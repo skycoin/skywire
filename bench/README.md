@@ -354,3 +354,91 @@ pool to settle and judges the re-read, saying so in one line; only a second
 mismatch is INVALID. Leftover shape is not a measurement: on 2026-09-18 the UP2
 cell left three actives behind and `mux-tunnels-2` was thrown away over a shape
 it could simply have re-taken.
+
+## Knob work on one deploy: `run-variants.sh` and `screen`
+
+A knob decision used to cost a build, a deploy and a campaign — about fifty
+minutes for one value — although the 115 router knobs (`skywire cli route
+settings`, catalogued in `pkg/router/routersettings`) and the 71 proxy knobs
+(`skywire cli proxy settings`, `pkg/skysocks/skysettings`) are all **live**.
+Two tools spend that deploy once.
+
+**`bench/run-variants.sh <exit pk> <out dir> <pins> [trials] [sink] [order]
+[variants file]`** dials ONE session and measures many knob variants through it,
+writing knobs only *between* rows. The variants file is one variant per line —
+`<name> <knob=value> …` — and line 1, or the line named `baseline`, is variant
+A. For each cell (`SWEEP_SIZES`, default 50 MB, x `SWEEP_DIRS`, default
+`down up`) and each of `SWEEP_TRIALS` (3) trials it walks the B list and
+measures **A, B, A, B'** …, so every B row has a control taken seconds earlier
+on the same session. The verdict per variant and cell is `median(B)/median(A)`
+against `SWEEP_BAR` (1.0), with every per-pair ratio listed beside it, so no
+reference route and no second proxy instance are involved: A *is* the reference.
+
+A key that is in the **router** catalog is written to the local visor **and** to
+the exit over `--via dmsg://<exit>` — a send window moved on one end only
+measures half a path; a key in the **proxy** catalog goes to `proxy settings
+--app <app>`. Membership is decided once at the start from `route settings
+--json` / `proxy settings --json`, never from the name, and a key in neither
+catalog stops the run before a row is measured. Every value is read back after
+each apply and recorded in the row; a knob whose catalog doc says it is read
+when a route group is BUILT or when a dial CHOOSES a route is flagged
+`dialtime:<key>` instead of being measured as if a live session could feel it.
+Every touched knob is snapshotted into `<out>/sweep/knobs-restore.tsv` and put
+back at the end and from the EXIT/TERM/INT traps.
+
+Artefacts: `<out>/<variant>.tsv` and `<variant>.carrier.tsv` are ordinary bench
+rows, so `summarize.sh` and `verdict.sh` read them unchanged; `<out>/sweep/
+rows.tsv` is one line per transfer and `<out>/sweep/verdict.tsv` the ratio
+table (ratio, medians, pairs, hash_ok, wire/goodput, PASS/FAIL). The exit
+RssAnon/CPU gate brackets the whole run as the set `sweep`.
+
+`SWEEP_DRY=1` runs the whole thing against `bench/dry-stub-cli.sh` and
+`bench/dry-stub-bench.sh` — no visor, no network — and `bench/selftest-variants.sh`
+asserts the interleaving order, that B's knobs never leak into an A row, the
+ratio arithmetic, the restore (including after a TERM mid-row), the dial-time
+note and the refusal of an unknown knob. Run it before touching either script.
+
+**`bench/screen`** says which knobs are worth measuring at all:
+
+```
+go run ./bench/screen gen -factors bench/screen/factors-mux.tsv -runs 16 > variants.txt
+bench/run-variants.sh <exit> <out dir> $S/pins 3 http://127.0.0.1:18080 "" variants.txt
+go run ./bench/screen analyze variants.txt <out dir>
+```
+
+`gen` emits a Plackett-Burman (`-runs 12` or `24`) or fractional-factorial
+(`-runs 16`) design as a variants file: every column balanced and every pair of
+columns balanced, so each factor's main effect is estimated from *all* the runs
+with the others averaged out. `analyze` reads the sweep's rows back and prints,
+per cell, each factor's effect in ratio units, its standard error from the
+replicate scatter, whether it clears two of them, and which factors deserve
+`bench/tune`. It is a filter, not a verdict: a resolution-III design aliases
+main effects with two-factor interactions, and the verdict is still a paired
+campaign under `verdict.sh`.
+
+`bench/screen/factors-mux.tsv` ships twelve factors — `leg.starve_ratio`,
+`ecf.max_window_bytes`, `ecf.window_margin`, `band.demote_ratio_tight`,
+`rack.reorder_factor`, `reorder.window`, `tlp.pto_factor`, `hol.rtt_factor`,
+`sbd.enabled`, `chunk.tunnel_concurrency`, `chunk.per_tunnel`,
+`upload.concurrency` — each with a line saying why it is in, and a closing list
+of the knobs deliberately left out (dial-time and shape knobs, which a
+single-session sweep cannot move).
+
+`bench/run-sweep.sh` is the older, coarser form and still has its place: it
+spends a COMPLETE runner invocation per value of one knob, which is what a shape
+change (a different `--tunnels`, a different pin order) needs. `run-variants.sh`
+is for knobs that move on a running session.
+
+### `SETTINGS` may name a router knob now
+
+`bench/lib-settings.sh` — the `SETTINGS="k=v …"` hook every runner calls once per
+set — applies the same catalog membership rule: a key that is in the **router**
+catalog goes to `route settings` on the local visor and, over `--via
+dmsg://<exit>` (`SETTINGS_EXIT`, or the runner's own `$exit_pk`), to the exit's;
+everything else goes to `proxy settings --app <app>` as before. Until now such a
+key was sent to the app, refused there, and took the whole `SETTINGS` line down
+with it. The router keys are snapshotted into `<set>.route-knobs.tsv` and
+restored on both ends by `settings_restore`, like `ROUTE_SETTINGS`. A `SETTINGS`
+line of proxy keys only behaves exactly as it did.
+`bench/selftest-settings.sh` asserts the split, the snapshot and the restore
+against the stub CLI.

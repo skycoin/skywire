@@ -1,0 +1,95 @@
+# factors-mux.tsv — the twelve knobs the first mux screen moves.
+#
+#   go run ./bench/screen gen -factors bench/screen/factors-mux.tsv -runs 16 > variants.txt
+#
+# Format: <knob> <low> <high>, whitespace separated; # lines are prose.
+#
+# TWELVE FACTORS NEED A 16-RUN DESIGN. A 12-run Plackett-Burman holds at most
+# eleven; drop a line to use -runs 12, or spend -runs 24 to buy a second estimate
+# of every effect. At 3 trials and a 50 MB cell, 16 runs is 16 design rows plus
+# the 16 interleaved baseline rows per trial.
+#
+# EVERY FACTOR HERE IS LIVE MID-SESSION. bench/run-variants.sh dials one session
+# and then only writes knobs between rows, so a knob read at DIAL time or when a
+# route group is BUILT would be measured as if it had done nothing. Those are
+# named at the bottom, deliberately out.
+#
+# The low/high pairs bracket the compiled default in each direction, which is
+# what makes a main effect a statement about the direction to move a knob rather
+# than about one arbitrary value.
+
+# leg.starve_ratio (default 6.0) — the outclassed-leg gate: how far off the best
+# leg's delay basis a leg may sit before it is cut to a probe per window. The
+# storm fix of 2026-09-16 and the 2-leg retx storms both live here, and nothing
+# has ever measured whether 6.0 is the right place to cut.
+leg.starve_ratio	3.0	12.0
+
+# ecf.max_window_bytes (default 8MiB) — the per-leg send window ceiling. The
+# open 2-leg question from the campaign: a ceiling too low starves aggregation,
+# too high buys in-flight bytes that only turn into reorder work.
+ecf.max_window_bytes	4MiB	16MiB
+
+# ecf.window_margin (default 2.0) — the multiplier on proven delivery-per-RTT
+# that sets the window in the first place. It and the ceiling above are the two
+# halves of one control and the screen can tell which half is binding.
+ecf.window_margin	1.5	3.0
+
+# band.demote_ratio_tight (default 2.0) — how far off the median latency an
+# active leg may sit in CAPACITY mode before it is demoted. This is the knob
+# that decides whether a slow-but-real route is spread across or thrown away,
+# which is the bittorrent-like-spread objective stated in prose.
+band.demote_ratio_tight	1.5	3.0
+
+# rack.reorder_factor (default 1.25) — the reordering tolerance before a
+# sequence is presumed lost. Multipath reorders by construction; too tight is a
+# retransmit storm, too loose is head-of-line delay.
+rack.reorder_factor	1.1	2.0
+
+# reorder.window (default 32768) — how many out-of-order packets the receiver
+# holds. The no-skip frontier means this is also how deep a stall may get before
+# the last-resort drop, and 32768 has never been measured against anything.
+reorder.window	8192	65536
+
+# tlp.pto_factor (default 2.0) — the tail-loss probe timeout as a multiple of
+# the slowest leg's RTT. It governs the end of every chunk, and a 4 MiB chunked
+# download is almost all tails.
+tlp.pto_factor	1.5	3.0
+
+# hol.rtt_factor (default 1.0) — the gap age, in fastest-leg RTTs, at which a
+# proactive head-of-line retransmit fires. The HoL wall is the documented reason
+# multipath aggregation fails; this is the knob that attacks it directly.
+hol.rtt_factor	0.5	2.0
+
+# sbd.enabled (default true) — shared-bottleneck detection at all. It is on and
+# sbd.demote is off, so it currently only records rulings: the screen says
+# whether the sampling itself costs anything measurable.
+sbd.enabled	false	true
+
+# chunk.tunnel_concurrency (default 4) — chunks one tunnel may carry at once on
+# a split download. The download composition cap (~6.5 MB/s at 100 MB) is a
+# placement question before it is a scheduler question.
+chunk.tunnel_concurrency	2	8
+
+# chunk.per_tunnel (default 2) — how many chunks the planner aims to give each
+# active tunnel, which sets how wide a transfer is spread before the scheduler
+# ever sees it.
+chunk.per_tunnel	1	4
+
+# upload.concurrency (default 4) — chunks one tunnel may carry at once on a
+# striped upload. The 10 MB upload gap (x0.5-0.65) is the longest-standing
+# unexplained cell in the campaign and this is its first suspect.
+upload.concurrency	2	8
+
+# DELIBERATELY OUT, and why:
+#   fec.enabled, mux.sack, mux.per_frame_noise, mux.hol_retx — advertised on NEW
+#     route groups only; a session already up keeps what it was born with.
+#   dial.candidates, dial.tunnel_legs, dial.foreground_mux, setup.* — read while
+#     a dial is CHOOSING a route. Screening them needs a re-dial per run, which
+#     is 30-70 s of settling per row and a different runner.
+#   pool.size, tunnel.count, mux.width — they change the SHAPE (how many tunnels
+#     carry the transfer), so a run that moves them is not comparable to one that
+#     does not; shape belongs in run-mux.sh / run-standby.sh sets.
+#   spread.max_share, spread.min_routes — criterion 10's policy, scored by
+#     bench/direction.sh against a cap assert, not by throughput alone.
+#   tunnel.promote_goodput_margin, tunnel.audition_every — the promoter acts over
+#     minutes; a 50 MB row is too short to move it, so it needs run-standby.sh.

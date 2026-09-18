@@ -51,7 +51,27 @@
 # read back from it and re-applied by flag; ROUTE_SETTINGS_RESTORE overrides
 # that with an explicit flag list when a knob ever grows a spelling the getter
 # does not round-trip.
+#
+# SETTINGS MAY NAME A ROUTER KNOB TOO (2026-09-18). `route settings` takes the
+# same key=value catalog spelling `proxy settings` does, so which command a knob
+# belongs to is a question about the CATALOGS, not about the caller. settings_apply
+# therefore reads both catalogs once per run — `route settings --json` (.knobs)
+# and `proxy settings --json` (.knobs[].name) — and sends each key where it
+# belongs: a proxy key to the app, a router key to the local visor AND, over
+# `--via dmsg://<exit>`, to the exit's, because a send window or a RACK term
+# moved on one end only measures half a path. The exit pk comes from
+# SETTINGS_EXIT, or from the caller's own $exit_pk when it has one; without
+# either, the router half is applied locally and the note says exit=unset.
+#
+# A key in NEITHER catalog is left in the proxy list and refused there, exactly
+# as it was before — the set is recorded as REFUSED rather than silently
+# measuring the defaults.
+#
+# The router keys are snapshotted into <set>.route-knobs.tsv before they move and
+# restored by settings_restore, on both ends, for the same reason ROUTE_SETTINGS
+# is: a router knob outlives the app and would carry into the next set.
 SETTINGS=${SETTINGS:-}
+SETTINGS_EXIT=${SETTINGS_EXIT:-}
 ROUTE_SETTINGS=${ROUTE_SETTINGS:-}
 ROUTE_SETTINGS_RESTORE=${ROUTE_SETTINGS_RESTORE:-}
 SETTINGS_WAIT=${SETTINGS_WAIT:-20}      # ceiling on the wait for a knob to land, seconds
@@ -79,6 +99,83 @@ _settings_pending() {
 	jq -r '[.knobs[]? | select(.state == "pending") | .name] | join(" ")' "$1" 2>/dev/null
 }
 
+# _settings_exit_pk: the exit the router half is mirrored to.
+_settings_exit_pk() { echo "${SETTINGS_EXIT:-${exit_pk:-}}"; }
+
+# _settings_router_keys: the router catalog's key names, read once per run and
+# cached beside the results. Empty when the visor would not answer, in which
+# case every key stays on the proxy side and behaves exactly as it did.
+_settings_router_keys() {
+	_rk="$out/.router-catalog"
+	if [ ! -f "$_rk" ]; then   # ONE attempt per run, even when the visor will not answer
+		$CLI cli route settings --json 2>/dev/null | jq -r '.knobs | keys[]?' > "$_rk" 2>/dev/null || : > "$_rk"
+	fi
+	cat "$_rk" 2>/dev/null
+}
+# _settings_is_router <key>
+_settings_is_router() { _settings_router_keys | grep -qx "$1"; }
+
+# _settings_kv_apply <set>: pull the ROUTER keys out of SETTINGS, snapshot them,
+# and write them to both ends. Leaves the proxy-only remainder in $_s_proxy.
+_settings_kv_apply() {
+	_s_proxy=""; _s_router=""
+	for _kv in $SETTINGS; do
+		case $_kv in
+		*=*) ;;
+		*) _s_proxy="$_s_proxy $_kv"; continue ;;
+		esac
+		if _settings_is_router "${_kv%%=*}"; then _s_router="$_s_router $_kv"; else _s_proxy="$_s_proxy $_kv"; fi
+	done
+	_s_proxy=${_s_proxy# }
+	[ -n "$_s_router" ] || return 0
+	_s_snap="$out/$1.route-knobs.tsv"
+	printf '# router knobs SETTINGS moved, and what they held before; settings_restore puts these back\n# key\tprevious\n' > "$_s_snap"
+	$CLI cli route settings --json 2>/dev/null > "$out/$1.route-before.json"
+	for _kv in $_s_router; do
+		_k=${_kv%%=*}
+		printf '%s\t%s\n' "$_k" "$(jq -r --arg k "$_k" '.knobs[$k] // empty' "$out/$1.route-before.json" 2>/dev/null)" >> "$_s_snap"
+	done
+	_s_exit=$(_settings_exit_pk)
+	# shellcheck disable=SC2086 # a deliberate word list of key=value
+	if $CLI cli route settings $_s_router >/dev/null 2>&1; then
+		settings_note="router=$(echo "$_s_router" | tr ' ' ',' | sed 's/^,//')"
+		if [ -n "$_s_exit" ]; then
+			# shellcheck disable=SC2086
+			timeout "${SETTINGS_EXIT_TIMEOUT:-120}" $CLI cli --via "dmsg://$_s_exit" route settings $_s_router >/dev/null 2>&1 &&
+				settings_note="$settings_note router_exit=ok" ||
+				settings_note="$settings_note router_exit=REFUSED"
+		else
+			settings_note="$settings_note router_exit=unset"
+		fi
+	else
+		echo "route settings: REFUSED '$_s_router' — those knobs are untouched"
+		settings_note="router=REFUSED:$(echo "$_s_router" | tr ' ' ',' | sed 's/^,//')"
+	fi
+	echo "route settings (key=value):$_s_router — local ok, exit ${_s_exit:-unset}"
+	return 0
+}
+
+# _settings_kv_restore <set>: put the key=value router knobs back, both ends.
+_settings_kv_restore() {
+	_s_snap="$out/$1.route-knobs.tsv"
+	[ -s "$_s_snap" ] || return 0
+	_s_back=""
+	while IFS='	' read -r _k _v; do
+		case $_k in \#* | "") continue ;; esac
+		[ -n "$_v" ] || continue
+		_s_back="$_s_back $_k=$_v"
+	done < "$_s_snap"
+	[ -n "$_s_back" ] || return 0
+	_s_exit=$(_settings_exit_pk)
+	# shellcheck disable=SC2086 # a deliberate word list of key=value
+	$CLI cli route settings $_s_back >/dev/null 2>&1 &&
+		echo "route settings: restored$_s_back" ||
+		echo "route settings: restore '$_s_back' REFUSED — the visor keeps the swept values"
+	# shellcheck disable=SC2086
+	[ -n "$_s_exit" ] && timeout "${SETTINGS_EXIT_TIMEOUT:-120}" $CLI cli --via "dmsg://$_s_exit" route settings $_s_back >/dev/null 2>&1
+	return 0
+}
+
 # settings_apply <set> <app>: the whole hook. Returns 0 always — a knob that
 # will not land is a fact about the run, recorded in the header and the dump,
 # not a reason to throw away a set.
@@ -87,11 +184,16 @@ settings_apply() {
 	settings_note=""
 	_settings_route_apply "$_s_set"
 	[ -n "$SETTINGS" ] || return 0
-	echo "$_s_app: applying live knobs: $SETTINGS"
-	# shellcheck disable=SC2086 # SETTINGS is a deliberate word list of key=value
-	$CLI cli proxy settings --app "$_s_app" $SETTINGS >/dev/null 2>&1 || {
-		echo "$_s_app: 'proxy settings' REFUSED '$SETTINGS' — the set runs on the compiled defaults"
-		settings_note="settings=REFUSED:$(echo "$SETTINGS" | tr ' ' ',')"
+	_settings_kv_apply "$_s_set"
+	_s_rnote=$settings_note
+	settings_note=""
+	[ -n "$_s_proxy" ] || { settings_note=$_s_rnote; return 0; }
+	echo "$_s_app: applying live knobs: $_s_proxy"
+	# shellcheck disable=SC2086 # the proxy remainder is a deliberate word list of key=value
+	$CLI cli proxy settings --app "$_s_app" $_s_proxy >/dev/null 2>&1 || {
+		echo "$_s_app: 'proxy settings' REFUSED '$_s_proxy' — the set runs on the compiled defaults"
+		settings_note="settings=REFUSED:$(echo "$_s_proxy" | tr ' ' ',')"
+		[ -z "$_s_rnote" ] || settings_note="$settings_note $_s_rnote"
 		return 0
 	}
 	$CLI cli proxy settings --app "$_s_app" --json > "$out/$_s_set.settings.json" 2>/dev/null
@@ -116,6 +218,7 @@ settings_apply() {
 		settings_note="settings=$_s_applied settings_pending=$(echo "$_s_pend" | tr ' ' ',')"
 	fi
 	[ -n "$ROUTE_SETTINGS" ] && settings_note="$settings_note route_settings=$(echo "$ROUTE_SETTINGS" | tr ' ' ',')"
+	[ -z "$_s_rnote" ] || settings_note="$settings_note $_s_rnote"
 	return 0
 }
 
@@ -167,9 +270,11 @@ _settings_route_prev() {
 	echo "$_r_args"
 }
 
-# settings_restore <set>: put the ROUTER knobs back. The APP knobs need no
+# settings_restore <set>: put the ROUTER knobs back — the key=value ones from
+# <set>.route-knobs.tsv (both ends) and the ROUTE_SETTINGS flags. The APP knobs need no
 # restore — the store dies with the app, which every runner stops at set end.
 settings_restore() {
+	_settings_kv_restore "$1"   # the key=value router half, both ends
 	[ "$settings_route_applied" = 1 ] || return 0
 	if [ -n "$ROUTE_SETTINGS_RESTORE" ]; then
 		_r_back=$ROUTE_SETTINGS_RESTORE
