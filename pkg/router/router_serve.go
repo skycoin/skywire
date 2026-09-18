@@ -155,6 +155,11 @@ func (r *router) Serve(ctx context.Context) error {
 	return nil
 }
 
+// serveTransportManager is the visor's SINGLE inbound packet loop: it reads
+// from every transport and dispatches to every route group. Nothing it calls
+// may block on one route group — a route group's handler is reached through
+// RouteGroup.handlePacket, which only queues onto that group's own intake
+// worker (see route_group.go serveIntake).
 func (r *router) serveTransportManager(ctx context.Context) {
 	for {
 		// Check context before blocking on ReadPacket

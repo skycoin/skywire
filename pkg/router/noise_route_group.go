@@ -94,6 +94,10 @@ func (nrg *NoiseRouteGroup) RouteHopDetails() []RouteHopInfo {
 	return nrg.rg.RouteHopDetails()
 }
 
+// handlePacket hands the packet to the wrapped route group's non-blocking
+// intake path (RouteGroup.handlePacket), so a noise-wrapped group queues onto
+// its own worker exactly like a raw one and neither can stall the router's
+// shared transport read loop.
 func (nrg *NoiseRouteGroup) handlePacket(packet routing.Packet) error {
 	return nrg.rg.handlePacket(packet)
 }

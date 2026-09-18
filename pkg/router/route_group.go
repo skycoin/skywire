@@ -30,6 +30,18 @@ const (
 	defaultRouteGroupKeepAliveInterval = DefaultRouteKeepAlive / 2
 	defaultReadChBufSize               = 1024
 	closeRoutineTimeout                = 2 * time.Second
+	// intakeChBufSize is the depth of a route group's own inbound intake
+	// queue — the buffer between the router's single transport read loop and
+	// this group's handler (see serveIntake). It is a constant rather than a
+	// `route settings` knob for the reason settings.go states: the channel is
+	// made once when the group is built, so changing it live would mean
+	// reaching into every running group, which is a locking change and not a
+	// knob.
+	intakeChBufSize = 1024
+	// intakeWarnInterval rate-limits the "intake queue full" warning to one
+	// per route group per interval. A stalled app overflows the queue at line
+	// rate, and a per-packet warning is itself a way to wedge a visor.
+	intakeWarnInterval = 10 * time.Second
 	// maxConsecutiveWriteFailures is the number of consecutive transport write failures
 	// before the RouteGroup closes itself to stop spamming logs.
 	maxConsecutiveWriteFailures = 5
@@ -290,6 +302,24 @@ type RouteGroup struct {
 	readCh  chan []byte  // push reads from Router
 	readBuf bytes.Buffer // for read overflow
 
+	// inCh is this group's INBOUND INTAKE QUEUE. The router has one goroutine
+	// reading every transport (serveTransportManager), so anything that blocks
+	// in a route group's handler blocks EVERY group on the visor: a group whose
+	// app stopped reading used to park the shared loop for up to 30 s per packet
+	// on readCh, and all route groups — on every first hop — stopped receiving
+	// at once for a minute at a time. The shared loop now only enqueues here
+	// (never blocking) and one worker per group (serveIntake) runs the
+	// synchronous handler, so a stuck group stalls only itself.
+	//
+	// One queue and one worker, so per-group packet order is preserved. Close
+	// packets deliberately bypass it (see handlePacket).
+	inCh chan routing.Packet
+	// intakeDrops counts packets dropped because inCh was full, and
+	// intakeWarnAt is the last time that was warned about (unix nanos), for the
+	// rate limit. Both are surfaced in `visor state --select diag`.
+	intakeDrops  atomic.Uint64
+	intakeWarnAt atomic.Int64
+
 	readDeadline  deadline.PipeDeadline
 	writeDeadline deadline.PipeDeadline
 
@@ -490,6 +520,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		fwd:                make([]routing.Rule, 0),
 		rvs:                make([]routing.Rule, 0),
 		readCh:             make(chan []byte, cfg.ReadChBufSize),
+		inCh:               make(chan routing.Packet, intakeChBufSize),
 		readBuf:            bytes.Buffer{},
 		remoteClosed:       make(chan struct{}),
 		closed:             make(chan struct{}),
@@ -509,6 +540,15 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		legRemoteTp:        make(map[uuid.UUID]uuid.UUID),
 		legRecvSnap:        make(map[uuid.UUID]uint64),
 	}
+
+	// The intake worker starts with the group: a handshake or data packet can
+	// arrive before anything else is wired (the initiator blocks on
+	// handshakeProcessed, which only the worker can close). It exits on
+	// rg.closed / rg.remoteClosed, and every abandoned-group path — a failed
+	// handshake send, a handshake timeout, a canceled dial, the router GC —
+	// calls Close(), which ends in setRemoteClosed(), so it cannot leak on a
+	// group that never completes its handshake.
+	go rg.serveIntake()
 
 	return rg
 }
@@ -4093,7 +4133,88 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 	return nil
 }
 
+// handlePacket accepts one inbound packet from the router's shared transport
+// read loop. It NEVER blocks: the packet is queued onto this group's intake
+// queue and handled by the group's own worker (serveIntake).
+//
+// A full queue drops the packet instead of waiting. That is safe for a mux
+// group (the SACK/retransmit layer recovers the frame) and no worse than the
+// pre-existing "readCh full for 30 s, drop" for a legacy group — while waiting
+// here would be exactly the all-paths stall this queue exists to prevent.
+//
+// Close packets bypass the queue and run inline, as they did before: a close
+// must take effect even when the worker is parked on a full readCh (the worker
+// leaves that select on rg.closed / rg.remoteClosed, which handleClosePacket
+// sets), and a queued close would be dropped by a full queue — leaving a dead
+// group alive until the keep-alive GC reaped it.
 func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
+	if packet.Type() == routing.ClosePacket {
+		return rg.handlePacketNow(packet)
+	}
+
+	select {
+	case <-rg.closed:
+		return io.ErrClosedPipe
+	case <-rg.remoteClosed:
+		return io.ErrClosedPipe
+	default:
+	}
+
+	select {
+	case rg.inCh <- packet:
+		return nil
+	default:
+		rg.noteIntakeDrop(packet)
+		return nil
+	}
+}
+
+// serveIntake drains this route group's intake queue, one packet at a time, in
+// arrival order. One worker per group: whatever the handler blocks on —  a full
+// readCh, rg.mu held across a transport write — is confined to this group.
+func (rg *RouteGroup) serveIntake() {
+	for {
+		select {
+		case <-rg.closed:
+			return
+		case <-rg.remoteClosed:
+			return
+		case packet := <-rg.inCh:
+			if err := rg.handlePacketNow(packet); err != nil {
+				rg.logger.WithError(err).
+					Debugf("Intake worker failed to handle %s packet", packet.Type())
+			}
+		}
+	}
+}
+
+// noteIntakeDrop counts a packet dropped by a full intake queue and warns at
+// most once per intakeWarnInterval for this group.
+func (rg *RouteGroup) noteIntakeDrop(packet routing.Packet) {
+	drops := rg.intakeDrops.Add(1)
+
+	now := time.Now().UnixNano()
+	last := rg.intakeWarnAt.Load()
+	if now-last < int64(intakeWarnInterval) || !rg.intakeWarnAt.CompareAndSwap(last, now) {
+		return
+	}
+
+	rg.logger.WithField("drops", drops).
+		WithField("type", packet.Type().String()).
+		WithField("capacity", cap(rg.inCh)).
+		Warn("Dropping inbound packet: route group intake queue full (application not reading)")
+}
+
+// intakeQueue is the depth, capacity and lifetime drop count of the group's
+// inbound intake queue.
+func (rg *RouteGroup) intakeQueue() (queue, capacity int, drops uint64) {
+	return len(rg.inCh), cap(rg.inCh), rg.intakeDrops.Load()
+}
+
+// handlePacketNow is the synchronous packet handler. It runs on the group's own
+// intake worker (and inline for close packets); it may block — on readCh or on
+// rg.mu — which is precisely why it is not called from the router's shared loop.
+func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 	switch packet.Type() {
 	case routing.ClosePacket:
 		closeCode, err := closeCodeFromPacket(packet)

@@ -164,10 +164,12 @@ func TestRouteGroup_ResponderReAcksDuplicateHandshake(t *testing.T) {
 
 	// First handshake: processed closes, responder does NOT re-ack from here
 	// (its saveRouteGroupRules would send the initial reverse handshake).
+	// handlePacket queues onto the group's intake worker (see serveIntake), so
+	// the effect lands on the worker rather than in this call.
 	require.NoError(t, rg.handlePacket(hs))
 	select {
 	case <-rg.handshakeProcessed:
-	default:
+	case <-time.After(time.Second):
 		t.Fatal("first handshake must close handshakeProcessed")
 	}
 	require.Equal(t, 0, conn.writeCount(), "first handshake must not itself re-ack")
