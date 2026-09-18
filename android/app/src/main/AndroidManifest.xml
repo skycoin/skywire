@@ -152,6 +152,12 @@
             android:name=".core.ChatMediaReceiver"
             android:exported="false" />
 
+        <!-- Decline, from the call notification. Not exported: the only thing
+             that may turn down a call on this phone is this phone. -->
+        <receiver
+            android:name=".core.VoiceCallReceiver"
+            android:exported="false" />
+
         <!-- Owns the phone's VPN interface and hands its descriptor to the
              visor.
 

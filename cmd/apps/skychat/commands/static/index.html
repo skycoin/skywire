@@ -3946,6 +3946,24 @@
     </div>
   </div>
 
+  <!-- Outgoing call, while it is still ringing at the other end. The same
+       banner as the incoming one because it is the same moment from the other
+       side, and it exists for one reason: to carry a Cancel. An unanswered
+       outbound call is in no active list, so the in-call panel's hang-up
+       button has no id for it — this is where the id lives. -->
+  <div id="outgoingCall" class="incoming-call hidden">
+    <div class="ic-info">
+      <div class="ic-avatar"><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 16.9v2.4a1.8 1.8 0 0 1-2 1.8 17.4 17.4 0 0 1-7.6-2.7 17.1 17.1 0 0 1-5.3-5.3A17.4 17.4 0 0 1 3 5.5a1.8 1.8 0 0 1 1.8-2h2.4a1.8 1.8 0 0 1 1.8 1.5c.1.9.3 1.7.6 2.5a1.8 1.8 0 0 1-.4 1.9l-1 1a14 14 0 0 0 5.3 5.3l1-1a1.8 1.8 0 0 1 1.9-.4c.8.3 1.6.5 2.5.6a1.8 1.8 0 0 1 1.6 1.9z"/></svg></div>
+      <div>
+        <div class="ic-title">Calling…</div>
+        <div class="ic-from" id="ocTo">-</div>
+      </div>
+    </div>
+    <div class="ic-actions">
+      <button class="ic-btn decline" onclick="app.cancelOutgoing()">Cancel</button>
+    </div>
+  </div>
+
   <!-- Active call panel -->
   <div id="callPanel" class="call-panel hidden">
     <div class="cp-top">
@@ -4654,7 +4672,7 @@
         // control surface that polls /voice/{incoming,active} and drives
         // /voice/{call,answer,decline,hangup,mute,levels}. Auto-hides when voice
         // is unavailable (no --pair-enable / no visor RPC / built without audio).
-        this.voice = { available: null, ring: null, activeId: null, micMuted: false, spkMuted: false, startedAt: 0, specOn: false, specChan: 'recv' };
+        this.voice = { available: null, ring: null, dialing: null, activeId: null, micMuted: false, spkMuted: false, startedAt: 0, specOn: false, specChan: 'recv' };
         this._voiceLevelTimer = null;
         this._voiceClockTimer = null;
         this._specTimer = null;
@@ -12690,11 +12708,16 @@
       // availability (hiding the call button when the visor voice RPC is off).
       async _pollVoice() {
         try {
-          const [incR, actR] = await Promise.all([fetch('/voice/incoming'), fetch('/voice/active')]);
+          const [incR, actR, dialR] = await Promise.all([
+            fetch('/voice/incoming'), fetch('/voice/active'), fetch('/voice/dialing'),
+          ]);
           if (!incR.ok || !actR.ok) { this._setVoiceAvailable(false); return; }
           this._setVoiceAvailable(true);
           this._updateIncoming(await incR.json());
           this._updateActive(await actR.json());
+          // Tolerated separately: an older visor has no dialing route, and
+          // losing the Cancel is not a reason to call voice unavailable.
+          this._updateDialing(dialR.ok ? await dialR.json() : []);
         } catch (e) {
           this._setVoiceAvailable(false);
         }
@@ -12708,6 +12731,7 @@
         this._refreshHeaderMenu();
         if (!v) { // voice went away — tear down any UI
           this.voice.ring = null; this._renderIncoming();
+          this._updateDialing([]);
           if (this.voice.activeId) this._endCallUI();
         }
       }
@@ -12735,6 +12759,43 @@
         } else {
           el.classList.add('hidden');
         }
+      }
+
+      // _updateDialing tracks the call we are placing, which exists only
+      // between the invite going out and the callee answering. It is the one
+      // window in which a call can be called off, and until /voice/dialing
+      // existed the UI could not see into it.
+      _updateDialing(list) {
+        const call = (Array.isArray(list) && list.length) ? list[0] : null;
+        // Once connected the in-call panel owns it; two banners for one call
+        // would be one too many.
+        this.voice.dialing = (call && this.voice.activeId !== call.call_id) ? call : null;
+        const el = document.getElementById('outgoingCall');
+        if (!el) return;
+        if (this.voice.dialing) {
+          document.getElementById('ocTo').textContent =
+            this.shortPk(this.voice.dialing.peer) || 'unknown';
+          el.classList.remove('hidden');
+        } else {
+          el.classList.add('hidden');
+        }
+      }
+
+      // cancelOutgoing calls off a call that is still ringing. Hanging up a
+      // dialing call IS cancelling the invite (see Manager.Hangup), so the
+      // same endpoint serves both ends of a call's life.
+      async cancelOutgoing() {
+        const call = this.voice.dialing;
+        if (!call) return;
+        this.voice.dialing = null;
+        const el = document.getElementById('outgoingCall');
+        if (el) el.classList.add('hidden');
+        try {
+          await fetch('/voice/hangup', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ call_id: call.call_id }),
+          });
+        } catch (e) { /* best-effort; the next poll re-reads the truth */ }
       }
 
       _updateActive(list) {
@@ -12804,6 +12865,10 @@
       async callPeer(peer) {
         if (!peer || !this.voice.available) return;
         if (this.voice.activeId) { this.showToast('Already in a call.', 'error'); return; }
+        // The request no longer blocks for the ring, so nothing else stops a
+        // second press from placing a second call — and the callee would ring
+        // twice for one caller who pressed twice.
+        if (this.voice.dialing) { this.showToast('Already calling.', 'error'); return; }
         this.showToast('Calling ' + this.shortPk(peer) + '…');
         try {
           const r = await fetch('/voice/call', {
@@ -12812,7 +12877,10 @@
           });
           if (!r.ok) { this.showToast('Call failed: ' + (await r.text()).trim(), 'error'); return; }
           const d = await r.json();
-          this._enterCall(d.call_id, peer);
+          // Ringing, not connected — show it as such. _updateActive promotes
+          // it to the in-call panel if and when the callee answers.
+          this.voice.dialing = { call_id: d.call_id, peer };
+          this._updateDialing([this.voice.dialing]);
         } catch (e) {
           this.showToast('Call failed.', 'error');
         }
@@ -12894,6 +12962,10 @@
       async placeCall() {
         if (!this.recipient || !this.voice.available) return;
         if (this.voice.activeId) { this.showToast('Already in a call.', 'error'); return; }
+        // The request no longer blocks for the ring, so nothing else stops a
+        // second press from placing a second call — and the callee would ring
+        // twice for one caller who pressed twice.
+        if (this.voice.dialing) { this.showToast('Already calling.', 'error'); return; }
         const peer = this.recipient;
         this.showToast('Calling ' + this.shortPk(peer) + '…');
         try {
@@ -12903,7 +12975,10 @@
           });
           if (!r.ok) { this.showToast('Call failed: ' + (await r.text()).trim(), 'error'); return; }
           const d = await r.json();
-          this._enterCall(d.call_id, peer);
+          // Ringing, not connected — show it as such. _updateActive promotes
+          // it to the in-call panel if and when the callee answers.
+          this.voice.dialing = { call_id: d.call_id, peer };
+          this._updateDialing([this.voice.dialing]);
         } catch (e) {
           this.showToast('Call failed.', 'error');
         }

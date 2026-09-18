@@ -20,6 +20,8 @@ import (
 type voiceAPI struct {
 	visorAPIShim
 	called   cipher.PubKey
+	dialed   cipher.PubKey
+	dialing  []visor.VoiceDialingInfo
 	answered []string
 	declined []string
 	hungup   []string
@@ -37,11 +39,20 @@ func (a *voiceAPI) VoiceCall(peer cipher.PubKey) (string, error) {
 	a.called = peer
 	return "call-1", nil
 }
-func (a *voiceAPI) VoiceAnswer(id string) error      { a.answered = append(a.answered, id); return nil }
-func (a *voiceAPI) VoiceDecline(id string) error     { a.declined = append(a.declined, id); return nil }
-func (a *voiceAPI) VoiceHangup(id string) error      { a.hungup = append(a.hungup, id); return nil }
-func (a *voiceAPI) VoiceActive() ([]string, error)   { return a.active, nil }
-func (a *voiceAPI) VoiceIncoming() ([]string, error) { return a.incoming, nil }
+
+// VoiceDial is what the handler uses: the blocking VoiceCall could never
+// answer the browser, because a ring outlasts the server's write timeout.
+func (a *voiceAPI) VoiceDial(peer cipher.PubKey) (string, error) {
+	a.dialed = peer
+	return "call-1", nil
+}
+
+func (a *voiceAPI) VoiceDialing() ([]visor.VoiceDialingInfo, error) { return a.dialing, nil }
+func (a *voiceAPI) VoiceAnswer(id string) error                     { a.answered = append(a.answered, id); return nil }
+func (a *voiceAPI) VoiceDecline(id string) error                    { a.declined = append(a.declined, id); return nil }
+func (a *voiceAPI) VoiceHangup(id string) error                     { a.hungup = append(a.hungup, id); return nil }
+func (a *voiceAPI) VoiceActive() ([]string, error)                  { return a.active, nil }
+func (a *voiceAPI) VoiceIncoming() ([]string, error)                { return a.incoming, nil }
 func (a *voiceAPI) VoiceCallAudio(string) ([]int16, []int16, error) {
 	return a.sent, a.recv, nil
 }
@@ -70,8 +81,11 @@ func TestVoiceCallHandler(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil || resp.CallID != "call-1" {
 		t.Errorf("call resp=%q err=%v", rr.Body.String(), err)
 	}
-	if fake.called != pk {
-		t.Errorf("VoiceCall got peer %s, want %s", fake.called.Hex(), pk.Hex())
+	if fake.dialed != pk {
+		t.Errorf("VoiceDial got peer %s, want %s", fake.dialed.Hex(), pk.Hex())
+	}
+	if fake.called != (cipher.PubKey{}) {
+		t.Errorf("the handler must not use the blocking VoiceCall: it cannot answer in time")
 	}
 
 	// Wrong method → 405.
@@ -160,6 +174,38 @@ func TestVoiceListHandlers(t *testing.T) {
 	active(rr, httptest.NewRequest(http.MethodPost, "/voice/active", nil))
 	if rr.Code != http.StatusMethodNotAllowed {
 		t.Errorf("POST list: code=%d, want 405", rr.Code)
+	}
+}
+
+// An outbound call that is still ringing exists in no active list and no
+// ringing list — its id lives only in the caller's dialing set. Hanging up
+// takes an id, so this route is the difference between a call that can be
+// called off and one that cannot.
+func TestVoiceDialingHandler(t *testing.T) {
+	fake := &voiceAPI{
+		dialing: []visor.VoiceDialingInfo{{CallID: "c9", Peer: "abcdef"}},
+	}
+	withFakePairRPC(t, fake)
+
+	rr := httptest.NewRecorder()
+	voiceDialingHandler()(rr, httptest.NewRequest(http.MethodGet, "/voice/dialing", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("dialing: code=%d body=%q", rr.Code, rr.Body.String())
+	}
+	var got []visor.VoiceDialingInfo
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("dialing: body=%q err=%v", rr.Body.String(), err)
+	}
+	if len(got) != 1 || got[0].CallID != "c9" || got[0].Peer != "abcdef" {
+		t.Errorf("dialing = %+v, want one call c9 with its peer", got)
+	}
+
+	// Empty must be [] and not null: the UI reads .length off it.
+	fake.dialing = nil
+	rr = httptest.NewRecorder()
+	voiceDialingHandler()(rr, httptest.NewRequest(http.MethodGet, "/voice/dialing", nil))
+	if body := strings.TrimSpace(rr.Body.String()); body != "[]" {
+		t.Errorf("empty dialing = %q, want []", body)
 	}
 }
 

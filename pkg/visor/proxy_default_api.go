@@ -996,6 +996,16 @@ func (proxyDefaultAPI) VoiceIncoming() ([]string, error) {
 	return nil, ErrProxyNotSupported
 }
 
+// VoiceDial implements API (not proxied).
+func (proxyDefaultAPI) VoiceDial(_ cipher.PubKey) (string, error) {
+	return "", ErrProxyNotSupported
+}
+
+// VoiceDialing implements API (not proxied).
+func (proxyDefaultAPI) VoiceDialing() ([]VoiceDialingInfo, error) {
+	return nil, ErrProxyNotSupported
+}
+
 // VoiceCallAudio implements API (not proxied).
 func (proxyDefaultAPI) VoiceCallAudio(_ string) (sent, recv []int16, err error) {
 	return nil, nil, ErrProxyNotSupported
