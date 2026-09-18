@@ -40,7 +40,7 @@ const (
 	// KindBool is a flag: 0 or 1, printed and parsed as false/true. It is the
 	// kind a DEFAULT-OFF mechanism is turned on with, which is how a new
 	// dataplane rule reaches the rig without a flag gate — the knob defaults to
-	// today's behaviour and the operator flips it live.
+	// today's behavior and the operator flips it live.
 	KindBool Kind = "bool"
 	KindEnum Kind = "enum"
 )
