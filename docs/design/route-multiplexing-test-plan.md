@@ -156,11 +156,18 @@ run that sets nothing is byte-for-byte the old binary.
 | tunnel promoter | `tunnel.promote_interval` · `tunnel.promote_margin` · `tunnel.promote_hold` · `tunnel.park_min_hold` · `tunnel.audition_window` · `tunnel.audition_every` |
 | probing and metering | `tunnel.probe_interval` · `tunnel.liveness_interval` · `tunnel.rtt_alpha` · `tunnel.meter_sample_min` · `tunnel.meter_cap_decay` · `tunnel.meter_fresh` · `tunnel.exit_open_penalty` |
 | range-split | `chunk.max_bytes` · `chunk.concurrency` · `chunk.retry_budget` · `chunk.idle_timeout` · `chunk.free_retries` · `chunk.outstanding_factor` |
+| chunk plan | `chunk.probe_bytes` · `chunk.min_bytes` · `chunk.per_tunnel` |
 | striped upload | `upload.stripe_min_bytes` · `upload.chunk_bytes` · `upload.mem_bytes` · `upload.concurrency` · `upload.replay_max_bytes` · `upload.probe_ttl` |
 | upload retries | `upload.ack_timeout` · `upload.idle_timeout` · `upload.durable_wait` · `upload.resend_passes` · `upload.early_tries` · `upload.early_wait_max` · `upload.busy_backoff` · `upload.busy_tries` · `upload.replay_tries` |
 
 `chunk.max_bytes` and `chunk.concurrency` OVERRIDE the boot flags
 (`--range-chunk-kib`, `--range-concurrency`): unset, the flag still wins.
+
+The chunk-plan three are the granularity sweep of §3: `chunk.probe_bytes` is
+chunk0 — the size probe, and the no-split threshold — while `chunk.min_bytes`
+and `chunk.per_tunnel` are the floor and the per-tunnel chunk count the target
+is computed from. They are read per download, so a sweep lands on the next
+object, never mid-object.
 
 The four upload knobs a test shrinks — `upload.stripe_min_bytes`,
 `upload.chunk_bytes`, `upload.mem_bytes`, `upload.concurrency` — override the
@@ -172,7 +179,8 @@ cannot over-subscribe the sink's window and make it evict an acked chunk.
 **Router knobs — `skywire cli route settings`**
 
 `--ecf-max-window` · `--ecf-min-window` · `--ecf-window-margin` ·
-`--send-window-wait-max` · `--leg-park-min-hold` · `--mux-fec`. Visor-wide and
+`--send-window-wait-max` · `--leg-park-min-hold` · `--dead-route-hold` ·
+`--dead-route-hold-max` · `--mux-fec`. Visor-wide and
 per-end, like `proxy mux cap`; `--mux-fec` reaches route groups built after it,
 since FEC is negotiated when a group is created. `windowRefreshInterval` is
 NOT here: it becomes a per-route-group ticker when the group is built.

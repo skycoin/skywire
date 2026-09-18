@@ -17,6 +17,34 @@ func TestRouterSettingsDefaultsMatchConstants(t *testing.T) {
 	require.EqualValues(t, ecfMaxWindowBytes, EcfMaxWindowBytes())
 	require.Equal(t, sendWindowWaitMax, SendWindowWaitMax())
 	require.Equal(t, legParkMinHold, LegParkMinHold())
+	require.Equal(t, deadRouteTTL, DeadRouteHold())
+	require.Equal(t, deadRouteMaxTTL, DeadRouteHoldMax())
+}
+
+// The dead-route cache the router builds carries no window of its own, so it
+// follows the knob on every death — that is what makes the hold live.
+func TestDeadRouteHoldIsLive(t *testing.T) {
+	t.Cleanup(resetRouterSettings)
+	c := newDeadRouteCache(0, 0)
+	ttl, max := c.hold()
+	require.Equal(t, deadRouteTTL, ttl)
+	require.Equal(t, deadRouteMaxTTL, max)
+
+	require.True(t, SetDeadRouteHold(5*time.Second))
+	require.True(t, SetDeadRouteHoldMax(30*time.Second))
+	ttl, max = c.hold()
+	require.Equal(t, 5*time.Second, ttl)
+	require.Equal(t, 30*time.Second, max)
+
+	// An explicit window (the tests own caches) ignores the knob.
+	fixed := newDeadRouteCache(time.Minute, 4*time.Minute)
+	ttl, max = fixed.hold()
+	require.Equal(t, time.Minute, ttl)
+	require.Equal(t, 4*time.Minute, max)
+
+	require.False(t, SetDeadRouteHold(0))
+	require.False(t, SetDeadRouteHoldMax(-time.Second))
+	require.Equal(t, 5*time.Second, DeadRouteHold(), "a refused set leaves the value alone")
 }
 
 func TestRouterSettingsSetAndRefuseNonPositive(t *testing.T) {
@@ -49,4 +77,6 @@ func resetRouterSettings() {
 	SetEcfMaxWindowBytes(ecfMaxWindowBytes)
 	SetSendWindowWaitMax(sendWindowWaitMax)
 	SetLegParkMinHold(legParkMinHold)
+	SetDeadRouteHold(deadRouteTTL)
+	SetDeadRouteHoldMax(deadRouteMaxTTL)
 }

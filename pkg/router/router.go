@@ -907,7 +907,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		tpdCache:        newTPDSnapshotCache(),
 		localRoutes:     newLocalRouteMemo(),
 		suspects:        newSuspectHopCache(handshakeAwaitTimeout),
-		deadRoutes:      newDeadRouteCache(deadRouteTTL, deadRouteMaxTTL),
+		deadRoutes:      newDeadRouteCache(0, 0), // 0 = follow the live route-settings knobs
 		warmRoutes:      newWarmRoutePool(defaultWarmPlanTTL),
 		// Default a mux responder to capacity bulk-spread for the downloads it
 		// serves (see router_serve.go); operators can disable via

@@ -31,6 +31,12 @@ var (
 	ecfMaxWindowBytesV atomic.Int64
 	sendWindowWaitMaxV atomic.Int64 // nanoseconds
 	legParkMinHoldV    atomic.Int64 // nanoseconds
+
+	// deadRouteHoldV and deadRouteHoldMaxV shadow deadRouteTTL and
+	// deadRouteMaxTTL in dead_route_cache.go; the cache re-reads them on every
+	// death, so a change reaches the router already running.
+	deadRouteHoldV    atomic.Int64 // nanoseconds
+	deadRouteHoldMaxV atomic.Int64 // nanoseconds
 )
 
 func init() {
@@ -39,6 +45,8 @@ func init() {
 	ecfMaxWindowBytesV.Store(ecfMaxWindowBytes)
 	sendWindowWaitMaxV.Store(int64(sendWindowWaitMax))
 	legParkMinHoldV.Store(int64(legParkMinHold))
+	deadRouteHoldV.Store(int64(deadRouteTTL))
+	deadRouteHoldMaxV.Store(int64(deadRouteMaxTTL))
 }
 
 // EcfWindowMargin is the multiplier on SACK-proven delivery-per-RTT that sets a
@@ -113,3 +121,28 @@ func (r *router) SetMuxFEC(on bool) { r.muxFEC.Store(on) }
 
 // GetMuxFEC reports whether new mux route groups advertise FEC.
 func (r *router) GetMuxFEC() bool { return r.muxFEC.Load() }
+
+// DeadRouteHold is the first exclusion window a route that died young is kept
+// out of the diversify search for.
+func DeadRouteHold() time.Duration { return time.Duration(deadRouteHoldV.Load()) }
+
+// SetDeadRouteHold installs the first exclusion window. Non-positive is refused.
+func SetDeadRouteHold(d time.Duration) bool {
+	if d <= 0 {
+		return false
+	}
+	deadRouteHoldV.Store(int64(d))
+	return true
+}
+
+// DeadRouteHoldMax caps the doubling applied on each repeat death.
+func DeadRouteHoldMax() time.Duration { return time.Duration(deadRouteHoldMaxV.Load()) }
+
+// SetDeadRouteHoldMax installs the exclusion ceiling. Non-positive is refused.
+func SetDeadRouteHoldMax(d time.Duration) bool {
+	if d <= 0 {
+		return false
+	}
+	deadRouteHoldMaxV.Store(int64(d))
+	return true
+}

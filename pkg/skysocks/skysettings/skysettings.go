@@ -61,6 +61,9 @@ const (
 	TunnelMeterFresh       = "tunnel.meter_fresh"
 
 	ChunkMaxBytes          = "chunk.max_bytes"
+	ChunkProbeBytes        = "chunk.probe_bytes"
+	ChunkMinBytes          = "chunk.min_bytes"
+	ChunkPerTunnel         = "chunk.per_tunnel"
 	ChunkConcurrency       = "chunk.concurrency"
 	ChunkRetryBudget       = "chunk.retry_budget"
 	ChunkIdleTimeout       = "chunk.idle_timeout"
@@ -158,6 +161,12 @@ func init() {
 		"range-split chunk ceiling; overrides --range-chunk-kib once set")
 	register(ChunkConcurrency, KindCount, 8,
 		"concurrent range-split chunk fetches; overrides --range-concurrency once set")
+	register(ChunkProbeBytes, KindBytes, 2<<20,
+		"bytes chunk0 asks for — the size probe, and the no-split threshold")
+	register(ChunkMinBytes, KindBytes, 1<<20,
+		"smallest chunk the planner will produce")
+	register(ChunkPerTunnel, KindCount, 2,
+		"chunks the planner aims to give each active tunnel")
 	register(ChunkRetryBudget, KindDuration, int64(15*time.Second),
 		"how long a failed chunk keeps being refetched before it gives up")
 	register(ChunkIdleTimeout, KindDuration, int64(15*time.Second),

@@ -51,6 +51,11 @@ type RouterSettings struct {
 	SendWindowWaitMax time.Duration `json:"send_window_wait_max,omitempty"`
 	LegParkMinHold    time.Duration `json:"leg_park_min_hold,omitempty"`
 
+	// The dead-route exclusion window and its ceiling, live from
+	// pkg/router/settings.go with the same zero-means-unchanged rule.
+	DeadRouteHold    time.Duration `json:"dead_route_hold,omitempty"`
+	DeadRouteHoldMax time.Duration `json:"dead_route_hold_max,omitempty"`
+
 	// MuxFEC advertises FEC on mux route groups created from now on; unlike
 	// the rest it is a tri-state on PUT, see SetRouterSettings.
 	MuxFEC *bool `json:"mux_fec,omitempty"`
@@ -87,6 +92,8 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 		EcfWindowMargin:     router.EcfWindowMargin(),
 		SendWindowWaitMax:   router.SendWindowWaitMax(),
 		LegParkMinHold:      router.LegParkMinHold(),
+		DeadRouteHold:       router.DeadRouteHold(),
+		DeadRouteHoldMax:    router.DeadRouteHoldMax(),
 		MuxFEC:              &fec,
 	}, nil
 }
@@ -126,6 +133,8 @@ func (v *Visor) SetRouterSettings(s RouterSettings) error {
 		{"ecf_window_margin", s.EcfWindowMargin == 0, func() bool { return router.SetEcfWindowMargin(s.EcfWindowMargin) }},
 		{"send_window_wait_max", s.SendWindowWaitMax == 0, func() bool { return router.SetSendWindowWaitMax(s.SendWindowWaitMax) }},
 		{"leg_park_min_hold", s.LegParkMinHold == 0, func() bool { return router.SetLegParkMinHold(s.LegParkMinHold) }},
+		{"dead_route_hold", s.DeadRouteHold == 0, func() bool { return router.SetDeadRouteHold(s.DeadRouteHold) }},
+		{"dead_route_hold_max", s.DeadRouteHoldMax == 0, func() bool { return router.SetDeadRouteHoldMax(s.DeadRouteHoldMax) }},
 	} {
 		if k.zero {
 			continue

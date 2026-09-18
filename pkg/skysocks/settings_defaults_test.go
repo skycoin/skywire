@@ -44,6 +44,10 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 	require.Equal(t, rsFreeRetries, setChunkFreeRetries())
 	require.Equal(t, rsOutstandingFactor, setChunkOutstandingFactor())
 
+	require.EqualValues(t, rsProbeChunkBytes, setChunkProbeBytes())
+	require.EqualValues(t, rsMinChunkBytes, setChunkMinBytes())
+	require.Equal(t, rsChunksPerTunnel, setChunkPerTunnel())
+
 	require.EqualValues(t, defaultRSChunkSize, skysettings.Bytes(skysettings.ChunkMaxBytes))
 	require.Equal(t, defaultRSConcurrency, skysettings.Count(skysettings.ChunkConcurrency))
 
@@ -67,7 +71,7 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 
 	// Every knob in the catalog is reachable: a name registered with no use site
 	// reading it is a knob the bench can set and nothing obeys.
-	require.Len(t, skysettings.Catalog(), 39)
+	require.Len(t, skysettings.Catalog(), 42)
 }
 
 // The two range-split knobs OVERRIDE a per-client boot flag rather than

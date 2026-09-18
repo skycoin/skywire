@@ -27,6 +27,8 @@ var (
 	settingsEcfMargin float64
 	settingsSendWait  time.Duration
 	settingsParkHold  time.Duration
+	settingsDeadHold  time.Duration
+	settingsDeadMax   time.Duration
 	settingsMuxFEC    string
 )
 
@@ -41,6 +43,8 @@ func init() {
 	settingsCmd.Flags().Float64Var(&settingsEcfMargin, "ecf-window-margin", 0, "multiplier on proven delivery-per-RTT (e.g. 2.0)")
 	settingsCmd.Flags().DurationVar(&settingsSendWait, "send-window-wait-max", 0, "how long a writer parks when every ready leg is at its window")
 	settingsCmd.Flags().DurationVar(&settingsParkHold, "leg-park-min-hold", 0, "how long an adaptive park holds before a leg may be re-admitted")
+	settingsCmd.Flags().DurationVar(&settingsDeadHold, "dead-route-hold", 0, "how long a route that died young is kept out of the next diversify search")
+	settingsCmd.Flags().DurationVar(&settingsDeadMax, "dead-route-hold-max", 0, "ceiling on the doubling applied to that window on each repeat death")
 	settingsCmd.Flags().StringVar(&settingsMuxFEC, "mux-fec", "", "true|false: advertise FEC on NEW mux route groups")
 }
 
@@ -65,7 +69,7 @@ effect at once; the preference is written to routing.transport_preference.`,
 		changed := false
 		for _, f := range []string{"prefer", "min-hops", "existing-tp-only", "force-local",
 			"ecf-max-window", "ecf-min-window", "ecf-window-margin", "send-window-wait-max",
-			"leg-park-min-hold", "mux-fec"} {
+			"leg-park-min-hold", "dead-route-hold", "dead-route-hold-max", "mux-fec"} {
 			changed = changed || cmd.Flags().Changed(f)
 		}
 		if changed {
@@ -107,6 +111,12 @@ effect at once; the preference is written to routing.transport_preference.`,
 			if cmd.Flags().Changed("leg-park-min-hold") {
 				next.LegParkMinHold = settingsParkHold
 			}
+			if cmd.Flags().Changed("dead-route-hold") {
+				next.DeadRouteHold = settingsDeadHold
+			}
+			if cmd.Flags().Changed("dead-route-hold-max") {
+				next.DeadRouteHoldMax = settingsDeadMax
+			}
 			if cmd.Flags().Changed("mux-fec") {
 				fec := settingsMuxFEC == "true"
 				next.MuxFEC = &fec
@@ -129,6 +139,8 @@ effect at once; the preference is written to routing.transport_preference.`,
 			EcfWindowMargin:     cur.EcfWindowMargin,
 			SendWindowWaitMax:   cur.SendWindowWaitMax.String(),
 			LegParkMinHold:      cur.LegParkMinHold.String(),
+			DeadRouteHold:       cur.DeadRouteHold.String(),
+			DeadRouteHoldMax:    cur.DeadRouteHoldMax.String(),
 			MuxFEC:              fec,
 		}))
 	},
