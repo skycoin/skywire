@@ -1,0 +1,115 @@
+# mux-tunnels-2 — per-row leg shares, forward = client->exit, reverse = exit->client
+# note	the exit snapshots only set start and end, so exit_standby/exit_retx/exit_ack are the set-end values repeated on every row, not per-row deltas
+# note	carrier.tsv counts a TRANSPORT, not a route group: a transport another group or app also rides counts that traffic here too
+# note	latency_ms is the end-of-set legs.json snapshot, not the latency measured on the row
+# note	shares and verdicts are computed over the legs that carried the payload: every leg of an ACTIVE group, plus any leg holding >= 1 % of the payload-direction bytes of the row (a mid-set promotion the set-start role does not yet show); the rest are listed with their bytes and a "-" share
+# note	some legs are in scope on bytes alone: their group reads "standby" in the set-start legs.json but they carried >= 1 % of the payload of a row
+# note	rev_bytes/rev_share on 12 row(s) are the local recv_delta (rev_basis local-recv): the exit's sent_bytes needs a per-row EXIT_SNAP run against an exit that reports the per-leg byte counters, and either the snapshots or the counters were absent
+# row	label	dir	size	leg	rg	role	scope	hops	carrier	latency_ms	remote_pk	fwd_bytes	rev_bytes	fwd_share	rev_share	rev_basis	exit_tp	exit_standby	exit_retx	exit_ack_ms	exit_sent_bytes	exit_recv_bytes
+1	mux-tunnels-2-t1	down	10000000	b414796d	49160	active	in	b414796d>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	135.750582	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	20159	2157946	90.9%	21.3%	local-recv	b414796d	no	10	1055.07	24700120	34363078
+1	mux-tunnels-2-t1	down	10000000	95839ad0	49161	active	in	95839ad0>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13;dc5330cf>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	31.621999	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	1295	5971365	5.8%	59.0%	local-recv	dc5330cf	no	4	440.09	200338448	143442376
+1	mux-tunnels-2-t1	down	10000000	f1012467	49162	-	in	-	stcpr	-	0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb	724	1999841	3.3%	19.7%	local-recv	-	-	-	-	-	-
+1	mux-tunnels-2-t1	down	10000000	fdab37dd	49163	-	out	-	stcpr	-	03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf	32	0	-	-	local-recv	-	-	-	-	-	-
+1	mux-tunnels-2-t1	down	10000000	ac40965a	49165	-	out	-	stcpr	-	02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7	32	32	-	-	local-recv	-	-	-	-	-	-
+2	mux-tunnels-2-t2	down	10000000	b414796d	49160	active	in	b414796d>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	135.750582	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	23536	2142932	93.3%	21.2%	local-recv	b414796d	no	10	1055.07	24700120	34363078
+2	mux-tunnels-2-t2	down	10000000	95839ad0	49161	active	in	95839ad0>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13;dc5330cf>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	31.621999	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	1684	7950957	6.7%	78.8%	local-recv	dc5330cf	no	4	440.09	200338448	143442376
+2	mux-tunnels-2-t2	down	10000000	f1012467	49162	-	out	-	stcpr	-	0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb	5	69	-	-	local-recv	-	-	-	-	-	-
+2	mux-tunnels-2-t2	down	10000000	fdab37dd	49163	-	out	-	stcpr	-	03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf	0	0	-	-	local-recv	-	-	-	-	-	-
+2	mux-tunnels-2-t2	down	10000000	ac40965a	49165	-	out	-	stcpr	-	02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7	0	0	-	-	local-recv	-	-	-	-	-	-
+2	mux-tunnels-2-t2	down	10000000	2c4ae7a5	49166	-	out	-	stcpr	-	02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd	32	0	-	-	local-recv	-	-	-	-	-	-
+2	mux-tunnels-2-t2	down	10000000	50cdb857	49167	-	out	-	stcpr	-	0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7	0	0	-	-	local-recv	-	-	-	-	-	-
+3	mux-tunnels-2-t3	down	10000000	b414796d	49160	active	in	b414796d>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	135.750582	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	29585	2119172	95.2%	21.1%	local-recv	b414796d	no	10	1055.07	24700120	34363078
+3	mux-tunnels-2-t3	down	10000000	95839ad0	49161	active	in	95839ad0>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13;dc5330cf>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	31.621999	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	1500	7918177	4.8%	78.9%	local-recv	dc5330cf	no	4	440.09	200338448	143442376
+3	mux-tunnels-2-t3	down	10000000	f1012467	49162	-	out	-	stcpr	-	0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb	13	45	-	-	local-recv	-	-	-	-	-	-
+3	mux-tunnels-2-t3	down	10000000	fdab37dd	49163	-	out	-	stcpr	-	03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf	40	40	-	-	local-recv	-	-	-	-	-	-
+3	mux-tunnels-2-t3	down	10000000	ac40965a	49165	-	out	-	stcpr	-	02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7	72	8	-	-	local-recv	-	-	-	-	-	-
+3	mux-tunnels-2-t3	down	10000000	2c4ae7a5	49166	-	out	-	stcpr	-	02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd	77	77	-	-	local-recv	-	-	-	-	-	-
+3	mux-tunnels-2-t3	down	10000000	50cdb857	49167	-	out	-	stcpr	-	0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7	77	77	-	-	local-recv	-	-	-	-	-	-
+4	mux-tunnels-2-t1	up	10000000	b414796d	49160	active	in	b414796d>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	135.750582	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	19719	30915	0.2%	92.7%	local-recv	b414796d	no	10	1055.07	24700120	34363078
+4	mux-tunnels-2-t1	up	10000000	95839ad0	49161	active	in	95839ad0>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13;dc5330cf>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	31.621999	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	10007056	2449	99.8%	7.3%	local-recv	dc5330cf	no	4	440.09	200338448	143442376
+4	mux-tunnels-2-t1	up	10000000	f1012467	49162	-	out	-	stcpr	-	0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb	32	32	-	-	local-recv	-	-	-	-	-	-
+4	mux-tunnels-2-t1	up	10000000	fdab37dd	49163	-	out	-	stcpr	-	03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf	37	37	-	-	local-recv	-	-	-	-	-	-
+4	mux-tunnels-2-t1	up	10000000	ac40965a	49165	-	out	-	stcpr	-	02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7	45	45	-	-	local-recv	-	-	-	-	-	-
+4	mux-tunnels-2-t1	up	10000000	2c4ae7a5	49166	-	out	-	stcpr	-	02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd	69	53	-	-	local-recv	-	-	-	-	-	-
+4	mux-tunnels-2-t1	up	10000000	50cdb857	49167	-	out	-	stcpr	-	0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7	69	37	-	-	local-recv	-	-	-	-	-	-
+4	mux-tunnels-2-t1	up	10000000	8378a54f	49168	-	out	-	sudph	-	035681dccabf5a90378b453507e6089a3731a150e8512c5e022557c879c87eefcd	0	0	-	-	local-recv	-	-	-	-	-	-
+5	mux-tunnels-2-t2	up	10000000	b414796d	49160	active	in	b414796d>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	135.750582	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	2509786	7277	25.1%	79.7%	local-recv	b414796d	no	10	1055.07	24700120	34363078
+5	mux-tunnels-2-t2	up	10000000	95839ad0	49161	active	in	95839ad0>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13;dc5330cf>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	31.621999	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	7505416	1856	74.9%	20.3%	local-recv	dc5330cf	no	4	440.09	200338448	143442376
+5	mux-tunnels-2-t2	up	10000000	f1012467	49162	-	out	-	stcpr	-	0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb	37	37	-	-	local-recv	-	-	-	-	-	-
+5	mux-tunnels-2-t2	up	10000000	fdab37dd	49163	-	out	-	stcpr	-	03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf	37	37	-	-	local-recv	-	-	-	-	-	-
+5	mux-tunnels-2-t2	up	10000000	ac40965a	49165	-	out	-	stcpr	-	02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7	37	37	-	-	local-recv	-	-	-	-	-	-
+5	mux-tunnels-2-t2	up	10000000	2c4ae7a5	49166	-	out	-	stcpr	-	02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd	37	37	-	-	local-recv	-	-	-	-	-	-
+5	mux-tunnels-2-t2	up	10000000	50cdb857	49167	-	out	-	stcpr	-	0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7	37	37	-	-	local-recv	-	-	-	-	-	-
+5	mux-tunnels-2-t2	up	10000000	8378a54f	49168	-	out	-	sudph	-	035681dccabf5a90378b453507e6089a3731a150e8512c5e022557c879c87eefcd	37	77	-	-	local-recv	-	-	-	-	-	-
+6	mux-tunnels-2-t3	up	10000000	b414796d	49160	active	in	b414796d>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	135.750582	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	2574222	272244	25.5%	99.1%	local-recv	b414796d	no	10	1055.07	24700120	34363078
+6	mux-tunnels-2-t3	up	10000000	95839ad0	49161	active	in	95839ad0>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13;dc5330cf>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	31.621999	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	5003773	1418	49.5%	0.5%	local-recv	dc5330cf	no	4	440.09	200338448	143442376
+6	mux-tunnels-2-t3	up	10000000	f1012467	49162	-	in	-	stcpr	-	0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb	2521260	919	25.0%	0.3%	local-recv	-	-	-	-	-	-
+6	mux-tunnels-2-t3	up	10000000	fdab37dd	49163	-	out	-	stcpr	-	03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf	106	106	-	-	local-recv	-	-	-	-	-	-
+6	mux-tunnels-2-t3	up	10000000	ac40965a	49165	-	out	-	stcpr	-	02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7	138	138	-	-	local-recv	-	-	-	-	-	-
+6	mux-tunnels-2-t3	up	10000000	2c4ae7a5	49166	-	out	-	stcpr	-	02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd	50	114	-	-	local-recv	-	-	-	-	-	-
+6	mux-tunnels-2-t3	up	10000000	50cdb857	49167	-	out	-	stcpr	-	0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7	3865	3616	-	-	local-recv	-	-	-	-	-	-
+6	mux-tunnels-2-t3	up	10000000	8378a54f	49168	-	out	-	sudph	-	035681dccabf5a90378b453507e6089a3731a150e8512c5e022557c879c87eefcd	45	45	-	-	local-recv	-	-	-	-	-	-
+7	mux-tunnels-2-t1	down	50000000	b414796d	49160	active	in	b414796d>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	135.750582	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	3873	2128222	50.2%	4.2%	local-recv	b414796d	no	10	1055.07	24700120	34363078
+7	mux-tunnels-2-t1	down	50000000	95839ad0	49161	active	in	95839ad0>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13;dc5330cf>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	31.621999	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	3842	47993593	49.8%	95.8%	local-recv	dc5330cf	no	4	440.09	200338448	143442376
+7	mux-tunnels-2-t1	down	50000000	f1012467	49162	-	out	-	stcpr	-	0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb	82	82	-	-	local-recv	-	-	-	-	-	-
+7	mux-tunnels-2-t1	down	50000000	fdab37dd	49163	-	out	-	stcpr	-	03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf	114	114	-	-	local-recv	-	-	-	-	-	-
+7	mux-tunnels-2-t1	down	50000000	ac40965a	49165	-	out	-	stcpr	-	02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7	82	82	-	-	local-recv	-	-	-	-	-	-
+7	mux-tunnels-2-t1	down	50000000	2c4ae7a5	49166	-	out	-	stcpr	-	02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd	82	82	-	-	local-recv	-	-	-	-	-	-
+7	mux-tunnels-2-t1	down	50000000	50cdb857	49167	-	out	-	stcpr	-	0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7	90	90	-	-	local-recv	-	-	-	-	-	-
+7	mux-tunnels-2-t1	down	50000000	8378a54f	49168	-	out	-	sudph	-	035681dccabf5a90378b453507e6089a3731a150e8512c5e022557c879c87eefcd	90	90	-	-	local-recv	-	-	-	-	-	-
+8	mux-tunnels-2-t2	down	50000000	b414796d	49160	active	in	b414796d>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	135.750582	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	53101	6141578	93.7%	12.3%	local-recv	b414796d	no	10	1055.07	24700120	34363078
+8	mux-tunnels-2-t2	down	50000000	95839ad0	49161	active	in	95839ad0>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13;dc5330cf>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	31.621999	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	3581	43993054	6.3%	87.7%	local-recv	dc5330cf	no	4	440.09	200338448	143442376
+8	mux-tunnels-2-t2	down	50000000	f1012467	49162	-	out	-	stcpr	-	0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb	170	138	-	-	local-recv	-	-	-	-	-	-
+8	mux-tunnels-2-t2	down	50000000	fdab37dd	49163	-	out	-	stcpr	-	03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf	138	106	-	-	local-recv	-	-	-	-	-	-
+8	mux-tunnels-2-t2	down	50000000	ac40965a	49165	-	out	-	stcpr	-	02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7	106	106	-	-	local-recv	-	-	-	-	-	-
+8	mux-tunnels-2-t2	down	50000000	2c4ae7a5	49166	-	out	-	stcpr	-	02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd	106	138	-	-	local-recv	-	-	-	-	-	-
+8	mux-tunnels-2-t2	down	50000000	50cdb857	49167	-	out	-	stcpr	-	0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7	256	261	-	-	local-recv	-	-	-	-	-	-
+8	mux-tunnels-2-t2	down	50000000	8378a54f	49168	-	out	-	sudph	-	035681dccabf5a90378b453507e6089a3731a150e8512c5e022557c879c87eefcd	109	77	-	-	local-recv	-	-	-	-	-	-
+9	mux-tunnels-2-t3	down	50000000	b414796d	49160	active	in	b414796d>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	135.750582	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	32999	10524497	89.7%	20.8%	local-recv	b414796d	no	10	1055.07	24700120	34363078
+9	mux-tunnels-2-t3	down	50000000	95839ad0	49161	active	in	95839ad0>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13;dc5330cf>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	31.621999	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	2914	35996157	7.9%	71.2%	local-recv	dc5330cf	no	4	440.09	200338448	143442376
+9	mux-tunnels-2-t3	down	50000000	f1012467	49162	-	in	-	stcpr	-	0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb	880	4014807	2.4%	7.9%	local-recv	-	-	-	-	-	-
+9	mux-tunnels-2-t3	down	50000000	fdab37dd	49163	-	out	-	stcpr	-	03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf	37	37	-	-	local-recv	-	-	-	-	-	-
+9	mux-tunnels-2-t3	down	50000000	ac40965a	49165	-	out	-	stcpr	-	02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7	69	69	-	-	local-recv	-	-	-	-	-	-
+9	mux-tunnels-2-t3	down	50000000	2c4ae7a5	49166	-	out	-	stcpr	-	02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd	37	37	-	-	local-recv	-	-	-	-	-	-
+9	mux-tunnels-2-t3	down	50000000	50cdb857	49167	-	out	-	stcpr	-	0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7	175	143	-	-	local-recv	-	-	-	-	-	-
+9	mux-tunnels-2-t3	down	50000000	8378a54f	49168	-	out	-	sudph	-	035681dccabf5a90378b453507e6089a3731a150e8512c5e022557c879c87eefcd	114	114	-	-	local-recv	-	-	-	-	-	-
+10	mux-tunnels-2-t1	up	50000000	b414796d	49160	active	in	b414796d>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	135.750582	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	8420266	16139	16.8%	74.4%	local-recv	b414796d	no	10	1055.07	24700120	34363078
+10	mux-tunnels-2-t1	up	50000000	95839ad0	49161	active	in	95839ad0>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13;dc5330cf>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	31.621999	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	41692235	5542	83.2%	25.6%	local-recv	dc5330cf	no	4	440.09	200338448	143442376
+10	mux-tunnels-2-t1	up	50000000	f1012467	49162	-	out	-	stcpr	-	0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb	87	82	-	-	local-recv	-	-	-	-	-	-
+10	mux-tunnels-2-t1	up	50000000	fdab37dd	49163	-	out	-	stcpr	-	03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf	124	119	-	-	local-recv	-	-	-	-	-	-
+10	mux-tunnels-2-t1	up	50000000	ac40965a	49165	-	out	-	stcpr	-	02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7	50	82	-	-	local-recv	-	-	-	-	-	-
+10	mux-tunnels-2-t1	up	50000000	2c4ae7a5	49166	-	out	-	stcpr	-	02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd	55	50	-	-	local-recv	-	-	-	-	-	-
+10	mux-tunnels-2-t1	up	50000000	50cdb857	49167	-	out	-	stcpr	-	0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7	53	53	-	-	local-recv	-	-	-	-	-	-
+10	mux-tunnels-2-t1	up	50000000	8378a54f	49168	-	out	-	sudph	-	035681dccabf5a90378b453507e6089a3731a150e8512c5e022557c879c87eefcd	53	53	-	-	local-recv	-	-	-	-	-	-
+11	mux-tunnels-2-t2	up	50000000	b414796d	49160	active	in	b414796d>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	135.750582	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	12548437	4846	25.1%	48.8%	local-recv	b414796d	no	10	1055.07	24700120	34363078
+11	mux-tunnels-2-t2	up	50000000	95839ad0	49161	active	in	95839ad0>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13;dc5330cf>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	31.621999	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	37523062	5088	74.9%	51.2%	local-recv	dc5330cf	no	4	440.09	200338448	143442376
+11	mux-tunnels-2-t2	up	50000000	f1012467	49162	-	out	-	stcpr	-	0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb	106	184	-	-	local-recv	-	-	-	-	-	-
+11	mux-tunnels-2-t2	up	50000000	fdab37dd	49163	-	out	-	stcpr	-	03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf	106	184	-	-	local-recv	-	-	-	-	-	-
+11	mux-tunnels-2-t2	up	50000000	ac40965a	49165	-	out	-	stcpr	-	02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7	106	186	-	-	local-recv	-	-	-	-	-	-
+11	mux-tunnels-2-t2	up	50000000	2c4ae7a5	49166	-	out	-	stcpr	-	02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd	143	221	-	-	local-recv	-	-	-	-	-	-
+11	mux-tunnels-2-t2	up	50000000	50cdb857	49167	-	out	-	stcpr	-	0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7	234	349	-	-	local-recv	-	-	-	-	-	-
+11	mux-tunnels-2-t2	up	50000000	8378a54f	49168	-	out	-	sudph	-	035681dccabf5a90378b453507e6089a3731a150e8512c5e022557c879c87eefcd	77	77	-	-	local-recv	-	-	-	-	-	-
+12	mux-tunnels-2-t3	up	50000000	b414796d	49160	active	in	b414796d>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	135.750582	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	8358268	560394	16.7%	55.1%	local-recv	b414796d	no	10	1055.07	24700120	34363078
+12	mux-tunnels-2-t3	up	50000000	95839ad0	49161	active	in	95839ad0>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13;dc5330cf>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	31.621999	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	41692296	456560	83.3%	44.9%	local-recv	dc5330cf	no	4	440.09	200338448	143442376
+12	mux-tunnels-2-t3	up	50000000	f1012467	49162	-	out	-	stcpr	-	0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb	241	418835	-	-	local-recv	-	-	-	-	-	-
+12	mux-tunnels-2-t3	up	50000000	fdab37dd	49163	-	out	-	stcpr	-	03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf	209	151093	-	-	local-recv	-	-	-	-	-	-
+12	mux-tunnels-2-t3	up	50000000	ac40965a	49165	-	out	-	stcpr	-	02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7	246	172707	-	-	local-recv	-	-	-	-	-	-
+12	mux-tunnels-2-t3	up	50000000	2c4ae7a5	49166	-	out	-	stcpr	-	02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd	177	191176	-	-	local-recv	-	-	-	-	-	-
+12	mux-tunnels-2-t3	up	50000000	50cdb857	49167	-	out	-	stcpr	-	0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7	209	166148	-	-	local-recv	-	-	-	-	-	-
+12	mux-tunnels-2-t3	up	50000000	8378a54f	49168	-	out	-	sudph	-	035681dccabf5a90378b453507e6089a3731a150e8512c5e022557c879c87eefcd	114	114	-	-	local-recv	-	-	-	-	-	-
+#
+# verdicts
+# row	label	dir	size	forward_on	forward_kind	forward_share	forward	reverse_fanout	reverse_max_share	reverse	flip
+1	mux-tunnels-2-t1	down	10000000	b414796d	direct	90.9%	PASS	3	59.0%	INFO	-
+2	mux-tunnels-2-t2	down	10000000	b414796d	direct	93.3%	PASS	2	78.8%	INFO	same
+3	mux-tunnels-2-t3	down	10000000	b414796d	direct	95.2%	PASS	2	78.9%	INFO	same
+4	mux-tunnels-2-t1	up	10000000	95839ad0	lowest-latency	99.8%	PASS	1	92.7%	INFO	flip:b414796d->95839ad0
+5	mux-tunnels-2-t2	up	10000000	95839ad0	lowest-latency	74.9%	INFO	2	79.7%	INFO	same
+6	mux-tunnels-2-t3	up	10000000	95839ad0	lowest-latency	49.5%	INFO	1	99.1%	INFO	same
+7	mux-tunnels-2-t1	down	50000000	b414796d	direct	50.2%	INFO	1	95.8%	FAIL	flip:95839ad0->b414796d
+8	mux-tunnels-2-t2	down	50000000	b414796d	direct	93.7%	PASS	2	87.7%	PASS	same
+9	mux-tunnels-2-t3	down	50000000	b414796d	direct	89.7%	PASS	2	71.2%	PASS	same
+10	mux-tunnels-2-t1	up	50000000	95839ad0	lowest-latency	83.2%	PASS	2	74.4%	INFO	flip:b414796d->95839ad0
+11	mux-tunnels-2-t2	up	50000000	95839ad0	lowest-latency	74.9%	INFO	2	51.2%	INFO	same
+12	mux-tunnels-2-t3	up	50000000	95839ad0	lowest-latency	83.3%	PASS	2	55.1%	INFO	same
+# flip	3 change(s) of the dominant forward leg at row(s) 4,7,10

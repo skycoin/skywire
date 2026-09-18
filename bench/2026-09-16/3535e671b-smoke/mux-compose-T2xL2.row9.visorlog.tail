@@ -1,0 +1,400 @@
+[2026-09-18T03:04:41-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T03:04:41-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=022305a2dbba7adc7a5d4f33dc27b75401424323a0e603e2f9e61c073057228475 type=sudph
+[2026-09-18T03:04:41-05:00] DEBUG [transport_manager]: Initializing TP with ID 72935383-f42e-0d0d-9669-86fecf56b6b6
+[2026-09-18T03:04:41-05:00] DEBUG [tp:022305a2dbba7adc7a5d4f33dc27b75401424323a0e603e2f9e61c073057228475]: no prior transport log entry; starting fresh transport=72935383-f42e-0d0d-9669-86fecf56b6b6
+[2026-09-18T03:04:41-05:00] DEBUG [transport_manager]: Dialing transport to 022305a2dbba7adc7a5d4f33dc27b75401424323a0e603e2f9e61c073057228475 via sudph
+[2026-09-18T03:04:41-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=537 after idle PTO app_name=skysocks-client
+[2026-09-18T03:04:41-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T03:04:41-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T03:04:41-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: shared-bottleneck ruling (advisory — sbd_demote is off, nothing was parked): leg 1 reads as co-bottlenecked with active leg 0 in group 0 — skew 0.000 vs -0.250, cv 0.241 vs 0.168, freq 0.429 vs 0.571, mean 208.1 vs 251.3 ms over 8/8 samples; send-path delivered 6 B/s (evidence floor 65536 B/s). Set --sbd-demote true on both ends to act on rulings like this one. app_name=skysocks-client
+[2026-09-18T03:04:41-05:00] DEBUG [transport_manager]: Error dialing transport to 02d4e78d234a6029427f39ba64a6c6e3cd01dcc1097f1c2ee6cfe62303f94ec992 via sudph: mt.client.Dial: handshake failed: timeout
+[2026-09-18T03:04:41-05:00] DEBUG [sudph]: Resolved PK 022305a2dbba7adc7a5d4f33dc27b75401424323a0e603e2f9e61c073057228475 to visor data {125.167.48.3:30856  false {59169 [192.168.1.116 2001:448a:10b1:6e88:9d5a:744a:eea7:7ffd 2001:448a:10b1:6e88:b7c:688a:76b:d332 2001:448a:10b1:6e88:745d:c243:5c35:90bc 2001:448a:10b1:6e88:4a0d:e5fa:833b:f36c] 36.70.54.47  }}
+[2026-09-18T03:04:41-05:00] DEBUG [sudph]: Dialing v4-only public address: 125.167.48.3:30856
+[2026-09-18T03:04:41-05:00] DEBUG [sudph]: Dialing 125.167.48.3:30856
+[2026-09-18T03:04:41-05:00] DEBUG [sudph]: Dialed 125.167.48.3:30856
+[2026-09-18T03:04:41-05:00] DEBUG [sudph]: Performing handshake with 125.167.48.3:30856
+[2026-09-18T03:04:42-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=03e38a3d8f7c896e21835b09173f3fdc053aca2b007652c9b4c93ac89bac85c9cd type=sudph
+[2026-09-18T03:04:42-05:00] DEBUG [transport_manager]: Initializing TP with ID 20a2a400-d7a3-0767-b41d-af6c25e36cc5
+[2026-09-18T03:04:42-05:00] DEBUG [transport_manager]: Found an old mTp from internal map.
+[2026-09-18T03:04:42-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=03e38a3d8f7c896e21835b09173f3fdc053aca2b007652c9b4c93ac89bac85c9cd type=sudph
+[2026-09-18T03:04:42-05:00] DEBUG [sudph]: Accepted connection from 1.21.119.157:36352
+[2026-09-18T03:04:42-05:00] DEBUG [cli_rpc]: CLI RPC stats: active=0, total=792, errors=0, peak=3
+[2026-09-18T03:04:42-05:00] DEBUG [transport_manager]: Error dialing transport to 03edb4ea9cc744bed9c72af65c70c2e3b24f3d946f40d9ac4052538d800e1ea2d0 via sudph: mt.client.Dial: handshake failed: timeout
+[2026-09-18T03:04:42-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49182, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T03:04:42-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=02df363105d96ff2cb7d6e8ef50300a678182ff4c632838d4e036852d36dbbfdd2 type=sudph
+[2026-09-18T03:04:42-05:00] DEBUG [transport_manager]: Initializing TP with ID 142a7bd1-1e09-07f1-b95d-3fbb73854751
+[2026-09-18T03:04:42-05:00] DEBUG [tp:02df363105d96ff2cb7d6e8ef50300a678182ff4c632838d4e036852d36dbbfdd2]: no prior transport log entry; starting fresh transport=142a7bd1-1e09-07f1-b95d-3fbb73854751
+[2026-09-18T03:04:42-05:00] DEBUG [transport_manager]: Dialing transport to 02df363105d96ff2cb7d6e8ef50300a678182ff4c632838d4e036852d36dbbfdd2 via sudph
+[2026-09-18T03:04:42-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=02ec69f28ec038778f738eae0ced387059897ccdca8b90b6131ab2d000df6adf04 type=sudph
+[2026-09-18T03:04:42-05:00] DEBUG [transport_manager]: Initializing TP with ID a91c1134-d283-0d2d-9626-449387e8de37
+[2026-09-18T03:04:42-05:00] DEBUG [tp:02ec69f28ec038778f738eae0ced387059897ccdca8b90b6131ab2d000df6adf04]: no prior transport log entry; starting fresh transport=a91c1134-d283-0d2d-9626-449387e8de37
+[2026-09-18T03:04:42-05:00] DEBUG [transport_manager]: Dialing transport to 02ec69f28ec038778f738eae0ced387059897ccdca8b90b6131ab2d000df6adf04 via sudph
+[2026-09-18T03:04:42-05:00] DEBUG [sudph]: Resolved PK 02df363105d96ff2cb7d6e8ef50300a678182ff4c632838d4e036852d36dbbfdd2 to visor data {84.20.25.148:41676  false {41676 [192.168.2.201] 84.20.25.148  }}
+[2026-09-18T03:04:42-05:00] DEBUG [sudph]: Dialing v4-only public address: 84.20.25.148:41676
+[2026-09-18T03:04:42-05:00] DEBUG [sudph]: Dialing 84.20.25.148:41676
+[2026-09-18T03:04:42-05:00] DEBUG [sudph]: Dialed 84.20.25.148:41676
+[2026-09-18T03:04:42-05:00] DEBUG [sudph]: Performing handshake with 84.20.25.148:41676
+[2026-09-18T03:04:43-05:00] DEBUG [cli_rpc]: CLI RPC conn #793 accepted from 127.0.0.1:59002 (active: 1)
+[2026-09-18T03:04:43-05:00] DEBUG [cli_rpc]: CLI RPC conn #793 closed after 17ms (active: 0)
+[2026-09-18T03:04:43-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: shared-bottleneck ruling (advisory — sbd_demote is off, nothing was parked): leg 1 reads as co-bottlenecked with active leg 0 in group 0 — skew 0.333 vs 0.500, cv 1.325 vs 0.689, freq 0.600 vs 0.571, mean 4441.6 vs 528.2 ms over 6/8 samples; send-path delivered 316642 B/s (evidence floor 65536 B/s). Set --sbd-demote true on both ends to act on rulings like this one. app_name=skysocks-client
+[2026-09-18T03:04:43-05:00] DEBUG [sudph]: Resolved PK 02ec69f28ec038778f738eae0ced387059897ccdca8b90b6131ab2d000df6adf04 to visor data {118.137.128.99:49048  false {36102 [192.168.0.6 192.168.65.184] 118.137.15.89  }}
+[2026-09-18T03:04:43-05:00] DEBUG [sudph]: Dialing v4-only public address: 118.137.128.99:49048
+[2026-09-18T03:04:43-05:00] DEBUG [sudph]: Dialing 118.137.128.99:49048
+[2026-09-18T03:04:43-05:00] DEBUG [sudph]: Dialed 118.137.128.99:49048
+[2026-09-18T03:04:43-05:00] DEBUG [sudph]: Performing handshake with 118.137.128.99:49048
+[2026-09-18T03:04:43-05:00] DEBUG [visor]: Saving transport to 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c via dmsg with label skycoin
+[2026-09-18T03:04:43-05:00] DEBUG [transport_manager]: Initializing TP with ID 5bacb16f-79c4-0d39-aaff-9a82ced5192a
+[2026-09-18T03:04:43-05:00] DEBUG [transport_manager]: Using no-op discovery client for self-transport
+[2026-09-18T03:04:43-05:00] DEBUG [tp:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c]: no prior transport log entry; starting fresh transport=5bacb16f-79c4-0d39-aaff-9a82ced5192a
+[2026-09-18T03:04:43-05:00] DEBUG [transport_manager]: Dialing transport to 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c via dmsg
+[2026-09-18T03:04:43-05:00] DEBUG [transport_manager]: Error dialing transport to 03756a76725bccd33c975d132b8f82bbad1507a02f38c39a2b689b51ffd61be8ce via sudph: mt.client.Dial: handshake failed: timeout
+[2026-09-18T03:04:43-05:00] DEBUG [transport_manager]: recv transport request: type(dmsg) remote(0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c)
+[2026-09-18T03:04:43-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-18T03:04:43-05:00] DEBUG [transport_manager]: Using no-op discovery client for self-transport (accept)
+[2026-09-18T03:04:43-05:00] DEBUG [tp:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c]: no prior transport log entry; starting fresh transport=5bacb16f-79c4-0d39-aaff-9a82ced5192a
+[2026-09-18T03:04:43-05:00] DEBUG [tp:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c]: Skipping settlement handshake for self-connection (noop discovery client)
+[2026-09-18T03:04:43-05:00] DEBUG [tp:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c]: Setting underlying transport...
+[2026-09-18T03:04:43-05:00] DEBUG [tp:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c]: Sent signal to 'mt.transportCh'.
+[2026-09-18T03:04:43-05:00] DEBUG [transport_manager]: accepted tp: type(dmsg) remote(0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c) tpID(5bacb16f-79c4-0d39-aaff-9a82ced5192a) new(true)
+[2026-09-18T03:04:43-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-18T03:04:43-05:00] DEBUG [tp:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c]: Serving. remote_pk=0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c tp_id=5bacb16f-79c4-0d39-aaff-9a82ced5192a tp_index=378
+[2026-09-18T03:04:44-05:00] DEBUG [tp:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c]: Skipping settlement handshake for self-connection (noop discovery client)
+[2026-09-18T03:04:44-05:00] DEBUG [tp:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c]: Sent signal to 'mt.transportCh'.
+[2026-09-18T03:04:44-05:00] DEBUG [visor]: Saved transport to 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c via dmsg, label user
+[2026-09-18T03:04:44-05:00] DEBUG [transportable]: Visor transportability check passed
+[2026-09-18T03:04:44-05:00] DEBUG [transport_manager]: Deletion nudge received, debouncing...
+[2026-09-18T03:04:44-05:00] DEBUG [tp:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c]: Stopped serving. remaining_tps=377 remote_pk=0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c tp_id=5bacb16f-79c4-0d39-aaff-9a82ced5192a tp_index=378
+[2026-09-18T03:04:44-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=035b7339c7ff088501268eb889e3d83b4f74fa852ea80109355e8ab4ddabe7f809 type=sudph
+[2026-09-18T03:04:44-05:00] DEBUG [transport_manager]: Initializing TP with ID a4192379-02f2-045d-8bbf-32512bb70ab9
+[2026-09-18T03:04:44-05:00] DEBUG [tp:035b7339c7ff088501268eb889e3d83b4f74fa852ea80109355e8ab4ddabe7f809]: no prior transport log entry; starting fresh transport=a4192379-02f2-045d-8bbf-32512bb70ab9
+[2026-09-18T03:04:44-05:00] DEBUG [transport_manager]: Dialing transport to 035b7339c7ff088501268eb889e3d83b4f74fa852ea80109355e8ab4ddabe7f809 via sudph
+[2026-09-18T03:04:44-05:00] DEBUG [sudph]: Resolved PK 035b7339c7ff088501268eb889e3d83b4f74fa852ea80109355e8ab4ddabe7f809 to visor data {103.14.2.109:61095  false {49466 [10.10.0.230]   }}
+[2026-09-18T03:04:44-05:00] DEBUG [sudph]: Dialing v4-only public address: 103.14.2.109:61095
+[2026-09-18T03:04:44-05:00] DEBUG [sudph]: Dialing 103.14.2.109:61095
+[2026-09-18T03:04:44-05:00] DEBUG [sudph]: Dialed 103.14.2.109:61095
+[2026-09-18T03:04:44-05:00] DEBUG [sudph]: Performing handshake with 103.14.2.109:61095
+[2026-09-18T03:04:44-05:00] DEBUG readPacket [tp:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c]: Failed to read packet header. error=EOF
+[2026-09-18T03:04:44-05:00] DEBUG [tp:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c]: Transport closed, stopping read loop error=EOF src="read_loop"
+[2026-09-18T03:04:44-05:00] DEBUG [transport_manager]: Error dialing transport to 0284b1931b7251c6e8ec7afbbf849bfeddd2cfaae71ae311b97f0e77f2f2d8ce76 via sudph: mt.client.Dial: handshake failed: timeout
+[2026-09-18T03:04:44-05:00] DEBUG [transport_manager]: Error dialing transport to 03d1ee0bb54028fb9548f65e3e1440538769bb1acd1e2c24925a5b3e0d88c680cd via sudph: mt.client.Dial: handshake failed: timeout
+[2026-09-18T03:04:44-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=03b72bdf04497b0712304ab59f3040ddcd789cee9156ca73a1be41f57bc9029aba type=sudph
+[2026-09-18T03:04:44-05:00] DEBUG [transport_manager]: Initializing TP with ID 4be3e8ec-c0ba-0630-a5c2-59d2694e7427
+[2026-09-18T03:04:44-05:00] DEBUG [transport_manager]: Dialing transport to 03b72bdf04497b0712304ab59f3040ddcd789cee9156ca73a1be41f57bc9029aba via sudph
+[2026-09-18T03:04:45-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=0277b420e9abeae438a98c63c175ad3f5ba6f02181eb230f1b00eaf16858eef71b type=sudph
+[2026-09-18T03:04:45-05:00] DEBUG [transport_manager]: Initializing TP with ID bc08f454-f315-055a-bf3f-21e5d562d75c
+[2026-09-18T03:04:45-05:00] DEBUG [tp:0277b420e9abeae438a98c63c175ad3f5ba6f02181eb230f1b00eaf16858eef71b]: no prior transport log entry; starting fresh transport=bc08f454-f315-055a-bf3f-21e5d562d75c
+[2026-09-18T03:04:45-05:00] DEBUG [transport_manager]: Dialing transport to 0277b420e9abeae438a98c63c175ad3f5ba6f02181eb230f1b00eaf16858eef71b via sudph
+[2026-09-18T03:04:45-05:00] DEBUG [sudph]: Resolved PK 03b72bdf04497b0712304ab59f3040ddcd789cee9156ca73a1be41f57bc9029aba to visor data {125.165.92.1:49336  false {49336 [192.168.26.4 100.75.27.70 fd7a:115c:a1e0::f501:1b47] 125.165.92.1  }}
+[2026-09-18T03:04:45-05:00] DEBUG [sudph]: Dialing v4-only public address: 125.165.92.1:49336
+[2026-09-18T03:04:45-05:00] DEBUG [sudph]: Dialing 125.165.92.1:49336
+[2026-09-18T03:04:45-05:00] DEBUG [sudph]: Dialed 125.165.92.1:49336
+[2026-09-18T03:04:45-05:00] DEBUG [sudph]: Performing handshake with 125.165.92.1:49336
+[2026-09-18T03:04:45-05:00] DEBUG [sudph]: Resolved PK 0277b420e9abeae438a98c63c175ad3f5ba6f02181eb230f1b00eaf16858eef71b to visor data {77.175.156.151:44274  false {44274 [192.168.178.6 fdac:f784:9d1d:0:5fb5:d6b7:648d:21f0 2a02:a46d:1165:1:25fa:91b4:5ea6:526b] 77.175.156.151  }}
+[2026-09-18T03:04:45-05:00] DEBUG [sudph]: Dialing v4-only public address: 77.175.156.151:44274
+[2026-09-18T03:04:45-05:00] DEBUG [sudph]: Dialing 77.175.156.151:44274
+[2026-09-18T03:04:45-05:00] DEBUG [sudph]: Dialed 77.175.156.151:44274
+[2026-09-18T03:04:45-05:00] DEBUG [sudph]: Performing handshake with 77.175.156.151:44274
+[2026-09-18T03:04:45-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=52731
+[2026-09-18T03:04:46-05:00] DEBUG [sudph]: Sent handshake to 125.165.92.1:49336, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49634, remote addr 03b72bdf04497b0712304ab59f3040ddcd789cee9156ca73a1be41f57bc9029aba:45
+[2026-09-18T03:04:46-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 19 packets app_name=skysocks-client
+[2026-09-18T03:04:46-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 2 packets app_name=skysocks-client
+[2026-09-18T03:04:46-05:00] DEBUG [tp:03b72bdf04497b0712304ab59f3040ddcd789cee9156ca73a1be41f57bc9029aba]: Sent signal to 'mt.transportCh'.
+[2026-09-18T03:04:46-05:00] DEBUG [transport_manager]: saved transport: remote(03b72bdf04497b0712304ab59f3040ddcd789cee9156ca73a1be41f57bc9029aba) type(sudph) tpID(4be3e8ec-c0ba-0630-a5c2-59d2694e7427)
+[2026-09-18T03:04:46-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=03b72bdf04497b0712304ab59f3040ddcd789cee9156ca73a1be41f57bc9029aba type=sudph
+[2026-09-18T03:04:46-05:00] DEBUG [tp:03b72bdf04497b0712304ab59f3040ddcd789cee9156ca73a1be41f57bc9029aba]: Serving. remote_pk=03b72bdf04497b0712304ab59f3040ddcd789cee9156ca73a1be41f57bc9029aba tp_id=4be3e8ec-c0ba-0630-a5c2-59d2694e7427 tp_index=378
+[2026-09-18T03:04:46-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=52731
+[2026-09-18T03:04:46-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=02edbfeeb19b17d5d89e9ec67aa5a0fc9d0265a74f6881fd2ae4810d738a590974 type=sudph
+[2026-09-18T03:04:46-05:00] DEBUG [transport_manager]: Initializing TP with ID fc139cab-c089-00af-a8dd-8571214a803d
+[2026-09-18T03:04:46-05:00] DEBUG [tp:02edbfeeb19b17d5d89e9ec67aa5a0fc9d0265a74f6881fd2ae4810d738a590974]: no prior transport log entry; starting fresh transport=fc139cab-c089-00af-a8dd-8571214a803d
+[2026-09-18T03:04:46-05:00] DEBUG [transport_manager]: Dialing transport to 02edbfeeb19b17d5d89e9ec67aa5a0fc9d0265a74f6881fd2ae4810d738a590974 via sudph
+[2026-09-18T03:04:46-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 1 packets app_name=skysocks-client
+[2026-09-18T03:04:46-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=650.925497ms yamux_id=1
+[2026-09-18T03:04:46-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 1 packets app_name=skysocks-client
+[2026-09-18T03:04:47-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=52731
+[2026-09-18T03:04:47-05:00] DEBUG [sudph]: Resolved PK 02edbfeeb19b17d5d89e9ec67aa5a0fc9d0265a74f6881fd2ae4810d738a590974 to visor data {180.254.78.126:55487  false {55487 [192.168.0.102 192.168.60.37] 180.254.78.126  }}
+[2026-09-18T03:04:47-05:00] DEBUG [sudph]: Dialing v4-only public address: 180.254.78.126:55487
+[2026-09-18T03:04:47-05:00] DEBUG [sudph]: Dialing 180.254.78.126:55487
+[2026-09-18T03:04:47-05:00] DEBUG [sudph]: Dialed 180.254.78.126:55487
+[2026-09-18T03:04:47-05:00] DEBUG [sudph]: Performing handshake with 180.254.78.126:55487
+[2026-09-18T03:04:47-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 1 packets app_name=skysocks-client
+[2026-09-18T03:04:47-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=52731
+[2026-09-18T03:04:47-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=52731
+[2026-09-18T03:04:47-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=52731
+[2026-09-18T03:04:48-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:50 error="i/o deadline reached" ports_reserved=118 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T03:04:48-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T03:04:48-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49181, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=35 after idle PTO app_name=skysocks-client
+[2026-09-18T03:04:48-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49179, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 36B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T03:04:48-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T03:04:48-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=537.325288ms yamux_id=3
+[2026-09-18T03:04:48-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 7 packets app_name=skysocks-client
+[2026-09-18T03:04:48-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 1 packets app_name=skysocks-client
+[2026-09-18T03:04:48-05:00] DEBUG [transport_manager]: Publishing 378 transports to TPD via CXO transport-list snapshot
+[2026-09-18T03:04:48-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 1 packets app_name=skysocks-client
+[2026-09-18T03:04:49-05:00] DEBUG [transport_manager]: Deregistering 1 transports via CXO transport-list snapshot
+[2026-09-18T03:04:49-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=547.056007ms yamux_id=5
+[2026-09-18T03:04:50-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=538.586232ms yamux_id=7
+[2026-09-18T03:04:50-05:00] DEBUG [transport_manager]: Error dialing transport to 0238a63328103c2c4e77c6b952bebe50e53afb0924e5c94b44aad9978f64e909d8 via sudph: mt.client.Dial: handshake failed: timeout
+[2026-09-18T03:04:50-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=037fd1fb66b7ff980a0ef2cdbbd1cc5df01eed247b24340cd4f6ae006551cfd152 type=sudph
+[2026-09-18T03:04:50-05:00] DEBUG [transport_manager]: Initializing TP with ID 82acda87-b3ad-0921-bb2e-cee9a3b101a5
+[2026-09-18T03:04:50-05:00] DEBUG [tp:037fd1fb66b7ff980a0ef2cdbbd1cc5df01eed247b24340cd4f6ae006551cfd152]: no prior transport log entry; starting fresh transport=82acda87-b3ad-0921-bb2e-cee9a3b101a5
+[2026-09-18T03:04:50-05:00] DEBUG [transport_manager]: Dialing transport to 037fd1fb66b7ff980a0ef2cdbbd1cc5df01eed247b24340cd4f6ae006551cfd152 via sudph
+[2026-09-18T03:04:50-05:00] DEBUG [sudph]: Resolved PK 037fd1fb66b7ff980a0ef2cdbbd1cc5df01eed247b24340cd4f6ae006551cfd152 to visor data {125.165.104.175:2919  false {46169 [192.168.100.43 2001:448a:1082:b0a6:15f3:92ba:a559:ff7a 100.82.215.57 fd7a:115c:a1e0::873b:d739]   }}
+[2026-09-18T03:04:50-05:00] DEBUG [sudph]: Dialing v4-only public address: 125.165.104.175:2919
+[2026-09-18T03:04:50-05:00] DEBUG [sudph]: Dialing 125.165.104.175:2919
+[2026-09-18T03:04:50-05:00] DEBUG [sudph]: Dialed 125.165.104.175:2919
+[2026-09-18T03:04:50-05:00] DEBUG [sudph]: Performing handshake with 125.165.104.175:2919
+[2026-09-18T03:04:50-05:00] DEBUG [transport_manager]: Error dialing transport to 03002e28d1b373988eca07f6a27a9f5cae190d982aa4e0894da2cd581d3f95330e via sudph: mt.client.Dial: handshake failed: timeout
+[2026-09-18T03:04:51-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=561 after idle PTO app_name=skysocks-client
+[2026-09-18T03:04:51-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=557.032715ms yamux_id=9
+[2026-09-18T03:04:51-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=029ba3febd2c145a0c31692a43c9b53460a71ded4df13f6e92da4fe7f88eed221b type=sudph
+[2026-09-18T03:04:51-05:00] DEBUG [transport_manager]: Initializing TP with ID 8bdf6b4a-ff9e-07be-a4d2-7c8553dee4b8
+[2026-09-18T03:04:51-05:00] DEBUG [tp:029ba3febd2c145a0c31692a43c9b53460a71ded4df13f6e92da4fe7f88eed221b]: no prior transport log entry; starting fresh transport=8bdf6b4a-ff9e-07be-a4d2-7c8553dee4b8
+[2026-09-18T03:04:51-05:00] DEBUG [transport_manager]: Dialing transport to 029ba3febd2c145a0c31692a43c9b53460a71ded4df13f6e92da4fe7f88eed221b via sudph
+[2026-09-18T03:04:51-05:00] DEBUG [sudph]: Resolved PK 029ba3febd2c145a0c31692a43c9b53460a71ded4df13f6e92da4fe7f88eed221b to visor data {139.180.221.115:45523  false {45523 [192.168.9.113] 139.180.221.115  }}
+[2026-09-18T03:04:51-05:00] DEBUG [sudph]: Dialing v4-only public address: 139.180.221.115:45523
+[2026-09-18T03:04:51-05:00] DEBUG [sudph]: Dialing 139.180.221.115:45523
+[2026-09-18T03:04:51-05:00] DEBUG [sudph]: Dialed 139.180.221.115:45523
+[2026-09-18T03:04:51-05:00] DEBUG [sudph]: Performing handshake with 139.180.221.115:45523
+[2026-09-18T03:04:51-05:00] DEBUG [transport_manager]: Error dialing transport to 022305a2dbba7adc7a5d4f33dc27b75401424323a0e603e2f9e61c073057228475 via sudph: mt.client.Dial: handshake failed: timeout
+[2026-09-18T03:04:51-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=543.503873ms yamux_id=11
+[2026-09-18T03:04:52-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49177, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T03:04:52-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T03:04:52-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=535.86632ms yamux_id=13
+[2026-09-18T03:04:52-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=336.112957ms yamux_id=15
+[2026-09-18T03:04:52-05:00] DEBUG [transport_manager]: Error dialing transport to 02df363105d96ff2cb7d6e8ef50300a678182ff4c632838d4e036852d36dbbfdd2 via sudph: mt.client.Dial: handshake failed: timeout
+[2026-09-18T03:04:53-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: shared-bottleneck ruling (advisory — sbd_demote is off, nothing was parked): leg 1 reads as co-bottlenecked with active leg 0 in group 0 — skew 0.333 vs 0.750, cv 1.325 vs 1.246, freq 0.600 vs 0.286, mean 4441.6 vs 1239.2 ms over 6/8 samples; send-path delivered 196811 B/s (evidence floor 65536 B/s). Set --sbd-demote true on both ends to act on rulings like this one. app_name=skysocks-client
+[2026-09-18T03:04:53-05:00] DEBUG [transport_manager]: Error dialing transport to 02ec69f28ec038778f738eae0ced387059897ccdca8b90b6131ab2d000df6adf04 via sudph: mt.client.Dial: handshake failed: timeout
+[2026-09-18T03:04:53-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-18T03:04:53-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=544.635532ms yamux_id=17
+[2026-09-18T03:04:53-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 11 packets app_name=skysocks-client
+[2026-09-18T03:04:53-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 1 packets app_name=skysocks-client
+[2026-09-18T03:04:54-05:00] DEBUG [transport_manager]: Error dialing transport to 035b7339c7ff088501268eb889e3d83b4f74fa852ea80109355e8ab4ddabe7f809 via sudph: mt.client.Dial: handshake failed: timeout
+[2026-09-18T03:04:55-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49181, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T03:04:55-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49181, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=36 after idle PTO app_name=skysocks-client
+[2026-09-18T03:04:55-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-18T03:04:55-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T03:04:55-05:00] DEBUG [transport_manager]: Error dialing transport to 0277b420e9abeae438a98c63c175ad3f5ba6f02181eb230f1b00eaf16858eef71b via sudph: mt.client.Dial: handshake failed: timeout
+[2026-09-18T03:04:56-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=593 after idle PTO app_name=skysocks-client
+[2026-09-18T03:04:56-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 1 packets app_name=skysocks-client
+[2026-09-18T03:04:57-05:00] DEBUG [transport_manager]: Error dialing transport to 02edbfeeb19b17d5d89e9ec67aa5a0fc9d0265a74f6881fd2ae4810d738a590974 via sudph: mt.client.Dial: handshake failed: timeout
+[2026-09-18T03:04:58-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 15 packets app_name=skysocks-client
+[2026-09-18T03:04:58-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=533.542777ms yamux_id=19
+[2026-09-18T03:04:58-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 1 packets app_name=skysocks-client
+[2026-09-18T03:04:58-05:00] DEBUG [hypervisor]: HTTP request bytes=50 elapsed=420µs method=GET path="/api/ui-version" status=200
+[2026-09-18T03:04:58-05:00] DEBUG [hypervisor]: HTTP request bytes=50 elapsed=730µs method=GET path="/api/ui-version" status=200
+[2026-09-18T03:04:58-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 1 packets app_name=skysocks-client
+[2026-09-18T03:04:58-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client-ref
+[2026-09-18T03:04:58-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 1 packets app_name=skysocks-client
+[2026-09-18T03:04:59-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 1 packets app_name=skysocks-client
+[2026-09-18T03:04:59-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=541.256657ms yamux_id=21
+[2026-09-18T03:05:00-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=535.718486ms yamux_id=23
+[2026-09-18T03:05:00-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=634 after idle PTO app_name=skysocks-client
+[2026-09-18T03:05:00-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=542.124565ms yamux_id=25
+[2026-09-18T03:05:00-05:00] DEBUG [transport_manager]: Error dialing transport to 037fd1fb66b7ff980a0ef2cdbbd1cc5df01eed247b24340cd4f6ae006551cfd152 via sudph: mt.client.Dial: handshake failed: timeout
+[2026-09-18T03:05:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #794 accepted from 127.0.0.1:44914 (active: 1)
+[2026-09-18T03:05:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #794 closed after 31ms (active: 0)
+[2026-09-18T03:05:01-05:00] DEBUG [transport_manager]: Error dialing transport to 029ba3febd2c145a0c31692a43c9b53460a71ded4df13f6e92da4fe7f88eed221b via sudph: mt.client.Dial: handshake failed: timeout
+[2026-09-18T03:05:01-05:00] DEBUG [public_autoconnect]: Phase 3b: Connecting to direct-unreachable public visors via WT (swtr)
+[2026-09-18T03:05:01-05:00] DEBUG [public_autoconnect]: Phase 3c: Connecting to direct-unreachable public visors via WS (swsr)
+[2026-09-18T03:05:01-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=142.693µs yamux_id=29
+[2026-09-18T03:05:01-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=547.04395ms yamux_id=27
+[2026-09-18T03:05:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #795 accepted from 127.0.0.1:48578 (active: 1)
+[2026-09-18T03:05:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #795 closed after 38ms (active: 0)
+[2026-09-18T03:05:01-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:67 error="i/o deadline reached" ports_reserved=119 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T03:05:01-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T03:05:01-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c type=swsr
+[2026-09-18T03:05:01-05:00] DEBUG [transport_manager]: Initializing TP with ID 02c4e0ad-b16b-05f2-91a8-a93ed8e36024
+[2026-09-18T03:05:01-05:00] DEBUG [tp:020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c]: no prior transport log entry; starting fresh transport=02c4e0ad-b16b-05f2-91a8-a93ed8e36024
+[2026-09-18T03:05:01-05:00] DEBUG [transport_manager]: Dialing transport to 020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c via swsr
+[2026-09-18T03:05:01-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"03d1ee0bb54028fb9548f65e3e1440538769bb1acd1e2c24925a5b3e0d88c680cd","Addr":"125.167.50.10:10363"}
+[2026-09-18T03:05:02-05:00] DEBUG [cli_rpc]: CLI RPC conn #796 accepted from 127.0.0.1:48582 (active: 1)
+[2026-09-18T03:05:02-05:00] DEBUG [cli_rpc]: CLI RPC conn #796 closed after 32ms (active: 0)
+[2026-09-18T03:05:02-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=02197045b9be7b63ff5db89bf9f862b81b8579d919fd3e5787da85dea8102fdcfb type=swsr
+[2026-09-18T03:05:02-05:00] DEBUG [transport_manager]: Initializing TP with ID 3458b729-d61d-0c63-a1d1-afd4eb95c01b
+[2026-09-18T03:05:02-05:00] DEBUG [tp:02197045b9be7b63ff5db89bf9f862b81b8579d919fd3e5787da85dea8102fdcfb]: no prior transport log entry; starting fresh transport=3458b729-d61d-0c63-a1d1-afd4eb95c01b
+[2026-09-18T03:05:02-05:00] DEBUG [transport_manager]: Dialing transport to 02197045b9be7b63ff5db89bf9f862b81b8579d919fd3e5787da85dea8102fdcfb via swsr
+[2026-09-18T03:05:02-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=334.509121ms yamux_id=33
+[2026-09-18T03:05:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49181, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=37 after idle PTO app_name=skysocks-client
+[2026-09-18T03:05:02-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=547.15501ms yamux_id=31
+[2026-09-18T03:05:02-05:00] DEBUG [cli_rpc]: CLI RPC conn #797 accepted from 127.0.0.1:48584 (active: 1)
+[2026-09-18T03:05:02-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa type=swsr
+[2026-09-18T03:05:02-05:00] DEBUG [transport_manager]: Initializing TP with ID f7f81b3d-676d-0497-a3a1-a4cad4eed853
+[2026-09-18T03:05:02-05:00] DEBUG [tp:024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa]: no prior transport log entry; starting fresh transport=f7f81b3d-676d-0497-a3a1-a4cad4eed853
+[2026-09-18T03:05:02-05:00] DEBUG [transport_manager]: Dialing transport to 024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa via swsr
+[2026-09-18T03:05:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T03:05:02-05:00] DEBUG [cli_rpc]: CLI RPC conn #797 closed after 33ms (active: 0)
+[2026-09-18T03:05:02-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=534.314021ms yamux_id=35
+[2026-09-18T03:05:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T03:05:02-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802 type=swsr
+[2026-09-18T03:05:02-05:00] DEBUG [transport_manager]: Initializing TP with ID f067bf22-298a-0a32-8dd9-b21dca1518cc
+[2026-09-18T03:05:02-05:00] DEBUG [tp:030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802]: no prior transport log entry; starting fresh transport=f067bf22-298a-0a32-8dd9-b21dca1518cc
+[2026-09-18T03:05:02-05:00] DEBUG [transport_manager]: Dialing transport to 030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802 via swsr
+[2026-09-18T03:05:02-05:00] DEBUG [cli_rpc]: CLI RPC conn #798 accepted from 127.0.0.1:48594 (active: 1)
+[2026-09-18T03:05:02-05:00] DEBUG [cli_rpc]: CLI RPC conn #798 closed after 38ms (active: 0)
+[2026-09-18T03:05:02-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf type=swsr
+[2026-09-18T03:05:02-05:00] DEBUG [transport_manager]: Initializing TP with ID 3fb4b2bd-dea5-0263-b7da-47a3732924fe
+[2026-09-18T03:05:02-05:00] DEBUG [tp:037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf]: no prior transport log entry; starting fresh transport=3fb4b2bd-dea5-0263-b7da-47a3732924fe
+[2026-09-18T03:05:02-05:00] DEBUG [transport_manager]: Dialing transport to 037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf via swsr
+[2026-09-18T03:05:03-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=548.373496ms yamux_id=37
+[2026-09-18T03:05:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #799 accepted from 127.0.0.1:48604 (active: 1)
+[2026-09-18T03:05:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #799 closed after 35ms (active: 0)
+[2026-09-18T03:05:03-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 776B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T03:05:03-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=0287c62844c64f0a0c399d8d2173a9d31529a1a0a62afd682bc795e6a74a30af01 type=swsr
+[2026-09-18T03:05:03-05:00] DEBUG [transport_manager]: Initializing TP with ID 9b29d852-6c35-0c1b-96ad-81a072ef7af9
+[2026-09-18T03:05:03-05:00] DEBUG [tp:0287c62844c64f0a0c399d8d2173a9d31529a1a0a62afd682bc795e6a74a30af01]: no prior transport log entry; starting fresh transport=9b29d852-6c35-0c1b-96ad-81a072ef7af9
+[2026-09-18T03:05:03-05:00] DEBUG [transport_manager]: Dialing transport to 0287c62844c64f0a0c399d8d2173a9d31529a1a0a62afd682bc795e6a74a30af01 via swsr
+[2026-09-18T03:05:03-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=543.716672ms yamux_id=39
+[2026-09-18T03:05:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #800 accepted from 127.0.0.1:48612 (active: 1)
+[2026-09-18T03:05:03-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba type=swsr
+[2026-09-18T03:05:03-05:00] DEBUG [transport_manager]: Initializing TP with ID d49f2e1b-dc4b-04d9-acb8-5f035febab1c
+[2026-09-18T03:05:03-05:00] DEBUG [tp:027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba]: no prior transport log entry; starting fresh transport=d49f2e1b-dc4b-04d9-acb8-5f035febab1c
+[2026-09-18T03:05:03-05:00] DEBUG [transport_manager]: Dialing transport to 027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba via swsr
+[2026-09-18T03:05:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #800 closed after 38ms (active: 0)
+[2026-09-18T03:05:03-05:00] DEBUG [swsr]: Dialing WS 020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c @ ws://206.1.97.18:19896/
+[2026-09-18T03:05:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #801 accepted from 127.0.0.1:48622 (active: 1)
+[2026-09-18T03:05:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #801 closed after 3ms (active: 0)
+[2026-09-18T03:05:04-05:00] DEBUG [swsr]: Dialing WS 02197045b9be7b63ff5db89bf9f862b81b8579d919fd3e5787da85dea8102fdcfb @ ws://92.112.126.5:37919/
+[2026-09-18T03:05:04-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=537.943178ms yamux_id=41
+[2026-09-18T03:05:04-05:00] DEBUG [cli_rpc]: CLI RPC conn #802 accepted from 127.0.0.1:48624 (active: 1)
+[2026-09-18T03:05:04-05:00] DEBUG [cli_rpc]: CLI RPC conn #802 closed after 36ms (active: 0)
+[2026-09-18T03:05:04-05:00] DEBUG [swsr]: Dialing WS 024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa @ ws://182.1.171.139:39535/
+[2026-09-18T03:05:04-05:00] DEBUG [rpc_client:0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7]: Accepted.
+[2026-09-18T03:05:04-05:00] DEBUG [swsr]: Dialing WS 030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802 @ ws://206.1.97.18:22132/
+[2026-09-18T03:05:04-05:00] DEBUG [swsr]: Performing handshake with websocket/unknown-addr
+[2026-09-18T03:05:04-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=542.999822ms yamux_id=43
+[2026-09-18T03:05:04-05:00] DEBUG [swsr]: Dialing WS 037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf @ ws://206.1.97.18:27029/
+[2026-09-18T03:05:05-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=1995 after idle PTO app_name=skysocks-client-ref
+[2026-09-18T03:05:05-05:00] DEBUG [swsr]: Dialing WS 0287c62844c64f0a0c399d8d2173a9d31529a1a0a62afd682bc795e6a74a30af01 @ ws://38.134.43.137:23500/
+[2026-09-18T03:05:05-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=637 after idle PTO app_name=skysocks-client
+[2026-09-18T03:05:05-05:00] DEBUG [swsr]: Performing handshake with websocket/unknown-addr
+[2026-09-18T03:05:05-05:00] DEBUG [swsr]: Dialing WS 027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba @ ws://206.1.97.18:50269/
+[2026-09-18T03:05:05-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=1995 after idle PTO app_name=skysocks-client-ref
+[2026-09-18T03:05:05-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"03d1ee0bb54028fb9548f65e3e1440538769bb1acd1e2c24925a5b3e0d88c680cd","Addr":"125.167.50.10:10363"}
+[2026-09-18T03:05:05-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=564.140074ms yamux_id=47
+[2026-09-18T03:05:05-05:00] DEBUG [swsr]: Sent handshake to websocket/unknown-addr, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49153, remote addr 020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c:45
+[2026-09-18T03:05:05-05:00] DEBUG [swsr]: Performing handshake with websocket/unknown-addr
+[2026-09-18T03:05:06-05:00] DEBUG [swsr]: Sent handshake to websocket/unknown-addr, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49154, remote addr 030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802:45
+[2026-09-18T03:05:06-05:00] DEBUG [swsr]: Performing handshake with websocket/unknown-addr
+[2026-09-18T03:05:06-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=586.849638ms yamux_id=49
+[2026-09-18T03:05:06-05:00] DEBUG [swsr]: Sent handshake to websocket/unknown-addr, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49155, remote addr 037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf:45
+[2026-09-18T03:05:06-05:00] DEBUG [tp:020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c]: Sent signal to 'mt.transportCh'.
+[2026-09-18T03:05:06-05:00] DEBUG [transport_manager]: saved transport: remote(020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c) type(swsr) tpID(02c4e0ad-b16b-05f2-91a8-a93ed8e36024)
+[2026-09-18T03:05:06-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c type=swsr
+[2026-09-18T03:05:06-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-18T03:05:06-05:00] DEBUG [tp:020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c]: Serving. remote_pk=020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c tp_id=02c4e0ad-b16b-05f2-91a8-a93ed8e36024 tp_index=379
+[2026-09-18T03:05:07-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=632.107148ms yamux_id=51
+[2026-09-18T03:05:07-05:00] DEBUG [tp:037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf]: Sent signal to 'mt.transportCh'.
+[2026-09-18T03:05:07-05:00] DEBUG [transport_manager]: saved transport: remote(037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf) type(swsr) tpID(3fb4b2bd-dea5-0263-b7da-47a3732924fe)
+[2026-09-18T03:05:07-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf type=swsr
+[2026-09-18T03:05:07-05:00] DEBUG [tp:037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf]: Serving. remote_pk=037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf tp_id=3fb4b2bd-dea5-0263-b7da-47a3732924fe tp_index=380
+[2026-09-18T03:05:07-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49181, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=37 after idle PTO app_name=skysocks-client
+[2026-09-18T03:05:08-05:00] DEBUG [swsr]: Sent handshake to websocket/unknown-addr, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49156, remote addr 027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba:45
+[2026-09-18T03:05:08-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=604.952438ms yamux_id=53
+[2026-09-18T03:05:08-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49179, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=121 after idle PTO app_name=skysocks-client
+[2026-09-18T03:05:08-05:00] DEBUG [tp:030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802]: Sent signal to 'mt.transportCh'.
+[2026-09-18T03:05:08-05:00] DEBUG [transport_manager]: saved transport: remote(030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802) type(swsr) tpID(f067bf22-298a-0a32-8dd9-b21dca1518cc)
+[2026-09-18T03:05:08-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802 type=swsr
+[2026-09-18T03:05:08-05:00] DEBUG [tp:030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802]: Serving. remote_pk=030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802 tp_id=f067bf22-298a-0a32-8dd9-b21dca1518cc tp_index=381
+[2026-09-18T03:05:09-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49179, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=121 after idle PTO app_name=skysocks-client
+[2026-09-18T03:05:09-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=692.549178ms yamux_id=55
+[2026-09-18T03:05:09-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=52789
+[2026-09-18T03:05:09-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=52790
+[2026-09-18T03:05:09-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=52791
+[2026-09-18T03:05:09-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T03:05:09-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49181, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=37 after idle PTO app_name=skysocks-client
+[2026-09-18T03:05:09-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=52793
+[2026-09-18T03:05:10-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49181, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T03:05:10-05:00] DEBUG [tp:027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba]: Sent signal to 'mt.transportCh'.
+[2026-09-18T03:05:10-05:00] DEBUG [transport_manager]: saved transport: remote(027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba) type(swsr) tpID(d49f2e1b-dc4b-04d9-acb8-5f035febab1c)
+[2026-09-18T03:05:10-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba type=swsr
+[2026-09-18T03:05:10-05:00] DEBUG [tp:027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba]: Serving. remote_pk=027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba tp_id=d49f2e1b-dc4b-04d9-acb8-5f035febab1c tp_index=382
+[2026-09-18T03:05:10-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=747.2736ms yamux_id=57
+[2026-09-18T03:05:10-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=639 after idle PTO app_name=skysocks-client
+[2026-09-18T03:05:10-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=52796
+[2026-09-18T03:05:10-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T03:05:11-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=553.937715ms yamux_id=59
+[2026-09-18T03:05:11-05:00] DEBUG [transport_manager]: Publishing 382 transports to TPD via CXO transport-list snapshot
+[2026-09-18T03:05:11-05:00] DEBUG [cli_rpc]: CLI RPC conn #803 accepted from 127.0.0.1:41562 (active: 1)
+[2026-09-18T03:05:11-05:00] DEBUG [cli_rpc]: CLI RPC conn #803 closed after 23ms (active: 0)
+[2026-09-18T03:05:11-05:00] DEBUG [cli_rpc]: CLI RPC conn #804 accepted from 127.0.0.1:41568 (active: 1)
+[2026-09-18T03:05:11-05:00] DEBUG [cli_rpc]: CLI RPC conn #804 closed after 1ms (active: 0)
+[2026-09-18T03:05:11-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=540.874972ms yamux_id=61
+[2026-09-18T03:05:12-05:00] DEBUG [cli_rpc]: CLI RPC conn #805 accepted from 127.0.0.1:41570 (active: 1)
+[2026-09-18T03:05:12-05:00] DEBUG [cli_rpc]: CLI RPC conn #805 closed after 33ms (active: 0)
+[2026-09-18T03:05:12-05:00] DEBUG [cli_rpc]: CLI RPC stats: active=0, total=805, errors=0, peak=3
+[2026-09-18T03:05:12-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=639 after idle PTO app_name=skysocks-client
+[2026-09-18T03:05:12-05:00] DEBUG [cli_rpc]: CLI RPC conn #806 accepted from 127.0.0.1:41586 (active: 1)
+[2026-09-18T03:05:12-05:00] DEBUG [cli_rpc]: CLI RPC conn #806 closed after 36ms (active: 0)
+[2026-09-18T03:05:12-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=545.78745ms yamux_id=63
+[2026-09-18T03:05:12-05:00] DEBUG [dmsgC]: Session stopped. error="dmsg: relay candidates changed"
+[2026-09-18T03:05:12-05:00] DEBUG [dmsgC]: Discovering dmsg servers...
+[2026-09-18T03:05:12-05:00] DEBUG [address_resolver]: Re-registering SUDPH with address resolver
+[2026-09-18T03:05:12-05:00] DEBUG [address_resolver]: Successfully re-registered SUDPH
+[2026-09-18T03:05:12-05:00] DEBUG [stcpr]: Re-registering STCPR with address resolver
+[2026-09-18T03:05:12-05:00] DEBUG httpClient.BindSTCPR [address_resolver]: Address resolver binding with: [192.168.1.117 70.121.13.123]
+[2026-09-18T03:05:12-05:00] DEBUG [cli_rpc]: CLI RPC conn #807 accepted from 127.0.0.1:41588 (active: 1)
+[2026-09-18T03:05:13-05:00] DEBUG [cli_rpc]: CLI RPC conn #807 closed after 40ms (active: 0)
+[2026-09-18T03:05:13-05:00] DEBUG [stcpr]: Successfully re-registered STCPR
+[2026-09-18T03:05:13-05:00] DEBUG httpClient.BindQUIC [address_resolver]: Address resolver binding QUIC with: [192.168.1.117 70.121.13.123] port 52513
+[2026-09-18T03:05:13-05:00] DEBUG [cli_rpc]: CLI RPC conn #808 accepted from 127.0.0.1:41602 (active: 1)
+[2026-09-18T03:05:13-05:00] DEBUG [cli_rpc]: CLI RPC conn #808 closed after 37ms (active: 0)
+[2026-09-18T03:05:13-05:00] DEBUG httpClient.BindWT [address_resolver]: Address resolver binding WT with: [192.168.1.117 70.121.13.123] port 36958 cert 1e8dab0add4eba1f7cf77ffc9db8ecca0cb0ed00f586d443081229732a41f6c6
+[2026-09-18T03:05:13-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=538.201186ms yamux_id=65
+[2026-09-18T03:05:13-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49179, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T03:05:13-05:00] DEBUG [cli_rpc]: CLI RPC conn #809 accepted from 127.0.0.1:41612 (active: 1)
+[2026-09-18T03:05:13-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=395 after idle PTO app_name=skysocks-client
+[2026-09-18T03:05:13-05:00] DEBUG [cli_rpc]: CLI RPC conn #809 closed after 38ms (active: 0)
+[2026-09-18T03:05:13-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49177, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=60 after idle PTO app_name=skysocks-client
+[2026-09-18T03:05:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #810 accepted from 127.0.0.1:41620 (active: 1)
+[2026-09-18T03:05:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #810 closed after 36ms (active: 0)
+[2026-09-18T03:05:14-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=395 after idle PTO app_name=skysocks-client
+[2026-09-18T03:05:14-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49177, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=60 after idle PTO app_name=skysocks-client
+[2026-09-18T03:05:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #811 accepted from 127.0.0.1:41632 (active: 1)
+[2026-09-18T03:05:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #811 closed after 36ms (active: 0)
+[2026-09-18T03:05:16-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T03:05:16-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49180, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T03:05:16-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T03:05:16-05:00] DEBUG [rpc_bridge]: rpc bridge: stream established scheme=0 target_pk=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T03:05:18-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T03:05:20-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49181, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 36B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T03:05:23-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T03:05:23-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=10.137598547s yamux_id=67
+[2026-09-18T03:05:24-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=19.652222109s yamux_id=45
+[2026-09-18T03:05:24-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:70, lAddr:028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73:49153]: TLP: probing tail seq=204 after idle PTO
+[2026-09-18T03:05:25-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49181, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=40 after idle PTO app_name=skysocks-client
+[2026-09-18T03:05:25-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:70, lAddr:028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73:49153]: TLP: probing tail seq=204 after idle PTO
+[2026-09-18T03:05:26-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T03:05:27-05:00] DEBUG [lan_dmsg_server]: Updating entry.
+[2026-09-18T03:05:29-05:00] DEBUG [cli_rpc]: CLI RPC conn #812 accepted from 127.0.0.1:51438 (active: 1)
+[2026-09-18T03:05:29-05:00] DEBUG [cli_rpc]: CLI RPC conn #812 closed after 31ms (active: 0)
+[2026-09-18T03:05:30-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49181, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T03:05:30-05:00] DEBUG [cli_rpc]: CLI RPC conn #813 accepted from 127.0.0.1:51442 (active: 1)
+[2026-09-18T03:05:30-05:00] DEBUG [cli_rpc]: CLI RPC conn #813 closed after 34ms (active: 0)
+[2026-09-18T03:05:30-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49181, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=41 after idle PTO app_name=skysocks-client
+[2026-09-18T03:05:30-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T03:05:30-05:00] DEBUG [cli_rpc]: CLI RPC conn #814 accepted from 127.0.0.1:51456 (active: 1)
+[2026-09-18T03:05:30-05:00] DEBUG [transport_manager]: Error dialing transport to 0287c62844c64f0a0c399d8d2173a9d31529a1a0a62afd682bc795e6a74a30af01 via swsr: mt.client.Dial: failed to WebSocket dial: failed to send handshake request: Get "http://38.134.43.137:23500/": read tcp 192.168.1.117:44156->38.134.43.137:23500: read: connection reset by peer
+[2026-09-18T03:05:30-05:00] DEBUG [cli_rpc]: CLI RPC conn #814 closed after 37ms (active: 0)
+[2026-09-18T03:05:31-05:00] DEBUG [cli_rpc]: CLI RPC conn #815 accepted from 127.0.0.1:51464 (active: 1)
+[2026-09-18T03:05:31-05:00] DEBUG [cli_rpc]: CLI RPC conn #815 closed after 39ms (active: 0)
+[2026-09-18T03:05:31-05:00] DEBUG [cli_rpc]: CLI RPC conn #816 accepted from 127.0.0.1:51476 (active: 1)
+[2026-09-18T03:05:31-05:00] DEBUG [cli_rpc]: CLI RPC conn #816 closed after 33ms (active: 0)
+[2026-09-18T03:05:31-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T03:05:31-05:00] DEBUG [cli_rpc]: CLI RPC conn #817 accepted from 127.0.0.1:56704 (active: 1)
+[2026-09-18T03:05:31-05:00] DEBUG [cli_rpc]: CLI RPC conn #817 closed after 34ms (active: 0)
+[2026-09-18T03:05:32-05:00] DEBUG [transport_manager]: Error dialing transport to 02197045b9be7b63ff5db89bf9f862b81b8579d919fd3e5787da85dea8102fdcfb via swsr: mt.client.Dial: failed to WebSocket dial: failed to send handshake request: Get "http://92.112.126.5:37919/": context deadline exceeded
+[2026-09-18T03:05:32-05:00] DEBUG [public_autoconnect]: Transport creation canceled (shutdown) error="save transport: mt.client.Dial: failed to WebSocket dial: failed to send handshake request: Get "http://92.112.126.5:37919/": context deadline exceeded" pk=02197045b9be7b63ff5db89bf9f862b81b8579d919fd3e5787da85dea8102fdcfb type=swsr
+[2026-09-18T03:05:32-05:00] DEBUG [cli_rpc]: CLI RPC conn #818 accepted from 127.0.0.1:56720 (active: 1)
+[2026-09-18T03:05:32-05:00] DEBUG [cli_rpc]: CLI RPC conn #818 closed after 33ms (active: 0)
+[2026-09-18T03:05:32-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49182, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T03:05:32-05:00] DEBUG [transport_manager]: Error dialing transport to 024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa via swsr: mt.client.Dial: failed to WebSocket dial: failed to send handshake request: Get "http://182.1.171.139:39535/": context deadline exceeded
+[2026-09-18T03:05:32-05:00] DEBUG [public_autoconnect]: Transport creation canceled (shutdown) error="save transport: mt.client.Dial: failed to WebSocket dial: failed to send handshake request: Get "http://182.1.171.139:39535/": context deadline exceeded" pk=024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa type=swsr
+[2026-09-18T03:05:32-05:00] DEBUG [public_autoconnect]: Phase 4: WebRTC fallback to direct-unreachable visors
+[2026-09-18T03:05:32-05:00] DEBUG [public_autoconnect]: Public autoconnect cycle completed public_visors=11 squicr=4 stcpr=17 sudph=338 swsr=4 swtr=0 webrtc=22
+[2026-09-18T03:05:32-05:00] DEBUG [cli_rpc]: CLI RPC conn #819 accepted from 127.0.0.1:56734 (active: 1)
+[2026-09-18T03:05:32-05:00] DEBUG [cli_rpc]: CLI RPC conn #819 closed after 3ms (active: 0)
+[2026-09-18T03:05:32-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK: retransmitting 3 packets app_name=skysocks-client
+[2026-09-18T03:05:32-05:00] DEBUG [cli_rpc]: CLI RPC conn #820 accepted from 127.0.0.1:56740 (active: 1)
+[2026-09-18T03:05:32-05:00] DEBUG [cli_rpc]: CLI RPC conn #820 closed after 30ms (active: 0)
+[2026-09-18T03:05:34-05:00] DEBUG [cli_rpc]: CLI RPC conn #821 accepted from 127.0.0.1:56742 (active: 1)
+[2026-09-18T03:05:34-05:00] DEBUG [cli_rpc]: CLI RPC conn #821 closed after 37ms (active: 0)
