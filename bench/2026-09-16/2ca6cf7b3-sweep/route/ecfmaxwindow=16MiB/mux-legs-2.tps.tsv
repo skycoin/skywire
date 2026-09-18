@@ -1,0 +1,4 @@
+# transports mux-legs-2 was measured over; first_seen_row 0 = held at set start
+# tp	type	remote_pk	first_seen_row
+fdab37dd-c35e-05bc-9e51-cd6b024e3eec	stcpr	03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf	0
+95839ad0-b588-0b1d-8475-45fba6ae993c	stcpr	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	0

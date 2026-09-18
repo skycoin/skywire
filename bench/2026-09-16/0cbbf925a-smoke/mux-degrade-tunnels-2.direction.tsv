@@ -1,0 +1,27 @@
+# mux-degrade-tunnels-2 — per-row leg shares, forward = client->exit, reverse = exit->client
+# note	no <set>.exit-recovery.tsv: the exit end contributes nothing; exit_tp/exit_standby/exit_retx/exit_ack are "-"
+# note	carrier.tsv counts a TRANSPORT, not a route group: a transport another group or app also rides counts that traffic here too
+# note	latency_ms is the end-of-set legs.json snapshot, not the latency measured on the row
+# note	shares and verdicts are computed over the legs that carried the payload: every leg of an ACTIVE group, plus any leg holding >= 1 % of the payload-direction bytes of the row (a mid-set promotion the set-start role does not yet show); the rest are listed with their bytes and a "-" share
+# note	some legs are in scope on bytes alone: their group reads "standby" in the set-start legs.json but they carried >= 1 % of the payload of a row
+# note	some transports are in carrier.tsv but not in legs.json or tps.tsv (a group dialled after the snapshot); their carrier/latency/hops/remote_pk read "-"
+# note	rev_bytes/rev_share on 2 row(s) are the local recv_delta (rev_basis local-recv): the exit's sent_bytes needs a per-row EXIT_SNAP run against an exit that reports the per-leg byte counters, and either the snapshots or the counters were absent
+# row	label	dir	size	leg	rg	role	scope	hops	carrier	latency_ms	remote_pk	fwd_bytes	rev_bytes	fwd_share	rev_share	rev_basis	exit_tp	exit_standby	exit_retx	exit_ack_ms	exit_sent_bytes	exit_recv_bytes
+1	mux-degrade-tunnels-2-t1	up	50000000	fdab37dd	49169	active	in	fdab37dd>03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf;7420f415>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	138.676558	03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf	25015810	156732	50.0%	97.8%	local-recv	-	-	-	-	-	-
+1	mux-degrade-tunnels-2-t1	up	50000000	95839ad0	49171	standby	in	95839ad0>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13;dc5330cf>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	34.872572	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	25015450	3502	50.0%	2.2%	local-recv	-	-	-	-	-	-
+1	mux-degrade-tunnels-2-t1	up	50000000	b414796d	49172	standby	out	b414796d>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	137.257947	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	4993	445893	-	-	local-recv	-	-	-	-	-	-
+1	mux-degrade-tunnels-2-t1	up	50000000	f1012467	49173	standby	out	f1012467>0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb;57c570d9>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	139.759832	0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb	221	431334	-	-	local-recv	-	-	-	-	-	-
+1	mux-degrade-tunnels-2-t1	up	50000000	ac40965a	49174	-	out	-	-	-	-	0	0	-	-	local-recv	-	-	-	-	-	-
+1	mux-degrade-tunnels-2-t1	up	50000000	50cdb857	49175	-	out	-	-	-	-	0	0	-	-	local-recv	-	-	-	-	-	-
+2	mux-degrade-tunnels-2-t2	up	50000000	fdab37dd	49169	active	in	fdab37dd>03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf;7420f415>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	138.676558	03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf	29184686	4223	58.3%	3.8%	local-recv	-	-	-	-	-	-
+2	mux-degrade-tunnels-2-t2	up	50000000	b414796d	49172	standby	in	b414796d>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	137.257947	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	8348391	104300	16.7%	94.4%	local-recv	-	-	-	-	-	-
+2	mux-degrade-tunnels-2-t2	up	50000000	f1012467	49173	standby	in	f1012467>0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb;57c570d9>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	139.759832	0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb	12507809	1944	25.0%	1.8%	local-recv	-	-	-	-	-	-
+2	mux-degrade-tunnels-2-t2	up	50000000	ac40965a	49174	-	out	-	-	-	-	0	0	-	-	local-recv	-	-	-	-	-	-
+2	mux-degrade-tunnels-2-t2	up	50000000	50cdb857	49175	-	out	-	-	-	-	0	0	-	-	local-recv	-	-	-	-	-	-
+2	mux-degrade-tunnels-2-t2	up	50000000	95839ad0	49176	standby	out	95839ad0>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13;dc5330cf>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	stcpr	34.872572	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	1358	2349	-	-	local-recv	-	-	-	-	-	-
+#
+# verdicts
+# row	label	dir	size	forward_on	forward_kind	forward_share	forward	reverse_fanout	reverse_max_share	reverse	flip
+1	mux-degrade-tunnels-2-t1	up	50000000	fdab37dd	other	50.0%	INFO	1	97.8%	INFO	-
+2	mux-degrade-tunnels-2-t2	up	50000000	fdab37dd	other	58.3%	INFO	1	94.4%	INFO	same
+# flip	0 change(s) of the dominant forward leg
