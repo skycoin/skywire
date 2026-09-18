@@ -284,7 +284,9 @@ cannot over-subscribe the sink's window and make it evict an acked chunk.
 
 `--ecf-max-window` · `--ecf-min-window` · `--ecf-window-margin` ·
 `--send-window-wait-max` · `--leg-park-min-hold` · `--dead-route-hold` ·
-`--dead-route-hold-max` · `--mux-fec`. Visor-wide and
+`--dead-route-hold-max` · `--mux-fec` · `--sbd-min-samples` ·
+`--sbd-sample-interval` · `--sbd-trial-window` · `--sbd-trial-loss` ·
+`--sbd-backoff` · `--sbd-min-evidence-rate`. Visor-wide and
 per-end, like `proxy mux cap`; `--mux-fec` reaches route groups built after it,
 since FEC is negotiated when a group is created. `windowRefreshInterval` is
 NOT here: it becomes a per-route-group ticker when the group is built.
@@ -465,6 +467,43 @@ candidates above.
   with reasons, and the bound in §1 is enforced against it.
 - A manual pin (`proxy mux set`, `--route`, `--routing-policy none`) is
   respected by the adaptive growth. It was not, live.
+
+**Shared-bottleneck DEMOTION is off by default; the ruling is recorded instead.**
+Over four rig runs on 2026-09-16/17 (`bench/2026-09-16/195b1094c-sbdsweep/{sbd-off,sbd-default}`,
+`0251e5da4-smoke`, `dfb0755c2-smoke`) the detector ruled eight times and was right
+zero times: with parking off (`--sbd-min-samples 1000000` both ends) the two-leg
+50 MB downloads ran **9.30 MB/s, x1.13, 5 of 5 above x1.09**, with parking on at
+its defaults **6.80 MB/s, x0.86**, and the parks decided while the group was idle
+were permanent at **x0.81**; with the evidence floor in place three of the four
+compose-set parks were refuted by their own trial — two on idle ticks between
+bench rows, trial rate 2 B/s — and the one that stood cost 10.8 %. The reason it
+could not be right is the sampling: the per-SACK delay series was taken from every
+entry a SACK purges below its contiguous frontier, so both legs were measuring how
+long the FRONTIER took to advance — the group's own head-of-line coupling, which
+correlates on any network — and only the frames a SACK NEWLY acks (the
+frontier-edge entry and the bitmap bits above it, each aged from its own send)
+are per-leg samples now. The evidence floor is measured on the same side those
+samples come from, the SEND path's SACK-acknowledged bytes per tick, because on a
+download the receiving end has no samples of its own and the sending end looked
+idle when judged by what it received; a trial tick below the floor returns no
+verdict at all and the trial stays open. So `--sbd-demote` (default **false**)
+makes the detector purely **observational**: the grouping is NOT handed to the
+mux and no weight moves, because `rebuildWeights` gives every non-representative
+member of a group zero send weight, which is a park by another name — with
+demotion off, `mux-compose-T2xL2` (`bench/2026-09-16/3535e671b-smoke`) still
+degenerated to upload shares of `49175:100%,49176:0%` and `49176:75%,49179:25%`,
+2 tunnels × 2 legs collapsing to 2 × 1 at x0.06–0.12, on 118 `sbd_ruling` events
+in 670 s one of which read a send path of 6 B/s. The ruling the detector would
+have acted on is recorded as an `sbd_ruling` mux event naming the legs, their
+summary statistics and the rate behind the reading, at most once per leg PAIR per
+`--sbd-backoff` window, and nothing below the evidence floor is grouped, ruled or
+recorded at all. Turn it on
+with `skywire cli route settings --sbd-demote true` on BOTH ends (a download is
+exit-sent), and the park is then the trial described above: the pre-park rate is
+recorded, re-read after `--sbd-trial-window` (3 s) with the leg out, a fall past
+`--sbd-trial-loss` (0.15) unparks it and exempts that PAIR for `--sbd-backoff`
+(5 min, doubling, capped at 1 h), and no ruling or verdict is taken below
+`--sbd-min-evidence-rate` (64 KiB/s).
 
 ### 3.5 Direction, proven
 

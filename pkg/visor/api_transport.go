@@ -56,6 +56,31 @@ type RouterSettings struct {
 	DeadRouteHold    time.Duration `json:"dead_route_hold,omitempty"`
 	DeadRouteHoldMax time.Duration `json:"dead_route_hold_max,omitempty"`
 
+	// Shared-bottleneck detection: how many per-leg delay samples a verdict
+	// needs, and the minimum spacing between two per-SACK samples for one leg.
+	// Same zero-means-unchanged rule.
+	SBDMinSamples     int           `json:"sbd_min_samples,omitempty"`
+	SBDSampleInterval time.Duration `json:"sbd_sample_interval,omitempty"`
+
+	// The terms of the park TRIAL that qualifies a shared-bottleneck ruling: how
+	// long the park is held before the aggregate goodput is re-read, the fraction
+	// of goodput it may cost before it is undone, and the first exemption window
+	// the vindicated pair earns. Same zero-means-unchanged rule.
+	SBDTrialWindow time.Duration `json:"sbd_trial_window,omitempty"`
+	SBDTrialLoss   float64       `json:"sbd_trial_loss,omitempty"`
+	SBDBackoff     time.Duration `json:"sbd_backoff,omitempty"`
+
+	// SBDMinEvidenceRate is the aggregate delivered-bytes rate (B/s) a group must
+	// be carrying before a shared-bottleneck ruling may park one of its legs: no
+	// traffic, no ruling. Same zero-means-unchanged rule.
+	SBDMinEvidenceRate int64 `json:"sbd_min_evidence_rate,omitempty"`
+
+	// SBDDemote gates the DEMOTION half of shared-bottleneck detection: false (the
+	// default) records every ruling as an sbd_ruling mux event and parks nothing.
+	// Like MuxFEC it is a tri-state on PUT — nil leaves it alone — because a bool
+	// has no "zero means unchanged" spelling.
+	SBDDemote *bool `json:"sbd_demote,omitempty"`
+
 	// MuxFEC advertises FEC on mux route groups created from now on; unlike
 	// the rest it is a tri-state on PUT, see SetRouterSettings.
 	MuxFEC *bool `json:"mux_fec,omitempty"`
@@ -82,6 +107,7 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 		preference = append(preference, string(t))
 	}
 	fec := v.router.GetMuxFEC()
+	sbdDemote := router.SBDDemote()
 	return RouterSettings{
 		ForceLocalRoutes:    v.router.GetForceLocalRoutes(),
 		ExistingTPOnly:      v.router.GetExistingTPOnly(),
@@ -94,6 +120,13 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 		LegParkMinHold:      router.LegParkMinHold(),
 		DeadRouteHold:       router.DeadRouteHold(),
 		DeadRouteHoldMax:    router.DeadRouteHoldMax(),
+		SBDMinSamples:       router.SBDMinSamples(),
+		SBDSampleInterval:   router.SBDSampleInterval(),
+		SBDTrialWindow:      router.SBDTrialWindow(),
+		SBDTrialLoss:        router.SBDTrialLoss(),
+		SBDBackoff:          router.SBDBackoff(),
+		SBDMinEvidenceRate:  router.SBDMinEvidenceRate(),
+		SBDDemote:           &sbdDemote,
 		MuxFEC:              &fec,
 	}, nil
 }
@@ -135,6 +168,12 @@ func (v *Visor) SetRouterSettings(s RouterSettings) error {
 		{"leg_park_min_hold", s.LegParkMinHold == 0, func() bool { return router.SetLegParkMinHold(s.LegParkMinHold) }},
 		{"dead_route_hold", s.DeadRouteHold == 0, func() bool { return router.SetDeadRouteHold(s.DeadRouteHold) }},
 		{"dead_route_hold_max", s.DeadRouteHoldMax == 0, func() bool { return router.SetDeadRouteHoldMax(s.DeadRouteHoldMax) }},
+		{"sbd_min_samples", s.SBDMinSamples == 0, func() bool { return router.SetSBDMinSamples(s.SBDMinSamples) }},
+		{"sbd_sample_interval", s.SBDSampleInterval == 0, func() bool { return router.SetSBDSampleInterval(s.SBDSampleInterval) }},
+		{"sbd_trial_window", s.SBDTrialWindow == 0, func() bool { return router.SetSBDTrialWindow(s.SBDTrialWindow) }},
+		{"sbd_trial_loss", s.SBDTrialLoss == 0, func() bool { return router.SetSBDTrialLoss(s.SBDTrialLoss) }},
+		{"sbd_backoff", s.SBDBackoff == 0, func() bool { return router.SetSBDBackoff(s.SBDBackoff) }},
+		{"sbd_min_evidence_rate", s.SBDMinEvidenceRate == 0, func() bool { return router.SetSBDMinEvidenceRate(s.SBDMinEvidenceRate) }},
 	} {
 		if k.zero {
 			continue
@@ -142,6 +181,9 @@ func (v *Visor) SetRouterSettings(s RouterSettings) error {
 		if !k.ok() {
 			return fmt.Errorf("%s must be positive", k.name)
 		}
+	}
+	if s.SBDDemote != nil {
+		router.SetSBDDemote(*s.SBDDemote)
 	}
 	if s.MuxFEC != nil {
 		v.router.SetMuxFEC(*s.MuxFEC)
