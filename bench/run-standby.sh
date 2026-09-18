@@ -780,6 +780,11 @@ fi
 
 setup_started=$(date +%Y-%m-%dT%H:%M:%S)
 set_name=mux-standby-pending
+# The per-app mux width and cap are PERSISTED overrides (#5042): a width a
+# previous set left behind shapes every tunnel this pool dials, and a pool of
+# two-leg tunnels is not the standby set (chain AQ/AR 2026-09-18: 32 groups x 2
+# legs, cut fences refused, w/g 1.27). Reset both to inherit before the dial.
+$CLI cli proxy settings --reset mux.width mux.cap >/dev/null 2>&1
 # a group left over from something else would be dialed as part of this pool:
 # refuse to measure until the app owns nothing.
 stop_app_clean "$name" || { invalid_set "$set_name" "route group(s) $rg_left survived two proxy stops before setup"; exit 1; }

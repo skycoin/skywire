@@ -229,7 +229,7 @@ invalid_set() {
 # leaves it (steady width 2, app stopped) before the next set starts.
 abort_set() {
 	invalid_set "$1" "$2"
-	$CLI cli proxy mux width 2 >/dev/null 2>&1
+	$CLI cli proxy settings --reset mux.width mux.cap >/dev/null 2>&1 # back to inherit
 	[ -n "${cur_app:-}" ] && { stop_app_clean "$cur_app" || echo "$cur_app: dst_ports $rg_left left behind by an aborted set"; }
 	return 0
 }
@@ -533,7 +533,7 @@ for spec in $compose; do
 	printf '# rg dst_ports before=%s after=%s %s\n' "$ports_before" "$ports_after" \
 		"$([ "$ports_before" = "$ports_after" ] && echo constant || echo CHANGED)" >> "$out/$set_name.carrier.tsv"
 	echo "$name: rg dst_ports $ports_before -> $ports_after"
-	$CLI cli proxy mux width 2 >/dev/null 2>&1 # back to the default steady width
+	$CLI cli proxy settings --reset mux.width mux.cap >/dev/null 2>&1 # back to inherit: the per-app override is persisted, a leftover width shapes every later dial
 	# the rows are already written, so a leftover group here invalidates the NEXT
 	# set (its own pre-setup check), not this one — just say so loudly.
 	stop_app_clean "$name" || echo "$set_name: dst_ports $rg_left outlived the set — the next set will be invalidated if they persist"
