@@ -544,6 +544,20 @@
          used. When that could not be asked, the wallet holds only the first
          one and its balance is a fraction of the truth — which must not be
          left looking like the whole of it. Retried on every refresh. -->
+    <!-- The node screen. Every balance, transaction list and broadcast for a
+         fiber coin goes to one daemon, and the address the app ships with is
+         not reachable from everywhere — it can be blocked, or throttled past
+         the point where a wallet with history can finish reading it. This is
+         the way out, and the only way to correct the address of a coin the
+         user added themselves. -->
+    <string name="wallet_node_title">Node</string>
+    <string name="wallet_node_row">Node</string>
+    <string name="wallet_node_body">Balances, transactions and broadcasts for %1$s are read from and sent to this node. Change it if the one shipped with the app cannot be reached from where you are, or if you run your own.</string>
+    <string name="wallet_node_field">Node address</string>
+    <string name="wallet_node_save">Use this node</string>
+    <string name="wallet_node_default">Go back to %1$s</string>
+    <string name="wallet_node_encrypted">Encrypted in transit. A node still sees which addresses you ask about together, but nobody else on the way does.</string>
+    <string name="wallet_node_cleartext">Not encrypted. Everyone between this phone and that address sees your whole address list and its balances. Your coins stay safe — keys never leave the device — but the addresses are linked to each other for anyone watching.</string>
     <string name="wallet_scan_pending">This wallet\'s other addresses have not been confirmed with the node yet, so the balance may be incomplete. It is retried on every refresh.</string>
     <string name="wallet_stale_never">Node unreachable. This wallet has not synced yet — balances show once the node answers.</string>
     <string name="wallet_stale_send_note">Send is disabled: no route to the node</string>

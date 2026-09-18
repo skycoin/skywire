@@ -157,6 +157,25 @@ data class WalletMeta(
     val addressScanAtMs: Long = 0,
 )
 
+/**
+ * Whether this coin's node address is one the user may set.
+ *
+ * True for Skycoin and every fiber chain, where [CoinSpec.nodeUrl] is the
+ * whole story: one daemon answers balances, history and broadcast alike, so
+ * pointing it elsewhere moves all of it and the setting means exactly what it
+ * says. The Ethereum family reads balances from an RPC and history from a
+ * separate indexer, so one field there would move half of it and quietly
+ * leave the rest — a worse answer than not offering it. Bitcoin is one
+ * Esplora host and could follow later; nobody has needed it.
+ */
+val CoinSpec.nodeUrlEditable: Boolean get() = kind == CoinKind.SKY_FIBER
+
+/** This coin as it is actually reached, once the user's own node address is applied. */
+fun CoinSpec.withNodeOverride(overrides: Map<String, String>): CoinSpec {
+    val url = overrides[id]?.trim()?.takeIf { it.isNotEmpty() } ?: return this
+    return if (url == nodeUrl) this else copy(nodeUrl = url)
+}
+
 /** True while this wallet's address list has never been confirmed against the chain. */
 val WalletMeta.addressScanPending: Boolean get() = addressScanAtMs <= 0
 

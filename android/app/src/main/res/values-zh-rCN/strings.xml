@@ -521,6 +521,14 @@
         <item quantity="other">%1$d 分钟</item>
     </plurals>
     <string name="wallet_stale_age_hours">%1$d 小时 %2$d 分钟</string>
+    <string name="wallet_node_title">节点</string>
+    <string name="wallet_node_row">节点</string>
+    <string name="wallet_node_body">%1$s 的余额、交易记录和广播都通过该节点收发。如果应用自带的节点在你所在的网络无法访问，或你有自建节点，可在此更改。</string>
+    <string name="wallet_node_field">节点地址</string>
+    <string name="wallet_node_save">使用该节点</string>
+    <string name="wallet_node_default">恢复为 %1$s</string>
+    <string name="wallet_node_encrypted">传输已加密。节点仍能看到你一并查询了哪些地址，但链路上的其他人看不到。</string>
+    <string name="wallet_node_cleartext">未加密。本机与该地址之间的任何人都能看到你的全部地址列表及余额。你的币是安全的——密钥从不离开本机——但在旁观者眼中，这些地址会被关联到一起。</string>
     <string name="wallet_scan_pending">尚未向节点确认本钱包的其余地址，因此余额可能不完整。每次刷新都会重试。</string>
     <string name="wallet_stale_never">无法连接节点服务器。该钱包尚未同步——节点服务器恢复响应后才会显示余额。</string>
     <string name="wallet_stale_send_note">发送已停用：没有到节点服务器的路由</string>
