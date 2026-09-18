@@ -98,6 +98,7 @@ const (
 	UploadEarlyWaitMax   = "upload.early_wait_max"
 	UploadBusyBackoff    = "upload.busy_backoff"
 	UploadBusyTries      = "upload.busy_tries"
+	UploadCutTries       = "upload.cut_tries"
 	UploadReplayTries    = "upload.replay_tries"
 	UploadDepthDynamic   = "upload.depth_dynamic"
 
@@ -273,6 +274,8 @@ func init() {
 		"wait between retries when the sink answers 503, its sessions all taken")
 	register(UploadBusyTries, KindCount, 3,
 		"503s one chunk waits out before the upload fails")
+	register(UploadCutTries, KindCount, 1,
+		"times one chunk is sent again after the sink refused it as short — the body was cut in flight, not by the sink")
 	register(UploadReplayTries, KindCount, 2,
 		"times a generic POST may be replayed after its tunnel died uncommitted")
 	register(UploadDepthDynamic, KindBool, boolVal(false),

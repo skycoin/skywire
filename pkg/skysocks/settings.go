@@ -203,6 +203,7 @@ func setUploadBusyBackoff() time.Duration {
 	return skysettings.Dur(skysettings.UploadBusyBackoff)
 }
 func setUploadBusyTries() int   { return skysettings.Count(skysettings.UploadBusyTries) }
+func setUploadCutTries() int    { return skysettings.Count(skysettings.UploadCutTries) }
 func setUploadReplayTries() int { return skysettings.Count(skysettings.UploadReplayTries) }
 
 // uploadTunables is ONE coherent read of the three knobs the slot arithmetic

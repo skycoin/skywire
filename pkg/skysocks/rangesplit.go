@@ -1127,6 +1127,24 @@ func (g *tunnelGuard) stop() {
 	})
 }
 
+// abandoned reports that THIS CLIENT took the attempt's stream away — the
+// tunnel was snubbed, or it died and the watcher closed the stream under the
+// body. It is the same test err() classifies by, asked WITHOUT releasing the
+// watcher, because an attempt can end with a STATUS rather than an error: yamux
+// serves reads after a local close (0magnet/yamux stream.go, "LocalClose only
+// prohibits further local writes"), so an origin that answers our own
+// truncation — the sink's short-chunk 400 — has that answer reach us on the
+// stream we just closed. Such an answer is not a verdict on the chunk.
+func (g *tunnelGuard) abandoned() bool {
+	if g == nil {
+		return false
+	}
+	if g.snubbed.Load() || (g.m != nil && g.m.isSnubbed()) {
+		return true
+	}
+	return g.fired.Load() || g.sess.IsClosed()
+}
+
 // err releases the watcher and classifies the attempt's outcome: an error on a
 // tunnel that is gone becomes errSessionClosed, which retries free of backoff
 // and free of budget. The session is re-checked here rather than trusting the

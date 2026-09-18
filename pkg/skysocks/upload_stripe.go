@@ -96,6 +96,14 @@ const (
 	// fixes, so it is the one case that waits.
 	uploadBusyBackoff = time.Second
 	uploadBusyTries   = 3
+	// uploadCutTries is how many times a chunk the sink refused as SHORT is sent
+	// again. A short chunk means the PUT body ended before its declared length,
+	// which the sink can only ever see because something between us and it cut
+	// the body — so it says nothing about the object and the bytes, still in our
+	// hand, belong on another tunnel. One re-send: a second short chunk in a row
+	// is a path that cannot carry this chunk at all and the object fails with the
+	// sink's own reason.
+	uploadCutTries = 1
 	// uploadReplayTries is how many times a generic POST may be replayed after
 	// the tunnel under it died with no response committed.
 	uploadReplayTries = 2
@@ -703,7 +711,18 @@ type chunkAck struct {
 	retryAfter time.Duration // Retry-After
 	evicted    []int64       // X-Upload-Evicted: chunk starts the sink dropped from its window
 	final      []byte        // the serialized response, when it carries the object's hash
+	// reason is the refusal's own first line, kept only for a status that fails
+	// the object. The 2026-09-16 compose set failed four uploads with nothing but
+	// "sink answered 400" to read afterwards, and which of the sink's five 400s
+	// it was decided what the bug even was.
+	reason string
 }
+
+// errChunkAbandoned marks an attempt whose stream THIS CLIENT closed under the
+// body. Whatever came back on it afterwards describes our own truncation, not
+// the chunk; the deferred guard turns this into errTunnelSnubbed or
+// errSessionClosed, both of which retry at once on another tunnel.
+var errChunkAbandoned = errors.New("skysocks: the chunk's stream was taken from under its body")
 
 // sendChunk delivers one chunk and does not return until the SINK says it is
 // durable — its offset inside the contiguous prefix of X-Upload-Received.
@@ -760,6 +779,7 @@ func (s *uploadStripe) deliverChunk(start, end int64, buf []byte) error {
 		free     int
 		busy     int
 		early    int
+		cut      int
 		deadline = time.Now().Add(rsChunkRetryBudget)
 		backoff  = rsChunkRetryBackoff
 	)
@@ -789,8 +809,19 @@ func (s *uploadStripe) deliverChunk(start, end int64, buf []byte) error {
 			attempt--
 
 			continue
+		case err == nil && ack.status == http.StatusBadRequest && cut < setUploadCutTries():
+			// The sink's short-chunk refusal: the PUT body ended before the length
+			// it declared. Nothing the sink does can produce that — the body was cut
+			// between us and it — so this is not a verdict on the object, and the
+			// bytes go again on whatever tunnel the planner picks next. Bounded,
+			// because a 400 the sink means (a malformed range, a bad id) would
+			// otherwise loop: a second one in a row fails the object.
+			cut++
+			attempt--
+
+			continue
 		case err == nil:
-			return fmt.Errorf("chunk %d-%d: sink answered %d", start, end, ack.status)
+			return fmt.Errorf("chunk %d-%d: sink answered %d%s", start, end, ack.status, ackReason(ack))
 		}
 		// The tunnel died under the chunk: re-send at once on another one. Nothing
 		// to wait for (the next pick skips the dead tunnel) and nothing to charge.
@@ -934,7 +965,26 @@ func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err
 	// writing into a stream the deferred Close is about to take away; end it and
 	// join it, so no goroutine outlives the attempt that started it.
 	endBodyWriter(st, werr)
+	// A refusal we CAUSED is not the sink's verdict. When the guard took this
+	// stream away under the body — the tunnel was snubbed, or it died — the sink
+	// read a body that ended early and refused it as short; yamux still serves
+	// our reads after that local close, which is the only reason we see the
+	// refusal at all. Hand deliverChunk an ABORTED attempt instead, so the
+	// deferred g.err classifies it and the chunk is re-issued at once on a live
+	// tunnel, free of backoff and free of budget — exactly as a death is.
+	if ack.status/100 != 2 && g.abandoned() {
+		return chunkAck{}, errChunkAbandoned
+	}
 	return ack, nil
+}
+
+// ackReason renders a refusal's own words for the error that carries it, or
+// nothing when the sink said nothing quotable.
+func ackReason(ack chunkAck) string {
+	if ack.reason == "" {
+		return ""
+	}
+	return " (" + ack.reason + ")"
 }
 
 // endBodyWriter stops the body goroutine and joins it. Closing the stream is
@@ -980,7 +1030,24 @@ func readChunkAck(resp *http.Response, body []byte) chunkAck {
 	if resp.StatusCode/100 == 2 && resp.Header.Get("X-Sha256") != "" {
 		ack.final = serializeResponse(resp, body)
 	}
+	if resp.StatusCode/100 != 2 {
+		ack.reason = refusalReason(body)
+	}
 	return ack
+}
+
+// refusalReason is the first line of a refusal body, capped — the sink answers
+// http.Error, so that line IS the reason ("short chunk: unexpected EOF").
+func refusalReason(body []byte) string {
+	const max = 120
+	line := strings.TrimSpace(string(body))
+	if i := strings.IndexAny(line, "\r\n"); i >= 0 {
+		line = strings.TrimSpace(line[:i])
+	}
+	if len([]rune(line)) > max {
+		line = string([]rune(line)[:max])
+	}
+	return line
 }
 
 // fetchFinal asks the sink for the object's completion record, for the case

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -240,6 +241,15 @@ type stubSink struct {
 	// a refusal the client cannot retry (see deliverChunk's default arm).
 	refuse   int
 	refuseAt int64
+	// cut makes the chunk starting at cutAt arrive SHORT once — the refusal the
+	// path's own truncation produces at the real sink (loadtest.go's "short
+	// chunk"), which is not a verdict on the object. cutSeen counts how many
+	// times that chunk reached the sink, so a test can tell a re-send from a
+	// retry of something else.
+	cut     bool
+	cutAt   int64
+	cutDone atomic.Bool
+	cutSeen atomic.Int64
 }
 
 func (s *stubSink) handler() http.HandlerFunc {
@@ -271,6 +281,14 @@ func (s *stubSink) handler() http.HandlerFunc {
 			_, _ = io.Copy(io.Discard, r.Body) //nolint:errcheck
 			http.Error(w, "refused", s.refuse)
 			return
+		}
+		if s.cut && start == s.cutAt {
+			s.cutSeen.Add(1)
+			if s.cutDone.CompareAndSwap(false, true) {
+				_, _ = io.Copy(io.Discard, r.Body) //nolint:errcheck
+				http.Error(w, "short chunk: unexpected EOF", http.StatusBadRequest)
+				return
+			}
 		}
 		if s.holdFirst > 0 {
 			if start == 0 {
@@ -1064,5 +1082,165 @@ func TestBadGatewayReasonIsOneHeaderSafeLine(t *testing.T) {
 	long := badGatewayReason(fmt.Errorf("%s", strings.Repeat("x", rsReasonMax+64)))
 	if len([]rune(long)) != rsReasonMax+1 {
 		t.Fatalf("a long reason was not capped: %d runes", len([]rune(long)))
+	}
+}
+
+// TestPutChunkDoesNotTakeARefusalOnAStreamItAbandoned is the 2026-09-16 compose
+// failure, reduced. Four striped uploads there died on "sink answered 400" —
+// the sink's short-chunk refusal, which it can only ever produce because the
+// PUT body ended before its declared length. The client had taken that stream
+// away itself: the tunnel guard closes an in-flight stream when its tunnel is
+// snubbed or dies, and yamux serves reads after a LOCAL close, so the refusal
+// our own cut caused came back to us and deliverChunk's default arm made it
+// terminal for the whole object.
+//
+// The exit here stops reading mid-body, the tunnel is snubbed under the chunk,
+// and only then does the refusal go out. putChunk must report an ABORTED
+// attempt — one freeRetry accepts, so the chunk is re-issued at once on a live
+// tunnel — and never the 400.
+func TestPutChunkDoesNotTakeARefusalOnAStreamItAbandoned(t *testing.T) {
+	buf := make([]byte, 512<<10) // larger than the yamux window: the writer parks
+	var (
+		ready   = make(chan struct{})
+		snubbed = make(chan struct{})
+	)
+	s := newUploadStripeOnExit(t, int64(len(buf)), func(st net.Conn) {
+		defer st.Close() //nolint:errcheck
+		if err := readSocks5ConnectRequest(st); err != nil {
+			return
+		}
+		_, _ = st.Write([]byte{0x05, 0x00}) //nolint:errcheck,gosec
+		_, _ = st.Write(socks5OKReply)      //nolint:errcheck,gosec
+		// The head and a slice of the body, then nothing: this is the cut.
+		if _, err := io.ReadFull(st, make([]byte, 4<<10)); err != nil {
+			return
+		}
+		close(ready)
+		<-snubbed
+		_, _ = io.WriteString(st, "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 27\r\n\r\nshort chunk: unexpected EOF") //nolint:errcheck,gosec
+	})
+
+	go func() {
+		<-ready
+		s.c.sessionsMu.Lock()
+		sess := s.c.sessions[0]
+		s.c.sessionsMu.Unlock()
+		s.c.meterOf(sess).snub(time.Now(), time.Minute)
+		close(snubbed)
+	}()
+
+	type outcome struct {
+		ack chunkAck
+		err error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		ack, err := s.putChunk(0, int64(len(buf))-1, buf)
+		done <- outcome{ack, err}
+	}()
+	select {
+	case got := <-done:
+		if got.err == nil {
+			t.Fatalf("putChunk took the refusal as an answer: ack = %+v", got.ack)
+		}
+		// The guard classifies it: errTunnelSnubbed, which is what re-issues the
+		// chunk, with the abandonment as its explanation.
+		if !errors.Is(got.err, errTunnelSnubbed) {
+			t.Fatalf("putChunk = %v, want the snub the guard saw", got.err)
+		}
+		if !strings.Contains(got.err.Error(), errChunkAbandoned.Error()) {
+			t.Fatalf("putChunk = %v, want the abandoned attempt as its cause", got.err)
+		}
+		if !freeRetry(got.err) {
+			t.Fatalf("putChunk = %v, want an error the chunk is re-issued on (free of budget)", got.err)
+		}
+		if got.ack.status != 0 {
+			t.Fatalf("ack = %+v, want nothing: the status belongs to the stream we cut", got.ack)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("putChunk hung on a stream the guard closed under it")
+	}
+	buf[0] ^= 0xFF // a writer still running would be a data race here
+}
+
+// TestStripedUploadRetriesAShortChunkRefusal: a 400 on a chunk the client did
+// NOT abandon still means the body was cut in flight — the sink refuses a short
+// chunk and stores nothing — so the chunk goes again on another tunnel and the
+// object completes. Before this, one such 400 anywhere in a 50 MB body failed
+// the whole upload with 8 MB already durable at the sink.
+func TestStripedUploadRetriesAShortChunkRefusal(t *testing.T) {
+	defer restoreUploadTunables(uploadChunkBytes, uploadMemBytes, uploadStripeMinBytes, uploadConcurrency)()
+	uploadChunkBytes = 64 << 10
+	uploadMemBytes = 256 << 10
+	uploadStripeMinBytes = 64 << 10
+	uploadConcurrency = 2
+
+	blob := make([]byte, 1<<20)
+	for i := range blob {
+		blob[i] = byte(i*17 + 5)
+	}
+	want := sha256.Sum256(blob)
+
+	sink := &stubSink{cut: true, cutAt: 2 * (64 << 10)} // the third chunk of the plan
+	backend := httptest.NewServer(sink.handler())
+	defer backend.Close()
+
+	proxy := newRSTestClient(t, backend.Listener.Addr().String(), rsTestConcurrency, 1<<20)
+	resp := socks5Upload(t, proxy, blob)
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != http.StatusOK {
+		reason := resp.Header.Get("X-Upload-Error")
+		t.Fatalf("status = %d (%s), want 200: a short-chunk 400 is not a verdict on the object", resp.StatusCode, reason)
+	}
+	var got struct {
+		Bytes  int64  `json:"bytes"`
+		Sha256 string `json:"sha256"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Bytes != int64(len(blob)) || got.Sha256 != hex.EncodeToString(want[:]) {
+		t.Fatalf("sink saw %d bytes / %s, want %d / %s", got.Bytes, got.Sha256, len(blob), hex.EncodeToString(want[:]))
+	}
+	if n := sink.cutSeen.Load(); n != 2 {
+		t.Fatalf("the cut chunk reached the sink %d time(s), want exactly 2 — one cut and one re-send", n)
+	}
+	if sink.whole != 0 {
+		t.Fatalf("%d whole-body POSTs reached the sink: the upload was not striped", sink.whole)
+	}
+}
+
+// TestShortChunkRefusalIsRetriedOnlyOnce: the bound matters as much as the
+// retry. A 400 the sink MEANS — a malformed range, an id it will not take —
+// repeats identically, so an unbounded re-send would loop until the budget ran
+// out with nothing learned. upload.cut_tries is that bound, and the error the
+// object finally fails with carries the sink's own words.
+func TestShortChunkRefusalIsRetriedOnlyOnce(t *testing.T) {
+	defer restoreUploadTunables(uploadChunkBytes, uploadMemBytes, uploadStripeMinBytes, uploadConcurrency)()
+	uploadChunkBytes = 64 << 10
+	uploadMemBytes = 256 << 10
+	uploadStripeMinBytes = 64 << 10
+	uploadConcurrency = 2
+
+	blob := make([]byte, 1<<20)
+	for i := range blob {
+		blob[i] = byte(i)
+	}
+	sink := &stubSink{refuse: http.StatusBadRequest} // refuseAt 0: every try at chunk 0
+	backend := httptest.NewServer(sink.handler())
+	defer backend.Close()
+
+	proxy := newRSTestClient(t, backend.Listener.Addr().String(), rsTestConcurrency, 1<<20)
+	resp := socks5Upload(t, proxy, blob)
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502: a 400 the sink means is still terminal", resp.StatusCode)
+	}
+	reason := resp.Header.Get("X-Upload-Error")
+	if !strings.Contains(reason, "sink answered 400") {
+		t.Fatalf("X-Upload-Error = %q, want the sink's status", reason)
+	}
+	if !strings.Contains(reason, "refused") {
+		t.Fatalf("X-Upload-Error = %q, want the sink's own words with it", reason)
 	}
 }
