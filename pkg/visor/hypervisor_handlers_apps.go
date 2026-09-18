@@ -280,9 +280,16 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 				if ctx.App.Name == skyenv.VPNClientName {
 					appStatus = appserver.AppDetailedStatusVPNConnecting
 				}
+				// Cosmetic, and deliberately best-effort: this only paints the
+				// dot amber until the app reports its own status, which is the
+				// authoritative one. The app can beat this call — against a
+				// remote visor it is a round-trip behind — and a visor that
+				// already has the app's "Running" drops it (see
+				// appserver.Proc.SetDetailedStatus). Failing a start that
+				// actually succeeded over a marker would be the wrong trade.
 				if err := ctx.API.SetAppDetailedStatus(ctx.App.Name, appStatus); err != nil {
-					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-					return
+					hv.log(r).WithError(err).
+						Debugf("putApp: %s start marker for %s not applied", appStatus, ctx.App.Name)
 				}
 			default:
 				errMsg := fmt.Errorf("value of 'status' field is %d when expecting 0 or 1", *reqBody.Status)

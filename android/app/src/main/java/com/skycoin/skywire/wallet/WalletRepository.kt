@@ -1,6 +1,7 @@
 package com.skycoin.skywire.wallet
 
 import android.content.Context
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.skycoin.skywire.R
@@ -18,11 +19,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 /**
@@ -36,15 +40,65 @@ class WalletRepository private constructor(private val context: Context) {
     private val seeds = WalletSeedStore(context)
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** Wallet id → when a failed address scan may be tried again. See settleAddressScan. */
+    private val scanRetryAfter = ConcurrentHashMap<String, Long>()
+
+    // connect and read bound the ways a call can STALL; nothing bounds how
+    // long a call that is making progress may take, because nothing bounds
+    // how big the answer is. A Skycoin node's /api/v1/transactions has no
+    // pagination — it returns every transaction every address has ever been
+    // in — and one ordinary address measured 8.5 MB, another 19 MB and still
+    // arriving. The old 30-second callTimeout cut those off mid-download on
+    // any link that was not fast, which is why a wallet with real history
+    // would not sync at all on a throttled connection while a fresh one-
+    // address wallet synced instantly: the difference was payload size, not
+    // the network being up.
+    //
+    // readTimeout is the real guard and is an IDLE timeout — it fires when
+    // 20 seconds pass with no bytes at all, so a slow but progressing
+    // download survives and a dead socket still fails. callTimeout stays
+    // only as a backstop against a server dripping bytes forever, at a value
+    // that can actually accommodate the payload. Same shape as the fix for
+    // skychat's large file transfers: an idle deadline does the work, the
+    // absolute one is a last resort.
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
-        .callTimeout(30, TimeUnit.SECONDS)
+        .callTimeout(BULK_CALL_BACKSTOP_MINUTES, TimeUnit.MINUTES)
         .build()
 
     // --- coins ---
 
+    /**
+     * Every coin, as it is actually reached — the user's own node address
+     * applied on top of the shipped one where they have set it.
+     *
+     * Applied here rather than at each call site so there is one answer to
+     * "which node is this coin on": [coreFor] builds its client from what
+     * comes out of here, and the screen that shows the address reads the same
+     * value the network calls use.
+     */
     fun coins(): Flow<List<CoinSpec>> = seeds.store.data.map { prefs ->
+        val overrides = nodeUrlsOf(prefs)
+        shippedCoins(prefs).map { it.withNodeOverride(overrides) }
+    }
+
+    /** The coin list before any node override — what "use the default" restores. */
+    fun defaultNodeUrls(): Flow<Map<String, String>> = seeds.store.data.map { prefs ->
+        shippedCoins(prefs).associate { it.id to it.nodeUrl }
+    }
+
+    /** The node addresses the user has set, by coin id. */
+    fun nodeUrls(): Flow<Map<String, String>> = seeds.store.data.map { nodeUrlsOf(it) }
+
+    private fun nodeUrlsOf(prefs: Preferences): Map<String, String> =
+        prefs[KEY_NODE_URLS]?.let {
+            runCatching {
+                json.decodeFromString(MapSerializer(String.serializer(), String.serializer()), it)
+            }.getOrNull()
+        } ?: emptyMap()
+
+    private fun shippedCoins(prefs: Preferences): List<CoinSpec> {
         // One stored list for everything user-added; the key predates
         // tokens and is not worth a migration to rename.
         val user = prefs[KEY_FIBER_COINS]?.let {
@@ -52,10 +106,40 @@ class WalletRepository private constructor(private val context: Context) {
         } ?: emptyList()
         // SKY first, user Fibercoins in the order added, then the other
         // built-ins, then user tokens in the order added.
-        listOf(CoinSpec.SKY) +
+        return listOf(CoinSpec.SKY) +
             user.filter { it.kind == CoinKind.SKY_FIBER } +
             listOf(CoinSpec.BTC, CoinSpec.ETH, CoinSpec.USDT) +
             user.filter { it.kind == CoinKind.ERC20 }
+    }
+
+    /**
+     * Point a coin at a different node, or hand it back to the shipped one
+     * with a blank [url].
+     *
+     * This is the way out of a node that cannot be reached from where the
+     * user is — a blocked host, a throttled one, or simply a preference for
+     * their own. It is also the only way to correct the address of a coin
+     * they added themselves, which until now was fixed at the moment it was
+     * created.
+     *
+     * Any address scan waiting on a back-off is released: the whole point of
+     * changing the node is that the old one was not answering, and making
+     * someone wait out a timer set against it would be answering the wrong
+     * question.
+     */
+    suspend fun setNodeUrl(coinId: String, url: String) {
+        val trimmed = url.trim().removeSuffix("/")
+        require(trimmed.isEmpty() || trimmed.toHttpUrlOrNull() != null) {
+            context.getString(R.string.wallet_add_coin_node_invalid)
+        }
+        seeds.store.edit { prefs ->
+            val next = nodeUrlsOf(prefs).toMutableMap()
+            if (trimmed.isEmpty()) next.remove(coinId) else next[coinId] = trimmed
+            prefs[KEY_NODE_URLS] = json.encodeToString(
+                MapSerializer(String.serializer(), String.serializer()), next,
+            )
+        }
+        wallets().first().filter { it.coinId == coinId }.forEach { scanRetryAfter.remove(it.id) }
     }
 
     suspend fun coin(coinId: String): CoinSpec? = coins().first().firstOrNull { it.id == coinId }
@@ -212,7 +296,9 @@ class WalletRepository private constructor(private val context: Context) {
     /**
      * Create (fresh phrase, already quiz-verified) or restore. Restores probe
      * the network for used addresses; a dead node degrades to one address
-     * rather than failing the restore.
+     * rather than failing the restore — but now says so, in
+     * [WalletMeta.addressScanAtMs], so the probe is retried until it lands
+     * instead of leaving the wallet permanently short of its own addresses.
      */
     suspend fun addWallet(spec: CoinSpec, name: String, mnemonic: String, restored: Boolean): WalletMeta =
         withContext(Dispatchers.IO) {
@@ -220,11 +306,17 @@ class WalletRepository private constructor(private val context: Context) {
             val seed = normalizeSeed(mnemonic)
             require(core.validateSeed(seed)) { context.getString(R.string.wallet_seed_invalid) }
 
-            val (receiveCount, changeCount) = if (restored) {
-                runCatching { core.scanUsed(seed) }.getOrDefault(1 to 0)
+            // null means the question could not be put, which is different
+            // from "the answer is one address" — a fresh phrase genuinely has
+            // one and is settled, a restore that could not reach the node is
+            // not.
+            val scan = if (restored) {
+                runCatching { core.scanUsed(seed) }.getOrNull()
             } else {
                 1 to 0
             }
+            val (receiveCount, changeCount) = scan ?: (1 to 0)
+            val scannedAt = if (scan != null) System.currentTimeMillis() else 0
             val book = core.deriveAddresses(seed, receiveCount, changeCount)
 
             // This coin may already hold this exact account — most likely
@@ -240,9 +332,14 @@ class WalletRepository private constructor(private val context: Context) {
             if (already != null) {
                 // A restore that scanned further than the mirror knew about is
                 // the one thing worth carrying over.
-                val grown = if (book.receive.size > already.receiveAddresses.size) {
-                    already.copy(receiveAddresses = book.receive, changeAddresses = book.change)
-                        .also { putWallets(wallets().first().map { w -> if (w.id == it.id) it else w }) }
+                val longer = book.receive.size > already.receiveAddresses.size
+                val settles = scannedAt > 0 && already.addressScanPending
+                val grown = if (longer || settles) {
+                    already.copy(
+                        receiveAddresses = if (longer) book.receive else already.receiveAddresses,
+                        changeAddresses = if (longer) book.change else already.changeAddresses,
+                        addressScanAtMs = maxOf(already.addressScanAtMs, scannedAt),
+                    ).also { putWallets(wallets().first().map { w -> if (w.id == it.id) it else w }) }
                 } else {
                     already
                 }
@@ -257,6 +354,7 @@ class WalletRepository private constructor(private val context: Context) {
                 createdAtMs = System.currentTimeMillis(),
                 receiveAddresses = book.receive,
                 changeAddresses = book.change,
+                addressScanAtMs = scannedAt,
             )
             seeds.putSeed(meta.id, seed)
             putWallets(wallets().first() + meta)
@@ -288,7 +386,11 @@ class WalletRepository private constructor(private val context: Context) {
     ) {
         coins().first()
             .filter { it.isEthFamily && it.id != exceptCoin }
-            .forEach { sibling -> mirrorWallet(sibling, source.name, source.createdAtMs, seed, book) }
+            .forEach { sibling ->
+                mirrorWallet(
+                    sibling, source.name, source.createdAtMs, seed, book, source.addressScanAtMs,
+                )
+            }
     }
 
     /**
@@ -305,6 +407,11 @@ class WalletRepository private constructor(private val context: Context) {
         createdAtMs: Long,
         seed: String,
         book: AddressBook,
+        // The mirror is the same account with the same addresses, so the
+        // source's answer about them is the mirror's answer too. Carrying it
+        // is what keeps a mirror from re-asking a question already settled,
+        // and from wearing "addresses unconfirmed" for a scan it never needed.
+        addressScanAtMs: Long,
     ): WalletMeta? {
         val head = book.receive.firstOrNull() ?: return null
         val existing = wallets().first().filter { it.coinId == coin.id }
@@ -317,6 +424,7 @@ class WalletRepository private constructor(private val context: Context) {
             createdAtMs = createdAtMs,
             receiveAddresses = book.receive,
             changeAddresses = book.change,
+            addressScanAtMs = addressScanAtMs,
         )
         // A second sealed copy of a phrase already on this device, under the
         // same keystore key — no new exposure, and the alternative (one seed
@@ -358,6 +466,7 @@ class WalletRepository private constructor(private val context: Context) {
                     existing.createdAtMs,
                     seed,
                     AddressBook(existing.receiveAddresses, existing.changeAddresses),
+                    existing.addressScanAtMs,
                 )
             }
     }
@@ -413,35 +522,81 @@ class WalletRepository private constructor(private val context: Context) {
         json.decodeFromString(WalletSnapshot.serializer(), f.readText())
     }.getOrNull()
 
-    /** Fetch balance and history; persist and return the fresh snapshot. */
+    /**
+     * Fetch balance and history; persist and return the fresh snapshot.
+     *
+     * The two halves fail independently, because they cost wildly different
+     * amounts. The balance is one small fixed-size answer — 268 bytes for a
+     * whole address book — and it is the half everything depends on: the
+     * screen's numbers, and whether Send is allowed at all. The history is
+     * unbounded and routinely megabytes (see the client above).
+     *
+     * Fetching them together meant one slow history download took the
+     * balance with it, and a wallet with enough history to be worth having
+     * would sit at "not synced yet" with sending disabled, forever, however
+     * many times it was reloaded. So the history is allowed to miss: the
+     * balance lands, the last history we did get is kept, and the snapshot
+     * records when that was. A balance that will not fetch is still fatal —
+     * at 268 bytes, that is the network being down.
+     */
     suspend fun refresh(walletId: String): WalletSnapshot = withContext(Dispatchers.IO) {
-        val meta = wallet(walletId) ?: error("unknown wallet")
-        val spec = coin(meta.coinId) ?: error("unknown coin")
+        val found = wallet(walletId) ?: error("unknown wallet")
+        val spec = coin(found.coinId) ?: error("unknown coin")
         val core = coreFor(spec)
+        // Ask again, if the question is still open: reading a balance from
+        // half a wallet's addresses is a wrong number, not a stale one.
+        val meta = settleAddressScan(found, core)
         val book = AddressBook(meta.receiveAddresses, meta.changeAddresses)
         val balance = core.balance(book)
-        val history = core.history(book)
-        val snapshot = WalletSnapshot(
-            confirmed = balance.confirmed,
-            predicted = balance.predicted,
-            hours = balance.hours,
-            spendableOutputs = balance.spendableOutputs,
-            txs = history.map {
-                CachedTx(
-                    txid = it.txid,
-                    incoming = it.incoming,
-                    amount = it.amount,
-                    party = it.party,
-                    timestamp = it.timestamp,
-                    confirmed = it.confirmed,
-                    confirmations = it.confirmations,
-                    fee = it.fee,
-                )
-            },
-            fetchedAtMs = System.currentTimeMillis(),
-        )
+        val previous = cachedSnapshot(walletId)
+        val history = runCatching { core.history(book) }.getOrNull()
+        val snapshot = mergeSnapshot(balance, history, previous, System.currentTimeMillis())
         cacheFile(walletId).writeText(json.encodeToString(WalletSnapshot.serializer(), snapshot))
         snapshot
+    }
+
+    /**
+     * Finish a restore's address discovery when it could not be done at the
+     * time, and record that it is done.
+     *
+     * Runs on refresh of a wallet whose scan is still open, which is what
+     * makes a restore on a bad connection a temporary state rather than a
+     * permanent one. Costs nothing once settled — the flag is checked first.
+     *
+     * A failure backs off rather than retrying on the next tick. The screen
+     * refreshes every 30 seconds and a scan is the same expensive question as
+     * a history fetch, so retrying at that cadence would put a wallet on a
+     * connection too poor to answer it into a loop pulling megabytes it can
+     * never finish, on what is usually metered data. The back-off is held in
+     * memory only: a restart is a fresh try, which is what a user who has
+     * moved onto a better network would expect.
+     *
+     * The address lists only ever grow here. A scan reports how many
+     * addresses the CHAIN has seen, which is not the same as how many the
+     * wallet holds: [newReceiveAddress] hands out further ones locally, and
+     * an address a user has been given out must not disappear because nobody
+     * has paid it yet.
+     */
+    private suspend fun settleAddressScan(meta: WalletMeta, core: WalletCore): WalletMeta {
+        if (!meta.addressScanPending) return meta
+        val now = System.currentTimeMillis()
+        if (now < (scanRetryAfter[meta.id] ?: 0L)) return meta
+        val seed = seeds.seed(meta.id) ?: return meta
+        val scanned = runCatching { core.scanUsed(seed) }.getOrNull()
+        if (scanned == null) {
+            scanRetryAfter[meta.id] = now + SCAN_RETRY_BACKOFF_MS
+            return meta
+        }
+        scanRetryAfter.remove(meta.id)
+        val (receiveCount, changeCount) = scanned
+        val book = core.deriveAddresses(
+            seed,
+            maxOf(receiveCount, meta.receiveAddresses.size),
+            maxOf(changeCount, meta.changeAddresses.size),
+        )
+        val settled = settledAddresses(meta, book, System.currentTimeMillis())
+        putWallets(wallets().first().map { if (it.id == settled.id) settled else it })
+        return settled
     }
 
     // --- send ---
@@ -490,7 +645,20 @@ class WalletRepository private constructor(private val context: Context) {
     }
 
     companion object {
+        /**
+         * Last resort, not a budget: a node that keeps sending is allowed to
+         * finish. Sized so the largest history the endpoint can hand back
+         * still arrives over a genuinely slow link — 19 MB at 100 KB/s is
+         * about three minutes — while a server that drips forever eventually
+         * lets go.
+         */
+        private const val BULK_CALL_BACKSTOP_MINUTES = 5L
+
+        /** Long enough that a scan the link cannot carry is not retried in a loop. */
+        private val SCAN_RETRY_BACKOFF_MS = TimeUnit.MINUTES.toMillis(5)
+
         private val KEY_WALLETS = stringPreferencesKey("wallets")
+        private val KEY_NODE_URLS = stringPreferencesKey("node_urls")
         private val KEY_FIBER_COINS = stringPreferencesKey("fiber_coins")
         private val KEY_SELECTED_COIN = stringPreferencesKey("selected_coin")
 

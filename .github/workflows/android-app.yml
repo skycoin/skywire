@@ -51,10 +51,13 @@ jobs:
         run: make android-mobile
 
       # LiveNodeTest is skipped unless SKYWIRE_NET_TESTS=1, so this stays
-      # offline. :app has no unit tests yet; :wallet-core holds the crypto
-      # vectors and golden fixtures, which are the ones worth gating on.
+      # offline. :wallet-core holds the crypto vectors and golden fixtures;
+      # :app holds the guards that assert against source rather than
+      # behaviour (the manifest keyguard, the translation catalogue) plus the
+      # pure decision logic the device classes are built around — a test that
+      # no lane runs is not a test.
       - name: Unit tests
-        run: cd android && ./gradlew --no-daemon :wallet-core:test
+        run: cd android && ./gradlew --no-daemon :wallet-core:test :app:testDebugUnitTest
 
       - name: Assemble debug APK
         run: cd android && ./gradlew --no-daemon :app:assembleDebug

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -213,11 +214,30 @@ func (s *Signaler) Invite(ctx context.Context, peer cipher.PubKey, callID, codec
 		_ = conn.Close() //nolint:errcheck
 		return nil, Sig{}, fmt.Errorf("voice: send invite: %w", err)
 	}
+	// The wait for the peer's answer is bounded by ctx, which it was not:
+	// only the dial above took the context, and the read below then blocked
+	// for as long as the callee cared to ring. A caller asking for a
+	// thirty-second call waited fifty-six, and nothing the caller did —
+	// deadline, cancel, hang up — ended it. Both halves are needed: the
+	// deadline covers a peer that never replies, and the cancel covers a
+	// caller who gives up first, since a deadline already set cannot be
+	// brought forward.
+	if dl, ok := ctx.Deadline(); ok {
+		_ = conn.SetReadDeadline(dl) //nolint:errcheck // not every conn honors one; the cancel below still does
+	}
+	stopCancel := context.AfterFunc(ctx, func() { _ = conn.Close() }) //nolint:errcheck
 	reply, err := readSig(conn)
+	stopCancel()
 	if err != nil {
 		_ = conn.Close() //nolint:errcheck
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, Sig{}, fmt.Errorf("voice: no answer: %w", ctxErr)
+		}
 		return nil, Sig{}, fmt.Errorf("voice: read invite reply: %w", err)
 	}
+	// Past here the conn is the MEDIA conn and must carry no deadline of the
+	// invite's — a call would end the moment the ring budget elapsed.
+	_ = conn.SetReadDeadline(time.Time{}) //nolint:errcheck
 	if reply.Type != SigAccept {
 		_ = conn.Close() //nolint:errcheck
 		return nil, reply, nil

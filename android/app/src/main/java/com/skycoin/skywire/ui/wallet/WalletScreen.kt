@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
@@ -73,6 +75,7 @@ import com.skycoin.skywire.ui.components.PENDING_AMBER
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.skywire.wallet.CoinSpec
+import com.skycoin.skywire.wallet.addressScanPending
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -93,6 +96,7 @@ fun WalletScreen(
     onHistory: () -> Unit,
     onTx: (String) -> Unit,
     onWallets: () -> Unit,
+    onNode: () -> Unit,
     onAddCoin: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -152,6 +156,17 @@ fun WalletScreen(
                 item {
                     BalanceHeader(state)
                     if (state.stale) StaleBanner(state)
+                    // A wallet whose addresses were never confirmed against
+                    // the chain is showing the balance of the addresses it
+                    // happens to hold, which after a restore on a bad
+                    // connection can be one out of several. That is a wrong
+                    // number rather than an old one, so it is said plainly
+                    // rather than left to look like the whole of it. Not
+                    // while a refresh is in flight — that refresh is the
+                    // thing that settles it.
+                    if (state.active?.addressScanPending == true && !state.refreshing) {
+                        ScanPendingBanner()
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 22.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -283,6 +298,54 @@ fun WalletScreen(
                             Modifier.size(18.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                }
+
+                // Which node the coin is on, shown rather than hidden: the
+                // answer to "why will this not sync" is often here, and a
+                // user who cannot reach the shipped one needs somewhere to
+                // say so. Only for the coins where one address is the whole
+                // story — see nodeUrlEditable.
+                if (canEditNode(state)) {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable(onClick = onNode)
+                                .padding(horizontal = 16.dp, vertical = 15.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Icon(
+                                Icons.Outlined.Dns,
+                                null,
+                                Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                stringResource(R.string.wallet_node_row),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                state.coin.nodeUrl.substringAfter("://"),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.widthIn(max = 150.dp),
+                            )
+                            Icon(
+                                Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                                null,
+                                Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
@@ -449,6 +512,27 @@ private fun StaleBanner(state: WalletUiState) {
     ) {
         Icon(Icons.Outlined.Schedule, null, Modifier.size(16.dp), tint = PENDING_AMBER)
         Text(text, style = MaterialTheme.typography.bodySmall, color = PENDING_AMBER)
+    }
+}
+
+/** Same shape as [StaleBanner]: the balance on screen is not to be trusted yet. */
+@Composable
+private fun ScanPendingBanner() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 18.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(PENDING_AMBER.copy(alpha = 0.12f))
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        Icon(Icons.Outlined.Schedule, null, Modifier.size(16.dp), tint = PENDING_AMBER)
+        Text(
+            stringResource(R.string.wallet_scan_pending),
+            style = MaterialTheme.typography.bodySmall,
+            color = PENDING_AMBER,
+        )
     }
 }
 

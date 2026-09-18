@@ -72,6 +72,50 @@ func (hv *Hypervisor) postDmsgConnectAll() http.HandlerFunc {
 	}
 }
 
+// postDmsgReconnect closes every dmsg session so the client re-dials at once.
+//
+// This is the "the network under me moved" action. A phone that switches
+// Wi-Fi ↔ cellular, or that the carrier hands a new IP during a handover,
+// keeps its old TCP sockets in ESTABLISHED: nothing has been sent on them
+// since the move, so neither end knows they are dead. The visor only finds
+// out when yamux's keepalive fails to write (30s interval + 45s write
+// timeout), and until then it is gone from the network — the hypervisor
+// sees the peer stop answering, dmsg peers cannot reach its listeners, and
+// the whole thing repeats on the next handover. Mobile data is where this
+// is constant rather than occasional.
+//
+// The OS knows the moment it happens, so the host app tells us (Android:
+// ConnectivityManager's default-network callback) and we drop the dead
+// sockets immediately instead of waiting out a timeout nobody can shorten
+// safely. Everything that rides dmsg recovers behind it: the serve loop
+// re-dials servers and republishes the discovery entry, and the hypervisor
+// RPC conn (a stream on one of those sessions) fails and is redialled by
+// ServeRPCClient.
+//
+// Idempotent and cheap when nothing was wrong — reconnecting costs about a
+// second — so a caller that is unsure is better off calling it.
+func (hv *Hypervisor) postDmsgReconnect() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if hv.visor == nil {
+			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, map[string]string{"error": "visor not available"})
+			return
+		}
+		closed, err := hv.visor.DmsgReconnect()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		hv.logger.WithField("sessions_closed", closed).
+			Info("Dmsg sessions dropped on request; the client will re-dial.")
+		httputil.WriteJSON(w, r, http.StatusOK, DmsgReconnectResult{SessionsClosed: closed})
+	}
+}
+
+// DmsgReconnectResult reports how many sessions postDmsgReconnect tore down.
+type DmsgReconnectResult struct {
+	SessionsClosed int `json:"sessions_closed"`
+}
+
 // putDmsgSessionsCount persists dmsg.sessions_count to the visor config and
 // triggers an immediate connect-all so the change takes effect without a
 // restart. A value of 0 means "connect to every available dmsg server",

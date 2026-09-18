@@ -294,6 +294,38 @@
       align-items: center;
       gap: 10px;
       margin-bottom: 12px;
+      /* Wrap rather than overflow. The one-pane rules below already say this
+         row does not fit — "the name plus the status pill plus three 36px
+         buttons is more than a 320px-wide header holds" — and solve it there
+         by dropping the wordmark. The two-pane sidebar is the same 320px
+         (280px between 761 and 900), was never given the same budget, and has
+         since gained a fourth button. A flex row that cannot fit neither
+         shrinks nor scrolls: it overflows, and the sidebar's edge cuts it.
+         That is how the settings button ended up sliced in half and the one
+         control that starts a chat, group or channel ended up off-screen
+         entirely — the sidebar looked like a rendering fault because a
+         control was missing with nothing to say so.
+
+         Wrapping costs a row of height, and only where the width is really
+         short: the actions drop to their own line under the name, still
+         right-aligned (see .title-actions). It also un-wraps by itself if the
+         sidebar is ever widened or a button retired, which is the part a
+         hand-tuned set of sizes would not do — the row got here by
+         accumulating one button at a time. */
+      flex-wrap: wrap;
+      row-gap: 8px;
+    }
+
+    /* The header's actions, as one thing. Grouping them is what makes the
+       wrap above land tidily: four separate flex children wrap one at a
+       time, so the row broke into "name, status, one button" over "three
+       buttons". The auto margin lives here rather than on the first button,
+       so the cluster hugs the right edge of whichever line it is on. */
+    .title-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-left: auto;
     }
 
     /* The wordmark was a blue-to-green gradient clipped to the text. The
@@ -2472,6 +2504,9 @@
          mistake it for, and the tab already says SkyChat. */
       .app-title h1 { display: none; }
       .app-title { gap: 8px; }
+      /* The cluster keeps its own gap, so the phone's tighter spacing has to
+         be said here too or the budget above is short by the difference. */
+      .title-actions { gap: 8px; }
       .app-title .icon-btn { flex-shrink: 0; }
 
       /* Composer budget on a phone. Four controls and 40px of padding do
@@ -3051,10 +3086,19 @@
       padding: 4px 12px 10px;
       background: var(--bg);
       flex-shrink: 0;
-      /* Five chips overflow a narrow sidebar; let them scroll sideways
-         rather than shrink the words to nothing. The bar is hidden, as
-         everywhere else. */
-      overflow-x: auto;
+      /* Five chips overflow a narrow sidebar. They used to scroll sideways
+         with the bar hidden, which is a swipe on a phone and nothing at all
+         on a desktop: Calls sat half-cut against the sidebar's edge with no
+         handle, no visible bar and no gesture to reach it — the same "looks
+         broken" the header above produced, by a different route.
+
+         Wrapping keeps the whole word on every chip, which is what the
+         scroll was protecting, and shows all five. Nothing scrolls this
+         strip programmatically, so there is nothing to lose. Where the
+         sidebar is full-width — a phone, one pane — the five still sit on
+         one line and this changes nothing. */
+      flex-wrap: wrap;
+      row-gap: 6px;
     }
 
     .side-tab {
@@ -3395,46 +3439,53 @@
              here rather than in the profile editor: an address is not
              something you edit, and burying it behind "change your name and
              picture" made the one value people ask for the hardest to find. -->
-        <button class="icon-btn" style="margin-left:auto" onclick="app.showMyQr()"
-                title="Your address" aria-label="Your address as a QR code">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true">
-            <path d="M3 3h7v7H3V3zm2 2v3h3V5H5zM14 3h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zM14 14h2v2h-2v-2zm3 0h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2zm-3 0h2v3h-2v-3zm4 3h4v-2h-2v-1h-2v3z"/>
-          </svg>
-        </button>
-        <!-- Address book. Beside the bell rather than inline in the list:
-             a contact is a person you know, not a conversation you have, and
-             the two lists answer different questions. Keeping the saved
-             people out of the chat list also stops the sidebar being mostly
-             rows with nothing in them. -->
-        <button class="icon-btn" onclick="app.openContacts()"
-                title="Address book" aria-label="Address book"><svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.8A1.8 1.8 0 0 1 6.8 3H19v18H6.8A1.8 1.8 0 0 1 5 19.2z"/><path d="M5 17.2h14M9 7.5h6M9 11h6"/></svg></button>
-        <!-- Settings: notification preferences and moving a chat to another
-             device. One button rather than one per preference — the bell
-             that used to sit here was a second entry point to half of the
-             same screen. -->
-        <button class="icon-btn" onclick="app.openAppSettings()"
-                title="Settings" aria-label="Settings">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-          </svg>
-        </button>
-        <!-- The one entry point for starting anything: an address (person,
-             group or channel), a new group, or a new channel. Sits here on
-             a wide screen and becomes a fixed bottom-right action button
-             on a phone, where the top of the screen is the hardest place
-             to reach with a thumb — one element repositioned by the
-             one-pane media query, not two in the DOM. -->
-        <button id="startBtn" class="start-btn" onclick="app.toggleStartMenu(event)"
-                title="Start a chat, group or channel" aria-label="Start a chat, group or channel"
-                aria-haspopup="true" aria-expanded="false">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" aria-hidden="true">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-        </button>
+        <!-- The four actions are one flex child, not four, so that when the
+             row wraps they move together instead of leaving whichever one
+             carried the auto margin stranded on the line above. The margin
+             is the group's now; it right-aligns the cluster on whichever
+             line it lands on. -->
+        <div class="title-actions">
+          <button class="icon-btn" onclick="app.showMyQr()"
+                  title="Your address" aria-label="Your address as a QR code">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true">
+              <path d="M3 3h7v7H3V3zm2 2v3h3V5H5zM14 3h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zM14 14h2v2h-2v-2zm3 0h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2zm-3 0h2v3h-2v-3zm4 3h4v-2h-2v-1h-2v3z"/>
+            </svg>
+          </button>
+          <!-- Address book. Beside the bell rather than inline in the list:
+               a contact is a person you know, not a conversation you have, and
+               the two lists answer different questions. Keeping the saved
+               people out of the chat list also stops the sidebar being mostly
+               rows with nothing in them. -->
+          <button class="icon-btn" onclick="app.openContacts()"
+                  title="Address book" aria-label="Address book"><svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.8A1.8 1.8 0 0 1 6.8 3H19v18H6.8A1.8 1.8 0 0 1 5 19.2z"/><path d="M5 17.2h14M9 7.5h6M9 11h6"/></svg></button>
+          <!-- Settings: notification preferences and moving a chat to another
+               device. One button rather than one per preference — the bell
+               that used to sit here was a second entry point to half of the
+               same screen. -->
+          <button class="icon-btn" onclick="app.openAppSettings()"
+                  title="Settings" aria-label="Settings">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
+          <!-- The one entry point for starting anything: an address (person,
+               group or channel), a new group, or a new channel. Sits here on
+               a wide screen and becomes a fixed bottom-right action button
+               on a phone, where the top of the screen is the hardest place
+               to reach with a thumb — one element repositioned by the
+               one-pane media query, not two in the DOM. -->
+          <button id="startBtn" class="start-btn" onclick="app.toggleStartMenu(event)"
+                  title="Start a chat, group or channel" aria-label="Start a chat, group or channel"
+                  aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+        </div>
       </div>
       <!-- First-run permission nudge. Hidden by default and only shown by
            _refreshNotifNudge when notifications are enabled but the browser has
@@ -3892,6 +3943,24 @@
     <div class="ic-actions">
       <button class="ic-btn decline" onclick="app.declineIncoming()">Decline</button>
       <button class="ic-btn answer" onclick="app.answerIncoming()">Answer</button>
+    </div>
+  </div>
+
+  <!-- Outgoing call, while it is still ringing at the other end. The same
+       banner as the incoming one because it is the same moment from the other
+       side, and it exists for one reason: to carry a Cancel. An unanswered
+       outbound call is in no active list, so the in-call panel's hang-up
+       button has no id for it — this is where the id lives. -->
+  <div id="outgoingCall" class="incoming-call hidden">
+    <div class="ic-info">
+      <div class="ic-avatar"><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 16.9v2.4a1.8 1.8 0 0 1-2 1.8 17.4 17.4 0 0 1-7.6-2.7 17.1 17.1 0 0 1-5.3-5.3A17.4 17.4 0 0 1 3 5.5a1.8 1.8 0 0 1 1.8-2h2.4a1.8 1.8 0 0 1 1.8 1.5c.1.9.3 1.7.6 2.5a1.8 1.8 0 0 1-.4 1.9l-1 1a14 14 0 0 0 5.3 5.3l1-1a1.8 1.8 0 0 1 1.9-.4c.8.3 1.6.5 2.5.6a1.8 1.8 0 0 1 1.6 1.9z"/></svg></div>
+      <div>
+        <div class="ic-title">Calling…</div>
+        <div class="ic-from" id="ocTo">-</div>
+      </div>
+    </div>
+    <div class="ic-actions">
+      <button class="ic-btn decline" onclick="app.cancelOutgoing()">Cancel</button>
     </div>
   </div>
 
@@ -4603,7 +4672,7 @@
         // control surface that polls /voice/{incoming,active} and drives
         // /voice/{call,answer,decline,hangup,mute,levels}. Auto-hides when voice
         // is unavailable (no --pair-enable / no visor RPC / built without audio).
-        this.voice = { available: null, ring: null, activeId: null, micMuted: false, spkMuted: false, startedAt: 0, specOn: false, specChan: 'recv' };
+        this.voice = { available: null, ring: null, dialing: null, activeId: null, micMuted: false, spkMuted: false, startedAt: 0, specOn: false, specChan: 'recv' };
         this._voiceLevelTimer = null;
         this._voiceClockTimer = null;
         this._specTimer = null;
@@ -12639,11 +12708,16 @@
       // availability (hiding the call button when the visor voice RPC is off).
       async _pollVoice() {
         try {
-          const [incR, actR] = await Promise.all([fetch('/voice/incoming'), fetch('/voice/active')]);
+          const [incR, actR, dialR] = await Promise.all([
+            fetch('/voice/incoming'), fetch('/voice/active'), fetch('/voice/dialing'),
+          ]);
           if (!incR.ok || !actR.ok) { this._setVoiceAvailable(false); return; }
           this._setVoiceAvailable(true);
           this._updateIncoming(await incR.json());
           this._updateActive(await actR.json());
+          // Tolerated separately: an older visor has no dialing route, and
+          // losing the Cancel is not a reason to call voice unavailable.
+          this._updateDialing(dialR.ok ? await dialR.json() : []);
         } catch (e) {
           this._setVoiceAvailable(false);
         }
@@ -12657,6 +12731,7 @@
         this._refreshHeaderMenu();
         if (!v) { // voice went away — tear down any UI
           this.voice.ring = null; this._renderIncoming();
+          this._updateDialing([]);
           if (this.voice.activeId) this._endCallUI();
         }
       }
@@ -12684,6 +12759,43 @@
         } else {
           el.classList.add('hidden');
         }
+      }
+
+      // _updateDialing tracks the call we are placing, which exists only
+      // between the invite going out and the callee answering. It is the one
+      // window in which a call can be called off, and until /voice/dialing
+      // existed the UI could not see into it.
+      _updateDialing(list) {
+        const call = (Array.isArray(list) && list.length) ? list[0] : null;
+        // Once connected the in-call panel owns it; two banners for one call
+        // would be one too many.
+        this.voice.dialing = (call && this.voice.activeId !== call.call_id) ? call : null;
+        const el = document.getElementById('outgoingCall');
+        if (!el) return;
+        if (this.voice.dialing) {
+          document.getElementById('ocTo').textContent =
+            this.shortPk(this.voice.dialing.peer) || 'unknown';
+          el.classList.remove('hidden');
+        } else {
+          el.classList.add('hidden');
+        }
+      }
+
+      // cancelOutgoing calls off a call that is still ringing. Hanging up a
+      // dialing call IS cancelling the invite (see Manager.Hangup), so the
+      // same endpoint serves both ends of a call's life.
+      async cancelOutgoing() {
+        const call = this.voice.dialing;
+        if (!call) return;
+        this.voice.dialing = null;
+        const el = document.getElementById('outgoingCall');
+        if (el) el.classList.add('hidden');
+        try {
+          await fetch('/voice/hangup', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ call_id: call.call_id }),
+          });
+        } catch (e) { /* best-effort; the next poll re-reads the truth */ }
       }
 
       _updateActive(list) {
@@ -12753,6 +12865,10 @@
       async callPeer(peer) {
         if (!peer || !this.voice.available) return;
         if (this.voice.activeId) { this.showToast('Already in a call.', 'error'); return; }
+        // The request no longer blocks for the ring, so nothing else stops a
+        // second press from placing a second call — and the callee would ring
+        // twice for one caller who pressed twice.
+        if (this.voice.dialing) { this.showToast('Already calling.', 'error'); return; }
         this.showToast('Calling ' + this.shortPk(peer) + '…');
         try {
           const r = await fetch('/voice/call', {
@@ -12761,7 +12877,10 @@
           });
           if (!r.ok) { this.showToast('Call failed: ' + (await r.text()).trim(), 'error'); return; }
           const d = await r.json();
-          this._enterCall(d.call_id, peer);
+          // Ringing, not connected — show it as such. _updateActive promotes
+          // it to the in-call panel if and when the callee answers.
+          this.voice.dialing = { call_id: d.call_id, peer };
+          this._updateDialing([this.voice.dialing]);
         } catch (e) {
           this.showToast('Call failed.', 'error');
         }
@@ -12843,6 +12962,10 @@
       async placeCall() {
         if (!this.recipient || !this.voice.available) return;
         if (this.voice.activeId) { this.showToast('Already in a call.', 'error'); return; }
+        // The request no longer blocks for the ring, so nothing else stops a
+        // second press from placing a second call — and the callee would ring
+        // twice for one caller who pressed twice.
+        if (this.voice.dialing) { this.showToast('Already calling.', 'error'); return; }
         const peer = this.recipient;
         this.showToast('Calling ' + this.shortPk(peer) + '…');
         try {
@@ -12852,7 +12975,10 @@
           });
           if (!r.ok) { this.showToast('Call failed: ' + (await r.text()).trim(), 'error'); return; }
           const d = await r.json();
-          this._enterCall(d.call_id, peer);
+          // Ringing, not connected — show it as such. _updateActive promotes
+          // it to the in-call panel if and when the callee answers.
+          this.voice.dialing = { call_id: d.call_id, peer };
+          this._updateDialing([this.voice.dialing]);
         } catch (e) {
           this.showToast('Call failed.', 'error');
         }

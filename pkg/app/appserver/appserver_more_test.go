@@ -119,6 +119,43 @@ func TestProc_SetDetailedStatus_RunningClosesReady(t *testing.T) {
 	require.NotPanics(t, func() { p.SetDetailedStatus(AppDetailedStatusRunning) })
 }
 
+// The hypervisor's app handler writes an optimistic "Starting" straight after
+// StartApp. Against a remote visor those are two RPCs a round-trip apart, and
+// an in-process app on the far end reports its own "Running" inside that gap —
+// so the marker arrives last. It must not pin the app at "Starting", because
+// an app announces "Running" exactly once and nothing would ever undo it: the
+// dot stayed amber until the whole visor was restarted.
+func TestProc_SetDetailedStatus_LateStartingMarkerIsDropped(t *testing.T) {
+	p := &Proc{readyCh: make(chan struct{}, 1), log: logging.MustGetLogger("proc-test")}
+
+	// The app wins the race: Running, then the marker lands.
+	p.SetDetailedStatus(AppDetailedStatusRunning)
+	p.SetDetailedStatus(AppDetailedStatusStarting)
+	require.Equal(t, AppDetailedStatusRunning, p.DetailedStatus())
+
+	// Statuses an app legitimately falls back to after it was running are not
+	// the marker and still apply.
+	p.SetDetailedStatus(AppDetailedStatusReconnecting)
+	require.Equal(t, AppDetailedStatusReconnecting, p.DetailedStatus())
+	p.SetDetailedStatus(AppDetailedStatusVPNConnecting)
+	require.Equal(t, AppDetailedStatusVPNConnecting, p.DetailedStatus())
+	p.SetDetailedStatus(AppDetailedStatusStopped)
+	require.Equal(t, AppDetailedStatusStopped, p.DetailedStatus())
+}
+
+// The ordinary case — the marker arrives before the app has said anything —
+// is what paints the dot amber while the app comes up, and must still work.
+// A restart builds a fresh Proc, so readiness never carries across runs.
+func TestProc_SetDetailedStatus_EarlyStartingMarkerApplies(t *testing.T) {
+	p := &Proc{readyCh: make(chan struct{}, 1), log: logging.MustGetLogger("proc-test")}
+
+	p.SetDetailedStatus(AppDetailedStatusStarting)
+	require.Equal(t, AppDetailedStatusStarting, p.DetailedStatus())
+
+	p.SetDetailedStatus(AppDetailedStatusRunning)
+	require.Equal(t, AppDetailedStatusRunning, p.DetailedStatus())
+}
+
 // ---- proc.go: NewProc ------------------------------------------------------
 
 func internalConf(name string) appcommon.ProcConfig { //nolint

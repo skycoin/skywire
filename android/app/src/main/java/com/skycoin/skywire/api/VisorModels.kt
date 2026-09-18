@@ -289,5 +289,11 @@ internal data class UserExists(@SerialName("exists") val exists: Boolean = false
 @Serializable
 internal data class CsrfToken(@SerialName("csrf_token") val token: String = "")
 
+/** What `POST /api/dmsg/reconnect` reports: sessions torn down for re-dial. */
+@Serializable
+internal data class DmsgReconnectResult(
+    @SerialName("sessions_closed") val sessionsClosed: Int = 0,
+)
+
 @Serializable
 internal data class ApiError(@SerialName("error") val error: String = "")

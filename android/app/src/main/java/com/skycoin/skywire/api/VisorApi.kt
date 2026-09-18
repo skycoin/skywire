@@ -511,6 +511,24 @@ class VisorApi(context: Context) {
             }
         }
 
+    /**
+     * Drop the visor's dmsg sessions so it re-dials now.
+     *
+     * Called when the phone's default network changes underneath the core:
+     * the old sockets are dead but nothing on either end knows it yet, and
+     * the visor would otherwise wait out a dmsg keepalive to find out. The
+     * hypervisor RPC conn rides one of these sessions, so it comes back with
+     * them. Returns the number of sessions that were torn down.
+     */
+    suspend fun dmsgReconnect(): Int = withContext(Dispatchers.IO) {
+        postWithRelogin("/api/dmsg/reconnect", "{}").use { resp ->
+            if (!resp.isSuccessful) {
+                throw IOException("dmsg reconnect failed (${resp.code}): ${errorBody(resp)}")
+            }
+            decode<DmsgReconnectResult>(resp).sessionsClosed
+        }
+    }
+
     /** Fresh 30-second CSRF token for a mutating `/api/visors/{pk}/…` call. */
     suspend fun csrfToken(): String = withContext(Dispatchers.IO) {
         get("/api/csrf").use { decode<CsrfToken>(it).token }

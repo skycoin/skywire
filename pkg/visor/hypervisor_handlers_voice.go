@@ -78,7 +78,9 @@ func (hv *Hypervisor) postVoiceCall() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "bad peer pk: " + err.Error()})
 			return
 		}
-		id, err := ctx.API.VoiceCall(pk)
+		// Dial, not Call: /api caps a request at 30s and a ring runs longer,
+		// so a blocking call could never deliver the id it made.
+		id, err := ctx.API.VoiceDial(pk)
 		if err != nil {
 			hv.writeVoiceErr(w, r, err)
 			return
@@ -160,8 +162,8 @@ func (hv *Hypervisor) getVoiceDialing() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusOK, []VoiceDialingInfo{})
 			return
 		}
-		out := hv.visor.VoiceDialing()
-		if out == nil {
+		out, err := hv.visor.VoiceDialing()
+		if err != nil || out == nil {
 			out = []VoiceDialingInfo{}
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, out)

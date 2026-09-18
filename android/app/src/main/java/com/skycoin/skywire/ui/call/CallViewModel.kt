@@ -4,6 +4,7 @@ import android.app.Application
 import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
+import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
@@ -53,6 +54,26 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     private var connectedAt: Long = 0
 
     init {
+        // Answer tapped on the notification. Waits for the call to be in the
+        // state before acting: the tap can start the app, and the first poll
+        // that knows about the call may still be in flight.
+        viewModelScope.launch {
+            VoiceCalls.answers.collect { callId ->
+                // The wait is bounded and the request is retired either way.
+                // Both matter: collect is sequential, so a request that never
+                // resolves holds every later one behind it, and the replay
+                // cache would hand the same dead id to the next view model —
+                // one stale tap would end answering from the notification
+                // until the process restarted. See VoiceCalls.awaitRinging.
+                if (VoiceCalls.awaitRinging(callId)) {
+                    runCatching { api.voiceAnswer(callId) }
+                        .onFailure { Log.w(TAG, "answer from the notification failed", it) }
+                } else {
+                    Log.i(TAG, "answer request for a call that never arrived")
+                }
+                VoiceCalls.answerHandled()
+            }
+        }
         viewModelScope.launch {
             VoiceCalls.state.collect { calls ->
                 val invite = calls.invite
@@ -158,7 +179,13 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         runCatching {
             val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
             ringtone = RingtoneManager.getRingtone(getApplication(), uri).also {
-                it.isLooping = true
+                // Looping arrived in API 28 and this app supports 26. Setting
+                // it below that throws, and because the whole block is one
+                // runCatching the throw landed before play() — an incoming
+                // call on Android 8 rang not badly but not at all. Above 28
+                // the ringtone loops itself; below it the poll above re-arms
+                // it each tick, which is the isPlaying guard's other job.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) it.isLooping = true
                 it.play()
             }
         }.onFailure { Log.w(TAG, "no ringtone", it) }

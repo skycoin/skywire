@@ -19,6 +19,8 @@ import com.skycoin.skywire.core.AppLock
 import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.AppVisibility
 import com.skycoin.skywire.core.DeepLinks
+import com.skycoin.skywire.core.VoiceCallWatcher
+import com.skycoin.skywire.core.VoiceCallReceiver
 import com.skycoin.skywire.core.ThemeMode
 import com.skycoin.skywire.core.VoiceCalls
 import com.skycoin.skywire.ui.SkywireApp
@@ -55,6 +57,7 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         DeepLinks.offer(intent)
+        offerCallAnswer(intent)
         // Short fade from the logo splash into Home.
         splash.setOnExitAnimationListener { provider ->
             provider.view.animate()
@@ -158,5 +161,19 @@ class MainActivity : FragmentActivity() {
         // actually brought the app forward, not the one it was launched with.
         setIntent(intent)
         DeepLinks.offer(intent)
+        offerCallAnswer(intent)
+    }
+
+    /**
+     * Answer tapped on the call notification. The id travels in the intent
+     * because the notification may be older than this process — the app can
+     * be started by that tap — so the screen cannot be assumed to know which
+     * call it is for.
+     */
+    private fun offerCallAnswer(intent: Intent) {
+        if (intent.action != VoiceCallWatcher.ACTION_ANSWER_CALL) return
+        intent.getStringExtra(VoiceCallReceiver.EXTRA_CALL_ID)
+            ?.takeIf { it.isNotEmpty() }
+            ?.let(VoiceCalls::requestAnswer)
     }
 }

@@ -1,5 +1,8 @@
 package com.skycoin.skywire.wallet
 
+import com.skycoin.wallet.AddressBook
+import com.skycoin.wallet.TxRecord
+import com.skycoin.wallet.WalletBalance
 import kotlinx.serialization.Serializable
 
 /** Which family a coin belongs to — the protocols this wallet speaks. */
@@ -71,7 +74,15 @@ data class CoinSpec(
             name = "Skycoin",
             ticker = "SKY",
             kind = CoinKind.SKY_FIBER,
-            nodeUrl = "http://node.skycoin.com",
+            // https, like every other endpoint here including Skycoin's own
+            // explorer on the next line. Over plain http the query string of
+            // every balance and history call carries the whole address book
+            // in the clear, which hands anyone on the path the one thing a
+            // wallet most wants kept apart: which addresses belong together.
+            // Funds are not at risk either way — signing is local and a
+            // tampered transaction fails verification — but the linkage is,
+            // and it cannot be taken back once seen. The host serves TLS.
+            nodeUrl = "https://node.skycoin.com",
             explorerTxUrl = "https://explorer.skycoin.com/app/transaction/%s",
             builtIn = true,
         )
@@ -125,6 +136,65 @@ data class WalletMeta(
     val createdAtMs: Long,
     val receiveAddresses: List<String>,
     val changeAddresses: List<String> = emptyList(),
+    /**
+     * When this wallet's addresses were last discovered from the chain, or 0
+     * while that has never succeeded.
+     *
+     * A restore asks the node which of the seed's addresses have been used;
+     * a fresh phrase has nothing to ask about and is scanned by definition.
+     * When the question cannot be put — the node is slow, the link is bad —
+     * the wallet is still created, holding only the first address, and the
+     * coins on the rest are invisible and unspendable. That used to be the
+     * end of it: nothing recorded that the answer was missing and nothing
+     * ever asked again, so a restore on a bad connection quietly produced a
+     * wallet that was wrong forever.
+     *
+     * 0 means the question is still open. Refresh asks it again until it is
+     * answered, and the screen says so meanwhile. Wallets written before
+     * this field existed default to 0 and are re-asked once, which is what
+     * repairs any that were truncated.
+     */
+    val addressScanAtMs: Long = 0,
+)
+
+/**
+ * Whether this coin's node address is one the user may set.
+ *
+ * True for Skycoin and every fiber chain, where [CoinSpec.nodeUrl] is the
+ * whole story: one daemon answers balances, history and broadcast alike, so
+ * pointing it elsewhere moves all of it and the setting means exactly what it
+ * says. The Ethereum family reads balances from an RPC and history from a
+ * separate indexer, so one field there would move half of it and quietly
+ * leave the rest — a worse answer than not offering it. Bitcoin is one
+ * Esplora host and could follow later; nobody has needed it.
+ */
+val CoinSpec.nodeUrlEditable: Boolean get() = kind == CoinKind.SKY_FIBER
+
+/** This coin as it is actually reached, once the user's own node address is applied. */
+fun CoinSpec.withNodeOverride(overrides: Map<String, String>): CoinSpec {
+    val url = overrides[id]?.trim()?.takeIf { it.isNotEmpty() } ?: return this
+    return if (url == nodeUrl) this else copy(nodeUrl = url)
+}
+
+/** True while this wallet's address list has never been confirmed against the chain. */
+val WalletMeta.addressScanPending: Boolean get() = addressScanAtMs <= 0
+
+/**
+ * Fold a completed address scan into a wallet, and mark the question closed.
+ *
+ * The lists only ever grow. A scan reports how many addresses the CHAIN has
+ * seen; that is not how many the wallet HOLDS, because a user can ask for
+ * further ones locally and may already have handed one out. Taking an
+ * address away because nobody has paid it yet would be the same class of
+ * mistake as never finding it: coins arriving somewhere the wallet no longer
+ * watches.
+ */
+fun settledAddresses(meta: WalletMeta, scanned: AddressBook, nowMs: Long): WalletMeta = meta.copy(
+    receiveAddresses = scanned.receive.takeIf { it.size >= meta.receiveAddresses.size }
+        ?: meta.receiveAddresses,
+    changeAddresses = scanned.change.takeIf { it.size >= meta.changeAddresses.size }
+        ?: meta.changeAddresses,
+    addressScanAtMs = nowMs,
 )
 
 /** One remembered transaction — TxRecord flattened for the cache file. */
@@ -153,4 +223,54 @@ data class WalletSnapshot(
     val spendableOutputs: Int = 0,
     val txs: List<CachedTx> = emptyList(),
     val fetchedAtMs: Long = 0,
+    /**
+     * When [txs] was last actually fetched, which can lag [fetchedAtMs]: the
+     * balance and the history are fetched separately and the history is the
+     * one that can be too big to arrive (see WalletRepository.refresh). 0 on
+     * a snapshot written before this field existed, and on one whose history
+     * has never landed — both mean "do not claim this list is complete".
+     */
+    val historyFetchedAtMs: Long = 0,
+)
+
+/** True when the tx list is older than the balance beside it, or never arrived. */
+val WalletSnapshot.historyBehind: Boolean get() = historyFetchedAtMs < fetchedAtMs
+
+/**
+ * Fold one refresh's results into the snapshot that gets cached.
+ *
+ * [history] is null when that fetch failed, which is a normal outcome rather
+ * than an error: the balance is a few hundred bytes and the transaction list
+ * is unbounded, so on a slow link the second can miss while the first lands.
+ * When it misses, the last list we did get is carried forward unchanged and
+ * its timestamp with it — so the snapshot goes on saying, truthfully, how old
+ * that list is, and never passes an empty one off as a fetched one.
+ *
+ * Pure, and separate from the fetching, because this rule is the whole point
+ * of splitting the two halves and is worth being able to state on its own.
+ */
+fun mergeSnapshot(
+    balance: WalletBalance,
+    history: List<TxRecord>?,
+    previous: WalletSnapshot?,
+    nowMs: Long,
+): WalletSnapshot = WalletSnapshot(
+    confirmed = balance.confirmed,
+    predicted = balance.predicted,
+    hours = balance.hours,
+    spendableOutputs = balance.spendableOutputs,
+    txs = history?.map {
+        CachedTx(
+            txid = it.txid,
+            incoming = it.incoming,
+            amount = it.amount,
+            party = it.party,
+            timestamp = it.timestamp,
+            confirmed = it.confirmed,
+            confirmations = it.confirmations,
+            fee = it.fee,
+        )
+    } ?: previous?.txs.orEmpty(),
+    fetchedAtMs = nowMs,
+    historyFetchedAtMs = if (history != null) nowMs else previous?.historyFetchedAtMs ?: 0,
 )
