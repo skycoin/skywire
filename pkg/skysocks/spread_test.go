@@ -41,9 +41,9 @@ func runPlan(capsBps []float64, chunks int, p spreadPolicy) []int64 {
 
 // mustRatio parses a knob value the way the CLI does, so a test sets 0.4 by
 // typing 0.4 rather than by pasting its IEEE-754 bit pattern.
-func mustRatio(t *testing.T, name, raw string) int64 {
+func mustRatio(t *testing.T, raw string) int64 {
 	t.Helper()
-	v, err := skysettings.Parse(name, raw)
+	v, err := skysettings.Parse(skysettings.SpreadMaxShare, raw)
 	require.NoError(t, err)
 	return v
 }
@@ -378,7 +378,7 @@ func TestSpreadBoundsTheShareOfA50MBDownload(t *testing.T) {
 	proxy, client := newSpreadTestClient(t, backend.Listener.Addr().String(), 2, 2, 6, chunk)
 
 	require.True(t, skysettings.Apply(map[string]int64{
-		skysettings.SpreadMaxShare:  mustRatio(t, skysettings.SpreadMaxShare, "0.4"),
+		skysettings.SpreadMaxShare:  mustRatio(t, "0.4"),
 		skysettings.SpreadMinRoutes: 3,
 		skysettings.ChunkMaxBytes:   chunk,
 		skysettings.ChunkProbeBytes: chunk,
@@ -421,7 +421,7 @@ func TestSpreadBoundsTheShareOfA50MBUpload(t *testing.T) {
 
 	proxy, client := newSpreadTestClient(t, backend.Listener.Addr().String(), 2, 2, 6, 1<<20)
 	require.True(t, skysettings.Apply(map[string]int64{
-		skysettings.SpreadMaxShare:  mustRatio(t, skysettings.SpreadMaxShare, "0.4"),
+		skysettings.SpreadMaxShare:  mustRatio(t, "0.4"),
 		skysettings.SpreadMinRoutes: 3,
 	}))
 
@@ -580,7 +580,7 @@ func TestSpreadPickAndReservationAreOneCriticalSection(t *testing.T) {
 		closeC:    make(chan struct{}),
 	}
 	require.True(t, skysettings.Apply(map[string]int64{
-		skysettings.SpreadMaxShare:  mustRatio(t, skysettings.SpreadMaxShare, "0.4"),
+		skysettings.SpreadMaxShare:  mustRatio(t, "0.4"),
 		skysettings.SpreadMinRoutes: 3,
 	}))
 	pl := c.newSpreadPlanner(spreadDown)
@@ -667,7 +667,7 @@ func TestSpreadUnchargesAFailedOpen(t *testing.T) {
 		closeC:    make(chan struct{}),
 	}
 	require.True(t, skysettings.Apply(map[string]int64{
-		skysettings.SpreadMaxShare:  mustRatio(t, skysettings.SpreadMaxShare, "0.4"),
+		skysettings.SpreadMaxShare:  mustRatio(t, "0.4"),
 		skysettings.SpreadMinRoutes: 2,
 	}))
 	pl := c.newSpreadPlanner(spreadDown)
