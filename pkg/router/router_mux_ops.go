@@ -239,6 +239,14 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 // hops) are out of scope: the local visor only sees its own first
 // hop after Dial completes, so checking past hop 0 is best-effort.
 func (r *router) AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []routing.Hop) error {
+	return r.addMuxRouteByHops(desc, fwd, rev, true)
+}
+
+// addMuxRouteByHops is AddMuxRouteByHops with the reverse direction made
+// optional: addRev=false installs the forward rule only, producing a
+// FORWARD-ONLY leg (see AddMuxRouteByHopsForward). Every gate below applies
+// either way — the asymmetry is only in which rules are kept.
+func (r *router) addMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []routing.Hop, addRev bool) error {
 	r.mx.Lock()
 	nrg, ok := r.rgsNs[desc]
 	r.mx.Unlock()
@@ -349,7 +357,7 @@ func (r *router) AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []rout
 		return fmt.Errorf("route setup failed: %w", err)
 	}
 
-	if err := r.appendRouteToGroup(nrg, rules); err != nil {
+	if err := r.appendRouteAsymmetric(nrg, rules, true, addRev); err != nil {
 		nrg.rg.noteLegEvent(MuxEventLegAddFailed, "add failed: "+err.Error(), MuxByLocal, -1,
 			nrg.rg.legCount(), tp, fwd)
 		return fmt.Errorf("append route failed: %w", err)

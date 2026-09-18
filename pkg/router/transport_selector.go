@@ -1166,3 +1166,15 @@ func (ts *transportSelector) FirstUnsaturated() int {
 	}
 	return -1
 }
+
+// ExplicitWeights returns a copy of the operator-supplied fractional weights
+// installed by SetExplicitWeights, for reporting them back (`proxy mux weights`
+// with no assignment, and the negotiated view). Nil when none were set.
+func (ts *transportSelector) ExplicitWeights() []float64 {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	if len(ts.explicitWeights) == 0 {
+		return nil
+	}
+	return append([]float64(nil), ts.explicitWeights...)
+}

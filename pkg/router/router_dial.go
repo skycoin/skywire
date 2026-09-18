@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"sort"
 	"strings"
@@ -109,6 +110,15 @@ func (r *router) DialRoutes(
 
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
+
+	// Multi-leg tunnels at dial time. An app tunnel asks for a single-route
+	// group and has its legs added afterwards; when the operator has set a
+	// dial-time tunnel width, dial the legs with it instead (see
+	// applyDialTunnelLegs). Off by default, so nothing changes until asked.
+	if legs := applyDialTunnelLegs(opts); legs > 0 {
+		opts.note("dial-time tunnel legs: %d", legs)
+		log.WithField("tunnel_legs", legs).Debug("Dialing tunnel with its legs.")
+	}
 
 	// Multi-tunnel bandwidth aggregation (docs/mux_aggregation_rfc.md step 3).
 	// When the caller opts in (skysocks-client's extra tunnels), diverge this
@@ -1803,6 +1813,12 @@ func firstHopCarrierClass(path []routing.Hop) int {
 // bounded so a fast tp with an unknown remainder can beat a slow known path but
 // never a comparable known one.
 //
+// Above all of it sits the operator's prefer list (route settings dial
+// --dial-prefer-pks): a candidate whose path touches a named peer is taken
+// first, and the ordering below then decides among those. The list is empty by
+// default, which makes the comparison fall straight through — an untouched
+// visor ranks exactly as it did.
+//
 // This is an ORDERING, not a filter: no candidate is ever dropped, so a dial is
 // never starved of a route by it. The downstream rankers sort stably, so this
 // order decides every tie they cannot.
@@ -1812,13 +1828,14 @@ func rankByPathLatency(cands [][]routing.Hop, latencyFor func(uuid.UUID) float64
 	}
 	type scored struct {
 		path    []routing.Hop
+		prefer  bool
 		class   int
 		ms      float64
 		unknown bool
 	}
 	acc := make([]scored, 0, len(cands))
 	for _, p := range cands {
-		s := scored{path: p, class: firstHopCarrierClass(p), unknown: true}
+		s := scored{path: p, class: firstHopCarrierClass(p), unknown: true, prefer: pathPrefersPK(p)}
 		if ms, ok := pathLatencyTotalMs(p, latencyFor); ok {
 			s.ms, s.unknown = ms, false
 		} else if ms, ok := pathLatencyPartialMs(p, latencyFor); ok {
@@ -1828,6 +1845,15 @@ func rankByPathLatency(cands [][]routing.Hop, latencyFor func(uuid.UUID) float64
 	}
 	sort.SliceStable(acc, func(i, j int) bool {
 		a, b := acc[i], acc[j]
+		// The operator's prefer list outranks everything the measurement can
+		// say. `route settings dial --dial-prefer-pks <pk,…>` is the answer to
+		// "auto-diversify cannot prefer the routes that won a set": a route
+		// through a named peer is taken first, and the rest of this ordering
+		// then decides among them. Empty list (the default) makes every
+		// candidate unpreferred, so the comparison falls straight through.
+		if a.prefer != b.prefer {
+			return a.prefer
+		}
 		if a.class != b.class {
 			return a.class < b.class
 		}
@@ -1904,7 +1930,9 @@ func pathLatencyTotalMs(path []routing.Hop, latencyFor func(uuid.UUID) float64) 
 // path in pathLatencyPartialMs. It sits above a typical intra-continent hop and
 // below a bad one (the campaign fleet spans 39ms to 470ms), so a fast tp into an
 // unknown remainder outranks a known-slow path but never a known-comparable one.
-const unknownHopPenaltyMs = 150.0
+// Live-settable via DialUnknownHopPenaltyMs (settings_dial.go); this is its
+// default.
+const unknownHopPenaltyMs = dialUnknownHopPenaltyDefaultMs
 
 // pathLatencyPartialMs scores a path whose latency is known for some hops but
 // not all: the sum of the hops that ARE measured plus unknownHopPenaltyMs for
@@ -1917,13 +1945,14 @@ func pathLatencyPartialMs(path []routing.Hop, latencyFor func(uuid.UUID) float64
 	if firstHopLatencyMs(path, latencyFor) <= 0 {
 		return 0, false
 	}
+	penalty := DialUnknownHopPenaltyMs()
 	var total float64
 	for _, h := range path {
 		if ms := hopLatencyMs(h, latencyFor); ms > 0 {
 			total += ms
 			continue
 		}
-		total += unknownHopPenaltyMs
+		total += penalty
 	}
 	return total, true
 }
@@ -2353,22 +2382,28 @@ func transportTypeCostMs(tpType string) float64 {
 // type — so ranking is by evidence, and a genuinely-fast webrtc link is kept
 // while a congested stcpr one is avoided. transportTypeCostMs is only the PRIOR,
 // used until a real measurement exists. Bytes/sec thresholds ≈ 40/10/2/0.4 Mbps.
+// Both terms are scaled by the live DialTypePriorScale / DialThroughputPriorScale
+// knobs (default 1.0 — the magnitudes below), so an operator can weaken the
+// prior toward pure RTT ranking (0 removes it) or sharpen it, on a running
+// visor. See settings_dial.go.
 func transportCostMs(tpType string, throughputBps float64) float64 {
 	if throughputBps <= 0 {
-		return transportTypeCostMs(tpType) // no measurement yet — type prior
+		return transportTypeCostMs(tpType) * DialTypePriorScale() // no measurement yet — type prior
 	}
+	var band float64
 	switch {
 	case throughputBps >= 5_000_000:
-		return 0
+		band = 0
 	case throughputBps >= 1_250_000:
-		return 25
+		band = 25
 	case throughputBps >= 250_000:
-		return 100
+		band = 100
 	case throughputBps >= 50_000:
-		return 250
+		band = 250
 	default:
-		return 400 // measured slow — worse than the webrtc prior
+		band = 400 // measured slow — worse than the webrtc prior
 	}
+	return band * DialThroughputPriorScale()
 }
 
 // pathLatencyScore returns the sum of per-hop avg-latency-ms across a
@@ -2384,7 +2419,7 @@ func transportCostMs(tpType string, throughputBps float64) float64 {
 // is nil-safe: a nil typeFor scores on RTT alone (back-compat for callers /
 // tests that don't thread transport type).
 func pathLatencyScore(path []routing.Hop, latencyFor func(uuid.UUID) float64, typeFor func(uuid.UUID) string, throughputFor func(uuid.UUID) float64) float64 {
-	const unknownLatencyCostMs = 1000.0
+	unknownLatencyCostMs := DialUnknownLatencyCostMs()
 	var total float64
 	for _, h := range path {
 		var ms float64
@@ -2426,15 +2461,21 @@ const (
 // positive mux degree returns mux+headroom, floored at the historical
 // default so we never request fewer candidates than before. The
 // finder clamps the value to its own ceiling.
+//
+// Both terms are live knobs (DialRouteCandidates / DialMuxRouteHeadroom, see
+// settings_dial.go); the constants above are their defaults.
 func findRouteNum(mux int) uint16 {
 	if mux <= 0 {
 		return 0
 	}
-	n := mux + muxRouteHeadroom
-	if n < baseRouteCandidates {
-		n = baseRouteCandidates
+	n := mux + DialMuxRouteHeadroom()
+	if floor := DialRouteCandidates(); n < floor {
+		n = floor
 	}
-	return uint16(n) //nolint:gosec // mux degree is a small CLI-bounded value
+	if n > math.MaxUint16 {
+		n = math.MaxUint16
+	}
+	return uint16(n) //nolint:gosec // clamped to MaxUint16 above
 }
 
 // buildHopLookups constructs TpID → avg-latency-ms and TpID →
@@ -3210,8 +3251,8 @@ func (r *router) establishMuxRoutes(
 	// the BACKGROUND self-heal (SetSelfHeal target = full Mux) fill the rest of
 	// the disjoint pool one leg at a time. The reverse/forward split is preserved
 	// below; this only bounds how many legs are attempted synchronously.
-	if maxCount > initialForegroundMux {
-		maxCount = initialForegroundMux
+	if fg := DialForegroundMux(); maxCount > fg {
+		maxCount = fg
 	}
 	if maxCount <= 1 || nrg.rg.mux == nil {
 		return
