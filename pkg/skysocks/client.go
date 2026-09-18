@@ -3076,8 +3076,8 @@ func (c *Client) serveStatusPage(conn, stream net.Conn) {
 		// context can instantiate it. Same module pkg/tpviz serves at
 		// /tpviz-gl.wasm; served here straight from the copy the native binary
 		// embeds (pkg/wasmhv/execwasm). In-process, no exit round-trip.
-		stream.Close()                          //nolint:errcheck,gosec
-		_, _ = conn.Write(statusWasmResponse()) //nolint:errcheck
+		stream.Close() //nolint:errcheck,gosec
+		writeStatusWasmResponse(conn)
 		return
 	case "/wasm_exec.js":
 		stream.Close()                              //nolint:errcheck,gosec
@@ -3089,28 +3089,42 @@ func (c *Client) serveStatusPage(conn, stream net.Conn) {
 	_, _ = conn.Write(statusHTTPResponse(body)) //nolint:errcheck
 }
 
-// statusWasmResponse returns the raw HTTP/1.1 response carrying the skywire
-// command module for /main.wasm, out of the copy embedded in the native
-// binary (pkg/wasmhv/execwasm). It serves the gzipped bytes verbatim with
-// Content-Encoding: gzip (the browser inflates; WebAssembly.instantiateStreaming
-// is happy with the result), avoiding inflating megabytes per request. A 503
-// is returned when no module is embedded — a source build without
-// `make embed-exec-wasm`, or the js build, which embeds nothing (it IS the
-// module) — in which case the page silently keeps the ASCII tree view.
-func statusWasmResponse() []byte {
-	gz := execwasm.Gz()
-	if len(gz) == 0 {
-		return statusServiceUnavailable("no skywire.wasm module embedded in this build")
+// writeStatusWasmResponse writes the raw HTTP/1.1 response carrying the
+// skywire command module for /main.wasm, out of the copy embedded in the
+// native binary (pkg/wasmhv/execwasm). It serves the gzipped bytes verbatim
+// with Content-Encoding: gzip (the browser inflates;
+// WebAssembly.instantiateStreaming is happy with the result), avoiding
+// inflating megabytes per request. A 503 is returned when no module is
+// embedded — a source build without `make embed-exec-wasm`, or the js build,
+// which embeds nothing (it IS the module) — in which case the page silently
+// keeps the ASCII tree view.
+//
+// The module streams from the binary's read-only mapping straight to the
+// connection: asking execwasm for the bytes would copy ~37 MB onto the heap
+// per request.
+func writeStatusWasmResponse(w io.Writer) {
+	n := execwasm.Size()
+	if n == 0 {
+		_, _ = w.Write(statusServiceUnavailable("no skywire.wasm module embedded in this build")) //nolint:errcheck
+		return
 	}
+	f, err := execwasm.Open()
+	if err != nil {
+		_, _ = w.Write(statusServiceUnavailable("no skywire.wasm module embedded in this build")) //nolint:errcheck
+		return
+	}
+	defer f.Close() //nolint:errcheck
 	var b bytes.Buffer
 	b.WriteString("HTTP/1.1 200 OK\r\n")
 	b.WriteString("Content-Type: application/wasm\r\n")
 	b.WriteString("Content-Encoding: gzip\r\n")
 	fmt.Fprintf(&b, "ETag: %q\r\n", execwasm.Stamp())
-	fmt.Fprintf(&b, "Content-Length: %d\r\n", len(gz))
+	fmt.Fprintf(&b, "Content-Length: %d\r\n", n)
 	b.WriteString("Cache-Control: no-store\r\nConnection: close\r\n\r\n")
-	b.Write(gz)
-	return b.Bytes()
+	if _, err := w.Write(b.Bytes()); err != nil {
+		return
+	}
+	_, _ = io.Copy(w, f) //nolint:errcheck
 }
 
 // statusWasmExecResponse returns the raw HTTP/1.1 response for /wasm_exec.js —
