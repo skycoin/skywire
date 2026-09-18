@@ -8,6 +8,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.Person
 import com.skycoin.skywire.MainActivity
 import com.skycoin.skywire.R
 import com.skycoin.skywire.api.SkychatApi
@@ -78,6 +79,56 @@ object VoiceCalls {
      */
     private val nudges = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     internal val nudge: SharedFlow<Unit> = nudges.asSharedFlow()
+
+    /**
+     * A call the user accepted from the notification, waiting for the screen
+     * to pick it up.
+     *
+     * Answering has to happen where the call can then be heard, so the
+     * notification's Answer opens the app rather than answering in place —
+     * and this is how the id survives that trip. Replayed to one collector,
+     * because the screen it is meant for may not exist yet when the tap
+     * lands.
+     */
+    private val answerRequests = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 1)
+    val answers: SharedFlow<String> = answerRequests.asSharedFlow()
+
+    /** The notification's Answer was tapped for [callId]. */
+    fun requestAnswer(callId: String) {
+        answerRequests.tryEmit(callId)
+    }
+
+    /** The request has been acted on; a later screen must not answer it again. */
+    fun answerHandled() {
+        answerRequests.resetReplayCache()
+    }
+
+    /**
+     * Wait until [callId] is one of the ringing calls, or give up.
+     *
+     * The tap that carries an answer request can be the thing that starts the
+     * app, so the call it names is routinely not in [state] yet — the first
+     * poll that knows about it may still be in flight. Hence a wait rather
+     * than a look.
+     *
+     * **Bounded, because the id may name a call that will never arrive.** A
+     * notification outlives the process that posted it: kill the app mid-ring
+     * and the ring stays on screen with nobody left to cancel it, so the tap
+     * can land seconds or days after the call ended. An unbounded wait there
+     * does not just miss one answer — it parks the collector that reads these
+     * requests, and every later one queues behind it forever.
+     *
+     * [ANSWER_WAIT_MS] is generous against the two-second poll and still
+     * short enough that a dead request clears while the user is looking at
+     * the screen it failed to open.
+     */
+    suspend fun awaitRinging(callId: String, timeoutMs: Long = ANSWER_WAIT_MS): Boolean =
+        withTimeoutOrNull(timeoutMs) {
+            state.first { s -> s.ringing.any { it.callId == callId } }
+        } != null
+
+    /** How long [awaitRinging] gives a call to appear. */
+    const val ANSWER_WAIT_MS = 15_000L
 
     /** The user ended [callId] — drop it now, confirm with the visor after. */
     fun endLocally(callId: String) {
@@ -164,6 +215,18 @@ internal class VoiceCallWatcher(context: Context) {
     private val notifications = NotificationManagerCompat.from(app)
     private var namesAt = 0L
 
+    /**
+     * The call the ringing notification is currently showing, if any.
+     *
+     * The watcher polls, so without this the notification was re-posted every
+     * two seconds for the whole of a forty-five second ring. With the
+     * full-screen intent granted that is not a redundant post — the platform
+     * acts on it, and the call screen is raised again, and again, roughly
+     * twenty times for one call. A caller who dialled once looked like a
+     * caller who would not stop.
+     */
+    private var showing: String? = null
+
     fun watch(scope: CoroutineScope): Job = scope.launch(Dispatchers.IO) {
         ensureChannels(app)
         var wasInCall = false
@@ -200,6 +263,7 @@ internal class VoiceCallWatcher(context: Context) {
             // ringing on screen and no service holding the microphone.
             VoiceCalls.clear()
             notifications.cancel(RINGING_NOTIFICATION_ID)
+            showing = null
             if (wasInCall) VoiceCallService.stop(app)
         }
     }
@@ -234,21 +298,56 @@ internal class VoiceCallWatcher(context: Context) {
      */
     private fun showRinging(invite: VoiceInvite?) {
         if (invite == null || AppVisibility.isForeground.value) {
-            notifications.cancel(RINGING_NOTIFICATION_ID)
+            if (showing != null) {
+                notifications.cancel(RINGING_NOTIFICATION_ID)
+                showing = null
+            }
             return
         }
-        val screen = PendingIntent.getActivity(
+        // Once per call, not once per poll. Posting is what raises the call
+        // screen, so re-posting an unchanged call re-raises it — see [showing].
+        // A new call id is a new call and does get its own.
+        if (invite.callId == showing) return
+        showing = invite.callId
+        if (!FullScreenCalls.isGranted(app)) {
+            // The platform will accept the notification and drop the intent,
+            // leaving a banner. Worth a line: it is the difference between
+            // "the call screen is broken" and "this phone has not been asked".
+            Log.i(TAG, "no full-screen-intent permission — the call arrives as a banner")
+        }
+        val screen = callScreenIntent(invite.callId, answer = false)
+        val answer = callScreenIntent(invite.callId, answer = true)
+        val decline = PendingIntent.getBroadcast(
             app,
-            0,
-            Intent(app, MainActivity::class.java)
-                .setAction(Intent.ACTION_MAIN)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            1,
+            Intent(app, VoiceCallReceiver::class.java)
+                .setAction(VoiceCallReceiver.ACTION_DECLINE)
+                .putExtra(VoiceCallReceiver.EXTRA_CALL_ID, invite.callId),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+        val caller = Person.Builder()
+            .setName(VoiceCalls.displayName(invite.fromPk))
+            .setImportant(true)
+            .build()
+        // CallStyle, not a plain notification with a category.
+        //
+        // The full-screen intent only takes the screen when the device is
+        // locked or idle — while someone is USING the phone the platform
+        // deliberately shows a notification instead, and no app overrides
+        // that. So what it degrades to is not a detail, it is what an
+        // incoming call looks like most of the time, and it was a line of
+        // text with nothing to press: answering meant finding the app.
+        //
+        // CallStyle is what makes the platform treat it as a call rather than
+        // as one more notification — ranked to the top, coloured, and exempt
+        // from the bundling that had been folding it into an aggregate group
+        // (measured: flags carried AUTOGROUP_SUMMARY and the key read
+        // `g:Aggregate_AlertingSection`, which is the "only visible in the
+        // dropdown" this fixes). It also carries Answer and Decline, so the
+        // common case is answerable where it appears.
         val note = NotificationCompat.Builder(app, CHANNEL_RINGING)
             .setSmallIcon(R.drawable.skywire_logo)
-            .setContentTitle(app.getString(R.string.call_incoming_title))
-            .setContentText(VoiceCalls.displayName(invite.fromPk))
+            .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, decline, answer))
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setOngoing(true)
@@ -260,8 +359,36 @@ internal class VoiceCallWatcher(context: Context) {
             .onFailure { Log.w(TAG, "cannot raise the call screen", it) }
     }
 
+    /**
+     * The call screen, optionally answering [callId] on arrival.
+     *
+     * Answer goes to the Activity rather than straight to the visor because a
+     * call you accept needs somewhere to happen — the screen that carries the
+     * audio controls and the hang-up. Decline is the one that does not (see
+     * [VoiceCallReceiver]).
+     *
+     * Distinct request codes, or the two would collide as one PendingIntent
+     * and Answer would arrive wearing Decline's extras.
+     */
+    private fun callScreenIntent(callId: String, answer: Boolean): PendingIntent {
+        val intent = Intent(app, MainActivity::class.java)
+            .setAction(if (answer) ACTION_ANSWER_CALL else Intent.ACTION_MAIN)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        if (answer) intent.putExtra(VoiceCallReceiver.EXTRA_CALL_ID, callId)
+        return PendingIntent.getActivity(
+            app,
+            if (answer) 2 else 0,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+    }
+
     companion object {
         private const val TAG = "SkywireVoice"
+
+        /** MainActivity intent action meaning "answer the call in the extra". */
+        const val ACTION_ANSWER_CALL = "com.skycoin.skywire.call.ANSWER"
+
         private const val POLL_MS = 2_000L
         private const val NAMES_REFRESH_MS = 30_000L
         const val RINGING_NOTIFICATION_ID = 2

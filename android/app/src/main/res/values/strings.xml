@@ -249,6 +249,13 @@
     <string name="chat_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
     <string name="chat_error_password">SkyChat rejected the stored password</string>
     <string name="chat_error_no_answer">SkyChat did not answer on %1$s</string>
+    <!-- Asked when a page is navigated away from while it has something
+         unsaved. Only skychat raises it, and only while a voice or video
+         message is recording; the page cannot pass its own wording (browsers
+         stopped honouring that), so the app says what it means. -->
+    <string name="webview_leave_title">Discard the recording?</string>
+    <string name="webview_leave_body">A recording is still running. Leaving this page now throws it away.</string>
+    <string name="webview_leave_confirm">Discard</string>
     <string name="chat_media_channel_name">SkyChat playback</string>
     <string name="chat_media_channel_description">Play, pause and skip a voice message or clip while it is playing.</string>
     <string name="chat_media_default_title">Audio</string>
@@ -392,6 +399,7 @@
     <string name="settings_language_system">System</string>
     <string name="settings_language_en" translatable="false">English</string>
     <string name="settings_language_zh_cn" translatable="false">简体中文</string>
+    <string name="settings_language_es" translatable="false">Español</string>
     <string name="settings_about">About</string>
     <string name="settings_app_version">App version</string>
     <string name="settings_core_version">Core version</string>
@@ -533,6 +541,25 @@
         <item quantity="other">%1$d minutes</item>
     </plurals>
     <string name="wallet_stale_age_hours">%1$d h %2$d min</string>
+    <!-- A restore asks the node which of the phrase's addresses have been
+         used. When that could not be asked, the wallet holds only the first
+         one and its balance is a fraction of the truth — which must not be
+         left looking like the whole of it. Retried on every refresh. -->
+    <!-- The node screen. Every balance, transaction list and broadcast for a
+         fiber coin goes to one daemon, and the address the app ships with is
+         not reachable from everywhere — it can be blocked, or throttled past
+         the point where a wallet with history can finish reading it. This is
+         the way out, and the only way to correct the address of a coin the
+         user added themselves. -->
+    <string name="wallet_node_title">Node</string>
+    <string name="wallet_node_row">Node</string>
+    <string name="wallet_node_body">Balances, transactions and broadcasts for %1$s are read from and sent to this node. Change it if the one shipped with the app cannot be reached from where you are, or if you run your own.</string>
+    <string name="wallet_node_field">Node address</string>
+    <string name="wallet_node_save">Use this node</string>
+    <string name="wallet_node_default">Go back to %1$s</string>
+    <string name="wallet_node_encrypted">Encrypted in transit. A node still sees which addresses you ask about together, but nobody else on the way does.</string>
+    <string name="wallet_node_cleartext">Not encrypted. Everyone between this phone and that address sees your whole address list and its balances. Your coins stay safe — keys never leave the device — but the addresses are linked to each other for anyone watching.</string>
+    <string name="wallet_scan_pending">This wallet\'s other addresses have not been confirmed with the node yet, so the balance may be incomplete. It is retried on every refresh.</string>
     <string name="wallet_stale_never">Node unreachable. This wallet has not synced yet — balances show once the node answers.</string>
     <string name="wallet_stale_send_note">Send is disabled: no route to the node</string>
     <string name="wallet_error_no_route">no route to the node</string>
@@ -624,6 +651,13 @@
     <string name="wallet_filter_sent">Sent</string>
     <string name="wallet_filter_received">Received</string>
     <string name="wallet_filter_pending">Pending</string>
+    <!-- Shown instead of "Nothing here yet" when the transaction list is
+         simply not the one the balance beside it came from: the history
+         endpoint has no pagination and can be megabytes, so it is the half of
+         a refresh that can fail on a slow connection. Claiming an empty chain
+         in that case would be a lie about someone's money. -->
+    <string name="wallet_history_unfetched_title">Transactions not loaded</string>
+    <string name="wallet_history_unfetched_body">The balance is up to date, but this wallet\'s %1$s transaction list has not come through yet. It can be large on a slow connection — pull to refresh to try again.</string>
     <string name="wallet_history_empty_title">Nothing here yet</string>
     <string name="wallet_history_empty_all">No %1$s has moved in or out of this wallet.</string>
     <string name="wallet_history_empty_filter">No %1$s transactions match this filter.</string>
@@ -737,6 +771,40 @@
     <string name="help_fleet_body">The visors you run on other machines — a desktop, a server, a Skyminer — seen from this phone. It is a window onto them, not a remote control: what arrives is status, and the one action is a restart.\n\nOff by default. Turning it on restarts this phone\u2019s core, because the setting is read once while the visor builds itself.\n\nA visor\u2019s own log is on its card here, since that feed travels from the remote machine; this app\u2019s logs are in Settings \u25b8 Diagnostics. Names you give a visor are kept on this phone and do not travel with it.</string>
 
     <!-- Battery / Doze. -->
+    <!-- Android 14 made the full-screen intent a permission of its own,
+         granted by default only to apps whose core function is calling. The
+         platform drops it silently when it is not held, so without this the
+         call screen never appears and an incoming call is a banner. -->
+    <string name="settings_calls">Incoming calls</string>
+    <string name="settings_calls_hint">Calls arrive as a notification you have to notice. Allow Skywire to show the call screen and a call takes over the screen and rings, the way a phone call does — even when the app is closed.</string>
+    <string name="settings_calls_granted_hint">A call takes over the screen and rings, even when the app is closed.</string>
+    <string name="settings_calls_allow">Show the call screen</string>
+    <string name="settings_calls_no_screen">This phone has no screen for that setting.</string>
+
+    <!-- In-app update. Skywire is installed from GitHub Releases, not a
+         store, so nothing announces a new build unless the app asks. -->
+    <string name="settings_updates">Updates</string>
+    <string name="settings_update_installed">Installed</string>
+    <string name="settings_update_check">Check for updates</string>
+    <string name="settings_update_checking">Checking GitHub…</string>
+    <string name="settings_update_uptodate">Skywire %1$s is the newest release.</string>
+    <string name="settings_update_available">Skywire %1$s is available.</string>
+    <string name="settings_update_size">Download · %1$s MB</string>
+    <string name="settings_update_downloading">Downloading… %1$d%%</string>
+    <string name="settings_update_downloading_unknown">Downloading…</string>
+    <string name="settings_update_cancel">Cancel</string>
+    <string name="settings_update_ready">Skywire %1$s is downloaded and ready to install.</string>
+    <string name="settings_update_install">Install</string>
+    <string name="settings_update_install_note">Android will ask you to confirm. Your settings, identity and wallets are kept — this replaces the app, it does not reinstall it.</string>
+    <string name="settings_update_permission_note">Android asks for permission to install apps from Skywire the first time. Installing is still confirmed by the system, every time.</string>
+    <string name="settings_update_check_failed">Could not reach GitHub to check for updates.</string>
+    <string name="settings_update_download_failed">The download did not complete.</string>
+    <string name="settings_update_install_failed">The update could not be installed.</string>
+    <string name="settings_update_no_permission_screen">This phone has no screen for that permission.</string>
+    <string name="settings_update_no_browser">No app on this phone can open a web page.</string>
+    <string name="settings_update_open_page">Open on GitHub</string>
+    <string name="settings_update_retry">Try again</string>
+    <string name="settings_update_notes">What changed</string>
     <string name="settings_battery">Battery</string>
     <string name="settings_battery_hint">Skywire keeps running in the background, but Android may still pause its network once the screen has been off for a while — messages and calls then arrive when the phone next wakes rather than when they were sent. Allowing Skywire to ignore battery optimisation closes that gap. It costs battery, and the app works either way.</string>
     <string name="settings_battery_exempt_hint">Skywire is allowed to ignore battery optimisation, so its connections stay up while the screen is off. Android\u2019s battery settings can take this back at any time.</string>

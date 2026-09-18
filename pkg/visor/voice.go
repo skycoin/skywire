@@ -11,26 +11,50 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	skycall "github.com/skycoin/skywire/pkg/skychat/call"
 )
 
 // ErrVoiceDisabled is returned when the voice manager isn't running (voice
 // needs a dmsg client; see init_voice.go).
 var ErrVoiceDisabled = errors.New("voice: disabled (no dmsg)")
 
+// voiceDialBudget is how long a caller waits for an answer: the whole of the
+// callee's ring, plus room for the reply to come back.
+//
+// Derived rather than chosen, because the two used to be independent numbers
+// that disagreed — a 30s dial against a 45s ring. The caller gave up first and
+// the callee went on ringing for fifteen seconds for a call that no longer
+// had anyone at the other end, which is a phone ringing at nobody.
+const voiceDialBudget = skycall.RingTimeout + 10*time.Second
+
 // VoiceCall places a 1:1 voice call to peer over the mesh and returns the new
-// call id. Blocks until the callee accepts/declines or the dial times out; the
-// media session then runs in the background until Hangup.
+// call id. Blocks until the callee accepts or declines, or until the ring
+// budget elapses; the media session then runs in the background until Hangup.
 func (v *Visor) VoiceCall(peer cipher.PubKey) (string, error) {
 	if v.voice == nil {
 		return "", ErrVoiceDisabled
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), voiceDialBudget)
 	defer cancel()
 	sess, err := v.voice.Call(ctx, peer)
 	if err != nil {
 		return "", err
 	}
 	return sess.CallID, nil
+}
+
+// VoiceDial places a 1:1 voice call and returns its id at once, without
+// waiting for an answer. The ring then runs in the background and the caller
+// follows it through VoiceDialing / VoiceActive, canceling with VoiceHangup.
+//
+// This is the one an HTTP handler wants: both surfaces that place calls cap a
+// request below the ring budget, so a blocking VoiceCall could never return
+// the id it produced. See call.Manager.Dial.
+func (v *Visor) VoiceDial(peer cipher.PubKey) (string, error) {
+	if v.voice == nil {
+		return "", ErrVoiceDisabled
+	}
+	return v.voice.Dial(peer, voiceDialBudget), nil
 }
 
 // VoiceHangup ends an active call by id.
@@ -87,18 +111,26 @@ type VoiceDialingInfo struct {
 
 // VoiceDialing returns the calls being placed right now.
 //
-// Deliberately NOT on the API interface: it exists for a UI running beside
-// this visor to show "calling…", and a caller's own dial state is of no use to
-// a remote operator. The local HTTP route reads it directly.
-func (v *Visor) VoiceDialing() []VoiceDialingInfo {
+// It was deliberately kept OFF the API interface, on the grounds that a
+// caller's own dial state is of no use to a remote operator. True, but it is
+// of use to the UI beside this visor, and skychat reaches the visor through
+// this interface — so the one surface that most needs it was the one that
+// could not have it. The consequence was not cosmetic: an outbound call that
+// is still ringing has no id anywhere the desktop UI can see, and the hang-up
+// button works off an id, so a call could be placed and not called off. The
+// phone could, through the hypervisor's own route; the desktop could not.
+//
+// The hypervisor route still answers empty for a REMOTE visor, so what a
+// remote operator can see is unchanged by this.
+func (v *Visor) VoiceDialing() ([]VoiceDialingInfo, error) {
 	if v.voice == nil {
-		return nil
+		return nil, ErrVoiceDisabled
 	}
 	out := make([]VoiceDialingInfo, 0)
 	for _, d := range v.voice.Dialing() {
 		out = append(out, VoiceDialingInfo{CallID: d.CallID, Peer: d.Peer.Hex()})
 	}
-	return out
+	return out, nil
 }
 
 // VoiceCallAudio returns the most recent buffered sent + received PCM for an

@@ -33,6 +33,7 @@ object Routes {
     const val WALLET_WALLETS = "wallet/wallets"
     const val WALLET_REVEAL = "wallet/reveal/{walletId}"
     const val WALLET_ADD_COIN = "wallet/addcoin"
+    const val WALLET_NODE = "wallet/node"
 
     fun walletTx(txid: String) = "wallet/tx/$txid"
     fun walletReveal(walletId: String) = "wallet/reveal/$walletId"
@@ -55,6 +56,6 @@ object Routes {
     val walletPushed = setOf(
         WALLET_CREATE, WALLET_VERIFY, WALLET_RESTORE, WALLET_RECEIVE,
         WALLET_SEND, WALLET_RESULT, WALLET_HISTORY, WALLET_TX,
-        WALLET_WALLETS, WALLET_REVEAL, WALLET_ADD_COIN,
+        WALLET_WALLETS, WALLET_REVEAL, WALLET_ADD_COIN, WALLET_NODE,
     )
 }

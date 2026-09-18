@@ -54,6 +54,7 @@ import androidx.core.net.toUri
 import com.skycoin.skywire.R
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.CachedTx
+import com.skycoin.skywire.wallet.historyBehind
 import com.skycoin.wallet.Amounts
 import java.time.Instant
 import java.time.ZoneId
@@ -117,15 +118,30 @@ fun WalletHistoryScreen(
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
                         )
+                        // "Nothing has moved in or out of this wallet" is a
+                        // claim about the chain, and it is only ours to make
+                        // when the list beside the balance actually arrived.
+                        // The history is the half of a refresh that can be
+                        // too big to fetch, so an empty list can equally mean
+                        // it never came — saying the wrong one of those to
+                        // someone looking for their coins is the worst answer
+                        // this screen can give.
+                        val unfetched = state.snapshot?.historyBehind != false
                         Text(
-                            stringResource(R.string.wallet_history_empty_title),
+                            stringResource(
+                                if (unfetched) R.string.wallet_history_unfetched_title
+                                else R.string.wallet_history_empty_title,
+                            ),
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(top = 20.dp),
                         )
                         Text(
                             stringResource(
-                                if (filter == TxFilter.ALL) R.string.wallet_history_empty_all
-                                else R.string.wallet_history_empty_filter,
+                                when {
+                                    unfetched -> R.string.wallet_history_unfetched_body
+                                    filter == TxFilter.ALL -> R.string.wallet_history_empty_all
+                                    else -> R.string.wallet_history_empty_filter
+                                },
                                 coin.ticker,
                             ),
                             style = MaterialTheme.typography.bodyMedium,
@@ -133,8 +149,10 @@ fun WalletHistoryScreen(
                             modifier = Modifier.padding(top = 8.dp),
                             textAlign = TextAlign.Center,
                         )
-                        FilledTonalButton(onClick = onReceive, modifier = Modifier.padding(top = 20.dp)) {
-                            Text(stringResource(R.string.wallet_history_show_address), fontWeight = FontWeight.Bold)
+                        if (!unfetched) {
+                            FilledTonalButton(onClick = onReceive, modifier = Modifier.padding(top = 20.dp)) {
+                                Text(stringResource(R.string.wallet_history_show_address), fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }

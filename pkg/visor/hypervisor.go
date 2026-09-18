@@ -889,6 +889,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/network/visor-uptime", hv.getNetworkVisorUptime())
 				r.Get("/dmsg/sessions", hv.getDmsgSessions())
 				r.Post("/dmsg/connect-all", hv.postDmsgConnectAll())
+				r.Post("/dmsg/reconnect", hv.postDmsgReconnect())
 				r.Put("/dmsg/sessions-count", hv.putDmsgSessionsCount())
 
 				r.Get("/lan-dmsg-server", hv.getLANDmsgServer())

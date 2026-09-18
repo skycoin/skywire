@@ -148,6 +148,10 @@ dependencies {
     // rather than about a running app — the manifest not handing the lock
     // screen to every screen, for one.
     testImplementation(libs.junit)
+    // The answer-request lifecycle is a suspend function with a timeout in
+    // it; asserting that the timeout actually fires needs a virtual clock,
+    // not a real fifteen-second wait.
+    testImplementation(libs.kotlinx.coroutines.test)
     // Instrumented. The audio engine's contract — that stopping a call
     // hands the microphone back — is a statement about AudioRecord and a real
     // socket, and neither has a meaningful stand-in on the JVM.

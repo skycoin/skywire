@@ -3,6 +3,14 @@
 
     <!-- The visor talks to dmsg/transports; the app talks to its local API. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Read-only, and the whole point is timing. When the phone moves between
+         Wi-Fi and cellular — or the carrier hands it a new IP mid-handover —
+         every TCP socket the visor holds is dead while both ends still believe
+         otherwise, and the visor only finds out ~75 s later when a dmsg
+         keepalive fails to write. The system knows at once; this lets us
+         listen and tell the core to re-dial then. See
+         [com.skycoin.skywire.core.NetworkWatcher]. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- SkywireCoreService runs the visor as a foreground service. specialUse
          (not dataSync) because Android 15 caps dataSync services at ~6 h and
          the visor is an always-on network node while connected. -->
@@ -35,6 +43,16 @@
          the full-screen intent is how the system is asked to raise one on our
          behalf — the same mechanism every dialer uses. -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <!-- Updating the app from inside the app. This is not a store build: the
+         APK is published on GitHub Releases, so nothing tells anyone that a
+         newer one exists and Settings has to ask. The permission only grants
+         the right to ASK — since API 26 "install unknown apps" is a per-app
+         switch the user still has to turn on, and the confirmation dialog for
+         every install is the system's own. What makes a substituted APK
+         harmless is not this app: Android refuses to upgrade a package whose
+         signing key differs. See [com.skycoin.skywire.core.AppUpdates]. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Voice messages (and the video messages the chat UI already renders a
          player for) go through getUserMedia inside the embedded SkyChat page;
@@ -142,6 +160,19 @@
              this app posted, and its PendingIntents carry our own component. -->
         <receiver
             android:name=".core.ChatMediaReceiver"
+            android:exported="false" />
+
+        <!-- Decline, from the call notification. Not exported: the only thing
+             that may turn down a call on this phone is this phone. -->
+        <receiver
+            android:name=".core.VoiceCallReceiver"
+            android:exported="false" />
+
+        <!-- Where PackageInstaller reports an update's progress back to. Not
+             exported: the sender is the system, answering a session this app
+             created, through a PendingIntent naming this component. -->
+        <receiver
+            android:name=".core.UpdateInstallReceiver"
             android:exported="false" />
 
         <!-- Owns the phone's VPN interface and hands its descriptor to the

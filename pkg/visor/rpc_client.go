@@ -1962,6 +1962,20 @@ func (rc *rpcClient) VoiceDecline(callID string) error {
 	return rc.Call("VoiceDecline", &callID, &struct{}{})
 }
 
+// VoiceDial implements API.
+func (rc *rpcClient) VoiceDial(peer cipher.PubKey) (string, error) {
+	var out string
+	err := rc.Call("VoiceDial", &peer, &out)
+	return out, err
+}
+
+// VoiceDialing implements API.
+func (rc *rpcClient) VoiceDialing() ([]VoiceDialingInfo, error) {
+	var out []VoiceDialingInfo
+	err := rc.Call("VoiceDialing", &struct{}{}, &out)
+	return out, err
+}
+
 // VoiceIncoming implements API.
 func (rc *rpcClient) VoiceIncoming() ([]string, error) {
 	var out []string

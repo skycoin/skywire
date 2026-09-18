@@ -253,6 +253,9 @@
     <string name="chat_core_offline">Skywire 核心未运行。请从“首页”启动。</string>
     <string name="chat_error_password">SkyChat 拒绝了已保存的密码。</string>
     <string name="chat_error_no_answer">SkyChat 未在 %1$s 上响应。</string>
+    <string name="webview_leave_title">放弃这段录制？</string>
+    <string name="webview_leave_body">录制仍在进行。现在离开此页面会将其丢弃。</string>
+    <string name="webview_leave_confirm">放弃</string>
     <string name="chat_media_channel_name">SkyChat 播放</string>
     <string name="chat_media_channel_description">语音消息或片段播放期间，可播放、暂停和跳过。</string>
     <string name="chat_media_default_title">音频</string>
@@ -518,6 +521,15 @@
         <item quantity="other">%1$d 分钟</item>
     </plurals>
     <string name="wallet_stale_age_hours">%1$d 小时 %2$d 分钟</string>
+    <string name="wallet_node_title">节点</string>
+    <string name="wallet_node_row">节点</string>
+    <string name="wallet_node_body">%1$s 的余额、交易记录和广播都通过该节点收发。如果应用自带的节点在你所在的网络无法访问，或你有自建节点，可在此更改。</string>
+    <string name="wallet_node_field">节点地址</string>
+    <string name="wallet_node_save">使用该节点</string>
+    <string name="wallet_node_default">恢复为 %1$s</string>
+    <string name="wallet_node_encrypted">传输已加密。节点仍能看到你一并查询了哪些地址，但链路上的其他人看不到。</string>
+    <string name="wallet_node_cleartext">未加密。本机与该地址之间的任何人都能看到你的全部地址列表及余额。你的币是安全的——密钥从不离开本机——但在旁观者眼中，这些地址会被关联到一起。</string>
+    <string name="wallet_scan_pending">尚未向节点确认本钱包的其余地址，因此余额可能不完整。每次刷新都会重试。</string>
     <string name="wallet_stale_never">无法连接节点服务器。该钱包尚未同步——节点服务器恢复响应后才会显示余额。</string>
     <string name="wallet_stale_send_note">发送已停用：没有到节点服务器的路由</string>
     <string name="wallet_error_no_route">没有到节点服务器的路由</string>
@@ -608,6 +620,8 @@
     <string name="wallet_filter_sent">转出</string>
     <string name="wallet_filter_received">转入</string>
     <string name="wallet_filter_pending">待确认</string>
+    <string name="wallet_history_unfetched_title">交易记录未加载</string>
+    <string name="wallet_history_unfetched_body">余额已是最新，但本钱包的 %1$s 交易记录尚未获取到。在网络较慢时它可能很大——请下拉刷新重试。</string>
     <string name="wallet_history_empty_title">这里还没有内容</string>
     <string name="wallet_history_empty_all">这个钱包还没有任何 %1$s 的转入或转出。</string>
     <string name="wallet_history_empty_filter">没有符合此筛选条件的 %1$s 交易。</string>
@@ -716,6 +730,36 @@
     <string name="help_fleet_title">关于集群</string>
     <string name="help_fleet_body">你在其他机器上运行的节点——台式机、服务器、Skyminer——从这部手机看过去的样子。它是一扇窗，不是遥控器：传回来的是状态，唯一能做的操作是重启。\n\n默认关闭。开启会重启这部手机的核心，因为这项设置只在节点自我构建时读取一次。\n\n节点自己的日志在这里的卡片上，因为那条日志来自远程机器；本应用的日志在“设置 \u25b8 诊断”里。你给节点起的名字保存在本机，不会跟着它走。</string>
     <!-- Battery / Doze. -->
+    <string name="settings_calls">来电</string>
+    <string name="settings_calls_hint">来电目前只是一条需要你留意的通知。允许 Skywire 显示来电界面后，来电会接管屏幕并响铃，就像普通电话一样——即使应用已关闭。</string>
+    <string name="settings_calls_granted_hint">来电会接管屏幕并响铃，即使应用已关闭。</string>
+    <string name="settings_calls_allow">显示来电界面</string>
+    <string name="settings_calls_no_screen">本机没有该设置的界面。</string>
+
+    <!-- 应用内更新。Skywire 通过 GitHub Releases 分发，不经应用商店，
+         因此除非应用主动查询，否则没有任何提示告知有新版本。 -->
+    <string name="settings_updates">更新</string>
+    <string name="settings_update_installed">已安装</string>
+    <string name="settings_update_check">检查更新</string>
+    <string name="settings_update_checking">正在查询 GitHub…</string>
+    <string name="settings_update_uptodate">Skywire %1$s 已是最新版本。</string>
+    <string name="settings_update_available">Skywire %1$s 已发布。</string>
+    <string name="settings_update_size">下载 · %1$s MB</string>
+    <string name="settings_update_downloading">正在下载… %1$d%%</string>
+    <string name="settings_update_downloading_unknown">正在下载…</string>
+    <string name="settings_update_cancel">取消</string>
+    <string name="settings_update_ready">Skywire %1$s 已下载完成，可以安装。</string>
+    <string name="settings_update_install">安装</string>
+    <string name="settings_update_install_note">Android 会请你确认。你的设置、身份和钱包都会保留——这是替换应用，不是重新安装。</string>
+    <string name="settings_update_permission_note">首次安装时，Android 会请求允许 Skywire 安装应用。每一次安装仍由系统确认。</string>
+    <string name="settings_update_check_failed">无法连接 GitHub 检查更新。</string>
+    <string name="settings_update_download_failed">下载未完成。</string>
+    <string name="settings_update_install_failed">更新安装失败。</string>
+    <string name="settings_update_no_permission_screen">本机没有该权限的设置界面。</string>
+    <string name="settings_update_no_browser">本机没有可以打开网页的应用。</string>
+    <string name="settings_update_open_page">在 GitHub 上查看</string>
+    <string name="settings_update_retry">重试</string>
+    <string name="settings_update_notes">更新内容</string>
     <string name="settings_battery">电池</string>
     <string name="settings_battery_hint">Skywire 会在后台持续运行，但屏幕熄灭一段时间后，Android 仍可能暂停它的网络——消息和通话会等到手机下次唤醒时才到达，而不是在发出时到达。允许 Skywire 忽略电池优化可以消除这段延迟。这会更耗电；不允许也一样能用。</string>
     <string name="settings_battery_exempt_hint">Skywire 已获准忽略电池优化，因此屏幕熄灭时连接仍会保持。Android 的电池设置随时可能收回这项权限。</string>
