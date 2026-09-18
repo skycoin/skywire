@@ -15,6 +15,13 @@
 #                   two-tunnel session, both hash-verified. The goal's upload
 #                   criterion: their summed MB/s must reach the sum of the two
 #                   best single-route reference uploads.
+#   mux-spread-3    (SPREAD=1) the DEFAULT pool session — no pins, no --tunnels,
+#                   the pool discovered as the standby set discovers it — under
+#                   the LIVE spread policy: SETTINGS gets
+#                   spread.max_share=0.4 spread.min_routes=3 merged into it.
+#                   50 MB down and up, no cut row. Criterion 10 (v4): >= 0.8 x
+#                   the paired reference with no route over its cap, scored from
+#                   bench/direction.sh into <set>.assert.tsv.
 # <set>.legs.json keeps the `mux info --json` snapshot taken before the set
 # (exact groups, legs, transport types, remote pks, and the remote public IP
 # each leg's transport lands on) and <set>.carrier.tsv the per-row byte
@@ -65,6 +72,13 @@
 #     bench/run-sweep.sh to drive one knob across a list of values.
 #   TRIALS_UP — upload cells take 3 trials, download cells the [trials]
 #     argument (5). Uploads repeat themselves; downloads do not.
+#   SPREAD — criterion 10's spread policy, as live knobs on the default session:
+#     SPREAD_SHARE (0.4) and SPREAD_ROUTES (3) are the cap and the floor,
+#     SPREAD_SIZE (50 MB) the cell, SPREAD_RATIO_MIN (0.8) the throughput bar and
+#     SPREAD_CHUNK_BYTES (4 MiB) the one-chunk slack the cap assert allows
+#     (cap + chunk/size). The endpoint ceiling the v4 upload and composition
+#     bars are scored against is a separate run: bench/run-ceiling.sh, whose
+#     ceiling.tsv bench/verdict.sh picks up from the same directory.
 #
 # DEFAULT SUITE: TUNNELS="2" LEGS="2", 5 download trials and 3 upload trials.
 # The sets that never win — three tunnels, three legs — are on-demand:
@@ -749,6 +763,166 @@ if [ "${UP2:-0}" = 1 ]; then
 			settings_restore "$set_name" # the app knobs die with the app; the ROUTER knobs do not
 			echo "$set_name: $(grep -vc '^#' "$f") rows, hash_ok=$(grep -v '^#' "$f" | awk -F'\t' '$8==1' | wc -l)"
 			mux_events "$set_name" "$name"
+			stop_app_clean "$name" || echo "$set_name: dst_ports $rg_left outlived the set"
+		fi
+	fi
+fi
+
+# --- the spread policy set (SPREAD=1) ------------------------------------------
+# Criterion 10 (v4, 2026-09-18): "under a spread policy that caps any one route
+# at 40 % of the bytes and holds at least three routes, throughput >= 0.8 x the
+# best single reference and no route exceeds its cap, measured from both ends'
+# per-leg counters at 50 MB down and up; the policy is a live setting".
+#
+# So the set is the DEFAULT POOL SESSION — no pins, no --tunnels, the pool
+# discovered exactly as the standby set discovers it — with the policy applied
+# as live knobs on top (bench/lib-settings.sh), which is the "live setting" half
+# of the criterion: nothing here is a boot flag and nothing is compiled in.
+#
+#   SETTINGS="spread.max_share=${SPREAD_SHARE:-0.4} spread.min_routes=${SPREAD_ROUTES:-3}"
+#
+# merged with whatever SETTINGS the campaign already holds, so a sweep over
+# another knob still carries the spread policy.
+#
+# 50 MB down and up, `trials` trials each, paired like every other set. NO CUT
+# ROW: the cut moves bytes between routes mid-set, which is exactly the quantity
+# the cap assert measures. Afterwards bench/direction.sh turns the two ends'
+# per-leg counters into per-row shares and <set>.assert.tsv scores them.
+sp_assert() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >> "$sp_af"; }
+sp_verdict() { if [ "$1" = 1 ]; then echo PASS; else echo FAIL; fi; }
+# spread_asserts: criterion 10's four asserts, from the artefacts the set wrote.
+# The cap tolerance is ONE CHUNK's worth of slack — a scheduler that places whole
+# chunks cannot land on 40.000 %, and the last chunk of a transfer is indivisible
+# — stated as a fraction: SPREAD_SHARE + SPREAD_CHUNK_BYTES / <transfer size>.
+spread_asserts() {
+	sp_af="$out/$set_name.assert.tsv"
+	sp_dir="$out/$set_name.direction.tsv"
+	sp_tol=$(awk -v c="$sp_share" -v k="$sp_chunk" -v n="$sp_size" 'BEGIN{printf "%.3f", c + k / n}')
+	{
+		printf '# assert\tvalue\twant\tverdict\n'
+		printf '# criterion 10: cap %s of the bytes on any one route, hold >= %s routes, >= %s x the paired reference, at %s MB down and up\n' \
+			"$sp_share" "$sp_routes" "$sp_ratio_min" "$((sp_size / 1000000))"
+		printf '# shares are bench/direction.sh per-row leg shares in the PAYLOAD direction (reverse bytes on a download, forward bytes on an upload), over the legs of ACTIVE groups only\n'
+		printf '# cap tolerance = %s + %s/%s = %s (one chunk of slack)\n' "$sp_share" "$sp_chunk" "$sp_size" "$sp_tol"
+	} > "$sp_af"
+	if [ ! -f "$sp_dir" ]; then
+		sp_assert routes_active "no $set_name.direction.tsv" ">= $sp_routes" FAIL
+		sp_assert max_share "no $set_name.direction.tsv" "<= $sp_tol" FAIL
+	else
+		# per row: in-scope legs, and the largest payload-direction share
+		sp_row=$(awk -F'\t' '!/^#/ && NF >= 16 && $1 ~ /^[0-9]+$/ && $8 == "in" {
+				sh = ($3 == "up") ? $15 : $16
+				sub(/%$/, "", sh)
+				if (sh == "-" || sh == "") next
+				legs[$1]++
+				if (sh + 0 > mx[$1]) { mx[$1] = sh + 0; who[$1] = $5 }
+			}
+			END {
+				for (r in legs) {
+					n++
+					if (minlegs == 0 || legs[r] < minlegs) minlegs = legs[r]
+					if (legs[r] > maxlegs) maxlegs = legs[r]
+					if (mx[r] > worst) { worst = mx[r]; wrow = r; wleg = who[r] }
+				}
+				printf "%d %d %d %.4f %d %s", n + 0, minlegs + 0, maxlegs + 0, worst / 100, wrow + 0, (wleg == "" ? "-" : wleg)
+			}' "$sp_dir")
+		sp_n=$(echo "$sp_row" | cut -d' ' -f1); sp_min=$(echo "$sp_row" | cut -d' ' -f2)
+		sp_max=$(echo "$sp_row" | cut -d' ' -f3); sp_worst=$(echo "$sp_row" | cut -d' ' -f4)
+		sp_wrow=$(echo "$sp_row" | cut -d' ' -f5); sp_wleg=$(echo "$sp_row" | cut -d' ' -f6)
+		if [ "${sp_n:-0}" -eq 0 ]; then
+			sp_assert routes_active "no scored rows in $set_name.direction.tsv" ">= $sp_routes" FAIL
+			sp_assert max_share "no scored rows in $set_name.direction.tsv" "<= $sp_tol" FAIL
+		else
+			sp_assert routes_active "min $sp_min, max $sp_max over $sp_n row(s)" ">= $sp_routes" \
+				"$(sp_verdict "$([ "$sp_min" -ge "$sp_routes" ] && echo 1 || echo 0)")"
+			sp_assert max_share "$sp_worst (worst row $sp_wrow, leg $sp_wleg)" "<= $sp_tol ($sp_share + chunk/size)" \
+				"$(sp_verdict "$(awk -v a="$sp_worst" -v b="$sp_tol" 'BEGIN{print (a + 0 <= b + 0) ? 1 : 0}')")"
+		fi
+	fi
+	# throughput: the paired ratio of each cell against the contemporaneous
+	# single-route reference, which is what "the best single reference" means
+	# here — the reference bench/pick-ref.sh probed for this campaign.
+	for sp_cell in "$((sp_size / 1000000))down" "$((sp_size / 1000000))up"; do
+		sp_r=$(grep -v '^#' "$out/$set_name.paired.tsv" 2>/dev/null |
+			awk -F'\t' -v c="$sp_cell" '$2==c && $5!="-" {print $5}' | sort -n |
+			awk '{a[NR]=$1} END{if (!NR) {print "-"; exit} printf "%.3f", (NR%2)?a[(NR+1)/2]:(a[NR/2]+a[NR/2+1])/2}')
+		if [ "$sp_r" = - ] || [ -z "$sp_r" ]; then
+			sp_assert "ratio_$sp_cell" "no paired rows" ">= $sp_ratio_min" FAIL
+		else
+			sp_assert "ratio_$sp_cell" "$sp_r" ">= $sp_ratio_min" \
+				"$(sp_verdict "$(awk -v a="$sp_r" -v b="$sp_ratio_min" 'BEGIN{print (a + 0 >= b + 0) ? 1 : 0}')")"
+		fi
+	done
+	sp_rows=$(grep -vc '^#' "$out/$set_name.tsv" 2>/dev/null || echo 0)
+	sp_hok=$(grep -v '^#' "$out/$set_name.tsv" 2>/dev/null | awk -F'\t' '$8==1' | wc -l)
+	sp_assert hashes "$sp_hok/$sp_rows" "$sp_rows/$sp_rows" \
+		"$(sp_verdict "$([ "$sp_rows" -gt 0 ] && [ "$sp_hok" -eq "$sp_rows" ] && echo 1 || echo 0)")"
+	# a policy the binary refused is a set measured on the DEFAULT policy under
+	# the spread set's name: that has to read FAIL, not pass quietly.
+	case ${settings_note:-} in
+	*REFUSED* | *settings_pending=*) sp_sv=FAIL ;;
+	"") sp_sv=FAIL ;;
+	*) sp_sv=PASS ;;
+	esac
+	sp_assert spread_policy "${settings_note:-not applied}" \
+		"spread.max_share=$sp_share spread.min_routes=$sp_routes applied" "$sp_sv"
+}
+if [ "${SPREAD:-0}" = 1 ]; then
+	late_rgs=""
+	sp_share=${SPREAD_SHARE:-0.4}; sp_routes=${SPREAD_ROUTES:-3}
+	sp_chunk=${SPREAD_CHUNK_BYTES:-4194304}   # one range chunk, the granularity a share can miss by
+	sp_ratio_min=${SPREAD_RATIO_MIN:-0.8}
+	sp_size=$(norm_sizes "${SPREAD_SIZE:-50000000}"); sp_size=${sp_size% }
+	set_name="mux-spread-$sp_routes"; name=$(app_name spread3); socks=$(app_addr 1151); cur_app=$name
+	setup_started=$(date +%Y-%m-%dT%H:%M:%S)
+	if ! stop_app_clean "$name"; then
+		abort_set "$set_name" "route group(s) $rg_left survived two proxy stops before setup"
+	else
+		# no pins, no --tunnels: the DEFAULT session, pool discovered, exactly as
+		# the standby set dials it. The policy arrives as a live knob below.
+		timeout 240 $CLI cli proxy start -k "$exit_pk" -n "$name" -a "$socks" \
+			${SPREAD_TUNNELS:+--tunnels $SPREAD_TUNNELS} \
+			${RANGE_PORT:+--range-port $RANGE_PORT} ${RANGE_CHUNK_KIB:+--range-chunk-kib $RANGE_CHUNK_KIB} ${RANGE_CONCURRENCY:+--range-concurrency $RANGE_CONCURRENCY} 2>&1 |
+			grep -iv debug | grep -i "tunnel\|standby\|pool\|running\|error\|fatal" | head -5
+		sleep 5
+		wait_pool "$name"
+		mux_info "$name" > "$out/$set_name.legs.json"
+		roles=$(rg_roles "$out/$set_name.legs.json")
+		groups=${roles%% *}; roles_rest=${roles#* }; active=${roles_rest%% *}; standby=${roles_rest##* }
+		tps=$(jq -r '.[].legs[].transport_id' "$out/$set_name.legs.json" 2>/dev/null | sort -u | tr '\n' ' ')
+		desc=$(jq -r '[.[] | "rg\(.desc.dst_port)\(if .tunnel_role then "/" + .tunnel_role else "" end)=[" + ([.legs[] | .tp_type + ">" + .remote_pk[0:8] + "@" + .transport_id[0:8]] | join(";")) + "]"] | join(" ")' "$out/$set_name.legs.json" 2>/dev/null)
+		echo "$name: $groups route group(s) — $active active, $standby standby; first-hop tps: $tps"
+		if [ "${groups:-0}" -lt 1 ]; then
+			abort_set "$set_name" "the default session came up with no route group at all (groups=$desc)"
+		else
+			# NOT a shape check: how many routes the policy manages to hold IS
+			# the measurement (the routes_active assert), so a session that holds
+			# too few is recorded and scored FAIL, never aborted.
+			warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
+			sp_settings_before=${SETTINGS:-}
+			SETTINGS="${sp_settings_before:+$sp_settings_before }spread.max_share=$sp_share spread.min_routes=$sp_routes"
+			settings_apply "$set_name" "$name"
+			res_warmup "$socks"
+			res_set "$set_name-pre"
+			# 50 MB down and up only, and no cut row
+			sp_sizes_before=$sizes; sizes=$sp_size
+			sp_dirs_set=0; [ "${DIRS+x}" = x ] && { sp_dirs_set=1; sp_dirs_before=$DIRS; }
+			DIRS="down up"
+			sp_cut_set=0; [ "${CUT_ROW+x}" = x ] && { sp_cut_set=1; sp_cut_before=$CUT_ROW; }
+			CUT_ROW=0
+			run_set "$set_name" "$socks" "$tps" \
+				"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name spread=max_share=$sp_share,min_routes=$sp_routes route_groups=$groups active=$active standby=$standby groups=$desc pins=none sink=$sink${settings_note:+ $settings_note}"
+			sizes=$sp_sizes_before
+			if [ "$sp_dirs_set" = 1 ]; then DIRS=$sp_dirs_before; else unset DIRS; fi
+			if [ "$sp_cut_set" = 1 ]; then CUT_ROW=$sp_cut_before; else unset CUT_ROW; fi
+			res_set "$set_name-post"; res_settle "$set_name"; res_check "$set_name"
+			settings_restore "$set_name" # the app knobs die with the app; the ROUTER knobs do not
+			SETTINGS=$sp_settings_before
+			# both ends' per-leg counters -> per-row shares, then the asserts
+			"$here/direction.sh" "$out" "$set_name" || echo "$set_name: direction.sh did not run — the share asserts will say so"
+			spread_asserts
+			echo "--- $set_name asserts"
+			cat "$out/$set_name.assert.tsv"
 			stop_app_clean "$name" || echo "$set_name: dst_ports $rg_left outlived the set"
 		fi
 	fi
