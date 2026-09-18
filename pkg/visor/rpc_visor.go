@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -264,6 +265,22 @@ func (r *RPC) SetRuntimeConfig(rawJSON *[]byte, _ *struct{}) (err error) {
 		return errors.New("nil runtime config payload")
 	}
 	return r.visor.SetRuntimeConfig(*rawJSON)
+}
+
+// SetConfigFields applies a field-by-field edit to the running visor's
+// config. Live where a live setter is registered for the path, on-disk
+// (restart-required) otherwise. See api_config_fields.go.
+func (r *RPC) SetConfigFields(fields *map[string]json.RawMessage, out *[]ConfigFieldChange) (err error) {
+	defer rpcutil.LogCall(r.log, "SetConfigFields", fields)(out, &err)
+	if fields == nil {
+		return errors.New("nil config fields payload")
+	}
+	changes, err := r.visor.SetConfigFields(*fields)
+	if err != nil {
+		return err
+	}
+	*out = changes
+	return nil
 }
 
 // LocalTransportStats returns the visor's local per-transport

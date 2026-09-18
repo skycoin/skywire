@@ -475,6 +475,10 @@ func (proxyDefaultAPI) SetRuntimeConfig(_ []byte) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) SetConfigFields(_ map[string]json.RawMessage) ([]ConfigFieldChange, error) {
+	return nil, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) LocalTransportStats() (*LocalTransportStatsResponse, error) {
 	return nil, ErrProxyNotSupported
 }

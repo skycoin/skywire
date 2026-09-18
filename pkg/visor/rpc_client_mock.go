@@ -733,6 +733,11 @@ func (mc *mockRPCClient) GetRuntimeConfig() ([]byte, error) { return []byte("{}"
 // SetRuntimeConfig implements API.
 func (mc *mockRPCClient) SetRuntimeConfig(_ []byte) error { return nil }
 
+// SetConfigFields implements API.
+func (mc *mockRPCClient) SetConfigFields(_ map[string]json.RawMessage) ([]ConfigFieldChange, error) {
+	return nil, nil
+}
+
 // LocalTransportStats implements API.
 func (mc *mockRPCClient) LocalTransportStats() (*LocalTransportStatsResponse, error) {
 	return &LocalTransportStatsResponse{}, nil
