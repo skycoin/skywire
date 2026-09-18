@@ -23,6 +23,7 @@ enum class AppLanguage(val tag: String) {
     SYSTEM(""),
     ENGLISH("en"),
     CHINESE_SIMPLIFIED("zh-CN"),
+    SPANISH("es"),
     ;
 
     companion object {
