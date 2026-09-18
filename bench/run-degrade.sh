@@ -78,6 +78,8 @@ CUT_HERE=$here # read by the library below
 # which also allows an auto-dialed tunnel's first hop.)
 CUT_FENCE=${CUT_FENCE:-pins}
 export CUT_HERE CUT_FENCE
+# shellcheck source=bench/lib-pins.sh
+. "$here/lib-pins.sh"
 # shellcheck source=bench/lib-cut.sh
 . "$here/lib-cut.sh"
 # shellcheck source=bench/lib-settings.sh
@@ -169,6 +171,7 @@ start_subject() {
 		for dp in $(mux_info "$name" | jq -r '.[].desc.dst_port' 2>/dev/null); do
 			s=$(echo "$chosen" | sed -n "${i}p")
 			[ -n "$s" ] || break
+			pin_ok "$pins/via-$s.json" || { echo "$set_name: rg$dp is left unpinned"; i=$((i + 1)); continue; }
 			cp "$pins/via-$s.json" "$out/$set_name.rg$dp.target.json"
 			timeout 300 $CLI cli proxy mux set -n "$name" --rg "$dp" --legs "$out/$set_name.rg$dp.target.json" --prune 2>&1 | grep -iv debug | head -3
 			assign="$assign rg$dp=$s"; i=$((i + 1))

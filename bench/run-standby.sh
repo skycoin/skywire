@@ -34,6 +34,15 @@
 # adds to MuxRouteGroupInfo — so it is read as optional and the carrier fallback
 # is the path that runs today.
 #
+# An active target is REQUIRED for the row to prove anything: cutting a standby
+# tunnel removes a few hundred bytes of keepalives, so nothing has to be promoted
+# to recover and the promote assert would fail a session that was never asked to
+# promote. Carrier growth therefore ORDERS the active candidates (busiest first)
+# instead of choosing among all of them, a standby is taken only when no active
+# tunnel passes the fences, and the role of whatever was cut is recorded as
+# cut_target_role in the cut log and the assert table — the promote assert is a
+# gate on an active cut and INFO on a standby one.
+#
 # What may be cut is fenced exactly as run-degrade.sh fences its tunnels-2 cut,
 # and for the same reason — a transport that cannot be restored to the SAME id
 # breaks the rig for every later set:
@@ -73,7 +82,8 @@
 #   rg_ports_lost         ports gone after the row, want at most the cut group
 #   rg_ports_gained       ports the pool refilled with — INFO, not a failure
 #   promote_event         >=1 tunnel_promoted (or leg_promoted on today's
-#                         develop; the value names which kind was found)
+#                         develop; the value names which kind was found) — a
+#                         gate only when cut_target_role is active, INFO otherwise
 #   ttfb_after_cut_s      first byte after the cut, want < CHAOS_TTFB_MAX_S
 #   local_reorder_wedge   reorder_wedge events + wedge counter, this end, want 0
 #   exit_reorder_wedge    the exit's wedge counter, want 0
@@ -327,39 +337,65 @@ carrier_rank() {
 	awk -F'\t' '$1 ~ /^[0-9]+$/ && $2 != "legs" && $4 ~ /^[0-9]+$/ {s[$2] += $4}
 		END {for (k in s) printf "%d %s\n", s[k], k}' "$c" | sort -rn | awk '{print $2}'
 }
-# choose_chaos: sets cut_rg, cut_tp, cut_pk, cut_short, cut_by. Returns 1 when
-# nothing survives the fences.
+# choose_chaos: sets cut_rg, cut_tp, cut_pk, cut_short, cut_by, cut_target_role.
+# Returns 1 when nothing survives the fences.
+#
+# The cut row is only evidence when it cuts a route that was CARRYING something:
+# cutting a standby tunnel takes out ~140 bytes of keepalives, needs no promote
+# to recover, and proves nothing. So an ACTIVE tunnel is preferred, and among
+# the active ones the busiest by the download bytes of the rows so far —
+# carrier-growth ORDERS the actives rather than replacing them. Only when no
+# active tunnel passes the fences does a standby become the target, with
+# cut_target_role saying so, on the log line and in the assert table, so the
+# promote assert can stop demanding a promotion no cut could have caused.
 choose_chaos() {
 	_info=$(mux_info "$name")
 	_state=$(state_rgs 60); [ -n "$_state" ] || _state='[]'
 	fenced_candidates "$_info" > "$tmp/cand"
 	[ -s "$tmp/cand" ] || { echo "no route group passes the cut fences"; return 1; }
-	cut_rg=""; cut_tp=""; cut_pk=""; cut_short=""; cut_by=""; _line=""
+	cut_rg=""; cut_tp=""; cut_pk=""; cut_short=""; cut_by=""; cut_target_role=""; _line=""
+	# the active ports, from the live state and from the set-start snapshot —
+	# a tunnel the pool promoted mid-set is active in the first and not the second
 	_act=$(active_ports "$_state" | tr '\n' ' ')
-	if [ -n "$(echo "$_act" | tr -d ' ')" ]; then
-		for _p in $_act; do
-			_line=$(awk -v p="$_p" '$1 == p {print; exit}' "$tmp/cand")
+	[ -n "$(echo "$_act" | tr -d ' ')" ] ||
+		_act=$(active_ports "$(cat "$out/$set_name.legs.json" 2>/dev/null || echo '[]')" | tr '\n' ' ')
+	_roles_known=0
+	[ -n "$(echo "$_act" | tr -d ' ')" ] && _roles_known=1
+	if [ "$_roles_known" = 1 ]; then
+		# busiest ACTIVE candidate first; an active one that moved no bytes at
+		# all still beats any standby.
+		for _t in $(carrier_rank) $(awk '{print $2}' "$tmp/cand"); do
+			_line=$(awk -v t="$_t" '$2 == t {print; exit}' "$tmp/cand")
 			[ -n "$_line" ] || continue
-			cut_by="tunnel_role=active"
+			echo " $_act " | grep -q " $(echo "$_line" | awk '{print $1}') " || { _line=""; continue; }
+			cut_by="tunnel_role=active, busiest by carrier-growth"
+			cut_target_role=active
 			break
 		done
+		[ -n "${_line:-}" ] ||
+			echo "$set_name: no ACTIVE tunnel passed the cut fences (active ports: ${_act:-none}) — falling back to a standby group; the cut row cannot prove a promotion"
 	fi
 	if [ -z "${_line:-}" ]; then
-		# no role field (today's develop), or no active group passed the fences:
-		# take the fenced group whose first hop actually carried the download.
+		# no role field, or no active group passed the fences: take the fenced
+		# group whose first hop actually carried the download.
 		for _t in $(carrier_rank); do
 			_line=$(awk -v t="$_t" '$2 == t {print; exit}' "$tmp/cand")
 			[ -n "$_line" ] || continue
 			cut_by="carrier-growth"
+			cut_target_role=$([ "$_roles_known" = 1 ] && echo standby || echo unknown)
 			break
 		done
 	fi
-	[ -n "${_line:-}" ] || { _line=$(head -1 "$tmp/cand"); cut_by="first-fenced"; }
+	if [ -z "${_line:-}" ]; then
+		_line=$(head -1 "$tmp/cand"); cut_by="first-fenced"
+		cut_target_role=$([ "$_roles_known" = 1 ] && echo standby || echo unknown)
+	fi
 	cut_rg=$(echo "$_line" | awk '{print $1}')
 	cut_tp=$(echo "$_line" | awk '{print $2}')
 	cut_pk=$(echo "$_line" | awk '{print $3}')
 	cut_short=$(echo "$_line" | awk '{print $4}')
-	echo "$set_name: cut target = tp $cut_tp on rg $cut_rg (remote $cut_pk, pin via-$cut_short, by $cut_by)"
+	echo "$set_name: cut target = tp $cut_tp on rg $cut_rg (remote $cut_pk, pin via-$cut_short, role $cut_target_role, by $cut_by)" |
+		tee -a "$out/$set_name.cut.log"
 	return 0
 }
 # restore_tp: put the cut transport back, as run-degrade.sh does — a re-dialled
@@ -527,7 +563,8 @@ write_asserts() {
 		assert_row cut_target "none — no group passed the fences" "one active tunnel" FAIL
 		return 0
 	fi
-	assert_row cut_target "tp $cut_tp rg $cut_rg remote $cut_pk (by $cut_by)" "an active tunnel's first hop" INFO
+	assert_row cut_target "tp $cut_tp rg $cut_rg remote $cut_pk role ${cut_target_role:-unknown} (by $cut_by)" "an active tunnel's first hop" \
+		"$([ "${cut_target_role:-unknown}" = active ] && echo PASS || echo INFO)"
 	# (b) the survivors kept their ports: nothing but the cut group may vanish,
 	# and a port that appears is the pool refilling, recorded on its own row.
 	_lost=$(ports_minus "$ports_before" "$ports_after")
@@ -545,15 +582,23 @@ write_asserts() {
 	assert_row rg_ports_gained "${_gained:-none}" "pool refill, not a rebuild" INFO
 	# (c) a promote. tunnel_promoted is the pool's own event; leg_promoted is what
 	# today's develop emits from the packet-level adaptive engine. Either counts,
-	# and the value names which was found so the two are never conflated.
+	# and the value names which was found so the two are never conflated. It is a
+	# GATE only when the cut took an active tunnel out: a standby cut costs the
+	# session its keepalives and nothing else, so there is nothing to promote and
+	# "none" is the correct outcome, not a failure.
 	_tp=$(jq '[.[] | select(.event == "tunnel_promoted")] | length' "$out/$set_name.mux_events.json" 2>/dev/null || echo 0)
 	_lp=$(jq '[.[] | select(.event == "leg_promoted")] | length' "$out/$set_name.mux_events.json" 2>/dev/null || echo 0)
 	_kind=none
 	[ "$_lp" -gt 0 ] && _kind="leg_promoted x$_lp"
 	[ "$_tp" -gt 0 ] && _kind="tunnel_promoted x$_tp"
 	[ "$_tp" -gt 0 ] && [ "$_lp" -gt 0 ] && _kind="tunnel_promoted x$_tp + leg_promoted x$_lp"
-	assert_row promote_event "$_kind" ">=1 tunnel_promoted (or leg_promoted)" \
-		"$(verdict "$([ "$((_tp + _lp))" -gt 0 ] && echo 1 || echo 0)")"
+	if [ "${cut_target_role:-unknown}" = active ]; then
+		assert_row promote_event "$_kind" ">=1 tunnel_promoted (or leg_promoted)" \
+			"$(verdict "$([ "$((_tp + _lp))" -gt 0 ] && echo 1 || echo 0)")"
+	else
+		assert_row promote_event "$_kind (cut target was ${cut_target_role:-unknown}, not active — no promotion was called for)" \
+			"none required unless the cut target was active" INFO
+	fi
 	# (d) the first byte after the cut
 	if [ "${ttfb:--}" = - ]; then
 		assert_row ttfb_after_cut_s "no byte arrived after the cut" "< $chaos_ttfb_max" FAIL
@@ -619,7 +664,7 @@ warm "$name" || echo "$name: probes failing — running the set anyway"
 # so SETTINGS can only be applied here — after the dial, after the pool settled
 # and the warm probes, and before the first row (bench/lib-settings.sh).
 settings_apply "$set_name" "$name"
-ports_before=""; ports_after=""; ttfb=-; cut_tp=""; cut_rg=""; cut_pk=""; cut_by=""
+ports_before=""; ports_after=""; ttfb=-; cut_tp=""; cut_rg=""; cut_pk=""; cut_by=""; cut_target_role=""
 run_set "$tps" \
 	"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name tunnels=$tunnels pool=$pool_size pool_settled=$pool_reason route_groups=$groups roles=$roles_seen groups=$desc chaos_row=$chaos_row chaos_after=${chaos_after}s sink=$sink${settings_note:+ $settings_note}"
 settings_restore "$set_name" # the app knobs die with the app; the ROUTER knobs do not
