@@ -245,7 +245,11 @@ is computed from. They are read per download, so a sweep lands on the next
 object, never mid-object.
 
 The snub and depth knobs are both borrowed from bittorrent. `tunnel.snub_after`
-(3 s, floored at twice the tunnel's smoothed RTT) and `tunnel.snub_hold` (10 s)
+(20 s since 2026-09-18 — it must sit above the longest measured reorder-wedge
+clear, 16.5 s, because a wedged route group delivers the app no byte, no ack and
+no pong, so a head-of-line-blocked tunnel is otherwise snubbed and its whole
+outstanding chunk set re-issued while the original is still in flight; floored at
+twice the tunnel's smoothed RTT) and `tunnel.snub_hold` (10 s)
 are bittorrent's SNUB: a peer that has sent nothing for a while is dropped from
 the request set however many requests are outstanding on it, and unchoked later
 with a single request to see whether it came back. Here the peer is a TUNNEL,
