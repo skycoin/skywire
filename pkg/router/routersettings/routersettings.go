@@ -78,6 +78,10 @@ type Knob struct {
 	cur    atomic.Int64
 	set    atomic.Bool
 	zeroOK bool
+	// signed marks a count whose sentinel values run BELOW zero (dial.tunnel_legs
+	// uses -1 for "follow the visor's mux width"), so Min may itself be negative
+	// and the positive-only rule does not apply.
+	signed bool
 }
 
 // Name is the knob's catalog name.
@@ -152,7 +156,25 @@ func RegisterBool(name string, def bool, doc string) *Knob {
 
 // RegisterZeroable is Register for a count whose OFF state is 0.
 func RegisterZeroable(name string, kind Kind, def int64, doc string) *Knob {
-	k := register(Def{Name: name, Kind: kind, Default: def})
+	k := register(Def{Name: name, Kind: kind, Default: def, Doc: doc})
+	k.zeroOK = true
+	return k
+}
+
+// RegisterSigned is Register for a count whose OFF or sentinel values run
+// BELOW zero — dial.tunnel_legs uses -1 for "follow the visor's mux width" —
+// with an explicit floor that may itself be negative.
+func RegisterSigned(name string, kind Kind, def, min int64, doc string) *Knob {
+	k := register(Def{Name: name, Kind: kind, Default: def, Min: min, Doc: doc})
+	k.signed = true
+	return k
+}
+
+// RegisterScale adds a KindRatio knob that accepts 0 — a multiplier whose zero
+// means "drop this term from the score", not "unset". Negative is still
+// refused.
+func RegisterScale(name string, def float64, doc string) *Knob {
+	k := register(Def{Name: name, Kind: KindRatio, Default: RatioBits(def), Doc: doc})
 	k.zeroOK = true
 	return k
 }
@@ -421,7 +443,7 @@ func check(k *Knob, v int64) error {
 		if math.IsNaN(f) || math.IsInf(f, 0) {
 			return fmt.Errorf("%s: must be a finite number", k.def.Name)
 		}
-		if f < k.def.MinRatio || (k.def.MinRatio == 0 && f <= 0) {
+		if f < k.def.MinRatio || (k.def.MinRatio == 0 && f <= 0 && !k.zeroOK) {
 			return fmt.Errorf("%s: must be at least %g, got %g", k.def.Name, minRatioOf(k), f)
 		}
 		if k.def.MaxRatio > 0 && f >= k.def.MaxRatio {
@@ -432,6 +454,15 @@ func check(k *Knob, v int64) error {
 			return fmt.Errorf("%s: want 0 or 1", k.def.Name)
 		}
 	case KindDuration, KindBytes, KindCount:
+		if k.signed {
+			// A signed count carries sentinel values below zero; Min is the
+			// real floor and the positive-only rule below does not apply.
+			if v < k.def.Min {
+				return fmt.Errorf("%s: must be at least %s, got %s",
+					k.def.Name, FormatKnob(k, k.def.Min), FormatKnob(k, v))
+			}
+			return nil
+		}
 		if k.def.Min > 0 {
 			if v < k.def.Min {
 				return fmt.Errorf("%s: must be at least %s, got %s",

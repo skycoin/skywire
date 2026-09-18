@@ -213,6 +213,23 @@ type API interface {
 	// app's active directional route groups. The pin is coordinated with the
 	// peer over the wire; RouteGroupMuxInfo reports the live state.
 	SetMuxDirection(appName, mode string) error
+	// AddMuxRouteForward is AddMuxRoute with the reverse direction dropped:
+	// the leg adds UPSTREAM send capacity only (`proxy mux add --forward-only`).
+	AddMuxRouteForward(appName string, fwd, rev []routing.Hop, srcPort uint16) error
+	// SetMuxWeights / ClearMuxWeights / MuxWeights are the operator's per-leg
+	// send-weight override on one route group — the reachable form of the
+	// router's WeightModeExplicit. Clearing returns the group to ECF.
+	SetMuxWeights(appName string, weights map[string]float64, srcPort uint16) (router.MuxWeightsView, error)
+	ClearMuxWeights(appName string, srcPort uint16) (router.MuxWeightsView, error)
+	MuxWeights(appName string, srcPort uint16) (router.MuxWeightsView, error)
+	// RouteGroupMuxNegotiated reports, per route group, the capabilities the
+	// two ends negotiated and the send-window shape this end is applying.
+	RouteGroupMuxNegotiated(appName string) ([]router.MuxNegotiated, error)
+	// GetRouterDialSettings / SetRouterDialSettings are the DIAL-TIME router
+	// knobs: ranking priors, candidate counts, warm-plan cache shape, the
+	// dead-route young-death window and the prefer-these-peers list.
+	GetRouterDialSettings() (RouterDialSettings, error)
+	SetRouterDialSettings(RouterDialSettings) error
 	ServiceHealth() ([]ServiceHealthEntry, error)
 	FetchServiceData(service, path string) ([]byte, error)
 	SetMinHops(uint16) error

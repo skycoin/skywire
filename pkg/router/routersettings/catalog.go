@@ -136,6 +136,22 @@ var (
 	DeadRouteHold    = RegisterMin("route.dead_hold", KindDuration, int64(60*time.Second), int64(time.Second), "how long a route that died young is kept out of the next diversify search")
 	DeadRouteHoldMax = RegisterMin("route.dead_hold_max", KindDuration, int64(8*time.Minute), int64(time.Second), "ceiling on the doubling applied to that window on each repeat death")
 
+	// Dial-time route ranking and candidate supply (router_dial.go,
+	// dial_tunnel_legs.go, warm_route_pool.go, dead_route_cache.go). These are
+	// read while a dial is CHOOSING a route, not while a group is sending — the
+	// `route settings dial` view prints this section on its own.
+	DialUnknownLatencyCostMs = RegisterScale("dial.unknown_latency_cost_ms", 1000.0, "what a hop with NO latency measurement costs a candidate's score, in ms; 0 drops the penalty")
+	DialUnknownHopPenaltyMs  = RegisterScale("dial.unknown_hop_penalty_ms", 150.0, "what ONE unmeasured hop costs a partially measured path, in ms; 0 drops the penalty")
+	DialTypePriorScale       = RegisterScale("dial.type_prior_scale", 1.0, "multiplier on the transport-TYPE ranking prior (the class penalty a hop carries until its link has a throughput measurement); 0 ranks on RTT alone")
+	DialThroughputPriorScale = RegisterScale("dial.throughput_prior_scale", 1.0, "multiplier on the MEASURED-throughput ranking band; 0 ranks on RTT alone")
+	DialCandidates           = RegisterMin("dial.candidates", KindCount, 3, 1, "floor on how many routes a mux dial asks the route finder for")
+	DialCandidateHeadroom    = RegisterZeroable("dial.candidate_headroom", KindCount, 2, "extra routes requested on top of the mux degree so the disjoint pick can still reach its target; 0 asks for exactly the degree")
+	DialForegroundMux        = RegisterMin("dial.foreground_mux", KindCount, 16, 1, "how many mux legs are established SYNCHRONOUSLY at dial time before the background self-heal fills the rest")
+	DialTunnelLegs           = RegisterSigned("dial.tunnel_legs", KindCount, 0, -1, "legs an app tunnel is dialed with: 0 = exactly what the app asked for, -1 = the visor's mux width, n = n legs (per-app scopeable)")
+	DeadRouteYoungAge        = RegisterMin("route.dead_young_age", KindDuration, int64(12*time.Second), int64(time.Second), "how soon after dial a route's death counts as evidence the route is dead rather than a normal teardown")
+	WarmPlanTTL              = RegisterMin("warm.plan_ttl", KindDuration, int64(30*time.Second), int64(time.Second), "staleness bound on a cached disjoint route plan in the warm pool")
+	WarmPlanBucketCap        = RegisterMin("warm.plan_bucket_cap", KindCount, 64, 1, "how many distinct disjoint plans the warm pool holds per exit")
+
 	// Mux event history (mux_events.go). The per-group ring is what keeps a
 	// chatty group from evicting another group's history: `mux info` reads the
 	// group's OWN ring, not the shared one.

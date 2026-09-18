@@ -109,9 +109,11 @@ func deadRouteKeyOf(path []routing.Hop) (deadRouteKey, bool) {
 }
 
 // mark records that the route died `age` after it was created. Deaths older
-// than deadRouteYoungAge are ignored — only a route that died YOUNG is evidence.
+// than DeadRouteYoungAge() are ignored — only a route that died YOUNG is
+// evidence. The window is re-read on every death, so `route settings dial
+// --dead-route-young-age` reaches a router already running.
 func (c *deadRouteCache) mark(path []routing.Hop, age time.Duration, now time.Time) bool {
-	if c == nil || age > deadRouteYoungAge {
+	if c == nil || age > DeadRouteYoungAge() {
 		return false
 	}
 	k, ok := deadRouteKeyOf(path)

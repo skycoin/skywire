@@ -582,6 +582,13 @@ func dialServer(ctx context.Context, cfg *clientConfig, appCl *app.Client, pk ci
 			// anywhere (measured live 2026-09-16: --tunnels 2, 0 route groups).
 			mux := 0
 			if cfg.routed || cfg.tunnels > 1 {
+				// 1 = "form a route group". The LEG COUNT is decided visor-side:
+				// the mux width lives in the router's adaptive preset, which this
+				// process cannot read, so `route settings dial --dial-tunnel-legs`
+				// raises this to the tunnel width at dial time (see
+				// router.applyDialTunnelLegs).
+				// TODO(mux): pass the per-app width here once the proxy mux ops
+				// expose one (visor.SetMuxWidth is still process-global).
 				mux = 1
 			}
 			return appCl.DialWithOptions(a, appserver.DialOptionsReq{
