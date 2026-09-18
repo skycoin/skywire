@@ -24,6 +24,21 @@
 // is what keeps a 470 ms Sydney tunnel out of the rule: three quarters of its
 // budget is one round trip, and a fixed 3 s would snub it for being far away.
 //
+// A SNUB MUST NEVER RE-ISSUE WORK WHOSE ORIGINAL ATTEMPT IS STILL MOVING at the
+// mux level, and the bound is the only app-local instrument for that. A route
+// group is a reliable ORDERED stream: while its receive frontier is wedged
+// behind a missing packet, nothing whatever reaches the app — no chunk byte, no
+// upload ack, not even the keepalive pong — so a head-of-line-blocked tunnel
+// and a dead one look identical here, and they differ only in how long the
+// silence lasts. The router sees the difference (it is still taking SACKs and
+// retransmitting), but no app RPC carries that: pkg/app.Client has no
+// route-group accessor, and the proxystatus.Snapshot the status page pulls
+// carries neither the reorder frontier nor a route group's local port to key it
+// by. So the bound is set above the longest measured wedge clear instead —
+// tunnelReorderWedgeClear below. With the old 3 s default a single wedge cost
+// six snub/unsnub pairs on one port and re-issued ~4 MB of outstanding chunks
+// each time, which is where 50 MB objects turned into 57.6-63.1 MB of wire.
+//
 // LIVENESS IS NEVER THE SNUB'S PROBLEM. If every active tunnel is silent, the
 // silence is not a tunnel fault — it is the origin, the exit, or the whole
 // mesh — and re-issuing the object's chunks onto tunnels that are equally
@@ -41,15 +56,36 @@ import (
 )
 
 const (
+	// tunnelReorderWedgeClear is the longest a RECEIVE-side reorder wedge was
+	// measured holding a LIVE tunnel silent. A frontier gap counts as a stall
+	// after the router's reorderTimeout (1.5 s, pkg/router/reorder.go) and is
+	// then healed by retransmit; on the 2026-09-18 two-tunnel/two-leg compose
+	// rows the wedge->cleared brackets ran 5 s to 16.5 s. Nothing reaches the
+	// app for that whole span — a route group is an ORDERED stream, so a wedge
+	// blocks chunk bytes, upload acks and the keepalive pong alike, and a
+	// wedged tunnel is indistinguishable from a silent one on app-local
+	// evidence except by how long the silence lasts.
+	tunnelReorderWedgeClear = 16500 * time.Millisecond
 	// tunnelSnubAfter is how long a tunnel may hold outstanding work while
-	// delivering no byte and no ack before it is snubbed.
-	tunnelSnubAfter = 3 * time.Second
+	// delivering no byte and no ack before it is snubbed. It sits ABOVE
+	// tunnelReorderWedgeClear (+~20 %) so head-of-line blocking behind a
+	// clearing wedge is never mistaken for a tunnel fault: snubbing there
+	// re-issues the tunnel's whole outstanding chunk set on the sibling while
+	// the original bytes are still in flight, and the duplicate is pure wire
+	// cost. A tunnel that is genuinely gone is retired by the liveness path's
+	// hard-dead window regardless of this bound.
+	tunnelSnubAfter = 20 * time.Second
 	// tunnelSnubHold is how long it then sits out before the one-chunk re-try.
 	tunnelSnubHold = 10 * time.Second
 	// tunnelSnubRTTFloor multiplies the tunnel's smoothed RTT into a floor under
 	// the bound, so a far tunnel is judged on ITS round trip and not the rig's.
 	tunnelSnubRTTFloor = 2
 )
+
+// Compile-time guard on the invariant above: the no-progress bound must stay
+// above the longest measured reorder-wedge clear, or the snub starts firing on
+// head-of-line-blocked tunnels again. A negative difference does not convert.
+const _ = uint(tunnelSnubAfter - tunnelReorderWedgeClear)
 
 // TunnelRoleSnubbed is the role a snubbed tunnel wears in the visor's mux view
 // (`visor state --select mux_route_groups` .tunnel_role, and `proxy mux info`
