@@ -183,10 +183,23 @@ object AppUpdates {
      * requiring both would turn a small change in how one release was typed
      * into "updates stopped working" for everyone already installed, and that
      * failure is silent. Case is not load-bearing.
+     *
+     * The title is matched as a **phrase, not a substring**. A bare
+     * `contains("mobile")` also accepts the project's own releases whenever
+     * one is titled "v1.3.95 - mobile fixes", and those really do attach an
+     * `android-arm64.apk`. Because every Android artifact in this repo is
+     * signed with the one keystore the release workflow guards, such a build
+     * would not merely be offered - it would install, and 1.3.95 outranks
+     * every 0.0.x forever after. The loose form fails in exactly the way this
+     * gate exists to prevent, and it fails on a release note nobody would
+     * think twice about writing.
      */
     private fun isMobileRelease(gh: GhRelease): Boolean =
         gh.tagName.startsWith("mobile-", ignoreCase = true) ||
-            gh.name.orEmpty().contains("mobile", ignoreCase = true)
+            MOBILE_TITLE.containsMatchIn(gh.name.orEmpty())
+
+    /** "Skywire Mobile", as a phrase on word boundaries - see [isMobileRelease]. */
+    private val MOBILE_TITLE = Regex("\\bskywire\\s+mobile\\b", RegexOption.IGNORE_CASE)
 
     /** A GitHub release becomes ours only if it has an APK we can install. */
     private fun toRelease(gh: GhRelease): Release? {
@@ -258,19 +271,38 @@ object AppUpdates {
                     }
                 }
             }
+            // A release that published no checksum is taken on trust in the
+            // platform's signature check, which is the decisive gate anyway.
+            // One that published a checksum we then could not read is NOT:
+            // the flaky connection that truncates a 56 MB APK is the same
+            // connection that fails the 94-byte fetch beside it, so treating
+            // unreadable as "no checksum" would retire the check at exactly
+            // the moment it is the one thing that would have caught the fault.
             release.sha256Url?.let { url ->
                 val published = fetchSha256(url)
+                    ?: run {
+                        target.delete()
+                        error("the published checksum could not be read")
+                    }
                 val actual = sha256(target)
-                if (published != null && !published.equals(actual, ignoreCase = true)) {
+                if (!published.equals(actual, ignoreCase = true)) {
                     target.delete()
                     error("checksum mismatch: expected $published, got $actual")
                 }
-            }
+            } ?: Log.i(TAG, "release ${release.tag} published no checksum")
             target
         }.onFailure { Log.w(TAG, "download failed", it) }
     }
 
-    /** The digest out of a `sha256sum` file: `<hex>  <filename>`. */
+    /**
+     * The digest out of a `sha256sum` file: `<hex>  <filename>`.
+     *
+     * null means the digest could not be obtained — the fetch failed, the
+     * server refused, or what came back was not 64 hex characters. It never
+     * means "this release has no checksum"; that is [Release.sha256Url] being
+     * null, which the caller separates because the two deserve opposite
+     * treatment.
+     */
     private fun fetchSha256(url: String): String? = runCatching {
         client.newCall(
             Request.Builder().url(url).header("User-Agent", USER_AGENT).build(),

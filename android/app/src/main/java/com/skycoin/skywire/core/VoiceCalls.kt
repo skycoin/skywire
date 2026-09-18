@@ -103,6 +103,33 @@ object VoiceCalls {
         answerRequests.resetReplayCache()
     }
 
+    /**
+     * Wait until [callId] is one of the ringing calls, or give up.
+     *
+     * The tap that carries an answer request can be the thing that starts the
+     * app, so the call it names is routinely not in [state] yet — the first
+     * poll that knows about it may still be in flight. Hence a wait rather
+     * than a look.
+     *
+     * **Bounded, because the id may name a call that will never arrive.** A
+     * notification outlives the process that posted it: kill the app mid-ring
+     * and the ring stays on screen with nobody left to cancel it, so the tap
+     * can land seconds or days after the call ended. An unbounded wait there
+     * does not just miss one answer — it parks the collector that reads these
+     * requests, and every later one queues behind it forever.
+     *
+     * [ANSWER_WAIT_MS] is generous against the two-second poll and still
+     * short enough that a dead request clears while the user is looking at
+     * the screen it failed to open.
+     */
+    suspend fun awaitRinging(callId: String, timeoutMs: Long = ANSWER_WAIT_MS): Boolean =
+        withTimeoutOrNull(timeoutMs) {
+            state.first { s -> s.ringing.any { it.callId == callId } }
+        } != null
+
+    /** How long [awaitRinging] gives a call to appear. */
+    const val ANSWER_WAIT_MS = 15_000L
+
     /** The user ended [callId] — drop it now, confirm with the visor after. */
     fun endLocally(callId: String) {
         ended.update { it + callId }

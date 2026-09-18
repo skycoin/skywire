@@ -21,6 +21,25 @@
       recovery phrase -> frase de recuperación, fee -> comisión
     Second person informal (tú) throughout, matching the direct voice of the
     English copy.
+
+    Two strings are deliberately SHORTER than a natural translation, because
+    they sit in containers that clip rather than wrap. A review could not see
+    this from the diff — the whole catalog arrived as one addition, so there is
+    no "before" to compare against — which is exactly why it is written down:
+
+      settings_replace_sk  "Reemplazar clave", not "Reemplazar la clave
+                           secreta". It shares one Row with settings_new_config
+                           in Settings ▸ Identity. That Row weights its two
+                           buttons by measured label width, which handles a
+                           long-vs-short pair but cannot help when the pair
+                           together exceeds the row: the natural translation
+                           rendered the neighbour as "Nueva".
+      call_unmute          "Activar", not "Activar micrófono". It is a label
+                           under a round button in a three-across SpaceEvenly
+                           row on the call screen, with no width constraint to
+                           wrap against.
+
+    Lengthening either one needs a look at the screen, not just the string.
 -->
 <resources>
 

@@ -13,7 +13,6 @@ import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.core.VoiceCalls
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -60,9 +59,18 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         // that knows about the call may still be in flight.
         viewModelScope.launch {
             VoiceCalls.answers.collect { callId ->
-                VoiceCalls.state.first { s -> s.ringing.any { it.callId == callId } }
-                runCatching { api.voiceAnswer(callId) }
-                    .onFailure { Log.w(TAG, "answer from the notification failed", it) }
+                // The wait is bounded and the request is retired either way.
+                // Both matter: collect is sequential, so a request that never
+                // resolves holds every later one behind it, and the replay
+                // cache would hand the same dead id to the next view model —
+                // one stale tap would end answering from the notification
+                // until the process restarted. See VoiceCalls.awaitRinging.
+                if (VoiceCalls.awaitRinging(callId)) {
+                    runCatching { api.voiceAnswer(callId) }
+                        .onFailure { Log.w(TAG, "answer from the notification failed", it) }
+                } else {
+                    Log.i(TAG, "answer request for a call that never arrived")
+                }
                 VoiceCalls.answerHandled()
             }
         }
