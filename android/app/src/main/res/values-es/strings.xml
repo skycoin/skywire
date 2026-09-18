@@ -1,0 +1,849 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Spanish (es). Every translatable string in values/strings.xml has an entry
+    here; the guard is TranslationCatalogTest, which also pins the format
+    placeholders, so a translation that drops a %1$s fails the build rather
+    than the screen that uses it.
+
+    Only the app's own interface is translated. Logs, the visor's own output and
+    the status text the network reports stay in English on purpose — see
+    com.skycoin.skywire.core.AppLanguage.
+
+    Terms settled for this catalog, used consistently throughout:
+      visor -> nodo          (in Spanish "visor" means viewfinder, which would
+                              actively mislead; "nodo" matches the call already
+                              made for Chinese)
+      wallet -> billetera    (the widest-reach crypto term)
+      Coin Hours -> kept     (the canonical Skycoin unit, as block explorers
+                              and the desktop wallet spell it)
+      Kill switch -> kept    (the established term in Spanish VPN interfaces)
+      Fleet -> Flota, transport -> transporte, hop -> salto, exit -> salida,
+      recovery phrase -> frase de recuperación, fee -> comisión
+    Second person informal (tú) throughout, matching the direct voice of the
+    English copy.
+-->
+<resources>
+
+    <string name="app_name">Skywire</string>
+
+    <string name="tab_home">Inicio</string>
+    <string name="tab_chat">Chat</string>
+    <string name="tab_wallet">Billetera</string>
+    <string name="tab_settings">Ajustes</string>
+    <string name="tab_hub_description">Apps</string>
+
+    <string name="app_skysocks">SkySOCKS</string>
+    <string name="app_skyvpn">SkyVPN</string>
+    <string name="app_skydex">SkyDEX</string>
+    <string name="app_skychat">SkyChat</string>
+    <string name="app_wallet">Billetera</string>
+    <string name="app_fleet">Flota</string>
+    <string name="app_skymeet">SkyMeet</string>
+
+    <!-- Apps hub -->
+    <string name="hub_subtitle">%1$d instaladas · %2$d en marcha</string>
+    <string name="hub_filter_all">Todas</string>
+    <string name="hub_filter_network">Red</string>
+    <string name="hub_filter_finance">Finanzas</string>
+    <string name="hub_filter_social">Social</string>
+    <string name="hub_section_apps">Tus apps</string>
+    <string name="hub_socks_sub">Proxy SOCKS5</string>
+    <string name="hub_dex_sub">Intercambio · SKY / BTC</string>
+    <string name="hub_chat_sub">Salas y mensajes</string>
+    <string name="hub_wallet_sub">SKY · Fibercoin · BTC · ETH</string>
+    <string name="hub_fleet_sub">Nodos que ejecutas en otro sitio</string>
+    <string name="hub_meet_sub">Llamadas cifradas</string>
+    <string name="hub_hero_reconnecting">Reconectando</string>
+    <string name="hub_hero_starting">Iniciando</string>
+    <string name="hub_hero_no_exit">Aún no has elegido salida</string>
+    <string name="hub_stat_down">Bajada</string>
+    <string name="hub_stat_up">Subida</string>
+    <string name="hub_stat_data">Datos</string>
+    <string name="hub_vpn_toggle">Activar o desactivar SkyVPN</string>
+    <plurals name="hub_hops">
+        <item quantity="one">%1$d salto</item>
+        <item quantity="many">%1$d de saltos</item>
+        <item quantity="other">%1$d saltos</item>
+    </plurals>
+    <string name="hub_hops_unknown">Saltos —</string>
+    <string name="hub_killswitch_on">Kill switch activado</string>
+    <string name="hub_killswitch_off">Kill switch desactivado</string>
+    <string name="hub_wallet_balance">%1$s SKY</string>
+    <plurals name="hub_fleet_connected">
+        <item quantity="one">%d nodo conectado</item>
+        <item quantity="many">%d de nodos conectados</item>
+        <item quantity="other">%d nodos conectados</item>
+    </plurals>
+
+    <!-- Route length (router min_hops) -->
+    <string name="hops_title">Longitud de la ruta</string>
+    <string name="hops_label_fastest">Más rápida</string>
+    <string name="hops_label_balanced">Equilibrada</string>
+    <string name="hops_label_private">Privada</string>
+    <string name="hops_hint_direct">Una ruta directa a la salida: lo más rápido que la red puede ser. La salida sigue sin poder leer tu tráfico, pero sí ve que este dispositivo es el que pregunta.</string>
+    <string name="hops_hint_multi">El tráfico pasa por intermediarios, así que ningún nodo ve a la vez quién pregunta y qué se pregunta. Más lento, y cada salto es otra máquina que tiene que seguir en pie.</string>
+    <string name="hops_hint_unknown">Esperando a que el nodo informe de sus ajustes de enrutamiento.</string>
+    <string name="hops_label_custom">Personalizada</string>
+    <string name="hops_custom_more">4+</string>
+    <string name="hops_custom_title">Longitud de ruta personalizada</string>
+    <string name="hops_custom_hint">Cada ruta que construya el nodo tendrá al menos este número de saltos. Cada salto a partir del primero compra más separación entre quién pregunta y qué se pregunta, y cuesta latencia, además de una máquina más que tiene que seguir en pie. El buscador de rutas explora como mucho 10 saltos, así que valores mayores nunca podrán construirse.</string>
+    <string name="hops_custom_label">Saltos mínimos</string>
+    <string name="hops_custom_invalid">Introduce un número entre 1 y 10.</string>
+
+    <!-- Network address (what SkyVPN does and does not change) -->
+    <string name="net_addr_title">Dirección de red</string>
+    <string name="net_addr_device">Este dispositivo</string>
+    <string name="net_addr_exit">El tráfico sale por</string>
+    <string name="net_addr_exit_none">No pasa por SkyVPN</string>
+    <string name="net_addr_exit_unknown">Ubicación de salida desconocida</string>
+    <string name="net_addr_waiting">Esperando al nodo…</string>
+    <string name="net_addr_carrier_nat">Dirección compartida del operador</string>
+    <string name="net_addr_unknown">No detectable</string>
+    <string name="net_addr_hint">La dirección propia de este dispositivo no cambia cuando SkyVPN se conecta: la app transporta el túnel, así que su propio tráfico tiene que quedarse fuera de él. Lo que cambia es por dónde sale de la red el tráfico de tus otras apps: la salida de arriba.</string>
+    <string name="hub_exit_prefix">Sale por %1$s</string>
+
+    <string name="coming_soon">Muy pronto</string>
+    <string name="connect">Conectar</string>
+    <string name="disconnect">Desconectar</string>
+    <string name="back">Atrás</string>
+    <string name="save">Guardar</string>
+    <string name="cancel">Cancelar</string>
+
+    <!-- Core service / notification -->
+    <string name="core_channel_name">Núcleo de Skywire</string>
+    <string name="core_channel_description">Se muestra mientras el nodo Skywire está en marcha.</string>
+    <string name="core_notification_title">Skywire en marcha</string>
+    <string name="core_notification_starting">Iniciando el nodo…</string>
+    <string name="core_notification_running">Conectado a la red Skywire.</string>
+    <string name="core_notification_restarting">El nodo falló: reiniciando (intento %1$d).</string>
+
+    <!-- Voice calls -->
+    <string name="call_channel_incoming">Llamadas entrantes</string>
+    <string name="call_channel_ongoing">Llamada en curso</string>
+    <string name="call_incoming_title">Llamada entrante</string>
+    <string name="call_dialing">Llamando…</string>
+    <string name="call_answer">Responder</string>
+    <string name="call_decline">Rechazar</string>
+    <string name="call_ongoing_title">Llamada en curso</string>
+    <string name="call_ongoing_text">SkyChat está usando el micrófono.</string>
+    <string name="call_mic_rationale">Permite el micrófono para que la otra persona pueda oírte.</string>
+    <string name="call_hang_up">Colgar</string>
+    <string name="call_mute">Silenciar</string>
+    <string name="call_unmute">Activar</string>
+    <string name="call_speaker">Altavoz</string>
+    <string name="call_missed_title">Llamada perdida</string>
+
+    <!-- Home / Connect -->
+    <string name="state_disconnected">Desconectado</string>
+    <string name="state_starting">Iniciando…</string>
+    <string name="state_connected">Conectado</string>
+    <string name="state_stopping">Deteniendo…</string>
+    <string name="state_restarting">Reiniciando (intento %1$d)…</string>
+    <string name="home_hint_disconnected">Conectar inicia el núcleo de Skywire en este teléfono.</string>
+    <string name="home_hint_starting">Entrando en la red Skywire. La primera conexión puede tardar unos minutos.</string>
+    <string name="home_error_start">El núcleo no llegó a arrancar. Revisa el registro del proceso.</string>
+    <string name="visor_info_title">Nodo</string>
+    <string name="visor_public_key">Clave pública</string>
+    <string name="visor_version">Versión</string>
+    <string name="visor_uptime">Tiempo activo</string>
+    <string name="visor_show_more">Más información</string>
+    <string name="visor_show_less">Menos información</string>
+    <string name="visor_transports">Transportes</string>
+    <string name="visor_transports_total">Total</string>
+    <string name="visor_dmsg_servers">Servidores DMSG</string>
+    <string name="visor_service_health">Estado de los servicios</string>
+    <string name="copied_to_clipboard">Copiado</string>
+    <string name="view_logs">Ver registros</string>
+
+    <!-- Log viewer -->
+    <string name="logs_title">Registros</string>
+    <string name="logs_source_core">Núcleo</string>
+    <string name="logs_source_process">Proceso</string>
+    <string name="logs_follow">Seguir</string>
+    <string name="logs_pause">Pausar</string>
+    <string name="logs_share">Compartir</string>
+    <string name="logs_search_hint">Filtrar…</string>
+    <string name="logs_empty">Todavía no hay entradas de registro.</string>
+    <string name="logs_loading">Obteniendo el registro…</string>
+    <string name="logs_dropped">%1$d líneas perdidas (el búfer dio la vuelta)</string>
+    <string name="logs_api_down">No se alcanza la API del núcleo: no se muestra nada nuevo. La fuente Proceso funciona incluso cuando el nodo no arranca.</string>
+
+    <!-- SkySOCKS -->
+    <string name="socks_state_connecting">Conectando…</string>
+    <string name="socks_state_error">La conexión falló</string>
+    <string name="socks_core_offline">El núcleo de Skywire no está en marcha. Inícialo desde la pestaña Inicio.</string>
+    <string name="socks_core_starting">Esperando a que arranque el núcleo de Skywire…</string>
+    <string name="socks_server">Servidor</string>
+    <string name="socks_latency">Latencia</string>
+    <string name="socks_transferred">Transferido</string>
+    <string name="socks_reconnect">Reconectar</string>
+    <string name="socks_pick_server">Elige un servidor abajo para conectarte.</string>
+    <string name="socks_proxy_title">SOCKS5 para otras apps</string>
+    <string name="socks_proxy_hint">Apunta a esta dirección desde una app o un navegador que admita proxy mientras SkySOCKS esté conectado. El enrutamiento de todo el teléfono llega con SkyVPN.</string>
+    <string name="socks_change_port">Cambiar el puerto</string>
+    <string name="socks_port_title">Puerto de escucha</string>
+    <string name="socks_port_hint">El servicio SOCKS5 se queda en 127.0.0.1: solo las apps de este teléfono pueden alcanzarlo.</string>
+    <string name="socks_port_label">Puerto</string>
+    <string name="socks_port_invalid">Introduce un puerto entre 1024 y 65535.</string>
+    <string name="socks_servers">Servidores (%1$d)</string>
+    <string name="socks_search_hint">Busca por clave, país o versión</string>
+    <string name="socks_servers_empty">Ningún servidor coincide con tu búsqueda.</string>
+    <string name="socks_servers_none">El descubrimiento de servicios no devolvió ningún servidor proxy.</string>
+    <string name="socks_retry">Reintentar</string>
+    <string name="socks_refresh">Actualizar</string>
+
+    <!-- Shared server-list pieces (SkySOCKS, SkyVPN) -->
+    <string name="server_location_unknown">Ubicación desconocida</string>
+
+    <!-- Durations, rendered a part at a time so a language that writes its
+         units out can. The separator is a resource for the same reason:
+         "2d 3h 4m" in English, "2天3小时4分" in Chinese, which sets them solid. -->
+    <string name="unit_days">%1$sd</string>
+    <string name="unit_hours">%1$sh</string>
+    <string name="unit_minutes">%1$smin</string>
+    <string name="unit_seconds">%1$ss</string>
+    <string name="unit_separator">" "</string>
+
+    <!-- The visor's own word for what an app is doing (detailed_status) and
+         for how its services are (services_health). The English is what the
+         API sends, character for character — anything these lists do not know
+         is shown exactly as it arrived. See ui/components/VisorWords.kt. -->
+    <string name="app_status_starting">Iniciando</string>
+    <string name="app_status_running">En marcha</string>
+    <string name="app_status_connecting">Conectando</string>
+    <string name="app_status_reconnecting">La conexión falló, reconectando</string>
+    <string name="app_status_shutting_down">Cerrando</string>
+    <string name="app_status_stopped">Detenido</string>
+    <string name="health_healthy">correcto</string>
+    <string name="health_unhealthy">con fallos</string>
+    <string name="health_connecting">conectando</string>
+    <string name="health_error">error</string>
+
+    <!-- SkyVPN -->
+    <string name="vpn_state_connecting">Conectando…</string>
+    <string name="vpn_state_error">La conexión falló</string>
+    <string name="vpn_state_blocked">Bloqueado por el kill switch</string>
+    <string name="vpn_core_offline">El núcleo de Skywire no está en marcha. Inícialo desde la pestaña Inicio.</string>
+    <string name="vpn_core_starting">Esperando a que arranque el núcleo de Skywire…</string>
+    <string name="vpn_server">Salida</string>
+    <string name="vpn_reconnect">Reconectar</string>
+    <string name="vpn_pick_server">Elige una salida abajo para enrutar este teléfono a través de ella.</string>
+    <string name="vpn_hint_blocked">El túnel está caído y el kill switch mantiene sin red a todas las demás apps. Desconecta para restablecer el funcionamiento normal.</string>
+    <string name="vpn_hint_excluded">El tráfico propio de Skywire se queda fuera del túnel: es lo que lo transporta.</string>
+    <string name="vpn_servers">Salidas (%1$d)</string>
+    <string name="vpn_servers_empty">Ninguna salida coincide con tu búsqueda.</string>
+    <string name="vpn_servers_none">El descubrimiento de servicios no devolvió ningún servidor VPN.</string>
+    <string name="vpn_search_hint">Busca por clave, país o versión</string>
+
+    <string name="vpn_stats_title">Esta sesión</string>
+    <string name="vpn_stats_ping">Ping</string>
+    <string name="vpn_stats_transferred">Transferido</string>
+    <string name="vpn_stats_speed">Velocidad</string>
+    <string name="vpn_stats_session">Sesión</string>
+    <string name="vpn_stats_total">Total en este teléfono</string>
+    <string name="vpn_stats_interface">Interfaz</string>
+
+    <string name="vpn_killswitch_title">Kill switch</string>
+    <string name="vpn_killswitch_hint">Mantiene la interfaz de red en pie mientras el túnel está caído, para que nada se escape por fuera. Las demás apps se quedan sin conexión hasta que vuelva.</string>
+    <string name="vpn_killswitch_always_on">Ajustes de VPN siempre activa</string>
+    <string name="vpn_killswitch_always_on_hint">Para la garantía más fuerte —bloquear incluso antes de que la app arranque— activa «VPN siempre activa» y «Bloquear conexiones sin VPN» para Skywire en los ajustes de Android.</string>
+
+    <string name="vpn_error_no_consent">Android no ha concedido el permiso de VPN.</string>
+    <string name="vpn_error_socket">El servicio VPN no pudo abrir su socket de traspaso: %1$s</string>
+    <string name="vpn_error_consent_denied">Hace falta el permiso de VPN para enrutar este teléfono a través de Skywire.</string>
+    <string name="vpn_error_settings">Android no tiene ninguna pantalla de ajustes de VPN que abrir.</string>
+
+    <!-- Primary transport (visor-wide; shown on SkySOCKS, later SkyVPN) -->
+    <string name="transport_title">Transporte</string>
+    <string name="transport_change">Cambiar</string>
+    <string name="transport_hint">Se prueba primero al construir la ruta hacia un servidor. Los demás quedan como alternativa.</string>
+    <string name="transport_sheet_title">Transporte principal</string>
+    <string name="transport_sheet_hint">Skywire prueba este tipo primero al conectarse y recurre a los demás cuando no puede. Se aplica en la siguiente conexión.</string>
+    <string name="transport_recommended">Recomendado en móvil</string>
+    <string name="transport_dmsg">DMSG</string>
+    <string name="transport_dmsg_hint">Retransmitido a través de un servidor DMSG. Funciona detrás de cualquier NAT de operador: la conexión que un teléfono siempre puede hacer.</string>
+    <string name="transport_stcpr">STCPR</string>
+    <string name="transport_stcpr_hint">TCP directo al servidor. El más rápido cuando funciona, pero necesita una accesibilidad que una red móvil rara vez da.</string>
+    <string name="transport_sudph">SUDPH</string>
+    <string name="transport_sudph_hint">UDP directo con perforación de NAT. Necesita un NAT que lo permita, y muchos operadores no lo hacen.</string>
+
+    <!-- SkyChat (embedded web UI) -->
+    <string name="chat_menu">Acciones del chat</string>
+    <string name="chat_reload">Recargar</string>
+    <string name="chat_starting">Iniciando SkyChat…</string>
+    <string name="chat_core_starting">Esperando a que arranque el núcleo de Skywire…</string>
+    <string name="chat_core_offline">El núcleo de Skywire no está en marcha. Inícialo desde la pestaña Inicio.</string>
+    <string name="chat_error_password">SkyChat rechazó la contraseña guardada</string>
+    <string name="chat_error_no_answer">SkyChat no respondió en %1$s</string>
+    <!-- Asked when a page is navigated away from while it has something
+         unsaved. Only skychat raises it, and only while a voice or video
+         message is recording; the page cannot pass its own wording (browsers
+         stopped honouring that), so the app says what it means. -->
+    <string name="webview_leave_title">¿Descartar la grabación?</string>
+    <string name="webview_leave_body">Hay una grabación en curso. Si sales de esta página ahora, se perderá.</string>
+    <string name="webview_leave_confirm">Descartar</string>
+    <string name="chat_media_channel_name">Reproducción de SkyChat</string>
+    <string name="chat_media_channel_description">Reproduce, pausa y salta un mensaje de voz o un clip mientras suena.</string>
+    <string name="chat_media_default_title">Audio</string>
+    <string name="chat_media_back">Atrás %1$d s</string>
+    <string name="chat_media_pause">Pausar</string>
+    <string name="chat_media_play">Reproducir</string>
+    <string name="chat_media_forward">Adelante %1$d s</string>
+
+    <!-- SkyDEX (native market entry + embedded trading UI) -->
+    <string name="dex_market_title">Mercado</string>
+    <string name="dex_market_label">Clave pública del mercado</string>
+    <string name="dex_market_hint">El mercado en el que operar. Al conectar se le llama por Skywire y se abre su pantalla de trading aquí abajo.</string>
+    <string name="dex_market_invalid">Una clave pública de mercado son 66 caracteres hexadecimales que empiezan por 02 o 03.</string>
+    <string name="dex_recents">Mercados recientes</string>
+    <string name="dex_connecting">Alcanzando el mercado por Skywire…</string>
+    <string name="dex_core_offline">El núcleo de Skywire no está en marcha. Inícialo desde la pestaña Inicio.</string>
+    <string name="dex_core_starting">Esperando a que arranque el núcleo de Skywire…</string>
+    <string name="dex_error_connect">falló la conexión con el mercado (%1$d)</string>
+    <string name="dex_error_password">SkyDEX rechazó la contraseña guardada</string>
+    <string name="dex_error_no_answer">SkyDEX no respondió en %1$s</string>
+    <string name="dex_error_invalid_key">Esa no es una clave pública de mercado.</string>
+
+    <!-- Fleet (opt-in, status-only view of the user's other visors) -->
+    <string name="fleet_enable">Activar Flota</string>
+    <string name="fleet_enable_hint">Permite que tus propios nodos alcancen este teléfono por DMSG e informen aquí de su estado. Desactivado por defecto.</string>
+    <string name="fleet_core_restarting">Reiniciando el núcleo de Skywire para que el cambio se aplique…</string>
+    <string name="fleet_confirm_on_title">¿Activar Flota?</string>
+    <string name="fleet_confirm_off_title">¿Desactivar Flota?</string>
+    <string name="fleet_confirm_restart_body">El núcleo de Skywire lee este ajuste solo al arrancar, así que hay que reiniciarlo. Cualquier conexión de SkySOCKS o SkyVPN se cae y habrá que reconectarla.</string>
+    <string name="fleet_confirm_restart_action">Reiniciar el núcleo</string>
+
+    <string name="fleet_off_title">Tus otros nodos, desde aquí</string>
+    <string name="fleet_off_body">Flota lista los nodos que ejecutas en otro sitio: si cada uno está en pie, qué está ejecutando y desde cuándo. Puedes reiniciar uno. Nada más: ni transportes, ni apps, ni ajustes.</string>
+    <string name="fleet_off_reachable">Activarlo hace que este teléfono sea alcanzable por DMSG como punto de estado, para que esos nodos puedan conectarse. Solo se conectan los nodos que ya llevan la clave de este teléfono, y aun así no pueden controlar nada aquí.</string>
+
+    <string name="fleet_add_title">Añadir un nodo</string>
+    <string name="fleet_add_body">En la otra máquina, añade la clave de este teléfono a la configuración de ese nodo:</string>
+    <string name="fleet_this_phone">Este teléfono</string>
+    <string name="fleet_add_pk_pending">Esperando a que el núcleo informe de la clave de este teléfono…</string>
+    <string name="fleet_add_command">skywire cli config update hv --add-pks %1$s</string>
+    <string name="fleet_add_tap_to_copy">Toca para copiar.</string>
+    <string name="fleet_add_then_restart">Ejecútalo donde esté el skywire-config.json de ese nodo y reinícialo. Aparecerá en la lista en cuanto se conecte.</string>
+
+    <string name="fleet_core_offline">El núcleo de Skywire no está en marcha. Inícialo desde la pestaña Inicio.</string>
+    <string name="fleet_core_starting">Esperando a que arranque el núcleo de Skywire…</string>
+    <string name="fleet_visors">Nodos (%1$d)</string>
+    <string name="fleet_visors_none">Todavía no se ha conectado ningún nodo. Toca ? arriba para ver cómo añadir uno.</string>
+    <string name="fleet_refresh">Actualizar</string>
+    <string name="fleet_state_offline">Sin conexión</string>
+    <string name="fleet_health">Estado</string>
+    <string name="fleet_health_unknown">Desconocido</string>
+    <string name="fleet_last_seen">Respondió por última vez hace %1$s: todo lo de arriba es de entonces</string>
+    <string name="fleet_restart">Reiniciar</string>
+    <string name="fleet_rename">Ponle nombre a este nodo</string>
+    <string name="fleet_rename_label">Nombre</string>
+    <string name="fleet_rename_hint">Un nombre para %1$s, para que sepas qué máquina es. Se guarda solo en este teléfono: nunca se escribe nada en el nodo. Vacía el campo para quitarlo.</string>
+    <string name="fleet_restart_confirm">¿Reiniciar %1$s? Cierra todo lo que está ejecutando, vuelve a leer su configuración y arranca de nuevo: unos segundos sin conexión, y todo lo enrutado a través de él se cae.</string>
+    <string name="fleet_restart_sent">Reinicio enviado a %1$s. Se desconectará y volverá por su cuenta.</string>
+
+    <string name="core_restart_failed">No se pudo volver a iniciar el núcleo: %1$s</string>
+    <string name="core_service_error">El servicio del núcleo falló de forma inesperada.</string>
+    <string name="core_spawn_failed">No se pudo iniciar el nodo: %1$s</string>
+    <string name="core_seal_readback_failed">No se pudo volver a leer la configuración sellada, así que se deja en su sitio la que no está cifrada.</string>
+    <string name="core_sealed_unreadable">La configuración sellada no se puede abrir.</string>
+    <string name="core_sealed_key_gone">La configuración sellada no se puede abrir: la clave del almacén de este teléfono ya no está (un restablecimiento de fábrica, o un bloqueo de pantalla que se quitó y se volvió a poner). La identidad que contiene es irrecuperable; se puede generar una nueva.</string>
+    <string name="core_config_failed">No se pudo generar la configuración.</string>
+    <string name="core_config_unreadable">No se puede leer el archivo de configuración (%1$s): borrar los datos de esta app lo regenera.</string>
+    <string name="core_config_regen_failed">No se pudo regenerar la configuración (salida %1$d):\n%2$s</string>
+    <string name="core_config_gen_timed_out">No se pudo generar la configuración: se agotó el tiempo (salida %1$d):\n%2$s</string>
+    <string name="core_config_gen_failed">No se pudo generar la configuración (salida %1$d):\n%2$s</string>
+    <string name="core_binary_missing">Falta el binario del núcleo de Skywire o no es ejecutable: %1$s</string>
+
+    <!-- App lock -->
+    <string name="lock_title">Skywire está bloqueada</string>
+    <string name="lock_unlock">Desbloquear</string>
+    <string name="lock_prompt_title">Desbloquear Skywire</string>
+    <string name="lock_prompt_subtitle">Usa tu huella, tu cara o el bloqueo de pantalla.</string>
+
+    <!-- Settings — identity -->
+    <string name="settings_identity">Identidad</string>
+    <string name="settings_identity_hint">Este teléfono es un nodo Skywire, y su clave es la dirección con la que todo lo demás lo alcanza. Las dos acciones de abajo acaban con esa identidad.</string>
+    <string name="settings_identity_none">Todavía no hay identidad. Conéctate una vez desde la pestaña Inicio y se generará una.</string>
+    <string name="settings_identity_working">Reiniciando el núcleo de Skywire con la nueva identidad…</string>
+    <string name="settings_replace_sk">Reemplazar clave</string>
+    <string name="settings_new_config">Nueva identidad</string>
+    <string name="settings_sk_hint">Pega la clave secreta de 64 caracteres con la que quieres que funcione este teléfono. El núcleo de Skywire la comprueba antes de cambiar nada.</string>
+    <string name="settings_sk_label">Clave secreta</string>
+    <string name="settings_sk_unchanged">Esa ya es la clave de este nodo: no hay nada que cambiar.</string>
+    <string name="settings_sk_unreadable">El núcleo no pudo leer esa clave secreta.</string>
+    <string name="settings_sk_invalid">No es una clave secreta: se esperaban %1$d caracteres hexadecimales.</string>
+    <string name="settings_sk_replaced">Identidad reemplazada. El núcleo está arrancando con la nueva clave.</string>
+    <string name="settings_identity_reset">Nueva identidad generada. El núcleo está arrancando con ella.</string>
+
+    <string name="settings_replace_title">¿Reemplazar la identidad de este nodo?</string>
+    <string name="settings_replace_new_pk">La nueva clave pública será %1$s.</string>
+    <string name="settings_replace_final_title">Esto no se puede deshacer</string>
+    <string name="settings_replace_final_body">Todo lo de arriba se borra y este teléfono pasa a ser el nodo %1$s. Asegúrate de conservar la clave secreta actual en algún sitio por si alguna vez la quieres de vuelta: si no, exporta primero la configuración.</string>
+    <string name="settings_replace_action">Reemplazar la identidad</string>
+
+    <string name="settings_new_title">¿Generar una identidad nueva?</string>
+    <string name="settings_new_extra">La nueva clave se genera en este teléfono. Todavía no la tiene nadie, así que nadie podrá alcanzarte en ella hasta que la compartas de nuevo.</string>
+    <string name="settings_new_final_title">Esto no se puede deshacer</string>
+    <string name="settings_new_final_body">La clave actual se destruye, no se archiva. Si no has exportado la configuración, esta identidad se pierde para siempre, junto con todo lo que estuviera dirigido a ella.</string>
+    <string name="settings_new_action">Generar una identidad nueva</string>
+
+    <!-- Shared by both destructive identity flows: what is actually lost. -->
+    <string name="settings_identity_loss">Perderás todo lo que este teléfono guarda como %1$s: su historial de chat y sus contactos, sus grupos y la dirección por la que lo conocen otros nodos. Nada de esto se puede recuperar después, y nada pasa a la clave nueva.</string>
+
+    <string name="settings_continue">Continuar</string>
+
+    <!-- Settings — config export -->
+    <string name="settings_config">Configuración</string>
+    <string name="settings_config_hint">La configuración completa del nodo, como un archivo que te quedas. Es la única forma de llevar esta identidad a otro dispositivo o de recuperarla.</string>
+    <string name="settings_export">Exportar la configuración</string>
+    <string name="settings_export_title">¿Exportar la configuración?</string>
+    <string name="settings_export_warning">El archivo contiene la clave secreta de este nodo en texto plano. Cualquiera que lo lea puede hacerse pasar por este nodo. Guárdalo donde solo tú puedas llegar: ni en una unidad compartida, ni en un chat.</string>
+    <string name="settings_export_prompt">Exportar la configuración de Skywire</string>
+    <string name="settings_export_done">Configuración exportada.</string>
+    <string name="settings_export_unwritable">El archivo elegido no se pudo abrir para escritura.</string>
+
+    <!-- Settings — app lock -->
+    <string name="settings_app_lock">Bloqueo de la app</string>
+    <string name="settings_app_lock_hint">Pide tu huella, tu cara o el bloqueo de pantalla cuando abres Skywire y cuando vuelves a ella tras medio minuto fuera. También oculta la app en la lista de recientes y bloquea las capturas de pantalla.</string>
+    <string name="settings_app_lock_unavailable">Este teléfono no tiene bloqueo de pantalla ni datos biométricos registrados, así que no hay nada con lo que comprobarlo.</string>
+    <string name="settings_open_security">Abrir los ajustes de seguridad</string>
+    <string name="settings_no_security_screen">Este teléfono no tiene una pantalla de ajustes de seguridad que abrir.</string>
+    <string name="settings_lock_enable_prompt">Activar el bloqueo de la app</string>
+    <string name="settings_lock_disable_prompt">Desactivar el bloqueo de la app</string>
+    <string name="settings_biometric_subtitle">Confirma que eres tú.</string>
+
+    <!-- Settings — appearance and about -->
+    <string name="settings_theme">Tema</string>
+    <string name="settings_theme_system">Sistema</string>
+    <string name="settings_theme_light">Claro</string>
+    <string name="settings_theme_dark">Oscuro</string>
+
+    <!-- Interface language. Each language is offered in its own script, so a
+         user who cannot read the current one can still find theirs. -->
+    <string name="settings_language">Idioma</string>
+    <string name="settings_language_hint">El idioma en el que está escrita esta app. Los registros y todo lo que informa el propio nodo se quedan en inglés: se leen junto a los de un escritorio, y una línea de registro traducida es una línea que nadie puede buscar.</string>
+    <string name="settings_language_system">Sistema</string>
+    <string name="settings_about">Acerca de</string>
+    <string name="settings_app_version">Versión de la app</string>
+    <string name="settings_core_version">Versión del núcleo</string>
+
+    <!-- Settings — logs and diagnostics -->
+    <string name="settings_diagnostics">Registros y diagnóstico</string>
+    <string name="settings_diagnostics_hint">Todas las fuentes de registro, una exportación de todas ellas y cuánto escribe el núcleo.</string>
+
+    <string name="diag_title">Registros y diagnóstico</string>
+    <string name="diag_sources">Fuentes</string>
+    <string name="diag_sources_hint">El mismo visor que abre el botón Registros de cada pantalla, con todas las fuentes listadas en un solo sitio.</string>
+    <string name="diag_source_core_hint">El registro de ejecución del propio nodo.</string>
+    <string name="diag_source_process_hint">Lo que imprimió el proceso del núcleo: la única fuente que sobrevive a un nodo que no arranca.</string>
+    <string name="diag_source_app_hint">El registro de esta app, tal como lo guarda el nodo.</string>
+
+    <string name="diag_export">Exportar todo</string>
+    <string name="diag_export_hint">Todas las fuentes de arriba en un solo zip, con los detalles del dispositivo y la configuración, sin su clave secreta.</string>
+    <string name="diag_export_action">Exportar todos los registros</string>
+    <string name="diag_exporting">Recopilando los registros…</string>
+    <string name="diag_export_done">Diagnóstico exportado.</string>
+    <string name="diag_export_unwritable">El archivo elegido no se pudo abrir para escritura.</string>
+
+    <string name="diag_level">Nivel de registro del núcleo</string>
+    <string name="diag_level_hint">Cuánto escribe el nodo. Debug y trace son para reproducir un problema: en un teléfono son muchísima escritura para un registro que nadie está leyendo.</string>
+    <string name="diag_level_confirm_title">¿Poner el nivel de registro en %1$s?</string>
+    <string name="diag_level_confirm_body">El núcleo de Skywire lee esto solo al arrancar, así que hay que reiniciarlo. Cualquier conexión de SkySOCKS o SkyVPN se cae y habrá que reconectarla.</string>
+
+    <string name="home_placeholder">Conectar iniciará el núcleo de Skywire. Muy pronto.</string>
+
+    <!-- Wallet — native SKY / fiber / BTC wallet. Keys are created and kept on
+         this device; the network is only asked for balances, history and
+         broadcast. -->
+    <string name="wallet_intro_title">Configura tu billetera de %1$s</string>
+    <string name="wallet_intro_body">Tus claves se crean en este dispositivo y se quedan en este dispositivo. Skywire nunca las ve, y nunca se envían a la red.</string>
+    <string name="wallet_intro_create">Crear una billetera nueva</string>
+    <string name="wallet_intro_create_sub">Generar una frase de recuperación nueva</string>
+    <string name="wallet_intro_restore">Restaurar desde la semilla</string>
+    <string name="wallet_intro_restore_sub">Introduce una frase de 12 palabras que ya tengas</string>
+
+    <string name="wallet_seed_title">Frase de recuperación</string>
+    <string name="wallet_seed_body">Apunta estas doce palabras en orden y guárdalas sin conexión. Cualquiera que las tenga puede gastar tus monedas.</string>
+    <string name="wallet_seed_secure">Las capturas de pantalla están desactivadas en esta pantalla. No hay botón de copiar.</string>
+    <string name="wallet_seed_continue">Continuar</string>
+
+    <string name="wallet_verify_title">Confirma la frase</string>
+    <string name="wallet_verify_body">Introduce tres palabras de la frase que acabas de apuntar. La billetera se activa en cuanto coincidan.</string>
+    <string name="wallet_verify_word">Palabra %1$d</string>
+    <string name="wallet_verify_hint">escribe la palabra</string>
+    <string name="wallet_verify_wrong">Esa no es la palabra %1$d. Revisa tu copia escrita.</string>
+    <string name="wallet_verify_missing">Introduce la palabra %1$d.</string>
+    <string name="wallet_verify_activate">Activar la billetera</string>
+    <string name="wallet_verify_again">Volver a mostrar la frase</string>
+    <string name="wallet_verify_done">Billetera activada</string>
+
+    <string name="wallet_restore_title">Restaurar la billetera</string>
+    <string name="wallet_restore_progress">Palabra %1$d de %2$d</string>
+    <string name="wallet_restore_paste">Pegar la semilla entera</string>
+    <string name="wallet_restore_pasted">Doce palabras leídas del portapapeles</string>
+    <string name="wallet_restore_hint">Siguiente palabra</string>
+    <string name="wallet_restore_wordlist_note">Las sugerencias salen de la lista de palabras BIP39 guardada en el dispositivo. Nada de lo que escribes se envía a ningún sitio.</string>
+    <string name="wallet_restore_action">Restaurar la billetera</string>
+    <string name="wallet_restore_checksum">Esta frase no pasa su suma de verificación. Una de las doce palabras está mal o fuera de orden.</string>
+    <string name="wallet_restore_short">Solo has introducido %1$d de 12 palabras. Una semilla se restaura entera o no se restaura.</string>
+    <string name="wallet_restore_done">Billetera restaurada. Buscando saldos.</string>
+    <string name="wallet_restore_scanning">Restaurando y buscando saldos…</string>
+
+    <string name="wallet_coin_chip_description">Elige una moneda</string>
+    <string name="wallet_coins_title">Elige una moneda</string>
+    <string name="wallet_coins_search">Buscar entre %1$d monedas</string>
+    <!-- Skycoin is the original chain — Fibercoins are separate chains
+         built from its codebase, so only they carry the fiber label. -->
+    <string name="wallet_coin_native">Red principal de Skycoin · nativa</string>
+    <string name="wallet_coin_fiber">Fibercoin</string>
+    <string name="wallet_coin_btc">Red principal de Bitcoin</string>
+    <string name="wallet_coin_eth">Red principal de Ethereum</string>
+    <string name="wallet_coin_erc20">Token ERC-20 en Ethereum</string>
+    <!-- The visor's own account of the last connection attempt, folded up
+         under the connect control. The failure reason is already on screen in
+         one line; this is the sequence behind it, for pasting to whoever is
+         helping. Same events the CLI prints for a verbose proxy start. -->
+    <string name="vpn_attempt_log">Detalles de la conexión (%1$d eventos)</string>
+    <string name="vpn_attempt_log_live">Detalles de la conexión: recopilando…</string>
+    <string name="vpn_attempt_log_empty">El nodo no registró nada para este intento.</string>
+    <string name="vpn_attempt_log_copy">Copiar los detalles</string>
+
+    <!-- Automatic transports to public visors. Off on this build because a
+         handset pays for them in battery and a radio that never idles, and
+         they mostly serve the network rather than this device. It is also
+         what gives the visor transports to route THROUGH, so a route length
+         above one hop needs it — hence the second line. -->
+    <!-- Route lengths above one hop need transports to route THROUGH, and on
+         this phone those come from Connect to public visors. Without it the
+         dial fails before the route finder is asked, so the choices are shown
+         disabled with the reason rather than offered and always failing. -->
+    <string name="hops_hint_needs_autoconnect">Solo hay un salto disponible: enrutar a través de intermediarios necesita transportes abiertos hacia nodos públicos, y eso está desactivado. Activa «Conectar con nodos públicos» en Ajustes para usar 2 o 3 saltos.</string>
+
+    <string name="settings_autoconnect">Conectar con nodos públicos</string>
+    <string name="settings_autoconnect_hint">Mantiene transportes abiertos hacia nodos públicos para que la red pueda enrutar a través de este teléfono, y para que este teléfono pueda enrutar a través de ellos. Cuesta batería y datos móviles, y por eso está desactivado. Las rutas de más de un salto lo necesitan.</string>
+    <string name="settings_autoconnect_restart">Se aplica la próxima vez que arranque el núcleo.</string>
+
+    <string name="settings_remote">Gestión remota</string>
+    <string name="settings_remote_hint">Permite que otro nodo —el tuyo, en un escritorio— gobierne este por la red: iniciar y detener apps, cambiar el enrutamiento, leer los registros. Nada es alcanzable hasta que concedas una clave, y la clave concedida tiene control total, así que debería ser una máquina tuya. En ningún sentido hay acceso a la shell ni a los archivos.</string>
+    <string name="settings_remote_restart">Conceder o revocar se aplica la próxima vez que arranque el núcleo.</string>
+    <string name="settings_remote_grant">Conceder acceso…</string>
+    <string name="settings_remote_grant_confirm">Conceder</string>
+    <string name="settings_remote_revoke">Revocar</string>
+    <string name="settings_remote_dialog_title">Conceder la gestión remota</string>
+    <string name="settings_remote_dialog_hint">Pega la clave pública del nodo que va a gobernar: «skywire cli visor pk» la imprime en esa máquina. Esa máquina obtendrá control total de este nodo la próxima vez que arranque el núcleo, y este teléfono aparecerá en su lista de hipervisores.</string>
+    <string name="settings_remote_label">Clave pública</string>
+    <string name="settings_remote_invalid">No es la clave pública de un nodo: se esperaban 66 caracteres hexadecimales.</string>
+    <string name="settings_remote_granted">Acceso concedido. Se aplica la próxima vez que arranque el núcleo.</string>
+    <string name="settings_remote_revoked">Acceso revocado. Se aplica la próxima vez que arranque el núcleo.</string>
+
+    <string name="wallet_coins_add">Añadir una moneda o un token</string>
+    <!-- Removing a coin the user added. Only the list entry goes: no key is
+         touched, which is the whole difference from removing a wallet, and
+         is why this one is safe to say plainly. A coin still holding wallets
+         is refused rather than cascading — see WalletRepository.removeUserCoin. -->
+    <string name="wallet_coin_remove">Quitar esta moneda</string>
+    <string name="wallet_coin_remove_title">¿Quitar %1$s?</string>
+    <string name="wallet_coin_remove_body">Desaparece de tu lista de monedas. No cambia nada en la cadena ni se toca ninguna clave: puedes volver a añadirla con los mismos datos.</string>
+    <string name="wallet_coin_remove_blocked_title">%1$s todavía tiene billeteras</string>
+    <string name="wallet_coin_remove_blocked">Quita antes sus billeteras. Borrar una billetera elimina su frase de recuperación de este teléfono, así que es una decisión aparte de ordenar esta lista.</string>
+    <plurals name="wallet_coin_remove_blocked_count">
+        <item quantity="one">Quita antes su billetera: borrar una billetera elimina su frase de recuperación de este teléfono.</item>
+        <item quantity="many">Quita antes sus %1$d de billeteras: borrar una billetera elimina su frase de recuperación de este teléfono.</item>
+        <item quantity="other">Quita antes sus %1$d billeteras: borrar una billetera elimina su frase de recuperación de este teléfono.</item>
+    </plurals>
+    <string name="wallet_coin_remove_builtin">%1$s viene incluida y no se puede quitar</string>
+    <string name="wallet_coin_remove_confirm">Quitar</string>
+    <string name="wallet_coin_remove_ack">Entendido</string>
+    <string name="wallet_coin_removed">%1$s quitada</string>
+    <string name="wallet_hours_sub">%1$s Coin Hours</string>
+    <string name="wallet_btc_sub">%1$d salidas confirmadas · esta cadena no tiene Coin Hours</string>
+    <string name="wallet_eth_sub">Red principal de Ethereum · las comisiones se pagan en ETH</string>
+    <string name="wallet_erc20_sub">%1$s en Ethereum · las comisiones se pagan en ETH</string>
+    <string name="wallet_stale_banner">No se alcanza el nodo. El saldo y el historial se actualizaron por última vez a las %1$s, hace %2$s. No se puede enviar hasta que el nodo responda.</string>
+    <plurals name="wallet_stale_age_minutes">
+        <item quantity="one">%1$d minuto</item>
+        <item quantity="many">%1$d de minutos</item>
+        <item quantity="other">%1$d minutos</item>
+    </plurals>
+    <string name="wallet_stale_age_hours">%1$d h %2$d min</string>
+    <!-- A restore asks the node which of the phrase's addresses have been
+         used. When that could not be asked, the wallet holds only the first
+         one and its balance is a fraction of the truth — which must not be
+         left looking like the whole of it. Retried on every refresh. -->
+    <!-- The node screen. Every balance, transaction list and broadcast for a
+         fiber coin goes to one daemon, and the address the app ships with is
+         not reachable from everywhere — it can be blocked, or throttled past
+         the point where a wallet with history can finish reading it. This is
+         the way out, and the only way to correct the address of a coin the
+         user added themselves. -->
+    <string name="wallet_node_title">Nodo de la moneda</string>
+    <string name="wallet_node_row">Nodo de la moneda</string>
+    <string name="wallet_node_body">Los saldos, las transacciones y los envíos de %1$s se leen de este nodo y se mandan a él. Cámbialo si el que viene con la app no se puede alcanzar desde donde estás, o si tienes uno propio.</string>
+    <string name="wallet_node_field">Dirección del nodo</string>
+    <string name="wallet_node_save">Usar este nodo</string>
+    <string name="wallet_node_default">Volver a %1$s</string>
+    <string name="wallet_node_encrypted">Cifrado en tránsito. El nodo sigue viendo qué direcciones consultas juntas, pero nadie más por el camino.</string>
+    <string name="wallet_node_cleartext">Sin cifrar. Todo el mundo entre este teléfono y esa dirección ve tu lista de direcciones entera y sus saldos. Tus monedas siguen a salvo —las claves nunca salen del dispositivo—, pero las direcciones quedan ligadas entre sí para cualquiera que esté mirando.</string>
+    <string name="wallet_scan_pending">Las demás direcciones de esta billetera todavía no se han confirmado con el nodo, así que el saldo puede estar incompleto. Se reintenta en cada actualización.</string>
+    <string name="wallet_stale_never">No se alcanza el nodo. Esta billetera aún no se ha sincronizado: los saldos aparecerán cuando el nodo responda.</string>
+    <string name="wallet_stale_send_note">Envío desactivado: no hay ruta hasta el nodo</string>
+    <string name="wallet_error_no_route">no hay ruta hasta el nodo</string>
+    <string name="wallet_error_rejected">rechazada</string>
+    <string name="wallet_receive">Recibir</string>
+    <string name="wallet_send">Enviar</string>
+    <string name="wallet_recent">Actividad reciente</string>
+    <string name="wallet_see_all">Ver todo</string>
+    <string name="wallet_no_activity_title">Todavía no hay actividad</string>
+    <string name="wallet_no_activity_body">Las monedas que recibas en esta billetera aparecerán aquí.</string>
+    <string name="wallet_wallets_row">Billeteras</string>
+    <string name="wallet_received_verb">Recibido</string>
+    <string name="wallet_sent_verb">Enviado</string>
+    <string name="wallet_from_line">de %1$s · %2$s</string>
+    <string name="wallet_to_line">a %1$s · %2$s</string>
+    <string name="wallet_self_line">dentro de esta billetera · %1$s</string>
+
+    <string name="wallet_receive_title">Recibir</string>
+    <string name="wallet_receive_only">Envía solo %1$s a esta dirección.</string>
+    <string name="wallet_receive_tap_copy">Toca para copiar la dirección completa</string>
+    <string name="wallet_copy">Copiar</string>
+    <string name="wallet_share">Compartir</string>
+    <string name="wallet_address_copied">Dirección copiada al portapapeles</string>
+    <string name="wallet_other_addresses">Otras direcciones de esta billetera</string>
+    <string name="wallet_addresses_in">Direcciones en %1$s</string>
+    <string name="wallet_addresses_note">Todas pertenecen a la misma semilla. Usar una nueva hace que tu saldo sea más difícil de seguir.</string>
+    <string name="wallet_address_default">Predeterminada · en uso</string>
+    <string name="wallet_address_unused">Nunca usada</string>
+    <string name="wallet_address_new">Generar una dirección nueva</string>
+    <string name="wallet_address_generated">Nueva dirección generada en %1$s</string>
+    <string name="wallet_address_picked">Recibiendo en la dirección seleccionada</string>
+
+    <string name="wallet_send_title">Enviar</string>
+    <string name="wallet_send_to">Para</string>
+    <string name="wallet_send_to_hint_fiber">dirección de %1$s</string>
+    <string name="wallet_send_to_hint_btc">dirección bc1… o 1…</string>
+    <string name="wallet_send_to_hint_eth">dirección 0x…</string>
+    <string name="wallet_paste">Pegar</string>
+    <string name="wallet_scan_description">Escanear un código QR</string>
+    <string name="wallet_send_amount">Cantidad</string>
+    <string name="wallet_send_available">Disponible %1$s %2$s</string>
+    <string name="wallet_send_invalid_amount">introduce una cantidad válida</string>
+    <string name="wallet_max">Máx.</string>
+    <string name="wallet_max_note_fiber">Máx. envía todos los %1$s. Los Coin Hours no se envían: una parte se quema como comisión.</string>
+    <string name="wallet_max_note_btc">Máx. gasta todas las salidas confirmadas y resta la comisión del minero, así que la cantidad se mueve con la tarifa.</string>
+    <string name="wallet_max_note_eth">Máx. reserva un poco de ETH para el gas; el resto exacto se calcula al revisar.</string>
+    <string name="wallet_max_note_erc20">Máx. envía todo el saldo del token. El gas se paga en ETH desde la misma dirección.</string>
+    <string name="wallet_fee">Comisión</string>
+    <string name="wallet_hours_burned">Coin Hours quemados</string>
+    <string name="wallet_hours_after">Coin Hours después</string>
+    <string name="wallet_fee_note_fiber">Las transacciones de %1$s no cuestan %1$s. Una décima parte de los Coin Hours que entran en la transacción se quema como comisión, y la mitad de lo que queda sigue adelante con las monedas.</string>
+    <string name="wallet_fee_rate">Tarifa de comisión</string>
+    <string name="wallet_fee_rate_value">%1$d sat/vB</string>
+    <string name="wallet_fee_estimate">Comisión estimada, %1$d vB</string>
+    <string name="wallet_fee_economy">Económica</string>
+    <string name="wallet_fee_normal">Normal</string>
+    <string name="wallet_fee_priority">Prioritaria</string>
+    <string name="wallet_fee_eta_economy">~2 h</string>
+    <string name="wallet_fee_eta_normal">~30 min</string>
+    <string name="wallet_fee_eta_priority">~10 min</string>
+    <string name="wallet_fee_network">Comisión de red</string>
+    <string name="wallet_fee_at_review">se calcula al revisar</string>
+    <string name="wallet_fee_gas">Límite de gas %1$d · hasta %2$d gwei por gas</string>
+    <string name="wallet_fee_note_eth">La comisión que se muestra es el peor caso a los precios de hoy: el gas que no se usa nunca se cobra.</string>
+    <string name="wallet_fee_note_erc20">Las transferencias de tokens queman gas, y el gas se paga en ETH desde la dirección que envía: ten siempre un poco de ETH junto a los tokens.</string>
+    <string name="wallet_review">Revisar</string>
+    <string name="wallet_review_title">Estás a punto de enviar</string>
+    <!-- %2$s is the coin's own name: Skycoin is the original chain, each
+         Fibercoin is its own network — never conflate them. -->
+    <string name="wallet_review_dest">a %1$s en la red %2$s. No se firma nada hasta que confirmes.</string>
+    <string name="wallet_review_amount">Cantidad</string>
+    <string name="wallet_review_miner_fee">Comisión del minero a %1$d sat/vB</string>
+    <string name="wallet_review_network_fee">Comisión de red, como mucho</string>
+    <string name="wallet_review_total">Total que sale de la billetera</string>
+    <string name="wallet_review_balance_after">Saldo de %1$s después</string>
+    <string name="wallet_review_hours_after">Coin Hours después</string>
+    <string name="wallet_review_back">Atrás</string>
+    <string name="wallet_review_sign">Firmar y enviar</string>
+    <string name="wallet_bio_send_title">Firma esta transacción</string>
+    <string name="wallet_bio_send_subtitle">La firma ocurre en este dispositivo. Tu clave nunca se envía a ningún sitio.</string>
+    <string name="wallet_result_title">Transmitida a la red</string>
+    <string name="wallet_result_body">%1$s %2$s va de camino a %3$s. Sigue pendiente hasta que la red la confirme.</string>
+    <string name="wallet_result_done">Hecho</string>
+    <string name="wallet_result_history">Ver en el historial</string>
+    <string name="wallet_txid_copied">Id de la transacción copiado</string>
+
+    <string name="wallet_history_title">Historial</string>
+    <string name="wallet_filter_all">Todas</string>
+    <string name="wallet_filter_sent">Enviadas</string>
+    <string name="wallet_filter_received">Recibidas</string>
+    <string name="wallet_filter_pending">Pendientes</string>
+    <!-- Shown instead of "Nothing here yet" when the transaction list is
+         simply not the one the balance beside it came from: the history
+         endpoint has no pagination and can be megabytes, so it is the half of
+         a refresh that can fail on a slow connection. Claiming an empty chain
+         in that case would be a lie about someone's money. -->
+    <string name="wallet_history_unfetched_title">Transacciones no cargadas</string>
+    <string name="wallet_history_unfetched_body">El saldo está al día, pero la lista de transacciones de %1$s de esta billetera todavía no ha llegado. Puede ser grande con una conexión lenta: desliza hacia abajo para volver a intentarlo.</string>
+    <string name="wallet_history_empty_title">Todavía no hay nada aquí</string>
+    <string name="wallet_history_empty_all">No ha entrado ni salido nada de %1$s de esta billetera.</string>
+    <string name="wallet_history_empty_filter">Ninguna transacción de %1$s coincide con este filtro.</string>
+    <string name="wallet_history_show_address">Mostrar mi dirección</string>
+    <string name="wallet_day_today">Hoy</string>
+    <string name="wallet_day_yesterday">Ayer</string>
+
+    <string name="wallet_tx_title">Transacción</string>
+    <string name="wallet_tx_confirmed">Confirmada</string>
+    <string name="wallet_tx_pending_long">Pendiente · esperando la primera confirmación</string>
+    <string name="wallet_tx_from">De</string>
+    <string name="wallet_tx_to">Para</string>
+    <string name="wallet_tx_wallet">Billetera</string>
+    <string name="wallet_tx_date">Fecha</string>
+    <string name="wallet_tx_fee">Comisión</string>
+    <string name="wallet_tx_confirmations">Confirmaciones</string>
+    <string name="wallet_tx_confirmations_pending">0 de 1</string>
+    <string name="wallet_tx_id">Id de la transacción</string>
+    <string name="wallet_tx_explorer">Abrir en el explorador</string>
+    <string name="wallet_tx_explorer_note">Abre %1$s en tu navegador. El explorador verá este id de transacción.</string>
+    <string name="wallet_tx_explorer_fallback">el explorador</string>
+    <string name="wallet_fee_hours_value">%1$s Coin Hours</string>
+
+    <string name="wallet_wallets_title">Billeteras</string>
+    <string name="wallet_active_badge">ACTIVA</string>
+    <string name="wallet_address_count_one">1 dirección</string>
+    <string name="wallet_address_count_many">%1$d direcciones</string>
+    <string name="wallet_add_wallet">Añadir una billetera</string>
+    <string name="wallet_count_one">1 billetera</string>
+    <string name="wallet_count_many">%1$d billeteras</string>
+    <string name="wallet_manage_create">Crear una nueva</string>
+    <string name="wallet_created_on">%1$s · creada el %2$s</string>
+    <string name="wallet_use">Usar esta billetera</string>
+    <string name="wallet_rename">Cambiar el nombre</string>
+    <string name="wallet_rename_title">Cambiar el nombre de la billetera</string>
+    <string name="wallet_reveal_action">Mostrar la frase de recuperación</string>
+    <string name="wallet_reveal_action_sub">Muestra las doce palabras a la vista. Pide tu huella antes.</string>
+    <string name="wallet_remove_action">Quitar de este dispositivo</string>
+    <string name="wallet_remove_action_sub">Borra las claves de aquí. Sin la frase, las monedas se pierden para siempre.</string>
+    <string name="wallet_remove_title">¿Quitar %1$s de este dispositivo?</string>
+    <string name="wallet_remove_body">Las claves guardadas aquí se borran. Si no tienes apuntadas las doce palabras de recuperación, nadie podrá volver a alcanzar las monedas de esta billetera, tú incluido.</string>
+    <string name="wallet_remove_confirm">Quitar</string>
+    <string name="wallet_remove_keep">Conservarla</string>
+    <string name="wallet_removed">%1$s quitada de este dispositivo</string>
+    <string name="wallet_bio_reveal_title">Confirma que eres tú</string>
+    <string name="wallet_bio_reveal_subtitle">Las palabras de %1$s se mostrarán a la vista en la siguiente pantalla.</string>
+    <string name="wallet_reveal_warning">Cualquiera que lea estas doce palabras puede mover todas las monedas de %1$s, desde cualquier dispositivo y sin tu teléfono. Muéstralas solo donde nadie pueda ver tu pantalla.</string>
+    <string name="wallet_reveal_autohide">Las capturas de pantalla están desactivadas. Esta pantalla se cierra sola en %1$s.</string>
+    <string name="wallet_reveal_hide">Ocultar la frase</string>
+
+    <string name="wallet_add_coin_title">Añadir una moneda o un token</string>
+    <string name="wallet_add_kind_fiber">Fibercoin</string>
+    <string name="wallet_add_kind_erc20">Token ERC-20</string>
+    <string name="wallet_add_coin_body">Todas las Fibercoins ejecutan el mismo software de nodo que Skycoin. Ponle nombre a la moneda y apunta la billetera a un nodo en el que confíes: los saldos, las comisiones y la precisión vienen de ese nodo.</string>
+    <string name="wallet_add_token_body">Todos los tokens ERC-20 viven en Ethereum y solo se diferencian en su contrato. Los decimales tienen que coincidir con los del propio contrato —6 para los tipo USDT, 18 para la mayoría— o las cantidades se leerán mal.</string>
+    <string name="wallet_add_coin_name">Nombre de la moneda</string>
+    <string name="wallet_add_coin_name_hint">p. ej. MDL Talent Hub</string>
+    <string name="wallet_add_coin_name_required">ponle un nombre a la moneda</string>
+    <string name="wallet_add_coin_ticker">Símbolo</string>
+    <string name="wallet_add_coin_ticker_hint">p. ej. MDL</string>
+    <string name="wallet_add_coin_ticker_required">ponle un símbolo a la moneda</string>
+    <string name="wallet_add_coin_icon">Icono</string>
+    <string name="wallet_add_coin_icon_pick">Elegir una imagen</string>
+    <string name="wallet_add_coin_icon_clear">Quitar</string>
+    <string name="wallet_add_coin_icon_unreadable">esa imagen no se puede leer</string>
+    <string name="wallet_add_coin_node">Dirección del nodo</string>
+    <string name="wallet_add_coin_node_hint">http://node.example.com:6420</string>
+    <string name="wallet_add_coin_node_invalid">la dirección del nodo tiene que ser una URL completa, como http://node.example.com:6420</string>
+    <string name="wallet_add_token_contract">Dirección del contrato</string>
+    <string name="wallet_add_token_contract_hint">0x…</string>
+    <string name="wallet_add_token_contract_invalid">el contrato tiene que ser una dirección 0x… (con suma de verificación o todo en minúsculas)</string>
+    <string name="wallet_add_token_decimals">Decimales</string>
+    <string name="wallet_add_token_decimals_hint">18</string>
+    <string name="wallet_add_token_decimals_range">los decimales tienen que estar entre 0 y 36</string>
+    <string name="wallet_add_token_decimals_invalid">los decimales tienen que ser un número: 6 para los tokens tipo USDT, 18 para la mayoría</string>
+    <string name="wallet_add_token_ticker_required">ponle un símbolo al token</string>
+    <string name="wallet_add_token_name_required">ponle un nombre al token</string>
+    <string name="wallet_add_coin_save">Añadir la moneda</string>
+    <string name="wallet_seed_unavailable">La frase no se puede leer: el almacén de claves del teléfono ha cambiado desde que se creó esta billetera.</string>
+    <string name="wallet_seed_invalid">frase de recuperación no válida</string>
+
+    <!-- Screen help. One ? per tab, in the header, opening a few sentences
+         about what the screen is for. The apps that used to carry their own
+         Logs action point at Settings instead. Typographic apostrophes
+         throughout: the Skycoin face has broken sidebearings on the straight
+         one and renders "phone's" as three tokens. -->
+    <string name="help_open">Sobre esta pantalla</string>
+    <string name="help_close">Entendido</string>
+
+    <string name="help_chat_title">Sobre SkyChat</string>
+    <string name="help_chat_body">Mensajes, llamadas, grupos y canales que viajan por Skywire en vez de por los servidores de una empresa. Tu identidad aquí es la clave pública de este nodo: repártela con el botón QR y cualquiera que la tenga podrá alcanzarte.\n\nEste es el mismo chat que corre en el escritorio, dispuesto para un teléfono. Guarda su propio historial en este dispositivo; no hay cuenta y nada se sincroniza solo, así que pasar a otro teléfono significa exportar desde los ajustes dentro del chat e importar allí.\n\nLos registros de SkyChat están en Ajustes ▸ Diagnóstico, junto con todos los demás registros que guarda esta app.</string>
+
+    <string name="help_hub_title">Sobre Apps</string>
+    <string name="help_hub_body">Todo lo que tu nodo puede ejecutar, en un solo sitio. Cada icono abre la pantalla de su app; el nodo sigue funcionando por debajo de la que estés mirando.\n\nSkySOCKS y SkyVPN mandan el tráfico de otras apps por la red, SkyDEX opera, SkyChat envía mensajes y Flota vigila los nodos que ejecutas en otro sitio. Un icono en gris es algo que todavía no está construido.</string>
+
+    <string name="help_wallet_title">Sobre la Billetera</string>
+    <string name="help_wallet_body">Skycoin, las Fibercoins que comparten su software de nodo y Bitcoin, todas en manos de claves que se generan en este teléfono y nunca salen de él. Skywire nunca las ve y nunca se envían a la red.\n\nLas doce palabras de recuperación son la billetera. Cualquiera que las lea puede gastar las monedas desde cualquier dispositivo sin tu teléfono, y si las pierdes nadie puede recuperarte la billetera: ni nosotros, ni nadie.\n\nLos saldos y el historial vienen del nodo al que apunta cada moneda, así que una moneda cuyo nodo no se alcanza muestra su último saldo conocido y no permite enviar.</string>
+
+    <string name="help_settings_title">Sobre los Ajustes</string>
+    <string name="help_settings_body">Quién es este teléfono en la red y cómo se comporta la app. La identidad es un par de claves en un archivo: haz una copia antes de necesitarla, porque perderla es perder tu dirección, la otra mitad de tu historial de chat y cualquier recompensa ligada a la clave.\n\nDiagnóstico es donde vive cada registro: el núcleo del nodo, el proceso de la app y cada app que corre bajo él. Ahí es donde hay que mirar cuando algo no conecta.</string>
+
+    <string name="help_socks_title">Sobre SkySOCKS</string>
+    <string name="help_socks_body">Un proxy SOCKS5 que sale por otro sitio. Elige un servidor y este teléfono ofrecerá un puerto proxy local; todo lo que apuntes a ese puerto saldrá de la red desde el servidor que elegiste y no desde aquí.\n\nSolo hace de proxy para lo que configures para usarlo: no captura el teléfono entero. SkyVPN es el que hace eso.\n\nLos registros de SkySOCKS están en Ajustes ▸ Diagnóstico.</string>
+
+    <string name="help_vpn_title">Sobre SkyVPN</string>
+    <string name="help_vpn_body">El tráfico del teléfono entero, a través de un servidor que elijas. Android pedirá añadir una configuración de VPN la primera vez; mientras esté activa, el tráfico de todas las apps saldrá por el servidor de salida en vez de desde aquí.\n\nLa clave se queda en este dispositivo y el servidor de salida ve el tráfico que reenvía, exactamente como cualquier salida de VPN. Desactivarla restablece el enrutamiento normal al instante.\n\nLos registros de SkyVPN están en Ajustes ▸ Diagnóstico.</string>
+
+    <string name="help_dex_title">Sobre SkyDEX</string>
+    <string name="help_dex_body">Operar contra un creador de mercado al que se llega por Skywire en vez de por la internet abierta. La pantalla es la del propio mercado, funcionando contra aquel al que estás conectado.\n\nLas órdenes y los saldos pertenecen a ese mercado, no a la billetera de la pestaña Billetera: son cosas separadas.\n\nLos registros de SkyDEX están en Ajustes ▸ Diagnóstico.</string>
+    <string name="help_fleet_title">Sobre Flota</string>
+    <string name="help_fleet_body">Los nodos que ejecutas en otras máquinas —un escritorio, un servidor, un Skyminer— vistos desde este teléfono. Es una ventana hacia ellos, no un mando a distancia: lo que llega es estado, y la única acción es reiniciar.\n\nDesactivado por defecto. Activarlo reinicia el núcleo de este teléfono, porque el ajuste se lee una sola vez mientras el nodo se construye.\n\nEl registro propio de cada nodo está en su tarjeta aquí, porque esa fuente viaja desde la máquina remota; los registros de esta app están en Ajustes ▸ Diagnóstico. Los nombres que le pongas a un nodo se quedan en este teléfono y no viajan con él.</string>
+
+    <!-- Battery / Doze. -->
+    <!-- Android 14 made the full-screen intent a permission of its own,
+         granted by default only to apps whose core function is calling. The
+         platform drops it silently when it is not held, so without this the
+         call screen never appears and an incoming call is a banner. -->
+    <string name="settings_calls">Llamadas entrantes</string>
+    <string name="settings_calls_hint">Las llamadas llegan como una notificación que tienes que advertir. Permite que Skywire muestre la pantalla de llamada y una llamada tomará la pantalla y sonará, como lo hace una llamada de teléfono, incluso con la app cerrada.</string>
+    <string name="settings_calls_granted_hint">Una llamada toma la pantalla y suena, incluso con la app cerrada.</string>
+    <string name="settings_calls_allow">Mostrar la pantalla de llamada</string>
+    <string name="settings_calls_no_screen">Este teléfono no tiene una pantalla para ese ajuste.</string>
+
+    <!-- In-app update. Skywire is installed from GitHub Releases, not a
+         store, so nothing announces a new build unless the app asks. -->
+    <string name="settings_updates">Actualizaciones</string>
+    <string name="settings_update_installed">Instalada</string>
+    <string name="settings_update_check">Buscar actualizaciones</string>
+    <string name="settings_update_checking">Consultando GitHub…</string>
+    <string name="settings_update_uptodate">Skywire %1$s es la versión más reciente.</string>
+    <string name="settings_update_available">Skywire %1$s ya está disponible.</string>
+    <string name="settings_update_size">Descargar · %1$s MB</string>
+    <string name="settings_update_downloading">Descargando… %1$d%%</string>
+    <string name="settings_update_downloading_unknown">Descargando…</string>
+    <string name="settings_update_cancel">Cancelar</string>
+    <string name="settings_update_ready">Skywire %1$s está descargada y lista para instalar.</string>
+    <string name="settings_update_install">Instalar</string>
+    <string name="settings_update_install_note">Android te pedirá que confirmes. Tus ajustes, tu identidad y tus billeteras se conservan: esto reemplaza la app, no la reinstala.</string>
+    <string name="settings_update_permission_note">Android pide permiso para instalar apps desde Skywire la primera vez. La instalación la sigue confirmando el sistema, siempre.</string>
+    <string name="settings_update_check_failed">No se pudo alcanzar GitHub para buscar actualizaciones.</string>
+    <string name="settings_update_download_failed">La descarga no se completó.</string>
+    <string name="settings_update_install_failed">No se pudo instalar la actualización.</string>
+    <string name="settings_update_no_permission_screen">Este teléfono no tiene una pantalla para ese permiso.</string>
+    <string name="settings_update_no_browser">Ninguna app de este teléfono puede abrir una página web.</string>
+    <string name="settings_update_open_page">Abrir en GitHub</string>
+    <string name="settings_update_retry">Reintentar</string>
+    <string name="settings_update_notes">Qué ha cambiado</string>
+    <string name="settings_battery">Batería</string>
+    <string name="settings_battery_hint">Skywire sigue funcionando en segundo plano, pero Android todavía puede pausar su red cuando la pantalla lleva un rato apagada: los mensajes y las llamadas llegan entonces cuando el teléfono despierta y no cuando se enviaron. Permitir que Skywire ignore la optimización de batería cierra ese hueco. Cuesta batería, y la app funciona de las dos maneras.</string>
+    <string name="settings_battery_exempt_hint">Skywire puede ignorar la optimización de batería, así que sus conexiones siguen en pie con la pantalla apagada. Los ajustes de batería de Android pueden retirar esto en cualquier momento.</string>
+    <string name="settings_battery_allow">Permitir</string>
+    <string name="settings_battery_not_now">Ahora no</string>
+    <string name="settings_battery_no_screen">Este teléfono no tiene una pantalla de optimización de batería que abrir.</string>
+    <string name="home_battery_title">¿Mantener Skywire conectada en segundo plano?</string>
+    <string name="home_battery_body">Android puede pausar la red de esta app cuando la pantalla lleva un rato apagada. Permite que ignore la optimización de batería y los mensajes llegarán según se envían.</string>
+    <!-- Config encryption at rest. -->
+    <string name="settings_encrypt">Cifrar la configuración en reposo</string>
+    <string name="settings_encrypt_hint">Sella el archivo de configuración siempre que Skywire esté desconectada, bajo una clave que este teléfono no entregará. Protege la clave secreta si examinan el dispositivo; no cambia nada mientras estás conectado.</string>
+    <string name="settings_encrypt_warning">Si este teléfono se restablece —o si se quita y se vuelve a poner su bloqueo de pantalla— la clave de sellado se destruye y la identidad de la configuración no se puede recuperar. Exporta antes la configuración si te importa.</string>
+    <string name="settings_encrypt_disable_prompt">Confirma para guardar la configuración sin cifrar</string>
+    <string name="settings_encrypt_on_done">Configuración cifrada.</string>
+    <string name="settings_encrypt_on_pending">La configuración se cifrará cuando te desconectes.</string>
+    <string name="settings_encrypt_off_done">La configuración ya no está cifrada.</string>
+</resources>
