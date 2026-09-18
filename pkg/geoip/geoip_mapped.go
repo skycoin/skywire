@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/oschwald/geoip2-golang/v2"
 )
@@ -23,13 +24,27 @@ import (
 // pressure, and the Go runtime never sees them. Decompression streams
 // straight to the file, so the heap never holds the whole database.
 
-// mappedDir is the directory the inflated database is cached in: the
-// user's cache directory, else the system temp directory.
-func mappedDir() string {
+// mappedDirs are the directories to try, in order, for the cache file. The
+// first one that takes a 60 MB write wins; only if none does is the database
+// inflated onto the heap instead (Shared), which is the 60 MB of resident,
+// GC-tracked memory this whole file exists to avoid — a heap profile of a
+// live exit visor found exactly that, so the fallback is not theoretical.
+//
+// os.UserCacheDir needs $XDG_CACHE_HOME or $HOME, and a systemd service that
+// inherits neither gets an error from it; the system temp directory is a
+// tmpfs on many hosts, where a 60 MB cache file is 60 MB of RAM and no better
+// than the heap copy. /var/cache is the FHS answer for exactly this file and
+// is on disk; a visor that cannot write there (not root) falls through to the
+// temp directory as before.
+func mappedDirs() []string {
+	var dirs []string
 	if d, err := os.UserCacheDir(); err == nil && d != "" {
-		return filepath.Join(d, "skywire")
+		dirs = append(dirs, filepath.Join(d, "skywire"))
 	}
-	return filepath.Join(os.TempDir(), "skywire-geoip")
+	if runtime.GOOS != "windows" {
+		dirs = append(dirs, filepath.Join("/var", "cache", "skywire"))
+	}
+	return append(dirs, filepath.Join(os.TempDir(), "skywire-geoip"))
 }
 
 // gzTrailer reads the CRC32 and uncompressed size a gzip member ends with;
