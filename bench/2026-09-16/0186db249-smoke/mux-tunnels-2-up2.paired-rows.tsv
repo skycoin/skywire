@@ -1,0 +1,5 @@
+# reference uploads of mux-tunnels-2-up2 (sequential, one per route), bench.sh rows
+mux-tunnels-2-up2-ref-r1	up	50000000	10318275	200	50000000	4.845776	1
+mux-tunnels-2-up2-ref-r1	up	50000000	3236220	200	50000000	15.450124	1
+mux-tunnels-2-up2-ref-r2	up	50000000	4924827	200	50000000	10.152643	1
+mux-tunnels-2-up2-ref-r2	up	50000000	8784011	200	50000000	5.692167	1

@@ -1,0 +1,2 @@
+# row	tp	first_hop_pk	ts	ttfb_after_cut_s	rg_ports_before	rg_ports_after	cut_ok	restored
+11	95839ad0-b588-0b1d-8475-45fba6ae993c	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	2026-09-17T18:32:00Z	0.606	49179	49179	1	1
