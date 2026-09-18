@@ -177,6 +177,17 @@ var (
 	SetupPlanClaimTTL      = RegisterMin("setup.plan_claim_ttl", KindDuration, int64(20*time.Second), int64(time.Second), "how long a concurrent dial holds its claim on an oracle candidate path, so N dials in one fill take N DISTINCT intermediates")
 	SetupFirstHopFilterMax = RegisterMin("setup.first_hop_filter_max", KindCount, 8, 1, "held first hops beyond which first-hop diversity stops being a filter and becomes a ranking term, so a deep pool can still grow over a reused first hop with a distinct intermediate")
 
+	// The per-destination route-setup circuit breaker (setupmetrics/stats.go).
+	// OFF by default: the breaker is a lockout held by the route setup node,
+	// which cannot see that the SOURCE visor already has live route groups to
+	// the destination it is refusing. The four parameters below are what it
+	// runs with when an operator turns it back on.
+	SetupCircuitBreaker         = RegisterBool("setup.circuit_breaker", false, "open a per-destination lockout at the route setup node after setup.circuit_fail_threshold consecutive failures; OFF by default because the node cannot see the source visor's live route groups to that destination, so one misattributed burst locks out a reachable exit. Failures are classified and counted either way")
+	SetupCircuitFailThreshold   = RegisterMin("setup.circuit_fail_threshold", KindCount, 3, 1, "consecutive setup failures attributed to one destination, inside setup.circuit_fail_window, that trip its breaker OPEN")
+	SetupCircuitOpenDuration    = RegisterMin("setup.circuit_open_duration", KindDuration, int64(5*time.Minute), int64(time.Second), "how long a tripped breaker refuses every setup to that destination before it admits one half-open probe")
+	SetupCircuitMaxOpenDuration = RegisterMin("setup.circuit_max_open_duration", KindDuration, int64(30*time.Minute), int64(time.Second), "total time in the open/half-open cycle after which a breaker is force-closed, so a destination that is actually alive cannot be locked out forever")
+	SetupCircuitFailWindow      = RegisterMin("setup.circuit_fail_window", KindDuration, int64(5*time.Minute), int64(time.Second), "how close together those failures must fall to count as consecutive; a slower trickle resets the counter instead of tripping the breaker")
+
 	// Mux event history (mux_events.go). The per-group ring is what keeps a
 	// chatty group from evicting another group's history: `mux info` reads the
 	// group's OWN ring, not the shared one.

@@ -60,6 +60,41 @@ func (e *DialError) Unwrap() error { return e.Err }
 // stay free of a router import cycle.
 func (e *DialError) DialFailedPK() cipher.PubKey { return e.PK }
 
+// errNoClientAvailable is the inner error of a ReserveError raised when the
+// id reserver never got a client for a hop (its dial lost the race or the
+// pool had nothing live for it).
+var errNoClientAvailable = errors.New("no client available")
+
+// ReserveError names the remote whose route-ID reservation failed. The
+// message is byte for byte what the id reserver used to format by hand, so
+// log greps and the setup node's own-view parser keep working; what is new
+// is that the PK is carried structurally, which is what lets the
+// setupmetrics collector attribute the failure to the hop that actually
+// failed instead of to the destination.
+//
+// Without this the whole error was an untyped fmt.Errorf: failedDialPK
+// found no PK, fell through to "blame the destination", and three
+// reservations that failed at some INTERMEDIATE tripped the destination's
+// breaker — observed live on 2026-09-18 against an exit the source visor
+// held 32 live route groups to.
+type ReserveError struct {
+	PK  cipher.PubKey
+	Err error
+}
+
+// Error preserves the legacy "reserve routeID from <pk> failed: <inner>"
+// wording.
+func (e *ReserveError) Error() string {
+	return fmt.Sprintf("reserve routeID from %s failed: %v", e.PK, e.Err)
+}
+
+// Unwrap exposes the inner error for errors.Is / errors.As.
+func (e *ReserveError) Unwrap() error { return e.Err }
+
+// DialFailedPK reports the remote whose reservation failed, through the
+// same anonymous interface setupmetrics probes for on DialError.
+func (e *ReserveError) DialFailedPK() cipher.PubKey { return e.PK }
+
 // NewClient creates a new Client.
 func NewClient(ctx context.Context, dialer network.Dialer, rPK cipher.PubKey) (*Client, error) {
 	dialCtx, dialCancel := context.WithTimeout(ctx, DialTimeout)

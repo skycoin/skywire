@@ -192,7 +192,7 @@ func (idr *idReserver) ReserveIDs(ctx context.Context) error {
 				// firstError below already waits for all N goroutines and
 				// returns the first error — so a genuinely dead hop still fails
 				// the route, without resetting the healthy hops.
-				errCh <- fmt.Errorf("reserve routeID from %s failed: no client available", pk)
+				errCh <- &ReserveError{PK: pk, Err: errNoClientAvailable}
 				return
 			}
 			rtIDs, err := client.ReserveIDs(ctx, n)
@@ -213,7 +213,7 @@ func (idr *idReserver) ReserveIDs(ctx context.Context) error {
 				}
 			}
 			if err != nil {
-				errCh <- fmt.Errorf("reserve routeID from %s failed: %w", pk, err)
+				errCh <- &ReserveError{PK: pk, Err: err}
 				return
 			}
 			idr.mx.Lock()
