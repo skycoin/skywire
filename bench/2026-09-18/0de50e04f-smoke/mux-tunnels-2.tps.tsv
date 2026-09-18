@@ -1,0 +1,4 @@
+# transports mux-tunnels-2 was measured over; first_seen_row 0 = held at set start
+# tp	type	remote_pk	first_seen_row
+b414796d-14fc-080e-9ce6-a7162e3e562b	stcpr	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	0
+95839ad0-b588-0b1d-8475-45fba6ae993c	stcpr	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	0
