@@ -23,18 +23,31 @@ type IntakeStats struct {
 	// StaleRouteDrops counts frames for rules that no longer exist (normal
 	// during teardown; a climbing count on an idle visor is not).
 	StaleRouteDrops int64 `json:"stale_route_drops"`
-	// RouteGroupQueues is the inbound app queue of every active route group:
-	// a queue at capacity is an app that stopped reading, and the router
-	// blocks on it (up to 30 s per packet) — stalling every transport.
+	// RouteGroupQueues is the two inbound queues of every active route group:
+	// the app queue (queue/capacity) and the intake queue between the router's
+	// shared read loop and the group's own worker (intake_*).
+	//
+	// An app queue at capacity is an app that stopped reading. That used to
+	// block the shared loop — up to 30 s per packet, stalling every transport
+	// on the visor; now it backs up into that group's intake queue instead,
+	// and a climbing intake_drops is where the loss shows up. Non-zero
+	// intake_drops on one group and healthy transfers elsewhere is the
+	// expected shape of a single wedged app.
 	RouteGroupQueues []RouteGroupQueue `json:"route_group_queues,omitempty"`
 }
 
-// RouteGroupQueue is one route group's inbound queue depth.
+// RouteGroupQueue is one route group's inbound queue depths.
 type RouteGroupQueue struct {
 	Desc     string `json:"desc"`
 	App      string `json:"app,omitempty"`
 	Queue    int    `json:"queue"`
 	Capacity int    `json:"capacity"`
+	// IntakeQueue/IntakeCapacity are the group's intake queue (see
+	// RouteGroup.inCh), and IntakeDrops counts packets the router dropped
+	// because it was full.
+	IntakeQueue    int    `json:"intake_queue"`
+	IntakeCapacity int    `json:"intake_capacity"`
+	IntakeDrops    uint64 `json:"intake_drops"`
 }
 
 type intakeCounters struct {
@@ -109,11 +122,15 @@ func (r *router) IntakeStats() IntakeStats {
 	r.mx.Unlock()
 	for _, rg := range rgs {
 		q, c := rg.readQueue()
+		iq, ic, drops := rg.intakeQueue()
 		out.RouteGroupQueues = append(out.RouteGroupQueues, RouteGroupQueue{
-			Desc:     rg.desc.String(),
-			App:      rg.AppName(),
-			Queue:    q,
-			Capacity: c,
+			Desc:           rg.desc.String(),
+			App:            rg.AppName(),
+			Queue:          q,
+			Capacity:       c,
+			IntakeQueue:    iq,
+			IntakeCapacity: ic,
+			IntakeDrops:    drops,
 		})
 	}
 	return out
