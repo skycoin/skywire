@@ -5241,7 +5241,16 @@ func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 			rg.legRTTWin[pongLegID] = mw
 		}
 		mw.push(latencyMs, time.Now())
+		e2e := rg.legE2ELatency[pongLegID]
 		rg.legLivenessMu.Unlock()
+		// Hand the smoothed end-to-end latency to the mux: it is the delay a
+		// frame in flight on this leg actually has to survive, and the mux's own
+		// per-leg numbers (first-hop transport RTT, send→ack delay) are not it.
+		// Without this the loss detectors judged a slow-routed leg by its near
+		// edge (see routeMux.legDelayBasisMs).
+		if rg.mux != nil {
+			rg.mux.setLegE2ERTT(pongLegID, e2e)
+		}
 	}
 
 	rg.networkStats.SetLatency(uint32(latencyMs)) //nolint: gosec

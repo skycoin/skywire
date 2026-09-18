@@ -1,8 +1,9 @@
 // Package router pkg/router/sbd_per_sack_test.go c2-net-routing
 //
-// Coverage for the per-SACK half of the mux-compose-T2xL2 finding: shared-bottleneck
-// detection folds a delay sample per SACK, so a verdict lands in seconds instead of
-// the ~110s the 30s liveness pong needs to clear sbdMinSamples.
+// Coverage for the two halves of the mux-compose-T2xL2 finding: shared-bottleneck
+// detection folding a delay sample per SACK (so a verdict lands in seconds, not
+// the ~110s the 30s liveness pong needs to clear sbdMinSamples), and RACK judging
+// a frame by the delay of the leg it actually rode.
 package router
 
 import (
@@ -11,6 +12,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // sbdSACKRig is a two-leg group whose mux feeds its per-SACK delay samples into
@@ -106,4 +109,51 @@ func TestSBDMinSamplesKnob(t *testing.T) {
 	require.False(t, sbdSimilar(corr, corr), "six samples must not satisfy a floor of twelve")
 	require.False(t, SetSBDMinSamples(0), "non-positive is refused")
 	require.False(t, SetSBDSampleInterval(0), "non-positive is refused")
+}
+
+// TestRackDoesNotJudgeSlowLegByFastLegDelay is the B regression: on the measured
+// composition the two pinned legs left over near first hops, so tp.GetLatency and
+// the ecfRttMs built on it read ~the fast leg for BOTH, and a leg whose ROUTE
+// measures 410 ms had its in-flight frames declared lost at 151 ms × 1.25. The
+// end-to-end pong latency is now the leg's own delay basis, so its frames wait
+// for its own delay and only the fast leg's hole is retransmitted.
+func TestRackDoesNotJudgeSlowLegByFastLegDelay(t *testing.T) {
+	log := logging.NewMasterLogger().PackageLogger("sbd-test")
+	m := newRouteMux(log, true)
+	setLegRTTs(m, []float64{151, 151}) // both legs look 151 ms from the near edge
+	fast, slow := uuid.New(), uuid.New()
+	m.setLegE2ERTT(fast, 151)
+	m.setLegE2ERTT(slow, 410) // ...but the slow leg's ROUTE is 410 ms
+
+	group := m.rackThreshold()
+	require.InDelta(t, float64(151*1.25*float64(time.Millisecond)), float64(group), float64(time.Millisecond),
+		"group-wide threshold is the slowest ecfRttMs × the reorder factor")
+	require.GreaterOrEqual(t, m.rackThresholdFor(slow), 512*time.Millisecond,
+		"the slow leg's holes must wait for the slow leg's own delay")
+	require.Equal(t, group, m.rackThresholdFor(fast), "a leg at the group basis keeps the group threshold")
+
+	// Seq 7 rode the slow leg, seq 8 the fast one, both sent 300 ms ago — past
+	// the group threshold (189 ms), well inside the slow leg's own (512 ms).
+	for seq, tp := range map[uint32]uuid.UUID{7: slow, 8: fast} {
+		m.retxBuf.Store(seq, []byte("f"), tp)
+		m.retxBuf.mu.Lock()
+		m.retxBuf.entries[seq].sentAt = time.Now().Add(-300 * time.Millisecond)
+		m.retxBuf.mu.Unlock()
+	}
+	got := m.onSACKReceived(6, []uint64{0b100}, 0, false) // bit 2 = seq 9 received; 7 and 8 missing
+	require.Equal(t, []uint32{8}, got, "only the fast leg's hole is overdue; the 410 ms leg's frame is in ordinary flight")
+}
+
+// TestLegLatencyByTpUsesEndToEnd: the proactive HoL path's per-leg overdueness
+// gate reads the same end-to-end basis, so a frame on a slow-routed leg is not
+// nudged onto the fastest leg one near-hop RTT into its ordinary flight.
+func TestLegLatencyByTpUsesEndToEnd(t *testing.T) {
+	rg, mts, _ := createMuxRouteGroup(t, 2)
+	mts[0].SetLatency(20)
+	mts[1].SetLatency(20)
+	rg.mux.setLegE2ERTT(mts[1].Entry.ID, 410)
+
+	got := rg.mux.legLatencyByTp(mts)
+	require.InDelta(t, 20, got[mts[0].Entry.ID], 0.001, "a leg with no pong sample keeps its first-hop RTT")
+	require.InDelta(t, 410, got[mts[1].Entry.ID], 0.001, "a slow-routed leg is judged on its whole route")
 }

@@ -212,6 +212,18 @@ type routeMux struct {
 	// traffic; nil on a mux nobody wired (unit tests).
 	onLegDelaySample func(uuid.UUID, float64)
 
+	// legE2EByTp is each leg's smoothed END-TO-END round-trip latency (ms, from
+	// the leg-liveness pong), keyed by transport ID, pushed by the route group
+	// (setLegE2ERTT). The mux's own per-leg numbers are the FIRST-HOP transport
+	// RTT (tp.GetLatency) and the send→ack delay (ackDelayByTp); neither is the
+	// leg's route latency. A leg whose first hop is 20ms but whose whole route is
+	// 410ms therefore read as a 20ms leg to every loss detector until a send→ack
+	// sample landed — and that estimate expires after ackDelayStale — so its
+	// in-flight frames were judged against the FAST leg's delay and declared
+	// lost. Guarded by legE2EMu.
+	legE2EByTp map[uuid.UUID]float64
+	legE2EMu   sync.RWMutex
+
 	// windowCh wakes a writer parked in waitSendWindow when a SACK may have
 	// freed per-leg window; sendWindowWaits / sendWindowTimeouts count the waits
 	// and the ones that gave up after sendWindowWaitMax (diagnostics).
@@ -1696,6 +1708,45 @@ func (m *routeMux) recordAckDelayTp(tpID uuid.UUID, d time.Duration) {
 	}
 }
 
+// setLegE2ERTT records one leg's smoothed end-to-end round-trip latency (ms),
+// as measured by the leg-liveness pong. Non-positive values are ignored.
+func (m *routeMux) setLegE2ERTT(tpID uuid.UUID, ms float64) {
+	if ms <= 0 || tpID == uuid.Nil {
+		return
+	}
+	m.legE2EMu.Lock()
+	if m.legE2EByTp == nil {
+		m.legE2EByTp = make(map[uuid.UUID]float64)
+	}
+	m.legE2EByTp[tpID] = ms
+	m.legE2EMu.Unlock()
+}
+
+// legE2ERttMsTp returns the leg's smoothed end-to-end round-trip latency in ms
+// (0 = no pong sample for that transport yet). Unlike ackDelayMsTp it does not
+// expire: the liveness pong keeps measuring an idle leg, and the route latency
+// it reports is a property of the path, not of a transfer.
+func (m *routeMux) legE2ERttMsTp(tpID uuid.UUID) float64 {
+	m.legE2EMu.RLock()
+	defer m.legE2EMu.RUnlock()
+	return m.legE2EByTp[tpID]
+}
+
+// legDelayBasisMs is the delay a frame in flight on this leg is judged against:
+// the larger of the leg's measured send→ack delay (the real feedback delay
+// under load, when fresh) and its end-to-end pong RTT (the path's latency,
+// always current). Either alone under-reports — the first expires between
+// transfers, the second does not see a queue — and judging a frame against a
+// number smaller than its leg's own delay declares it lost while it is in
+// ordinary flight. 0 when the leg has neither.
+func (m *routeMux) legDelayBasisMs(tpID uuid.UUID) float64 {
+	basis := m.ackDelayMsTp(tpID)
+	if e2e := m.legE2ERttMsTp(tpID); e2e > basis {
+		basis = e2e
+	}
+	return basis
+}
+
 // ackDelayMsTp returns the leg's EWMA send→ack delay in milliseconds (0 = no
 // sample yet for that transport, or none for ackDelayStale).
 func (m *routeMux) ackDelayMsTp(tpID uuid.UUID) float64 {
@@ -1709,10 +1760,11 @@ func (m *routeMux) ackDelayMsTp(tpID uuid.UUID) float64 {
 	return e.ms
 }
 
-// rackThresholdFor is rackThreshold judged for one leg: when the leg.s own
-// measured send→ack delay exceeds the group-wide basis, its holes wait for
-// that delay (× the reorder factor, the ceiling raised to it) before they are
-// presumed lost. Never below the group-wide threshold.
+// rackThresholdFor is rackThreshold judged for one leg: when the leg's own
+// measured delay exceeds the group-wide basis, its holes wait for that delay
+// (× the reorder factor, the ceiling raised to it) before they are presumed
+// lost. Never below the group-wide threshold, which stays the floor for a leg
+// with no delay sample of its own.
 func (m *routeMux) rackThresholdFor(tpID uuid.UUID) time.Duration {
 	return m.rackThresholdForWith(m.rackThreshold(), tpID)
 }
@@ -1723,7 +1775,15 @@ func (m *routeMux) rackThresholdFor(tpID uuid.UUID) time.Duration {
 // and the window refresh reads the buffer under that table's lock — the
 // inversion that froze a group).
 func (m *routeMux) rackThresholdForWith(th time.Duration, tpID uuid.UUID) time.Duration {
-	ad := m.ackDelayMsTp(tpID)
+	// The leg's own delay is max(send→ack delay, end-to-end pong RTT). Judged on
+	// the send→ack delay alone this was per-leg in form only: that estimate is
+	// empty until a never-retransmitted frame is acked and expires
+	// ackDelayStale after the last one, so the common case fell back to the
+	// group threshold — built from ecfRttMs, whose floor is the FIRST-HOP
+	// latency. On the measured 2026-09-17 compositions (legs at 151/216 ms and
+	// 137/410 ms end-to-end over near first hops) that put every leg's holes on
+	// the fast leg's clock and declared the slow leg's in-flight frames lost.
+	ad := m.legDelayBasisMs(tpID)
 	if ad <= 0 {
 		return th
 	}
