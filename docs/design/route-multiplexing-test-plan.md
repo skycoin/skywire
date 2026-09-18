@@ -198,6 +198,42 @@ skywire cli proxy settings --reset chunk.max_bytes chunk.concurrency
 A row is valid only once its knobs read `applied` — a `pending` row means the
 app has not pulled the change yet and is still measuring the previous value.
 
+**In the bench runners — `SETTINGS`, and `bench/run-sweep.sh`**
+
+A knob set by hand before a runner is gone by the first row: the visor's per-app
+store is cleared when the app stops, and every runner in `bench/` STARTS the app
+under test itself, once per set. `SETTINGS="key=value ..."` is therefore honoured
+by `run-mux.sh`, `run-compose.sh`, `run-standby.sh` and `run-degrade.sh` at the
+one point where it is both installable and covers the whole set — after the dial,
+the shape check and the warm probes (and, where a pool is awaited, after it has
+settled) and before the first row. `bench/lib-settings.sh` holds the single copy:
+it applies the knobs, WAITS for them (polling `proxy settings --json` until
+nothing reads `pending`, capped at three `tunnel.probe_interval` ticks or
+`SETTINGS_WAIT`, 20 s), records them in the set's `#` header line and dumps the
+full table to `<set>.settings.json`. A set whose knob never landed says
+`settings_pending=` in its header rather than quietly measuring the compiled
+default. `ROUTE_SETTINGS="--flag value ..."` does the same for the router knobs
+and is RESTORED at set end from the `route settings --json` state read before it,
+because a router knob outlives the app it was set for. The paired reference
+instances receive neither: they are the control, and a sweep is only readable if
+the reference is the same on every value.
+
+`bench/run-sweep.sh` drives one knob across a list of values — a complete run of
+the named runner per value, into its own directory, with the knob as the only
+difference:
+
+```
+TUNNELS=2 LEGS="" bench/run-sweep.sh <exit> bench/2026-09-18/<commit> $S/pins \
+    run-mux.sh upload.chunk_bytes 1MiB,2MiB,4MiB,8MiB 3 http://127.0.0.1:18080 "<order>"
+```
+
+That writes `bench/2026-09-18/<commit>/sweep/upload.chunk_bytes=1MiB/` … `=8MiB/`
+and tables them in `sweep/upload.chunk_bytes.tsv`: one row per value, one column
+per (set, size, direction) cell, each holding
+`median MB/s;paired ratio;hashes ok/n;wire/goodput`. Read the RATIO column, not
+the median — the bar swings 2x inside an hour, and only the paired ratio says
+whether a value moved the result or the network did.
+
 ## 3. The work, in order, each step judged by the rig
 
 ### 3.1 Bound what is in flight per leg

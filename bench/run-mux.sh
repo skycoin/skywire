@@ -54,6 +54,15 @@
 #     <set>-settled reading taken EXIT_RES_SETTLE_S (30) seconds after its post
 #     — Go's scavenger gives back what a set borrowed — and the whole run is
 #     scored once more by `exit-resources-check.sh <out> --slope`.
+#   SETTINGS / ROUTE_SETTINGS — live tuning knobs, applied to the APP UNDER TEST
+#     once per set, after it is up and warm and before the first row, and waited
+#     for: a knob reaches the app on its keepalive tick, not at once. SETTINGS
+#     takes `proxy settings` key=value pairs ("upload.chunk_bytes=2MiB"),
+#     ROUTE_SETTINGS whole `route settings` flags, which are restored at set end
+#     because a router knob outlives the app. The paired references never
+#     receive either — they are the control. Both are recorded in the set header
+#     and in <set>.settings.json. See bench/lib-settings.sh, and
+#     bench/run-sweep.sh to drive one knob across a list of values.
 #   TRIALS_UP — upload cells take 3 trials, download cells the [trials]
 #     argument (5). Uploads repeat themselves; downloads do not.
 #
@@ -73,6 +82,8 @@ export PAIRED_HERE CUT_HERE
 . "$here/lib-paired.sh"
 # shellcheck source=bench/lib-cut.sh
 . "$here/lib-cut.sh"
+# shellcheck source=bench/lib-settings.sh
+. "$here/lib-settings.sh"
 # norm_sizes: SIZES takes megabytes ("10 50 100") or bytes ("10000000 50000000");
 # an entry below 1000 is megabytes. Anything non-numeric is dropped.
 norm_sizes() {
@@ -568,11 +579,16 @@ for N in $tunnel_counts; do
 	# disjoint first hops for.
 	[ "$active" -eq "$N" ] || { abort_set "$set_name" "shape differs from target: $active active route group(s) of $groups ($standby standby), asked for $N (groups=$desc)"; port=$((port + 1)); continue; }
 	warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
+	# live knobs, once per set: the visor's app store is cleared when the app
+	# stops, so SETTINGS can only be applied here — after the dial, the shape
+	# check and the warm probes, and before the first row (bench/lib-settings.sh).
+	settings_apply "$set_name" "$name"
 	res_warmup "$socks"
 	res_set "$set_name-pre"
 	run_set "$set_name" "$socks" "$tps" \
-		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name tunnels=$N route_groups=$groups active=$active standby=$standby groups=$desc sink=$sink"
+		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name tunnels=$N route_groups=$groups active=$active standby=$standby groups=$desc sink=$sink${settings_note:+ $settings_note}"
 	res_set "$set_name-post"; res_settle "$set_name"; res_check "$set_name"
+	settings_restore "$set_name" # the app knobs die with the app; the ROUTER knobs do not
 	# the rows are already written, so a leftover group here invalidates the
 	# NEXT set (its own pre-setup check), not this one — just say so loudly.
 	stop_app_clean "$name" || echo "$set_name: dst_ports $rg_left outlived the set — the next set will be invalidated if they persist"
@@ -619,11 +635,16 @@ for N in $leg_counts; do
 	[ "$active" -eq 1 ] || { abort_set "$set_name" "$active active route group(s) of $groups for a legs set, want exactly 1 (rg_port=$port_before)"; port=$((port + 1)); continue; }
 	[ "$nlegs" -eq "$N" ] && [ "$missing" -eq 0 ] || { abort_set "$set_name" "leg set differs from target: legs=$nlegs/$N missing=$missing present=$desc"; port=$((port + 1)); continue; }
 	warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
+	# live knobs, once per set: the visor's app store is cleared when the app
+	# stops, so SETTINGS can only be applied here — after the dial, the shape
+	# check and the warm probes, and before the first row (bench/lib-settings.sh).
+	settings_apply "$set_name" "$name"
 	res_warmup "$socks"
 	res_set "$set_name-pre"
 	run_set "$set_name" "$socks" "$tps" \
-		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name legs=$N/$nlegs width=$N rg_port=$port_before route_groups=$groups active=$active standby=$standby pins=$(echo $chosen | tr ' ' ',') legs_desc=$desc sink=$sink"
+		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name legs=$N/$nlegs width=$N rg_port=$port_before route_groups=$groups active=$active standby=$standby pins=$(echo $chosen | tr ' ' ',') legs_desc=$desc sink=$sink${settings_note:+ $settings_note}"
 	res_set "$set_name-post"; res_settle "$set_name"; res_check "$set_name"
+	settings_restore "$set_name" # the app knobs die with the app; the ROUTER knobs do not
 	mux_info "$name" > "$tmp/$set_name.after.json"
 	port_after=$(active_json "$tmp/$set_name.after.json" | jq -r '.[0].desc.dst_port')
 	echo "# rg src_port before=$port_before after=$port_after $( [ "$port_before" = "$port_after" ] && echo constant || echo CHANGED)" >> "$out/$set_name.carrier.tsv"
@@ -680,10 +701,14 @@ if [ "${UP2:-0}" = 1 ]; then
 			paired_stop 1; stop_app_clean "$name" >/dev/null 2>&1
 		else
 			warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
+			# live knobs, once per set: the visor's app store is cleared when the app
+			# stops, so SETTINGS can only be applied here — after the dial, the shape
+			# check and the warm probes, and before the first row (bench/lib-settings.sh).
+			settings_apply "$set_name" "$name"
 			res_warmup "$socks"
 			res_set "$set_name-pre"
 			set_started=$(date +%Y-%m-%dT%H:%M:%S)
-			echo "# exit=$exit_pk local=$local_commit exit_commit=$ec session=$name tunnels=2 route_groups=$groups active=$active standby=$standby groups=$desc refs=$ref1,$ref2 size=$up2_size sink=$sink" > "$f"
+			echo "# exit=$exit_pk local=$local_commit exit_commit=$ec session=$name tunnels=2 route_groups=$groups active=$active standby=$standby groups=$desc refs=$ref1,$ref2 size=$up2_size sink=$sink${settings_note:+ $settings_note}" > "$f"
 			printf '# reference uploads of %s (sequential, one per route), bench.sh rows\n' "$set_name" > "$out/$set_name.paired-rows.tsv"
 			printf '# trial\ta_MBps\tb_MBps\tsum_MBps\tref1_MBps\tref2_MBps\tref_sum_MBps\tratio\ta_ok\tb_ok\n' > "$u"
 			# payloads once, outside every timed section, as run-capcheck.sh does
@@ -721,6 +746,7 @@ if [ "${UP2:-0}" = 1 ]; then
 			done
 			paired_stop 1; paired_stop 2
 			res_set "$set_name-post"; res_settle "$set_name"; res_check "$set_name"
+			settings_restore "$set_name" # the app knobs die with the app; the ROUTER knobs do not
 			echo "$set_name: $(grep -vc '^#' "$f") rows, hash_ok=$(grep -v '^#' "$f" | awk -F'\t' '$8==1' | wc -l)"
 			mux_events "$set_name" "$name"
 			stop_app_clean "$name" || echo "$set_name: dst_ports $rg_left outlived the set"
