@@ -1,0 +1,3 @@
+# set	rows	fwd_pass	fwd_fail	fwd_info	dominant_fwd_leg	dominant_kind	rev_pass	rev_fail	rev_info	max_rev_fanout	flips	flip_rows
+mux-legs-2	16	16	0	0	95839ad0	lowest-latency	5	0	11	2	0	-
+mux-tunnels-2	16	0	0	16	b414796d	direct	5	0	11	3	3	6,9,14

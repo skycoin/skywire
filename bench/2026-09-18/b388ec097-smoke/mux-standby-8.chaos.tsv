@@ -1,0 +1,2 @@
+# row	tp_id	first_hop_pk	ts	rg	chosen_by	cut_ok	cut_at_s	bytes_before_cut	ttfb_after_s	goodput_before_Bps	goodput_after_Bps	restored	cut_trigger	pct_at_cut	ttfb_measured_s
+11	ac40965a-bc99-01e4-a2c9-c26b76db013b	02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7	2026-09-18T15:39:41Z	49179	carrier-growth	1	4.651	2584576	0.511	555703	1924405	1	deadline	5	0.511

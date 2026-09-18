@@ -1,0 +1,1 @@
+# row	tp_id	first_hop_pk	ts	rg	chosen_by	cut_ok	cut_at_s	bytes_before_cut	ttfb_after_s	goodput_before_Bps	goodput_after_Bps	restored	cut_trigger	pct_at_cut	ttfb_measured_s

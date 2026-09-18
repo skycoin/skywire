@@ -1,0 +1,5 @@
+# ts	label	rss_anon_kb	cpu_s	load1	idle_cps	sys_mb	heap_alloc_mb	num_gc	goroutines
+1789743582	warmup	367632	9.85	0.16	0.054	353.6	201.7	20	1919
+1789743588	mux-tunnels-2-pre	367632	10.11	0.38	0.040	353.6	233.1	20	1940
+1789743962	mux-tunnels-2-post	452352	44.81	0.49	0.056	443.8	325.0	94	4412
+1789743998	mux-tunnels-2-settled	400256	47.59	0.35	0.042	443.8	291.1	98	4427

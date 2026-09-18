@@ -1,0 +1,400 @@
+[2026-09-18T09:27:58-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"03c758a0daabab4b4bbd524cf46306212818b051b9d92949bd8acdf6226aad32e6","Addr":"70.121.13.123:42081"}
+[2026-09-18T09:27:58-05:00] INFO [hypervisor_client]: Dialing... hypervisor_pk=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5 via=dmsg
+[2026-09-18T09:27:58-05:00] DEBUG [cli_rpc]: CLI RPC conn #138 accepted from 127.0.0.1:49590 (active: 1)
+[2026-09-18T09:27:58-05:00] DEBUG [cli_rpc]: CLI RPC conn #138 closed after 10ms (active: 0)
+[2026-09-18T09:27:58-05:00] INFO [hypervisor_client]: Serving RPC client... hypervisor_pk=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5 via=dmsg
+[2026-09-18T09:27:58-05:00] INFO [lan_dmsg_discovery]: Hypervisor pushed embedded DMSG server: PK=0375feba1760886b8cf0da7863a972a4a4bb7b22971f01734e20c599111133d8ff Address=127.0.0.1:18 PublicAddress=
+[2026-09-18T09:27:58-05:00] DEBUG [dmsgC]: Dialing session... remote_pk=0375feba1760886b8cf0da7863a972a4a4bb7b22971f01734e20c599111133d8ff
+[2026-09-18T09:27:58-05:00] DEBUG [lan_dmsg_discovery]: Pushed embedded DMSG server unreachable @ 127.0.0.1:18 — trying next error="failed to dial: dial tcp 127.0.0.1:18: connect: connection refused"
+[2026-09-18T09:27:58-05:00] WARN [lan_dmsg_discovery]: Failed to connect to any pushed embedded DMSG server address
+[2026-09-18T09:27:58-05:00] INFO [lan_dmsg_discovery]: Saved embedded DMSG server entries to config: PK=0375feba1760886b8cf0da7863a972a4a4bb7b22971f01734e20c599111133d8ff addresses=[127.0.0.1:18]
+[2026-09-18T09:27:58-05:00] INFO [visor:config]: Flushing config to file. config_version="v1.3.94-alpha1.0.-899369d1c2d2+dirty" filepath=skywire-config.json
+[2026-09-18T09:27:58-05:00] DEBUG [cli_rpc]: CLI RPC conn #139 accepted from 127.0.0.1:49598 (active: 1)
+[2026-09-18T09:27:58-05:00] DEBUG [cli_rpc]: CLI RPC conn #139 closed after 16ms (active: 0)
+[2026-09-18T09:27:58-05:00] WARN [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49159, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=0 reverse_STANDBY=0 direct=1 legs (moved 10005742B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T09:27:58-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49167, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=69 after idle PTO app_name=skysocks-client-ref
+[2026-09-18T09:27:59-05:00] DEBUG [hypervisor]: HTTP request bytes=134 elapsed=171µs method=GET path="/pair/status" status=200
+[2026-09-18T09:27:59-05:00] DEBUG [cli_rpc]: CLI RPC conn #140 accepted from 127.0.0.1:49608 (active: 1)
+[2026-09-18T09:27:59-05:00] DEBUG [cli_rpc]: CLI RPC conn #140 closed after 15ms (active: 0)
+[2026-09-18T09:27:59-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49167, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=69 after idle PTO app_name=skysocks-client-ref
+[2026-09-18T09:27:59-05:00] DEBUG [cli_rpc]: CLI RPC conn #141 accepted from 127.0.0.1:49622 (active: 1)
+[2026-09-18T09:27:59-05:00] DEBUG [cli_rpc]: CLI RPC conn #141 closed after 14ms (active: 0)
+[2026-09-18T09:27:59-05:00] DEBUG [cli_rpc]: CLI RPC conn #142 accepted from 127.0.0.1:49628 (active: 1)
+[2026-09-18T09:27:59-05:00] DEBUG [cli_rpc]: CLI RPC conn #142 closed after 11ms (active: 0)
+[2026-09-18T09:28:00-05:00] DEBUG [launcher]: Direct app-dial: handed to listener _=skynet port=46 remote=03c758a0daabab4b4bbd524cf46306212818b051b9d92949bd8acdf6226aad32e6
+[2026-09-18T09:28:00-05:00] DEBUG [rpc_client_sky:03c758a0daabab4b4bbd524cf46306212818b051b9d92949bd8acdf6226aad32e6]: Accepted (skynet).
+[2026-09-18T09:28:00-05:00] DEBUG [cli_rpc]: CLI RPC conn #143 accepted from 127.0.0.1:49644 (active: 1)
+[2026-09-18T09:28:00-05:00] DEBUG [cli_rpc]: CLI RPC conn #143 closed after 3ms (active: 0)
+[2026-09-18T09:28:00-05:00] DEBUG [cli_rpc]: CLI RPC conn #144 accepted from 127.0.0.1:49650 (active: 1)
+[2026-09-18T09:28:00-05:00] DEBUG [cli_rpc]: CLI RPC conn #144 closed after 9ms (active: 0)
+[2026-09-18T09:28:00-05:00] DEBUG [proc:skysocks-client-ref:10026916997941c695500072a207bdb3]: Accepted skysocks client
+[2026-09-18T09:28:00-05:00] DEBUG [proc:skysocks-client-ref:10026916997941c695500072a207bdb3]: Opened session skysocks client
+[2026-09-18T09:28:01-05:00] WARN [router]: Closing conn from untrusted setup node close_err=<nil> remote_pk=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+[2026-09-18T09:28:01-05:00] DEBUG [hypervisor]: HTTP request bytes=8745 elapsed=155µs method=GET path="/vnet-sw.js" status=200
+[2026-09-18T09:28:01-05:00] DEBUG [hypervisor]: HTTP request bytes=50 elapsed=402µs method=GET path="/api/ui-version" status=200
+[2026-09-18T09:28:01-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49161, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=35 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:01-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49160, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=66 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:01-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49162, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=34 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:01-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49159, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=175 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49161, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=35 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49163, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=33 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49166, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=30 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49165, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=30 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49164, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=31 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49160, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=66 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49162, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=34 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:02-05:00] WARN [router]: Closing conn from untrusted setup node close_err=<nil> remote_pk=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+[2026-09-18T09:28:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49159, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=175 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49163, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=33 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49165, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=30 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49166, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=30 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:02-05:00] DEBUG [transport_manager]: Publishing 46 transports to TPD via CXO transport-list snapshot
+[2026-09-18T09:28:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49164, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=31 after idle PTO app_name=skysocks-client
+[2026-09-18T09:28:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #145 accepted from 127.0.0.1:52846 (active: 1)
+[2026-09-18T09:28:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #145 closed after 12ms (active: 0)
+[2026-09-18T09:28:04-05:00] DEBUG [transport_manager]: Error dialing transport to 0287c62844c64f0a0c399d8d2173a9d31529a1a0a62afd682bc795e6a74a30af01 via swsr: mt.client.Dial: failed to WebSocket dial: failed to send handshake request: Get "http://38.134.43.137:23500/": read tcp 192.168.1.117:35516->38.134.43.137:23500: read: connection reset by peer
+[2026-09-18T09:28:04-05:00] WARN [public_autoconnect]: Failed to add transport error="save transport: mt.client.Dial: failed to WebSocket dial: failed to send handshake request: Get "http://38.134.43.137:23500/": read tcp 192.168.1.117:35516->38.134.43.137:23500: read: connection reset by peer" pk=0287c62844c64f0a0c399d8d2173a9d31529a1a0a62afd682bc795e6a74a30af01 retry_in=5m0s type=swsr
+[2026-09-18T09:28:04-05:00] DEBUG [public_autoconnect]: Phase 4: WebRTC fallback to direct-unreachable visors
+[2026-09-18T09:28:04-05:00] DEBUG [cli_rpc]: CLI RPC conn #146 accepted from 127.0.0.1:52860 (active: 1)
+[2026-09-18T09:28:04-05:00] DEBUG [cli_rpc]: CLI RPC conn #146 closed after 13ms (active: 0)
+[2026-09-18T09:28:06-05:00] DEBUG [hypervisor]: HTTP request bytes=50 elapsed=456µs method=GET path="/api/ui-version" status=200
+[2026-09-18T09:28:08-05:00] WARN [router]: Closing conn from untrusted setup node close_err=<nil> remote_pk=02ea1b80411ef28514056466bf11d8a7b7fcdcf4a964ebd874f8bd9fd74e81eda2
+[2026-09-18T09:28:09-05:00] WARN [tp:0328947fced4d4b7beb65a6ef60d579e42d7976168c292cbd6d28b5b8bdc85757f]: Transport peer stopped answering pings; closing half-open transport missed_pongs=3 remote=0328947fced4d4b7beb65a6ef60d579e42d7976168c292cbd6d28b5b8bdc85757f
+[2026-09-18T09:28:09-05:00] DEBUG [tp:0328947fced4d4b7beb65a6ef60d579e42d7976168c292cbd6d28b5b8bdc85757f]: Stopped serving. remaining_tps=45 remote_pk=0328947fced4d4b7beb65a6ef60d579e42d7976168c292cbd6d28b5b8bdc85757f tp_id=2fc76c8c-e5a0-0ea9-8cad-6693ea36e521 tp_index=33
+[2026-09-18T09:28:09-05:00] DEBUG [transport_manager]: Deletion nudge received, debouncing...
+[2026-09-18T09:28:09-05:00] DEBUG readPacket [tp:0328947fced4d4b7beb65a6ef60d579e42d7976168c292cbd6d28b5b8bdc85757f]: Failed to read packet header. error="io: read/write on closed pipe"
+[2026-09-18T09:28:09-05:00] DEBUG [tp:0328947fced4d4b7beb65a6ef60d579e42d7976168c292cbd6d28b5b8bdc85757f]: Transport closed, stopping read loop error="io: read/write on closed pipe" src="read_loop"
+[2026-09-18T09:28:09-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80 error="i/o deadline reached" ports_reserved=115 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:09-05:00] DEBUG [dmsgC]: DialStream failed via cached route, evicting error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:10-05:00] DEBUG [transport_manager]: Deleted 1 unused transport entries
+[2026-09-18T09:28:10-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=023254178cd0249c59ff12525bb45e26b1ed3e571c18556dfe05ceeefacf07c62a type=webrtc
+[2026-09-18T09:28:10-05:00] DEBUG [transport_manager]: Initializing TP with ID a3fcb4b7-3f76-04ac-9a3b-269103eeef15
+[2026-09-18T09:28:10-05:00] DEBUG [tp:023254178cd0249c59ff12525bb45e26b1ed3e571c18556dfe05ceeefacf07c62a]: no prior transport log entry; starting fresh transport=a3fcb4b7-3f76-04ac-9a3b-269103eeef15
+[2026-09-18T09:28:10-05:00] DEBUG [transport_manager]: Dialing transport to 023254178cd0249c59ff12525bb45e26b1ed3e571c18556dfe05ceeefacf07c62a via webrtc
+[2026-09-18T09:28:10-05:00] DEBUG [webrtc]: Dialing WebRTC 023254178cd0249c59ff12525bb45e26b1ed3e571c18556dfe05ceeefacf07c62a (signaling over dmsg:56)
+[2026-09-18T09:28:10-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=0362aae9abdff59026a881fe1991e8262a2047c26842334b23744a942b2f298e0c type=webrtc
+[2026-09-18T09:28:10-05:00] DEBUG [transport_manager]: Initializing TP with ID f2542145-1889-0e5c-b3ce-77be6e52982a
+[2026-09-18T09:28:10-05:00] DEBUG [tp:0362aae9abdff59026a881fe1991e8262a2047c26842334b23744a942b2f298e0c]: no prior transport log entry; starting fresh transport=f2542145-1889-0e5c-b3ce-77be6e52982a
+[2026-09-18T09:28:10-05:00] DEBUG [transport_manager]: Dialing transport to 0362aae9abdff59026a881fe1991e8262a2047c26842334b23744a942b2f298e0c via webrtc
+[2026-09-18T09:28:10-05:00] DEBUG [webrtc]: Dialing WebRTC 0362aae9abdff59026a881fe1991e8262a2047c26842334b23744a942b2f298e0c (signaling over dmsg:56)
+[2026-09-18T09:28:10-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=03d8184d5787787fe5535c2e92b97ea30f70bb7adb85e43e39af15b727c90e4f14 type=webrtc
+[2026-09-18T09:28:10-05:00] DEBUG [transport_manager]: Initializing TP with ID e76a8902-9743-0131-84c8-26a16989ee32
+[2026-09-18T09:28:10-05:00] DEBUG [tp:03d8184d5787787fe5535c2e92b97ea30f70bb7adb85e43e39af15b727c90e4f14]: no prior transport log entry; starting fresh transport=e76a8902-9743-0131-84c8-26a16989ee32
+[2026-09-18T09:28:10-05:00] DEBUG [transport_manager]: Dialing transport to 03d8184d5787787fe5535c2e92b97ea30f70bb7adb85e43e39af15b727c90e4f14 via webrtc
+[2026-09-18T09:28:10-05:00] DEBUG [webrtc]: Dialing WebRTC 03d8184d5787787fe5535c2e92b97ea30f70bb7adb85e43e39af15b727c90e4f14 (signaling over dmsg:56)
+[2026-09-18T09:28:10-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696 type=webrtc
+[2026-09-18T09:28:10-05:00] DEBUG [transport_manager]: Initializing TP with ID b8d499db-5fc2-09cf-8832-c3cefaf2d149
+[2026-09-18T09:28:10-05:00] DEBUG [tp:02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696]: no prior transport log entry; starting fresh transport=b8d499db-5fc2-09cf-8832-c3cefaf2d149
+[2026-09-18T09:28:10-05:00] DEBUG [transport_manager]: Dialing transport to 02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696 via webrtc
+[2026-09-18T09:28:10-05:00] DEBUG [webrtc]: Dialing WebRTC 02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696 (signaling over dmsg:56)
+[2026-09-18T09:28:11-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=0223db09582076aa2144e4de337831a24585afc1598facf0f4352ddf7e42ef1207 type=webrtc
+[2026-09-18T09:28:11-05:00] DEBUG [transport_manager]: Initializing TP with ID f52a8f0a-3e63-07bb-ad48-feadd4f94a5a
+[2026-09-18T09:28:11-05:00] DEBUG [tp:0223db09582076aa2144e4de337831a24585afc1598facf0f4352ddf7e42ef1207]: no prior transport log entry; starting fresh transport=f52a8f0a-3e63-07bb-ad48-feadd4f94a5a
+[2026-09-18T09:28:11-05:00] DEBUG [transport_manager]: Dialing transport to 0223db09582076aa2144e4de337831a24585afc1598facf0f4352ddf7e42ef1207 via webrtc
+[2026-09-18T09:28:11-05:00] DEBUG [webrtc]: Dialing WebRTC 0223db09582076aa2144e4de337831a24585afc1598facf0f4352ddf7e42ef1207 (signaling over dmsg:56)
+[2026-09-18T09:28:11-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=0247a4f5a8b6e46d0b80b4be5f9c1dbd0b3d6da834c14793a7ef9fb3055b64598a type=webrtc
+[2026-09-18T09:28:11-05:00] DEBUG [transport_manager]: Initializing TP with ID becda8c4-d47a-0c12-8b02-5c014c95f530
+[2026-09-18T09:28:11-05:00] DEBUG [tp:0247a4f5a8b6e46d0b80b4be5f9c1dbd0b3d6da834c14793a7ef9fb3055b64598a]: no prior transport log entry; starting fresh transport=becda8c4-d47a-0c12-8b02-5c014c95f530
+[2026-09-18T09:28:11-05:00] DEBUG [transport_manager]: Dialing transport to 0247a4f5a8b6e46d0b80b4be5f9c1dbd0b3d6da834c14793a7ef9fb3055b64598a via webrtc
+[2026-09-18T09:28:11-05:00] DEBUG [webrtc]: Dialing WebRTC 0247a4f5a8b6e46d0b80b4be5f9c1dbd0b3d6da834c14793a7ef9fb3055b64598a (signaling over dmsg:56)
+[2026-09-18T09:28:11-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=02e2354ac4e088ef9ed626c4a00c318f2c0262d7dcac0bb5c8788e3177f71331a8 type=webrtc
+[2026-09-18T09:28:11-05:00] DEBUG [transport_manager]: Initializing TP with ID 245abdc4-f341-023d-bd1b-5234f5c037ba
+[2026-09-18T09:28:11-05:00] DEBUG [tp:02e2354ac4e088ef9ed626c4a00c318f2c0262d7dcac0bb5c8788e3177f71331a8]: no prior transport log entry; starting fresh transport=245abdc4-f341-023d-bd1b-5234f5c037ba
+[2026-09-18T09:28:11-05:00] DEBUG [transport_manager]: Dialing transport to 02e2354ac4e088ef9ed626c4a00c318f2c0262d7dcac0bb5c8788e3177f71331a8 via webrtc
+[2026-09-18T09:28:11-05:00] DEBUG [webrtc]: Dialing WebRTC 02e2354ac4e088ef9ed626c4a00c318f2c0262d7dcac0bb5c8788e3177f71331a8 (signaling over dmsg:56)
+[2026-09-18T09:28:11-05:00] DEBUG [sudph]: Accepted connection from 88.146.116.113:49888
+[2026-09-18T09:28:11-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=03fff8eef4d0abbef9de9f778ceb2db76a8ecadca722a45a94f3072407ccbf3a68 type=webrtc
+[2026-09-18T09:28:11-05:00] DEBUG [transport_manager]: Initializing TP with ID da231d59-6009-02b9-923a-4a36ad00f02c
+[2026-09-18T09:28:11-05:00] DEBUG [tp:03fff8eef4d0abbef9de9f778ceb2db76a8ecadca722a45a94f3072407ccbf3a68]: no prior transport log entry; starting fresh transport=da231d59-6009-02b9-923a-4a36ad00f02c
+[2026-09-18T09:28:11-05:00] DEBUG [transport_manager]: Dialing transport to 03fff8eef4d0abbef9de9f778ceb2db76a8ecadca722a45a94f3072407ccbf3a68 via webrtc
+[2026-09-18T09:28:11-05:00] DEBUG [webrtc]: Dialing WebRTC 03fff8eef4d0abbef9de9f778ceb2db76a8ecadca722a45a94f3072407ccbf3a68 (signaling over dmsg:56)
+[2026-09-18T09:28:13-05:00] DEBUG [rpc_client:0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13]: Accepted.
+[2026-09-18T09:28:13-05:00] DEBUG [rpc_client:0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb]: Accepted.
+[2026-09-18T09:28:14-05:00] DEBUG [transport_manager]: Deregistering 1 transports via CXO transport-list snapshot
+[2026-09-18T09:28:14-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"02f93ec1abfe8d6c9f4411095a1a6cba078b0dcadc9cb0e421b6e4a685cdcc26b4","Addr":"70.121.13.123:36339"}
+[2026-09-18T09:28:14-05:00] DEBUG [sudph]: Remote visor 02f93ec1abfe8d6c9f4411095a1a6cba078b0dcadc9cb0e421b6e4a685cdcc26b4 shares same public IP, resolving LAN addresses
+[2026-09-18T09:28:14-05:00] DEBUG [rpc_client:03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf]: Accepted.
+[2026-09-18T09:28:14-05:00] DEBUG [sudph]: Accepted connection from 192.168.1.141:36339
+[2026-09-18T09:28:14-05:00] DEBUG [sudph]: Sent handshake to 192.168.1.141:36339, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 02f93ec1abfe8d6c9f4411095a1a6cba078b0dcadc9cb0e421b6e4a685cdcc26b4:49400
+[2026-09-18T09:28:14-05:00] DEBUG [transport_manager]: recv transport request: type(sudph) remote(02f93ec1abfe8d6c9f4411095a1a6cba078b0dcadc9cb0e421b6e4a685cdcc26b4)
+[2026-09-18T09:28:14-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-18T09:28:14-05:00] DEBUG [tp:02f93ec1abfe8d6c9f4411095a1a6cba078b0dcadc9cb0e421b6e4a685cdcc26b4]: no prior transport log entry; starting fresh transport=8e3a3db3-136b-07e7-a6b3-da07bbd6873a
+[2026-09-18T09:28:14-05:00] DEBUG [tp:02f93ec1abfe8d6c9f4411095a1a6cba078b0dcadc9cb0e421b6e4a685cdcc26b4]: Performing settlement handshake...
+[2026-09-18T09:28:14-05:00] DEBUG [tp:02f93ec1abfe8d6c9f4411095a1a6cba078b0dcadc9cb0e421b6e4a685cdcc26b4]: Serving. remote_pk=02f93ec1abfe8d6c9f4411095a1a6cba078b0dcadc9cb0e421b6e4a685cdcc26b4 tp_id=8e3a3db3-136b-07e7-a6b3-da07bbd6873a tp_index=46
+[2026-09-18T09:28:14-05:00] DEBUG [tp:02f93ec1abfe8d6c9f4411095a1a6cba078b0dcadc9cb0e421b6e4a685cdcc26b4]: Setting underlying transport...
+[2026-09-18T09:28:14-05:00] DEBUG [tp:02f93ec1abfe8d6c9f4411095a1a6cba078b0dcadc9cb0e421b6e4a685cdcc26b4]: Sent signal to 'mt.transportCh'.
+[2026-09-18T09:28:14-05:00] DEBUG [transport_manager]: accepted tp: type(sudph) remote(02f93ec1abfe8d6c9f4411095a1a6cba078b0dcadc9cb0e421b6e4a685cdcc26b4) tpID(8e3a3db3-136b-07e7-a6b3-da07bbd6873a) new(true)
+[2026-09-18T09:28:14-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-18T09:28:14-05:00] DEBUG [rpc_client:02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd]: Accepted.
+[2026-09-18T09:28:15-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=023254178cd0249c59ff12525bb45e26b1ed3e571c18556dfe05ceeefacf07c62a:56 error="i/o deadline reached" ports_reserved=124 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:15-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:15-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=023254178cd0249c59ff12525bb45e26b1ed3e571c18556dfe05ceeefacf07c62a
+[2026-09-18T09:28:15-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=0362aae9abdff59026a881fe1991e8262a2047c26842334b23744a942b2f298e0c:56 error="i/o deadline reached" ports_reserved=124 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:15-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:15-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=0362aae9abdff59026a881fe1991e8262a2047c26842334b23744a942b2f298e0c
+[2026-09-18T09:28:15-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=03d8184d5787787fe5535c2e92b97ea30f70bb7adb85e43e39af15b727c90e4f14:56 error="i/o deadline reached" ports_reserved=124 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:15-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:15-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=03d8184d5787787fe5535c2e92b97ea30f70bb7adb85e43e39af15b727c90e4f14
+[2026-09-18T09:28:15-05:00] WARN [proc:skysocks-client-ref:10026916997941c695500072a207bdb3]: Exit never answered the SOCKS5 greeting on tunnel 1/1 after 15s (i/o deadline reached); benching it for 10s — 1 exit-open timeout(s) so far
+[2026-09-18T09:28:15-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696:56 error="i/o deadline reached" ports_reserved=124 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:15-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:15-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696
+[2026-09-18T09:28:16-05:00] DEBUG [cli_rpc]: CLI RPC conn #147 accepted from 127.0.0.1:42466 (active: 1)
+[2026-09-18T09:28:16-05:00] DEBUG [cli_rpc]: CLI RPC conn #147 closed after 2ms (active: 0)
+[2026-09-18T09:28:16-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=0223db09582076aa2144e4de337831a24585afc1598facf0f4352ddf7e42ef1207:56 error="i/o deadline reached" ports_reserved=124 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:16-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:16-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=0223db09582076aa2144e4de337831a24585afc1598facf0f4352ddf7e42ef1207
+[2026-09-18T09:28:16-05:00] DEBUG [launcher]: Direct app-dial: handed to listener _=skynet port=46 remote=02f93ec1abfe8d6c9f4411095a1a6cba078b0dcadc9cb0e421b6e4a685cdcc26b4
+[2026-09-18T09:28:16-05:00] DEBUG [rpc_client_sky:02f93ec1abfe8d6c9f4411095a1a6cba078b0dcadc9cb0e421b6e4a685cdcc26b4]: Accepted (skynet).
+[2026-09-18T09:28:16-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=0247a4f5a8b6e46d0b80b4be5f9c1dbd0b3d6da834c14793a7ef9fb3055b64598a:56 error="i/o deadline reached" ports_reserved=125 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:16-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:16-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=0247a4f5a8b6e46d0b80b4be5f9c1dbd0b3d6da834c14793a7ef9fb3055b64598a
+[2026-09-18T09:28:16-05:00] DEBUG [cli_rpc]: CLI RPC conn #148 accepted from 127.0.0.1:42476 (active: 1)
+[2026-09-18T09:28:16-05:00] DEBUG [cli_rpc]: CLI RPC conn #148 closed after 2ms (active: 0)
+[2026-09-18T09:28:16-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=02e2354ac4e088ef9ed626c4a00c318f2c0262d7dcac0bb5c8788e3177f71331a8:56 error="i/o deadline reached" ports_reserved=126 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:16-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:16-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=02e2354ac4e088ef9ed626c4a00c318f2c0262d7dcac0bb5c8788e3177f71331a8
+[2026-09-18T09:28:16-05:00] DEBUG [cli_rpc]: CLI RPC conn #149 accepted from 127.0.0.1:42478 (active: 1)
+[2026-09-18T09:28:16-05:00] DEBUG [cli_rpc]: CLI RPC conn #149 closed after 8ms (active: 0)
+[2026-09-18T09:28:16-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=03fff8eef4d0abbef9de9f778ceb2db76a8ecadca722a45a94f3072407ccbf3a68:56 error="i/o deadline reached" ports_reserved=127 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:16-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:16-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=03fff8eef4d0abbef9de9f778ceb2db76a8ecadca722a45a94f3072407ccbf3a68
+[2026-09-18T09:28:16-05:00] DEBUG [rpc_client:02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7]: Accepted.
+[2026-09-18T09:28:17-05:00] DEBUG [cli_rpc]: CLI RPC conn #150 accepted from 127.0.0.1:42492 (active: 1)
+[2026-09-18T09:28:17-05:00] DEBUG [cli_rpc]: CLI RPC conn #150 closed after 11ms (active: 0)
+[2026-09-18T09:28:17-05:00] DEBUG [cli_rpc]: CLI RPC conn #151 accepted from 127.0.0.1:42502 (active: 1)
+[2026-09-18T09:28:17-05:00] DEBUG [cli_rpc]: CLI RPC conn #151 closed after 12ms (active: 0)
+[2026-09-18T09:28:17-05:00] DEBUG [cli_rpc]: CLI RPC conn #152 accepted from 127.0.0.1:42514 (active: 1)
+[2026-09-18T09:28:17-05:00] DEBUG [cli_rpc]: CLI RPC conn #152 closed after 13ms (active: 0)
+[2026-09-18T09:28:18-05:00] DEBUG [cli_rpc]: CLI RPC conn #153 accepted from 127.0.0.1:42526 (active: 1)
+[2026-09-18T09:28:18-05:00] DEBUG [cli_rpc]: CLI RPC conn #153 closed after 10ms (active: 0)
+[2026-09-18T09:28:18-05:00] DEBUG [cli_rpc]: CLI RPC conn #154 accepted from 127.0.0.1:42542 (active: 1)
+[2026-09-18T09:28:18-05:00] DEBUG [cli_rpc]: CLI RPC conn #154 closed after 11ms (active: 0)
+[2026-09-18T09:28:19-05:00] DEBUG [cli_rpc]: CLI RPC conn #155 accepted from 127.0.0.1:42552 (active: 1)
+[2026-09-18T09:28:19-05:00] DEBUG [cli_rpc]: CLI RPC stats: active=1, total=155, errors=0, peak=2
+[2026-09-18T09:28:19-05:00] DEBUG [cli_rpc]: CLI RPC conn #155 closed after 17ms (active: 0)
+[2026-09-18T09:28:19-05:00] DEBUG [cli_rpc]: CLI RPC conn #156 accepted from 127.0.0.1:42566 (active: 1)
+[2026-09-18T09:28:19-05:00] DEBUG [cli_rpc]: CLI RPC conn #156 closed after 11ms (active: 0)
+[2026-09-18T09:28:19-05:00] DEBUG [cli_rpc]: CLI RPC conn #157 accepted from 127.0.0.1:42568 (active: 1)
+[2026-09-18T09:28:19-05:00] DEBUG [cli_rpc]: CLI RPC conn #157 closed after 11ms (active: 0)
+[2026-09-18T09:28:19-05:00] DEBUG [proc:skysocks-client:7192a350251c48e2bab2cd3f05308945]: Accepted skysocks client
+[2026-09-18T09:28:19-05:00] DEBUG [proc:skysocks-client:7192a350251c48e2bab2cd3f05308945]: Opened session skysocks client
+[2026-09-18T09:28:19-05:00] DEBUG [transport_manager]: Publishing 46 transports to TPD via CXO transport-list snapshot
+[2026-09-18T09:28:20-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=128 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:20-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:20-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=129 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:20-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:20-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=130 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:20-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:20-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=131 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:20-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:20-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7","Addr":"172.104.166.8:30084"}
+[2026-09-18T09:28:21-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=132 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:21-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:21-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=133 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:21-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:21-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=134 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:21-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:21-05:00] WARN [sudph]: failed to accept incoming connection: handshake failed: timeout
+[2026-09-18T09:28:21-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=135 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:21-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:23-05:00] INFO [hypervisor]: Pushed LAN DMSG server info to visor visor=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+[2026-09-18T09:28:23-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7","Addr":"172.104.166.8:30084"}
+[2026-09-18T09:28:23-05:00] INFO [hypervisor]: Pushed LAN DMSG server info to visor visor=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb
+[2026-09-18T09:28:23-05:00] DEBUG [sudph]: Accepted connection from 172.104.166.8:30084
+[2026-09-18T09:28:24-05:00] DEBUG [sudph]: Sent handshake to 172.104.166.8:30084, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7:58738
+[2026-09-18T09:28:24-05:00] DEBUG [transport_manager]: recv transport request: type(sudph) remote(02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7)
+[2026-09-18T09:28:24-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-18T09:28:24-05:00] DEBUG [tp:02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7]: no prior transport log entry; starting fresh transport=4d8ec1f7-7d42-0f36-9694-20ced01defbe
+[2026-09-18T09:28:24-05:00] DEBUG [tp:02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7]: Performing settlement handshake...
+[2026-09-18T09:28:24-05:00] DEBUG [tp:02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7]: Serving. remote_pk=02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7 tp_id=4d8ec1f7-7d42-0f36-9694-20ced01defbe tp_index=47
+[2026-09-18T09:28:24-05:00] DEBUG [router]: Saved routing rule: keyRtID=33 type=IntermediaryForward (total rules: 23)
+[2026-09-18T09:28:24-05:00] DEBUG [router]: Save new Routing Rule with ID 33 INTER(keyRtID:33, nxtRtID:1, nxtTpID:cb4f36d8-cd96-0d68-bd33-60bb01fc6f04)
+[2026-09-18T09:28:24-05:00] DEBUG [router]: Saved routing rule: keyRtID=34 type=IntermediaryForward (total rules: 24)
+[2026-09-18T09:28:24-05:00] DEBUG [router]: Save new Routing Rule with ID 34 INTER(keyRtID:34, nxtRtID:11, nxtTpID:dc8b7f76-293a-0966-9a95-05f6de08abe4)
+[2026-09-18T09:28:24-05:00] DEBUG [tp:02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7]: Setting underlying transport...
+[2026-09-18T09:28:24-05:00] DEBUG [tp:02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7]: Sent signal to 'mt.transportCh'.
+[2026-09-18T09:28:24-05:00] DEBUG [transport_manager]: accepted tp: type(sudph) remote(02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7) tpID(4d8ec1f7-7d42-0f36-9694-20ced01defbe) new(true)
+[2026-09-18T09:28:24-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-18T09:28:24-05:00] INFO [hypervisor]: Pushed LAN DMSG server info to visor visor=03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf
+[2026-09-18T09:28:25-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=136 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:25-05:00] DEBUG [dmsgC]: DialStream failed via cached route, evicting error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:25-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=138 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:25-05:00] DEBUG [dmsgC]: DialStream failed via cached route, evicting error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:25-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=140 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:25-05:00] DEBUG [dmsgC]: DialStream failed via cached route, evicting error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:25-05:00] INFO [hypervisor]: Pushed LAN DMSG server info to visor visor=02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd
+[2026-09-18T09:28:25-05:00] DEBUG [webrtc]: WebRTC signaling stream to 0362aae9abdff59026a881fe1991e8262a2047c26842334b23744a942b2f298e0c established; starting offerer
+[2026-09-18T09:28:25-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=142 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:25-05:00] DEBUG [dmsgC]: DialStream failed via cached route, evicting error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:26-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=144 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:26-05:00] DEBUG [dmsgC]: DialStream failed via cached route, evicting error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:26-05:00] DEBUG [webrtc]: WebRTC signaling stream to 02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696 established; starting offerer
+[2026-09-18T09:28:26-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=145 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:26-05:00] DEBUG [dmsgC]: DialStream failed via cached route, evicting error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:26-05:00] DEBUG [webrtc]: WebRTC signaling stream to 03d8184d5787787fe5535c2e92b97ea30f70bb7adb85e43e39af15b727c90e4f14 established; starting offerer
+[2026-09-18T09:28:26-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=146 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:26-05:00] DEBUG [dmsgC]: DialStream failed via cached route, evicting error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:26-05:00] DEBUG [webrtc]: WebRTC signaling stream to 0223db09582076aa2144e4de337831a24585afc1598facf0f4352ddf7e42ef1207 established; starting offerer
+[2026-09-18T09:28:26-05:00] DEBUG [webrtc]: WebRTC signaling stream to 0247a4f5a8b6e46d0b80b4be5f9c1dbd0b3d6da834c14793a7ef9fb3055b64598a established; starting offerer
+[2026-09-18T09:28:26-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80 error="i/o deadline reached" ports_reserved=147 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:26-05:00] DEBUG [dmsgC]: DialStream failed via cached route, evicting error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:27-05:00] DEBUG [webrtc]: WebRTC signaling stream to 03fff8eef4d0abbef9de9f778ceb2db76a8ecadca722a45a94f3072407ccbf3a68 established; starting offerer
+[2026-09-18T09:28:27-05:00] DEBUG [webrtc]: Performing handshake with webrtc-datachannel
+[2026-09-18T09:28:27-05:00] DEBUG [webrtc]: Sent handshake to webrtc-datachannel, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49153, remote addr 0362aae9abdff59026a881fe1991e8262a2047c26842334b23744a942b2f298e0c:45
+[2026-09-18T09:28:27-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"03c92f7757d082e34d7b2765c7f82181ccbd3d9dfa2feb99482e7ea2efdb5b4003","Addr":"106.43.111.171:59210"}
+[2026-09-18T09:28:27-05:00] DEBUG [tp:0362aae9abdff59026a881fe1991e8262a2047c26842334b23744a942b2f298e0c]: Sent signal to 'mt.transportCh'.
+[2026-09-18T09:28:27-05:00] DEBUG [transport_manager]: saved transport: remote(0362aae9abdff59026a881fe1991e8262a2047c26842334b23744a942b2f298e0c) type(webrtc) tpID(f2542145-1889-0e5c-b3ce-77be6e52982a)
+[2026-09-18T09:28:27-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=0362aae9abdff59026a881fe1991e8262a2047c26842334b23744a942b2f298e0c type=webrtc
+[2026-09-18T09:28:27-05:00] DEBUG [tp:0362aae9abdff59026a881fe1991e8262a2047c26842334b23744a942b2f298e0c]: Serving. remote_pk=0362aae9abdff59026a881fe1991e8262a2047c26842334b23744a942b2f298e0c tp_id=f2542145-1889-0e5c-b3ce-77be6e52982a tp_index=48
+[2026-09-18T09:28:27-05:00] DEBUG [webrtc]: Performing handshake with webrtc-datachannel
+[2026-09-18T09:28:28-05:00] DEBUG [webrtc]: Sent handshake to webrtc-datachannel, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49154, remote addr 02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696:45
+[2026-09-18T09:28:28-05:00] DEBUG [tp:02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696]: Sent signal to 'mt.transportCh'.
+[2026-09-18T09:28:28-05:00] DEBUG [transport_manager]: saved transport: remote(02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696) type(webrtc) tpID(b8d499db-5fc2-09cf-8832-c3cefaf2d149)
+[2026-09-18T09:28:28-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696 type=webrtc
+[2026-09-18T09:28:28-05:00] DEBUG [tp:02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696]: Serving. remote_pk=02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696 tp_id=b8d499db-5fc2-09cf-8832-c3cefaf2d149 tp_index=49
+[2026-09-18T09:28:28-05:00] DEBUG [sudph]: Accepted connection from 106.43.111.171:52627
+[2026-09-18T09:28:29-05:00] DEBUG [webrtc]: Performing handshake with webrtc-datachannel
+[2026-09-18T09:28:29-05:00] DEBUG [webrtc]: Performing handshake with webrtc-datachannel
+[2026-09-18T09:28:29-05:00] DEBUG [webrtc]: WebRTC signaling stream to 02e2354ac4e088ef9ed626c4a00c318f2c0262d7dcac0bb5c8788e3177f71331a8 established; starting offerer
+[2026-09-18T09:28:29-05:00] DEBUG [webrtc]: Sent handshake to webrtc-datachannel, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49155, remote addr 0247a4f5a8b6e46d0b80b4be5f9c1dbd0b3d6da834c14793a7ef9fb3055b64598a:45
+[2026-09-18T09:28:29-05:00] DEBUG [transport_manager]: Publishing 49 transports to TPD via CXO transport-list snapshot
+[2026-09-18T09:28:30-05:00] DEBUG [webrtc]: Sent handshake to webrtc-datachannel, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49156, remote addr 03d8184d5787787fe5535c2e92b97ea30f70bb7adb85e43e39af15b727c90e4f14:45
+[2026-09-18T09:28:30-05:00] DEBUG [tp:0247a4f5a8b6e46d0b80b4be5f9c1dbd0b3d6da834c14793a7ef9fb3055b64598a]: Sent signal to 'mt.transportCh'.
+[2026-09-18T09:28:30-05:00] DEBUG [transport_manager]: saved transport: remote(0247a4f5a8b6e46d0b80b4be5f9c1dbd0b3d6da834c14793a7ef9fb3055b64598a) type(webrtc) tpID(becda8c4-d47a-0c12-8b02-5c014c95f530)
+[2026-09-18T09:28:30-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=0247a4f5a8b6e46d0b80b4be5f9c1dbd0b3d6da834c14793a7ef9fb3055b64598a type=webrtc
+[2026-09-18T09:28:30-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-18T09:28:30-05:00] DEBUG [tp:0247a4f5a8b6e46d0b80b4be5f9c1dbd0b3d6da834c14793a7ef9fb3055b64598a]: Serving. remote_pk=0247a4f5a8b6e46d0b80b4be5f9c1dbd0b3d6da834c14793a7ef9fb3055b64598a tp_id=becda8c4-d47a-0c12-8b02-5c014c95f530 tp_index=50
+[2026-09-18T09:28:30-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=023254178cd0249c59ff12525bb45e26b1ed3e571c18556dfe05ceeefacf07c62a:56 error="i/o deadline reached" ports_reserved=144 session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+[2026-09-18T09:28:30-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+[2026-09-18T09:28:30-05:00] DEBUG [webrtc]: Performing handshake with webrtc-datachannel
+[2026-09-18T09:28:30-05:00] DEBUG [tp:03d8184d5787787fe5535c2e92b97ea30f70bb7adb85e43e39af15b727c90e4f14]: Sent signal to 'mt.transportCh'.
+[2026-09-18T09:28:30-05:00] DEBUG [transport_manager]: saved transport: remote(03d8184d5787787fe5535c2e92b97ea30f70bb7adb85e43e39af15b727c90e4f14) type(webrtc) tpID(e76a8902-9743-0131-84c8-26a16989ee32)
+[2026-09-18T09:28:30-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=03d8184d5787787fe5535c2e92b97ea30f70bb7adb85e43e39af15b727c90e4f14 type=webrtc
+[2026-09-18T09:28:30-05:00] DEBUG [tp:03d8184d5787787fe5535c2e92b97ea30f70bb7adb85e43e39af15b727c90e4f14]: Serving. remote_pk=03d8184d5787787fe5535c2e92b97ea30f70bb7adb85e43e39af15b727c90e4f14 tp_id=e76a8902-9743-0131-84c8-26a16989ee32 tp_index=51
+[2026-09-18T09:28:30-05:00] DEBUG [dmsgC]: reaping idle dmsg session (streamless, over min_sessions) remote_pk=02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7
+[2026-09-18T09:28:30-05:00] DEBUG [dmsgC]: Session shut down, stopping accept loop. error="session shutdown" session=02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7
+[2026-09-18T09:28:30-05:00] DEBUG [dmsgC]: reaping idle dmsg session (streamless, over min_sessions) remote_pk=03804a4fdf5b3ac1ae59aede3621cf746b5d949a69ccfec8495e87edca946c22fa
+[2026-09-18T09:28:30-05:00] DEBUG [dmsgC]: Session shut down, stopping accept loop. error="session shutdown" session=03804a4fdf5b3ac1ae59aede3621cf746b5d949a69ccfec8495e87edca946c22fa
+[2026-09-18T09:28:30-05:00] DEBUG [lan_dmsg_server]: Stopping session... error=EOF session=0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c
+[2026-09-18T09:28:30-05:00] DEBUG [lan_dmsg_server]: Stopped session. error=<nil> remote_pk=0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c remote_tcp=192.168.1.117:53908
+[2026-09-18T09:28:31-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"03c92f7757d082e34d7b2765c7f82181ccbd3d9dfa2feb99482e7ea2efdb5b4003","Addr":"106.43.111.171:59210"}
+[2026-09-18T09:28:31-05:00] DEBUG [sudph]: Accepted connection from 82.158.130.98:44960
+[2026-09-18T09:28:31-05:00] WARN [tp:0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13]: Dropping packet: readCh full for 30s (application not reading) src="read_loop"
+[2026-09-18T09:28:31-05:00] WARN [tp:0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb]: Dropping packet: readCh full for 30s (application not reading) src="read_loop"
+[2026-09-18T09:28:31-05:00] WARN [tp:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1]: Dropping packet: readCh full for 30s (application not reading) src="read_loop"
+[2026-09-18T09:28:31-05:00] WARN [tp:03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf]: Dropping packet: readCh full for 30s (application not reading) src="read_loop"
+[2026-09-18T09:28:31-05:00] DEBUG [sudph]: Accepted connection from 106.43.111.171:59210
+[2026-09-18T09:28:31-05:00] WARN [tp:02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7]: Dropping packet: readCh full for 30s (application not reading) src="read_loop"
+[2026-09-18T09:28:31-05:00] DEBUG [sudph]: Sent handshake to 106.43.111.171:59210, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 03c92f7757d082e34d7b2765c7f82181ccbd3d9dfa2feb99482e7ea2efdb5b4003:60213
+[2026-09-18T09:28:31-05:00] WARN [tp:02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd]: Dropping packet: readCh full for 30s (application not reading) src="read_loop"
+[2026-09-18T09:28:31-05:00] WARN [tp:02aa4893366f4629a91f5f763061feb8e204e4835001c90f4e3393dabbe90e42e4]: Dropping packet: readCh full for 30s (application not reading) src="read_loop"
+[2026-09-18T09:28:31-05:00] DEBUG [lan_dmsg_server]: Updating entry. available_sessions=100
+[2026-09-18T09:28:31-05:00] DEBUG [dmsgC]: Updating entry. entry=	version: 0.0.1
+	sequence: 87950
+	registered at: 1789741544422502719
+	static public key: 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c
+	signature: d67592a65cf6ae119a51d71378bd3383bb1498ba36662b0945e893b487f3ba061adb14aa045f343ea75c98197295deb4fea9459ca53a6ab0e9d3118440e2523d00
+	entry is registered as client. Related info: 
+		delegated servers: 
+			0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7
+			0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb
+			03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf
+			0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+			0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7
+
+
+[2026-09-18T09:28:31-05:00] WARN [tp:0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7]: Dropping packet: readCh full for 30s (application not reading) src="read_loop"
+[2026-09-18T09:28:31-05:00] DEBUG [webrtc]: Sent handshake to webrtc-datachannel, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49157, remote addr 0223db09582076aa2144e4de337831a24585afc1598facf0f4352ddf7e42ef1207:45
+[2026-09-18T09:28:31-05:00] DEBUG [transport_manager]: recv transport request: type(sudph) remote(03c92f7757d082e34d7b2765c7f82181ccbd3d9dfa2feb99482e7ea2efdb5b4003)
+[2026-09-18T09:28:31-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-18T09:28:31-05:00] DEBUG [tp:03c92f7757d082e34d7b2765c7f82181ccbd3d9dfa2feb99482e7ea2efdb5b4003]: no prior transport log entry; starting fresh transport=f892e231-1828-0464-aa5d-1395399d92f5
+[2026-09-18T09:28:31-05:00] DEBUG [tp:03c92f7757d082e34d7b2765c7f82181ccbd3d9dfa2feb99482e7ea2efdb5b4003]: Performing settlement handshake...
+[2026-09-18T09:28:31-05:00] DEBUG [tp:03c92f7757d082e34d7b2765c7f82181ccbd3d9dfa2feb99482e7ea2efdb5b4003]: Serving. remote_pk=03c92f7757d082e34d7b2765c7f82181ccbd3d9dfa2feb99482e7ea2efdb5b4003 tp_id=f892e231-1828-0464-aa5d-1395399d92f5 tp_index=52
+[2026-09-18T09:28:32-05:00] DEBUG [tp:03c92f7757d082e34d7b2765c7f82181ccbd3d9dfa2feb99482e7ea2efdb5b4003]: Setting underlying transport...
+[2026-09-18T09:28:32-05:00] DEBUG [tp:03c92f7757d082e34d7b2765c7f82181ccbd3d9dfa2feb99482e7ea2efdb5b4003]: Sent signal to 'mt.transportCh'.
+[2026-09-18T09:28:32-05:00] DEBUG [transport_manager]: accepted tp: type(sudph) remote(03c92f7757d082e34d7b2765c7f82181ccbd3d9dfa2feb99482e7ea2efdb5b4003) tpID(f892e231-1828-0464-aa5d-1395399d92f5) new(true)
+[2026-09-18T09:28:32-05:00] DEBUG [tp:0223db09582076aa2144e4de337831a24585afc1598facf0f4352ddf7e42ef1207]: Sent signal to 'mt.transportCh'.
+[2026-09-18T09:28:32-05:00] DEBUG [transport_manager]: saved transport: remote(0223db09582076aa2144e4de337831a24585afc1598facf0f4352ddf7e42ef1207) type(webrtc) tpID(f52a8f0a-3e63-07bb-ad48-feadd4f94a5a)
+[2026-09-18T09:28:32-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=0223db09582076aa2144e4de337831a24585afc1598facf0f4352ddf7e42ef1207 type=webrtc
+[2026-09-18T09:28:32-05:00] DEBUG [tp:0223db09582076aa2144e4de337831a24585afc1598facf0f4352ddf7e42ef1207]: Serving. remote_pk=0223db09582076aa2144e4de337831a24585afc1598facf0f4352ddf7e42ef1207 tp_id=f52a8f0a-3e63-07bb-ad48-feadd4f94a5a tp_index=53
+[2026-09-18T09:28:32-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80 error="i/o deadline reached" ports_reserved=135 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:32-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:33-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=0223c4b4a559a80f3eee61400a20142e834c89764e5ee67d25fcc76d150f980407 type=webrtc
+[2026-09-18T09:28:33-05:00] DEBUG [transport_manager]: Initializing TP with ID b5bac0ef-d48e-0808-b423-ae61a510261a
+[2026-09-18T09:28:33-05:00] DEBUG [tp:0223c4b4a559a80f3eee61400a20142e834c89764e5ee67d25fcc76d150f980407]: no prior transport log entry; starting fresh transport=b5bac0ef-d48e-0808-b423-ae61a510261a
+[2026-09-18T09:28:33-05:00] DEBUG [transport_manager]: Dialing transport to 0223c4b4a559a80f3eee61400a20142e834c89764e5ee67d25fcc76d150f980407 via webrtc
+[2026-09-18T09:28:33-05:00] DEBUG [webrtc]: Dialing WebRTC 0223c4b4a559a80f3eee61400a20142e834c89764e5ee67d25fcc76d150f980407 (signaling over dmsg:56)
+[2026-09-18T09:28:33-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=02750d66ab7a076431fae7337dda042e0148387968bc4f6a6c84f4ccb1e790ba41 type=webrtc
+[2026-09-18T09:28:33-05:00] DEBUG [transport_manager]: Initializing TP with ID dc3684a2-2f12-042e-8745-b34f281123ce
+[2026-09-18T09:28:33-05:00] DEBUG [tp:02750d66ab7a076431fae7337dda042e0148387968bc4f6a6c84f4ccb1e790ba41]: no prior transport log entry; starting fresh transport=dc3684a2-2f12-042e-8745-b34f281123ce
+[2026-09-18T09:28:33-05:00] DEBUG [transport_manager]: Dialing transport to 02750d66ab7a076431fae7337dda042e0148387968bc4f6a6c84f4ccb1e790ba41 via webrtc
+[2026-09-18T09:28:33-05:00] DEBUG [webrtc]: Dialing WebRTC 02750d66ab7a076431fae7337dda042e0148387968bc4f6a6c84f4ccb1e790ba41 (signaling over dmsg:56)
+[2026-09-18T09:28:33-05:00] WARN [tp:038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5]: Dropping packet: readCh full for 30s (application not reading) src="read_loop"
+[2026-09-18T09:28:33-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=0358ee2dd4d5f4049ea7017f67f41d3ff9b7524609d9f4b9508b848a18932775a0 type=webrtc
+[2026-09-18T09:28:33-05:00] DEBUG [transport_manager]: Initializing TP with ID f7fec150-cf0e-001f-ae56-af63b88f0f00
+[2026-09-18T09:28:33-05:00] DEBUG [tp:0358ee2dd4d5f4049ea7017f67f41d3ff9b7524609d9f4b9508b848a18932775a0]: no prior transport log entry; starting fresh transport=f7fec150-cf0e-001f-ae56-af63b88f0f00
+[2026-09-18T09:28:33-05:00] DEBUG [transport_manager]: Dialing transport to 0358ee2dd4d5f4049ea7017f67f41d3ff9b7524609d9f4b9508b848a18932775a0 via webrtc
+[2026-09-18T09:28:33-05:00] DEBUG [webrtc]: Dialing WebRTC 0358ee2dd4d5f4049ea7017f67f41d3ff9b7524609d9f4b9508b848a18932775a0 (signaling over dmsg:56)
+[2026-09-18T09:28:33-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=02cd0b0508b685332bbfede328c4cc80bff5a9b9e0cb28eae28cba7826166bf8cd type=webrtc
+[2026-09-18T09:28:33-05:00] DEBUG [transport_manager]: Initializing TP with ID 4a536862-5031-0c70-8410-6f73c230d614
+[2026-09-18T09:28:33-05:00] DEBUG [tp:02cd0b0508b685332bbfede328c4cc80bff5a9b9e0cb28eae28cba7826166bf8cd]: no prior transport log entry; starting fresh transport=4a536862-5031-0c70-8410-6f73c230d614
+[2026-09-18T09:28:33-05:00] DEBUG [transport_manager]: Dialing transport to 02cd0b0508b685332bbfede328c4cc80bff5a9b9e0cb28eae28cba7826166bf8cd via webrtc
+[2026-09-18T09:28:33-05:00] DEBUG [webrtc]: Dialing WebRTC 02cd0b0508b685332bbfede328c4cc80bff5a9b9e0cb28eae28cba7826166bf8cd (signaling over dmsg:56)
+[2026-09-18T09:28:34-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=0338f9da42471a9acad15a3cd67f956faccb5a8ad7747690a0e52e484916c6be1c type=webrtc
+[2026-09-18T09:28:34-05:00] DEBUG [transport_manager]: Initializing TP with ID 20f653f1-48e8-0515-8daf-445c33609983
+[2026-09-18T09:28:34-05:00] DEBUG [tp:0338f9da42471a9acad15a3cd67f956faccb5a8ad7747690a0e52e484916c6be1c]: no prior transport log entry; starting fresh transport=20f653f1-48e8-0515-8daf-445c33609983
+[2026-09-18T09:28:34-05:00] DEBUG [transport_manager]: Dialing transport to 0338f9da42471a9acad15a3cd67f956faccb5a8ad7747690a0e52e484916c6be1c via webrtc
+[2026-09-18T09:28:34-05:00] DEBUG [webrtc]: Dialing WebRTC 0338f9da42471a9acad15a3cd67f956faccb5a8ad7747690a0e52e484916c6be1c (signaling over dmsg:56)
+[2026-09-18T09:28:34-05:00] DEBUG [cli_rpc]: CLI RPC conn #158 accepted from 127.0.0.1:57248 (active: 1)
+[2026-09-18T09:28:34-05:00] DEBUG [cli_rpc]: CLI RPC conn #158 closed after 11ms (active: 0)
+[2026-09-18T09:28:34-05:00] WARN [proc:skysocks-client:7192a350251c48e2bab2cd3f05308945]: Exit never answered the SOCKS5 greeting on tunnel 1/8 after 15s (i/o deadline reached); benching it for 10s — 1 exit-open timeout(s) so far
+[2026-09-18T09:28:35-05:00] DEBUG [transport_manager]: Publishing 53 transports to TPD via CXO transport-list snapshot
+[2026-09-18T09:28:35-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=023254178cd0249c59ff12525bb45e26b1ed3e571c18556dfe05ceeefacf07c62a:56 error="i/o deadline reached" ports_reserved=141 session=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb
+[2026-09-18T09:28:35-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb
+[2026-09-18T09:28:35-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="session shutdown" server=02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7
+[2026-09-18T09:28:35-05:00] DEBUG [cli_rpc]: CLI RPC conn #159 accepted from 127.0.0.1:57256 (active: 1)
+[2026-09-18T09:28:35-05:00] DEBUG [cli_rpc]: CLI RPC conn #159 closed after 13ms (active: 0)
+[2026-09-18T09:28:35-05:00] DEBUG [cli_rpc]: CLI RPC conn #160 accepted from 127.0.0.1:57258 (active: 1)
+[2026-09-18T09:28:35-05:00] DEBUG [cli_rpc]: CLI RPC conn #160 closed after 10ms (active: 0)
+[2026-09-18T09:28:35-05:00] DEBUG [cli_rpc]: CLI RPC conn #161 accepted from 127.0.0.1:57272 (active: 1)
+[2026-09-18T09:28:35-05:00] DEBUG [cli_rpc]: CLI RPC conn #161 closed after 9ms (active: 0)
+[2026-09-18T09:28:36-05:00] DEBUG [cli_rpc]: CLI RPC conn #162 accepted from 127.0.0.1:57288 (active: 1)
+[2026-09-18T09:28:36-05:00] DEBUG [cli_rpc]: CLI RPC conn #162 closed after 11ms (active: 0)
+[2026-09-18T09:28:36-05:00] DEBUG [cli_rpc]: CLI RPC conn #163 accepted from 127.0.0.1:57294 (active: 1)
+[2026-09-18T09:28:36-05:00] DEBUG [cli_rpc]: CLI RPC conn #163 closed after 10ms (active: 0)
+[2026-09-18T09:28:36-05:00] DEBUG [cli_rpc]: CLI RPC conn #164 accepted from 127.0.0.1:57306 (active: 1)
+[2026-09-18T09:28:36-05:00] DEBUG [cli_rpc]: CLI RPC conn #164 closed after 11ms (active: 0)
+[2026-09-18T09:28:36-05:00] DEBUG [rpc_client:02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7]: RPC call timed out; keeping conn (not yet at close threshold). consecutive_timeouts=1
+[2026-09-18T09:28:36-05:00] DEBUG [rpc_client:02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7]: RPC call timed out; keeping conn (not yet at close threshold). consecutive_timeouts=2
+[2026-09-18T09:28:36-05:00] DEBUG [hypervisor]: Failed to push LAN DMSG server info to visor error="context deadline exceeded"
+[2026-09-18T09:28:37-05:00] DEBUG [cli_rpc]: CLI RPC conn #165 accepted from 127.0.0.1:57316 (active: 1)
+[2026-09-18T09:28:37-05:00] DEBUG [cli_rpc]: CLI RPC conn #165 closed after 10ms (active: 0)
+[2026-09-18T09:28:37-05:00] DEBUG [cli_rpc]: CLI RPC conn #166 accepted from 127.0.0.1:57322 (active: 1)
+[2026-09-18T09:28:37-05:00] DEBUG [cli_rpc]: CLI RPC conn #166 closed after 10ms (active: 0)
+[2026-09-18T09:28:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #167 accepted from 127.0.0.1:57334 (active: 1)
+[2026-09-18T09:28:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #167 closed after 2ms (active: 0)
+[2026-09-18T09:28:38-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=0223c4b4a559a80f3eee61400a20142e834c89764e5ee67d25fcc76d150f980407:56 error="i/o deadline reached" ports_reserved=142 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:38-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:38-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=0223c4b4a559a80f3eee61400a20142e834c89764e5ee67d25fcc76d150f980407
+[2026-09-18T09:28:38-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=02750d66ab7a076431fae7337dda042e0148387968bc4f6a6c84f4ccb1e790ba41:56 error="i/o deadline reached" ports_reserved=143 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:38-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:38-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=02750d66ab7a076431fae7337dda042e0148387968bc4f6a6c84f4ccb1e790ba41
+[2026-09-18T09:28:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #168 accepted from 127.0.0.1:57344 (active: 1)
+[2026-09-18T09:28:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #168 closed after 14ms (active: 0)
+[2026-09-18T09:28:38-05:00] WARN [sudph]: failed to accept incoming connection: handshake failed: timeout
+[2026-09-18T09:28:38-05:00] DEBUG [dmsgC]: Discovery lookup failed, trying connected servers error="dmsg error 103 - client entry in discovery has no delegated servers" remote_pk=02750d66ab7a076431fae7337dda042e0148387968bc4f6a6c84f4ccb1e790ba41
+[2026-09-18T09:28:38-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=0358ee2dd4d5f4049ea7017f67f41d3ff9b7524609d9f4b9508b848a18932775a0:56 error="i/o deadline reached" ports_reserved=144 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:38-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:38-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=0358ee2dd4d5f4049ea7017f67f41d3ff9b7524609d9f4b9508b848a18932775a0
+[2026-09-18T09:28:38-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=02cd0b0508b685332bbfede328c4cc80bff5a9b9e0cb28eae28cba7826166bf8cd:56 error="i/o deadline reached" ports_reserved=145 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:38-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:38-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=02cd0b0508b685332bbfede328c4cc80bff5a9b9e0cb28eae28cba7826166bf8cd
+[2026-09-18T09:28:39-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=02750d66ab7a076431fae7337dda042e0148387968bc4f6a6c84f4ccb1e790ba41:56 error=EOF ports_reserved=146 session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7
+[2026-09-18T09:28:39-05:00] DEBUG [dmsgC]: DialStream failed via connected server, trying next error=EOF server=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7
+[2026-09-18T09:28:39-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=0338f9da42471a9acad15a3cd67f956faccb5a8ad7747690a0e52e484916c6be1c:56 error="i/o deadline reached" ports_reserved=147 session=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:39-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error="i/o deadline reached" server=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T09:28:39-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=0338f9da42471a9acad15a3cd67f956faccb5a8ad7747690a0e52e484916c6be1c
+[2026-09-18T09:28:39-05:00] DEBUG [webrtc]: WebRTC signaling stream to 0358ee2dd4d5f4049ea7017f67f41d3ff9b7524609d9f4b9508b848a18932775a0 established; starting offerer
+[2026-09-18T09:28:39-05:00] DEBUG [cli_rpc]: CLI RPC conn #169 accepted from 127.0.0.1:57358 (active: 1)
+[2026-09-18T09:28:39-05:00] DEBUG [cli_rpc]: CLI RPC conn #169 closed after 20ms (active: 0)

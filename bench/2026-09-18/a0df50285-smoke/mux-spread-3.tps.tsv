@@ -1,0 +1,5 @@
+# transports mux-spread-3 was measured over; first_seen_row 0 = held at set start
+# tp	type	remote_pk	first_seen_row
+b414796d-14fc-080e-9ce6-a7162e3e562b	stcpr	022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1	0
+c2ee64dc-2e0e-098e-b60d-27bc36a5d24d	stcpr	02ea1b80411ef28514056466bf11d8a7b7fcdcf4a964ebd874f8bd9fd74e81eda2	0
+57787a56-5159-011c-a8fa-e0864daf8710	stcpr	039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1	0

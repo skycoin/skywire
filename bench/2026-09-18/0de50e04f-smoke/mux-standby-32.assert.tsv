@@ -1,0 +1,5 @@
+# assert	value	want	verdict
+pool_size	32	> 2	PASS
+pool_settled	quiet 20s	quiet	INFO
+hashes_after_cut	5/5	5/5	PASS
+cut_target	none — no group passed the fences	one active tunnel	FAIL
