@@ -107,15 +107,29 @@ type warmRoutePool struct {
 	stored uint64
 }
 
+// newWarmRoutePool builds the pool. ttl <= 0 means "follow the live
+// WarmPlanTTL knob" — which is what the router passes, so
+// `route settings dial --warm-plan-ttl` reaches a pool already holding plans.
+// A positive ttl PINS this pool to that value (tests do this, so a retune
+// elsewhere cannot make them flaky).
 func newWarmRoutePool(ttl time.Duration) *warmRoutePool {
-	if ttl <= 0 {
-		ttl = defaultWarmPlanTTL
+	if ttl < 0 {
+		ttl = 0
 	}
 	return &warmRoutePool{
 		ttl:    ttl,
 		now:    time.Now,
 		byExit: make(map[planKey]*planBucket),
 	}
+}
+
+// planTTL is the staleness bound in force for this pool: its pinned value, or
+// the live knob when it was built without one.
+func (p *warmRoutePool) planTTL() time.Duration {
+	if p.ttl > 0 {
+		return p.ttl
+	}
+	return WarmPlanTTL()
 }
 
 // planIntermediates extracts intermediate visor PKs from a forward hop
@@ -162,7 +176,7 @@ func (p *warmRoutePool) put(dst cipher.PubKey, minHops uint16, fwd, rev []routin
 	defer p.mu.Unlock()
 	b := p.byExit[key]
 	now := p.now()
-	if b == nil || now.Sub(b.filled) > p.ttl {
+	if b == nil || now.Sub(b.filled) > p.planTTL() {
 		// Fresh bucket (new exit, or the old one expired): start clean so a
 		// stale plan can't outlive its TTL by being appended alongside fresh
 		// ones under the same filled stamp.
@@ -176,7 +190,7 @@ func (p *warmRoutePool) put(dst cipher.PubKey, minHops uint16, fwd, rev []routin
 			return
 		}
 	}
-	if len(b.plans) >= warmPlanBucketCap {
+	if len(b.plans) >= WarmPlanBucketCap() {
 		b.plans = b.plans[1:] // drop oldest, bounded memory
 	}
 	b.plans = append(b.plans, plan)
@@ -233,7 +247,7 @@ func (p *warmRoutePool) bestPlan(dst cipher.PubKey, minHops uint16, excludeTps, 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	b := p.byExit[key]
-	if b == nil || p.now().Sub(b.filled) > p.ttl {
+	if b == nil || p.now().Sub(b.filled) > p.planTTL() {
 		if b != nil {
 			delete(p.byExit, key) // evict expired bucket
 		}

@@ -46,6 +46,10 @@ func TestCatalogDefaultsMatchConstants(t *testing.T) {
 		{rs.EcfRttMinCreep, ecfRttMinCreepDefault},
 		{rs.UnidirFlipRatio, flipRatioDefault},
 		{rs.ForwardSwitchMargin, forwardSwitchMarginDefault},
+		{rs.DialUnknownLatencyCostMs, dialUnknownLatencyCostDefaultMs},
+		{rs.DialUnknownHopPenaltyMs, dialUnknownHopPenaltyDefaultMs},
+		{rs.DialTypePriorScale, dialPriorScaleDefault},
+		{rs.DialThroughputPriorScale, dialPriorScaleDefault},
 	}
 	for _, c := range ratios {
 		require.Equal(t, c.want, c.k.Ratio(), c.k.Name())
@@ -83,6 +87,8 @@ func TestCatalogDefaultsMatchConstants(t *testing.T) {
 		{rs.UnidirFlipInterval, unidirFlipIntervalDefault},
 		{rs.DeadRouteHold, deadRouteTTLDefault},
 		{rs.DeadRouteHoldMax, deadRouteMaxTTLDefault},
+		{rs.DeadRouteYoungAge, deadRouteYoungAge},
+		{rs.WarmPlanTTL, defaultWarmPlanTTL},
 	}
 	for _, c := range durations {
 		require.Equal(t, c.want, c.k.Duration(), c.k.Name())
@@ -117,6 +123,11 @@ func TestCatalogDefaultsMatchConstants(t *testing.T) {
 		{rs.UnidirFlipCooldownTicks, flipCooldownTicksDefault},
 		{rs.UnidirFlipMinGoodput, int64(flipMinGoodputDefault)},
 		{rs.ForwardSwitchSamples, forwardSwitchSamplesDefault},
+		{rs.DialCandidates, baseRouteCandidates},
+		{rs.DialCandidateHeadroom, muxRouteHeadroom},
+		{rs.DialForegroundMux, initialForegroundMux},
+		{rs.DialTunnelLegs, dialTunnelLegsDefault},
+		{rs.WarmPlanBucketCap, warmPlanBucketCap},
 		{rs.MuxEventRingSize, MuxEventRingSizeDefault},
 		{rs.MuxEventsPerGroup, muxEventsPerGroupDefault},
 	}
