@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
+	"github.com/skycoin/skywire/pkg/skysocks/skysettings"
 )
 
 // newTestTunnelConn returns a conn the Client can wrap as a tunnel: a pipe with
@@ -47,13 +50,18 @@ func newPoolClient(t *testing.T, max int) (*Client, func()) {
 	require.NoError(t, c.AddTunnel(conn))
 	c.SetTunnelTarget(1)
 	c.SetStandbyPool(max)
+	// These tests assert dial COUNTS, so pin the fill to one dial at a time —
+	// the serial shape they were written against. The concurrent fill has its
+	// own tests (TestPoolFill_RunsConcurrentDials).
+	require.True(t, router.SetSetupFillInflight(1))
+	t.Cleanup(routersettings.Reset)
 	return c, closeConn
 }
 
 // waitFill waits for the single in-flight pool dial to finish.
 func waitFill(t *testing.T, c *Client) {
 	t.Helper()
-	require.Eventually(t, func() bool { return !c.poolFillInFlight.Load() }, 3*time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool { return c.poolFillInFlight.Load() == 0 }, 3*time.Second, 5*time.Millisecond)
 }
 
 // A standby tunnel is held, pinged and measured — and never picked while an
@@ -336,4 +344,107 @@ func TestPoolFill_DisabledByZero(t *testing.T) {
 	_, standby, settled, _, _ := c.StandbyPoolState()
 	require.Zero(t, standby)
 	require.False(t, settled)
+}
+
+// The fill runs setup.fill_inflight dials AT ONCE. Serial was the reason a pool
+// of eight took ~56 s to build (one dial per ~7 s tick, each paying its own
+// route-finder/oracle query and its own setup-node request), and it is also why
+// the initiator-side batcher had nothing to collect: concurrent dials to one
+// exit are what become a single batched setup request.
+func TestPoolFill_RunsConcurrentDials(t *testing.T) {
+	var closers []func()
+	defer func() {
+		for _, fn := range closers {
+			fn()
+		}
+	}()
+
+	c, closeFirst := newPoolClient(t, 32)
+	closers = append(closers, closeFirst)
+	require.True(t, router.SetSetupFillInflight(6))
+
+	var inFlight, peak, dials atomic.Int64
+	var mu sync.Mutex
+	release := make(chan struct{})
+	c.SetPoolDial(func() (net.Conn, error) {
+		n := inFlight.Add(1)
+		for {
+			p := peak.Load()
+			if n <= p || peak.CompareAndSwap(p, n) {
+				break
+			}
+		}
+		<-release // hold every dial open so the concurrency is observable
+		inFlight.Add(-1)
+		dials.Add(1)
+		mu.Lock()
+		conn, closeConn := newTestTunnelConn(t)
+		closers = append(closers, closeConn)
+		mu.Unlock()
+		return conn, nil
+	})
+
+	c.maybePoolFill()
+	require.Eventually(t, func() bool { return inFlight.Load() == 6 }, 3*time.Second, 5*time.Millisecond,
+		"six dials must be in flight together")
+	close(release)
+	waitFill(t, c)
+
+	require.EqualValues(t, 6, dials.Load())
+	require.EqualValues(t, 6, peak.Load(), "never more than setup.fill_inflight at once")
+	held, standby, _, _, _ := c.StandbyPoolState()
+	require.Equal(t, 7, held, "the active tunnel plus six")
+	require.Equal(t, 6, standby)
+}
+
+// The launch count is bounded by the GAP to the ceiling, not just by the
+// in-flight knob: a pool two short of its ceiling launches two, not eight.
+func TestPoolFill_LaunchesOnlyUpToTheCeiling(t *testing.T) {
+	var closers []func()
+	defer func() {
+		for _, fn := range closers {
+			fn()
+		}
+	}()
+
+	c, closeFirst := newPoolClient(t, 3) // 1 held, ceiling 3 -> room for 2
+	closers = append(closers, closeFirst)
+	require.True(t, router.SetSetupFillInflight(8))
+
+	var dials atomic.Int64
+	var mu sync.Mutex
+	c.SetPoolDial(func() (net.Conn, error) {
+		dials.Add(1)
+		mu.Lock()
+		conn, closeConn := newTestTunnelConn(t)
+		closers = append(closers, closeConn)
+		mu.Unlock()
+		return conn, nil
+	})
+
+	c.maybePoolFill()
+	waitFill(t, c)
+	require.EqualValues(t, 2, dials.Load(), "the ceiling bounds the launch, the knob does not override it")
+	held, _, _, _, _ := c.StandbyPoolState()
+	require.Equal(t, 3, held)
+}
+
+// pool.freeze still stops the fill dead, however many dials the knob allows.
+func TestPoolFill_FreezeBeatsConcurrency(t *testing.T) {
+	c, closeFirst := newPoolClient(t, 32)
+	defer closeFirst()
+	require.True(t, router.SetSetupFillInflight(8))
+
+	var dials atomic.Int64
+	c.SetPoolDial(func() (net.Conn, error) {
+		dials.Add(1)
+		return nil, errors.New("must not be called")
+	})
+
+	t.Cleanup(func() { skysettings.Reset() })
+	require.True(t, skysettings.Apply(map[string]int64{skysettings.PoolFreeze: 1}))
+
+	c.maybePoolFill()
+	waitFill(t, c)
+	require.Zero(t, dials.Load(), "a frozen pool dials nothing")
 }

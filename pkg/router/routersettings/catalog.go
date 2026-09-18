@@ -163,6 +163,18 @@ var (
 	WarmPlanTTL              = RegisterMin("warm.plan_ttl", KindDuration, int64(30*time.Second), int64(time.Second), "staleness bound on a cached disjoint route plan in the warm pool")
 	WarmPlanBucketCap        = RegisterMin("warm.plan_bucket_cap", KindCount, 64, 1, "how many distinct disjoint plans the warm pool holds per exit")
 
+	// Batched route setup (setup_batch_client.go, setup_batch.go, oracle_plan_cache.go).
+	// A multi-route dial to one exit — a standby-pool fill, --tunnels N, the mux
+	// leg self-heal — collects its siblings for setup.batch_window and sends them
+	// as ONE request the setup node coalesces per hop. The batch form is used only
+	// when the node advertised CapBatchRouteSetup; these knobs shape it, they do
+	// not gate it.
+	SetupBatchWindow       = RegisterMin("setup.batch_window", KindDuration, int64(40*time.Millisecond), int64(time.Millisecond), "how long a route setup waits to collect sibling dials to the same exit before sending them as one batched request")
+	SetupBatchMax          = RegisterMin("setup.batch_max", KindCount, 16, 1, "most routes carried in one batched setup request; 1 disables batching and sends singles")
+	SetupFillInflight      = RegisterMin("setup.fill_inflight", KindCount, 8, 1, "how many standby-pool tunnel dials run concurrently, which is also how many routes a fill can offer one batch")
+	SetupPlanClaimTTL      = RegisterMin("setup.plan_claim_ttl", KindDuration, int64(20*time.Second), int64(time.Second), "how long a concurrent dial holds its claim on an oracle candidate path, so N dials in one fill take N DISTINCT intermediates")
+	SetupFirstHopFilterMax = RegisterMin("setup.first_hop_filter_max", KindCount, 8, 1, "held first hops beyond which first-hop diversity stops being a filter and becomes a ranking term, so a deep pool can still grow over a reused first hop with a distinct intermediate")
+
 	// Mux event history (mux_events.go). The per-group ring is what keeps a
 	// chatty group from evicting another group's history: `mux info` reads the
 	// group's OWN ring, not the shared one.

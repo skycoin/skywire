@@ -32,6 +32,11 @@ type DiagSnapshot struct {
 	// RouteSource is where multi-hop routes came from: the local graph (a
 	// hypervisor's attached visors), the route finder, or the local fallback.
 	RouteSource *router.RouteSourceStats `json:"route_source,omitempty"`
+	// RouteSetup is how this visor's route setups were ISSUED: batched vs
+	// single vs fell back because the setup node is un-upgraded, plus whether
+	// the RSN-oracle queried once per fill and whether the concurrent dials of a
+	// fill landed on distinct intermediates.
+	RouteSetup *router.SetupPathStats `json:"route_setup,omitempty"`
 	// VStream is one entry per virtual-stream mux (skynet forwarding,
 	// app-direct dials, visor RPC): open streams, relay legs, and frames that
 	// arrived for streams this side does not have.
@@ -192,6 +197,13 @@ func (v *Visor) DiagSnapshot() *DiagSnapshot {
 	if is, ok := v.router.(interface{ IntakeStats() router.IntakeStats }); ok {
 		stats := is.IntakeStats()
 		d.Intake = &stats
+	}
+
+	if ss, ok := v.router.(interface {
+		SetupPathStats() router.SetupPathStats
+	}); ok {
+		stats := ss.SetupPathStats()
+		d.RouteSetup = &stats
 	}
 
 	if v.router != nil {

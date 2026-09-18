@@ -91,6 +91,8 @@ func TestCatalogDefaultsMatchConstants(t *testing.T) {
 		{rs.WarmPlanTTL, defaultWarmPlanTTL},
 		{rs.ForwardWriteTimeout, forwardWriteTimeoutDefault},
 		{rs.ForwardDropEventWindow, forwardDropEventWindowDefault},
+		{rs.SetupBatchWindow, setupBatchWindowDefault},
+		{rs.SetupPlanClaimTTL, setupPlanClaimTTLDefault},
 	}
 	for _, c := range durations {
 		require.Equal(t, c.want, c.k.Duration(), c.k.Name())
@@ -130,6 +132,9 @@ func TestCatalogDefaultsMatchConstants(t *testing.T) {
 		{rs.DialForegroundMux, initialForegroundMux},
 		{rs.DialTunnelLegs, dialTunnelLegsDefault},
 		{rs.WarmPlanBucketCap, warmPlanBucketCap},
+		{rs.SetupBatchMax, setupBatchMaxDefault},
+		{rs.SetupFillInflight, setupFillInflightDefault},
+		{rs.SetupFirstHopFilterMax, setupFirstHopFilterMaxDefault},
 		{rs.MuxEventRingSize, MuxEventRingSizeDefault},
 		{rs.MuxEventsPerGroup, muxEventsPerGroupDefault},
 		{rs.ForwardQueueDepth, forwardQueueDepthDefault},

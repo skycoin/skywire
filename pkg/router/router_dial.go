@@ -2311,12 +2311,34 @@ func (r *router) freeFirstHops(cands [][]routing.Hop, opts *DialOptions) [][]rou
 	if opts == nil {
 		return cands
 	}
-	out := filterDisjointFirstHop(cands, opts.ExcludeTransportIDs)
-	out = r.filterDisjointFirstHopPeer(out, opts.ExcludeFirstHopPeers, opts.ExcludeFirstHopIPs)
 	// A route that died within seconds of its last dial without carrying a byte
 	// is not a free first hop, it is a known-dead one. Without this the pool fill
 	// re-picked the same dead route on every consecutive dial (dead_route_cache.go).
-	return r.filterDeadRoutes(out, opts)
+	// This filter is always hard: a dead route is not a worse route, it is a
+	// route that does not work.
+	cands = r.filterDeadRoutes(cands, opts)
+
+	free := filterDisjointFirstHop(cands, opts.ExcludeTransportIDs)
+	free = r.filterDisjointFirstHopPeer(free, opts.ExcludeFirstHopPeers, opts.ExcludeFirstHopIPs)
+
+	// Beyond setup.first_hop_filter_max held first hops, diversity stops being a
+	// FILTER and becomes a RANKING TERM: the free hops still come first, but a
+	// candidate over an already-used first hop is offered rather than refused.
+	//
+	// As a hard filter it is what settled the pool at "no disjoint first hop
+	// left", which is the right answer for the first handful of tunnels — those
+	// are the ones whose whole purpose is to escape a shared bottleneck. It is
+	// the wrong answer for the twentieth: with 274 shared intermediates to the
+	// exit and every one of them requiring a DISTINCT intermediate path anyway,
+	// refusing the twentieth tunnel because its first hop is the same transport
+	// as the third's throws away a genuinely different path for a constraint
+	// that has already been satisfied nineteen times over.
+	held := len(opts.ExcludeFirstHopPeers)
+	if len(free) > 0 || held < SetupFirstHopFilterMax() {
+		return free
+	}
+	opts.note("first-hop diversity relaxed: %d held first hops, offering reused ones", held)
+	return cands
 }
 
 // firstHopExcluded reports whether a single candidate path's first hop is taken

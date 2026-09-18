@@ -345,12 +345,19 @@ const (
 	// no streams, so a tunnel that fails is replaced by a route that already
 	// exists instead of one set up from scratch (8-9 s through the setup node).
 	//
-	// Eight, matching the adaptive mux's per-group leg ceiling
-	// (preset.AdaptCap), and it is a bound rather than a target: the pool
-	// fills one tunnel at a time and STOPS at the first
-	// router.ErrNoDisjointFirstHop, so a topology offering three disjoint
+	// Thirty-two. It is a bound rather than a target: the fill STOPS at the
+	// first router.ErrNoDisjointFirstHop, so a topology offering three disjoint
 	// first hops settles at three and never dials again until a tunnel dies.
 	// Chasing an unreachable target is what made the self-heal storm of #4325.
+	//
+	// It was eight — the adaptive mux's per-group leg ceiling (preset.AdaptCap)
+	// — while the fill dialed ONE tunnel per ~7 s, each paying its own
+	// route-finder/oracle query and its own setup-node request. The fill now runs
+	// setup.fill_inflight dials at once and those dials leave as ONE batched
+	// setup request (routing/batch_route.go), so the cost of a deeper pool is no
+	// longer linear in its size and the discovered candidate set — 274 shared
+	// intermediates to the campaign exit — is what the ceiling should be measured
+	// against, not the per-group leg cap.
 	//
 	// On a WELL-CONNECTED visor this ceiling, not exhaustion, is what stops the
 	// fill — and that is the intended reading of the number. A first hop is any
@@ -366,7 +373,7 @@ const (
 	// ONE home for the default so the CLI flag, the app's cobra flag and the
 	// app's launcher flag set cannot drift (CLI/GUI parity), exactly as with
 	// SkysocksClientTunnels. 0 disables the pool (active tunnels only).
-	SkysocksClientStandbyPool = 8
+	SkysocksClientStandbyPool = 32
 
 	// VPNServerName is the name of the vpn server app
 	VPNServerName = "vpn-server"
