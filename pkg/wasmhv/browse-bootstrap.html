@@ -320,10 +320,29 @@
     });
   }
 
+  // serviceWorker.ready resolves when a worker is ACTIVE, which is not the same
+  // as this document being CONTROLLED by it. On a first visit the shell registers
+  // the worker and then writes the fetched document, and those subresource fetches
+  // are issued from an uncontrolled client -- clients.claim() cannot retroactively
+  // claim a fetch already in flight. They bypass the relay and fail, so a cold
+  // visit renders unstyled with no scripts while a reload works perfectly.
+  //
+  // Wait for the claim to actually land before anyone fetches anything.
+  function awaitControl() {
+    if (!('serviceWorker' in navigator) || navigator.serviceWorker.controller) { return null; }
+    return new Promise(function (resolve) {
+      var done = false;
+      function finish() { if (!done) { done = true; resolve(null); } }
+      navigator.serviceWorker.addEventListener('controllerchange', finish, { once: true });
+      setTimeout(finish, 5000); // never hang the page on a claim that never comes
+    });
+  }
+
   function registerSW() {
     if (!('serviceWorker' in navigator)) return Promise.resolve(null);
     return navigator.serviceWorker.register('/browse-sw.js', { scope: '/' })
       .then(function () { return navigator.serviceWorker.ready; })
+      .then(awaitControl)
       .catch(function () { return null; }); // fall through; top page still injects
   }
 
