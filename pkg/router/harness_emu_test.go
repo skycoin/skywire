@@ -22,6 +22,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"math/rand"
 	"strings"
 	"sync"
@@ -297,12 +298,12 @@ func (r *emuRig) wireEnd(e *emuEnd, fwd, rvs []routing.Rule, opts emuOpts, initi
 	// opt-in because they rule in tens of seconds.
 	rg.handshakeProcessedOnce.Do(func() { close(rg.handshakeProcessed) })
 	go rg.servicePacketLoop("sack", rg.cfg.KeepAliveInterval/2, rg.sackServiceFn, nil)
-	go rg.servicePacketLoop("tlp", tlpCheckInterval, rg.tlpServiceFn, nil)
-	go rg.servicePacketLoop("send-window", windowRefreshInterval, rg.windowServiceFn, nil)
-	go rg.servicePacketLoop("reorder-stall", reorderStallInterval, rg.reorderStallServiceFn, nil)
+	go rg.serviceKnobLoop("tlp", routersettings.TLPCheckInterval, rg.tlpServiceFn)
+	go rg.serviceKnobLoop("send-window", routersettings.SendWindowRefreshInterval, rg.windowServiceFn)
+	go rg.serviceKnobLoop("reorder-stall", routersettings.ReorderStallInterval, rg.reorderStallServiceFn)
 	if opts.Liveness {
-		go rg.servicePacketLoop("leg-liveness", legLivenessInterval, rg.legLivenessServiceFn, nil)
-		go rg.servicePacketLoop("leg-dataprogress", legDataProgressInterval, rg.legDataProgressServiceFn, nil)
+		go rg.serviceKnobLoop("leg-liveness", routersettings.LegLivenessInterval, rg.legLivenessServiceFn)
+		go rg.serviceKnobLoop("leg-dataprogress", routersettings.LegDataProgressInterval, rg.legDataProgressServiceFn)
 	}
 }
 
