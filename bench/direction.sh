@@ -26,11 +26,15 @@
 #              not in the legs.json snapshot.
 #   exit end   <set>.exit-recovery.tsv  per group and leg, as the exit sees it:
 #              tp (its own first hop), standby, retransmits, dup_bytes,
-#              ack_delay_ms. The exit's leg record carries NO byte counter, so
-#              the exit's sent bytes are read from the local recv_delta of the
-#              same leg and the exit record is used to confirm the leg's role
-#              and to carry its retransmits/ack delay. Most sets snapshot the
-#              exit only at set start and end; standby sets snapshot per row.
+#              ack_delay_ms, sent_bytes and recv_bytes. The exit is the SENDER
+#              of the reverse direction, so its own sent_bytes is the direct
+#              measurement of it — where consecutive per-row snapshots carry
+#              the counter for every in-scope leg the reverse share is computed
+#              from its deltas (rev_basis exit-sent), and it falls back to the
+#              local recv_delta of the same leg otherwise (rev_basis
+#              local-recv), which is what every run before the counters had.
+#              Most sets snapshot the exit only at set start and end; standby
+#              sets snapshot per row.
 #   rows       <set>.tsv          label, dir, size (bench.sh's columns).
 #
 # Two caveats the data imposes, repeated in every output as "# note" lines:
@@ -119,7 +123,9 @@ for set_name in $sets; do
 			      (if .standby then "yes" else "no" end),
 			      ((.retransmits // 0)|tostring),
 			      ((.dup_bytes // 0)|tostring),
-			      (if .ack_delay_ms == null then "-" else ((.ack_delay_ms*100|round)/100|tostring) end) ]
+			      (if .ack_delay_ms == null then "-" else ((.ack_delay_ms*100|round)/100|tostring) end),
+			      (if .sent_bytes == null then "-" else (.sent_bytes|tostring) end),
+			      (if .recv_bytes == null then "-" else (.recv_bytes|tostring) end) ]
 			  | @tsv' 2>/dev/null
 		done > "$tmp/exit.tsv"
 		if awk -F'\t' 'NR>0 && $1 ~ /^[0-9]+$/ {f=1} END{exit !f}' "$tmp/exit.tsv"; then
@@ -158,6 +164,12 @@ for set_name in $sets; do
 			if (tp == "") { x_unmatched++; continue }
 			x_tp[k SUBSEP tp] = xtp; x_sb[k SUBSEP tp] = $4
 			x_retx[k SUBSEP tp] = $5; x_ack[k SUBSEP tp] = $7
+			# the exit OWN per-leg byte counters (rg-scoped, not the
+			# transport totals): sent_bytes is the reverse direction measured
+			# at the sending end, recv_bytes the forward direction as it
+			# arrived there. "-" on a run whose exit predates the counters.
+			if ($8 ~ /^[0-9]+$/) x_sent[k SUBSEP tp] = $8 + 0
+			if ($9 ~ /^[0-9]+$/) x_recv[k SUBSEP tp] = $9 + 0
 			x_have[k] = 1
 		}
 		close(xf)
@@ -180,7 +192,6 @@ for set_name in $sets; do
 			note("no <set>.exit-recovery.tsv: the exit end contributes nothing; exit_tp/exit_standby/exit_retx/exit_ack are \"-\"")
 		else if (exit_mode == "start_end")
 			note("the exit snapshots only set start and end, so exit_standby/exit_retx/exit_ack are the set-end values repeated on every row, not per-row deltas")
-		note("the exit'"'"'s per-leg record has no byte counter (only tp, standby, retransmits, dup_bytes, ack_delay_ms), so exit_bytes is the local recv_delta of the same leg — the bytes the exit sent that arrived there")
 
 		note("carrier.tsv counts a TRANSPORT, not a route group: a transport another group or app also rides counts that traffic here too")
 		note("latency_ms is the end-of-set legs.json snapshot, not the latency measured on the row")
@@ -234,18 +245,46 @@ for set_name in $sets; do
 				if (lat != "-" && (minlat < 0 || lat + 0 < minlat)) minlat = lat + 0
 			}
 
+			key = (exit_mode == "per_row") ? r : "end"
+			if (!(key in x_have) && ("end" in x_have)) key = "end"
+
+			# REVERSE basis. The exit is the SENDER of the reverse direction, so
+			# its own per-leg sent_bytes is the direct measurement — the local
+			# recv_delta is only what survived the wire. Usable when this row and
+			# a previous snapshot both carry the counter for every in-scope leg,
+			# i.e. a per-row EXIT_SNAP run against an exit new enough to report
+			# it; otherwise fall back to the local recv_delta exactly as before.
+			delete xrev
+			use_xrev = 0; xrt = 0
+			xprev = ""
+			if (exit_mode == "per_row" && (r in x_have)) {
+				for (p = r - 1; p >= 1; p--) if (p in x_have) { xprev = p; break }
+				if (xprev == "" && ("start" in x_have)) xprev = "start"
+			}
+			if (xprev != "") {
+				use_xrev = 1
+				for (i = 1; i <= ntp; i++) {
+					tp = rowtp[i]
+					if (!inscope[tp]) continue
+					if (!((r SUBSEP tp) in x_sent) || !((xprev SUBSEP tp) in x_sent)) { use_xrev = 0; break }
+					d = x_sent[r SUBSEP tp] - x_sent[xprev SUBSEP tp]
+					if (d < 0) { use_xrev = 0; break }   # counters reset (re-dial)
+					xrev[tp] = d; xrt += d
+				}
+				if (use_xrev && xrt <= 0) use_xrev = 0
+			}
+			if (use_xrev) { rt = xrt; nxrev++ } else nlrev++
+
 			topleg = "-"; topshare = -1; fan = 0; revmax = -1; revmaxleg = "-"
 			for (i = 1; i <= ntp; i++) {
 				tp = rowtp[i]
 				if (!inscope[tp]) continue
-				fs = share(fwd[r SUBSEP tp], ft); rs = share(rev[r SUBSEP tp], rt)
+				rvb = use_xrev ? xrev[tp] : rev[r SUBSEP tp]
+				fs = share(fwd[r SUBSEP tp], ft); rs = share(rvb, rt)
 				if (fs > topshare) { topshare = fs; topleg = tp }
 				if (rs > revmax) { revmax = rs; revmaxleg = tp }
 				if (rs >= 0.10) fan++
 			}
-
-			key = (exit_mode == "per_row") ? r : "end"
-			if (!(key in x_have) && ("end" in x_have)) key = "end"
 			for (i = 1; i <= ntp; i++) {
 				tp = rowtp[i]
 				typ = (tp in m_type) ? m_type[tp] : ((tp in t_type) ? t_type[tp] : "-")
@@ -257,13 +296,16 @@ for set_name in $sets; do
 				if (!(tp in m_type) && !(tp in t_type) && !warned_meta++)
 					note("some transports are in carrier.tsv but not in legs.json or tps.tsv (a group dialled after the snapshot); their carrier/latency/hops/remote_pk read \"-\"")
 				xk = key SUBSEP tp
-				tbl[++nt] = sprintf("%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s", \
+				rvb = use_xrev ? xrev[tp] : rev[r SUBSEP tp]
+				tbl[++nt] = sprintf("%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s", \
 				  r, r_lab[r], r_dir[r], r_size[r], tp, rg, rol, (inscope[tp] ? "in" : "out"), hop, typ, lat, rpk, \
-				  fwd[r SUBSEP tp], rev[r SUBSEP tp], \
+				  fwd[r SUBSEP tp], rvb, \
 				  (inscope[tp] ? pct(share(fwd[r SUBSEP tp], ft)) : "-"), \
-				  (inscope[tp] ? pct(share(rev[r SUBSEP tp], rt)) : "-"), \
+				  (inscope[tp] ? pct(share(rvb, rt)) : "-"), \
+				  (use_xrev ? "exit-sent" : "local-recv"), \
 				  ((xk in x_tp) ? x_tp[xk] : "-"), ((xk in x_sb) ? x_sb[xk] : "-"), \
-				  ((xk in x_retx) ? x_retx[xk] : "-"), ((xk in x_ack) ? x_ack[xk] : "-"))
+				  ((xk in x_retx) ? x_retx[xk] : "-"), ((xk in x_ack) ? x_ack[xk] : "-"), \
+				  ((xk in x_sent) ? x_sent[xk] "" : "-"), ((xk in x_recv) ? x_recv[xk] "" : "-"))
 			}
 
 			kind = "-"
@@ -294,9 +336,13 @@ for set_name in $sets; do
 			nv++
 		}
 
+		if (nxrev)
+			note("rev_bytes/rev_share on " nxrev " row(s) are the EXIT'"'"'s OWN per-leg sent_bytes deltas (rev_basis exit-sent) — the reverse direction measured at the SENDING end")
+		if (nlrev)
+			note("rev_bytes/rev_share on " nlrev " row(s) are the local recv_delta (rev_basis local-recv): the exit'"'"'s sent_bytes needs a per-row EXIT_SNAP run against an exit that reports the per-leg byte counters, and either the snapshots or the counters were absent")
 		printf "# %s — per-row leg shares, forward = client->exit, reverse = exit->client\n", set_name > out
 		for (i = 1; i <= nn; i++) printf "# note\t%s\n", notes[i] > out
-		printf "# row\tlabel\tdir\tsize\tleg\trg\trole\tscope\thops\tcarrier\tlatency_ms\tremote_pk\tfwd_bytes\trev_bytes\tfwd_share\trev_share\texit_tp\texit_standby\texit_retx\texit_ack_ms\n" > out
+		printf "# row\tlabel\tdir\tsize\tleg\trg\trole\tscope\thops\tcarrier\tlatency_ms\tremote_pk\tfwd_bytes\trev_bytes\tfwd_share\trev_share\trev_basis\texit_tp\texit_standby\texit_retx\texit_ack_ms\texit_sent_bytes\texit_recv_bytes\n" > out
 		for (i = 1; i <= nt; i++) print tbl[i] > out
 
 		printf "#\n# verdicts\n" > out

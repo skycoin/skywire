@@ -396,7 +396,39 @@ type routeMux struct {
 	// stay active-on-add so a non-adaptive group never strands aux legs in
 	// standby. Guarded by legMu.
 	standbyNewLegs bool
+
+	// legLatencyFn resolves ONE leg's measured END-TO-END route latency in ms
+	// from its transport id — the EWMA of the per-leg liveness pong across ALL
+	// hops (rg.legEndToEndLatencyMs), wired at mux construction. 0 means "no
+	// sample yet"; nil means the mux was built without a route group (tests).
+	// The liveness pongs run on every leg on their own cadence, so this is a
+	// measurement the mux can read for a leg it is NOT currently sending on —
+	// no probe traffic of its own. Read on the send path under the route
+	// group's mu; the rg.mu -> legLivenessMu order is the documented one.
+	legLatencyFn func(uuid.UUID) float64
+
+	// confinedFwd* cache the leg confinedForwardLeg last chose, so the
+	// no-direct-leg forward confinement re-measures at most once per
+	// confinedForwardRefresh instead of once per frame, and so a burst stays on
+	// one leg rather than oscillating between two near-equal legs. Touched only
+	// from selectTransportRaw, which runs under the route group's mu.
+	confinedFwdIdx    int
+	confinedFwdLatMs  float64
+	confinedFwdAtNano int64
 }
+
+const (
+	// confinedForwardRefresh bounds how often the no-direct-leg forward
+	// confinement re-measures its leg. A burst is thousands of frames; the leg
+	// latencies behind the decision move on the liveness-pong cadence, so
+	// re-reading them per frame buys nothing and costs a lock each time.
+	confinedForwardRefresh = 250 * time.Millisecond
+	// confinedForwardMargin is how much faster a challenger leg must be before
+	// the confinement moves off the leg it already holds (1.15 = 15 %). Without
+	// it two legs of near-equal latency trade the whole upload back and forth
+	// every refresh, which is exactly the spray the confinement exists to stop.
+	confinedForwardMargin = 1.15
+)
 
 // reorderWindow bounds how far the receiver's reorder buffer will hold
 // out-of-order packets waiting for a gap to fill before it force-flushes.
@@ -444,6 +476,8 @@ func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 		// RACK reorder factor starts at the static baseline; DSACK feedback
 		// widens it and clean acks decay it back (see rack_tlp.go).
 		rackFactorMilli: int64(rackReorderFactor * 1000),
+		// No leg held by the forward confinement yet.
+		confinedFwdIdx: -1,
 	}
 	// Feed measured send→ack delays into the RACK basis (see ackDelayMs /
 	// rackThreshold): under load the queue, not the wire, dominates feedback
@@ -530,8 +564,25 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 		// whatever download rides it) rather than spraying. The heavy/download
 		// direction (wantDirect false) keeps its existing fall-through: with no
 		// reverse leg there is genuinely nothing to confine to.
-		if wantDirect && tps[0] != nil && !tps[0].IsClosed() {
-			return tps[0], fwd[0], 0, nil
+		//
+		// WHICH leg it is confined to is confinedForwardLeg's decision: the
+		// LOWEST MEASURED leg, not leg 0. Leg 0 is the leg that happened to be
+		// added first — for an operator-pinned mux it is simply the first
+		// `mux add` — and confining to it unconditionally sent every byte of
+		// the forward direction down whichever pinned leg the operator typed
+		// first. Measured live 2026-09-16 on mux-legs-2 (two pinned two-hop
+		// legs, no direct leg): forward rode the 141 ms leg in 7 of 10 rows on
+		// every build while the 33 ms leg sat idle, where every set that DID
+		// have a direct leg took it correctly. confinedForwardLeg falls back to
+		// leg 0 whenever the legs are not comparably measured, so the
+		// unmeasured case behaves exactly as before.
+		if wantDirect {
+			if idx := m.confinedForwardLeg(tps); idx >= 0 && idx < len(fwd) {
+				return tps[idx], fwd[idx], idx, nil
+			}
+			if tps[0] != nil && !tps[0].IsClosed() {
+				return tps[0], fwd[0], 0, nil
+			}
 		}
 	}
 
@@ -661,6 +712,100 @@ func (m *routeMux) selectFastestTransport(tps []*transport.ManagedTransport, fwd
 		return nil, nil, -1, ErrNoSuitableTransport
 	}
 	return tps[bestIdx], fwd[bestIdx], bestIdx, nil
+}
+
+// SetLegLatencyFn wires the per-leg END-TO-END route latency lookup (ms by
+// transport id; 0 = unmeasured). Called once by the route group when the mux is
+// built. Nil-safe: a mux without it simply has no end-to-end basis and falls
+// back to the first-hop transport RTT.
+func (m *routeMux) SetLegLatencyFn(fn func(uuid.UUID) float64) { m.legLatencyFn = fn }
+
+// confinedForwardLeg picks the single leg the LIGHT (forward/upload) direction
+// is confined to when the group is directional and has NO direct leg at all.
+//
+// The confinement itself is not in question — spraying an upload across every
+// forward leg over-subscribes the no-skip reorder frontier and was measured at
+// 67-172 MB sent for a 10 MB upload. What was wrong is WHICH leg: leg 0, the
+// primary, is only "the leg added first" (for an operator-pinned mux, the first
+// `mux add`), and it carried the whole forward direction however slow it was.
+//
+// The pick is the lowest measured latency among the live, ready, non-standby
+// legs, on ONE comparable basis for all of them:
+//
+//   - the END-TO-END route latency (all hops, from the leg-liveness pong) when
+//     EVERY candidate has a sample — the number that actually describes a
+//     multihop leg;
+//   - otherwise the FIRST-HOP transport RTT when every candidate has one;
+//   - otherwise nothing: it returns -1 and the caller keeps leg 0, so an
+//     unmeasured group behaves exactly as it did before.
+//
+// The two bases are never mixed across legs: an end-to-end value and a
+// first-hop value are different quantities, and comparing them would hand the
+// direction to whichever leg happened to lack a pong.
+//
+// The decision is cached for confinedForwardRefresh and only moves when a
+// challenger is confinedForwardMargin faster, so a burst stays on one leg.
+//
+// Caller holds the route group's mu (as for selectTransportRaw).
+func (m *routeMux) confinedForwardLeg(tps []*transport.ManagedTransport) int {
+	now := time.Now().UnixNano()
+	if m.confinedFwdIdx >= 0 && m.confinedFwdIdx < len(tps) &&
+		now-m.confinedFwdAtNano < int64(confinedForwardRefresh) {
+		if tp := tps[m.confinedFwdIdx]; tp != nil && !tp.IsClosed() && m.legReadyAt(m.confinedFwdIdx) {
+			return m.confinedFwdIdx
+		}
+	}
+
+	cand := make([]int, 0, len(tps))
+	for idx, tp := range tps {
+		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
+			continue
+		}
+		cand = append(cand, idx)
+	}
+	if len(cand) == 0 {
+		return -1
+	}
+
+	lat := make([]float64, len(cand))
+	haveE2E := m.legLatencyFn != nil
+	for i, idx := range cand {
+		if !haveE2E {
+			break
+		}
+		if ms := m.legLatencyFn(tps[idx].Entry.ID); ms > 0 {
+			lat[i] = ms
+		} else {
+			haveE2E = false
+		}
+	}
+	if !haveE2E {
+		for i, idx := range cand {
+			ms := tps[idx].GetLatency()
+			if ms <= 0 {
+				return -1 // not comparably measured — leave the caller on leg 0
+			}
+			lat[i] = ms
+		}
+	}
+
+	best, bestLat := cand[0], lat[0]
+	for i, idx := range cand {
+		if lat[i] < bestLat {
+			best, bestLat = idx, lat[i]
+		}
+	}
+	// Hold the incumbent unless the challenger clears the margin.
+	if m.confinedFwdIdx >= 0 && m.confinedFwdIdx != best && m.confinedFwdLatMs > 0 {
+		for i, idx := range cand {
+			if idx == m.confinedFwdIdx && lat[i] < bestLat*confinedForwardMargin {
+				best, bestLat = idx, lat[i]
+				break
+			}
+		}
+	}
+	m.confinedFwdIdx, m.confinedFwdLatMs, m.confinedFwdAtNano = best, bestLat, now
+	return best
 }
 
 // growLegs extends the per-leg counter slice to cover at least n

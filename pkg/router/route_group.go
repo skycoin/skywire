@@ -4161,6 +4161,12 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 			if remoteCaps&routing.CapMux != 0 {
 				sack := remoteCaps&routing.CapSACK != 0
 				rg.mux = newRouteMux(rg.logger, sack)
+				// The mux's own latency signal is the first-hop transport RTT,
+				// which says nothing about a multihop leg's far side. Give it
+				// the end-to-end route latency the leg-liveness pongs already
+				// measure, so the no-direct-leg forward confinement can pick
+				// the fastest leg rather than whichever was added first.
+				rg.mux.SetLegLatencyFn(rg.legEndToEndLatencyMs)
 				// If a promoting rotation engine was already wired (SetRotation
 				// before the handshake), route new aux legs through warm standby
 				// on add. Set BEFORE growLegs so it governs any aux legs already

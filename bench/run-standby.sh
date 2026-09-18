@@ -139,7 +139,7 @@ EXIT_SNAP_TIMEOUT=${EXIT_SNAP_TIMEOUT:-40}
 # src_port is in <ports> (our desc.dst_port is the exit's desc.src_port).
 exit_rgs() {
 	timeout "$1" $CLI cli visor state --via "dmsg://$exit_pk" --select mux_route_groups --json 2>/dev/null |
-		jq -c --argjson p "$2" '[.mux_route_groups[]? | select(.desc.src_port as $s | $p | index($s)) | {rg: .desc.src_port, tunnel_role, recovery, legs: [.legs[] | {tp: .transport_id[0:8], standby, retransmits, dup_bytes, ack_delay_ms}]}]' 2>/dev/null
+		jq -c --argjson p "$2" '[.mux_route_groups[]? | select(.desc.src_port as $s | $p | index($s)) | {rg: .desc.src_port, tunnel_role, recovery, legs: [.legs[] | {tp: .transport_id[0:8], standby, retransmits, dup_bytes, ack_delay_ms, sent_bytes, sent_packets, recv_bytes, recv_packets}]}]' 2>/dev/null
 }
 # tp id -> remote public IP. `mux info` names a leg's transport but not where it
 # lands; `tp ls --json` carries remote_ip per transport id.
@@ -489,7 +489,7 @@ run_set() { # <tp ids> <header>
 	mux_events "$set_name" "$name" "$ports"
 	# the EXIT's view of the same group(s) at the end of the set
 	x=""; for _ in 1 2 3; do
-		x=$(timeout 90 $CLI cli visor state --via "dmsg://$exit_pk" --select mux_route_groups --json 2>/dev/null | jq -c --argjson p "$ports" '[.mux_route_groups[]? | select(.desc.src_port as $s | $p | index($s)) | {rg: .desc.src_port, tunnel_role, recovery, legs: [.legs[] | {tp: .transport_id[0:8], standby, retransmits, dup_bytes, ack_delay_ms}]}]')
+		x=$(timeout 90 $CLI cli visor state --via "dmsg://$exit_pk" --select mux_route_groups --json 2>/dev/null | jq -c --argjson p "$ports" '[.mux_route_groups[]? | select(.desc.src_port as $s | $p | index($s)) | {rg: .desc.src_port, tunnel_role, recovery, legs: [.legs[] | {tp: .transport_id[0:8], standby, retransmits, dup_bytes, ack_delay_ms, sent_bytes, sent_packets, recv_bytes, recv_packets}]}]')
 		[ -n "$x" ] && [ "$x" != "[]" ] && break
 		sleep 3
 	done

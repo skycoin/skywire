@@ -310,7 +310,7 @@ for subject in $subjects; do
 	mux_events "$set_name" "$name"
 	ports=$(mux_info "$name" | jq -c '[.[].desc.dst_port]')
 	x=""; for _ in 1 2 3; do
-		x=$(timeout 90 $CLI cli visor state --via "dmsg://$exit_pk" --select mux_route_groups --json 2>/dev/null | jq -c --argjson p "$ports" '[.mux_route_groups[]? | select(.desc.src_port as $s | $p | index($s)) | {rg: .desc.src_port, recovery, legs: [.legs[] | {tp: .transport_id[0:8], standby, retransmits, dup_bytes, ack_delay_ms}]}]')
+		x=$(timeout 90 $CLI cli visor state --via "dmsg://$exit_pk" --select mux_route_groups --json 2>/dev/null | jq -c --argjson p "$ports" '[.mux_route_groups[]? | select(.desc.src_port as $s | $p | index($s)) | {rg: .desc.src_port, recovery, legs: [.legs[] | {tp: .transport_id[0:8], standby, retransmits, dup_bytes, ack_delay_ms, sent_bytes, sent_packets, recv_bytes, recv_packets}]}]')
 		[ -n "$x" ] && [ "$x" != "[]" ] && break
 		sleep 3
 	done
