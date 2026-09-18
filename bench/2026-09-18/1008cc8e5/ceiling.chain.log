@@ -1,0 +1,43 @@
+local=1008cc8e5 exit=1008cc8e5 clients=3 size=50000000 trials=2 sink=http://127.0.0.1:18080
+downlink routes (best first): via-0371ab4b via-0281a102 via-02c48393
+ceil1 on direct warm: 4/4 probes ok
+ceil2 on direct warm: 4/4 probes ok
+ceil3 on direct warm: 4/4 probes ok
+uplink trial 1: 1 client(s) summed 9.04 MB/s (direct:9.04), 1/1 hash-verified
+uplink trial 1: 3 client(s) summed 11.27 MB/s (direct:3.73,direct:3.75,direct:3.79), 3/3 hash-verified
+uplink trial 2: 1 client(s) summed 10.52 MB/s (direct:10.52), 1/1 hash-verified
+uplink trial 2: 3 client(s) summed 11.30 MB/s (direct:3.74,direct:3.74,direct:3.82), 3/3 hash-verified
+ceil1 on via-0371ab4b warm: 4/4 probes ok
+ceil2 on via-0281a102 warm: 4/4 probes ok
+ceil3 on via-02c48393 warm: 4/4 probes ok
+downlink trial 1: 1 client(s) summed 8.19 MB/s (via-0371ab4b:8.19), 1/1 hash-verified
+downlink trial 1: 3 client(s) summed 12.35 MB/s (via-0371ab4b:6.95,via-0281a102:2.57,via-02c48393:2.83), 3/3 hash-verified
+uplink-via trial 1: 1 client(s) summed 10.10 MB/s (via-0371ab4b:10.10), 1/1 hash-verified
+downlink trial 2: 1 client(s) summed 8.72 MB/s (via-0371ab4b:8.72), 1/1 hash-verified
+downlink trial 2: 3 client(s) summed 10.61 MB/s (via-0371ab4b:4.15,via-0281a102:2.64,via-02c48393:3.82), 3/3 hash-verified
+uplink-via trial 2: 1 client(s) summed 10.36 MB/s (via-0371ab4b:10.36), 1/1 hash-verified
+ceiling uplink: single 9.78, 3 concurrent 11.29 MB/s over 3 direct clients, grew=yes (x1.15)
+ceiling downlink: single 8.46, 3 concurrent 11.48 MB/s over via-0371ab4b via-0281a102 via-02c48393, grew=yes (x1.36)
+uplink via via-0371ab4b alone: 10.23 MB/s (direct single 9.78)
+--- bench/2026-09-18/1008cc8e5/ceiling.tsv
+# ceiling.tsv — the endpoint ceiling: 3 concurrent clients, 50000000 bytes each, 2 trial(s)
+# exit=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1 local=1008cc8e5 exit_commit=1008cc8e5 sink=http://127.0.0.1:18080
+# uplink rows: 3 DIRECT clients (the uplink is the local card), warm=3/3, stcpr tps: ceil1=b414796d-14fc-080e-9ce6-a7162e3e562b ceil2=b414796d-14fc-080e-9ce6-a7162e3e562b ceil3=b414796d-14fc-080e-9ce6-a7162e3e562b
+# downlink rows: the 3 best DISTINCT routes of the paired ranking, slot 1 first — via-0371ab4b via-0281a102 via-02c48393
+# uplink-via rows: one upload over via-0371ab4b alone, so the direct uplink can be seen for what it is
+# a clients=1 row is the same transfer alone, immediately before the concurrent one of the same trial
+# kind	clients	trial	bytes	sum_MBps	route:rate_MBps	hashes_ok/n
+uplink	1	1	50000000	9.04	direct:9.04	1/1
+uplink	3	1	50000000	11.27	direct:3.73,direct:3.75,direct:3.79	3/3
+uplink	1	2	50000000	10.52	direct:10.52	1/1
+uplink	3	2	50000000	11.30	direct:3.74,direct:3.74,direct:3.82	3/3
+# downlink clients warm=3/3 on via-0371ab4b via-0281a102 via-02c48393
+downlink	1	1	50000000	8.19	via-0371ab4b:8.19	1/1
+downlink	3	1	50000000	12.35	via-0371ab4b:6.95,via-0281a102:2.57,via-02c48393:2.83	3/3
+uplink-via	1	1	50000000	10.10	via-0371ab4b:10.10	1/1
+downlink	1	2	50000000	8.72	via-0371ab4b:8.72	1/1
+downlink	3	2	50000000	10.61	via-0371ab4b:4.15,via-0281a102:2.64,via-02c48393:3.82	3/3
+uplink-via	1	2	50000000	10.36	via-0371ab4b:10.36	1/1
+# ceiling uplink: single 9.78 MB/s, 3 concurrent 11.29 MB/s over 3 direct clients, grew=yes (x1.15) — the ceiling is the concurrent median
+# ceiling downlink: single 8.46 MB/s, 3 concurrent 11.48 MB/s over via-0371ab4b via-0281a102 via-02c48393, grew=yes (x1.36) — the ceiling is the concurrent median
+# uplink over via-0371ab4b alone: 10.23 MB/s vs 9.78 MB/s direct — the direct uplink IS a bottleneck

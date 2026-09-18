@@ -1,0 +1,43 @@
+local=1008cc8e5 exit=1008cc8e5 order=03f57e7c 0371ab4b 0255117b 0281a102 02c48393 02a2d4c3 sizes=10000000 50000000  tunnels=2 legs=
+paired references: PAIRED_REF=auto resolved to '0371ab4b'; ranking was:
+  8.87 0371ab4b ref
+  7.44 0281a102 ref
+  7.37 02c48393 ref
+  6.81 03f57e7c ref
+  5.97 02a2d4c3 ref
+  5.78 direct ref
+Running!
+skysocks-client: route group count stable at 7 for 10s
+skysocks-client: 7 route group(s) — 2 active, 5 standby; first-hop tps: 50cdb857-a262-0ae5-bf5b-5c93c8025b69 95839ad0-b588-0b1d-8475-45fba6ae993c ac40965a-bc99-01e4-a2c9-c26b76db013b b414796d-14fc-080e-9ce6-a7162e3e562b f1012467-de9d-09a9-8b49-62a43945c24b f92bb572-e2d4-0d53-b732-5342265bca62 fdab37dd-c35e-05bc-9e51-cd6b024e3eec 
+skysocks-client warm: 4/4 probes ok
+exit-resources mux-tunnels-2-pre: RssAnon 449432 kB, cpu 443.67 s, load1 0.17, idle 0.060 core, sys 586.6 MB, heap 319.4 MB, gc 741, goroutines 6094
+Running!
+route pinned: 1 leg(s) added, 1 pruned, 0 already present
+paired: reference slot 1 = 0371ab4b on skysocks-client-ref@127.0.0.1:1081, 4/4 probes ok
+mux-tunnels-2: 16 rows, hash_ok=16
+mux-tunnels-2: paired ratios vs 0371ab4b: 50up: 1.345 0.992 1.017 10up: 0.771 0.853 0.079 10down: 1.744 1.374 1.211 1.381 1.140 50down: 1.052 1.083 0.948 1.367 1.004 
+mux-tunnels-2: 31 mux events: group_created(route group dialed by this visor) leg_added(route setup: primary leg) group_created(route group dialed by this visor) leg_added(route setup: primary leg) dial_decision(diversify: 1 sibling group(s) to 022716fb:3, excluding first-hop tp(s) b414796d and 1 first-hop peer(s); hook-race: ev
+exit-resources mux-tunnels-2-post: RssAnon 482692 kB, cpu 482.00 s, load1 0.62, idle 0.062 core, sys 586.6 MB, heap 227.0 MB, gc 807, goroutines 6208
+exit-resources mux-tunnels-2-settled: RssAnon 483460 kB, cpu 484.80 s, load1 0.50, idle 0.062 core, sys 586.6 MB, heap 202.0 MB, gc 809, goroutines 6224
+EXITRES mux-tunnels-2 rss=449432->482692 kB d_rss=33260 KiB settled=483460 d_settled=34028 sys=586.6->586.6 MB cpu=38.3s wall=353s cps=0.11 idle=0.06 allow=0.56 verdict=PASS
+Running!
+skysocks-client: route group count stable at 8 for 10s
+Running!
+route pinned: 1 leg(s) added, 1 pruned, 0 already present
+paired: reference slot 1 = 0371ab4b on skysocks-client-ref@127.0.0.1:1081, 4/4 probes ok
+Running!
+route pinned: 1 leg(s) added, 1 pruned, 0 already present
+paired: reference slot 2 = 0281a102 on skysocks-client-ref2@127.0.0.1:1084, 4/4 probes ok
+skysocks-client warm: 4/4 probes ok
+exit-resources mux-tunnels-2-up2-pre: RssAnon 482592 kB, cpu 490.55 s, load1 0.20, idle 0.100 core, sys 586.6 MB, heap 194.9 MB, gc 813, goroutines 6316
+mux-tunnels-2-up2 trial 1: 5.49 + 6.18 MB/s vs references 10.27 + 8.93 MB/s
+mux-tunnels-2-up2 trial 2: 5.46 + 5.72 MB/s vs references 10.54 + 9.06 MB/s
+mux-tunnels-2-up2 trial 3: 5.54 + 5.79 MB/s vs references 9.84 + 8.97 MB/s
+mux-tunnels-2-up2 trial 4: 5.52 + 5.98 MB/s vs references 10.48 + 8.92 MB/s
+mux-tunnels-2-up2 trial 5: 5.60 + 5.55 MB/s vs references 10.37 + 9.15 MB/s
+exit-resources mux-tunnels-2-up2-post: RssAnon 494592 kB, cpu 516.28 s, load1 0.32, idle 0.094 core, sys 586.9 MB, heap 198.0 MB, gc 878, goroutines 6332
+exit-resources mux-tunnels-2-up2-settled: RssAnon 466784 kB, cpu 519.35 s, load1 0.17, idle 0.112 core, sys 586.9 MB, heap 289.7 MB, gc 880, goroutines 6329
+EXITRES mux-tunnels-2-up2 rss=482592->494592 kB d_rss=12000 KiB settled=466784 d_settled=-15808 sys=586.6->586.9 MB cpu=25.7s wall=115s cps=0.22 idle=0.10 allow=0.60 verdict=PASS
+mux-tunnels-2-up2: 10 rows, hash_ok=10
+mux-tunnels-2-up2: 38 mux events: group_created(route group dialed by this visor) leg_added(route setup: primary leg) group_created(route group dialed by this visor) leg_added(route setup: primary leg) dial_decision(diversify: 1 sibling group(s) to 022716fb:3, excluding first-hop tp(s) b414796d and 1 first-hop peer(s); hook-race: ev
+EXITRES-SLOPE bench/2026-09-18/1008cc8e5 slope=-182 KiB/min span=41.5 min n=19 verdict=PASS
