@@ -164,6 +164,7 @@ type API interface {
 	GetIsPublic() bool
 	GetRuntimeConfig() ([]byte, error)
 	SetRuntimeConfig(rawJSON []byte) error
+	SetConfigFields(fields map[string]json.RawMessage) ([]ConfigFieldChange, error)
 	LocalTransportStats() (*LocalTransportStatsResponse, error)
 	LocalUptimeStats(args LocalUptimeArgs) (*LocalUptimeResponse, error)
 	FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error)
