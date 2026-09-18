@@ -96,6 +96,32 @@ downloads and uploads, at 3, 10, 50 and 100 MB, five trials each:
    must fall back to a single route on that path, by measurement, not by
    configuration.
 
+
+Since **v4 (2026-09-18)** two of those bars are measured against the ENDPOINT
+rather than against another skywire number, so a campaign also runs
+`bench/run-ceiling.sh <exit pk> <out dir> [trials] [sink]`: `CEIL_N` (3)
+concurrent DIRECT proxy clients, one 50 MB transfer alone and then all N at the
+same instant, uploads first and then downloads, every transfer hash-verified
+against the sink. It writes `ceiling.tsv` into the campaign directory — one row
+per (kind, clients, trial) carrying the sum, the per-client rates and the
+hashes, plus a `# ceiling` line per kind saying whether the sum grew from one
+client to N — and `bench/verdict.sh` takes the median of the concurrent sums as
+the uplink and the downlink ceiling. With no `ceiling.tsv` both verdicts keep
+the pre-v4 rule and print "no ceiling row": a ceiling quoted from an older
+campaign is not a bar, because the bars move by 2x inside an hour.
+
+Criterion 10's spread policy is `SPREAD=1 bench/run-mux.sh …`, which adds the
+`mux-spread-3` set — the default pool session, no pins and no `--tunnels`, with
+`SETTINGS="spread.max_share=0.4 spread.min_routes=3"` merged into whatever the
+campaign already sets, 50 MB down and up, paired like every other set and with
+no cut row (a cut moves bytes between routes mid-set, which is the quantity the
+cap measures). `bench/direction.sh` then turns both ends' per-leg counters into
+per-row shares and `mux-spread-3.assert.tsv` scores them: `routes_active >= 3`,
+`max_share <= 0.4 + chunk/size` (0.484 at 50 MB with a 4 MiB chunk — a scheduler
+placing whole chunks cannot land on 40.000 %), the paired ratio of each cell
+`>= 0.8`, hashes n/n, and the policy itself recorded, so a knob the binary
+refused reads FAIL instead of passing as a measurement of the default.
+
 ## 2. The rig, frozen and repeatable
 
 Everything the last campaign learned the hard way, fixed as procedure:
@@ -159,6 +185,7 @@ run that sets nothing is byte-for-byte the old binary.
 | chunk plan | `chunk.probe_bytes` · `chunk.min_bytes` · `chunk.per_tunnel` |
 | striped upload | `upload.stripe_min_bytes` · `upload.chunk_bytes` · `upload.mem_bytes` · `upload.concurrency` · `upload.replay_max_bytes` · `upload.probe_ttl` |
 | upload retries | `upload.ack_timeout` · `upload.idle_timeout` · `upload.durable_wait` · `upload.resend_passes` · `upload.early_tries` · `upload.early_wait_max` · `upload.busy_backoff` · `upload.busy_tries` · `upload.replay_tries` |
+| spread policy (v4) | `spread.max_share` · `spread.min_routes` · `spread.endgame` · `spread.weight` |
 
 `chunk.max_bytes` and `chunk.concurrency` OVERRIDE the boot flags
 (`--range-chunk-kib`, `--range-concurrency`): unset, the flag still wins.
@@ -454,6 +481,23 @@ with mux overhead on it.
    hashes; 96 % of the direct uplink bar on 10 MB up, 88 % on 50 MB up. The auto-dial picked Atlanta
    and Frankfurt by itself — the routes an operator would have pinned — where campaign19's
    first-hop-only ranking picked a 1 ms LAN neighbour and collapsed. A third tunnel buys nothing.
+
+### v4 (2026-09-18) — the criteria as re-worded
+
+The eight criteria above are the 2026-09-16/17 scoreboard and stand as they were
+measured; nothing in them is rewritten here. These rows re-word two of them
+against the **endpoint ceiling measured in the same campaign**
+(`bench/run-ceiling.sh`, §1) and add a tenth:
+
+| criterion | v4 (2026-09-18) |
+|---|---|
+| 2 — two concurrent uploads | "≥ the smaller of (sum of the two best references) and 0.95 × the measured uplink ceiling, the ceiling measured in the same campaign as concurrent direct uploads to the exit, sink-verified" |
+| 4 — 50/100 MB composition | "≥ the better of the two alone when that better one does not saturate the endpoint (its rate < 0.9 × the measured endpoint ceiling), otherwise ≥ 0.95 × the endpoint ceiling; the ceiling measured in the same campaign" |
+| 10 — spread policy (new) | "under a spread policy that caps any one route at 40 % of the bytes and holds at least three routes, throughput ≥ 0.8 × the best single reference and no route exceeds its cap, measured from both ends' per-leg counters at 50 MB down and up; the policy is a live setting" |
+
+`bench/verdict.sh` scores 2 and 4 from `ceiling.tsv` when the campaign measured
+one and says which bound bound each verdict; criterion 10 is the `mux-spread-3`
+set of `bench/run-mux.sh` and its `.assert.tsv`.
 
 ### Direction (criterion 5)
 

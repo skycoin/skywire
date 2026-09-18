@@ -22,18 +22,36 @@
 #   composition           mux-compose-* at 10 MB: ratio >= TOL x the ratio of
 #                         BOTH mux-tunnels-2 and mux-legs-2 in the same cell of
 #                         the same run ("not worse than each alone at 10 MB");
-#                         at 50 MB and 100 MB: ratio >= the better of the two
-#                         ("… and >= the better of the two alone"). When those
-#                         two sets are not in the directory the cell is marked
+#                         at 50 MB and 100 MB: the v4 rule below. When those two
+#                         sets are not in the directory the cell is marked
 #                         NOCOMP and scored by the plain ratio rule.
 #   every cell            all rows hash-verified, and wire/goodput <= 1.2
 #                         (criterion 7's amplification gate).
 #
 # The two-upload cell is scored separately, from <set>.up2.tsv: the sum of two
-# concurrent uploads against the sum of the two best single-route references.
+# concurrent uploads against the bar below.
+#
+# THE ENDPOINT CEILING (v4, 2026-09-18). When the directory holds a
+# `ceiling.tsv` — bench/run-ceiling.sh, N concurrent DIRECT clients measured in
+# the SAME campaign — two verdicts are scored against the endpoint instead of
+# against skywire alone:
+#
+#   two uploads   sum >= min(ref1 + ref2, 0.95 x the uplink ceiling), and the
+#                 line says which of the two bounds bound it.
+#   composition   at 50 and 100 MB DOWN: if the better of mux-tunnels-2 and
+#                 mux-legs-2 in that cell does NOT saturate the endpoint (its
+#                 median rate < 0.9 x the downlink ceiling) the bar is the
+#                 better of the two alone within the 5 % band; otherwise the
+#                 component has the endpoint and the bar is 0.95 x the ceiling.
+#
+# Without a ceiling.tsv both keep exactly today's rule and say "no ceiling row"
+# — a ceiling quoted from an older campaign is not a bar, the link moves by 2x
+# inside an hour.
 #
 # Sets marked INVALID by their run script (a <set>.INVALID marker naming the
 # reason) never reach the table — they were measured in the wrong shape.
+# A set that writes a <set>.assert.tsv (the spread set of run-mux.sh, the
+# standby set of run-standby.sh) has that table printed verbatim at the end.
 set -u
 refs=$1; mux=$2
 here=$(dirname "$0")
@@ -45,6 +63,32 @@ for m in "$refs"/*.INVALID "$mux"/*.INVALID; do
 	[ -f "$m" ] || continue
 	echo "INVALID $(basename "$m" .INVALID): $(head -1 "$m")"
 done
+
+# --- the endpoint ceiling, when the campaign measured one ---------------------
+ceil_file=""
+for c in "$mux/ceiling.tsv" "$refs/ceiling.tsv"; do
+	[ -f "$c" ] && { ceil_file=$c; break; }
+done
+# ceil_of <uplink|downlink>: the median of the CONCURRENT sums — the rows with
+# the most clients — or "" when there is no such row.
+ceil_of() {
+	[ -n "$ceil_file" ] || return 0
+	awk -F'\t' -v k="$1" '
+		/^#/ { next }
+		$1 == k { rows[++m] = $2 "\t" $5; if ($2 + 0 > mc) mc = $2 + 0 }
+		END {
+			for (i = 1; i <= m; i++) { split(rows[i], f, "\t"); if (f[1] + 0 == mc) v[++n] = f[2] + 0 }
+			if (!n) exit
+			for (i = 2; i <= n; i++) { x = v[i]; j = i - 1; while (j > 0 && v[j] > x) { v[j+1] = v[j]; j-- } v[j+1] = x }
+			printf "%.2f", (n % 2) ? v[(n+1)/2] : (v[n/2] + v[n/2+1]) / 2
+		}' "$ceil_file"
+}
+ceil_up=$(ceil_of uplink); ceil_down=$(ceil_of downlink)
+if [ -n "$ceil_file" ]; then
+	echo "endpoint ceiling ($ceil_file): uplink ${ceil_up:--} MB/s, downlink ${ceil_down:--} MB/s (median of the concurrent sums)"
+else
+	echo "no ceiling row: no ceiling.tsv in $mux or $refs — the two-upload and composition cells keep the pre-v4 rule"
+fi
 
 # --- paired ratios: one median per set and cell -------------------------------
 : > "$tmp/pratio"
@@ -68,8 +112,13 @@ fi
 # --- the old bar, for any set that has no paired file -------------------------
 bar=$("$here/summarize.sh" "$refs" 2>/dev/null | awk 'NR>1 && $1 ~ /^ref-/ {k=$2" "$3; if ($5>b[k]) {b[k]=$5; s[k]=$1}} END{for (k in b) print k, b[k], s[k]}')
 
+# one summarize pass over the mux dir: the table below and the per-cell medians
+# the composition rule needs for its components read the same rows.
+"$here/summarize.sh" "$mux" 2>/dev/null > "$tmp/sum"
+awk 'NR>1 && $1 ~ /^mux-/ {print $1, $3 $2, $5}' "$tmp/sum" > "$tmp/med"
+
 printf '%-18s %-5s %-4s %-7s %-8s %-6s %-5s %-7s %-7s %s\n' set dir MB median bar/ratio ok/n w/g mode verdict note
-"$here/summarize.sh" "$mux" 2>/dev/null | awk 'NR>1 && $1 ~ /^mux-/' | while read -r set dir mb okn med min max carrier wg; do
+awk 'NR>1 && $1 ~ /^mux-/' "$tmp/sum" | while read -r set dir mb okn med min max carrier wg; do
 	: "$min $max $carrier" # summarize's columns, not scored here
 	cell="$mb$dir"
 	ok=${okn%%/*}; n=${okn##*/}
@@ -92,10 +141,22 @@ printf '%-18s %-5s %-4s %-7s %-8s %-6s %-5s %-7s %-7s %s\n' set dir MB median ba
 				awk -v r="$ratio" -v a="$t2" -v b="$l2" -v t="$tol" \
 					'BEGIN{exit !(r+0 >= t*a && r+0 >= t*b)}' || v=FAIL
 			else
-				# ">= the better of the two alone" at 50 MB and 100 MB
-				note="vs better of t2 $t2 l2 $l2"
-				awk -v r="$ratio" -v a="$t2" -v b="$l2" \
-					'BEGIN{best=(a+0>b+0?a+0:b+0); exit !(r+0 >= best)}' || v=FAIL
+				# v4: ">= the better of the two alone WHEN that better one does
+				# not saturate the endpoint, otherwise >= 0.95 x the ceiling"
+				brate=$(awk -v c="$cell" '($1=="mux-tunnels-2" || $1=="mux-legs-2") && $2==c {if ($3+0>b) b=$3+0} END{printf "%.2f", b+0}' "$tmp/med")
+				cl=""; [ "$dir" = down ] && cl=$ceil_down
+				if [ -z "$cl" ]; then
+					note="vs better of t2 $t2 l2 $l2, no ceiling row"
+					awk -v r="$ratio" -v a="$t2" -v b="$l2" \
+						'BEGIN{best=(a+0>b+0?a+0:b+0); exit !(r+0 >= best)}' || v=FAIL
+				elif awk -v r="$brate" -v c="$cl" 'BEGIN{exit !(r+0 < 0.9*c)}'; then
+					note="vs better of t2 $t2 l2 $l2 (5 % band); best $brate < 0.9 x ceiling $cl"
+					awk -v r="$ratio" -v a="$t2" -v b="$l2" -v t="$tol" \
+						'BEGIN{best=(a+0>b+0?a+0:b+0); exit !(r+0 >= t*best)}' || v=FAIL
+				else
+					note="best $brate saturates ceiling $cl — bar 0.95 x ceiling = $(awk -v c="$cl" 'BEGIN{printf "%.2f", 0.95*c}')"
+					awk -v m="$med" -v c="$cl" 'BEGIN{exit !(m+0 >= 0.95*c)}' || v=FAIL
+				fi
 			fi
 			;;
 		*)
@@ -120,19 +181,30 @@ printf '%-18s %-5s %-4s %-7s %-8s %-6s %-5s %-7s %-7s %s\n' set dir MB median ba
 done
 
 # --- the two-upload cell ------------------------------------------------------
+# v4: the bar is min(the two references' sum, 0.95 x the uplink ceiling), scored
+# on the MEDIAN per-trial sum. With no ceiling.tsv it is the pre-v4 rule: the
+# median per-trial ratio against TOL.
 for u in "$mux"/*.up2.tsv; do
 	[ -f "$u" ] || continue
 	s=$(basename "$u" .up2.tsv)
 	[ -f "$mux/$s.INVALID" ] && continue
-	grep -v '^#' "$u" | awk -F'\t' -v s="$s" -v t="$tol" '
-		$8 != "-" { r[++k] = $8 + 0; sum += $4; rs += $7; ok += ($9 == 1 && $10 == 1) }
+	grep -v '^#' "$u" | awk -F'\t' -v s="$s" -v t="$tol" -v cu="$ceil_up" '
+		function msort(a, n,   i, j, x) { for (i = 2; i <= n; i++) { x = a[i]; j = i - 1; while (j > 0 && a[j] > x) { a[j+1] = a[j]; j-- } a[j+1] = x } }
+		function med(a, n) { msort(a, n); return (n % 2) ? a[(n+1)/2] : (a[n/2] + a[n/2+1]) / 2 }
+		$8 != "-" { k++; r[k] = $8 + 0; sm[k] = $4 + 0; rf[k] = $7 + 0; ok += ($9 == 1 && $10 == 1) }
 		END {
 			if (!k) { printf "%-18s two concurrent uploads: no scored trials\n", s; exit }
-			# median of the k ratios, by insertion sort (mawk has no asort)
-			for (i = 2; i <= k; i++) { v = r[i]; j = i - 1; while (j > 0 && r[j] > v) { r[j+1] = r[j]; j-- } r[j+1] = v }
-			med = (k % 2) ? r[(k+1)/2] : (r[k/2] + r[k/2+1]) / 2
-			printf "%-18s two concurrent uploads: sum %.2f vs ref sum %.2f, median ratio x%.3f over %d trial(s), %d hash-clean -> %s\n", \
-				s, sum/k, rs/k, med, k, ok, (med >= t + 0 && ok == k ? "PASS" : "FAIL")
+			mr = med(r, k); ms = med(sm, k); mf = med(rf, k)
+			if (cu == "") {
+				printf "%-18s two concurrent uploads: sum %.2f vs ref sum %.2f, median ratio x%.3f over %d trial(s), %d hash-clean, no ceiling row -> %s\n", \
+					s, ms, mf, mr, k, ok, (mr >= t + 0 && ok == k ? "PASS" : "FAIL")
+				exit
+			}
+			cb = 0.95 * cu
+			bar = (mf < cb ? mf : cb)
+			printf "%-18s two concurrent uploads: sum %.2f vs bar %.2f = min(ref sum %.2f, 0.95 x uplink ceiling %.2f = %.2f) — bound by %s; median ratio x%.3f over %d trial(s), %d hash-clean -> %s\n", \
+				s, ms, bar, mf, cu, cb, (mf < cb ? "the reference sum" : "the ceiling"), mr, k, ok, \
+				(ms >= bar && ok == k ? "PASS" : "FAIL")
 		}'
 done
 
@@ -150,6 +222,15 @@ for cf in "$mux"/*.cut.tsv; do
 	fi
 	grep -v '^#' "$cf" | awk -F'\t' -v s="$s" \
 		'{printf "%-18s cut row %s: %s (first hop %s) ttfb_after_cut %ss, rg %s -> %s, cut_ok=%s restored=%s\n", s, $1, $2, $3, $5, $6, $7, $8, $9}'
+done
+
+# --- per-set assert tables (the spread set, the standby set) ------------------
+for af in "$mux"/*.assert.tsv; do
+	[ -f "$af" ] || continue
+	s=$(basename "$af" .assert.tsv)
+	[ -f "$mux/$s.INVALID" ] && continue
+	echo "--- $s asserts"
+	cat "$af"
 done
 
 # --- the exit resource gate ---------------------------------------------------

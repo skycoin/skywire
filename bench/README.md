@@ -110,6 +110,53 @@ has moved, and a paired campaign has no stale bar. The probe is a download only
 — upload medians repeat within 5 % across runs (direct 50 MB up 9.52 / 9.60 /
 9.65 / 10.32), downloads swing by 2x.
 
+## The endpoint ceiling (v4, 2026-09-18)
+
+    bench/run-ceiling.sh <exit pk> <out dir> [trials] [sink]
+
+starts `CEIL_N` (3) `--direct` proxy clients on their own SOCKS ports, warms
+each, then per trial runs one 50 MB transfer alone and then all N at the same
+instant — uploads (`kind=uplink`) first, then downloads (`kind=downlink`) —
+every transfer hash-verified against the sink. `ceiling.tsv` holds
+`kind clients trial bytes sum_MBps rates_MBps hashes_ok/n` plus a `# ceiling`
+line per kind saying whether the sum grew from one client to N, and the ceiling
+itself is the **median of the concurrent sums**. `verdict.sh` reads it from the
+mux dir (or the refs dir) automatically.
+
+The v4 bars that need it: the two-upload cell is scored against
+`min(ref1 + ref2, 0.95 x the uplink ceiling)` and the line names the binding
+bound; a composition's 50/100 MB **download** is scored against the better of
+`mux-tunnels-2`/`mux-legs-2` while that better one stays below `0.9 x the
+downlink ceiling`, and against `0.95 x the ceiling` once it does not. Without a
+`ceiling.tsv` both keep the pre-v4 rule and print `no ceiling row` — the link
+moves by 2x inside an hour, so a ceiling from another campaign is not a bar.
+
+## The spread set (criterion 10)
+
+`SPREAD=1 bench/run-mux.sh …` adds `mux-spread-3`: the **default pool session**
+— no pins, no `--tunnels` — with
+`SETTINGS="spread.max_share=${SPREAD_SHARE:-0.4} spread.min_routes=${SPREAD_ROUTES:-3}"`
+merged into whatever `SETTINGS` already holds, 50 MB down and up, paired like
+every other set, and no cut row. After the set `bench/direction.sh` runs over it
+and `mux-spread-3.assert.tsv` scores criterion 10 from both ends' per-leg
+counters:
+
+- `routes_active` — the minimum number of in-scope legs over the set's rows,
+  want `>= SPREAD_ROUTES` (3);
+- `max_share` — the largest payload-direction share of any one route on any row
+  (reverse bytes on a download, forward bytes on an upload), want
+  `<= SPREAD_SHARE + SPREAD_CHUNK_BYTES / SPREAD_SIZE` = **0.484** at the
+  defaults: one chunk of slack, because a scheduler placing whole 4 MiB chunks
+  into a 50 MB transfer cannot land on 40.000 %;
+- `ratio_50down` / `ratio_50up` — the median paired ratio of each cell, want
+  `>= SPREAD_RATIO_MIN` (0.8);
+- `hashes` — n/n;
+- `spread_policy` — the knobs as `proxy settings` reported them; a REFUSED or
+  still-pending knob is a FAIL, because that set measured the default policy
+  under the spread set's name.
+
+`verdict.sh` prints every `<set>.assert.tsv` it finds, this one included.
+
 ## The rest of the campaign knobs
 
 | knob | default | what it does |
