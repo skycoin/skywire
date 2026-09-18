@@ -1,0 +1,5 @@
+# sweep of chunk.per_tunnel over 1,4 with run-compose.sh, one complete run per value under bench/2026-09-16/2ca6cf7b3-sweep/sweep/<value>/
+# each cell: median_MBps;paired_ratio;hashes_ok/n;wire_goodput ("-" = the value never produced that cell)
+value	mux-compose-T2xL2/50down	mux-compose-T2xL2/100down
+1	-	-
+4	4.80;-;2/2;1.34	6.47;-;2/2;1.01

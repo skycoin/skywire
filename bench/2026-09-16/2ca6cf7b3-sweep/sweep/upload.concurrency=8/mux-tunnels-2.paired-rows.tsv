@@ -1,0 +1,9 @@
+# reference transfers of mux-tunnels-2, bench.sh rows: direct (direct stcpr to the exit (AppDirect shortcut, no route group))
+mux-tunnels-2-ref-r1	down	10000000	1417772	200	10000000	7.053320	1
+mux-tunnels-2-ref-r2	down	10000000	2131564	200	10000000	4.691393	1
+mux-tunnels-2-ref-r3	up	10000000	4683717	200	10000000	2.135060	1
+mux-tunnels-2-ref-r4	up	10000000	4822786	200	10000000	2.073496	1
+mux-tunnels-2-ref-r5	down	50000000	5640913	200	50000000	8.863816	1
+mux-tunnels-2-ref-r6	down	50000000	4931401	200	50000000	10.139112	1
+mux-tunnels-2-ref-r7	up	50000000	8981099	200	50000000	5.567251	1
+mux-tunnels-2-ref-r8	up	50000000	9074082	200	50000000	5.510205	1

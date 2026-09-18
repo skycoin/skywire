@@ -1,0 +1,10 @@
+# paired reference: direct (direct stcpr to the exit (AppDirect shortcut, no route group)) via skysocks-client-ref@127.0.0.1:1081 — one reference row of the same cell immediately before every mux row
+# row	cell	ref_MBps	mux_MBps	ratio	ref_ok	mux_ok	ref_legs
+1	10down	mux-tunnels-2	4.44	-	row	1	-
+2	10down	mux-tunnels-2	1.55	-	row	1	-
+3	10up	mux-tunnels-2	5.10	-	row	1	-
+4	10up	mux-tunnels-2	5.40	-	row	1	-
+5	50down	mux-tunnels-2	6.05	-	row	1	-
+6	50down	mux-tunnels-2	5.25	-	row	1	-
+7	50up	mux-tunnels-2	9.66	-	row	1	-
+8	50up	mux-tunnels-2	10.03	-	row	1	-

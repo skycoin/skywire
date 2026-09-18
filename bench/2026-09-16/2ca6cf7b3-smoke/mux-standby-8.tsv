@@ -1,0 +1,13 @@
+# exit=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1 local=2ca6cf7b3 exit_commit=2ca6cf7b3 session=skysocks-client tunnels=2 pool=8 pool_settled=quiet 20s route_groups=8 roles=active,active,standby,standby,standby,standby,standby,standby groups=rg49175/active=[stcpr>022716fb@b414796d] rg49176/active=[stcpr>0371ab4b@95839ad0] rg49177/standby=[stcpr>0281a102@f1012467] rg49178/standby=[stcpr>03f57e7c@fdab37dd] rg49179/standby=[stcpr>0255117b@50cdb857] rg49180/standby=[stcpr>02c48393@ac40965a] rg49181/standby=[stcpr>02a2d4c3@2c4ae7a5] rg49182/standby=[stcpr>03d0c4a9@83e88e2a] chaos_row=7 chaos_after=5s sink=http://127.0.0.1:18080
+mux-standby-8-t1	down	10000000	5369017	200	10000000	1.862641	1
+mux-standby-8-t2	down	10000000	4718902	200	10000000	2.119203	1
+mux-standby-8-t3	down	10000000	4957757	200	10000000	2.017139	1
+mux-standby-8-t1	up	10000000	4520119	200	10000000	2.212386	1
+mux-standby-8-t2	up	10000000	3773755	200	10000000	2.649953	1
+mux-standby-8-t3	up	10000000	4026346	200	10000000	2.483699	1
+mux-standby-8-t1	down	50000000	7562468	200	50000000	6.611666	1
+mux-standby-8-t2	down	50000000	3576484	200	50000000	13.980267	1
+mux-standby-8-t3	down	50000000	5366756	200	50000000	9.316733	1
+mux-standby-8-t1	up	50000000	9262092	200	50000000	5.398405	1
+mux-standby-8-t2	up	50000000	9013863	200	50000000	5.547084	1
+mux-standby-8-t3	up	50000000	9269819	200	50000000	5.393902	1

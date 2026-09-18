@@ -1,0 +1,998 @@
+[
+  {
+    "at": "2026-09-17T21:41:46.354483986-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49201,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T21:41:46.354487061-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49201,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "b414796d-14fc-080e-9ce6-a7162e3e562b",
+    "tp_type": "stcpr",
+    "remote_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T21:41:51.690821398-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49202,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T21:41:51.690823803-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49202,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+    "tp_type": "stcpr",
+    "remote_pk": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T21:41:51.826258165-05:00",
+    "event": "dial_decision",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49202,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "diversify: 1 sibling group(s) to 022716fb:3, excluding first-hop tp(s) b414796d and 1 first-hop peer(s); hook-race: every direct route to 022716fb shares the sibling's first hop (b414796d); awaiting the ranked candidates; excluding 1 same-LAN first hop(s) (share our uplink): 8e3a3db3; ranked by carrier class then path latency: 95839ad0/stcpr=34+98ms, f1012467/stcpr=136+0ms, 062c57d2/stcpr=149+40ms, fdab37dd/stcpr=142+55ms, 2c4ae7a5/stcpr=250+130ms, 50cdb857/stcpr=209+273ms, 7aeb822f/stcpr=271+272ms, ac40965a/stcpr=230+314ms, 01f2a564/stcpr=514+466ms, 4889f2b3/stcpr=571+489ms, 83e88e2a/stcpr=423+843ms, 59f8374e/stcpr=1266+354ms, f18c5993/stcpr=1372+3753ms, 6cb2bbf7/stcpr=3573+2752ms, 93139b56/sudph=20+114ms, 08e154d4/sudph=134+13ms, eef2d4f7/sudph=142+9ms, 49236a72/sudph=143+9ms, 4703b4c4/sudph=144+9ms, 9cd5f9a8/sudph=143+14ms, 3c838c5d/sudph=144+15ms, c0c594b1/sudph=141+18ms, a3c17e80/sudph=150+9ms, 7fcd65b9/sudph=145+15ms, 81adbc36/sudph=45+116ms, 6f46d934/sudph=149+14ms, c5b5b364/sudph=47+116ms, 7ca0e483/sudph=47+117ms, 2202a94e/sudph=44+121ms, 729182c5/sudph=48+117ms, e850bb9e/sudph=154+12ms, 3dfa30f2/sudph=152+15ms, 564a8527/sudph=129+38ms, 21e24380/sudph=145+22ms, abfee912/sudph=47+121ms, 9fa91cce/sudph=52+116ms, ef6d5530/sudph=151+17ms, 5d878181/sudph=49+120ms, f9870773/sudph=63+109ms, 4a318706/sudph=153+20ms, 2fc76c8c/sudph=144+29ms, 540125a4/sudph=54+120ms, 4f7eb678/sudph=143+32ms, 4c04ca1d/sudph=161+14ms, 62df7ff7/sudph=58+120ms, 0bcd24d8/sudph=168+12ms, 7ac523ad/sudph=56+124ms, eb2562fd/sudph=54+127ms, 588f33c8/sudph=155+25ms, b1de7249/sudph=159+23ms, e3b329fe/sudph=57+126ms, 0bc5f2a4/sudph=158+30ms, ba3f5ddb/sudph=160+29ms, ee6868d9/sudph=160+31ms, 566a42ca/sudph=160+34ms, e808fc63/sudph=44ms+unknown (path latency unknown, ranked by tp latency 194 ms), 4fd1d8d9/sudph=64+132ms, 5dfc8b3b/sudph=160+36ms, 0b4b3025/sudph=56+142ms, 97096f02/sudph=64+134ms, 14c258be/sudph=50ms+unknown (path latency unknown, ranked by tp latency 200 ms), 0d19170b/sudph=54ms+unknown (path latency unknown, ranked by tp latency 204 ms), 93dfce7a/sudph=160+45ms, e87f5d57/sudph=174+31ms, 20a2a400/sudph=181+27ms, 4115ff2d/sudph=161+48ms, 11d867fd/sudph=180+30ms, 1740916d/sudph=61ms+unknown (path latency unknown, ranked by tp latency 211 ms), d5a5dc92/sudph=163+56ms, 380513dc/sudph=69+151ms, 18d36d9c/sudph=194+27ms, 07fd6545/sudph=61+163ms, a0bcd839/sudph=170+57ms, 3bae2f00/sudph=183+45ms, b6feb1c1/sudph=186+44ms, 9c54a36f/sudph=96+135ms, 12707801/sudph=100+135ms, 44540829/sudph=187+49ms, 4fafe7b9/sudph=89ms+unknown (path latency unknown, ranked by tp latency 239 ms), 8008aaed/sudph=84+155ms, 9055544a/sudph=77+163ms, f834bb35/sudph=77+165ms, 68d4e318/sudph=80+164ms, a248b092/sudph=109ms+unknown (path latency unknown, ranked by tp latency 259 ms), d93bb059/sudph=151ms+unknown (path latency unknown, ranked by tp latency 301 ms), e7f88491/sudph=180ms+unknown (path latency unknown, ranked by tp latency 330 ms), c9952aa4/sudph=186ms+unknown (path latency unknown, ranked by tp latency 336 ms), e57c175d/sudph=174+168ms, f0d5b942/sudph=176+168ms, 29d6d27e/sudph=178+170ms, 9abe0fe8/sudph=179+170ms, a3b0bfa0/sudph=180+168ms, 2fc19004/sudph=185+164ms, 3ab5eaa2/sudph=185+166ms, 74f8f009/sudph=187+164ms, c33c23e0/sudph=183+168ms, 75f09818/sudph=180+173ms, 2b23b4f7/sudph=189+164ms, 455509d7/sudph=185+169ms, c620ba52/sudph=183+172ms, 1aaa1c45/sudph=186+169ms, 2e03e58b/sudph=180+174ms, 807baa4e/sudph=185+170ms, 0780dbbe/sudph=186+169ms, 4e5fed0b/sudph=180+175ms, e71692d0/sudph=189+166ms, 50e63570/sudph=183+173ms, 880f0f36/sudph=190+166ms, 32768ddd/sudph=184+177ms, 3fd812af/sudph=188+174ms, fa319603/sudph=190+174ms, 704733b6/sudph=234ms+unknown (path latency unknown, ranked by tp latency 384 ms), e6b304af/sudph=224+166ms, 92b09c11/sudph=241ms+unknown (path latency unknown, ranked by tp latency 391 ms), 0a9df774/sudph=241ms+unknown (path latency unknown, ranked by tp latency 391 ms), 8378a54f/sudph=242ms+unknown (path latency unknown, ranked by tp latency 392 ms), 495db33c/sudph=228+165ms, aaf64533/sudph=225+168ms, 6ff82430/sudph=243ms+unknown (path latency unknown, ranked by tp latency 393 ms), 6abc7b7f/sudph=227+167ms, 7634f5d3/sudph=248ms+unknown (path latency unknown, ranked by tp latency 398 ms), 323ca76b/sudph=233+167ms, b57601c8/sudph=234+167ms, f5a84096/sudph=228+174ms, 0a59c873/sudph=221+181ms, 273f570b/sudph=229+173ms, 1a332555/sudph=232+171ms, e1c038eb/sudph=238+165ms, ce33f7cc/sudph=150+254ms, 5d8de0a5/sudph=239+167ms, 7ce6fa6b/sudph=232+174ms, 220c8bd0/sudph=237+169ms, f50bbc8b/sudph=156+253ms, 16b231fc/sudph=243+166ms, 640610e1/sudph=229+180ms, a02a521d/sudph=234+175ms, 4192550e/sudph=231+180ms, b51867ef/sudph=235+177ms, 2aa74fd3/sudph=235+177ms, 37d26df6/sudph=237+175ms, 7214de62/sudph=242+171ms, dafef9fe/sudph=238+177ms, 09cf4575/sudph=231+184ms, f02cf77f/sudph=238+178ms, 69960a17/sudph=240+177ms, c8919459/sudph=232+185ms, 7ed17ade/sudph=248+170ms, 7619ecc4/sudph=241+177ms, 9ce6c73f/sudph=234+186ms, bd4ff66a/sudph=236+184ms, 8418f4d0/sudph=226+194ms, 164862de/sudph=270ms+unknown (path latency unknown, ranked by tp latency 420 ms), 438f9f1d/sudph=244+178ms, 60f7c470/sudph=242+180ms, 5da161c4/sudph=243+181ms, dd8c9773/sudph=248+176ms, fc659541/sudph=255+170ms, c399e4f5/sudph=244+181ms, 516efbbb/sudph=240+185ms, 400afc99/sudph=276ms+unknown (path latency unknown, ranked by tp latency 426 ms), 86a92f24/sudph=249+177ms, 8b95839a/sudph=240+189ms, f588ee22/sudph=250+179ms, 9a3a33de/sudph=241+189ms, 818d5118/sudph=241+189ms, 4c6c12f1/sudph=247+184ms, d5292c5a/sudph=248+183ms, 2b364511/sudph=256+175ms, 7f84f1c0/sudph=247+185ms, 73eeae10/sudph=237+195ms, 998d4c3f/sudph=235+198ms, 8f0fe1bb/sudph=250+183ms, 41238a2c/sudph=253+181ms, 76903505/sudph=245+189ms, a28a4aea/sudph=246+190ms, ab4d7985/sudph=240+198ms, 3c794e10/sudph=249+190ms, e79a19ea/sudph=240+200ms, 8926c036/sudph=256+184ms, a7430867/sudph=256+185ms, bf03c16a/sudph=241+201ms, 56b0e11d/sudph=255+187ms, c6c97e2f/sudph=234+209ms, ec541a8d/sudph=252+192ms, 80715d1d/sudph=254+192ms, f57e59f7/sudph=274+175ms, 6d239e7c/sudph=262+189ms, a574dd28/sudph=255+196ms, 0887955d/sudph=259+194ms, 531d68f8/sudph=255+197ms, 9bd4fefc/sudph=246+207ms, c6669bc2/sudph=260+196ms, c5d40c0b/sudph=245+213ms, c98ba1a4/sudph=275+184ms, 10f1597d/sudph=287+175ms, 66ac506d/sudph=258+204ms, 118ac36e/sudph=266+198ms, dc982f96/sudph=268+197ms, 0aa6037a/sudph=253+213ms, 17d588b6/sudph=275+198ms, c0470303/sudph=264+218ms, eb50a4eb/sudph=276+208ms, 3380a330/sudph=233+255ms, 007695c7/sudph=235+254ms, a058a585/sudph=235+255ms, f5125970/sudph=236+255ms, a88ccbc8/sudph=236+254ms, f65f5a4f/sudph=237+255ms, bdf67f3c/sudph=240+254ms, e60b0444/sudph=240+254ms, 5084ae93/sudph=241+255ms, 69c984d1/sudph=243+254ms, d1a40fe9/sudph=244+254ms, d1087514/sudph=278+231ms, f892e231/sudph=223+287ms, dcfe6981/sudph=215+303ms, f0629873/sudph=220+308ms, 652ddd86/sudph=213+318ms, 4d876c20/sudph=218+314ms, fc473391/sudph=286+246ms, 469162c6/sudph=214+323ms, 7f145af5/sudph=266+275ms, 4f0de239/sudph=280+276ms, 540cfd51/sudph=297+277ms, e5351b2f/sudph=369+311ms, 9569a25f/sudph=249+10348ms, d8f0cf92/sudph=unmeasured, b8d499db/webrtc=95ms+unknown (path latency unknown, ranked by tp latency 245 ms), 6e366f15/webrtc=91+175ms, b526f5ae/webrtc=233ms+unknown (path latency unknown, ranked by tp latency 383 ms), 3d708bc4/webrtc=241ms+unknown (path latency unknown, ranked by tp latency 391 ms), 97d523f8/webrtc=245ms+unknown (path latency unknown, ranked by tp latency 395 ms), 677f9049/webrtc=235+170ms, b6ec8539/webrtc=258ms+unknown (path latency unknown, ranked by tp latency 408 ms), db18af25/webrtc=268ms+unknown (path latency unknown, ranked by tp latency 418 ms), f09e820c/webrtc=254+174ms, f9b82246/webrtc=255+180ms, ca4589b2/webrtc=297ms+unknown (path latency unknown, ranked by tp latency 447 ms), 3446de5c/webrtc=309ms+unknown (path latency unknown, ranked by tp latency 459 ms), 95ca4c8a/webrtc=340ms+unknown (path latency unknown, ranked by tp latency 490 ms), 29d2aab6/webrtc=340ms+unknown (path latency unknown, ranked by tp latency 490 ms), b5d73702/webrtc=437ms+unknown (path latency unknown, ranked by tp latency 587 ms), 1458293c/webrtc=308+334ms; chose 95839ad0; oracle: path over a free first hop; first hop 95839ad0"
+  },
+  {
+    "at": "2026-09-17T21:41:58.802465331-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49203,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T21:41:58.802469227-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49203,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "f1012467-de9d-09a9-8b49-62a43945c24b",
+    "tp_type": "stcpr",
+    "remote_pk": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T21:41:58.943615273-05:00",
+    "event": "dial_decision",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49203,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "diversify: 2 sibling group(s) to 022716fb:3, excluding first-hop tp(s) b414796d,95839ad0 and 2 first-hop peer(s); hook-race: every direct route to 022716fb shares the sibling's first hop (b414796d); awaiting the ranked candidates; excluding 2 same-LAN first hop(s) (share our uplink): eada53a2,8e3a3db3; ranked by carrier class then path latency: f1012467/stcpr=136+0ms, 062c57d2/stcpr=149+40ms, fdab37dd/stcpr=142+55ms, 2c4ae7a5/stcpr=250+130ms, 50cdb857/stcpr=209+273ms, 7aeb822f/stcpr=271+272ms, ac40965a/stcpr=230+314ms, 01f2a564/stcpr=514+466ms, 4889f2b3/stcpr=571+489ms, 83e88e2a/stcpr=423+843ms, 59f8374e/stcpr=1266+354ms, f18c5993/stcpr=1372+3753ms, 6cb2bbf7/stcpr=3573+2752ms, 93139b56/sudph=32+114ms, 08e154d4/sudph=137+13ms, 49236a72/sudph=146+9ms, 4703b4c4/sudph=147+9ms, 9cd5f9a8/sudph=146+14ms, eef2d4f7/sudph=150+9ms, 3c838c5d/sudph=147+15ms, a3c17e80/sudph=153+9ms, c5b5b364/sudph=47+116ms, c0c594b1/sudph=146+18ms, 7ca0e483/sudph=49+117ms, 81adbc36/sudph=50+116ms, 729182c5/sudph=51+117ms, 5d878181/sudph=48+120ms, 7fcd65b9/sudph=153+15ms, 9fa91cce/sudph=53+116ms, 2202a94e/sudph=50+121ms, 6f46d934/sudph=157+14ms, 540125a4/sudph=53+120ms, 564a8527/sudph=136+38ms, f9870773/sudph=66+109ms, 21e24380/sudph=153+22ms, abfee912/sudph=54+121ms, 3dfa30f2/sudph=161+15ms, 2fc76c8c/sudph=147+29ms, e850bb9e/sudph=166+12ms, eb2562fd/sudph=52+127ms, ef6d5530/sudph=164+17ms, 4f7eb678/sudph=153+32ms, 588f33c8/sudph=161+25ms, 62df7ff7/sudph=67+120ms, 0bcd24d8/sudph=178+12ms, 7ac523ad/sudph=68+124ms, b1de7249/sudph=169+23ms, e3b329fe/sudph=67+126ms, 0bc5f2a4/sudph=163+30ms, 4c04ca1d/sudph=179+14ms, ee6868d9/sudph=164+31ms, 4a318706/sudph=178+20ms, 4fd1d8d9/sudph=68+132ms, e808fc63/sudph=51ms+unknown (path latency unknown, ranked by tp latency 201 ms), 97096f02/sudph=68+134ms, 14c258be/sudph=53ms+unknown (path latency unknown, ranked by tp latency 203 ms), 0d19170b/sudph=57ms+unknown (path latency unknown, ranked by tp latency 207 ms), 0b4b3025/sudph=67+142ms, ba3f5ddb/sudph=181+29ms, e87f5d57/sudph=181+31ms, 566a42ca/sudph=181+34ms, 20a2a400/sudph=188+27ms, 5dfc8b3b/sudph=179+36ms, 1740916d/sudph=66ms+unknown (path latency unknown, ranked by tp latency 216 ms), 11d867fd/sudph=187+30ms, d5a5dc92/sudph=164+56ms, 18d36d9c/sudph=194+27ms, 93dfce7a/sudph=178+45ms, 380513dc/sudph=73+151ms, 4115ff2d/sudph=178+48ms, 07fd6545/sudph=68+163ms, 3bae2f00/sudph=188+45ms, 44540829/sudph=186+49ms, a0bcd839/sudph=181+57ms, 12707801/sudph=106+135ms, b6feb1c1/sudph=198+44ms, 4fafe7b9/sudph=93ms+unknown (path latency unknown, ranked by tp latency 243 ms), 68d4e318/sudph=82+164ms, 8008aaed/sudph=92+155ms, 9c54a36f/sudph=112+135ms, f834bb35/sudph=84+165ms, 9055544a/sudph=89+163ms, a248b092/sudph=117ms+unknown (path latency unknown, ranked by tp latency 267 ms), d93bb059/sudph=156ms+unknown (path latency unknown, ranked by tp latency 306 ms), e7f88491/sudph=185ms+unknown (path latency unknown, ranked by tp latency 335 ms), c9952aa4/sudph=186ms+unknown (path latency unknown, ranked by tp latency 336 ms), e57c175d/sudph=179+168ms, f0d5b942/sudph=181+168ms, a3b0bfa0/sudph=183+168ms, 29d6d27e/sudph=184+170ms, 74f8f009/sudph=190+164ms, c620ba52/sudph=184+172ms, 2fc19004/sudph=191+164ms, 2b23b4f7/sudph=191+164ms, 75f09818/sudph=183+173ms, 9abe0fe8/sudph=187+170ms, 1aaa1c45/sudph=190+169ms, 807baa4e/sudph=189+170ms, c33c23e0/sudph=190+168ms, e71692d0/sudph=192+166ms, 4e5fed0b/sudph=184+175ms, 880f0f36/sudph=193+166ms, 2e03e58b/sudph=186+174ms, 3ab5eaa2/sudph=194+166ms, 0780dbbe/sudph=193+169ms, 50e63570/sudph=189+173ms, 3fd812af/sudph=189+174ms, 455509d7/sudph=195+169ms, 32768ddd/sudph=193+177ms, fa319603/sudph=198+174ms, 704733b6/sudph=238ms+unknown (path latency unknown, ranked by tp latency 388 ms), 6ff82430/sudph=243ms+unknown (path latency unknown, ranked by tp latency 393 ms), 0a9df774/sudph=246ms+unknown (path latency unknown, ranked by tp latency 396 ms), 92b09c11/sudph=246ms+unknown (path latency unknown, ranked by tp latency 396 ms), 8378a54f/sudph=247ms+unknown (path latency unknown, ranked by tp latency 397 ms), 7634f5d3/sudph=248ms+unknown (path latency unknown, ranked by tp latency 398 ms), e6b304af/sudph=234+166ms, 495db33c/sudph=236+165ms, 16b231fc/sudph=236+166ms, 6abc7b7f/sudph=237+167ms, aaf64533/sudph=236+168ms, 323ca76b/sudph=238+167ms, b57601c8/sudph=240+167ms, 0a59c873/sudph=227+181ms, ce33f7cc/sudph=153+254ms, 1a332555/sudph=238+171ms, e1c038eb/sudph=244+165ms, 273f570b/sudph=237+173ms, f5a84096/sudph=237+174ms, a02a521d/sudph=237+175ms, 5d8de0a5/sudph=246+167ms, 7ce6fa6b/sudph=238+174ms, b51867ef/sudph=236+177ms, 640610e1/sudph=235+180ms, 220c8bd0/sudph=247+169ms, f50bbc8b/sudph=163+253ms, 4192550e/sudph=236+180ms, dafef9fe/sudph=240+177ms, 2aa74fd3/sudph=240+177ms, 37d26df6/sudph=243+175ms, 7619ecc4/sudph=242+177ms, 09cf4575/sudph=237+184ms, f02cf77f/sudph=243+178ms, c8919459/sudph=237+185ms, 69960a17/sudph=247+177ms, bd4ff66a/sudph=239+184ms, 9ce6c73f/sudph=238+186ms, 7214de62/sudph=255+171ms, 438f9f1d/sudph=250+178ms, 164862de/sudph=278ms+unknown (path latency unknown, ranked by tp latency 428 ms), c399e4f5/sudph=247+181ms, 60f7c470/sudph=248+180ms, 7ed17ade/sudph=258+170ms, 5da161c4/sudph=249+181ms, 8418f4d0/sudph=235+194ms, 516efbbb/sudph=244+185ms, fc659541/sudph=260+170ms, 400afc99/sudph=281ms+unknown (path latency unknown, ranked by tp latency 431 ms), 8b95839a/sudph=242+189ms, 76903505/sudph=243+189ms, 86a92f24/sudph=256+177ms, 73eeae10/sudph=240+195ms, 9a3a33de/sudph=246+189ms, f588ee22/sudph=256+179ms, 2b364511/sudph=262+175ms, 41238a2c/sudph=257+181ms, 998d4c3f/sudph=240+198ms, 8f0fe1bb/sudph=258+183ms, d5292c5a/sudph=258+183ms, 4c6c12f1/sudph=258+184ms, ab4d7985/sudph=244+198ms, 8926c036/sudph=259+184ms, 7f84f1c0/sudph=258+185ms, e79a19ea/sudph=244+200ms, a7430867/sudph=259+185ms, bf03c16a/sudph=244+201ms, 56b0e11d/sudph=258+187ms, 818d5118/sudph=257+189ms, c6c97e2f/sudph=238+209ms, a28a4aea/sudph=258+190ms, 3c794e10/sudph=258+190ms, f57e59f7/sudph=275+175ms, ec541a8d/sudph=258+192ms, 80715d1d/sudph=259+192ms, 6d239e7c/sudph=263+189ms, 0887955d/sudph=260+194ms, a574dd28/sudph=258+196ms, 531d68f8/sudph=260+197ms, 17d588b6/sudph=261+198ms, 66ac506d/sudph=259+204ms, dd8c9773/sudph=288+176ms, 9bd4fefc/sudph=257+207ms, 10f1597d/sudph=291+175ms, c98ba1a4/sudph=282+184ms, dc982f96/sudph=273+197ms, c5d40c0b/sudph=258+213ms, eb50a4eb/sudph=263+208ms, 118ac36e/sudph=275+198ms, 0aa6037a/sudph=260+213ms, c6669bc2/sudph=281+196ms, c0470303/sudph=269+218ms, f65f5a4f/sudph=238+255ms, 007695c7/sudph=238+254ms, f5125970/sudph=238+255ms, a88ccbc8/sudph=239+254ms, a058a585/sudph=239+255ms, 5084ae93/sudph=240+255ms, 3380a330/sudph=240+255ms, d1a40fe9/sudph=242+254ms, bdf67f3c/sudph=243+254ms, e60b0444/sudph=244+254ms, 69c984d1/sudph=244+254ms, f892e231/sudph=236+287ms, dcfe6981/sudph=221+303ms, d1087514/sudph=294+231ms, fc473391/sudph=279+246ms, f0629873/sudph=220+308ms, 4d876c20/sudph=219+314ms, 652ddd86/sudph=215+318ms, 469162c6/sudph=216+323ms, 7f145af5/sudph=266+275ms, 540cfd51/sudph=265+277ms, 4f0de239/sudph=293+276ms, e5351b2f/sudph=275+311ms, 9569a25f/sudph=249+10348ms, d8f0cf92/sudph=unmeasured, b8d499db/webrtc=95ms+unknown (path latency unknown, ranked by tp latency 245 ms), 6e366f15/webrtc=91+175ms, b526f5ae/webrtc=233ms+unknown (path latency unknown, ranked by tp latency 383 ms), 3d708bc4/webrtc=241ms+unknown (path latency unknown, ranked by tp latency 391 ms), 97d523f8/webrtc=245ms+unknown (path latency unknown, ranked by tp latency 395 ms), 677f9049/webrtc=235+170ms, b6ec8539/webrtc=258ms+unknown (path latency unknown, ranked by tp latency 408 ms), db18af25/webrtc=268ms+unknown (path latency unknown, ranked by tp latency 418 ms), f09e820c/webrtc=254+174ms, f9b82246/webrtc=255+180ms, ca4589b2/webrtc=297ms+unknown (path latency unknown, ranked by tp latency 447 ms), 3446de5c/webrtc=309ms+unknown (path latency unknown, ranked by tp latency 459 ms), 95ca4c8a/webrtc=340ms+unknown (path latency unknown, ranked by tp latency 490 ms), 29d2aab6/webrtc=340ms+unknown (path latency unknown, ranked by tp latency 490 ms), b5d73702/webrtc=437ms+unknown (path latency unknown, ranked by tp latency 587 ms), 1458293c/webrtc=308+334ms; chose f1012467; oracle: path over a free first hop; first hop f1012467"
+  },
+  {
+    "at": "2026-09-17T21:42:05.035921269-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49204,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T21:42:05.035923847-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49204,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "062c57d2-0c3c-05ac-8df4-d322cd8da1aa",
+    "tp_type": "stcpr",
+    "remote_pk": "03dc3488e49ded9250f3cca2827ab16f6331b7ccefdad614353c785a5fc76c1b13",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T21:42:05.217367667-05:00",
+    "event": "dial_decision",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49204,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "diversify: 3 sibling group(s) to 022716fb:3, excluding first-hop tp(s) 95839ad0,f1012467,b414796d and 3 first-hop peer(s); hook-race: every direct route to 022716fb shares the sibling's first hop (b414796d); awaiting the ranked candidates; excluding 2 same-LAN first hop(s) (share our uplink): eada53a2,8e3a3db3; ranked by carrier class then path latency: 062c57d2/stcpr=149+40ms, fdab37dd/stcpr=142+152ms, 2c4ae7a5/stcpr=250+130ms, 50cdb857/stcpr=209+273ms, 7aeb822f/stcpr=271+272ms, ac40965a/stcpr=230+314ms, 01f2a564/stcpr=514+466ms, 4889f2b3/stcpr=571+489ms, 83e88e2a/stcpr=423+843ms, 59f8374e/stcpr=1266+354ms, f18c5993/stcpr=1372+3753ms, 6cb2bbf7/stcpr=3573+2752ms, 93139b56/sudph=32+114ms, 08e154d4/sudph=137+13ms, 49236a72/sudph=146+9ms, 4703b4c4/sudph=147+9ms, 9cd5f9a8/sudph=146+14ms, eef2d4f7/sudph=150+9ms, 3c838c5d/sudph=147+15ms, a3c17e80/sudph=153+9ms, c5b5b364/sudph=47+116ms, c0c594b1/sudph=146+18ms, 7ca0e483/sudph=49+117ms, 81adbc36/sudph=50+116ms, 729182c5/sudph=51+117ms, 5d878181/sudph=48+120ms, 7fcd65b9/sudph=153+15ms, 9fa91cce/sudph=53+116ms, 2202a94e/sudph=50+121ms, 6f46d934/sudph=157+14ms, 540125a4/sudph=53+120ms, 564a8527/sudph=136+38ms, f9870773/sudph=66+109ms, 21e24380/sudph=153+22ms, abfee912/sudph=54+121ms, 3dfa30f2/sudph=161+15ms, 2fc76c8c/sudph=147+29ms, e850bb9e/sudph=166+12ms, eb2562fd/sudph=52+127ms, ef6d5530/sudph=164+17ms, 4f7eb678/sudph=153+32ms, 588f33c8/sudph=161+25ms, 62df7ff7/sudph=67+120ms, 0bcd24d8/sudph=178+12ms, 7ac523ad/sudph=68+124ms, b1de7249/sudph=169+23ms, e3b329fe/sudph=67+126ms, 0bc5f2a4/sudph=163+30ms, 4c04ca1d/sudph=179+14ms, ee6868d9/sudph=164+31ms, 4a318706/sudph=178+20ms, 4fd1d8d9/sudph=68+132ms, e808fc63/sudph=51ms+unknown (path latency unknown, ranked by tp latency 201 ms), 97096f02/sudph=68+134ms, 14c258be/sudph=53ms+unknown (path latency unknown, ranked by tp latency 203 ms), 0d19170b/sudph=57ms+unknown (path latency unknown, ranked by tp latency 207 ms), 0b4b3025/sudph=67+142ms, ba3f5ddb/sudph=181+29ms, e87f5d57/sudph=181+31ms, 566a42ca/sudph=181+34ms, 20a2a400/sudph=188+27ms, 5dfc8b3b/sudph=179+36ms, 1740916d/sudph=66ms+unknown (path latency unknown, ranked by tp latency 216 ms), 11d867fd/sudph=187+30ms, d5a5dc92/sudph=164+56ms, 18d36d9c/sudph=194+27ms, 93dfce7a/sudph=178+45ms, 380513dc/sudph=73+151ms, 4115ff2d/sudph=178+48ms, 07fd6545/sudph=68+163ms, 3bae2f00/sudph=188+45ms, 44540829/sudph=186+49ms, a0bcd839/sudph=181+57ms, 12707801/sudph=106+135ms, b6feb1c1/sudph=198+44ms, 4fafe7b9/sudph=93ms+unknown (path latency unknown, ranked by tp latency 243 ms), 68d4e318/sudph=82+164ms, 8008aaed/sudph=92+155ms, 9c54a36f/sudph=112+135ms, f834bb35/sudph=84+165ms, 9055544a/sudph=89+163ms, a248b092/sudph=117ms+unknown (path latency unknown, ranked by tp latency 267 ms), d93bb059/sudph=156ms+unknown (path latency unknown, ranked by tp latency 306 ms), e7f88491/sudph=185ms+unknown (path latency unknown, ranked by tp latency 335 ms), c9952aa4/sudph=186ms+unknown (path latency unknown, ranked by tp latency 336 ms), e57c175d/sudph=179+168ms, f0d5b942/sudph=181+168ms, a3b0bfa0/sudph=183+168ms, 29d6d27e/sudph=184+170ms, 74f8f009/sudph=190+164ms, c620ba52/sudph=184+172ms, 2fc19004/sudph=191+164ms, 2b23b4f7/sudph=191+164ms, 75f09818/sudph=183+173ms, 9abe0fe8/sudph=187+170ms, 1aaa1c45/sudph=190+169ms, 807baa4e/sudph=189+170ms, c33c23e0/sudph=190+168ms, e71692d0/sudph=192+166ms, 4e5fed0b/sudph=184+175ms, 880f0f36/sudph=193+166ms, 2e03e58b/sudph=186+174ms, 3ab5eaa2/sudph=194+166ms, 0780dbbe/sudph=193+169ms, 50e63570/sudph=189+173ms, 3fd812af/sudph=189+174ms, 455509d7/sudph=195+169ms, 32768ddd/sudph=193+177ms, fa319603/sudph=198+174ms, 704733b6/sudph=238ms+unknown (path latency unknown, ranked by tp latency 388 ms), 6ff82430/sudph=243ms+unknown (path latency unknown, ranked by tp latency 393 ms), 0a9df774/sudph=246ms+unknown (path latency unknown, ranked by tp latency 396 ms), 92b09c11/sudph=246ms+unknown (path latency unknown, ranked by tp latency 396 ms), 8378a54f/sudph=247ms+unknown (path latency unknown, ranked by tp latency 397 ms), 7634f5d3/sudph=248ms+unknown (path latency unknown, ranked by tp latency 398 ms), e6b304af/sudph=234+166ms, 495db33c/sudph=236+165ms, 16b231fc/sudph=236+166ms, 6abc7b7f/sudph=237+167ms, aaf64533/sudph=236+168ms, 323ca76b/sudph=238+167ms, b57601c8/sudph=240+167ms, 0a59c873/sudph=227+181ms, ce33f7cc/sudph=153+254ms, 1a332555/sudph=238+171ms, e1c038eb/sudph=244+165ms, 273f570b/sudph=237+173ms, f5a84096/sudph=237+174ms, a02a521d/sudph=237+175ms, 5d8de0a5/sudph=246+167ms, 7ce6fa6b/sudph=238+174ms, b51867ef/sudph=236+177ms, 640610e1/sudph=235+180ms, 220c8bd0/sudph=247+169ms, f50bbc8b/sudph=163+253ms, 4192550e/sudph=236+180ms, dafef9fe/sudph=240+177ms, 2aa74fd3/sudph=240+177ms, 37d26df6/sudph=243+175ms, 7619ecc4/sudph=242+177ms, 09cf4575/sudph=237+184ms, f02cf77f/sudph=243+178ms, c8919459/sudph=237+185ms, 69960a17/sudph=247+177ms, bd4ff66a/sudph=239+184ms, 9ce6c73f/sudph=238+186ms, 7214de62/sudph=255+171ms, 438f9f1d/sudph=250+178ms, 164862de/sudph=278ms+unknown (path latency unknown, ranked by tp latency 428 ms), c399e4f5/sudph=247+181ms, 60f7c470/sudph=248+180ms, 7ed17ade/sudph=258+170ms, 5da161c4/sudph=249+181ms, 8418f4d0/sudph=235+194ms, 516efbbb/sudph=244+185ms, fc659541/sudph=260+170ms, 400afc99/sudph=281ms+unknown (path latency unknown, ranked by tp latency 431 ms), 8b95839a/sudph=242+189ms, 76903505/sudph=243+189ms, 86a92f24/sudph=256+177ms, 73eeae10/sudph=240+195ms, 9a3a33de/sudph=246+189ms, f588ee22/sudph=256+179ms, 2b364511/sudph=262+175ms, 41238a2c/sudph=257+181ms, 998d4c3f/sudph=240+198ms, 8f0fe1bb/sudph=258+183ms, d5292c5a/sudph=258+183ms, 4c6c12f1/sudph=258+184ms, ab4d7985/sudph=244+198ms, 8926c036/sudph=259+184ms, 7f84f1c0/sudph=258+185ms, e79a19ea/sudph=244+200ms, a7430867/sudph=259+185ms, bf03c16a/sudph=244+201ms, 56b0e11d/sudph=258+187ms, 818d5118/sudph=257+189ms, c6c97e2f/sudph=238+209ms, a28a4aea/sudph=258+190ms, 3c794e10/sudph=258+190ms, f57e59f7/sudph=275+175ms, ec541a8d/sudph=258+192ms, 80715d1d/sudph=259+192ms, 6d239e7c/sudph=263+189ms, 0887955d/sudph=260+194ms, a574dd28/sudph=258+196ms, 531d68f8/sudph=260+197ms, 17d588b6/sudph=261+198ms, 66ac506d/sudph=259+204ms, dd8c9773/sudph=288+176ms, 9bd4fefc/sudph=257+207ms, 10f1597d/sudph=291+175ms, c98ba1a4/sudph=282+184ms, dc982f96/sudph=273+197ms, c5d40c0b/sudph=258+213ms, eb50a4eb/sudph=263+208ms, 118ac36e/sudph=275+198ms, 0aa6037a/sudph=260+213ms, c6669bc2/sudph=281+196ms, c0470303/sudph=269+218ms, 007695c7/sudph=238+254ms, a88ccbc8/sudph=239+254ms, f65f5a4f/sudph=238+256ms, a058a585/sudph=239+255ms, f5125970/sudph=238+256ms, 5084ae93/sudph=240+255ms, 3380a330/sudph=240+255ms, d1a40fe9/sudph=242+254ms, bdf67f3c/sudph=243+254ms, e60b0444/sudph=244+254ms, 69c984d1/sudph=244+254ms, b416383a/sudph=215p+304ms, f892e231/sudph=236+287ms, dcfe6981/sudph=221+303ms, d1087514/sudph=294+231ms, fc473391/sudph=279+246ms, f0629873/sudph=220+308ms, 4d876c20/sudph=219+314ms, 652ddd86/sudph=215+318ms, 469162c6/sudph=216+323ms, 7f145af5/sudph=266+275ms, 540cfd51/sudph=265+277ms, 4f0de239/sudph=293+276ms, e5351b2f/sudph=275+311ms, 9569a25f/sudph=249+10348ms, d8f0cf92/sudph=unmeasured, b8d499db/webrtc=95ms+unknown (path latency unknown, ranked by tp latency 245 ms), 6e366f15/webrtc=91+175ms, b526f5ae/webrtc=233ms+unknown (path latency unknown, ranked by tp latency 383 ms), 3d708bc4/webrtc=241ms+unknown (path latency unknown, ranked by tp latency 391 ms), 97d523f8/webrtc=245ms+unknown (path latency unknown, ranked by tp latency 395 ms), 677f9049/webrtc=235+170ms, b6ec8539/webrtc=258ms+unknown (path latency unknown, ranked by tp latency 408 ms), db18af25/webrtc=268ms+unknown (path latency unknown, ranked by tp latency 418 ms), f09e820c/webrtc=254+174ms, f9b82246/webrtc=255+180ms, ca4589b2/webrtc=297ms+unknown (path latency unknown, ranked by tp latency 447 ms), 3446de5c/webrtc=309ms+unknown (path latency unknown, ranked by tp latency 459 ms), 95ca4c8a/webrtc=340ms+unknown (path latency unknown, ranked by tp latency 490 ms), 29d2aab6/webrtc=340ms+unknown (path latency unknown, ranked by tp latency 490 ms), b5d73702/webrtc=437ms+unknown (path latency unknown, ranked by tp latency 587 ms), 1458293c/webrtc=308+334ms; chose 062c57d2; oracle: path over a free first hop; first hop 062c57d2"
+  },
+  {
+    "at": "2026-09-17T21:42:10.993379701-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49205,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T21:42:10.993384064-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49205,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "fdab37dd-c35e-05bc-9e51-cd6b024e3eec",
+    "tp_type": "stcpr",
+    "remote_pk": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T21:42:11.151730218-05:00",
+    "event": "dial_decision",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49205,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "diversify: 4 sibling group(s) to 022716fb:3, excluding first-hop tp(s) b414796d,062c57d2,95839ad0,f1012467 and 4 first-hop peer(s); hook-race: every direct route to 022716fb shares the sibling's first hop (b414796d); awaiting the ranked candidates; excluding 2 same-LAN first hop(s) (share our uplink): eada53a2,8e3a3db3; ranked by carrier class then path latency: fdab37dd/stcpr=142+8ms, 2c4ae7a5/stcpr=250+224ms, 50cdb857/stcpr=209+280ms, ac40965a/stcpr=230+299ms, 7aeb822f/stcpr=271+264ms, 83e88e2a/stcpr=423+294ms, 4889f2b3/stcpr=571+317ms, 01f2a564/stcpr=514+467ms, 59f8374e/stcpr=1266+270ms, 6cb2bbf7/stcpr=3573+270ms, 93139b56/sudph=32+115ms, 564a8527/sudph=136+13ms, 08e154d4/sudph=137+15ms, 3c838c5d/sudph=147+8ms, 2fc76c8c/sudph=147+9ms, c0c594b1/sudph=146+9ms, 49236a72/sudph=146+10ms, 9cd5f9a8/sudph=146+10ms, eef2d4f7/sudph=150+9ms, 4703b4c4/sudph=147+12ms, a3c17e80/sudph=153+9ms, c5b5b364/sudph=47+116ms, 7ca0e483/sudph=49+116ms, 81adbc36/sudph=50+117ms, 21e24380/sudph=153+14ms, 729182c5/sudph=51+117ms, 5d878181/sudph=48+121ms, f9870773/sudph=66+103ms, 7fcd65b9/sudph=153+16ms, 9fa91cce/sudph=53+117ms, 2202a94e/sudph=50+121ms, 4f7eb678/sudph=153+18ms, 6f46d934/sudph=157+15ms, 14c258be/sudph=53+121ms, abfee912/sudph=54+121ms, 540125a4/sudph=53+122ms, eb2562fd/sudph=52+126ms, ef6d5530/sudph=164+16ms, 3dfa30f2/sudph=161+20ms, e850bb9e/sudph=166+15ms, b1de7249/sudph=169+16ms, 588f33c8/sudph=161+26ms, 0bc5f2a4/sudph=163+25ms, d5a5dc92/sudph=164+25ms, ee6868d9/sudph=164+25ms, 93dfce7a/sudph=178+12ms, 0bcd24d8/sudph=178+13ms, ba3f5ddb/sudph=181+11ms, 4c04ca1d/sudph=179+15ms, 5dfc8b3b/sudph=179+15ms, e3b329fe/sudph=67+127ms, 566a42ca/sudph=181+14ms, 4115ff2d/sudph=178+17ms, a0bcd839/sudph=181+15ms, 4fd1d8d9/sudph=68+129ms, 97096f02/sudph=68+131ms, 7ac523ad/sudph=68+132ms, 0d19170b/sudph=57+143ms, e808fc63/sudph=51ms+unknown (path latency unknown, ranked by tp latency 201 ms), e87f5d57/sudph=181+21ms, 62df7ff7/sudph=67+135ms, 4a318706/sudph=178+28ms, 0b4b3025/sudph=67+142ms, 20a2a400/sudph=188+23ms, 44540829/sudph=186+25ms, 11d867fd/sudph=187+28ms, 3bae2f00/sudph=188+27ms, 1740916d/sudph=66ms+unknown (path latency unknown, ranked by tp latency 216 ms), 18d36d9c/sudph=194+29ms, 380513dc/sudph=73+150ms, b6feb1c1/sudph=198+27ms, 07fd6545/sudph=68+164ms, 12707801/sudph=106+135ms, 4fafe7b9/sudph=93ms+unknown (path latency unknown, ranked by tp latency 243 ms), 9c54a36f/sudph=112+132ms, 8008aaed/sudph=92+152ms, 68d4e318/sudph=82+164ms, f834bb35/sudph=84+163ms, 9055544a/sudph=89+159ms, a248b092/sudph=117+136ms, d93bb059/sudph=156ms+unknown (path latency unknown, ranked by tp latency 306 ms), e7f88491/sudph=185ms+unknown (path latency unknown, ranked by tp latency 335 ms), c9952aa4/sudph=186ms+unknown (path latency unknown, ranked by tp latency 336 ms), e57c175d/sudph=179+168ms, c620ba52/sudph=184+164ms, f0d5b942/sudph=181+169ms, a3b0bfa0/sudph=183+168ms, 75f09818/sudph=183+169ms, 29d6d27e/sudph=184+169ms, 74f8f009/sudph=190+164ms, 2b23b4f7/sudph=191+164ms, 2fc19004/sudph=191+165ms, 9abe0fe8/sudph=187+170ms, 807baa4e/sudph=189+169ms, 4e5fed0b/sudph=184+175ms, 2e03e58b/sudph=186+173ms, c33c23e0/sudph=190+168ms, e71692d0/sudph=192+166ms, 880f0f36/sudph=193+166ms, 1aaa1c45/sudph=190+170ms, 3ab5eaa2/sudph=194+166ms, 0780dbbe/sudph=193+169ms, 50e63570/sudph=189+173ms, 3fd812af/sudph=189+174ms, 455509d7/sudph=195+170ms, 32768ddd/sudph=193+172ms, fa319603/sudph=198+173ms, 704733b6/sudph=238ms+unknown (path latency unknown, ranked by tp latency 388 ms), 49bbb3c8/sudph=238ms+unknown (path latency unknown, ranked by tp latency 388 ms), 6ff82430/sudph=243ms+unknown (path latency unknown, ranked by tp latency 393 ms), 0a9df774/sudph=246ms+unknown (path latency unknown, ranked by tp latency 396 ms), 92b09c11/sudph=246ms+unknown (path latency unknown, ranked by tp latency 396 ms), 8378a54f/sudph=247ms+unknown (path latency unknown, ranked by tp latency 397 ms), 7634f5d3/sudph=248ms+unknown (path latency unknown, ranked by tp latency 398 ms), e6b304af/sudph=234+166ms, 495db33c/sudph=236+167ms, 6abc7b7f/sudph=237+167ms, 323ca76b/sudph=238+167ms, aaf64533/sudph=236+168ms, b57601c8/sudph=240+167ms, ce33f7cc/sudph=153+254ms, 0a59c873/sudph=227+181ms, 1a332555/sudph=238+171ms, e1c038eb/sudph=244+165ms, a02a521d/sudph=237+173ms, 273f570b/sudph=237+173ms, f5a84096/sudph=237+174ms, 16b231fc/sudph=236+176ms, 7ce6fa6b/sudph=238+174ms, b51867ef/sudph=236+177ms, 5d8de0a5/sudph=246+168ms, f50bbc8b/sudph=163+252ms, 220c8bd0/sudph=247+169ms, 4192550e/sudph=236+180ms, 640610e1/sudph=235+181ms, dafef9fe/sudph=240+177ms, 37d26df6/sudph=243+175ms, 2aa74fd3/sudph=240+178ms, 7619ecc4/sudph=242+177ms, 09cf4575/sudph=237+184ms, f02cf77f/sudph=243+178ms, c8919459/sudph=237+185ms, 69960a17/sudph=247+177ms, 9ce6c73f/sudph=238+185ms, bd4ff66a/sudph=239+184ms, 7214de62/sudph=255+171ms, 7ed17ade/sudph=258+169ms, 438f9f1d/sudph=250+178ms, 60f7c470/sudph=248+180ms, c399e4f5/sudph=247+182ms, 8418f4d0/sudph=235+194ms, fc659541/sudph=260+170ms, 516efbbb/sudph=244+185ms, 5da161c4/sudph=249+181ms, 9569a25f/sudph=249+181ms, 400afc99/sudph=281ms+unknown (path latency unknown, ranked by tp latency 431 ms), 73eeae10/sudph=240+192ms, 8b95839a/sudph=242+189ms, 86a92f24/sudph=256+176ms, 76903505/sudph=243+191ms, 9a3a33de/sudph=246+189ms, f588ee22/sudph=256+179ms, 2b364511/sudph=262+175ms, 998d4c3f/sudph=240+198ms, c6c97e2f/sudph=238+200ms, 41238a2c/sudph=257+181ms, 9bd4fefc/sudph=257+183ms, 8f0fe1bb/sudph=258+183ms, d5292c5a/sudph=258+183ms, 164862de/sudph=278+164ms, 4c6c12f1/sudph=258+184ms, 7f84f1c0/sudph=258+184ms, 8926c036/sudph=259+184ms, ab4d7985/sudph=244+199ms, e79a19ea/sudph=244+200ms, bf03c16a/sudph=244+201ms, a7430867/sudph=259+186ms, 56b0e11d/sudph=258+188ms, a28a4aea/sudph=258+190ms, 3c794e10/sudph=258+190ms, f57e59f7/sudph=275+175ms, a574dd28/sudph=258+193ms, 0887955d/sudph=260+191ms, 6d239e7c/sudph=263+189ms, 80715d1d/sudph=259+193ms, ec541a8d/sudph=258+195ms, 818d5118/sudph=257+199ms, 531d68f8/sudph=260+197ms, c5d40c0b/sudph=258+203ms, 66ac506d/sudph=259+201ms, dd8c9773/sudph=288+173ms, 17d588b6/sudph=261+202ms, c98ba1a4/sudph=282+184ms, 10f1597d/sudph=291+175ms, 118ac36e/sudph=275+193ms, dc982f96/sudph=273+197ms, eb50a4eb/sudph=263+207ms, 7f145af5/sudph=266+207ms, 540cfd51/sudph=265+208ms, 0aa6037a/sudph=260+213ms, c6669bc2/sudph=281+196ms, e5351b2f/sudph=275+208ms, c0470303/sudph=269+218ms, 007695c7/sudph=238+254ms, a88ccbc8/sudph=239+254ms, a058a585/sudph=239+254ms, f65f5a4f/sudph=238+256ms, f5125970/sudph=238+256ms, 3380a330/sudph=240+255ms, d1a40fe9/sudph=242+254ms, 5084ae93/sudph=240+257ms, 69c984d1/sudph=244+255ms, 4f0de239/sudph=293+206ms, e60b0444/sudph=244+256ms, bdf67f3c/sudph=243+257ms, d1087514/sudph=294+210ms, fc473391/sudph=279+229ms, b416383a/sudph=215+303ms, f892e231/sudph=236+283ms, dcfe6981/sudph=221+304ms, f0629873/sudph=220+309ms, 4d876c20/sudph=219+314ms, 469162c6/sudph=216+319ms, 652ddd86/sudph=215+319ms, d8f0cf92/sudph=unmeasured, 6e366f15/webrtc=91+147ms, b8d499db/webrtc=95ms+unknown (path latency unknown, ranked by tp latency 245 ms), b526f5ae/webrtc=233ms+unknown (path latency unknown, ranked by tp latency 383 ms), 3d708bc4/webrtc=241ms+unknown (path latency unknown, ranked by tp latency 391 ms), 97d523f8/webrtc=245ms+unknown (path latency unknown, ranked by tp latency 395 ms), 677f9049/webrtc=235+170ms, b6ec8539/webrtc=258ms+unknown (path latency unknown, ranked by tp latency 408 ms), db18af25/webrtc=268ms+unknown (path latency unknown, ranked by tp latency 418 ms), f09e820c/webrtc=254+174ms, f9b82246/webrtc=255+182ms, ca4589b2/webrtc=297ms+unknown (path latency unknown, ranked by tp latency 447 ms), 3446de5c/webrtc=309ms+unknown (path latency unknown, ranked by tp latency 459 ms), 95ca4c8a/webrtc=340ms+unknown (path latency unknown, ranked by tp latency 490 ms), 29d2aab6/webrtc=340ms+unknown (path latency unknown, ranked by tp latency 490 ms), b5d73702/webrtc=437ms+unknown (path latency unknown, ranked by tp latency 587 ms), 1458293c/webrtc=308+333ms; chose fdab37dd; oracle: path over a free first hop; first hop fdab37dd"
+  },
+  {
+    "at": "2026-09-17T21:42:11.82738951-05:00",
+    "event": "group_closed",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49204,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 1,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "local close (code 0)"
+  },
+  {
+    "at": "2026-09-17T21:42:16.827034016-05:00",
+    "event": "tunnel_retired",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49204,
+      "src_port": 3
+    },
+    "by": "adaptive",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "062c57d2-0c3c-05ac-8df4-d322cd8da1aa",
+    "tp_type": "stcpr",
+    "remote_pk": "03dc3488e49ded9250f3cca2827ab16f6331b7ccefdad614353c785a5fc76c1b13",
+    "hops": [
+      {
+        "tp_id": "062c57d2-0c3c-05ac-8df4-d322cd8da1aa",
+        "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+        "to": "03dc3488e49ded9250f3cca2827ab16f6331b7ccefdad614353c785a5fc76c1b13",
+        "tp_type": "stcpr"
+      },
+      {
+        "tp_id": "2d3c4852-cfd3-07ed-951c-a2c04250bf4a",
+        "from": "03dc3488e49ded9250f3cca2827ab16f6331b7ccefdad614353c785a5fc76c1b13",
+        "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+        "tp_type": "stcpr"
+      }
+    ],
+    "reason": "tunnel session closed"
+  },
+  {
+    "at": "2026-09-17T21:42:18.24689283-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49206,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T21:42:18.246895467-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49206,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "2c4ae7a5-de55-0e09-bd14-7febf7d9f972",
+    "tp_type": "stcpr",
+    "remote_pk": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T21:42:18.631889387-05:00",
+    "event": "dial_decision",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49206,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "diversify: 5 sibling group(s) to 022716fb:3, excluding first-hop tp(s) b414796d,062c57d2,fdab37dd,95839ad0,f1012467 and 5 first-hop peer(s); hook-race: every direct route to 022716fb shares the sibling's first hop (b414796d); awaiting the ranked candidates; excluding 2 same-LAN first hop(s) (share our uplink): eada53a2,8e3a3db3; ranked by carrier class then path latency: 2c4ae7a5/stcpr=250+224ms, 50cdb857/stcpr=209+280ms, ac40965a/stcpr=230+299ms, 7aeb822f/stcpr=271+264ms, 83e88e2a/stcpr=423+294ms, 4889f2b3/stcpr=571+317ms, 01f2a564/stcpr=514+467ms, 59f8374e/stcpr=1266+270ms, 6cb2bbf7/stcpr=3573+270ms, 93139b56/sudph=27+115ms, 564a8527/sudph=137+13ms, 08e154d4/sudph=138+15ms, 3c838c5d/sudph=150+8ms, c0c594b1/sudph=149+9ms, 2fc76c8c/sudph=150+9ms, eef2d4f7/sudph=151+9ms, 49236a72/sudph=152+10ms, 9cd5f9a8/sudph=152+10ms, a3c17e80/sudph=153+9ms, 4703b4c4/sudph=150+12ms, 0bcd24d8/sudph=151+13ms, 21e24380/sudph=153+14ms, 7ca0e483/sudph=51+116ms, c5b5b364/sudph=51+116ms, 5dfc8b3b/sudph=152+15ms, 4115ff2d/sudph=152+17ms, 7fcd65b9/sudph=153+16ms, 729182c5/sudph=53+117ms, 4f7eb678/sudph=152+18ms, 81adbc36/sudph=53+117ms, b1de7249/sudph=156+16ms, 6f46d934/sudph=157+15ms, 5d878181/sudph=52+121ms, f9870773/sudph=70+103ms, 9fa91cce/sudph=56+117ms, 2202a94e/sudph=53+121ms, abfee912/sudph=56+121ms, 14c258be/sudph=57+121ms, 540125a4/sudph=56+122ms, ef6d5530/sudph=164+16ms, 3dfa30f2/sudph=161+20ms, e850bb9e/sudph=166+15ms, eb2562fd/sudph=55+126ms, 588f33c8/sudph=161+26ms, 0bc5f2a4/sudph=163+25ms, d5a5dc92/sudph=164+25ms, ee6868d9/sudph=164+25ms, 93dfce7a/sudph=178+12ms, ba3f5ddb/sudph=181+11ms, 4c04ca1d/sudph=179+15ms, e3b329fe/sudph=67+127ms, 566a42ca/sudph=181+14ms, a0bcd839/sudph=181+15ms, 4fd1d8d9/sudph=68+129ms, 97096f02/sudph=68+131ms, 7ac523ad/sudph=68+132ms, e87f5d57/sudph=181+21ms, 62df7ff7/sudph=68+135ms, e808fc63/sudph=53ms+unknown (path latency unknown, ranked by tp latency 203 ms), 0d19170b/sudph=60+143ms, 4a318706/sudph=178+28ms, 0b4b3025/sudph=65+142ms, 20a2a400/sudph=188+23ms, 44540829/sudph=186+25ms, 11d867fd/sudph=187+28ms, 3bae2f00/sudph=188+27ms, 1740916d/sudph=69ms+unknown (path latency unknown, ranked by tp latency 219 ms), 18d36d9c/sudph=194+29ms, b6feb1c1/sudph=198+27ms, 9c54a36f/sudph=97+132ms, 380513dc/sudph=80+150ms, 07fd6545/sudph=75+164ms, 12707801/sudph=109+135ms, 4fafe7b9/sudph=95ms+unknown (path latency unknown, ranked by tp latency 245 ms), 9055544a/sudph=87+159ms, f834bb35/sudph=86+163ms, 8008aaed/sudph=97+152ms, 68d4e318/sudph=89+164ms, a248b092/sudph=118+136ms, d93bb059/sudph=156ms+unknown (path latency unknown, ranked by tp latency 306 ms), e7f88491/sudph=185ms+unknown (path latency unknown, ranked by tp latency 335 ms), c9952aa4/sudph=186ms+unknown (path latency unknown, ranked by tp latency 336 ms), e57c175d/sudph=179+168ms, c620ba52/sudph=184+164ms, f0d5b942/sudph=181+169ms, a3b0bfa0/sudph=183+168ms, 75f09818/sudph=183+169ms, 29d6d27e/sudph=184+169ms, 74f8f009/sudph=190+164ms, 2b23b4f7/sudph=191+164ms, 2fc19004/sudph=191+165ms, 9abe0fe8/sudph=187+170ms, 807baa4e/sudph=189+169ms, 4e5fed0b/sudph=184+175ms, 2e03e58b/sudph=186+173ms, c33c23e0/sudph=190+168ms, e71692d0/sudph=192+166ms, 880f0f36/sudph=193+166ms, 1aaa1c45/sudph=190+170ms, 3ab5eaa2/sudph=194+166ms, 0780dbbe/sudph=193+169ms, 50e63570/sudph=189+173ms, 3fd812af/sudph=189+174ms, 455509d7/sudph=195+170ms, 32768ddd/sudph=193+172ms, fa319603/sudph=198+173ms, 704733b6/sudph=238ms+unknown (path latency unknown, ranked by tp latency 388 ms), 49bbb3c8/sudph=238ms+unknown (path latency unknown, ranked by tp latency 388 ms), 6ff82430/sudph=243ms+unknown (path latency unknown, ranked by tp latency 393 ms), 0a9df774/sudph=246ms+unknown (path latency unknown, ranked by tp latency 396 ms), 92b09c11/sudph=246ms+unknown (path latency unknown, ranked by tp latency 396 ms), 8378a54f/sudph=247ms+unknown (path latency unknown, ranked by tp latency 397 ms), 7634f5d3/sudph=248ms+unknown (path latency unknown, ranked by tp latency 398 ms), e6b304af/sudph=234+166ms, 495db33c/sudph=236+167ms, 6abc7b7f/sudph=237+167ms, 323ca76b/sudph=238+167ms, aaf64533/sudph=236+168ms, b57601c8/sudph=240+167ms, ce33f7cc/sudph=153+254ms, 0a59c873/sudph=227+181ms, 1a332555/sudph=238+171ms, e1c038eb/sudph=244+165ms, a02a521d/sudph=237+173ms, 273f570b/sudph=237+173ms, f5a84096/sudph=237+174ms, 16b231fc/sudph=236+176ms, 7ce6fa6b/sudph=238+174ms, b51867ef/sudph=236+177ms, 5d8de0a5/sudph=246+168ms, f50bbc8b/sudph=163+252ms, 220c8bd0/sudph=247+169ms, 4192550e/sudph=236+180ms, 640610e1/sudph=235+181ms, dafef9fe/sudph=240+177ms, 37d26df6/sudph=243+175ms, 2aa74fd3/sudph=240+178ms, 7619ecc4/sudph=242+177ms, 09cf4575/sudph=237+184ms, f02cf77f/sudph=243+178ms, c8919459/sudph=237+185ms, 69960a17/sudph=247+177ms, 9ce6c73f/sudph=238+185ms, bd4ff66a/sudph=239+184ms, 7214de62/sudph=255+171ms, 7ed17ade/sudph=258+169ms, 438f9f1d/sudph=250+178ms, 60f7c470/sudph=248+180ms, c399e4f5/sudph=247+182ms, 8418f4d0/sudph=235+194ms, fc659541/sudph=260+170ms, 516efbbb/sudph=244+185ms, 5da161c4/sudph=249+181ms, 9569a25f/sudph=249+181ms, 400afc99/sudph=281ms+unknown (path latency unknown, ranked by tp latency 431 ms), 73eeae10/sudph=240+192ms, 8b95839a/sudph=242+189ms, 86a92f24/sudph=256+176ms, 76903505/sudph=243+191ms, 9a3a33de/sudph=246+189ms, f588ee22/sudph=256+179ms, 2b364511/sudph=262+175ms, 998d4c3f/sudph=240+198ms, c6c97e2f/sudph=238+200ms, 41238a2c/sudph=257+181ms, 9bd4fefc/sudph=257+183ms, 8f0fe1bb/sudph=258+183ms, d5292c5a/sudph=258+183ms, 164862de/sudph=278+164ms, 4c6c12f1/sudph=258+184ms, 7f84f1c0/sudph=258+184ms, 8926c036/sudph=259+184ms, ab4d7985/sudph=244+199ms, e79a19ea/sudph=244+200ms, bf03c16a/sudph=244+201ms, a7430867/sudph=259+186ms, 56b0e11d/sudph=258+188ms, a28a4aea/sudph=258+190ms, 3c794e10/sudph=258+190ms, f57e59f7/sudph=275+175ms, a574dd28/sudph=258+193ms, 0887955d/sudph=260+191ms, 6d239e7c/sudph=263+189ms, 80715d1d/sudph=259+193ms, ec541a8d/sudph=258+195ms, 818d5118/sudph=257+199ms, 531d68f8/sudph=260+197ms, c5d40c0b/sudph=258+203ms, 66ac506d/sudph=259+201ms, dd8c9773/sudph=288+173ms, 17d588b6/sudph=261+202ms, c98ba1a4/sudph=282+184ms, 10f1597d/sudph=291+175ms, 118ac36e/sudph=275+193ms, dc982f96/sudph=273+197ms, eb50a4eb/sudph=263+207ms, 7f145af5/sudph=266+207ms, 540cfd51/sudph=265+208ms, 0aa6037a/sudph=260+213ms, c6669bc2/sudph=281+196ms, e5351b2f/sudph=275+208ms, c0470303/sudph=269+218ms, 007695c7/sudph=238+254ms, a88ccbc8/sudph=239+254ms, a058a585/sudph=239+254ms, f65f5a4f/sudph=238+256ms, f5125970/sudph=238+256ms, 3380a330/sudph=240+255ms, d1a40fe9/sudph=242+254ms, 5084ae93/sudph=240+257ms, 69c984d1/sudph=244+255ms, 4f0de239/sudph=293+206ms, e60b0444/sudph=244+256ms, bdf67f3c/sudph=243+257ms, d1087514/sudph=294+210ms, fc473391/sudph=279+229ms, b416383a/sudph=215+303ms, f892e231/sudph=236+283ms, dcfe6981/sudph=221+304ms, f0629873/sudph=220+309ms, 4d876c20/sudph=219+314ms, 469162c6/sudph=216+319ms, 652ddd86/sudph=215+319ms, d8f0cf92/sudph=unmeasured, 6e366f15/webrtc=91+147ms, b8d499db/webrtc=95ms+unknown (path latency unknown, ranked by tp latency 245 ms), b526f5ae/webrtc=233ms+unknown (path latency unknown, ranked by tp latency 383 ms), 3d708bc4/webrtc=241ms+unknown (path latency unknown, ranked by tp latency 391 ms), 97d523f8/webrtc=245ms+unknown (path latency unknown, ranked by tp latency 395 ms), 677f9049/webrtc=235+170ms, b6ec8539/webrtc=258ms+unknown (path latency unknown, ranked by tp latency 408 ms), db18af25/webrtc=268ms+unknown (path latency unknown, ranked by tp latency 418 ms), f09e820c/webrtc=254+174ms, f9b82246/webrtc=255+182ms, ca4589b2/webrtc=297ms+unknown (path latency unknown, ranked by tp latency 447 ms), 3446de5c/webrtc=309ms+unknown (path latency unknown, ranked by tp latency 459 ms), 95ca4c8a/webrtc=340ms+unknown (path latency unknown, ranked by tp latency 490 ms), 29d2aab6/webrtc=340ms+unknown (path latency unknown, ranked by tp latency 490 ms), b5d73702/webrtc=437ms+unknown (path latency unknown, ranked by tp latency 587 ms), 1458293c/webrtc=308+333ms; chose 2c4ae7a5; oracle: path over a free first hop; first hop 2c4ae7a5"
+  },
+  {
+    "at": "2026-09-17T21:42:26.906368809-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49207,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T21:42:26.90637164-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49207,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "50cdb857-a262-0ae5-bf5b-5c93c8025b69",
+    "tp_type": "stcpr",
+    "remote_pk": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T21:42:27.435537628-05:00",
+    "event": "dial_decision",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49207,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "diversify: 6 sibling group(s) to 022716fb:3, excluding first-hop tp(s) 95839ad0,f1012467,b414796d,062c57d2,fdab37dd,2c4ae7a5 and 6 first-hop peer(s); hook-race: every direct route to 022716fb shares the sibling's first hop (b414796d); awaiting the ranked candidates; excluding 2 same-LAN first hop(s) (share our uplink): eada53a2,8e3a3db3; ranked by carrier class then path latency: 50cdb857/stcpr=209+280ms, ac40965a/stcpr=230+299ms, 7aeb822f/stcpr=271+264ms, 83e88e2a/stcpr=423+294ms, 4889f2b3/stcpr=571+317ms, 01f2a564/stcpr=514+467ms, 59f8374e/stcpr=1266+270ms, 6cb2bbf7/stcpr=3573+270ms, 93139b56/sudph=27+115ms, 564a8527/sudph=137+13ms, 08e154d4/sudph=138+15ms, 3c838c5d/sudph=150+8ms, c0c594b1/sudph=149+9ms, 2fc76c8c/sudph=150+9ms, eef2d4f7/sudph=151+9ms, 49236a72/sudph=152+10ms, 9cd5f9a8/sudph=152+10ms, 4703b4c4/sudph=150+12ms, 0bcd24d8/sudph=151+13ms, a3c17e80/sudph=156+9ms, 7ca0e483/sudph=51+116ms, c5b5b364/sudph=51+116ms, 5dfc8b3b/sudph=152+15ms, 4c04ca1d/sudph=153+15ms, 4115ff2d/sudph=152+17ms, 729182c5/sudph=53+117ms, 4f7eb678/sudph=152+18ms, 81adbc36/sudph=53+117ms, b1de7249/sudph=156+16ms, ba3f5ddb/sudph=161+11ms, 5d878181/sudph=52+121ms, f9870773/sudph=70+103ms, 9fa91cce/sudph=56+117ms, 2202a94e/sudph=53+121ms, 93dfce7a/sudph=163+12ms, 566a42ca/sudph=162+14ms, abfee912/sudph=56+121ms, 14c258be/sudph=57+121ms, 540125a4/sudph=56+122ms, a0bcd839/sudph=163+15ms, e87f5d57/sudph=157+21ms, 4a318706/sudph=153+28ms, eb2562fd/sudph=55+126ms, 588f33c8/sudph=164+26ms, 0bc5f2a4/sudph=166+25ms, ee6868d9/sudph=167+25ms, d5a5dc92/sudph=168+25ms, e3b329fe/sudph=67+127ms, 4fd1d8d9/sudph=68+129ms, 97096f02/sudph=68+131ms, 7ac523ad/sudph=68+132ms, 62df7ff7/sudph=68+135ms, e808fc63/sudph=53ms+unknown (path latency unknown, ranked by tp latency 203 ms), 0d19170b/sudph=60+143ms, 0b4b3025/sudph=65+142ms, 20a2a400/sudph=193+23ms, 44540829/sudph=192+25ms, 1740916d/sudph=69ms+unknown (path latency unknown, ranked by tp latency 219 ms), 11d867fd/sudph=192+28ms, 3bae2f00/sudph=194+27ms, 18d36d9c/sudph=193+29ms, b6feb1c1/sudph=201+27ms, 9c54a36f/sudph=97+132ms, 380513dc/sudph=80+150ms, 6f46d934/sudph=215+15ms, 21e24380/sudph=218+14ms, 7fcd65b9/sudph=218+16ms, 3dfa30f2/sudph=216+20ms, ef6d5530/sudph=222+16ms, 07fd6545/sudph=75+164ms, e850bb9e/sudph=224+15ms, 12707801/sudph=109+135ms, 4fafe7b9/sudph=95ms+unknown (path latency unknown, ranked by tp latency 245 ms), 9055544a/sudph=87+159ms, f834bb35/sudph=86+163ms, 8008aaed/sudph=97+152ms, 68d4e318/sudph=89+164ms, a248b092/sudph=118+136ms, d93bb059/sudph=158ms+unknown (path latency unknown, ranked by tp latency 308 ms), e7f88491/sudph=187ms+unknown (path latency unknown, ranked by tp latency 337 ms), c9952aa4/sudph=194ms+unknown (path latency unknown, ranked by tp latency 344 ms), f0d5b942/sudph=180+169ms, e57c175d/sudph=181+168ms, c620ba52/sudph=188+164ms, 74f8f009/sudph=189+164ms, 75f09818/sudph=185+169ms, a3b0bfa0/sudph=186+168ms, 29d6d27e/sudph=186+169ms, 9abe0fe8/sudph=187+170ms, c33c23e0/sudph=189+168ms, 2fc19004/sudph=194+165ms, 2b23b4f7/sudph=194+164ms, 880f0f36/sudph=193+166ms, 3ab5eaa2/sudph=194+166ms, 807baa4e/sudph=191+169ms, 2e03e58b/sudph=188+173ms, 455509d7/sudph=192+170ms, 4e5fed0b/sudph=187+175ms, e71692d0/sudph=197+166ms, 1aaa1c45/sudph=193+170ms, 50e63570/sudph=190+173ms, 0780dbbe/sudph=195+169ms, 32768ddd/sudph=192+172ms, 3fd812af/sudph=191+174ms, fa319603/sudph=198+173ms, 704733b6/sudph=242ms+unknown (path latency unknown, ranked by tp latency 392 ms), 92b09c11/sudph=245ms+unknown (path latency unknown, ranked by tp latency 395 ms), e6b304af/sudph=232+166ms, 8378a54f/sudph=250ms+unknown (path latency unknown, ranked by tp latency 400 ms), 0a9df774/sudph=250ms+unknown (path latency unknown, ranked by tp latency 400 ms), 6ff82430/sudph=251ms+unknown (path latency unknown, ranked by tp latency 401 ms), aaf64533/sudph=234+168ms, 6abc7b7f/sudph=236+167ms, 495db33c/sudph=236+167ms, 323ca76b/sudph=242+167ms, b57601c8/sudph=243+167ms, f5a84096/sudph=236+174ms, 0a59c873/sudph=229+181ms, 273f570b/sudph=237+173ms, 1a332555/sudph=240+171ms, e1c038eb/sudph=247+165ms, a02a521d/sudph=240+173ms, ce33f7cc/sudph=159+254ms, 220c8bd0/sudph=245+169ms, 7ce6fa6b/sudph=240+174ms, b51867ef/sudph=239+177ms, f50bbc8b/sudph=164+252ms, 5d8de0a5/sudph=248+168ms, 7634f5d3/sudph=266ms+unknown (path latency unknown, ranked by tp latency 416 ms), 4192550e/sudph=236+180ms, 640610e1/sudph=236+181ms, dd8c9773/sudph=245+173ms, 7214de62/sudph=250+171ms, 37d26df6/sudph=246+175ms, 2aa74fd3/sudph=243+178ms, dafef9fe/sudph=245+177ms, 7619ecc4/sudph=245+177ms, 69960a17/sudph=247+177ms, c8919459/sudph=239+185ms, 09cf4575/sudph=240+184ms, 7ed17ade/sudph=256+169ms, f02cf77f/sudph=247+178ms, 49bbb3c8/sudph=276ms+unknown (path latency unknown, ranked by tp latency 426 ms), 9ce6c73f/sudph=241+185ms, bd4ff66a/sudph=243+184ms, 8418f4d0/sudph=233+194ms, 438f9f1d/sudph=252+178ms, 9569a25f/sudph=249+181ms, 60f7c470/sudph=251+180ms, 516efbbb/sudph=247+185ms, fc659541/sudph=263+170ms, 5da161c4/sudph=252+181ms, 8b95839a/sudph=246+189ms, 400afc99/sudph=285ms+unknown (path latency unknown, ranked by tp latency 435 ms), 73eeae10/sudph=243+192ms, 41238a2c/sudph=255+181ms, 76903505/sudph=247+191ms, 9a3a33de/sudph=249+189ms, 9bd4fefc/sudph=255+183ms, f588ee22/sudph=259+179ms, 16b231fc/sudph=263+176ms, d5292c5a/sudph=257+183ms, 4c6c12f1/sudph=256+184ms, 2b364511/sudph=266+175ms, 998d4c3f/sudph=244+198ms, 7f84f1c0/sudph=258+184ms, 8f0fe1bb/sudph=259+183ms, 164862de/sudph=278+164ms, 86a92f24/sudph=268+176ms, a28a4aea/sudph=255+190ms, ab4d7985/sudph=247+199ms, 8926c036/sudph=262+184ms, e79a19ea/sudph=247+200ms, a7430867/sudph=261+186ms, bf03c16a/sudph=247+201ms, 3c794e10/sudph=258+190ms, 56b0e11d/sudph=261+188ms, 818d5118/sudph=251+199ms, f57e59f7/sudph=278+175ms, ec541a8d/sudph=259+195ms, 6d239e7c/sudph=267+189ms, 80715d1d/sudph=263+193ms, 0887955d/sudph=265+191ms, c399e4f5/sudph=275+182ms, a574dd28/sudph=264+193ms, 531d68f8/sudph=264+197ms, 66ac506d/sudph=263+201ms, c6669bc2/sudph=269+196ms, c98ba1a4/sudph=285+184ms, 10f1597d/sudph=293+175ms, dc982f96/sudph=276+197ms, 0aa6037a/sudph=260+213ms, e5351b2f/sudph=270+208ms, c5d40c0b/sudph=281+203ms, c0470303/sudph=273+218ms, a058a585/sudph=242+254ms, a88ccbc8/sudph=243+254ms, f65f5a4f/sudph=241+256ms, 3380a330/sudph=243+255ms, f5125970/sudph=241+256ms, 007695c7/sudph=244+254ms, 5084ae93/sudph=242+257ms, d1a40fe9/sudph=246+254ms, 69c984d1/sudph=248+255ms, e60b0444/sudph=247+256ms, bdf67f3c/sudph=247+257ms, 7f145af5/sudph=303+207ms, eb50a4eb/sudph=308+207ms, 540cfd51/sudph=309+208ms, f892e231/sudph=238+283ms, b416383a/sudph=224+303ms, dcfe6981/sudph=226+304ms, f0629873/sudph=223+309ms, 652ddd86/sudph=218+319ms, 4d876c20/sudph=225+314ms, 469162c6/sudph=224+319ms, d1087514/sudph=370+210ms, 17d588b6/sudph=505+202ms, 4f0de239/sudph=826+206ms, 118ac36e/sudph=1215+193ms, c6c97e2f/sudph=1608+200ms, fc473391/sudph=1738+229ms, d8f0cf92/sudph=unmeasured, 6e366f15/webrtc=91+147ms, b8d499db/webrtc=95ms+unknown (path latency unknown, ranked by tp latency 245 ms), b526f5ae/webrtc=233ms+unknown (path latency unknown, ranked by tp latency 383 ms), 3d708bc4/webrtc=241ms+unknown (path latency unknown, ranked by tp latency 391 ms), 97d523f8/webrtc=245ms+unknown (path latency unknown, ranked by tp latency 395 ms), 677f9049/webrtc=235+170ms, b6ec8539/webrtc=258ms+unknown (path latency unknown, ranked by tp latency 408 ms), db18af25/webrtc=268ms+unknown (path latency unknown, ranked by tp latency 418 ms), f09e820c/webrtc=254+174ms, f9b82246/webrtc=255+182ms, ca4589b2/webrtc=297ms+unknown (path latency unknown, ranked by tp latency 447 ms), 3446de5c/webrtc=309ms+unknown (path latency unknown, ranked by tp latency 459 ms), 95ca4c8a/webrtc=340ms+unknown (path latency unknown, ranked by tp latency 490 ms), 29d2aab6/webrtc=340ms+unknown (path latency unknown, ranked by tp latency 490 ms), b5d73702/webrtc=437ms+unknown (path latency unknown, ranked by tp latency 587 ms), 1458293c/webrtc=308+333ms; chose 50cdb857; oracle: path over a free first hop; first hop 50cdb857"
+  },
+  {
+    "at": "2026-09-17T21:42:32.997199854-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49208,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T21:42:32.997202044-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49208,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "ac40965a-bc99-01e4-a2c9-c26b76db013b",
+    "tp_type": "stcpr",
+    "remote_pk": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T21:42:33.486593512-05:00",
+    "event": "dial_decision",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49208,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "diversify: 6 sibling group(s) to 022716fb:3, excluding first-hop tp(s) b414796d,50cdb857,fdab37dd,2c4ae7a5,95839ad0,f1012467 and 6 first-hop peer(s); hook-race: every direct route to 022716fb shares the sibling's first hop (b414796d); awaiting the ranked candidates; excluding 2 same-LAN first hop(s) (share our uplink): eada53a2,8e3a3db3; ranked by carrier class then path latency: ac40965a/stcpr=230+299ms, 7aeb822f/stcpr=271+264ms, 83e88e2a/stcpr=423+294ms, 4889f2b3/stcpr=571+317ms, 01f2a564/stcpr=514+467ms, 59f8374e/stcpr=1266+270ms, 6cb2bbf7/stcpr=3573+270ms, 93139b56/sudph=27+115ms, 564a8527/sudph=137+13ms, 08e154d4/sudph=138+15ms, 3c838c5d/sudph=150+8ms, 920483c5/sudph=148p+11ms, c0c594b1/sudph=149+9ms, 2fc76c8c/sudph=150+9ms, eef2d4f7/sudph=151+9ms, 49236a72/sudph=152+10ms, 9cd5f9a8/sudph=152+10ms, 4703b4c4/sudph=150+12ms, 0bcd24d8/sudph=151+13ms, a3c17e80/sudph=156+9ms, 7ca0e483/sudph=51+116ms, c5b5b364/sudph=51+116ms, 5dfc8b3b/sudph=152+15ms, 4c04ca1d/sudph=153+15ms, 4115ff2d/sudph=152+17ms, 729182c5/sudph=53+117ms, 4f7eb678/sudph=152+18ms, 81adbc36/sudph=53+117ms, b1de7249/sudph=156+16ms, ba3f5ddb/sudph=161+11ms, 5d878181/sudph=52+121ms, f9870773/sudph=70+103ms, 9fa91cce/sudph=56+117ms, 2202a94e/sudph=53+121ms, 93dfce7a/sudph=163+12ms, 566a42ca/sudph=162+14ms, abfee912/sudph=56+121ms, 14c258be/sudph=57+121ms, 540125a4/sudph=56+122ms, a0bcd839/sudph=163+15ms, e87f5d57/sudph=157+21ms, 4a318706/sudph=153+28ms, eb2562fd/sudph=55+126ms, 588f33c8/sudph=164+26ms, 0bc5f2a4/sudph=166+25ms, ee6868d9/sudph=167+25ms, d5a5dc92/sudph=168+25ms, e3b329fe/sudph=67+127ms, 4fd1d8d9/sudph=68+129ms, 97096f02/sudph=68+131ms, 7ac523ad/sudph=68+132ms, 62df7ff7/sudph=68+135ms, e808fc63/sudph=53ms+unknown (path latency unknown, ranked by tp latency 203 ms), 0d19170b/sudph=60+143ms, 0b4b3025/sudph=65+142ms, 20a2a400/sudph=193+23ms, 44540829/sudph=192+25ms, 1740916d/sudph=69ms+unknown (path latency unknown, ranked by tp latency 219 ms), 11d867fd/sudph=192+28ms, 3bae2f00/sudph=194+27ms, 18d36d9c/sudph=193+29ms, b6feb1c1/sudph=201+27ms, 9c54a36f/sudph=97+132ms, 380513dc/sudph=80+150ms, 6f46d934/sudph=215+15ms, 21e24380/sudph=218+14ms, 7fcd65b9/sudph=218+16ms, 3dfa30f2/sudph=216+20ms, ef6d5530/sudph=222+16ms, 07fd6545/sudph=75+164ms, e850bb9e/sudph=224+15ms, 12707801/sudph=109+135ms, 4fafe7b9/sudph=95ms+unknown (path latency unknown, ranked by tp latency 245 ms), 9055544a/sudph=87+159ms, f834bb35/sudph=86+163ms, 8008aaed/sudph=97+152ms, 68d4e318/sudph=89+164ms, a248b092/sudph=118+136ms, d93bb059/sudph=158ms+unknown (path latency unknown, ranked by tp latency 308 ms), e7f88491/sudph=187ms+unknown (path latency unknown, ranked by tp latency 337 ms), c9952aa4/sudph=194ms+unknown (path latency unknown, ranked by tp latency 344 ms), f0d5b942/sudph=180+169ms, e57c175d/sudph=181+168ms, c620ba52/sudph=188+164ms, 74f8f009/sudph=189+164ms, 75f09818/sudph=185+169ms, a3b0bfa0/sudph=186+168ms, 29d6d27e/sudph=186+169ms, 9abe0fe8/sudph=187+170ms, c33c23e0/sudph=189+168ms, 2fc19004/sudph=194+165ms, 2b23b4f7/sudph=194+164ms, 880f0f36/sudph=193+166ms, 3ab5eaa2/sudph=194+166ms, 807baa4e/sudph=191+169ms, 2e03e58b/sudph=188+173ms, 455509d7/sudph=192+170ms, 4e5fed0b/sudph=187+175ms, e71692d0/sudph=197+166ms, 1aaa1c45/sudph=193+170ms, 50e63570/sudph=190+173ms, 0780dbbe/sudph=195+169ms, 32768ddd/sudph=192+172ms, 3fd812af/sudph=191+174ms, fa319603/sudph=198+173ms, 704733b6/sudph=242ms+unknown (path latency unknown, ranked by tp latency 392 ms), 92b09c11/sudph=245ms+unknown (path latency unknown, ranked by tp latency 395 ms), e6b304af/sudph=232+166ms, 8378a54f/sudph=250ms+unknown (path latency unknown, ranked by tp latency 400 ms), 0a9df774/sudph=250ms+unknown (path latency unknown, ranked by tp latency 400 ms), 6ff82430/sudph=251ms+unknown (path latency unknown, ranked by tp latency 401 ms), aaf64533/sudph=234+168ms, 6abc7b7f/sudph=236+167ms, 495db33c/sudph=236+167ms, 323ca76b/sudph=242+167ms, b57601c8/sudph=243+167ms, f5a84096/sudph=236+174ms, 0a59c873/sudph=229+181ms, 273f570b/sudph=237+173ms, 1a332555/sudph=240+171ms, e1c038eb/sudph=247+165ms, a02a521d/sudph=240+173ms, ce33f7cc/sudph=159+254ms, 220c8bd0/sudph=245+169ms, 7ce6fa6b/sudph=240+174ms, b51867ef/sudph=239+177ms, f50bbc8b/sudph=164+252ms, 5d8de0a5/sudph=248+168ms, 7634f5d3/sudph=266ms+unknown (path latency unknown, ranked by tp latency 416 ms), 4192550e/sudph=236+180ms, 640610e1/sudph=236+181ms, dd8c9773/sudph=245+173ms, 7214de62/sudph=250+171ms, 37d26df6/sudph=246+175ms, 2aa74fd3/sudph=243+178ms, dafef9fe/sudph=245+177ms, 7619ecc4/sudph=245+177ms, 69960a17/sudph=247+177ms, c8919459/sudph=239+185ms, 09cf4575/sudph=240+184ms, 7ed17ade/sudph=256+169ms, f02cf77f/sudph=247+178ms, 49bbb3c8/sudph=276ms+unknown (path latency unknown, ranked by tp latency 426 ms), 9ce6c73f/sudph=241+185ms, bd4ff66a/sudph=243+184ms, 8418f4d0/sudph=233+194ms, 438f9f1d/sudph=252+178ms, 9569a25f/sudph=249+181ms, 60f7c470/sudph=251+180ms, 516efbbb/sudph=247+185ms, fc659541/sudph=263+170ms, 4c1940bb/sudph=252p+181ms, 5da161c4/sudph=252+181ms, 8b95839a/sudph=246+189ms, 400afc99/sudph=285ms+unknown (path latency unknown, ranked by tp latency 435 ms), 73eeae10/sudph=243+192ms, 41238a2c/sudph=255+181ms, 76903505/sudph=247+191ms, 9a3a33de/sudph=249+189ms, 9bd4fefc/sudph=255+183ms, f588ee22/sudph=259+179ms, 16b231fc/sudph=263+176ms, d5292c5a/sudph=257+183ms, 4c6c12f1/sudph=256+184ms, 2b364511/sudph=266+175ms, 998d4c3f/sudph=244+198ms, 7f84f1c0/sudph=258+184ms, 8f0fe1bb/sudph=259+183ms, 164862de/sudph=278+164ms, 86a92f24/sudph=268+176ms, a28a4aea/sudph=255+190ms, ab4d7985/sudph=247+199ms, 8926c036/sudph=262+184ms, e79a19ea/sudph=247+200ms, a7430867/sudph=261+186ms, bf03c16a/sudph=247+201ms, 3c794e10/sudph=258+190ms, 56b0e11d/sudph=261+188ms, 818d5118/sudph=251+199ms, f57e59f7/sudph=278+175ms, ec541a8d/sudph=259+195ms, 6d239e7c/sudph=267+189ms, 80715d1d/sudph=263+193ms, 0887955d/sudph=265+191ms, c399e4f5/sudph=275+182ms, a574dd28/sudph=264+193ms, 531d68f8/sudph=264+197ms, 66ac506d/sudph=263+201ms, c6669bc2/sudph=269+196ms, c98ba1a4/sudph=285+184ms, 10f1597d/sudph=293+175ms, dc982f96/sudph=276+197ms, 0aa6037a/sudph=260+213ms, e5351b2f/sudph=270+208ms, c5d40c0b/sudph=281+203ms, c0470303/sudph=273+218ms, a058a585/sudph=242+254ms, a88ccbc8/sudph=243+254ms, f65f5a4f/sudph=241+256ms, 3380a330/sudph=243+255ms, f5125970/sudph=241+256ms, 007695c7/sudph=244+254ms, 5084ae93/sudph=242+257ms, d1a40fe9/sudph=246+254ms, 69c984d1/sudph=248+255ms, e60b0444/sudph=247+256ms, bdf67f3c/sudph=247+257ms, 7f145af5/sudph=303+207ms, eb50a4eb/sudph=308+207ms, 540cfd51/sudph=309+208ms, c3ab039f/sudph=213p+308ms, f892e231/sudph=238+283ms, b416383a/sudph=224+303ms, dcfe6981/sudph=226+304ms, f0629873/sudph=223+309ms, 652ddd86/sudph=218+319ms, 4d876c20/sudph=225+314ms, 469162c6/sudph=224+319ms, d1087514/sudph=370+210ms, 17d588b6/sudph=505+202ms, 4f0de239/sudph=826+206ms, 118ac36e/sudph=1215+193ms, c6c97e2f/sudph=1608+200ms, fc473391/sudph=1738+229ms, d8f0cf92/sudph=unmeasured, 6e366f15/webrtc=91+147ms, b8d499db/webrtc=95ms+unknown (path latency unknown, ranked by tp latency 245 ms), b526f5ae/webrtc=233ms+unknown (path latency unknown, ranked by tp latency 383 ms), 3d708bc4/webrtc=241ms+unknown (path latency unknown, ranked by tp latency 391 ms), 97d523f8/webrtc=245ms+unknown (path latency unknown, ranked by tp latency 395 ms), 677f9049/webrtc=235+170ms, b6ec8539/webrtc=258ms+unknown (path latency unknown, ranked by tp latency 408 ms), db18af25/webrtc=268ms+unknown (path latency unknown, ranked by tp latency 418 ms), f09e820c/webrtc=254+174ms, f9b82246/webrtc=255+182ms, ca4589b2/webrtc=297ms+unknown (path latency unknown, ranked by tp latency 447 ms), 3446de5c/webrtc=309ms+unknown (path latency unknown, ranked by tp latency 459 ms), 95ca4c8a/webrtc=340ms+unknown (path latency unknown, ranked by tp latency 490 ms), 29d2aab6/webrtc=340ms+unknown (path latency unknown, ranked by tp latency 490 ms), b5d73702/webrtc=437ms+unknown (path latency unknown, ranked by tp latency 587 ms), 1458293c/webrtc=308+333ms; chose ac40965a; oracle: path over a free first hop; first hop ac40965a"
+  },
+  {
+    "at": "2026-09-17T21:42:39.29849682-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49209,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T21:42:39.298499526-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49209,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "7aeb822f-eace-0363-8eee-3092e5a4a504",
+    "tp_type": "stcpr",
+    "remote_pk": "02c4569e268fd666c229d76e4c65c1da8cf7f13a9a24c117e01bccb4ce99b464c7",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T21:42:39.840133878-05:00",
+    "event": "dial_decision",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49209,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "diversify: 7 sibling group(s) to 022716fb:3, excluding first-hop tp(s) b414796d,50cdb857,fdab37dd,2c4ae7a5,95839ad0,f1012467,ac40965a and 7 first-hop peer(s); hook-race: every direct route to 022716fb shares the sibling's first hop (b414796d); awaiting the ranked candidates; excluding 2 same-LAN first hop(s) (share our uplink): 8e3a3db3,eada53a2; ranked by carrier class then path latency: 7aeb822f/stcpr=278+264ms, 83e88e2a/stcpr=433+294ms, 4889f2b3/stcpr=571+317ms, 01f2a564/stcpr=629+467ms, 59f8374e/stcpr=888+270ms, 6cb2bbf7/stcpr=3573+270ms, 93139b56/sudph=30+115ms, 564a8527/sudph=138+13ms, 08e154d4/sudph=142+15ms, 3c838c5d/sudph=152+8ms, 49236a72/sudph=150+10ms, c0c594b1/sudph=151+9ms, 9cd5f9a8/sudph=150+10ms, 2fc76c8c/sudph=153+9ms, a3c17e80/sudph=154+9ms, eef2d4f7/sudph=155+9ms, 4703b4c4/sudph=153+12ms, 21e24380/sudph=151+14ms, 81adbc36/sudph=50+117ms, b1de7249/sudph=153+16ms, c5b5b364/sudph=53+116ms, f9870773/sudph=68+103ms, 729182c5/sudph=56+117ms, 920483c5/sudph=163+11ms, 7ca0e483/sudph=59+116ms, 5d878181/sudph=54+121ms, 2202a94e/sudph=55+121ms, 9fa91cce/sudph=60+117ms, 540125a4/sudph=58+122ms, 5dfc8b3b/sudph=166+15ms, 14c258be/sudph=61+121ms, e850bb9e/sudph=169+15ms, eb2562fd/sudph=58+126ms, abfee912/sudph=65+121ms, 4115ff2d/sudph=170+17ms, 0bcd24d8/sudph=175+13ms, 4c04ca1d/sudph=174+15ms, ee6868d9/sudph=165+25ms, 588f33c8/sudph=165+26ms, 93dfce7a/sudph=178+12ms, ba3f5ddb/sudph=181+11ms, a0bcd839/sudph=177+15ms, 566a42ca/sudph=179+14ms, d5a5dc92/sudph=169+25ms, 0bc5f2a4/sudph=169+25ms, e3b329fe/sudph=69+127ms, 4fd1d8d9/sudph=71+129ms, e87f5d57/sudph=180+21ms, 7ac523ad/sudph=71+132ms, 0d19170b/sudph=62+143ms, 62df7ff7/sudph=70+135ms, e808fc63/sudph=57ms+unknown (path latency unknown, ranked by tp latency 207 ms), 0b4b3025/sudph=67+142ms, 4a318706/sudph=180+28ms, 20a2a400/sudph=195+23ms, 44540829/sudph=192+25ms, 11d867fd/sudph=192+28ms, 1740916d/sudph=70ms+unknown (path latency unknown, ranked by tp latency 220 ms), 3bae2f00/sudph=195+27ms, 18d36d9c/sudph=194+29ms, b6feb1c1/sudph=197+27ms, 380513dc/sudph=81+150ms, 9c54a36f/sudph=106+132ms, 07fd6545/sudph=75+164ms, 9055544a/sudph=84+159ms, 8008aaed/sudph=94+152ms, 4fafe7b9/sudph=97ms+unknown (path latency unknown, ranked by tp latency 247 ms), 68d4e318/sudph=85+164ms, a248b092/sudph=116+136ms, f834bb35/sudph=94+163ms, 7fcd65b9/sudph=271+16ms, 4f7eb678/sudph=277+18ms, 3dfa30f2/sudph=278+20ms, 97096f02/sudph=169+131ms, 6f46d934/sudph=286+15ms, ef6d5530/sudph=292+16ms, d93bb059/sudph=166ms+unknown (path latency unknown, ranked by tp latency 316 ms), e7f88491/sudph=183ms+unknown (path latency unknown, ranked by tp latency 333 ms), c9952aa4/sudph=197ms+unknown (path latency unknown, ranked by tp latency 347 ms), c620ba52/sudph=185+164ms, 12707801/sudph=216+135ms, e57c175d/sudph=183+168ms, f0d5b942/sudph=183+169ms, 9abe0fe8/sudph=185+170ms, 75f09818/sudph=187+169ms, 74f8f009/sudph=192+164ms, 880f0f36/sudph=191+166ms, 2e03e58b/sudph=184+173ms, 3ab5eaa2/sudph=192+166ms, 29d6d27e/sudph=189+169ms, a3b0bfa0/sudph=190+168ms, c33c23e0/sudph=192+168ms, 1aaa1c45/sudph=192+170ms, 0780dbbe/sudph=193+169ms, 2fc19004/sudph=198+165ms, 807baa4e/sudph=195+169ms, 4e5fed0b/sudph=190+175ms, e71692d0/sudph=200+166ms, 455509d7/sudph=196+170ms, 32768ddd/sudph=195+172ms, 2b23b4f7/sudph=203+164ms, fa319603/sudph=194+173ms, 3fd812af/sudph=195+174ms, 50e63570/sudph=196+173ms, 704733b6/sudph=250ms+unknown (path latency unknown, ranked by tp latency 400 ms), e6b304af/sudph=234+166ms, 6ff82430/sudph=250ms+unknown (path latency unknown, ranked by tp latency 400 ms), 8378a54f/sudph=251ms+unknown (path latency unknown, ranked by tp latency 401 ms), 0a9df774/sudph=252ms+unknown (path latency unknown, ranked by tp latency 402 ms), 7634f5d3/sudph=254ms+unknown (path latency unknown, ranked by tp latency 404 ms), aaf64533/sudph=236+168ms, 495db33c/sudph=238+167ms, 6abc7b7f/sudph=239+167ms, 323ca76b/sudph=244+167ms, 49bbb3c8/sudph=261ms+unknown (path latency unknown, ranked by tp latency 411 ms), 5d8de0a5/sudph=244+168ms, 7ce6fa6b/sudph=238+174ms, 273f570b/sudph=239+173ms, 1a332555/sudph=242+171ms, 0a59c873/sudph=232+181ms, b57601c8/sudph=246+167ms, f5a84096/sudph=239+174ms, 16b231fc/sudph=239+176ms, e1c038eb/sudph=251+165ms, 220c8bd0/sudph=248+169ms, a02a521d/sudph=245+173ms, ce33f7cc/sudph=164+254ms, b51867ef/sudph=241+177ms, 4192550e/sudph=239+180ms, 7214de62/sudph=248+171ms, f50bbc8b/sudph=167+252ms, 640610e1/sudph=238+181ms, 92b09c11/sudph=269ms+unknown (path latency unknown, ranked by tp latency 419 ms), 2aa74fd3/sudph=244+178ms, dafef9fe/sudph=247+177ms, 37d26df6/sudph=249+175ms, 7619ecc4/sudph=247+177ms, 09cf4575/sudph=241+184ms, f02cf77f/sudph=247+178ms, c8919459/sudph=241+185ms, dd8c9773/sudph=254+173ms, 69960a17/sudph=251+177ms, 8418f4d0/sudph=234+194ms, 438f9f1d/sudph=251+178ms, 7ed17ade/sudph=260+169ms, 9ce6c73f/sudph=244+185ms, bd4ff66a/sudph=246+184ms, fc659541/sudph=260+170ms, 86a92f24/sudph=256+176ms, c399e4f5/sudph=252+182ms, 516efbbb/sudph=249+185ms, c670b0b9/sudph=254p+180ms, 60f7c470/sudph=255+180ms, 400afc99/sudph=286ms+unknown (path latency unknown, ranked by tp latency 436 ms), 9a3a33de/sudph=248+189ms, 5da161c4/sudph=255+181ms, f588ee22/sudph=258+179ms, 2b364511/sudph=263+175ms, 8b95839a/sudph=248+189ms, 41238a2c/sudph=257+181ms, 76903505/sudph=247+191ms, 73eeae10/sudph=246+192ms, 9bd4fefc/sudph=256+183ms, 8f0fe1bb/sudph=257+183ms, 164862de/sudph=277+164ms, d5292c5a/sudph=260+183ms, 998d4c3f/sudph=245+198ms, 4c6c12f1/sudph=259+184ms, 7f84f1c0/sudph=260+184ms, a28a4aea/sudph=257+190ms, ab4d7985/sudph=250+199ms, a7430867/sudph=263+186ms, e79a19ea/sudph=248+200ms, 4c1940bb/sudph=268+181ms, 3c794e10/sudph=259+190ms, 56b0e11d/sudph=262+188ms, bf03c16a/sudph=250+201ms, 8926c036/sudph=269+184ms, f57e59f7/sudph=279+175ms, c5d40c0b/sudph=251+203ms, 80715d1d/sudph=262+193ms, a574dd28/sudph=262+193ms, 6d239e7c/sudph=268+189ms, ec541a8d/sudph=262+195ms, 818d5118/sudph=260+199ms, 0887955d/sudph=268+191ms, 17d588b6/sudph=261+202ms, 531d68f8/sudph=268+197ms, 66ac506d/sudph=265+201ms, c6669bc2/sudph=273+196ms, 118ac36e/sudph=278+193ms, 10f1597d/sudph=296+175ms, eb50a4eb/sudph=265+207ms, 7f145af5/sudph=266+207ms, c98ba1a4/sudph=292+184ms, dc982f96/sudph=280+197ms, 4f0de239/sudph=271+206ms, 0aa6037a/sudph=272+213ms, 540cfd51/sudph=279+208ms, c0470303/sudph=275+218ms, fc473391/sudph=266+229ms, 007695c7/sudph=242+254ms, a058a585/sudph=243+254ms, f65f5a4f/sudph=244+256ms, f5125970/sudph=245+256ms, d1a40fe9/sudph=248+254ms, a88ccbc8/sudph=248+254ms, 3380a330/sudph=247+255ms, 5084ae93/sudph=248+257ms, 69c984d1/sudph=251+255ms, e60b0444/sudph=251+256ms, bdf67f3c/sudph=251+257ms, e5351b2f/sudph=307+208ms, f892e231/sudph=238+283ms, c6c97e2f/sudph=322+200ms, dcfe6981/sudph=227+304ms, b416383a/sudph=228+303ms, d1087514/sudph=322+210ms, f0629873/sudph=225+309ms, c3ab039f/sudph=229+308ms, 652ddd86/sudph=220+319ms, 4d876c20/sudph=225+314ms, 469162c6/sudph=223+319ms, d8f0cf92/sudph=unmeasured, 6e366f15/webrtc=86+147ms, b8d499db/webrtc=87ms+unknown (path latency unknown, ranked by tp latency 237 ms), b526f5ae/webrtc=239ms+unknown (path latency unknown, ranked by tp latency 389 ms), 97d523f8/webrtc=245ms+unknown (path latency unknown, ranked by tp latency 395 ms), 3d708bc4/webrtc=249ms+unknown (path latency unknown, ranked by tp latency 399 ms), db18af25/webrtc=254ms+unknown (path latency unknown, ranked by tp latency 404 ms), 677f9049/webrtc=243+170ms, b6ec8539/webrtc=264ms+unknown (path latency unknown, ranked by tp latency 414 ms), f09e820c/webrtc=247+174ms, f9b82246/webrtc=250+182ms, ca4589b2/webrtc=308ms+unknown (path latency unknown, ranked by tp latency 458 ms), 29d2aab6/webrtc=323ms+unknown (path latency unknown, ranked by tp latency 473 ms), 3446de5c/webrtc=382ms+unknown (path latency unknown, ranked by tp latency 532 ms), b5d73702/webrtc=437ms+unknown (path latency unknown, ranked by tp latency 587 ms), 1458293c/webrtc=312+333ms, 95ca4c8a/webrtc=1330ms+unknown (path latency unknown, ranked by tp latency 1480 ms); chose 7aeb822f; oracle: path over a free first hop; first hop 7aeb822f"
+  },
+  {
+    "at": "2026-09-17T21:42:55.807340137-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49201,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 1,
+    "legs": 2,
+    "tp_id": "fdab37dd-c35e-05bc-9e51-cd6b024e3eec",
+    "tp_type": "stcpr",
+    "remote_pk": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+    "reason": "mux append: aux leg"
+  },
+  {
+    "at": "2026-09-17T21:42:55.807489089-05:00",
+    "event": "leg_promoted",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49201,
+      "src_port": 3
+    },
+    "by": "operator",
+    "leg_index": 1,
+    "legs": 2,
+    "tp_id": "fdab37dd-c35e-05bc-9e51-cd6b024e3eec",
+    "tp_type": "stcpr",
+    "remote_pk": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+    "reason": "operator: pinned leg active"
+  },
+  {
+    "at": "2026-09-17T21:42:55.958606425-05:00",
+    "event": "leg_parked",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49201,
+      "src_port": 3
+    },
+    "by": "peer",
+    "leg_index": 1,
+    "legs": 2,
+    "tp_id": "fdab37dd-c35e-05bc-9e51-cd6b024e3eec",
+    "tp_type": "stcpr",
+    "remote_pk": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+    "hops": [
+      {
+        "tp_id": "fdab37dd-c35e-05bc-9e51-cd6b024e3eec",
+        "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+        "to": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+        "tp_type": "stcpr"
+      },
+      {
+        "tp_id": "7420f415-abd5-014f-bc55-e6132477485f",
+        "from": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+        "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+        "tp_type": "stcpr"
+      }
+    ],
+    "reason": "peer-mirrored park: the remote end marked this leg standby (CapLegState)"
+  },
+  {
+    "at": "2026-09-17T21:42:56.498836208-05:00",
+    "event": "leg_promoted",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49201,
+      "src_port": 3
+    },
+    "by": "peer",
+    "leg_index": 1,
+    "legs": 2,
+    "tp_id": "fdab37dd-c35e-05bc-9e51-cd6b024e3eec",
+    "tp_type": "stcpr",
+    "remote_pk": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+    "hops": [
+      {
+        "tp_id": "fdab37dd-c35e-05bc-9e51-cd6b024e3eec",
+        "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+        "to": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+        "tp_type": "stcpr"
+      },
+      {
+        "tp_id": "7420f415-abd5-014f-bc55-e6132477485f",
+        "from": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+        "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+        "tp_type": "stcpr"
+      }
+    ],
+    "reason": "peer-mirrored promote: the remote end marked this leg active (CapLegState)"
+  },
+  {
+    "at": "2026-09-17T21:42:57.677805037-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49201,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 2,
+    "legs": 3,
+    "tp_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+    "tp_type": "stcpr",
+    "remote_pk": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+    "reason": "mux append: aux leg"
+  },
+  {
+    "at": "2026-09-17T21:42:57.678038206-05:00",
+    "event": "leg_promoted",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49201,
+      "src_port": 3
+    },
+    "by": "operator",
+    "leg_index": 2,
+    "legs": 3,
+    "tp_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+    "tp_type": "stcpr",
+    "remote_pk": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+    "reason": "operator: pinned leg active"
+  },
+  {
+    "at": "2026-09-17T21:42:57.678803518-05:00",
+    "event": "leg_removed",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49201,
+      "src_port": 3
+    },
+    "by": "operator",
+    "leg_index": 0,
+    "legs": 2,
+    "tp_id": "b414796d-14fc-080e-9ce6-a7162e3e562b",
+    "tp_type": "stcpr",
+    "remote_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+    "hops": [
+      {
+        "tp_id": "b414796d-14fc-080e-9ce6-a7162e3e562b",
+        "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+        "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+        "tp_type": "stcpr"
+      }
+    ],
+    "reason": "operator: mux remove"
+  },
+  {
+    "at": "2026-09-17T21:42:57.678804035-05:00",
+    "event": "primary_rehomed",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49201,
+      "src_port": 3
+    },
+    "by": "operator",
+    "leg_index": 0,
+    "legs": 2,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "operator removed the primary leg"
+  },
+  {
+    "at": "2026-09-17T21:42:57.809492599-05:00",
+    "event": "leg_parked",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49201,
+      "src_port": 3
+    },
+    "by": "peer",
+    "leg_index": 1,
+    "legs": 2,
+    "tp_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+    "tp_type": "stcpr",
+    "remote_pk": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+    "hops": [
+      {
+        "tp_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+        "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+        "to": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+        "tp_type": "stcpr"
+      },
+      {
+        "tp_id": "dc5330cf-5d85-0b70-88e9-e4ab169d17fd",
+        "from": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+        "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+        "tp_type": "stcpr"
+      }
+    ],
+    "reason": "peer-mirrored park: the remote end marked this leg standby (CapLegState)"
+  },
+  {
+    "at": "2026-09-17T21:42:59.690414938-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49202,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 1,
+    "legs": 2,
+    "tp_id": "f1012467-de9d-09a9-8b49-62a43945c24b",
+    "tp_type": "stcpr",
+    "remote_pk": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+    "reason": "mux append: aux leg"
+  },
+  {
+    "at": "2026-09-17T21:42:59.690515917-05:00",
+    "event": "leg_promoted",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49202,
+      "src_port": 3
+    },
+    "by": "operator",
+    "leg_index": 1,
+    "legs": 2,
+    "tp_id": "f1012467-de9d-09a9-8b49-62a43945c24b",
+    "tp_type": "stcpr",
+    "remote_pk": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+    "reason": "operator: pinned leg active"
+  },
+  {
+    "at": "2026-09-17T21:42:59.828707875-05:00",
+    "event": "leg_parked",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49202,
+      "src_port": 3
+    },
+    "by": "peer",
+    "leg_index": 1,
+    "legs": 2,
+    "tp_id": "f1012467-de9d-09a9-8b49-62a43945c24b",
+    "tp_type": "stcpr",
+    "remote_pk": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+    "hops": [
+      {
+        "tp_id": "f1012467-de9d-09a9-8b49-62a43945c24b",
+        "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+        "to": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+        "tp_type": "stcpr"
+      },
+      {
+        "tp_id": "57c570d9-d718-01f6-a458-7cd9b5f8f1dc",
+        "from": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+        "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+        "tp_type": "stcpr"
+      }
+    ],
+    "reason": "peer-mirrored park: the remote end marked this leg standby (CapLegState)"
+  },
+  {
+    "at": "2026-09-17T21:43:01.49256034-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49202,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 2,
+    "legs": 3,
+    "tp_id": "ac40965a-bc99-01e4-a2c9-c26b76db013b",
+    "tp_type": "stcpr",
+    "remote_pk": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+    "reason": "mux append: aux leg"
+  },
+  {
+    "at": "2026-09-17T21:43:01.492690736-05:00",
+    "event": "leg_promoted",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49202,
+      "src_port": 3
+    },
+    "by": "operator",
+    "leg_index": 2,
+    "legs": 3,
+    "tp_id": "ac40965a-bc99-01e4-a2c9-c26b76db013b",
+    "tp_type": "stcpr",
+    "remote_pk": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+    "reason": "operator: pinned leg active"
+  },
+  {
+    "at": "2026-09-17T21:43:01.49321238-05:00",
+    "event": "leg_removed",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49202,
+      "src_port": 3
+    },
+    "by": "operator",
+    "leg_index": 0,
+    "legs": 2,
+    "tp_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+    "tp_type": "stcpr",
+    "remote_pk": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+    "hops": [
+      {
+        "tp_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+        "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+        "to": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+        "tp_type": "stcpr"
+      },
+      {
+        "tp_id": "dc5330cf-5d85-0b70-88e9-e4ab169d17fd",
+        "from": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+        "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+        "tp_type": "stcpr"
+      }
+    ],
+    "reason": "operator: mux remove"
+  },
+  {
+    "at": "2026-09-17T21:43:01.493212965-05:00",
+    "event": "primary_rehomed",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49202,
+      "src_port": 3
+    },
+    "by": "operator",
+    "leg_index": 0,
+    "legs": 2,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "operator removed the primary leg"
+  },
+  {
+    "at": "2026-09-17T21:43:01.873809682-05:00",
+    "event": "leg_parked",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49202,
+      "src_port": 3
+    },
+    "by": "peer",
+    "leg_index": 1,
+    "legs": 2,
+    "tp_id": "ac40965a-bc99-01e4-a2c9-c26b76db013b",
+    "tp_type": "stcpr",
+    "remote_pk": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+    "hops": [
+      {
+        "tp_id": "ac40965a-bc99-01e4-a2c9-c26b76db013b",
+        "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+        "to": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+        "tp_type": "stcpr"
+      },
+      {
+        "tp_id": "3de424e0-edac-027d-bf49-8012ef60d061",
+        "from": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+        "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+        "tp_type": "stcpr"
+      }
+    ],
+    "reason": "peer-mirrored park: the remote end marked this leg standby (CapLegState)"
+  },
+  {
+    "at": "2026-09-17T21:43:01.956179843-05:00",
+    "event": "leg_promoted",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49202,
+      "src_port": 3
+    },
+    "by": "peer",
+    "leg_index": 1,
+    "legs": 2,
+    "tp_id": "ac40965a-bc99-01e4-a2c9-c26b76db013b",
+    "tp_type": "stcpr",
+    "remote_pk": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+    "hops": [
+      {
+        "tp_id": "ac40965a-bc99-01e4-a2c9-c26b76db013b",
+        "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+        "to": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+        "tp_type": "stcpr"
+      },
+      {
+        "tp_id": "3de424e0-edac-027d-bf49-8012ef60d061",
+        "from": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+        "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+        "tp_type": "stcpr"
+      }
+    ],
+    "reason": "peer-mirrored promote: the remote end marked this leg active (CapLegState)"
+  },
+  {
+    "at": "2026-09-17T21:43:03.49016291-05:00",
+    "event": "leg_promoted",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49201,
+      "src_port": 3
+    },
+    "by": "peer",
+    "leg_index": 1,
+    "legs": 2,
+    "tp_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+    "tp_type": "stcpr",
+    "remote_pk": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+    "hops": [
+      {
+        "tp_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+        "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+        "to": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+        "tp_type": "stcpr"
+      },
+      {
+        "tp_id": "dc5330cf-5d85-0b70-88e9-e4ab169d17fd",
+        "from": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+        "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+        "tp_type": "stcpr"
+      }
+    ],
+    "reason": "peer-mirrored promote: the remote end marked this leg active (CapLegState)"
+  },
+  {
+    "at": "2026-09-17T21:44:51.495746684-05:00",
+    "event": "leg_parked",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49201,
+      "src_port": 3
+    },
+    "by": "adaptive",
+    "leg_index": 1,
+    "legs": 2,
+    "tp_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+    "tp_type": "stcpr",
+    "remote_pk": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+    "reason": "shared bottleneck: co-bottlenecked with a kept active leg (one pipe, not two)"
+  },
+  {
+    "at": "2026-09-17T21:44:56.826473782-05:00",
+    "event": "leg_parked",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49202,
+      "src_port": 3
+    },
+    "by": "adaptive",
+    "leg_index": 1,
+    "legs": 2,
+    "tp_id": "ac40965a-bc99-01e4-a2c9-c26b76db013b",
+    "tp_type": "stcpr",
+    "remote_pk": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+    "reason": "shared bottleneck: co-bottlenecked with a kept active leg (one pipe, not two)"
+  }
+]

@@ -1,0 +1,9 @@
+# exit=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1 local=65d4e646b exit_commit=f9107c982 session=skysocks-client tunnels=2 route_groups=7 active=2 standby=5 groups=rg49274/active=[stcpr>022716fb@b414796d] rg49275/active=[stcpr>0371ab4b@95839ad0] rg49276/standby=[stcpr>0281a102@f1012467] rg49277/standby=[stcpr>03f57e7c@fdab37dd] rg49278/standby=[stcpr>0255117b@50cdb857] rg49279/standby=[stcpr>02a2d4c3@2c4ae7a5] rg49280/standby=[stcpr>02c48393@ac40965a] sink=http://127.0.0.1:18080 settings=chunk.max_bytes=2MiB,upload.chunk_bytes=4MiB,upload.concurrency=2 settings_landed=8s
+mux-tunnels-2-t1	down	10000000	5143040	200	10000000	1.944427	1
+mux-tunnels-2-t2	down	10000000	5546373	200	10000000	1.803026	1
+mux-tunnels-2-t1	up	10000000	5707107	200	10000000	1.752308	1
+mux-tunnels-2-t2	up	10000000	6281426	200	10000000	1.592095	1
+mux-tunnels-2-t1	down	50000000	7648714	200	50000000	6.537137	1
+mux-tunnels-2-t2	down	50000000	8877948	200	50000000	5.632015	1
+mux-tunnels-2-t1	up	50000000	9353698	200	50000000	5.345552	1
+mux-tunnels-2-t2	up	50000000	10331618	200	50000000	4.839617	1
