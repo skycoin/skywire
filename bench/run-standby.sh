@@ -82,6 +82,12 @@
 # Functions are copied from run-mux.sh and run-degrade.sh rather than sourced:
 # they are scripts with top-level work, not libraries, and factoring a bench
 # library out of them would change files a measurement run is reading right now.
+# SETTINGS="key=value ..." applies live `proxy settings` knobs to the app under
+# test once per set — after it is up and warm, before the first row, waited for
+# and recorded in the set header and <set>.settings.json. ROUTE_SETTINGS="--flag
+# value ..." does the same for the visor-wide `route settings` and is restored
+# at set end. The paired references never receive either. bench/lib-settings.sh;
+# bench/run-sweep.sh drives one knob across a list of values.
 set -u
 CLI=${CLI:-/home/d0mo/go/bin/skywire}
 exit_pk=$1; out=$2; pins=$3; trials=${4:-5}; sink=${5:-http://127.0.0.1:18080}
@@ -89,6 +95,8 @@ order=${6:-$(ls "$pins"/via-*.json | sed 's|.*/via-||; s|\.json$||' | tr '\n' ' 
 here=$(dirname "$0")
 mkdir -p "$out"
 local_commit=$(git -C "$here/.." rev-parse --short=9 HEAD)
+# shellcheck source=bench/lib-settings.sh
+. "$here/lib-settings.sh"
 sizes="10000000 50000000"
 tunnels=${TUNNELS:-2}
 # the chaos row is the first 50 MB download: trials 10 MB downs, trials 10 MB
@@ -597,9 +605,14 @@ fenced_candidates "$(mux_info "$name")" > "$tmp/preflight"
 echo "$name: $(grep -c . "$tmp/preflight") group(s) cuttable and restorable"
 
 warm "$name" || echo "$name: probes failing — running the set anyway"
+# live knobs, once per set: the visor's app store is cleared when the app stops,
+# so SETTINGS can only be applied here — after the dial, after the pool settled
+# and the warm probes, and before the first row (bench/lib-settings.sh).
+settings_apply "$set_name" "$name"
 ports_before=""; ports_after=""; ttfb=-; cut_tp=""; cut_rg=""; cut_pk=""; cut_by=""
 run_set "$tps" \
-	"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name tunnels=$tunnels pool=$pool_size pool_settled=$pool_reason route_groups=$groups roles=$roles_seen groups=$desc chaos_row=$chaos_row chaos_after=${chaos_after}s sink=$sink"
+	"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name tunnels=$tunnels pool=$pool_size pool_settled=$pool_reason route_groups=$groups roles=$roles_seen groups=$desc chaos_row=$chaos_row chaos_after=${chaos_after}s sink=$sink${settings_note:+ $settings_note}"
+settings_restore "$set_name" # the app knobs die with the app; the ROUTER knobs do not
 write_asserts
 echo "--- $set_name asserts"
 cat "$out/$set_name.assert.tsv"

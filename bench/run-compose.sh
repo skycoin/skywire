@@ -36,6 +36,12 @@
 # The functions below are copied from run-mux.sh rather than sourced: run-mux.sh
 # is a script with top-level work, not a library. What IS shared lives in
 # bench/lib-paired.sh and bench/lib-cut.sh, which are libraries.
+# SETTINGS="key=value ..." applies live `proxy settings` knobs to the app under
+# test once per set — after it is up and warm, before the first row, waited for
+# and recorded in the set header and <set>.settings.json. ROUTE_SETTINGS="--flag
+# value ..." does the same for the visor-wide `route settings` and is restored
+# at set end. The paired references never receive either. bench/lib-settings.sh;
+# bench/run-sweep.sh drives one knob across a list of values.
 set -u
 CLI=${CLI:-/home/d0mo/go/bin/skywire}
 exit_pk=$1; out=$2; pins=$3; trials=${4:-5}; sink=${5:-http://127.0.0.1:18080}
@@ -47,6 +53,8 @@ PAIRED_HERE=$here # read by the library below
 export PAIRED_HERE
 # shellcheck source=bench/lib-paired.sh
 . "$here/lib-paired.sh"
+# shellcheck source=bench/lib-settings.sh
+. "$here/lib-settings.sh"
 # norm_sizes: SIZES takes megabytes ("10 50 100") or bytes ("10000000 50000000");
 # an entry below 1000 is megabytes. Anything non-numeric is dropped.
 norm_sizes() {
@@ -482,12 +490,17 @@ for spec in $compose; do
 	[ "$missing" -eq 0 ] || { abort_set "$set_name" "$missing pinned leg(s) missing from the realized shape (groups=$desc)"; port=$((port + 1)); continue; }
 
 	warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
+	# live knobs, once per set: the visor's app store is cleared when the app
+	# stops, so SETTINGS can only be applied here — after the dial, the shape
+	# check and the warm probes, and before the first row (bench/lib-settings.sh).
+	settings_apply "$set_name" "$name"
 	res_warmup "$socks"
 	res_set "$set_name-pre"
 	run_set "$set_name" "$socks" "$tps" \
-		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name compose=${T}x${L} tunnels=$T width=$L route_groups=$allgroups active=$groups standby=$nstandby legs_per_rg=$shape pinned=$pinned rg_ports=$ports_before pin_assign=$(echo $assign) groups=$desc sink=$sink"
+		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name compose=${T}x${L} tunnels=$T width=$L route_groups=$allgroups active=$groups standby=$nstandby legs_per_rg=$shape pinned=$pinned rg_ports=$ports_before pin_assign=$(echo $assign) groups=$desc sink=$sink${settings_note:+ $settings_note}"
 
 	res_set "$set_name-post"; res_settle "$set_name"; res_check "$set_name"
+	settings_restore "$set_name" # the app knobs die with the app; the ROUTER knobs do not
 	mux_info "$name" > "$out/$set_name.after.json"
 	ports_after=$(active_json "$out/$set_name.after.json" | jq -r '[.[].desc.dst_port] | join(",")')
 	rm -f "$out/$set_name.after.json"
