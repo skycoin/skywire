@@ -63,8 +63,9 @@ var (
 	// sbdDemoteV shadows sbdDemoteDefault in bottleneck.go — whether a
 	// shared-bottleneck ruling may PARK a leg at all. OFF by default: on the
 	// 2026-09-16/17 rig the detector was 0-for-8 (see bottleneck.go), so the
-	// ruling is recorded as a mux event and the grouping still reaches the mux,
-	// but nothing is demoted until an operator turns this on. enforceBottleneckGroups
+	// ruling is recorded as a mux event and nothing else changes — neither the
+	// active set nor the send weights, since the grouping is itself a weight
+	// decision — until an operator turns this on. enforceBottleneckGroups
 	// re-reads it on every data-progress tick.
 	sbdDemoteV atomic.Bool
 )

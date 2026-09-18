@@ -465,8 +465,8 @@ type RouteGroup struct {
 	// latency band judges on — the latest sample (and the EWMA over it) is
 	// queue-inflated under load and made the band flap. Guarded by legLivenessMu.
 	legRTTWin map[uuid.UUID]*legRTTWindow
-	// sbdTrialMu guards sbdTrials and sbdIndependent. Leaf lock: NEVER held while
-	// taking rg.mu, legLivenessMu or adaptiveParkMu.
+	// sbdTrialMu guards sbdTrials, sbdIndependent and sbdRuledAt. Leaf lock: NEVER
+	// held while taking rg.mu, legLivenessMu or adaptiveParkMu.
 	sbdTrialMu sync.Mutex
 	// sbdTrials holds, per PARKED leg transport ID, the standing shared-bottleneck
 	// park trial: a park is provisional until the group's aggregate goodput is
@@ -480,6 +480,11 @@ type RouteGroup struct {
 	// sbdIndependent holds, per leg PAIR, the verified-independent window a failed
 	// park trial opened: while it runs, no SBD ruling may merge those two legs.
 	sbdIndependent map[sbdPairKey]sbdSuppression
+	// sbdRuledAt holds, per leg PAIR, when an OBSERVATIONAL shared-bottleneck
+	// ruling was last recorded for it (sbd_demote off). The detector rules on
+	// every data-progress tick, so without this the record is one event every 5 s
+	// for the whole transfer. Guarded by sbdTrialMu.
+	sbdRuledAt map[sbdPairKey]time.Time
 	// adaptiveParkMu guards adaptiveParks. Leaf lock: NEVER held while taking
 	// rg.mu or legLivenessMu.
 	adaptiveParkMu sync.Mutex
@@ -556,6 +561,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		legRecvSnap:        make(map[uuid.UUID]uint64),
 		sbdTrials:          make(map[uuid.UUID]sbdTrial),
 		sbdIndependent:     make(map[sbdPairKey]sbdSuppression),
+		sbdRuledAt:         make(map[sbdPairKey]time.Time),
 	}
 
 	// The intake worker starts with the group: a handshake or data packet can
@@ -3226,6 +3232,20 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 		return
 	}
 
+	// NO TRAFFIC, NO RULING — and, since the grouping is itself a weight decision
+	// (see below), no grouping either. A shared bottleneck is a statement about a
+	// queue two legs are both waiting in, and an idle group has no queue: its legs
+	// co-vary only because neither is loaded. The floor is read HERE, before any
+	// correlation work, so a tick that carried nothing produces no clustering, no
+	// weight change and no event — the T2xL2 compose set recorded 118 sbd_ruling
+	// events in 670 s, one of them on a send path delivering 6 B/s against a
+	// 65536 B/s floor, because the floor used to gate only the demotion.
+	floor := float64(SBDMinEvidenceRate())
+	if sendRate < floor {
+		rg.mux.SetLegGroups(nil)
+		return
+	}
+
 	// Per-leg OWD summary statistics from the moving windows (legLivenessMu).
 	stats := make([]sbdStats, len(tpsCopy))
 	rg.legLivenessMu.Lock()
@@ -3248,7 +3268,21 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 		}
 		return rg.sbdSuppressed(tpsCopy[i].Entry.ID, tpsCopy[j].Entry.ID)
 	})
-	rg.mux.SetLegGroups(groups)
+
+	// THE GROUPING IS A DE-FACTO PARK, so it goes to the mux only when demotion is
+	// on. rebuildWeights (route_mux.go) gives the group's AGGREGATE throughput to
+	// one representative leg and ZERO send weight to every other member, which
+	// takes a leg's traffic away exactly as setLegStandby would — without a park
+	// event, without a trial, and without anything that could undo it. That is how
+	// the T2xL2 compose set reached upload shares of 49175:100%,49176:0% with
+	// sbd_demote OFF: 2 tunnels x 2 legs became 2 x 1 and the set collapsed
+	// (uploads x0.06-0.12). With demotion off the detector is purely
+	// OBSERVATIONAL: it records the ruling and changes nothing.
+	if SBDDemote() {
+		rg.mux.SetLegGroups(groups)
+	} else {
+		rg.mux.SetLegGroups(nil)
+	}
 
 	// Distinct-group admission: park any redundant co-bottlenecked active legs.
 	legs := make([]bottleneckLeg, 0, len(tpsCopy))
@@ -3270,42 +3304,40 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 	if len(demote) == 0 {
 		return
 	}
-	floor := float64(SBDMinEvidenceRate())
 
 	// DEMOTION IS OFF BY DEFAULT (sbdDemoteDefault): the ruling is recorded, with
-	// the numbers behind it, and no leg is taken away. The grouping above already
-	// reached the mux, which is the half of the detector that only ever costs a
-	// weight. Turning it on is `route settings --sbd-demote true` on BOTH ends.
+	// the numbers behind it, and NOTHING else happens — no leg is taken away and,
+	// per the SetLegGroups branch above, no weight moves. The record is rate
+	// limited to one ruling per leg PAIR per SBDBackoff window: the detector rules
+	// on every 5 s tick of a transfer, and an unlimited record is 118 identical
+	// events in 670 s (the T2xL2 compose set) rather than a diagnosis.
+	// Turning demotion on is `route settings --sbd-demote true` on BOTH ends.
 	if !SBDDemote() {
 		for _, idx := range demote {
 			var tp *transport.ManagedTransport
 			if idx < len(tpsCopy) {
 				tp = tpsCopy[idx]
 			}
-			reason := sbdRulingReason(idx, sbdGroupKeeper(legs, demote, idx), groups, stats, sendRate, floor)
+			keeper := sbdGroupKeeper(legs, demote, idx)
+			if !rg.sbdRulingDue(sbdLegID(tpsCopy, idx), sbdLegID(tpsCopy, keeper)) {
+				continue
+			}
+			reason := sbdRulingReason(idx, keeper, groups, stats, sendRate, floor)
 			rg.logger.Debugf("%s", reason)
 			rg.noteLegEvent(MuxEventSBDRuling, reason, MuxByAdaptive, idx, len(tpsCopy), tp, nil)
 		}
 		return
 	}
 
-	// NO TRAFFIC, NO RULING. A shared bottleneck is a statement about a queue two
-	// legs are both waiting in, and an idle group has no queue: its legs co-vary
-	// only because neither is loaded. Such a park is also unarbitrable — the trial
-	// compares against a pre-park rate of zero, which can never fall — so it is
-	// permanent for the whole transfer that follows. That is the measured defect
-	// (bench/2026-09-16/0251e5da4-smoke/mux-legs-2): parks at 01:06:30.615 and
-	// 01:06:35.615 landed before row 1 moved a byte, and all 15 rows after them ran
+	// The evidence floor was cleared at the top of this tick (nothing below it gets
+	// this far), so the park below is always decided on a group that was actually
+	// carrying sbdMinEvidenceRate. That is what makes it arbitrable: a park decided
+	// at idle compares against a pre-park rate of zero, which can never fall, and
+	// stands for the whole transfer — the measured defect in
+	// bench/2026-09-16/0251e5da4-smoke/mux-legs-2, where parks at 01:06:30.615 and
+	// 01:06:35.615 landed before row 1 moved a byte and all 15 rows after them ran
 	// single-leg at x0.81 (50 MB) and x0.68 (10 MB) against the paired reference,
-	// where the same route pair with parking off gave x1.13. So the ruling is
-	// withheld until the group is actually carrying sbdMinEvidenceRate; the
-	// grouping above still went to the mux, only the demotion waits for evidence.
-	if sendRate < floor {
-		rg.logger.Debugf("shared-bottleneck: withholding the park of leg(s) %v — the group is delivering %.0f B/s on the send path, below the %.0f B/s evidence floor; an idle group's legs co-vary because neither is loaded, and the park could not be arbitrated",
-			demote, sendRate, floor)
-		return
-	}
-
+	// where the same route pair with parking off gave x1.13.
 	for _, idx := range demote {
 		rg.logger.Infof("shared-bottleneck: parking leg %d to warm standby on TRIAL (co-bottlenecked with a kept active leg in group %d — one pipe, not two; striping it adds only reorder cost). Aggregate goodput now %.0f B/s; if it falls more than %.0f%% within %v the park is undone",
 			idx, groups[idx], sendRate, SBDTrialLoss()*100, SBDTrialWindow())

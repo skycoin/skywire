@@ -500,10 +500,16 @@ const (
 	// compose-set parks were refuted by their own trial — two of them on idle ticks
 	// between bench rows, trial rate 2 B/s — and the one that stood cost 10.8%.
 	//
-	// So the ruling is kept and recorded (MuxEventSBDRuling, with the correlation
-	// numbers and the rate behind it) and the grouping still reaches the mux, where
-	// it only makes rebuildWeights count one bottleneck as one unit of capacity.
-	// The demotion — the part that takes a leg away — waits for an operator:
+	// So with it off the detector is purely OBSERVATIONAL: the ruling is kept and
+	// recorded (MuxEventSBDRuling, with the correlation numbers and the rate behind
+	// it) and NOTHING else happens — the grouping is not handed to the mux either,
+	// because rebuildWeights gives every non-representative member of a group zero
+	// send weight, which is a park by another name. That was the second half of the
+	// same defect (bench/2026-09-16/3535e671b-smoke/mux-compose-T2xL2): 118 rulings
+	// in 670 s with demotion OFF still drove the upload shares to 49175:100%,
+	// 49176:0% and 49176:75%,49179:25% — 2 tunnels x 2 legs down to 2 x 1, uploads
+	// x0.06-0.12. The demotion — the part that takes a leg away — and the grouping
+	// that enacts it both wait for an operator:
 	// `skywire cli route settings --sbd-demote true`. The default of the
 	// --sbd-demote knob; the live value is SBDDemote().
 	sbdDemoteDefault = false

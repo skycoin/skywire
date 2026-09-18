@@ -487,10 +487,17 @@ samples come from, the SEND path's SACK-acknowledged bytes per tick, because on 
 download the receiving end has no samples of its own and the sending end looked
 idle when judged by what it received; a trial tick below the floor returns no
 verdict at all and the trial stays open. So `--sbd-demote` (default **false**)
-gates the demotion only: the grouping still reaches the mux, where it makes
-`rebuildWeights` count one bottleneck as one unit of capacity, and every ruling
-the detector would have acted on is recorded as an `sbd_ruling` mux event naming
-the legs, their summary statistics and the rate behind the reading. Turn it on
+makes the detector purely **observational**: the grouping is NOT handed to the
+mux and no weight moves, because `rebuildWeights` gives every non-representative
+member of a group zero send weight, which is a park by another name — with
+demotion off, `mux-compose-T2xL2` (`bench/2026-09-16/3535e671b-smoke`) still
+degenerated to upload shares of `49175:100%,49176:0%` and `49176:75%,49179:25%`,
+2 tunnels × 2 legs collapsing to 2 × 1 at x0.06–0.12, on 118 `sbd_ruling` events
+in 670 s one of which read a send path of 6 B/s. The ruling the detector would
+have acted on is recorded as an `sbd_ruling` mux event naming the legs, their
+summary statistics and the rate behind the reading, at most once per leg PAIR per
+`--sbd-backoff` window, and nothing below the evidence floor is grouped, ruled or
+recorded at all. Turn it on
 with `skywire cli route settings --sbd-demote true` on BOTH ends (a download is
 exit-sent), and the park is then the trial described above: the pre-park rate is
 recorded, re-read after `--sbd-trial-window` (3 s) with the leg out, a fall past

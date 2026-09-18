@@ -13,6 +13,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // sbdTrialRig is a two-leg group whose legs share a delay-variation signature —
@@ -278,12 +280,10 @@ func TestSBDTrialHasNoVerdictOnAnIdleTick(t *testing.T) {
 	require.Equal(t, 1, countEvents(rg, MuxEventParkTrialFailed))
 }
 
-// TestSBDRulingIsRecordedNotActedOnByDefault is what ships: with sbd_demote off
-// (the default) the detector still rules and still hands the grouping to the mux,
-// but the leg stays in the active set and the ruling is recorded as an sbd_ruling
-// mux event carrying the numbers behind it. The rig measured the detector 0-for-8,
-// so this is the difference between a diagnosis and a demotion.
-func TestSBDRulingIsRecordedNotActedOnByDefault(t *testing.T) {
+// sbdCorrelatedRig is a two-leg group whose legs carry the same delay signature
+// (so the detector rules on them) with demotion left at its default.
+func sbdCorrelatedRig(t *testing.T) (*RouteGroup, []*transport.ManagedTransport, []uuid.UUID) {
+	t.Helper()
 	rg, mts, _ := createMuxRouteGroup(t, 2)
 	rg.muxEvents = &muxEventRing{}
 	require.False(t, SBDDemote(), "demotion must be off unless a test asks for it")
@@ -298,20 +298,35 @@ func TestSBDRulingIsRecordedNotActedOnByDefault(t *testing.T) {
 		rg.legE2ELatency[mt.Entry.ID] = 50
 	}
 	rg.legLivenessMu.Unlock()
-	ids := []uuid.UUID{mts[0].Entry.ID, mts[1].Entry.ID}
+	return rg, mts, []uuid.UUID{mts[0].Entry.ID, mts[1].Entry.ID}
+}
+
+// sbdLegWeights runs one capacity-mode weight rebuild over legs that have each
+// moved the same bytes, and returns the per-leg send weights the scheduler would
+// use. Equal input bytes make the answer a pure statement about the grouping.
+func sbdLegWeights(rg *RouteGroup, mts []*transport.ManagedTransport) []float64 {
+	rg.mux.tpSelector.SetMode(WeightModeCapacity)
+	for i := range mts {
+		rg.mux.recordSent(i, 1000)
+	}
+	rg.mux.rebuildWeights(mts)
+	return append([]float64(nil), rg.mux.tpSelector.capacityWeights...)
+}
+
+// TestSBDRulingIsRecordedNotActedOnByDefault is what ships: with sbd_demote off
+// (the default) the detector still rules, but nothing at all changes — the leg
+// stays in the active set, the grouping never reaches the mux, and the ruling is
+// recorded as an sbd_ruling mux event carrying the numbers behind it. The rig
+// measured the detector 0-for-8, so this is the difference between a diagnosis
+// and a demotion.
+func TestSBDRulingIsRecordedNotActedOnByDefault(t *testing.T) {
+	rg, _, ids := sbdCorrelatedRig(t)
 
 	sbdTick(rg, ids, 25_000_000, 21_500_000)
 
 	require.False(t, rg.mux.isLegStandby(1), "a ruling must not park a leg with demotion off")
 	require.Zero(t, countEvents(rg, MuxEventLegParked), "and must not emit a park event")
 	require.Equal(t, 1, countEvents(rg, MuxEventSBDRuling), "the ruling itself is recorded")
-
-	// The GROUPING still reaches the mux — that half only costs a weight, and it
-	// is what makes rebuildWeights count one bottleneck as one unit of capacity.
-	rg.mux.legMu.Lock()
-	g0, g1 := rg.mux.groupOf(0), rg.mux.groupOf(1)
-	rg.mux.legMu.Unlock()
-	require.Equal(t, g0, g1, "the two legs must still be grouped as one bottleneck")
 
 	var reason string
 	for _, e := range rg.muxEvents.snapshot() {
@@ -328,6 +343,91 @@ func TestSBDRulingIsRecordedNotActedOnByDefault(t *testing.T) {
 	n := len(rg.sbdTrials)
 	rg.sbdTrialMu.Unlock()
 	require.Zero(t, n, "a ruling that parked nothing opens no trial")
+}
+
+// TestSBDRulingWithDemoteOffTouchesNoWeights is the mux-compose-T2xL2 regression.
+// With sbd_demote OFF the detector handed its grouping to the mux anyway, and
+// rebuildWeights gives every non-representative member of a group ZERO send
+// weight — so the "observational" detector silently emptied a leg. The live set
+// ran 118 sbd_ruling events in 670 s and its upload shares degenerated to
+// 49175:100%,49176:0%: two tunnels of two legs became two of one, uploads x0.06 -
+// x0.12 against the paired reference. Off means off: both legs keep their weight.
+func TestSBDRulingWithDemoteOffTouchesNoWeights(t *testing.T) {
+	rg, mts, ids := sbdCorrelatedRig(t)
+
+	sbdTick(rg, ids, 25_000_000, 21_500_000)
+	require.Equal(t, 1, countEvents(rg, MuxEventSBDRuling), "precondition: the detector did rule")
+
+	rg.mux.legMu.Lock()
+	nGroups := len(rg.mux.legGroups)
+	rg.mux.legMu.Unlock()
+	require.Zero(t, nGroups, "no grouping may reach the mux while demotion is off")
+
+	w := sbdLegWeights(rg, mts)
+	require.Len(t, w, 2)
+	require.InDelta(t, 1000, w[0], 1e-9, "leg 0 keeps its own throughput")
+	require.InDelta(t, 1000, w[1], 1e-9, "the leg the ruling named keeps its send weight — this is the defect")
+}
+
+// TestSBDRulingIsRateLimitedPerPair: a ruling that acts on nothing is a diagnosis,
+// and one per 5s tick for the length of a transfer is noise (118 events in 670 s
+// on the live set). The same pair is recorded at most once per SBDBackoff window.
+func TestSBDRulingIsRateLimitedPerPair(t *testing.T) {
+	rg, _, ids := sbdCorrelatedRig(t)
+
+	for i := 0; i < 10; i++ {
+		sbdTick(rg, ids, 25_000_000, 21_500_000)
+	}
+	require.Equal(t, 1, countEvents(rg, MuxEventSBDRuling), "ten ticks on one pair are one diagnosis")
+
+	// Past the window the pair is reported again — the record is rate limited, not
+	// one-shot.
+	prev := SBDBackoff()
+	require.True(t, SetSBDBackoff(time.Nanosecond))
+	t.Cleanup(func() { SetSBDBackoff(prev) })
+	sbdTick(rg, ids, 25_000_000, 21_500_000)
+	require.Equal(t, 2, countEvents(rg, MuxEventSBDRuling), "a new backoff window records the pair again")
+}
+
+// TestSBDNoRulingOrGroupingBelowTheEvidenceFloor: the floor gates the whole
+// detector, not just the demotion. One of the 118 live rulings read "send-path
+// delivered 6 B/s (evidence floor 65536 B/s)" — a statement about the gap between
+// two bench rows. Below the floor there is no ruling, no grouping and no event.
+func TestSBDNoRulingOrGroupingBelowTheEvidenceFloor(t *testing.T) {
+	rg, mts, ids := sbdCorrelatedRig(t)
+
+	// 6 B/s on the send path: the rate the live misruling was read at.
+	sbdTick(rg, ids, 30, 0)
+
+	require.Zero(t, countEvents(rg, MuxEventSBDRuling), "an idle tick is not evidence of a shared queue")
+	rg.mux.legMu.Lock()
+	nGroups := len(rg.mux.legGroups)
+	rg.mux.legMu.Unlock()
+	require.Zero(t, nGroups, "and no grouping is computed from it")
+
+	w := sbdLegWeights(rg, mts)
+	require.InDelta(t, 1000, w[0], 1e-9)
+	require.InDelta(t, 1000, w[1], 1e-9, "weights are untouched below the floor")
+}
+
+// TestSBDGroupingReachesTheMuxWhenDemotionIsOn: the operator-enabled path is
+// unchanged — the grouping is applied, so rebuildWeights counts the shared
+// bottleneck as ONE unit of capacity and the parked member carries nothing.
+func TestSBDGroupingReachesTheMuxWhenDemotionIsOn(t *testing.T) {
+	rg, mts, ids := sbdCorrelatedRig(t)
+	sbdDemoteOn(t)
+
+	sbdTick(rg, ids, 25_000_000, 21_500_000)
+	require.True(t, rg.mux.isLegStandby(1), "precondition: with demotion on the redundant leg is parked")
+
+	rg.mux.legMu.Lock()
+	g0, g1 := rg.mux.groupOf(0), rg.mux.groupOf(1)
+	rg.mux.legMu.Unlock()
+	require.Equal(t, g0, g1, "the two legs are grouped as one bottleneck")
+
+	w := sbdLegWeights(rg, mts)
+	require.InDelta(t, 1000, w[0], 1e-9, "the representative carries the group's aggregate")
+	require.InDelta(t, 0, w[1], 1e-9, "and the parked member carries nothing")
 }
 
 // TestSBDDemoteKnob: the gate is a live route setting, off by default, and it

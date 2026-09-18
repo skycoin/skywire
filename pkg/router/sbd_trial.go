@@ -109,6 +109,43 @@ func (rg *RouteGroup) sbdSuppressed(a, b uuid.UUID) bool {
 	return ok && time.Now().Before(s.until)
 }
 
+// sbdLegID returns leg i's transport ID, or uuid.Nil when the index is out of
+// range or the leg is gone. Pure.
+func sbdLegID(tps []*transport.ManagedTransport, i int) uuid.UUID {
+	if i < 0 || i >= len(tps) || tps[i] == nil {
+		return uuid.Nil
+	}
+	return tps[i].Entry.ID
+}
+
+// sbdRulingDue reports whether an OBSERVATIONAL shared-bottleneck ruling (the
+// sbd_demote-off path, which records the verdict and changes nothing) may be
+// recorded for this pair of legs now, and stamps the pair when it may.
+//
+// The detector rules on every data-progress tick, and a ruling that acts on
+// nothing is the same sentence every 5 s: the T2xL2 compose set recorded 118
+// sbd_ruling events in 670 s, which buries the rest of the mux event ring. One
+// per pair per SBDBackoff window — the same window a refuted park earns — keeps
+// the diagnosis and drops the repetition. A pair with an unknown leg (the keeper
+// was pruned mid-tick) is never suppressed: there is nothing to key on.
+func (rg *RouteGroup) sbdRulingDue(a, b uuid.UUID) bool {
+	if a == uuid.Nil || b == uuid.Nil {
+		return true
+	}
+	key := sbdPair(a, b)
+	now := time.Now()
+	rg.sbdTrialMu.Lock()
+	defer rg.sbdTrialMu.Unlock()
+	if rg.sbdRuledAt == nil {
+		rg.sbdRuledAt = make(map[sbdPairKey]time.Time)
+	}
+	if last, ok := rg.sbdRuledAt[key]; ok && now.Sub(last) < SBDBackoff() {
+		return false
+	}
+	rg.sbdRuledAt[key] = now
+	return true
+}
+
 // noteSBDIndependent opens (or re-opens, doubled) the verified-independent
 // window for a pair whose park trial just failed, and returns the span granted.
 // The previous span is remembered across expiry on purpose: a pair the detector
