@@ -268,6 +268,13 @@ type SetAppArgsIn struct {
 	Args    []string
 }
 
+// SetAppSettingsIn replaces the whole live tuning knob set for an app. An
+// empty Values is a full reset to the compiled defaults.
+type SetAppSettingsIn struct {
+	AppName string
+	Values  map[string]int64
+}
+
 // SetAppEnvFullIn replaces the entire Env slice on an app.
 type SetAppEnvFullIn struct {
 	AppName string

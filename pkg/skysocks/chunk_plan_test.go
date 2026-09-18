@@ -1,6 +1,12 @@
 package skysocks
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/skysocks/skysettings"
+)
 
 // TestChunkTargetFollowsObject proves the target chunk size is the object over
 // two chunks per active tunnel, clamped to [1 MiB, ceiling].
@@ -98,4 +104,24 @@ func TestProbeChunkHonoursLowerCeiling(t *testing.T) {
 	if got := c.probeChunkBytes(); got != 512<<10 {
 		t.Errorf("probeChunkBytes = %d, want the %d ceiling", got, 512<<10)
 	}
+}
+
+// The plan's three numbers are knobs: a bench sweeping granularity moves them
+// on the running client instead of rebuilding it. Unset, the plan is the one
+// the constants describe (TestSettingDefaultsMatchConstants holds that).
+func TestChunkPlanFollowsTheKnobs(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	c := &Client{rs: rangeSplitConfig{chunkSize: 4 << 20, concurrency: 8}}
+	require.EqualValues(t, rsProbeChunkBytes, c.probeChunkBytes())
+
+	require.True(t, skysettings.Apply(map[string]int64{
+		skysettings.ChunkProbeBytes: 1 << 20,
+		skysettings.ChunkMinBytes:   2 << 20,
+		skysettings.ChunkPerTunnel:  4,
+	}))
+	require.EqualValues(t, 1<<20, c.probeChunkBytes())
+	// 40 MiB over 2 tunnels at 4 chunks each targets 5 MiB, capped by the
+	// 4 MiB ceiling; the 2 MiB floor shows on the small object below.
+	require.EqualValues(t, 4<<20, chunkTarget(40<<20, 2, 4<<20))
+	require.EqualValues(t, 2<<20, chunkTarget(4<<20, 2, 4<<20), "the floor knob governs")
 }

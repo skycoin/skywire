@@ -54,6 +54,27 @@ func (_m *MockProcManager) SetProxyStatusFn(fn func(appName string) (proxystatus
 	_m.Called(fn)
 }
 
+// The live-settings trio is backed by a REAL store rather than mock.Called:
+// it carries no behaviour worth asserting, and a Called() here would turn
+// every existing MockProcManager test that happens to reach the settings
+// ingress into an unexpected-call panic.
+var mockProcSettings = newAppSettings()
+
+// SetAppSettings provides a working stand-in for the real store.
+func (_m *MockProcManager) SetAppSettings(appName string, vals map[string]int64) uint64 {
+	return mockProcSettings.set(appName, vals)
+}
+
+// AppSettings provides a working stand-in for the real store.
+func (_m *MockProcManager) AppSettings(appName string, applied uint64) (map[string]int64, uint64) {
+	return mockProcSettings.pull(appName, applied)
+}
+
+// AppSettingsState provides a working stand-in for the real store.
+func (_m *MockProcManager) AppSettingsState(appName string) (map[string]int64, uint64, uint64) {
+	return mockProcSettings.state(appName)
+}
+
 // Addr provides a mock function with no fields
 func (_m *MockProcManager) Addr() net.Addr {
 	ret := _m.Called()

@@ -48,6 +48,9 @@ type RPCIngressClient interface {
 	// the app dialed from req.LocalPort, and re-labels that group's tunnel
 	// role. See NoteMuxEventReq.
 	NoteMuxEvent(req NoteMuxEventReq) error
+	// AppSettings polls the visor for this app's live tuning knobs, reporting
+	// the version the app currently has installed. See AppSettingsResp.
+	AppSettings(req AppSettingsReq) (AppSettingsResp, error)
 	Listen(local appnet.Addr) (uint16, error)
 	Accept(lisID uint16) (connID uint16, remote appnet.Addr, err error)
 	Write(connID uint16, b []byte) (int, error)
@@ -146,6 +149,15 @@ func (c *rpcIngressClient) DialWithOptions(req DialOptionsReq) (connID uint16, l
 // NoteMuxEvent sends `NoteMuxEvent` command to the server.
 func (c *rpcIngressClient) NoteMuxEvent(req NoteMuxEventReq) error {
 	return c.rpc.Call(c.formatMethod("NoteMuxEvent"), &req, nil)
+}
+
+// AppSettings sends `AppSettings` command to the server.
+func (c *rpcIngressClient) AppSettings(req AppSettingsReq) (AppSettingsResp, error) {
+	var resp AppSettingsResp
+	if err := c.rpc.Call(c.formatMethod("AppSettings"), &req, &resp); err != nil {
+		return AppSettingsResp{}, err
+	}
+	return resp, nil
 }
 
 // Listen sends `Listen` command to the server.

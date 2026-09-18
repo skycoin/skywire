@@ -123,6 +123,28 @@ func (r *RPC) SetAppArgs(in *SetAppArgsIn, _ *struct{}) (err error) {
 	return r.visor.SetAppArgs(in.AppName, in.Args)
 }
 
+// GetAppSettings returns the live tuning knobs held for an app.
+func (r *RPC) GetAppSettings(appName *string, out *AppSettings) (err error) {
+	defer rpcutil.LogCall(r.log, "GetAppSettings", *appName)(out, &err)
+	s, err := r.visor.GetAppSettings(*appName)
+	if err != nil {
+		return err
+	}
+	*out = s
+	return nil
+}
+
+// SetAppSettings replaces the live tuning knobs held for an app.
+func (r *RPC) SetAppSettings(in *SetAppSettingsIn, out *AppSettings) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppSettings", in)(out, &err)
+	s, err := r.visor.SetAppSettings(in.AppName, in.Values)
+	if err != nil {
+		return err
+	}
+	*out = s
+	return nil
+}
+
 // SetAppEnvFull replaces the entire Env slice on an app.
 func (r *RPC) SetAppEnvFull(in *SetAppEnvFullIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppEnvFull", in)(nil, &err)

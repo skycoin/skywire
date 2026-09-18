@@ -264,6 +264,14 @@ func (_m *MockRPCIngressClient) Read(connID uint16, b []byte) (int, error) {
 	return r0, r1
 }
 
+// AppSettings provides a working stand-in for the real store, keyed by the
+// mock itself: nothing about the poll is worth asserting, and a mock.Called
+// here would panic in every existing test that reaches the settings tick.
+func (_m *MockRPCIngressClient) AppSettings(req AppSettingsReq) (AppSettingsResp, error) {
+	vals, version := mockProcSettings.pull("mock", req.Applied)
+	return AppSettingsResp{Version: version, Values: vals, Changed: version != req.Applied}, nil
+}
+
 // NoteMuxEvent provides a mock function with given fields: req
 func (_m *MockRPCIngressClient) NoteMuxEvent(req NoteMuxEventReq) error {
 	ret := _m.Called(req)

@@ -189,7 +189,7 @@ func (c *Client) maybePromote() {
 		}
 	}
 
-	if worst == nil || best == nil || best.rtt <= 0 || worst.rtt < tunnelPromoteMargin*best.rtt {
+	if worst == nil || best == nil || best.rtt <= 0 || worst.rtt < setTunnelPromoteMargin()*best.rtt {
 		// Nobody qualifies this tick, so nobody keeps a clock: an advantage
 		// that lapses starts its hold again from zero.
 		c.clearPromoteClocks(nil)
@@ -272,10 +272,10 @@ func (c *Client) tunnelCandidates(now time.Time) (active, standby []tunnelCandid
 		if !ok || m.onBench(now) {
 			continue
 		}
-		if ns := m.stamp.Load(); ns <= 0 || now.Sub(time.Unix(0, ns)) > standbyRTTStale {
+		if ns := m.stamp.Load(); ns <= 0 || now.Sub(time.Unix(0, ns)) > setStandbyRTTStale() {
 			continue
 		}
-		if at, parked := c.parkedAt[s]; parked && now.Sub(at) < tunnelParkMinHold {
+		if at, parked := c.parkedAt[s]; parked && now.Sub(at) < setTunnelParkMinHold() {
 			continue
 		}
 		standby = append(standby, cand)
@@ -305,7 +305,7 @@ func (c *Client) notePromoteCandidate(s *yamux.Session, now time.Time) (since ti
 		return 0, false
 	}
 	since = now.Sub(first)
-	return since, since >= tunnelPromoteHold
+	return since, since >= setTunnelPromoteHold()
 }
 
 // clearPromoteClocks forgets every qualifying clock except keep's (nil clears
@@ -390,7 +390,7 @@ func (c *Client) armAudition(now time.Time, active, standby []tunnelCandidate) {
 	var pick *yamux.Session
 	pickRTT := 0.0
 	for _, sb := range standby {
-		if sb.proven || sb.rtt <= 0 || sb.rtt > tunnelPromoteMargin*bestActive {
+		if sb.proven || sb.rtt <= 0 || sb.rtt > setTunnelPromoteMargin()*bestActive {
 			continue
 		}
 		if pick == nil || sb.rtt < pickRTT {
@@ -408,11 +408,11 @@ func (c *Client) armAudition(now time.Time, active, standby []tunnelCandidate) {
 	if c.auditionedAt == nil {
 		c.auditionedAt = make(map[*yamux.Session]time.Time)
 	}
-	if at, seen := c.auditionedAt[pick]; seen && now.Sub(at) < tunnelAuditionEvery {
+	if at, seen := c.auditionedAt[pick]; seen && now.Sub(at) < setTunnelAuditionEvery() {
 		return
 	}
 	c.audition = pick
-	c.auditionUntil = now.Add(tunnelAuditionWindow)
+	c.auditionUntil = now.Add(setTunnelAuditionWindow())
 	c.auditionedAt[pick] = now
 }
 

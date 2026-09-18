@@ -381,3 +381,19 @@ func (c *Client) Close() {
 		}
 	}
 }
+
+// AppSettings polls the visor for this app's live tuning knobs, reporting the
+// version the app currently has installed so a steady-state poll costs an empty
+// round-trip. Returns the full intended set and the version it carries; a knob
+// absent from the set is at its compiled default.
+//
+// This is the only visor->app VALUE channel: the ingress gateway is ingress
+// only (the app is the RPC client), so a running app is reconfigured by asking,
+// not by being told. See pkg/app/appserver/app_settings.go.
+func (c *Client) AppSettings(applied uint64) (map[string]int64, uint64, error) {
+	resp, err := c.rpcC.AppSettings(appserver.AppSettingsReq{Applied: applied})
+	if err != nil {
+		return nil, applied, err
+	}
+	return resp.Values, resp.Version, nil
+}

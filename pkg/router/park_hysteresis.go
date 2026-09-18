@@ -79,7 +79,7 @@ func (rg *RouteGroup) adaptiveParkHeld(tpID uuid.UUID) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	if time.Since(p.at) >= legParkMinHold {
+	if time.Since(p.at) >= LegParkMinHold() {
 		return p.reason, false
 	}
 	return p.reason, true
@@ -128,7 +128,7 @@ func (rg *RouteGroup) promoteLegAdaptive(idx int, reason string) bool {
 	}
 	if parkReason, held := rg.adaptiveParkHeld(tpID); held {
 		rg.logger.Debugf("park-hysteresis: leg %d stays parked (%s); %v hold not expired, refusing the adaptive re-admit (%s)",
-			idx, parkReason, legParkMinHold, reason)
+			idx, parkReason, LegParkMinHold(), reason)
 		return false
 	}
 	rg.mux.setLegStandby(idx, false)

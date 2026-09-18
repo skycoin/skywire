@@ -73,6 +73,16 @@ type ProcManager interface {
 	// ProxyStatus returns the visor-built status snapshot for appName. ok is
 	// false when no builder is wired (wasm/tests) or it has no data for the app.
 	ProxyStatus(appName string) (proxystatus.Snapshot, bool)
+	// SetAppSettings replaces the live tuning knobs held for a running app and
+	// returns the new version. Process-scoped, not persisted; see
+	// app_settings.go.
+	SetAppSettings(appName string, vals map[string]int64) uint64
+	// AppSettings answers the app POLLING for its knobs, recording the version
+	// it reports having applied. Values are nil when applied is already current.
+	AppSettings(appName string, applied uint64) (map[string]int64, uint64)
+	// AppSettingsState reports the intended values, their version, and the
+	// version the app last acknowledged — the CLI's pending/applied column.
+	AppSettingsState(appName string) (map[string]int64, uint64, uint64)
 }
 
 // procManager manages skywire applications. It implements `ProcManager`.
@@ -107,6 +117,10 @@ type procManager struct {
 	// app that serves its own reserved status host. Set once via
 	// SetProxyStatusFn right after construction; nil is valid (wasm/tests).
 	proxyStatusFn func(appName string) (proxystatus.Snapshot, bool)
+
+	// settings holds the live tuning knobs per app name, pulled by the app on
+	// its own tick. Never nil after NewProcManager.
+	settings *appSettings
 }
 
 // NewProcManager constructs `ProcManager`.
@@ -143,6 +157,7 @@ func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appe
 		notifyHub:    hub,
 		done:         make(chan struct{}),
 		logStorePath: logStorePath,
+		settings:     newAppSettings(),
 	}
 
 	procM.connsWG.Add(1)
@@ -408,6 +423,9 @@ func (m *procManager) Stop(name string) error {
 	if err != nil {
 		return err
 	}
+	// Live tuning knobs are process-scoped: a stopped app returns to the
+	// compiled defaults rather than silently inheriting a bench sweep.
+	m.settings.clear(name)
 
 	return p.Stop()
 }

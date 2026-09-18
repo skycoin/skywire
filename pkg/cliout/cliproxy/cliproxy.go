@@ -9,6 +9,7 @@ package cliproxy
 import (
 	"fmt"
 	"io"
+	"text/tabwriter"
 	"time"
 )
 
@@ -119,4 +120,43 @@ func (m MuxAuto) Human(w io.Writer) error {
 	_, err := fmt.Fprintf(w, "[%s] preset=%s: %d legs, keep<=%d, %s %d, grew %d\n",
 		time.Now().Format("15:04:05"), m.Preset, m.Legs, m.Keep, verb, m.Pruned, m.Grown)
 	return err
+}
+
+// Settings is a running proxy app's live tuning knobs (`proxy settings`).
+type Settings struct {
+	App string `json:"app"`
+	// Version is the value set the visor holds; Applied is the one the app
+	// last reported having installed. Applied < Version means a change is in
+	// flight — the app installs it on its next pull.
+	Version uint64          `json:"version"`
+	Applied uint64          `json:"applied"`
+	Knobs   []SettingsEntry `json:"knobs"`
+}
+
+// SettingsEntry is one knob's row.
+type SettingsEntry struct {
+	Name    string `json:"name"`
+	Value   string `json:"value"`
+	Default string `json:"default"`
+	Kind    string `json:"kind"`
+	// State is "default", "applied" or "pending".
+	State string `json:"state"`
+	Doc   string `json:"doc,omitempty"`
+}
+
+// Human writes the knob table.
+func (s Settings) Human(w io.Writer) error {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	if _, err := fmt.Fprintf(tw, "app: %s\tversion: %d\tapplied: %d\n", s.App, s.Version, s.Applied); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(tw, "NAME\tVALUE\tDEFAULT\tKIND\tSTATE"); err != nil {
+		return err
+	}
+	for _, k := range s.Knobs {
+		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", k.Name, k.Value, k.Default, k.Kind, k.State); err != nil {
+			return err
+		}
+	}
+	return tw.Flush()
 }

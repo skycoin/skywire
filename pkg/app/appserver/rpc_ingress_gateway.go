@@ -178,6 +178,31 @@ func (r *RPCIngressGateway) ProxyStatus(_ *struct{}, resp *proxystatus.Snapshot)
 	return nil
 }
 
+// AppSettings answers the calling app POLLING for its live tuning knobs — the
+// one visor->app value channel there is. The gateway is INGRESS only (the app
+// is the RPC client), so nothing can be pushed into a running app; the app asks
+// on a tick it already runs and installs what comes back.
+//
+// Ownership is r.proc.appName, the same proof ProxyStatus and NoteMuxEvent use,
+// so an app can only ever read its own knobs. A visor with no store wired (unit
+// tests with a bare gateway) answers "nothing changed" WITHOUT error, so the app
+// degrades to its compiled defaults rather than logging a failure every tick.
+func (r *RPCIngressGateway) AppSettings(req *AppSettingsReq, resp *AppSettingsResp) (err error) {
+	defer rpcutil.LogCall(r.log, "AppSettings", req)(nil, &err)
+	if r.proc == nil || r.proc.m == nil {
+		return nil
+	}
+	applied := uint64(0)
+	if req != nil {
+		applied = req.Applied
+	}
+	vals, version := r.proc.m.AppSettings(r.proc.appName, applied)
+	resp.Version = version
+	resp.Values = vals
+	resp.Changed = version != applied
+	return nil
+}
+
 // SetError sets error of an app.
 func (r *RPCIngressGateway) SetError(appErr *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetError", appErr)(nil, &err)

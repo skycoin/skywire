@@ -111,6 +111,10 @@ type API interface {
 	SetAppDNS(appName string, dnsaddr string) error
 	DoCustomSetting(appName string, customSetting map[string]any) error
 	SetAppArgs(appName string, args []string) error
+	// GetAppSettings / SetAppSettings carry the live tuning knobs held for a
+	// running app (process-scoped, pulled by the app; see api_app_settings.go).
+	GetAppSettings(appName string) (AppSettings, error)
+	SetAppSettings(appName string, vals map[string]int64) (AppSettings, error)
 	SetAppEnv(appName, key, value string) error
 	SetAppEnvBatch(appName string, env map[string]string) error
 	SetAppEnvFull(appName string, env []string) error

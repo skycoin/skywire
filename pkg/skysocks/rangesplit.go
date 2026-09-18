@@ -315,7 +315,7 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 		chunks := 1 + numChunks(total-chunk0Len, chunkSize)
 		if c.appCl != nil {
 			c.appCl.Log().Debugf("range-split: %s %d bytes → %d chunks of %d bytes × %d streams",
-				host, total, chunks, chunkSize, c.rs.concurrency)
+				host, total, chunks, chunkSize, c.rsConcurrency())
 		}
 		// Observability counters (surfaced as proxystatus.RangeSplit): this is a
 		// committed multi-chunk split, so record it and mark it in flight for the
@@ -401,7 +401,7 @@ const rsOutstandingFactor = 2
 // the configured chunk size. Kept for callers with nothing to plan against (no
 // known total split point); startChunkFetchesFrom is the planned form.
 func (c *Client) startChunkFetches(total int64, fetch func(start, end int64) ([]byte, error)) *chunkFetches {
-	return c.startChunkFetchesFrom(c.rs.chunkSize, total, c.rs.chunkSize, fetch)
+	return c.startChunkFetchesFrom(c.rsChunkSize(), total, c.rsChunkSize(), fetch)
 }
 
 // startChunkFetchesFrom launches the concurrent fetches for [from, total) in
@@ -411,11 +411,14 @@ func (c *Client) startChunkFetchesFrom(from, total, chunkSize int64, fetch func(
 	if chunkSize < 1 {
 		chunkSize = defaultRSChunkSize
 	}
+	// The concurrency knob is read ONCE per download: a value that moved
+	// mid-flight would resize an admission gate the producer is already using.
+	conc := c.rsConcurrency()
 	f := &chunkFetches{
 		c:     c,
 		total: total,
-		sem:   make(chan struct{}, c.rs.concurrency),
-		mem:   make(chan struct{}, rsOutstandingFactor*c.rs.concurrency),
+		sem:   make(chan struct{}, conc),
+		mem:   make(chan struct{}, setChunkOutstandingFactor()*conc),
 		stop:  make(chan struct{}),
 	}
 	for start := from; start < total; start += chunkSize {
@@ -555,7 +558,7 @@ func (c *Client) fetchChunkRetry(req *http.Request, host, validator string, star
 			return nil, err
 		}
 		return buf, nil
-	}, rsChunkRetryBudget, rsChunkRetryBackoff, rsChunkRetryBackoffMax)
+	}, setChunkRetryBudget(), rsChunkRetryBackoff, rsChunkRetryBackoffMax)
 }
 
 // retryWithBudget calls fetch until it succeeds, or until at least rsChunkRetries
@@ -577,7 +580,7 @@ func retryWithBudget(fetch func() ([]byte, error), budget, backoff, backoffMax t
 		// the dead tunnel) and no attempt charged, so a mid-download tunnel
 		// loss costs the chunk one round trip instead of a sleep plus a slice
 		// of its budget. Bounded by rsFreeRetries.
-		if errors.Is(err, errSessionClosed) && free < rsFreeRetries {
+		if errors.Is(err, errSessionClosed) && free < setChunkFreeRetries() {
 			free++
 			attempt--
 
@@ -819,7 +822,7 @@ func (c *Client) fetchChunk(req *http.Request, host, validator string, start, en
 	// carrying the file (measured live: 48.5MB received for a 20MB download,
 	// 2.4x waste). Rolling the deadline forward on every read means only a
 	// genuinely STALLED stream fails; a slow-but-moving one completes.
-	got, rerr := readChunkBody(st, resp.Body, buf[:end-start+1], rsChunkIdleTimeout)
+	got, rerr := readChunkBody(st, resp.Body, buf[:end-start+1], setChunkIdleTimeout())
 	return int64(got), rerr
 }
 

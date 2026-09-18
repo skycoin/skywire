@@ -36,6 +36,29 @@ type RouterSettings struct {
 	// Written to routing.transport_preference, so it survives a restart —
 	// but not a config regen (no skywire.conf field).
 	TransportPreference []string `json:"transport_preference,omitempty"`
+
+	// The mux send-window shape and the adaptive park hold, live from
+	// pkg/router/settings.go. Each zero value means "leave unchanged" on PUT,
+	// so an older client that does not know a field cannot reset it. GET always
+	// answers the values in force.
+	//
+	// windowRefreshInterval is deliberately absent: it becomes a per-route-group
+	// ticker when the group is built, so moving it live is a locking change
+	// rather than a knob.
+	EcfMaxWindowBytes int64         `json:"ecf_max_window_bytes,omitempty"`
+	EcfMinWindowBytes int64         `json:"ecf_min_window_bytes,omitempty"`
+	EcfWindowMargin   float64       `json:"ecf_window_margin,omitempty"`
+	SendWindowWaitMax time.Duration `json:"send_window_wait_max,omitempty"`
+	LegParkMinHold    time.Duration `json:"leg_park_min_hold,omitempty"`
+
+	// The dead-route exclusion window and its ceiling, live from
+	// pkg/router/settings.go with the same zero-means-unchanged rule.
+	DeadRouteHold    time.Duration `json:"dead_route_hold,omitempty"`
+	DeadRouteHoldMax time.Duration `json:"dead_route_hold_max,omitempty"`
+
+	// MuxFEC advertises FEC on mux route groups created from now on; unlike
+	// the rest it is a tri-state on PUT, see SetRouterSettings.
+	MuxFEC *bool `json:"mux_fec,omitempty"`
 }
 
 // GetRouterSettings returns the current runtime values of the four
@@ -58,11 +81,20 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 	for _, t := range order {
 		preference = append(preference, string(t))
 	}
+	fec := v.router.GetMuxFEC()
 	return RouterSettings{
 		ForceLocalRoutes:    v.router.GetForceLocalRoutes(),
 		ExistingTPOnly:      v.router.GetExistingTPOnly(),
 		MinHops:             hops,
 		TransportPreference: preference,
+		EcfMaxWindowBytes:   router.EcfMaxWindowBytes(),
+		EcfMinWindowBytes:   router.EcfMinWindowBytes(),
+		EcfWindowMargin:     router.EcfWindowMargin(),
+		SendWindowWaitMax:   router.SendWindowWaitMax(),
+		LegParkMinHold:      router.LegParkMinHold(),
+		DeadRouteHold:       router.DeadRouteHold(),
+		DeadRouteHoldMax:    router.DeadRouteHoldMax(),
+		MuxFEC:              &fec,
 	}, nil
 }
 
@@ -86,6 +118,35 @@ func (v *Visor) SetRouterSettings(s RouterSettings) error {
 	}
 	if s.TransportPreference != nil {
 		if err := v.SetTransportPreference(s.TransportPreference); err != nil {
+			return err
+		}
+	}
+	// The mux knobs: zero means "leave it", so a caller that sends only the
+	// four original fields changes nothing here.
+	for _, k := range []struct {
+		name string
+		zero bool
+		ok   func() bool
+	}{
+		{"ecf_max_window_bytes", s.EcfMaxWindowBytes == 0, func() bool { return router.SetEcfMaxWindowBytes(s.EcfMaxWindowBytes) }},
+		{"ecf_min_window_bytes", s.EcfMinWindowBytes == 0, func() bool { return router.SetEcfMinWindowBytes(s.EcfMinWindowBytes) }},
+		{"ecf_window_margin", s.EcfWindowMargin == 0, func() bool { return router.SetEcfWindowMargin(s.EcfWindowMargin) }},
+		{"send_window_wait_max", s.SendWindowWaitMax == 0, func() bool { return router.SetSendWindowWaitMax(s.SendWindowWaitMax) }},
+		{"leg_park_min_hold", s.LegParkMinHold == 0, func() bool { return router.SetLegParkMinHold(s.LegParkMinHold) }},
+		{"dead_route_hold", s.DeadRouteHold == 0, func() bool { return router.SetDeadRouteHold(s.DeadRouteHold) }},
+		{"dead_route_hold_max", s.DeadRouteHoldMax == 0, func() bool { return router.SetDeadRouteHoldMax(s.DeadRouteHoldMax) }},
+	} {
+		if k.zero {
+			continue
+		}
+		if !k.ok() {
+			return fmt.Errorf("%s must be positive", k.name)
+		}
+	}
+	if s.MuxFEC != nil {
+		v.router.SetMuxFEC(*s.MuxFEC)
+		v.conf.Routing.MuxFEC = *s.MuxFEC
+		if err := v.conf.Flush(); err != nil {
 			return err
 		}
 	}

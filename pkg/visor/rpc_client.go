@@ -648,6 +648,20 @@ func (rc *rpcClient) SetAppArgs(appName string, args []string) error {
 	return rc.Call("SetAppArgs", &SetAppArgsIn{AppName: appName, Args: args}, &struct{}{})
 }
 
+// GetAppSettings implements API.
+func (rc *rpcClient) GetAppSettings(appName string) (AppSettings, error) {
+	var out AppSettings
+	err := rc.Call("GetAppSettings", &appName, &out)
+	return out, err
+}
+
+// SetAppSettings implements API.
+func (rc *rpcClient) SetAppSettings(appName string, vals map[string]int64) (AppSettings, error) {
+	var out AppSettings
+	err := rc.Call("SetAppSettings", &SetAppSettingsIn{AppName: appName, Values: vals}, &out)
+	return out, err
+}
+
 // SetAppEnvFull implements API.
 func (rc *rpcClient) SetAppEnvFull(appName string, env []string) error {
 	return rc.Call("SetAppEnvFull", &SetAppEnvFullIn{AppName: appName, Env: env}, &struct{}{})
