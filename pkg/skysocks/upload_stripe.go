@@ -387,10 +387,14 @@ func (c *Client) serveStripedUpload(conn net.Conn, u *uploadCandidate) {
 	s := newUploadStripe(c, u, conn)
 	final, err := s.run()
 	if err != nil {
+		// The same sentence three ways: the app log, the 502's X-Upload-Error
+		// header and the 502's body. A bench row that fails has the header on
+		// hand whether or not anyone can reach this app's log.
+		why := fmt.Errorf("striped upload %s: %d bytes failed with %d acked: %w", u.host, u.total, s.received(), err)
 		if c.appCl != nil {
-			c.appCl.Log().Warnf("striped upload: %s %d bytes failed at %d acked: %v", u.host, u.total, s.received(), err)
+			c.appCl.Log().Warnf("%v", why)
 		}
-		writeBadGateway(conn)
+		writeBadGateway(conn, why)
 		return
 	}
 	if c.appCl != nil {

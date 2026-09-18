@@ -236,6 +236,10 @@ type stubSink struct {
 	holdFirst   time.Duration
 	released    atomic.Bool
 	earlyStarts map[int64]bool
+	// refuse is the status the chunk starting at refuseAt is answered with —
+	// a refusal the client cannot retry (see deliverChunk's default arm).
+	refuse   int
+	refuseAt int64
 }
 
 func (s *stubSink) handler() http.HandlerFunc {
@@ -259,6 +263,13 @@ func (s *stubSink) handler() http.HandlerFunc {
 		var start, end, total int64
 		if _, err := fmt.Sscanf(cr, "bytes %d-%d/%d", &start, &end, &total); err != nil {
 			http.Error(w, "bad range", http.StatusBadRequest)
+			return
+		}
+		// A sink that refuses one chunk outright: not a 425 or a 503, so the
+		// client has nothing to retry and the upload ends there.
+		if s.refuse > 0 && start == s.refuseAt {
+			_, _ = io.Copy(io.Discard, r.Body) //nolint:errcheck
+			http.Error(w, "refused", s.refuse)
 			return
 		}
 		if s.holdFirst > 0 {
@@ -993,4 +1004,65 @@ func TestStripedUploadChunksAreSizedFromTheObject(t *testing.T) {
 		t.Fatalf("chunks ran %d..%d bytes: the plan left a runt", smallest, largest)
 	}
 	t.Logf("10 MB in %d chunks of %d..%d bytes under a %d ceiling", len(sink.have), smallest, largest, uploadChunkBytes)
+}
+
+// TestFailedStripedUploadSaysWhy: the 502 a failed striped upload becomes is
+// the only artifact a bench row keeps, so it has to carry the reason. Two
+// uploads failed this way in the 2026-09-16 compose set and the cause was not
+// recoverable from anything the run wrote down — the one line naming the error
+// went to a logger nobody collected.
+func TestFailedStripedUploadSaysWhy(t *testing.T) {
+	defer restoreUploadTunables(uploadChunkBytes, uploadMemBytes, uploadStripeMinBytes, uploadConcurrency)()
+	uploadChunkBytes = 64 << 10
+	uploadMemBytes = 256 << 10
+	uploadStripeMinBytes = 64 << 10
+	uploadConcurrency = 2
+
+	blob := make([]byte, 1<<20)
+	for i := range blob {
+		blob[i] = byte(i)
+	}
+	sink := &stubSink{refuse: http.StatusInsufficientStorage} // refuseAt 0: the first chunk
+	backend := httptest.NewServer(sink.handler())
+	defer backend.Close()
+
+	proxy := newRSTestClient(t, backend.Listener.Addr().String(), rsTestConcurrency, 1<<20)
+	resp := socks5Upload(t, proxy, blob)
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", resp.StatusCode)
+	}
+	reason := resp.Header.Get("X-Upload-Error")
+	if reason == "" {
+		t.Fatal("the 502 named no reason: X-Upload-Error is what a failed bench row is read from")
+	}
+	if !strings.Contains(reason, "striped upload") || !strings.Contains(reason, "sink answered 507") {
+		t.Fatalf("X-Upload-Error = %q, want the offset and the sink's status in it", reason)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if strings.TrimSpace(string(body)) != reason {
+		t.Fatalf("body = %q, want the same sentence as the header (%q)", body, reason)
+	}
+}
+
+// TestBadGatewayReasonIsOneHeaderSafeLine: the reason is a header value, so a
+// multi-line error must not be able to end the header early or smuggle one in.
+func TestBadGatewayReasonIsOneHeaderSafeLine(t *testing.T) {
+	got := badGatewayReason(fmt.Errorf("chunk 0-65535:\r\nX-Injected: yes\n  read body\tat 0"))
+	if strings.ContainsAny(got, "\r\n\t") {
+		t.Fatalf("reason %q still carries a line break", got)
+	}
+	if got != "chunk 0-65535: X-Injected: yes read body at 0" {
+		t.Fatalf("reason = %q", got)
+	}
+	if badGatewayReason(nil) != "" {
+		t.Fatal("a nil error has no reason; writeBadGateway falls back to rsBadGatewayBody")
+	}
+	long := badGatewayReason(fmt.Errorf("%s", strings.Repeat("x", rsReasonMax+64)))
+	if len([]rune(long)) != rsReasonMax+1 {
+		t.Fatalf("a long reason was not capped: %d runes", len([]rune(long)))
+	}
 }

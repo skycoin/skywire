@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -251,6 +252,9 @@ var (
 	inProcessConnsMu sync.RWMutex
 	inProcessConns   = make(map[ProcKey]net.Conn)
 
+	inProcessLogsMu sync.RWMutex
+	inProcessLogs   = make(map[ProcKey]logrus.FieldLogger)
+
 	// internalAppStartMu serializes internal app startup to prevent env var races
 	internalAppStartMu sync.Mutex
 	// configReadDones tracks channels for signaling when config has been read
@@ -277,6 +281,39 @@ func UnregisterInProcessConn(key ProcKey) {
 	inProcessConnsMu.Lock()
 	defer inProcessConnsMu.Unlock()
 	delete(inProcessConns, key)
+}
+
+// RegisterInProcessLogger registers the visor-side per-app logger of an
+// in-process app by its ProcKey, exactly as RegisterInProcessConn registers its
+// conn.
+//
+// An EXTERNAL app's stderr is read by the proc manager and re-logged through
+// that same logger (appserver.attachCmdLogs → printStdErr), so its lines reach
+// the app's bbolt log store and local/log/skywire.log. An in-process app has no
+// stderr pipe: its app.Client built a private logrus straight onto the visor's
+// os.Stderr, so everything it logged — including the warning naming why an
+// upload failed — existed only in the visor's console. This registry is how
+// app.NewClient finds the collected logger instead.
+func RegisterInProcessLogger(key ProcKey, log logrus.FieldLogger) {
+	inProcessLogsMu.Lock()
+	defer inProcessLogsMu.Unlock()
+	inProcessLogs[key] = log
+}
+
+// GetInProcessLogger retrieves the logger for an in-process app by its ProcKey,
+// or nil when the app is not in-process (the external case, where stderr is the
+// channel).
+func GetInProcessLogger(key ProcKey) logrus.FieldLogger {
+	inProcessLogsMu.RLock()
+	defer inProcessLogsMu.RUnlock()
+	return inProcessLogs[key]
+}
+
+// UnregisterInProcessLogger removes the logger for an in-process app.
+func UnregisterInProcessLogger(key ProcKey) {
+	inProcessLogsMu.Lock()
+	defer inProcessLogsMu.Unlock()
+	delete(inProcessLogs, key)
 }
 
 // AcquireInternalAppStart acquires the lock for starting an internal app.

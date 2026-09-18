@@ -275,7 +275,9 @@ run_set() { # <set> <socks> <tp ids> <header>
 				fi
 				before=""
 				for tp in $tps; do before="$before $tp:$(tp_counters "$tp" | tr ' ' ',')"; done
-				"$here/bench.sh" "$socks" "$sink" "$n" "$dir" "$set_name-t$t" >> "$f"
+				# the answer of a NON-2xx row is kept beside the blackout capture of the same
+				# row (bench.sh BENCH_FAIL_PREFIX): X-Upload-Error names why a 502 happened.
+				BENCH_FAIL_PREFIX="$out/$set_name.row$row" "$here/bench.sh" "$socks" "$sink" "$n" "$dir" "$set_name-t$t" >> "$f"
 				if [ "$set_paired" = 1 ]; then
 					_mlast=$(tail -1 "$f")
 					paired_emit "$row" "$(paired_cell "$n" "$dir")" "$pref" "$pok" "$plegs" \

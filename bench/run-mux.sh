@@ -462,7 +462,9 @@ run_set() { # <set> <socks> <tp ids> <header>
 				if [ "$row" = "$cut_at_row" ]; then
 					cut_transfer_row "$set_name-t$t" "$dir" "$n"
 				else
-					"$here/bench.sh" "$socks" "$sink" "$n" "$dir" "$set_name-t$t" >> "$f"
+					# the answer of a NON-2xx row is kept beside the blackout capture of the same
+					# row (bench.sh BENCH_FAIL_PREFIX): X-Upload-Error names why a 502 happened.
+					BENCH_FAIL_PREFIX="$out/$set_name.row$row" "$here/bench.sh" "$socks" "$sink" "$n" "$dir" "$set_name-t$t" >> "$f"
 				fi
 				if [ "$set_paired" = 1 ]; then
 					_mlast=$(tail -1 "$f")
