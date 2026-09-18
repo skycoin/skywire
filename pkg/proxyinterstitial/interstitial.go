@@ -6,9 +6,11 @@
 // established — instead of a raw connection error or a mute hang.
 //
 // It mirrors the wasm-visor's in-tab interstitial (pkg/wasmhv/browse-bootstrap.html)
-// but is fully static: no SharedWorker, no streamed log. A transient page
-// auto-refreshes so the browser retries the same URL once the route is warm;
-// a hard-failure page stops retrying and offers a manual retry.
+// but is fully static: no SharedWorker, no streamed log. Both variants retry the
+// same URL forever — a transient page at a fast cadence, a hard-failure page at a
+// lazy one (it also offers a manual Retry). The retry probes with fetch() before
+// it navigates, so an attempt that lands while the proxy process itself is
+// restarting cannot replace the page with the browser's own proxy-error page.
 //
 // Injection model: these proxies dial the target inside a SOCKS5 Dial callback
 // (or an io.Copy tunnel). On a *transient* dial failure for a plaintext-HTTP
@@ -30,11 +32,25 @@ import (
 	"time"
 )
 
-// refreshSeconds is how long the transient page waits before reloading the
-// target URL. Short enough to feel responsive, long enough that a multi-hop
-// route setup (a few seconds on first use) usually completes within one or
-// two cycles.
-const refreshSeconds = 3
+// transientRefreshSeconds is how long the transient page waits between retries
+// of the target URL. Short enough to feel responsive, long enough that a
+// multi-hop route setup (a few seconds on first use) usually completes within
+// one or two cycles.
+const transientRefreshSeconds = 3
+
+// errorRefreshSeconds is the SLOW auto-retry cadence of the hard-failure page.
+// The hard variant used to stop retrying altogether, which made a classification
+// mistake (or a merely long outage) permanent: the tab sat on "Couldn't build a
+// route" until a human pressed Retry. It keeps the manual button, and also keeps
+// probing at this much lazier cadence so a route that does come back is picked
+// up unattended.
+const errorRefreshSeconds = 15
+
+// maxRetrySeconds caps the retry backoff the page applies when the PROXY itself
+// is unreachable (the skysocks-client process restarting: the browser's SOCKS
+// connection is refused). Backing off bounds the retry storm during a long
+// restart; capping it bounds how long a recovered proxy stays unnoticed.
+const maxRetrySeconds = 30
 
 // mechanismLabel maps a transport-mechanism key to the user-facing name shown
 // in the "Fetching the page over …" step. The three native proxy surfaces that
@@ -55,8 +71,23 @@ func mechanismLabel(mechanism string) string {
 // optional one-line status/error string; mechanism names the forwarding surface
 // ("skysocks" / "dmsg" / "skynet") so the fetch step is specific rather than a
 // generic "over skywire". When isError is true the page renders the
-// hard-failure variant (error styling, no auto-refresh, manual retry button);
-// otherwise it renders the transient variant (spinner + meta-refresh auto-retry).
+// hard-failure variant (error styling, manual retry button plus a slow
+// auto-retry); otherwise it renders the transient variant (spinner + a fast
+// auto-retry).
+//
+// Both variants retry FOREVER, and both retry by PROBING rather than by
+// navigating blind. A plain <meta http-equiv="refresh"> re-navigates the tab
+// unconditionally, so if the refresh happens to land while the proxy process
+// itself is restarting (the browser's SOCKS connection is refused for a few
+// seconds) the browser replaces this page with its own "proxy server is
+// refusing connections" error — which has no refresh of its own, so the retry
+// chain is dead until a human reloads. That is the exact dead end operators hit
+// across a `proxy stop` / `proxy start`. The retry script instead fetches the
+// same URL in the background: a refused fetch merely schedules another attempt
+// (with capped backoff) and leaves the page standing, and a fetch that comes
+// back WITHOUT this package's marker header means the route is warm and the
+// real content is there, so the page reloads exactly once, into it. The
+// meta-refresh survives inside <noscript> as the no-JS fallback.
 func Page(target, detail, mechanism string, isError bool) string {
 	target = html.EscapeString(strings.TrimSpace(target))
 	detail = html.EscapeString(strings.TrimSpace(detail))
@@ -66,18 +97,18 @@ func Page(target, detail, mechanism string, isError bool) string {
 	heading := "Building a route over the mesh…"
 	msg := "Establishing a private route to this site. This can take a few seconds on first use."
 	cls := ""
-	var refreshMeta string
+	every := transientRefreshSeconds
 	if isError {
 		title = "Couldn’t reach this site over skywire"
 		heading = "Couldn’t build a route"
 		msg = "The page did not load through the skywire mesh proxy."
 		cls = " err"
-	} else {
-		// Auto-retry the SAME URL. A browser proxied through the mesh will
-		// re-issue the request; by then the route the first attempt kicked
-		// off is usually warm.
-		refreshMeta = fmt.Sprintf(`<meta http-equiv="refresh" content="%d">`, refreshSeconds)
+		every = errorRefreshSeconds
 	}
+	// Auto-retry the SAME URL, forever. The meta refresh is the no-JS fallback
+	// only — with JS the probing retry script below drives it, so the two never
+	// double up.
+	refreshMeta := fmt.Sprintf(`<noscript><meta http-equiv="refresh" content="%d"></noscript>`, every)
 
 	detailBlock := ""
 	if detail != "" {
@@ -126,7 +157,39 @@ func Page(target, detail, mechanism string, isError bool) string {
 		retry +
 		hostBlock +
 		footer +
-		`</div></div></body></html>`
+		`</div></div>` + retryScript(every) + `</body></html>`
+}
+
+// retryScript is the probing auto-retry: it re-fetches the page's own URL in the
+// background every `every` seconds and only navigates when that fetch proves the
+// real content is there.
+//
+// Three properties matter, and each is a defect this replaces:
+//   - A failed attempt never destroys the page. fetch() rejecting (the proxy
+//     process restarting, so the browser's SOCKS connection is refused) just
+//     schedules the next attempt, where a <meta refresh> would have navigated
+//     into the browser's own proxy-error page and ended the retry chain.
+//   - The retry is unbounded in count, bounded in rate: the delay backs off by
+//     1.6x up to maxRetrySeconds while the proxy is unreachable, and snaps back
+//     to the base cadence as soon as the proxy answers at all.
+//   - It distinguishes "the proxy answered with this page again" from "the route
+//     is warm". A response carrying MarkerHeader was minted by this package, so
+//     the route is still cold: stay put and probe again — no navigation churn.
+//     A response WITHOUT it is the real page, so reload once, into it.
+//
+// A browser coming back online retries at once rather than waiting out the
+// backoff. Everything is best-effort: any exception leaves the noscript meta
+// refresh as the fallback.
+func retryScript(every int) string {
+	return fmt.Sprintf(`<script>(function(){var b=%d000,m=%d000,d=b,p=false,h=%q;`+
+		`function later(){setTimeout(go,d);}`+
+		`function go(){if(p){return;}p=true;`+
+		`try{fetch(location.href,{cache:"no-store",credentials:"same-origin"}).then(function(r){p=false;d=b;`+
+		`if(r&&r.headers&&r.headers.get(h)){later();return;}location.reload();},`+
+		`function(){p=false;d=Math.min(Math.round(d*1.6),m);later();});}`+
+		`catch(e){p=false;d=Math.min(Math.round(d*1.6),m);later();}}`+
+		`window.addEventListener("online",function(){d=b;if(!p){go();}});`+
+		`later();})();</script>`, every, maxRetrySeconds, MarkerHeader)
 }
 
 // statusHost returns the reserved status host for a mechanism label
@@ -240,12 +303,22 @@ func httpResponse(target, detail, mechanism string, isError bool) []byte {
 	b.WriteString("Content-Type: text/html; charset=utf-8\r\n")
 	fmt.Fprintf(&b, "Content-Length: %d\r\n", len(bodyStr))
 	b.WriteString(markerHeaderLine)
-	b.WriteString("Cache-Control: no-store, must-revalidate\r\n")
+	b.WriteString(noStoreHeaderLines)
 	b.WriteString("Connection: close\r\n")
 	b.WriteString("\r\n")
 	b.WriteString(bodyStr)
 	return b.Bytes()
 }
+
+// noStoreHeaderLines is the full belt-and-braces no-cache set. Cache-Control
+// alone is honored by every current browser, but the interstitial's retry is a
+// re-request of the SAME URL, so a single cached copy anywhere in the chain
+// (an HTTP/1.0-era intermediary, a browser in a reduced-privacy mode) turns the
+// retry into a replay of the waiting page forever. Pragma + Expires cost two
+// lines and close that off.
+const noStoreHeaderLines = "Cache-Control: no-store, no-cache, must-revalidate, max-age=0\r\n" +
+	"Pragma: no-cache\r\n" +
+	"Expires: 0\r\n"
 
 // Conn returns a net.Conn that serves the interstitial as a one-shot HTTP
 // response. Reads yield the response bytes then EOF; writes (the browser's
@@ -448,7 +521,7 @@ func reloadHTTPResponse() []byte {
 	b.WriteString("Content-Type: text/html; charset=utf-8\r\n")
 	fmt.Fprintf(&b, "Content-Length: %d\r\n", len(body))
 	b.WriteString(markerHeaderLine)
-	b.WriteString("Cache-Control: no-store, must-revalidate\r\n")
+	b.WriteString(noStoreHeaderLines)
 	b.WriteString("Connection: close\r\n\r\n")
 	b.WriteString(body)
 	return b.Bytes()

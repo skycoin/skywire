@@ -20,6 +20,24 @@ const refreshSeconds = 4
 // bottom (terminal-tail order). The Provider may return fewer.
 const maxLogLines = 200
 
+// WebSocket recovery cadence for the skysocks page (see liveScript). The proxy
+// that serves this page restarts routinely, so these govern how a live tab rides
+// out a restart rather than being thrown away.
+//
+//   - wsBackoffBaseMs: first reconnect delay, and the delay the page snaps back
+//     to the instant a frame arrives.
+//   - wsBackoffMaxMs: cap on the 1.6x backoff. Bounds the retry rate during a
+//     long outage without letting a recovered proxy go unnoticed for long.
+//   - wsReloadAfterMs: how long the stream must have been down before the page
+//     will even CONSIDER a full reload — and that reload is still probed first.
+//     Well past a normal visor restart, so the ordinary case is healed by
+//     reconnecting alone, with no navigation at all.
+const (
+	wsBackoffBaseMs = 1000
+	wsBackoffMaxMs  = 20000
+	wsReloadAfterMs = 60000
+)
+
 // Render returns the full, self-contained HTML status page for snap. All
 // interpolated values are HTML-escaped; the page loads no external resource
 // (matching the proxies' strict no-network serving context).
@@ -117,12 +135,29 @@ func RenderFragment(snap Snapshot) []byte {
 // (non-upgraded) ws:// scheme and host.
 //
 // Progressive enhancement: the server-rendered initial paint stands alone, so the
-// page still works with JS or WebSocket unavailable. A healthy message cancels any
-// pending fallback. On close/error it reconnects after a short backoff (2s);
-// only if reconnects never recover does the slow (15s) full reload fire as a last
-// resort. window.sendCmd(obj) sends a JSON control frame (e.g. {cmd:"resync"}) and
-// is the seam the route-control buttons use. Emitted only for the skysocks surface
-// (the only one with a /ws handler).
+// page still works with JS or WebSocket unavailable. window.sendCmd(obj) sends a
+// JSON control frame (e.g. {cmd:"resync"}) and is the seam the route-control
+// buttons use. Emitted only for the skysocks surface (the only one with a /ws
+// handler).
+//
+// Surviving a visor / proxy restart (the reason this page exists). The proxy
+// serving this page restarts often, and every restart kills the WebSocket. The
+// old recovery was a flat 2 s reconnect plus an UNCONDITIONAL location.reload()
+// 15 s after the first close — and that reload was the bug: a full navigation
+// through a SOCKS proxy that is, during a restart, refusing connections, so the
+// browser replaced this live page with its own "proxy server is refusing
+// connections" error, which has no retry of its own. A page that would have
+// recovered by itself on the next reconnect was thrown away, and the tab then sat
+// dead until a human reloaded it.
+//
+// So: reconnect FOREVER, with a capped backoff (base wsBackoffBaseMs, x1.6 up to
+// wsBackoffMaxMs), snapping back to the base the moment a frame arrives. Never
+// reload while a reconnect might still succeed. A reload is kept only as a last
+// resort for a very long outage (wsReloadAfterMs) — and even then it is PROBED
+// first: a background fetch of this page's own URL must come back ok before the
+// navigation happens, so a reload can never land on the browser's proxy-error
+// page. Regained connectivity (the "online" event) and the tab becoming visible
+// again both retry at once instead of waiting out the backoff.
 //
 // Selection guard (the copy-without-fighting-the-repaint fix): before swapping the
 // live region we check window.getSelection(); while the user has a non-collapsed
@@ -144,9 +179,19 @@ func RenderFragment(snap Snapshot) []byte {
 // Clipboard API when available and falling back to execCommand('copy') so it works
 // over plain HTTP (status.skysocks is not a secure context). It flashes the element
 // green briefly. The live indicator (#wsstat) is driven here too.
-const liveScript = `<script>(function(){var t,ws,pend=null,last=null,pv=null;` +
+var liveScript = `<script>(function(){var ws=null,pend=null,last=null,pv=null,` +
+	fmt.Sprintf(`bo=%d,down=0,probing=false,armed=false,BASE=%d,MAX=%d,RELOAD=%d;`,
+		wsBackoffBaseMs, wsBackoffBaseMs, wsBackoffMaxMs, wsReloadAfterMs) +
 	`function stat(s,c){var el=document.getElementById("wsstat");if(el){el.textContent=s;el.className="wsstat "+c;el.insertAdjacentHTML("afterbegin",'<i class="dot"></i>');}}` +
-	`function slow(){if(!t){t=setTimeout(function(){location.reload();},15000);}}` +
+	// probeReload is the LAST resort, and it never navigates blind: it fetches this
+	// page's own URL in the background and reloads only if that came back ok. A
+	// refused/failed probe (the proxy is mid-restart) leaves the page exactly where
+	// it is, still reconnecting.
+	`function probeReload(){if(probing){return;}probing=true;` +
+	`try{fetch(location.pathname,{cache:"no-store",credentials:"same-origin"}).then(function(r){probing=false;if(r&&r.ok){location.reload();}},function(){probing=false;});}catch(e){probing=false;}}` +
+	// sched backs the reconnect off (capped) and re-arms exactly one timer.
+	`function sched(){if(armed){return;}armed=true;var d=bo;bo=Math.min(Math.round(bo*1.6),MAX);` +
+	`if(down&&Date.now()-down>RELOAD){probeReload();}setTimeout(connect,d);}` +
 	`function url(){return location.origin.replace(/^http/,"ws")+"/ws";}` +
 	`function selecting(){var s=window.getSelection();return !!(s&&!s.isCollapsed&&String(s));}` +
 	// Live up/down rate meters: difference the cumulative data-val byte totals of the
@@ -175,11 +220,17 @@ const liveScript = `<script>(function(){var t,ws,pend=null,last=null,pv=null;` +
 	`var tr2=el.querySelector(".tree");if(tr2){tr2.scrollLeft=trl;}meters(el);window.scrollTo(sx,sy);}` +
 	`function push(h){if(selecting()){pend=h;return;}apply(h);}` +
 	`document.addEventListener("selectionchange",function(){if(pend!==null&&!selecting()){var h=pend;pend=null;apply(h);}});` +
-	`function connect(){stat("connecting","wait");try{ws=new WebSocket(url());}catch(e){slow();return;}` +
+	`function connect(){armed=false;if(ws){return;}stat("connecting","wait");` +
+	`try{ws=new WebSocket(url());}catch(e){ws=null;if(!down){down=Date.now();}sched();return;}` +
 	`ws.onopen=function(){stat("live","ok");};` +
-	`ws.onmessage=function(e){if(t){clearTimeout(t);t=null;}stat("live","ok");push(e.data);};` +
-	`ws.onclose=function(){ws=null;stat("reconnecting","warn");slow();setTimeout(connect,2000);};` +
+	`ws.onmessage=function(e){bo=BASE;down=0;stat("live","ok");push(e.data);};` +
+	`ws.onclose=function(){ws=null;if(!down){down=Date.now();}stat("reconnecting","warn");sched();};` +
 	`ws.onerror=function(){try{ws.close();}catch(e){}};}` +
+	// A browser that just regained connectivity, or a tab the user just came back
+	// to, retries immediately rather than sitting out the remaining backoff.
+	`function wake(){bo=BASE;if(!ws){armed=false;connect();}}` +
+	`window.addEventListener("online",wake);` +
+	`document.addEventListener("visibilitychange",function(){if(!document.hidden){wake();}});` +
 	`window.sendCmd=function(o){try{if(ws&&ws.readyState===1){ws.send(JSON.stringify(o));return true;}}catch(e){}return false;};` +
 	`function flash(el,cls){if(!el){return;}el.classList.add(cls);setTimeout(function(){el.classList.remove(cls);},800);}` +
 	`function fb(txt){try{var a=document.createElement("textarea");a.value=txt;a.setAttribute("readonly","");a.style.position="fixed";a.style.opacity="0";document.body.appendChild(a);a.select();document.execCommand("copy");document.body.removeChild(a);return true;}catch(e){return false;}}` +

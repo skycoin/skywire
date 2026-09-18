@@ -357,12 +357,25 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 			log.WithError(lerr).Debug("disconnected status listener not bound")
 			close(ddone)
 		}
+		// Hold the port until the live listener is about to take it, and release it
+		// exactly once however this cycle unwinds. The handover has to stay
+		// sequential — ReuseListen sets SO_REUSEPORT, so two bound listeners would
+		// have the kernel split browser connections between the live client and the
+		// sessionless one — but every statement between the last dial and
+		// ListenAndServe is time :1080 is unbound, so release as late as possible.
+		released := false
+		release := func() {
+			if released {
+				return
+			}
+			released = true
+			dcancel()
+			<-ddone
+		}
+		defer release()
 
 		conn, err := dialServer(cycleCtx, cfg, appCl, pk, false, false)
 		if err != nil {
-			// Stop the disconnected listener and wait for it to release :1080.
-			dcancel()
-			<-ddone
 			return fmt.Errorf("dial server: %w", err)
 		}
 		conns := []net.Conn{conn}
@@ -397,10 +410,6 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 			}
 			conns = append(conns, extra)
 		}
-		// Stop the disconnected listener and wait for it to release :1080 before the
-		// live Client rebinds the same addr.
-		dcancel()
-		<-ddone
 		log.Infof("Connected to %v", pk)
 		if len(conns) > 1 {
 			log.Infof("skysocks-client: %d tunnels dialed with visor-side disjoint-path coordination — each extra tunnel is steered off the first-hop transports the earlier ones claimed (docs/mux_aggregation_rfc.md step 3). Tunnels that could not find a disjoint transport fall back to a shared path.", len(conns))
@@ -477,6 +486,9 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 
 		log.Infof("Serving proxy client %v", cfg.addr)
 		setAppStatus(appCl, log, appserver.AppDetailedStatusRunning)
+		// Hand :1080 from the sessionless listener to the live one, as late as
+		// possible (see `release` above).
+		release()
 		//nolint:staticcheck
 		if err := client.ListenAndServe(cfg.addr); err != nil {
 			return fmt.Errorf("serve proxy client: %w", err)
@@ -513,10 +525,15 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 			log.WithError(err).Warnf("Reconnecting in %v", delay)
 			setAppStatus(appCl, log, appserver.AppDetailedStatusReconnecting)
 		}
-		select {
-		case <-cycleCtx.Done():
+		// SERVE the reconnect delay instead of sleeping through it: hold :1080
+		// with the sessionless listener for the whole wait, so status.skysocks
+		// (and the branded interstitial's own auto-retry) are answered between
+		// cycles too. Sleeping here left the port unbound for up to 30 s on every
+		// restart or exit flap, and a browser that hit that window got the proxy's
+		// connection refused — a dead end with no retry of its own.
+		skysocks.ServeDisconnectedWait(cycleCtx, cfg.addr, appCl, delay)
+		if cycleCtx.Err() != nil {
 			return nil
-		case <-time.After(delay):
 		}
 		// Back off while the remote stays unreachable; reset once a
 		// cycle has actually served for a while (remote came back).

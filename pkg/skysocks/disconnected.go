@@ -21,6 +21,7 @@ package skysocks
 import (
 	"context"
 	"net"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/proxyinterstitial"
@@ -45,6 +46,36 @@ func ServeDisconnected(ctx context.Context, lis net.Listener, appCl *app.Client)
 		}
 		go disconnectedConn(conn, appCl)
 	}
+}
+
+// ServeDisconnectedWait owns addr for d (or until ctx is canceled), answering
+// browser connections locally, then releases the port and returns.
+//
+// It exists to close the RECONNECT GAP — the one proxy state in which
+// status.skysocks was not answered in-process at all. When every tunnel dies,
+// (*Client).ListenAndServe tears the live :1080 listener down and returns, and
+// the app's reconnect loop then SLEEPS (2 s doubling to 30 s) before the next
+// cycle binds its disconnected listener and starts dialing. Across that sleep —
+// and it is entered on every visor restart, `proxy stop`/`proxy start` and exit
+// flap — nothing held :1080, so every browser request was connection-refused:
+// status.skysocks included, and the branded interstitial's own auto-retry
+// included. The browser then shows its "proxy server is refusing connections"
+// page, which has no retry of its own, and the tab is dead until a human
+// reloads. Serving the sleep instead of sleeping through it means the reserved
+// diagnostic page is answerable in EVERY proxy state — starting, dialing,
+// no route, route down, and now between cycles.
+//
+// The port is released on return, so the next cycle's listener (and ultimately
+// the live Client's) rebinds cleanly; a bind failure degrades to a plain wait
+// rather than skipping the delay, so it can never turn into a dial hot loop.
+func ServeDisconnectedWait(ctx context.Context, addr string, appCl *app.Client, d time.Duration) {
+	wctx, cancel := context.WithTimeout(ctx, d)
+	defer cancel()
+	lis, err := ReuseListen(addr)
+	if err == nil {
+		ServeDisconnected(wctx, lis, appCl)
+	}
+	<-wctx.Done()
 }
 
 // disconnectedConn answers one browser SOCKS5 connection while disconnected from

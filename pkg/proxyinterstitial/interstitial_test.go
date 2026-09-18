@@ -3,6 +3,7 @@ package proxyinterstitial
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -26,12 +27,79 @@ func TestPageTransient(t *testing.T) {
 
 func TestPageError(t *testing.T) {
 	p := Page("example.dmsg", "no route to host", "dmsg", true)
-	if strings.Contains(p, "http-equiv=\"refresh\"") {
-		t.Error("error page must not auto-refresh")
-	}
 	for _, want := range []string{"Retry", "no route to host", "example.dmsg"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("error page missing %q", want)
+		}
+	}
+}
+
+// TestPageRetriesForever is the regression test for the retry chain that used to
+// stop: BOTH variants must keep retrying on their own — the transient one fast,
+// the hard-failure one slowly (it used to give up entirely, so a classification
+// mistake or a merely long outage was permanent). The no-JS meta refresh must sit
+// inside <noscript> so it never doubles up with the retry script.
+func TestPageRetriesForever(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		isError bool
+		every   int
+	}{
+		{"transient", false, transientRefreshSeconds},
+		{"hard failure", true, errorRefreshSeconds},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := Page("example.dmsg", "", "dmsg", tc.isError)
+			want := fmt.Sprintf(`<noscript><meta http-equiv="refresh" content="%d"></noscript>`, tc.every)
+			if !strings.Contains(p, want) {
+				t.Errorf("missing the no-JS refresh fallback %q", want)
+			}
+			// A bare meta refresh outside <noscript> would fire alongside the script.
+			if strings.Contains(strings.ReplaceAll(p, want, ""), `http-equiv="refresh"`) {
+				t.Error("meta refresh must live only inside <noscript>")
+			}
+			if !strings.Contains(p, "fetch(location.href") {
+				t.Error("retry must probe with fetch before navigating")
+			}
+			if !strings.Contains(p, MarkerHeader) {
+				t.Error("retry must key on the marker header to detect the real page")
+			}
+		})
+	}
+}
+
+// TestRetryScriptProbesBeforeNavigating pins the three properties that keep the
+// retry chain alive across a proxy restart: a failed probe reschedules instead of
+// navigating (a blind navigation lands on the browser's proxy-error page, which
+// has no retry), the backoff is capped rather than unbounded, and a response
+// still carrying the marker header does not trigger a reload.
+func TestRetryScriptProbesBeforeNavigating(t *testing.T) {
+	s := retryScript(transientRefreshSeconds)
+	for _, want := range []string{
+		fmt.Sprintf("var b=%d000,m=%d000", transientRefreshSeconds, maxRetrySeconds),
+		"Math.min(Math.round(d*1.6),m)",
+		`r.headers.get(h)){later();return;}location.reload();`,
+		`window.addEventListener("online"`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("retry script missing %q", want)
+		}
+	}
+}
+
+// TestSyntheticResponsesAreUncacheable: the retry re-requests the SAME URL, so a
+// cached interstitial anywhere in the chain would replay the waiting page forever.
+func TestSyntheticResponsesAreUncacheable(t *testing.T) {
+	for name, raw := range map[string][]byte{
+		"interstitial": httpResponse("example.dmsg", "", "dmsg", false),
+		"error":        httpResponse("example.dmsg", "boom", "dmsg", true),
+		"reload":       reloadHTTPResponse(),
+	} {
+		head, _, _ := strings.Cut(string(raw), "\r\n\r\n")
+		for _, want := range []string{"Cache-Control: no-store", "Pragma: no-cache", "Expires: 0"} {
+			if !strings.Contains(head, want) {
+				t.Errorf("%s response missing %q; head=%q", name, want, head)
+			}
 		}
 	}
 }
