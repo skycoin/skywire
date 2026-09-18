@@ -403,6 +403,20 @@ The rig decides between them by the same table. Neither is started until
 3.1 and 3.2 have been measured, because the last campaign spent weeks on the
 wrong layer.
 
+**The cut row's own frontier, done first.** Criterion 6 (first byte after a
+mid-transfer cut under 2 s) was failed by the range splitter, not by the route
+layer: on `bench/2026-09-16/03ece1e95-smoke/mux-standby-8` the active tunnel was
+cut 5.2 s into a 50 MB download, the group closed at t, retire and promote
+landed at t+2.0 s, and the browser's next byte only at t+7.0 s. Detection was
+~1.8 s of that; the remaining ~5 s was the in-order writer's whole-chunk
+barrier — the frontier chunk's already-received prefix could not be emitted, so
+its ~4 MiB remainder had to complete on a just-promoted tunnel first (uploads,
+which have no such barrier, recover in 1.7–1.8 s on the same rig). The writer
+now streams the frontier chunk as its bytes arrive and a refetch resumes from
+the byte after the last one written, so a cut costs one detection instead of one
+chunk. Re-measure the cut row against this before judging the route-layer
+candidates above.
+
 ### 3.4 Liveness and stability, finished
 
 - With control-frame priority in place, re-run the frozen-exit 30-minute

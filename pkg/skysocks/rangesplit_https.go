@@ -262,7 +262,10 @@ func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, re
 		c.rsChunks.Add(uint64(chunks)) //nolint:gosec // chunks>=2 here (total>chunk0Len)
 		c.rsBytes.Add(uint64(total))   //nolint:gosec // total>0 checked above
 		c.rsActive.Add(1)
-		pending = c.startChunkFetchesFrom(chunk0Len, total, chunkSize, func(start, end int64) ([]byte, error) {
+		// No progress sink: fetchChunkTLSRetry restarts a failed chunk from its
+		// first byte rather than resuming, so a streamed prefix could not be
+		// honoured — the TLS path keeps buffering whole chunks.
+		pending = c.startChunkFetchesFrom(chunk0Len, total, chunkSize, func(start, end int64, _ rsProgress) ([]byte, error) {
 			return c.fetchChunkTLSRetry(req, host, validator, start, end)
 		})
 	}

@@ -392,7 +392,7 @@ func TestStripedUploadHoldsItsMemoryBound(t *testing.T) {
 	backend := httptest.NewServer(sink.handler())
 	defer backend.Close()
 
-	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 1<<20)
+	proxy := newRSTestClient(t, backend.Listener.Addr().String(), rsTestConcurrency, 1<<20)
 	uploadHeldPeak.Store(0)
 
 	resp := socks5Upload(t, proxy, blob)
@@ -558,7 +558,7 @@ func TestUploadToNonOptInOriginIsUnchanged(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 1<<20)
+	proxy := newRSTestClient(t, backend.Listener.Addr().String(), rsTestConcurrency, 1<<20)
 	resp := socks5Upload(t, proxy, blob)
 	defer resp.Body.Close() //nolint:errcheck
 	var got struct {
@@ -872,7 +872,7 @@ func TestUploadSlotIsFreedOnTheAckNotTheDurability(t *testing.T) {
 	backend := httptest.NewServer(sink.handler())
 	defer backend.Close()
 
-	resp := socks5Upload(t, newRSTestClient(t, backend.Listener.Addr().String(), 1<<20), blob)
+	resp := socks5Upload(t, newRSTestClient(t, backend.Listener.Addr().String(), rsTestConcurrency, 1<<20), blob)
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -951,7 +951,7 @@ func TestStripedUploadChunksAreSizedFromTheObject(t *testing.T) {
 	backend := httptest.NewServer(sink.handler())
 	defer backend.Close()
 
-	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 1<<20)
+	proxy := newRSTestClient(t, backend.Listener.Addr().String(), rsTestConcurrency, 1<<20)
 	resp := socks5Upload(t, proxy, blob)
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != 200 {
