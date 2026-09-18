@@ -69,14 +69,28 @@ type deadRouteCache struct {
 	m   map[deadRouteKey]deadRouteEntry
 }
 
+// newDeadRouteCache builds the cache. A non-positive ttl or max means "follow
+// the live knob" (router.DeadRouteHold / DeadRouteHoldMax, whose defaults are
+// deadRouteTTL and deadRouteMaxTTL) — that is how the router builds it, so
+// `route settings --dead-route-hold` reaches a router already running. Tests
+// pass explicit values and are unaffected by the knob.
 func newDeadRouteCache(ttl, max time.Duration) *deadRouteCache {
+	return &deadRouteCache{ttl: ttl, max: max, m: make(map[deadRouteKey]deadRouteEntry)}
+}
+
+// hold is the exclusion window and its ceiling in force, re-read on every death.
+func (c *deadRouteCache) hold() (ttl, max time.Duration) {
+	ttl, max = c.ttl, c.max
 	if ttl <= 0 {
-		ttl = deadRouteTTL
+		ttl = DeadRouteHold()
+	}
+	if max <= 0 {
+		max = DeadRouteHoldMax()
 	}
 	if max < ttl {
 		max = ttl
 	}
-	return &deadRouteCache{ttl: ttl, max: max, m: make(map[deadRouteKey]deadRouteEntry)}
+	return ttl, max
 }
 
 // deadRouteKeyOf digests a forward path into a cache key. Reports ok=false for
@@ -107,12 +121,12 @@ func (c *deadRouteCache) mark(path []routing.Hop, age time.Duration, now time.Ti
 	defer c.mu.Unlock()
 	c.pruneLocked(now)
 	e := c.m[k]
-	ttl := c.ttl
+	ttl, maxTTL := c.hold()
 	if e.strikes > 0 && e.ttl > 0 {
 		ttl = e.ttl * 2
 	}
-	if ttl > c.max {
-		ttl = c.max
+	if ttl > maxTTL {
+		ttl = maxTTL
 	}
 	c.m[k] = deadRouteEntry{until: now.Add(ttl), ttl: ttl, at: now, age: age, strikes: e.strikes + 1}
 	return true

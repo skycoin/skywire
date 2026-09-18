@@ -310,6 +310,14 @@ func (proxyDefaultAPI) SetAppArgs(_ string, _ []string) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) GetAppSettings(_ string) (AppSettings, error) {
+	return AppSettings{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) SetAppSettings(_ string, _ map[string]int64) (AppSettings, error) {
+	return AppSettings{}, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) SetAppEnv(_ string, _ string, _ string) error {
 	return ErrProxyNotSupported
 }

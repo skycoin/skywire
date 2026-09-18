@@ -93,11 +93,26 @@ type Settings struct {
 	ExistingTPOnly      bool     `json:"existing_tp_only"`
 	MinHops             uint16   `json:"min_hops"`
 	TransportPreference []string `json:"transport_preference"`
+
+	// The mux send-window shape and the adaptive park hold.
+	EcfMaxWindowBytes int64   `json:"ecf_max_window_bytes"`
+	EcfMinWindowBytes int64   `json:"ecf_min_window_bytes"`
+	EcfWindowMargin   float64 `json:"ecf_window_margin"`
+	SendWindowWaitMax string  `json:"send_window_wait_max"`
+	LegParkMinHold    string  `json:"leg_park_min_hold"`
+	DeadRouteHold     string  `json:"dead_route_hold"`
+	DeadRouteHoldMax  string  `json:"dead_route_hold_max"`
+	MuxFEC            bool    `json:"mux_fec"`
 }
 
 // Human writes one knob per line.
 func (s Settings) Human(w io.Writer) error {
-	_, err := fmt.Fprintf(w, "min_hops: %d\nexisting_tp_only: %v\nforce_local_routes: %v\ntransport_preference: %s\n",
-		s.MinHops, s.ExistingTPOnly, s.ForceLocalRoutes, strings.Join(s.TransportPreference, ","))
+	_, err := fmt.Fprintf(w, "min_hops: %d\nexisting_tp_only: %v\nforce_local_routes: %v\ntransport_preference: %s\n"+
+		"ecf_max_window_bytes: %d\necf_min_window_bytes: %d\necf_window_margin: %g\n"+
+		"send_window_wait_max: %s\nleg_park_min_hold: %s\n"+
+		"dead_route_hold: %s\ndead_route_hold_max: %s\nmux_fec: %v\n",
+		s.MinHops, s.ExistingTPOnly, s.ForceLocalRoutes, strings.Join(s.TransportPreference, ","),
+		s.EcfMaxWindowBytes, s.EcfMinWindowBytes, s.EcfWindowMargin,
+		s.SendWindowWaitMax, s.LegParkMinHold, s.DeadRouteHold, s.DeadRouteHoldMax, s.MuxFEC)
 	return err
 }

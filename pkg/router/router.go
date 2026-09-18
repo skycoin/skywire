@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	rpc "github.com/0magnet/gobrpc"
@@ -640,6 +641,10 @@ type Router interface {
 	// path inert even when Config.EnableRSNOracleRoutes is set.
 	SetDstTransportOracle(DstTransportOracle)
 	SetMuxMode(WeightMode)
+	// SetMuxFEC / GetMuxFEC mirror Config.MuxFEC at runtime; the setting is
+	// read when a mux route group is BUILT, so it reaches new groups only.
+	SetMuxFEC(bool)
+	GetMuxFEC() bool
 	GetExistingTPOnly() bool
 	GetForceLocalRoutes() bool
 	GetLastRouteCalcTime() time.Duration
@@ -746,6 +751,7 @@ type router struct {
 	rgsRaw           map[routing.RouteDescriptor]*RouteGroup         // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
 	rgsDatagrams     map[routing.RouteDescriptor]*DatagramRouteGroup // faithful-UDP (DatagramPacket) route groups, keyed like rgsNs; #2607 stage-4 dispatch
 	intake           intakeCounters                                  // inbound-path counters for `visor state` (router_intake.go)
+	muxFEC           atomic.Bool                                     // live mirror of Config.MuxFEC; read when a mux route group is built (settings.go)
 	muxEvents        muxEventRing                                    // bounded history of route-group/mux-leg changes with reasons (mux_events.go)
 	routeSource      routeSourceCounters                             // where routes came from (router_route_source.go)
 	datagramPorts    map[routing.Port]struct{}                       // local ports with faithful-UDP intent; the accept side builds a datagram sibling only for these (#2607 on-demand-by-local-intent)
@@ -901,13 +907,14 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		tpdCache:        newTPDSnapshotCache(),
 		localRoutes:     newLocalRouteMemo(),
 		suspects:        newSuspectHopCache(handshakeAwaitTimeout),
-		deadRoutes:      newDeadRouteCache(deadRouteTTL, deadRouteMaxTTL),
+		deadRoutes:      newDeadRouteCache(0, 0), // 0 = follow the live route-settings knobs
 		warmRoutes:      newWarmRoutePool(defaultWarmPlanTTL),
 		// Default a mux responder to capacity bulk-spread for the downloads it
 		// serves (see router_serve.go); operators can disable via
 		// SetResponderBulkSpread(false).
 		responderBulkSpread: true,
 	}
+	r.muxFEC.Store(config.MuxFEC)
 
 	go r.rulesGCLoop()
 

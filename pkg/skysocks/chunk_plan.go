@@ -39,12 +39,13 @@ const (
 	rsProbeChunkBytes = 2 << 20
 )
 
-// probeChunkBytes is the byte count chunk0's range asks for: rsProbeChunkBytes,
-// or the configured chunk size when the operator has capped it lower.
+// probeChunkBytes is the byte count chunk0's range asks for: the chunk.probe_bytes
+// knob (rsProbeChunkBytes by default), or the chunk ceiling in force when the
+// operator has capped it lower.
 func (c *Client) probeChunkBytes() int64 {
-	n := int64(rsProbeChunkBytes)
-	if c.rs.chunkSize > 0 && c.rs.chunkSize < n {
-		n = c.rs.chunkSize
+	n := setChunkProbeBytes()
+	if ceil := c.rsChunkSize(); ceil > 0 && ceil < n {
+		n = ceil
 	}
 	return n
 }
@@ -60,8 +61,9 @@ func (c *Client) activeTunnels() int {
 }
 
 // chunkTarget is the planner's target chunk size for an object of total bytes
-// spread over `tunnels` active tunnels: total/(rsChunksPerTunnel×tunnels),
-// clamped to [rsMinChunkBytes, ceiling].
+// spread over `tunnels` active tunnels: total/(chunk.per_tunnel×tunnels),
+// clamped to [chunk.min_bytes, ceiling]. The two knobs default to
+// rsChunksPerTunnel and rsMinChunkBytes.
 func chunkTarget(total int64, tunnels int, ceiling int64) int64 {
 	if ceiling <= 0 {
 		ceiling = defaultRSChunkSize
@@ -69,9 +71,13 @@ func chunkTarget(total int64, tunnels int, ceiling int64) int64 {
 	if tunnels < 1 {
 		tunnels = 1
 	}
-	size := total / int64(rsChunksPerTunnel*tunnels)
-	if size < rsMinChunkBytes {
-		size = rsMinChunkBytes
+	per := setChunkPerTunnel()
+	if per < 1 {
+		per = rsChunksPerTunnel
+	}
+	size := total / int64(per*tunnels)
+	if floor := setChunkMinBytes(); size < floor {
+		size = floor
 	}
 	if size > ceiling {
 		size = ceiling
@@ -99,5 +105,5 @@ func evenChunkSize(remaining, target int64) int64 {
 // chunk0: the per-object target for the current active tunnel count, rounded to
 // divide the remainder evenly.
 func (c *Client) planChunkSize(total, chunk0Len int64) int64 {
-	return evenChunkSize(total-chunk0Len, chunkTarget(total, c.activeTunnels(), c.rs.chunkSize))
+	return evenChunkSize(total-chunk0Len, chunkTarget(total, c.activeTunnels(), c.rsChunkSize()))
 }

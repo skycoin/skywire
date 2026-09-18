@@ -166,8 +166,8 @@ func classifyUpload(r *http.Request, head []byte, host string) *uploadCandidate 
 		head:   head,
 		host:   host,
 		total:  r.ContentLength,
-		stripe: r.ContentLength >= uploadStripeMinBytes,
-		replay: r.ContentLength <= uploadReplayMaxBytes,
+		stripe: r.ContentLength >= setUploadStripeMinBytes(),
+		replay: r.ContentLength <= setUploadReplayMaxBytes(),
 	}
 	if !u.stripe && !u.replay {
 		return nil
@@ -200,7 +200,7 @@ func (p *uploadProbeCache) get(key string) (uploadProbeEntry, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	e, ok := p.m[key]
-	if !ok || time.Since(e.at) > uploadProbeTTL {
+	if !ok || time.Since(e.at) > setUploadProbeTTL() {
 		return uploadProbeEntry{}, false
 	}
 	return e, true
@@ -331,6 +331,9 @@ type uploadStripe struct {
 	u    *uploadCandidate
 	id   string
 	body io.Reader
+	// chunk is the chunk size this object was cut with, snapshotted by run so a
+	// mid-upload knob change cannot move a boundary the sink already addressed.
+	chunk int64
 
 	mu       sync.Mutex
 	cond     *sync.Cond
@@ -379,7 +382,7 @@ func (c *Client) serveStripedUpload(conn net.Conn, u *uploadCandidate) {
 		return
 	}
 	if c.appCl != nil {
-		c.appCl.Log().Debugf("striped upload: %s %d bytes in %d chunks completed", u.host, u.total, numChunks(u.total, uploadChunkBytes))
+		c.appCl.Log().Debugf("striped upload: %s %d bytes in %d chunks completed", u.host, u.total, numChunks(u.total, s.chunk))
 	}
 	_, _ = conn.Write(final) //nolint:errcheck
 }
@@ -387,11 +390,16 @@ func (c *Client) serveStripedUpload(conn net.Conn, u *uploadCandidate) {
 // run reads the body into bounded buffers and sends the chunks. It returns the
 // serialized response the browser gets — the ack that completed the object.
 func (s *uploadStripe) run() ([]byte, error) {
-	mem := make(chan struct{}, s.slots())
+	// The chunk size is snapshotted for the whole object: the sink addresses a
+	// chunk by its offset, so re-reading the knob mid-body would cut the next
+	// chunk on a boundary the sink is not expecting.
+	t := uploadSnapshot()
+	s.chunk = t.chunk
+	mem := make(chan struct{}, s.slotsFrom(t))
 
 	var wg sync.WaitGroup
-	for start := int64(0); start < s.u.total; start += uploadChunkBytes {
-		end := start + uploadChunkBytes - 1
+	for start := int64(0); start < s.u.total; start += t.chunk {
+		end := start + t.chunk - 1
 		if end >= s.u.total {
 			end = s.u.total - 1
 		}
@@ -458,10 +466,15 @@ func (s *uploadStripe) run() ([]byte, error) {
 // admit the re-send — each eviction a 5 s stall and a 4 MiB re-send, three of
 // them a failed object (bench/2026-09-16/3194b7cc8-smoke: 0.43/0.76 MB/s after
 // the cut, one trial a 502).
-func (s *uploadStripe) slots() int {
-	n := uploadMemBytes / uploadChunkBytes
+// The three knobs come from ONE snapshot per call and are handed down, so a
+// settings pull landing mid-call cannot divide the window by a new chunk size
+// and subtract a headroom counted in the old one.
+func (s *uploadStripe) slots() int { return s.slotsFrom(uploadSnapshot()) }
+
+func (s *uploadStripe) slotsFrom(t uploadTunables) int {
+	n := t.mem / t.chunk
 	if w := s.u.window; w > 0 {
-		if sinkMax := w/uploadChunkBytes - int64(s.headroom()); sinkMax < n {
+		if sinkMax := w/t.chunk - int64(s.headroomFrom(t)); sinkMax < n {
 			n = sinkMax
 		}
 	}
@@ -475,10 +488,12 @@ func (s *uploadStripe) slots() int {
 // one tunnel's worth, but never more than half the window — otherwise raising
 // perTunnel would narrow an OLD sink (a 16 MiB window) to a single live buffer,
 // which is the pipeline stall this is meant to remove.
-func (s *uploadStripe) headroom() int {
-	n := s.perTunnel()
+func (s *uploadStripe) headroom() int { return s.headroomFrom(uploadSnapshot()) }
+
+func (s *uploadStripe) headroomFrom(t uploadTunables) int {
+	n := t.perTunnel()
 	if w := s.u.window; w > 0 {
-		if half := int(w / uploadChunkBytes / 2); half >= 1 && n > half {
+		if half := int(w / t.chunk / 2); half >= 1 && n > half {
 			n = half
 		}
 	}
@@ -486,13 +501,7 @@ func (s *uploadStripe) headroom() int {
 }
 
 // perTunnel is how many chunks one tunnel may carry at once.
-func (s *uploadStripe) perTunnel() int {
-	n := uploadConcurrency
-	if n < 1 {
-		n = 1
-	}
-	return n
-}
+func (s *uploadStripe) perTunnel() int { return uploadSnapshot().perTunnel() }
 
 // takeSlot blocks until the chunks in flight are fewer than the tunnels can
 // carry. The count is re-read every wait, so losing a tunnel narrows the upload
@@ -595,7 +604,7 @@ func (s *uploadStripe) awaitDurable(start, end int64) bool {
 		}
 		// Backstop: nothing is going out any more and the prefix has stopped, so
 		// no chunk below us is coming to move it.
-		if s.sending == 0 && time.Since(s.ackedAt) > uploadDurableWait {
+		if s.sending == 0 && time.Since(s.ackedAt) > setUploadDurableWait() {
 			return false
 		}
 		s.mu.Unlock()
@@ -646,7 +655,7 @@ func (s *uploadStripe) sendChunk(start, end int64, buf []byte, onAck func()) err
 		if s.awaitDurable(start, end) {
 			return nil
 		}
-		if pass >= uploadResendPasses {
+		if pass >= setUploadResendPasses() {
 			return fmt.Errorf("chunk %d-%d: acked %d time(s) but the sink's prefix never reached it (%d/%d)",
 				start, end, pass, s.received(), s.u.total)
 		}
@@ -682,7 +691,7 @@ func (s *uploadStripe) deliverChunk(start, end int64, buf []byte) error {
 			s.note(ack)
 			return nil
 		case err == nil && ack.status == http.StatusTooEarly:
-			if early++; early > uploadEarlyTries {
+			if early++; early > setUploadEarlyTries() {
 				return fmt.Errorf("chunk %d-%d: sink held it off %d times (frontier %d)", start, end, early-1, ack.nextOffset)
 			}
 			s.note(ack)
@@ -691,10 +700,10 @@ func (s *uploadStripe) deliverChunk(start, end int64, buf []byte) error {
 
 			continue
 		case err == nil && ack.status == http.StatusServiceUnavailable:
-			if busy++; busy >= uploadBusyTries {
+			if busy++; busy >= setUploadBusyTries() {
 				return fmt.Errorf("chunk %d-%d: sink out of upload sessions after %d tries", start, end, busy)
 			}
-			time.Sleep(uploadBusyBackoff)
+			time.Sleep(setUploadBusyBackoff())
 			attempt--
 
 			continue
@@ -724,10 +733,10 @@ func (s *uploadStripe) deliverChunk(start, end int64, buf []byte) error {
 // uploadRetryWait bounds a sink-supplied Retry-After.
 func uploadRetryWait(d time.Duration) time.Duration {
 	if d <= 0 {
-		return uploadBusyBackoff
+		return setUploadBusyBackoff()
 	}
-	if d > uploadEarlyWaitMax {
-		return uploadEarlyWaitMax
+	if d > setUploadEarlyWaitMax() {
+		return setUploadEarlyWaitMax()
 	}
 	return d
 }
@@ -774,10 +783,10 @@ func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err
 	// 60 s for a 12 MiB object against a one-chunk window).
 	werr := make(chan error, 1)
 	go func() {
-		e := writeChunkBody(st, buf, uploadIdleTimeout)
+		e := writeChunkBody(st, buf, setUploadIdleTimeout())
 		if e == nil {
 			// The chunk is out; the ack's own window starts now.
-			_ = st.SetReadDeadline(time.Now().Add(uploadAckTimeout)) //nolint:errcheck
+			_ = st.SetReadDeadline(time.Now().Add(setUploadAckTimeout())) //nolint:errcheck
 		}
 		werr <- e
 	}()
@@ -788,7 +797,7 @@ func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err
 		endBodyWriter(st, werr)
 		return ack, err
 	}
-	_ = st.SetReadDeadline(time.Now().Add(uploadAckTimeout)) //nolint:errcheck
+	_ = st.SetReadDeadline(time.Now().Add(setUploadAckTimeout())) //nolint:errcheck
 
 	resp, rerr := http.ReadResponse(bufio.NewReader(st), &http.Request{Method: http.MethodPut})
 	if rerr != nil {
@@ -976,7 +985,7 @@ func (c *Client) spliceReplayable(conn, stream net.Conn, u *uploadCandidate) {
 		committed, sawInterim, err := c.relayUploadOnce(conn, sess, stream, u, body, attempt > 0, interim)
 		interim = interim || sawInterim
 		stream.Close() //nolint:errcheck,gosec
-		if err == nil || committed || attempt >= uploadReplayTries {
+		if err == nil || committed || attempt >= setUploadReplayTries() {
 			return
 		}
 		// Only a dead TUNNEL earns a replay, and only with the whole body in hand.
@@ -1032,7 +1041,7 @@ func (c *Client) relayUploadOnce(conn net.Conn, sess *yamux.Session, stream net.
 			if room > int64(len(buf)) {
 				room = int64(len(buf))
 			}
-			_ = conn.SetReadDeadline(time.Now().Add(uploadIdleTimeout)) //nolint:errcheck
+			_ = conn.SetReadDeadline(time.Now().Add(setUploadIdleTimeout())) //nolint:errcheck
 			n, rerr := conn.Read(buf[:room])
 			if n > 0 {
 				body.Write(buf[:n]) //nolint:errcheck // bytes.Buffer never errors
