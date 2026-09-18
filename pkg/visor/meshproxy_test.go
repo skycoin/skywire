@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/proxyinterstitial"
 )
 
 func TestNormalizeMeshSuffix(t *testing.T) {
@@ -324,8 +326,9 @@ func TestInterstitialRTWarmBypasses(t *testing.T) {
 	}
 }
 
-// A fast upstream error is classified: transient → auto-refresh page, hard → error
-// page with a manual retry and no auto-refresh.
+// A fast upstream error is classified: transient → fast auto-retry and no retry
+// button, hard → a manual Retry button plus the slow auto-retry (the hard page
+// used to stop retrying entirely, which made a misclassification permanent).
 func TestInterstitialRTFailFastClassifies(t *testing.T) {
 	t.Run("transient", func(t *testing.T) {
 		g := &gateRT{fast: true, err: errors.New("dial dmsg: i/o timeout")}
@@ -350,8 +353,14 @@ func TestInterstitialRTFailFastClassifies(t *testing.T) {
 			t.Fatalf("hard error status = %d, want 502", resp.StatusCode)
 		}
 		body := readBody(t, resp)
-		if strings.Contains(body, `http-equiv="refresh"`) || !strings.Contains(body, "Retry") {
-			t.Errorf("hard error should offer a manual retry and not auto-refresh")
+		if !strings.Contains(body, "Retry") {
+			t.Errorf("hard error should offer a manual retry")
+		}
+		if !strings.Contains(body, `content="15"`) {
+			t.Errorf("hard error should keep a slow auto-retry so a recovered route is picked up unattended")
+		}
+		if resp.Header.Get(proxyinterstitial.MarkerHeader) == "" {
+			t.Errorf("interstitial response must carry the synthetic marker the page's retry keys on")
 		}
 	})
 }

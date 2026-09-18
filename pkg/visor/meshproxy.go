@@ -416,6 +416,11 @@ func (rt *meshInterstitialRT) streamingInterstitialResponse(req *http.Request, c
 	h := make(http.Header)
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("Cache-Control", "no-store, must-revalidate")
+	// Label the page as synthesized here, exactly as the SOCKS-side writer does
+	// (proxyinterstitial.MarkerHeader): the page's own retry script keys on this
+	// header to tell "the proxy answered with the interstitial again" from "the
+	// route is warm and this is the real content".
+	h.Set(proxyinterstitial.MarkerHeader, "1")
 	return &http.Response{
 		StatusCode: http.StatusOK,
 		Status:     "200 OK",
@@ -442,6 +447,7 @@ func (rt *meshInterstitialRT) interstitialResponse(req *http.Request, detail str
 	h := make(http.Header)
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("Cache-Control", "no-store, must-revalidate")
+	h.Set(proxyinterstitial.MarkerHeader, "1")
 	return &http.Response{
 		StatusCode:    status,
 		Status:        fmt.Sprintf("%d %s", status, http.StatusText(status)),
@@ -575,6 +581,7 @@ func (v *Visor) newMeshReverseProxy(resolve meshResolveFn) (*httputil.ReversePro
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-store, must-revalidate")
+			w.Header().Set(proxyinterstitial.MarkerHeader, "1")
 			w.WriteHeader(status)
 			// proxyinterstitial.Page HTML-escapes target and detail, so the rendered
 			// document carries no unescaped request-derived content (no XSS).
