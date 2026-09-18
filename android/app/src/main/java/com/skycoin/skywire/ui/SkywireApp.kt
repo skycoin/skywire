@@ -80,6 +80,7 @@ import com.skycoin.skywire.ui.vpn.VpnScreen
 import com.skycoin.skywire.ui.wallet.WalletAddCoinScreen
 import com.skycoin.skywire.ui.wallet.WalletHistoryScreen
 import com.skycoin.skywire.ui.wallet.WalletManageScreen
+import com.skycoin.skywire.ui.wallet.WalletNodeScreen
 import com.skycoin.skywire.ui.wallet.WalletReceiveScreen
 import com.skycoin.skywire.ui.wallet.WalletRestoreScreen
 import com.skycoin.skywire.ui.wallet.WalletResultScreen
@@ -212,6 +213,7 @@ fun SkywireApp() {
                     onHistory = { navController.navigate(Routes.WALLET_HISTORY) { launchSingleTop = true } },
                     onTx = { txid -> navController.navigate(Routes.walletTx(txid)) { launchSingleTop = true } },
                     onWallets = { navController.navigate(Routes.WALLET_WALLETS) { launchSingleTop = true } },
+                    onNode = { navController.navigate(Routes.WALLET_NODE) { launchSingleTop = true } },
                     onAddCoin = { navController.navigate(Routes.WALLET_ADD_COIN) { launchSingleTop = true } },
                 )
             }
@@ -285,6 +287,13 @@ fun SkywireApp() {
                     onBack = { navController.popBackStack() },
                 )
             }
+            composable(Routes.WALLET_NODE) {
+                WalletNodeScreen(
+                    viewModel = walletViewModel,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+
             composable(Routes.WALLET_WALLETS) {
                 WalletManageScreen(
                     viewModel = walletViewModel,

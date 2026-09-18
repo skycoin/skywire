@@ -54,6 +54,9 @@ data class DraftState(
     val quizPositions: List<Int> = emptyList(),
 )
 
+/** Four flows, one carrier — Kotlin ships Triple and stops. */
+private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
+
 data class WalletUiState(
     val ready: Boolean = false,
     val coins: List<CoinSpec> = emptyList(),
@@ -71,6 +74,12 @@ data class WalletUiState(
     val receiveIndex: Int = 0,
     val send: SendState = SendState(),
     val draft: DraftState = DraftState(),
+    /**
+     * The node address [coin] would use with nothing set — what the Node
+     * screen offers to go back to, and what it compares against to know
+     * whether the address on screen is the user's or the shipped one.
+     */
+    val defaultNodeUrl: String = "",
     val message: String? = null,
 )
 
@@ -87,9 +96,14 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             // All four flows read the same DataStore, so any wallet-store edit
             // re-runs this block with a consistent view.
-            combine(repo.coins(), repo.selectedCoinId(), repo.wallets()) { coins, selectedId, wallets ->
-                Triple(coins, selectedId, wallets)
-            }.collectLatest { (coins, selectedId, wallets) ->
+            combine(
+                repo.coins(),
+                repo.selectedCoinId(),
+                repo.wallets(),
+                repo.defaultNodeUrls(),
+            ) { coins, selectedId, wallets, defaults ->
+                Quad(coins, selectedId, wallets, defaults)
+            }.collectLatest { (coins, selectedId, wallets, defaults) ->
                 val coin = coins.firstOrNull { it.id == selectedId } ?: CoinSpec.SKY
                 val coinWallets = wallets.filter { it.coinId == coin.id }
                 val activeId = repo.activeWalletId(coin.id).first()
@@ -101,6 +115,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                         ready = true,
                         coins = coins,
                         coin = coin,
+                        defaultNodeUrl = defaults[coin.id] ?: coin.nodeUrl,
                         allWallets = wallets,
                         coinWallets = coinWallets,
                         active = active,
@@ -173,6 +188,18 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                 mutable.update { it.copy(message = report(e), restoring = false) }
             }
         }
+    }
+
+    /**
+     * Point the selected coin at a different node, or hand it back to the
+     * shipped one with a blank [url]. The wallet re-reads immediately: the
+     * coin flow carries the new address, which rebuilds the client under it.
+     */
+    fun setNodeUrl(url: String, onDone: () -> Unit) = action {
+        repo.setNodeUrl(mutable.value.coin.id, url)
+        mutable.update { it.copy(stale = false) }
+        onDone()
+        refreshNow()
     }
 
     // --- coin switching / Fibercoins ---
