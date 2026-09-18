@@ -2,12 +2,16 @@
 package router
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	rs "github.com/skycoin/skywire/pkg/router/routersettings"
+	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -93,6 +97,9 @@ func TestCatalogDefaultsMatchConstants(t *testing.T) {
 		{rs.ForwardDropEventWindow, forwardDropEventWindowDefault},
 		{rs.SetupBatchWindow, setupBatchWindowDefault},
 		{rs.SetupPlanClaimTTL, setupPlanClaimTTLDefault},
+		{rs.SetupCircuitOpenDuration, setupmetrics.CircuitOpenDurationDefault},
+		{rs.SetupCircuitMaxOpenDuration, setupmetrics.CircuitMaxOpenDurationDefault},
+		{rs.SetupCircuitFailWindow, setupmetrics.CircuitFailureWindowDefault},
 	}
 	for _, c := range durations {
 		require.Equal(t, c.want, c.k.Duration(), c.k.Name())
@@ -135,6 +142,7 @@ func TestCatalogDefaultsMatchConstants(t *testing.T) {
 		{rs.SetupBatchMax, setupBatchMaxDefault},
 		{rs.SetupFillInflight, setupFillInflightDefault},
 		{rs.SetupFirstHopFilterMax, setupFirstHopFilterMaxDefault},
+		{rs.SetupCircuitFailThreshold, setupmetrics.CircuitFailureThresholdDefault},
 		{rs.MuxEventRingSize, MuxEventRingSizeDefault},
 		{rs.MuxEventsPerGroup, muxEventsPerGroupDefault},
 		{rs.ForwardQueueDepth, forwardQueueDepthDefault},
@@ -146,6 +154,7 @@ func TestCatalogDefaultsMatchConstants(t *testing.T) {
 	require.Equal(t, forwardSpillDefault, rs.ForwardSpill.Bool())
 	require.Equal(t, sbdDemoteDefault, rs.SBDDemote.Bool())
 	require.Equal(t, perFrameNoiseEnabledDefault, rs.MuxPerFrameNoise.Bool())
+	require.Equal(t, setupmetrics.CircuitBreakerEnabledDefault, rs.SetupCircuitBreaker.Bool())
 	require.EqualValues(t, rackFactorMaxDefault, (&routeMux{}).rackFactorMax())
 	// The RACK adaptation's baseline is rack.reorder_factor in milli-units.
 	require.EqualValues(t, rackReorderFactorDefault*1000, (&routeMux{}).rackFactorMin())
@@ -240,4 +249,60 @@ func TestPerGroupEventRingIsNotEvictedBySiblings(t *testing.T) {
 	own := quiet.ownEvents.lastN(8)
 	require.Len(t, own, 1)
 	require.Equal(t, "the one event that matters", own[0].Reason)
+}
+
+// The four circuit-breaker parameters and the switch above them are live
+// knobs, not constants: a set moves what the collector reads on its next
+// call, with no restart and no route group rebuilt.
+func TestSetupCircuitKnobsAreLive(t *testing.T) {
+	t.Cleanup(rs.Reset)
+
+	require.False(t, SetupCircuitBreaker(), "setup.circuit_breaker must ship off")
+	require.True(t, SetSetupCircuitBreaker(true))
+	require.True(t, SetupCircuitBreaker())
+
+	require.True(t, SetSetupCircuitFailThreshold(7))
+	require.Equal(t, 7, SetupCircuitFailThreshold())
+	require.True(t, SetSetupCircuitOpenDuration(90*time.Second))
+	require.Equal(t, 90*time.Second, SetupCircuitOpenDuration())
+	require.True(t, SetSetupCircuitMaxOpenDuration(11*time.Minute))
+	require.Equal(t, 11*time.Minute, SetupCircuitMaxOpenDuration())
+	require.True(t, SetSetupCircuitFailWindow(45*time.Second))
+	require.Equal(t, 45*time.Second, SetupCircuitFailWindow())
+
+	// Nonsense is refused rather than installed, so a typo cannot disarm the
+	// window bounds.
+	require.False(t, SetSetupCircuitFailThreshold(0))
+	require.Equal(t, 7, SetupCircuitFailThreshold())
+
+	// And the catalog is where `route settings` finds them.
+	seen := map[string]bool{}
+	for _, e := range rs.Snapshot() {
+		seen[e.Name] = true
+	}
+	for _, name := range []string{
+		"setup.circuit_breaker", "setup.circuit_fail_threshold", "setup.circuit_open_duration",
+		"setup.circuit_max_open_duration", "setup.circuit_fail_window",
+	} {
+		require.True(t, seen[name], name)
+	}
+}
+
+// A reservation that failed at some hop now names that hop structurally, so
+// setupmetrics can charge the failure to it instead of to the destination —
+// while the message stays byte for byte what log greps and the setup node's
+// own-view parser already match on.
+func TestReserveErrorNamesTheFailedHop(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	inner := errors.New("connection is shut down")
+	err := fmt.Errorf("failed to reserve route ids: %w", &ReserveError{PK: pk, Err: inner})
+
+	require.Equal(t,
+		"failed to reserve route ids: reserve routeID from "+pk.String()+" failed: connection is shut down",
+		err.Error())
+	require.True(t, errors.Is(err, inner))
+
+	var re *ReserveError
+	require.True(t, errors.As(err, &re))
+	require.Equal(t, pk, re.DialFailedPK())
 }

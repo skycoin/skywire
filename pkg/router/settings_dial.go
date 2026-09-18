@@ -324,3 +324,55 @@ func SetupFirstHopFilterMax() int { return routersettings.SetupFirstHopFilterMax
 func SetSetupFirstHopFilterMax(n int) bool {
 	return setInt(routersettings.SetupFirstHopFilterMax, int64(n))
 }
+
+// SetupCircuitBreaker reports whether the route setup node's per-destination
+// circuit breaker may open. Off by default — see setupmetrics for why.
+func SetupCircuitBreaker() bool { return routersettings.SetupCircuitBreaker.Bool() }
+
+// SetSetupCircuitBreaker turns that lockout on or off.
+func SetSetupCircuitBreaker(on bool) bool {
+	setBool(routersettings.SetupCircuitBreaker, on)
+	return true
+}
+
+// SetupCircuitFailThreshold is how many consecutive failures attributed to one
+// destination trip its breaker.
+func SetupCircuitFailThreshold() int { return routersettings.SetupCircuitFailThreshold.Int() }
+
+// SetSetupCircuitFailThreshold installs that threshold. Non-positive is refused.
+func SetSetupCircuitFailThreshold(n int) bool {
+	return setInt(routersettings.SetupCircuitFailThreshold, int64(n))
+}
+
+// SetupCircuitOpenDuration is how long a tripped breaker refuses setups before
+// admitting a half-open probe.
+func SetupCircuitOpenDuration() time.Duration {
+	return routersettings.SetupCircuitOpenDuration.Duration()
+}
+
+// SetSetupCircuitOpenDuration installs that duration. Non-positive is refused.
+func SetSetupCircuitOpenDuration(d time.Duration) bool {
+	return setInt(routersettings.SetupCircuitOpenDuration, int64(d))
+}
+
+// SetupCircuitMaxOpenDuration is the total open/half-open time after which a
+// breaker is force-closed.
+func SetupCircuitMaxOpenDuration() time.Duration {
+	return routersettings.SetupCircuitMaxOpenDuration.Duration()
+}
+
+// SetSetupCircuitMaxOpenDuration installs that ceiling. Non-positive is refused.
+func SetSetupCircuitMaxOpenDuration(d time.Duration) bool {
+	return setInt(routersettings.SetupCircuitMaxOpenDuration, int64(d))
+}
+
+// SetupCircuitFailWindow is how close together failures must fall to count as
+// consecutive.
+func SetupCircuitFailWindow() time.Duration {
+	return routersettings.SetupCircuitFailWindow.Duration()
+}
+
+// SetSetupCircuitFailWindow installs that window. Non-positive is refused.
+func SetSetupCircuitFailWindow(d time.Duration) bool {
+	return setInt(routersettings.SetupCircuitFailWindow, int64(d))
+}
