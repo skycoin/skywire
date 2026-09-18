@@ -158,6 +158,18 @@ type legCounters struct {
 	// cannot inflate — the transport measures it out of band — so it is the
 	// ceiling the BDP baseline is held under (see refreshLegWindows).
 	ecfHopRttMinMs float64
+	// probeBasisBits is this leg's delay basis (float64 bits) at the moment
+	// ruleProbeOnlyLegs judged it OUTCLASSED by the group's best active leg —
+	// and 0 while it is not outclassed, which is what the selection gate reads
+	// to mean "full share". probeWinNano opens the current probe window and
+	// probeWinBytes is what has been placed on the leg inside it, so an
+	// outclassed leg carries at most LegProbeBytes per window instead of a
+	// proportional share. All three are atomic: the ruling is written under
+	// legMu by the window refresh, the bytes are charged from the send path by
+	// recordSent, and the gate reads them per pick.
+	probeBasisBits uint64 // atomic (float64 bits)
+	probeWinNano   int64  // atomic
+	probeWinBytes  uint64 // atomic
 }
 
 // routeMux encapsulates route multiplexing state and logic.
@@ -461,6 +473,11 @@ type routeMux struct {
 	// so the route group can record a forward_rehomed mux event. prev is -1 the
 	// first time a leg is chosen (no event is emitted for that).
 	onForwardRehome func(prev, next int, tp *transport.ManagedTransport, legs int, reason string)
+
+	// onLegProbeRuling, when wired (SetLegProbeRulingFn), is called from the
+	// window refresh with legMu dropped whenever a leg is ruled probe-only or
+	// restored to a full share, so the route group can record the event.
+	onLegProbeRuling func(idx, legs int, tp *transport.ManagedTransport, probeOnly bool, reason string)
 }
 
 const (
@@ -646,7 +663,10 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 			WeightModeSTMS:
 			m.feedInflight(tps)
 			idx := m.tpSelector.SelectForPayload(payload)
-			if idx < len(tps) {
+			// A leg ruled probe-only that has spent its budget declines the
+			// frame here and the weighted path below re-homes it; every other
+			// leg answers false, so a group of comparable legs is unchanged.
+			if idx < len(tps) && !m.legProbeExhausted(idx) {
 				tp := tps[idx]
 				if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
 					return tp, fwd[idx], idx, nil
@@ -667,6 +687,14 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 				if alt := m.tpSelector.FirstUnsaturated(); alt >= 0 {
 					idx = alt
 				}
+			}
+		}
+		// …and a pick that lands on a leg out of probe budget moves to one that
+		// still has a share, so a leg whose delay basis is a multiple of its
+		// sibling's cannot take every other frame.
+		if m.legProbeExhausted(idx) {
+			if alt := m.firstProbeReadyLeg(tps); alt >= 0 {
+				idx = alt
 			}
 		}
 		if idx < len(tps) {
@@ -1269,6 +1297,10 @@ func (m *routeMux) recordSent(idx int, n uint64) {
 	if idx < len(m.legs) {
 		atomic.AddUint64(&m.legs[idx].sentBytes, n)
 		atomic.AddUint64(&m.legs[idx].sentPackets, 1)
+		// The probe budget is charged from what actually went on the wire, so a
+		// leg ruled probe-only carries one probe per window however large the
+		// frames are (the gate's own charge would have to guess the size).
+		atomic.AddUint64(&m.legs[idx].probeWinBytes, n)
 	}
 	m.legMu.RUnlock()
 }
@@ -2367,10 +2399,177 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 				ready:     ready,
 			}
 		}
+		rulings := m.ruleProbeOnlyLegsLocked(states)
 		m.ecfLastRebuildNano = now
 		m.legMu.Unlock()
 		m.tpSelector.SetECFState(states)
+		m.reportProbeRulings(tps, rulings)
 	}
+}
+
+// legProbeRuling is one leg crossing into — or back out of — the probe-only
+// state, carried out of the window refresh so the event is recorded with legMu
+// dropped.
+type legProbeRuling struct {
+	idx       int
+	probeOnly bool
+	reason    string
+}
+
+// ruleProbeOnlyLegsLocked decides, once per window refresh, which legs are so
+// far behind the group's best ACTIVE leg that they may carry no more than a
+// probe per window.
+//
+// The download on a two-leg group is not scheduled by ECF at all: under
+// CapUniDir the reverse direction is picked by selectByDirection, whose tier 1
+// is the mirrored round-robin schedule (transportSelector.Rebuild puts the live
+// legs in ts.schedule unweighted for every predictive mode), so a leg keeps
+// taking every other frame no matter what its delay basis says. Measured live
+// 2026-09-18 (bench/2026-09-18/1008cc8e5, compose 2x2): group rg49220 paired a
+// 7.4 MB/s leg with one whose own reference ran at 0.06 MB/s, the scheduler put
+// 0.5-2.2 MB of each 10 MB download on the slow one, and the five trials took
+// 8.3-37.4 s — each one's duration is the bytes placed on the slow leg divided
+// by its ~60 KB/s. The group's own detector had the number: an sbd_ruling in
+// the same run read "mean 755.9 vs 9291.3 ms over 8/8 samples".
+//
+// The basis is ecfRttMs, the leg's END-TO-END feedback delay (max of first-hop
+// RTT and measured send→ack delay) — the same quantity ECF and RACK judge a leg
+// by, and the one a queue we built shows up in. A leg is ruled probe-only when
+// it is ready, has a basis of its own, that basis is at least
+// legProbeMinBasisMs in absolute terms, and it exceeds the best ready leg's by
+// more than LegStarveRatio. The absolute floor is what keeps an ordinary skew
+// out of this: the healthy pairs on the rig read 44 ms against 166 ms by first
+// hop and 172.7 vs 214.6 ms / 336.3 vs 513.9 ms by delay basis — ratios of 3.8,
+// 1.24 and 1.53, all under the 6.0 default and the first two under the floor.
+//
+// A probe-only leg is not parked: it keeps its rules, keeps being measured by
+// its probe, and its basis decays back toward the first-hop RTT once we stop
+// queueing on it (ackDelayStale expires the send→ack term), so the ruling lifts
+// by itself when the leg recovers.
+//
+// Caller holds legMu; returns the transitions for reportProbeRulings to record.
+func (m *routeMux) ruleProbeOnlyLegsLocked(states []ecfLegState) []legProbeRuling {
+	ratio := LegStarveRatio()
+	best := 0.0
+	for i := range states {
+		if !states[i].ready || states[i].rttMs <= 0 {
+			continue
+		}
+		if best == 0 || states[i].rttMs < best {
+			best = states[i].rttMs
+		}
+	}
+	var out []legProbeRuling
+	for i, lc := range m.legs {
+		if lc == nil || i >= len(states) {
+			continue
+		}
+		basis := states[i].rttMs
+		probeOnly := ratio > 1 && best > 0 && states[i].ready &&
+			basis >= legProbeMinBasisMs && basis > ratio*best
+		was := math.Float64frombits(atomic.LoadUint64(&lc.probeBasisBits)) > 0
+		switch {
+		case probeOnly:
+			atomic.StoreUint64(&lc.probeBasisBits, math.Float64bits(basis))
+		default:
+			atomic.StoreUint64(&lc.probeBasisBits, 0)
+		}
+		if probeOnly == was {
+			continue
+		}
+		r := legProbeRuling{idx: i, probeOnly: probeOnly}
+		if probeOnly {
+			r.reason = fmt.Sprintf("delay basis %.0f ms against the best active leg's %.0f ms (more than %.1fx) — capped at %d bytes per %.0f ms window instead of a proportional share; not parked, the probe keeps measuring it",
+				basis, best, ratio, LegProbeBytes(), probeWindowMs(basis))
+		} else {
+			r.reason = fmt.Sprintf("delay basis %.0f ms is back within %.1fx of the best active leg's %.0f ms — full share restored",
+				basis, ratio, best)
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// reportProbeRulings records each probe-only transition as a mux event. Called
+// with legMu dropped; the hook is the route group's noteLegEvent, which takes no
+// locks of its own.
+func (m *routeMux) reportProbeRulings(tps []*transport.ManagedTransport, rulings []legProbeRuling) {
+	if len(rulings) == 0 || m.onLegProbeRuling == nil {
+		return
+	}
+	for _, r := range rulings {
+		var tp *transport.ManagedTransport
+		if r.idx < len(tps) {
+			tp = tps[r.idx]
+		}
+		m.onLegProbeRuling(r.idx, len(tps), tp, r.probeOnly, r.reason)
+	}
+}
+
+// SetLegProbeRulingFn wires the callback the mux fires when a leg is ruled
+// probe-only or restored to a full share, so the route group can record a
+// leg_probe_only / leg_full_share mux event. Called once by the route group
+// when the mux is built.
+func (m *routeMux) SetLegProbeRulingFn(fn func(idx, legs int, tp *transport.ManagedTransport, probeOnly bool, reason string)) {
+	m.onLegProbeRuling = fn
+}
+
+// probeWindowMs is how long one probe budget lasts on a leg with this delay
+// basis: the leg's own basis, floored at legProbeMinWindow so a fast-but-thin
+// leg is not re-probed thousands of times a second.
+func probeWindowMs(basisMs float64) float64 {
+	if lo := float64(legProbeMinWindow) / float64(time.Millisecond); basisMs < lo {
+		return lo
+	}
+	return basisMs
+}
+
+// legProbeExhausted reports whether leg idx is ruled probe-only AND has already
+// carried its probe budget in the current window. It is the selection gate: a
+// leg it answers true for is skipped while any other leg can take the frame,
+// so an outclassed leg is fed a probe's worth per window rather than a
+// proportional share. False for every leg that is not ruled probe-only, so a
+// group of comparable legs picks exactly as it did before.
+//
+// The window rolls here (the first pick past its end resets the byte count)
+// rather than on the refresh tick, so the budget is paced by the leg's own
+// delay basis and not by windowRefreshInterval.
+func (m *routeMux) legProbeExhausted(idx int) bool {
+	if idx < 0 {
+		return false
+	}
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	if idx >= len(m.legs) || m.legs[idx] == nil {
+		return false
+	}
+	lc := m.legs[idx]
+	basis := math.Float64frombits(atomic.LoadUint64(&lc.probeBasisBits))
+	if basis <= 0 {
+		return false
+	}
+	now := time.Now().UnixNano()
+	win := int64(probeWindowMs(basis) * float64(time.Millisecond))
+	start := atomic.LoadInt64(&lc.probeWinNano)
+	if now-start >= win && atomic.CompareAndSwapInt64(&lc.probeWinNano, start, now) {
+		atomic.StoreUint64(&lc.probeWinBytes, 0)
+	}
+	return atomic.LoadUint64(&lc.probeWinBytes) >= uint64(LegProbeBytes()) //nolint:gosec // LegProbeBytes is refused unless positive
+}
+
+// firstProbeReadyLeg returns the lowest-indexed live, ready leg that is not out
+// of probe budget, or -1 when every ready leg is. Used to move a schedule pick
+// off an outclassed leg.
+func (m *routeMux) firstProbeReadyLeg(tps []*transport.ManagedTransport) int {
+	for idx, tp := range tps {
+		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
+			continue
+		}
+		if !m.legProbeExhausted(idx) {
+			return idx
+		}
+	}
+	return -1
 }
 
 // Per-leg send window (test plan §3.1). ecfWindowMargin scales the SACK-proven
@@ -2392,6 +2591,24 @@ const (
 	sendWindowWaitMax     = 250 * time.Millisecond
 	sendWindowPoll        = 20 * time.Millisecond
 	windowRefreshInterval = 100 * time.Millisecond
+)
+
+// The outclassed-leg gate (ruleProbeOnlyLegsLocked / legProbeExhausted).
+//
+// legStarveRatio is how many times the best ready leg's delay basis a leg's own
+// basis must exceed before it is cut to a probe. 6.0 clears every healthy skew
+// the rig has produced — 3.8 by first hop (44 ms against 166 ms), 1.24 and 1.53
+// by delay basis — and is well under the 12.3 of the 2026-09-18 collapse.
+// legProbeBytes is what it may carry per window; one frame is at most ~64 KiB,
+// so the budget is about one frame per window. legProbeMinBasisMs is the
+// absolute floor under which no leg is ever cut, so a pair of fast legs whose
+// ratio happens to be large (5 ms against 40 ms) is left alone, and
+// legProbeMinWindow floors the window for a leg whose basis is short.
+const (
+	legStarveRatio     = 6.0
+	legProbeBytes      = 64 * 1024
+	legProbeMinBasisMs = 250.0
+	legProbeMinWindow  = 250 * time.Millisecond
 )
 
 // feedInflight hands the predictive selector each leg's REAL unacknowledged

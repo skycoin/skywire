@@ -132,6 +132,17 @@ const (
 	// after the hold. The Reason names the silence and the bound.
 	MuxEventTunnelSnubbed   = "tunnel_snubbed"
 	MuxEventTunnelUnsnubbed = "tunnel_unsnubbed"
+
+	// MuxEventLegProbeOnly / ...LegFullShare bracket the OUTCLASSED-LEG gate: a
+	// leg whose delay basis exceeds the group's best active leg's by more than
+	// --leg-starve-ratio is cut to --leg-probe-bytes per window instead of the
+	// proportional share the round-robin schedule would give it, and restored
+	// when its basis comes back. Neither is a park — the leg keeps its rules and
+	// its probe — so they are recorded apart from leg_parked/leg_promoted. Their
+	// Reason names both bases and the ratio, which is what a bench run scores the
+	// gate by.
+	MuxEventLegProbeOnly = "leg_probe_only"
+	MuxEventLegFullShare = "leg_full_share"
 )
 
 // Mux event initiators (MuxEvent.By).
@@ -271,6 +282,18 @@ func (rg *RouteGroup) noteForwardRehome(prev, next int, tp *transport.ManagedTra
 		return
 	}
 	rg.noteLegEvent(MuxEventForwardRehomed, reason, MuxByAdaptive, next, legs, tp, nil)
+}
+
+// noteLegProbeRuling records a leg being cut to a probe per window, or restored
+// to a full share (see routeMux.ruleProbeOnlyLegsLocked). Wired into the mux as
+// SetLegProbeRulingFn, so it is called from the window-refresh service with the
+// mux's legMu DROPPED and rg.mu not held — noteMuxEvent takes no locks.
+func (rg *RouteGroup) noteLegProbeRuling(idx, legs int, tp *transport.ManagedTransport, probeOnly bool, reason string) {
+	kind := MuxEventLegFullShare
+	if probeOnly {
+		kind = MuxEventLegProbeOnly
+	}
+	rg.noteLegEvent(kind, reason, MuxByAdaptive, idx, legs, tp, nil)
 }
 
 // noteTunnelEvent records an app-decided TUNNEL event (promoted / parked /

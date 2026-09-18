@@ -86,6 +86,13 @@ type RouterSettings struct {
 	// samples. Same zero-means-unchanged rule.
 	ForwardSwitchMargin float64 `json:"forward_switch_margin,omitempty"`
 
+	// LegStarveRatio is how many times the best ready leg's delay basis a leg's
+	// own must exceed before the scheduler cuts it to a probe per window, and
+	// LegProbeBytes is that probe. Same zero-means-unchanged rule; a very large
+	// ratio disables the gate.
+	LegStarveRatio float64 `json:"leg_starve_ratio,omitempty"`
+	LegProbeBytes  int64   `json:"leg_probe_bytes,omitempty"`
+
 	// SBDDemote gates the DEMOTION half of shared-bottleneck detection: false (the
 	// default) records every ruling as an sbd_ruling mux event and parks nothing.
 	// Like MuxFEC it is a tri-state on PUT — nil leaves it alone — because a bool
@@ -141,6 +148,8 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 		SBDDemote:           &sbdDemote,
 		ForwardSpill:        &forwardSpill,
 		ForwardSwitchMargin: router.ForwardSwitchMargin(),
+		LegStarveRatio:      router.LegStarveRatio(),
+		LegProbeBytes:       router.LegProbeBytes(),
 		MuxFEC:              &fec,
 	}, nil
 }
@@ -189,6 +198,8 @@ func (v *Visor) SetRouterSettings(s RouterSettings) error {
 		{"sbd_backoff", s.SBDBackoff == 0, func() bool { return router.SetSBDBackoff(s.SBDBackoff) }},
 		{"sbd_min_evidence_rate", s.SBDMinEvidenceRate == 0, func() bool { return router.SetSBDMinEvidenceRate(s.SBDMinEvidenceRate) }},
 		{"forward_switch_margin", s.ForwardSwitchMargin == 0, func() bool { return router.SetForwardSwitchMargin(s.ForwardSwitchMargin) }},
+		{"leg_starve_ratio", s.LegStarveRatio == 0, func() bool { return router.SetLegStarveRatio(s.LegStarveRatio) }},
+		{"leg_probe_bytes", s.LegProbeBytes == 0, func() bool { return router.SetLegProbeBytes(s.LegProbeBytes) }},
 	} {
 		if k.zero {
 			continue
