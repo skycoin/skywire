@@ -2,7 +2,7 @@
 
 The 2026-09-18 chains, continuing the index of `README-2026-09-17-chains.md` (chains 21 and
 A–N). Chains O–W ran overnight against the merged-develop deploy and the first ceiling
-measurements; X–AH are the day's branch runs. Each result dir carries its own README with
+measurements; X–AK are the day's branch runs. Each result dir carries its own README with
 the verdict rows, the cut row and the exit gate; this is the index. The paired reference is
 `0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13` throughout, and from
 chain AB on the verdicts are ceiling-aware against chain Z's `ceiling.tsv` (uplink 11.23,
@@ -28,9 +28,14 @@ downlink 9.55 MB/s).
 | AD | `195b1094c-sbdsweep` | live two-arm sweep: SBD off (`--sbd-min-samples 1000000`) vs default | legs-2 50 down **x1.130 PASS off / x0.862 FAIL default**, 1 vs 2 park events | the ruling: two legs do aggregate; #5012's park is the cost |
 | AE | `0251e5da4-smoke` | int-K2: #5012 amended, park as a goodput trial | all four tunnels-2 cells PASS; compose 100 down x0.986 PASS; 2 upload hashes lost to the short-chunk 400 | #5012 not merged; the 400 finding → #5025 (51c2f2844) and #5027 |
 | AF | `dfb0755c2-smoke` | int-L: #5012 at 0512a6044, per-SACK + park-as-trial + evidence floor | tunnels-2 50 down x1.126, 50 up x1.020 PASS; legs-2 50 down x0.703; compose 17/21 hashes, 50 up 0/3 | not merged — reworked again; #5027 written for the retry |
-| AG | — | full paired campaign on merged develop (goal v4): refs, ceiling, tunnels-2, legs-2, compose 2x2 + 100 MB, standby with no pins, spread, direction | — | queued behind chain AH |
-| AH | `3535e671b` (int-M) | #5027 short-chunk retry + #5012 reworked (SBD demote off by default, per-leg sampling) | — | in progress |
+| AG | — | full paired campaign on merged develop (goal v4): refs, ceiling, tunnels-2, legs-2, compose 2x2 + 100 MB, standby with no pins, spread, direction | — | running: on develop `1008cc8e5`, results in `bench/2026-09-18/` |
+| AH | `3535e671b-smoke` (int-M) | #5027 short-chunk retry + #5012 reworked (SBD demote off by default, per-leg sampling) | tunnels-2 50 down x1.003 / up x0.930; legs-2 50 down x1.108 PASS; compose 10 up x0.057, 50 up x0.120; 52/53 hashes | #5027 merged as `0db22347b`; #5012 held back again |
+| AI | `e128db1ff-smoke` (int-N) | #5029 snub gating + #5030 acceptor park + #5012 gated; second compose arm with homogeneous-latency pins in `homog/` | tunnels-2 50 down x1.094 / up x0.992 PASS; legs-2 50 down x0.999 PASS; compose 50 down x1.001, 50 up x0.338; homog 100 down x0.613 — not a pin artefact; 33/33 hashes | #5029 `1545f15f0`, #5030 `14a8b5354`, #5012 `da1709895` |
+| AJ | `6c8029830-smoke` (int-O) | #5031 upload placement by tx capacity + #5032 SACK retransmit on the leg basis | compose 100 down x1.055 PASS; 50 up x0.244, 10 up x0.041 (the day's floor); every tunnels-2 cell short; 53/53 hashes | #5031 `15e12e619`, #5032 `d23f8b3d6` |
+| AK | `908a98bcd-smoke` (int-P) | #5035 forward confinement holds for uploads — a full window waits instead of spilling, with hysteresis | tunnels-2 50 down x1.075 / up x0.994 PASS; legs-2 50 down x1.084 PASS; compose 50 up 8.40 x0.816 (was 2.43), 10 up 4.60 (was 0.27); 53/53 hashes | #5035 merged as `1008cc8e5` |
 
-Of the branches carried through chains W–AF, chain AC's four PRs and chain T's #5010 and
-chain AA's #5018 merged; #5012 ran four times (W, AB, AE, AF) without merging and is in
-chain AH in its reworked form.
+Of the branches carried through chains W–AK, chain AC's four PRs, chain T's #5010 and chain
+AA's #5018 merged, and chains AH–AK merged #5027, #5029, #5030, #5012, #5031, #5032 and #5035.
+#5012 ran five times (W, AB, AE, AF, AH) before it merged from chain AI as `da1709895`. Chain AK's
+head `1008cc8e5` is the develop the criterion status in `docs/design/route-multiplexing-test-plan.md`
+is scored at; chain AG's full paired campaign is running against it.
