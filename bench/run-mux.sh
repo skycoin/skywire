@@ -98,6 +98,8 @@ export PAIRED_HERE CUT_HERE
 . "$here/lib-cut.sh"
 # shellcheck source=bench/lib-settings.sh
 . "$here/lib-settings.sh"
+# shellcheck source=bench/lib-blackout.sh
+. "$here/lib-blackout.sh"
 # norm_sizes: SIZES takes megabytes ("10 50 100") or bytes ("10000000 50000000");
 # an entry below 1000 is megabytes. Anything non-numeric is dropped.
 norm_sizes() {
@@ -485,6 +487,11 @@ run_set() { # <set> <socks> <tp ids> <header>
 				# that one case is still snapshotted immediately. Healthy rows are
 				# not: see exit_snap_row.
 				if [ "$(tail -1 "$f" | cut -f8)" != 1 ]; then
+					# The local receive-loop proof FIRST: the parked goroutine
+					# and the route group at capacity clear within a minute,
+					# and the exit query below can spend 60 s of that
+					# (bench/lib-blackout.sh).
+					blackout_capture "$out" "$set_name" "$row"
 					echo "# exit-on-fail $row	$(exit_rgs 60 "$p")" >> "$out/$set_name.recovery.tsv"
 				fi
 				t=$((t + 1))

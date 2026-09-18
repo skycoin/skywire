@@ -88,6 +88,8 @@ PAIRED_HERE=$here
 export PAIRED_HERE
 # shellcheck source=bench/lib-paired.sh
 . "$here/lib-paired.sh"
+# shellcheck source=bench/lib-blackout.sh
+. "$here/lib-blackout.sh"
 mkdir -p "$out"
 local_commit=$(git -C "$here/.." rev-parse --short=9 HEAD)
 N=${CEIL_N:-3}
@@ -273,6 +275,11 @@ ceil_row() {
 	done
 	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$_rk" "$_rn" "$_rt" "$bytes" "$_rsum" "$_rrates" "$_rok/$_rn" >> "$ceil"
 	echo "$_rk trial $_rt: $_rn client(s) summed $_rsum MB/s ($_rrates), $_rok/$_rn hash-verified"
+	# A client that did not verify is this run's failed row: take the local
+	# receive-loop proof before it clears (bench/lib-blackout.sh, into
+	# ceiling.recovery.tsv and ceiling.row<kind>-c<n>-t<trial>.* beside it).
+	[ "$_rok" -lt "$_rn" ] && blackout_capture "$out" ceiling "$_rk-c$_rn-t$_rt"
+	return 0
 }
 # ceil_median <kind> <clients> -> the median sum over that kind's rows, or "-"
 ceil_median() {
