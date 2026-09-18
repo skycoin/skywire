@@ -99,9 +99,31 @@ func creditSendPath(rg *RouteGroup, ids []uuid.UUID, vals ...uint64) {
 	}
 }
 
+// ripenSBDTrials back-dates every trial opened by an EARLIER tick so this one
+// reads its verdict, whatever the clock's resolution is.
+//
+// evaluateSBDTrials holds a trial until now.Sub(tr.at) >= SBDTrialWindow, and a
+// rig that wants the verdict on the next tick sets that window to 1 ns. Two
+// time.Now() readings inside one tick are only guaranteed to differ where the
+// monotonic clock ticks finer than the work between them: Go reads it on Windows
+// from KUSER_SHARED_DATA at the timer-interrupt period (~0.5-15.6 ms), so the
+// difference was 0, no trial was ever ripe, and every case here that turns on a
+// verdict failed on the windows lane while passing on linux and darwin. A trial
+// opened by THIS tick is unaffected — evaluateSBDTrials runs at the top of
+// enforceBottleneckGroups, before the ruling that opens one.
+func ripenSBDTrials(rg *RouteGroup) {
+	rg.sbdTrialMu.Lock()
+	defer rg.sbdTrialMu.Unlock()
+	for id, tr := range rg.sbdTrials {
+		tr.at = tr.at.Add(-time.Hour)
+		rg.sbdTrials[id] = tr
+	}
+}
+
 // sbdTick runs one data-progress tick carrying vals[i] bytes on leg i, on both
 // the send path (the evidence) and the recv deltas (the reverse-direction floor).
 func sbdTick(rg *RouteGroup, ids []uuid.UUID, vals ...uint64) {
+	ripenSBDTrials(rg)
 	creditSendPath(rg, ids, vals...)
 	rg.enforceBottleneckGroups(deltas(ids, vals...))
 }
