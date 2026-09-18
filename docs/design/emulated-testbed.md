@@ -79,7 +79,7 @@ shares, retransmits, reorder drops, SACK counts, TTFB and the probe rulings.
 | scenario | shape | state on e897dbfbb |
 | --- | --- | --- |
 | `TestEmuDeadLegShareIsBounded` | 7 MB/s / 45 ms beside 60 KB/s with ~1 s of queueing | passes as written — completes, wire/goodput 1.01, slow leg 3 % of the payload — but the group runs at **x0.26 of the good leg alone** |
-| `TestEmuHealthySkewStillAggregates` | 44 ms and 166 ms at equal rates | passes: x1.57, neither leg ruled probe-only |
+| `TestEmuHealthySkewStillAggregates` | 44 ms and 166 ms at equal rates | passes: x1.6-1.8 over the 44 ms leg alone, neither leg ruled probe-only |
 | `TestEmuLossBurstKeepsHashesAndBoundsWire` | 3 % loss on one of two legs | passes: hash ok, wire/goodput 1.11 |
 | `TestEmuCutOfBusiestLegCompletes` | 3 legs, busiest cut a third of the way in | passes: completes, resumes ~5 ms after the cut, no rebuild |
 | `TestEmuFlappingLegDoesNotWedge` | 3 legs, one cut/restored every 500 ms | passes: completes intact |
