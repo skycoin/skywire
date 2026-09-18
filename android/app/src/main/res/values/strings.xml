@@ -779,6 +779,31 @@
     <string name="settings_calls_granted_hint">A call takes over the screen and rings, even when the app is closed.</string>
     <string name="settings_calls_allow">Show the call screen</string>
     <string name="settings_calls_no_screen">This phone has no screen for that setting.</string>
+
+    <!-- In-app update. Skywire is installed from GitHub Releases, not a
+         store, so nothing announces a new build unless the app asks. -->
+    <string name="settings_updates">Updates</string>
+    <string name="settings_update_installed">Installed</string>
+    <string name="settings_update_check">Check for updates</string>
+    <string name="settings_update_checking">Checking GitHub…</string>
+    <string name="settings_update_uptodate">Skywire %1$s is the newest release.</string>
+    <string name="settings_update_available">Skywire %1$s is available.</string>
+    <string name="settings_update_size">Download · %1$s MB</string>
+    <string name="settings_update_downloading">Downloading… %1$d%%</string>
+    <string name="settings_update_downloading_unknown">Downloading…</string>
+    <string name="settings_update_cancel">Cancel</string>
+    <string name="settings_update_ready">Skywire %1$s is downloaded and ready to install.</string>
+    <string name="settings_update_install">Install</string>
+    <string name="settings_update_install_note">Android will ask you to confirm. Your settings, identity and wallets are kept — this replaces the app, it does not reinstall it.</string>
+    <string name="settings_update_permission_note">Android asks for permission to install apps from Skywire the first time. Installing is still confirmed by the system, every time.</string>
+    <string name="settings_update_check_failed">Could not reach GitHub to check for updates.</string>
+    <string name="settings_update_download_failed">The download did not complete.</string>
+    <string name="settings_update_install_failed">The update could not be installed.</string>
+    <string name="settings_update_no_permission_screen">This phone has no screen for that permission.</string>
+    <string name="settings_update_no_browser">No app on this phone can open a web page.</string>
+    <string name="settings_update_open_page">Open on GitHub</string>
+    <string name="settings_update_retry">Try again</string>
+    <string name="settings_update_notes">What changed</string>
     <string name="settings_battery">Battery</string>
     <string name="settings_battery_hint">Skywire keeps running in the background, but Android may still pause its network once the screen has been off for a while — messages and calls then arrive when the phone next wakes rather than when they were sent. Allowing Skywire to ignore battery optimisation closes that gap. It costs battery, and the app works either way.</string>
     <string name="settings_battery_exempt_hint">Skywire is allowed to ignore battery optimisation, so its connections stay up while the screen is off. Android\u2019s battery settings can take this back at any time.</string>
