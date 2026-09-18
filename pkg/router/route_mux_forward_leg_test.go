@@ -103,7 +103,7 @@ func TestConfinedForwardTakesLowestLatencyLeg(t *testing.T) {
 	}
 
 	// And a leg that is decisively faster does take it — but only after
-	// forwardSwitchSamples CONSECUTIVE samples clear the margin. One sample is
+	// forwardSwitchSamplesDefault CONSECUTIVE samples clear the margin. One sample is
 	// not a decision: on the live legs-2 set a single loaded sample from the
 	// incumbent produced 6 forward flips in ten rows, and every flip split the
 	// upload across a 44 ms and a 166 ms leg.
@@ -115,11 +115,11 @@ func TestConfinedForwardTakesLowestLatencyLeg(t *testing.T) {
 	})
 	m.confinedFwdAtNano = 0
 	if seen := burst(); seen[0] != 0 {
-		t.Errorf("one sample moved the direction; the switch must need %d; got legs=%v", forwardSwitchSamples, seen)
+		t.Errorf("one sample moved the direction; the switch must need %d; got legs=%v", forwardSwitchSamplesDefault, seen)
 	}
 	m.confinedFwdAtNano = 0
 	if seen := burst(); seen[1] != 0 {
-		t.Errorf("forward did not move to the decisively faster leg after %d samples; got legs=%v", forwardSwitchSamples, seen)
+		t.Errorf("forward did not move to the decisively faster leg after %d samples; got legs=%v", forwardSwitchSamplesDefault, seen)
 	}
 }
 

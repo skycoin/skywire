@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 )
 
 // RACK-TLP (RFC 8985) completes the mux's loss recovery beyond the RTT-derived
@@ -29,21 +31,21 @@ import (
 //     closed loop that keeps the anti-spurious-retransmit threshold matched to the
 //     path's real reordering instead of a fixed guess.
 
-// DSACK reorder-factor adaptation bounds (milli-units: factor ×1000).
+// DSACK reorder-factor adaptation bounds (milli-units: factor ×1000). The
+// baseline is rack.reorder_factor itself — see (*routeMux).rackFactorMin.
 const (
-	rackFactorMin     = int64(rackReorderFactor * 1000) // baseline (== 1.25×)
-	rackFactorMax     = 3000                            // cap the widening at 3.0× maxLegRTT
-	rackDSACKGrowStep = 250                             // widen per DSACK (a spurious retransmit observed)
-	rackDecayStep     = 25                              // narrow per clean SACK, back toward baseline
+	rackFactorMaxDefault     = 3000 // cap the widening at 3.0× maxLegRTT
+	rackDSACKGrowStepDefault = 250  // widen per DSACK (a spurious retransmit observed)
+	rackDecayStepDefault     = 25   // narrow per clean SACK, back toward baseline
 )
 
 // Tail-Loss Probe timing bounds.
 const (
-	tlpPTOFactor     = 2.0                    // PTO ≈ this × slowest active-leg RTT (RFC 8985)
-	tlpMinPTO        = 100 * time.Millisecond // never probe sooner than this (anti-spurious)
-	tlpMaxPTO        = 2 * time.Second        // never wait longer than this before probing
-	tlpMaxProbes     = 2                      // consecutive probes per stall before deferring to other recovery
-	tlpCheckInterval = 100 * time.Millisecond // service-loop cadence (idle check; sends only when a probe is due)
+	tlpPTOFactorDefault     = 2.0                    // PTO ≈ this × slowest active-leg RTT (RFC 8985)
+	tlpMinPTODefault        = 100 * time.Millisecond // never probe sooner than this (anti-spurious)
+	tlpMaxPTODefault        = 2 * time.Second        // never wait longer than this before probing
+	tlpMaxProbesDefault     = 2                      // consecutive probes per stall before deferring to other recovery
+	tlpCheckIntervalDefault = 100 * time.Millisecond // service-loop cadence (idle check; sends only when a probe is due)
 )
 
 // rackFactor returns the current DSACK-adapted reorder factor (slow-leg RTT is
@@ -52,7 +54,7 @@ const (
 func (m *routeMux) rackFactor() float64 {
 	v := atomic.LoadInt64(&m.rackFactorMilli)
 	if v <= 0 {
-		return rackReorderFactor
+		return m.knRatio(routersettings.RackReorderFactor)
 	}
 	return float64(v) / 1000
 }
@@ -63,9 +65,9 @@ func (m *routeMux) rackFactor() float64 {
 func (m *routeMux) growRackFactor(dsackSeq uint32) {
 	for {
 		cur := atomic.LoadInt64(&m.rackFactorMilli)
-		next := cur + rackDSACKGrowStep
-		if next > rackFactorMax {
-			next = rackFactorMax
+		next := cur + int64(m.knInt(routersettings.RackDSACKGrowStep))
+		if next > m.rackFactorMax() {
+			next = m.rackFactorMax()
 		}
 		if next == cur {
 			return
@@ -86,12 +88,12 @@ func (m *routeMux) growRackFactor(dsackSeq uint32) {
 func (m *routeMux) decayRackFactor() {
 	for {
 		cur := atomic.LoadInt64(&m.rackFactorMilli)
-		if cur <= rackFactorMin {
+		if cur <= m.rackFactorMin() {
 			return
 		}
-		next := cur - rackDecayStep
-		if next < rackFactorMin {
-			next = rackFactorMin
+		next := cur - int64(m.knInt(routersettings.RackDecayStep))
+		if next < m.rackFactorMin() {
+			next = m.rackFactorMin()
 		}
 		if atomic.CompareAndSwapInt64(&m.rackFactorMilli, cur, next) {
 			return
@@ -148,14 +150,14 @@ func (m *routeMux) onSACKReceived(lastContig uint32, words []uint64, dsackSeq ui
 func (m *routeMux) ptoInterval() time.Duration {
 	maxRtt := m.maxActiveLegRTTms()
 	if maxRtt <= 0 {
-		return rackDefaultNoRTT * 2 // no RTT measured yet: conservative
+		return m.knDur(routersettings.RackDefaultNoRTT) * 2 // no RTT measured yet: conservative
 	}
-	pto := time.Duration(maxRtt*tlpPTOFactor) * time.Millisecond
-	if pto < tlpMinPTO {
-		pto = tlpMinPTO
+	pto := time.Duration(maxRtt*m.knRatio(routersettings.TLPPTOFactor)) * time.Millisecond
+	if pto < m.knDur(routersettings.TLPMinPTO) {
+		pto = m.knDur(routersettings.TLPMinPTO)
 	}
-	if pto > tlpMaxPTO {
-		pto = tlpMaxPTO
+	if pto > m.knDur(routersettings.TLPMaxPTO) {
+		pto = m.knDur(routersettings.TLPMaxPTO)
 	}
 	return pto
 }
@@ -173,7 +175,7 @@ func (m *routeMux) tlpProbeSeq(now time.Time) (uint32, bool) {
 	if !ok {
 		return 0, false // nothing outstanding — no tail to probe
 	}
-	if atomic.LoadInt32(&m.tlpProbeCount) >= tlpMaxProbes {
+	if int(atomic.LoadInt32(&m.tlpProbeCount)) >= m.knInt(routersettings.TLPMaxProbes) {
 		return 0, false // budget spent; defer to reactive SACK / retx aging
 	}
 	last := atomic.LoadInt64(&m.lastSendNano)
@@ -185,4 +187,15 @@ func (m *routeMux) tlpProbeSeq(now time.Time) (uint32, bool) {
 	}
 	atomic.AddInt32(&m.tlpProbeCount, 1)
 	return tail, true
+}
+
+// rackFactorMin is the DSACK adaptation's baseline in milli-units: the live
+// rack.reorder_factor, which the widening never narrows back below.
+func (m *routeMux) rackFactorMin() int64 {
+	return int64(m.knRatio(routersettings.RackReorderFactor) * 1000)
+}
+
+// rackFactorMax is the ceiling on the DSACK-driven widening, in milli-units.
+func (m *routeMux) rackFactorMax() int64 {
+	return int64(m.knRatio(routersettings.RackFactorMax) * 1000)
 }

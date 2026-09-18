@@ -11,7 +11,7 @@ import (
 )
 
 // openStuckGap backdates the reorder frontier's gap so gapAge() reads older than
-// legDataStallGapAge — the receiver is genuinely stuck on a missing sequence.
+// legDataStallGapAgeDefault — the receiver is genuinely stuck on a missing sequence.
 func openStuckGap(rg *RouteGroup, age time.Duration) {
 	rb := rg.mux.reorderBuf
 	rb.mu.Lock()
@@ -43,7 +43,7 @@ func TestIdleLegIsNotStalledLeg(t *testing.T) {
 
 	// One sample of a busy leg 0 and a silent leg 1, frontier healthy.
 	rg.mux.recordPayload(0, 8<<20)
-	require.Less(t, rg.mux.gapAge(), legDataStallGapAge, "frontier must be healthy for this leg of the test")
+	require.Less(t, rg.mux.gapAge(), legDataStallGapAgeDefault, "frontier must be healthy for this leg of the test")
 	rg.legDataProgressServiceFn(0)
 
 	require.False(t, rg.mux.isLegStandby(1),
@@ -52,12 +52,12 @@ func TestIdleLegIsNotStalledLeg(t *testing.T) {
 
 	// Same silence, but now the receiver IS stuck behind a missing sequence: the
 	// leg is genuinely stalling the group, so the park stands.
-	openStuckGap(rg, legDataStallGapAge+2*time.Second)
+	openStuckGap(rg, legDataStallGapAgeDefault+2*time.Second)
 	rg.mux.recordPayload(0, 8<<20)
 	rg.legDataProgressServiceFn(0)
 
 	require.True(t, rg.mux.isLegStandby(1),
-		"a leg delivering nothing while the frontier is STUCK past legDataStallGapAge is still parked")
+		"a leg delivering nothing while the frontier is STUCK past legDataStallGapAgeDefault is still parked")
 	require.Equal(t, 1, countEvents(rg, MuxEventLegParked), "the stuck-frontier park posts its event")
 }
 
@@ -66,7 +66,7 @@ func TestIdleLegIsNotStalledLeg(t *testing.T) {
 // minutes left 11 mux events and ZERO parks in the log — the one-leg downloads
 // were unattributable. Every adopted transition must post an event with by=peer,
 // and only a real transition (the peer re-broadcasts its whole set every
-// legStateResyncInterval).
+// legStateResyncIntervalDefault).
 func TestPeerLegStateIsAnEvent(t *testing.T) {
 	rg, _, _ := createMuxRouteGroup(t, 2)
 	rg.muxEvents = &muxEventRing{}

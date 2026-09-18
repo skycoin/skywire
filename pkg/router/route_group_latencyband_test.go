@@ -121,7 +121,7 @@ func TestPartitionLatencyBand(t *testing.T) {
 			wantDemote: nil, wantPromote: nil,
 		},
 		{
-			name: "fewer than bandMinLegs measured: no action",
+			name: "fewer than bandMinLegsDefault measured: no action",
 			legs: []bandLeg{
 				{idx: 0, latMs: 150, primary: true},
 				{idx: 1, latMs: 2},
@@ -342,7 +342,7 @@ func TestPickPrimaryReelection(t *testing.T) {
 			wantIdx: 1, wantOK: true,
 		},
 		{
-			name: "fewer than bandMinLegs: no re-election",
+			name: "fewer than bandMinLegsDefault: no re-election",
 			legs: []bandLeg{
 				{idx: 0, latMs: 2, primary: true},
 				{idx: 1, latMs: 200},
@@ -418,7 +418,7 @@ func TestEnforceLatencyBandParksArtifactLeg(t *testing.T) {
 
 	rg.adaptiveParkMu.Lock()
 	p := rg.adaptiveParks[mts[3].Entry.ID]
-	p.at = p.at.Add(-legParkMinHold - time.Second)
+	p.at = p.at.Add(-legParkMinHoldDefault - time.Second)
 	rg.adaptiveParks[mts[3].Entry.ID] = p
 	rg.adaptiveParkMu.Unlock()
 

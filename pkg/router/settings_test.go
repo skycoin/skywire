@@ -12,13 +12,13 @@ import (
 // a visor that never calls `route settings` must behave exactly as it did.
 func TestRouterSettingsDefaultsMatchConstants(t *testing.T) {
 	t.Cleanup(resetRouterSettings)
-	require.Equal(t, float64(ecfWindowMargin), EcfWindowMargin())
-	require.EqualValues(t, ecfMinWindowBytes, EcfMinWindowBytes())
-	require.EqualValues(t, ecfMaxWindowBytes, EcfMaxWindowBytes())
-	require.Equal(t, sendWindowWaitMax, SendWindowWaitMax())
-	require.Equal(t, legParkMinHold, LegParkMinHold())
-	require.Equal(t, deadRouteTTL, DeadRouteHold())
-	require.Equal(t, deadRouteMaxTTL, DeadRouteHoldMax())
+	require.Equal(t, float64(ecfWindowMarginDefault), EcfWindowMargin())
+	require.EqualValues(t, ecfMinWindowBytesDefault, EcfMinWindowBytes())
+	require.EqualValues(t, ecfMaxWindowBytesDefault, EcfMaxWindowBytes())
+	require.Equal(t, sendWindowWaitMaxDefault, SendWindowWaitMax())
+	require.Equal(t, legParkMinHoldDefault, LegParkMinHold())
+	require.Equal(t, deadRouteTTLDefault, DeadRouteHold())
+	require.Equal(t, deadRouteMaxTTLDefault, DeadRouteHoldMax())
 }
 
 // The dead-route cache the router builds carries no window of its own, so it
@@ -27,8 +27,8 @@ func TestDeadRouteHoldIsLive(t *testing.T) {
 	t.Cleanup(resetRouterSettings)
 	c := newDeadRouteCache(0, 0)
 	ttl, max := c.hold()
-	require.Equal(t, deadRouteTTL, ttl)
-	require.Equal(t, deadRouteMaxTTL, max)
+	require.Equal(t, deadRouteTTLDefault, ttl)
+	require.Equal(t, deadRouteMaxTTLDefault, max)
 
 	require.True(t, SetDeadRouteHold(5*time.Second))
 	require.True(t, SetDeadRouteHoldMax(30*time.Second))
@@ -72,11 +72,11 @@ func TestRouterSettingsSetAndRefuseNonPositive(t *testing.T) {
 }
 
 func resetRouterSettings() {
-	SetEcfWindowMargin(ecfWindowMargin)
-	SetEcfMinWindowBytes(ecfMinWindowBytes)
-	SetEcfMaxWindowBytes(ecfMaxWindowBytes)
-	SetSendWindowWaitMax(sendWindowWaitMax)
-	SetLegParkMinHold(legParkMinHold)
-	SetDeadRouteHold(deadRouteTTL)
-	SetDeadRouteHoldMax(deadRouteMaxTTL)
+	SetEcfWindowMargin(ecfWindowMarginDefault)
+	SetEcfMinWindowBytes(ecfMinWindowBytesDefault)
+	SetEcfMaxWindowBytes(ecfMaxWindowBytesDefault)
+	SetSendWindowWaitMax(sendWindowWaitMaxDefault)
+	SetLegParkMinHold(legParkMinHoldDefault)
+	SetDeadRouteHold(deadRouteTTLDefault)
+	SetDeadRouteHoldMax(deadRouteMaxTTLDefault)
 }

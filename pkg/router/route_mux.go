@@ -12,6 +12,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -300,6 +301,11 @@ type routeMux struct {
 	sackSendErrors    uint64
 	lastSACKSentNano  int64
 
+	// knobHolder carries the owning route group's resolved router knobs (see
+	// settings_group.go). Shared with the RouteGroup, so a `route settings --app`
+	// override reaches the dataplane and the service loops together.
+	knobHolder *routersettings.Holder
+
 	// Incoming packet reordering
 	reorderBuf *reorderBuffer
 
@@ -503,8 +509,8 @@ const (
 	// the incumbent crosses a 15 % margin easily — and every flip splits the
 	// upload across two skewed legs, which is the collapse this confinement
 	// exists to prevent (measured x0.24 on a 50 MB upload).
-	forwardSwitchMarginDefault = 0.2
-	forwardSwitchSamples       = 2
+	forwardSwitchMarginDefault  = 0.2
+	forwardSwitchSamplesDefault = 2
 )
 
 // reorderWindow bounds how far the receiver's reorder buffer will hold
@@ -532,27 +538,28 @@ const (
 // the cap the buffer now DROPS excess (never skips) while the leg-dataprogress
 // prune + SACK retransmit refill the frontier in order. TODO: make adaptive to
 // the measured RTT_max of the active set instead of a flat gigabit-sized cap.
-const reorderWindow = 32768
+const reorderWindowDefault = 32768
 
 // newRouteMux creates a new routeMux instance with all sub-components initialized.
 func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 	m := &routeMux{
 		logger:      logger,
-		reorderBuf:  newReorderBuffer(reorderWindow),
+		knobHolder:  routersettings.NewHolder(""),
+		reorderBuf:  newReorderBuffer(routersettings.ReorderWindow.Int()),
 		tpSelector:  newTransportSelector(),
 		sackEnabled: sackEnabled,
 		sackTracker: newSACKTracker(),
 		// Sender-side retx window kept in step with the receiver's reorder
 		// window so a genuinely-lost sequence is still held for retransmit
 		// while the receiver is holding the gap open for it.
-		retxBuf:  newRetxBuffer(reorderWindow),
+		retxBuf:  newRetxBuffer(routersettings.ReorderWindow.Int()),
 		windowCh: make(chan struct{}, 1),
 		// Proactive HoL retransmit tracker is always constructed; it is only
 		// consulted when holRetxEnabled is set at handshake (see hol_retx.go).
 		holRetx: newHolRetxTracker(),
 		// RACK reorder factor starts at the static baseline; DSACK feedback
 		// widens it and clean acks decay it back (see rack_tlp.go).
-		rackFactorMilli: int64(rackReorderFactor * 1000),
+		rackFactorMilli: int64(routersettings.RackReorderFactor.Ratio() * 1000),
 		// No leg held by the forward confinement yet, and no challenger.
 		confinedFwdIdx:     -1,
 		confinedFwdChalIdx: -1,
@@ -1006,12 +1013,12 @@ func (m *routeMux) confinedForwardLeg(tps []*transport.ManagedTransport, wantDir
 		} else {
 			m.confinedFwdChalIdx, m.confinedFwdChalHits = best, 1
 		}
-		if m.confinedFwdChalHits < forwardSwitchSamples {
+		if m.confinedFwdChalHits < m.knInt(routersettings.ForwardSwitchSamples) {
 			best, bestAt = prev, held
 			break
 		}
 		reason = fmt.Sprintf("leg %d measured %.0f ms against leg %d's %.0f ms (at least %.0f%% lower for %d consecutive samples)",
-			best, lat[bestAt], prev, lat[held], margin*100, forwardSwitchSamples)
+			best, lat[bestAt], prev, lat[held], margin*100, m.knInt(routersettings.ForwardSwitchSamples))
 		m.confinedFwdChalIdx, m.confinedFwdChalHits = -1, 0
 	default:
 		m.confinedFwdChalIdx, m.confinedFwdChalHits = -1, 0
@@ -1700,7 +1707,7 @@ func (m *routeMux) distributionMode() WeightMode {
 // well under retxMinAge so a genuine loss is still signaled several times
 // before the sender's retransmit timer fires, while collapsing the flood of
 // per-packet SACKs that latency-skew reordering would otherwise produce.
-const sackMinInterval = 25 * time.Millisecond
+const sackMinIntervalDefault = 25 * time.Millisecond
 
 // shouldSendSACK reports whether enough time has elapsed since the last SACK to
 // send another, rate-limiting SACK feedback under heavy cross-leg reordering.
@@ -1708,7 +1715,7 @@ const sackMinInterval = 25 * time.Millisecond
 func (m *routeMux) shouldSendSACK() bool {
 	now := time.Now().UnixNano()
 	prev := atomic.LoadInt64(&m.lastSACKNano)
-	if now-prev < int64(sackMinInterval) {
+	if now-prev < int64(m.knDur(routersettings.SackMinInterval)) {
 		return false
 	}
 	return atomic.CompareAndSwapInt64(&m.lastSACKNano, prev, now)
@@ -1764,10 +1771,10 @@ func (m *routeMux) takeDSACK() (uint32, bool) {
 // fast path is recovered in tens of ms instead of always waiting ~750ms, while a
 // genuinely slow leg still isn't declared lost prematurely.
 const (
-	rackReorderFactor = 1.25                    // slow-leg RTT × this = the reordering tolerance
-	rackFloor         = 60 * time.Millisecond   // never retransmit sooner than this (anti-storm)
-	rackCeil          = 1500 * time.Millisecond // never wait longer than this
-	rackDefaultNoRTT  = 300 * time.Millisecond  // before any leg RTT is measured
+	rackReorderFactorDefault = 1.25                    // slow-leg RTT × this = the reordering tolerance
+	rackFloorDefault         = 60 * time.Millisecond   // never retransmit sooner than this (anti-storm)
+	rackCeilDefault          = 1500 * time.Millisecond // never wait longer than this
+	rackDefaultNoRTTDefault  = 300 * time.Millisecond  // before any leg RTT is measured
 )
 
 // rackThreshold computes the current reorder-tolerant retransmit threshold from
@@ -1782,7 +1789,7 @@ const (
 func (m *routeMux) rackThreshold() time.Duration {
 	maxRtt := m.maxActiveLegRTTms()
 	if maxRtt <= 0 {
-		return rackDefaultNoRTT
+		return m.knDur(routersettings.RackDefaultNoRTT)
 	}
 	// The reordering/feedback window is the LARGER of the idle-ping RTT and the
 	// measured send→ack delay (ackDelayMs): a saturated leg's queue delays acks
@@ -1792,8 +1799,8 @@ func (m *routeMux) rackThreshold() time.Duration {
 		maxRtt = ad
 	}
 	th := time.Duration(maxRtt*m.rackFactor()) * time.Millisecond
-	if th < rackFloor {
-		th = rackFloor
+	if th < m.knDur(routersettings.RackFloor) {
+		th = m.knDur(routersettings.RackFloor)
 	}
 	// The absolute ceiling bounds the wait for a genuine loss, but it must
 	// never undercut one measured RTT: when queueing delay inflates the
@@ -1804,7 +1811,7 @@ func (m *routeMux) rackThreshold() time.Duration {
 	// ceiling at one measured RTT: waiting less than one RTT for an ack is
 	// definitionally spurious, and the wait stays bounded (max(rackCeil, RTT))
 	// rather than unbounded.
-	ceil := rackCeil
+	ceil := m.knDur(routersettings.RackCeil)
 	if rttDur := time.Duration(maxRtt) * time.Millisecond; rttDur > ceil {
 		ceil = rttDur
 	}
@@ -2277,7 +2284,7 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 				case lc.ecfHopRttMinMs == 0 || hopMs < lc.ecfHopRttMinMs:
 					lc.ecfHopRttMinMs = hopMs
 				default:
-					lc.ecfHopRttMinMs += ecfRttMinCreep * (hopMs - lc.ecfHopRttMinMs)
+					lc.ecfHopRttMinMs += routersettings.EcfRttMinCreep.Ratio() * (hopMs - lc.ecfHopRttMinMs)
 				}
 			}
 			if rttMs > 0 {
@@ -2289,8 +2296,8 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 					if dev < 0 {
 						dev = -dev
 					}
-					lc.ecfJitterMs = ecfJitterAlpha*dev + (1-ecfJitterAlpha)*lc.ecfJitterMs
-					lc.ecfRttMs = ecfRttAlpha*rttMs + (1-ecfRttAlpha)*lc.ecfRttMs
+					lc.ecfJitterMs = routersettings.EcfJitterAlpha.Ratio()*dev + (1-routersettings.EcfJitterAlpha.Ratio())*lc.ecfJitterMs
+					lc.ecfRttMs = routersettings.EcfRttAlpha.Ratio()*rttMs + (1-routersettings.EcfRttAlpha.Ratio())*lc.ecfRttMs
 					// Baseline RTT = running minimum of the SAME end-to-end basis,
 					// with a slow upward creep: a transient congestion spike never
 					// raises it, but a leg whose true latency rose for good is
@@ -2301,7 +2308,7 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 					if rttMs < lc.ecfRttMinMs {
 						lc.ecfRttMinMs = rttMs
 					} else {
-						lc.ecfRttMinMs += ecfRttMinCreep * (lc.ecfRttMs - lc.ecfRttMinMs)
+						lc.ecfRttMinMs += routersettings.EcfRttMinCreep.Ratio() * (lc.ecfRttMs - lc.ecfRttMinMs)
 					}
 				}
 			}
@@ -2504,7 +2511,7 @@ func (m *routeMux) ruleProbeOnlyLegsLocked(states []ecfLegState) []legProbeRulin
 			continue
 		}
 		basis, deliv := states[i].rttMs, states[i].delivBps
-		outclassedByDelay := basis >= legProbeMinBasisMs && basis > ratio*best
+		outclassedByDelay := basis >= m.knRatio(routersettings.LegProbeMinBasisMs) && basis > ratio*best
 		unproductive := states[i].delivKnown && bestDeliv > 0 && deliv*ratio < bestDeliv
 		probeOnly := ratio > 1 && best > 0 && states[i].ready &&
 			outclassedByDelay && unproductive
@@ -2521,7 +2528,7 @@ func (m *routeMux) ruleProbeOnlyLegsLocked(states []ecfLegState) []legProbeRulin
 		r := legProbeRuling{idx: i, probeOnly: probeOnly}
 		if probeOnly {
 			r.reason = fmt.Sprintf("delay basis %.0f ms against the best active leg's %.0f ms (more than %.1fx) AND delivering %.0f B/s against its %.0f B/s (under 1/%.1f) — capped at %d bytes per %.0f ms window instead of a proportional share; not parked, the probe keeps measuring it",
-				basis, best, ratio, deliv, bestDeliv, ratio, LegProbeBytes(), probeWindowMs(basis))
+				basis, best, ratio, deliv, bestDeliv, ratio, LegProbeBytes(), m.probeWindowMs(basis))
 		} else {
 			why := fmt.Sprintf("delay basis %.0f ms is back within %.1fx of the best active leg's %.0f ms", basis, ratio, best)
 			if outclassedByDelay {
@@ -2566,14 +2573,15 @@ func foldDeliv(prev, sample float64) float64 {
 	if prev <= 0 {
 		return sample
 	}
-	return legDelivAlpha*sample + (1-legDelivAlpha)*prev
+	a := LegDelivAlpha()
+	return a*sample + (1-a)*prev
 }
 
 // probeWindowMs is how long one probe budget lasts on a leg with this delay
 // basis: the leg's own basis, floored at legProbeMinWindow so a fast-but-thin
 // leg is not re-probed thousands of times a second.
-func probeWindowMs(basisMs float64) float64 {
-	if lo := float64(legProbeMinWindow) / float64(time.Millisecond); basisMs < lo {
+func (m *routeMux) probeWindowMs(basisMs float64) float64 {
+	if lo := float64(m.knDur(routersettings.LegProbeMinWindow)) / float64(time.Millisecond); basisMs < lo {
 		return lo
 	}
 	return basisMs
@@ -2604,7 +2612,7 @@ func (m *routeMux) legProbeExhausted(idx int) bool {
 		return false
 	}
 	now := time.Now().UnixNano()
-	win := int64(probeWindowMs(basis) * float64(time.Millisecond))
+	win := int64(m.probeWindowMs(basis) * float64(time.Millisecond))
 	start := atomic.LoadInt64(&lc.probeWinNano)
 	if now-start >= win && atomic.CompareAndSwapInt64(&lc.probeWinNano, start, now) {
 		atomic.StoreUint64(&lc.probeWinBytes, 0)
@@ -2640,12 +2648,12 @@ func (m *routeMux) firstProbeReadyLeg(tps []*transport.ManagedTransport) int {
 // (measured at 250 ms: 10 MB uploads over two legs ran at half the single-route
 // rate, the ramp alone costing more than a second).
 const (
-	ecfWindowMargin       = 2.0
-	ecfMinWindowBytes     = 128 * 1024
-	ecfMaxWindowBytes     = 8 * 1024 * 1024
-	sendWindowWaitMax     = 250 * time.Millisecond
-	sendWindowPoll        = 20 * time.Millisecond
-	windowRefreshInterval = 100 * time.Millisecond
+	ecfWindowMarginDefault       = 2.0
+	ecfMinWindowBytesDefault     = 128 * 1024
+	ecfMaxWindowBytesDefault     = 8 * 1024 * 1024
+	sendWindowWaitMaxDefault     = 250 * time.Millisecond
+	sendWindowPollDefault        = 20 * time.Millisecond
+	windowRefreshIntervalDefault = 100 * time.Millisecond
 )
 
 // The outclassed-leg gate (ruleProbeOnlyLegsLocked / legProbeExhausted).
@@ -2664,11 +2672,11 @@ const (
 // legDelivAlpha weights the newest sample in the per-leg delivery EWMA the
 // goodput half reads.
 const (
-	legStarveRatio     = 6.0
-	legProbeBytes      = 64 * 1024
-	legProbeMinBasisMs = 250.0
-	legProbeMinWindow  = 250 * time.Millisecond
-	legDelivAlpha      = 0.3
+	legStarveRatioDefault     = 6.0
+	legProbeBytesDefault      = 64 * 1024
+	legProbeMinBasisMsDefault = 250.0
+	legProbeMinWindowDefault  = 250 * time.Millisecond
+	legDelivAlphaDefault      = 0.3
 )
 
 // feedInflight hands the predictive selector each leg's REAL unacknowledged
@@ -2742,8 +2750,8 @@ func (m *routeMux) waitSendWindow(tps []*transport.ManagedTransport, closed <-ch
 			atomic.AddUint64(&m.sendWindowTimeouts, 1)
 			return
 		}
-		if remaining > sendWindowPoll {
-			remaining = sendWindowPoll
+		if remaining > m.knDur(routersettings.SendWindowPoll) {
+			remaining = m.knDur(routersettings.SendWindowPoll)
 		}
 		t := time.NewTimer(remaining)
 		select {

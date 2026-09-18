@@ -32,7 +32,7 @@ func TestDirectionPinHoldsAgainstFlipPressure(t *testing.T) {
 	if got := m.flipPinMode(); got != routing.DirectionPinFlipped {
 		t.Fatalf("flipPinMode = %d, want %d", got, routing.DirectionPinFlipped)
 	}
-	for i := 0; i < flipHysteresis*4; i++ {
+	for i := 0; i < flipHysteresisDefault*4; i++ {
 		if _, changed := m.flipStep(100_000, 5_000_000); changed { // download-heavy
 			t.Fatalf("controller moved the mapping under a pin at tick %d", i+1)
 		}
@@ -45,7 +45,7 @@ func TestDirectionPinHoldsAgainstFlipPressure(t *testing.T) {
 	m2 := newRouteMux(log, true)
 	m2.setDirectional(true, dst, src)
 	m2.setFlipPin(routing.DirectionPinDefault)
-	for i := 0; i < flipHysteresis*4; i++ {
+	for i := 0; i < flipHysteresisDefault*4; i++ {
 		if _, changed := m2.flipStep(5_000_000, 100_000); changed { // upload-heavy
 			t.Fatalf("controller flipped a pin-default mux at tick %d", i+1)
 		}
@@ -72,7 +72,7 @@ func TestDirectionPinReleaseResumesController(t *testing.T) {
 	m.setDirectional(true, dst, src)
 	m.setFlipPin(routing.DirectionPinFlipped)
 	// A few dormant ticks under revert pressure keep the counters zeroed.
-	for i := 0; i < flipHysteresis*2; i++ {
+	for i := 0; i < flipHysteresisDefault*2; i++ {
 		m.flipStep(100_000, 5_000_000)
 	}
 
@@ -86,15 +86,15 @@ func TestDirectionPinReleaseResumesController(t *testing.T) {
 
 	// The controller resumes from a clean slate: the download-heavy signal must
 	// still take the full hysteresis vote before reverting.
-	for i := 0; i < flipHysteresis-1; i++ {
+	for i := 0; i < flipHysteresisDefault-1; i++ {
 		if _, changed := m.flipStep(100_000, 5_000_000); changed {
-			t.Fatalf("reverted after only %d post-release ticks, want %d", i+1, flipHysteresis)
+			t.Fatalf("reverted after only %d post-release ticks, want %d", i+1, flipHysteresisDefault)
 		}
 	}
 	flipped, changed := m.flipStep(100_000, 5_000_000)
 	if !changed || flipped {
 		t.Fatalf("controller did not revert after release + %d ticks: flipped=%v changed=%v",
-			flipHysteresis, flipped, changed)
+			flipHysteresisDefault, flipped, changed)
 	}
 }
 

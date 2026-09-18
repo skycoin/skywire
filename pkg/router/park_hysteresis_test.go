@@ -53,7 +53,7 @@ func parkFlapRig(t *testing.T) (*RouteGroup, []*transport.ManagedTransport) {
 
 // loadedDeltas is one data-progress tick in which every leg is carrying real
 // traffic, so the group clears the shared-bottleneck evidence floor
-// (sbdMinEvidenceRate) and the detector is allowed to rule. A ruling made below
+// (sbdMinEvidenceRateDefault) and the detector is allowed to rule. A ruling made below
 // that floor is withheld — see TestSBDNoParkWithoutTrafficToRuleOn. The bytes are
 // credited on the SEND path (SACK-acknowledged), which is the side the evidence
 // floor is measured on, and returned as the recv deltas the reverse-floor guard
@@ -89,7 +89,7 @@ func countEvents(rg *RouteGroup, kind string) int {
 // forcing the demote-time retransmit flush.
 //
 // With the hold the leg is parked ONCE and stays parked across every subsequent
-// tick inside legParkMinHold.
+// tick inside legParkMinHoldDefault.
 func TestAdaptiveParkHoldStopsControllerFlap(t *testing.T) {
 	rg, mts := parkFlapRig(t)
 
@@ -133,12 +133,12 @@ func TestAdaptiveParkHoldExpiresAndPromotes(t *testing.T) {
 	// Age the park past its minimum hold.
 	rg.adaptiveParkMu.Lock()
 	p := rg.adaptiveParks[mts[1].Entry.ID]
-	p.at = p.at.Add(-legParkMinHold - time.Second)
+	p.at = p.at.Add(-legParkMinHoldDefault - time.Second)
 	rg.adaptiveParks[mts[1].Entry.ID] = p
 	rg.adaptiveParkMu.Unlock()
 
 	if _, held := rg.adaptiveParkHeld(mts[1].Entry.ID); held {
-		t.Fatal("the hold must expire after legParkMinHold")
+		t.Fatal("the hold must expire after legParkMinHoldDefault")
 	}
 
 	rg.enforceLatencyBand(nil)

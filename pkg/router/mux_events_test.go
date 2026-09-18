@@ -87,13 +87,13 @@ func TestMuxEventsRecordPrimaryRehome(t *testing.T) {
 
 func TestMuxEventRingIsBoundedAndOrdered(t *testing.T) {
 	var r muxEventRing
-	for i := 0; i < MuxEventRingSize+10; i++ {
+	for i := 0; i < MuxEventRingSizeDefault+10; i++ {
 		r.add(MuxEvent{Reason: fmt.Sprint(i)})
 	}
 	got := r.snapshot()
-	require.Len(t, got, MuxEventRingSize)
+	require.Len(t, got, MuxEventRingSizeDefault)
 	require.Equal(t, "10", got[0].Reason)
-	require.Equal(t, fmt.Sprint(MuxEventRingSize+9), got[len(got)-1].Reason)
+	require.Equal(t, fmt.Sprint(MuxEventRingSizeDefault+9), got[len(got)-1].Reason)
 }
 
 func TestMuxEventRingForDescFiltersAndBounds(t *testing.T) {

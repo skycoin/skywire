@@ -12,6 +12,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cliout/cliroute"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/skysocks/skysettings"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -41,6 +42,8 @@ var (
 	settingsFwdMargin float64
 	settingsStarveRat float64
 	settingsProbeByte string
+	settingsApp       string
+	settingsReset     bool
 )
 
 func init() {
@@ -68,17 +71,49 @@ func init() {
 	settingsCmd.Flags().Float64Var(&settingsFwdMargin, "forward-switch-margin", 0, "how much lower a challenger leg must measure, for two consecutive samples, before the forward direction moves to it (e.g. 0.2)")
 	settingsCmd.Flags().Float64Var(&settingsStarveRat, "leg-starve-ratio", 0, "delay-basis multiple AND inverse goodput fraction at which a leg is cut to a probe per window (e.g. 6.0)")
 	settingsCmd.Flags().StringVar(&settingsProbeByte, "leg-probe-bytes", "", "what a leg cut to probe-only may carry per window (e.g. 64KiB)")
+	settingsCmd.Flags().StringVar(&settingsApp, "app", "", "scope the key=value settings to the route groups owned by this app (default: visor-wide)")
+	settingsCmd.Flags().BoolVar(&settingsReset, "reset", false, "restore every knob to the value the binary compiled with (with --app: drop that app's overrides)")
 }
 
 var settingsCmd = &cobra.Command{
 	Use:   "settings",
 	Short: "Show or set the visor's runtime router knobs",
-	Long: `Show or set the visor-wide router knobs: minimum hops, existing-transports-only,
-local route calculation, and the transport type preference — which type is
-created first and which existing transport a direct route rides when several
-reach the same peer. With no flags the current values are printed. Changes take
-effect at once; the preference is written to routing.transport_preference.`,
-	Args: cobra.NoArgs,
+	Long: `Show or set the visor's runtime router knobs.
+
+With no arguments every knob is printed: the routing choices (minimum hops,
+existing-transports-only, local route calculation, transport type preference)
+followed by the whole mux/dataplane catalog — send windows, RACK and reorder
+terms, leg liveness and failover timers, SACK and delayed-ack cadence, TLP and
+HoL retransmit, shared-bottleneck detection, FEC geometry, the ECF selector,
+the unidirectional flip controller, the mux event rings, and the capability
+toggles. --json carries the same catalog as a stable map under "knobs", plus
+each knob's compiled default and what the config holds for it under
+"knob_detail", so a bench runner can save it and feed it back verbatim.
+
+Knobs are set as key=value arguments, one or many:
+
+  skywire cli route settings ecf.max_window_bytes=16MiB rack.ceil=800ms
+  skywire cli route settings mux.sack=false
+  skywire cli route settings --app skysocks-client leg.starve_ratio=3
+  skywire cli route settings --reset
+
+Values take the same spellings 'proxy settings' accepts: 8MiB / 64K for bytes,
+250ms / 5s for durations, a plain float for ratios, true/false for toggles.
+Every default is the value the binary compiled with, so a visor that sets
+nothing behaves exactly as it did.
+
+--app scopes the change to the route groups owned by that app, so a subject
+client and its paired reference can run different values on one visor;
+unspecified knobs fall back to the visor-wide value. --reset restores every
+default (with --app, drops just that app's overrides).
+
+Changes take effect at once: values read on a data path are live, and the ones
+read when a route group is BUILT — the negotiated capabilities mux.per_frame_noise,
+mux.sack, mux.hol_retx and fec.enabled — apply to NEW groups, leaving groups
+already running untouched. Everything set here is written to
+routing.router_settings and restored at the next start. The older per-knob flags
+below remain for compatibility; they name the same knobs.`,
+	Args: cobra.ArbitraryArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -87,6 +122,20 @@ effect at once; the preference is written to routing.transport_preference.`,
 		cur, err := rpcClient.GetRouterSettings()
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		// key=value arguments are the catalog surface; the per-knob flags below are
+		// the older names for the same values.
+		knobs := map[string]string{}
+		for _, a := range args {
+			k, val, ok := strings.Cut(a, "=")
+			k, val = strings.TrimSpace(k), strings.TrimSpace(val)
+			if !ok || k == "" || val == "" {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("%q is not key=value", a))
+			}
+			if _, err := routersettings.Parse(k, val); err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			knobs[k] = val
 		}
 		changed := false
 		for _, f := range []string{"prefer", "min-hops", "existing-tp-only", "force-local",
@@ -97,6 +146,7 @@ effect at once; the preference is written to routing.transport_preference.`,
 			"leg-starve-ratio", "leg-probe-bytes"} {
 			changed = changed || cmd.Flags().Changed(f)
 		}
+		changed = changed || len(knobs) > 0 || settingsReset
 		if changed {
 			next := visor.RouterSettings{
 				ForceLocalRoutes: cur.ForceLocalRoutes,
@@ -181,6 +231,9 @@ effect at once; the preference is written to routing.transport_preference.`,
 			if cmd.Flags().Changed("leg-probe-bytes") {
 				next.LegProbeBytes = mustBytes(cmd, settingsProbeByte)
 			}
+			next.Knobs = knobs
+			next.KnobApp = settingsApp
+			next.KnobReset = settingsReset
 			if err := rpcClient.SetRouterSettings(next); err != nil {
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
@@ -215,6 +268,9 @@ effect at once; the preference is written to routing.transport_preference.`,
 			ForwardSwitchMargin: cur.ForwardSwitchMargin,
 			LegStarveRatio:      cur.LegStarveRatio,
 			LegProbeBytes:       cur.LegProbeBytes,
+			Knobs:               cur.Knobs,
+			KnobDetail:          knobDetail(cur.KnobState),
+			AppKnobs:            cur.AppKnobs,
 		}))
 	},
 }
@@ -227,4 +283,25 @@ func mustBytes(cmd *cobra.Command, raw string) int64 {
 		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("%q is not a byte size: %w", raw, err))
 	}
 	return v
+}
+
+// knobDetail turns the RPC's knob rows into the map the JSON output carries:
+// per knob the compiled default, whether it was explicitly set, and what the
+// visor config holds — the persisted-vs-live comparison.
+func knobDetail(rows []visor.RouterKnob) map[string]cliroute.Knob {
+	if len(rows) == 0 {
+		return nil
+	}
+	out := make(map[string]cliroute.Knob, len(rows))
+	for _, r := range rows {
+		out[r.Name] = cliroute.Knob{
+			Kind:      r.Kind,
+			Value:     r.Value,
+			Default:   r.Default,
+			Set:       r.Set,
+			Persisted: r.Persisted,
+			Doc:       r.Doc,
+		}
+	}
+	return out
 }

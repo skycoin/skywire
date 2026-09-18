@@ -37,7 +37,7 @@ func TestStalledLegParkHonorsMirror(t *testing.T) {
 
 		// Leg 0 moves bulk, leg 1 delivers nothing, and the no-skip frontier is
 		// genuinely stuck behind a missing sequence — the detector's park case.
-		openStuckGap(rg, legDataStallGapAge+2*time.Second)
+		openStuckGap(rg, legDataStallGapAgeDefault+2*time.Second)
 		rg.mux.recordPayload(0, 8<<20)
 		rg.legDataProgressServiceFn(0)
 		return rg

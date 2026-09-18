@@ -82,10 +82,10 @@ func TestLegLivenessSwapsSoleBlackHoledLeg(t *testing.T) {
 		mu.Unlock()
 	}
 
-	// The sole leg never echoes; after legPongMissThreshold cycles it is declared
+	// The sole leg never echoes; after legPongMissThresholdDefault cycles it is declared
 	// black-holing and the swap fires. Keep the replacement (once present) echoing
 	// so it is not itself re-declared dead.
-	for i := 0; i < legPongMissThreshold+3; i++ {
+	for i := 0; i < legPongMissThresholdDefault+3; i++ {
 		mu.Lock()
 		r := replID
 		mu.Unlock()
@@ -94,7 +94,7 @@ func TestLegLivenessSwapsSoleBlackHoledLeg(t *testing.T) {
 			rg.legPongSeen[r] = true
 			rg.legLivenessMu.Unlock()
 		}
-		rg.legLivenessServiceFn(legLivenessInterval)
+		rg.legLivenessServiceFn(legLivenessIntervalDefault)
 	}
 
 	require.Eventually(t, func() bool {
@@ -120,11 +120,11 @@ func TestLegLivenessSoleLegKeepsAliveWhenEchoing(t *testing.T) {
 	var addCalls int
 	rg.selfHealAdd = func(_ []string) { addCalls++ }
 
-	for i := 0; i < legPongMissThreshold+3; i++ {
+	for i := 0; i < legPongMissThresholdDefault+3; i++ {
 		rg.legLivenessMu.Lock()
 		rg.legPongSeen[keep] = true
 		rg.legLivenessMu.Unlock()
-		rg.legLivenessServiceFn(legLivenessInterval)
+		rg.legLivenessServiceFn(legLivenessIntervalDefault)
 	}
 
 	rg.mu.Lock()

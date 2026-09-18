@@ -116,10 +116,10 @@ func TestRetxBuffer_RetransmitList(t *testing.T) {
 		rb.Store(i, []byte{byte(i)}, uuid.Nil)
 	}
 
-	// Age the stored entries past retxMinAge so ProcessSACK will list missing
+	// Age the stored entries past retxMinAgeDefault so ProcessSACK will list missing
 	// sequences (a younger gap is presumed in flight on a slower mux leg).
 	for _, e := range rb.entries {
-		e.sentAt = e.sentAt.Add(-2 * retxMinAge)
+		e.sentAt = e.sentAt.Add(-2 * retxMinAgeDefault)
 	}
 
 	// SACK: lastContiguous=2, bitmap=0b1010 (seq 3 missing, 4 received, 5 missing, 6 received)
@@ -139,7 +139,7 @@ func TestRetxBuffer_RetransmitList(t *testing.T) {
 func TestRetxBuffer_RetxBackoffSuppressesDuplicates(t *testing.T) {
 	rb := newRetxBuffer(128)
 	rb.Store(3, []byte{3}, uuid.Nil)
-	rb.entries[3].sentAt = time.Now().Add(-2 * retxMinAge)
+	rb.entries[3].sentAt = time.Now().Add(-2 * retxMinAgeDefault)
 
 	// SACK: lastContiguous=2, seq 3 missing, seq 4 received.
 	sack := func() []uint32 { return rb.ProcessSACK(2, []uint64{0b10}, 0) }
@@ -156,20 +156,20 @@ func TestRetxBuffer_RetxBackoffSuppressesDuplicates(t *testing.T) {
 	}
 
 	// After one backoff interval (2×threshold for the 2nd retx) it is due again.
-	backdate(2*retxMinAge + time.Millisecond)
+	backdate(2*retxMinAgeDefault + time.Millisecond)
 	assert.Equal(t, []uint32{3}, sack(), "re-selected once the backoff elapses")
 	assert.Empty(t, sack(), "and suppressed again right after")
 
 	// Backoff doubles per retx: the 3rd needs 4×threshold, so 2× is not enough.
-	backdate(2*retxMinAge + time.Millisecond)
+	backdate(2*retxMinAgeDefault + time.Millisecond)
 	assert.Empty(t, sack(), "doubled backoff not yet elapsed")
-	backdate(4*retxMinAge + time.Millisecond)
+	backdate(4*retxMinAgeDefault + time.Millisecond)
 	assert.Equal(t, []uint32{3}, sack())
 
 	// The cap: retxCount keeps growing but the wait is bounded at
-	// threshold<<retxBackoffMaxShift.
+	// threshold<<retxBackoffMaxShiftDefault.
 	for i := 0; i < 10; i++ {
-		backdate(retxMinAge << (retxBackoffMaxShift + 1))
+		backdate(retxMinAgeDefault << (retxBackoffMaxShiftDefault + 1))
 		assert.Equal(t, []uint32{3}, sack(), "capped backoff stays retryable")
 	}
 
@@ -264,8 +264,8 @@ func TestRackThreshold(t *testing.T) {
 	m := newRouteMux(log, true)
 
 	// No RTT measured yet → conservative default.
-	if got := m.rackThreshold(); got != rackDefaultNoRTT {
-		t.Fatalf("no-RTT threshold = %v, want %v", got, rackDefaultNoRTT)
+	if got := m.rackThreshold(); got != rackDefaultNoRTTDefault {
+		t.Fatalf("no-RTT threshold = %v, want %v", got, rackDefaultNoRTTDefault)
 	}
 
 	// Give it 4 active legs with a heterogeneous RTT spread; the threshold must
@@ -278,22 +278,22 @@ func TestRackThreshold(t *testing.T) {
 		m.legs[i].ecfRttMs = r
 	}
 	m.legMu.Unlock()
-	want := time.Duration(rtts[3]*rackReorderFactor) * time.Millisecond // slowest leg × factor
+	want := time.Duration(rtts[3]*rackReorderFactorDefault) * time.Millisecond // slowest leg × factor
 	if got := m.rackThreshold(); got != want {
-		t.Fatalf("heterogeneous threshold = %v, want %v (slowest 441ms × %.2f)", got, want, rackReorderFactor)
+		t.Fatalf("heterogeneous threshold = %v, want %v (slowest 441ms × %.2f)", got, want, rackReorderFactorDefault)
 	}
-	if got := m.rackThreshold(); got >= retxMinAge {
-		t.Fatalf("RACK threshold %v should beat the fixed retxMinAge %v on this path", got, retxMinAge)
+	if got := m.rackThreshold(); got >= retxMinAgeDefault {
+		t.Fatalf("RACK threshold %v should beat the fixed retxMinAgeDefault %v on this path", got, retxMinAgeDefault)
 	}
 
-	// A tiny-RTT fast path floors at rackFloor (anti-storm), not near-zero.
+	// A tiny-RTT fast path floors at rackFloorDefault (anti-storm), not near-zero.
 	m.legMu.Lock()
 	for i := range m.legs {
 		m.legs[i].ecfRttMs = 5
 	}
 	m.legMu.Unlock()
-	if got := m.rackThreshold(); got != rackFloor {
-		t.Fatalf("fast-path threshold = %v, want floor %v", got, rackFloor)
+	if got := m.rackThreshold(); got != rackFloorDefault {
+		t.Fatalf("fast-path threshold = %v, want floor %v", got, rackFloorDefault)
 	}
 }
 
@@ -320,7 +320,7 @@ func TestRackThresholdTracksAckDelay(t *testing.T) {
 	if widened <= base {
 		t.Fatalf("threshold after 4s ack-delay sample = %v, want > base %v", widened, base)
 	}
-	// One sample took it half-way (EWMA 2s) → threshold ≥ 2s, above rackCeil —
+	// One sample took it half-way (EWMA 2s) → threshold ≥ 2s, above rackCeilDefault —
 	// the ceil must floor at the measured feedback delay, mirroring the RTT rule.
 	if widened < 2*time.Second {
 		t.Fatalf("threshold %v did not track the ack-delay EWMA (want ≥ 2s)", widened)
@@ -334,7 +334,7 @@ func TestRackThresholdTracksAckDelay(t *testing.T) {
 	if relaxed >= widened {
 		t.Fatalf("threshold must decay after fast acks: %v -> %v", widened, relaxed)
 	}
-	want := time.Duration(60*rackReorderFactor) * time.Millisecond
+	want := time.Duration(60*rackReorderFactorDefault) * time.Millisecond
 	if relaxed != want {
 		t.Fatalf("decayed threshold = %v, want idle-RTT basis %v", relaxed, want)
 	}

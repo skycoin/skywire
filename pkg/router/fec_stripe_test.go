@@ -7,13 +7,13 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
-// TestFECStripeCap pins the FEC-block striping cap: no leg exceeds fecDefaultR
+// TestFECStripeCap pins the FEC-block striping cap: no leg exceeds fecDefaultRDefault
 // frames of a K-frame block (so a fully-stalled leg stays within FEC's R-erasure
 // recovery), it never fails a send, and it is inert when FEC is off.
 func TestFECStripeCap(t *testing.T) {
 	m := &routeMux{
 		fecEnabled: true,
-		fecStriper: newFECStriper(fecDefaultK, fecDefaultR),
+		fecStriper: newFECStriper(fecDefaultKDefault, fecDefaultRDefault),
 		legs:       make([]*legCounters, 4),
 		ready:      []bool{true, true, true, true},
 	}
@@ -29,8 +29,8 @@ func TestFECStripeCap(t *testing.T) {
 	// Fill leg 0 to R; it is now block-full.
 	m.fecStripeUse(0)
 	m.fecStripeUse(0)
-	if got := m.fecStripeUsed[0]; got != fecDefaultR {
-		t.Fatalf("leg0 count=%d, want %d", got, fecDefaultR)
+	if got := m.fecStripeUsed[0]; got != fecDefaultRDefault {
+		t.Fatalf("leg0 count=%d, want %d", got, fecDefaultRDefault)
 	}
 	// Selecting leg 0 now reassigns to a leg with room.
 	if alt, ok := m.fecStripeReassign(tps, 0); !ok || alt == 0 {
@@ -38,7 +38,7 @@ func TestFECStripeCap(t *testing.T) {
 	}
 	// Fill every leg to R → reassignment keeps the original pick (never fail a send).
 	for i := 0; i < 4; i++ {
-		for m.fecStripeUsed[i] < fecDefaultR {
+		for m.fecStripeUsed[i] < fecDefaultRDefault {
 			m.fecStripeUse(i)
 		}
 	}
@@ -46,7 +46,7 @@ func TestFECStripeCap(t *testing.T) {
 		t.Fatalf("all legs block-full: got (%d,%v), want (0,false)", alt, ok)
 	}
 	// Advancing to the next block resets the per-leg counts → room again.
-	atomic.StoreUint32(&m.writeSeq, fecDefaultK) // block 1
+	atomic.StoreUint32(&m.writeSeq, fecDefaultKDefault) // block 1
 	if alt, ok := m.fecStripeReassign(tps, 0); ok || alt != 0 {
 		t.Fatalf("new block: got (%d,%v), want (0,false)", alt, ok)
 	}
@@ -66,7 +66,7 @@ func TestFECStripeCap(t *testing.T) {
 func TestFECStripeCapInertSingleLeg(t *testing.T) {
 	m := &routeMux{
 		fecEnabled: true,
-		fecStriper: newFECStriper(fecDefaultK, fecDefaultR),
+		fecStriper: newFECStriper(fecDefaultKDefault, fecDefaultRDefault),
 		legs:       make([]*legCounters, 1),
 		ready:      []bool{true},
 	}
