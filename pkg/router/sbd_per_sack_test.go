@@ -17,8 +17,8 @@ import (
 )
 
 // sbdSACKRig is a two-leg group whose mux feeds its per-SACK delay samples into
-// the SBD windows, with the fold rate limiter effectively off so a test can
-// deliver its samples without wall-clock sleeps.
+// the SBD windows, with the fold rate limiter effectively off (see sbdSACK) so a
+// test can deliver its samples without wall-clock sleeps.
 func sbdSACKRig(t *testing.T) (*RouteGroup, []uuid.UUID) {
 	t.Helper()
 	rg, mts, _ := createMuxRouteGroup(t, 2)
@@ -29,6 +29,28 @@ func sbdSACKRig(t *testing.T) (*RouteGroup, []uuid.UUID) {
 	require.True(t, SetSBDSampleInterval(time.Nanosecond))
 	t.Cleanup(func() { SetSBDSampleInterval(prev) })
 	return rg, []uuid.UUID{mts[0].Entry.ID, mts[1].Entry.ID}
+}
+
+// sbdSACK delivers one per-SACK delay sample (ms) down the real path —
+// recordAckDelayTp, its rate limiter, the onLegDelaySample hook — and guarantees
+// the fold.
+//
+// The limiter compares time.Now().UnixNano() deltas against SBDSampleInterval,
+// and a rig that wants every sample folded asks for an interval of 1 ns. That is
+// only ever true where the clock ticks finer than one loop iteration: Go reads
+// wall time on Windows from KUSER_SHARED_DATA at the timer-interrupt period
+// (~0.5-15.6 ms) and on darwin at ~1 us, so consecutive calls read the SAME
+// nanosecond, the delta is 0, and every sample after the first is dropped —
+// n stayed at 1, below sbd.min_samples, and the detector had nothing to rule on.
+// That is what made these cases fail on the windows and darwin lanes and pass on
+// linux. Clearing the fold stamp is the deterministic form of "the limiter is
+// off for this rig"; TestSBDSampleIntervalRateLimitsFolds still covers the
+// limiter itself, at its real interval.
+func sbdSACK(rg *RouteGroup, tpID uuid.UUID, ms float64) {
+	rg.mux.ackDelayByTpMu.Lock()
+	rg.mux.sbdFoldNano = nil
+	rg.mux.ackDelayByTpMu.Unlock()
+	rg.mux.recordAckDelayTp(tpID, time.Duration(ms*float64(time.Millisecond)))
 }
 
 // TestSBDRulesWithinAFewSACKs: two legs behind ONE uplink show the same
@@ -45,8 +67,8 @@ func TestSBDRulesWithinAFewSACKs(t *testing.T) {
 	leg1 := []float64{80, 99, 80, 99, 80, 99, 80, 99}
 	sacks := 0
 	for i := range leg0 {
-		rg.mux.recordAckDelayTp(ids[0], time.Duration(leg0[i]*float64(time.Millisecond)))
-		rg.mux.recordAckDelayTp(ids[1], time.Duration(leg1[i]*float64(time.Millisecond)))
+		sbdSACK(rg, ids[0], leg0[i])
+		sbdSACK(rg, ids[1], leg1[i])
 		sacks++
 	}
 	require.LessOrEqual(t, sacks, sbdWindowSamplesDefault, "a verdict must not need more SACKs than the window holds")
@@ -68,8 +90,8 @@ func TestSBDDoesNotParkUncorrelatedLegs(t *testing.T) {
 	leg0 := []float64{50, 140, 50, 140, 50, 140, 50, 140}
 	leg1 := []float64{90, 90.5, 90, 90.5, 90, 90.5, 90, 90.5}
 	for i := range leg0 {
-		rg.mux.recordAckDelayTp(ids[0], time.Duration(leg0[i]*float64(time.Millisecond)))
-		rg.mux.recordAckDelayTp(ids[1], time.Duration(leg1[i]*float64(time.Millisecond)))
+		sbdSACK(rg, ids[0], leg0[i])
+		sbdSACK(rg, ids[1], leg1[i])
 	}
 
 	sbdTick(rg, ids, 5_000_000, 5_000_000)
@@ -229,8 +251,8 @@ func TestIndependentLegSeriesAreNotRuledShared(t *testing.T) {
 		a := []float64{50, 140, 50, 140, 50, 140, 50, 140} // a congested queue
 		b := []float64{90, 90.5, 90, 90.5, 90, 90.5, 90, 90.5}
 		for i := range a {
-			rg.mux.recordAckDelayTp(ids[0], time.Duration(a[i]*float64(time.Millisecond)))
-			rg.mux.recordAckDelayTp(ids[1], time.Duration(b[i]*float64(time.Millisecond)))
+			sbdSACK(rg, ids[0], a[i])
+			sbdSACK(rg, ids[1], b[i])
 		}
 		sbdTick(rg, ids, 5_000_000, 5_000_000)
 		return rg
@@ -243,8 +265,8 @@ func TestIndependentLegSeriesAreNotRuledShared(t *testing.T) {
 	rg2, ids2 := sbdSACKRig(t)
 	same := []float64{50, 140, 50, 140, 50, 140, 50, 140}
 	for i := range same {
-		rg2.mux.recordAckDelayTp(ids2[0], time.Duration(same[i]*float64(time.Millisecond)))
-		rg2.mux.recordAckDelayTp(ids2[1], time.Duration(same[i]*float64(time.Millisecond)))
+		sbdSACK(rg2, ids2[0], same[i])
+		sbdSACK(rg2, ids2[1], same[i])
 	}
 	sbdTick(rg2, ids2, 5_000_000, 5_000_000)
 	require.True(t, rg2.mux.isLegStandby(1), "one series on both legs is the shared-bottleneck signature")
