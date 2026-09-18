@@ -651,7 +651,11 @@ for N in $leg_counts; do
 	name=$(app_name "leg$N"); socks=$(app_addr "$port"); set_name="mux-legs-$N"; cur_app=$name
 	setup_started=$(date +%Y-%m-%dT%H:%M:%S)
 	chosen=$(echo "$order" | tr ' ' '\n' | grep -v '^$' | head -n "$N")
-	[ "$(echo "$chosen" | wc -l)" -eq "$N" ] || { echo "$set_name: only $(echo "$chosen" | wc -l) pins available — skipping"; continue; }
+	# N pinned first hops or no legs set: a set run on fewer measures a width it
+	# does not claim. `wc -l` counts an empty $chosen as one line, so the pins
+	# are counted, not the lines.
+	nchosen=$(printf '%s\n' "$chosen" | grep -vc '^$')
+	[ "$nchosen" -eq "$N" ] || { abort_set "$set_name" "need $N ranked pins for a legs-$N set, have $nchosen (${order:-none}) — see the pin order lines above; PIN_ALLOW_UNRANKED=1 or an explicit 6th-argument order overrides"; port=$((port + 1)); continue; }
 	first=$(echo "$chosen" | head -1)
 	legs_file="$out/$set_name.target.json"
 	pin_bad=0

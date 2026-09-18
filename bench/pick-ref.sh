@@ -23,6 +23,11 @@
 # (plain bench.sh rows) and the per-candidate medians in
 # <out dir>/paired-ref.tsv, so the choice can be re-read later.
 #
+# EVERY candidate gets a row there — probed, failed (0/N) or merely recorded
+# (0/0, carrying the rank the suite or its own reference set gives it). That
+# file is what bench/lib-pins.sh ranks the pin order by, and a route missing
+# from it is "unranked", which is a worse answer than "known to be bad".
+#
 # This makes bench/drift-probe.sh unnecessary for a paired campaign: drift asks
 # "has the bar moved since it was measured", and a paired campaign measures the
 # bar next to every row, so there is no stale bar to drift from.
@@ -87,6 +92,30 @@ for tok in $(echo "$shortlist" | awk '{print $2}'); do
 	echo "pick-ref: $tok probed $m MB/s ($ok/$trials hash-verified; the full suite had it at $rank_m)"
 	[ "$m" = - ] && continue
 	if awk -v a="$m" -v b="$best_m" 'BEGIN{exit !(a + 0 > b + 0)}'; then best=$tok; best_m=$m; fi
+done
+
+# EVERY candidate is recorded, not only the ones the shortlist had room to
+# probe. A route with no row here reads as UNRANKED downstream
+# (bench/lib-pins.sh pin_order) and is then either left out or, with
+# PIN_ALLOW_UNRANKED=1, taken on nothing but its name — which is how
+# via-0255117b got back into the composition cell of chain AL, whose out dir
+# held only a copy of this file and no ref-via-*.tsv. A candidate that was not
+# probed carries `-` for its probe median and 0/0 trials, with whatever this
+# out dir knows about it in source_rank_MBps: the suite's ranking, or the
+# median of its own reference set. That number is what ranks it — or drops it,
+# when it says the route cannot carry 50 MB — so the file is self-contained
+# wherever it is copied.
+probed=$(grep -v '^#' "$f" | cut -f1 | tr '\n' ' ')
+ranking=$(paired_rank "$out")
+for tok in $(echo "$ranking" | awk '{print $2}') \
+	$(ls "$pins"/via-*.json 2>/dev/null | sed 's|.*/via-||; s|\.json$||'); do
+	[ -n "$tok" ] || continue
+	case " $probed " in *" $tok "*) continue ;; esac
+	probed="$probed$tok "
+	rank_m=$(echo "$ranking" | awk -v t="$tok" '$2 == t {print $1; exit}')
+	if [ -z "$rank_m" ] && refstat=$(pin_ref_stats "$out" "$tok"); then rank_m=${refstat%% *}; fi
+	printf '%s\t-\t0/0\t%s\n' "$tok" "${rank_m:--}" >> "$f"
+	echo "pick-ref: $tok recorded but not probed (known rank ${rank_m:--} MB/s)"
 done
 
 if [ -z "$best" ]; then
