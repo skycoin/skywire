@@ -23,10 +23,16 @@
 # down, 6-10 10 MB up, 11-15 50 MB down, 16-20 50 MB up (with trials=5; the
 # chaos row is trials*2+1 in general).
 #
-# CHAOS. Row 11 — the first 50 MB download — is the chaos row. CHAOS_AFTER_S (5)
-# seconds into the transfer, the first-hop transport of one ACTIVE tunnel is
+# CHAOS. Row 11 — the first 50 MB download — is the chaos row. Once the transfer
+# has moved CHAOS_PCT (40 %) of its bytes, or the deadline cut_deadline() derives
+# from the rate the set has already shown has passed (never later than
+# CHAOS_AFTER_S, 5 s), the first-hop transport of one ACTIVE tunnel is
 # removed with `tp rm <id>`, and the row is then timed to the first byte that
-# arrives after the cut (ttfb_after_s). Which tunnel is "active": the group whose
+# arrives after the cut (ttfb_after_s). A cut that still landed with
+# CHAOS_LATE_PCT (90 %) or more of the object already delivered records
+# ttfb_after_s as `late` and the assert as INVALID: there was nothing left to
+# recover, so the row measured the cut and not the pool.
+# Which tunnel is "active": the group whose
 # `tunnel_role` says so, when the visor reports that field, and otherwise the
 # group whose first-hop transport actually moved the download bytes of rows 1-10
 # (the carrier deltas this script is already recording). `tunnel_role` does not
@@ -84,7 +90,9 @@
 #   promote_event         >=1 tunnel_promoted (or leg_promoted on today's
 #                         develop; the value names which kind was found) — a
 #                         gate only when cut_target_role is active, INFO otherwise
-#   ttfb_after_cut_s      first byte after the cut, want < CHAOS_TTFB_MAX_S
+#   ttfb_after_cut_s      first byte after the cut, want < CHAOS_TTFB_MAX_S;
+#                         INVALID when the cut landed past CHAOS_LATE_PCT of
+#                         the object (value 'late')
 #   local_reorder_wedge   reorder_wedge events + wedge counter, this end, want 0
 #   exit_reorder_wedge    the exit's wedge counter, want 0
 #   pool_size / pool_settled / cut_target  INFO rows that date the run
@@ -118,6 +126,11 @@ chaos_size=50000000
 chaos_after=${CHAOS_AFTER_S:-5}
 chaos_pct=${CHAOS_PCT:-40}
 chaos_ttfb_max=${CHAOS_TTFB_MAX_S:-2}
+chaos_poll=${CHAOS_POLL:-0.1}
+# a cut that lands with this much of the object already delivered measured
+# nothing: see cut_deadline() and the `late` marking in chaos_row.
+chaos_late_pct=${CHAOS_LATE_PCT:-90}
+chaos_floor=${CHAOS_FLOOR_S:-0.5}
 # pool fill: poll every POOL_POLL s until the group count has not moved for
 # POOL_QUIET s, giving up after POOL_WAIT s either way.
 pool_wait=${POOL_WAIT:-180}
@@ -249,6 +262,12 @@ mux_events() {
 now() { date +%s.%N; }
 since_s() { awk -v a="$1" -v b="$(now)" 'BEGIN{printf "%.3f", b - a}'; }
 ge() { awk -v a="$1" -v b="$2" 'BEGIN{exit !(a + 0 >= b + 0)}'; }
+# now_ms / elapsed in integer milliseconds: the chaos row's poll loop runs on
+# these instead of now()/since_s()/ge(), which cost a date AND two awks per
+# sample. One `date` and shell arithmetic hold the loop near its nominal
+# CHAOS_POLL, which is the difference between sampling a fast transfer eight
+# times before the 40 % mark and sampling it twice.
+now_ms() { date +%s%3N; }
 div() { awk -v a="$1" -v b="$2" 'BEGIN{if (b + 0 > 0) printf "%.0f", a / b; else print "-"}'; }
 lt() { awk -v a="$1" -v b="$2" 'BEGIN{exit !(a + 0 < b + 0)}'; }
 # pin_short <tp id>: the pin file whose FIRST HOP is that transport. Doubles as
@@ -411,6 +430,29 @@ restore_tp() {
 	done
 	if tp_present "$cut_tp"; then echo 1; else echo 0; fi
 }
+# cut_deadline: how many seconds into the row the cut fires when the BYTE
+# trigger has not.
+#
+# WHY IT IS NOT SIMPLY CHAOS_AFTER_S. The only progress signal a download row
+# has is the size of curl's output file, and bytes do not reach curl smoothly:
+# the client reassembles the object in order, so a chunk still in flight holds
+# everything behind it back and then releases it at once. Every chaos row ever
+# recorded fired on the TIME trigger — on 2026-09-18 the 50 MB row moved
+# 9.44 MB/s and every sample before 5.180 s still read under the 20 MB mark, so
+# the fixed 5 s deadline fired at 48,955,392 of 50,000,000 bytes: 98 % of the
+# object was already in and there was no traffic left for the promoted tunnel to
+# carry, which is what "no byte arrived after the cut" actually recorded.
+# So the deadline is scaled by the rate this SET has already shown: chaos_pct of
+# the time this row is expected to take, capped at CHAOS_AFTER_S and floored at
+# CHAOS_FLOOR_S. With no completed download row to learn from it is
+# CHAOS_AFTER_S, exactly as before.
+cut_deadline() {
+	_cdr=$(grep -v '^#' "$f" 2>/dev/null | awk -F'\t' '$2 == "down" && $8 == 1 && $4 + 0 > 0 {print $4}' | sort -n |
+		awk '{a[NR] = $1} END {if (!NR) exit; printf "%.0f\n", (NR % 2) ? a[(NR + 1) / 2] : (a[NR / 2] + a[NR / 2 + 1]) / 2}')
+	case ${_cdr:-} in '' | 0 | *[!0-9]*) echo "$chaos_after"; return 0 ;; esac
+	awk -v size="$chaos_size" -v r="$_cdr" -v pct="$chaos_pct" -v cap="$chaos_after" -v floor="$chaos_floor" \
+		'BEGIN{d = size / r * pct / 100; if (d > cap) d = cap; if (d < floor) d = floor; printf "%.3f", d}'
+}
 # chaos_row <label>: the 50 MB download that gets cut. Writes bench.sh's row to
 # $f and the cut record to $chaosf, and leaves the measurement in $ttfb,
 # $cut_at, $bytes_at_cut, $ports_after.
@@ -418,26 +460,37 @@ chaos_row() {
 	label=$1 # `set --` below reassigns the positional params, as run-degrade.sh does
 	w="$tmp/row"; rm -rf "$w"; mkdir -p "$w"
 	ports_before=$(mux_info "$name" | jq -r '[.[].desc.dst_port] | join(",")' 2>/dev/null)
-	start=$(now)
+	want_bytes=$((chaos_size * chaos_pct / 100))
+	deadline=$(cut_deadline)
+	deadline_ms=$(awk -v d="$deadline" 'BEGIN{printf "%d", d * 1000}')
+	echo "$set_name $label: cut fires at $want_bytes bytes ($chaos_pct % of $chaos_size) or ${deadline}s, whichever comes first (cap ${chaos_after}s, poll ${chaos_poll}s)"
+	start_ms=$(now_ms)
 	curl -s --socks5-hostname "$socks" -m 900 -D "$w/h" -o "$w/b" \
 		-w '%{http_code} %{size_download} %{time_total} %{speed_download}' "$sink/?bytes=$chaos_size" > "$w/w" 2>/dev/null &
 	cpid=$!
-	cut_done=0; cut_at=0; bytes_at_cut=0; ttfb=-; cut_ok=0; cut_ts=-
+	cut_done=0; cut_at=0; bytes_at_cut=0; ttfb=-; cut_ok=0; cut_ts=-; cut_trigger=-
 	while kill -0 "$cpid" 2>/dev/null; do
-		e=$(since_s "$start")
+		e_ms=$(($(now_ms) - start_ms))
+		e=$(printf '%d.%03d' "$((e_ms / 1000))" "$((e_ms % 1000))")
 		p=0; [ -f "$w/b" ] && p=$(wc -c < "$w/b" | tr -d ' ')
 		case $p in '' | *[!0-9]*) p=0 ;; esac
 		if [ "$cut_done" -eq 0 ]; then
-			if [ "$p" -ge "$((chaos_size * chaos_pct / 100))" ] || ge "$e" "$chaos_after"; then
-				bytes_at_cut=$p; cut_at=$e; cut_ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+			_ctrig=
+			if [ "$p" -ge "$want_bytes" ]; then
+				_ctrig=bytes
+			elif [ "$e_ms" -ge "$deadline_ms" ]; then
+				_ctrig=deadline
+			fi
+			if [ -n "$_ctrig" ]; then
+				bytes_at_cut=$p; cut_at=$e; cut_trigger=$_ctrig; cut_ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 				timeout 60 $CLI cli tp rm "$cut_tp" >> "$out/$set_name.cut.log" 2>&1 && cut_ok=1 || cut_ok=0
 				cut_done=1
-				echo "$set_name $label: cut tp $cut_tp (rg $cut_rg, remote $cut_pk) at ${cut_at}s after $bytes_at_cut bytes (ok=$cut_ok)"
+				echo "$set_name $label: cut tp $cut_tp (rg $cut_rg, remote $cut_pk) at ${cut_at}s after $bytes_at_cut bytes, trigger=$cut_trigger (ok=$cut_ok)"
 			fi
 		elif [ "$ttfb" = - ] && [ "$p" -gt "$bytes_at_cut" ]; then
 			ttfb=$(awk -v a="$e" -v b="$cut_at" 'BEGIN{printf "%.3f", a - b}')
 		fi
-		sleep 0.25
+		sleep "$chaos_poll"
 	done
 	wait "$cpid" 2>/dev/null
 	# shellcheck disable=SC2046 # the four -w fields are split on purpose, as bench.sh does
@@ -453,11 +506,23 @@ chaos_row() {
 	rem=$((got - bytes_at_cut)); [ "$rem" -lt 0 ] && rem=0
 	gp_before=$(div "$bytes_at_cut" "$cut_at")
 	gp_after=$(div "$rem" "$(awk -v a="$secs" -v b="$cut_at" 'BEGIN{printf "%.3f", a - b}')")
+	# A cut that lands with (almost) the whole object already delivered measures
+	# nothing: no traffic is left for a promoted tunnel to carry, so "no byte
+	# arrived after the cut" is a property of the CUT, not of the recovery. Such
+	# a row is INVALID, not a failure — the measured value, if any, is kept in
+	# ttfb_measured_s so the row is still readable.
+	pct_at_cut=$((bytes_at_cut * 100 / chaos_size))
+	ttfb_meas=$ttfb
+	if [ "$pct_at_cut" -ge "$chaos_late_pct" ]; then
+		ttfb=late
+		echo "$set_name $label: the cut landed at ${pct_at_cut}% of the object (>= ${chaos_late_pct}%, trigger=$cut_trigger) — too late to measure recovery, ttfb recorded as 'late'"
+	fi
 	restored=$(restore_tp)
-	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
 		"$row" "$cut_tp" "$cut_pk" "$cut_ts" "$cut_rg" "$cut_by" "$cut_ok" "$cut_at" \
-		"$bytes_at_cut" "$ttfb" "$gp_before" "$gp_after" "$restored" >> "$chaosf"
-	echo "$set_name $label: http=$http got=$got hash_ok=$ok before=${gp_before}B/s after=${gp_after}B/s ttfb_after=${ttfb}s restored=$restored rg_ports $ports_before -> $ports_after"
+		"$bytes_at_cut" "$ttfb" "$gp_before" "$gp_after" "$restored" \
+		"$cut_trigger" "$pct_at_cut" "$ttfb_meas" >> "$chaosf"
+	echo "$set_name $label: http=$http got=$got hash_ok=$ok before=${gp_before}B/s after=${gp_after}B/s ttfb_after=${ttfb}s (measured ${ttfb_meas}s at ${pct_at_cut}% cut by $cut_trigger) restored=$restored rg_ports $ports_before -> $ports_after"
 }
 
 # --- the set ------------------------------------------------------------------
@@ -467,7 +532,7 @@ run_set() { # <tp ids> <header>
 	set_started=$(date +%Y-%m-%dT%H:%M:%S) # visor-local time, the zone the event ring is stamped in
 	echo "# $header" > "$f"
 	printf '# row\ttp\tsent_delta\trecv_delta\n' > "$c"
-	printf '# row\ttp_id\tfirst_hop_pk\tts\trg\tchosen_by\tcut_ok\tcut_at_s\tbytes_before_cut\tttfb_after_s\tgoodput_before_Bps\tgoodput_after_Bps\trestored\n' > "$chaosf"
+	printf '# row\ttp_id\tfirst_hop_pk\tts\trg\tchosen_by\tcut_ok\tcut_at_s\tbytes_before_cut\tttfb_after_s\tgoodput_before_Bps\tgoodput_after_Bps\trestored\tcut_trigger\tpct_at_cut\tttfb_measured_s\n' > "$chaosf"
 	: > "$out/$set_name.cut.log"
 	: > "$out/$set_name.recovery.tsv"
 	[ "$EXIT_SNAP" = 1 ] && printf '# row\texit_mux_route_groups\n' > "$out/$set_name.exit-recovery.tsv"
@@ -599,8 +664,14 @@ write_asserts() {
 		assert_row promote_event "$_kind (cut target was ${cut_target_role:-unknown}, not active — no promotion was called for)" \
 			"none required unless the cut target was active" INFO
 	fi
-	# (d) the first byte after the cut
-	if [ "${ttfb:--}" = - ]; then
+	# (d) the first byte after the cut. A cut that landed on the tail of the
+	# object (>= CHAOS_LATE_PCT of the bytes already in) had no traffic left to
+	# recover: INVALID — the row measured the cut's timing, not the pool.
+	if [ "${ttfb:--}" = late ]; then
+		assert_row ttfb_after_cut_s \
+			"late — the cut landed at ${pct_at_cut:-?}% of the object (trigger ${cut_trigger:--}, measured ${ttfb_meas:--}s)" \
+			"< $chaos_ttfb_max, cut below ${chaos_late_pct}% of the object" INVALID
+	elif [ "${ttfb:--}" = - ]; then
 		assert_row ttfb_after_cut_s "no byte arrived after the cut" "< $chaos_ttfb_max" FAIL
 	else
 		assert_row ttfb_after_cut_s "$ttfb" "< $chaos_ttfb_max" "$(verdict "$(lt "$ttfb" "$chaos_ttfb_max" && echo 1 || echo 0)")"

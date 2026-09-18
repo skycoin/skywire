@@ -47,6 +47,16 @@ deltas of every first-hop transport. `TUNNELS` and `LEGS` choose the counts
 (both default to `2` — see the knob table below); `[pin order]` lists pin
 shorts best route first.
 
+Given no `[pin order]`, `run-mux.sh` and `run-compose.sh` derive one from the
+run's own numbers instead of `ls` order (`pin_order`, `bench/lib-pins.sh`): the
+candidates `pick-ref.sh` probed, best median first (`paired-ref.tsv`), then the
+rest in `ls` order — and a route whose reference failed a 50 MB download cell or
+median under `PIN_MIN_MBPS` (1 MB/s) is dropped outright. Alphabetical order is
+not a ranking: on 2026-09-18 it seated via-0255117b, a route whose own reference
+measured 0.05 MB/s and failed all three 50 MB downloads that hour, in the
+composition cell's second tunnel, and the cell measured that route. The chosen
+order and the reason for every route are printed on stderr.
+
 The carrier list is a **union, re-read every row**, not the list captured at set
 start: the app's route groups are read before and after each row and every
 transport they hold joins the tracked list, which is never shortened.
@@ -261,9 +271,24 @@ legs, hops with full public keys, `remote_ip` per leg — plus each group's
 
 Rows are `run-mux.sh`'s twenty in the same order (1–5 10 MB down, 6–10 10 MB up,
 11–15 50 MB down, 16–20 50 MB up). Row 11 — the first 50 MB download — is the
-chaos row: `CHAOS_AFTER_S` (5) seconds in, the first-hop transport of one ACTIVE
+chaos row: once the transfer has moved `CHAOS_PCT` (40 %) of its bytes, or the
+deadline `cut_deadline` derives from the download rate the set has already shown
+has passed — `CHAOS_PCT` of the time this row is expected to take, capped at
+`CHAOS_AFTER_S` (5 s) — the first-hop transport of one ACTIVE
 tunnel is removed with `tp rm`, and the row is timed to the first byte that
-arrives afterwards. The active tunnel is the one `tunnel_role` names, or, when
+arrives afterwards.
+
+The deadline is scaled because the byte trigger alone cannot be relied on: the
+only progress signal is the size of curl's output file, and the client's
+in-order reassembly hands it multi-megabyte bursts, so a fast row can cross 40 %
+and 95 % inside one sampling gap. Every chaos row on record fired on the fixed
+5 s deadline, and on 2026-09-18 that meant cutting a 9.44 MB/s row at 5.180 s
+with 48,955,392 of 50,000,000 bytes already in — nothing was left for a promoted
+tunnel to carry, and the row recorded "no byte arrived after the cut" as a
+FAIL. A cut that still lands with `CHAOS_LATE_PCT` (90 %) or more of the object
+delivered now records `ttfb_after_s` as `late` and the assert as INVALID: the
+row timed the cut, not the pool. The sampling cadence is `CHAOS_POLL` (0.1 s).
+The active tunnel is the one `tunnel_role` names, or, when
 the visor does not report that field, the one whose first hop actually carried
 the downloads of rows 1–10. What may be cut is fenced as in `run-degrade.sh` —
 one of the pinned hop-1 stcpr transports (so `tp add -t stcpr <pk>` rebuilds the
@@ -273,12 +298,15 @@ is re-added right after the row and every pin is swept again at the end; a pin
 the sweep cannot restore is named, and `rig-restore.sh` is then the next step.
 
 `<set>.chaos.tsv` records what was cut (row, transport id, first-hop public key
-in full, timestamp, and the row's before/after goodput). `<set>.assert.tsv` is
+in full, timestamp, the row's before/after goodput, and — since the late-cut fix
+— `cut_trigger` (`bytes` or `deadline`), `pct_at_cut` and the measured
+`ttfb_measured_s` behind a `late`). `<set>.assert.tsv` is
 the set's pass/fail table: rows 11–15 all hash-verified; every pre-cut route
 group except the cut one still held afterwards (the no-rebuild test, with any
 port the pool refills recorded separately); at least one `tunnel_promoted` — or
 `leg_promoted`, and the row says which was found; time to first byte after the
-cut under `CHAOS_TTFB_MAX_S` (2); and zero reorder wedges at either end, read
+cut under `CHAOS_TTFB_MAX_S` (2) — INVALID, not FAIL, when the cut landed
+`late`; and zero reorder wedges at either end, read
 from the local event ring and both ends' recovery counters.
 ## The standby pool changes what "shape" means
 
@@ -299,3 +327,10 @@ still for 10 s (bounded at 60 s, `POOL_STABLE_S` / `POOL_WAIT_S`) before
 snapshotting, then print the pool size they settled at. The carriers are still
 named from every group, standby included, because a standby leg can be promoted
 mid-set; the cut row only ever targets an active one.
+
+A tunnels set that finds a different number of ACTIVE groups than `--tunnels N`
+asked for now **restarts the session once** with the asked shape, waits for the
+pool to settle and judges the re-read, saying so in one line; only a second
+mismatch is INVALID. Leftover shape is not a measurement: on 2026-09-18 the UP2
+cell left three actives behind and `mux-tunnels-2` was thrown away over a shape
+it could simply have re-taken.

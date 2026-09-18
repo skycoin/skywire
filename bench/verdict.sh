@@ -225,8 +225,13 @@ for cf in "$mux"/*.cut.tsv; do
 		printf '%-18s cut row: skipped — %s\n' "$s" "${_vr:-no row recorded}"
 		continue
 	fi
+	# ttfb_after_cut = `late`: the cut landed on the tail of the object, with no
+	# traffic left for the recovery to carry. That row is INVALID — it timed the
+	# cut, not the router — and is never read as a failure to recover
+	# (bench/lib-cut.sh CUT_LATE_PCT).
 	grep -v '^#' "$cf" | awk -F'\t' -v s="$s" \
-		'{printf "%-18s cut row %s: %s (first hop %s) ttfb_after_cut %ss, rg %s -> %s, cut_ok=%s restored=%s\n", s, $1, $2, $3, $5, $6, $7, $8, $9}'
+		'{ t = ($5 == "late" ? "INVALID (cut landed too late to measure)" : $5 "s");
+		   printf "%-18s cut row %s: %s (first hop %s) ttfb_after_cut %s, rg %s -> %s, cut_ok=%s restored=%s\n", s, $1, $2, $3, t, $6, $7, $8, $9}'
 done
 
 # --- per-set assert tables (the spread set, the standby set) ------------------
