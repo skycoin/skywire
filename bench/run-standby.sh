@@ -88,7 +88,10 @@
 # reference row of the SAME cell, on one single route, in a second proxy
 # instance on :1081, immediately before each pool row (bench/lib-paired.sh) —
 # so the pool is scored by the paired ratio instead of the day's reference bar.
-# The reference's own route is fenced off the chaos cut. PAIRED unset keeps the
+# The reference's own route is fenced off the chaos cut, so with PAIRED_REF=auto
+# the reference is chosen once the pool has SETTLED, from the candidates whose
+# first hop no active tunnel holds: a reference sitting on an active tunnel
+# fences that group out of the cut. PAIRED unset keeps the
 # bar, which is the only thing a dir with no ref-* rows can be scored against —
 # and a SMOKE dir has none, which is why chain AL's pool set came back NOBAR.
 #
@@ -367,6 +370,42 @@ ref_fenced_tps() {
 		$CLI cli proxy mux info -n "${PAIRED_SLOT1_NAME:-skysocks-client-ref}" --json 2>/dev/null |
 			jq -r '.[]?.legs[]?.transport_id // empty' 2>/dev/null
 	} | grep -v '^$' | sort -u | tr '\n' ' ' | sed 's/ *$//'
+}
+# paired_avoid_active: pick the reference AFTER the pool has settled, so it does
+# not ride a route the pool is already running as an ACTIVE tunnel.
+#
+# Chain AW resolved the reference at set start — before any tunnel existed — to
+# the fastest route of the day, the pool then dialed that same route as one of
+# its two active tunnels, and the fence above ("never the paired reference's own
+# route") removed the only cuttable active group: "no route group passes the cut
+# fences", and the set lost its cut row. So slot 1 is re-chosen here, before the
+# reference is dialed: the best-ranked candidate — paired_candidates' order,
+# which is paired_resolve's own ranking — whose pin's FIRST HOP is not the first
+# hop of a group the visor calls tunnel_role=active. `direct` holds no route
+# group and so collides with nothing. Only for PAIRED_REF=auto: an explicitly
+# named reference is what the operator asked to measure against, collision or
+# not. With no tunnel_role reported there is nothing to avoid and the resolved
+# reference stands.
+paired_avoid_active() {
+	[ "${PAIRED:-0}" = 1 ] && [ "${PAIRED_REF:-auto}" = auto ] || return 0
+	_pat=$(jq -r '.[] | select((.tunnel_role // "") == "active") | .legs[0].transport_id // empty' \
+		"$out/$set_name.legs.json" 2>/dev/null | sort -u | tr '\n' ' ')
+	[ -n "$(printf '%s' "$_pat" | tr -d ' ')" ] || return 0
+	for _pac in $(paired_candidates "$out"); do
+		if [ "$_pac" != direct ]; then
+			_pap=$_pac
+			[ -f "$_pap" ] || _pap="$pins/via-$_pac.json"
+			[ -f "$_pap" ] || continue
+			_paf=$(jq -r '.[0].forward[0].TpID // empty' "$_pap" 2>/dev/null)
+			[ -n "$_paf" ] || continue
+			case " $_pat " in *" $_paf "*) continue ;; esac
+		fi
+		[ "$_pac" = "$paired_ref" ] ||
+			echo "paired: reference '$paired_ref' rides the first hop of an ACTIVE tunnel — measuring against '$_pac' instead, so the cut fences leave an active group cuttable"
+		paired_ref=$_pac
+		return 0
+	done
+	echo "paired: every reference candidate rides the first hop of an ACTIVE tunnel — keeping '$paired_ref'; the cut row may find no group inside the fences"
 }
 # fenced_candidates <mux info json>: "dst_port tp_id remote_pk pin_short" for
 # every route group whose FIRST HOP passes all three fences — four, with a
@@ -774,7 +813,7 @@ echo "local=$local_commit exit=$ec app=$name addr=$socks tunnels=$tunnels chaos_
 paired_ref=""
 if [ "$PAIRED" = 1 ]; then
 	paired_ref=$(paired_resolve "$out" 1)
-	echo "paired references: PAIRED_REF=$PAIRED_REF resolved to '$paired_ref'; ranking was:"
+	echo "paired references: PAIRED_REF=$PAIRED_REF resolved to '$paired_ref' (re-checked against the pool's active tunnels once it settles); ranking was:"
 	paired_rank "$out" | sed 's/^/  /'
 fi
 
@@ -817,6 +856,9 @@ c="$out/$set_name.carrier.tsv"
 fenced_candidates "$(mux_info "$name")" > "$tmp/preflight"
 [ -s "$tmp/preflight" ] || { abort_set "$set_name" "no route group's first hop passes the cut fences (a pin, not the exit, not shared) — nothing restorable to cut (groups=$desc)"; exit 1; }
 echo "$name: $(grep -c . "$tmp/preflight") group(s) cuttable and restorable"
+# and now, with the pool's roles known and before run_set dials the reference,
+# make sure the reference is not sitting on one of those active tunnels
+paired_avoid_active
 
 warm "$name" || echo "$name: probes failing — running the set anyway"
 # live knobs, once per set: the visor's app store is cleared when the app stops,

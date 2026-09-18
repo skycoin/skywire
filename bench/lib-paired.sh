@@ -135,6 +135,25 @@ paired_resolve() {
 	echo "$_pt"
 }
 
+# paired_candidates <outdir>: every reference token this out dir knows, best
+# first — paired_resolve's answer, then bench/pick-ref.sh's probed candidates by
+# their probe median, then the suite ranking. Same material and the same order
+# as paired_resolve, whose answer is simply the first line; this exists for a
+# caller that has to REJECT the first choice (run-standby.sh, when the pool made
+# the reference's route an active tunnel) and needs the next one down. Nothing
+# is invented: `direct` appears only where the ranking already had it, so a
+# caller that runs off the end of this list is out of measured references and
+# should say so rather than measure against a route nothing probed.
+paired_candidates() {
+	{
+		paired_resolve "$1" 1
+		grep -v '^#' "$1/paired-ref.tsv" 2>/dev/null |
+			awk -F'\t' '$2 != "-" && $2 + 0 > 0 {printf "%s\t%s\n", $2, $1}' |
+			sort -k1,1 -gr | cut -f2
+		paired_rank "$1" | awk '{print $2}'
+	} | grep -v '^$' | awk '!seen[$0]++'
+}
+
 # _paired_stop_clean <app>: stop the instance and insist its route groups are
 # gone, retrying the stop once (run-mux.sh's rule, self-contained here so the
 # library does not depend on the caller's helpers).
@@ -176,8 +195,12 @@ paired_start() {
 		# a stub pin cannot fail the leg check informatively — it fails it every
 		# time, for a reason no line names. Say so before starting anything.
 		pin_ok "$_ppin" || { echo "paired: reference slot $_pslot has no usable pin — unpaired"; return 1; }
+		# the CLI's pin failures ("no route group to pin after …", "NOT running on
+		# the pinned route") name neither "pinned" nor "error", so the old filter
+		# printed only "Running!" and the set went unpaired with nothing said
+		# (chain AW). Keep every line that mentions a pin or a route group.
 		timeout 240 $CLI cli proxy start -k "$_pxpk" -n "$_pn" -a "$_pa" --route "$_ppin" 2>&1 |
-			grep -iv debug | grep -i "pinned\|running\|error\|fatal" | head -3
+			grep -iv debug | grep -i "pin\|route group\|running\|error\|fatal" | head -4
 		_pwant=$(jq -r '.[0].forward[0].TpID' "$_ppin" 2>/dev/null)
 		_phops=$(jq -r '.[0].forward | map(.From + ">" + .To + "@" + .TpID) | join(",")' "$_ppin" 2>/dev/null)
 		_phave=$($CLI cli proxy mux info -n "$_pn" --json 2>/dev/null | jq -r '.[0].legs[]?.transport_id')
