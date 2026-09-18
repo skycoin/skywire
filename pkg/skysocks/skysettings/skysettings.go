@@ -65,6 +65,7 @@ const (
 
 	TunnelProbeInterval    = "tunnel.probe_interval"
 	TunnelLivenessInterval = "tunnel.liveness_interval"
+	TunnelProbeFailWindow  = "tunnel.probe_fail_window"
 	TunnelRTTAlpha         = "tunnel.rtt_alpha"
 	TunnelPromoteInterval  = "tunnel.promote_interval"
 	TunnelPromoteMargin    = "tunnel.promote_margin"
@@ -232,6 +233,8 @@ func init() {
 		"how often each tunnel's RTT is re-measured (also the settings-pull tick)")
 	register(TunnelLivenessInterval, KindDuration, int64(15*time.Second),
 		"how often the keepalive loop probes each tunnel for liveness")
+	register(TunnelProbeFailWindow, KindDuration, int64(60*time.Second),
+		"how long a liveness ping may stay unanswered before it counts as a FAILED probe; a tunnel is retired only when it is BOTH silent for the hard-dead window and has a failed probe, so a local dataplane stall no longer retires healthy standbys")
 	register(TunnelRTTAlpha, KindRatio, ratio(0.25),
 		"weight of each new ping in a tunnel's RTT EWMA")
 	register(TunnelPromoteInterval, KindDuration, int64(5*time.Second),

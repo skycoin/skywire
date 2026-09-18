@@ -6,8 +6,22 @@
 // find the value the binary was built with.
 package router
 
+import "time"
+
 // forwardSpillDefault is OFF: the forward direction stays on its confined leg
 // and a full window makes the writer WAIT rather than spill the frame onto a
 // sibling, which is what kept a 50 MB upload from splitting across two skewed
 // legs. forward.spill turns it back on.
 const forwardSpillDefault = false
+
+// The transit (forward) write path's compiled defaults; see router_forward.go.
+//
+// forwardWriteTimeoutDefault is deliberately far below the transport layer's
+// own writeTimeout (1 minute): a frame this visor only RELAYS for a stranger is
+// the cheapest thing on the visor to drop, and the minute was what let one
+// wedged peer freeze the whole dataplane.
+const (
+	forwardWriteTimeoutDefault    = 2 * time.Second
+	forwardQueueDepthDefault      = 1024
+	forwardDropEventWindowDefault = time.Minute
+)

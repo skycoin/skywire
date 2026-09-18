@@ -114,6 +114,10 @@ type Client struct {
 	// than synchronizing it.
 	probeInterval  time.Duration
 	hardDeadWindow time.Duration
+	// probeFailWin is the same kind of snapshot for sessionProbeFailWindow:
+	// how long a ping may stay unanswered before it counts as a failed probe.
+	// See tunnel_liveness.go — silence alone no longer retires a tunnel.
+	probeFailWin time.Duration
 
 	// exitOpenTimeouts is the client's cumulative count of exit opens that timed
 	// out — a stream whose exit never answered the SOCKS5 greeting inside
@@ -742,6 +746,7 @@ func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 		// never reads the package-level vars.
 		probeInterval:  livenessProbeInterval,
 		hardDeadWindow: sessionHardDeadWindow,
+		probeFailWin:   sessionProbeFailWindow,
 	}
 
 	session, stamp, err := newYamuxSession(conn)
@@ -2241,6 +2246,9 @@ func (c *Client) sessionKeepAliveLoop() {
 	resC := make(chan probeResult, 64)
 	lastPong := make(map[*yamux.Session]time.Time) // last time a pong was seen (early or late)
 	inFlight := make(map[*yamux.Session]bool)      // a ping is outstanding for this session
+	// probes records what each tunnel's pings DID, which is the evidence a
+	// retire now needs on top of the silence (tunnel_liveness.go).
+	probes := newProbeLedger()
 	prevLive := -1
 
 	for {
@@ -2252,6 +2260,7 @@ func (c *Client) sessionKeepAliveLoop() {
 			// ponged, mark the tunnel alive as of now — this is what lets a wedge that
 			// clears after the probe deadline keep the tunnel from being retired.
 			inFlight[r.s] = false
+			probes.result(r.s, r.ok)
 			if r.ok {
 				lastPong[r.s] = time.Now()
 				c.recordTunnelRTT(r.s, r.rtt)
@@ -2318,6 +2327,7 @@ func (c *Client) sessionKeepAliveLoop() {
 					c.retireTunnel(s, "tunnel session closed")
 					delete(lastPong, s)
 					delete(inFlight, s)
+					probes.forget(s)
 					continue
 				}
 				if _, seen := lastPong[s]; !seen {
@@ -2329,6 +2339,7 @@ func (c *Client) sessionKeepAliveLoop() {
 				// outstanding ping's eventual pong refreshes liveness via resC.
 				if !inFlight[s] {
 					inFlight[s] = true
+					probes.sent(s, now)
 					go func(s *yamux.Session) {
 						rtt, err := s.Ping()
 						select {
@@ -2346,18 +2357,26 @@ func (c *Client) sessionKeepAliveLoop() {
 				if rt := c.lastRecvTime(s); rt.After(lastAlive) {
 					lastAlive = rt
 				}
-				if now.Sub(lastAlive) >= c.hardDeadWindow {
+				// …and only when a PROBE has actually failed. Silence is what
+				// a local dataplane stall looks like too (the visor's own
+				// inbound loop froze for 30 s on 2026-09-18 and this rule
+				// retired three healthy tunnels for it); a ping that errored,
+				// or one outstanding past tunnel.probe_fail_window, is the
+				// tunnel itself answering. See tunnel_liveness.go.
+				if now.Sub(lastAlive) >= c.hardDeadWindow &&
+					probes.failed(s, inFlight[s], now, c.probeFailWindow()) {
 					silent := now.Sub(lastAlive).Truncate(time.Second)
 					if c.appCl != nil {
-						c.appCl.Log().Warnf("No pong and no traffic either way for %v (> hard-dead window); tunnel gone, retiring it", silent)
+						c.appCl.Log().Warnf("Liveness probe failed and no traffic either way for %v (> hard-dead window); tunnel gone, retiring it", silent)
 					}
 					// Closes it AND, when it was an active tunnel, promotes the
 					// best standby into its place before this tick ends — so
 					// the next stream has somewhere live to go immediately
 					// rather than after a fresh route setup.
-					c.retireTunnel(s, fmt.Sprintf("liveness: no pong and no bytes for %v", silent))
+					c.retireTunnel(s, fmt.Sprintf("liveness: probe failed and no bytes for %v", silent))
 					delete(lastPong, s)
 					delete(inFlight, s)
+					probes.forget(s)
 				}
 			}
 			if c.allSessionsClosed() {

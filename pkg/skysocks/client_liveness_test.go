@@ -148,12 +148,21 @@ func clientClosed(c *Client) bool {
 // newLoopHarness wires a client whose sole tunnel talks to a real yamux server
 // through a gatedConn, and shrinks the loop cadence so a wedge can be simulated
 // in milliseconds. Returns the client and the gate.
-func newLoopHarness(t *testing.T) (*Client, *gatedConn) {
+func newLoopHarness(t *testing.T, probeFail ...time.Duration) (*Client, *gatedConn) {
 	t.Helper()
-	oldInterval, oldWindow := livenessProbeInterval, sessionHardDeadWindow
+	oldInterval, oldWindow, oldFail := livenessProbeInterval, sessionHardDeadWindow, sessionProbeFailWindow
 	livenessProbeInterval = 15 * time.Millisecond
 	sessionHardDeadWindow = 90 * time.Millisecond
-	t.Cleanup(func() { livenessProbeInterval, sessionHardDeadWindow = oldInterval, oldWindow })
+	// A retire needs a FAILED probe as well as the silence (tunnel_liveness.go);
+	// shrink its window with the rest of the cadence so a wedge that never clears
+	// still ages into one inside the test.
+	sessionProbeFailWindow = 90 * time.Millisecond
+	if len(probeFail) > 0 {
+		sessionProbeFailWindow = probeFail[0]
+	}
+	t.Cleanup(func() {
+		livenessProbeInterval, sessionHardDeadWindow, sessionProbeFailWindow = oldInterval, oldWindow, oldFail
+	})
 
 	p1, p2 := net.Pipe()
 	server, err := yamux.Server(p2, yamux.DefaultConfig())
@@ -236,10 +245,16 @@ func TestKeepAlive_TrueSilenceRetires(t *testing.T) {
 // sends, so the client's own pings are never ACKed. Once the peer goes fully
 // silent, the tunnel must still retire.
 func TestKeepAlive_DataFlowSurvivesPongStarvation(t *testing.T) {
-	oldInterval, oldWindow := livenessProbeInterval, sessionHardDeadWindow
+	oldInterval, oldWindow, oldFail := livenessProbeInterval, sessionHardDeadWindow, sessionProbeFailWindow
 	livenessProbeInterval = 15 * time.Millisecond
 	sessionHardDeadWindow = 90 * time.Millisecond
-	t.Cleanup(func() { livenessProbeInterval, sessionHardDeadWindow = oldInterval, oldWindow })
+	// A retire needs a FAILED probe as well as the silence (tunnel_liveness.go);
+	// shrink its window with the rest of the cadence so a wedge that never clears
+	// still ages into one inside the test.
+	sessionProbeFailWindow = 90 * time.Millisecond
+	t.Cleanup(func() {
+		livenessProbeInterval, sessionHardDeadWindow, sessionProbeFailWindow = oldInterval, oldWindow, oldFail
+	})
 
 	p1, p2 := net.Pipe()
 	c, err := NewClient(p1, nil)
@@ -308,10 +323,16 @@ func TestKeepAlive_DataFlowSurvivesPongStarvation(t *testing.T) {
 // at ~112s. Once the upload stops (and the peer stays silent), the tunnel must
 // still retire.
 func TestKeepAlive_UploadSurvivesPongStarvation(t *testing.T) {
-	oldInterval, oldWindow := livenessProbeInterval, sessionHardDeadWindow
+	oldInterval, oldWindow, oldFail := livenessProbeInterval, sessionHardDeadWindow, sessionProbeFailWindow
 	livenessProbeInterval = 15 * time.Millisecond
 	sessionHardDeadWindow = 90 * time.Millisecond
-	t.Cleanup(func() { livenessProbeInterval, sessionHardDeadWindow = oldInterval, oldWindow })
+	// A retire needs a FAILED probe as well as the silence (tunnel_liveness.go);
+	// shrink its window with the rest of the cadence so a wedge that never clears
+	// still ages into one inside the test.
+	sessionProbeFailWindow = 90 * time.Millisecond
+	t.Cleanup(func() {
+		livenessProbeInterval, sessionHardDeadWindow, sessionProbeFailWindow = oldInterval, oldWindow, oldFail
+	})
 
 	p1, p2 := net.Pipe()
 	c, err := NewClient(p1, nil)
@@ -372,4 +393,28 @@ func TestKeepAlive_UploadSurvivesPongStarvation(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatal("fully-silent tunnel was never retired after the upload stopped")
+}
+
+// TestKeepAlive_LocalStallDoesNotRetire is the regression test for the
+// 2026-09-18 collateral damage: the visor's own inbound packet loop froze for
+// ~30 s behind a wedged transit peer, every tunnel went silent at once, and
+// this loop retired three HEALTHY tunnels for it — the pool then re-dialed
+// onto unmeasured sudph routes and the set stayed degraded for ten minutes.
+//
+// Silence past the hard-dead window is NOT evidence on its own. With the
+// probe-fail window set above the stall, the outstanding ping has not failed
+// yet, so nothing may be retired.
+func TestKeepAlive_LocalStallDoesNotRetire(t *testing.T) {
+	c, gate := newLoopHarness(t, 10*time.Second) // a probe-fail window no stall here will reach
+	gate.pause()                                 // nothing moves in either direction: the local dataplane is stalled
+	time.Sleep(4 * sessionHardDeadWindow)        // well past the silence window the old rule retired on
+	if clientClosed(c) {
+		t.Fatal("a tunnel silent only because the local dataplane stalled was retired")
+	}
+	// It comes back, and the tunnel is still there to use.
+	gate.resume()
+	time.Sleep(2 * sessionHardDeadWindow)
+	if clientClosed(c) {
+		t.Fatal("the tunnel was retired after the stall cleared")
+	}
 }

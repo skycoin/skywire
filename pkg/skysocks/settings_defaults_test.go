@@ -86,6 +86,10 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 	require.Equal(t, tunnelSnubAfter, setTunnelSnubAfter())
 	require.Equal(t, tunnelSnubHold, setTunnelSnubHold())
 	require.Equal(t, tunnelDepthMargin, setTunnelDepthMargin())
+
+	// The liveness evidence window: a retire needs a FAILED probe, and this is
+	// how long a ping may stay unanswered before it counts as one.
+	require.Equal(t, sessionProbeFailWindow, skysettings.Dur(skysettings.TunnelProbeFailWindow))
 	require.Equal(t, rsDepthMin, setChunkDepthMin())
 	require.Equal(t, rsDepthMax, setChunkDepthMax())
 	require.False(t, setChunkDepthDynamic(), "chunk.depth_dynamic is off until the operator says otherwise")
@@ -97,7 +101,7 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 
 	// Every knob in the catalog is reachable: a name registered with no use site
 	// reading it is a knob the bench can set and nothing obeys.
-	require.Len(t, skysettings.Catalog(), 64)
+	require.Len(t, skysettings.Catalog(), 65)
 
 	// The shape knobs default to the flags they twin (skyenv.SkysocksClientTunnels,
 	// skyenv.SkysocksClientStandbyPool), the per-app mux pair defaults to

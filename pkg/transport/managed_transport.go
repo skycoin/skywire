@@ -91,12 +91,20 @@ type ManagedTransport struct {
 	transport   network.Transport
 	transportCh chan struct{}
 	transportMx sync.Mutex
-	// writeMx serializes writers against each other on the underlying conn, so
+	// writeSem serializes writers against each other on the underlying conn, so
 	// a packet reaches the wire as one frame. It is deliberately NOT
 	// transportMx: readPacket takes that one on every read, and holding it
 	// across an underlying write serialized every read behind every write.
 	// Never taken while transportMx is held.
-	writeMx sync.Mutex
+	//
+	// A channel rather than a sync.Mutex because the acquisition must be
+	// CANCELLABLE: the holder can be parked on a wedged conn for its whole
+	// write deadline, and a caller with a shorter deadline of its own (the
+	// transit writer's forward.write_timeout) must be able to give up on the
+	// queue instead of inheriting the holder's. Lazily made — &ManagedTransport{}
+	// literals exist in tests — via writeSlot.
+	semOnce  sync.Once
+	writeSem chan struct{}
 
 	done chan struct{}
 	wg   sync.WaitGroup
@@ -1203,8 +1211,28 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 
 // writeTimeout bounds a single transport write so a half-open conn cannot
 // park a write goroutine (and its packet buffer) forever. The write side had
-// no deadline at all; this mirrors readPacket's readTimeout.
+// no deadline at all; this mirrors readPacket's readTimeout. It is the
+// CEILING, not the value: a caller whose context carries an earlier deadline
+// gets that one charged to the conn instead (see writeDeadline).
 const writeTimeout = 1 * time.Minute
+
+// writeSlot is the one-writer-at-a-time semaphore, made on first use so a
+// zero-value ManagedTransport (tests build them) is usable.
+func (mt *ManagedTransport) writeSlot() chan struct{} {
+	mt.semOnce.Do(func() { mt.writeSem = make(chan struct{}, 1) })
+	return mt.writeSem
+}
+
+// writeDeadline is the deadline to charge the underlying conn for one write:
+// the transport's own ceiling, or the caller's if it asked for less. Without
+// this a 2 s transit write could still hold the write slot for a minute.
+func writeDeadline(ctx context.Context) time.Time {
+	dl := time.Now().Add(writeTimeout)
+	if d, ok := ctx.Deadline(); ok && d.Before(dl) {
+		return d
+	}
+	return dl
+}
 
 // WritePacket writes a packet to the remote.
 // Respects context cancellation to prevent blocking forever on dead transports.
@@ -1256,7 +1284,7 @@ func (mt *ManagedTransport) getUnderlying() network.Transport {
 	return tp
 }
 
-// writeTo writes packet to tp, holding writeMx — not transportMx — for the
+// writeTo writes packet to tp, holding writeSem — not transportMx — for the
 // underlying write.
 //
 // transportMx used to be held across the whole write, and readPacket takes
@@ -1264,11 +1292,19 @@ func (mt *ManagedTransport) getUnderlying() network.Transport {
 // every read serialized behind every in-flight write on the transport. It also
 // happened to serialize writers against each other, which is a guarantee worth
 // keeping: a routing packet must reach the wire as one frame, not interleaved
-// with another writer's. writeMx keeps exactly that, and nothing else.
+// with another writer's. writeSem keeps exactly that, and nothing else.
 //
 // The write runs in a goroutine so ctx cancellation is respected even when the
 // conn is wedged; tp is passed in so the goroutine never reads the shared
 // mt.transport field, which setTransport/close can mutate.
+//
+// Both the QUEUE and the write itself are bounded by ctx now. The deadline
+// used to be set only AFTER the slot was won, on the reasoning that waiting
+// for another writer should not be charged against this write — true, but it
+// meant a caller could sit behind a wedged holder for a full minute with
+// nothing it could do about it, which is how one stuck transit peer parked the
+// router's inbound loop. A caller that says how long it is willing to wait now
+// gets exactly that, and the waiting is where it gives up.
 func (mt *ManagedTransport) writeTo(ctx context.Context, tp network.Transport, packet routing.Packet) (int, error) {
 	type writeResult struct {
 		n   int
@@ -1281,11 +1317,15 @@ func (mt *ManagedTransport) writeTo(ctx context.Context, tp network.Transport, p
 				ch <- writeResult{0, fmt.Errorf("panic in transport write: %v", r)}
 			}
 		}()
-		mt.writeMx.Lock()
-		defer mt.writeMx.Unlock()
-		// Deadline set after the queue, so time spent waiting for another
-		// writer is not charged against this write.
-		if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		sem := mt.writeSlot()
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			ch <- writeResult{0, ctx.Err()}
+			return
+		}
+		defer func() { <-sem }()
+		if err := tp.SetWriteDeadline(writeDeadline(ctx)); err != nil {
 			mt.log.WithError(err).Debug("Failed to set write deadline")
 		}
 		n, err := tp.Write(packet)
@@ -1358,17 +1398,18 @@ func (mt *ManagedTransport) WriteRawPacket(packet routing.Packet) error {
 	// conn must not block here while holding the lock, which would freeze the
 	// whole transport — including its own close(), getTransport(), and every
 	// other method that needs the lock. WritePacket now takes the same route.
-	// writeMx keeps this frame from interleaving with a routed write's.
+	// writeSem keeps this frame from interleaving with a routed write's.
 	tp := mt.getUnderlying()
 	if tp == nil {
 		return fmt.Errorf("write raw packet: transport not set up")
 	}
-	mt.writeMx.Lock()
+	sem := mt.writeSlot()
+	sem <- struct{}{}
 	if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
 		mt.log.WithError(err).Debug("Failed to set write deadline")
 	}
 	n, err := tp.Write(packet)
-	mt.writeMx.Unlock()
+	<-sem
 	if err != nil {
 		if cur := mt.getUnderlying(); cur != nil && cur != tp {
 			// The conn was swapped under this write (#4925); the error is the
