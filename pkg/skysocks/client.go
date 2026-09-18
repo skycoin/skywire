@@ -171,6 +171,13 @@ type Client struct {
 	rsChunks atomic.Uint64
 	rsBytes  atomic.Uint64
 
+	// spreadLast holds the *spreadPlanner of the most recently COMPLETED split
+	// download or striped upload — the per-tunnel byte ledger behind the
+	// `shares=` line of its completion log (spread.go). One value, replaced
+	// wholesale, so a reader always sees one object's shares and never a mix
+	// of two.
+	spreadLast atomic.Value
+
 	// standby marks the tunnels held in the POOL rather than carrying streams.
 	// Guarded by sessionsMu, keyed like recvStamp; absent means active. A
 	// standby tunnel is a fully dialed route group + noise + yamux session to
@@ -580,6 +587,16 @@ func (m *tunnelMeter) capacity(now time.Time) (bps float64, fresh bool) {
 	defer m.mu.Unlock()
 	fresh = !m.busyAt.IsZero() && now.Sub(m.busyAt) <= setMeterFresh()
 	return m.rxCapBps, fresh
+}
+
+// capacityTx returns the tunnel's proven UPLOAD capacity in bytes/s — what a
+// striped-upload chunk will use. 0 means nothing proven yet. fresh says whether
+// a busy window updated the estimate within meterFresh of now.
+func (m *tunnelMeter) capacityTx(now time.Time) (bps float64, fresh bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	fresh = !m.busyAt.IsZero() && now.Sub(m.busyAt) <= setMeterFresh()
+	return m.txCapBps, fresh
 }
 
 // pickDir is what a new stream will mostly do, for pickSessionFor.
@@ -1145,12 +1162,72 @@ func (c *Client) promoteBestStandby(reason string) *yamux.Session {
 	if best == nil {
 		return nil
 	}
-	c.noteTunnel(best, router.MuxEventTunnelPromoted, reason, TunnelRoleActive)
+	return c.notePromoted(best, reason)
+}
+
+// notePromoted publishes a promotion whose standby-map flip has already been
+// made under sessionsMu, so the two promoters below report it identically.
+func (c *Client) notePromoted(s *yamux.Session, reason string) *yamux.Session {
+	c.noteTunnel(s, router.MuxEventTunnelPromoted, reason, TunnelRoleActive)
 	if c.appCl != nil {
 		c.appCl.Log().Infof("Promoted a standby tunnel into the active set (%s); %d active of %d held",
 			reason, c.activeLiveCount(), c.liveSessionCount())
 	}
-	return best
+	return s
+}
+
+// promoteFastestStandby is promoteBestStandby for a SPREAD: the tunnel picked
+// is the standby with the highest measured capacity in dir, not the lowest RTT.
+//
+// The distinction is the second half of the 5.13 vs 8.23 MB/s row. min_routes
+// promoted through the RTT rank, and the fastest standby of that run — the one
+// with a real capacity sample behind it — stayed in the pool while a nearer but
+// slower route took the third slot; the planner then weighed the shares
+// correctly over a set whose third member could not carry much. Capacity is the
+// statistic the planner itself assigns on (spreadCandidates), so the set it is
+// handed is now chosen on it too.
+//
+// A standby that has never carried bytes has no capacity sample, and a benched
+// one is not a candidate at all: with neither available this falls straight
+// back to promoteBestStandby, so the FAILOVER ranking is untouched — it is
+// still what runs when nothing has been measured, and it is still what the
+// failover paths call directly.
+func (c *Client) promoteFastestStandby(dir spreadDir, reason string) *yamux.Session {
+	now := time.Now()
+	c.sessionsMu.Lock()
+	var (
+		best    *yamux.Session
+		bestBps float64
+	)
+	for _, s := range c.sessions {
+		if s == nil || s.IsClosed() || !c.standby[s] {
+			continue
+		}
+		m := c.recvStamp[s]
+		if m == nil || m.onBench(now) {
+			continue
+		}
+		var bps float64
+		if dir == spreadUp {
+			bps, _ = m.capacityTx(now)
+		} else {
+			bps, _ = m.capacity(now)
+		}
+		if bps > bestBps {
+			best, bestBps = s, bps
+		}
+	}
+	if best != nil {
+		delete(c.standby, best)
+		if c.audition == best {
+			c.audition = nil
+		}
+	}
+	c.sessionsMu.Unlock()
+	if best == nil {
+		return c.promoteBestStandby(reason)
+	}
+	return c.notePromoted(best, reason)
 }
 
 // parkTunnel returns an ACTIVE tunnel to the pool: it stops being picked, goes

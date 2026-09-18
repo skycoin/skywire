@@ -250,13 +250,19 @@ func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, re
 	if total < chunk0Len {
 		chunk0Len = total
 	}
+	// The object's spread ledger, as on the plaintext path. The HTTPS split has
+	// no endgame: a duplicate here costs a second TLS handshake to the origin
+	// as well as the bytes, which is a different trade and is not measured yet.
+	pl := c.newSpreadPlanner(spreadDown)
+	pl.ensureRoutes()
+
 	var pending *chunkFetches
 	if total > chunk0Len {
 		chunkSize := c.planChunkSize(total, chunk0Len)
 		chunks := 1 + numChunks(total-chunk0Len, chunkSize)
 		if c.appCl != nil {
 			c.appCl.Log().Debugf("https range-split: %s %d bytes → %d chunks of %d bytes × %d streams",
-				host, total, chunks, chunkSize, c.rsConcurrency())
+				host, total, chunks, chunkSize, c.chunkAdmission(pl))
 		}
 		c.rsSplits.Add(1)
 		c.rsChunks.Add(uint64(chunks)) //nolint:gosec // chunks>=2 here (total>chunk0Len)
@@ -265,8 +271,8 @@ func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, re
 		// No progress sink: fetchChunkTLSRetry restarts a failed chunk from its
 		// first byte rather than resuming, so a streamed prefix could not be
 		// honoured — the TLS path keeps buffering whole chunks.
-		pending = c.startChunkFetchesFrom(chunk0Len, total, chunkSize, func(start, end int64, _ rsProgress) ([]byte, error) {
-			return c.fetchChunkTLSRetry(req, host, validator, start, end)
+		pending = c.startChunkFetchesPlanned(chunk0Len, total, chunkSize, pl, func(start, end int64, _ rsProgress, p chunkPlacement) ([]byte, error) {
+			return c.fetchChunkTLSRetry(req, host, validator, start, end, p)
 		})
 	}
 
@@ -286,19 +292,20 @@ func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, re
 	}
 
 	pending.writeInOrder(btls, func(w net.Conn, start int64) (int64, error) {
-		return c.streamTailTLSOnce(w, req, host, validator, start, total)
+		return c.streamTailTLSOnce(w, req, host, validator, start, total, pl)
 	})
 	c.rsActive.Add(-1)
+	c.logSpread("https range-split", host, total, pl)
 	btls.Close() //nolint:errcheck,gosec
 }
 
 // fetchChunkTLSRetry fetches one byte range over a fresh TLS-to-origin stream,
 // redialing on churn — the HTTPS analog of fetchChunkRetry.
-func (c *Client) fetchChunkTLSRetry(req *http.Request, host, validator string, start, end int64) ([]byte, error) {
+func (c *Client) fetchChunkTLSRetry(req *http.Request, host, validator string, start, end int64, p chunkPlacement) ([]byte, error) {
 	var err error
 	for i := 0; i < rsChunkRetries; i++ {
 		var buf []byte
-		buf, err = c.fetchChunkTLS(req, host, validator, start, end)
+		buf, err = c.fetchChunkTLS(req, host, validator, start, end, p)
 		if err == nil {
 			return buf, nil
 		}
@@ -309,11 +316,19 @@ func (c *Client) fetchChunkTLSRetry(req *http.Request, host, validator string, s
 // fetchChunkTLS opens a new exit stream, SOCKS5-CONNECTs to host:443, wraps it in a
 // verified TLS client to the origin, issues a ranged GET carrying the original
 // request's headers plus If-Range, and returns exactly the requested bytes.
-func (c *Client) fetchChunkTLS(req *http.Request, host, validator string, start, end int64) (out []byte, err error) {
-	sess, st, err := c.openChunkStream(pickSibling)
+func (c *Client) fetchChunkTLS(req *http.Request, host, validator string, start, end int64, p chunkPlacement) (out []byte, err error) {
+	size := end - start + 1
+	sess, st, err := c.openChunkStreamFor(p, size, pickSibling)
 	if err != nil {
 		return nil, err
 	}
+	// A TLS chunk is all-or-nothing (io.ReadFull below), so the reservation is
+	// either kept whole or released whole.
+	defer func() {
+		if err != nil {
+			p.pl.settle(sess, size, 0)
+		}
+	}()
 	defer st.Close() //nolint:errcheck,gosec
 	g := c.guardTunnel(sess, st)
 	defer func() { err = g.err(err) }()
@@ -352,11 +367,12 @@ func (c *Client) fetchChunkTLS(req *http.Request, host, validator string, start,
 // sequential rescue when a parallel chunk exhausts its retries. The body is
 // copied straight through under a progress-refreshed idle timeout; returns the
 // bytes written so the caller resumes from start+written.
-func (c *Client) streamTailTLSOnce(w net.Conn, req *http.Request, host, validator string, start, total int64) (n int64, err error) {
-	sess, st, err := c.openChunkStream(pickLone)
+func (c *Client) streamTailTLSOnce(w net.Conn, req *http.Request, host, validator string, start, total int64, pl *spreadPlanner) (n int64, err error) {
+	sess, st, err := c.openChunkStreamFor(chunkPlacement{pl: pl}, 0, pickLone)
 	if err != nil {
 		return 0, err
 	}
+	defer func() { pl.charge(sess, n) }()
 	defer st.Close() //nolint:errcheck,gosec
 	g := c.guardTunnel(sess, st)
 	defer func() { err = g.err(err) }()

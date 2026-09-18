@@ -309,13 +309,22 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	if total < chunk0Len {
 		chunk0Len = total
 	}
+	// The object's spread ledger. It is kept whatever the knobs say — the
+	// `shares=` line below is the client's own account of what each tunnel
+	// carried — and it STEERS the chunks only once a spread knob is set.
+	// min_routes is applied here, before the first chunk goes out, since
+	// promoting a standby after the plan is made cannot change the plan.
+	pl := c.newSpreadPlanner(spreadDown)
+	pl.ensureRoutes()
+	pl.charge(sessionOf(stream), chunk0Len)
+
 	var pending *chunkFetches
 	if total > chunk0Len {
 		chunkSize := c.planChunkSize(total, chunk0Len)
 		chunks := 1 + numChunks(total-chunk0Len, chunkSize)
 		if c.appCl != nil {
 			c.appCl.Log().Debugf("range-split: %s %d bytes → %d chunks of %d bytes × %d streams",
-				host, total, chunks, chunkSize, c.rsConcurrency())
+				host, total, chunks, chunkSize, c.chunkAdmission(pl))
 		}
 		// Observability counters (surfaced as proxystatus.RangeSplit): this is a
 		// committed multi-chunk split, so record it and mark it in flight for the
@@ -324,8 +333,8 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 		c.rsChunks.Add(uint64(chunks)) //nolint:gosec // chunks>=2 here (total>chunk0Len)
 		c.rsBytes.Add(uint64(total))   //nolint:gosec // total>0 checked above
 		c.rsActive.Add(1)
-		pending = c.startChunkFetchesFrom(chunk0Len, total, chunkSize, func(start, end int64, prog rsProgress) ([]byte, error) {
-			return c.fetchChunkRetry(req, host, validator, start, end, prog)
+		pending = c.startChunkFetchesPlanned(chunk0Len, total, chunkSize, pl, func(start, end int64, prog rsProgress, p chunkPlacement) ([]byte, error) {
+			return c.fetchChunkRetry(req, host, validator, start, end, prog, p)
 		})
 	}
 
@@ -349,11 +358,25 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	//    that exhausts its retries degrades to the sequential rescue rather than
 	//    truncating the download.
 	pending.writeInOrder(conn, func(w net.Conn, start int64) (int64, error) {
-		return c.streamTailOnce(w, req, host, validator, start, total)
+		return c.streamTailOnce(w, req, host, validator, start, total, pl)
 	})
 	c.rsActive.Add(-1)
+	c.logSpread("range-split", host, total, pl)
 	conn.Close() //nolint:errcheck,gosec
 	return host, nil, true
+}
+
+// logSpread is the object's completion line: what each tunnel carried, as a
+// percentage, keyed by the tunnel's local route-group port — the same name the
+// bench's carrier.tsv uses, so a client-side share can be matched against the
+// per-transport sent/recv deltas measured at both ends (bench/direction.sh).
+func (c *Client) logSpread(what, host string, total int64, pl *spreadPlanner) {
+	c.recordSpread(pl)
+	if c.appCl == nil || pl == nil {
+		return
+	}
+	c.appCl.Log().Debugf("%s: %s %d bytes complete over %d tunnel(s) %s top=%.0f%%",
+		what, host, total, len(pl.shares()), pl.sharesLine(), 100*pl.topShare())
 }
 
 // rsChunk is one outstanding byte range: its bytes once fetched, or the error
@@ -375,6 +398,15 @@ type rsChunk struct {
 	buf        []byte
 	err        error
 	done       chan struct{}
+	// won is closed the instant the chunk is complete, whichever attempt got
+	// there. It is the loser's cancel under the endgame (chunkPlacement.lost).
+	won chan struct{}
+	// runners counts the attempts still going, so a LOSER's failure cannot
+	// fail a chunk whose winner is still reading. dup makes the duplicate
+	// at-most-once per chunk.
+	runners atomic.Int32
+	dup     atomic.Bool
+	fin     sync.Once
 
 	mu sync.Mutex
 	// pbuf is the buffer the fetch is filling; filled is how many of its leading
@@ -388,6 +420,28 @@ type rsChunk struct {
 	// wake is closed on every advance of filled and replaced, so a writer that
 	// captured it under mu is woken exactly once per advance.
 	wake chan struct{}
+}
+
+// complete records one attempt's outcome. The FIRST success completes the
+// chunk; an error completes it only when no other attempt is still running.
+func (ch *rsChunk) complete(buf []byte, err error) {
+	if err == nil {
+		ch.fin.Do(func() {
+			ch.buf = buf
+			close(ch.won)
+			close(ch.done)
+		})
+		ch.runners.Add(-1)
+
+		return
+	}
+	if ch.runners.Add(-1) == 0 {
+		ch.fin.Do(func() {
+			ch.err = err
+			close(ch.won)
+			close(ch.done)
+		})
+	}
 }
 
 // publish records that buf[:filled] holds the chunk's first filled bytes and
@@ -466,6 +520,11 @@ type rsProgress func(buf []byte, filled int64)
 // calls prog and is delivered whole, as before.
 type rsFetchFunc func(start, end int64, prog rsProgress) ([]byte, error)
 
+// rsPlannedFetchFunc is rsFetchFunc under a spread planner: the attempt is also
+// handed its placement — the object's ledger, and for an endgame duplicate the
+// tunnel it is pinned to and the channel that tells it it lost.
+type rsPlannedFetchFunc func(start, end int64, prog rsProgress, p chunkPlacement) ([]byte, error)
+
 // chunkFetches is a running set of concurrent range fetches, started BEFORE the
 // consumer needs the bytes (chunk0 is still draining to the browser) and drained
 // in order by writeInOrder. Splitting start from drain is what lets the parallel
@@ -510,12 +569,64 @@ func (c *Client) startChunkFetches(total int64, fetch func(start, end int64) ([]
 // steps of chunkSize and returns immediately. The caller must eventually call
 // writeInOrder (or abort).
 func (c *Client) startChunkFetchesFrom(from, total, chunkSize int64, fetch rsFetchFunc) *chunkFetches {
+	return c.startChunkFetchesPlanned(from, total, chunkSize, nil,
+		func(start, end int64, prog rsProgress, _ chunkPlacement) ([]byte, error) {
+			return fetch(start, end, prog)
+		})
+}
+
+// chunkAdmission is the object-wide in-flight budget for a split download —
+// how many chunk fetches may be open at once.
+//
+// Unset, it is chunk.concurrency exactly as before: ONE budget for the object,
+// whatever width it is spread over. That gate is width-BLIND, and it is why the
+// first live spread run downloaded at 5.13 MB/s against an 8.23 MB/s single-route
+// reference (0.62x) while the uploads of the same run reached 0.91x: three
+// tunnels shared the same 8 streams, ~2.7 each, so the object finished near one
+// tunnel's solo rate no matter how well the shares were balanced. The striped
+// upload never had the cap — it gates on `inflight < live*perTunnel` — which is
+// the rule mirrored here.
+//
+// So once the spread policy STEERS, the budget is sized per active tunnel:
+// chunk.tunnel_concurrency × the active width, measured after the planner's
+// ensureRoutes has promoted standbys to min_routes. A width of one is not a
+// spread at all and keeps the object-wide value, so nothing narrows below
+// today's. With no knob set the policy does not steer and this returns
+// chunk.concurrency, unchanged.
+//
+// Never 0: an unbuffered admission gate is a producer that can never admit the
+// first chunk, since the release only happens inside the fetch it is waiting to
+// start.
+func (c *Client) chunkAdmission(pl *spreadPlanner) int {
+	conc := c.rsConcurrency()
+	if conc < 1 {
+		conc = defaultRSConcurrency
+	}
+	if pl == nil || !pl.pol.steers() {
+		return conc
+	}
+	active := c.activeLiveCount()
+	if active < 2 {
+		return conc
+	}
+	per := setChunkTunnelConcurrency()
+	if per < 1 {
+		per = 1
+	}
+	return per * active
+}
+
+// startChunkFetchesPlanned is startChunkFetchesFrom under a spread planner: the
+// fetch is handed the placement for its attempt (the ledger, and for an endgame
+// duplicate the tunnel it is pinned to and the channel that tells it it lost),
+// and the producer arms the endgame on the tail.
+func (c *Client) startChunkFetchesPlanned(from, total, chunkSize int64, pl *spreadPlanner, fetch rsPlannedFetchFunc) *chunkFetches {
 	if chunkSize < 1 {
 		chunkSize = defaultRSChunkSize
 	}
-	// The concurrency knob is read ONCE per download: a value that moved
+	// The admission budget is read ONCE per download: a value that moved
 	// mid-flight would resize an admission gate the producer is already using.
-	conc := c.rsConcurrency()
+	conc := c.chunkAdmission(pl)
 	f := &chunkFetches{
 		c:     c,
 		total: total,
@@ -531,23 +642,53 @@ func (c *Client) startChunkFetchesFrom(from, total, chunkSize int64, fetch rsFet
 		f.chunks = append(f.chunks, &rsChunk{
 			start: start, end: end,
 			done: make(chan struct{}),
+			won:  make(chan struct{}),
 			wake: make(chan struct{}),
 		})
 	}
 
 	go func() {
-		for _, ch := range f.chunks {
+		for i, ch := range f.chunks {
 			if !f.acquire(f.mem) || !f.acquire(f.sem) {
 				return
 			}
+			ch.runners.Add(1)
 			go func(ch *rsChunk) {
-				ch.buf, ch.err = fetch(ch.start, ch.end, ch.publish)
+				buf, err := fetch(ch.start, ch.end, ch.publish, chunkPlacement{pl: pl, lost: ch.won})
 				<-f.sem // admission released on FETCH completion, not on delivery
-				close(ch.done)
+				ch.complete(buf, err)
 			}(ch)
+			// The endgame: once fewer chunks remain than there are tunnels to
+			// carry them, the tail is also asked for on the fastest IDLE
+			// tunnel and the first answer wins. At most one duplicate per
+			// chunk, and only onto a tunnel that would otherwise sit out the
+			// rest of the object — so the wire cost is bounded by the tail,
+			// not by the object.
+			f.maybeDuplicate(ch, len(f.chunks)-i, pl, fetch)
 		}
 	}()
 	return f
+}
+
+// maybeDuplicate arms one endgame duplicate for ch when the policy asks for it
+// and a tunnel is idle to take it. The duplicate takes no admission slot: it is
+// the tail, there is no next chunk whose admission it could delay.
+func (f *chunkFetches) maybeDuplicate(ch *rsChunk, remaining int, pl *spreadPlanner, fetch rsPlannedFetchFunc) {
+	if pl == nil || !spreadDuplicates(remaining, f.c.activeLiveCount(), pl.pol) {
+		return
+	}
+	idle := pl.pickIdle()
+	if idle == nil || !ch.dup.CompareAndSwap(false, true) {
+		return
+	}
+	ch.runners.Add(1)
+	go func() {
+		// The duplicate publishes into the same watermark: both attempts hold
+		// the SAME absolute byte range, so whichever is further ahead may feed
+		// the in-order writer.
+		buf, err := fetch(ch.start, ch.end, ch.publish, chunkPlacement{pl: pl, pin: idle, lost: ch.won})
+		ch.complete(buf, err)
+	}()
 }
 
 // acquire takes one slot of gate, or reports false once the consumer has stopped.
@@ -666,15 +807,20 @@ func (c *Client) rescueTail(conn net.Conn, start, total int64, rescue func(w net
 // read publishes buf[:got+n] to prog, and a resumed attempt appends past that
 // watermark, so bytes already handed to the browser are never re-fetched and
 // never re-emitted.
-func (c *Client) fetchChunkRetry(req *http.Request, host, validator string, start, end int64, prog rsProgress) ([]byte, error) {
+func (c *Client) fetchChunkRetry(req *http.Request, host, validator string, start, end int64, prog rsProgress, p chunkPlacement) ([]byte, error) {
 	buf := make([]byte, end-start+1)
 	var got int64
 	return retryWithBudget(func() ([]byte, error) {
+		// An endgame duplicate whose twin already delivered the chunk stops
+		// here rather than opening another stream for bytes that have arrived.
+		if p.raceLost() {
+			return nil, errChunkRaceLost
+		}
 		n, err := c.fetchChunk(req, host, validator, start+got, end, buf[got:], func(k int) {
 			if prog != nil {
 				prog(buf, got+int64(k))
 			}
-		})
+		}, p)
 		got += n
 		if err != nil {
 			return nil, err
@@ -696,6 +842,11 @@ func retryWithBudget(fetch func() ([]byte, error), budget, backoff, backoffMax t
 		var buf []byte
 		if buf, err = fetch(); err == nil {
 			return buf, nil
+		}
+		// The chunk is already delivered by the attempt that won the endgame
+		// race. There is nothing left to retry.
+		if errors.Is(err, errChunkRaceLost) {
+			return nil, err
 		}
 		// The tunnel died under the attempt: refetch immediately on another
 		// one. No backoff (there is nothing to wait for — the next pick skips
@@ -731,15 +882,92 @@ func retryWithBudget(fetch func() ([]byte, error), budget, backoff, backoffMax t
 // an upload probe, an upload's completion fetch. Only a sibling may audition a
 // standby tunnel; see pickKind.
 func (c *Client) openChunkStream(kind pickKind) (*yamux.Session, net.Conn, error) {
-	sess := c.pickSessionKind(pickRecv, kind)
+	return c.openChunkStreamFor(chunkPlacement{}, 0, kind)
+}
+
+// chunkPlacement is where ONE chunk attempt goes and how its bytes are
+// accounted. The zero value is today's behavior: no ledger, no pin, no race.
+type chunkPlacement struct {
+	// pl is the object's ledger. nil, or a policy that steers nothing, leaves
+	// the choice to pickSessionFor.
+	pl *spreadPlanner
+	// pin is the ONE tunnel this attempt must use — set only for an endgame
+	// duplicate, whose whole purpose is the tunnel it rides. A pinned attempt
+	// never falls back to the picker: with the pin gone there is nothing to
+	// duplicate onto and the original attempt stands alone.
+	pin *yamux.Session
+	// lost is closed when another attempt won this chunk. The loser stops
+	// retrying and its stream is closed under it, so a duplicate cannot go on
+	// spending a tunnel on bytes that have already arrived.
+	lost <-chan struct{}
+}
+
+// raceLost reports whether another attempt already won this chunk.
+func (p chunkPlacement) raceLost() bool {
+	if p.lost == nil {
+		return false
+	}
+	select {
+	case <-p.lost:
+		return true
+	default:
+		return false
+	}
+}
+
+// errChunkRaceLost ends a duplicate attempt whose twin already delivered the
+// bytes. It is never surfaced: the chunk is complete.
+var errChunkRaceLost = errors.New("skysocks: another attempt delivered the chunk")
+
+// openChunkStreamFor is openChunkStream under a spread planner: the planner
+// chooses the tunnel from the object's byte ledger rather than the picker
+// choosing it from the tunnels' stream counts, and the chunk's size is BOOKED
+// against the tunnel at admission, so concurrent picks see the reservation
+// rather than all landing on the tunnel that has not moved a byte yet.
+// kind is the picker's fallback kind — see openChunkStream — and applies only
+// when the planner does not steer this attempt.
+func (c *Client) openChunkStreamFor(p chunkPlacement, size int64, kind pickKind) (*yamux.Session, net.Conn, error) {
+	sess := p.pin
+	// booked says the reservation for this chunk is already on the ledger, so
+	// the error paths below know whether they owe it back.
+	booked := false
+	if sess == nil {
+		// pick() chooses AND books in one critical section. Booking after the
+		// Open() below instead was the 2026-09-16 bug: with an admission gate
+		// of chunk.tunnel_concurrency × active tunnels every chunk of the
+		// object is admitted at once, every pick resolved against the same
+		// pre-charge ledger, and all 12 chunks of a 50 MB download landed on
+		// the one tunnel that had not moved a byte yet.
+		sess = p.pl.pick(size)
+		booked = sess != nil
+	}
+	if sess == nil || sess.IsClosed() {
+		if booked {
+			p.pl.uncharge(sess, size)
+			booked = false
+		}
+		if p.pin != nil {
+			return nil, nil, fmt.Errorf("%w: the pinned tunnel is gone", errSessionClosed)
+		}
+		sess = c.pickSessionKind(pickRecv, kind)
+	}
 	if sess == nil {
 		return nil, nil, errAllTunnelsDown
 	}
+	if !booked {
+		// The pinned tunnel and the pickSessionFor fallback are booked here:
+		// they are not the planner's choice, but their bytes are the object's.
+		p.pl.charge(sess, size)
+	}
 	if sess.IsClosed() {
+		p.pl.uncharge(sess, size)
 		return nil, nil, fmt.Errorf("%w: closed between the pick and the open", errSessionClosed)
 	}
 	st, err := sess.Open()
 	if err != nil {
+		// Nothing went out: the reservation must not steer the rest of the
+		// object away from a tunnel that carried no bytes for it.
+		p.pl.uncharge(sess, size)
 		if sess.IsClosed() {
 			return nil, nil, fmt.Errorf("%w: %v", errSessionClosed, err)
 		}
@@ -749,6 +977,35 @@ func (c *Client) openChunkStream(kind pickKind) (*yamux.Session, net.Conn, error
 
 	return sess, st, nil
 }
+
+// lostWatcher closes an in-flight chunk stream the moment ANOTHER attempt wins
+// the chunk — the endgame's counterpart to tunnelGuard. Without it the loser of
+// a race reads out a full duplicate body nobody will use, occupying the one
+// idle tunnel the duplicate was supposed to make use of.
+type lostWatcher struct {
+	done chan struct{}
+	once sync.Once
+}
+
+// watchLost arms the watcher. The caller must stop() it when its attempt
+// returns; with no race to lose (lost == nil) it starts no goroutine.
+func watchLost(st net.Conn, lost <-chan struct{}) *lostWatcher {
+	w := &lostWatcher{done: make(chan struct{})}
+	if lost == nil {
+		return w
+	}
+	go func() {
+		select {
+		case <-lost:
+			st.Close() //nolint:errcheck,gosec
+		case <-w.done:
+		}
+	}()
+
+	return w
+}
+
+func (w *lostWatcher) stop() { w.once.Do(func() { close(w.done) }) }
 
 // tunnelGuard closes an in-flight range stream the moment its tunnel dies, and
 // remembers that it did so.
@@ -836,11 +1093,14 @@ const rsRescueIdleTimeout = 60 * time.Second
 // through (never buffered — the tail can be most of the file) under a
 // progress-refreshed idle timeout. Returns the bytes actually written, so the
 // caller resumes from start+written on failure.
-func (c *Client) streamTailOnce(w net.Conn, req *http.Request, host, validator string, start, total int64) (n int64, err error) {
-	sess, st, err := c.openChunkStream(pickLone)
+func (c *Client) streamTailOnce(w net.Conn, req *http.Request, host, validator string, start, total int64, pl *spreadPlanner) (n int64, err error) {
+	sess, st, err := c.openChunkStreamFor(chunkPlacement{pl: pl}, 0, pickLone)
 	if err != nil {
 		return 0, err
 	}
+	// The rescue's bytes count toward the object's shares like any others; it
+	// is one stream, so they are booked as they are delivered.
+	defer func() { pl.charge(sess, n) }()
 	defer st.Close() //nolint:errcheck,gosec
 	g := c.guardTunnel(sess, st)
 	defer func() { err = g.err(err) }()
@@ -914,17 +1174,25 @@ func copyWithIdleTimeout(dst io.Writer, body io.Reader, under net.Conn, limit in
 // buf must be end-start+1 long. onRead (may be nil) is called with the bytes of
 // buf filled SO FAR after every read, so the in-order writer can stream the
 // frontier chunk out as it arrives.
-func (c *Client) fetchChunk(req *http.Request, host, validator string, start, end int64, buf []byte, onRead func(filled int)) (n int64, err error) {
-	sess, st, err := c.openChunkStream(pickSibling)
+func (c *Client) fetchChunk(req *http.Request, host, validator string, start, end int64, buf []byte, onRead func(filled int), p chunkPlacement) (n int64, err error) {
+	size := end - start + 1
+	sess, st, err := c.openChunkStreamFor(p, size, pickSibling)
 	if err != nil {
 		return 0, err
 	}
+	// The ledger booked the whole chunk at admission; correct it to what this
+	// attempt actually carried, so a chunk that failed and went elsewhere does
+	// not leave its first tunnel charged for bytes it never moved.
+	defer func() { p.pl.settle(sess, size, n) }()
 	defer st.Close() //nolint:errcheck,gosec
 	// A tunnel that dies under this fetch fails it AT ONCE — the deadlines below
 	// are for a slow tunnel, not a gone one — and the failure is labeled
 	// errSessionClosed so the chunk is refetched immediately on a live tunnel.
 	g := c.guardTunnel(sess, st)
 	defer func() { err = g.err(err) }()
+	// A duplicate that loses the endgame race has its stream closed under it.
+	w := watchLost(st, p.lost)
+	defer w.stop()
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
 	// ONE round trip: the SOCKS5 greeting, the CONNECT and the ranged GET go out

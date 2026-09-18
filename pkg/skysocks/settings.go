@@ -64,9 +64,12 @@ func setMeterSampleMin() time.Duration { return skysettings.Dur(skysettings.Tunn
 func setMeterCapDecay() float64        { return skysettings.Ratio(skysettings.TunnelMeterCapDecay) }
 func setMeterFresh() time.Duration     { return skysettings.Dur(skysettings.TunnelMeterFresh) }
 
-func setChunkProbeBytes() int64          { return skysettings.Bytes(skysettings.ChunkProbeBytes) }
-func setChunkMinBytes() int64            { return skysettings.Bytes(skysettings.ChunkMinBytes) }
-func setChunkPerTunnel() int             { return skysettings.Count(skysettings.ChunkPerTunnel) }
+func setChunkProbeBytes() int64 { return skysettings.Bytes(skysettings.ChunkProbeBytes) }
+func setChunkMinBytes() int64   { return skysettings.Bytes(skysettings.ChunkMinBytes) }
+func setChunkPerTunnel() int    { return skysettings.Count(skysettings.ChunkPerTunnel) }
+func setChunkTunnelConcurrency() int {
+	return skysettings.Count(skysettings.ChunkTunnelConcurrency)
+}
 func setChunkRetryBudget() time.Duration { return skysettings.Dur(skysettings.ChunkRetryBudget) }
 func setChunkIdleTimeout() time.Duration { return skysettings.Dur(skysettings.ChunkIdleTimeout) }
 func setChunkFreeRetries() int           { return skysettings.Count(skysettings.ChunkFreeRetries) }
@@ -172,6 +175,14 @@ func setUploadReplayMaxBytes() int64 {
 	}
 	return uploadReplayMaxBytes
 }
+
+// The spread policy's four knobs (spread.go). They are read as one snapshot
+// per object by spreadPolicyNow, never per chunk.
+
+func setSpreadMaxShare() float64 { return skysettings.Ratio(skysettings.SpreadMaxShare) }
+func setSpreadMinRoutes() int    { return skysettings.Count(skysettings.SpreadMinRoutes) }
+func setSpreadEndgame() bool     { return skysettings.Bool(skysettings.SpreadEndgame) }
+func setSpreadWeight() string    { return skysettings.Enum(skysettings.SpreadWeight) }
 
 func setUploadProbeTTL() time.Duration { return skysettings.Dur(skysettings.UploadProbeTTL) }
 func setUploadAckTimeout() time.Duration {

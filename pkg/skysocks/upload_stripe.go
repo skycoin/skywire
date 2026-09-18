@@ -343,6 +343,9 @@ type uploadStripe struct {
 	// first read; an object with no known total never plans one (the knob is then
 	// the chunk, as it was before the plan existed).
 	planned atomic.Int64
+	// pl is the object's spread ledger: which tunnel each chunk goes on, and
+	// what each tunnel has carried of this body. Set by run.
+	pl *spreadPlanner
 
 	mu       sync.Mutex
 	cond     *sync.Cond
@@ -394,12 +397,19 @@ func (c *Client) serveStripedUpload(conn net.Conn, u *uploadCandidate) {
 		c.appCl.Log().Debugf("striped upload: %s %d bytes in %d chunks of %d bytes completed",
 			u.host, u.total, numChunks(u.total, s.chunk), s.chunk)
 	}
+	c.logSpread("striped upload", u.host, u.total, s.pl)
 	_, _ = conn.Write(final) //nolint:errcheck
 }
 
 // run reads the body into bounded buffers and sends the chunks. It returns the
 // serialized response the browser gets — the ack that completed the object.
 func (s *uploadStripe) run() ([]byte, error) {
+	// The spread ledger for this body, planned on the UPLOAD capacity estimate.
+	// takeSlot still decides HOW MANY chunks may be out at once; the planner
+	// decides WHICH tunnel each of them takes. min_routes is applied FIRST, so
+	// the chunk below is planned over the width the object will actually have.
+	s.pl = s.c.newSpreadPlanner(spreadUp)
+	s.pl.ensureRoutes()
 	// The chunk size is planned from the object and snapshotted for the whole of
 	// it: the sink addresses a chunk by its offset, so re-planning mid-body would
 	// cut the next chunk on a boundary the sink is not expecting.
@@ -796,10 +806,19 @@ func uploadRetryWait(d time.Duration) time.Duration {
 // under a rolling write deadline WHILE the handshake replies and the ack are
 // read back — so the chunk costs no idle round trip of its own at either end.
 func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err error) {
-	sess, st, err := s.c.openChunkStream(pickSibling)
+	size := end - start + 1
+	sess, st, err := s.c.openChunkStreamFor(chunkPlacement{pl: s.pl}, size, pickSibling)
 	if err != nil {
 		return ack, err
 	}
+	// The chunk is durable only on its 2xx, so an attempt that ends any other
+	// way carried nothing this object should be charged for: the bytes go
+	// again, on whatever tunnel the planner picks next.
+	defer func() {
+		if err != nil || ack.status/100 != 2 {
+			s.pl.settle(sess, size, 0)
+		}
+	}()
 	defer st.Close() //nolint:errcheck,gosec
 	// A tunnel that dies under this PUT fails it AT ONCE — the deadlines are for a
 	// slow tunnel, not a gone one — labeled errSessionClosed so the chunk goes to

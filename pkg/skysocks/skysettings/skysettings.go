@@ -27,7 +27,8 @@ import (
 
 // Kind is how a knob's int64 payload is read and written. Everything fits in
 // an int64: bytes and counts directly, a duration as nanoseconds, a ratio as
-// the IEEE-754 bit pattern of its float64.
+// the IEEE-754 bit pattern of its float64, a bool as 0/1 and an enum as the
+// index of its value in Def.Enum.
 type Kind string
 
 // The knob kinds.
@@ -36,6 +37,8 @@ const (
 	KindCount    Kind = "count"
 	KindDuration Kind = "duration"
 	KindRatio    Kind = "ratio"
+	KindBool     Kind = "bool"
+	KindEnum     Kind = "enum"
 )
 
 // Knob names. Lowercase dotted, grouped by the machinery they steer.
@@ -65,6 +68,7 @@ const (
 	ChunkMinBytes          = "chunk.min_bytes"
 	ChunkPerTunnel         = "chunk.per_tunnel"
 	ChunkConcurrency       = "chunk.concurrency"
+	ChunkTunnelConcurrency = "chunk.tunnel_concurrency"
 	ChunkRetryBudget       = "chunk.retry_budget"
 	ChunkIdleTimeout       = "chunk.idle_timeout"
 	ChunkFreeRetries       = "chunk.free_retries"
@@ -85,6 +89,19 @@ const (
 	UploadBusyBackoff    = "upload.busy_backoff"
 	UploadBusyTries      = "upload.busy_tries"
 	UploadReplayTries    = "upload.replay_tries"
+
+	SpreadMaxShare  = "spread.max_share"
+	SpreadMinRoutes = "spread.min_routes"
+	SpreadEndgame   = "spread.endgame"
+	SpreadWeight    = "spread.weight"
+)
+
+// The values SpreadWeight takes. rate is capacity-proportional assignment (the
+// performance end of the spectrum); even assigns equally whatever a tunnel has
+// been shown to carry (the privacy end).
+const (
+	SpreadWeightRate = "rate"
+	SpreadWeightEven = "even"
 )
 
 // Def is a knob's static description: everything the CLI needs to parse a
@@ -94,12 +111,19 @@ type Def struct {
 	Kind    Kind   `json:"kind"`
 	Default int64  `json:"-"`
 	Doc     string `json:"doc,omitempty"`
+	// Enum lists the accepted values of a KindEnum knob, in payload order:
+	// the knob's int64 IS the index into this slice.
+	Enum []string `json:"enum,omitempty"`
 }
 
 type knob struct {
 	def Def
 	cur atomic.Int64
 	set atomic.Bool
+	// zeroOK marks a count whose OFF state is 0 — spread.min_routes, where
+	// "no floor" is the default. Every other count refuses a non-positive
+	// value, since 0 there means a stalled gate.
+	zeroOK bool
 }
 
 var (
@@ -116,7 +140,27 @@ func register(name string, kind Kind, def int64, doc string) {
 	order = append(order, name)
 }
 
+// registerZeroable is register for a count whose off state is 0.
+func registerZeroable(name string, kind Kind, def int64, doc string) {
+	register(name, kind, def, doc)
+	knobs[name].zeroOK = true
+}
+
+// registerEnum registers a KindEnum knob: values in payload order, the default
+// given as an index into them.
+func registerEnum(name string, values []string, def int64, doc string) {
+	register(name, KindEnum, def, doc)
+	knobs[name].def.Enum = values
+}
+
 func ratio(f float64) int64 { return int64(math.Float64bits(f)) } //nolint:gosec
+
+func boolVal(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
+}
 
 func init() {
 	register(PoolFillInterval, KindDuration, int64(2*time.Second),
@@ -161,6 +205,8 @@ func init() {
 		"range-split chunk ceiling; overrides --range-chunk-kib once set")
 	register(ChunkConcurrency, KindCount, 8,
 		"concurrent range-split chunk fetches; overrides --range-concurrency once set")
+	register(ChunkTunnelConcurrency, KindCount, 4,
+		"chunks one tunnel may carry at once on a split download the spread policy steers")
 	register(ChunkProbeBytes, KindBytes, 2<<20,
 		"bytes chunk0 asks for — the size probe, and the no-split threshold")
 	register(ChunkMinBytes, KindBytes, 1<<20,
@@ -206,6 +252,19 @@ func init() {
 		"503s one chunk waits out before the upload fails")
 	register(UploadReplayTries, KindCount, 2,
 		"times a generic POST may be replayed after its tunnel died uncommitted")
+
+	// The spread policy (docs/design/route-spread-policy.md). Every default is
+	// OFF: max_share 1.0 caps nothing, min_routes 0 asks for no floor, endgame
+	// is false and the weight is the capacity-proportional one, which is what
+	// the chunk assignment already aims at.
+	register(SpreadMaxShare, KindRatio, ratio(1.0),
+		"largest fraction of one object's bytes any single route may carry (1 = uncapped)")
+	registerZeroable(SpreadMinRoutes, KindCount, 0,
+		"routes an object must be spread over, promoting standbys to reach it (0 = no floor)")
+	register(SpreadEndgame, KindBool, boolVal(false),
+		"duplicate the last chunks on the fastest idle route and take the first to finish")
+	registerEnum(SpreadWeight, []string{SpreadWeightRate, SpreadWeightEven}, 0,
+		"how a route's share is chosen: rate = proportional to measured capacity, even = equal")
 }
 
 func lookup(name string) *knob {
@@ -234,6 +293,23 @@ func Dur(name string) time.Duration { return time.Duration(Raw(name)) }
 
 // Ratio reads a KindRatio knob.
 func Ratio(name string) float64 { return math.Float64frombits(uint64(Raw(name))) } //nolint:gosec
+
+// Bool reads a KindBool knob.
+func Bool(name string) bool { return Raw(name) != 0 }
+
+// Enum reads a KindEnum knob as the value's name; "" for an unknown knob or an
+// index the catalog does not hold.
+func Enum(name string) string {
+	k := lookup(name)
+	if k == nil {
+		return ""
+	}
+	i := k.cur.Load()
+	if i < 0 || i >= int64(len(k.def.Enum)) {
+		return ""
+	}
+	return k.def.Enum[i]
+}
 
 // IsSet reports whether the knob has been explicitly set — the difference
 // between "the compiled default" and "set to a value that happens to equal
@@ -352,10 +428,25 @@ func Parse(name, raw string) (int64, error) {
 		if err != nil {
 			return 0, fmt.Errorf("%s: %w", name, err)
 		}
-		if v <= 0 {
+		if v < 0 || (v == 0 && !k.zeroOK) {
 			return 0, fmt.Errorf("%s: must be positive, got %d", name, v)
 		}
 		return v, nil
+	case KindBool:
+		switch strings.ToLower(raw) {
+		case "true", "yes", "on", "1":
+			return 1, nil
+		case "false", "no", "off", "0":
+			return 0, nil
+		}
+		return 0, fmt.Errorf("%s: want true or false, got %q", name, raw)
+	case KindEnum:
+		for i, v := range k.def.Enum {
+			if strings.EqualFold(raw, v) {
+				return int64(i), nil
+			}
+		}
+		return 0, fmt.Errorf("%s: want one of %s, got %q", name, strings.Join(k.def.Enum, "|"), raw)
 	case KindRatio:
 		f, err := strconv.ParseFloat(raw, 64)
 		if err != nil {
@@ -384,6 +475,13 @@ func Format(name string, v int64) string {
 	case KindRatio:
 		return strconv.FormatFloat(math.Float64frombits(uint64(v)), 'g', -1, 64) //nolint:gosec
 	case KindCount:
+		return strconv.FormatInt(v, 10)
+	case KindBool:
+		return strconv.FormatBool(v != 0)
+	case KindEnum:
+		if v >= 0 && v < int64(len(k.def.Enum)) {
+			return k.def.Enum[v]
+		}
 		return strconv.FormatInt(v, 10)
 	}
 	return strconv.FormatInt(v, 10)
