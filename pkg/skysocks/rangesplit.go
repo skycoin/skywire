@@ -324,8 +324,8 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 		c.rsChunks.Add(uint64(chunks)) //nolint:gosec // chunks>=2 here (total>chunk0Len)
 		c.rsBytes.Add(uint64(total))   //nolint:gosec // total>0 checked above
 		c.rsActive.Add(1)
-		pending = c.startChunkFetchesFrom(chunk0Len, total, chunkSize, func(start, end int64) ([]byte, error) {
-			return c.fetchChunkRetry(req, host, validator, start, end)
+		pending = c.startChunkFetchesFrom(chunk0Len, total, chunkSize, func(start, end int64, prog rsProgress) ([]byte, error) {
+			return c.fetchChunkRetry(req, host, validator, start, end, prog)
 		})
 	}
 
@@ -358,12 +358,113 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 
 // rsChunk is one outstanding byte range: its bytes once fetched, or the error
 // that ended its retry budget.
+//
+// A chunk also carries a STREAMING watermark. The chunk writeInOrder is
+// currently waiting on — the frontier — publishes the buffer it is filling and
+// how much of it has arrived after every read, so the in-order writer can hand
+// the browser that prefix instead of waiting for the whole chunk. The barrier
+// was the bulk of the cost of a mid-transfer cut: measured on the rig
+// (bench/2026-09-16/03ece1e95-smoke, mux-standby-8, the active tunnel cut 5.2 s
+// into a 50 MB download) the group closed at t, retire+promote landed at t+2.0 s
+// and the browser's next byte only at t+7.0 s — detection was ~1.8 s of that and
+// the remaining ~5 s was the frontier chunk having to refetch its whole
+// remainder on a just-promoted tunnel before ANY of it could be written.
+// Uploads, which have no such barrier, recover in 1.7–1.8 s on the same rig.
 type rsChunk struct {
 	start, end int64
 	buf        []byte
 	err        error
 	done       chan struct{}
+
+	mu sync.Mutex
+	// pbuf is the buffer the fetch is filling; filled is how many of its leading
+	// bytes are final. The fetch owns [filled, len) and the writer reads
+	// [emitted, filled) — disjoint regions of ONE buffer, which is what keeps a
+	// resumed attempt consistent with what the browser has already seen
+	// (fetchChunkRetry re-asks for [start+got, end] and fills the same buffer at
+	// that offset, so it can never re-emit or skip a byte).
+	pbuf   []byte
+	filled int64
+	// wake is closed on every advance of filled and replaced, so a writer that
+	// captured it under mu is woken exactly once per advance.
+	wake chan struct{}
 }
+
+// publish records that buf[:filled] holds the chunk's first filled bytes and
+// will not be rewritten. Safe on a nil chunk (a fetch with nowhere to report).
+func (ch *rsChunk) publish(buf []byte, filled int64) {
+	if ch == nil {
+		return
+	}
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	if filled <= ch.filled {
+		return
+	}
+	ch.pbuf, ch.filled = buf, filled
+	close(ch.wake)
+	ch.wake = make(chan struct{})
+}
+
+// release drops the chunk's buffers once it has been written to the browser.
+func (ch *rsChunk) release() {
+	ch.mu.Lock()
+	ch.pbuf, ch.buf = nil, nil
+	ch.mu.Unlock()
+}
+
+// streamTo writes the chunk to conn as its bytes arrive, returning once the
+// chunk is finished (or conn failed). It reports how many of the chunk's bytes
+// reached conn, a write error (the browser is gone) and the fetch's own error —
+// the byte count is the caller's resume point, since a streamed prefix must
+// never be sent twice and nothing may be skipped between it and the rescue.
+//
+// A chunk that never publishes progress is written WHOLE on completion, exactly
+// as before: an unreporting fetch (the HTTPS path, a test's fake fetch) cannot
+// promise that a partial result survives into its retry.
+func (ch *rsChunk) streamTo(conn net.Conn) (emitted int64, werr, ferr error) {
+	for {
+		ch.mu.Lock()
+		buf, filled, wake := ch.pbuf, ch.filled, ch.wake
+		ch.mu.Unlock()
+		if filled > emitted {
+			n, err := conn.Write(buf[emitted:filled])
+			emitted += int64(n)
+			if err != nil {
+				return emitted, err, nil
+			}
+
+			continue
+		}
+		select {
+		case <-ch.done:
+			if ch.err != nil {
+				return emitted, nil, ch.err
+			}
+			// The fetch's returned buffer is the authority on the chunk's
+			// bytes; whatever the streamed prefix did not cover goes out here.
+			if int64(len(ch.buf)) > emitted {
+				n, err := conn.Write(ch.buf[emitted:])
+				emitted += int64(n)
+				if err != nil {
+					return emitted, err, nil
+				}
+			}
+
+			return emitted, nil, nil
+		case <-wake:
+		}
+	}
+}
+
+// rsProgress is how a fetch publishes its partial result: buf[:filled] holds the
+// range's first filled bytes and will not be rewritten.
+type rsProgress func(buf []byte, filled int64)
+
+// rsFetchFunc fetches one [start, end] byte range, reporting into prog as the
+// bytes land. A fetch that cannot resume from a partial result simply never
+// calls prog and is delivered whole, as before.
+type rsFetchFunc func(start, end int64, prog rsProgress) ([]byte, error)
 
 // chunkFetches is a running set of concurrent range fetches, started BEFORE the
 // consumer needs the bytes (chunk0 is still draining to the browser) and drained
@@ -401,13 +502,14 @@ const rsOutstandingFactor = 2
 // the configured chunk size. Kept for callers with nothing to plan against (no
 // known total split point); startChunkFetchesFrom is the planned form.
 func (c *Client) startChunkFetches(total int64, fetch func(start, end int64) ([]byte, error)) *chunkFetches {
-	return c.startChunkFetchesFrom(c.rsChunkSize(), total, c.rsChunkSize(), fetch)
+	return c.startChunkFetchesFrom(c.rsChunkSize(), total, c.rsChunkSize(),
+		func(start, end int64, _ rsProgress) ([]byte, error) { return fetch(start, end) })
 }
 
 // startChunkFetchesFrom launches the concurrent fetches for [from, total) in
 // steps of chunkSize and returns immediately. The caller must eventually call
 // writeInOrder (or abort).
-func (c *Client) startChunkFetchesFrom(from, total, chunkSize int64, fetch func(start, end int64) ([]byte, error)) *chunkFetches {
+func (c *Client) startChunkFetchesFrom(from, total, chunkSize int64, fetch rsFetchFunc) *chunkFetches {
 	if chunkSize < 1 {
 		chunkSize = defaultRSChunkSize
 	}
@@ -426,7 +528,11 @@ func (c *Client) startChunkFetchesFrom(from, total, chunkSize int64, fetch func(
 		if end >= total {
 			end = total - 1
 		}
-		f.chunks = append(f.chunks, &rsChunk{start: start, end: end, done: make(chan struct{})})
+		f.chunks = append(f.chunks, &rsChunk{
+			start: start, end: end,
+			done: make(chan struct{}),
+			wake: make(chan struct{}),
+		})
 	}
 
 	go func() {
@@ -435,7 +541,7 @@ func (c *Client) startChunkFetchesFrom(from, total, chunkSize int64, fetch func(
 				return
 			}
 			go func(ch *rsChunk) {
-				ch.buf, ch.err = fetch(ch.start, ch.end)
+				ch.buf, ch.err = fetch(ch.start, ch.end, ch.publish)
 				<-f.sem // admission released on FETCH completion, not on delivery
 				close(ch.done)
 			}(ch)
@@ -458,7 +564,12 @@ func (f *chunkFetches) acquire(gate chan struct{}) bool {
 // it could deliver a byte). Safe to call more than once.
 func (f *chunkFetches) abort() { f.stopOnce.Do(func() { close(f.stop) }) }
 
-// writeInOrder writes the fetched chunks to conn in order.
+// writeInOrder writes the fetched chunks to conn in order, STREAMING the
+// frontier chunk: the chunk the browser is waiting on is written as its bytes
+// arrive rather than after it completes, so a chunk that loses its tunnel
+// mid-body costs the browser one detection instead of one whole chunk (see
+// rsChunk). Chunks behind the frontier still buffer — nothing may overtake the
+// byte order — and stream their remainder once their turn comes.
 //
 // When a chunk exhausts its retry budget, the split does NOT truncate the
 // download: it degrades to the SEQUENTIAL rescue path — rescue streams
@@ -473,20 +584,23 @@ func (f *chunkFetches) abort() { f.stopOnce.Do(func() { close(f.stop) }) }
 func (f *chunkFetches) writeInOrder(conn net.Conn, rescue func(w net.Conn, start int64) (int64, error)) {
 	defer f.abort()
 	for _, ch := range f.chunks {
-		<-ch.done
-		if ch.err != nil {
+		emitted, werr, ferr := ch.streamTo(conn)
+		if werr != nil {
+			break // the browser is gone; caller closes conn
+		}
+		if ferr != nil {
 			if f.c.appCl != nil {
-				f.c.appCl.Log().Debugf("range-split: chunk %d-%d failed: %v", ch.start, ch.end, ch.err)
+				f.c.appCl.Log().Debugf("range-split: chunk %d-%d failed after %d streamed bytes: %v", ch.start, ch.end, emitted, ferr)
 			}
 			if rescue != nil {
-				f.c.rescueTail(conn, ch.start, f.total, rescue)
+				// Resume at the first byte the browser has NOT seen. The
+				// streamed prefix must not be sent twice and no byte may be
+				// skipped between it and the rescue.
+				f.c.rescueTail(conn, ch.start+emitted, f.total, rescue)
 			}
 			break // rescued (or truncated with no rescue); caller closes conn
 		}
-		if _, err := conn.Write(ch.buf); err != nil {
-			break
-		}
-		ch.buf = nil
+		ch.release()
 		<-f.mem // the buffer is gone; let the producer queue another chunk
 	}
 }
@@ -548,11 +662,19 @@ func (c *Client) rescueTail(conn net.Conn, start, total int64, rescue func(w net
 // that was not on the cut tunnel). Ranges are absolute byte offsets at the
 // origin, so a resume is just the next ranged GET; nothing about the chunk plan
 // changes.
-func (c *Client) fetchChunkRetry(req *http.Request, host, validator string, start, end int64) ([]byte, error) {
+// The same single buffer is what makes the frontier chunk STREAMABLE: every
+// read publishes buf[:got+n] to prog, and a resumed attempt appends past that
+// watermark, so bytes already handed to the browser are never re-fetched and
+// never re-emitted.
+func (c *Client) fetchChunkRetry(req *http.Request, host, validator string, start, end int64, prog rsProgress) ([]byte, error) {
 	buf := make([]byte, end-start+1)
 	var got int64
 	return retryWithBudget(func() ([]byte, error) {
-		n, err := c.fetchChunk(req, host, validator, start+got, end, buf[got:])
+		n, err := c.fetchChunk(req, host, validator, start+got, end, buf[got:], func(k int) {
+			if prog != nil {
+				prog(buf, got+int64(k))
+			}
+		})
 		got += n
 		if err != nil {
 			return nil, err
@@ -784,8 +906,10 @@ func copyWithIdleTimeout(dst io.Writer, body io.Reader, under net.Conn, limit in
 //
 // It returns how many bytes it DID deliver even on failure, so the caller can
 // resume the chunk from start+n instead of re-fetching what already arrived.
-// buf must be end-start+1 long.
-func (c *Client) fetchChunk(req *http.Request, host, validator string, start, end int64, buf []byte) (n int64, err error) {
+// buf must be end-start+1 long. onRead (may be nil) is called with the bytes of
+// buf filled SO FAR after every read, so the in-order writer can stream the
+// frontier chunk out as it arrives.
+func (c *Client) fetchChunk(req *http.Request, host, validator string, start, end int64, buf []byte, onRead func(filled int)) (n int64, err error) {
 	sess, st, err := c.openChunkStream()
 	if err != nil {
 		return 0, err
@@ -822,7 +946,7 @@ func (c *Client) fetchChunk(req *http.Request, host, validator string, start, en
 	// carrying the file (measured live: 48.5MB received for a 20MB download,
 	// 2.4x waste). Rolling the deadline forward on every read means only a
 	// genuinely STALLED stream fails; a slow-but-moving one completes.
-	got, rerr := readChunkBody(st, resp.Body, buf[:end-start+1], setChunkIdleTimeout())
+	got, rerr := readChunkBodyProgress(st, resp.Body, buf[:end-start+1], setChunkIdleTimeout(), onRead)
 	return int64(got), rerr
 }
 
@@ -845,6 +969,13 @@ type readDeadliner interface {
 // forever while it holds its memory permits — a silent all-paths stall. A
 // streak means a broken reader: fail the attempt and let the retry decide.
 func readChunkBody(st readDeadliner, body io.Reader, buf []byte, idle time.Duration) (int, error) {
+	return readChunkBodyProgress(st, body, buf, idle, nil)
+}
+
+// readChunkBodyProgress is readChunkBody reporting its watermark: onRead (nil to
+// skip) is called with the bytes filled so far after every read that delivered
+// any, which is what lets writeInOrder stream the frontier chunk.
+func readChunkBodyProgress(st readDeadliner, body io.Reader, buf []byte, idle time.Duration, onRead func(filled int)) (int, error) {
 	got := 0
 	zeroReads := 0
 	const maxZeroReads = 64
@@ -854,6 +985,9 @@ func readChunkBody(st readDeadliner, body io.Reader, buf []byte, idle time.Durat
 		got += n
 		if n > 0 {
 			zeroReads = 0
+			if onRead != nil {
+				onRead(got)
+			}
 		} else if rerr == nil {
 			if zeroReads++; zeroReads >= maxZeroReads {
 				return got, fmt.Errorf("chunk body stuck: %d consecutive zero-byte reads with no error", zeroReads)

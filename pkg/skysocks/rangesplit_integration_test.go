@@ -110,13 +110,13 @@ func socks5Get(t *testing.T, proxyAddr, path string) *http.Response {
 	return resp
 }
 
-// rsTestConcurrency is the range-split concurrency every newRSTestClient case
-// runs at.
+// rsTestConcurrency is the range-split concurrency most newRSTestClient cases
+// run at.
 const rsTestConcurrency = 4
 
-// Every caller splits over the same four concurrent range streams, so the
-// concurrency is fixed here rather than passed in.
-func newRSTestClient(t *testing.T, backendAddr string, chunk int64) string {
+// Most callers split over rsTestConcurrency concurrent range streams; the
+// frontier cases need a narrower split, so conc is a parameter.
+func newRSTestClient(t *testing.T, backendAddr string, conc int, chunk int64) string {
 	t.Helper()
 	// TCP socketpair between the client and the fake exit.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -140,7 +140,7 @@ func newRSTestClient(t *testing.T, backendAddr string, chunk int64) string {
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
-	client.SetRangeSplit(true, rsTestConcurrency, chunk)
+	client.SetRangeSplit(true, conc, chunk)
 	t.Cleanup(func() { _ = client.Close() }) //nolint:errcheck
 
 	// Bind a free port, hand it to ListenAndServe.
@@ -179,7 +179,7 @@ func TestRangeSplitByteIdentity(t *testing.T) {
 	defer backend.Close()
 
 	// 1 MiB chunks over 20 MiB → 20 chunks across 4 concurrent streams.
-	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 1<<20)
+	proxy := newRSTestClient(t, backend.Listener.Addr().String(), rsTestConcurrency, 1<<20)
 
 	resp := socks5Get(t, proxy, "/blob.bin")
 	defer resp.Body.Close() //nolint:errcheck
@@ -214,7 +214,7 @@ func TestRangeSplitNonRangeServer(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 1<<20)
+	proxy := newRSTestClient(t, backend.Listener.Addr().String(), rsTestConcurrency, 1<<20)
 	resp := socks5Get(t, proxy, "/nr.bin")
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != 200 {
@@ -239,7 +239,7 @@ func TestRangeSplitSmallFile(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 1<<20)
+	proxy := newRSTestClient(t, backend.Listener.Addr().String(), rsTestConcurrency, 1<<20)
 	resp := socks5Get(t, proxy, "/s.bin")
 	defer resp.Body.Close() //nolint:errcheck
 	got, err := io.ReadAll(resp.Body)
