@@ -462,3 +462,153 @@ func (c *Client) ensureMinRoutes(n int, dir spreadDir, reason string) int {
 	}
 	return c.activeLiveCount()
 }
+
+// medianMeasured is the median of the capacities that have actually been
+// measured (the positive entries), 0 when none has. It is what a striped
+// upload credits a tunnel it knows nothing about.
+//
+// Crediting an unmeasured tunnel the BEST capacity present is right for a
+// download — a tunnel that never gets a chunk is never measured, and the cost
+// of probing one is a chunk that arrives late among many. It is wrong for a
+// SMALL striped upload, where every chunk is admitted before any of them
+// reports back and the object finishes when its slowest chunk does: measured
+// live 2026-09-16 (bench/2026-09-16/e128db1ff-smoke/mux-tunnels-2, 10 MB
+// uploads over two tunnels of 31.6 ms and 135.8 ms), the row that put one
+// chunk on a third tunnel created mid-set and never measured ran x0.265 of the
+// single-route bar, against x1.107 for the row that used the fast tunnel
+// alone. The median is the honest prior: an unproven tunnel is no better than
+// the middle of the ones that have proven something.
+func medianMeasured(capsBps []float64) float64 {
+	seen := make([]float64, 0, len(capsBps))
+	for _, c := range capsBps {
+		if c > 0 {
+			seen = append(seen, c)
+		}
+	}
+	if len(seen) == 0 {
+		return 0
+	}
+	sort.Float64s(seen)
+	if n := len(seen); n%2 == 1 {
+		return seen[n/2]
+	}
+	return (seen[len(seen)/2-1] + seen[len(seen)/2]) / 2
+}
+
+// spreadBurst assigns n chunks of ONE object to the tunnels in capsBps and
+// returns the tunnel index each chunk belongs on, chunk 0 first.
+//
+// It exists for the case the per-chunk picker cannot answer: an object small
+// enough that every one of its chunks is admitted before any of them has moved
+// a byte. The picker then resolves the whole burst against the same stale
+// ledger and places the chunks round-robin, which for two tunnels of very
+// different speeds is the worst assignment available — the object finishes at
+// the slow tunnel's pace while the fast one idles. Live, at 2.5 MB chunks over
+// a 31.6 ms and a 135.8 ms tunnel: 4/0 ran 1.61 s (x1.107 of the single-route
+// bar), 3/1 ran x0.393 with the lone slow chunk taking ~3.6 s while the fast
+// tunnel sat idle for 2.6 s of it, and 2/1/1 over a third, never-measured
+// tunnel ran x0.265.
+//
+// Three rules:
+//
+//  1. WEIGHTS. A measured tunnel weighs its capacity; an unmeasured one weighs
+//     medianMeasured. With nothing measured anywhere there is no slow tunnel to
+//     avoid and the chunks go round-robin, which is equal shares.
+//  2. PROPORTIONS. Seats are apportioned by largest remainder, then every
+//     tunnel but the fastest is capped at floor(n × w_i / Σw) — so at 6 MB/s
+//     beside 0.7 MB/s a four-chunk object puts nothing on the slow tunnel, and
+//     the fastest absorbs whatever the caps leave over.
+//  3. THE TAIL. The chunks are emitted slowest tunnel first, so the LAST chunk
+//     of the object — the one that decides when it completes, because there is
+//     no later chunk behind it to hide its latency — always lands on the
+//     fastest tunnel.
+func spreadBurst(capsBps []float64, n int) []int {
+	k := len(capsBps)
+	if n <= 0 || k == 0 {
+		return nil
+	}
+	credit := medianMeasured(capsBps)
+	if credit <= 0 || k == 1 {
+		// Nothing proven anywhere (or nowhere else to put a chunk): equal
+		// shares, which is what the picker's fewest-streams rule already does.
+		out := make([]int, n)
+		for i := range out {
+			out[i] = i % k
+		}
+		return out
+	}
+	weights := make([]float64, k)
+	total, fastest := 0.0, 0
+	for i, c := range capsBps {
+		weights[i] = c
+		if weights[i] <= 0 {
+			weights[i] = credit
+		}
+		total += weights[i]
+		if weights[i] > weights[fastest] {
+			fastest = i
+		}
+	}
+	counts := seatsByRemainder(weights, total, n)
+	// The cap, and the fastest tunnel absorbing what it leaves over.
+	left := n
+	for i := range counts {
+		if i == fastest {
+			continue
+		}
+		if capped := int(float64(n) * weights[i] / total); counts[i] > capped {
+			counts[i] = capped
+		}
+		left -= counts[i]
+	}
+	counts[fastest] = left
+	// Slowest first, so the object's last chunk is the fastest tunnel's.
+	order := make([]int, k)
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(a, b int) bool { return weights[order[a]] < weights[order[b]] })
+	out := make([]int, 0, n)
+	for _, lane := range order {
+		for j := 0; j < counts[lane]; j++ {
+			out = append(out, lane)
+		}
+	}
+	return out
+}
+
+// seatsByRemainder apportions n seats over the weights: each takes its whole
+// quota, and the seats the quotas leave unassigned go to the largest fractional
+// remainders (ties to the heavier weight, then the lower index). It is Hamilton
+// apportionment, and it is only the first half of spreadBurst's rule 2 — the
+// per-tunnel cap is applied to what it returns.
+func seatsByRemainder(weights []float64, total float64, n int) []int {
+	counts := make([]int, len(weights))
+	if total <= 0 {
+		return counts
+	}
+	type rem struct {
+		i    int
+		frac float64
+		w    float64
+	}
+	rems := make([]rem, 0, len(weights))
+	seated := 0
+	for i, w := range weights {
+		q := float64(n) * w / total
+		counts[i] = int(q)
+		seated += counts[i]
+		rems = append(rems, rem{i: i, frac: q - float64(counts[i]), w: w})
+	}
+	sort.SliceStable(rems, func(a, b int) bool {
+		if rems[a].frac != rems[b].frac {
+			return rems[a].frac > rems[b].frac
+		}
+		return rems[a].w > rems[b].w
+	})
+	for j := 0; seated < n && j < len(rems); j++ {
+		counts[rems[j].i]++
+		seated++
+	}
+	return counts
+}

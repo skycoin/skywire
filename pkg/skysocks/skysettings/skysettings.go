@@ -101,6 +101,7 @@ const (
 	UploadCutTries       = "upload.cut_tries"
 	UploadReplayTries    = "upload.replay_tries"
 	UploadDepthDynamic   = "upload.depth_dynamic"
+	UploadBurstPlan      = "upload.burst_plan"
 
 	SpreadMaxShare  = "spread.max_share"
 	SpreadMinRoutes = "spread.min_routes"
@@ -280,6 +281,8 @@ func init() {
 		"times a generic POST may be replayed after its tunnel died uncommitted")
 	register(UploadDepthDynamic, KindBool, boolVal(false),
 		"size the per-tunnel upload depth from the bandwidth-delay product instead of upload.concurrency; shares chunk.depth_min/max and tunnel.depth_margin")
+	register(UploadBurstPlan, KindBool, boolVal(true),
+		"place a striped upload whose chunks are ALL admitted at once by measured upload capacity and RTT, keeping the object's last chunk off the slow route")
 
 	// The spread policy (docs/design/route-spread-policy.md). Every default is
 	// OFF: max_share 1.0 caps nothing, min_routes 0 asks for no floor, endgame

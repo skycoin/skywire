@@ -644,7 +644,15 @@ type pickDir int
 const (
 	pickAny  pickDir = iota // a lone stream (browser connection, upload): lowest RTT wins
 	pickRecv                // a range chunk: the tunnel will mostly deliver
+	pickSend                // a striped-upload chunk: the tunnel will mostly send
 )
+
+// up reports whether the pick weighs the UPLOAD direction. A tunnel's two
+// capacities are measured separately (tunnelMeter.sample decays a direction
+// only when that direction moved bytes), and on the rig they differ by a factor
+// of four on the same tunnel, so a striped-upload chunk scored on the download
+// estimate is scored on a number that has nothing to do with what it will do.
+func (d pickDir) up() bool { return d == pickSend }
 
 // pickKind says whether the new stream is ONE OF SEVERAL parallel streams for
 // the same transfer, or the only stream that transfer has. It decides nothing
@@ -1881,7 +1889,7 @@ func (c *Client) pickSessionKind(dir pickDir, kind pickKind) *yamux.Session {
 		anyBusy = anyBusy || counts[i] > 0
 		if m := c.recvStamp[s]; m != nil {
 			m.sample(now, counts[i] > 0)
-			caps[i], fresh[i] = m.capacity(now)
+			caps[i], fresh[i] = m.capacityDir(now, dir.up())
 			if caps[i] > best {
 				best = caps[i]
 			}
@@ -1919,22 +1927,71 @@ func (c *Client) pickSessionKind(dir pickDir, kind pickKind) *yamux.Session {
 		}
 		return c.sessions[idx]
 	}
+	// What a tunnel with nothing proven — or with a stale estimate while a
+	// transfer runs — is credited.
+	//
+	// A RANGE CHUNK credits it the BEST capacity present, so it is probed: a
+	// download that never gives an unproven tunnel a chunk never learns it is
+	// the fast one, and the cost of being wrong is one chunk out of many
+	// arriving late behind chunks that are still coming anyway.
+	//
+	// A STRIPED-UPLOAD CHUNK cannot pay that. A small object's chunks are all
+	// admitted in one burst, so there is no later chunk to hide a bad guess
+	// behind and the object finishes when its slowest chunk does. It credits
+	// the MEDIAN of the measured tunnels instead — an unproven tunnel is no
+	// better than the middle of the ones that have proven something. With
+	// nothing measured anywhere `best` is 0 and the plain fewest-streams rule
+	// above has already returned, which is equal shares.
+	credit := best
+	if dir.up() {
+		if med := medianMeasured(caps); med > 0 {
+			credit = med
+		}
+	}
 	idx = -1
-	bestScore := 0.0
+	bestScore, bestRTT := 0.0, 0.0
 	for i, n := range counts {
 		if n < 0 {
 			continue
 		}
 		cp := caps[i]
 		if cp <= 0 || (n == 0 && !fresh[i] && anyBusy) {
-			cp = best
+			cp = credit
+		}
+		rttMs := 0.0
+		if rttOK[i] {
+			rttMs = rtts[i]
 		}
 		score := float64(n+1) / cp
-		if idx == -1 || score < bestScore || (score == bestScore && n < counts[idx]) {
-			idx, bestScore = i, score
+		// The RTT term, for the upload direction only: at EQUAL
+		// capacity-per-stream the lower-RTT tunnel wins. It bites exactly where
+		// the credit above leaves tunnels tied — two tunnels the median credits
+		// alike — and a download's placement is left byte for byte as it was:
+		// its tie is still broken on the stream count alone.
+		switch {
+		case idx == -1 || score < bestScore:
+		case score != bestScore:
+			continue
+		case dir.up() && rttBeats(rttMs, bestRTT):
+		case dir.up() && rttMs != bestRTT:
+			continue
+		case n < counts[idx]:
+		default:
+			continue
 		}
+		idx, bestScore, bestRTT = i, score, rttMs
 	}
 	return c.sessions[idx]
+}
+
+// rttBeats reports whether a measured RTT of ms displaces a current best of
+// bestMs. An unmeasured RTT (0) never displaces a measured one, and never
+// stands in for one.
+func rttBeats(ms, bestMs float64) bool {
+	if ms <= 0 {
+		return false
+	}
+	return bestMs <= 0 || ms < bestMs
 }
 
 // anySessionLive reports whether at least one tunnel is still up. With a single

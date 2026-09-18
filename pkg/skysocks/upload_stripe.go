@@ -354,6 +354,10 @@ type uploadStripe struct {
 	// pl is the object's spread ledger: which tunnel each chunk goes on, and
 	// what each tunnel has carried of this body. Set by run.
 	pl *spreadPlanner
+	// burst is the chunk→tunnel assignment for an object whose chunks are ALL
+	// admitted before any of them reports back. nil for everything else, which
+	// is every object long enough that the picker gets feedback in time.
+	burst *uploadBurst
 
 	mu       sync.Mutex
 	cond     *sync.Cond
@@ -427,7 +431,9 @@ func (s *uploadStripe) run() ([]byte, error) {
 	// cut the next chunk on a boundary the sink is not expecting.
 	t := s.tunables()
 	s.chunk = t.chunk
-	mem := make(chan struct{}, s.slotsFrom(t))
+	slots := s.slotsFrom(t)
+	mem := make(chan struct{}, slots)
+	s.burst = s.planBurst(t, slots)
 
 	var wg sync.WaitGroup
 	for start := int64(0); start < s.u.total; start += t.chunk {
@@ -582,6 +588,73 @@ func (s *uploadStripe) tunables() uploadTunables {
 	}
 	t.chunk = p
 	return t
+}
+
+// uploadBurst is one object's chunk→tunnel assignment, keyed by the chunk's
+// start offset. It is handed out ONCE per chunk: a chunk that has to go again
+// is placed by the picker, which by then has the feedback the plan was written
+// without.
+type uploadBurst struct {
+	mu sync.Mutex
+	by map[int64]*yamux.Session
+}
+
+// take hands out the tunnel the plan chose for the chunk at start, or nil when
+// the plan has nothing to say about it (or has already said it).
+func (b *uploadBurst) take(start int64) *yamux.Session {
+	if b == nil {
+		return nil
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	s := b.by[start]
+	delete(b.by, start)
+	return s
+}
+
+// planBurst is the object's placement when EVERY chunk is admitted before any
+// of them reports back, and nil when it is not.
+//
+// The admission gate is the narrower of the memory slots and
+// activeLiveCount × upload.concurrency. An object with more chunks than that
+// has a tail placed with feedback — measured live, a 50 MB upload (12 chunks
+// over 8 slots) is fine — and is left to the picker. An object with FEWER
+// chunks than slots has none: all four chunks of a 10 MB upload are placed in
+// one burst against a ledger nothing has moved a byte against, and the picker's
+// round-robin answer put a chunk on a 135.8 ms tunnel that then ran ~3.6 s at
+// ~0.7 MB/s while the 31.6 ms tunnel idled 2.6 s of it
+// (bench/2026-09-16/e128db1ff-smoke/mux-tunnels-2: 3/1 x0.393 and 2/1/1 x0.265
+// against 4/0 x1.107).
+func (s *uploadStripe) planBurst(t uploadTunables, slots int) *uploadBurst {
+	if s.c == nil || !setUploadBurstPlan() || s.u == nil || s.u.total <= 0 || t.chunk <= 0 {
+		return nil
+	}
+	live := s.c.activeLiveCount()
+	if live < 1 {
+		live = 1
+	}
+	if gate := live * s.perTunnel(); gate < slots {
+		slots = gate
+	}
+	n := numChunks(s.u.total, t.chunk)
+	if n < 2 || n > int64(slots) {
+		return nil
+	}
+	sessions, caps := s.c.spreadCandidates(spreadUp)
+	if len(sessions) < 2 {
+		return nil
+	}
+	lanes := spreadBurst(caps, int(n))
+	if len(lanes) != int(n) {
+		return nil
+	}
+	b := &uploadBurst{by: make(map[int64]*yamux.Session, n)}
+	for i, lane := range lanes {
+		if lane >= 0 && lane < len(sessions) {
+			b.by[int64(i)*t.chunk] = sessions[lane]
+		}
+	}
+	return b
 }
 
 // activeTunnels is how many tunnels can carry a chunk right now; 1 for a stripe
@@ -860,7 +933,8 @@ func uploadRetryWait(d time.Duration) time.Duration {
 // read back — so the chunk costs no idle round trip of its own at either end.
 func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err error) {
 	size := end - start + 1
-	sess, st, err := s.c.openChunkStreamFor(chunkPlacement{pl: s.pl}, size, pickSibling)
+	sess, st, err := s.c.openChunkStreamFor(
+		chunkPlacement{pl: s.pl, prefer: s.burst.take(start)}, size, pickSibling)
 	if err != nil {
 		return ack, err
 	}
