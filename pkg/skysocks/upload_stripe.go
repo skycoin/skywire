@@ -520,8 +520,26 @@ func (s *uploadStripe) headroomFrom(t uploadTunables) int {
 	return n
 }
 
-// perTunnel is how many chunks one tunnel may carry at once.
-func (s *uploadStripe) perTunnel() int { return s.tunables().perTunnel() }
+// perTunnel is how many chunks one tunnel may carry at once: upload.concurrency,
+// or the bandwidth-delay depth when upload.depth_dynamic is on. Read once per
+// admission decision by the caller (takeSlot asks on each wait, headroom on
+// each call), so a knob change lands on the next slot rather than mid-chunk.
+//
+// The depth is computed against the chunk THIS OBJECT was planned with — the
+// one run() snapshotted, else the planned size tunables() holds — because the
+// bandwidth-delay product is a count of chunks and a count against the ceiling
+// would under-queue an object cut finer than it.
+func (s *uploadStripe) perTunnel() int {
+	t := s.tunables()
+	if s.c == nil {
+		return t.perTunnel()
+	}
+	chunk := s.chunk
+	if chunk <= 0 {
+		chunk = t.chunk
+	}
+	return s.c.tunnelDepth(chunk, true, t.perTunnel())
+}
 
 // tunables is this object's coherent read of the upload knobs, with the chunk
 // size PLANNED from the object instead of taken as the knob's own value:

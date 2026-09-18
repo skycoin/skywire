@@ -78,13 +78,20 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 	require.Equal(t, skysettings.SpreadWeightRate, setSpreadWeight(), "spread.weight")
 	require.False(t, spreadPolicyNow().steers(), "with nothing set the planner steers nothing")
 
-	// The snub.
+	// The snub and the bandwidth-delay depth. Both depth_dynamic flags are OFF
+	// by default, which is the whole no-flag-gate contract here: the mechanism
+	// ships inert and the operator turns it on live.
 	require.Equal(t, tunnelSnubAfter, setTunnelSnubAfter())
 	require.Equal(t, tunnelSnubHold, setTunnelSnubHold())
+	require.Equal(t, tunnelDepthMargin, setTunnelDepthMargin())
+	require.Equal(t, rsDepthMin, setChunkDepthMin())
+	require.Equal(t, rsDepthMax, setChunkDepthMax())
+	require.False(t, setChunkDepthDynamic(), "chunk.depth_dynamic is off until the operator says otherwise")
+	require.False(t, setUploadDepthDynamic(), "upload.depth_dynamic is off until the operator says otherwise")
 
 	// Every knob in the catalog is reachable: a name registered with no use site
 	// reading it is a knob the bench can set and nothing obeys.
-	require.Len(t, skysettings.Catalog(), 49)
+	require.Len(t, skysettings.Catalog(), 54)
 }
 
 // The two range-split knobs OVERRIDE a per-client boot flag rather than
