@@ -16,6 +16,7 @@ Also that day the DE exit visor turned out to have been OOM-killed seven times i
 
 Then the mux sets themselves, run through the default proxy instance: `--tunnels N` had never dialed a route group (#4945), and once it did the candidate-route race handed every tunnel the same first hop (#4946, with #4947 recording each diversify dial's route choice on the group). The three-leg and five-leg groups exposed a spurious-retransmit storm — the exit re-sent 37,207 frames for 20,304 sent — because the ack-delay estimate the retransmit threshold floors on never samples a retransmitted frame; a DSACK now feeds the late original's delay into it (#4948).
 
+-   feat(skysocks,cli,router): proxy settings — live-tunable client knobs (pool, tunnel, chunk, upload) pulled on the keepalive tick, and route settings gains the ECF window, park hold, FEC and dead-route hold  [#5002](https://github.com/skycoin/skywire/pull/5002)
 -   fix(router): a route that died within seconds of its dial is not re-picked by the next diversify search  [#5004](https://github.com/skycoin/skywire/pull/5004)
 -   bench: the standby cut lands at 40 % of the object, with the 5 s elapsed cap as backstop  [#5003](https://github.com/skycoin/skywire/pull/5003)
 -   fix(router): a sibling candidate with unknown path latency is ranked by its transport latency, not dropped  [#5001](https://github.com/skycoin/skywire/pull/5001)
