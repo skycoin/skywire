@@ -181,3 +181,30 @@ func TestCutBlackHoles(t *testing.T) {
 		t.Fatalf("cut accounting: %+v", st)
 	}
 }
+
+// TestPairPreservesOrderWithoutImpairment is the regression for the reordering
+// that made pkg/router's TestTransitWriteStillRelaysInOrder fail on CI's linux
+// and windows lanes: a direction with nothing configured must deliver frames in
+// the order they were written. Delivery was one already-expired time.AfterFunc
+// per frame, so the runtime pushed them into the peer's inbox in whatever order
+// it liked — 20 of 20 rounds reordered before the fix.
+func TestPairPreservesOrderWithoutImpairment(t *testing.T) {
+	const rounds, frames = 20, 64
+	for round := 0; round < rounds; round++ {
+		a, b := NewPair(PairConfig{Name: "order"})
+		for i := 0; i < frames; i++ {
+			if _, err := a.Write([]byte{byte(i)}); err != nil {
+				t.Fatalf("round %d: write %d: %v", round, i, err)
+			}
+		}
+		for i := 0; i < frames; i++ {
+			got := readFrame(t, b, 5*time.Second)
+			if len(got) != 1 || got[0] != byte(i) {
+				t.Fatalf("round %d: frame %d arrived as %v", round, i, got)
+			}
+		}
+		if err := a.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

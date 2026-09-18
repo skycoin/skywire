@@ -354,10 +354,20 @@ type RouteGroup struct {
 	// used to wait for all the `Close` packets to run through the loop and come back.
 	// Atomic counter + channel instead of sync.WaitGroup to avoid
 	// "WaitGroup reused before previous Wait returned" panics.
-	closeDonePending int32         // atomic counter of outstanding close acks
-	closeDoneCh      chan struct{} // closed when closeDonePending reaches 0
-	once             sync.Once     // guards the readCh/remoteClosed cleanup
-	closedOnce       sync.Once     // guards close(rg.closed) — closable from two paths
+	closeDonePending int32 // atomic counter of outstanding close acks
+	// closeDoneCh is closed when closeDonePending reaches 0. It is reached
+	// from three goroutines — both Close() callers and the packet loop
+	// handling the peer's close replies — so it is created and closed through
+	// closeDone()/signalCloseDone() and never touched directly: it used to be
+	// assigned unlocked in close() and read unlocked in
+	// waitForCloseRouteGroup, which the race detector caught on CI's windows
+	// lane (and which two concurrent Close() calls could also turn into a
+	// close of a closed channel).
+	closeDoneMu   sync.Mutex
+	closeDoneOnce sync.Once
+	closeDoneCh   chan struct{}
+	once          sync.Once // guards the readCh/remoteClosed cleanup
+	closedOnce    sync.Once // guards close(rg.closed) — closable from two paths
 
 	errorMu    sync.RWMutex
 	closeError error
@@ -4376,7 +4386,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 	if closeInitiator {
 		// will wait for close response from all the transports
 		atomic.StoreInt32(&rg.closeDonePending, int32(len(tps))) //nolint:gosec
-		rg.closeDoneCh = make(chan struct{})
+		rg.closeDone()
 	}
 
 	rg.broadcastClosePackets(code, tps, fwd)
@@ -5376,11 +5386,7 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 		rg.logger.Debugf("Handling response close packet with code %d", code)
 
 		if atomic.AddInt32(&rg.closeDonePending, -1) <= 0 {
-			select {
-			case <-rg.closeDoneCh:
-			default:
-				close(rg.closeDoneCh)
-			}
+			rg.signalCloseDone()
 		}
 		return nil
 	}
@@ -5620,18 +5626,33 @@ func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode, tps []*trans
 	}
 }
 
+// closeDone returns the channel the close initiator waits on, creating it on
+// first use. One channel for the group's lifetime: a repeat close finds it
+// already signaled and does not wait again, which is what a caller that is
+// only trying not to deadlock wants anyway.
+func (rg *RouteGroup) closeDone() chan struct{} {
+	rg.closeDoneMu.Lock()
+	defer rg.closeDoneMu.Unlock()
+	if rg.closeDoneCh == nil {
+		rg.closeDoneCh = make(chan struct{})
+	}
+	return rg.closeDoneCh
+}
+
+// signalCloseDone releases every waiter, exactly once.
+func (rg *RouteGroup) signalCloseDone() {
+	ch := rg.closeDone()
+	rg.closeDoneOnce.Do(func() { close(ch) })
+}
+
 func (rg *RouteGroup) waitForCloseRouteGroup(waitTimeout time.Duration) error {
 	select {
-	case <-rg.closeDoneCh:
+	case <-rg.closeDone():
 		return nil
 	case <-time.After(waitTimeout):
 		// Force-complete: zero the counter and signal the channel.
 		atomic.StoreInt32(&rg.closeDonePending, 0)
-		select {
-		case <-rg.closeDoneCh:
-		default:
-			close(rg.closeDoneCh)
-		}
+		rg.signalCloseDone()
 		return fmt.Errorf("close route group timed out after %v", waitTimeout)
 	}
 }

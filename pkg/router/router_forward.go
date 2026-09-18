@@ -53,11 +53,6 @@ const (
 // readable from `visor state` long after the log ring has rolled.
 const MuxEventForwardDrops = "forward_drops"
 
-// forwardWriterIdleTimeout retires a writer goroutine whose transport has not
-// relayed anything for a while, so a visor that transits for many short-lived
-// peers does not accumulate one goroutine per peer for its whole uptime.
-const forwardWriterIdleTimeout = 2 * time.Minute
-
 // forwardTable holds one writer per next-hop transport. Zero value ready: a
 // router built by a test never pays for the map.
 type forwardTable struct {
@@ -83,6 +78,7 @@ type forwardWriter struct {
 	remote cipher.PubKey
 	ch     chan forwardFrame
 
+	queuedBytes       atomic.Int64
 	sent              atomic.Uint64
 	dropQueueFull     atomic.Uint64
 	dropWriteTimeout  atomic.Uint64
@@ -132,8 +128,18 @@ func (t *forwardTable) enqueue(r *router, tp *transport.ManagedTransport, f forw
 		t.m[id] = w
 		go w.serve()
 	}
+	// forward.queue_depth counts FRAMES, so on its own it lets one wedged peer
+	// hold depth × the largest frame it was relaying. forward.queue_bytes is
+	// the same queue bounded by what it actually costs the heap; 0 (the
+	// shipped default) leaves the frame count as the only bound.
+	n := int64(len(f.p))
+	if max := routersettings.ForwardQueueBytes.Bytes(); max > 0 && w.queuedBytes.Load()+n > max {
+		t.mu.Unlock()
+		return w
+	}
 	select {
 	case w.ch <- f:
+		w.queuedBytes.Add(n)
 		t.mu.Unlock()
 		return nil
 	default:
@@ -173,6 +179,7 @@ func (t *forwardTable) snapshot() []ForwardQueue {
 			Remote:            w.remote,
 			Queue:             len(w.ch),
 			Capacity:          cap(w.ch),
+			QueuedBytes:       w.queuedBytes.Load(),
 			Sent:              w.sent.Load(),
 			DropsQueueFull:    w.dropQueueFull.Load(),
 			DropsWriteTimeout: w.dropWriteTimeout.Load(),
@@ -185,26 +192,22 @@ func (t *forwardTable) snapshot() []ForwardQueue {
 // serve drains the queue, one frame at a time, for as long as the transport
 // keeps relaying.
 func (w *forwardWriter) serve() {
-	idle := time.NewTimer(forwardWriterIdleTimeout)
-	defer idle.Stop()
 	for {
+		// A fresh timer per wait, so a live change to forward.writer_idle
+		// applies to the next one.
+		idle := time.NewTimer(routersettings.ForwardWriterIdle.Duration())
 		select {
 		case <-w.r.done:
+			idle.Stop()
 			return
 		case f := <-w.ch:
+			idle.Stop()
+			w.queuedBytes.Add(-int64(len(f.p)))
 			w.write(f)
-			if !idle.Stop() {
-				select {
-				case <-idle.C:
-				default:
-				}
-			}
-			idle.Reset(forwardWriterIdleTimeout)
 		case <-idle.C:
 			if w.r.forward.retireIfIdle(w) {
 				return
 			}
-			idle.Reset(forwardWriterIdleTimeout)
 		}
 	}
 }
