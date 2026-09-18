@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/0magnet/yamux"
+
+	"github.com/skycoin/skywire/pkg/skysocks/skysettings"
 )
 
 // --- classification -------------------------------------------------------
@@ -889,4 +891,103 @@ func TestUploadSlotIsFreedOnTheAckNotTheDurability(t *testing.T) {
 	if !third {
 		t.Fatalf("only %d chunk(s) reached the sink while chunk 0 was held: the slot was not freed until the chunk was durable", early)
 	}
+}
+
+// TestUploadChunkIsPlannedUnderTheKnobCeiling: upload.chunk_bytes is the
+// CEILING. The chunk an object is cut with comes from its length under that
+// ceiling, is decided once, and does not move when the knob does mid-object —
+// the sink addresses a chunk by its offset and cannot be told a boundary twice.
+func TestUploadChunkIsPlannedUnderTheKnobCeiling(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	defer restoreUploadTunables(uploadChunkBytes, uploadMemBytes, uploadStripeMinBytes, uploadConcurrency)()
+	uploadChunkBytes, uploadMemBytes, uploadConcurrency = 4<<20, 32<<20, 4
+
+	// No client, so one active tunnel: the 10 MB target is half the object and
+	// the 4 MiB ceiling binds, evened to three equal chunks.
+	s := &uploadStripe{u: &uploadCandidate{total: 10_000_000}}
+	if got := s.tunables().chunk; got != 3_333_334 {
+		t.Fatalf("planned chunk = %d, want 3333334", got)
+	}
+
+	// The knob capped lower caps the plan of the NEXT object.
+	if !skysettings.Apply(map[string]int64{skysettings.UploadChunkBytes: 1 << 20}) {
+		t.Fatal("the knob did not take")
+	}
+	capped := &uploadStripe{u: &uploadCandidate{total: 10_000_000}}
+	if got := capped.tunables().chunk; got != 1_000_000 {
+		t.Fatalf("with a 1 MiB ceiling the planned chunk = %d, want 1000000", got)
+	}
+	// ...and the object already cut keeps the size it was cut with.
+	if got := s.tunables().chunk; got != 3_333_334 {
+		t.Fatalf("the in-flight object's chunk moved to %d", got)
+	}
+	// The slot arithmetic divides by the PLANNED size, not the ceiling: 32 MiB of
+	// memory over 1 MB chunks is 32 buffers, not the 8 the 4 MiB ceiling gives.
+	if got := capped.slots(); got != 33 {
+		t.Fatalf("slots at a 1000000-byte chunk = %d, want 33", got)
+	}
+}
+
+// TestStripedUploadChunksAreSizedFromTheObject is the plan on the real path: a
+// 10 MB body through the striped upload reaches the sink as equal planned
+// chunks, not as 4 MiB steps ending in a 1.6 MB runt that one tunnel carries
+// alone (the 10 MB cell ran at half the single-route reference that way —
+// bench/2026-09-16/2ca6cf7b3-sweep/sweep/upload.chunk_bytes.tsv).
+func TestStripedUploadChunksAreSizedFromTheObject(t *testing.T) {
+	defer restoreUploadTunables(uploadChunkBytes, uploadMemBytes, uploadStripeMinBytes, uploadConcurrency)()
+	uploadChunkBytes, uploadMemBytes, uploadStripeMinBytes, uploadConcurrency = 4<<20, 32<<20, 4<<20, 4
+
+	const total = 10_000_000
+	blob := make([]byte, total)
+	for i := range blob {
+		blob[i] = byte(i*31 + 7)
+	}
+	want := sha256.Sum256(blob)
+
+	sink := &stubSink{}
+	backend := httptest.NewServer(sink.handler())
+	defer backend.Close()
+
+	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 4, 1<<20)
+	resp := socks5Upload(t, proxy, "/upload", blob)
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var got struct {
+		Bytes  int64  `json:"bytes"`
+		Sha256 string `json:"sha256"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Bytes != total || got.Sha256 != hex.EncodeToString(want[:]) {
+		t.Fatalf("sink saw %d bytes / %s, want %d / %s", got.Bytes, got.Sha256, total, hex.EncodeToString(want[:]))
+	}
+
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	if sink.whole != 0 {
+		t.Fatalf("%d whole-body POST(s) reached the sink: the upload was not striped", sink.whole)
+	}
+	// One active tunnel, a 4 MiB ceiling: three chunks of 3,333,334 bytes.
+	if len(sink.have) != 3 {
+		t.Fatalf("the sink took %d chunk(s), want 3", len(sink.have))
+	}
+	var smallest, largest int64
+	for _, n := range sink.have {
+		if n > largest {
+			largest = n
+		}
+		if smallest == 0 || n < smallest {
+			smallest = n
+		}
+	}
+	if largest > uploadChunkBytes {
+		t.Fatalf("a %d-byte chunk passed the %d ceiling", largest, uploadChunkBytes)
+	}
+	if smallest*10 < largest*9 {
+		t.Fatalf("chunks ran %d..%d bytes: the plan left a runt", smallest, largest)
+	}
+	t.Logf("10 MB in %d chunks of %d..%d bytes under a %d ceiling", len(sink.have), smallest, largest, uploadChunkBytes)
 }
