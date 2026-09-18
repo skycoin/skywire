@@ -1,5 +1,7 @@
 package com.skycoin.skywire.wallet
 
+import com.skycoin.wallet.TxRecord
+import com.skycoin.wallet.WalletBalance
 import kotlinx.serialization.Serializable
 
 /** Which family a coin belongs to — the protocols this wallet speaks. */
@@ -153,4 +155,54 @@ data class WalletSnapshot(
     val spendableOutputs: Int = 0,
     val txs: List<CachedTx> = emptyList(),
     val fetchedAtMs: Long = 0,
+    /**
+     * When [txs] was last actually fetched, which can lag [fetchedAtMs]: the
+     * balance and the history are fetched separately and the history is the
+     * one that can be too big to arrive (see WalletRepository.refresh). 0 on
+     * a snapshot written before this field existed, and on one whose history
+     * has never landed — both mean "do not claim this list is complete".
+     */
+    val historyFetchedAtMs: Long = 0,
+)
+
+/** True when the tx list is older than the balance beside it, or never arrived. */
+val WalletSnapshot.historyBehind: Boolean get() = historyFetchedAtMs < fetchedAtMs
+
+/**
+ * Fold one refresh's results into the snapshot that gets cached.
+ *
+ * [history] is null when that fetch failed, which is a normal outcome rather
+ * than an error: the balance is a few hundred bytes and the transaction list
+ * is unbounded, so on a slow link the second can miss while the first lands.
+ * When it misses, the last list we did get is carried forward unchanged and
+ * its timestamp with it — so the snapshot goes on saying, truthfully, how old
+ * that list is, and never passes an empty one off as a fetched one.
+ *
+ * Pure, and separate from the fetching, because this rule is the whole point
+ * of splitting the two halves and is worth being able to state on its own.
+ */
+fun mergeSnapshot(
+    balance: WalletBalance,
+    history: List<TxRecord>?,
+    previous: WalletSnapshot?,
+    nowMs: Long,
+): WalletSnapshot = WalletSnapshot(
+    confirmed = balance.confirmed,
+    predicted = balance.predicted,
+    hours = balance.hours,
+    spendableOutputs = balance.spendableOutputs,
+    txs = history?.map {
+        CachedTx(
+            txid = it.txid,
+            incoming = it.incoming,
+            amount = it.amount,
+            party = it.party,
+            timestamp = it.timestamp,
+            confirmed = it.confirmed,
+            confirmations = it.confirmations,
+            fee = it.fee,
+        )
+    } ?: previous?.txs.orEmpty(),
+    fetchedAtMs = nowMs,
+    historyFetchedAtMs = if (history != null) nowMs else previous?.historyFetchedAtMs ?: 0,
 )

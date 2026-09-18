@@ -611,6 +611,8 @@
     <string name="wallet_filter_sent">转出</string>
     <string name="wallet_filter_received">转入</string>
     <string name="wallet_filter_pending">待确认</string>
+    <string name="wallet_history_unfetched_title">交易记录未加载</string>
+    <string name="wallet_history_unfetched_body">余额已是最新，但本钱包的 %1$s 交易记录尚未获取到。在网络较慢时它可能很大——请下拉刷新重试。</string>
     <string name="wallet_history_empty_title">这里还没有内容</string>
     <string name="wallet_history_empty_all">这个钱包还没有任何 %1$s 的转入或转出。</string>
     <string name="wallet_history_empty_filter">没有符合此筛选条件的 %1$s 交易。</string>
