@@ -455,11 +455,46 @@ func (p *Proc) SetDetailedStatus(status string) {
 		p.readyOnce.Do(func() { close(p.readyCh) })
 	}
 
+	// "Starting" is never something an app reports about itself once it is up:
+	// it is the optimistic marker the hypervisor's app handler writes straight
+	// after StartApp, so the UI dot turns amber for the gap between "launched"
+	// and "the app said it is running".
+	//
+	// Against a REMOTE visor those two calls are a full RPC round-trip apart,
+	// and an in-process app on the other end (skychat on a phone) reaches its
+	// own "Running" inside that gap. The marker then lands last and pins the
+	// app at "Starting" for the rest of the proc's life, because nothing ever
+	// re-reports "Running" — the app says it exactly once, at startup.
+	// Restarting the app from the same remote UI loses the same race again;
+	// only restarting the visor cleared it, because autostart never goes
+	// through that handler.
+	//
+	// So: once this proc has reported ready, a "Starting" is stale by
+	// construction. Drop it. Statuses an app legitimately falls back to after
+	// running — "Connecting", "Connection failed, reconnecting" — are not
+	// "Starting" and are unaffected.
+	if status == AppDetailedStatusStarting && p.reportedReady() {
+		return
+	}
+
 	if status == AppDetailedStatusRunning || status == AppDetailedStatusStopped {
 		p.log.Infof("App %v is %v", p.appName, status)
 	}
 
 	p.status = status
+}
+
+// reportedReady reports whether the app behind this proc has already announced
+// itself as running — readyCh is closed by the first "Running" status and a
+// restart builds a fresh Proc, so this is scoped to one app run. Nil-channel
+// safe: a bare &Proc{} reads as not ready.
+func (p *Proc) reportedReady() bool {
+	select {
+	case <-p.readyCh:
+		return true
+	default:
+		return false
+	}
 }
 
 // SetConnectionDuration sets the proc's connection duration

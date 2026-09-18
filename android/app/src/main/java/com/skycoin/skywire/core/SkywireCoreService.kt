@@ -58,6 +58,7 @@ class SkywireCoreService : Service() {
     private var runner: Job? = null
     private var callWatcher: Job? = null
     private var notifyBridge: Job? = null
+    private var networkWatcher: Job? = null
 
     @Volatile private var child: Process? = null
 
@@ -161,6 +162,12 @@ class SkywireCoreService : Service() {
                     notifyBridge?.cancel()
                     notifyBridge =
                         NotificationBridge(this@SkywireCoreService).watch(scope)
+                    // Rebuilt with the visor for the same reason, and one
+                    // more: the network it just came up on is the baseline
+                    // this watcher measures every later move against.
+                    networkWatcher?.cancel()
+                    networkWatcher =
+                        NetworkWatcher(this@SkywireCoreService).watch(scope)
 
                     val pump = launch(Dispatchers.IO) {
                         process.inputStream.bufferedReader().forEachLine { log.line(it) }
@@ -172,6 +179,8 @@ class SkywireCoreService : Service() {
                     callWatcher = null
                     notifyBridge?.cancel()
                     notifyBridge = null
+                    networkWatcher?.cancel()
+                    networkWatcher = null
 
                     val ranMs = SystemClock.elapsedRealtime() - startedAt
                     log.line("=== visor exited with code $exit after ${ranMs / 1000}s ===")
