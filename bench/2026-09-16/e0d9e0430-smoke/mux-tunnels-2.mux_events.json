@@ -1,0 +1,487 @@
+[
+  {
+    "at": "2026-09-17T16:34:19.111797398-05:00",
+    "event": "group_closed",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49154,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 1,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "local close (code 0)"
+  },
+  {
+    "at": "2026-09-17T16:34:19.111873617-05:00",
+    "event": "group_closed",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49153,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 1,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "local close (code 0)"
+  },
+  {
+    "at": "2026-09-17T16:34:21.336945593-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49160,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T16:34:21.336947764-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49160,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "b414796d-14fc-080e-9ce6-a7162e3e562b",
+    "tp_type": "stcpr",
+    "remote_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T16:34:26.062315104-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49161,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T16:34:26.062317664-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49161,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+    "tp_type": "stcpr",
+    "remote_pk": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T16:34:26.198021674-05:00",
+    "event": "dial_decision",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49161,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "diversify: 1 sibling group(s) to 022716fb:3, excluding first-hop tp(s) b414796d and 1 first-hop peer(s); hook-race: every direct route to 022716fb shares the sibling's first hop (b414796d); awaiting the ranked candidates; excluding 1 same-LAN first hop(s) (share our uplink): 0be8b6f0; ranked by carrier class then path latency: 95839ad0/stcpr=34+98ms, f1012467/stcpr=135+2ms, fdab37dd/stcpr=144+7ms, ac40965a/stcpr=273p+320ms, 50cdb857/stcpr=225p+415ms, 2c4ae7a5/stcpr=266pms+unknown, ce33f7cc/sudph=148+249ms, 33420250/sudph=245+174ms, a6c2cf64/sudph=235+190ms, f57e59f7/sudph=276+181ms, 4226b750/sudph=230+283ms, b1de7249/sudph=147pms+unknown, e3c125ff/sudph=64ms+unknown, 93139b56/sudph=30ms+unknown, f02cf77f/sudph=247ms+unknown, d1a40fe9/sudph=unmeasured, 9a92f214/sudph=unmeasured, 9fa91cce/sudph=unmeasured, bdf67f3c/sudph=unmeasured, f0629873/sudph=209ms+unknown, eef2d4f7/sudph=unmeasured, a02a521d/sudph=242ms+unknown, c0c594b1/sudph=unmeasured, f65f5a4f/sudph=unmeasured, fc659541/sudph=272ms+unknown, 16b231fc/sudph=unmeasured, 469162c6/sudph=unmeasured, 3c838c5d/sudph=unmeasured, d354afe9/sudph=unmeasured, 4192550e/sudph=unmeasured, 0780dbbe/sudph=unmeasured; chose 95839ad0; oracle: path over a free first hop; first hop 95839ad0"
+  },
+  {
+    "at": "2026-09-17T16:34:44.469541281-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49162,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T16:34:44.469545073-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49162,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "f1012467-de9d-09a9-8b49-62a43945c24b",
+    "tp_type": "stcpr",
+    "remote_pk": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T16:34:54.470799525-05:00",
+    "event": "group_closed",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49162,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 1,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "local close (code 0)"
+  },
+  {
+    "at": "2026-09-17T16:35:01.437768666-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49162,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T16:35:01.43777049-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49162,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "fdab37dd-c35e-05bc-9e51-cd6b024e3eec",
+    "tp_type": "stcpr",
+    "remote_pk": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T16:35:01.665141498-05:00",
+    "event": "dial_decision",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49162,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "diversify: 2 sibling group(s) to 022716fb:3, excluding first-hop tp(s) b414796d,95839ad0 and 2 first-hop peer(s); hook-race: every direct route to 022716fb shares the sibling's first hop (b414796d); awaiting the ranked candidates; excluding 1 same-LAN first hop(s) (share our uplink): 0be8b6f0; ranked by carrier class then path latency: f1012467/stcpr=135+2ms, fdab37dd/stcpr=144+7ms, ac40965a/stcpr=273+320ms, 50cdb857/stcpr=225+415ms, 2c4ae7a5/stcpr=266ms+unknown, ce33f7cc/sudph=148+249ms, 33420250/sudph=245+174ms, a6c2cf64/sudph=235+190ms, f57e59f7/sudph=276+181ms, bdf67f3c/sudph=241p+257ms, 4226b750/sudph=230+283ms, b1de7249/sudph=147ms+unknown, e3c125ff/sudph=64ms+unknown, 93139b56/sudph=30ms+unknown, f02cf77f/sudph=247ms+unknown, d1a40fe9/sudph=unmeasured, 9a92f214/sudph=unmeasured, 9fa91cce/sudph=57pms+unknown, f0629873/sudph=209ms+unknown, eef2d4f7/sudph=unmeasured, 7619ecc4/sudph=unmeasured, a02a521d/sudph=242ms+unknown, c0c594b1/sudph=unmeasured, 17d588b6/sudph=255ms+unknown, f65f5a4f/sudph=unmeasured, fc659541/sudph=272ms+unknown, a3b0bfa0/sudph=182pms+unknown, 16b231fc/sudph=unmeasured, 469162c6/sudph=222pms+unknown, 3c838c5d/sudph=unmeasured, 9c54a36f/sudph=87pms+unknown, d354afe9/sudph=unmeasured, 4192550e/sudph=unmeasured, 0780dbbe/sudph=unmeasured; chose f1012467; oracle: path over a free first hop; excluding 1 same-LAN first hop(s) (share our uplink): 0be8b6f0; ranked by carrier class then path latency: fdab37dd/stcpr=150+7ms, ac40965a/stcpr=232+320ms, 50cdb857/stcpr=192+415ms, 2c4ae7a5/stcpr=271ms+unknown, 4115ff2d/sudph=144p+16ms, 5546801c/sudph=65p+123ms, bb4ede3d/sudph=175p+159ms, ce33f7cc/sudph=156+249ms, 33420250/sudph=254+174ms, f57e59f7/sudph=286+181ms, bdf67f3c/sudph=243+257ms, a6c2cf64/sudph=866+190ms, b1de7249/sudph=151ms+unknown, e3c125ff/sudph=73ms+unknown, 93139b56/sudph=26ms+unknown, f02cf77f/sudph=254ms+unknown, d1a40fe9/sudph=unmeasured, 9a92f214/sudph=unmeasured, 9fa91cce/sudph=57ms+unknown, f0629873/sudph=223ms+unknown, eef2d4f7/sudph=unmeasured, 7619ecc4/sudph=unmeasured, 455509d7/sudph=198ms+unknown, 736083a8/sudph=148pms+unknown, a02a521d/sudph=248ms+unknown, c0c594b1/sudph=unmeasured, c6c97e2f/sudph=257ms+unknown, 17d588b6/sudph=263ms+unknown, f65f5a4f/sudph=unmeasured, fc659541/sudph=245ms+unknown, a3b0bfa0/sudph=183ms+unknown, 16b231fc/sudph=unmeasured, 469162c6/sudph=1360ms+unknown, 2b23b4f7/sudph=182pms+unknown, 3c838c5d/sudph=152ms+unknown, d1087514/sudph=324pms+unknown, 9c54a36f/sudph=93ms+unknown, d354afe9/sudph=unmeasured, 5dfc8b3b/sudph=148ms+unknown, 4192550e/sudph=unmeasured, 0780dbbe/sudph=unmeasured; chose fdab37dd; oracle: path over a free first hop; first hop fdab37dd"
+  },
+  {
+    "at": "2026-09-17T16:35:06.332255117-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49163,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T16:35:06.332258081-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49163,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "f1012467-de9d-09a9-8b49-62a43945c24b",
+    "tp_type": "stcpr",
+    "remote_pk": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T16:35:06.469968372-05:00",
+    "event": "dial_decision",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49163,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "diversify: 3 sibling group(s) to 022716fb:3, excluding first-hop tp(s) b414796d,95839ad0,fdab37dd and 3 first-hop peer(s); hook-race: every direct route to 022716fb shares the sibling's first hop (b414796d); awaiting the ranked candidates; excluding 1 same-LAN first hop(s) (share our uplink): 0be8b6f0; ranked by carrier class then path latency: f1012467/stcpr=134+2ms, ac40965a/stcpr=232+320ms, 50cdb857/stcpr=192+415ms, 2c4ae7a5/stcpr=271ms+unknown, 4115ff2d/sudph=202+16ms, 5546801c/sudph=167+123ms, bb4ede3d/sudph=230+159ms, ce33f7cc/sudph=206+249ms, 33420250/sudph=282+174ms, a6c2cf64/sudph=271+190ms, f57e59f7/sudph=343+181ms, bdf67f3c/sudph=269+257ms, b1de7249/sudph=203ms+unknown, e3c125ff/sudph=166ms+unknown, 93139b56/sudph=91ms+unknown, f02cf77f/sudph=282ms+unknown, d1a40fe9/sudph=unmeasured, 9a92f214/sudph=unmeasured, 9fa91cce/sudph=147ms+unknown, f0629873/sudph=270ms+unknown, eef2d4f7/sudph=unmeasured, 4f0de239/sudph=unmeasured, 7619ecc4/sudph=unmeasured, 455509d7/sudph=252ms+unknown, 736083a8/sudph=208ms+unknown, a02a521d/sudph=272ms+unknown, c0c594b1/sudph=unmeasured, c6c97e2f/sudph=270ms+unknown, 17d588b6/sudph=331ms+unknown, f65f5a4f/sudph=unmeasured, fc659541/sudph=273ms+unknown, a3b0bfa0/sudph=229ms+unknown, ee6868d9/sudph=unmeasured, 16b231fc/sudph=unmeasured, 469162c6/sudph=271ms+unknown, 2b23b4f7/sudph=244ms+unknown, 3c838c5d/sudph=202ms+unknown, d1087514/sudph=330ms+unknown, 9c54a36f/sudph=174ms+unknown, d354afe9/sudph=unmeasured, 5dfc8b3b/sudph=201ms+unknown, 4192550e/sudph=unmeasured, 0780dbbe/sudph=unmeasured; chose f1012467; oracle: path over a free first hop; first hop f1012467"
+  },
+  {
+    "at": "2026-09-17T16:35:12.348549608-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49164,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T16:35:12.348552175-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49164,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "ac40965a-bc99-01e4-a2c9-c26b76db013b",
+    "tp_type": "stcpr",
+    "remote_pk": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T16:35:12.734135609-05:00",
+    "event": "dial_decision",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49164,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "diversify: 4 sibling group(s) to 022716fb:3, excluding first-hop tp(s) 95839ad0,fdab37dd,f1012467,b414796d and 4 first-hop peer(s); hook-race: every direct route to 022716fb shares the sibling's first hop (b414796d); awaiting the ranked candidates; excluding 1 same-LAN first hop(s) (share our uplink): 0be8b6f0; ranked by carrier class then path latency: ac40965a/stcpr=232+320ms, 50cdb857/stcpr=192+415ms, 2c4ae7a5/stcpr=271ms+unknown, 4a318706/sudph=160p+18ms, 4115ff2d/sudph=202+16ms, 5546801c/sudph=167+123ms, bb4ede3d/sudph=230+159ms, ce33f7cc/sudph=206+249ms, 33420250/sudph=282+174ms, a6c2cf64/sudph=271+190ms, f57e59f7/sudph=343+181ms, bdf67f3c/sudph=269+257ms, b1de7249/sudph=203ms+unknown, e3c125ff/sudph=166ms+unknown, 93139b56/sudph=91ms+unknown, f02cf77f/sudph=282ms+unknown, d1a40fe9/sudph=unmeasured, 9a92f214/sudph=unmeasured, 9fa91cce/sudph=147ms+unknown, e1c038eb/sudph=247pms+unknown, f0629873/sudph=270ms+unknown, eef2d4f7/sudph=unmeasured, 4f0de239/sudph=unmeasured, 7619ecc4/sudph=unmeasured, a28a4aea/sudph=254pms+unknown, 455509d7/sudph=252ms+unknown, 736083a8/sudph=208ms+unknown, a02a521d/sudph=272ms+unknown, c0c594b1/sudph=unmeasured, c6c97e2f/sudph=270ms+unknown, 17d588b6/sudph=331ms+unknown, b6feb1c1/sudph=197pms+unknown, f65f5a4f/sudph=unmeasured, fc659541/sudph=273ms+unknown, ba3f5ddb/sudph=160pms+unknown, a3b0bfa0/sudph=229ms+unknown, ee6868d9/sudph=unmeasured, a3c17e80/sudph=unmeasured, 16b231fc/sudph=unmeasured, 469162c6/sudph=271ms+unknown, 2b23b4f7/sudph=244ms+unknown, 3c838c5d/sudph=202ms+unknown, d1087514/sudph=330ms+unknown, 9c54a36f/sudph=174ms+unknown, d354afe9/sudph=unmeasured, 5dfc8b3b/sudph=201ms+unknown, 4192550e/sudph=unmeasured, 0780dbbe/sudph=unmeasured; chose ac40965a; oracle: path over a free first hop; first hop ac40965a"
+  },
+  {
+    "at": "2026-09-17T16:35:19.164278183-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49165,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T16:35:19.164282796-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49165,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "50cdb857-a262-0ae5-bf5b-5c93c8025b69",
+    "tp_type": "stcpr",
+    "remote_pk": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T16:35:21.162376843-05:00",
+    "event": "dial_decision",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49165,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "diversify: 5 sibling group(s) to 022716fb:3, excluding first-hop tp(s) f1012467,ac40965a,b414796d,95839ad0,fdab37dd and 5 first-hop peer(s); hook-race: every direct route to 022716fb shares the sibling's first hop (b414796d); awaiting the ranked candidates; excluding 1 same-LAN first hop(s) (share our uplink): 0be8b6f0; ranked by carrier class then path latency: 50cdb857/stcpr=192+415ms, 2c4ae7a5/stcpr=271ms+unknown, 4a318706/sudph=160+19ms, 93139b56/sudph=91+115ms, 3c838c5d/sudph=202+9ms, 5dfc8b3b/sudph=201+17ms, b1de7249/sudph=203+24ms, 4115ff2d/sudph=202+30ms, 9fa91cce/sudph=147+121ms, 5546801c/sudph=167+117ms, 9c54a36f/sudph=174+122ms, bb4ede3d/sudph=230+160ms, a3b0bfa0/sudph=229+164ms, 2b23b4f7/sudph=244+164ms, 455509d7/sudph=252+166ms, a02a521d/sudph=272+169ms, ce33f7cc/sudph=206+243ms, a6c2cf64/sudph=271+187ms, 33420250/sudph=282+177ms, c6c97e2f/sudph=270+191ms, f02cf77f/sudph=282+184ms, f57e59f7/sudph=343+179ms, bdf67f3c/sudph=269+255ms, 17d588b6/sudph=331+194ms, d1087514/sudph=330+209ms, fc659541/sudph=273+271ms, f0629873/sudph=270+319ms, 469162c6/sudph=271+319ms, e3c125ff/sudph=166ms+unknown, d1a40fe9/sudph=unmeasured, 9a92f214/sudph=unmeasured, e1c038eb/sudph=247ms+unknown, 323ca76b/sudph=237pms+unknown, eef2d4f7/sudph=unmeasured, 4f0de239/sudph=unmeasured, a28a4aea/sudph=254ms+unknown, 736083a8/sudph=208ms+unknown, c0c594b1/sudph=unmeasured, b6feb1c1/sudph=197ms+unknown, f65f5a4f/sudph=243pms+unknown, ba3f5ddb/sudph=160ms+unknown, ee6868d9/sudph=unmeasured, a3c17e80/sudph=unmeasured, 1aaa1c45/sudph=186pms+unknown, d354afe9/sudph=unmeasured, 4192550e/sudph=unmeasured, 0780dbbe/sudph=unmeasured; chose 50cdb857; oracle: path over a free first hop; first hop 50cdb857"
+  },
+  {
+    "at": "2026-09-17T16:35:26.499568342-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49166,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T16:35:26.499570634-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49166,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "2c4ae7a5-de55-0e09-bd14-7febf7d9f972",
+    "tp_type": "stcpr",
+    "remote_pk": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T16:35:32.007788259-05:00",
+    "event": "dial_decision",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49166,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "diversify: 6 sibling group(s) to 022716fb:3, excluding first-hop tp(s) 50cdb857,b414796d,95839ad0,fdab37dd,f1012467,ac40965a and 6 first-hop peer(s); hook-race: every direct route to 022716fb shares the sibling's first hop (b414796d); awaiting the ranked candidates; excluding 1 same-LAN first hop(s) (share our uplink): 0be8b6f0; ranked by carrier class then path latency: 2c4ae7a5/stcpr=271ms+unknown, 93139b56/sudph=29+115ms, 3c838c5d/sudph=143+9ms, 5dfc8b3b/sudph=143+17ms, 4a318706/sudph=149+19ms, 9fa91cce/sudph=50+121ms, b1de7249/sudph=147+24ms, 4115ff2d/sudph=143+30ms, 81adbc36/sudph=50+127ms, 5546801c/sudph=63+117ms, 9c54a36f/sudph=84+122ms, bb4ede3d/sudph=175+160ms, a3b0bfa0/sudph=174+164ms, 2b23b4f7/sudph=184+164ms, 455509d7/sudph=193+166ms, ce33f7cc/sudph=152+243ms, a02a521d/sudph=242+169ms, a6c2cf64/sudph=233+187ms, 33420250/sudph=246+177ms, f02cf77f/sudph=245+184ms, 9bd4fefc/sudph=256+178ms, f57e59f7/sudph=279+179ms, c6c97e2f/sudph=270+191ms, 17d588b6/sudph=276+194ms, d1087514/sudph=283+209ms, bdf67f3c/sudph=238+256ms, fc659541/sudph=260+271ms, f0629873/sudph=216+319ms, 469162c6/sudph=219+319ms, e3c125ff/sudph=65ms+unknown, d1a40fe9/sudph=unmeasured, a88ccbc8/sudph=236ms+unknown, 9a92f214/sudph=unmeasured, 495db33c/sudph=244ms+unknown, e1c038eb/sudph=236ms+unknown, 323ca76b/sudph=231ms+unknown, eef2d4f7/sudph=unmeasured, 4f0de239/sudph=unmeasured, a28a4aea/sudph=245ms+unknown, 736083a8/sudph=165ms+unknown, c0c594b1/sudph=unmeasured, 516efbbb/sudph=unmeasured, b6feb1c1/sudph=182ms+unknown, f65f5a4f/sudph=241ms+unknown, ba3f5ddb/sudph=148ms+unknown, ee6868d9/sudph=unmeasured, a3c17e80/sudph=145ms+unknown, 1aaa1c45/sudph=181ms+unknown, d354afe9/sudph=unmeasured, 4192550e/sudph=unmeasured, 0780dbbe/sudph=unmeasured; chose 2c4ae7a5; oracle: path over a free first hop; first hop 2c4ae7a5"
+  },
+  {
+    "at": "2026-09-17T16:35:42.986748848-05:00",
+    "event": "group_created",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49167,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": -1,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "route group dialed by this visor"
+  },
+  {
+    "at": "2026-09-17T16:35:42.986752758-05:00",
+    "event": "leg_added",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49167,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 1,
+    "tp_id": "93139b56-acc0-00e5-8ca0-cd0bad229d62",
+    "tp_type": "sudph",
+    "remote_pk": "024a37bae69d6be2ec51eeb9d2b7e99073c30153d06896032f5bd3c09ca843bdb9",
+    "reason": "route setup: primary leg"
+  },
+  {
+    "at": "2026-09-17T16:35:43.127354611-05:00",
+    "event": "dial_decision",
+    "app": "skysocks-client",
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49167,
+      "src_port": 3
+    },
+    "by": "local",
+    "leg_index": 0,
+    "legs": 0,
+    "tp_id": "00000000-0000-0000-0000-000000000000",
+    "remote_pk": "000000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "diversify: 7 sibling group(s) to 022716fb:3, excluding first-hop tp(s) 2c4ae7a5,b414796d,95839ad0,fdab37dd,f1012467,ac40965a,50cdb857 and 7 first-hop peer(s); hook-race: every direct route to 022716fb shares the sibling's first hop (b414796d); awaiting the ranked candidates; excluding 1 same-LAN first hop(s) (share our uplink): 0be8b6f0; ranked by carrier class then path latency: 93139b56/sudph=29+115ms, 3c838c5d/sudph=143+9ms, 5dfc8b3b/sudph=143+17ms, 4a318706/sudph=149+19ms, 9fa91cce/sudph=50+121ms, b1de7249/sudph=147+24ms, 4115ff2d/sudph=143+30ms, 81adbc36/sudph=50+127ms, 5546801c/sudph=63+117ms, 9c54a36f/sudph=84+122ms, bb4ede3d/sudph=175+160ms, a3b0bfa0/sudph=174+164ms, 2b23b4f7/sudph=184+164ms, 455509d7/sudph=193+166ms, ce33f7cc/sudph=152+243ms, a02a521d/sudph=242+169ms, a6c2cf64/sudph=233+187ms, 33420250/sudph=246+177ms, f02cf77f/sudph=245+184ms, 9bd4fefc/sudph=256+178ms, 76903505/sudph=250p+195ms, f57e59f7/sudph=279+179ms, 17d588b6/sudph=276+194ms, d1087514/sudph=283+209ms, bdf67f3c/sudph=238+255ms, 4d876c20/sudph=217p+313ms, fc659541/sudph=260+271ms, f0629873/sudph=216+319ms, 469162c6/sudph=219+319ms, c6c97e2f/sudph=5719+191ms, e3c125ff/sudph=65ms+unknown, 7214de62/sudph=237pms+unknown, d1a40fe9/sudph=unmeasured, a88ccbc8/sudph=236ms+unknown, 50e63570/sudph=182pms+unknown, 9a92f214/sudph=unmeasured, 495db33c/sudph=244ms+unknown, e1c038eb/sudph=236ms+unknown, 323ca76b/sudph=231ms+unknown, 3ab5eaa2/sudph=unmeasured, eef2d4f7/sudph=unmeasured, 818d5118/sudph=258pms+unknown, a28a4aea/sudph=245ms+unknown, 736083a8/sudph=165ms+unknown, c0c594b1/sudph=unmeasured, 516efbbb/sudph=237pms+unknown, b6feb1c1/sudph=182ms+unknown, 49236a72/sudph=unmeasured, f65f5a4f/sudph=241ms+unknown, bf03c16a/sudph=274ms+unknown, ba3f5ddb/sudph=148ms+unknown, a3c17e80/sudph=145ms+unknown, eb2562fd/sudph=51pms+unknown, 1aaa1c45/sudph=181ms+unknown, d354afe9/sudph=unmeasured, 393b2ecb/sudph=294pms+unknown, 4192550e/sudph=unmeasured, 0780dbbe/sudph=unmeasured; chose 93139b56; oracle: path over a free first hop; first hop 93139b56"
+  }
+]

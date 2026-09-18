@@ -1,0 +1,12 @@
+# assert	value	want	verdict
+pool_size	8	> 2	PASS
+pool_settled	quiet 20s	quiet	INFO
+hashes_after_cut	3/3	3/3	PASS
+cut_target	tp 95839ad0-b588-0b1d-8475-45fba6ae993c rg 49176 remote 0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 (by tunnel_role=active)	an active tunnel's first hop	INFO
+survivors_kept	7/7 (49175,49176,49177,49179,49180,49181,49182,49183 -> 49175,49176,49177,49179,49180,49181,49182,49183)	all but rg 49176	PASS
+rg_ports_lost	none	at most rg 49176	PASS
+rg_ports_gained	none	pool refill, not a rebuild	INFO
+promote_event	tunnel_promoted x1	>=1 tunnel_promoted (or leg_promoted)	PASS
+ttfb_after_cut_s	1.180	< 2	PASS
+local_reorder_wedge	0 events, wedges counter 0	0	PASS
+exit_reorder_wedge	0	0	PASS

@@ -1,0 +1,5 @@
+# exit=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1 local=0186db249 exit_commit=0186db249 session=skysocks-client tunnels=2 route_groups=4 active=2 standby=2 groups=rg49173/active=[stcpr>022716fb@b414796d] rg49174/active=[stcpr>0371ab4b@95839ad0] rg49175/standby=[stcpr>0281a102@f1012467] rg49177/standby=[stcpr>03f57e7c@fdab37dd] refs=0371ab4b,03f57e7c size=50000000 sink=http://127.0.0.1:18080
+mux-tunnels-2-up2-t1a	up	50000000	5850252	200	50000000	8.546699	1
+mux-tunnels-2-up2-t1b	up	50000000	5390774	200	50000000	9.275194	1
+mux-tunnels-2-up2-t2a	up	50000000	5531190	200	50000000	9.039744	1
+mux-tunnels-2-up2-t2b	up	50000000	5510719	200	50000000	9.073321	1

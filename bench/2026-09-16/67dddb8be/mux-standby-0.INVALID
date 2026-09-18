@@ -1,0 +1,1 @@
+pool did not grow past the active set: 0 group(s) with --tunnels 2 (quiet 20s, below tunnels+1; groups=rg49205=[stcpr>022716fb@b414796d] rg49206=[webrtc>039fc26e@18ef0327] rg49207=[sudph>03c3278f@3c838c5d] rg49209=[stcpr>0371ab4b@95839ad0] rg49210=[sudph>024a37ba@93139b56] rg49211=[sudph>02b9062c@857e2cd9] rg49212=[stcpr>0281a102@f1012467] rg49213=[sudph>02956775@9fa91cce])
