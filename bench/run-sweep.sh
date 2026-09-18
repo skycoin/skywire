@@ -38,6 +38,15 @@
 #
 # Nothing here decides anything: it puts the numbers side by side. The verdict
 # is bench/verdict.sh on each value's directory.
+#
+# THE CHEAPER FORM. This script spends a COMPLETE runner invocation — a session
+# dial, a warm-up and a full set — on every value, which is what a SHAPE change
+# needs (a different --tunnels, a different pin order: things a running session
+# cannot be talked into). A knob that is live on a running session does not need
+# any of that: bench/run-variants.sh dials ONE session, writes knobs between
+# rows, and interleaves the baseline with every variant, so an A/B ratio costs
+# two rows instead of two sets. Use this script for shapes and that one for
+# knobs; bench/screen says which knobs are worth either.
 set -u
 exit_pk=$1; out=$2; pins=$3; runner=$4; key=$5; values=$6
 shift 6

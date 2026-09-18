@@ -489,6 +489,35 @@ stderr well inside the gap between them have said anything. The incumbent is a
 place to point a campaign, not a verdict: the verdict is still a full run under
 `bench/verdict.sh`.
 
+### How a knob decision is made, since 2026-09-18
+
+One deploy, not one per value. `bench/run-variants.sh` dials a single session
+and measures a whole list of knob variants through it, writing knobs only
+between rows: a variants file names variant A (the `baseline`, every knob where
+the visor already holds it) and any number of B variants, and each cell is
+measured **A, B, A, B'** … so every B row has a control taken seconds earlier on
+the same tunnels. The verdict is `median(B)/median(A)` with the per-pair ratios
+beside it, which is the paired-ratio rule of §2 applied without a second proxy
+instance: on a link whose bar swings 2x inside an hour, the interleaved A row is
+the only honest reference. Router knobs are written to BOTH ends
+(`route settings` locally and over `--via dmsg://<exit>`), proxy knobs to the
+app; every value is read back into the row, a knob that is only read at dial
+time is flagged rather than pretended at, and everything the run touched is
+restored from the EXIT/TERM traps.
+
+Before spending rig time on any of it, `bench/screen` says which knobs are worth
+moving: `screen gen` writes a Plackett-Burman (12/24 runs) or fractional
+factorial (16 runs) design as a variants file — every column and every pair of
+columns balanced, so all twelve factors are estimated from all sixteen runs —
+and `screen analyze` prints each factor's main effect per cell with a standard
+error taken from the replicate scatter, calling real only what clears two of
+them. The order is therefore: **screen** to find the few knobs that move this
+rig, **run-variants** (or `bench/tune` for a finer grid) to choose their values,
+and a full paired campaign under `bench/verdict.sh` to decide. `bench/screen/
+factors-mux.tsv` is the first twelve, and `SWEEP_DRY=1` with
+`bench/selftest-variants.sh` exercises the whole runner — interleaving, restore
+and ratio arithmetic — without touching the rig.
+
 ## 3. The work, in order, each step judged by the rig
 
 ### 3.1 Bound what is in flight per leg
