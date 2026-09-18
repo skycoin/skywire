@@ -16,6 +16,16 @@ Also that day the DE exit visor turned out to have been OOM-killed seven times i
 
 Then the mux sets themselves, run through the default proxy instance: `--tunnels N` had never dialed a route group (#4945), and once it did the candidate-route race handed every tunnel the same first hop (#4946, with #4947 recording each diversify dial's route choice on the group). The three-leg and five-leg groups exposed a spurious-retransmit storm — the exit re-sent 37,207 frames for 20,304 sent — because the ack-delay estimate the retransmit threshold floors on never samples a retransmitted frame; a DSACK now feeds the late original's delay into it (#4948).
 
+-   bench: shares count every leg that carried bytes (≥ 1 % of the row), a pin whose first hop is not a transport UUID is refused with `INVALID pin`, an unpaired set says `unpaired`, and the cut row targets the busiest active tunnel  [#5019](https://github.com/skycoin/skywire/pull/5019)
+-   bench: a failed row captures the visor's goroutine dumps, every route group's intake queue and the visor-log counters at the instant of failure  [#5017](https://github.com/skycoin/skywire/pull/5017)
+-   bench: the downlink ceiling is measured over the N best distinct routes, not the direct path alone  [#5016](https://github.com/skycoin/skywire/pull/5016)
+-   bench: a Thompson-sampling tuner over the live knobs, one runner call per round, incumbent table per cell  [#5015](https://github.com/skycoin/skywire/pull/5015)
+-   bench: the endpoint ceiling row (concurrent direct uploads and downloads, sink-verified), ceiling-aware two-upload and composition verdicts, and the spread set  [#5011](https://github.com/skycoin/skywire/pull/5011)
+-   fix(router): forward traffic takes the lowest-latency leg when no leg is direct; the exit keeps per-leg byte counters so direction is read from both ends  [#5010](https://github.com/skycoin/skywire/pull/5010)
+-   bench: direction analysis from both ends' per-leg counters — forward share, reverse fan-out and flips per row  [#5009](https://github.com/skycoin/skywire/pull/5009)
+-   feat(skysocks): a striped upload's chunk is sized from the object, under the `upload.chunk_bytes` ceiling (10 MB uploads x0.82 → paired)  [#5008](https://github.com/skycoin/skywire/pull/5008)
+-   bench: run-sweep.sh carries the paired reference into each value directory  [#5007](https://github.com/skycoin/skywire/pull/5007)
+-   bench: live-knob sweeps through `proxy settings` and `route settings`, one value per directory, applied after warm-up  [#5006](https://github.com/skycoin/skywire/pull/5006)
 -   feat(skysocks,cli,router): proxy settings — live-tunable client knobs (pool, tunnel, chunk, upload) pulled on the keepalive tick, and route settings gains the ECF window, park hold, FEC and dead-route hold  [#5002](https://github.com/skycoin/skywire/pull/5002)
 -   fix(router): a route that died within seconds of its dial is not re-picked by the next diversify search  [#5004](https://github.com/skycoin/skywire/pull/5004)
 -   bench: the standby cut lands at 40 % of the object, with the 5 s elapsed cap as backstop  [#5003](https://github.com/skycoin/skywire/pull/5003)
