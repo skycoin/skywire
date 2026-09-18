@@ -3,6 +3,14 @@
 
     <!-- The visor talks to dmsg/transports; the app talks to its local API. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Read-only, and the whole point is timing. When the phone moves between
+         Wi-Fi and cellular — or the carrier hands it a new IP mid-handover —
+         every TCP socket the visor holds is dead while both ends still believe
+         otherwise, and the visor only finds out ~75 s later when a dmsg
+         keepalive fails to write. The system knows at once; this lets us
+         listen and tell the core to re-dial then. See
+         [com.skycoin.skywire.core.NetworkWatcher]. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- SkywireCoreService runs the visor as a foreground service. specialUse
          (not dataSync) because Android 15 caps dataSync services at ~6 h and
          the visor is an always-on network node while connected. -->
