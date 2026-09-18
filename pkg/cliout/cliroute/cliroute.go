@@ -118,6 +118,12 @@ type Settings struct {
 	ForwardSpill        bool    `json:"forward_spill"`
 	ForwardSwitchMargin float64 `json:"forward_switch_margin"`
 
+	// LegStarveRatio is how many times the best ready leg's delay basis a leg's own
+	// must exceed before the scheduler cuts it to LegProbeBytes per window instead
+	// of a proportional share.
+	LegStarveRatio float64 `json:"leg_starve_ratio"`
+	LegProbeBytes  int64   `json:"leg_probe_bytes"`
+
 	// SBDDemote reports whether a shared-bottleneck ruling may park a leg at all.
 	// False (the default) means rulings are recorded as sbd_ruling mux events and
 	// nothing is demoted.
@@ -133,12 +139,14 @@ func (s Settings) Human(w io.Writer) error {
 		"sbd_min_samples: %d\nsbd_sample_interval: %s\n"+
 		"sbd_trial_window: %s\nsbd_trial_loss: %g\nsbd_backoff: %s\n"+
 		"sbd_min_evidence_rate: %d\nsbd_demote: %v\n"+
-		"forward_spill: %v\nforward_switch_margin: %g\n",
+		"forward_spill: %v\nforward_switch_margin: %g\n"+
+		"leg_starve_ratio: %g\nleg_probe_bytes: %d\n",
 		s.MinHops, s.ExistingTPOnly, s.ForceLocalRoutes, strings.Join(s.TransportPreference, ","),
 		s.EcfMaxWindowBytes, s.EcfMinWindowBytes, s.EcfWindowMargin,
 		s.SendWindowWaitMax, s.LegParkMinHold, s.DeadRouteHold, s.DeadRouteHoldMax, s.MuxFEC,
 		s.SBDMinSamples, s.SBDSampleInterval,
 		s.SBDTrialWindow, s.SBDTrialLoss, s.SBDBackoff, s.SBDMinEvidenceRate, s.SBDDemote,
-		s.ForwardSpill, s.ForwardSwitchMargin)
+		s.ForwardSpill, s.ForwardSwitchMargin,
+		s.LegStarveRatio, s.LegProbeBytes)
 	return err
 }

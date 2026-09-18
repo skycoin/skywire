@@ -74,6 +74,15 @@ var (
 	// re-read on every pick, so a sweep can move them on a running visor.
 	forwardSpillV        atomic.Bool
 	forwardSwitchMarginV atomic.Uint64 // float64 bits
+
+	// legStarveRatioV and legProbeBytesV shadow legStarveRatio and legProbeBytes
+	// in route_mux.go — the terms of the OUTCLASSED-LEG gate. The ratio is
+	// re-read by every window refresh (ruleProbeOnlyLegsLocked) and the budget by
+	// every pick that lands on a probe-only leg (legProbeExhausted), so a sweep
+	// can move either on a running visor; a ratio at or below 1 turns the gate
+	// off entirely.
+	legStarveRatioV atomic.Uint64 // float64 bits
+	legProbeBytesV  atomic.Int64
 )
 
 func init() {
@@ -93,6 +102,41 @@ func init() {
 	sbdDemoteV.Store(sbdDemoteDefault)
 	forwardSpillV.Store(forwardSpillDefault)
 	forwardSwitchMarginV.Store(math.Float64bits(forwardSwitchMarginDefault))
+	legStarveRatioV.Store(math.Float64bits(legStarveRatio))
+	legProbeBytesV.Store(legProbeBytes)
+}
+
+// LegStarveRatio is the one ratio the outclassed-leg ruling uses at both ends:
+// a leg is cut to a probe per window only when its delay basis exceeds the best
+// ready leg's by more than this AND its proven delivery rate is under 1/this of
+// that leg's — so a leg that is slow but productive keeps its share. At or below
+// 1 the gate is off.
+func LegStarveRatio() float64 { return math.Float64frombits(legStarveRatioV.Load()) }
+
+// SetLegStarveRatio installs that ratio. Only a finite value above 1 is
+// accepted — at or below 1 every leg would outclass every other, including
+// itself; use a very large ratio to disable the gate instead.
+func SetLegStarveRatio(v float64) bool {
+	if v <= 1 || math.IsInf(v, 0) || math.IsNaN(v) {
+		return false
+	}
+	legStarveRatioV.Store(math.Float64bits(v))
+	return true
+}
+
+// LegProbeBytes is how many bytes a leg ruled probe-only may carry per window
+// (the window being its own delay basis, floored at legProbeMinWindow).
+func LegProbeBytes() int64 { return legProbeBytesV.Load() }
+
+// SetLegProbeBytes installs that budget. Non-positive is refused: a budget of
+// zero would silence the leg completely, and the point of the probe is that the
+// leg keeps being measured so the ruling can lift.
+func SetLegProbeBytes(v int64) bool {
+	if v <= 0 {
+		return false
+	}
+	legProbeBytesV.Store(v)
+	return true
 }
 
 // EcfWindowMargin is the multiplier on SACK-proven delivery-per-RTT that sets a

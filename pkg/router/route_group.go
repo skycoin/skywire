@@ -4502,6 +4502,9 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 				// recorded, so `visor state --select diag` answers "which leg is
 				// the upload on, and why did it change".
 				rg.mux.SetForwardRehomeFn(rg.noteForwardRehome)
+				// …and a leg cut to a probe (or given its share back) is
+				// recorded there too, so a collapse onto one bad leg says so.
+				rg.mux.SetLegProbeRulingFn(rg.noteLegProbeRuling)
 				// Every SACK's per-leg send→ack delay also feeds the leg's
 				// shared-bottleneck window (rate-limited to one sample per
 				// SBDSampleInterval), so the detector can rule while a transfer

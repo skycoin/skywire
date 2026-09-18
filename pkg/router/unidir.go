@@ -330,12 +330,28 @@ func (m *routeMux) selectByDirection(tps []*transport.ManagedTransport, fwd []ro
 	// Tier 1: active, ready, class-matching (legReadyAt already excludes standby).
 	// Prefer the scheduler's pick when it qualifies, so the heavy direction spreads
 	// across the active legs per the mux weights/ECF.
+	//
+	// The spread is bounded by the probe budget: the schedule this tier reads is
+	// an UNWEIGHTED round-robin over the live legs for every predictive mode
+	// (transportSelector.Rebuild), so without the gate a leg whose delay basis is
+	// a multiple of its sibling's keeps taking every other frame of the download
+	// — which is the 2026-09-18 collapse (8.3-37.4 s for 10 MB, each trial's
+	// duration the bytes placed on the 60 KB/s leg divided by its rate). A leg
+	// ruled probe-only still gets its probe per window, so it keeps being
+	// measured and the ruling lifts by itself when it recovers.
 	activeReady := func(idx int) bool { return classOK(idx) && m.legReadyAt(idx) }
+	withBudget := func(idx int) bool { return activeReady(idx) && !m.legProbeExhausted(idx) }
 	if m.tpSelector != nil && m.tpSelector.Len() > 0 {
-		if idx := m.tpSelector.Select(); idx >= 0 && idx < n && activeReady(idx) {
+		if idx := m.tpSelector.Select(); idx >= 0 && idx < n && withBudget(idx) {
 			return tps[idx], fwd[idx], idx, true
 		}
 	}
+	if tp, rule, idx, ok := scan(withBudget); ok {
+		return tp, rule, idx, true
+	}
+	// Every active leg is out of probe budget (or the group has only outclassed
+	// legs left): the download still has to go somewhere, so the budget is
+	// advisory from here down and the original tiers decide.
 	if tp, rule, idx, ok := scan(activeReady); ok {
 		return tp, rule, idx, true
 	}
