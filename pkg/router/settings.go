@@ -68,6 +68,12 @@ var (
 	// decision — until an operator turns this on. enforceBottleneckGroups
 	// re-reads it on every data-progress tick.
 	sbdDemoteV atomic.Bool
+
+	// forwardSpillV and forwardSwitchMarginV govern the FORWARD direction's
+	// confinement to one leg (see route_mux.go selectConfinedForward). Both are
+	// re-read on every pick, so a sweep can move them on a running visor.
+	forwardSpillV        atomic.Bool
+	forwardSwitchMarginV atomic.Uint64 // float64 bits
 )
 
 func init() {
@@ -85,6 +91,8 @@ func init() {
 	sbdBackoffV.Store(int64(sbdBackoff))
 	sbdMinEvidenceRateV.Store(sbdMinEvidenceRate)
 	sbdDemoteV.Store(sbdDemoteDefault)
+	forwardSpillV.Store(forwardSpillDefault)
+	forwardSwitchMarginV.Store(math.Float64bits(forwardSwitchMarginDefault))
 }
 
 // EcfWindowMargin is the multiplier on SACK-proven delivery-per-RTT that sets a
@@ -280,5 +288,40 @@ func SBDDemote() bool { return sbdDemoteV.Load() }
 // always applies and always reports true.
 func SetSBDDemote(on bool) bool {
 	sbdDemoteV.Store(on)
+	return true
+}
+
+// forwardSpillDefault is OFF: the forward direction stays on its confined leg
+// and a full send window WAITS (bounded by SendWindowWaitMax) instead of
+// spilling the frame onto another leg. Every live row that did spill — the
+// upload split across a 44 ms and a 166 ms leg — collapsed, at x0.68 for 10 MB
+// and x0.24 for 50 MB, while the rows that stayed on one leg ran at x0.98-1.0.
+const forwardSpillDefault = false
+
+// ForwardSpill reports whether a forward frame may leave the confined leg when
+// that leg is at its send window. Off by default; on restores the pre-fix
+// behavior, where a saturated confined leg handed the frame to the scheduler.
+func ForwardSpill() bool { return forwardSpillV.Load() }
+
+// SetForwardSpill turns forward spill on or off on a running visor. Like
+// SetSBDDemote there is no "zero means unchanged" case, so it always applies.
+func SetForwardSpill(on bool) bool {
+	forwardSpillV.Store(on)
+	return true
+}
+
+// ForwardSwitchMargin is how much LOWER a challenger leg's measured end-to-end
+// latency must be before the forward direction moves off the leg it holds
+// (0.2 = 20 % lower), for forwardSwitchSamples consecutive samples.
+func ForwardSwitchMargin() float64 { return math.Float64frombits(forwardSwitchMarginV.Load()) }
+
+// SetForwardSwitchMargin installs that fraction. Only a value in (0, 1) is
+// accepted: 0 would move the direction on measurement noise — the flapping this
+// margin exists to stop — and 1 could never be cleared.
+func SetForwardSwitchMargin(v float64) bool {
+	if v <= 0 || v >= 1 || math.IsNaN(v) {
+		return false
+	}
+	forwardSwitchMarginV.Store(math.Float64bits(v))
 	return true
 }

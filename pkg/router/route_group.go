@@ -1905,11 +1905,17 @@ func (rg *RouteGroup) nextTransport(payload []byte) (*transport.ManagedTransport
 	return rg.tps[0], rg.fwd[0], 0, nil
 }
 
-// nextFastestTransport is nextTransport's retransmit-path variant: it always
-// routes to the lowest-latency live leg (see routeMux.selectFastestTransport)
-// so a head-of-line-blocking gap is healed on a fast leg, not re-sent down the
-// slow leg that stalled it. Single-leg groups behave identically to
-// nextTransport.
+// nextFastestTransport is nextTransport's retransmit-path variant: it routes to
+// the lowest-latency live leg (see routeMux.selectFastestTransport) so a
+// head-of-line-blocking gap is healed on a fast leg, not re-sent down the slow
+// leg that stalled it. Single-leg groups behave identically to nextTransport.
+//
+// The one exception is a FORWARD-confined direction: its retransmits go back on
+// the confined leg, like its data. A retransmit that leaves on another leg is
+// the same split the confinement exists to stop — it puts the very sequence the
+// peer's no-skip frontier is waiting on behind a different leg's queue, and it
+// is why rows that looked confined on the data path still showed a fifth of
+// their bytes on the wrong leg.
 func (rg *RouteGroup) nextFastestTransport() (*transport.ManagedTransport, routing.Rule, int, error) {
 	if len(rg.tps) == 0 {
 		return nil, nil, -1, ErrNoTransports
@@ -1921,6 +1927,11 @@ func (rg *RouteGroup) nextFastestTransport() (*transport.ManagedTransport, routi
 		return nil, nil, -1, ErrRuleTransportMismatch
 	}
 	if rg.mux != nil && len(rg.tps) > 1 {
+		if directional, wantDirect, dstPK, srcPK := rg.mux.dirConfig(); directional && rg.mux.forwardSender() {
+			if tp, rule, idx, ok := rg.mux.selectConfinedForward(rg.tps, rg.fwd, wantDirect, dstPK, srcPK); ok {
+				return tp, rule, idx, nil
+			}
+		}
 		return rg.mux.selectFastestTransport(rg.tps, rg.fwd)
 	}
 	if rg.tps[0] == nil {
@@ -4487,6 +4498,10 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 				// measure, so the no-direct-leg forward confinement can pick
 				// the fastest leg rather than whichever was added first.
 				rg.mux.SetLegLatencyFn(rg.legEndToEndLatencyMs)
+				// The forward direction rides one leg; every move of it is
+				// recorded, so `visor state --select diag` answers "which leg is
+				// the upload on, and why did it change".
+				rg.mux.SetForwardRehomeFn(rg.noteForwardRehome)
 				// Every SACK's per-leg send→ack delay also feeds the leg's
 				// shared-bottleneck window (rate-limited to one sample per
 				// SBDSampleInterval), so the detector can rule while a transfer
