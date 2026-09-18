@@ -1,5 +1,5 @@
 | striped upload | `upload.stripe_min_bytes` · `upload.chunk_bytes` · `upload.mem_bytes` · `upload.concurrency` · `upload.replay_max_bytes` · `upload.probe_ttl` |
-| upload retries | `upload.ack_timeout` · `upload.idle_timeout` · `upload.durable_wait` · `upload.resend_passes` · `upload.early_tries` · `upload.early_wait_max` · `upload.busy_backoff` · `upload.busy_tries` · `upload.replay_tries` |
+| upload retries | `upload.ack_timeout` · `upload.idle_timeout` · `upload.durable_wait` · `upload.resend_passes` · `upload.early_tries` · `upload.early_wait_max` · `upload.busy_backoff` · `upload.busy_tries` · `upload.cut_tries` · `upload.replay_tries` |
 # Route multiplexing: the live campaign to finish it
 
 Status: plan, 2026-09-15. To be taken up after v1.3.94. "Tested" here means
@@ -232,7 +232,7 @@ run that sets nothing is byte-for-byte the old binary.
 | snub | `tunnel.snub_after` · `tunnel.snub_hold` |
 | queue depth | `chunk.depth_dynamic` · `upload.depth_dynamic` · `chunk.depth_min` · `chunk.depth_max` · `tunnel.depth_margin` |
 | striped upload | `upload.stripe_min_bytes` · `upload.chunk_bytes` · `upload.mem_bytes` · `upload.concurrency` · `upload.replay_max_bytes` · `upload.probe_ttl` |
-| upload retries | `upload.ack_timeout` · `upload.idle_timeout` · `upload.durable_wait` · `upload.resend_passes` · `upload.early_tries` · `upload.early_wait_max` · `upload.busy_backoff` · `upload.busy_tries` · `upload.replay_tries` |
+| upload retries | `upload.ack_timeout` · `upload.idle_timeout` · `upload.durable_wait` · `upload.resend_passes` · `upload.early_tries` · `upload.early_wait_max` · `upload.busy_backoff` · `upload.busy_tries` · `upload.cut_tries` · `upload.replay_tries` |
 | spread policy (v4) | `spread.max_share` · `spread.min_routes` · `spread.endgame` · `spread.weight` |
 
 `chunk.max_bytes` and `chunk.concurrency` OVERRIDE the boot flags
