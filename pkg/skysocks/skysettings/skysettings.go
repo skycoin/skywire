@@ -71,16 +71,24 @@ const (
 	TunnelPromoteMargin    = "tunnel.promote_margin"
 	TunnelPromoteHold      = "tunnel.promote_hold"
 	TunnelParkMinHold      = "tunnel.park_min_hold"
-	TunnelAuditionWindow   = "tunnel.audition_window"
-	TunnelAuditionEvery    = "tunnel.audition_every"
-	TunnelExitOpenPenalty  = "tunnel.exit_open_penalty"
-	TunnelMeterSampleMin   = "tunnel.meter_sample_min"
-	TunnelMeterCapDecay    = "tunnel.meter_cap_decay"
-	TunnelMeterFresh       = "tunnel.meter_fresh"
-	TunnelSnubAfter        = "tunnel.snub_after"
-	TunnelSnubHold         = "tunnel.snub_hold"
-	TunnelDepthMargin      = "tunnel.depth_margin"
-	TunnelCount            = "tunnel.count"
+
+	TunnelGoodputAlpha         = "tunnel.goodput_alpha"
+	TunnelGoodputFresh         = "tunnel.goodput_fresh"
+	TunnelGoodputMinWindows    = "tunnel.goodput_min_windows"
+	TunnelPromoteGoodputMargin = "tunnel.promote_goodput_margin"
+	TunnelPromoteQuietBytes    = "tunnel.promote_quiet_bytes"
+	TunnelPromoteIdleBps       = "tunnel.promote_idle_bps"
+
+	TunnelAuditionWindow  = "tunnel.audition_window"
+	TunnelAuditionEvery   = "tunnel.audition_every"
+	TunnelExitOpenPenalty = "tunnel.exit_open_penalty"
+	TunnelMeterSampleMin  = "tunnel.meter_sample_min"
+	TunnelMeterCapDecay   = "tunnel.meter_cap_decay"
+	TunnelMeterFresh      = "tunnel.meter_fresh"
+	TunnelSnubAfter       = "tunnel.snub_after"
+	TunnelSnubHold        = "tunnel.snub_hold"
+	TunnelDepthMargin     = "tunnel.depth_margin"
+	TunnelCount           = "tunnel.count"
 
 	MuxCap   = "mux.cap"
 	MuxWidth = "mux.width"
@@ -245,6 +253,18 @@ func init() {
 		"how long an advantage must hold before the swap fires")
 	register(TunnelParkMinHold, KindDuration, int64(30*time.Second),
 		"how long a parked tunnel stays out of the candidate set")
+	register(TunnelGoodputAlpha, KindRatio, ratio(0.25),
+		"weight of each carrying window in a tunnel's delivered-goodput EWMA")
+	register(TunnelGoodputFresh, KindDuration, int64(2*time.Minute),
+		"how long a tunnel's measured goodput stays usable for a promotion decision; past it the tunnel is unmeasured again and the audition re-measures it")
+	register(TunnelGoodputMinWindows, KindCount, 2,
+		"carrying windows a tunnel needs before its goodput counts as measured")
+	register(TunnelPromoteGoodputMargin, KindRatio, ratio(1.5),
+		"how much more a standby must have been measured DELIVERING than the weakest active before it may swap in")
+	register(TunnelPromoteQuietBytes, KindBytes, 256<<10,
+		"bytes an active tunnel may move between two promoter ticks and still count as idle; above it the tunnel is mid-transfer and is never parked")
+	register(TunnelPromoteIdleBps, KindBytes, 64<<10,
+		"measured goodput at or above which an active tunnel counts as PRODUCTIVE, so a lower round trip alone can never park it")
 	register(TunnelAuditionWindow, KindDuration, int64(30*time.Second),
 		"how long an audition offer stands before it expires")
 	register(TunnelAuditionEvery, KindDuration, int64(60*time.Second),
