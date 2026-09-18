@@ -928,10 +928,24 @@ var errChunkRaceLost = errors.New("skysocks: another attempt delivered the chunk
 // when the planner does not steer this attempt.
 func (c *Client) openChunkStreamFor(p chunkPlacement, size int64, kind pickKind) (*yamux.Session, net.Conn, error) {
 	sess := p.pin
+	// booked says the reservation for this chunk is already on the ledger, so
+	// the error paths below know whether they owe it back.
+	booked := false
 	if sess == nil {
-		sess = p.pl.pick()
+		// pick() chooses AND books in one critical section. Booking after the
+		// Open() below instead was the 2026-09-16 bug: with an admission gate
+		// of chunk.tunnel_concurrency × active tunnels every chunk of the
+		// object is admitted at once, every pick resolved against the same
+		// pre-charge ledger, and all 12 chunks of a 50 MB download landed on
+		// the one tunnel that had not moved a byte yet.
+		sess = p.pl.pick(size)
+		booked = sess != nil
 	}
 	if sess == nil || sess.IsClosed() {
+		if booked {
+			p.pl.uncharge(sess, size)
+			booked = false
+		}
 		if p.pin != nil {
 			return nil, nil, fmt.Errorf("%w: the pinned tunnel is gone", errSessionClosed)
 		}
@@ -940,18 +954,26 @@ func (c *Client) openChunkStreamFor(p chunkPlacement, size int64, kind pickKind)
 	if sess == nil {
 		return nil, nil, errAllTunnelsDown
 	}
+	if !booked {
+		// The pinned tunnel and the pickSessionFor fallback are booked here:
+		// they are not the planner's choice, but their bytes are the object's.
+		p.pl.charge(sess, size)
+	}
 	if sess.IsClosed() {
+		p.pl.uncharge(sess, size)
 		return nil, nil, fmt.Errorf("%w: closed between the pick and the open", errSessionClosed)
 	}
 	st, err := sess.Open()
 	if err != nil {
+		// Nothing went out: the reservation must not steer the rest of the
+		// object away from a tunnel that carried no bytes for it.
+		p.pl.uncharge(sess, size)
 		if sess.IsClosed() {
 			return nil, nil, fmt.Errorf("%w: %v", errSessionClosed, err)
 		}
 
 		return nil, nil, err
 	}
-	p.pl.charge(sess, size)
 
 	return sess, st, nil
 }

@@ -98,8 +98,12 @@ func (p spreadPolicy) capped() bool { return p.maxShare > 0 && p.maxShare < 1 }
 //     SKIPPED, but only while another tunnel is under its cap: a cap must
 //     never be a reason to stall an object.
 //  3. Among what is left, the tunnel furthest BELOW its weight — smallest
-//     carried/weight — takes the chunk; ties go to the lowest index, which is
-//     the order the sessions were added.
+//     carried/weight — takes the chunk; ties go to the tunnel with the most
+//     MEASURED capacity, and only then to the lowest index. The first chunk of
+//     an object is one big tie (nothing is carried yet), and the lowest index
+//     is the tunnel the sessions happen to have been added in — on the rig,
+//     the direct one — so an index-only tie-break aims every opening chunk at
+//     the same route.
 //
 // Rule 3 alone is the fix for "the slow tunnel drags the pair below itself":
 // at 8 and 3 MB/s the ratio settles at 8:3, so the slow tunnel gets fewer
@@ -112,6 +116,7 @@ func spreadChoose(capsBps []float64, carried []int64, p spreadPolicy) int {
 	// never indexed out of three separate slices.
 	type lane struct {
 		weight   float64
+		measured float64
 		carried  int64
 		eligible bool
 	}
@@ -119,7 +124,7 @@ func spreadChoose(capsBps []float64, carried []int64, p spreadPolicy) int {
 	// 1. weights.
 	best := 0.0
 	for i, c := range capsBps {
-		lanes[i] = lane{weight: c, carried: carried[i], eligible: true}
+		lanes[i] = lane{weight: c, measured: c, carried: carried[i], eligible: true}
 		if p.even {
 			lanes[i].weight = 1
 		}
@@ -149,14 +154,14 @@ func spreadChoose(capsBps []float64, carried []int64, p spreadPolicy) int {
 	// 3. the deepest deficit wins. With every tunnel at its cap the cap is
 	// ignored: it must never be a reason to stall an object.
 	idx := -1
-	bestScore := 0.0
+	bestScore, bestCap := 0.0, 0.0
 	for i, l := range lanes {
 		if !l.eligible && under > 0 {
 			continue
 		}
 		score := float64(l.carried) / l.weight
-		if idx == -1 || score < bestScore {
-			idx, bestScore = i, score
+		if idx == -1 || score < bestScore || (score == bestScore && l.measured > bestCap) {
+			idx, bestScore, bestCap = i, score, l.measured
 		}
 	}
 	return idx
@@ -209,10 +214,18 @@ func (p *spreadPlanner) ensureRoutes() int {
 	return p.c.ensureMinRoutes(p.pol.minRoutes, p.dir, "spread.min_routes")
 }
 
-// pick returns the tunnel the next chunk of `size` bytes belongs on, or nil to
-// leave the choice to pickSessionFor (the policy steers nothing, or there is
-// nothing to choose between).
-func (p *spreadPlanner) pick() *yamux.Session {
+// pick returns the tunnel the next chunk of `size` bytes belongs on AND books
+// those bytes against it, or nil to leave the choice to pickSessionFor (the
+// policy steers nothing, or there is nothing to choose between).
+//
+// The choose and the charge are ONE critical section, and that is the whole
+// point of the method: chunks are admitted in a burst — the download gate is
+// chunk.tunnel_concurrency × the active width — so picks resolve concurrently.
+// Reading the ledger under one lock and charging under another leaves every
+// pick in the burst looking at the same all-zero ledger, which is one tie that
+// the whole burst breaks the same way. A caller that gets a session back owes
+// uncharge(sess, size) if the chunk never goes out.
+func (p *spreadPlanner) pick(size int64) *yamux.Session {
 	if p == nil || p.c == nil || !p.pol.steers() {
 		return nil
 	}
@@ -222,14 +235,16 @@ func (p *spreadPlanner) pick() *yamux.Session {
 	}
 	carried := make([]int64, len(sessions))
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	for i, s := range sessions {
 		carried[i] = p.bytes[s]
 	}
-	p.mu.Unlock()
-	if i := spreadChoose(caps, carried, p.pol); i >= 0 {
-		return sessions[i]
+	i := spreadChoose(caps, carried, p.pol)
+	if i < 0 {
+		return nil
 	}
-	return nil
+	p.chargeLocked(sessions[i], size)
+	return sessions[i]
 }
 
 // pickIdle returns the fastest tunnel carrying NO stream right now, for an
@@ -264,10 +279,35 @@ func (p *spreadPlanner) charge(s *yamux.Session, n int64) {
 		return
 	}
 	p.mu.Lock()
+	p.chargeLocked(s, n)
+	p.mu.Unlock()
+}
+
+// chargeLocked is charge with p.mu already held, so a pick can book what it
+// chose without letting go of the ledger in between.
+func (p *spreadPlanner) chargeLocked(s *yamux.Session, n int64) {
+	if n <= 0 {
+		return
+	}
 	if _, seen := p.bytes[s]; !seen {
 		p.order = append(p.order, s)
 	}
 	p.bytes[s] += n
+}
+
+// uncharge releases a reservation that never became bytes on the wire: the
+// stream would not open, or the chosen tunnel closed between the pick and the
+// open. A reservation left behind is phantom bytes — it steers the rest of the
+// object away from a tunnel that carried nothing for it, and it inflates that
+// tunnel's share in the completion line.
+func (p *spreadPlanner) uncharge(s *yamux.Session, n int64) {
+	if p == nil || s == nil || n <= 0 {
+		return
+	}
+	p.mu.Lock()
+	if p.bytes[s] -= n; p.bytes[s] < 0 {
+		p.bytes[s] = 0
+	}
 	p.mu.Unlock()
 }
 

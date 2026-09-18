@@ -52,7 +52,9 @@ chunk lands wherever `pickSessionFor(pickRecv)` puts it today.
 2. A route at or above `max_share` of the bytes placed so far is skipped, but
    only while another route is under its cap. A cap never stalls an object.
 3. Of what is left, the route furthest below its weight — smallest
-   carried/weight — takes the chunk.
+   carried/weight — takes the chunk. Ties go to the route with the most
+   measured capacity, then to the lowest index: the first chunk of an object is
+   one big tie, and the session order is not a placement policy.
 
 **Where it applies.** Range-split download chunk assignment across ACTIVE
 tunnels (`rangesplit.go`) and striped-upload slot assignment (`upload_stripe.go`),
@@ -93,7 +95,14 @@ after `min_routes` has promoted; unset, and at a width of one, it is
 **Accounting.** The planner books a chunk's bytes against its tunnel at
 admission and corrects the booking to what the tunnel actually carried when the
 attempt ends, so an attempt that failed and went elsewhere leaves its first
-tunnel charged for nothing. On completion the object logs
+tunnel charged for nothing. The choice and the booking are ONE critical section
+— the pick that reads the ledger is the pick that charges it, and an open that
+fails un-charges the reservation — because the admission gate above releases a
+whole burst of chunks at once, and picks resolving against a ledger charged
+afterwards all see the same all-zero shares and break the same tie the same way
+(2026-09-16, `max_share` 0.4 / `min_routes` 3 over three active tunnels: all 12
+chunks of a 50 MB download landed on the direct tunnel, 48.0 MB of 50).
+On completion the object logs
 `shares=<port>:<pct>,... top=<pct>`, keyed by the tunnel's local route-group
 port — the same name `bench/direction.sh` reads out of `carrier.tsv`, so the
 client's account can be matched against the per-transport `sent_delta` /

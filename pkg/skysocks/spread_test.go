@@ -125,7 +125,7 @@ func TestSpreadOffLeavesThePickOrderAlone(t *testing.T) {
 
 	c := &Client{}
 	pl := c.newSpreadPlanner(spreadDown)
-	require.Nil(t, pl.pick(), "off, the planner defers to the picker")
+	require.Nil(t, pl.pick(planChunk), "off, the planner defers to the picker")
 
 	require.True(t, skysettings.Apply(map[string]int64{skysettings.SpreadMinRoutes: 3}))
 	require.True(t, spreadPolicyNow().steers())
@@ -551,4 +551,142 @@ func TestEnsureMinRoutesFallsBackToTheRTTRank(t *testing.T) {
 	require.Equal(t, 2, c.ensureMinRoutes(2, spreadDown, "test"))
 	require.False(t, c.IsStandby(near), "no capacity sample anywhere: the lowest RTT wins")
 	require.True(t, c.IsStandby(far))
+}
+
+// Concurrent picks must not all land on the same tunnel. The download gate
+// admits chunk.tunnel_concurrency × the active width at once, so every chunk of
+// a 50 MB object over three tunnels is picked in the same instant. With the
+// reservation booked outside the pick's lock the whole burst read the same
+// all-zero ledger and broke the tie the same way — live on 2026-09-16
+// (bench/2026-09-16/03ece1e95-smoke, mux-spread-3 row 4, max_share 0.4 /
+// min_routes 3): all 12 chunks went to the direct tunnel, 48.0 of 50 MB.
+func TestSpreadPickAndReservationAreOneCriticalSection(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	capsBps := []float64{8 << 20, 5 << 20, 3 << 20}
+	sessions := make([]*yamux.Session, 0, len(capsBps))
+	meters := map[*yamux.Session]*tunnelMeter{}
+	for i := range capsBps {
+		s, closeS := newTestSession(t)
+		defer closeS() //nolint:revive // the sessions must outlive the loop
+		m := new(tunnelMeter)
+		m.rxCapBps = capsBps[i]
+		sessions = append(sessions, s)
+		meters[s] = m
+	}
+	c := &Client{
+		sessions:  sessions,
+		recvStamp: meters,
+		standby:   map[*yamux.Session]bool{},
+		closeC:    make(chan struct{}),
+	}
+	require.True(t, skysettings.Apply(map[string]int64{
+		skysettings.SpreadMaxShare:  mustRatio(t, skysettings.SpreadMaxShare, "0.4"),
+		skysettings.SpreadMinRoutes: 3,
+	}))
+	pl := c.newSpreadPlanner(spreadDown)
+	require.True(t, pl.pol.steers())
+
+	// chunk.tunnel_concurrency (4) × 3 active tunnels: the live burst.
+	const chunks = 12
+	picked := make([]*yamux.Session, chunks)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < chunks; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			picked[i] = pl.pick(planChunk)
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	for i, s := range picked {
+		require.NotNilf(t, s, "chunk %d was placed nowhere", i)
+	}
+	total := int64(chunks) * planChunk
+	sh := pl.shares()
+	require.Len(t, sh, len(capsBps), "the burst must reach every tunnel")
+	var booked int64
+	for _, s := range sh {
+		booked += s.bytes
+		// The cap, plus the one chunk a tunnel may be handed while it is
+		// still under it.
+		require.LessOrEqualf(t, float64(s.bytes), 0.4*float64(total)+float64(planChunk),
+			"one tunnel booked %d of the %d bytes in the burst", s.bytes, total)
+	}
+	require.Equal(t, total, booked, "every pick books its chunk exactly once")
+}
+
+// newGoAwaySession is a LIVE tunnel whose peer has sent GoAway: Open() fails
+// while the session itself is not closed, which is the shape of a failed open
+// on the admission path (a closed session is refused before the open).
+func newGoAwaySession(t *testing.T) (*yamux.Session, func()) {
+	t.Helper()
+	a, b := net.Pipe()
+	ssess, err := yamux.Server(b, yamux.DefaultConfig())
+	require.NoError(t, err)
+	csess, err := yamux.Client(a, yamux.DefaultConfig())
+	require.NoError(t, err)
+	go func() { _ = ssess.GoAway() }() //nolint:errcheck
+	require.Eventually(t, func() bool {
+		st, err := csess.Open()
+		if err == nil {
+			st.Close() //nolint:errcheck,gosec
+			return false
+		}
+		return !csess.IsClosed()
+	}, 5*time.Second, 10*time.Millisecond, "the peer's GoAway never arrived")
+	return csess, func() {
+		_ = csess.Close() //nolint:errcheck
+		_ = ssess.Close() //nolint:errcheck
+		_ = a.Close()     //nolint:errcheck
+		_ = b.Close()     //nolint:errcheck
+	}
+}
+
+// A reservation that never becomes bytes on the wire goes back. Without the
+// un-charge a tunnel that refuses every open accumulates phantom bytes, which
+// both steer the rest of the object away from tunnels that carried nothing and
+// inflate that tunnel's share in the completion line.
+func TestSpreadUnchargesAFailedOpen(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	sessions := make([]*yamux.Session, 0, 2)
+	meters := map[*yamux.Session]*tunnelMeter{}
+	for i := 0; i < 2; i++ {
+		s, closeS := newGoAwaySession(t)
+		defer closeS() //nolint:revive // the sessions must outlive the loop
+		sessions = append(sessions, s)
+		meters[s] = new(tunnelMeter)
+	}
+	c := &Client{
+		sessions:  sessions,
+		recvStamp: meters,
+		standby:   map[*yamux.Session]bool{},
+		closeC:    make(chan struct{}),
+	}
+	require.True(t, skysettings.Apply(map[string]int64{
+		skysettings.SpreadMaxShare:  mustRatio(t, skysettings.SpreadMaxShare, "0.4"),
+		skysettings.SpreadMinRoutes: 2,
+	}))
+	pl := c.newSpreadPlanner(spreadDown)
+
+	// The reservation IS on the ledger between the pick and the open — that is
+	// what the concurrent picks of the burst above see.
+	s := pl.pick(planChunk)
+	require.NotNil(t, s)
+	require.InDelta(t, 1.0, pl.topShare(), 1e-9)
+	pl.uncharge(s, planChunk)
+	require.Zero(t, pl.topShare(), "the reservation goes back")
+
+	for i := 0; i < 4; i++ {
+		_, _, err := c.openChunkStreamFor(chunkPlacement{pl: pl}, planChunk, pickSibling)
+		require.Errorf(t, err, "open %d: the peer has gone away", i)
+	}
+	for _, sh := range pl.shares() {
+		require.Zerof(t, sh.bytes, "a failed open left %d phantom bytes", sh.bytes)
+	}
+	require.Zero(t, pl.topShare())
+	require.Equal(t, "shares=none", pl.sharesLine())
 }
