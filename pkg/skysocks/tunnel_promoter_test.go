@@ -252,9 +252,10 @@ func TestPromoter_SwapReportsAParkAndAPromote(t *testing.T) {
 }
 
 // The audition: while everything is idle, a standby whose capacity was never
-// measured is offered the next lone stream — the only way a tunnel carrying
-// nothing can ever get a capacity number (#4965), and it costs no extra bytes.
-func TestPromoter_AuditionOffersALoneStreamToAnUnprovenStandby(t *testing.T) {
+// measured is offered the next SIBLING chunk stream — the only way a tunnel
+// carrying nothing can ever get a capacity number (#4965), and it costs no
+// extra bytes.
+func TestPromoter_AuditionOffersASiblingChunkStreamToAnUnprovenStandby(t *testing.T) {
 	c, active, standby, cleanup := promoterClient(t, 100, 95) // inside the margin: a plausible candidate, not a swap
 	defer cleanup()
 
@@ -264,14 +265,18 @@ func TestPromoter_AuditionOffersALoneStreamToAnUnprovenStandby(t *testing.T) {
 	c.sessionsMu.Unlock()
 	require.Same(t, standby, armed, "the unproven standby is on offer")
 
-	require.Same(t, standby, c.pickSessionFor(pickAny), "and the next lone stream auditions it")
-	require.Same(t, active, c.pickSessionFor(pickAny), "one stream per offer; the next goes back to the active tunnel")
+	require.Same(t, standby, c.pickSessionKind(pickRecv, pickSibling), "and the next sibling chunk auditions it")
+	require.Same(t, active, c.pickSessionKind(pickRecv, pickSibling), "one stream per offer; the next goes back to the active tunnel")
 	require.True(t, c.IsStandby(standby), "an audition is a measurement, not a promotion")
 }
 
-// ...and it never touches a transfer: with any tunnel busy the offer is not
-// made, and a standing offer is withdrawn.
-func TestPromoter_AuditionIsWithdrawnWhileAnythingIsBusy(t *testing.T) {
+// The audition must never take the ENTRY stream. It is the stream a browser
+// connection is answered on, and for a splittable GET it is also chunk0 — the
+// 2 MiB probe whose body is copied to the browser ahead of every other chunk —
+// so a cold standby under it holds up the whole download. Measured on the rig
+// 2026-09-16 (bench/2026-09-16/03ece1e95-smoke, mux-tunnels-2 rows 10 and 13):
+// 5.1 and 5.3 MB/s against 8.3-8.4 for the rows either side of them.
+func TestPromoter_AuditionNeverTakesTheEntryStream(t *testing.T) {
 	c, active, standby, cleanup := promoterClient(t, 100, 95)
 	defer cleanup()
 
@@ -280,21 +285,42 @@ func TestPromoter_AuditionIsWithdrawnWhileAnythingIsBusy(t *testing.T) {
 	require.Same(t, standby, c.audition)
 	c.sessionsMu.Unlock()
 
+	require.Same(t, active, c.pickSession(), "the entry stream — stream0, chunk0 of a splittable GET — stays on an active tunnel")
+	c.sessionsMu.Lock()
+	require.Same(t, standby, c.audition, "and the offer is not spent on it either: it waits")
+	c.sessionsMu.Unlock()
+
+	// stream0 is now in flight, which is the normal condition of every sibling
+	// pick that follows it. The offer is still there for the first of them.
 	st, err := active.Open()
 	require.NoError(t, err)
 	defer st.Close() //nolint:errcheck
 	require.Eventually(t, func() bool { return active.NumStreams() == 1 }, time.Second, 5*time.Millisecond)
 
-	require.Same(t, active, c.pickSessionFor(pickAny), "a busy client places streams as usual")
-	c.sessionsMu.Lock()
-	require.Nil(t, c.audition, "the offer is withdrawn rather than deferred")
-	c.sessionsMu.Unlock()
+	require.Same(t, standby, c.pickSessionKind(pickRecv, pickSibling), "the first sibling chunk takes the audition")
+	require.Same(t, active, c.pickSessionKind(pickRecv, pickSibling), "one stream per offer")
+	require.True(t, c.IsStandby(standby), "an audition is a measurement, not a promotion")
+}
 
-	// And no new offer is made while the transfer runs.
-	c.maybePromote()
-	c.sessionsMu.Lock()
-	require.Nil(t, c.audition)
-	c.sessionsMu.Unlock()
+// ...and it never touches a transfer: with any tunnel busy no offer is made.
+func TestPromoter_NoAuditionIsOfferedWhileAnythingIsBusy(t *testing.T) {
+	c, active, standby, cleanup := promoterClient(t, 100, 95)
+	defer cleanup()
+
+	st, err := active.Open()
+	require.NoError(t, err)
+	defer st.Close() //nolint:errcheck
+	require.Eventually(t, func() bool { return active.NumStreams() == 1 }, time.Second, 5*time.Millisecond)
+
+	// No offer is made while the transfer runs, so nothing can consume one.
+	for i := 0; i < 3; i++ {
+		c.maybePromote()
+		c.sessionsMu.Lock()
+		require.Nil(t, c.audition, "an audition is armed only from a quiet moment")
+		c.sessionsMu.Unlock()
+	}
+	require.Same(t, active, c.pickSessionKind(pickRecv, pickSibling), "a busy client places streams as usual")
+	require.True(t, c.IsStandby(standby))
 }
 
 // A standby whose capacity IS proven needs no audition.
@@ -424,7 +450,7 @@ func TestPromoter_NoAuditionWhileTheAuditionedStandbyIsStillBusy(t *testing.T) {
 	c.sessionsMu.Lock()
 	require.Same(t, standby, c.audition)
 	c.sessionsMu.Unlock()
-	require.Same(t, standby, c.pickSessionFor(pickAny), "a lone stream takes the offer")
+	require.Same(t, standby, c.pickSessionKind(pickRecv, pickSibling), "a sibling chunk stream takes the offer")
 
 	st, err := standby.Open()
 	require.NoError(t, err)
@@ -443,6 +469,6 @@ func TestPromoter_NoAuditionWhileTheAuditionedStandbyIsStillBusy(t *testing.T) {
 		c.sessionsMu.Unlock()
 		require.Nil(t, armed, "a busy standby is in flight, not idle")
 	}
-	require.Same(t, active, c.pickSessionFor(pickAny), "so the next lone stream goes to the measured tunnel")
+	require.Same(t, active, c.pickSessionKind(pickRecv, pickSibling), "so the next chunk stream goes to the measured tunnel")
 	require.NoError(t, st.Close())
 }

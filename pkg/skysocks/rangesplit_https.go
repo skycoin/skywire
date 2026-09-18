@@ -310,7 +310,7 @@ func (c *Client) fetchChunkTLSRetry(req *http.Request, host, validator string, s
 // verified TLS client to the origin, issues a ranged GET carrying the original
 // request's headers plus If-Range, and returns exactly the requested bytes.
 func (c *Client) fetchChunkTLS(req *http.Request, host, validator string, start, end int64) (out []byte, err error) {
-	sess, st, err := c.openChunkStream()
+	sess, st, err := c.openChunkStream(pickSibling)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +353,7 @@ func (c *Client) fetchChunkTLS(req *http.Request, host, validator string, start,
 // copied straight through under a progress-refreshed idle timeout; returns the
 // bytes written so the caller resumes from start+written.
 func (c *Client) streamTailTLSOnce(w net.Conn, req *http.Request, host, validator string, start, total int64) (n int64, err error) {
-	sess, st, err := c.openChunkStream()
+	sess, st, err := c.openChunkStream(pickLone)
 	if err != nil {
 		return 0, err
 	}
