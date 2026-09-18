@@ -141,6 +141,8 @@ var (
 	// itself carries forward.write_timeout as its deadline.
 	ForwardWriteTimeout    = RegisterMin("forward.write_timeout", KindDuration, int64(2*time.Second), int64(50*time.Millisecond), "how long ONE transit (forward/intermediary) write may take before the frame is dropped; it is also the deadline charged to the underlying conn, so it caps how long a wedged peer can hold the transport write lock")
 	ForwardQueueDepth      = RegisterMin("forward.queue_depth", KindCount, 1024, 1, "frames the per-next-hop transit queue holds before a further frame is dropped as forward_drop_queue_full (read when a transport first forwards; a change applies to queues created after it)")
+	ForwardQueueBytes      = RegisterZeroable("forward.queue_bytes", KindBytes, 0, "second bound on the same queue, in BYTES rather than frames; 0 is off, which is the shipped behavior. forward.queue_depth alone is a frame count, so a peer that stops draining a bulk transfer can hold depth × max frame size — set this to cap what one wedged transit peer may cost a visor's heap")
+	ForwardWriterIdle      = RegisterMin("forward.writer_idle", KindDuration, int64(2*time.Minute), int64(time.Second), "how long a next hop's writer goroutine waits with an empty queue before retiring, so a visor that transits for many short-lived peers does not keep one goroutine per peer for its whole uptime")
 	ForwardDropEventWindow = RegisterMin("forward.drop_event_window", KindDuration, int64(time.Minute), int64(time.Second), "how often ONE transport may record a forward_drops mux event, so a peer that black-holes a bulk transfer costs one line per window, not one per frame")
 
 	// Route exclusion after an early death (dead_route_cache.go).

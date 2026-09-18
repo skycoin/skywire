@@ -162,7 +162,10 @@ type ForwardQueue struct {
 	Remote   cipher.PubKey `json:"remote_pk,omitempty"`
 	Queue    int           `json:"queue"`
 	Capacity int           `json:"capacity"`
-	Sent     uint64        `json:"sent"`
+	// QueuedBytes is what the frames waiting in it currently hold, against
+	// forward.queue_bytes when that bound is set.
+	QueuedBytes int64  `json:"queued_bytes"`
+	Sent        uint64 `json:"sent"`
 	// The named drop reasons, one counter each.
 	DropsQueueFull    uint64 `json:"forward_drop_queue_full"`
 	DropsWriteTimeout uint64 `json:"forward_drop_write_timeout"`
