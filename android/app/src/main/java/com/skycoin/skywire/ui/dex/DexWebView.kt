@@ -7,9 +7,7 @@ import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.util.Log
 import android.view.ViewGroup
-import android.app.AlertDialog
 import android.webkit.ConsoleMessage
-import android.webkit.JsResult
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -17,6 +15,7 @@ import android.webkit.WebViewClient
 import androidx.core.net.toUri
 import com.skycoin.skywire.R
 import com.skycoin.skywire.core.SkydexProfile
+import com.skycoin.skywire.ui.webview.JsDialogChromeClient
 import org.json.JSONObject
 
 /**
@@ -834,62 +833,24 @@ internal object DexWebView {
     """.trimIndent()
 
     /**
-     * Chrome client: the page's console next to the app's own logcat, and its
-     * JavaScript dialogs.
+     * Chrome client: the page's console next to the app's own logcat, on top
+     * of the JavaScript dialogs [JsDialogChromeClient] answers.
      *
-     * The dialogs are not a nicety. A WebView with no `onJsConfirm` suppresses
-     * `window.confirm()` and hands the page `false`, and the page guards
-     * cancelling a listing or an order behind exactly that call — so without
-     * this, **Cancel silently does nothing**, which on a screen holding
-     * escrowed coins is the worst possible way to fail.
+     * The dialogs are not a nicety, and this page is why the shared class
+     * exists: it guards cancelling a listing or an order behind
+     * `window.confirm()`, and a confirm nobody answers is — depending on the
+     * platform version — either a Cancel that silently does nothing or a
+     * screen whose JavaScript never runs again. On a page holding escrowed
+     * coins, both are the worst possible way to fail.
      */
-    fun chromeClient(isDark: () -> Boolean = { true }): WebChromeClient = object : WebChromeClient() {
+    fun chromeClient(isDark: () -> Boolean = { true }): WebChromeClient =
+        object : JsDialogChromeClient(isDark) {
 
-        // These dialogs are drawn by the platform, not by Compose, so they do
-        // not inherit the app's light/dark the way every other surface does —
-        // an Activity theme cannot see a choice that lives in a composition
-        // local. Naming the half explicitly is what keeps a confirm from
-        // arriving as a dark slab over the light trading page.
-        private fun builder(context: Context) = AlertDialog.Builder(
-            context,
-            if (isDark()) android.R.style.Theme_DeviceDefault_Dialog_Alert
-            else android.R.style.Theme_DeviceDefault_Light_Dialog_Alert,
-        )
-
-        override fun onJsConfirm(
-            view: WebView,
-            url: String,
-            message: String,
-            result: JsResult,
-        ): Boolean {
-            builder(view.context)
-                .setMessage(message)
-                .setPositiveButton(android.R.string.ok) { _, _ -> result.confirm() }
-                .setNegativeButton(android.R.string.cancel) { _, _ -> result.cancel() }
-                .setOnCancelListener { result.cancel() }
-                .show()
-            return true
+            override fun onConsoleMessage(message: ConsoleMessage): Boolean {
+                Log.d(TAG, "${message.sourceId()}:${message.lineNumber()} ${message.message()}")
+                return true
+            }
         }
-
-        override fun onJsAlert(
-            view: WebView,
-            url: String,
-            message: String,
-            result: JsResult,
-        ): Boolean {
-            builder(view.context)
-                .setMessage(message)
-                .setPositiveButton(android.R.string.ok) { _, _ -> result.confirm() }
-                .setOnCancelListener { result.confirm() }
-                .show()
-            return true
-        }
-
-        override fun onConsoleMessage(message: ConsoleMessage): Boolean {
-            Log.d(TAG, "${message.sourceId()}:${message.lineNumber()} ${message.message()}")
-            return true
-        }
-    }
 
     /** True when the navigation was handled (i.e. must not load in-page). */
     private fun openExternally(context: Context, uri: Uri): Boolean {

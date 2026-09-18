@@ -135,6 +135,7 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
     // while the chat is open moves the page over with the rest of the app
     // instead of leaving one screen in the other theme until it reloads.
     val darkTheme = LocalDarkTheme.current
+    val dark = rememberUpdatedState(darkTheme)
     LaunchedEffect(darkTheme, pageReady) {
         val view = webView
         if (pageReady && view != null) ChatWebView.applyTheme(view, darkTheme)
@@ -181,6 +182,10 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
                                 onError = { pageError = it },
                             )
                             view.webChromeClient = ChatWebView.chromeClient(
+                                // Read per dialog, not captured: the factory
+                                // runs once and the theme can change under an
+                                // open page.
+                                isDark = { dark.value },
                                 onPermissionRequest = { request ->
                                     val needed = request.resources
                                         .mapNotNull(ChatWebView::androidPermission)
@@ -190,6 +195,20 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
                                             ChatWebView.androidPermission(resource) != null
                                         }
                                     } else {
+                                        // Answer whatever is already waiting
+                                        // before replacing it, the way the
+                                        // file chooser below does. A dropped
+                                        // PermissionRequest is never granted
+                                        // and never denied, and the page's
+                                        // getUserMedia() promise then never
+                                        // settles — the composer button
+                                        // latches on it and stops responding
+                                        // for the life of the page. Chromium
+                                        // serialises the requests one frame
+                                        // makes, so this is the case that is
+                                        // left: requests from two frames, or
+                                        // a launch that never comes back.
+                                        pendingMedia?.deny()
                                         pendingMedia = request
                                         mediaPermissions.launch(needed.toTypedArray())
                                     }

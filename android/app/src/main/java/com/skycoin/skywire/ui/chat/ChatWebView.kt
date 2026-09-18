@@ -23,6 +23,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.skycoin.skywire.R
 import com.skycoin.skywire.core.SkychatProfile
+import com.skycoin.skywire.ui.webview.JsDialogChromeClient
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
@@ -176,11 +177,19 @@ internal object ChatWebView {
      * Chrome client: the parts of the page that need the phone — the
      * microphone and camera for voice/video messages, and the file picker
      * for attachments.
+     *
+     * Built on [JsDialogChromeClient], which is what answers the page's
+     * `confirm()` calls. Not optional: this page guards seven destructive
+     * actions behind one, and a confirm nobody answers blocks its JavaScript
+     * thread for good — the chat keeps showing what it was showing and stops
+     * responding to touch entirely, while the rest of the app carries on. See
+     * that class for the full account.
      */
     fun chromeClient(
+        isDark: () -> Boolean,
         onPermissionRequest: (PermissionRequest) -> Unit,
         onFileChooser: (ValueCallback<Array<Uri>>, WebChromeClient.FileChooserParams) -> Boolean,
-    ): WebChromeClient = object : WebChromeClient() {
+    ): WebChromeClient = object : JsDialogChromeClient(isDark) {
 
         override fun onPermissionRequest(request: PermissionRequest) {
             onPermissionRequest.invoke(request)
