@@ -569,9 +569,12 @@ func (*mockRPCClient) SetAppArgs(string, []string) error { return nil }
 func (*mockRPCClient) GetAppSettings(string) (AppSettings, error) { return AppSettings{}, nil }
 
 // SetAppSettings implements API.
-func (*mockRPCClient) SetAppSettings(string, map[string]int64) (AppSettings, error) {
+func (*mockRPCClient) SetAppSettings(string, map[string]int64, map[string]string) (AppSettings, error) {
 	return AppSettings{}, nil
 }
+
+// CutAppTunnel implements API.
+func (*mockRPCClient) CutAppTunnel(string, uint16) (uint64, error) { return 0, nil }
 
 // SetAppEnvFull implements API.
 func (*mockRPCClient) SetAppEnvFull(string, []string) error { return nil }

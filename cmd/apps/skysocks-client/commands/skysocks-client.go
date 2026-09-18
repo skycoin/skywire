@@ -358,7 +358,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 			close(ddone)
 		}
 
-		conn, err := dialServer(cycleCtx, cfg, appCl, pk, false, false)
+		conn, err := dialServer(cycleCtx, cfg, appCl, pk, false, false, poolFilter{})
 		if err != nil {
 			// Stop the disconnected listener and wait for it to release :1080.
 			dcancel()
@@ -390,7 +390,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// is a soft preference: if fewer than N disjoint transports exist, tunnels
 		// fall back to a shared path.)
 		for i := int64(1); i < cfg.tunnels; i++ {
-			extra, derr := dialServer(cycleCtx, cfg, appCl, pk, true, false)
+			extra, derr := dialServer(cycleCtx, cfg, appCl, pk, true, false, poolFilter{})
 			if derr != nil {
 				log.WithError(derr).Warnf("tunnel %d/%d dial failed; continuing with %d tunnel(s)", i+1, cfg.tunnels, len(conns))
 				continue
@@ -437,7 +437,8 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		}
 		if cfg.tunnels > 1 {
 			client.SetTunnelRedial(func() (net.Conn, error) {
-				return dialServer(cycleCtx, cfg, appCl, pk, true, false)
+				excl, types := client.PoolFilter()
+				return dialServer(cycleCtx, cfg, appCl, pk, true, false, poolFilter{excludePKs: excl, requireTpTypes: types})
 			})
 			// Standby pool. The same sequential diversify dial, but requiring a
 			// disjoint first hop rather than merely preferring one, so the
@@ -447,7 +448,8 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 			// the dial lives here because the server PK, retrier and appnet
 			// fallback do.
 			client.SetPoolDial(func() (net.Conn, error) {
-				return dialServer(cycleCtx, cfg, appCl, pk, true, true)
+				excl, types := client.PoolFilter()
+				return dialServer(cycleCtx, cfg, appCl, pk, true, true, poolFilter{excludePKs: excl, requireTpTypes: types})
 			})
 			client.SetStandbyPool(int(cfg.standbyPool))
 		}
@@ -531,6 +533,15 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 	}
 }
 
+// poolFilter is the live candidate filter a tunnel dial carries: the peers it
+// may not leave over or traverse, and the transport types its first hop must
+// have. Zero value = no filter, which is every dial made before the client has
+// pulled a setting.
+type poolFilter struct {
+	excludePKs     []string
+	requireTpTypes []string
+}
+
 // dialServer dials one tunnel to the exit. diversify, set for tunnels 2..N of
 // a --tunnels aggregation, asks the visor to steer this tunnel off the
 // first-hop transports/intermediates the earlier tunnels to this same exit
@@ -546,7 +557,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 // router's refusal (app.IsNoDisjointFirstHop) is the pool's stop signal, so it
 // is returned WITHOUT the retrier's usual re-attempts — retrying an exhausted
 // topology is the setup-node storm of #4325.
-func dialServer(ctx context.Context, cfg *clientConfig, appCl *app.Client, pk cipher.PubKey, diversify, standby bool) (net.Conn, error) {
+func dialServer(ctx context.Context, cfg *clientConfig, appCl *app.Client, pk cipher.PubKey, diversify, standby bool, filter poolFilter) (net.Conn, error) {
 	role := ""
 	if cfg.tunnels > 1 || cfg.routed {
 		role = skysocks.TunnelRoleActive
@@ -577,6 +588,13 @@ func dialServer(ctx context.Context, cfg *clientConfig, appCl *app.Client, pk ci
 				MuxRoutes:           mux,
 				Direct:              cfg.direct,
 				DiversifyTransports: diversify,
+				// The live pool candidate filter (pool.exclude_pks,
+				// pool.require_tp_types), read per dial from the running
+				// client so a change lands on the next dial and not at the
+				// next restart. Empty on the initial dials, which have no
+				// client to read yet — and therefore no settings pulled.
+				ExcludeFirstHopPKs:   filter.excludePKs,
+				RequireFirstHopTypes: filter.requireTpTypes,
 				// A standby-pool dial REQUIRES a first hop no sibling tunnel
 				// holds: a shared extra tunnel aggregates nothing, and the
 				// refusal is how the pool learns it has reached the topology's

@@ -127,8 +127,8 @@ func defaultRangeSplitConfig() rangeSplitConfig {
 // rangePlainPort is the port the splitter treats as plaintext HTTP (80 unless
 // SetRangeSplitPort chose another).
 func (c *Client) rangePlainPort() int {
-	if c.rs.plainPort > 0 {
-		return c.rs.plainPort
+	if p := c.rsPlainPort(); p > 0 {
+		return p
 	}
 	return 80
 }

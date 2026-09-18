@@ -20,8 +20,8 @@ import (
 // The fields that do not apply are omitted rather than zeroed, so their absence
 // is meaningful.
 type MuxOp struct {
-	// Op is "add", "remove", "cap", "width", "standby", "switch", "mode" or
-	// "direction".
+	// Op is "add", "remove", "cut", "cap", "width", "standby", "switch",
+	// "mode" or "direction".
 	Op  string `json:"op"`
 	App string `json:"app"`
 
@@ -47,10 +47,13 @@ func (m MuxOp) Human(w io.Writer) error {
 		_, err := fmt.Fprintf(w, "removed mux leg via transport %s on app=%s\n", m.TransportID, m.App)
 		return err
 	case "cap":
-		_, err := fmt.Fprintf(w, "mux active-width cap set to %s\n", m.Value)
+		_, err := fmt.Fprintf(w, "mux active-width cap for app=%s is %s\n", m.App, m.Value)
 		return err
 	case "width":
-		_, err := fmt.Fprintf(w, "mux steady active width set to %s\n", m.Value)
+		_, err := fmt.Fprintf(w, "mux active width for app=%s is %s\n", m.App, m.Value)
+		return err
+	case "cut":
+		_, err := fmt.Fprintf(w, "cut the app=%s tunnel on port %s; the pool replaces it on the next tick\n", m.App, m.Value)
 		return err
 	case "standby":
 		_, err := fmt.Fprintf(w, "mux warm-standby reserve set to %s\n", m.Value)

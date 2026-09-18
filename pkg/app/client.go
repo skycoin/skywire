@@ -400,10 +400,13 @@ func (c *Client) Close() {
 // This is the only visor->app VALUE channel: the ingress gateway is ingress
 // only (the app is the RPC client), so a running app is reconfigured by asking,
 // not by being told. See pkg/app/appserver/app_settings.go.
-func (c *Client) AppSettings(applied uint64) (map[string]int64, uint64, error) {
-	resp, err := c.rpcC.AppSettings(appserver.AppSettingsReq{Applied: applied})
+// The list knobs travel in their own map (text) and the edge-triggered ops
+// beside both; opsApplied is the highest op sequence this app has carried out,
+// which is how an op leaves the visor's queue.
+func (c *Client) AppSettings(applied, opsApplied uint64) (map[string]int64, map[string]string, []appserver.AppOp, uint64, error) {
+	resp, err := c.rpcC.AppSettings(appserver.AppSettingsReq{Applied: applied, OpsApplied: opsApplied})
 	if err != nil {
-		return nil, applied, err
+		return nil, nil, nil, applied, err
 	}
-	return resp.Values, resp.Version, nil
+	return resp.Values, resp.Text, resp.Ops, resp.Version, nil
 }

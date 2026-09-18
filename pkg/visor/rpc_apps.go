@@ -137,7 +137,7 @@ func (r *RPC) GetAppSettings(appName *string, out *AppSettings) (err error) {
 // SetAppSettings replaces the live tuning knobs held for an app.
 func (r *RPC) SetAppSettings(in *SetAppSettingsIn, out *AppSettings) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppSettings", in)(out, &err)
-	s, err := r.visor.SetAppSettings(in.AppName, in.Values)
+	s, err := r.visor.SetAppSettings(in.AppName, in.Values, in.Text)
 	if err != nil {
 		return err
 	}
@@ -314,4 +314,15 @@ func (r *RPC) GetAppConnectionsSummary(appName *string, out *[]appserver.Connect
 	}
 
 	return err
+}
+
+// CutAppTunnel closes one of an app's tunnels by its route group port.
+func (r *RPC) CutAppTunnel(in *CutAppTunnelIn, seq *uint64) (err error) {
+	defer rpcutil.LogCall(r.log, "CutAppTunnel", in)(seq, &err)
+	s, err := r.visor.CutAppTunnel(in.AppName, in.RGPort)
+	if err != nil {
+		return err
+	}
+	*seq = s
+	return nil
 }

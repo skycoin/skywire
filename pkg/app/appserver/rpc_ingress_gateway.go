@@ -192,13 +192,15 @@ func (r *RPCIngressGateway) AppSettings(req *AppSettingsReq, resp *AppSettingsRe
 	if r.proc == nil || r.proc.m == nil {
 		return nil
 	}
-	applied := uint64(0)
+	applied, opsApplied := uint64(0), uint64(0)
 	if req != nil {
-		applied = req.Applied
+		applied, opsApplied = req.Applied, req.OpsApplied
 	}
-	vals, version := r.proc.m.AppSettings(r.proc.appName, applied)
+	vals, text, ops, version := r.proc.m.AppSettings(r.proc.appName, applied, opsApplied)
 	resp.Version = version
 	resp.Values = vals
+	resp.Text = text
+	resp.Ops = ops
 	resp.Changed = version != applied
 	return nil
 }
@@ -444,6 +446,16 @@ type DialOptionsReq struct {
 	// visor-side to the case where a sibling route group already exists, so a
 	// lone dial is byte-identical to today. See router.DialOptions.
 	DiversifyTransports bool
+	// ExcludeFirstHopPKs / RequireFirstHopTypes are the standby pool's live
+	// candidate filter (pool.exclude_pks, pool.require_tp_types). The app owns
+	// them because the app owns the pool: it knows which of its dials is a
+	// pool dial. The PKs become the router's peer-level first-hop and
+	// intermediate exclusions; the types are checked once the dial has landed
+	// (see checkFirstHopType — a per-dial type filter is not something the
+	// router's candidate ranking can express today). Empty on every other
+	// dial, which is therefore byte-identical to before.
+	ExcludeFirstHopPKs   []string
+	RequireFirstHopTypes []string
 	// RequireDisjointFirstHop turns DiversifyTransports from a preference into
 	// a requirement: instead of conceding a shared first hop, the dial fails
 	// with router.ErrNoDisjointFirstHop. The skysocks standby pool sets it so
@@ -464,6 +476,7 @@ type DialOptionsReq struct {
 // under a visor-global min_hops or mux_routes > 1).
 func (r DialOptionsReq) Explicit() bool {
 	return r.Direct || r.DiversifyTransports || r.RequireDisjointFirstHop ||
+		len(r.ExcludeFirstHopPKs) > 0 ||
 		r.MuxRoutes != 0 || r.MinHops != 0 ||
 		r.ForwardMinHops != 0 || r.ReverseMinHops != 0 ||
 		r.ForwardMuxRoutes != 0 || r.ReverseMuxRoutes != 0
@@ -519,6 +532,11 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, req *DialOptionsReq
 	// is unaffected.
 	dialCtx, cancelDial := context.WithTimeout(appnet.WithAppName(context.Background(), appName), dialSetupCeiling)
 	defer cancelDial()
+	// The owning app's live mux width/ceiling, for a dial that asked for none
+	// of its own (see dial_app_knobs.go).
+	if r.proc != nil {
+		applyAppMuxKnobs(r.proc.m, appName, req)
+	}
 	conn, err := dialWithMuxRoutes(dialCtx, remote, req)
 	if err != nil {
 		free()
@@ -531,6 +549,19 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, req *DialOptionsReq
 		return err
 	}
 
+	localAddr := wrappedConn.LocalAddr().(appnet.Addr)
+
+	// The pool's first-hop type requirement is judged on the group that just
+	// came up: a tunnel the operator said not to hold is closed here rather
+	// than handed to the app.
+	if err := checkFirstHopType(routerFor(remote.Net), appName, localAddr.Port, req.RequireFirstHopTypes); err != nil {
+		if cErr := wrappedConn.Close(); cErr != nil {
+			r.log.WithError(cErr).Debug("Error closing a conn refused by pool.require_tp_types.")
+		}
+		free()
+		return err
+	}
+
 	if err := r.cm.Set(*reservedConnID, wrappedConn); err != nil {
 		if cErr := wrappedConn.Close(); cErr != nil {
 			r.log.WithError(cErr).Error("Error closing wrappedConn.")
@@ -538,8 +569,6 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, req *DialOptionsReq
 		free()
 		return err
 	}
-
-	localAddr := wrappedConn.LocalAddr().(appnet.Addr)
 
 	resp.ConnID = *reservedConnID
 	resp.LocalPort = localAddr.Port
@@ -584,6 +613,13 @@ func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptions
 	opts.DiversifyTransports = req.DiversifyTransports
 	opts.RequireDisjointFirstHop = req.RequireDisjointFirstHop
 	opts.TunnelRole = req.TunnelRole
+	// pool.exclude_pks: a peer named here is neither a first hop nor an
+	// intermediate of this dial. Both lists, because excluding the peer alone
+	// still leaves it free to appear in the middle of the path.
+	if excl := parsePKList(req.ExcludeFirstHopPKs); len(excl) > 0 {
+		opts.ExcludeFirstHopPeers = append(opts.ExcludeFirstHopPeers, excl...)
+		opts.ExcludeIntermediatePKs = append(opts.ExcludeIntermediatePKs, excl...)
+	}
 	if req.Direct {
 		// Force a 1-hop direct dial that creates the transport on demand and
 		// bypasses the route-finder. Mirrors the policy-layer Fallback="direct"

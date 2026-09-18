@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/skysocks/skysettings"
 )
 
@@ -96,7 +97,19 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 
 	// Every knob in the catalog is reachable: a name registered with no use site
 	// reading it is a knob the bench can set and nothing obeys.
-	require.Len(t, skysettings.Catalog(), 56)
+	require.Len(t, skysettings.Catalog(), 64)
+
+	// The shape knobs default to the flags they twin (skyenv.SkysocksClientTunnels,
+	// skyenv.SkysocksClientStandbyPool), the per-app mux pair defaults to
+	// "inherit the visor-wide value", and every filter admits everything.
+	require.Equal(t, 2, setTunnelCount())
+	require.Equal(t, 8, setPoolSize())
+	require.False(t, setPoolFreeze(), "pool.freeze holds nothing still until it is set")
+	require.Empty(t, poolExcludePKs())
+	require.Empty(t, poolRequireTpTypes())
+	require.Zero(t, skysettings.Count(skysettings.MuxCap))
+	require.Zero(t, skysettings.Count(skysettings.MuxWidth))
+	require.Equal(t, 80, skysettings.Count(skysettings.RangePort))
 }
 
 // The two range-split knobs OVERRIDE a per-client boot flag rather than
@@ -125,11 +138,11 @@ func TestPullSettingsAppliesAndVersions(t *testing.T) {
 	t.Cleanup(func() { skysettings.Reset() })
 	version := uint64(0)
 	vals := map[string]int64{}
-	c := &Client{appSettings: func(applied uint64) (map[string]int64, uint64, error) {
+	c := &Client{appSettings: func(applied, _ uint64) (map[string]int64, map[string]string, []appserver.AppOp, uint64, error) {
 		if applied == version {
-			return nil, version, nil
+			return nil, nil, nil, version, nil
 		}
-		return vals, version, nil
+		return vals, nil, nil, version, nil
 	}}
 
 	require.False(t, c.pullSettings(), "nothing set, nothing to do")

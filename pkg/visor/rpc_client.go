@@ -656,10 +656,17 @@ func (rc *rpcClient) GetAppSettings(appName string) (AppSettings, error) {
 }
 
 // SetAppSettings implements API.
-func (rc *rpcClient) SetAppSettings(appName string, vals map[string]int64) (AppSettings, error) {
+func (rc *rpcClient) SetAppSettings(appName string, vals map[string]int64, text map[string]string) (AppSettings, error) {
 	var out AppSettings
-	err := rc.Call("SetAppSettings", &SetAppSettingsIn{AppName: appName, Values: vals}, &out)
+	err := rc.Call("SetAppSettings", &SetAppSettingsIn{AppName: appName, Values: vals, Text: text}, &out)
 	return out, err
+}
+
+// CutAppTunnel implements API.
+func (rc *rpcClient) CutAppTunnel(appName string, rgPort uint16) (uint64, error) {
+	var seq uint64
+	err := rc.Call("CutAppTunnel", &CutAppTunnelIn{AppName: appName, RGPort: rgPort}, &seq)
+	return seq, err
 }
 
 // SetAppEnvFull implements API.

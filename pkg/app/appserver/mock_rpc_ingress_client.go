@@ -268,8 +268,8 @@ func (_m *MockRPCIngressClient) Read(connID uint16, b []byte) (int, error) {
 // mock itself: nothing about the poll is worth asserting, and a mock.Called
 // here would panic in every existing test that reaches the settings tick.
 func (_m *MockRPCIngressClient) AppSettings(req AppSettingsReq) (AppSettingsResp, error) {
-	vals, version := mockProcSettings.pull("mock", req.Applied)
-	return AppSettingsResp{Version: version, Values: vals, Changed: version != req.Applied}, nil
+	vals, text, ops, version := mockProcSettings.pull("mock", req.Applied, req.OpsApplied)
+	return AppSettingsResp{Version: version, Values: vals, Text: text, Ops: ops, Changed: version != req.Applied}, nil
 }
 
 // NoteMuxEvent provides a mock function with given fields: req

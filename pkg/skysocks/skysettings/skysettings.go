@@ -15,6 +15,7 @@
 package skysettings
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math"
 	"sort"
@@ -43,6 +44,11 @@ const (
 	// today's behavior and the operator flips it live.
 	KindBool Kind = "bool"
 	KindEnum Kind = "enum"
+	// KindList is a comma-separated list of tokens — a set of public keys, a
+	// set of transport types. It is the one kind whose payload is NOT an
+	// int64, so it travels beside the numeric map rather than inside it (see
+	// ApplyText); everything else about it is an ordinary knob.
+	KindList Kind = "list"
 )
 
 // Knob names. Lowercase dotted, grouped by the machinery they steer.
@@ -52,6 +58,10 @@ const (
 	PoolRetryBackoffMax = "pool.retry_backoff_max"
 	PoolRetryRounds     = "pool.retry_rounds"
 	PoolStandbyRTTStale = "pool.standby_rtt_stale"
+	PoolSize            = "pool.size"
+	PoolFreeze          = "pool.freeze"
+	PoolExcludePKs      = "pool.exclude_pks"
+	PoolRequireTpTypes  = "pool.require_tp_types"
 
 	TunnelProbeInterval    = "tunnel.probe_interval"
 	TunnelLivenessInterval = "tunnel.liveness_interval"
@@ -69,6 +79,12 @@ const (
 	TunnelSnubAfter        = "tunnel.snub_after"
 	TunnelSnubHold         = "tunnel.snub_hold"
 	TunnelDepthMargin      = "tunnel.depth_margin"
+	TunnelCount            = "tunnel.count"
+
+	MuxCap   = "mux.cap"
+	MuxWidth = "mux.width"
+
+	RangePort = "range.port"
 
 	ChunkMaxBytes          = "chunk.max_bytes"
 	ChunkProbeBytes        = "chunk.probe_bytes"
@@ -133,6 +149,10 @@ type knob struct {
 	def Def
 	cur atomic.Int64
 	set atomic.Bool
+	// list is the payload of a KindList knob: the tokens currently in force.
+	// nil and empty mean the same thing (the knob's default, which for every
+	// list knob is "no entries" — a filter that filters nothing).
+	list atomic.Pointer[[]string]
 	// zeroOK marks a count whose OFF state is 0 — spread.min_routes, where
 	// "no floor" is the default. Every other count refuses a non-positive
 	// value, since 0 there means a stalled gate.
@@ -153,10 +173,19 @@ func register(name string, kind Kind, def int64, doc string) {
 	order = append(order, name)
 }
 
-// registerZeroable is register for a count whose off state is 0.
-func registerZeroable(name string, kind Kind, def int64, doc string) {
-	register(name, kind, def, doc)
+// registerZeroable is register for a COUNT whose off state is 0 — a floor of
+// none, a ceiling of "inherit". Every other count refuses a non-positive
+// value, since 0 there means a stalled gate.
+func registerZeroable(name string, def int64, doc string) {
+	register(name, KindCount, def, doc)
 	knobs[name].zeroOK = true
+}
+
+// registerList registers a KindList knob. Its default is ALWAYS the empty list
+// — a candidate filter that admits everything — so an unset client behaves as
+// it does today.
+func registerList(name string, doc string) {
+	register(name, KindList, 0, doc)
 }
 
 // registerEnum registers a KindEnum knob: values in payload order, the default
@@ -186,6 +215,18 @@ func init() {
 		"rounds of failed dials before the pool fill rests until a death")
 	register(PoolStandbyRTTStale, KindDuration, int64(15*time.Second),
 		"how long a standby tunnel may be silent and still be promoted")
+	// The live twin of --standby-pool. Default 8 is skyenv.SkysocksClientStandbyPool
+	// (restated rather than imported: this package takes no skywire import so the
+	// CLI can read the catalog without linking the client). Unset, the boot flag
+	// still wins; set, the pool grows or shrinks to it on the next fill tick.
+	registerZeroable(PoolSize, 8,
+		"CEILING on tunnels held to the exit including the active ones; overrides --standby-pool once set (0 = active tunnels only)")
+	register(PoolFreeze, KindBool, boolVal(false),
+		"hold the active set still: the promoter makes no discretionary swap and the pool neither fills nor shrinks. A dead tunnel is still replaced, and a reconcile the operator asks for still runs")
+	registerList(PoolExcludePKs,
+		"public keys the pool's dials must not use as a first hop or an intermediate (comma-separated; empty = no exclusion)")
+	registerList(PoolRequireTpTypes,
+		"transport types a pool dial's FIRST HOP must have, e.g. stcpr,sudph (comma-separated; empty = any type)")
 
 	register(TunnelProbeInterval, KindDuration, int64(5*time.Second),
 		"how often each tunnel's RTT is re-measured (also the settings-pull tick)")
@@ -219,6 +260,25 @@ func init() {
 		"how long a snubbed tunnel sits out before it is re-tried with ONE chunk")
 	register(TunnelDepthMargin, KindDuration, int64(50*time.Millisecond),
 		"added to a tunnel's RTT in the bandwidth-delay queue depth")
+	// The live twin of --tunnels. Default 2 is skyenv.SkysocksClientTunnels.
+	// Setting it reconciles the ACTIVE set on the next tick — promoting from
+	// the pool to grow, parking the worst active tunnel to shrink — without
+	// restarting the app.
+	register(TunnelCount, KindCount, 2,
+		"size of the ACTIVE tunnel set; overrides --tunnels once set, reconciled by promote/park on the next tick")
+
+	// Per-APP mux width. The visor-wide adaptive ceiling and floor
+	// (`proxy mux cap|width --visor-wide`) remain the default for every app
+	// that sets neither; these two are read by the visor's dial path for the
+	// app that owns the dial, so one app's legs pin no longer lands on every
+	// other app's route groups. 0 = inherit the visor-wide value.
+	registerZeroable(MuxCap, 0,
+		"ceiling on the mux legs this app's dials ask for (0 = the visor-wide adaptive ceiling)")
+	registerZeroable(MuxWidth, 0,
+		"mux legs this app's dials ask for (0 = the visor-wide adaptive width)")
+
+	register(RangePort, KindCount, 80,
+		"destination port the splitter treats as plaintext HTTP; overrides --range-port once set")
 
 	register(ChunkMaxBytes, KindBytes, 4<<20,
 		"range-split chunk ceiling; overrides --range-chunk-kib once set")
@@ -290,7 +350,7 @@ func init() {
 	// the chunk assignment already aims at.
 	register(SpreadMaxShare, KindRatio, ratio(1.0),
 		"largest fraction of one object's bytes any single route may carry (1 = uncapped)")
-	registerZeroable(SpreadMinRoutes, KindCount, 0,
+	registerZeroable(SpreadMinRoutes, 0,
 		"routes an object must be spread over, promoting standbys to reach it (0 = no floor)")
 	register(SpreadEndgame, KindBool, boolVal(false),
 		"duplicate the last chunks on the fastest idle route and take the first to finish")
@@ -342,6 +402,27 @@ func Enum(name string) string {
 	return k.def.Enum[i]
 }
 
+// Strings reads a KindList knob. The returned slice is the live payload and
+// must not be mutated by the caller.
+func Strings(name string) []string {
+	k := lookup(name)
+	if k == nil {
+		return nil
+	}
+	if p := k.list.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
+
+// IsList reports whether the named knob carries a token list rather than an
+// int64 — the one thing a caller parsing `key=value` has to know before it
+// picks which map the value belongs in.
+func IsList(name string) bool {
+	k := lookup(name)
+	return k != nil && k.def.Kind == KindList
+}
+
 // IsSet reports whether the knob has been explicitly set — the difference
 // between "the compiled default" and "set to a value that happens to equal
 // the default". Use sites that OVERRIDE a per-client configuration (the
@@ -376,6 +457,9 @@ type Entry struct {
 	// Value is the current payload, Set says whether it was explicitly set.
 	Value int64 `json:"-"`
 	Set   bool  `json:"set"`
+	// Text is the rendered payload of a KindList knob, empty for every other
+	// kind (whose payload is Value).
+	Text string `json:"text,omitempty"`
 }
 
 // Snapshot returns every knob's current value, name-sorted.
@@ -385,7 +469,13 @@ func Snapshot() []Entry {
 	out := make([]Entry, 0, len(knobs))
 	for _, n := range order {
 		k := knobs[n]
-		out = append(out, Entry{Def: k.def, Value: k.cur.Load(), Set: k.set.Load()})
+		e := Entry{Def: k.def, Value: k.cur.Load(), Set: k.set.Load()}
+		if k.def.Kind == KindList {
+			if p := k.list.Load(); p != nil {
+				e.Text = strings.Join(*p, ",")
+			}
+		}
+		out = append(out, e)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
@@ -402,6 +492,12 @@ func Apply(vals map[string]int64) bool {
 	changed := false
 	for _, n := range order {
 		k := knobs[n]
+		if k.def.Kind == KindList {
+			// A list knob's payload does not fit an int64 and is installed by
+			// ApplyText; leaving it out here is what keeps the two halves of
+			// one pull from clearing each other's IsSet.
+			continue
+		}
 		v, ok := vals[n]
 		if !ok {
 			v = k.def.Default
@@ -420,8 +516,95 @@ func Apply(vals map[string]int64) bool {
 	return changed
 }
 
+// ApplyText installs the KindList knobs wholesale, exactly as Apply does for
+// the numeric ones: a knob named in text takes that value, a knob absent from
+// it goes back to the empty list. Malformed entries are dropped rather than
+// refused — the CLI validates on the way in, and an app must not stall on a
+// value a newer visor sent it. Reports whether anything changed.
+func ApplyText(text map[string]string) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	changed := false
+	for _, n := range order {
+		k := knobs[n]
+		if k.def.Kind != KindList {
+			continue
+		}
+		next := splitList(text[n])
+		prev := k.list.Load()
+		if prev == nil && len(next) == 0 {
+			continue
+		}
+		if prev != nil && equalList(*prev, next) {
+			continue
+		}
+		k.list.Store(&next)
+		k.set.Store(len(next) > 0)
+		changed = true
+	}
+	if changed {
+		version.Add(1)
+	}
+	return changed
+}
+
+func equalList(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// splitList is the one tokenizer: comma-separated, whitespace trimmed, empties
+// dropped. Lowercasing is left to the use site, since a public key is
+// case-insensitive hex and a transport type is already lowercase.
+func splitList(raw string) []string {
+	var out []string
+	for _, p := range strings.Split(raw, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// ParseList validates and normalises a KindList value the way Parse does for
+// an int64 one. A pool.exclude_pks entry must be a full 66-hex-character
+// public key — a truncated key would silently exclude nothing.
+func ParseList(name, raw string) (string, error) {
+	k := lookup(name)
+	if k == nil {
+		return "", fmt.Errorf("unknown setting %q", name)
+	}
+	if k.def.Kind != KindList {
+		return "", fmt.Errorf("%s: not a list setting", name)
+	}
+	toks := splitList(raw)
+	for i, t := range toks {
+		if name == PoolExcludePKs {
+			if len(t) != 66 {
+				return "", fmt.Errorf("%s: %q is not a 66-character public key (never abbreviate a key here)", name, t)
+			}
+			if _, err := hex.DecodeString(t); err != nil {
+				return "", fmt.Errorf("%s: %q is not hex: %w", name, t, err)
+			}
+		}
+		toks[i] = strings.ToLower(t)
+	}
+	return strings.Join(toks, ","), nil
+}
+
 // Reset returns every knob to its compiled default.
-func Reset() bool { return Apply(nil) }
+func Reset() bool {
+	numeric := Apply(nil)
+	text := ApplyText(nil)
+	return numeric || text
+}
 
 // Parse turns a human value into the knob's int64 payload. Bytes accept a
 // plain number of bytes or a IEC/SI suffix (4MiB, 4M, 512KiB); durations take
@@ -430,6 +613,9 @@ func Parse(name, raw string) (int64, error) {
 	k := lookup(name)
 	if k == nil {
 		return 0, fmt.Errorf("unknown setting %q", name)
+	}
+	if k.def.Kind == KindList {
+		return 0, fmt.Errorf("%s: a list setting, parse it with ParseList", name)
 	}
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -499,6 +685,8 @@ func Format(name string, v int64) string {
 		return strconv.FormatInt(v, 10)
 	}
 	switch k.def.Kind {
+	case KindList:
+		return strings.Join(Strings(name), ",")
 	case KindDuration:
 		return time.Duration(v).String()
 	case KindBytes:

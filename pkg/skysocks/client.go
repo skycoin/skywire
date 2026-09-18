@@ -24,6 +24,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/proxyinterstitial"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/router"
@@ -247,8 +248,12 @@ type Client struct {
 	// settingsApplied is the version last installed, reported back on each pull
 	// so the visor can answer nothing when nothing moved; it is touched only by
 	// the keepalive loop.
-	appSettings     func(applied uint64) (map[string]int64, uint64, error)
+	// The list knobs arrive in their own map and the edge-triggered ops
+	// (cut-tunnel) beside both; opsApplied is the highest op sequence carried
+	// out, reported back so an op leaves the visor's queue exactly once.
+	appSettings     func(applied, opsApplied uint64) (map[string]int64, map[string]string, []appserver.AppOp, uint64, error)
 	settingsApplied uint64
+	opsApplied      uint64
 
 	// The promoter's hysteresis state, all guarded by sessionsMu and keyed
 	// like standby/recvStamp. See tunnel_promoter.go.
@@ -1493,6 +1498,16 @@ func (c *Client) notePoolDialFailure(err error) {
 // Nothing here ever removes a tunnel. The pool is never reaped: the active
 // target alone decides which tunnels carry streams.
 func (c *Client) maybePoolFill() {
+	// A lowered ceiling is answered on the same tick a raised one is (see
+	// maybePoolShrink), and before the fill reads the ceiling itself.
+	c.maybePoolShrink()
+	if setPoolFreeze() {
+		// pool.freeze: the set of tunnels held is the operator's to change, not
+		// the fill's. A tunnel DEATH still re-arms the fill, so the freeze is
+		// lifted into a refill the moment it is cleared rather than leaving the
+		// pool permanently short.
+		return
+	}
 	c.redialMu.Lock()
 	fn := c.poolDial
 	poolMax := c.poolMax

@@ -273,6 +273,16 @@ type SetAppArgsIn struct {
 type SetAppSettingsIn struct {
 	AppName string
 	Values  map[string]int64
+	// Text carries the LIST knobs, whose payload is a token set rather than an
+	// int64. Empty Values AND empty Text is the full reset.
+	Text map[string]string
+}
+
+// CutAppTunnelIn names one tunnel of one app: the route group port `proxy mux
+// info` prints as dst_port.
+type CutAppTunnelIn struct {
+	AppName string
+	RGPort  uint16
 }
 
 // SetAppEnvFullIn replaces the entire Env slice on an app.

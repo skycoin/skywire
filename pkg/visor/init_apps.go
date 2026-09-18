@@ -56,6 +56,11 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 
 	v.pushCloseStack("launcher.proc_manager", procM.Close)
 
+	// The live app knobs an operator set are restored BEFORE any app starts,
+	// so an app's first settings pull already carries them and a visor restart
+	// is not a silent reset (see api_app_settings.go).
+	v.restoreAppSettings(procM)
+
 	// Wire the read-only app→visor status RPC so an app that serves its own
 	// reserved status host (skysocks-client's status.skysocks) can render the
 	// visor's rich per-leg mux telemetry — the same view the visor-side

@@ -2,6 +2,7 @@
 package skysettings
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,6 +14,11 @@ import (
 func TestParseFormatRoundTrip(t *testing.T) {
 	t.Cleanup(func() { Reset() })
 	for _, d := range Catalog() {
+		if d.Kind == KindList {
+			// A list knob's payload is a string, not an int64; its round trip
+			// is TestListRoundTrip below.
+			continue
+		}
 		back, err := Parse(d.Name, Format(d.Name, d.Default))
 		require.NoErrorf(t, err, "%s: %s", d.Name, Format(d.Name, d.Default))
 		require.Equalf(t, d.Default, back, "%s round-trips its default", d.Name)
@@ -79,4 +85,47 @@ func TestApplyIgnoresUnknown(t *testing.T) {
 	t.Cleanup(func() { Reset() })
 	require.True(t, Apply(map[string]int64{"future.knob": 1, ChunkConcurrency: 16}))
 	require.Equal(t, 16, Count(ChunkConcurrency))
+}
+
+// A list knob installs, reads back and resets like every other knob — and
+// refuses a truncated public key, which would otherwise silently exclude
+// nothing.
+func TestListRoundTrip(t *testing.T) {
+	t.Cleanup(func() { Reset() })
+	const pk = "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"
+
+	require.Empty(t, Strings(PoolExcludePKs))
+	require.False(t, IsSet(PoolExcludePKs))
+	require.True(t, IsList(PoolExcludePKs))
+
+	norm, err := ParseList(PoolExcludePKs, " "+strings.ToUpper(pk)+" , ")
+	require.NoError(t, err)
+	require.Equal(t, pk, norm)
+
+	require.True(t, ApplyText(map[string]string{PoolExcludePKs: norm}))
+	require.Equal(t, []string{pk}, Strings(PoolExcludePKs))
+	require.True(t, IsSet(PoolExcludePKs))
+	require.Equal(t, pk, Format(PoolExcludePKs, 0))
+
+	// A second identical apply is not a change; dropping the key is.
+	require.False(t, ApplyText(map[string]string{PoolExcludePKs: norm}))
+	require.True(t, ApplyText(nil))
+	require.Empty(t, Strings(PoolExcludePKs))
+	require.False(t, IsSet(PoolExcludePKs))
+
+	_, err = ParseList(PoolExcludePKs, "0281a102")
+	require.Error(t, err)
+	_, err = ParseList(PoolRequireTpTypes, "stcpr, sudph")
+	require.NoError(t, err)
+}
+
+// The numeric half of a pull must not clear the list half's IsSet, nor the
+// other way round: they arrive as two maps in one answer.
+func TestApplyAndApplyTextAreIndependent(t *testing.T) {
+	t.Cleanup(func() { Reset() })
+	require.True(t, ApplyText(map[string]string{PoolRequireTpTypes: "stcpr"}))
+	require.True(t, Apply(map[string]int64{PoolSize: 4}))
+	require.Equal(t, []string{"stcpr"}, Strings(PoolRequireTpTypes))
+	require.True(t, IsSet(PoolRequireTpTypes))
+	require.Equal(t, 4, Count(PoolSize))
 }
