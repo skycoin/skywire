@@ -135,7 +135,8 @@ const (
 
 	// MuxEventLegProbeOnly / ...LegFullShare bracket the OUTCLASSED-LEG gate: a
 	// leg whose delay basis exceeds the group's best active leg's by more than
-	// --leg-starve-ratio is cut to --leg-probe-bytes per window instead of the
+	// --leg-starve-ratio while delivering under 1/that of its goodput is cut to
+	// --leg-probe-bytes per window instead of the
 	// proportional share the round-robin schedule would give it, and restored
 	// when its basis comes back. Neither is a park — the leg keeps its rules and
 	// its probe — so they are recorded apart from leg_parked/leg_promoted. Their

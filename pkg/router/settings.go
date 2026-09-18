@@ -106,9 +106,11 @@ func init() {
 	legProbeBytesV.Store(legProbeBytes)
 }
 
-// LegStarveRatio is how many times the best ready leg's delay basis a leg's own
-// basis must exceed before the scheduler cuts it to a probe per window instead
-// of a proportional share. At or below 1 the gate is off.
+// LegStarveRatio is the one ratio the outclassed-leg ruling uses at both ends:
+// a leg is cut to a probe per window only when its delay basis exceeds the best
+// ready leg's by more than this AND its proven delivery rate is under 1/this of
+// that leg's — so a leg that is slow but productive keeps its share. At or below
+// 1 the gate is off.
 func LegStarveRatio() float64 { return math.Float64frombits(legStarveRatioV.Load()) }
 
 // SetLegStarveRatio installs that ratio. Only a finite value above 1 is

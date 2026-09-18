@@ -66,7 +66,7 @@ func init() {
 	settingsCmd.Flags().StringVar(&settingsSBDDemote, "sbd-demote", "", "true|false: let a shared-bottleneck ruling PARK a leg (default false — rulings are recorded as sbd_ruling mux events only)")
 	settingsCmd.Flags().StringVar(&settingsFwdSpill, "forward-spill", "", "true|false: let a FORWARD frame leave its confined leg when that leg is at its send window (default false — the writer waits instead)")
 	settingsCmd.Flags().Float64Var(&settingsFwdMargin, "forward-switch-margin", 0, "how much lower a challenger leg must measure, for two consecutive samples, before the forward direction moves to it (e.g. 0.2)")
-	settingsCmd.Flags().Float64Var(&settingsStarveRat, "leg-starve-ratio", 0, "how many times the best active leg's delay basis a leg's own may exceed before it is cut to a probe per window (e.g. 6.0)")
+	settingsCmd.Flags().Float64Var(&settingsStarveRat, "leg-starve-ratio", 0, "delay-basis multiple AND inverse goodput fraction at which a leg is cut to a probe per window (e.g. 6.0)")
 	settingsCmd.Flags().StringVar(&settingsProbeByte, "leg-probe-bytes", "", "what a leg cut to probe-only may carry per window (e.g. 64KiB)")
 }
 

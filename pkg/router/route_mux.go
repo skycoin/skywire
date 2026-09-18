@@ -145,8 +145,15 @@ type legCounters struct {
 	// refreshes that see no new ack.
 	ecfLastAckedNano int64
 	ecfCwndBytes     float64
-	ecfRttMs         float64
-	ecfJitterMs      float64
+	// ecfDelivBps is an EWMA of that same delivery rate (bytes acknowledged per
+	// second), kept apart from the window it sizes because the outclassed-leg
+	// gate judges PRODUCTIVITY with it: a leg whose delay basis is inflated by
+	// its own queue but which is still delivering its share is not outclassed.
+	// A refresh that sees no new ack for over a second folds in a zero, so a
+	// leg that went silent decays toward 0 instead of holding a stale rate.
+	ecfDelivBps float64
+	ecfRttMs    float64
+	ecfJitterMs float64
 	// ecfRttMinMs is the leg's baseline (minimum observed) RTT — the
 	// uncongested latency. It seeds the stable BDP for cwndBytes and, against
 	// the live ecfRttMs, is the congestion signal ecfSaturated reads. Tracked
@@ -2367,8 +2374,17 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 						lc.ecfCwndBytes = cwnd
 						lc.ecfLastAckedBytes = acked
 						lc.ecfLastAckedNano = now
+						lc.ecfDelivBps = foldDeliv(lc.ecfDelivBps, deliv)
 					} else if lc.ecfCwndBytes > 0 {
 						cwnd = lc.ecfCwndBytes
+					}
+					// A leg that has gone quiet folds a ZERO into its delivery
+					// EWMA once the silence passes a second, so the gate reads
+					// "delivering nothing now" instead of the last rate it proved
+					// before it stalled. The WINDOW is deliberately left alone —
+					// it changes only on ack evidence (above).
+					if now-lc.ecfLastAckedNano > int64(time.Second) {
+						lc.ecfDelivBps = foldDeliv(lc.ecfDelivBps, 0)
 					}
 				}
 			}
@@ -2391,12 +2407,14 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 				ready = false
 			}
 			states[i] = ecfLegState{
-				rttMs:     lc.ecfRttMs,
-				rttMinMs:  lc.ecfRttMinMs,
-				jitterMs:  lc.ecfJitterMs,
-				rateBps:   rate,
-				cwndBytes: cwnd,
-				ready:     ready,
+				rttMs:      lc.ecfRttMs,
+				rttMinMs:   lc.ecfRttMinMs,
+				jitterMs:   lc.ecfJitterMs,
+				rateBps:    rate,
+				cwndBytes:  cwnd,
+				ready:      ready,
+				delivBps:   lc.ecfDelivBps,
+				delivKnown: lc.ecfLastAckedNano != 0,
 			}
 		}
 		rulings := m.ruleProbeOnlyLegsLocked(states)
@@ -2432,31 +2450,52 @@ type legProbeRuling struct {
 // by its ~60 KB/s. The group's own detector had the number: an sbd_ruling in
 // the same run read "mean 755.9 vs 9291.3 ms over 8/8 samples".
 //
-// The basis is ecfRttMs, the leg's END-TO-END feedback delay (max of first-hop
-// RTT and measured send→ack delay) — the same quantity ECF and RACK judge a leg
-// by, and the one a queue we built shows up in. A leg is ruled probe-only when
-// it is ready, has a basis of its own, that basis is at least
-// legProbeMinBasisMs in absolute terms, and it exceeds the best ready leg's by
-// more than LegStarveRatio. The absolute floor is what keeps an ordinary skew
-// out of this: the healthy pairs on the rig read 44 ms against 166 ms by first
-// hop and 172.7 vs 214.6 ms / 336.3 vs 513.9 ms by delay basis — ratios of 3.8,
-// 1.24 and 1.53, all under the 6.0 default and the first two under the floor.
+// A DELAY reading alone is not enough to rule on, and the first live run
+// (bench/2026-09-18/9f4848dfa-smoke) proved it: on legs-2 the healthy 166 ms leg
+// beside the 44 ms one was cut five times — "322 ms against 53 ms", "270 vs 43",
+// "613 vs 86", "833 vs 122", "843 vs 125" — and the set fell to x0.854 on a
+// 50 MB download from x1.0-1.08. Under ECF a slower leg carrying its share sits
+// at 6-7x on the send→ack basis routinely, because that basis is window/rate:
+// the queue is OUR OWN and the leg was delivering 27-65 % of the bytes while it
+// read that way (carrier rows 11-13: 18.5/37.2, 10.7/39.4, 33.7/18.0 MB).
+//
+// So the ruling takes TWO readings, and a leg has to fail both:
+//
+//	DELAY — ecfRttMs, the END-TO-END feedback delay (max of first-hop RTT and
+//	   measured send→ack delay), above legProbeMinBasisMs in absolute terms and
+//	   more than LegStarveRatio times the best ready leg's.
+//	GOODPUT — ecfDelivBps, what the peer's SACKs PROVE the leg delivered, below
+//	   1/LegStarveRatio of the best ready leg's. The same ratio serves both ends:
+//	   a leg that is slow but PRODUCTIVE keeps its share.
+//
+// The AG case clears both by a wide margin: 9291 ms against 756 ms (12.3x) while
+// delivering ~60 KB/s against ~7 MB/s (0.9 % — the goodput test wants under
+// 16.7 %). The healthy legs-2 pair fails the second: 6-7x on delay, but 27 % of
+// the bytes at worst. A leg with no ack of its own yet (delivKnown false) is
+// never ruled — cold is not the same as unproductive.
 //
 // A probe-only leg is not parked: it keeps its rules, keeps being measured by
 // its probe, and its basis decays back toward the first-hop RTT once we stop
 // queueing on it (ackDelayStale expires the send→ack term), so the ruling lifts
 // by itself when the leg recovers.
 //
+// Every reading here comes from THIS group's own leg table — states is built
+// from m.legs, one routeMux per RouteGroup — so a leg is only ever judged
+// against its siblings in the same route group.
+//
 // Caller holds legMu; returns the transitions for reportProbeRulings to record.
 func (m *routeMux) ruleProbeOnlyLegsLocked(states []ecfLegState) []legProbeRuling {
 	ratio := LegStarveRatio()
-	best := 0.0
+	best, bestDeliv := 0.0, 0.0
 	for i := range states {
-		if !states[i].ready || states[i].rttMs <= 0 {
+		if !states[i].ready {
 			continue
 		}
-		if best == 0 || states[i].rttMs < best {
+		if states[i].rttMs > 0 && (best == 0 || states[i].rttMs < best) {
 			best = states[i].rttMs
+		}
+		if states[i].delivKnown && states[i].delivBps > bestDeliv {
+			bestDeliv = states[i].delivBps
 		}
 	}
 	var out []legProbeRuling
@@ -2464,9 +2503,11 @@ func (m *routeMux) ruleProbeOnlyLegsLocked(states []ecfLegState) []legProbeRulin
 		if lc == nil || i >= len(states) {
 			continue
 		}
-		basis := states[i].rttMs
+		basis, deliv := states[i].rttMs, states[i].delivBps
+		outclassedByDelay := basis >= legProbeMinBasisMs && basis > ratio*best
+		unproductive := states[i].delivKnown && bestDeliv > 0 && deliv*ratio < bestDeliv
 		probeOnly := ratio > 1 && best > 0 && states[i].ready &&
-			basis >= legProbeMinBasisMs && basis > ratio*best
+			outclassedByDelay && unproductive
 		was := math.Float64frombits(atomic.LoadUint64(&lc.probeBasisBits)) > 0
 		switch {
 		case probeOnly:
@@ -2479,11 +2520,14 @@ func (m *routeMux) ruleProbeOnlyLegsLocked(states []ecfLegState) []legProbeRulin
 		}
 		r := legProbeRuling{idx: i, probeOnly: probeOnly}
 		if probeOnly {
-			r.reason = fmt.Sprintf("delay basis %.0f ms against the best active leg's %.0f ms (more than %.1fx) — capped at %d bytes per %.0f ms window instead of a proportional share; not parked, the probe keeps measuring it",
-				basis, best, ratio, LegProbeBytes(), probeWindowMs(basis))
+			r.reason = fmt.Sprintf("delay basis %.0f ms against the best active leg's %.0f ms (more than %.1fx) AND delivering %.0f B/s against its %.0f B/s (under 1/%.1f) — capped at %d bytes per %.0f ms window instead of a proportional share; not parked, the probe keeps measuring it",
+				basis, best, ratio, deliv, bestDeliv, ratio, LegProbeBytes(), probeWindowMs(basis))
 		} else {
-			r.reason = fmt.Sprintf("delay basis %.0f ms is back within %.1fx of the best active leg's %.0f ms — full share restored",
-				basis, ratio, best)
+			why := fmt.Sprintf("delay basis %.0f ms is back within %.1fx of the best active leg's %.0f ms", basis, ratio, best)
+			if outclassedByDelay {
+				why = fmt.Sprintf("delivering %.0f B/s against the best active leg's %.0f B/s — slow but productive", deliv, bestDeliv)
+			}
+			r.reason = why + " — full share restored"
 		}
 		out = append(out, r)
 	}
@@ -2512,6 +2556,17 @@ func (m *routeMux) reportProbeRulings(tps []*transport.ManagedTransport, rulings
 // when the mux is built.
 func (m *routeMux) SetLegProbeRulingFn(fn func(idx, legs int, tp *transport.ManagedTransport, probeOnly bool, reason string)) {
 	m.onLegProbeRuling = fn
+}
+
+// foldDeliv folds one delivery-rate sample into a leg's EWMA. Smoothed because
+// the ruling reads it against a sibling's: an instantaneous rate over one
+// ~100 ms refresh swings far enough for a productive leg to look idle for a
+// tick, and the cost of a wrong ruling is a starved leg.
+func foldDeliv(prev, sample float64) float64 {
+	if prev <= 0 {
+		return sample
+	}
+	return legDelivAlpha*sample + (1-legDelivAlpha)*prev
 }
 
 // probeWindowMs is how long one probe budget lasts on a leg with this delay
@@ -2595,20 +2650,25 @@ const (
 
 // The outclassed-leg gate (ruleProbeOnlyLegsLocked / legProbeExhausted).
 //
-// legStarveRatio is how many times the best ready leg's delay basis a leg's own
-// basis must exceed before it is cut to a probe. 6.0 clears every healthy skew
-// the rig has produced — 3.8 by first hop (44 ms against 166 ms), 1.24 and 1.53
-// by delay basis — and is well under the 12.3 of the 2026-09-18 collapse.
-// legProbeBytes is what it may carry per window; one frame is at most ~64 KiB,
-// so the budget is about one frame per window. legProbeMinBasisMs is the
-// absolute floor under which no leg is ever cut, so a pair of fast legs whose
-// ratio happens to be large (5 ms against 40 ms) is left alone, and
-// legProbeMinWindow floors the window for a leg whose basis is short.
+// legStarveRatio serves BOTH halves of the ruling: a leg's delay basis must
+// exceed the best ready leg's by more than this AND its proven delivery rate
+// must be under 1/this of the best leg's. One number because the two tests are
+// the same judgement from either end, and the live margins are wide on both:
+// the leg that had to be cut read 12.3x on delay and 0.9 % on goodput, while the
+// healthy legs-2 pair that must NOT be cut read 6-7x on delay but 27-65 % on
+// goodput. legProbeBytes is what a ruled leg may carry per window; one frame is
+// at most ~64 KiB, so the budget is about one frame per window.
+// legProbeMinBasisMs is the absolute floor under which no leg is ever cut, so a
+// pair of fast legs whose ratio happens to be large (5 ms against 40 ms) is left
+// alone; legProbeMinWindow floors the window for a leg whose basis is short; and
+// legDelivAlpha weights the newest sample in the per-leg delivery EWMA the
+// goodput half reads.
 const (
 	legStarveRatio     = 6.0
 	legProbeBytes      = 64 * 1024
 	legProbeMinBasisMs = 250.0
 	legProbeMinWindow  = 250 * time.Millisecond
+	legDelivAlpha      = 0.3
 )
 
 // feedInflight hands the predictive selector each leg's REAL unacknowledged
