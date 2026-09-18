@@ -337,11 +337,20 @@ type API interface {
 
 	// Skychat 1:1 voice calls (pkg/skychat/call).
 	VoiceCall(peer cipher.PubKey) (string, error)
+	// VoiceDial places a call and returns its id without waiting for an
+	// answer — what a UI needs, and what an HTTP handler can actually
+	// deliver. See Visor.VoiceDial.
+	VoiceDial(peer cipher.PubKey) (string, error)
 	VoiceHangup(callID string) error
 	VoiceActive() ([]string, error)
 	VoiceAnswer(callID string) error
 	VoiceDecline(callID string) error
 	VoiceIncoming() ([]string, error)
+	// VoiceDialing lists the calls this visor is PLACING and that have not
+	// been answered yet. It is what lets a UI show "calling…" and, more to
+	// the point, call it off: hanging up takes a call id, and until the
+	// invite is answered this is the only place one exists.
+	VoiceDialing() ([]VoiceDialingInfo, error)
 	VoiceCallAudio(callID string) (sent, recv []int16, err error)
 	VoiceMute(callID string, mic, speaker bool) error
 

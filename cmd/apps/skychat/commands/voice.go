@@ -41,6 +41,7 @@ func registerVoiceHTTPHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/voice/mute", requireAuthFunc(voiceMuteHandler()))
 	mux.HandleFunc("/voice/active", requireAuthFunc(voiceListHandler("VoiceActive", func(c visor.API) ([]string, error) { return c.VoiceActive() })))
 	mux.HandleFunc("/voice/incoming", requireAuthFunc(voiceListHandler("VoiceIncoming", func(c visor.API) ([]string, error) { return c.VoiceIncoming() })))
+	mux.HandleFunc("/voice/dialing", requireAuthFunc(voiceDialingHandler()))
 	mux.HandleFunc("/voice/levels", requireAuthFunc(voiceLevelsHandler()))
 	mux.HandleFunc("/voice/audio", requireAuthFunc(voiceAudioHandler()))
 }
@@ -88,8 +89,11 @@ func voiceCallHandler() http.HandlerFunc {
 			return
 		}
 		var callID string
-		if err := pairRPCCall("VoiceCall", func(c visor.API) error {
-			id, e := c.VoiceCall(peer)
+		// Dial, not Call: this server's write timeout is 10s and a ring runs
+		// far longer, so a blocking call could never answer the browser — every
+		// outgoing call reported "Call failed" while ringing perfectly well.
+		if err := pairRPCCall("VoiceDial", func(c visor.API) error {
+			id, e := c.VoiceDial(peer)
 			callID = id
 			return e
 		}); err != nil {
@@ -165,6 +169,42 @@ func voiceMuteHandler() http.HandlerFunc {
 			return
 		}
 		writeJSON(w, map[string]bool{"ok": true})
+	}
+}
+
+// voiceDialingHandler serves GET /voice/dialing → [{call_id, peer}] for the
+// calls this visor is PLACING and that have not been answered yet.
+//
+// Not part of voiceListHandler because these are not bare ids: hanging up
+// needs the id and the UI needs the peer to say who is being called, and the
+// ringing list's "<id> from <pk>" string was a shape to copy, not to repeat.
+//
+// This is what gives an outbound call a Cancel. Until the callee answers, the
+// call exists only in the caller's dialing set — it is in no active list and
+// no ringing list — so without this route the UI had no id, and the hang-up
+// button, which works off an id, had nothing to act on.
+func voiceDialingHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if voiceRPCDown(w) {
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "GET only", http.StatusMethodNotAllowed)
+			return
+		}
+		var calls []visor.VoiceDialingInfo
+		if err := pairRPCCall("VoiceDialing", func(c visor.API) error {
+			out, e := c.VoiceDialing()
+			calls = out
+			return e
+		}); err != nil {
+			http.Error(w, err.Error(), voiceErrStatus(err))
+			return
+		}
+		if calls == nil {
+			calls = []visor.VoiceDialingInfo{}
+		}
+		writeJSON(w, calls)
 	}
 }
 

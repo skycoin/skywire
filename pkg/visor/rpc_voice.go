@@ -31,6 +31,17 @@ func (r *RPC) VoiceHangup(callID *string, _ *struct{}) (err error) {
 	return r.visor.VoiceHangup(*callID)
 }
 
+// VoiceDial places a call and replies with its id, without waiting.
+func (r *RPC) VoiceDial(peer *cipher.PubKey, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceDial", peer)(out, &err)
+	id, err := r.visor.VoiceDial(*peer)
+	if err != nil {
+		return err
+	}
+	*out = id
+	return nil
+}
+
 // VoiceActive replies with the ids of active calls.
 func (r *RPC) VoiceActive(_ *struct{}, out *[]string) (err error) {
 	defer rpcutil.LogCall(r.log, "VoiceActive", nil)(out, &err)
@@ -68,6 +79,17 @@ func (r *RPC) VoiceIncoming(_ *struct{}, out *[]string) (err error) {
 		return err
 	}
 	*out = ids
+	return nil
+}
+
+// VoiceDialing replies with the calls this visor is placing.
+func (r *RPC) VoiceDialing(_ *struct{}, out *[]VoiceDialingInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceDialing", nil)(out, &err)
+	calls, err := r.visor.VoiceDialing()
+	if err != nil {
+		return err
+	}
+	*out = calls
 	return nil
 }
 

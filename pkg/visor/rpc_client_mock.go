@@ -1499,6 +1499,12 @@ func (mc *mockRPCClient) VoiceAnswer(_ string) error { return nil }
 // VoiceDecline implements API.
 func (mc *mockRPCClient) VoiceDecline(_ string) error { return nil }
 
+// VoiceDial implements API.
+func (mc *mockRPCClient) VoiceDial(_ cipher.PubKey) (string, error) { return "", nil }
+
+// VoiceDialing implements API.
+func (mc *mockRPCClient) VoiceDialing() ([]VoiceDialingInfo, error) { return nil, nil }
+
 // VoiceIncoming implements API.
 func (mc *mockRPCClient) VoiceIncoming() ([]string, error) { return nil, nil }
 

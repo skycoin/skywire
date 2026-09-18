@@ -16,6 +16,14 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
+// RingTimeout is how long an unanswered inbound call rings, and therefore the
+// longest a caller can be kept waiting for an answer. Exported because the
+// caller's own budget has to be derived from it rather than guessed: the two
+// were independent 30s and 45s constants, so a caller gave up fifteen seconds
+// before the callee stopped ringing — the phone went on ringing for a call
+// nobody was on the other end of any more.
+const RingTimeout = ringTimeout
+
 // ringTimeout bounds how long an unanswered inbound call rings before it's
 // auto-declined (in ManualAnswer mode).
 const ringTimeout = 45 * time.Second
@@ -137,25 +145,68 @@ func (m *Manager) AddListener(ctx context.Context, lis net.Listener) {
 	m.sig.AddListener(ctx, lis)
 }
 
-// Call places an outbound call to peer: invite over signaling, and on accept
-// start a media Session over the (now media-mode) conn. Returns the live
-// Session, or the peer's decline/busy reason.
-func (m *Manager) Call(ctx context.Context, peer cipher.PubKey) (*Session, error) {
+// beginDial registers an outbound call before its invite goes out, so the very
+// first poll of a UI already sees it — and, more to the point, has an id to
+// cancel it with. Returns the id, the cancellable dial context, and the
+// cleanup that deregisters it.
+func (m *Manager) beginDial(ctx context.Context, peer cipher.PubKey) (string, context.Context, func()) {
 	callID := newCallID()
-	// Cancellable so Hangup can abort the ring; registered before the invite
-	// goes out so the very first poll of a UI already sees the call.
-	dctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	dctx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel is called by the returned func
 	m.mu.Lock()
 	m.dialing[callID] = &dialingCall{peer: peer, cancel: cancel}
 	m.mu.Unlock()
-	defer func() {
+	return callID, dctx, func() {
 		m.mu.Lock()
 		delete(m.dialing, callID)
 		m.mu.Unlock()
-	}()
+		cancel()
+	}
+}
 
-	conn, reply, err := m.sig.Invite(dctx, peer, callID, m.cfg.Codec.Name(), m.cfg.SignalPort)
+// Call places an outbound call to peer and BLOCKS until it is answered,
+// declined, or the ring budget elapses. For a caller that waits — the CLI.
+// Anything answering an HTTP request wants [Dial].
+func (m *Manager) Call(ctx context.Context, peer cipher.PubKey) (*Session, error) {
+	callID, dctx, done := m.beginDial(ctx, peer)
+	defer done()
+	return m.dial(dctx, callID, peer)
+}
+
+// Dial places an outbound call and returns its id straight away, leaving the
+// invite to complete in the background.
+//
+// This is what a UI needs. A call's id is the only handle on it — hanging up
+// takes one — and until the callee answers, that id exists nowhere else: the
+// call is in no active list and no ringing list. A caller that only learns the
+// id when the call CONNECTS therefore cannot call off a call that is still
+// ringing, which is the one moment anyone wants to.
+//
+// It also has to not block. The two HTTP surfaces that place calls both cap a
+// request well below the ring — skychat's own server at a 10s write timeout,
+// the hypervisor's /api at 30s — so a handler that waited out a 55s ring could
+// never deliver its answer to anyone. The caller saw a failed request for a
+// call that was ringing perfectly well.
+//
+// It takes a budget rather than a context because it owns the call's whole
+// lifetime: there is no request to tie it to, and tying it to one would end
+// the call when the request did.
+func (m *Manager) Dial(peer cipher.PubKey, budget time.Duration) string {
+	ctx, cancel := context.WithTimeout(context.Background(), budget) //nolint:gosec // canceled by the goroutine below
+	callID, dctx, done := m.beginDial(ctx, peer)
+	go func() {
+		defer cancel()
+		defer done()
+		if _, err := m.dial(dctx, callID, peer); err != nil {
+			m.log.WithError(err).WithField("call", callID).
+				Info("voice: outbound call ended before it connected")
+		}
+	}()
+	return callID
+}
+
+// dial sends the invite and, on accept, starts the media session.
+func (m *Manager) dial(ctx context.Context, callID string, peer cipher.PubKey) (*Session, error) {
+	conn, reply, err := m.sig.Invite(ctx, peer, callID, m.cfg.Codec.Name(), m.cfg.SignalPort)
 	if err != nil {
 		return nil, err
 	}
