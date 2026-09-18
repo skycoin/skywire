@@ -568,6 +568,23 @@ var genConfigCmd = &cobra.Command{
 			internal.Catch(cmd.Flags(), cmd.Help())
 			os.Exit(0)
 		}
+		// Re-resolve ${OUTPUT} before anything reads `output`.
+		//
+		// ${OUTPUT} is the advertised default of gen's -o, but it cannot
+		// be trusted to still be in `output` by the time PreRun runs: the
+		// variable is package-level and SHARED with `config update`,
+		// whose own -o registration (PersistentFlags, default "") runs
+		// later in the package's init order and overwrites whatever
+		// gen's registration put there. The -o help text still shows the
+		// skyenv value, so the clobber is invisible — which is why
+		// `SKYENV=<file> cli config gen -r` appeared to ignore the env
+		// file entirely: it wrote a cwd-relative skywire-config.json (or,
+		// with -u/-p, the mode path) while the operator inspected the
+		// OUTPUT file and found it untouched, with is_public false and no
+		// hypervisors. Resolve it here, where the flag set knows whether
+		// -o was actually passed on the command line.
+		output = resolveGenOutput(cmd.Flags().Changed("out"), output, scriptExecString("${OUTPUT}"))
+
 		//set default output filename
 		if output == "" {
 			isOutUnset = true
@@ -1008,6 +1025,17 @@ func loadServicesFromFile(log *logging.Logger) {
 	}
 }
 
+// resolveGenOutput picks the path `config gen` writes. An -o passed on
+// the command line always wins; otherwise ${OUTPUT} from the skyenv
+// file, when that file set one; otherwise whatever the caller already
+// had, which the mode (-p/-u) default resolves downstream.
+func resolveGenOutput(changed bool, current, skyenvOutput string) string {
+	if changed || skyenvOutput == "" {
+		return current
+	}
+	return skyenvOutput
+}
+
 // readExistingConfig reads an old config file when regenerating, preserving
 // the secret key and optionally hypervisor/dmsgpty whitelist keys.
 func readExistingConfig(log *logging.Logger) {
@@ -1072,7 +1100,18 @@ var oldConfCache *visorconfig.V1
 // Structural/versioned fields (Binary, Port) always come from the freshly-built
 // defaults. No-op when not regenerating or when the old config had no apps.
 func mergeExistingApps(log *logging.Logger) {
-	if !isRegen || oldConfCache == nil || oldConfCache.Launcher == nil {
+	if !isRegen || oldConfCache == nil {
+		return
+	}
+	// app_settings is written by the VISOR, not by config gen: it is where
+	// `skywire cli proxy settings k=v` persists the live app knobs so they
+	// survive a restart. Nothing on the gen side can reconstruct it, so a
+	// regen that rebuilds the config from defaults silently resets every
+	// knob the operator set. Carry it over.
+	if len(oldConfCache.AppSettings) > 0 {
+		conf.AppSettings = oldConfCache.AppSettings
+	}
+	if oldConfCache.Launcher == nil {
 		return
 	}
 	old := oldConfCache.Launcher.Apps
@@ -1368,6 +1407,28 @@ func configureRouting() {
 		// it back off, edit enable_cascade_route_setup in the JSON directly.
 		if oldConfCache.Routing.EnableCascadeRouteSetup {
 			conf.Routing.EnableCascadeRouteSetup = true
+		}
+		// routing.router_settings / router_app_settings are the visor's
+		// own persistence for `skywire cli route settings k=v` — the
+		// knob catalog that replaced the 17 router constants. config gen
+		// has no flag for any of them and cannot regenerate them, so a
+		// regen that dropped the maps would reset a live sweep to the
+		// binary's compiled-in defaults on the next restart. Same
+		// contract as launcher.app_settings in mergeExistingApps.
+		// Explicitly regen-gated (unlike MinHops above, which is reached
+		// only on a regen anyway): these maps are visor-written state, so
+		// a fresh generate must never inherit them.
+		if isRegen && len(oldConfCache.Routing.RouterSettings) > 0 {
+			conf.Routing.RouterSettings = oldConfCache.Routing.RouterSettings
+		}
+		if isRegen && len(oldConfCache.Routing.RouterAppSettings) > 0 {
+			conf.Routing.RouterAppSettings = oldConfCache.Routing.RouterAppSettings
+		}
+		// routing.transport_preference is the third of the same kind: the
+		// visor writes it from `cli tp preference`, config gen has no flag
+		// for it, and a regen was silently reverting the order.
+		if isRegen && len(oldConfCache.Routing.TransportPreference) > 0 {
+			conf.Routing.TransportPreference = oldConfCache.Routing.TransportPreference
 		}
 		// Per-dial routing policy is deliberately NOT preserved from the old JSON
 		// across regen: /etc/skywire.conf (POLICYPERDIAL), surfaced above as

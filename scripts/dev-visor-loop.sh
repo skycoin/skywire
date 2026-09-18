@@ -9,6 +9,14 @@
 # Override the visor flags without editing this file:
 #   VISOR_FLAGS="-sl debug -q http" ./dev-visor-loop.sh
 #
+# Before every start the loop re-derives ./skywire-config.json from
+# ./skywire.conf with `SKYENV=./skywire.conf skywire autoconfig --no-restart`,
+# so editing skywire.conf and letting the visor restart is all it takes to
+# change the dev visor's config. autoconfig reads OUTPUT from the conf file
+# (./skywire-config.json here) and regen retains the keys, the app list and
+# everything the visor persists itself. Set SKIP_AUTOCONFIG=1 to run against a
+# hand-edited JSON instead.
+#
 # Runs from the repo root regardless of where it is invoked.
 set -o pipefail
 cd "$(dirname "$0")/.." || exit 1 # script lives in scripts/, build from repo root
@@ -29,6 +37,21 @@ while true; do
 		echo ">>> build failed — not starting a stale binary; retrying in 5s"
 		sleep 5
 		continue
+	fi
+
+	# Re-derive the config from skywire.conf. This is the ONLY thing that
+	# writes ./skywire-config.json in the dev loop: the conf file is the
+	# source of truth and a restart is how a conf edit takes effect.
+	# --no-restart keeps autoconfig from touching systemd — this loop owns
+	# the visor process, not a unit. A failure here means the config on
+	# disk no longer matches skywire.conf, so do not start on it.
+	if [ "${SKIP_AUTOCONFIG:-}" != "1" ]; then
+		echo ">>> autoconfig (SKYENV=./skywire.conf)…"
+		if ! SKYENV=./skywire.conf "$SKYWIRE_BIN" autoconfig --no-restart; then
+			echo ">>> autoconfig failed — not starting on a stale config; retrying in 5s"
+			sleep 5
+			continue
+		fi
 	fi
 
 	# shellcheck disable=SC2086 # VISOR_FLAGS is intentionally word-split

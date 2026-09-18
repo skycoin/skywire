@@ -21,6 +21,14 @@
 //	               USRENV. This preserves the legacy "root install"
 //	               flow for operators who haven't migrated.
 //
+//	OUTPUT=path  → overrides the config path either mode picked, and
+//	               is passed on as `cli config gen -o <path>`. A
+//	               relative path resolves against the CURRENT WORKING
+//	               DIRECTORY (what `config gen -o` does), which is how
+//	               a repo-local dev loop keeps ./skywire-config.json in
+//	               sync with ./skywire.conf. The unit (system vs
+//	               --user) still comes from PKGENV/USRENV.
+//
 // The only env var autoconfig itself reads is SKYENV (the path to
 // the env file). Everything else lives inside that file.
 package commands
@@ -254,6 +262,15 @@ type resolvedConfig struct {
 	configPath  string // resolved skywire.json path
 	useUserUnit bool   // true = `systemctl --user`, false = system unit
 	noRestart   bool   // --no-restart: apply config but skip the service restart (pty-safe)
+	// outputSet records that ${OUTPUT} in the skyenv file — not the
+	// PKGENV/USRENV default — decided configPath. generateConfig then
+	// pins `cli config gen -o <configPath>` instead of -p/-u.
+	outputSet bool
+	// skyenvMissing is true when SKYENV names a file that does not
+	// exist. The parser treats a missing env file as "no variables
+	// set", so every value silently falls back to its flag default —
+	// the single most confusing way for autoconfig to go wrong.
+	skyenvMissing bool
 }
 
 // autoconfigCmd is constructed in init() via the autoconfigcmd factory
@@ -316,6 +333,16 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 
 	resolved := resolveConfig()
 
+	// SKYENV names a file that isn't there. The skyenv parser reports a
+	// missing file as "no variables set", so continuing would write a
+	// config built entirely from flag defaults — no SK, no hypervisors,
+	// is_public false — over whatever the operator already had. Stop.
+	if resolved.skyenvMissing {
+		fmt.Printf("%s>>> FATAL:%s SKYENV=%s does not exist\n", colorRed, colorReset, os.Getenv("SKYENV"))
+		fmt.Printf("            a missing skyenv file reads as empty, so every value would fall back to its default\n")
+		os.Exit(1)
+	}
+
 	if err := generateConfig(resolved, hvArg, edits); err != nil {
 		fmt.Printf("%s>>> FATAL:%s %v\n", colorRed, colorReset, err)
 		os.Exit(1)
@@ -325,6 +352,9 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 		mode := "PKGENV"
 		if resolved.usrEnv {
 			mode = "USRENV"
+		}
+		if resolved.outputSet {
+			mode = "OUTPUT"
 		}
 		fmt.Printf("%s>>> FATAL:%s expected config file not found at %s\n", colorRed, colorReset, resolved.configPath)
 		fmt.Printf("            autoconfig resolved mode=%s from %s\n", mode, func() string {
@@ -495,6 +525,20 @@ func resolveConfig() resolvedConfig {
 		if _, err := os.Stat(candidate); err == nil {
 			r.skyenvPath = candidate
 		}
+	} else {
+		// An explicit SKYENV is an assertion that THIS file holds the
+		// settings. Absolutize it so the `cli config gen` subprocess
+		// resolves the same file regardless of its own working
+		// directory, and record a miss so the caller can fail loudly
+		// instead of silently generating an all-defaults config.
+		// SKYENV is an operator-supplied path by design — naming the
+		// env file is the whole point of the variable, and the parser
+		// below reads it either way. This only checks whether it exists.
+		if _, err := os.Stat(r.skyenvPath); err != nil { //nolint:gosec
+			r.skyenvMissing = true
+		} else if abs, err := filepath.Abs(r.skyenvPath); err == nil {
+			r.skyenvPath = abs
+		}
 	}
 
 	r.pkgEnv = cmdutil.SkyenvBool("${PKGENV:-false}", r.skyenvPath)
@@ -519,6 +563,28 @@ func resolveConfig() resolvedConfig {
 	default: // pkgEnv
 		r.configPath = visorconfig.SkywireConfig()
 		r.useUserUnit = false
+	}
+
+	// ${OUTPUT} in the skyenv file overrides the mode-derived path.
+	// `cli config gen` already reads OUTPUT as the default for -o, so
+	// without this autoconfig generated into OUTPUT while stat-checking,
+	// reporting and (on the next run) reading the PKGENV/USRENV path —
+	// the same class of divergence the -p/-u propagation fixed.
+	//
+	// A relative OUTPUT resolves against the CURRENT WORKING DIRECTORY,
+	// not the skyenv file's directory. That is what `cli config gen -o`
+	// itself does (its PreRun runs filepath.Abs on the value), and
+	// autoconfig's whole job here is to agree with the generator. It is
+	// also what the repo-local dev loop wants: it cds to the repo root
+	// and OUTPUT='./skywire-config.json' is the visor's config there.
+	if out := cmdutil.SkyenvString("${OUTPUT}", r.skyenvPath); out != "" {
+		r.outputSet = true
+		r.configPath = out
+		if abs, err := filepath.Abs(out); err == nil {
+			r.configPath = abs
+		}
+		// The unit choice stays with PKGENV/USRENV: OUTPUT says where the
+		// JSON lives, not who runs the service.
 	}
 	return r
 }
@@ -545,25 +611,51 @@ func resolveConfig() resolvedConfig {
 // HYPERVISORPKS / ISHYPERVISOR were set in the env file. Propagating
 // -p/-u from resolvedConfig closes the gap.
 func generateConfig(r resolvedConfig, hvArg string, edits []skyenvEdit) error {
+	args, printableArgs := buildGenArgs(r, hvArg, edits)
+
+	envPrefix := ""
+	if r.skyenvPath != "" {
+		envPrefix = fmt.Sprintf("SKYENV=%s ", r.skyenvPath)
+	}
+	msg3(fmt.Sprintf("Generating skywire config with command:\n  %s%sskywire %s%s", colorCyan, envPrefix, strings.Join(printableArgs, " "), colorReset))
+
+	return execConfigGen(r, args)
+}
+
+// buildGenArgs assembles the `cli config gen` invocation. Split out of
+// generateConfig so the flag choices — above all which write-target flag
+// is pinned — are unit-testable without spawning a subprocess. Returns
+// (args actually passed, args shown to the operator).
+func buildGenArgs(r resolvedConfig, hvArg string, edits []skyenvEdit) (args, printableArgs []string) {
 	// printableArgs is what we PRINT for the operator to copy-paste.
 	// Intentionally omits -w (we suppress the noisy fetch logs
 	// ourselves). If the install fails, the operator can paste this
 	// exact line and see the full debug logging that we hid.
-	printableArgs := []string{"cli", "config", "gen", "-r"}
+	printableArgs = []string{"cli", "config", "gen", "-r"}
 
 	// args is what we ACTUALLY pass. -w suppresses the success-path
 	// JSON dump (echoing the SK + every service URL on every install
 	// is noisy and a perceived secret-leak risk on shared terminals).
-	args := []string{"cli", "config", "gen", "-r", "-w"}
+	args = []string{"cli", "config", "gen", "-r", "-w"}
 
-	// Pin the write target to the same mode autoconfig resolved.
-	// Without this, cli config gen's own scriptExecBool defaults
-	// (`${PKGENV:-false}` / `${USRENV:-false}`) silently mis-resolve
-	// to false when the env file doesn't set those keys explicitly,
-	// and gen writes to a cwd-relative path instead of the absolute
-	// /opt/skywire/skywire.json (PKGENV) or ~/skywire-config.json
-	// (USRENV) that autoconfig already stat-checks downstream.
+	// Pin the write target to the path autoconfig resolved.
+	//
+	// ${OUTPUT} set in the skyenv file → -o <absolute path>. -p/-u are
+	// deliberately NOT passed alongside it: gen only consults them when
+	// -o is unset, and -u additionally forces the local hypervisor on,
+	// which would silently override ISHYPERVISOR=false.
+	//
+	// Otherwise pin the mode autoconfig resolved. Without this, cli
+	// config gen's own scriptExecBool defaults (`${PKGENV:-false}` /
+	// `${USRENV:-false}`) silently mis-resolve to false when the env
+	// file doesn't set those keys explicitly, and gen writes to a
+	// cwd-relative path instead of the absolute /opt/skywire/skywire.json
+	// (PKGENV) or ~/skywire-config.json (USRENV) that autoconfig already
+	// stat-checks downstream.
 	switch {
+	case r.outputSet:
+		args = append(args, "-o", r.configPath)
+		printableArgs = append(printableArgs, "-o", r.configPath)
 	case r.usrEnv:
 		args = append(args, "-u")
 		printableArgs = append(printableArgs, "-u")
@@ -622,13 +714,7 @@ func generateConfig(r resolvedConfig, hvArg string, edits []skyenvEdit) error {
 		}
 	}
 
-	envPrefix := ""
-	if r.skyenvPath != "" {
-		envPrefix = fmt.Sprintf("SKYENV=%s ", r.skyenvPath)
-	}
-	msg3(fmt.Sprintf("Generating skywire config with command:\n  %s%sskywire %s%s", colorCyan, envPrefix, strings.Join(printableArgs, " "), colorReset))
-
-	return execConfigGen(r, args)
+	return args, printableArgs
 }
 
 // writeSystemdDropIn writes a one-section drop-in that pins User=
