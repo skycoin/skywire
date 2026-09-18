@@ -521,6 +521,7 @@
         <item quantity="other">%1$d 分钟</item>
     </plurals>
     <string name="wallet_stale_age_hours">%1$d 小时 %2$d 分钟</string>
+    <string name="wallet_scan_pending">尚未向节点确认本钱包的其余地址，因此余额可能不完整。每次刷新都会重试。</string>
     <string name="wallet_stale_never">无法连接节点服务器。该钱包尚未同步——节点服务器恢复响应后才会显示余额。</string>
     <string name="wallet_stale_send_note">发送已停用：没有到节点服务器的路由</string>
     <string name="wallet_error_no_route">没有到节点服务器的路由</string>
