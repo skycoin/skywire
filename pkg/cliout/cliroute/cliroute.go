@@ -103,6 +103,18 @@ type Settings struct {
 	DeadRouteHold     string  `json:"dead_route_hold"`
 	DeadRouteHoldMax  string  `json:"dead_route_hold_max"`
 	MuxFEC            bool    `json:"mux_fec"`
+
+	// Shared-bottleneck detection.
+	SBDMinSamples      int     `json:"sbd_min_samples"`
+	SBDSampleInterval  string  `json:"sbd_sample_interval"`
+	SBDTrialWindow     string  `json:"sbd_trial_window"`
+	SBDTrialLoss       float64 `json:"sbd_trial_loss"`
+	SBDBackoff         string  `json:"sbd_backoff"`
+	SBDMinEvidenceRate int64   `json:"sbd_min_evidence_rate"`
+	// SBDDemote reports whether a shared-bottleneck ruling may park a leg at all.
+	// False (the default) means rulings are recorded as sbd_ruling mux events and
+	// nothing is demoted.
+	SBDDemote bool `json:"sbd_demote"`
 }
 
 // Human writes one knob per line.
@@ -110,9 +122,14 @@ func (s Settings) Human(w io.Writer) error {
 	_, err := fmt.Fprintf(w, "min_hops: %d\nexisting_tp_only: %v\nforce_local_routes: %v\ntransport_preference: %s\n"+
 		"ecf_max_window_bytes: %d\necf_min_window_bytes: %d\necf_window_margin: %g\n"+
 		"send_window_wait_max: %s\nleg_park_min_hold: %s\n"+
-		"dead_route_hold: %s\ndead_route_hold_max: %s\nmux_fec: %v\n",
+		"dead_route_hold: %s\ndead_route_hold_max: %s\nmux_fec: %v\n"+
+		"sbd_min_samples: %d\nsbd_sample_interval: %s\n"+
+		"sbd_trial_window: %s\nsbd_trial_loss: %g\nsbd_backoff: %s\n"+
+		"sbd_min_evidence_rate: %d\nsbd_demote: %v\n",
 		s.MinHops, s.ExistingTPOnly, s.ForceLocalRoutes, strings.Join(s.TransportPreference, ","),
 		s.EcfMaxWindowBytes, s.EcfMinWindowBytes, s.EcfWindowMargin,
-		s.SendWindowWaitMax, s.LegParkMinHold, s.DeadRouteHold, s.DeadRouteHoldMax, s.MuxFEC)
+		s.SendWindowWaitMax, s.LegParkMinHold, s.DeadRouteHold, s.DeadRouteHoldMax, s.MuxFEC,
+		s.SBDMinSamples, s.SBDSampleInterval,
+		s.SBDTrialWindow, s.SBDTrialLoss, s.SBDBackoff, s.SBDMinEvidenceRate, s.SBDDemote)
 	return err
 }

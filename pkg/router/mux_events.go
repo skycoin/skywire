@@ -64,14 +64,29 @@ const (
 	// the operator pinned it (mux add / mux set) or the policy tick promoted it.
 	// The counterpart of MuxEventLegParked, so churn is countable in both
 	// directions.
-	MuxEventLegPromoted  = "leg_promoted"
-	MuxEventLegAddFailed = "leg_add_failed"
+	MuxEventLegPromoted = "leg_promoted"
+	// MuxEventParkTrialFailed is a shared-bottleneck park that GOODPUT refuted:
+	// the group's aggregate delivered-bytes rate fell by more than the trial
+	// limit with the leg parked, so the legs were carrying independent capacity
+	// after all. Its Reason names both rates (before → after, B/s) and the
+	// exemption the pair earned, so a bench run can count wrong SBD rulings and
+	// see what each cost. Always followed by the leg_promoted of the unpark.
+	MuxEventParkTrialFailed = "park_trial_failed"
+	// MuxEventSBDRuling is a shared-bottleneck ruling the detector MADE and did
+	// not act on: with demotion off (the default, see sbdDemoteDefault) a leg the
+	// detector judges redundant is recorded and kept. Its Reason names the leg,
+	// the active leg it was judged against, the pair's summary statistics and the
+	// send-path rate behind the reading — everything a bench run needs to score
+	// the detector against what the transfer actually did, without letting it take
+	// a leg away to find out.
+	MuxEventSBDRuling = "sbd_ruling"
 	// MuxEventLegStalled is a leg the data-progress detector found stalled
 	// behind an open reorder gap on a side that does NOT own the active set —
 	// an ACCEPTOR honoring the initiator's CapLegState mirror. The observation
 	// is still worth recording (it names the leg and the gap age), but the park
 	// belongs to the initiator, so no park follows and nothing is mirrored back.
 	MuxEventLegStalled    = "leg_stalled"
+	MuxEventLegAddFailed  = "leg_add_failed"
 	MuxEventPrimaryRehome = "primary_rehomed"
 	// MuxEventReorderWedge / ...Cleared bracket a RECEIVE-side reorder wedge:
 	// the frontier held past reorderTimeout because the sender's retransmit

@@ -191,13 +191,24 @@ func (m *routeMux) fastestLegLatency(tps []*transport.ManagedTransport) float64 
 // on a since-demoted leg is still in flight on THAT leg's latency, and judging
 // it against anything else declares it stalled while it is merely slow. Caller
 // holds rg.mu (reads the tps slice).
+//
+// The value is max(first-hop transport RTT, end-to-end pong RTT). tp.GetLatency
+// is only the NEAR EDGE: on the 2026-09-17 compositions the two pinned legs left
+// over near first hops and their routes measured 151/216 ms and 137/410 ms
+// end-to-end, so the first hop alone put the slow leg's frames one fast-hop RTT
+// past due and the proactive path re-sent them on the fastest leg — the leg that
+// sets the rate — while the originals were still in ordinary flight.
 func (m *routeMux) legLatencyByTp(tps []*transport.ManagedTransport) map[uuid.UUID]float64 {
 	out := make(map[uuid.UUID]float64, len(tps))
 	for _, tp := range tps {
 		if tp == nil || tp.IsClosed() {
 			continue
 		}
-		if lat := tp.GetLatency(); lat > 0 {
+		lat := tp.GetLatency()
+		if e2e := m.legE2ERttMsTp(tp.Entry.ID); e2e > lat {
+			lat = e2e
+		}
+		if lat > 0 {
 			out[tp.Entry.ID] = lat
 		}
 	}
