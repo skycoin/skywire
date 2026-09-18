@@ -3752,6 +3752,20 @@ func (rg *RouteGroup) reportStalledLegs(deadSet map[uuid.UUID]struct{}) {
 }
 
 func (rg *RouteGroup) pruneLivenessDeadLegs(deadIDs []uuid.UUID) {
+	rg.pruneDeadLegs(deadIDs,
+		fmt.Sprintf("liveness: no echo for %d probes (transport stays up)", rg.knInt(routersettings.LegPongMissThreshold)),
+		"liveness-dead")
+}
+
+// pruneDeadLegs drops every leg whose transport id is in deadIDs, deletes that
+// leg's rules, and reports how many legs went. reason is recorded on the
+// leg_removed event and hookEvent names the leg-change hook's event.
+//
+// The LAST leg is never dropped here: a group with no legs has nowhere to put
+// the next byte, so an empty group is an outage rather than a repair. Callers
+// that know the leg is gone for good (a transport the visor itself removed —
+// see handleTransportClosed) close the group instead.
+func (rg *RouteGroup) pruneDeadLegs(deadIDs []uuid.UUID, reason, hookEvent string) int {
 	deadSet := make(map[uuid.UUID]struct{}, len(deadIDs))
 	for _, id := range deadIDs {
 		deadSet[id] = struct{}{}
@@ -3760,7 +3774,7 @@ func (rg *RouteGroup) pruneLivenessDeadLegs(deadIDs []uuid.UUID) {
 	rg.mu.Lock()
 	if len(rg.tps) <= 1 {
 		rg.mu.Unlock()
-		return
+		return 0
 	}
 	aliveTps := make([]*transport.ManagedTransport, 0, len(rg.tps))
 	aliveFwd := make([]routing.Rule, 0, len(rg.fwd))
@@ -3781,10 +3795,8 @@ func (rg *RouteGroup) pruneLivenessDeadLegs(deadIDs []uuid.UUID) {
 				deadRuleIDs = append(deadRuleIDs, rg.rvs[i].KeyRouteID())
 			}
 			if tp != nil {
-				rg.logger.Infof("leg-liveness: pruning black-holing leg %v (no echo for %d probes; transport stays up)",
-					tp.Entry.ID, rg.knInt(routersettings.LegPongMissThreshold))
+				rg.logger.Infof("pruning leg %v: %s", tp.Entry.ID, reason)
 			}
-			reason := fmt.Sprintf("liveness: no echo for %d probes (transport stays up)", rg.knInt(routersettings.LegPongMissThreshold))
 			rg.noteLegEvent(MuxEventLegRemoved, reason, MuxByAdaptive, i, remaining-1, tp,
 				rg.legHopsLocked(tpEntryID(tp)))
 			if i == 0 {
@@ -3805,7 +3817,7 @@ func (rg *RouteGroup) pruneLivenessDeadLegs(deadIDs []uuid.UUID) {
 	}
 	if len(droppedIdx) == 0 {
 		rg.mu.Unlock()
-		return
+		return 0
 	}
 	if len(deadRuleIDs) > 0 {
 		rg.rt.DelRules(deadRuleIDs)
@@ -3819,10 +3831,11 @@ func (rg *RouteGroup) pruneLivenessDeadLegs(deadIDs []uuid.UUID) {
 	rg.mu.Unlock()
 
 	for _, idx := range droppedIdx {
-		rg.fireLegChange("liveness-dead", idx)
+		rg.fireLegChange(hookEvent, idx)
 	}
 	rg.signalRotate()
 	rg.maybeSelfHeal()
+	return len(droppedIdx)
 }
 
 // soleLegExcludeHopsLocked returns the intermediate PKs of the route group's
@@ -4391,10 +4404,16 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 
 	rg.broadcastClosePackets(code, tps, fwd)
 
-	if closeInitiator {
+	if closeInitiator && anyLiveTransport(tps) {
 		// if this visor initiated closing, we need to wait for close packets
 		// to come back, or to exit with a timeout if anything goes wrong in
-		// the network
+		// the network.
+		//
+		// Only while a leg can still carry the reply. When every transport
+		// under the group is closed the answer cannot arrive, and waiting
+		// closeRoutineTimeout for it keeps the app's reader and writer parked
+		// on a group that is already gone — the whole cost of the wait with
+		// none of its benefit.
 		if err := rg.waitForCloseRouteGroup(closeRoutineTimeout); err != nil {
 			rg.logger.Errorf("Error during close route group: %v", err)
 		}

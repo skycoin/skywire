@@ -279,3 +279,112 @@ func TestEmuUploadConfinementHoldsOnLowestLatencyLeg(t *testing.T) {
 			100*share, 100*s.Legs[0].Share(total), 100*s.Legs[1].Share(total), 100*s.Legs[2].Share(total))
 	}
 }
+
+// TestEmuTransportRemovedUnderLegCompletes is the bench's standby cut in the
+// testbed: the transport under the busiest leg is REMOVED (`skywire cli tp rm`
+// → transport.Manager.DeleteTransport → ManagedTransport close → the router's
+// close hook), not merely black-holed. The leg must be gone from the group at
+// the close, not at a timeout, and the stream must resume inside the 2 s bar.
+func TestEmuTransportRemovedUnderLegCompletes(t *testing.T) {
+	const bytes = 8 * emuMB
+	legs := []emuLegSpec{
+		symmetric("a", 3*emuMB, 50*time.Millisecond, 2*emuMB),
+		symmetric("b", 3*emuMB, 60*time.Millisecond, 2*emuMB),
+		symmetric("c", 3*emuMB, 70*time.Millisecond, 2*emuMB),
+	}
+	rig := newEmuRig(t, emuOpts{Legs: legs, Liveness: true})
+
+	type cutResult struct{ death, ttfb time.Duration }
+	res := make(chan cutResult, 1)
+	go func() {
+		deadline := time.Now().Add(emuTimeout)
+		for time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+			if rig.busiestSendLeg() >= 0 && rig.downProgress() > bytes/3 {
+				break
+			}
+		}
+		idx := rig.busiestSendLeg()
+		if idx < 0 {
+			idx = 0
+		}
+		before := rig.downProgress()
+		legsBefore := rig.LegsOn(false)
+		at := time.Now()
+		rig.Leg(idx).RemoveTransport()
+
+		// Both clocks run together, off one loop: time to leg death (the
+		// sending end no longer counts the removed transport as a leg it may
+		// schedule on) and time to the first byte that lands after the removal.
+		death, ttfb := emuTimeout, emuTimeout
+		for time.Since(at) < emuTimeout {
+			if death == emuTimeout && rig.LegsOn(false) < legsBefore {
+				death = time.Since(at)
+			}
+			if ttfb == emuTimeout && rig.downProgress() > before {
+				ttfb = time.Since(at)
+			}
+			if death < emuTimeout && ttfb < emuTimeout {
+				break
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		res <- cutResult{death: death, ttfb: ttfb}
+	}()
+
+	x := rig.Transfer(emuDown, bytes, emuTimeout)
+	got := <-res
+	s := rig.Summary("transport-removed-under-leg", emuDown, x)
+	s.TTFB = got.ttfb
+	s.Notes = append(s.Notes,
+		"the leg's transport is removed, not black-holed",
+		fmt.Sprintf("leg death %v; ttfb measured from the removal to the next byte delivered", got.death))
+	t.Log(s.Table())
+
+	if !s.HashOK {
+		t.Errorf("the transfer did not survive the removal: got %d/%d bytes", s.Got, s.Bytes)
+	}
+	if got.death > 2*time.Second {
+		t.Errorf("the leg was still schedulable %v after its transport was removed, past the 2 s bar", got.death)
+	}
+	if got.ttfb > 2*time.Second {
+		t.Errorf("the stream resumed %v after the removal, past the 2 s bar", got.ttfb)
+	}
+}
+
+// TestEmuTransportRemovedUnderSoleLegErrorsAtOnce is the single-leg tunnel the
+// standby pool actually runs: every tunnel in the pool is a one-leg group, so
+// the removed transport takes the whole group with it. The reader must be
+// handed its error at the close — that error IS the failover trigger, and the
+// pool promotes a standby in the same tick it arrives.
+func TestEmuTransportRemovedUnderSoleLegErrorsAtOnce(t *testing.T) {
+	rig := newEmuRig(t, emuOpts{Legs: []emuLegSpec{
+		symmetric("only", 3*emuMB, 50*time.Millisecond, 2*emuMB),
+	}})
+
+	readErr := make(chan error, 1)
+	go func() {
+		buf := make([]byte, 64*1024)
+		for {
+			if _, err := rig.A.rg.Read(buf); err != nil {
+				readErr <- err
+				return
+			}
+		}
+	}()
+
+	time.Sleep(100 * time.Millisecond) // let the reader park in Read
+	at := time.Now()
+	rig.Leg(0).RemoveTransport()
+
+	select {
+	case err := <-readErr:
+		took := time.Since(at)
+		t.Logf("the sole leg's removal reached the reader in %v: %v", took, err)
+		if took > 2*time.Second {
+			t.Errorf("the reader waited %v for a group whose only transport was gone, past the 2 s bar", took)
+		}
+	case <-time.After(emuTimeout):
+		t.Fatalf("the reader was never told: %v after its group's only transport was removed it is still parked in Read", emuTimeout)
+	}
+}

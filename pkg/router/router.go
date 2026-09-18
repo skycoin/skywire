@@ -919,6 +919,12 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 	}
 	r.muxFEC.Store(config.MuxFEC)
 
+	// A transport that closes takes its legs with it, at the close rather than
+	// at whatever timeout above happens to notice the silence (transport_close.go).
+	if r.tm != nil {
+		r.tm.OnTransportClosed(r.closeLegsOnTransport)
+	}
+
 	go r.rulesGCLoop()
 
 	// Register the setup RPC gateway on r.rpcSrv. Build-tagged: native uses
