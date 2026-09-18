@@ -378,44 +378,15 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		if err != nil {
 			return fmt.Errorf("dial server: %w", err)
 		}
-		conns := []net.Conn{conn}
-		// Dial the additional tunnels. Each is an independent route group +
-		// noise + yamux; the client stripes browser conns across them. A tunnel
-		// that fails to dial is skipped (degrade to fewer tunnels) rather than
-		// failing the whole cycle. diversify=true asks the visor to leave over a
-		// DIFFERENT first-hop transport than the tunnels already dialed to this
-		// exit (disjoint-tunnel coordination), so their throughputs sum instead
-		// of splitting one link — see docs/mux_aggregation_rfc.md step 3.
-		//
-		// The loop is SEQUENTIAL by design, and that is what makes the
-		// diversification reliable: the visor's sibling-exclusion scan
-		// (router.siblingRouteGroupExclusions, #4214) diverts tunnel i+1 off the
-		// first-hop transports tunnel i already holds ONLY if tunnel i's route
-		// group is already visible in the visor's live set (rgsNs). It is: the
-		// visor registers the primary route group — with its first-hop transport
-		// in rg.tps — into rgsNs SYNCHRONOUSLY inside saveRouteGroupRules, before
-		// DialRoutes (and thus this RPC dial) returns. #4209 defers only the
-		// AUXILIARY mux legs asynchronously, and skysocks tunnels request no mux
-		// (muxRoutes=0), so each tunnel is single-leg with nothing left to
-		// register late. Because each dialServer call below returns only after its
-		// tunnel is registered, tunnel i is always seen by tunnel i+1's exclusion
-		// scan — no inter-dial delay or route-group poll is needed. (The exclusion
-		// is a soft preference: if fewer than N disjoint transports exist, tunnels
-		// fall back to a shared path.)
-		for i := int64(1); i < cfg.tunnels; i++ {
-			extra, derr := dialServer(cycleCtx, cfg, appCl, pk, true, false, poolFilter{})
-			if derr != nil {
-				log.WithError(derr).Warnf("tunnel %d/%d dial failed; continuing with %d tunnel(s)", i+1, cfg.tunnels, len(conns))
-				continue
-			}
-			conns = append(conns, extra)
-		}
 		log.Infof("Connected to %v", pk)
-		if len(conns) > 1 {
-			log.Infof("skysocks-client: %d tunnels dialed with visor-side disjoint-path coordination — each extra tunnel is steered off the first-hop transports the earlier ones claimed (docs/mux_aggregation_rfc.md step 3). Tunnels that could not find a disjoint transport fall back to a shared path.", len(conns))
-		}
-		client, err := skysocks.NewMultiClient(conns, appCl)
+		// ONE dialed tunnel is already a working session, so it is the one the
+		// client is built from and the one the app reports Running on. Tunnels
+		// 2..N of --tunnels, and the standby pool behind them, are filled in the
+		// background by the tunnelFill started below — see tunnel_fill.go for why
+		// they can no longer run on the startup path.
+		client, err := skysocks.NewClient(conn, appCl)
 		if err != nil {
+			_ = conn.Close() //nolint:errcheck,gosec
 			return fmt.Errorf("new client: %w", err)
 		}
 		// Keep N healthy tunnels: when one dies, the client re-dials a fresh
@@ -424,14 +395,16 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// hand the Client the SAME diversify=true dial the extra tunnels used;
 		// the visor steers the replacement off the survivors' first-hop transports
 		// (#4214). Target the requested --tunnels so a re-dial also refills the
-		// width when some initial dials fell short. Only wire re-dial for N>1: at
-		// N==1 the client never re-dials (its lone tunnel's death is total
-		// collapse, handled by the --reconnect loop above), keeping the default
-		// path byte-identical. The Client bounds re-dial to one in-flight attempt
-		// and backs off on repeated failure, so this cannot fight the outer
-		// runCycle: it only replaces individual dead tunnels while the client is
-		// otherwise alive; if EVERY tunnel dies, ListenAndServe returns and the
-		// runCycle re-dials the whole client.
+		// width when some initial dials fell short — which, with the fill moved off
+		// the startup path, is also how a session that started short of --tunnels
+		// keeps reaching for the rest. Only wire re-dial for N>1: at N==1 the
+		// client never re-dials (its lone tunnel's death is total collapse,
+		// handled by the --reconnect loop above), keeping the default path
+		// byte-identical. The Client bounds re-dial to one in-flight attempt and
+		// backs off on repeated failure, so this cannot fight the outer runCycle:
+		// it only replaces individual dead tunnels while the client is otherwise
+		// alive; if EVERY tunnel dies, ListenAndServe returns and the runCycle
+		// re-dials the whole client.
 		client.SetTunnelTarget(int(cfg.tunnels))
 		// Transparent HTTP range-splitting (default-on; see rangesplit.go). One
 		// range-capable :80 GET is fetched as concurrent byte ranges over separate
@@ -444,24 +417,40 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		if mitmMinter != nil {
 			client.SetHTTPSRangeSplitMinter(mitmCert, mitmMinter)
 		}
-		if cfg.tunnels > 1 {
-			client.SetTunnelRedial(func() (net.Conn, error) {
-				excl, types := client.PoolFilter()
-				return dialServer(cycleCtx, cfg, appCl, pk, true, false, poolFilter{excludePKs: excl, requireTpTypes: types})
-			})
-			// Standby pool. The same sequential diversify dial, but requiring a
-			// disjoint first hop rather than merely preferring one, so the
-			// router's refusal tells the Client the topology is exhausted and
-			// the fill can rest. The Client owns the loop (one dial at a time,
-			// stop at the cap or at exhaustion, re-arm only on a tunnel death);
-			// the dial lives here because the server PK, retrier and appnet
-			// fallback do.
-			client.SetPoolDial(func() (net.Conn, error) {
-				excl, types := client.PoolFilter()
-				return dialServer(cycleCtx, cfg, appCl, pk, true, true, poolFilter{excludePKs: excl, requireTpTypes: types})
-			})
-			client.SetStandbyPool(int(cfg.standbyPool))
-		}
+		// Widen to --tunnels in the background, then hand the tunnel set over to
+		// the Client's own re-dial and standby-pool machinery. Both are wired by
+		// the fill's `wire` callback rather than here, so the keepalive loop's
+		// maybeRedial cannot race the fill for the same slot.
+		tunnelFill{
+			ctx:     cycleCtx,
+			tunnels: cfg.tunnels,
+			dial: func() (net.Conn, error) {
+				return dialServer(cycleCtx, cfg, appCl, pk, true, false, poolFilter{})
+			},
+			add: client.AddTunnel,
+			wire: func() {
+				if cfg.tunnels <= 1 {
+					return
+				}
+				client.SetTunnelRedial(func() (net.Conn, error) {
+					excl, types := client.PoolFilter()
+					return dialServer(cycleCtx, cfg, appCl, pk, true, false, poolFilter{excludePKs: excl, requireTpTypes: types})
+				})
+				// Standby pool. The same sequential diversify dial, but requiring a
+				// disjoint first hop rather than merely preferring one, so the
+				// router's refusal tells the Client the topology is exhausted and
+				// the fill can rest. The Client owns the loop (one dial at a time,
+				// stop at the cap or at exhaustion, re-arm only on a tunnel death);
+				// the dial lives here because the server PK, retrier and appnet
+				// fallback do.
+				client.SetPoolDial(func() (net.Conn, error) {
+					excl, types := client.PoolFilter()
+					return dialServer(cycleCtx, cfg, appCl, pk, true, true, poolFilter{excludePKs: excl, requireTpTypes: types})
+				})
+				client.SetStandbyPool(int(cfg.standbyPool))
+			},
+			log: log,
+		}.start()
 		// Close the client when the outer ctx fires so
 		// ListenAndServe returns. With --reconnect the loop
 		// just iterates; without it the loop body returns and
@@ -582,8 +571,17 @@ func dialServer(ctx context.Context, cfg *clientConfig, appCl *app.Client, pk ci
 	if standby {
 		role = skysocks.TunnelRoleStandby
 	}
-	//nolint:errcheck
-	appCl.SetDetailedStatus(appserver.AppDetailedStatusStarting) //nolint:errcheck,gosec
+	// "Starting" belongs to the dial the session does not yet exist without —
+	// the FIRST tunnel of a cycle, which is the only one with diversify and
+	// standby both unset. Every other dial here (the background widening toward
+	// --tunnels, a re-dial replacing a dead tunnel, a standby-pool dial) runs
+	// while the proxy is already Running and serving, and stamping Starting on
+	// those said the opposite: `proxy start` treats Starting as not-yet-ready
+	// and keeps waiting, so a widening dial behind an already-serving session
+	// held the CLI at "starting" until its --timeout ran out.
+	if !diversify && !standby {
+		appCl.SetDetailedStatus(appserver.AppDetailedStatusStarting) //nolint:errcheck,gosec
+	}
 	// dial one network to the server. On skynet, --direct forces a 1-hop
 	// direct-transport-only dial (create-on-demand, bypass the route-finder +
 	// setup node, self-heals on server restart); dmsg is a plain relay stream.
