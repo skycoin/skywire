@@ -396,10 +396,12 @@ func (c *Client) lastSpread() *spreadPlanner {
 }
 
 // spreadCandidates snapshots the tunnels a chunk may be placed on — live,
-// active (a standby tunnel carries nothing by definition) and not benched by an
-// exit-open timeout — with each one's proven capacity in the planner's
-// direction. The order is the session order, so spreadChoose's tie-break is
-// today's pick order.
+// active (a standby tunnel carries nothing by definition), not benched by an
+// exit-open timeout, and not SNUBBED — with each one's proven capacity in the
+// planner's direction. A snub is a standby by another name: the tunnel is no
+// candidate until it is unsnubbed, and the chunks it held are re-issued onto
+// the ones that are. The order is the session order, so spreadChoose's
+// tie-break is today's pick order.
 func (c *Client) spreadCandidates(dir spreadDir) (sessions []*yamux.Session, capsBps []float64) {
 	now := time.Now()
 	c.sessionsMu.Lock()
@@ -409,7 +411,7 @@ func (c *Client) spreadCandidates(dir spreadDir) (sessions []*yamux.Session, cap
 			continue
 		}
 		m := c.recvStamp[s]
-		if m != nil && m.onBench(now) {
+		if m != nil && (m.onBench(now) || m.snubSitOut()) {
 			continue
 		}
 		var bps float64

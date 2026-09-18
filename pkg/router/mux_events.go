@@ -96,6 +96,13 @@ const (
 	MuxEventTunnelPromoted = "tunnel_promoted"
 	MuxEventTunnelParked   = "tunnel_parked"
 	MuxEventTunnelRetired  = "tunnel_retired"
+	// MuxEventTunnelSnubbed / ...Unsnubbed bracket a QUEUE-AWARE no-progress
+	// sit-out, borrowed from bittorrent: a tunnel holding outstanding chunks
+	// that has delivered no byte and no ack for its snub bound is snubbed, its
+	// outstanding work re-issued elsewhere, and it is re-tried with ONE chunk
+	// after the hold. The Reason names the silence and the bound.
+	MuxEventTunnelSnubbed   = "tunnel_snubbed"
+	MuxEventTunnelUnsnubbed = "tunnel_unsnubbed"
 )
 
 // Mux event initiators (MuxEvent.By).

@@ -66,13 +66,21 @@ func (c *Client) activeTunnels() int {
 // clamped to [chunk.min_bytes, ceiling]. The two knobs default to
 // rsChunksPerTunnel and rsMinChunkBytes.
 func chunkTarget(total int64, tunnels int, ceiling int64) int64 {
+	return chunkTargetPer(total, tunnels, ceiling, setChunkPerTunnel())
+}
+
+// chunkTargetPer is chunkTarget with the per-tunnel DEPTH supplied: the
+// chunk.per_tunnel knob by default, or the bandwidth-delay depth when
+// chunk.depth_dynamic is on. Split out so the depth is read ONCE per download,
+// at the one admission decision that consumes it, rather than re-derived
+// wherever the plan is touched.
+func chunkTargetPer(total int64, tunnels int, ceiling int64, per int) int64 {
 	if ceiling <= 0 {
 		ceiling = defaultRSChunkSize
 	}
 	if tunnels < 1 {
 		tunnels = 1
 	}
-	per := setChunkPerTunnel()
 	if per < 1 {
 		per = rsChunksPerTunnel
 	}
@@ -106,7 +114,11 @@ func evenChunkSize(remaining, target int64) int64 {
 // chunk0: the per-object target for the current active tunnel count, rounded to
 // divide the remainder evenly.
 func (c *Client) planChunkSize(total, chunk0Len int64) int64 {
-	return evenChunkSize(total-chunk0Len, chunkTarget(total, c.activeTunnels(), c.rsChunkSize()))
+	ceiling := c.rsChunkSize()
+	// The depth is read once here, at the plan: a value that moved mid-object
+	// would re-cut chunks the fetches are already addressing by byte offset.
+	per := c.tunnelDepth(ceiling, false, setChunkPerTunnel())
+	return evenChunkSize(total-chunk0Len, chunkTargetPer(total, c.activeTunnels(), ceiling, per))
 }
 
 // planUploadChunk is the chunk size a STRIPED UPLOAD cuts one object with. It is

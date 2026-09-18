@@ -101,6 +101,20 @@ const (
 // single-tunnel speed.
 var errSessionClosed = errors.New("skysocks: tunnel closed under the fetch")
 
+// errTunnelSnubbed marks an attempt this client ABORTED because its tunnel was
+// snubbed — it held outstanding work and produced no byte and no ack for its
+// bound (tunnel_snub.go). Like errSessionClosed it says nothing about the
+// chunk, so it refetches at once on another tunnel free of backoff and free of
+// budget; unlike it, the tunnel is still alive and is not retired.
+var errTunnelSnubbed = errors.New("skysocks: tunnel snubbed under the fetch")
+
+// freeRetry reports whether a failed attempt is one the CLIENT caused by moving
+// the chunk off its tunnel — a death or a snub — rather than evidence about the
+// chunk. Those refetch immediately on another tunnel and are not charged.
+func freeRetry(err error) bool {
+	return errors.Is(err, errSessionClosed) || errors.Is(err, errTunnelSnubbed)
+}
+
 func defaultRangeSplitConfig() rangeSplitConfig {
 	return rangeSplitConfig{
 		enabled:      true,
@@ -848,12 +862,12 @@ func retryWithBudget(fetch func() ([]byte, error), budget, backoff, backoffMax t
 		if errors.Is(err, errChunkRaceLost) {
 			return nil, err
 		}
-		// The tunnel died under the attempt: refetch immediately on another
-		// one. No backoff (there is nothing to wait for — the next pick skips
-		// the dead tunnel) and no attempt charged, so a mid-download tunnel
-		// loss costs the chunk one round trip instead of a sleep plus a slice
-		// of its budget. Bounded by rsFreeRetries.
-		if errors.Is(err, errSessionClosed) && free < setChunkFreeRetries() {
+		// The tunnel died — or was SNUBBED — under the attempt: refetch
+		// immediately on another one. No backoff (there is nothing to wait for —
+		// the next pick skips both) and no attempt charged, so a mid-download
+		// tunnel loss costs the chunk one round trip instead of a sleep plus a
+		// slice of its budget. Bounded by rsFreeRetries.
+		if freeRetry(err) && free < setChunkFreeRetries() {
 			free++
 			attempt--
 
@@ -1023,6 +1037,14 @@ type tunnelGuard struct {
 	fired atomic.Bool
 	done  chan struct{}
 	once  sync.Once
+
+	// m is set only by guardChunkTunnel: the meter of the tunnel this attempt
+	// is OUTSTANDING WORK on, for the per-tunnel snub. nil on the paths that
+	// must never be snubbed — the sequential rescue, the upload probe and the
+	// generic POST relay — because those are the liveness fallbacks and
+	// aborting them re-issues nothing.
+	m       *tunnelMeter
+	snubbed atomic.Bool
 }
 
 // guardTunnel starts watching sess for st. The caller must call err (or stop) to
@@ -1041,7 +1063,30 @@ type tunnelGuard struct {
 // window to the close itself: the failover promote happens in the same instant
 // the chunk fails, so the refetch has the promoted tunnel to land on.
 func (c *Client) guardTunnel(sess *yamux.Session, st net.Conn) *tunnelGuard {
-	g := &tunnelGuard{c: c, sess: sess, done: make(chan struct{})}
+	return c.guard(sess, st, nil)
+}
+
+// guardChunkTunnel is guardTunnel for an attempt that counts as OUTSTANDING
+// WORK on its tunnel — a range chunk, a striped-upload chunk. Beyond the death
+// watch it books the attempt on the tunnel.s meter (so the snub evaluator can
+// see that the tunnel is holding work) and aborts the attempt the moment the
+// tunnel is snubbed, which is what re-issues the chunk elsewhere.
+//
+// The paths that stay on plain guardTunnel are the ones that must not be
+// snubbed: the sequential rescue is the download's liveness fallback, and the
+// upload probe and the generic POST relay are single attempts with nowhere to
+// be re-issued to.
+func (c *Client) guardChunkTunnel(sess *yamux.Session, st net.Conn) *tunnelGuard {
+	return c.guard(sess, st, c.meterOf(sess))
+}
+
+func (c *Client) guard(sess *yamux.Session, st net.Conn, m *tunnelMeter) *tunnelGuard {
+	g := &tunnelGuard{c: c, sess: sess, m: m, done: make(chan struct{})}
+	m.startWork(time.Now())
+	var snubC <-chan struct{}
+	if m != nil {
+		snubC = m.snubChan()
+	}
 	go func() {
 		select {
 		case <-sess.CloseChan():
@@ -1050,6 +1095,14 @@ func (c *Client) guardTunnel(sess *yamux.Session, st net.Conn) *tunnelGuard {
 			if g.c != nil {
 				g.c.retireTunnel(sess, "tunnel closed under a range fetch")
 			}
+		case <-snubC:
+			// The tunnel went silent with this chunk on it. Unblock the
+			// attempt exactly as a death would — the chunk is refetched at
+			// once on another tunnel — but do NOT retire anything: a snubbed
+			// tunnel is alive, and it gets its one-chunk probe back after the
+			// hold.
+			g.snubbed.Store(true)
+			st.Close() //nolint:errcheck,gosec
 		case <-g.done:
 		}
 	}()
@@ -1057,8 +1110,22 @@ func (c *Client) guardTunnel(sess *yamux.Session, st net.Conn) *tunnelGuard {
 	return g
 }
 
-// stop releases the watcher.
-func (g *tunnelGuard) stop() { g.once.Do(func() { close(g.done) }) }
+// meterOf returns the meter of a tunnel in the current set, or nil.
+func (c *Client) meterOf(sess *yamux.Session) *tunnelMeter {
+	c.sessionsMu.Lock()
+	defer c.sessionsMu.Unlock()
+	return c.recvStamp[sess]
+}
+
+// stop releases the watcher and, with it, the tunnel.s outstanding-work count.
+// Both under the same sync.Once, so a chunk is booked off its tunnel exactly
+// once however many times the caller releases the guard.
+func (g *tunnelGuard) stop() {
+	g.once.Do(func() {
+		close(g.done)
+		g.m.endWork()
+	})
+}
 
 // err releases the watcher and classifies the attempt's outcome: an error on a
 // tunnel that is gone becomes errSessionClosed, which retries free of backoff
@@ -1068,7 +1135,16 @@ func (g *tunnelGuard) stop() { g.once.Do(func() { close(g.done) }) }
 // common case and charge the death to the chunk.
 func (g *tunnelGuard) err(err error) error {
 	g.stop()
-	if err == nil || (!g.fired.Load() && !g.sess.IsClosed()) {
+	if err == nil {
+		return err
+	}
+	// A SNUB is checked before the death: both can be true at once (the snub
+	// closed the stream, and the tunnel then died anyway), and the snub is the
+	// classification that must not retire a live tunnel.
+	if g.snubbed.Load() || (g.m != nil && g.m.isSnubbed()) {
+		return fmt.Errorf("%w: %v", errTunnelSnubbed, err)
+	}
+	if !g.fired.Load() && !g.sess.IsClosed() {
 		return err
 	}
 	// Retire here too, not only in the watcher: stop() and the close can race in
@@ -1188,7 +1264,9 @@ func (c *Client) fetchChunk(req *http.Request, host, validator string, start, en
 	// A tunnel that dies under this fetch fails it AT ONCE — the deadlines below
 	// are for a slow tunnel, not a gone one — and the failure is labeled
 	// errSessionClosed so the chunk is refetched immediately on a live tunnel.
-	g := c.guardTunnel(sess, st)
+	// guardChunkTunnel also books the chunk as outstanding work on the tunnel
+	// and aborts it the same way if the tunnel is SNUBBED.
+	g := c.guardChunkTunnel(sess, st)
 	defer func() { err = g.err(err) }()
 	// A duplicate that loses the endgame race has its stream closed under it.
 	w := watchLost(st, p.lost)
@@ -1219,7 +1297,11 @@ func (c *Client) fetchChunk(req *http.Request, host, validator string, start, en
 	// carrying the file (measured live: 48.5MB received for a 20MB download,
 	// 2.4x waste). Rolling the deadline forward on every read means only a
 	// genuinely STALLED stream fails; a slow-but-moving one completes.
-	got, rerr := readChunkBodyProgress(st, resp.Body, buf[:end-start+1], setChunkIdleTimeout(), onRead)
+	// The body is read through the tunnel's meter: every byte stamps lastByteAt,
+	// which is the download half of the snub's progress evidence. It is stamped
+	// per TUNNEL and not per chunk on purpose — a chunk queued behind two others
+	// is not a silent tunnel, and the bytes those two are delivering say so.
+	got, rerr := readChunkBodyProgress(st, meteredBody{r: resp.Body, m: c.meterOf(sess)}, buf[:end-start+1], setChunkIdleTimeout(), onRead)
 	return int64(got), rerr
 }
 
@@ -1632,4 +1714,20 @@ func parseContentRangeTotal(cr string) (int64, bool) {
 
 func numChunks(total, chunkSize int64) int64 {
 	return (total + chunkSize - 1) / chunkSize
+}
+
+// meteredBody stamps the tunnel's byte clock as a chunk body arrives. The stamp
+// is what the per-tunnel snub reads: a tunnel delivering ANY chunk's bytes is
+// making progress, whatever any individual chunk is waiting for.
+type meteredBody struct {
+	r io.Reader
+	m *tunnelMeter
+}
+
+func (b meteredBody) Read(p []byte) (int, error) {
+	n, err := b.r.Read(p)
+	if n > 0 && b.m != nil {
+		b.m.noteChunkByte(time.Now())
+	}
+	return n, err
 }
