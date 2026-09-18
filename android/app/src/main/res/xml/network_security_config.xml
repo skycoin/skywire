@@ -1,13 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- targetSdk ≥ 28 blocks cleartext HTTP by default. The visor's local API is
-     plain HTTP on 127.0.0.1, the Skycoin node the wallet ships against is plain
-     HTTP (node.skycoin.com), and user-added fiber-coin nodes are commonly plain
-     HTTP on a bare IP — their operators rarely front them with TLS. Since fiber
-     node addresses are free-form user input, they cannot be whitelisted by
-     domain, so cleartext is permitted at the base. Nothing secret rides on
-     those connections: keys never leave the device and signing is local; an
-     eavesdropper sees balances and broadcast transactions, which are public
-     chain data anyway. -->
+<!-- targetSdk ≥ 28 blocks cleartext HTTP by default. Two things here still
+     need it, and neither can be named by domain:
+
+       - the visor's own API, plain HTTP on 127.0.0.1;
+       - user-added fiber-coin nodes, commonly plain HTTP on a bare IP,
+         because their operators rarely front them with TLS. Those addresses
+         are free-form user input, so there is no domain to whitelist.
+
+     So cleartext stays permitted at the base. It is no longer permitted for
+     the built-in node: every endpoint this app ships with is https, and the
+     Skycoin node moved there with the rest (see CoinSpec.SKY).
+
+     The older note here said nothing secret rides on those connections,
+     since balances and transactions are public chain data. Each item is —
+     but the query is not: a balance call names the whole address book at
+     once, and which addresses belong to one wallet is precisely what a
+     wallet has to keep to itself. Funds are not at risk either way, because
+     keys never leave the device and signing is local, but that linkage
+     cannot be taken back once it has been seen. Anyone pointing this app at
+     a cleartext node of their own is choosing that for themselves. -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

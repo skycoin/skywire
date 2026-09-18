@@ -1,5 +1,6 @@
 package com.skycoin.skywire.wallet
 
+import com.skycoin.wallet.AddressBook
 import com.skycoin.wallet.TxRecord
 import com.skycoin.wallet.WalletBalance
 import kotlinx.serialization.Serializable
@@ -73,7 +74,15 @@ data class CoinSpec(
             name = "Skycoin",
             ticker = "SKY",
             kind = CoinKind.SKY_FIBER,
-            nodeUrl = "http://node.skycoin.com",
+            // https, like every other endpoint here including Skycoin's own
+            // explorer on the next line. Over plain http the query string of
+            // every balance and history call carries the whole address book
+            // in the clear, which hands anyone on the path the one thing a
+            // wallet most wants kept apart: which addresses belong together.
+            // Funds are not at risk either way — signing is local and a
+            // tampered transaction fails verification — but the linkage is,
+            // and it cannot be taken back once seen. The host serves TLS.
+            nodeUrl = "https://node.skycoin.com",
             explorerTxUrl = "https://explorer.skycoin.com/app/transaction/%s",
             builtIn = true,
         )
@@ -127,6 +136,46 @@ data class WalletMeta(
     val createdAtMs: Long,
     val receiveAddresses: List<String>,
     val changeAddresses: List<String> = emptyList(),
+    /**
+     * When this wallet's addresses were last discovered from the chain, or 0
+     * while that has never succeeded.
+     *
+     * A restore asks the node which of the seed's addresses have been used;
+     * a fresh phrase has nothing to ask about and is scanned by definition.
+     * When the question cannot be put — the node is slow, the link is bad —
+     * the wallet is still created, holding only the first address, and the
+     * coins on the rest are invisible and unspendable. That used to be the
+     * end of it: nothing recorded that the answer was missing and nothing
+     * ever asked again, so a restore on a bad connection quietly produced a
+     * wallet that was wrong forever.
+     *
+     * 0 means the question is still open. Refresh asks it again until it is
+     * answered, and the screen says so meanwhile. Wallets written before
+     * this field existed default to 0 and are re-asked once, which is what
+     * repairs any that were truncated.
+     */
+    val addressScanAtMs: Long = 0,
+)
+
+/** True while this wallet's address list has never been confirmed against the chain. */
+val WalletMeta.addressScanPending: Boolean get() = addressScanAtMs <= 0
+
+/**
+ * Fold a completed address scan into a wallet, and mark the question closed.
+ *
+ * The lists only ever grow. A scan reports how many addresses the CHAIN has
+ * seen; that is not how many the wallet HOLDS, because a user can ask for
+ * further ones locally and may already have handed one out. Taking an
+ * address away because nobody has paid it yet would be the same class of
+ * mistake as never finding it: coins arriving somewhere the wallet no longer
+ * watches.
+ */
+fun settledAddresses(meta: WalletMeta, scanned: AddressBook, nowMs: Long): WalletMeta = meta.copy(
+    receiveAddresses = scanned.receive.takeIf { it.size >= meta.receiveAddresses.size }
+        ?: meta.receiveAddresses,
+    changeAddresses = scanned.change.takeIf { it.size >= meta.changeAddresses.size }
+        ?: meta.changeAddresses,
+    addressScanAtMs = nowMs,
 )
 
 /** One remembered transaction — TxRecord flattened for the cache file. */

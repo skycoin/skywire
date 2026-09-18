@@ -540,6 +540,11 @@
         <item quantity="other">%1$d minutes</item>
     </plurals>
     <string name="wallet_stale_age_hours">%1$d h %2$d min</string>
+    <!-- A restore asks the node which of the phrase's addresses have been
+         used. When that could not be asked, the wallet holds only the first
+         one and its balance is a fraction of the truth — which must not be
+         left looking like the whole of it. Retried on every refresh. -->
+    <string name="wallet_scan_pending">This wallet\'s other addresses have not been confirmed with the node yet, so the balance may be incomplete. It is retried on every refresh.</string>
     <string name="wallet_stale_never">Node unreachable. This wallet has not synced yet — balances show once the node answers.</string>
     <string name="wallet_stale_send_note">Send is disabled: no route to the node</string>
     <string name="wallet_error_no_route">no route to the node</string>
