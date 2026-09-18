@@ -137,3 +137,64 @@ func TestDisconnectedNonHTTPPortDeclined(t *testing.T) {
 		t.Fatalf("expected the non-HTTP CONNECT to be declined with no body, got %d bytes: %q", n, string(buf[:n]))
 	}
 }
+
+// TestServeDisconnectedWaitCoversReconnectGap is the regression test for the one
+// proxy state that had NO listener at all: the app's reconnect delay between
+// cycles. ListenAndServe tears :1080 down when every tunnel dies, and the old
+// loop then slept (up to 30 s) before the next cycle bound anything — so a
+// browser hitting that window got connection-refused, including for
+// status.skysocks and including the interstitial's own auto-retry, which is a
+// dead end with no further retry. Serving the delay must answer the reserved
+// host in-process and release the port when the delay is up.
+func TestServeDisconnectedWaitCoversReconnectGap(t *testing.T) {
+	addr := freeAddr(t)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ServeDisconnectedWait(context.Background(), addr, nil, 2*time.Second)
+	}()
+	waitDial(t, addr)
+
+	conn := socks5Connect(t, addr, "status.skysocks", 80)
+	defer conn.Close() //nolint:errcheck
+	if _, err := conn.Write([]byte("GET / HTTP/1.1\r\nHost: status.skysocks\r\nConnection: close\r\n\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		t.Fatalf("status page not served during the reconnect delay: %v", err)
+	}
+	defer resp.Body.Close()          //nolint:errcheck
+	body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+	if !strings.Contains(string(body), "no active session to the exit") {
+		t.Fatalf("reconnect-gap request did not get the disconnected status page; body=%q", string(body))
+	}
+
+	// The wait must actually expire (it is the reconnect delay) and hand the port
+	// back for the next cycle's listener.
+	select {
+	case <-done:
+	case <-time.After(8 * time.Second):
+		t.Fatal("ServeDisconnectedWait did not return when its delay elapsed")
+	}
+}
+
+// TestServeDisconnectedWaitHonorsCancel: a visor stop must not be made to wait
+// out the reconnect delay.
+func TestServeDisconnectedWaitHonorsCancel(t *testing.T) {
+	addr := freeAddr(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ServeDisconnectedWait(ctx, addr, nil, time.Minute)
+	}()
+	waitDial(t, addr)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ServeDisconnectedWait ignored ctx cancellation")
+	}
+}
