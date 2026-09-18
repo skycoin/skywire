@@ -61,18 +61,28 @@ func (_m *MockProcManager) SetProxyStatusFn(fn func(appName string) (proxystatus
 var mockProcSettings = newAppSettings()
 
 // SetAppSettings provides a working stand-in for the real store.
-func (_m *MockProcManager) SetAppSettings(appName string, vals map[string]int64) uint64 {
-	return mockProcSettings.set(appName, vals)
+func (_m *MockProcManager) SetAppSettings(appName string, vals map[string]int64, text map[string]string) uint64 {
+	return mockProcSettings.set(appName, vals, text)
 }
 
 // AppSettings provides a working stand-in for the real store.
-func (_m *MockProcManager) AppSettings(appName string, applied uint64) (map[string]int64, uint64) {
-	return mockProcSettings.pull(appName, applied)
+func (_m *MockProcManager) AppSettings(appName string, applied, opsApplied uint64) (map[string]int64, map[string]string, []AppOp, uint64) {
+	return mockProcSettings.pull(appName, applied, opsApplied)
 }
 
 // AppSettingsState provides a working stand-in for the real store.
-func (_m *MockProcManager) AppSettingsState(appName string) (map[string]int64, uint64, uint64) {
+func (_m *MockProcManager) AppSettingsState(appName string) (map[string]int64, map[string]string, uint64, uint64) {
 	return mockProcSettings.state(appName)
+}
+
+// QueueAppOp provides a working stand-in for the real store.
+func (_m *MockProcManager) QueueAppOp(appName, kind string, arg int64) uint64 {
+	return mockProcSettings.queueOp(appName, kind, arg)
+}
+
+// AllAppSettings provides a working stand-in for the real store.
+func (_m *MockProcManager) AllAppSettings() (map[string]map[string]int64, map[string]map[string]string) {
+	return mockProcSettings.all()
 }
 
 // Addr provides a mock function with no fields

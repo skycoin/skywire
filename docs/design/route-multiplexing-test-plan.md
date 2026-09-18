@@ -216,9 +216,11 @@ of the two-day window spent deploying constants. `proxy settings` and the mux
 half of `route settings` remove that cost: the value lives in an atomic the use
 site re-reads, the visor holds the set per app, and a running skysocks-client
 PULLS it on the keepalive tick it already runs (one `tunnel.probe_interval`,
-5 s by default). Nothing is persisted — a knob lives for as long as the app
-process does, so a restart is always a return to the compiled defaults, and a
-run that sets nothing is byte-for-byte the old binary.
+5 s by default). A knob PERSISTS (since 2026-09-18): it outlives `proxy stop`
+and the app restart it implies, and the visor writes the set to its config
+(`app_settings`) so it outlives the visor too — `proxy settings --reset` is the
+one thing that forgets one. A run that sets nothing is byte-for-byte the old
+binary.
 
 **Client knobs — `skywire cli proxy settings [--app skysocks-client]`**
 
@@ -234,9 +236,43 @@ run that sets nothing is byte-for-byte the old binary.
 | striped upload | `upload.stripe_min_bytes` · `upload.chunk_bytes` · `upload.mem_bytes` · `upload.concurrency` · `upload.replay_max_bytes` · `upload.probe_ttl` |
 | upload retries | `upload.ack_timeout` · `upload.idle_timeout` · `upload.durable_wait` · `upload.resend_passes` · `upload.early_tries` · `upload.early_wait_max` · `upload.busy_backoff` · `upload.busy_tries` · `upload.cut_tries` · `upload.replay_tries` |
 | spread policy (v4) | `spread.max_share` · `spread.min_routes` · `spread.endgame` · `spread.weight` |
+| tunnel shape (live twins of the boot flags) | `tunnel.count` · `pool.size` · `range.port` |
+| pool control | `pool.freeze` · `pool.exclude_pks` · `pool.require_tp_types` |
+| per-app mux width | `mux.cap` · `mux.width` |
 
-`chunk.max_bytes` and `chunk.concurrency` OVERRIDE the boot flags
-(`--range-chunk-kib`, `--range-concurrency`): unset, the flag still wins.
+`chunk.max_bytes`, `chunk.concurrency`, `range.port`, `tunnel.count` and
+`pool.size` OVERRIDE the boot flags (`--range-chunk-kib`,
+`--range-concurrency`, `--range-port`, `--tunnels`, `--standby-pool`): unset,
+the flag still wins. The last two describe a SHAPE rather than a value, so a
+change is reconciled on the tick it lands — `tunnel.count` by promoting from
+the pool or parking the worst idle active tunnel, `pool.size` by growing on the
+next fill or giving up the worst STANDBY tunnels above the new ceiling (never
+an active one). Neither restarts the app.
+
+`pool.freeze` (default false) holds the set still: the promoter makes no
+discretionary swap and the pool neither fills nor shrinks. A tunnel DEATH is
+still answered — the failover promote and the re-arm are untouched — and a
+reconcile the operator asks for still runs, so freeze is "stop drifting", not
+"stop healing".
+
+`pool.exclude_pks` and `pool.require_tp_types` are the pool dial's live
+candidate filter, both empty by default. The PKs are excluded as first hops AND
+as intermediates; the types are checked on the group that came up, and a first
+hop of the wrong type is closed and counted as an ordinary dial failure (the
+router's own candidate ranking has no per-dial type filter — only the
+visor-wide `routing.route_exclude_transport_types`).
+
+`mux.cap` and `mux.width` (0 = inherit) are PER APP, read by the visor's dial
+path for the app that owns the dial: `skywire cli proxy mux cap|width [n] -n
+<app>`, with `--visor-wide` for the process-global adaptive ceiling and floor
+the old command set. Pinning the legs of the proxy under test no longer pins
+them on the paired reference dialing beside it.
+
+`skywire cli proxy tunnel rm --rg <port>` closes exactly one tunnel — the route
+group whose port `proxy mux info` prints as `desc.dst_port` — and lets the pool
+replace it. `proxy mux rm` cannot: it drops a LEG and the router refuses to take
+the last one, which is why the degrade row used to cut the host's transport and
+take every other route over it down with it.
 
 The chunk-plan three are the granularity sweep of §3: `chunk.probe_bytes` is
 chunk0 — the size probe, and the no-split threshold — while `chunk.min_bytes`

@@ -17,6 +17,8 @@ package skysocks
 import (
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skysocks/skysettings"
 )
 
@@ -30,6 +32,20 @@ func setPoolRetryBackoffMax() time.Duration {
 	return skysettings.Dur(skysettings.PoolRetryBackoffMax)
 }
 func setPoolRetryRounds() int { return skysettings.Count(skysettings.PoolRetryRounds) }
+
+// The three shape knobs. pool.size and tunnel.count are OVERRIDES of the boot
+// flags (--standby-pool, --tunnels) in the same sense as the range-split pair:
+// unset, the flag the app was started with still wins; set, they are what the
+// client reconciles to on the next tick.
+func setPoolSize() int    { return skysettings.Count(skysettings.PoolSize) }
+func setTunnelCount() int { return skysettings.Count(skysettings.TunnelCount) }
+func setPoolFreeze() bool { return skysettings.Bool(skysettings.PoolFreeze) }
+func poolExcludePKs() []string {
+	return skysettings.Strings(skysettings.PoolExcludePKs)
+}
+func poolRequireTpTypes() []string {
+	return skysettings.Strings(skysettings.PoolRequireTpTypes)
+}
 func setStandbyRTTStale() time.Duration {
 	return skysettings.Dur(skysettings.PoolStandbyRTTStale)
 }
@@ -86,6 +102,16 @@ func (c *Client) rsChunkSize() int64 {
 	return c.rs.chunkSize
 }
 
+// rsPlainPort is the destination port the splitter treats as plaintext HTTP:
+// the knob when it has been set, otherwise whatever --range-port configured.
+// Read per request, so moving it live moves the very next GET.
+func (c *Client) rsPlainPort() int {
+	if skysettings.IsSet(skysettings.RangePort) {
+		return skysettings.Count(skysettings.RangePort)
+	}
+	return c.rs.plainPort
+}
+
 // rsConcurrency is the range-split fetch concurrency in force; see rsChunkSize.
 func (c *Client) rsConcurrency() int {
 	if skysettings.IsSet(skysettings.ChunkConcurrency) {
@@ -106,22 +132,70 @@ func (c *Client) pullSettings() bool {
 	if c.appSettings == nil {
 		return false
 	}
-	vals, version, err := c.appSettings(c.settingsApplied)
+	vals, text, ops, version, err := c.appSettings(c.settingsApplied, c.opsApplied)
 	if err != nil {
 		if c.appCl != nil {
 			c.appCl.Log().Debugf("Pulling app settings failed: %v", err)
 		}
 		return false
 	}
+	c.applyOps(ops)
 	if version == c.settingsApplied {
 		return false
 	}
-	changed := skysettings.Apply(vals)
+	// Both halves of the answer ALWAYS run: || would skip the list knobs the
+	// moment a numeric one moved.
+	numeric := skysettings.Apply(vals)
+	lists := skysettings.ApplyText(text)
+	changed := numeric || lists
 	c.settingsApplied = version
 	if changed && c.appCl != nil {
-		c.appCl.Log().Infof("Applied %d live setting(s) at version %d", len(vals), version)
+		c.appCl.Log().Infof("Applied %d live setting(s) at version %d", len(vals)+len(text), version)
+	}
+	if changed {
+		c.reconcileLiveKnobs()
 	}
 	return changed
+}
+
+// applyOps carries out the edge-triggered instructions the visor queued, in
+// order, and records the highest sequence done so the next pull acks them. An
+// op whose target is already gone is still acked: it asked for a tunnel to be
+// closed, and a closed tunnel is the outcome either way.
+func (c *Client) applyOps(ops []appserver.AppOp) {
+	for _, op := range ops {
+		if op.Seq <= c.opsApplied {
+			continue
+		}
+		switch op.Kind {
+		case appserver.AppOpCutTunnel:
+			c.cutTunnel(routing.Port(op.Arg)) //nolint:gosec
+		default:
+			if c.appCl != nil {
+				c.appCl.Log().Warnf("Ignoring unknown app op %q (seq %d)", op.Kind, op.Seq)
+			}
+		}
+		c.opsApplied = op.Seq
+	}
+}
+
+// reconcileLiveKnobs applies the two knobs that describe a SHAPE rather than a
+// value — the active tunnel count and the pool ceiling — to the tunnels the
+// client is holding right now. Called on the tick a settings change lands, so
+// `proxy settings tunnel.count=3` widens the active set by promoting from the
+// pool instead of waiting for a restart.
+func (c *Client) reconcileLiveKnobs() {
+	if skysettings.IsSet(skysettings.TunnelCount) {
+		if n := setTunnelCount(); n >= 1 {
+			c.SetTunnelTarget(n)
+		}
+	}
+	if skysettings.IsSet(skysettings.PoolSize) {
+		c.SetStandbyPool(setPoolSize())
+	}
+	// The reconcile itself is deliberately allowed under pool.freeze: it is
+	// the operator asking for a shape, not the promoter drifting toward one.
+	c.reconcileActiveSet("live settings change")
 }
 
 // livenessInterval is the liveness-probe cadence in force: the knob when it has

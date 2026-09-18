@@ -48,11 +48,13 @@ import (
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cliout/cliproxy"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skysocks/skysettings"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
 var (
 	muxOpsApp         string
+	muxOpsVisorWide   bool
 	muxOpsSrcPort     uint16
 	muxAddRouteSrc    string
 	muxSwitchRouteSrc string
@@ -75,66 +77,140 @@ func init() {
 	muxDirectionCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose route groups to pin")
 	addMuxSub(muxModeCmd, "mux-mode")
 	addMuxSub(muxDirectionCmd, "mux-direction")
+	muxCapCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose mux width to read or set")
+	muxCapCmd.Flags().BoolVar(&muxOpsVisorWide, "visor-wide", false, "set the process-global adaptive value every app without an override inherits, instead of this app's")
+	muxWidthCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose mux width to read or set")
+	muxWidthCmd.Flags().BoolVar(&muxOpsVisorWide, "visor-wide", false, "set the process-global adaptive value every app without an override inherits, instead of this app's")
 	addMuxSub(muxCapCmd, "mux-cap")
 	addMuxSub(muxWidthCmd, "mux-width")
+	tunnelRmCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose tunnel to close")
+	tunnelRmCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "the tunnel's route group port, as 'mux info' prints it (desc.dst_port)")
+	tunnelCmd.AddCommand(tunnelRmCmd)
+	RootCmd.AddCommand(tunnelCmd)
 	addMuxSub(muxStandbyCmd, "mux-standby")
 }
 
-var muxCapCmd = &cobra.Command{
-	Use:   "cap <n>",
-	Short: "Set the adaptive mux active-width ceiling at runtime",
-	Long: `Set the MAXIMUM number of ACTIVE mux legs the adaptive engine may grow to
-under sustained load — the aggregation ceiling. Applies LIVE to this visor's
-adaptive route groups on their next tick (no restart). Send-side is a per-visor
-decision, so set it independently on each end (e.g. over the pty to the exit).
+// muxWidthKnob sets (or reads) one of the two PER-APP mux width knobs.
+//
+// Per-app is the point. Both used to drive a process-global atomic in the
+// routing policy preset, so pinning the legs of the proxy under test pinned
+// them on every other app's route groups too — the paired reference dialing
+// beside it included, which made a legs sweep something a bench could only
+// record rather than avoid. The value now lives in the app's own knob set
+// (mux.cap / mux.width, `proxy settings`) and the visor's dial path reads the
+// owning app's before it dials.
+//
+// --visor-wide is the old behavior, kept because it is still the right one for
+// the adaptive engine's own floor and ceiling: it sets the process-global
+// value every app WITHOUT an override of its own inherits, live, on the next
+// tick of every adaptive route group.
+func muxWidthKnob(cmd *cobra.Command, args []string, op, knob string) {
+	rpcClient, err := clirpc.Client(cmd.Flags())
+	if err != nil {
+		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+	}
+	defer rpcClient.Close() //nolint:errcheck,gosec
 
-Example:
-  skywire cli proxy mux cap 60     # allow aggregation up to 60 active legs`,
-	Args:                  cobra.ExactArgs(1),
+	// No argument: read it back. The per-app value the visor holds, or the
+	// word "inherit" when the app has none and the visor-wide default governs.
+	if len(args) == 0 {
+		if muxOpsVisorWide {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--visor-wide has no readback; `route settings --json` reports the adaptive values"))
+		}
+		cur, gerr := rpcClient.GetAppSettings(muxOpsApp)
+		if gerr != nil {
+			internal.PrintFatalError(cmd.Flags(), gerr)
+		}
+		value := "inherit"
+		if v, ok := cur.Values[knob]; ok {
+			value = strconv.FormatInt(v, 10)
+		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: op, App: muxOpsApp, Value: value}))
+		return
+	}
+
+	n, err := strconv.Atoi(args[0])
+	if err != nil || n < 1 {
+		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("%s must be a positive integer, got %q", op, args[0]))
+	}
+
+	if muxOpsVisorWide {
+		if op == "cap" {
+			err = rpcClient.SetMuxCap(n)
+		} else {
+			err = rpcClient.SetMuxWidth(n)
+		}
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("set visor-wide %s: %w", op, err))
+		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: op, App: "(visor-wide)", Value: args[0]}))
+		return
+	}
+
+	cur, err := rpcClient.GetAppSettings(muxOpsApp)
+	if err != nil {
+		internal.PrintFatalError(cmd.Flags(), err)
+	}
+	next, nextText, err := applySettingArgs(cur.Values, cur.Text, []string{fmt.Sprintf("%s=%d", knob, n)}, false)
+	if err != nil {
+		internal.PrintFatalError(cmd.Flags(), err)
+	}
+	if _, err = rpcClient.SetAppSettings(muxOpsApp, next, nextText); err != nil {
+		internal.PrintFatalError(cmd.Flags(), err)
+	}
+	internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: op, App: muxOpsApp, Value: args[0]}))
+}
+
+var muxCapCmd = &cobra.Command{
+	Use:   "cap [n]",
+	Short: "Set an app's mux active-width ceiling at runtime",
+	Long: `Set the MAXIMUM number of ACTIVE mux legs the named app's dials may ask for —
+the aggregation ceiling. With no argument the app's current value is printed
+("inherit" when it has none).
+
+The value is PER APP (-n, default skysocks-client) and is read by the visor's
+dial path for the app that owns the dial, so pinning the legs of the proxy
+under test no longer pins them on every other app's route groups. It reaches
+route groups dialed from now on; an app already running re-dials its tunnels on
+'proxy restart'.
+
+--visor-wide sets the process-global adaptive ceiling instead — what every app
+with no override of its own inherits — live, on the next tick of every adaptive
+route group. That is what this command did before it took an app name.
+
+Examples:
+  skywire cli proxy mux cap 4                 # skysocks-client's ceiling
+  skywire cli proxy mux cap                   # read it back
+  skywire cli proxy mux cap 60 --visor-wide   # the adaptive engine's ceiling`,
+	Args:                  cobra.MaximumNArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		n, err := strconv.Atoi(args[0])
-		if err != nil || n < 1 {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cap must be a positive integer, got %q", args[0]))
-		}
-		rpcClient, err := clirpc.Client(cmd.Flags())
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
-		}
-		defer rpcClient.Close() //nolint:errcheck,gosec
-		if err := rpcClient.SetMuxCap(n); err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetMuxCap: %w", err))
-		}
-		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: "cap", App: muxOpsApp, Value: args[0]}))
+		muxWidthKnob(cmd, args, "cap", skysettings.MuxCap)
 	},
 }
 
 var muxWidthCmd = &cobra.Command{
-	Use:   "width <n>",
-	Short: "Set the adaptive mux steady active download width at runtime",
-	Long: `Set the STEADY active download width — the floor number of active mux legs
-the adaptive engine converges to when idle (more than one spreads a bulk flow
-proactively before saturation instead of ramping from a single leg). Applies
-LIVE on the next tick; clamped to [1, cap]. Set per-visor, per-end.
+	Use:   "width [n]",
+	Short: "Set an app's mux active width at runtime",
+	Long: `Set the number of ACTIVE mux legs the named app's dials ask for. With no
+argument the app's current value is printed ("inherit" when it has none).
 
-Example:
-  skywire cli proxy mux width 8    # keep 8 legs active by default`,
-	Args:                  cobra.ExactArgs(1),
+PER APP (-n, default skysocks-client), read by the visor's dial path for the
+app that owns the dial; bounded by that app's mux cap when it has one. It
+shapes route groups dialed from now on.
+
+--visor-wide sets the process-global steady active download width the adaptive
+engine converges to when idle — the floor every app without an override
+inherits — live on the next tick, clamped to [1, cap].
+
+Examples:
+  skywire cli proxy mux width 2                # skysocks-client's legs
+  skywire cli proxy mux width                  # read it back
+  skywire cli proxy mux width 8 --visor-wide   # the adaptive engine's floor`,
+	Args:                  cobra.MaximumNArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		n, err := strconv.Atoi(args[0])
-		if err != nil || n < 1 {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("width must be a positive integer, got %q", args[0]))
-		}
-		rpcClient, err := clirpc.Client(cmd.Flags())
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
-		}
-		defer rpcClient.Close() //nolint:errcheck,gosec
-		if err := rpcClient.SetMuxWidth(n); err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetMuxWidth: %w", err))
-		}
-		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: "width", App: muxOpsApp, Value: args[0]}))
+		muxWidthKnob(cmd, args, "width", skysettings.MuxWidth)
 	},
 }
 
@@ -568,6 +644,54 @@ Example:
 		}
 		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{
 			Op: "direction", App: muxOpsApp, Mode: mode,
+		}))
+	},
+}
+
+var tunnelCmd = &cobra.Command{
+	Use:   "tunnel",
+	Short: "Operate on a proxy app's individual tunnels",
+	Long: `Operate on one TUNNEL — one route group an app holds to its exit — rather than
+on the legs inside one ('proxy mux').`,
+}
+
+var tunnelRmCmd = &cobra.Command{
+	Use:   "rm --rg <port>",
+	Short: "Close one of an app's tunnels and let its pool replace it",
+	Long: `Close exactly one tunnel: the route group whose port is --rg, as 'proxy mux
+info' prints it (desc.dst_port). The app's standby pool takes over its slot in
+the active set immediately and dials a replacement in the background, which is
+the whole point — this is a tunnel death staged on purpose.
+
+'proxy mux rm' cannot do this: it drops a LEG and the router refuses to take
+the last one, so a test that wanted one tunnel gone had to cut the underlying
+transport on the host and take every other route over it down with it.
+
+The cut is carried out by the APP (only it knows which of its sessions the
+group carries), so it lands on the app's next settings pull — one
+tunnel.probe_interval, 5 s by default. An unknown port is refused here, with
+the candidate list.
+
+Example:
+  skywire cli proxy mux info --json | jq -r '.[].desc.dst_port'
+  skywire cli proxy tunnel rm --rg 49170`,
+	Args:                  cobra.NoArgs,
+	DisableFlagsInUseLine: true,
+	Run: func(cmd *cobra.Command, _ []string) {
+		if muxOpsSrcPort == 0 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("pass --rg <port>: the tunnel's route group port, as 'proxy mux info' prints it"))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+		}
+		defer rpcClient.Close() //nolint:errcheck,gosec
+
+		if _, err := rpcClient.CutAppTunnel(muxOpsApp, muxOpsSrcPort); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("CutAppTunnel: %w", err))
+		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{
+			Op: "cut", App: muxOpsApp, Value: strconv.Itoa(int(muxOpsSrcPort)),
 		}))
 	},
 }
