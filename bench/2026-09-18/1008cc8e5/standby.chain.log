@@ -1,0 +1,29 @@
+local=1008cc8e5 exit=1008cc8e5 app=skysocks-client addr=127.0.0.1:1080 tunnels=2 chaos_row=11 order=03f57e7c 0371ab4b 0281a102 02c48393 02a2d4c3 0255117b
+Running!
+pool: 2 route group(s) to the exit after 0s
+pool: 3 route group(s) to the exit after 5s
+pool: 5 route group(s) to the exit after 10s
+skysocks-client: pool settled at 5 route group(s) (quiet 20s)
+skysocks-client: 5 route group(s); roles: active,active,standby,standby,standby; first-hop tps: 95839ad0-b588-0b1d-8475-45fba6ae993c ac40965a-bc99-01e4-a2c9-c26b76db013b b414796d-14fc-080e-9ce6-a7162e3e562b f1012467-de9d-09a9-8b49-62a43945c24b fdab37dd-c35e-05bc-9e51-cd6b024e3eec 
+skysocks-client: 4 group(s) cuttable and restorable
+skysocks-client warm: 4/4 probes ok
+mux-standby-5: cut target = tp 95839ad0-b588-0b1d-8475-45fba6ae993c on rg 49234 (remote 0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13, pin via-0371ab4b, role active, by tunnel_role=active, busiest by carrier-growth)
+mux-standby-5 mux-standby-5-t1: cut tp 95839ad0-b588-0b1d-8475-45fba6ae993c (rg 49234, remote 0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13) at 5.180s after 48955392 bytes (ok=1)
+mux-standby-5 mux-standby-5-t1: http=200 got=50000000 hash_ok=1 before=9450848B/s after=9083548B/s ttfb_after=-s restored=1 rg_ports 49233,49234,49236,49237,49238,49239,49240 -> 49233,49234,49236,49237,49238,49239,49240
+mux-standby-5: 20 rows, hash_ok=20
+mux-standby-5: 42 mux events: group_created(route group dialed by this visor) leg_added(route setup: primary leg) group_created(route group dialed by this visor) leg_added(route setup: primary leg) dial_decision(diversify: 1 sibling group(s) to 022716fb:3, excluding first-hop tp(s) b414796d and 1 first-hop peer(s); hook-race: ev
+--- mux-standby-5 asserts
+# assert	value	want	verdict
+pool_size	5	> 2	PASS
+pool_settled	quiet 20s	quiet	INFO
+hashes_after_cut	5/5	5/5	PASS
+cut_target	tp 95839ad0-b588-0b1d-8475-45fba6ae993c rg 49234 remote 0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 role active (by tunnel_role=active, busiest by carrier-growth)	an active tunnel's first hop	PASS
+survivors_kept	6/6 (49233,49234,49236,49237,49238,49239,49240 -> 49233,49234,49236,49237,49238,49239,49240)	all but rg 49234	PASS
+rg_ports_lost	none	at most rg 49234	PASS
+rg_ports_gained	none	pool refill, not a rebuild	INFO
+promote_event	tunnel_promoted x1	>=1 tunnel_promoted (or leg_promoted)	PASS
+ttfb_after_cut_s	no byte arrived after the cut	< 2	FAIL
+local_reorder_wedge	0 events, wedges counter 0	0	PASS
+exit_reorder_wedge	0	0	PASS
+--- rig sweep
+hop-1 stcpr present: 6/6

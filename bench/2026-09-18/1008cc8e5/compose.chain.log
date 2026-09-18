@@ -1,0 +1,30 @@
+local=1008cc8e5 exit=1008cc8e5 order=03f57e7c 0371ab4b 0255117b 0281a102 02c48393 02a2d4c3 compose=2x2 sizes=10000000 50000000 100000000 
+paired references: PAIRED_REF=auto resolved to '0371ab4b'
+Running!
+skysocks-client: route group count stable at 7 for 10s
+skysocks-client: 7 route group(s) — 2 active, 5 standby
+mux-compose-T2xL2: rg49219 <- 03f57e7c 0371ab4b 
++ added leg (first tp=fdab37dd-c35e-05bc-9e51-cd6b024e3eec)
++ added leg (first tp=95839ad0-b588-0b1d-8475-45fba6ae993c)
+- removed leg (tp=b414796d-14fc-080e-9ce6-a7162e3e562b)
+mux set app=skysocks-client: target=2, +2 added, -1 removed, 0 already present
+mux-compose-T2xL2: rg49220 <- 0255117b 0281a102 
++ added leg (first tp=50cdb857-a262-0ae5-bf5b-5c93c8025b69)
++ added leg (first tp=f1012467-de9d-09a9-8b49-62a43945c24b)
+- removed leg (tp=95839ad0-b588-0b1d-8475-45fba6ae993c)
+mux set app=skysocks-client: target=2, +2 added, -1 removed, 0 already present
+skysocks-client: 2/2 active route group(s) of 7 (5 standby), legs per active rg: 2+2 (want 2 each), pinned=yes
+skysocks-client: first-hop tps: 2c4ae7a5-de55-0e09-bd14-7febf7d9f972 50cdb857-a262-0ae5-bf5b-5c93c8025b69 95839ad0-b588-0b1d-8475-45fba6ae993c ac40965a-bc99-01e4-a2c9-c26b76db013b f1012467-de9d-09a9-8b49-62a43945c24b fdab37dd-c35e-05bc-9e51-cd6b024e3eec 
+skysocks-client warm: 4/4 probes ok
+exit-resources mux-compose-T2xL2-pre: RssAnon 451744 kB, cpu 300.13 s, load1 0.35, idle 0.072 core, sys 557.9 MB, heap 190.9 MB, gc 505, goroutines 5816
+Running!
+route pinned: 1 leg(s) added, 1 pruned, 0 already present
+paired: reference slot 1 = 0371ab4b on skysocks-client-ref@127.0.0.1:1081, 4/4 probes ok
+mux-compose-T2xL2: 21 rows, hash_ok=21
+mux-compose-T2xL2: paired ratios vs 0371ab4b: 50up: 0.294 0.912 0.828 10up: 0.576 0.627 0.602 10down: 0.220 0.117 0.077 0.055 0.049 100down: 0.273 1.109 0.931 1.051 0.383 50down: 0.186 0.205 0.593 0.133 0.973 
+mux-compose-T2xL2: 118 mux events: group_created(route group dialed by this visor) leg_added(route setup: primary leg) group_created(route group dialed by this visor) leg_added(route setup: primary leg) dial_decision(diversify: 1 sibling group(s) to 022716fb:3, excluding first-hop tp(s) b414796d and 1 first-hop peer(s); hook-race: ev
+exit-resources mux-compose-T2xL2-post: RssAnon 469448 kB, cpu 371.66 s, load1 0.32, idle 0.044 core, sys 557.9 MB, heap 240.3 MB, gc 632, goroutines 5944
+exit-resources mux-compose-T2xL2-settled: RssAnon 469448 kB, cpu 374.06 s, load1 0.18, idle 0.062 core, sys 557.9 MB, heap 396.5 MB, gc 633, goroutines 5936
+EXITRES mux-compose-T2xL2 rss=451744->469448 kB d_rss=17704 KiB settled=469448 d_settled=17704 sys=557.9->557.9 MB cpu=71.5s wall=661s cps=0.11 idle=0.07 allow=0.57 verdict=PASS
+skysocks-client: rg dst_ports 49219,49220 -> 49219,49222
+EXITRES-SLOPE bench/2026-09-18/1008cc8e5 slope=-1707 KiB/min span=19.7 min n=10 verdict=SKIP (span under 20 min)

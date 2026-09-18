@@ -1,0 +1,9 @@
+# exit=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1 local=1008cc8e5 exit_commit=1008cc8e5 session=skysocks-client spread=max_share=0.4,min_routes=3 route_groups=8 active=2 standby=6 groups=rg49245/active=[stcpr>022716fb@b414796d] rg49246/active=[stcpr>03f57e7c@fdab37dd] rg49247/standby=[stcpr>0371ab4b@95839ad0] rg49248/standby=[stcpr>0281a102@f1012467] rg49249/standby=[stcpr>02c48393@ac40965a] rg49250/standby=[stcpr>0255117b@50cdb857] rg49251/standby=[stcpr>03dc3488@062c57d2] rg49252/standby=[stcpr>02a2d4c3@2c4ae7a5] pins=none sink=http://127.0.0.1:18080 settings=spread.max_share=0.4,spread.min_routes=3 settings_landed=6s
+mux-spread-3-t1	down	50000000	5486679	200	50000000	9.113015	1
+mux-spread-3-t2	down	50000000	5936653	200	50000000	8.422301	1
+mux-spread-3-t3	down	50000000	7728410	200	50000000	6.469702	1
+mux-spread-3-t4	down	50000000	5618074	200	50000000	8.899878	1
+mux-spread-3-t5	down	50000000	4893845	200	50000000	10.216985	1
+mux-spread-3-t1	up	50000000	8729684	200	50000000	5.727673	1
+mux-spread-3-t2	up	50000000	9532243	200	50000000	5.245424	1
+mux-spread-3-t3	up	50000000	9665107	200	50000000	5.173301	1

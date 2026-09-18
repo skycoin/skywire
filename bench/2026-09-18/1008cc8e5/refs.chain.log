@@ -1,0 +1,33 @@
+local=1008cc8e5 exit=1008cc8e5
+skysocks-client warm: 4/4 probes ok (try 1)
+skysocks-client carrier probe: tp=b414796d-14fc-080e-9ce6-a7162e3e562b recv_delta=10087839
+ref-direct-stcpr: 12 rows, hash_ok=12
+skysocks-client warm: 4/4 probes ok (try 1)
+skysocks-client carrier probe: tp=bd7698ba-38c3-06c5-8add-fffc3872e75b recv_delta=10030371
+ref-direct-squicr: 12 rows, hash_ok=12
+route pinned: 1 leg(s) added, 1 pruned, 0 already present
+skysocks-client warm: 4/4 probes ok (try 1)
+sha256sum: /tmp/tmp.2lK2KBrd8u/r.body: No such file or directory
+sha256sum: /tmp/tmp.zwkuCbA3mE/r.body: No such file or directory
+ref-via-0255117b: 12 rows, hash_ok=8
+ref-via-0255117b: 3 mux events: group_closed(local close (code 0)) group_created(route group dialed by this visor) leg_added(route setup: primary leg)
+route pinned: 1 leg(s) added, 1 pruned, 0 already present
+skysocks-client warm: 4/4 probes ok (try 1)
+ref-via-0281a102: 12 rows, hash_ok=12
+ref-via-0281a102: 0 mux events: 
+route pinned: 1 leg(s) added, 1 pruned, 0 already present
+skysocks-client warm: 4/4 probes ok (try 1)
+ref-via-02a2d4c3: 12 rows, hash_ok=12
+ref-via-02a2d4c3: 0 mux events: 
+route pinned: 1 leg(s) added, 1 pruned, 0 already present
+skysocks-client warm: 4/4 probes ok (try 1)
+ref-via-02c48393: 12 rows, hash_ok=12
+ref-via-02c48393: 0 mux events: 
+route pinned: 1 leg(s) added, 1 pruned, 0 already present
+skysocks-client warm: 4/4 probes ok (try 1)
+ref-via-0371ab4b: 12 rows, hash_ok=12
+ref-via-0371ab4b: 0 mux events: 
+route pinned: 1 leg(s) added, 1 pruned, 0 already present
+skysocks-client warm: 4/4 probes ok (try 1)
+ref-via-03f57e7c: 12 rows, hash_ok=12
+ref-via-03f57e7c: 0 mux events: 

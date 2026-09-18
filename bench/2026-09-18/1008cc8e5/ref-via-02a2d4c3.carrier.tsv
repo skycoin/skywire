@@ -1,0 +1,26 @@
+# row	tp	sent_delta	recv_delta
+1	2c4ae7a5-de55-0e09-bd14-7febf7d9f972	732	10043714
+1	legs	2c4ae7a5	-
+2	2c4ae7a5-de55-0e09-bd14-7febf7d9f972	497	10018370
+2	legs	2c4ae7a5	-
+3	2c4ae7a5-de55-0e09-bd14-7febf7d9f972	507	10031697
+3	legs	2c4ae7a5	-
+4	2c4ae7a5-de55-0e09-bd14-7febf7d9f972	10016797	649
+4	legs	2c4ae7a5	-
+5	2c4ae7a5-de55-0e09-bd14-7febf7d9f972	10016302	577
+5	legs	2c4ae7a5	-
+6	2c4ae7a5-de55-0e09-bd14-7febf7d9f972	10016334	599
+6	legs	2c4ae7a5	-
+7	2c4ae7a5-de55-0e09-bd14-7febf7d9f972	1135	50261446
+7	legs	2c4ae7a5	-
+8	2c4ae7a5-de55-0e09-bd14-7febf7d9f972	830	50079990
+8	legs	2c4ae7a5	-
+9	2c4ae7a5-de55-0e09-bd14-7febf7d9f972	889	50080111
+9	legs	2c4ae7a5	-
+10	2c4ae7a5-de55-0e09-bd14-7febf7d9f972	50082482	184169
+10	legs	2c4ae7a5	-
+11	2c4ae7a5-de55-0e09-bd14-7febf7d9f972	50079982	1076
+11	legs	2c4ae7a5	-
+12	2c4ae7a5-de55-0e09-bd14-7febf7d9f972	50079979	1066
+12	legs	2c4ae7a5	-
+# exit-side d0b47ec2-f051-0fc7-b194-f81e98f33f8e sent_delta=180354657 recv_delta=183023317 over the set
