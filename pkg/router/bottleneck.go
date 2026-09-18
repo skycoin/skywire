@@ -456,6 +456,27 @@ const (
 	// most and never permanently. Not a knob: it is the ceiling of the knob
 	// above, like deadRouteMaxTTL.
 	sbdBackoffMax = time.Hour
+	// sbdMinEvidenceRate is the aggregate delivered-bytes floor (B/s) a group must
+	// be carrying before a shared-bottleneck ruling may park one of its legs.
+	//
+	// NO TRAFFIC, NO RULING. The detector clusters on delay CO-VARIATION, and an
+	// idle group's legs co-vary trivially — a few liveness pongs on two quiet
+	// routes look alike because neither is queueing behind anything. Worse, a park
+	// decided at idle can never be arbitrated: sbdTrialFailed reads a base rate of
+	// zero as no evidence, so the trial cannot fail and the park stands for the
+	// whole transfer that follows. That is exactly what the two-leg rig measured
+	// (bench/2026-09-16/0251e5da4-smoke/mux-legs-2): the group parked at
+	// 01:06:30.615 and re-parked at 01:06:35.615, both BEFORE row 1 moved a byte,
+	// and every one of the next 15 rows then ran single-leg — 50 MB downloads at
+	// x0.81 and 10 MB at x0.68 against the paired reference, where the same route
+	// pair with the detector off ran x1.13.
+	//
+	// 64 KiB/s is two orders of magnitude below the ~7-9 MB/s a loaded two-leg
+	// group carries and still above the handful of bytes a keepalive stirs, so it
+	// admits every real transfer and refuses every ruling made on silence. The
+	// default of the --sbd-min-evidence-rate knob; the live value is
+	// SBDMinEvidenceRate().
+	sbdMinEvidenceRate = 64 << 10
 )
 
 // sbdAggRate turns one data-progress tick's per-leg recv deltas into the group's
@@ -476,8 +497,9 @@ func sbdAggRate(recvDeltas map[uuid.UUID]uint64) float64 {
 // rate measured with the leg parked fell more than loss below the rate measured
 // over the interval before the park. A non-positive base rate is no evidence at
 // all (the group was idle when the park landed), so a trial can never fail on
-// it — an idle park stands and is re-judged the next time the detector rules.
-// Pure.
+// it. sbdMinEvidenceRate stops such a park being decided in the first place, and
+// evaluateSBDTrials holds any that slipped through OPEN until traffic arrives
+// rather than letting it stand — see the idle branch there. Pure.
 func sbdTrialFailed(baseRate, trialRate, loss float64) bool {
 	if baseRate <= 0 {
 		return false

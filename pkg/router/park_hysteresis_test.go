@@ -50,6 +50,18 @@ func parkFlapRig(t *testing.T) (*RouteGroup, []*transport.ManagedTransport) {
 	return rg, mts
 }
 
+// loadedDeltas is one data-progress tick in which every leg is carrying real
+// traffic, so the group clears the shared-bottleneck evidence floor
+// (sbdMinEvidenceRate) and the detector is allowed to rule. A ruling made below
+// that floor is withheld — see TestSBDNoParkWithoutTrafficToRuleOn.
+func loadedDeltas(mts []*transport.ManagedTransport) map[uuid.UUID]uint64 {
+	out := make(map[uuid.UUID]uint64, len(mts))
+	for _, mt := range mts {
+		out[mt.Entry.ID] = 5_000_000
+	}
+	return out
+}
+
 func countEvents(rg *RouteGroup, kind string) int {
 	n := 0
 	for _, e := range rg.muxEvents.snapshot() {
@@ -75,7 +87,7 @@ func TestAdaptiveParkHoldStopsControllerFlap(t *testing.T) {
 	rg, mts := parkFlapRig(t)
 
 	// Tick 1: the bottleneck controller parks leg 1...
-	rg.enforceBottleneckGroups(nil)
+	rg.enforceBottleneckGroups(loadedDeltas(mts))
 	require.True(t, rg.mux.isLegStandby(1), "leg 1 must be parked as co-bottlenecked with the primary")
 	reason, held := rg.adaptiveParkHeld(mts[1].Entry.ID)
 	require.True(t, held, "the adaptive park must start a hold")
@@ -88,7 +100,7 @@ func TestAdaptiveParkHoldStopsControllerFlap(t *testing.T) {
 
 	// 13 more ticks inside the hold: still one park, no promotions.
 	for i := 0; i < 13; i++ {
-		rg.enforceBottleneckGroups(nil)
+		rg.enforceBottleneckGroups(loadedDeltas(mts))
 		rg.enforceLatencyBand(nil)
 		require.True(t, rg.mux.isLegStandby(1), "leg 1 must stay parked for the whole hold (tick %d)", i+2)
 	}
@@ -108,7 +120,7 @@ func TestAdaptiveParkHoldStopsControllerFlap(t *testing.T) {
 func TestAdaptiveParkHoldExpiresAndPromotes(t *testing.T) {
 	rg, mts := parkFlapRig(t)
 
-	rg.enforceBottleneckGroups(nil)
+	rg.enforceBottleneckGroups(loadedDeltas(mts))
 	require.True(t, rg.mux.isLegStandby(1), "leg 1 parked")
 
 	// Age the park past its minimum hold.
@@ -129,7 +141,7 @@ func TestAdaptiveParkHoldExpiresAndPromotes(t *testing.T) {
 	// The record is gone, so the next adaptive park starts a fresh hold.
 	_, held := rg.adaptiveParkHeld(mts[1].Entry.ID)
 	require.False(t, held)
-	rg.enforceBottleneckGroups(nil)
+	rg.enforceBottleneckGroups(loadedDeltas(mts))
 	_, held = rg.adaptiveParkHeld(mts[1].Entry.ID)
 	require.True(t, held, "the re-park starts a new hold")
 }
@@ -140,7 +152,7 @@ func TestAdaptiveParkHoldExpiresAndPromotes(t *testing.T) {
 func TestOperatorPinOverridesParkHold(t *testing.T) {
 	rg, mts := parkFlapRig(t)
 
-	rg.enforceBottleneckGroups(nil)
+	rg.enforceBottleneckGroups(loadedDeltas(mts))
 	require.True(t, rg.mux.isLegStandby(1), "leg 1 parked")
 	if _, held := rg.adaptiveParkHeld(mts[1].Entry.ID); !held {
 		t.Fatal("precondition: the park is held")

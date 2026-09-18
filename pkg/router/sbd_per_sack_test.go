@@ -50,7 +50,7 @@ func TestSBDRulesWithinAFewSACKs(t *testing.T) {
 	}
 	require.LessOrEqual(t, sacks, sbdWindowSamples, "a verdict must not need more SACKs than the window holds")
 
-	rg.enforceBottleneckGroups(nil)
+	rg.enforceBottleneckGroups(deltas(ids, 5_000_000, 5_000_000))
 	require.True(t, rg.mux.isLegStandby(1), "co-bottlenecked leg must be parked from the per-SACK samples alone")
 	require.False(t, rg.mux.isLegStandby(0), "the primary is never parked")
 	require.Equal(t, 1, countEvents(rg, MuxEventLegParked), "the park must emit the same single leg_parked event")
@@ -71,7 +71,7 @@ func TestSBDDoesNotParkUncorrelatedLegs(t *testing.T) {
 		rg.mux.recordAckDelayTp(ids[1], time.Duration(leg1[i]*float64(time.Millisecond)))
 	}
 
-	rg.enforceBottleneckGroups(nil)
+	rg.enforceBottleneckGroups(deltas(ids, 5_000_000, 5_000_000))
 	require.False(t, rg.mux.isLegStandby(0))
 	require.False(t, rg.mux.isLegStandby(1), "legs with unrelated delay signatures are two pipes, not one")
 	require.Zero(t, countEvents(rg, MuxEventLegParked))

@@ -70,6 +70,11 @@ type RouterSettings struct {
 	SBDTrialLoss   float64       `json:"sbd_trial_loss,omitempty"`
 	SBDBackoff     time.Duration `json:"sbd_backoff,omitempty"`
 
+	// SBDMinEvidenceRate is the aggregate delivered-bytes rate (B/s) a group must
+	// be carrying before a shared-bottleneck ruling may park one of its legs: no
+	// traffic, no ruling. Same zero-means-unchanged rule.
+	SBDMinEvidenceRate int64 `json:"sbd_min_evidence_rate,omitempty"`
+
 	// MuxFEC advertises FEC on mux route groups created from now on; unlike
 	// the rest it is a tri-state on PUT, see SetRouterSettings.
 	MuxFEC *bool `json:"mux_fec,omitempty"`
@@ -113,6 +118,7 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 		SBDTrialWindow:      router.SBDTrialWindow(),
 		SBDTrialLoss:        router.SBDTrialLoss(),
 		SBDBackoff:          router.SBDBackoff(),
+		SBDMinEvidenceRate:  router.SBDMinEvidenceRate(),
 		MuxFEC:              &fec,
 	}, nil
 }
@@ -159,6 +165,7 @@ func (v *Visor) SetRouterSettings(s RouterSettings) error {
 		{"sbd_trial_window", s.SBDTrialWindow == 0, func() bool { return router.SetSBDTrialWindow(s.SBDTrialWindow) }},
 		{"sbd_trial_loss", s.SBDTrialLoss == 0, func() bool { return router.SetSBDTrialLoss(s.SBDTrialLoss) }},
 		{"sbd_backoff", s.SBDBackoff == 0, func() bool { return router.SetSBDBackoff(s.SBDBackoff) }},
+		{"sbd_min_evidence_rate", s.SBDMinEvidenceRate == 0, func() bool { return router.SetSBDMinEvidenceRate(s.SBDMinEvidenceRate) }},
 	} {
 		if k.zero {
 			continue

@@ -3254,6 +3254,24 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 	}
 	demote := pickBottleneckDemotions(legs)
 	demote = rg.keepReverseFloor(demote, recvDeltas)
+
+	// NO TRAFFIC, NO RULING. A shared bottleneck is a statement about a queue two
+	// legs are both waiting in, and an idle group has no queue: its legs co-vary
+	// only because neither is loaded. Such a park is also unarbitrable — the trial
+	// compares against a pre-park rate of zero, which can never fall — so it is
+	// permanent for the whole transfer that follows. That is the measured defect
+	// (bench/2026-09-16/0251e5da4-smoke/mux-legs-2): parks at 01:06:30.615 and
+	// 01:06:35.615 landed before row 1 moved a byte, and all 15 rows after them ran
+	// single-leg at x0.81 (50 MB) and x0.68 (10 MB) against the paired reference,
+	// where the same route pair with parking off gave x1.13. So the ruling is
+	// withheld until the group is actually carrying sbdMinEvidenceRate; the
+	// grouping above still went to the mux, only the demotion waits for evidence.
+	if floor := float64(SBDMinEvidenceRate()); len(demote) > 0 && aggRate < floor {
+		rg.logger.Debugf("shared-bottleneck: withholding the park of leg(s) %v — the group is carrying %.0f B/s, below the %.0f B/s evidence floor; an idle group's legs co-vary because neither is loaded, and the park could not be arbitrated",
+			demote, aggRate, floor)
+		return
+	}
+
 	for _, idx := range demote {
 		rg.logger.Infof("shared-bottleneck: parking leg %d to warm standby on TRIAL (co-bottlenecked with a kept active leg in group %d — one pipe, not two; striping it adds only reorder cost). Aggregate goodput now %.0f B/s; if it falls more than %.0f%% within %v the park is undone",
 			idx, groups[idx], aggRate, SBDTrialLoss()*100, SBDTrialWindow())

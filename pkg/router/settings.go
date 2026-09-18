@@ -53,6 +53,12 @@ var (
 	sbdTrialWindowV atomic.Int64  // nanoseconds
 	sbdTrialLossV   atomic.Uint64 // float64 bits
 	sbdBackoffV     atomic.Int64  // nanoseconds
+
+	// sbdMinEvidenceRateV shadows sbdMinEvidenceRate in bottleneck.go — the
+	// aggregate goodput a group must be carrying before a shared-bottleneck
+	// ruling may park one of its legs. enforceBottleneckGroups re-reads it on
+	// every data-progress tick.
+	sbdMinEvidenceRateV atomic.Int64 // bytes per second
 )
 
 func init() {
@@ -68,6 +74,7 @@ func init() {
 	sbdTrialWindowV.Store(int64(sbdTrialWindow))
 	sbdTrialLossV.Store(math.Float64bits(sbdTrialLoss))
 	sbdBackoffV.Store(int64(sbdBackoff))
+	sbdMinEvidenceRateV.Store(sbdMinEvidenceRate)
 }
 
 // EcfWindowMargin is the multiplier on SACK-proven delivery-per-RTT that sets a
@@ -233,5 +240,21 @@ func SetSBDBackoff(d time.Duration) bool {
 		return false
 	}
 	sbdBackoffV.Store(int64(d))
+	return true
+}
+
+// SBDMinEvidenceRate is the aggregate delivered-bytes rate (B/s) a route group
+// must be carrying before a shared-bottleneck ruling may park one of its legs.
+// Below it there is no traffic to have produced a bottleneck and none to
+// arbitrate the park with, so the ruling is withheld.
+func SBDMinEvidenceRate() int64 { return sbdMinEvidenceRateV.Load() }
+
+// SetSBDMinEvidenceRate installs that floor. Non-positive is refused: a floor of
+// zero is what let an idle park stand for a whole transfer.
+func SetSBDMinEvidenceRate(v int64) bool {
+	if v <= 0 {
+		return false
+	}
+	sbdMinEvidenceRateV.Store(v)
 	return true
 }

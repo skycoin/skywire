@@ -132,3 +132,110 @@ func TestSBDTrialKnobs(t *testing.T) {
 	require.False(t, SetSBDTrialLoss(1), "a limit of 1 could never be reached")
 	require.False(t, SetSBDBackoff(-time.Second), "non-positive is refused")
 }
+
+// TestSBDNoParkWithoutTrafficToRuleOn is the live regression for the idle park:
+// on mux-legs-2 the detector parked at 01:06:30.615 and re-parked at 01:06:35.615
+// with the group carrying nothing, and because a trial cannot fail against a
+// pre-park rate of zero the park was permanent — all 15 rows that followed ran
+// single-leg, 50 MB at x0.81 and 10 MB at x0.68 where the same route pair with
+// parking off gave x1.13. No traffic, no ruling: below the evidence floor the
+// demotion is withheld, and the same group carrying real bytes still parks.
+func TestSBDNoParkWithoutTrafficToRuleOn(t *testing.T) {
+	rg, ids := sbdTrialRig(t)
+
+	// An idle tick: the legs co-vary (they always do when neither is loaded) but
+	// nothing is moving, so there is no bottleneck to have detected.
+	rg.enforceBottleneckGroups(nil)
+	require.False(t, rg.mux.isLegStandby(1), "a park may not be decided on an idle group")
+	require.Zero(t, countEvents(rg, MuxEventLegParked))
+
+	// A trickle below the floor is no better: 64 KiB/s is the bar, and a tick
+	// carrying half of it over legDataProgressInterval does not clear it.
+	rg.enforceBottleneckGroups(deltas(ids, uint64(sbdMinEvidenceRate*legDataProgressInterval/time.Second)/2, 0))
+	require.False(t, rg.mux.isLegStandby(1), "a trickle below the evidence floor is not evidence")
+	require.Zero(t, countEvents(rg, MuxEventLegParked))
+
+	// Loaded, the very same grouping parks the redundant leg as before — the floor
+	// gates when the detector may rule, not what it rules.
+	rg.enforceBottleneckGroups(deltas(ids, 25_000_000, 21_500_000))
+	require.True(t, rg.mux.isLegStandby(1), "a loaded group is still ruled on")
+	require.Equal(t, 1, countEvents(rg, MuxEventLegParked))
+}
+
+// TestSBDRefutedParkIsRememberedAfterMirroredPromote is the second half of the
+// live defect: the peer mirrors a promote of its own right after a park, so by
+// the time the verdict came in the leg was no longer standby — the old code took
+// that as "nothing to undo", skipped noteSBDIndependent with it, and the detector
+// re-parked the pair on the very next tick. The refutation is a fact about the
+// PAIR, so it is recorded either way and only the unpark is skipped.
+func TestSBDRefutedParkIsRememberedAfterMirroredPromote(t *testing.T) {
+	rg, ids := sbdTrialRig(t)
+
+	rg.enforceBottleneckGroups(deltas(ids, 25_000_000, 21_500_000))
+	require.True(t, rg.mux.isLegStandby(1), "precondition: the co-bottlenecked leg is parked on trial")
+
+	// The peer's mirrored leg-state promote lands before the trial is read.
+	rg.mux.setLegStandby(1, false)
+
+	// The trial is now ripe and the goodput fell by 27%: the ruling is refuted.
+	rg.enforceBottleneckGroups(deltas(ids, 34_000_000, 0))
+
+	require.Equal(t, 1, countEvents(rg, MuxEventParkTrialFailed), "the refutation is recorded even with nothing to unpark")
+	require.Zero(t, countEvents(rg, MuxEventLegPromoted), "a leg already active needs no unpark")
+	require.True(t, rg.sbdSuppressed(ids[0], ids[1]), "the pair must be marked verified-independent")
+	require.False(t, rg.mux.isLegStandby(1), "and the same tick must not re-park it")
+
+	// The backoff holds across further loaded ticks — this is what stops the
+	// immediate re-park the live run showed five seconds after the first.
+	rg.enforceBottleneckGroups(deltas(ids, 25_000_000, 21_500_000))
+	require.False(t, rg.mux.isLegStandby(1), "the suppressed pair stays two pipes for the backoff window")
+	require.Equal(t, 1, countEvents(rg, MuxEventLegParked), "no re-park inside the backoff")
+}
+
+// TestSBDIdleParkIsNeverPermanent: a park that slipped through with no pre-park
+// reading (an older peer's mirror, or one made before the floor was raised on a
+// running visor) stays OPEN rather than standing, and is undone on the first
+// loaded tick — the A/B is deferred to loaded conditions, not skipped.
+func TestSBDIdleParkIsNeverPermanent(t *testing.T) {
+	rg, ids := sbdTrialRig(t)
+
+	rg.mux.setLegStandby(1, true)
+	rg.beginSBDTrial(ids[1], ids[0], 0) // the idle park, base rate 0
+
+	// Idle ticks do not end it: an ended trial against a base of zero can never
+	// fail, which is precisely how the park became permanent.
+	for i := 0; i < 3; i++ {
+		rg.enforceBottleneckGroups(nil)
+	}
+	require.True(t, rg.mux.isLegStandby(1), "still parked while there is nothing to judge it by")
+	rg.sbdTrialMu.Lock()
+	_, open := rg.sbdTrials[ids[1]]
+	rg.sbdTrialMu.Unlock()
+	require.True(t, open, "the trial must stay open, not end on no evidence")
+
+	// The first loaded tick undoes it and holds the pair apart for one window, so
+	// the detector re-rules under load instead of re-parking on the spot.
+	rg.enforceBottleneckGroups(deltas(ids, 25_000_000, 21_500_000))
+	require.False(t, rg.mux.isLegStandby(1), "an unarbitrable park must not stand once traffic arrives")
+	require.Equal(t, 1, countEvents(rg, MuxEventParkTrialFailed))
+	require.True(t, rg.sbdSuppressed(ids[0], ids[1]), "the pair is held apart for the deferred A/B")
+	require.Equal(t, sbdBackoff, rg.noteSBDIndependent(ids[0], ids[1]),
+		"a probation is not a verified-independent window: the backoff does not double off it")
+}
+
+// TestSBDMinEvidenceRateKnob: the floor is a live route setting whose default is
+// the constant the package compiled with, and zero — the value that let an idle
+// park stand for a whole transfer — is refused.
+func TestSBDMinEvidenceRateKnob(t *testing.T) {
+	require.Equal(t, int64(sbdMinEvidenceRate), SBDMinEvidenceRate())
+	require.Equal(t, int64(64<<10), SBDMinEvidenceRate(), "the documented default is 64 KiB/s")
+
+	prev := SBDMinEvidenceRate()
+	t.Cleanup(func() { SetSBDMinEvidenceRate(prev) })
+
+	require.True(t, SetSBDMinEvidenceRate(1<<20))
+	require.Equal(t, int64(1<<20), SBDMinEvidenceRate())
+	require.False(t, SetSBDMinEvidenceRate(0), "a floor of zero is what made an idle park permanent")
+	require.False(t, SetSBDMinEvidenceRate(-1), "non-positive is refused")
+	require.Equal(t, int64(1<<20), SBDMinEvidenceRate(), "a refused value must not be installed")
+}

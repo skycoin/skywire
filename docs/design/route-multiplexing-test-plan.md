@@ -286,7 +286,7 @@ cannot over-subscribe the sink's window and make it evict an acked chunk.
 `--send-window-wait-max` · `--leg-park-min-hold` · `--dead-route-hold` ·
 `--dead-route-hold-max` · `--mux-fec` · `--sbd-min-samples` ·
 `--sbd-sample-interval` · `--sbd-trial-window` · `--sbd-trial-loss` ·
-`--sbd-backoff`. Visor-wide and
+`--sbd-backoff` · `--sbd-min-evidence-rate`. Visor-wide and
 per-end, like `proxy mux cap`; `--mux-fec` reaches route groups built after it,
 since FEC is negotiated when a group is created. `windowRefreshInterval` is
 NOT here: it becomes a per-route-group ticker when the group is built.
@@ -488,6 +488,19 @@ Both ends run it, which matters because a download is exit-sent and the ruling
 that cost the 2.5 MB/s was made at the exit; each failed trial emits a
 `park_trial_failed` mux event naming both rates, so a bench run can count wrong
 rulings and what each one cost.
+
+**And the trial only works if the park was arbitrable in the first place.** On
+`bench/2026-09-16/0251e5da4-smoke/mux-legs-2` the detector parked at 01:06:30.615
+and re-parked at 01:06:35.615 with the group carrying nothing, before row 1 moved
+a byte: a trial cannot fail against a pre-park rate of zero, so that park was
+permanent and all 15 rows that followed ran single-leg — **x0.81 on 50 MB, x0.68
+on 10 MB**, against x1.13 for the same route pair with parking off. No traffic,
+no ruling: a demotion is now withheld unless the group is carrying
+`--sbd-min-evidence-rate` (default 64 KiB/s), and a park that slipped through
+with no baseline stays on trial until traffic arrives instead of standing.
+Separately, the refutation a failed trial produces is recorded even when the peer
+has already mirrored a promote of the leg — that is why the first verdict was
+dropped and the re-park landed five seconds later.
 
 ### 3.5 Direction, proven
 
