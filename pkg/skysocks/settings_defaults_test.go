@@ -67,6 +67,7 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 	require.Equal(t, uploadEarlyWaitMax, setUploadEarlyWaitMax())
 	require.Equal(t, uploadBusyBackoff, setUploadBusyBackoff())
 	require.Equal(t, uploadBusyTries, setUploadBusyTries())
+	require.Equal(t, uploadCutTries, setUploadCutTries())
 	require.Equal(t, uploadReplayTries, setUploadReplayTries())
 
 	// The spread policy defaults to OFF in all four of its knobs — the property
@@ -91,7 +92,7 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 
 	// Every knob in the catalog is reachable: a name registered with no use site
 	// reading it is a knob the bench can set and nothing obeys.
-	require.Len(t, skysettings.Catalog(), 54)
+	require.Len(t, skysettings.Catalog(), 55)
 }
 
 // The two range-split knobs OVERRIDE a per-client boot flag rather than
