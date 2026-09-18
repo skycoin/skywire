@@ -1013,7 +1013,25 @@ exec-wasm: ## Build the js/wasm command module to build/exec-wasm/skywire.wasm
 	GOOS=js GOARCH=wasm go build -trimpath -buildvcs=true -mod=vendor -tags "$(EXEC_WASM_TAGS)" -ldflags="-s -w" -o ./build/exec-wasm/skywire.wasm .
 	@ls -la ./build/exec-wasm/skywire.wasm
 
-embed-exec-wasm: exec-wasm ## Stage the js/wasm command module for embedding (pkg/wasmhv/execwasm/blob/, tracked)
+# The module is built with -buildvcs=true, so ONE untracked file in the work
+# tree is enough for Go to record vcs.modified=true inside it, and every native
+# binary that embeds it then reports dev-<commit>-dirty for the rest of its
+# life. That is how the blob committed by #4872 came to be dirty: it was staged
+# from a tree with untracked bench/ dirs in it, and v1.3.94 shipped the result.
+# release.yml and publish-binary.yml gate their own stage-1 builds this way;
+# this is the same gate for the maintainer who restages the blob by hand.
+# EMBED_REQUIRE_CLEAN=0 overrides it for a throwaway local build.
+EMBED_REQUIRE_CLEAN ?= 1
+
+.PHONY: assert-clean-tree
+assert-clean-tree:
+	@test "$(EMBED_REQUIRE_CLEAN)" != "1" || test -z "$$(git status --porcelain)" || { \
+		echo "work tree is dirty — the staged js/wasm module would be stamped -dirty:"; \
+		git status --porcelain; \
+		echo "commit or clean the tree first, or set EMBED_REQUIRE_CLEAN=0 for a local build"; \
+		exit 1; }
+
+embed-exec-wasm: assert-clean-tree exec-wasm ## Stage the js/wasm command module for embedding (pkg/wasmhv/execwasm/blob/, tracked)
 	gzip -9 -n -c ./build/exec-wasm/skywire.wasm > ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz
 	@# Record which commit the module was built from, so the native binary can
 	@# say at serve time that it is serving a module older than itself. The
