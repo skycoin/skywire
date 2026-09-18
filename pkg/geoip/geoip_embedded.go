@@ -75,13 +75,16 @@ func Embedded() bool { return len(embeddedGz) > 0 }
 // it on first use. Callers keep this lazy: a visor that never answers a geo
 // query never pays for it. The reader is memory-mapped over a cached inflated
 // copy (see geoip_mapped.go) so the ~60 MB database stays out of the Go heap;
-// only if that cache cannot be written does it fall back to inflating into
-// memory. The reader is safe for concurrent use and is never closed.
+// each candidate cache directory is tried in turn, and only if none of them
+// takes the file does it fall back to inflating into memory. The reader is
+// safe for concurrent use and is never closed.
 func Shared() (*geoip2.Reader, error) {
 	sharedOnce.Do(func() {
-		if r, err := openMapped(mappedDir()); err == nil {
-			shared = r
-			return
+		for _, dir := range mappedDirs() {
+			if r, err := openMapped(dir); err == nil {
+				shared = r
+				return
+			}
 		}
 		shared, sharedErr = OpenEmbedded()
 	})

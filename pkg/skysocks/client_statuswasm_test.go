@@ -2,6 +2,7 @@ package skysocks
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"net/http"
 	"strings"
@@ -16,7 +17,9 @@ import (
 // there; the module is 200 + gzip + the execwasm stamp as ETag when one is
 // embedded (the two-stage build), else 503.
 func TestStatusWasmResponses(t *testing.T) {
-	wasmResp := parseResp(t, statusWasmResponse())
+	var wasmRaw bytes.Buffer
+	writeStatusWasmResponse(&wasmRaw)
+	wasmResp := parseResp(t, wasmRaw.Bytes())
 	if !execwasm.Present() {
 		if wasmResp.StatusCode != http.StatusServiceUnavailable {
 			t.Fatalf("/main.wasm status = %d without an embedded module, want 503", wasmResp.StatusCode)

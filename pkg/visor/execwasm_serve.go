@@ -19,8 +19,9 @@ func execModuleSource(explicit string) (path string, ok bool) {
 }
 
 // serveExecWasm answers GET /skywire.wasm from path when set, else from the
-// embedded module (execwasm.ServeGz: gzip as embedded when the client accepts
-// it, inflated on the fly otherwise).
+// embedded module (execwasm.ServeEmbedded: gzip as embedded when the client
+// accepts it, inflated on the fly otherwise, streamed out of the binary's
+// read-only mapping rather than a heap copy of it).
 func serveExecWasm(w http.ResponseWriter, r *http.Request, path string) {
 	w.Header().Set("Content-Type", "application/wasm")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -28,12 +29,5 @@ func serveExecWasm(w http.ResponseWriter, r *http.Request, path string) {
 		http.ServeFile(w, r, path)
 		return
 	}
-	serveExecWasmGz(w, r, execwasm.Gz(), execwasm.Stamp())
-}
-
-// serveExecWasmGz is execwasm.ServeGz; the surfaces that serve the module in
-// a role (tpviz, the wallet cipher) call it there without importing this
-// package.
-func serveExecWasmGz(w http.ResponseWriter, r *http.Request, gz []byte, stamp string) {
-	execwasm.ServeGz(w, r, gz, stamp)
+	execwasm.ServeEmbedded(w, r)
 }

@@ -90,7 +90,10 @@ func TestOpenMapped_UnwritableDirFails(t *testing.T) {
 	require.Error(t, err, "Shared() falls back to the in-memory reader on this error")
 }
 
-// Not an assertion, evidence: how much heap each open path pins.
+// The mapped path must pin no meaningful heap: that is the whole reason it
+// exists. The in-memory path is measured beside it as the control — it is
+// what a visor pays when no cache directory takes the file, and a heap
+// profile of a live exit visor found 59 MB there, 31 % of its live heap.
 func TestOpenMapped_HeapFootprint(t *testing.T) {
 	if !Embedded() {
 		t.Skip("no embedded database in this build")
@@ -106,9 +109,27 @@ func TestOpenMapped_HeapFootprint(t *testing.T) {
 	// Heap sizes here are far below the int64 ceiling; the helper keeps the
 	// signed subtraction (the delta can legitimately be negative) without an
 	// unchecked uint64→int64 conversion at the call site.
-	t.Logf("mapped: heap +%d KiB", heapDeltaKiB(before.HeapInuse, after.HeapInuse))
+	mapped := heapDeltaKiB(before.HeapInuse, after.HeapInuse)
+	inMemory := int64(len(EmbeddedDB()) / 1024)
+	t.Logf("mapped: heap +%d KiB; in-memory: heap +%d KiB pinned by EmbeddedDB()", mapped, inMemory)
 
-	t.Logf("in-memory: heap +%d KiB pinned by EmbeddedDB()", len(EmbeddedDB())/1024)
+	require.Greater(t, inMemory, int64(32<<10), "the embedded database should be tens of MiB")
+	require.Less(t, mapped, int64(4<<10),
+		"the mapped reader must not put the database on the heap (in-memory pins %d KiB)", inMemory)
+}
+
+// mappedDirs must always offer somewhere to write and must end at the system
+// temp directory, the one path that needs no environment at all: a service
+// started without $HOME or $XDG_CACHE_HOME gets nothing from
+// os.UserCacheDir, and falling through to the in-memory reader there is what
+// this ordering exists to avoid.
+func TestMappedDirs_AlwaysHasALastResort(t *testing.T) {
+	dirs := mappedDirs()
+	require.NotEmpty(t, dirs)
+	require.Equal(t, filepath.Join(os.TempDir(), "skywire-geoip"), dirs[len(dirs)-1])
+	for _, d := range dirs {
+		require.True(t, filepath.IsAbs(d), "candidate %q is not absolute", d)
+	}
 }
 
 // heapDeltaKiB reports after-before in KiB. Both are runtime.MemStats byte
