@@ -420,7 +420,7 @@ run_set() { # <set> <socks> <tp ids> <header>
 			set_paired=1
 			paired_header "$paired_ref" "${paired_route:-?}"
 		else
-			echo "$set_name: no contemporaneous reference — the set is measured UNPAIRED (verdict.sh falls back to the bar)"
+			echo "$set_name: unpaired — no contemporaneous reference came up; the set is measured against the bar instead (verdict.sh)"
 		fi
 	fi
 	cut_at_row=0
@@ -625,6 +625,9 @@ for N in $leg_counts; do
 	[ "$(echo "$chosen" | wc -l)" -eq "$N" ] || { echo "$set_name: only $(echo "$chosen" | wc -l) pins available — skipping"; continue; }
 	first=$(echo "$chosen" | head -1)
 	legs_file="$out/$set_name.target.json"
+	pin_bad=0
+	for s in $chosen; do pin_ok "$pins/via-$s.json" || pin_bad=$((pin_bad + 1)); done
+	[ "$pin_bad" -eq 0 ] || { abort_set "$set_name" "$pin_bad of $N pin file(s) are stubs, not routes — fix the pins dir $pins"; port=$((port + 1)); continue; }
 	for s in $chosen; do cat "$pins/via-$s.json"; done | jq -s 'add' > "$legs_file"
 	stop_app_clean "$name" || { abort_set "$set_name" "route group(s) $rg_left survived two proxy stops before setup"; port=$((port + 1)); continue; }
 	# `proxy start --route` reconciles against the app's live groups and is FATAL
@@ -715,10 +718,10 @@ if [ "${UP2:-0}" = 1 ]; then
 		if [ "$active" -ne 2 ]; then
 			abort_set "$set_name" "shape differs from target: $active active route group(s) of $groups ($standby standby), asked for 2 (groups=$desc)"
 		elif ! paired_start 1 "$ref1" "$exit_pk" "$pins" "$sink"; then
-			invalid_set "$set_name" "reference slot 1 ($ref1) would not come up"
+			invalid_set "$set_name" "unpaired: reference slot 1 ($ref1) would not come up"
 			stop_app_clean "$name" >/dev/null 2>&1
 		elif ! paired_start 2 "$ref2" "$exit_pk" "$pins" "$sink"; then
-			invalid_set "$set_name" "reference slot 2 ($ref2) would not come up"
+			invalid_set "$set_name" "unpaired: reference slot 2 ($ref2) would not come up"
 			paired_stop 1; stop_app_clean "$name" >/dev/null 2>&1
 		else
 			warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"

@@ -256,7 +256,7 @@ run_set() { # <set> <socks> <tp ids> <header>
 			set_paired=1
 			paired_header "$paired_ref" "${paired_route:-?}"
 		else
-			echo "$set_name: no contemporaneous reference — the set is measured UNPAIRED (verdict.sh falls back to the bar)"
+			echo "$set_name: unpaired — no contemporaneous reference came up; the set is measured against the bar instead (verdict.sh)"
 		fi
 	fi
 	exit_snap_row start
@@ -448,6 +448,12 @@ for spec in $compose; do
 		for dp in $(active_ports "$out/$set_name.legs.json"); do
 			legs_file="$out/$set_name.rg$dp.target.json"
 			slice=$(echo "$order" | tr ' ' '\n' | grep -v '^$' | sed -n "$((i * L + 1)),$((i * L + L))p")
+			pin_bad=0
+			for s in $slice; do pin_ok "$pins/via-$s.json" || pin_bad=$((pin_bad + 1)); done
+			if [ "$pin_bad" -ne 0 ]; then
+				echo "$set_name: rg$dp is left unpinned — $pin_bad of its $L pin file(s) are stubs, not routes"
+				i=$((i + 1)); continue
+			fi
 			for s in $slice; do cat "$pins/via-$s.json"; done | jq -s 'add' > "$legs_file"
 			assign="$assign rg$dp=$(echo $slice | tr ' ' ',')"
 			echo "$set_name: rg$dp <- $(echo $slice | tr '\n' ' ')"

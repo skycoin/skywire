@@ -46,8 +46,13 @@
 # port, all started and warmed before anything is timed. A direct client is
 # `proxy start --direct` with stcpr preferred, the AppDirect shortcut, one hop to
 # the exit and no route group at all; a via client is `--route <pins>/via-<short>
-# .json` with the pinned leg verified the way lib-paired.sh verifies it. Then,
-# per trial and per kind:
+# .json` with the pinned leg verified the way lib-paired.sh verifies it. The
+# pins dir is READ-ONLY to this script and to every other runner — nothing in
+# bench/ writes a via-*.json — so a dry run or a stub-CLI exercise of any of
+# them must be handed a throwaway copy, never the campaign's pins dir. Three
+# pins overwritten with placeholders on 2026-09-18 cost a whole chain its paired
+# references; bench/lib-pins.sh now refuses such a file loudly. Then, per trial
+# and per kind:
 #
 #   1. ONE client transfers alone            -> a `clients=1` row
 #   2. all N transfer AT THE SAME INSTANT    -> a `clients=N` row whose
@@ -189,6 +194,11 @@ start_client() {
 		[ -f "$_sp" ] || _sp="$pins/via-$_st.json"
 		if [ ! -f "$_sp" ]; then
 			echo "run-ceiling: no pin file for route '$_st' (pins=$pins) — client $_si falls back to direct"
+			start_client "$_si" direct
+			return $?
+		fi
+		if ! pin_ok "$_sp"; then
+			echo "run-ceiling: client $_si falls back to direct"
 			start_client "$_si" direct
 			return $?
 		fi

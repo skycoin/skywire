@@ -41,9 +41,13 @@
 # carrier.tsv counts a TRANSPORT, not a route group, so a transport shared with
 # another group or app counts that traffic too; and latency_ms comes from the
 # end-of-set legs.json snapshot, not from the row. To keep the first from
-# swamping the verdict, shares and verdicts are computed over the legs of
-# ACTIVE groups only when any group of the set is marked active — a standby
-# group carries keepalives, not the payload — and over every leg otherwise.
+# swamping the verdict, shares and verdicts are computed over the legs that
+# carried the payload when any group of the set is marked active — every leg of
+# an active group, plus any leg holding >= 1 % of the row's payload-direction
+# bytes, which is how a tunnel the pool promoted mid-set counts even though the
+# set-start legs.json still calls its group standby — and over every leg
+# otherwise. A group that really is standby carries keepalives, not payload,
+# and falls under the 1 % line on its own.
 #
 # Verdicts, per row:
 #   forward_on    the leg that carried >= 80 % of the forward bytes, and whether
@@ -231,10 +235,30 @@ for set_name in $sets; do
 				rol_of[tp] = rol
 				if (rol == "active") nactive++
 			}
+			# the role above is the SET-START legs.json snapshot. A tunnel the
+			# pool promotes mid-set carries payload under a role that still
+			# reads "standby", so bytes carried decide too: a leg holding >= 1 %
+			# of the all-leg payload-direction bytes (recv on a download,
+			# sent on an upload) is in scope whatever the snapshot called it.
+			paytot = 0
+			delete pay
+			for (i = 1; i <= ntp; i++) {
+				tp = rowtp[i]
+				pay[tp] = (r_dir[r] == "up") ? fwd[r SUBSEP tp] : rev[r SUBSEP tp]
+				paytot += pay[tp]
+			}
 			delete inscope
-			for (i = 1; i <= ntp; i++) { tp = rowtp[i]; inscope[tp] = (nactive > 0 ? (rol_of[tp] == "active") : 1) }
+			ncarried = 0
+			for (i = 1; i <= ntp; i++) {
+				tp = rowtp[i]
+				carried = (paytot > 0 && pay[tp] >= 0.01 * paytot)
+				inscope[tp] = (nactive > 0 ? (rol_of[tp] == "active" || carried) : 1)
+				if (carried && rol_of[tp] != "active" && nactive > 0) ncarried++
+			}
 			if (nactive > 0 && nactive < ntp && !warned_scope++)
-				note("shares and verdicts are computed over the legs of ACTIVE groups only; standby legs are listed with their bytes and a \"-\" share")
+				note("shares and verdicts are computed over the legs that carried the payload: every leg of an ACTIVE group, plus any leg holding >= 1 % of the payload-direction bytes of the row (a mid-set promotion the set-start role does not yet show); the rest are listed with their bytes and a \"-\" share")
+			if (ncarried && !warned_carried++)
+				note("some legs are in scope on bytes alone: their group reads \"standby\" in the set-start legs.json but they carried >= 1 % of the payload of a row")
 
 			ft = 0; rt = 0; minlat = -1
 			for (i = 1; i <= ntp; i++) {

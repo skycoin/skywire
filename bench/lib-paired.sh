@@ -64,6 +64,10 @@ PAIRED_RG_WAIT=${PAIRED_RG_WAIT:-30}
 PAIRED_HERE=${PAIRED_HERE:-$(dirname "$0")}
 CLI=${CLI:-/home/d0mo/go/bin/skywire}
 
+# pin_ok: the shared stub-pin check, used before any --route pin is trusted.
+# shellcheck source=bench/lib-pins.sh
+. "$PAIRED_HERE/lib-pins.sh"
+
 _paired_name() { case $1 in 2) echo "$PAIRED_SLOT2_NAME" ;; *) echo "$PAIRED_SLOT1_NAME" ;; esac; }
 _paired_addr() { case $1 in 2) echo "$PAIRED_SLOT2_ADDR" ;; *) echo "$PAIRED_SLOT1_ADDR" ;; esac; }
 
@@ -169,6 +173,9 @@ paired_start() {
 		_ppin=$_ptok
 		[ -f "$_ppin" ] || _ppin="$_ppins/via-$_ptok.json"
 		[ -f "$_ppin" ] || { echo "paired: no pin file for reference '$_ptok'"; return 1; }
+		# a stub pin cannot fail the leg check informatively — it fails it every
+		# time, for a reason no line names. Say so before starting anything.
+		pin_ok "$_ppin" || { echo "paired: reference slot $_pslot has no usable pin — unpaired"; return 1; }
 		timeout 240 $CLI cli proxy start -k "$_pxpk" -n "$_pn" -a "$_pa" --route "$_ppin" 2>&1 |
 			grep -iv debug | grep -i "pinned\|running\|error\|fatal" | head -3
 		_pwant=$(jq -r '.[0].forward[0].TpID' "$_ppin" 2>/dev/null)

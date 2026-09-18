@@ -172,6 +172,14 @@ Everything the last campaign learned the hard way, fixed as procedure:
   exit's, and the evidence clears within a minute, so the capture runs first on
   the failing row, before the exit-side snapshot; it is bounded to ~60 s and
   `BLACKOUT=0` turns it off (bench/lib-blackout.sh).
+- **The cut row cuts something that was carrying.** `run-standby.sh`'s chaos row
+  picks the busiest ACTIVE tunnel that passes the restore fences — carrier
+  growth orders the active candidates rather than choosing among all of them —
+  and records `cut_target_role` in the cut log and the assert table. Cutting a
+  standby tunnel takes out a few hundred bytes of keepalives, needs no promotion
+  to recover and proves nothing about recovery, so when no active tunnel passes
+  the fences the run says so and `promote_event` drops to INFO instead of
+  failing a session that was never asked to promote.
 - **Hygiene:** never remove transports the operator's own proxy uses; never
   let a same-LAN or NAT-hairpin leg into a subject group; watch the exit's
   own leg counters, because the exit runs its own scheduler.
@@ -273,7 +281,13 @@ default. `ROUTE_SETTINGS="--flag value ..."` does the same for the router knobs
 and is RESTORED at set end from the `route settings --json` state read before it,
 because a router knob outlives the app it was set for. The paired reference
 instances receive neither: they are the control, and a sweep is only readable if
-the reference is the same on every value.
+the reference is the same on every value. Every consumer of a pin file — the
+paired reference, `run-mux.sh`'s legs pinning, `run-compose.sh`'s per-tunnel
+slices, `run-degrade.sh`'s tunnels-2 targets — first runs `pin_ok`
+(`bench/lib-pins.sh`): a pin whose first hop is not a transport UUID is refused
+with a line starting `INVALID pin`, and a set that ends up without its reference
+prints `unpaired`. On 2026-09-18 three pins had been overwritten with 59-byte
+stubs and every set of a chain ran unpaired without one line naming the cause.
 
 `bench/run-sweep.sh` drives one knob across a list of values — a complete run of
 the named runner per value, into its own directory, with the knob as the only
@@ -584,9 +598,12 @@ names the rg:transport membership at that row. Leg identity comes from `<set>.le
 for that leg — and contributing `standby`, `retransmits` and `ack_delay_ms`. The exit's per-leg
 record carries **no byte counter**, so the exit's sent bytes are read as the local `recv_delta` of
 the same leg; two further limits are printed as `# note` lines in every output — `carrier.tsv`
-counts a transport rather than a route group, and `latency_ms` is the end-of-set snapshot. Because a
-standby group carries only keepalives, shares and verdicts are computed over the legs of active
-groups. Per row it reports `forward_on` (the leg with ≥ 80 % of the forward bytes, and whether that
+counts a transport rather than a route group, and `latency_ms` is the end-of-set snapshot. Scope is
+decided by bytes carried, not by the set-start snapshot: every leg of an active group counts, and so
+does any leg holding ≥ 1 % of that row's payload-direction bytes, because a tunnel the pool promotes
+mid-set carries payload for rows whose `tunnel_role` still reads `standby` — on `mux-spread-3` of
+`bench/2026-09-16/f9107c982-smoke` that is the difference between scoring row 1 over 2 legs at a
+0.669 max share and over the 4 legs that actually carried it at 0.482. Per row it reports `forward_on` (the leg with ≥ 80 % of the forward bytes, and whether that
 leg is the direct or the lowest-latency one), `reverse_fanout` (legs above 10 % of the reverse
 bytes, and the largest single share) and `flip` (a change of dominant forward leg between rows). It
 writes `<set>.direction.tsv` per set and a `direction.tsv` summary at the top of the result dir.
