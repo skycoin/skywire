@@ -31,6 +31,10 @@ func TestCatalogDefaultsMatchConstants(t *testing.T) {
 		{rs.LegStarveRatio, legStarveRatioDefault},
 		{rs.LegProbeMinBasisMs, legProbeMinBasisMsDefault},
 		{rs.LegDelivAlpha, legDelivAlphaDefault},
+		{rs.LegStarveGoodputOnlyRatio, legStarveGoodputOnlyRatioDefault},
+		{rs.LegStallRTpropFactor, legStallRTpropFactorDefault},
+		{rs.PathBDPGain, pathBDPGainDefault},
+		{rs.PathAppLimitedFrac, pathAppLimitedFracDefault},
 		{rs.RackReorderFactor, rackReorderFactorDefault},
 		{rs.EcfWindowMargin, ecfWindowMarginDefault},
 		{rs.TLPPTOFactor, tlpPTOFactorDefault},
@@ -65,6 +69,7 @@ func TestCatalogDefaultsMatchConstants(t *testing.T) {
 		{rs.LegStateResyncInterval, legStateResyncIntervalDefault},
 		{rs.LegParkMinHold, legParkMinHoldDefault},
 		{rs.LegProbeMinWindow, legProbeMinWindowDefault},
+		{rs.LegStallMinSilence, legStallMinSilenceDefault},
 		{rs.RackFloor, rackFloorDefault},
 		{rs.RackCeil, rackCeilDefault},
 		{rs.RackDefaultNoRTT, rackDefaultNoRTTDefault},
@@ -89,6 +94,7 @@ func TestCatalogDefaultsMatchConstants(t *testing.T) {
 		{rs.DeadRouteHoldMax, deadRouteMaxTTLDefault},
 		{rs.DeadRouteYoungAge, deadRouteYoungAge},
 		{rs.WarmPlanTTL, defaultWarmPlanTTL},
+		{rs.PathRTpropWindow, pathRTpropWindowDefault},
 	}
 	for _, c := range durations {
 		require.Equal(t, c.want, c.k.Duration(), c.k.Name())
@@ -130,6 +136,7 @@ func TestCatalogDefaultsMatchConstants(t *testing.T) {
 		{rs.WarmPlanBucketCap, warmPlanBucketCap},
 		{rs.MuxEventRingSize, MuxEventRingSizeDefault},
 		{rs.MuxEventsPerGroup, muxEventsPerGroupDefault},
+		{rs.PathBtlBwWindowRound, pathBtlBwWindowRoundsDefault},
 	}
 	for _, c := range counts {
 		require.EqualValues(t, c.want, c.k.Raw(), c.k.Name())
@@ -138,6 +145,8 @@ func TestCatalogDefaultsMatchConstants(t *testing.T) {
 	require.Equal(t, forwardSpillDefault, rs.ForwardSpill.Bool())
 	require.Equal(t, sbdDemoteDefault, rs.SBDDemote.Bool())
 	require.Equal(t, perFrameNoiseEnabledDefault, rs.MuxPerFrameNoise.Bool())
+	require.True(t, rs.PathModel.Bool(), "the path model is read by the schedulers by default")
+	require.True(t, rs.UnidirReverseECF.Bool(), "the reverse direction places predictively by default")
 	require.EqualValues(t, rackFactorMaxDefault, (&routeMux{}).rackFactorMax())
 	// The RACK adaptation's baseline is rack.reorder_factor in milli-units.
 	require.EqualValues(t, rackReorderFactorDefault*1000, (&routeMux{}).rackFactorMin())

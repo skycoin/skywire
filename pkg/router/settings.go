@@ -105,6 +105,34 @@ func LegDelivAlpha() float64 { return routersettings.LegDelivAlpha.Ratio() }
 // SetLegDelivAlpha installs that weight. Only a value in (0,1] is accepted.
 func SetLegDelivAlpha(v float64) bool { return setRatio(routersettings.LegDelivAlpha, v) }
 
+// LegStarveGoodputOnlyRatio is the goodput gap at which the ruling's goodput
+// half cuts a leg on its own, without the delay half agreeing — the gap past
+// which no delay reading excuses a leg (a leg carrying 1 % of the bytes, not
+// one carrying a third of them while reading 6x).
+func LegStarveGoodputOnlyRatio() float64 {
+	return routersettings.LegStarveGoodputOnlyRatio.Ratio()
+}
+
+// SetLegStarveGoodputOnlyRatio installs that gap. Only a value above 1 is
+// accepted; use a very large one to leave the paired ruling as the only path.
+func SetLegStarveGoodputOnlyRatio(v float64) bool {
+	if v <= 1 {
+		return false
+	}
+	return setRatio(routersettings.LegStarveGoodputOnlyRatio, v)
+}
+
+// LegStallRTpropFactor is how many multiples of its RTprop a leg may hold
+// unacknowledged bytes with nothing confirmed before it counts as stalled. 0
+// turns the stall reading off.
+func LegStallRTpropFactor() float64 { return routersettings.LegStallRTpropFactor.Ratio() }
+
+// SetLegStallRTpropFactor installs that multiple. Negative is refused; 0 is
+// accepted and turns the stall reading off.
+func SetLegStallRTpropFactor(v float64) bool {
+	return setRatio(routersettings.LegStallRTpropFactor, v)
+}
+
 // ---------------------------------------------------------------------------
 // Dead-route exclusion.
 

@@ -810,6 +810,14 @@ type MuxLeg struct {
 	// per-leg send window they are bounded by (0 when not a predictive mode).
 	InflightBytes float64 `json:"inflight_bytes"`
 	WindowBytes   float64 `json:"window_bytes"`
+	// PathModel is the leg's BBR-style path model (leg_rate.go): BtlBw (the
+	// windowed max of its SACK-proven delivery rate), RTprop (the windowed min
+	// of its out-of-band path RTT), their product as the BDP, and the honest
+	// queueing delay inflight/BtlBw. It is the pair of readings AckDelayMS
+	// conflates — a basis is queue depth in disguise — so a viewer can tell a
+	// leg that is far away from one that is merely backed up. Known is false
+	// until both halves are measured.
+	PathModel legPathSnapshot `json:"path_model"`
 	// Direct is true when this leg's first hop goes straight to the route
 	// group's destination (a 1-hop/direct route); false means the leg is
 	// multihop (relayed through one or more intermediates). Lets a viewer
@@ -884,6 +892,7 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 				if rg.mux.tpSelector != nil {
 					leg.InflightBytes, leg.WindowBytes = rg.mux.tpSelector.LegWindow(i)
 				}
+				leg.PathModel = rg.mux.pathModelSnapshot(i)
 			}
 			// Direct = this leg's first hop reaches the route group's FAR
 			// endpoint itself, i.e. a 1-hop route; otherwise it is relayed
@@ -4591,6 +4600,10 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 				// …and a leg cut to a probe (or given its share back) is
 				// recorded there too, so a collapse onto one bad leg says so.
 				rg.mux.SetLegProbeRulingFn(rg.noteLegProbeRuling)
+				// …and when that ruling is a STALL, the window the leg is
+				// sitting on is stranded: re-send it at once on a healthy leg
+				// rather than letting each sequence age out of RACK.
+				rg.mux.SetLegStrandedFn(rg.flushStrandedLeg)
 				// Every SACK's per-leg send→ack delay also feeds the leg's
 				// shared-bottleneck window (rate-limited to one sample per
 				// SBDSampleInterval), so the detector can rule while a transfer
