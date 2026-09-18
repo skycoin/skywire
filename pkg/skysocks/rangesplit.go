@@ -725,8 +725,13 @@ func retryWithBudget(fetch func() ([]byte, error), budget, backoff, backoffMax t
 // watch it die. A tunnel that is closed — or that closes between the pick and
 // the open — yields errSessionClosed rather than a generic error, so the caller
 // refetches at once on another tunnel instead of backing off.
-func (c *Client) openChunkStream() (*yamux.Session, net.Conn, error) {
-	sess := c.pickSessionFor(pickRecv)
+//
+// kind says whether this stream is one of SEVERAL parallel chunk streams
+// (pickSibling) or the only stream its transfer has (pickLone) — a rescue tail,
+// an upload probe, an upload's completion fetch. Only a sibling may audition a
+// standby tunnel; see pickKind.
+func (c *Client) openChunkStream(kind pickKind) (*yamux.Session, net.Conn, error) {
+	sess := c.pickSessionKind(pickRecv, kind)
 	if sess == nil {
 		return nil, nil, errAllTunnelsDown
 	}
@@ -832,7 +837,7 @@ const rsRescueIdleTimeout = 60 * time.Second
 // progress-refreshed idle timeout. Returns the bytes actually written, so the
 // caller resumes from start+written on failure.
 func (c *Client) streamTailOnce(w net.Conn, req *http.Request, host, validator string, start, total int64) (n int64, err error) {
-	sess, st, err := c.openChunkStream()
+	sess, st, err := c.openChunkStream(pickLone)
 	if err != nil {
 		return 0, err
 	}
@@ -910,7 +915,7 @@ func copyWithIdleTimeout(dst io.Writer, body io.Reader, under net.Conn, limit in
 // buf filled SO FAR after every read, so the in-order writer can stream the
 // frontier chunk out as it arrives.
 func (c *Client) fetchChunk(req *http.Request, host, validator string, start, end int64, buf []byte, onRead func(filled int)) (n int64, err error) {
-	sess, st, err := c.openChunkStream()
+	sess, st, err := c.openChunkStream(pickSibling)
 	if err != nil {
 		return 0, err
 	}
