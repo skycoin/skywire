@@ -111,6 +111,10 @@ type Settings struct {
 	SBDTrialLoss       float64 `json:"sbd_trial_loss"`
 	SBDBackoff         string  `json:"sbd_backoff"`
 	SBDMinEvidenceRate int64   `json:"sbd_min_evidence_rate"`
+	// SBDDemote reports whether a shared-bottleneck ruling may park a leg at all.
+	// False (the default) means rulings are recorded as sbd_ruling mux events and
+	// nothing is demoted.
+	SBDDemote bool `json:"sbd_demote"`
 }
 
 // Human writes one knob per line.
@@ -121,11 +125,11 @@ func (s Settings) Human(w io.Writer) error {
 		"dead_route_hold: %s\ndead_route_hold_max: %s\nmux_fec: %v\n"+
 		"sbd_min_samples: %d\nsbd_sample_interval: %s\n"+
 		"sbd_trial_window: %s\nsbd_trial_loss: %g\nsbd_backoff: %s\n"+
-		"sbd_min_evidence_rate: %d\n",
+		"sbd_min_evidence_rate: %d\nsbd_demote: %v\n",
 		s.MinHops, s.ExistingTPOnly, s.ForceLocalRoutes, strings.Join(s.TransportPreference, ","),
 		s.EcfMaxWindowBytes, s.EcfMinWindowBytes, s.EcfWindowMargin,
 		s.SendWindowWaitMax, s.LegParkMinHold, s.DeadRouteHold, s.DeadRouteHoldMax, s.MuxFEC,
 		s.SBDMinSamples, s.SBDSampleInterval,
-		s.SBDTrialWindow, s.SBDTrialLoss, s.SBDBackoff, s.SBDMinEvidenceRate)
+		s.SBDTrialWindow, s.SBDTrialLoss, s.SBDBackoff, s.SBDMinEvidenceRate, s.SBDDemote)
 	return err
 }

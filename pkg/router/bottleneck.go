@@ -3,6 +3,7 @@ package router
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -34,14 +35,23 @@ import (
 // legLivenessInterval (30s) the sbdMinSamples floor is only cleared after ~110s,
 // and the operator-pinned two-leg-over-one-uplink compositions that SBD exists
 // to catch spend that whole time striping across a pipe that is not there. So
-// while data flows the SENDER's own feedback is folded too: every SACK yields a
-// send→ack delay sample for the leg it acknowledges (the per-leg ack-delay
-// estimate the RACK threshold already keeps — routeMux.recordAckDelayTp), and
-// one such sample per leg per sbdSampleInterval goes into the same window, with
-// the same statistics. The two sources measure the same thing (a round trip over
-// that leg, queueing included) and a transfer floods the window with the SACK
-// source within a second, so the verdict arrives in seconds rather than minutes
-// and the park event/reason is unchanged.
+// while data flows the SENDER's own feedback is folded too: a SACK yields a
+// send→ack delay sample for the leg that carried the frame it NEWLY acks (the
+// per-leg ack-delay estimate the RACK threshold already keeps —
+// routeMux.recordAckDelayTp), and one such sample per leg per sbdSampleInterval
+// goes into the same window, with the same statistics. The two sources measure
+// the same thing (a round trip over that leg, queueing included) and a transfer
+// floods the window with the SACK source within a second, so the verdict arrives
+// in seconds rather than minutes and the park event/reason is unchanged.
+//
+// NEWLY acks is the whole of it. A SACK purges every entry below its contiguous
+// frontier, and those entries were received at some unknown earlier time: their
+// send→ack age is how long the FRONTIER took to advance past them, one number
+// shared by every leg in the batch. Sampling all of them made the two legs' series
+// two views of one quantity — the group's own head-of-line coupling — which
+// correlates by construction, on any network. So only the frames whose arrival
+// this SACK actually reports are sampled per leg: the frontier-edge entry and the
+// bitmap bits set above it (see retxBuffer.ProcessSACKWith).
 //
 // Because raw cross-correlation would need time-aligned samples (our per-leg
 // pongs are sampled independently), we follow RFC 8382 and cluster on the
@@ -477,6 +487,26 @@ const (
 	// default of the --sbd-min-evidence-rate knob; the live value is
 	// SBDMinEvidenceRate().
 	sbdMinEvidenceRate = 64 << 10
+	// sbdDemoteDefault is whether a shared-bottleneck ruling may PARK a leg.
+	//
+	// It is FALSE, and that is a measurement, not caution. Over four rig runs on
+	// 2026-09-16/17 (bench/2026-09-16/195b1094c-sbdsweep/{sbd-off,sbd-default},
+	// 0251e5da4-smoke, dfb0755c2-smoke) the detector ruled eight times and was
+	// right zero times: with parking off (--sbd-min-samples raised out of reach on
+	// both ends) the two-leg 50 MB downloads ran x1.13 against the paired
+	// reference, 5 of 5 at or above x1.09; with parking on at its defaults the same
+	// route pair ran x0.86, and the parks decided while the group was idle were
+	// permanent at x0.81. With the evidence floor in place three of the four
+	// compose-set parks were refuted by their own trial — two of them on idle ticks
+	// between bench rows, trial rate 2 B/s — and the one that stood cost 10.8%.
+	//
+	// So the ruling is kept and recorded (MuxEventSBDRuling, with the correlation
+	// numbers and the rate behind it) and the grouping still reaches the mux, where
+	// it only makes rebuildWeights count one bottleneck as one unit of capacity.
+	// The demotion — the part that takes a leg away — waits for an operator:
+	// `skywire cli route settings --sbd-demote true`. The default of the
+	// --sbd-demote knob; the live value is SBDDemote().
+	sbdDemoteDefault = false
 )
 
 // sbdAggRate turns one data-progress tick's per-leg recv deltas into the group's
@@ -562,4 +592,32 @@ func sbdGroupKeeper(legs []bottleneckLeg, demote []int, idx int) int {
 		return l.idx
 	}
 	return -1
+}
+
+// sbdRulingReason renders one shared-bottleneck ruling as the sentence recorded
+// in a MuxEventSBDRuling: which leg the detector judged redundant, which active
+// leg it was judged against, the summary statistics that made them look alike,
+// and the send-path rate the reading was taken at. keeper < 0 (no surviving
+// active leg found in the group) drops the pairwise half.
+//
+// It exists because with demotion off (sbdDemoteDefault) the ruling IS the whole
+// output: a bench run scores the detector by reading these against what the
+// transfer did, so the numbers behind the verdict have to be in the record, not
+// just the verdict. Pure.
+func sbdRulingReason(idx, keeper int, groups []int, stats []sbdStats, rate, floor float64) string {
+	group := -1
+	if idx >= 0 && idx < len(groups) {
+		group = groups[idx]
+	}
+	var b bytes.Buffer
+	fmt.Fprintf(&b, "shared-bottleneck ruling (advisory — sbd_demote is off, nothing was parked): leg %d", idx)
+	if keeper >= 0 && idx < len(stats) && keeper < len(stats) {
+		a, k := stats[idx], stats[keeper]
+		fmt.Fprintf(&b, " reads as co-bottlenecked with active leg %d in group %d — skew %.3f vs %.3f, cv %.3f vs %.3f, freq %.3f vs %.3f, mean %.1f vs %.1f ms over %d/%d samples",
+			keeper, group, a.skew, k.skew, a.cv, k.cv, a.freq, k.freq, a.mean, k.mean, a.n, k.n)
+	} else {
+		fmt.Fprintf(&b, " reads as co-bottlenecked with a kept active leg in group %d", group)
+	}
+	fmt.Fprintf(&b, "; send-path delivered %.0f B/s (evidence floor %.0f B/s). Set --sbd-demote true on both ends to act on rulings like this one.", rate, floor)
+	return b.String()
 }

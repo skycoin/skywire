@@ -75,6 +75,12 @@ type RouterSettings struct {
 	// traffic, no ruling. Same zero-means-unchanged rule.
 	SBDMinEvidenceRate int64 `json:"sbd_min_evidence_rate,omitempty"`
 
+	// SBDDemote gates the DEMOTION half of shared-bottleneck detection: false (the
+	// default) records every ruling as an sbd_ruling mux event and parks nothing.
+	// Like MuxFEC it is a tri-state on PUT — nil leaves it alone — because a bool
+	// has no "zero means unchanged" spelling.
+	SBDDemote *bool `json:"sbd_demote,omitempty"`
+
 	// MuxFEC advertises FEC on mux route groups created from now on; unlike
 	// the rest it is a tri-state on PUT, see SetRouterSettings.
 	MuxFEC *bool `json:"mux_fec,omitempty"`
@@ -101,6 +107,7 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 		preference = append(preference, string(t))
 	}
 	fec := v.router.GetMuxFEC()
+	sbdDemote := router.SBDDemote()
 	return RouterSettings{
 		ForceLocalRoutes:    v.router.GetForceLocalRoutes(),
 		ExistingTPOnly:      v.router.GetExistingTPOnly(),
@@ -119,6 +126,7 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 		SBDTrialLoss:        router.SBDTrialLoss(),
 		SBDBackoff:          router.SBDBackoff(),
 		SBDMinEvidenceRate:  router.SBDMinEvidenceRate(),
+		SBDDemote:           &sbdDemote,
 		MuxFEC:              &fec,
 	}, nil
 }
@@ -173,6 +181,9 @@ func (v *Visor) SetRouterSettings(s RouterSettings) error {
 		if !k.ok() {
 			return fmt.Errorf("%s must be positive", k.name)
 		}
+	}
+	if s.SBDDemote != nil {
+		router.SetSBDDemote(*s.SBDDemote)
 	}
 	if s.MuxFEC != nil {
 		v.router.SetMuxFEC(*s.MuxFEC)

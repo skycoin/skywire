@@ -54,6 +54,49 @@ func (rg *RouteGroup) beginSBDTrial(parked, keeper uuid.UUID, baseRate float64) 
 	rg.sbdTrials[parked] = sbdTrial{keeper: keeper, at: time.Now(), baseRate: baseRate}
 }
 
+// sbdSendDeltas returns each leg's SACK-acknowledged bytes since the previous
+// call — the SEND path's delivered-bytes deltas for one data-progress tick,
+// which sbdAggRate turns into the rate every shared-bottleneck decision is
+// weighed against.
+//
+// The send path is the side the detector's delay samples come from (a frame's
+// own send→ack round trip, see bottleneck.go), so it is the side its evidence
+// floor has to be measured on. Reading the RECEIVE deltas instead compares a
+// ruling with the opposite end of the transfer: a download is sent by the exit,
+// which receives almost nothing, so the exit's own rulings looked idle for the
+// whole transfer and the client's looked busy on samples it never took.
+//
+// A leg seen for the first time yields no delta (there is no baseline to
+// difference), and a counter that did not move yields none either. The cumulative
+// reads are taken BEFORE sbdTrialMu, which must not be held while another lock is
+// taken.
+func (rg *RouteGroup) sbdSendDeltas(tps []*transport.ManagedTransport) map[uuid.UUID]uint64 {
+	out := make(map[uuid.UUID]uint64, len(tps))
+	if rg.mux == nil || rg.mux.retxBuf == nil {
+		return out
+	}
+	cur := make(map[uuid.UUID]uint64, len(tps))
+	for _, tp := range tps {
+		if tp == nil {
+			continue
+		}
+		cur[tp.Entry.ID] = rg.mux.retxBuf.AckedBytes(tp.Entry.ID)
+	}
+	rg.sbdTrialMu.Lock()
+	defer rg.sbdTrialMu.Unlock()
+	if rg.sbdAckedPrev == nil {
+		rg.sbdAckedPrev = make(map[uuid.UUID]uint64, len(tps))
+	}
+	for id, c := range cur {
+		prev, seen := rg.sbdAckedPrev[id]
+		rg.sbdAckedPrev[id] = c
+		if seen && c > prev {
+			out[id] = c - prev
+		}
+	}
+	return out
+}
+
 // sbdSuppressed reports whether a failed trial already proved these two legs
 // independent and the pair's window is still open.
 func (rg *RouteGroup) sbdSuppressed(a, b uuid.UUID) bool {
@@ -64,32 +107,6 @@ func (rg *RouteGroup) sbdSuppressed(a, b uuid.UUID) bool {
 	defer rg.sbdTrialMu.Unlock()
 	s, ok := rg.sbdIndependent[sbdPair(a, b)]
 	return ok && time.Now().Before(s.until)
-}
-
-// noteSBDProbation holds a pair apart for exactly d — a SHORT exemption for a
-// pair whose park cannot be arbitrated (it was decided while the group was idle,
-// so there is no pre-park rate to compare against). It is deliberately NOT
-// noteSBDIndependent: nothing has been proven about these two legs, so the
-// backoff must not double and the window must not outlast one trial. What it
-// buys is one window of two-leg operation UNDER LOAD, after which the detector
-// re-rules from loaded delay windows and any park it then makes carries a real
-// base rate and a real trial. A standing verified-independent window (which is
-// longer and was actually earned) is left alone.
-func (rg *RouteGroup) noteSBDProbation(a, b uuid.UUID, d time.Duration) {
-	if a == uuid.Nil || b == uuid.Nil || d <= 0 {
-		return
-	}
-	key := sbdPair(a, b)
-	rg.sbdTrialMu.Lock()
-	defer rg.sbdTrialMu.Unlock()
-	if rg.sbdIndependent == nil {
-		rg.sbdIndependent = make(map[sbdPairKey]sbdSuppression)
-	}
-	until := time.Now().Add(d)
-	if s, ok := rg.sbdIndependent[key]; ok && s.until.After(until) {
-		return
-	}
-	rg.sbdIndependent[key] = sbdSuppression{until: until, span: rg.sbdIndependent[key].span}
 }
 
 // noteSBDIndependent opens (or re-opens, doubled) the verified-independent
@@ -117,26 +134,26 @@ type sbdTrialVerdict struct {
 	leg    int
 	base   float64
 	failed bool
-	// idle marks a trial whose park was decided with the group carrying nothing:
-	// there is no pre-park rate, so no measurement can ever refute it. It is
-	// undone on the first loaded tick rather than allowed to stand.
-	idle bool
 }
 
 // evaluateSBDTrials reads the verdict on every park trial that has run for at
-// least SBDTrialWindow, given aggRate — the group's aggregate delivered-bytes
-// rate (B/s) over the tick just sampled, measured with the parked legs OUT.
+// least SBDTrialWindow, given rate — the group's SEND-path delivered-bytes rate
+// (B/s) over the tick just sampled, measured with the parked legs OUT.
 // A trial whose rate fell by more than SBDTrialLoss UNPARKS its leg and marks
 // the pair verified-independent; any other trial simply ends and the park
-// stands. Trials for legs that are gone are dropped. A trial whose park was
-// decided while the group was IDLE has no bar to clear, so it is never ended
-// against one: it stays open until traffic arrives and is then undone, which
-// defers the A/B to loaded conditions instead of leaving the park permanent.
+// stands. Trials for legs that are gone are dropped.
+//
+// A tick BELOW sbdMinEvidenceRate returns no verdict at all: the trial arbitrates
+// a rate, and a tick that carried nothing measures nothing. Two of the four
+// compose-set parks on 2026-09-17 were refuted on such a tick — trial rate 2 B/s,
+// between two bench rows — which is a statement about the gap between rows, not
+// about the legs. The trial stays OPEN until the group is carrying something
+// again, which is also what keeps a park from standing unarbitrated.
 //
 // Called at the top of enforceBottleneckGroups, before the detector rules again,
 // so a leg the evidence just vindicated is active (and its pair suppressed)
 // before this tick's grouping is computed.
-func (rg *RouteGroup) evaluateSBDTrials(aggRate float64, tps []*transport.ManagedTransport) {
+func (rg *RouteGroup) evaluateSBDTrials(rate float64, tps []*transport.ManagedTransport) {
 	if rg.mux == nil {
 		return
 	}
@@ -148,6 +165,7 @@ func (rg *RouteGroup) evaluateSBDTrials(aggRate float64, tps []*transport.Manage
 	}
 
 	now, window, loss := time.Now(), SBDTrialWindow(), SBDTrialLoss()
+	floor := float64(SBDMinEvidenceRate())
 	var ripe []sbdTrialVerdict
 	rg.sbdTrialMu.Lock()
 	for id, tr := range rg.sbdTrials {
@@ -156,30 +174,18 @@ func (rg *RouteGroup) evaluateSBDTrials(aggRate float64, tps []*transport.Manage
 			delete(rg.sbdTrials, id) // the leg was removed; nothing to arbitrate
 			continue
 		}
-		if tr.baseRate <= 0 && aggRate <= 0 {
-			// The park was decided on silence and there is still no traffic to judge
-			// it by. Do NOT end the trial: a trial that ends against a base rate of
-			// zero can never fail (sbdTrialFailed), so the park would stand for the
-			// whole transfer that follows — the measured defect. It stays OPEN.
+		if rate < floor {
+			// NO VERDICT ON AN IDLE TICK — the same floor the ruling itself had to
+			// clear, applied to the measurement that arbitrates it. The trial stays
+			// OPEN rather than ending either way.
 			continue
 		}
 		if now.Sub(tr.at) < window {
 			continue
 		}
 		delete(rg.sbdTrials, id)
-		if tr.baseRate <= 0 {
-			// Traffic has arrived, but this park has no pre-park reading and never
-			// will. Undo it and hold the pair apart for one window so the A/B is
-			// simply DEFERRED to loaded conditions: the detector re-rules from loaded
-			// delay windows and any re-park it makes is a real trial against a real
-			// base rate. sbdMinEvidenceRate stops such a park being decided at all;
-			// this is the belt for one already standing (an older peer's mirror, or a
-			// park made before the floor was raised on a running visor).
-			ripe = append(ripe, sbdTrialVerdict{tpID: id, keeper: tr.keeper, leg: i, idle: true})
-			continue
-		}
 		ripe = append(ripe, sbdTrialVerdict{tpID: id, keeper: tr.keeper, leg: i, base: tr.baseRate,
-			failed: sbdTrialFailed(tr.baseRate, aggRate, loss)})
+			failed: sbdTrialFailed(tr.baseRate, rate, loss)})
 	}
 	rg.sbdTrialMu.Unlock()
 	if len(ripe) == 0 {
@@ -189,22 +195,9 @@ func (rg *RouteGroup) evaluateSBDTrials(aggRate float64, tps []*transport.Manage
 
 	for _, v := range ripe {
 		switch {
-		case v.idle:
-			// Long enough to cover a whole data-progress tick plus a trial: the
-			// re-ruling must happen on LOADED delay windows, and this tick's
-			// grouping runs immediately after this loop — a probation shorter than
-			// the tick would let the detector re-park before a single loaded sample
-			// existed, which is the flap the live run showed five seconds apart.
-			span := legDataProgressInterval + window
-			rg.noteSBDProbation(v.tpID, v.keeper, span)
-			reason := fmt.Sprintf("shared-bottleneck park of leg %d was decided with the group carrying nothing (pre-park rate 0 B/s) — no measurement can refute it, so it is undone and the pair is held apart for %v while the detector re-rules under load",
-				v.leg, span)
-			rg.logger.Infof("%s", reason)
-			rg.undoRefutedPark(v, tps, reason,
-				"shared-bottleneck park had no evidence behind it, leg re-admitted for a loaded re-ruling")
 		case !v.failed:
-			rg.logger.Debugf("shared-bottleneck: park of leg %d stands — aggregate goodput %.0f→%.0f B/s over the %v trial, no capacity was lost",
-				v.leg, v.base, aggRate, window)
+			rg.logger.Debugf("shared-bottleneck: park of leg %d stands — send-path goodput %.0f→%.0f B/s over the %v trial, no capacity was lost",
+				v.leg, v.base, rate, window)
 		default:
 			// The suppression is recorded BEFORE the unpark and regardless of whether
 			// the leg is still standby: the measurement refuted the RULING, which is
@@ -216,10 +209,10 @@ func (rg *RouteGroup) evaluateSBDTrials(aggRate float64, tps []*transport.Manage
 			span := rg.noteSBDIndependent(v.tpID, v.keeper)
 			dropPct := 0.0
 			if v.base > 0 {
-				dropPct = (v.base - aggRate) / v.base * 100
+				dropPct = (v.base - rate) / v.base * 100
 			}
-			reason := fmt.Sprintf("shared-bottleneck park trial FAILED: aggregate goodput %.0f→%.0f B/s (-%.1f%%, limit %.0f%%) with leg %d parked — the legs carry independent capacity; unparked, pair exempt from SBD for %v",
-				v.base, aggRate, dropPct, loss*100, v.leg, span)
+			reason := fmt.Sprintf("shared-bottleneck park trial FAILED: send-path goodput %.0f→%.0f B/s (-%.1f%%, limit %.0f%%) with leg %d parked — the legs carry independent capacity; unparked, pair exempt from SBD for %v",
+				v.base, rate, dropPct, loss*100, v.leg, span)
 			rg.logger.Infof("%s", reason)
 			rg.undoRefutedPark(v, tps, reason,
 				"shared-bottleneck park trial failed: aggregate goodput fell, leg re-admitted")

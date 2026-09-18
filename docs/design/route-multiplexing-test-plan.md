@@ -468,39 +468,35 @@ candidates above.
 - A manual pin (`proxy mux set`, `--route`, `--routing-policy none`) is
   respected by the adaptive growth. It was not, live.
 
-**A shared-bottleneck park is a trial, arbitrated by goodput.** The 2026-09-18
-sweep (int-J, `bench/2026-09-16/195b1094c-sbdsweep/`) ran the same two-leg group
-— distinct intermediates, distinct first hops — both ways over 50 MB downloads
-paired against the best single route: with the detector parked out
-(`--sbd-min-samples 1000000` on both ends) **9.30 MB/s, x1.13, every row above
-x1.09**; with the default floor of 4 the SBD park landed and the same group ran
-**6.80 MB/s, x0.86**, while the endpoint's downlink measured 9.55 MB/s over
-three concurrent single-route clients, so the two legs were never behind one
-pipe. Delay co-variation is evidence of a shared queue, not proof of one, and a
-wrong ruling costs a whole leg — so the park is now provisional: the group's
-aggregate delivered-bytes rate before the park is recorded, and after
-`--sbd-trial-window` (3 s, read on the next 5 s data-progress tick) it is read
-again with the leg out; a fall past `--sbd-trial-loss` (0.15) unparks the leg
-immediately (the trial verdict overrides the 30 s `leg-park-min-hold`) and
-exempts that PAIR from further SBD merging for `--sbd-backoff` (5 min, doubling
-per repeat, capped at 1 h), while a park that costs nothing stands as before.
-Both ends run it, which matters because a download is exit-sent and the ruling
-that cost the 2.5 MB/s was made at the exit; each failed trial emits a
-`park_trial_failed` mux event naming both rates, so a bench run can count wrong
-rulings and what each one cost.
-
-**And the trial only works if the park was arbitrable in the first place.** On
-`bench/2026-09-16/0251e5da4-smoke/mux-legs-2` the detector parked at 01:06:30.615
-and re-parked at 01:06:35.615 with the group carrying nothing, before row 1 moved
-a byte: a trial cannot fail against a pre-park rate of zero, so that park was
-permanent and all 15 rows that followed ran single-leg — **x0.81 on 50 MB, x0.68
-on 10 MB**, against x1.13 for the same route pair with parking off. No traffic,
-no ruling: a demotion is now withheld unless the group is carrying
-`--sbd-min-evidence-rate` (default 64 KiB/s), and a park that slipped through
-with no baseline stays on trial until traffic arrives instead of standing.
-Separately, the refutation a failed trial produces is recorded even when the peer
-has already mirrored a promote of the leg — that is why the first verdict was
-dropped and the re-park landed five seconds later.
+**Shared-bottleneck DEMOTION is off by default; the ruling is recorded instead.**
+Over four rig runs on 2026-09-16/17 (`bench/2026-09-16/195b1094c-sbdsweep/{sbd-off,sbd-default}`,
+`0251e5da4-smoke`, `dfb0755c2-smoke`) the detector ruled eight times and was right
+zero times: with parking off (`--sbd-min-samples 1000000` both ends) the two-leg
+50 MB downloads ran **9.30 MB/s, x1.13, 5 of 5 above x1.09**, with parking on at
+its defaults **6.80 MB/s, x0.86**, and the parks decided while the group was idle
+were permanent at **x0.81**; with the evidence floor in place three of the four
+compose-set parks were refuted by their own trial — two on idle ticks between
+bench rows, trial rate 2 B/s — and the one that stood cost 10.8 %. The reason it
+could not be right is the sampling: the per-SACK delay series was taken from every
+entry a SACK purges below its contiguous frontier, so both legs were measuring how
+long the FRONTIER took to advance — the group's own head-of-line coupling, which
+correlates on any network — and only the frames a SACK NEWLY acks (the
+frontier-edge entry and the bitmap bits above it, each aged from its own send)
+are per-leg samples now. The evidence floor is measured on the same side those
+samples come from, the SEND path's SACK-acknowledged bytes per tick, because on a
+download the receiving end has no samples of its own and the sending end looked
+idle when judged by what it received; a trial tick below the floor returns no
+verdict at all and the trial stays open. So `--sbd-demote` (default **false**)
+gates the demotion only: the grouping still reaches the mux, where it makes
+`rebuildWeights` count one bottleneck as one unit of capacity, and every ruling
+the detector would have acted on is recorded as an `sbd_ruling` mux event naming
+the legs, their summary statistics and the rate behind the reading. Turn it on
+with `skywire cli route settings --sbd-demote true` on BOTH ends (a download is
+exit-sent), and the park is then the trial described above: the pre-park rate is
+recorded, re-read after `--sbd-trial-window` (3 s) with the leg out, a fall past
+`--sbd-trial-loss` (0.15) unparks it and exempts that PAIR for `--sbd-backoff`
+(5 min, doubling, capped at 1 h), and no ruling or verdict is taken below
+`--sbd-min-evidence-rate` (64 KiB/s).
 
 ### 3.5 Direction, proven
 

@@ -24,6 +24,7 @@ func sbdSACKRig(t *testing.T) (*RouteGroup, []uuid.UUID) {
 	rg, mts, _ := createMuxRouteGroup(t, 2)
 	rg.muxEvents = &muxEventRing{} // capture the park event the verdict emits
 	rg.mux.onLegDelaySample = rg.foldLegDelaySample
+	sbdDemoteOn(t) // these cases are about what a ruling DOES
 	prev := SBDSampleInterval()
 	require.True(t, SetSBDSampleInterval(time.Nanosecond))
 	t.Cleanup(func() { SetSBDSampleInterval(prev) })
@@ -50,7 +51,7 @@ func TestSBDRulesWithinAFewSACKs(t *testing.T) {
 	}
 	require.LessOrEqual(t, sacks, sbdWindowSamples, "a verdict must not need more SACKs than the window holds")
 
-	rg.enforceBottleneckGroups(deltas(ids, 5_000_000, 5_000_000))
+	sbdTick(rg, ids, 5_000_000, 5_000_000)
 	require.True(t, rg.mux.isLegStandby(1), "co-bottlenecked leg must be parked from the per-SACK samples alone")
 	require.False(t, rg.mux.isLegStandby(0), "the primary is never parked")
 	require.Equal(t, 1, countEvents(rg, MuxEventLegParked), "the park must emit the same single leg_parked event")
@@ -71,7 +72,7 @@ func TestSBDDoesNotParkUncorrelatedLegs(t *testing.T) {
 		rg.mux.recordAckDelayTp(ids[1], time.Duration(leg1[i]*float64(time.Millisecond)))
 	}
 
-	rg.enforceBottleneckGroups(deltas(ids, 5_000_000, 5_000_000))
+	sbdTick(rg, ids, 5_000_000, 5_000_000)
 	require.False(t, rg.mux.isLegStandby(0))
 	require.False(t, rg.mux.isLegStandby(1), "legs with unrelated delay signatures are two pipes, not one")
 	require.Zero(t, countEvents(rg, MuxEventLegParked))
@@ -156,4 +157,95 @@ func TestLegLatencyByTpUsesEndToEnd(t *testing.T) {
 	got := rg.mux.legLatencyByTp(mts)
 	require.InDelta(t, 20, got[mts[0].Entry.ID], 0.001, "a leg with no pong sample keeps its first-hop RTT")
 	require.InDelta(t, 410, got[mts[1].Entry.ID], 0.001, "a slow-routed leg is judged on its whole route")
+}
+
+// legDelaySamples drives one SACK through a retx buffer and returns the per-leg
+// delay samples it produced, keyed by transport.
+func legDelaySamples(rb *retxBuffer, lastContig uint32, words []uint64) map[uuid.UUID][]float64 {
+	got := map[uuid.UUID][]float64{}
+	rb.onAckDelayTp = func(tp uuid.UUID, d time.Duration) {
+		got[tp] = append(got[tp], float64(d)/float64(time.Millisecond))
+	}
+	rb.ProcessSACK(lastContig, words, time.Second)
+	return got
+}
+
+// TestSACKSamplesOnlyNewlyAckedFramesPerLeg is the sampling defect itself. A SACK
+// purges everything below its contiguous frontier, and the frames behind a stall
+// come out in one batch whose ages are all ~the age of the STALL — one number, on
+// both legs. Sampling that batch per leg fed the detector two views of the group's
+// own head-of-line coupling, which correlates whatever the network is doing (the
+// rig measured the detector 0-for-8 on it). Only the frame whose arrival moved the
+// frontier, and the bits the bitmap newly reports, are per-leg samples now.
+func TestSACKSamplesOnlyNewlyAckedFramesPerLeg(t *testing.T) {
+	rb := newRetxBuffer(64)
+	legA, legB := uuid.New(), uuid.New()
+
+	// Six frames striped A,B,A,B,A,B, all sent ~400ms ago behind one stalled
+	// frontier; seq 6 (leg B) is the one whose arrival advances it.
+	for seq := uint32(1); seq <= 6; seq++ {
+		tp := legA
+		if seq%2 == 0 {
+			tp = legB
+		}
+		rb.Store(seq, []byte("frame"), tp)
+	}
+	rb.mu.Lock()
+	for seq := uint32(1); seq <= 6; seq++ {
+		rb.entries[seq].sentAt = time.Now().Add(-400 * time.Millisecond)
+	}
+	rb.mu.Unlock()
+
+	got := legDelaySamples(rb, 6, nil)
+	require.Empty(t, got[legA], "the frames purged behind the frontier are not this leg's round trips")
+	require.Len(t, got[legB], 1, "exactly one sample: the frame that moved the frontier")
+	require.InDelta(t, 400, got[legB][0], 50)
+
+	// The bitmap half: seqs the SACK newly reports above the frontier ARE each
+	// leg's own round trips, and each carries its own age.
+	rb2 := newRetxBuffer(64)
+	rb2.Store(10, []byte("frame"), legA)
+	rb2.Store(11, []byte("frame"), legB)
+	rb2.mu.Lock()
+	rb2.entries[10].sentAt = time.Now().Add(-120 * time.Millisecond)
+	rb2.entries[11].sentAt = time.Now().Add(-320 * time.Millisecond)
+	rb2.mu.Unlock()
+
+	got2 := legDelaySamples(rb2, 9, []uint64{0b11}) // seqs 10 and 11 received
+	require.Len(t, got2[legA], 1)
+	require.Len(t, got2[legB], 1)
+	require.InDelta(t, 120, got2[legA][0], 50, "each leg is sampled on its own frame's age")
+	require.InDelta(t, 320, got2[legB][0], 50)
+}
+
+// TestIndependentLegSeriesAreNotRuledShared is the consequence: fed two
+// INDEPENDENT round-trip series the detector leaves the legs alone, and fed the
+// SAME series (which is what the frontier-batch sampling manufactured) it rules
+// them one pipe. The old sampling could only ever produce the second case.
+func TestIndependentLegSeriesAreNotRuledShared(t *testing.T) {
+	independent := func(t *testing.T) *RouteGroup {
+		t.Helper()
+		rg, ids := sbdSACKRig(t)
+		a := []float64{50, 140, 50, 140, 50, 140, 50, 140} // a congested queue
+		b := []float64{90, 90.5, 90, 90.5, 90, 90.5, 90, 90.5}
+		for i := range a {
+			rg.mux.recordAckDelayTp(ids[0], time.Duration(a[i]*float64(time.Millisecond)))
+			rg.mux.recordAckDelayTp(ids[1], time.Duration(b[i]*float64(time.Millisecond)))
+		}
+		sbdTick(rg, ids, 5_000_000, 5_000_000)
+		return rg
+	}
+	rg := independent(t)
+	require.False(t, rg.mux.isLegStandby(1), "two independent series are two pipes")
+	require.Zero(t, countEvents(rg, MuxEventLegParked))
+	require.Zero(t, countEvents(rg, MuxEventSBDRuling), "and there is no ruling to record either")
+
+	rg2, ids2 := sbdSACKRig(t)
+	same := []float64{50, 140, 50, 140, 50, 140, 50, 140}
+	for i := range same {
+		rg2.mux.recordAckDelayTp(ids2[0], time.Duration(same[i]*float64(time.Millisecond)))
+		rg2.mux.recordAckDelayTp(ids2[1], time.Duration(same[i]*float64(time.Millisecond)))
+	}
+	sbdTick(rg2, ids2, 5_000_000, 5_000_000)
+	require.True(t, rg2.mux.isLegStandby(1), "one series on both legs is the shared-bottleneck signature")
 }

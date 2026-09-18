@@ -397,27 +397,48 @@ func (rb *retxBuffer) ProcessSACKWith(lastContiguous uint32, words []uint64, thr
 	defer rb.mu.Unlock()
 
 	// Ack-delay sampling (see onAckDelay): the largest send→ack delay among the
-	// never-retransmitted entries this SACK purges, and every one of them per
-	// transport (onAckDelayTp).
+	// never-retransmitted entries this SACK purges.
 	var ackDelayMax time.Duration
 	sampleNow := time.Now()
-	sample := func(e *retxEntry) {
+	sample := func(e *retxEntry) time.Duration {
 		if e.retxCount != 0 {
-			return
+			return 0
 		}
 		d := sampleNow.Sub(e.sentAt)
 		if d > ackDelayMax {
 			ackDelayMax = d
 		}
-		if rb.onAckDelayTp != nil && e.tpID != uuid.Nil {
-			rb.onAckDelayTp(e.tpID, d)
+		return d
+	}
+	// sampleLeg is the PER-LEG series (onAckDelayTp): the RACK per-leg threshold
+	// and the shared-bottleneck detector's delay window. It is fed only by frames
+	// this SACK NEWLY acks — the frontier-edge entry and the bitmap bits set above
+	// it — each measured from its OWN send time to now, so the two legs of a group
+	// produce two independent round-trip series.
+	//
+	// Everything else purged below the frontier was received at some unknown
+	// earlier time; its age is the delay the FRONTIER took to advance, which is one
+	// number shared by every leg in the batch. Folding those into the per-leg
+	// windows made both legs sample the group's own head-of-line coupling, so the
+	// detector found them correlated whatever the network was doing (0-for-8 on the
+	// 2026-09-16/17 rig — see bottleneck.go).
+	sampleLeg := func(e *retxEntry, d time.Duration) {
+		if d <= 0 || rb.onAckDelayTp == nil || e.tpID == uuid.Nil {
+			return
 		}
+		rb.onAckDelayTp(e.tpID, d)
 	}
 
-	// Purge all entries up to and including lastContiguous.
+	// Purge all entries up to and including lastContiguous. Only the entry AT the
+	// frontier is a per-leg sample: it is the frame whose arrival moved the
+	// frontier here, so its age is a round trip over its own leg. The ones behind
+	// it are purged on the frontier's schedule, not their own (see sampleLeg).
 	for seq, e := range rb.entries {
 		if seq <= lastContiguous {
-			sample(e)
+			d := sample(e)
+			if seq == lastContiguous {
+				sampleLeg(e, d)
+			}
 			rb.acked(e)
 			delete(rb.entries, seq)
 		}
@@ -445,7 +466,9 @@ func (rb *retxBuffer) ProcessSACKWith(lastContiguous uint32, words []uint64, thr
 			checkSeq := base + i
 			if word&(1<<i) != 0 {
 				if e, ok := rb.entries[checkSeq]; ok {
-					sample(e)
+					// A set bit purges its entry, so an entry we still hold with its
+					// bit set is one THIS SACK first reports: a per-leg sample.
+					sampleLeg(e, sample(e))
 					rb.acked(e)
 					delete(rb.entries, checkSeq)
 				}

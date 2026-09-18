@@ -59,6 +59,14 @@ var (
 	// ruling may park one of its legs. enforceBottleneckGroups re-reads it on
 	// every data-progress tick.
 	sbdMinEvidenceRateV atomic.Int64 // bytes per second
+
+	// sbdDemoteV shadows sbdDemoteDefault in bottleneck.go — whether a
+	// shared-bottleneck ruling may PARK a leg at all. OFF by default: on the
+	// 2026-09-16/17 rig the detector was 0-for-8 (see bottleneck.go), so the
+	// ruling is recorded as a mux event and the grouping still reaches the mux,
+	// but nothing is demoted until an operator turns this on. enforceBottleneckGroups
+	// re-reads it on every data-progress tick.
+	sbdDemoteV atomic.Bool
 )
 
 func init() {
@@ -75,6 +83,7 @@ func init() {
 	sbdTrialLossV.Store(math.Float64bits(sbdTrialLoss))
 	sbdBackoffV.Store(int64(sbdBackoff))
 	sbdMinEvidenceRateV.Store(sbdMinEvidenceRate)
+	sbdDemoteV.Store(sbdDemoteDefault)
 }
 
 // EcfWindowMargin is the multiplier on SACK-proven delivery-per-RTT that sets a
@@ -256,5 +265,19 @@ func SetSBDMinEvidenceRate(v int64) bool {
 		return false
 	}
 	sbdMinEvidenceRateV.Store(v)
+	return true
+}
+
+// SBDDemote reports whether a shared-bottleneck ruling may park a leg. When it
+// is off (the default) the detector still groups the legs and hands the grouping
+// to the mux, and every ruling it would have acted on is recorded as a
+// MuxEventSBDRuling mux event — but no leg is demoted.
+func SBDDemote() bool { return sbdDemoteV.Load() }
+
+// SetSBDDemote turns shared-bottleneck DEMOTION on or off on a running visor.
+// Unlike the numeric knobs there is no "zero means unchanged" case, so this
+// always applies and always reports true.
+func SetSBDDemote(on bool) bool {
+	sbdDemoteV.Store(on)
 	return true
 }

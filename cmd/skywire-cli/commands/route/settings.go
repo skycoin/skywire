@@ -36,6 +36,7 @@ var (
 	settingsSBDTrialL float64
 	settingsSBDBackof time.Duration
 	settingsSBDEvid   string
+	settingsSBDDemote string
 )
 
 func init() {
@@ -58,6 +59,7 @@ func init() {
 	settingsCmd.Flags().Float64Var(&settingsSBDTrialL, "sbd-trial-loss", 0, "fraction of aggregate goodput a park may cost before it is undone (e.g. 0.15)")
 	settingsCmd.Flags().DurationVar(&settingsSBDBackof, "sbd-backoff", 0, "how long a pair whose park trial failed is exempt from shared-bottleneck merging (doubles per repeat)")
 	settingsCmd.Flags().StringVar(&settingsSBDEvid, "sbd-min-evidence-rate", "", "aggregate goodput a group must carry before a shared-bottleneck ruling may park a leg (e.g. 64KiB)")
+	settingsCmd.Flags().StringVar(&settingsSBDDemote, "sbd-demote", "", "true|false: let a shared-bottleneck ruling PARK a leg (default false — rulings are recorded as sbd_ruling mux events only)")
 }
 
 var settingsCmd = &cobra.Command{
@@ -83,7 +85,7 @@ effect at once; the preference is written to routing.transport_preference.`,
 			"ecf-max-window", "ecf-min-window", "ecf-window-margin", "send-window-wait-max",
 			"leg-park-min-hold", "dead-route-hold", "dead-route-hold-max", "mux-fec",
 			"sbd-min-samples", "sbd-sample-interval", "sbd-trial-window", "sbd-trial-loss", "sbd-backoff",
-			"sbd-min-evidence-rate"} {
+			"sbd-min-evidence-rate", "sbd-demote"} {
 			changed = changed || cmd.Flags().Changed(f)
 		}
 		if changed {
@@ -153,6 +155,10 @@ effect at once; the preference is written to routing.transport_preference.`,
 			if cmd.Flags().Changed("sbd-min-evidence-rate") {
 				next.SBDMinEvidenceRate = mustBytes(cmd, settingsSBDEvid)
 			}
+			if cmd.Flags().Changed("sbd-demote") {
+				demote := settingsSBDDemote == "true"
+				next.SBDDemote = &demote
+			}
 			if err := rpcClient.SetRouterSettings(next); err != nil {
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
@@ -161,6 +167,7 @@ effect at once; the preference is written to routing.transport_preference.`,
 			}
 		}
 		fec := cur.MuxFEC != nil && *cur.MuxFEC
+		sbdDemote := cur.SBDDemote != nil && *cur.SBDDemote
 		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliroute.Settings{
 			ForceLocalRoutes:    cur.ForceLocalRoutes,
 			ExistingTPOnly:      cur.ExistingTPOnly,
@@ -180,6 +187,7 @@ effect at once; the preference is written to routing.transport_preference.`,
 			SBDTrialLoss:        cur.SBDTrialLoss,
 			SBDBackoff:          cur.SBDBackoff.String(),
 			SBDMinEvidenceRate:  cur.SBDMinEvidenceRate,
+			SBDDemote:           sbdDemote,
 		}))
 	},
 }
