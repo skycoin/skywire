@@ -58,6 +58,12 @@
 # script sources and run-mux.sh's single CUT_ROW uses too. The rest of the
 # helpers are still copied from run-mux.sh: it is a script with top-level work,
 # not a library.
+# SETTINGS="key=value ..." applies live `proxy settings` knobs to the app under
+# test once per set — after it is up and warm, before the first row, waited for
+# and recorded in the set header and <set>.settings.json. ROUTE_SETTINGS="--flag
+# value ..." does the same for the visor-wide `route settings` and is restored
+# at set end. The paired references never receive either. bench/lib-settings.sh;
+# bench/run-sweep.sh drives one knob across a list of values.
 set -u
 CLI=${CLI:-/home/d0mo/go/bin/skywire}
 exit_pk=$1; out=$2; pins=$3; trials=${4:-5}; sink=${5:-http://127.0.0.1:18080}
@@ -74,6 +80,8 @@ CUT_FENCE=${CUT_FENCE:-pins}
 export CUT_HERE CUT_FENCE
 # shellcheck source=bench/lib-cut.sh
 . "$here/lib-cut.sh"
+# shellcheck source=bench/lib-settings.sh
+. "$here/lib-settings.sh"
 subjects=${SUBJECTS:-"legs-2 tunnels-2"}
 size=${DEGRADE_SIZE:-50000000}
 dirs=${DIRS:-"down up"}
@@ -242,8 +250,12 @@ for subject in $subjects; do
 	[ "$groups" -eq "$want_groups" ] || echo "$name: WARNING $groups route group(s), wanted $want_groups — set recorded as-is"
 	choose_cut "$subject" || { stop_app "$name"; port=$((port + 1)); continue; }
 	warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
+	# live knobs, once per set: the visor's app store is cleared when the app
+	# stops, so SETTINGS can only be applied here — after the dial, the shape
+	# check and the warm probes, and before the first row (bench/lib-settings.sh).
+	settings_apply "$set_name" "$name"
 
-	echo "# exit=$exit_pk local=$local_commit exit_commit=$ec session=$name subject=$subject $setup route_groups=$groups legs_per_rg=$shape rg_ports=$ports_before groups=$desc cut=$cut_kind:$cut_tp cut_pct=$cut_pct cut_after=${cut_after}s sink=$sink" > "$f"
+	echo "# exit=$exit_pk local=$local_commit exit_commit=$ec session=$name subject=$subject $setup route_groups=$groups legs_per_rg=$shape rg_ports=$ports_before groups=$desc cut=$cut_kind:$cut_tp cut_pct=$cut_pct cut_after=${cut_after}s sink=$sink${settings_note:+ $settings_note}" > "$f"
 	printf '# row\ttp\tsent_delta\trecv_delta\n' > "$c"
 	printf '# row\tsubject\tcut_at_s\twhat_cut\tbytes_before_cut\tttfb_after_s\tgoodput_before_Bps\tgoodput_after_Bps\trestored\trg_ports_after\n' > "$cutf"
 	: > "$out/$set_name.cut.log"
@@ -294,6 +306,7 @@ for subject in $subjects; do
 		done
 	done
 	echo "$set_name: $(grep -vc '^#' "$f") rows, hash_ok=$(grep -v '^#' "$f" | awk -F'\t' '$8==1' | wc -l), cuts=$(grep -vc '^#' "$cutf")"
+	settings_restore "$set_name" # the app knobs die with the app; the ROUTER knobs do not
 	mux_events "$set_name" "$name"
 	ports=$(mux_info "$name" | jq -c '[.[].desc.dst_port]')
 	x=""; for _ in 1 2 3; do
