@@ -840,6 +840,13 @@ func (rc *rpcClient) SetRuntimeConfig(rawJSON []byte) error {
 	return rc.Call("SetRuntimeConfig", &rawJSON, &struct{}{})
 }
 
+// SetConfigFields implements API.
+func (rc *rpcClient) SetConfigFields(fields map[string]json.RawMessage) ([]ConfigFieldChange, error) {
+	var out []ConfigFieldChange
+	err := rc.Call("SetConfigFields", &fields, &out)
+	return out, err
+}
+
 // LocalTransportStats implements API.
 func (rc *rpcClient) LocalTransportStats() (*LocalTransportStatsResponse, error) {
 	var resp LocalTransportStatsResponse

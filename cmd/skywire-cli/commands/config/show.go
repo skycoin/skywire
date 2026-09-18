@@ -76,6 +76,13 @@ Use --path to print just the config file path.`,
 			return
 		}
 
+		// Drop the secret key. GetRuntimeConfig already redacts it, but the
+		// file fallback above reads skywire-config.json verbatim and would
+		// otherwise print the visor's identity secret to the terminal.
+		if m, ok := v.(map[string]interface{}); ok {
+			delete(m, "sk")
+		}
+
 		// Apply jq filter if provided. Collect results so --json emits a
 		// single array (when multiple) or the lone value, matching how
 		// jq itself behaves with -c off.
