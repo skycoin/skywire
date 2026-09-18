@@ -180,7 +180,7 @@ func TestRangeSplitFrontierStreamsBeforeChunkCompletes(t *testing.T) {
 	})
 
 	proxy := newRSTestClient(t, origin, 2, chunkSz)
-	conn, resp := socks5GetStreaming(t, proxy, "/blob.bin")
+	conn, resp := socks5GetStreaming(t, proxy)
 	defer conn.Close()      //nolint:errcheck
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != 200 {
@@ -239,7 +239,7 @@ func TestRangeSplitFrontierResumesAfterMidStreamCut(t *testing.T) {
 	})
 
 	proxy := newRSTestClient(t, origin, 2, chunkSz)
-	conn, resp := socks5GetStreaming(t, proxy, "/blob.bin")
+	conn, resp := socks5GetStreaming(t, proxy)
 	defer conn.Close()      //nolint:errcheck
 	defer resp.Body.Close() //nolint:errcheck
 

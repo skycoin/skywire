@@ -205,7 +205,7 @@ func TestRangeSplitChunkFailoverOnTunnelLoss(t *testing.T) {
 		t.Fatalf("park stream: %v", err)
 	}
 
-	conn, resp := socks5GetStreaming(t, proxy, "/blob.bin")
+	conn, resp := socks5GetStreaming(t, proxy)
 	defer conn.Close()      //nolint:errcheck
 	defer resp.Body.Close() //nolint:errcheck
 	park.Close()            //nolint:errcheck,gosec
@@ -318,7 +318,8 @@ func TestRangeSplitChunkFailoverOnTunnelLoss(t *testing.T) {
 
 // socks5GetStreaming is socks5Get without draining the body: the caller reads it
 // incrementally so it can time the bytes.
-func socks5GetStreaming(t *testing.T, proxyAddr, path string) (net.Conn, *http.Response) {
+func socks5GetStreaming(t *testing.T, proxyAddr string) (net.Conn, *http.Response) {
+	const path = "/blob.bin"
 	t.Helper()
 	const host = "example.com"
 	c, err := net.Dial("tcp", proxyAddr)
@@ -453,7 +454,7 @@ func TestRangeSplitChunkRefetchResumesFromReceivedOffset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("park stream: %v", err)
 	}
-	conn, resp := socks5GetStreaming(t, proxy, "/blob.bin")
+	conn, resp := socks5GetStreaming(t, proxy)
 	defer conn.Close()      //nolint:errcheck
 	defer resp.Body.Close() //nolint:errcheck
 	park.Close()            //nolint:errcheck,gosec
