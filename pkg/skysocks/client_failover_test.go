@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -273,6 +274,10 @@ func TestFailover_ActiveDiesStandbyPromotedRefillLandsStandby(t *testing.T) {
 		}
 	}()
 	c.SetStandbyPool(4)
+	// This test counts dials, so hold the fill to one at a time (the concurrent
+	// fill has its own tests in client_standby_test.go).
+	require.True(t, router.SetSetupFillInflight(1))
+	t.Cleanup(routersettings.Reset)
 	c.SetPoolDial(func() (net.Conn, error) {
 		conn, closeConn := newTestTunnelConn(t)
 		closers = append(closers, closeConn)

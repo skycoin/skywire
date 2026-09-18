@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"sync"
 	"time"
 
 	rpc "github.com/0magnet/gobrpc"
@@ -30,6 +31,13 @@ type SetupClient struct {
 	conn          net.Conn
 	rpc           *rpc.Client
 	connectedNode cipher.PubKey // The setup node that successfully connected
+
+	// caps is the setup node's advertised capability list, read once per
+	// connection by Capabilities. capsRead distinguishes "not asked yet" from
+	// "asked, and the node advertises nothing" (an un-upgraded node).
+	capsMu   sync.Mutex
+	caps     []string
+	capsRead bool
 }
 
 // NewSetupClient creates a new SetupClient.
@@ -156,6 +164,46 @@ func (c *SetupClient) SignTransportQuery(ctx context.Context, src, dst cipher.Pu
 		return nil, err
 	}
 	return resp.Query, nil
+}
+
+// Capabilities asks the setup node which request shapes it understands, and
+// caches the answer for the life of this client (one client is one connection,
+// and a node's capabilities do not change under a live connection).
+//
+// A setup node that predates the Capabilities RPC answers with net/rpc's
+// "can't find method"; that is not an error here, it is the answer — an empty
+// capability list, meaning only the original DialRouteGroup. This is what lets
+// the batched form ship without a flag on either side.
+func (c *SetupClient) Capabilities(ctx context.Context) ([]string, error) {
+	c.capsMu.Lock()
+	defer c.capsMu.Unlock()
+	if c.capsRead {
+		return c.caps, nil
+	}
+	var resp CapabilitiesReply
+	err := c.call(ctx, rpcName+".Capabilities", &CapabilitiesArgs{}, &resp)
+	switch {
+	case err == nil:
+		c.caps = resp.Caps
+	case isUnimplementedRPC(err):
+		c.caps = nil
+	default:
+		return nil, err
+	}
+	c.capsRead = true
+	return c.caps, nil
+}
+
+// DialRouteGroupBatch sets up every route in the batch in ONE request. Only
+// call it when Capabilities advertised CapBatchRouteSetup.
+//
+// A nil error does NOT mean every route installed: the reply carries a result
+// per route and partial success is the normal outcome of a batch whose members
+// leave over different intermediates.
+func (c *SetupClient) DialRouteGroupBatch(ctx context.Context, batch routing.BidirectionalRouteBatch) (routing.BidirectionalRouteBatchReply, error) {
+	var resp routing.BidirectionalRouteBatchReply
+	err := c.call(ctx, rpcName+".DialRouteGroupBatch", &batch, &resp)
+	return resp, err
 }
 
 // DialRouteGroup generates rules for routes from a visor and sends them to visors.

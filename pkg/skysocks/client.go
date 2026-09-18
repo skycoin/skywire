@@ -228,7 +228,15 @@ type Client struct {
 	poolSettledN      int
 	poolSettledReason string
 	poolSettledLogged bool
-	poolFillInFlight  atomic.Bool
+	// poolFillInFlight is how many pool dials are running right now, bounded by
+	// router.SetupFillInflight(). It used to be a single-flight bool, which made
+	// the fill strictly serial: one dial per keepalive tick, each paying its own
+	// route-finder/oracle query and its own setup-node request, so a pool of
+	// eight took ~56 s to build. Concurrent dials are also what gives the
+	// initiator-side batcher something to coalesce — they arrive at the setup
+	// dialer within milliseconds of each other and leave as ONE batched request
+	// (pkg/router/setup_batch_client.go).
+	poolFillInFlight atomic.Int32
 
 	// muxNote reports one tunnel switch to the visor, which records it on the
 	// router's mux-event ring and re-labels the route group's tunnel role. Set
@@ -1553,14 +1561,16 @@ func (c *Client) notePoolDialFailure(err error) {
 	c.appCl.Log().Warnf("Standby pool dial failed (%d/%d): %v", fails, maxRedialFails, err)
 }
 
-// maybePoolFill dials at most ONE more sibling tunnel toward the pool ceiling.
+// maybePoolFill dials up to setup.fill_inflight more sibling tunnels toward the
+// pool ceiling, concurrently.
 //
 // It is the tunnel-level twin of the mux's leg self-heal, and it obeys the
 // same discipline, for the same reason. #4325 turned a pool TARGET of 513 into
 // an endless dial loop that the whole fleet felt, because an unreachable
 // target is chased forever. So this one is not a target at all:
 //
-//   - one dial in flight, ever (poolFillInFlight);
+//   - at most setup.fill_inflight dials in flight (poolFillInFlight), launched
+//     TOGETHER so the setup dialer can coalesce them into one batched request;
 //   - stop at the ceiling, and record it;
 //   - stop for good at the first router.ErrNoDisjointFirstHop — that answer is
 //     about the topology, not about luck, and re-asking cannot change it;
@@ -1609,11 +1619,40 @@ func (c *Client) maybePoolFill() {
 		c.settlePool(held, "pool ceiling")
 		return
 	}
-	if !c.poolFillInFlight.CompareAndSwap(false, true) {
-		return // a pool dial is already running
+	// How many dials to launch on this tick: up to the in-flight bound, never
+	// more than the gap to the ceiling. Launching them TOGETHER is the point —
+	// the setup dialer coalesces concurrent dials to one exit into a single
+	// batched setup request, and one serial dial per tick gave it nothing to
+	// coalesce (and built a pool of eight in ~56 s of setup-node round trips).
+	inflight := router.SetupFillInflight()
+	want := poolMax - held
+	if want > inflight {
+		want = inflight
 	}
-	go func() {
-		defer c.poolFillInFlight.Store(false)
+	launched := 0
+	for i := 0; i < want; i++ {
+		if int(c.poolFillInFlight.Add(1)) > inflight {
+			c.poolFillInFlight.Add(-1)
+			break
+		}
+		launched++
+	}
+	if launched == 0 {
+		return // every slot is busy
+	}
+	for i := 0; i < launched; i++ {
+		go c.onePoolDial(fn, target)
+	}
+}
+
+// onePoolDial is one standby-pool dial: it grows the pool by a tunnel, or
+// records why it could not. Several run concurrently, bounded by
+// setup.fill_inflight; each holds one of those slots.
+func (c *Client) onePoolDial(fn func() (net.Conn, error), target int) {
+	// The slot is released however this dial ends, including the several early
+	// returns below; the closure keeps that one defer next to the work.
+	func() {
+		defer c.poolFillInFlight.Add(-1)
 		conn, err := fn()
 		if err != nil {
 			if app.IsNoDisjointFirstHop(err) {
