@@ -69,9 +69,18 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 	require.Equal(t, uploadBusyTries, setUploadBusyTries())
 	require.Equal(t, uploadReplayTries, setUploadReplayTries())
 
+	// The spread policy defaults to OFF in all four of its knobs — the property
+	// criterion 10 rests on, since every measurement before it was taken with
+	// no spread policy at all.
+	require.Equal(t, 1.0, setSpreadMaxShare(), "spread.max_share")
+	require.Equal(t, 0, setSpreadMinRoutes(), "spread.min_routes")
+	require.False(t, setSpreadEndgame(), "spread.endgame")
+	require.Equal(t, skysettings.SpreadWeightRate, setSpreadWeight(), "spread.weight")
+	require.False(t, spreadPolicyNow().steers(), "with nothing set the planner steers nothing")
+
 	// Every knob in the catalog is reachable: a name registered with no use site
 	// reading it is a knob the bench can set and nothing obeys.
-	require.Len(t, skysettings.Catalog(), 42)
+	require.Len(t, skysettings.Catalog(), 46)
 }
 
 // The two range-split knobs OVERRIDE a per-client boot flag rather than

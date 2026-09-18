@@ -173,6 +173,14 @@ func setUploadReplayMaxBytes() int64 {
 	return uploadReplayMaxBytes
 }
 
+// The spread policy's four knobs (spread.go). They are read as one snapshot
+// per object by spreadPolicyNow, never per chunk.
+
+func setSpreadMaxShare() float64 { return skysettings.Ratio(skysettings.SpreadMaxShare) }
+func setSpreadMinRoutes() int    { return skysettings.Count(skysettings.SpreadMinRoutes) }
+func setSpreadEndgame() bool     { return skysettings.Bool(skysettings.SpreadEndgame) }
+func setSpreadWeight() string    { return skysettings.Enum(skysettings.SpreadWeight) }
+
 func setUploadProbeTTL() time.Duration { return skysettings.Dur(skysettings.UploadProbeTTL) }
 func setUploadAckTimeout() time.Duration {
 	return skysettings.Dur(skysettings.UploadAckTimeout)

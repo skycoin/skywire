@@ -171,6 +171,13 @@ type Client struct {
 	rsChunks atomic.Uint64
 	rsBytes  atomic.Uint64
 
+	// spreadLast holds the *spreadPlanner of the most recently COMPLETED split
+	// download or striped upload — the per-tunnel byte ledger behind the
+	// `shares=` line of its completion log (spread.go). One value, replaced
+	// wholesale, so a reader always sees one object's shares and never a mix
+	// of two.
+	spreadLast atomic.Value
+
 	// standby marks the tunnels held in the POOL rather than carrying streams.
 	// Guarded by sessionsMu, keyed like recvStamp; absent means active. A
 	// standby tunnel is a fully dialed route group + noise + yamux session to
@@ -580,6 +587,16 @@ func (m *tunnelMeter) capacity(now time.Time) (bps float64, fresh bool) {
 	defer m.mu.Unlock()
 	fresh = !m.busyAt.IsZero() && now.Sub(m.busyAt) <= setMeterFresh()
 	return m.rxCapBps, fresh
+}
+
+// capacityTx returns the tunnel's proven UPLOAD capacity in bytes/s — what a
+// striped-upload chunk will use. 0 means nothing proven yet. fresh says whether
+// a busy window updated the estimate within meterFresh of now.
+func (m *tunnelMeter) capacityTx(now time.Time) (bps float64, fresh bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	fresh = !m.busyAt.IsZero() && now.Sub(m.busyAt) <= setMeterFresh()
+	return m.txCapBps, fresh
 }
 
 // pickDir is what a new stream will mostly do, for pickSessionFor.
