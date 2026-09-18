@@ -82,7 +82,7 @@ func TestReorderBuffer_MaxGapDropsExcessNeverSkips(t *testing.T) {
 // single missing sequence; none may be delivered early, and when the missing
 // one finally arrives the whole run delivers in order with no hole.
 func TestReorderLosslessBeyondOldMaxGap(t *testing.T) {
-	rb := newReorderBuffer(reorderWindow) // 2048
+	rb := newReorderBuffer(reorderWindowDefault) // 2048
 
 	if got := rb.Insert(0, []byte{0}); len(got) != 1 {
 		t.Fatalf("seq0 in-order: delivered %d, want 1", len(got))
@@ -120,11 +120,11 @@ func TestReorderLosslessBeyondOldMaxGap(t *testing.T) {
 // contiguously from a live leg), which is what keeps mux>1 usable under a
 // black-holing leg. This is the inverse of the old time-based skip.
 func TestReorderNeverSkipsAcrossTimeout(t *testing.T) {
-	old := reorderTimeout
-	reorderTimeout = 100 * time.Millisecond
-	defer func() { reorderTimeout = old }()
+	old := reorderTimeoutDefault
+	reorderTimeoutDefault = 100 * time.Millisecond
+	defer func() { reorderTimeoutDefault = old }()
 
-	rb := newReorderBuffer(reorderWindow)
+	rb := newReorderBuffer(reorderWindowDefault)
 
 	if got := rb.Insert(0, []byte{0}); len(got) != 1 {
 		t.Fatalf("seq0: delivered %d, want 1", len(got))
@@ -170,17 +170,17 @@ func TestReorderNeverSkipsAcrossTimeout(t *testing.T) {
 // missing sequence actually arriving — recovery comes from SACK retransmit + the
 // leg-dataprogress prune, not from skipping.
 func TestReorderBuffer_NeverSkipsGap(t *testing.T) {
-	orig := reorderTimeout
-	reorderTimeout = 20 * time.Millisecond
-	defer func() { reorderTimeout = orig }()
+	orig := reorderTimeoutDefault
+	reorderTimeoutDefault = 20 * time.Millisecond
+	defer func() { reorderTimeoutDefault = orig }()
 
 	rb := newReorderBuffer(64)
 	assert.Equal(t, [][]byte{[]byte("a")}, rb.Insert(0, []byte("a"))) // seq 0 in order
 	_ = rb.Insert(2, []byte("c"))                                     // gap at seq 1, buffered
 	_ = rb.Insert(3, []byte("d"))                                     // still buffered behind the gap
-	time.Sleep(40 * time.Millisecond)                                 // well past reorderTimeout
-	assert.Equal(t, 2, rb.Pending(), "gap must stay held past reorderTimeout — never skip")
-	assert.True(t, rb.GapAge() > reorderTimeout, "gap is aged but still held, not released")
+	time.Sleep(40 * time.Millisecond)                                 // well past reorderTimeoutDefault
+	assert.Equal(t, 2, rb.Pending(), "gap must stay held past reorderTimeoutDefault — never skip")
+	assert.True(t, rb.GapAge() > reorderTimeoutDefault, "gap is aged but still held, not released")
 	// The missing seq 1 finally arrives → in-order delivery of 1,2,3.
 	assert.Equal(t, [][]byte{[]byte("b"), []byte("c"), []byte("d")}, rb.Insert(1, []byte("b")))
 	assert.Equal(t, 0, rb.Pending(), "buffer drained in order once the gap filled")

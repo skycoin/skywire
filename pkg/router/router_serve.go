@@ -36,7 +36,7 @@ var errRouteGroupInitializing = errors.New("noise route group already being init
 // scoped (not the dmsg RPC control plane), so a regression degrades skynet/proxy
 // route groups but leaves dmsg access intact. See
 // docs/inverse_mux_per_frame_noise_rfc.md.
-const perFrameNoiseEnabled = true
+const perFrameNoiseEnabledDefault = true
 
 // AcceptRoutes should block until we receive an AddRules packet from SetupNode
 // that contains ConsumeRule(s) or ForwardRule(s).
@@ -325,7 +325,7 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	// frame and EncryptConn is bypassed (see below); otherwise it falls back to
 	// the stream-noise wrap unchanged.
 	rg.nsConf = nsConf
-	rg.perFrameNoiseWant = perFrameNoiseEnabled
+	rg.perFrameNoiseWant = PerFrameNoiseEnabled()
 	initiatorWord := "accepted from the setup node"
 	if nsConf.Initiator {
 		initiatorWord = "dialed by this visor"

@@ -2,7 +2,7 @@
 //
 // Coverage for the two halves of the mux-compose-T2xL2 finding: shared-bottleneck
 // detection folding a delay sample per SACK (so a verdict lands in seconds, not
-// the ~110s the 30s liveness pong needs to clear sbdMinSamples), and RACK judging
+// the ~110s the 30s liveness pong needs to clear sbdMinSamplesDefault), and RACK judging
 // a frame by the delay of the leg it actually rode.
 package router
 
@@ -49,7 +49,7 @@ func TestSBDRulesWithinAFewSACKs(t *testing.T) {
 		rg.mux.recordAckDelayTp(ids[1], time.Duration(leg1[i]*float64(time.Millisecond)))
 		sacks++
 	}
-	require.LessOrEqual(t, sacks, sbdWindowSamples, "a verdict must not need more SACKs than the window holds")
+	require.LessOrEqual(t, sacks, sbdWindowSamplesDefault, "a verdict must not need more SACKs than the window holds")
 
 	sbdTick(rg, ids, 5_000_000, 5_000_000)
 	require.True(t, rg.mux.isLegStandby(1), "co-bottlenecked leg must be parked from the per-SACK samples alone")
@@ -84,7 +84,7 @@ func TestSBDDoesNotParkUncorrelatedLegs(t *testing.T) {
 func TestSBDSampleIntervalRateLimitsFolds(t *testing.T) {
 	rg, mts, _ := createMuxRouteGroup(t, 2)
 	rg.mux.onLegDelaySample = rg.foldLegDelaySample
-	require.Equal(t, sbdSampleInterval, SBDSampleInterval(), "default must be the compiled-in constant")
+	require.Equal(t, sbdSampleIntervalDefault, SBDSampleInterval(), "default must be the compiled-in constant")
 
 	id := mts[0].Entry.ID
 	for i := 0; i < 20; i++ {
@@ -100,7 +100,7 @@ func TestSBDSampleIntervalRateLimitsFolds(t *testing.T) {
 // what the legs have collected withholds the verdict (its today-default is the
 // constant the package compiled with).
 func TestSBDMinSamplesKnob(t *testing.T) {
-	require.Equal(t, sbdMinSamples, SBDMinSamples())
+	require.Equal(t, sbdMinSamplesDefault, SBDMinSamples())
 	prev := SBDMinSamples()
 	t.Cleanup(func() { SetSBDMinSamples(prev) })
 

@@ -2,9 +2,11 @@
 package router
 
 import (
-	"github.com/google/uuid"
-	"github.com/skycoin/skywire/pkg/transport"
 	"sync"
+
+	"github.com/google/uuid"
+
+	"github.com/skycoin/skywire/pkg/transport"
 
 	"sync/atomic"
 	"testing"
@@ -29,27 +31,27 @@ func TestPTOInterval(t *testing.T) {
 	m := newRouteMux(log, true)
 
 	// No RTT yet → conservative default (2× the no-RTT rack default).
-	if got, want := m.ptoInterval(), rackDefaultNoRTT*2; got != want {
+	if got, want := m.ptoInterval(), rackDefaultNoRTTDefault*2; got != want {
 		t.Fatalf("no-RTT PTO = %v, want %v", got, want)
 	}
 
 	// PTO tracks 2× the slowest active leg's RTT.
 	setLegRTTs(m, []float64{50, 120, 300})
-	if got, want := m.ptoInterval(), time.Duration(300*tlpPTOFactor)*time.Millisecond; got != want {
-		t.Fatalf("PTO = %v, want %v (slowest 300ms × %.1f)", got, want, tlpPTOFactor)
+	if got, want := m.ptoInterval(), time.Duration(300*tlpPTOFactorDefault)*time.Millisecond; got != want {
+		t.Fatalf("PTO = %v, want %v (slowest 300ms × %.1f)", got, want, tlpPTOFactorDefault)
 	}
 
 	// A very fast path floors (fresh mux: growLegs only grows, never shrinks).
 	mFast := newRouteMux(log, true)
 	setLegRTTs(mFast, []float64{2, 3})
-	if got := mFast.ptoInterval(); got != tlpMinPTO {
-		t.Fatalf("fast-path PTO = %v, want floor %v", got, tlpMinPTO)
+	if got := mFast.ptoInterval(); got != tlpMinPTODefault {
+		t.Fatalf("fast-path PTO = %v, want floor %v", got, tlpMinPTODefault)
 	}
 	// A very slow path caps.
 	mSlow := newRouteMux(log, true)
 	setLegRTTs(mSlow, []float64{5000})
-	if got := mSlow.ptoInterval(); got != tlpMaxPTO {
-		t.Fatalf("slow-path PTO = %v, want cap %v", got, tlpMaxPTO)
+	if got := mSlow.ptoInterval(); got != tlpMaxPTODefault {
+		t.Fatalf("slow-path PTO = %v, want cap %v", got, tlpMaxPTODefault)
 	}
 }
 
@@ -88,7 +90,7 @@ func TestTLPProbeSeq(t *testing.T) {
 		t.Fatal("second probe (within budget) should be due")
 	}
 	if _, due := m.tlpProbeSeq(now.Add(time.Hour)); due {
-		t.Fatalf("probe budget %d exceeded but still firing", tlpMaxProbes)
+		t.Fatalf("probe budget %d exceeded but still firing", tlpMaxProbesDefault)
 	}
 
 	// Ack progress resets the budget → probing resumes.
@@ -102,28 +104,28 @@ func TestDSACKGrowDecay(t *testing.T) {
 	log := logging.NewMasterLogger().PackageLogger("tlp-test")
 	m := newRouteMux(log, true)
 
-	if got := atomic.LoadInt64(&m.rackFactorMilli); got != rackFactorMin {
-		t.Fatalf("initial reorder factor = %d, want baseline %d", got, rackFactorMin)
+	if got := atomic.LoadInt64(&m.rackFactorMilli); got != m.rackFactorMin() {
+		t.Fatalf("initial reorder factor = %d, want baseline %d", got, m.rackFactorMin())
 	}
 
-	// Each DSACK widens by one grow step, capped at rackFactorMax.
+	// Each DSACK widens by one grow step, capped at rackFactorMaxDefault.
 	m.growRackFactor(5)
-	if got, want := atomic.LoadInt64(&m.rackFactorMilli), rackFactorMin+rackDSACKGrowStep; got != want {
+	if got, want := atomic.LoadInt64(&m.rackFactorMilli), m.rackFactorMin()+rackDSACKGrowStepDefault; got != want {
 		t.Fatalf("after 1 DSACK factor = %d, want %d", got, want)
 	}
 	for i := 0; i < 100; i++ {
 		m.growRackFactor(uint32(i))
 	}
-	if got := atomic.LoadInt64(&m.rackFactorMilli); got != rackFactorMax {
-		t.Fatalf("saturated factor = %d, want cap %d", got, rackFactorMax)
+	if got := atomic.LoadInt64(&m.rackFactorMilli); got != rackFactorMaxDefault {
+		t.Fatalf("saturated factor = %d, want cap %d", got, rackFactorMaxDefault)
 	}
 
 	// Clean SACKs decay it back down, never below the baseline.
 	for i := 0; i < 1000; i++ {
 		m.decayRackFactor()
 	}
-	if got := atomic.LoadInt64(&m.rackFactorMilli); got != rackFactorMin {
-		t.Fatalf("decayed factor = %d, want baseline floor %d", got, rackFactorMin)
+	if got := atomic.LoadInt64(&m.rackFactorMilli); got != m.rackFactorMin() {
+		t.Fatalf("decayed factor = %d, want baseline floor %d", got, m.rackFactorMin())
 	}
 }
 

@@ -47,7 +47,7 @@ func TestSelectDataStalledLegs(t *testing.T) {
 	})
 
 	t.Run("no prune when gap not stuck and leader is slow", func(t *testing.T) {
-		// Leader moved only 16000B over the window (< legBlackHoleMinTopBytes), so
+		// Leader moved only 16000B over the window (< legBlackHoleMinTopBytesDefault), so
 		// the frontier-healthy black-hole path does not judge — the whole group is
 		// merely slow, not one leg black-holing a fast one.
 		legs := []legRecvDelta{

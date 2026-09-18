@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -17,11 +18,11 @@ import (
 // asymmetry, so they flip together (a brief transient where only one has flipped
 // self-corrects on the next tick). Hysteresis + cooldown keep it from flapping.
 const (
-	unidirFlipInterval = 1 * time.Second // flip-controller tick cadence
-	flipRatio          = 2.0             // flip when the heavy direction ≥ this × the light one
-	flipHysteresis     = 3               // consecutive qualifying ticks before flipping
-	flipCooldownTicks  = 3               // ticks to hold after a flip before another
-	flipMinGoodput     = 8192.0          // bytes/sec floor — ignore near-idle noise
+	unidirFlipIntervalDefault = 1 * time.Second // flip-controller tick cadence
+	flipRatioDefault          = 2.0             // flip when the heavy direction ≥ this × the light one
+	flipHysteresisDefault     = 3               // consecutive qualifying ticks before flipping
+	flipCooldownTicksDefault  = 3               // ticks to hold after a flip before another
+	flipMinGoodputDefault     = 8192.0          // bytes/sec floor — ignore near-idle noise
 )
 
 // Unidirectional per-leg send selection (CapUniDir). Each end restricts its OWN
@@ -243,23 +244,23 @@ func (m *routeMux) flipStep(up, down float64) (flipped, changed bool) {
 	}
 
 	switch {
-	case up > flipMinGoodput && up >= flipRatio*down:
+	case up > float64(m.knBytes(routersettings.UnidirFlipMinGoodput)) && up >= m.knRatio(routersettings.UnidirFlipRatio)*down:
 		m.flipUpHits++
 		m.flipDownHits = 0
-	case down > flipMinGoodput && down >= flipRatio*up:
+	case down > float64(m.knBytes(routersettings.UnidirFlipMinGoodput)) && down >= m.knRatio(routersettings.UnidirFlipRatio)*up:
 		m.flipDownHits++
 		m.flipUpHits = 0
 	default:
 		m.flipUpHits, m.flipDownHits = 0, 0
 	}
 
-	if !cur && m.flipUpHits >= flipHysteresis && m.setFlipped(true) {
-		m.flipCooldown = flipCooldownTicks
+	if !cur && m.flipUpHits >= m.knInt(routersettings.UnidirFlipHysteresis) && m.setFlipped(true) {
+		m.flipCooldown = m.knInt(routersettings.UnidirFlipCooldownTicks)
 		m.flipUpHits = 0
 		return true, true
 	}
-	if cur && m.flipDownHits >= flipHysteresis && m.setFlipped(false) {
-		m.flipCooldown = flipCooldownTicks
+	if cur && m.flipDownHits >= m.knInt(routersettings.UnidirFlipHysteresis) && m.setFlipped(false) {
+		m.flipCooldown = m.knInt(routersettings.UnidirFlipCooldownTicks)
 		m.flipDownHits = 0
 		return false, true
 	}

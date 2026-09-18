@@ -8,6 +8,7 @@ package cliroute
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -128,6 +129,31 @@ type Settings struct {
 	// False (the default) means rulings are recorded as sbd_ruling mux events and
 	// nothing is demoted.
 	SBDDemote bool `json:"sbd_demote"`
+
+	// Knobs is the WHOLE router knob catalog as a stable map of catalog name to
+	// formatted value — the shape a bench runner saves before a sweep and feeds
+	// back verbatim afterwards (`route settings k=v …`). It is the complete
+	// surface; the typed fields above are the same values under their older
+	// names, kept so existing consumers do not break.
+	Knobs map[string]string `json:"knobs"`
+
+	// KnobDetail carries each knob's compiled default, whether it was explicitly
+	// set, and what the visor config holds for it — the persisted-vs-live view.
+	KnobDetail map[string]Knob `json:"knob_detail,omitempty"`
+
+	// AppKnobs is every per-app override map (`route settings --app <name>`),
+	// keyed by app name. Absent when no app has overrides.
+	AppKnobs map[string]map[string]string `json:"app_knobs,omitempty"`
+}
+
+// Knob is one row of Settings.KnobDetail.
+type Knob struct {
+	Kind      string `json:"kind"`
+	Value     string `json:"value"`
+	Default   string `json:"default"`
+	Set       bool   `json:"set"`
+	Persisted string `json:"persisted,omitempty"`
+	Doc       string `json:"doc,omitempty"`
 }
 
 // Human writes one knob per line.
@@ -148,5 +174,37 @@ func (s Settings) Human(w io.Writer) error {
 		s.SBDTrialWindow, s.SBDTrialLoss, s.SBDBackoff, s.SBDMinEvidenceRate, s.SBDDemote,
 		s.ForwardSpill, s.ForwardSwitchMargin,
 		s.LegStarveRatio, s.LegProbeBytes)
-	return err
+	if err != nil {
+		return err
+	}
+	// …then the whole catalog, name-sorted, so the human output is the same
+	// surface the JSON carries rather than a curated subset of it.
+	names := make([]string, 0, len(s.Knobs))
+	for n := range s.Knobs {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		if _, err := fmt.Fprintf(w, "%s: %s\n", n, s.Knobs[n]); err != nil {
+			return err
+		}
+	}
+	apps := make([]string, 0, len(s.AppKnobs))
+	for a := range s.AppKnobs {
+		apps = append(apps, a)
+	}
+	sort.Strings(apps)
+	for _, a := range apps {
+		keys := make([]string, 0, len(s.AppKnobs[a]))
+		for n := range s.AppKnobs[a] {
+			keys = append(keys, n)
+		}
+		sort.Strings(keys)
+		for _, n := range keys {
+			if _, err := fmt.Fprintf(w, "app[%s] %s: %s\n", a, n, s.AppKnobs[a][n]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

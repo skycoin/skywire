@@ -194,7 +194,7 @@ func TestForwardConfinementHysteresis(t *testing.T) {
 		return 44
 	})
 	if idx := sample(); idx != 1 {
-		t.Fatalf("one 30 %% sample moved the direction to leg %d; the switch needs %d", idx, forwardSwitchSamples)
+		t.Fatalf("one 30 %% sample moved the direction to leg %d; the switch needs %d", idx, forwardSwitchSamplesDefault)
 	}
 	if idx := sample(); idx != 0 {
 		t.Fatalf("a sustained 30 %% inversion did not move the direction; still on leg %d", idx)
