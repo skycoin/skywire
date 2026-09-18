@@ -64,8 +64,14 @@ const (
 	// the operator pinned it (mux add / mux set) or the policy tick promoted it.
 	// The counterpart of MuxEventLegParked, so churn is countable in both
 	// directions.
-	MuxEventLegPromoted   = "leg_promoted"
-	MuxEventLegAddFailed  = "leg_add_failed"
+	MuxEventLegPromoted  = "leg_promoted"
+	MuxEventLegAddFailed = "leg_add_failed"
+	// MuxEventLegStalled is a leg the data-progress detector found stalled
+	// behind an open reorder gap on a side that does NOT own the active set —
+	// an ACCEPTOR honoring the initiator's CapLegState mirror. The observation
+	// is still worth recording (it names the leg and the gap age), but the park
+	// belongs to the initiator, so no park follows and nothing is mirrored back.
+	MuxEventLegStalled    = "leg_stalled"
 	MuxEventPrimaryRehome = "primary_rehomed"
 	// MuxEventReorderWedge / ...Cleared bracket a RECEIVE-side reorder wedge:
 	// the frontier held past reorderTimeout because the sender's retransmit
