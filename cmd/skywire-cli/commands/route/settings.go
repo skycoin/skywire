@@ -37,6 +37,8 @@ var (
 	settingsSBDBackof time.Duration
 	settingsSBDEvid   string
 	settingsSBDDemote string
+	settingsFwdSpill  string
+	settingsFwdMargin float64
 )
 
 func init() {
@@ -60,6 +62,8 @@ func init() {
 	settingsCmd.Flags().DurationVar(&settingsSBDBackof, "sbd-backoff", 0, "how long a pair whose park trial failed is exempt from shared-bottleneck merging (doubles per repeat)")
 	settingsCmd.Flags().StringVar(&settingsSBDEvid, "sbd-min-evidence-rate", "", "aggregate goodput a group must carry before a shared-bottleneck ruling may park a leg (e.g. 64KiB)")
 	settingsCmd.Flags().StringVar(&settingsSBDDemote, "sbd-demote", "", "true|false: let a shared-bottleneck ruling PARK a leg (default false — rulings are recorded as sbd_ruling mux events only)")
+	settingsCmd.Flags().StringVar(&settingsFwdSpill, "forward-spill", "", "true|false: let a FORWARD frame leave its confined leg when that leg is at its send window (default false — the writer waits instead)")
+	settingsCmd.Flags().Float64Var(&settingsFwdMargin, "forward-switch-margin", 0, "how much lower a challenger leg must measure, for two consecutive samples, before the forward direction moves to it (e.g. 0.2)")
 }
 
 var settingsCmd = &cobra.Command{
@@ -85,7 +89,7 @@ effect at once; the preference is written to routing.transport_preference.`,
 			"ecf-max-window", "ecf-min-window", "ecf-window-margin", "send-window-wait-max",
 			"leg-park-min-hold", "dead-route-hold", "dead-route-hold-max", "mux-fec",
 			"sbd-min-samples", "sbd-sample-interval", "sbd-trial-window", "sbd-trial-loss", "sbd-backoff",
-			"sbd-min-evidence-rate", "sbd-demote"} {
+			"sbd-min-evidence-rate", "sbd-demote", "forward-spill", "forward-switch-margin"} {
 			changed = changed || cmd.Flags().Changed(f)
 		}
 		if changed {
@@ -159,6 +163,13 @@ effect at once; the preference is written to routing.transport_preference.`,
 				demote := settingsSBDDemote == "true"
 				next.SBDDemote = &demote
 			}
+			if cmd.Flags().Changed("forward-spill") {
+				spill := settingsFwdSpill == "true"
+				next.ForwardSpill = &spill
+			}
+			if cmd.Flags().Changed("forward-switch-margin") {
+				next.ForwardSwitchMargin = settingsFwdMargin
+			}
 			if err := rpcClient.SetRouterSettings(next); err != nil {
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
@@ -168,6 +179,7 @@ effect at once; the preference is written to routing.transport_preference.`,
 		}
 		fec := cur.MuxFEC != nil && *cur.MuxFEC
 		sbdDemote := cur.SBDDemote != nil && *cur.SBDDemote
+		fwdSpill := cur.ForwardSpill != nil && *cur.ForwardSpill
 		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliroute.Settings{
 			ForceLocalRoutes:    cur.ForceLocalRoutes,
 			ExistingTPOnly:      cur.ExistingTPOnly,
@@ -188,6 +200,8 @@ effect at once; the preference is written to routing.transport_preference.`,
 			SBDBackoff:          cur.SBDBackoff.String(),
 			SBDMinEvidenceRate:  cur.SBDMinEvidenceRate,
 			SBDDemote:           sbdDemote,
+			ForwardSpill:        fwdSpill,
+			ForwardSwitchMargin: cur.ForwardSwitchMargin,
 		}))
 	},
 }

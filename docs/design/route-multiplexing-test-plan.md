@@ -532,6 +532,28 @@ direct leg carries one direction and the mux legs the other, the flip
 happens at the stated ratio and cools down as specified. This was
 implemented and never demonstrated.
 
+The forward direction rides ONE leg — the direct leg, or else the
+lowest-latency one — and only the reverse direction fans out; on
+2026-09-16 it did not hold. mux-legs-2 (44 ms and 166 ms legs, no direct
+leg) put 79 % of one 10 MB upload on the 166 ms leg and 21 % on the 44 ms
+one, and the T2xL2 composition split a 50 MB upload 37/16 within one group
+and 8/39 within the other, with 6 and 11 forward flips across ten rows.
+Every row that split collapsed (x0.68, x0.24, x0.04) while the rows that
+stayed on one leg ran at x0.98-1.0. The cause was reading the flip
+controller's direction→class mapping instead of the sender's role: a
+sustained upload flips the mapping, and on a group with no direct leg that
+hands the forward direction to the ECF scheduler over every multihop leg.
+
+The rule now: the forward direction is confined by ROLE, its retransmits
+ride the confined leg too, a full send window on that leg WAITS
+(`--send-window-wait-max`) instead of spilling, and the leg only changes
+when it is no longer selectable (dead, parked, or outclassed by a direct
+leg that joined) or a challenger measures at least `--forward-switch-margin`
+lower for two consecutive samples — each move recorded as a
+`forward_rehomed` mux event. Two live knobs: `route settings
+--forward-spill` (default **false**; true restores the spilling behavior)
+and `--forward-switch-margin` (default **0.2**).
+
 ### 3.6 The default, decided by the table
 
 Adaptive ships as the default only when it wins §1 on the rig, and it must

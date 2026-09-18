@@ -2,6 +2,7 @@
 package router
 
 import (
+	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -437,27 +438,49 @@ type routeMux struct {
 	// group's mu; the rg.mu -> legLivenessMu order is the documented one.
 	legLatencyFn func(uuid.UUID) float64
 
-	// confinedFwd* cache the leg confinedForwardLeg last chose, so the
-	// no-direct-leg forward confinement re-measures at most once per
-	// confinedForwardRefresh instead of once per frame, and so a burst stays on
-	// one leg rather than oscillating between two near-equal legs. Touched only
-	// from selectTransportRaw, which runs under the route group's mu.
-	confinedFwdIdx    int
-	confinedFwdLatMs  float64
-	confinedFwdAtNano int64
+	// confinedFwd* cache the leg confinedForwardLeg last chose, so the forward
+	// confinement re-measures at most once per confinedForwardRefresh instead of
+	// once per frame, and so a burst stays on one leg rather than oscillating
+	// between two near-equal legs. confinedFwdChal* hold the CHALLENGER a
+	// candidate must be for forwardSwitchSamples consecutive samples before the
+	// direction moves. Touched only from selectTransportRaw and the retransmit
+	// pick, both of which run under the route group's mu.
+	confinedFwdIdx      int
+	confinedFwdLatMs    float64
+	confinedFwdAtNano   int64
+	confinedFwdChalIdx  int
+	confinedFwdChalHits int
+
+	// confinedFwdCur mirrors confinedFwdIdx for readers OUTSIDE the route
+	// group's mu — waitSendWindow runs on the writer with rg.mu dropped, and it
+	// has to know which leg's window it is waiting on. -1 = no leg confined.
+	confinedFwdCur atomic.Int64
+
+	// onForwardRehome, when wired (SetForwardRehomeFn), is called under the
+	// route group's mu whenever the forward direction moves to a different leg,
+	// so the route group can record a forward_rehomed mux event. prev is -1 the
+	// first time a leg is chosen (no event is emitted for that).
+	onForwardRehome func(prev, next int, tp *transport.ManagedTransport, legs int, reason string)
 }
 
 const (
-	// confinedForwardRefresh bounds how often the no-direct-leg forward
-	// confinement re-measures its leg. A burst is thousands of frames; the leg
-	// latencies behind the decision move on the liveness-pong cadence, so
-	// re-reading them per frame buys nothing and costs a lock each time.
+	// confinedForwardRefresh bounds how often the forward confinement
+	// re-measures its leg. A burst is thousands of frames; the leg latencies
+	// behind the decision move on the liveness-pong cadence, so re-reading them
+	// per frame buys nothing and costs a lock each time.
 	confinedForwardRefresh = 250 * time.Millisecond
-	// confinedForwardMargin is how much faster a challenger leg must be before
-	// the confinement moves off the leg it already holds (1.15 = 15 %). Without
-	// it two legs of near-equal latency trade the whole upload back and forth
-	// every refresh, which is exactly the spray the confinement exists to stop.
-	confinedForwardMargin = 1.15
+	// forwardSwitchMarginDefault is how much LOWER a challenger leg's end-to-end
+	// latency must be before the confinement moves off the leg it already holds
+	// (0.2 = 20 % lower), and forwardSwitchSamples is how many CONSECUTIVE
+	// refreshes it must clear that margin for. Live as ForwardSwitchMargin().
+	//
+	// One sample was not enough: the live legs-2 set (44 ms vs 166 ms) still
+	// produced 6 forward flips in ten rows, because a single loaded sample from
+	// the incumbent crosses a 15 % margin easily — and every flip splits the
+	// upload across two skewed legs, which is the collapse this confinement
+	// exists to prevent (measured x0.24 on a 50 MB upload).
+	forwardSwitchMarginDefault = 0.2
+	forwardSwitchSamples       = 2
 )
 
 // reorderWindow bounds how far the receiver's reorder buffer will hold
@@ -506,9 +529,11 @@ func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 		// RACK reorder factor starts at the static baseline; DSACK feedback
 		// widens it and clean acks decay it back (see rack_tlp.go).
 		rackFactorMilli: int64(rackReorderFactor * 1000),
-		// No leg held by the forward confinement yet.
-		confinedFwdIdx: -1,
+		// No leg held by the forward confinement yet, and no challenger.
+		confinedFwdIdx:     -1,
+		confinedFwdChalIdx: -1,
 	}
+	m.confinedFwdCur.Store(-1)
 	// Feed measured send→ack delays into the RACK basis (see ackDelayMs /
 	// rackThreshold): under load the queue, not the wire, dominates feedback
 	// delay, and only this sample sees it.
@@ -580,40 +605,31 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 	// is genuinely no reverse leg does it return ok=false and selection falls
 	// through to the standard path.
 	if directional, wantDirect, dstPK, srcPK := m.dirConfig(); directional {
-		if tp, rule, idx, ok := m.selectByDirection(tps, fwd, wantDirect, dstPK, srcPK); ok {
+		// The FORWARD direction (client -> exit: uploads and requests) rides ONE
+		// leg. Which leg is selectConfinedForward's decision — the direct leg when
+		// the group has one, else the lowest-latency leg — but THAT it is one leg
+		// is decided here, by this end's ROLE, not by the direction->class mapping
+		// the flip controller maintains. Reading the class instead was the bug:
+		// when the flip controller moved the forward direction onto the multihop
+		// class (a sustained upload flips it, and legs-2 has no direct leg for the
+		// light direction to sit on), selectByDirection's tier 1 matched BOTH
+		// multihop legs and handed the upload straight to the ECF scheduler. That
+		// is the measured 79 % / 21 % split across a 44 ms and a 166 ms leg, and
+		// the 6 flips in ten rows behind it.
+		if m.forwardSender() {
+			if tp, rule, idx, ok := m.selectConfinedForward(tps, fwd, wantDirect, dstPK, srcPK); ok {
+				return tp, rule, idx, nil
+			}
+		} else if tp, rule, idx, ok := m.selectByDirection(tps, fwd, wantDirect, dstPK, srcPK); ok {
+			// REVERSE (exit -> client: downloads) keeps its fan-out untouched.
 			return tp, rule, idx, nil
 		}
-		// No leg of the wanted class exists. For the LIGHT direction (wantDirect
-		// true = the initiator's forward/upload send, which the unidir model puts
-		// on the DIRECT leg), a multihop-only path has no direct leg to confine to
-		// — falling through to the weighted scheduler would SPRAY the upload across
-		// every forward leg, over-subscribing the no-skip reorder frontier (measured
-		// 67-172MB sent for a 10MB upload from a public node with no direct transport
-		// to the exit, plus stalls). Confine it to the primary leg (0) instead: it is
-		// always active and single, so the upload stays on one leg (full-duplex with
-		// whatever download rides it) rather than spraying. The heavy/download
-		// direction (wantDirect false) keeps its existing fall-through: with no
-		// reverse leg there is genuinely nothing to confine to.
-		//
-		// WHICH leg it is confined to is confinedForwardLeg's decision: the
-		// LOWEST MEASURED leg, not leg 0. Leg 0 is the leg that happened to be
-		// added first — for an operator-pinned mux it is simply the first
-		// `mux add` — and confining to it unconditionally sent every byte of
-		// the forward direction down whichever pinned leg the operator typed
-		// first. Measured live 2026-09-16 on mux-legs-2 (two pinned two-hop
-		// legs, no direct leg): forward rode the 141 ms leg in 7 of 10 rows on
-		// every build while the 33 ms leg sat idle, where every set that DID
-		// have a direct leg took it correctly. confinedForwardLeg falls back to
-		// leg 0 whenever the legs are not comparably measured, so the
-		// unmeasured case behaves exactly as before.
-		if wantDirect {
-			if idx := m.confinedForwardLeg(tps); idx >= 0 && idx < len(fwd) {
-				return tps[idx], fwd[idx], idx, nil
-			}
-			if tps[0] != nil && !tps[0].IsClosed() {
-				return tps[0], fwd[0], 0, nil
-			}
-		}
+		// The REVERSE direction with no leg of its class left falls through to the
+		// standard path below — there is genuinely nothing to confine a download
+		// to, and spreading it is what the reverse direction is meant to do. The
+		// FORWARD direction never reaches here: selectConfinedForward widens its
+		// own candidate set (class-matching legs first, then any live leg, then
+		// any ruled leg) rather than handing the upload to the scheduler.
 	}
 
 	// Payload-inspecting modes: ask the selector for a leg
@@ -750,34 +766,150 @@ func (m *routeMux) selectFastestTransport(tps []*transport.ManagedTransport, fwd
 // back to the first-hop transport RTT.
 func (m *routeMux) SetLegLatencyFn(fn func(uuid.UUID) float64) { m.legLatencyFn = fn }
 
-// confinedForwardLeg picks the single leg the LIGHT (forward/upload) direction
-// is confined to when the group is directional and has NO direct leg at all.
+// forwardSender reports whether THIS end sends the FORWARD direction of the
+// route group — client → exit: uploads and requests. That is the INITIATOR's
+// send, always: the flip controller moves which CLASS of leg each direction
+// prefers, never which end is the client. Reading the class mapping here
+// instead of the role is what let a sustained upload flip the forward direction
+// onto the multihop class and straight into the ECF scheduler.
+func (m *routeMux) forwardSender() bool {
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	return m.directional && m.initiator
+}
+
+// SetForwardRehomeFn wires the callback the mux fires when the forward
+// direction moves to a different leg, so the route group can record a
+// forward_rehomed mux event. Called once by the route group when the mux is
+// built; the callback runs under the route group's mu.
+func (m *routeMux) SetForwardRehomeFn(fn func(prev, next int, tp *transport.ManagedTransport, legs int, reason string)) {
+	m.onForwardRehome = fn
+}
+
+// confinedForwardIdx is the leg the forward direction is currently confined to,
+// or -1 when none is held. Lock-free, for readers outside the route group's mu
+// (waitSendWindow runs on the writer with rg.mu dropped).
+func (m *routeMux) confinedForwardIdx() int { return int(m.confinedFwdCur.Load()) }
+
+// selectConfinedForward is the FORWARD direction's whole send decision: one leg,
+// every frame. The leg is confinedForwardLeg's pick; the only thing that may
+// move a frame off it is the --forward-spill knob, which is OFF by default.
+//
+// With spill off, a frame that arrives while the confined leg is at its send
+// window is not re-homed onto another leg — the writer WAITS for the window
+// (waitSendWindow, bounded by --send-window-wait-max). That is the correct
+// trade: the alternative is a 10 MB upload split across a 44 ms and a 166 ms
+// leg, and every such row measured on the live rig collapsed (x0.68 at 10 MB,
+// x0.24 at 50 MB) because the peer's no-skip reorder frontier waits out the
+// skew. Spilling is kept as a knob because it is what the code did before, not
+// because it is the better default.
+func (m *routeMux) selectConfinedForward(tps []*transport.ManagedTransport, fwd []routing.Rule,
+	wantDirect bool, dst, src cipher.PubKey) (*transport.ManagedTransport, routing.Rule, int, bool) {
+	idx := m.confinedForwardLeg(tps, wantDirect, dst, src)
+	if idx < 0 || idx >= len(fwd) || idx >= len(tps) {
+		return nil, nil, -1, false
+	}
+	if ForwardSpill() && m.tpSelector != nil && m.retxBuf != nil && m.sackEnabled {
+		m.feedInflight(tps)
+		if m.tpSelector.Saturated(idx) {
+			if alt := m.tpSelector.FirstUnsaturated(); alt >= 0 && alt < len(fwd) && alt < len(tps) {
+				if tp := tps[alt]; tp != nil && !tp.IsClosed() && m.legReadyAt(alt) {
+					return tp, fwd[alt], alt, true
+				}
+			}
+		}
+	}
+	return tps[idx], fwd[idx], idx, true
+}
+
+// forwardCandidates lists the legs the forward direction may be confined to, in
+// three widening passes: the legs of the wanted CLASS that are live, ready and
+// active; then any live, ready, active leg (a multihop-only group has no direct
+// leg to sit on, which is the legs-2 shape); then any live leg with a rule at
+// all, so a group whose whole active set was just parked still sends.
+func (m *routeMux) forwardCandidates(tps []*transport.ManagedTransport, wantDirect bool, dst, src cipher.PubKey) []int {
+	live := func(idx int) bool {
+		tp := tps[idx]
+		return tp != nil && !tp.IsClosed()
+	}
+	for _, match := range []func(int) bool{
+		func(idx int) bool {
+			return live(idx) && legIsDirect(tps[idx], dst, src) == wantDirect && m.legReadyAt(idx)
+		},
+		func(idx int) bool { return live(idx) && m.legReadyAt(idx) },
+		func(idx int) bool { return live(idx) && m.legSelectableIgnoringStandby(idx) },
+	} {
+		cand := make([]int, 0, len(tps))
+		for idx := range tps {
+			if match(idx) {
+				cand = append(cand, idx)
+			}
+		}
+		if len(cand) > 0 {
+			return cand
+		}
+	}
+	return nil
+}
+
+// forwardLatencies measures every candidate on ONE comparable basis: the
+// END-TO-END route latency (all hops, from the leg-liveness pong) when every
+// candidate has a sample — the number that actually describes a multihop leg —
+// else the FIRST-HOP transport RTT when every candidate has one. The two are
+// never mixed across legs: they are different quantities, and comparing them
+// would hand the direction to whichever leg happened to lack a pong. ok=false
+// means "not comparably measured", and the caller keeps the lowest-indexed
+// candidate (leg 0 in practice) exactly as an unmeasured group did before.
+func (m *routeMux) forwardLatencies(tps []*transport.ManagedTransport, cand []int) ([]float64, bool) {
+	lat := make([]float64, len(cand))
+	if m.legLatencyFn != nil {
+		ok := true
+		for i, idx := range cand {
+			ms := m.legLatencyFn(tps[idx].Entry.ID)
+			if ms <= 0 {
+				ok = false
+				break
+			}
+			lat[i] = ms
+		}
+		if ok {
+			return lat, true
+		}
+	}
+	for i, idx := range cand {
+		ms := tps[idx].GetLatency()
+		if ms <= 0 {
+			return nil, false
+		}
+		lat[i] = ms
+	}
+	return lat, true
+}
+
+// confinedForwardLeg picks the single leg the FORWARD direction is confined to.
 //
 // The confinement itself is not in question — spraying an upload across every
 // forward leg over-subscribes the no-skip reorder frontier and was measured at
-// 67-172 MB sent for a 10 MB upload. What was wrong is WHICH leg: leg 0, the
-// primary, is only "the leg added first" (for an operator-pinned mux, the first
-// `mux add`), and it carried the whole forward direction however slow it was.
+// 67-172 MB sent for a 10 MB upload. WHICH leg is decided here: the lowest
+// measured latency among the candidates (forwardCandidates, forwardLatencies),
+// which for a group that has a direct leg IS the direct leg, since the
+// class-matching pass yields it alone.
 //
-// The pick is the lowest measured latency among the live, ready, non-standby
-// legs, on ONE comparable basis for all of them:
+// Two things keep the pick still. The decision is cached for
+// confinedForwardRefresh, so a burst of thousands of frames re-measures a
+// handful of times. And moving off the leg the direction already holds needs a
+// challenger at least ForwardSwitchMargin LOWER for forwardSwitchSamples
+// CONSECUTIVE refreshes — a single loaded sample cannot take the upload away,
+// which is what produced 6 forward flips in ten live rows and split every one
+// of them across a 44 ms and a 166 ms leg.
 //
-//   - the END-TO-END route latency (all hops, from the leg-liveness pong) when
-//     EVERY candidate has a sample — the number that actually describes a
-//     multihop leg;
-//   - otherwise the FIRST-HOP transport RTT when every candidate has one;
-//   - otherwise nothing: it returns -1 and the caller keeps leg 0, so an
-//     unmeasured group behaves exactly as it did before.
-//
-// The two bases are never mixed across legs: an end-to-end value and a
-// first-hop value are different quantities, and comparing them would hand the
-// direction to whichever leg happened to lack a pong.
-//
-// The decision is cached for confinedForwardRefresh and only moves when a
-// challenger is confinedForwardMargin faster, so a burst stays on one leg.
+// The incumbent is dropped without hysteresis only when it is no longer a
+// candidate at all: dead, parked to standby, or outclassed by a direct leg that
+// has just joined. That is a REHOME, and it is reported through onForwardRehome
+// so `visor state --select diag` says which leg took the direction and why.
 //
 // Caller holds the route group's mu (as for selectTransportRaw).
-func (m *routeMux) confinedForwardLeg(tps []*transport.ManagedTransport) int {
+func (m *routeMux) confinedForwardLeg(tps []*transport.ManagedTransport, wantDirect bool, dst, src cipher.PubKey) int {
 	now := time.Now().UnixNano()
 	if m.confinedFwdIdx >= 0 && m.confinedFwdIdx < len(tps) &&
 		now-m.confinedFwdAtNano < int64(confinedForwardRefresh) {
@@ -786,55 +918,84 @@ func (m *routeMux) confinedForwardLeg(tps []*transport.ManagedTransport) int {
 		}
 	}
 
-	cand := make([]int, 0, len(tps))
-	for idx, tp := range tps {
-		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
-			continue
-		}
-		cand = append(cand, idx)
-	}
+	cand := m.forwardCandidates(tps, wantDirect, dst, src)
 	if len(cand) == 0 {
 		return -1
 	}
+	lat, measured := m.forwardLatencies(tps, cand)
 
-	lat := make([]float64, len(cand))
-	haveE2E := m.legLatencyFn != nil
+	prev := m.confinedFwdIdx
+	// Is the leg the direction already holds still eligible?
+	held := -1
 	for i, idx := range cand {
-		if !haveE2E {
+		if idx == prev {
+			held = i
 			break
 		}
-		if ms := m.legLatencyFn(tps[idx].Entry.ID); ms > 0 {
-			lat[i] = ms
-		} else {
-			haveE2E = false
-		}
-	}
-	if !haveE2E {
-		for i, idx := range cand {
-			ms := tps[idx].GetLatency()
-			if ms <= 0 {
-				return -1 // not comparably measured — leave the caller on leg 0
-			}
-			lat[i] = ms
-		}
 	}
 
-	best, bestLat := cand[0], lat[0]
-	for i, idx := range cand {
-		if lat[i] < bestLat {
-			best, bestLat = idx, lat[i]
-		}
-	}
-	// Hold the incumbent unless the challenger clears the margin.
-	if m.confinedFwdIdx >= 0 && m.confinedFwdIdx != best && m.confinedFwdLatMs > 0 {
-		for i, idx := range cand {
-			if idx == m.confinedFwdIdx && lat[i] < bestLat*confinedForwardMargin {
-				best, bestLat = idx, lat[i]
-				break
+	best, bestAt := cand[0], 0
+	if measured {
+		for i := range cand {
+			if lat[i] < lat[bestAt] {
+				best, bestAt = cand[i], i
 			}
 		}
+	} else if held >= 0 {
+		// Not comparably measured: never move a direction that is already placed.
+		best, bestAt = prev, held
 	}
-	m.confinedFwdIdx, m.confinedFwdLatMs, m.confinedFwdAtNano = best, bestLat, now
+
+	// An incumbent placed before any leg was comparably measured is a
+	// PLACEHOLDER (leg 0, the leg that happened to be added first), not a
+	// decision — the first real measurement replaces it outright, with no
+	// hysteresis to clear and no rehome to report.
+	placeholder := held >= 0 && m.confinedFwdLatMs <= 0
+
+	reason := ""
+	switch {
+	case placeholder:
+		m.confinedFwdChalIdx, m.confinedFwdChalHits = -1, 0
+	case held < 0 && prev >= 0:
+		reason = fmt.Sprintf("leg %d is no longer selectable (dead, parked to standby, or a direct leg joined) — rehomed to leg %d", prev, best)
+	case held >= 0 && best != prev && measured:
+		// Hysteresis: the challenger must clear the margin on consecutive samples.
+		margin := ForwardSwitchMargin()
+		if lat[bestAt] > lat[held]*(1-margin) {
+			m.confinedFwdChalIdx, m.confinedFwdChalHits = -1, 0
+			best, bestAt = prev, held
+			break
+		}
+		if m.confinedFwdChalIdx == best {
+			m.confinedFwdChalHits++
+		} else {
+			m.confinedFwdChalIdx, m.confinedFwdChalHits = best, 1
+		}
+		if m.confinedFwdChalHits < forwardSwitchSamples {
+			best, bestAt = prev, held
+			break
+		}
+		reason = fmt.Sprintf("leg %d measured %.0f ms against leg %d's %.0f ms (at least %.0f%% lower for %d consecutive samples)",
+			best, lat[bestAt], prev, lat[held], margin*100, forwardSwitchSamples)
+		m.confinedFwdChalIdx, m.confinedFwdChalHits = -1, 0
+	default:
+		m.confinedFwdChalIdx, m.confinedFwdChalHits = -1, 0
+	}
+
+	at := now
+	if measured {
+		m.confinedFwdLatMs = lat[bestAt]
+	} else {
+		// Nothing was measured, so nothing was decided: hold the leg for this
+		// frame but re-measure on the next one rather than sitting on a
+		// placeholder for a whole refresh interval.
+		m.confinedFwdLatMs, at = 0, 0
+	}
+	m.confinedFwdIdx, m.confinedFwdAtNano = best, at
+	m.confinedFwdCur.Store(int64(best))
+	if reason != "" && prev != best && m.onForwardRehome != nil {
+		m.onForwardRehome(prev, best, tps[best], len(tps), reason)
+	}
 	return best
 }
 
@@ -2262,9 +2423,28 @@ func (m *routeMux) signalWindow() {
 	}
 }
 
-// waitSendWindow parks a writer while every ready leg is at its in-flight
-// window, until a SACK frees capacity, the group closes, or sendWindowWaitMax
-// elapses. A no-op unless SACK accounting and a predictive scheduler are on.
+// sendWindowBlocked reports whether the next frame has nowhere to go under the
+// send windows in force. For a FORWARD-confined direction that is one question
+// — is the CONFINED leg at its window — because the frame is going on that leg
+// and no other: with --forward-spill off (the default) a full window is a
+// reason to wait, not a reason to spray the upload onto a slower leg. Every
+// other case keeps the original test, every ready leg saturated.
+//
+// Called from waitSendWindow, which runs on the writer with the route group's
+// mu DROPPED, so it reads the confined leg from the atomic mirror.
+func (m *routeMux) sendWindowBlocked() bool {
+	if !ForwardSpill() {
+		if idx := m.confinedForwardIdx(); idx >= 0 && m.forwardSender() {
+			return m.tpSelector.Saturated(idx)
+		}
+	}
+	return m.tpSelector.AllReadySaturated()
+}
+
+// waitSendWindow parks a writer while the leg(s) it may use are at their
+// in-flight window, until a SACK frees capacity, the group closes, or
+// sendWindowWaitMax elapses. A no-op unless SACK accounting and a predictive
+// scheduler are on.
 func (m *routeMux) waitSendWindow(tps []*transport.ManagedTransport, closed <-chan struct{}) {
 	if m.retxBuf == nil || !m.sackEnabled || m.tpSelector == nil {
 		return
@@ -2273,7 +2453,7 @@ func (m *routeMux) waitSendWindow(tps []*transport.ManagedTransport, closed <-ch
 	waited := false
 	for {
 		m.feedInflight(tps)
-		if !m.tpSelector.AllReadySaturated() {
+		if !m.sendWindowBlocked() {
 			return
 		}
 		if !waited {

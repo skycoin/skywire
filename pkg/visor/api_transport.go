@@ -75,6 +75,17 @@ type RouterSettings struct {
 	// traffic, no ruling. Same zero-means-unchanged rule.
 	SBDMinEvidenceRate int64 `json:"sbd_min_evidence_rate,omitempty"`
 
+	// ForwardSpill lets a FORWARD frame leave the confined leg when that leg is at
+	// its send window (the pre-fix behavior). Off by default: the writer waits for
+	// the window instead, because every live row that spilled an upload across two
+	// skewed legs collapsed. Tri-state on PUT like SBDDemote — nil leaves it alone.
+	ForwardSpill *bool `json:"forward_spill,omitempty"`
+
+	// ForwardSwitchMargin is how much LOWER a challenger leg must measure before the
+	// forward direction moves off the leg it holds (0.2 = 20 %), for two consecutive
+	// samples. Same zero-means-unchanged rule.
+	ForwardSwitchMargin float64 `json:"forward_switch_margin,omitempty"`
+
 	// SBDDemote gates the DEMOTION half of shared-bottleneck detection: false (the
 	// default) records every ruling as an sbd_ruling mux event and parks nothing.
 	// Like MuxFEC it is a tri-state on PUT — nil leaves it alone — because a bool
@@ -108,6 +119,7 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 	}
 	fec := v.router.GetMuxFEC()
 	sbdDemote := router.SBDDemote()
+	forwardSpill := router.ForwardSpill()
 	return RouterSettings{
 		ForceLocalRoutes:    v.router.GetForceLocalRoutes(),
 		ExistingTPOnly:      v.router.GetExistingTPOnly(),
@@ -127,6 +139,8 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 		SBDBackoff:          router.SBDBackoff(),
 		SBDMinEvidenceRate:  router.SBDMinEvidenceRate(),
 		SBDDemote:           &sbdDemote,
+		ForwardSpill:        &forwardSpill,
+		ForwardSwitchMargin: router.ForwardSwitchMargin(),
 		MuxFEC:              &fec,
 	}, nil
 }
@@ -174,6 +188,7 @@ func (v *Visor) SetRouterSettings(s RouterSettings) error {
 		{"sbd_trial_loss", s.SBDTrialLoss == 0, func() bool { return router.SetSBDTrialLoss(s.SBDTrialLoss) }},
 		{"sbd_backoff", s.SBDBackoff == 0, func() bool { return router.SetSBDBackoff(s.SBDBackoff) }},
 		{"sbd_min_evidence_rate", s.SBDMinEvidenceRate == 0, func() bool { return router.SetSBDMinEvidenceRate(s.SBDMinEvidenceRate) }},
+		{"forward_switch_margin", s.ForwardSwitchMargin == 0, func() bool { return router.SetForwardSwitchMargin(s.ForwardSwitchMargin) }},
 	} {
 		if k.zero {
 			continue
@@ -184,6 +199,9 @@ func (v *Visor) SetRouterSettings(s RouterSettings) error {
 	}
 	if s.SBDDemote != nil {
 		router.SetSBDDemote(*s.SBDDemote)
+	}
+	if s.ForwardSpill != nil {
+		router.SetForwardSpill(*s.ForwardSpill)
 	}
 	if s.MuxFEC != nil {
 		v.router.SetMuxFEC(*s.MuxFEC)

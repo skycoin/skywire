@@ -88,6 +88,14 @@ const (
 	MuxEventLegStalled    = "leg_stalled"
 	MuxEventLegAddFailed  = "leg_add_failed"
 	MuxEventPrimaryRehome = "primary_rehomed"
+	// MuxEventForwardRehomed is the FORWARD direction (client → exit: uploads and
+	// requests) moving to a different leg. It rides ONE leg — the direct leg, or
+	// else the lowest-latency one — so every move is a decision worth a line: its
+	// Reason says whether the leg it held went away (dead, parked to standby, or
+	// outclassed by a direct leg that joined) or a challenger measured far enough
+	// below it for long enough (--forward-switch-margin, two consecutive samples).
+	// A run full of these is the flapping the margin exists to stop.
+	MuxEventForwardRehomed = "forward_rehomed"
 	// MuxEventReorderWedge / ...Cleared bracket a RECEIVE-side reorder wedge:
 	// the frontier held past reorderTimeout because the sender's retransmit
 	// never refilled the missing sequence, and then it advanced again. Whole-
@@ -252,6 +260,17 @@ func (rg *RouteGroup) noteLegEvent(kind, reason, by string, idx, legs int, tp *t
 		e.Remote = tp.Remote()
 	}
 	rg.noteMuxEvent(e)
+}
+
+// noteForwardRehome records the FORWARD direction moving to a different leg
+// (MuxEventForwardRehomed). Wired into the mux as SetForwardRehomeFn, so it is
+// called from the send path with rg.mu HELD — noteMuxEvent takes no locks, and
+// nothing here does either.
+func (rg *RouteGroup) noteForwardRehome(prev, next int, tp *transport.ManagedTransport, legs int, reason string) {
+	if prev == next {
+		return
+	}
+	rg.noteLegEvent(MuxEventForwardRehomed, reason, MuxByAdaptive, next, legs, tp, nil)
 }
 
 // noteTunnelEvent records an app-decided TUNNEL event (promoted / parked /
