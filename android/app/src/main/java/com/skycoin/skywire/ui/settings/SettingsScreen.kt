@@ -28,6 +28,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.OutlinedTextField
@@ -57,6 +58,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
+import com.skycoin.skywire.core.AppUpdates
 import com.skycoin.skywire.core.AppLanguage
 import com.skycoin.skywire.core.ThemeMode
 import com.skycoin.skywire.ui.components.Biometrics
@@ -104,6 +106,10 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         viewModel.setBiometricsAvailable(Biometrics.canAuthenticate(context))
     }
+
+    // Asked on the way in, not on a button nobody presses. Throttled inside
+    // the view model, and silent about a failure — see checkForUpdate.
+    LaunchedEffect(Unit) { viewModel.checkForUpdate(manual = false) }
 
     LaunchedEffect(state.message) {
         state.message?.let { message ->
@@ -229,6 +235,20 @@ fun SettingsScreen(
                 }
             }
             item { DiagnosticsRow(onOpenDiagnostics) }
+            item {
+                UpdateCard(
+                    state = state,
+                    onCheck = { viewModel.checkForUpdate(manual = true) },
+                    onDownload = viewModel::downloadUpdate,
+                    onCancel = viewModel::cancelDownload,
+                    onInstall = viewModel::installUpdate,
+                    onOpenPage = viewModel::openReleasePage,
+                    onRetry = {
+                        viewModel.dismissUpdateFailure()
+                        viewModel.checkForUpdate(manual = true)
+                    },
+                )
+            }
             item { AboutCard(state) }
         }
     }
@@ -770,6 +790,221 @@ private fun DiagnosticsRow(onOpen: () -> Unit) {
         }
     }
 }
+
+/**
+ * The update, and everything it can be in the middle of.
+ *
+ * Skywire is installed from an APK on GitHub Releases, not from a store, so
+ * nothing on this phone will ever tell its owner that a newer build exists —
+ * they hear it on Telegram or they keep running what they have. This card is
+ * the part that was missing, and it is deliberately the whole path: find,
+ * fetch, install. A card that only said "a new version is out" would leave
+ * the user at the same manual download it was trying to save them from.
+ *
+ * Exclusive states, one card each, because they are not modifiers of one
+ * another — see [UpdateStatus]. The version in hand is always shown, at the
+ * top, in every one of them: it is the fact the user came here for, and the
+ * answer to "did the update actually take" after the app restarts.
+ */
+@Composable
+private fun UpdateCard(
+    state: SettingsUiState,
+    onCheck: () -> Unit,
+    onDownload: () -> Unit,
+    onCancel: () -> Unit,
+    onInstall: () -> Unit,
+    onOpenPage: () -> Unit,
+    onRetry: () -> Unit,
+) {
+    val context = LocalContext.current
+    SectionCard {
+        Text(stringResource(R.string.settings_updates), style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        InfoRow(
+            label = stringResource(R.string.settings_update_installed),
+            value = state.appVersion.ifEmpty { "—" },
+        )
+        Spacer(Modifier.height(10.dp))
+
+        when (val update = state.update) {
+            is UpdateStatus.Idle -> {
+                UpdateActions { FilledTonalButton(onClick = onCheck) { Text(stringResource(R.string.settings_update_check)) } }
+            }
+
+            is UpdateStatus.Checking -> {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    UpdateHint(stringResource(R.string.settings_update_checking))
+                }
+            }
+
+            is UpdateStatus.UpToDate -> {
+                UpdateHint(
+                    stringResource(R.string.settings_update_uptodate, state.appVersion.ifEmpty { "—" }),
+                )
+                UpdateActions { FilledTonalButton(onClick = onCheck) { Text(stringResource(R.string.settings_update_check)) } }
+            }
+
+            is UpdateStatus.Available -> {
+                UpdateHint(
+                    stringResource(R.string.settings_update_available, update.release.version.toString()),
+                )
+                ReleaseNotes(update.release.notes)
+                UpdateActions {
+                    FilledTonalButton(onClick = onDownload) {
+                        Text(stringResource(R.string.settings_update_size, megabytes(update.release.apkSize)))
+                    }
+                    FilledTonalButton(onClick = onOpenPage) {
+                        Text(stringResource(R.string.settings_update_open_page))
+                    }
+                }
+            }
+
+            is UpdateStatus.Downloading -> {
+                UpdateHint(
+                    if (update.progress >= 0f) {
+                        stringResource(
+                            R.string.settings_update_downloading,
+                            (update.progress * 100).toInt(),
+                        )
+                    } else {
+                        stringResource(R.string.settings_update_downloading_unknown)
+                    },
+                )
+                Spacer(Modifier.height(10.dp))
+                // Indeterminate only when the server withheld a length —
+                // a bar sitting at zero for a 56 MB file reads as stuck.
+                if (update.progress >= 0f) {
+                    LinearProgressIndicator(
+                        progress = { update.progress },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+                UpdateActions {
+                    FilledTonalButton(onClick = onCancel) {
+                        Text(stringResource(R.string.settings_update_cancel))
+                    }
+                }
+            }
+
+            is UpdateStatus.Ready -> {
+                UpdateHint(
+                    stringResource(R.string.settings_update_ready, update.release.version.toString()),
+                )
+                Spacer(Modifier.height(6.dp))
+                // Which of the two notes applies is a fact about this phone,
+                // and it changes while the user is looking at the card — they
+                // leave to grant it and come back. Read here rather than held
+                // in state for that reason.
+                UpdateHint(
+                    stringResource(
+                        if (AppUpdates.canInstall(context)) R.string.settings_update_install_note
+                        else R.string.settings_update_permission_note,
+                    ),
+                )
+                UpdateActions {
+                    FilledTonalButton(onClick = onInstall) {
+                        Text(stringResource(R.string.settings_update_install))
+                    }
+                    FilledTonalButton(onClick = onOpenPage) {
+                        Text(stringResource(R.string.settings_update_open_page))
+                    }
+                }
+            }
+
+            is UpdateStatus.Failed -> {
+                Text(
+                    update.reason,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                UpdateActions {
+                    FilledTonalButton(onClick = onRetry) {
+                        Text(stringResource(R.string.settings_update_retry))
+                    }
+                    FilledTonalButton(onClick = onOpenPage) {
+                        Text(stringResource(R.string.settings_update_open_page))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateHint(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** FlowRow, so two buttons wrap instead of clipping on a narrow phone. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun UpdateActions(content: @Composable () -> Unit) {
+    Spacer(Modifier.height(12.dp))
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) { content() }
+}
+
+/**
+ * The release body, trimmed to something a card can hold.
+ *
+ * GitHub release notes run to screenfuls of markdown, and this renders none of
+ * it — the point is a line or two of "what changed" beside the version number,
+ * with "Open on GitHub" for anyone who wants the rest. Bullets keep their
+ * dashes; headings and links read as the plain text they are.
+ */
+@Composable
+private fun ReleaseNotes(notes: String) {
+    if (notes.isBlank()) return
+    val shown = remember(notes) {
+        notes.lineSequence()
+            .map { line ->
+                line.trim()
+                    .trimStart('#').trim()
+                    // Emphasis markers only — the text between them is the
+                    // content and is kept. Left in, a release note reads
+                    // "**Skywire Mobile v0.0.2** is now available".
+                    .replace("**", "")
+                    // A markdown bullet, as a bullet. Same line, one glyph
+                    // that does not also mean emphasis.
+                    .replaceFirst(Regex("""^[*-]\s+"""), "• ")
+            }
+            .filter { it.isNotEmpty() }
+            .take(NOTES_LINES)
+            .joinToString("\n")
+            .take(NOTES_CHARS)
+    }
+    if (shown.isBlank()) return
+    Spacer(Modifier.height(10.dp))
+    Text(
+        stringResource(R.string.settings_update_notes),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(Modifier.height(2.dp))
+    Text(
+        shown,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+// Enough to say what the release is, never enough to push the buttons
+// below the fold — "Open on GitHub" is what the rest of it is for.
+private const val NOTES_LINES = 4
+private const val NOTES_CHARS = 300
+
+/** APK size as a number the card can put in "Download · %s MB". */
+private fun megabytes(bytes: Long): String =
+    if (bytes <= 0L) "?" else "%.1f".format(bytes / 1_048_576.0)
 
 @Composable
 private fun AboutCard(state: SettingsUiState) {

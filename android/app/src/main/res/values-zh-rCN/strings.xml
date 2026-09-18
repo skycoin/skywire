@@ -735,6 +735,31 @@
     <string name="settings_calls_granted_hint">来电会接管屏幕并响铃，即使应用已关闭。</string>
     <string name="settings_calls_allow">显示来电界面</string>
     <string name="settings_calls_no_screen">本机没有该设置的界面。</string>
+
+    <!-- 应用内更新。Skywire 通过 GitHub Releases 分发，不经应用商店，
+         因此除非应用主动查询，否则没有任何提示告知有新版本。 -->
+    <string name="settings_updates">更新</string>
+    <string name="settings_update_installed">已安装</string>
+    <string name="settings_update_check">检查更新</string>
+    <string name="settings_update_checking">正在查询 GitHub…</string>
+    <string name="settings_update_uptodate">Skywire %1$s 已是最新版本。</string>
+    <string name="settings_update_available">Skywire %1$s 已发布。</string>
+    <string name="settings_update_size">下载 · %1$s MB</string>
+    <string name="settings_update_downloading">正在下载… %1$d%%</string>
+    <string name="settings_update_downloading_unknown">正在下载…</string>
+    <string name="settings_update_cancel">取消</string>
+    <string name="settings_update_ready">Skywire %1$s 已下载完成，可以安装。</string>
+    <string name="settings_update_install">安装</string>
+    <string name="settings_update_install_note">Android 会请你确认。你的设置、身份和钱包都会保留——这是替换应用，不是重新安装。</string>
+    <string name="settings_update_permission_note">首次安装时，Android 会请求允许 Skywire 安装应用。每一次安装仍由系统确认。</string>
+    <string name="settings_update_check_failed">无法连接 GitHub 检查更新。</string>
+    <string name="settings_update_download_failed">下载未完成。</string>
+    <string name="settings_update_install_failed">更新安装失败。</string>
+    <string name="settings_update_no_permission_screen">本机没有该权限的设置界面。</string>
+    <string name="settings_update_no_browser">本机没有可以打开网页的应用。</string>
+    <string name="settings_update_open_page">在 GitHub 上查看</string>
+    <string name="settings_update_retry">重试</string>
+    <string name="settings_update_notes">更新内容</string>
     <string name="settings_battery">电池</string>
     <string name="settings_battery_hint">Skywire 会在后台持续运行，但屏幕熄灭一段时间后，Android 仍可能暂停它的网络——消息和通话会等到手机下次唤醒时才到达，而不是在发出时到达。允许 Skywire 忽略电池优化可以消除这段延迟。这会更耗电；不允许也一样能用。</string>
     <string name="settings_battery_exempt_hint">Skywire 已获准忽略电池优化，因此屏幕熄灭时连接仍会保持。Android 的电池设置随时可能收回这项权限。</string>
