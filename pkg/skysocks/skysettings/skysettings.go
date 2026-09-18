@@ -212,8 +212,8 @@ func init() {
 		"per-sample decay applied to a busy tunnel's capacity estimate")
 	register(TunnelMeterFresh, KindDuration, int64(2*time.Second),
 		"how long a busy window's capacity estimate stays authoritative")
-	register(TunnelSnubAfter, KindDuration, int64(3*time.Second),
-		"no byte and no ack for this long, with work outstanding, snubs a tunnel (floored at 2x its smoothed RTT)")
+	register(TunnelSnubAfter, KindDuration, int64(20*time.Second),
+		"no byte and no ack for this long, with work outstanding, snubs a tunnel (floored at 2x its smoothed RTT; kept above the longest measured reorder-wedge clear so a head-of-line-blocked tunnel is not re-issued)")
 	register(TunnelSnubHold, KindDuration, int64(10*time.Second),
 		"how long a snubbed tunnel sits out before it is re-tried with ONE chunk")
 	register(TunnelDepthMargin, KindDuration, int64(50*time.Millisecond),

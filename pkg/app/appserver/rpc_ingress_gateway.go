@@ -218,15 +218,16 @@ func (r *RPCIngressGateway) SetAppPort(port routing.Port, _ *struct{}) (err erro
 }
 
 // NoteMuxEventReq is an app reporting a TUNNEL event — one of its tunnels
-// promoted out of standby, parked back into it, or retired dead — onto the
-// router's mux-event ring, and re-labeling that tunnel's role.
+// promoted out of standby, parked back into it, snubbed for making no progress
+// (or unsnubbed when its hold is served), or retired dead — onto the router's
+// mux-event ring, and re-labeling that tunnel's role.
 //
 // LocalPort names the tunnel: it is the port the app was handed when it dialed
 // (DialResp.LocalPort), which is the route group's source port, and the only
 // identifier the app has for a route group it knows nothing else about. Event
 // is one of router.MuxEventTunnel*; Reason is what decided it, in the words of
 // the code that did ("failover: active tunnel died"). Role, when set, is the
-// tunnel's role AFTER the event ("active" / "standby").
+// tunnel's role AFTER the event ("active" / "standby" / "snubbed").
 type NoteMuxEventReq struct {
 	LocalPort routing.Port
 	Event     string
@@ -246,6 +247,10 @@ const (
 	maxMuxEventReasonLen = 256
 	tunnelRoleActive     = "active"
 	tunnelRoleStandby    = "standby"
+	// tunnelRoleSnubbed is skysocks.TunnelRoleSnubbed — the role a tunnel wears
+	// while it sits out a snub. It rides the same field as active/standby, so
+	// leaving it off this list rejected every snub event outright.
+	tunnelRoleSnubbed = "snubbed"
 )
 
 // truncateMuxEventReason bounds the app-supplied reason kept in the router's
@@ -260,9 +265,27 @@ func truncateMuxEventReason(reason string) string {
 
 // validTunnelEvent reports whether event is one of the tunnel-level mux events
 // an app is allowed to record.
+//
+// The snub pair was missing here for as long as the snub existed: every
+// tunnel_snubbed / tunnel_unsnubbed the client reported came back
+// "NoteMuxEvent: unknown event", so the mechanism that re-issues a tunnel's
+// whole outstanding chunk set left no trace in the router's ring or in `visor
+// state`, and a bench run could not see it had fired at all.
 func validTunnelEvent(event string) bool {
 	switch event {
-	case router.MuxEventTunnelPromoted, router.MuxEventTunnelParked, router.MuxEventTunnelRetired:
+	case router.MuxEventTunnelPromoted, router.MuxEventTunnelParked, router.MuxEventTunnelRetired,
+		router.MuxEventTunnelSnubbed, router.MuxEventTunnelUnsnubbed:
+		return true
+	default:
+		return false
+	}
+}
+
+// validTunnelRole reports whether role is one of the roles an app may stamp on
+// its own tunnel. The empty string means "leave the role alone".
+func validTunnelRole(role string) bool {
+	switch role {
+	case "", tunnelRoleActive, tunnelRoleStandby, tunnelRoleSnubbed:
 		return true
 	default:
 		return false
@@ -339,7 +362,7 @@ func (r *RPCIngressGateway) NoteMuxEvent(req *NoteMuxEventReq, _ *struct{}) (err
 	if !validTunnelEvent(req.Event) {
 		return fmt.Errorf("NoteMuxEvent: unknown event %q", req.Event)
 	}
-	if req.Role != "" && req.Role != tunnelRoleActive && req.Role != tunnelRoleStandby {
+	if !validTunnelRole(req.Role) {
 		return fmt.Errorf("NoteMuxEvent: unknown role %q", req.Role)
 	}
 	if !r.ownsLocalPort(req.LocalPort) {

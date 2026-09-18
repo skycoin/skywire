@@ -76,6 +76,14 @@ func TestSnubBoundFlooredByRTT(t *testing.T) {
 
 	m2 := new(tunnelMeter)
 	m2.recordRTT(2500 * time.Millisecond)
+	require.Equal(t, tunnelSnubAfter, m2.snubBound(),
+		"at the default the knob outlasts any real RTT — no tunnel is 10s away")
+
+	// The floor is what still governs once an operator sweeps the knob DOWN
+	// live (`proxy settings tunnel.snub_after=...`): a far tunnel is judged on
+	// ITS round trip and not on the rig's.
+	require.True(t, skysettings.Apply(map[string]int64{skysettings.TunnelSnubAfter: int64(3 * time.Second)}))
+	require.Equal(t, 3*time.Second, new(tunnelMeter).snubBound(), "a near tunnel: the knob governs")
 	require.Equal(t, 5*time.Second, m2.snubBound(), "a far tunnel: 2x its RTT")
 }
 
@@ -178,8 +186,8 @@ func TestEvaluateSnubsMovesChunksToTheMovingTunnel(t *testing.T) {
 	}
 
 	// Both hold a chunk; only one of them is delivering bytes.
-	ms.startWork(now.Add(-4 * time.Second))
-	mm.startWork(now.Add(-4 * time.Second))
+	ms.startWork(now.Add(-tunnelSnubAfter - time.Second))
+	mm.startWork(now.Add(-tunnelSnubAfter - time.Second))
 	mm.noteChunkByte(now.Add(-100 * time.Millisecond))
 
 	c.evaluateSnubs(now)
@@ -195,4 +203,70 @@ func TestEvaluateSnubsMovesChunksToTheMovingTunnel(t *testing.T) {
 	c.evaluateSnubs(now.Add(tunnelSnubHold + time.Millisecond))
 	require.False(t, ms.isSnubbed(), "the hold is served")
 	require.Same(t, silent, c.pickSessionFor(pickRecv), "and it is re-tried with one chunk")
+}
+
+// The wedge row of the 2026-09-18 two-tunnel/two-leg compose set. A route group
+// is a reliable ORDERED stream: while its receive frontier is wedged behind a
+// missing packet the app gets no chunk byte, no upload ack and not even the
+// keepalive pong, so a head-of-line-blocked tunnel is indistinguishable from a
+// dead one on app-local evidence — the router is the end that can still see the
+// SACKs and the retransmits, and no app RPC carries that. What separates them
+// is DURATION: those wedges cleared in 5 s to 16.5 s. The bound must outlast
+// the longest of them, or a live tunnel is snubbed and the ~4 MB it still has
+// outstanding is re-issued on its sibling while the original is in flight —
+// six snub/unsnub pairs on one port, and 57.6-63.1 MB of wire for 50 MB.
+func TestSnubBoundOutlastsAReorderWedge(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	require.Greater(t, tunnelSnubAfter, tunnelReorderWedgeClear,
+		"the no-progress bound must sit above the longest measured wedge clear")
+	require.Equal(t, tunnelSnubAfter, skysettings.Dur(skysettings.TunnelSnubAfter),
+		"the registered knob default and the documented constant are one number")
+	require.Equal(t, tunnelSnubAfter, new(tunnelMeter).snubBound(),
+		"an unmeasured tunnel is judged on the knob")
+}
+
+// (a) A tunnel head-of-line blocked for the whole of the longest measured wedge
+// is NOT snubbed, and (b) one that stays silent past the bound still is. The
+// same two tunnels, the same evaluator, only the clock moves.
+func TestEvaluateSnubsSparesAWedgedTunnelAndStillCatchesASilentOne(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	wedged, close0 := newTestSession(t)
+	defer close0()
+	moving, close1 := newTestSession(t)
+	defer close1()
+
+	t0 := time.Now()
+	mw, mm := new(tunnelMeter), new(tunnelMeter)
+	mw.rxCapBps, mw.busyAt, mm.rxCapBps, mm.busyAt = 5e6, t0, 5e6, t0
+	c := &Client{
+		sessions:  []*yamux.Session{wedged, moving},
+		recvStamp: map[*yamux.Session]*tunnelMeter{wedged: mw, moving: mm},
+		closeC:    make(chan struct{}),
+	}
+	mw.startWork(t0) // ~4 MB of chunks outstanding behind the frontier gap
+	mm.startWork(t0)
+
+	// (a) The wedge, sampled every tick right up to the longest one measured.
+	// Nothing arrives on the wedged tunnel for any of it.
+	for at := t0.Add(snubTick()); at.Sub(t0) <= tunnelReorderWedgeClear; at = at.Add(snubTick()) {
+		mm.noteChunkByte(at) // the sibling keeps moving, so the liveness guard is not what spares it
+		c.evaluateSnubs(at)
+		require.False(t, mw.isSnubbed(),
+			"a tunnel head-of-line blocked for %s must not be snubbed", at.Sub(t0))
+	}
+
+	// The wedge clears and the bytes the original attempt was always going to
+	// deliver arrive — proof the re-issue would have been pure duplicate wire.
+	cleared := t0.Add(tunnelReorderWedgeClear)
+	mw.noteChunkByte(cleared)
+	c.evaluateSnubs(cleared)
+	require.False(t, mw.isSnubbed())
+
+	// (b) Now it goes truly silent: no byte, no ack, past the bound.
+	silentFor := cleared.Add(tunnelSnubAfter + time.Second)
+	mm.noteChunkByte(silentFor)
+	c.evaluateSnubs(silentFor)
+	require.True(t, mw.isSnubbed(), "silence past the bound is still a snub")
+	require.False(t, mm.isSnubbed())
+	require.Same(t, moving, c.pickSessionFor(pickRecv), "and its chunks are re-issued on the sibling")
 }
