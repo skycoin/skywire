@@ -47,7 +47,7 @@ func TestSelectRouteDescByPort(t *testing.T) {
 	}
 
 	// src_port still selects when the caller has only the one group (the
-	// pre-existing behaviour), and 0 auto-picks it.
+	// pre-existing behavior), and 0 auto-picks it.
 	one := infos[:1]
 	if got, err := selectRouteDesc(one, "skysocks-client", appPort); err != nil || got.DstPort() != 49166 {
 		t.Errorf("selectRouteDesc(src_port=%d) = (%v, %v), want the only group", appPort, got.DstPort(), err)

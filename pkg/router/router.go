@@ -768,7 +768,7 @@ type router struct {
 	existingTpOnlyMu sync.Mutex       // protects existingTpOnly
 	// sameLANPeersFn overrides where the same-LAN peer set comes from. nil in
 	// production — sameLANExcludedPKs then asks the transport manager
-	// (Manager.SameLANPeers, the #4253 check). Present so the LAN-neighbour
+	// (Manager.SameLANPeers, the #4253 check). Present so the LAN-neighbor
 	// refusal can be exercised without standing up real transports.
 	sameLANPeersFn     func() []cipher.PubKey
 	forceLocalRoutes   bool       // when true, skip route finder and use local route calculation

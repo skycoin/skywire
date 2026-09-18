@@ -41,11 +41,14 @@ func collectConn(t *testing.T) (net.Conn, *sync.Mutex, *bytes.Buffer) {
 	return a, &mu, &buf
 }
 
+// rescueChunk is the chunk size every rescue case in this file runs at.
+const rescueChunk = 8
+
 // rescueClient builds a minimal Client whose chunkSize/concurrency drive
 // streamRemainingChunks directly (no network).
-func rescueClient(chunkSize int64) *Client {
+func rescueClient() *Client {
 	c := &Client{closeC: make(chan struct{})}
-	c.rs = rangeSplitConfig{enabled: true, concurrency: 2, chunkSize: chunkSize}
+	c.rs = rangeSplitConfig{enabled: true, concurrency: 2, chunkSize: rescueChunk}
 	return c
 }
 
@@ -53,9 +56,9 @@ func rescueClient(chunkSize int64) *Client {
 // the rescue streams the remainder (resuming across a partial first attempt),
 // so the client receives every byte of [chunkSize, total).
 func TestStreamRemainingChunks_RescueCompletesDownload(t *testing.T) {
-	const chunk = 8
+	const chunk = rescueChunk
 	const total = 40 // chunk0 (8B, not part of this call) + 4 chunks of 8
-	c := rescueClient(chunk)
+	c := rescueClient()
 	conn, mu, got := collectConn(t)
 
 	pattern := func(start, end int64) []byte {
@@ -112,9 +115,9 @@ func TestStreamRemainingChunks_RescueCompletesDownload(t *testing.T) {
 // TestStreamRemainingChunks_NoRescueKeepsTruncation: with a nil rescue the old
 // behavior stands — the stream ends at the failed chunk boundary.
 func TestStreamRemainingChunks_NoRescueKeepsTruncation(t *testing.T) {
-	const chunk = 8
+	const chunk = rescueChunk
 	const total = 32
-	c := rescueClient(chunk)
+	c := rescueClient()
 	conn, mu, got := collectConn(t)
 
 	fetch := func(start, end int64) ([]byte, error) {
@@ -137,9 +140,8 @@ func TestStreamRemainingChunks_NoRescueKeepsTruncation(t *testing.T) {
 // TestStreamRemainingChunks_RescueGivesUpWithoutProgress: a rescue that never
 // delivers a byte is abandoned after rsRescueAttempts tries.
 func TestStreamRemainingChunks_RescueGivesUpWithoutProgress(t *testing.T) {
-	const chunk = 8
 	const total = 32
-	c := rescueClient(chunk)
+	c := rescueClient()
 	conn, _, _ := collectConn(t)
 
 	fetch := func(start, end int64) ([]byte, error) {
