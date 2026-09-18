@@ -45,9 +45,14 @@
 set -u
 CLI=${CLI:-/home/d0mo/go/bin/skywire}
 exit_pk=$1; out=$2; pins=$3; trials=${4:-5}; sink=${5:-http://127.0.0.1:18080}
-order=${6:-$(ls "$pins"/via-*.json | sed 's|.*/via-||; s|\.json$||' | tr '\n' ' ')}
 here=$(dirname "$0")
 mkdir -p "$out"
+# shellcheck source=bench/lib-pins.sh
+. "$here/lib-pins.sh"
+# The pin order is a MEASUREMENT, not an alphabet: pin_order ranks the pins by
+# this campaign's own reference numbers and drops a route whose reference could
+# not carry 50 MB (bench/lib-pins.sh). The explicit 6th argument still wins.
+order=${6:-$(pin_order "$out" "$pins")}
 local_commit=$(git -C "$here/.." rev-parse --short=9 HEAD)
 PAIRED_HERE=$here # read by the library below
 export PAIRED_HERE

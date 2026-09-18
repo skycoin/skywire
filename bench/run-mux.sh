@@ -86,9 +86,14 @@
 set -u
 CLI=${CLI:-/home/d0mo/go/bin/skywire}
 exit_pk=$1; out=$2; pins=$3; trials=${4:-5}; sink=${5:-http://127.0.0.1:18080}
-order=${6:-$(ls "$pins"/via-*.json | sed 's|.*/via-||; s|\.json$||' | tr '\n' ' ')}
 here=$(dirname "$0")
 mkdir -p "$out"
+# shellcheck source=bench/lib-pins.sh
+. "$here/lib-pins.sh"
+# The pin order is a MEASUREMENT, not an alphabet: pin_order ranks the pins by
+# this campaign's own reference numbers and drops a route whose reference could
+# not carry 50 MB (bench/lib-pins.sh). The explicit 6th argument still wins.
+order=${6:-$(pin_order "$out" "$pins")}
 local_commit=$(git -C "$here/.." rev-parse --short=9 HEAD)
 PAIRED_HERE=$here; CUT_HERE=$here # read by the libraries below
 export PAIRED_HERE CUT_HERE
@@ -577,6 +582,24 @@ res_slope() {
 	return 0
 }
 
+# tunnel_dial <app> <socks> <N> <set>: dial the session with N tunnels, let the
+# standby pool settle, and read the REALIZED shape into $groups / $active /
+# $standby / $tps / $desc (and <set>.legs.json). Two callers: the set's own dial
+# and the reconcile below, which has to re-read the same fields.
+tunnel_dial() {
+	timeout 240 $CLI cli proxy start -k "$exit_pk" -n "$1" -a "$2" --tunnels "$3" ${RANGE_PORT:+--range-port $RANGE_PORT} ${RANGE_CHUNK_KIB:+--range-chunk-kib $RANGE_CHUNK_KIB} ${RANGE_CONCURRENCY:+--range-concurrency $RANGE_CONCURRENCY} 2>&1 | grep -iv debug | grep -i "tunnel\|running\|error\|fatal" | head -3
+	sleep 5
+	wait_pool "$1" # the standby pool is still filling 5 s after the dial
+	mux_info "$1" > "$out/$4.legs.json"
+	roles=$(rg_roles "$out/$4.legs.json")
+	groups=${roles%% *}; roles_rest=${roles#* }; active=${roles_rest%% *}; standby=${roles_rest##* }
+	# the carriers are named from EVERY group, standby included: a standby tunnel
+	# moves only its keepalive, and a leg promoted mid-set has to be in the list.
+	tps=$(jq -r '.[].legs[].transport_id' "$out/$4.legs.json" 2>/dev/null | sort -u | tr '\n' ' ')
+	desc=$(jq -r '[.[] | "rg\(.desc.dst_port)\(if .tunnel_role then "/" + .tunnel_role else "" end)=[" + ([.legs[] | .tp_type + ">" + .remote_pk[0:8] + "@" + .transport_id[0:8]] | join(";")) + "]"] | join(" ")' "$out/$4.legs.json" 2>/dev/null)
+	echo "$1: $groups route group(s) — $active active, $standby standby; first-hop tps: $tps"
+}
+
 # --- stream-level: N tunnels ---------------------------------------------------
 port=1101
 for N in $tunnel_counts; do
@@ -585,22 +608,26 @@ for N in $tunnel_counts; do
 	# a group left over from the previous set would be dialed instead of this
 	# set's own tunnels: refuse to measure until the app owns nothing.
 	stop_app_clean "$name" || { abort_set "$set_name" "route group(s) $rg_left survived two proxy stops before setup"; port=$((port + 1)); continue; }
-	timeout 240 $CLI cli proxy start -k "$exit_pk" -n "$name" -a "$socks" --tunnels "$N" ${RANGE_PORT:+--range-port $RANGE_PORT} ${RANGE_CHUNK_KIB:+--range-chunk-kib $RANGE_CHUNK_KIB} ${RANGE_CONCURRENCY:+--range-concurrency $RANGE_CONCURRENCY} 2>&1 | grep -iv debug | grep -i "tunnel\|running\|error\|fatal" | head -3
-	sleep 5
-	wait_pool "$name" # the standby pool is still filling 5 s after the dial
-	mux_info "$name" > "$out/$set_name.legs.json"
-	roles=$(rg_roles "$out/$set_name.legs.json")
-	groups=${roles%% *}; roles_rest=${roles#* }; active=${roles_rest%% *}; standby=${roles_rest##* }
-	# the carriers are named from EVERY group, standby included: a standby tunnel
-	# moves only its keepalive, and a leg promoted mid-set has to be in the list.
-	tps=$(jq -r '.[].legs[].transport_id' "$out/$set_name.legs.json" 2>/dev/null | sort -u | tr '\n' ' ')
-	desc=$(jq -r '[.[] | "rg\(.desc.dst_port)\(if .tunnel_role then "/" + .tunnel_role else "" end)=[" + ([.legs[] | .tp_type + ">" + .remote_pk[0:8] + "@" + .transport_id[0:8]] | join(";")) + "]"] | join(" ")' "$out/$set_name.legs.json" 2>/dev/null)
-	echo "$name: $groups route group(s) — $active active, $standby standby; first-hop tps: $tps"
+	tunnel_dial "$name" "$socks" "$N" "$set_name"
 	# the target IS N ACTIVE tunnels; a set that came up in another shape measures
 	# something else and must not be recorded as this set (campaign16). Standby
 	# tunnels are not part of the shape: the pool holds as many as the router has
 	# disjoint first hops for.
-	[ "$active" -eq "$N" ] || { abort_set "$set_name" "shape differs from target: $active active route group(s) of $groups ($standby standby), asked for $N (groups=$desc)"; port=$((port + 1)); continue; }
+	#
+	# A session that already holds MORE actives than this set asks for is not a
+	# measurement problem, it is leftover shape: the UP2 cell of 2026-09-18
+	# 1008cc8e5 left three actives behind and mux-tunnels-2 went INVALID on a
+	# shape it could simply have re-taken. Restart the session once with the
+	# asked shape, let the pool settle, and judge the re-read.
+	if [ "$active" -ne "$N" ]; then
+		echo "$set_name: session holds $active active route group(s) of $groups, asked for $N — restarting it with --tunnels $N and re-reading the shape"
+		if stop_app_clean "$name"; then
+			tunnel_dial "$name" "$socks" "$N" "$set_name"
+		else
+			echo "$set_name: route group(s) $rg_left survived two proxy stops during the reconcile"
+		fi
+	fi
+	[ "$active" -eq "$N" ] || { abort_set "$set_name" "shape differs from target after a reconcile: $active active route group(s) of $groups ($standby standby), asked for $N (groups=$desc)"; port=$((port + 1)); continue; }
 	warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
 	# live knobs, once per set: the visor's app store is cleared when the app
 	# stops, so SETTINGS can only be applied here — after the dial, the shape
