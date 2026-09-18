@@ -61,10 +61,34 @@ busy window only proves the direction it moved bytes in. The LEGS inside one
 route group are out of scope: that is the router's ECF scheduler, a different
 layer on a different statistic. This policy chooses between GROUPS.
 
-**The pool.** `min_routes` is reached by PROMOTING standby tunnels through the
-existing promoter path (`promoteBestStandby`), before the object's first chunk
-goes out. It never dials: the discovered pool is the ceiling, and a policy
-asking for more routes than exist runs on the ones that do.
+**The pool.** `min_routes` is reached by PROMOTING standby tunnels, before the
+object's first chunk goes out. It never dials: the discovered pool is the
+ceiling, and a policy asking for more routes than exist runs on the ones that
+do. The route promoted is the standby with the highest measured capacity in the
+object's direction (`promoteFastestStandby`), NOT the lowest RTT: the route is
+being added to carry bytes, and capacity is the statistic the planner will weigh
+its share by. With no standby measured this falls back to the failover rank
+(`promoteBestStandby`, lowest RTT), which the failover paths themselves still
+use unchanged. On the download path the promotion happens after chunk0's stream
+is already open — chunk0 doubles as the size probe, and it is the reply to it
+that first says the object is splittable at all — so chunk0 is charged to
+whichever tunnel the browser's CONNECT landed on and only the remainder is
+planned over the widened set.
+
+**Width.** The download's in-flight budget follows the width once the policy
+steers. `chunk.concurrency` is ONE object-wide admission gate, so three routes
+under it simply share the same eight streams — about 2.7 each — and the object
+finishes near a single route's solo rate however well the shares are balanced.
+That is the whole of the first live run's download gap: 5.13 MB/s against an
+8.23 MB/s best single-route reference (0.62×), while the uploads of the same
+run, gated per tunnel (`inflight < live × upload.concurrency`), reached 0.91×.
+Steering, the gate is `chunk.tunnel_concurrency` × the active width, measured
+after `min_routes` has promoted; unset, and at a width of one, it is
+`chunk.concurrency` exactly as before.
+
+| knob | kind | default | meaning |
+|---|---|---|---|
+| `chunk.tunnel_concurrency` | count | `4` | chunks one route may carry at once on a split download the policy steers |
 
 **Accounting.** The planner books a chunk's bytes against its tunnel at
 admission and corrects the booking to what the tunnel actually carried when the

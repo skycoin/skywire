@@ -206,7 +206,7 @@ func (p *spreadPlanner) ensureRoutes() int {
 	if p == nil || p.c == nil || p.pol.minRoutes < 2 {
 		return 0
 	}
-	return p.c.ensureMinRoutes(p.pol.minRoutes, "spread.min_routes")
+	return p.c.ensureMinRoutes(p.pol.minRoutes, p.dir, "spread.min_routes")
 }
 
 // pick returns the tunnel the next chunk of `size` bytes belongs on, or nil to
@@ -402,13 +402,19 @@ func (c *Client) tunnelPort(s *yamux.Session) uint16 {
 // them, and reports the width it reached. It NEVER dials: the pool is filled
 // by the keepalive loop against the routes that were discovered, and a spread
 // policy asking for more routes than exist must run on the ones that do.
-func (c *Client) ensureMinRoutes(n int, reason string) int {
+//
+// It promotes on measured CAPACITY in the object's direction
+// (promoteFastestStandby), not on the failover path's RTT rank: a route added to
+// widen a transfer is judged on what it has been shown to carry, since that is
+// what the planner will weigh its share by. With nothing measured that falls
+// back to the RTT rank on its own.
+func (c *Client) ensureMinRoutes(n int, dir spreadDir, reason string) int {
 	held := c.liveSessionCount()
 	for i := 0; i <= held; i++ {
 		if c.activeLiveCount() >= n {
 			break
 		}
-		if c.promoteBestStandby(reason) == nil {
+		if c.promoteFastestStandby(dir, reason) == nil {
 			break
 		}
 	}

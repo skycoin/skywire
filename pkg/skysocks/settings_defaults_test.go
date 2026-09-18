@@ -80,7 +80,7 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 
 	// Every knob in the catalog is reachable: a name registered with no use site
 	// reading it is a knob the bench can set and nothing obeys.
-	require.Len(t, skysettings.Catalog(), 46)
+	require.Len(t, skysettings.Catalog(), 47)
 }
 
 // The two range-split knobs OVERRIDE a per-client boot flag rather than

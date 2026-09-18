@@ -68,6 +68,7 @@ const (
 	ChunkMinBytes          = "chunk.min_bytes"
 	ChunkPerTunnel         = "chunk.per_tunnel"
 	ChunkConcurrency       = "chunk.concurrency"
+	ChunkTunnelConcurrency = "chunk.tunnel_concurrency"
 	ChunkRetryBudget       = "chunk.retry_budget"
 	ChunkIdleTimeout       = "chunk.idle_timeout"
 	ChunkFreeRetries       = "chunk.free_retries"
@@ -204,6 +205,8 @@ func init() {
 		"range-split chunk ceiling; overrides --range-chunk-kib once set")
 	register(ChunkConcurrency, KindCount, 8,
 		"concurrent range-split chunk fetches; overrides --range-concurrency once set")
+	register(ChunkTunnelConcurrency, KindCount, 4,
+		"chunks one tunnel may carry at once on a split download the spread policy steers")
 	register(ChunkProbeBytes, KindBytes, 2<<20,
 		"bytes chunk0 asks for — the size probe, and the no-split threshold")
 	register(ChunkMinBytes, KindBytes, 1<<20,

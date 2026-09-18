@@ -64,9 +64,12 @@ func setMeterSampleMin() time.Duration { return skysettings.Dur(skysettings.Tunn
 func setMeterCapDecay() float64        { return skysettings.Ratio(skysettings.TunnelMeterCapDecay) }
 func setMeterFresh() time.Duration     { return skysettings.Dur(skysettings.TunnelMeterFresh) }
 
-func setChunkProbeBytes() int64          { return skysettings.Bytes(skysettings.ChunkProbeBytes) }
-func setChunkMinBytes() int64            { return skysettings.Bytes(skysettings.ChunkMinBytes) }
-func setChunkPerTunnel() int             { return skysettings.Count(skysettings.ChunkPerTunnel) }
+func setChunkProbeBytes() int64 { return skysettings.Bytes(skysettings.ChunkProbeBytes) }
+func setChunkMinBytes() int64   { return skysettings.Bytes(skysettings.ChunkMinBytes) }
+func setChunkPerTunnel() int    { return skysettings.Count(skysettings.ChunkPerTunnel) }
+func setChunkTunnelConcurrency() int {
+	return skysettings.Count(skysettings.ChunkTunnelConcurrency)
+}
 func setChunkRetryBudget() time.Duration { return skysettings.Dur(skysettings.ChunkRetryBudget) }
 func setChunkIdleTimeout() time.Duration { return skysettings.Dur(skysettings.ChunkIdleTimeout) }
 func setChunkFreeRetries() int           { return skysettings.Count(skysettings.ChunkFreeRetries) }

@@ -253,13 +253,13 @@ func TestEnsureMinRoutesPromotesStandbysAndNeverDials(t *testing.T) {
 	}
 	require.Equal(t, 1, c.activeLiveCount())
 
-	require.Equal(t, 3, c.ensureMinRoutes(3, "test"), "both standbys promoted")
+	require.Equal(t, 3, c.ensureMinRoutes(3, spreadDown, "test"), "both standbys promoted")
 	require.False(t, c.IsStandby(sb1))
 	require.False(t, c.IsStandby(sb2))
 
 	// Asking for more than the pool holds is not an error and dials nothing:
 	// the object runs on the width that exists.
-	require.Equal(t, 3, c.ensureMinRoutes(8, "test"))
+	require.Equal(t, 3, c.ensureMinRoutes(8, spreadDown, "test"))
 	require.Len(t, c.sessions, 3, "ensureMinRoutes must never add a tunnel")
 }
 
@@ -438,4 +438,117 @@ func TestSpreadBoundsTheShareOfA50MBUpload(t *testing.T) {
 	require.Zero(t, sink.whole, "the body must be striped, not sent whole")
 
 	spreadTopShare(t, client.lastSpread(), 0.4, float64(uploadChunkBytes)/blobSize, "50 MB upload")
+}
+
+// The download admission gate is WIDTH-AWARE once the policy steers. Unset it
+// is chunk.concurrency — one object-wide budget, whatever the width — which is
+// the gate that held the first live spread run's downloads at 0.62x the best
+// single-route reference while its uploads, gated per tunnel, reached 0.91x.
+func TestChunkAdmissionScalesWithActiveTunnels(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	sessions := make([]*yamux.Session, 0, 3)
+	meters := map[*yamux.Session]*tunnelMeter{}
+	for i := 0; i < 3; i++ {
+		s, closeS := newTestSession(t)
+		defer closeS() //nolint:revive // the sessions must outlive the loop
+		sessions = append(sessions, s)
+		meters[s] = new(tunnelMeter)
+	}
+	c := &Client{
+		rs:        rangeSplitConfig{enabled: true, concurrency: 8, chunkSize: 1 << 20},
+		sessions:  sessions,
+		recvStamp: meters,
+		standby:   map[*yamux.Session]bool{},
+		closeC:    make(chan struct{}),
+	}
+	require.Equal(t, 3, c.activeLiveCount())
+
+	// Nothing set: today's gate, byte for byte.
+	require.Equal(t, 8, c.chunkAdmission(nil), "no planner is the sequential caller")
+	require.Equal(t, 8, c.chunkAdmission(c.newSpreadPlanner(spreadDown)), "an inert policy steers nothing")
+
+	// Steering: chunk.tunnel_concurrency (4) × the active width (3).
+	require.True(t, skysettings.Apply(map[string]int64{skysettings.SpreadMinRoutes: 3}))
+	pl := c.newSpreadPlanner(spreadDown)
+	require.True(t, pl.pol.steers())
+	require.Equal(t, 12, c.chunkAdmission(pl))
+
+	// The per-tunnel depth is the knob, not a constant.
+	require.True(t, skysettings.Apply(map[string]int64{
+		skysettings.SpreadMinRoutes:        3,
+		skysettings.ChunkTunnelConcurrency: 2,
+	}))
+	require.Equal(t, 6, c.chunkAdmission(c.newSpreadPlanner(spreadDown)))
+
+	// One active tunnel is not a spread: the object-wide value stands, so the
+	// gate never narrows below today's.
+	c.standby[sessions[1]] = true
+	c.standby[sessions[2]] = true
+	require.Equal(t, 1, c.activeLiveCount())
+	require.Equal(t, 8, c.chunkAdmission(c.newSpreadPlanner(spreadDown)))
+}
+
+// min_routes promotes the standby with the highest measured CAPACITY, not the
+// lowest RTT: the route is being added to carry bytes, and capacity is what the
+// planner weighs its share by. The RTT rank still governs failover.
+func TestEnsureMinRoutesPromotesTheFastestStandby(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	active, closeA := newTestSession(t)
+	defer closeA()
+	near, closeN := newTestSession(t)
+	defer closeN()
+	fast, closeF := newTestSession(t)
+	defer closeF()
+
+	mA, mNear, mFast := new(tunnelMeter), new(tunnelMeter), new(tunnelMeter)
+	mA.rttMs, mNear.rttMs, mFast.rttMs = 40, 20, 60
+	mNear.rxCapBps, mFast.rxCapBps = 1<<20, 8<<20
+	mNear.txCapBps, mFast.txCapBps = 8<<20, 1<<20 // the upload ranking is the other way round
+	c := &Client{
+		sessions:  []*yamux.Session{active, near, fast},
+		recvStamp: map[*yamux.Session]*tunnelMeter{active: mA, near: mNear, fast: mFast},
+		standby:   map[*yamux.Session]bool{near: true, fast: true},
+		closeC:    make(chan struct{}),
+	}
+
+	// Downloading: `fast` carries 8x what `near` does, though `near` answers in
+	// a third of the time. The RTT rank would have taken `near`.
+	require.Equal(t, 2, c.ensureMinRoutes(2, spreadDown, "test"))
+	require.False(t, c.IsStandby(fast), "the highest-capacity standby is promoted")
+	require.True(t, c.IsStandby(near))
+
+	// The direction is the object's: an upload weighs the tx estimate.
+	c2 := &Client{
+		sessions:  []*yamux.Session{active, near, fast},
+		recvStamp: map[*yamux.Session]*tunnelMeter{active: mA, near: mNear, fast: mFast},
+		standby:   map[*yamux.Session]bool{near: true, fast: true},
+		closeC:    make(chan struct{}),
+	}
+	require.Equal(t, 2, c2.ensureMinRoutes(2, spreadUp, "test"))
+	require.False(t, c2.IsStandby(near))
+	require.True(t, c2.IsStandby(fast))
+}
+
+// With nothing measured there is no capacity to rank on, and the promotion
+// falls back to promoteBestStandby's RTT rank — the failover ordering, unchanged.
+func TestEnsureMinRoutesFallsBackToTheRTTRank(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	active, closeA := newTestSession(t)
+	defer closeA()
+	near, closeN := newTestSession(t)
+	defer closeN()
+	far, closeF := newTestSession(t)
+	defer closeF()
+
+	mA, mNear, mFar := new(tunnelMeter), new(tunnelMeter), new(tunnelMeter)
+	mA.rttMs, mNear.rttMs, mFar.rttMs = 40, 20, 60
+	c := &Client{
+		sessions:  []*yamux.Session{active, near, far},
+		recvStamp: map[*yamux.Session]*tunnelMeter{active: mA, near: mNear, far: mFar},
+		standby:   map[*yamux.Session]bool{near: true, far: true},
+		closeC:    make(chan struct{}),
+	}
+	require.Equal(t, 2, c.ensureMinRoutes(2, spreadDown, "test"))
+	require.False(t, c.IsStandby(near), "no capacity sample anywhere: the lowest RTT wins")
+	require.True(t, c.IsStandby(far))
 }

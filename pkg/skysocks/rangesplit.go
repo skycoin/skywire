@@ -324,7 +324,7 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 		chunks := 1 + numChunks(total-chunk0Len, chunkSize)
 		if c.appCl != nil {
 			c.appCl.Log().Debugf("range-split: %s %d bytes → %d chunks of %d bytes × %d streams",
-				host, total, chunks, chunkSize, c.rsConcurrency())
+				host, total, chunks, chunkSize, c.chunkAdmission(pl))
 		}
 		// Observability counters (surfaced as proxystatus.RangeSplit): this is a
 		// committed multi-chunk split, so record it and mark it in flight for the
@@ -575,6 +575,47 @@ func (c *Client) startChunkFetchesFrom(from, total, chunkSize int64, fetch rsFet
 		})
 }
 
+// chunkAdmission is the object-wide in-flight budget for a split download —
+// how many chunk fetches may be open at once.
+//
+// Unset, it is chunk.concurrency exactly as before: ONE budget for the object,
+// whatever width it is spread over. That gate is width-BLIND, and it is why the
+// first live spread run downloaded at 5.13 MB/s against an 8.23 MB/s single-route
+// reference (0.62x) while the uploads of the same run reached 0.91x: three
+// tunnels shared the same 8 streams, ~2.7 each, so the object finished near one
+// tunnel's solo rate no matter how well the shares were balanced. The striped
+// upload never had the cap — it gates on `inflight < live*perTunnel` — which is
+// the rule mirrored here.
+//
+// So once the spread policy STEERS, the budget is sized per active tunnel:
+// chunk.tunnel_concurrency × the active width, measured after the planner's
+// ensureRoutes has promoted standbys to min_routes. A width of one is not a
+// spread at all and keeps the object-wide value, so nothing narrows below
+// today's. With no knob set the policy does not steer and this returns
+// chunk.concurrency, unchanged.
+//
+// Never 0: an unbuffered admission gate is a producer that can never admit the
+// first chunk, since the release only happens inside the fetch it is waiting to
+// start.
+func (c *Client) chunkAdmission(pl *spreadPlanner) int {
+	conc := c.rsConcurrency()
+	if conc < 1 {
+		conc = defaultRSConcurrency
+	}
+	if pl == nil || !pl.pol.steers() {
+		return conc
+	}
+	active := c.activeLiveCount()
+	if active < 2 {
+		return conc
+	}
+	per := setChunkTunnelConcurrency()
+	if per < 1 {
+		per = 1
+	}
+	return per * active
+}
+
 // startChunkFetchesPlanned is startChunkFetchesFrom under a spread planner: the
 // fetch is handed the placement for its attempt (the ledger, and for an endgame
 // duplicate the tunnel it is pinned to and the channel that tells it it lost),
@@ -583,15 +624,9 @@ func (c *Client) startChunkFetchesPlanned(from, total, chunkSize int64, pl *spre
 	if chunkSize < 1 {
 		chunkSize = defaultRSChunkSize
 	}
-	// The concurrency knob is read ONCE per download: a value that moved
+	// The admission budget is read ONCE per download: a value that moved
 	// mid-flight would resize an admission gate the producer is already using.
-	// Never 0: an unbuffered admission gate is a producer that can never admit
-	// the first chunk, since the release only happens inside the fetch it is
-	// waiting to start.
-	conc := c.rsConcurrency()
-	if conc < 1 {
-		conc = defaultRSConcurrency
-	}
+	conc := c.chunkAdmission(pl)
 	f := &chunkFetches{
 		c:     c,
 		total: total,
