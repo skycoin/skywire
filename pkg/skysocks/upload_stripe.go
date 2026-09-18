@@ -520,8 +520,26 @@ func (s *uploadStripe) headroomFrom(t uploadTunables) int {
 	return n
 }
 
-// perTunnel is how many chunks one tunnel may carry at once.
-func (s *uploadStripe) perTunnel() int { return s.tunables().perTunnel() }
+// perTunnel is how many chunks one tunnel may carry at once: upload.concurrency,
+// or the bandwidth-delay depth when upload.depth_dynamic is on. Read once per
+// admission decision by the caller (takeSlot asks on each wait, headroom on
+// each call), so a knob change lands on the next slot rather than mid-chunk.
+//
+// The depth is computed against the chunk THIS OBJECT was planned with — the
+// one run() snapshotted, else the planned size tunables() holds — because the
+// bandwidth-delay product is a count of chunks and a count against the ceiling
+// would under-queue an object cut finer than it.
+func (s *uploadStripe) perTunnel() int {
+	t := s.tunables()
+	if s.c == nil {
+		return t.perTunnel()
+	}
+	chunk := s.chunk
+	if chunk <= 0 {
+		chunk = t.chunk
+	}
+	return s.c.tunnelDepth(chunk, true, t.perTunnel())
+}
 
 // tunables is this object's coherent read of the upload knobs, with the chunk
 // size PLANNED from the object instead of taken as the knob's own value:
@@ -772,7 +790,7 @@ func (s *uploadStripe) deliverChunk(start, end int64, buf []byte) error {
 		}
 		// The tunnel died under the chunk: re-send at once on another one. Nothing
 		// to wait for (the next pick skips the dead tunnel) and nothing to charge.
-		if errors.Is(err, errSessionClosed) && free < rsFreeRetries {
+		if freeRetry(err) && free < rsFreeRetries {
 			free++
 			attempt--
 
@@ -822,9 +840,11 @@ func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err
 	defer st.Close() //nolint:errcheck,gosec
 	// A tunnel that dies under this PUT fails it AT ONCE — the deadlines are for a
 	// slow tunnel, not a gone one — labeled errSessionClosed so the chunk goes to
-	// a live tunnel without backing off. guardTunnel unblocks a parked WRITE as
-	// readily as a parked read, which is what an upload spends its time in.
-	g := s.c.guardTunnel(sess, st)
+	// a live tunnel without backing off. guardChunkTunnel unblocks a parked WRITE
+	// as readily as a parked read, which is what an upload spends its time in,
+	// and it books the chunk as outstanding work on the tunnel so a tunnel that
+	// acks nothing is snubbed and its slots re-issued.
+	g := s.c.guardChunkTunnel(sess, st)
 	defer func() { err = g.err(err) }()
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
@@ -850,9 +870,16 @@ func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err
 	// pipe, which reads as a transport fault and burns the chunk's retry budget
 	// instead of waiting the Retry-After out (measured: a 502 to the browser, and
 	// 60 s for a 12 MiB object against a one-chunk window).
+	// The meter the body write and the ack stamp: the UPLOAD half of the snub's
+	// progress evidence. An ack is the sink saying it has the chunk; a slice of
+	// body that COMPLETES its write is the peer's receive window advancing, which
+	// under yamux flow control is the far end consuming what came before it.
+	// Either is proof the tunnel is moving, and a chunk waiting behind three
+	// others on the same tunnel rides on it rather than being timed on its own.
+	m := s.c.meterOf(sess)
 	werr := make(chan error, 1)
 	go func() {
-		e := writeChunkBody(st, buf, setUploadIdleTimeout())
+		e := writeChunkBody(meteredWrite{Conn: st, m: m}, buf, setUploadIdleTimeout())
 		if e == nil {
 			// The chunk is out; the ack's own window starts now.
 			_ = st.SetReadDeadline(time.Now().Add(setUploadAckTimeout())) //nolint:errcheck
@@ -889,6 +916,7 @@ func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err
 		return ack, err
 	}
 	ack = readChunkAck(resp, body)
+	m.noteUploadAck(time.Now())
 	if ack.status/100 == 2 {
 		// A 2xx means the sink read the whole chunk, so the writer is done; an
 		// error from it now would mean the ack is not to be trusted.
@@ -1193,4 +1221,21 @@ func sessionOf(stream net.Conn) *yamux.Session {
 		stream = un.Unwrap()
 	}
 	return nil
+}
+
+// meteredWrite stamps the tunnel's ack clock as a chunk body goes out. A write
+// that completes means the peer's yamux receive window advanced, so it is
+// evidence about the far end and not merely about our own send buffer — the
+// same reasoning recvStampConn's write stamp rests on.
+type meteredWrite struct {
+	net.Conn
+	m *tunnelMeter
+}
+
+func (w meteredWrite) Write(p []byte) (int, error) {
+	n, err := w.Conn.Write(p)
+	if n > 0 && w.m != nil {
+		w.m.noteUploadAck(time.Now())
+	}
+	return n, err
 }

@@ -37,8 +37,12 @@ const (
 	KindCount    Kind = "count"
 	KindDuration Kind = "duration"
 	KindRatio    Kind = "ratio"
-	KindBool     Kind = "bool"
-	KindEnum     Kind = "enum"
+	// KindBool is a flag: 0 or 1, printed and parsed as false/true. It is the
+	// kind a DEFAULT-OFF mechanism is turned on with, which is how a new
+	// dataplane rule reaches the rig without a flag gate — the knob defaults to
+	// today's behaviour and the operator flips it live.
+	KindBool Kind = "bool"
+	KindEnum Kind = "enum"
 )
 
 // Knob names. Lowercase dotted, grouped by the machinery they steer.
@@ -62,6 +66,9 @@ const (
 	TunnelMeterSampleMin   = "tunnel.meter_sample_min"
 	TunnelMeterCapDecay    = "tunnel.meter_cap_decay"
 	TunnelMeterFresh       = "tunnel.meter_fresh"
+	TunnelSnubAfter        = "tunnel.snub_after"
+	TunnelSnubHold         = "tunnel.snub_hold"
+	TunnelDepthMargin      = "tunnel.depth_margin"
 
 	ChunkMaxBytes          = "chunk.max_bytes"
 	ChunkProbeBytes        = "chunk.probe_bytes"
@@ -73,6 +80,9 @@ const (
 	ChunkIdleTimeout       = "chunk.idle_timeout"
 	ChunkFreeRetries       = "chunk.free_retries"
 	ChunkOutstandingFactor = "chunk.outstanding_factor"
+	ChunkDepthDynamic      = "chunk.depth_dynamic"
+	ChunkDepthMin          = "chunk.depth_min"
+	ChunkDepthMax          = "chunk.depth_max"
 
 	UploadStripeMinBytes = "upload.stripe_min_bytes"
 	UploadChunkBytes     = "upload.chunk_bytes"
@@ -89,6 +99,7 @@ const (
 	UploadBusyBackoff    = "upload.busy_backoff"
 	UploadBusyTries      = "upload.busy_tries"
 	UploadReplayTries    = "upload.replay_tries"
+	UploadDepthDynamic   = "upload.depth_dynamic"
 
 	SpreadMaxShare  = "spread.max_share"
 	SpreadMinRoutes = "spread.min_routes"
@@ -200,6 +211,12 @@ func init() {
 		"per-sample decay applied to a busy tunnel's capacity estimate")
 	register(TunnelMeterFresh, KindDuration, int64(2*time.Second),
 		"how long a busy window's capacity estimate stays authoritative")
+	register(TunnelSnubAfter, KindDuration, int64(3*time.Second),
+		"no byte and no ack for this long, with work outstanding, snubs a tunnel (floored at 2x its smoothed RTT)")
+	register(TunnelSnubHold, KindDuration, int64(10*time.Second),
+		"how long a snubbed tunnel sits out before it is re-tried with ONE chunk")
+	register(TunnelDepthMargin, KindDuration, int64(50*time.Millisecond),
+		"added to a tunnel's RTT in the bandwidth-delay queue depth")
 
 	register(ChunkMaxBytes, KindBytes, 4<<20,
 		"range-split chunk ceiling; overrides --range-chunk-kib once set")
@@ -221,6 +238,12 @@ func init() {
 		"refetches a tunnel death may buy a chunk without charging its budget")
 	register(ChunkOutstandingFactor, KindCount, 2,
 		"outstanding chunk buffers as a multiple of the fetch concurrency")
+	register(ChunkDepthDynamic, KindBool, 0,
+		"size the per-tunnel chunk depth from each tunnel's bandwidth-delay product instead of chunk.per_tunnel")
+	register(ChunkDepthMin, KindCount, 2,
+		"floor on the dynamic per-tunnel depth (the fixed depth it replaces)")
+	register(ChunkDepthMax, KindCount, 8,
+		"ceiling on the dynamic per-tunnel depth")
 
 	register(UploadStripeMinBytes, KindBytes, 4<<20,
 		"smallest POST body addressed in chunks rather than sent as one stream")
@@ -252,6 +275,8 @@ func init() {
 		"503s one chunk waits out before the upload fails")
 	register(UploadReplayTries, KindCount, 2,
 		"times a generic POST may be replayed after its tunnel died uncommitted")
+	register(UploadDepthDynamic, KindBool, boolVal(false),
+		"size the per-tunnel upload depth from the bandwidth-delay product instead of upload.concurrency; shares chunk.depth_min/max and tunnel.depth_margin")
 
 	// The spread policy (docs/design/route-spread-policy.md). Every default is
 	// OFF: max_share 1.0 caps nothing, min_routes 0 asks for no floor, endgame
@@ -291,11 +316,11 @@ func Count(name string) int { return int(Raw(name)) }
 // Dur reads a KindDuration knob.
 func Dur(name string) time.Duration { return time.Duration(Raw(name)) }
 
-// Ratio reads a KindRatio knob.
-func Ratio(name string) float64 { return math.Float64frombits(uint64(Raw(name))) } //nolint:gosec
-
 // Bool reads a KindBool knob.
 func Bool(name string) bool { return Raw(name) != 0 }
+
+// Ratio reads a KindRatio knob.
+func Ratio(name string) float64 { return math.Float64frombits(uint64(Raw(name))) } //nolint:gosec
 
 // Enum reads a KindEnum knob as the value's name; "" for an unknown knob or an
 // index the catalog does not hold.
@@ -472,12 +497,12 @@ func Format(name string, v int64) string {
 		return time.Duration(v).String()
 	case KindBytes:
 		return formatBytes(v)
+	case KindBool:
+		return strconv.FormatBool(v != 0)
 	case KindRatio:
 		return strconv.FormatFloat(math.Float64frombits(uint64(v)), 'g', -1, 64) //nolint:gosec
 	case KindCount:
 		return strconv.FormatInt(v, 10)
-	case KindBool:
-		return strconv.FormatBool(v != 0)
 	case KindEnum:
 		if v >= 0 && v < int64(len(k.def.Enum)) {
 			return k.def.Enum[v]

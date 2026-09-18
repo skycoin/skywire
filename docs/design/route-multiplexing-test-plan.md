@@ -222,6 +222,8 @@ run that sets nothing is byte-for-byte the old binary.
 | probing and metering | `tunnel.probe_interval` · `tunnel.liveness_interval` · `tunnel.rtt_alpha` · `tunnel.meter_sample_min` · `tunnel.meter_cap_decay` · `tunnel.meter_fresh` · `tunnel.exit_open_penalty` |
 | range-split | `chunk.max_bytes` · `chunk.concurrency` · `chunk.tunnel_concurrency` · `chunk.retry_budget` · `chunk.idle_timeout` · `chunk.free_retries` · `chunk.outstanding_factor` |
 | chunk plan | `chunk.probe_bytes` · `chunk.min_bytes` · `chunk.per_tunnel` |
+| snub | `tunnel.snub_after` · `tunnel.snub_hold` |
+| queue depth | `chunk.depth_dynamic` · `upload.depth_dynamic` · `chunk.depth_min` · `chunk.depth_max` · `tunnel.depth_margin` |
 | striped upload | `upload.stripe_min_bytes` · `upload.chunk_bytes` · `upload.mem_bytes` · `upload.concurrency` · `upload.replay_max_bytes` · `upload.probe_ttl` |
 | upload retries | `upload.ack_timeout` · `upload.idle_timeout` · `upload.durable_wait` · `upload.resend_passes` · `upload.early_tries` · `upload.early_wait_max` · `upload.busy_backoff` · `upload.busy_tries` · `upload.replay_tries` |
 | spread policy (v4) | `spread.max_share` · `spread.min_routes` · `spread.endgame` · `spread.weight` |
@@ -234,6 +236,31 @@ chunk0 — the size probe, and the no-split threshold — while `chunk.min_bytes
 and `chunk.per_tunnel` are the floor and the per-tunnel chunk count the target
 is computed from. They are read per download, so a sweep lands on the next
 object, never mid-object.
+
+The snub and depth knobs are both borrowed from bittorrent. `tunnel.snub_after`
+(3 s, floored at twice the tunnel's smoothed RTT) and `tunnel.snub_hold` (10 s)
+are bittorrent's SNUB: a peer that has sent nothing for a while is dropped from
+the request set however many requests are outstanding on it, and unchoked later
+with a single request to see whether it came back. Here the peer is a TUNNEL,
+the evidence is any chunk body byte or upload ack on it, and a chunk queued
+behind two others is invisible to the rule — which is what the earlier
+per-chunk time-to-first-byte bound got wrong. A snubbed tunnel's outstanding
+chunks are re-issued elsewhere free of budget, it takes no new ones, and after
+the hold it is re-tried with exactly ONE. If EVERY active tunnel is silent
+nothing is snubbed: that silence is the origin or the exit, not the tunnels.
+The state shows as `tunnel_snubbed` / `tunnel_unsnubbed` in `proxy mux events`
+and as role=snubbed in `proxy mux info`.
+
+`chunk.depth_dynamic` and `upload.depth_dynamic` (both OFF by default, so a run
+that sets nothing keeps the fixed `chunk.per_tunnel` 2 and `upload.concurrency`
+4) size the per-tunnel queue depth from the BANDWIDTH-DELAY PRODUCT instead:
+ceil(rate x (RTT + `tunnel.depth_margin`) / chunk), clamped to
+[`chunk.depth_min`, `chunk.depth_max`] (2..8) and averaged over the active
+tunnels. It is bittorrent's pipelining rule — a peer is kept with enough
+outstanding requests to cover one round trip of its own rate, which is one chunk
+on a fast near tunnel and four on a slow far one. The depth is read once per
+admission decision (the chunk plan per download, the upload's slot gate per
+wait), never mid-chunk.
 
 The four upload knobs a test shrinks — `upload.stripe_min_bytes`,
 `upload.chunk_bytes`, `upload.mem_bytes`, `upload.concurrency` — override the

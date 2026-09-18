@@ -423,6 +423,18 @@ type tunnelMeter struct {
 	openTimeouts atomic.Uint64
 	penaltyUntil atomic.Int64
 
+	// The snub half of the meter (tunnel_snub.go): how much work the tunnel
+	// holds, when it last produced a byte or an ack, when its current run of
+	// work began, and the hold it is serving. All atomics, because the snub
+	// evaluator reads them from the keepalive loop while chunk goroutines
+	// write them.
+	outstanding atomic.Int64
+	lastByteAt  atomic.Int64
+	lastAckAt   atomic.Int64
+	workAt      atomic.Int64
+	snubUntil   atomic.Int64
+	probing     atomic.Bool
+
 	mu       sync.Mutex
 	lastAt   time.Time
 	lastRx   uint64
@@ -445,6 +457,10 @@ type tunnelMeter struct {
 	// took in legRTTWindow after one leg's samples walked 37 → 955 ms inside a
 	// single download and flapped a park every 30 s.
 	rttWin tunnelRTTWindow
+	// snubC is closed while the tunnel is snubbed and replaced on un-snub, so a
+	// chunk in flight on the tunnel can select on the snub the way it selects
+	// on the session dying. Guarded by mu like the rest of this block.
+	snubC chan struct{}
 }
 
 // tunnelRTTAlpha weights each new ping into the tunnel's RTT EWMA. The first
@@ -597,6 +613,16 @@ func (m *tunnelMeter) capacityTx(now time.Time) (bps float64, fresh bool) {
 	defer m.mu.Unlock()
 	fresh = !m.busyAt.IsZero() && now.Sub(m.busyAt) <= setMeterFresh()
 	return m.txCapBps, fresh
+}
+
+// capacityDir returns the tunnel's proven capacity in the direction a chunk
+// will use — upload for a striped PUT, download for a range GET — so the
+// bandwidth-delay depth is computed from the direction it is about to size.
+func (m *tunnelMeter) capacityDir(now time.Time, up bool) (bps float64, fresh bool) {
+	if up {
+		return m.capacityTx(now)
+	}
+	return m.capacity(now)
 }
 
 // pickDir is what a new stream will mostly do, for pickSessionFor.
@@ -1826,7 +1852,12 @@ func (c *Client) pickSessionKind(dir pickDir, kind pickKind) *yamux.Session {
 			sitOut[i] = true
 			continue
 		}
-		if m := c.recvStamp[s]; m != nil && m.onBench(now) {
+		// A SNUBBED tunnel sits out on the same terms as a benched one, and for
+		// the same reason: it held work and delivered nothing, so the stale-idle
+		// credit below would steer the next chunk straight back onto it. A
+		// tunnel on its post-hold PROBE sits out only once it holds that one
+		// chunk — the probe is how it earns its share back.
+		if m := c.recvStamp[s]; m != nil && (m.onBench(now) || m.snubSitOut()) {
 			sitOut[i] = true
 			continue
 		}
@@ -2120,6 +2151,13 @@ func (c *Client) sessionKeepAliveLoop() {
 	promoteTicker := time.NewTicker(setTunnelPromoteInterval())
 	defer promoteTicker.Stop()
 
+	// The per-tunnel SNUB is evaluated on this loop too, at half the bound so a
+	// tunnel crosses it within one tick. It costs one pass over the sessions and
+	// decides nothing at all while no tunnel holds outstanding work, which is
+	// every tick of an idle client.
+	snubTicker := time.NewTicker(snubTick())
+	defer snubTicker.Stop()
+
 	type probeResult struct {
 		s   *yamux.Session
 		ok  bool
@@ -2155,6 +2193,7 @@ func (c *Client) sessionKeepAliveLoop() {
 				rttTicker.Reset(setTunnelRTTProbeInterval())
 				poolTicker.Reset(setPoolFillInterval())
 				promoteTicker.Reset(setTunnelPromoteInterval())
+				snubTicker.Reset(snubTick())
 				ticker.Reset(c.livenessInterval())
 			}
 			// Refresh every live tunnel's RTT, at most one probe outstanding per
@@ -2193,6 +2232,8 @@ func (c *Client) sessionKeepAliveLoop() {
 			c.maybePoolFill()
 		case <-promoteTicker.C:
 			c.maybePromote()
+		case <-snubTicker.C:
+			c.evaluateSnubs(time.Now())
 		case <-ticker.C:
 			now := time.Now()
 			for _, s := range c.snapshotSessions() {

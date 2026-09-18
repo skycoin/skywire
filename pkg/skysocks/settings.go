@@ -236,3 +236,22 @@ func (t uploadTunables) perTunnel() int {
 	}
 	return t.concurrency
 }
+
+// The snub and bandwidth-delay-depth knobs (tunnel_snub.go). The two
+// depth_dynamic flags default to FALSE, so a client that sets nothing keeps
+// today's fixed depths exactly — the operator turns the mechanism on live and
+// the default moves only once a rig row says it should.
+
+func setTunnelSnubAfter() time.Duration {
+	return skysettings.Dur(skysettings.TunnelSnubAfter)
+}
+func setTunnelSnubHold() time.Duration {
+	return skysettings.Dur(skysettings.TunnelSnubHold)
+}
+func setTunnelDepthMargin() time.Duration {
+	return skysettings.Dur(skysettings.TunnelDepthMargin)
+}
+func setChunkDepthDynamic() bool  { return skysettings.Bool(skysettings.ChunkDepthDynamic) }
+func setUploadDepthDynamic() bool { return skysettings.Bool(skysettings.UploadDepthDynamic) }
+func setChunkDepthMin() int       { return skysettings.Count(skysettings.ChunkDepthMin) }
+func setChunkDepthMax() int       { return skysettings.Count(skysettings.ChunkDepthMax) }
