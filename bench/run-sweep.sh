@@ -53,7 +53,8 @@ echo "run-sweep: $runner over $key = $(echo "$vlist" | tr ' ' ',')${base_setting
 # --- the runs -----------------------------------------------------------------
 for v in $vlist; do
 	[ -n "$v" ] || continue
-	vout="$sweep/$key=$v"
+	vout="$sweep/$key=$v"; mkdir -p "$vout"
+	for _pr in paired-ref.txt paired-ref.tsv; do [ -f "$out/$_pr" ] && cp "$out/$_pr" "$vout/"; done
 	echo "=== $key=$v -> $vout"
 	SETTINGS="${base_settings:+$base_settings }$key=$v"
 	export SETTINGS
@@ -74,7 +75,8 @@ paired_ratio() {
 cols="$tmp/cols"; : > "$cols"
 for v in $vlist; do
 	[ -n "$v" ] || continue
-	vout="$sweep/$key=$v"
+	vout="$sweep/$key=$v"; mkdir -p "$vout"
+	for _pr in paired-ref.txt paired-ref.tsv; do [ -f "$out/$_pr" ] && cp "$out/$_pr" "$vout/"; done
 	[ -d "$vout" ] || continue
 	"$here/summarize.sh" "$vout" 2>/dev/null | awk 'NR > 1 && $1 !~ /^INVALID/ && $3 ~ /^[0-9]+$/' > "$tmp/sum.$v"
 	# set/<MB><dir>, in first-seen order, unioned across every value
