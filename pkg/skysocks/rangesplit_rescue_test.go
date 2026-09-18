@@ -41,14 +41,14 @@ func collectConn(t *testing.T) (net.Conn, *sync.Mutex, *bytes.Buffer) {
 	return a, &mu, &buf
 }
 
-// rescueChunk is the chunk size every rescue case in this file runs at.
+// rescueChunk is the chunk size the rescue cases in this file run at.
 const rescueChunk = 8
 
 // rescueClient builds a minimal Client whose chunkSize/concurrency drive
 // streamRemainingChunks directly (no network).
-func rescueClient() *Client {
+func rescueClient(chunkSize int64) *Client {
 	c := &Client{closeC: make(chan struct{})}
-	c.rs = rangeSplitConfig{enabled: true, concurrency: 2, chunkSize: rescueChunk}
+	c.rs = rangeSplitConfig{enabled: true, concurrency: 2, chunkSize: chunkSize}
 	return c
 }
 
@@ -58,7 +58,7 @@ func rescueClient() *Client {
 func TestStreamRemainingChunks_RescueCompletesDownload(t *testing.T) {
 	const chunk = rescueChunk
 	const total = 40 // chunk0 (8B, not part of this call) + 4 chunks of 8
-	c := rescueClient()
+	c := rescueClient(rescueChunk)
 	conn, mu, got := collectConn(t)
 
 	pattern := func(start, end int64) []byte {
@@ -117,7 +117,7 @@ func TestStreamRemainingChunks_RescueCompletesDownload(t *testing.T) {
 func TestStreamRemainingChunks_NoRescueKeepsTruncation(t *testing.T) {
 	const chunk = rescueChunk
 	const total = 32
-	c := rescueClient()
+	c := rescueClient(rescueChunk)
 	conn, mu, got := collectConn(t)
 
 	fetch := func(start, end int64) ([]byte, error) {
@@ -141,7 +141,7 @@ func TestStreamRemainingChunks_NoRescueKeepsTruncation(t *testing.T) {
 // delivers a byte is abandoned after rsRescueAttempts tries.
 func TestStreamRemainingChunks_RescueGivesUpWithoutProgress(t *testing.T) {
 	const total = 32
-	c := rescueClient()
+	c := rescueClient(rescueChunk)
 	conn, _, _ := collectConn(t)
 
 	fetch := func(start, end int64) ([]byte, error) {
