@@ -1,0 +1,12 @@
+# assert	value	want	verdict
+pool_size	8	> 2	PASS
+pool_settled	quiet 20s	quiet	INFO
+hashes_after_cut	5/5	5/5	PASS
+cut_target	tp ac40965a-bc99-01e4-a2c9-c26b76db013b rg 49179 remote 02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7 role standby (by carrier-growth)	an active tunnel's first hop	INFO
+survivors_kept	7/7 (49174,49175,49176,49177,49178,49179,49180,49184 -> 49174,49175,49176,49177,49178,49180,49184)	all but rg 49179	PASS
+rg_ports_lost	49179	at most rg 49179	PASS
+rg_ports_gained	none	pool refill, not a rebuild	INFO
+promote_event	none (cut target was standby, not active — no promotion was called for)	none required unless the cut target was active	INFO
+ttfb_after_cut_s	0.511	< 2	PASS
+local_reorder_wedge	0 events, wedges counter 0	0	PASS
+exit_reorder_wedge	0	0	PASS

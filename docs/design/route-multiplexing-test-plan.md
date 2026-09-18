@@ -845,63 +845,59 @@ against the **endpoint ceiling measured in the same campaign**
 one and says which bound bound each verdict; criterion 10 is the `mux-spread-3`
 set of `bench/run-mux.sh` and its `.assert.tsv`.
 
-### Criterion status as of develop 1008cc8e5 (the 2026-09-18 chains)
+### Criterion status at the campaign close — develop `898591982` (the 2026-09-18 chains)
 
-The 2026-09-18 chains O–AK are indexed in `bench/2026-09-16/README-2026-09-18-chains.md`; the
-rows below score the ten criteria (1–8 as measured in the 2026-09-16/17 campaign, 2, 4 and
-10 as re-worded above) against that day's result dirs, at the day's last merged head
-`1008cc8e5` (#5035, chain AK). Ceilings are chain Z's
-`bench/2026-09-16/f9107c982-ceiling2/ceiling.tsv` — uplink 11.23, downlink 9.55 MB/s.
+The 2026-09-18 chains O–AK are indexed in `bench/2026-09-16/README-2026-09-18-chains.md` and
+chains AL–AW, FINAL and FINAL2 in `bench/2026-09-18/README.md`; the rows below close the
+campaign, scoring the ten criteria (2, 4 and 10 as re-worded above) against the **reported
+run**, `bench/2026-09-18/898591982-smoke/` — develop's tip with #5067, the route-setup-node
+destination circuit breaker off on both setup nodes, no pins on any set. Ratios are mux ÷ the
+best paired reference at 10 MB and 50 MB, down and up. Ceilings are that run's own
+`ceiling.tsv` — uplink 11.29, downlink 11.48 MB/s.
 
-1. **Refs — MET.** Every set of every chain ran against a paired reference measured on the
-   same commit in the same window, `PAIRED_REF=auto` resolving to
-   `0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13`
-   (`bench/2026-09-16/*/paired-ref.txt`). The one chain whose pins were stubbed,
-   `f9107c982-smoke`, reports every row NOBAR rather than a number — which is the
-   mechanism working.
-2. **Tunnels ≥ best ref — MET at 50 MB.** At `1008cc8e5` (`bench/2026-09-16/908a98bcd-smoke/`)
-   tunnels-2 runs **x1.08 down** and **x0.99 up** on 50 MB, both PASS, and 50 MB up is the
-   day's best upload cell at 10.23 MB/s. The same cells held across `0cbbf925a-smoke`
-   (x1.106/x1.037) and `e128db1ff-smoke` (x1.094/x0.992). 10 MB is the cell still short:
-   **x0.87** down and x0.87 up at `1008cc8e5`.
-3. **Legs ≥ best ref — MET for downloads.** legs-2 at `1008cc8e5` is **x1.08 on the 50 MB
-   download** and **x1.01 on 10 MB**, both PASS — the first chain where both download cells
-   clear. Chain AD's two-arm sweep (`bench/2026-09-16/195b1094c-sbdsweep/`) had shown the
-   x0.70–0.81 downloads were #5012's shared-bottleneck parking; with demotion off by default
-   (#5012 as `da1709895`, chain AI) the downloads recover. Uploads stay short: **x0.94** at
-   50 MB and **x0.78** at 10 MB.
-4. **Composition — OPEN, but recovered.** #5035's forward confinement (`1008cc8e5`,
-   `bench/2026-09-16/908a98bcd-smoke/`) brought the composition uploads back from the
-   collapse chains AH and AJ measured: 50 MB up **8.40 MB/s x0.82** against 2.43 in
-   `6c8029830-smoke`, 10 MB up **4.60** against 0.27, with wire/goodput back to 1.00 on both.
-   The downloads are close but under the ceiling-aware bar — 50 MB down **x0.94** (best 9.15
-   against 0.95 × 9.55 = 9.07) and 100 MB down **x0.84** — and all 53 rows hash-clean. Chain
-   AI's homogeneous-latency arm (`bench/2026-09-16/e128db1ff-smoke/homog/`) scored the same
-   cells at x0.755/x0.756/x0.613, so the shortfall is not an artefact of the pinned latency spread.
-5. **Direction, from both ends — MET.** #5010 (`48872035e`, measured in
-   `bench/2026-09-16/845dd383e-smoke/`) sends forward traffic down the lowest-latency leg
-   when no leg is direct: legs-2 scores 9 of 12 forward rows PASS where every earlier run
-   failed most of them, and the exit's per-leg byte counters make the attribution measured
-   at both ends.
-6. **Degradation — MET.** #5023 (`8a8b1daf9`) streams the frontier chunk as it arrives, so
-   a cut costs one detection rather than one chunk. In `bench/2026-09-16/0cbbf925a-smoke/`
-   the active-tunnel cut gives `ttfb_after_cut_s` **0.643 PASS**, `promote_event
-   tunnel_promoted x1`, `survivors_kept 7/7`, `hashes_after_cut 3/3` and zero reorder
-   wedges at either end — against 6.784 s on the same set two chains earlier.
-7. **Does not amplify — MET.** Wire/goodput is **1.00–1.04** in every tunnels-2, legs-2,
-   standby and spread cell at `1008cc8e5`. The exceptions are inside the composition set
-   (1.18 on the 10 MB download) and belong to criterion 4.
-8. **The default — SHIPPED.** The standby pool is the default: the pool settles at 8–9
-   groups with no pins in `f9107c982-smoke`, `03ece1e95-smoke` and `0cbbf925a-smoke`, and
-   the cut row is chosen by `tunnel_role=active` rather than by hand.
-9. **The final no-pins campaign — PENDING.** Chain AG is the full paired suite on develop
-   `1008cc8e5` with no pins on any set; it is running, and its results land in
-   `bench/2026-09-18/`.
-10. **Spread policy — MET.** `bench/2026-09-16/0cbbf925a-smoke/mux-spread-3.assert.tsv`:
-    `routes_active min 3 max 3 PASS`, `max_share 0.4410 <= 0.484 PASS`, `ratio_50down
-    0.866 PASS`, `ratio_50up 0.951 PASS`, `hashes 8/8 PASS`, `spread_policy applied PASS` —
-    three routes held, no route over its cap, x0.87 down and x0.95 up against the paired
-    reference, with the policy set live through `proxy settings`.
+1. **Refs — MET.** Every set resolved its paired reference by probe, the best candidate being
+   `0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13`, and a reference row of
+   the same cell ran immediately before every mux row. The ceiling was measured in the same
+   campaign: uplink 11.29 MB/s over three concurrent direct clients, downlink 11.48 MB/s.
+2. **Tunnels ≥ best ref — MET on the four measured cells.** tunnels-2 runs **x1.56 down** at
+   10 MB and **x1.14** at 50 MB, **x1.54 up** and **x1.05**, with 5/5 and 3/3 hashes and
+   wire/goodput 1.00. The two-concurrent-uploads cell of the v4 wording was not re-run in the
+   closing campaign — it was last measured in campaign v1 — so that half of the criterion is
+   only partially met.
+3. **Legs ≥ best ref — downloads MET, uploads NOT MET.** legs-2 scores **x1.01** and **x0.97**
+   on the downloads, both inside the 5 % band, and the route group's port stayed constant for
+   the set. The uploads are where two legs still lose: **x0.69** at 10 MB and **x0.88** at
+   50 MB.
+4. **Composition — MET at 50 and 100 MB down, NOT MET at 10 MB down and 50 MB up.** 2x2
+   composition runs **x1.59** on the 50 MB download and **x1.08** at 100 MB, and the
+   ceiling-aware bound applies as the better single alternative (5.32 MB/s) is under
+   0.9 × the ceiling. The 10 MB download at **x1.22** is below two tunnels alone (x1.56), so
+   composition buys nothing in that cell, and the 50 MB upload is **x0.43**.
+5. **Direction, from both ends — MET for the shipped default.** On the standby pool, forward
+   traffic takes the direct or lowest-latency route in **20 of 20 rows PASS** and the reverse
+   stream fans. On legs-2, 6 of 12 forward rows are flagged, but by a checker with no latency
+   tolerance band against legs of 149 and 139 ms; the checker is to be relaxed rather than the
+   scheduler changed.
+6. **Degradation — MET.** A transport cut mid-transfer costs **`ttfb_after_cut_s` 0.219**
+   (bar: < 2 s), **31/31 survivors kept**, no rebuild — the lost group's port is the only one
+   gone and none is gained — and **5/5 hashes** after the cut. One blemish: the
+   `local_reorder_wedge` counter reads 1 on the cut row.
+7. **Does not amplify — MET.** Wire/goodput is **≤ 1.08 in every cell** of the reported run,
+   and the churn that does happen is bounded and carries a named reason in `mux_events`.
+8. **The default — MET, and shipped.** The standby pool is the default: the pool discovered
+   **32 groups** with no pins, the active set is chosen on measured goodput (#5047), failover
+   is same-tick (#4991), and a dead active is replaced out of the pool rather than rebuilt.
+9. **The final no-pins campaign — DONE.** `bench/2026-09-18/898591982-smoke/` is that run, and
+   it is the one reported above: develop's tip, no pins on any set, every criterion scored from
+   its artefacts. The immediately preceding attempt, `bench/2026-09-18/9bea70ded-smoke/`, had
+   valid tunnels and legs sets but invalid composition and standby sets — the route setup
+   node's destination circuit breaker had opened against the exit, which is what #5067 fixes.
+10. **Spread policy — MET as a live setting, NOT shipped as a default.** Chain AS
+    (`bench/2026-09-18/4078c5f70-smoke/mux-spread-3.assert.tsv`) holds **three routes** with a
+    **max share of 0.417**, inside the 0.4 cap plus its band, at **x1.46 down** and **x0.95 up**
+    on 50 MB — the criterion met with the policy set live through `proxy settings`. As a
+    *default* it is not shippable yet: #5054 measured **x0.605 down / x0.157 up** (chain AT,
+    `bench/2026-09-18/a0df50285-smoke/`) and is held for v1.3.96.
 
 ### Direction (criterion 5)
 
