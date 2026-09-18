@@ -234,6 +234,11 @@ func (p *Proc) startInProcess() error {
 
 	appConn, serverConn := net.Pipe()
 	appcommon.RegisterInProcessConn(p.conf.ProcKey, appConn)
+	// …and the logger beside it: an in-process app has no stderr pipe for
+	// attachCmdLogs to read, so without this its app.Client logs onto the
+	// visor's console only — never into the app's log store or
+	// local/log/skywire.log, where a failure is looked for afterwards.
+	appcommon.RegisterInProcessLogger(p.conf.ProcKey, p.log)
 
 	// Acquire lock to serialize env var access for internal apps
 	// This prevents race conditions where multiple apps overwrite each other's PROC_CONFIG
@@ -304,6 +309,7 @@ func (p *Proc) startInProcess() error {
 	go func() {
 		defer func() {
 			appcommon.UnregisterInProcessConn(p.conf.ProcKey)
+			appcommon.UnregisterInProcessLogger(p.conf.ProcKey)
 			_ = p.m.SetError(p.appName, p.err) //nolint:errcheck
 			_ = p.m.Stop(p.appName)            //nolint:errcheck
 		}()

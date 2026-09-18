@@ -237,7 +237,7 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	reply, err := readSocks5Reply(stream)
 	if err != nil || len(reply) < 2 || reply[1] != 0x00 || injectErr != nil {
 		if isHTTP {
-			writeBadGateway(conn)
+			writeBadGateway(conn, connectFailure(host, reply, err, injectErr))
 		}
 		conn.Close()   //nolint:errcheck,gosec
 		stream.Close() //nolint:errcheck,gosec
@@ -1486,16 +1486,66 @@ func (c *Client) splicePrefixed(conn, stream net.Conn, clientPrefix []byte) {
 // browser before the exit has spoken (rangeSplitInner step 1).
 var socks5OKReply = []byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0}
 
-// rsBadGatewayBody is the body of the 502 below.
-const rsBadGatewayBody = "skysocks: the exit could not reach the origin\n"
+// rsBadGatewayBody is the reason of last resort: a 502 whose caller had no
+// error to name.
+const rsBadGatewayBody = "skysocks: the exit could not reach the origin"
+
+// rsReasonMax caps the reason line. It is a header value and a body, and an
+// error carrying a whole sink response would make it neither readable nor safe.
+const rsReasonMax = 512
+
+// badGatewayReason flattens err into one header-safe line: control characters
+// (a CR or LF above all, which would end the header early) become spaces, runs
+// of blanks collapse, and the result is capped at rsReasonMax.
+func badGatewayReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	flat := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, err.Error())
+	flat = strings.TrimSpace(strings.Join(strings.Fields(flat), " "))
+	if len(flat) > rsReasonMax {
+		flat = flat[:rsReasonMax] + "…"
+	}
+	return flat
+}
 
 // writeBadGateway answers an HTTP request the splitter has already read with a
-// minimal 502. It is what a failed CONNECT becomes once the browser has been
-// told CONNECT succeeded: the refusal cannot be relayed as SOCKS any more, and
-// closing silently is indistinguishable from a network fault.
-func writeBadGateway(conn net.Conn) {
-	_, _ = fmt.Fprintf(conn, "HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", //nolint:errcheck
-		len(rsBadGatewayBody), rsBadGatewayBody)
+// minimal 502 THAT SAYS WHY. It is what a failure becomes once the browser has
+// been told CONNECT succeeded: the refusal cannot be relayed as SOCKS any more,
+// and closing silently is indistinguishable from a network fault.
+//
+// err is the reason, and it is written twice — as the X-Upload-Error header, so
+// a bench runner or a script can read it off a failed row without a log, and as
+// the body, so a person sees it. A nil err falls back to rsBadGatewayBody.
+func writeBadGateway(conn net.Conn, err error) {
+	reason := badGatewayReason(err)
+	if reason == "" {
+		reason = rsBadGatewayBody
+	}
+	body := reason + "\n"
+	_, _ = fmt.Fprintf(conn, "HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain; charset=utf-8\r\nX-Upload-Error: %s\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", //nolint:errcheck
+		reason, len(body), body)
+}
+
+// connectFailure names why step 4 of rangeSplitInner gave up: the reply could
+// not be read, the exit refused with a SOCKS5 status, or the pipelined GET that
+// rode ahead of it never got out.
+func connectFailure(host string, reply []byte, readErr, injectErr error) error {
+	switch {
+	case readErr != nil:
+		return fmt.Errorf("connect %s: the exit's reply could not be read: %w", host, readErr)
+	case len(reply) >= 2 && reply[1] != 0x00:
+		return fmt.Errorf("connect %s: the exit refused it (socks5 reply %d)", host, reply[1])
+	case injectErr != nil:
+		return fmt.Errorf("connect %s: the pipelined request could not be written: %w", host, injectErr)
+	default:
+		return fmt.Errorf("connect %s: the exit's reply was malformed (%d bytes)", host, len(reply))
+	}
 }
 
 // readSocks5Reply reads one SOCKS5 reply (VER REP RSV ATYP ADDR PORT) and returns

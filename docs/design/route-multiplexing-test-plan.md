@@ -166,14 +166,21 @@ Everything the last campaign learned the hard way, fixed as procedure:
   lines that produced them. From a **public node** for NAT-free numbers when
   the question is the mesh, from this node when the question is the client.
 - **A failed row is diagnosed where it fails.** Beside the `# exit-on-fail`
-  line every runner already writes into `<set>.recovery.tsv`, an `http=000` row
-  now also gets a `# blackout-capture <row>` line —
-  `goroutines=<n> readch_full=<n> write_timeout=<n> rg_full=<desc|none>` — and
-  the four files it summarises: `<set>.row<row>.goroutines-serve.txt` and
-  `.goroutines-data.txt` (the shared inbound loop and what it is parked on),
-  `.intake.json` (`visor state --select diag` `.intake`, whose
-  `route_group_queues` names the group whose readCh is at capacity) and
-  `.visorlog.tail`. These blackouts are a **local** receive-loop stall, not the
+  line every runner already writes into `<set>.recovery.tsv`, a failed row now
+  also gets a `# blackout-capture <row>` line — `goroutines=<n>
+  readch_full=<n> write_timeout=<n> write_timeout_other=<n> rg_full=<desc|none>
+  upload_error=<reason|->` — and the files it summarises:
+  `<set>.row<row>.goroutines-serve.txt` and `.goroutines-data.txt` (the shared
+  inbound loop and what it is parked on), `.intake.json` (`visor state --select
+  diag` `.intake`, whose `route_group_queues` names the group whose readCh is at
+  capacity), `.visorlog.tail`, and `.r.hdr` / `.r.body` — the failed transfer's
+  own answer, where a skysocks 502 names its cause in `X-Upload-Error`. Two
+  counters, not one: `write_timeout` counts only lines naming this set's traffic
+  (a route group, a leg, `writeMx`, a transport ID from `<set>.legs.json`) and
+  `write_timeout_other` holds the rest, because unrelated stcpr dials to public
+  visors time out all day and were once read as proof. The log is picked by
+  **mtime**, not by name — the newest sorted `skywire-*.log` is a rotated,
+  frozen file. These blackouts are a **local** receive-loop stall, not the
   exit's, and the evidence clears within a minute, so the capture runs first on
   the failing row, before the exit-side snapshot; it is bounded to ~60 s and
   `BLACKOUT=0` turns it off (bench/lib-blackout.sh).
