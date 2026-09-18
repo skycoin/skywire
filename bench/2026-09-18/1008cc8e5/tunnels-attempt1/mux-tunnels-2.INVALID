@@ -1,0 +1,1 @@
+shape differs from target: 3 active route group(s) of 4 (1 standby), asked for 2 (groups=rg49198/active=[stcpr>022716fb@b414796d] rg49200/active=[stcpr>03f57e7c@fdab37dd] rg49201/active=[stcpr>02a2d4c3@2c4ae7a5] rg49202/standby=[stcpr>0255117b@50cdb857])

@@ -1,0 +1,5 @@
+mux-standby-5: cut target = tp 95839ad0-b588-0b1d-8475-45fba6ae993c on rg 49234 (remote 0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13, pin via-0371ab4b, role active, by tunnel_role=active, busiest by carrier-growth)
+OK
+[2026-09-18T07:04:39.9233-05:00] INFO [skywire-cli]: Established stcpr transport to 0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+type      id                                       remote_pk                                                              mode     label
+stcpr     95839ad0-b588-0b1d-8475-45fba6ae993c     0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13     out      skycoin

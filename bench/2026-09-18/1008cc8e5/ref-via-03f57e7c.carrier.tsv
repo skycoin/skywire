@@ -1,0 +1,26 @@
+# row	tp	sent_delta	recv_delta
+1	fdab37dd-c35e-05bc-9e51-cd6b024e3eec	631	10049197
+1	legs	fdab37dd	-
+2	fdab37dd-c35e-05bc-9e51-cd6b024e3eec	400	10016441
+2	legs	fdab37dd	-
+3	fdab37dd-c35e-05bc-9e51-cd6b024e3eec	368	10016357
+3	legs	fdab37dd	-
+4	fdab37dd-c35e-05bc-9e51-cd6b024e3eec	10016839	693
+4	legs	fdab37dd	-
+5	fdab37dd-c35e-05bc-9e51-cd6b024e3eec	10016302	604
+5	legs	fdab37dd	-
+6	fdab37dd-c35e-05bc-9e51-cd6b024e3eec	10016315	649
+6	legs	fdab37dd	-
+7	fdab37dd-c35e-05bc-9e51-cd6b024e3eec	1158	50233540
+7	legs	fdab37dd	-
+8	fdab37dd-c35e-05bc-9e51-cd6b024e3eec	798	50079958
+8	legs	fdab37dd	-
+9	fdab37dd-c35e-05bc-9e51-cd6b024e3eec	867	50080027
+9	legs	fdab37dd	-
+10	fdab37dd-c35e-05bc-9e51-cd6b024e3eec	50079954	153454
+10	legs	fdab37dd	-
+11	fdab37dd-c35e-05bc-9e51-cd6b024e3eec	50079915	1008
+11	legs	fdab37dd	-
+12	fdab37dd-c35e-05bc-9e51-cd6b024e3eec	50079846	939
+12	legs	fdab37dd	-
+# exit-side 7420f415-abd5-014f-bc55-e6132477485f sent_delta=180326978 recv_delta=180293333 over the set

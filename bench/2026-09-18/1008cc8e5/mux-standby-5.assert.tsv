@@ -1,0 +1,12 @@
+# assert	value	want	verdict
+pool_size	5	> 2	PASS
+pool_settled	quiet 20s	quiet	INFO
+hashes_after_cut	5/5	5/5	PASS
+cut_target	tp 95839ad0-b588-0b1d-8475-45fba6ae993c rg 49234 remote 0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 role active (by tunnel_role=active, busiest by carrier-growth)	an active tunnel's first hop	PASS
+survivors_kept	6/6 (49233,49234,49236,49237,49238,49239,49240 -> 49233,49234,49236,49237,49238,49239,49240)	all but rg 49234	PASS
+rg_ports_lost	none	at most rg 49234	PASS
+rg_ports_gained	none	pool refill, not a rebuild	INFO
+promote_event	tunnel_promoted x1	>=1 tunnel_promoted (or leg_promoted)	PASS
+ttfb_after_cut_s	no byte arrived after the cut	< 2	FAIL
+local_reorder_wedge	0 events, wedges counter 0	0	PASS
+exit_reorder_wedge	0	0	PASS
