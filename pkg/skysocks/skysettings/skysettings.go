@@ -3,7 +3,7 @@
 // A process-scoped registry of the skysocks-client tuning knobs the mux bench
 // sweeps. Every entry's DEFAULT is the constant the client compiled with, so a
 // client with nothing set behaves byte for byte as it does today; a knob only
-// changes behaviour once it has been explicitly set.
+// changes behavior once it has been explicitly set.
 //
 // The shape is pkg/router/policy/preset's atomics generalised over a map: one
 // atomic per knob, written by the settings pull and read at the use site. No
@@ -66,6 +66,22 @@ const (
 	ChunkIdleTimeout       = "chunk.idle_timeout"
 	ChunkFreeRetries       = "chunk.free_retries"
 	ChunkOutstandingFactor = "chunk.outstanding_factor"
+
+	UploadStripeMinBytes = "upload.stripe_min_bytes"
+	UploadChunkBytes     = "upload.chunk_bytes"
+	UploadMemBytes       = "upload.mem_bytes"
+	UploadConcurrency    = "upload.concurrency"
+	UploadReplayMaxBytes = "upload.replay_max_bytes"
+	UploadProbeTTL       = "upload.probe_ttl"
+	UploadAckTimeout     = "upload.ack_timeout"
+	UploadIdleTimeout    = "upload.idle_timeout"
+	UploadDurableWait    = "upload.durable_wait"
+	UploadResendPasses   = "upload.resend_passes" //nolint:gosec // G101: "passes" here is a retry count, not a password
+	UploadEarlyTries     = "upload.early_tries"
+	UploadEarlyWaitMax   = "upload.early_wait_max"
+	UploadBusyBackoff    = "upload.busy_backoff"
+	UploadBusyTries      = "upload.busy_tries"
+	UploadReplayTries    = "upload.replay_tries"
 )
 
 // Def is a knob's static description: everything the CLI needs to parse a
@@ -150,6 +166,37 @@ func init() {
 		"refetches a tunnel death may buy a chunk without charging its budget")
 	register(ChunkOutstandingFactor, KindCount, 2,
 		"outstanding chunk buffers as a multiple of the fetch concurrency")
+
+	register(UploadStripeMinBytes, KindBytes, 4<<20,
+		"smallest POST body addressed in chunks rather than sent as one stream")
+	register(UploadChunkBytes, KindBytes, 4<<20,
+		"one striped-upload chunk, and so one buffer")
+	register(UploadMemBytes, KindBytes, 32<<20,
+		"ceiling on the upload chunk buffers alive at once, whatever the body size")
+	register(UploadConcurrency, KindCount, 4,
+		"chunks one tunnel may carry at once on a striped upload")
+	register(UploadReplayMaxBytes, KindBytes, 8<<20,
+		"largest generic POST body remembered so it can be replayed on another tunnel")
+	register(UploadProbeTTL, KindDuration, int64(5*time.Minute),
+		"how long an origin's X-Chunked-Upload answer is trusted")
+	register(UploadAckTimeout, KindDuration, int64(60*time.Second),
+		"how long a chunk waits for its ack once its body is out")
+	register(UploadIdleTimeout, KindDuration, int64(30*time.Second),
+		"rolling no-progress deadline on a chunk body write")
+	register(UploadDurableWait, KindDuration, int64(5*time.Second),
+		"how long an acked chunk waits for the sink's prefix to reach it before it is re-sent")
+	register(UploadResendPasses, KindCount, 3,
+		"passes one chunk may be sent again because the sink's prefix never reached it")
+	register(UploadEarlyTries, KindCount, 20,
+		"425s one chunk may wait out before the upload gives up")
+	register(UploadEarlyWaitMax, KindDuration, int64(5*time.Second),
+		"ceiling on the Retry-After a 425 may impose")
+	register(UploadBusyBackoff, KindDuration, int64(time.Second),
+		"wait between retries when the sink answers 503, its sessions all taken")
+	register(UploadBusyTries, KindCount, 3,
+		"503s one chunk waits out before the upload fails")
+	register(UploadReplayTries, KindCount, 2,
+		"times a generic POST may be replayed after its tunnel died uncommitted")
 }
 
 func lookup(name string) *knob {

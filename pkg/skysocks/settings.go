@@ -127,3 +127,96 @@ func (c *Client) livenessInterval() time.Duration {
 	}
 	return c.probeInterval
 }
+
+// The striped upload's knobs. The four the tests shrink (the stripe threshold,
+// the chunk, the memory ceiling and the per-tunnel concurrency) are OVERRIDES
+// in the same sense as the range-split pair: unset, the package var still wins,
+// so a test that moves it is unaffected and a client that sets nothing uploads
+// byte for byte as it does today. The rest read the knob directly, whose
+// default is the constant they replaced.
+
+func setUploadStripeMinBytes() int64 {
+	if skysettings.IsSet(skysettings.UploadStripeMinBytes) {
+		return skysettings.Bytes(skysettings.UploadStripeMinBytes)
+	}
+	return uploadStripeMinBytes
+}
+
+func setUploadChunkBytes() int64 {
+	if skysettings.IsSet(skysettings.UploadChunkBytes) {
+		return skysettings.Bytes(skysettings.UploadChunkBytes)
+	}
+	return uploadChunkBytes
+}
+
+func setUploadMemBytes() int64 {
+	if skysettings.IsSet(skysettings.UploadMemBytes) {
+		return skysettings.Bytes(skysettings.UploadMemBytes)
+	}
+	return uploadMemBytes
+}
+
+func setUploadConcurrency() int {
+	if skysettings.IsSet(skysettings.UploadConcurrency) {
+		return skysettings.Count(skysettings.UploadConcurrency)
+	}
+	return uploadConcurrency
+}
+
+func setUploadReplayMaxBytes() int64 {
+	if skysettings.IsSet(skysettings.UploadReplayMaxBytes) {
+		return skysettings.Bytes(skysettings.UploadReplayMaxBytes)
+	}
+	return uploadReplayMaxBytes
+}
+
+func setUploadProbeTTL() time.Duration { return skysettings.Dur(skysettings.UploadProbeTTL) }
+func setUploadAckTimeout() time.Duration {
+	return skysettings.Dur(skysettings.UploadAckTimeout)
+}
+func setUploadIdleTimeout() time.Duration {
+	return skysettings.Dur(skysettings.UploadIdleTimeout)
+}
+func setUploadDurableWait() time.Duration {
+	return skysettings.Dur(skysettings.UploadDurableWait)
+}
+func setUploadResendPasses() int { return skysettings.Count(skysettings.UploadResendPasses) }
+func setUploadEarlyTries() int   { return skysettings.Count(skysettings.UploadEarlyTries) }
+func setUploadEarlyWaitMax() time.Duration {
+	return skysettings.Dur(skysettings.UploadEarlyWaitMax)
+}
+func setUploadBusyBackoff() time.Duration {
+	return skysettings.Dur(skysettings.UploadBusyBackoff)
+}
+func setUploadBusyTries() int   { return skysettings.Count(skysettings.UploadBusyTries) }
+func setUploadReplayTries() int { return skysettings.Count(skysettings.UploadReplayTries) }
+
+// uploadTunables is ONE coherent read of the three knobs the slot arithmetic
+// mixes. slots() divides the memory ceiling by the chunk size and subtracts a
+// headroom counted in the same chunks, so each of those numbers has to come
+// from the same instant: a settings pull landing between the two reads would
+// otherwise divide the sink's window by a new chunk size and subtract a
+// headroom measured in the old one, and the result is the over-subscription
+// that makes the sink evict an already-acked chunk.
+type uploadTunables struct {
+	chunk       int64
+	mem         int64
+	concurrency int
+}
+
+func uploadSnapshot() uploadTunables {
+	return uploadTunables{
+		chunk:       setUploadChunkBytes(),
+		mem:         setUploadMemBytes(),
+		concurrency: setUploadConcurrency(),
+	}
+}
+
+// perTunnel is how many chunks one tunnel may carry at once, floored at 1 so a
+// knob set to zero cannot stall every upload.
+func (t uploadTunables) perTunnel() int {
+	if t.concurrency < 1 {
+		return 1
+	}
+	return t.concurrency
+}

@@ -46,7 +46,28 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 
 	require.EqualValues(t, defaultRSChunkSize, skysettings.Bytes(skysettings.ChunkMaxBytes))
 	require.Equal(t, defaultRSConcurrency, skysettings.Count(skysettings.ChunkConcurrency))
-	require.Equal(t, poolFillInterval, setPoolFillInterval())
+
+	// The striped upload. The four the tests shrink read the package var while
+	// the knob is unset, so with nothing set the two are the same number.
+	require.Equal(t, uploadStripeMinBytes, setUploadStripeMinBytes())
+	require.Equal(t, uploadChunkBytes, setUploadChunkBytes())
+	require.Equal(t, uploadMemBytes, setUploadMemBytes())
+	require.Equal(t, uploadConcurrency, setUploadConcurrency())
+	require.Equal(t, uploadReplayMaxBytes, setUploadReplayMaxBytes())
+	require.Equal(t, uploadProbeTTL, setUploadProbeTTL())
+	require.Equal(t, uploadAckTimeout, setUploadAckTimeout())
+	require.Equal(t, uploadIdleTimeout, setUploadIdleTimeout())
+	require.Equal(t, uploadDurableWait, setUploadDurableWait())
+	require.Equal(t, uploadResendPasses, setUploadResendPasses())
+	require.Equal(t, uploadEarlyTries, setUploadEarlyTries())
+	require.Equal(t, uploadEarlyWaitMax, setUploadEarlyWaitMax())
+	require.Equal(t, uploadBusyBackoff, setUploadBusyBackoff())
+	require.Equal(t, uploadBusyTries, setUploadBusyTries())
+	require.Equal(t, uploadReplayTries, setUploadReplayTries())
+
+	// Every knob in the catalog is reachable: a name registered with no use site
+	// reading it is a knob the bench can set and nothing obeys.
+	require.Len(t, skysettings.Catalog(), 39)
 }
 
 // The two range-split knobs OVERRIDE a per-client boot flag rather than
@@ -90,4 +111,31 @@ func TestPullSettingsAppliesAndVersions(t *testing.T) {
 	require.EqualValues(t, 20e9, setTunnelAuditionEvery())
 
 	require.False(t, c.pullSettings(), "the version is unchanged, so the pull is a no-op")
+}
+
+// The four upload knobs the tests shrink OVERRIDE the package var rather than
+// replacing it, and slots()/headroom() take one snapshot per call: with the
+// knob set, both halves of the window arithmetic move together.
+func TestUploadKnobsOverrideAndAreSnapshotted(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	defer restoreUploadTunables(uploadChunkBytes, uploadMemBytes, uploadStripeMinBytes, uploadConcurrency)()
+	uploadChunkBytes, uploadMemBytes, uploadConcurrency = 4<<20, 32<<20, 4
+
+	s := &uploadStripe{u: &uploadCandidate{window: 32 << 20}}
+	require.Equal(t, 4, s.perTunnel(), "unset, the package var wins")
+	require.Equal(t, 4, s.slots(), "8 of our own, less the 4-chunk headroom")
+
+	require.True(t, skysettings.Apply(map[string]int64{
+		skysettings.UploadChunkBytes:  8 << 20,
+		skysettings.UploadConcurrency: 2,
+	}))
+	// 32 MiB of memory over 8 MiB chunks is 4; the sink's 32 MiB window is 4
+	// chunks less a 2-chunk headroom. Both halves read the NEW chunk size.
+	require.Equal(t, 2, s.perTunnel(), "set, the knob wins")
+	require.Equal(t, 2, s.headroom())
+	require.Equal(t, 2, s.slots())
+
+	require.True(t, skysettings.Reset())
+	require.Equal(t, 4, s.perTunnel(), "reset returns the package var")
+	require.Equal(t, 4, s.slots())
 }

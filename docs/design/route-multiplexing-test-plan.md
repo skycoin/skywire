@@ -1,3 +1,5 @@
+| striped upload | `upload.stripe_min_bytes` · `upload.chunk_bytes` · `upload.mem_bytes` · `upload.concurrency` · `upload.replay_max_bytes` · `upload.probe_ttl` |
+| upload retries | `upload.ack_timeout` · `upload.idle_timeout` · `upload.durable_wait` · `upload.resend_passes` · `upload.early_tries` · `upload.early_wait_max` · `upload.busy_backoff` · `upload.busy_tries` · `upload.replay_tries` |
 # Route multiplexing: the live campaign to finish it
 
 Status: plan, 2026-09-15. To be taken up after v1.3.94. "Tested" here means
@@ -154,9 +156,18 @@ run that sets nothing is byte-for-byte the old binary.
 | tunnel promoter | `tunnel.promote_interval` · `tunnel.promote_margin` · `tunnel.promote_hold` · `tunnel.park_min_hold` · `tunnel.audition_window` · `tunnel.audition_every` |
 | probing and metering | `tunnel.probe_interval` · `tunnel.liveness_interval` · `tunnel.rtt_alpha` · `tunnel.meter_sample_min` · `tunnel.meter_cap_decay` · `tunnel.meter_fresh` · `tunnel.exit_open_penalty` |
 | range-split | `chunk.max_bytes` · `chunk.concurrency` · `chunk.retry_budget` · `chunk.idle_timeout` · `chunk.free_retries` · `chunk.outstanding_factor` |
+| striped upload | `upload.stripe_min_bytes` · `upload.chunk_bytes` · `upload.mem_bytes` · `upload.concurrency` · `upload.replay_max_bytes` · `upload.probe_ttl` |
+| upload retries | `upload.ack_timeout` · `upload.idle_timeout` · `upload.durable_wait` · `upload.resend_passes` · `upload.early_tries` · `upload.early_wait_max` · `upload.busy_backoff` · `upload.busy_tries` · `upload.replay_tries` |
 
 `chunk.max_bytes` and `chunk.concurrency` OVERRIDE the boot flags
 (`--range-chunk-kib`, `--range-concurrency`): unset, the flag still wins.
+
+The four upload knobs a test shrinks — `upload.stripe_min_bytes`,
+`upload.chunk_bytes`, `upload.mem_bytes`, `upload.concurrency` — override the
+compiled value the same way. `upload.chunk_bytes` is snapshotted per object (the
+sink addresses a chunk by its offset), and `slots()`/`headroom()` read chunk,
+memory and concurrency from ONE snapshot per call, so a sweep landing mid-upload
+cannot over-subscribe the sink's window and make it evict an acked chunk.
 
 **Router knobs — `skywire cli route settings`**
 
