@@ -36,8 +36,8 @@ defaulting to today's behaviour:
 
 | knob | kind | default | meaning |
 |---|---|---|---|
-| `spread.max_share` | ratio | `1.0` (off) | largest fraction of one object's bytes any single route may carry |
-| `spread.min_routes` | count | `0` (off) | routes an object must be spread over |
+| `spread.max_share` | ratio | `0.4` (was `1.0` = off until 2026-09-18) | largest fraction of one object's bytes any single route may carry |
+| `spread.min_routes` | count | `3` (was `0` = off until 2026-09-18) | routes an object must be spread over |
 | `spread.endgame` | bool | `false` | duplicate the tail chunks on the fastest idle route |
 | `spread.weight` | enum | `rate` | `rate` = proportional to measured capacity, `even` = equal shares |
 

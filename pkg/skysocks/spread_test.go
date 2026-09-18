@@ -116,11 +116,12 @@ func TestSpreadChooseNeverStallsOnTheCap(t *testing.T) {
 	require.Equal(t, -1, spreadChoose(nil, nil, spreadPolicy{maxShare: 0.4}), "nothing to place it on")
 }
 
-// Off is off: with no knob set the policy steers nothing and the planner hands
-// the choice back to pickSessionFor, so an unset client places chunks exactly
+// Off is off: with the cap and the floor set off the policy steers nothing and the planner hands
+// the choice back to pickSessionFor, so such a client places chunks exactly
 // as it does today.
 func TestSpreadOffLeavesThePickOrderAlone(t *testing.T) {
 	t.Cleanup(func() { skysettings.Reset() })
+	spreadOff(t)
 	require.False(t, spreadPolicyNow().steers())
 
 	c := &Client{}
@@ -267,6 +268,7 @@ func TestEnsureMinRoutesPromotesStandbysAndNeverDials(t *testing.T) {
 // same promote path.
 func TestSpreadPlannerEnsureRoutesUsesThePool(t *testing.T) {
 	t.Cleanup(func() { skysettings.Reset() })
+	spreadOff(t)
 	active, closeA := newTestSession(t)
 	defer closeA()
 	sb, closeS := newTestSession(t)
@@ -278,7 +280,7 @@ func TestSpreadPlannerEnsureRoutesUsesThePool(t *testing.T) {
 		standby:   map[*yamux.Session]bool{sb: true},
 		closeC:    make(chan struct{}),
 	}
-	require.Zero(t, c.newSpreadPlanner(spreadDown).ensureRoutes(), "off, nothing is promoted")
+	require.Zero(t, c.newSpreadPlanner(spreadDown).ensureRoutes(), "set off, nothing is promoted")
 	require.True(t, c.IsStandby(sb))
 
 	require.True(t, skysettings.Apply(map[string]int64{skysettings.SpreadMinRoutes: 2}))
@@ -446,6 +448,7 @@ func TestSpreadBoundsTheShareOfA50MBUpload(t *testing.T) {
 // single-route reference while its uploads, gated per tunnel, reached 0.91x.
 func TestChunkAdmissionScalesWithActiveTunnels(t *testing.T) {
 	t.Cleanup(func() { skysettings.Reset() })
+	spreadOff(t)
 	sessions := make([]*yamux.Session, 0, 3)
 	meters := map[*yamux.Session]*tunnelMeter{}
 	for i := 0; i < 3; i++ {
@@ -463,7 +466,7 @@ func TestChunkAdmissionScalesWithActiveTunnels(t *testing.T) {
 	}
 	require.Equal(t, 3, c.activeLiveCount())
 
-	// Nothing set: today's gate, byte for byte.
+	// Set off: the pre-spread gate, byte for byte.
 	require.Equal(t, 8, c.chunkAdmission(nil), "no planner is the sequential caller")
 	require.Equal(t, 8, c.chunkAdmission(c.newSpreadPlanner(spreadDown)), "an inert policy steers nothing")
 
@@ -689,4 +692,22 @@ func TestSpreadUnchargesAFailedOpen(t *testing.T) {
 	}
 	require.Zero(t, pl.topShare())
 	require.Equal(t, "shares=none", pl.sharesLine())
+}
+
+// spreadOff turns the shipped cap and floor off, for the tests of the path a
+// non-steering policy takes: since 2026-09-18 the defaults steer, so "off" is a
+// setting and no longer the unset state.
+func spreadOff(t *testing.T) {
+	t.Helper()
+	require.True(t, skysettings.Apply(map[string]int64{
+		skysettings.SpreadMaxShare:  mustParse(t, skysettings.SpreadMaxShare, "1"),
+		skysettings.SpreadMinRoutes: 0,
+	}), "spread off")
+}
+
+func mustParse(t *testing.T, knob, raw string) int64 {
+	t.Helper()
+	v, err := skysettings.Parse(knob, raw)
+	require.NoError(t, err)
+	return v
 }
