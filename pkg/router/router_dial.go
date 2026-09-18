@@ -1777,7 +1777,7 @@ func firstHopCarrierClass(path []routing.Hop) int {
 
 // rankByPathLatency orders a diversify dial's admissible candidates (those whose
 // first hop is not already claimed by a sibling tunnel and is not a same-LAN
-// neighbour, i.e. the output of freeFirstHops) by their first hop's CARRIER
+// neighbor, i.e. the output of freeFirstHops) by their first hop's CARRIER
 // CLASS first (see carrierClassDirect — a resolved TCP/QUIC link beats a
 // hole-punched UDP one however good its ping) and then, within a class, by
 // their MEASURED END-TO-END latency — the sum of every hop's latency — lowest
@@ -1788,7 +1788,7 @@ func firstHopCarrierClass(path []routing.Hop) int {
 //
 // The score is the WHOLE path, not just the first hop. A first hop this visor
 // can measure says nothing about where the route goes afterwards: ranking on it
-// alone picked a LAN neighbour whose own hop to the exit was unknown — 1ms to
+// alone picked a LAN neighbor whose own hop to the exit was unknown — 1ms to
 // the first hop, and 50 MB down measured 3.85 MB/s, 10 MB down 2.46, worse than
 // the 470ms intermediate the ranking was introduced to avoid (2026-09-18).
 //
@@ -2234,7 +2234,7 @@ func (r *router) filterDisjointFirstHopPeer(cands [][]routing.Hop, peers []ciphe
 // public IP (the NAT-hairpin case). It returns the survivors and the dropped
 // candidates, so the dial trail can name what it refused.
 //
-// A LAN neighbour is not diversity: it shares our uplink, so a second tunnel
+// A LAN neighbor is not diversity: it shares our uplink, so a second tunnel
 // through it contends with the first for the very bottleneck the tunnels were
 // split to escape, while its own onward hop to the exit is a link we know
 // nothing about. Ranking gave it the top slot precisely because it is close —

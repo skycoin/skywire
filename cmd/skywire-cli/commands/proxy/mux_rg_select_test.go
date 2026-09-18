@@ -62,7 +62,7 @@ func TestSelectAutoRGByDstPort(t *testing.T) {
 		}
 	}
 
-	// One group: src_port and 0 both still resolve it (unchanged behaviour).
+	// One group: src_port and 0 both still resolve it (unchanged behavior).
 	one := rgs[:1]
 	if got, err := selectAutoRG(one, "skysocks-client", 3); err != nil || got.Desc.DstPort != 49166 {
 		t.Errorf("selectAutoRG(--rg 3) = (%d, %v), want the only group", got.Desc.DstPort, err)

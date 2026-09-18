@@ -10,13 +10,18 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
+// appTaggedRGRemotePort is the single remote port every group in this file
+// faces; the groups are distinguished by their local port alone.
+const appTaggedRGRemotePort routing.Port = 3
+
 // newAppTaggedRG builds an established route group tagged with appName and
-// registers nothing — the caller decides which map it goes in.
-func newAppTaggedRG(t *testing.T, rt routing.Table, appName string, lPort, rPort routing.Port) *RouteGroup {
+// registers nothing — the caller decides which map it goes in. Every group in
+// this test faces the same remote port; only lPort distinguishes them.
+func newAppTaggedRG(t *testing.T, rt routing.Table, appName string, lPort routing.Port) *RouteGroup {
 	t.Helper()
 	pk1, _ := cipher.GenerateKeyPair()
 	pk2, _ := cipher.GenerateKeyPair()
-	desc := routing.NewRouteDescriptor(pk1, pk2, lPort, rPort)
+	desc := routing.NewRouteDescriptor(pk1, pk2, lPort, appTaggedRGRemotePort)
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), rt, desc, logging.NewMasterLogger())
 	rg.SetAppName(appName)
 	return rg
@@ -35,17 +40,17 @@ func newAppTaggedRG(t *testing.T, rt routing.Table, appName string, lPort, rPort
 func TestCloseRouteGroupsForApp_ClosesEveryGroupTheAppDialed(t *testing.T) {
 	r := newSweepTestRouter(t)
 
-	tunnel1 := newAppTaggedRG(t, r.rt, "skysocks-client", 49168, 3)
-	tunnel2 := newAppTaggedRG(t, r.rt, "skysocks-client", 49201, 3)
+	tunnel1 := newAppTaggedRG(t, r.rt, "skysocks-client", 49168)
+	tunnel2 := newAppTaggedRG(t, r.rt, "skysocks-client", 49201)
 	r.rgsNs[tunnel1.desc] = &NoiseRouteGroup{rg: tunnel1, Conn: tunnel1}
 	r.rgsNs[tunnel2.desc] = &NoiseRouteGroup{rg: tunnel2, Conn: tunnel2}
 
 	// Another app's group must survive untouched.
-	other := newAppTaggedRG(t, r.rt, "vpn-client", 49300, 3)
+	other := newAppTaggedRG(t, r.rt, "vpn-client", 49300)
 	r.rgsNs[other.desc] = &NoiseRouteGroup{rg: other, Conn: other}
 
 	// A group still finishing its noise handshake belongs to the app too.
-	initializing := newAppTaggedRG(t, r.rt, "skysocks-client", 49222, 3)
+	initializing := newAppTaggedRG(t, r.rt, "skysocks-client", 49222)
 	r.rgsRaw[initializing.desc] = initializing
 
 	require.Len(t, r.RouteGroupMuxInfoForApp("skysocks-client"), 2)
@@ -72,7 +77,7 @@ func TestCloseRouteGroupsForApp_ClosesEveryGroupTheAppDialed(t *testing.T) {
 func TestCloseRouteGroupsForApp_UntaggedAndUnknownApps(t *testing.T) {
 	r := newSweepTestRouter(t)
 
-	untagged := newAppTaggedRG(t, r.rt, "", 49400, 3)
+	untagged := newAppTaggedRG(t, r.rt, "", 49400)
 	r.rgsNs[untagged.desc] = &NoiseRouteGroup{rg: untagged, Conn: untagged}
 
 	require.Equal(t, 0, r.CloseRouteGroupsForApp(""))

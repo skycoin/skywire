@@ -2832,7 +2832,7 @@ const (
 // mirrors to the peer over CapLegState and the peer's own resync then keeps the
 // leg out of the set for the traffic that follows.
 //
-// With the frontier STUCK the pre-existing behaviour stands: park rather than
+// With the frontier STUCK the pre-existing behavior stands: park rather than
 // remove, because removing a leg the receiver is HoL-blocked behind orphans its
 // in-flight sequences (the retransmits land on a torn-down rule) and turns a
 // transient stall into a permanent wedge. Removal stays reserved for a genuine

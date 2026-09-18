@@ -65,7 +65,7 @@ func TestConfinedForwardTakesLowestLatencyLeg(t *testing.T) {
 		return seen
 	}
 
-	// No latency measured on either leg: behaviour is unchanged — the whole
+	// No latency measured on either leg: behavior is unchanged — the whole
 	// burst stays confined to the primary, exactly as before the fix.
 	if seen := burst(); seen[1] != 0 {
 		t.Errorf("unmeasured legs: forward must stay on the primary; got legs=%v", seen)

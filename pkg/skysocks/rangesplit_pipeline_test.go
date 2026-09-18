@@ -119,7 +119,7 @@ func TestRangeSplitParallelFetchesStartDuringChunk0(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 4, chunkSize)
+	proxy := newRSTestClient(t, backend.Listener.Addr().String(), chunkSize)
 
 	// Reads the headers only; the body stays unread, so the proxy stalls part
 	// way through writing chunk0 into the socket.
@@ -149,9 +149,9 @@ func TestRangeSplitParallelFetchesStartDuringChunk0(t *testing.T) {
 // reading froze every later chunk's stream setup too, forcing a second wave of
 // per-chunk round trips once it resumed.
 func TestChunkFetches_AdmitOnFetchCompletion(t *testing.T) {
-	const chunk = 8
-	const total = chunk * 6  // chunk0 plus 5 fetched chunks
-	c := rescueClient(chunk) // concurrency 2
+	const chunk = rescueChunk
+	const total = chunk * 6 // chunk0 plus 5 fetched chunks
+	c := rescueClient()     // concurrency 2
 
 	// A pipe nobody ever reads: the first conn.Write blocks until cleanup.
 	blocked, peer := net.Pipe()

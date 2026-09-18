@@ -792,7 +792,7 @@ func (c *Client) fetchChunk(req *http.Request, host, validator string, start, en
 	}
 	defer st.Close() //nolint:errcheck,gosec
 	// A tunnel that dies under this fetch fails it AT ONCE — the deadlines below
-	// are for a slow tunnel, not a gone one — and the failure is labelled
+	// are for a slow tunnel, not a gone one — and the failure is labeled
 	// errSessionClosed so the chunk is refetched immediately on a live tunnel.
 	g := c.guardTunnel(sess, st)
 	defer func() { err = g.err(err) }()

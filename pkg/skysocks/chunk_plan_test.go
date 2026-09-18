@@ -177,7 +177,7 @@ func TestPlanUploadChunkFollowsTheObject(t *testing.T) {
 }
 
 // TestPlanUploadChunkWithoutALength: a body whose length is unknown has nothing
-// to plan against, and the ceiling is then the chunk — the behaviour every
+// to plan against, and the ceiling is then the chunk — the behavior every
 // upload had before the plan existed.
 func TestPlanUploadChunkWithoutALength(t *testing.T) {
 	if got := planUploadChunk(0, 2, 4<<20); got != 4<<20 {

@@ -911,15 +911,6 @@ func (c *Client) SetTunnelRedial(fn func() (net.Conn, error)) {
 	c.redialMu.Unlock()
 }
 
-// poolFillInterval is how often the keepalive loop considers adding one more
-// tunnel to the standby pool. It paces the fill, it does not drive it: exactly
-// one pool dial is ever in flight (poolFillInFlight), and a dial takes seconds
-// (a setup-node round), so this is really "how soon after one lands the next
-// begins". Short enough that a pool of eight is up within a minute of app
-// start, and inert the rest of the time — the fill disarms itself at the cap
-// or at exhaustion and is re-armed only by a tunnel death.
-const poolFillInterval = 2 * time.Second
-
 // Bounded retry after a pool dial FAILS — as opposed to being refused for want
 // of a disjoint first hop, which is a settled fact about the topology and is
 // never retried.
@@ -2007,7 +1998,7 @@ func (c *Client) sessionKeepAliveLoop() {
 	// The standby pool grows on this loop too, one tunnel at a time. The
 	// ticker only paces it — maybePoolFill is a no-op unless the fill is armed
 	// (SetStandbyPool at start, a tunnel death after that), so after the pool
-	// settles this costs a function call every poolFillInterval.
+	// settles this costs a function call every setPoolFillInterval().
 	poolTicker := time.NewTicker(setPoolFillInterval())
 	defer poolTicker.Stop()
 
