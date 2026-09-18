@@ -783,6 +783,7 @@ type router struct {
 	tpdCache          *tpdSnapshotCache // one-snapshot TTL cache of GetAllTransports, see tpd_cache.go
 	localRoutes       *localRouteMemo   // memoized calculateLocalRoutes BFS, keyed on snapshot version + local first-hop set
 	suspects          *suspectHopCache  // short-TTL penalty cache for intermediates that lost/failed a setup race (see parallel_route_setup.go)
+	deadRoutes        *deadRouteCache   // short-TTL exclusion of whole routes that died young without carrying payload (see dead_route_cache.go)
 	warmRoutes        *warmRoutePool    // visor-level shared cache of disjoint aux-leg PLANS to an exit, shared across route groups (see warm_route_pool.go / docs/design/shared-warm-route-pool.md)
 	// dstTpOracle fetches a destination visor's OWN transport list
 	// authoritatively from the destination (via an RSN-signed transport-query),
@@ -900,6 +901,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		tpdCache:        newTPDSnapshotCache(),
 		localRoutes:     newLocalRouteMemo(),
 		suspects:        newSuspectHopCache(handshakeAwaitTimeout),
+		deadRoutes:      newDeadRouteCache(deadRouteTTL, deadRouteMaxTTL),
 		warmRoutes:      newWarmRoutePool(defaultWarmPlanTTL),
 		// Default a mux responder to capacity bulk-spread for the downloads it
 		// serves (see router_serve.go); operators can disable via

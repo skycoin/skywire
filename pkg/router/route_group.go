@@ -295,6 +295,15 @@ type RouteGroup struct {
 
 	networkStats *networkStats
 
+	// createdAt is when this group was constructed, and closeObserver (if the
+	// dialer installed one) is called once from close() with the group's age
+	// and the payload it carried. It is how the router learns that a route it
+	// just dialed died young without ever moving a byte — see
+	// dead_route_cache.go. Both are written once at setup and read at close.
+	createdAt       time.Time
+	closeObserverMu sync.Mutex
+	closeObserver   func(age time.Duration, carried uint64)
+
 	// used as a bool to indicate if this particular route group initiated close loop
 	closeInitiated   int32
 	remoteClosedOnce sync.Once
@@ -489,6 +498,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		writeDeadline:      deadline.MakePipeDeadline(),
 		handshakeProcessed: make(chan struct{}),
 		networkStats:       newNetworkStats(),
+		createdAt:          time.Now(),
 		legPongSeen:        make(map[uuid.UUID]bool),
 		legMissed:          make(map[uuid.UUID]int),
 		inflightPings:      make(map[int64]uuid.UUID),
@@ -4004,6 +4014,8 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		return nil
 	}
 
+	rg.fireCloseObserver()
+
 	// Snapshot the legs under rg.mu and RELEASE it before the broadcast and the
 	// wait below. Both are slow (a dead transport takes the full
 	// closeRoutineTimeout, and the wait another one), and rg.mu is the lock the
@@ -5305,4 +5317,31 @@ func (rg *RouteGroup) windowServiceFn(_ time.Duration) {
 	rg.mu.Unlock()
 	rg.mux.refreshLegWindows(tps)
 	rg.mux.signalWindow()
+}
+
+// SetCloseObserver installs a one-shot callback fired when this group closes,
+// carrying the group's age and the total payload it received. The dialer uses
+// it to record a route that died young without ever moving a byte (see
+// dead_route_cache.go). Safe to call at most once per group; a nil fn clears it.
+func (rg *RouteGroup) SetCloseObserver(fn func(age time.Duration, carried uint64)) {
+	rg.closeObserverMu.Lock()
+	rg.closeObserver = fn
+	rg.closeObserverMu.Unlock()
+}
+
+// fireCloseObserver runs — and then drops — the close observer, so it is called
+// exactly once even if close() is reached twice.
+func (rg *RouteGroup) fireCloseObserver() {
+	rg.closeObserverMu.Lock()
+	fn := rg.closeObserver
+	rg.closeObserver = nil
+	rg.closeObserverMu.Unlock()
+	if fn == nil {
+		return
+	}
+	var age time.Duration
+	if !rg.createdAt.IsZero() {
+		age = time.Since(rg.createdAt)
+	}
+	fn(age, rg.networkStats.BandwidthReceived()+rg.networkStats.BandwidthSent())
 }
