@@ -134,7 +134,10 @@ func (m *routeMux) onSACKReceived(lastContig uint32, words []uint64, dsackSeq ui
 		m.decayRackFactor()
 	}
 	th := m.rackThreshold() // computed BEFORE the buffer lock: the per-leg callback must not read the leg table under it
-	retx := m.retxBuf.ProcessSACKWith(lastContig, words, th, func(tpID uuid.UUID) time.Duration { return m.rackThresholdForWith(th, tpID) })
+	retx, deferred := m.retxBuf.ProcessSACKWith(lastContig, words, th, func(tpID uuid.UUID) time.Duration { return m.rackThresholdForWith(th, tpID) })
+	if deferred > 0 {
+		atomic.AddUint64(&m.retxDeferredYoung, uint64(deferred))
+	}
 	m.signalWindow() // purged entries may have freed per-leg window for a parked writer
 	return retx
 }

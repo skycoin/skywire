@@ -727,7 +727,11 @@ type MuxRecovery struct {
 	RetxReqSACK        uint64 `json:"retx_req_sack"`
 	RetxReqHOL         uint64 `json:"retx_req_hol"`
 	RetxReqFlush       uint64 `json:"retx_req_flush"`
-	RetxSendErrors     uint64 `json:"retx_send_errors"`
+	// RetxDeferredYoung counts the holes a SACK named that were NOT resent
+	// because the frame is still younger than the delay basis of the leg it
+	// rode — the duplicate bytes kept off the wire.
+	RetxDeferredYoung uint64 `json:"retx_deferred_young"`
+	RetxSendErrors    uint64 `json:"retx_send_errors"`
 	// SendWindowWaits / SendWindowTimeouts: writers parked because every ready
 	// leg was at its per-leg send window, and the parks that gave up after
 	// sendWindowWaitMax and sent anyway.
@@ -937,6 +941,7 @@ func (rg *RouteGroup) recoverySnapshot(legs []MuxLeg) *MuxRecovery {
 		RetxReqSACK:        atomic.LoadUint64(&m.retxReqSACK),
 		RetxReqHOL:         atomic.LoadUint64(&m.retxReqHOL),
 		RetxReqFlush:       atomic.LoadUint64(&m.retxReqFlush),
+		RetxDeferredYoung:  atomic.LoadUint64(&m.retxDeferredYoung),
 		RetxSendErrors:     atomic.LoadUint64(&m.retxSendErrors),
 		SendWindowWaits:    atomic.LoadUint64(&m.sendWindowWaits),
 		SendWindowTimeouts: atomic.LoadUint64(&m.sendWindowTimeouts),

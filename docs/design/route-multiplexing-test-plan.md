@@ -462,6 +462,22 @@ the byte after the last one written, so a cut costs one detection instead of one
 chunk. Re-measure the cut row against this before judging the route-layer
 candidates above.
 
+**A retransmit honours the sending leg's own clock.** On `mux-legs-2`
+(`bench/2026-09-16/e128db1ff-smoke`, legs at 128/152 ms) every row that actually
+striped an upload paid ~50 % of the wire in duplicates: a 10 MB row striped
+51/49 put 14.6 MB on the wire with `retx_sent` +337, of which `retx_req_sack`
++306, and both send windows saturated until the writer parked; the row that kept
+100 % on one leg sent 10.02 MB with one retransmit. The receiver was not holding
+the frontier (`reorder_pending` 0). The cause was the per-leg RACK threshold's
+ceiling: a leg whose measured delay had grown past `rackCeil` had its wait pulled
+back to exactly one delay basis — the *mean* of its own distribution — so every
+frame slower than that mean was re-sent while in ordinary flight on its own leg.
+The rule now is that a SACK- or HoL-requested retransmit of a frame is withheld
+until the frame is older than the sending leg's `legDelayBasisMs` (max of its
+send→ack delay and its pong RTT) times the RACK reorder margin, at any basis;
+withheld holes are counted as `retx_deferred_young` so a run can tell a deferral
+from a loss.
+
 ### 3.4 Liveness and stability, finished
 
 - With control-frame priority in place, re-run the frozen-exit 30-minute
