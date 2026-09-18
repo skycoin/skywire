@@ -118,14 +118,14 @@ func TestRouteGroupCloseNoGoroutineLeak(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond)
 
-	// closeDoneCh is closed when the close completes (or is force-completed on timeout).
-	if rg.closeDoneCh != nil {
-		select {
-		case <-rg.closeDoneCh:
-			// channel closed — no leak
-		case <-time.After(2 * time.Second):
-			t.Fatal("closeDoneCh not closed after Close() timeout — goroutine leak")
-		}
+	// closeDone() is closed when the close completes (or is force-completed on
+	// timeout). Read it through the accessor, not the field: the field is
+	// written by whichever goroutine initiates the close.
+	select {
+	case <-rg.closeDone():
+		// channel closed — no leak
+	case <-time.After(2 * time.Second):
+		t.Fatal("closeDoneCh not closed after Close() timeout — goroutine leak")
 	}
 }
 

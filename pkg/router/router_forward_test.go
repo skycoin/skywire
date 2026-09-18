@@ -27,18 +27,18 @@ import (
 // following write parks until its deadline. That is the live shape — a peer
 // whose socket buffer is full — and NOT emu's Cut(), which accepts writes and
 // black-holes them (a cut link would never have stalled anything).
-func wedgedLeg(t *testing.T, name string) (near network.Transport, far *emu.Conn) {
+func wedgedLeg(t *testing.T, name string) (near network.Transport) {
 	t.Helper()
 	lpk, _ := cipher.GenerateKeyPair()
 	rpk, _ := cipher.GenerateKeyPair()
-	a, b := emu.NewPair(emu.PairConfig{
+	a, _ := emu.NewPair(emu.PairConfig{
 		Name: name,
 		AtoB: emu.LinkConfig{RateBps: 1, QueueBytes: 1},
 		BtoA: emu.LinkConfig{},
 		APK:  lpk, BPK: rpk, Type: types.STCPR,
 	})
 	t.Cleanup(func() { _ = a.Close() }) //nolint:errcheck
-	return a, b
+	return a
 }
 
 // healthyLeg is the same thing with no impairment at all.
@@ -96,7 +96,7 @@ func TestTransitWriteDoesNotBlockTheServeLoop(t *testing.T) {
 	require.NoError(t, rs.Set(rs.ForwardQueueDepth.Name(), "8"))
 
 	r, tm := newForwardTestRouter(t)
-	wedged, _ := wedgedLeg(t, "transit")
+	wedged := wedgedLeg(t, "transit")
 	wedgedID := uuid.New()
 	injectTransport(t, tm, wedged, wedgedID)
 
@@ -179,6 +179,11 @@ func drainDatagrams(dg *DatagramRouteGroup) int {
 // the write moved to a goroutine, it did not become lossy or unordered.
 func TestTransitWriteStillRelaysInOrder(t *testing.T) {
 	t.Cleanup(rs.Reset)
+	// The whole burst is pushed before anything is read, so the queue has to
+	// hold it: pin the depth the test needs rather than inherit whatever
+	// forward.queue_depth defaults to, or a later change to that default turns
+	// this into a flake that reports as reordering.
+	require.NoError(t, rs.Set(rs.ForwardQueueDepth.Name(), "128"))
 	r, tm := newForwardTestRouter(t)
 	near, far := healthyLeg(t, "relay")
 	tpID := uuid.New()
@@ -214,4 +219,50 @@ func TestTransitWriteStillRelaysInOrder(t *testing.T) {
 	}, 5*time.Second, 10*time.Millisecond, "not every relayed frame was counted as sent")
 	stats := r.IntakeStats().ForwardQueues
 	require.Zero(t, stats[0].DropsQueueFull+stats[0].DropsWriteTimeout+stats[0].DropsWriteError)
+}
+
+// forward.queue_bytes is the second bound on the same queue. forward.queue_depth
+// counts frames, so on its own it lets one peer that stopped draining hold
+// depth × the largest frame it was relaying — 1024 × 64 KiB on the shipped
+// default, a quarter of a visor's memory limit for one stranger's route. The
+// byte bound is off by default; when it is set it must be what bites, well
+// before the frame count does.
+func TestForwardQueueBytesBoundsOneWedgedPeer(t *testing.T) {
+	t.Cleanup(rs.Reset)
+	require.NoError(t, rs.Set(rs.ForwardWriteTimeout.Name(), "200ms"))
+	require.NoError(t, rs.Set(rs.ForwardQueueDepth.Name(), "512"))
+	require.NoError(t, rs.Set(rs.ForwardQueueBytes.Name(), "8192"))
+
+	r, tm := newForwardTestRouter(t)
+	wedged := wedgedLeg(t, "bounded")
+	tpID := uuid.New()
+	injectTransport(t, tm, wedged, tpID)
+
+	const key = routing.RouteID(21)
+	require.NoError(t, r.rt.SaveRule(routing.IntermediaryForwardRule(time.Hour, key, routing.RouteID(22), tpID)))
+
+	p, err := routing.MakeDataPacket(key, make([]byte, 1024))
+	require.NoError(t, err)
+	ctx := context.Background()
+	for i := 0; i < 128; i++ {
+		require.NoError(t, r.handleTransportPacket(ctx, p))
+	}
+
+	require.Eventually(t, func() bool {
+		for _, q := range r.IntakeStats().ForwardQueues {
+			if q.TpID == tpID && q.DropsQueueFull > 0 {
+				return true
+			}
+		}
+		return false
+	}, 5*time.Second, 10*time.Millisecond, "forward.queue_bytes never bounded the wedged peer's queue")
+
+	for _, q := range r.IntakeStats().ForwardQueues {
+		if q.TpID != tpID {
+			continue
+		}
+		require.LessOrEqual(t, q.QueuedBytes, int64(8192)+int64(len(p)),
+			"the queue grew past forward.queue_bytes")
+		require.Less(t, q.Queue, 512, "the frame count was never the bound that bit")
+	}
 }
