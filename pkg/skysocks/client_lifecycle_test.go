@@ -125,7 +125,8 @@ func TestReadChunkBody_ZeroReadsTerminate(t *testing.T) {
 	z := &zeroReader{}
 	done := make(chan error, 1)
 	go func() {
-		done <- readChunkBody(nopDeadliner{}, z, make([]byte, 4<<10), time.Minute)
+		_, err := readChunkBody(nopDeadliner{}, z, make([]byte, 4<<10), time.Minute)
+		done <- err
 	}()
 	select {
 	case err := <-done:
@@ -140,7 +141,9 @@ func TestReadChunkBody_ZeroReadsTerminate(t *testing.T) {
 // A body that delivers is unaffected: the guard resets on every byte.
 func TestReadChunkBody_SlowBodyCompletes(t *testing.T) {
 	buf := make([]byte, 8)
-	require.NoError(t, readChunkBody(nopDeadliner{}, &drip{n: len(buf)}, buf, time.Minute))
+	n, err := readChunkBody(nopDeadliner{}, &drip{n: len(buf)}, buf, time.Minute)
+	require.NoError(t, err)
+	require.Equal(t, len(buf), n, "a completed body reports every byte it filled")
 }
 
 // drip returns one byte per read, with a zero-byte read between each.
