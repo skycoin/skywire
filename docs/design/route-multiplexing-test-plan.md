@@ -455,6 +455,41 @@ with mux overhead on it.
    and Frankfurt by itself — the routes an operator would have pinned — where campaign19's
    first-hop-only ranking picked a 1 ms LAN neighbour and collapsed. A third tunnel buys nothing.
 
+### Direction (criterion 5)
+
+`bench/direction.sh <result dir> [set…]` turns the artefacts a run already writes into the per-row
+attribution criterion 5 asks for. For every row (trial × direction × size) it takes the local end's
+`<set>.carrier.tsv` deltas — `sent_delta` is what this visor put on the leg (client→exit, forward),
+`recv_delta` is what arrived on it (exit→client, reverse) — together with the `legs` pseudo-row that
+names the rg:transport membership at that row. Leg identity comes from `<set>.legs.json`:
+`transport_id`, `tp_type`, `remote_pk`, `latency_ms`, `direct`, `hops[]` and `tunnel_role`, with
+`<set>.tps.tsv` as the fallback for a group dialed after the snapshot. The exit end is
+`<set>.exit-recovery.tsv`, matched to our legs through `hops[-1].tp_id` — the exit's own first hop
+for that leg — and contributing `standby`, `retransmits` and `ack_delay_ms`. The exit's per-leg
+record carries **no byte counter**, so the exit's sent bytes are read as the local `recv_delta` of
+the same leg; two further limits are printed as `# note` lines in every output — `carrier.tsv`
+counts a transport rather than a route group, and `latency_ms` is the end-of-set snapshot. Because a
+standby group carries only keepalives, shares and verdicts are computed over the legs of active
+groups. Per row it reports `forward_on` (the leg with ≥ 80 % of the forward bytes, and whether that
+leg is the direct or the lowest-latency one), `reverse_fanout` (legs above 10 % of the reverse
+bytes, and the largest single share) and `flip` (a change of dominant forward leg between rows). It
+writes `<set>.direction.tsv` per set and a `direction.tsv` summary at the top of the result dir.
+
+Run over the four smoke dirs of 2026-09-16 (`2ca6cf7b3`, `0290ff96a`, `0186db249`, `deac6fa5a`) the
+shape is consistent. Where a direct one-hop leg exists, forward takes it or takes the lowest-RTT leg
+and never anything else: `mux-tunnels-2` scores 5/10, 9/10, 6/10 and 10/10 rows PASS with **no FAIL**
+in any run, and `mux-standby-8` 7, 8 and 11 of 12, always on `b414796d`, the one-hop leg to the exit.
+`mux-legs-2` is the counter-case and the finding worth acting on: its two legs are both two-hop and
+neither is direct, and forward settles on `fdab37dd` at ~147–149 ms rather than on `95839ad0` at
+36–132 ms — 7, 7, 6 and 2 rows of 10 FAIL on that account, the remainder split between rows where
+the lower-RTT leg did win and rows where forward fanned below the 80 % bar. Reverse does fan: on
+downloads of ≥ 50 MB two legs clear 10 % in three of the four dirs (2/2 PASS), and 6/6 in
+`mux-compose-T2xL2`, where four active legs let the reverse stream spread up to four ways; it
+collapses onto one leg in `0290ff96a`'s tunnels and standby sets. The dominant forward leg does move
+within a set — 0 to 5 flips per set, several of them between consecutive trials of one cell rather
+than at a cell boundary — so the choice is not fixed for the life of a group, but nothing here
+isolates load as the cause and criterion 5's "flipping on load" stays unproven.
+
 ### The fixes this campaign merged
 
 | PR | symptom → fix |
