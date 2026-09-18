@@ -314,9 +314,12 @@ func (s *stubSink) handler() http.HandlerFunc {
 
 // socks5Upload drives a SOCKS5 CONNECT to example.com:80 and an
 // Expect-100-continue POST through the proxy, returning the final response.
-func socks5Upload(t *testing.T, proxyAddr, path string, body []byte) *http.Response {
+// Every caller posts to the same upload path, so it is fixed here rather than
+// passed in.
+func socks5Upload(t *testing.T, proxyAddr string, body []byte) *http.Response {
 	t.Helper()
 	const host = "example.com"
+	const path = "/upload"
 	c, err := net.Dial("tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("dial proxy: %v", err)
@@ -389,10 +392,10 @@ func TestStripedUploadHoldsItsMemoryBound(t *testing.T) {
 	backend := httptest.NewServer(sink.handler())
 	defer backend.Close()
 
-	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 4, 1<<20)
+	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 1<<20)
 	uploadHeldPeak.Store(0)
 
-	resp := socks5Upload(t, proxy, "/upload", blob)
+	resp := socks5Upload(t, proxy, blob)
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -472,7 +475,7 @@ func TestGenericPostIsReplayedWhenItsTunnelDies(t *testing.T) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		resp := socks5Upload(t, proxy, "/upload", blob)
+		resp := socks5Upload(t, proxy, blob)
 		defer resp.Body.Close() //nolint:errcheck
 		var got struct {
 			Bytes  int64  `json:"bytes"`
@@ -555,8 +558,8 @@ func TestUploadToNonOptInOriginIsUnchanged(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 4, 1<<20)
-	resp := socks5Upload(t, proxy, "/upload", blob)
+	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 1<<20)
+	resp := socks5Upload(t, proxy, blob)
 	defer resp.Body.Close() //nolint:errcheck
 	var got struct {
 		Bytes  int64  `json:"bytes"`
@@ -869,7 +872,7 @@ func TestUploadSlotIsFreedOnTheAckNotTheDurability(t *testing.T) {
 	backend := httptest.NewServer(sink.handler())
 	defer backend.Close()
 
-	resp := socks5Upload(t, newRSTestClient(t, backend.Listener.Addr().String(), 4, 1<<20), "/upload", blob)
+	resp := socks5Upload(t, newRSTestClient(t, backend.Listener.Addr().String(), 1<<20), blob)
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -948,8 +951,8 @@ func TestStripedUploadChunksAreSizedFromTheObject(t *testing.T) {
 	backend := httptest.NewServer(sink.handler())
 	defer backend.Close()
 
-	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 4, 1<<20)
-	resp := socks5Upload(t, proxy, "/upload", blob)
+	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 1<<20)
+	resp := socks5Upload(t, proxy, blob)
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)

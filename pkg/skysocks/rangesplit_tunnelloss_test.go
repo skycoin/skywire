@@ -97,7 +97,7 @@ func rsSlowExit(conn net.Conn, backendAddr string, accepted *atomic.Int64) {
 			done := make(chan struct{}, 2)
 			go func() { _, _ = io.Copy(be, st); done <- struct{}{} }() //nolint:errcheck,gosec
 			go func() {                                                //nolint:errcheck,gosec
-				_, _ = io.Copy(slowWriter{w: st, chunk: 32 << 10, pause: 100 * time.Millisecond}, be)
+				_, _ = io.Copy(slowWriter{w: st, chunk: 32 << 10, pause: 100 * time.Millisecond}, be) //nolint:errcheck // blank-assigned; pipe teardown ends the copy
 				done <- struct{}{}
 			}()
 			<-done
@@ -182,7 +182,7 @@ func TestRangeSplitChunkFailoverOnTunnelLoss(t *testing.T) {
 	const blobSize = 8 << 20
 	blob := make([]byte, blobSize)
 	for i := range blob {
-		blob[i] = byte(i*37 + 11)
+		blob[i] = byte(i*37 + 11) //nolint:gosec // deterministic test fill; byte wrap is intended
 	}
 	want := sha256.Sum256(blob)
 
@@ -206,9 +206,9 @@ func TestRangeSplitChunkFailoverOnTunnelLoss(t *testing.T) {
 	}
 
 	conn, resp := socks5GetStreaming(t, proxy, "/blob.bin")
-	defer conn.Close() //nolint:errcheck
-	defer resp.Body.Close()
-	park.Close() //nolint:errcheck,gosec
+	defer conn.Close()      //nolint:errcheck
+	defer resp.Body.Close() //nolint:errcheck
+	park.Close()            //nolint:errcheck,gosec
 
 	var (
 		mu  sync.Mutex
@@ -454,9 +454,9 @@ func TestRangeSplitChunkRefetchResumesFromReceivedOffset(t *testing.T) {
 		t.Fatalf("park stream: %v", err)
 	}
 	conn, resp := socks5GetStreaming(t, proxy, "/blob.bin")
-	defer conn.Close() //nolint:errcheck
-	defer resp.Body.Close()
-	park.Close() //nolint:errcheck,gosec
+	defer conn.Close()      //nolint:errcheck
+	defer resp.Body.Close() //nolint:errcheck
+	park.Close()            //nolint:errcheck,gosec
 
 	var (
 		mu  sync.Mutex
