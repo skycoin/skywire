@@ -751,6 +751,7 @@ type router struct {
 	rgsRaw           map[routing.RouteDescriptor]*RouteGroup         // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
 	rgsDatagrams     map[routing.RouteDescriptor]*DatagramRouteGroup // faithful-UDP (DatagramPacket) route groups, keyed like rgsNs; #2607 stage-4 dispatch
 	intake           intakeCounters                                  // inbound-path counters for `visor state` (router_intake.go)
+	forward          forwardTable                                    // per-next-hop transit write queues, off the serve loop (router_forward.go)
 	muxFEC           atomic.Bool                                     // live mirror of Config.MuxFEC; read when a mux route group is built (settings.go)
 	muxEvents        muxEventRing                                    // bounded history of route-group/mux-leg changes with reasons (mux_events.go)
 	routeSource      routeSourceCounters                             // where routes came from (router_route_source.go)

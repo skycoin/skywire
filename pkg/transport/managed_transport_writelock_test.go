@@ -89,7 +89,7 @@ func TestSlowWriteDoesNotBlockRead(t *testing.T) {
 	mt.close()
 }
 
-// writeMx is what keeps frames whole now that transportMx is not held across
+// writeSem is what keeps frames whole now that transportMx is not held across
 // the write: two concurrent writers must never interleave their bytes.
 func TestConcurrentWritesDoNotInterleave(t *testing.T) {
 	tm := newTestManager(t)
@@ -152,3 +152,73 @@ func (t *interleaveCheckTransport) RemotePort() uint16               { return 0 
 func (t *interleaveCheckTransport) LocalRawAddr() net.Addr           { return &net.TCPAddr{} }
 func (t *interleaveCheckTransport) RemoteRawAddr() net.Addr          { return &net.TCPAddr{} }
 func (t *interleaveCheckTransport) Network() types.Type              { return types.STCPR }
+
+// The write slot's acquisition is ctx-aware, and a caller's deadline is
+// charged to the conn.
+//
+// The deadline used to be set only AFTER the slot was won ("time spent waiting
+// for another writer is not charged against this write"), and the wait itself
+// was a plain mutex, so a caller behind a writer parked on a wedged conn had
+// no way out short of that writer's own one-minute deadline. That is how a
+// single stuck transit peer parked the router's inbound packet loop on
+// 2026-09-18. A caller that says how long it will wait now gets exactly that.
+func TestWriteWaiterGivesUpOnItsOwnDeadline(t *testing.T) {
+	tm := newTestManager(t)
+	remote := mustPK(t)
+	fc := &fakeClient{pk: tm.Conf.PubKey, sk: tm.Conf.SecKey, typ: types.STCPR}
+	mt := NewManagedTransport(ManagedTransportConfig{
+		client:   fc,
+		DC:       NewNoopDiscoveryClient(),
+		LS:       InMemoryTransportLogStore(),
+		RemotePK: remote,
+	})
+
+	near, far := net.Pipe()
+	defer far.Close() //nolint:errcheck
+	conn := &gatedWriteTransport{
+		pipeTransport: &pipeTransport{Conn: near, lpk: tm.Conf.PubKey, rpk: remote, nw: types.STCPR},
+		gate:          make(chan struct{}),
+		entered:       make(chan struct{}),
+	}
+	mt.setTransport(conn)
+	tm.InjectTransportForTest(mt)
+
+	pkt, err := routing.MakeDataPacket(routing.RouteID(1), []byte("parked write"))
+	require.NoError(t, err)
+	wdone := make(chan error, 1)
+	go func() { wdone <- mt.WritePacket(context.Background(), pkt) }()
+	select {
+	case <-conn.entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the first write never reached the underlying conn")
+	}
+
+	// A second writer with 150 ms of patience must get its own answer back in
+	// about that long, not in a minute.
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	err = mt.WritePacket(ctx, pkt)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, time.Since(start), 5*time.Second,
+		"a waiter inherited the parked writer's deadline instead of its own")
+
+	close(conn.gate)
+	require.NoError(t, <-wdone)
+	mt.close()
+}
+
+// A caller's deadline is the one charged to the conn when it is the shorter of
+// the two: writeDeadline never hands out more time than the caller asked for,
+// and never more than the transport's own ceiling.
+func TestWriteDeadlineTakesTheSmaller(t *testing.T) {
+	require.WithinDuration(t, time.Now().Add(writeTimeout), writeDeadline(context.Background()), time.Second)
+
+	short, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	require.WithinDuration(t, time.Now().Add(2*time.Second), writeDeadline(short), 500*time.Millisecond)
+
+	long, cancelLong := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancelLong()
+	require.WithinDuration(t, time.Now().Add(writeTimeout), writeDeadline(long), time.Second)
+}

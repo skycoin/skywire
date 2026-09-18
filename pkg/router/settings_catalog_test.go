@@ -89,6 +89,8 @@ func TestCatalogDefaultsMatchConstants(t *testing.T) {
 		{rs.DeadRouteHoldMax, deadRouteMaxTTLDefault},
 		{rs.DeadRouteYoungAge, deadRouteYoungAge},
 		{rs.WarmPlanTTL, defaultWarmPlanTTL},
+		{rs.ForwardWriteTimeout, forwardWriteTimeoutDefault},
+		{rs.ForwardDropEventWindow, forwardDropEventWindowDefault},
 	}
 	for _, c := range durations {
 		require.Equal(t, c.want, c.k.Duration(), c.k.Name())
@@ -130,6 +132,7 @@ func TestCatalogDefaultsMatchConstants(t *testing.T) {
 		{rs.WarmPlanBucketCap, warmPlanBucketCap},
 		{rs.MuxEventRingSize, MuxEventRingSizeDefault},
 		{rs.MuxEventsPerGroup, muxEventsPerGroupDefault},
+		{rs.ForwardQueueDepth, forwardQueueDepthDefault},
 	}
 	for _, c := range counts {
 		require.EqualValues(t, c.want, c.k.Raw(), c.k.Name())
