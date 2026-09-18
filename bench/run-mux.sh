@@ -360,7 +360,7 @@ invalid_set() {
 # leaves it (steady width 2, app stopped) before the next set starts.
 abort_set() {
 	invalid_set "$1" "$2"
-	$CLI cli proxy mux width 2 >/dev/null 2>&1
+	$CLI cli proxy settings --reset mux.width mux.cap >/dev/null 2>&1 # back to inherit
 	[ -n "${cur_app:-}" ] && { stop_app_clean "$cur_app" || echo "$cur_app: dst_ports $rg_left left behind by an aborted set"; }
 	return 0
 }
@@ -705,7 +705,7 @@ for N in $leg_counts; do
 	mux_info "$name" > "$tmp/$set_name.after.json"
 	port_after=$(active_json "$tmp/$set_name.after.json" | jq -r '.[0].desc.dst_port')
 	echo "# rg src_port before=$port_before after=$port_after $( [ "$port_before" = "$port_after" ] && echo constant || echo CHANGED)" >> "$out/$set_name.carrier.tsv"
-	$CLI cli proxy mux width 2 >/dev/null 2>&1 # back to the default steady width
+	$CLI cli proxy settings --reset mux.width mux.cap >/dev/null 2>&1 # back to inherit: the per-app override is persisted, a leftover width shapes every later dial
 	echo "$name: rg src_port $port_before -> $port_after"
 	stop_app_clean "$name" || echo "$set_name: dst_ports $rg_left outlived the set — the next set will be invalidated if they persist"
 	port=$((port + 1))
