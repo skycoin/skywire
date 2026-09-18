@@ -96,6 +96,11 @@ downloads and uploads, at 3, 10, 50 and 100 MB, five trials each:
    must fall back to a single route on that path, by measurement, not by
    configuration.
 
+10. **Spread proven.** Under a spread policy that caps any one route at 40 % of
+    the bytes and holds at least three routes, throughput ≥ 0.8 × the best
+    single reference and no route exceeds its cap, measured from both ends'
+    per-leg counters at 50 MB down and up; the policy is a live setting, not a
+    build. Design and bench set: `docs/design/route-spread-policy.md`.
 
 Since **v4 (2026-09-18)** two of those bars are measured against the ENDPOINT
 rather than against another skywire number, so a campaign also runs
