@@ -36,6 +36,10 @@ func init() {
 	pk, _ = sk.PubKey() //nolint
 
 	dmsgclient.InitFlags(RootCmd)
+	// Outbound only: this tool opens no dmsg listener, so a discovery entry
+	// naming its servers advertises a destination that accepts nothing. See
+	// dmsgclient.NoRegister.
+	dmsgclient.NoRegister = true
 	RootCmd.Flags().StringVarP(&filterDomainSuffix, "filter", "f", ".dmsg", "domain suffix to filter")
 	RootCmd.Flags().UintVarP(&proxyPort, "socks", "q", proxyPort, "port to serve the socks5 proxy")
 	RootCmd.Flags().StringVarP(&addProxy, "addproxy", "r", addProxy, "configure additional socks5 proxy for dmsgweb (i.e. 127.0.0.1:1080)")

@@ -38,6 +38,25 @@ var (
 	// Format: pk@ip:port (e.g., 02a2d4c3...@45.79.124.73:30082)
 	DmsgServerAddr string
 
+	// NoRegister suppresses this tool's own dmsg discovery entry.
+	//
+	// A discovery entry is an INBOUND-reachability advertisement: "these are
+	// the servers you can reach me through". A tool that only ever dials out —
+	// dmsgcurl fetching a URL, dmsgip asking for an address, the dmsgweb
+	// resolver, the dmsg-socks5 client half — opens no dmsg listener, so its
+	// entry names servers for a destination that accepts nothing. It is a write
+	// on the discovery, a row in its store and a TTL to expire, for an identity
+	// that is usually ephemeral (these tools generate a keypair per run) and
+	// gone in seconds.
+	//
+	// Not registering does NOT make a client undialable, and does not affect
+	// its ability to dial or resolve anyone else — see dmsg.Config.NoRegister,
+	// where registration and resolution are documented as independent axes.
+	//
+	// Binaries that DO accept inbound dmsg dials (dmsghttp, dmsgwebsrv,
+	// dmsg-socks5 serve) leave this false: their entry is the whole point.
+	NoRegister = false
+
 	// DmsgAttach is the local visor dmsg-relay acceptor to attach to instead
 	// of dialing dmsg servers: a unix socket path, or "tcp://host:port" for a
 	// loopback listener. The tool keeps its own key — that is the whole point
