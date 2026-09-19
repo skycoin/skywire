@@ -387,6 +387,40 @@ func (hv *Hypervisor) DisableUI() error {
 	return nil
 }
 
+// SetAuth turns the web UI's login requirement on or off at runtime.
+//
+// EnableAuth is read while the chi router is BUILT, not per request, so setting
+// the flag alone changes nothing on a server that is already serving. The
+// change takes effect by rebuilding the mux, which is what this does: only the
+// HTTP listener is cycled, in the same way EnableUI/DisableUI cycle it. The
+// DMSG-RPC listener, managed-visor tracking and `hv ls` are untouched, and so
+// is the visor — this is the "without restarting the visor" path.
+//
+// Sessions do not survive the switch (the router, and with it the session
+// middleware, is new), so a browser tab open on the UI has to be reloaded.
+func (hv *Hypervisor) SetAuth(enable bool) error {
+	hv.enableMu.Lock()
+	defer hv.enableMu.Unlock()
+
+	if hv.c.EnableAuth == enable {
+		return nil
+	}
+	hv.c.EnableAuth = enable
+	hv.logger.WithField("enable_auth", enable).Info("Hypervisor UI auth changed")
+	if !hv.uiServing {
+		return nil
+	}
+	hv.stopUI()
+	return hv.startUI()
+}
+
+// AuthEnabled reports whether the web UI currently requires a login.
+func (hv *Hypervisor) AuthEnabled() bool {
+	hv.enableMu.Lock()
+	defer hv.enableMu.Unlock()
+	return hv.c.EnableAuth
+}
+
 // IsUIServing reports whether the web UI HTTP server is currently serving.
 func (hv *Hypervisor) IsUIServing() bool {
 	hv.enableMu.Lock()

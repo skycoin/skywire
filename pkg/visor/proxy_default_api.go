@@ -110,6 +110,14 @@ func (proxyDefaultAPI) DisableHypervisorUIPersist(_ bool) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) SetHypervisorAuthPersist(_, _ bool) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) IsHypervisorAuthEnabled() bool {
+	return false
+}
+
 func (proxyDefaultAPI) IsHypervisorUIServing() bool {
 	return false
 }

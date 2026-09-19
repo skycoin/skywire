@@ -370,6 +370,21 @@ func (rc *rpcClient) DisableHypervisorUIPersist(persist bool) error {
 	return rc.Call("DisableHypervisorUI", &persist, &struct{}{})
 }
 
+// SetHypervisorAuthPersist turns the hypervisor UI login requirement on or off
+// at runtime; only the UI HTTP listener is cycled.
+func (rc *rpcClient) SetHypervisorAuthPersist(enable, persist bool) error {
+	return rc.Call("SetHypervisorAuth", &SetHypervisorAuthIn{Enable: enable, Persist: persist}, &struct{}{})
+}
+
+// IsHypervisorAuthEnabled reports whether the hypervisor UI requires a login.
+func (rc *rpcClient) IsHypervisorAuthEnabled() bool {
+	var out bool
+	if err := rc.Call("IsHypervisorAuthEnabled", &struct{}{}, &out); err != nil {
+		return false
+	}
+	return out
+}
+
 // IsHypervisorUIServing calls IsHypervisorUIServing
 func (rc *rpcClient) IsHypervisorUIServing() bool {
 	var out bool

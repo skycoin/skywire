@@ -112,6 +112,14 @@ type HVVisorEntry struct {
 	// from summary.Load. Rendered by `hv ls --load`. omitempty so older
 	// sub-hypervisor binaries that don't carry it don't break the JSON shape.
 	Load *LoadStats `json:"load,omitempty"`
+	// Hypervisors is the set of hypervisors THIS visor is configured to be
+	// managed by (its conf.Hypervisors), reported by the visor itself. An
+	// attached visor commonly answers to more than one hypervisor, and until
+	// now the only way to learn the others was to ask that visor directly:
+	// the tree sections describe hypervisors THIS one can reach, not the ones
+	// its peers have set. omitempty so an older visor that does not report
+	// them is absent rather than empty.
+	Hypervisors []cipher.PubKey `json:"hypervisors,omitempty"`
 }
 
 func populateEntryFromSummary(entry *HVVisorEntry, summary *Summary) {
@@ -134,6 +142,10 @@ func populateEntryFromSummary(entry *HVVisorEntry, summary *Summary) {
 	entry.RewardAddress = summary.RewardAddress
 	entry.Hostname = summary.Overview.Hostname
 	entry.Load = summary.Load
+	// The visor's own conf.Hypervisors, already carried in the Overview it
+	// returns — the hypervisors it answers to, which only it knows. Lifting it
+	// onto the entry is what puts it in `hv ls`.
+	entry.Hypervisors = summary.Overview.Hypervisors
 	if summary.Health != nil {
 		entry.ServicesHealth = summary.Health.ServicesHealth
 	}

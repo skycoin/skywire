@@ -56,6 +56,29 @@ func (r *RPC) DisableHypervisorUI(persist *bool, _ *struct{}) (err error) {
 	return r.visor.DisableHypervisorUIPersist(p)
 }
 
+// SetHypervisorAuthIn is the argument of SetHypervisorAuth.
+type SetHypervisorAuthIn struct {
+	Enable  bool
+	Persist bool
+}
+
+// SetHypervisorAuth turns the hypervisor web UI's login requirement on or off
+// at runtime, cycling only the UI's HTTP listener. Persists when Persist is set.
+func (r *RPC) SetHypervisorAuth(in *SetHypervisorAuthIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetHypervisorAuth", in)(nil, &err)
+	if in == nil {
+		return errors.New("nil argument")
+	}
+	return r.visor.SetHypervisorAuthPersist(in.Enable, in.Persist)
+}
+
+// IsHypervisorAuthEnabled returns whether the hypervisor web UI requires a login.
+func (r *RPC) IsHypervisorAuthEnabled(_ *struct{}, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "IsHypervisorAuthEnabled", nil)(out, &err)
+	*out = r.visor.IsHypervisorAuthEnabled()
+	return nil
+}
+
 // IsHypervisorUIServing returns whether the hypervisor web UI is serving.
 func (r *RPC) IsHypervisorUIServing(_ *struct{}, out *bool) (err error) {
 	*out = r.visor.IsHypervisorUIServing()
