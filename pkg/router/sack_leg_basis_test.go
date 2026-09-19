@@ -2,7 +2,6 @@
 package router
 
 import (
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -47,7 +46,7 @@ func TestSACKDefersFrameYoungerThanItsLegBasis(t *testing.T) {
 
 	got := m.onSACKReceived(6, []uint64{0b100}, 0, false) // bit 2 = seq 9 received
 	require.Equal(t, []uint32{8}, got, "only the fast leg's hole is overdue")
-	require.Equal(t, uint64(1), atomic.LoadUint64(&m.retxDeferredYoung),
+	require.Equal(t, uint64(1), m.retxDeferredYoung.Load(),
 		"the slow leg's in-flight frame is counted as deferred, not retransmitted")
 }
 
@@ -64,7 +63,7 @@ func TestSACKRetransmitsOncePastLegBasis(t *testing.T) {
 	storeAged(m, 7, slow, 400*time.Millisecond) // > 150 ms × 1.25
 	got := m.onSACKReceived(6, []uint64{0b100}, 0, false)
 	require.Equal(t, []uint32{7}, got, "past its own leg's basis the hole is a loss")
-	require.Zero(t, atomic.LoadUint64(&m.retxDeferredYoung))
+	require.Zero(t, m.retxDeferredYoung.Load())
 }
 
 // TestQueueDeepLegWaitsBasisPlusMargin pins the clamp that produced the storm:
@@ -87,7 +86,7 @@ func TestQueueDeepLegWaitsBasisPlusMargin(t *testing.T) {
 	storeAged(m, 7, deep, 2200*time.Millisecond) // above the bare basis, below basis×1.25
 	require.Empty(t, m.onSACKReceived(6, []uint64{0b100}, 0, false),
 		"a frame inside the leg's basis+margin is in flight, not lost")
-	require.Equal(t, uint64(1), atomic.LoadUint64(&m.retxDeferredYoung))
+	require.Equal(t, uint64(1), m.retxDeferredYoung.Load())
 }
 
 // TestSingleLegGroupJudgedByGroupThreshold is the no-change case: with one leg
@@ -104,9 +103,9 @@ func TestSingleLegGroupJudgedByGroupThreshold(t *testing.T) {
 
 	storeAged(m, 7, only, 100*time.Millisecond)
 	require.Empty(t, m.onSACKReceived(6, []uint64{0b100}, 0, false), "younger than the threshold")
-	require.Zero(t, atomic.LoadUint64(&m.retxDeferredYoung), "no per-leg deferral on a single-leg group")
+	require.Zero(t, m.retxDeferredYoung.Load(), "no per-leg deferral on a single-leg group")
 
 	storeAged(m, 7, only, 400*time.Millisecond)
 	require.Equal(t, []uint32{7}, m.onSACKReceived(6, []uint64{0b100}, 0, false), "older than the threshold")
-	require.Zero(t, atomic.LoadUint64(&m.retxDeferredYoung))
+	require.Zero(t, m.retxDeferredYoung.Load())
 }

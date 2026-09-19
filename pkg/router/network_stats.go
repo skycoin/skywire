@@ -9,9 +9,9 @@ import (
 )
 
 type networkStats struct {
-	totalBandwidthSent     uint64
-	totalBandwidthReceived uint64
-	bandwidthReceived      uint64
+	totalBandwidthSent     atomic.Uint64
+	totalBandwidthReceived atomic.Uint64
+	bandwidthReceived      atomic.Uint64
 	latency                uint32
 	uploadSpeed            uint32
 	downloadSpeed          uint32
@@ -53,20 +53,20 @@ func (s *networkStats) DownloadSpeed() uint32 {
 }
 
 func (s *networkStats) BandwidthSent() uint64 {
-	return atomic.LoadUint64(&s.totalBandwidthSent)
+	return s.totalBandwidthSent.Load()
 }
 
 func (s *networkStats) AddBandwidthSent(amount uint64) {
-	atomic.AddUint64(&s.totalBandwidthSent, amount)
+	s.totalBandwidthSent.Add(amount)
 }
 
 func (s *networkStats) BandwidthReceived() uint64 {
-	return atomic.LoadUint64(&s.totalBandwidthReceived)
+	return s.totalBandwidthReceived.Load()
 }
 
 func (s *networkStats) AddBandwidthReceived(amount uint64) {
-	atomic.AddUint64(&s.bandwidthReceived, amount)
-	atomic.AddUint64(&s.totalBandwidthReceived, amount)
+	s.bandwidthReceived.Add(amount)
+	s.totalBandwidthReceived.Add(amount)
 }
 
 func (s *networkStats) RemoteThroughput() int64 {
@@ -94,7 +94,7 @@ func (s *networkStats) remoteThroughputAt(now time.Time) int64 {
 		return 0
 	}
 
-	bandwidth := atomic.SwapUint64(&s.bandwidthReceived, 0)
+	bandwidth := s.bandwidthReceived.Swap(0)
 	throughput := float64(bandwidth) / timePassed.Seconds()
 
 	// Go leaves float64->int64 UNDEFINED for NaN and for values outside int64's

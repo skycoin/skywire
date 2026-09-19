@@ -3,7 +3,6 @@ package router
 
 import (
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -104,7 +103,7 @@ func TestForwardConfinedLegWaitsInsteadOfSpilling(t *testing.T) {
 	if seen[1] != frames {
 		t.Errorf("expected all %d frames on the 44 ms leg; got %v", frames, seen)
 	}
-	if waits := atomic.LoadUint64(&m.sendWindowWaits); waits == 0 {
+	if waits := m.sendWindowWaits.Load(); waits == 0 {
 		t.Error("the writer never parked for the confined leg's window — it must wait, not spill")
 	}
 }

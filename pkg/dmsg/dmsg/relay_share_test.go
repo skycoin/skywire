@@ -27,7 +27,7 @@ func TestRelaySlotPerPeerShare(t *testing.T) {
 	require.True(t, c.tryAcquireRelaySlot(b))
 	require.False(t, c.tryAcquireRelaySlot(b))
 
-	require.Equal(t, int64(4), c.relayedStreams, "four live streams across two peers")
+	require.Equal(t, int64(4), c.relayedStreams.Load(), "four live streams across two peers")
 
 	// Releasing frees the share again.
 	c.releaseRelaySlot(a)
@@ -49,7 +49,7 @@ func TestRelayShareForgetsIdlePeers(t *testing.T) {
 	n := len(c.relayShare)
 	c.relayShareMx.Unlock()
 	require.Zero(t, n, "a peer holding no slots must leave no entry behind")
-	require.Zero(t, c.relayedStreams)
+	require.Zero(t, c.relayedStreams.Load())
 }
 
 // A cap too small to divide must still relay something: a share that rounds

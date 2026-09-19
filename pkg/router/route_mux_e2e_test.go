@@ -3,7 +3,6 @@ package router
 import (
 	"github.com/google/uuid"
 
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -211,8 +210,8 @@ func TestMux_SendDistributesAcrossReadyLegs(t *testing.T) {
 			t.Fatalf("write %d failed: %v", i, err)
 		}
 	}
-	s0 := atomic.LoadUint64(&rg.mux.legs[0].sentBytes)
-	s1 := atomic.LoadUint64(&rg.mux.legs[1].sentBytes)
+	s0 := rg.mux.legs[0].sentBytes.Load()
+	s1 := rg.mux.legs[1].sentBytes.Load()
 	if s0 == 0 || s1 == 0 {
 		t.Fatalf("traffic not split across both ready legs: leg0=%d leg1=%d (mux funneled to one)", s0, s1)
 	}

@@ -8,7 +8,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/transport"
 
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -71,7 +70,7 @@ func TestTLPProbeSeq(t *testing.T) {
 	m.retxBuf.Store(10, []byte("a"), uuid.Nil)
 	m.retxBuf.Store(11, []byte("b"), uuid.Nil)
 	m.retxBuf.Store(12, []byte("c"), uuid.Nil) // tail = 12
-	atomic.StoreInt64(&m.lastSendNano, now.UnixNano())
+	m.lastSendNano.Store(now.UnixNano())
 	if _, due := m.tlpProbeSeq(now.Add(10 * time.Millisecond)); due {
 		t.Fatal("probe due before a full PTO of idle")
 	}
@@ -104,19 +103,19 @@ func TestDSACKGrowDecay(t *testing.T) {
 	log := logging.NewMasterLogger().PackageLogger("tlp-test")
 	m := newRouteMux(log, true)
 
-	if got := atomic.LoadInt64(&m.rackFactorMilli); got != m.rackFactorMin() {
+	if got := m.rackFactorMilli.Load(); got != m.rackFactorMin() {
 		t.Fatalf("initial reorder factor = %d, want baseline %d", got, m.rackFactorMin())
 	}
 
 	// Each DSACK widens by one grow step, capped at rackFactorMaxDefault.
 	m.growRackFactor(5)
-	if got, want := atomic.LoadInt64(&m.rackFactorMilli), m.rackFactorMin()+rackDSACKGrowStepDefault; got != want {
+	if got, want := m.rackFactorMilli.Load(), m.rackFactorMin()+rackDSACKGrowStepDefault; got != want {
 		t.Fatalf("after 1 DSACK factor = %d, want %d", got, want)
 	}
 	for i := 0; i < 100; i++ {
 		m.growRackFactor(uint32(i))
 	}
-	if got := atomic.LoadInt64(&m.rackFactorMilli); got != rackFactorMaxDefault {
+	if got := m.rackFactorMilli.Load(); got != rackFactorMaxDefault {
 		t.Fatalf("saturated factor = %d, want cap %d", got, rackFactorMaxDefault)
 	}
 
@@ -124,7 +123,7 @@ func TestDSACKGrowDecay(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		m.decayRackFactor()
 	}
-	if got := atomic.LoadInt64(&m.rackFactorMilli); got != m.rackFactorMin() {
+	if got := m.rackFactorMilli.Load(); got != m.rackFactorMin() {
 		t.Fatalf("decayed factor = %d, want baseline floor %d", got, m.rackFactorMin())
 	}
 }

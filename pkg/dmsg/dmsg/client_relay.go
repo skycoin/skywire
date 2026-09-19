@@ -21,7 +21,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"sync/atomic"
 	"time"
 
 	"github.com/0magnet/yamux"
@@ -177,7 +176,7 @@ func (ce *Client) RelaySessions() []cipher.PubKey {
 
 // RelayedStreams reports how many relayed streams this client is carrying.
 func (ce *Client) RelayedStreams() int {
-	return int(atomic.LoadInt64(&ce.relayedStreams))
+	return int(ce.relayedStreams.Load())
 }
 
 // MaxRelayedStreams is the relay-slot cap RelayedStreams is charged against
@@ -581,5 +580,5 @@ func (ce *Client) hasServerSession() bool {
 // peer's share of it was full. Surfaced in `visor state` so a hub at its cap
 // is diagnosable from the hub rather than inferred from the peers it refused.
 func (ce *Client) RelayRefused() int {
-	return int(atomic.LoadInt64(&ce.relayRefused))
+	return int(ce.relayRefused.Load())
 }

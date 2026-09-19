@@ -523,6 +523,15 @@ test: ## Run tests
 	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
 	${OPTS} go test ${TEST_OPTS}
 
+test-32bit: ## Run the packages that use 64-bit atomics under a 32-bit GOARCH, where a misaligned atomic panics
+	# A 64-bit atomic on a 4-aligned address panics with "unaligned 64-bit
+	# atomic operation" on arm/386/mips and takes the process with it. The
+	# offsets differ only by word size, so a 386 run reproduces what an armhf
+	# visor does — and 386 test binaries are static and run on an amd64 host,
+	# which arm ones do not. Declaring such counters atomic.Int64/Uint64 is the
+	# fix; this is how the ones that were not get found.
+	CGO_ENABLED=0 GOARCH=386 go test  ./pkg/transport/... ./pkg/router/... ./pkg/dmsg/... ./pkg/logging/... ./pkg/vpn/... ./pkg/httpauthclient/... ./pkg/metricsutil/...
+
 test-windows: ## Run tests on windows
 	@go clean -testcache
 	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...

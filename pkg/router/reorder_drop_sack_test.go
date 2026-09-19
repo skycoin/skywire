@@ -2,7 +2,6 @@
 package router
 
 import (
-	"sync/atomic"
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -44,7 +43,7 @@ func TestReorderDropIsNotSACKed(t *testing.T) {
 	if !gap {
 		t.Error("seq 4 dropped at maxGap but gapDetected = false: no SACK goes out, so the frontier is never re-requested")
 	}
-	if got := atomic.LoadUint64(&m.reorderDrops); got != 1 {
+	if got := m.reorderDrops.Load(); got != 1 {
 		t.Errorf("reorderDrops = %d, want 1: the drop must be countable from MuxRecovery", got)
 	}
 	if got := m.reorderPending(); got != 2 {

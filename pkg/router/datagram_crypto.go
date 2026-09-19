@@ -165,7 +165,7 @@ type DatagramCipher struct {
 	// next nonce; rekey resets it. Tracked separately from inbound
 	// so two-direction ciphers can share the cipherEpoch without
 	// stomping on each other.
-	outCounter uint64 // atomic
+	outCounter atomic.Uint64 // atomic
 
 	// Inbound-only state. The sliding-window bitmap tracks which
 	// counters have been observed in the trailing replayWindowSize
@@ -243,7 +243,7 @@ func (dc *DatagramCipher) installEpoch(masterKey [32]byte, cfg *DatagramCipherCo
 		timeLimit:   tl,
 		packetLimit: pl,
 	})
-	atomic.StoreUint64(&dc.outCounter, 0)
+	dc.outCounter.Store(0)
 	dc.inMu.Lock()
 	for i := range dc.inWindow {
 		dc.inWindow[i] = 0
@@ -275,7 +275,7 @@ func (dc *DatagramCipher) NeedsRekey() bool {
 	if time.Since(ep.openedAt) >= ep.timeLimit {
 		return true
 	}
-	if atomic.LoadUint64(&dc.outCounter) >= ep.packetLimit {
+	if dc.outCounter.Load() >= ep.packetLimit {
 		return true
 	}
 	return false
@@ -301,11 +301,11 @@ func (dc *DatagramCipher) Seal(routeID uint32, plaintext []byte) ([]byte, error)
 	if ep == nil {
 		return nil, errors.New("datagram-crypto: cipher uninitialised")
 	}
-	counter := atomic.AddUint64(&dc.outCounter, 1) - 1 // first nonce = 0
+	counter := dc.outCounter.Add(1) - 1 // first nonce = 0
 	if counter >= ep.packetLimit {
 		// Roll back — we didn't consume a counter the receiver
 		// could ever observe.
-		atomic.AddUint64(&dc.outCounter, ^uint64(0))
+		dc.outCounter.Add(^uint64(0))
 		return nil, ErrCounterExhausted
 	}
 

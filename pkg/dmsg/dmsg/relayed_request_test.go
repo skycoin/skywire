@@ -3,7 +3,6 @@ package dmsg
 import (
 	"context"
 	"net"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -175,7 +174,7 @@ func TestRelayedRequest_ForwardedOverClientSession(t *testing.T) {
 	require.Equal(t, "via relay", string(buf))
 
 	// Charged to the relay slots for as long as the bridge lives...
-	require.Equal(t, int64(1), atomic.LoadInt64(&env.srv.relayedStreams))
+	require.Equal(t, int64(1), env.srv.relayedStreams.Load())
 	// ...so at MaxRelayedStreams 1 a second relayed request is refused.
 	_, obj2, _ := env.signedRequest(t, false)
 	env.expectRejected(t, obj2)

@@ -119,7 +119,7 @@ func TestMuxShouldSendSACK(t *testing.T) {
 	require.False(t, m.shouldSendSACK(), "immediate second SACK is rate-limited")
 
 	// Backdate the last-SACK timestamp past the min interval.
-	m.lastSACKNano = time.Now().Add(-2 * sackMinIntervalDefault).UnixNano()
+	m.lastSACKNano.Store(time.Now().Add(-2 * sackMinIntervalDefault).UnixNano())
 	require.True(t, m.shouldSendSACK(), "SACK allowed again after the min interval")
 }
 

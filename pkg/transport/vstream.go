@@ -81,12 +81,18 @@ type VStreamMux struct {
 	// never collide with one the peer opened on the same transport.
 	streams   map[streamKey]*VStream
 	streamsMu sync.Mutex
-	streamID  uint64
+	streamID  atomic.Uint64
 
-	// Counters for `visor state` (see Stats). Atomics.
-	framesUnknownStream int64 // DATA/FIN for a stream id we do not have
-	stalledStreams      int64 // streams closed because the reader never drained
-	acceptDropped       int64 // SYNs closed because Accept was not called in time
+	// Counters for `visor state` (see Stats).
+	//
+	// The TYPED atomics, not int64 + atomic.AddInt64: a bare 64-bit field is
+	// only 4-byte aligned inside a struct on 32-bit ARM and 386, and a 64-bit
+	// atomic on a 4-aligned address panics the process with "unaligned 64-bit
+	// atomic operation". atomic.Int64/Uint64 embed the runtime's align64 marker,
+	// so the compiler places them correctly on every GOARCH.
+	framesUnknownStream atomic.Int64 // DATA/FIN for a stream id we do not have
+	stalledStreams      atomic.Int64 // streams closed because the reader never drained
+	acceptDropped       atomic.Int64 // SYNs closed because Accept was not called in time
 
 	// relays holds active relay legs keyed by (inbound transport, wire
 	// streamID). Each direction of a bridged stream is registered pointing
@@ -95,7 +101,7 @@ type VStreamMux struct {
 	// by maxRelays.
 	relays     map[relayKey]relayKey
 	relaysMu   sync.Mutex
-	relayCount int64
+	relayCount atomic.Int64
 	maxRelays  int
 
 	incoming chan *VStream
@@ -204,7 +210,7 @@ const (
 // dial to the tab got the same id — frames crossed streams and yamux died
 // with "invalid protocol version".
 func (m *VStreamMux) nextIDFor(remotePK cipher.PubKey) uint64 {
-	id := atomic.AddUint64(&m.streamID, 1) << 1
+	id := m.streamID.Add(1) << 1
 	local := m.localPK()
 	if bytes.Compare(local[:], remotePK[:]) > 0 {
 		id |= 1
@@ -219,7 +225,7 @@ func (m *VStreamMux) nextIDFor(remotePK cipher.PubKey) uint64 {
 // it. A reader that drains nothing for vstreamStallTimeout is dead — close the
 // stream so the peer sees EOF and the read loop is freed.
 func (m *VStreamMux) deliver(stream *VStream, buf []byte) {
-	atomic.AddInt64(&stream.recvBytes, int64(len(buf)))
+	stream.recvBytes.Add(int64(len(buf)))
 	select {
 	case stream.readBuf <- buf:
 		return
@@ -233,7 +239,7 @@ func (m *VStreamMux) deliver(stream *VStream, buf []byte) {
 	case stream.readBuf <- buf:
 	case <-stream.closed:
 	case <-t.C:
-		atomic.AddInt64(&m.stalledStreams, 1)
+		m.stalledStreams.Add(1)
 		m.log.WithField("stream", stream.id).WithField("remote", stream.remotePK.String()).
 			Warn("vstream: reader stalled; closing stream")
 		stream.Close() //nolint:errcheck,gosec
@@ -251,7 +257,7 @@ func (m *VStreamMux) offerIncoming(stream *VStream, what string) {
 	case <-m.done:
 		stream.Close() //nolint:errcheck,gosec
 	case <-t.C:
-		atomic.AddInt64(&m.acceptDropped, 1)
+		m.acceptDropped.Add(1)
 		m.log.Warn("vstream: " + what + " not accepted in time; closing")
 		stream.Close() //nolint:errcheck,gosec
 	}
@@ -473,7 +479,7 @@ func (m *VStreamMux) HandlePacket(p routing.Packet, mt *ManagedTransport) {
 		if ok {
 			stream.Close() //nolint:errcheck,gosec
 		} else {
-			atomic.AddInt64(&m.framesUnknownStream, 1)
+			m.framesUnknownStream.Add(1)
 		}
 
 	default: // DATA
@@ -481,7 +487,7 @@ func (m *VStreamMux) HandlePacket(p routing.Packet, mt *ManagedTransport) {
 		stream, ok := m.streams[streamKey{mt.Entry.ID, streamID}]
 		m.streamsMu.Unlock()
 		if !ok {
-			atomic.AddInt64(&m.framesUnknownStream, 1)
+			m.framesUnknownStream.Add(1)
 			return
 		}
 		buf := make([]byte, len(data))
@@ -532,8 +538,11 @@ type VStream struct {
 	openedAt time.Time
 	// sentBytes/recvBytes are this stream's payload counters, the direct
 	// path's answer to a route group's per-leg totals.
-	sentBytes int64
-	recvBytes int64
+	// Typed atomics: see the note on VStreamMux's counters — a bare int64 here
+	// lands at offset 36 behind id+appName+openedAt on a 32-bit build, and the
+	// first Write panics the visor.
+	sentBytes atomic.Int64
+	recvBytes atomic.Int64
 	remotePK  cipher.PubKey
 	tpID      uuid.UUID
 	readBuf   chan []byte
@@ -589,7 +598,7 @@ func (s *VStream) Write(p []byte) (int, error) {
 		if err := s.sendFlag(VStreamFlagData, chunk); err != nil {
 			return n, err
 		}
-		atomic.AddInt64(&s.sentBytes, int64(len(chunk)))
+		s.sentBytes.Add(int64(len(chunk)))
 		n += len(chunk)
 		p = p[len(chunk):]
 	}
@@ -708,10 +717,10 @@ func (m *VStreamMux) Stats() VStreamMuxStats {
 	return VStreamMuxStats{
 		PacketType:          m.packetType.String(),
 		Streams:             n,
-		RelayLegs:           atomic.LoadInt64(&m.relayCount),
-		FramesUnknownStream: atomic.LoadInt64(&m.framesUnknownStream),
-		StalledStreams:      atomic.LoadInt64(&m.stalledStreams),
-		AcceptDropped:       atomic.LoadInt64(&m.acceptDropped),
+		RelayLegs:           m.relayCount.Load(),
+		FramesUnknownStream: m.framesUnknownStream.Load(),
+		StalledStreams:      m.stalledStreams.Load(),
+		AcceptDropped:       m.acceptDropped.Load(),
 		ReadBufCap:          vstreamReadBuf,
 		ReadBufMaxLen:       maxLen,
 		ReadBufNearFull:     nearFull,
@@ -769,8 +778,8 @@ func (m *VStreamMux) StreamInfo(appName string) []VStreamInfo {
 			RemotePK:   s.remotePK,
 			TpID:       s.tpID,
 			StreamID:   s.id,
-			SentBytes:  nonNegativeCount(atomic.LoadInt64(&s.sentBytes)),
-			RecvBytes:  nonNegativeCount(atomic.LoadInt64(&s.recvBytes)),
+			SentBytes:  nonNegativeCount(s.sentBytes.Load()),
+			RecvBytes:  nonNegativeCount(s.recvBytes.Load()),
 			UptimeMS:   uptime,
 			ReadBufLen: len(s.readBuf),
 			ReadBufCap: cap(s.readBuf),

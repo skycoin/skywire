@@ -89,25 +89,25 @@ const (
 )
 
 type legCounters struct {
-	sentBytes   uint64 // atomic
-	sentPackets uint64 // atomic
-	recvBytes   uint64 // atomic
-	recvPackets uint64 // atomic
-	retransmits uint64 // atomic
+	sentBytes   atomic.Uint64 // atomic
+	sentPackets atomic.Uint64 // atomic
+	recvBytes   atomic.Uint64 // atomic
+	recvPackets atomic.Uint64 // atomic
+	retransmits atomic.Uint64 // atomic
 	// payloadBytes is the UNIQUE in-order payload this leg delivered: each
 	// sequence credited once, to the leg it FIRST arrived on. Unlike recvBytes
 	// (every inbound frame, incl. retransmits/duplicates), a retransmit of a seq
 	// already seen on another leg is NOT counted, so the per-leg payloadBytes sum
 	// equals the transfer size and cleanly attributes which legs carried a
 	// direction's data — the confound-free basis for per-direction leg telemetry.
-	payloadBytes uint64 // atomic
+	payloadBytes atomic.Uint64 // atomic
 	// dupBytes is inbound DUPLICATE data on this leg (a seq already delivered
 	// or buffered when it arrived here) — the peer's spurious-retransmit waste,
 	// which rides the fastest leg and otherwise masquerades as payload in
 	// recvBytes. repairBytes is inbound FEC repair frames — deliberate overhead,
 	// counted apart from waste. Both atomic.
-	dupBytes    uint64 // atomic
-	repairBytes uint64 // atomic
+	dupBytes    atomic.Uint64 // atomic
+	repairBytes atomic.Uint64 // atomic
 	// lastTotalBytes snapshots sentBytes+recvBytes at the previous
 	// capacity-weight rebuild; the delta since then is this leg's
 	// recent throughput, used by WeightModeCapacity. Touched only
@@ -175,9 +175,9 @@ type legCounters struct {
 	// proportional share. All three are atomic: the ruling is written under
 	// legMu by the window refresh, the bytes are charged from the send path by
 	// recordSent, and the gate reads them per pick.
-	probeBasisBits uint64 // atomic (float64 bits)
-	probeWinNano   int64  // atomic
-	probeWinBytes  uint64 // atomic
+	probeBasisBits atomic.Uint64 // atomic (float64 bits)
+	probeWinNano   atomic.Int64  // atomic
+	probeWinBytes  atomic.Uint64 // atomic
 }
 
 // routeMux encapsulates route multiplexing state and logic.
@@ -198,9 +198,9 @@ type routeMux struct {
 	// forever. rackFactorMilli is the DSACK-adapted reorder tolerance ×1000: a
 	// duplicate report from the receiver widens it (we retransmitted too eagerly),
 	// clean acks decay it back toward the static baseline. All atomic.
-	lastSendNano    int64
+	lastSendNano    atomic.Int64
 	tlpProbeCount   int32
-	rackFactorMilli int64
+	rackFactorMilli atomic.Int64
 	lastAckedContig uint32 // atomic: highest SACK lastContiguous seen (ack-progress edge for TLP reset)
 	// ackDelayMilli is an EWMA (×1000) of the measured send→ack delay of
 	// never-retransmitted frames (fed by retxBuf.onAckDelay). Under load it is
@@ -210,7 +210,7 @@ type routeMux struct {
 	// queued frame lost (measured: 899 spurious retransmits on a ~1250-frame
 	// upload). rackThreshold takes the max of both signals. Atomic; 0 = no
 	// sample yet.
-	ackDelayMilli int64
+	ackDelayMilli atomic.Int64
 	// ackDelayByTp is the same EWMA kept PER LEG, keyed by the transport the
 	// frame last rode. The group-wide value is refreshed by every SACK's
 	// fast-leg samples and collapses back within a second of each slow-leg
@@ -249,8 +249,8 @@ type routeMux struct {
 	// freed per-leg window; sendWindowWaits / sendWindowTimeouts count the waits
 	// and the ones that gave up after sendWindowWaitMax (diagnostics).
 	windowCh           chan struct{}
-	sendWindowWaits    uint64
-	sendWindowTimeouts uint64
+	sendWindowWaits    atomic.Uint64
+	sendWindowTimeouts atomic.Uint64
 
 	// reorderDrops counts RECEIVE-side packets the reorder buffer dropped at
 	// maxGap (see reorderBuffer.InsertOrDrop). Previously invisible: the drop
@@ -258,14 +258,14 @@ type routeMux struct {
 	// no witness at all. Non-zero here means the frontier gap grew past the
 	// whole reorder window — a leg died mid-stream — and the dropped sequences
 	// are waiting on the sender's retransmit. atomic.
-	reorderDrops uint64
+	reorderDrops atomic.Uint64
 
 	// lastSACKNano rate-limits receiver-side SACK feedback. Cross-leg
 	// reordering from latency skew makes nearly every packet arrive
 	// out-of-order, so firing a SACK per out-of-order packet would spawn a
 	// goroutine and emit a control packet thousands of times per second.
 	// atomic: UnixNano of the last SACK we sent.
-	lastSACKNano int64
+	lastSACKNano atomic.Int64
 
 	// Loss-recovery counters (all atomic), surfaced as the `recovery` object in
 	// `visor state --select mux_route_groups` / `proxy mux info --json`. A
@@ -279,27 +279,27 @@ type routeMux struct {
 	// that gap), retxSendErrors counts the resends that failed to reach a leg,
 	// tlpProbes counts tail-loss probes, and sacksSent/sackSendErrors/
 	// lastSACKSentNano are the receiver-side mirror.
-	retxSkippedMissing uint64
+	retxSkippedMissing atomic.Uint64
 	// retxReqSACK / retxReqHOL / retxReqFlush count the sequences each
 	// retransmit path ASKED to resend (reactive SACK holes past the RACK
 	// threshold, the proactive head-of-line nudge, the demote-time flush), so a
 	// retransmit storm names its source from visor state.
-	retxReqSACK  uint64
-	retxReqHOL   uint64
-	retxReqFlush uint64
+	retxReqSACK  atomic.Uint64
+	retxReqHOL   atomic.Uint64
+	retxReqFlush atomic.Uint64
 	// retxDeferredYoung counts the holes a SACK named that were NOT resent
 	// because the frame is still younger than the delay basis of the leg it was
 	// sent on (legDelayBasisMs × the reorder factor) — the duplicates that used
 	// to leave on the group's clock. Rising here while retx_req_sack stays low
 	// is the fix working; both rising together is a genuinely lossy leg.
-	retxDeferredYoung uint64
-	retxSendErrors    uint64
-	tlpProbes         uint64
-	sacksRecv         uint64
-	lastSACKRecvNano  int64
-	sacksSent         uint64
-	sackSendErrors    uint64
-	lastSACKSentNano  int64
+	retxDeferredYoung atomic.Uint64
+	retxSendErrors    atomic.Uint64
+	tlpProbes         atomic.Uint64
+	sacksRecv         atomic.Uint64
+	lastSACKRecvNano  atomic.Int64
+	sacksSent         atomic.Uint64
+	sackSendErrors    atomic.Uint64
+	lastSACKSentNano  atomic.Int64
 
 	// knobHolder carries the owning route group's resolved router knobs (see
 	// settings_group.go). Shared with the RouteGroup, so a `route settings --app`
@@ -325,7 +325,7 @@ type routeMux struct {
 	// (separate from lastSACKNano so it doesn't fight the window-ack SACK limiter).
 	holRetxEnabled bool
 	holRetx        *holRetxTracker
-	holSACKNano    int64 // atomic: UnixNano of the last proactive HoL SACK we sent
+	holSACKNano    atomic.Int64 // atomic: UnixNano of the last proactive HoL SACK we sent
 
 	// legStateEnabled is true when both peers advertised CapLegState. When set, a
 	// park/promote of a leg is signaled to the remote (LegStatePacket) so it
@@ -397,9 +397,9 @@ type routeMux struct {
 	// frontier frames recovered from repair (each a slow-leg stall avoided). These
 	// let an observer decompose mux traffic into data vs repair (the true FEC
 	// overhead) vs retransmit, separately from the aggregate byte counters.
-	fecRepairBytesSent uint64
-	fecRepairBytesRecv uint64
-	fecReconstructs    uint64
+	fecRepairBytesSent atomic.Uint64
+	fecRepairBytesRecv atomic.Uint64
+	fecReconstructs    atomic.Uint64
 
 	// Per-leg traffic counters parallel to the rg's tps[] / fwd[] /
 	// rvs[] slices. Mutated atomically. Read via Snapshot().
@@ -557,14 +557,15 @@ func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 		// Proactive HoL retransmit tracker is always constructed; it is only
 		// consulted when holRetxEnabled is set at handshake (see hol_retx.go).
 		holRetx: newHolRetxTracker(),
-		// RACK reorder factor starts at the static baseline; DSACK feedback
-		// widens it and clean acks decay it back (see rack_tlp.go).
-		rackFactorMilli: int64(routersettings.RackReorderFactor.Ratio() * 1000),
 		// No leg held by the forward confinement yet, and no challenger.
 		confinedFwdIdx:     -1,
 		confinedFwdChalIdx: -1,
 	}
 	m.confinedFwdCur.Store(-1)
+	// RACK reorder factor starts at the static baseline; DSACK feedback widens
+	// it and clean acks decay it back (see rack_tlp.go). Set after construction
+	// because atomic.Int64 carries a noCopy and cannot go in a struct literal.
+	m.rackFactorMilli.Store(int64(routersettings.RackReorderFactor.Ratio() * 1000))
 	// Feed measured send→ack delays into the RACK basis (see ackDelayMs /
 	// rackThreshold): under load the queue, not the wire, dominates feedback
 	// delay, and only this sample sees it.
@@ -1309,12 +1310,12 @@ func (m *routeMux) recordSent(idx int, n uint64) {
 	}
 	m.legMu.RLock()
 	if idx < len(m.legs) {
-		atomic.AddUint64(&m.legs[idx].sentBytes, n)
-		atomic.AddUint64(&m.legs[idx].sentPackets, 1)
+		m.legs[idx].sentBytes.Add(n)
+		m.legs[idx].sentPackets.Add(1)
 		// The probe budget is charged from what actually went on the wire, so a
 		// leg ruled probe-only carries one probe per window however large the
 		// frames are (the gate's own charge would have to guess the size).
-		atomic.AddUint64(&m.legs[idx].probeWinBytes, n)
+		m.legs[idx].probeWinBytes.Add(n)
 	}
 	m.legMu.RUnlock()
 }
@@ -1327,8 +1328,8 @@ func (m *routeMux) recordRecv(idx int, n uint64) {
 	}
 	m.legMu.RLock()
 	if idx < len(m.legs) {
-		atomic.AddUint64(&m.legs[idx].recvBytes, n)
-		atomic.AddUint64(&m.legs[idx].recvPackets, 1)
+		m.legs[idx].recvBytes.Add(n)
+		m.legs[idx].recvPackets.Add(1)
 	}
 	m.legMu.RUnlock()
 }
@@ -1341,7 +1342,7 @@ func (m *routeMux) recordPayload(idx int, n uint64) {
 	}
 	m.legMu.RLock()
 	if idx < len(m.legs) {
-		atomic.AddUint64(&m.legs[idx].payloadBytes, n)
+		m.legs[idx].payloadBytes.Add(n)
 	}
 	m.legMu.RUnlock()
 }
@@ -1359,7 +1360,7 @@ func (m *routeMux) recordDup(idx int, n uint64) {
 	}
 	m.legMu.RLock()
 	if idx < len(m.legs) {
-		atomic.AddUint64(&m.legs[idx].dupBytes, n)
+		m.legs[idx].dupBytes.Add(n)
 	}
 	m.legMu.RUnlock()
 }
@@ -1373,7 +1374,7 @@ func (m *routeMux) recordRepair(idx int, n uint64) {
 	}
 	m.legMu.RLock()
 	if idx < len(m.legs) {
-		atomic.AddUint64(&m.legs[idx].repairBytes, n)
+		m.legs[idx].repairBytes.Add(n)
 	}
 	m.legMu.RUnlock()
 }
@@ -1387,7 +1388,7 @@ func (m *routeMux) recordRetransmit(idx int) {
 	}
 	m.legMu.RLock()
 	if idx < len(m.legs) {
-		atomic.AddUint64(&m.legs[idx].retransmits, 1)
+		m.legs[idx].retransmits.Add(1)
 	}
 	m.legMu.RUnlock()
 }
@@ -1401,7 +1402,7 @@ func (m *routeMux) retransmitsAt(idx int) uint64 {
 	m.legMu.RLock()
 	defer m.legMu.RUnlock()
 	if idx < len(m.legs) {
-		return atomic.LoadUint64(&m.legs[idx].retransmits)
+		return m.legs[idx].retransmits.Load()
 	}
 	return 0
 }
@@ -1417,19 +1418,19 @@ func (m *routeMux) snapshotLegs() []LegStats {
 	m.legMu.Lock()
 	out := make([]LegStats, len(m.legs))
 	for i, c := range m.legs {
-		sent := atomic.LoadUint64(&c.sentBytes)
-		recv := atomic.LoadUint64(&c.recvBytes)
+		sent := c.sentBytes.Load()
+		recv := c.recvBytes.Load()
 		m.sampleGoodput(c, sent, recv, now)
 		out[i] = LegStats{
 			Index:          i,
 			SentBytes:      sent,
-			SentPackets:    atomic.LoadUint64(&c.sentPackets),
+			SentPackets:    c.sentPackets.Load(),
 			RecvBytes:      recv,
-			RecvPackets:    atomic.LoadUint64(&c.recvPackets),
-			PayloadBytes:   atomic.LoadUint64(&c.payloadBytes),
-			DupBytes:       atomic.LoadUint64(&c.dupBytes),
-			RepairBytes:    atomic.LoadUint64(&c.repairBytes),
-			Retransmits:    atomic.LoadUint64(&c.retransmits),
+			RecvPackets:    c.recvPackets.Load(),
+			PayloadBytes:   c.payloadBytes.Load(),
+			DupBytes:       c.dupBytes.Load(),
+			RepairBytes:    c.repairBytes.Load(),
+			Retransmits:    c.retransmits.Load(),
 			GoodputUpBps:   c.goodputUpBps,
 			GoodputDownBps: c.goodputDownBps,
 			GoodputBps:     c.goodputUpBps + c.goodputDownBps,
@@ -1537,7 +1538,7 @@ func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte, tpID uuid.U
 
 	// Stamp the TLP idle timer: new data just went out, so the tail-loss probe
 	// clock restarts. A probe only fires once this stays quiet for a PTO.
-	atomic.StoreInt64(&m.lastSendNano, time.Now().UnixNano())
+	m.lastSendNano.Store(time.Now().UnixNano())
 
 	return packet, seq, nil
 }
@@ -1603,7 +1604,7 @@ func (m *routeMux) deliverData(leg int, seq uint32, data []byte) (delivered [][]
 	var dropped bool
 	delivered, dropped = m.reorderBuf.InsertOrDrop(seq, data)
 	if dropped {
-		atomic.AddUint64(&m.reorderDrops, 1)
+		m.reorderDrops.Add(1)
 		if m.logger != nil {
 			m.logger.Debugf("reorder buffer full: dropped seq %d (not SACKed, sender will retransmit)", seq)
 		}
@@ -1686,8 +1687,8 @@ func (m *routeMux) retxStats() (held int, minSeq, maxSeq uint32) {
 // msSinceNano is the age in milliseconds of an atomic UnixNano stamp, or -1
 // when the stamp was never set (never vs "just now" are opposite diagnoses for
 // a SACK feedback path, so they must not both render as 0).
-func msSinceNano(p *int64) float64 {
-	nano := atomic.LoadInt64(p)
+func msSinceNano(p *atomic.Int64) float64 {
+	nano := p.Load()
 	if nano == 0 {
 		return -1
 	}
@@ -1714,11 +1715,11 @@ const sackMinIntervalDefault = 25 * time.Millisecond
 // Concurrency-safe: only the goroutine that wins the CAS returns true.
 func (m *routeMux) shouldSendSACK() bool {
 	now := time.Now().UnixNano()
-	prev := atomic.LoadInt64(&m.lastSACKNano)
+	prev := m.lastSACKNano.Load()
 	if now-prev < int64(m.knDur(routersettings.SackMinInterval)) {
 		return false
 	}
-	return atomic.CompareAndSwapInt64(&m.lastSACKNano, prev, now)
+	return m.lastSACKNano.CompareAndSwap(prev, now)
 }
 
 // shouldSendHolSACK reports whether enough time has elapsed since the last
@@ -1730,11 +1731,11 @@ func (m *routeMux) shouldSendSACK() bool {
 // goroutine that wins the CAS returns true.
 func (m *routeMux) shouldSendHolSACK(interval time.Duration) bool {
 	now := time.Now().UnixNano()
-	prev := atomic.LoadInt64(&m.holSACKNano)
+	prev := m.holSACKNano.Load()
 	if now-prev < int64(interval) {
 		return false
 	}
-	return atomic.CompareAndSwapInt64(&m.holSACKNano, prev, now)
+	return m.holSACKNano.CompareAndSwap(prev, now)
 }
 
 // generateSACK returns the current SACK state for sending to the peer:
@@ -1830,14 +1831,14 @@ func (m *routeMux) rackThreshold() time.Duration {
 func (m *routeMux) recordAckDelay(d time.Duration) {
 	ms := float64(d) / float64(time.Millisecond)
 	for {
-		cur := atomic.LoadInt64(&m.ackDelayMilli)
+		cur := m.ackDelayMilli.Load()
 		curMs := float64(cur) / 1000
 		alpha := 0.125
 		if ms > curMs {
 			alpha = 0.5
 		}
 		next := int64((curMs + alpha*(ms-curMs)) * 1000)
-		if atomic.CompareAndSwapInt64(&m.ackDelayMilli, cur, next) {
+		if m.ackDelayMilli.CompareAndSwap(cur, next) {
 			return
 		}
 	}
@@ -1845,7 +1846,7 @@ func (m *routeMux) recordAckDelay(d time.Duration) {
 
 // ackDelayMs returns the EWMA send→ack delay in milliseconds (0 = no sample).
 func (m *routeMux) ackDelayMs() float64 {
-	return float64(atomic.LoadInt64(&m.ackDelayMilli)) / 1000
+	return float64(m.ackDelayMilli.Load()) / 1000
 }
 
 // ackDelayEst is one leg's send→ack delay estimate: the asymmetric EWMA the
@@ -2120,7 +2121,7 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 			if lc == nil {
 				continue
 			}
-			total := atomic.LoadUint64(&lc.sentBytes) + atomic.LoadUint64(&lc.recvBytes)
+			total := lc.sentBytes.Load() + lc.recvBytes.Load()
 			delta := total - lc.lastTotalBytes
 			lc.lastTotalBytes = total
 			deltas[i] = float64(delta)
@@ -2246,7 +2247,7 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 				continue
 			}
 			// Send rate over the refresh window (bytes/sec).
-			sent := atomic.LoadUint64(&lc.sentBytes)
+			sent := lc.sentBytes.Load()
 			var rate float64
 			if elapsed > 0 {
 				rate = float64(byteDelta(sent, lc.ecfLastSentBytes)) / elapsed
@@ -2515,12 +2516,12 @@ func (m *routeMux) ruleProbeOnlyLegsLocked(states []ecfLegState) []legProbeRulin
 		unproductive := states[i].delivKnown && bestDeliv > 0 && deliv*ratio < bestDeliv
 		probeOnly := ratio > 1 && best > 0 && states[i].ready &&
 			outclassedByDelay && unproductive
-		was := math.Float64frombits(atomic.LoadUint64(&lc.probeBasisBits)) > 0
+		was := math.Float64frombits(lc.probeBasisBits.Load()) > 0
 		switch {
 		case probeOnly:
-			atomic.StoreUint64(&lc.probeBasisBits, math.Float64bits(basis))
+			lc.probeBasisBits.Store(math.Float64bits(basis))
 		default:
-			atomic.StoreUint64(&lc.probeBasisBits, 0)
+			lc.probeBasisBits.Store(0)
 		}
 		if probeOnly == was {
 			continue
@@ -2607,17 +2608,17 @@ func (m *routeMux) legProbeExhausted(idx int) bool {
 		return false
 	}
 	lc := m.legs[idx]
-	basis := math.Float64frombits(atomic.LoadUint64(&lc.probeBasisBits))
+	basis := math.Float64frombits(lc.probeBasisBits.Load())
 	if basis <= 0 {
 		return false
 	}
 	now := time.Now().UnixNano()
 	win := int64(m.probeWindowMs(basis) * float64(time.Millisecond))
-	start := atomic.LoadInt64(&lc.probeWinNano)
-	if now-start >= win && atomic.CompareAndSwapInt64(&lc.probeWinNano, start, now) {
-		atomic.StoreUint64(&lc.probeWinBytes, 0)
+	start := lc.probeWinNano.Load()
+	if now-start >= win && lc.probeWinNano.CompareAndSwap(start, now) {
+		lc.probeWinBytes.Store(0)
 	}
-	return atomic.LoadUint64(&lc.probeWinBytes) >= uint64(LegProbeBytes()) //nolint:gosec // LegProbeBytes is refused unless positive
+	return lc.probeWinBytes.Load() >= uint64(LegProbeBytes()) //nolint:gosec // LegProbeBytes is refused unless positive
 }
 
 // firstProbeReadyLeg returns the lowest-indexed live, ready leg that is not out
@@ -2742,12 +2743,12 @@ func (m *routeMux) waitSendWindow(tps []*transport.ManagedTransport, closed <-ch
 			return
 		}
 		if !waited {
-			atomic.AddUint64(&m.sendWindowWaits, 1)
+			m.sendWindowWaits.Add(1)
 			waited = true
 		}
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
-			atomic.AddUint64(&m.sendWindowTimeouts, 1)
+			m.sendWindowTimeouts.Add(1)
 			return
 		}
 		if remaining > m.knDur(routersettings.SendWindowPoll) {
