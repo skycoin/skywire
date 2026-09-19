@@ -12,6 +12,7 @@ import (
 
 	appspec "github.com/skycoin/skywire/pkg/app/appserver/spec"
 	"github.com/skycoin/skywire/pkg/cipher"
+	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/routing"
 	tnspec "github.com/skycoin/skywire/pkg/transport/network/spec"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -47,7 +48,14 @@ func newTestConfig(t *testing.T) (*visorconfig.V1, string) {
 				{Name: "vpn-client", AutoStart: false, Port: routing.Port(43)},
 			},
 		},
-		STCP:        &tnspec.STCPConfig{},
+		STCP: &tnspec.STCPConfig{},
+		// The optional sections that liveConfigFieldTable registers paths under.
+		// A nil section resolves as "not set; set the whole block first", which
+		// is what TestLiveConfigFieldsResolve is here to catch for REAL typos —
+		// so the fixture has to carry every section the table names.
+		DmsgWeb:     &visorconfig.DmsgWebConfig{},
+		SkynetWeb:   &visorconfig.SkynetWebConfig{},
+		Hypervisor:  &visorconfig.HypervisorConfig{},
 		AppSettings: map[string]visorconfig.AppSettingsEntry{"skysocks-client": {}},
 	}
 	initial, err := json.MarshalIndent(conf, "", "  ")
@@ -311,4 +319,23 @@ func TestConfigFieldChangeString(t *testing.T) {
 		ConfigFieldChange{Path: "is_public", Old: []byte("false"), New: []byte("true"), Live: true}.String())
 	require.Equal(t, "transport.transport_port: 0 -> 7777 (restart-required)",
 		ConfigFieldChange{Path: "transport.transport_port", Old: []byte("0"), New: []byte("7777")}.String())
+}
+
+// dmsg.sessions_count is printed by `config show` but tagged `json:"-"` on the
+// struct — the canonical value lives in Dmsg.Deployments and the top-level
+// field is a read-only mirror. "no field" would read as a lie against output
+// the operator is looking at, so the resolver names what it actually is.
+func TestResolveConfigTargetNamesMirrorFields(t *testing.T) {
+	conf, _ := newTestConfig(t)
+	conf.Dmsg = &dmsgspec.DmsgConfig{}
+	root := reflect.ValueOf(conf).Elem()
+
+	_, err := resolveConfigTarget(root, "dmsg.sessions_count")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "read-only mirror")
+
+	// A genuine typo still reads as one.
+	_, err = resolveConfigTarget(root, "dmsg.sessions_kount")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unknown config path")
 }
