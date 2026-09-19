@@ -55,7 +55,7 @@ func StartDmsgWithSyntheticDiscovery(ctx context.Context, dlog *logging.Logger, 
 		}
 	}
 
-	dmsgC = dmsg.NewClient(pk, sk, baseDiscClient, &dmsg.Config{MinSessions: dmsgSessions})
+	dmsgC = dmsg.NewClient(pk, sk, baseDiscClient, clientConfig(dmsgSessions))
 	dlog.Debug("Created dmsg client.")
 
 	go dmsgC.Serve(ctx)
@@ -137,7 +137,7 @@ func StartDmsgWithDirectClient(ctx context.Context, dlog *logging.Logger, pk cip
 	// Wrap with fallback client that tries direct first, then HTTP discovery
 	fallbackClient := NewFallbackDiscClient(directClient, httpDiscClient, dlog)
 
-	dmsgC = dmsg.NewClient(pk, sk, fallbackClient, &dmsg.Config{MinSessions: dmsgSessions})
+	dmsgC = dmsg.NewClient(pk, sk, fallbackClient, clientConfig(dmsgSessions))
 	dlog.Debug("Created dmsg client with fallback discovery client (direct + HTTP).")
 
 	go dmsgC.Serve(ctx)
@@ -226,7 +226,7 @@ func StartDmsgSelfHostedDisc(ctx context.Context, dlog *logging.Logger, pk ciphe
 	httpDisc := disc.NewHTTP(dmsgDiscAddr, httpClient, dlog)
 	fallbackDisc := NewFallbackDiscClient(directClient, httpDisc, dlog)
 
-	dmsgC = dmsg.NewClient(pk, sk, fallbackDisc, &dmsg.Config{MinSessions: dmsgSessions})
+	dmsgC = dmsg.NewClient(pk, sk, fallbackDisc, clientConfig(dmsgSessions))
 	httpClient.Transport = dmsghttp.MakeHTTPTransport(ctx, dmsgC)
 	dlog.Debug("Created single dmsg client with self-hosted discovery over its own sessions.")
 

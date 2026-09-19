@@ -117,6 +117,9 @@ var RootCmd = &cobra.Command{
 		// flags and never calls InitFlags, so -c/--dmsg-disc, -e/--sess and
 		// -z/--http were silently ignored and the client always used the hardcoded
 		// production discovery. Route on the flags we actually parsed instead.
+		// Outbound only: dmsgip asks the discovery for an address and exits. It
+		// opens no dmsg listener, so it publishes no entry of its own.
+		dmsgclient.NoRegister = true
 		var dmsgC *dmsg.Client
 		var closeDmsg func()
 		if useHTTP {

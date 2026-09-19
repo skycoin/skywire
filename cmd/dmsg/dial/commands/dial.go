@@ -32,6 +32,10 @@ var (
 
 func init() {
 	dmsgclient.InitFlags(RootCmd)
+	// Outbound only: this tool opens no dmsg listener, so a discovery entry
+	// naming its servers advertises a destination that accepts nothing. See
+	// dmsgclient.NoRegister.
+	dmsgclient.NoRegister = true
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[ debug | warn | error | fatal | panic | trace | info ]")
 	RootCmd.Flags().IntVarP(&waitTime, "wait", "w", 0, "wait time in seconds before disconnecting")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified")
