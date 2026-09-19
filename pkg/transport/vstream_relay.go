@@ -10,7 +10,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"sync/atomic"
 
 	"github.com/google/uuid"
 
@@ -38,7 +37,7 @@ func (m *VStreamMux) registerRelayLeg(in, out relayKey) {
 	m.relays[in] = out
 	m.relays[out] = in
 	m.relaysMu.Unlock()
-	atomic.AddInt64(&m.relayCount, 1)
+	m.relayCount.Add(1)
 }
 
 // teardownRelayLeg removes both directions of a bridged stream and drops the
@@ -52,7 +51,7 @@ func (m *VStreamMux) teardownRelayLeg(a, b relayKey) {
 	}
 	m.relaysMu.Unlock()
 	if ok {
-		atomic.AddInt64(&m.relayCount, -1)
+		m.relayCount.Add(-1)
 	}
 }
 
@@ -123,7 +122,7 @@ func (m *VStreamMux) handleRelaySyn(mt *ManagedTransport, wireID uint64, senderP
 		m.log.Warn("vstream relay: refusing to re-forward already-relayed SYN (1-hop)")
 		return
 	}
-	if atomic.LoadInt64(&m.relayCount) >= int64(m.maxRelays) {
+	if m.relayCount.Load() >= int64(m.maxRelays) {
 		m.log.Warn("vstream relay: at relay-stream capacity; dropping")
 		return
 	}

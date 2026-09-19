@@ -1,7 +1,6 @@
 package router
 
 import (
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -18,13 +17,13 @@ func TestRemoteThroughputZeroWindow(t *testing.T) {
 	s.bandwidthReceivedRecStart = now
 
 	// Bytes counted, but no time has passed: the +Inf case.
-	atomic.StoreUint64(&s.bandwidthReceived, 4096)
+	s.bandwidthReceived.Store(4096)
 	if got := s.remoteThroughputAt(now); got != 0 {
 		t.Errorf("zero-width window with traffic returned %d, want 0", got)
 	}
 
 	// No bytes and no time: the NaN case.
-	atomic.StoreUint64(&s.bandwidthReceived, 0)
+	s.bandwidthReceived.Store(0)
 	if got := s.remoteThroughputAt(now); got != 0 {
 		t.Errorf("zero-width window with no traffic returned %d, want 0", got)
 	}
@@ -38,11 +37,11 @@ func TestRemoteThroughputZeroWindowKeepsBytes(t *testing.T) {
 	start := time.Now().UTC()
 	s.bandwidthReceivedRecStart = start
 
-	atomic.StoreUint64(&s.bandwidthReceived, 1000)
+	s.bandwidthReceived.Store(1000)
 	if got := s.remoteThroughputAt(start); got != 0 {
 		t.Fatalf("zero-width window returned %d, want 0", got)
 	}
-	if got := atomic.LoadUint64(&s.bandwidthReceived); got != 1000 {
+	if got := s.bandwidthReceived.Load(); got != 1000 {
 		t.Fatalf("zero-width window consumed the accumulator: %d bytes left, want 1000", got)
 	}
 
@@ -59,7 +58,7 @@ func TestRemoteThroughputBackwardsClock(t *testing.T) {
 	now := time.Now().UTC()
 	s.bandwidthReceivedRecStart = now.Add(time.Second) // start is in the future
 
-	atomic.StoreUint64(&s.bandwidthReceived, 4096)
+	s.bandwidthReceived.Store(4096)
 	if got := s.remoteThroughputAt(now); got != 0 {
 		t.Errorf("backwards clock returned %d, want 0", got)
 	}
@@ -71,7 +70,7 @@ func TestRemoteThroughputNormalWindow(t *testing.T) {
 	start := time.Now().UTC()
 	s.bandwidthReceivedRecStart = start
 
-	atomic.StoreUint64(&s.bandwidthReceived, 8192)
+	s.bandwidthReceived.Store(8192)
 	got := s.remoteThroughputAt(start.Add(2 * time.Second))
 	if got != 4096 {
 		t.Errorf("throughput = %d, want 4096 (8192 bytes over 2s)", got)

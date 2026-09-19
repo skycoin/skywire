@@ -284,7 +284,7 @@ func TestRouteMuxRemoveLegs(t *testing.T) {
 	m.markLegReady(2)
 	m.markLegReady(4) // ready = [T,F,T,F,T]
 	for i := range m.legs {
-		m.legs[i].sentBytes = uint64(i * 10) // tag identity: 0,10,20,30,40
+		m.legs[i].sentBytes.Store(uint64(i * 10)) // tag identity: 0,10,20,30,40
 	}
 
 	m.removeLegs(1, 3) // drop middle legs (ascending, as pruneDeadTransports passes)
@@ -293,9 +293,9 @@ func TestRouteMuxRemoveLegs(t *testing.T) {
 	require.Len(t, m.ready, 3, "ready not compacted")
 	// Survivors are original legs 0,2,4 in order.
 	require.Equal(t, []bool{true, true, true}, m.ready, "ready bits must follow the surviving legs")
-	require.Equal(t, uint64(0), m.legs[0].sentBytes)
-	require.Equal(t, uint64(20), m.legs[1].sentBytes, "former leg 2's counters must move to index 1")
-	require.Equal(t, uint64(40), m.legs[2].sentBytes, "former leg 4's counters must move to index 2")
+	require.Equal(t, uint64(0), m.legs[0].sentBytes.Load())
+	require.Equal(t, uint64(20), m.legs[1].sentBytes.Load(), "former leg 2's counters must move to index 1")
+	require.Equal(t, uint64(40), m.legs[2].sentBytes.Load(), "former leg 4's counters must move to index 2")
 	require.True(t, m.legReadyAt(1), "former leg 2 (ready) must read ready at its new index")
 }
 

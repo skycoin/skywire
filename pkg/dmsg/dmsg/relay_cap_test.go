@@ -57,5 +57,5 @@ func TestRelaySlotCap(t *testing.T) {
 	}
 	wg.Wait()
 	require.Equal(t, int64(8), granted, "exactly cap slots granted, no overshoot")
-	require.Equal(t, int64(8), c2.relayedStreams, "live count equals granted slots")
+	require.Equal(t, int64(8), c2.relayedStreams.Load(), "live count equals granted slots")
 }
