@@ -79,7 +79,7 @@ type Filter struct {
 type subscription struct {
 	filter  Filter
 	ch      chan *logrus.Entry
-	dropped uint64 // atomic
+	dropped atomic.Uint64
 	closed  atomic.Bool
 }
 
@@ -118,7 +118,7 @@ func (b *Broadcaster) Fire(e *logrus.Entry) error {
 			select {
 			case sub.ch <- e:
 			default:
-				atomic.AddUint64(&sub.dropped, 1)
+				sub.dropped.Add(1)
 			}
 		}
 		b.mu.RUnlock()
@@ -157,7 +157,7 @@ func (b *Broadcaster) Subscribe(f Filter, capacity int) (<-chan *logrus.Entry, f
 
 	cancel := func() uint64 {
 		if !sub.closed.CompareAndSwap(false, true) {
-			return atomic.LoadUint64(&sub.dropped)
+			return sub.dropped.Load()
 		}
 		// Take the write lock so any in-flight Fire holding RLock has
 		// finished iterating before we delete and close — no chance of
@@ -167,7 +167,7 @@ func (b *Broadcaster) Subscribe(f Filter, capacity int) (<-chan *logrus.Entry, f
 		b.subCount.Store(int64(len(b.subs)))
 		b.mu.Unlock()
 		close(sub.ch)
-		return atomic.LoadUint64(&sub.dropped)
+		return sub.dropped.Load()
 	}
 	return sub.ch, cancel
 }

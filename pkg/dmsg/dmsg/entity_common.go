@@ -37,7 +37,7 @@ type discoveryEndpoint struct {
 // EntityCommon contains the common fields and methods for server and client entities.
 type EntityCommon struct {
 	// atomic requires 64-bit alignment for struct field access
-	lastUpdate int64 // Timestamp (in unix seconds) of last update.
+	lastUpdate atomic.Int64 // Timestamp (in unix seconds) of last update.
 
 	// lastInbound is the time a remote-initiated stream was last accepted on any
 	// of this entity's listeners, as unix nanoseconds. atomic.Int64 rather than a
@@ -183,7 +183,7 @@ type EntityCommon struct {
 	// is the live count (accessed atomically). Local client↔client
 	// bridging on the same server is not counted. Set on Server entities.
 	maxRelayedStreams int
-	relayedStreams    int64
+	relayedStreams    atomic.Int64
 	relayShare        map[cipher.PubKey]int64
 	relayShareMx      sync.Mutex
 	// relayRefused counts stream requests this entity turned away with
@@ -192,7 +192,7 @@ type EntityCommon struct {
 	// service: the refusal is indistinguishable, at the dialer, from the
 	// destination being down. libp2p's relay service exports rejections by
 	// reason for the same purpose.
-	relayRefused int64
+	relayRefused atomic.Int64
 
 	// acceptRelayedRequests admits a stream request over a CLIENT session
 	// whose SrcAddr.PK is not the session's remote key (see
@@ -499,8 +499,8 @@ func (c *EntityCommon) tryAcquireRelaySlot(peer cipher.PubKey) bool {
 	c.relayShare[peer]++
 	c.relayShareMx.Unlock()
 
-	if atomic.AddInt64(&c.relayedStreams, 1) > int64(c.maxRelayedStreams) {
-		atomic.AddInt64(&c.relayedStreams, -1)
+	if c.relayedStreams.Add(1) > int64(c.maxRelayedStreams) {
+		c.relayedStreams.Add(-1)
 		c.releasePeerShare(peer)
 		return false
 	}
@@ -509,7 +509,7 @@ func (c *EntityCommon) tryAcquireRelaySlot(peer cipher.PubKey) bool {
 
 // releaseRelaySlot returns a slot reserved by tryAcquireRelaySlot.
 func (c *EntityCommon) releaseRelaySlot(peer cipher.PubKey) {
-	atomic.AddInt64(&c.relayedStreams, -1)
+	c.relayedStreams.Add(-1)
 	c.releasePeerShare(peer)
 }
 
@@ -1470,7 +1470,7 @@ func getClientEntry(ctx context.Context, dc disc.APIClient, clientPK cipher.PubK
 */
 
 func (c *EntityCommon) updateIsDue() (lastUpdate time.Time, isDue bool) {
-	lastUpdate = time.Unix(0, atomic.LoadInt64(&c.lastUpdate))
+	lastUpdate = time.Unix(0, c.lastUpdate.Load())
 	isDue = time.Since(lastUpdate) >= c.effectiveUpdateInterval()
 	return lastUpdate, isDue
 }
@@ -1509,7 +1509,7 @@ func (c *EntityCommon) SetCXOKeepaliveHealthyFunc(fn func() bool) {
 // updatedWithin reports whether the last discovery-entry update happened within
 // the given duration — used to coalesce rapid nudge-driven re-registrations.
 func (c *EntityCommon) updatedWithin(d time.Duration) bool {
-	return time.Since(time.Unix(0, atomic.LoadInt64(&c.lastUpdate))) < d
+	return time.Since(time.Unix(0, c.lastUpdate.Load())) < d
 }
 
 // nudgeEntryUpdate signals the update loop that a session changed and
@@ -1523,7 +1523,7 @@ func (c *EntityCommon) nudgeEntryUpdate() {
 }
 
 func (c *EntityCommon) recordUpdate() {
-	atomic.StoreInt64(&c.lastUpdate, time.Now().UnixNano())
+	c.lastUpdate.Store(time.Now().UnixNano())
 }
 
 // Unpublished reports whether this entity publishes no discovery entry

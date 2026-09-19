@@ -2,7 +2,6 @@ package transport
 
 import (
 	"encoding/binary"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -103,7 +102,7 @@ func TestVStreamRelayForward(t *testing.T) {
 		"forwarded signature must still verify under the origin PK")
 	outID := fwd.streamID
 	require.NotEqual(t, inID, outID, "streamID must be remapped on the outbound leg")
-	require.Equal(t, int64(1), atomic.LoadInt64(&muxR.relayCount))
+	require.Equal(t, int64(1), muxR.relayCount.Load())
 
 	// DATA A->B: forwarded on the outbound id.
 	memRB.written = nil
@@ -122,7 +121,7 @@ func TestVStreamRelayForward(t *testing.T) {
 
 	// FIN A->B tears the leg down.
 	muxR.HandlePacket(buildVStreamPacket(routing.SkynetForwardPacket, inID, apk, VStreamFlagFin, nil), mtRA)
-	require.Equal(t, int64(0), atomic.LoadInt64(&muxR.relayCount), "relay count drops to 0 on FIN")
+	require.Equal(t, int64(0), muxR.relayCount.Load(), "relay count drops to 0 on FIN")
 }
 
 // TestVStreamRelayRejects covers the relay's refusal paths.
@@ -141,18 +140,18 @@ func TestVStreamRelayRejects(t *testing.T) {
 	memRB.written = nil
 	muxR.HandlePacket(buildRelaySynWithSig(1, apk, bpk, 1, badSig, false), mtRA)
 	require.Empty(t, memRB.written, "relay must not forward a bad-signature SYN")
-	require.Equal(t, int64(0), atomic.LoadInt64(&muxR.relayCount))
+	require.Equal(t, int64(0), muxR.relayCount.Load())
 
 	// Already-relayed SYN (1-hop guard).
 	memRB.written = nil
 	muxR.HandlePacket(buildRelaySyn(t, 2, apk, ask, bpk, 2, true), mtRA)
 	require.Empty(t, memRB.written, "relay must not re-forward an already-relayed SYN")
-	require.Equal(t, int64(0), atomic.LoadInt64(&muxR.relayCount))
+	require.Equal(t, int64(0), muxR.relayCount.Load())
 
 	// No transport to the destination.
 	noTpDst := mustPK(t)
 	muxR.HandlePacket(buildRelaySyn(t, 3, apk, ask, noTpDst, 3, false), mtRA)
-	require.Equal(t, int64(0), atomic.LoadInt64(&muxR.relayCount), "no dst transport → no relay leg")
+	require.Equal(t, int64(0), muxR.relayCount.Load(), "no dst transport → no relay leg")
 }
 
 // TestVStreamRelayTerminatesLocally covers a relay SYN whose destination is
@@ -169,7 +168,7 @@ func TestVStreamRelayTerminatesLocally(t *testing.T) {
 	s, err := muxR.Accept()
 	require.NoError(t, err)
 	require.Equal(t, apk, s.RemotePK(), "locally-terminated relayed stream is attributed to the origin")
-	require.Equal(t, int64(0), atomic.LoadInt64(&muxR.relayCount), "local termination is not a relay leg")
+	require.Equal(t, int64(0), muxR.relayCount.Load(), "local termination is not a relay leg")
 }
 
 // TestVStreamDialThroughRelay covers the originator side: it emits a valid

@@ -200,7 +200,7 @@ func DefaultRouteGroupConfig() *RouteGroupConfig {
 // It implements 'net.Conn'.
 type RouteGroup struct {
 	// atomic requires 64-bit alignment for struct field access
-	lastSent int64
+	lastSent atomic.Int64
 
 	// consecutiveWriteFailures tracks repeated transport write errors.
 	// After maxConsecutiveWriteFailures, the RouteGroup closes itself.
@@ -449,11 +449,11 @@ type RouteGroup struct {
 	// stuck on, reorderWedges how many wedges have cleared, and
 	// reorderWedgeLongestMs the longest one seen on this group.
 	soleBHTicks           int
-	reorderWedgeTicks     int64
-	reorderWedgeStartNano int64
+	reorderWedgeTicks     atomic.Int64
+	reorderWedgeStartNano atomic.Int64
 	reorderWedgeSeq       uint32
-	reorderWedges         uint64
-	reorderWedgeLongestMs int64
+	reorderWedges         atomic.Uint64
+	reorderWedgeLongestMs atomic.Int64
 	reorderWedgeLoggedAt  time.Duration
 
 	// delayedAckArmed guards the one-shot delayed-ack timer (see
@@ -854,9 +854,9 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 		info.ReorderGapAge = rg.mux.gapAge()
 		info.WriteSeq = rg.mux.writeSeqValue()
 		info.FECEnabled = rg.mux.fecEnabled
-		info.FECRepairBytesSent = atomic.LoadUint64(&rg.mux.fecRepairBytesSent)
-		info.FECRepairBytesRecv = atomic.LoadUint64(&rg.mux.fecRepairBytesRecv)
-		info.FECReconstructs = atomic.LoadUint64(&rg.mux.fecReconstructs)
+		info.FECRepairBytesSent = rg.mux.fecRepairBytesSent.Load()
+		info.FECRepairBytesRecv = rg.mux.fecRepairBytesRecv.Load()
+		info.FECReconstructs = rg.mux.fecReconstructs.Load()
 		info.Directional, info.Flipped = rg.mux.dirState()
 		if info.Directional {
 			info.FlipPinned = flipPinString(rg.mux.flipPinMode())
@@ -968,28 +968,28 @@ func (rg *RouteGroup) recoverySnapshot(legs []MuxLeg) *MuxRecovery {
 		RetxHeld:           held,
 		RetxMinSeq:         minSeq,
 		RetxMaxSeq:         maxSeq,
-		RetxSkippedMissing: atomic.LoadUint64(&m.retxSkippedMissing),
-		RetxReqSACK:        atomic.LoadUint64(&m.retxReqSACK),
-		RetxReqHOL:         atomic.LoadUint64(&m.retxReqHOL),
-		RetxReqFlush:       atomic.LoadUint64(&m.retxReqFlush),
-		RetxDeferredYoung:  atomic.LoadUint64(&m.retxDeferredYoung),
-		RetxSendErrors:     atomic.LoadUint64(&m.retxSendErrors),
-		SendWindowWaits:    atomic.LoadUint64(&m.sendWindowWaits),
-		SendWindowTimeouts: atomic.LoadUint64(&m.sendWindowTimeouts),
-		TLPProbes:          atomic.LoadUint64(&m.tlpProbes),
-		SACKsRecv:          atomic.LoadUint64(&m.sacksRecv),
+		RetxSkippedMissing: m.retxSkippedMissing.Load(),
+		RetxReqSACK:        m.retxReqSACK.Load(),
+		RetxReqHOL:         m.retxReqHOL.Load(),
+		RetxReqFlush:       m.retxReqFlush.Load(),
+		RetxDeferredYoung:  m.retxDeferredYoung.Load(),
+		RetxSendErrors:     m.retxSendErrors.Load(),
+		SendWindowWaits:    m.sendWindowWaits.Load(),
+		SendWindowTimeouts: m.sendWindowTimeouts.Load(),
+		TLPProbes:          m.tlpProbes.Load(),
+		SACKsRecv:          m.sacksRecv.Load(),
 		LastSACKRecvMsAgo:  msSinceNano(&m.lastSACKRecvNano),
 		LastSACKRecvContig: atomic.LoadUint32(&m.lastAckedContig),
 		ReorderNextSeq:     m.reorderNextSeq(),
 		ReorderPending:     m.reorderPending(),
-		ReorderDrops:       atomic.LoadUint64(&m.reorderDrops),
+		ReorderDrops:       m.reorderDrops.Load(),
 		GapAgeMS:           float64(m.gapAge()) / float64(time.Millisecond),
-		SACKsSent:          atomic.LoadUint64(&m.sacksSent),
-		SACKSendErrors:     atomic.LoadUint64(&m.sackSendErrors),
+		SACKsSent:          m.sacksSent.Load(),
+		SACKSendErrors:     m.sackSendErrors.Load(),
 		LastSACKSentMsAgo:  msSinceNano(&m.lastSACKSentNano),
-		WedgeTicks:         atomic.LoadInt64(&rg.reorderWedgeTicks),
-		Wedges:             atomic.LoadUint64(&rg.reorderWedges),
-		LongestWedgeMS:     atomic.LoadInt64(&rg.reorderWedgeLongestMs),
+		WedgeTicks:         rg.reorderWedgeTicks.Load(),
+		Wedges:             rg.reorderWedges.Load(),
+		LongestWedgeMS:     rg.reorderWedgeLongestMs.Load(),
 	}
 	for _, leg := range legs {
 		rec.RetxSent += leg.Retransmits
@@ -1282,7 +1282,7 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 			return 0, err
 		}
 
-		atomic.StoreInt64(&rg.lastSent, time.Now().UnixNano())
+		rg.lastSent.Store(time.Now().UnixNano())
 
 		// Per-mux-leg sent counter. The aggregate networkStats is
 		// already updated inside writePacket (and gates on packet
@@ -1328,7 +1328,7 @@ func (rg *RouteGroup) flushFECRepairs() {
 			continue
 		}
 		ctx, cancel := context.WithCancel(context.Background())
-		atomic.AddUint64(&rg.mux.fecRepairBytesSent, uint64(pkt.Size()))
+		rg.mux.fecRepairBytesSent.Add(uint64(pkt.Size()))
 		errCh := rg.writePacketAsync(ctx, tp, pkt, rule.KeyRouteID())
 		select {
 		case <-rg.writeDeadline.Wait():
@@ -1355,7 +1355,7 @@ func (rg *RouteGroup) fecFlushServiceFn(_ time.Duration) {
 	if rg.mux == nil || !rg.mux.fecEnabled || rg.mux.fecStriper == nil {
 		return
 	}
-	lastSent := time.Unix(0, atomic.LoadInt64(&rg.lastSent))
+	lastSent := time.Unix(0, rg.lastSent.Load())
 	if !fecShouldFlush(time.Now(), lastSent, fecDefaultIdleFlush, rg.mux.fecStriper.hasPartialBlock()) {
 		return
 	}
@@ -2277,7 +2277,7 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 		}
 		rg.mu.Unlock()
 		if seqs := rg.mux.heldRetxSeqsOnTps(demotedTps); len(seqs) > 0 {
-			atomic.AddUint64(&rg.mux.retxReqFlush, uint64(len(seqs)))
+			rg.mux.retxReqFlush.Add(uint64(len(seqs)))
 			if err := rg.resendSeqs(seqs); err != nil {
 				rg.logger.WithError(err).Debug("demote retx flush: no active leg to resend on")
 			}
@@ -2558,7 +2558,7 @@ func (rg *RouteGroup) reorderStallServiceFn(_ time.Duration) {
 		// wedge is diagnosable from the log. Throttled to ~once per reorderTimeout
 		// (the service fires every reorderStallInterval) via a transition/decay
 		// counter so a sustained wedge doesn't spam.
-		ticks := atomic.AddInt64(&rg.reorderWedgeTicks, 1)
+		ticks := rg.reorderWedgeTicks.Add(1)
 		if ticks == 1 || gapAge > rg.reorderWedgeLoggedAt+routersettings.ReorderTimeout.Duration() {
 			active := rg.mux.activeLegCount()
 			seq := rg.mux.reorderNextSeq()
@@ -2571,7 +2571,7 @@ func (rg *RouteGroup) reorderStallServiceFn(_ time.Duration) {
 				// the far end's `visor state --select diag` carries the wedge next
 				// to the leg churn instead of it living only in this visor's log
 				// ring (which holds minutes).
-				atomic.StoreInt64(&rg.reorderWedgeStartNano, time.Now().UnixNano())
+				rg.reorderWedgeStartNano.Store(time.Now().UnixNano())
 				atomic.StoreUint32(&rg.reorderWedgeSeq, seq)
 				rg.noteMuxEvent(MuxEvent{
 					Event:    MuxEventReorderWedge,
@@ -2586,16 +2586,16 @@ func (rg *RouteGroup) reorderStallServiceFn(_ time.Duration) {
 		if err := rg.sendSACK(); err != nil {
 			rg.logger.WithError(err).Debug("reorder-stall SACK failed")
 		}
-	} else if ticks := atomic.SwapInt64(&rg.reorderWedgeTicks, 0); ticks > 0 {
+	} else if ticks := rg.reorderWedgeTicks.Swap(0); ticks > 0 {
 		// Gap cleared — log the recovery so the wedge's duration is bounded in the log.
 		var held time.Duration
-		if startNano := atomic.SwapInt64(&rg.reorderWedgeStartNano, 0); startNano != 0 {
+		if startNano := rg.reorderWedgeStartNano.Swap(0); startNano != 0 {
 			held = time.Since(time.Unix(0, startNano))
 		}
 		seq := atomic.LoadUint32(&rg.reorderWedgeSeq)
-		atomic.AddUint64(&rg.reorderWedges, 1)
-		if ms := held.Milliseconds(); ms > atomic.LoadInt64(&rg.reorderWedgeLongestMs) {
-			atomic.StoreInt64(&rg.reorderWedgeLongestMs, ms)
+		rg.reorderWedges.Add(1)
+		if ms := held.Milliseconds(); ms > rg.reorderWedgeLongestMs.Load() {
+			rg.reorderWedgeLongestMs.Store(ms)
 		}
 		rg.logger.Infof("reorder-wedge CLEARED after %d stall ticks (frontier advancing again)", ticks)
 		rg.noteMuxEvent(MuxEvent{
@@ -3965,7 +3965,7 @@ func (rg *RouteGroup) servicePacketLoop(name string, interval time.Duration, f s
 }
 
 func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
-	lastSent := time.Unix(0, atomic.LoadInt64(&rg.lastSent))
+	lastSent := time.Unix(0, rg.lastSent.Load())
 
 	if time.Since(lastSent) < interval {
 		return
@@ -4927,7 +4927,7 @@ func (rg *RouteGroup) handleRepairPacket(packet routing.Packet) error {
 	if rg.mux == nil || !rg.mux.fecEnabled {
 		return nil
 	}
-	atomic.AddUint64(&rg.mux.fecRepairBytesRecv, uint64(packet.Size()))
+	rg.mux.fecRepairBytesRecv.Add(uint64(packet.Size()))
 	// Per-leg repair accounting: resolve the arrival leg from the packet's route
 	// ID (same reverse-rule match as handleDataPacket) and credit both its recv
 	// counters and the repair-specific one — before this, FEC repairs were
@@ -5174,14 +5174,14 @@ func (rg *RouteGroup) sendSACK() error {
 	}
 	err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 	if err != nil {
-		atomic.AddUint64(&rg.mux.sackSendErrors, 1)
+		rg.mux.sackSendErrors.Add(1)
 		return err
 	}
 	// Receiver-side feedback accounting: a wedged frontier with sacks_sent
 	// climbing and the peer's retx_sent flat means our SACKs are not reaching
 	// the sender (or are reaching it with nothing left to resend).
-	atomic.AddUint64(&rg.mux.sacksSent, 1)
-	atomic.StoreInt64(&rg.mux.lastSACKSentNano, time.Now().UnixNano())
+	rg.mux.sacksSent.Add(1)
+	rg.mux.lastSACKSentNano.Store(time.Now().UnixNano())
 	return nil
 }
 
@@ -5199,14 +5199,14 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 	// "did the peer's SACK even arrive" is the first fork of a wedge diagnosis,
 	// and it must be answerable when the answer is "yes, but there was nothing
 	// to resend" (the early return below).
-	atomic.AddUint64(&rg.mux.sacksRecv, 1)
-	atomic.StoreInt64(&rg.mux.lastSACKRecvNano, time.Now().UnixNano())
+	rg.mux.sacksRecv.Add(1)
+	rg.mux.lastSACKRecvNano.Store(time.Now().UnixNano())
 
 	// Normal reactive retransmit: holes overdue past the RACK threshold. Also
 	// advances the ack-progress edge (resets the TLP probe budget) and adapts the
 	// reorder factor from the DSACK signal (widen on a duplicate, decay otherwise).
 	retxSeqs := rg.mux.onSACKReceived(lastContig, words, dsackSeq, hasDSACK)
-	atomic.AddUint64(&rg.mux.retxReqSACK, uint64(len(retxSeqs)))
+	rg.mux.retxReqSACK.Add(uint64(len(retxSeqs)))
 
 	// Proactive HoL retransmit (CapHOLRetx): the frontier-blocking seq (and the
 	// next few contiguous holes) retransmitted NOW on the fastest leg, bypassing
@@ -5220,7 +5220,7 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 		legRTT := rg.mux.legLatencyByTp(rg.tps)
 		rg.mu.Unlock()
 		if due := rg.mux.proactiveRetxSeqs(lastContig, words, fastMs, legRTT, time.Now()); len(due) > 0 {
-			atomic.AddUint64(&rg.mux.retxReqHOL, uint64(len(due)))
+			rg.mux.retxReqHOL.Add(uint64(len(due)))
 			retxSeqs = mergeSeqs(retxSeqs, due)
 		}
 	}
@@ -5283,7 +5283,7 @@ func (rg *RouteGroup) resendSeqs(seqs []uint32) error {
 			// because a wedge where the receiver keeps naming a seq and this keeps
 			// climbing is a DIFFERENT failure from one where the SACKs never
 			// arrive — and from the sender the two look identical otherwise.
-			atomic.AddUint64(&rg.mux.retxSkippedMissing, 1)
+			rg.mux.retxSkippedMissing.Add(1)
 			continue
 		}
 
@@ -5291,18 +5291,18 @@ func (rg *RouteGroup) resendSeqs(seqs []uint32) error {
 		tp, rule, leg, err := rg.nextFastestTransport()
 		rg.mu.Unlock()
 		if err != nil {
-			atomic.AddUint64(&rg.mux.retxSendErrors, 1)
+			rg.mux.retxSendErrors.Add(1)
 			return err
 		}
 
 		retxPacket, err := routing.MakeSequencedDataPacket(rule.NextRouteID(), seq, data)
 		if err != nil {
-			atomic.AddUint64(&rg.mux.retxSendErrors, 1)
+			rg.mux.retxSendErrors.Add(1)
 			return err
 		}
 
 		if err := rg.writePacket(context.Background(), tp, retxPacket, rule.KeyRouteID()); err != nil {
-			atomic.AddUint64(&rg.mux.retxSendErrors, 1)
+			rg.mux.retxSendErrors.Add(1)
 			rg.logger.WithError(err).Warnf("failed to retransmit seq %d", seq)
 		} else if leg >= 0 {
 			// Count retransmits against the leg that carried them
@@ -5317,7 +5317,7 @@ func (rg *RouteGroup) resendSeqs(seqs []uint32) error {
 			}
 			// A frame just went out (incl. a TLP probe) — restart the TLP idle
 			// timer so the next probe waits a fresh PTO rather than back-to-back.
-			atomic.StoreInt64(&rg.mux.lastSendNano, time.Now().UnixNano())
+			rg.mux.lastSendNano.Store(time.Now().UnixNano())
 		}
 	}
 	return nil
@@ -5390,7 +5390,7 @@ func (rg *RouteGroup) tlpServiceFn(_ time.Duration) {
 	if !due {
 		return
 	}
-	atomic.AddUint64(&rg.mux.tlpProbes, 1)
+	rg.mux.tlpProbes.Add(1)
 	rg.logger.Debugf("TLP: probing tail seq=%d after idle PTO", seq)
 	if err := rg.resendSeqs([]uint32{seq}); err != nil {
 		rg.logger.WithError(err).Debug("TLP: tail probe send failed")

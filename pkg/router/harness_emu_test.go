@@ -550,10 +550,10 @@ func (r *emuRig) Summary(name string, dir emuDir, x *emuTransfer) emu.Summary {
 		l.Standby = sm.isLegStandby(i)
 		s.Legs = append(s.Legs, l)
 	}
-	s.ReorderDrops = atomic.LoadUint64(&rm.reorderDrops)
-	s.SendWindowWaits = atomic.LoadUint64(&sm.sendWindowWaits)
-	s.SacksSent = atomic.LoadUint64(&rm.sacksSent)
-	s.SacksRecv = atomic.LoadUint64(&sm.sacksRecv)
+	s.ReorderDrops = rm.reorderDrops.Load()
+	s.SendWindowWaits = sm.sendWindowWaits.Load()
+	s.SacksSent = rm.sacksSent.Load()
+	s.SacksRecv = sm.sacksRecv.Load()
 	if x.Err != nil {
 		s.Notes = append(s.Notes, "error: "+x.Err.Error())
 	}

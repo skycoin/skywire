@@ -3,7 +3,6 @@ package router
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -286,7 +285,7 @@ func (m *routeMux) proactiveRetxSeqs(lastContiguous uint32, words []uint64, fast
 			// Young on its own leg. Counted when the fastest-leg fallback would
 			// have nudged it, so retx_deferred_young covers both request paths.
 			if gapTh > fallbackTh && now.Sub(sentAt) >= fallbackTh {
-				atomic.AddUint64(&m.retxDeferredYoung, 1)
+				m.retxDeferredYoung.Add(1)
 			}
 			continue
 		}

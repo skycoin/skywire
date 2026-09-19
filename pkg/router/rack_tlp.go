@@ -52,7 +52,7 @@ const (
 // multiplied by this in rackThreshold). Falls back to the static baseline if the
 // adaptive value was never initialized.
 func (m *routeMux) rackFactor() float64 {
-	v := atomic.LoadInt64(&m.rackFactorMilli)
+	v := m.rackFactorMilli.Load()
 	if v <= 0 {
 		return m.knRatio(routersettings.RackReorderFactor)
 	}
@@ -64,7 +64,7 @@ func (m *routeMux) rackFactor() float64 {
 // rackFactorMax. Concurrency-safe (CAS loop).
 func (m *routeMux) growRackFactor(dsackSeq uint32) {
 	for {
-		cur := atomic.LoadInt64(&m.rackFactorMilli)
+		cur := m.rackFactorMilli.Load()
 		next := cur + int64(m.knInt(routersettings.RackDSACKGrowStep))
 		if next > m.rackFactorMax() {
 			next = m.rackFactorMax()
@@ -72,7 +72,7 @@ func (m *routeMux) growRackFactor(dsackSeq uint32) {
 		if next == cur {
 			return
 		}
-		if atomic.CompareAndSwapInt64(&m.rackFactorMilli, cur, next) {
+		if m.rackFactorMilli.CompareAndSwap(cur, next) {
 			if m.logger != nil {
 				m.logger.Debugf("RACK: DSACK seq=%d (spurious retransmit) → reorder factor widened to %.2f×", dsackSeq, float64(next)/1000)
 			}
@@ -87,7 +87,7 @@ func (m *routeMux) growRackFactor(dsackSeq uint32) {
 // Concurrency-safe (CAS loop).
 func (m *routeMux) decayRackFactor() {
 	for {
-		cur := atomic.LoadInt64(&m.rackFactorMilli)
+		cur := m.rackFactorMilli.Load()
 		if cur <= m.rackFactorMin() {
 			return
 		}
@@ -95,7 +95,7 @@ func (m *routeMux) decayRackFactor() {
 		if next < m.rackFactorMin() {
 			next = m.rackFactorMin()
 		}
-		if atomic.CompareAndSwapInt64(&m.rackFactorMilli, cur, next) {
+		if m.rackFactorMilli.CompareAndSwap(cur, next) {
 			return
 		}
 	}
@@ -138,7 +138,7 @@ func (m *routeMux) onSACKReceived(lastContig uint32, words []uint64, dsackSeq ui
 	th := m.rackThreshold() // computed BEFORE the buffer lock: the per-leg callback must not read the leg table under it
 	retx, deferred := m.retxBuf.ProcessSACKWith(lastContig, words, th, func(tpID uuid.UUID) time.Duration { return m.rackThresholdForWith(th, tpID) })
 	if deferred > 0 {
-		atomic.AddUint64(&m.retxDeferredYoung, uint64(deferred))
+		m.retxDeferredYoung.Add(uint64(deferred))
 	}
 	m.signalWindow() // purged entries may have freed per-leg window for a parked writer
 	return retx
@@ -178,7 +178,7 @@ func (m *routeMux) tlpProbeSeq(now time.Time) (uint32, bool) {
 	if int(atomic.LoadInt32(&m.tlpProbeCount)) >= m.knInt(routersettings.TLPMaxProbes) {
 		return 0, false // budget spent; defer to reactive SACK / retx aging
 	}
-	last := atomic.LoadInt64(&m.lastSendNano)
+	last := m.lastSendNano.Load()
 	if last == 0 {
 		return 0, false // nothing sent yet
 	}

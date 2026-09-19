@@ -9,7 +9,6 @@
 package router
 
 import (
-	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -60,19 +59,19 @@ func TestRecoveryCountersSkippedMissingAndSACKsRecv(t *testing.T) {
 	// asks for is unrefillable. resendSeqs must skip them (not error) and count
 	// each one — no transport is touched on this path.
 	require.NoError(t, rg.resendSeqs([]uint32{41, 42, 43}))
-	require.EqualValues(t, 3, atomic.LoadUint64(&rg.mux.retxSkippedMissing))
+	require.EqualValues(t, 3, rg.mux.retxSkippedMissing.Load())
 
 	// A sequence we DO hold is not counted as skipped.
 	rg.mux.retxBuf.Store(44, []byte("held"), uuid.Nil)
-	require.EqualValues(t, 3, atomic.LoadUint64(&rg.mux.retxSkippedMissing))
+	require.EqualValues(t, 3, rg.mux.retxSkippedMissing.Load())
 
 	// Inbound SACK feedback is counted before any retransmit decision, so
 	// "the peer is talking to us" stays answerable even when the SACK asks for
 	// nothing (the empty-retransmit early return).
-	require.EqualValues(t, 0, atomic.LoadUint64(&rg.mux.sacksRecv))
+	require.EqualValues(t, 0, rg.mux.sacksRecv.Load())
 	require.NoError(t, rg.handleSACKPacket(routing.MakeSACKPacket(routing.RouteID(1), 40, nil)))
 	require.NoError(t, rg.handleSACKPacket(routing.MakeSACKPacket(routing.RouteID(1), 41, nil)))
-	require.EqualValues(t, 2, atomic.LoadUint64(&rg.mux.sacksRecv))
+	require.EqualValues(t, 2, rg.mux.sacksRecv.Load())
 
 	rec := rg.MuxStats().Recovery
 	require.NotNil(t, rec)

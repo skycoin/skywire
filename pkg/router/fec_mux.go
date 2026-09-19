@@ -536,7 +536,7 @@ func (m *routeMux) fecTryAdvance() [][]byte {
 		if len(delivered) == 0 {
 			break
 		}
-		atomic.AddUint64(&m.fecReconstructs, 1)
+		m.fecReconstructs.Add(1)
 		out = append(out, delivered...)
 		if m.sackEnabled && m.sackTracker != nil {
 			m.sackTracker.AdvanceContiguous(m.reorderBuf.NextSeq())

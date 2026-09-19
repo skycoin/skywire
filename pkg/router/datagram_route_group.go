@@ -96,7 +96,7 @@ var ErrClosed = errors.New("datagram-route-group: closed")
 //   - Close releases the readCh and marks the group dead. Idempotent.
 type DatagramRouteGroup struct {
 	// atomic; first for 64-bit alignment.
-	lastSent                 int64
+	lastSent                 atomic.Int64
 	closeFlag                int32 // atomic; 1 once Close has run
 	consecutiveWriteFailures int32
 
@@ -135,7 +135,7 @@ type DatagramRouteGroup struct {
 	// inboundDropped counts datagrams dropped because readCh was
 	// full when Handle tried to push. Surfaced via Stats() and
 	// useful for diagnosing slow consumers.
-	inboundDropped uint64 // atomic
+	inboundDropped atomic.Uint64
 
 	// AEAD layer. outCipher seals outbound datagrams (called by
 	// WriteTo); inCipher opens inbound (called by Handle). Nil
@@ -153,7 +153,7 @@ type DatagramRouteGroup struct {
 	// diagnostics. Forged datagrams under load would otherwise be
 	// invisible to operators — this lets a monitor pick up an
 	// in-progress attack.
-	aeadAuthFailures uint64 // atomic
+	aeadAuthFailures atomic.Uint64
 }
 
 // NewDatagramRouteGroup constructs a DatagramRouteGroup. The
@@ -299,7 +299,7 @@ func (dg *DatagramRouteGroup) WriteTo(data []byte, addr net.Addr) (int, error) {
 		return 0, err
 	}
 	atomic.StoreInt32(&dg.consecutiveWriteFailures, 0)
-	atomic.StoreInt64(&dg.lastSent, time.Now().UnixNano())
+	dg.lastSent.Store(time.Now().UnixNano())
 	dg.networkStats.AddBandwidthSent(uint64(packet.Size()))
 	return len(data), nil
 }
@@ -358,7 +358,7 @@ func (dg *DatagramRouteGroup) Handle(packet routing.Packet) error {
 	if cipher != nil {
 		pt, err := cipher.Open(uint32(packet.RouteID()), packet.Payload())
 		if err != nil {
-			atomic.AddUint64(&dg.aeadAuthFailures, 1)
+			dg.aeadAuthFailures.Add(1)
 			return nil // drop silently
 		}
 		cp = pt
@@ -377,7 +377,7 @@ func (dg *DatagramRouteGroup) Handle(packet routing.Packet) error {
 	case <-dg.closed:
 		return io.ErrClosedPipe
 	default:
-		atomic.AddUint64(&dg.inboundDropped, 1)
+		dg.inboundDropped.Add(1)
 		return nil
 	}
 }
@@ -453,7 +453,7 @@ func (dg *DatagramRouteGroup) IsAlive() bool {
 // due to a full readCh since group construction. Surfaced for
 // diagnostics; not used in the hot path.
 func (dg *DatagramRouteGroup) InboundDropped() uint64 {
-	return atomic.LoadUint64(&dg.inboundDropped)
+	return dg.inboundDropped.Load()
 }
 
 // AEADAuthFailures returns the count of inbound datagrams dropped
@@ -464,7 +464,7 @@ func (dg *DatagramRouteGroup) InboundDropped() uint64 {
 // forgery attempt in progress or a peer-side cipher desync (often
 // a missed rekey).
 func (dg *DatagramRouteGroup) AEADAuthFailures() uint64 {
-	return atomic.LoadUint64(&dg.aeadAuthFailures)
+	return dg.aeadAuthFailures.Load()
 }
 
 // Compile-time assertion that DatagramRouteGroup satisfies the
