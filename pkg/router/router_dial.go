@@ -2301,6 +2301,76 @@ func (r *router) filterLANFirstHops(cands [][]routing.Hop) (keep, dropped [][]ro
 	return keep, dropped
 }
 
+// distinctPKs counts the DISTINCT keys in an exclusion list.
+//
+// The sibling-exclusion lists are built by appending one entry per sibling
+// route group PER TRANSPORT (siblingRouteGroupExclusions), so a pool whose
+// tunnels have collapsed onto one first hop reports that hop once per tunnel.
+// Counting the SLICE there makes a degenerate pool look diverse — the very
+// duplicates that prove the collapse are what push the count past
+// setup.first_hop_filter_max and unlatch the filter that would have refused
+// them. Measured live 2026-09-18: 32 pool tunnels reporting "32 first-hop
+// peer(s)" over 4 distinct transports, 29 of them the same one.
+func distinctPKs(pks []cipher.PubKey) int {
+	if len(pks) == 0 {
+		return 0
+	}
+	seen := make(map[cipher.PubKey]struct{}, len(pks))
+	for _, pk := range pks {
+		seen[pk] = struct{}{}
+	}
+	return len(seen)
+}
+
+// pathIntermediates returns the PKs strictly between a candidate path's source
+// and its destination — the nodes that make one path to an exit different from
+// another to the same exit. A 1-hop direct path has none.
+func pathIntermediates(hops []routing.Hop) []cipher.PubKey {
+	if len(hops) < 2 {
+		return nil
+	}
+	out := make([]cipher.PubKey, 0, len(hops)-1)
+	for _, h := range hops[:len(hops)-1] {
+		out = append(out, h.To)
+	}
+	return out
+}
+
+// filterDistinctIntermediate keeps the candidates that reach the destination
+// through at least one intermediate no sibling already occupies.
+//
+// This is the other half of the relaxation below. Letting a deep pool reuse a
+// first hop is only sound while the reused hop still leads somewhere new; the
+// --standby-pool contract states it exactly — "a reused first hop WITH A
+// DISTINCT INTERMEDIATE is allowed". A 1-hop direct route has no intermediate
+// at all, so reusing ITS first hop reuses the entire path: the new tunnel is
+// the old tunnel, and it aggregates nothing. Such a candidate is dropped here
+// rather than offered, which is what lets the pool settle at its real disjoint
+// bound instead of filling to the ceiling with clones of its own best route.
+func filterDistinctIntermediate(cands [][]routing.Hop, held []cipher.PubKey) [][]routing.Hop {
+	if len(cands) == 0 {
+		return cands
+	}
+	heldSet := make(map[cipher.PubKey]struct{}, len(held))
+	for _, pk := range held {
+		heldSet[pk] = struct{}{}
+	}
+	keep := make([][]routing.Hop, 0, len(cands))
+	for _, hops := range cands {
+		fresh := false
+		for _, pk := range pathIntermediates(hops) {
+			if _, taken := heldSet[pk]; !taken {
+				fresh = true
+				break
+			}
+		}
+		if fresh {
+			keep = append(keep, hops)
+		}
+	}
+	return keep
+}
+
 // freeFirstHops is THE first-hop admission test for a diversify dial, shared by
 // every candidate selection that can win one (the route-finder path, the
 // K-candidate race, the RSN oracle and the hook-race direct route) so they
@@ -2333,12 +2403,27 @@ func (r *router) freeFirstHops(cands [][]routing.Hop, opts *DialOptions) [][]rou
 	// refusing the twentieth tunnel because its first hop is the same transport
 	// as the third's throws away a genuinely different path for a constraint
 	// that has already been satisfied nineteen times over.
-	held := len(opts.ExcludeFirstHopPeers)
+	//
+	// DISTINCT held hops, not the length of a list that carries one entry per
+	// sibling transport: counting duplicates lets a pool that has collapsed onto
+	// a single first hop unlatch its own guard (see distinctPKs).
+	held := distinctPKs(opts.ExcludeFirstHopPeers)
 	if len(free) > 0 || held < SetupFirstHopFilterMax() {
 		return free
 	}
-	opts.note("first-hop diversity relaxed: %d held first hops, offering reused ones", held)
-	return cands
+
+	// Relaxed — but only as far as the documented contract, "a reused first hop
+	// WITH A DISTINCT INTERMEDIATE". A candidate that reuses a held first hop
+	// and adds no new intermediate is not a different path to the exit, it is
+	// the same path again; offering it is how the pool filled to its ceiling
+	// with clones of its own lowest-latency route.
+	reused := filterDistinctIntermediate(cands, opts.ExcludeIntermediatePKs)
+	if len(reused) == 0 {
+		opts.note("first-hop diversity relaxed: %d held first hops, but no reused-hop candidate adds a distinct intermediate; settling", held)
+		return nil
+	}
+	opts.note("first-hop diversity relaxed: %d held first hops, offering %d reused one(s) with a distinct intermediate", held, len(reused))
+	return reused
 }
 
 // firstHopExcluded reports whether a single candidate path's first hop is taken
