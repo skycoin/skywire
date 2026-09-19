@@ -49,6 +49,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // ConfigFieldChange reports one field's before/after from SetConfigFields.
@@ -213,6 +214,73 @@ var liveConfigFieldTable = []liveConfigField{
 				return errors.New("env must be a list of KEY=VALUE strings")
 			}
 			return v.SetAppEnvFull(idx, env)
+		},
+	}, {
+		Path: "reward_address",
+		Desc: "skycoin address rewards are paid to (durable store is <local_path>/reward.txt, not this json)",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			_, err := v.SetRewardAddress(nv.String())
+			return err
+		},
+	}, {
+		Path: "hypervisor.enable",
+		Desc: "run the hypervisor: DMSG-RPC listener, managed-visor tracking and the web UI",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			if nv.Bool() {
+				return v.EnableHypervisorPersist(true)
+			}
+			return v.DisableHypervisorPersist(true)
+		},
+	}, {
+		Path: "hypervisor.ui_disable",
+		Desc: "stop the hypervisor web UI, keeping DMSG-RPC, tracking and `hv ls`",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			if nv.Bool() {
+				return v.DisableHypervisorUIPersist(true)
+			}
+			return v.EnableHypervisorUIPersist(true)
+		},
+	}, {
+		Path: "hypervisor.enable_auth",
+		Desc: "require a login on the hypervisor web UI (rebuilds the UI router; open tabs must reload)",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			return v.SetHypervisorAuthPersist(nv.Bool(), true)
+		},
+	}, {
+		Path: "dmsg_web.enable",
+		Desc: "run the .dmsg resolving proxy",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			return v.setEmbeddedProxyEnabledPersist("dmsg", nv.Bool())
+		},
+	}, {
+		Path: "dmsg_web.proxy_addr",
+		Desc: "SOCKS5 bind address for the .dmsg resolving proxy — \"\" is loopback (also enables it)",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			return v.SetEmbeddedProxyBind("dmsg", nv.String())
+		},
+	}, {
+		Path: "dmsg_web.upstream_socks",
+		Desc: "SOCKS5 upstream the .dmsg proxy forwards non-matching CONNECTs to",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			return v.setEmbeddedProxyUpstreamPersist("dmsg", nv.String())
+		},
+	}, {
+		Path: "skynet_web.enable",
+		Desc: "run the .skynet resolving proxy",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			return v.setEmbeddedProxyEnabledPersist("skynet", nv.Bool())
+		},
+	}, {
+		Path: "skynet_web.proxy_addr",
+		Desc: "SOCKS5 bind address for the .skynet resolving proxy — \"\" is loopback (also enables it)",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			return v.SetEmbeddedProxyBind("skynet", nv.String())
+		},
+	}, {
+		Path: "skynet_web.upstream_socks",
+		Desc: "SOCKS5 upstream the .skynet proxy forwards non-matching CONNECTs to",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			return v.setEmbeddedProxyUpstreamPersist("skynet", nv.String())
 		},
 	},
 }
@@ -462,6 +530,14 @@ func resolveConfigTarget(root reflect.Value, path string) (*configTarget, error)
 		}
 		field, ok := fieldByJSONTag(block, seg.name)
 		if !ok {
+			// A field the block MARSHALS but tags `json:"-"` is a mirror of
+			// state that lives somewhere else (dmsg.sessions_count and its
+			// siblings mirror Dmsg.Deployments, and are documented read-only
+			// after unmarshal). It shows up in `config show`, so "no field"
+			// reads as a lie. Say what it actually is.
+			if mirroredJSONField(block, seg.name) {
+				return nil, fmt.Errorf("%s is a read-only mirror of state held elsewhere in the config and cannot be set by path", path)
+			}
 			return nil, fmt.Errorf("unknown config path %q (no field %q)", path, seg.name)
 		}
 		cur = field
@@ -653,4 +729,77 @@ func marshalConfigValue(v reflect.Value) (json.RawMessage, error) {
 		return json.RawMessage("null"), nil
 	}
 	return json.Marshal(v.Interface())
+}
+
+// setEmbeddedProxyEnabledPersist / setEmbeddedProxyUpstreamPersist apply a
+// resolving-proxy field to the RUNNING resolver and then write it down.
+//
+// The runtime setters in api_proxies.go are split on persistence:
+// SetEmbeddedProxyBind documents that it persists, while SetEmbeddedProxyEnabled
+// and SetEmbeddedProxyUpstream only touch the running resolver — `proxies set`
+// is a runtime command, and that is a defensible thing for it to be. `config
+// set` is not: its whole contract is that the value is now the config. So the
+// flush lives here rather than changing what `proxies set` means.
+func (v *Visor) setEmbeddedProxyEnabledPersist(kind string, enable bool) error {
+	if err := v.SetEmbeddedProxyEnabled(kind, enable); err != nil {
+		return err
+	}
+	switch kind {
+	case "dmsg":
+		if v.conf.DmsgWeb == nil {
+			v.conf.DmsgWeb = &visorconfig.DmsgWebConfig{}
+		}
+		v.conf.DmsgWeb.Enable = enable
+	case "skynet":
+		if v.conf.SkynetWeb == nil {
+			v.conf.SkynetWeb = &visorconfig.SkynetWebConfig{}
+		}
+		v.conf.SkynetWeb.Enable = enable
+	default:
+		return fmt.Errorf("unknown proxy kind %q", kind)
+	}
+	return v.conf.Flush()
+}
+
+func (v *Visor) setEmbeddedProxyUpstreamPersist(kind, addr string) error {
+	if err := v.SetEmbeddedProxyUpstream(kind, addr); err != nil {
+		return err
+	}
+	switch kind {
+	case "dmsg":
+		if v.conf.DmsgWeb == nil {
+			v.conf.DmsgWeb = &visorconfig.DmsgWebConfig{}
+		}
+		v.conf.DmsgWeb.UpstreamSOCKS = addr
+	case "skynet":
+		if v.conf.SkynetWeb == nil {
+			v.conf.SkynetWeb = &visorconfig.SkynetWebConfig{}
+		}
+		v.conf.SkynetWeb.UpstreamSOCKS = addr
+	default:
+		return fmt.Errorf("unknown proxy kind %q", kind)
+	}
+	return v.conf.Flush()
+}
+
+// mirroredJSONField reports whether the block has a field NAMED for this JSON
+// key but tagged `json:"-"` — a mirror the block's own MarshalJSON writes out
+// while the canonical value lives elsewhere. Matched on the Go field name in
+// UpperCamel, which is how every such mirror in the config is spelled.
+func mirroredJSONField(block reflect.Value, name string) bool {
+	want := strings.ReplaceAll(strings.Title(strings.ReplaceAll(name, "_", " ")), " ", "") //nolint:staticcheck // ASCII config keys
+	t := block.Type()
+	for i := 0; i < t.NumField(); i++ {
+		sf := t.Field(i)
+		if sf.PkgPath != "" {
+			continue
+		}
+		if strings.Split(sf.Tag.Get("json"), ",")[0] != "-" {
+			continue
+		}
+		if strings.EqualFold(sf.Name, want) {
+			return true
+		}
+	}
+	return false
 }
