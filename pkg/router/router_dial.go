@@ -1313,8 +1313,8 @@ fetchRoutesAgain:
 	// headroom for disjoint-pick overlap) so --forward-mux/--reverse-mux
 	// above 3 actually get enough disjoint routes. Zero mux → 0 →
 	// finder uses its default.
-	fwdNum := findRouteNum(opts.EffectiveMuxRoutes(true))
-	revNum := findRouteNum(opts.EffectiveMuxRoutes(false))
+	fwdNum := findRouteNumFor(opts.EffectiveMuxRoutes(true), opts)
+	revNum := findRouteNumFor(opts.EffectiveMuxRoutes(false), opts)
 
 	// A destination this visor already holds a graph for (a hypervisor's
 	// attached visors) is routed locally first; the route finder is asked
@@ -2585,6 +2585,42 @@ func findRouteNum(mux int) uint16 {
 	return uint16(n) //nolint:gosec // clamped to MaxUint16 above
 }
 
+// findRouteNumFor is findRouteNum with the DIAL in view, because a diversify
+// dial needs a different number than a mux dial does.
+//
+// findRouteNum sizes the request off the mux degree: how many legs this one
+// route group wants. A standby-pool fill asks for mux 1 and therefore for
+// dial.candidates = 3 routes — and it asks that same question thirty-two times
+// in a row while excluding what it already holds. The finder answers
+// rank-ordered, so those three are the same three every time: the pool re-sees
+// its own lowest-latency route, every candidate is refused as a held first hop,
+// and the fill settles far below a topology that has hundreds of distinct
+// intermediates to offer (measured 2026-09-18: 1,332 transports over 662
+// distinct peers, a pool of 32 tunnels over 4 transports).
+//
+// So a dial that is explicitly diversifying — the pool fill sets both
+// DiversifyTransports and RequireDisjointFirstHop — asks for a WINDOW instead
+// of a top-N: dial.diversify_candidates routes, defaulting to 20, which is
+// also the route finder's own per-request ceiling today. The mux-degree
+// calculation still applies and still wins when it asks for more — including
+// mux 0, where the window replaces the "let the finder pick its own default"
+// sentinel, because a dial that is diversifying needs alternatives whether or
+// not it is also muxing.
+func findRouteNumFor(mux int, opts *DialOptions) uint16 {
+	n := findRouteNum(mux)
+	if opts == nil || !opts.DiversifyTransports || !opts.RequireDisjointFirstHop {
+		return n
+	}
+	want := DialDiversifyCandidates()
+	if want > math.MaxUint16 {
+		want = math.MaxUint16
+	}
+	if uint16(want) > n { //nolint:gosec // clamped to MaxUint16 above
+		return uint16(want) //nolint:gosec // clamped to MaxUint16 above
+	}
+	return n
+}
+
 // buildHopLookups constructs TpID → avg-latency-ms and TpID →
 // transport-type lookups over the union of TpIDs appearing in fwd
 // and rev path candidates. Sources, in preference order:
@@ -2939,6 +2975,67 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 
 	log.Debugf("Found %d local transports", len(localTps))
 
+	// The first-hop exclusions this dial is JUDGED against, applied here where
+	// the first hop is chosen.
+	//
+	// The caller re-checks whatever this returns with firstHopExcluded and
+	// throws the path away when it leaves over a hop a sibling tunnel already
+	// holds. A local calc that ignores the exclusions therefore does not merely
+	// waste a BFS — it returns the SAME refused path on every dial of a pool
+	// fill, so the pool never discovers the first hops it has not used yet and
+	// settles at a handful of tunnels over one transport.
+	//
+	// ExcludeTransportIDs was already honoured, but only for the direct probe
+	// below. These extend it to the PEER and its IP — one host answers on
+	// stcpr, squicr and sudph alike, and all three ride the same link — and to
+	// the multi-hop BFS.
+	var (
+		exclTpID  map[uuid.UUID]struct{}
+		exclPeer  map[cipher.PubKey]struct{}
+		exclHopIP map[string]struct{}
+	)
+	if dialOpts != nil {
+		if len(dialOpts.ExcludeTransportIDs) > 0 {
+			exclTpID = make(map[uuid.UUID]struct{}, len(dialOpts.ExcludeTransportIDs))
+			for _, id := range dialOpts.ExcludeTransportIDs {
+				exclTpID[id] = struct{}{}
+			}
+		}
+		if len(dialOpts.ExcludeFirstHopPeers) > 0 {
+			exclPeer = make(map[cipher.PubKey]struct{}, len(dialOpts.ExcludeFirstHopPeers))
+			for _, pk := range dialOpts.ExcludeFirstHopPeers {
+				exclPeer[pk] = struct{}{}
+			}
+		}
+		if len(dialOpts.ExcludeFirstHopIPs) > 0 {
+			exclHopIP = make(map[string]struct{}, len(dialOpts.ExcludeFirstHopIPs))
+			for _, ip := range dialOpts.ExcludeFirstHopIPs {
+				exclHopIP[ip] = struct{}{}
+			}
+		}
+	}
+	hasFirstHopExclusions := len(exclTpID) > 0 || len(exclPeer) > 0 || len(exclHopIP) > 0
+	// localFirstHopHeld reports whether a sibling tunnel already leaves over
+	// this local transport — by ID, by peer, or by the peer's IP.
+	localFirstHopHeld := func(tp localTpRef) bool {
+		if _, bad := exclTpID[tp.id]; bad {
+			return true
+		}
+		if _, bad := exclPeer[tp.remotePK]; bad {
+			return true
+		}
+		if len(exclHopIP) > 0 && r.tm != nil {
+			if mt := r.tm.Transport(tp.id); mt != nil {
+				if ip := mt.RemoteIP(); ip != "" {
+					if _, bad := exclHopIP[ip]; bad {
+						return true
+					}
+				}
+			}
+		}
+		return false
+	}
+
 	// Skip the direct (1-hop) probe when the caller asked for
 	// MinHops >= 2 — they want a non-direct path. Use the MAX of
 	// per-direction MinHops since local-BFS mirrors forward to reverse
@@ -2967,17 +3064,12 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 				log.Debugf("Skipping DMSG transport %s (excluded for mux)", tp.id)
 				continue
 			}
-			// Skip excluded transport IDs (used by mux to get different transports)
-			excluded := false
-			if dialOpts != nil {
-				for _, exID := range dialOpts.ExcludeTransportIDs {
-					if tp.id == exID {
-						excluded = true
-						break
-					}
-				}
-			}
-			if excluded {
+			// Skip a first hop a sibling tunnel already holds — by transport ID
+			// (used by mux to get different transports), by peer, or by IP. On
+			// the direct route the first hop IS the destination, so a pool that
+			// already holds the direct tunnel excludes the exit as a peer and
+			// this is the check that stops the fill cloning it.
+			if localFirstHopHeld(tp) {
 				log.Debugf("Skipping excluded transport %s to destination", tp.id)
 				dialOpts.note("local: skipped excluded direct tp %s", tp.id.String()[:8])
 				continue
@@ -3135,7 +3227,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		memoKey localRouteKey
 		// Transport-ID exclusions shape the answer too (a diversify dial's first-hop
 		// exclusions), so a dial carrying them must not be served another dial's path.
-		memoEnabled = len(excludeIntermediates) == 0 && (dialOpts == nil || len(dialOpts.ExcludeTransportIDs) == 0) && r.localRoutes != nil && snapGen != 0
+		memoEnabled = len(excludeIntermediates) == 0 && !hasFirstHopExclusions && r.localRoutes != nil && snapGen != 0
 		localSig    uint64
 	)
 	if memoEnabled {
@@ -3152,7 +3244,28 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		}
 	}
 
-	best, level, found := localRouteBFS(src, dst, localTps, localBFSGraph{
+	// The BFS starts from this visor's own transports, so a held first hop is
+	// not a starting point. Falling back to the unfiltered set when every hop
+	// is held keeps the documented soft-preference behaviour: a dial with
+	// nowhere else to go still gets an answer, and the caller's own gate
+	// decides whether to use it.
+	bfsTps := localTps
+	if hasFirstHopExclusions {
+		keep := make([]localTpRef, 0, len(localTps))
+		for _, tp := range localTps {
+			if !localFirstHopHeld(tp) {
+				keep = append(keep, tp)
+			}
+		}
+		if len(keep) > 0 {
+			bfsTps = keep
+			dialOpts.note("local: %d of %d first hops free after exclusions", len(keep), len(localTps))
+		} else {
+			dialOpts.note("local: all %d first hops held; searching them anyway", len(localTps))
+		}
+	}
+
+	best, level, found := localRouteBFS(src, dst, bfsTps, localBFSGraph{
 		byEdge:         transportsByEdge,
 		latencyByID:    tpLatencyMs,
 		typeByID:       tpTypeOf,

@@ -348,6 +348,36 @@ func (v *Visor) DisableHypervisorUIPersist(persist bool) error {
 	return nil
 }
 
+// SetHypervisorAuthPersist turns the hypervisor web UI's login requirement on
+// or off without restarting the visor, and optionally writes it to the config.
+// Only the UI's HTTP listener is cycled; see Hypervisor.SetAuth.
+func (v *Visor) SetHypervisorAuthPersist(enable, persist bool) error {
+	if v.hvInstance == nil {
+		return v.hvNotReadyErr()
+	}
+	if err := v.hvInstance.SetAuth(enable); err != nil {
+		return err
+	}
+	if persist {
+		if v.conf.Hypervisor == nil {
+			config := visorconfig.DefaultHypervisorConfig()
+			v.conf.Hypervisor = &config
+		}
+		v.conf.Hypervisor.EnableAuth = enable
+		return v.conf.Flush()
+	}
+	return nil
+}
+
+// IsHypervisorAuthEnabled reports whether the hypervisor web UI requires a
+// login right now. False when this visor runs no hypervisor.
+func (v *Visor) IsHypervisorAuthEnabled() bool {
+	if v.hvInstance == nil {
+		return false
+	}
+	return v.hvInstance.AuthEnabled()
+}
+
 // persistHypervisorUIDisabled writes the web-UI disable state to the config.
 func (v *Visor) persistHypervisorUIDisabled(disable bool) error {
 	if v.conf.Hypervisor == nil {

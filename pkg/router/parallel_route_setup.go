@@ -254,8 +254,8 @@ func (r *router) fetchCandidateRoutes(
 
 	// Request enough candidates to actually have K to race — the mux degree
 	// OR k + headroom, whichever is larger.
-	num := findRouteNum(opts.EffectiveMuxRoutes(true))
-	if rn := findRouteNum(opts.EffectiveMuxRoutes(false)); rn > num {
+	num := findRouteNumFor(opts.EffectiveMuxRoutes(true), opts)
+	if rn := findRouteNumFor(opts.EffectiveMuxRoutes(false), opts); rn > num {
 		num = rn
 	}
 	wantK := uint16(k + muxRouteHeadroom) //nolint:gosec // k is clamped small

@@ -159,6 +159,7 @@ var (
 	DialThroughputPriorScale = RegisterScale("dial.throughput_prior_scale", 1.0, "multiplier on the MEASURED-throughput ranking band; 0 ranks on RTT alone")
 	DialCandidates           = RegisterMin("dial.candidates", KindCount, 3, 1, "floor on how many routes a mux dial asks the route finder for")
 	DialCandidateHeadroom    = RegisterZeroable("dial.candidate_headroom", KindCount, 2, "extra routes requested on top of the mux degree so the disjoint pick can still reach its target; 0 asks for exactly the degree")
+	DialDiversifyCandidates  = RegisterMin("dial.diversify_candidates", KindCount, 20, 1, "routes a DIVERSIFY dial (a standby-pool fill) asks the route finder for: the pool needs a candidate the tunnels it already holds do not use, and the rank-ordered top few are exactly the ones they do")
 	DialForegroundMux        = RegisterMin("dial.foreground_mux", KindCount, 16, 1, "how many mux legs are established SYNCHRONOUSLY at dial time before the background self-heal fills the rest")
 	DialTunnelLegs           = RegisterSigned("dial.tunnel_legs", KindCount, 0, -1, "legs an app tunnel is dialed with: 0 = exactly what the app asked for, -1 = the visor's mux width, n = n legs (per-app scopeable)")
 	DeadRouteYoungAge        = RegisterMin("route.dead_young_age", KindDuration, int64(12*time.Second), int64(time.Second), "how soon after dial a route's death counts as evidence the route is dead rather than a normal teardown")

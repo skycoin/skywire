@@ -45,6 +45,8 @@ type API interface {
 	EnableHypervisorUIPersist(persist bool) error
 	DisableHypervisorUIPersist(persist bool) error
 	IsHypervisorUIServing() bool
+	SetHypervisorAuthPersist(enable, persist bool) error
+	IsHypervisorAuthEnabled() bool
 	DmsgPortHits() []dmsg.PortHit
 	Uptime() (float64, error)
 	UptimeHistory(args UptimeHistoryArgs) (*UptimeHistoryResponse, error)
