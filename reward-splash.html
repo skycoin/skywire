@@ -1,0 +1,75 @@
+<!doctype html>
+<!--
+  Deployment artifact — NOT served by the reward server. Place this at the Caddy
+  webroot for theskywirenetwork.net so the clearnet entry point is a small,
+  crawlable splash that hands off to the wasm visor (which reaches the reward UI
+  over dmsg). See docs/project_wasm_deeplink_gateway / docs/skynet-browser.md.
+
+  Why a splash and not a hard 302:
+    - SEO: crawlers can't run the wasm visor + dmsg; this page has real,
+      indexable content and a <link rel="canonical">.
+    - UX: the wasm visor takes ~7-10s to boot + connect dmsg; a splash gives a
+      "connecting…" state and a manual button instead of a 10s blank page.
+
+  Example Caddyfile:
+    theskywirenetwork.net {
+      root * /var/www/skywire-splash
+      handle / { file_server }                 # this file
+      handle /api/* { reverse_proxy <reward-server-upstream> }   # graph/API still served
+      handle { redir https://skywire.theskywirenetwork.net/?skynet=rewards.dmsg&kiosk=1 }
+    }
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0e0c14">
+  <title>Skywire Network — the decentralized internet</title>
+  <meta name="description" content="Skywire is a decentralized, peer-to-peer mesh network. This page opens the Skywire Network reward system inside a keyless in-browser visor, reached entirely over the mesh — no server, no account.">
+  <meta name="keywords" content="Skycoin, Skywire, mesh network, dmsg, decentralized internet, rewards, transport bandwidth">
+  <link rel="canonical" href="https://theskywirenetwork.net/">
+  <meta property="og:title" content="Skywire Network — the decentralized internet">
+  <meta property="og:description" content="Open the Skywire reward system in a keyless in-browser visor, reached over the peer-to-peer mesh.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://theskywirenetwork.net/">
+  <meta property="og:image" content="https://theskywirenetwork.net/favicon.ico">
+  <!-- Fallback redirect for no-JS clients; the button + script below are the primary path. -->
+  <noscript><meta http-equiv="refresh" content="3;url=https://skywire.theskywirenetwork.net/?skynet=rewards.dmsg&amp;kiosk=1"></noscript>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+           background:#0e0c14; color:#cdd2da; font:16px/1.6 system-ui,-apple-system,sans-serif; text-align:center; }
+    main { max-width:560px; padding:2rem 1.5rem; }
+    h1 { color:#9d7cff; font-size:1.8rem; margin:0 0 .4rem; }
+    p { opacity:.85; }
+    a.btn { display:inline-block; margin-top:1.2rem; padding:.7em 1.4em; background:#9d7cff; color:#0e0c14;
+            font-weight:600; text-decoration:none; border-radius:8px; }
+    .sub { margin-top:1rem; font-size:.85rem; opacity:.6; }
+    .spin { display:inline-block; width:14px; height:14px; border:2px solid #2a2342; border-top-color:#9d7cff;
+            border-radius:50%; animation:s 1s linear infinite; vertical-align:-2px; margin-right:.4em; }
+    @keyframes s { to { transform:rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Skywire Network</h1>
+    <p>
+      Skywire is a decentralized, peer-to-peer mesh network. The reward system and
+      network stats live on the mesh — served over <b>dmsg</b>, not the clearnet web.
+    </p>
+    <p class="sub"><span class="spin"></span>Opening in a keyless in-browser visor…</p>
+    <a class="btn" href="https://skywire.theskywirenetwork.net/?skynet=rewards.dmsg&amp;kiosk=1">Open Skywire</a>
+    <p class="sub">
+      Runs a full Skywire visor in your browser tab and fetches the reward UI over the
+      mesh. No install, no account. First load takes a few seconds to connect.
+    </p>
+  </main>
+  <script>
+    // Redirect after a short beat so the splash is visible + crawlable, then hand off
+    // to the wasm visor deep-link. Users who prefer can click the button immediately.
+    setTimeout(function () {
+      location.href = "https://skywire.theskywirenetwork.net/?skynet=rewards.dmsg&kiosk=1";
+    }, 2500);
+  </script>
+</body>
+</html>

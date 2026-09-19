@@ -1,0 +1,2800 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Skywire — peer-to-peer encrypted networking">
+      
+      
+      
+        <link rel="canonical" href="https://skycoin.github.io/skywire/design/route-multiplexing-test-plan/">
+      
+      
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.50">
+    
+    
+      
+        <title>Route multiplexing test plan - Skywire</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.a40c8224.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#route-multiplexing-the-live-campaign-to-finish-it" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Skywire" class="md-header__button md-logo" aria-label="Skywire" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Skywire
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Route multiplexing test plan
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/skycoin/skywire" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    skycoin/skywire
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../guides/" class="md-tabs__link">
+        
+  
+    
+  
+  Guides
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../skywire/" class="md-tabs__link">
+        
+  
+    
+  
+  Command Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../apps-overview/" class="md-tabs__link">
+          
+  
+    
+  
+  Apps
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../packaging/" class="md-tabs__link">
+          
+  
+    
+  
+  Packaging & Updates
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../specs/" class="md-tabs__link">
+        
+  
+    
+  
+  Specs
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../graph/" class="md-tabs__link">
+        
+  
+    
+  
+  Code Graph
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../glossary/" class="md-tabs__link">
+        
+  
+    
+  
+  Glossary
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../rewards/" class="md-tabs__link">
+        
+  
+    
+  
+  Rewards
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="https://blog.theskywirenetwork.net" class="md-tabs__link">
+        
+  
+    
+  
+  Blog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Skywire" class="md-nav__button md-logo" aria-label="Skywire" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Skywire
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/skycoin/skywire" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    skycoin/skywire
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guides
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skywire/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Apps
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Apps
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../apps-overview/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../pty/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    PTY
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            PTY
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../pty/skywire-pty/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Mode 1 — the visor-hosted pty (skywire cli pty)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../pty/standalone-pty/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Modes 2 &amp; 3 — the standalone pty (skywire app pty)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../skychat/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Skychat
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3">
+            <span class="md-nav__icon md-icon"></span>
+            Skychat
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skychat/skychat-visor/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Visor-hosted skychat (skywire cli skychat)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skychat/standalone-skychat/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Standalone skychat — TCP-direct &amp; CXO
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_4" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../skynet/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    SkyNet
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4_4" id="__nav_4_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_4">
+            <span class="md-nav__icon md-icon"></span>
+            SkyNet
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skynet/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SkyNet client
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_5" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../skysocks/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    SOCKS5 Proxy
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4_5" id="__nav_4_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_5">
+            <span class="md-nav__icon md-icon"></span>
+            SOCKS5 Proxy
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skysocks/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SOCKS5 proxy — client (skysocks-client)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_6" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../vpn/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    VPN
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4_6" id="__nav_4_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_6">
+            <span class="md-nav__icon md-icon"></span>
+            VPN
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../vpn/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    VPN client (vpn-client)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../vpn/router/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    VPN router (vpn-router)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../packaging/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Packaging & Updates
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Packaging & Updates
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../packaging/auto-update/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Auto-Update
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../packaging/aur-packages/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AUR Packages
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../specs/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Specs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graph/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Code Graph
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../glossary/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Glossary
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../rewards/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Rewards
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://blog.theskywirenetwork.net" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Blog
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#0-where-it-stands" class="md-nav__link">
+    <span class="md-ellipsis">
+      0. Where it stands
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0b-the-intended-default-in-the-operators-words" class="md-nav__link">
+    <span class="md-ellipsis">
+      0b. The intended default, in the operator's words
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-exit-criteria-measured-live" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Exit criteria, measured live
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-the-rig-frozen-and-repeatable" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. The rig, frozen and repeatable
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2b-sweeping-a-value-without-a-redeploy" class="md-nav__link">
+    <span class="md-ellipsis">
+      2b. Sweeping a value without a redeploy
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2b. Sweeping a value without a redeploy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-a-knob-decision-is-made-since-2026-09-18" class="md-nav__link">
+    <span class="md-ellipsis">
+      How a knob decision is made, since 2026-09-18
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-the-work-in-order-each-step-judged-by-the-rig" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. The work, in order, each step judged by the rig
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. The work, in order, each step judged by the rig">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-bound-what-is-in-flight-per-leg" class="md-nav__link">
+    <span class="md-ellipsis">
+      3.1 Bound what is in flight per leg
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-make-the-scheduler-predict-arrival-not-throughput" class="md-nav__link">
+    <span class="md-ellipsis">
+      3.2 Make the scheduler predict arrival, not throughput
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-the-frontier-stop-waiting-on-the-slowest-leg" class="md-nav__link">
+    <span class="md-ellipsis">
+      3.3 The frontier: stop waiting on the slowest leg
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-liveness-and-stability-finished" class="md-nav__link">
+    <span class="md-ellipsis">
+      3.4 Liveness and stability, finished
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35-direction-proven" class="md-nav__link">
+    <span class="md-ellipsis">
+      3.5 Direction, proven
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#36-the-default-decided-by-the-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      3.6 The default, decided by the table
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-milestones" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Milestones
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-the-safety-net-not-the-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      Appendix: the safety net (not the work)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#results-2026-09-1617-live-campaign" class="md-nav__link">
+    <span class="md-ellipsis">
+      Results (2026-09-16/17 live campaign)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Results (2026-09-16/17 live campaign)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-rig-and-the-method" class="md-nav__link">
+    <span class="md-ellipsis">
+      The rig and the method
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/skycoin/skywire/edit/develop/docs/design/route-multiplexing-test-plan.md" title="Edit this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<p>| striped upload | <code>upload.stripe_min_bytes</code> · <code>upload.chunk_bytes</code> · <code>upload.mem_bytes</code> · <code>upload.concurrency</code> · <code>upload.replay_max_bytes</code> · <code>upload.probe_ttl</code> |
+| upload retries | <code>upload.ack_timeout</code> · <code>upload.idle_timeout</code> · <code>upload.durable_wait</code> · <code>upload.resend_passes</code> · <code>upload.early_tries</code> · <code>upload.early_wait_max</code> · <code>upload.busy_backoff</code> · <code>upload.busy_tries</code> · <code>upload.cut_tries</code> · <code>upload.replay_tries</code> |</p>
+<h1 id="route-multiplexing-the-live-campaign-to-finish-it">Route multiplexing: the live campaign to finish it<a class="headerlink" href="#route-multiplexing-the-live-campaign-to-finish-it" title="Permalink">&para;</a></h1>
+<p>Status: plan, 2026-09-15. To be taken up after v1.3.94. "Tested" here means
+tested live, on the fleet, until the implementation is actually right; the
+unit and CI material is an appendix, because it is the safety net, not the
+work.</p>
+<h2 id="0-where-it-stands">0. Where it stands<a class="headerlink" href="#0-where-it-stands" title="Permalink">&para;</a></h2>
+<p>What works, proven live:</p>
+<ul>
+<li>packet-level striping in both directions (exit and node both spray across
+  legs), transport-disjoint legs, same-LAN artifact legs rejected (#4253);</li>
+<li>route setup stands up N disjoint legs without a rebuild (#4116, #4131);</li>
+<li>the retransmit storm is gone (#4399: per-seq backoff, RTT-floored RACK);</li>
+<li>the reorder buffer never skips (#4005), so the noise stream is never
+  corrupted;</li>
+<li>a single black-holing leg is probed and replaced (#4247); latency-band
+  admission parks outliers (#4248); ECF is the default scheduler with a
+  baseline-RTT BDP, congestion shed and a cold budget (#4254);</li>
+<li>per-direction leg assignment with a load-driven flip exists (#4304, #4305)
+  but its live demo never happened: the exit was still on the previous build;</li>
+<li>the rig exists: <code>proxy loadtest serve/run</code>, <code>proxy mux info --ndjson</code>,
+  <code>proxy mux set/mode/cap/width/direction</code>, <code>visor state --via dmsg://&lt;exit&gt;</code>.</li>
+</ul>
+<p>What does not work, and is the whole point:</p>
+<ul>
+<li><strong>more legs = less throughput, monotonically, both directions</strong>, with
+  healthy converged legs and a healthy single-leg baseline:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>direction</th>
+<th>1 leg</th>
+<th>4 legs</th>
+<th>6 legs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>download (exit-scheduled)</td>
+<td>350 KB/s</td>
+<td>144</td>
+<td>12</td>
+</tr>
+<tr>
+<td>upload (client-scheduled)</td>
+<td>7.1 MB/s</td>
+<td>5.8</td>
+<td>3.5</td>
+</tr>
+</tbody>
+</table>
+<p>Send-side governance is ruled out (the upload row is scheduled entirely by
+  the node that has every fix). The mechanism is the global-sequence no-skip
+  frontier plus <strong>unbounded per-leg in-flight</strong>: nothing stops a slow leg's
+  queue from growing, the frontier waits on it, and every added leg is another
+  queue to wait on.
+- the false liveness teardown is only partly fixed (#4346 halved it; the rest
+  are conn-error reconnects driven by the same wedges);
+- the adaptive default has never been shown to beat a single route on the
+  same path, so "adaptive by default" is a belief, not a measurement.</p>
+<p>The only proof that aggregation is possible at all is a static hand-set mux
+of six homogeneous 175–312 ms legs that did about 2× a single leg, then was
+not touched. Everything dynamic loses to that.</p>
+<h2 id="0b-the-intended-default-in-the-operators-words">0b. The intended default, in the operator's words<a class="headerlink" href="#0b-the-intended-default-in-the-operators-words" title="Permalink">&para;</a></h2>
+<p>Stated 2026-09-15, and it is the specification the rest of this document serves:</p>
+<ul>
+<li>Forward traffic goes over a direct route when one exists and is allowed;
+  otherwise over the lowest-latency route available. Reverse traffic fans out
+  over multiplexed multihop routes. Unidirectional whenever that is available.</li>
+<li>The direction switches on demand when upload bandwidth exceeds download
+  bandwidth.</li>
+<li>It always decays to a working connection, even if that ends up
+  bidirectional over a single transport or a single multihop route.</li>
+<li>Establish as many routes to the exit as can exist and hold them in standby,
+  so they can switch in at a moment's notice. That may be a lot of routes in
+  standby, and that is fine.</li>
+<li>The proxy already converts a GET into range requests when the server
+  supports it, so the reverse path carries many streams in parallel.</li>
+</ul>
+<p>Two consequences for the work below. First, the standby pool is large by
+design; the campaign tunes how standby legs are chosen, ordered and promoted,
+not how few there are. Second, the range-request case makes the reverse path
+a set of independent streams, and independent streams do not need to share
+one reorder frontier: pinning each stream to one leg (stream-to-leg affinity,
+ordered per leg, no cross-leg reassembly) aggregates across streams with no
+frontier at all, and is a smaller change than per-leg sequencing. A single
+large stream (a non-range download, a VPN flow) still needs the frontier work
+in §3.3, so both remain, with affinity first because it serves the case the
+proxy already produces.</p>
+<h2 id="1-exit-criteria-measured-live">1. Exit criteria, measured live<a class="headerlink" href="#1-exit-criteria-measured-live" title="Permalink">&para;</a></h2>
+<p>The campaign is done when all of the following hold on the rig in §2, for
+downloads and uploads, at 3, 10, 50 and 100 MB, five trials each:</p>
+<ol>
+<li><strong>Completes.</strong> 5/5, and the received bytes hash to the sent bytes.</li>
+<li><strong>Aggregates.</strong> N-leg goodput ≥ single-leg goodput on the same exit,
+   measured concurrently, for N = 2, 4, 6; and 6 ≥ 4 ≥ 2 within tolerance.
+   Anti-aggregation of any degree fails the criterion.</li>
+<li><strong>Stays up.</strong> The route group's local port is constant for the whole run
+   (no rebuild); leg changes carry a named reason and stay under a bound per
+   minute; no liveness teardown while any leg is live.</li>
+<li><strong>Does not amplify.</strong> Wire bytes / goodput ≤ 1.2 with no loss present;
+   retransmits obey the backoff.</li>
+<li>
+<p><strong>The default is the winner.</strong> Whatever policy ships as the default is the
+   one that won the table. If a single route wins on a path, the default
+   must fall back to a single route on that path, by measurement, not by
+   configuration.</p>
+</li>
+<li>
+<p><strong>Spread proven.</strong> Under a spread policy that caps any one route at 40 % of
+    the bytes and holds at least three routes, throughput ≥ 0.8 × the best
+    single reference and no route exceeds its cap, measured from both ends'
+    per-leg counters at 50 MB down and up; the policy is a live setting, not a
+    build. Design and bench set: <code>docs/design/route-spread-policy.md</code>.</p>
+</li>
+</ol>
+<p>Since <strong>v4 (2026-09-18)</strong> two of those bars are measured against the ENDPOINT
+rather than against another skywire number, so a campaign also runs
+<code>bench/run-ceiling.sh &lt;exit pk&gt; &lt;out dir&gt; [trials] [sink] [pins dir]</code>: <code>CEIL_N</code>
+(3) concurrent proxy clients, one 50 MB transfer alone and then all N at the
+same instant, uploads first and then downloads, every transfer hash-verified
+against the sink. It writes <code>ceiling.tsv</code> into the campaign directory — one row
+per (kind, clients, trial) carrying the sum, the per-client <code>route:rate</code> pairs
+and the hashes, plus a <code># ceiling</code> line per kind saying whether the sum grew
+from one client to N — and <code>bench/verdict.sh</code> takes the median of the concurrent
+sums as the uplink and the downlink ceiling. With no <code>ceiling.tsv</code> both verdicts
+keep the pre-v4 rule and print "no ceiling row": a ceiling quoted from an older
+campaign is not a bar, because the bars move by 2x inside an hour.</p>
+<p>The two kinds do <strong>not</strong> ride the same path, and that is the point. The uplink
+is the local card, so its N clients are <code>--direct</code> (9.04 alone / 10.70
+concurrent on 2026-09-16). The downlink over those same direct clients came out
+at 4.72 alone / 5.04 concurrent while one download through the best intermediate
+was doing 8–9.5 MB/s in the same hour: the direct stcpr path is <strong>itself</strong> the
+download bottleneck, so a downlink ceiling measured through it measures that
+path rather than the endpoint, and criterion 4 would clear it trivially. So the
+downlink clients are pinned to the <strong>N best distinct routes of the paired
+ranking</strong> — <code>paired-ref.tsv</code> when <code>bench/pick-ref.sh</code> has probed one, else
+<code>paired_rank</code>'s medians, read from the out dir and then its parent; slot 1 the
+best, slot 2 the second best, <code>direct</code> appended last when fewer than N ranked
+routes exist. One extra <code>uplink-via</code> row per trial uploads over the best via
+route alone, so the file also says whether the direct uplink is a bottleneck.</p>
+<p>Criterion 10's spread policy is <code>SPREAD=1 bench/run-mux.sh …</code>, which adds the
+<code>mux-spread-3</code> set — the default pool session, no pins and no <code>--tunnels</code>, with
+<code>SETTINGS="spread.max_share=0.4 spread.min_routes=3"</code> merged into whatever the
+campaign already sets, 50 MB down and up, paired like every other set and with
+no cut row (a cut moves bytes between routes mid-set, which is the quantity the
+cap measures). <code>bench/direction.sh</code> then turns both ends' per-leg counters into
+per-row shares and <code>mux-spread-3.assert.tsv</code> scores them: <code>routes_active &gt;= 3</code>,
+<code>max_share &lt;= 0.4 + chunk/size</code> (0.484 at 50 MB with a 4 MiB chunk — a scheduler
+placing whole chunks cannot land on 40.000 %), the paired ratio of each cell
+<code>&gt;= 0.8</code>, hashes n/n, and the policy itself recorded, so a knob the binary
+refused reads FAIL instead of passing as a measurement of the default.</p>
+<h2 id="2-the-rig-frozen-and-repeatable">2. The rig, frozen and repeatable<a class="headerlink" href="#2-the-rig-frozen-and-repeatable" title="Permalink">&para;</a></h2>
+<p>Everything the last campaign learned the hard way, fixed as procedure:</p>
+<ul>
+<li><strong>One controlled exit</strong> on Linode (02f9aa58… or 02ea1b80…), auto-update
+  timer stopped for the run, process uptime recorded at start and end so a
+  collapse can never again be blamed on a restart. Both ends run the <strong>same
+  commit</strong>; the deploy is the merge (fleet ripple) or, when the exit lags, the
+  manual binary copy recipe. Never start a run with mismatched ends.</li>
+<li><strong>Two clients on the node, same exit:</strong> A = one leg, the reference;
+  B = the subject with N legs. Dialed <strong>sequentially</strong>, each session confirmed
+  before the next (parallel dials contend in route setup and only one
+  connects). Pulled <strong>concurrently</strong>, so the exit's condition is the same for
+  both. B ≥ A is the test; A alone tells you the mesh's state that hour.</li>
+<li><strong>No reconfiguration during a run.</strong> Every <code>proxy mux set</code>, <code>mode</code>,
+  <code>width</code>, <code>cap</code> or policy change is its own run, from a fresh session.
+  <code>proxy start</code> on a live app drops its route; measuring mid-re-establishment
+  produced every false "storm" of the last campaign.</li>
+<li><strong>Measurement:</strong> <code>proxy loadtest run</code> NDJSON (goodput, gaps), <code>proxy mux
+  info --ndjson</code> every second, exit-side <code>visor state --via dmsg://&lt;exit&gt;</code>
+  before and after (per-leg sent/recv/retx are the decisive diagnostic;
+  logs are not). Results land in <code>bench/&lt;date&gt;/&lt;commit&gt;/</code> with the command
+  lines that produced them. From a <strong>public node</strong> for NAT-free numbers when
+  the question is the mesh, from this node when the question is the client.</li>
+<li><strong>A failed row is diagnosed where it fails.</strong> Beside the <code># exit-on-fail</code>
+  line every runner already writes into <code>&lt;set&gt;.recovery.tsv</code>, a failed row now
+  also gets a <code># blackout-capture &lt;row&gt;</code> line — <code>goroutines=&lt;n&gt;
+  readch_full=&lt;n&gt; write_timeout=&lt;n&gt; write_timeout_other=&lt;n&gt; rg_full=&lt;desc|none&gt;
+  upload_error=&lt;reason|-&gt;</code> — and the files it summarises:
+  <code>&lt;set&gt;.row&lt;row&gt;.goroutines-serve.txt</code> and <code>.goroutines-data.txt</code> (the shared
+  inbound loop and what it is parked on), <code>.intake.json</code> (<code>visor state --select
+  diag</code> <code>.intake</code>, whose <code>route_group_queues</code> names the group whose readCh is at
+  capacity), <code>.visorlog.tail</code>, and <code>.r.hdr</code> / <code>.r.body</code> — the failed transfer's
+  own answer, where a skysocks 502 names its cause in <code>X-Upload-Error</code>. Two
+  counters, not one: <code>write_timeout</code> counts only lines naming this set's traffic
+  (a route group, a leg, <code>writeMx</code>, a transport ID from <code>&lt;set&gt;.legs.json</code>) and
+  <code>write_timeout_other</code> holds the rest, because unrelated stcpr dials to public
+  visors time out all day and were once read as proof. The log is picked by
+  <strong>mtime</strong>, not by name — the newest sorted <code>skywire-*.log</code> is a rotated,
+  frozen file. These blackouts are a <strong>local</strong> receive-loop stall, not the
+  exit's, and the evidence clears within a minute, so the capture runs first on
+  the failing row, before the exit-side snapshot; it is bounded to ~60 s and
+  <code>BLACKOUT=0</code> turns it off (bench/lib-blackout.sh).</li>
+<li><strong>The cut row cuts something that was carrying.</strong> <code>run-standby.sh</code>'s chaos row
+  picks the busiest ACTIVE tunnel that passes the restore fences — carrier
+  growth orders the active candidates rather than choosing among all of them —
+  and records <code>cut_target_role</code> in the cut log and the assert table. Cutting a
+  standby tunnel takes out a few hundred bytes of keepalives, needs no promotion
+  to recover and proves nothing about recovery, so when no active tunnel passes
+  the fences the run says so and <code>promote_event</code> drops to INFO instead of
+  failing a session that was never asked to promote.</li>
+<li><strong>Hygiene:</strong> never remove transports the operator's own proxy uses; never
+  let a same-LAN or NAT-hairpin leg into a subject group; watch the exit's
+  own leg counters, because the exit runs its own scheduler.</li>
+<li><strong>The baseline table first.</strong> Before any change: v1.3.94, the full grid of
+  §1, both directions. Every later run is a diff against it.</li>
+<li><strong>References, unattended:</strong> <code>bench/run-refs.sh &lt;exit&gt; bench/&lt;date&gt;/&lt;commit&gt;
+  &lt;pins&gt;</code> takes the direct references (stcpr, squicr; a <code>--direct</code> proxy each,
+  <code>route settings --prefer</code> choosing the carrier) and one proxy per pinned
+  two-hop route (<code>proxy start --route &lt;pin&gt;</code>, the session on exactly that leg),
+  ten transfers per size and direction, each hash-verified, with the carrier
+  transport's byte deltas recorded per row and the exit-side hop-2 deltas per
+  set. A pin lands only once the setup nodes run #4923 (a folded dmsg-server
+  visor as an intermediate) and the client #4924 (<code>--route</code> dials a routed
+  group instead of the AppDirect shortcut); <code>skywire cli proxy mux info -n
+  &lt;session&gt; -v</code> must show the pinned first-hop transport as the only leg.</li>
+</ul>
+<h2 id="2b-sweeping-a-value-without-a-redeploy">2b. Sweeping a value without a redeploy<a class="headerlink" href="#2b-sweeping-a-value-without-a-redeploy" title="Permalink">&para;</a></h2>
+<p>Six of the eight rig cycles of 2026-09-16/17 changed a NUMBER, not a formula,
+and each still cost a rebuild, a binary push and a restart — roughly three hours
+of the two-day window spent deploying constants. <code>proxy settings</code> and the mux
+half of <code>route settings</code> remove that cost: the value lives in an atomic the use
+site re-reads, the visor holds the set per app, and a running skysocks-client
+PULLS it on the keepalive tick it already runs (one <code>tunnel.probe_interval</code>,
+5 s by default). A knob PERSISTS (since 2026-09-18): it outlives <code>proxy stop</code>
+and the app restart it implies, and the visor writes the set to its config
+(<code>app_settings</code>) so it outlives the visor too — <code>proxy settings --reset</code> is the
+one thing that forgets one. A run that sets nothing is byte-for-byte the old
+binary.</p>
+<p><strong>Client knobs — <code>skywire cli proxy settings [--app skysocks-client]</code></strong></p>
+<table>
+<thead>
+<tr>
+<th>group</th>
+<th>knobs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>standby pool</td>
+<td><code>pool.fill_interval</code> · <code>pool.retry_backoff_base</code> · <code>pool.retry_backoff_max</code> · <code>pool.retry_rounds</code> · <code>pool.standby_rtt_stale</code></td>
+</tr>
+<tr>
+<td>tunnel promoter</td>
+<td><code>tunnel.promote_interval</code> · <code>tunnel.promote_margin</code> · <code>tunnel.promote_hold</code> · <code>tunnel.park_min_hold</code> · <code>tunnel.audition_window</code> · <code>tunnel.audition_every</code></td>
+</tr>
+<tr>
+<td>probing and metering</td>
+<td><code>tunnel.probe_interval</code> · <code>tunnel.liveness_interval</code> · <code>tunnel.rtt_alpha</code> · <code>tunnel.meter_sample_min</code> · <code>tunnel.meter_cap_decay</code> · <code>tunnel.meter_fresh</code> · <code>tunnel.exit_open_penalty</code></td>
+</tr>
+<tr>
+<td>range-split</td>
+<td><code>chunk.max_bytes</code> · <code>chunk.concurrency</code> · <code>chunk.tunnel_concurrency</code> · <code>chunk.retry_budget</code> · <code>chunk.idle_timeout</code> · <code>chunk.free_retries</code> · <code>chunk.outstanding_factor</code></td>
+</tr>
+<tr>
+<td>chunk plan</td>
+<td><code>chunk.probe_bytes</code> · <code>chunk.min_bytes</code> · <code>chunk.per_tunnel</code></td>
+</tr>
+<tr>
+<td>snub</td>
+<td><code>tunnel.snub_after</code> · <code>tunnel.snub_hold</code></td>
+</tr>
+<tr>
+<td>queue depth</td>
+<td><code>chunk.depth_dynamic</code> · <code>upload.depth_dynamic</code> · <code>chunk.depth_min</code> · <code>chunk.depth_max</code> · <code>tunnel.depth_margin</code></td>
+</tr>
+<tr>
+<td>striped upload</td>
+<td><code>upload.stripe_min_bytes</code> · <code>upload.chunk_bytes</code> · <code>upload.mem_bytes</code> · <code>upload.concurrency</code> · <code>upload.replay_max_bytes</code> · <code>upload.probe_ttl</code></td>
+</tr>
+<tr>
+<td>upload retries</td>
+<td><code>upload.ack_timeout</code> · <code>upload.idle_timeout</code> · <code>upload.durable_wait</code> · <code>upload.resend_passes</code> · <code>upload.early_tries</code> · <code>upload.early_wait_max</code> · <code>upload.busy_backoff</code> · <code>upload.busy_tries</code> · <code>upload.cut_tries</code> · <code>upload.replay_tries</code></td>
+</tr>
+<tr>
+<td>spread policy (v4)</td>
+<td><code>spread.max_share</code> · <code>spread.min_routes</code> · <code>spread.endgame</code> · <code>spread.weight</code></td>
+</tr>
+<tr>
+<td>tunnel shape (live twins of the boot flags)</td>
+<td><code>tunnel.count</code> · <code>pool.size</code> · <code>range.port</code></td>
+</tr>
+<tr>
+<td>pool control</td>
+<td><code>pool.freeze</code> · <code>pool.exclude_pks</code> · <code>pool.require_tp_types</code></td>
+</tr>
+<tr>
+<td>per-app mux width</td>
+<td><code>mux.cap</code> · <code>mux.width</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>chunk.max_bytes</code>, <code>chunk.concurrency</code>, <code>range.port</code>, <code>tunnel.count</code> and
+<code>pool.size</code> OVERRIDE the boot flags (<code>--range-chunk-kib</code>,
+<code>--range-concurrency</code>, <code>--range-port</code>, <code>--tunnels</code>, <code>--standby-pool</code>): unset,
+the flag still wins. The last two describe a SHAPE rather than a value, so a
+change is reconciled on the tick it lands — <code>tunnel.count</code> by promoting from
+the pool or parking the worst idle active tunnel, <code>pool.size</code> by growing on the
+next fill or giving up the worst STANDBY tunnels above the new ceiling (never
+an active one). Neither restarts the app.</p>
+<p><code>pool.freeze</code> (default false) holds the set still: the promoter makes no
+discretionary swap and the pool neither fills nor shrinks. A tunnel DEATH is
+still answered — the failover promote and the re-arm are untouched — and a
+reconcile the operator asks for still runs, so freeze is "stop drifting", not
+"stop healing".</p>
+<p><code>pool.exclude_pks</code> and <code>pool.require_tp_types</code> are the pool dial's live
+candidate filter, both empty by default. The PKs are excluded as first hops AND
+as intermediates; the types are checked on the group that came up, and a first
+hop of the wrong type is closed and counted as an ordinary dial failure (the
+router's own candidate ranking has no per-dial type filter — only the
+visor-wide <code>routing.route_exclude_transport_types</code>).</p>
+<p><code>mux.cap</code> and <code>mux.width</code> (0 = inherit) are PER APP, read by the visor's dial
+path for the app that owns the dial: <code>skywire cli proxy mux cap|width [n] -n
+&lt;app&gt;</code>, with <code>--visor-wide</code> for the process-global adaptive ceiling and floor
+the old command set. Pinning the legs of the proxy under test no longer pins
+them on the paired reference dialing beside it.</p>
+<p><code>skywire cli proxy tunnel rm --rg &lt;port&gt;</code> closes exactly one tunnel — the route
+group whose port <code>proxy mux info</code> prints as <code>desc.dst_port</code> — and lets the pool
+replace it. <code>proxy mux rm</code> cannot: it drops a LEG and the router refuses to take
+the last one, which is why the degrade row used to cut the host's transport and
+take every other route over it down with it.</p>
+<p>The chunk-plan three are the granularity sweep of §3: <code>chunk.probe_bytes</code> is
+chunk0 — the size probe, and the no-split threshold — while <code>chunk.min_bytes</code>
+and <code>chunk.per_tunnel</code> are the floor and the per-tunnel chunk count the target
+is computed from. They are read per download, so a sweep lands on the next
+object, never mid-object.</p>
+<p>The snub and depth knobs are both borrowed from bittorrent. <code>tunnel.snub_after</code>
+(20 s since 2026-09-18 — it must sit above the longest measured reorder-wedge
+clear, 16.5 s, because a wedged route group delivers the app no byte, no ack and
+no pong, so a head-of-line-blocked tunnel is otherwise snubbed and its whole
+outstanding chunk set re-issued while the original is still in flight; floored at
+twice the tunnel's smoothed RTT) and <code>tunnel.snub_hold</code> (10 s)
+are bittorrent's SNUB: a peer that has sent nothing for a while is dropped from
+the request set however many requests are outstanding on it, and unchoked later
+with a single request to see whether it came back. Here the peer is a TUNNEL,
+the evidence is any chunk body byte or upload ack on it, and a chunk queued
+behind two others is invisible to the rule — which is what the earlier
+per-chunk time-to-first-byte bound got wrong. A snubbed tunnel's outstanding
+chunks are re-issued elsewhere free of budget, it takes no new ones, and after
+the hold it is re-tried with exactly ONE. If EVERY active tunnel is silent
+nothing is snubbed: that silence is the origin or the exit, not the tunnels.
+The state shows as <code>tunnel_snubbed</code> / <code>tunnel_unsnubbed</code> in <code>proxy mux events</code>
+and as role=snubbed in <code>proxy mux info</code>.</p>
+<p><code>chunk.depth_dynamic</code> and <code>upload.depth_dynamic</code> (both OFF by default, so a run
+that sets nothing keeps the fixed <code>chunk.per_tunnel</code> 2 and <code>upload.concurrency</code>
+4) size the per-tunnel queue depth from the BANDWIDTH-DELAY PRODUCT instead:
+ceil(rate x (RTT + <code>tunnel.depth_margin</code>) / chunk), clamped to
+[<code>chunk.depth_min</code>, <code>chunk.depth_max</code>] (2..8) and averaged over the active
+tunnels. It is bittorrent's pipelining rule — a peer is kept with enough
+outstanding requests to cover one round trip of its own rate, which is one chunk
+on a fast near tunnel and four on a slow far one. The depth is read once per
+admission decision (the chunk plan per download, the upload's slot gate per
+wait), never mid-chunk.</p>
+<p>The four upload knobs a test shrinks — <code>upload.stripe_min_bytes</code>,
+<code>upload.chunk_bytes</code>, <code>upload.mem_bytes</code>, <code>upload.concurrency</code> — override the
+compiled value the same way. <code>upload.chunk_bytes</code> is a CEILING, not a fixed step:
+each object's chunk is planned from its Content-Length the way a download's is
+(<code>planUploadChunk</code> — the object over two chunks per active tunnel, floored at
+<code>chunk.min_bytes</code>, capped here), so 10 MB over two tunnels is cut at 2.5 MB while
+50 MB stays at the 4 MiB ceiling. The planned size is snapshotted per object (the
+sink addresses a chunk by its offset), and <code>slots()</code>/<code>headroom()</code> read chunk,
+memory and concurrency from ONE snapshot per call, so a sweep landing mid-upload
+cannot over-subscribe the sink's window and make it evict an acked chunk.</p>
+<p><strong>Router knobs — <code>skywire cli route settings [key=value ...]</code></strong></p>
+<p>The whole router/mux dataplane is a catalog now, not a flag list: every entry's
+default is the constant the binary compiled with, values are set as <code>key=value</code>
+arguments (the same spellings <code>proxy settings</code> takes — <code>8MiB</code>, <code>250ms</code>, <code>0.2</code>,
+<code>true</code>), and <code>route settings --json</code> reads back EVERY knob as a stable map under
+<code>knobs</code>, with each knob's default, whether it was explicitly set, and what the
+config holds for it under <code>knob_detail</code>. That map is the save/restore unit
+<code>bench/lib-settings.sh</code> uses.</p>
+<table>
+<thead>
+<tr>
+<th>group</th>
+<th>knobs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>send window</td>
+<td><code>ecf.max_window_bytes</code> · <code>ecf.min_window_bytes</code> · <code>ecf.window_margin</code> · <code>send.window_wait_max</code> · <code>send.window_poll</code> · <code>send.window_refresh_interval</code></td>
+</tr>
+<tr>
+<td>latency band</td>
+<td><code>band.demote_ratio</code> · <code>band.admit_ratio</code> · <code>band.demote_ratio_tight</code> · <code>band.admit_ratio_tight</code> · <code>band.goodput_gate_frac</code> · <code>band.min_legs</code></td>
+</tr>
+<tr>
+<td>leg liveness / failover</td>
+<td><code>leg.liveness_interval</code> · <code>leg.pong_miss_threshold</code> · <code>leg.data_progress_interval</code> · <code>leg.data_stall_gap_age</code> · <code>leg.blackhole_min_top_bytes</code> · <code>leg.sole_blackhole_sent_floor</code> · <code>leg.sole_blackhole_ticks</code> · <code>leg.state_resync_interval</code> · <code>leg.park_min_hold</code></td>
+</tr>
+<tr>
+<td>outclassed-leg gate</td>
+<td><code>leg.starve_ratio</code> · <code>leg.probe_bytes</code> · <code>leg.probe_min_basis_ms</code> · <code>leg.probe_min_window</code></td>
+</tr>
+<tr>
+<td>forward confinement</td>
+<td><code>forward.spill</code> · <code>forward.switch_margin</code> · <code>forward.switch_samples</code></td>
+</tr>
+<tr>
+<td>RACK / retransmit</td>
+<td><code>rack.reorder_factor</code> · <code>rack.floor</code> · <code>rack.ceil</code> · <code>rack.default_no_rtt</code> · <code>rack.factor_max</code> · <code>rack.dsack_grow_step</code> · <code>rack.decay_step</code> · <code>rack.retx_min_age</code> · <code>rack.retx_backoff_max_shift</code></td>
+</tr>
+<tr>
+<td>reorder buffer</td>
+<td><code>reorder.window</code> · <code>reorder.timeout</code> · <code>reorder.stall_interval</code></td>
+</tr>
+<tr>
+<td>SACK cadence</td>
+<td><code>sack.min_interval</code> · <code>sack.delayed_ack_delay</code></td>
+</tr>
+<tr>
+<td>tail-loss probe</td>
+<td><code>tlp.pto_factor</code> · <code>tlp.min_pto</code> · <code>tlp.max_pto</code> · <code>tlp.max_probes</code> · <code>tlp.check_interval</code></td>
+</tr>
+<tr>
+<td>HoL retransmit</td>
+<td><code>hol.gap_floor</code> · <code>hol.rtt_factor</code> · <code>hol.max_fill</code> · <code>hol.per_seq_floor</code></td>
+</tr>
+<tr>
+<td>shared bottleneck</td>
+<td><code>sbd.enabled</code> · <code>sbd.min_samples</code> · <code>sbd.sample_interval</code> · <code>sbd.window_samples</code> · <code>sbd.skew_tol</code> · <code>sbd.cv_tol_frac</code> · <code>sbd.freq_tol</code> · <code>sbd.trial_window</code> · <code>sbd.trial_loss</code> · <code>sbd.backoff</code> · <code>sbd.min_evidence_rate</code> · <code>sbd.demote</code></td>
+</tr>
+<tr>
+<td>FEC</td>
+<td><code>fec.enabled</code> · <code>fec.k</code> · <code>fec.r</code></td>
+</tr>
+<tr>
+<td>ECF selector</td>
+<td><code>ecf.beta</code> · <code>ecf.default_frame_bytes</code> · <code>ecf.rtt_alpha</code> · <code>ecf.jitter_alpha</code> · <code>ecf.cold_bootstrap_bytes</code> · <code>ecf.congest_rtt_factor</code> · <code>ecf.rtt_min_creep</code></td>
+</tr>
+<tr>
+<td>unidirectional flip</td>
+<td><code>unidir.flip_interval</code> · <code>unidir.flip_ratio</code> · <code>unidir.flip_hysteresis</code> · <code>unidir.flip_cooldown_ticks</code> · <code>unidir.flip_min_goodput</code></td>
+</tr>
+<tr>
+<td>route exclusion</td>
+<td><code>route.dead_hold</code> · <code>route.dead_hold_max</code></td>
+</tr>
+<tr>
+<td>mux event history</td>
+<td><code>mux.event_ring_size</code> · <code>mux.event_ring_per_group</code> · <code>mux.events_per_group</code></td>
+</tr>
+<tr>
+<td>negotiated capabilities</td>
+<td><code>mux.per_frame_noise</code> · <code>mux.sack</code> · <code>mux.hol_retx</code></td>
+</tr>
+</tbody>
+</table>
+<p>Three things changed with the catalog:</p>
+<p><code>send.window_refresh_interval</code> is live. It used to be excluded because it
+becomes a route group's ticker when the group is built; the group's loop now
+re-reads it each tick and resets the ticker when it moves, with a 10 ms floor so
+a mistyped value cannot spin the loop. The same holds for every other service
+cadence here (<code>leg.liveness_interval</code>, <code>leg.data_progress_interval</code>,
+<code>reorder.stall_interval</code>, <code>leg.state_resync_interval</code>, <code>unidir.flip_interval</code>,
+<code>tlp.check_interval</code>).</p>
+<p><code>sbd.enabled</code> is an explicit off switch — the rig used to fake one with an
+unreachable <code>--sbd-min-samples 1000000</code>. Off stops the sampling as well as the
+rulings. The four capability toggles (<code>mux.per_frame_noise</code>, <code>mux.sack</code>,
+<code>mux.hol_retx</code>, <code>fec.enabled</code>) are read where a handshake is BUILT, so they
+degrade NEW route groups and leave groups already running with what they
+negotiated; <code>mux.hol_retx</code> is never advertised without <code>mux.sack</code>, which it
+reuses. <code>mux info</code> reports what each group actually negotiated.</p>
+<p><code>--app &lt;name&gt;</code> scopes a set to the route groups that app owns, which is what
+lets a subject client and its paired reference run different values on one
+visor — the visor-wide value stands for every knob the app does not override.
+The resolution happens once when a group is built and again only when the
+catalog moves, never per packet, and <code>mux info</code> reports which override set a
+group resolved against. Everything set here is written to
+<code>routing.router_settings</code> (and <code>routing.router_app_settings</code>) and replayed at
+the next start, so a sweep survives a restart; <code>--reset</code> restores every default
+and drops every override. The older per-knob flags (<code>--ecf-max-window</code> and the
+rest) still work and name the same knobs.</p>
+<p>One router sweep cell:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>skywire cli route settings --json | jq -c '.knobs' &gt; /tmp/before.json
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>skywire cli route settings ecf.max_window_bytes=16MiB rack.ceil=800ms
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>skywire cli route settings --app skysocks-client leg.starve_ratio=3
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>... run the set ...
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>skywire cli route settings --reset
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>skywire cli route settings $(jq -r 'to_entries[]|"\(.key)=\(.value)"' /tmp/before.json)
+</span></code></pre></div>
+<p>One client sweep cell, start to finish:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>skywire cli proxy settings                                  # the table, with pending/applied
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>skywire cli proxy settings chunk.max_bytes=8MiB chunk.concurrency=16
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>skywire cli proxy settings --json | jq '.knobs[] | select(.state=="applied")'
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>skywire cli proxy loadtest run -n sweep -u http://&lt;host&gt;/50M -d 2m -o bench/&lt;date&gt;/&lt;commit&gt;/chunk-8MiB.ndjson
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>skywire cli proxy settings --reset chunk.max_bytes chunk.concurrency
+</span></code></pre></div>
+<p>A row is valid only once its knobs read <code>applied</code> — a <code>pending</code> row means the
+app has not pulled the change yet and is still measuring the previous value.</p>
+<p><strong>In the bench runners — <code>SETTINGS</code>, and <code>bench/run-sweep.sh</code></strong></p>
+<p>A knob set by hand before a runner is gone by the first row: the visor's per-app
+store is cleared when the app stops, and every runner in <code>bench/</code> STARTS the app
+under test itself, once per set. <code>SETTINGS="key=value ..."</code> is therefore honoured
+by <code>run-mux.sh</code>, <code>run-compose.sh</code>, <code>run-standby.sh</code> and <code>run-degrade.sh</code> at the
+one point where it is both installable and covers the whole set — after the dial,
+the shape check and the warm probes (and, where a pool is awaited, after it has
+settled) and before the first row. <code>bench/lib-settings.sh</code> holds the single copy:
+it applies the knobs, WAITS for them (polling <code>proxy settings --json</code> until
+nothing reads <code>pending</code>, capped at three <code>tunnel.probe_interval</code> ticks or
+<code>SETTINGS_WAIT</code>, 20 s), records them in the set's <code>#</code> header line and dumps the
+full table to <code>&lt;set&gt;.settings.json</code>. A set whose knob never landed says
+<code>settings_pending=</code> in its header rather than quietly measuring the compiled
+default. <code>ROUTE_SETTINGS</code> does the same for the router knobs (key=value arguments as
+well as the older flags) and is RESTORED at set end from the <code>route settings
+--json</code> state read before it — now the whole <code>knobs</code> map rather than the
+readable subset, because a router knob outlives the app it was set for AND
+survives a restart. The paired reference
+instances receive neither: they are the control, and a sweep is only readable if
+the reference is the same on every value. Every consumer of a pin file — the
+paired reference, <code>run-mux.sh</code>'s legs pinning, <code>run-compose.sh</code>'s per-tunnel
+slices, <code>run-degrade.sh</code>'s tunnels-2 targets — first runs <code>pin_ok</code>
+(<code>bench/lib-pins.sh</code>): a pin whose first hop is not a transport UUID is refused
+with a line starting <code>INVALID pin</code>, and a set that ends up without its reference
+prints <code>unpaired</code>. On 2026-09-18 three pins had been overwritten with 59-byte
+stubs and every set of a chain ran unpaired without one line naming the cause.</p>
+<p><code>bench/run-sweep.sh</code> drives one knob across a list of values — a complete run of
+the named runner per value, into its own directory, with the knob as the only
+difference:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>TUNNELS=2 LEGS="" bench/run-sweep.sh &lt;exit&gt; bench/2026-09-18/&lt;commit&gt; $S/pins \
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    run-mux.sh upload.chunk_bytes 1MiB,2MiB,4MiB,8MiB 3 http://127.0.0.1:18080 "&lt;order&gt;"
+</span></code></pre></div>
+<p>That writes <code>bench/2026-09-18/&lt;commit&gt;/sweep/upload.chunk_bytes=1MiB/</code> … <code>=8MiB/</code>
+and tables them in <code>sweep/upload.chunk_bytes.tsv</code>: one row per value, one column
+per (set, size, direction) cell, each holding
+<code>median MB/s;paired ratio;hashes ok/n;wire/goodput</code>. Read the RATIO column, not
+the median — the bar swings 2x inside an hour, and only the paired ratio says
+whether a value moved the result or the network did.</p>
+<p><strong>Spending the rig minutes where they pay — <code>bench/tune</code></strong></p>
+<p>A sweep pays the same price for every value of every knob, and three knobs at
+three values is nine runs that still say nothing about how the three interact.
+<code>bench/tune</code> spends the same budget as a bandit instead: one arm per (knob,
+value), a Gaussian posterior per arm, and Thompson sampling — each round draws
+one value from each arm's posterior, runs the runner ONCE at the argmax with
+every other knob held at its incumbent (that knob's posterior-mean-best value so
+far; a knob never yet measured is simply left out, so the app keeps its compiled
+default), and updates that one arm. The knob under test rotates round-robin.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>go run ./bench/tune -exit &lt;exit&gt; -out bench/2026-09-18/&lt;commit&gt; -pins $S/pins \
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    -runner run-mux.sh -trials 2 -rounds 12 -env 'TUNNELS=2 LEGS=' \
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    -args 'http://127.0.0.1:18080 "&lt;order&gt;"' \
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    -objective 'mux-tunnels-2/50up:ratio,mux-tunnels-2/10up:ratio' \
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    -knobs 'upload.chunk_bytes=1MiB,2MiB,4MiB;upload.concurrency=2,4,8;chunk.max_bytes=2MiB,4MiB,8MiB'
+</span></code></pre></div>
+<p>The objective is the geometric mean of the named cells' MEDIAN PAIRED RATIOS —
+the same verdict the sweep table's ratio column carries, for the same reason,
+and geometric so a proportional loss in the 10 MB cell costs what a proportional
+gain in the 50 MB cell pays. A cell with no paired file falls back to that
+cell's median goodput; a run that produced no cell at all (the rig dropped, the
+set went INVALID) is a MISSING observation and updates nothing — never a zero,
+which would retire a value on one bad night. Each round runs into
+<code>&lt;out&gt;/tune/r&lt;round&gt;-&lt;knob&gt;=&lt;value&gt;/</code> with the campaign's <code>paired-ref.txt</code>
+copied in, exactly as a sweep value gets it: the reference is the control and
+has to be the same route in every round or the rounds are not comparable.
+<code>-route-knobs '--ecf-max-window=4MiB,8MiB,16MiB'</code> puts router flags on the same
+grid, through <code>ROUTE_SETTINGS</code>.</p>
+<p>The output is <code>&lt;out&gt;/tune/tune.tsv</code> (round, knob, value, the settings applied,
+the objective and every cell that fed it), <code>&lt;out&gt;/tune/incumbent.txt</code> (a
+<code>SETTINGS=</code> line to paste into the campaign) and a table per knob: value, n,
+mean, ±stderr, and which value the posterior currently calls best. Read n first
+— a bandit deliberately stops paying for a losing value, so a row with n=1 has
+not been ruled out, it has been given less of the budget, and only the arms with n≥3 and a
+stderr well inside the gap between them have said anything. The incumbent is a
+place to point a campaign, not a verdict: the verdict is still a full run under
+<code>bench/verdict.sh</code>.</p>
+<h3 id="how-a-knob-decision-is-made-since-2026-09-18">How a knob decision is made, since 2026-09-18<a class="headerlink" href="#how-a-knob-decision-is-made-since-2026-09-18" title="Permalink">&para;</a></h3>
+<p>One deploy, not one per value. <code>bench/run-variants.sh</code> dials a single session
+and measures a whole list of knob variants through it, writing knobs only
+between rows: a variants file names variant A (the <code>baseline</code>, every knob where
+the visor already holds it) and any number of B variants, and each cell is
+measured <strong>A, B, A, B'</strong> … so every B row has a control taken seconds earlier on
+the same tunnels. The verdict is <code>median(B)/median(A)</code> with the per-pair ratios
+beside it, which is the paired-ratio rule of §2 applied without a second proxy
+instance: on a link whose bar swings 2x inside an hour, the interleaved A row is
+the only honest reference. Router knobs are written to BOTH ends
+(<code>route settings</code> locally and over <code>--via dmsg://&lt;exit&gt;</code>), proxy knobs to the
+app; every value is read back into the row, a knob that is only read at dial
+time is flagged rather than pretended at, and everything the run touched is
+restored from the EXIT/TERM traps.</p>
+<p>Before spending rig time on any of it, <code>bench/screen</code> says which knobs are worth
+moving: <code>screen gen</code> writes a Plackett-Burman (12/24 runs) or fractional
+factorial (16 runs) design as a variants file — every column and every pair of
+columns balanced, so all twelve factors are estimated from all sixteen runs —
+and <code>screen analyze</code> prints each factor's main effect per cell with a standard
+error taken from the replicate scatter, calling real only what clears two of
+them. The order is therefore: <strong>screen</strong> to find the few knobs that move this
+rig, <strong>run-variants</strong> (or <code>bench/tune</code> for a finer grid) to choose their values,
+and a full paired campaign under <code>bench/verdict.sh</code> to decide. <code>bench/screen/
+factors-mux.tsv</code> is the first twelve, and <code>SWEEP_DRY=1</code> with
+<code>bench/selftest-variants.sh</code> exercises the whole runner — interleaving, restore
+and ratio arithmetic — without touching the rig.</p>
+<h2 id="3-the-work-in-order-each-step-judged-by-the-rig">3. The work, in order, each step judged by the rig<a class="headerlink" href="#3-the-work-in-order-each-step-judged-by-the-rig" title="Permalink">&para;</a></h2>
+<h3 id="31-bound-what-is-in-flight-per-leg">3.1 Bound what is in flight per leg<a class="headerlink" href="#31-bound-what-is-in-flight-per-leg" title="Permalink">&para;</a></h3>
+<p>The memory of the last campaign names this "defect C": <code>wrapPayload</code> accepts
+unbounded in-flight, so a slow leg is fed until its queue is seconds deep and
+the frontier waits on it. This is the first change because it is the one the
+anti-aggregation numbers point at directly.</p>
+<ul>
+<li>A per-leg send window: in-flight bytes on a leg ≤ its baseline-RTT BDP,
+  from the delivery rate the receiver's SACKs prove, not from bytes handed to
+  the transport (ECF's <code>rateBps</code> still counts the latter).</li>
+<li>When every leg is at its window the writer blocks; it never queues into a
+  bloated leg.</li>
+<li>Control frames (SACK, pong, leg-state) are sent ahead of data on every leg.
+  The false liveness teardown is a pong stuck behind data; this removes the
+  cause rather than tolerating it.</li>
+</ul>
+<p>Rig question after this step: does the download row stop being monotone
+decreasing? If 2 legs ≥ 1 leg but 6 &lt; 4, the window is right and the
+scheduler is next. If 2 &lt; 1 still, the frontier is next (§3.3).</p>
+<h3 id="32-make-the-scheduler-predict-arrival-not-throughput">3.2 Make the scheduler predict arrival, not throughput<a class="headerlink" href="#32-make-the-scheduler-predict-arrival-not-throughput" title="Permalink">&para;</a></h3>
+<p>ECF picks the leg that completes soonest; it is only as good as its inputs.</p>
+<ul>
+<li>Delivery-proven rate per leg (from 3.1) and per-leg end-to-end latency
+  EWMA (#3985) feed the completion estimate; transport-level RTT is not used.</li>
+<li>Cold legs get the probe budget and ramp; a leg whose delivery rate falls
+  below a fraction of its baseline is shed, not fed.</li>
+<li>Live tuning through <code>proxy mux mode|cap|width</code> on the rig, one knob per
+  run; the constants that win go in as defaults with the numbers that chose
+  them.</li>
+</ul>
+<p>Rig question: at 4 and 6 legs, is the exit's per-leg <code>sent_bytes</code> share
+within tolerance of each leg's measured capacity share? If shares are right
+and goodput is still below the sum, the frontier is the remaining loss.</p>
+<h3 id="33-the-frontier-stop-waiting-on-the-slowest-leg">3.3 The frontier: stop waiting on the slowest leg<a class="headerlink" href="#33-the-frontier-stop-waiting-on-the-slowest-leg" title="Permalink">&para;</a></h3>
+<p>Only if 3.1 and 3.2 leave anti-aggregation on the table. Two candidates,
+both capability-negotiated, no flag:</p>
+<ul>
+<li><strong>Per-leg sequencing with a stream-layer merge:</strong> each leg carries its own
+  ordered sub-stream; the receiver keeps a cursor per leg and reassembles by
+  a global order only at stripe boundaries, so one leg's lag delays one
+  stripe, not every later packet. This is what MPTCP does with its two
+  sequence spaces.</li>
+<li><strong>Aggregation above the route group</strong> for what can be split: the HTTPS
+  range-split path already does this and is the one place multi-leg beats
+  single-leg in production today.</li>
+</ul>
+<p>The rig decides between them by the same table. Neither is started until
+3.1 and 3.2 have been measured, because the last campaign spent weeks on the
+wrong layer.</p>
+<p><strong>The cut row's own frontier, done first.</strong> Criterion 6 (first byte after a
+mid-transfer cut under 2 s) was failed by the range splitter, not by the route
+layer: on <code>bench/2026-09-16/03ece1e95-smoke/mux-standby-8</code> the active tunnel was
+cut 5.2 s into a 50 MB download, the group closed at t, retire and promote
+landed at t+2.0 s, and the browser's next byte only at t+7.0 s. Detection was
+~1.8 s of that; the remaining ~5 s was the in-order writer's whole-chunk
+barrier — the frontier chunk's already-received prefix could not be emitted, so
+its ~4 MiB remainder had to complete on a just-promoted tunnel first (uploads,
+which have no such barrier, recover in 1.7–1.8 s on the same rig). The writer
+now streams the frontier chunk as its bytes arrive and a refetch resumes from
+the byte after the last one written, so a cut costs one detection instead of one
+chunk. Re-measure the cut row against this before judging the route-layer
+candidates above.</p>
+<p><strong>A retransmit honours the sending leg's own clock.</strong> On <code>mux-legs-2</code>
+(<code>bench/2026-09-16/e128db1ff-smoke</code>, legs at 128/152 ms) every row that actually
+striped an upload paid ~50 % of the wire in duplicates: a 10 MB row striped
+51/49 put 14.6 MB on the wire with <code>retx_sent</code> +337, of which <code>retx_req_sack</code>
++306, and both send windows saturated until the writer parked; the row that kept
+100 % on one leg sent 10.02 MB with one retransmit. The receiver was not holding
+the frontier (<code>reorder_pending</code> 0). The cause was the per-leg RACK threshold's
+ceiling: a leg whose measured delay had grown past <code>rackCeil</code> had its wait pulled
+back to exactly one delay basis — the <em>mean</em> of its own distribution — so every
+frame slower than that mean was re-sent while in ordinary flight on its own leg.
+The rule now is that a SACK- or HoL-requested retransmit of a frame is withheld
+until the frame is older than the sending leg's <code>legDelayBasisMs</code> (max of its
+send→ack delay and its pong RTT) times the RACK reorder margin, at any basis;
+withheld holes are counted as <code>retx_deferred_young</code> so a run can tell a deferral
+from a loss.</p>
+<h3 id="34-liveness-and-stability-finished">3.4 Liveness and stability, finished<a class="headerlink" href="#34-liveness-and-stability-finished" title="Permalink">&para;</a></h3>
+<ul>
+<li>With control-frame priority in place, re-run the frozen-exit 30-minute
+  continuous-load sample that measured 13/30 then 6/30 collapses. Target 0.</li>
+<li>Every promote, park, prune and heal decision writes its reason into
+  <code>visor state</code> and <code>proxy mux info</code>; a run's churn is reported as a count
+  with reasons, and the bound in §1 is enforced against it.</li>
+<li>A manual pin (<code>proxy mux set</code>, <code>--route</code>, <code>--routing-policy none</code>) is
+  respected by the adaptive growth. It was not, live.</li>
+</ul>
+<p><strong>Shared-bottleneck DEMOTION is off by default; the ruling is recorded instead.</strong>
+Over four rig runs on 2026-09-16/17 (<code>bench/2026-09-16/195b1094c-sbdsweep/{sbd-off,sbd-default}</code>,
+<code>0251e5da4-smoke</code>, <code>dfb0755c2-smoke</code>) the detector ruled eight times and was right
+zero times: with parking off (<code>--sbd-min-samples 1000000</code> both ends) the two-leg
+50 MB downloads ran <strong>9.30 MB/s, x1.13, 5 of 5 above x1.09</strong>, with parking on at
+its defaults <strong>6.80 MB/s, x0.86</strong>, and the parks decided while the group was idle
+were permanent at <strong>x0.81</strong>; with the evidence floor in place three of the four
+compose-set parks were refuted by their own trial — two on idle ticks between
+bench rows, trial rate 2 B/s — and the one that stood cost 10.8 %. The reason it
+could not be right is the sampling: the per-SACK delay series was taken from every
+entry a SACK purges below its contiguous frontier, so both legs were measuring how
+long the FRONTIER took to advance — the group's own head-of-line coupling, which
+correlates on any network — and only the frames a SACK NEWLY acks (the
+frontier-edge entry and the bitmap bits above it, each aged from its own send)
+are per-leg samples now. The evidence floor is measured on the same side those
+samples come from, the SEND path's SACK-acknowledged bytes per tick, because on a
+download the receiving end has no samples of its own and the sending end looked
+idle when judged by what it received; a trial tick below the floor returns no
+verdict at all and the trial stays open. So <code>--sbd-demote</code> (default <strong>false</strong>)
+makes the detector purely <strong>observational</strong>: the grouping is NOT handed to the
+mux and no weight moves, because <code>rebuildWeights</code> gives every non-representative
+member of a group zero send weight, which is a park by another name — with
+demotion off, <code>mux-compose-T2xL2</code> (<code>bench/2026-09-16/3535e671b-smoke</code>) still
+degenerated to upload shares of <code>49175:100%,49176:0%</code> and <code>49176:75%,49179:25%</code>,
+2 tunnels × 2 legs collapsing to 2 × 1 at x0.06–0.12, on 118 <code>sbd_ruling</code> events
+in 670 s one of which read a send path of 6 B/s. The ruling the detector would
+have acted on is recorded as an <code>sbd_ruling</code> mux event naming the legs, their
+summary statistics and the rate behind the reading, at most once per leg PAIR per
+<code>--sbd-backoff</code> window, and nothing below the evidence floor is grouped, ruled or
+recorded at all. Turn it on
+with <code>skywire cli route settings --sbd-demote true</code> on BOTH ends (a download is
+exit-sent), and the park is then the trial described above: the pre-park rate is
+recorded, re-read after <code>--sbd-trial-window</code> (3 s) with the leg out, a fall past
+<code>--sbd-trial-loss</code> (0.15) unparks it and exempts that PAIR for <code>--sbd-backoff</code>
+(5 min, doubling, capped at 1 h), and no ruling or verdict is taken below
+<code>--sbd-min-evidence-rate</code> (64 KiB/s).</p>
+<h3 id="35-direction-proven">3.5 Direction, proven<a class="headerlink" href="#35-direction-proven" title="Permalink">&para;</a></h3>
+<p>Both ends on the same build, download-heavy and upload-heavy runs: the
+direct leg carries one direction and the mux legs the other, the flip
+happens at the stated ratio and cools down as specified. This was
+implemented and never demonstrated.</p>
+<p>The forward direction rides ONE leg — the direct leg, or else the
+lowest-latency one — and only the reverse direction fans out; on
+2026-09-16 it did not hold. mux-legs-2 (44 ms and 166 ms legs, no direct
+leg) put 79 % of one 10 MB upload on the 166 ms leg and 21 % on the 44 ms
+one, and the T2xL2 composition split a 50 MB upload 37/16 within one group
+and 8/39 within the other, with 6 and 11 forward flips across ten rows.
+Every row that split collapsed (x0.68, x0.24, x0.04) while the rows that
+stayed on one leg ran at x0.98-1.0. The cause was reading the flip
+controller's direction→class mapping instead of the sender's role: a
+sustained upload flips the mapping, and on a group with no direct leg that
+hands the forward direction to the ECF scheduler over every multihop leg.</p>
+<p>The rule now: the forward direction is confined by ROLE, its retransmits
+ride the confined leg too, a full send window on that leg WAITS
+(<code>--send-window-wait-max</code>) instead of spilling, and the leg only changes
+when it is no longer selectable (dead, parked, or outclassed by a direct
+leg that joined) or a challenger measures at least <code>--forward-switch-margin</code>
+lower for two consecutive samples — each move recorded as a
+<code>forward_rehomed</code> mux event. Two live knobs: <code>route settings
+--forward-spill</code> (default <strong>false</strong>; true restores the spilling behavior)
+and <code>--forward-switch-margin</code> (default <strong>0.2</strong>).</p>
+<h3 id="36-the-default-decided-by-the-table">3.6 The default, decided by the table<a class="headerlink" href="#36-the-default-decided-by-the-table" title="Permalink">&para;</a></h3>
+<p>Adaptive ships as the default only when it wins §1 on the rig, and it must
+choose a single route on a path where a single route wins. Until then the
+default is whatever the table says, which today is a single route.</p>
+<h2 id="4-milestones">4. Milestones<a class="headerlink" href="#4-milestones" title="Permalink">&para;</a></h2>
+<ol>
+<li>Baseline table on v1.3.94 (both directions, four sizes, 1/2/4/6 legs).</li>
+<li>3.1 merged and deployed both ends; table re-run. Decision: scheduler or
+   frontier next.</li>
+<li>3.2 tuned live; table re-run.</li>
+<li>3.3 if still needed; table re-run.</li>
+<li>3.4 and 3.5; 30-minute stability sample at 0 collapses.</li>
+<li>3.6: the default chosen by numbers; release notes carry the table.</li>
+</ol>
+<p>Rule from here on: no mux change merges without a before/after row from the
+rig, and no live-found bug is fixed without a reproduction (appendix) that
+stays as its regression.</p>
+<h2 id="appendix-the-safety-net-not-the-work">Appendix: the safety net (not the work)<a class="headerlink" href="#appendix-the-safety-net-not-the-work" title="Permalink">&para;</a></h2>
+<ul>
+<li><strong>Deterministic legs in <code>pkg/router</code>:</strong> a <code>netsim</code> with latency, jitter,
+  bandwidth, stall, black-hole, death and RTT-ramp schedules behind one
+  injectable clock, two real route groups end to end; one scenario per bug
+  the campaign has found, plus a seeded randomized long-run under <code>-race</code>
+  asserting integrity, liveness, no anti-aggregation (tagged <code>muxgoal</code>,
+  expected to fail until §3.3 lands), amplification and stability.</li>
+<li><strong>Control plane in process:</strong> concurrent leg setup (#80 class), pin
+  respected, same-LAN filters, dial contention.</li>
+<li><strong>Docker lane with <code>tc netem</code>:</strong> four visors, ≥2 disjoint legs, the
+  loadtest driver, invariants with CI tolerances; non-required until a week
+  without a flake.</li>
+<li><strong>The benchmark script:</strong> §2 as one command, run before every release and
+  nightly against the last release's table.</li>
+</ul>
+<h2 id="results-2026-09-1617-live-campaign">Results (2026-09-16/17 live campaign)<a class="headerlink" href="#results-2026-09-1617-live-campaign" title="Permalink">&para;</a></h2>
+<p>Twenty campaigns ran over two days, <code>bench/2026-09-16/&lt;commit&gt;/</code>, one README per campaign;
+<code>bench/2026-09-16/a5b973a97/</code> is the closing full suite — the first run in which the tunnels sets
+were dialed by the <strong>shipping default</strong> rather than by hand. The campaign's scoreboard expands §1's
+five criteria into the eight below.</p>
+<h3 id="the-rig-and-the-method">The rig and the method<a class="headerlink" href="#the-rig-and-the-method" title="Permalink">&para;</a></h3>
+<p>Everything was measured on one frozen rig: this host (US) as the client, one controlled exit in
+Frankfurt (<code>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1</code>), and six
+single-intermediate stcpr routes to it whose first hops sit on six distinct /24s in five distinct
+/16s, none sharing a host or a NIC with another (<code>bench/2026-09-16/intermediates.md</code>). Every campaign
+ran both ends on the same commit against a reference set measured on that same commit within the
+same two hours — eight single-route references, five transfers per size and direction, each
+hash-verified — because the bars drift by up to 2x over twelve hours. From campaign15 on, every mux
+PR also got a two-trial smoke run before merge; that caught two regressions (#4972's first branch,</p>
+<h1 id="4977-that-would-otherwise-have-cost-a-full-campaign-each">4977) that would otherwise have cost a full campaign each.<a class="headerlink" href="#4977-that-would-otherwise-have-cost-a-full-campaign-each" title="Permalink">&para;</a></h1>
+<h3 id="the-ceilings">The ceilings<a class="headerlink" href="#the-ceilings" title="Permalink">&para;</a></h3>
+<p>The campaign's last day was spent establishing what the numbers are allowed to be:</p>
+<table>
+<thead>
+<tr>
+<th>measurement</th>
+<th>down MB/s</th>
+<th>up MB/s</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>this host's raw link (Cloudflare, four parallel; 11.4 single)</td>
+<td>12.1</td>
+<td>–</td>
+</tr>
+<tr>
+<td>skywire, two independent single routes at once (<code>run-capcheck.sh</code>)</td>
+<td>10.41</td>
+<td>13.95</td>
+</tr>
+<tr>
+<td>skywire, best single route (<code>8170476dd/ref-via-03f57e7c</code>, <code>ref-via-0371ab4b</code>)</td>
+<td>8.84</td>
+<td>9.99</td>
+</tr>
+<tr>
+<td>one range-split object, steady state</td>
+<td>9.1–9.7</td>
+<td>–</td>
+</tr>
+<tr>
+<td>the bench sink, measured locally on the exit</td>
+<td>205</td>
+<td>–</td>
+</tr>
+</tbody>
+</table>
+<p>A range-split download fits <code>t = a + b·S</code> with a fixed prelude <code>a ≈ 1.1 s</code> (exit round trips before
+the parallel chunk fetches start) and <code>1/b = 9.1–9.7 MB/s</code>; the 8.x medians are that steady rate
+amortised over the prelude, which is 17 % of a 50 MB transfer and much more of a 10 MB one. It is
+not CPU: per-thread sampling on both ends peaks at 10.5 % of a core, the transport RX loop at 9 %
+while moving 10 MB/s. So the honest ceiling for one object on this host is ~9.5, for the path
+10.4 down / 13.9 up, under a 12.1 MB/s link.</p>
+<h3 id="the-closing-run-campaign20-a5b973a97-no-pins-on-the-tunnels-sets">The closing run — campaign20, a5b973a97, no pins on the tunnels sets<a class="headerlink" href="#the-closing-run-campaign20-a5b973a97-no-pins-on-the-tunnels-sets" title="Permalink">&para;</a></h3>
+<p><code>bench/2026-09-16/a5b973a97/</code>, both ends at a5b973a97 (#4981 two tunnels by default + sibling dialed
+on the best-ranked unused route, #4982 sink hash cache + optimistic CONNECT, #4983 full-path latency
+ranking + LAN exclusion). The tunnels sets were auto-dialed by the shipping default; legs and compose
+were pinned. Bars are the eight-set reference suite measured into the same directory right after the
+mux sets, because the drift probe came back past 25 % on two cells in opposite directions (direct
+stcpr 50 MB down 2.11 vs its own 5.11 reference, Atlanta 50 MB down 10.06 vs 6.09).</p>
+<p>Bars: <strong>10 down 5.00, 10 up 7.52, 50 up 10.32</strong> direct stcpr; <strong>50 down 5.43</strong> via
+<code>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13</code>. 120/120 mux rows and 160/160
+reference rows hash-verified; no reorder wedge on either end in the whole run.</p>
+<table>
+<thead>
+<tr>
+<th>set</th>
+<th>down 10</th>
+<th>up 10</th>
+<th>down 50</th>
+<th>up 50</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>tunnels-2 (auto)</td>
+<td>4.54</td>
+<td>7.25 (96 %)</td>
+<td><strong>7.37 PASS</strong></td>
+<td>9.07 (88 %)</td>
+</tr>
+<tr>
+<td>tunnels-3 (auto)</td>
+<td>4.71</td>
+<td>5.57</td>
+<td><strong>7.00 PASS</strong></td>
+<td>9.11</td>
+</tr>
+<tr>
+<td>legs-2</td>
+<td><strong>5.33 PASS</strong></td>
+<td>4.64</td>
+<td><strong>7.05 PASS</strong></td>
+<td>8.81</td>
+</tr>
+<tr>
+<td>legs-3</td>
+<td><strong>5.14 PASS</strong></td>
+<td>5.09</td>
+<td>6.05 (w/g <strong>1.36</strong>)</td>
+<td>8.67</td>
+</tr>
+<tr>
+<td>compose-T2xL2 (2x2)</td>
+<td>3.47</td>
+<td>4.53</td>
+<td><strong>6.51 PASS</strong></td>
+<td>8.94</td>
+</tr>
+<tr>
+<td>compose-T2xL1 (2x1)</td>
+<td>4.61</td>
+<td>4.69</td>
+<td><strong>8.33 PASS</strong></td>
+<td>8.73</td>
+</tr>
+</tbody>
+</table>
+<h1 id="4983-did-what-it-was-merged-for-the-auto-dial-excluded-the-same-lan-first-hop-that-wrecked">4983 did what it was merged for: the auto-dial excluded the same-LAN first hop that wrecked<a class="headerlink" href="#4983-did-what-it-was-merged-for-the-auto-dial-excluded-the-same-lan-first-hop-that-wrecked" title="Permalink">&para;</a></h1>
+<p>campaign19 by name, ranked 35 candidates by first-hop <em>plus</em> second-hop latency and chose Atlanta
+<code>95839ad0</code>; tunnels-3's second decision ranked 164 and chose Frankfurt <code>f1012467</code>. Both are routes an
+operator would have pinned. tunnels-2 stripes 50 MB downloads 58/42–75/25 across its two tunnels at
+w/g 1.01; its uploads ride one tunnel whole, which is why every upload cell is a single-route number
+with mux overhead on it.</p>
+<h3 id="the-criteria">The criteria<a class="headerlink" href="#the-criteria" title="Permalink">&para;</a></h3>
+<ol>
+<li><strong>Refs — MET.</strong> Eight single-route reference sets per campaign, hash-verified, wire/goodput
+   1.00–1.02; the closing bars are <code>bench/2026-09-16/a5b973a97/ref-*.tsv</code> and every set's hop list
+   is recorded in its <code>.legs.json</code>.</li>
+<li><strong>Tunnels ≥ best ref, 5/5 — PARTLY: MET on the 50 MB download, not on 10 MB down or 50 MB up.</strong>
+   In the closing run the auto-dialed tunnels-2 passes the 50 MB download bar, 7.37 vs 5.43, w/g
+   1.01, 5/5 hashes. It reaches <strong>96 %</strong> of the direct uplink bar on 10 MB up (7.25 vs 7.52) and
+   88 % on 50 MB up (9.07 vs 10.32), and 91 % on 10 MB down (4.54 vs 5.00). Earlier runs pass
+   uploads outright when the bars are lower (10 MB up 6.64–6.82 vs 5.97; 50 MB up 10.00 vs 9.99).</li>
+<li><strong>Legs ≥ best ref, port constant — PARTLY: MET on the 50 MB download with two legs.</strong> legs-2
+   passes both download cells in the closing run (10 MB 5.33 vs 5.00, 50 MB 7.05 vs 5.43), and
+   passed earlier at 8.46 vs 8.05 (4cc8e9b6b) and 5.71 vs 5.51 (52e430fff). <strong>A third leg hurts</strong>:
+   legs-3 drops to 6.05 on the 50 MB download and is the run's only amplification failure. The
+   group's dst_port was constant for every set of every campaign, but run-to-run variance is ±20 %
+   on the same pins and the same scheduler.</li>
+<li><strong>Composition ≥ each component — NOT MET.</strong> Two legs inside each of two tunnels never beat either
+   alone: 5.63 (1ce356b2d), 6.67 (4cc8e9b6b), 7.15 (8170476dd), 7.11 (a5b611278), 6.51 (a5b973a97)
+   on the 50 MB download, against 7.05–8.46 for the best single-shape cells of the same runs.</li>
+<li><strong>Direction, from both ends — PARTLY.</strong> Both ends' per-leg counters are captured per row since
+   campaign17 (<code>&lt;set&gt;.exit-recovery.tsv</code> beside our own <code>.recovery.tsv</code>) — 119 of 120 rows in the
+   closing run, the miss a 40 s exit-snapshot timeout — so attribution is measured rather than
+   inferred. Forward traffic rides the direct or lowest-RTT tunnel by policy (#4972, #4978): in the
+   closing tunnels-2 set every upload object rode one tunnel whole, while its downloads fanned
+   58/42–75/25 across both. The automatic flip on load was not demonstrated.</li>
+<li><strong>Degradation — MET for legs, NOT MET for tunnels.</strong> Cutting a leg mid-transfer
+   (<code>proxy mux rm</code>, 50 MB, 3 trials): the port stays constant, no group is rebuilt, hashes 3/3 both
+   directions, ttfb after the cut 0.9 s down / 1.7 s up, reorder wedge 1.5–1.9 s cleared in 0.5 s.
+   Cutting a tunnel's transport closes its group, because a tunnel is a single-leg group: downloads
+   survive at 1.1 MB/s with 35–40 s to resume, and a POST in flight on the cut tunnel cannot be
+   resumed at all.</li>
+<li><strong>Does not amplify, bounded named churn — MET except legs-3's 50 MB download.</strong> In the closing
+   run wire/goodput is 1.00–1.12 in every cell but one: legs-3 50 MB down at <strong>1.36</strong>, the run's
+   only amplification failure and the reason that cell does not pass despite clearing the rate bar.
+   Every park and promote carries a named reason (shared bottleneck, latency band with its min-RTT,
+   peer-mirrored, operator), and the 30 s park hold from #4968 bounds the churn: 5–26 events per
+   20-row set in the closing run, with <strong>no reorder wedge on either end</strong>.</li>
+<li><strong>The default, by the table — SHIPPED.</strong> <code>tunnels=2</code> is the shipping default
+   (<code>skyenv.SkysocksClientTunnels</code>), with the sibling dialed on the best-ranked unused route (#4981)
+   ranked by first-hop <em>plus</em> second-hop path latency and with same-LAN first hops excluded (#4983).
+   Measured with no pins at all in campaign20: 50 MB down 7.37 vs the 5.43 bar, w/g 1.01, 5/5
+   hashes; 96 % of the direct uplink bar on 10 MB up, 88 % on 50 MB up. The auto-dial picked Atlanta
+   and Frankfurt by itself — the routes an operator would have pinned — where campaign19's
+   first-hop-only ranking picked a 1 ms LAN neighbour and collapsed. A third tunnel buys nothing.</li>
+</ol>
+<h3 id="v4-2026-09-18-the-criteria-as-re-worded">v4 (2026-09-18) — the criteria as re-worded<a class="headerlink" href="#v4-2026-09-18-the-criteria-as-re-worded" title="Permalink">&para;</a></h3>
+<p>The eight criteria above are the 2026-09-16/17 scoreboard and stand as they were
+measured; nothing in them is rewritten here. These rows re-word two of them
+against the <strong>endpoint ceiling measured in the same campaign</strong>
+(<code>bench/run-ceiling.sh</code>, §1) and add a tenth:</p>
+<table>
+<thead>
+<tr>
+<th>criterion</th>
+<th>v4 (2026-09-18)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2 — two concurrent uploads</td>
+<td>"≥ the smaller of (sum of the two best references) and 0.95 × the measured uplink ceiling, the ceiling measured in the same campaign as concurrent direct uploads to the exit, sink-verified"</td>
+</tr>
+<tr>
+<td>4 — 50/100 MB composition</td>
+<td>"≥ the better of the two alone when that better one does not saturate the endpoint (its rate &lt; 0.9 × the measured endpoint ceiling), otherwise ≥ 0.95 × the endpoint ceiling; the ceiling measured in the same campaign"</td>
+</tr>
+<tr>
+<td>10 — spread policy (new)</td>
+<td>"under a spread policy that caps any one route at 40 % of the bytes and holds at least three routes, throughput ≥ 0.8 × the best single reference and no route exceeds its cap, measured from both ends' per-leg counters at 50 MB down and up; the policy is a live setting"</td>
+</tr>
+</tbody>
+</table>
+<p><code>bench/verdict.sh</code> scores 2 and 4 from <code>ceiling.tsv</code> when the campaign measured
+one and says which bound bound each verdict; criterion 10 is the <code>mux-spread-3</code>
+set of <code>bench/run-mux.sh</code> and its <code>.assert.tsv</code>.</p>
+<h3 id="criterion-status-at-the-campaign-close-develop-898591982-the-2026-09-18-chains">Criterion status at the campaign close — develop <code>898591982</code> (the 2026-09-18 chains)<a class="headerlink" href="#criterion-status-at-the-campaign-close-develop-898591982-the-2026-09-18-chains" title="Permalink">&para;</a></h3>
+<p>The 2026-09-18 chains O–AK are indexed in <code>bench/2026-09-16/README-2026-09-18-chains.md</code> and
+chains AL–AW, FINAL and FINAL2 in <code>bench/2026-09-18/README.md</code>; the rows below close the
+campaign, scoring the ten criteria (2, 4 and 10 as re-worded above) against the <strong>reported
+run</strong>, <code>bench/2026-09-18/898591982-smoke/</code> — develop's tip with #5067, the route-setup-node
+destination circuit breaker off on both setup nodes, no pins on any set. Ratios are mux ÷ the
+best paired reference at 10 MB and 50 MB, down and up. Ceilings are that run's own
+<code>ceiling.tsv</code> — uplink 11.29, downlink 11.48 MB/s.</p>
+<ol>
+<li><strong>Refs — MET.</strong> Every set resolved its paired reference by probe, the best candidate being
+   <code>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13</code>, and a reference row of
+   the same cell ran immediately before every mux row. The ceiling was measured in the same
+   campaign: uplink 11.29 MB/s over three concurrent direct clients, downlink 11.48 MB/s.</li>
+<li><strong>Tunnels ≥ best ref — MET on the four measured cells.</strong> tunnels-2 runs <strong>x1.56 down</strong> at
+   10 MB and <strong>x1.14</strong> at 50 MB, <strong>x1.54 up</strong> and <strong>x1.05</strong>, with 5/5 and 3/3 hashes and
+   wire/goodput 1.00. The two-concurrent-uploads cell of the v4 wording was not re-run in the
+   closing campaign — it was last measured in campaign v1 — so that half of the criterion is
+   only partially met.</li>
+<li><strong>Legs ≥ best ref — downloads MET, uploads NOT MET.</strong> legs-2 scores <strong>x1.01</strong> and <strong>x0.97</strong>
+   on the downloads, both inside the 5 % band, and the route group's port stayed constant for
+   the set. The uploads are where two legs still lose: <strong>x0.69</strong> at 10 MB and <strong>x0.88</strong> at
+   50 MB.</li>
+<li><strong>Composition — MET at 50 and 100 MB down, NOT MET at 10 MB down and 50 MB up.</strong> 2x2
+   composition runs <strong>x1.59</strong> on the 50 MB download and <strong>x1.08</strong> at 100 MB, and the
+   ceiling-aware bound applies as the better single alternative (5.32 MB/s) is under
+   0.9 × the ceiling. The 10 MB download at <strong>x1.22</strong> is below two tunnels alone (x1.56), so
+   composition buys nothing in that cell, and the 50 MB upload is <strong>x0.43</strong>.</li>
+<li><strong>Direction, from both ends — MET for the shipped default.</strong> On the standby pool, forward
+   traffic takes the direct or lowest-latency route in <strong>20 of 20 rows PASS</strong> and the reverse
+   stream fans. On legs-2, 6 of 12 forward rows are flagged, but by a checker with no latency
+   tolerance band against legs of 149 and 139 ms; the checker is to be relaxed rather than the
+   scheduler changed.</li>
+<li><strong>Degradation — MET.</strong> A transport cut mid-transfer costs <strong><code>ttfb_after_cut_s</code> 0.219</strong>
+   (bar: &lt; 2 s), <strong>31/31 survivors kept</strong>, no rebuild — the lost group's port is the only one
+   gone and none is gained — and <strong>5/5 hashes</strong> after the cut. One blemish: the
+   <code>local_reorder_wedge</code> counter reads 1 on the cut row.</li>
+<li><strong>Does not amplify — MET.</strong> Wire/goodput is <strong>≤ 1.08 in every cell</strong> of the reported run,
+   and the churn that does happen is bounded and carries a named reason in <code>mux_events</code>.</li>
+<li><strong>The default — MET, and shipped.</strong> The standby pool is the default: the pool discovered
+   <strong>32 groups</strong> with no pins, the active set is chosen on measured goodput (#5047), failover
+   is same-tick (#4991), and a dead active is replaced out of the pool rather than rebuilt.</li>
+<li><strong>The final no-pins campaign — DONE.</strong> <code>bench/2026-09-18/898591982-smoke/</code> is that run, and
+   it is the one reported above: develop's tip, no pins on any set, every criterion scored from
+   its artefacts. The immediately preceding attempt, <code>bench/2026-09-18/9bea70ded-smoke/</code>, had
+   valid tunnels and legs sets but invalid composition and standby sets — the route setup
+   node's destination circuit breaker had opened against the exit, which is what #5067 fixes.</li>
+<li><strong>Spread policy — MET as a live setting, NOT shipped as a default.</strong> Chain AS
+    (<code>bench/2026-09-18/4078c5f70-smoke/mux-spread-3.assert.tsv</code>) holds <strong>three routes</strong> with a
+    <strong>max share of 0.417</strong>, inside the 0.4 cap plus its band, at <strong>x1.46 down</strong> and <strong>x0.95 up</strong>
+    on 50 MB — the criterion met with the policy set live through <code>proxy settings</code>. As a
+    <em>default</em> it is not shippable yet: #5054 measured <strong>x0.605 down / x0.157 up</strong> (chain AT,
+    <code>bench/2026-09-18/a0df50285-smoke/</code>) and is held for v1.3.96.</li>
+</ol>
+<h3 id="direction-criterion-5">Direction (criterion 5)<a class="headerlink" href="#direction-criterion-5" title="Permalink">&para;</a></h3>
+<p><code>bench/direction.sh &lt;result dir&gt; [set…]</code> turns the artefacts a run already writes into the per-row
+attribution criterion 5 asks for. For every row (trial × direction × size) it takes the local end's
+<code>&lt;set&gt;.carrier.tsv</code> deltas — <code>sent_delta</code> is what this visor put on the leg (client→exit, forward),
+<code>recv_delta</code> is what arrived on it (exit→client, reverse) — together with the <code>legs</code> pseudo-row that
+names the rg:transport membership at that row. Leg identity comes from <code>&lt;set&gt;.legs.json</code>:
+<code>transport_id</code>, <code>tp_type</code>, <code>remote_pk</code>, <code>latency_ms</code>, <code>direct</code>, <code>hops[]</code> and <code>tunnel_role</code>, with
+<code>&lt;set&gt;.tps.tsv</code> as the fallback for a group dialed after the snapshot. The exit end is
+<code>&lt;set&gt;.exit-recovery.tsv</code>, matched to our legs through <code>hops[-1].tp_id</code> — the exit's own first hop
+for that leg — and contributing <code>standby</code>, <code>retransmits</code> and <code>ack_delay_ms</code>. The exit's per-leg
+record carries <strong>no byte counter</strong>, so the exit's sent bytes are read as the local <code>recv_delta</code> of
+the same leg; two further limits are printed as <code># note</code> lines in every output — <code>carrier.tsv</code>
+counts a transport rather than a route group, and <code>latency_ms</code> is the end-of-set snapshot. Scope is
+decided by bytes carried, not by the set-start snapshot: every leg of an active group counts, and so
+does any leg holding ≥ 1 % of that row's payload-direction bytes, because a tunnel the pool promotes
+mid-set carries payload for rows whose <code>tunnel_role</code> still reads <code>standby</code> — on <code>mux-spread-3</code> of
+<code>bench/2026-09-16/f9107c982-smoke</code> that is the difference between scoring row 1 over 2 legs at a
+0.669 max share and over the 4 legs that actually carried it at 0.482. Per row it reports <code>forward_on</code> (the leg with ≥ 80 % of the forward bytes, and whether that
+leg is the direct or the lowest-latency one), <code>reverse_fanout</code> (legs above 10 % of the reverse
+bytes, and the largest single share) and <code>flip</code> (a change of dominant forward leg between rows). It
+writes <code>&lt;set&gt;.direction.tsv</code> per set and a <code>direction.tsv</code> summary at the top of the result dir.</p>
+<p>Run over the four smoke dirs of 2026-09-16 (<code>2ca6cf7b3</code>, <code>0290ff96a</code>, <code>0186db249</code>, <code>deac6fa5a</code>) the
+shape is consistent. Where a direct one-hop leg exists, forward takes it or takes the lowest-RTT leg
+and never anything else: <code>mux-tunnels-2</code> scores 5/10, 9/10, 6/10 and 10/10 rows PASS with <strong>no FAIL</strong>
+in any run, and <code>mux-standby-8</code> 7, 8 and 11 of 12, always on <code>b414796d</code>, the one-hop leg to the exit.
+<code>mux-legs-2</code> is the counter-case and the finding worth acting on: its two legs are both two-hop and
+neither is direct, and forward settles on <code>fdab37dd</code> at ~147–149 ms rather than on <code>95839ad0</code> at
+36–132 ms — 7, 7, 6 and 2 rows of 10 FAIL on that account, the remainder split between rows where
+the lower-RTT leg did win and rows where forward fanned below the 80 % bar. Reverse does fan: on
+downloads of ≥ 50 MB two legs clear 10 % in three of the four dirs (2/2 PASS), and 6/6 in
+<code>mux-compose-T2xL2</code>, where four active legs let the reverse stream spread up to four ways; it
+collapses onto one leg in <code>0290ff96a</code>'s tunnels and standby sets. The dominant forward leg does move
+within a set — 0 to 5 flips per set, several of them between consecutive trials of one cell rather
+than at a cell boundary — so the choice is not fixed for the life of a group, but nothing here
+isolates load as the cause and criterion 5's "flipping on load" stays unproven.</p>
+<h3 id="the-fixes-this-campaign-merged">The fixes this campaign merged<a class="headerlink" href="#the-fixes-this-campaign-merged" title="Permalink">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>PR</th>
+<th>symptom → fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>#4962</td>
+<td><code>proxy mux info</code> hung under load → the window-refresh/SACK lock inversion broken; a lone leg never parks</td>
+</tr>
+<tr>
+<td>#4963</td>
+<td>a new stream landed anywhere → it goes to the tunnel with the most proven bandwidth</td>
+</tr>
+<tr>
+<td>#4964</td>
+<td>the exit parked healthy legs during a download → the receive-side stall detector judges legs by payload</td>
+</tr>
+<tr>
+<td>#4965</td>
+<td>an idle tunnel's keepalive rate counted as proven capacity → busy-only sampling, stale idle tunnels re-probed</td>
+</tr>
+<tr>
+<td>#4966</td>
+<td>three serialized mesh round trips per range chunk → one, with parallel fetches starting at once</td>
+</tr>
+<tr>
+<td>#4967</td>
+<td><code>--rg</code> could not name a tunnel (all groups share src_port 3) → it takes the group's own dst_port</td>
+</tr>
+<tr>
+<td>#4968</td>
+<td>a leg flapped 13 times in 65 s → an adaptive park holds 30 s; the latency band cannot undo a bottleneck park</td>
+</tr>
+<tr>
+<td>#4969</td>
+<td>an idle leg read as stalled, and a peer's park was silent → idle ≠ stalled, peer parks are events</td>
+</tr>
+<tr>
+<td>#4970</td>
+<td>ECF and RACK used first-hop RTT (10 ms vs 95 ms) where feedback was 170 ms → both use end-to-end delay; the band uses windowed min-RTT</td>
+</tr>
+<tr>
+<td>#4971</td>
+<td>a 15 s exit-open timeout surfaced only as http 000 → logged, counted, and that tunnel sits out the next picks</td>
+</tr>
+<tr>
+<td>#4972</td>
+<td>the BDP baseline ratcheted on a 470 ms path (50 MB up 9.82 → 2.80) → the window follows feedback delay over a first-hop baseline; a lone stream takes the lowest-latency tunnel</td>
+</tr>
+<tr>
+<td>#4973</td>
+<td>the standalone socks client could not carry over dmsg → it does, and takes the server flags</td>
+</tr>
+<tr>
+<td>#4974</td>
+<td>a chunk on a closed tunnel waited out 35–40 s of timeouts → it fails at once and refetches on a live tunnel</td>
+</tr>
+<tr>
+<td>#4975</td>
+<td>route groups outlived their app, so the next <code>--route</code> pin landed on a stale group → an app's groups close when it stops</td>
+</tr>
+<tr>
+<td>#4976</td>
+<td>— bench scripts, results and the campaign's data</td>
+</tr>
+<tr>
+<td>#4977</td>
+<td>park gate and retransmit charging reworked → measured worse twice (legs-2 50 MB down 5.86 and 6.54 vs 7.51); <strong>closed, not merged</strong></td>
+</tr>
+<tr>
+<td>#4978</td>
+<td>two concurrent streams stacked on one tunnel (&gt;99.5 % of bytes) → the pick scores <code>rtt × (streams+1)</code></td>
+</tr>
+<tr>
+<td>#4979</td>
+<td>the first stream paid a serialized greeting and CONNECT → pipelined like a chunk's, one round trip off the prelude</td>
+</tr>
+<tr>
+<td>#4981</td>
+<td>the sibling tunnel took any unused first hop → it is dialed on the best-ranked unused route, and two tunnels are the default</td>
+</tr>
+<tr>
+<td>#4982</td>
+<td>the loadtest sink re-hashed its object per request, and the split path serialized CONNECT → hash cached once, CONNECT answered optimistically</td>
+</tr>
+<tr>
+<td>#4983</td>
+<td>ranking by first-hop latency chose a 1 ms LAN neighbour whose second hop was never measured → full path latency, and same-LAN first hops are not diversity</td>
+</tr>
+</tbody>
+</table>
+<h3 id="open">Open<a class="headerlink" href="#open" title="Permalink">&para;</a></h3>
+<ul>
+<li><strong>Per-object prelude.</strong> ~0.9 s remains after #4979; it is the gap between one split object
+  (8.2–8.5) and two concurrent objects (10.0).</li>
+<li><strong>The packet-level scheduler is left as measured.</strong> Both #4977 variants regressed; legs-2 at
+  ~7.5 is 85 % of the best single route and that is where it stands.</li>
+<li><strong>Silent all-paths stalls,</strong> roughly one per 100 transfers, on plain routes as well as mux: every
+  group freezes together for 15–55 s and the client's exit-open sniff timeout closes the connection.
+  Wants a transport last-read/last-write age diagnostic.</li>
+<li><strong>10 MB downloads are the weakest cell in every campaign</strong> — three 4 MiB chunks leave nothing to
+  parallelise and the prelude is a fifth of the transfer. Only the pinned legs sets have ever
+  cleared it (5.33 and 5.14 vs 5.00 in campaign20); the auto-dialed tunnels sets sit at 91 %.</li>
+<li><strong>A dmsg-only reference set</strong> is still unmeasured; it is blocked until #4973 is deployed fleet-wide
+  and measured.</li>
+<li><strong>Route volatility.</strong> The 50 MB download bar was 8.84, then 6.63, then 5.43 in three consecutive
+  measurement windows, and the direct downlink lost 59 % of itself between one campaign's references
+  and the next campaign's drift probe. A ranking taken once, at dial time, is ranking against a
+  number that will be wrong within the hour.</li>
+</ul>
+<h3 id="next-phase-the-standby-pool">Next phase — the standby pool<a class="headerlink" href="#next-phase-the-standby-pool" title="Permalink">&para;</a></h3>
+<p>This supersedes criterion 8's earlier "needs route ranking first" decision text. The ranked pre-dial
+of #4981/#4983 is an <strong>interim step</strong>: it made the default safe to ship and it demonstrably picks
+good routes, but it commits to a ranking taken before any bytes move. The user's direction, verbatim:</p>
+<blockquote>
+<p>"route ranking before dialing isn't the best approach, just dial / set up the routes and hold them
+in standby, that would be the best approach and the only way to have routes that can be switched in
+in an instant."</p>
+</blockquote>
+<p>So the next phase dials a <strong>standby pool</strong> — routes set up and held, not carrying traffic — and
+switches on <strong>live measurement</strong> of the legs that are actually running, so a route that degrades
+mid-transfer is replaced in an instant rather than at the next dial. Probing the pool over
+dmsg-over-skynet relay legs is part of the same phase.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://github.com/skycoin/skywire" target="_blank" rel="noopener" title="skycoin/skywire on GitHub" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://t.me/skywire" target="_blank" rel="noopener" title="Skywire on Telegram" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M248 8C111.033 8 0 119.033 0 256s111.033 248 248 248 248-111.033 248-248S384.967 8 248 8m114.952 168.66c-3.732 39.215-19.881 134.378-28.1 178.3-3.476 18.584-10.322 24.816-16.948 25.425-14.4 1.326-25.338-9.517-39.287-18.661-21.827-14.308-34.158-23.215-55.346-37.177-24.485-16.135-8.612-25 5.342-39.5 3.652-3.793 67.107-61.51 68.335-66.746.153-.655.3-3.1-1.154-4.384s-3.59-.849-5.135-.5q-3.283.746-104.608 69.142-14.845 10.194-26.894 9.934c-8.855-.191-25.888-5.006-38.551-9.123-15.531-5.048-27.875-7.717-26.8-16.291q.84-6.7 18.45-13.7 108.446-47.248 144.628-62.3c68.872-28.647 83.183-33.623 92.511-33.789 2.052-.034 6.639.474 9.61 2.885a10.45 10.45 0 0 1 3.53 6.716 43.8 43.8 0 0 1 .417 9.769"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://blog.theskywirenetwork.net" target="_blank" rel="noopener" title="Skycoin blog" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M0 64c0-17.7 14.3-32 32-32 229.8 0 416 186.2 416 416 0 17.7-14.3 32-32 32s-32-14.3-32-32C384 253.6 226.4 96 32 96 14.3 96 0 81.7 0 64m0 352a64 64 0 1 1 128 0 64 64 0 1 1-128 0m32-256c159.1 0 288 128.9 288 288 0 17.7-14.3 32-32 32s-32-14.3-32-32c0-123.7-100.3-224-224-224-17.7 0-32-14.3-32-32s14.3-32 32-32"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "navigation.tracking", "navigation.indexes", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.action.edit", "toc.follow"], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.60a45f97.min.js"></script>
+      
+    
+  </body>
+</html>
