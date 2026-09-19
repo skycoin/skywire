@@ -250,6 +250,11 @@ var proxyCmd = &cobra.Command{
 		ctx, cancel := cmdutil.SignalContext(context.Background(), dlog)
 		defer cancel()
 
+		// The proxy half only DIALS the socks5 server; nothing dials it back, so
+		// it publishes no discovery entry. `dmsg-socks5 serve` is the half that
+		// listens, and it registers. Set here rather than in init() because both
+		// subcommands share the package global.
+		dmsgclient.NoRegister = true
 		dmsgC, closeDmsg, err := dmsgclient.InitDmsgWithFlags(ctx, dlog, pk, sk, nil, pubKey.String())
 
 		if err != nil {

@@ -90,13 +90,22 @@ func InitDmsgWithFlags(ctx context.Context, dlog *logging.Logger, pk cipher.PubK
 	return StartDmsgSelfHostedDisc(ctx, dlog, pk, sk, DmsgDiscAddr, DmsgSessions)
 }
 
+// clientConfig is the dmsg client config every helper in this package builds.
+// One constructor so the package globals reach the client in exactly one place —
+// NoRegister in particular, whose failure mode is silent: a tool that registers
+// when it should not still works, it just litters the discovery with an entry
+// nothing can dial.
+func clientConfig(dmsgSessions int) *dmsg.Config {
+	return &dmsg.Config{MinSessions: dmsgSessions, NoRegister: NoRegister}
+}
+
 // StartDmsg starts dmsg returns a dmsg client for the given dmsg discovery
 func StartDmsg(ctx context.Context, dlog *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, httpClient *http.Client, dmsgDisc string, dmsgSessions int) (dmsgC *dmsg.Client, stop func(), err error) {
 	if dlog == nil {
 		return nil, nil, fmt.Errorf("nil logger")
 	}
 
-	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, httpClient, dlog), &dmsg.Config{MinSessions: dmsgSessions})
+	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, httpClient, dlog), clientConfig(dmsgSessions))
 	dlog.Debug("Created dmsg client.")
 
 	go dmsgC.Serve(ctx)

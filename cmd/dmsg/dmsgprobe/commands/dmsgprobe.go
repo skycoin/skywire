@@ -32,6 +32,10 @@ var (
 func init() {
 	RootCmd.Flags().SortFlags = false
 	dmsgclient.InitFlags(RootCmd)
+	// Outbound only: this tool opens no dmsg listener, so a discovery entry
+	// naming its servers advertises a destination that accepts nothing. See
+	// dmsgclient.NoRegister.
+	dmsgclient.NoRegister = true
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "fatal", "[ debug | warn | error | fatal | panic | trace | info ]")
 	RootCmd.Flags().StringVar(&probeServer, "server", "", "force the probe through this specific dmsg server (pk hex)")
 	RootCmd.Flags().StringVar(&probeVia, "via", "", "probe a direct noise-TCP connection instead of dmsg: tcp://<pk>@host:port")

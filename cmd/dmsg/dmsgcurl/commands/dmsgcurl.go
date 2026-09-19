@@ -50,6 +50,10 @@ var (
 func init() {
 	RootCmd.Flags().SortFlags = false
 	dmsgclient.InitFlags(RootCmd)
+	// Outbound only: this tool opens no dmsg listener, so a discovery entry
+	// naming its servers advertises a destination that accepts nothing. See
+	// dmsgclient.NoRegister.
+	dmsgclient.NoRegister = true
 	RootCmd.Flags().StringVarP(&proxyAddr, "proxy", "p", proxyAddr, "connect to DMSG via proxy (i.e. '127.0.0.1:1080')")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "fatal", "[ debug | warn | error | fatal | panic | trace | info ]")
 	RootCmd.Flags().StringVarP(&dmsgcurlData, "data", "d", "", "dmsghttp POST data")
