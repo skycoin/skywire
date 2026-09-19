@@ -128,6 +128,17 @@ func SetDialMuxRouteHeadroom(n int) bool {
 	return setInt(routersettings.DialCandidateHeadroom, int64(n))
 }
 
+// DialDiversifyCandidates is how many routes a DIVERSIFY dial asks the route
+// finder for. A standby-pool fill is not looking for the best route, it is
+// looking for one the tunnels it already holds do not use — and the finder
+// answers rank-ordered, so the top few are exactly the ones they do.
+func DialDiversifyCandidates() int { return routersettings.DialDiversifyCandidates.Int() }
+
+// SetDialDiversifyCandidates installs that count. Non-positive is refused.
+func SetDialDiversifyCandidates(n int) bool {
+	return setInt(routersettings.DialDiversifyCandidates, int64(n))
+}
+
 // DialForegroundMux bounds how many mux legs are established SYNCHRONOUSLY at
 // dial time; the background self-heal fills the rest of the pool.
 func DialForegroundMux() int { return routersettings.DialForegroundMux.Int() }

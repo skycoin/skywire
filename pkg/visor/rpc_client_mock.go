@@ -258,6 +258,12 @@ func (mc *mockRPCClient) EnableHypervisorUIPersist(_ bool) error { return nil }
 // DisableHypervisorUIPersist implements API
 func (mc *mockRPCClient) DisableHypervisorUIPersist(_ bool) error { return nil }
 
+// SetHypervisorAuthPersist implements API
+func (mc *mockRPCClient) SetHypervisorAuthPersist(_, _ bool) error { return nil }
+
+// IsHypervisorAuthEnabled implements API
+func (mc *mockRPCClient) IsHypervisorAuthEnabled() bool { return false }
+
 // IsHypervisorUIServing implements API
 func (mc *mockRPCClient) IsHypervisorUIServing() bool { return false }
 

@@ -44,7 +44,12 @@
 }
 
 .transports-column {
-  width: 10%;
+  // The widest of the variable columns: its cell holds a FOUR-column grid
+  // (type, count, in, out) per transport type. At 10% the grid was wider than
+  // the column on any viewport below ~1400px and, with nothing clipping it,
+  // painted straight over the DMSG column to its right. The extra 3% comes
+  // out of the key column, which truncates by design.
+  width: 13%;
 }
 
 // Per-type transport counts in the Transports column, laid out as a 4-column
@@ -90,7 +95,7 @@
 }
 
 .dmsg-column {
-  width: 9%;
+  width: 10%;
 }
 
 // Per-carrier dmsg-server counts in the DMSG column, laid out as a 2-column
@@ -126,7 +131,7 @@
 }
 
 .key-column {
-  width: 25%;
+  width: 21%;
 }
 
 // A visor public key is 66 hex chars; on desktop (the wide table is md+ only)
@@ -270,4 +275,39 @@
 .wasm-visor-row tr,
 .wasm-visor-row td {
   background-color: rgba(140, 110, 205, 0.13) !important;
+}
+
+// Neither counts grid may paint outside its own cell.
+//
+// table-layout:fixed sizes every column from the percentages above, but a
+// nowrap inline-grid inside a cell keeps its intrinsic width regardless — so
+// as the window narrows the Transports grid simply overflowed the column and
+// rendered on top of the DMSG column's numbers (reported 2026-09-18, and the
+// same for DMSG over Key). max-width pins the grid to the cell it is in and
+// overflow:hidden is the guarantee that nothing escapes it.
+//
+// Clipping is the floor, not the plan: the media queries below tighten the
+// gaps and the type scale first, so the numbers still fit down to the width
+// where the table gives way to the mobile card list (md, 768px) and the point
+// where anything is actually clipped is below that.
+.tp-counts,
+.dmsg-counts {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+@media (max-width: 1400px) {
+  .tp-counts,
+  .dmsg-counts {
+    font-size: 0.78em;
+    column-gap: 4px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .tp-counts,
+  .dmsg-counts {
+    font-size: 0.72em;
+    column-gap: 3px;
+  }
 }
