@@ -202,9 +202,18 @@ type RouteGroup struct {
 	// atomic requires 64-bit alignment for struct field access
 	lastSent atomic.Int64
 
+	// lastRecv is the arrival time of the most recent inbound packet. It exists
+	// for the service-loop gate (service_gate.go): a group being downloaded to
+	// sends almost nothing, so without a receive term it would read as idle and
+	// the gated loops would park and unpark once per arriving packet.
+	lastRecv atomic.Int64
+
 	// consecutiveWriteFailures tracks repeated transport write errors.
 	// After maxConsecutiveWriteFailures, the RouteGroup closes itself.
 	consecutiveWriteFailures int32
+
+	// wake releases the service loops parked by their gate (service_gate.go).
+	wake serviceWake
 
 	mu sync.Mutex
 
@@ -1039,6 +1048,11 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
+
+	// Release the traffic-gated service loops BEFORE the send-window park
+	// below, so send-window is refreshing by the time a writer could block on
+	// it. One relaxed atomic load when nothing is parked.
+	rg.signalServiceWake()
 
 	for n < len(p) {
 		// Per-leg send window: park while every ready leg is at its window so a
@@ -2160,21 +2174,28 @@ func (rg *RouteGroup) startOffServiceLoops() {
 	// prove delivered; refreshed only at the rebuild cadence (seconds) it
 	// doubled from 128 KiB every ~5 s and pinned an upload at ~1.7 MB/s, so
 	// refresh four times a second.
-	go rg.serviceKnobLoop("send-window", routersettings.SendWindowRefreshInterval, rg.windowServiceFn)
+	// Gated: with nothing outstanding in the retransmit buffer the window is
+	// recomputed from unchanged inputs, and no writer can be parked waiting to
+	// be signaled. The write path wakes it.
+	go rg.serviceKnobLoopGated("send-window", routersettings.SendWindowRefreshInterval, rg.windowServiceFn, rg.muxDormant)
 	// Timer-driven reorder-stall recovery: when a frontier gap is stuck past
 	// reorderTimeout with no packet arriving to trigger the arrival-driven SACK,
 	// emit a SACK so the sender retransmits the missing seq in order (never skip).
-	go rg.serviceKnobLoop("reorder-stall", routersettings.ReorderStallInterval, rg.reorderStallServiceFn)
+	// Gated: this fires only on a frontier gap held past reorder.timeout, and a
+	// gap can only open when a packet arrives — which wakes it.
+	go rg.serviceKnobLoopGated("reorder-stall", routersettings.ReorderStallInterval, rg.reorderStallServiceFn, rg.muxDormant)
 	// Periodic leg-state resync: re-assert the full standby/active set to the peer
 	// so a lost park/promote signal self-corrects instead of desyncing the mirror
 	// permanently (CapLegState). No-op unless negotiated; see legStateResyncServiceFn.
-	go rg.serviceKnobLoop("legstate-resync", routersettings.LegStateResyncInterval, rg.legStateResyncServiceFn)
+	// Gated: its loop runs from leg index 1, so it is a no-op below two legs.
+	go rg.serviceKnobLoopGated("legstate-resync", routersettings.LegStateResyncInterval, rg.legStateResyncServiceFn, rg.singleLegDormant)
 	// Unidirectional flip controller (CapUniDir): both ends run this, so the
 	// direction→leg-class mapping flips together when the traffic asymmetry
 	// inverts (upload outweighs download → the heavy upload gets the mux). No-op
 	// unless directional; the fn self-gates. Cadence matches the reorder-stall
 	// tick so the hysteresis is a small number of seconds.
-	go rg.serviceKnobLoop("unidir-flip", routersettings.UnidirFlipInterval, rg.unidirFlipServiceFn)
+	// Gated: a direction→leg-class mapping needs two classes of leg to map onto.
+	go rg.serviceKnobLoopGated("unidir-flip", routersettings.UnidirFlipInterval, rg.unidirFlipServiceFn, rg.singleLegDormant)
 	// Note: Automatic ping loop removed. Latency is now measured once at transport creation.
 	// Rotation loop is NOT started here — startOffServiceLoops runs
 	// during initial route-group setup, before the router-side
@@ -3904,6 +3925,17 @@ func (rg *RouteGroup) healSoleBlackHoledLeg(deadID uuid.UUID) {
 // the group was built, and excluded from the first live set for exactly that
 // reason — settable on a running visor.
 func (rg *RouteGroup) serviceKnobLoop(name string, k *routersettings.Knob, f sendServicePacketFn) {
+	rg.serviceKnobLoopGated(name, k, f, nil)
+}
+
+// serviceKnobLoopGated is serviceKnobLoop with an optional dormancy gate: while
+// dormant reports true the loop stops its ticker and parks on the group's wake
+// broadcast, so it costs a stack and no timer. Pass nil to tick unconditionally.
+//
+// The gate is re-read after every wake and after every tick, so a stale or
+// spurious wake merely re-parks. See service_gate.go for which loops take a gate
+// and why parking each one is safe.
+func (rg *RouteGroup) serviceKnobLoopGated(name string, k *routersettings.Knob, f sendServicePacketFn, dormant func() bool) {
 	interval := rg.knDur(k)
 	if interval <= 0 {
 		select {
@@ -3915,7 +3947,49 @@ func (rg *RouteGroup) serviceKnobLoop(name string, k *routersettings.Knob, f sen
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	// parked is this loop's own view of whether its ticker is stopped; the
+	// group-wide counter it maintains is what lets signal() skip the mutex when
+	// nothing is parked. Unwind it on every exit path.
+	parked := false
+	defer func() {
+		if parked {
+			rg.wake.parked.Add(-1)
+		}
+	}()
+
 	for {
+		var wakeCh <-chan struct{}
+		switch {
+		case dormant == nil:
+			// Ungated: tick unconditionally, exactly as before.
+		case parked:
+			// Still parked: take the CURRENT wake channel, then re-read the
+			// gate. Taking it first is what makes a racing signal safe — it
+			// closes a channel already held rather than one taken later.
+			wakeCh = rg.wake.wait()
+			if !dormant() {
+				rg.wake.parked.Add(-1)
+				parked = false
+				wakeCh = nil
+				ticker.Reset(interval)
+			}
+		case dormant():
+			// Entering dormancy. Register BEFORE taking the channel and
+			// re-reading the gate: a signal that observed a zero counter and
+			// skipped therefore published its state before this second read.
+			rg.wake.parked.Add(1)
+			wakeCh = rg.wake.wait()
+			if dormant() {
+				// A stopped ticker's channel never fires again, so the select
+				// below waits on the wake and the close channels alone.
+				ticker.Stop()
+				parked = true
+			} else {
+				rg.wake.parked.Add(-1)
+				wakeCh = nil
+			}
+		}
+
 		select {
 		case <-rg.remoteClosed:
 			rg.logger.Debugf("Remote got closed, stopping %s loop", name)
@@ -3924,12 +3998,18 @@ func (rg *RouteGroup) serviceKnobLoop(name string, k *routersettings.Knob, f sen
 			rg.logger.Debugf("RouteGroup closed, stopping %s loop", name)
 			return
 		case <-ticker.C:
+			// A tick buffered before Stop can still arrive once; f self-gates,
+			// so running it while dormant is a no-op either way.
 			f(interval)
+		case <-wakeCh:
+			// Woken from dormancy; the gate is re-evaluated at the top.
 		}
 		if rg.refreshKnobs() {
 			if next := rg.knDur(k); next > 0 && next != interval {
 				interval = next
-				ticker.Reset(interval)
+				if !parked {
+					ticker.Reset(interval)
+				}
 				rg.logger.Debugf("%s loop cadence moved to %s (%s)", name, interval, k.Name())
 			}
 		}
@@ -4470,6 +4550,14 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 // sets), and a queued close would be dropped by a full queue — leaving a dead
 // group alive until the keep-alive GC reaped it.
 func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
+	// An inbound packet is what opens a reorder gap and what moves the ack
+	// frontier, so it both records receive activity (which holds the gated loops
+	// awake for the grace period, so a download does not park and unpark them
+	// per packet) and releases them if they are already parked. One atomic store
+	// plus one relaxed load when nothing is parked.
+	rg.lastRecv.Store(time.Now().UnixNano())
+	rg.signalServiceWake()
+
 	if packet.Type() == routing.ClosePacket {
 		return rg.handlePacketNow(packet)
 	}
@@ -4645,7 +4733,9 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 					// lost burst-tail (which the receiver never reports — its bitmap ends
 					// at the last seq it got) recovers in one PTO instead of stalling until
 					// the retx entry ages out (RFC 8985). Reuses the SACK retransmit path.
-					go rg.serviceKnobLoop("tlp", routersettings.TLPCheckInterval, rg.tlpServiceFn)
+					// Gated: a tail probe needs an outstanding tail, so this is a
+					// no-op whenever the retransmit buffer is empty.
+					go rg.serviceKnobLoopGated("tlp", routersettings.TLPCheckInterval, rg.tlpServiceFn, rg.muxDormant)
 					// Proactive HoL retransmit reuses the SACK channel, so it is only
 					// enabled when SACK is too. Both peers must advertise CapHOLRetx;
 					// otherwise the group keeps the reactive SACK behavior.
@@ -5722,6 +5812,9 @@ func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.M
 	hookSet := rg.legChangeHook != nil && newIdx > 0
 	rg.mu.Unlock()
 
+	// A second leg is what the leg-gated loops were parked waiting for.
+	rg.signalServiceWake()
+
 	if hookSet {
 		rg.fireLegChange("added", newIdx)
 	}
@@ -5755,6 +5848,9 @@ func (rg *RouteGroup) appendForwardLeg(forward routing.Rule, tp *transport.Manag
 	rg.noteLegEvent(MuxEventLegAdded, reason, MuxByLocal, newIdx, legs, tp, rg.legHopsLocked(tpEntryID(tp)))
 	hookSet := rg.legChangeHook != nil
 	rg.mu.Unlock()
+
+	// A second leg is what the leg-gated loops were parked waiting for.
+	rg.signalServiceWake()
 
 	if hookSet {
 		rg.fireLegChange("added", newIdx)
