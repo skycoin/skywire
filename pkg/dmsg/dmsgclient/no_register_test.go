@@ -38,7 +38,7 @@ func TestClientConfigCarriesNoRegister(t *testing.T) {
 	require.Equal(t, 3, clientConfig(3).MinSessions, "session count still plumbs through")
 }
 
-// And the config the helpers build is honoured by the client it is handed to —
+// And the config the helpers build is honored by the client it is handed to —
 // Unpublished is what `visor state` reports and what the serve loop consults
 // before its initial post.
 func TestNoRegisterSuppressesTheEntry(t *testing.T) {

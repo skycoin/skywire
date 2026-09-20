@@ -2985,7 +2985,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	// fill, so the pool never discovers the first hops it has not used yet and
 	// settles at a handful of tunnels over one transport.
 	//
-	// ExcludeTransportIDs was already honoured, but only for the direct probe
+	// ExcludeTransportIDs was already honored, but only for the direct probe
 	// below. These extend it to the PEER and its IP — one host answers on
 	// stcpr, squicr and sudph alike, and all three ride the same link — and to
 	// the multi-hop BFS.
@@ -3246,7 +3246,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 
 	// The BFS starts from this visor's own transports, so a held first hop is
 	// not a starting point. Falling back to the unfiltered set when every hop
-	// is held keeps the documented soft-preference behaviour: a dial with
+	// is held keeps the documented soft-preference behavior: a dial with
 	// nowhere else to go still gets an answer, and the caller's own gate
 	// decides whether to use it.
 	bfsTps := localTps

@@ -261,7 +261,7 @@ func TestCollector_CircuitBreaker_SourceUnreachable(t *testing.T) {
 	}
 
 	snap := c.Snapshot()
-	if got := snap.FailuresByReason[ReasonSourceUnreachable]; got != uint64(circuitFailureThreshold()+2) {
+	if got := snap.FailuresByReason[ReasonSourceUnreachable]; got != wantCount(circuitFailureThreshold()+2) {
 		t.Errorf("source_unreachable count=%d, want %d", got, circuitFailureThreshold()+2)
 	}
 	if got := snap.FailuresByReason[ReasonIDReservation]; got != 0 {
@@ -289,7 +289,7 @@ func TestCollector_CircuitBreaker_DestinationUnreachable(t *testing.T) {
 	}
 
 	snap := c.Snapshot()
-	if got := snap.FailuresByReason[ReasonIDReservation]; got != uint64(circuitFailureThreshold()) {
+	if got := snap.FailuresByReason[ReasonIDReservation]; got != wantCount(circuitFailureThreshold()) {
 		t.Errorf("id_reservation count=%d, want %d", got, circuitFailureThreshold())
 	}
 }
@@ -325,7 +325,7 @@ func TestCollector_CircuitBreaker_IntermediateUnreachable(t *testing.T) {
 	}
 
 	snap := c.Snapshot()
-	if got := snap.FailuresByReason[ReasonIntermediateUnreachable]; got != uint64(circuitFailureThreshold()+2) {
+	if got := snap.FailuresByReason[ReasonIntermediateUnreachable]; got != wantCount(circuitFailureThreshold()+2) {
 		t.Errorf("intermediate_unreachable count=%d, want %d", got, circuitFailureThreshold()+2)
 	}
 	if got := snap.FailuresByReason[ReasonIDReservation]; got != 0 {
@@ -714,4 +714,15 @@ func TestCollector_CircuitBreakerKnobRestoresTrip(t *testing.T) {
 	if bs, open := c.Snapshot().Breakers[dst.String()]; !open || bs.State != CircuitOpen {
 		t.Fatalf("breaker=%+v open=%v, want open", bs, open)
 	}
+}
+
+// wantCount converts a knob-backed threshold to the uint64 the snapshot's
+// failure counters use. setup.circuit_fail_threshold is registered with a floor
+// of 1 so the value is never negative, but the conversion needs an explicit
+// guard to be provably in range.
+func wantCount(n int) uint64 {
+	if n < 0 {
+		return 0
+	}
+	return uint64(n)
 }
