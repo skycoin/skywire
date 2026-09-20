@@ -36,6 +36,13 @@ var (
 	LegStateResyncInterval    = RegisterMin("leg.state_resync_interval", KindDuration, int64(7*time.Second), int64(time.Second), "how often the active-set side re-asserts its COMPLETE standby/active set to the peer (CapLegState)")
 	LegParkMinHold            = RegisterMin("leg.park_min_hold", KindDuration, int64(30*time.Second), int64(time.Second), "how long an adaptive park holds before a leg may be re-admitted")
 
+	// Idle suspension of the service loops that cannot act on a quiet or
+	// single-leg group (service_gate.go). The three loops it parks tick at 10,
+	// 10 and 2 Hz, so a standby pool of dozens of groups spends most of the
+	// visor's idle CPU proving there is nothing to do. 0 disables suspension
+	// and restores the unconditional tickers.
+	MuxIdleSuspendGrace = RegisterZeroable("mux.idle_suspend_grace", KindDuration, int64(2*time.Second), "how long after the last send before a group's traffic-gated service loops may park; 0 keeps them ticking always")
+
 	// The outclassed-leg gate (route_mux.go ruleProbeOnlyLegsLocked).
 	LegStarveRatio     = RegisterRatio("leg.starve_ratio", 6.0, 1.0, "how many times the best active leg's delay basis a leg's own may exceed before it is cut to a probe per window")
 	LegProbeBytes      = RegisterMin("leg.probe_bytes", KindBytes, 64*1024, 1024, "what a leg cut to probe-only may carry per window")
