@@ -233,6 +233,10 @@ type API interface {
 	// RouteGroupMuxNegotiated reports, per route group, the capabilities the
 	// two ends negotiated and the send-window shape this end is applying.
 	RouteGroupMuxNegotiated(appName string) ([]router.MuxNegotiated, error)
+	// RehomeTunnelLeg moves a STANDBY tunnel's whole built chain into an ACTIVE
+	// tunnel as one more mux leg, in place, with no setup-node dial
+	// (`proxy mux adopt`). Both ports are the dst_port `proxy mux info` prints.
+	RehomeTunnelLeg(appName string, targetPort, standbyPort uint16) error
 	// GetRouterDialSettings / SetRouterDialSettings are the DIAL-TIME router
 	// knobs: ranking priors, candidate counts, warm-plan cache shape, the
 	// dead-route young-death window and the prefer-these-peers list.

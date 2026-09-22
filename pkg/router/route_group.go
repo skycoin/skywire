@@ -389,6 +389,13 @@ type RouteGroup struct {
 	// Encapsulates sequencing, reordering, SACK, and transport selection.
 	mux *routeMux
 
+	// rehomeHost is the router this group is registered with, as the narrow
+	// interface leg re-home needs: a re-home arriving on THIS group's chain
+	// names a DIFFERENT group by descriptor, and only the router can resolve
+	// one. Nil for a group built outside the router (tests, datagram setup),
+	// which simply refuses every re-home. See leg_rehome.go.
+	rehomeHost legRehomeHost
+
 	// legChangeHook, when non-nil, fires from the leg-mutation
 	// paths (appendForwardLeg / appendRules / leg-prune on
 	// transport close). Returning a non-Unset DistributionConfig
@@ -4381,7 +4388,7 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		// reliable transports whose gaps SACK recovery refills, so it is off by
 		// default. It still only ACTIVATES when the peer also advertises it, so an
 		// old or non-opted peer simply never negotiates it and is unaffected.
-		caps := muxHandshakeCaps() | routing.CapLegState | routing.CapUniDir
+		caps := muxHandshakeCaps() | routing.CapLegState | routing.CapUniDir | routing.CapLegRehome
 		if rg.cfg != nil && rg.cfg.FEC {
 			caps |= routing.CapFEC
 		}
@@ -4645,6 +4652,8 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 		return rg.handleLegStatePacket(packet)
 	case routing.DirectionPacket:
 		return rg.handleDirectionPacket(packet)
+	case routing.LegRehomePacket:
+		return rg.handleLegRehomePacket(packet)
 	case routing.HandshakePacket:
 		// A handshake on an aux leg proves the peer registered that leg's
 		// rule, so it is safe to start sending on it. The primary leg's
@@ -4782,6 +4791,16 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 				if remoteCaps&routing.CapUniDir != 0 {
 					rg.mux.setDirectional(rg.initiator, rg.desc.DstPK(), rg.desc.SrcPK())
 					rg.logger.Debug("Unidirectional send selection enabled (both peers support CapUniDir)")
+				}
+
+				// Leg re-home negotiation. Both edges must advertise CapLegRehome;
+				// then a STANDBY group's whole chain can be adopted as one of this
+				// group's mux legs by rewriting its consume rule at each edge, with
+				// no setup-node dial. Inert until an operator or the pool asks for
+				// one; see leg_rehome.go.
+				if remoteCaps&routing.CapLegRehome != 0 {
+					rg.mux.legRehomeEnabled = true
+					rg.logger.Debug("Leg re-home enabled (both peers support CapLegRehome)")
 				}
 
 				// FEC negotiation. Requires CapMux (rg.mux set above); enabled purely

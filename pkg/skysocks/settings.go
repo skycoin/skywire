@@ -201,6 +201,8 @@ func (c *Client) applyOps(ops []appserver.AppOp) {
 		switch op.Kind {
 		case appserver.AppOpCutTunnel:
 			c.cutTunnel(routing.Port(op.Arg)) //nolint:gosec
+		case appserver.AppOpConsumedTunnel:
+			c.consumedTunnel(routing.Port(op.Arg)) //nolint:gosec
 		default:
 			if c.appCl != nil {
 				c.appCl.Log().Warnf("Ignoring unknown app op %q (seq %d)", op.Kind, op.Seq)
