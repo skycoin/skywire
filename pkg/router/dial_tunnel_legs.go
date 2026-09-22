@@ -39,6 +39,11 @@ func applyDialTunnelLegs(opts *DialOptions) int {
 	if opts.AppName == "" || opts.EnsureDirectTransport || opts.Datagram {
 		return 0
 	}
+	if opts.TunnelRole == tunnelRoleStandby {
+		// A pooled tunnel is dialed single-leg and stays that way; the width
+		// belongs to the ACTIVE tunnels (pool_arbiter.go).
+		return 0
+	}
 	want := dialTunnelLegsFor(opts.AppName)
 	if want == 0 {
 		return 0

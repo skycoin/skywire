@@ -442,6 +442,15 @@ type RouteGroup struct {
 	selfHealTarget int
 	healInFlight   atomic.Bool
 
+	// The standby-pool arbiter's per-group state (pool_arbiter.go): the legs
+	// this group took from the pool, when the last one was taken, and the load
+	// episode marks the release is measured from. All guarded by rg.mu.
+	poolTaken     []poolTakenLeg
+	poolLastTake  time.Time
+	poolLoadAt    time.Time
+	poolBusySince time.Time
+	poolBytesMark uint64
+
 	// dirFanoutTicks throttles the directional confinement/fan-out summary logged
 	// by legDataProgressServiceFn (see there) so a busy download does not spam it.
 	dirFanoutTicks int
@@ -647,8 +656,15 @@ func (rg *RouteGroup) SetTunnelRole(role string) {
 		return
 	}
 	rg.mu.Lock()
+	prev := rg.tunnelRole
 	rg.tunnelRole = role
 	rg.mu.Unlock()
+	// DEMOTION to standby: whatever width this group held as an active tunnel,
+	// a pooled one holds a single leg. Give the extras back now rather than
+	// leaving them parked on the exit (pool_arbiter.go).
+	if role == tunnelRoleStandby && prev != tunnelRoleStandby {
+		rg.shedLegsForStandby()
+	}
 }
 
 // TunnelRole returns the dialing app's label for this route group ("active" /
@@ -739,6 +755,10 @@ type MuxInfo struct {
 	// tunnels, and ALWAYS empty on the accepting end: an exit knows how many
 	// tunnels a client holds but not which of them are in standby, so read the
 	// role on the local end.
+	// AgeMS is how long this route group has existed. For a pooled STANDBY
+	// tunnel it is its AUDITION age — how long it has been held open, pinged
+	// and measured without carrying a stream.
+	AgeMS      float64
 	TunnelRole string
 }
 
@@ -818,6 +838,10 @@ type MuxLeg struct {
 	TransportID string `json:"transport_id"`
 	TpType      string `json:"tp_type"`
 	RemotePK    string `json:"remote_pk"`
+	// Source names where a leg that is NOT this group's own dial came from —
+	// "standby :4, re-homed in place" for a leg the pool arbiter took
+	// (pool_arbiter.go). Empty for an ordinary dialed leg.
+	Source string `json:"source,omitempty"`
 	// LatencyMS is the FIRST-HOP transport RTT in ms (the same value
 	// 'tp ls' shows). For a multihop leg this is only the near edge, NOT
 	// the whole path — use RouteLatencyMS for the end-to-end route.
@@ -880,6 +904,9 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 	}
 	info.PerFrameNoise = rg.perFrameNoiseActive
 	info.TunnelRole = rg.tunnelRole
+	if !rg.createdAt.IsZero() {
+		info.AgeMS = float64(time.Since(rg.createdAt)) / float64(time.Millisecond)
+	}
 	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
 	rg.mu.Unlock()
 
@@ -901,6 +928,7 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 			leg.TransportID = tp.Entry.ID.String()
 			leg.TpType = string(tp.Entry.Type)
 			leg.RemotePK = tp.Remote().String()
+			leg.Source = rg.poolLegSource(tp.Entry.ID)
 			leg.LatencyMS = tp.GetLatency()
 			// TRUE end-to-end route latency (all hops), from the leg-liveness
 			// pong — distinct from the first-hop transport RTT above.
@@ -1500,6 +1528,9 @@ func (rg *RouteGroup) SetRotation(hook RotationHook, applyAdd, applyAddForward f
 // is the requested mux degree (legs the group should maintain). A target of
 // 0 or 1 disables self-heal (a single-leg group has nothing to spread to).
 func (rg *RouteGroup) SetSelfHeal(applyAdd func(excludeHops []string), target int) {
+	if target > 1 && !rg.poolWideningAllowed() {
+		target = 1 // a standby tunnel holds one leg, whatever the width says
+	}
 	rg.mu.Lock()
 	rg.selfHealAdd = applyAdd
 	rg.selfHealTarget = target
@@ -1513,6 +1544,9 @@ func (rg *RouteGroup) SetSelfHeal(applyAdd func(excludeHops []string), target in
 // live self-heal target instead of letting maybeSelfHeal keep re-dialing back
 // toward the (larger) dial-time value.
 func (rg *RouteGroup) setSelfHealTarget(target int) {
+	if target > 1 && !rg.poolWideningAllowed() {
+		target = 1 // a standby tunnel holds one leg, whatever the width says
+	}
 	rg.mu.Lock()
 	rg.selfHealTarget = target
 	rg.mu.Unlock()
@@ -1590,6 +1624,13 @@ func (rg *RouteGroup) maybeSelfHeal() {
 	add := rg.selfHealAdd
 	target := rg.selfHealTarget
 	rg.mu.Unlock()
+	// A STANDBY tunnel is single-leg by construction: widening one spends a
+	// second chain to the exit on a tunnel carrying nothing (pool_arbiter.go).
+	// The top-up is an ACTIVE-tunnel power; a group with no role at all is
+	// unaffected.
+	if !rg.poolWideningAllowed() {
+		return
+	}
 	if add == nil || target <= 1 || rg.isClosed() {
 		return
 	}

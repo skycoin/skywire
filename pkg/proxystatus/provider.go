@@ -83,6 +83,10 @@ type Leg struct {
 	GoodputDownBps float64
 	Alive          bool
 	Standby        bool
+	// Source names where a leg that is not this group's own dial came from:
+	// a leg the standby-pool arbiter took ("standby :4, re-homed in place").
+	// Empty for an ordinary dialed leg.
+	Source string `json:"source,omitempty"`
 	// Hops is the leg's full forward route (every hop to the destination),
 	// full PKs, per-hop transport type + latency where known.
 	Hops []Hop
@@ -283,7 +287,11 @@ type Tunnel struct {
 	// same port NoteMuxEvent is addressed by). It is what lets the dialing
 	// app match a tunnel in this snapshot to its own session rather than
 	// trusting the tunnel order. 0 when the visor could not name it.
-	LocalPort uint16 `json:"local_port,omitempty"`
+	// AuditionMS is how long this tunnel has existed. For a STANDBY tunnel it
+	// is its audition age: how long the pool has held it open, pinged and
+	// measured it without putting a stream on it.
+	AuditionMS float64 `json:"audition_ms,omitempty"`
+	LocalPort  uint16  `json:"local_port,omitempty"`
 }
 
 // Stream is one open tunneled stream on the surface's session to the exit — the
