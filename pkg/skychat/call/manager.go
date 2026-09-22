@@ -401,7 +401,15 @@ func (m *Manager) dropCall(callID string) {
 	m.mu.Unlock()
 	if sess != nil {
 		sess.Close()
-		m.log.WithField("call", callID).Info("voice: call ended")
+		// With the reason, because "call ended" on its own is what a report
+		// of calls dropping by themselves has to be diagnosed from, and it
+		// says nothing: a peer hanging up and a transport collapsing under a
+		// live call produced the identical line.
+		reason := sess.EndReason()
+		if reason == "" {
+			reason = "hung up here"
+		}
+		m.log.WithField("call", callID).WithField("reason", reason).Info("voice: call ended")
 	}
 }
 

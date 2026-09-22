@@ -91,6 +91,31 @@ class NetworkMovesTest {
     }
 
     @Test
+    fun gainingAnAddressIsNotAMove() {
+        val moves = NetworkMoves()
+        moves.observe(attachment("100", "192.168.1.14"))
+        // IPv6 privacy extensions mint a new temporary address alongside the
+        // one we already hold; a router advertisement adds a prefix. Every
+        // socket the core has open keeps working — it is still bound to an
+        // address the phone still has — so re-dialling here would drop a call
+        // in progress for a change that invalidated nothing.
+        assertFalse(moves.observe(attachment("100", "192.168.1.14", "2001:db8::9")))
+        assertFalse(moves.observe(attachment("100", "192.168.1.14", "2001:db8::9", "2001:db8::a")))
+        // ...and the address going away again still is one.
+        assertTrue(moves.observe(attachment("100", "2001:db8::9", "2001:db8::a")))
+    }
+
+    @Test
+    fun aRotatedAddressIsStillAMove() {
+        val moves = NetworkMoves()
+        moves.observe(attachment("100", "192.168.1.14", "2001:db8::9"))
+        // The v6 address is replaced rather than merely added: whatever was
+        // bound to the old one is dead, so this is a real move even though the
+        // set is the same size.
+        assertTrue(moves.observe(attachment("100", "192.168.1.14", "2001:db8::a")))
+    }
+
+    @Test
     fun linkLocalAndLoopbackAreIgnored() {
         // fe80:: is per-interface and constant across the moves that matter;
         // no dmsg session is bound to one. Neither should register as a

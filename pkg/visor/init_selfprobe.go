@@ -107,9 +107,13 @@ func selfProbeLoop(ctx context.Context, v *Visor, dmsgC *dmsg.Client, log *loggi
 				}
 				continue
 			}
+			// Whether anything is riding the sessions recovery would
+			// close, read for the window the probe covers — before the
+			// probe runs, so its own dial cannot be what satisfies it.
+			relaying := dmsgC.RelayedSince(lastTick)
 			lastTick = now
 			probeResults := runSelfProbes(ctx, v, dmsgC, log)
-			handleProbeResults(dmsgC, state, probeResults, now, log)
+			handleProbeResults(dmsgC, state, probeResults, now, relaying, log)
 		}
 	}
 }
@@ -125,7 +129,16 @@ type probeReconnector interface {
 // a force-reconnect when the threshold is crossed (subject to cooldown).
 // The now parameter is injected so tests can control cooldown timing
 // deterministically.
-func handleProbeResults(reconn probeReconnector, state *probeState, results map[uint16]bool, now time.Time, log *logging.Logger) {
+//
+// relaying is whether any dmsg session has carried bytes since the last tick,
+// and it VETOES the recovery. Recovery here is ForceReconnect, which closes
+// every session this visor has — so it does not just re-dial, it hangs up
+// whatever was riding them, a voice call included. Data moving is not proof
+// the listeners are reachable, which is what the probe asks, but it is proof
+// that the cure would cost more than the disease: a visor nobody can reach is
+// worth re-dialing for, a visor mid-call is not. The failure keeps counting,
+// so the moment the traffic stops the next tick recovers.
+func handleProbeResults(reconn probeReconnector, state *probeState, results map[uint16]bool, now time.Time, relaying bool, log *logging.Logger) {
 	anyFailed := false
 	shouldRecover := false
 	for port, ok := range results {
@@ -157,6 +170,10 @@ func handleProbeResults(reconn probeReconnector, state *probeState, results map[
 		}
 	}
 
+	if shouldRecover && relaying {
+		log.Warn("Self-probe recovery withheld: dmsg sessions are carrying traffic; not tearing down live streams")
+		shouldRecover = false
+	}
 	if shouldRecover {
 		count := reconn.ForceReconnect()
 		state.lastReconnect = now

@@ -366,10 +366,32 @@ func (ce *Client) sortedMeshSessions(delegatedServers []cipher.PubKey) []ClientS
 	return sessions
 }
 
-// sortSessionsByLatency sorts sessions by last measured ping latency (ascending).
-// Sessions with no measurement (0) are sorted last.
+// sortSessionsByLatency sorts sessions by last measured ping latency
+// (ascending). Sessions with no measurement (0) are sorted last, and sessions
+// whose pings are FAILING sort behind all of them.
+//
+// The failing ones need saying because latency alone hides them: a session
+// records its last SUCCESSFUL round-trip, so a server that has since stopped
+// answering keeps whatever fast number it last posted and sorts first — the
+// sickest server in the set, picked ahead of every healthy one.
+//
+// That used to be masked: the ping loop closed such a session outright, so it
+// left the list rather than sorting badly within it. It no longer does when
+// the session is carrying traffic (see decideReap), which is right — a call
+// on it should not be hung up — but it means the demotion has to be done
+// here instead, or a client would keep routing NEW dials through a server it
+// already knows is failing them.
+//
+// The bar is pingDeadThreshold, not one failure: a single miss is the
+// transient the threshold already exists to absorb, and reordering on it
+// would just shuffle the list for noise.
 func sortSessionsByLatency(sessions []ClientSession) {
 	sort.Slice(sessions, func(i, j int) bool {
+		failingI := sessions[i].PingFails() >= pingDeadThreshold
+		failingJ := sessions[j].PingFails() >= pingDeadThreshold
+		if failingI != failingJ {
+			return !failingI
+		}
 		pi := sessions[i].LastPing()
 		pj := sessions[j].LastPing()
 		// Treat 0 (unmeasured) as maximum latency.

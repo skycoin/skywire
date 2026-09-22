@@ -88,6 +88,15 @@ type SessionCommon struct {
 	// `visor state`.
 	pingFails atomic.Int32
 
+	// lastReadNs is when a stream on this session last READ bytes, as unix
+	// nanoseconds, or 0 for never. atomic.Int64 rather than a bare int64
+	// because it carries its own alignment guarantee — this repo ships armv7,
+	// where a misaligned 64-bit atomic panics at runtime.
+	//
+	// It is the answer to "is this server still relaying to us", asked by
+	// something a relayed byte already proves. See ReadSince.
+	lastReadNs atomic.Int64
+
 	// reaped is set by the client's idle-session reaper just before it closes
 	// this session. The serve goroutine's exit path reads it so a deliberate
 	// trim is not mistaken for a dropped server. Without it the exit path
@@ -525,6 +534,33 @@ func (sc *SessionCommon) quicPing(quicSes quicConn) (time.Duration, error) {
 // Returns 0 if no measurement has been taken yet.
 // PingFails is the consecutive liveness-ping failure count for this session.
 func (sc *SessionCommon) PingFails() int { return int(sc.pingFails.Load()) }
+
+// markRead records that a stream on this session just read bytes. Called from
+// Stream.Read on every successful read, so it must stay a single store.
+func (sc *SessionCommon) markRead() {
+	if sc == nil {
+		return
+	}
+	sc.lastReadNs.Store(time.Now().UnixNano())
+}
+
+// ReadSince reports whether any stream on this session has read bytes since t.
+//
+// Those bytes came through the dmsg server, which is the very thing the
+// liveness ping goes and asks about — so this is the same evidence, produced
+// by real traffic instead of by a probe, and it cannot be wrong in the
+// direction that matters: data does not arrive through a server that has
+// stopped relaying for us.
+//
+// False means "no evidence", not "dead". An idle session reads nothing and is
+// exactly the case the ping exists for.
+func (sc *SessionCommon) ReadSince(t time.Time) bool {
+	if sc == nil {
+		return false
+	}
+	ns := sc.lastReadNs.Load()
+	return ns != 0 && ns > t.UnixNano()
+}
 
 func (sc *SessionCommon) LastPing() time.Duration {
 	return time.Duration(sc.lastPingNs.Load())
