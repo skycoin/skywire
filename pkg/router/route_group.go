@@ -450,6 +450,9 @@ type RouteGroup struct {
 	poolLoadAt    time.Time
 	poolBusySince time.Time
 	poolBytesMark uint64
+	// poolBytesAt is when poolBytesMark was sampled, so the episode is judged
+	// on a RATE rather than on "any delta at all" (see poolLoadSignal).
+	poolBytesAt time.Time
 
 	// dirFanoutTicks throttles the directional confinement/fan-out summary logged
 	// by legDataProgressServiceFn (see there) so a busy download does not spam it.
@@ -655,6 +658,10 @@ func (rg *RouteGroup) SetTunnelRole(role string) {
 	if role == "" {
 		return
 	}
+	// The app labels its tunnels, so from here on one of its groups with NO
+	// label is a role that has not arrived yet rather than a group the pool
+	// rules do not cover (pool_arbiter.go).
+	noteRoleReportingApp(rg.AppName())
 	rg.mu.Lock()
 	prev := rg.tunnelRole
 	rg.tunnelRole = role
