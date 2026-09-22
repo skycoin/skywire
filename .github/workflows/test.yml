@@ -77,6 +77,28 @@ jobs:
         if: always()
         run: make check-ci
 
+  # The mux emulator: the router scenarios (emulong variants included) and the
+  # stream bench, which reproduce the live rig's weaknesses in-process. Its own
+  # job so a mux regression is a red lane with the cell name in it, not a line
+  # buried in the linux suite.
+  emu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Router emulator + stream bench
+        env:
+          EMUSTREAM_DOWN_MIB: 48
+          EMUSTREAM_UP_MIB: 24
+          EMUSTREAM_TIMEOUT_S: 180
+        run: go test -mod=vendor -tags emulong -count=1 -timeout 25m -run 'Emu|StreamBench' ./pkg/router
+
   # e2e runs as its own job so it executes in parallel with the linux check
   # job above instead of serially after it — cutting overall wall-clock.
   e2e:
