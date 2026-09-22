@@ -52,6 +52,11 @@ func (r *router) GrowMuxRoute(_ routing.RouteDescriptor, _, _ int) (int, error) 
 	return 0, errRouteSetupUnsupported
 }
 
+// GrowMuxFromPool — Router interface method; source-only.
+func (r *router) GrowMuxFromPool(_ routing.Port, _, _ int) (int, error) {
+	return 0, errRouteSetupUnsupported
+}
+
 // RemoveMuxRouteByTransport — Router interface method; source-only.
 func (r *router) RemoveMuxRouteByTransport(_ routing.RouteDescriptor, _ uuid.UUID) error {
 	return errRouteSetupUnsupported

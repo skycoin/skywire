@@ -359,6 +359,26 @@ func (v *Visor) GrowMuxRoute(appName string, target, minHops int, rgPort uint16)
 	return v.router.GrowMuxRoute(desc, target, minHops)
 }
 
+// GrowMuxFromPool implements API. Grows the app's tunnel by `legs` additional
+// mux legs, built on the routes of the app's STANDBY tunnels to the same exit
+// instead of discovered from scratch, with today's route-finder grow as the
+// fallback for whatever the pool cannot cover (see pool_legs.go). rgPort
+// disambiguates concurrent rg's exactly as AddMuxRoute does. Returns the
+// number of legs actually added.
+func (v *Visor) GrowMuxFromPool(appName string, legs, minHops int, rgPort uint16) (int, error) {
+	if v.router == nil {
+		return 0, errors.New("router not available")
+	}
+	desc, err := v.findRouteDescForApp(appName, rgPort)
+	if err != nil {
+		return 0, err
+	}
+	// The rg is keyed receive-side, so the tunnel's own (local, dialed-from)
+	// port is the descriptor's DST port — the value `proxy mux info` prints
+	// per rg and `--tunnel` names.
+	return v.router.GrowMuxFromPool(desc.DstPort(), legs, minHops)
+}
+
 // RemoveMuxRoute implements API. Drops the leg over the given
 // transport from the app's active rg; rgPort disambiguates as in
 // AddMuxRoute.

@@ -210,6 +210,11 @@ type API interface {
 	ActiveRoutes() ([]AppRouteStatus, error)
 	AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint16) error
 	GrowMuxRoute(appName string, target, minHops int, srcPort uint16) (int, error)
+	// GrowMuxFromPool grows the app's tunnel by `legs` additional mux legs,
+	// built on the plans of the app's STANDBY tunnels to the same exit
+	// (already ranked, first-hop transport already up) and falling back to
+	// GrowMuxRoute's route-finder path for whatever the pool cannot cover.
+	GrowMuxFromPool(appName string, legs, minHops int, srcPort uint16) (int, error)
 	RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error
 	// SetMuxDirection pins (mode "default"/"flipped") or releases (mode
 	// "auto") the unidirectional direction→leg-class mapping on ALL of the
