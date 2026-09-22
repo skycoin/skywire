@@ -1,6 +1,6 @@
 //go:build !mobile
 
-// Package visor pkg/visor/hypervisor_handlers_browse_test.go c3-vis-core
+// Package visor pkg/visor/fetchdest_test.go c3-vis-core
 package visor
 
 import (
