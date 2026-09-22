@@ -932,6 +932,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 	}
 
 	go r.rulesGCLoop()
+	go r.poolArbiterLoop()
 
 	// Register the setup RPC gateway on r.rpcSrv. Build-tagged: native uses
 	// reflection (net/rpc-style Register); TinyGo uses explicit HandleFunc

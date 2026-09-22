@@ -156,6 +156,7 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 			Events:             info.Events,
 			Recovery:           info.Recovery,
 			TunnelRole:         info.TunnelRole,
+			AgeMS:              info.AgeMS,
 		}
 		for _, leg := range info.Legs {
 			entry.AggSentBytes += leg.SentBytes
@@ -168,6 +169,7 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 				TransportID:    leg.TransportID,
 				TpType:         leg.TpType,
 				RemotePK:       leg.RemotePK,
+				Source:         leg.Source,
 				LatencyMS:      leg.LatencyMS,
 				RouteLatencyMS: leg.RouteLatencyMS,
 				AckDelayMS:     leg.AckDelayMS,

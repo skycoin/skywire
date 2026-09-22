@@ -147,7 +147,22 @@ func RouteTree(snap Snapshot) *bitree.Node {
 	// tell apart; a lone stream renders its legs clean.
 	if len(snap.Tunnels) >= 1 {
 		multi := len(snap.Tunnels) > 1
+		// STANDBY tunnels belong in the same tree as the active ones, below
+		// them: the pool is part of the route picture, not a separate list (the
+		// operator's own framing). Order is stable within each half, so the
+		// active tunnels keep their dial order and the pool follows it.
+		ordered := make([]Tunnel, 0, len(snap.Tunnels))
 		for _, t := range snap.Tunnels {
+			if !TunnelStandby(t) {
+				ordered = append(ordered, t)
+			}
+		}
+		for _, t := range snap.Tunnels {
+			if TunnelStandby(t) {
+				ordered = append(ordered, t)
+			}
+		}
+		for _, t := range ordered {
 			streamIdx := -1 // unbanded: a single stream has nothing to distinguish
 			if multi {
 				streamIdx = t.Index
@@ -215,6 +230,11 @@ func streamHeaderNode(t Tunnel, nLegs int) *bitree.Node {
 	parts := []string{fmt.Sprintf("%s stream %d", StreamHeaderGlyph, t.Index)}
 	if role := tunnelRoleLabel(t.Role); role != "" {
 		parts = append(parts, role)
+	}
+	if TunnelStandby(t) && t.AuditionMS > 0 {
+		// A standby tunnel's one interesting number is how long it has been
+		// auditioning -- held open and measured without carrying anything.
+		parts = append(parts, "held "+compactAge(int64(t.AuditionMS)))
 	}
 	parts = append(parts, fmt.Sprintf("%d %s", nLegs, legWord), mux)
 	return &bitree.Node{Label: strings.Join(parts, " · ")}
@@ -410,6 +430,9 @@ func routeToNode(l Leg, w sumWidths, aggUp, aggDown float64, streamIdx int) *bit
 		return &bitree.Node{Label: orDashPK(l.RemotePK), Left: []*bitree.Node{left}}
 	}
 	head := hopToNode(l.Hops[0])
+	if l.Source != "" {
+		head.Cols = append(head.Cols, "from "+l.Source)
+	}
 	head.Left = []*bitree.Node{left}
 	cur := head
 	for _, h := range l.Hops[1:] {
