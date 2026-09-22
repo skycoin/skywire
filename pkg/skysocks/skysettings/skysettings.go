@@ -385,13 +385,13 @@ func init() {
 	register(UploadBurstPlan, KindBool, boolVal(true),
 		"place a striped upload whose chunks are ALL admitted at once by measured upload capacity and RTT, keeping the object's last chunk off the slow route")
 
-	// The spread policy (docs/design/route-spread-policy.md). Every default is
-	// OFF: max_share 1.0 caps nothing, min_routes 0 asks for no floor, endgame
-	// is false and the weight is the capacity-proportional one, which is what
-	// the chunk assignment already aims at.
-	register(SpreadMaxShare, KindRatio, ratio(1.0),
+	// The spread policy (docs/design/route-spread-policy.md). The cap and the floor
+	// ship ON — max_share 0.4 over at least 3 routes, the values criterion 10 was
+	// measured with (2026-09-18) — endgame stays off and the weight is the
+	// capacity-proportional one, which is what the chunk assignment already aims at.
+	register(SpreadMaxShare, KindRatio, ratio(0.4),
 		"largest fraction of one object's bytes any single route may carry (1 = uncapped)")
-	registerZeroable(SpreadMinRoutes, 0,
+	registerZeroable(SpreadMinRoutes, 3,
 		"routes an object must be spread over, promoting standbys to reach it (0 = no floor)")
 	register(SpreadEndgame, KindBool, boolVal(false),
 		"duplicate the last chunks on the fastest idle route and take the first to finish")
