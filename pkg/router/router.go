@@ -714,6 +714,12 @@ type Router interface {
 	// minutes, this holds the events.
 	MuxEvents() []MuxEvent
 
+	// MuxCounters returns the whole-router cumulative counters (tunnel
+	// promotions, leg re-homes sent/received/acked/failed, forward fan-out
+	// engage/release) that the bounded MuxEvents ring above does not retain
+	// once it wraps.
+	MuxCounters() MuxCounters
+
 	// NoteTunnelEvent records an event the APP that holds a tunnel decided —
 	// a standby tunnel promoted into the active set, an active one parked, a
 	// dead one retired — on the route group dialed from localPort, and

@@ -150,16 +150,20 @@ func rehomeChain(g, s *RouteGroup) error {
 	if err := s.writePacket(context.Background(), tp, req, fwd.KeyRouteID()); err != nil {
 		return fmt.Errorf("send re-home request: %w", err)
 	}
+	globalMuxCounters.legRehomesSent.Add(1)
 
 	var flags byte
 	select {
 	case flags = <-ackCh:
 	case <-time.After(legRehomeAckTimeout):
+		globalMuxCounters.legRehomesFailed.Add(1)
 		return fmt.Errorf("no re-home ack from %s within %s; both groups left intact", s.desc.DstPK(), legRehomeAckTimeout)
 	}
 	if flags&routing.LegRehomeRefused != 0 || flags&routing.LegRehomeAck == 0 {
+		globalMuxCounters.legRehomesFailed.Add(1)
 		return fmt.Errorf("peer %s refused the re-home; both groups left intact", s.desc.DstPK())
 	}
+	globalMuxCounters.legRehomesAcked.Add(1)
 
 	reason := fmt.Sprintf("rehome from :%d", s.desc.DstPort())
 	leg, err := s.detachLegForRehome(0, reason)
@@ -232,6 +236,7 @@ func (rg *RouteGroup) handleLegRehomePacket(packet routing.Packet) error {
 // acceptRehome is the exit half: the request arrived on THIS group's chain and
 // names another group of the same peer as the chain's new owner.
 func (rg *RouteGroup) acceptRehome(routeID routing.RouteID, nonce uint64, srcPort, dstPort routing.Port) {
+	globalMuxCounters.legRehomesReceived.Add(1)
 	idx := rg.legIndexByConsumeRule(routeID)
 	target, err := rg.rehomeTarget(srcPort, dstPort)
 	if err == nil && idx < 0 {
@@ -252,6 +257,7 @@ func (rg *RouteGroup) acceptRehome(routeID routing.RouteID, nonce uint64, srcPor
 		_, err = target.adoptRehomedLeg(leg, reason, true)
 	}
 	if err != nil {
+		globalMuxCounters.legRehomesFailed.Add(1)
 		rg.logger.WithError(err).Debug("Re-home refused")
 		rg.replyRehome(idx, nonce, srcPort, dstPort, routing.LegRehomeRefused)
 		return

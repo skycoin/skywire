@@ -470,6 +470,10 @@ type MuxLegInfo struct {
 	// Hops is the leg's full forward route (every hop to the destination),
 	// with full PKs and per-hop transport type + latency where known.
 	Hops []MuxHopInfo `json:"hops,omitempty"`
+	// CapacityPriorBps is the pool arbiter's PRIOR throughput estimate for
+	// this leg (router.throughputPrior) — what a standby tunnel is ranked by
+	// before it has carried anything to measure.
+	CapacityPriorBps float64 `json:"capacity_prior_bps,omitempty"`
 }
 
 // MuxHopInfo is one hop of a mux leg's forward route. From/To are FULL

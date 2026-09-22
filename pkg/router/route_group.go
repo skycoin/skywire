@@ -884,6 +884,12 @@ type MuxLeg struct {
 	// owned; single-intermediate far hop derived from route−transport RTT).
 	// Empty when the route path wasn't recorded (legacy/accepted routes).
 	Hops []RouteHopInfo `json:"hops,omitempty"`
+	// CapacityPriorBps is the pool arbiter's PRIOR throughput estimate for
+	// this leg's transport (throughputPrior: the transport's live measured
+	// rate if it has one, else its catalog entry) — the number a standby
+	// tunnel is ranked by BEFORE it is measured. Distinct from GoodputBps,
+	// which is the leg's own live EWMA once it has carried traffic.
+	CapacityPriorBps float64 `json:"capacity_prior_bps,omitempty"`
 }
 
 // MuxStats returns a point-in-time snapshot of the rg's per-leg
@@ -936,6 +942,7 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 			leg.TpType = string(tp.Entry.Type)
 			leg.RemotePK = tp.Remote().String()
 			leg.Source = rg.poolLegSource(tp.Entry.ID)
+			leg.CapacityPriorBps = throughputPrior(tp)
 			leg.LatencyMS = tp.GetLatency()
 			// TRUE end-to-end route latency (all hops), from the leg-liveness
 			// pong — distinct from the first-hop transport RTT above.
