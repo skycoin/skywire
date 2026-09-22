@@ -320,6 +320,9 @@ func (rg *RouteGroup) noteForwardFanout(on bool, idx int, reason string) {
 	kind := MuxEventForwardConfined
 	if on {
 		kind = MuxEventForwardFanout
+		globalMuxCounters.forwardFanoutEngaged.Add(1)
+	} else {
+		globalMuxCounters.forwardFanoutReleased.Add(1)
 	}
 	rg.noteMuxEvent(MuxEvent{Event: kind, Reason: reason, By: MuxByAdaptive, LegIndex: idx})
 }
@@ -347,6 +350,9 @@ func (rg *RouteGroup) noteLegProbeRuling(idx, legs int, tp *transport.ManagedTra
 func (rg *RouteGroup) noteTunnelEvent(kind, reason string) {
 	if rg == nil {
 		return
+	}
+	if kind == MuxEventTunnelPromoted {
+		globalMuxCounters.tunnelPromotions.Add(1)
 	}
 	rg.mu.Lock()
 	var tp *transport.ManagedTransport

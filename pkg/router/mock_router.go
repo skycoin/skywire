@@ -592,6 +592,15 @@ func (_m *MockRouter) MuxEvents() []MuxEvent {
 	return nil
 }
 
+// MuxCounters provides a mock function with no fields
+func (_m *MockRouter) MuxCounters() MuxCounters {
+	ret := _m.Called()
+	if r, ok := ret.Get(0).(MuxCounters); ok {
+		return r
+	}
+	return MuxCounters{}
+}
+
 // NoteTunnelEvent provides a mock function
 func (_m *MockRouter) NoteTunnelEvent(localPort routing.Port, event string, reason string, role string) bool {
 	ret := _m.Called(localPort, event, reason, role)
