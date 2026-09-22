@@ -44,6 +44,7 @@ import (
 	cliversion "github.com/skycoin/skywire/cmd/skywire-cli/commands/version"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
+	cliwisp "github.com/skycoin/skywire/cmd/skywire-cli/commands/wisp"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/flags"
@@ -83,6 +84,7 @@ func init() {
 	cliresolver.RootCmd.GroupID = groupVisor
 	climail.RootCmd.GroupID = groupVisor
 	cliserve.RootCmd.GroupID = groupNet
+	cliwisp.RootCmd.GroupID = groupNet
 
 	clivpn.RootCmd.GroupID = groupApps
 	cliskysocksc.RootCmd.GroupID = groupApps
@@ -144,6 +146,7 @@ func init() {
 		cliresolver.RootCmd,
 		climail.RootCmd,
 		cliserve.RootCmd,
+		cliwisp.RootCmd,
 		clipv.RootCmd,
 		clisvc.RootCmd,
 		cliutil.RootCmd,
