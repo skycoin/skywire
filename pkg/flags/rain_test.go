@@ -141,3 +141,33 @@ func TestEachDeepestFirstVisitsChildrenFirst(t *testing.T) {
 
 	require.Equal(t, []string{"leaf", "mid", "root"}, order)
 }
+
+// `--help` is the screen and `help` is the text: the flag prints help over
+// the backdrop, the subcommand prints the same help without it, and neither
+// needs an environment variable set to get there.
+//
+// Asserted at the decision rather than at the output, because a test has no
+// terminal and backdrop draws nothing either way — so a test of the bytes
+// could only ever check the negative half.
+func TestHelpSubcommandIsPlainAndHelpFlagIsNot(t *testing.T) {
+	t.Setenv(NoRainEnv, "")
+
+	backdropOff := func(args []string) bool {
+		root := newTree()
+		InitFlags(root, true)
+
+		var off bool
+		def := root.HelpFunc()
+		root.SetHelpFunc(func(c *cobra.Command, a []string) {
+			off = rainOptions(c).Off
+			def(c, a)
+		})
+
+		root.SetArgs(args)
+		captureStdout(t, func() { require.NoError(t, root.Execute()) })
+		return off
+	}
+
+	require.True(t, backdropOff([]string{"help"}), "`help` drew a backdrop")
+	require.False(t, backdropOff([]string{"--help"}), "`--help` did not draw a backdrop")
+}
