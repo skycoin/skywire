@@ -11,9 +11,6 @@
 package cliwisp
 
 import (
-	"fmt"
-	"net/http"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -97,50 +94,6 @@ Examples:
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 
-		path := wispPath
-		if !strings.HasPrefix(path, "/") {
-			path = "/" + path
-		}
-
-		mux := http.NewServeMux()
-		// Both spellings: LinuxOnTab points at /wisp, while wisp-js
-		// refuses any endpoint URL without a trailing slash. Serving
-		// only one of them turns the other client's connect into a 404
-		// that looks like the server is down.
-		mux.Handle(path, srv)
-		mux.Handle(path+"/", srv)
-		mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprintln(w, "ok") //nolint:errcheck,gosec // health probe
-		})
-
-		scheme := "ws"
-		if wispTLSCert != "" {
-			scheme = "wss"
-		}
-
-		var b strings.Builder
-		fmt.Fprintf(&b, "serving wisp on %s://%s%s\n", scheme, wispAddr, path)
-		fmt.Fprintf(&b, "  egress: %s\n", egress.Describe())
-		fmt.Fprintf(&b, "  buffer: %d packets per stream\n", wispBuffer)
-		internal.PrintOutput(cmd.Flags(), b.String(), b.String())
-
-		httpSrv := &http.Server{
-			Addr:              wispAddr,
-			Handler:           mux,
-			ReadHeaderTimeout: 10 * time.Second,
-		}
-
-		if wispTLSCert != "" || wispTLSKey != "" {
-			if wispTLSCert == "" || wispTLSKey == "" {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--tls-cert and --tls-key must be given together"))
-			}
-			err = httpSrv.ListenAndServeTLS(wispTLSCert, wispTLSKey)
-		} else {
-			err = httpSrv.ListenAndServe()
-		}
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), err)
-		}
+		serveWisp(cmd, srv, egress)
 	},
 }

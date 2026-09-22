@@ -102,13 +102,30 @@ func (u *udpStream) Close() error { return u.conn.Close() }
 // SocksEgress carries streams through a SOCKS5 proxy — by default the local
 // skysocks-client, which puts them on a route to an exit visor.
 type SocksEgress struct {
-	Addr   string
-	dialer proxy.ContextDialer
+	Addr    string
+	dialer  proxy.ContextDialer
+	forward proxy.Dialer
 }
 
-// NewSocksEgress builds an egress over the SOCKS5 proxy at addr.
+// NewSocksEgress builds an egress over the SOCKS5 proxy at addr, reached over
+// the host's own network.
 func NewSocksEgress(addr string) (*SocksEgress, error) {
-	d, err := proxy.SOCKS5("tcp", addr, nil, proxy.Direct)
+	return NewSocksEgressThrough(addr, proxy.Direct)
+}
+
+// NewSocksEgressThrough builds an egress over the SOCKS5 proxy at addr,
+// reaching the proxy itself through forward.
+//
+// This matters in a tab. The visor's skysocks-client binds its SOCKS5 port on
+// the page's virtual loopback, which net.Dial knows nothing about — Go's js
+// runtime simulates a per-instance loopback of its own, so a direct dial finds
+// nothing there. Passing bottle's vnet as forward is what lets an in-page Wisp
+// server reach the in-page proxy.
+func NewSocksEgressThrough(addr string, forward proxy.Dialer) (*SocksEgress, error) {
+	if forward == nil {
+		forward = proxy.Direct
+	}
+	d, err := proxy.SOCKS5("tcp", addr, nil, forward)
 	if err != nil {
 		return nil, fmt.Errorf("socks5 %s: %w", addr, err)
 	}
@@ -116,7 +133,7 @@ func NewSocksEgress(addr string) (*SocksEgress, error) {
 	if !ok {
 		return nil, fmt.Errorf("socks5 %s: dialer does not support contexts", addr)
 	}
-	return &SocksEgress{Addr: addr, dialer: cd}, nil
+	return &SocksEgress{Addr: addr, dialer: cd, forward: forward}, nil
 }
 
 // DialTCP implements Egress.
@@ -127,30 +144,36 @@ func (e *SocksEgress) DialTCP(ctx context.Context, host string, port uint16) (ne
 // DialUDP implements Egress.
 //
 // UDP ASSOCIATE is tried first: skysocks relays datagrams over the route to
-// the exit, so a guest's UDP reaches the same place its TCP does. A proxy that
-// refuses the association — an exit too old to relay, or some other SOCKS5
-// server with CONNECT only — leaves port 53 working through the DNS-over-TCP
-// translation, which is what spares each guest from running its own unbound.
-// Any other port is then refused rather than quietly sent out of the host's
-// own interface, which would put traffic on the clearnet that the caller asked
-// to route over skywire.
+// the exit, so a guest's UDP reaches the same place its TCP does.
+//
+// Port 53 falls back to the DNS-over-TCP translation whenever the association
+// cannot be had, which is what spares each guest from running its own unbound.
+// The fallback is on ANY failure rather than only on a refusal, because there
+// is a second way to have no association: inside a tab there are no UDP
+// sockets at all, so the association fails on its own socket rather than on
+// the proxy's answer. Treating only a refusal as grounds to fall back left
+// in-page DNS broken for a reason that had nothing to do with the proxy.
+//
+// Any other port is refused rather than quietly sent out of the host's own
+// interface, which would put traffic on the clearnet the caller asked to route
+// over skywire.
 func (e *SocksEgress) DialUDP(ctx context.Context, host string, port uint16) (DatagramStream, error) {
-	s, err := dialSocksUDP(ctx, e.Addr, host, port)
+	s, err := dialSocksUDP(ctx, e.Addr, host, port, e.forward)
 	if err == nil {
 		return s, nil
 	}
-	if !errors.Is(err, errAssociateRefused) {
-		return nil, err
-	}
 
-	if port != 53 {
+	if port == 53 {
+		c, derr := e.dialer.DialContext(ctx, "tcp", joinHostPort(host, port))
+		if derr != nil {
+			return nil, derr
+		}
+		return &dnsOverTCP{conn: c}, nil
+	}
+	if errors.Is(err, errAssociateRefused) {
 		return nil, fmt.Errorf("%w: port %d, and the proxy has no UDP ASSOCIATE (%v)", ErrUDPUnsupported, port, err)
 	}
-	c, derr := e.dialer.DialContext(ctx, "tcp", joinHostPort(host, port))
-	if derr != nil {
-		return nil, derr
-	}
-	return &dnsOverTCP{conn: c}, nil
+	return nil, err
 }
 
 // Describe implements Egress.
