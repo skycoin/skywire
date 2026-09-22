@@ -1,4 +1,4 @@
-package skysocksc
+package loadtest
 
 import (
 	"bytes"
@@ -20,43 +20,43 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// loadtestUploadRig isolates a test from the package-level session store and
+// uploadRig isolates a test from the package-level session store and
 // restores the sink's limits afterwards.
-func loadtestUploadRig(t *testing.T, window int64, sessions int) {
+func uploadRig(t *testing.T, window int64, sessions int) {
 	t.Helper()
-	oldWindow, oldSessions, oldIdle, oldNow := loadtestUploadWindow, loadtestUploadSessions, loadtestUploadIdle, loadtestNow
-	loadtestUploadWindow, loadtestUploadSessions = window, sessions
-	loadtestUploadMu.Lock()
-	loadtestUploads = map[string]*loadtestUploadSession{}
-	loadtestUploadMu.Unlock()
+	oldWindow, oldSessions, oldIdle, oldNow := UploadWindow, UploadSessions, UploadIdle, nowFn
+	UploadWindow, UploadSessions = window, sessions
+	uploadMu.Lock()
+	uploads = map[string]*uploadSession{}
+	uploadMu.Unlock()
 	t.Cleanup(func() {
-		loadtestUploadWindow, loadtestUploadSessions, loadtestUploadIdle, loadtestNow = oldWindow, oldSessions, oldIdle, oldNow
-		loadtestUploadMu.Lock()
-		loadtestUploads = map[string]*loadtestUploadSession{}
-		loadtestUploadMu.Unlock()
+		UploadWindow, UploadSessions, UploadIdle, nowFn = oldWindow, oldSessions, oldIdle, oldNow
+		uploadMu.Lock()
+		uploads = map[string]*uploadSession{}
+		uploadMu.Unlock()
 	})
 }
 
-// loadtestUploadPut sends one offset-addressed chunk of an object of total bytes.
-func loadtestUploadPut(id string, body []byte, start, total uint64) *httptest.ResponseRecorder {
+// uploadPut sends one offset-addressed chunk of an object of total bytes.
+func uploadPut(id string, body []byte, start, total uint64) *httptest.ResponseRecorder {
 	end := start + uint64(len(body)) - 1
 	req := httptest.NewRequest(http.MethodPut,
 		"/upload?id="+id+"&bytes="+strconv.FormatUint(total, 10), bytes.NewReader(body))
 	req.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, total))
 	rec := httptest.NewRecorder()
-	loadtestUpload(rec, req)
+	serveUpload(rec, req)
 	return rec
 }
 
-// loadtestUploadBody is a deterministic payload whose every chunk differs, so a
+// uploadBody is a deterministic payload whose every chunk differs, so a
 // chunk absorbed at the wrong offset cannot hash to the right value.
-func loadtestUploadBody(n uint64) []byte {
+func uploadBody(n uint64) []byte {
 	b := make([]byte, n)
-	loadtestPattern(b, n, 0)
+	pattern(b, n, 0)
 	return b
 }
 
-func loadtestUploadReceived(t *testing.T, rec *httptest.ResponseRecorder) uint64 {
+func uploadReceived(t *testing.T, rec *httptest.ResponseRecorder) uint64 {
 	t.Helper()
 	v, err := strconv.ParseUint(rec.Header().Get("X-Upload-Received"), 10, 63)
 	require.NoError(t, err, "every 2xx carries X-Upload-Received")
@@ -66,10 +66,10 @@ func loadtestUploadReceived(t *testing.T, rec *httptest.ResponseRecorder) uint64
 // TestLoadtestUploadAdvertisesChunking pins the opt-in signal: the ONE header a
 // client may key the chunked path on, plus the limits it must respect.
 func TestLoadtestUploadAdvertisesChunking(t *testing.T) {
-	loadtestUploadRig(t, 1<<20, 4)
+	uploadRig(t, 1<<20, 4)
 	for _, method := range []string{http.MethodHead, http.MethodOptions} {
 		rec := httptest.NewRecorder()
-		loadtestUpload(rec, httptest.NewRequest(method, "/upload", nil))
+		serveUpload(rec, httptest.NewRequest(method, "/upload", nil))
 		require.Equal(t, http.StatusOK, rec.Code, method)
 		require.Equal(t, "bytes", rec.Header().Get("X-Chunked-Upload"), method)
 		require.Equal(t, strconv.FormatInt(1<<20, 10), rec.Header().Get("X-Upload-Window"))
@@ -82,9 +82,9 @@ func TestLoadtestUploadAdvertisesChunking(t *testing.T) {
 // the chunked path's final answer is the plain POST's answer for the same bytes,
 // so a hash check does not care which path carried them.
 func TestLoadtestUploadInOrderMatchesPlainPost(t *testing.T) {
-	loadtestUploadRig(t, 1<<20, 4)
+	uploadRig(t, 1<<20, 4)
 	const total, chunk = 300_001, 64 * 1024
-	body := loadtestUploadBody(total)
+	body := uploadBody(total)
 
 	var last *httptest.ResponseRecorder
 	for off := 0; off < total; off += chunk {
@@ -92,9 +92,9 @@ func TestLoadtestUploadInOrderMatchesPlainPost(t *testing.T) {
 		if end > total {
 			end = total
 		}
-		rec := loadtestUploadPut("obj", body[off:end], uint64(off), total)
+		rec := uploadPut("obj", body[off:end], uint64(off), total)
 		require.Equal(t, http.StatusOK, rec.Code)
-		require.Equal(t, uint64(end), loadtestUploadReceived(t, rec), "the ack is the durable prefix")
+		require.Equal(t, uint64(end), uploadReceived(t, rec), "the ack is the durable prefix")
 		last = rec
 	}
 	sum := sha256.Sum256(body)
@@ -104,7 +104,7 @@ func TestLoadtestUploadInOrderMatchesPlainPost(t *testing.T) {
 
 	// The plain POST path is untouched and answers the same thing.
 	rec := httptest.NewRecorder()
-	loadtestUpload(rec, httptest.NewRequest(http.MethodPost, "/upload", bytes.NewReader(body)))
+	serveUpload(rec, httptest.NewRequest(http.MethodPost, "/upload", bytes.NewReader(body)))
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, last.Body.String(), rec.Body.String(), "same JSON either way")
 }
@@ -113,38 +113,38 @@ func TestLoadtestUploadInOrderMatchesPlainPost(t *testing.T) {
 // striped sender produces on a lossy path: a chunk ahead of the frontier, a
 // re-send of one already durable, and a re-send of one still held.
 func TestLoadtestUploadAbsorbsOutOfOrderAndDuplicates(t *testing.T) {
-	loadtestUploadRig(t, 1<<20, 4)
+	uploadRig(t, 1<<20, 4)
 	const total, chunk = 4 * 4096, 4096
-	body := loadtestUploadBody(total)
+	body := uploadBody(total)
 	at := func(i int) []byte { return body[i*chunk : (i+1)*chunk] }
 
 	// Chunk 1 arrives first and waits in the window: 202, not 200 — it is held,
 	// not durable, and the sender may not drop it yet.
-	rec := loadtestUploadPut("obj", at(1), chunk, total)
+	rec := uploadPut("obj", at(1), chunk, total)
 	require.Equal(t, http.StatusAccepted, rec.Code)
-	require.Equal(t, uint64(0), loadtestUploadReceived(t, rec))
+	require.Equal(t, uint64(0), uploadReceived(t, rec))
 
 	// A re-send of a held chunk replaces it in place.
-	rec = loadtestUploadPut("obj", at(1), chunk, total)
+	rec = uploadPut("obj", at(1), chunk, total)
 	require.Equal(t, http.StatusAccepted, rec.Code)
-	require.Equal(t, uint64(0), loadtestUploadReceived(t, rec))
+	require.Equal(t, uint64(0), uploadReceived(t, rec))
 
 	// Chunk 0 is the frontier: it absorbs itself and drains chunk 1 behind it.
-	rec = loadtestUploadPut("obj", at(0), 0, total)
+	rec = uploadPut("obj", at(0), 0, total)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, uint64(2*chunk), loadtestUploadReceived(t, rec))
+	require.Equal(t, uint64(2*chunk), uploadReceived(t, rec))
 
 	// A chunk already inside the durable prefix is idempotent, not a re-hash.
-	rec = loadtestUploadPut("obj", at(0), 0, total)
+	rec = uploadPut("obj", at(0), 0, total)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, uint64(2*chunk), loadtestUploadReceived(t, rec))
+	require.Equal(t, uint64(2*chunk), uploadReceived(t, rec))
 
 	// A chunk that overlaps the frontier is trimmed, not double-counted.
-	rec = loadtestUploadPut("obj", body[chunk:3*chunk], chunk, total)
+	rec = uploadPut("obj", body[chunk:3*chunk], chunk, total)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, uint64(3*chunk), loadtestUploadReceived(t, rec))
+	require.Equal(t, uint64(3*chunk), uploadReceived(t, rec))
 
-	rec = loadtestUploadPut("obj", at(3), 3*chunk, total)
+	rec = uploadPut("obj", at(3), 3*chunk, total)
 	require.Equal(t, http.StatusOK, rec.Code)
 	sum := sha256.Sum256(body)
 	require.Equal(t, hex.EncodeToString(sum[:]), rec.Header().Get("X-Sha256"),
@@ -152,18 +152,18 @@ func TestLoadtestUploadAbsorbsOutOfOrderAndDuplicates(t *testing.T) {
 
 	// Once complete the session keeps answering the same thing, for a late
 	// re-send or a resume probe.
-	rec = loadtestUploadPut("obj", at(2), 2*chunk, total)
+	rec = uploadPut("obj", at(2), 2*chunk, total)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), hex.EncodeToString(sum[:]))
 
 	rec = httptest.NewRecorder()
-	loadtestUpload(rec, httptest.NewRequest(http.MethodGet, "/upload?id=obj", nil))
+	serveUpload(rec, httptest.NewRequest(http.MethodGet, "/upload?id=obj", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, uint64(total), loadtestUploadReceived(t, rec))
+	require.Equal(t, uint64(total), uploadReceived(t, rec))
 	require.Contains(t, rec.Body.String(), hex.EncodeToString(sum[:]))
 
 	rec = httptest.NewRecorder()
-	loadtestUpload(rec, httptest.NewRequest(http.MethodGet, "/upload?id=nope", nil))
+	serveUpload(rec, httptest.NewRequest(http.MethodGet, "/upload?id=nope", nil))
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }
 
@@ -172,40 +172,40 @@ func TestLoadtestUploadAbsorbsOutOfOrderAndDuplicates(t *testing.T) {
 // is accepted once the frontier has moved.
 func TestLoadtestUploadWindowFullBacksOff(t *testing.T) {
 	const chunk = 4096
-	loadtestUploadRig(t, 2*chunk, 4) // room for two held chunks
+	uploadRig(t, 2*chunk, 4) // room for two held chunks
 	const total = 8 * chunk
-	body := loadtestUploadBody(total)
+	body := uploadBody(total)
 	at := func(i int) []byte { return body[i*chunk : (i+1)*chunk] }
 
 	// The window is a byte range: [acked, acked+window). Chunk 1 is inside it —
 	// held, so 202: received, not committed.
-	require.Equal(t, http.StatusAccepted, loadtestUploadPut("obj", at(1), chunk, total).Code)
+	require.Equal(t, http.StatusAccepted, uploadPut("obj", at(1), chunk, total).Code)
 
 	// Chunk 2 ends past the window's reach — refused, with the offset to resume
 	// from and a Retry-After, so the sender backs off instead of being dropped.
-	rec := loadtestUploadPut("obj", at(2), 2*chunk, total)
+	rec := uploadPut("obj", at(2), 2*chunk, total)
 	require.Equal(t, http.StatusTooEarly, rec.Code, "past the window's reach")
 	require.Equal(t, "1", rec.Header().Get("Retry-After"))
 	require.Equal(t, "0", rec.Header().Get("X-Next-Offset"), "resume from the durable prefix")
 
 	// Overlapping re-sends inside the reach are held until the buffered bytes
 	// would exceed the window, then refused the same way.
-	require.Equal(t, http.StatusAccepted, loadtestUploadPut("obj", body[5000:2*chunk], 5000, total).Code)
-	rec = loadtestUploadPut("obj", body[6000:2*chunk], 6000, total)
+	require.Equal(t, http.StatusAccepted, uploadPut("obj", body[5000:2*chunk], 5000, total).Code)
+	rec = uploadPut("obj", body[6000:2*chunk], 6000, total)
 	require.Equal(t, http.StatusTooEarly, rec.Code, "the window is full")
 	require.Equal(t, "1", rec.Header().Get("Retry-After"))
 
 	// The frontier is never refused: it evicts a held chunk rather than stall.
 	// Eviction is only sound because held chunks were answered 202 and never
 	// 200 — a 200'd chunk is durable and may never be dropped.
-	evicted := loadtestUploadEvicted.Load()
-	rec = loadtestUploadPut("obj", at(0), 0, total)
+	evicted := uploadEvicted.Load()
+	rec = uploadPut("obj", at(0), 0, total)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, uint64(2*chunk), loadtestUploadReceived(t, rec), "chunk 1 drained behind it")
-	require.Greater(t, loadtestUploadEvicted.Load(), evicted, "the drop is counted, not silent")
+	require.Equal(t, uint64(2*chunk), uploadReceived(t, rec), "chunk 1 drained behind it")
+	require.Greater(t, uploadEvicted.Load(), evicted, "the drop is counted, not silent")
 
 	for i := 2; i < 8; i++ {
-		rec = loadtestUploadPut("obj", at(i), uint64(i*chunk), total)
+		rec = uploadPut("obj", at(i), uint64(i*chunk), total)
 		require.Equal(t, http.StatusOK, rec.Code)
 	}
 	sum := sha256.Sum256(body)
@@ -217,38 +217,38 @@ func TestLoadtestUploadWindowFullBacksOff(t *testing.T) {
 // the object's size or how badly the chunks are ordered.
 func TestLoadtestUploadBoundsMemory(t *testing.T) {
 	const chunk = 4096
-	loadtestUploadRig(t, 2*chunk, 2)
+	uploadRig(t, 2*chunk, 2)
 	const total = 64 * chunk
-	body := loadtestUploadBody(total)
+	body := uploadBody(total)
 
 	for i := 16; i > 0; i-- { // deliberately reversed, so nothing ever drains
-		loadtestUploadPut("obj", body[i*chunk:(i+1)*chunk], uint64(i*chunk), total)
+		uploadPut("obj", body[i*chunk:(i+1)*chunk], uint64(i*chunk), total)
 	}
-	loadtestUploadMu.Lock()
-	s := loadtestUploads["obj"]
-	loadtestUploadMu.Unlock()
+	uploadMu.Lock()
+	s := uploads["obj"]
+	uploadMu.Unlock()
 	require.NotNil(t, s)
 	s.mu.Lock()
 	held, acked := s.heldBytes, s.acked
 	s.mu.Unlock()
 	require.Zero(t, acked, "no prefix without chunk 0")
-	require.LessOrEqual(t, held, loadtestWindow(), "held bytes never exceed the window")
+	require.LessOrEqual(t, held, windowBytes(), "held bytes never exceed the window")
 
 	// A second session is fine; the third is refused with a Retry-After, so the
 	// ceiling is window x sessions.
-	require.Equal(t, http.StatusOK, loadtestUploadPut("obj2", body[:chunk], 0, total).Code)
-	rec := loadtestUploadPut("obj3", body[:chunk], 0, total)
+	require.Equal(t, http.StatusOK, uploadPut("obj2", body[:chunk], 0, total).Code)
+	rec := uploadPut("obj3", body[:chunk], 0, total)
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	require.Equal(t, "1", rec.Header().Get("Retry-After"))
 
 	// An idle session expires and its buffers go with it, so the refusal is not
 	// permanent.
-	loadtestNow = func() time.Time { return time.Now().Add(2*loadtestUploadIdle + time.Second) }
-	require.Equal(t, http.StatusOK, loadtestUploadPut("obj4", body[:chunk], 0, total).Code)
-	loadtestUploadMu.Lock()
-	_, stale := loadtestUploads["obj"]
-	live := len(loadtestUploads)
-	loadtestUploadMu.Unlock()
+	nowFn = func() time.Time { return time.Now().Add(2*UploadIdle + time.Second) }
+	require.Equal(t, http.StatusOK, uploadPut("obj4", body[:chunk], 0, total).Code)
+	uploadMu.Lock()
+	_, stale := uploads["obj"]
+	live := len(uploads)
+	uploadMu.Unlock()
 	require.False(t, stale, "the idle session was expired")
 	require.Equal(t, 1, live)
 }
@@ -259,9 +259,9 @@ func TestLoadtestUploadBoundsMemory(t *testing.T) {
 // orphan while the next chunk opens a fresh session at acked=0, and the durable
 // prefix walks backwards with no error and no log.
 func TestLoadtestUploadSlowChunkIsNotIdle(t *testing.T) {
-	const total, chunk = 1 << 20, 3 * loadtestUploadReadStep
-	loadtestUploadRig(t, 1<<20, 4)
-	body := loadtestUploadBody(total)
+	const total, chunk = 1 << 20, 3 * uploadReadStep
+	uploadRig(t, 1<<20, 4)
+	body := uploadBody(total)
 
 	// The handler reads the clock from another goroutine, so the test moves a
 	// guarded value rather than swapping the function.
@@ -273,7 +273,7 @@ func TestLoadtestUploadSlowChunkIsNotIdle(t *testing.T) {
 		defer clockMu.Unlock()
 		clock = at
 	}
-	loadtestNow = func() time.Time {
+	nowFn = func() time.Time {
 		clockMu.Lock()
 		defer clockMu.Unlock()
 		return clock
@@ -286,13 +286,13 @@ func TestLoadtestUploadSlowChunkIsNotIdle(t *testing.T) {
 	served := make(chan struct{})
 	go func() {
 		defer close(served)
-		loadtestUpload(rec, req)
+		serveUpload(rec, req)
 	}()
 
-	session := func() *loadtestUploadSession {
-		loadtestUploadMu.Lock()
-		defer loadtestUploadMu.Unlock()
-		return loadtestUploads["slow"]
+	session := func() *uploadSession {
+		uploadMu.Lock()
+		defer uploadMu.Unlock()
+		return uploads["slow"]
 	}
 	require.Eventually(t, func() bool {
 		s := session()
@@ -305,11 +305,11 @@ func TestLoadtestUploadSlowChunkIsNotIdle(t *testing.T) {
 	}, 5*time.Second, time.Millisecond, "the chunk is admitted and being read")
 
 	// One read step lands, then the clock jumps past the idle limit.
-	_, err := pw.Write(body[:loadtestUploadReadStep])
+	_, err := pw.Write(body[:uploadReadStep])
 	require.NoError(t, err)
-	t1 := t0.Add(2 * loadtestUploadIdle)
+	t1 := t0.Add(2 * UploadIdle)
 	setClock(t1)
-	_, err = pw.Write(body[loadtestUploadReadStep : 2*loadtestUploadReadStep])
+	_, err = pw.Write(body[uploadReadStep : 2*uploadReadStep])
 	require.NoError(t, err)
 
 	// Progress, not admission, is what liveness is measured on: the second step
@@ -324,17 +324,17 @@ func TestLoadtestUploadSlowChunkIsNotIdle(t *testing.T) {
 
 	// A second upload sweeps, at a clock well past the reading session's last
 	// progress. It survives only because it has a chunk in flight.
-	setClock(t1.Add(2 * loadtestUploadIdle))
-	require.Equal(t, http.StatusOK, loadtestUploadPut("other", body[:1024], 0, total).Code)
+	setClock(t1.Add(2 * UploadIdle))
+	require.Equal(t, http.StatusOK, uploadPut("other", body[:1024], 0, total).Code)
 	require.Same(t, s, session(), "a session with a chunk in flight is never idle")
 
-	_, err = pw.Write(body[2*loadtestUploadReadStep : chunk])
+	_, err = pw.Write(body[2*uploadReadStep : chunk])
 	require.NoError(t, err)
 	require.NoError(t, pw.Close())
 	<-served
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, uint64(chunk), loadtestUploadReceived(t, rec))
+	require.Equal(t, uint64(chunk), uploadReceived(t, rec))
 	require.Same(t, s, session(), "it committed into the session it was admitted to")
 }
 
@@ -344,38 +344,38 @@ func TestLoadtestUploadSlowChunkIsNotIdle(t *testing.T) {
 // for two minutes. It stays answerable for a late re-send or a resume probe.
 func TestLoadtestUploadSealedSessionFreesItsSlot(t *testing.T) {
 	const total = 4096
-	loadtestUploadRig(t, 1<<20, 2)
-	body := loadtestUploadBody(total)
+	uploadRig(t, 1<<20, 2)
+	body := uploadBody(total)
 	sum := sha256.Sum256(body)
 
-	for i := 0; i < 2*loadtestUploadSealedMemo; i++ {
+	for i := 0; i < 2*uploadSealedMemo; i++ {
 		id := fmt.Sprintf("obj%d", i)
-		rec := loadtestUploadPut(id, body, 0, total)
+		rec := uploadPut(id, body, 0, total)
 		require.Equal(t, http.StatusOK, rec.Code, "upload %d is refused by nothing", i)
 		require.Equal(t, hex.EncodeToString(sum[:]), rec.Header().Get("X-Sha256"))
 	}
 
 	// The most recent completions still answer a late re-send and a resume
 	// probe, and the memo of them is bounded.
-	last := fmt.Sprintf("obj%d", 2*loadtestUploadSealedMemo-1)
-	rec := loadtestUploadPut(last, body, 0, total)
+	last := fmt.Sprintf("obj%d", 2*uploadSealedMemo-1)
+	rec := uploadPut(last, body, 0, total)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), hex.EncodeToString(sum[:]))
 
 	rec = httptest.NewRecorder()
-	loadtestUpload(rec, httptest.NewRequest(http.MethodGet, "/upload?id="+last, nil))
+	serveUpload(rec, httptest.NewRequest(http.MethodGet, "/upload?id="+last, nil))
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, uint64(total), loadtestUploadReceived(t, rec))
+	require.Equal(t, uint64(total), uploadReceived(t, rec))
 
-	loadtestUploadMu.Lock()
-	live := len(loadtestUploads)
-	loadtestUploadMu.Unlock()
-	require.LessOrEqual(t, live, loadtestUploadSealedMemo+1, "sealed sessions are a bounded memo")
+	uploadMu.Lock()
+	live := len(uploads)
+	uploadMu.Unlock()
+	require.LessOrEqual(t, live, uploadSealedMemo+1, "sealed sessions are a bounded memo")
 
 	// And an unsealed session still costs a slot: the cap is not defeated.
-	require.Equal(t, http.StatusAccepted, loadtestUploadPut("partA", body[2048:], 2048, total).Code)
-	require.Equal(t, http.StatusAccepted, loadtestUploadPut("partB", body[2048:], 2048, total).Code)
-	require.Equal(t, http.StatusServiceUnavailable, loadtestUploadPut("partC", body[2048:], 2048, total).Code)
+	require.Equal(t, http.StatusAccepted, uploadPut("partA", body[2048:], 2048, total).Code)
+	require.Equal(t, http.StatusAccepted, uploadPut("partB", body[2048:], 2048, total).Code)
+	require.Equal(t, http.StatusServiceUnavailable, uploadPut("partC", body[2048:], 2048, total).Code)
 }
 
 // TestLoadtestUploadRefusalKeepsTheConnection is the back-pressure protocol over
@@ -386,10 +386,10 @@ func TestLoadtestUploadSealedSessionFreesItsSlot(t *testing.T) {
 // X-Next-Offset/Retry-After it was supposed to back off on.
 func TestLoadtestUploadRefusalKeepsTheConnection(t *testing.T) {
 	const total, chunk = 4 << 20, 300 << 10 // a chunk well past the 256 KiB cliff
-	loadtestUploadRig(t, 512<<10, 4)
-	body := loadtestUploadBody(total)
+	uploadRig(t, 512<<10, 4)
+	body := uploadBody(total)
 
-	srv := httptest.NewServer(http.HandlerFunc(loadtestUpload))
+	srv := httptest.NewServer(http.HandlerFunc(serveUpload))
 	defer srv.Close()
 
 	var dials atomic.Int64
@@ -432,15 +432,15 @@ func TestLoadtestUploadRefusalKeepsTheConnection(t *testing.T) {
 // TestLoadtestUploadRejectsMalformedChunks pins the refusals that keep a partial
 // or mis-addressed chunk from ever advancing the prefix hash.
 func TestLoadtestUploadRejectsMalformedChunks(t *testing.T) {
-	loadtestUploadRig(t, 1<<20, 4)
+	uploadRig(t, 1<<20, 4)
 	const total = 4096
-	body := loadtestUploadBody(total)
+	body := uploadBody(total)
 
 	bad := func(cr string, b []byte) int {
 		req := httptest.NewRequest(http.MethodPut, "/upload?id=obj&bytes=4096", bytes.NewReader(b))
 		req.Header.Set("Content-Range", cr)
 		rec := httptest.NewRecorder()
-		loadtestUpload(rec, req)
+		serveUpload(rec, req)
 		return rec.Code
 	}
 	require.Equal(t, http.StatusBadRequest, bad("bytes */4096", body))
@@ -448,30 +448,30 @@ func TestLoadtestUploadRejectsMalformedChunks(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, bad("bytes 4096-8191/4096", body), "past the object")
 	require.Equal(t, http.StatusBadRequest, bad("bytes 0-4095/4096", body[:10]), "Content-Length disagrees")
 	require.Equal(t, http.StatusRequestEntityTooLarge, func() int {
-		loadtestUploadRig(t, 1024, 4)
+		uploadRig(t, 1024, 4)
 		return bad("bytes 0-4095/4096", body)
 	}())
 
 	// A size that disagrees with an existing session is a conflict, not a
 	// silently corrupted object.
-	loadtestUploadRig(t, 1<<20, 4)
-	require.Equal(t, http.StatusOK, loadtestUploadPut("obj", body[:1024], 0, total).Code)
+	uploadRig(t, 1<<20, 4)
+	require.Equal(t, http.StatusOK, uploadPut("obj", body[:1024], 0, total).Code)
 	req := httptest.NewRequest(http.MethodPut, "/upload?id=obj&bytes=8192", bytes.NewReader(body[:1024]))
 	req.Header.Set("Content-Range", "bytes 0-1023/8192")
 	rec := httptest.NewRecorder()
-	loadtestUpload(rec, req)
+	serveUpload(rec, req)
 	require.Equal(t, http.StatusConflict, rec.Code)
 
 	// bytes= must agree with the Content-Range it accompanies.
 	req = httptest.NewRequest(http.MethodPut, "/upload?id=obj&bytes=9999", bytes.NewReader(body[:1024]))
 	req.Header.Set("Content-Range", "bytes 0-1023/4096")
 	rec = httptest.NewRecorder()
-	loadtestUpload(rec, req)
+	serveUpload(rec, req)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 
 	// An unsupported verb is still refused.
 	rec = httptest.NewRecorder()
-	loadtestUpload(rec, httptest.NewRequest(http.MethodDelete, "/upload", nil))
+	serveUpload(rec, httptest.NewRequest(http.MethodDelete, "/upload", nil))
 	require.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 }
 
@@ -491,9 +491,9 @@ func TestParseContentRange(t *testing.T) {
 // TestLoadtestUploadConcurrentChunks is the striped sender's shape: several
 // chunks of one object in flight at once, arriving in no particular order.
 func TestLoadtestUploadConcurrentChunks(t *testing.T) {
-	loadtestUploadRig(t, 1<<20, 4)
+	uploadRig(t, 1<<20, 4)
 	const total, chunk = 32 * 1024, 4096
-	body := loadtestUploadBody(total)
+	body := uploadBody(total)
 
 	order := []uint64{5, 2, 7, 0, 3, 6, 1, 4}
 	done := make(chan struct{}, len(order))
@@ -504,7 +504,7 @@ func TestLoadtestUploadConcurrentChunks(t *testing.T) {
 			// durable prefix — a 200, or an X-Upload-Received past its end. A 202
 			// (held, still evictable) and a 425 (refused) both mean re-send.
 			for {
-				rec := loadtestUploadPut("obj", body[i*chunk:(i+1)*chunk], i*chunk, total)
+				rec := uploadPut("obj", body[i*chunk:(i+1)*chunk], i*chunk, total)
 				switch rec.Code {
 				case http.StatusOK:
 					return
@@ -525,9 +525,9 @@ func TestLoadtestUploadConcurrentChunks(t *testing.T) {
 		<-done
 	}
 	rec := httptest.NewRecorder()
-	loadtestUpload(rec, httptest.NewRequest(http.MethodGet, "/upload?id=obj", nil))
+	serveUpload(rec, httptest.NewRequest(http.MethodGet, "/upload?id=obj", nil))
 	sum := sha256.Sum256(body)
-	require.Equal(t, uint64(total), loadtestUploadReceived(t, rec))
+	require.Equal(t, uint64(total), uploadReceived(t, rec))
 	require.True(t, strings.Contains(rec.Body.String(), hex.EncodeToString(sum[:])))
 }
 
@@ -538,32 +538,32 @@ func TestLoadtestUploadConcurrentChunks(t *testing.T) {
 // (bench/2026-09-16/3194b7cc8-smoke).
 func TestLoadtestUploadEvictionNamesTheOffsets(t *testing.T) {
 	const chunk = 4096
-	loadtestUploadRig(t, 4*chunk, 4)
+	uploadRig(t, 4*chunk, 4)
 	const total = 8 * chunk
-	body := loadtestUploadBody(total)
+	body := uploadBody(total)
 	at := func(i int) []byte { return body[i*chunk : (i+1)*chunk] }
 
 	// Three chunks ahead of the frontier, all inside the window's reach.
 	for i := 1; i <= 3; i++ {
 		require.Equal(t, http.StatusAccepted,
-			loadtestUploadPut("obj", at(i), uint64(i*chunk), total).Code)
+			uploadPut("obj", at(i), uint64(i*chunk), total).Code)
 	}
 
 	// A frontier chunk that does not fit beside them evicts the furthest held
 	// one — and says which one, on its own ack.
-	rec := loadtestUploadPut("obj", body[:2*chunk], 0, total)
+	rec := uploadPut("obj", body[:2*chunk], 0, total)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, strconv.Itoa(3*chunk), rec.Header().Get("X-Upload-Evicted"),
 		"the dropped chunk is named on the ack, not left to a timeout")
-	require.Equal(t, uint64(3*chunk), loadtestUploadReceived(t, rec), "chunks 1 and 2 drained behind it")
+	require.Equal(t, uint64(3*chunk), uploadReceived(t, rec), "chunks 1 and 2 drained behind it")
 
 	// The notice is drained: the re-send's own ack does not repeat it.
-	rec = loadtestUploadPut("obj", at(3), 3*chunk, total)
+	rec = uploadPut("obj", at(3), 3*chunk, total)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Empty(t, rec.Header().Get("X-Upload-Evicted"), "a notice is delivered once")
 
 	// Nothing was evicted on a clean object, so an old client sees no new header.
-	rec = loadtestUploadPut("clean", at(0), 0, total)
+	rec = uploadPut("clean", at(0), 0, total)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Empty(t, rec.Header().Get("X-Upload-Evicted"))
 }
@@ -571,13 +571,13 @@ func TestLoadtestUploadEvictionNamesTheOffsets(t *testing.T) {
 // TestLoadtestUploadEvictionNoticeIsBounded: the notice queue cannot grow
 // without limit however many chunks are dropped.
 func TestLoadtestUploadEvictionNoticeIsBounded(t *testing.T) {
-	s := &loadtestUploadSession{held: map[uint64][]byte{}}
-	for i := 0; i < loadtestUploadEvictNotices*3; i++ {
+	s := &uploadSession{held: map[uint64][]byte{}}
+	for i := 0; i < uploadEvictNotices*3; i++ {
 		s.held[uint64(i)] = []byte{0}
 		s.heldBytes++
 		s.evictFurthest()
 	}
-	require.Len(t, s.evicted, loadtestUploadEvictNotices)
+	require.Len(t, s.evicted, uploadEvictNotices)
 	require.NotEmpty(t, s.takeEvicted())
 	require.Empty(t, s.takeEvicted(), "draining leaves nothing behind")
 }
