@@ -58,15 +58,16 @@ func init() {
 		vpnPairCmd,
 		skynetPairCmd,
 	)
-	// Install flag-aware `help` (supports -r/-t/-d modes) on the
-	// Install flag-aware `help` + coloredcobra styling on every
-	// subcommand root that has its own subcommand tree. The top-
-	// level skywire binary calls InitFlags on its own RootCmd (in
-	// main()), but that doesn't recurse — without InitStyle here,
-	// `skywire cli` renders without colors because cc.Init was never
-	// run on scli.RootCmd.
+	// coloredcobra styling on every subcommand root that has its own
+	// subcommand tree. The top-level skywire binary calls InitFlags on its
+	// own RootCmd (in main()), but cc.Init doesn't recurse — without
+	// InitStyle here, `skywire cli` renders without colors because cc.Init
+	// was never run on scli.RootCmd.
+	//
+	// The flag-aware `help` that used to be installed here command by
+	// command now comes from InstallHelpTree in Execute, which covers the
+	// whole tree rather than these five roots.
 	for _, sub := range []*cobra.Command{scli.RootCmd, services.RootCmd, dmsg.RootCmd, visor.RootCmd, cxo.RootCmd} {
-		flags.InstallHelp(sub)
 		flags.InitStyle(sub)
 	}
 
@@ -225,9 +226,15 @@ func Execute() {
 	// including the top-level binary adding skycoin), which InitRain and
 	// tui.Install both require ("last, once every subcommand is in the tree").
 	//
+	//   InstallHelpTree — `help` as a real command at every level, not just
+	//                 on the roots, so its -r/-t/-d modes work anywhere.
 	//   InitRain   — print help over a still frame of the Matrix code rain.
 	//   tui.Install — --tui opens the interactive console (alt-screen, animated
 	//                 rain) instead of printing help.
+	//
+	// InstallHelpTree goes first: the other two wrap help functions, and the
+	// commands it adds should be wrapped along with the rest.
+	flags.InstallHelpTree(RootCmd)
 	flags.InitRain(RootCmd)
 	tui.Install(RootCmd)
 	cmdutil.RunRoot(RootCmd)
