@@ -97,6 +97,14 @@ type Hop struct {
 	To        string
 	TpType    string
 	LatencyMS float64
+	// ThroughputBps is the hop transport's passively observed peak goodput in
+	// bytes/s (transport.Entry.ThroughputBps), 0 when this visor holds no
+	// entry for the transport. It is what lets a route that has never carried
+	// a byte be given a capacity PRIOR instead of a guess: the first hop is
+	// always owned locally, and a deeper hop reports a number only when the
+	// visor happens to hold that transport too. RTT says how LONG a path is;
+	// this is the only field that says how WIDE it is.
+	ThroughputBps float64 `json:"throughput_bps,omitempty"`
 }
 
 // Snapshot is everything a status page renders for one surface. It is a
@@ -270,6 +278,12 @@ type Tunnel struct {
 	// single-tunnel session, or a route group belonging to something else.
 	// It is the local end's own label; an exit cannot know it.
 	Role string
+	// LocalPort is the route group's LOCAL port — the one name the app, the
+	// visor and the bench's carrier.tsv already share for one tunnel (the
+	// same port NoteMuxEvent is addressed by). It is what lets the dialing
+	// app match a tunnel in this snapshot to its own session rather than
+	// trusting the tunnel order. 0 when the visor could not name it.
+	LocalPort uint16 `json:"local_port,omitempty"`
 }
 
 // Stream is one open tunneled stream on the surface's session to the exit — the

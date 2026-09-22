@@ -26,11 +26,18 @@ const planChunk = int64(1 << 20)
 
 // runPlan plays `chunks` equal chunks through spreadChoose and returns the
 // bytes each tunnel ended up with — the planner's whole decision, without a
-// tunnel, a stream or a byte of network.
+// tunnel, a stream or a byte of network. No tunnel has a capacity prior.
 func runPlan(capsBps []float64, chunks int, p spreadPolicy) []int64 {
+	return runPlanWithPriors(capsBps, make([]float64, len(capsBps)), chunks, p)
+}
+
+// runPlanWithPriors is runPlan for the case the planner is really about: some
+// of the tunnels have never been measured and are known only by the prior
+// their transports imply.
+func runPlanWithPriors(capsBps, priorBps []float64, chunks int, p spreadPolicy) []int64 {
 	carried := make([]int64, len(capsBps))
 	for i := 0; i < chunks; i++ {
-		idx := spreadChoose(capsBps, carried, p)
+		idx := spreadChoose(capsBps, priorBps, carried, p)
 		if idx < 0 {
 			break
 		}
@@ -83,13 +90,44 @@ func TestSpreadChooseEvenIgnoresCapacity(t *testing.T) {
 	}
 }
 
-// An unmeasured tunnel is credited the best capacity present rather than
-// starved — the #4965 rule, applied to shares. A tunnel that never gets a chunk
-// is never measured, and a tunnel that is never measured never gets a chunk.
-func TestSpreadChooseProbesAnUnmeasuredTunnel(t *testing.T) {
-	carried := runPlan([]float64{8 << 20, 0}, 20, spreadPolicy{maxShare: 1})
-	require.Positive(t, carried[1], "the unproven tunnel must be given something to prove")
-	require.InDelta(t, 0.5, shareOf(carried, 1), 0.05)
+// THE DEFECT, as a table. An unmeasured tunnel used to be credited the BEST
+// weight present — "probed rather than starved", the #4965 rule applied to
+// shares — so a standby promoted by min_routes and switched in before the first
+// chunk took an equal share of the object on the strength of having carried
+// nothing at all. It now takes exactly ONE chunk: enough to be measured, never
+// enough to decide when the object finishes.
+func TestSpreadChooseGivesAnUnmeasuredRouteWithoutAPriorOneProbeChunk(t *testing.T) {
+	const chunks = 20
+	carried := runPlan([]float64{8 << 20, 0}, chunks, spreadPolicy{maxShare: 1})
+
+	require.Equal(t, planChunk, carried[1], "exactly one probe chunk, not a share")
+	require.InDelta(t, 1.0/chunks, shareOf(carried, 1), 0.001)
+	require.Equal(t, int64(chunks-1)*planChunk, carried[0], "the measured route carries the rest")
+}
+
+// ...and with a PRIOR the same route is weighed by it instead. The prior is a
+// real number about a real path (the minimum observed throughput of the
+// transports the route is built from), so a route it says can carry a third of
+// what the measured one carries takes a third of the shares — not an equal
+// share, and not a single chunk either.
+func TestSpreadChooseWeighsAnUnmeasuredRouteByItsPrior(t *testing.T) {
+	carried := runPlanWithPriors(
+		[]float64{9 << 20, 0}, // one measured at 9 MB/s, one never measured
+		[]float64{0, 3 << 20}, // ...whose transports say 3 MB/s
+		120, spreadPolicy{maxShare: 1})
+
+	require.InDelta(t, 0.75, shareOf(carried, 0), 0.02, "9/(9+3)")
+	require.InDelta(t, 0.25, shareOf(carried, 1), 0.02, "3/(9+3) — its prior, not the best weight present")
+}
+
+// A prior is never mistaken for a measurement: at equal numbers the MEASURED
+// route wins every tie, which is what keeps the opening chunks of an object —
+// all of them one big tie, since nothing is carried yet — off the route that
+// has only ever been described.
+func TestSpreadChooseBreaksTiesTowardTheMeasuredRoute(t *testing.T) {
+	require.Equal(t, 0, spreadChoose(
+		[]float64{4 << 20, 0}, []float64{0, 4 << 20}, []int64{0, 0},
+		spreadPolicy{maxShare: 1}), "same weight, but only one of them is evidence")
 }
 
 // max_share 0.4 over three tunnels: nobody finishes above 40 % of the object,
@@ -112,8 +150,13 @@ func TestSpreadChooseHoldsTheCap(t *testing.T) {
 // its share the cap is ignored and the chunk is still placed.
 func TestSpreadChooseNeverStallsOnTheCap(t *testing.T) {
 	// One tunnel cannot be under a 0.4 cap of itself, ever.
-	require.Equal(t, 0, spreadChoose([]float64{1 << 20}, []int64{1 << 30}, spreadPolicy{maxShare: 0.4}))
-	require.Equal(t, -1, spreadChoose(nil, nil, spreadPolicy{maxShare: 0.4}), "nothing to place it on")
+	require.Equal(t, 0, spreadChoose([]float64{1 << 20}, []float64{0}, []int64{1 << 30}, spreadPolicy{maxShare: 0.4}))
+	require.Equal(t, -1, spreadChoose(nil, nil, nil, spreadPolicy{maxShare: 0.4}), "nothing to place it on")
+	// ...and neither may the probe bound. A lone tunnel nothing is known
+	// about has spent its one probe chunk and is still the only place the
+	// next chunk can go.
+	require.Equal(t, 0, spreadChoose([]float64{0}, []float64{0}, []int64{planChunk}, spreadPolicy{maxShare: 1, minRoutes: 2}),
+		"a spent probe must not stall an object either")
 }
 
 // Off is off: with no knob set the policy steers nothing and the planner hands
@@ -551,6 +594,61 @@ func TestEnsureMinRoutesFallsBackToTheRTTRank(t *testing.T) {
 	require.Equal(t, 2, c.ensureMinRoutes(2, spreadDown, "test"))
 	require.False(t, c.IsStandby(near), "no capacity sample anywhere: the lowest RTT wins")
 	require.True(t, c.IsStandby(far))
+}
+
+// The three tiers of the promotion rank, in one table. A MEASURED standby
+// outranks one known only by its capacity prior, a prior outranks knowing
+// nothing at all, and RTT decides only inside the bottom tier. The rank used to
+// be measured-capacity-then-RTT, which put a route that had never carried a
+// byte ahead of one whose transports said it was three times as wide.
+func TestEnsureMinRoutesRanksMeasuredThenPriorThenRTT(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	mk := func(t *testing.T) (*yamux.Session, func()) { return newTestSession(t) }
+
+	active, closeA := mk(t)
+	defer closeA()
+	measured, closeM := mk(t)
+	defer closeM()
+	priored, closeP := mk(t)
+	defer closeP()
+	unknown, closeU := mk(t)
+	defer closeU()
+
+	build := func() *Client {
+		mA, mM, mP, mU := new(tunnelMeter), new(tunnelMeter), new(tunnelMeter), new(tunnelMeter)
+		mA.rttMs = 40
+		// The ranking must not be readable off the pings: the tunnel nothing is
+		// known about is the NEAREST one, which is what the old rank promoted.
+		mM.rttMs, mP.rttMs, mU.rttMs = 300, 200, 10
+		mM.rxCapBps = 2 << 20 // measured, and the SLOWEST number in the table
+		mP.priorBps = 6 << 20 // never measured; its transports say 6 MB/s
+		return &Client{
+			sessions:  []*yamux.Session{active, measured, priored, unknown},
+			recvStamp: map[*yamux.Session]*tunnelMeter{active: mA, measured: mM, priored: mP, unknown: mU},
+			standby:   map[*yamux.Session]bool{measured: true, priored: true, unknown: true},
+			closeC:    make(chan struct{}),
+		}
+	}
+
+	// One more route: evidence wins, even though the prior claims three times
+	// the throughput and the unknown route pings twenty times better.
+	c := build()
+	require.Equal(t, 2, c.ensureMinRoutes(2, spreadDown, "test"))
+	require.False(t, c.IsStandby(measured), "a busy-window sample outranks a prior")
+	require.True(t, c.IsStandby(priored))
+	require.True(t, c.IsStandby(unknown))
+
+	// Two more: the prior takes the next seat, and the route nothing is known
+	// about is last however well it pings.
+	c = build()
+	require.Equal(t, 3, c.ensureMinRoutes(3, spreadDown, "test"))
+	require.False(t, c.IsStandby(priored), "a prior outranks knowing nothing")
+	require.True(t, c.IsStandby(unknown), "and the unmeasured, priorless route is last")
+
+	// ...and it is taken only when there is nothing else left.
+	c = build()
+	require.Equal(t, 4, c.ensureMinRoutes(4, spreadDown, "test"))
+	require.False(t, c.IsStandby(unknown))
 }
 
 // Concurrent picks must not all land on the same tunnel. The download gate
