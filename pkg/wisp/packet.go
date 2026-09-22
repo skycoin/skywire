@@ -113,6 +113,54 @@ func EncodeClose(streamID uint32, reason uint8) []byte {
 	return Encode(PacketClose, streamID, []byte{reason})
 }
 
+// ParseContinue decodes a CONTINUE payload into the buffer size it carries,
+// in packets. The value is the remaining buffer, not a delta.
+func ParseContinue(payload []byte) (uint32, error) {
+	if len(payload) < 4 {
+		return 0, fmt.Errorf("wisp: CONTINUE payload %d bytes, want 4", len(payload))
+	}
+	return binary.LittleEndian.Uint32(payload[:4]), nil
+}
+
+// CloseError is a CLOSE reason code presented as an error, so that a stream
+// torn down by the far end reports why through the ordinary error path.
+type CloseError uint8
+
+// Error implements error.
+func (e CloseError) Error() string {
+	return fmt.Sprintf("wisp: stream closed (0x%02x: %s)", uint8(e), closeReasonName(uint8(e)))
+}
+
+// closeReasonName renders a CLOSE reason for humans.
+func closeReasonName(reason uint8) string {
+	switch reason {
+	case CloseUnspecified:
+		return "unspecified"
+	case CloseVoluntary:
+		return "voluntary"
+	case CloseNetworkError:
+		return "network error"
+	case CloseIncompatExt:
+		return "incompatible extensions"
+	case CloseInvalidInfo:
+		return "invalid info"
+	case CloseUnreachable:
+		return "host unreachable"
+	case CloseTimeout:
+		return "connection timed out"
+	case CloseRefused:
+		return "connection refused"
+	case CloseTransferTimeo:
+		return "transfer timed out"
+	case CloseBlocked:
+		return "blocked by proxy"
+	case CloseThrottled:
+		return "throttled"
+	default:
+		return "unknown"
+	}
+}
+
 // Extension is one entry of an INFO packet's extension list.
 type Extension struct {
 	ID       uint8
