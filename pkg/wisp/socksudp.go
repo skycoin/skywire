@@ -225,30 +225,18 @@ func (s *socksUDP) ReadDatagram() ([]byte, error) {
 	}
 }
 
-// socksUDPBody returns the payload of a SOCKS5 UDP datagram.
+// socksUDPBody returns the payload of a SOCKS5 UDP datagram, which is all a
+// connected stream needs: the header names where it came from, and that is
+// the one peer this stream has.
 func socksUDPBody(b []byte) ([]byte, error) {
-	if len(b) < 5 {
-		return nil, errors.New("wisp: UDP datagram too short for a SOCKS5 header")
+	_, _, body, frag, err := parseSocksUDP(b)
+	if err != nil {
+		return nil, err
 	}
-	if b[2] != 0x00 {
+	if frag != 0 {
 		return nil, errors.New("wisp: fragmented SOCKS5 datagrams are not reassembled")
 	}
-	i := 4
-	switch b[3] {
-	case 0x01:
-		i += 4
-	case 0x03:
-		i += 1 + int(b[4])
-	case 0x04:
-		i += 16
-	default:
-		return nil, fmt.Errorf("wisp: SOCKS5 datagram address type 0x%02x", b[3])
-	}
-	i += 2
-	if len(b) < i {
-		return nil, errors.New("wisp: SOCKS5 datagram header runs past its end")
-	}
-	return b[i:], nil
+	return body, nil
 }
 
 // Close implements DatagramStream. Closing the control connection is what ends

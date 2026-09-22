@@ -20,11 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
-
-	socks5 "github.com/armon/go-socks5"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -52,6 +49,13 @@ Every SOCKS5 CONNECT becomes a Wisp stream on one shared WebSocket, so a
 browser's several dozen connections cost one socket rather than several dozen.
 Names are never resolved here: the hostname is passed through to the backend,
 which resolves it at the far end.
+
+UDP ASSOCIATE is served too, since a Wisp session carries datagrams as well as
+streams. The proxy binds the relay socket the application is promised and
+opens one Wisp UDP stream per destination behind it, reaping the ones that
+fall idle; the association ends with its control connection, as RFC 1928 says.
+A backend that does not advertise the UDP extension gets a refusal rather than
+an association that swallows everything sent to it.
 
 --proxy dials the websocket through a SOCKS5 proxy of its own. Pointed at the
 local skysocks-client it puts the Wisp session on a route to an exit, so the
@@ -107,23 +111,9 @@ Examples:
 				c.Version(), c.Buffer(), yesNo(c.UDPSupported()))
 		}
 
-		srv, err := socks5.New(&socks5.Config{
-			Logger: logging.NewStdLoggerLevel(log, logrus.DebugLevel),
-			// Pass hostnames through unresolved. The default
-			// resolver would look them up on THIS host, which both
-			// leaks the query and resolves against the wrong
-			// network — the backend's view is the one that matters.
-			Resolver: passthroughResolver{},
-			Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				c, err := sess.get(ctx)
-				if err != nil {
-					return nil, err
-				}
-				return c.DialContext(ctx, network, addr)
-			},
-		})
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), err)
+		srv := &wisp.SocksServer{
+			Session: sess.get,
+			Log:     log,
 		}
 
 		var b strings.Builder
@@ -135,8 +125,12 @@ Examples:
 		fmt.Fprintf(&b, "  status:  %s\n", status)
 		internal.PrintOutput(cmd.Flags(), b.String(), b.String())
 
-		// ListenAndServe only ever returns on failure.
-		internal.PrintFatalError(cmd.Flags(), srv.ListenAndServe("tcp", wispClientListen))
+		l, err := net.Listen("tcp", wispClientListen)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		// Serve only ever returns on failure.
+		internal.PrintFatalError(cmd.Flags(), srv.Serve(l))
 	},
 }
 
@@ -215,15 +209,6 @@ func viaClient(via string) (*http.Client, error) {
 	return &http.Client{
 		Transport: &http.Transport{DialContext: cd.DialContext},
 	}, nil
-}
-
-// passthroughResolver leaves a hostname unresolved, which go-socks5 takes as
-// "dial the name" rather than "dial an address".
-type passthroughResolver struct{}
-
-// Resolve implements socks5.NameResolver.
-func (passthroughResolver) Resolve(ctx context.Context, _ string) (context.Context, net.IP, error) {
-	return ctx, nil, nil
 }
 
 func yesNo(b bool) string {
