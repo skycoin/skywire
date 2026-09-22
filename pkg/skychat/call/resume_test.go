@@ -166,18 +166,13 @@ func TestResumeRefusedFromWrongPeer(t *testing.T) {
 	})
 	go mgrB.Serve(ctx, lis)
 
-	// B is waiting for pkPeer to come back for call "abc".
+	// B has a live call with pkPeer.
 	const callID = "abcabcabcabcabca"
-	waitDone := make(chan struct{})
-	go func() {
-		defer close(waitDone)
-		_, _ = mgrB.resumeInbound(ctx, callID, pkPeer) //nolint:errcheck
-	}()
-	waitFor(t, func() bool {
-		mgrB.mu.Lock()
-		defer mgrB.mu.Unlock()
-		return mgrB.resuming[callID] != nil
-	}, 2*time.Second, "B never registered the resume wait")
+	near, far := net.Pipe()
+	defer far.Close() //nolint:errcheck
+	live := mgrB.startSession(callID, pkPeer, near, 1)
+	live.SetAwaitResume()
+	defer live.Close()
 
 	stranger := NewManager(Config{
 		LocalPK: pkStranger,
@@ -187,26 +182,12 @@ func TestResumeRefusedFromWrongPeer(t *testing.T) {
 		t.Fatal("a resume from a stranger was accepted for somebody else's call")
 	}
 
-	// And the real peer's call is still waiting, not consumed by the attempt.
-	mgrB.mu.Lock()
-	still := mgrB.resuming[callID] != nil
-	mgrB.mu.Unlock()
-	if !still {
-		t.Fatal("the stranger's refused resume canceled the genuine wait")
+	// The refusal must not have disturbed the call it failed to hijack.
+	if got, _ := live.media(); got != near {
+		t.Fatal("the stranger's refused resume replaced the call's transport")
 	}
-	cancel()
-	<-waitDone
-}
-
-func waitFor(t *testing.T, cond func() bool, within time.Duration, msg string) {
-	t.Helper()
-	deadline := time.After(within)
-	for !cond() {
-		select {
-		case <-deadline:
-			t.Fatal(msg)
-		case <-time.After(10 * time.Millisecond):
-		}
+	if r := live.EndReason(); r != "" {
+		t.Fatalf("the refused resume ended the call: %q", r)
 	}
 }
 
@@ -243,5 +224,80 @@ func TestHangupDuringReconnectEndsTheCallNow(t *testing.T) {
 	case <-done:
 	case <-time.After(3 * time.Second):
 		t.Fatal("hanging up during a reconnect did not end the call")
+	}
+}
+
+// blackholeConn is a transport that has died without saying so: writes are
+// swallowed and reads block, which is what a dead TCP connection looks like to
+// the side that is mostly writing — the kernel accepts into the send buffer
+// and nothing ever comes back.
+type blackholeConn struct {
+	net.Conn
+	dead chan struct{}
+	once sync.Once
+}
+
+func newBlackholeConn() *blackholeConn {
+	near, far := net.Pipe()
+	_ = far.Close() //nolint:errcheck // only near is used, for its net.Conn surface
+	return &blackholeConn{Conn: near, dead: make(chan struct{})}
+}
+
+func (c *blackholeConn) Read([]byte) (int, error)    { <-c.dead; return 0, io.EOF }
+func (c *blackholeConn) Write(b []byte) (int, error) { return len(b), nil }
+func (c *blackholeConn) Close() error {
+	c.once.Do(func() { close(c.dead) })
+	return nil
+}
+
+// TestAdoptionDoesNotNeedThisSideToHaveNoticed is the fix for what a real soak
+// test caught: the two ends of a call do not find out the transport died at
+// the same time, and can be the better part of a minute apart.
+//
+// Measured, on the run that produced this test: the caller noticed at 18:07:57
+// and gave up re-dialing at 18:08:27; the callee did not notice until 18:08:51
+// — twenty-four seconds after the only peer that was going to call back had
+// stopped. While resumption required BOTH sides to be in a reconnecting state
+// at once, their windows simply missed each other and the call died anyway.
+//
+// So adoption does not ask. A session that believes everything is fine takes
+// the replacement and carries on with it.
+func TestAdoptionDoesNotNeedThisSideToHaveNoticed(t *testing.T) {
+	dead := newBlackholeConn()
+	sess := NewSession("feedfacefeedface", dead, NewPCMCodec(), &toneSource{}, NullSink{}, 1, nil)
+	sess.SetAwaitResume()
+	sess.SetPeer(cipher.PubKey{})
+
+	done := make(chan struct{})
+	go func() { sess.Run(context.Background()); close(done) }()
+	defer func() { sess.Close(); <-done }()
+
+	// Let it settle into "happily writing into nowhere": it has noticed
+	// nothing, so there is no reconnect in flight for the adoption to race.
+	time.Sleep(100 * time.Millisecond)
+	if r := sess.EndReason(); r != "" {
+		t.Fatalf("the session ended before the test began: %q", r)
+	}
+
+	near, far := net.Pipe()
+	defer far.Close() //nolint:errcheck
+	if !sess.AdoptConn(near) {
+		t.Fatal("a live session refused the peer's replacement transport")
+	}
+
+	// Media must now be arriving on the new conn.
+	if err := far.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline: %v", err)
+	}
+	var hdr [2]byte
+	if _, err := io.ReadFull(far, hdr[:]); err != nil {
+		t.Fatalf("no media on the adopted transport: %v", err)
+	}
+	n := int(hdr[0])<<8 | int(hdr[1])
+	if n == 0 || n > sigMaxLen {
+		t.Fatalf("adopted transport carried a nonsense frame length %d", n)
+	}
+	if _, err := io.ReadFull(far, make([]byte, n)); err != nil {
+		t.Fatalf("frame body truncated on the adopted transport: %v", err)
 	}
 }

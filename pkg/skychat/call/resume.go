@@ -3,7 +3,6 @@ package call
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -42,13 +41,16 @@ const resumeRetryInterval = 2 * time.Second
 // attempt fails however long it is given.
 const resumeAttemptBudget = 8 * time.Second
 
-// resumeWait is a call whose media conn has failed and whose peer is expected
-// to re-dial. Only the side that PLACED the call re-dials; the side that
-// answered parks here, so the two cannot both dial and end up with a conn each.
-type resumeWait struct {
-	peer cipher.PubKey
-	conn chan net.Conn // buffered(1)
-}
+// adoptWaitBudget is how long the ANSWERING side holds a call open waiting to
+// be re-dialed.
+//
+// Longer than the dialing side's budget, deliberately. The two sides do not
+// notice a dead transport at the same time and can be most of a minute apart —
+// a dead TCP connection accepts writes until its buffer fills, so the side
+// that is mostly writing finds out last. Whoever notices second must still be
+// there when the other's re-dial arrives, so it waits out the dialer's whole
+// budget with room to spare.
+const adoptWaitBudget = ResumeBudget + 30*time.Second
 
 // resumeOutbound rebuilds the media conn from the CALLER's side by re-dialing
 // the peer, retrying until the budget runs out.
@@ -83,70 +85,39 @@ func (m *Manager) resumeOutbound(ctx context.Context, callID string, peer cipher
 	}
 }
 
-// resumeInbound rebuilds the media conn from the CALLEE's side, by waiting for
-// the caller to re-dial with this call's id.
-func (m *Manager) resumeInbound(ctx context.Context, callID string, peer cipher.PubKey) (net.Conn, error) {
-	w := &resumeWait{peer: peer, conn: make(chan net.Conn, 1)}
-	m.mu.Lock()
-	m.resuming[callID] = w
-	m.mu.Unlock()
-	defer func() {
-		m.mu.Lock()
-		delete(m.resuming, callID)
-		m.mu.Unlock()
-		// A conn that landed in the channel between our giving up and the
-		// deregistration above has nobody left to read it. The buffered slot
-		// would hold it open for the life of the process.
-		select {
-		case orphan := <-w.conn:
-			_ = orphan.Close() //nolint:errcheck
-		default:
-		}
-	}()
-
-	timer := time.NewTimer(ResumeBudget)
-	defer timer.Stop()
-	select {
-	case conn := <-w.conn:
-		return conn, nil
-	case <-timer.C:
-		return nil, errors.New("voice: the caller did not reconnect")
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
-
-// handleResume is the callee side of a re-dial: it attaches the fresh conn to
-// the call already waiting for one, or declines.
+// handleResume is the answering side of a re-dial: it hands the fresh conn to
+// the call it names, or declines.
+//
+// It looks the call up in the LIVE calls, not in a list of calls known to be
+// broken, because this side may not have noticed anything is wrong yet — and
+// routinely has not. That is the whole point: the peer noticing is enough.
 func (m *Manager) handleResume(sig Sig, conn net.Conn) {
 	m.mu.Lock()
-	w := m.resuming[sig.CallID]
+	sess := m.calls[sig.CallID]
 	m.mu.Unlock()
-	if w == nil {
-		// No call of that id is missing its transport. Nothing to attach to,
-		// and nothing worth telling the dialer beyond that.
-		_ = writeSig(conn, Sig{Type: SigDecline, CallID: sig.CallID, FromPK: m.cfg.LocalPK, Reason: "no call awaiting resume"}) //nolint:errcheck
-		_ = conn.Close()                                                                                                        //nolint:errcheck
+	if sess == nil {
+		// No live call of that id. Nothing to attach to, and nothing worth
+		// telling the dialer beyond that.
+		_ = writeSig(conn, Sig{Type: SigDecline, CallID: sig.CallID, FromPK: m.cfg.LocalPK, Reason: "no such call"}) //nolint:errcheck
+		_ = conn.Close()                                                                                             //nolint:errcheck
 		return
 	}
-	if !m.resumeIsFromPeer(w, sig, conn) {
+	if !resumeIsFromPeer(sess.Peer(), sig, conn) {
 		_ = writeSig(conn, Sig{Type: SigDecline, CallID: sig.CallID, FromPK: m.cfg.LocalPK, Reason: "resume from the wrong peer"}) //nolint:errcheck
 		_ = conn.Close()                                                                                                           //nolint:errcheck
 		m.log.WithField("call", sig.CallID).Warn("voice: refused a resume that did not come from the call's peer")
 		return
 	}
-	// Accept BEFORE handing the conn over: the dialer starts sending media as
-	// soon as it reads this, and the session must already own the conn by
-	// then or those first frames land on nobody.
+	// Accept BEFORE adopting: the dialer starts sending media as soon as it
+	// reads this, and the session must already own the conn by then or those
+	// first frames land on nobody.
 	ack := Sig{Type: SigAccept, CallID: sig.CallID, FromPK: m.cfg.LocalPK, Codec: m.cfg.Codec.Name(), MediaPort: m.cfg.SignalPort}
 	if err := writeSig(conn, ack); err != nil {
 		_ = conn.Close() //nolint:errcheck
 		return
 	}
-	select {
-	case w.conn <- conn:
-	default:
-		_ = conn.Close() //nolint:errcheck // already resumed by an earlier dial
+	if !sess.AdoptConn(conn) {
+		_ = conn.Close() //nolint:errcheck // hung up in the meantime
 	}
 }
 
@@ -169,9 +140,9 @@ type peerNamed interface {
 // invite has always stood on, narrowed by a resume being possible only for a
 // live call, only while its transport is down, and only with its 64 random bits
 // of id.
-func (m *Manager) resumeIsFromPeer(w *resumeWait, sig Sig, conn net.Conn) bool {
+func resumeIsFromPeer(peer cipher.PubKey, sig Sig, conn net.Conn) bool {
 	if pn, ok := conn.(peerNamed); ok {
-		return pn.RemotePK() == w.peer
+		return pn.RemotePK() == peer
 	}
-	return sig.FromPK == w.peer
+	return sig.FromPK == peer
 }

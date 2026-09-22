@@ -90,10 +90,6 @@ type Manager struct {
 	// callee's list) nor Active (that starts at "answered"), so a UI had
 	// nothing to show for the ten seconds a caller most wants feedback.
 	dialing map[string]*dialingCall
-	// resuming holds calls whose media transport has failed and whose peer
-	// is expected to re-dial. A resume frame is matched against it; an id
-	// not in here has no call to attach to. See resume.go.
-	resuming map[string]*resumeWait
 }
 
 // dialingCall is an outbound invite in flight.
@@ -130,7 +126,7 @@ func NewManager(cfg Config) *Manager {
 	if cfg.NewSink == nil {
 		cfg.NewSink = func() Sink { return NullSink{} }
 	}
-	m := &Manager{cfg: cfg, log: cfg.Logger, calls: make(map[string]*Session), ringing: make(map[string]*ringingCall), taps: make(map[string]*callTap), dialing: make(map[string]*dialingCall), resuming: make(map[string]*resumeWait)}
+	m := &Manager{cfg: cfg, log: cfg.Logger, calls: make(map[string]*Session), ringing: make(map[string]*ringingCall), taps: make(map[string]*callTap), dialing: make(map[string]*dialingCall)}
 	m.sig = NewSignaler(cfg.LocalPK, cfg.SignalPort, cfg.Dial, cfg.Logger)
 	m.sig.SetInviteHandler(m.handleInvite)
 	m.sig.SetResumeHandler(m.handleResume)
@@ -222,7 +218,7 @@ func (m *Manager) dial(ctx context.Context, callID string, peer cipher.PubKey) (
 		}
 		return nil, fmt.Errorf("voice: call not accepted: %s", reason)
 	}
-	sess := m.startSession(callID, conn, ssrcFromPK(m.cfg.LocalPK))
+	sess := m.startSession(callID, peer, conn, ssrcFromPK(m.cfg.LocalPK))
 	// This side placed the call, so this side re-dials when the transport
 	// under it dies; the callee waits to be re-dialed. See resumeOutbound.
 	sess.SetResume(func(rctx context.Context, id string) (net.Conn, error) {
@@ -325,12 +321,10 @@ func (m *Manager) accept(inv Sig, conn net.Conn) {
 		_ = conn.Close() //nolint:errcheck
 		return
 	}
-	sess := m.startSession(inv.CallID, conn, ssrcFromPK(m.cfg.LocalPK))
+	sess := m.startSession(inv.CallID, inv.FromPK, conn, ssrcFromPK(m.cfg.LocalPK))
 	// We answered, so we wait to be re-dialed rather than dialing — only one
 	// side may, or a broken transport becomes two replacements.
-	sess.SetResume(func(rctx context.Context, id string) (net.Conn, error) {
-		return m.resumeInbound(rctx, id, inv.FromPK)
-	})
+	sess.SetAwaitResume()
 	go func() { sess.Run(context.Background()); m.dropCall(inv.CallID) }() //nolint:gosec // session outlives the invite/request ctx by design
 }
 
@@ -377,7 +371,7 @@ func (m *Manager) Incoming() []Sig {
 	return out
 }
 
-func (m *Manager) startSession(callID string, conn net.Conn, ssrc uint32) *Session {
+func (m *Manager) startSession(callID string, peer cipher.PubKey, conn net.Conn, ssrc uint32) *Session {
 	src := m.cfg.NewSource()
 	sink := m.cfg.NewSink()
 	if m.cfg.Visualize {
@@ -389,6 +383,7 @@ func (m *Manager) startSession(callID string, conn net.Conn, ssrc uint32) *Sessi
 		m.mu.Unlock()
 	}
 	sess := NewSession(callID, conn, m.cfg.NewCodec(), src, sink, ssrc, m.log)
+	sess.SetPeer(peer)
 	m.mu.Lock()
 	m.calls[callID] = sess
 	m.mu.Unlock()
