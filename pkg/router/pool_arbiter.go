@@ -42,6 +42,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -71,14 +72,69 @@ type poolTakenLeg struct {
 	at   time.Time
 }
 
+// roleReportingApps remembers which apps label their tunnels at all. An app
+// registers itself the first time one of its dials carries a role, which is
+// before any of its groups can be widened — the role is stamped in finishDial,
+// the self-heal top-up and the arbiter run later off the router's own clocks.
+//
+// It exists because "no role" is two different situations. For an app that
+// never labels anything (the accept side, a plain app dial) it means the pool
+// rules do not apply. For the PROXY it means the label has not arrived yet, and
+// treating that as "widen freely" is what the rig caught: a tunnel dialed for
+// the pool grew a second leg in the gap before it was known to be standby.
+var (
+	roleReportingMu   sync.RWMutex
+	roleReportingApps = map[string]struct{}{}
+)
+
+// noteRoleReportingApp records that app labels its tunnels. Called from
+// SetTunnelRole, so the registry needs no configuration and no app-name list.
+func noteRoleReportingApp(app string) {
+	if app == "" {
+		return
+	}
+	roleReportingMu.RLock()
+	_, ok := roleReportingApps[app]
+	roleReportingMu.RUnlock()
+	if ok {
+		return
+	}
+	roleReportingMu.Lock()
+	roleReportingApps[app] = struct{}{}
+	roleReportingMu.Unlock()
+}
+
+// appReportsTunnelRoles reports whether app has ever labelled a tunnel.
+func appReportsTunnelRoles(app string) bool {
+	if app == "" {
+		return false
+	}
+	roleReportingMu.RLock()
+	defer roleReportingMu.RUnlock()
+	_, ok := roleReportingApps[app]
+	return ok
+}
+
 // standbyTunnel reports whether the DIALING app labels this route group a
 // standby tunnel — held open and measured, carrying no streams.
 func (rg *RouteGroup) standbyTunnel() bool { return rg.TunnelRole() == tunnelRoleStandby }
 
+// tunnelRoleUnknown reports whether this group belongs to a role-reporting app
+// but has no role yet. Such a group is treated as the pool's — the safe half of
+// the guess, since a mislabelled standby costs the exit a whole extra chain
+// while a mislabelled active only waits for its width.
+func (rg *RouteGroup) tunnelRoleUnknown() bool {
+	return rg.TunnelRole() == "" && appReportsTunnelRoles(rg.AppName())
+}
+
 // poolWideningAllowed reports whether this group may hold more than one leg.
-// A standby tunnel may not: see the file header. A group with no role at all
-// (a non-proxy app, the accept side) is unaffected and widens as it always has.
-func (rg *RouteGroup) poolWideningAllowed() bool { return !rg.standbyTunnel() }
+// A standby tunnel may not: see the file header. Neither may a group of a
+// role-reporting app whose role has not landed yet. A group of an app that
+// never reports roles at all (a non-proxy app, the accept side) is unaffected
+// and widens as it always has.
+func (rg *RouteGroup) poolWideningAllowed() bool {
+	return !rg.standbyTunnel() && !rg.tunnelRoleUnknown()
+}
 
 // muxWidthTarget is the leg count this group is meant to hold — its self-heal
 // target, which is the dial-time mux width re-capped live by the adaptive
@@ -111,36 +167,35 @@ func (rg *RouteGroup) poolMovedBytes() uint64 {
 //     "one leg is not enough" verdict and carries its own engage/release
 //     hysteresis;
 //   - a continuous transfer episode in either direction lasting at least
-//     unidir.fanout_engage — the reverse-heavy case, which the forward latch
-//     cannot see because a download's pressure is at the other end. Reusing the
-//     fan-out engage window keeps this from introducing a second threshold.
+//     unidir.fanout_engage AND running at pool.load_min_bps or better — the
+//     reverse-heavy case, which the forward latch cannot see because a
+//     download's pressure is at the other end. Reusing the fan-out engage
+//     window keeps this from introducing a second threshold.
+//
+// The RATE is the half that was missing. "Any byte delta since the last tick"
+// is true of a group that is only keeping itself alive: the mux's own control
+// and liveness frames move bytes every second, so the episode never broke and
+// every active tunnel read as permanently loaded — the arbiter then spent a
+// pooled tunnel every pool.leg_interval for as long as the session lasted (rig
+// 2026-09-22, 37 takes / 13 releases against a 2-tunnel compose set, with the
+// pool's own audition traffic keeping the mark moving). A floor makes the
+// heartbeat case impossible without adding a second latch.
 //
 // It returns the reason the events will carry, and updates the episode marks.
 func (rg *RouteGroup) poolLoadSignal(now time.Time) (string, bool) {
 	if rg.mux == nil {
 		return "", false
 	}
-	moved := rg.poolMovedBytes()
 	engage := rg.mux.knDur(routersettings.UnidirFanoutEngage)
-
-	rg.mu.Lock()
-	busy := moved > rg.poolBytesMark
-	rg.poolBytesMark = moved
-	switch {
-	case !busy:
-		rg.poolBusySince = time.Time{}
-	case rg.poolBusySince.IsZero():
-		rg.poolBusySince = now
-	}
-	sustained := busy && !rg.poolBusySince.IsZero() && now.Sub(rg.poolBusySince) >= engage
-	rg.mu.Unlock()
+	sustained := rg.noteLoadSample(rg.poolMovedBytes(), now, float64(rg.mux.knInt(routersettings.PoolLoadMinBps)), engage)
 
 	reason := ""
 	switch {
 	case rg.mux.forwardFanoutActive():
 		reason = "forward_fanout latched: the upload has more demand than its confined leg"
 	case sustained:
-		reason = fmt.Sprintf("the group has been carrying continuously for %v (reverse-heavy)", engage)
+		reason = fmt.Sprintf("the group has been carrying at %d B/s or better for %v (reverse-heavy)",
+			rg.mux.knInt(routersettings.PoolLoadMinBps), engage)
 	default:
 		return "", false
 	}
@@ -148,6 +203,34 @@ func (rg *RouteGroup) poolLoadSignal(now time.Time) (string, bool) {
 	rg.poolLoadAt = now
 	rg.mu.Unlock()
 	return reason, true
+}
+
+// noteLoadSample folds one byte-total sample into the reverse-heavy episode and
+// reports whether the episode has been running at floor bytes/second or better
+// for at least engage. Split out of poolLoadSignal so the rate rule can be
+// driven directly by a test without synthesizing mux leg counters.
+func (rg *RouteGroup) noteLoadSample(moved uint64, now time.Time, floor float64, engage time.Duration) bool {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	// The FIRST sample only establishes the baseline: a group's lifetime byte
+	// total is not a rate, and counting it as one latched the episode at the
+	// very first tick.
+	elapsed := now.Sub(rg.poolBytesAt).Seconds()
+	first := rg.poolBytesAt.IsZero()
+	delta := float64(0)
+	if moved > rg.poolBytesMark {
+		delta = float64(moved - rg.poolBytesMark)
+	}
+	busy := !first && elapsed > 0 && delta/elapsed >= floor
+	rg.poolBytesMark = moved
+	rg.poolBytesAt = now
+	switch {
+	case !busy:
+		rg.poolBusySince = time.Time{}
+	case rg.poolBusySince.IsZero():
+		rg.poolBusySince = now
+	}
+	return busy && !rg.poolBusySince.IsZero() && now.Sub(rg.poolBusySince) >= engage
 }
 
 // poolCandidate is one pooled tunnel offered to an active group, with the same
