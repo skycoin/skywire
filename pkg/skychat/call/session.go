@@ -20,11 +20,22 @@ import (
 // signaling (Sig.Codec), so the number is just a stable tag on the wire.
 const rtpPayloadType = 96
 
+// ResumeFunc re-establishes a call's media conn after the transport under it
+// died. It blocks until it has one or gives up, and owns its own budget — the
+// session has no deadline to lend it.
+type ResumeFunc func(ctx context.Context, callID string) (net.Conn, error)
+
 // Session is one established 1:1 call's MEDIA plane: RTP frames over a skywire
 // net.Conn (a dmsg stream or skynet route conn — already Noise-encrypted, so no
 // SRTP needed for the transport hop). It runs a send loop (capture → encode →
 // RTP → conn) and a recv loop (conn → RTP → decode → playback) until ctx is
-// canceled or the conn errors.
+// canceled, or the conn fails and cannot be rebuilt.
+//
+// The conn is not fixed for the life of the call. It is one stream on a SHARED
+// dmsg session, so it dies whenever that session does — a server evicting the
+// client, a reaper, a phone moving from Wi-Fi to cellular — none of which is a
+// reason to hang up on anybody. Given a ResumeFunc the loops rebuild it and go
+// on; see tryResume.
 //
 // Framing: because a stream conn has no message boundaries, each RTP packet is
 // length-prefixed (2-byte big-endian). Over a datagram route (a follow-up) each
@@ -33,7 +44,23 @@ const rtpPayloadType = 96
 type Session struct {
 	CallID string
 
+	// connMu guards the media conn and its generation. The conn is swapped
+	// rather than fixed because a call outlives it: see tryResume.
+	connMu sync.Mutex
 	conn   net.Conn
+	gen    uint64
+	closed bool
+
+	// resumeMu serializes reconnection so the two loops, which both notice
+	// the same broken conn, produce one replacement between them.
+	resumeMu sync.Mutex
+	resume   ResumeFunc
+	// hungUp is closed by Close, and is what makes hanging up DURING a
+	// reconnect take effect now. Without it the red button would be honored
+	// only when the reconnect budget ran out — half a minute of a call that
+	// the user has already ended still showing as live.
+	hungUp chan struct{}
+
 	codec  Codec
 	source Source
 	sink   Sink
@@ -98,7 +125,84 @@ func NewSession(callID string, conn net.Conn, codec Codec, source Source, sink S
 	if sink == nil {
 		sink = NullSink{}
 	}
-	return &Session{CallID: callID, conn: conn, codec: codec, source: source, sink: sink, ssrc: ssrc, log: log}
+	return &Session{CallID: callID, conn: conn, codec: codec, source: source, sink: sink, ssrc: ssrc, log: log, hungUp: make(chan struct{})}
+}
+
+// SetResume gives the session a way to rebuild its media conn when the
+// transport under it fails. Without one a broken conn ends the call, which is
+// what every session did before resumption existed.
+func (s *Session) SetResume(r ResumeFunc) {
+	s.connMu.Lock()
+	s.resume = r
+	s.connMu.Unlock()
+}
+
+// media returns the conn to use now and the generation it belongs to. The
+// loops re-read it every frame: a resumed call is a different conn, and one
+// captured once would go on reading a socket nobody is writing to.
+func (s *Session) media() (net.Conn, uint64) {
+	s.connMu.Lock()
+	defer s.connMu.Unlock()
+	return s.conn, s.gen
+}
+
+// tryResume rebuilds the media conn after the conn of generation gen failed,
+// and reports whether the call may continue.
+//
+// Both loops call it on the same failure. The first through does the work; the
+// second finds the generation already moved on and simply carries on with the
+// new conn — which is also why the loops must restart at a frame boundary
+// after this returns true, discarding whatever half a frame they were holding.
+// A resumed stream begins at the start of a frame; splicing it into the middle
+// of the last one would misframe everything after it.
+func (s *Session) tryResume(ctx context.Context, gen uint64) bool {
+	s.resumeMu.Lock()
+	defer s.resumeMu.Unlock()
+
+	s.connMu.Lock()
+	closed, cur, resume := s.closed, s.gen, s.resume
+	s.connMu.Unlock()
+	if closed || resume == nil {
+		return false
+	}
+	if cur != gen {
+		return true // the other loop rebuilt it while we were failing
+	}
+
+	s.log.WithField("call", s.CallID).Info("voice: media transport failed — reconnecting")
+	// Ends the attempt the moment the call is hung up, rather than when the
+	// reconnect budget expires. The watcher exits either way — hanging up
+	// closes hungUp, and finishing cancels rctx.
+	rctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		select {
+		case <-s.hungUp:
+			cancel()
+		case <-rctx.Done():
+		}
+	}()
+	next, err := resume(rctx, s.CallID)
+	if err != nil {
+		s.log.WithError(err).WithField("call", s.CallID).Info("voice: could not reconnect the call")
+		return false
+	}
+
+	s.connMu.Lock()
+	if s.closed {
+		s.connMu.Unlock()
+		_ = next.Close() //nolint:errcheck // hung up while we were reconnecting
+		return false
+	}
+	old := s.conn
+	s.conn = next
+	s.gen++
+	s.connMu.Unlock()
+	// Closing the old conn is what wakes the other loop, still blocked on a
+	// socket that will never deliver again.
+	_ = old.Close() //nolint:errcheck
+	s.log.WithField("call", s.CallID).Info("voice: media transport re-established")
+	return true
 }
 
 // Run drives both media loops until ctx is done or the conn fails, then closes
@@ -169,11 +273,18 @@ func (s *Session) sendLoop(ctx context.Context) {
 			continue
 		}
 		binary.BigEndian.PutUint16(hdr[:], uint16(len(raw))) //nolint:gosec // guarded above
-		if _, err := s.conn.Write(hdr[:]); err != nil {
+		conn, gen := s.media()
+		if _, err := conn.Write(hdr[:]); err != nil {
+			if s.tryResume(ctx, gen) {
+				continue // this frame is lost; the next one goes on the new conn
+			}
 			s.noteEnd("send failed: " + err.Error())
 			return
 		}
-		if _, err := s.conn.Write(raw); err != nil {
+		if _, err := conn.Write(raw); err != nil {
+			if s.tryResume(ctx, gen) {
+				continue
+			}
 			s.noteEnd("send failed: " + err.Error())
 			return
 		}
@@ -190,8 +301,12 @@ func (s *Session) recvLoop(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
+		conn, gen := s.media()
 		var hdr [2]byte
-		if _, err := io.ReadFull(s.conn, hdr[:]); err != nil {
+		if _, err := io.ReadFull(conn, hdr[:]); err != nil {
+			if s.tryResume(ctx, gen) {
+				continue // start again at a frame boundary on the new conn
+			}
 			s.noteEnd(recvEndReason(err))
 			return
 		}
@@ -200,7 +315,10 @@ func (s *Session) recvLoop(ctx context.Context) {
 			continue
 		}
 		raw := make([]byte, n)
-		if _, err := io.ReadFull(s.conn, raw); err != nil {
+		if _, err := io.ReadFull(conn, raw); err != nil {
+			if s.tryResume(ctx, gen) {
+				continue
+			}
 			s.noteEnd(recvEndReason(err))
 			return
 		}
@@ -245,7 +363,15 @@ func recvEndReason(err error) string {
 // would never be dropped from the manager.
 func (s *Session) Close() {
 	s.closeOnce.Do(func() {
-		_ = s.conn.Close() //nolint:errcheck
+		// closed before the conn, so a reconnect racing this one sees the
+		// call is over and drops the conn it just built instead of handing
+		// the session a live socket nobody will read.
+		s.connMu.Lock()
+		s.closed = true
+		conn := s.conn
+		s.connMu.Unlock()
+		close(s.hungUp)
+		_ = conn.Close() //nolint:errcheck
 		if c, ok := s.source.(io.Closer); ok {
 			_ = c.Close() //nolint:errcheck
 		}
