@@ -3,6 +3,7 @@ package router
 
 import (
 	"fmt"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -453,15 +454,32 @@ func (m *routeMux) forwardFanoutLegs(tps []*transport.ManagedTransport, cur int)
 	if !measured || lat[0] <= 0 {
 		return nil
 	}
+	// The band is ordered by LATENCY, fastest first, and the fallback below
+	// takes the first member with room. Round-robin was the first shape and it
+	// is wrong once the legs differ in rate: it hands the slow leg an equal
+	// share, so frames arrive further and further out of order, the peer's
+	// no-skip frontier holds them, and the yamux window above the group drains
+	// waiting for in-order bytes. Preferring the fastest leg with room keeps
+	// arrivals near in-order and gives the slow leg exactly the overflow the
+	// fast one cannot take, which is its rate share.
 	ceil := lat[0] * m.knRatio(routersettings.UnidirFanoutMaxSkew)
-	band := []int{cur}
+	type bandLeg struct {
+		idx int
+		lat float64
+	}
+	ranked := []bandLeg{{cur, lat[0]}}
 	for i := 1; i < len(cand); i++ {
 		if lat[i] > 0 && lat[i] <= ceil {
-			band = append(band, cand[i])
+			ranked = append(ranked, bandLeg{cand[i], lat[i]})
 		}
 	}
-	if len(band) < 2 {
+	if len(ranked) < 2 {
 		return nil
+	}
+	sort.Slice(ranked, func(a, b int) bool { return ranked[a].lat < ranked[b].lat })
+	band := make([]int, len(ranked))
+	for i := range ranked {
+		band[i] = ranked[i].idx
 	}
 	return band
 }
@@ -502,9 +520,7 @@ func (m *routeMux) pickFanoutLeg(tps []*transport.ManagedTransport, payload []by
 		!m.legProbeExhausted(idx) && !m.tpSelector.Saturated(idx) {
 		return idx
 	}
-	start := int(atomic.AddUint32(&m.tpIndex, 1) - 1)
-	for i := 0; i < len(band); i++ {
-		idx := band[((start%len(band))+i+len(band))%len(band)]
+	for _, idx := range band {
 		if !m.tpSelector.Saturated(idx) {
 			return idx
 		}
