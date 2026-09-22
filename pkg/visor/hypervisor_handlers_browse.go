@@ -129,10 +129,10 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			// prefix, so any deeper path (".../dashboard/") is normalised away
 			// before the document even finishes loading, landing back here.
 			//
-			// Sec-Fetch-Dest is the reliable signal and survives a frame
-			// reload; ?embed=1 is the explicit override for callers that set
-			// it (and for engines that omit the header).
-			if r.Header.Get("Sec-Fetch-Dest") == "iframe" || r.URL.Query().Get("embed") == "1" {
+			// fetchDest is the reliable signal and survives a frame reload;
+			// ?embed=1 is the explicit override for callers that set it (and
+			// for engines that omit the header).
+			if fetchDest(r) == "iframe" || r.URL.Query().Get("embed") == "1" {
 				hv.serveInjectedIndex(w, r, fileServer)
 				return
 			}
@@ -425,4 +425,27 @@ func deskRootHandler(h http.Handler) http.Handler {
 func isDeskRoot(r *http.Request) bool {
 	v, _ := r.Context().Value(deskRootKey{}).(bool)
 	return v
+}
+
+// fetchDest reports what the browser said this request was FOR — "document"
+// for a top-level navigation, "iframe" for a framed one, "script", "image" and
+// so on for subresources. Empty when nothing said.
+//
+// Sec-Fetch-Dest is the browser's own header and is authoritative whenever the
+// request reached us over the network. It does NOT survive a service worker:
+// it is a forbidden header name, so a worker rebuilding the request can
+// neither read it nor pass it on, and every request served over bottle's vnet
+// wire arrives without it. The worker forwards request.destination — the same
+// fact, readable — as X-Vnet-Fetch-Dest instead, so accept either.
+//
+// Without this a framed page served through the vnet has only ?embed=1 to go
+// on, and a client-side router drops the query on its first navigation. The
+// hypervisor UI then reloaded into the desk rather than the dashboard, and the
+// desk bounced itself back with location.replace: two document loads per
+// reload, with 504s from the worker in between.
+func fetchDest(r *http.Request) string {
+	if d := r.Header.Get("Sec-Fetch-Dest"); d != "" {
+		return d
+	}
+	return r.Header.Get("X-Vnet-Fetch-Dest")
 }
