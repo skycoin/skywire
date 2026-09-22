@@ -120,6 +120,14 @@ const (
 	// shares a first hop with its siblings says why, from `visor state`.
 	MuxEventDialDecision = "dial_decision"
 
+	// MuxEventPoolLegTaken / ...Released bracket the standby-pool arbiter's dual
+	// use of a pooled tunnel (pool_arbiter.go): a LOADED active tunnel took a
+	// pooled chain as one more packet-level mux leg, and gave it back when the
+	// load was gone. The Reason names the load signal and the standby tunnel's
+	// own port, so a leg that is not the group's own dial says where it is from.
+	MuxEventPoolLegTaken    = "pool_leg_taken"
+	MuxEventPoolLegReleased = "pool_leg_released"
+
 	// The TUNNEL-level counterparts of the leg events above, decided by the
 	// APP that holds the tunnels (the skysocks standby pool) and reported into
 	// this ring through NoteTunnelEvent. A tunnel is a whole route group, so

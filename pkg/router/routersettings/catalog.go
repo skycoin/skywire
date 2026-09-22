@@ -146,6 +146,13 @@ var (
 	UnidirFanoutRelease = RegisterMin("unidir.fanout_release", KindDuration, int64(2*time.Second), int64(100*time.Millisecond), "how long without a full FORWARD send window before the fan-out is released and the upload returns to its single leg")
 	UnidirFanoutMaxSkew = RegisterRatio("unidir.fanout_max_skew", 2.0, 1.0, "the most a sibling leg's latency may exceed the confined FORWARD leg's before it is too skewed to carry upload overflow")
 
+	// The standby-POOL arbiter (pool_arbiter.go). A pooled tunnel is a stream
+	// reserve AND a mux leg for whichever active tunnel is loaded; these three
+	// bound how fast it may be spent and how long a spent one is held.
+	PoolLegInterval = RegisterMin("pool.leg_interval", KindDuration, int64(5*time.Second), int64(time.Second), "the least time between two legs one active tunnel takes from the standby pool")
+	PoolLegRelease  = RegisterMin("pool.leg_release", KindDuration, int64(30*time.Second), int64(time.Second), "how long an active tunnel must show no load before a leg it took from the standby pool is released")
+	PoolMinStandby  = RegisterMin("pool.min_standby", KindCount, 2, 0, "how many tunnels the standby pool must keep; the arbiter never takes a leg that would leave fewer")
+
 	// FORWARD-direction confinement (route_mux.go selectConfinedForward).
 	ForwardSpill         = RegisterBool("forward.spill", false, "let a FORWARD frame leave its confined leg when that leg is at its send window; off means the writer waits")
 	ForwardSwitchMargin  = RegisterRatioRange("forward.switch_margin", 0.2, 0, 1, "how much lower a challenger leg must measure before the forward direction moves to it")

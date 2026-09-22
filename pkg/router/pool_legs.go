@@ -103,18 +103,23 @@ func (p poolLegPlan) source() string {
 // keeps a fast-but-thin first hop from outranking the link that can actually
 // carry the stripe.
 func rankPoolPlans(plans []poolLegPlan) {
-	sort.SliceStable(plans, func(i, j int) bool {
-		li, lj := plans[i].latencyMS, plans[j].latencyMS
-		switch {
-		case li > 0 && lj <= 0:
-			return true
-		case li <= 0 && lj > 0:
-			return false
-		case li != lj:
-			return li < lj
-		}
-		return plans[i].throughputBps > plans[j].throughputBps
-	})
+	sort.SliceStable(plans, func(i, j int) bool { return lessPoolPlan(plans[i], plans[j]) })
+}
+
+// lessPoolPlan is that ordering as a two-plan comparison, so the pool ARBITER
+// (pool_arbiter.go) ranks whole standby tunnels by exactly the same keys this
+// file ranks their plans by.
+func lessPoolPlan(a, b poolLegPlan) bool {
+	la, lb := a.latencyMS, b.latencyMS
+	switch {
+	case la > 0 && lb <= 0:
+		return true
+	case la <= 0 && lb > 0:
+		return false
+	case la != lb:
+		return la < lb
+	}
+	return a.throughputBps > b.throughputBps
 }
 
 // throughputPrior is the capacity signal for a first-hop transport, in the
