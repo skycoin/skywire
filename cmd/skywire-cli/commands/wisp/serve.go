@@ -55,11 +55,13 @@ Both protocol versions are served. Which one is used is the client's choice: v2
 clients open with a Sec-WebSocket-Protocol header and get an INFO exchange
 advertising UDP support, v1 clients get the initial CONTINUE straight away.
 
-UDP needs care. SOCKS5 as skysocks implements it has no UDP ASSOCIATE, so a UDP
-stream cannot cross an exit as-is. Port 53 is translated to DNS-over-TCP through
-the same proxy, which is what lets a guest resolve names without running its own
-unbound; every other UDP port is refused rather than quietly leaked to the
-clearnet. With --direct, real UDP sockets are used and nothing is refused.
+UDP crosses an exit through SOCKS5 UDP ASSOCIATE, which skysocks relays over
+the route, so a guest datagram reaches the same place its TCP does. Against a
+proxy that has no association — an older exit, or some other CONNECT-only
+SOCKS5 — port 53 still works through a DNS-over-TCP translation, which lets a
+guest resolve names without running its own unbound, and every other port is
+refused rather than quietly leaked to the clearnet. With --direct, real UDP
+sockets are used and nothing is refused.
 
 Examples:
   skywire cli wisp serve                             # ws://127.0.0.1:6001/wisp over skywire
