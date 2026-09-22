@@ -335,6 +335,13 @@ type routeMux struct {
 	// download stall). See handleLegStatePacket / sendLegState in route_group.go.
 	legStateEnabled bool
 
+	// legRehomeEnabled is true when both peers advertised CapLegRehome. When set,
+	// a STANDBY route group's whole built chain can be moved into this group as a
+	// mux leg in place, with no setup-node dial (see leg_rehome.go and
+	// docs/design/leg-rehome.md). Unset, RehomeStandbyLeg reports
+	// ErrRehomeUnsupported and the caller dials a pool-sourced leg instead.
+	legRehomeEnabled bool
+
 	// Unidirectional per-leg send selection (CapUniDir, see unidir.go). When
 	// directional is set (both peers advertised CapUniDir), each end restricts its
 	// OWN send to legs matching its direction: the initiator uploads on the DIRECT

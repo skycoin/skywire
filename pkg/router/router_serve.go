@@ -317,6 +317,7 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	rgCfg.FEC = r.muxFEC.Load()
 	rg := NewRouteGroup(rgCfg, r.rt, rules.Desc, r.mLogger)
 	rg.muxEvents = &r.muxEvents
+	rg.rehomeHost = r
 	rg.SetAppName(appName)
 	rg.initiator = nsConf.Initiator
 	// Per-frame noise (inverse-mux): hand the RG the same KK keys EncryptConn

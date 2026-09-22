@@ -1524,6 +1524,18 @@ func (c *Client) parkTunnel(s *yamux.Session, reason string) bool {
 // c.sessions holds sessionsMu for the whole read and none of them keeps an
 // index across the lock, so compacting here desynchronises nothing.
 func (c *Client) retireTunnel(s *yamux.Session, reason string) bool {
+	return c.retireTunnelAs(s, reason, router.MuxEventTunnelRetired, true)
+}
+
+// retireTunnelAs is retireTunnel with the two things a DEATH implies made
+// explicit, because a tunnel can also leave for a reason that is not a death:
+// event is what goes in the router's ring, and replace says whether to treat
+// the departure as a loss — reset the redial backoff and arm a pool fill. A
+// tunnel the router CONSUMED (its chain re-homed into an active group as a mux
+// leg, docs/design/leg-rehome.md) is spent, not lost: nothing needs replacing
+// in a hurry, and arming the fill for it is a redial storm for a tunnel the
+// operator deliberately spent.
+func (c *Client) retireTunnelAs(s *yamux.Session, reason, event string, replace bool) bool {
 	if s == nil {
 		return false
 	}
@@ -1547,7 +1559,7 @@ func (c *Client) retireTunnel(s *yamux.Session, reason string) bool {
 
 	_ = s.Close() //nolint:errcheck
 	c.forgetTunnel(s)
-	c.queueTunnelNote(port, router.MuxEventTunnelRetired, reason, "")
+	c.queueTunnelNote(port, event, reason, "")
 	// The death itself re-arms the fill and the re-dial backoff. The keepalive
 	// loop's level check (live < prevLive across two 15 s ticks) is a backstop,
 	// not the trigger: a death whose replacement lands inside the same window
@@ -1566,8 +1578,10 @@ func (c *Client) retireTunnel(s *yamux.Session, reason string) bool {
 	// after the death, which is about what the freed hop needs to come back.
 	// Liveness never waits on this: the failover promote below is immediate and
 	// this only schedules a dial that GROWS the pool.
-	c.resetRedialBackoff()
-	c.armPoolFillAfter(c.probeInterval)
+	if replace {
+		c.resetRedialBackoff()
+		c.armPoolFillAfter(c.probeInterval)
+	}
 	if !wasStandby {
 		c.promoteBestStandby("failover: active tunnel died")
 	}

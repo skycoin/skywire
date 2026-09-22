@@ -126,6 +126,13 @@ const (
 	MuxEventTunnelPromoted = "tunnel_promoted"
 	MuxEventTunnelParked   = "tunnel_parked"
 	MuxEventTunnelRetired  = "tunnel_retired"
+	// MuxEventTunnelConsumed is a standby tunnel SPENT rather than lost: its
+	// whole built chain was re-homed into an active group as one more mux leg
+	// (leg_rehome.go), so the tunnel's own route group closed on purpose. The
+	// distinction matters to the app: a death re-arms the redial backoff and the
+	// pool fill, and doing that for a tunnel nobody lost is a redial storm. The
+	// Reason names the group the chain went to.
+	MuxEventTunnelConsumed = "tunnel_consumed"
 	// MuxEventTunnelSnubbed / ...Unsnubbed bracket a QUEUE-AWARE no-progress
 	// sit-out, borrowed from bittorrent: a tunnel holding outstanding chunks
 	// that has delivered no byte and no ack for its snub bound is snubbed, its

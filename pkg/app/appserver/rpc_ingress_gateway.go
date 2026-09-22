@@ -297,7 +297,7 @@ func truncateMuxEventReason(reason string) string {
 func validTunnelEvent(event string) bool {
 	switch event {
 	case router.MuxEventTunnelPromoted, router.MuxEventTunnelParked, router.MuxEventTunnelRetired,
-		router.MuxEventTunnelSnubbed, router.MuxEventTunnelUnsnubbed:
+		router.MuxEventTunnelSnubbed, router.MuxEventTunnelUnsnubbed, router.MuxEventTunnelConsumed:
 		return true
 	default:
 		return false

@@ -69,6 +69,16 @@ type AppOp struct {
 // host's transport.
 const AppOpCutTunnel = "cut-tunnel"
 
+// AppOpConsumedTunnel tells the app that one of its tunnels was SPENT, not
+// lost: the router re-homed that tunnel's whole route chain into an active
+// group as a mux leg (docs/design/leg-rehome.md), and the tunnel's own group is
+// closing as a result. Arg is the route group's port, exactly as for
+// AppOpCutTunnel. The app drops the tunnel from its pool and records
+// tunnel_consumed, WITHOUT the redial backoff reset and pool-fill arming a
+// death triggers — nobody lost this tunnel, so nothing needs replacing in a
+// hurry.
+const AppOpConsumedTunnel = "consumed-tunnel"
+
 func newAppSettings() *appSettings {
 	return &appSettings{
 		values:  make(map[string]map[string]int64),
