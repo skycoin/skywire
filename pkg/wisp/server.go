@@ -1,12 +1,13 @@
 // Package wisp pkg/wisp/server.go c4-app-proxy
 //
-// A Wisp server over a single WebSocket, speaking v1 and v2. Which one is in
-// use is decided by the client: v2 opens with a Sec-WebSocket-Protocol header
-// and expects an INFO exchange first, v1 sends no such header and expects the
-// initial CONTINUE straight away.
+// A Wisp server, speaking v1 and v2 over any transport (frames.go). On a
+// WebSocket the version is the client's choice: v2 opens with a
+// Sec-WebSocket-Protocol header and expects an INFO exchange first, v1 sends no
+// such header and expects the initial CONTINUE straight away. On a raw conn
+// there is no header to carry that, so ServeConn speaks v2.
 //
 // Flow control is deliberately one-directional. Wisp's credit scheme only
-// covers client -> server; the reverse direction rides on WebSocket and TCP
+// covers client -> server; the reverse direction rides on the transport's own
 // backpressure, which is what the per-stream reader blocking on the session's
 // write queue gives us. Adding a gate to the server -> client side stalls
 // every transfer larger than one buffer and shows up as a truncated download
@@ -16,12 +17,9 @@ package wisp
 import (
 	"context"
 	"errors"
-	"net/http"
-	"strings"
+	"net"
 	"sync"
 	"time"
-
-	"github.com/coder/websocket"
 
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -29,7 +27,7 @@ import (
 const (
 	// DefaultBuffer is the per-stream client -> server credit, in packets.
 	DefaultBuffer uint32 = 128
-	// DefaultReadLimit bounds one WebSocket message. A Wisp DATA payload is
+	// DefaultReadLimit bounds one frame. A Wisp DATA payload is
 	// whatever the client's TCP stack handed over, so this only needs to
 	// clear a jumbo frame with room to spare.
 	DefaultReadLimit int64 = 1 << 20
@@ -47,15 +45,16 @@ type Config struct {
 	Buffer uint32
 	// DialTimeout bounds one CONNECT. Zero means defaultDialTimeout.
 	DialTimeout time.Duration
-	// ReadLimit bounds one WebSocket message. Zero means DefaultReadLimit.
+	// ReadLimit bounds one frame. Zero means DefaultReadLimit.
 	ReadLimit int64
 	// Log receives per-session and per-stream events. Zero means a logger
 	// named "wisp".
 	Log *logging.Logger
 }
 
-// Server serves the Wisp protocol over WebSocket. It implements http.Handler,
-// so it can be mounted on any path.
+// Server serves the Wisp protocol. Off the browser it implements http.Handler,
+// so it can be mounted on any path and upgraded to a WebSocket; everywhere,
+// including js/wasm, ServeConn runs a session over a plain byte stream.
 type Server struct {
 	cfg Config
 }
@@ -81,54 +80,53 @@ func NewServer(cfg Config) (*Server, error) {
 	return &Server{cfg: cfg}, nil
 }
 
-// ServeHTTP upgrades the request and runs one Wisp session on it.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// A v2 client announces itself with Sec-WebSocket-Protocol. Echo back
-	// whatever it offered, since the spec keys the version off the header
-	// being present rather than off any particular subprotocol name.
-	offered := subprotocols(r)
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		Subprotocols:       offered,
-		InsecureSkipVerify: true, // a guest NIC dials from whatever origin the page has
-	})
-	if err != nil {
-		s.cfg.Log.WithError(err).Debug("websocket upgrade failed")
-		return
-	}
-	c.SetReadLimit(s.cfg.ReadLimit)
+// ServeConn runs one Wisp session over a byte stream, framing it rather than
+// upgrading it. This is the path that works on js/wasm, where websocket.Accept
+// does not exist and a service worker could not reach it anyway: a visor in a
+// tab serves Wisp on a virtual-loopback port and the page connects to that.
+//
+// The session speaks v2. Both ends of a raw conn are chosen by whoever wired
+// them together, so there is no version to negotiate and no header to carry
+// one in.
+//
+// ServeConn owns conn and closes it before returning.
+func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
+	s.ServeFrames(ctx, NewStreamFrames(conn, s.cfg.ReadLimit), true)
+}
+
+// ServeFrames runs one Wisp session over any transport. v2 selects the INFO
+// exchange; false starts with the v1 CONTINUE instead.
+//
+// It owns frames and closes them before returning.
+func (s *Server) ServeFrames(ctx context.Context, frames Frames, v2 bool) {
+	// A byte-stream read does not abandon itself when a context is
+	// canceled the way a WebSocket read does, so cancellation is turned
+	// into a close. The watcher is bound to a derived context so it cannot
+	// outlive the session even when the caller passes Background.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		<-ctx.Done()
+		frames.Close() //nolint:errcheck,gosec // unblocking a read that will not return on its own
+	}()
 
 	sess := &session{
 		srv:     s,
-		conn:    c,
-		v2:      len(offered) > 0,
+		frames:  frames,
+		v2:      v2,
 		streams: make(map[uint32]*stream),
 		writes:  make(chan []byte, writeQueueDepth),
 		log:     s.cfg.Log,
 	}
-	sess.run(r.Context())
+	sess.run(ctx)
 }
 
-func subprotocols(r *http.Request) []string {
-	raw := r.Header.Get("Sec-WebSocket-Protocol")
-	if raw == "" {
-		return nil
-	}
-	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
-// session is one WebSocket carrying many streams.
+// session is one transport carrying many streams.
 type session struct {
-	srv  *Server
-	conn *websocket.Conn
-	v2   bool
-	log  *logging.Logger
+	srv    *Server
+	frames Frames
+	v2     bool
+	log    *logging.Logger
 
 	mu      sync.Mutex
 	streams map[uint32]*stream
@@ -145,7 +143,7 @@ func (s *session) run(parent context.Context) {
 	defer func() {
 		s.closeAllStreams()
 		s.wg.Wait()
-		s.conn.CloseNow() //nolint:errcheck,gosec // best effort on the way out
+		s.frames.Close() //nolint:errcheck,gosec // best effort on the way out
 	}()
 
 	// One writer owns the socket: coder/websocket permits a single
@@ -160,7 +158,7 @@ func (s *session) run(parent context.Context) {
 				return
 			case frame := <-s.writes:
 				wctx, wcancel := context.WithTimeout(ctx, 30*time.Second)
-				err := s.conn.Write(wctx, websocket.MessageBinary, frame)
+				err := s.frames.WriteFrame(wctx, frame)
 				wcancel()
 				if err != nil {
 					return
@@ -176,13 +174,10 @@ func (s *session) run(parent context.Context) {
 	}
 
 	for {
-		typ, data, err := s.conn.Read(ctx)
+		data, err := s.frames.ReadFrame(ctx)
 		if err != nil {
 			s.log.WithError(err).Debug("session read ended")
 			break
-		}
-		if typ != websocket.MessageBinary {
-			continue
 		}
 		pkt, err := Parse(data)
 		if err != nil {
@@ -217,12 +212,9 @@ func (s *session) handshake(ctx context.Context) bool {
 	// stream 0 when it cannot live with our extension set.
 	rctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	typ, data, err := s.conn.Read(rctx)
+	data, err := s.frames.ReadFrame(rctx)
 	if err != nil {
 		s.log.WithError(err).Debug("v2 handshake read failed")
-		return false
-	}
-	if typ != websocket.MessageBinary {
 		return false
 	}
 	pkt, err := Parse(data)
