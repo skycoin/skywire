@@ -384,6 +384,13 @@ func (s *Stream) Read(b []byte) (int, error) {
 	if n > 0 {
 		// Reset the read deadline on successful read to keep the stream alive.
 		s.SetReadDeadline(time.Now().Add(StreamIdleTimeout)) //nolint:errcheck,gosec
+		// These bytes reached us through the session's dmsg server, which is
+		// the one fact its liveness ping goes looking for. Recording it here
+		// is what stops the ping reaper closing a session that is carrying a
+		// call. See SessionCommon.ReadSince.
+		if s.ses != nil {
+			s.ses.markRead()
+		}
 	}
 	if err != nil && s != nil {
 		// Terminal read error — release the porter reservation so we don't

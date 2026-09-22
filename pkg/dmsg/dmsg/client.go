@@ -1527,8 +1527,12 @@ func (ce *Client) pingSessionsLoop(ctx context.Context) {
 	// SessionCommon) reset it naturally.
 	fails := make(map[*SessionCommon]int)
 
+	// lastTick is the start of the window each session's traffic is judged
+	// over: a session that has read bytes since then is relaying, whatever
+	// its ping says.
+	lastTick := time.Now()
 	// Do an initial ping immediately.
-	ce.pingSessions(ctx, fails)
+	ce.pingSessions(fails, lastTick)
 
 	for {
 		select {
@@ -1537,7 +1541,9 @@ func (ce *Client) pingSessionsLoop(ctx context.Context) {
 		case <-ce.done:
 			return
 		case <-ticker.C:
-			ce.pingSessions(ctx, fails)
+			since := lastTick
+			lastTick = time.Now()
+			ce.pingSessions(fails, since)
 		}
 	}
 }
@@ -1547,7 +1553,67 @@ func (ce *Client) pingSessionsLoop(ctx context.Context) {
 // hiccup (packet loss, brief server blip) does not kill the session.
 const pingDeadThreshold = 2
 
-func (ce *Client) pingSessions(_ context.Context, fails map[*SessionCommon]int) {
+// RelayedSince reports whether ANY of this client's sessions has read bytes
+// since t.
+//
+// The client-wide version of SessionCommon.ReadSince, for a caller deciding
+// whether to tear every session down — the visor's self-probe does, and a
+// visor with traffic moving is not the unreachable visor that recovery is
+// for. See decideReap for the same rule applied per session.
+func (ce *Client) RelayedSince(t time.Time) bool {
+	ce.sessionsMx.Lock()
+	defer ce.sessionsMx.Unlock()
+	for _, ses := range ce.sessions {
+		if ses.ReadSince(t) {
+			return true
+		}
+	}
+	return false
+}
+
+// reapDecision is what the ping loop does with a session whose liveness ping
+// just failed.
+type reapDecision int
+
+const (
+	// reapWait: under the threshold. Count it and look again next tick.
+	reapWait reapDecision = iota
+	// reapKeep: over the threshold, but the session is still relaying. New
+	// dials should prefer another server; this one keeps its streams.
+	reapKeep
+	// reapClose: over the threshold and silent. Close it and re-dial.
+	reapClose
+)
+
+// decideReap applies the rule, kept apart from the loop so it can be stated
+// once and tested directly.
+//
+// relayingSince is whether any stream on the session has READ bytes since the
+// last tick, and it is the half that was missing. The ping and the traffic
+// answer different questions: the ping opens a NEW stream through the server
+// and waits for the echo, so failing it means new streams are not getting
+// through, while bytes arriving on the streams already open mean the server
+// is relaying right now. The second is the stronger evidence — it is the
+// server doing the thing rather than being asked whether it would — and the
+// loop used to ignore it and close the session anyway, taking every stream on
+// it down. A voice call that had run for a quarter of an hour at fifty
+// packets a second each way died seventeen milliseconds after that close.
+//
+// An idle session reads nothing, so the genuinely dead session this was
+// written for still reaps exactly as before.
+func decideReap(consecutiveFails int, relayingSince bool) reapDecision {
+	if consecutiveFails < pingDeadThreshold {
+		return reapWait
+	}
+	if relayingSince {
+		return reapKeep
+	}
+	return reapClose
+}
+
+// pingSessions pings every session once. since bounds the traffic window used
+// to spare a session from the reaper — see the close branch below.
+func (ce *Client) pingSessions(fails map[*SessionCommon]int, since time.Time) {
 	sessions := ce.allClientSessions(ce.porter)
 	// Track which sessions are currently alive so we can prune the
 	// fails map and avoid a slow leak as sessions churn.
@@ -1563,12 +1629,26 @@ func (ce *Client) pingSessions(_ context.Context, fails map[*SessionCommon]int) 
 				WithField("server", ses.RemotePK()).
 				WithField("consecutive_fails", fails[key]).
 				Debug("Session ping failed")
-			if fails[key] >= pingDeadThreshold {
+			switch decideReap(fails[key], key.ReadSince(since)) {
+			case reapKeep:
+				// Once, on the crossing. The condition can hold for as long
+				// as the server cares to refuse new streams, and a warning a
+				// minute about a session that is working is noise; the count
+				// stays visible in `visor state` either way.
+				entry := ce.log.WithField("server", ses.RemotePK()).
+					WithField("consecutive_fails", fails[key])
+				if fails[key] == pingDeadThreshold {
+					entry.Warn("Session ping failing but it is still relaying traffic; keeping it (new dials will prefer another server)")
+				} else {
+					entry.Debug("Session ping still failing; still relaying, still keeping it")
+				}
+			case reapClose:
 				ce.log.WithField("server", ses.RemotePK()).
 					WithField("consecutive_fails", fails[key]).
 					Warn("Closing dead session (ping threshold exceeded); reconnect loop will re-dial")
 				_ = ses.Close() //nolint:errcheck,gosec
 				delete(fails, key)
+			case reapWait:
 			}
 			continue
 		}

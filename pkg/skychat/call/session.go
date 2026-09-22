@@ -4,6 +4,7 @@ package call
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"sync"
@@ -47,6 +48,33 @@ type Session struct {
 	spkMuted atomic.Bool
 
 	closeOnce sync.Once
+
+	// endReason is why the call ended, kept because it used to be thrown
+	// away. Every exit below dropped its error on the floor and the manager
+	// then logged a bare "call ended", so a call that died on its own — the
+	// report this exists for — named neither the side that ended it nor the
+	// thing that went wrong. Read by EndReason once the loops have stopped.
+	endMu     sync.Mutex
+	endReason string
+}
+
+// noteEnd records the first reason a loop gave for stopping. First, not last:
+// one loop's exit closes the conn, so whatever the other one reports after
+// that is the close, not the cause.
+func (s *Session) noteEnd(reason string) {
+	s.endMu.Lock()
+	if s.endReason == "" {
+		s.endReason = reason
+	}
+	s.endMu.Unlock()
+}
+
+// EndReason says why the call ended, for whoever logs that it did. Empty
+// while it is still running.
+func (s *Session) EndReason() string {
+	s.endMu.Lock()
+	defer s.endMu.Unlock()
+	return s.endReason
 }
 
 // SetMicMuted toggles whether our captured audio is sent to the peer.
@@ -106,6 +134,7 @@ func (s *Session) sendLoop(ctx context.Context) {
 			if err != io.EOF {
 				s.log.WithError(err).Debug("voice: source read")
 			}
+			s.noteEnd("microphone stopped: " + err.Error())
 			return
 		}
 		// Mic muted → send a silent frame (keeps cadence/keepalive; peer just
@@ -141,9 +170,11 @@ func (s *Session) sendLoop(ctx context.Context) {
 		}
 		binary.BigEndian.PutUint16(hdr[:], uint16(len(raw))) //nolint:gosec // guarded above
 		if _, err := s.conn.Write(hdr[:]); err != nil {
+			s.noteEnd("send failed: " + err.Error())
 			return
 		}
 		if _, err := s.conn.Write(raw); err != nil {
+			s.noteEnd("send failed: " + err.Error())
 			return
 		}
 		seq++
@@ -161,6 +192,7 @@ func (s *Session) recvLoop(ctx context.Context) {
 		}
 		var hdr [2]byte
 		if _, err := io.ReadFull(s.conn, hdr[:]); err != nil {
+			s.noteEnd(recvEndReason(err))
 			return
 		}
 		n := binary.BigEndian.Uint16(hdr[:])
@@ -169,6 +201,7 @@ func (s *Session) recvLoop(ctx context.Context) {
 		}
 		raw := make([]byte, n)
 		if _, err := io.ReadFull(s.conn, raw); err != nil {
+			s.noteEnd(recvEndReason(err))
 			return
 		}
 		var pkt rtp.Packet
@@ -188,9 +221,21 @@ func (s *Session) recvLoop(ctx context.Context) {
 		}
 		if _, err := s.sink.Write(pcm); err != nil {
 			s.log.WithError(err).Debug("voice: sink write")
+			s.noteEnd("speaker stopped: " + err.Error())
 			return
 		}
 	}
+}
+
+// recvEndReason names what a failed media read means. A clean EOF is the peer
+// hanging up — the ordinary end of a call, and worth distinguishing from the
+// transport going out from under one, which is what a caller reporting a call
+// that "just dropped" needs to be able to tell apart.
+func recvEndReason(err error) string {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return "peer hung up"
+	}
+	return "transport closed: " + err.Error()
 }
 
 // Close tears down the session's conn (idempotent). The Run loops observe the
