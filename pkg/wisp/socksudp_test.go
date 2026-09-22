@@ -1,3 +1,5 @@
+//go:build !js
+
 // Package wisp pkg/wisp/socksudp_test.go c4-app-proxy
 //
 // The association is driven against a relay written to RFC 1928 rather than

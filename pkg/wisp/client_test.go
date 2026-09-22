@@ -1,3 +1,5 @@
+//go:build !js
+
 // Package wisp pkg/wisp/client_test.go c4-app-proxy
 //
 // The client is exercised against the real server rather than a mock of it,
