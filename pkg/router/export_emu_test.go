@@ -15,7 +15,10 @@ import (
 	"net"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/router/emu"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // EmuLegSpec, EmuOpts, EmuRig and EmuLeg are the harness types under names the
@@ -72,3 +75,35 @@ func (r *emuRig) WireBytesDir(down bool) uint64 {
 // EmuLinkConfig is emu.LinkConfig, re-exported so a bench file does not need
 // its own import of the emulator to describe a leg.
 type EmuLinkConfig = emu.LinkConfig
+
+// Role is the client-side (dialing) route group's tunnel role — "standby",
+// "active", or "" when the app does not report roles.
+func (r *emuRig) Role() string { return r.A.rg.TunnelRole() }
+
+// SetRole stamps the client-side group's role the way saveRouteGroupRules
+// does at dial time, before anything can widen it (#5096).
+func (r *emuRig) SetRole(role string) { r.A.rg.SetTunnelRole(role) }
+
+// AliveLegs is how many of the client-side route group's legs are alive right
+// now — the LIVE pool width, as opposed to Legs (how many the rig was built
+// with).
+func (r *emuRig) AliveLegs() int { return r.A.rg.aliveLegCount() }
+
+// SimulateEstablishMuxRoutesWiden reproduces, without a full Router.DialRoutes
+// pipeline, the one thing the background establishMuxRoutes does when its
+// gate is open: append another leg. dialMuxTarget IS that gate (#5094/#5096)
+// — it returns 1 whenever the group's role forbids widening past one leg.
+// Reports whether a leg was appended.
+func (r *emuRig) SimulateEstablishMuxRoutesWiden(width int) bool {
+	rg := r.A.rg
+	if rg.dialMuxTarget(width) <= 1 {
+		return false
+	}
+	probe, _ := emu.NewPair(emu.PairConfig{Name: "widen-probe", Type: "emu"})
+	mt := transport.NewManagedTransportForTest(probe)
+	mt.Entry = transport.Entry{ID: uuid.New(), Type: "emu-widen-probe"}
+	rg.mu.Lock()
+	rg.tps = append(rg.tps, mt)
+	rg.mu.Unlock()
+	return true
+}

@@ -630,12 +630,33 @@ func TestStreamBench(t *testing.T) {
 				}
 			}
 			active = append(active, newTunnel(t, fmt.Sprintf("tun%d", i), legs))
+			active[len(active)-1].rig.SetRole("active")
 		}
 		for i := 0; i < standby; i++ {
 			pool = append(pool, newTunnel(t, fmt.Sprintf("pool%d", i),
 				[]router.EmuLegSpec{cfg.hopLeg(fmt.Sprintf("p%d", i), i, nextSeed())}))
+			pool[len(pool)-1].rig.SetRole("standby")
 		}
 		return active, pool, newProxy(t, cfg, active, pool, sinkPort)
+	}
+
+	// assertLegDiscipline is the emu bench's own gate for #5094/#5096: after
+	// everything a cell did, a STANDBY tunnel must still hold exactly one
+	// leg, and an ACTIVE tunnel must hold no more than the cell's configured
+	// width — whatever establishMuxRoutes, self-heal or the arbiter did in
+	// between must never have widened a pool tunnel.
+	assertLegDiscipline := func(t *testing.T, legsPer int, active, pool []*tunnel) {
+		t.Helper()
+		for _, tn := range active {
+			if n := tn.rig.AliveLegs(); n > legsPer {
+				t.Errorf("%s: role=%q legs=%d exceeds the cell's configured width %d", tn.name, tn.rig.Role(), n, legsPer)
+			}
+		}
+		for _, tn := range pool {
+			if n := tn.rig.AliveLegs(); n != 1 {
+				t.Errorf("%s: role=%q legs=%d, want exactly 1 for a standby tunnel", tn.name, tn.rig.Role(), n)
+			}
+		}
 	}
 
 	// 1. ref — one tunnel, one direct leg. Every ratio below is against this.
@@ -647,11 +668,13 @@ func TestStreamBench(t *testing.T) {
 		r := record(t, &rows, "ref", "down", download(t, p, sinkAddr, cfg.down, cfg, nil), active, "")
 		refDown = r.bps
 		rows[len(rows)-1].ratio = 1
+		assertLegDiscipline(t, 1, active, nil)
 
 		activeUp, _, pUp := build(t, 1, 1, 0, true)
 		ru := record(t, &rows, "ref", "up", upload(t, pUp, sinkAddr, cfg.up, cfg), activeUp, "")
 		refUp = ru.bps
 		rows[len(rows)-1].ratio = 1
+		assertLegDiscipline(t, 1, activeUp, nil)
 	})
 
 	// ratio fills in the reference column once the reference exists.
@@ -668,7 +691,7 @@ func TestStreamBench(t *testing.T) {
 		t.Helper()
 		skysettings.Apply(base) //nolint:errcheck // wholesale install; the return says only whether it moved
 		for _, dir := range dirs {
-			active, _, p := build(t, n, legsPer, 0, false)
+			active, pool, p := build(t, n, legsPer, 0, false)
 			var x xfer
 			if dir == "down" {
 				x = download(t, p, sinkAddr, cfg.down, cfg, nil)
@@ -677,6 +700,7 @@ func TestStreamBench(t *testing.T) {
 			}
 			record(t, &rows, name, dir, x, active, "")
 			ratio(&rows[len(rows)-1])
+			assertLegDiscipline(t, legsPer, active, pool)
 		}
 	}
 
@@ -728,6 +752,7 @@ func TestStreamBench(t *testing.T) {
 				t.Errorf("%s: top route carried %.1f%% of the object, over the %.1f%% cap",
 					dir, 100*top, 100*(0.4+slack))
 			}
+			assertLegDiscipline(t, 1, active, nil)
 		}
 	})
 
@@ -783,6 +808,17 @@ func TestStreamBench(t *testing.T) {
 		} else if gap >= 2*time.Second {
 			t.Errorf("time to first byte after the cut = %v, want under 2s", gap)
 		}
+		assertLegDiscipline(t, 1, active, pool)
+
+		// #5094/#5096: after exactly this kind of cut, the live router's
+		// background establishMuxRoutes looks for a tunnel to widen. The
+		// harness has no Router.DialRoutes to launch that routine for real,
+		// so drive its own gate (dialMuxTarget) directly on a still-standby
+		// pool tunnel — the shape of the regression the rig run of
+		// 2026-09-22 hit (all 30 pooled tunnels grown to 2 legs before their
+		// role could clamp the dial).
+		pool[0].rig.SimulateEstablishMuxRoutesWiden(2) //nolint:errcheck // return checked via assertLegDiscipline below
+		assertLegDiscipline(t, 1, active, pool)
 	})
 
 	// 7. up2 — two concurrent uploads on tunnels-2; the row is their sum.
@@ -811,6 +847,7 @@ func TestStreamBench(t *testing.T) {
 		record(t, &rows, "up2", "up", sum, active,
 			fmt.Sprintf("two concurrent %d-byte uploads; the row is their sum", cfg.up))
 		ratio(&rows[len(rows)-1])
+		assertLegDiscipline(t, 1, active, nil)
 	})
 
 	// The summary table, in the live bench's column order.
