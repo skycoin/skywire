@@ -410,6 +410,7 @@ func (r *emuRig) wireEnd(e *emuEnd, fwd, rvs []routing.Rule, opts emuOpts, initi
 	rg.mu.Unlock()
 
 	m.SetForwardRehomeFn(rg.noteForwardRehome)
+	m.SetForwardFanoutFn(rg.noteForwardFanout)
 	m.SetLegProbeRulingFn(func(idx, legs int, tp *transport.ManagedTransport, probeOnly bool, reason string) {
 		rg.noteLegProbeRuling(idx, legs, tp, probeOnly, reason)
 		side := "acceptor"
@@ -733,4 +734,17 @@ func (r *emuRig) legBases(e *emuEnd) string {
 	}
 	b.WriteString("]")
 	return b.String()
+}
+
+// legSentBytes is one end's per-leg SENT byte counters — the counters a
+// scenario diffs across a transfer to say which leg carried it.
+func (r *emuRig) legSentBytes(e *emuEnd) []uint64 {
+	e.rg.mu.Lock()
+	legs := e.rg.mux.snapshotLegs()
+	e.rg.mu.Unlock()
+	out := make([]uint64, len(legs))
+	for i := range legs {
+		out[i] = legs[i].SentBytes
+	}
+	return out
 }

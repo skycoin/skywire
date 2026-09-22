@@ -97,6 +97,15 @@ const (
 	// below it for long enough (--forward-switch-margin, two consecutive samples).
 	// A run full of these is the flapping the margin exists to stop.
 	MuxEventForwardRehomed = "forward_rehomed"
+	// MuxEventForwardFanout / ...Confined bracket the FORWARD direction's
+	// load-triggered fan-out: the leg it is confined to sat at its send window
+	// for unidir.fanout_engage without a break and a sibling within
+	// unidir.fanout_max_skew took the overflow, and later the load subsided and
+	// the direction went back to the one leg. An upload that never raises one is
+	// an upload that fitted on a single leg — the confinement working, not the
+	// aggregation missing.
+	MuxEventForwardFanout   = "forward_fanout"
+	MuxEventForwardConfined = "forward_confined"
 	// MuxEventReorderWedge / ...Cleared bracket a RECEIVE-side reorder wedge:
 	// the frontier held past reorderTimeout because the sender's retransmit
 	// never refilled the missing sequence, and then it advanced again. Whole-
@@ -291,6 +300,20 @@ func (rg *RouteGroup) noteForwardRehome(prev, next int, tp *transport.ManagedTra
 		return
 	}
 	rg.noteLegEvent(MuxEventForwardRehomed, reason, MuxByAdaptive, next, legs, tp, nil)
+}
+
+// noteForwardFanout records the FORWARD direction fanning out over its sibling
+// legs under load, or returning to its single leg (MuxEventForwardFanout /
+// MuxEventForwardConfined). Wired into the mux as SetForwardFanoutFn, which is
+// called both from the writer (no locks held) and from the send path (rg.mu
+// held) — noteMuxEvent takes no locks, and legCount would, so the leg count is
+// read from the event's own leg index only.
+func (rg *RouteGroup) noteForwardFanout(on bool, idx int, reason string) {
+	kind := MuxEventForwardConfined
+	if on {
+		kind = MuxEventForwardFanout
+	}
+	rg.noteMuxEvent(MuxEvent{Event: kind, Reason: reason, By: MuxByAdaptive, LegIndex: idx})
 }
 
 // noteLegProbeRuling records a leg being cut to a probe per window, or restored

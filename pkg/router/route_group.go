@@ -4714,6 +4714,9 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 				// recorded, so `visor state --select diag` answers "which leg is
 				// the upload on, and why did it change".
 				rg.mux.SetForwardRehomeFn(rg.noteForwardRehome)
+				// …and when a sustained upload widens it over that leg's
+				// siblings, or the load subsides and it narrows back.
+				rg.mux.SetForwardFanoutFn(rg.noteForwardFanout)
 				// …and a leg cut to a probe (or given its share back) is
 				// recorded there too, so a collapse onto one bad leg says so.
 				rg.mux.SetLegProbeRulingFn(rg.noteLegProbeRuling)
