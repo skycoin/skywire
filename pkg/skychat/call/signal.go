@@ -225,7 +225,7 @@ func (s *Signaler) Invite(ctx context.Context, peer cipher.PubKey, callID, codec
 	if dl, ok := ctx.Deadline(); ok {
 		_ = conn.SetReadDeadline(dl) //nolint:errcheck // not every conn honors one; the cancel below still does
 	}
-	stopCancel := context.AfterFunc(ctx, func() { _ = conn.Close() }) //nolint:errcheck
+	stopCancel := context.AfterFunc(ctx, func() { s.cancelInvite(conn, callID) })
 	reply, err := readSig(conn)
 	stopCancel()
 	if err != nil {
@@ -243,6 +243,37 @@ func (s *Signaler) Invite(ctx context.Context, peer cipher.PubKey, callID, codec
 		return nil, reply, nil
 	}
 	return conn, reply, nil
+}
+
+// hangupWriteGrace bounds the farewell below. A grace rather than a write
+// deadline because a deadline is a no-op on some of the carriers voice runs
+// over (appnet's directConn sets none), so the only way to be sure the conn
+// gets dropped is to stop waiting on the write rather than to bound it.
+const hangupWriteGrace = 500 * time.Millisecond
+
+// cancelInvite ends an invite this side has given up on — the caller hanging
+// up while the callee is still ringing, or the ring budget running out.
+//
+// Closing the conn is what ends the call, and it stays the thing that does.
+// The frame in front of it is so the callee learns WHY, and learns it without
+// having to wait on a carrier propagating a half-close: the callee reads this
+// conn throughout the ring precisely so a cancel can stop the ringing at once
+// (see ringWatch). The write is best-effort and strictly bounded, because the
+// close must happen whatever it does — otherwise hanging up during a ring
+// would itself hang, on a conn that is already wedged.
+func (s *Signaler) cancelInvite(conn net.Conn, callID string) {
+	sent := make(chan struct{})
+	go func() {
+		defer close(sent)
+		_ = writeSig(conn, Sig{Type: SigHangup, CallID: callID, FromPK: s.localPK, Reason: "caller hung up"}) //nolint:errcheck
+	}()
+	timer := time.NewTimer(hangupWriteGrace)
+	defer timer.Stop()
+	select {
+	case <-sent:
+	case <-timer.C:
+	}
+	_ = conn.Close() //nolint:errcheck // the close is the point; a conn already gone reports so
 }
 
 func (s *Signaler) closeListeners() {
