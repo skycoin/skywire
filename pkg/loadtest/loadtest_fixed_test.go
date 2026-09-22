@@ -1,4 +1,4 @@
-package skysocksc
+package loadtest
 
 import (
 	"bytes"
@@ -21,7 +21,7 @@ import (
 func TestLoadtestFixedIsDeterministicAndCertified(t *testing.T) {
 	get := func() ([]byte, string) {
 		rec := httptest.NewRecorder()
-		loadtestFixed(rec, httptest.NewRequest(http.MethodGet, "/?bytes=300001", nil), "300001")
+		serveFixed(rec, httptest.NewRequest(http.MethodGet, "/?bytes=300001", nil), "300001")
 		require.Equal(t, http.StatusOK, rec.Code)
 		return rec.Body.Bytes(), rec.Header().Get("X-Sha256")
 	}
@@ -35,7 +35,7 @@ func TestLoadtestFixedIsDeterministicAndCertified(t *testing.T) {
 	require.NotEqual(t, strings.Repeat("\x00", 64), string(a[:64]), "not zeros")
 
 	rec := httptest.NewRecorder()
-	loadtestUpload(rec, httptest.NewRequest(http.MethodPost, "/upload", strings.NewReader("hello")))
+	serveUpload(rec, httptest.NewRequest(http.MethodPost, "/upload", strings.NewReader("hello")))
 	require.Equal(t, http.StatusOK, rec.Code)
 	body, _ := io.ReadAll(rec.Body) //nolint:errcheck
 	hs := sha256.Sum256([]byte("hello"))
@@ -43,7 +43,7 @@ func TestLoadtestFixedIsDeterministicAndCertified(t *testing.T) {
 	require.Contains(t, string(body), hex.EncodeToString(hs[:]))
 
 	rec = httptest.NewRecorder()
-	loadtestFixed(rec, httptest.NewRequest(http.MethodGet, "/?bytes=x", nil), "x")
+	serveFixed(rec, httptest.NewRequest(http.MethodGet, "/?bytes=x", nil), "x")
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
@@ -60,7 +60,7 @@ func TestLoadtestFixedServesRanges(t *testing.T) {
 			req.Header.Set("Range", rng)
 		}
 		rec := httptest.NewRecorder()
-		loadtestFixed(rec, req, "700000")
+		serveFixed(rec, req, "700000")
 		return rec, rec.Body.Bytes()
 	}
 	full, body := get("")
@@ -105,18 +105,18 @@ func TestLoadtestFixedHashesAnObjectOnce(t *testing.T) {
 			req.Header.Set("Range", rng)
 		}
 		rec := httptest.NewRecorder()
-		loadtestFixed(rec, req, nStr)
+		serveFixed(rec, req, nStr)
 		return rec
 	}
 
-	before := loadtestSumCalcs.Load()
+	before := sumCalcs.Load()
 	full := get("")
 	require.Equal(t, http.StatusOK, full.Code)
-	require.Equal(t, before+1, loadtestSumCalcs.Load(), "the first request computes the hash")
+	require.Equal(t, before+1, sumCalcs.Load(), "the first request computes the hash")
 	body := full.Body.Bytes()
 	require.Len(t, body, 1234567)
 
-	after := loadtestSumCalcs.Load()
+	after := sumCalcs.Load()
 	for _, r := range []string{"bytes=0-299999", "bytes=300000-1234566"} {
 		rec := get(r)
 		require.Equal(t, http.StatusPartialContent, rec.Code, r)
@@ -125,7 +125,7 @@ func TestLoadtestFixedHashesAnObjectOnce(t *testing.T) {
 		require.True(t, ok, r)
 		require.Equal(t, body[s:e+1], rec.Body.Bytes(), "%s: a range is the whole object's bytes at that offset", r)
 	}
-	require.Equal(t, after, loadtestSumCalcs.Load(), "a ranged GET must not re-hash the whole object")
+	require.Equal(t, after, sumCalcs.Load(), "a ranged GET must not re-hash the whole object")
 }
 
 // TestLoadtestSumIsComputedOnceUnderConcurrency covers the shape the bench
@@ -134,15 +134,15 @@ func TestLoadtestFixedHashesAnObjectOnce(t *testing.T) {
 // the single computation instead.
 func TestLoadtestSumIsComputedOnceUnderConcurrency(t *testing.T) {
 	const n = 7_654_321 // a size no other test uses
-	before := loadtestSumCalcs.Load()
+	before := sumCalcs.Load()
 	var wg sync.WaitGroup
 	sums := make([]string, 16)
 	for i := range sums {
 		wg.Add(1)
-		go func(i int) { defer wg.Done(); sums[i] = loadtestSum(n) }(i)
+		go func(i int) { defer wg.Done(); sums[i] = objectSum(n) }(i)
 	}
 	wg.Wait()
-	require.Equal(t, before+1, loadtestSumCalcs.Load(), "16 concurrent askers, one computation")
+	require.Equal(t, before+1, sumCalcs.Load(), "16 concurrent askers, one computation")
 	for _, s := range sums {
 		require.Equal(t, sums[0], s)
 		require.Len(t, s, 64)
