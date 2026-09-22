@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"io"
 	"net"
 	"net/http/httptest"
 	"strings"
@@ -399,14 +400,74 @@ func TestNewServerRequiresEgress(t *testing.T) {
 	}
 }
 
+// TestSocksEgressRefusesNonDNSUDP covers the fallback: a proxy that is
+// reachable but has no UDP ASSOCIATE still carries DNS, and refuses everything
+// else rather than leaking it to the clearnet.
 func TestSocksEgressRefusesNonDNSUDP(t *testing.T) {
-	eg, err := NewSocksEgress("127.0.0.1:1")
+	addr := connectOnlySocks(t)
+	eg, err := NewSocksEgress(addr)
 	if err != nil {
 		t.Fatalf("NewSocksEgress: %v", err)
 	}
 	if _, err := eg.DialUDP(context.Background(), "ntp.test", 123); !errors.Is(err, ErrUDPUnsupported) {
 		t.Fatalf("DialUDP(123) error = %v, want ErrUDPUnsupported", err)
 	}
+}
+
+// TestSocksEgressRefusesUDPWhenTheProxyIsUnreachable keeps an unreachable
+// proxy reported as what it is. "UDP is not carried by this egress" would send
+// whoever reads the log looking for a missing feature instead of a dead proxy.
+func TestSocksEgressRefusesUDPWhenTheProxyIsUnreachable(t *testing.T) {
+	eg, err := NewSocksEgress("127.0.0.1:1")
+	if err != nil {
+		t.Fatalf("NewSocksEgress: %v", err)
+	}
+	_, err = eg.DialUDP(context.Background(), "ntp.test", 123)
+	if err == nil {
+		t.Fatal("DialUDP against a dead proxy returned nil error, want one")
+	}
+	if errors.Is(err, ErrUDPUnsupported) {
+		t.Fatalf("DialUDP against a dead proxy = %v, want a dial failure rather than ErrUDPUnsupported", err)
+	}
+}
+
+// connectOnlySocks serves a SOCKS5 proxy that accepts the no-auth greeting and
+// answers every request with "command not supported" — an exit from before
+// datagrams were relayed.
+func connectOnlySocks(t *testing.T) string {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { l.Close() }) //nolint:errcheck,gosec // test teardown
+
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer c.Close() //nolint:errcheck,gosec // test server
+				hdr := make([]byte, 2)
+				if _, err := io.ReadFull(c, hdr); err != nil {
+					return
+				}
+				if _, err := io.ReadFull(c, make([]byte, int(hdr[1]))); err != nil {
+					return
+				}
+				if _, err := c.Write([]byte{0x05, 0x00}); err != nil {
+					return
+				}
+				if _, err := io.ReadFull(c, make([]byte, 10)); err != nil {
+					return
+				}
+				c.Write([]byte{0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) //nolint:errcheck,gosec // test server
+			}()
+		}
+	}()
+	return l.Addr().String()
 }
 
 func TestCloseReasonForMapsCommonFailures(t *testing.T) {

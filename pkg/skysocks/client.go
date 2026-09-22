@@ -2824,6 +2824,17 @@ func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool, target 
 	req = append(req, portB...)
 	port := int(portB[0])<<8 | int(portB[1])
 
+	// UDP ASSOCIATE: the address just parsed is where the application says
+	// it will send datagrams FROM, not a destination, so neither the status
+	// host nor the exit's CONNECT path applies. The association is answered
+	// here and its datagrams ride this stream (udp.go). The CONNECT path
+	// below is untouched — this is the only command that diverges.
+	if rhdr[1] == cmdUDPAssociate {
+		clearDeadlines(conn, stream)
+		c.serveUDPAssociate(conn, stream)
+		return false, ""
+	}
+
 	// Reserved status host: serve the in-process page over HTTP. This is reached
 	// with NO exit involvement, so status.skysocks stays reachable when the exit is
 	// down. HTTP only — the resolver CA forbids a .skysocks TLS leaf, so
