@@ -98,6 +98,12 @@ func setTunnelAuditionWindow() time.Duration {
 func setTunnelAuditionEvery() time.Duration {
 	return skysettings.Dur(skysettings.TunnelAuditionEvery)
 }
+func setTunnelAuditionParallel() int {
+	return skysettings.Count(skysettings.TunnelAuditionParallel)
+}
+func setTunnelPriorRefresh() time.Duration {
+	return skysettings.Dur(skysettings.TunnelPriorRefresh)
+}
 func setExitOpenPenalty() time.Duration {
 	return skysettings.Dur(skysettings.TunnelExitOpenPenalty)
 }

@@ -640,9 +640,17 @@ func (s *uploadStripe) planBurst(t uploadTunables, slots int) *uploadBurst {
 	if n < 2 || n > int64(slots) {
 		return nil
 	}
-	sessions, caps := s.c.spreadCandidates(spreadUp)
+	sessions, caps, priors := s.c.spreadCandidates(spreadUp)
 	if len(sessions) < 2 {
 		return nil
+	}
+	// A tunnel with no upload measurement but a capacity prior enters the
+	// burst weighed by its prior; one with neither stays 0 and is credited
+	// medianMeasured, which is spreadBurst's own honest fallback.
+	for i := range caps {
+		if caps[i] <= 0 && i < len(priors) {
+			caps[i] = priors[i]
+		}
 	}
 	lanes := spreadBurst(caps, int(n))
 	if len(lanes) != int(n) {

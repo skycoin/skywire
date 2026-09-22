@@ -7,6 +7,7 @@ package skysocks
 import (
 	"fmt"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/0magnet/yamux"
@@ -99,9 +100,22 @@ const (
 // only by a SIBLING stream — one of several parallel chunk streams, never the
 // entry stream the browser's first byte comes through (pickKind) — only one
 // stream per offer, and at most one offer per tunnel per tunnelAuditionEvery.
+//
+// tunnelAuditionParallel is how many of those offers may stand AT ONCE. One at
+// a time made the pool's measurement rate one tunnel per tunnelAuditionEvery:
+// a pool of eight needed eight minutes of unbroken idleness before the last of
+// them had a capacity, and the gap between two transfers is never that long —
+// so the spread policy went on finding unmeasured routes to promote no matter
+// how long the client had been up. Three offers at once is the same bargain
+// three times over: every one of them is still armed only while NOTHING is
+// busy, taken only by a sibling stream, one stream per offer, and one offer
+// per tunnel per tunnelAuditionEvery. Nothing extra is sent; the burst of
+// sibling chunks a split download opens anyway is simply spread over three
+// unproven standbys instead of one.
 const (
-	tunnelAuditionWindow = 30 * time.Second
-	tunnelAuditionEvery  = 60 * time.Second
+	tunnelAuditionWindow   = 30 * time.Second
+	tunnelAuditionEvery    = 60 * time.Second
+	tunnelAuditionParallel = 3
 )
 
 // tunnelRTTMinWindow is how far back the promoter's minimum-RTT statistic
@@ -180,6 +194,11 @@ type tunnelCandidate struct {
 	// the last tick. A carrying tunnel is never a swap candidate.
 	carrying bool
 	proven   bool // its goodput is measured, so an audition would teach nothing
+	// measuredAt is when the tunnel's goodput estimate last moved; the zero
+	// time means it never has. With several audition offers standing at once
+	// this is what orders them: the standby measured longest ago (never
+	// measured first) is the one whose number is least worth trusting.
+	measuredAt time.Time
 }
 
 // productive reports whether the tunnel has been MEASURED delivering real
@@ -460,8 +479,9 @@ func (c *Client) tunnelCandidates(now time.Time) (active, standby []tunnelCandid
 		c.tickBytes[s] = total
 		cand := tunnelCandidate{
 			s: s, rtt: rtt, gp: gp, gpOK: gpOK, streams: streams, moved: moved,
-			carrying: streams > 0 || m.outstandingWork() > 0 || movedOver(moved, setTunnelPromoteQuietBytes()),
-			proven:   gpOK,
+			carrying:   streams > 0 || m.outstandingWork() > 0 || movedOver(moved, setTunnelPromoteQuietBytes()),
+			proven:     gpOK,
+			measuredAt: m.goodputAt(),
 		}
 		if !c.standby[s] {
 			active = append(active, cand)
@@ -532,9 +552,7 @@ func (c *Client) promoteTunnel(s *yamux.Session, reason string) bool {
 	}
 	delete(c.standby, s)
 	// A tunnel entering the active set is not on offer for an audition.
-	if c.audition == s {
-		c.audition = nil
-	}
+	delete(c.auditions, s)
 	c.sessionsMu.Unlock()
 	c.noteTunnel(s, router.MuxEventTunnelPromoted, reason, TunnelRoleActive)
 	if c.appCl != nil {
@@ -544,15 +562,16 @@ func (c *Client) promoteTunnel(s *yamux.Session, reason string) bool {
 	return true
 }
 
-// armAudition offers the next SIBLING chunk stream to one standby tunnel, so a
-// tunnel the promoter might switch in has a capacity measurement rather than
-// only a ping.
+// armAudition offers the next SIBLING chunk streams to up to
+// tunnel.audition_parallel standby tunnels, so the tunnels the promoter might
+// switch in have a capacity measurement rather than only a ping.
 //
-// The offer is made only when every tunnel is idle — a stream arriving now
+// The offers are made only when every tunnel is idle — a stream arriving now
 // would be placed on some tunnel anyway, so nothing extra is sent and no
-// measured transfer is touched — and only to a plausible candidate: a standby
-// within the promote margin of the best active tunnel whose capacity is still
-// unproven. One offer per tunnel per tunnelAuditionEvery, expiring after
+// measured transfer is touched — and only to plausible candidates: standbys
+// whose capacity is still unproven, OLDEST-MEASURED FIRST (never measured
+// counts as oldest, ties to the lowest ping so the cheapest chunk is tried
+// first). One offer per tunnel per tunnelAuditionEvery, each expiring after
 // tunnelAuditionWindow if no stream arrives.
 //
 // "Every tunnel" means every tunnel, standby ones included. This loop used to
@@ -584,43 +603,86 @@ func (c *Client) armAudition(now time.Time, active, standby []tunnelCandidate) {
 	// because its latency does not tell us what it can carry, so screening the
 	// candidates on latency first kept the fattest far route permanently
 	// unmeasured and therefore permanently unpromotable. Any standby whose
-	// goodput is unmeasured is a candidate; the lowest ping goes first only so
-	// that the cheapest chunk is tried first, and tunnel.audition_every
-	// rotates the rest in over the following ticks.
-	var pick *yamux.Session
-	pickRTT := 0.0
+	// goodput is unmeasured is a candidate.
+	pool := make([]tunnelCandidate, 0, len(standby))
 	for _, sb := range standby {
 		if sb.proven || sb.rtt <= 0 {
 			continue
 		}
-		if pick == nil || sb.rtt < pickRTT {
-			pick, pickRTT = sb.s, sb.rtt
-		}
+		pool = append(pool, sb)
 	}
-	if pick == nil {
+	if len(pool) == 0 {
 		return
 	}
+	// Oldest measurement first (never measured is the zero time, so it sorts
+	// ahead of everything), ties to the lowest ping.
+	sort.SliceStable(pool, func(i, j int) bool {
+		if !pool[i].measuredAt.Equal(pool[j].measuredAt) {
+			return pool[i].measuredAt.Before(pool[j].measuredAt)
+		}
+		return pool[i].rtt < pool[j].rtt
+	})
+
 	c.sessionsMu.Lock()
 	defer c.sessionsMu.Unlock()
-	if c.audition != nil && now.Before(c.auditionUntil) {
-		return // an offer is already standing
+	if c.auditions == nil {
+		c.auditions = make(map[*yamux.Session]time.Time)
 	}
 	if c.auditionedAt == nil {
 		c.auditionedAt = make(map[*yamux.Session]time.Time)
 	}
-	if at, seen := c.auditionedAt[pick]; seen && now.Sub(at) < setTunnelAuditionEvery() {
+	// An expired offer nobody took frees its slot; a live one holds it.
+	standing := 0
+	for s, until := range c.auditions {
+		if now.After(until) || s.IsClosed() || !c.standby[s] {
+			delete(c.auditions, s)
+			continue
+		}
+		standing++
+	}
+	room := setTunnelAuditionParallel() - standing
+	if room <= 0 {
 		return
 	}
-	c.audition = pick
-	c.auditionUntil = now.Add(setTunnelAuditionWindow())
-	c.auditionedAt[pick] = now
+	for _, sb := range pool {
+		if room == 0 {
+			return
+		}
+		if _, armed := c.auditions[sb.s]; armed {
+			continue
+		}
+		if at, seen := c.auditionedAt[sb.s]; seen && now.Sub(at) < setTunnelAuditionEvery() {
+			continue
+		}
+		c.auditions[sb.s] = now.Add(setTunnelAuditionWindow())
+		c.auditionedAt[sb.s] = now
+		room--
+	}
 }
 
-// auditionPickLocked returns the standby tunnel currently on offer, or nil.
-// Callers MUST hold sessionsMu (pickSessionKind does), and may call it only for
-// a SIBLING stream — one of several parallel chunk streams (pickKind).
+// auditionsArmed lists the standby tunnels whose offer is still standing, in
+// the session order. Read-only, takes sessionsMu itself.
+func (c *Client) auditionsArmed() []*yamux.Session {
+	now := time.Now()
+	c.sessionsMu.Lock()
+	defer c.sessionsMu.Unlock()
+	out := make([]*yamux.Session, 0, len(c.auditions))
+	for _, s := range c.sessions {
+		if until, armed := c.auditions[s]; armed && !now.After(until) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// auditionPickLocked returns one standby tunnel whose offer is standing, or
+// nil. Callers MUST hold sessionsMu (pickSessionKind does), and may call it
+// only for a SIBLING stream — one of several parallel chunk streams (pickKind).
 //
-// The offer is consumed by the pick, so exactly one stream auditions per offer.
+// The offer is consumed by the pick, so exactly one stream auditions per offer
+// however many offers stand at once. Offers are taken in the SESSION order
+// rather than by ranging the map, because a map range is randomized and the
+// tunnel a given chunk lands on would then differ between two identical runs.
 //
 // What keeps the measurement free is armAudition: it makes no offer unless
 // every tunnel, standby ones included, is idle. It is NOT re-tested here. A
@@ -631,16 +693,19 @@ func (c *Client) armAudition(now time.Time, active, standby []tunnelCandidate) {
 // end up on the entry stream instead: that was the only pick idle enough to
 // consume it, and it is the one pick the download cannot absorb.
 func (c *Client) auditionPickLocked(now time.Time) *yamux.Session {
-	s := c.audition
-	if s == nil {
-		return nil
+	for _, s := range c.sessions {
+		until, armed := c.auditions[s]
+		if !armed {
+			continue
+		}
+		if now.After(until) || s.IsClosed() || !c.standby[s] {
+			delete(c.auditions, s)
+			continue
+		}
+		delete(c.auditions, s)
+		return s
 	}
-	if now.After(c.auditionUntil) || s.IsClosed() || !c.standby[s] {
-		c.audition = nil
-		return nil
-	}
-	c.audition = nil
-	return s
+	return nil
 }
 
 // forgetTunnel drops every promoter record for a retired session, so the maps
@@ -651,8 +716,6 @@ func (c *Client) forgetTunnel(s *yamux.Session) {
 	delete(c.parkedAt, s)
 	delete(c.auditionedAt, s)
 	delete(c.tickBytes, s)
-	if c.audition == s {
-		c.audition = nil
-	}
+	delete(c.auditions, s)
 	c.sessionsMu.Unlock()
 }

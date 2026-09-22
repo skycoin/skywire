@@ -263,10 +263,7 @@ func TestPromoter_AuditionOffersASiblingChunkStreamToAnUnprovenStandby(t *testin
 	defer cleanup()
 
 	c.maybePromote()
-	c.sessionsMu.Lock()
-	armed := c.audition
-	c.sessionsMu.Unlock()
-	require.Same(t, standby, armed, "the unproven standby is on offer")
+	require.Equal(t, []*yamux.Session{standby}, c.auditionsArmed(), "the unproven standby is on offer")
 
 	require.Same(t, standby, c.pickSessionKind(pickRecv, pickSibling), "and the next sibling chunk auditions it")
 	require.Same(t, active, c.pickSessionKind(pickRecv, pickSibling), "one stream per offer; the next goes back to the active tunnel")
@@ -284,14 +281,10 @@ func TestPromoter_AuditionNeverTakesTheEntryStream(t *testing.T) {
 	defer cleanup()
 
 	c.maybePromote()
-	c.sessionsMu.Lock()
-	require.Same(t, standby, c.audition)
-	c.sessionsMu.Unlock()
+	require.Equal(t, []*yamux.Session{standby}, c.auditionsArmed())
 
 	require.Same(t, active, c.pickSession(), "the entry stream — stream0, chunk0 of a splittable GET — stays on an active tunnel")
-	c.sessionsMu.Lock()
-	require.Same(t, standby, c.audition, "and the offer is not spent on it either: it waits")
-	c.sessionsMu.Unlock()
+	require.Equal(t, []*yamux.Session{standby}, c.auditionsArmed(), "and the offer is not spent on it either: it waits")
 
 	// stream0 is now in flight, which is the normal condition of every sibling
 	// pick that follows it. The offer is still there for the first of them.
@@ -318,9 +311,7 @@ func TestPromoter_NoAuditionIsOfferedWhileAnythingIsBusy(t *testing.T) {
 	// No offer is made while the transfer runs, so nothing can consume one.
 	for i := 0; i < 3; i++ {
 		c.maybePromote()
-		c.sessionsMu.Lock()
-		require.Nil(t, c.audition, "an audition is armed only from a quiet moment")
-		c.sessionsMu.Unlock()
+		require.Empty(t, c.auditionsArmed(), "an audition is armed only from a quiet moment")
 	}
 	require.Same(t, active, c.pickSessionKind(pickRecv, pickSibling), "a busy client places streams as usual")
 	require.True(t, c.IsStandby(standby))
@@ -335,9 +326,7 @@ func TestPromoter_NoAuditionForAProvenStandby(t *testing.T) {
 	setGoodput(c, standby, 8e6)
 
 	c.maybePromote()
-	c.sessionsMu.Lock()
-	require.Nil(t, c.audition)
-	c.sessionsMu.Unlock()
+	require.Empty(t, c.auditionsArmed())
 }
 
 // A client with no pool is inert: the promoter must cost a proxy running
@@ -351,8 +340,8 @@ func TestPromoter_NoPoolIsANoOp(t *testing.T) {
 	require.Equal(t, 1, c.activeLiveCount())
 	c.sessionsMu.Lock()
 	require.Empty(t, c.promoteSince)
-	require.Nil(t, c.audition)
 	c.sessionsMu.Unlock()
+	require.Empty(t, c.auditionsArmed())
 }
 
 // The failover is answered by the FIRST tick that can see the session closed,
@@ -447,9 +436,7 @@ func TestPromoter_NoAuditionWhileTheAuditionedStandbyIsStillBusy(t *testing.T) {
 	defer cleanup()
 
 	c.maybePromote()
-	c.sessionsMu.Lock()
-	require.Same(t, standby, c.audition)
-	c.sessionsMu.Unlock()
+	require.Equal(t, []*yamux.Session{standby}, c.auditionsArmed())
 	require.Same(t, standby, c.pickSessionKind(pickRecv, pickSibling), "a sibling chunk stream takes the offer")
 
 	st, err := standby.Open()
@@ -464,10 +451,7 @@ func TestPromoter_NoAuditionWhileTheAuditionedStandbyIsStillBusy(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		c.maybePromote()
-		c.sessionsMu.Lock()
-		armed := c.audition
-		c.sessionsMu.Unlock()
-		require.Nil(t, armed, "a busy standby is in flight, not idle")
+		require.Empty(t, c.auditionsArmed(), "a busy standby is in flight, not idle")
 	}
 	require.Same(t, active, c.pickSessionKind(pickRecv, pickSibling), "so the next chunk stream goes to the measured tunnel")
 	require.NoError(t, st.Close())
@@ -744,4 +728,129 @@ func TestPromoter_MeasuredTunnelsDoNotPingPong(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, swaps, "exactly one swap, and no trade back inside the park hold")
+}
+
+// --- the parallel audition ---------------------------------------------------
+
+// auditionClient builds a Client with one active tunnel and n unproven
+// standbys, each with a distinct RTT and a distinct last-measured time so the
+// audition order is decidable. measuredAgo[i] is how long ago standby i's
+// goodput last moved; a zero duration means it never has.
+func auditionClient(t *testing.T, rtts []float64, measuredAgo []time.Duration) (*Client, []*yamux.Session) {
+	t.Helper()
+	c := &Client{closeC: make(chan struct{}), streams: map[uint32]streamMeta{}}
+	c.recvStamp = map[*yamux.Session]*tunnelMeter{}
+	c.standby = map[*yamux.Session]bool{}
+	now := time.Now()
+
+	mk := func(rtt float64, port routing.Port, standby bool, ago time.Duration) *yamux.Session {
+		s := newClosingPeerSession(t)
+		m := new(tunnelMeter)
+		m.port = port
+		m.rttMs = rtt
+		m.rttWin.push(rtt, now)
+		m.stamp.Store(now.UnixNano())
+		if ago > 0 {
+			// Measured, but long enough ago that goodput() no longer counts it
+			// — an unproven standby with a stale number behind it.
+			m.gpBps, m.gpWins, m.gpAt = 1e6, tunnelGoodputMinWindows, now.Add(-ago)
+		}
+		c.sessions = append(c.sessions, s)
+		c.recvStamp[s] = m
+		if standby {
+			c.standby[s] = true
+		}
+		return s
+	}
+	mk(100, 1000, false, 0)
+	out := make([]*yamux.Session, 0, len(rtts))
+	for i, rtt := range rtts {
+		out = append(out, mk(rtt, routing.Port(1001+i), true, measuredAgo[i])) //nolint:gosec
+	}
+	c.SetTunnelTarget(1)
+	return c, out
+}
+
+// tunnel.audition_parallel offers may stand at once. One at a time measured a
+// pool at one tunnel per tunnel.audition_every (60 s), so a pool of eight
+// needed eight minutes of unbroken idleness — longer than the gap between two
+// transfers ever is, which is how the spread policy kept finding unmeasured
+// routes to promote.
+func TestPromoter_AuditionsUpToTheParallelBound(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	c, standbys := auditionClient(t,
+		[]float64{90, 95, 92, 99, 91},
+		[]time.Duration{0, 0, 0, 0, 0})
+
+	c.maybePromote()
+	require.Len(t, c.auditionsArmed(), tunnelAuditionParallel, "three offers, not one and not five")
+
+	// ...and the bound is a live knob, not a constant.
+	require.True(t, skysettings.Apply(map[string]int64{skysettings.TunnelAuditionParallel: 5}))
+	c.maybePromote()
+	require.Len(t, c.auditionsArmed(), 5)
+	require.Len(t, standbys, 5)
+
+	// One stream per offer, and each offer goes to a different tunnel.
+	seen := map[*yamux.Session]bool{}
+	for i := 0; i < 5; i++ {
+		s := c.pickSessionKind(pickRecv, pickSibling)
+		require.True(t, c.IsStandby(s), "each sibling chunk takes one standby's offer")
+		require.False(t, seen[s], "an offer is consumed, so no tunnel auditions twice")
+		seen[s] = true
+	}
+	require.Empty(t, c.auditionsArmed(), "every offer spent")
+	require.False(t, c.IsStandby(c.pickSessionKind(pickRecv, pickSibling)), "and the next chunk goes back to the active tunnel")
+}
+
+// The offers go to the standbys measured LONGEST ago — never measured first —
+// so a pool rotates rather than re-auditioning whatever pings best.
+func TestPromoter_AuditionsTheOldestMeasuredStandbysFirst(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	// The never-measured tunnel pings WORST, so an RTT-ordered pick would put
+	// it last of the four; the two measured recently ping best.
+	c, sb := auditionClient(t,
+		[]float64{99, 40, 45, 90},
+		[]time.Duration{0, time.Minute, 2 * time.Minute, 10 * time.Minute})
+	never, recent, older, oldest := sb[0], sb[1], sb[2], sb[3]
+
+	c.maybePromote()
+	armed := c.auditionsArmed()
+	require.Len(t, armed, tunnelAuditionParallel)
+	require.Contains(t, armed, never, "a tunnel that has never been measured is the oldest there is")
+	require.Contains(t, armed, oldest)
+	require.Contains(t, armed, older)
+	require.NotContains(t, armed, recent, "the most recently measured standby waits its turn")
+}
+
+// Every existing rail still holds with several offers standing: nothing is
+// armed while ANY tunnel is busy, and a proven standby is never a candidate.
+func TestPromoter_ParallelAuditionsAreStillIdleOnlyAndUnprovenOnly(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	c, sb := auditionClient(t,
+		[]float64{90, 95, 92},
+		[]time.Duration{0, 0, 0})
+
+	// One standby has a FRESH measurement: an audition would teach nothing.
+	setGoodput(c, sb[0], 8e6)
+	c.maybePromote()
+	armed := c.auditionsArmed()
+	require.Len(t, armed, 2)
+	require.NotContains(t, armed, sb[0], "a proven standby is not a candidate")
+
+	// Something goes busy: no further offer is armed, however much room the
+	// parallel bound leaves.
+	c.sessionsMu.Lock()
+	c.auditions = map[*yamux.Session]time.Time{}
+	c.auditionedAt = map[*yamux.Session]time.Time{}
+	c.sessionsMu.Unlock()
+	st, err := sb[1].Open()
+	require.NoError(t, err)
+	defer st.Close() //nolint:errcheck
+	require.Eventually(t, func() bool { return sb[1].NumStreams() == 1 }, time.Second, 5*time.Millisecond)
+
+	for i := 0; i < 3; i++ {
+		c.maybePromote()
+		require.Empty(t, c.auditionsArmed(), "an audition is armed only from a quiet moment")
+	}
 }

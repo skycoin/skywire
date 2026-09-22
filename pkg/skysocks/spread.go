@@ -84,79 +84,101 @@ func (p spreadPolicy) steers() bool {
 func (p spreadPolicy) capped() bool { return p.maxShare > 0 && p.maxShare < 1 }
 
 // spreadChoose is the whole placement rule, as a pure function of what each
-// tunnel can carry (capsBps, bytes/s, 0 = never measured) and what it has
-// carried for THIS object (carried, bytes). It returns the index of the tunnel
-// the next chunk belongs on, or -1 when there is nothing to place it on.
+// tunnel has been MEASURED able to carry (capsBps, bytes/s, 0 = never
+// measured), what its transports say it SHOULD manage (priorBps, bytes/s, 0 =
+// no prior — see tunnel_prior.go), and what it has carried for THIS object
+// (carried, bytes). It returns the index of the tunnel the next chunk belongs
+// on, or -1 when there is nothing to place it on.
 //
 // Three lines:
 //
-//  1. Every tunnel gets a WEIGHT: its measured capacity (weight=rate), or 1
-//     (weight=even). A tunnel with no measurement is credited the best weight
-//     present, so an unproven tunnel is probed rather than starved — the #4965
-//     rule, applied to shares instead of streams.
+//  1. Every tunnel gets a WEIGHT: its measured capacity (weight=rate) or 1
+//     (weight=even). A tunnel with no measurement but a PRIOR is weighed by
+//     its prior. A tunnel with neither is a PROBE: it weighs the smallest
+//     weight present and may take exactly ONE chunk of the object, after which
+//     it is skipped until a measurement re-weighs it. It is never credited the
+//     best weight present — that was the old rule (the #4965 "probe rather
+//     than starve" rule applied to shares), and it is what let a standby that
+//     had never carried a byte be handed the fattest share of an object.
 //  2. A tunnel whose share of the bytes so far is at or above max_share is
 //     SKIPPED, but only while another tunnel is under its cap: a cap must
-//     never be a reason to stall an object.
+//     never be a reason to stall an object. Neither may the probe bound: with
+//     nothing else eligible, every tunnel is.
 //  3. Among what is left, the tunnel furthest BELOW its weight — smallest
 //     carried/weight — takes the chunk; ties go to the tunnel with the most
 //     MEASURED capacity, and only then to the lowest index. The first chunk of
 //     an object is one big tie (nothing is carried yet), and the lowest index
 //     is the tunnel the sessions happen to have been added in — on the rig,
 //     the direct one — so an index-only tie-break aims every opening chunk at
-//     the same route.
+//     the same route. An unmeasured tunnel loses every tie by construction,
+//     which is what keeps a probe out of the opening chunks.
 //
 // Rule 3 alone is the fix for "the slow tunnel drags the pair below itself":
 // at 8 and 3 MB/s the ratio settles at 8:3, so the slow tunnel gets fewer
 // chunks rather than an equal number of them.
-func spreadChoose(capsBps []float64, carried []int64, p spreadPolicy) int {
+func spreadChoose(capsBps, priorBps []float64, carried []int64, p spreadPolicy) int {
 	if len(capsBps) == 0 || len(capsBps) != len(carried) {
 		return -1
 	}
 	// One row per tunnel, so the weight, the bytes and the eligibility are
-	// never indexed out of three separate slices.
+	// never indexed out of four separate slices.
 	type lane struct {
 		weight   float64
 		measured float64
 		carried  int64
+		probe    bool
 		eligible bool
 	}
 	lanes := make([]lane, len(capsBps))
-	// 1. weights.
-	best := 0.0
+	// 1. weights. The smallest positive weight is what a probe lane borrows:
+	// a route nothing is known about is worth no more than the least of the
+	// routes something IS known about.
+	least := 0.0
 	for i, c := range capsBps {
-		lanes[i] = lane{weight: c, measured: c, carried: carried[i], eligible: true}
-		if p.even {
+		w := c
+		if w <= 0 && i < len(priorBps) {
+			w = priorBps[i]
+		}
+		lanes[i] = lane{weight: w, measured: c, carried: carried[i], probe: w <= 0, eligible: true}
+		if p.even && w > 0 {
 			lanes[i].weight = 1
 		}
-		if c > best {
-			best = c
+		if lanes[i].weight > 0 && (least == 0 || lanes[i].weight < least) {
+			least = lanes[i].weight
 		}
 	}
-	if best <= 0 {
-		best = 1
+	if least <= 0 {
+		least = 1 // nothing is known about anything: one weight fits all
 	}
-	// 2. the cap, applied against the bytes placed so far.
+	// 2. the cap and the probe bound, applied against the bytes placed so far.
 	var total int64
 	for _, l := range lanes {
 		total += l.carried
 	}
-	under := 0
+	eligible := 0
 	for i := range lanes {
-		if lanes[i].weight <= 0 {
-			lanes[i].weight = best
+		if lanes[i].probe {
+			lanes[i].weight = least
+			// The one probe chunk: once it has carried anything for this
+			// object it sits out until a measurement gives it a real weight.
+			if lanes[i].carried > 0 {
+				lanes[i].eligible = false
+				continue
+			}
 		}
 		if p.capped() && total > 0 && float64(lanes[i].carried) >= p.maxShare*float64(total) {
 			lanes[i].eligible = false
 			continue
 		}
-		under++
+		eligible++
 	}
-	// 3. the deepest deficit wins. With every tunnel at its cap the cap is
-	// ignored: it must never be a reason to stall an object.
+	// 3. the deepest deficit wins. With nothing eligible — every tunnel at its
+	// cap, or every tunnel a spent probe — the bounds are ignored: neither may
+	// ever be a reason to stall an object.
 	idx := -1
 	bestScore, bestCap := 0.0, 0.0
 	for i, l := range lanes {
-		if !l.eligible && under > 0 {
+		if !l.eligible && eligible > 0 {
 			continue
 		}
 		score := float64(l.carried) / l.weight
@@ -229,7 +251,7 @@ func (p *spreadPlanner) pick(size int64) *yamux.Session {
 	if p == nil || p.c == nil || !p.pol.steers() {
 		return nil
 	}
-	sessions, caps := p.c.spreadCandidates(p.dir)
+	sessions, caps, priors := p.c.spreadCandidates(p.dir)
 	if len(sessions) < 2 {
 		return nil
 	}
@@ -239,7 +261,7 @@ func (p *spreadPlanner) pick(size int64) *yamux.Session {
 	for i, s := range sessions {
 		carried[i] = p.bytes[s]
 	}
-	i := spreadChoose(caps, carried, p.pol)
+	i := spreadChoose(caps, priors, carried, p.pol)
 	if i < 0 {
 		return nil
 	}
@@ -250,11 +272,15 @@ func (p *spreadPlanner) pick(size int64) *yamux.Session {
 // pickIdle returns the fastest tunnel carrying NO stream right now, for an
 // endgame duplicate: a duplicate is only free if it rides a tunnel that would
 // otherwise sit out the rest of the object. nil when every tunnel is busy.
+//
+// "Fastest" is the measured capacity where there is one and the prior
+// otherwise, so the duplicate of a tail chunk does not go to the one tunnel in
+// the set nothing is known about.
 func (p *spreadPlanner) pickIdle() *yamux.Session {
 	if p == nil || p.c == nil {
 		return nil
 	}
-	sessions, caps := p.c.spreadCandidates(p.dir)
+	sessions, caps, priors := p.c.spreadCandidates(p.dir)
 	var (
 		best  *yamux.Session
 		bestC = -1.0
@@ -263,8 +289,12 @@ func (p *spreadPlanner) pickIdle() *yamux.Session {
 		if s.NumStreams() > 0 {
 			continue
 		}
-		if caps[i] > bestC {
-			best, bestC = s, caps[i]
+		rate := caps[i]
+		if rate <= 0 {
+			rate = priors[i]
+		}
+		if rate > bestC {
+			best, bestC = s, rate
 		}
 	}
 	return best
@@ -398,11 +428,16 @@ func (c *Client) lastSpread() *spreadPlanner {
 // spreadCandidates snapshots the tunnels a chunk may be placed on — live,
 // active (a standby tunnel carries nothing by definition), not benched by an
 // exit-open timeout, and not SNUBBED — with each one's proven capacity in the
-// planner's direction. A snub is a standby by another name: the tunnel is no
-// candidate until it is unsnubbed, and the chunks it held are re-issued onto
-// the ones that are. The order is the session order, so spreadChoose's
-// tie-break is today's pick order.
-func (c *Client) spreadCandidates(dir spreadDir) (sessions []*yamux.Session, capsBps []float64) {
+// planner's direction AND its capacity prior. A snub is a standby by another
+// name: the tunnel is no candidate until it is unsnubbed, and the chunks it
+// held are re-issued onto the ones that are. The order is the session order, so
+// spreadChoose's tie-break is today's pick order.
+//
+// The two capacity slices are returned SEPARATELY, and that is the point: a
+// measurement and a prior are different kinds of claim, and the planner's
+// whole new rule is that it must be able to tell them apart. capsBps[i] is 0
+// for a tunnel no busy window has sampled, whatever priorBps[i] says.
+func (c *Client) spreadCandidates(dir spreadDir) (sessions []*yamux.Session, capsBps, priorBps []float64) {
 	now := time.Now()
 	c.sessionsMu.Lock()
 	defer c.sessionsMu.Unlock()
@@ -414,18 +449,16 @@ func (c *Client) spreadCandidates(dir spreadDir) (sessions []*yamux.Session, cap
 		if m != nil && (m.onBench(now) || m.snubSitOut()) {
 			continue
 		}
-		var bps float64
+		var bps, prior float64
 		if m != nil {
-			if dir == spreadUp {
-				bps, _ = m.capacityTx(now)
-			} else {
-				bps, _ = m.capacity(now)
-			}
+			bps, _ = m.capacityDir(now, dir == spreadUp)
+			prior = m.prior()
 		}
 		sessions = append(sessions, s)
 		capsBps = append(capsBps, bps)
+		priorBps = append(priorBps, prior)
 	}
-	return sessions, capsBps
+	return sessions, capsBps, priorBps
 }
 
 // tunnelPort is the local route-group port a tunnel was dialed from — the one
