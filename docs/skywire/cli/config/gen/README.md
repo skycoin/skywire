@@ -101,6 +101,9 @@ skywire cli config gen
       --dmsgweb                              enable embedded .dmsg resolving SOCKS5 proxy on 127.0.0.1:4445
       --dmsgweb-sk string                    run the embedded resolver under THIS secret key instead of the visor's, attached in-process (for a key a deployment already knows, e.g. a survey whitelist)
       --skynetweb                            enable embedded .skynet resolving SOCKS5 proxy on 127.0.0.1:4446
+      --wisp                                 enable the embedded Wisp server on the virtual-loopback port, for a browser-side guest's network
+      --wisp-port uint                       port for --wisp (default 6001)
+      --wisp-socks string                    SOCKS5 proxy --wisp carries streams over (default: the local skysocks-client)
       --skymail-bridge                       enable SMTP to skywire bridge on 127.0.0.1:1025
       --dmsgweb-upstream string              upstream SOCKS5 for non .dmsg traffic (empty chains to skynetweb)
       --skynetweb-upstream string            upstream SOCKS5 for non .skynet traffic

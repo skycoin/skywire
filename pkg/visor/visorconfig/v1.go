@@ -22,6 +22,7 @@ type V1 struct {
 	LogServer *LogServer           `json:"log_server,omitempty"`
 	DmsgWeb   *DmsgWebConfig       `json:"dmsg_web,omitempty"`
 	SkynetWeb *SkynetWebConfig     `json:"skynet_web,omitempty"`
+	Wisp      *WispConfig          `json:"wisp,omitempty"`
 	// Resolvers declares ADDITIONAL resolving proxies beyond the dmsg_web /
 	// skynet_web pair above — each with its own port, bind address, domain
 	// suffix and (for a dmsg one) its own identity. Purely additive: absent,
@@ -448,6 +449,38 @@ type BrowseOriginConfig struct {
 	// mode (least-recently-used eviction when full). Defaults 8470 / 64.
 	PortBase int `json:"port_base,omitempty"`
 	PortSpan int `json:"port_span,omitempty"`
+}
+
+// DefaultWispPort is the virtual-loopback port the embedded Wisp server binds,
+// matching `skywire cli wisp serve`'s default so the two are one address in
+// two places rather than two conventions.
+const DefaultWispPort = 6001
+
+// WispConfig enables the embedded Wisp server: a multiplexer that carries many
+// TCP and UDP sockets for a page over one connection, which is how a
+// browser-side Linux guest is given a network.
+//
+// It binds the page's virtual loopback rather than an HTTP port, and frames
+// its session rather than upgrading it to a WebSocket. Both are forced: inside
+// a tab websocket.Accept does not exist, and a service worker cannot intercept
+// ws:// even if it did. So the page reaches this by dialing the vnet port
+// directly.
+//
+// Streams leave through UpstreamSOCKS, which defaults to the visor's own
+// skysocks-client — putting a guest's traffic on a route to an exit instead of
+// through whatever central relay the page shipped with.
+type WispConfig struct {
+	// Enable must be true for the server to start.
+	Enable bool `json:"enable"`
+	// Port is the virtual-loopback port to serve on. Zero means
+	// DefaultWispPort.
+	Port uint `json:"port,omitempty"`
+	// UpstreamSOCKS is the SOCKS5 proxy that carries the streams. Empty
+	// means the local skysocks-client.
+	UpstreamSOCKS string `json:"upstream_socks,omitempty"`
+	// Buffer is the per-stream client -> server credit, in packets. Zero
+	// means the package default.
+	Buffer uint32 `json:"buffer,omitempty"`
 }
 
 // SkynetWebConfig enables the embedded `.skynet` resolving proxy — the
