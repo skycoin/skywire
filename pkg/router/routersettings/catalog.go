@@ -134,6 +134,18 @@ var (
 	UnidirFlipCooldownTicks = RegisterMin("unidir.flip_cooldown_ticks", KindCount, 3, 1, "ticks to hold after a flip before another")
 	UnidirFlipMinGoodput    = RegisterMin("unidir.flip_min_goodput", KindBytes, 8192, 1, "bytes/sec floor under which the flip controller ignores the asymmetry as idle noise")
 
+	// FORWARD fan-out under load (unidir.go). The forward direction is confined
+	// to ONE leg — that is what keeps an interactive session on the lowest-latency
+	// leg — until a sustained upload proves one leg is not enough: the confined
+	// leg sits at its send window for unidir.fanout_engage without a break AND a
+	// sibling leg is close enough in latency to carry the overflow without
+	// stalling the peer's no-skip reorder frontier. The fan-out is released after
+	// unidir.fanout_release without such a stretch, so the direction goes back to
+	// the one leg as soon as the load subsides.
+	UnidirFanoutEngage  = RegisterMin("unidir.fanout_engage", KindDuration, int64(300*time.Millisecond), int64(50*time.Millisecond), "how long a FORWARD upload must keep filling its confined leg's send window before the upload fans out over its sibling legs")
+	UnidirFanoutRelease = RegisterMin("unidir.fanout_release", KindDuration, int64(2*time.Second), int64(100*time.Millisecond), "how long without a full FORWARD send window before the fan-out is released and the upload returns to its single leg")
+	UnidirFanoutMaxSkew = RegisterRatio("unidir.fanout_max_skew", 2.0, 1.0, "the most a sibling leg's latency may exceed the confined FORWARD leg's before it is too skewed to carry upload overflow")
+
 	// FORWARD-direction confinement (route_mux.go selectConfinedForward).
 	ForwardSpill         = RegisterBool("forward.spill", false, "let a FORWARD frame leave its confined leg when that leg is at its send window; off means the writer waits")
 	ForwardSwitchMargin  = RegisterRatioRange("forward.switch_margin", 0.2, 0, 1, "how much lower a challenger leg must measure before the forward direction moves to it")
