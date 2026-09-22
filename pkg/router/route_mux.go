@@ -498,6 +498,17 @@ type routeMux struct {
 	// window refresh with legMu dropped whenever a leg is ruled probe-only or
 	// restored to a full share, so the route group can record the event.
 	onLegProbeRuling func(idx, legs int, tp *transport.ManagedTransport, probeOnly bool, reason string)
+
+	// fwdFan latches the FORWARD direction's load-triggered fan-out: the
+	// confined leg keeps priority, and its sibling legs carry the overflow only
+	// while a sustained upload holds its send window full (unidir.go).
+	fwdFan forwardFanout
+
+	// onForwardFanout, when wired (SetForwardFanoutFn), is called when that
+	// latch moves, so the route group can record a forward_fanout /
+	// forward_confined mux event. Called both from the writer (legMu and rg.mu
+	// dropped) and from the send path, so the callback must take no locks.
+	onForwardFanout func(on bool, idx int, reason string)
 }
 
 const (
@@ -656,7 +667,7 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 		// is the measured 79 % / 21 % split across a 44 ms and a 166 ms leg, and
 		// the 6 flips in ten rows behind it.
 		if m.forwardSender() {
-			if tp, rule, idx, ok := m.selectConfinedForward(tps, fwd, wantDirect, dstPK, srcPK); ok {
+			if tp, rule, idx, ok := m.selectConfinedForwardFor(tps, fwd, payload, wantDirect, dstPK, srcPK); ok {
 				return tp, rule, idx, nil
 			}
 		} else if tp, rule, idx, ok := m.selectByDirection(tps, fwd, wantDirect, dstPK, srcPK); ok {
@@ -836,6 +847,13 @@ func (m *routeMux) SetForwardRehomeFn(fn func(prev, next int, tp *transport.Mana
 	m.onForwardRehome = fn
 }
 
+// SetForwardFanoutFn wires the callback the mux fires when the forward
+// direction fans out over its sibling legs under load, or returns to its single
+// leg. Called once by the route group when the mux is built.
+func (m *routeMux) SetForwardFanoutFn(fn func(on bool, idx int, reason string)) {
+	m.onForwardFanout = fn
+}
+
 // confinedForwardIdx is the leg the forward direction is currently confined to,
 // or -1 when none is held. Lock-free, for readers outside the route group's mu
 // (waitSendWindow runs on the writer with rg.mu dropped).
@@ -853,11 +871,39 @@ func (m *routeMux) confinedForwardIdx() int { return int(m.confinedFwdCur.Load()
 // x0.24 at 50 MB) because the peer's no-skip reorder frontier waits out the
 // skew. Spilling is kept as a knob because it is what the code did before, not
 // because it is the better default.
+//
+// payload is the frame's application bytes, or nil on the retransmit path: it
+// is only read by the fan-out's scheduler pick, which is the one decision here
+// that depends on how big the frame is.
 func (m *routeMux) selectConfinedForward(tps []*transport.ManagedTransport, fwd []routing.Rule,
+	wantDirect bool, dst, src cipher.PubKey) (*transport.ManagedTransport, routing.Rule, int, bool) {
+	return m.selectConfinedForwardFor(tps, fwd, nil, wantDirect, dst, src)
+}
+
+// selectConfinedForwardFor is selectConfinedForward with the frame in hand.
+func (m *routeMux) selectConfinedForwardFor(tps []*transport.ManagedTransport, fwd []routing.Rule, payload []byte,
 	wantDirect bool, dst, src cipher.PubKey) (*transport.ManagedTransport, routing.Rule, int, bool) {
 	idx := m.confinedForwardLeg(tps, wantDirect, dst, src)
 	if idx < 0 || idx >= len(fwd) || idx >= len(tps) {
 		return nil, nil, -1, false
+	}
+	// Load-triggered fan-out: the direction it is confined to has been filling
+	// its leg's send window long enough that one leg is demonstrably not enough,
+	// and the group has a sibling close enough in latency to stride with it
+	// (unidir.go). The frame goes to whichever band leg has room; when none has,
+	// the pick falls through to the confined leg and the writer waits on it,
+	// exactly as a confined direction does.
+	//
+	// The in-flight estimates are re-read per frame (as the spill path does):
+	// nothing charges the selector for a frame this path places, so without the
+	// refresh a band leg keeps reading as full from the previous frame and the
+	// stride collapses back onto the confined leg (measured: 75 %/25 % and
+	// x1.14 instead of 48 %/52 % and x1.39).
+	if m.tpSelector != nil && m.retxBuf != nil && m.sackEnabled && m.forwardFanoutActive() {
+		m.feedInflight(tps)
+		if alt := m.pickFanoutLeg(tps, payload, idx); alt >= 0 && alt < len(fwd) && alt < len(tps) {
+			return tps[alt], fwd[alt], alt, true
+		}
 	}
 	if ForwardSpill() && m.tpSelector != nil && m.retxBuf != nil && m.sackEnabled {
 		m.feedInflight(tps)
@@ -2725,9 +2771,19 @@ func (m *routeMux) signalWindow() {
 //
 // Called from waitSendWindow, which runs on the writer with the route group's
 // mu DROPPED, so it reads the confined leg from the atomic mirror.
-func (m *routeMux) sendWindowBlocked() bool {
+//
+// While the direction is FANNED OUT under load the question widens by exactly
+// the legs the fan-out may use: the writer is released as soon as the confined
+// leg or an eligible sibling has room, and still parks when neither does. It is
+// not AllReadySaturated — a leg outside the skew band has room the upload is
+// not allowed to use, and releasing the writer against it would put the frame
+// on the confined leg's full window instead.
+func (m *routeMux) sendWindowBlocked(tps []*transport.ManagedTransport) bool {
 	if !ForwardSpill() {
 		if idx := m.confinedForwardIdx(); idx >= 0 && m.forwardSender() {
+			if m.forwardFanoutActive() {
+				return !m.forwardFanoutRoom(tps, idx)
+			}
 			return m.tpSelector.Saturated(idx)
 		}
 	}
@@ -2746,7 +2802,12 @@ func (m *routeMux) waitSendWindow(tps []*transport.ManagedTransport, closed <-ch
 	waited := false
 	for {
 		m.feedInflight(tps)
-		if !m.sendWindowBlocked() {
+		// One observation of the confined leg's window per poll, blocked or
+		// not: this loop is the only place that sees the forward writer's
+		// demand with the in-flight estimates fresh, so it is where the
+		// load-triggered fan-out engages and releases.
+		m.noteForwardLoad(tps)
+		if !m.sendWindowBlocked(tps) {
 			return
 		}
 		if !waited {
