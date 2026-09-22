@@ -22,6 +22,7 @@ import (
 
 	"github.com/0magnet/yamux"
 
+	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -189,6 +190,42 @@ func (c *Client) cutTunnel(port routing.Port) bool {
 		c.appCl.Log().Infof("Cutting the tunnel on port %d at the operator's request", port)
 	}
 	return c.retireTunnel(target, "operator: tunnel cut")
+}
+
+// consumedTunnel drops the tunnel on port because the router SPENT it: its
+// whole route chain was re-homed into an active group as a mux leg
+// (docs/design/leg-rehome.md), so the tunnel's own route group is closing and
+// its yamux session is about to die.
+//
+// The difference from a cut is the whole point: a death re-arms the redial
+// backoff and the pool fill, and doing that here would dial a replacement for a
+// tunnel nobody lost — the pool would churn once per adoption. The tunnel just
+// leaves the pool, recorded as tunnel_consumed, and the pool's own ceiling
+// logic refills on its ordinary schedule.
+func (c *Client) consumedTunnel(port routing.Port) bool {
+	if port == 0 {
+		return false
+	}
+	var target *yamux.Session
+	c.sessionsMu.Lock()
+	for s, m := range c.recvStamp {
+		if m != nil && m.port == port {
+			target = s
+			break
+		}
+	}
+	c.sessionsMu.Unlock()
+	if target == nil {
+		if c.appCl != nil {
+			c.appCl.Log().Warnf("Told the tunnel on port %d was consumed; no tunnel holds it (already gone?)", port)
+		}
+		return false
+	}
+	if c.appCl != nil {
+		c.appCl.Log().Infof("Tunnel on port %d was consumed: its chain is now a mux leg", port)
+	}
+	return c.retireTunnelAs(target, "consumed: its chain was re-homed as a mux leg",
+		router.MuxEventTunnelConsumed, false)
 }
 
 // PoolFilter is the standby pool's live candidate filter as the app's dial

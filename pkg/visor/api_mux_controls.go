@@ -24,6 +24,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 
 	"github.com/skycoin/skywire/pkg/router"
@@ -78,6 +79,15 @@ type MuxWeightsInput struct {
 	AppName string
 	RGPort  uint16
 	Weights map[string]float64
+}
+
+// MuxRehomeInput is the argument of the RehomeTunnelLeg RPC: the app, the
+// ACTIVE tunnel that is to gain a leg, and the STANDBY tunnel whose chain it
+// takes. Both ports are the dst_port `proxy mux info` prints.
+type MuxRehomeInput struct {
+	AppName     string
+	TargetPort  uint16
+	StandbyPort uint16
 }
 
 // GetRouterDialSettings implements API. Reads the live dial-time knobs.
@@ -247,6 +257,43 @@ func (v *Visor) AddMuxRouteForward(appName string, fwd, rev []routing.Hop, rgPor
 	return mc.AddMuxRouteByHopsForward(desc, fwd, rev)
 }
 
+// RehomeTunnelLeg implements API. Moves the STANDBY tunnel's whole built chain
+// into the ACTIVE tunnel as one more mux leg, in place, with no setup-node
+// dial. Both tunnels belong to appName and must join the same peer.
+//
+// On success the app is told its standby tunnel was CONSUMED rather than lost,
+// so it drops it from the pool without the redial backoff reset and pool fill a
+// death triggers. The op lands on the app's next settings pull.
+func (v *Visor) RehomeTunnelLeg(appName string, targetPort, standbyPort uint16) error {
+	mc, err := v.muxLegController()
+	if err != nil {
+		return err
+	}
+	if targetPort == 0 || standbyPort == 0 {
+		return errors.New("pass both --tunnel <active dst_port> and --from <standby dst_port>")
+	}
+	if targetPort == standbyPort {
+		return errors.New("--tunnel and --from name the same tunnel")
+	}
+	target, err := v.findRouteDescForApp(appName, targetPort)
+	if err != nil {
+		return fmt.Errorf("target tunnel: %w", err)
+	}
+	standby, err := v.findRouteDescForApp(appName, standbyPort)
+	if err != nil {
+		return fmt.Errorf("standby tunnel: %w", err)
+	}
+	if err := mc.RehomeStandbyLeg(target, standby); err != nil {
+		return err
+	}
+	if v.procM != nil {
+		seq := v.procM.QueueAppOp(appName, appserver.AppOpConsumedTunnel, int64(standbyPort))
+		v.log.Infof("RehomeTunnelLeg: :%d adopted the chain of :%d; queued the consumed-tunnel op for %s (op %d)",
+			targetPort, standbyPort, appName, seq)
+	}
+	return nil
+}
+
 // RouteGroupMuxNegotiated implements API. Per-group negotiated capabilities and
 // the send-window shape in effect.
 func (v *Visor) RouteGroupMuxNegotiated(appName string) ([]router.MuxNegotiated, error) {
@@ -297,6 +344,12 @@ func (r *RPC) MuxWeights(in *MuxWeightsInput, out *router.MuxWeightsView) (err e
 func (r *RPC) AddMuxRouteForward(in *MuxRouteInput, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "AddMuxRouteForward", in)(nil, &err)
 	return r.visor.AddMuxRouteForward(in.AppName, in.Forward, in.Reverse, in.SrcPort)
+}
+
+// RehomeTunnelLeg adopts a standby tunnel's chain into an active one as a leg.
+func (r *RPC) RehomeTunnelLeg(in *MuxRehomeInput, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RehomeTunnelLeg", in)(nil, &err)
+	return r.visor.RehomeTunnelLeg(in.AppName, in.TargetPort, in.StandbyPort)
 }
 
 // RouteGroupMuxNegotiated reports per-group negotiated values.
@@ -354,6 +407,13 @@ func (rc *rpcClient) AddMuxRouteForward(appName string, fwd, rev []routing.Hop, 
 	}, &struct{}{})
 }
 
+// RehomeTunnelLeg implements API.
+func (rc *rpcClient) RehomeTunnelLeg(appName string, targetPort, standbyPort uint16) error {
+	return rc.Call("RehomeTunnelLeg", &MuxRehomeInput{
+		AppName: appName, TargetPort: targetPort, StandbyPort: standbyPort,
+	}, &struct{}{})
+}
+
 // RouteGroupMuxNegotiated implements API.
 func (rc *rpcClient) RouteGroupMuxNegotiated(appName string) ([]router.MuxNegotiated, error) {
 	var out []router.MuxNegotiated
@@ -382,6 +442,7 @@ func (*mockRPCClient) AddMuxRouteForward(string, []routing.Hop, []routing.Hop, u
 func (*mockRPCClient) RouteGroupMuxNegotiated(string) ([]router.MuxNegotiated, error) {
 	return nil, nil
 }
+func (*mockRPCClient) RehomeTunnelLeg(string, uint16, uint16) error { return nil }
 
 func (proxyDefaultAPI) GetRouterDialSettings() (RouterDialSettings, error) {
 	return RouterDialSettings{}, ErrProxyNotSupported
@@ -404,6 +465,7 @@ func (proxyDefaultAPI) AddMuxRouteForward(string, []routing.Hop, []routing.Hop, 
 func (proxyDefaultAPI) RouteGroupMuxNegotiated(string) ([]router.MuxNegotiated, error) {
 	return nil, ErrProxyNotSupported
 }
+func (proxyDefaultAPI) RehomeTunnelLeg(string, uint16, uint16) error { return ErrProxyNotSupported }
 
 // msDuration converts a wire-side millisecond count to a Duration. The dial
 // settings travel as ms rather than as a Duration so a JSON caller (the hvui,

@@ -95,6 +95,11 @@ type MuxLegController interface {
 	MuxWeightsFor(desc routing.RouteDescriptor) (MuxWeightsView, error)
 	AddMuxRouteByHopsForward(desc routing.RouteDescriptor, fwd, rev []routing.Hop) error
 	MuxNegotiatedForApp(appName string) []MuxNegotiated
+	// RehomeStandbyLeg moves a STANDBY group's whole built chain into the
+	// target group as one more mux leg, in place, with no setup-node dial.
+	// Returns ErrRehomeUnsupported when the peer did not negotiate
+	// CapLegRehome. See leg_rehome.go.
+	RehomeStandbyLeg(target, standby routing.RouteDescriptor) error
 }
 
 var _ MuxLegController = (*router)(nil)
