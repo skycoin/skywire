@@ -237,6 +237,27 @@ type NoteMuxEventReq struct {
 	Role      string
 }
 
+// GrowMuxReq is an app asking the visor to widen ONE of its tunnels by Legs
+// packet-level mux legs, built on the routes of the app's own STANDBY tunnels
+// to the same exit (pkg/router/pool_legs.go) rather than discovered from
+// scratch. The app knows which tunnel it wants widened and how many of its
+// tunnels are parked; only the visor knows the routes behind them.
+//
+// LocalPort names the tunnel exactly as in NoteMuxEventReq: the port the app
+// was handed when it dialed. MinHops floors the hop count of a leg the pool
+// could not cover and the route-finder has to plan (0 = the visor's own floor).
+type GrowMuxReq struct {
+	LocalPort routing.Port
+	Legs      int
+	MinHops   int
+}
+
+// maxGrowMuxLegs bounds what one app call may ask for. Each leg is a
+// setup-node dial with a route-ID reservation on every hop, so an app looping
+// on a large count could hammer the setup node; the adaptive mux width never
+// approaches this.
+const maxGrowMuxLegs = 16
+
 // Tunnel event and role vocabulary accepted from an app. The events mirror
 // router.MuxEventTunnel* and the roles skysocks.TunnelRole* — named here as
 // literals because pkg/skysocks imports this package, not the other way round.
@@ -386,6 +407,49 @@ func (r *RPCIngressGateway) NoteMuxEvent(req *NoteMuxEventReq, _ *struct{}) (err
 		return nil
 	}
 	rt.NoteTunnelEvent(req.LocalPort, req.Event, reason, req.Role)
+	return nil
+}
+
+// GrowMux widens one of this app's tunnels by req.Legs mux legs taken from the
+// app's standby pool, and reports how many were actually added.
+//
+// Same seam and same ownership proof as NoteMuxEvent: the router's lookup is by
+// PORT ALONE, so without the check any app process could grow another app's
+// tunnel. Legs is clamped rather than rejected — an app asking for more than
+// the bound gets the bound, which is the useful behavior for a widen request.
+// A networker with no route groups degrades quietly, as dialWithMuxRoutes does.
+func (r *RPCIngressGateway) GrowMux(req *GrowMuxReq, out *int) (err error) {
+	defer rpcutil.LogCall(r.log, "GrowMux", req)(out, &err)
+	if req == nil {
+		return errors.New("GrowMux: nil request")
+	}
+	if !r.ownsLocalPort(req.LocalPort) {
+		return fmt.Errorf("GrowMux: local port %d is not this app's", req.LocalPort)
+	}
+	legs := req.Legs
+	if legs <= 0 {
+		legs = 1
+	}
+	if legs > maxGrowMuxLegs {
+		legs = maxGrowMuxLegs
+	}
+	nw, nerr := appnet.ResolveNetworker(appnet.TypeSkynet)
+	if nerr != nil {
+		return nerr
+	}
+	sw, ok := nw.(*appnet.SkywireNetworker)
+	if !ok {
+		return nil
+	}
+	rt := sw.Router()
+	if rt == nil {
+		return nil
+	}
+	added, err := rt.GrowMuxFromPool(req.LocalPort, legs, req.MinHops)
+	if err != nil {
+		return err
+	}
+	*out = added
 	return nil
 }
 

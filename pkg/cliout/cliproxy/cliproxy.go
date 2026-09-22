@@ -35,6 +35,11 @@ type MuxOp struct {
 	// separate from Mode so a width/standby retune isn't reported as a "mode"
 	// change.
 	Value string `json:"value,omitempty"`
+	// Legs is how many mux legs the op actually added, for "grow". Kept apart
+	// from Hops (one leg's length) and Value (the tunnel's port) so a caller
+	// can read the outcome without parsing prose: fewer legs than asked for is
+	// a normal answer, not an error.
+	Legs int `json:"legs,omitempty"`
 }
 
 // Human writes the sentence this used to print.
@@ -54,6 +59,9 @@ func (m MuxOp) Human(w io.Writer) error {
 		return err
 	case "cut":
 		_, err := fmt.Fprintf(w, "cut the app=%s tunnel on port %s; the pool replaces it on the next tick\n", m.App, m.Value)
+		return err
+	case "grow":
+		_, err := fmt.Fprintf(w, "added %d mux leg(s) to the app=%s tunnel on port %s, from its standby pool\n", m.Legs, m.App, m.Value)
 		return err
 	case "standby":
 		_, err := fmt.Fprintf(w, "mux warm-standby reserve set to %s\n", m.Value)

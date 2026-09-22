@@ -1000,6 +1000,16 @@ func (rc *rpcClient) GrowMuxRoute(appName string, target, minHops int, srcPort u
 	return added, err
 }
 
+// GrowMuxFromPool grows the app's tunnel by `legs` additional mux legs, built
+// on the routes of the app's STANDBY tunnels to the same exit; minHops floors
+// a fallback-planned leg's hop count. srcPort disambiguates as in AddMuxRoute.
+// Returns the number of legs added.
+func (rc *rpcClient) GrowMuxFromPool(appName string, legs, minHops int, srcPort uint16) (int, error) {
+	var added int
+	err := rc.Call("GrowMuxFromPool", &MuxRouteInput{AppName: appName, Legs: legs, MinHops: minHops, SrcPort: srcPort}, &added)
+	return added, err
+}
+
 // RemoveMuxRoute drops the leg over tpID from the app's active rg.
 // srcPort disambiguates as in AddMuxRoute.
 func (rc *rpcClient) RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error {

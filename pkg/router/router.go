@@ -652,6 +652,12 @@ type Router interface {
 	RoutingTableStats() routing.RoutingTableStats
 	AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []routing.Hop) error
 	GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int) (int, error)
+	// GrowMuxFromPool grows the tunnel route group this visor dialed from
+	// localPort by up to legs additional mux legs, taking the plans from the
+	// app's STANDBY tunnels to the same exit (already ranked, first-hop
+	// transport already up) and falling back to GrowMuxRoute's route-finder
+	// path for whatever the pool cannot cover. See pool_legs.go.
+	GrowMuxFromPool(localPort routing.Port, legs, minHops int) (int, error)
 	RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.UUID) error
 
 	// SetMuxDirectionForApp applies a manual unidirectional direction pin

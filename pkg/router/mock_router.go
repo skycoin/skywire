@@ -494,6 +494,12 @@ func (_m *MockRouter) GrowMuxRoute(_a0 routing.RouteDescriptor, _a1, _a2 int) (i
 	return ret.Int(0), ret.Error(1)
 }
 
+// GrowMuxFromPool provides a mock function
+func (_m *MockRouter) GrowMuxFromPool(_a0 routing.Port, _a1, _a2 int) (int, error) {
+	ret := _m.Called(_a0, _a1, _a2)
+	return ret.Int(0), ret.Error(1)
+}
+
 // RemoveMuxRouteByTransport provides a mock function
 func (_m *MockRouter) RemoveMuxRouteByTransport(_a0 routing.RouteDescriptor, _a1 uuid.UUID) error {
 	ret := _m.Called(_a0, _a1)

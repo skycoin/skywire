@@ -78,6 +78,12 @@ type routePlan struct {
 	// for its whole TTL and every hit becomes a wasted setup-node round trip.
 	remoteTp uuid.UUID
 	inter    []cipher.PubKey // intermediate visor PKs (for disjointness matching)
+	// source names where the plan came from, in the words of whatever put it
+	// here ("pool plan from standby group :49170"). Empty means the plan was
+	// discovered the usual way, by a route-finder round trip. It is carried
+	// only so a served plan can say what it was sourced from in the group's
+	// dial-decision event; it never takes part in matching.
+	source string
 }
 
 // planKey identifies a bucket of disjoint plans to one exit at one min-hops
@@ -159,6 +165,14 @@ func planIntermediates(fwd []routing.Hop) []cipher.PubKey {
 // the same first hop are, for mux purposes, the same leg). Nil/empty forward
 // plans are ignored.
 func (p *warmRoutePool) put(dst cipher.PubKey, minHops uint16, fwd, rev []routing.Hop) {
+	p.putSourced(dst, minHops, fwd, rev, "")
+}
+
+// putSourced is put with a label naming where the plan came from, carried back
+// to the caller that is served it (bestPlanSourced) so the group's
+// dial-decision event can say so. See pool_legs.go, which seeds the pool with
+// the routes of an app's STANDBY tunnels.
+func (p *warmRoutePool) putSourced(dst cipher.PubKey, minHops uint16, fwd, rev []routing.Hop, source string) {
 	if p == nil || len(fwd) == 0 {
 		return
 	}
@@ -168,6 +182,7 @@ func (p *warmRoutePool) put(dst cipher.PubKey, minHops uint16, fwd, rev []routin
 		rev:     append([]routing.Hop(nil), rev...),
 		firstTp: fwd[0].TpID,
 		inter:   planIntermediates(fwd),
+		source:  source,
 	}
 	if len(rev) > 0 {
 		plan.remoteTp = rev[0].TpID
@@ -228,8 +243,16 @@ func (pl *routePlan) disjointFrom(excludeTps, excludeRemoteTps map[uuid.UUID]str
 // its own route group already holds, so a plan matching one of these is a
 // guaranteed setup-node failure and must not be served from cache.
 func (p *warmRoutePool) bestPlan(dst cipher.PubKey, minHops uint16, excludeTps, excludeRemoteTps []uuid.UUID, excludePKs []cipher.PubKey) (fwd, rev []routing.Hop, ok bool) {
+	f, r, _, hit := p.bestPlanSourced(dst, minHops, excludeTps, excludeRemoteTps, excludePKs)
+	return f, r, hit
+}
+
+// bestPlanSourced is bestPlan plus the served plan's source label (empty for a
+// plan the route-finder discovered), so the caller can name what it dialed on
+// in the group's dial-decision event.
+func (p *warmRoutePool) bestPlanSourced(dst cipher.PubKey, minHops uint16, excludeTps, excludeRemoteTps []uuid.UUID, excludePKs []cipher.PubKey) (fwd, rev []routing.Hop, source string, ok bool) {
 	if p == nil {
-		return nil, nil, false
+		return nil, nil, "", false
 	}
 	key := planKey{dst: dst, minHops: minHops}
 	exTp := make(map[uuid.UUID]struct{}, len(excludeTps))
@@ -252,16 +275,16 @@ func (p *warmRoutePool) bestPlan(dst cipher.PubKey, minHops uint16, excludeTps, 
 			delete(p.byExit, key) // evict expired bucket
 		}
 		p.misses++
-		return nil, nil, false
+		return nil, nil, "", false
 	}
 	for i := range b.plans {
 		if b.plans[i].disjointFrom(exTp, exRemoteTp, exPK) {
 			p.hits++
-			return b.plans[i].fwd, b.plans[i].rev, true
+			return b.plans[i].fwd, b.plans[i].rev, b.plans[i].source, true
 		}
 	}
 	p.misses++
-	return nil, nil, false
+	return nil, nil, "", false
 }
 
 // invalidate drops all cached plans to one exit — called when a transport to a

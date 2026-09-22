@@ -3874,15 +3874,29 @@ func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *D
 	if e := muxOpts.EffectiveMinHops(true); e > 0 {
 		keyMinHops = uint16(e) //nolint:gosec
 	}
+	// POOL-SOURCED LEGS: before the cache is consulted, offer it the routes of
+	// this app's STANDBY sibling tunnels to the same exit — already ranked,
+	// already measured, first-hop transport already up (see pool_legs.go). The
+	// seed is lazy because the router cannot see the app's pool settlement, and
+	// it is free of consequence: with no standby siblings nothing is seeded and
+	// everything below is byte-for-byte what it was.
+	r.seedPoolPlans(nrg.rg.desc, keyMinHops)
 	var muxFwd, muxRev []routing.Hop
-	if cf, cr, ok := r.warmRoutes.bestPlan(rPK, keyMinHops, excludeIDs, excludeRemoteIDs, excludePKs); ok {
+	if cf, cr, source, ok := r.warmRoutes.bestPlanSourced(rPK, keyMinHops, excludeIDs, excludeRemoteIDs, excludePKs); ok {
 		muxFwd, muxRev = cf, cr
 		log.WithField("first_tp", func() string {
 			if len(cf) > 0 {
 				return cf[0].TpID.String()
 			}
 			return ""
-		}()).Debug("Mux add-leg: served disjoint plan from shared warm-route pool (skipped route-finder)")
+		}()).WithField("plan_source", planSource(source)).
+			Debug("Mux add-leg: served disjoint plan from shared warm-route pool (skipped route-finder)")
+		if source != "" {
+			nrg.rg.noteMuxEvent(MuxEvent{
+				Event: MuxEventDialDecision, By: MuxByLocal, LegIndex: -1, Legs: nrg.rg.legCount(),
+				TpID: cf[0].TpID, Reason: source + "; grown without a route-finder call",
+			})
+		}
 	} else {
 		// Plan the replacement/added leg over the GLOBAL TPD graph via the
 		// route-finder first (same rationale as establishMuxRoutes): local calc is

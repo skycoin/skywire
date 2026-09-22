@@ -493,6 +493,10 @@ type MuxRouteInput struct {
 	// Add/RemoveMuxRoute.
 	Target  int
 	MinHops int
+	// Legs is the RELATIVE leg count for GrowMuxFromPool — "grow this group
+	// by k legs" — as opposed to Target's absolute "grow it to N legs".
+	// Unused by every other op.
+	Legs int
 	// SrcPort disambiguates between concurrent rg's owned by the same
 	// app (one per concurrent SOCKS5 connection on skysocks-client,
 	// etc.). Zero means "auto-pick if exactly one rg is active for
