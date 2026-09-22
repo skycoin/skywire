@@ -345,6 +345,16 @@ func (s *Stream) RawRemoteAddr() Addr {
 	return s.rAddr
 }
 
+// RemotePK returns the public key of the client at the other end.
+//
+// Established by the end-to-end client<->client Noise handshake, not asserted
+// by the peer, so a caller may use it to authenticate one. appnet's directConn
+// offers the same method, which lets a transport-agnostic consumer ask either
+// carrier who it is talking to.
+func (s *Stream) RemotePK() cipher.PubKey {
+	return s.rAddr.PK
+}
+
 // ServerPK returns the remote PK of the dmsg.Server used to relay frames to and from the remote client.
 func (s *Stream) ServerPK() cipher.PubKey {
 	return s.ses.RemotePK()
