@@ -49,6 +49,7 @@ skywire cli
 - [version](version/README.md) — Show the build version and check the latest available release/commit
 - [visor](visor/README.md) — Query the Skywire Visor
 - [vpn](vpn/README.md) — VPN client
+- [wisp](wisp/README.md) — Serve the Wisp protocol over skywire
 
 ## Flags
 
