@@ -7,6 +7,7 @@
     "loading-error": "Hubo un error obteniendo los datos. Reintentando...",
     "operation-error": "Hubo un error al intentar completar la operación.",
     "no-connection-error": "No hay conexión a Internet o conexión con el hipervisor.",
+    "hypervisor-busy-error": "El hipervisor no respondió a tiempo.",
     "error": "Error:",
     "refreshed": "Datos refrescados.",
     "options": "Opciones",

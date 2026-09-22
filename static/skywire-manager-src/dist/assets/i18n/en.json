@@ -10,6 +10,7 @@
     "loading-error": "There was an error getting the data. Retrying...",
     "operation-error": "There was an error trying to complete the operation.",
     "no-connection-error": "There is no internet connection or connection to the Hypervisor.",
+    "hypervisor-busy-error": "The Hypervisor did not respond in time.",
     "error": "Error:",
     "refreshed": "Data refreshed.",
     "options": "Options",
