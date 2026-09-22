@@ -336,6 +336,28 @@ const (
 	TunnelRoleStandby = "standby"
 )
 
+// DialTunnelRole is the role the app stamps on ONE dial, and the only place
+// that decision is made — the app's dial helper (cmd/apps/skysocks-client) and
+// this package's own tests read the same function.
+//
+// It must be right at DIAL time rather than at the first report: a role-less
+// group is a group the visor cannot place, and the router now refuses to widen
+// one at all (pool_arbiter.go poolWideningAllowed). Every dial that fills or
+// refills the ACTIVE set is active; every standby-pool fill is standby.
+//
+// tunnels is --tunnels, routed is --routed, standby marks a pool fill. A
+// single-tunnel session that never asked for a route group gets no role: it
+// has no pool and nothing to arbitrate.
+func DialTunnelRole(tunnels int, routed, standby bool) string {
+	if standby {
+		return TunnelRoleStandby
+	}
+	if tunnels > 1 || routed {
+		return TunnelRoleActive
+	}
+	return ""
+}
+
 // streamMeta is the per-stream detail the status page surfaces for an open
 // tunneled stream. sent/recv are pointers so the map-by-value copy shares the one
 // counter the splice loop increments (handleStream wraps the yamux conn in a

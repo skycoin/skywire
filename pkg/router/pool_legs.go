@@ -50,10 +50,12 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -86,11 +88,52 @@ type poolLegPlan struct {
 	latencyMS float64
 	// throughputBps is the first hop's observed capacity prior.
 	throughputBps float64
+	// dupOf names the sibling tunnel that already holds this exact hop path,
+	// set only when pool.allow_duplicate_route let the plan through. 0 means
+	// the plan's route is distinct, which is the default and the only case the
+	// ranking offers at all.
+	dupOf routing.Port
 }
 
 // source is the plan's provenance, in the words the dial-decision event carries.
 func (p poolLegPlan) source() string {
-	return fmt.Sprintf("pool plan from standby group :%d", p.port)
+	s := fmt.Sprintf("pool plan from standby group :%d", p.port)
+	if p.dupOf != 0 {
+		s += fmt.Sprintf(" (duplicate of the route :%d already holds; allowed by pool.allow_duplicate_route)", p.dupOf)
+	}
+	return s
+}
+
+// hopPathSig identifies a WHOLE route by its transport-ID sequence, which is
+// what "the same route" means for the distinct-route rule: two plans with the
+// same signature traverse the same physical links in the same order, so a
+// second route ID over them buys no capacity and costs the exit a second chain.
+func hopPathSig(hops []routing.Hop) string {
+	if len(hops) == 0 {
+		return ""
+	}
+	ids := make([]string, 0, len(hops))
+	for _, h := range hops {
+		ids = append(ids, h.TpID.String())
+	}
+	return strings.Join(ids, ">")
+}
+
+// routePathSigs is the set of hop-path signatures this group's legs occupy.
+func (rg *RouteGroup) routePathSigs() map[string]struct{} {
+	rg.mu.Lock()
+	tps := append([]*transport.ManagedTransport(nil), rg.tps...)
+	rg.mu.Unlock()
+	out := make(map[string]struct{}, len(tps))
+	for _, tp := range tps {
+		if tp == nil {
+			continue
+		}
+		if s := hopPathSig(rg.legHopsFor(tp.Entry.ID)); s != "" {
+			out[s] = struct{}{}
+		}
+	}
+	return out
 }
 
 // rankPoolPlans orders plans best-first: measured end-to-end route latency
@@ -219,7 +262,39 @@ func (r *router) standbyPoolPlans(desc routing.RouteDescriptor, minHops uint16) 
 		})
 	}
 	rankPoolPlans(plans)
-	return plans
+	return distinctRoutePlans(plans, target.rg.knBool(routersettings.PoolAllowDuplicateRoute))
+}
+
+// distinctRoutePlans is the DISTINCT-ROUTE rule, applied after the ranking so
+// the tunnel kept for a given route is the best-ranked one holding it.
+//
+// A hop path a sibling tunnel already offers is not a second path, it is the
+// same one wearing another route ID: the rig run of 2026-09-22 ended with
+// pooled tunnels :49205 and :49235 both riding transport a94550f5 and the exit
+// carried both, for no aggregation at all. The repeat is dropped — unless
+// pool.allow_duplicate_route is on, in which case it is offered with the
+// tunnel it duplicates named, so the dial-decision event says so out loud.
+//
+// A plan whose route the TARGET group holds never gets this far: it shares the
+// target's first hop, which standbyPoolPlans has already skipped.
+func distinctRoutePlans(plans []poolLegPlan, allowDup bool) []poolLegPlan {
+	seen := make(map[string]routing.Port, len(plans))
+	out := plans[:0]
+	for _, p := range plans {
+		sig := hopPathSig(p.fwd)
+		keeper, dup := seen[sig]
+		if !dup {
+			seen[sig] = p.port
+			out = append(out, p)
+			continue
+		}
+		if !allowDup {
+			continue
+		}
+		p.dupOf = keeper
+		out = append(out, p)
+	}
+	return out
 }
 
 // seedPoolPlans puts the ranked standby-sibling plans for desc's group into the

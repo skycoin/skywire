@@ -565,13 +565,11 @@ type poolFilter struct {
 // is returned WITHOUT the retrier's usual re-attempts — retrying an exhausted
 // topology is the setup-node storm of #4325.
 func dialServer(ctx context.Context, cfg *clientConfig, appCl *app.Client, pk cipher.PubKey, diversify, standby bool, filter poolFilter) (net.Conn, error) {
-	role := ""
-	if cfg.tunnels > 1 || cfg.routed {
-		role = skysocks.TunnelRoleActive
-	}
-	if standby {
-		role = skysocks.TunnelRoleStandby
-	}
+	// The role travels WITH the dial (not with the first report): the router
+	// refuses to widen a group of this app while its role is unknown, so an
+	// active fill that arrived role-less would sit at one leg and a pool fill
+	// that arrived role-less would be widened before it was known to be spare.
+	role := skysocks.DialTunnelRole(int(cfg.tunnels), cfg.routed, standby)
 	// "Starting" belongs to the dial the session does not yet exist without —
 	// the FIRST tunnel of a cycle, which is the only one with diversify and
 	// standby both unset. Every other dial here (the background widening toward

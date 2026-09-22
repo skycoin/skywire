@@ -152,6 +152,18 @@ var (
 	PoolLegInterval = RegisterMin("pool.leg_interval", KindDuration, int64(5*time.Second), int64(time.Second), "the least time between two legs one active tunnel takes from the standby pool")
 	PoolLegRelease  = RegisterMin("pool.leg_release", KindDuration, int64(30*time.Second), int64(time.Second), "how long an active tunnel must show no load before a leg it took from the standby pool is released")
 	PoolMinStandby  = RegisterMin("pool.min_standby", KindCount, 2, 0, "how many tunnels the standby pool must keep; the arbiter never takes a leg that would leave fewer")
+	// PoolLoadMinBps is the arbiter's load FLOOR. Its reverse-heavy episode
+	// used to latch on ANY byte delta at all, so a tunnel's keepalives and the
+	// mux's own control frames read as "carrying continuously" and an active
+	// tunnel took a leg every pool.leg_interval for the whole run (rig
+	// 2026-09-22: 37 leg_added / 13 leg_removed on a 2-tunnel compose set).
+	// A rate below this is a heartbeat, not a transfer.
+	PoolLoadMinBps = RegisterMin("pool.load_min_bps", KindCount, 262144, 0, "the least sustained wire rate, in bytes per second, that counts as load for the standby-pool arbiter")
+	// PoolAllowDuplicateRoute lifts the distinct-route rule: by default a
+	// pooled tunnel whose whole hop path a tunnel of the same app to the same
+	// exit already holds is not offered as a leg plan — a second route ID over
+	// the same chain aggregates nothing and the exit pays for both.
+	PoolAllowDuplicateRoute = RegisterBool("pool.allow_duplicate_route", false, "offer a pooled tunnel as a leg plan even when a sibling tunnel already holds the same hop path")
 
 	// FORWARD-direction confinement (route_mux.go selectConfinedForward).
 	ForwardSpill         = RegisterBool("forward.spill", false, "let a FORWARD frame leave its confined leg when that leg is at its send window; off means the writer waits")
