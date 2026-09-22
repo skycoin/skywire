@@ -1,3 +1,5 @@
+//go:build !js
+
 // Package wisp pkg/wisp/socksserver_test.go c4-app-proxy
 //
 // The SOCKS5 front end is driven against a real Client talking to a real

@@ -1,9 +1,10 @@
 // Package wisp pkg/wisp/client.go c4-app-proxy
 //
-// The other end of server.go: a Wisp client, which dials someone else's Wisp
-// endpoint and multiplexes TCP and UDP streams over it. It is what lets a
-// visor *consume* a Wisp backend rather than only provide one — the same
-// protocol a browser-side Linux guest speaks, spoken outbound.
+// The other end of server.go: a Wisp client, which opens a session against
+// someone else's Wisp endpoint and multiplexes TCP and UDP streams over it —
+// by URL with Dial, or over a conn you already have with DialConn. It is what
+// lets a visor *consume* a Wisp backend rather than only provide one — the
+// same protocol a browser-side Linux guest speaks, spoken outbound.
 //
 // A Client is an Egress, so a Wisp server can be pointed at one and relay a
 // guest's traffic through a second hop; and it is a proxy.ContextDialer, so
@@ -31,8 +32,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/coder/websocket"
 
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -66,19 +65,19 @@ type ClientConfig struct {
 	// Set this to route the WebSocket itself over something — a SOCKS5
 	// proxy, a skywire route — rather than the host's network.
 	HTTPClient *http.Client
-	// ReadLimit bounds one WebSocket message. Zero means DefaultReadLimit.
+	// ReadLimit bounds one frame. Zero means DefaultReadLimit.
 	ReadLimit int64
 	// Log receives per-session and per-stream events. Zero means a logger
 	// named "wisp-client".
 	Log *logging.Logger
 }
 
-// Client is a Wisp client session: one WebSocket carrying many streams.
+// Client is a Wisp client session: one transport carrying many streams.
 type Client struct {
 	url string
 	log *logging.Logger
 
-	conn *websocket.Conn
+	frames Frames
 
 	// v2 records whether the negotiated session did an INFO exchange, and
 	// udp whether the server advertised the UDP extension. A v1 server
@@ -111,27 +110,51 @@ func Dial(ctx context.Context, cfg ClientConfig) (*Client, error) {
 	if cfg.URL == "" {
 		return nil, errors.New("wisp: no endpoint URL configured")
 	}
+	cfg = cfg.withDefaults()
+
+	frames, err := dialWebsocket(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return newClient(ctx, cfg, cfg.URL, frames)
+}
+
+// DialConn opens a Wisp session over a byte stream that is already connected,
+// framing it rather than upgrading it (frames.go). It is the counterpart of
+// Server.ServeConn, and the path that works on js/wasm: the browser WebSocket
+// cannot carry a custom transport or custom headers, so a session that has to
+// ride one (a virtual-loopback conn, a skywire stream, a SOCKS5 proxy) is
+// built here instead of dialed by URL.
+//
+// The session speaks v2, matching ServeConn.
+//
+// DialConn owns conn and closes it with the session.
+func DialConn(ctx context.Context, conn net.Conn, cfg ClientConfig) (*Client, error) {
+	cfg = cfg.withDefaults()
+	name := cfg.URL
+	if name == "" {
+		name = conn.RemoteAddr().String()
+	}
+	return newClient(ctx, cfg, name, NewStreamFrames(conn, cfg.ReadLimit))
+}
+
+// withDefaults fills the zero values a Client needs.
+func (cfg ClientConfig) withDefaults() ClientConfig {
 	if cfg.ReadLimit == 0 {
 		cfg.ReadLimit = DefaultReadLimit
 	}
 	if cfg.Log == nil {
 		cfg.Log = logging.MustGetLogger("wisp-client")
 	}
+	return cfg
+}
 
-	conn, _, err := websocket.Dial(ctx, cfg.URL, &websocket.DialOptions{
-		HTTPClient:   cfg.HTTPClient,
-		HTTPHeader:   cfg.Header,
-		Subprotocols: []string{Subprotocol},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("wisp: dial %s: %w", cfg.URL, err)
-	}
-	conn.SetReadLimit(cfg.ReadLimit)
-
+// newClient runs the opening exchange and starts the session's goroutines.
+func newClient(ctx context.Context, cfg ClientConfig, name string, frames Frames) (*Client, error) {
 	c := &Client{
-		url:     cfg.URL,
+		url:     name,
 		log:     cfg.Log,
-		conn:    conn,
+		frames:  frames,
 		writes:  make(chan []byte, writeQueueDepth),
 		done:    make(chan struct{}),
 		streams: make(map[uint32]*clientStream),
@@ -232,18 +255,14 @@ func (c *Client) UDPSupported() bool { return c.udp }
 // Buffer returns the per-stream credit the server granted.
 func (c *Client) Buffer() uint32 { return c.buffer }
 
-// readPacket reads one binary frame and decodes it, skipping any text frame.
+// readPacket reads one frame and decodes it. Skipping non-binary frames is the
+// WebSocket transport's business, not this one's (frames.go).
 func (c *Client) readPacket(ctx context.Context) (Packet, error) {
-	for {
-		typ, data, err := c.conn.Read(ctx)
-		if err != nil {
-			return Packet{}, err
-		}
-		if typ != websocket.MessageBinary {
-			continue
-		}
-		return Parse(data)
+	data, err := c.frames.ReadFrame(ctx)
+	if err != nil {
+		return Packet{}, err
 	}
+	return Parse(data)
 }
 
 // writeLoop owns the socket's write side: coder/websocket permits a single
@@ -256,7 +275,7 @@ func (c *Client) writeLoop() {
 			return
 		case frame := <-c.writes:
 			wctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
-			err := c.conn.Write(wctx, websocket.MessageBinary, frame)
+			err := c.frames.WriteFrame(wctx, frame)
 			cancel()
 			if err != nil {
 				c.closeWith(fmt.Errorf("wisp: session write: %w", err))
@@ -456,7 +475,7 @@ func (c *Client) closeWith(err error) {
 			// per-stream CLOSE would have nowhere to go.
 			st.sessionGone(err)
 		}
-		c.conn.CloseNow() //nolint:errcheck,gosec // best effort on the way out
+		c.frames.Close() //nolint:errcheck,gosec // best effort on the way out
 		if err != nil && !errors.Is(err, ErrClientClosed) {
 			c.log.WithError(err).Debug("session ended")
 		}
