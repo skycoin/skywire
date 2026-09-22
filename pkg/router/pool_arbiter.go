@@ -136,6 +136,23 @@ func (rg *RouteGroup) poolWideningAllowed() bool {
 	return !rg.standbyTunnel() && !rg.tunnelRoleUnknown()
 }
 
+// dialMuxTarget clamps a DIAL's requested mux width to what this group's role
+// allows. It runs on the dial path, where the role has just been seeded from
+// DialOptions (saveRouteGroupRules) — so it is the gate that keeps a pooled
+// tunnel from ever wiring SetSelfHeal at the visor width or running
+// establishMuxRoutes, both of which live behind `muxTarget > 1`.
+//
+// This is the DIAL-TIME half of poolWideningAllowed. The self-heal and arbiter
+// halves guard a group that is already established; this one guards the window
+// between the group's creation and its first byte, which is where the rig run
+// of 2026-09-22 grew all 30 pooled tunnels to two legs.
+func (rg *RouteGroup) dialMuxTarget(target int) int {
+	if target > 1 && !rg.poolWideningAllowed() {
+		return 1
+	}
+	return target
+}
+
 // muxWidthTarget is the leg count this group is meant to hold — its self-heal
 // target, which is the dial-time mux width re-capped live by the adaptive
 // rotation (setSelfHealTarget). 0/1 means "no width to fill" and the arbiter
