@@ -113,6 +113,20 @@ self.addEventListener('fetch', (event) => {
 			if (/^(host|connection|content-length|accept-encoding|upgrade|via)$/i.test(k)) continue;
 			headers[k] = v;
 		}
+		// Sec-Fetch-Dest cannot reach the loop above: it is a forbidden header
+		// name, so the browser keeps it out of Request.headers and a worker
+		// rebuilding the request has no way to read or forward it. Everything
+		// served through here loses it, while the same request made over the
+		// network keeps it.
+		//
+		// request.destination carries the same fact and IS readable, so pass it
+		// on under a name of our own. A server behind the virtual wire that
+		// needs to know it is being framed otherwise has only a query parameter
+		// to go on, and a client-side router drops that on its first
+		// navigation — so a reload of the frame is served something different
+		// from what the first load got. (skywire's hypervisor UI chooses
+		// dashboard-vs-desk on exactly this, and reloaded into the wrong one.)
+		if (event.request.destination) headers['x-vnet-fetch-dest'] = event.request.destination;
 		let body = null;
 		if (!/^(GET|HEAD)$/i.test(event.request.method)) {
 			try { body = new Uint8Array(await event.request.arrayBuffer()); } catch (e) { body = null; }
