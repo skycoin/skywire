@@ -5,13 +5,13 @@
 // the default is the local skysocks-client, which carries the stream over a
 // route to an exit visor, and --direct dials the host's own network instead.
 //
-// UDP is the awkward one. SOCKS5 as skysocks implements it has CONNECT only —
-// no UDP ASSOCIATE — so a UDP stream cannot traverse an exit as-is. Rather
-// than silently leak those datagrams to the clearnet, the socks egress
-// translates port 53 into DNS-over-TCP through the same proxy and refuses
-// every other UDP port with "blocked by proxy". That translation is what
-// spares each guest from running its own unbound with forward-tcp-upstream:
-// the usual workaround when a Wisp backend cannot carry UDP/53.
+// UDP goes through SOCKS5 UDP ASSOCIATE (socksudp.go), which skysocks now
+// relays over the route to the exit, so a guest datagram reaches the same
+// place its TCP does. A proxy without an association — an older exit, or some
+// other CONNECT-only SOCKS5 — leaves port 53 working through a DNS-over-TCP
+// translation, which spares each guest from running its own unbound with
+// forward-tcp-upstream; every other port is refused rather than silently
+// leaked to the clearnet.
 package wisp
 
 import (
@@ -126,24 +126,36 @@ func (e *SocksEgress) DialTCP(ctx context.Context, host string, port uint16) (ne
 
 // DialUDP implements Egress.
 //
-// Port 53 becomes DNS-over-TCP through the proxy. Everything else is refused:
-// a UDP stream has nowhere to go over a CONNECT-only SOCKS5, and quietly
-// sending it out of the host's own interface would put traffic on the clearnet
-// that the caller asked to route over skywire.
+// UDP ASSOCIATE is tried first: skysocks relays datagrams over the route to
+// the exit, so a guest's UDP reaches the same place its TCP does. A proxy that
+// refuses the association — an exit too old to relay, or some other SOCKS5
+// server with CONNECT only — leaves port 53 working through the DNS-over-TCP
+// translation, which is what spares each guest from running its own unbound.
+// Any other port is then refused rather than quietly sent out of the host's
+// own interface, which would put traffic on the clearnet that the caller asked
+// to route over skywire.
 func (e *SocksEgress) DialUDP(ctx context.Context, host string, port uint16) (DatagramStream, error) {
-	if port != 53 {
-		return nil, fmt.Errorf("%w: port %d (only 53 is translated, as DNS-over-TCP)", ErrUDPUnsupported, port)
+	s, err := dialSocksUDP(ctx, e.Addr, host, port)
+	if err == nil {
+		return s, nil
 	}
-	c, err := e.dialer.DialContext(ctx, "tcp", joinHostPort(host, port))
-	if err != nil {
+	if !errors.Is(err, errAssociateRefused) {
 		return nil, err
+	}
+
+	if port != 53 {
+		return nil, fmt.Errorf("%w: port %d, and the proxy has no UDP ASSOCIATE (%v)", ErrUDPUnsupported, port, err)
+	}
+	c, derr := e.dialer.DialContext(ctx, "tcp", joinHostPort(host, port))
+	if derr != nil {
+		return nil, derr
 	}
 	return &dnsOverTCP{conn: c}, nil
 }
 
 // Describe implements Egress.
 func (e *SocksEgress) Describe() string {
-	return "socks5 " + e.Addr + " (skywire exit; UDP/53 translated to DNS-over-TCP)"
+	return "socks5 " + e.Addr + " (skywire exit; UDP via ASSOCIATE, or DNS-over-TCP where the proxy has none)"
 }
 
 // dnsOverTCP presents a TCP DNS connection as a datagram stream. Per RFC 1035
