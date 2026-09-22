@@ -12,6 +12,7 @@ import (
 	"github.com/0magnet/yamux"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/skysocks/skysettings"
@@ -447,4 +448,110 @@ func TestPoolFill_FreezeBeatsConcurrency(t *testing.T) {
 	c.maybePoolFill()
 	waitFill(t, c)
 	require.Zero(t, dials.Load(), "a frozen pool dials nothing")
+}
+
+// --- the capacity prior ------------------------------------------------------
+
+// The prior is the MINIMUM over a leg's hops, because a path is as wide as its
+// narrowest hop — and a hop the visor holds no entry for reports 0, which must
+// read as "unknown" and not as "slow".
+func TestTunnelPrior_IsTheNarrowestKnownHop(t *testing.T) {
+	leg := func(alive bool, bps ...float64) proxystatus.Leg {
+		l := proxystatus.Leg{Alive: alive}
+		for _, b := range bps {
+			l.Hops = append(l.Hops, proxystatus.Hop{ThroughputBps: b})
+		}
+		return l
+	}
+
+	require.Equal(t, 3e6, legPriorBps(leg(true, 9e6, 3e6, 7e6)), "the narrowest hop bounds the path")
+	require.Equal(t, 9e6, legPriorBps(leg(true, 9e6, 0)), "an unknown hop is skipped, not counted as zero")
+	require.Zero(t, legPriorBps(leg(true)), "no hops, no prior")
+	require.Zero(t, legPriorBps(leg(true, 0, 0)), "nothing known about any hop")
+
+	// A tunnel takes the BEST of its alive legs — a conservative claim, since
+	// the legs stripe and a sum would promise an aggregate the mux must earn.
+	// A dead leg says nothing about what the tunnel can carry.
+	tun := proxystatus.Tunnel{Legs: []proxystatus.Leg{
+		leg(true, 2e6), leg(true, 5e6), leg(false, 40e6),
+	}}
+	require.Equal(t, 5e6, tunnelPriorBps(tun))
+}
+
+// The prior reaches the app over the channel it already uses to see its own
+// tunnels — the ProxyStatus RPC — and is matched to a session by the tunnel's
+// LOCAL PORT, the one name the app, the visor and the bench already share for
+// one tunnel. A tunnel the visor could not name a port for is never guessed at.
+func TestPullCapacityPriors_MatchesTunnelsByLocalPort(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	a, closeA := newTestSession(t)
+	defer closeA()
+	b, closeB := newTestSession(t)
+	defer closeB()
+
+	mA, mB := new(tunnelMeter), new(tunnelMeter)
+	mA.port, mB.port = 1000, 1001
+	c := &Client{
+		sessions:  []*yamux.Session{a, b},
+		recvStamp: map[*yamux.Session]*tunnelMeter{a: mA, b: mB},
+		standby:   map[*yamux.Session]bool{b: true},
+		closeC:    make(chan struct{}),
+	}
+	hop := func(bps float64) proxystatus.Hop { return proxystatus.Hop{ThroughputBps: bps} }
+	snap := proxystatus.Snapshot{Tunnels: []proxystatus.Tunnel{
+		{LocalPort: 1001, Legs: []proxystatus.Leg{{Alive: true, Hops: []proxystatus.Hop{hop(9e6), hop(4e6)}}}},
+		{LocalPort: 0, Legs: []proxystatus.Leg{{Alive: true, Hops: []proxystatus.Hop{hop(99e6)}}}},
+	}}
+	pulls := 0
+	c.appProxyStatus = func() (proxystatus.Snapshot, error) { pulls++; return snap, nil }
+
+	now := time.Now()
+	c.pullCapacityPriors(now)
+	require.Equal(t, 1, pulls)
+	require.Equal(t, 4e6, mB.prior(), "the standby is weighed by its narrowest hop")
+	require.Zero(t, mA.prior(), "a tunnel the snapshot did not name keeps no prior")
+
+	// The rate limit: inside tunnel.prior_refresh the visor is not asked again.
+	c.pullCapacityPriors(now.Add(tunnelPriorRefresh / 2))
+	require.Equal(t, 1, pulls)
+	c.pullCapacityPriors(now.Add(2 * tunnelPriorRefresh))
+	require.Equal(t, 2, pulls)
+
+	// A route whose transports stop reporting throughput goes back to being
+	// honestly unknown rather than coasting on a number from minutes ago.
+	snap = proxystatus.Snapshot{Tunnels: []proxystatus.Tunnel{{LocalPort: 1001}}}
+	c.pullCapacityPriors(now.Add(4 * tunnelPriorRefresh))
+	require.Zero(t, mB.prior())
+}
+
+// capacityOrPrior is the one accessor the planner and the promoter read, and
+// the distinction it draws is the whole point: a measurement, a prior, or
+// nothing — never a prior dressed up as a measurement.
+func TestCapacityOrPrior_NeverPassesAPriorOffAsAMeasurement(t *testing.T) {
+	now := time.Now()
+	m := new(tunnelMeter)
+
+	bps, fresh, prior := m.capacityOrPrior(now, false)
+	require.Zero(t, bps)
+	require.False(t, fresh)
+	require.False(t, prior, "nothing measured and no prior is not a prior")
+
+	m.setPrior(5e6)
+	bps, fresh, prior = m.capacityOrPrior(now, false)
+	require.Equal(t, 5e6, bps)
+	require.False(t, fresh, "a prior is never fresh: no busy window produced it")
+	require.True(t, prior)
+
+	// A real sample takes over the moment there is one, in that direction only.
+	m.mu.Lock()
+	m.rxCapBps, m.busyAt = 2e6, now
+	m.mu.Unlock()
+	bps, fresh, prior = m.capacityOrPrior(now, false)
+	require.Equal(t, 2e6, bps, "evidence replaces the prior even when it is worse news")
+	require.True(t, fresh)
+	require.False(t, prior)
+
+	bps, _, prior = m.capacityOrPrior(now, true)
+	require.Equal(t, 5e6, bps, "the upload direction has still proven nothing")
+	require.True(t, prior)
 }

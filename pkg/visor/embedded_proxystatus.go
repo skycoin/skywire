@@ -159,9 +159,12 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 			// group's descriptor carries the local visor as Dst and the exit as Src,
 			// so hardcoding DstPK mislabeled the local visor as the exit; pick the
 			// far end orientation-independently.
-			exit := info.Desc.DstPK
+			// The LOCAL port is the far end's mirror image: a route group's
+			// LocalAddr is desc.Dst(), so the port on whichever descriptor end
+			// is this visor is the one the dialing app knows its tunnel by.
+			exit, localPort := info.Desc.DstPK, info.Desc.SrcPort
 			if exit == self {
-				exit = info.Desc.SrcPK
+				exit, localPort = info.Desc.SrcPK, info.Desc.DstPort
 			}
 			t := proxystatus.Tunnel{
 				Index:      ti,
@@ -169,10 +172,11 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 				MuxEnabled: info.MuxEnabled,
 				// "active" / "standby", as the dialing app labeled it. Empty
 				// unless this visor is the one holding the tunnels.
-				Role: info.TunnelRole,
+				Role:      info.TunnelRole,
+				LocalPort: uint16(localPort),
 			}
 			for _, leg := range info.Legs {
-				t.Legs = append(t.Legs, proxyLegFrom(leg))
+				t.Legs = append(t.Legs, proxyLegFrom(leg, p.hopThroughputBps))
 			}
 			snap.Tunnels = append(snap.Tunnels, t)
 		}
@@ -203,11 +207,12 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 							// it does for a routed hop — without it the tree drew
 							// a bare public key and nothing else.
 							Hops: []proxystatus.Hop{{
-								From:      self.String(),
-								To:        s.RemotePK.String(),
-								TpID:      s.TpID.String(),
-								TpType:    tpType,
-								LatencyMS: rtt,
+								From:          self.String(),
+								To:            s.RemotePK.String(),
+								TpID:          s.TpID.String(),
+								TpType:        tpType,
+								LatencyMS:     rtt,
+								ThroughputBps: p.hopThroughputBps(s.TpID.String()),
 							}},
 							Direct: true,
 							// Alive is what the tree renderer gates on: it skips
@@ -510,7 +515,11 @@ func appendNote(existing, add string) string {
 
 // proxyLegFrom transcribes one visor MuxLegInfo into the proxystatus.Leg shape
 // the status tree renders. Shared by every tunnel's leg list.
-func proxyLegFrom(leg MuxLegInfo) proxystatus.Leg {
+//
+// throughput resolves a hop's transport id to its observed peak goodput; nil
+// leaves every hop's ThroughputBps at 0 (the shape every caller had before the
+// capacity prior existed).
+func proxyLegFrom(leg MuxLegInfo, throughput func(string) float64) proxystatus.Leg {
 	return proxystatus.Leg{
 		Index:          leg.Index,
 		TransportID:    leg.TransportID,
@@ -529,13 +538,15 @@ func proxyLegFrom(leg MuxLegInfo) proxystatus.Leg {
 		GoodputDownBps: leg.GoodputDownBps,
 		Alive:          leg.Alive,
 		Standby:        leg.Standby,
-		Hops:           proxyHopsFrom(leg.Hops),
+		Hops:           proxyHopsFrom(leg.Hops, throughput),
 	}
 }
 
 // proxyHopsFrom transcribes the visor's per-leg MuxHopInfo into the
-// proxystatus.Hop shape the status page renders (full PKs preserved).
-func proxyHopsFrom(hops []MuxHopInfo) []proxystatus.Hop {
+// proxystatus.Hop shape the status page renders (full PKs preserved), stamping
+// each hop with the transport's observed peak goodput where the visor holds
+// the transport.
+func proxyHopsFrom(hops []MuxHopInfo, throughput func(string) float64) []proxystatus.Hop {
 	if len(hops) == 0 {
 		return nil
 	}
@@ -548,8 +559,36 @@ func proxyHopsFrom(hops []MuxHopInfo) []proxystatus.Hop {
 			TpType:    h.TpType,
 			LatencyMS: h.LatencyMS,
 		}
+		if throughput != nil {
+			out[i].ThroughputBps = throughput(h.TpID)
+		}
 	}
 	return out
+}
+
+// hopThroughputBps resolves a hop's transport id to the passively observed
+// peak goodput the transport manager holds for it.
+//
+// The LOCAL transport manager is the only source consulted, deliberately: this
+// runs on the status/RPC path, and a TPD round-trip per hop is what
+// pkg/router/tpd_cache.go exists to stop. The first hop of every leg is a
+// transport this visor owns, so a leg always reports at least the near edge —
+// which is the hop a standby tunnel's capacity prior is really about. A deeper
+// hop reports a number only when this visor happens to hold that transport as
+// well, and 0 otherwise, which the prior reads as "unknown" rather than "slow".
+func (p *visorStatusProvider) hopThroughputBps(tpID string) float64 {
+	if p.v == nil || p.v.tpM == nil || tpID == "" {
+		return 0
+	}
+	id, err := uuid.Parse(tpID)
+	if err != nil {
+		return 0
+	}
+	tp, err := p.v.tpM.GetTransportByID(id)
+	if err != nil || tp == nil {
+		return 0
+	}
+	return tp.GetThroughputBps()
 }
 
 // directTpDetail resolves the type and measured RTT of the transport carrying a

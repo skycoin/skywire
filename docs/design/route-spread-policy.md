@@ -47,10 +47,18 @@ chunk lands wherever `pickSessionFor(pickRecv)` puts it today.
 **The rule.** Per object, per chunk, from the object's own byte ledger:
 
 1. Each route gets a weight — its metered capacity (`rate`) or 1 (`even`). A
-   route with no measurement is credited the best weight present, so an unproven
-   route is probed rather than starved (the #4965 rule, applied to shares).
+   route with no measurement but a capacity PRIOR is weighed by that prior: the
+   minimum `ThroughputBps` over its hops' transports, taken over its widest
+   live leg, read from the visor over the `ProxyStatus` RPC and refreshed every
+   `tunnel.prior_refresh`. A route with no measurement and no prior is a PROBE:
+   it weighs the smallest weight present and may take exactly ONE chunk of the
+   object, after which it sits out until a measurement re-weighs it. It is
+   never credited the best weight present — that was the old rule, and it is
+   how a standby promoted before the first chunk was handed the fattest share
+   of an object on the strength of having carried nothing.
 2. A route at or above `max_share` of the bytes placed so far is skipped, but
-   only while another route is under its cap. A cap never stalls an object.
+   only while another route is under its cap. A cap never stalls an object —
+   and neither may the probe bound: with nothing else eligible, everything is.
 3. Of what is left, the route furthest below its weight — smallest
    carried/weight — takes the chunk. Ties go to the route with the most
    measured capacity, then to the lowest index: the first chunk of an object is
@@ -66,12 +74,16 @@ layer on a different statistic. This policy chooses between GROUPS.
 **The pool.** `min_routes` is reached by PROMOTING standby tunnels, before the
 object's first chunk goes out. It never dials: the discovered pool is the
 ceiling, and a policy asking for more routes than exist runs on the ones that
-do. The route promoted is the standby with the highest measured capacity in the
-object's direction (`promoteFastestStandby`), NOT the lowest RTT: the route is
-being added to carry bytes, and capacity is the statistic the planner will weigh
-its share by. With no standby measured this falls back to the failover rank
-(`promoteBestStandby`, lowest RTT), which the failover paths themselves still
-use unchanged. On the download path the promotion happens after chunk0's stream
+do. The route promoted is ranked in three tiers (`promoteFastestStandby`), NOT
+on RTT: a standby with a MEASURED capacity in the object's direction first
+(highest first), then one known only by its capacity PRIOR (highest first),
+then — last, and only when there is nothing else — one with neither. The route
+is being added to carry bytes, and capacity is the statistic the planner will
+weigh its share by. With every candidate in the bottom tier this falls back to
+the failover rank (`promoteBestStandby`, lowest RTT), which the failover paths
+themselves still use unchanged. Standbys get their capacity numbers from the
+idle audition, which offers up to `tunnel.audition_parallel` (3) of them a
+sibling chunk stream at once, oldest-measured first, while nothing is busy. On the download path the promotion happens after chunk0's stream
 is already open — chunk0 doubles as the size probe, and it is the reply to it
 that first says the object is splittable at all — so chunk0 is charged to
 whichever tunnel the browser's CONNECT landed on and only the remainder is

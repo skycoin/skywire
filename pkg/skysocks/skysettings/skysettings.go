@@ -81,6 +81,8 @@ const (
 
 	TunnelAuditionWindow   = "tunnel.audition_window"
 	TunnelAuditionEvery    = "tunnel.audition_every"
+	TunnelAuditionParallel = "tunnel.audition_parallel"
+	TunnelPriorRefresh     = "tunnel.prior_refresh"
 	TunnelExitOpenPenalty  = "tunnel.exit_open_penalty"
 	TunnelMeterSampleMin   = "tunnel.meter_sample_min"
 	TunnelMeterCapDecay    = "tunnel.meter_cap_decay"
@@ -270,6 +272,10 @@ func init() {
 		"how long an audition offer stands before it expires")
 	register(TunnelAuditionEvery, KindDuration, int64(60*time.Second),
 		"minimum gap between two auditions of the same tunnel")
+	register(TunnelAuditionParallel, KindCount, 3,
+		"how many standby tunnels may audition AT ONCE while nothing is busy; one at a time measured a pool of eight in eight minutes of idleness, longer than the gap between two transfers ever is")
+	register(TunnelPriorRefresh, KindDuration, int64(30*time.Second),
+		"how often the app re-reads its tunnels' capacity PRIOR (the per-hop transport throughput) from the visor")
 	register(TunnelExitOpenPenalty, KindDuration, int64(10*time.Second),
 		"how long a tunnel sits out the picks after an exit open timed out")
 	register(TunnelMeterSampleMin, KindDuration, int64(500*time.Millisecond),
