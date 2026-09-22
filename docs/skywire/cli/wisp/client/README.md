@@ -9,6 +9,13 @@ browser's several dozen connections cost one socket rather than several dozen.
 Names are never resolved here: the hostname is passed through to the backend,
 which resolves it at the far end.
 
+UDP ASSOCIATE is served too, since a Wisp session carries datagrams as well as
+streams. The proxy binds the relay socket the application is promised and
+opens one Wisp UDP stream per destination behind it, reaping the ones that
+fall idle; the association ends with its control connection, as RFC 1928 says.
+A backend that does not advertise the UDP extension gets a refusal rather than
+an association that swallows everything sent to it.
+
 --proxy dials the websocket through a SOCKS5 proxy of its own. Pointed at the
 local skysocks-client it puts the Wisp session on a route to an exit, so the
 backend is reached over skywire rather than the clearnet.
