@@ -20,7 +20,19 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"golang.org/x/net/proxy"
 )
+
+// dialThrough dials addr with forward, honoring a context deadline when the
+// dialer has a context-aware form. bottle's vnet does not, which is why the
+// plain Dial is not simply the only path.
+func dialThrough(ctx context.Context, forward proxy.Dialer, addr string) (net.Conn, error) {
+	if cd, ok := forward.(proxy.ContextDialer); ok {
+		return cd.DialContext(ctx, "tcp", addr)
+	}
+	return forward.Dial("tcp", addr)
+}
 
 // socksUDPMaxDatagram is the largest UDP payload, and so the read buffer for
 // one datagram coming back from the relay.
@@ -44,10 +56,13 @@ type socksUDP struct {
 }
 
 // dialSocksUDP opens a UDP association through the SOCKS5 proxy at proxyAddr
-// and points it at host:port.
-func dialSocksUDP(ctx context.Context, proxyAddr, host string, port uint16) (*socksUDP, error) {
-	var d net.Dialer
-	control, err := d.DialContext(ctx, "tcp", proxyAddr)
+// and points it at host:port. forward reaches the proxy itself; nil means the
+// host's own network.
+func dialSocksUDP(ctx context.Context, proxyAddr, host string, port uint16, forward proxy.Dialer) (*socksUDP, error) {
+	if forward == nil {
+		forward = proxy.Direct
+	}
+	control, err := dialThrough(ctx, forward, proxyAddr)
 	if err != nil {
 		return nil, err
 	}

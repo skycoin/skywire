@@ -110,6 +110,9 @@ func TestMustMarshalJSONNative_ResolverBlocks(t *testing.T) {
 		TLSMITM:      true, TLSPort: 443, TLSCAPath: "/ca.pem", TLSCAKeyPath: "/ca.key",
 		SelfLoopback: &no, Alias: "gw", SelfLoopbackAuthenticated: &yes,
 	}
+	v.Wisp = &visorconfig.WispConfig{
+		Enable: true, Port: 6001, UpstreamSOCKS: "127.0.0.1:1080", Buffer: 128,
+	}
 	v.Resolvers = []visorconfig.ResolverConfig{
 		{
 			Name: "lan", Kind: visorconfig.ResolverKindDmsg, Enable: true, SecretKey: &sk,
