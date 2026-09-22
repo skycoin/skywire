@@ -48,6 +48,10 @@ type RPCIngressClient interface {
 	// the app dialed from req.LocalPort, and re-labels that group's tunnel
 	// role. See NoteMuxEventReq.
 	NoteMuxEvent(req NoteMuxEventReq) error
+	// GrowMux asks the visor to widen the tunnel the app dialed from
+	// req.LocalPort by req.Legs mux legs, built on the routes of the app's own
+	// STANDBY tunnels to the same exit. Returns how many legs were added.
+	GrowMux(req GrowMuxReq) (int, error)
 	// AppSettings polls the visor for this app's live tuning knobs, reporting
 	// the version the app currently has installed. See AppSettingsResp.
 	AppSettings(req AppSettingsReq) (AppSettingsResp, error)
@@ -149,6 +153,15 @@ func (c *rpcIngressClient) DialWithOptions(req DialOptionsReq) (connID uint16, l
 // NoteMuxEvent sends `NoteMuxEvent` command to the server.
 func (c *rpcIngressClient) NoteMuxEvent(req NoteMuxEventReq) error {
 	return c.rpc.Call(c.formatMethod("NoteMuxEvent"), &req, nil)
+}
+
+// GrowMux sends `GrowMux` command to the server.
+func (c *rpcIngressClient) GrowMux(req GrowMuxReq) (int, error) {
+	var added int
+	if err := c.rpc.Call(c.formatMethod("GrowMux"), &req, &added); err != nil {
+		return 0, err
+	}
+	return added, nil
 }
 
 // AppSettings sends `AppSettings` command to the server.

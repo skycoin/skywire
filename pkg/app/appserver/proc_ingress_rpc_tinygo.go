@@ -88,6 +88,14 @@ func registerIngressRPC(s *rpc.Server, name string, gw *RPCIngressGateway) error
 		var r struct{}
 		return &r, gw.NoteMuxEvent(&a, &r)
 	})
+	h("GrowMux", func(dec *gob.Decoder) (interface{}, error) {
+		var a GrowMuxReq
+		if err := dec.Decode(&a); err != nil {
+			return nil, err
+		}
+		var r int
+		return &r, gw.GrowMux(&a, &r)
+	})
 	h("AppSettings", func(dec *gob.Decoder) (interface{}, error) {
 		var a AppSettingsReq
 		if err := dec.Decode(&a); err != nil {
