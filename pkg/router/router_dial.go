@@ -341,9 +341,11 @@ func (r *router) DialRoutes(
 				}
 				appName := ""
 				datagram := false
+				role := ""
 				if opts != nil {
 					appName = opts.AppName
 					datagram = opts.Datagram
+					role = opts.TunnelRole
 				}
 				dial := func(dctx context.Context, c routing.BidirectionalRoute) (routing.EdgeRules, cipher.PubKey, error) {
 					return r.conf.RouteGroupDialer.Dial(dctx, log, r.dmsgC, r.conf.SetupNodes, c)
@@ -352,7 +354,7 @@ func (r *router) DialRoutes(
 					if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
 						return nil, err
 					}
-					nrg, err := r.saveRouteGroupRules(hctx, rules, nsConf, appName, datagram)
+					nrg, err := r.saveRouteGroupRules(hctx, rules, nsConf, appName, role, datagram)
 					if err != nil {
 						// Free the local key route IDs so the next candidate /
 						// attempt can reserve cleanly (mirrors the sequential path).
@@ -599,12 +601,14 @@ func (r *router) DialRoutes(
 
 		appName := ""
 		datagram := false
+		role := ""
 		if opts != nil {
 			appName = opts.AppName
 			datagram = opts.Datagram
+			role = opts.TunnelRole
 		}
 		hsStart := time.Now()
-		nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, appName, datagram)
+		nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, appName, role, datagram)
 		if err != nil {
 			// Remember the ROUTE, not just its intermediates. The per-dial
 			// opts exclusions below die with this DialOptions, so the next
@@ -785,6 +789,18 @@ func (r *router) finishDial(
 	// single 1-hop request would have completed. Observed live as a 32-leg mux on
 	// the pty port (22) that never carried a byte. Keep control channels direct;
 	// this is the port-keyed complement to the --direct / same-LAN no-mux gates.
+	// A STANDBY tunnel is single-leg from BIRTH. The role is seeded onto the
+	// group in saveRouteGroupRules, so this gate — unlike the arbiter's, which
+	// only ever sees an established group — is reached with the label already
+	// in hand: a pooled tunnel never wires SetSelfHeal at the visor width and
+	// never runs establishMuxRoutes, which is where its second leg came from
+	// (rig 2026-09-22, 33 leg_added on 30 standby groups, zero pool_leg_taken).
+	if clamped := nrg.rg.dialMuxTarget(muxTarget); clamped != muxTarget {
+		r.logger.WithField("dst", forwardDesc.DstPK().String()).
+			WithField("tunnel_role", nrg.rg.TunnelRole()).
+			Debug("standby tunnel: single leg whatever the mux width says")
+		muxTarget = clamped
+	}
 	if muxTarget > 1 && isControlPlanePort(rPort) {
 		r.logger.WithField("dst", forwardDesc.DstPK().String()).
 			WithField("port", rPort).
@@ -943,11 +959,13 @@ func (r *router) setupPingRoute(
 
 	appName := ""
 	datagram := false
+	role := ""
 	if opts != nil {
 		appName = opts.AppName
 		datagram = opts.Datagram
+		role = opts.TunnelRole
 	}
-	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, appName, datagram)
+	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, appName, role, datagram)
 	if err != nil {
 		// Clean up saved rules if route group setup fails
 		r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
