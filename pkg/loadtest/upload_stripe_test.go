@@ -1,12 +1,12 @@
-// Package skysocksc — the striped upload path of pkg/skysocks against the real
+// Package loadtest — the striped upload path of pkg/skysocks against the real
 // chunked-upload sink of `loadtest serve`.
 //
 // These are the two halves of the contract meeting: the client cuts a POST into
 // offset-addressed PUTs and the sink absorbs them, hashing the contiguous prefix
-// once. Nothing here stands in for either side — the handler is loadtestUpload
+// once. Nothing here stands in for either side — the handler is serveUpload
 // itself, the proxy is a real skysocks.Client, and the tunnels are real yamux
 // sessions that can be killed under a transfer.
-package skysocksc
+package loadtest
 
 import (
 	"bufio"
@@ -154,7 +154,7 @@ func upServeSocks(st net.Conn, backendAddr string, pace time.Duration) {
 
 // --- the sink ---------------------------------------------------------------
 
-// upSink serves the REAL loadtestUpload handler and counts what it answered, so
+// upSink serves the REAL serveUpload handler and counts what it answered, so
 // a test can assert a 425 was actually exercised rather than assumed.
 type upSink struct {
 	puts     atomic.Int64
@@ -185,7 +185,7 @@ func (s *upSink) handler() http.HandlerFunc {
 		case http.MethodPost:
 			s.posts.Add(1)
 		}
-		loadtestUpload(&upRecorder{ResponseWriter: w, sink: s}, r)
+		serveUpload(&upRecorder{ResponseWriter: w, sink: s}, r)
 	}
 }
 
@@ -284,12 +284,12 @@ func upProxy(t *testing.T, conns []net.Conn) string {
 }
 
 // upResetSink drops the sink's session table between tests: sessions live for
-// loadtestUploadIdle and only four may exist at once, so without this the fifth
+// UploadIdle and only four may exist at once, so without this the fifth
 // test in one process is answered 503 by a sink full of finished uploads.
 func upResetSink() {
-	loadtestUploadMu.Lock()
-	loadtestUploads = map[string]*loadtestUploadSession{}
-	loadtestUploadMu.Unlock()
+	uploadMu.Lock()
+	uploads = map[string]*uploadSession{}
+	uploadMu.Unlock()
 }
 
 func upBlob(n int) ([]byte, string) {
@@ -410,9 +410,9 @@ func TestStripedUploadSurvivesATunnelCut(t *testing.T) {
 // wait and come back rather than fail the upload.
 func TestStripedUploadWaitsOutTheSinksReorderWindow(t *testing.T) {
 	upResetSink()
-	window, sessions := loadtestUploadWindow, loadtestUploadSessions
-	loadtestUploadSessions = 4
-	defer func() { loadtestUploadWindow, loadtestUploadSessions = window, sessions }()
+	window, sessions := UploadWindow, UploadSessions
+	UploadSessions = 4
+	defer func() { UploadWindow, UploadSessions = window, sessions }()
 
 	blob, want := upBlob(12 << 20) // three chunks, at most one admissible at a time
 
@@ -421,9 +421,9 @@ func TestStripedUploadWaitsOutTheSinksReorderWindow(t *testing.T) {
 	// one chunk.
 	tighten := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodHead || r.Method == http.MethodOptions {
-			loadtestUploadWindow = 16 << 20
+			UploadWindow = 16 << 20
 			sink.handler()(w, r)
-			loadtestUploadWindow = 4 << 20
+			UploadWindow = 4 << 20
 			return
 		}
 		sink.handler()(w, r)
