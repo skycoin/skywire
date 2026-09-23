@@ -8,6 +8,29 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 ## Unreleased
 
+-   status.skysocks: streams=N per tunnel; add mux.app_width knob  [#5105](https://github.com/skycoin/skywire/pull/5105)
+-   router: verify in the mux that delivered bytes are what the sender wrote  [#5104](https://github.com/skycoin/skywire/pull/5104)
+-   router,skysocks: register the last bare mux constants as live knobs  [#5103](https://github.com/skycoin/skywire/pull/5103)
+-   hypervisor: stop the UI auto-reloader looping under a subpath mount  [#5102](https://github.com/skycoin/skywire/pull/5102)
+-   router,visor,cli: pool table and mux counters in visor state  [#5101](https://github.com/skycoin/skywire/pull/5101)
+-   router: assert standby pool tunnels stay single-leg in the emu bench  [#5100](https://github.com/skycoin/skywire/pull/5100)
+-   visor: serve Wisp on a virtual-loopback port, and fix the wasm build  [#5099](https://github.com/skycoin/skywire/pull/5099)
+-   ci: run the router emulator and stream bench as their own lane  [#5098](https://github.com/skycoin/skywire/pull/5098)
+-   wisp: run a session over any transport, so it works on js/wasm  [#5097](https://github.com/skycoin/skywire/pull/5097)
+-   router: seed a tunnel's role at group creation, before anything can widen it  [#5096](https://github.com/skycoin/skywire/pull/5096)
+-   cli: serve UDP ASSOCIATE from the wisp client's local proxy  [#5095](https://github.com/skycoin/skywire/pull/5095)
+-   router: keep a tunnel whose role is unknown out of the pool's widening  [#5094](https://github.com/skycoin/skywire/pull/5094)
+-   skysocks: relay UDP over a route, so UDP ASSOCIATE works across an exit  [#5093](https://github.com/skycoin/skywire/pull/5093)
+-   cli: add a Wisp client, so a visor can consume a Wisp backend  [#5090](https://github.com/skycoin/skywire/pull/5090)
+-   router: make a standby tunnel single-leg and lend its chain to a loaded active tunnel  [#5089](https://github.com/skycoin/skywire/pull/5089)
+-   cli: serve the Wisp protocol over skywire  [#5088](https://github.com/skycoin/skywire/pull/5088)
+-   router: order the forward fan-out band by latency instead of round-robin  [#5087](https://github.com/skycoin/skywire/pull/5087)
+-   router: fan the forward direction over its legs when the upload is the heavy one  [#5086](https://github.com/skycoin/skywire/pull/5086)
+-   router: re-home a standby tunnel's route chain as a mux leg  [#5085](https://github.com/skycoin/skywire/pull/5085)
+-   test: run the mux bench cells in process over emulated tunnels  [#5084](https://github.com/skycoin/skywire/pull/5084)
+-   skysocks: give a standby tunnel a capacity prior before it is promoted  [#5083](https://github.com/skycoin/skywire/pull/5083)
+-   router: grow a tunnel's mux legs on its standby tunnels' routes  [#5082](https://github.com/skycoin/skywire/pull/5082)
+
 ## 1.3.95
 
 Develop after v1.3.94. Headlines: **routes through a folded dmsg-server visor work again** — every dmsg client built on the seeded discovery answered a lookup for such a key from its server-only seed and never asked the live discovery, so the route setup nodes failed id reservation for every hop through one of the seven folded servers and opened their circuit breakers (#4923); **a peer that re-dials after a restart keeps its new transport** instead of having it reset by the old connection's close (#4925); **`route settings`** shows and sets the router knobs, transport preference included (#4920); **`visor state --select diag`** carries the transport open/close event ring with close reasons (#4919); **sudph transports are kept alive** and autoconnect tries stcpr and squicr before sudph (#4921); **`proxy start --route`** pins a session to exactly the supplied routes (#4924); **`loadtest serve`** certifies transfers by hash so the mux campaign's rows are verified (#4917). The live route-multiplexing campaign and its intended default policy are in `docs/design/`; measurements land in `bench/`.
