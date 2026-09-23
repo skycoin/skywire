@@ -180,6 +180,15 @@ var (
 	MuxShape = RegisterString("mux.shape", ShapeAuto,
 		"target multiplexing SHAPE of a session (one app, one exit): auto = as many tunnels as the app holds, each at pool.active_width legs; <k>x<n> = k tunnels of n legs (2x2, 4x1, 1x4); a comma list gives each tunnel its own leg count (2,1,1). ADVISORY: reported as shape_target, not yet converged toward",
 		ValidateShape)
+	// MuxShapeHold freezes the CONVERGER without changing the target: while it
+	// is set shapeStep declines every move and the session keeps the shape it
+	// has. It is the router-side mirror of the app's own holds — the visor sets
+	// it for an app whose pool.freeze or tunnel.freeze_active is on
+	// (pkg/visor/api_app_settings.go) — so an operator who froze the app's
+	// tunnel set does not get the router moving it underneath them
+	// (docs/design/mux-shape-axis.md I8).
+	MuxShapeHold = RegisterBool("mux.shape_hold", false,
+		"hold the shape converger still: no compose, decompose, promote or park toward mux.shape while set; the visor sets it for an app whose pool.freeze or tunnel.freeze_active is on")
 	// PoolComposeIdle is what makes the fail-over INSTANT. Packet-level
 	// multiplexing exists for privacy and for surviving a leg cut, not for
 	// throughput — and a second leg that is only taken once the load latches

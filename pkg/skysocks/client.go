@@ -314,6 +314,22 @@ type Client struct {
 	// loop, like settingsApplied.
 	appProxyStatus func() (proxystatus.Snapshot, error)
 	priorsAt       time.Time
+
+	// The SESSION shape the ROUTER publishes, pulled on the same snapshot as
+	// the capacity priors: shapeTunnels is the k an explicit mux.shape asks for
+	// and shapeSource where that target came from. An explicit shape is the
+	// target the active set follows INSTEAD of tunnel.count — the router flips a
+	// standby route group's role, but only this process owns the yamux session
+	// that puts streams on one. Guarded by redialMu, like target.
+	shapeTunnels int
+	shapeSource  string
+
+	// draining is the ACTIVE tunnels the shape wants parked that are carrying
+	// streams right now. The picker passes them over, so they finish what they
+	// hold and are given nothing new, and the next tick parks each one as it
+	// falls idle — the park itself never costs a stream. Guarded by sessionsMu,
+	// like standby.
+	draining map[*yamux.Session]bool
 }
 
 // tunnelNote is one queued mux event on its way to the visor.
@@ -2595,6 +2611,11 @@ func (c *Client) sessionKeepAliveLoop() {
 			c.maybePoolFill()
 		case <-promoteTicker.C:
 			c.maybePromote()
+			// An explicit mux.shape converges on this tick too: the tunnel the
+			// shape wants parked can be carrying streams for minutes, so the
+			// reconcile has to be re-tried and not left to the settings change
+			// that started it. Inert under mux.shape=auto.
+			c.reconcileShape()
 		case <-snubTicker.C:
 			c.evaluateSnubs(time.Now())
 		case <-ticker.C:

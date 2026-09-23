@@ -151,4 +151,11 @@ func (c *Client) pullCapacityPriors(now time.Time) {
 		return
 	}
 	c.applyCapacityPriors(capacityPriorsFrom(snap))
+	// The same snapshot carries the SESSION shape the router is converging
+	// toward. An explicit mux.shape names how many tunnels must carry streams,
+	// which is this process's half of the shape: reconcile the moment it moves
+	// rather than waiting for the next settings change.
+	if c.applyShapeTarget(snap.ShapeTunnels, snap.ShapeSource) {
+		c.reconcileActiveSet("mux.shape target changed")
+	}
 }
