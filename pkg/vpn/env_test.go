@@ -92,3 +92,31 @@ func TestIPFromEnv(t *testing.T) {
 	require.False(t, ok)
 	require.Nil(t, ip)
 }
+
+// The visor writes a count of 0 when dmsg is up but every session is
+// skynet-carried — there is no server the tunnel has to route around. That
+// must start the client, while an absent count (dmsg never wired up) still
+// refuses to.
+func TestDmsgSrvAddrsFromEnv(t *testing.T) {
+	t.Run("absent count is refused", func(t *testing.T) {
+		t.Setenv(DmsgAddrsCountEnvKey, "")
+		_, err := dmsgSrvAddrsFromEnv()
+		require.Error(t, err)
+	})
+
+	t.Run("zero count is no servers", func(t *testing.T) {
+		t.Setenv(DmsgAddrsCountEnvKey, "0")
+		addrs, err := dmsgSrvAddrsFromEnv()
+		require.NoError(t, err)
+		require.Empty(t, addrs)
+	})
+
+	t.Run("each counted server resolves", func(t *testing.T) {
+		t.Setenv(DmsgAddrsCountEnvKey, "1")
+		t.Setenv(DmsgAddrEnvPrefix+"0", "203.0.113.7:8080")
+		addrs, err := dmsgSrvAddrsFromEnv()
+		require.NoError(t, err)
+		require.Len(t, addrs, 1)
+		require.Equal(t, "203.0.113.7", addrs[0].String())
+	})
+}
