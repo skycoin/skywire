@@ -4,6 +4,11 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
 import android.util.Log
 import com.skycoin.skywire.api.VisorApi
 import kotlinx.coroutines.CoroutineScope
@@ -20,19 +25,40 @@ import kotlin.coroutines.coroutineContext
 
 /**
  * What makes one attachment to the network different from another: which
- * network the system routes through, and the addresses we hold on it. A TCP
- * socket survives neither of those changing.
+ * network the system routes through, and the addresses we hold on it. Whether
+ * a difference costs us our sockets is a separate question — see
+ * [Attachment.invalidatedBy], which is where it is answered.
  */
-internal data class Attachment(val networkId: String, val addresses: String) {
+internal data class Attachment(val networkId: String, val addresses: Set<String>) {
     override fun toString(): String =
-        if (addresses.isEmpty()) networkId else "$networkId[$addresses]"
+        if (addresses.isEmpty()) networkId else "$networkId[${addresses.sorted().joinToString(",")}]"
+
+    /**
+     * Whether moving from this attachment to [next] invalidates the sockets
+     * the core is holding.
+     *
+     * A different network plainly does. So does an address of ours going
+     * away: anything bound to it is dead. An address ARRIVING does not —
+     * existing connections keep the four-tuple they were opened with, and
+     * the kernel does not rebind them — and separating that case out is why
+     * this exists. The whole set used to be compared, so a phone that merely
+     * GAINED an address re-dialled every dmsg session for nothing, and
+     * everything riding them went too, a call in progress included.
+     *
+     * Phones gain addresses routinely: IPv6 privacy extensions mint a fresh
+     * temporary address while the old one is still assigned and retire it
+     * only later, and a new router advertisement can add a prefix. Each of
+     * those was a false alarm that cost a call.
+     */
+    fun invalidatedBy(next: Attachment): Boolean =
+        networkId != next.networkId || addresses.any { it !in next.addresses }
 
     companion object {
         /**
-         * Routable addresses only, in a stable order. Link-local is
-         * per-interface and constant across the moves that matter, and no
-         * dmsg session is bound to one; ordering is the framework's, not a
-         * fact about the network.
+         * Routable addresses only. Link-local is per-interface and constant
+         * across the moves that matter, and no dmsg session is bound to one.
+         * A set, because the framework's ordering is not a fact about the
+         * network.
          */
         fun of(networkId: String, addresses: List<InetAddress>): Attachment =
             Attachment(
@@ -40,8 +66,7 @@ internal data class Attachment(val networkId: String, val addresses: String) {
                 addresses = addresses
                     .filterNot { it.isLinkLocalAddress || it.isLoopbackAddress || it.isAnyLocalAddress }
                     .mapNotNull { it.hostAddress }
-                    .sorted()
-                    .joinToString(","),
+                    .toSet(),
             )
     }
 }
@@ -49,11 +74,12 @@ internal data class Attachment(val networkId: String, val addresses: String) {
 /**
  * Decides which network events are worth a re-dial.
  *
- * Deliberately narrow: the default network's identity, or the addresses on
- * it. Not its capabilities, not signal strength, not metered-ness — none of
- * those invalidate a socket, and re-dialling on them would churn sessions for
- * nothing. The network the visor started on is the baseline and is never
- * itself a move.
+ * Deliberately narrow: the default network's identity, or an address of ours
+ * going away. Not its capabilities, not signal strength, not metered-ness,
+ * and not an address merely being ADDED — none of those invalidate a socket,
+ * and re-dialling on them would churn sessions for nothing, which on a phone
+ * means dropping whatever was riding them. The network the visor started on
+ * is the baseline and is never itself a move. See [Attachment.invalidatedBy].
  *
  * Not synchronized: the framework serializes `NetworkCallback` delivery, and
  * this is only ever driven from there.
@@ -69,9 +95,19 @@ internal class NetworkMoves {
     /**
      * Records where we are now. Returns true when that is a move — i.e. the
      * sockets the core holds are no longer on the network it holds them on.
+     *
+     * [vpn]: [next] is a VPN — in practice SkyVPN's own tun. That is neither a
+     * move nor a new place to be. The core is excluded from the tunnel
+     * (SkyVpnService's addDisallowedApplication), so its sockets are still on
+     * the network underneath, exactly where they were. Calling it a move
+     * dropped every dmsg session the moment SkyVPN came up, the session
+     * carrying the tunnel's own transport among them, and the VPN tore itself
+     * down within two seconds of connecting.
      */
-    fun observe(next: Attachment): Boolean {
-        if (next == current) return false
+    fun observe(next: Attachment, vpn: Boolean = false): Boolean {
+        if (vpn) return false
+        val was = current
+        if (next == was) return false
         current = next
         if (!baselineTaken) {
             // The network the visor came up on. Its sockets are the ones it
@@ -79,7 +115,9 @@ internal class NetworkMoves {
             baselineTaken = true
             return false
         }
-        return true
+        // Nothing current means the default had gone away entirely (see
+        // [lost]); coming back is a move however long the gap was.
+        return was == null || was.invalidatedBy(next)
     }
 
     /**
@@ -157,14 +195,19 @@ internal class NetworkWatcher(context: Context) {
                     network.toString(),
                     props?.linkAddresses.orEmpty().map { it.address },
                 )
-                if (!state.observe(next)) {
+                val vpn = cm.getNetworkCapabilities(network)
+                    ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+                if (vpn) {
+                    Log.d(TAG, "default is a VPN, not a move: $next")
+                }
+                if (!state.observe(next, vpn)) {
                     // The first attachment is worth a line of its own: it is
                     // the one every later "moved" line is read against, and
                     // without it a log that never says "moved" is ambiguous
                     // between "nothing moved" and "this never started".
                     // Repeats of an attachment we already hold are not — the
                     // framework re-reports freely and they would be noise.
-                    if (was == null) Log.i(TAG, "network baseline: $next")
+                    if (was == null && !vpn) Log.i(TAG, "network baseline: $next")
                     return
                 }
                 Log.i(TAG, "network moved: $was -> $next")
@@ -172,13 +215,34 @@ internal class NetworkWatcher(context: Context) {
             }
         }
 
+        // What to follow is the network under any VPN, because that is where
+        // the core's sockets are. With SkyVPN up the app's DEFAULT network is
+        // the VPN, and it stays the VPN across a Wi-Fi/cellular switch, so
+        // following the default would see nothing move while everything under
+        // it did. From API 31 the framework will track the best non-VPN
+        // network directly. Before that there is only the default: VPN
+        // networks are skipped (see [NetworkMoves.observe]), and a move made
+        // while SkyVPN is up waits for the core's own keepalives, as it did
+        // before this class existed.
+        var callbacks: HandlerThread? = null
         try {
-            cm.registerDefaultNetworkCallback(callback)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val underVpn = NetworkRequest.Builder()
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                    .build()
+                val thread = HandlerThread(TAG).apply { start() }
+                callbacks = thread
+                cm.registerBestMatchingNetworkCallback(underVpn, callback, Handler(thread.looper))
+            } else {
+                cm.registerDefaultNetworkCallback(callback)
+            }
         } catch (e: SecurityException) {
             // ACCESS_NETWORK_STATE is in the manifest, but a hardened ROM can
             // still refuse. The visor's own keepalives remain the fallback —
             // slower, not absent.
             Log.w(TAG, "cannot watch the default network: ${e.message}")
+            callbacks?.quitSafely()
             return@launch
         }
 
@@ -196,6 +260,7 @@ internal class NetworkWatcher(context: Context) {
             // even when the scope is already cancelled.
             withContext(NonCancellable) {
                 runCatching { cm.unregisterNetworkCallback(callback) }
+                callbacks?.quitSafely()
             }
         }
     }

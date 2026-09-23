@@ -7,9 +7,9 @@ plugins {
 
 // Version comes from the release tag when there is one, and from the
 // fallbacks below otherwise, so a local `./gradlew assembleDebug` needs no
-// arguments. The release workflow derives both from the `vX.Y.Z` tag (the same
-// tag that cuts every other release artifact) — see the `android` job in
-// .github/workflows/release.yml.
+// arguments. The Android release workflow derives both from the
+// `mobile-vX.Y.Z` tag through `make android-apk` — see
+// .github/workflows/android-release.yml.
 val appVersionName = (project.findProperty("skywireVersionName") as String?) ?: "0.1.0"
 val appVersionCode = (project.findProperty("skywireVersionCode") as String?)?.toInt() ?: 1
 
@@ -50,8 +50,15 @@ android {
 
     buildTypes {
         release {
-            // Minification/shrinking is deferred to release hardening.
-            isMinifyEnabled = false
+            // R8 is half of the download: unshrunk, every Compose, icons-extended,
+            // OkHttp and BouncyCastle class ships — 24 MB of dex against 2.4 MB
+            // shrunk. Class names stay readable (proguard-rules.pro says how);
+            // the win is the unused code removed, not the renaming. R8 breaks at
+            // RUNTIME when something is only reached by reflection, which is why
+            // android-app.yml assembles this build type on every PR and why keep
+            // rules for anything that turns up go in proguard-rules.pro.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // findByName, not getByName: null is the valid "unsigned" state.
             signingConfig = signingConfigs.findByName("release")
@@ -87,6 +94,14 @@ android {
             // the APK" packaging leaves nativeLibraryDir empty and exec would fail.
             // This is why the installed-size estimate exceeds the APK download size.
             useLegacyPackaging = true
+        }
+        // BouncyCastle's post-quantum data tables (1.2 MB compressed). R8 drops
+        // the pqc classes as unreached, but Java resources are not code and
+        // ship regardless. The wallet uses only the lightweight secp256k1,
+        // RFC 6979 and digest API (org.bouncycastle.crypto.* / math.ec.*) —
+        // nothing under org.bouncycastle.pqc — so nothing can ask for them.
+        resources {
+            excludes += "org/bouncycastle/pqc/**"
         }
     }
 }

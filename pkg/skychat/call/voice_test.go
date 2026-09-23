@@ -415,3 +415,128 @@ func TestCallAudioTap(t *testing.T) {
 		t.Fatal("tapped sent audio is all silence")
 	}
 }
+
+// TestCallerHangupStopsTheRing: a caller who hangs up mid-ring stops the ring
+// THEN, not when the ring timeout runs out.
+//
+// This is the bug it exists for: the callee had no reader on the signaling
+// conn until it answered, so a cancel — which arrives on that conn — went
+// unseen and the callee kept ringing for whatever was left of the 45s, the
+// twenty-to-thirty seconds of ringtone reported after a caller hung up.
+func TestCallerHangupStopsTheRing(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	pkA, _ := cipher.GenerateKeyPair()
+	pkB, _ := cipher.GenerateKeyPair()
+
+	lis := newMemListener()
+	defer lis.Close() //nolint:errcheck
+
+	rang := make(chan Sig, 1)
+	mgrB := NewManager(Config{
+		LocalPK:      pkB,
+		Dial:         func(context.Context, cipher.PubKey, uint16) (net.Conn, error) { return nil, io.EOF },
+		ManualAnswer: true,
+		Ring:         func(inv Sig) { rang <- inv },
+	})
+	go mgrB.Serve(ctx, lis)
+
+	mgrA := NewManager(Config{
+		LocalPK: pkA,
+		Dial:    func(context.Context, cipher.PubKey, uint16) (net.Conn, error) { return lis.dial() },
+	})
+
+	callID := mgrA.Dial(pkB, RingTimeout+10*time.Second)
+	select {
+	case <-rang:
+	case <-time.After(2 * time.Second):
+		t.Fatal("call never rang")
+	}
+	if err := mgrA.Hangup(callID); err != nil {
+		t.Fatalf("Hangup while ringing: %v", err)
+	}
+
+	// Well inside the ring timeout — the point is that it does NOT wait for it.
+	deadline := time.After(3 * time.Second)
+	for {
+		if len(mgrB.Incoming()) == 0 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("callee still ringing after the caller hung up")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if got := mgrB.Active(); len(got) != 0 {
+		t.Fatalf("a hung-up call connected anyway: %v", got)
+	}
+}
+
+// TestManualAnswerDeliversAudio answers a RINGING call and asserts audio still
+// arrives — the ring watch reads the signaling conn that becomes the media
+// conn, so the bytes it took while watching have to reach the session intact.
+// Lose the handover and the first RTP frame is eaten and every later one is
+// mis-framed, which is a call that connects and is silent.
+func TestManualAnswerDeliversAudio(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	pkA, _ := cipher.GenerateKeyPair()
+	pkB, _ := cipher.GenerateKeyPair()
+
+	lis := newMemListener()
+	defer lis.Close() //nolint:errcheck
+
+	sink := &captureSink{}
+	rang := make(chan Sig, 1)
+	mgrB := NewManager(Config{
+		LocalPK:      pkB,
+		Dial:         func(context.Context, cipher.PubKey, uint16) (net.Conn, error) { return nil, io.EOF },
+		ManualAnswer: true,
+		Ring:         func(inv Sig) { rang <- inv },
+		NewSink:      func() Sink { return sink },
+	})
+	go mgrB.Serve(ctx, lis)
+
+	mgrA := NewManager(Config{
+		LocalPK:   pkA,
+		Dial:      func(context.Context, cipher.PubKey, uint16) (net.Conn, error) { return lis.dial() },
+		NewSource: func() Source { return &toneSource{} },
+	})
+	mgrA.Dial(pkB, RingTimeout+10*time.Second)
+
+	var inv Sig
+	select {
+	case inv = <-rang:
+	case <-time.After(2 * time.Second):
+		t.Fatal("call never rang")
+	}
+	if err := mgrB.Answer(inv.CallID); err != nil {
+		t.Fatalf("Answer: %v", err)
+	}
+
+	deadline := time.After(3 * time.Second)
+	for sink.count() < 5 {
+		select {
+		case <-deadline:
+			t.Fatalf("only %d frames received after answering a ringing call", sink.count())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	sink.mu.Lock()
+	f := sink.frames[len(sink.frames)-1]
+	sink.mu.Unlock()
+	if len(f) != frameSamples {
+		t.Fatalf("frame size %d != %d — the media stream is mis-framed", len(f), frameSamples)
+	}
+	nonzero := false
+	for _, s := range f {
+		if s != 0 {
+			nonzero = true
+			break
+		}
+	}
+	if !nonzero {
+		t.Fatal("received frame is all-zero; tone did not round-trip through the ring watch")
+	}
+}

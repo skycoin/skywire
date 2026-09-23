@@ -809,9 +809,17 @@ func TestPromoter_AuditionsTheOldestMeasuredStandbysFirst(t *testing.T) {
 	t.Cleanup(func() { skysettings.Reset() })
 	// The never-measured tunnel pings WORST, so an RTT-ordered pick would put
 	// it last of the four; the two measured recently ping best.
+	//
+	// Every measured age is past the goodput freshness window, so all four are
+	// unproven and only the ordering decides. The ages used to be 1 and 2
+	// minutes against a 2-minute window: "recent" was then proven outright, and
+	// "older" sat exactly on the boundary — stale only by the nanoseconds
+	// between this fixture and maybePromote. Windows' coarse clock made those
+	// nanoseconds zero, "older" counted as proven, and two were armed, not three.
+	fresh := setTunnelGoodputFresh()
 	c, sb := auditionClient(t,
 		[]float64{99, 40, 45, 90},
-		[]time.Duration{0, time.Minute, 2 * time.Minute, 10 * time.Minute})
+		[]time.Duration{0, fresh + time.Minute, fresh + 2*time.Minute, fresh + 10*time.Minute})
 	never, recent, older, oldest := sb[0], sb[1], sb[2], sb[3]
 
 	c.maybePromote()
