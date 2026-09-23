@@ -48,13 +48,16 @@ func initPairing(_ context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
+	// js/wasm has no on-disk CXDS; run each pair's CXO tree in memory there.
+	cxoDir, cxoInMem := cxoPubStorage(filepath.Join(dataDir, "cxo"))
 	mgr, err := pairing.NewManager(pairing.ManagerConfig{
-		Store:   store,
-		DmsgC:   v.dmsgC,
-		MyPK:    v.conf.PK,
-		MySK:    v.conf.SK,
-		DataDir: filepath.Join(dataDir, "cxo"),
-		Logger:  log,
+		Store:      store,
+		DmsgC:      v.dmsgC,
+		MyPK:       v.conf.PK,
+		MySK:       v.conf.SK,
+		DataDir:    cxoDir,
+		InMemoryDB: cxoInMem,
+		Logger:     log,
 	})
 	if err != nil {
 		_ = store.Close() //nolint:errcheck
