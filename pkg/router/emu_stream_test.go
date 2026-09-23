@@ -645,8 +645,32 @@ func TestStreamBench(t *testing.T) {
 	// leg, and an ACTIVE tunnel must hold no more than the cell's configured
 	// width — whatever establishMuxRoutes, self-heal or the arbiter did in
 	// between must never have widened a pool tunnel.
+	// assertIntegrity is the bench's INTEGRITY gate, checked cell by cell against
+	// the counters as they stood after the previous cell (they are process-wide
+	// and cumulative). delivery_crc_failures moving means the mux handed the app
+	// bytes that are not what the sender wrote, in that order — the #4005 class of
+	// defect the external object hash used to be the only witness to.
+	// aead_failures moving means a frame failed its per-frame AEAD. Both must stay
+	// flat on every emulated cell, however lossy the legs are: loss and reordering
+	// are recovered by SACK/FEC/reorder, never by delivering wrong bytes.
+	integrityBase := router.MuxCountersSnapshot()
+	assertIntegrity := func(t *testing.T) {
+		t.Helper()
+		got := router.MuxCountersSnapshot()
+		if d := got.DeliveryCRCFailures - integrityBase.DeliveryCRCFailures; d != 0 {
+			t.Errorf("delivery_crc_failures advanced by %d: the mux delivered corrupted or misordered bytes", d)
+		}
+		if d := got.AEADFailures - integrityBase.AEADFailures; d != 0 {
+			t.Errorf("aead_failures advanced by %d: a mux frame failed its per-frame AEAD", d)
+		}
+		integrityBase = got
+	}
+
 	assertLegDiscipline := func(t *testing.T, legsPer int, active, pool []*tunnel) {
 		t.Helper()
+		// Every cell ends in assertLegDiscipline, so the integrity gate rides along
+		// here rather than being repeated at each call site.
+		assertIntegrity(t)
 		for _, tn := range active {
 			if n := tn.rig.AliveLegs(); n > legsPer {
 				t.Errorf("%s: role=%q legs=%d exceeds the cell's configured width %d", tn.name, tn.rig.Role(), n, legsPer)

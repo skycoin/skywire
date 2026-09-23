@@ -342,6 +342,17 @@ type routeMux struct {
 	// ErrRehomeUnsupported and the caller dials a pool-sourced leg instead.
 	legRehomeEnabled bool
 
+	// deliveryCRC is true when both peers advertised CapDeliveryCRC (and our own
+	// mux.delivery_crc knob is on). When set, wrapPayload stamps every data frame
+	// with a CRC32C over (seq ‖ payload) and deliverData verifies + strips it on
+	// the in-order delivery path. See delivery_crc.go for the framing.
+	// groupPort/crcWarnOnce only serve the mismatch log: the group's local port
+	// identifies it, and the warning is emitted once per group so a corrupting
+	// leg cannot flood the log (every mismatch is still counted).
+	deliveryCRC bool
+	groupPort   routing.Port
+	crcWarnOnce sync.Once
+
 	// Unidirectional per-leg send selection (CapUniDir, see unidir.go). When
 	// directional is set (both peers advertised CapUniDir), each end restricts its
 	// OWN send to legs matching its direction: the initiator uploads on the DIRECT
@@ -1549,6 +1560,9 @@ func (m *routeMux) frameOverhead() int {
 	if m.seal != nil {
 		overhead += perFrameSealOverhead
 	}
+	if m.deliveryCRC {
+		overhead += routing.DeliveryCRCSize
+	}
 	return overhead
 }
 
@@ -1567,6 +1581,13 @@ func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte, tpID uuid.U
 		return nil, 0, routing.ErrPayloadTooBig
 	}
 	seq := atomic.AddUint32(&m.writeSeq, 1) - 1
+	// Delivery check: stamp the CRC32C of (seq ‖ payload) BEFORE the seal, so the
+	// trailer rides inside the ciphertext and a retransmit or FEC reconstruction
+	// of this seq reproduces identical bytes. The receiver verifies it when this
+	// frame is DELIVERED in order (see deliverData / delivery_crc.go).
+	if m.deliveryCRC {
+		data = stampDeliveryCRC(seq, data)
+	}
 	// Per-frame AEAD: seal the app payload under seq as the nonce. The sealed
 	// bytes are what go on the wire AND into the retx buffer, so a SACK
 	// retransmit resends the identical sealed frame (same seq ⇒ same nonce ⇒
@@ -1620,6 +1641,11 @@ func (m *routeMux) deliverData(leg int, seq uint32, data []byte) (delivered [][]
 	if m.open != nil {
 		pt, err := m.open(seq, data)
 		if err != nil {
+			// Count the AEAD failure router-wide. DatagramRouteGroup has had its
+			// own tally since per-frame noise landed; this is the same event on
+			// the STREAM route group path, so `visor state --select mux` reports
+			// per-frame authentication failures for every kind of group.
+			noteAEADFailure()
 			if m.logger != nil {
 				m.logger.WithError(err).Tracef("per-frame open failed for seq %d; dropping", seq)
 			}
@@ -1654,6 +1680,11 @@ func (m *routeMux) deliverData(leg int, seq uint32, data []byte) (delivered [][]
 	// purged it from the retransmit buffer, and the no-skip frontier then wedged
 	// forever on a sequence nobody could resend. A dropped seq stays unrecorded,
 	// so the SACK reports it missing and the sender retransmits it.
+	// The reorder buffer only ever releases a CONTIGUOUS run from its frontier,
+	// so the first frame it delivers below carries the frontier sequence read
+	// here and frame i carries startSeq+i — the binding the delivery CRC checks.
+	startSeq := m.reorderBuf.NextSeq()
+
 	var dropped bool
 	delivered, dropped = m.reorderBuf.InsertOrDrop(seq, data)
 	if dropped {
@@ -1688,7 +1719,40 @@ func (m *routeMux) deliverData(leg int, seq uint32, data []byte) (delivered [][]
 		}
 	}
 
+	// Delivery check, LAST: everything above may still add to the in-order run,
+	// and the point of this check is the bytes that actually reach the app.
+	if m.deliveryCRC && len(delivered) > 0 {
+		delivered = m.verifyDelivered(startSeq, delivered)
+	}
+
 	return delivered, gapDetected
+}
+
+// verifyDelivered checks and strips the delivery CRC of an in-order run whose
+// first frame carries startSeq, returning only the frames that matched. A
+// mismatched frame is DROPPED — corrupted or misordered bytes are never handed
+// to the app — counted router-wide, and logged once per group at warn.
+//
+// The run is filtered in place: out only ever trails the read index.
+func (m *routeMux) verifyDelivered(startSeq uint32, delivered [][]byte) [][]byte {
+	out := delivered[:0]
+	for i, frame := range delivered {
+		seq := startSeq + uint32(i)
+		payload, ok := checkDeliveryCRC(seq, frame)
+		if !ok {
+			noteDeliveryCRCFailure()
+			port := m.groupPort
+			m.crcWarnOnce.Do(func() {
+				if m.logger != nil {
+					m.logger.Warnf("delivery CRC mismatch on group port %d at seq %d: dropping the frame "+
+						"(further mismatches on this group are counted, not logged)", port, seq)
+				}
+			})
+			continue
+		}
+		out = append(out, payload)
+	}
+	return out
 }
 
 // gapAge exposes the reorder buffer's current frontier-gap age (0 if the stream

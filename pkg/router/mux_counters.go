@@ -31,6 +31,18 @@ type MuxCounters struct {
 	// (MuxEventForwardFanout) or off (MuxEventForwardConfined).
 	ForwardFanoutEngaged  uint64 `json:"forward_fanout_engaged"`
 	ForwardFanoutReleased uint64 `json:"forward_fanout_released"`
+	// AEADFailures counts per-frame AEAD (CapPerFrameNoise) open failures
+	// across ALL route groups — the stream RouteGroup's mux path and the
+	// datagram group's, which also keeps its own per-group tally. A nonzero
+	// value is tampering, a stale duplicate after a rekey, or wire corruption
+	// the transport did not catch; the frame is always dropped, never delivered.
+	AEADFailures uint64 `json:"aead_failures"`
+	// DeliveryCRCFailures counts frames dropped at DELIVERY because their
+	// CapDeliveryCRC trailer did not match the CRC32C of (seq ‖ payload) — see
+	// delivery_crc.go. Unlike AEADFailures this one is the reassembly check: it
+	// catches a reorder/flush defect that would otherwise only surface as an
+	// application hash failure. It must be 0 on a healthy mux.
+	DeliveryCRCFailures uint64 `json:"delivery_crc_failures"`
 }
 
 // muxGlobalCounters holds the live atomics backing MuxCounters.
@@ -42,7 +54,18 @@ type muxGlobalCounters struct {
 	legRehomesFailed      atomic.Uint64
 	forwardFanoutEngaged  atomic.Uint64
 	forwardFanoutReleased atomic.Uint64
+	aeadFailures          atomic.Uint64
+	deliveryCRCFailures   atomic.Uint64
 }
+
+// noteAEADFailure records one per-frame AEAD open failure, on any kind of route
+// group. Called from the drop path itself, so the count and the drop cannot
+// disagree.
+func noteAEADFailure() { globalMuxCounters.aeadFailures.Add(1) }
+
+// noteDeliveryCRCFailure records one frame dropped at delivery for a CRC
+// mismatch (see routeMux.verifyDelivered).
+func noteDeliveryCRCFailure() { globalMuxCounters.deliveryCRCFailures.Add(1) }
 
 // globalMuxCounters is process-wide: the events it tallies (tunnel
 // promotion, leg re-home, forward fan-out) are router-wide phenomena, not
@@ -59,8 +82,15 @@ func (c *muxGlobalCounters) snapshot() MuxCounters {
 		LegRehomesFailed:      c.legRehomesFailed.Load(),
 		ForwardFanoutEngaged:  c.forwardFanoutEngaged.Load(),
 		ForwardFanoutReleased: c.forwardFanoutReleased.Load(),
+		AEADFailures:          c.aeadFailures.Load(),
+		DeliveryCRCFailures:   c.deliveryCRCFailures.Load(),
 	}
 }
+
+// MuxCountersSnapshot reads the process-wide mux counters without a router
+// instance. The counters are global (see globalMuxCounters), and the emulator
+// bench asserts the integrity ones cell by cell.
+func MuxCountersSnapshot() MuxCounters { return globalMuxCounters.snapshot() }
 
 // MuxCounters implements Router.
 func (r *router) MuxCounters() MuxCounters {

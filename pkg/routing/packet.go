@@ -280,11 +280,27 @@ const (
 	// just changes owner. A peer without the bit never receives a LegRehomePacket
 	// and the caller falls back to dialing a pool-sourced leg.
 	CapLegRehome uint16 = 1 << 8
+	// CapDeliveryCRC: the peer supports the in-mux DELIVERY check. When BOTH
+	// edges advertise it (and CapMux, which it requires), every sequenced DATA
+	// frame's payload becomes app_payload ‖ crc32c(seq_be ‖ app_payload) —
+	// DeliveryCRCSize extra bytes, stamped before the per-frame AEAD seal so a
+	// retransmit or an FEC reconstruction reproduces identical bytes. The
+	// receiver verifies and strips the trailing 4 bytes at DELIVERY time (after
+	// reordering, on the in-order path), so a reorder/flush defect that hands
+	// the app the right bytes in the wrong order is caught in the router instead
+	// of surfacing as an application hash failure. Per-frame AEAD already covers
+	// wire corruption of ONE frame; this covers the reassembled run. A peer
+	// without the bit is never stamped and never strips.
+	CapDeliveryCRC uint16 = 1 << 9
 )
 
 // SeqSize is the byte size of the sequence number prepended to DataPacket
 // payloads when mux mode is active.
 const SeqSize = 4
+
+// DeliveryCRCSize is the byte size of the CRC32C (Castagnoli) trailer appended
+// to a sequenced DATA frame's payload when CapDeliveryCRC is negotiated.
+const DeliveryCRCSize = 4
 
 // SACKMaxWords bounds the SACK bitmap to the mux reorder window: each word
 // acknowledges 64 sequences, so 32 words cover 2048 outstanding sequences —

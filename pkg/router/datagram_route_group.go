@@ -359,6 +359,9 @@ func (dg *DatagramRouteGroup) Handle(packet routing.Packet) error {
 		pt, err := cipher.Open(uint32(packet.RouteID()), packet.Payload())
 		if err != nil {
 			dg.aeadAuthFailures.Add(1)
+			// Also tally it router-wide, so MuxCounters.aead_failures covers every
+			// kind of route group rather than only this one's local counter.
+			noteAEADFailure()
 			return nil // drop silently
 		}
 		cp = pt

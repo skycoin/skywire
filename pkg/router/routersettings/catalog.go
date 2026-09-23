@@ -257,4 +257,5 @@ var (
 	MuxPerFrameNoise = RegisterBool("mux.per_frame_noise", true, "advertise CapPerFrameNoise (the inverse multiplexer's per-frame AEAD) on NEW route groups")
 	MuxSACK          = RegisterBool("mux.sack", true, "advertise CapSACK (selective-acknowledgement retransmit) on NEW route groups")
 	MuxHOLRetx       = RegisterBool("mux.hol_retx", true, "advertise CapHOLRetx (proactive head-of-line retransmit) on NEW route groups")
+	MuxDeliveryCRC   = RegisterBool("mux.delivery_crc", true, "stamp each mux data frame with a CRC32C over (sequence ‖ payload), verified at delivery; advertises CapDeliveryCRC on NEW route groups")
 )
