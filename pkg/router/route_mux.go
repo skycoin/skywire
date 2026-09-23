@@ -800,6 +800,14 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 // are rescued on a fast path. Falls back to the first ready leg when no leg has
 // a latency measurement yet.
 func (m *routeMux) selectFastestTransport(tps []*transport.ManagedTransport, fwd []routing.Rule) (*transport.ManagedTransport, routing.Rule, int, error) {
+	return m.selectFastestTransportExcept(tps, fwd, uuid.Nil)
+}
+
+// selectFastestTransportExcept is selectFastestTransport with one transport
+// taken out of the running (uuid.Nil excludes nothing). The exclusion is a
+// skip inside the same loop rather than a filtered slice, because legReadyAt
+// is indexed by leg position and a shorter slice would read the wrong legs.
+func (m *routeMux) selectFastestTransportExcept(tps []*transport.ManagedTransport, fwd []routing.Rule, except uuid.UUID) (*transport.ManagedTransport, routing.Rule, int, error) {
 	if len(tps) == 0 {
 		return nil, nil, -1, ErrNoTransports
 	}
@@ -810,6 +818,9 @@ func (m *routeMux) selectFastestTransport(tps []*transport.ManagedTransport, fwd
 	bestLat := -1.0
 	for idx, tp := range tps {
 		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
+			continue
+		}
+		if except != uuid.Nil && tp.Entry.ID == except {
 			continue
 		}
 		if firstReady < 0 {
@@ -2206,6 +2217,15 @@ func (m *routeMux) heldRetxSeqsOnTps(tpIDs []uuid.UUID) []uint32 {
 		}
 	}
 	return m.retxBuf.HeldSeqsOnTps(set)
+}
+
+// retxTpOf is the transport a held sequence was last sent on, or uuid.Nil.
+func (m *routeMux) retxTpOf(seq uint32) uuid.UUID {
+	if m.retxBuf == nil {
+		return uuid.Nil
+	}
+	id, _ := m.retxBuf.TpIDOf(seq)
+	return id
 }
 
 // retxSetTp re-tags a held sequence's last-send transport after a retransmit
