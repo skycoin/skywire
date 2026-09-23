@@ -1,0 +1,400 @@
+[2026-09-22T20:16:35-05:00] DEBUG [tp:0285553257c555e3a543b0717771790053276bd490c7c72baa9311f12d1f6b78bb]: Serving. remote_pk=0285553257c555e3a543b0717771790053276bd490c7c72baa9311f12d1f6b78bb tp_id=66f4c0d5-f418-0166-83f0-0ea86bce6618 tp_index=1366
+[2026-09-22T20:16:35-05:00] DEBUG [transport_manager]: recv transport request: type(squicr) remote(0385c0ed0b72ae997966300ebd01dd5edc36981feacd159670a11d2cc48c13fa34)
+[2026-09-22T20:16:35-05:00] DEBUG [tp:0285553257c555e3a543b0717771790053276bd490c7c72baa9311f12d1f6b78bb]: Setting underlying transport...
+[2026-09-22T20:16:35-05:00] DEBUG [tp:0285553257c555e3a543b0717771790053276bd490c7c72baa9311f12d1f6b78bb]: Sent signal to 'mt.transportCh'.
+[2026-09-22T20:16:35-05:00] DEBUG [transport_manager]: accepted tp: type(stcpr) remote(0285553257c555e3a543b0717771790053276bd490c7c72baa9311f12d1f6b78bb) tpID(66f4c0d5-f418-0166-83f0-0ea86bce6618) new(true)
+[2026-09-22T20:16:35-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-22T20:16:35-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T20:16:35-05:00] DEBUG [tp:0385c0ed0b72ae997966300ebd01dd5edc36981feacd159670a11d2cc48c13fa34]: no prior transport log entry; starting fresh transport=32efe575-4b52-02d3-8cd9-f0df1ec8c1c2
+[2026-09-22T20:16:35-05:00] DEBUG [tp:0385c0ed0b72ae997966300ebd01dd5edc36981feacd159670a11d2cc48c13fa34]: Performing settlement handshake...
+[2026-09-22T20:16:35-05:00] DEBUG [tp:0385c0ed0b72ae997966300ebd01dd5edc36981feacd159670a11d2cc48c13fa34]: Serving. remote_pk=0385c0ed0b72ae997966300ebd01dd5edc36981feacd159670a11d2cc48c13fa34 tp_id=32efe575-4b52-02d3-8cd9-f0df1ec8c1c2 tp_index=1367
+[2026-09-22T20:16:35-05:00] DEBUG [tp:0385c0ed0b72ae997966300ebd01dd5edc36981feacd159670a11d2cc48c13fa34]: Setting underlying transport...
+[2026-09-22T20:16:35-05:00] DEBUG [tp:0385c0ed0b72ae997966300ebd01dd5edc36981feacd159670a11d2cc48c13fa34]: Sent signal to 'mt.transportCh'.
+[2026-09-22T20:16:35-05:00] DEBUG [transport_manager]: accepted tp: type(squicr) remote(0385c0ed0b72ae997966300ebd01dd5edc36981feacd159670a11d2cc48c13fa34) tpID(32efe575-4b52-02d3-8cd9-f0df1ec8c1c2) new(true)
+[2026-09-22T20:16:35-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02d631d18d624da692ed2f1eb144755f57ec833ad8c0a00670dacdffe9e13a8ace took=1m40.71986203s yamux_id=269
+[2026-09-22T20:16:36-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02d631d18d624da692ed2f1eb144755f57ec833ad8c0a00670dacdffe9e13a8ace took=187.001963ms yamux_id=295
+[2026-09-22T20:16:36-05:00] DEBUG [transport_manager]: Deregistering 2 transports via CXO transport-list snapshot
+[2026-09-22T20:16:36-05:00] DEBUG [stcpr]: Accepted connection from 158.247.204.16:42842
+[2026-09-22T20:16:36-05:00] DEBUG [stcpr]: Detected external STCPR connection from 158.247.204.16
+[2026-09-22T20:16:37-05:00] DEBUG [stcpr]: Sent handshake to 158.247.204.16:42842, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 0368aaf97dc56c89dd81913507d278362631db651ada1aa8181b2cbf4ca3e7afe5:49174
+[2026-09-22T20:16:37-05:00] DEBUG [transport_manager]: recv transport request: type(stcpr) remote(0368aaf97dc56c89dd81913507d278362631db651ada1aa8181b2cbf4ca3e7afe5)
+[2026-09-22T20:16:37-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T20:16:37-05:00] DEBUG [tp:0368aaf97dc56c89dd81913507d278362631db651ada1aa8181b2cbf4ca3e7afe5]: no prior transport log entry; starting fresh transport=96a6745f-7f94-0cf7-b5fe-dcf02dd5664b
+[2026-09-22T20:16:37-05:00] DEBUG [tp:0368aaf97dc56c89dd81913507d278362631db651ada1aa8181b2cbf4ca3e7afe5]: Performing settlement handshake...
+[2026-09-22T20:16:37-05:00] DEBUG [tp:0368aaf97dc56c89dd81913507d278362631db651ada1aa8181b2cbf4ca3e7afe5]: Serving. remote_pk=0368aaf97dc56c89dd81913507d278362631db651ada1aa8181b2cbf4ca3e7afe5 tp_id=96a6745f-7f94-0cf7-b5fe-dcf02dd5664b tp_index=1368
+[2026-09-22T20:16:37-05:00] DEBUG [tp:0368aaf97dc56c89dd81913507d278362631db651ada1aa8181b2cbf4ca3e7afe5]: Setting underlying transport...
+[2026-09-22T20:16:37-05:00] DEBUG [tp:0368aaf97dc56c89dd81913507d278362631db651ada1aa8181b2cbf4ca3e7afe5]: Sent signal to 'mt.transportCh'.
+[2026-09-22T20:16:37-05:00] DEBUG [transport_manager]: accepted tp: type(stcpr) remote(0368aaf97dc56c89dd81913507d278362631db651ada1aa8181b2cbf4ca3e7afe5) tpID(96a6745f-7f94-0cf7-b5fe-dcf02dd5664b) new(true)
+[2026-09-22T20:16:38-05:00] DEBUG readPacket [tp:02fff6d34b877913bf31ccc5737b5d02d2bbabaa9799b9e7c03bb994b6896cd728]: Failed to read packet header. error="timeout: no recent network activity"
+[2026-09-22T20:16:38-05:00] DEBUG [tp:02fff6d34b877913bf31ccc5737b5d02d2bbabaa9799b9e7c03bb994b6896cd728]: Datagram read loop stopping error="timeout: no recent network activity" src="datagram_read_loop"
+[2026-09-22T20:16:38-05:00] DEBUG [tp:02fff6d34b877913bf31ccc5737b5d02d2bbabaa9799b9e7c03bb994b6896cd728]: Transport closed, stopping read loop error="timeout: no recent network activity" src="read_loop"
+[2026-09-22T20:16:38-05:00] DEBUG [transport_manager]: Deletion nudge received, debouncing...
+[2026-09-22T20:16:38-05:00] DEBUG [tp:02fff6d34b877913bf31ccc5737b5d02d2bbabaa9799b9e7c03bb994b6896cd728]: Stopped serving. remaining_tps=1367 remote_pk=02fff6d34b877913bf31ccc5737b5d02d2bbabaa9799b9e7c03bb994b6896cd728 tp_id=e5355e92-ff67-05d3-82f4-d78b4b9285d9 tp_index=1321
+[2026-09-22T20:16:39-05:00] DEBUG [dmsgC]: Discovery lookup failed, trying connected servers error="dmsg error 100 - entry is not found in discovery: Get "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/dmsg-discovery/entry/038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5": EOF" remote_pk=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5
+[2026-09-22T20:16:39-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49227, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 0 active app_name=skysocks-client
+[2026-09-22T20:16:39-05:00] DEBUG [cli_rpc]: CLI RPC conn #1290 accepted from 127.0.0.1:59684 (active: 1)
+[2026-09-22T20:16:39-05:00] DEBUG [cli_rpc]: CLI RPC conn #1290 closed after 94ms (active: 0)
+[2026-09-22T20:16:40-05:00] DEBUG [cli_rpc]: CLI RPC conn #1291 accepted from 127.0.0.1:59690 (active: 1)
+[2026-09-22T20:16:40-05:00] DEBUG [cli_rpc]: CLI RPC conn #1291 closed after 94ms (active: 0)
+[2026-09-22T20:16:40-05:00] DEBUG [cli_rpc]: CLI RPC conn #1292 accepted from 127.0.0.1:59692 (active: 1)
+[2026-09-22T20:16:40-05:00] DEBUG [cli_rpc]: CLI RPC conn #1292 closed after 5ms (active: 0)
+[2026-09-22T20:16:40-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5:46 error=EOF ports_reserved=192 session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7
+[2026-09-22T20:16:40-05:00] DEBUG [dmsgC]: DialStream failed via connected server, trying next error=EOF server=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7
+[2026-09-22T20:16:40-05:00] DEBUG [cli_rpc]: CLI RPC conn #1293 accepted from 127.0.0.1:59706 (active: 1)
+[2026-09-22T20:16:40-05:00] DEBUG [cli_rpc]: CLI RPC conn #1293 closed after 82ms (active: 0)
+[2026-09-22T20:16:40-05:00] DEBUG [squicr]: Accepted connection from 182.8.100.220:24494
+[2026-09-22T20:16:40-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49229, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: RACK: DSACK seq=0 (spurious retransmit) → reorder factor widened to 1.50× app_name=skysocks-client-ref
+[2026-09-22T20:16:40-05:00] DEBUG [transport_manager]: Publishing 1367 transports to TPD via CXO transport-list snapshot
+[2026-09-22T20:16:40-05:00] DEBUG [squicr]: Sent handshake to 182.8.100.220:24494, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 02d1aad3d0b11e481aa2019b809a45176d78193c626d78d74c41f2857c6e35dd51:49507
+[2026-09-22T20:16:41-05:00] DEBUG [rpc_bridge]: rpc bridge: stream established scheme=0 target_pk=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-22T20:16:41-05:00] DEBUG [transport_manager]: recv transport request: type(squicr) remote(02d1aad3d0b11e481aa2019b809a45176d78193c626d78d74c41f2857c6e35dd51)
+[2026-09-22T20:16:41-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T20:16:41-05:00] DEBUG [tp:02d1aad3d0b11e481aa2019b809a45176d78193c626d78d74c41f2857c6e35dd51]: no prior transport log entry; starting fresh transport=24640c89-5bdc-045e-807c-861d8ac7f667
+[2026-09-22T20:16:41-05:00] DEBUG [tp:02d1aad3d0b11e481aa2019b809a45176d78193c626d78d74c41f2857c6e35dd51]: Performing settlement handshake...
+[2026-09-22T20:16:41-05:00] DEBUG [tp:02d1aad3d0b11e481aa2019b809a45176d78193c626d78d74c41f2857c6e35dd51]: Serving. remote_pk=02d1aad3d0b11e481aa2019b809a45176d78193c626d78d74c41f2857c6e35dd51 tp_id=24640c89-5bdc-045e-807c-861d8ac7f667 tp_index=1368
+[2026-09-22T20:16:41-05:00] DEBUG [app_discovery]: Entry registered successfully entry="{"address":"0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:7773","geo":{"country":"US","lat":33.1494,"lon":-96.828,"region":"TX"},"local_ips":["192.168.1.117","70.121.13.123"],"type":"visor","version":"v1.3.97-0.-e65f4df8c238+dirty"}"
+[2026-09-22T20:16:41-05:00] DEBUG [app_discovery]: Service discovery heartbeat sent successfully
+[2026-09-22T20:16:41-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5:46 error=EOF ports_reserved=193 session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+[2026-09-22T20:16:41-05:00] DEBUG [dmsgC]: DialStream failed via connected server, trying next error=EOF server=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+[2026-09-22T20:16:41-05:00] DEBUG [tp:02d1aad3d0b11e481aa2019b809a45176d78193c626d78d74c41f2857c6e35dd51]: Setting underlying transport...
+[2026-09-22T20:16:41-05:00] DEBUG [tp:02d1aad3d0b11e481aa2019b809a45176d78193c626d78d74c41f2857c6e35dd51]: Sent signal to 'mt.transportCh'.
+[2026-09-22T20:16:41-05:00] DEBUG [transport_manager]: accepted tp: type(squicr) remote(02d1aad3d0b11e481aa2019b809a45176d78193c626d78d74c41f2857c6e35dd51) tpID(24640c89-5bdc-045e-807c-861d8ac7f667) new(true)
+[2026-09-22T20:16:41-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-22T20:16:41-05:00] DEBUG [cli_rpc]: CLI RPC conn #1294 accepted from 127.0.0.1:57058 (active: 1)
+[2026-09-22T20:16:41-05:00] DEBUG [cli_rpc]: CLI RPC conn #1294 closed after 116ms (active: 0)
+[2026-09-22T20:16:42-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5:46 error=EOF ports_reserved=195 session=03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf
+[2026-09-22T20:16:42-05:00] DEBUG [dmsgC]: DialStream failed via connected server, trying next error=EOF server=03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf
+[2026-09-22T20:16:42-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=0377be08d4f1cddfbfa088e8fbc301efa0a01e107d036a4e02a09eeb8c25df7077 took=397.181054ms yamux_id=667
+[2026-09-22T20:16:42-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=60519 error="dmsg error 306 - request has no associated listener" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=61350
+[2026-09-22T20:16:43-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=60519 error="dmsg error 306 - request has no associated listener" session=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=61351
+[2026-09-22T20:16:43-05:00] DEBUG [cli_rpc]: CLI RPC stats: active=0, total=1294, errors=0, peak=2
+[2026-09-22T20:16:43-05:00] DEBUG [tp:039b1189ae0f40b09cffd04d82feadd847514e2578c3c00349fe112f3cc2430bca]: Datagram read loop stopping error="timeout: no recent network activity" src="datagram_read_loop"
+[2026-09-22T20:16:43-05:00] DEBUG readPacket [tp:039b1189ae0f40b09cffd04d82feadd847514e2578c3c00349fe112f3cc2430bca]: Failed to read packet header. error="timeout: no recent network activity"
+[2026-09-22T20:16:43-05:00] DEBUG [tp:039b1189ae0f40b09cffd04d82feadd847514e2578c3c00349fe112f3cc2430bca]: Transport closed, stopping read loop error="timeout: no recent network activity" src="read_loop"
+[2026-09-22T20:16:43-05:00] DEBUG [tp:039b1189ae0f40b09cffd04d82feadd847514e2578c3c00349fe112f3cc2430bca]: Stopped serving. remaining_tps=1367 remote_pk=039b1189ae0f40b09cffd04d82feadd847514e2578c3c00349fe112f3cc2430bca tp_id=9cc56848-13b1-01d7-8db4-c87a17f7704b tp_index=1342
+[2026-09-22T20:16:43-05:00] DEBUG [tp:0247b43670d8bcc127144a0e2d38ffa1bdef3358c4af408e8dfdd6848d8d5c4e3e]: Datagram read loop stopping error="timeout: no recent network activity" src="datagram_read_loop"
+[2026-09-22T20:16:43-05:00] DEBUG readPacket [tp:0247b43670d8bcc127144a0e2d38ffa1bdef3358c4af408e8dfdd6848d8d5c4e3e]: Failed to read packet header. error="timeout: no recent network activity"
+[2026-09-22T20:16:43-05:00] DEBUG [tp:0247b43670d8bcc127144a0e2d38ffa1bdef3358c4af408e8dfdd6848d8d5c4e3e]: Transport closed, stopping read loop error="timeout: no recent network activity" src="read_loop"
+[2026-09-22T20:16:43-05:00] DEBUG [tp:0247b43670d8bcc127144a0e2d38ffa1bdef3358c4af408e8dfdd6848d8d5c4e3e]: Stopped serving. remaining_tps=1366 remote_pk=0247b43670d8bcc127144a0e2d38ffa1bdef3358c4af408e8dfdd6848d8d5c4e3e tp_id=d4a32bdb-1d3b-0c34-9a2a-f74a02d054b2 tp_index=1337
+[2026-09-22T20:16:43-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=60519 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=61352
+[2026-09-22T20:16:43-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=60519 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=61353
+[2026-09-22T20:16:43-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=60519 error="dmsg error 306 - request has no associated listener" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=61354
+[2026-09-22T20:16:43-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5:46 error=EOF ports_reserved=197 session=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb
+[2026-09-22T20:16:43-05:00] DEBUG [dmsgC]: DialStream failed via connected server, trying next error=EOF server=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb
+[2026-09-22T20:16:43-05:00] DEBUG [stcpr]: Accepted connection from 45.79.213.251:45192
+[2026-09-22T20:16:43-05:00] DEBUG [stcpr]: Detected external STCPR connection from 45.79.213.251
+[2026-09-22T20:16:43-05:00] DEBUG [stcpr]: Accepted connection from 175.158.55.46:7898
+[2026-09-22T20:16:43-05:00] DEBUG [stcpr]: Detected external STCPR connection from 175.158.55.46
+[2026-09-22T20:16:43-05:00] DEBUG [stcpr]: Sent handshake to 45.79.213.251:45192, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13:49201
+[2026-09-22T20:16:43-05:00] DEBUG [transport_manager]: recv transport request: type(stcpr) remote(0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13)
+[2026-09-22T20:16:43-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T20:16:43-05:00] DEBUG [tp:0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13]: Performing settlement handshake...
+[2026-09-22T20:16:43-05:00] DEBUG [tp:0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13]: Serving. remote_pk=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 tp_id=95839ad0-b588-0b1d-8475-45fba6ae993c tp_index=1367
+[2026-09-22T20:16:43-05:00] DEBUG [tp:0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13]: Setting underlying transport...
+[2026-09-22T20:16:43-05:00] DEBUG [tp:0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13]: Sent signal to 'mt.transportCh'.
+[2026-09-22T20:16:43-05:00] DEBUG [transport_manager]: accepted tp: type(stcpr) remote(0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13) tpID(95839ad0-b588-0b1d-8475-45fba6ae993c) new(true)
+[2026-09-22T20:16:43-05:00] DEBUG [transport_manager]: Deregistering 3 transports via CXO transport-list snapshot
+[2026-09-22T20:16:43-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=60519 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=61355
+[2026-09-22T20:16:43-05:00] DEBUG [stcpr]: Sent handshake to 175.158.55.46:7898, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da:49155
+[2026-09-22T20:16:44-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:44-05:00] DEBUG [transport_manager]: recv transport request: type(stcpr) remote(023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da)
+[2026-09-22T20:16:44-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T20:16:44-05:00] DEBUG [tp:023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da]: no prior transport log entry; starting fresh transport=b007efd1-f07f-09bb-b588-392b434d07bd
+[2026-09-22T20:16:44-05:00] DEBUG [tp:023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da]: Performing settlement handshake...
+[2026-09-22T20:16:44-05:00] DEBUG [tp:023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da]: Serving. remote_pk=023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da tp_id=b007efd1-f07f-09bb-b588-392b434d07bd tp_index=1368
+[2026-09-22T20:16:44-05:00] DEBUG [tp:023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da]: Setting underlying transport...
+[2026-09-22T20:16:44-05:00] DEBUG [tp:023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da]: Sent signal to 'mt.transportCh'.
+[2026-09-22T20:16:44-05:00] DEBUG [transport_manager]: accepted tp: type(stcpr) remote(023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da) tpID(b007efd1-f07f-09bb-b588-392b434d07bd) new(true)
+[2026-09-22T20:16:44-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02d631d18d624da692ed2f1eb144755f57ec833ad8c0a00670dacdffe9e13a8ace took=519.840176ms yamux_id=297
+[2026-09-22T20:16:44-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:45-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5:46 error=EOF ports_reserved=198 session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7
+[2026-09-22T20:16:45-05:00] DEBUG [dmsgC]: DialStream failed via connected server, trying next error=EOF server=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7
+[2026-09-22T20:16:45-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02d631d18d624da692ed2f1eb144755f57ec833ad8c0a00670dacdffe9e13a8ace took=181.472109ms yamux_id=299
+[2026-09-22T20:16:45-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:45-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02d631d18d624da692ed2f1eb144755f57ec833ad8c0a00670dacdffe9e13a8ace took=178.534286ms yamux_id=301
+[2026-09-22T20:16:45-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:45-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02d631d18d624da692ed2f1eb144755f57ec833ad8c0a00670dacdffe9e13a8ace took=189.734065ms yamux_id=303
+[2026-09-22T20:16:46-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:46-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=0377be08d4f1cddfbfa088e8fbc301efa0a01e107d036a4e02a09eeb8c25df7077 took=2.765076417s yamux_id=669
+[2026-09-22T20:16:46-05:00] DEBUG [rpc_bridge]: rpc bridge: stream established scheme=0 target_pk=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-22T20:16:46-05:00] DEBUG [transport_manager]: Publishing 1368 transports to TPD via CXO transport-list snapshot
+[2026-09-22T20:16:46-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:46-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49227, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 0 active app_name=skysocks-client
+[2026-09-22T20:16:47-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:47-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02d631d18d624da692ed2f1eb144755f57ec833ad8c0a00670dacdffe9e13a8ace took=187.536082ms yamux_id=305
+[2026-09-22T20:16:47-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02d631d18d624da692ed2f1eb144755f57ec833ad8c0a00670dacdffe9e13a8ace took=226.99962ms yamux_id=307
+[2026-09-22T20:16:47-05:00] DEBUG [squicr]: Accepted connection from 106.43.109.183:62744
+[2026-09-22T20:16:47-05:00] DEBUG [squicr]: Sent handshake to 106.43.109.183:62744, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 02b310b1adbcef45673db949d765b64fa6e0499bfe5625eea1f87c93b963d48fc6:51061
+[2026-09-22T20:16:47-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:47-05:00] DEBUG [transport_manager]: recv transport request: type(squicr) remote(02b310b1adbcef45673db949d765b64fa6e0499bfe5625eea1f87c93b963d48fc6)
+[2026-09-22T20:16:47-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T20:16:47-05:00] DEBUG [tp:02b310b1adbcef45673db949d765b64fa6e0499bfe5625eea1f87c93b963d48fc6]: no prior transport log entry; starting fresh transport=96a058ac-0b97-00a3-b106-5eb10acd01b7
+[2026-09-22T20:16:47-05:00] DEBUG [tp:02b310b1adbcef45673db949d765b64fa6e0499bfe5625eea1f87c93b963d48fc6]: Serving. remote_pk=02b310b1adbcef45673db949d765b64fa6e0499bfe5625eea1f87c93b963d48fc6 tp_id=96a058ac-0b97-00a3-b106-5eb10acd01b7 tp_index=1369
+[2026-09-22T20:16:47-05:00] DEBUG [tp:02b310b1adbcef45673db949d765b64fa6e0499bfe5625eea1f87c93b963d48fc6]: Performing settlement handshake...
+[2026-09-22T20:16:48-05:00] DEBUG [tp:02b310b1adbcef45673db949d765b64fa6e0499bfe5625eea1f87c93b963d48fc6]: Setting underlying transport...
+[2026-09-22T20:16:48-05:00] DEBUG [tp:02b310b1adbcef45673db949d765b64fa6e0499bfe5625eea1f87c93b963d48fc6]: Sent signal to 'mt.transportCh'.
+[2026-09-22T20:16:48-05:00] DEBUG [transport_manager]: accepted tp: type(squicr) remote(02b310b1adbcef45673db949d765b64fa6e0499bfe5625eea1f87c93b963d48fc6) tpID(96a058ac-0b97-00a3-b106-5eb10acd01b7) new(true)
+[2026-09-22T20:16:48-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-22T20:16:48-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:48-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:48-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=0377be08d4f1cddfbfa088e8fbc301efa0a01e107d036a4e02a09eeb8c25df7077 took=804.748226ms yamux_id=671
+[2026-09-22T20:16:49-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:49-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9 took=8.430505ms yamux_id=455
+[2026-09-22T20:16:49-05:00] DEBUG [squicr]: Accepted connection from 175.158.55.46:7861
+[2026-09-22T20:16:49-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:49-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=0377be08d4f1cddfbfa088e8fbc301efa0a01e107d036a4e02a09eeb8c25df7077 took=1m42.336258644s yamux_id=587
+[2026-09-22T20:16:49-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9 took=349.612554ms yamux_id=457
+[2026-09-22T20:16:49-05:00] DEBUG [squicr]: Sent handshake to 175.158.55.46:7861, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da:49153
+[2026-09-22T20:16:50-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5:46 error="i/o deadline reached" ports_reserved=199 session=0207abc28c19492fd22ffc39985982bbb2b76b892a6c11b64d03ba9adeaf520f80
+[2026-09-22T20:16:50-05:00] DEBUG [dmsgC]: DialStream failed via connected server, trying next error="i/o deadline reached" server=0207abc28c19492fd22ffc39985982bbb2b76b892a6c11b64d03ba9adeaf520f80
+[2026-09-22T20:16:50-05:00] DEBUG [hypervisor_client]: Dial to hypervisor failed; retrying. error="dmsg error 100 - entry is not found in discovery: Get "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/dmsg-discovery/entry/038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5": EOF" hypervisor_pk=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5
+[2026-09-22T20:16:50-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:50-05:00] DEBUG [transport_manager]: recv transport request: type(squicr) remote(023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da)
+[2026-09-22T20:16:50-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T20:16:50-05:00] DEBUG [tp:023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da]: Performing settlement handshake...
+[2026-09-22T20:16:50-05:00] DEBUG [tp:023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da]: Serving. remote_pk=023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da tp_id=d4595b5c-9314-0013-a75f-ddc725fbce48 tp_index=1370
+[2026-09-22T20:16:50-05:00] DEBUG [tp:023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da]: Setting underlying transport...
+[2026-09-22T20:16:50-05:00] DEBUG [tp:023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da]: Sent signal to 'mt.transportCh'.
+[2026-09-22T20:16:50-05:00] DEBUG [transport_manager]: accepted tp: type(squicr) remote(023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da) tpID(d4595b5c-9314-0013-a75f-ddc725fbce48) new(true)
+[2026-09-22T20:16:50-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:51-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:51-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:51-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49229, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=8 after idle PTO app_name=skysocks-client-ref
+[2026-09-22T20:16:52-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:52-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:53-05:00] DEBUG [transport_manager]: Publishing 1370 transports to TPD via CXO transport-list snapshot
+[2026-09-22T20:16:53-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:53-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=151, pktType=Ping)"
+[2026-09-22T20:16:53-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=0377be08d4f1cddfbfa088e8fbc301efa0a01e107d036a4e02a09eeb8c25df7077 took=65.972µs yamux_id=675
+[2026-09-22T20:16:53-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=151, pktType=Pong)"
+[2026-09-22T20:16:53-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49227, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 0 active app_name=skysocks-client
+[2026-09-22T20:16:53-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:53-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49229, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: RACK: DSACK seq=8 (spurious retransmit) → reorder factor widened to 1.65× app_name=skysocks-client-ref
+[2026-09-22T20:16:54-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:54-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:55-05:00] DEBUG [hypervisor_client]: Dial to hypervisor failed; retrying. error="dmsg error 100 - entry is not found in discovery: Get "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/dmsg-discovery/entry/038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5": EOF" hypervisor_pk=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5
+[2026-09-22T20:16:55-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:55-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:55-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=157, pktType=Ping)"
+[2026-09-22T20:16:55-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:56-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:56-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02d631d18d624da692ed2f1eb144755f57ec833ad8c0a00670dacdffe9e13a8ace took=2m59.738634007s yamux_id=263
+[2026-09-22T20:16:56-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55430
+[2026-09-22T20:16:56-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55430
+[2026-09-22T20:16:56-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=0377be08d4f1cddfbfa088e8fbc301efa0a01e107d036a4e02a09eeb8c25df7077 took=3.137145554s yamux_id=673
+[2026-09-22T20:16:56-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:57-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:57-05:00] DEBUG readPacket [tp:023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da]: Failed to read packet header. error=EOF
+[2026-09-22T20:16:57-05:00] DEBUG [tp:023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da]: Transport closed, stopping read loop error=EOF src="read_loop"
+[2026-09-22T20:16:57-05:00] DEBUG [transport_manager]: Deletion nudge received, debouncing...
+[2026-09-22T20:16:57-05:00] DEBUG [tp:023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da]: Stopped serving. remaining_tps=1369 remote_pk=023c5971124c4eef69d3751575dd6ccd942abbe6e8aa4d66e2907ac52acff9a8da tp_id=b007efd1-f07f-09bb-b588-392b434d07bd tp_index=1368
+[2026-09-22T20:16:57-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:58-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55430
+[2026-09-22T20:16:58-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:58-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55435
+[2026-09-22T20:16:58-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:58-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55435
+[2026-09-22T20:16:59-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:59-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:16:59-05:00] DEBUG readPacket [tp:03e238d0cc42b9cf595ce29f7cbe8a05a615d38a65f5a3ce674b4d0a264d2e2690]: Failed to read packet header. error="read tcp 192.168.1.117:47834->36.95.212.119:7779: read: connection timed out"
+[2026-09-22T20:16:59-05:00] DEBUG [tp:03e238d0cc42b9cf595ce29f7cbe8a05a615d38a65f5a3ce674b4d0a264d2e2690]: Stopped serving. remaining_tps=1368 remote_pk=03e238d0cc42b9cf595ce29f7cbe8a05a615d38a65f5a3ce674b4d0a264d2e2690 tp_id=f18c5993-8f06-0283-923a-35f66dfb4ea1 tp_index=1047
+[2026-09-22T20:17:00-05:00] DEBUG [hypervisor_client]: Dial to hypervisor failed; retrying. error="dmsg error 100 - entry is not found in discovery: Get "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/dmsg-discovery/entry/038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5": EOF" hypervisor_pk=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5
+[2026-09-22T20:17:00-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:00-05:00] DEBUG [transport_manager]: Deleted 1 unused transport entries
+[2026-09-22T20:17:00-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:00-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49227, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 0 active app_name=skysocks-client
+[2026-09-22T20:17:00-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55436
+[2026-09-22T20:17:01-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:01-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55436
+[2026-09-22T20:17:01-05:00] DEBUG [stcpr]: Accepted connection from 207.148.77.89:53182
+[2026-09-22T20:17:01-05:00] DEBUG [stcpr]: Detected external STCPR connection from 207.148.77.89
+[2026-09-22T20:17:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #1295 accepted from 127.0.0.1:59492 (active: 1)
+[2026-09-22T20:17:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #1295 closed after 8ms (active: 0)
+[2026-09-22T20:17:01-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:01-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55436
+[2026-09-22T20:17:01-05:00] DEBUG [stcpr]: Sent handshake to 207.148.77.89:53182, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 0240042a0a280cf58b14c2df626d5cae550de703dc7ad58b67790779ff1538353f:49158
+[2026-09-22T20:17:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #1296 accepted from 127.0.0.1:57980 (active: 1)
+[2026-09-22T20:17:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #1296 closed after 6ms (active: 0)
+[2026-09-22T20:17:01-05:00] DEBUG [transport_manager]: recv transport request: type(stcpr) remote(0240042a0a280cf58b14c2df626d5cae550de703dc7ad58b67790779ff1538353f)
+[2026-09-22T20:17:01-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T20:17:01-05:00] DEBUG [tp:0240042a0a280cf58b14c2df626d5cae550de703dc7ad58b67790779ff1538353f]: no prior transport log entry; starting fresh transport=a0e7ea6c-7c3b-0955-8678-aa2fe4e8041a
+[2026-09-22T20:17:01-05:00] DEBUG [tp:0240042a0a280cf58b14c2df626d5cae550de703dc7ad58b67790779ff1538353f]: Performing settlement handshake...
+[2026-09-22T20:17:01-05:00] DEBUG [tp:0240042a0a280cf58b14c2df626d5cae550de703dc7ad58b67790779ff1538353f]: Serving. remote_pk=0240042a0a280cf58b14c2df626d5cae550de703dc7ad58b67790779ff1538353f tp_id=a0e7ea6c-7c3b-0955-8678-aa2fe4e8041a tp_index=1369
+[2026-09-22T20:17:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #1297 accepted from 127.0.0.1:57982 (active: 1)
+[2026-09-22T20:17:02-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:02-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55436
+[2026-09-22T20:17:02-05:00] DEBUG [tp:0240042a0a280cf58b14c2df626d5cae550de703dc7ad58b67790779ff1538353f]: Setting underlying transport...
+[2026-09-22T20:17:02-05:00] DEBUG [tp:0240042a0a280cf58b14c2df626d5cae550de703dc7ad58b67790779ff1538353f]: Sent signal to 'mt.transportCh'.
+[2026-09-22T20:17:02-05:00] DEBUG [transport_manager]: accepted tp: type(stcpr) remote(0240042a0a280cf58b14c2df626d5cae550de703dc7ad58b67790779ff1538353f) tpID(a0e7ea6c-7c3b-0955-8678-aa2fe4e8041a) new(true)
+[2026-09-22T20:17:02-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-22T20:17:02-05:00] DEBUG [cli_rpc]: CLI RPC conn #1297 closed after 410ms (active: 0)
+[2026-09-22T20:17:02-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55436
+[2026-09-22T20:17:02-05:00] DEBUG [transport_manager]: Deregistering 2 transports via CXO transport-list snapshot
+[2026-09-22T20:17:02-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:02-05:00] DEBUG [cli_rpc]: CLI RPC conn #1298 accepted from 127.0.0.1:57988 (active: 1)
+[2026-09-22T20:17:02-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55436
+[2026-09-22T20:17:02-05:00] DEBUG [cli_rpc]: CLI RPC conn #1298 closed after 164ms (active: 0)
+[2026-09-22T20:17:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #1299 accepted from 127.0.0.1:57990 (active: 1)
+[2026-09-22T20:17:03-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #1299 closed after 180ms (active: 0)
+[2026-09-22T20:17:03-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:03-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:03-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:03-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:04-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:04-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:05-05:00] DEBUG [hypervisor_client]: Dial to hypervisor failed; retrying. error="dmsg error 100 - entry is not found in discovery: Get "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/dmsg-discovery/entry/038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5": EOF" hypervisor_pk=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5
+[2026-09-22T20:17:05-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:05-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:06-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55440
+[2026-09-22T20:17:06-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55440
+[2026-09-22T20:17:06-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55440
+[2026-09-22T20:17:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:07-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:07-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55436
+[2026-09-22T20:17:07-05:00] DEBUG [transport_manager]: Publishing 1369 transports to TPD via CXO transport-list snapshot
+[2026-09-22T20:17:07-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55436
+[2026-09-22T20:17:07-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:07-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49227, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 0 active app_name=skysocks-client
+[2026-09-22T20:17:07-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55436
+[2026-09-22T20:17:07-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55440
+[2026-09-22T20:17:08-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:08-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55444
+[2026-09-22T20:17:08-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55445
+[2026-09-22T20:17:08-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55446
+[2026-09-22T20:17:08-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=030ffcafdcaa0d86c60ddf52ad31de283b2a5e1e93027ede1c7fa7695d3e546a92
+[2026-09-22T20:17:08-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:09-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55446
+[2026-09-22T20:17:09-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:09-05:00] DEBUG [stcpr]: Accepted connection from 157.85.207.97:1690
+[2026-09-22T20:17:09-05:00] DEBUG [stcpr]: Detected external STCPR connection from 157.85.207.97
+[2026-09-22T20:17:09-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55446
+[2026-09-22T20:17:09-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=029c038258e05fad7a34f08f4652ea6eb2567a51167985e6b6e2649cc2e3f313f6
+[2026-09-22T20:17:09-05:00] DEBUG [stcpr]: Sent handshake to 157.85.207.97:1690, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 03179e7ab7f17bf58b1dd0c94c94178c551fb23da92eaa1ac480244b7351631248:49154
+[2026-09-22T20:17:09-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:09-05:00] DEBUG [transport_manager]: recv transport request: type(stcpr) remote(03179e7ab7f17bf58b1dd0c94c94178c551fb23da92eaa1ac480244b7351631248)
+[2026-09-22T20:17:09-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T20:17:09-05:00] DEBUG [tp:03179e7ab7f17bf58b1dd0c94c94178c551fb23da92eaa1ac480244b7351631248]: Performing settlement handshake...
+[2026-09-22T20:17:09-05:00] DEBUG [tp:03179e7ab7f17bf58b1dd0c94c94178c551fb23da92eaa1ac480244b7351631248]: Serving. remote_pk=03179e7ab7f17bf58b1dd0c94c94178c551fb23da92eaa1ac480244b7351631248 tp_id=70c63235-4128-0b08-b3f1-d3adaed2e833 tp_index=1370
+[2026-09-22T20:17:10-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:10-05:00] DEBUG [tp:03179e7ab7f17bf58b1dd0c94c94178c551fb23da92eaa1ac480244b7351631248]: Setting underlying transport...
+[2026-09-22T20:17:10-05:00] DEBUG [tp:03179e7ab7f17bf58b1dd0c94c94178c551fb23da92eaa1ac480244b7351631248]: Sent signal to 'mt.transportCh'.
+[2026-09-22T20:17:10-05:00] DEBUG [transport_manager]: accepted tp: type(stcpr) remote(03179e7ab7f17bf58b1dd0c94c94178c551fb23da92eaa1ac480244b7351631248) tpID(70c63235-4128-0b08-b3f1-d3adaed2e833) new(true)
+[2026-09-22T20:17:10-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-22T20:17:10-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=035681dccabf5a90378b453507e6089a3731a150e8512c5e022557c879c87eefcd
+[2026-09-22T20:17:10-05:00] DEBUG [hypervisor_client]: Dial to hypervisor failed; retrying. error="dmsg error 100 - entry is not found in discovery: Get "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/dmsg-discovery/entry/038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5": EOF" hypervisor_pk=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5
+[2026-09-22T20:17:10-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55455
+[2026-09-22T20:17:10-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=0368aaf97dc56c89dd81913507d278362631db651ada1aa8181b2cbf4ca3e7afe5
+[2026-09-22T20:17:10-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55458
+[2026-09-22T20:17:10-05:00] DEBUG [squicr]: Accepted connection from 106.43.109.183:16368
+[2026-09-22T20:17:10-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:10-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55458
+[2026-09-22T20:17:10-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05","Addr":"182.8.99.0:25091"}
+[2026-09-22T20:17:10-05:00] DEBUG [squicr]: Sent handshake to 106.43.109.183:16368, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 022ee170a3d19864584fd95877548b5131c454f4c080a35b785573b6306ccbb89d:51187
+[2026-09-22T20:17:10-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=55458
+[2026-09-22T20:17:10-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=03825d1932f7882826eb33ca9ad85963068b310fb602ee199cf9b868f0b2cb9dc0
+[2026-09-22T20:17:11-05:00] DEBUG [transport_manager]: recv transport request: type(squicr) remote(022ee170a3d19864584fd95877548b5131c454f4c080a35b785573b6306ccbb89d)
+[2026-09-22T20:17:11-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T20:17:11-05:00] DEBUG [tp:022ee170a3d19864584fd95877548b5131c454f4c080a35b785573b6306ccbb89d]: Performing settlement handshake...
+[2026-09-22T20:17:11-05:00] DEBUG [tp:022ee170a3d19864584fd95877548b5131c454f4c080a35b785573b6306ccbb89d]: Serving. remote_pk=022ee170a3d19864584fd95877548b5131c454f4c080a35b785573b6306ccbb89d tp_id=ae54bd16-18da-0782-a400-d5306e4b8a6e tp_index=1371
+[2026-09-22T20:17:11-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:11-05:00] DEBUG [tp:022ee170a3d19864584fd95877548b5131c454f4c080a35b785573b6306ccbb89d]: Setting underlying transport...
+[2026-09-22T20:17:11-05:00] DEBUG [tp:022ee170a3d19864584fd95877548b5131c454f4c080a35b785573b6306ccbb89d]: Sent signal to 'mt.transportCh'.
+[2026-09-22T20:17:11-05:00] DEBUG [transport_manager]: accepted tp: type(squicr) remote(022ee170a3d19864584fd95877548b5131c454f4c080a35b785573b6306ccbb89d) tpID(ae54bd16-18da-0782-a400-d5306e4b8a6e) new(true)
+[2026-09-22T20:17:11-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=0377be08d4f1cddfbfa088e8fbc301efa0a01e107d036a4e02a09eeb8c25df7077 took=5.639479923s yamux_id=677
+[2026-09-22T20:17:11-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=02aba8108bdecc3c5f5b7402929451454ae0afa4941206749b87b11de79fccdcdc
+[2026-09-22T20:17:11-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:12-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9 took=3.222110755s yamux_id=459
+[2026-09-22T20:17:12-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9 took=550.506879ms yamux_id=471
+[2026-09-22T20:17:12-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:12-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05","Addr":"182.8.99.0:25091"}
+[2026-09-22T20:17:12-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=028aa61f58936e9cfd8b858ad62ed2752fad06b5a868b25ccaa60f7fd954da3467
+[2026-09-22T20:17:12-05:00] DEBUG [sudph]: Accepted connection from 182.8.99.0:25091
+[2026-09-22T20:17:12-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:12-05:00] DEBUG [sudph]: Sent handshake to 182.8.99.0:25091, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05:54714
+[2026-09-22T20:17:12-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9 took=554.403837ms yamux_id=475
+[2026-09-22T20:17:12-05:00] DEBUG [transport_manager]: recv transport request: type(sudph) remote(024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05)
+[2026-09-22T20:17:12-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T20:17:12-05:00] DEBUG [tp:024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05]: no prior transport log entry; starting fresh transport=5f40ba4f-19dc-07db-ab79-9918e009ce29
+[2026-09-22T20:17:12-05:00] DEBUG [tp:024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05]: Performing settlement handshake...
+[2026-09-22T20:17:12-05:00] DEBUG [tp:024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05]: Serving. remote_pk=024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05 tp_id=5f40ba4f-19dc-07db-ab79-9918e009ce29 tp_index=1372
+[2026-09-22T20:17:13-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:13-05:00] DEBUG [tp:024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05]: Setting underlying transport...
+[2026-09-22T20:17:13-05:00] DEBUG [tp:024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05]: Sent signal to 'mt.transportCh'.
+[2026-09-22T20:17:13-05:00] DEBUG [transport_manager]: accepted tp: type(sudph) remote(024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05) tpID(5f40ba4f-19dc-07db-ab79-9918e009ce29) new(true)
+[2026-09-22T20:17:13-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=03e4df33224dde5e5e69c6bdb377180badec3f637c45f6108f304100f2a898c366
+[2026-09-22T20:17:13-05:00] DEBUG [cli_rpc]: CLI RPC stats: active=0, total=1299, errors=0, peak=2
+[2026-09-22T20:17:13-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:13-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9 took=3.531765394s yamux_id=463
+[2026-09-22T20:17:13-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9 took=545.153823ms yamux_id=479
+[2026-09-22T20:17:14-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=029129ab76f0446eef3ec47c9f6c9fc5603de8faa8665902034ef18f2272305831
+[2026-09-22T20:17:14-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:14-05:00] DEBUG [stcpr]: Accepted connection from 182.8.99.0:13674
+[2026-09-22T20:17:14-05:00] DEBUG [stcpr]: Detected external STCPR connection from 182.8.99.0
+[2026-09-22T20:17:14-05:00] DEBUG [stcpr]: Sent handshake to 182.8.99.0:13674, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05:49579
+[2026-09-22T20:17:14-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9 took=562.706936ms yamux_id=483
+[2026-09-22T20:17:14-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:14-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9 took=344.927937ms yamux_id=485
+[2026-09-22T20:17:14-05:00] DEBUG [transport_manager]: recv transport request: type(stcpr) remote(024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05)
+[2026-09-22T20:17:14-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T20:17:14-05:00] DEBUG [tp:024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05]: no prior transport log entry; starting fresh transport=f2c0305a-d8ac-0978-8b93-0a7160a8dcc3
+[2026-09-22T20:17:14-05:00] DEBUG [tp:024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05]: Performing settlement handshake...
+[2026-09-22T20:17:14-05:00] DEBUG [tp:024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05]: Serving. remote_pk=024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05 tp_id=f2c0305a-d8ac-0978-8b93-0a7160a8dcc3 tp_index=1373
+[2026-09-22T20:17:15-05:00] DEBUG [tp:024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05]: Setting underlying transport...
+[2026-09-22T20:17:15-05:00] DEBUG [tp:024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05]: Sent signal to 'mt.transportCh'.
+[2026-09-22T20:17:15-05:00] DEBUG [transport_manager]: accepted tp: type(stcpr) remote(024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05) tpID(f2c0305a-d8ac-0978-8b93-0a7160a8dcc3) new(true)
+[2026-09-22T20:17:15-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=02667d8d3df9fb17de64e12e9b4b8651cefbf5a0f057825efb0f067e318890008c
+[2026-09-22T20:17:15-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:15-05:00] DEBUG [transport_manager]: Publishing 1373 transports to TPD via CXO transport-list snapshot
+[2026-09-22T20:17:15-05:00] DEBUG [hypervisor_client]: Dial to hypervisor failed; retrying. error="dmsg error 100 - entry is not found in discovery: Get "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/dmsg-discovery/entry/038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5": EOF" hypervisor_pk=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5
+[2026-09-22T20:17:15-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:15-05:00] DEBUG [dmsgC]: Peer forward failed, trying next. dst_addr=029c038258e05fad7a34f08f4652ea6eb2567a51167985e6b6e2649cc2e3f313f6:56 error="i/o deadline reached" peer=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb session=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9 src_addr=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9:49465 yamux_id=461
+[2026-09-22T20:17:16-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:16-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:16-05:00] DEBUG [squicr]: Accepted connection from 182.8.99.0:13644
+[2026-09-22T20:17:16-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9 took=5.41375892s yamux_id=469
+[2026-09-22T20:17:17-05:00] DEBUG [squicr]: Sent handshake to 182.8.99.0:13644, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05:49310
+[2026-09-22T20:17:17-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:17-05:00] DEBUG [transport_manager]: recv transport request: type(squicr) remote(024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05)
+[2026-09-22T20:17:17-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T20:17:17-05:00] DEBUG [tp:024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05]: no prior transport log entry; starting fresh transport=42321356-aa18-0276-86f4-7e6c10adaa02
+[2026-09-22T20:17:17-05:00] DEBUG [tp:024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05]: Performing settlement handshake...
+[2026-09-22T20:17:17-05:00] DEBUG [tp:024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05]: Serving. remote_pk=024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05 tp_id=42321356-aa18-0276-86f4-7e6c10adaa02 tp_index=1374
+[2026-09-22T20:17:17-05:00] DEBUG [tp:024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05]: Setting underlying transport...
+[2026-09-22T20:17:17-05:00] DEBUG [tp:024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05]: Sent signal to 'mt.transportCh'.
+[2026-09-22T20:17:17-05:00] DEBUG [transport_manager]: accepted tp: type(squicr) remote(024fb77cd923b9e76714ae9ef0c7aeb2dbb502ff797d0d86af20f08af592e1af05) tpID(42321356-aa18-0276-86f4-7e6c10adaa02) new(true)
+[2026-09-22T20:17:17-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-22T20:17:17-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:17-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=0377be08d4f1cddfbfa088e8fbc301efa0a01e107d036a4e02a09eeb8c25df7077 took=591.696551ms yamux_id=679
+[2026-09-22T20:17:18-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9 took=752.111533ms yamux_id=489
+[2026-09-22T20:17:18-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:18-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=02c676334a20fe137e9d56e229e1a90e80ab4f73122fb8fe54b09afa76e393662e
+[2026-09-22T20:17:18-05:00] DEBUG [squicr]: Accepted connection from 139.180.218.32:36573
+[2026-09-22T20:17:18-05:00] DEBUG [cli_rpc]: CLI RPC conn #1300 accepted from 127.0.0.1:33050 (active: 1)
+[2026-09-22T20:17:18-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9 took=345.954588ms yamux_id=491
+[2026-09-22T20:17:18-05:00] DEBUG [cli_rpc]: CLI RPC conn #1300 closed after 105ms (active: 0)
+[2026-09-22T20:17:18-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9 took=8.169565482s yamux_id=465
+[2026-09-22T20:17:18-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:18-05:00] DEBUG [cli_rpc]: CLI RPC conn #1301 accepted from 127.0.0.1:33052 (active: 1)
+[2026-09-22T20:17:18-05:00] DEBUG [cli_rpc]: CLI RPC conn #1301 closed after 97ms (active: 0)
+[2026-09-22T20:17:18-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=03462f5dcfa00e37ab8e554932b83eddcb67768619d26fbee52ccddc3af31245b9 took=1m59.86983965s yamux_id=345
+[2026-09-22T20:17:18-05:00] DEBUG [squicr]: Sent handshake to 139.180.218.32:36573, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 0285553257c555e3a543b0717771790053276bd490c7c72baa9311f12d1f6b78bb:49154
+[2026-09-22T20:17:18-05:00] DEBUG [cli_rpc]: CLI RPC conn #1302 accepted from 127.0.0.1:33060 (active: 1)
+[2026-09-22T20:17:18-05:00] DEBUG [cli_rpc]: CLI RPC conn #1302 closed after 4ms (active: 0)
+[2026-09-22T20:17:18-05:00] DEBUG [cli_rpc]: CLI RPC conn #1303 accepted from 127.0.0.1:33076 (active: 1)
+[2026-09-22T20:17:19-05:00] DEBUG [cli_rpc]: CLI RPC conn #1303 closed after 89ms (active: 0)
+[2026-09-22T20:17:19-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:19-05:00] DEBUG [transport_manager]: recv transport request: type(squicr) remote(0285553257c555e3a543b0717771790053276bd490c7c72baa9311f12d1f6b78bb)
+[2026-09-22T20:17:19-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T20:17:19-05:00] DEBUG [tp:0285553257c555e3a543b0717771790053276bd490c7c72baa9311f12d1f6b78bb]: Performing settlement handshake...
+[2026-09-22T20:17:19-05:00] DEBUG [tp:0285553257c555e3a543b0717771790053276bd490c7c72baa9311f12d1f6b78bb]: Serving. remote_pk=0285553257c555e3a543b0717771790053276bd490c7c72baa9311f12d1f6b78bb tp_id=806e5769-78cf-0c44-9101-e2f44e56d4eb tp_index=1375
+[2026-09-22T20:17:19-05:00] DEBUG [tp:0285553257c555e3a543b0717771790053276bd490c7c72baa9311f12d1f6b78bb]: Setting underlying transport...
+[2026-09-22T20:17:19-05:00] DEBUG [tp:0285553257c555e3a543b0717771790053276bd490c7c72baa9311f12d1f6b78bb]: Sent signal to 'mt.transportCh'.
+[2026-09-22T20:17:19-05:00] DEBUG [transport_manager]: accepted tp: type(squicr) remote(0285553257c555e3a543b0717771790053276bd490c7c72baa9311f12d1f6b78bb) tpID(806e5769-78cf-0c44-9101-e2f44e56d4eb) new(true)
+[2026-09-22T20:17:19-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:19-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02d631d18d624da692ed2f1eb144755f57ec833ad8c0a00670dacdffe9e13a8ace took=1m54.056735848s yamux_id=281
+[2026-09-22T20:17:20-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T20:17:20-05:00] DEBUG [hypervisor_client]: Dial to hypervisor failed; retrying. error="dmsg error 100 - entry is not found in discovery: Get "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/dmsg-discovery/entry/038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5": EOF" hypervisor_pk=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5
+[2026-09-22T20:17:20-05:00] DEBUG [cli_rpc]: CLI RPC conn #1304 accepted from 127.0.0.1:33092 (active: 1)
+[2026-09-22T20:17:20-05:00] DEBUG [cli_rpc]: CLI RPC conn #1304 closed after 100ms (active: 0)

@@ -1,0 +1,8 @@
+goroutine 470 [chan receive]:
+github.com/skycoin/skywire/pkg/transport.(*Manager).ReadPacket(...)
+	/home/d0mo/go/src/github.com/0magnet/skywire/pkg/transport/manager.go:1782
+github.com/skycoin/skywire/pkg/router.(*router).serveTransportManager(0xf9b1f4c7000, {0x9e8c500, 0xf9b22321ae0})
+	/home/d0mo/go/src/github.com/0magnet/skywire/pkg/router/router_serve.go:173 +0x85
+created by github.com/skycoin/skywire/pkg/router.(*router).Serve in goroutine 112
+	/home/d0mo/go/src/github.com/0magnet/skywire/pkg/router/router_serve.go:143 +0x777
+

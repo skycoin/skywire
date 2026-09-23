@@ -1,0 +1,3834 @@
+[
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49196,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 18,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+        "tp_type": "stcpr",
+        "remote_pk": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+        "latency_ms": 230.301,
+        "route_latency_ms": 126.897,
+        "direct": false,
+        "sent_bytes": 96,
+        "sent_packets": 3,
+        "recv_bytes": 96,
+        "recv_packets": 3,
+        "payload_bytes": 36,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 1,
+        "goodput_bps": 3.223728011170458,
+        "goodput_up_bps": 1.6029378258492206,
+        "goodput_down_bps": 1.620790185321237,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+            "tp_type": "stcpr",
+            "latency_ms": 230.301
+          },
+          {
+            "tp_id": "dc5330cf-5d85-0b70-88e9-e4ab169d17fd",
+            "from": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "45.79.213.251"
+      },
+      {
+        "index": 1,
+        "transport_id": "f1012467-de9d-09a9-8b49-62a43945c24b",
+        "tp_type": "stcpr",
+        "remote_pk": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+        "latency_ms": 149.463,
+        "route_latency_ms": 127.786,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "f1012467-de9d-09a9-8b49-62a43945c24b",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+            "tp_type": "stcpr",
+            "latency_ms": 149.463
+          },
+          {
+            "tp_id": "57c570d9-d718-01f6-a458-7cd9b5f8f1dc",
+            "from": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "139.162.160.227"
+      }
+    ],
+    "recovery": {
+      "write_seq": 18,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 1,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 1,
+      "sacks_recv": 13,
+      "last_sack_recv_ms_ago": 4548.571387,
+      "last_sack_recv_contig": 17,
+      "reorder_next_seq": 18,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 13,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4681.759934,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "active"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49197,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 15,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "ac40965a-bc99-01e4-a2c9-c26b76db013b",
+        "tp_type": "stcpr",
+        "remote_pk": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+        "latency_ms": 260.445617,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 64,
+        "recv_packets": 2,
+        "payload_bytes": 24,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 1.540987430421276,
+        "goodput_down_bps": 1.540987430421276,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "ac40965a-bc99-01e4-a2c9-c26b76db013b",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+            "tp_type": "stcpr",
+            "latency_ms": 260.445617
+          },
+          {
+            "tp_id": "3de424e0-edac-027d-bf49-8012ef60d061",
+            "from": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "172.104.166.8"
+      },
+      {
+        "index": 1,
+        "transport_id": "2c4ae7a5-de55-0e09-bd14-7febf7d9f972",
+        "tp_type": "stcpr",
+        "remote_pk": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
+        "latency_ms": 284.778898,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "2c4ae7a5-de55-0e09-bd14-7febf7d9f972",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
+            "tp_type": "stcpr",
+            "latency_ms": 284.778898
+          },
+          {
+            "tp_id": "d0b47ec2-f051-0fc7-b194-f81e98f33f8e",
+            "from": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "45.79.124.73"
+      }
+    ],
+    "recovery": {
+      "write_seq": 15,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 11,
+      "last_sack_recv_ms_ago": 4677.879972,
+      "last_sack_recv_contig": 14,
+      "reorder_next_seq": 15,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 11,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4547.861057,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "active"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49198,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 14,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "fdab37dd-c35e-05bc-9e51-cd6b024e3eec",
+        "tp_type": "stcpr",
+        "remote_pk": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+        "latency_ms": 162.662,
+        "route_latency_ms": 141.298,
+        "direct": false,
+        "sent_bytes": 448,
+        "sent_packets": 14,
+        "recv_bytes": 512,
+        "recv_packets": 16,
+        "payload_bytes": 168,
+        "dup_bytes": 24,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 1.1152462572702575,
+        "goodput_up_bps": 0.5540451771177478,
+        "goodput_down_bps": 0.5612010801525098,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "fdab37dd-c35e-05bc-9e51-cd6b024e3eec",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+            "tp_type": "stcpr",
+            "latency_ms": 162.662
+          },
+          {
+            "tp_id": "7420f415-abd5-014f-bc55-e6132477485f",
+            "from": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "172.235.168.146"
+      },
+      {
+        "index": 1,
+        "transport_id": "afa66373-ac3e-008f-9820-bd68b46268b8",
+        "tp_type": "stcpr",
+        "remote_pk": "03634a5464d2ef3c257c530b77467265526f010d15a82dab765606abe63426db45",
+        "latency_ms": 71.144673,
+        "route_latency_ms": 162.662,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "afa66373-ac3e-008f-9820-bd68b46268b8",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03634a5464d2ef3c257c530b77467265526f010d15a82dab765606abe63426db45",
+            "tp_type": "stcpr",
+            "latency_ms": 71.144673
+          },
+          {
+            "tp_id": "6167786b-5623-09fb-96e7-f840b793f5c0",
+            "from": "03634a5464d2ef3c257c530b77467265526f010d15a82dab765606abe63426db45",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 91.51732700000001
+          }
+        ],
+        "remote_ip": "104.62.49.99"
+      }
+    ],
+    "recovery": {
+      "write_seq": 14,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 10,
+      "last_sack_recv_ms_ago": 4664.253304,
+      "last_sack_recv_contig": 13,
+      "reorder_next_seq": 14,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 10,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4667.078945,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49199,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 14,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "bac92dd4-675b-0587-941c-740a8adf8311",
+        "tp_type": "stcpr",
+        "remote_pk": "02db6d6f87e5d6382c827c066514195dfed31f61f07a295caa1b8f4364826921be",
+        "latency_ms": 150.325,
+        "route_latency_ms": 150.325,
+        "direct": false,
+        "sent_bytes": 448,
+        "sent_packets": 14,
+        "recv_bytes": 512,
+        "recv_packets": 16,
+        "payload_bytes": 168,
+        "dup_bytes": 24,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 1.6700598741933737,
+        "goodput_up_bps": 0.8338151895837386,
+        "goodput_down_bps": 0.8362446846096351,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "bac92dd4-675b-0587-941c-740a8adf8311",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "02db6d6f87e5d6382c827c066514195dfed31f61f07a295caa1b8f4364826921be",
+            "tp_type": "stcpr",
+            "latency_ms": 150.325
+          },
+          {
+            "tp_id": "11b37300-6182-02fc-8d46-93959968e7e5",
+            "from": "02db6d6f87e5d6382c827c066514195dfed31f61f07a295caa1b8f4364826921be",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "88.146.116.113"
+      },
+      {
+        "index": 1,
+        "transport_id": "57787a56-5159-011c-a8fa-e0864daf8710",
+        "tp_type": "stcpr",
+        "remote_pk": "039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1",
+        "latency_ms": 151.162,
+        "route_latency_ms": 143.912,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "57787a56-5159-011c-a8fa-e0864daf8710",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1",
+            "tp_type": "stcpr",
+            "latency_ms": 151.162
+          },
+          {
+            "tp_id": "505b10aa-ad47-04bb-a7af-aa32f9ef4484",
+            "from": "039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "139.144.183.24"
+      }
+    ],
+    "recovery": {
+      "write_seq": 14,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 10,
+      "last_sack_recv_ms_ago": 4656.763211,
+      "last_sack_recv_contig": 13,
+      "reorder_next_seq": 14,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 10,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4660.273479,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49200,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 14,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "8b310db2-874e-0409-9169-52458c150e79",
+        "tp_type": "squicr",
+        "remote_pk": "021ed11eb6557e39fee1e2ef91671bced1483b6c15debc45be54a5f1e1c3c07659",
+        "latency_ms": 163.395,
+        "route_latency_ms": 156.249,
+        "direct": false,
+        "sent_bytes": 448,
+        "sent_packets": 14,
+        "recv_bytes": 512,
+        "recv_packets": 16,
+        "payload_bytes": 168,
+        "dup_bytes": 24,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 1.1152234729683745,
+        "goodput_up_bps": 0.5540322146411262,
+        "goodput_down_bps": 0.5611912583272484,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "8b310db2-874e-0409-9169-52458c150e79",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "021ed11eb6557e39fee1e2ef91671bced1483b6c15debc45be54a5f1e1c3c07659",
+            "tp_type": "squicr",
+            "latency_ms": 163.395
+          },
+          {
+            "tp_id": "a8ae418c-edc4-0e15-ba8f-1135d8dad16f",
+            "from": "021ed11eb6557e39fee1e2ef91671bced1483b6c15debc45be54a5f1e1c3c07659",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "92.116.65.243"
+      },
+      {
+        "index": 1,
+        "transport_id": "696629b6-c362-0f0c-addf-1dbaacc9a0cd",
+        "tp_type": "stcpr",
+        "remote_pk": "03ecc7d108a98480b40a85bbfadb8f477d0c3559316306dcd7ba52fa3d21dad91e",
+        "latency_ms": 83.511387,
+        "route_latency_ms": 163.395,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "696629b6-c362-0f0c-addf-1dbaacc9a0cd",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03ecc7d108a98480b40a85bbfadb8f477d0c3559316306dcd7ba52fa3d21dad91e",
+            "tp_type": "stcpr",
+            "latency_ms": 83.511387
+          },
+          {
+            "tp_id": "75b62c04-114e-032d-8f0f-fceb61749075",
+            "from": "03ecc7d108a98480b40a85bbfadb8f477d0c3559316306dcd7ba52fa3d21dad91e",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 79.88361300000001
+          }
+        ],
+        "remote_ip": "104.62.49.99"
+      }
+    ],
+    "recovery": {
+      "write_seq": 14,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 10,
+      "last_sack_recv_ms_ago": 4634.257613,
+      "last_sack_recv_contig": 13,
+      "reorder_next_seq": 14,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 10,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4655.840429,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49201,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 14,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "e11b656f-7329-0650-b55a-289be7ac38c7",
+        "tp_type": "stcpr",
+        "remote_pk": "03a9a28d2a38de5342e43b88c6c138eada84e412cf1e703432c7affee73190cd88",
+        "latency_ms": 147.771,
+        "route_latency_ms": 147.771,
+        "direct": false,
+        "sent_bytes": 448,
+        "sent_packets": 14,
+        "recv_bytes": 512,
+        "recv_packets": 16,
+        "payload_bytes": 168,
+        "dup_bytes": 24,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 0.7973048908475219,
+        "goodput_up_bps": 0.39792938565340735,
+        "goodput_down_bps": 0.3993755051941145,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "e11b656f-7329-0650-b55a-289be7ac38c7",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03a9a28d2a38de5342e43b88c6c138eada84e412cf1e703432c7affee73190cd88",
+            "tp_type": "stcpr",
+            "latency_ms": 147.771
+          },
+          {
+            "tp_id": "7546a023-3801-050a-95ee-744042362667",
+            "from": "03a9a28d2a38de5342e43b88c6c138eada84e412cf1e703432c7affee73190cd88",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "88.146.116.113"
+      },
+      {
+        "index": 1,
+        "transport_id": "57787a56-5159-011c-a8fa-e0864daf8710",
+        "tp_type": "stcpr",
+        "remote_pk": "039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1",
+        "latency_ms": 151.162,
+        "route_latency_ms": 141.639,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "57787a56-5159-011c-a8fa-e0864daf8710",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1",
+            "tp_type": "stcpr",
+            "latency_ms": 151.162
+          },
+          {
+            "tp_id": "505b10aa-ad47-04bb-a7af-aa32f9ef4484",
+            "from": "039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "139.144.183.24"
+      }
+    ],
+    "recovery": {
+      "write_seq": 14,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 10,
+      "last_sack_recv_ms_ago": 4656.342228,
+      "last_sack_recv_contig": 13,
+      "reorder_next_seq": 14,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 10,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4659.62138,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49202,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 14,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "f0812b1a-b696-0b90-a09a-3a06f11e54eb",
+        "tp_type": "squicr",
+        "remote_pk": "03dd3a272482055da08828fafffe0cb537915a52e71c92bfc9bf3140ab0153cd7c",
+        "latency_ms": 150.526,
+        "route_latency_ms": 148.589,
+        "direct": false,
+        "sent_bytes": 448,
+        "sent_packets": 14,
+        "recv_bytes": 512,
+        "recv_packets": 16,
+        "payload_bytes": 168,
+        "dup_bytes": 24,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 1.1143107987698688,
+        "goodput_up_bps": 0.5535778357788327,
+        "goodput_down_bps": 0.5607329629910361,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "f0812b1a-b696-0b90-a09a-3a06f11e54eb",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03dd3a272482055da08828fafffe0cb537915a52e71c92bfc9bf3140ab0153cd7c",
+            "tp_type": "squicr",
+            "latency_ms": 150.526
+          },
+          {
+            "tp_id": "ce4708f1-5b1f-0448-bbef-0ee6db894bfd",
+            "from": "03dd3a272482055da08828fafffe0cb537915a52e71c92bfc9bf3140ab0153cd7c",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "143.177.188.119"
+      },
+      {
+        "index": 1,
+        "transport_id": "7a64a71c-87c2-0f76-abec-2c76e8cb35b2",
+        "tp_type": "stcpr",
+        "remote_pk": "02f0fabacf587c096ca7e38846b16f2617cbeeeca7bd7a06e73b2030f8645dd00f",
+        "latency_ms": 80.279704,
+        "route_latency_ms": 150.526,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "7a64a71c-87c2-0f76-abec-2c76e8cb35b2",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "02f0fabacf587c096ca7e38846b16f2617cbeeeca7bd7a06e73b2030f8645dd00f",
+            "tp_type": "stcpr",
+            "latency_ms": 80.279704
+          },
+          {
+            "tp_id": "79a37fb3-3ab1-0514-8971-91f004dde491",
+            "from": "02f0fabacf587c096ca7e38846b16f2617cbeeeca7bd7a06e73b2030f8645dd00f",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 70.24629600000002
+          }
+        ],
+        "remote_ip": "104.62.49.99"
+      }
+    ],
+    "recovery": {
+      "write_seq": 14,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 10,
+      "last_sack_recv_ms_ago": 4656.296066,
+      "last_sack_recv_contig": 13,
+      "reorder_next_seq": 14,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 10,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4660.088289,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49203,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 14,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "2d551308-d713-03ba-8c5d-0b696076a9e2",
+        "tp_type": "stcpr",
+        "remote_pk": "03e977a4fb802e9ed2a618bf21497a1ff6a3385212b575deba39a0e419d9025494",
+        "latency_ms": 158.379,
+        "route_latency_ms": 158.379,
+        "direct": false,
+        "sent_bytes": 448,
+        "sent_packets": 14,
+        "recv_bytes": 512,
+        "recv_packets": 16,
+        "payload_bytes": 168,
+        "dup_bytes": 24,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 0.8371989826078603,
+        "goodput_up_bps": 0.41787555826734185,
+        "goodput_down_bps": 0.4193234243405185,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "2d551308-d713-03ba-8c5d-0b696076a9e2",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03e977a4fb802e9ed2a618bf21497a1ff6a3385212b575deba39a0e419d9025494",
+            "tp_type": "stcpr",
+            "latency_ms": 158.379
+          },
+          {
+            "tp_id": "a7457b04-aaea-0079-b24a-1d81e252861a",
+            "from": "03e977a4fb802e9ed2a618bf21497a1ff6a3385212b575deba39a0e419d9025494",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "143.177.188.119"
+      },
+      {
+        "index": 1,
+        "transport_id": "a7990e32-facb-0925-861b-292f7030ab00",
+        "tp_type": "stcpr",
+        "remote_pk": "020819902394f4b8e0e77c3961bb37d77b688d41c3f639f531aebb0a70c64d7092",
+        "latency_ms": 78.579356,
+        "route_latency_ms": 150.987,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "a7990e32-facb-0925-861b-292f7030ab00",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "020819902394f4b8e0e77c3961bb37d77b688d41c3f639f531aebb0a70c64d7092",
+            "tp_type": "stcpr",
+            "latency_ms": 78.579356
+          },
+          {
+            "tp_id": "4d82d133-11f3-00e4-8792-d4fbe3656bbc",
+            "from": "020819902394f4b8e0e77c3961bb37d77b688d41c3f639f531aebb0a70c64d7092",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 72.40764399999999
+          }
+        ],
+        "remote_ip": "104.62.49.99"
+      }
+    ],
+    "recovery": {
+      "write_seq": 14,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 10,
+      "last_sack_recv_ms_ago": 4656.555858,
+      "last_sack_recv_contig": 13,
+      "reorder_next_seq": 14,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 10,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4660.201013,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49204,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 14,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "57787a56-5159-011c-a8fa-e0864daf8710",
+        "tp_type": "stcpr",
+        "remote_pk": "039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1",
+        "latency_ms": 151.162,
+        "route_latency_ms": 136.799,
+        "direct": false,
+        "sent_bytes": 448,
+        "sent_packets": 14,
+        "recv_bytes": 480,
+        "recv_packets": 15,
+        "payload_bytes": 168,
+        "dup_bytes": 12,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 1.825171307400526,
+        "goodput_up_bps": 0.6606998670212282,
+        "goodput_down_bps": 1.1644714403792977,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "57787a56-5159-011c-a8fa-e0864daf8710",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1",
+            "tp_type": "stcpr",
+            "latency_ms": 151.162
+          },
+          {
+            "tp_id": "505b10aa-ad47-04bb-a7af-aa32f9ef4484",
+            "from": "039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "139.144.183.24"
+      },
+      {
+        "index": 1,
+        "transport_id": "6bcb6117-192c-02f9-8f8a-1addd2f302c5",
+        "tp_type": "stcpr",
+        "remote_pk": "03fd9c1e1904c44bfefbf04a9188a1f3ba819f8324cc861292b695ae4ca687c447",
+        "latency_ms": 67.735919,
+        "route_latency_ms": 151.162,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "6bcb6117-192c-02f9-8f8a-1addd2f302c5",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03fd9c1e1904c44bfefbf04a9188a1f3ba819f8324cc861292b695ae4ca687c447",
+            "tp_type": "stcpr",
+            "latency_ms": 67.735919
+          },
+          {
+            "tp_id": "07917228-c131-0341-b2cf-9f60f6475b76",
+            "from": "03fd9c1e1904c44bfefbf04a9188a1f3ba819f8324cc861292b695ae4ca687c447",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 83.42608100000001
+          }
+        ],
+        "remote_ip": "104.62.49.99"
+      }
+    ],
+    "recovery": {
+      "write_seq": 14,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 10,
+      "last_sack_recv_ms_ago": 4673.989658,
+      "last_sack_recv_contig": 13,
+      "reorder_next_seq": 14,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 10,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4675.215551,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49205,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 14,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "21b7d9b7-7b9f-0f80-9ddd-cad8868ab7f5",
+        "tp_type": "squicr",
+        "remote_pk": "039fc26e1088917d070659ecc0a233d96534a28842d996ae9c6531753613db7be0",
+        "latency_ms": 154.039,
+        "route_latency_ms": 154.039,
+        "direct": false,
+        "sent_bytes": 480,
+        "sent_packets": 15,
+        "recv_bytes": 512,
+        "recv_packets": 16,
+        "payload_bytes": 168,
+        "dup_bytes": 24,
+        "repair_bytes": 0,
+        "retransmits": 1,
+        "goodput_bps": 0.7701418005037108,
+        "goodput_up_bps": 0.38434783969608427,
+        "goodput_down_bps": 0.3857939608076266,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "21b7d9b7-7b9f-0f80-9ddd-cad8868ab7f5",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "039fc26e1088917d070659ecc0a233d96534a28842d996ae9c6531753613db7be0",
+            "tp_type": "squicr",
+            "latency_ms": 154.039
+          },
+          {
+            "tp_id": "d1bd7a30-76cc-0ce1-9b3b-5b65f35fa6d2",
+            "from": "039fc26e1088917d070659ecc0a233d96534a28842d996ae9c6531753613db7be0",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "92.116.65.243"
+      },
+      {
+        "index": 1,
+        "transport_id": "ee5902d2-3332-0649-9f1b-8a2891df65c1",
+        "tp_type": "stcpr",
+        "remote_pk": "0397b427c1e522b768389db1fdfab3943a74e69683800fe4950af7dfb3bf66893c",
+        "latency_ms": 81.255159,
+        "route_latency_ms": 151.985,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "ee5902d2-3332-0649-9f1b-8a2891df65c1",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "0397b427c1e522b768389db1fdfab3943a74e69683800fe4950af7dfb3bf66893c",
+            "tp_type": "stcpr",
+            "latency_ms": 81.255159
+          },
+          {
+            "tp_id": "2dfdb077-9398-0c3f-84cf-c988ab51f71f",
+            "from": "0397b427c1e522b768389db1fdfab3943a74e69683800fe4950af7dfb3bf66893c",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 70.72984100000001
+          }
+        ],
+        "remote_ip": "104.62.49.99"
+      }
+    ],
+    "recovery": {
+      "write_seq": 14,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 1,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 1,
+      "sacks_recv": 10,
+      "last_sack_recv_ms_ago": 4656.238501,
+      "last_sack_recv_contig": 13,
+      "reorder_next_seq": 14,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 10,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4659.832173,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49206,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 12,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "c98cd4de-a817-03d5-b8ad-cf23d929e569",
+        "tp_type": "stcpr",
+        "remote_pk": "03f82ff0d7ce318d14db5a8fb754741fa257ffcdb17c629879f854298e8fe85384",
+        "latency_ms": 154.519,
+        "route_latency_ms": 151.962,
+        "direct": false,
+        "sent_bytes": 384,
+        "sent_packets": 12,
+        "recv_bytes": 416,
+        "recv_packets": 13,
+        "payload_bytes": 144,
+        "dup_bytes": 12,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 3.080836056890611,
+        "goodput_up_bps": 1.0660386079902364,
+        "goodput_down_bps": 2.0147974489003744,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "c98cd4de-a817-03d5-b8ad-cf23d929e569",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03f82ff0d7ce318d14db5a8fb754741fa257ffcdb17c629879f854298e8fe85384",
+            "tp_type": "stcpr",
+            "latency_ms": 154.519
+          },
+          {
+            "tp_id": "5e04a7c8-f71b-09de-9e6e-a4f11f9bde12",
+            "from": "03f82ff0d7ce318d14db5a8fb754741fa257ffcdb17c629879f854298e8fe85384",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "92.116.65.243"
+      },
+      {
+        "index": 1,
+        "transport_id": "b250c046-0c75-0a23-87f4-8bbd934afe9a",
+        "tp_type": "stcpr",
+        "remote_pk": "02956775f345d7328128678c0ced40a3e3e3f91bbf431ef886f41df31d93ee1661",
+        "latency_ms": 84.167806,
+        "route_latency_ms": 154.519,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "b250c046-0c75-0a23-87f4-8bbd934afe9a",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "02956775f345d7328128678c0ced40a3e3e3f91bbf431ef886f41df31d93ee1661",
+            "tp_type": "stcpr",
+            "latency_ms": 84.167806
+          },
+          {
+            "tp_id": "3164901a-eb42-0d00-9713-ace5f45bf26b",
+            "from": "02956775f345d7328128678c0ced40a3e3e3f91bbf431ef886f41df31d93ee1661",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 70.351194
+          }
+        ],
+        "remote_ip": "104.62.49.99"
+      }
+    ],
+    "recovery": {
+      "write_seq": 12,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 9,
+      "last_sack_recv_ms_ago": 4656.08705,
+      "last_sack_recv_contig": 11,
+      "reorder_next_seq": 12,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 9,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4652.555376,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49207,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 12,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "bf9b0de8-37e1-09ba-b743-0c529ae98372",
+        "tp_type": "stcpr",
+        "remote_pk": "026a913078651938783e19416a2de99c924df209e28512da2a571868c989bf3822",
+        "latency_ms": 159.492,
+        "route_latency_ms": 148.301,
+        "direct": false,
+        "sent_bytes": 384,
+        "sent_packets": 12,
+        "recv_bytes": 416,
+        "recv_packets": 13,
+        "payload_bytes": 144,
+        "dup_bytes": 12,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 2.6103043712814396,
+        "goodput_up_bps": 0.9188113987871849,
+        "goodput_down_bps": 1.6914929724942545,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "bf9b0de8-37e1-09ba-b743-0c529ae98372",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "026a913078651938783e19416a2de99c924df209e28512da2a571868c989bf3822",
+            "tp_type": "stcpr",
+            "latency_ms": 159.492
+          },
+          {
+            "tp_id": "c2793bef-ed3b-0336-b332-41dfa06adfb8",
+            "from": "026a913078651938783e19416a2de99c924df209e28512da2a571868c989bf3822",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "143.177.188.119"
+      },
+      {
+        "index": 1,
+        "transport_id": "6cb544c3-cb74-0166-9096-2c9e157c34ab",
+        "tp_type": "squicr",
+        "remote_pk": "02b65e1f9b56ae2ad8775c93761e6e9bb1f04fc18ff9ef8d9c780c2bc6d36dcc06",
+        "latency_ms": 89.93374,
+        "route_latency_ms": 159.492,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "6cb544c3-cb74-0166-9096-2c9e157c34ab",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "02b65e1f9b56ae2ad8775c93761e6e9bb1f04fc18ff9ef8d9c780c2bc6d36dcc06",
+            "tp_type": "squicr",
+            "latency_ms": 89.93374
+          },
+          {
+            "tp_id": "3074999f-8e8b-0902-99ae-0670c82cbd39",
+            "from": "02b65e1f9b56ae2ad8775c93761e6e9bb1f04fc18ff9ef8d9c780c2bc6d36dcc06",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 69.55825999999999
+          }
+        ],
+        "remote_ip": "70.24.202.169"
+      }
+    ],
+    "recovery": {
+      "write_seq": 12,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 9,
+      "last_sack_recv_ms_ago": 4656.288673,
+      "last_sack_recv_contig": 11,
+      "reorder_next_seq": 12,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 9,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4660.156043,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49208,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 12,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "03f0e265-2a83-0173-b7bb-434db346af6f",
+        "tp_type": "stcpr",
+        "remote_pk": "035f6c7648bb0034b436db7d3845f7b482e8da705ca2b4622fd9673eb60921d5e5",
+        "latency_ms": 154.526,
+        "route_latency_ms": 150.609,
+        "direct": false,
+        "sent_bytes": 384,
+        "sent_packets": 12,
+        "recv_bytes": 416,
+        "recv_packets": 13,
+        "payload_bytes": 144,
+        "dup_bytes": 12,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 1.8399059932949418,
+        "goodput_up_bps": 0.9187382974564299,
+        "goodput_down_bps": 0.921167695838512,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "03f0e265-2a83-0173-b7bb-434db346af6f",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "035f6c7648bb0034b436db7d3845f7b482e8da705ca2b4622fd9673eb60921d5e5",
+            "tp_type": "stcpr",
+            "latency_ms": 154.526
+          },
+          {
+            "tp_id": "ca5d50b7-114d-03e9-b4ab-75fd65cb62ef",
+            "from": "035f6c7648bb0034b436db7d3845f7b482e8da705ca2b4622fd9673eb60921d5e5",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "88.146.116.113"
+      },
+      {
+        "index": 1,
+        "transport_id": "c2ee64dc-2e0e-098e-b60d-27bc36a5d24d",
+        "tp_type": "stcpr",
+        "remote_pk": "02ea1b80411ef28514056466bf11d8a7b7fcdcf4a964ebd874f8bd9fd74e81eda2",
+        "latency_ms": 91.878022,
+        "route_latency_ms": 154.526,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "c2ee64dc-2e0e-098e-b60d-27bc36a5d24d",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "02ea1b80411ef28514056466bf11d8a7b7fcdcf4a964ebd874f8bd9fd74e81eda2",
+            "tp_type": "stcpr",
+            "latency_ms": 91.878022
+          },
+          {
+            "tp_id": "1483d7b9-e80b-0af0-9ba2-d511c6ac6e15",
+            "from": "02ea1b80411ef28514056466bf11d8a7b7fcdcf4a964ebd874f8bd9fd74e81eda2",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 62.64797800000001
+          }
+        ],
+        "remote_ip": "172.105.110.46"
+      }
+    ],
+    "recovery": {
+      "write_seq": 12,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 9,
+      "last_sack_recv_ms_ago": 4656.188097,
+      "last_sack_recv_contig": 11,
+      "reorder_next_seq": 12,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 9,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4659.609975,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49209,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 12,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "bd6baec7-62f1-07b1-b830-6d5c61f243f9",
+        "tp_type": "stcpr",
+        "remote_pk": "02090aec59b40207d8662c82e4ecfc524b740c27f2fb98cfb5582833a66bdcb797",
+        "latency_ms": 163.622,
+        "route_latency_ms": 152.367,
+        "direct": false,
+        "sent_bytes": 384,
+        "sent_packets": 12,
+        "recv_bytes": 416,
+        "recv_packets": 13,
+        "payload_bytes": 144,
+        "dup_bytes": 12,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 3.3813287198394932,
+        "goodput_up_bps": 0.9185848170126741,
+        "goodput_down_bps": 2.462743902826819,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "bd6baec7-62f1-07b1-b830-6d5c61f243f9",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "02090aec59b40207d8662c82e4ecfc524b740c27f2fb98cfb5582833a66bdcb797",
+            "tp_type": "stcpr",
+            "latency_ms": 163.622
+          },
+          {
+            "tp_id": "cab03f16-b67d-0b02-9ffd-32e858d28f5e",
+            "from": "02090aec59b40207d8662c82e4ecfc524b740c27f2fb98cfb5582833a66bdcb797",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "88.146.116.113"
+      },
+      {
+        "index": 1,
+        "transport_id": "2c38ba2b-6fb8-0053-9854-fff9b115375d",
+        "tp_type": "stcpr",
+        "remote_pk": "0253292a39ace939652a7a8ec32a2f02014d55787141b67d3608439d4db389efd3",
+        "latency_ms": 86.618173,
+        "route_latency_ms": 163.622,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "2c38ba2b-6fb8-0053-9854-fff9b115375d",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "0253292a39ace939652a7a8ec32a2f02014d55787141b67d3608439d4db389efd3",
+            "tp_type": "stcpr",
+            "latency_ms": 86.618173
+          },
+          {
+            "tp_id": "a7c5620e-d191-00d4-a939-d55e1d36ad14",
+            "from": "0253292a39ace939652a7a8ec32a2f02014d55787141b67d3608439d4db389efd3",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 77.00382700000002
+          }
+        ],
+        "remote_ip": "73.124.235.134"
+      }
+    ],
+    "recovery": {
+      "write_seq": 12,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 9,
+      "last_sack_recv_ms_ago": 4634.705997,
+      "last_sack_recv_contig": 11,
+      "reorder_next_seq": 12,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 9,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4647.863494,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49210,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 12,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "b71ddf99-3454-0def-8e91-03c47857d1a8",
+        "tp_type": "stcpr",
+        "remote_pk": "0328947fced4d4b7beb65a6ef60d579e42d7976168c292cbd6d28b5b8bdc85757f",
+        "latency_ms": 174.31,
+        "route_latency_ms": 150.147,
+        "direct": false,
+        "sent_bytes": 384,
+        "sent_packets": 12,
+        "recv_bytes": 416,
+        "recv_packets": 13,
+        "payload_bytes": 144,
+        "dup_bytes": 12,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 3.021045924730152,
+        "goodput_up_bps": 1.132789310524175,
+        "goodput_down_bps": 1.8882566142059771,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "b71ddf99-3454-0def-8e91-03c47857d1a8",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "0328947fced4d4b7beb65a6ef60d579e42d7976168c292cbd6d28b5b8bdc85757f",
+            "tp_type": "stcpr",
+            "latency_ms": 174.31
+          },
+          {
+            "tp_id": "47828219-9f81-0e0b-a2d3-f22c703e9479",
+            "from": "0328947fced4d4b7beb65a6ef60d579e42d7976168c292cbd6d28b5b8bdc85757f",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "88.146.116.113"
+      },
+      {
+        "index": 1,
+        "transport_id": "82aaa034-a066-0349-9880-5aac71fea524",
+        "tp_type": "stcpr",
+        "remote_pk": "03852490a5cb7f48e8d20af0a4c558a605a2ef26b61ae75a78295c442697ecd375",
+        "latency_ms": 89.212253,
+        "route_latency_ms": 174.31,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "82aaa034-a066-0349-9880-5aac71fea524",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03852490a5cb7f48e8d20af0a4c558a605a2ef26b61ae75a78295c442697ecd375",
+            "tp_type": "stcpr",
+            "latency_ms": 89.212253
+          },
+          {
+            "tp_id": "b625e9da-511a-05b7-bd3b-76b7571cc770",
+            "from": "03852490a5cb7f48e8d20af0a4c558a605a2ef26b61ae75a78295c442697ecd375",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 85.097747
+          }
+        ],
+        "remote_ip": "64.181.242.32"
+      }
+    ],
+    "recovery": {
+      "write_seq": 12,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 9,
+      "last_sack_recv_ms_ago": 4656.339153,
+      "last_sack_recv_contig": 11,
+      "reorder_next_seq": 12,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 9,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4660.133886,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49211,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 12,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "d652e2b5-ba67-013d-8d2b-552d71d08194",
+        "tp_type": "stcpr",
+        "remote_pk": "0249e37beff540c44c280f2a38eedf3b9fb9529dde0c14102d9f65234de51e9a2b",
+        "latency_ms": 165.999,
+        "route_latency_ms": 165.61,
+        "direct": false,
+        "sent_bytes": 416,
+        "sent_packets": 13,
+        "recv_bytes": 416,
+        "recv_packets": 13,
+        "payload_bytes": 144,
+        "dup_bytes": 12,
+        "repair_bytes": 0,
+        "retransmits": 1,
+        "goodput_bps": 3.3847454499385616,
+        "goodput_up_bps": 0.9177372084132578,
+        "goodput_down_bps": 2.467008241525304,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "d652e2b5-ba67-013d-8d2b-552d71d08194",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "0249e37beff540c44c280f2a38eedf3b9fb9529dde0c14102d9f65234de51e9a2b",
+            "tp_type": "stcpr",
+            "latency_ms": 165.999
+          },
+          {
+            "tp_id": "9d34fc3e-d644-0970-a7a3-a44967d1514c",
+            "from": "0249e37beff540c44c280f2a38eedf3b9fb9529dde0c14102d9f65234de51e9a2b",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "70.24.202.169"
+      },
+      {
+        "index": 1,
+        "transport_id": "d42159f8-b738-0214-944b-6d3b1e5c7df5",
+        "tp_type": "stcpr",
+        "remote_pk": "03935c2ae731926e45f104bc618946e0747de96178bcf68b62a4abef7216ada291",
+        "latency_ms": 90.772562,
+        "route_latency_ms": 165.999,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "d42159f8-b738-0214-944b-6d3b1e5c7df5",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03935c2ae731926e45f104bc618946e0747de96178bcf68b62a4abef7216ada291",
+            "tp_type": "stcpr",
+            "latency_ms": 90.772562
+          },
+          {
+            "tp_id": "cba3c1f1-3793-0548-8a1b-9f14c68d0022",
+            "from": "03935c2ae731926e45f104bc618946e0747de96178bcf68b62a4abef7216ada291",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 75.226438
+          }
+        ],
+        "remote_ip": "73.124.235.134"
+      }
+    ],
+    "recovery": {
+      "write_seq": 12,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 1,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 1,
+      "sacks_recv": 9,
+      "last_sack_recv_ms_ago": 4634.513367,
+      "last_sack_recv_contig": 11,
+      "reorder_next_seq": 12,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 9,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4647.765501,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49212,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 12,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "94729aa0-2229-0e60-bfd2-a4eb264ac393",
+        "tp_type": "stcpr",
+        "remote_pk": "022d2e9ff0ab2b5ad03851b07a61c32b403570423a2b5a4567e2f4d2aabcd1119d",
+        "latency_ms": 156.577,
+        "route_latency_ms": 155.052,
+        "direct": false,
+        "sent_bytes": 416,
+        "sent_packets": 13,
+        "recv_bytes": 384,
+        "recv_packets": 12,
+        "payload_bytes": 144,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 1,
+        "goodput_bps": 3.080282717038184,
+        "goodput_up_bps": 1.0663310123333598,
+        "goodput_down_bps": 2.0139517047048243,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "94729aa0-2229-0e60-bfd2-a4eb264ac393",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "022d2e9ff0ab2b5ad03851b07a61c32b403570423a2b5a4567e2f4d2aabcd1119d",
+            "tp_type": "stcpr",
+            "latency_ms": 156.577
+          },
+          {
+            "tp_id": "fa5763f3-e4e1-0f97-a4fc-41ed255cec0b",
+            "from": "022d2e9ff0ab2b5ad03851b07a61c32b403570423a2b5a4567e2f4d2aabcd1119d",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "70.24.202.169"
+      },
+      {
+        "index": 1,
+        "transport_id": "a94550f5-5ffd-06af-a17b-d337af066557",
+        "tp_type": "stcpr",
+        "remote_pk": "025cc9b7ba632d57c12ccad1eb31c47a942dede14d1e174ac6c19a4988abb200c0",
+        "latency_ms": 79.48205,
+        "route_latency_ms": 156.577,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "a94550f5-5ffd-06af-a17b-d337af066557",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "025cc9b7ba632d57c12ccad1eb31c47a942dede14d1e174ac6c19a4988abb200c0",
+            "tp_type": "stcpr",
+            "latency_ms": 79.48205
+          },
+          {
+            "tp_id": "f3dfb306-6fa5-0d2a-a97f-0cb1d8f56cac",
+            "from": "025cc9b7ba632d57c12ccad1eb31c47a942dede14d1e174ac6c19a4988abb200c0",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 77.09495
+          }
+        ],
+        "remote_ip": "104.62.49.99"
+      }
+    ],
+    "recovery": {
+      "write_seq": 12,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 1,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 1,
+      "sacks_recv": 9,
+      "last_sack_recv_ms_ago": 4655.677099,
+      "last_sack_recv_contig": 11,
+      "reorder_next_seq": 12,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 9,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4654.595978,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49213,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 12,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "6235595f-352f-0c63-b64e-e69236801e58",
+        "tp_type": "stcpr",
+        "remote_pk": "037ef96f02ad3dbe63ff73596f8035e535dc08be5138ded83a0dc20e7d8093e320",
+        "latency_ms": 166.476,
+        "route_latency_ms": 164.158,
+        "direct": false,
+        "sent_bytes": 384,
+        "sent_packets": 12,
+        "recv_bytes": 448,
+        "recv_packets": 14,
+        "payload_bytes": 144,
+        "dup_bytes": 24,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 3.3830060958035393,
+        "goodput_up_bps": 0.9181956123817432,
+        "goodput_down_bps": 2.4648104834217963,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "6235595f-352f-0c63-b64e-e69236801e58",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "037ef96f02ad3dbe63ff73596f8035e535dc08be5138ded83a0dc20e7d8093e320",
+            "tp_type": "stcpr",
+            "latency_ms": 166.476
+          },
+          {
+            "tp_id": "f08d991e-6383-01e7-90dc-6c29d630e150",
+            "from": "037ef96f02ad3dbe63ff73596f8035e535dc08be5138ded83a0dc20e7d8093e320",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "92.116.65.243"
+      },
+      {
+        "index": 1,
+        "transport_id": "b6e61452-3dcb-012b-bd56-ebfa8b24af94",
+        "tp_type": "stcpr",
+        "remote_pk": "02d92e70b9dd358112ebd266e641a6a928397edfda54c213f7b37dd5cd57eca17a",
+        "latency_ms": 81.695909,
+        "route_latency_ms": 166.476,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "b6e61452-3dcb-012b-bd56-ebfa8b24af94",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "02d92e70b9dd358112ebd266e641a6a928397edfda54c213f7b37dd5cd57eca17a",
+            "tp_type": "stcpr",
+            "latency_ms": 81.695909
+          },
+          {
+            "tp_id": "f3d8c01a-0109-051e-9fa3-7187422fdffc",
+            "from": "02d92e70b9dd358112ebd266e641a6a928397edfda54c213f7b37dd5cd57eca17a",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 84.780091
+          }
+        ],
+        "remote_ip": "104.62.49.99"
+      }
+    ],
+    "recovery": {
+      "write_seq": 12,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 9,
+      "last_sack_recv_ms_ago": 4631.938948,
+      "last_sack_recv_contig": 11,
+      "reorder_next_seq": 12,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 9,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4648.026605,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49214,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 12,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "bbed733f-4bfc-0f00-aaf7-640b4d9768f1",
+        "tp_type": "stcpr",
+        "remote_pk": "02b3a85aee85dece633272731c2e37867a39fa9127f28233ad18ed0051184fc40a",
+        "latency_ms": 179.328,
+        "route_latency_ms": 168.334,
+        "direct": false,
+        "sent_bytes": 416,
+        "sent_packets": 13,
+        "recv_bytes": 416,
+        "recv_packets": 13,
+        "payload_bytes": 144,
+        "dup_bytes": 12,
+        "repair_bytes": 0,
+        "retransmits": 1,
+        "goodput_bps": 0.7924797807951978,
+        "goodput_up_bps": 0.3955152895492717,
+        "goodput_down_bps": 0.39696449124592614,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "bbed733f-4bfc-0f00-aaf7-640b4d9768f1",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "02b3a85aee85dece633272731c2e37867a39fa9127f28233ad18ed0051184fc40a",
+            "tp_type": "stcpr",
+            "latency_ms": 179.328
+          },
+          {
+            "tp_id": "d30e45c7-786f-0548-9d5a-32e1913a2d9e",
+            "from": "02b3a85aee85dece633272731c2e37867a39fa9127f28233ad18ed0051184fc40a",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "69.156.143.243"
+      },
+      {
+        "index": 1,
+        "transport_id": "65fe27ea-5740-0a4d-ba8e-efbac1e61969",
+        "tp_type": "stcpr",
+        "remote_pk": "0306ad93b7602ef24438231f45ba93efe775ac6451cca4c07203152260c04fdf73",
+        "latency_ms": 83.727456,
+        "route_latency_ms": 179.328,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "65fe27ea-5740-0a4d-ba8e-efbac1e61969",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "0306ad93b7602ef24438231f45ba93efe775ac6451cca4c07203152260c04fdf73",
+            "tp_type": "stcpr",
+            "latency_ms": 83.727456
+          },
+          {
+            "tp_id": "f222a053-54c6-0ee0-895b-45ae3c4abd2d",
+            "from": "0306ad93b7602ef24438231f45ba93efe775ac6451cca4c07203152260c04fdf73",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 95.600544
+          }
+        ],
+        "remote_ip": "159.54.190.74"
+      }
+    ],
+    "recovery": {
+      "write_seq": 12,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 1,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 1,
+      "sacks_recv": 9,
+      "last_sack_recv_ms_ago": 4634.455896,
+      "last_sack_recv_contig": 11,
+      "reorder_next_seq": 12,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 9,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4639.762292,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49215,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 12,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "5157fdc8-9f58-0f34-8fc4-dd61cad4c892",
+        "tp_type": "stcpr",
+        "remote_pk": "03360da779493433e9ae8e103ac1c0baf6973982f93bd3cf326e4b18f9fda666cb",
+        "latency_ms": 156.704,
+        "route_latency_ms": 155.799,
+        "direct": false,
+        "sent_bytes": 384,
+        "sent_packets": 12,
+        "recv_bytes": 448,
+        "recv_packets": 14,
+        "payload_bytes": 144,
+        "dup_bytes": 24,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 0.7919189404703235,
+        "goodput_up_bps": 0.39523541475877,
+        "goodput_down_bps": 0.3966835257115535,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "5157fdc8-9f58-0f34-8fc4-dd61cad4c892",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03360da779493433e9ae8e103ac1c0baf6973982f93bd3cf326e4b18f9fda666cb",
+            "tp_type": "stcpr",
+            "latency_ms": 156.704
+          },
+          {
+            "tp_id": "2b4ccbdd-3038-0987-884c-b28884530fab",
+            "from": "03360da779493433e9ae8e103ac1c0baf6973982f93bd3cf326e4b18f9fda666cb",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "77.175.133.249"
+      },
+      {
+        "index": 1,
+        "transport_id": "9eaf41ca-8598-065b-995d-f20f9fcd5e15",
+        "tp_type": "stcpr",
+        "remote_pk": "024612a8620478067843481adf891fa0660d4aef26a82418638d9ed1925696b2dd",
+        "latency_ms": 98.813963,
+        "route_latency_ms": 156.704,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "9eaf41ca-8598-065b-995d-f20f9fcd5e15",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "024612a8620478067843481adf891fa0660d4aef26a82418638d9ed1925696b2dd",
+            "tp_type": "stcpr",
+            "latency_ms": 98.813963
+          },
+          {
+            "tp_id": "30b8ad74-b897-0261-96f9-5f0a9eb41fce",
+            "from": "024612a8620478067843481adf891fa0660d4aef26a82418638d9ed1925696b2dd",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 57.89003700000001
+          }
+        ],
+        "remote_ip": "99.232.56.209"
+      }
+    ],
+    "recovery": {
+      "write_seq": 12,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 9,
+      "last_sack_recv_ms_ago": 4651.338873,
+      "last_sack_recv_contig": 11,
+      "reorder_next_seq": 12,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 9,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4653.32859,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49216,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 11,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "5e54c3c1-a1f8-0d29-ab8c-622323915925",
+        "tp_type": "stcpr",
+        "remote_pk": "03972edf4a2a08aaa4659428e71c9297b5218d0b50a9693edad3ede1eea68dc29b",
+        "latency_ms": 190.364,
+        "route_latency_ms": 165.031,
+        "direct": false,
+        "sent_bytes": 352,
+        "sent_packets": 11,
+        "recv_bytes": 416,
+        "recv_packets": 13,
+        "payload_bytes": 132,
+        "dup_bytes": 24,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 0.4630361321241261,
+        "goodput_up_bps": 0.23108069212998658,
+        "goodput_down_bps": 0.23195543999413948,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "5e54c3c1-a1f8-0d29-ab8c-622323915925",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03972edf4a2a08aaa4659428e71c9297b5218d0b50a9693edad3ede1eea68dc29b",
+            "tp_type": "stcpr",
+            "latency_ms": 190.364
+          },
+          {
+            "tp_id": "2cc06378-b201-05ee-9499-c628d24733b5",
+            "from": "03972edf4a2a08aaa4659428e71c9297b5218d0b50a9693edad3ede1eea68dc29b",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "77.175.133.249"
+      },
+      {
+        "index": 1,
+        "transport_id": "727e4759-3f3b-03e6-9692-05430c13adda",
+        "tp_type": "stcpr",
+        "remote_pk": "03f20fef900246b3a56a1e3cdf84e5f47bda358ecfe2150020c951efc1d64ed9aa",
+        "latency_ms": 81.787688,
+        "route_latency_ms": 190.364,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "727e4759-3f3b-03e6-9692-05430c13adda",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03f20fef900246b3a56a1e3cdf84e5f47bda358ecfe2150020c951efc1d64ed9aa",
+            "tp_type": "stcpr",
+            "latency_ms": 81.787688
+          },
+          {
+            "tp_id": "3d18959e-9c36-0b85-a0aa-4b93b19d9464",
+            "from": "03f20fef900246b3a56a1e3cdf84e5f47bda358ecfe2150020c951efc1d64ed9aa",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 108.576312
+          }
+        ],
+        "remote_ip": "75.83.188.190"
+      }
+    ],
+    "recovery": {
+      "write_seq": 11,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 8,
+      "last_sack_recv_ms_ago": 4635.144449,
+      "last_sack_recv_contig": 10,
+      "reorder_next_seq": 11,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 8,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4648.044006,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49217,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 11,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "0585f299-63de-0cbb-879d-51ad3ecf42d4",
+        "tp_type": "stcpr",
+        "remote_pk": "026611a9dcc29f231169893e3f4db401d74f8c49c7f53fc329ced99b63c9d43caf",
+        "latency_ms": 206.8,
+        "route_latency_ms": 175.233,
+        "direct": false,
+        "sent_bytes": 352,
+        "sent_packets": 11,
+        "recv_bytes": 416,
+        "recv_packets": 13,
+        "payload_bytes": 132,
+        "dup_bytes": 24,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 0.7719336564721493,
+        "goodput_up_bps": 0.38523799841784656,
+        "goodput_down_bps": 0.3866956580543027,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "0585f299-63de-0cbb-879d-51ad3ecf42d4",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "026611a9dcc29f231169893e3f4db401d74f8c49c7f53fc329ced99b63c9d43caf",
+            "tp_type": "stcpr",
+            "latency_ms": 206.8
+          },
+          {
+            "tp_id": "ac80c559-21ef-0d81-a756-fa557dba0188",
+            "from": "026611a9dcc29f231169893e3f4db401d74f8c49c7f53fc329ced99b63c9d43caf",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "94.32.70.55"
+      },
+      {
+        "index": 1,
+        "transport_id": "fb021902-66a2-0ed5-9aa9-8a1e412c8376",
+        "tp_type": "stcpr",
+        "remote_pk": "02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696",
+        "latency_ms": 102.511121,
+        "route_latency_ms": 206.8,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "fb021902-66a2-0ed5-9aa9-8a1e412c8376",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696",
+            "tp_type": "stcpr",
+            "latency_ms": 102.511121
+          },
+          {
+            "tp_id": "80303b39-2c13-003e-8482-d747cc655498",
+            "from": "02781a0ac87d137d612bdefc5d68f420125887771e2d5cf6bc710c83ffc3b9d696",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 104.28887900000001
+          }
+        ],
+        "remote_ip": "167.88.50.59"
+      }
+    ],
+    "recovery": {
+      "write_seq": 11,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 8,
+      "last_sack_recv_ms_ago": 4634.111301,
+      "last_sack_recv_contig": 10,
+      "reorder_next_seq": 11,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 8,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4638.868861,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49218,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 11,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "3e214e29-58ea-001b-ad9d-c624471106a1",
+        "tp_type": "stcpr",
+        "remote_pk": "0335cab89b9352e1052ddc431a35aa5adbd5667046d09e7a6b06c295af09795e7e",
+        "latency_ms": 160.816,
+        "route_latency_ms": 157.074,
+        "direct": false,
+        "sent_bytes": 352,
+        "sent_packets": 11,
+        "recv_bytes": 384,
+        "recv_packets": 12,
+        "payload_bytes": 132,
+        "dup_bytes": 12,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 0.4640874252159657,
+        "goodput_up_bps": 0.2316092371044391,
+        "goodput_down_bps": 0.2324781881115266,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "3e214e29-58ea-001b-ad9d-c624471106a1",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "0335cab89b9352e1052ddc431a35aa5adbd5667046d09e7a6b06c295af09795e7e",
+            "tp_type": "stcpr",
+            "latency_ms": 160.816
+          },
+          {
+            "tp_id": "ab79e81f-0ede-0563-bbda-f846572c5ee2",
+            "from": "0335cab89b9352e1052ddc431a35aa5adbd5667046d09e7a6b06c295af09795e7e",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "77.175.133.249"
+      },
+      {
+        "index": 1,
+        "transport_id": "ddb937d3-dbc0-0ff4-8efe-a7a73626366c",
+        "tp_type": "stcpr",
+        "remote_pk": "02c1365658b10d187d42b01b527daa50d9685faea97cbc86ff14cdd9f0da6d18f3",
+        "latency_ms": 87.718488,
+        "route_latency_ms": 160.816,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "ddb937d3-dbc0-0ff4-8efe-a7a73626366c",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "02c1365658b10d187d42b01b527daa50d9685faea97cbc86ff14cdd9f0da6d18f3",
+            "tp_type": "stcpr",
+            "latency_ms": 87.718488
+          },
+          {
+            "tp_id": "4ee85f82-6914-0c0b-9a17-7af5f1fff3ca",
+            "from": "02c1365658b10d187d42b01b527daa50d9685faea97cbc86ff14cdd9f0da6d18f3",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 73.09751200000001
+          }
+        ],
+        "remote_ip": "73.124.235.134"
+      }
+    ],
+    "recovery": {
+      "write_seq": 11,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 8,
+      "last_sack_recv_ms_ago": 4648.330398,
+      "last_sack_recv_contig": 10,
+      "reorder_next_seq": 11,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 8,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4647.952776,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49219,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 11,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "c15f0beb-8c76-0b97-96eb-76dd431e432f",
+        "tp_type": "stcpr",
+        "remote_pk": "0322a57e4e7fabf8b3edfcccb91fcac97561b27c0d128542b1446a0a3bd06190bf",
+        "latency_ms": 193.814,
+        "route_latency_ms": 184.393,
+        "direct": false,
+        "sent_bytes": 352,
+        "sent_packets": 11,
+        "recv_bytes": 416,
+        "recv_packets": 13,
+        "payload_bytes": 132,
+        "dup_bytes": 24,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 0.7731311424292447,
+        "goodput_up_bps": 0.3858366912946077,
+        "goodput_down_bps": 0.38729445113463706,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "c15f0beb-8c76-0b97-96eb-76dd431e432f",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "0322a57e4e7fabf8b3edfcccb91fcac97561b27c0d128542b1446a0a3bd06190bf",
+            "tp_type": "stcpr",
+            "latency_ms": 193.814
+          },
+          {
+            "tp_id": "666cc821-ada6-057d-a96f-3ed2f4368851",
+            "from": "0322a57e4e7fabf8b3edfcccb91fcac97561b27c0d128542b1446a0a3bd06190bf",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "89.238.167.166"
+      },
+      {
+        "index": 1,
+        "transport_id": "c13c5a2b-2f76-0f90-8ac3-270c8c82f829",
+        "tp_type": "stcpr",
+        "remote_pk": "026b10689962730f56b399909f442c8f32035165b0acc8a8eae0ce889a96163846",
+        "latency_ms": 86.920443,
+        "route_latency_ms": 193.814,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "c13c5a2b-2f76-0f90-8ac3-270c8c82f829",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "026b10689962730f56b399909f442c8f32035165b0acc8a8eae0ce889a96163846",
+            "tp_type": "stcpr",
+            "latency_ms": 86.920443
+          },
+          {
+            "tp_id": "ff7674ae-7cd2-0a4b-8988-6ea30a674ba7",
+            "from": "026b10689962730f56b399909f442c8f32035165b0acc8a8eae0ce889a96163846",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 106.89355699999999
+          }
+        ],
+        "remote_ip": "73.124.235.134"
+      }
+    ],
+    "recovery": {
+      "write_seq": 11,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 8,
+      "last_sack_recv_ms_ago": 4574.409849,
+      "last_sack_recv_contig": 10,
+      "reorder_next_seq": 11,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 8,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4578.012585,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49220,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 11,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "f7f92fb4-63b8-0ba5-85ad-dc07aa835e54",
+        "tp_type": "squicr",
+        "remote_pk": "03e977883c41fca1e63a178398c46574b7ab8d4f381266c852242f473881c32337",
+        "latency_ms": 172.643,
+        "route_latency_ms": 171.605,
+        "direct": false,
+        "sent_bytes": 352,
+        "sent_packets": 11,
+        "recv_bytes": 384,
+        "recv_packets": 12,
+        "payload_bytes": 132,
+        "dup_bytes": 12,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 0.4641350738727961,
+        "goodput_up_bps": 0.23163312146335036,
+        "goodput_down_bps": 0.23250195240944577,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "f7f92fb4-63b8-0ba5-85ad-dc07aa835e54",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03e977883c41fca1e63a178398c46574b7ab8d4f381266c852242f473881c32337",
+            "tp_type": "squicr",
+            "latency_ms": 172.643
+          },
+          {
+            "tp_id": "6f46dafc-1c22-05ea-9700-86852c8a9770",
+            "from": "03e977883c41fca1e63a178398c46574b7ab8d4f381266c852242f473881c32337",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "77.175.133.249"
+      },
+      {
+        "index": 1,
+        "transport_id": "ca42696c-cc9d-0d66-b651-4b6d5f192b69",
+        "tp_type": "stcpr",
+        "remote_pk": "028ed30c290b4c0c36d769108be072a995ac100cd5fcb249b33b92c127961cdfbb",
+        "latency_ms": 88.550059,
+        "route_latency_ms": 172.643,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "ca42696c-cc9d-0d66-b651-4b6d5f192b69",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "028ed30c290b4c0c36d769108be072a995ac100cd5fcb249b33b92c127961cdfbb",
+            "tp_type": "stcpr",
+            "latency_ms": 88.550059
+          },
+          {
+            "tp_id": "97203c85-923c-009e-85a1-9b05a104167b",
+            "from": "028ed30c290b4c0c36d769108be072a995ac100cd5fcb249b33b92c127961cdfbb",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 84.092941
+          }
+        ],
+        "remote_ip": "73.124.235.134"
+      }
+    ],
+    "recovery": {
+      "write_seq": 11,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 8,
+      "last_sack_recv_ms_ago": 4634.808836,
+      "last_sack_recv_contig": 10,
+      "reorder_next_seq": 11,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 8,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4643.668064,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49221,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 11,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "9a548f01-5fa1-03ea-9679-5587a13110ef",
+        "tp_type": "stcpr",
+        "remote_pk": "038a10abc4081748dad046dafe39a4f4744352703d19a6dbee68b97ae9f9d334f0",
+        "latency_ms": 168.277,
+        "route_latency_ms": 168.277,
+        "direct": false,
+        "sent_bytes": 352,
+        "sent_packets": 11,
+        "recv_bytes": 416,
+        "recv_packets": 13,
+        "payload_bytes": 132,
+        "dup_bytes": 24,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 0.46335329575118,
+        "goodput_up_bps": 0.231242132555508,
+        "goodput_down_bps": 0.232111163195672,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "9a548f01-5fa1-03ea-9679-5587a13110ef",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "038a10abc4081748dad046dafe39a4f4744352703d19a6dbee68b97ae9f9d334f0",
+            "tp_type": "stcpr",
+            "latency_ms": 168.277
+          },
+          {
+            "tp_id": "7db81071-4733-0f77-a761-e819dd8a312f",
+            "from": "038a10abc4081748dad046dafe39a4f4744352703d19a6dbee68b97ae9f9d334f0",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "92.116.65.243"
+      },
+      {
+        "index": 1,
+        "transport_id": "88737946-d62e-0e57-bfeb-33d28895bc54",
+        "tp_type": "stcpr",
+        "remote_pk": "039ba57e780efc89546104a134e9121f1dda0617e335eee8c3f21e4e272df93ac1",
+        "latency_ms": 87.871766,
+        "route_latency_ms": 164.043,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "88737946-d62e-0e57-bfeb-33d28895bc54",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "039ba57e780efc89546104a134e9121f1dda0617e335eee8c3f21e4e272df93ac1",
+            "tp_type": "stcpr",
+            "latency_ms": 87.871766
+          },
+          {
+            "tp_id": "f888da30-319a-0582-bf9c-aca1095bd01e",
+            "from": "039ba57e780efc89546104a134e9121f1dda0617e335eee8c3f21e4e272df93ac1",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 76.17123400000001
+          }
+        ],
+        "remote_ip": "73.124.235.134"
+      }
+    ],
+    "recovery": {
+      "write_seq": 11,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 8,
+      "last_sack_recv_ms_ago": 4631.654928,
+      "last_sack_recv_contig": 10,
+      "reorder_next_seq": 11,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 8,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4647.938297,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49222,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 11,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "54999ec3-58fa-008e-ae0d-1c4f66a6c837",
+        "tp_type": "stcpr",
+        "remote_pk": "0276161280817ad1cd3d637f5396f2b937f1973ba24d37ecf199085fe75166c28a",
+        "latency_ms": 182.485,
+        "route_latency_ms": 170.13,
+        "direct": false,
+        "sent_bytes": 384,
+        "sent_packets": 12,
+        "recv_bytes": 352,
+        "recv_packets": 11,
+        "payload_bytes": 132,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 1,
+        "goodput_bps": 1.939221818300648,
+        "goodput_up_bps": 0.9602928102050875,
+        "goodput_down_bps": 0.9789290080955606,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "54999ec3-58fa-008e-ae0d-1c4f66a6c837",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "0276161280817ad1cd3d637f5396f2b937f1973ba24d37ecf199085fe75166c28a",
+            "tp_type": "stcpr",
+            "latency_ms": 182.485
+          },
+          {
+            "tp_id": "bcacf948-a243-0699-94d0-112a2c2f6b34",
+            "from": "0276161280817ad1cd3d637f5396f2b937f1973ba24d37ecf199085fe75166c28a",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "70.24.202.169"
+      },
+      {
+        "index": 1,
+        "transport_id": "690554b9-1d58-04c8-ab20-ff3607e69827",
+        "tp_type": "stcpr",
+        "remote_pk": "02bf4a7b17f587405738f9c2677ac63b7b99fa3f1e589159daf8429d66585e2e0c",
+        "latency_ms": 88.214923,
+        "route_latency_ms": 182.485,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "690554b9-1d58-04c8-ab20-ff3607e69827",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "02bf4a7b17f587405738f9c2677ac63b7b99fa3f1e589159daf8429d66585e2e0c",
+            "tp_type": "stcpr",
+            "latency_ms": 88.214923
+          },
+          {
+            "tp_id": "cc141cac-9253-0186-9fa2-99b93d9cdcf9",
+            "from": "02bf4a7b17f587405738f9c2677ac63b7b99fa3f1e589159daf8429d66585e2e0c",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 94.27007700000001
+          }
+        ],
+        "remote_ip": "73.124.235.134"
+      }
+    ],
+    "recovery": {
+      "write_seq": 11,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 1,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 1,
+      "sacks_recv": 8,
+      "last_sack_recv_ms_ago": 4634.404428,
+      "last_sack_recv_contig": 10,
+      "reorder_next_seq": 11,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 8,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4646.332453,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49223,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 11,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "30f42c30-4c30-067a-ab12-3fda8d1e3c26",
+        "tp_type": "stcpr",
+        "remote_pk": "03eba64189c636ab77c2da630bf2a0c77061bc783e59f80fd39015a42f9ae6ce01",
+        "latency_ms": 160.884,
+        "route_latency_ms": 160.884,
+        "direct": false,
+        "sent_bytes": 352,
+        "sent_packets": 11,
+        "recv_bytes": 416,
+        "recv_packets": 13,
+        "payload_bytes": 132,
+        "dup_bytes": 24,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 1.8000698919692528,
+        "goodput_up_bps": 0.7024849823106262,
+        "goodput_down_bps": 1.0975849096586268,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "30f42c30-4c30-067a-ab12-3fda8d1e3c26",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03eba64189c636ab77c2da630bf2a0c77061bc783e59f80fd39015a42f9ae6ce01",
+            "tp_type": "stcpr",
+            "latency_ms": 160.884
+          },
+          {
+            "tp_id": "0d8257e2-30ad-0601-b3f2-c55dac887f16",
+            "from": "03eba64189c636ab77c2da630bf2a0c77061bc783e59f80fd39015a42f9ae6ce01",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "92.116.65.243"
+      },
+      {
+        "index": 1,
+        "transport_id": "e5f24143-49cd-0bc6-b5d3-6087f8ac969e",
+        "tp_type": "stcpr",
+        "remote_pk": "024a37bae69d6be2ec51eeb9d2b7e99073c30153d06896032f5bd3c09ca843bdb9",
+        "latency_ms": 43.640492,
+        "route_latency_ms": 144.517,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "e5f24143-49cd-0bc6-b5d3-6087f8ac969e",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "024a37bae69d6be2ec51eeb9d2b7e99073c30153d06896032f5bd3c09ca843bdb9",
+            "tp_type": "stcpr",
+            "latency_ms": 43.640492
+          },
+          {
+            "tp_id": "a214890d-d089-0b62-9b20-c86449e19bc2",
+            "from": "024a37bae69d6be2ec51eeb9d2b7e99073c30153d06896032f5bd3c09ca843bdb9",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 100.876508
+          }
+        ],
+        "remote_ip": "45.56.79.245"
+      }
+    ],
+    "recovery": {
+      "write_seq": 11,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 8,
+      "last_sack_recv_ms_ago": 4631.747588,
+      "last_sack_recv_contig": 10,
+      "reorder_next_seq": 11,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 8,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4647.856579,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49230,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 10,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "60c8d7d1-7cbe-0046-aaa2-d671a09be2c9",
+        "tp_type": "stcpr",
+        "remote_pk": "038483486b1c21304bd04b8d187452f25cb2e7fd7ad653429a79317c6c2399857e",
+        "latency_ms": 176.029,
+        "route_latency_ms": 176.029,
+        "direct": false,
+        "sent_bytes": 320,
+        "sent_packets": 10,
+        "recv_bytes": 352,
+        "recv_packets": 11,
+        "payload_bytes": 120,
+        "dup_bytes": 12,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 3.126894130766691,
+        "goodput_up_bps": 1.0306229750163336,
+        "goodput_down_bps": 2.0962711557503573,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "60c8d7d1-7cbe-0046-aaa2-d671a09be2c9",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "038483486b1c21304bd04b8d187452f25cb2e7fd7ad653429a79317c6c2399857e",
+            "tp_type": "stcpr",
+            "latency_ms": 176.029
+          },
+          {
+            "tp_id": "81f314f9-5425-0880-8f67-08c5da878879",
+            "from": "038483486b1c21304bd04b8d187452f25cb2e7fd7ad653429a79317c6c2399857e",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "94.32.70.55"
+      },
+      {
+        "index": 1,
+        "transport_id": "287b1d97-fa6b-0fc8-b6ea-1c3986ce7b10",
+        "tp_type": "stcpr",
+        "remote_pk": "03b934e8a26ddb9d635381df94dbf778cdfebf53f8956902ec3a7837524a75024f",
+        "latency_ms": 71.640363,
+        "route_latency_ms": 168.487,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "287b1d97-fa6b-0fc8-b6ea-1c3986ce7b10",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03b934e8a26ddb9d635381df94dbf778cdfebf53f8956902ec3a7837524a75024f",
+            "tp_type": "stcpr",
+            "latency_ms": 71.640363
+          },
+          {
+            "tp_id": "9d5d85da-f7f2-0287-b39c-9168bdeca418",
+            "from": "03b934e8a26ddb9d635381df94dbf778cdfebf53f8956902ec3a7837524a75024f",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 96.846637
+          }
+        ],
+        "remote_ip": "104.62.49.99"
+      }
+    ],
+    "recovery": {
+      "write_seq": 10,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 7,
+      "last_sack_recv_ms_ago": 4634.080969,
+      "last_sack_recv_contig": 9,
+      "reorder_next_seq": 10,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 7,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4639.485522,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49231,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 10,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "314582ee-2e7b-028d-b558-312099c1ab96",
+        "tp_type": "stcpr",
+        "remote_pk": "03579bc431d50d5398ff1fd9cb1572075663292b0aae08ed6cf6a2a2989fe62825",
+        "latency_ms": 199.44,
+        "route_latency_ms": 185.485,
+        "direct": false,
+        "sent_bytes": 320,
+        "sent_packets": 10,
+        "recv_bytes": 352,
+        "recv_packets": 11,
+        "payload_bytes": 120,
+        "dup_bytes": 12,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 3.1274472889599374,
+        "goodput_up_bps": 1.030247800570609,
+        "goodput_down_bps": 2.0971994883893283,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "314582ee-2e7b-028d-b558-312099c1ab96",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03579bc431d50d5398ff1fd9cb1572075663292b0aae08ed6cf6a2a2989fe62825",
+            "tp_type": "stcpr",
+            "latency_ms": 199.44
+          },
+          {
+            "tp_id": "48367bae-33bb-046c-9b26-f0d674c9db77",
+            "from": "03579bc431d50d5398ff1fd9cb1572075663292b0aae08ed6cf6a2a2989fe62825",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "82.137.58.100"
+      },
+      {
+        "index": 1,
+        "transport_id": "ab6fa43b-9a69-06d2-adb0-923dbfd29b74",
+        "tp_type": "stcpr",
+        "remote_pk": "03a8f75d51e001092f8ebe5c729b8fe7fa45503c12bc75f8ad060e5aeae4db458a",
+        "latency_ms": 104.383306,
+        "route_latency_ms": 199.44,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "ab6fa43b-9a69-06d2-adb0-923dbfd29b74",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03a8f75d51e001092f8ebe5c729b8fe7fa45503c12bc75f8ad060e5aeae4db458a",
+            "tp_type": "stcpr",
+            "latency_ms": 104.383306
+          },
+          {
+            "tp_id": "4a68d5f3-1102-0332-98b7-a26561930ec7",
+            "from": "03a8f75d51e001092f8ebe5c729b8fe7fa45503c12bc75f8ad060e5aeae4db458a",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 95.056694
+          }
+        ],
+        "remote_ip": "24.183.19.218"
+      }
+    ],
+    "recovery": {
+      "write_seq": 10,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 7,
+      "last_sack_recv_ms_ago": 4628.986195,
+      "last_sack_recv_contig": 9,
+      "reorder_next_seq": 10,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 7,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4628.900255,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49232,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 8,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+        "tp_type": "stcpr",
+        "remote_pk": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+        "latency_ms": 230.301,
+        "route_latency_ms": 230.301,
+        "direct": false,
+        "sent_bytes": 288,
+        "sent_packets": 9,
+        "recv_bytes": 288,
+        "recv_packets": 9,
+        "payload_bytes": 96,
+        "dup_bytes": 12,
+        "repair_bytes": 0,
+        "retransmits": 1,
+        "goodput_bps": 3.2949012411408605,
+        "goodput_up_bps": 1.6214154831986178,
+        "goodput_down_bps": 1.6734857579422429,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+            "tp_type": "stcpr",
+            "latency_ms": 230.301
+          },
+          {
+            "tp_id": "dc5330cf-5d85-0b70-88e9-e4ab169d17fd",
+            "from": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "45.79.213.251"
+      },
+      {
+        "index": 1,
+        "transport_id": "e5f24143-49cd-0bc6-b5d3-6087f8ac969e",
+        "tp_type": "stcpr",
+        "remote_pk": "024a37bae69d6be2ec51eeb9d2b7e99073c30153d06896032f5bd3c09ca843bdb9",
+        "latency_ms": 43.640492,
+        "route_latency_ms": 144.494,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "e5f24143-49cd-0bc6-b5d3-6087f8ac969e",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "024a37bae69d6be2ec51eeb9d2b7e99073c30153d06896032f5bd3c09ca843bdb9",
+            "tp_type": "stcpr",
+            "latency_ms": 43.640492
+          },
+          {
+            "tp_id": "a214890d-d089-0b62-9b20-c86449e19bc2",
+            "from": "024a37bae69d6be2ec51eeb9d2b7e99073c30153d06896032f5bd3c09ca843bdb9",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 100.853508
+          }
+        ],
+        "remote_ip": "45.56.79.245"
+      }
+    ],
+    "recovery": {
+      "write_seq": 8,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 1,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 1,
+      "sacks_recv": 6,
+      "last_sack_recv_ms_ago": 4547.88715,
+      "last_sack_recv_contig": 7,
+      "reorder_next_seq": 8,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 6,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4681.224565,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49233,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 8,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "ac8a230e-85fc-06bf-a585-d6d7e6625690",
+        "tp_type": "stcpr",
+        "remote_pk": "03a8eb9a13dc2e7e369d6960b0fdd5324caed238c17824a7a23812088abe37085d",
+        "latency_ms": 229.246,
+        "route_latency_ms": 192.553,
+        "direct": false,
+        "sent_bytes": 256,
+        "sent_packets": 8,
+        "recv_bytes": 288,
+        "recv_packets": 9,
+        "payload_bytes": 96,
+        "dup_bytes": 12,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 3.297552748531988,
+        "goodput_up_bps": 1.6228838875756033,
+        "goodput_down_bps": 1.6746688609563845,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "ac8a230e-85fc-06bf-a585-d6d7e6625690",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "03a8eb9a13dc2e7e369d6960b0fdd5324caed238c17824a7a23812088abe37085d",
+            "tp_type": "stcpr",
+            "latency_ms": 229.246
+          },
+          {
+            "tp_id": "10f9445c-d17f-0a68-a248-a13758a54a70",
+            "from": "03a8eb9a13dc2e7e369d6960b0fdd5324caed238c17824a7a23812088abe37085d",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "82.137.58.100"
+      },
+      {
+        "index": 1,
+        "transport_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+        "tp_type": "stcpr",
+        "remote_pk": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+        "latency_ms": 230.301,
+        "route_latency_ms": 229.246,
+        "direct": false,
+        "sent_bytes": 0,
+        "sent_packets": 0,
+        "recv_bytes": 0,
+        "recv_packets": 0,
+        "payload_bytes": 0,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "alive": true,
+        "standby": true,
+        "hops": [
+          {
+            "tp_id": "95839ad0-b588-0b1d-8475-45fba6ae993c",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+            "tp_type": "stcpr",
+            "latency_ms": 230.301
+          },
+          {
+            "tp_id": "dc5330cf-5d85-0b70-88e9-e4ab169d17fd",
+            "from": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "45.79.213.251"
+      }
+    ],
+    "recovery": {
+      "write_seq": 8,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 6,
+      "last_sack_recv_ms_ago": 4618.76465,
+      "last_sack_recv_contig": 7,
+      "reorder_next_seq": 8,
+      "reorder_pending": 0,
+      "reorder_drops": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 6,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 4618.514466,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    },
+    "tunnel_role": "standby"
+  }
+]
