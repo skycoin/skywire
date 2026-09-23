@@ -332,12 +332,12 @@ Progress log: [implementation-report.md](implementation-report.md).
 
 The tag starts `.github/workflows/android-release.yml`. It refuses a tag that
 does not match `version.properties`, publishes the signed APK and AAB to GitHub
-Releases, and runs the F-Droid check (`android-fdroid.yml`) beside it.
+Releases, and then runs the F-Droid check (`android-fdroid.yml`) on that tag.
 
 F-Droid needs nothing per release. Its update bot finds the new tag, reads
 `version.properties` there, and adds the build to fdroiddata by itself, using
-the recipe in `fdroid/com.skycoin.skywire.yml`. PRs that touch the F-Droid
-build run the same check on GitHub's runners.
+the recipe in `fdroid/com.skycoin.skywire.yml`. The F-Droid check publishes
+nothing; it tells us whether F-Droid's run of the same tag will work.
 
 ## License
 

@@ -6,8 +6,8 @@
 # resubmitting per release.
 #
 # android/fdroid/check.sh runs this recipe the way F-Droid does (lint,
-# checkupdates, build) on every mobile-v* tag and on PRs that touch it — see
-# .github/workflows/android-fdroid.yml. Changes here should keep that green.
+# checkupdates, build) after every mobile-v* release — see
+# .github/workflows/android-fdroid.yml.
 #
 # The store listing (title, descriptions, icon, changelogs) is not in this
 # file: fdroidserver reads it from android/fastlane/metadata/android/.

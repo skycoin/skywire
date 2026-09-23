@@ -16,12 +16,6 @@ permissions:
   contents: write
 
 jobs:
-  # The F-Droid build of this tag, the way F-Droid's own CI and update bot
-  # will see it. Runs beside the release rather than before it: a problem on
-  # F-Droid's side should turn this run red, not hold back the GitHub APK.
-  fdroid:
-    uses: ./.github/workflows/android-fdroid.yml
-
   release:
     runs-on: ubuntu-latest
     steps:
@@ -213,3 +207,11 @@ jobs:
             --title "Skywire Mobile ${{ steps.version.outputs.name }}" \
             "${args[@]}" \
             "$out.apk" "$out.apk.sha256" "$out.aab" "$out.aab.sha256"
+
+  # Once the GitHub release is out: the F-Droid build of this tag, the way
+  # F-Droid's update bot and build server will see it. It publishes nothing —
+  # F-Droid picks the tag up on its own — and a failure here leaves the GitHub
+  # release as it is.
+  fdroid:
+    needs: release
+    uses: ./.github/workflows/android-fdroid.yml
