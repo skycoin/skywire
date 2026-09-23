@@ -70,7 +70,14 @@ Modes (mutually exclusive):
 			case recursive:
 				PrintHelpAll(target, true)
 			default:
-				_ = target.Help() //nolint:errcheck,gosec
+				// Plain, like the three modes above it. `--help` is the
+				// screen — colored, over the code rain — and `help` is the
+				// same text without the backdrop, for reading closely or
+				// copying out. One decorated form and one clean one, neither
+				// needing an environment variable to reach. See rain.go.
+				withPlainHelp(func() {
+					_ = target.Help() //nolint:errcheck,gosec
+				})
 			}
 		},
 	}
@@ -117,6 +124,50 @@ Modes (mutually exclusive):
 			}
 		},
 	})
+}
+
+// InstallHelpTree installs the flag-aware `help` on root and on every command
+// beneath it that has subcommands of its own.
+//
+// Without it, `help` is a real command only on the few roots InstallHelp was
+// called on, and at any greater depth it only appears to work: cobra prints a
+// command's help for any argument it cannot resolve, so `visor help` and
+// `visor zzzz` are the same code path. The flags are the tell — `visor help -t`
+// fails with "unknown shorthand flag: 't'" because nothing is parsing them.
+//
+// Descendants get it only if they have visible subcommands of their own. A
+// leaf takes positional arguments, and giving it a `help` child would capture
+// an argument that was meant for it; a parent that already prints help for an
+// unrecognized argument loses nothing by having the word resolve properly
+// instead. Root is exempt from that rule — a binary's own root gets `help`
+// whether or not it has subcommands, which is what InstallHelp has always
+// done for it.
+//
+// That leaves the commands which are both a parent and runnable, where the
+// word is genuinely ambiguous, and the answer there is the POSIX one rather
+// than a special case: `cmd -- help` passes it through as an argument. Cobra
+// stops looking for subcommands at `--` (stripFlags breaks out of its loop),
+// so the argument reaches the command and is rejected or used on its own
+// terms. Sniffing for args[0] == "help" somewhere instead would claim the
+// word just as firmly, only in a place with no flags parsed and no way to
+// opt out.
+//
+// Call it once the tree is assembled, and before anything that wraps help
+// functions (InitRain, tui.Install), so the commands it adds are wrapped too.
+func InstallHelpTree(root *cobra.Command) {
+	installHelpTree(root, true)
+}
+
+func installHelpTree(c *cobra.Command, isRoot bool) {
+	// Snapshot the children first: InstallHelp adds `help` and `tree` to c,
+	// and recursing into those would be pointless at best.
+	children := append([]*cobra.Command(nil), c.Commands()...)
+	if isRoot || c.HasAvailableSubCommands() {
+		InstallHelp(c)
+	}
+	for _, sub := range children {
+		installHelpTree(sub, false)
+	}
 }
 
 // findChild returns the direct child of c matching name, or nil.

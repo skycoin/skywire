@@ -389,6 +389,13 @@ type RouteGroup struct {
 	// Encapsulates sequencing, reordering, SACK, and transport selection.
 	mux *routeMux
 
+	// rehomeHost is the router this group is registered with, as the narrow
+	// interface leg re-home needs: a re-home arriving on THIS group's chain
+	// names a DIFFERENT group by descriptor, and only the router can resolve
+	// one. Nil for a group built outside the router (tests, datagram setup),
+	// which simply refuses every re-home. See leg_rehome.go.
+	rehomeHost legRehomeHost
+
 	// legChangeHook, when non-nil, fires from the leg-mutation
 	// paths (appendForwardLeg / appendRules / leg-prune on
 	// transport close). Returning a non-Unset DistributionConfig
@@ -434,6 +441,18 @@ type RouteGroup struct {
 	selfHealAdd    func(excludeHops []string)
 	selfHealTarget int
 	healInFlight   atomic.Bool
+
+	// The standby-pool arbiter's per-group state (pool_arbiter.go): the legs
+	// this group took from the pool, when the last one was taken, and the load
+	// episode marks the release is measured from. All guarded by rg.mu.
+	poolTaken     []poolTakenLeg
+	poolLastTake  time.Time
+	poolLoadAt    time.Time
+	poolBusySince time.Time
+	poolBytesMark uint64
+	// poolBytesAt is when poolBytesMark was sampled, so the episode is judged
+	// on a RATE rather than on "any delta at all" (see poolLoadSignal).
+	poolBytesAt time.Time
 
 	// dirFanoutTicks throttles the directional confinement/fan-out summary logged
 	// by legDataProgressServiceFn (see there) so a busy download does not spam it.
@@ -639,9 +658,20 @@ func (rg *RouteGroup) SetTunnelRole(role string) {
 	if role == "" {
 		return
 	}
+	// The app labels its tunnels, so from here on one of its groups with NO
+	// label is a role that has not arrived yet rather than a group the pool
+	// rules do not cover (pool_arbiter.go).
+	noteRoleReportingApp(rg.AppName())
 	rg.mu.Lock()
+	prev := rg.tunnelRole
 	rg.tunnelRole = role
 	rg.mu.Unlock()
+	// DEMOTION to standby: whatever width this group held as an active tunnel,
+	// a pooled one holds a single leg. Give the extras back now rather than
+	// leaving them parked on the exit (pool_arbiter.go).
+	if role == tunnelRoleStandby && prev != tunnelRoleStandby {
+		rg.shedLegsForStandby()
+	}
 }
 
 // TunnelRole returns the dialing app's label for this route group ("active" /
@@ -732,6 +762,10 @@ type MuxInfo struct {
 	// tunnels, and ALWAYS empty on the accepting end: an exit knows how many
 	// tunnels a client holds but not which of them are in standby, so read the
 	// role on the local end.
+	// AgeMS is how long this route group has existed. For a pooled STANDBY
+	// tunnel it is its AUDITION age — how long it has been held open, pinged
+	// and measured without carrying a stream.
+	AgeMS      float64
 	TunnelRole string
 }
 
@@ -811,6 +845,10 @@ type MuxLeg struct {
 	TransportID string `json:"transport_id"`
 	TpType      string `json:"tp_type"`
 	RemotePK    string `json:"remote_pk"`
+	// Source names where a leg that is NOT this group's own dial came from —
+	// "standby :4, re-homed in place" for a leg the pool arbiter took
+	// (pool_arbiter.go). Empty for an ordinary dialed leg.
+	Source string `json:"source,omitempty"`
 	// LatencyMS is the FIRST-HOP transport RTT in ms (the same value
 	// 'tp ls' shows). For a multihop leg this is only the near edge, NOT
 	// the whole path — use RouteLatencyMS for the end-to-end route.
@@ -846,6 +884,12 @@ type MuxLeg struct {
 	// owned; single-intermediate far hop derived from route−transport RTT).
 	// Empty when the route path wasn't recorded (legacy/accepted routes).
 	Hops []RouteHopInfo `json:"hops,omitempty"`
+	// CapacityPriorBps is the pool arbiter's PRIOR throughput estimate for
+	// this leg's transport (throughputPrior: the transport's live measured
+	// rate if it has one, else its catalog entry) — the number a standby
+	// tunnel is ranked by BEFORE it is measured. Distinct from GoodputBps,
+	// which is the leg's own live EWMA once it has carried traffic.
+	CapacityPriorBps float64 `json:"capacity_prior_bps,omitempty"`
 }
 
 // MuxStats returns a point-in-time snapshot of the rg's per-leg
@@ -873,6 +917,9 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 	}
 	info.PerFrameNoise = rg.perFrameNoiseActive
 	info.TunnelRole = rg.tunnelRole
+	if !rg.createdAt.IsZero() {
+		info.AgeMS = float64(time.Since(rg.createdAt)) / float64(time.Millisecond)
+	}
 	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
 	rg.mu.Unlock()
 
@@ -894,6 +941,8 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 			leg.TransportID = tp.Entry.ID.String()
 			leg.TpType = string(tp.Entry.Type)
 			leg.RemotePK = tp.Remote().String()
+			leg.Source = rg.poolLegSource(tp.Entry.ID)
+			leg.CapacityPriorBps = throughputPrior(tp)
 			leg.LatencyMS = tp.GetLatency()
 			// TRUE end-to-end route latency (all hops), from the leg-liveness
 			// pong — distinct from the first-hop transport RTT above.
@@ -1493,6 +1542,9 @@ func (rg *RouteGroup) SetRotation(hook RotationHook, applyAdd, applyAddForward f
 // is the requested mux degree (legs the group should maintain). A target of
 // 0 or 1 disables self-heal (a single-leg group has nothing to spread to).
 func (rg *RouteGroup) SetSelfHeal(applyAdd func(excludeHops []string), target int) {
+	if target > 1 && !rg.poolWideningAllowed() {
+		target = 1 // a standby tunnel holds one leg, whatever the width says
+	}
 	rg.mu.Lock()
 	rg.selfHealAdd = applyAdd
 	rg.selfHealTarget = target
@@ -1506,6 +1558,9 @@ func (rg *RouteGroup) SetSelfHeal(applyAdd func(excludeHops []string), target in
 // live self-heal target instead of letting maybeSelfHeal keep re-dialing back
 // toward the (larger) dial-time value.
 func (rg *RouteGroup) setSelfHealTarget(target int) {
+	if target > 1 && !rg.poolWideningAllowed() {
+		target = 1 // a standby tunnel holds one leg, whatever the width says
+	}
 	rg.mu.Lock()
 	rg.selfHealTarget = target
 	rg.mu.Unlock()
@@ -1583,6 +1638,13 @@ func (rg *RouteGroup) maybeSelfHeal() {
 	add := rg.selfHealAdd
 	target := rg.selfHealTarget
 	rg.mu.Unlock()
+	// A STANDBY tunnel is single-leg by construction: widening one spends a
+	// second chain to the exit on a tunnel carrying nothing (pool_arbiter.go).
+	// The top-up is an ACTIVE-tunnel power; a group with no role at all is
+	// unaffected.
+	if !rg.poolWideningAllowed() {
+		return
+	}
 	if add == nil || target <= 1 || rg.isClosed() {
 		return
 	}
@@ -4381,7 +4443,10 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		// reliable transports whose gaps SACK recovery refills, so it is off by
 		// default. It still only ACTIVATES when the peer also advertises it, so an
 		// old or non-opted peer simply never negotiates it and is unaffected.
-		caps := muxHandshakeCaps() | routing.CapLegState | routing.CapUniDir
+		caps := muxHandshakeCaps() | routing.CapLegState | routing.CapUniDir | routing.CapLegRehome
+		if DeliveryCRCAdvertised() {
+			caps |= routing.CapDeliveryCRC
+		}
 		if rg.cfg != nil && rg.cfg.FEC {
 			caps |= routing.CapFEC
 		}
@@ -4645,6 +4710,8 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 		return rg.handleLegStatePacket(packet)
 	case routing.DirectionPacket:
 		return rg.handleDirectionPacket(packet)
+	case routing.LegRehomePacket:
+		return rg.handleLegRehomePacket(packet)
 	case routing.HandshakePacket:
 		// A handshake on an aux leg proves the peer registered that leg's
 		// rule, so it is safe to start sending on it. The primary leg's
@@ -4705,6 +4772,9 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 				// recorded, so `visor state --select diag` answers "which leg is
 				// the upload on, and why did it change".
 				rg.mux.SetForwardRehomeFn(rg.noteForwardRehome)
+				// …and when a sustained upload widens it over that leg's
+				// siblings, or the load subsides and it narrows back.
+				rg.mux.SetForwardFanoutFn(rg.noteForwardFanout)
 				// …and a leg cut to a probe (or given its share back) is
 				// recorded there too, so a collapse onto one bad leg says so.
 				rg.mux.SetLegProbeRulingFn(rg.noteLegProbeRuling)
@@ -4782,6 +4852,28 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 				if remoteCaps&routing.CapUniDir != 0 {
 					rg.mux.setDirectional(rg.initiator, rg.desc.DstPK(), rg.desc.SrcPK())
 					rg.logger.Debug("Unidirectional send selection enabled (both peers support CapUniDir)")
+				}
+
+				// Leg re-home negotiation. Both edges must advertise CapLegRehome;
+				// then a STANDBY group's whole chain can be adopted as one of this
+				// group's mux legs by rewriting its consume rule at each edge, with
+				// no setup-node dial. Inert until an operator or the pool asks for
+				// one; see leg_rehome.go.
+				if remoteCaps&routing.CapLegRehome != 0 {
+					rg.mux.legRehomeEnabled = true
+					rg.logger.Debug("Leg re-home enabled (both peers support CapLegRehome)")
+				}
+
+				// Delivery-check negotiation. Both edges must advertise
+				// CapDeliveryCRC, and we must still want it ourselves — the knob is
+				// read here as well as at advertise time so a group born while it was
+				// off never strips a trailer its peer was not told to stamp. From now
+				// on every data frame this group sends carries a CRC32C over
+				// (seq ‖ payload) and every frame it delivers is verified against it.
+				if remoteCaps&routing.CapDeliveryCRC != 0 && DeliveryCRCAdvertised() {
+					rg.mux.deliveryCRC = true
+					rg.mux.groupPort = rg.desc.SrcPort()
+					rg.logger.Debug("Delivery CRC enabled (both peers support CapDeliveryCRC)")
 				}
 
 				// FEC negotiation. Requires CapMux (rg.mux set above); enabled purely

@@ -1,0 +1,10 @@
+# assert	value	want	verdict
+# criterion 10: cap 0.4 of the bytes on any one route, hold >= 3 routes, >= 0.8 x the paired reference, at 50 MB down and up
+# shares are bench/direction.sh per-row leg shares in the PAYLOAD direction (reverse bytes on a download, forward bytes on an upload), over the legs of ACTIVE groups only
+# cap tolerance = 0.4 + 4194304/50000000 = 0.484 (one chunk of slack)
+routes_active	min 3, max 4 over 8 row(s)	>= 3	PASS
+max_share	0.5740 (worst row 1, leg b414796d)	<= 0.484 (0.4 + chunk/size)	FAIL
+ratio_50down	0.977	>= 0.8	PASS
+ratio_50up	0.959	>= 0.8	PASS
+hashes	8/8	8/8	PASS
+spread_policy	settings=spread.max_share=0.4,spread.min_routes=3 settings_landed=8s	spread.max_share=0.4 spread.min_routes=3 applied	PASS

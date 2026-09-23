@@ -2,6 +2,8 @@
 package router
 
 import (
+	"fmt"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -123,11 +125,6 @@ func flipPinString(mode byte) string {
 	}
 }
 
-// soleBlackHoleExemptRecvFloor is the per-tick GROUP recv above which a
-// directional group's sole ACTIVE (light-direction) leg is exempt from the
-// sole-leg black-hole reaping.
-const soleBlackHoleExemptRecvFloor = 16 * 1024
-
 // soleLegBlackHoleExempt reports whether the sole-leg black-hole reaping should
 // be SKIPPED this tick. Under unidirectional assignment the sole active leg
 // carries only ONE direction — on a download it is the light FORWARD (upload)
@@ -135,10 +132,11 @@ const soleBlackHoleExemptRecvFloor = 16 * 1024
 // REVERSE (send-standby) mux legs. Judging that leg by its own recv would misread
 // it as a black-hole and prune the direct leg exactly when unidir is working. So
 // skip the reaping when directional AND the GROUP is receiving data on its
-// reverse legs (aggregate recv delta above the floor) — the group is not
-// black-holing even though the sole active leg is quiet on the receive side.
+// reverse legs (aggregate recv delta above unidir.sole_blackhole_exempt_recv_floor)
+// — the group is not black-holing even though the sole active leg is quiet on
+// the receive side.
 func soleLegBlackHoleExempt(directional bool, aggRecvDelta uint64) bool {
-	return directional && aggRecvDelta > soleBlackHoleExemptRecvFloor
+	return directional && aggRecvDelta > uint64(routersettings.UnidirSoleBlackHoleExemptRecvFloor.Bytes()) //nolint:gosec
 }
 
 // dirConfig snapshots the directional state under legMu so the send path reads it
@@ -265,6 +263,282 @@ func (m *routeMux) flipStep(up, down float64) (flipped, changed bool) {
 		return false, true
 	}
 	return cur, false
+}
+
+// Forward fan-out under load (step 2c). CONFINEMENT is what keeps an
+// interactive session's requests on the lowest-latency leg, and #5035 measured
+// what happens without it: an upload sprayed across a 44 ms and a 166 ms leg
+// runs at x0.24 of one leg alone, because the peer's no-skip reorder frontier
+// waits out the skew. But confinement also caps the upload at ONE leg's rate,
+// which is why every upload cell of the live campaign lost (legs-2: x0.69 at
+// 10 MB, x0.88 at 50 MB; compose 2x2 50 MB up x0.43).
+//
+// The flip controller was supposed to cover this case and cannot: it moves
+// which CLASS of leg each direction prefers, while selectTransportRaw sends the
+// forward direction through selectConfinedForward by this end's ROLE. A flip
+// therefore moves the upload from one single leg to another single leg, and in
+// a group with no direct leg — the legs-2 and compose-2x2 shapes — both classes
+// are "multihop", so it does not even do that.
+//
+// So the widening is driven by LOAD instead, and it is a WIDENING rather than a
+// move: the leg the direction was confined to stays in the set and stays the
+// scheduler's first choice. Three gates keep it away from the traffic
+// confinement exists for:
+//
+//   - LOAD: the confined leg must keep filling its send window for
+//     unidir.fanout_engage. A request that fits in one window never gets there,
+//     so an interactive session stays on its single lowest-latency leg.
+//   - SKEW: only siblings within unidir.fanout_max_skew of the confined leg's
+//     measured latency join the band. This is the lesson of the rejected #5050 —
+//     a 44 ms leg's frames must not be striped onto a 166 ms one — and it is why
+//     a group whose siblings are all far slower simply stays confined.
+//   - RELEASE: unidir.fanout_release with nothing written puts the direction
+//     back on its one leg, so the fan-out cannot outlive the upload.
+//
+// Within the band the frame goes wherever the existing ECF scheduler says, which
+// is the same machinery the download direction has always used; the band is the
+// only thing the forward direction adds to it.
+const (
+	forwardFanoutEngageDefault  = 300 * time.Millisecond
+	forwardFanoutReleaseDefault = 2 * time.Second
+	forwardFanoutMaxSkewDefault = 2.0
+)
+
+// forwardFanout is the forward direction's load meter and fan-out latch. All
+// fields are atomics: the meter is fed from the writer (waitSendWindow, with
+// the route group's mu DROPPED) and read from the send path (with it held).
+type forwardFanout struct {
+	on atomic.Bool
+	// satSince is when the current load episode began, 0 when there is none.
+	// lastSat is the most recent qualifying observation, which is what the
+	// release interval is measured from.
+	satSince atomic.Int64
+	lastSat  atomic.Int64
+}
+
+// forwardFanoutStep applies one observation of the forward writer's demand to
+// the latch. qualifies means "there is a band to widen into AND the direction
+// is loaded" — the band half matters on its own, because a group with no
+// comparable sibling must never accumulate toward a fan-out it cannot use.
+// Split from the sampling so the hysteresis is unit testable with a synthetic
+// clock (nowNano is a real UnixNano; 0 is the "no episode" sentinel).
+func (m *routeMux) forwardFanoutStep(nowNano int64, qualifies bool, engage, release time.Duration) (on, changed bool) {
+	f := &m.fwdFan
+	if qualifies {
+		if f.satSince.Load() == 0 {
+			f.satSince.Store(nowNano)
+		}
+		f.lastSat.Store(nowNano)
+		if nowNano-f.satSince.Load() >= int64(engage) && f.on.CompareAndSwap(false, true) {
+			return true, true
+		}
+		return f.on.Load(), false
+	}
+	// A rate-limited leg is not full from one microsecond to the next — it
+	// fills, drains an ack's worth and fills again, so the writer's view of it
+	// alternates many times a second. Requiring an UNBROKEN stretch of full
+	// windows would therefore never engage on a real upload (measured: 25
+	// window parks across a 4.6 s 16 MB transfer, none of them adjacent). The
+	// episode is what has to be unbroken: it survives any gap shorter than the
+	// release interval, and only a leg that has had room for that whole
+	// interval ends it.
+	last := f.lastSat.Load()
+	if last == 0 || nowNano-last < int64(release) {
+		return f.on.Load(), false
+	}
+	f.satSince.Store(0)
+	if f.on.CompareAndSwap(true, false) {
+		return false, true
+	}
+	return false, false
+}
+
+// forwardFanoutActive reports whether the forward direction is currently fanned
+// out, expiring the latch in place when the release interval has passed with no
+// qualifying observation. Expiring here rather than only on the writer's path
+// matters because a group that stops uploading stops calling waitSendWindow
+// altogether — the latch has to drop on the clock, not on the next write.
+func (m *routeMux) forwardFanoutActive() bool {
+	if !m.fwdFan.on.Load() {
+		return false
+	}
+	on, changed := m.forwardFanoutStep(time.Now().UnixNano(), false,
+		m.knDur(routersettings.UnidirFanoutEngage), m.knDur(routersettings.UnidirFanoutRelease))
+	if changed {
+		m.noteFanoutChange(false, "the forward direction has written nothing for the whole release interval — the upload is back on its single leg")
+	}
+	return on
+}
+
+// noteFanoutChange fires the fan-out callback (SetForwardFanoutFn), so a change
+// of latch is a named mux event rather than only a rate that moved.
+func (m *routeMux) noteFanoutChange(on bool, reason string) {
+	if m.onForwardFanout != nil {
+		m.onForwardFanout(on, m.confinedForwardIdx(), reason)
+	}
+}
+
+// noteForwardLoad feeds the writer's view of the confined leg's send window to
+// the fan-out latch. Called from waitSendWindow, which runs on the writer with
+// the route group's mu DROPPED and has just refreshed the in-flight estimates.
+func (m *routeMux) noteForwardLoad(tps []*transport.ManagedTransport) {
+	if !m.forwardSender() || m.tpSelector == nil {
+		return
+	}
+	idx := m.confinedForwardIdx()
+	// ENGAGE reads pressure: the one leg the direction is confined to is at its
+	// send window. HOLD reads demand: the writer is still pushing frames at all.
+	// They cannot be the same question, because the pressure is what the fan-out
+	// RELIEVES — once the siblings are carrying, the confined leg stops being
+	// full and a pressure-held latch releases itself in the middle of the upload
+	// and re-engages 300 ms later (measured on a 48 MB emulated upload: one
+	// release, one re-engage, x1.31 instead of x1.6). A latch held by demand is
+	// stable, and it still cannot outlive the upload: this is the writer's own
+	// path, so when the application stops writing the observations stop with it
+	// and forwardFanoutActive expires the latch on the clock.
+	qualifies := idx >= 0 && len(m.forwardFanoutLegs(tps, idx)) > 0 &&
+		(m.fwdFan.on.Load() || m.tpSelector.Saturated(idx))
+	on, changed := m.forwardFanoutStep(time.Now().UnixNano(), qualifies,
+		m.knDur(routersettings.UnidirFanoutEngage), m.knDur(routersettings.UnidirFanoutRelease))
+	if !changed {
+		return
+	}
+	if on {
+		m.noteFanoutChange(true, fmt.Sprintf(
+			"leg %d kept filling its send window for %v — the upload is now striding %d legs within %.1fx of its latency",
+			idx, m.knDur(routersettings.UnidirFanoutEngage), len(m.forwardFanoutLegs(tps, idx)), m.knRatio(routersettings.UnidirFanoutMaxSkew)))
+		return
+	}
+	m.noteFanoutChange(false, "the forward direction has written nothing for the whole release interval — the upload is back on its single leg")
+}
+
+// forwardFanoutLegs is the BAND the forward direction strides while fanned out:
+// the leg it is confined to, plus every live, ready, class-agnostic sibling
+// whose latency is within unidir.fanout_max_skew of it, measured on the SAME
+// basis confinedForwardLeg used (forwardLatencies: end-to-end when every
+// candidate has a pong, else the first-hop RTT). nil when the group has no
+// comparable sibling — an unmeasured group included, because the fan-out never
+// guesses which legs are close enough to stride together.
+//
+// Two deliberate choices. The band is NOT filtered by leg class: the whole
+// point of the load trigger is that one leg is not enough, and in a group that
+// has a direct leg the extra capacity is on the multihop legs. And the band is
+// narrow (2.0x by default), which is the lesson of the rejected #5050 — a
+// 44 ms leg's traffic striped onto a 166 ms one measured x0.24, because the
+// peer's no-skip reorder frontier waits out the skew. A direct leg far faster
+// than every sibling therefore has an EMPTY band and stays confined.
+func (m *routeMux) forwardFanoutLegs(tps []*transport.ManagedTransport, cur int) []int {
+	if cur < 0 || cur >= len(tps) {
+		return nil
+	}
+	cand := make([]int, 0, len(tps))
+	cand = append(cand, cur)
+	for idx := range tps {
+		if idx == cur {
+			continue
+		}
+		tp := tps[idx]
+		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
+			continue
+		}
+		cand = append(cand, idx)
+	}
+	if len(cand) < 2 {
+		return nil
+	}
+	lat, measured := m.forwardLatencies(tps, cand)
+	if !measured || lat[0] <= 0 {
+		return nil
+	}
+	// The band is ordered by LATENCY, fastest first, and the fallback below
+	// takes the first member with room. Round-robin was the first shape and it
+	// is wrong once the legs differ in rate: it hands the slow leg an equal
+	// share, so frames arrive further and further out of order, the peer's
+	// no-skip frontier holds them, and the yamux window above the group drains
+	// waiting for in-order bytes. Preferring the fastest leg with room keeps
+	// arrivals near in-order and gives the slow leg exactly the overflow the
+	// fast one cannot take, which is its rate share.
+	ceil := lat[0] * m.knRatio(routersettings.UnidirFanoutMaxSkew)
+	type bandLeg struct {
+		idx int
+		lat float64
+	}
+	ranked := []bandLeg{{cur, lat[0]}}
+	for i := 1; i < len(cand); i++ {
+		if lat[i] > 0 && lat[i] <= ceil {
+			ranked = append(ranked, bandLeg{cand[i], lat[i]})
+		}
+	}
+	if len(ranked) < 2 {
+		return nil
+	}
+	sort.Slice(ranked, func(a, b int) bool { return ranked[a].lat < ranked[b].lat })
+	band := make([]int, len(ranked))
+	for i := range ranked {
+		band[i] = ranked[i].idx
+	}
+	return band
+}
+
+// pickFanoutLeg returns the band leg a forward frame should ride now, or -1
+// when every leg in the band is at its send window (then the writer waits,
+// exactly as a confined direction does — it never spills outside the band).
+//
+// Round-robin over the band, NOT "the confined leg until it is full, then the
+// rest". Strict overflow was measured first and does not aggregate: the writer
+// is one goroutine, so keeping the primary leg pinned at its window makes every
+// frame wait on that leg's pacing and the siblings pick up only what leaks past
+// it (16 MB over a 120 ms and a 150 ms leg: 63 %/37 %, x1.28 of one leg alone).
+// Striding the band evenly is what the download direction has always done, and
+// it is what the aggregation number comes from.
+func (m *routeMux) pickFanoutLeg(tps []*transport.ManagedTransport, payload []byte, cur int) int {
+	band := m.forwardFanoutLegs(tps, cur)
+	if len(band) == 0 {
+		return -1
+	}
+	inBand := func(idx int) bool {
+		for _, b := range band {
+			if b == idx {
+				return true
+			}
+		}
+		return false
+	}
+	// Ask the SCHEDULER first, bounded to the band. ECF (the default mode)
+	// places a frame on the leg that will deliver it soonest and charges the
+	// leg's in-flight for it; a plain round-robin does neither, and on two legs
+	// of equal rate and unequal RTT it splits by bandwidth-delay product instead
+	// of by rate — the slower leg draws the larger share and becomes the
+	// bottleneck (measured 37 %/62 % at x1.34 against 48 %/52 % at x1.6). This is
+	// the same selector the download direction has always used; the band is the
+	// only thing the forward direction adds.
+	if idx := m.tpSelector.SelectForPayload(payload); idx >= 0 && idx < len(tps) && inBand(idx) &&
+		!m.legProbeExhausted(idx) && !m.tpSelector.Saturated(idx) {
+		return idx
+	}
+	for _, idx := range band {
+		if !m.tpSelector.Saturated(idx) {
+			return idx
+		}
+	}
+	return -1
+}
+
+// forwardFanoutRoom reports whether a fanned-out forward direction has anywhere
+// to put a frame. It is the send-window question for an upload striding a band,
+// and answering it from the band rather than from every ready leg is what stops
+// the writer being released against a leg too skewed to be used.
+//
+// A pure query: it neither advances the round-robin cursor nor charges the
+// scheduler, because the parked writer asks it on every poll and the frame it
+// is waiting to send has not been placed yet.
+func (m *routeMux) forwardFanoutRoom(tps []*transport.ManagedTransport, cur int) bool {
+	for _, idx := range m.forwardFanoutLegs(tps, cur) {
+		if !m.tpSelector.Saturated(idx) {
+			return true
+		}
+	}
+	return false
 }
 
 // selectByDirection picks a leg matching this end's send direction. Under

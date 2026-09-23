@@ -81,7 +81,7 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 	// Accept-side datagram intent comes from the local serving port
 	// being registered as faithful-UDP-capable (RegisterDatagramPort).
 	datagram := r.isDatagramPort(rules.Desc.DstPort())
-	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, "", datagram)
+	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, "", "", datagram)
 	if err != nil {
 		// A route group for this descriptor is already initializing: these rules
 		// belong to an additional (aux) mux leg the existing group should adopt,
@@ -275,7 +275,17 @@ func awaitHandshakeAck(ctx context.Context, processed <-chan struct{}, retransmi
 	}
 }
 
-func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRules, nsConf noise.Config, appName string, datagram bool) (*NoiseRouteGroup, error) {
+// saveRouteGroupRules builds the route group for one dial's (or one accepted
+// request's) edge rules. role is the DIALING app's tunnel label from
+// DialOptions.TunnelRole, empty on the accept side — it is seeded onto the
+// group HERE, at creation, because everything that decides how wide the group
+// may grow runs before the dial returns: the mux width, SetSelfHeal and the
+// background establishMuxRoutes all read the group a moment after this call,
+// and finishDial's own SetTunnelRole lands after all of them. A pooled tunnel
+// whose label arrived only at that point had already been grown to the visor
+// width (rig 2026-09-22: 30 standby groups holding 2 legs each, 33 leg_added,
+// zero pool_leg_taken — dial-time widening, not the arbiter).
+func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRules, nsConf noise.Config, appName, role string, datagram bool) (*NoiseRouteGroup, error) {
 	// Check context before starting
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -317,7 +327,14 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	rgCfg.FEC = r.muxFEC.Load()
 	rg := NewRouteGroup(rgCfg, r.rt, rules.Desc, r.mLogger)
 	rg.muxEvents = &r.muxEvents
+	rg.rehomeHost = r
 	rg.SetAppName(appName)
+	// Seed the role before anyone can widen the group. SetTunnelRole is a
+	// no-op for the empty role, so the accept side and every non-tunnel dial
+	// are unchanged; a dial that DID carry a role also registers its app as
+	// role-reporting here, so a sibling dial that is still in flight is
+	// treated as a role in flight rather than as a group the pool rules skip.
+	rg.SetTunnelRole(role)
 	rg.initiator = nsConf.Initiator
 	// Per-frame noise (inverse-mux): hand the RG the same KK keys EncryptConn
 	// would use, and opt in per the env gate so the whole fleet isn't flipped at

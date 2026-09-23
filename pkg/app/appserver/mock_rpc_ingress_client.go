@@ -272,6 +272,17 @@ func (_m *MockRPCIngressClient) AppSettings(req AppSettingsReq) (AppSettingsResp
 	return AppSettingsResp{Version: version, Values: vals, Text: text, Ops: ops, Changed: version != req.Applied}, nil
 }
 
+// GrowMux provides a mock function with given fields: req
+func (_m *MockRPCIngressClient) GrowMux(req GrowMuxReq) (int, error) {
+	ret := _m.Called(req)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GrowMux")
+	}
+
+	return ret.Int(0), ret.Error(1)
+}
+
 // NoteMuxEvent provides a mock function with given fields: req
 func (_m *MockRPCIngressClient) NoteMuxEvent(req NoteMuxEventReq) error {
 	ret := _m.Called(req)

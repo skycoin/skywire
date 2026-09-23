@@ -123,6 +123,9 @@ var (
 	proxyServerWhitelist       string
 	enableDmsgWeb              bool
 	enableSkynetWeb            bool
+	enableWisp                 bool
+	wispPort                   uint
+	wispUpstreamSOCKS          string
 	enableSkymailBridge        bool
 	dmsgWebUpstreamSOCKS       string
 	skynetWebUpstreamSOCKS     string

@@ -19,7 +19,13 @@ func InitFlags(cmd *cobra.Command, usage bool) {
 	// default. Supports -r/-t/-d modes — see InstallHelp. Replaces
 	// the previous `&cobra.Command{Hidden: true}` stub that disabled
 	// `cmd help` entirely.
-	InstallHelp(cmd)
+	//
+	// The whole tree, not just this root: `--help` is a persistent flag and
+	// so reaches every command, and `help` should reach just as far. A
+	// binary that finishes assembling its tree after this call (the skywire
+	// binary adds skycoin in a later init) covers the rest by calling
+	// InstallHelpTree again at Execute time.
+	InstallHelpTree(cmd)
 	installSecKeyFallback(cmd)
 	cmd.PersistentFlags().MarkHidden("help") //nolint:errcheck,gosec
 

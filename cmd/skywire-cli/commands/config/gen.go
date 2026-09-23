@@ -334,6 +334,9 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&enableDmsgWeb, "dmsgweb", scriptExecBool("${DMSGWEB:-false}"), "enable embedded .dmsg resolving SOCKS5 proxy on 127.0.0.1:4445")
 	genConfigCmd.Flags().StringVar(&dmsgWebSecretKey, "dmsgweb-sk", scriptExecString("${DMSGWEBSK}"), "run the embedded resolver under THIS secret key instead of the visor's, attached in-process (for a key a deployment already knows, e.g. a survey whitelist)")
 	genConfigCmd.Flags().BoolVar(&enableSkynetWeb, "skynetweb", scriptExecBool("${SKYNETWEB:-false}"), "enable embedded .skynet resolving SOCKS5 proxy on 127.0.0.1:4446")
+	genConfigCmd.Flags().BoolVar(&enableWisp, "wisp", scriptExecBool("${WISP:-false}"), "enable the embedded Wisp server on the virtual-loopback port, for a browser-side guest's network")
+	genConfigCmd.Flags().UintVar(&wispPort, "wisp-port", visorconfig.DefaultWispPort, "port for --wisp")
+	genConfigCmd.Flags().StringVar(&wispUpstreamSOCKS, "wisp-socks", "", "SOCKS5 proxy --wisp carries streams over (default: the local skysocks-client)")
 	genConfigCmd.Flags().BoolVar(&enableSkymailBridge, "skymail-bridge", scriptExecBool("${SKYMAILBRIDGE:-false}"), "enable SMTP to skywire bridge on 127.0.0.1:1025")
 	genConfigCmd.Flags().StringVar(&dmsgWebUpstreamSOCKS, "dmsgweb-upstream", scriptExecString("${DMSGWEBUPSTREAM}"), "upstream SOCKS5 for non .dmsg traffic (empty chains to skynetweb)")
 	gHiddenFlags = append(gHiddenFlags, "dmsgweb-upstream")
@@ -2516,6 +2519,13 @@ func configureResolvingProxies(log *logging.Logger) {
 			Enable:        true,
 			UpstreamSOCKS: skynetWebUpstreamSOCKS,
 			ProxyAddr:     skynetWebProxyAddr,
+		}
+	}
+	if enableWisp {
+		conf.Wisp = &visorconfig.WispConfig{
+			Enable:        true,
+			Port:          wispPort,
+			UpstreamSOCKS: wispUpstreamSOCKS,
 		}
 	}
 	if enableSkymailBridge {

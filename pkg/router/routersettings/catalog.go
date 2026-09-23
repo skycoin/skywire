@@ -35,6 +35,7 @@ var (
 	LegSoleBlackHoleTicks     = RegisterMin("leg.sole_blackhole_ticks", KindCount, 3, 1, "consecutive data-progress intervals a sole leg must deliver nothing before a replacement is dialed")
 	LegStateResyncInterval    = RegisterMin("leg.state_resync_interval", KindDuration, int64(7*time.Second), int64(time.Second), "how often the active-set side re-asserts its COMPLETE standby/active set to the peer (CapLegState)")
 	LegParkMinHold            = RegisterMin("leg.park_min_hold", KindDuration, int64(30*time.Second), int64(time.Second), "how long an adaptive park holds before a leg may be re-admitted")
+	LegRehomeAckTimeout       = RegisterMin("leg.rehome_ack_timeout", KindDuration, int64(5*time.Second), int64(100*time.Millisecond), "how long a leg re-home waits for the exit's ack before both groups are left intact")
 
 	// Idle suspension of the service loops that cannot act on a quiet or
 	// single-leg group (service_gate.go). The three loops it parks tick at 10,
@@ -134,6 +135,53 @@ var (
 	UnidirFlipCooldownTicks = RegisterMin("unidir.flip_cooldown_ticks", KindCount, 3, 1, "ticks to hold after a flip before another")
 	UnidirFlipMinGoodput    = RegisterMin("unidir.flip_min_goodput", KindBytes, 8192, 1, "bytes/sec floor under which the flip controller ignores the asymmetry as idle noise")
 
+	// FORWARD fan-out under load (unidir.go). The forward direction is confined
+	// to ONE leg — that is what keeps an interactive session on the lowest-latency
+	// leg — until a sustained upload proves one leg is not enough: the confined
+	// leg sits at its send window for unidir.fanout_engage without a break AND a
+	// sibling leg is close enough in latency to carry the overflow without
+	// stalling the peer's no-skip reorder frontier. The fan-out is released after
+	// unidir.fanout_release without such a stretch, so the direction goes back to
+	// the one leg as soon as the load subsides.
+	UnidirFanoutEngage  = RegisterMin("unidir.fanout_engage", KindDuration, int64(300*time.Millisecond), int64(50*time.Millisecond), "how long a FORWARD upload must keep filling its confined leg's send window before the upload fans out over its sibling legs")
+	UnidirFanoutRelease = RegisterMin("unidir.fanout_release", KindDuration, int64(2*time.Second), int64(100*time.Millisecond), "how long without a full FORWARD send window before the fan-out is released and the upload returns to its single leg")
+	UnidirFanoutMaxSkew = RegisterRatio("unidir.fanout_max_skew", 2.0, 1.0, "the most a sibling leg's latency may exceed the confined FORWARD leg's before it is too skewed to carry upload overflow")
+
+	// The sole-leg black-hole reaping's unidirectional exemption (unidir.go
+	// soleLegBlackHoleExempt). A directional group's sole ACTIVE leg carries
+	// only one direction, so it is judged by the GROUP's aggregate receive
+	// instead of its own.
+	UnidirSoleBlackHoleExemptRecvFloor = RegisterMin("unidir.sole_blackhole_exempt_recv_floor", KindBytes, 16*1024, 1, "per-tick GROUP recv above which a directional group's sole active leg is exempt from the sole-leg black-hole reaping")
+
+	// The standby-POOL arbiter (pool_arbiter.go). A pooled tunnel is a stream
+	// reserve AND a mux leg for whichever active tunnel is loaded; these three
+	// bound how fast it may be spent and how long a spent one is held.
+	PoolLegInterval = RegisterMin("pool.leg_interval", KindDuration, int64(5*time.Second), int64(time.Second), "the least time between two legs one active tunnel takes from the standby pool")
+	PoolLegRelease  = RegisterMin("pool.leg_release", KindDuration, int64(30*time.Second), int64(time.Second), "how long an active tunnel must show no load before a leg it took from the standby pool is released")
+	PoolMinStandby  = RegisterMin("pool.min_standby", KindCount, 2, 0, "how many tunnels the standby pool must keep; the arbiter never takes a leg that would leave fewer")
+	// PoolLoadMinBps is the arbiter's load FLOOR. Its reverse-heavy episode
+	// used to latch on ANY byte delta at all, so a tunnel's keepalives and the
+	// mux's own control frames read as "carrying continuously" and an active
+	// tunnel took a leg every pool.leg_interval for the whole run (rig
+	// 2026-09-22: 37 leg_added / 13 leg_removed on a 2-tunnel compose set).
+	// A rate below this is a heartbeat, not a transfer.
+	PoolLoadMinBps = RegisterMin("pool.load_min_bps", KindCount, 262144, 0, "the least sustained wire rate, in bytes per second, that counts as load for the standby-pool arbiter")
+	// PoolAllowDuplicateRoute lifts the distinct-route rule: by default a
+	// pooled tunnel whose whole hop path a tunnel of the same app to the same
+	// exit already holds is not offered as a leg plan — a second route ID over
+	// the same chain aggregates nothing and the exit pays for both.
+	PoolAllowDuplicateRoute = RegisterBool("pool.allow_duplicate_route", false, "offer a pooled tunnel as a leg plan even when a sibling tunnel already holds the same hop path")
+
+	// The pool-sourced leg plan's candidate filter (pool_legs.go
+	// standbyPoolPlans). Applied to each standby sibling's route before it can
+	// become an aux-leg plan; a plan failing any of the three is skipped, not
+	// ranked. All three default to "admit everything", so an unset visor's
+	// plan selection is unchanged.
+	PoolPlanSeedCap = RegisterMin("pool.plan_seed_cap", KindCount, 16, 1, "how many standby siblings' routes are offered to the warm-route pool in one seed")
+	PoolMaxHops     = RegisterZeroable("pool.max_hops", KindCount, 0, "ceiling on a pool leg plan's hop count; a longer route is skipped (0 = any)")
+	PoolTpTypes     = RegisterList("pool.tp_types", "transport types a pool leg plan's FIRST HOP must have, e.g. stcpr,sudph (comma-separated; empty = any type)")
+	PoolExcludePKs  = RegisterList("pool.exclude_pks", "public keys a pool leg plan must not touch, as a first hop or an intermediate (comma-separated FULL keys; empty = no exclusion)")
+
 	// FORWARD-direction confinement (route_mux.go selectConfinedForward).
 	ForwardSpill         = RegisterBool("forward.spill", false, "let a FORWARD frame leave its confined leg when that leg is at its send window; off means the writer waits")
 	ForwardSwitchMargin  = RegisterRatioRange("forward.switch_margin", 0.2, 0, 1, "how much lower a challenger leg must measure before the forward direction moves to it")
@@ -169,6 +217,7 @@ var (
 	DialDiversifyCandidates  = RegisterMin("dial.diversify_candidates", KindCount, 20, 1, "routes a DIVERSIFY dial (a standby-pool fill) asks the route finder for: the pool needs a candidate the tunnels it already holds do not use, and the rank-ordered top few are exactly the ones they do")
 	DialForegroundMux        = RegisterMin("dial.foreground_mux", KindCount, 16, 1, "how many mux legs are established SYNCHRONOUSLY at dial time before the background self-heal fills the rest")
 	DialTunnelLegs           = RegisterSigned("dial.tunnel_legs", KindCount, 0, -1, "legs an app tunnel is dialed with: 0 = exactly what the app asked for, -1 = the visor's mux width, n = n legs (per-app scopeable)")
+	MuxAppWidth              = RegisterList("mux.app_width", "per-app mux width, as comma-separated app=n entries (e.g. skysocks-client=2); when dial.tunnel_legs resolves to -1 for an app with an entry here, its width is used instead of the visor's adaptive mux width, and it also caps how wide that app's ACTIVE tunnels may self-heal/widen")
 	DeadRouteYoungAge        = RegisterMin("route.dead_young_age", KindDuration, int64(12*time.Second), int64(time.Second), "how soon after dial a route's death counts as evidence the route is dead rather than a normal teardown")
 	WarmPlanTTL              = RegisterMin("warm.plan_ttl", KindDuration, int64(30*time.Second), int64(time.Second), "staleness bound on a cached disjoint route plan in the warm pool")
 	WarmPlanBucketCap        = RegisterMin("warm.plan_bucket_cap", KindCount, 64, 1, "how many distinct disjoint plans the warm pool holds per exit")
@@ -209,4 +258,5 @@ var (
 	MuxPerFrameNoise = RegisterBool("mux.per_frame_noise", true, "advertise CapPerFrameNoise (the inverse multiplexer's per-frame AEAD) on NEW route groups")
 	MuxSACK          = RegisterBool("mux.sack", true, "advertise CapSACK (selective-acknowledgement retransmit) on NEW route groups")
 	MuxHOLRetx       = RegisterBool("mux.hol_retx", true, "advertise CapHOLRetx (proactive head-of-line retransmit) on NEW route groups")
+	MuxDeliveryCRC   = RegisterBool("mux.delivery_crc", true, "stamp each mux data frame with a CRC32C over (sequence ‖ payload), verified at delivery; advertises CapDeliveryCRC on NEW route groups")
 )

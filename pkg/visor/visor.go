@@ -391,6 +391,7 @@ type Visor struct {
 	// Accepts inbound SMTP from a co-located Postfix and dials peers via
 	// the visor's dmsg client. Standalone hosts use cmd/smb.
 	embeddedSkymailBridge *EmbeddedSkymailBridge
+	embeddedWisp          *EmbeddedWisp
 	// Shared VStreamMux for skynet forwarding (route ID 0).
 	// Used by both the forwarding server (Accept) and the skynetweb dialer (Dial).
 	skynetFwdMux *transport.VStreamMux

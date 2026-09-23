@@ -189,3 +189,34 @@ func TestCaptureStdout(t *testing.T) {
 	out := captureStdout(t, func() { os.Stdout.WriteString("hello") }) //nolint
 	require.Equal(t, "hello", out)
 }
+
+// `--` is the way out for a command that is both a parent and runnable, where
+// the installed `help` child otherwise takes a word the command could have
+// wanted. Cobra stops looking for subcommands at `--`, so the argument reaches
+// the command; no sniffing for the word anywhere is needed, and unlike
+// sniffing it leaves the caller a choice.
+func TestDoubleDashPassesHelpThroughAsAnArgument(t *testing.T) {
+	var got []string
+	sub := &cobra.Command{
+		Use:  "sub",
+		Args: cobra.ArbitraryArgs,
+		Run:  func(_ *cobra.Command, args []string) { got = args },
+	}
+	sub.AddCommand(&cobra.Command{Use: "child", Run: func(*cobra.Command, []string) {}})
+	root := &cobra.Command{Use: "root"}
+	root.AddCommand(sub)
+	InitFlags(root, true)
+
+	require.NotNil(t, findChild(sub, "help"), "sub should have gained a help command")
+
+	// Without it, the word resolves to that help command.
+	root.SetArgs([]string{"sub", "help"})
+	out := captureStdout(t, func() { require.NoError(t, root.Execute()) })
+	require.Nil(t, got, "`sub help` ran sub with an argument instead of printing help")
+	require.NotEmpty(t, out)
+
+	// With it, the word is an argument again.
+	root.SetArgs([]string{"sub", "--", "help"})
+	captureStdout(t, func() { require.NoError(t, root.Execute()) })
+	require.Equal(t, []string{"help"}, got)
+}

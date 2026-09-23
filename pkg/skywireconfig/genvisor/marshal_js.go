@@ -254,6 +254,10 @@ func marshalV1(w *strings.Builder, v *visorconfig.V1, indent int) {
 		o.field("skynet_web")
 		marshalSkynetWeb(w, v.SkynetWeb, o.indent+1)
 	}
+	if v.Wisp != nil {
+		o.field("wisp")
+		marshalWisp(w, v.Wisp, o.indent+1)
+	}
 	if v.Resolvers != nil {
 		o.field("resolvers")
 		marshalResolvers(w, v.Resolvers, o.indent+1)
@@ -634,6 +638,31 @@ func marshalRewards(w *strings.Builder, r *visorconfig.RewardsConfig, indent int
 	if r.LoginNode != "" {
 		o.field("login_node")
 		writeQuoted(w, r.LoginNode)
+	}
+	o.close()
+}
+
+// marshalWisp emits the wisp block.
+//
+// Field order follows WispConfig's declaration order, which is what
+// encoding/json would produce — marshal_compare_test.go holds the two to the
+// same bytes, so a field added there and forgotten here is a test failure
+// rather than a config that silently loses the section in a tab.
+func marshalWisp(w *strings.Builder, s *visorconfig.WispConfig, indent int) {
+	o := newObj(w, indent)
+	o.field("enable")
+	writeBool(w, s.Enable)
+	if s.Port != 0 {
+		o.field("port")
+		writeUint(w, uint64(s.Port))
+	}
+	if s.UpstreamSOCKS != "" {
+		o.field("upstream_socks")
+		writeQuoted(w, s.UpstreamSOCKS)
+	}
+	if s.Buffer != 0 {
+		o.field("buffer")
+		writeUint(w, uint64(s.Buffer))
 	}
 	o.close()
 }

@@ -48,6 +48,11 @@ const (
 	// capability (per-frame noise, SACK, HoL retransmit) stops being advertised
 	// on NEW route groups without a flag gate or a rebuild.
 	KindBool Kind = "bool"
+	// KindList is a comma-separated list of tokens — a set of public keys, a
+	// set of transport types. Its payload is NOT an int64, so it travels beside
+	// the numeric map (see SetList/Strings) rather than inside it; a list knob
+	// is visor-wide only, with no per-app override.
+	KindList Kind = "list"
 )
 
 // Def is a knob's static description: everything a caller needs to parse a
@@ -82,6 +87,10 @@ type Knob struct {
 	// uses -1 for "follow the visor's mux width"), so Min may itself be negative
 	// and the positive-only rule does not apply.
 	signed bool
+	// list is the payload of a KindList knob: the tokens currently in force.
+	// nil and empty mean the same thing (the knob's default, which for every
+	// list knob is "no entries" — a filter that filters nothing).
+	list atomic.Pointer[[]string]
 }
 
 // Name is the knob's catalog name.
@@ -107,6 +116,18 @@ func (k *Knob) Int() int { return int(k.cur.Load()) }
 
 // Bool reads a KindBool knob.
 func (k *Knob) Bool() bool { return k.cur.Load() != 0 }
+
+// Strings reads a KindList knob's tokens. Nil-safe; nil and empty both mean
+// "no entries", the default that filters nothing.
+func (k *Knob) Strings() []string {
+	if k == nil {
+		return nil
+	}
+	if p := k.list.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
 
 // IsSet reports whether the knob has been explicitly set — the difference
 // between "the compiled default" and "set to a value that equals the default".
@@ -177,6 +198,13 @@ func RegisterScale(name string, def float64, doc string) *Knob {
 	k := register(Def{Name: name, Kind: KindRatio, Default: RatioBits(def), Doc: doc})
 	k.zeroOK = true
 	return k
+}
+
+// RegisterList adds a KindList knob. Its default is ALWAYS the empty list — a
+// candidate filter that admits everything — so an unset visor behaves as it
+// does today.
+func RegisterList(name string, doc string) *Knob {
+	return register(Def{Name: name, Kind: KindList, Doc: doc})
 }
 
 func register(d Def) *Knob {
@@ -376,6 +404,9 @@ func SetValue(name string, v int64) error {
 
 // Set parses raw for the named knob and installs it visor-wide.
 func Set(name, raw string) error {
+	if k := Lookup(name); k != nil && k.def.Kind == KindList {
+		return SetList(name, raw)
+	}
 	v, err := Parse(name, raw)
 	if err != nil {
 		return err
@@ -383,11 +414,50 @@ func Set(name, raw string) error {
 	return SetValue(name, v)
 }
 
+// SetList installs a KindList knob's tokens visor-wide, replacing whatever it
+// currently holds. An empty raw value clears it back to "no entries", the
+// default. List knobs have no per-app override.
+func SetList(name, raw string) error {
+	mu.Lock()
+	defer mu.Unlock()
+	k := byName[name]
+	if k == nil {
+		return fmt.Errorf("unknown setting %q", name)
+	}
+	if k.def.Kind != KindList {
+		return fmt.Errorf("%s: not a list knob", name)
+	}
+	toks := splitCSV(raw)
+	k.list.Store(&toks)
+	k.set.Store(true)
+	bump()
+	return nil
+}
+
+func splitCSV(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // SetApp parses raw and installs it as an override for route groups owned by
-// app. An empty app is the visor-wide set.
+// app. An empty app is the visor-wide set. List knobs refuse a non-empty app:
+// they have no per-app override.
 func SetApp(app, name, raw string) error {
 	if app == "" {
 		return Set(name, raw)
+	}
+	if k := Lookup(name); k != nil && k.def.Kind == KindList {
+		return fmt.Errorf("%s: list knobs are visor-wide only", name)
 	}
 	v, err := Parse(name, raw)
 	if err != nil {
@@ -418,6 +488,9 @@ func Reset() {
 	for _, k := range order {
 		k.cur.Store(k.def.Default)
 		k.set.Store(false)
+		if k.def.Kind == KindList {
+			k.list.Store(nil)
+		}
 	}
 	appVals = map[string]map[string]int64{}
 	bump()
@@ -505,11 +578,17 @@ func Snapshot() []Entry {
 	out := make([]Entry, 0, len(order))
 	for _, k := range order {
 		v := k.cur.Load()
+		defStr := FormatKnob(k, k.def.Default)
+		if k.def.Kind == KindList {
+			// The compiled default of every list knob is "no entries"; the
+			// default int64 payload (0) formatted as a list would be misread.
+			defStr = ""
+		}
 		out = append(out, Entry{
 			Def:        k.def,
 			Value:      v,
 			Formatted:  FormatKnob(k, v),
-			DefaultStr: FormatKnob(k, k.def.Default),
+			DefaultStr: defStr,
 			Set:        k.set.Load(),
 		})
 	}
@@ -604,6 +683,14 @@ func Parse(name, raw string) (int64, error) {
 		return 0, fmt.Errorf("unknown setting %q", name)
 	}
 	raw = strings.TrimSpace(raw)
+	if k.def.Kind == KindList {
+		// A list knob's payload is not an int64, and its default is the EMPTY
+		// list, so "" is a valid value here (the round-trip of every default
+		// is what makes `route settings --json` a restorable save). Parse
+		// exists for lists only so a caller that validates before applying
+		// (the CLI) does not choke on the kind; the tokens go through SetList.
+		return 0, nil
+	}
 	if raw == "" {
 		return 0, fmt.Errorf("%s: empty value", name)
 	}
@@ -641,6 +728,11 @@ func Parse(name, raw string) (int64, error) {
 			return 0, fmt.Errorf("%s: %w", name, err)
 		}
 		v = RatioBits(f)
+	case KindList:
+		// A list knob's payload is not an int64; Parse exists here only so a
+		// caller that validates before applying (the CLI) does not choke on
+		// its kind. The actual value is installed by Set/SetList.
+		return 0, nil
 	default:
 		return 0, fmt.Errorf("%s: unhandled kind %q", name, k.def.Kind)
 	}
@@ -661,6 +753,9 @@ func Format(name string, v int64) string {
 
 // FormatKnob is Format for a handle the caller already holds.
 func FormatKnob(k *Knob, v int64) string {
+	if k.def.Kind == KindList {
+		return strings.Join(k.Strings(), ",")
+	}
 	switch k.def.Kind {
 	case KindDuration:
 		return time.Duration(v).String()

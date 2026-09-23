@@ -21,7 +21,7 @@ import (
 // is meaningful.
 type MuxOp struct {
 	// Op is "add", "remove", "cut", "cap", "width", "standby", "switch",
-	// "mode" or "direction".
+	// "adopt", "mode" or "direction".
 	Op  string `json:"op"`
 	App string `json:"app"`
 
@@ -35,6 +35,11 @@ type MuxOp struct {
 	// separate from Mode so a width/standby retune isn't reported as a "mode"
 	// change.
 	Value string `json:"value,omitempty"`
+	// Legs is how many mux legs the op actually added, for "grow". Kept apart
+	// from Hops (one leg's length) and Value (the tunnel's port) so a caller
+	// can read the outcome without parsing prose: fewer legs than asked for is
+	// a normal answer, not an error.
+	Legs int `json:"legs,omitempty"`
 }
 
 // Human writes the sentence this used to print.
@@ -55,8 +60,14 @@ func (m MuxOp) Human(w io.Writer) error {
 	case "cut":
 		_, err := fmt.Fprintf(w, "cut the app=%s tunnel on port %s; the pool replaces it on the next tick\n", m.App, m.Value)
 		return err
+	case "grow":
+		_, err := fmt.Fprintf(w, "added %d mux leg(s) to the app=%s tunnel on port %s, from its standby pool\n", m.Legs, m.App, m.Value)
+		return err
 	case "standby":
 		_, err := fmt.Fprintf(w, "mux warm-standby reserve set to %s\n", m.Value)
+		return err
+	case "adopt":
+		_, err := fmt.Fprintf(w, "re-homed a standby tunnel's chain into an active one (%s) on app=%s; the standby tunnel is consumed\n", m.Value, m.App)
 		return err
 	case "switch":
 		_, err := fmt.Fprintf(w, "switched primary route to a %d-hop leg (first tp=%s) on app=%s; old primary retired\n", m.Hops, m.TransportID, m.App)

@@ -210,6 +210,11 @@ type API interface {
 	ActiveRoutes() ([]AppRouteStatus, error)
 	AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint16) error
 	GrowMuxRoute(appName string, target, minHops int, srcPort uint16) (int, error)
+	// GrowMuxFromPool grows the app's tunnel by `legs` additional mux legs,
+	// built on the plans of the app's STANDBY tunnels to the same exit
+	// (already ranked, first-hop transport already up) and falling back to
+	// GrowMuxRoute's route-finder path for whatever the pool cannot cover.
+	GrowMuxFromPool(appName string, legs, minHops int, srcPort uint16) (int, error)
 	RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error
 	// SetMuxDirection pins (mode "default"/"flipped") or releases (mode
 	// "auto") the unidirectional direction→leg-class mapping on ALL of the
@@ -228,6 +233,10 @@ type API interface {
 	// RouteGroupMuxNegotiated reports, per route group, the capabilities the
 	// two ends negotiated and the send-window shape this end is applying.
 	RouteGroupMuxNegotiated(appName string) ([]router.MuxNegotiated, error)
+	// RehomeTunnelLeg moves a STANDBY tunnel's whole built chain into an ACTIVE
+	// tunnel as one more mux leg, in place, with no setup-node dial
+	// (`proxy mux adopt`). Both ports are the dst_port `proxy mux info` prints.
+	RehomeTunnelLeg(appName string, targetPort, standbyPort uint16) error
 	// GetRouterDialSettings / SetRouterDialSettings are the DIAL-TIME router
 	// knobs: ranking priors, candidate counts, warm-plan cache shape, the
 	// dead-route young-death window and the prefer-these-peers list.

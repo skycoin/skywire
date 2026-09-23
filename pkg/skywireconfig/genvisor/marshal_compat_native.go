@@ -272,6 +272,10 @@ func marshalV1Native(w *strings.Builder, v *visorconfig.V1, indent int) {
 		o.field("skynet_web")
 		marshalSkynetWebNative(w, v.SkynetWeb, o.indent+1)
 	}
+	if v.Wisp != nil {
+		o.field("wisp")
+		marshalWispNative(w, v.Wisp, o.indent+1)
+	}
 	if v.Resolvers != nil {
 		o.field("resolvers")
 		marshalResolversNative(w, v.Resolvers, o.indent+1)
@@ -738,6 +742,28 @@ func marshalDmsgWebNative(w *strings.Builder, d *visorconfig.DmsgWebConfig, inde
 
 // marshalSkynetWebNative emits the skynet_web block — same completeness rule as
 // marshalDmsgWebNative above, and the same fields were missing.
+// marshalWispNative emits the wisp block. Its js twin is marshalWisp; the two
+// must stay identical, which marshal_compare_test.go enforces against
+// encoding/json.
+func marshalWispNative(w *strings.Builder, s *visorconfig.WispConfig, indent int) {
+	o := newObjNative(w, indent)
+	o.field("enable")
+	writeBoolNative(w, s.Enable)
+	if s.Port != 0 {
+		o.field("port")
+		writeUintNative(w, uint64(s.Port))
+	}
+	if s.UpstreamSOCKS != "" {
+		o.field("upstream_socks")
+		writeQuotedNative(w, s.UpstreamSOCKS)
+	}
+	if s.Buffer != 0 {
+		o.field("buffer")
+		writeUintNative(w, uint64(s.Buffer))
+	}
+	o.close()
+}
+
 func marshalSkynetWebNative(w *strings.Builder, s *visorconfig.SkynetWebConfig, indent int) {
 	o := newObjNative(w, indent)
 	o.field("enable")

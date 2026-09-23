@@ -231,6 +231,12 @@ func HOLRetxAdvertised() bool {
 	return routersettings.MuxHOLRetx.Bool() && routersettings.MuxSACK.Bool()
 }
 
+// DeliveryCRCAdvertised reports whether CapDeliveryCRC is advertised on new
+// route groups. It gates OUR sender side: with the knob off we never stamp a
+// frame, and because the peer only strips when we advertised too, the two ends
+// can never disagree about whether the 4-byte trailer is present.
+func DeliveryCRCAdvertised() bool { return routersettings.MuxDeliveryCRC.Bool() }
+
 // SetMuxFEC turns FEC advertisement on mux route groups on or off for route
 // groups created from now on. Live in the sense the rest of this file is not:
 // FEC is negotiated when a group is built, so a group already running keeps the

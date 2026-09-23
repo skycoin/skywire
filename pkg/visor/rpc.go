@@ -88,18 +88,18 @@ type TransportSummary struct {
 	// measurement yet. Populated from tp.GetLatency().
 	LatencyMS float64 `json:"latency_ms,omitempty"`
 	// ThroughputBps is the passively-observed peak goodput (bytes/sec)
-	// this transport has carried — a measured CAPACITY lower-bound,
+	// this transport has carried Ã¢ÂÂ a measured CAPACITY lower-bound,
 	// distinct from RTT (a low-latency link can still be low-throughput,
 	// e.g. webrtc). Zero until real traffic has flowed. Populated from
 	// tp.GetThroughputBps().
 	ThroughputBps float64 `json:"throughput_bps,omitempty"`
 	// Initiator is true when this visor dialed out to establish the
 	// transport (outgoing); false when it accepted an inbound dial
-	// (incoming). The transport is bidirectional — this records only
+	// (incoming). The transport is bidirectional Ã¢ÂÂ this records only
 	// who originated it, for in/out reporting.
 	Initiator bool `json:"initiator"`
 	// RemoteIP is the host portion of the underlying transport's raw
-	// remote address (e.g. "1.2.3.4"). Empty for dmsg — which relays
+	// remote address (e.g. "1.2.3.4"). Empty for dmsg Ã¢ÂÂ which relays
 	// through a server rather than dialing the peer directly, so an
 	// empty RemoteIP is itself the "relayed, not direct" signal.
 	// Populated from tp.RemoteIP().
@@ -109,7 +109,7 @@ type TransportSummary struct {
 	// when there is no direct IP (dmsg) or no geoip hit.
 	RemoteCountry string `json:"remote_country,omitempty"`
 	// Endpoint carries the per-transport-type low-level connection
-	// metadata — the direct IP:port for stcp/stcpr/sudph/squicr, the
+	// metadata Ã¢ÂÂ the direct IP:port for stcp/stcpr/sudph/squicr, the
 	// relaying dmsg server PK for dmsg, the QUIC TLS fingerprint/ALPN
 	// for squicr, the selected ICE candidate for webrtc. Secrets-free
 	// (dmsg = server PK only, never a secret key). nil when the
@@ -122,8 +122,8 @@ type TransportSummary struct {
 //
 // encoding/json's `omitempty` cannot express this: uuid.UUID and
 // cipher.PubKey are fixed-size arrays, and omitempty never treats an
-// array as empty — so an otherwise-blank entry still costs ~170 bytes
-// of "000…0" on the wire. That is what makes the node-list projection
+// array as empty Ã¢ÂÂ so an otherwise-blank entry still costs ~170 bytes
+// of "000Ã¢ÂÂ¦0" on the wire. That is what makes the node-list projection
 // worth doing at all (see compactTransportSummaries, which emits type
 // and direction only). A real transport has all three set and
 // serializes exactly as it did before.
@@ -219,7 +219,7 @@ type SetAutoStartIn struct {
 
 // SetAppWhitelistIn carries a comma-separated list of public keys
 // allowed to connect to skysocks / vpn-server. Empty = open to all
-// authenticated peers. Replaces the prior SetAppPasswordIn — those
+// authenticated peers. Replaces the prior SetAppPasswordIn Ã¢ÂÂ those
 // apps no longer accept a passcode flag.
 type SetAppWhitelistIn struct {
 	AppName   string
@@ -336,7 +336,7 @@ type MuxRouteGroupInfo struct {
 	MuxEnabled    bool                          `json:"mux_enabled"`
 	SACKEnabled   bool                          `json:"sack_enabled"`
 	PerFrameNoise bool                          `json:"per_frame_noise"`
-	// Directional: unidirectional send selection (CapUniDir) is active — each
+	// Directional: unidirectional send selection (CapUniDir) is active Ã¢ÂÂ each
 	// direction rides a disjoint leg class. Flipped: the direction->leg-class
 	// mapping is swapped (heavy direction took the mux). With per-leg `direct`,
 	// this tells which class carries which direction without log-grepping.
@@ -357,7 +357,7 @@ type MuxRouteGroupInfo struct {
 	// pending count with a growing gap age marks a stalled/black-holing leg.
 	ReorderPending  int     `json:"reorder_pending,omitempty"`
 	ReorderGapAgeMS float64 `json:"reorder_gap_age_ms,omitempty"`
-	// WriteSeq is the total DATA frames this mux has emitted outbound — a cheap
+	// WriteSeq is the total DATA frames this mux has emitted outbound Ã¢ÂÂ a cheap
 	// aggregate send-progress counter across all legs.
 	WriteSeq uint32 `json:"write_seq,omitempty"`
 	// AggSentBytes / AggRecvBytes are the rg-scoped totals summed across every
@@ -365,7 +365,7 @@ type MuxRouteGroupInfo struct {
 	// also count other groups sharing the transport).
 	AggSentBytes uint64 `json:"agg_sent_bytes,omitempty"`
 	AggRecvBytes uint64 `json:"agg_recv_bytes,omitempty"`
-	// AggGoodputBps is the route-group's recent goodput — the sum of the
+	// AggGoodputBps is the route-group's recent goodput Ã¢ÂÂ the sum of the
 	// per-leg goodput RATES (bytes/sec), i.e. what the whole group is moving
 	// right now, distinct from the cumulative AggSentBytes/AggRecvBytes totals.
 	// AggGoodputUpBps/AggGoodputDownBps split it by direction (sum of the
@@ -375,7 +375,7 @@ type MuxRouteGroupInfo struct {
 	AggGoodputDownBps float64 `json:"agg_goodput_down_bps,omitempty"`
 	// FEC (forward error correction) telemetry. FECEnabled reports whether both
 	// peers negotiated CapFEC on this group. FECRepairBytesSent/Recv are cumulative
-	// repair-frame bytes scheduled onto / received from legs — the TRUE FEC
+	// repair-frame bytes scheduled onto / received from legs Ã¢ÂÂ the TRUE FEC
 	// overhead, separable from data (AggRecvBytes) and retransmit (per-leg
 	// Retransmits). FECReconstructs counts frontier frames recovered from repair
 	// (each a slow-leg head-of-line stall this group avoided).
@@ -385,7 +385,7 @@ type MuxRouteGroupInfo struct {
 	FECReconstructs    uint64       `json:"fec_reconstructs,omitempty"`
 	Legs               []MuxLegInfo `json:"legs"`
 	// Events is this route group's most recent leg/group changes with their
-	// reasons, oldest first — the churn next to the legs, so a reading that
+	// reasons, oldest first Ã¢ÂÂ the churn next to the legs, so a reading that
 	// shows a leg missing also shows who took it and why. The whole-visor ring
 	// is diag.mux_events in `visor state`.
 	Events []router.MuxEvent `json:"events,omitempty"`
@@ -395,10 +395,10 @@ type MuxRouteGroupInfo struct {
 	// feedback) next to the receiver-side reorder frontier (the seq waited on,
 	// the packets dammed behind it, outbound SACK feedback, wedge counters). A
 	// reorder wedge is a two-ended failure, and before this only the RECEIVER
-	// logged anything — the sender had nothing to show. Nil when the group has
+	// logged anything Ã¢ÂÂ the sender had nothing to show. Nil when the group has
 	// no mux.
 	Recovery *router.MuxRecovery `json:"recovery,omitempty"`
-	// TunnelRole is the DIALING end's label for this route group — "active"
+	// TunnelRole is the DIALING end's label for this route group Ã¢ÂÂ "active"
 	// (it carries streams) or "standby" (held open, kept alive and measured,
 	// carrying nothing, ready to take over). Absent for every route group that
 	// is not one of a multi-tunnel app's tunnels.
@@ -407,6 +407,10 @@ type MuxRouteGroupInfo struct {
 	// but not which of them are in standby, so this field is always empty in
 	// an accepting visor's `visor state`.
 	TunnelRole string `json:"tunnel_role,omitempty"`
+	// AgeMS is how long this route group has existed â for a pooled STANDBY
+	// tunnel, its AUDITION age: how long it has been held open and measured
+	// without carrying a stream.
+	AgeMS float64 `json:"age_ms,omitempty"`
 }
 
 // MuxLegInfo is one route in a mux'd group.
@@ -415,13 +419,16 @@ type MuxLegInfo struct {
 	TransportID string `json:"transport_id"`
 	TpType      string `json:"tp_type"`
 	RemotePK    string `json:"remote_pk"`
+	// Source names where a leg that is not this group's own dial came from —
+	// a leg the standby-pool arbiter took ("standby :4, re-homed in place").
+	Source string `json:"source,omitempty"`
 	// LatencyMS is the FIRST-HOP transport RTT; RouteLatencyMS is the leg's
-	// TRUE end-to-end route latency (all hops, from the leg-liveness pong) —
+	// TRUE end-to-end route latency (all hops, from the leg-liveness pong) Ã¢ÂÂ
 	// on a multihop leg the two differ sharply. Direct is true for a 1-hop
 	// route straight to the destination, false for a relayed (multihop) leg.
 	LatencyMS      float64 `json:"latency_ms,omitempty"`
 	RouteLatencyMS float64 `json:"route_latency_ms,omitempty"`
-	// AckDelayMS is the leg's own EWMA send→ack delay; InflightBytes and
+	// AckDelayMS is the leg's own EWMA sendÃ¢ÂÂack delay; InflightBytes and
 	// WindowBytes are its real unacknowledged bytes and the send window they
 	// are bounded by (see router.MuxLeg).
 	AckDelayMS    float64 `json:"ack_delay_ms"`
@@ -433,12 +440,12 @@ type MuxLegInfo struct {
 	RecvBytes     uint64  `json:"recv_bytes"`
 	RecvPackets   uint64  `json:"recv_packets"`
 	// PayloadBytes is the UNIQUE in-order payload this leg delivered (each seq
-	// counted once, retransmits/duplicates excluded) — so per-leg values sum to
+	// counted once, retransmits/duplicates excluded) Ã¢ÂÂ so per-leg values sum to
 	// the transfer size and cleanly attribute which legs carried a direction's
 	// data, unlike RecvBytes which includes retransmit inflation.
 	PayloadBytes uint64 `json:"payload_bytes"`
 	// DupBytes is inbound DUPLICATE data (seqs already delivered/buffered on
-	// arrival) — the peer's spurious-retransmit waste, which rides the fastest
+	// arrival) Ã¢ÂÂ the peer's spurious-retransmit waste, which rides the fastest
 	// leg. RepairBytes is inbound FEC repair frames (deliberate overhead).
 	// With PayloadBytes they decompose RecvBytes, so a standby leg showing
 	// traffic is attributable from telemetry.
@@ -449,7 +456,7 @@ type MuxLegInfo struct {
 	// transport is closed; Standby=true for a warm standby (rules kept,
 	// not sending). Surfaced for the per-leg telemetry harness.
 	Retransmits uint64 `json:"retransmits"`
-	// GoodputBps is this leg's recent goodput — the EWMA of (sent+recv) bytes
+	// GoodputBps is this leg's recent goodput Ã¢ÂÂ the EWMA of (sent+recv) bytes
 	// per second over the telemetry refresh window (~1s for the status page).
 	// The RATE the leg is currently moving, as opposed to the cumulative
 	// SentBytes/RecvBytes totals. 0 until a second sample lands.
@@ -463,6 +470,10 @@ type MuxLegInfo struct {
 	// Hops is the leg's full forward route (every hop to the destination),
 	// with full PKs and per-hop transport type + latency where known.
 	Hops []MuxHopInfo `json:"hops,omitempty"`
+	// CapacityPriorBps is the pool arbiter's PRIOR throughput estimate for
+	// this leg (router.throughputPrior) — what a standby tunnel is ranked by
+	// before it has carried anything to measure.
+	CapacityPriorBps float64 `json:"capacity_prior_bps,omitempty"`
 }
 
 // MuxHopInfo is one hop of a mux leg's forward route. From/To are FULL
@@ -493,6 +504,10 @@ type MuxRouteInput struct {
 	// Add/RemoveMuxRoute.
 	Target  int
 	MinHops int
+	// Legs is the RELATIVE leg count for GrowMuxFromPool Ã¢ÂÂ "grow this group
+	// by k legs" Ã¢ÂÂ as opposed to Target's absolute "grow it to N legs".
+	// Unused by every other op.
+	Legs int
 	// SrcPort disambiguates between concurrent rg's owned by the same
 	// app (one per concurrent SOCKS5 connection on skysocks-client,
 	// etc.). Zero means "auto-pick if exactly one rg is active for

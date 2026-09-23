@@ -67,6 +67,15 @@ func setTunnelPromoteHold() time.Duration {
 func setTunnelParkMinHold() time.Duration {
 	return skysettings.Dur(skysettings.TunnelParkMinHold)
 }
+func setTunnelRTTMinWindow() time.Duration {
+	return skysettings.Dur(skysettings.TunnelRTTMinWindow)
+}
+func setTunnelRTTSamplesCap() int { return skysettings.Count(skysettings.TunnelRTTSamplesCap) }
+
+// tunnelFreezeActive is the promoter's own hold: no discretionary promotion or
+// park while it is set, independent of pool.freeze (which also stops the pool
+// filling or shrinking). A dead active tunnel is still failed over either way.
+func tunnelFreezeActive() bool { return skysettings.Bool(skysettings.TunnelFreezeActive) }
 
 // The capacity-aware half of the promotion rule (tunnel_promoter.go). Every
 // one of these is a knob rather than a constant because the numbers they carry
@@ -97,6 +106,12 @@ func setTunnelAuditionWindow() time.Duration {
 }
 func setTunnelAuditionEvery() time.Duration {
 	return skysettings.Dur(skysettings.TunnelAuditionEvery)
+}
+func setTunnelAuditionParallel() int {
+	return skysettings.Count(skysettings.TunnelAuditionParallel)
+}
+func setTunnelPriorRefresh() time.Duration {
+	return skysettings.Dur(skysettings.TunnelPriorRefresh)
 }
 func setExitOpenPenalty() time.Duration {
 	return skysettings.Dur(skysettings.TunnelExitOpenPenalty)
@@ -195,6 +210,8 @@ func (c *Client) applyOps(ops []appserver.AppOp) {
 		switch op.Kind {
 		case appserver.AppOpCutTunnel:
 			c.cutTunnel(routing.Port(op.Arg)) //nolint:gosec
+		case appserver.AppOpConsumedTunnel:
+			c.consumedTunnel(routing.Port(op.Arg)) //nolint:gosec
 		default:
 			if c.appCl != nil {
 				c.appCl.Log().Warnf("Ignoring unknown app op %q (seq %d)", op.Kind, op.Seq)
