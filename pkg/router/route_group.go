@@ -2047,6 +2047,28 @@ func (rg *RouteGroup) nextFastestTransport() (*transport.ManagedTransport, routi
 	return rg.tps[0], rg.fwd[0], 0, nil
 }
 
+// nextRetxTransport is nextFastestTransport for the RETRANSMIT path: the same
+// pick, minus the leg the sequence was last sent on. Caller holds rg.mu.
+func (rg *RouteGroup) nextRetxTransport(avoid uuid.UUID) (*transport.ManagedTransport, routing.Rule, int, error) {
+	if avoid == uuid.Nil || rg.mux == nil || len(rg.tps) < 2 {
+		return rg.nextFastestTransport()
+	}
+	if len(rg.fwd) == 0 {
+		return nil, nil, -1, ErrNoRules
+	}
+	if len(rg.tps) != len(rg.fwd) {
+		return nil, nil, -1, ErrRuleTransportMismatch
+	}
+	// Directional confinement pins the forward direction to one leg by design;
+	// a retransmit must not break out of it.
+	if directional, wantDirect, dstPK, srcPK := rg.mux.dirConfig(); directional && rg.mux.forwardSender() {
+		if tp, rule, idx, ok := rg.mux.selectConfinedForward(rg.tps, rg.fwd, wantDirect, dstPK, srcPK); ok {
+			return tp, rule, idx, nil
+		}
+	}
+	return rg.mux.selectRetxTransport(rg.tps, rg.fwd, avoid)
+}
+
 // RouteHops returns the list of visor public keys that form the route path.
 // The first element is the first hop from the source, and the last element
 // is the destination visor.
@@ -5469,8 +5491,13 @@ func (rg *RouteGroup) resendSeqs(seqs []uint32) error {
 			continue
 		}
 
+		// The leg this sequence was last sent on is the one that failed to
+		// deliver it, so it is the one leg the retry must not use (see
+		// routeMux.selectRetxTransport).
+		avoid := rg.mux.retxLastTp(seq)
+
 		rg.mu.Lock()
-		tp, rule, leg, err := rg.nextFastestTransport()
+		tp, rule, leg, err := rg.nextRetxTransport(avoid)
 		rg.mu.Unlock()
 		if err != nil {
 			rg.mux.retxSendErrors.Add(1)
