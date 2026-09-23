@@ -3,12 +3,13 @@
 #
 #   1. fdroid lint          — what fdroiddata's CI checks on the merge request
 #   2. fdroid checkupdates  — what F-Droid's update bot runs to find a new
-#                             mobile-v* tag and add its build by itself
+#                             fdroid-v* tag and add its build by itself
 #   3. fdroid build         — what F-Droid's build server runs, scanner included
 #
-# for the commit checked out at $SRC. Runs as root inside F-Droid's own build
-# server image; .github/workflows/android-fdroid.yml starts it like this after
-# each mobile-v* release (on a GitHub runner — the image is several GB):
+# for the commit checked out at $SRC — the release's commit with its version
+# stamped into android/version.properties. Runs as root inside F-Droid's own
+# build server image; .github/workflows/android-fdroid.yml starts it like this
+# after each mobile-v* release (on a GitHub runner — the image is several GB):
 #
 #   docker run --rm -v "$PWD:/src" -v "$PWD/fdroid-out:/out" \
 #     registry.gitlab.com/fdroid/fdroidserver:buildserver-trixie \
@@ -72,29 +73,27 @@ step "fdroid lint (the recipe exactly as it is submitted)"
 fdroid lint "$APPID"
 
 # From here the recipe clones a local copy of this checkout instead of
-# GitHub, so it builds this commit — including on a PR, where it has no tag
-# yet. The copy is bare and shares objects with $SRC; a tag made in it for a
-# version the PR introduces never touches $SRC.
+# GitHub, so it builds this commit. The fdroid-v tag the bot looks for is only
+# pushed once this script has passed, so it is made here, in a bare copy that
+# shares objects with $SRC and never touches it.
 repo=/tmp/skywire.git
 rm -rf "$repo"
 git clone -q --bare --shared "$SRC" "$repo"
 git -C "$repo" branch -f fdroid-check "$head_sha"
-if ! git -C "$repo" rev-parse -q --verify "refs/tags/mobile-v$name" >/dev/null; then
-  git -C "$repo" tag "mobile-v$name" "$head_sha"
-fi
+git -C "$repo" tag -f "fdroid-v$name" "$head_sha"
 sed -i "s|^Repo: .*|Repo: $repo|" "metadata/$APPID.yml"
 chown -R vagrant "$home_vagrant"
 
-step "fdroid checkupdates (the update bot: finds mobile-v$name, reads its version)"
+step "fdroid checkupdates (the update bot: finds fdroid-v$name, reads its version)"
 fdroid checkupdates --auto --verbose "$APPID"
 grep -q "^CurrentVersionCode: $code\$" "metadata/$APPID.yml" \
-  || fail "the update bot did not pick up $name ($code) from android/version.properties at mobile-v$name"
+  || fail "the update bot did not pick up $name ($code) from android/version.properties at fdroid-v$name"
 grep -q "^    versionCode: $code\$" "metadata/$APPID.yml" \
   || fail "no build entry for versionCode $code after checkupdates"
 echo "update bot sees $name ($code)"
 
-# Build this commit even when mobile-v$name already exists on an older one
-# (a PR after the release, before the next bump).
+# Build this commit even if an fdroid-v$name from an earlier run already
+# points at another one.
 python3 - "metadata/$APPID.yml" "$code" "$head_sha" <<'EOF'
 import sys
 path, code, sha = sys.argv[1], sys.argv[2], sys.argv[3]

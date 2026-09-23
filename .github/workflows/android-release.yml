@@ -81,17 +81,6 @@ jobs:
             echo "::error::0.0.0 derives versionCode 0; Android requires a positive integer (lowest is 0.0.1)"
             exit 1
           fi
-          # F-Droid's update bot reads the version from android/version.properties
-          # at this tag, not from the tag, so a tag cut without bumping the file
-          # would never reach F-Droid. Stop it here instead.
-          major=${raw%%.*}
-          code=$((major * 10000 + minor * 100 + patch))
-          file_name=$(sed -n 's/^versionName=//p' android/version.properties)
-          file_code=$(sed -n 's/^versionCode=//p' android/version.properties)
-          if [ "$file_name" != "$raw" ] || [ "$file_code" != "$code" ]; then
-            echo "::error::android/version.properties says $file_name ($file_code); tag ${GITHUB_REF_NAME} needs versionName=$raw and versionCode=$code. Bump the file, merge, and tag again."
-            exit 1
-          fi
           echo "name=$raw" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-go@v7
@@ -208,10 +197,10 @@ jobs:
             "${args[@]}" \
             "$out.apk" "$out.apk.sha256" "$out.aab" "$out.aab.sha256"
 
-  # Once the GitHub release is out: the F-Droid build of this tag, the way
-  # F-Droid's update bot and build server will see it. It publishes nothing —
-  # F-Droid picks the tag up on its own — and a failure here leaves the GitHub
-  # release as it is.
+  # Once the GitHub release is out: stamps this tag's version for F-Droid,
+  # builds it the way F-Droid's update bot and build server will, and if that
+  # passes tags it fdroid-vX.Y.Z — the tag F-Droid picks up on its own. A
+  # failure here leaves the GitHub release as it is. See android-fdroid.yml.
   fdroid:
     needs: release
     uses: ./.github/workflows/android-fdroid.yml
