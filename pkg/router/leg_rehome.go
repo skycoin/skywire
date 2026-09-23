@@ -233,6 +233,9 @@ func (rg *RouteGroup) handleLegRehomePacket(packet routing.Packet) error {
 	case flags&routing.LegRehomeCommit != 0:
 		rg.commitRehomedLeg(packet.RouteID())
 		return nil
+	case flags&routing.LegRehomeSplit != 0:
+		rg.acceptSplit(packet.RouteID(), nonce, srcPort, dstPort)
+		return nil
 	default:
 		rg.acceptRehome(packet.RouteID(), nonce, srcPort, dstPort)
 		return nil
