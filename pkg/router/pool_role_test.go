@@ -26,7 +26,7 @@ import (
 )
 
 // TestRoleLessGroupOfARoleReportingAppIsNotWidened is gate one. The app has
-// labelled at least one tunnel, so "no role" on another of its groups means
+// labeled at least one tunnel, so "no role" on another of its groups means
 // the label is in flight — and a group in that state must not be widened by
 // the self-heal top-up, by SetSelfHeal's width, or by the arbiter.
 func TestRoleLessGroupOfARoleReportingAppIsNotWidened(t *testing.T) {
@@ -36,13 +36,13 @@ func TestRoleLessGroupOfARoleReportingAppIsNotWidened(t *testing.T) {
 	local, _ := cipher.GenerateKeyPair()
 
 	// The app labels one tunnel: from here on it is a role-reporting app.
-	labelled, _ := poolTunnel(t, r, exit, local, 49180, tunnelRoleActive,
+	labeled, _ := poolTunnel(t, r, exit, local, 49180, tunnelRoleActive,
 		[]routing.Hop{{TpID: uuid.New(), From: local, To: exit}}, 40, 0)
-	labelled.SetAppName(app)
-	labelled.SetTunnelRole(tunnelRoleActive)
+	labeled.SetAppName(app)
+	labeled.SetTunnelRole(tunnelRoleActive)
 	require.True(t, appReportsTunnelRoles(app), "an app that stamped a role must be registered as role-reporting")
 
-	// A second group of the SAME app, dialed but not yet labelled.
+	// A second group of the SAME app, dialed but not yet labeled.
 	unlabelled, _ := poolTunnel(t, r, exit, local, 49181, "",
 		[]routing.Hop{{TpID: uuid.New(), From: local, To: exit}}, 40, 0)
 	unlabelled.SetAppName(app)
@@ -57,12 +57,12 @@ func TestRoleLessGroupOfARoleReportingAppIsNotWidened(t *testing.T) {
 	require.Zero(t, widened, "the self-heal top-up must never widen a role-unknown group")
 
 	// The arbiter does not touch it either: it is neither active nor standby.
-	poolArbiterStep(unlabelled, []*RouteGroup{labelled}, time.Now(), func(*RouteGroup) error {
+	poolArbiterStep(unlabelled, []*RouteGroup{labeled}, time.Now(), func(*RouteGroup) error {
 		t.Fatal("the arbiter must not grow a group whose role is unknown")
 		return nil
 	})
 
-	// A group of an app that never reports roles keeps today's behaviour.
+	// A group of an app that never reports roles keeps today's behavior.
 	plain, _ := poolTunnel(t, r, exit, local, 49182, "",
 		[]routing.Hop{{TpID: uuid.New(), From: local, To: exit}}, 40, 0)
 	plain.SetAppName("an-app-that-never-labels-anything")
