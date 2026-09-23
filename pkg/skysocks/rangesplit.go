@@ -1494,29 +1494,50 @@ func (c *Client) exitWriteConnect(st net.Conn, host string, port int, payload []
 // splicePrefixed is the original two-way splice, optionally replaying bytes already
 // read from the browser to the exit first (so the exit sees an identical stream).
 func (c *Client) splicePrefixed(conn, stream net.Conn, clientPrefix []byte) {
-	const errorCount = 2
-	errCh := make(chan error, errorCount)
 	go func() {
 		var src io.Reader = conn
 		if len(clientPrefix) > 0 {
 			src = io.MultiReader(bytes.NewReader(clientPrefix), conn)
 		}
 		_, err := io.Copy(stream, src)
-		errCh <- err
-	}()
-	go func() {
-		_, err := io.Copy(conn, stream)
-		errCh <- err
-	}()
-	for i := 0; i < errorCount; i++ {
-		if err := <-errCh; err != nil && c.appCl != nil {
-			c.appCl.Log().Debugf("Copy error: %v", err)
-		}
-		if i == 0 {
+		if err != nil {
+			// The client's side broke rather than finished. Nothing is left to
+			// read the reply, so end the whole transaction.
+			if c.appCl != nil {
+				c.appCl.Log().Debugf("Copy error: %v", err)
+			}
 			conn.Close()   //nolint:errcheck,gosec
 			stream.Close() //nolint:errcheck,gosec
+			return
 		}
+		// A clean EOF is a half close, not a hang-up: the client has finished
+		// its request and is still waiting for the reply. Tearing the pair
+		// down here truncated that reply to NOTHING — an empty body and no
+		// error, for every client that shuts down its write side once the
+		// request is complete (nc -N among them). Forward the end of data and
+		// leave the download running.
+		halfCloseWrite(stream)
+	}()
+
+	// The download direction owns the lifetime: when the exit has finished,
+	// the transaction is over and closing conn also unblocks the copy above.
+	if _, err := io.Copy(conn, stream); err != nil && c.appCl != nil {
+		c.appCl.Log().Debugf("Copy error: %v", err)
 	}
+	conn.Close()   //nolint:errcheck,gosec
+	stream.Close() //nolint:errcheck,gosec
+}
+
+// halfCloseWrite passes on "I have finished sending" without disturbing the
+// other direction. A yamux stream has no CloseWrite, and its Close is exactly
+// this half close: from an established stream it sends the FIN and stays
+// readable.
+func halfCloseWrite(c net.Conn) {
+	if cw, ok := c.(interface{ CloseWrite() error }); ok {
+		cw.CloseWrite() //nolint:errcheck,gosec // best effort signal
+		return
+	}
+	c.Close() //nolint:errcheck,gosec // yamux: FIN, still readable
 }
 
 // --- small HTTP/SOCKS5 helpers ---
