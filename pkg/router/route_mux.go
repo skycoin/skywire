@@ -191,6 +191,12 @@ type routeMux struct {
 	writeSeq uint32 // atomic: next outgoing sequence number
 	tpIndex  uint32 // atomic: round-robin fallback index for transport selection
 
+	// ctrlSeq numbers the IN-BAND leg control frames (mux_control_frame.go),
+	// which ride the reserved top band of the sequence space and so must not
+	// draw from writeSeq: a control frame neither consumes nor skips a data
+	// sequence, and never enters the reorder/SACK space.
+	ctrlSeq atomic.Uint32
+
 	// RACK-TLP tail-loss probe + DSACK reorder-window adaptation (see rack_tlp.go).
 	// lastSendNano stamps the last DATA/retransmit frame put on the wire (the TLP
 	// idle timer reads it). tlpProbeCount is the number of consecutive tail probes

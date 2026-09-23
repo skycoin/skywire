@@ -91,6 +91,11 @@ type emuOpts struct {
 	Liveness bool
 	// ReadChBufSize overrides the route groups' read channel depth.
 	ReadChBufSize int
+	// DropTypes makes BOTH ends discard every packet of these types on arrival,
+	// the way an intermediate relay on an older build silently drops a packet
+	// type it never learned. Simulating it at the far end is equivalent for the
+	// control plane: the message never reaches the group it addresses.
+	DropTypes []routing.PacketType
 }
 
 // emuEnd is one side of the rig.
@@ -182,6 +187,9 @@ type emuRig struct {
 
 	inflight  atomic.Pointer[emuTransfer]
 	sendingUp atomic.Bool
+
+	// dropTypes are the packet types both ends discard on arrival (emuOpts).
+	dropTypes []routing.PacketType
 }
 
 // emuLeg addresses one leg's two directions.
@@ -276,7 +284,7 @@ func newEmuRig(t *testing.T, opts emuOpts) *emuRig {
 		cfg.ReadChBufSize = opts.ReadChBufSize
 	}
 
-	rig := &emuRig{t: t, legs: opts.Legs, stop: make(chan struct{})}
+	rig := &emuRig{t: t, legs: opts.Legs, stop: make(chan struct{}), dropTypes: opts.DropTypes}
 
 	// A is the INITIATOR (src), B the ACCEPTOR (dst).
 	srcPort, dstPort := opts.SrcPort, opts.DstPort
@@ -464,6 +472,11 @@ func (r *emuRig) serveLeg(e *emuEnd, i int) {
 		}
 		pkt := make(routing.Packet, n)
 		copy(pkt, buf[:n])
+		// An old relay on the path silently discards a packet TYPE it never
+		// learned (emuOpts.DropTypes). Nothing answers, nothing logs.
+		if r.dropped(pkt.Type()) {
+			continue
+		}
 		// With a shared host, dispatch BY RULE — a re-homed chain's frames then
 		// reach whichever group now owns its consume rule, not the rig that
 		// happens to hold the conn.
@@ -793,4 +806,14 @@ func (h *emuHost) singleLegGroupOn(tpID uuid.UUID) *RouteGroup {
 		}
 	}
 	return nil
+}
+
+// dropped reports whether this rig's simulated old relay discards the type.
+func (r *emuRig) dropped(t routing.PacketType) bool {
+	for _, d := range r.dropTypes {
+		if d == t {
+			return true
+		}
+	}
+	return false
 }
