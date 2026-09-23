@@ -1,0 +1,63 @@
+# F-Droid lane: lint the recipe, run F-Droid's update bot against this commit,
+# and build the app on F-Droid's own build server image — the three things
+# F-Droid does with android/fdroid/com.skycoin.skywire.yml. See
+# android/fdroid/check.sh for what each step proves.
+#
+# android-release.yml calls this on every mobile-v* tag. PRs run it when they
+# touch something the F-Droid build depends on, so a break shows up before a
+# tag rather than on F-Droid.
+name: Android F-Droid
+
+on:
+  workflow_call:
+  pull_request:
+    paths:
+      - 'android/fdroid/**'
+      - 'android/version.properties'
+      - 'android/app/build.gradle.kts'
+      - 'android/app/src/fdroid/**'
+      - 'android/gradle/**'
+      - 'android/*.kts'
+      - 'go.mod'
+      - 'Makefile'
+      - '.github/workflows/android-fdroid.yml'
+
+concurrency:
+  group: android-fdroid-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  fdroid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      # The build server image carries a full Android SDK, the NDK is
+      # downloaded on top, and the Go payload builds from a full clone. The
+      # runner's preinstalled toolchains are not used by any of it.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Lint, checkupdates, build (F-Droid build server image)
+        run: |
+          mkdir -p fdroid-out
+          docker run --rm \
+            -v "$PWD:/src" -v "$PWD/fdroid-out:/out" \
+            registry.gitlab.com/fdroid/fdroidserver:buildserver-trixie \
+            bash /src/android/fdroid/check.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fdroid-unsigned-apk
+          path: fdroid-out/*.apk
+          if-no-files-found: error

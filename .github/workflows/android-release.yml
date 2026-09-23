@@ -16,6 +16,12 @@ permissions:
   contents: write
 
 jobs:
+  # The F-Droid build of this tag, the way F-Droid's own CI and update bot
+  # will see it. Runs beside the release rather than before it: a problem on
+  # F-Droid's side should turn this run red, not hold back the GitHub APK.
+  fdroid:
+    uses: ./.github/workflows/android-fdroid.yml
+
   release:
     runs-on: ubuntu-latest
     steps:
@@ -79,6 +85,17 @@ jobs:
           fi
           if [ "$raw" = "0.0.0" ]; then
             echo "::error::0.0.0 derives versionCode 0; Android requires a positive integer (lowest is 0.0.1)"
+            exit 1
+          fi
+          # F-Droid's update bot reads the version from android/version.properties
+          # at this tag, not from the tag, so a tag cut without bumping the file
+          # would never reach F-Droid. Stop it here instead.
+          major=${raw%%.*}
+          code=$((major * 10000 + minor * 100 + patch))
+          file_name=$(sed -n 's/^versionName=//p' android/version.properties)
+          file_code=$(sed -n 's/^versionCode=//p' android/version.properties)
+          if [ "$file_name" != "$raw" ] || [ "$file_code" != "$code" ]; then
+            echo "::error::android/version.properties says $file_name ($file_code); tag ${GITHUB_REF_NAME} needs versionName=$raw and versionCode=$code. Bump the file, merge, and tag again."
             exit 1
           fi
           echo "name=$raw" >> "$GITHUB_OUTPUT"

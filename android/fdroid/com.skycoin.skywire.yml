@@ -1,27 +1,23 @@
-# Draft F-Droid build recipe. It does not run from here: submit it as
-# metadata/com.skycoin.skywire.yml in a merge request to
-# https://gitlab.com/fdroid/fdroiddata, together with the fdroiddata
-# template's checklist.
+# F-Droid build recipe. Submit it once as metadata/com.skycoin.skywire.yml
+# in a merge request to https://gitlab.com/fdroid/fdroiddata. After that
+# F-Droid's update bot keeps it current by itself: at each new mobile-v* tag
+# it reads android/version.properties, appends a copy of the last build
+# entry for the new version and commit, and F-Droid builds it. Nothing needs
+# resubmitting per release.
 #
-# The store listing (title, descriptions, icon, changelogs) is NOT in this
+# android/fdroid/check.sh runs this recipe the way F-Droid does (lint,
+# checkupdates, build) on every mobile-v* tag and on PRs that touch it — see
+# .github/workflows/android-fdroid.yml. Changes here should keep that green.
+#
+# The store listing (title, descriptions, icon, changelogs) is not in this
 # file: fdroidserver reads it from android/fastlane/metadata/android/.
 #
-# The first build entry names the first mobile release cut after the F-Droid
-# work lands (mobile-v0.0.4 → versionCode 4, the Makefile's
-# major*10000+minor*100+patch). mobile-v0.0.3 predates it — no LICENSE, no
-# skywireFdroid switch — so F-Droid cannot build that one. Adjust both if that release gets a different
-# number; see the note at the bottom for later releases.
+# The build entry is copied forward verbatim for each release, so it must not
+# name a version anywhere but versionName/versionCode/commit. The version
+# comes from android/version.properties and the Go toolchain from go.mod.
 #
-# Expect review questions on committed build artifacts that end up in the
-# app, and have the answers ready:
-#   - pkg/router/policy/wasm/presets/bundle.wasm — embedded in the mobile
-#     binary; rebuilt from docs/examples/routing-policies/wasm/bundle with
-#     TinyGo by `make bundle-wasm`. Reviewers may ask for that to run in
-#     prebuild (TinyGo installed like Go below).
-#   - committed web UIs (skychat's embedded UI, the vendored skydex-client
-#     static assets) — built from sources that are in the tree.
-#   - pkg/geoip/GeoLite2-City.mmdb.gz and pkg/wasmhv/execwasm/blob are in the
-#     repo but NOT in the app: the `mobile` build tag excludes both.
+# mobile-v0.0.3 and earlier predate the LICENSE and the skywireFdroid switch,
+# so the first build is mobile-v0.0.4.
 
 Categories:
   - Connectivity
@@ -45,34 +41,34 @@ Builds:
     subdir: android/app
     sudo:
       - apt-get update
-      - apt-get install -y make
-      # The module needs Go 1.26.4; Debian's is older. Official tarball,
-      # pinned by checksum.
-      - curl -Lo /tmp/go.tar.gz https://go.dev/dl/go1.26.4.linux-amd64.tar.gz
-      - echo "1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f  /tmp/go.tar.gz"
-        | sha256sum -c -
-      - tar -C /opt -xzf /tmp/go.tar.gz
+      - apt-get install -y golang-go make
     gradle:
       - yes
+    # Prebuilt files in the repo that the mobile build does not use: the
+    # `mobile` build tag excludes the GeoLite2 database and the wasm
+    # hypervisor, and the wasm routing-policy examples are docs.
+    scandelete:
+      - pkg/geoip/GeoLite2-City.mmdb.gz
+      - pkg/wasmhv/execwasm/blob
+      - docs/examples/routing-policies/wasm
     gradleprops:
-      # Strips the in-app updater and REQUEST_INSTALL_PACKAGES — F-Droid
+      # Strips the in-app updater and REQUEST_INSTALL_PACKAGES: F-Droid
       # delivers the updates. See android/app/build.gradle.kts.
       - skywireFdroid=true
-      - skywireVersionName=0.0.4
-      - skywireVersionCode=4
     ndk: r27c
     build:
       # The Go core (libskywire-mobile.so) from vendored sources, into
       # app/src/main/jniLibs, before gradle packages it. The NDK lane is the
       # release one: cgo resolves DNS through bionic.
+      # Debian's Go is older than go.mod asks for; GOTOOLCHAIN=auto has it
+      # fetch exactly the go.mod version, verified against sum.golang.org, so
+      # this entry never pins a Go version of its own.
       - cd ../..
-      - PATH=/opt/go/bin:$PATH ANDROID_NDK_HOME=$$NDK$$ make android-mobile-ndk
+      - export GOTOOLCHAIN=auto GOPROXY=https://proxy.golang.org,direct GOSUMDB=sum.golang.org
+      - ANDROID_NDK_HOME=$$NDK$$ make android-mobile-ndk
 
-# The versionCode is computed from the tag by the Makefile and passed to
-# gradle as a property; no file in the tree holds it, so checkupdates has
-# nothing to read. Each release adds its build entry by hand (a small MR to
-# fdroiddata) until the version is committed to a file it can parse.
-AutoUpdateMode: None
-UpdateCheckMode: None
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^mobile-v[0-9]+\.[0-9]+\.[0-9]+$
+UpdateCheckData: android/version.properties|(?m)^versionCode=(\d+)$|android/version.properties|(?m)^versionName=(\S+)$
 CurrentVersion: 0.0.4
 CurrentVersionCode: 4
