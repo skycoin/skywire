@@ -4,6 +4,11 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
 import android.util.Log
 import com.skycoin.skywire.api.VisorApi
 import kotlinx.coroutines.CoroutineScope
@@ -90,8 +95,17 @@ internal class NetworkMoves {
     /**
      * Records where we are now. Returns true when that is a move — i.e. the
      * sockets the core holds are no longer on the network it holds them on.
+     *
+     * [vpn]: [next] is a VPN — in practice SkyVPN's own tun. That is neither a
+     * move nor a new place to be. The core is excluded from the tunnel
+     * (SkyVpnService's addDisallowedApplication), so its sockets are still on
+     * the network underneath, exactly where they were. Calling it a move
+     * dropped every dmsg session the moment SkyVPN came up, the session
+     * carrying the tunnel's own transport among them, and the VPN tore itself
+     * down within two seconds of connecting.
      */
-    fun observe(next: Attachment): Boolean {
+    fun observe(next: Attachment, vpn: Boolean = false): Boolean {
+        if (vpn) return false
         val was = current
         if (next == was) return false
         current = next
@@ -181,14 +195,19 @@ internal class NetworkWatcher(context: Context) {
                     network.toString(),
                     props?.linkAddresses.orEmpty().map { it.address },
                 )
-                if (!state.observe(next)) {
+                val vpn = cm.getNetworkCapabilities(network)
+                    ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+                if (vpn) {
+                    Log.d(TAG, "default is a VPN, not a move: $next")
+                }
+                if (!state.observe(next, vpn)) {
                     // The first attachment is worth a line of its own: it is
                     // the one every later "moved" line is read against, and
                     // without it a log that never says "moved" is ambiguous
                     // between "nothing moved" and "this never started".
                     // Repeats of an attachment we already hold are not — the
                     // framework re-reports freely and they would be noise.
-                    if (was == null) Log.i(TAG, "network baseline: $next")
+                    if (was == null && !vpn) Log.i(TAG, "network baseline: $next")
                     return
                 }
                 Log.i(TAG, "network moved: $was -> $next")
@@ -196,13 +215,34 @@ internal class NetworkWatcher(context: Context) {
             }
         }
 
+        // What to follow is the network under any VPN, because that is where
+        // the core's sockets are. With SkyVPN up the app's DEFAULT network is
+        // the VPN, and it stays the VPN across a Wi-Fi/cellular switch, so
+        // following the default would see nothing move while everything under
+        // it did. From API 31 the framework will track the best non-VPN
+        // network directly. Before that there is only the default: VPN
+        // networks are skipped (see [NetworkMoves.observe]), and a move made
+        // while SkyVPN is up waits for the core's own keepalives, as it did
+        // before this class existed.
+        var callbacks: HandlerThread? = null
         try {
-            cm.registerDefaultNetworkCallback(callback)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val underVpn = NetworkRequest.Builder()
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                    .build()
+                val thread = HandlerThread(TAG).apply { start() }
+                callbacks = thread
+                cm.registerBestMatchingNetworkCallback(underVpn, callback, Handler(thread.looper))
+            } else {
+                cm.registerDefaultNetworkCallback(callback)
+            }
         } catch (e: SecurityException) {
             // ACCESS_NETWORK_STATE is in the manifest, but a hardened ROM can
             // still refuse. The visor's own keepalives remain the fallback —
             // slower, not absent.
             Log.w(TAG, "cannot watch the default network: ${e.message}")
+            callbacks?.quitSafely()
             return@launch
         }
 
@@ -220,6 +260,7 @@ internal class NetworkWatcher(context: Context) {
             // even when the scope is already cancelled.
             withContext(NonCancellable) {
                 runCatching { cm.unregisterNetworkCallback(callback) }
+                callbacks?.quitSafely()
             }
         }
     }

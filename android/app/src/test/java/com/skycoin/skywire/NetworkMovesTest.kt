@@ -116,6 +116,32 @@ class NetworkMovesTest {
     }
 
     @Test
+    fun theVpnThisAppRaisedIsNotAMove() {
+        // The sequence an API 37 emulator logged the moment SkyVPN connected.
+        // The core is excluded from its own tunnel, so none of this touched a
+        // socket it holds — yet each step was a move, and the re-dial the
+        // first one triggered took down the tunnel's transport with it.
+        val moves = NetworkMoves()
+        val wifi = attachment("101", "10.0.2.16")
+        moves.observe(wifi)
+        assertFalse(moves.observe(attachment("102", "172.16.0.12"), vpn = true))
+        assertEquals("a VPN is not somewhere the core is", wifi, moves.current())
+        moves.lost("102")
+        assertFalse(moves.observe(wifi))
+    }
+
+    @Test
+    fun aVpnAlreadyUpIsNotTheBaseline() {
+        // The core restarting while SkyVPN holds the default: the baseline is
+        // the network underneath, whenever it is first reported.
+        val moves = NetworkMoves()
+        assertFalse(moves.observe(attachment("102", "172.16.0.12"), vpn = true))
+        assertNull(moves.current())
+        assertFalse(moves.observe(attachment("101", "10.0.2.16")))
+        assertTrue(moves.observe(attachment("103", "10.84.22.7")))
+    }
+
+    @Test
     fun linkLocalAndLoopbackAreIgnored() {
         // fe80:: is per-interface and constant across the moves that matter;
         // no dmsg session is bound to one. Neither should register as a
