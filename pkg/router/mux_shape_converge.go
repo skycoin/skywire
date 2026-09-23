@@ -503,10 +503,33 @@ func (c *shapeConverge) done(move string, from Shape, reason string) {
 // blocked logs a move the invariants refused. Debug, not Info: a session that
 // cannot converge says so once a tick for as long as it cannot, and the
 // operator asks `proxy mux info` for the standing answer.
+// shapeBlockedEvery bounds how often ONE unchanged deferral reason is
+// repeated. The converger ticks about twice a second, so a tunnel sitting out
+// its retry backoff logged the same sentence on every tick — 288 identical
+// lines in 3.5 minutes, measured — which buries the lines that say what
+// actually moved.
+const shapeBlockedEvery = 30 * time.Second
+
+// shapeBlockedSaid is when each distinct deferral reason was last logged. It is
+// package-scoped because a shapeConverge lives for exactly one tick: the state
+// that has to outlast the repetition cannot live on it.
+var shapeBlockedSaid sync.Map // string -> time.Time
+
 func (c *shapeConverge) blocked(from Shape, why string) {
-	if len(c.active) > 0 {
-		c.active[0].logger.Debugf("Shape %s -> %s deferred; %s", from, c.target, why)
+	if len(c.active) == 0 {
+		return
 	}
+	g := c.active[0]
+	// Keyed by the tunnel as well as by the sentence: two tunnels held back for
+	// the same reason are two facts, and each deserves its line.
+	key := fmt.Sprintf(":%d|%v->%v|%s", g.desc.SrcPort(), from, c.target, why)
+	if last, ok := shapeBlockedSaid.Load(key); ok {
+		if at, isTime := last.(time.Time); isTime && c.now.Sub(at) < shapeBlockedEvery {
+			return
+		}
+	}
+	shapeBlockedSaid.Store(key, c.now)
+	g.logger.Debugf("Shape %s -> %s deferred; %s", from, c.target, why)
 }
 
 // shapeBusy is the router's view of I7 — "this tunnel is carrying". The app

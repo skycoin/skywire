@@ -4757,6 +4757,15 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 		}
 		return rg.handleClosePacket(closeCode)
 	case routing.DataPacket:
+		// IN-BAND leg control (mux_control_frame.go): a re-home/split message
+		// rides a DataPacket so every relay forwards it. Dispatched here,
+		// before anything reads it as application data — it must not flip the
+		// "first packet is data, so the peer is an old visor" inference below,
+		// and it never reaches the reorder buffer, the SACK tracker or the
+		// delivery CRC.
+		if rg.isMuxControlPacket(packet) {
+			return rg.handleMuxControlFrame(packet)
+		}
 		rg.handshakeProcessedOnce.Do(func() {
 			// first packet is data packet, so we're communicating with the old visor
 			rg.encrypt = false
