@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     // No org.jetbrains.kotlin.android: Kotlin support is built into AGP ≥9.
@@ -5,13 +7,18 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// Version comes from the release tag when there is one, and from the
-// fallbacks below otherwise, so a local `./gradlew assembleDebug` needs no
-// arguments. The Android release workflow derives both from the
-// `mobile-vX.Y.Z` tag through `make android-apk` — see
+// The version of record is android/version.properties, which is what a local
+// `./gradlew assembleDebug` and the F-Droid build use. The release workflow
+// passes the `mobile-vX.Y.Z` tag's version as properties through
+// `make android-apk`, after checking the tag against that file — see
 // .github/workflows/android-release.yml.
-val appVersionName = (project.findProperty("skywireVersionName") as String?) ?: "0.1.0"
-val appVersionCode = (project.findProperty("skywireVersionCode") as String?)?.toInt() ?: 1
+val versionFile = Properties().apply {
+    rootProject.file("version.properties").inputStream().use { load(it) }
+}
+val appVersionName = (project.findProperty("skywireVersionName") as String?)
+    ?: versionFile.getProperty("versionName")
+val appVersionCode = ((project.findProperty("skywireVersionCode") as String?)
+    ?: versionFile.getProperty("versionCode")).toInt()
 
 // Release signing is supplied by the environment, never committed. Absent
 // (every local build), `release` stays unsigned exactly as before; the

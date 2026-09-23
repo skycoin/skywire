@@ -324,6 +324,21 @@ android/
 
 Progress log: [implementation-report.md](implementation-report.md).
 
+## Releasing
+
+1. Bump `android/version.properties`: `versionName=X.Y.Z` and
+   `versionCode=X*10000 + Y*100 + Z`. Merge it.
+2. Tag the merged commit `mobile-vX.Y.Z` and push the tag.
+
+The tag starts `.github/workflows/android-release.yml`. It refuses a tag that
+does not match `version.properties`, publishes the signed APK and AAB to GitHub
+Releases, and runs the F-Droid check (`android-fdroid.yml`) beside it.
+
+F-Droid needs nothing per release. Its update bot finds the new tag, reads
+`version.properties` there, and adds the build to fdroiddata by itself, using
+the recipe in `fdroid/com.skycoin.skywire.yml`. PRs that touch the F-Droid
+build run the same check on GitHub's runners.
+
 ## License
 
 Part of Skywire, licensed under the [GNU Affero General Public License v3.0](../LICENSE)
