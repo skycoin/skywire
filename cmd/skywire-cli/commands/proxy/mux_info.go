@@ -114,6 +114,10 @@ type muxCountersInfo struct {
 	LegRehomesReceived    uint64 `json:"leg_rehomes_received"`
 	LegRehomesAcked       uint64 `json:"leg_rehomes_acked"`
 	LegRehomesFailed      uint64 `json:"leg_rehomes_failed"`
+	LegSplitsSent         uint64 `json:"leg_splits_sent"`
+	LegSplitsReceived     uint64 `json:"leg_splits_received"`
+	LegSplitsAcked        uint64 `json:"leg_splits_acked"`
+	LegSplitsFailed       uint64 `json:"leg_splits_failed"`
 	ForwardFanoutEngaged  uint64 `json:"forward_fanout_engaged"`
 	ForwardFanoutReleased uint64 `json:"forward_fanout_released"`
 	AEADFailures          uint64 `json:"aead_failures"`
@@ -151,8 +155,9 @@ func printMuxCounters(cmd *cobra.Command, mc *muxCountersInfo) {
 	if mc == nil || cliout.JSONMode(cmd) {
 		return
 	}
-	fmt.Printf("counters: promotions=%d  rehome sent/recv/acked/failed=%d/%d/%d/%d  fanout engage/release=%d/%d  integrity aead/delivery-crc=%d/%d\n",
+	fmt.Printf("counters: promotions=%d  rehome sent/recv/acked/failed=%d/%d/%d/%d  split sent/recv/acked/failed=%d/%d/%d/%d  fanout engage/release=%d/%d  integrity aead/delivery-crc=%d/%d\n",
 		mc.TunnelPromotions, mc.LegRehomesSent, mc.LegRehomesReceived, mc.LegRehomesAcked, mc.LegRehomesFailed,
+		mc.LegSplitsSent, mc.LegSplitsReceived, mc.LegSplitsAcked, mc.LegSplitsFailed,
 		mc.ForwardFanoutEngaged, mc.ForwardFanoutReleased, mc.AEADFailures, mc.DeliveryCRCFailures)
 }
 

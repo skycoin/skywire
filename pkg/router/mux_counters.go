@@ -26,6 +26,15 @@ type MuxCounters struct {
 	LegRehomesReceived uint64 `json:"leg_rehomes_received"`
 	LegRehomesAcked    uint64 `json:"leg_rehomes_acked"`
 	LegRehomesFailed   uint64 `json:"leg_rehomes_failed"`
+	// LegSplitsSent/Received/Acked/Failed count the REVERSE move
+	// (leg_split.go): a leg handed back OUT of a group into a standalone
+	// standby group of its own, instead of its transport being closed.
+	// Sent/Acked/Failed are this visor's own outbound splits, Received an
+	// incoming split request it accepted or refused.
+	LegSplitsSent     uint64 `json:"leg_splits_sent"`
+	LegSplitsReceived uint64 `json:"leg_splits_received"`
+	LegSplitsAcked    uint64 `json:"leg_splits_acked"`
+	LegSplitsFailed   uint64 `json:"leg_splits_failed"`
 	// ForwardFanoutEngaged/Released count noteForwardFanout(on=true/false):
 	// the forward direction's fan-out-under-load latch (unidir.go) turning on
 	// (MuxEventForwardFanout) or off (MuxEventForwardConfined).
@@ -52,6 +61,10 @@ type muxGlobalCounters struct {
 	legRehomesReceived    atomic.Uint64
 	legRehomesAcked       atomic.Uint64
 	legRehomesFailed      atomic.Uint64
+	legSplitsSent         atomic.Uint64
+	legSplitsReceived     atomic.Uint64
+	legSplitsAcked        atomic.Uint64
+	legSplitsFailed       atomic.Uint64
 	forwardFanoutEngaged  atomic.Uint64
 	forwardFanoutReleased atomic.Uint64
 	aeadFailures          atomic.Uint64
@@ -80,6 +93,10 @@ func (c *muxGlobalCounters) snapshot() MuxCounters {
 		LegRehomesReceived:    c.legRehomesReceived.Load(),
 		LegRehomesAcked:       c.legRehomesAcked.Load(),
 		LegRehomesFailed:      c.legRehomesFailed.Load(),
+		LegSplitsSent:         c.legSplitsSent.Load(),
+		LegSplitsReceived:     c.legSplitsReceived.Load(),
+		LegSplitsAcked:        c.legSplitsAcked.Load(),
+		LegSplitsFailed:       c.legSplitsFailed.Load(),
 		ForwardFanoutEngaged:  c.forwardFanoutEngaged.Load(),
 		ForwardFanoutReleased: c.forwardFanoutReleased.Load(),
 		AEADFailures:          c.aeadFailures.Load(),

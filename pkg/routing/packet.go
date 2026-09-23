@@ -199,6 +199,12 @@ const (
 	// mux not enabled). Carried with LegRehomeAck cleared; both groups are left
 	// exactly as they were.
 	LegRehomeRefused byte = 0x04
+	// LegRehomeSplit marks the REVERSE direction (router/leg_split.go): the
+	// ports name a NEW standalone standby group of the INITIATOR, and the chain
+	// the packet arrives on is to leave the group it belongs to and become that
+	// group's only leg. Echoed on the ack and on a refusal, so an answer is
+	// never mistaken for a forward re-home's.
+	LegRehomeSplit byte = 0x08
 )
 
 // FECRepairHdr is the fixed prefix of a RepairPacket payload: blockID(4) + idx(1)
