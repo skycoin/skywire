@@ -421,6 +421,13 @@ type MuxRouteGroupInfo struct {
 	Shape       string `json:"shape,omitempty"`
 	ShapeTarget string `json:"shape_target,omitempty"`
 	ShapeSource string `json:"shape_source,omitempty"`
+	// ShapeTunnels is the k the target asks for (0 under auto); LastMove and
+	// MoveCounts are the session's shape-move history, keyed by the four move
+	// names pool_leg_taken / pool_leg_released / tunnel_promoted /
+	// tunnel_parked.
+	ShapeTunnels int                  `json:"shape_tunnels,omitempty"`
+	LastMove     *router.MuxShapeMove `json:"last_move,omitempty"`
+	MoveCounts   map[string]uint64    `json:"move_counts,omitempty"`
 }
 
 // MuxLegInfo is one route in a mux'd group.

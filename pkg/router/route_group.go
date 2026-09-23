@@ -783,6 +783,19 @@ type MuxInfo struct {
 	Shape       string
 	ShapeTarget string
 	ShapeSource string
+	// ShapeTunnels is the k the target asks for — the number of ACTIVE tunnels
+	// the session is converging to. 0 under mux.shape=auto, where the count is
+	// the app's own tunnel.count and nothing here overrides it. It is published
+	// so the dialing app can promote toward the shape rather than toward
+	// tunnel.count (docs/design/mux-shape-axis.md step 6).
+	ShapeTunnels int
+	// LastMove is the most recent shape move this session made and MoveCounts
+	// the running tally, keyed by the four move names (pool_leg_taken,
+	// pool_leg_released, tunnel_promoted, tunnel_parked). They make a shape
+	// history readable without walking the event ring. Both nil on a session
+	// that has never moved.
+	LastMove   *MuxShapeMove
+	MoveCounts map[string]uint64
 }
 
 // MuxRecovery is a route group's LOSS-RECOVERY state: the sender-side
