@@ -996,3 +996,36 @@ So the next phase dials a **standby pool** — routes set up and held, not carry
 switches on **live measurement** of the legs that are actually running, so a route that degrades
 mid-transfer is replaced in an instant rather than at the next dial. Probing the pool over
 dmsg-over-skynet relay legs is part of the same phase.
+
+## Results (2026-09-22: standby pool, leg re-home, delivery CRC)
+
+Today's range (#5082-#5105) took the standby pool from proposal to a running default. The pool's
+ceiling was raised to 32 with first-hop diversity so standby tunnels don't cluster on one neighbour,
+pool-sourced legs and leg re-home landed (#5082-#5085, #5089), and a standby tunnel is now clamped to
+a single leg with its role seeded at group creation so nothing can widen it before the pool decides
+(#5096, #5094). In-mux delivery CRC verifies the sender's bytes reach the reader unmodified (#5104),
+`visor state --select pool|mux` and `status.skysocks` expose the pool table, mux counters and
+per-tunnel `streams=N` alongside a new `mux.app_width` knob (#5101, #5105), and the last bare mux
+constants are registered as live knobs (#5103). The emu suites (#5084 onward) now run as their own CI
+lane, `emu` (#5098).
+
+| run | 10 MB down | 50 MB down | 100 MB down | 10 MB up | 50 MB up | standby legs | active legs | exit gate | promoter flips |
+|---|---|---|---|---|---|---|---|---|---|
+| 4 (3656694b8-smoke) | 0.57 | 0.64 | 0.93 | 1.04 | 0.70 | 1 leg ×26 | 2 legs ×2 | PASS | 2 |
+| 5 (3656694b8-mon5) | 0.52 | 1.44 | 0.84 | 0.93 | 0.97 | 1 leg ×30 | 2 legs ×2 | FAIL | 12 |
+
+Ratios are goodput against the paired single-route reference. Run 5's exit gate failure is
+attributed to the exit's full outbound transport mesh — roughly 1384 transports to 737 peers — not a
+leak.
+
+The final chain on develop head 6b414eea2 is running; its digest will be appended once it completes.
+
+### Known weak spots, ticketed
+
+- 10 MB objects sit below the single-route reference (0.52-0.57) while 50/100 MB clear 0.84 —
+  [#5107](https://github.com/skycoin/skywire/issues/5107).
+- Chunked HTTP uploads still ride a single tunnel; only the range-split plaintext path stripes —
+  [#5106](https://github.com/skycoin/skywire/issues/5106).
+- The emu harness has no `Router.DialRoutes`, so `assertLegDiscipline` is only proven through a
+  synthetic `dialMuxTarget` call, and establishMuxRoutes/self-heal widening go uncovered in-process —
+  [#5108](https://github.com/skycoin/skywire/issues/5108).
