@@ -1,0 +1,76 @@
+# F-Droid build recipe. Submit it once as metadata/com.skycoin.skywire.yml
+# in a merge request to https://gitlab.com/fdroid/fdroiddata. After that
+# F-Droid's update bot keeps it current by itself: at each new fdroid-v* tag
+# it reads android/version.properties, appends a copy of the last build
+# entry for the new version and commit, and F-Droid builds it. Nothing needs
+# resubmitting per release.
+#
+# fdroid-v* tags are made by CI, not by hand: after each mobile-vX.Y.Z
+# release, .github/workflows/android-fdroid.yml stamps X.Y.Z into
+# android/version.properties on a commit over the tagged one, runs this
+# recipe the way F-Droid does (android/fdroid/check.sh: lint, checkupdates,
+# build), and only then tags that commit fdroid-vX.Y.Z.
+#
+# The store listing (title, descriptions, icon, changelogs) is not in this
+# file: fdroidserver reads it from android/fastlane/metadata/android/.
+#
+# The build entry is copied forward verbatim for each release, so it must not
+# name a version anywhere but versionName/versionCode/commit. The version
+# comes from android/version.properties and the Go toolchain from go.mod.
+#
+# mobile-v0.0.3 and earlier predate the LICENSE and the skywireFdroid switch,
+# so the first build is fdroid-v0.0.4, made by the mobile-v0.0.4 release.
+
+Categories:
+  - Connectivity
+  - Internet
+License: AGPL-3.0-only
+AuthorName: Skycoin
+WebSite: https://www.skycoin.com
+SourceCode: https://github.com/skycoin/skywire
+IssueTracker: https://github.com/skycoin/skywire/issues
+Changelog: https://github.com/skycoin/skywire/releases
+
+AutoName: Skywire
+
+RepoType: git
+Repo: https://github.com/skycoin/skywire.git
+
+Builds:
+  - versionName: 0.0.4
+    versionCode: 4
+    commit: fdroid-v0.0.4
+    subdir: android/app
+    sudo:
+      - apt-get update
+      - apt-get install -y golang-go make
+    gradle:
+      - yes
+    # Prebuilt files in the repo that the mobile build does not use: the
+    # `mobile` build tag excludes the GeoLite2 database and the wasm
+    # hypervisor, and the wasm routing-policy examples are docs.
+    scandelete:
+      - pkg/geoip/GeoLite2-City.mmdb.gz
+      - pkg/wasmhv/execwasm/blob
+      - docs/examples/routing-policies/wasm
+    gradleprops:
+      # Strips the in-app updater and REQUEST_INSTALL_PACKAGES: F-Droid
+      # delivers the updates. See android/app/build.gradle.kts.
+      - skywireFdroid=true
+    ndk: r27c
+    build:
+      # The Go core (libskywire-mobile.so) from vendored sources, into
+      # app/src/main/jniLibs, before gradle packages it. The NDK lane is the
+      # release one: cgo resolves DNS through bionic.
+      # Debian's Go is older than go.mod asks for; GOTOOLCHAIN=auto has it
+      # fetch exactly the go.mod version, verified against sum.golang.org, so
+      # this entry never pins a Go version of its own.
+      - cd ../..
+      - export GOTOOLCHAIN=auto GOPROXY=https://proxy.golang.org,direct GOSUMDB=sum.golang.org
+      - ANDROID_NDK_HOME=$$NDK$$ make android-mobile-ndk
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^fdroid-v[0-9]+\.[0-9]+\.[0-9]+$
+UpdateCheckData: android/version.properties|(?m)^versionCode=(\d+)$|android/version.properties|(?m)^versionName=(\S+)$
+CurrentVersion: 0.0.4
+CurrentVersionCode: 4
