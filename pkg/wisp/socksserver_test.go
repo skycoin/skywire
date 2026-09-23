@@ -150,7 +150,7 @@ func TestSocksServerRelaysUDP(t *testing.T) {
 		t.Fatalf("send: %v", err)
 	}
 
-	peer := eg.udpPeer(t, 0)
+	peer := eg.udpPeer(t)
 	select {
 	case got := <-peer.out:
 		if string(got) != "query" {
@@ -219,7 +219,7 @@ func TestSocksServerKeepsOneStreamPerDestination(t *testing.T) {
 		}
 	}
 
-	first := eg.udpPeer(t, 0)
+	first := eg.udpPeerTo(t, "1.1.1.1", 53)
 	for _, want := range []string{"a", "b"} {
 		select {
 		case got := <-first.out:
@@ -231,7 +231,7 @@ func TestSocksServerKeepsOneStreamPerDestination(t *testing.T) {
 		}
 	}
 
-	second := eg.udpPeer(t, 1)
+	second := eg.udpPeerTo(t, "9.9.9.9", 53)
 	select {
 	case got := <-second.out:
 		if string(got) != "c" {
@@ -275,7 +275,7 @@ func TestSocksServerAssociationEndsWithItsControlConn(t *testing.T) {
 	if _, err := sock.Write(encodeSocksUDP("1.1.1.1", 53, []byte("x"))); err != nil {
 		t.Fatalf("send: %v", err)
 	}
-	peer := eg.udpPeer(t, 0)
+	peer := eg.udpPeer(t)
 	select {
 	case <-peer.out:
 	case <-time.After(10 * time.Second):

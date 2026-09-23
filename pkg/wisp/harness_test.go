@@ -39,7 +39,7 @@ func (f *fakeEgress) DialUDP(_ context.Context, host string, port uint16) (Datag
 	if f.udpErr != nil {
 		return nil, f.udpErr
 	}
-	d := &fakeDatagram{out: make(chan []byte, 8), in: make(chan []byte, 8)}
+	d := &fakeDatagram{host: host, port: port, out: make(chan []byte, 8), in: make(chan []byte, 8)}
 	f.udpPeers = append(f.udpPeers, d)
 	return d, nil
 }
@@ -63,25 +63,50 @@ func (f *fakeEgress) tcpPeer(t *testing.T, i int) net.Conn {
 	return nil
 }
 
-func (f *fakeEgress) udpPeer(t *testing.T, i int) *fakeDatagram {
+// udpPeer is the first UDP peer dialed — for a test with one destination.
+func (f *fakeEgress) udpPeer(t *testing.T) *fakeDatagram {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		f.mu.Lock()
-		if len(f.udpPeers) > i {
-			d := f.udpPeers[i]
+		if len(f.udpPeers) > 0 {
+			d := f.udpPeers[0]
 			f.mu.Unlock()
 			return d
 		}
 		f.mu.Unlock()
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatalf("no UDP peer %d after 2s", i)
+	t.Fatal("no UDP peer after 2s")
+	return nil
+}
+
+// udpPeerTo is the UDP peer dialed to host:port. Streams to different
+// destinations are opened concurrently at the server, so the order they reach
+// the egress is not the order the client sent in; a test with more than one
+// destination has to find its peer by address, not by index.
+func (f *fakeEgress) udpPeerTo(t *testing.T, host string, port uint16) *fakeDatagram {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		for _, d := range f.udpPeers {
+			if d.host == host && d.port == port {
+				f.mu.Unlock()
+				return d
+			}
+		}
+		f.mu.Unlock()
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("no UDP peer to %s:%d after 2s", host, port)
 	return nil
 }
 
 // fakeDatagram is a DatagramStream whose two directions are channels.
 type fakeDatagram struct {
+	host      string // the destination it was dialed to
+	port      uint16
 	out       chan []byte // written by the server, read by the test
 	in        chan []byte // written by the test, read by the server
 	closeOnce sync.Once

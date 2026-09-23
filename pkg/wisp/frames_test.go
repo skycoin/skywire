@@ -194,7 +194,7 @@ func TestServeConnCarriesUDP(t *testing.T) {
 		t.Fatalf("WriteDatagram: %v", err)
 	}
 
-	peer := eg.udpPeer(t, 0)
+	peer := eg.udpPeer(t)
 	select {
 	case got := <-peer.out:
 		if string(got) != "query" {

@@ -229,7 +229,7 @@ func TestUDPStreamCarriesDatagramsAndGetsNoCredit(t *testing.T) {
 	c.recv()                                       // CONTINUE on stream 0
 	c.send(EncodeConnect(2, StreamUDP, "dns", 53)) // UDP stream
 
-	peer := eg.udpPeer(t, 0)
+	peer := eg.udpPeer(t)
 
 	// client → far end, more packets than the buffer would allow if UDP
 	// were credited.
