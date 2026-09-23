@@ -18,7 +18,7 @@ import (
 // they went on writing to the renamed inode. One writer means an Info line
 // logged after a rotation is in the file that is actually on disk.
 func TestTextLogHook_LevelsShareOneWriter(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "skywire.log")
+	path := filepath.Join(logTestDir(t), "skywire.log")
 
 	hook, err := newTextLogHook(path)
 	require.NoError(t, err)
@@ -52,4 +52,17 @@ func TestTextLogHook_LevelsShareOneWriter(t *testing.T) {
 		require.Contains(t, string(raw), want,
 			"the current log file lost a line written after rotation")
 	}
+}
+
+// logTestDir is a temp dir whose removal failure is tolerated: the hook's
+// lumberjack writer has no Close, so on Windows the log file is still open
+// when the test ends and t.TempDir's cleanup would fail the test.
+func logTestDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "loghook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) }) //nolint:errcheck
+	return dir
 }
