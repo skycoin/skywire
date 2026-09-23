@@ -104,7 +104,7 @@ func noteRoleReportingApp(app string) {
 	roleReportingMu.Unlock()
 }
 
-// appReportsTunnelRoles reports whether app has ever labelled a tunnel.
+// appReportsTunnelRoles reports whether app has ever labeled a tunnel.
 func appReportsTunnelRoles(app string) bool {
 	if app == "" {
 		return false
