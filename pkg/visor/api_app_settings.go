@@ -21,6 +21,7 @@ import (
 	"errors"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 )
 
 // AppSettings is the CLI's read of an app's live tuning knobs: the values the
@@ -66,6 +67,7 @@ func (v *Visor) SetAppSettings(appName string, vals map[string]int64, text map[s
 		return AppSettings{}, ErrProcManagerNotAvailable
 	}
 	version := v.procM.SetAppSettings(appName, vals, text)
+	v.mirrorShapeHold(appName, vals)
 	v.persistAppSettings()
 	_, _, _, applied := v.procM.AppSettingsState(appName)
 	return AppSettings{AppName: appName, Values: vals, Text: text, Version: version, Applied: applied}, nil
@@ -95,7 +97,39 @@ func (v *Visor) restoreAppSettings(procM appserver.ProcManager) {
 			continue
 		}
 		procM.SetAppSettings(app, s.Values, s.Text)
+		v.mirrorShapeHold(app, s.Values)
 		v.log.Infof("Restored %d live setting(s) for app %q from config",
 			len(s.Values)+len(s.Text), app)
+	}
+}
+
+// The app knobs that FREEZE an app's own tunnel set: pool.freeze stops the
+// pool moving at all, tunnel.freeze_active stops the promoter's discretionary
+// promote and park. They are named here as literals because pkg/visor does not
+// import the app's knob registry (pkg/skysocks/skysettings does, and it imports
+// this tree, not the other way round).
+const (
+	appKnobPoolFreeze         = "pool.freeze"
+	appKnobTunnelFreezeActive = "tunnel.freeze_active"
+)
+
+// mirrorShapeHold mirrors an app's freeze knobs into the router's
+// mux.shape_hold for that app, so the shape converger holds still while the app
+// is holding its own tunnel set still (docs/design/mux-shape-axis.md I8).
+//
+// The router cannot read the app's knobs: they live in the app PROCESS, behind
+// a pull the visor answers but does not interpret. The visor is the one end
+// that sees both sets, so it is the one that can join them — one knob write per
+// `proxy settings` call and one per app at boot, no new RPC and nothing for the
+// app to remember to send.
+func (v *Visor) mirrorShapeHold(appName string, vals map[string]int64) {
+	hold := vals[appKnobPoolFreeze] != 0 || vals[appKnobTunnelFreezeActive] != 0
+	raw := "false"
+	if hold {
+		raw = "true"
+	}
+	if err := routersettings.SetApp(appName, routersettings.MuxShapeHold.Name(), raw); err != nil {
+		v.log.WithError(err).WithField("app", appName).
+			Warn("Failed to mirror the app's freeze into mux.shape_hold; the shape converger may keep moving")
 	}
 }

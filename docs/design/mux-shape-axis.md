@@ -171,9 +171,12 @@ baseline, plus a rig smoke on the fleet before merge.
    `TestEmuShapeConverges2x2To4x1`, `TestEmuShapeConverges2x2To1x4`,
    `TestEmuShapeRoundTripsBackTo2x2`.
 6. **Promotion under the shape.** `reconcileActiveSet`
-   (`client_live_ops.go:38`) takes `k` from the shape instead of `c.target`;
-   the shape travels app↔router on the existing tunnel-role RPC
-   (`pkg/app/appserver/rpc_ingress_gateway.go:validTunnelRole`).
+   (`client_live_ops.go:38`) takes `k` from the shape instead of `c.target`.
+   The shape travels router→app on the per-tunnel snapshot the client already
+   pulls for its capacity priors (`proxystatus.Snapshot.ShapeTunnels` /
+   `ShapeSource`), and the app's freezes travel the other way as
+   `mux.shape_hold`, which the visor sets for an app whose `pool.freeze` or
+   `tunnel.freeze_active` is on (I8). Neither direction needs a new RPC.
    Tests: `TestReconcileActiveSetFollowsShape` beside the existing
    `TestReconcileActiveSetFollowsTunnelCount`.
 7. **Surfaces.** `LastMove`, `MoveCounts`, the `visor state --select mux`

@@ -139,9 +139,17 @@ type Snapshot struct {
 	// list above (a caller that only projects a single route group). Legs mirrors
 	// Tunnels[0].Legs for back-compat.
 	Tunnels []Tunnel
-	Logs    []string // recent log lines, oldest first
-	Events  []string // route/transport events affecting this surface, oldest first
-	Streams []Stream // per-stream detail for the open session (skysocks tunnel), when tracked
+	// ShapeTunnels is how many ACTIVE tunnels the session's mux.shape target
+	// asks for — the k of "<k>x<n>" — and ShapeSource where that target came
+	// from: "mux.shape" for an operator-named shape, "auto" (or empty) for the
+	// default. The dialing app FOLLOWS k with its own active set: the router
+	// can flip a route group's role, but only the app owns the yamux session
+	// that puts streams on one (pkg/skysocks reconcileActiveSet).
+	ShapeTunnels int      `json:"shape_tunnels,omitempty"`
+	ShapeSource  string   `json:"shape_source,omitempty"`
+	Logs         []string // recent log lines, oldest first
+	Events       []string // route/transport events affecting this surface, oldest first
+	Streams      []Stream // per-stream detail for the open session (skysocks tunnel), when tracked
 	// RangeSplit summarizes transparent HTTP range-splitting activity on the
 	// surface (skysocks only): whether a split is firing right now and its
 	// cumulative shape. Nil when the surface does not range-split (every

@@ -181,3 +181,63 @@ func TestLiveOpsTerminate(t *testing.T) {
 		t.Fatal("reconcile did not terminate")
 	}
 }
+
+// TestReconcileActiveSetFollowsShape is step 6 of docs/design/mux-shape-axis.md:
+// an explicit mux.shape names k, the router publishes it on the snapshot the
+// client already pulls, and the ACTIVE set follows k instead of tunnel.count —
+// which is what puts yamux streams on a tunnel the router promoted.
+func TestReconcileActiveSetFollowsShape(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	c := liveOpsClient(t, 3)
+	require.Equal(t, 1, c.activeLiveCount(), "tunnel.count=1 is the client's own target")
+
+	require.True(t, c.applyShapeTarget(4, shapeSourceMuxShape), "the shape target moved")
+	c.reconcileActiveSet("shape")
+	require.Equal(t, 4, c.activeLiveCount(), "mux.shape=4x1 wants four tunnels carrying streams")
+	require.Equal(t, 4, c.liveSessionCount(), "and takes them from the pool, dialing nothing")
+
+	// Back to auto: tunnel.count is in charge again and the extra tunnels park.
+	require.True(t, c.applyShapeTarget(0, "auto"))
+	c.reconcileActiveSet("shape")
+	require.Equal(t, 1, c.activeLiveCount(), "under auto the target is tunnel.count=1 again")
+	require.Equal(t, 4, c.liveSessionCount(), "a shrink of the ACTIVE set gives up no tunnel")
+
+	// A shape the app cannot read (an older visor, no route group) leaves
+	// tunnel.count exactly where it was.
+	require.False(t, c.applyShapeTarget(9, ""), "an absent shape is not news")
+	target, source := c.tunnelTarget()
+	require.Equal(t, 1, target)
+	require.Equal(t, "auto", source)
+}
+
+// TestShapeDrainsBeforeParking is I6/I7 on the app side: a surplus tunnel that
+// is CARRYING is not parked, it is drained — the picker stops offering it work
+// and the park waits for it to fall idle.
+func TestShapeDrainsBeforeParking(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	c := liveOpsClient(t, 3)
+	require.True(t, c.applyShapeTarget(4, shapeSourceMuxShape))
+	c.reconcileActiveSet("shape")
+	require.Equal(t, 4, c.activeLiveCount())
+	require.Zero(t, c.drainingCount(), "nothing is draining while the set matches the shape")
+
+	// Three of the four must go. With no stream on any of them the reconcile
+	// parks them outright and marks nothing.
+	require.True(t, c.applyShapeTarget(1, shapeSourceMuxShape))
+	c.reconcileActiveSet("shape")
+	require.Equal(t, 1, c.activeLiveCount())
+	require.Zero(t, c.drainingCount(), "an idle surplus is parked, never drained")
+
+	// Now the surplus the SHRINK cannot park: mark it directly, as the
+	// reconcile does when every extra tunnel is busy, and check the picker.
+	c.applyShapeTarget(4, shapeSourceMuxShape)
+	c.reconcileActiveSet("shape")
+	c.markDraining(1, "test")
+	require.Equal(t, 3, c.drainingCount(), "every tunnel above the target drains")
+	picked, _, _ := c.spreadCandidates(spreadUp)
+	require.Len(t, picked, 1, "the picker offers work only to the tunnel the shape keeps")
+
+	c.clearDraining()
+	picked, _, _ = c.spreadCandidates(spreadUp)
+	require.Len(t, picked, 4, "and every tunnel carries again once the drain is lifted")
+}

@@ -24,16 +24,18 @@
 // the default behavior is bit-for-bit what develop does. Only an operator who
 // names a shape takes this path.
 //
-// What is NOT reachable yet: a tunnel this file PROMOTES carries no yamux
-// session, because that session belongs to the dialing app
-// (pkg/skysocks/client.go promoteBestStandby). The role flip makes the tunnel
-// real to the router — the arbiter offers it the pool, the shape measures it,
-// `visor state` prints it — and MuxInfo.ShapeTunnels publishes the target k so
-// the app's reconcileActiveSet can follow it; putting STREAMS on it is step 6
-// of the design. Likewise pool.freeze / tunnel.freeze_active (I8) live in the
-// app process (pkg/skysocks/settings.go) and cannot be read from here; the
-// router-side hold that does apply is leg.split_on_release, and it gates every
-// decompose below.
+// A tunnel this file PROMOTES carries no yamux session of its own: that
+// session belongs to the dialing app. MuxInfo.ShapeTunnels publishes the
+// target k and the app's reconcileActiveSet (pkg/skysocks/client_live_ops.go)
+// follows it, promoting one of ITS standby tunnels per tunnel the shape asks
+// for, so the streams spread as wide as the shape says. The one case still out
+// of reach is a chain this file DECOMPOSED into a fresh standby group: the app
+// never dialed it, so it has no session to promote.
+//
+// Two holds stop the moves below. leg.split_on_release gates every decompose,
+// and mux.shape_hold gates the whole step — the visor sets it for an app whose
+// pool.freeze or tunnel.freeze_active is on (I8), which is how an app-process
+// freeze reaches a package that cannot read the app's knobs.
 package router
 
 import (
@@ -167,6 +169,13 @@ func shapeStep(active, pool []*RouteGroup, now time.Time,
 	target, source := shapeTarget(live[0].shapeSpec(), nil)
 	if source != shapeSourceKnob || target.Tunnels() < 1 {
 		return shapeVerdictAuto
+	}
+	if live[0].knobs().Bool(routersettings.MuxShapeHold) {
+		// I8: the app has frozen its own tunnel set (pool.freeze /
+		// tunnel.freeze_active, mirrored here by the visor). The target still
+		// reads back from `visor state`; only the moves stop.
+		live[0].logger.Debugf("Shape %s deferred; mux.shape_hold is set", target)
+		return shapeVerdictHeld
 	}
 	// The load marks are the arbiter's, and the arbiter no longer runs for
 	// this session. Keep sampling them: I7 ("never demote a tunnel that is
