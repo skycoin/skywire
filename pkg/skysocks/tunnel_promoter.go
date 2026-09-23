@@ -388,7 +388,7 @@ func (c *Client) maybePromote() {
 	if len(active) == 0 || len(standby) == 0 {
 		// No active set means the failover path owns the situation; no pool
 		// means there is nothing to promote.
-		c.clearPromoteClocks(nil)
+		c.clearPromoteClocks()
 		return
 	}
 
@@ -396,7 +396,7 @@ func (c *Client) maybePromote() {
 	if worst == nil || best == nil {
 		// Nobody qualifies this tick, so nobody keeps a clock: an advantage
 		// that lapses starts its hold again from zero.
-		c.clearPromoteClocks(nil)
+		c.clearPromoteClocks()
 		c.armAudition(now, active, standby)
 		return
 	}
@@ -415,7 +415,7 @@ func (c *Client) maybePromote() {
 		// suppressed. The event still records that a swap qualified, so `mux
 		// info` shows what was held back rather than nothing at all.
 		c.noteTunnel(best.s, router.MuxEventTunnelPromoted, "frozen", TunnelRoleStandby)
-		c.clearPromoteClocks(nil)
+		c.clearPromoteClocks()
 		c.armAudition(now, active, standby)
 		return
 	}
@@ -426,7 +426,7 @@ func (c *Client) maybePromote() {
 		return
 	}
 	c.promoteTunnel(best.s, reason)
-	c.clearPromoteClocks(nil)
+	c.clearPromoteClocks()
 	c.armAudition(now, active, standby)
 }
 
@@ -537,14 +537,11 @@ func (c *Client) notePromoteCandidate(s *yamux.Session, now time.Time) (since ti
 	return since, since >= setTunnelPromoteHold()
 }
 
-// clearPromoteClocks forgets every qualifying clock except keep's (nil clears
-// all of them).
-func (c *Client) clearPromoteClocks(keep *yamux.Session) {
+// clearPromoteClocks forgets every qualifying clock.
+func (c *Client) clearPromoteClocks() {
 	c.sessionsMu.Lock()
 	for k := range c.promoteSince {
-		if k != keep {
-			delete(c.promoteSince, k)
-		}
+		delete(c.promoteSince, k)
 	}
 	c.sessionsMu.Unlock()
 }
