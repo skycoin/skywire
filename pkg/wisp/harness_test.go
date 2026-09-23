@@ -39,7 +39,7 @@ func (f *fakeEgress) DialUDP(_ context.Context, host string, port uint16) (Datag
 	if f.udpErr != nil {
 		return nil, f.udpErr
 	}
-	d := &fakeDatagram{host: host, port: port, out: make(chan []byte, 8), in: make(chan []byte, 8)}
+	d := &fakeDatagram{out: make(chan []byte, 8), in: make(chan []byte, 8), host: host}
 	f.udpPeers = append(f.udpPeers, d)
 	return d, nil
 }
@@ -63,9 +63,9 @@ func (f *fakeEgress) tcpPeer(t *testing.T, i int) net.Conn {
 	return nil
 }
 
-// udpPeer is the first UDP peer dialed — for a test with one destination.
 func (f *fakeEgress) udpPeer(t *testing.T) *fakeDatagram {
 	t.Helper()
+	const i = 0 // the first stream opened; use udpPeerTo when more than one destination is in play
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		f.mu.Lock()
@@ -103,12 +103,34 @@ func (f *fakeEgress) udpPeerTo(t *testing.T, host string, port uint16) *fakeData
 	return nil
 }
 
+// udpPeerTo is udpPeer by destination rather than by dial order: streams to
+// different destinations open from independent goroutines, so their order in
+// udpPeers is a race (the CI runner opened the second destination first).
+func (f *fakeEgress) udpPeerTo(t *testing.T, host string) *fakeDatagram {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		for _, d := range f.udpPeers {
+			if d.host == host {
+				f.mu.Unlock()
+				return d
+			}
+		}
+		f.mu.Unlock()
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("no UDP peer to %s after 2s", host)
+	return nil
+}
+
 // fakeDatagram is a DatagramStream whose two directions are channels.
 type fakeDatagram struct {
 	host      string // the destination it was dialed to
 	port      uint16
 	out       chan []byte // written by the server, read by the test
 	in        chan []byte // written by the test, read by the server
+	host      string
 	closeOnce sync.Once
 	closed    chan struct{}
 	initOnce  sync.Once

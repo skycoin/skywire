@@ -219,7 +219,7 @@ func TestSocksServerKeepsOneStreamPerDestination(t *testing.T) {
 		}
 	}
 
-	first := eg.udpPeerTo(t, "1.1.1.1", 53)
+	first := eg.udpPeerTo(t, "1.1.1.1")
 	for _, want := range []string{"a", "b"} {
 		select {
 		case got := <-first.out:
@@ -231,7 +231,7 @@ func TestSocksServerKeepsOneStreamPerDestination(t *testing.T) {
 		}
 	}
 
-	second := eg.udpPeerTo(t, "9.9.9.9", 53)
+	second := eg.udpPeerTo(t, "9.9.9.9")
 	select {
 	case got := <-second.out:
 		if string(got) != "c" {
