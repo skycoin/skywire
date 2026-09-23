@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -117,3 +118,42 @@ func TestClaimFirstHop_EmptyPath(t *testing.T) {
 	require.True(t, ok)
 	release()
 }
+
+// The window the claim registry alone does NOT close (#5133): a sibling dial
+// that started later, finished, registered its route group and RELEASED its
+// claim is invisible to both halves of the check — it is not in the hold map
+// any more, and it was not in the exclusion snapshot the slow dial took before
+// the sibling existed. The claim must therefore consult the live groups too.
+func TestClaimFirstHop_RefusesAHopALiveSiblingAlreadyHolds(t *testing.T) {
+	lPK, _ := cipher.GenerateKeyPair()
+	exit, _ := cipher.GenerateKeyPair()
+	midPK, _ := cipher.GenerateKeyPair()
+	const rPort = routing.Port(3)
+
+	r := newExclusionTestRouter(t, lPK)
+
+	// Dial A: claims tp1, finishes, registers its group, releases the claim.
+	tp1 := uuid.New()
+	pathA := []routing.Hop{{TpID: tp1, From: lPK, To: midPK}}
+	releaseA, ok := r.claimFirstHop(exit, rPort, pathA)
+	require.True(t, ok, "the first dial to the exit takes tp1 unopposed")
+	seedSiblingRG(t, r, lPK, exit, midPK, rPort, routing.Port(1001), tp1)
+	releaseA()
+
+	// Dial B started before A did, so its own exclusion snapshot never saw A.
+	// It re-picks after a failed setup and lands on tp1. Nothing is in flight.
+	require.Empty(t, mustIDs(r.inFlightFirstHopExclusions(exit, rPort)),
+		"A released its claim, so the hold map is empty — the stale-snapshot window")
+
+	pathB := []routing.Hop{{TpID: tp1, From: lPK, To: midPK}}
+	_, ok = r.claimFirstHop(exit, rPort, pathB)
+	require.False(t, ok,
+		"tp1 is carrying a live sibling tunnel to the same exit: the second pool tunnel must re-pick")
+
+	// A different transport to the same exit is still free.
+	pathC := []routing.Hop{{TpID: uuid.New(), From: lPK, To: mustPK(t)}}
+	_, ok = r.claimFirstHop(exit, rPort, pathC)
+	require.True(t, ok, "diversifying onto a free transport must still succeed")
+}
+
+func mustIDs(ids []uuid.UUID, _ []cipher.PubKey, _ []string) []uuid.UUID { return ids }

@@ -34,6 +34,9 @@ type dialFirstHopHold struct {
 	tpID uuid.UUID
 	peer cipher.PubKey
 	ip   string
+	// from is the LOCAL edge of the first hop — this visor. Only used to ask
+	// siblingRouteGroupExclusions which edge of a sibling's transport is the peer.
+	from cipher.PubKey
 }
 
 // dialFirstHopHolds is the per-router registry of those claims, keyed by
@@ -127,6 +130,51 @@ func (r *router) inFlightFirstHopExclusions(rPK cipher.PubKey, rPort routing.Por
 	return r.firstHopHolds.exclusions(dialDstKey(rPK, rPort))
 }
 
+// siblingHoldsFirstHop reports whether a route group that is ALREADY LIVE to
+// (rPK, rPort) occupies hold's transport, its peer or its remote IP.
+//
+// A dial gathers its sibling exclusions once, before the retry loop
+// (router_dial.go: the opts.DiversifyTransports block), so that set is a
+// snapshot of the instant the dial started. The claim registry covers the
+// siblings that were in flight at that instant — but a sibling that STARTED
+// later, finished, registered its route group and released its claim is in
+// neither: not in the stale snapshot, and no longer in the hold map. A dial
+// whose route fetch is slow, or that re-picks after a failed setup, then walks
+// straight onto that sibling's first hop. That is the remaining window, and it
+// is why a 24-group pool fill came up with exactly one duplicate pair.
+//
+// Checking the live groups HERE, at the same point the claim is taken, closes
+// it: a sibling is either still dialing (hold map) or already registered (this
+// scan), and its claim is released only after its group is registered, so the
+// union of the two is complete at every instant.
+func (r *router) siblingHoldsFirstHop(rPK cipher.PubKey, rPort routing.Port, hold dialFirstHopHold) bool {
+	ids, _, peers, ips, count := r.siblingRouteGroupExclusions(hold.from, rPK, rPort)
+	if count == 0 {
+		return false
+	}
+	for _, id := range ids {
+		if id == hold.tpID {
+			return true
+		}
+	}
+	var zero cipher.PubKey
+	if hold.peer != zero {
+		for _, peer := range peers {
+			if peer == hold.peer {
+				return true
+			}
+		}
+	}
+	if hold.ip != "" {
+		for _, ip := range ips {
+			if ip == hold.ip {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // claimFirstHop reserves the first hop of hops for a dial to (rPK, rPort).
 // A path with no hops claims nothing and succeeds, so a caller need not special
 // case it.
@@ -134,11 +182,17 @@ func (r *router) claimFirstHop(rPK cipher.PubKey, rPort routing.Port, hops []rou
 	if len(hops) == 0 {
 		return func() {}, true
 	}
-	hold := dialFirstHopHold{tpID: hops[0].TpID, peer: hops[0].To}
+	hold := dialFirstHopHold{tpID: hops[0].TpID, peer: hops[0].To, from: hops[0].From}
 	if r.tm != nil {
 		if tp := r.tm.Transport(hops[0].TpID); tp != nil {
 			hold.ip = tp.RemoteIP()
 		}
+	}
+	// Live siblings first: they are the half the caller's snapshot can have
+	// gone stale on. A dial that has already registered its group holds its
+	// first hop just as firmly as one still in flight.
+	if r.siblingHoldsFirstHop(rPK, rPort, hold) {
+		return nil, false
 	}
 	return r.firstHopHolds.claim(dialDstKey(rPK, rPort), hold)
 }
