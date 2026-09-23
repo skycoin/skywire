@@ -689,7 +689,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
 
   /**
    * Maps a dmsg server's transport protocol (as reported by the visor:
-   * tcp | ws | wss | webtransport | quic) to the short carrier label
+   * tcp | ws | wss | webtransport | quic | skynet) to the short carrier label
    * shown in the DMSG cell, mirroring how the Transports cell shows a
    * short uppercase type. Unknown/blank protocols fall back to "?".
    */
@@ -700,6 +700,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       case 'webtransport': return 'WT';
       case 'tcp': return 'TCP';
       case 'quic': return 'QUIC';
+      case 'skynet': return 'SKY';
       default: return '?';
     }
   }
