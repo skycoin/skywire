@@ -26,7 +26,7 @@ func (s fakeCarrierSession) RemoteTCPAddr() net.Addr { return s.remote }
 // server's key and port, which resolves to nothing — the phone's vpn-client
 // refused to start on it with "lookup <pk>: no such host".
 func TestVPNDirectDmsgAddr(t *testing.T) {
-	t.Run("a directly dialled server is routed around the tunnel", func(t *testing.T) {
+	t.Run("a directly dialed server is routed around the tunnel", func(t *testing.T) {
 		addr, ok := vpnDirectDmsgAddr(fakeCarrierSession{
 			carrier: dmsg.CarrierTCP,
 			remote:  &net.TCPAddr{IP: net.ParseIP("203.0.113.7"), Port: 8080},
