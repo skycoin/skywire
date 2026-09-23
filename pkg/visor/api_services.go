@@ -677,12 +677,12 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 	if v.dmsgC != nil {
 		dmsgSessions := v.dmsgC.AllSessions()
 		for i, session := range dmsgSessions {
-			ports[fmt.Sprintf("dmsg_session_%d", i)] = PortDetail{Port: strings.Split(session.LocalTCPAddr().String(), ":")[1], Type: "TCP"}
+			ports[fmt.Sprintf("dmsg_session_%d", i)] = PortDetail{Port: addrPort(session.LocalTCPAddr().String()), Type: "TCP"}
 		}
 
 		dmsgStreams := v.dmsgC.AllStreams()
 		for i, stream := range dmsgStreams {
-			ports[fmt.Sprintf("dmsg_stream_%d", i)] = PortDetail{Port: strings.Split(stream.LocalAddr().String(), ":")[1], Type: "DMSG"}
+			ports[fmt.Sprintf("dmsg_stream_%d", i)] = PortDetail{Port: addrPort(stream.LocalAddr().String()), Type: "DMSG"}
 		}
 	}
 	if v.procM != nil {
