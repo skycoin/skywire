@@ -70,6 +70,16 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 		// destination route group applies it (handleDirectionPacket). Without
 		// this case the router dropped every pin as ErrUnknownPacketType.
 		return r.dispatchToRouteGroup(ctx, packet)
+	case routing.LegRehomePacket:
+		// Leg re-home request/ack/commit (CapLegRehome): route-ID-driven like
+		// LegState — forwarded when this visor is an intermediary, else delivered
+		// to the group that currently owns the chain's consume rule, which
+		// services every phase (handleLegRehomePacket). Without this case the
+		// request died at the first hop AND at the far edge's own router as
+		// ErrUnknownPacketType, so the initiator's leg_rehomes_sent climbed while
+		// the peer's leg_rehomes_received stayed 0 and every re-home fell back to
+		// dialing a fresh chain (the RepairPacket #4297 failure mode).
+		return r.dispatchToRouteGroup(ctx, packet)
 	case routing.TransportPingPacket, routing.TransportPongPacket,
 		routing.CascadeSetupPacket, routing.CascadeAckPacket, routing.DHTPacket,
 		routing.SetupRPCPacket, routing.VisorRPCPacket, routing.SkynetForwardPacket,
@@ -376,6 +386,17 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 		// the default and DROPS the signal, so a multihop leg's parking never
 		// reaches the far sender (the RepairPacket #4297 failure mode).
 		p = routing.MakeLegStatePacket(rule.NextRouteID(), packet.LegStateStandby())
+	case routing.LegRehomePacket:
+		// Leg re-home control frame (CapLegRehome): re-stamp the next-hop route
+		// ID and pass the nonce, the initiator's port pair and the phase flags
+		// through unchanged — an intermediate never interprets a re-home, it only
+		// has to relay it. Without this every re-home request died on the first
+		// fleet hop, so the feature only ever worked on a single-hop chain.
+		nonce, srcPort, dstPort, flags, ok := packet.LegRehomeFields()
+		if !ok {
+			return fmt.Errorf("malformed leg re-home packet (routeID=%d)", packet.RouteID())
+		}
+		p = routing.MakeLegRehomePacket(rule.NextRouteID(), nonce, srcPort, dstPort, flags)
 	default:
 		return fmt.Errorf("packet of type %s can't be forwarded", packet.Type())
 	}
