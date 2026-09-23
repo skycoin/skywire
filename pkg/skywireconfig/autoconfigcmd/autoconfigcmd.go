@@ -607,7 +607,13 @@ var envMap = map[string]EnvMapping{
 	"dmsgweb-addr":     {Key: "DMSGWEBADDR", Format: EnvFormatString},
 	"dmsgweb-sk": {Key: "DMSGWEBSK", Format: EnvFormatString,
 		Note: "Secret key the embedded resolver answers under instead of the visor's. For a key the deployment already knows and cannot rotate (a survey whitelist). Attached in-process: one session, no discovery entry."},
-	"skynetweb-addr":     {Key: "SKYNETWEBADDR", Format: EnvFormatString},
+	"skynetweb-addr": {Key: "SKYNETWEBADDR", Format: EnvFormatString},
+
+	// Embedded Wisp server
+	"wisp":               {Key: "WISP", Format: EnvFormatBool},
+	"no-wisp":            {Key: "WISP", Format: EnvFormatBool, Negate: true},
+	"wisp-port":          {Key: "WISPPORT", Format: EnvFormatInt, Default: "6001"},
+	"wisp-socks":         {Key: "WISPSOCKS", Format: EnvFormatString},
 	"skynetweb-upstream": {Key: "SKYNETWEBUPSTREAM", Format: EnvFormatString},
 	"resolvers": {Key: "RESOLVERS", Format: EnvFormatBashArray,
 		Note: "Additional proxies only — DMSGWEB/SKYNETWEB stay the primaries on 4445/4446. Each spec needs its own port; " +
