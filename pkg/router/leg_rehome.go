@@ -33,6 +33,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -44,11 +45,11 @@ import (
 // warm transport (see poolSourcedLegFallback).
 var ErrRehomeUnsupported = errors.New("leg re-home unsupported (peer did not negotiate CapLegRehome)")
 
-// legRehomeAckTimeout bounds the wait for the exit's ack. A re-home is two
-// visors rewriting one rule each; if the ack does not come back within a few
-// route RTTs the request is abandoned and BOTH groups are left exactly as they
-// were — never half-moved.
-const legRehomeAckTimeout = 5 * time.Second
+// legRehomeAckTimeout bounds the wait for the exit's ack (leg.rehome_ack_timeout).
+// A re-home is two visors rewriting one rule each; if the ack does not come
+// back within a few route RTTs the request is abandoned and BOTH groups are
+// left exactly as they were — never half-moved.
+func legRehomeAckTimeout() time.Duration { return routersettings.LegRehomeAckTimeout.Duration() }
 
 // legRehomeHost is the narrow view of the router a route group needs to service
 // an inbound re-home: the request arrives on THIS group's chain but names a
@@ -155,9 +156,9 @@ func rehomeChain(g, s *RouteGroup) error {
 	var flags byte
 	select {
 	case flags = <-ackCh:
-	case <-time.After(legRehomeAckTimeout):
+	case <-time.After(legRehomeAckTimeout()):
 		globalMuxCounters.legRehomesFailed.Add(1)
-		return fmt.Errorf("no re-home ack from %s within %s; both groups left intact", s.desc.DstPK(), legRehomeAckTimeout)
+		return fmt.Errorf("no re-home ack from %s within %s; both groups left intact", s.desc.DstPK(), legRehomeAckTimeout())
 	}
 	if flags&routing.LegRehomeRefused != 0 || flags&routing.LegRehomeAck == 0 {
 		globalMuxCounters.legRehomesFailed.Add(1)

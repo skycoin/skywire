@@ -147,7 +147,7 @@ func (w *tunnelRTTWindow) push(sampleMs float64, now time.Time) {
 		return
 	}
 	w.s = append(w.s, tunnelRTTSample{ms: sampleMs, at: now})
-	cutoff := now.Add(-tunnelRTTMinWindow)
+	cutoff := now.Add(-setTunnelRTTMinWindow())
 	i := 0
 	for i < len(w.s) && w.s[i].at.Before(cutoff) {
 		i++
@@ -155,7 +155,7 @@ func (w *tunnelRTTWindow) push(sampleMs float64, now time.Time) {
 	if i > 0 {
 		w.s = append(w.s[:0], w.s[i:]...)
 	}
-	if over := len(w.s) - tunnelRTTSamplesCap; over > 0 {
+	if over := len(w.s) - setTunnelRTTSamplesCap(); over > 0 {
 		w.s = append(w.s[:0], w.s[over:]...)
 	}
 }
@@ -168,7 +168,7 @@ func (w *tunnelRTTWindow) minMs(now time.Time) float64 {
 	if w == nil {
 		return 0
 	}
-	cutoff := now.Add(-tunnelRTTMinWindow)
+	cutoff := now.Add(-setTunnelRTTMinWindow())
 	best := 0.0
 	for _, s := range w.s {
 		if s.at.Before(cutoff) {
@@ -408,6 +408,17 @@ func (c *Client) maybePromote() {
 	}
 
 	reason := swapReason(worst, best, byGoodput, since)
+	if tunnelFreezeActive() {
+		// tunnel.freeze_active: the operator holds the ACTIVE set's membership
+		// still. A dead active tunnel is still failed over by the sweep above;
+		// only the discretionary promotion/park this swap would have made is
+		// suppressed. The event still records that a swap qualified, so `mux
+		// info` shows what was held back rather than nothing at all.
+		c.noteTunnel(best.s, router.MuxEventTunnelPromoted, "frozen", TunnelRoleStandby)
+		c.clearPromoteClocks(nil)
+		c.armAudition(now, active, standby)
+		return
+	}
 	// Park first: the active set must never be momentarily two wide, since the
 	// picker would stripe a stream onto a tunnel that is about to leave.
 	if !c.parkTunnel(worst.s, reason) {
