@@ -141,16 +141,14 @@ func muxCountersFrom(snap any) *muxCountersInfo {
 	return wrapper.MuxCounters
 }
 
-// printMuxCounters prints the whole-router counters: as its own JSON value in
-// --json mode (this command already emits one JSON value per refresh in
-// --watch mode, so a second value here is consistent), or a one-line human
-// summary otherwise. A nil mc (older visor / RPC error) prints nothing.
+// printMuxCounters prints the whole-router counters as a one-line human
+// summary. In --json mode it prints NOTHING: the command's JSON output is the
+// per-group array and must stay ONE document (bench/*.sh pipe it straight
+// into jq; a second value after the array broke every leg assertion on
+// 2026-09-22). The counters are already in `visor state --select mux`.
+// A nil mc (older visor / RPC error) prints nothing.
 func printMuxCounters(cmd *cobra.Command, mc *muxCountersInfo) {
-	if mc == nil {
-		return
-	}
-	if cliout.JSONMode(cmd) {
-		internal.Catch(cmd.Flags(), cliout.Print(cmd, mc))
+	if mc == nil || cliout.JSONMode(cmd) {
 		return
 	}
 	fmt.Printf("counters: promotions=%d  rehome sent/recv/acked/failed=%d/%d/%d/%d  fanout engage/release=%d/%d  integrity aead/delivery-crc=%d/%d\n",
