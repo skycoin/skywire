@@ -2649,6 +2649,7 @@ func writeConfigOutput(log *logging.Logger) {
 		if err != nil {
 			log.Fatalf("Failed to write config file: %v", err)
 		}
+		log.Debugf("config gen: wrote %s (wisp set=%v enableWisp=%v dmsg_web set=%v skynet_web set=%v)", confPath, conf.Wisp != nil, enableWisp, conf.DmsgWeb != nil, conf.SkynetWeb != nil)
 	}
 	// Print results.
 	j, err := json.MarshalIndent(conf, "", "\t")
