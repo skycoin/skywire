@@ -1024,6 +1024,10 @@ all five sets, but its compose and standby cells were invalidated by the develop
 intermediates auto-updating and restarting mid-chain (the merge had landed two minutes before
 launch), chain 8 reran compose and standby but its interleaved reference tunnel failed its probes so
 compose is unpaired, and chain 9 reran compose paired. Bench output is under `bench/2026-09-23/`.
+Chain 11 (`3176a8512-mon11`) is the pre-merge smoke of #5114, which fixed the leg-cut wedge
+(#5113): a lost frame was retransmitted down the very leg that lost it, because the retransmit
+path used the plain lowest-latency pick. The standby cut now recovers with a 0.22 s
+time-to-first-byte. Its pool settled at 15 only because the exit had restarted ten minutes earlier.
 
 | chain / set | 10 MB down | 50 MB down | 100 MB down | 10 MB up | 50 MB up | legs | exit gate | flips |
 |---|---|---|---|---|---|---|---|---|
@@ -1033,6 +1037,8 @@ compose is unpaired, and chain 9 reran compose paired. Bench output is under `be
 | 8 compose 2x2 (unpaired, MB/s) | 4.88 | 8.48 | 6.86 | 6.39 | 9.84 | active 2×2, standby 1×31 | PASS | 4 |
 | 8 standby-33 (cut) | 0.82 | 0.60 | - | 0.91 | 2.03 | active 1×2, standby 1×30 | PASS | - |
 | 9 compose 2x2 (paired) | 0.75 | 0.87 | 1.06 | 0.66 | 0.34 | active 2×2, standby 1×30 | FAIL | 10 |
+| 11 legs-2 (smoke of #5114) | 1.34 | 1.29 | - | 1.15 | 0.97 | one group, 2 legs | PASS | 2 |
+| 11 standby-15 (cut, smoke of #5114) | 0.76 | 1.10 | - | 0.71 | 0.88 | active 1×2, standby 1×13 | PASS | - |
 
 What the final chains prove: every standby tunnel holds exactly one leg and the active tunnels
 hold two, over a pool of 30-33 distinct routes, on every set of every chain; the delivery CRC's
