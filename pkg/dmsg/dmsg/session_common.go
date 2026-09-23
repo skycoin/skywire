@@ -405,16 +405,31 @@ func (sc *SessionCommon) Ping() (time.Duration, error) {
 	smuxSes := sc.sm.smux
 	quicSes := sc.sm.quic
 	sc.sm.mutx.RUnlock()
-	if yamuxSes != nil {
-		return sc.yamuxPing(yamuxSes)
-	}
-	if smuxSes != nil {
-		return sc.smuxPing(smuxSes)
-	}
-	if quicSes != nil {
-		return sc.quicPing(quicSes)
+	switch {
+	case yamuxSes != nil:
+		return measuredRTT(sc.yamuxPing(yamuxSes))
+	case smuxSes != nil:
+		return measuredRTT(sc.smuxPing(smuxSes))
+	case quicSes != nil:
+		return measuredRTT(sc.quicPing(quicSes))
 	}
 	return 0, fmt.Errorf("no mux session available for ping")
+}
+
+// minMeasuredRTT is the least round trip a successful ping reports.
+//
+// Zero is LastPing's "never measured", and a clock coarser than the round trip
+// really does measure zero: Windows' monotonic clock against a loopback or LAN
+// echo returned 0s (TestQUICSessionPing, windows lane), so a session that had
+// just answered looked like one that never had. One microsecond is below any
+// network round trip, so it changes no real measurement.
+const minMeasuredRTT = time.Microsecond
+
+func measuredRTT(rtt time.Duration, err error) (time.Duration, error) {
+	if err == nil && rtt < minMeasuredRTT {
+		rtt = minMeasuredRTT
+	}
+	return rtt, err
 }
 
 // yamuxPing implements ping over yamux the same way smuxPing does for smux:
