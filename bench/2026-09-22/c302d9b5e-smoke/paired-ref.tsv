@@ -1,0 +1,5 @@
+# pick-ref: 3 candidates x 2 trials of 50000000 bytes down, exit=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1 sink=http://127.0.0.1:18080
+# candidate	median_MBps	trials_ok	source_rank_MBps
+0371ab4b	8.99	2/2	8.87
+0281a102	7.10	2/2	7.44
+02c48393	5.62	2/2	7.37

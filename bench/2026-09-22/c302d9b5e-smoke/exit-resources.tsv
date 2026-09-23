@@ -1,0 +1,5 @@
+# ts	label	rss_anon_kb	cpu_s	load1	idle_cps	sys_mb	heap_alloc_mb	num_gc	goroutines
+1790111538	warmup	434480	41.68	0.93	0.114	531.2	183.9	63	5265
+1790111543	mux-compose-T2xL2-pre	440368	42.15	0.86	0.088	531.2	192.2	64	5270
+1790112890	mux-compose-T2xL2-post	543896	178.54	0.31	0.150	633.4	253.4	273	6934
+1790112926	mux-compose-T2xL2-settled	551832	181.95	0.38	0.080	633.4	300.3	275	7060

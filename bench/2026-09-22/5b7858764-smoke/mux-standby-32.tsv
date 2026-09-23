@@ -1,0 +1,21 @@
+# exit=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1 local=5b7858764 exit_commit=5b7858764 session=skysocks-client tunnels=2 pool=32 pool_settled=quiet 20s route_groups=32 roles=active,active,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby,standby groups=rg49305/active=[stcpr>022716fb@b414796d] rg49306/active=[stcpr>039a6d1e@57787a56] rg49307/standby=[stcpr>028ce3ca@eaddf8ac] rg49308/standby=[stcpr>024a37ba@e5f24143] rg49309/standby=[stcpr>02db6d6f@bac92dd4] rg49310/standby=[stcpr>0281a102@f1012467] rg49311/standby=[stcpr>026a9130@bf9b0de8] rg49312/standby=[stcpr>02ea1b80@c2ee64dc] rg49313/standby=[stcpr>022d2e9f@94729aa0] rg49314/standby=[stcpr>035f532a@df4c1852] rg49315/standby=[stcpr>03e977a4@2d551308] rg49316/standby=[stcpr>02230b0a@e5faa6e0] rg49317/standby=[stcpr>0328947f@b71ddf99] rg49318/standby=[stcpr>031fc6a4@336d3a3e] rg49319/standby=[stcpr>03c3278f@97ae541b] rg49320/standby=[stcpr>03dd3a27@ea69bc13] rg49321/standby=[stcpr>03a9a28d@e11b656f] rg49322/standby=[stcpr>039c9046@a58835c2] rg49323/standby=[stcpr>025cc9b7@a94550f5] rg49324/standby=[stcpr>025cc9b7@a94550f5] rg49325/standby=[stcpr>035f6c76@03f0e265] rg49326/standby=[stcpr>02b3a85a@bbed733f] rg49327/standby=[stcpr>02090aec@bd6baec7] rg49328/standby=[stcpr>02761612@54999ec3] rg49329/standby=[stcpr>02f65a51@4aa23edc] rg49330/standby=[stcpr>026611a9@0585f299] rg49331/standby=[stcpr>02956775@b250c046] rg49332/standby=[stcpr>03d1063b@1bda3d87] rg49333/standby=[stcpr>02c43f7d@25b03079] rg49334/standby=[stcpr>03bd7649@ebbe12da] rg49335/standby=[stcpr>0326baff@23e4154b] rg49341/standby=[stcpr>029ee027@625849be] chaos_row=11 chaos_after=5s sink=http://127.0.0.1:18080
+mux-standby-32-t1	down	10000000	1514591	200	10000000	6.602474	1
+mux-standby-32-t2	down	10000000	1917597	200	10000000	5.214905	1
+mux-standby-32-t3	down	10000000	2158577	200	10000000	4.632745	1
+mux-standby-32-t4	down	10000000	4408164	200	10000000	2.268560	1
+mux-standby-32-t5	down	10000000	4289433	200	10000000	2.331380	1
+mux-standby-32-t1	up	10000000	907748	200	10000000	11.016385	1
+mux-standby-32-t2	up	10000000	1773435	200	10000000	5.638825	1
+mux-standby-32-t3	up	10000000	1062056	200	10000000	9.415795	1
+mux-standby-32-t4	up	10000000	5047094	200	10000000	1.981428	1
+mux-standby-32-t5	up	10000000	4970141	200	10000000	2.012158	1
+mux-standby-32-t1	down	50000000	4122849	200	50000000	12.127598	1
+mux-standby-32-t2	down	50000000	5808881	200	50000000	8.607547	1
+mux-standby-32-t3	down	50000000	8300430	200	50000000	6.023815	1
+mux-standby-32-t4	down	50000000	7972489	200	50000000	6.271624	1
+mux-standby-32-t5	down	50000000	7319826	200	50000000	6.830991	1
+mux-standby-32-t1	up	50000000	6543408	200	50000000	7.641391	1
+mux-standby-32-t2	up	50000000	7671934	200	50000000	6.517387	1
+mux-standby-32-t3	up	50000000	6110280	200	50000000	8.182994	1
+mux-standby-32-t4	up	50000000	6470627	200	50000000	7.727288	1
+mux-standby-32-t5	up	50000000	7739971	200	50000000	6.460032	1
