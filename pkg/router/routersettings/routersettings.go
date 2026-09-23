@@ -683,6 +683,14 @@ func Parse(name, raw string) (int64, error) {
 		return 0, fmt.Errorf("unknown setting %q", name)
 	}
 	raw = strings.TrimSpace(raw)
+	if k.def.Kind == KindList {
+		// A list knob's payload is not an int64, and its default is the EMPTY
+		// list, so "" is a valid value here (the round-trip of every default
+		// is what makes `route settings --json` a restorable save). Parse
+		// exists for lists only so a caller that validates before applying
+		// (the CLI) does not choke on the kind; the tokens go through SetList.
+		return 0, nil
+	}
 	if raw == "" {
 		return 0, fmt.Errorf("%s: empty value", name)
 	}

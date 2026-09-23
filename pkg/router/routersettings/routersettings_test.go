@@ -59,6 +59,9 @@ func bumpedValue(t *testing.T, k *Knob) string {
 		return FormatKnob(k, RatioBits(next))
 	case KindDuration, KindBytes, KindCount:
 		return FormatKnob(k, d.Default*2)
+	case KindList:
+		// The default is the empty list; any tokens differ from it.
+		return "aa,bb"
 	}
 	t.Fatalf("%s: unhandled kind %q", d.Name, d.Kind)
 	return ""
