@@ -13,6 +13,8 @@ package router
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -24,11 +26,27 @@ const (
 	// emuMB scales every rate and transfer in this file. Rates are real
 	// bytes per second, so a scenario's duration is transfer/rate.
 	emuMB = 1 << 20
-	// emuTimeout bounds one transfer. Every scenario here is designed to
-	// finish in a couple of seconds; the timeout only turns a wedge into a
-	// failed assertion instead of a hung test binary.
-	emuTimeout = 25 * time.Second
 )
+
+// emuTimeout bounds one transfer. Every scenario here is designed to finish
+// in a couple of seconds on a developer box; the timeout only turns a wedge
+// into a failed assertion instead of a hung test binary. EMU_TIMEOUT_S raises
+// it for a slower runner (CI reached 3.0 of 8.4 MB in 25 s on 2026-09-22).
+var emuTimeout = emuTimeoutFromEnv(25 * time.Second)
+
+// emuTimeoutFromEnv reads EMU_TIMEOUT_S as a float number of seconds, or
+// returns def when it is unset or unparsable.
+func emuTimeoutFromEnv(def time.Duration) time.Duration {
+	v, ok := os.LookupEnv("EMU_TIMEOUT_S")
+	if !ok {
+		return def
+	}
+	f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+	if err != nil || f <= 0 {
+		return def
+	}
+	return time.Duration(f * float64(time.Second))
+}
 
 // emuBaseline runs the same transfer over a ONE-leg rig with the given leg —
 // the "that leg alone" bar every aggregation claim is measured against.
