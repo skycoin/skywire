@@ -220,7 +220,7 @@ var (
 	DialThroughputPriorScale = RegisterScale("dial.throughput_prior_scale", 1.0, "multiplier on the MEASURED-throughput ranking band; 0 ranks on RTT alone")
 	DialCandidates           = RegisterMin("dial.candidates", KindCount, 3, 1, "floor on how many routes a mux dial asks the route finder for")
 	DialCandidateHeadroom    = RegisterZeroable("dial.candidate_headroom", KindCount, 2, "extra routes requested on top of the mux degree so the disjoint pick can still reach its target; 0 asks for exactly the degree")
-	DialDiversifyCandidates  = RegisterMin("dial.diversify_candidates", KindCount, 20, 1, "routes a DIVERSIFY dial (a standby-pool fill) asks the route finder for: the pool needs a candidate the tunnels it already holds do not use, and the rank-ordered top few are exactly the ones they do")
+	DialDiversifyCandidates  = RegisterMin("dial.diversify_candidates", KindCount, 128, 1, "routes a DIVERSIFY dial (a standby-pool fill) asks the route finder for: the pool needs a candidate the tunnels it already holds do not use, and the rank-ordered top few are exactly the ones they do — a window narrower than the pool is deep is what used to leave free first hops unseen just outside it")
 	DialForegroundMux        = RegisterMin("dial.foreground_mux", KindCount, 16, 1, "how many mux legs are established SYNCHRONOUSLY at dial time before the background self-heal fills the rest")
 	DialTunnelLegs           = RegisterSigned("dial.tunnel_legs", KindCount, 0, -1, "legs an app tunnel is dialed with: 0 = exactly what the app asked for, -1 = the visor's mux width, n = n legs (per-app scopeable)")
 	MuxAppWidth              = RegisterList("mux.app_width", "per-app mux width, as comma-separated app=n entries (e.g. skysocks-client=2); when dial.tunnel_legs resolves to -1 for an app with an entry here, its width is used instead of the visor's adaptive mux width, and it also caps how wide that app's ACTIVE tunnels may self-heal/widen")
@@ -238,7 +238,7 @@ var (
 	SetupBatchMax          = RegisterMin("setup.batch_max", KindCount, 16, 1, "most routes carried in one batched setup request; 1 disables batching and sends singles")
 	SetupFillInflight      = RegisterMin("setup.fill_inflight", KindCount, 8, 1, "how many standby-pool tunnel dials run concurrently, which is also how many routes a fill can offer one batch")
 	SetupPlanClaimTTL      = RegisterMin("setup.plan_claim_ttl", KindDuration, int64(20*time.Second), int64(time.Second), "how long a concurrent dial holds its claim on an oracle candidate path, so N dials in one fill take N DISTINCT intermediates")
-	SetupFirstHopFilterMax = RegisterMin("setup.first_hop_filter_max", KindCount, 8, 1, "held first hops beyond which first-hop diversity stops being a filter and becomes a ranking term, so a deep pool can still grow over a reused first hop with a distinct intermediate")
+	SetupFirstHopFilterMax = RegisterMin("setup.first_hop_filter_max", KindCount, 8, 1, "held first hops beyond which first-hop diversity may stop being a filter and become a ranking term, so a deep pool can still grow over a reused first hop with a distinct intermediate; ONLY consulted when pool.allow_duplicate_route is on — by default a pool with no free first hop settles instead of sharing one")
 
 	// The per-destination route-setup circuit breaker (setupmetrics/stats.go).
 	// OFF by default: the breaker is a lockout held by the route setup node,
