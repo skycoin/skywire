@@ -832,6 +832,75 @@ func (m *routeMux) selectFastestTransport(tps []*transport.ManagedTransport, fwd
 	return tps[bestIdx], fwd[bestIdx], bestIdx, nil
 }
 
+// selectRetxTransport is selectFastestTransport with one extra rule: it refuses
+// the leg the sequence was LAST sent on.
+//
+// A retransmit exists because that frame did not arrive, so the leg that
+// carried it is the single worst candidate to carry it again — and because
+// selectFastestTransport is a pure latency pick, it is also the leg the retry
+// deterministically lands on. When a leg black-holes mid-flight (a live route
+// dying without its socket closing) that costs the whole group: the frontier
+// sequence is re-sent onto the black hole, every retry, for as long as the leg
+// still reads as ready. Measured on the emulator (scenario (d), a 3-leg group,
+// busiest leg cut at 1/3): all 93 retransmits went out on the cut leg, the
+// no-skip reorder frontier never advanced past the missing sequence, and the
+// transfer stopped for good at 3,014,646 of 8,388,608 bytes with 4.6 MB already
+// buffered behind the gap — with the other two legs healthy and idle
+// (skycoin/skywire#5113).
+//
+// Avoiding the leg costs nothing when the leg is merely slow (the frame is
+// re-sent on the next-fastest leg, which is what the caller wanted anyway) and
+// is the whole recovery when the leg is dead. It never strands a retransmit:
+// with no other ready leg — a single-leg group, or every sibling parked — it
+// falls back to the unrestricted pick.
+func (m *routeMux) selectRetxTransport(tps []*transport.ManagedTransport, fwd []routing.Rule, avoid uuid.UUID) (*transport.ManagedTransport, routing.Rule, int, error) {
+	if avoid == uuid.Nil || len(tps) < 2 {
+		return m.selectFastestTransport(tps, fwd)
+	}
+	if len(fwd) == 0 {
+		return nil, nil, -1, ErrNoRules
+	}
+	bestIdx, firstReady := -1, -1
+	bestLat := -1.0
+	for idx, tp := range tps {
+		if tp == nil || tp.IsClosed() || tp.Entry.ID == avoid || !m.legReadyAt(idx) || idx >= len(fwd) {
+			continue
+		}
+		if firstReady < 0 {
+			firstReady = idx
+		}
+		lat := tp.GetLatency()
+		if lat <= 0 {
+			continue // unknown latency — only a last resort
+		}
+		if bestLat < 0 || lat < bestLat {
+			bestLat, bestIdx = lat, idx
+		}
+	}
+	if bestIdx < 0 {
+		bestIdx = firstReady
+	}
+	if bestIdx < 0 {
+		// Nothing else is ready: better to retry down the same leg than to
+		// drop the frame the receiver's frontier is waiting for.
+		return m.selectFastestTransport(tps, fwd)
+	}
+	return tps[bestIdx], fwd[bestIdx], bestIdx, nil
+}
+
+// retxLastTp is the transport a held sequence was last sent on, or uuid.Nil when
+// the buffer no longer holds it. Feeds selectRetxTransport.
+func (m *routeMux) retxLastTp(seq uint32) uuid.UUID {
+	if m.retxBuf == nil {
+		return uuid.Nil
+	}
+	_, tpID, ok := m.retxBuf.SentInfo(seq)
+	if !ok {
+		return uuid.Nil
+	}
+	return tpID
+}
+
 // SetLegLatencyFn wires the per-leg END-TO-END route latency lookup (ms by
 // transport id; 0 = unmeasured). Called once by the route group when the mux is
 // built. Nil-safe: a mux without it simply has no end-to-end basis and falls
