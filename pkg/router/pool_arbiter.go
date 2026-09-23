@@ -164,14 +164,29 @@ func (rg *RouteGroup) dialMuxTarget(target int) int {
 	return target
 }
 
-// muxWidthTarget is the leg count this group is meant to hold — its self-heal
-// target, which is the dial-time mux width re-capped live by the adaptive
-// rotation (setSelfHealTarget). 0/1 means "no width to fill" and the arbiter
-// stays out.
+// muxWidthTarget is the leg count this group is meant to hold. For a standby
+// or role-less group it is the self-heal target — the dial-time mux width
+// re-capped live by the adaptive rotation (setSelfHealTarget), clamped to one
+// for a standby. For an ACTIVE tunnel of a role-reporting app it is at least
+// mux.app_width for that app, or pool.active_width when none is set: those
+// apps dial one leg per tunnel, and the extra legs are meant to come from the
+// standby pool under load, which the dial-time width alone never allows.
+// 0/1 means "no width to fill" and the arbiter stays out.
 func (rg *RouteGroup) muxWidthTarget() int {
 	rg.mu.Lock()
-	defer rg.mu.Unlock()
-	return rg.selfHealTarget
+	t := rg.selfHealTarget
+	rg.mu.Unlock()
+	if rg.TunnelRole() != tunnelRoleActive || rg.mux == nil {
+		return t
+	}
+	want, ok := muxAppWidthFor(rg.AppName())
+	if !ok {
+		want = rg.mux.knInt(routersettings.PoolActiveWidth)
+	}
+	if want > t {
+		t = want
+	}
+	return t
 }
 
 // poolMovedBytes is the group's aggregate wire bytes in both directions, the
