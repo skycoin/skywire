@@ -195,3 +195,121 @@ func TestComposeIdleNeverReleasesTheComposedWidth(t *testing.T) {
 	require.NotEmpty(t, rig.active.poolLegSource(rig.grownTps[0]),
 		"the composed leg keeps its provenance: it was never released back to the pool")
 }
+
+// twoActiveRig is one (app, exit) session with TWO active tunnels sharing one
+// standby pool — the shape the fleet runs with pool.compose_idle on, and the
+// one the per-group first-hop rule was blind to.
+type twoActiveRig struct {
+	r            *router
+	active, pool []*RouteGroup
+	exit, local  cipher.PubKey
+	nextRouteID  routing.RouteID
+}
+
+func newTwoActiveRig(t *testing.T, app string, actives, standby int) *twoActiveRig {
+	t.Helper()
+	rig := &twoActiveRig{r: newPoolTestRouter(t), nextRouteID: 700}
+	rig.exit, _ = cipher.GenerateKeyPair()
+	rig.local, _ = cipher.GenerateKeyPair()
+
+	for i := 0; i < actives; i++ {
+		g, _ := poolTunnel(t, rig.r, rig.exit, rig.local, routing.Port(49400+i), tunnelRoleActive,
+			[]routing.Hop{{TpID: uuid.New(), From: rig.local, To: rig.exit}}, 40, 0)
+		g.SetAppName(app)
+		g.SetTunnelRole(tunnelRoleActive)
+		g.SetSelfHeal(nil, 1) // one leg dialed, as a proxy tunnel is
+		rig.active = append(rig.active, g)
+	}
+	for i := 0; i < standby; i++ {
+		s, _ := poolTunnel(t, rig.r, rig.exit, rig.local, routing.Port(49420+i), tunnelRoleStandby,
+			[]routing.Hop{{TpID: uuid.New(), From: rig.local, To: rig.exit}}, float64(50+i), 0)
+		s.SetAppName(app)
+		s.SetTunnelRole(tunnelRoleStandby)
+		rig.pool = append(rig.pool, s)
+	}
+	return rig
+}
+
+// grow models the fallback that actually runs against the fleet — the leg is
+// dialed on the POOLED tunnel's own plan, so it lands on that tunnel's first
+// hop — and fails the test if the exclusion list handed to the dial still
+// names a hop a sibling active tunnel holds.
+func (rig *twoActiveRig) grow(t *testing.T) func(g, s *RouteGroup, exclude []uuid.UUID) error {
+	t.Helper()
+	return func(g, s *RouteGroup, exclude []uuid.UUID) error {
+		s.mu.Lock()
+		mt := s.tps[0]
+		s.mu.Unlock()
+		for _, id := range exclude {
+			require.NotEqual(t, mt.Entry.ID, id,
+				"the grow fallback picks its own plan, so the sibling's first hops must reach its dial")
+		}
+		rid := rig.nextRouteID
+		rig.nextRouteID += 2
+		fwd := routing.ForwardRule(DefaultRouteKeepAlive, rid, rid+1, mt.Entry.ID, rig.local, rig.exit,
+			g.desc.DstPort(), poolTestExitPort)
+		rvs := routing.ConsumeRule(DefaultRouteKeepAlive, rid+1, rig.local, rig.exit,
+			poolTestExitPort, g.desc.DstPort())
+		require.NoError(t, rig.r.rt.SaveRule(fwd))
+		require.NoError(t, rig.r.rt.SaveRule(rvs))
+		g.appendRules(fwd, rvs, mt, "test: leg composed from the pool")
+		return nil
+	}
+}
+
+// compose runs arbiter rounds until every active tunnel is at the width.
+func (rig *twoActiveRig) compose(t *testing.T, rounds int) {
+	t.Helper()
+	now := time.Now()
+	for i := 0; i < rounds; i++ {
+		poolArbiterRound(rig.active, rig.pool, now, rig.grow(t))
+		now = now.Add(rig.active[0].mux.knDur(routersettings.PoolLegInterval))
+	}
+}
+
+// firstHops is the set of first-hop transports g holds.
+func firstHops(g *RouteGroup) map[uuid.UUID]struct{} {
+	held := make(map[uuid.UUID]struct{})
+	noteHeldFirstHops(g, held)
+	return held
+}
+
+// TestPoolArbiterNeverPutsTwoActiveTunnelsOnOneFirstHop is the fail-over rule
+// one level out from the per-group one: with pool.compose_idle on, BOTH active
+// tunnels of an app compose in the same tick, and until the held set was
+// shared they were offered the same best standby and both took its first hop
+// (rig 2026-09-23: both tunnels on transport 08e154d4). One transport dying
+// then cut a leg in both, which is the failure the composed width exists to
+// survive. pool.allow_duplicate_route is the opt-out, and keeps the old
+// behavior exactly.
+func TestPoolArbiterNeverPutsTwoActiveTunnelsOnOneFirstHop(t *testing.T) {
+	rig := newTwoActiveRig(t, "skysocks-client-two-active-test", 2, 5)
+	width := rig.active[0].mux.knInt(routersettings.PoolActiveWidth)
+	require.Greater(t, width, 1, "pool.active_width must compose past the dialed leg")
+
+	rig.compose(t, width+2)
+	for i, g := range rig.active {
+		require.Equal(t, width, g.aliveLegCount(), "active tunnel %d composes to pool.active_width", i)
+	}
+	held := firstHops(rig.active[0])
+	for id := range firstHops(rig.active[1]) {
+		require.NotContains(t, held, id,
+			"two ACTIVE tunnels of one app must never hold legs on one first hop: the transport dying cuts a leg in both")
+	}
+
+	// The opt-in knob restores the old behavior: both tunnels are offered the
+	// same best-ranked standby and both ride it.
+	require.NoError(t, routersettings.Set("pool.allow_duplicate_route", "true"))
+	defer func() { require.NoError(t, routersettings.Set("pool.allow_duplicate_route", "false")) }()
+
+	dup := newTwoActiveRig(t, "skysocks-client-two-active-dup-test", 2, 5)
+	dup.compose(t, width+2)
+	shared := 0
+	held = firstHops(dup.active[0])
+	for id := range firstHops(dup.active[1]) {
+		if _, ok := held[id]; ok {
+			shared++
+		}
+	}
+	require.NotZero(t, shared, "pool.allow_duplicate_route opts back in to sharing a first hop")
+}

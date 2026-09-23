@@ -370,6 +370,15 @@ func (r *router) seedPoolPlans(desc routing.RouteDescriptor, minHops uint16) int
 // through the ingress gateway, so an in-place re-home of a standby chain can
 // use it as its no-capability fallback without duplicating any of this.
 func (r *router) GrowMuxFromPool(localPort routing.Port, legs, minHops int) (int, error) {
+	return r.growMuxFromPool(localPort, legs, minHops, nil)
+}
+
+// growMuxFromPool is GrowMuxFromPool with extra first-hop transports ruled out
+// of the plan it picks. The arbiter passes the hops the app's OTHER active
+// tunnels to this exit hold: the pool plan this call chooses is its own — the
+// warm pool ranks and serves it, not the candidate the arbiter had in mind —
+// so the exclusion has to reach the selection, not only the candidate list.
+func (r *router) growMuxFromPool(localPort routing.Port, legs, minHops int, exclude []uuid.UUID) (int, error) {
 	if legs <= 0 {
 		legs = 1
 	}
@@ -394,6 +403,7 @@ func (r *router) GrowMuxFromPool(localPort routing.Port, legs, minHops int) (int
 	added := 0
 	for added < legs {
 		excludeIDs, excludeRemoteIDs, excludePKs := r.groupExcludes(nrg, lPK, rPK)
+		excludeIDs = append(excludeIDs, exclude...)
 		fwd, rev, source, hit := r.warmRoutes.bestPlanSourced(rPK, keyMinHops, excludeIDs, excludeRemoteIDs, excludePKs)
 		if !hit {
 			break
