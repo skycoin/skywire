@@ -130,6 +130,15 @@ func SetDialMuxRouteHeadroom(n int) bool {
 	return setInt(routersettings.DialCandidateHeadroom, int64(n))
 }
 
+// dialDiversifyCandidatesDefault is that window's width. It has to exceed the
+// depth the pool can reach, because the finder answers rank-ordered: a window
+// of 20 against a client holding 750 transports to intermediates meant the free
+// first hops sat just outside it and the pool reported itself out of disjoint
+// paths while most of the topology was untried. 128 covers a pool far deeper
+// than any measured one; the cost is a longer candidate list to rank, which is
+// a local sort.
+const dialDiversifyCandidatesDefault = 128
+
 // DialDiversifyCandidates is how many routes a DIVERSIFY dial asks the route
 // finder for. A standby-pool fill is not looking for the best route, it is
 // looking for one the tunnels it already holds do not use — and the finder
@@ -344,15 +353,18 @@ func SetSetupPlanClaimTTL(d time.Duration) bool {
 }
 
 // setupFirstHopFilterMaxDefault is how many held first hops a dial may exclude
-// as a HARD filter before first-hop diversity becomes a ranking term instead.
-// Eight is the old standby-pool ceiling: up to that depth, refusing a reused
-// first hop is what the pool was for; past it the constraint has been satisfied
-// many times over and a distinct intermediate is the property that still
-// matters. See freeFirstHops.
+// as a HARD filter before first-hop diversity becomes a ranking term instead —
+// which by default never happens: the threshold is consulted only when
+// pool.allow_duplicate_route has opted in to sharing a first hop. Without that
+// opt-in a pool with no free first hop settles, because the answer to "every
+// candidate's first hop is taken" is a wider window
+// (dial.diversify_candidates), not a second tunnel on a held transport.
+// See freeFirstHops.
 const setupFirstHopFilterMaxDefault = 8
 
 // SetupFirstHopFilterMax is the held-first-hop count beyond which first-hop
-// diversity is a ranking term rather than a filter.
+// diversity is a ranking term rather than a filter — under
+// pool.allow_duplicate_route only.
 func SetupFirstHopFilterMax() int { return routersettings.SetupFirstHopFilterMax.Int() }
 
 // SetSetupFirstHopFilterMax installs that threshold. Non-positive is refused.

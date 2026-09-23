@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/noise"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/rfclient"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -132,6 +133,21 @@ func (r *router) DialRoutes(
 	// the route-finder / local calc treat these as soft preferences and fall
 	// back to a shared path when no disjoint transport is free.
 	if opts.DiversifyTransports {
+		// The route groups that already exist are only half the picture: a pool
+		// fill runs setup.fill_inflight dials at once, and a dial that has not
+		// finished has no route group for the scan above to find. Its claimed
+		// first hop counts all the same (#5125) — without this the startup burst
+		// put eight tunnels on one direct transport inside a second, each of
+		// them correctly reporting "no sibling group yet".
+		if exIDs, exPeers, exIPs := r.inFlightFirstHopExclusions(rPK, rPort); len(exIDs) > 0 {
+			opts.ExcludeTransportIDs = append(opts.ExcludeTransportIDs, exIDs...)
+			opts.ExcludeFirstHopPeers = append(opts.ExcludeFirstHopPeers, exPeers...)
+			opts.ExcludeFirstHopIPs = append(opts.ExcludeFirstHopIPs, exIPs...)
+			opts.note("diversify: %d dial(s) in flight to %s:%d, excluding their claimed first hop(s) %s",
+				len(exIDs), rPK.String()[:8], rPort, shortTpIDs(exIDs))
+			log.WithField("inflight_dials", len(exIDs)).
+				Debug("Diversifying around the first hops in-flight sibling dials have claimed.")
+		}
 		if exIDs, exPKs, exPeers, exIPs, count := r.siblingRouteGroupExclusions(lPK, rPK, rPort); count > 0 {
 			opts.ExcludeTransportIDs = append(opts.ExcludeTransportIDs, exIDs...)
 			opts.ExcludeIntermediatePKs = append(opts.ExcludeIntermediatePKs, exPKs...)
@@ -314,6 +330,17 @@ func (r *router) DialRoutes(
 	// DOES accept. See WithForceLegacyRouteSetup.
 	escalateToLegacy := false
 
+	// First hops this dial has CLAIMED against concurrent sibling dials, held
+	// until the dial returns — by then its route group is registered and
+	// siblingRouteGroupExclusions reports the same hop on its own. See
+	// dial_first_hop_holds.go (#5125).
+	var claimReleases []func()
+	defer func() {
+		for _, release := range claimReleases {
+			release()
+		}
+	}()
+
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		// PARALLEL candidate route-group setup — the steady-connection fix.
 		// When configured (K>1) and this isn't the cold-start transport-
@@ -370,24 +397,61 @@ func (r *router) DialRoutes(
 					// which is the arming gap #4063 alone had.
 					r.suspects.armAll(intermediatePKsOfPath(c.Forward, lPK, rPK))
 				}
-				nrg, rules, winIdx, rerr := r.raceCandidateSetup(ctx, log, candidates, dial, handshake, onLoser)
-				if rerr == nil {
-					opts.note("K-race: candidate %d/%d won", winIdx+1, len(candidates))
-					return r.finishDial(log, nrg, rules, candidates[winIdx].Forward, candidates[winIdx].Reverse, forwardDesc, opts, rPK, lPort, rPort), nil
-				}
-				if ctx.Err() != nil {
-					return nil, ctx.Err()
-				}
-				// Every raced candidate failed. Exclude their intermediates and
-				// fall through to the sequential path (fresh finder query +
-				// local-calc fallback) this same attempt.
-				for _, c := range candidates {
-					for _, ipk := range intermediatePKsOfPath(c.Forward, lPK, rPK) {
-						opts = appendExcludeIntermediate(opts, ipk)
+				// The raced candidates are set up CONCURRENTLY, so this dial is
+				// occupying every one of their first hops for the length of the
+				// race. Claim them, and drop any a sibling dial already holds —
+				// racing over a hop another in-flight tunnel is claiming is the
+				// same collision the sequential gate refuses (#5125). Released
+				// as soon as the race ends: the winner's route group is
+				// registered by then, so the exclusion scan sees it for itself.
+				var raceReleases []func()
+				releaseRaced := func() {
+					for _, release := range raceReleases {
+						release()
 					}
+					raceReleases = nil
 				}
-				log.WithError(rerr).Warnf("Parallel route setup: all %d candidate(s) failed (attempt %d/%d); excluding intermediates, falling back to sequential setup",
-					len(candidates), attempt, maxRetries)
+				if opts != nil && opts.DiversifyTransports {
+					free := make([]routing.BidirectionalRoute, 0, len(candidates))
+					for _, c := range candidates {
+						release, claimed := r.claimFirstHop(rPK, rPort, c.Forward)
+						if !claimed {
+							continue
+						}
+						raceReleases = append(raceReleases, release)
+						free = append(free, c)
+					}
+					if len(free) == 0 {
+						opts.note("K-race: every candidate's first hop is claimed by an in-flight sibling dial; sequential dial")
+						log.Debug("diversify: in-flight sibling dials hold every raced candidate's first hop; deferring to the sequential dial")
+					}
+					candidates = free
+				}
+				// An empty list here means the claim filter above took every
+				// candidate; the sequential path below re-picks with those hops
+				// excluded, which is what it is for (and nothing was claimed in
+				// that case, so there is nothing to release here).
+				if len(candidates) > 0 {
+					nrg, rules, winIdx, rerr := r.raceCandidateSetup(ctx, log, candidates, dial, handshake, onLoser)
+					releaseRaced()
+					if rerr == nil {
+						opts.note("K-race: candidate %d/%d won", winIdx+1, len(candidates))
+						return r.finishDial(log, nrg, rules, candidates[winIdx].Forward, candidates[winIdx].Reverse, forwardDesc, opts, rPK, lPort, rPort), nil
+					}
+					if ctx.Err() != nil {
+						return nil, ctx.Err()
+					}
+					// Every raced candidate failed. Exclude their intermediates and
+					// fall through to the sequential path (fresh finder query +
+					// local-calc fallback) this same attempt.
+					for _, c := range candidates {
+						for _, ipk := range intermediatePKsOfPath(c.Forward, lPK, rPK) {
+							opts = appendExcludeIntermediate(opts, ipk)
+						}
+					}
+					log.WithError(rerr).Warnf("Parallel route setup: all %d candidate(s) failed (attempt %d/%d); excluding intermediates, falling back to sequential setup",
+						len(candidates), attempt, maxRetries)
+				}
 			}
 			// ferr != nil or <2 candidates: fall through to the sequential path,
 			// which has the full retry/local-calc machinery.
@@ -512,6 +576,29 @@ func (r *router) DialRoutes(
 		if opts != nil && opts.DiversifyTransports && opts.RequireDisjointFirstHop && r.firstHopExcluded(forwardPath, opts) {
 			opts.note("required disjoint first hop: picked route shares %s; settling", forwardPath[0].TpID.String()[:8])
 			return nil, noDisjointFirstHopErr(rPK, 1)
+		}
+
+		// CLAIM the first hop before setting the route up. The gate above tests
+		// against a snapshot taken when this dial started; a sibling dial that
+		// started at the same instant read the same empty snapshot and may be
+		// about to set up over this very transport. The claim is the one place
+		// where the test and the reservation happen together, so exactly one of
+		// the two wins it and the other re-picks (#5125).
+		if opts != nil && opts.DiversifyTransports && len(forwardPath) > 0 {
+			release, claimed := r.claimFirstHop(rPK, rPort, forwardPath)
+			if !claimed {
+				opts.note("first hop %s is claimed by an in-flight sibling dial; re-picking", forwardPath[0].TpID.String()[:8])
+				opts.ExcludeTransportIDs = append(opts.ExcludeTransportIDs, forwardPath[0].TpID)
+				opts.ExcludeFirstHopPeers = append(opts.ExcludeFirstHopPeers, forwardPath[0].To)
+				if attempt < maxFetchAttempts {
+					continue
+				}
+				if opts.RequireDisjointFirstHop {
+					return nil, noDisjointFirstHopErr(rPK, 1)
+				}
+			} else {
+				claimReleases = append(claimReleases, release)
+			}
 		}
 
 		keepAlive := DefaultRouteKeepAlive
@@ -2409,6 +2496,19 @@ func (r *router) freeFirstHops(cands [][]routing.Hop, opts *DialOptions) [][]rou
 	free := filterDisjointFirstHop(cands, opts.ExcludeTransportIDs)
 	free = r.filterDisjointFirstHopPeer(free, opts.ExcludeFirstHopPeers, opts.ExcludeFirstHopIPs)
 
+	// By DEFAULT there is no "beyond": two tunnels to one exit never share a
+	// first-hop transport, however deep the pool is. When no candidate in the
+	// window has a free first hop the pool SETTLES — that is the answer, and
+	// dial.diversify_candidates is the knob that decides how much of the
+	// topology the window covered before we believe it. The live failure this
+	// closes: the window was 20 rank-ordered routes while the client held 750
+	// stcpr transports to intermediates, so "9 held first hops, relaxing" meant
+	// "free first hops exist, just outside the window" and the pool put two
+	// tunnels on one transport.
+	//
+	// pool.allow_duplicate_route is the explicit opt-in to sharing, and only
+	// with it on does setup.first_hop_filter_max mean anything:
+	//
 	// Beyond setup.first_hop_filter_max held first hops, diversity stops being a
 	// FILTER and becomes a RANKING TERM: the free hops still come first, but a
 	// candidate over an already-used first hop is offered rather than refused.
@@ -2428,6 +2528,10 @@ func (r *router) freeFirstHops(cands [][]routing.Hop, opts *DialOptions) [][]rou
 	held := distinctPKs(opts.ExcludeFirstHopPeers)
 	if len(free) > 0 || held < SetupFirstHopFilterMax() {
 		return free
+	}
+	if !routersettings.PoolAllowDuplicateRoute.Bool() {
+		opts.note("no free first hop among %d candidate(s) with %d held; settling (pool.allow_duplicate_route is off)", len(cands), held)
+		return nil
 	}
 
 	// Relaxed — but only as far as the documented contract, "a reused first hop
