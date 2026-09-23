@@ -2840,8 +2840,11 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 			if badSignature {
 				lvl = rg.logger.Warnf
 			}
-			lvl("unidir fan-out: download on reverse_active=%d reverse_STANDBY=%d direct=%d legs (moved %dB; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription)",
-				revActive, revStandby, directRecv, aggDelta)
+			msg := "unidir fan-out: download on reverse_active=%d reverse_STANDBY=%d direct=%d legs (moved %dB)"
+			if badSignature {
+				msg += " — STANDBY/direct recv should be 0: the exit is not honoring the mirrored active set (reorder-frontier over-subscription)"
+			}
+			lvl(msg, revActive, revStandby, directRecv, aggDelta)
 		}
 	} else {
 		rg.dirFanoutTicks = 0
