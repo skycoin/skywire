@@ -48,11 +48,21 @@ Builds:
       - yes
     # Prebuilt files in the repo that the mobile build does not use: the
     # `mobile` build tag excludes the GeoLite2 database and the wasm
-    # hypervisor, and the wasm routing-policy examples are docs.
+    # hypervisor, the wasm routing-policy examples are docs, and the two
+    # package.json files are npm metadata that vendored Go modules carry.
     scandelete:
       - pkg/geoip/GeoLite2-City.mmdb.gz
       - pkg/wasmhv/execwasm/blob
       - docs/examples/routing-policies/wasm
+      - vendor/github.com/blang/semver/package.json
+      - vendor/github.com/go-redis/redis/v8/package.json
+    # Generated files the mobile binary embeds with go:embed, so they have to
+    # stay: the pty web terminal page (gzipped HTML), and the routing-policy
+    # presets, built with TinyGo from
+    # docs/examples/routing-policies/wasm/bundle by `make bundle-wasm`.
+    scanignore:
+      - pkg/pty/term.html.gz
+      - pkg/router/policy/wasm/presets/bundle.wasm
     gradleprops:
       # Strips the in-app updater and REQUEST_INSTALL_PACKAGES: F-Droid
       # delivers the updates. See android/app/build.gradle.kts.
