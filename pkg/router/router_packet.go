@@ -97,12 +97,38 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 	}
 }
 
+// noteLegRehomeDrop records that a leg re-home / leg split control frame did
+// not get any further, with the route ID it was stamped with and the type of
+// the rule that was (or was not) found for it. A re-home that dies in transit
+// is otherwise perfectly silent: the initiator only ever sees "no ack", and
+// every hop between the two edges keeps no trace at all — which is why the
+// live failure of 2026-09-23 could not be placed on a hop.
+func (r *router) noteLegRehomeDrop(packet routing.Packet, rule routing.Rule, reason string) {
+	if r.logger == nil || packet.Type() != routing.LegRehomePacket {
+		return
+	}
+	ruleType := "none"
+	if rule != nil {
+		ruleType = rule.Type().String()
+	}
+	var flags byte
+	if _, _, _, f, ok := packet.LegRehomeFields(); ok {
+		flags = f
+	}
+	r.logger.WithField("route_id", packet.RouteID()).
+		WithField("rule_type", ruleType).
+		WithField("flags", flags).
+		WithField("split", flags&routing.LegRehomeSplit != 0).
+		Debugf("Dropped a leg re-home frame: %s", reason)
+}
+
 // dispatchToRouteGroup is the common handler for packets that follow the pattern:
 // get rule → forward if intermediary → look up route group → handle packet.
 // Used by ping, pong, error, and similar packet types.
 func (r *router) dispatchToRouteGroup(ctx context.Context, packet routing.Packet) error {
 	rule, err := r.GetRule(packet.RouteID())
 	if err != nil {
+		r.noteLegRehomeDrop(packet, nil, "no rule for its route ID at this hop")
 		// Surface the offending route ID + packet type. A bare "rule not
 		// found" is useless for diagnosing multihop setup failures where a
 		// handshake/data frame arrives stamped with a route ID this visor
@@ -141,6 +167,7 @@ func (r *router) dispatchToRouteGroup(ctx context.Context, packet routing.Packet
 	if r.pending.park(desc, packet, time.Now()) {
 		return nil
 	}
+	r.noteLegRehomeDrop(packet, rule, "no route group holds "+desc.String())
 	return errRouteDescNotExist
 }
 
@@ -323,6 +350,7 @@ func (r *router) UpdateRuleActivity(routeID routing.RouteID) error {
 func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule routing.Rule) error {
 	tp := r.tm.Transport(rule.NextTransportID())
 	if tp == nil {
+		r.noteLegRehomeDrop(packet, rule, "next-hop transport "+rule.NextTransportID().String()+" is gone")
 		return fmt.Errorf("transport %s not found for next-hop routing", rule.NextTransportID())
 	}
 
@@ -394,7 +422,13 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 		// fleet hop, so the feature only ever worked on a single-hop chain.
 		nonce, srcPort, dstPort, flags, ok := packet.LegRehomeFields()
 		if !ok {
+			r.noteLegRehomeDrop(packet, rule, "malformed payload")
 			return fmt.Errorf("malformed leg re-home packet (routeID=%d)", packet.RouteID())
+		}
+		if flags&routing.LegRehomeSplit != 0 {
+			globalMuxCounters.legSplitsForwarded.Add(1)
+		} else {
+			globalMuxCounters.legRehomesForwarded.Add(1)
 		}
 		p = routing.MakeLegRehomePacket(rule.NextRouteID(), nonce, srcPort, dstPort, flags)
 	default:

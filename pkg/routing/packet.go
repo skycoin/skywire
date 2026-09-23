@@ -90,6 +90,17 @@ func (t PacketType) String() string {
 	}
 }
 
+// Known reports whether t is a packet type this build defines. It is the
+// single place the wire-level "is this frame sane" checks ask, so a NEW packet
+// type only has to be added to String() and to the bound below — see
+// TestPacketTypeKnownTracksString, which fails when the two drift apart.
+//
+// It has to be kept current: the read loop used to compare against
+// DirectionPacket directly, so every LegRehomePacket (added after it) was
+// counted as a malformed frame and logged as "peer framing off" on both the
+// intermediates and the exit.
+func (t PacketType) Known() bool { return t <= LegRehomePacket }
+
 // Possible PacketType values:
 // - DataPacket      - Payload is just the underlying data.
 // - ClosePacket     - Payload is a type CloseCode byte.

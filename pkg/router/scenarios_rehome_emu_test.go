@@ -209,3 +209,50 @@ func TestLegRehomeSurvivesAnIntermediate(t *testing.T) {
 		require.Equal(t, flags, gotFlags)
 	}
 }
+
+// TestLegRehomeRelayIsCounted is the observability half of the 2026-09-23 live
+// failure: an initiator whose re-home is never acked cannot tell an exit that
+// refused from a hop that never relayed the frame. A transited hop now counts
+// what it relays, split frames apart from re-home frames, so the two are
+// distinguishable from `visor state --select mux` on the first hop.
+//
+// The rule installed here is routing.IntermediaryForwardRule — the type a live
+// fleet relay actually holds for a mux leg's chain.
+func TestLegRehomeRelayIsCounted(t *testing.T) {
+	r, tm := newForwardTestRouter(t)
+	near, far := healthyLeg(t, "rehome-relay-counted")
+	tpID := uuid.New()
+	injectTransport(t, tm, near, tpID)
+
+	const inKey, outKey = routing.RouteID(20), routing.RouteID(21)
+	require.NoError(t, r.rt.SaveRule(routing.IntermediaryForwardRule(time.Hour, inKey, outKey, tpID)))
+
+	drain := func() {
+		buf := make([]byte, 1<<10)
+		require.NoError(t, far.SetReadDeadline(time.Now().Add(5*time.Second)))
+		_, err := far.Read(buf)
+		require.NoError(t, err, "the frame never left the intermediate")
+	}
+
+	before := MuxCountersSnapshot()
+	require.NoError(t, r.handleTransportPacket(context.Background(),
+		routing.MakeLegRehomePacket(inKey, 1, 3, 4, 0)))
+	drain()
+	require.NoError(t, r.handleTransportPacket(context.Background(),
+		routing.MakeLegRehomePacket(inKey, 2, 3, 4, routing.LegRehomeSplit)))
+	drain()
+	after := MuxCountersSnapshot()
+
+	require.Equal(t, uint64(1), after.LegRehomesForwarded-before.LegRehomesForwarded,
+		"a relayed re-home request must be counted at the intermediate")
+	require.Equal(t, uint64(1), after.LegSplitsForwarded-before.LegSplitsForwarded,
+		"a relayed split request must be counted apart from a re-home")
+
+	// A frame for a route this hop has no rule for is dropped, not relayed —
+	// and must not be counted as forwarded.
+	require.Error(t, r.handleTransportPacket(context.Background(),
+		routing.MakeLegRehomePacket(inKey+7, 3, 3, 4, 0)))
+	stale := MuxCountersSnapshot()
+	require.Equal(t, after.LegRehomesForwarded, stale.LegRehomesForwarded,
+		"a dropped re-home must not count as forwarded")
+}
