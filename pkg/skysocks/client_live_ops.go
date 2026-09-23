@@ -26,7 +26,8 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
-// reconcileActiveSet moves the active tunnel set to the current target by
+// reconcileActiveSet moves the active tunnel set to the current target — the k
+// an explicit mux.shape names, else tunnel.count (client_shape.go) — by
 // promoting from the pool or parking the worst IDLE active tunnel, and stops
 // the moment neither is possible. It never dials (the pool fill owns that) and
 // never parks a tunnel carrying streams — the pool's bargain is that a switch
@@ -36,29 +37,35 @@ import (
 // Bounded by the number of tunnels held, so it terminates even if a promote
 // were to fail to change the count.
 func (c *Client) reconcileActiveSet(reason string) {
-	c.redialMu.Lock()
-	target := c.target
-	c.redialMu.Unlock()
+	target, source := c.tunnelTarget()
 	if target < 1 {
 		return
 	}
+	why := shapeReason(target, source, reason)
 	bound := len(c.snapshotSessions()) + 1
 	for i := 0; i < bound; i++ {
 		active := c.activeLiveCount()
 		switch {
 		case active < target:
-			if c.promoteBestStandby(fmt.Sprintf("reconcile: active set below tunnel.count=%d (%s)", target, reason)) == nil {
+			c.clearDraining()
+			if c.promoteBestStandby(why) == nil {
 				return // nothing held to promote; the pool fill grows it
 			}
 		case active > target:
 			worst := c.worstIdleActive()
 			if worst == nil {
-				return // every extra tunnel is carrying streams; leave them be
+				// Every extra tunnel is carrying streams. Stop FEEDING them
+				// and leave them be: a park that cost a stream would be the
+				// one thing the pool promises never to do, so the surplus
+				// drains and the next tick parks it.
+				c.markDraining(target, reason)
+				return
 			}
-			if !c.parkTunnel(worst, fmt.Sprintf("reconcile: active set above tunnel.count=%d (%s)", target, reason)) {
+			if !c.parkTunnel(worst, why) {
 				return
 			}
 		default:
+			c.clearDraining()
 			return
 		}
 	}

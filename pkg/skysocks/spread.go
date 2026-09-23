@@ -445,6 +445,12 @@ func (c *Client) spreadCandidates(dir spreadDir) (sessions []*yamux.Session, cap
 		if s == nil || s.IsClosed() || c.standby[s] {
 			continue
 		}
+		if c.draining[s] {
+			// The shape wants this tunnel parked and it is still carrying:
+			// it finishes what it holds and is offered nothing new
+			// (client_shape.go markDraining).
+			continue
+		}
 		m := c.recvStamp[s]
 		if m != nil && (m.onBench(now) || m.snubSitOut()) {
 			continue

@@ -201,3 +201,26 @@ func TestShapeStepStandsDownUnderAuto(t *testing.T) {
 		require.Zero(t, info.ShapeTunnels, "auto publishes no k; the app's tunnel.count still owns the count")
 	}
 }
+
+// TestShapeStepHoldsUnderShapeHold is I8. The app's own freezes (pool.freeze,
+// tunnel.freeze_active) live in the app PROCESS and cannot be read from here;
+// the visor mirrors them into mux.shape_hold, and this is what that buys: the
+// target still reads back, and not one move is made toward it.
+func TestShapeStepHoldsUnderShapeHold(t *testing.T) {
+	t.Cleanup(func() { routersettings.ResetApp(shapeEmuApp) })
+	rigs := shapeEmuRig(t, 2, 6)
+	composeTo2x2(t, rigs)
+	require.NoError(t, routersettings.SetApp(shapeEmuApp, routersettings.MuxShape.Name(), "4x1"))
+	require.NoError(t, routersettings.SetApp(shapeEmuApp, routersettings.MuxShapeHold.Name(), "true"))
+
+	active, pool := shapeSession0(rigs)
+	before := shapeOf(rigs)
+	require.Equal(t, shapeVerdictHeld, shapeStep(active, pool, time.Now(), nil),
+		"a frozen app's session must not be converged")
+	require.Equal(t, before, shapeOf(rigs), "and nothing may have moved")
+
+	// Lifting the hold hands the session straight back to the converger.
+	require.NoError(t, routersettings.SetApp(shapeEmuApp, routersettings.MuxShapeHold.Name(), "false"))
+	require.Equal(t, shapeVerdictMoved, shapeStep(active, pool, time.Now(), nil))
+	require.NotEqual(t, before, shapeOf(rigs), "the move the hold was deferring")
+}

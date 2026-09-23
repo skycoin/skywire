@@ -181,6 +181,15 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 			}
 			snap.Tunnels = append(snap.Tunnels, t)
 		}
+		// The session-level shape target rides the same call: every ACTIVE
+		// snapshot of a session carries it, so the first one that has it is
+		// the session's answer.
+		for _, info := range infos {
+			if info.ShapeSource != "" {
+				snap.ShapeSource, snap.ShapeTunnels = info.ShapeSource, info.ShapeTunnels
+				break
+			}
+		}
 		if len(snap.Tunnels) > 0 {
 			snap.MuxEnabled = snap.Tunnels[0].MuxEnabled
 			snap.Legs = snap.Tunnels[0].Legs
