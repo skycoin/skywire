@@ -601,7 +601,7 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 		// Any received packet (pong, the peer's own ping, or route data) proves
 		// the link is alive — feed the unarmed-silence reaper in tickPing.
 		mt.lastRecvNanos.Store(time.Now().UnixNano())
-		if p.Type() > routing.DirectionPacket {
+		if !p.Type().Known() {
 			mt.malformedFrames.Add(1)
 			head := p
 			if len(head) > 24 {

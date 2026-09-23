@@ -163,6 +163,15 @@ func rehomeChain(g, s *RouteGroup) error {
 	case flags = <-ackCh:
 	case <-time.After(legRehomeAckTimeout()):
 		globalMuxCounters.legRehomesFailed.Add(1)
+		// Name the chain the request went out on. A re-home that is never
+		// acked is otherwise silent, and the one thing that tells the two
+		// live failure modes apart — an exit that refused vs a hop that never
+		// relayed the frame — is whether this chain is transited at all.
+		s.logger.WithField("tp_id", tp.Entry.ID).
+			WithField("first_hop", tp.Remote().String()).
+			WithField("direct", tp.Remote() == s.desc.DstPK()).
+			WithField("route_id", fwd.NextRouteID()).
+			Debugf("Re-home: no ack within %s; compare leg_rehomes_forwarded on the first hop", legRehomeAckTimeout())
 		return fmt.Errorf("%w: no ack from %s within %s; both groups left intact", ErrRehomeNoAck, s.desc.DstPK(), legRehomeAckTimeout())
 	}
 	if flags&routing.LegRehomeRefused != 0 || flags&routing.LegRehomeAck == 0 {

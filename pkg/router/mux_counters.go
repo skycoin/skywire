@@ -31,10 +31,19 @@ type MuxCounters struct {
 	// standby group of its own, instead of its transport being closed.
 	// Sent/Acked/Failed are this visor's own outbound splits, Received an
 	// incoming split request it accepted or refused.
-	LegSplitsSent     uint64 `json:"leg_splits_sent"`
-	LegSplitsReceived uint64 `json:"leg_splits_received"`
-	LegSplitsAcked    uint64 `json:"leg_splits_acked"`
-	LegSplitsFailed   uint64 `json:"leg_splits_failed"`
+	// LegRehomesForwarded/LegSplitsForwarded count re-home and split control
+	// frames this visor RELAYED as an intermediate hop (router_packet.go
+	// forwardPacket). They are what makes a transited re-home observable at all:
+	// on the initiator a chain through a relay that does not forward the type is
+	// indistinguishable from an exit that refused, and the relay itself had no
+	// tally of its own. A sent-but-never-acked re-home whose first hop reports 0
+	// here died at that hop.
+	LegRehomesForwarded uint64 `json:"leg_rehomes_forwarded"`
+	LegSplitsForwarded  uint64 `json:"leg_splits_forwarded"`
+	LegSplitsSent       uint64 `json:"leg_splits_sent"`
+	LegSplitsReceived   uint64 `json:"leg_splits_received"`
+	LegSplitsAcked      uint64 `json:"leg_splits_acked"`
+	LegSplitsFailed     uint64 `json:"leg_splits_failed"`
 	// ForwardFanoutEngaged/Released count noteForwardFanout(on=true/false):
 	// the forward direction's fan-out-under-load latch (unidir.go) turning on
 	// (MuxEventForwardFanout) or off (MuxEventForwardConfined).
@@ -61,6 +70,8 @@ type muxGlobalCounters struct {
 	legRehomesReceived    atomic.Uint64
 	legRehomesAcked       atomic.Uint64
 	legRehomesFailed      atomic.Uint64
+	legRehomesForwarded   atomic.Uint64
+	legSplitsForwarded    atomic.Uint64
 	legSplitsSent         atomic.Uint64
 	legSplitsReceived     atomic.Uint64
 	legSplitsAcked        atomic.Uint64
@@ -93,6 +104,8 @@ func (c *muxGlobalCounters) snapshot() MuxCounters {
 		LegRehomesReceived:    c.legRehomesReceived.Load(),
 		LegRehomesAcked:       c.legRehomesAcked.Load(),
 		LegRehomesFailed:      c.legRehomesFailed.Load(),
+		LegRehomesForwarded:   c.legRehomesForwarded.Load(),
+		LegSplitsForwarded:    c.legSplitsForwarded.Load(),
 		LegSplitsSent:         c.legSplitsSent.Load(),
 		LegSplitsReceived:     c.legSplitsReceived.Load(),
 		LegSplitsAcked:        c.legSplitsAcked.Load(),
