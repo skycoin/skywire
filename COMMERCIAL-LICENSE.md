@@ -14,4 +14,4 @@ modify, embed or distribute Skywire without the AGPL's obligations — for
 example, to ship it inside a proprietary product or to run a modified version
 as a service without publishing the changes.
 
-To ask about a commercial license, contact: <CONTACT>
+To ask about a commercial license, contact: [contact@skycoin.com](mailto:contact@skycoin.com)
