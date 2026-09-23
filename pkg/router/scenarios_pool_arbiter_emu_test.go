@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -115,7 +116,14 @@ func TestEmuPoolArbiterTakesOneLegAndKeepsTheStandbyTunnelsSingleLeg(t *testing.
 	require.True(t, rehomeEventSeen(g.A.rg, MuxEventPoolLegTaken, "took standby tunnel"),
 		"the take must be recorded as pool_leg_taken with its source port")
 
-	// RELEASE: no load, past pool.leg_release. The future clock is the seam —
+	// RELEASE: pool.compose_idle (the default) holds an ACTIVE tunnel at its
+	// width even with no load, so the give-back below is what the arbiter does
+	// with the knob OFF. The idle compose itself is pinned in
+	// pool_compose_idle_test.go.
+	require.NoError(t, routersettings.Set("pool.compose_idle", "false"))
+	defer func() { require.NoError(t, routersettings.Set("pool.compose_idle", "true")) }()
+
+	// No load, past pool.leg_release. The future clock is the seam —
 	// the same comparison the router's loop makes, without a 30 s wait.
 	// The forward fan-out latch expires on the REAL clock, so the first ticks
 	// still read as loaded; the synthetic clock advances past pool.leg_release

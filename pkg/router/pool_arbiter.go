@@ -26,6 +26,14 @@
 //     load goes away the leg is released and the app's fill tops the pool back
 //     up.
 //
+// With pool.compose_idle (the default), the width is not a load response at
+// all: an ACTIVE tunnel is held at pool.active_width legs whenever it is below
+// it, idle included, and is never released below that width. The packet-level
+// mux is here for privacy and for surviving a cut leg, and a spare that only
+// appears after the load latches cannot survive a cut that happens before it —
+// so the striping cost of an idle second chain is accepted. Legs taken ABOVE
+// the idle width under load still go back after pool.leg_release.
+//
 // The hysteresis is what keeps this from becoming churn: the load must have
 // LATCHED (the forward fan-out's own latch, or a continuous transfer episode
 // of at least unidir.fanout_engage in the reverse direction), at most one leg
@@ -189,6 +197,34 @@ func (rg *RouteGroup) muxWidthTarget() int {
 	return t
 }
 
+// poolIdleWidth is the leg count an ACTIVE tunnel is held at even with no load
+// at all — the pool.compose_idle half of the arbiter, and 0 when the knob is
+// off or this group is not one the rule covers.
+//
+// Packet-level multiplexing is here for privacy and for surviving a leg cut.
+// Neither is served by a width that only appears once the load latch fires: a
+// transport that dies while the tunnel is idle leaves a single-leg group that
+// has to set a route up before it carries anything again, which is exactly the
+// stall the mux was supposed to remove. So the width is held all the time and
+// the striping cost of an idle second chain is accepted.
+//
+// It is pool.active_width, or the app's own mux.app_width when that is larger,
+// clamped to muxWidthTarget so a per-app width that deliberately caps a tunnel
+// at one leg still caps it here.
+func (rg *RouteGroup) poolIdleWidth() int {
+	if rg.mux == nil || rg.TunnelRole() != tunnelRoleActive || !rg.knBool(routersettings.PoolComposeIdle) {
+		return 0
+	}
+	w := rg.mux.knInt(routersettings.PoolActiveWidth)
+	if n, ok := muxAppWidthFor(rg.AppName()); ok && n > w {
+		w = n
+	}
+	if t := rg.muxWidthTarget(); w > t {
+		w = t
+	}
+	return w
+}
+
 // poolMovedBytes is the group's aggregate wire bytes in both directions, the
 // cheap "is this group carrying anything" sample the reverse-load episode is
 // built from.
@@ -342,15 +378,31 @@ func poolArbiterStep(g *RouteGroup, pool []*RouteGroup, now time.Time, grow func
 		return
 	}
 	reason, loaded := g.poolLoadSignal(now)
-	if !loaded {
-		g.releasePoolLegs(now)
-		return
-	}
-	width := g.muxWidthTarget()
-	if width <= 1 || g.aliveLegCount() >= width {
+	idleWidth := g.poolIdleWidth()
+	switch {
+	case loaded:
+		width := g.muxWidthTarget()
+		if width <= 1 || g.aliveLegCount() >= width {
+			return
+		}
+	// With pool.compose_idle on, a tunnel below its idle width is due for a
+	// leg whether or not it is carrying anything — including right after one
+	// of its legs was cut, which is the case the whole knob exists for.
+	case idleWidth > 1 && g.aliveLegCount() < idleWidth:
+		reason = fmt.Sprintf("pool.compose_idle: %d of %d legs while idle, so a leg cut fails over on the spare",
+			g.aliveLegCount(), idleWidth)
+	default:
+		g.releasePoolLegs(now, idleWidth)
 		return
 	}
 	if !g.poolTakeDue(now) {
+		return
+	}
+	// The self-heal top-up dials a replacement off the group's own dial-time
+	// selfHealTarget. It only runs at all when that target is above one, but
+	// when it does the two would be dialing the same missing leg, so whichever
+	// started first owns the refill for this tick.
+	if g.healInFlight.Load() {
 		return
 	}
 	cands := poolCandidates(g, pool)
@@ -399,6 +451,19 @@ func (rg *RouteGroup) poolTakeDue(now time.Time) bool {
 func (rg *RouteGroup) notePoolLegTaken(c poolCandidate, now time.Time, reason, how string) {
 	rg.mu.Lock()
 	rg.poolLastTake = now
+	// A leg that was CUT (transport closed, pruned) leaves its provenance
+	// behind; drop those entries before recording the refill so `mux info`
+	// names a live leg and the release accounting counts live legs only.
+	live := rg.poolTaken[:0]
+	for _, t := range rg.poolTaken {
+		for _, tp := range rg.tps {
+			if tp != nil && !tp.IsClosed() && tp.Entry.ID == t.tpID {
+				live = append(live, t)
+				break
+			}
+		}
+	}
+	rg.poolTaken = live
 	idx := -1
 	var tpID uuid.UUID
 	for i, tp := range rg.tps {
@@ -422,11 +487,16 @@ func (rg *RouteGroup) notePoolLegTaken(c poolCandidate, now time.Time, reason, h
 	})
 }
 
-// releasePoolLegs gives every pool-sourced leg back once the group has shown no
-// load for pool.leg_release. The leg is CLOSED, not handed back: a re-homed
-// chain keeps its route either way, and the app's own pool fill re-dials a
-// standby tunnel exactly as it does after any other tunnel ends.
-func (rg *RouteGroup) releasePoolLegs(now time.Time) {
+// releasePoolLegs gives pool-sourced legs back once the group has shown no load
+// for pool.leg_release. The leg is CLOSED, not handed back: a re-homed chain
+// keeps its route either way, and the app's own pool fill re-dials a standby
+// tunnel exactly as it does after any other tunnel ends.
+//
+// keep is the idle width (poolIdleWidth): legs taken ABOVE it under load are
+// still released when the load goes, but the group is never taken below it,
+// because those legs are the instant fail-over. keep <= 1 is the knob-off case
+// and releases every pool-sourced leg, as it always did.
+func (rg *RouteGroup) releasePoolLegs(now time.Time, keep int) {
 	rg.mu.Lock()
 	if len(rg.poolTaken) == 0 {
 		rg.mu.Unlock()
@@ -438,7 +508,27 @@ func (rg *RouteGroup) releasePoolLegs(now time.Time) {
 		return
 	}
 	taken := rg.poolTaken
-	rg.poolTaken = nil
+	if keep > 1 {
+		alive := 0
+		for _, tp := range rg.tps {
+			if tp != nil && !tp.IsClosed() {
+				alive++
+			}
+		}
+		n := alive - keep // only the legs above the idle width
+		if n <= 0 {
+			rg.mu.Unlock()
+			return
+		}
+		if n > len(taken) {
+			n = len(taken)
+		}
+		// Newest first: the oldest takes are the composed width.
+		rg.poolTaken = append([]poolTakenLeg(nil), taken[:len(taken)-n]...)
+		taken = append([]poolTakenLeg(nil), taken[len(taken)-n:]...)
+	} else {
+		rg.poolTaken = nil
+	}
 	rg.mu.Unlock()
 
 	for _, t := range taken {

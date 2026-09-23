@@ -165,6 +165,13 @@ var (
 	// standby pool was a stream reserve only. An ACTIVE tunnel now targets at
 	// least this many legs under load; mux.app_width for the app overrides it.
 	PoolActiveWidth = RegisterMin("pool.active_width", KindCount, 2, 1, "legs an active tunnel of a role-reporting app targets under load, taking the extra ones from the standby pool; mux.app_width for the app overrides it")
+	// PoolComposeIdle is what makes the fail-over INSTANT. Packet-level
+	// multiplexing exists for privacy and for surviving a leg cut, not for
+	// throughput — and a second leg that is only taken once the load latches
+	// cannot carry a cut that happens before it. So an active tunnel is
+	// composed at its width all the time, idle included; the slight throughput
+	// cost of striping over an idle second chain is accepted.
+	PoolComposeIdle = RegisterBool("pool.compose_idle", true, "keep an active tunnel of a role-reporting app at pool.active_width legs even when idle, so a leg cut fails over instantly; false = take extra legs only under load")
 	// PoolLoadMinBps is the arbiter's load FLOOR. Its reverse-heavy episode
 	// used to latch on ANY byte delta at all, so a tunnel's keepalives and the
 	// mux's own control frames read as "carrying continuously" and an active
