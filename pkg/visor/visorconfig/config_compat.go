@@ -40,6 +40,7 @@ type v1JSON struct {
 	LogServer     *LogServer           `json:"log_server,omitempty"`
 	DmsgWeb       *DmsgWebConfig       `json:"dmsg_web,omitempty"`
 	SkynetWeb     *SkynetWebConfig     `json:"skynet_web,omitempty"`
+	Wisp          *WispConfig          `json:"wisp,omitempty"`
 	Resolvers     []ResolverConfig     `json:"resolvers,omitempty"`
 	BrowseOrigin  *BrowseOriginConfig  `json:"browse_origin,omitempty"`
 	SkymailBridge *SkymailBridgeConfig `json:"skymail_bridge,omitempty"`
@@ -79,6 +80,8 @@ type v1JSON struct {
 	RewardSystemDmsg string `json:"reward_system_dmsg,omitempty"`
 	MemoryLimit      string `json:"memory_limit,omitempty"`
 
+	AppSettings map[string]AppSettingsEntry `json:"app_settings,omitempty"`
+
 	Hypervisor *HypervisorConfig `json:"hypervisor,omitempty"`
 }
 
@@ -105,6 +108,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.LogServer = mirror.LogServer
 	v.DmsgWeb = mirror.DmsgWeb
 	v.SkynetWeb = mirror.SkynetWeb
+	v.Wisp = mirror.Wisp
 	v.Resolvers = mirror.Resolvers
 	v.BrowseOrigin = mirror.BrowseOrigin
 	v.SkymailBridge = mirror.SkymailBridge
@@ -138,6 +142,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.RewardSystem = mirror.RewardSystem
 	v.RewardSystemDmsg = mirror.RewardSystemDmsg
 	v.MemoryLimit = mirror.MemoryLimit
+	v.AppSettings = mirror.AppSettings
 	v.Hypervisor = mirror.Hypervisor
 
 	if v.Pty == nil {
