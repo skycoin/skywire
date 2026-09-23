@@ -1392,74 +1392,12 @@ func storeLog(conf *visorconfig.V1) {
 		_ = os.Chmod(logFile, 0644) //nolint:gosec,errcheck
 	}
 
-	hook, _ := lumberjackrus.NewHook( //nolint:errcheck
-		&lumberjackrus.LogFile{
-			Filename:   conf.LocalPath + "/log/skywire.log",
-			MaxSize:    1,
-			MaxBackups: 1,
-			MaxAge:     1,
-			Compress:   false,
-			LocalTime:  false,
-		},
-		logrus.TraceLevel,
-		&logging.TextFormatter{
-			DisableColors:   true,
-			FullTimestamp:   true,
-			ForceFormatting: true,
-		},
-		&lumberjackrus.LogFileOpts{
-			logrus.InfoLevel: &lumberjackrus.LogFile{
-				Filename:   conf.LocalPath + "/log/skywire.log",
-				MaxSize:    1,
-				MaxBackups: 1,
-				MaxAge:     1,
-				Compress:   false,
-				LocalTime:  false,
-			},
-			logrus.WarnLevel: &lumberjackrus.LogFile{
-				Filename:   conf.LocalPath + "/log/skywire.log",
-				MaxSize:    1,
-				MaxBackups: 1,
-				MaxAge:     1,
-				Compress:   false,
-				LocalTime:  false,
-			},
-			logrus.TraceLevel: &lumberjackrus.LogFile{
-				Filename:   conf.LocalPath + "/log/skywire.log",
-				MaxSize:    1,
-				MaxBackups: 1,
-				MaxAge:     1,
-				Compress:   false,
-				LocalTime:  false,
-			},
-			logrus.ErrorLevel: &lumberjackrus.LogFile{
-				Filename:   conf.LocalPath + "/log/skywire.log",
-				MaxSize:    1,
-				MaxBackups: 1,
-				MaxAge:     1,
-				Compress:   false,
-				LocalTime:  false,
-			},
-			logrus.DebugLevel: &lumberjackrus.LogFile{
-				Filename:   conf.LocalPath + "/log/skywire.log",
-				MaxSize:    1,
-				MaxBackups: 1,
-				MaxAge:     1,
-				Compress:   false,
-				LocalTime:  false,
-			},
-			logrus.FatalLevel: &lumberjackrus.LogFile{
-				Filename:   conf.LocalPath + "/log/skywire.log",
-				MaxSize:    1,
-				MaxBackups: 1,
-				MaxAge:     1,
-				Compress:   false,
-				LocalTime:  false,
-			},
-		},
-	)
-	mLog.Hooks.Add(hook)
-	conf.MasterLogger().Hooks.Add(hook)
+	if hook, err := newTextLogHook(logFile); err != nil {
+		mLog.WithError(err).Warn("Failed to open the log file; logging to stdout only")
+	} else {
+		mLog.Hooks.Add(hook)
+		conf.MasterLogger().Hooks.Add(hook)
+	}
 
 	if isLogJSON {
 		addJSONLogHook(conf)
@@ -1566,4 +1504,30 @@ func (v *Visor) GetNetworkTypes() []string {
 		return nil
 	}
 	return types
+}
+
+// newTextLogHook builds the file hook for the human-readable log at path.
+//
+// One writer, deliberately. lumberjackrus accepts a per-level LogFile map, and
+// this used to carry one entry per level, every one of them naming this same
+// file. That gave each level its own lumberjack.Logger over one path, and
+// rotation is per-writer: whichever level first crossed MaxSize renamed the
+// file and opened a fresh one while the others kept writing to the renamed —
+// then reaped — inode. DEBUG has the most volume so it always won, and the
+// INFO, WARN and ERROR lines were written to a file nobody could read. The
+// default logger alone, with no per-level overrides, keeps every level on a
+// single rotating writer.
+func newTextLogHook(path string) (logrus.Hook, error) {
+	return lumberjackrus.NewHook(&lumberjackrus.LogFile{
+		Filename:   path,
+		MaxSize:    1,
+		MaxBackups: 1,
+		MaxAge:     1,
+		Compress:   false,
+		LocalTime:  false,
+	}, logrus.TraceLevel, &logging.TextFormatter{
+		DisableColors:   true,
+		FullTimestamp:   true,
+		ForceFormatting: true,
+	}, nil)
 }
