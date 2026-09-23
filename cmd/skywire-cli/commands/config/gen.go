@@ -2744,6 +2744,11 @@ var (
 		// chain was silently off; found live with nothing on 4445 or 4446.
 		"dmsgweb":   "DMSGWEB=true",
 		"skynetweb": "SKYNETWEB=true",
+		// Same reason again: without this, autoconfig writes WISP=true to the
+		// conf and gen never hears about it. On the browser build gen re-enters
+		// IN-PROCESS, so its flag defaults were read before the edit — the
+		// embedded Wisp server stayed off with nothing on vnet:6001.
+		"wisp": "WISP=true",
 	}
 	// String flags: KEY='value' lines.
 	valueFlagToEnv = map[string]string{
@@ -2760,6 +2765,7 @@ var (
 		"dmsgweb-addr":       "DMSGWEBADDR",
 		"skynetweb-addr":     "SKYNETWEBADDR",
 		"dmsgweb-sk":         "DMSGWEBSK",
+		"wisp-socks":         "WISPSOCKS",
 	}
 	// Integer/port flags: bare KEY=N lines (e.g. #TRANSPORTPORT=0).
 	intFlagToEnv = map[string]string{
@@ -2768,6 +2774,7 @@ var (
 		"sudph":              "SUDPHPORT",
 		"min-hops":           "MINHOPS",
 		"ar-transport-limit": "ARTRANSPORTLIMIT",
+		"wisp-port":          "WISPPORT",
 	}
 	// Array-shaped flags: bash-array lines KEY=('a' 'b' 'c'), taken
 	// comma-separated on the CLI (`--hvpks PK1,PK2`) — split, trimmed, empties
@@ -2844,12 +2851,12 @@ func applyFlagsToConf(conf string, cmd *cobra.Command) string {
 			if !cmd.Flags().Changed(flagName) {
 				continue
 			}
-			val, _ := cmd.Flags().GetInt(flagName) //nolint:errcheck
+			val := flagDigits(cmd, flagName)
 			// Match the bash (#KEY=) or PowerShell (#$KEY=) template form.
 			if strings.HasPrefix(trimmed, "#"+envKey+"=") {
-				lines[i] = envKey + "=" + strconv.Itoa(val)
+				lines[i] = envKey + "=" + val
 			} else if strings.HasPrefix(trimmed, "#$"+envKey+"=") {
-				lines[i] = "$" + envKey + "=" + strconv.Itoa(val)
+				lines[i] = "$" + envKey + "=" + val
 			}
 		}
 		// Check array flags (bash-array form: KEY=('a' 'b' 'c'))
@@ -2901,4 +2908,17 @@ func hvAuthFromEnv(s string) (value, ok bool) {
 	default:
 		return false, false
 	}
+}
+
+// flagDigits reads an integer-shaped flag as the digits it was set to.
+//
+// GetInt is typed and fails on a flag declared as any other integer kind —
+// --wisp-port is a uint — returning 0 with the error dropped, so the conf got
+// KEY=0 no matter what the operator passed. A flag's own string value is
+// already the number, whatever width or signedness it was declared with.
+func flagDigits(cmd *cobra.Command, name string) string {
+	if f := cmd.Flags().Lookup(name); f != nil {
+		return f.Value.String()
+	}
+	return "0"
 }
