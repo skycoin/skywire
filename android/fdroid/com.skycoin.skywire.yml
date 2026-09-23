@@ -1,13 +1,15 @@
 # F-Droid build recipe. Submit it once as metadata/com.skycoin.skywire.yml
 # in a merge request to https://gitlab.com/fdroid/fdroiddata. After that
-# F-Droid's update bot keeps it current by itself: at each new mobile-v* tag
+# F-Droid's update bot keeps it current by itself: at each new fdroid-v* tag
 # it reads android/version.properties, appends a copy of the last build
 # entry for the new version and commit, and F-Droid builds it. Nothing needs
 # resubmitting per release.
 #
-# android/fdroid/check.sh runs this recipe the way F-Droid does (lint,
-# checkupdates, build) after every mobile-v* release — see
-# .github/workflows/android-fdroid.yml.
+# fdroid-v* tags are made by CI, not by hand: after each mobile-vX.Y.Z
+# release, .github/workflows/android-fdroid.yml stamps X.Y.Z into
+# android/version.properties on a commit over the tagged one, runs this
+# recipe the way F-Droid does (android/fdroid/check.sh: lint, checkupdates,
+# build), and only then tags that commit fdroid-vX.Y.Z.
 #
 # The store listing (title, descriptions, icon, changelogs) is not in this
 # file: fdroidserver reads it from android/fastlane/metadata/android/.
@@ -17,7 +19,7 @@
 # comes from android/version.properties and the Go toolchain from go.mod.
 #
 # mobile-v0.0.3 and earlier predate the LICENSE and the skywireFdroid switch,
-# so the first build is mobile-v0.0.4.
+# so the first build is fdroid-v0.0.4, made by the mobile-v0.0.4 release.
 
 Categories:
   - Connectivity
@@ -37,7 +39,7 @@ Repo: https://github.com/skycoin/skywire.git
 Builds:
   - versionName: 0.0.4
     versionCode: 4
-    commit: mobile-v0.0.4
+    commit: fdroid-v0.0.4
     subdir: android/app
     sudo:
       - apt-get update
@@ -68,7 +70,7 @@ Builds:
       - ANDROID_NDK_HOME=$$NDK$$ make android-mobile-ndk
 
 AutoUpdateMode: Version
-UpdateCheckMode: Tags ^mobile-v[0-9]+\.[0-9]+\.[0-9]+$
+UpdateCheckMode: Tags ^fdroid-v[0-9]+\.[0-9]+\.[0-9]+$
 UpdateCheckData: android/version.properties|(?m)^versionCode=(\d+)$|android/version.properties|(?m)^versionName=(\S+)$
 CurrentVersion: 0.0.4
 CurrentVersionCode: 4

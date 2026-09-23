@@ -326,18 +326,15 @@ Progress log: [implementation-report.md](implementation-report.md).
 
 ## Releasing
 
-1. Bump `android/version.properties`: `versionName=X.Y.Z` and
-   `versionCode=X*10000 + Y*100 + Z`. Merge it.
-2. Tag the merged commit `mobile-vX.Y.Z` and push the tag.
+Tag the commit `mobile-vX.Y.Z` and push the tag. That is the whole release,
+F-Droid included.
 
-The tag starts `.github/workflows/android-release.yml`. It refuses a tag that
-does not match `version.properties`, publishes the signed APK and AAB to GitHub
-Releases, and then runs the F-Droid check (`android-fdroid.yml`) on that tag.
-
-F-Droid needs nothing per release. Its update bot finds the new tag, reads
-`version.properties` there, and adds the build to fdroiddata by itself, using
-the recipe in `fdroid/com.skycoin.skywire.yml`. The F-Droid check publishes
-nothing; it tells us whether F-Droid's run of the same tag will work.
+The tag starts `.github/workflows/android-release.yml`, which publishes the
+signed APK and AAB to GitHub Releases. Then `android-fdroid.yml` writes X.Y.Z
+into `version.properties` on a commit over the tag, builds it the way F-Droid
+will (lint, update bot, build), and if that passes tags it `fdroid-vX.Y.Z`.
+F-Droid's update bot watches `fdroid-v*` tags and publishes each one by
+itself, using the recipe in `fdroid/com.skycoin.skywire.yml`.
 
 ## License
 

@@ -7,11 +7,10 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// The version of record is android/version.properties, which is what a local
-// `./gradlew assembleDebug` and the F-Droid build use. The release workflow
-// passes the `mobile-vX.Y.Z` tag's version as properties through
-// `make android-apk`, after checking the tag against that file — see
-// .github/workflows/android-release.yml.
+// A local `./gradlew assembleDebug` and the F-Droid build take the version from
+// android/version.properties, which CI stamps for F-Droid (see that file).
+// The release workflow passes the `mobile-vX.Y.Z` tag's version as properties
+// through `make android-apk` — see .github/workflows/android-release.yml.
 val versionFile = Properties().apply {
     rootProject.file("version.properties").inputStream().use { load(it) }
 }
