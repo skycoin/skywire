@@ -411,6 +411,16 @@ type MuxRouteGroupInfo struct {
 	// tunnel, its AUDITION age: how long it has been held open and measured
 	// without carrying a stream.
 	AgeMS float64 `json:"age_ms,omitempty"`
+	// Shape is the SESSION's measured multiplexing shape: every ACTIVE tunnel
+	// this app holds to this exit with its live leg count — "2x2" is two
+	// tunnels of two legs, "4x1" pure stream level, "1x4" pure packet level.
+	// ShapeTarget is the shape it is being held at, ShapeSource whether that
+	// came from the auto rule (tunnel.count x pool.active_width) or from the
+	// mux.shape knob. Advisory: reported, not yet converged toward. Empty on
+	// a standby tunnel and on every accept-side group.
+	Shape       string `json:"shape,omitempty"`
+	ShapeTarget string `json:"shape_target,omitempty"`
+	ShapeSource string `json:"shape_source,omitempty"`
 }
 
 // MuxLegInfo is one route in a mux'd group.
