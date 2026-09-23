@@ -53,6 +53,10 @@ const (
 	// the numeric map (see SetList/Strings) rather than inside it; a list knob
 	// is visor-wide only, with no per-app override.
 	KindList Kind = "list"
+	// KindString is a free-form TEXT value with a grammar of its own (mux.shape:
+	// auto | <k>x<n> | n1,n2,…), refused by the knob's Validate func rather than
+	// by a numeric floor. Its int64 payload is unused; see stringknob.go.
+	KindString Kind = "string"
 )
 
 // Def is a knob's static description: everything a caller needs to parse a
@@ -71,7 +75,11 @@ type Def struct {
 	// a fraction that must stay inside (min, max), such as a hysteresis margin
 	// that could never be cleared at 1.
 	MaxRatio float64 `json:"-"`
-	Doc      string  `json:"doc,omitempty"`
+	// DefaultText is the compiled default of a KindString knob, and Validate
+	// its grammar — run on every set, and on the default at registration.
+	DefaultText string             `json:"-"`
+	Validate    func(string) error `json:"-"`
+	Doc         string             `json:"doc,omitempty"`
 }
 
 // Knob is one registered setting. Callers hold the pointer (obtained once at
@@ -91,6 +99,9 @@ type Knob struct {
 	// nil and empty mean the same thing (the knob's default, which for every
 	// list knob is "no entries" — a filter that filters nothing).
 	list atomic.Pointer[[]string]
+	// str is the payload of a KindString knob: the text currently in force.
+	// nil means the knob is unset and reads its def.DefaultText.
+	str atomic.Pointer[string]
 }
 
 // Name is the knob's catalog name.
@@ -250,6 +261,9 @@ type View struct {
 	app  string
 	ver  uint64
 	vals []int64
+	// texts is the resolved value of every KindString knob, by knob index;
+	// empty for a knob of any other kind.
+	texts []string
 }
 
 // App is the app name the view resolves for; "" is the visor-wide view.
@@ -309,14 +323,24 @@ func Resolve(app string) *View {
 	if v, ok := views[app]; ok {
 		return v
 	}
-	v := &View{app: app, ver: version.Load(), vals: make([]int64, len(order))}
+	v := &View{app: app, ver: version.Load(), vals: make([]int64, len(order)), texts: make([]string, len(order))}
 	for i, k := range order {
 		v.vals[i] = k.cur.Load()
+		if k.def.Kind == KindString {
+			v.texts[i] = k.Text()
+		}
 	}
 	if ov := appVals[app]; app != "" && ov != nil {
 		for name, val := range ov {
 			if k := byName[name]; k != nil {
 				v.vals[k.idx] = val
+			}
+		}
+	}
+	if ov := appText[app]; app != "" && ov != nil {
+		for name, val := range ov {
+			if k := byName[name]; k != nil {
+				v.texts[k.idx] = val
 			}
 		}
 	}
@@ -404,8 +428,13 @@ func SetValue(name string, v int64) error {
 
 // Set parses raw for the named knob and installs it visor-wide.
 func Set(name, raw string) error {
-	if k := Lookup(name); k != nil && k.def.Kind == KindList {
-		return SetList(name, raw)
+	if k := Lookup(name); k != nil {
+		switch k.def.Kind {
+		case KindList:
+			return SetList(name, raw)
+		case KindString:
+			return SetText(name, raw)
+		}
 	}
 	v, err := Parse(name, raw)
 	if err != nil {
@@ -456,8 +485,13 @@ func SetApp(app, name, raw string) error {
 	if app == "" {
 		return Set(name, raw)
 	}
-	if k := Lookup(name); k != nil && k.def.Kind == KindList {
-		return fmt.Errorf("%s: list knobs are visor-wide only", name)
+	if k := Lookup(name); k != nil {
+		switch k.def.Kind {
+		case KindList:
+			return fmt.Errorf("%s: list knobs are visor-wide only", name)
+		case KindString:
+			return setAppText(app, name, raw)
+		}
 	}
 	v, err := Parse(name, raw)
 	if err != nil {
@@ -491,8 +525,12 @@ func Reset() {
 		if k.def.Kind == KindList {
 			k.list.Store(nil)
 		}
+		if k.def.Kind == KindString {
+			k.str.Store(nil)
+		}
 	}
 	appVals = map[string]map[string]int64{}
+	appText = map[string]map[string]string{}
 	bump()
 }
 
@@ -506,6 +544,7 @@ func ResetApp(app string) {
 	mu.Lock()
 	defer mu.Unlock()
 	delete(appVals, app)
+	delete(appText, app)
 	bump()
 }
 
@@ -584,6 +623,10 @@ func Snapshot() []Entry {
 			// default int64 payload (0) formatted as a list would be misread.
 			defStr = ""
 		}
+		if k.def.Kind == KindString {
+			// Same for a string knob: its default is text, not the payload.
+			defStr = k.def.DefaultText
+		}
 		out = append(out, Entry{
 			Def:        k.def,
 			Value:      v,
@@ -621,6 +664,18 @@ func AppOverrides() map[string]map[string]string {
 			if k := byName[name]; k != nil {
 				m[name] = FormatKnob(k, v)
 			}
+		}
+		if len(m) > 0 {
+			out[app] = m
+		}
+	}
+	for app, vals := range appText {
+		m := out[app]
+		if m == nil {
+			m = map[string]string{}
+		}
+		for name, v := range vals {
+			m[name] = v
 		}
 		if len(m) > 0 {
 			out[app] = m
@@ -683,6 +738,15 @@ func Parse(name, raw string) (int64, error) {
 		return 0, fmt.Errorf("unknown setting %q", name)
 	}
 	raw = strings.TrimSpace(raw)
+	if k.def.Kind == KindString {
+		// A string knob's payload is not an int64 either. Parse runs the knob's
+		// OWN validator, so a caller that validates before applying (the CLI)
+		// reports the grammar error; the value itself goes in through SetText.
+		if _, err := validateText(k, raw); err != nil {
+			return 0, err
+		}
+		return 0, nil
+	}
 	if k.def.Kind == KindList {
 		// A list knob's payload is not an int64, and its default is the EMPTY
 		// list, so "" is a valid value here (the round-trip of every default
@@ -728,10 +792,10 @@ func Parse(name, raw string) (int64, error) {
 			return 0, fmt.Errorf("%s: %w", name, err)
 		}
 		v = RatioBits(f)
-	case KindList:
-		// A list knob's payload is not an int64; Parse exists here only so a
-		// caller that validates before applying (the CLI) does not choke on
-		// its kind. The actual value is installed by Set/SetList.
+	case KindList, KindString:
+		// Neither payload is an int64; Parse exists here only so a caller that
+		// validates before applying (the CLI) does not choke on the kind. The
+		// actual value is installed by Set/SetList/SetText.
 		return 0, nil
 	default:
 		return 0, fmt.Errorf("%s: unhandled kind %q", name, k.def.Kind)
@@ -755,6 +819,9 @@ func Format(name string, v int64) string {
 func FormatKnob(k *Knob, v int64) string {
 	if k.def.Kind == KindList {
 		return strings.Join(k.Strings(), ",")
+	}
+	if k.def.Kind == KindString {
+		return k.Text()
 	}
 	switch k.def.Kind {
 	case KindDuration:

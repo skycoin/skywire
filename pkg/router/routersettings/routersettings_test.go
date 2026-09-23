@@ -62,6 +62,12 @@ func bumpedValue(t *testing.T, k *Knob) string {
 	case KindList:
 		// The default is the empty list; any tokens differ from it.
 		return "aa,bb"
+	case KindString:
+		// A string knob's legal values are its own grammar's, so there is no
+		// generic bump: mux.shape is the only one, and "2x2" differs from its
+		// "auto" default. A second string knob lands here and says so.
+		require.Equal(t, "mux.shape", d.Name, "a new string knob needs its own bumped value here")
+		return "2x2"
 	}
 	t.Fatalf("%s: unhandled kind %q", d.Name, d.Kind)
 	return ""
