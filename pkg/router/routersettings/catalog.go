@@ -189,6 +189,15 @@ var (
 	// (docs/design/mux-shape-axis.md I8).
 	MuxShapeHold = RegisterBool("mux.shape_hold", false,
 		"hold the shape converger still: no compose, decompose, promote or park toward mux.shape while set; the visor sets it for an app whose pool.freeze or tunnel.freeze_active is on")
+	// ShapeRetryBackoff is how long the converger leaves a CHAIN alone after a
+	// re-home or a split of it went unacknowledged. Without it the converger
+	// retried the same dead leg every arbiter tick, and because a split
+	// quiesces its leg for the whole leg.rehome_ack_timeout first, the tunnel
+	// stopped striping over that chain for five seconds out of every five —
+	// measured live as a 30 MB download taking 527 s. The backoff DOUBLES per
+	// unanswered move, up to twenty times this base.
+	ShapeRetryBackoff = RegisterMin("shape.retry_backoff", KindDuration, int64(30*time.Second), int64(time.Second),
+		"how long the shape converger leaves a chain alone after a re-home or split of it went unacknowledged; doubles per failure up to 20x this")
 	// PoolComposeIdle is what makes the fail-over INSTANT. Packet-level
 	// multiplexing exists for privacy and for surviving a leg cut, not for
 	// throughput — and a second leg that is only taken once the load latches

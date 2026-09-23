@@ -2,6 +2,7 @@ package router
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -55,44 +56,111 @@ func TestParseShapeRejectsZeroLegs(t *testing.T) {
 }
 
 // The measured shape counts ACTIVE tunnels and each one's ALIVE legs: a
-// standby tunnel is the pool rather than the shape, and a leg parked in warm
-// standby is held rather than spent.
+// standby TUNNEL is the pool rather than the shape, and a leg counts for as
+// long as its transport is open — including one the converger has quiesced for
+// a split's ack wait, which is a leg the tunnel still holds.
 func TestSessionShapeCountsTunnelsAndLegs(t *testing.T) {
 	src, _, err := cipher.GenerateDeterministicKeyPair([]byte("shape-src"))
 	require.NoError(t, err)
 	exit, _, err := cipher.GenerateDeterministicKeyPair([]byte("shape-exit"))
 	require.NoError(t, err)
 
+	// legs are given as (alive) flags.
 	mk := func(role string, legs ...bool) MuxInfo {
 		in := MuxInfo{
 			Desc:       routing.NewRouteDescriptor(src, exit, 49150, 3),
-			KnobApp:    "skysocks-client",
+			AppName:    "skysocks-client",
 			TunnelRole: role,
 		}
-		for _, standby := range legs {
-			in.Legs = append(in.Legs, MuxLeg{Standby: standby})
+		for _, alive := range legs {
+			in.Legs = append(in.Legs, MuxLeg{Alive: alive})
 		}
 		return in
 	}
 
 	// Two active tunnels of two live legs each, one standby pool tunnel: 2x2.
 	infos := []MuxInfo{
-		mk(tunnelRoleActive, false, false),
-		mk(tunnelRoleActive, false, false),
-		mk("standby", false),
+		mk(tunnelRoleActive, true, true),
+		mk(tunnelRoleActive, true, true),
+		mk("standby", true),
 	}
 	require.Equal(t, "2x2", sessionShape(infos).String())
 
-	// A leg parked in warm standby does not count; a tunnel never reads zero.
+	// A leg whose transport is gone does not count; a tunnel never reads zero.
 	infos = []MuxInfo{
-		mk(tunnelRoleActive, false, true),
-		mk(tunnelRoleActive, true, true),
-		mk(tunnelRoleActive, false, false, false),
+		mk(tunnelRoleActive, true, false),
+		mk(tunnelRoleActive, false, false),
+		mk(tunnelRoleActive, true, true, true),
 	}
 	require.Equal(t, "3,1,1", sessionShape(infos).String())
 
-	require.Equal(t, "", sessionShape([]MuxInfo{mk("standby", false)}).String())
+	// A leg the converger QUIESCED is still a leg: this is the 2026-09-23
+	// misreport, where a session holding 1,2,1,1 rendered as "4x1" because the
+	// leg waiting on a split ack was counted out from under it.
+	quiesced := mk(tunnelRoleActive, true, true)
+	quiesced.Legs[1].Standby = true
+	infos = []MuxInfo{
+		mk(tunnelRoleActive, true),
+		quiesced,
+		mk(tunnelRoleActive, true),
+		mk(tunnelRoleActive, true),
+	}
+	require.Equal(t, "2,1,1,1", sessionShape(infos).String())
+
+	require.Equal(t, "", sessionShape([]MuxInfo{mk("standby", true)}).String())
 	require.Equal(t, "", sessionShape(nil).String())
+}
+
+// The header a 1,2,1,1 session renders — the second half of the 2026-09-23
+// misreport. `proxy mux info` read "shape=4x1(mux.shape)" while the converger
+// was still trying to split that second leg back out, because the two ends of
+// the fence counted legs differently. Every ACTIVE tunnel of the session must
+// carry the canonical "2,1,1,1", and the move history must come with it.
+func TestApplySessionShapesRendersAQuiescedLeg(t *testing.T) {
+	src, _, err := cipher.GenerateDeterministicKeyPair([]byte("shape-src"))
+	require.NoError(t, err)
+	exit, _, err := cipher.GenerateDeterministicKeyPair([]byte("shape-exit"))
+	require.NoError(t, err)
+
+	mk := func(legs ...bool) MuxInfo {
+		in := MuxInfo{
+			Desc:       routing.NewRouteDescriptor(src, exit, 49150, 3),
+			AppName:    "skysocks-client",
+			TunnelRole: tunnelRoleActive,
+		}
+		for _, standby := range legs {
+			in.Legs = append(in.Legs, MuxLeg{Alive: true, Standby: standby})
+		}
+		return in
+	}
+
+	// The converger records a move under the app that DIALED the tunnel. The
+	// header has to find it under the same key — it used to look under
+	// KnobApp, which is empty unless that app has a `route settings --app`
+	// override of its own, so last= and moves[] never printed at all.
+	key := shapeSession{app: "skysocks-client", exit: exit}
+	shapeMoves.note(key, MuxShapeMove{Move: MuxEventPoolLegReleased, From: "2,2", To: "2,1,1", Reason: "shape 2x2 -> 4x1", At: time.Now()})
+	t.Cleanup(func() {
+		shapeMoves.mu.Lock()
+		delete(shapeMoves.entries, key)
+		shapeMoves.mu.Unlock()
+	})
+
+	infos := []MuxInfo{mk(false), mk(false, true), mk(false), mk(false)}
+	in := make([]shapeInput, len(infos))
+	for i := range in {
+		in[i] = shapeInput{legTarget: 1, spec: "4x1"}
+	}
+	applySessionShapes(infos, in)
+
+	for i := range infos {
+		require.Equal(t, "2,1,1,1", infos[i].Shape, "tunnel %d must report the shape the session HAS", i)
+		require.Equal(t, "4x1", infos[i].ShapeTarget)
+		require.Equal(t, shapeSourceKnob, infos[i].ShapeSource)
+		require.NotNil(t, infos[i].LastMove, "tunnel %d must carry the session's last move", i)
+		require.Equal(t, MuxEventPoolLegReleased, infos[i].LastMove.Move)
+		require.Equal(t, uint64(1), infos[i].MoveCounts[MuxEventPoolLegReleased])
+	}
 }
 
 // The shape fields land on every ACTIVE tunnel of a session and nowhere else;
@@ -110,10 +178,14 @@ func TestApplySessionShapesReportsTargetAndSource(t *testing.T) {
 	mk := func(app string, exit cipher.PubKey, role string, legs int) MuxInfo {
 		in := MuxInfo{
 			Desc:       routing.NewRouteDescriptor(src, exit, 49150, 3),
+			AppName:    app,
 			KnobApp:    app,
 			TunnelRole: role,
 		}
 		in.Legs = make([]MuxLeg, legs)
+		for i := range in.Legs {
+			in.Legs[i].Alive = true
+		}
 		return in
 	}
 

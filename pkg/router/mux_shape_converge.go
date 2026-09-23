@@ -255,22 +255,32 @@ func (c *shapeConverge) move() bool {
 	case kCur < kTgt:
 		// Too few tunnels. Free a chain from an over-wide tunnel before
 		// reaching into the pool — that keeps I1's reserve intact and is the
-		// move 2x2 -> 4x1 needs twice over anyway.
-		if g := c.overWide(order); g != nil {
-			return c.decompose(g, from, "freeing a chain for the tunnel the target still wants")
+		// move 2x2 -> 4x1 needs twice over anyway. EVERY over-wide tunnel is
+		// offered, not just the first: a tunnel whose splittable legs are all
+		// inside their retry backoff must not hold the whole session still.
+		for _, g := range c.overWide(order) {
+			if c.decompose(g, from, "freeing a chain for the tunnel the target still wants") {
+				return true
+			}
 		}
 		return c.promote(from)
 
 	default:
 		// Right number of tunnels, wrong widths. Fix the first mismatch in
-		// widest-first order.
+		// widest-first order that can actually be fixed — a declined move
+		// falls through to the next mismatch rather than ending the tick,
+		// so one un-splittable leg does not stall the rest of the session.
 		for i, g := range order {
 			have, want := g.aliveLegCount(), c.target.Legs[i]
 			switch {
 			case have > want:
-				return c.decompose(g, from, fmt.Sprintf("tunnel :%d holds %d legs, the target wants %d", g.desc.SrcPort(), have, want))
+				if c.decompose(g, from, fmt.Sprintf("tunnel :%d holds %d legs, the target wants %d", g.desc.SrcPort(), have, want)) {
+					return true
+				}
 			case have < want:
-				return c.compose(g, from, fmt.Sprintf("tunnel :%d holds %d legs, the target wants %d", g.desc.SrcPort(), have, want))
+				if c.compose(g, from, fmt.Sprintf("tunnel :%d holds %d legs, the target wants %d", g.desc.SrcPort(), have, want)) {
+					return true
+				}
 			}
 		}
 	}
@@ -294,21 +304,22 @@ func (c *shapeConverge) parkVictim(order []*RouteGroup) *RouteGroup {
 	return victim
 }
 
-// overWide is the first tunnel holding more legs than any entry of the target
-// asks for — a chain that is certain to be wanted elsewhere.
-func (c *shapeConverge) overWide(order []*RouteGroup) *RouteGroup {
+// overWide is every tunnel holding more legs than any entry of the target asks
+// for — chains that are certain to be wanted elsewhere, widest first.
+func (c *shapeConverge) overWide(order []*RouteGroup) []*RouteGroup {
 	max := 0
 	for _, n := range c.target.Legs {
 		if n > max {
 			max = n
 		}
 	}
+	out := make([]*RouteGroup, 0, len(order))
 	for _, g := range order {
 		if g.aliveLegCount() > max {
-			return g
+			out = append(out, g)
 		}
 	}
-	return nil
+	return out
 }
 
 // compose takes the best pooled chain and makes it a leg of g — the arbiter's
@@ -332,7 +343,21 @@ func (c *shapeConverge) compose(g *RouteGroup, from Shape, why string) bool {
 		c.blocked(from, fmt.Sprintf("taking it would leave %d standby and pool.min_standby=%d", len(cands)-1, min))
 		return false
 	}
+	// A chain whose last re-home went unanswered is left alone for its backoff
+	// exactly as a leg is, and the next-best candidate is taken instead.
 	cand := cands[0]
+	picked := false
+	for _, x := range cands {
+		if !shapeRetries.backedOff(x.rg.firstLegTpID(), c.now) {
+			cand, picked = x, true
+			break
+		}
+	}
+	if !picked {
+		c.blocked(from, fmt.Sprintf("all %d takeable chains are inside their retry backoff", len(cands)))
+		return false
+	}
+	tp := cand.rg.firstLegTpID()
 	how := "re-homed in place"
 	err := rehomeChain(g, cand.rg)
 	if (errors.Is(err, ErrRehomeUnsupported) || errors.Is(err, ErrRehomeNoAck)) && c.grow != nil {
@@ -340,10 +365,18 @@ func (c *shapeConverge) compose(g *RouteGroup, from Shape, why string) bool {
 		err = c.grow(g, cand.rg, heldFirstHopIDs(sibling))
 	}
 	if err != nil {
+		if errors.Is(err, ErrRehomeNoAck) || errors.Is(err, ErrRehomeUnsupported) {
+			step := shapeRetries.fail(tp, c.now, g.knDur(routersettings.ShapeRetryBackoff))
+			g.logger.WithError(err).WithField("tp_id", tp).
+				Infof("Shape %s -> %s deferred: standby :%d did not ack its re-home into tunnel :%d; not retrying that chain until %s (%v)",
+					from, c.target, cand.plan.port, g.desc.SrcPort(), c.now.Add(step).Format(time.RFC3339), step)
+			return false
+		}
 		g.logger.WithError(err).Debugf("Shape: could not take the chain of :%d", cand.plan.port)
 		c.blocked(from, fmt.Sprintf("the chain of standby :%d could not be taken: %v", cand.plan.port, err))
 		return false
 	}
+	shapeRetries.ok(tp)
 	reason := fmt.Sprintf("shape %s -> %s: %s", from, c.target, why)
 	g.notePoolLegTaken(cand, c.now, reason, how)
 	c.done(MuxEventPoolLegTaken, from, reason+fmt.Sprintf("; standby :%d became a leg of tunnel :%d (%s)",
@@ -359,18 +392,45 @@ func (c *shapeConverge) decompose(g *RouteGroup, from Shape, why string) bool {
 		c.blocked(from, "leg.split_on_release is off, and a shape move never closes a chain (I4)")
 		return false
 	}
-	idx := g.lastAliveLegIndex()
-	if idx < 1 { // I6: the first leg IS the tunnel
-		c.blocked(from, "the tunnel holds one leg and a tunnel never reaches zero (I6)")
+	if g.shapeBusy(c.now) {
+		// splitLeg QUIESCES the leg before it tells the exit and holds it
+		// there for leg.rehome_ack_timeout. On a tunnel that is carrying, that
+		// is the download stopping striping over a quarter of its chains for
+		// five seconds of every tick — the 2026-09-23 collapse. A loaded
+		// tunnel keeps the shape it has until its load episode ends.
+		c.blocked(from, fmt.Sprintf("tunnel :%d is carrying and the split's ack wait would park one of its legs (I7)", g.desc.SrcPort()))
 		return false
 	}
+	leg, held, ok := splitCandidate(g, c.now)
+	if !ok {
+		if held > 0 {
+			c.blocked(from, fmt.Sprintf("all %d splittable legs of tunnel :%d are inside their retry backoff", held, g.desc.SrcPort()))
+		} else { // I6: the first leg IS the tunnel
+			c.blocked(from, "the tunnel holds one leg and a tunnel never reaches zero (I6)")
+		}
+		return false
+	}
+	idx := leg.idx
 	reason := fmt.Sprintf("shape %s -> %s: %s", from, c.target, why)
 	ns, err := g.splitLeg(idx, reason)
 	if err != nil {
+		if errors.Is(err, ErrRehomeNoAck) || errors.Is(err, ErrRehomeUnsupported) {
+			// Not a transient: the hop dropping the request will still be
+			// dropping it next tick. Remember the CHAIN, back off, and say so
+			// ONCE per backoff step at Info — the line an operator watching a
+			// shape that will not converge needs, and the only one they get
+			// until the backoff expires.
+			step := shapeRetries.fail(leg.tp, c.now, g.knDur(routersettings.ShapeRetryBackoff))
+			g.logger.WithError(err).WithField("tp_id", leg.tp).
+				Infof("Shape %s -> %s deferred: the %s leg %d of tunnel :%d did not ack its split; not retrying that chain until %s (%v)",
+					from, c.target, shapeLegHint(leg), idx, g.desc.SrcPort(), c.now.Add(step).Format(time.RFC3339), step)
+			return false
+		}
 		g.logger.WithError(err).Debugf("Shape: leg %d of :%d could not be split back out", idx, g.desc.SrcPort())
 		c.blocked(from, fmt.Sprintf("leg %d of tunnel :%d could not be split back out: %v", idx, g.desc.SrcPort(), err))
 		return false
 	}
+	shapeRetries.ok(leg.tp)
 	g.noteMuxEvent(MuxEvent{
 		Event: MuxEventPoolLegReleased, By: MuxByLocal, LegIndex: idx, Legs: g.legCount(),
 		Reason: reason + fmt.Sprintf("; split back out as standby :%d, transport kept", ns.desc.SrcPort()),
@@ -447,20 +507,6 @@ func (c *shapeConverge) blocked(from Shape, why string) {
 	if len(c.active) > 0 {
 		c.active[0].logger.Debugf("Shape %s -> %s deferred; %s", from, c.target, why)
 	}
-}
-
-// lastAliveLegIndex is the index of the group's highest live leg — the one a
-// decompose gives back. -1 when the group has no leg above its first.
-func (rg *RouteGroup) lastAliveLegIndex() int {
-	rg.mu.Lock()
-	defer rg.mu.Unlock()
-	idx := -1
-	for i, tp := range rg.tps {
-		if tp != nil && !tp.IsClosed() {
-			idx = i
-		}
-	}
-	return idx
 }
 
 // shapeBusy is the router's view of I7 — "this tunnel is carrying". The app

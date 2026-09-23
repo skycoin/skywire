@@ -703,6 +703,10 @@ type MuxInfo struct {
 	// inverse-multiplexer path, network.EncryptConn bypassed). False means the
 	// group runs the classic stream-noise wrap.
 	PerFrameNoise bool
+	// AppName is the app that DIALED this route group — the key its session's
+	// shape and move history are held under. Distinct from KnobApp below,
+	// which is only ever set when that app has an override of its own.
+	AppName string
 	// KnobApp names the app whose `route settings --app <name>` override set this
 	// group resolved against; empty means it runs the visor-wide values. It is
 	// how a paired subject/reference run proves the two clients really did get
@@ -925,6 +929,7 @@ type MuxLeg struct {
 // counters paired with each leg's transport identity.
 func (rg *RouteGroup) MuxStats() MuxInfo {
 	info := MuxInfo{Desc: rg.desc, Events: rg.ownEvents.lastN(rg.knInt(routersettings.MuxEventsPerGroup))}
+	info.AppName = rg.AppName()
 	info.KnobApp = rg.knobs().App()
 	rg.mu.Lock()
 	if rg.mux != nil {

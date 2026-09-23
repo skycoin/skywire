@@ -184,7 +184,10 @@ func (rg *RouteGroup) splitLeg(idx int, reason string) (*RouteGroup, error) {
 			WithField("first_hop", tp.Remote().String()).
 			WithField("direct", tp.Remote() == rg.desc.DstPK()).
 			WithField("route_id", fwd.NextRouteID()).
-			Debugf("Split: no ack within %s; compare leg_splits_forwarded on the first hop", legRehomeAckTimeout())
+			// Info, not Debug: this is the line that names WHICH chain went
+			// unanswered, and it is what the shape converger's backoff and the
+			// arbiter's leg_release interval are each pacing — never per tick.
+			Infof("Split: no ack within %s; compare leg_splits_forwarded on the first hop", legRehomeAckTimeout())
 		return nil, fmt.Errorf("%w: no split ack from %s within %s; the leg is left where it was",
 			ErrRehomeNoAck, rg.desc.DstPK(), legRehomeAckTimeout())
 	}

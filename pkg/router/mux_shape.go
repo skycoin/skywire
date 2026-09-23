@@ -139,14 +139,17 @@ func sessionShape(infos []MuxInfo) Shape {
 	return newShape(legs)
 }
 
-// aliveLegs counts the legs of one tunnel that are carrying. A leg parked in
-// warm standby is held, not spent, so it is not part of the shape; a group
-// with no leg detail at all still counts as one, since a tunnel never has
-// zero legs.
+// aliveLegs counts the legs of one tunnel the way the CONVERGER counts them
+// (aliveLegCount): a leg is a leg for as long as its transport is open. The two
+// counts have to agree — a leg the converger QUIESCES for the few seconds of a
+// split's ack wait is still a chain the tunnel holds, and counting it out made
+// a session holding 1,2,1,1 render as "4x1" while the converger was still
+// trying to move it. A group with no leg detail at all still counts as one,
+// since a tunnel never has zero legs.
 func aliveLegs(in MuxInfo) int {
 	n := 0
 	for _, l := range in.Legs {
-		if !l.Standby {
+		if l.Alive {
 			n++
 		}
 	}
@@ -177,7 +180,13 @@ func applySessionShapes(infos []MuxInfo, in []shapeInput) {
 		if infos[i].TunnelRole != tunnelRoleActive {
 			continue
 		}
-		key := shapeSession{app: infos[i].KnobApp, exit: infos[i].Desc.DstPK()}
+		// The session is keyed by the app that DIALED the tunnel, which is the
+		// key shapeStep's ledger writes under. KnobApp is a different thing —
+		// it is empty unless `route settings --app` set an override for that
+		// app — so keying on it both merged two apps' tunnels into one session
+		// and missed every move the converger had recorded, which is why
+		// `proxy mux info` never printed last= or moves[].
+		key := shapeSession{app: infos[i].AppName, exit: infos[i].Desc.DstPK()}
 		s := byKey[key]
 		if s == nil {
 			s = &session{spec: routersettings.ShapeAuto}
