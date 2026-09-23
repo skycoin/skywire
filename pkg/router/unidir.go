@@ -125,11 +125,6 @@ func flipPinString(mode byte) string {
 	}
 }
 
-// soleBlackHoleExemptRecvFloor is the per-tick GROUP recv above which a
-// directional group's sole ACTIVE (light-direction) leg is exempt from the
-// sole-leg black-hole reaping.
-const soleBlackHoleExemptRecvFloor = 16 * 1024
-
 // soleLegBlackHoleExempt reports whether the sole-leg black-hole reaping should
 // be SKIPPED this tick. Under unidirectional assignment the sole active leg
 // carries only ONE direction — on a download it is the light FORWARD (upload)
@@ -137,10 +132,11 @@ const soleBlackHoleExemptRecvFloor = 16 * 1024
 // REVERSE (send-standby) mux legs. Judging that leg by its own recv would misread
 // it as a black-hole and prune the direct leg exactly when unidir is working. So
 // skip the reaping when directional AND the GROUP is receiving data on its
-// reverse legs (aggregate recv delta above the floor) — the group is not
-// black-holing even though the sole active leg is quiet on the receive side.
+// reverse legs (aggregate recv delta above unidir.sole_blackhole_exempt_recv_floor)
+// — the group is not black-holing even though the sole active leg is quiet on
+// the receive side.
 func soleLegBlackHoleExempt(directional bool, aggRecvDelta uint64) bool {
-	return directional && aggRecvDelta > soleBlackHoleExemptRecvFloor
+	return directional && aggRecvDelta > uint64(routersettings.UnidirSoleBlackHoleExemptRecvFloor.Bytes()) //nolint:gosec
 }
 
 // dirConfig snapshots the directional state under legMu so the send path reads it

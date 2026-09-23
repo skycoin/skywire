@@ -6,6 +6,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 )
 
 // pkFromHex parses a hex public key or fails the test.
@@ -86,19 +87,20 @@ func TestLegIsDirect(t *testing.T) {
 // exempts its sole light-direction leg from black-hole reaping; a non-directional
 // group, or a directional group with no group recv, is not exempt.
 func TestSoleLegBlackHoleExempt(t *testing.T) {
+	floor := uint64(routersettings.UnidirSoleBlackHoleExemptRecvFloor.Bytes()) //nolint:gosec
 	// directional + group receiving (aggDelta above floor) → exempt.
-	if !soleLegBlackHoleExempt(true, soleBlackHoleExemptRecvFloor+1) {
+	if !soleLegBlackHoleExempt(true, floor+1) {
 		t.Fatal("directional group with healthy recv should be exempt")
 	}
 	// directional but group NOT receiving (idle) → not exempt (a real black-hole).
 	if soleLegBlackHoleExempt(true, 0) {
 		t.Fatal("directional group with no recv should NOT be exempt")
 	}
-	if soleLegBlackHoleExempt(true, soleBlackHoleExemptRecvFloor) {
+	if soleLegBlackHoleExempt(true, floor) {
 		t.Fatal("recv exactly at the floor should NOT be exempt (strictly above)")
 	}
 	// non-directional group → never exempt (old behavior unchanged).
-	if soleLegBlackHoleExempt(false, 10*soleBlackHoleExemptRecvFloor) {
+	if soleLegBlackHoleExempt(false, 10*floor) {
 		t.Fatal("non-directional group must never be exempt")
 	}
 }

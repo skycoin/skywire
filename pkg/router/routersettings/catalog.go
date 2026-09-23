@@ -35,6 +35,7 @@ var (
 	LegSoleBlackHoleTicks     = RegisterMin("leg.sole_blackhole_ticks", KindCount, 3, 1, "consecutive data-progress intervals a sole leg must deliver nothing before a replacement is dialed")
 	LegStateResyncInterval    = RegisterMin("leg.state_resync_interval", KindDuration, int64(7*time.Second), int64(time.Second), "how often the active-set side re-asserts its COMPLETE standby/active set to the peer (CapLegState)")
 	LegParkMinHold            = RegisterMin("leg.park_min_hold", KindDuration, int64(30*time.Second), int64(time.Second), "how long an adaptive park holds before a leg may be re-admitted")
+	LegRehomeAckTimeout       = RegisterMin("leg.rehome_ack_timeout", KindDuration, int64(5*time.Second), int64(100*time.Millisecond), "how long a leg re-home waits for the exit's ack before both groups are left intact")
 
 	// Idle suspension of the service loops that cannot act on a quiet or
 	// single-leg group (service_gate.go). The three loops it parks tick at 10,
@@ -146,6 +147,12 @@ var (
 	UnidirFanoutRelease = RegisterMin("unidir.fanout_release", KindDuration, int64(2*time.Second), int64(100*time.Millisecond), "how long without a full FORWARD send window before the fan-out is released and the upload returns to its single leg")
 	UnidirFanoutMaxSkew = RegisterRatio("unidir.fanout_max_skew", 2.0, 1.0, "the most a sibling leg's latency may exceed the confined FORWARD leg's before it is too skewed to carry upload overflow")
 
+	// The sole-leg black-hole reaping's unidirectional exemption (unidir.go
+	// soleLegBlackHoleExempt). A directional group's sole ACTIVE leg carries
+	// only one direction, so it is judged by the GROUP's aggregate receive
+	// instead of its own.
+	UnidirSoleBlackHoleExemptRecvFloor = RegisterMin("unidir.sole_blackhole_exempt_recv_floor", KindBytes, 16*1024, 1, "per-tick GROUP recv above which a directional group's sole active leg is exempt from the sole-leg black-hole reaping")
+
 	// The standby-POOL arbiter (pool_arbiter.go). A pooled tunnel is a stream
 	// reserve AND a mux leg for whichever active tunnel is loaded; these three
 	// bound how fast it may be spent and how long a spent one is held.
@@ -164,6 +171,16 @@ var (
 	// exit already holds is not offered as a leg plan — a second route ID over
 	// the same chain aggregates nothing and the exit pays for both.
 	PoolAllowDuplicateRoute = RegisterBool("pool.allow_duplicate_route", false, "offer a pooled tunnel as a leg plan even when a sibling tunnel already holds the same hop path")
+
+	// The pool-sourced leg plan's candidate filter (pool_legs.go
+	// standbyPoolPlans). Applied to each standby sibling's route before it can
+	// become an aux-leg plan; a plan failing any of the three is skipped, not
+	// ranked. All three default to "admit everything", so an unset visor's
+	// plan selection is unchanged.
+	PoolPlanSeedCap = RegisterMin("pool.plan_seed_cap", KindCount, 16, 1, "how many standby siblings' routes are offered to the warm-route pool in one seed")
+	PoolMaxHops     = RegisterZeroable("pool.max_hops", KindCount, 0, "ceiling on a pool leg plan's hop count; a longer route is skipped (0 = any)")
+	PoolTpTypes     = RegisterList("pool.tp_types", "transport types a pool leg plan's FIRST HOP must have, e.g. stcpr,sudph (comma-separated; empty = any type)")
+	PoolExcludePKs  = RegisterList("pool.exclude_pks", "public keys a pool leg plan must not touch, as a first hop or an intermediate (comma-separated FULL keys; empty = no exclusion)")
 
 	// FORWARD-direction confinement (route_mux.go selectConfinedForward).
 	ForwardSpill         = RegisterBool("forward.spill", false, "let a FORWARD frame leave its confined leg when that leg is at its send window; off means the writer waits")

@@ -92,6 +92,9 @@ const (
 	TunnelDepthMargin      = "tunnel.depth_margin"
 	TunnelCount            = "tunnel.count"
 	TunnelGroupDialCeiling = "tunnel.group_dial_ceiling"
+	TunnelRTTMinWindow     = "tunnel.rtt_min_window"
+	TunnelRTTSamplesCap    = "tunnel.rtt_samples_cap"
+	TunnelFreezeActive     = "tunnel.freeze_active"
 
 	MuxCap   = "mux.cap"
 	MuxWidth = "mux.width"
@@ -307,6 +310,13 @@ func init() {
 	// and is not bounded by this; nor is an explicit --routed.
 	register(TunnelGroupDialCeiling, KindDuration, int64(20*time.Second),
 		"how long the first tunnel may spend forming a route group before the dial decays to a direct session")
+
+	register(TunnelRTTMinWindow, KindDuration, int64(30*time.Second),
+		"how far back the promoter's minimum-RTT statistic looks; matches tunnel.park_min_hold so a tunnel must look worse for at least as long as a park lasts before one is taken")
+	register(TunnelRTTSamplesCap, KindCount, 64,
+		"most raw ping samples kept per tunnel in the minimum-RTT window")
+	register(TunnelFreezeActive, KindBool, boolVal(false),
+		"hold the ACTIVE set's membership still: the promoter makes no discretionary promotion or park. A dead active tunnel is still failed over, and pool.freeze's own hold (which also stops the pool filling or shrinking) is independent of this one")
 
 	// Per-APP mux width. The visor-wide adaptive ceiling and floor
 	// (`proxy mux cap|width --visor-wide`) remain the default for every app
