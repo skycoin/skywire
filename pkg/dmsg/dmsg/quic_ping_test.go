@@ -5,6 +5,7 @@ package dmsg
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -75,4 +76,23 @@ func TestQUICSessionPing(t *testing.T) {
 
 	require.NoError(t, client.Close())
 	require.NoError(t, srv.Close())
+}
+
+// TestMeasuredRTTIsNeverZero pins why a successful ping cannot report 0s: 0 is
+// LastPing's "never measured". Windows' coarse monotonic clock measured a
+// loopback echo as exactly 0s, so this is checked here directly rather than
+// left to whichever runner happens to have that clock.
+func TestMeasuredRTTIsNeverZero(t *testing.T) {
+	rtt, err := measuredRTT(0, nil)
+	require.NoError(t, err)
+	require.Equal(t, minMeasuredRTT, rtt, "a round trip that happened took some time")
+
+	rtt, err = measuredRTT(5*time.Millisecond, nil)
+	require.NoError(t, err)
+	require.Equal(t, 5*time.Millisecond, rtt, "a real measurement is left alone")
+
+	failed := errors.New("ping failed")
+	rtt, err = measuredRTT(0, failed)
+	require.ErrorIs(t, err, failed)
+	require.Zero(t, rtt, "a failed ping measured nothing")
 }
