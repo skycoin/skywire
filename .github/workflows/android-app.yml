@@ -62,6 +62,15 @@ jobs:
       - name: Assemble debug APK
         run: cd android && ./gradlew --no-daemon :app:assembleDebug
 
+      # The release build type is the only one R8 shrinks, so without this a
+      # dependency bump that R8 cannot resolve (a missing class, a broken keep
+      # rule) first fails on the tag, in the middle of cutting a release.
+      # Unsigned: no keystore here, and signing is not what this checks. What
+      # R8 breaks at runtime — a path reached only by reflection — no build
+      # catches; that needs the release APK on a device.
+      - name: Assemble release APK (R8, unsigned)
+        run: cd android && ./gradlew --no-daemon :app:assembleRelease
+
       # Kept for triage: when a run fails on a device-only problem, having the
       # exact APK the job built beats rebuilding it locally and guessing.
       - name: Upload debug APK

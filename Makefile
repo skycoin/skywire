@@ -233,14 +233,19 @@ build-merged-cgo: ## Build with CGO optimization for faster DMSG handshakes (req
 # One binary: visor + cli `config` subtree + the 4 client apps (in-proc via the
 # launcher registry). The `mobile` tag strips the embedded desktop assets
 # (geoip db 30 MB, manager UI 6.8 MB, vendored browser wallet 11 MB, tpviz
-# legacy 2.8 MB). Output lands in the android project's jniLibs so Android
+# legacy 2.8 MB). `nomsgpack` is gin's own tag: it drops the ugorji msgpack
+# codec (2.8 MB of code, the biggest third-party package in the payload) — gin
+# is on the phone only for the log server and the rewards server, both JSON.
+# Output lands in the android project's jniLibs so Android
 # Studio picks it up directly. -checklinkname=0 is REQUIRED on GOOS=android:
 # the vendored wlynxg/anet uses //go:linkname into net (Go ≥1.23 blocks it).
 ANDROID_JNILIBS := android/app/src/main/jniLibs/arm64-v8a
-MOBILE_TAGS := mobile,withoutsystray
-# Size budget for the android payload, in bytes (80 MB). The CI lane fails
+MOBILE_TAGS := mobile,withoutsystray,nomsgpack
+# Size budget for the android payload, in bytes (70 MiB). The CI lane fails
 # over it so the lite variant can't silently rot or regain the stripped fat.
-ANDROID_MOBILE_MAX_BYTES := 83886080
+# It gates the pure-Go lane, which measured 68.8 MB (65.6 MiB) on 2026-09-23;
+# the NDK release lane is 6 MB smaller again (packed relocations).
+ANDROID_MOBILE_MAX_BYTES := 73400320
 
 # MOBILE_APPINFO stamps the same symbols as $(BUILDINFO) with the phone's own
 # version. It is listed AFTER $(BUILDINFO) on the ldflags line, and the linker
@@ -291,13 +296,18 @@ android-mobile-check: android-mobile ## CI lane: android-mobile + fail over the 
 		exit 1; \
 	fi
 
+# --pack-dyn-relocs=android: the payload is a PIE, and its 7 MB .rela table of
+# dynamic relocations packs into Android's compact format (−6 MB on disk,
+# −0.6 MB in the APK). bionic's linker reads it from API 23; minSdk is 26.
+# External linking only, so the pure-Go lane above can't take it — that lane
+# doesn't ship.
 android-mobile-ndk: check-mobile-version ## Release lane: NDK/cgo android build (DNS via bionic getaddrinfo); requires ANDROID_NDK_HOME
 	@set -e; \
 	test -n "$(ANDROID_NDK_HOME)" || { echo "ANDROID_NDK_HOME is not set"; exit 1; }; \
 	CC_BIN=$$(ls $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/*/bin/aarch64-linux-android26-clang 2>/dev/null | head -n1); \
 	test -n "$$CC_BIN" || { echo "aarch64-linux-android26-clang not found under ANDROID_NDK_HOME"; exit 1; }; \
 	mkdir -p $(ANDROID_JNILIBS); \
-	GOOS=android GOARCH=arm64 CGO_ENABLED=1 CC="$$CC_BIN" go build -tags $(MOBILE_TAGS) "-ldflags=$(BUILDINFO) $(MOBILE_APPINFO) -w -s -checklinkname=0" -mod=vendor -o $(ANDROID_JNILIBS)/libskywire-mobile.so ./cmd/skywire-mobile; \
+	GOOS=android GOARCH=arm64 CGO_ENABLED=1 CC="$$CC_BIN" go build -tags $(MOBILE_TAGS) "-ldflags=$(BUILDINFO) $(MOBILE_APPINFO) -w -s -checklinkname=0 -extldflags=-Wl,--pack-dyn-relocs=android" -mod=vendor -o $(ANDROID_JNILIBS)/libskywire-mobile.so ./cmd/skywire-mobile; \
 	ls -la $(ANDROID_JNILIBS)/libskywire-mobile.so
 
 # Android Studio's bundled JDK (gradle needs JDK 17+); override if yours differs.
