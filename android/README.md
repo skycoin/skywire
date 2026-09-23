@@ -336,6 +336,11 @@ will (lint, update bot, build), and if that passes tags it `fdroid-vX.Y.Z`.
 F-Droid's update bot watches `fdroid-v*` tags and publishes each one by
 itself, using the recipe in `fdroid/com.skycoin.skywire.yml`.
 
+If the F-Droid step fails, fix it on `develop` and run it again for the same
+tag: Actions → Android F-Droid → Run workflow, or
+`gh workflow run android-fdroid.yml -f tag=mobile-vX.Y.Z`. No new release is
+needed; the tag's source is built with `develop`'s script and recipe.
+
 ## License
 
 Part of Skywire, licensed under the [GNU Affero General Public License v3.0](../LICENSE)

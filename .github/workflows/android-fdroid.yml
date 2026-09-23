@@ -1,5 +1,5 @@
 # F-Droid lane, run by android-release.yml once a mobile-vX.Y.Z tag's GitHub
-# release is out. It has no trigger of its own.
+# release is out.
 #
 # F-Droid's update bot needs the version in a file inside the tag it builds
 # (it cannot compute our versionCode from a tag name), so this lane:
@@ -14,10 +14,32 @@
 # fdroid-v* tags are what the recipe (android/fdroid/com.skycoin.skywire.yml)
 # tells F-Droid's bot to watch, so F-Droid only ever sees a release this lane
 # already built. Publishing is F-Droid's: nothing here uploads anything.
+#
+# Run it by hand (Actions → Android F-Droid → Run workflow, or
+# `gh workflow run android-fdroid.yml -f tag=mobile-vX.Y.Z`) to redo this for
+# a tag that already has its release, e.g. after fixing this lane. The source
+# is the tag's; check.sh and the recipe are those of the branch it is run
+# from, so a fix does not need a new release.
 name: Android F-Droid
 
 on:
   workflow_call:
+    inputs:
+      tag:
+        description: mobile-vX.Y.Z tag; empty means the tag the caller runs for
+        required: false
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing mobile-vX.Y.Z tag to run the F-Droid lane for
+        required: true
+        type: string
+
+env:
+  # From the release: the tag it was pushed for. By hand: the input.
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   fdroid:
@@ -26,16 +48,29 @@ jobs:
     permissions:
       contents: write # the fdroid-v tag
     steps:
+      - name: Check the tag name
+        run: |
+          printf '%s' "$TAG" | grep -qE '^mobile-v[0-9]+\.[0-9]+\.[0-9]+$' \
+            || { echo "::error::'$TAG' is not mobile-vX.Y.Z"; exit 1; }
+
       - uses: actions/checkout@v7
         with:
+          ref: refs/tags/${{ env.TAG }}
           fetch-depth: 0
           fetch-tags: true
 
-      # The tag's shape was validated by the release job this one waits for.
+      # check.sh and the recipe from the commit this workflow runs from: the
+      # tag itself when the release calls it, the chosen branch by hand.
+      - name: Take check.sh and the recipe from ${{ github.ref_name }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/fdroid-ci"
+          git archive "$GITHUB_SHA" android/fdroid | tar -x -C "$RUNNER_TEMP/fdroid-ci"
+          ls "$RUNNER_TEMP/fdroid-ci/android/fdroid"
+
       - name: Stamp the tag's version into android/version.properties
         id: version
         run: |
-          raw="${GITHUB_REF_NAME#mobile-v}"
+          raw="${TAG#mobile-v}"
           major=${raw%%.*}; rest=${raw#*.}; minor=${rest%%.*}; patch=${rest#*.}
           code=$((major * 10000 + minor * 100 + patch))
           sed -i -e "s/^versionName=.*/versionName=$raw/" \
@@ -44,7 +79,7 @@ jobs:
           if ! git diff --quiet; then
             git -c user.name='github-actions[bot]' \
                 -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-                commit -q -am "android: version $raw for F-Droid (from ${GITHUB_REF_NAME})"
+                commit -q -am "android: version $raw for F-Droid (from $TAG)"
           fi
           echo "name=$raw" >> "$GITHUB_OUTPUT"
 
@@ -62,8 +97,10 @@ jobs:
           mkdir -p fdroid-out
           docker run --rm \
             -v "$PWD:/src" -v "$PWD/fdroid-out:/out" \
+            -v "$RUNNER_TEMP/fdroid-ci:/ci:ro" \
+            -e RECIPE=/ci/android/fdroid/com.skycoin.skywire.yml \
             registry.gitlab.com/fdroid/fdroidserver:buildserver-trixie \
-            bash /src/android/fdroid/check.sh
+            bash /ci/android/fdroid/check.sh
 
       - uses: actions/upload-artifact@v7
         with:
