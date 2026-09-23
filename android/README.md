@@ -323,3 +323,21 @@ android/
 ```
 
 Progress log: [implementation-report.md](implementation-report.md).
+
+## Releasing
+
+Tag the commit `mobile-vX.Y.Z` and push the tag. That is the whole release,
+F-Droid included.
+
+The tag starts `.github/workflows/android-release.yml`, which publishes the
+signed APK and AAB to GitHub Releases. Then `android-fdroid.yml` writes X.Y.Z
+into `version.properties` on a commit over the tag, builds it the way F-Droid
+will (lint, update bot, build), and if that passes tags it `fdroid-vX.Y.Z`.
+F-Droid's update bot watches `fdroid-v*` tags and publishes each one by
+itself, using the recipe in `fdroid/com.skycoin.skywire.yml`.
+
+## License
+
+Part of Skywire, licensed under the [GNU Affero General Public License v3.0](../LICENSE)
+(AGPL-3.0-only); a commercial license is also available — see
+[COMMERCIAL-LICENSE.md](../COMMERCIAL-LICENSE.md).

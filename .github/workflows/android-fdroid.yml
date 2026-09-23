@@ -1,0 +1,84 @@
+# F-Droid lane, run by android-release.yml once a mobile-vX.Y.Z tag's GitHub
+# release is out. It has no trigger of its own.
+#
+# F-Droid's update bot needs the version in a file inside the tag it builds
+# (it cannot compute our versionCode from a tag name), so this lane:
+#
+#   1. stamps X.Y.Z into android/version.properties with sed and commits that
+#      on top of the tagged commit — nothing is pushed to any branch;
+#   2. runs android/fdroid/check.sh on that commit: fdroid lint, fdroid
+#      checkupdates (the update bot) and fdroid build, in F-Droid's own build
+#      server image;
+#   3. only if all of that passed, pushes the tag fdroid-vX.Y.Z on that commit.
+#
+# fdroid-v* tags are what the recipe (android/fdroid/com.skycoin.skywire.yml)
+# tells F-Droid's bot to watch, so F-Droid only ever sees a release this lane
+# already built. Publishing is F-Droid's: nothing here uploads anything.
+name: Android F-Droid
+
+on:
+  workflow_call:
+
+jobs:
+  fdroid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write # the fdroid-v tag
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      # The tag's shape was validated by the release job this one waits for.
+      - name: Stamp the tag's version into android/version.properties
+        id: version
+        run: |
+          raw="${GITHUB_REF_NAME#mobile-v}"
+          major=${raw%%.*}; rest=${raw#*.}; minor=${rest%%.*}; patch=${rest#*.}
+          code=$((major * 10000 + minor * 100 + patch))
+          sed -i -e "s/^versionName=.*/versionName=$raw/" \
+                 -e "s/^versionCode=.*/versionCode=$code/" android/version.properties
+          grep -E '^version(Name|Code)=' android/version.properties
+          if ! git diff --quiet; then
+            git -c user.name='github-actions[bot]' \
+                -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+                commit -q -am "android: version $raw for F-Droid (from ${GITHUB_REF_NAME})"
+          fi
+          echo "name=$raw" >> "$GITHUB_OUTPUT"
+
+      # The build server image carries a full Android SDK, the NDK is
+      # downloaded on top, and the Go payload builds from a full clone. The
+      # runner's preinstalled toolchains are not used by any of it.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Lint, checkupdates, build (F-Droid build server image)
+        run: |
+          mkdir -p fdroid-out
+          docker run --rm \
+            -v "$PWD:/src" -v "$PWD/fdroid-out:/out" \
+            registry.gitlab.com/fdroid/fdroidserver:buildserver-trixie \
+            bash /src/android/fdroid/check.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fdroid-unsigned-apk
+          path: fdroid-out/*.apk
+          if-no-files-found: error
+
+      # Last, so a failure anywhere above means F-Droid never sees this
+      # release. A re-run finds the tag already there and leaves it.
+      - name: Tag fdroid-v${{ steps.version.outputs.name }} for F-Droid's update bot
+        run: |
+          tag="fdroid-v${{ steps.version.outputs.name }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists; leaving it"
+            exit 0
+          fi
+          git tag "$tag"
+          git push origin "refs/tags/$tag"

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     // No org.jetbrains.kotlin.android: Kotlin support is built into AGP ≥9.
@@ -5,19 +7,31 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// Version comes from the release tag when there is one, and from the
-// fallbacks below otherwise, so a local `./gradlew assembleDebug` needs no
-// arguments. The Android release workflow derives both from the
-// `mobile-vX.Y.Z` tag through `make android-apk` — see
-// .github/workflows/android-release.yml.
-val appVersionName = (project.findProperty("skywireVersionName") as String?) ?: "0.1.0"
-val appVersionCode = (project.findProperty("skywireVersionCode") as String?)?.toInt() ?: 1
+// A local `./gradlew assembleDebug` and the F-Droid build take the version from
+// android/version.properties, which CI stamps for F-Droid (see that file).
+// The release workflow passes the `mobile-vX.Y.Z` tag's version as properties
+// through `make android-apk` — see .github/workflows/android-release.yml.
+val versionFile = Properties().apply {
+    rootProject.file("version.properties").inputStream().use { load(it) }
+}
+val appVersionName = (project.findProperty("skywireVersionName") as String?)
+    ?: versionFile.getProperty("versionName")
+val appVersionCode = ((project.findProperty("skywireVersionCode") as String?)
+    ?: versionFile.getProperty("versionCode")).toInt()
 
 // Release signing is supplied by the environment, never committed. Absent
 // (every local build), `release` stays unsigned exactly as before; the
 // release workflow refuses to publish in that state rather than shipping an
 // APK nobody can install.
 val keystoreFile = System.getenv("ANDROID_KEYSTORE_FILE")
+
+// F-Droid builds the app itself, signs it with its own key and delivers the
+// updates, so the F-Droid build (`-PskywireFdroid=true`, set by its recipe in
+// android/fdroid/) carries no updater: AppUpdates is switched off through
+// BuildConfig.SELF_UPDATE and REQUEST_INSTALL_PACKAGES is stripped by the
+// overlay manifest in src/fdroid/. A property rather than a product flavor so
+// every task name and output path the Makefile and workflows use stays as is.
+val fdroid = project.findProperty("skywireFdroid") == "true"
 
 android {
     namespace = "com.skycoin.skywire"
@@ -31,6 +45,7 @@ android {
         versionCode = appVersionCode
         versionName = appVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("boolean", "SELF_UPDATE", (!fdroid).toString())
         ndk {
             // The Go payload (libskywire-mobile.so) is arm64-only.
             abiFilters += "arm64-v8a"
@@ -72,6 +87,15 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    if (fdroid) {
+        // A build-type manifest merges over src/main's, so it can remove what
+        // main declares. Both build types, so a debug build is the same app.
+        for (buildType in listOf("debug", "release")) {
+            sourceSets.getByName(buildType).manifest.srcFile("src/fdroid/AndroidManifest.xml")
+        }
     }
 
     // The in-app language picker can only offer what is installed. Play's App

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The F-Droid build's overlay, merged only when -PskywireFdroid=true (see
+     app/build.gradle.kts). F-Droid delivers the updates, so the app never
+     installs one itself and has no reason to ask for the right to. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.REQUEST_INSTALL_PACKAGES"
+        tools:node="remove" />
+</manifest>
