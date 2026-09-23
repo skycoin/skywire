@@ -319,20 +319,54 @@ type poolCandidate struct {
 	plan poolLegPlan
 }
 
+// noteHeldFirstHops records every transport rg holds right now in held, which
+// is the set a pooled tunnel's first hop is checked against.
+func noteHeldFirstHops(rg *RouteGroup, held map[uuid.UUID]struct{}) {
+	if rg == nil || held == nil {
+		return
+	}
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	for _, tp := range rg.tps {
+		if tp != nil {
+			held[tp.Entry.ID] = struct{}{}
+		}
+	}
+}
+
+// heldFirstHopIDs renders a held set as the exclusion list the grow fallback's
+// dial takes, so the plan it picks for itself obeys the same rule the
+// candidate ranking does.
+func heldFirstHopIDs(held map[uuid.UUID]struct{}) []uuid.UUID {
+	if len(held) == 0 {
+		return nil
+	}
+	out := make([]uuid.UUID, 0, len(held))
+	for id := range held {
+		out = append(out, id)
+	}
+	return out
+}
+
 // poolCandidates ranks the standby siblings g may take from, best first:
 // measured end-to-end route latency, then the first hop's throughput prior —
 // the ordering rankPoolPlans defines. A sibling is skipped when it is closed,
 // no longer single-leg, or its first hop is one g already holds (two legs on
 // one first hop are one link's capacity wearing two route IDs).
-func poolCandidates(g *RouteGroup, pool []*RouteGroup) []poolCandidate {
-	held := make(map[uuid.UUID]struct{})
-	g.mu.Lock()
-	for _, tp := range g.tps {
-		if tp != nil {
-			held[tp.Entry.ID] = struct{}{}
-		}
+//
+// sibling carries the first hops the OTHER active tunnels of the same app and
+// exit hold, including the ones they took earlier in this same tick. Two
+// ACTIVE tunnels on one first hop are the same bottleneck a step further out:
+// the rig run of 2026-09-23 had both compose-idle tunnels holding a leg on
+// transport 08e154d4, so the one transport dying cut a leg in both — exactly
+// the fail-over the composed width exists to provide. nil (pool.
+// allow_duplicate_route) keeps the old per-group rule.
+func poolCandidates(g *RouteGroup, pool []*RouteGroup, sibling map[uuid.UUID]struct{}) []poolCandidate {
+	held := make(map[uuid.UUID]struct{}, len(sibling)+1)
+	for id := range sibling {
+		held[id] = struct{}{}
 	}
-	g.mu.Unlock()
+	noteHeldFirstHops(g, held)
 
 	out := make([]poolCandidate, 0, len(pool))
 	for _, s := range pool {
@@ -374,6 +408,13 @@ func poolCandidates(g *RouteGroup, pool []*RouteGroup) []poolCandidate {
 // plan (GrowMuxFromPool) — and may be nil, in which case a peer without
 // CapLegRehome simply yields no leg.
 func poolArbiterStep(g *RouteGroup, pool []*RouteGroup, now time.Time, grow func(standby *RouteGroup) error) {
+	poolArbiterStepExcluding(g, pool, now, nil, grow)
+}
+
+// poolArbiterStepExcluding is poolArbiterStep with the first hops g's ACTIVE
+// siblings hold ruled out — see poolCandidates.
+func poolArbiterStepExcluding(g *RouteGroup, pool []*RouteGroup, now time.Time,
+	sibling map[uuid.UUID]struct{}, grow func(standby *RouteGroup) error) {
 	if g == nil || g.mux == nil || g.isClosed() || g.TunnelRole() != tunnelRoleActive {
 		return
 	}
@@ -405,7 +446,7 @@ func poolArbiterStep(g *RouteGroup, pool []*RouteGroup, now time.Time, grow func
 	if g.healInFlight.Load() {
 		return
 	}
-	cands := poolCandidates(g, pool)
+	cands := poolCandidates(g, pool, sibling)
 	if len(cands) == 0 {
 		return
 	}
@@ -599,25 +640,60 @@ func (r *router) poolArbiterTick(now time.Time) {
 		exit cipher.PubKey
 	}
 	pools := make(map[key][]*RouteGroup)
-	var active []*RouteGroup
+	actives := make(map[key][]*RouteGroup)
 	for _, rg := range groups {
+		k := key{app: rg.AppName(), exit: rg.desc.SrcPK()}
 		switch rg.TunnelRole() {
 		case tunnelRoleStandby:
-			k := key{app: rg.AppName(), exit: rg.desc.SrcPK()}
 			pools[k] = append(pools[k], rg)
 		case tunnelRoleActive:
-			active = append(active, rg)
+			actives[k] = append(actives[k], rg)
 		}
 	}
-	for _, g := range active {
-		pool := pools[key{app: g.AppName(), exit: g.desc.SrcPK()}]
-		poolArbiterStep(g, pool, now, func(s *RouteGroup) error {
-			_, err := r.GrowMuxFromPool(g.desc.DstPort(), 1, 0)
+	for k, active := range actives {
+		poolArbiterRound(active, pools[k], now, func(g, s *RouteGroup, exclude []uuid.UUID) error {
+			_, err := r.growMuxFromPool(g.desc.DstPort(), 1, 0, exclude)
 			if err == nil {
 				s.noteTunnelConsumed(g.desc.DstPort())
 			}
 			return err
 		})
+	}
+}
+
+// poolArbiterRound is one arbiter pass over the ACTIVE tunnels of ONE
+// (app, exit) session against their shared pool.
+//
+// The round is what makes the first hops the tunnels hold a SET rather than a
+// per-group fact: every active tunnel's transports are ruled out for every
+// other one, and a tunnel that takes a leg here is folded back in before the
+// next tunnel is offered the pool — without that, two tunnels evaluated in the
+// same tick see the same best standby and both land on its first hop.
+//
+// pool.allow_duplicate_route opts a tunnel back out of the rule, the same knob
+// that lets a pooled plan repeat a hop path at dial time.
+func poolArbiterRound(active, pool []*RouteGroup, now time.Time,
+	grow func(g, standby *RouteGroup, exclude []uuid.UUID) error) {
+	held := make(map[uuid.UUID]struct{})
+	for _, g := range active {
+		noteHeldFirstHops(g, held)
+	}
+	for _, g := range active {
+		if g == nil {
+			continue
+		}
+		sibling := held
+		if g.knBool(routersettings.PoolAllowDuplicateRoute) {
+			sibling = nil
+		}
+		var f func(*RouteGroup) error
+		if grow != nil {
+			f = func(s *RouteGroup) error { return grow(g, s, heldFirstHopIDs(sibling)) }
+		}
+		poolArbiterStepExcluding(g, pool, now, sibling, f)
+		// A take — re-homed or dialed — is on g.tps now, and is a first hop
+		// the next active tunnel of this session must not take again.
+		noteHeldFirstHops(g, held)
 	}
 }
 
