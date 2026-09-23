@@ -150,7 +150,7 @@ func TestSocksServerRelaysUDP(t *testing.T) {
 		t.Fatalf("send: %v", err)
 	}
 
-	peer := eg.udpPeer(t, 0)
+	peer := eg.udpPeer(t)
 	select {
 	case got := <-peer.out:
 		if string(got) != "query" {
@@ -275,7 +275,7 @@ func TestSocksServerAssociationEndsWithItsControlConn(t *testing.T) {
 	if _, err := sock.Write(encodeSocksUDP("1.1.1.1", 53, []byte("x"))); err != nil {
 		t.Fatalf("send: %v", err)
 	}
-	peer := eg.udpPeer(t, 0)
+	peer := eg.udpPeer(t)
 	select {
 	case <-peer.out:
 	case <-time.After(10 * time.Second):

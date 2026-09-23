@@ -63,8 +63,9 @@ func (f *fakeEgress) tcpPeer(t *testing.T, i int) net.Conn {
 	return nil
 }
 
-func (f *fakeEgress) udpPeer(t *testing.T, i int) *fakeDatagram {
+func (f *fakeEgress) udpPeer(t *testing.T) *fakeDatagram {
 	t.Helper()
+	const i = 0 // the first stream opened; use udpPeerTo when more than one destination is in play
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		f.mu.Lock()
