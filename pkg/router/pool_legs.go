@@ -55,18 +55,72 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // poolPlanSeedCap bounds how many standby siblings' routes are offered to the
-// warm-route pool in one seed. The pool is ranked best-first, a group grows by
-// a handful of legs at most, and the bucket it feeds is itself capped
-// (warmPlanBucketCap) — so pushing all 32 tunnels of a full standby pool
-// through it every tick would only churn the bucket. 16 leaves ample headroom
-// above any mux width the adaptive engine asks for.
-const poolPlanSeedCap = 16
+// warm-route pool in one seed (pool.plan_seed_cap). The pool is ranked
+// best-first, a group grows by a handful of legs at most, and the bucket it
+// feeds is itself capped (warmPlanBucketCap) — so pushing all 32 tunnels of a
+// full standby pool through it every tick would only churn the bucket. 16
+// leaves ample headroom above any mux width the adaptive engine asks for.
+func poolPlanSeedCap() int { return routersettings.PoolPlanSeedCap.Int() }
+
+// poolPlanAdmitted reports whether one standby sibling's route may become a
+// pool leg plan at all — the CANDIDATE filter (pool.max_hops, pool.tp_types,
+// pool.exclude_pks), applied before a plan is ranked or seeded. All three
+// default to "admit everything", so an unset visor's selection is unchanged.
+// tp is the first hop's transport (its declared type is what pool.tp_types
+// filters on); fwd is the whole hop path (every hop's From/To is what
+// pool.exclude_pks filters on).
+func poolPlanAdmitted(log *logging.Logger, port routing.Port, fwd []routing.Hop, tp *transport.ManagedTransport) bool {
+	if max := routersettings.PoolMaxHops.Int(); max > 0 && len(fwd) > max {
+		if log != nil {
+			log.Debugf("pool plan from standby group :%d skipped: %d hops over pool.max_hops=%d", port, len(fwd), max)
+		}
+		return false
+	}
+	if types := routersettings.PoolTpTypes.Strings(); len(types) > 0 && tp != nil {
+		want := string(tp.Entry.Type)
+		ok := false
+		for _, t := range types {
+			if t == want {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			if log != nil {
+				log.Debugf("pool plan from standby group :%d skipped: first hop type %q not in pool.tp_types", port, want)
+			}
+			return false
+		}
+	}
+	if excl := routersettings.PoolExcludePKs.Strings(); len(excl) > 0 {
+		bad := make(map[string]struct{}, len(excl))
+		for _, pk := range excl {
+			bad[pk] = struct{}{}
+		}
+		for _, h := range fwd {
+			if _, hit := bad[h.From.Hex()]; hit {
+				if log != nil {
+					log.Debugf("pool plan from standby group :%d skipped: hop touches an excluded pk", port)
+				}
+				return false
+			}
+			if _, hit := bad[h.To.Hex()]; hit {
+				if log != nil {
+					log.Debugf("pool plan from standby group :%d skipped: hop touches an excluded pk", port)
+				}
+				return false
+			}
+		}
+	}
+	return true
+}
 
 // tunnelRoleStandby is the label a multi-tunnel app puts on a tunnel it is
 // holding ready rather than sending on (DialOptions.TunnelRole, re-stamped live
@@ -200,6 +254,7 @@ func throughputPrior(tp *transport.ManagedTransport) float64 {
 // Locking: the matching groups are snapshotted under r.mx and then read through
 // their own rg locks, so r.mx is never held while a route-group lock is taken.
 func (r *router) standbyPoolPlans(desc routing.RouteDescriptor, minHops uint16) []poolLegPlan {
+	log := r.scopedLog(desc.SrcPort())
 	r.mx.Lock()
 	target := r.rgsNs[desc]
 	var siblings []*NoiseRouteGroup
@@ -250,6 +305,9 @@ func (r *router) standbyPoolPlans(desc routing.RouteDescriptor, minHops uint16) 
 			continue
 		}
 		if _, dup := held[fwd[0].TpID]; dup {
+			continue
+		}
+		if !poolPlanAdmitted(log, rg.desc.DstPort(), fwd, tp) {
 			continue
 		}
 		plans = append(plans, poolLegPlan{
@@ -308,8 +366,8 @@ func distinctRoutePlans(plans []poolLegPlan, allowDup bool) []poolLegPlan {
 // the bucket past what the topology offers.
 func (r *router) seedPoolPlans(desc routing.RouteDescriptor, minHops uint16) int {
 	plans := r.standbyPoolPlans(desc, minHops)
-	if len(plans) > poolPlanSeedCap {
-		plans = plans[:poolPlanSeedCap]
+	if seedCap := poolPlanSeedCap(); len(plans) > seedCap {
+		plans = plans[:seedCap]
 	}
 	for i := range plans {
 		r.warmRoutes.putSourced(desc.SrcPK(), minHops, plans[i].fwd, plans[i].rev, plans[i].source())

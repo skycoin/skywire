@@ -67,6 +67,15 @@ func setTunnelPromoteHold() time.Duration {
 func setTunnelParkMinHold() time.Duration {
 	return skysettings.Dur(skysettings.TunnelParkMinHold)
 }
+func setTunnelRTTMinWindow() time.Duration {
+	return skysettings.Dur(skysettings.TunnelRTTMinWindow)
+}
+func setTunnelRTTSamplesCap() int { return skysettings.Count(skysettings.TunnelRTTSamplesCap) }
+
+// tunnelFreezeActive is the promoter's own hold: no discretionary promotion or
+// park while it is set, independent of pool.freeze (which also stops the pool
+// filling or shrinking). A dead active tunnel is still failed over either way.
+func tunnelFreezeActive() bool { return skysettings.Bool(skysettings.TunnelFreezeActive) }
 
 // The capacity-aware half of the promotion rule (tunnel_promoter.go). Every
 // one of these is a knob rather than a constant because the numbers they carry
