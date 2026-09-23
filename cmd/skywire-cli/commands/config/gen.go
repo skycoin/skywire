@@ -148,7 +148,7 @@ func init() {
 	if scriptExecString("${OUTPUT}") == "" {
 		msg += ": " + skyenv.ConfigName
 	}
-	genConfigCmd.Flags().StringVarP(&output, "out", "o", scriptExecString("${OUTPUT}"), msg+"")
+	skyenvStringVarP(genConfigCmd.Flags(), &output, "out", "o", "${OUTPUT}", msg+"")
 	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "suppress config output to terminal")
 	genConfigCmd.Flags().StringVar(&walletCustody, "wallet-custody", "", "where the skycoin-web wallet keeps keys: browser|disk|remote")
 	genConfigCmd.Flags().StringVar(&walletDir, "wallet-dir", "", "wallet dir for --wallet-custody=disk (a seed-wallet store, not per-coin)")
@@ -166,16 +166,16 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "retainhv")
 
 	// Network and deployment flags
-	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", scriptExecArray(fmt.Sprintf("${SVCCONFADDR[@]-%s}", serviceConfURL)), "services conf url\n\r")
+	skyenvArrayVarP(genConfigCmd.Flags(), &serviceConfURL, "url", "a", fmt.Sprintf("${SVCCONFADDR[@]-%s}", serviceConfURL), "services conf url\n\r")
 	gHiddenFlags = append(gHiddenFlags, "url")
-	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment (ports offset +10000 from prod)")
+	skyenvBoolVarP(genConfigCmd.Flags(), &isTestEnv, "testenv", "t", "${TESTENV:-false}", "use test deployment (ports offset +10000 from prod)")
 	gHiddenFlags = append(gHiddenFlags, "testenv")
 	// Deployment services are dmsg-only. --dmsghttp is the (default) behavior and
 	// kept as a hidden no-op for back-compat; the former --http / --dual modes are
 	// gone — plain HTTP to deployment services is no longer supported.
-	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use only dmsg for skywire services, no http (this is the default)")
+	skyenvBoolVarP(genConfigCmd.Flags(), &isDmsgHTTP, "dmsghttp", "d", "${DMSGHTTP:-false}", "use only dmsg for skywire services, no http (this is the default)")
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
-	genConfigCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "D", scriptExecString("${DMSGCONF}"), "dmsghttp config path")
+	skyenvStringVarP(genConfigCmd.Flags(), &dmsgHTTPPath, "dmsgconf", "D", "${DMSGCONF}", "dmsghttp config path")
 	gHiddenFlags = append(gHiddenFlags, "dmsgconf")
 	// Note: the historical `BESTPROTO=true` knob was a China-only
 	// dmsghttp-fallback path that fired only when ipinfo.io reported
@@ -187,49 +187,49 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
 	gHiddenFlags = append(gHiddenFlags, "nofetch")
 	// SvcConfName integration not wired in.
-	genConfigCmd.Flags().StringVarP(&configServicePath, "svcconf", "S", scriptExecString("${SVCCONF}"), "fallback service configuration file")
+	skyenvStringVarP(genConfigCmd.Flags(), &configServicePath, "svcconf", "S", "${SVCCONF}", "fallback service configuration file")
 	gHiddenFlags = append(gHiddenFlags, "svcconf")
 	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for services")
 	gHiddenFlags = append(gHiddenFlags, "nodefaults")
 
 	// DMSG flags
-	genConfigCmd.Flags().IntVar(&minDmsgSess, "minsess", scriptExecInt("${MINDMSGSESS:-2}"), "number of dmsg servers to connect to (0 = unlimited)")
+	skyenvIntVar(genConfigCmd.Flags(), &minDmsgSess, "minsess", "${MINDMSGSESS:-2}", "number of dmsg servers to connect to (0 = unlimited)")
 	gHiddenFlags = append(gHiddenFlags, "minsess")
 
 	// Transport flags
-	genConfigCmd.Flags().BoolVarP(&disablePublicAutoConn, "autoconn", "y", scriptExecBool("${DISABLEPUBLICAUTOCONN:-false}"), "disable autoconnect to public visors")
+	skyenvBoolVarP(genConfigCmd.Flags(), &disablePublicAutoConn, "autoconn", "y", "${DISABLEPUBLICAUTOCONN:-false}", "disable autoconnect to public visors")
 	gHiddenFlags = append(gHiddenFlags, "autoconn")
-	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", scriptExecBool("${VISORISPUBLIC:-false}"), "publicize visor in service discovery")
+	skyenvBoolVarP(genConfigCmd.Flags(), &isPublic, "public", "z", "${VISORISPUBLIC:-false}", "publicize visor in service discovery")
 	gHiddenFlags = append(gHiddenFlags, "public")
-	genConfigCmd.Flags().IntVar(&stcprPort, "stcpr", scriptExecInt("${STCPRPORT:-0}"), "tcp transport listening port (0 = random / shared master port)")
+	skyenvIntVar(genConfigCmd.Flags(), &stcprPort, "stcpr", "${STCPRPORT:-0}", "tcp transport listening port (0 = random / shared master port)")
 	gHiddenFlags = append(gHiddenFlags, "stcpr")
-	genConfigCmd.Flags().IntVar(&sudphPort, "sudph", scriptExecInt("${SUDPHPORT:-0}"), "udp transport listening port (0 = random / shared master port)")
+	skyenvIntVar(genConfigCmd.Flags(), &sudphPort, "sudph", "${SUDPHPORT:-0}", "udp transport listening port (0 = random / shared master port)")
 	gHiddenFlags = append(gHiddenFlags, "sudph")
 	// Unified master transport port: one number carrying every transport type
 	// (stcpr+WS on <port>/tcp, quic+sudph+wt+webrtc on <port>/udp, demuxed by
 	// protocol). Per-type ports above override it. Visible because this is the
 	// recommended way to expose a public visor behind a single firewall rule.
-	genConfigCmd.Flags().IntVar(&transportPort, "transport-port", scriptExecInt("${TRANSPORTPORT:-0}"), "shared master transport port for all transport types (0 = per-type ports)")
-	genConfigCmd.Flags().IntVar(&genMinHops, "min-hops", scriptExecInt("${MINHOPS:-1}"), "minimum route hops (1 = allow direct 1-hop routes, >=2 = force multihop through intermediaries for sender privacy)")
-	genConfigCmd.Flags().IntVar(&arTransportLimit, "ar-transport-limit", scriptExecInt("${ARTRANSPORTLIMIT:-0}"), "address-resolver registration: 0 = stay registered, N>0 = deregister after N transports, N<0 = never register (inbound-invisible)")
-	genConfigCmd.Flags().BoolVar(&noDirectTransports, "no-direct-transports", scriptExecBool("${NODIRECTTRANSPORTS:-false}"), "never create direct p2p transports; dmsg (relay) is still allowed")
-	genConfigCmd.Flags().BoolVar(&ptyRPCExec, "pty-rpc-exec", scriptExecBool("${PTYRPCEXEC:-false}"), "allow visor-RPC-initiated dmsgpty exec (control/jump node opt-in; off = closes a local privilege-escalation vector)")
+	skyenvIntVar(genConfigCmd.Flags(), &transportPort, "transport-port", "${TRANSPORTPORT:-0}", "shared master transport port for all transport types (0 = per-type ports)")
+	skyenvIntVar(genConfigCmd.Flags(), &genMinHops, "min-hops", "${MINHOPS:-1}", "minimum route hops (1 = allow direct 1-hop routes, >=2 = force multihop through intermediaries for sender privacy)")
+	skyenvIntVar(genConfigCmd.Flags(), &arTransportLimit, "ar-transport-limit", "${ARTRANSPORTLIMIT:-0}", "address-resolver registration: 0 = stay registered, N>0 = deregister after N transports, N<0 = never register (inbound-invisible)")
+	skyenvBoolVar(genConfigCmd.Flags(), &noDirectTransports, "no-direct-transports", "${NODIRECTTRANSPORTS:-false}", "never create direct p2p transports; dmsg (relay) is still allowed")
+	skyenvBoolVar(genConfigCmd.Flags(), &ptyRPCExec, "pty-rpc-exec", "${PTYRPCEXEC:-false}", "allow visor-RPC-initiated dmsgpty exec (control/jump node opt-in; off = closes a local privilege-escalation vector)")
 
 	// Routing flags
 	msg = "add route setup node PKs"
 	if scriptExecArray("${ROUTESETUPPKS[@]}") != "" {
 		msg += "\n\r"
 	}
-	genConfigCmd.Flags().StringVar(&routeSetupNodes, "routesetup", scriptExecArray("${ROUTESETUPPKS[@]}"), msg)
+	skyenvArrayVar(genConfigCmd.Flags(), &routeSetupNodes, "routesetup", "${ROUTESETUPPKS[@]}", msg)
 	gHiddenFlags = append(gHiddenFlags, "routesetup")
 	msg = "add transport setup node PKs"
 	if scriptExecArray("${TPSETUPPKS[@]}") != "" {
 		msg += "\n\r"
 	}
-	genConfigCmd.Flags().StringVar(&transportSetupPKs, "tpsetup", scriptExecArray("${TPSETUPPKS[@]}"), msg)
+	skyenvArrayVar(genConfigCmd.Flags(), &transportSetupPKs, "tpsetup", "${TPSETUPPKS[@]}", msg)
 	gHiddenFlags = append(gHiddenFlags, "tpsetup")
 	genConfigCmd.Flags().BoolVar(&cascadeRouteSetup, "cascade", false, "opt into source-driven cascade route setup (default: legacy setup-node path)")
-	genConfigCmd.Flags().StringVar(&policyPerDial, "policy", scriptExecString("${POLICYPERDIAL}"), "per-dial routing policy: preset:<name> (e.g. preset:adaptive), @/path/policy.star, @/path/policy.wasm, inline Starlark, or empty for built-in defaults")
+	skyenvStringVar(genConfigCmd.Flags(), &policyPerDial, "policy", "${POLICYPERDIAL}", "per-dial routing policy: preset:<name> (e.g. preset:adaptive), @/path/policy.star, @/path/policy.wasm, inline Starlark, or empty for built-in defaults")
 	gHiddenFlags = append(gHiddenFlags, "policy")
 	genConfigCmd.Flags().BoolVar(&snConfig, "sn", false, "generate config for route setup node")
 	gHiddenFlags = append(gHiddenFlags, "sn")
@@ -245,25 +245,25 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "ar")
 	genConfigCmd.Flags().BoolVar(&rfConfig, "rf", false, "generate config for route-finder service")
 	gHiddenFlags = append(gHiddenFlags, "rf")
-	genConfigCmd.Flags().BoolVar(&enableCalculateRoutes, "calculate-routes", scriptExecBool("${CALCULATEROUTES:-false}"), "enable local route calculation")
+	skyenvBoolVar(genConfigCmd.Flags(), &enableCalculateRoutes, "calculate-routes", "${CALCULATEROUTES:-false}", "enable local route calculation")
 	gHiddenFlags = append(gHiddenFlags, "calculate-routes")
 
 	// Hypervisor and security flags
-	genConfigCmd.Flags().BoolVarP(&isHypervisor, "ishv", "i", scriptExecBool("${ISHYPERVISOR:-false}"), "local hypervisor configuration")
-	genConfigCmd.Flags().StringVar(&hvDeskAddr, "hvdeskaddr", scriptExecString("${HVDESKADDR}"), "hypervisor desk address: where the wasm-visor hypervisor UI is served, beside the dashboard on hvaddr (default :8010)")
+	skyenvBoolVarP(genConfigCmd.Flags(), &isHypervisor, "ishv", "i", "${ISHYPERVISOR:-false}", "local hypervisor configuration")
+	skyenvStringVar(genConfigCmd.Flags(), &hvDeskAddr, "hvdeskaddr", "${HVDESKADDR}", "hypervisor desk address: where the wasm-visor hypervisor UI is served, beside the dashboard on hvaddr (default :8010)")
 	gHiddenFlags = append(gHiddenFlags, "hvdeskaddr")
 	msg = "list of public keys to add as hypervisor"
 	if scriptExecArray("${HYPERVISORPKS[@]}") != "" {
 		msg += "\n\r"
 	}
-	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", scriptExecArray("${HYPERVISORPKS[@]}"), msg)
-	genConfigCmd.Flags().StringVar(&wsPeers, "ws-peer", scriptExecArray("${WSPEERS[@]}"), "peers to hold a WebSocket transport to, <pk>@<ws(s)://host[:port]/path>, comma-separated — pins each in transport.ws_table and makes it a persistent transport (no address-resolver lookup; the address is the one given)")
+	skyenvArrayVarP(genConfigCmd.Flags(), &hypervisorPKs, "hvpks", "j", "${HYPERVISORPKS[@]}", msg)
+	skyenvArrayVar(genConfigCmd.Flags(), &wsPeers, "ws-peer", "${WSPEERS[@]}", "peers to hold a WebSocket transport to, <pk>@<ws(s)://host[:port]/path>, comma-separated — pins each in transport.ws_table and makes it a persistent transport (no address-resolver lookup; the address is the one given)")
 	genConfigCmd.Flags().BoolVarP(&isDisableAuth, "noauth", "c", false, "disable authentication for hypervisor UI")
 	gHiddenFlags = append(gHiddenFlags, "noauth")
 	genConfigCmd.Flags().BoolVarP(&isEnableAuth, "auth", "e", false, "enable auth on hypervisor UI")
 	gHiddenFlags = append(gHiddenFlags, "auth")
 	hvAuthEnv = scriptExecString("${HVAUTH}")
-	genConfigCmd.Flags().BoolVar(&isEnablePKEndpoint, "pk-endpoint", scriptExecBool("${ENABLEPKENDPOINT:-false}"), "expose unauthenticated GET /api/pk on the hypervisor (skybian / Arch-ARM image builds set this)")
+	skyenvBoolVar(genConfigCmd.Flags(), &isEnablePKEndpoint, "pk-endpoint", "${ENABLEPKENDPOINT:-false}", "expose unauthenticated GET /api/pk on the hypervisor (skybian / Arch-ARM image builds set this)")
 	gHiddenFlags = append(gHiddenFlags, "pk-endpoint")
 
 	// Dmsgpty and survey whitelist flags
@@ -271,17 +271,17 @@ func init() {
 	if scriptExecArray("${DMSGPTYPKS[@]}") != "" {
 		msg += "\n\r"
 	}
-	genConfigCmd.Flags().StringVar(&dmsgptyWlPKs, "dmsgpty", scriptExecArray("${DMSGPTYPKS[@]}"), msg)
+	skyenvArrayVar(genConfigCmd.Flags(), &dmsgptyWlPKs, "dmsgpty", "${DMSGPTYPKS[@]}", msg)
 	msg = "add survey whitelist PKs"
 	if scriptExecArray("${SURVEYPKS[@]}") != "" {
 		msg += "\n\r"
 	}
 
-	genConfigCmd.Flags().StringVar(&surveyWhitelistPKs, "survey", scriptExecArray("${SURVEYPKS[@]}"), msg)
+	skyenvArrayVar(genConfigCmd.Flags(), &surveyWhitelistPKs, "survey", "${SURVEYPKS[@]}", msg)
 	gHiddenFlags = append(gHiddenFlags, "survey")
 
 	// App flags
-	genConfigCmd.Flags().BoolVarP(&isDisplayNodeIP, "publicip", "l", scriptExecBool("${DISPLAYNODEIP:-false}"), "display visor ip in service discovery")
+	skyenvBoolVarP(genConfigCmd.Flags(), &isDisplayNodeIP, "publicip", "l", "${DISPLAYNODEIP:-false}", "display visor ip in service discovery")
 	gHiddenFlags = append(gHiddenFlags, "publicip")
 	genConfigCmd.Flags().BoolVarP(&addExampleApps, "example-apps", "m", false, "add example apps to the config")
 	gHiddenFlags = append(gHiddenFlags, "example-apps")
@@ -289,89 +289,89 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "external-apps")
 	genConfigCmd.Flags().StringVarP(&disableApps, "disableapps", "g", "", "comma separated list of apps to disable")
 	gHiddenFlags = append(gHiddenFlags, "disableapps")
-	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path for visor native apps")
+	skyenvStringVar(genConfigCmd.Flags(), &binPath, "binpath", "${BINPATH}", "set bin_path for visor native apps")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
-	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${VPNSERVER:-true}"), "autostart vpn server")
-	genConfigCmd.Flags().BoolVar(&isVpnRouterEnable, "servevpnrouter", scriptExecBool("${VPNROUTER:-false}"), "autostart the vpn router (LAN/WiFi gateway that NATs into the vpn-client tunnel; needs --vpnrouter-lan-ifc)")
-	genConfigCmd.Flags().StringVar(&vpnRouterLanIfc, "vpnrouter-lan-ifc", scriptExecString("${VPNROUTERLANIFC}"), "downstream LAN/WiFi interface the vpn router serves (e.g. eth1 or wlan0)")
-	genConfigCmd.Flags().StringVar(&vpnRouterSubnet, "vpnrouter-subnet", scriptExecString("${VPNROUTERSUBNET}"), "vpn router gateway+subnet as <gateway-ip>/<prefix> (default 192.168.42.1/24)")
-	genConfigCmd.Flags().BoolVar(&vpnRouterWifi, "vpnrouter-wifi", scriptExecBool("${VPNROUTERWIFI:-false}"), "vpn router WiFi-out: run hostapd (AP) on the downstream interface")
-	genConfigCmd.Flags().StringVar(&vpnRouterSSID, "vpnrouter-ssid", scriptExecString("${VPNROUTERSSID}"), "vpn router WiFi SSID (with --vpnrouter-wifi)")
-	genConfigCmd.Flags().StringVar(&vpnRouterPassphrase, "vpnrouter-passphrase", scriptExecString("${VPNROUTERPASSPHRASE}"), "vpn router WiFi WPA2 passphrase, 8–63 chars (with --vpnrouter-wifi)")
-	genConfigCmd.Flags().StringVar(&vpnRouterBand, "vpnrouter-band", scriptExecString("${VPNROUTERBAND}"), "vpn router WiFi band: 2.4 or 5 (default 2.4)")
-	genConfigCmd.Flags().IntVar(&vpnRouterChannel, "vpnrouter-channel", scriptExecInt("${VPNROUTERCHANNEL:-0}"), "vpn router WiFi channel (0 = default for the band)")
-	genConfigCmd.Flags().StringVar(&vpnRouterCountry, "vpnrouter-country", scriptExecString("${VPNROUTERCOUNTRY}"), "vpn router WiFi regulatory country code (default US)")
-	genConfigCmd.Flags().BoolVar(&vpnRouterOpenWiFi, "vpnrouter-open", scriptExecBool("${VPNROUTEROPEN:-false}"), "vpn router WiFi: allow an open (passphrase-less) network")
-	genConfigCmd.Flags().BoolVar(&vpnRouterMeshGW, "vpnrouter-mesh-gateway", scriptExecBool("${VPNROUTERMESHGW:-false}"), "vpn router: also act as a mesh gateway (resolve *.dmsg / *.skynet for clients)")
-	genConfigCmd.Flags().StringVar(&vpnRouterMeshGWCIDR, "vpnrouter-mesh-gateway-cidr", scriptExecString("${VPNROUTERMESHGWCIDR}"), "vpn router mesh-gateway synthetic-IP pool (default 100.64.0.0/16)")
-	genConfigCmd.Flags().BoolVar(&vpnRouterMeshTLS, "vpnrouter-mesh-gateway-tls", scriptExecBool("${VPNROUTERMESHTLS:-false}"), "vpn router mesh gateway: TLS-MITM HTTPS to *.dmsg/*.skynet (clients must trust the generated CA)")
+	skyenvBoolVarP(genConfigCmd.Flags(), &isVpnServerEnable, "servevpn", "v", "${VPNSERVER:-true}", "autostart vpn server")
+	skyenvBoolVar(genConfigCmd.Flags(), &isVpnRouterEnable, "servevpnrouter", "${VPNROUTER:-false}", "autostart the vpn router (LAN/WiFi gateway that NATs into the vpn-client tunnel; needs --vpnrouter-lan-ifc)")
+	skyenvStringVar(genConfigCmd.Flags(), &vpnRouterLanIfc, "vpnrouter-lan-ifc", "${VPNROUTERLANIFC}", "downstream LAN/WiFi interface the vpn router serves (e.g. eth1 or wlan0)")
+	skyenvStringVar(genConfigCmd.Flags(), &vpnRouterSubnet, "vpnrouter-subnet", "${VPNROUTERSUBNET}", "vpn router gateway+subnet as <gateway-ip>/<prefix> (default 192.168.42.1/24)")
+	skyenvBoolVar(genConfigCmd.Flags(), &vpnRouterWifi, "vpnrouter-wifi", "${VPNROUTERWIFI:-false}", "vpn router WiFi-out: run hostapd (AP) on the downstream interface")
+	skyenvStringVar(genConfigCmd.Flags(), &vpnRouterSSID, "vpnrouter-ssid", "${VPNROUTERSSID}", "vpn router WiFi SSID (with --vpnrouter-wifi)")
+	skyenvStringVar(genConfigCmd.Flags(), &vpnRouterPassphrase, "vpnrouter-passphrase", "${VPNROUTERPASSPHRASE}", "vpn router WiFi WPA2 passphrase, 8–63 chars (with --vpnrouter-wifi)")
+	skyenvStringVar(genConfigCmd.Flags(), &vpnRouterBand, "vpnrouter-band", "${VPNROUTERBAND}", "vpn router WiFi band: 2.4 or 5 (default 2.4)")
+	skyenvIntVar(genConfigCmd.Flags(), &vpnRouterChannel, "vpnrouter-channel", "${VPNROUTERCHANNEL:-0}", "vpn router WiFi channel (0 = default for the band)")
+	skyenvStringVar(genConfigCmd.Flags(), &vpnRouterCountry, "vpnrouter-country", "${VPNROUTERCOUNTRY}", "vpn router WiFi regulatory country code (default US)")
+	skyenvBoolVar(genConfigCmd.Flags(), &vpnRouterOpenWiFi, "vpnrouter-open", "${VPNROUTEROPEN:-false}", "vpn router WiFi: allow an open (passphrase-less) network")
+	skyenvBoolVar(genConfigCmd.Flags(), &vpnRouterMeshGW, "vpnrouter-mesh-gateway", "${VPNROUTERMESHGW:-false}", "vpn router: also act as a mesh gateway (resolve *.dmsg / *.skynet for clients)")
+	skyenvStringVar(genConfigCmd.Flags(), &vpnRouterMeshGWCIDR, "vpnrouter-mesh-gateway-cidr", "${VPNROUTERMESHGWCIDR}", "vpn router mesh-gateway synthetic-IP pool (default 100.64.0.0/16)")
+	skyenvBoolVar(genConfigCmd.Flags(), &vpnRouterMeshTLS, "vpnrouter-mesh-gateway-tls", "${VPNROUTERMESHTLS:-false}", "vpn router mesh gateway: TLS-MITM HTTPS to *.dmsg/*.skynet (clients must trust the generated CA)")
 	gHiddenFlags = append(gHiddenFlags, "servevpn")
 
 	// VPN flags
 	// VPN client killswitch is handled as string for cobra flag compatibility.
-	genConfigCmd.Flags().StringVar(&setVPNClientKillswitch, "killsw", scriptExecString("${VPNKS}"), "vpn client killswitch")
+	skyenvStringVar(genConfigCmd.Flags(), &setVPNClientKillswitch, "killsw", "${VPNKS}", "vpn client killswitch")
 	gHiddenFlags = append(gHiddenFlags, "killsw")
-	genConfigCmd.Flags().StringVar(&addVPNClientSrv, "addvpn", scriptExecString("${ADDVPNPK}"), "set vpn server public key for vpn client")
+	skyenvStringVar(genConfigCmd.Flags(), &addVPNClientSrv, "addvpn", "${ADDVPNPK}", "set vpn server public key for vpn client")
 	gHiddenFlags = append(gHiddenFlags, "addvpn")
-	genConfigCmd.Flags().StringVar(&addVPNServerWhitelist, "vpnwl", scriptExecArray("${VPNSERVERWL[@]}"), "vpn server whitelist (comma separated; empty allows all)")
-	genConfigCmd.Flags().StringVar(&setVPNServerSecure, "secure", scriptExecString("${VPNSEVERSECURE}"), "change secure mode status of vpn server")
+	skyenvArrayVar(genConfigCmd.Flags(), &addVPNServerWhitelist, "vpnwl", "${VPNSERVERWL[@]}", "vpn server whitelist (comma separated; empty allows all)")
+	skyenvStringVar(genConfigCmd.Flags(), &setVPNServerSecure, "secure", "${VPNSEVERSECURE}", "change secure mode status of vpn server")
 	gHiddenFlags = append(gHiddenFlags, "secure")
-	genConfigCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", scriptExecString("${VPNSEVERNETIFC}"), "VPN Server network interface (detected: "+getInterfaceNames()+")")
+	skyenvStringVar(genConfigCmd.Flags(), &setVPNServerNetIfc, "netifc", "${VPNSEVERNETIFC}", "VPN Server network interface (detected: "+getInterfaceNames()+")")
 	gHiddenFlags = append(gHiddenFlags, "netifc")
 
 	// Proxy flags
-	genConfigCmd.Flags().StringVar(&addSkysocksClientSrv, "proxyclientpk", scriptExecString("${PROXYCLIENTPK}"), "set server public key for proxy client")
+	skyenvStringVar(genConfigCmd.Flags(), &addSkysocksClientSrv, "proxyclientpk", "${PROXYCLIENTPK}", "set server public key for proxy client")
 	gHiddenFlags = append(gHiddenFlags, "proxyclientpk")
-	genConfigCmd.Flags().BoolVar(&enableProxyClientAutostart, "startproxyclient", scriptExecBool("${STARTPROXYCLIENT:-false}"), "autostart proxy client")
+	skyenvBoolVar(genConfigCmd.Flags(), &enableProxyClientAutostart, "startproxyclient", "${STARTPROXYCLIENT:-false}", "autostart proxy client")
 	gHiddenFlags = append(gHiddenFlags, "startproxyclient")
-	genConfigCmd.Flags().BoolVar(&isProxyServerEnable, "serveproxy", scriptExecBool("${PROXYSERVER:-true}"), "autostart proxy server")
-	genConfigCmd.Flags().StringVar(&proxyServerWhitelist, "proxywl", scriptExecArray("${PROXYSERVERWL[@]}"), "proxy server whitelist (comma separated; empty allows all)")
+	skyenvBoolVar(genConfigCmd.Flags(), &isProxyServerEnable, "serveproxy", "${PROXYSERVER:-true}", "autostart proxy server")
+	skyenvArrayVar(genConfigCmd.Flags(), &proxyServerWhitelist, "proxywl", "${PROXYSERVERWL[@]}", "proxy server whitelist (comma separated; empty allows all)")
 
 	// Embedded resolving-proxy flags. Browsers point a single SOCKS5
 	// at the dmsgweb listener and `.dmsg` / `.skynet` URLs resolve.
 	// When both are enabled, the runtime auto-chains dmsgweb's
 	// upstream → skynetweb so one entry covers both TLDs.
-	genConfigCmd.Flags().BoolVar(&enableDmsgWeb, "dmsgweb", scriptExecBool("${DMSGWEB:-false}"), "enable embedded .dmsg resolving SOCKS5 proxy on 127.0.0.1:4445")
-	genConfigCmd.Flags().StringVar(&dmsgWebSecretKey, "dmsgweb-sk", scriptExecString("${DMSGWEBSK}"), "run the embedded resolver under THIS secret key instead of the visor's, attached in-process (for a key a deployment already knows, e.g. a survey whitelist)")
-	genConfigCmd.Flags().BoolVar(&enableSkynetWeb, "skynetweb", scriptExecBool("${SKYNETWEB:-false}"), "enable embedded .skynet resolving SOCKS5 proxy on 127.0.0.1:4446")
-	genConfigCmd.Flags().BoolVar(&enableWisp, "wisp", scriptExecBool("${WISP:-false}"), "enable the embedded Wisp server on the virtual-loopback port, for a browser-side guest's network")
-	genConfigCmd.Flags().UintVar(&wispPort, "wisp-port", scriptExecUint("${WISPPORT:-"+strconv.Itoa(visorconfig.DefaultWispPort)+"}"), "port for --wisp")
-	genConfigCmd.Flags().StringVar(&wispUpstreamSOCKS, "wisp-socks", scriptExecString("${WISPSOCKS}"), "SOCKS5 proxy --wisp carries streams over (default: the local skysocks-client)")
-	genConfigCmd.Flags().BoolVar(&enableSkymailBridge, "skymail-bridge", scriptExecBool("${SKYMAILBRIDGE:-false}"), "enable SMTP to skywire bridge on 127.0.0.1:1025")
-	genConfigCmd.Flags().StringVar(&dmsgWebUpstreamSOCKS, "dmsgweb-upstream", scriptExecString("${DMSGWEBUPSTREAM}"), "upstream SOCKS5 for non .dmsg traffic (empty chains to skynetweb)")
+	skyenvBoolVar(genConfigCmd.Flags(), &enableDmsgWeb, "dmsgweb", "${DMSGWEB:-false}", "enable embedded .dmsg resolving SOCKS5 proxy on 127.0.0.1:4445")
+	skyenvStringVar(genConfigCmd.Flags(), &dmsgWebSecretKey, "dmsgweb-sk", "${DMSGWEBSK}", "run the embedded resolver under THIS secret key instead of the visor's, attached in-process (for a key a deployment already knows, e.g. a survey whitelist)")
+	skyenvBoolVar(genConfigCmd.Flags(), &enableSkynetWeb, "skynetweb", "${SKYNETWEB:-false}", "enable embedded .skynet resolving SOCKS5 proxy on 127.0.0.1:4446")
+	skyenvBoolVar(genConfigCmd.Flags(), &enableWisp, "wisp", "${WISP:-false}", "enable the embedded Wisp server on the virtual-loopback port, for a browser-side guest's network")
+	skyenvUintVar(genConfigCmd.Flags(), &wispPort, "wisp-port", "${WISPPORT:-"+strconv.Itoa(visorconfig.DefaultWispPort)+"}", "port for --wisp")
+	skyenvStringVar(genConfigCmd.Flags(), &wispUpstreamSOCKS, "wisp-socks", "${WISPSOCKS}", "SOCKS5 proxy --wisp carries streams over (default: the local skysocks-client)")
+	skyenvBoolVar(genConfigCmd.Flags(), &enableSkymailBridge, "skymail-bridge", "${SKYMAILBRIDGE:-false}", "enable SMTP to skywire bridge on 127.0.0.1:1025")
+	skyenvStringVar(genConfigCmd.Flags(), &dmsgWebUpstreamSOCKS, "dmsgweb-upstream", "${DMSGWEBUPSTREAM}", "upstream SOCKS5 for non .dmsg traffic (empty chains to skynetweb)")
 	gHiddenFlags = append(gHiddenFlags, "dmsgweb-upstream")
-	genConfigCmd.Flags().StringVar(&skynetWebUpstreamSOCKS, "skynetweb-upstream", scriptExecString("${SKYNETWEBUPSTREAM}"), "upstream SOCKS5 for non .skynet traffic")
+	skyenvStringVar(genConfigCmd.Flags(), &skynetWebUpstreamSOCKS, "skynetweb-upstream", "${SKYNETWEBUPSTREAM}", "upstream SOCKS5 for non .skynet traffic")
 	gHiddenFlags = append(gHiddenFlags, "skynetweb-upstream")
-	genConfigCmd.Flags().StringVar(&dmsgWebProxyAddr, "dmsgweb-addr", scriptExecString("${DMSGWEBADDR}"), "host the .dmsg SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
+	skyenvStringVar(genConfigCmd.Flags(), &dmsgWebProxyAddr, "dmsgweb-addr", "${DMSGWEBADDR}", "host the .dmsg SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
 	gHiddenFlags = append(gHiddenFlags, "dmsgweb-addr")
-	genConfigCmd.Flags().StringVar(&skynetWebProxyAddr, "skynetweb-addr", scriptExecString("${SKYNETWEBADDR}"), "host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
+	skyenvStringVar(genConfigCmd.Flags(), &skynetWebProxyAddr, "skynetweb-addr", "${SKYNETWEBADDR}", "host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
 	gHiddenFlags = append(gHiddenFlags, "skynetweb-addr")
 	// Additional resolving proxies beyond the two above — each its own port,
 	// bind address and (for a dmsg one) its own dmsg identity. The two
 	// singular blocks stay the primaries; this only adds.
-	genConfigCmd.Flags().StringVar(&extraResolvers, "resolvers", scriptExecArray("${RESOLVERS[@]}"), "additional resolving proxies; CSV of <kind>:<port>[;name=|addr=|suffix=|sk=|upstream=|chain=|alias=]")
+	skyenvArrayVar(genConfigCmd.Flags(), &extraResolvers, "resolvers", "${RESOLVERS[@]}", "additional resolving proxies; CSV of <kind>:<port>[;name=|addr=|suffix=|sk=|upstream=|chain=|alias=]")
 	gHiddenFlags = append(gHiddenFlags, "resolvers")
 
 	// Browse-origin flags: the loopback real-origin browse proxy also serves the
 	// warning-free HTTPS proxy-status pages (status-<surface>.<suffix>) when a real
 	// wildcard cert for *.<suffix> is supplied. Enabled by default (loopback-only).
-	genConfigCmd.Flags().BoolVar(&noBrowseOrigin, "no-browse-origin", scriptExecBool("${NOBROWSEORIGIN:-false}"), "do not serve the loopback real-origin browse proxy / HTTPS proxy-status pages (status-<surface>.<suffix>)")
-	genConfigCmd.Flags().StringVar(&browseOriginSuffix, "browse-suffix", scriptExecString("${BROWSESUFFIX}"), fmt.Sprintf("browse-origin domain suffix (leading dot) for the loopback browse proxy + HTTPS proxy-status pages. Empty = deployment default (%q)", deployment.Prod.BrowseOriginSuffix))
-	genConfigCmd.Flags().StringVar(&browseOriginTLSCert, "browse-tls-cert", scriptExecString("${BROWSETLSCERT}"), "PEM cert for the browse-origin listener — a real wildcard cert for *.<browse-suffix> so status-<surface>.<suffix> loads over warning-free HTTPS. Requires --browse-tls-key; empty = plain HTTP on loopback")
+	skyenvBoolVar(genConfigCmd.Flags(), &noBrowseOrigin, "no-browse-origin", "${NOBROWSEORIGIN:-false}", "do not serve the loopback real-origin browse proxy / HTTPS proxy-status pages (status-<surface>.<suffix>)")
+	skyenvStringVar(genConfigCmd.Flags(), &browseOriginSuffix, "browse-suffix", "${BROWSESUFFIX}", fmt.Sprintf("browse-origin domain suffix (leading dot) for the loopback browse proxy + HTTPS proxy-status pages. Empty = deployment default (%q)", deployment.Prod.BrowseOriginSuffix))
+	skyenvStringVar(genConfigCmd.Flags(), &browseOriginTLSCert, "browse-tls-cert", "${BROWSETLSCERT}", "PEM cert for the browse-origin listener — a real wildcard cert for *.<browse-suffix> so status-<surface>.<suffix> loads over warning-free HTTPS. Requires --browse-tls-key; empty = plain HTTP on loopback")
 	gHiddenFlags = append(gHiddenFlags, "browse-tls-cert")
-	genConfigCmd.Flags().StringVar(&browseOriginTLSKey, "browse-tls-key", scriptExecString("${BROWSETLSKEY}"), "PEM key paired with --browse-tls-cert")
+	skyenvStringVar(genConfigCmd.Flags(), &browseOriginTLSKey, "browse-tls-key", "${BROWSETLSKEY}", "PEM key paired with --browse-tls-cert")
 	gHiddenFlags = append(gHiddenFlags, "browse-tls-key")
 
 	// Skychat flags
-	genConfigCmd.Flags().BoolVar(&isSkychatEnable, "servechat", scriptExecBool("${SKYCHAT:-true}"), "autostart skychat")
-	genConfigCmd.Flags().StringVar(&skychatAddr, "chataddr", scriptExecString("${SKYCHATADDR:-"+skyenv.SkychatAddr+"}"), "skychat local address")
+	skyenvBoolVar(genConfigCmd.Flags(), &isSkychatEnable, "servechat", "${SKYCHAT:-true}", "autostart skychat")
+	skyenvStringVar(genConfigCmd.Flags(), &skychatAddr, "chataddr", "${SKYCHATADDR:-"+skyenv.SkychatAddr+"}", "skychat local address")
 	gHiddenFlags = append(gHiddenFlags, "chataddr")
-	genConfigCmd.Flags().BoolVar(&isSkychatPairEnable, "servechatpair", scriptExecBool("${SKYCHATPAIR:-true}"), "skychat pair RPC channel (required for group chat)")
+	skyenvBoolVar(genConfigCmd.Flags(), &isSkychatPairEnable, "servechatpair", "${SKYCHATPAIR:-true}", "skychat pair RPC channel (required for group chat)")
 	gHiddenFlags = append(gHiddenFlags, "servechatpair")
 	// Visible, unlike the other two: it is the one skychat knob that takes
 	// something away (the local UI on --chataddr), so an operator has to be
 	// able to find it without reading the source.
-	genConfigCmd.Flags().BoolVar(&isSkychatPortless, "chatportless", scriptExecBool("${SKYCHATPORTLESS:-false}"), "run skychat with no TCP port; reach its UI only through the hypervisor")
+	skyenvBoolVar(genConfigCmd.Flags(), &isSkychatPortless, "chatportless", "${SKYCHATPORTLESS:-false}", "run skychat with no TCP port; reach its UI only through the hypervisor")
 
 	// Skycoin embedded apps. Default-off for both — operator opts in
 	// per-app via these flags or via SKYENV. The wallet's user-drop
@@ -379,12 +379,12 @@ func init() {
 	// touches the operator's ~/.skycoin/wallets dir, so when the
 	// visor itself runs as _skywire the wallet should be configured
 	// to drop to the operator's UID.
-	genConfigCmd.Flags().BoolVar(&isSkycoinDaemonEnable, "skycoind", scriptExecBool("${SKYCOIND:-false}"), "autostart skycoin daemon (legacy single instance)")
-	genConfigCmd.Flags().StringVar(&skycoinDaemonFiber, "skycoindfiber", scriptExecString("${SKYCOIND_FIBER_TOML}"), "legacy FIBER_TOML path (single instance)")
+	skyenvBoolVar(genConfigCmd.Flags(), &isSkycoinDaemonEnable, "skycoind", "${SKYCOIND:-false}", "autostart skycoin daemon (legacy single instance)")
+	skyenvStringVar(genConfigCmd.Flags(), &skycoinDaemonFiber, "skycoindfiber", "${SKYCOIND_FIBER_TOML}", "legacy FIBER_TOML path (single instance)")
 	gHiddenFlags = append(gHiddenFlags, "skycoindfiber")
-	genConfigCmd.Flags().StringVar(&skycoinDaemonAPISets, "skycoindapi", scriptExecString("${SKYCOIND_API_SETS}"), "legacy api sets (single instance)")
+	skyenvStringVar(genConfigCmd.Flags(), &skycoinDaemonAPISets, "skycoindapi", "${SKYCOIND_API_SETS}", "legacy api sets (single instance)")
 	gHiddenFlags = append(gHiddenFlags, "skycoindapi")
-	genConfigCmd.Flags().StringVar(&skycoinDaemonUser, "skycoindUSER", scriptExecString("${SKYCOIND_USER}"), "skycoin daemon UID (applies to every instance)")
+	skyenvStringVar(genConfigCmd.Flags(), &skycoinDaemonUser, "skycoindUSER", "${SKYCOIND_USER}", "skycoin daemon UID (applies to every instance)")
 	gHiddenFlags = append(gHiddenFlags, "skycoindUSER")
 	// Multi-instance: SKYCOIND_INSTANCES is a bash array. Entries
 	// are either the literal "skycoin" (built-in defaults, no
@@ -392,33 +392,33 @@ func init() {
 	// expands ${VAR[@]} into a CSV string here; gen splits on commas
 	// at render time and emits one AppConfig per entry with auto-
 	// allocated --port (base 6420 +2N) and --data-dir.
-	genConfigCmd.Flags().StringVar(&skycoinDaemonInstances, "skycoindinstances", scriptExecArray("${SKYCOIND_INSTANCES[@]}"), "skycoin daemon instances (comma separated; skycoin or fiber.toml path)")
+	skyenvArrayVar(genConfigCmd.Flags(), &skycoinDaemonInstances, "skycoindinstances", "${SKYCOIND_INSTANCES[@]}", "skycoin daemon instances (comma separated; skycoin or fiber.toml path)")
 	gHiddenFlags = append(gHiddenFlags, "skycoindinstances")
-	genConfigCmd.Flags().StringVar(&skycoinDaemonFlags, "skycoindflags", scriptExecString("${SKYCOIND_FLAGS}"), "extra flags appended to every skycoin daemon (port and data dir auto allocated)")
+	skyenvStringVar(genConfigCmd.Flags(), &skycoinDaemonFlags, "skycoindflags", "${SKYCOIND_FLAGS}", "extra flags appended to every skycoin daemon (port and data dir auto allocated)")
 	gHiddenFlags = append(gHiddenFlags, "skycoindflags")
-	genConfigCmd.Flags().StringVar(&coinNodes, "coin-nodes", scriptExecArray("${COIN_NODES[@]}"), "fibercoin nodes to forward over dmsg + advertise (type=coin); CSV of local_addr[@dmsg_port]")
+	skyenvArrayVar(genConfigCmd.Flags(), &coinNodes, "coin-nodes", "${COIN_NODES[@]}", "fibercoin nodes to forward over dmsg + advertise (type=coin); CSV of local_addr[@dmsg_port]")
 	gHiddenFlags = append(gHiddenFlags, "coin-nodes")
-	genConfigCmd.Flags().BoolVar(&isSkycoinWebEnable, "skycoinweb", scriptExecBool("${SKYCOINWEB:-false}"), "autostart skycoin web wallet (thin client)")
+	skyenvBoolVar(genConfigCmd.Flags(), &isSkycoinWebEnable, "skycoinweb", "${SKYCOINWEB:-false}", "autostart skycoin web wallet (thin client)")
 	// 8002 to avoid colliding with skychat's default at 127.0.0.1:8001.
 	// Both apps' upstream defaults happen to be 8001; skychat got there
 	// first in skywire so skycoin-web shifts up by one. Operator can
 	// override via SKYCOINWEBADDR or the universal settings panel.
-	genConfigCmd.Flags().StringVar(&skycoinWebAddr, "skycoinwebaddr", scriptExecString("${SKYCOINWEBADDR:-127.0.0.1:8002}"), "skycoin web bind address (host:port)")
+	skyenvStringVar(genConfigCmd.Flags(), &skycoinWebAddr, "skycoinwebaddr", "${SKYCOINWEBADDR:-127.0.0.1:8002}", "skycoin web bind address (host:port)")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebaddr")
 	// SKYCOINWEBNODES is a bash array (multiple node URLs supported
 	// — one per fibercoin the wallet is meant to multi-coin-browse).
 	// scriptExecArray expands ${VAR[@]} into a CSV string here; we
 	// re-split on commas at AppConfig render time and emit repeated
 	// --node-url flags as skycoin-web's StringArrayVar expects.
-	genConfigCmd.Flags().StringVar(&skycoinWebNodeURLs, "skycoinwebnodes", scriptExecArray("${SKYCOINWEBNODES[@]}"), "node URLs the skycoin web wallet talks to (comma separated)")
+	skyenvArrayVar(genConfigCmd.Flags(), &skycoinWebNodeURLs, "skycoinwebnodes", "${SKYCOINWEBNODES[@]}", "node URLs the skycoin web wallet talks to (comma separated)")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebnodes")
-	genConfigCmd.Flags().StringVar(&skycoinWebWalletDir, "skycoinwebwallet", scriptExecString("${SKYCOINWEBWALLET}"), "skycoin web wallet dir override")
+	skyenvStringVar(genConfigCmd.Flags(), &skycoinWebWalletDir, "skycoinwebwallet", "${SKYCOINWEBWALLET}", "skycoin web wallet dir override")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebwallet")
-	genConfigCmd.Flags().StringVar(&skycoinWebUser, "skycoinwebuser", scriptExecString("${SKYCOINWEBUSER}"), "skycoin web UID (empty inherits visor UID)")
+	skyenvStringVar(genConfigCmd.Flags(), &skycoinWebUser, "skycoinwebuser", "${SKYCOINWEBUSER}", "skycoin web UID (empty inherits visor UID)")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebuser")
 
 	// Reward address
-	genConfigCmd.Flags().StringVar(&rewardSkyAddr, "rewardaddr", scriptExecString("${REWARDSKYADDR}"), "skycoin reward address or xpub key")
+	skyenvStringVar(genConfigCmd.Flags(), &rewardSkyAddr, "rewardaddr", "${REWARDSKYADDR}", "skycoin reward address or xpub key")
 
 	// Path and environment flags
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
@@ -432,13 +432,13 @@ func init() {
 	if skyenv.OS == "mac" {
 		pText = "use mac installation path: "
 	}
-	genConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", scriptExecBool("${PKGENV:-false}"), pText+skyenv.SkywirePath+"")
+	skyenvBoolVarP(genConfigCmd.Flags(), &isPkgEnv, "pkg", "p", "${PKGENV:-false}", pText+skyenv.SkywirePath+"")
 	homepath := visorconfig.HomePath()
 	if homepath != "" {
 
-		genConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", scriptExecBool("${USRENV:-false}"), "use paths for user space: "+homepath+"")
+		skyenvBoolVarP(genConfigCmd.Flags(), &isUsrEnv, "user", "u", "${USRENV:-false}", "use paths for user space: "+homepath+"")
 	}
-	genConfigCmd.Flags().StringVar(&logLevel, "loglvl", scriptExecString("${LOGLVL:-info}"), "level of logging in config")
+	skyenvStringVar(genConfigCmd.Flags(), &logLevel, "loglvl", "${LOGLVL:-info}", "level of logging in config")
 	gHiddenFlags = append(gHiddenFlags, "loglvl")
 
 	// Secret key flag
@@ -450,22 +450,22 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "sk")
 
 	// Version and misc flags
-	genConfigCmd.Flags().StringVar(&ver, "version", scriptExecString("${VERSION}"), "custom version testing override")
+	skyenvStringVar(genConfigCmd.Flags(), &ver, "version", "${VERSION}", "custom version testing override")
 	gHiddenFlags = append(gHiddenFlags, "version")
 
 	// Advanced tuning flags (visible with --all)
-	genConfigCmd.Flags().StringVar(&hvHTTPAddr, "hvaddr", scriptExecString("${HVHTTPADDR}"), "hypervisor HTTP address")
+	skyenvStringVar(genConfigCmd.Flags(), &hvHTTPAddr, "hvaddr", "${HVHTTPADDR}", "hypervisor HTTP address")
 	gHiddenFlags = append(gHiddenFlags, "hvaddr")
-	genConfigCmd.Flags().StringVar(&stunServers, "stun", scriptExecArray("${STUNSERVERS[@]}"), "comma-separated list of STUN servers")
+	skyenvArrayVar(genConfigCmd.Flags(), &stunServers, "stun", "${STUNSERVERS[@]}", "comma-separated list of STUN servers")
 	gHiddenFlags = append(gHiddenFlags, "stun")
-	genConfigCmd.Flags().StringVar(&shutdownTimeout, "timeout", scriptExecString("${SHUTDOWNTIMEOUT}"), "graceful shutdown timeout (e.g. 10s)")
+	skyenvStringVar(genConfigCmd.Flags(), &shutdownTimeout, "timeout", "${SHUTDOWNTIMEOUT}", "graceful shutdown timeout (e.g. 10s)")
 	gHiddenFlags = append(gHiddenFlags, "timeout")
-	genConfigCmd.Flags().StringVar(&publicVisorRegTimeout, "regtimeout", scriptExecString("${REGTIMEOUT}"), "public visor registration timeout (e.g. 10m)")
+	skyenvStringVar(genConfigCmd.Flags(), &publicVisorRegTimeout, "regtimeout", "${REGTIMEOUT}", "public visor registration timeout (e.g. 10m)")
 	gHiddenFlags = append(gHiddenFlags, "regtimeout")
-	genConfigCmd.Flags().IntVar(&publicVisorMaxTransports, "maxtransports", scriptExecInt("${MAXTRANSPORTS:-0}"), "public visor max transports")
+	skyenvIntVar(genConfigCmd.Flags(), &publicVisorMaxTransports, "maxtransports", "${MAXTRANSPORTS:-0}", "public visor max transports")
 	gHiddenFlags = append(gHiddenFlags, "maxtransports")
 	gHiddenFlags = append(gHiddenFlags, "muxroutes")
-	genConfigCmd.Flags().StringVar(&cliAddr, "cliaddr", scriptExecString("${CLIADDR}"), "CLI RPC address (e.g. 0.0.0.0:3435 for Docker)")
+	skyenvStringVar(genConfigCmd.Flags(), &cliAddr, "cliaddr", "${CLIADDR}", "CLI RPC address (e.g. 0.0.0.0:3435 for Docker)")
 	gHiddenFlags = append(gHiddenFlags, "cliaddr")
 
 	// Embedded LAN/WAN DMSG server. Always on whenever ISHYPERVISOR=true
@@ -480,20 +480,20 @@ func init() {
 	// Operators who actually want hypervisor-without-LAN-DMSG can
 	// hand-edit /opt/skywire/skywire.json to drop the
 	// hypervisor.lan_dmsg_server.enable boolean.
-	genConfigCmd.Flags().IntVar(&lanDmsgPort, "lan-dmsg-port", scriptExecInt("${LANDMSGPORT:-0}"), "embedded DMSG server TCP port (0 = OS-assigned at runtime; pin via LANDMSGPORT for stable WAN reachability)")
+	skyenvIntVar(genConfigCmd.Flags(), &lanDmsgPort, "lan-dmsg-port", "${LANDMSGPORT:-0}", "embedded DMSG server TCP port (0 = OS-assigned at runtime; pin via LANDMSGPORT for stable WAN reachability)")
 	gHiddenFlags = append(gHiddenFlags, "lan-dmsg-port")
-	genConfigCmd.Flags().StringVar(&lanDmsgPublicAddress, "lan-dmsg-public", scriptExecString("${LANDMSGPUBLIC}"), "embedded DMSG server WAN-reachable address (host:port; requires port-forward)")
+	skyenvStringVar(genConfigCmd.Flags(), &lanDmsgPublicAddress, "lan-dmsg-public", "${LANDMSGPUBLIC}", "embedded DMSG server WAN-reachable address (host:port; requires port-forward)")
 	gHiddenFlags = append(gHiddenFlags, "lan-dmsg-public")
-	genConfigCmd.Flags().StringVar(&dmsgServerConf, "dmsg-server-conf", scriptExecString("${DMSGSERVERCONF}"), "run the dmsg server from this standalone dmsg-server config file inside the visor (replaces a separate dmsg server unit)")
+	skyenvStringVar(genConfigCmd.Flags(), &dmsgServerConf, "dmsg-server-conf", "${DMSGSERVERCONF}", "run the dmsg server from this standalone dmsg-server config file inside the visor (replaces a separate dmsg server unit)")
 	gHiddenFlags = append(gHiddenFlags, "dmsg-server-conf")
-	genConfigCmd.Flags().BoolVar(&dmsgServerOwnKey, "dmsg-server", scriptExecBool("${DMSGSERVER:-false}"), "run a dmsg server inside the visor on the visor's OWN key, sharing its transport port")
+	skyenvBoolVar(genConfigCmd.Flags(), &dmsgServerOwnKey, "dmsg-server", "${DMSGSERVER:-false}", "run a dmsg server inside the visor on the visor's OWN key, sharing its transport port")
 	gHiddenFlags = append(gHiddenFlags, "dmsg-server")
-	genConfigCmd.Flags().StringVar(&dmsgServerPublicAddr, "dmsg-server-public", scriptExecString("${DMSGSERVERPUBLIC}"), "address that in-visor dmsg server advertises (host:port); empty advertises whatever its listener resolves to")
-	genConfigCmd.Flags().StringVar(&dmsgServerWSTLSAddr, "dmsg-server-ws-tls", scriptExecString("${DMSGSERVERWSTLS}"), "address (\":443\") where the in-visor dmsg server self-terminates TLS for its wss front via Let's Encrypt; empty leaves TLS to a reverse proxy on this host")
+	skyenvStringVar(genConfigCmd.Flags(), &dmsgServerPublicAddr, "dmsg-server-public", "${DMSGSERVERPUBLIC}", "address that in-visor dmsg server advertises (host:port); empty advertises whatever its listener resolves to")
+	skyenvStringVar(genConfigCmd.Flags(), &dmsgServerWSTLSAddr, "dmsg-server-ws-tls", "${DMSGSERVERWSTLS}", "address (\":443\") where the in-visor dmsg server self-terminates TLS for its wss front via Let's Encrypt; empty leaves TLS to a reverse proxy on this host")
 	gHiddenFlags = append(gHiddenFlags, "dmsg-server-ws-tls")
-	genConfigCmd.Flags().StringVar(&dmsgRelayAddr, "dmsg-relay-addr", scriptExecString("${DMSGRELAYADDR}"), "loopback host:port for the dmsg relay acceptor, for local services that cannot use the unix socket (a different user than the visor). Requires --dmsg-relay-keys")
-	genConfigCmd.Flags().StringVar(&dmsgRelayKeys, "dmsg-relay-keys", scriptExecString("${DMSGRELAYKEYS}"), "public keys allowed to attach to the dmsg relay, comma-separated. Required with --dmsg-relay-addr: a TCP listener has no filesystem gate")
-	genConfigCmd.Flags().BoolVar(&noDmsgRelay, "no-dmsg-relay", scriptExecBool("${NODMSGRELAY:-false}"), "do not serve the local dmsg relay acceptor at all (it is served by default)")
+	skyenvStringVar(genConfigCmd.Flags(), &dmsgRelayAddr, "dmsg-relay-addr", "${DMSGRELAYADDR}", "loopback host:port for the dmsg relay acceptor, for local services that cannot use the unix socket (a different user than the visor). Requires --dmsg-relay-keys")
+	skyenvStringVar(genConfigCmd.Flags(), &dmsgRelayKeys, "dmsg-relay-keys", "${DMSGRELAYKEYS}", "public keys allowed to attach to the dmsg relay, comma-separated. Required with --dmsg-relay-addr: a TCP listener has no filesystem gate")
+	skyenvBoolVar(genConfigCmd.Flags(), &noDmsgRelay, "no-dmsg-relay", "${NODMSGRELAY:-false}", "do not serve the local dmsg relay acceptor at all (it is served by default)")
 	gHiddenFlags = append(gHiddenFlags, "dmsg-server-public")
 
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
@@ -541,6 +541,16 @@ var genConfigCmd = &cobra.Command{
 	}(),
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		log := logger
+		// Every SKYENV-derived flag default was evaluated when this
+		// package registered its flags, which can be long before the
+		// env file is the one the caller means: on js/wasm `skywire
+		// autoconfig` re-enters `config gen` in this same process,
+		// after init. No flag names the env file, so here — before
+		// anything reads a flag — is where its path is final.
+		skyenvfile = resolveSkyenvFile()
+		refreshSkyenvDefaults(cmd.Flags())
+		initWisp, runWisp := skyenvDefaultValues(cmd.Flags(), "wisp")
+		log.Debugf("config gen: wisp default at init=%v, at run=%v", initWisp, runWisp)
 		if isEnvs || envfileOut != "" {
 			if skyenv.OS == "windows" {
 				envfile = envfileWindows
