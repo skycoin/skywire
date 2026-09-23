@@ -729,6 +729,15 @@ jobs:
           # jarsigner is the right verifier for the bundle.
           jarsigner -verify "$aab" | grep -q 'jar verified' \
             || { echo "::error::AAB is not signed"; exit 1; }
+          # The download budget, and IzzyOnDroid's default limit. R8 plus the
+          # payload's nomsgpack and packed relocations took the APK from 56 MB
+          # to 27 MB; over 30 MB means one of them came undone, and that should
+          # stop the release rather than ship.
+          apk_max=30000000
+          apk_size=$(wc -c < "$apk" | tr -d '[:space:]')
+          echo "APK: $apk_size bytes (budget $apk_max)"
+          [ "$apk_size" -le "$apk_max" ] \
+            || { echo "::error::APK is $apk_size bytes, over the $apk_max-byte budget"; exit 1; }
           apk_out="skywire-${ref}-android-arm64.apk"
           aab_out="skywire-${ref}-android-arm64.aab"
           mv "$apk" "$apk_out"
