@@ -1,0 +1,2 @@
+# row	tp_id	first_hop_pk	ts	rg	chosen_by	cut_ok	cut_at_s	bytes_before_cut	ttfb_after_s	goodput_before_Bps	goodput_after_Bps	restored	cut_trigger	pct_at_cut	ttfb_measured_s
+11	f1012467-de9d-09a9-8b49-62a43945c24b	0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb	2026-09-23T12:42:07Z	49206	tunnel_role=active, busiest by carrier-growth	1	4.786	8269824	0.217	1727920	26732976	1	deadline	16	0.217
