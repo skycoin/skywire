@@ -382,12 +382,15 @@ func (hv *Hypervisor) getUIVersion() http.HandlerFunc {
 
 // uiAutoReloadJS polls the served-bundle fingerprint and reloads once it changes
 // (a new visor binary shipped a new embedded UI). Silent, with a short grace so
-// an in-flight click isn't cut off.
+// an in-flight click isn't cut off. The path is RELATIVE and a non-OK answer is
+// ignored: the UI is also served under a subpath (the desk's /vnet/<port>/), where
+// an absolute /api/ui-version reaches the outer origin's 404 page instead — and
+// that text never equals the booted stamp, so the frame reloaded every 30 s.
 const uiAutoReloadJS = `(function(){
   var booted = window.__SKYWIRE_UI_VERSION__;
   if (!booted) { return; }
   setInterval(function(){
-    fetch('/api/ui-version', {cache:'no-store'}).then(function(r){ return r.text(); }).then(function(v){
+    fetch('api/ui-version', {cache:'no-store'}).then(function(r){ return r.ok ? r.text() : ''; }).then(function(v){
       if (v && v !== booted) {
         try { console.log('skywire: new hypervisor UI available — reloading'); } catch(e){}
         setTimeout(function(){ location.reload(); }, 1500);
