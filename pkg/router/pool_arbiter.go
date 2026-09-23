@@ -164,14 +164,29 @@ func (rg *RouteGroup) dialMuxTarget(target int) int {
 	return target
 }
 
-// muxWidthTarget is the leg count this group is meant to hold — its self-heal
-// target, which is the dial-time mux width re-capped live by the adaptive
-// rotation (setSelfHealTarget). 0/1 means "no width to fill" and the arbiter
-// stays out.
+// muxWidthTarget is the leg count this group is meant to hold. For a standby
+// or role-less group it is the self-heal target — the dial-time mux width
+// re-capped live by the adaptive rotation (setSelfHealTarget), clamped to one
+// for a standby. For an ACTIVE tunnel of a role-reporting app it is at least
+// mux.app_width for that app, or pool.active_width when none is set: those
+// apps dial one leg per tunnel, and the extra legs are meant to come from the
+// standby pool under load, which the dial-time width alone never allows.
+// 0/1 means "no width to fill" and the arbiter stays out.
 func (rg *RouteGroup) muxWidthTarget() int {
 	rg.mu.Lock()
-	defer rg.mu.Unlock()
-	return rg.selfHealTarget
+	t := rg.selfHealTarget
+	rg.mu.Unlock()
+	if rg.TunnelRole() != tunnelRoleActive || rg.mux == nil {
+		return t
+	}
+	want, ok := muxAppWidthFor(rg.AppName())
+	if !ok {
+		want = rg.mux.knInt(routersettings.PoolActiveWidth)
+	}
+	if want > t {
+		t = want
+	}
+	return t
 }
 
 // poolMovedBytes is the group's aggregate wire bytes in both directions, the
@@ -352,7 +367,12 @@ func poolArbiterStep(g *RouteGroup, pool []*RouteGroup, now time.Time, grow func
 	c := cands[0]
 	how := "re-homed in place"
 	err := rehomeChain(g, c.rg)
-	if errors.Is(err, ErrRehomeUnsupported) && grow != nil {
+	// An exit that never negotiated the capability, and one whose ack never
+	// arrives (a fleet intermediate that predates the re-home packet drops it
+	// on the way; measured 15 sent / 0 received on 2026-09-23) both leave the
+	// two groups intact, so the take goes on by dialing the leg on the pool's
+	// plan through ordinary route setup, which every intermediate forwards.
+	if (errors.Is(err, ErrRehomeUnsupported) || errors.Is(err, ErrRehomeNoAck)) && grow != nil {
 		how = "dialed on the pool's plan"
 		err = grow(c.rg)
 	}

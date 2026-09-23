@@ -159,6 +159,12 @@ var (
 	PoolLegInterval = RegisterMin("pool.leg_interval", KindDuration, int64(5*time.Second), int64(time.Second), "the least time between two legs one active tunnel takes from the standby pool")
 	PoolLegRelease  = RegisterMin("pool.leg_release", KindDuration, int64(30*time.Second), int64(time.Second), "how long an active tunnel must show no load before a leg it took from the standby pool is released")
 	PoolMinStandby  = RegisterMin("pool.min_standby", KindCount, 2, 0, "how many tunnels the standby pool must keep; the arbiter never takes a leg that would leave fewer")
+	// PoolActiveWidth is what makes the pool's packet-level half happen by
+	// DEFAULT: a role-reporting app dials its tunnels with one leg, and the
+	// arbiter used to read that dial-time width and stay out for good, so the
+	// standby pool was a stream reserve only. An ACTIVE tunnel now targets at
+	// least this many legs under load; mux.app_width for the app overrides it.
+	PoolActiveWidth = RegisterMin("pool.active_width", KindCount, 2, 1, "legs an active tunnel of a role-reporting app targets under load, taking the extra ones from the standby pool; mux.app_width for the app overrides it")
 	// PoolLoadMinBps is the arbiter's load FLOOR. Its reverse-heavy episode
 	// used to latch on ANY byte delta at all, so a tunnel's keepalives and the
 	// mux's own control frames read as "carrying continuously" and an active

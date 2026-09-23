@@ -45,6 +45,11 @@ import (
 // warm transport (see poolSourcedLegFallback).
 var ErrRehomeUnsupported = errors.New("leg re-home unsupported (peer did not negotiate CapLegRehome)")
 
+// ErrRehomeNoAck is the exit not answering a re-home request in time or
+// refusing it: both groups are left intact, so the caller may fall back to
+// dialing the leg on the pool's plan instead of giving up on the take.
+var ErrRehomeNoAck = errors.New("re-home not acknowledged")
+
 // legRehomeAckTimeout bounds the wait for the exit's ack (leg.rehome_ack_timeout).
 // A re-home is two visors rewriting one rule each; if the ack does not come
 // back within a few route RTTs the request is abandoned and BOTH groups are
@@ -158,11 +163,11 @@ func rehomeChain(g, s *RouteGroup) error {
 	case flags = <-ackCh:
 	case <-time.After(legRehomeAckTimeout()):
 		globalMuxCounters.legRehomesFailed.Add(1)
-		return fmt.Errorf("no re-home ack from %s within %s; both groups left intact", s.desc.DstPK(), legRehomeAckTimeout())
+		return fmt.Errorf("%w: no ack from %s within %s; both groups left intact", ErrRehomeNoAck, s.desc.DstPK(), legRehomeAckTimeout())
 	}
 	if flags&routing.LegRehomeRefused != 0 || flags&routing.LegRehomeAck == 0 {
 		globalMuxCounters.legRehomesFailed.Add(1)
-		return fmt.Errorf("peer %s refused the re-home; both groups left intact", s.desc.DstPK())
+		return fmt.Errorf("%w: peer %s refused; both groups left intact", ErrRehomeNoAck, s.desc.DstPK())
 	}
 	globalMuxCounters.legRehomesAcked.Add(1)
 
