@@ -345,6 +345,16 @@ func (s *Stream) RawRemoteAddr() Addr {
 	return s.rAddr
 }
 
+// RemotePK returns the public key of the client at the other end.
+//
+// Established by the end-to-end client<->client Noise handshake, not asserted
+// by the peer, so a caller may use it to authenticate one. appnet's directConn
+// offers the same method, which lets a transport-agnostic consumer ask either
+// carrier who it is talking to.
+func (s *Stream) RemotePK() cipher.PubKey {
+	return s.rAddr.PK
+}
+
 // ServerPK returns the remote PK of the dmsg.Server used to relay frames to and from the remote client.
 func (s *Stream) ServerPK() cipher.PubKey {
 	return s.ses.RemotePK()
@@ -384,6 +394,13 @@ func (s *Stream) Read(b []byte) (int, error) {
 	if n > 0 {
 		// Reset the read deadline on successful read to keep the stream alive.
 		s.SetReadDeadline(time.Now().Add(StreamIdleTimeout)) //nolint:errcheck,gosec
+		// These bytes reached us through the session's dmsg server, which is
+		// the one fact its liveness ping goes looking for. Recording it here
+		// is what stops the ping reaper closing a session that is carrying a
+		// call. See SessionCommon.ReadSince.
+		if s.ses != nil {
+			s.ses.markRead()
+		}
 	}
 	if err != nil && s != nil {
 		// Terminal read error — release the porter reservation so we don't

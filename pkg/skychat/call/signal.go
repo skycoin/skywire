@@ -30,6 +30,11 @@ const (
 	SigHangup
 	// SigBusy signals the callee is already in a call.
 	SigBusy
+	// SigResume re-attaches a media conn to a call already in progress whose
+	// transport died under it. Appended last on purpose: a peer that predates
+	// it reads an unknown type, answers SigDecline("expected invite"), and the
+	// call ends the way it used to instead of misbehaving.
+	SigResume
 )
 
 // Sig is one signaling message. It carries the call id, the sender, and — on
@@ -91,6 +96,12 @@ func readSig(r io.Reader) (Sig, error) {
 // SkychatVoiceMediaPort).
 type DialFunc func(ctx context.Context, peer cipher.PubKey, port uint16) (net.Conn, error)
 
+// ResumeHandler is called when a peer re-dials to continue a call whose media
+// transport failed. It receives the resume frame and the fresh conn; the
+// implementation answers SigAccept and hands the conn to the live session, or
+// declines if it knows of no such call awaiting one.
+type ResumeHandler func(sig Sig, conn net.Conn)
+
 // InviteHandler is called when an inbound invite arrives. It receives the
 // invite and the live signaling conn; the implementation decides to accept
 // (reply SigAccept and set up media) or decline. It must not block long.
@@ -106,9 +117,10 @@ type Signaler struct {
 	dial    DialFunc
 	log     *logging.Logger
 
-	mu      sync.Mutex
-	onInv   InviteHandler
-	serving []net.Listener
+	mu       sync.Mutex
+	onInv    InviteHandler
+	onResume ResumeHandler
+	serving  []net.Listener
 }
 
 // NewSignaler builds a Signaler bound to the given local PK / port / dialer.
@@ -123,6 +135,15 @@ func NewSignaler(localPK cipher.PubKey, port uint16, dial DialFunc, log *logging
 func (s *Signaler) SetInviteHandler(h InviteHandler) {
 	s.mu.Lock()
 	s.onInv = h
+	s.mu.Unlock()
+}
+
+// SetResumeHandler registers the callback for a peer re-dialing an existing
+// call. Leaving it unset makes this endpoint answer every resume with a
+// decline, which is what a build without call resumption should do.
+func (s *Signaler) SetResumeHandler(h ResumeHandler) {
+	s.mu.Lock()
+	s.onResume = h
 	s.mu.Unlock()
 }
 
@@ -183,8 +204,20 @@ func (s *Signaler) handleInbound(conn net.Conn) {
 		_ = conn.Close() //nolint:errcheck
 		return
 	}
+	if sig.Type == SigResume {
+		s.mu.Lock()
+		h := s.onResume
+		s.mu.Unlock()
+		if h == nil {
+			_ = writeSig(conn, Sig{Type: SigDecline, CallID: sig.CallID, FromPK: s.localPK, Reason: "resume not supported"}) //nolint:errcheck
+			_ = conn.Close()                                                                                                 //nolint:errcheck
+			return
+		}
+		h(sig, conn)
+		return
+	}
 	if sig.Type != SigInvite {
-		// Only an invite legitimately opens a fresh signaling conn.
+		// Only an invite or a resume legitimately opens a fresh signaling conn.
 		_ = writeSig(conn, Sig{Type: SigDecline, CallID: sig.CallID, FromPK: s.localPK, Reason: "expected invite"}) //nolint:errcheck
 		_ = conn.Close()                                                                                            //nolint:errcheck
 		return
@@ -214,35 +247,112 @@ func (s *Signaler) Invite(ctx context.Context, peer cipher.PubKey, callID, codec
 		_ = conn.Close() //nolint:errcheck
 		return nil, Sig{}, fmt.Errorf("voice: send invite: %w", err)
 	}
-	// The wait for the peer's answer is bounded by ctx, which it was not:
-	// only the dial above took the context, and the read below then blocked
-	// for as long as the callee cared to ring. A caller asking for a
-	// thirty-second call waited fifty-six, and nothing the caller did —
-	// deadline, cancel, hang up — ended it. Both halves are needed: the
-	// deadline covers a peer that never replies, and the cancel covers a
-	// caller who gives up first, since a deadline already set cannot be
-	// brought forward.
-	if dl, ok := ctx.Deadline(); ok {
-		_ = conn.SetReadDeadline(dl) //nolint:errcheck // not every conn honors one; the cancel below still does
-	}
-	stopCancel := context.AfterFunc(ctx, func() { _ = conn.Close() }) //nolint:errcheck
-	reply, err := readSig(conn)
-	stopCancel()
+	reply, err := awaitReply(ctx, conn, func(c net.Conn) { s.cancelInvite(c, callID) })
 	if err != nil {
 		_ = conn.Close() //nolint:errcheck
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return nil, Sig{}, fmt.Errorf("voice: no answer: %w", ctxErr)
-		}
 		return nil, Sig{}, fmt.Errorf("voice: read invite reply: %w", err)
 	}
-	// Past here the conn is the MEDIA conn and must carry no deadline of the
-	// invite's — a call would end the moment the ring budget elapsed.
-	_ = conn.SetReadDeadline(time.Time{}) //nolint:errcheck
 	if reply.Type != SigAccept {
 		_ = conn.Close() //nolint:errcheck
 		return nil, reply, nil
 	}
 	return conn, reply, nil
+}
+
+// awaitReply waits for one signaling frame on a conn we have just written a
+// request to, bounded by ctx, and hands the conn back ready to carry media.
+//
+// The bounding is both halves on purpose. Only the dial used to take the
+// context and the read then blocked for as long as the peer cared to ring: a
+// caller asking for a thirty-second call waited fifty-six, and nothing it did
+// — deadline, cancel, hang up — ended it. The deadline covers a peer that
+// never replies; onGiveUp covers a caller who gives up first, because a
+// deadline already set cannot be brought forward.
+//
+// On success the read deadline is CLEARED. Past this point the conn is the
+// media conn, and a call would otherwise end the moment the request's budget
+// elapsed.
+func awaitReply(ctx context.Context, conn net.Conn, onGiveUp func(net.Conn)) (Sig, error) {
+	if dl, ok := ctx.Deadline(); ok {
+		_ = conn.SetReadDeadline(dl) //nolint:errcheck // not every conn honors one; onGiveUp still does
+	}
+	stop := context.AfterFunc(ctx, func() { onGiveUp(conn) })
+	reply, err := readSig(conn)
+	stop()
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			// The read error here is only ever "closed" — onGiveUp did that.
+			// The context is the actual cause and the only useful thing to
+			// report. No "voice:" prefix: both callers add their own.
+			return Sig{}, fmt.Errorf("no answer: %w", ctxErr)
+		}
+		return Sig{}, err
+	}
+	_ = conn.SetReadDeadline(time.Time{}) //nolint:errcheck
+	return reply, nil
+}
+
+// Resume re-dials the peer's signaling port to continue an EXISTING call whose
+// media transport died, and returns the fresh media conn.
+//
+// It carries the original call id, which is how the peer tells this apart from
+// a new call: a resume must attach to the session already running rather than
+// ring anybody. Same shape as Invite otherwise — request, bounded wait, and on
+// SigAccept the conn becomes the media conn.
+func (s *Signaler) Resume(ctx context.Context, peer cipher.PubKey, callID string) (net.Conn, error) {
+	conn, err := s.dial(ctx, peer, s.port)
+	if err != nil {
+		return nil, fmt.Errorf("voice: resume dial: %w", err)
+	}
+	if err := writeSig(conn, Sig{Type: SigResume, CallID: callID, FromPK: s.localPK}); err != nil {
+		_ = conn.Close() //nolint:errcheck
+		return nil, fmt.Errorf("voice: send resume: %w", err)
+	}
+	reply, err := awaitReply(ctx, conn, func(c net.Conn) { _ = c.Close() }) //nolint:errcheck // best effort; the read below reports the outcome
+	if err != nil {
+		_ = conn.Close() //nolint:errcheck
+		return nil, fmt.Errorf("voice: resume reply: %w", err)
+	}
+	if reply.Type != SigAccept {
+		_ = conn.Close() //nolint:errcheck
+		reason := reply.Reason
+		if reason == "" {
+			reason = sigTypeName(reply.Type)
+		}
+		return nil, fmt.Errorf("voice: resume refused: %s", reason)
+	}
+	return conn, nil
+}
+
+// hangupWriteGrace bounds the farewell below. A grace rather than a write
+// deadline because a deadline is a no-op on some of the carriers voice runs
+// over (appnet's directConn sets none), so the only way to be sure the conn
+// gets dropped is to stop waiting on the write rather than to bound it.
+const hangupWriteGrace = 500 * time.Millisecond
+
+// cancelInvite ends an invite this side has given up on — the caller hanging
+// up while the callee is still ringing, or the ring budget running out.
+//
+// Closing the conn is what ends the call, and it stays the thing that does.
+// The frame in front of it is so the callee learns WHY, and learns it without
+// having to wait on a carrier propagating a half-close: the callee reads this
+// conn throughout the ring precisely so a cancel can stop the ringing at once
+// (see ringWatch). The write is best-effort and strictly bounded, because the
+// close must happen whatever it does — otherwise hanging up during a ring
+// would itself hang, on a conn that is already wedged.
+func (s *Signaler) cancelInvite(conn net.Conn, callID string) {
+	sent := make(chan struct{})
+	go func() {
+		defer close(sent)
+		_ = writeSig(conn, Sig{Type: SigHangup, CallID: callID, FromPK: s.localPK, Reason: "caller hung up"}) //nolint:errcheck
+	}()
+	timer := time.NewTimer(hangupWriteGrace)
+	defer timer.Stop()
+	select {
+	case <-sent:
+	case <-timer.C:
+	}
+	_ = conn.Close() //nolint:errcheck // the close is the point; a conn already gone reports so
 }
 
 func (s *Signaler) closeListeners() {

@@ -81,6 +81,20 @@ func (noDiscoveryClient) ClientsByServer(context.Context, cipher.PubKey) ([]*Ent
 }
 
 // Entry retrieves an entry associated with the given public key.
+// do issues one discovery request, refusing the one request that cannot be
+// issued: a lookup against a dmsg-addressed discovery made from inside a dmsg
+// dial that is itself waiting on a lookup. See ErrCircularDiscovery.
+//
+// Every method funnels through here, so the guard covers the whole surface
+// rather than the one method a stack trace happened to name.
+func (c *httpClient) do(req *http.Request) (*http.Response, error) {
+	ctx := req.Context()
+	if requestInFlight(ctx) && overDmsg(c.address) {
+		return nil, fmt.Errorf("%w (%s)", ErrCircularDiscovery, c.address)
+	}
+	return c.client.Do(req.WithContext(withRequestInFlight(ctx)))
+}
+
 func (c *httpClient) Entry(ctx context.Context, publicKey cipher.PubKey) (*Entry, error) {
 	endpoint := fmt.Sprintf("%s/dmsg-discovery/entry/%s", c.address, publicKey)
 	log := c.log.WithField("endpoint", endpoint)
@@ -92,7 +106,7 @@ func (c *httpClient) Entry(ctx context.Context, publicKey cipher.PubKey) (*Entry
 
 	req = req.WithContext(ctx)
 
-	resp, err := c.client.Do(req)
+	resp, err := c.do(req)
 	if resp != nil {
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
@@ -144,7 +158,7 @@ func (c *httpClient) PostEntry(ctx context.Context, entry *Entry) error {
 
 	req = req.WithContext(ctx)
 
-	resp, err := c.client.Do(req)
+	resp, err := c.do(req)
 	if resp != nil {
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
@@ -199,7 +213,7 @@ func (c *httpClient) DelEntry(ctx context.Context, entry *Entry) error {
 
 	req = req.WithContext(ctx)
 
-	resp, err := c.client.Do(req)
+	resp, err := c.do(req)
 	if resp != nil {
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
@@ -305,7 +319,7 @@ func (c *httpClient) AvailableServers(ctx context.Context) ([]*Entry, error) {
 	}
 	req = req.WithContext(ctx)
 
-	resp, err := c.client.Do(req)
+	resp, err := c.do(req)
 	if resp != nil {
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
@@ -347,7 +361,7 @@ func (c *httpClient) AllServers(ctx context.Context) ([]*Entry, error) {
 	}
 	req = req.WithContext(ctx)
 
-	resp, err := c.client.Do(req)
+	resp, err := c.do(req)
 	if resp != nil {
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
@@ -389,7 +403,7 @@ func (c *httpClient) AllEntries(ctx context.Context) ([]string, error) {
 	}
 	req = req.WithContext(ctx)
 
-	resp, err := c.client.Do(req)
+	resp, err := c.do(req)
 	if resp != nil {
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
@@ -430,7 +444,7 @@ func (c *httpClient) AllClientsByServer(ctx context.Context) (map[string][]*Entr
 	}
 	req = req.WithContext(ctx)
 
-	resp, err := c.client.Do(req)
+	resp, err := c.do(req)
 	if resp != nil {
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
@@ -471,7 +485,7 @@ func (c *httpClient) ClientsByServer(ctx context.Context, serverPK cipher.PubKey
 	}
 	req = req.WithContext(ctx)
 
-	resp, err := c.client.Do(req)
+	resp, err := c.do(req)
 	if resp != nil {
 		defer func() {
 			if err := resp.Body.Close(); err != nil {

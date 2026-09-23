@@ -129,6 +129,7 @@ func NewManager(cfg Config) *Manager {
 	m := &Manager{cfg: cfg, log: cfg.Logger, calls: make(map[string]*Session), ringing: make(map[string]*ringingCall), taps: make(map[string]*callTap), dialing: make(map[string]*dialingCall)}
 	m.sig = NewSignaler(cfg.LocalPK, cfg.SignalPort, cfg.Dial, cfg.Logger)
 	m.sig.SetInviteHandler(m.handleInvite)
+	m.sig.SetResumeHandler(m.handleResume)
 	return m
 }
 
@@ -217,7 +218,12 @@ func (m *Manager) dial(ctx context.Context, callID string, peer cipher.PubKey) (
 		}
 		return nil, fmt.Errorf("voice: call not accepted: %s", reason)
 	}
-	sess := m.startSession(callID, conn, ssrcFromPK(m.cfg.LocalPK))
+	sess := m.startSession(callID, peer, conn, ssrcFromPK(m.cfg.LocalPK))
+	// This side placed the call, so this side re-dials when the transport
+	// under it dies; the callee waits to be re-dialed. See resumeOutbound.
+	sess.SetResume(func(rctx context.Context, id string) (net.Conn, error) {
+		return m.resumeOutbound(rctx, id, peer)
+	})
 	// The session runs independently of the (possibly short) invite ctx — it
 	// ends when the conn closes (Hangup or the peer hanging up), not when the
 	// caller's dial deadline elapses.
@@ -231,12 +237,22 @@ func (m *Manager) dial(ctx context.Context, callID string, peer cipher.PubKey) (
 // and starts a media Session over the same conn.
 func (m *Manager) handleInvite(inv Sig, conn net.Conn) {
 	if m.cfg.ManualAnswer {
-		if !m.ringAndWait(inv) {
-			_ = writeSig(conn, Sig{Type: SigDecline, CallID: inv.CallID, FromPK: m.cfg.LocalPK, Reason: "no answer"}) //nolint:errcheck
-			_ = conn.Close()                                                                                          //nolint:errcheck
-			return
+		// Watched, so that a caller hanging up mid-ring stops the ring here
+		// and now instead of leaving it to run out the timeout. Everything
+		// downstream reads through the watch — see ringWatch.
+		w := watchRing(conn)
+		switch m.ringAndWait(inv, w.gone) {
+		case ringAnswered:
+			w.answer()
+			m.accept(inv, w)
+		case ringAbandoned:
+			// Nobody to decline to: the caller has already hung up, and the
+			// write would only block on a conn that is on its way out.
+			_ = w.Close() //nolint:errcheck
+		default:
+			_ = writeSig(w, Sig{Type: SigDecline, CallID: inv.CallID, FromPK: m.cfg.LocalPK, Reason: "no answer"}) //nolint:errcheck
+			_ = w.Close()                                                                                          //nolint:errcheck
 		}
-		m.accept(inv, conn)
 		return
 	}
 	if m.cfg.OnIncoming == nil || !m.cfg.OnIncoming(inv) {
@@ -247,9 +263,25 @@ func (m *Manager) handleInvite(inv Sig, conn net.Conn) {
 	m.accept(inv, conn)
 }
 
-// ringAndWait parks the invite as a ringing call and blocks until it's answered,
-// declined, or the ring timeout fires. Returns true only on an explicit answer.
-func (m *Manager) ringAndWait(inv Sig) bool {
+// ringOutcome is how a ring ended.
+type ringOutcome int
+
+const (
+	// ringAnswered: someone picked up.
+	ringAnswered ringOutcome = iota
+	// ringDeclined: an explicit decline, or the ring timing out — either way
+	// the caller is still there and is owed an answer.
+	ringDeclined
+	// ringAbandoned: the caller hung up before anyone picked up.
+	ringAbandoned
+)
+
+// ringAndWait parks the invite as a ringing call and blocks until it's
+// answered, declined, abandoned by the caller, or the ring timeout fires.
+//
+// gone is the caller-hung-up signal from the call's ringWatch. It is what
+// makes a ring end when the call does rather than when the timeout says so.
+func (m *Manager) ringAndWait(inv Sig, gone <-chan struct{}) ringOutcome {
 	rc := &ringingCall{inv: inv, decided: make(chan bool, 1)}
 	m.mu.Lock()
 	m.ringing[inv.CallID] = rc
@@ -260,15 +292,26 @@ func (m *Manager) ringAndWait(inv Sig) bool {
 	m.log.WithField("from", inv.FromPK.Hex()).WithField("call", inv.CallID).
 		Info("voice: incoming call RINGING — answer with `skychat voice answer <id>`")
 
-	var ok bool
+	timeout := time.NewTimer(ringTimeout)
+	defer timeout.Stop()
+	out := ringDeclined
 	select {
-	case ok = <-rc.decided:
-	case <-time.After(ringTimeout):
+	case ok := <-rc.decided:
+		if ok {
+			out = ringAnswered
+		}
+	case <-gone:
+		out = ringAbandoned
+	case <-timeout.C:
 	}
 	m.mu.Lock()
 	delete(m.ringing, inv.CallID)
 	m.mu.Unlock()
-	return ok
+	if out == ringAbandoned {
+		m.log.WithField("from", inv.FromPK.Hex()).WithField("call", inv.CallID).
+			Info("voice: caller hung up before the call was answered")
+	}
+	return out
 }
 
 // accept replies SigAccept and starts the media session over conn.
@@ -278,7 +321,10 @@ func (m *Manager) accept(inv Sig, conn net.Conn) {
 		_ = conn.Close() //nolint:errcheck
 		return
 	}
-	sess := m.startSession(inv.CallID, conn, ssrcFromPK(m.cfg.LocalPK))
+	sess := m.startSession(inv.CallID, inv.FromPK, conn, ssrcFromPK(m.cfg.LocalPK))
+	// We answered, so we wait to be re-dialed rather than dialing — only one
+	// side may, or a broken transport becomes two replacements.
+	sess.SetAwaitResume()
 	go func() { sess.Run(context.Background()); m.dropCall(inv.CallID) }() //nolint:gosec // session outlives the invite/request ctx by design
 }
 
@@ -325,7 +371,7 @@ func (m *Manager) Incoming() []Sig {
 	return out
 }
 
-func (m *Manager) startSession(callID string, conn net.Conn, ssrc uint32) *Session {
+func (m *Manager) startSession(callID string, peer cipher.PubKey, conn net.Conn, ssrc uint32) *Session {
 	src := m.cfg.NewSource()
 	sink := m.cfg.NewSink()
 	if m.cfg.Visualize {
@@ -337,6 +383,7 @@ func (m *Manager) startSession(callID string, conn net.Conn, ssrc uint32) *Sessi
 		m.mu.Unlock()
 	}
 	sess := NewSession(callID, conn, m.cfg.NewCodec(), src, sink, ssrc, m.log)
+	sess.SetPeer(peer)
 	m.mu.Lock()
 	m.calls[callID] = sess
 	m.mu.Unlock()
@@ -364,7 +411,15 @@ func (m *Manager) dropCall(callID string) {
 	m.mu.Unlock()
 	if sess != nil {
 		sess.Close()
-		m.log.WithField("call", callID).Info("voice: call ended")
+		// With the reason, because "call ended" on its own is what a report
+		// of calls dropping by themselves has to be diagnosed from, and it
+		// says nothing: a peer hanging up and a transport collapsing under a
+		// live call produced the identical line.
+		reason := sess.EndReason()
+		if reason == "" {
+			reason = "hung up here"
+		}
+		m.log.WithField("call", callID).WithField("reason", reason).Info("voice: call ended")
 	}
 }
 

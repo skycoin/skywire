@@ -535,6 +535,24 @@ func appsContains(apps []appserver.AppConfig, name string) bool {
 	return false
 }
 
+// vpnDirectDmsgAddr is the address of a dmsg server the vpn-client must route
+// around the tunnel to keep ses alive, and false when there is none.
+//
+// A skynet-carried session has none. It reaches its server over a skywire
+// route, so its "TCP" remote is a routing address — the server's public key
+// and port — and the vpn-client, handed that, DNS-resolved the key and refused
+// to start ("lookup 0281a1…: no such host"). What that session actually rides
+// is skywire transports, whose IPs already travel as TPRemoteIPs.
+func vpnDirectDmsgAddr(ses interface {
+	Carrier() string
+	RemoteTCPAddr() net.Addr
+}) (string, bool) {
+	if ses.Carrier() == dmsg.CarrierSkynet {
+		return "", false
+	}
+	return ses.RemoteTCPAddr().String(), true
+}
+
 // Make an env maker function for vpn application
 func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs []string) launcher.EnvMaker {
 	return func() ([]string, error) {
@@ -546,17 +564,16 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 			log := conf.MasterLogger().PackageLogger("vpn_env_maker")
 			r := netutil.NewRetrier(log, 1*time.Second, 10*time.Second, 0, 1)
 			err := r.Do(context.Background(), func() error {
-				for _, ses := range dmsgC.AllSessions() {
-					envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
-				}
-
-				if len(envCfg.DmsgServers) == 0 {
+				sessions := dmsgC.AllSessions()
+				if len(sessions) == 0 {
 					return errors.New("no dmsg servers found")
 				}
-
 				if dmsgDC != nil {
-					for _, ses := range dmsgDC.AllSessions() {
-						envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
+					sessions = append(sessions, dmsgDC.AllSessions()...)
+				}
+				for _, ses := range sessions {
+					if addr, ok := vpnDirectDmsgAddr(ses); ok {
+						envCfg.DmsgServers = append(envCfg.DmsgServers, addr)
 					}
 				}
 				return nil
@@ -587,6 +604,13 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 		envCfg.TPRemoteIPs = tpRemoteAddrs
 
 		envMap := vpn.AppEnvArgs(envCfg)
+		// AppEnvArgs leaves the count out of an empty list, and the vpn-client
+		// reads an absent count as dmsg never having been wired up and refuses
+		// to start. Every session being skynet-carried is not that: dmsg is up,
+		// there is just no server the tunnel has to route around.
+		if conf.Dmsg != nil {
+			envMap[vpn.DmsgAddrsCountEnvKey] = strconv.Itoa(len(envCfg.DmsgServers))
+		}
 
 		envs := make([]string, 0, len(envMap))
 		for k, v := range envMap {
