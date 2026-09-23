@@ -57,6 +57,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.skycoin.skywire.BuildConfig
 import com.skycoin.skywire.R
 import com.skycoin.skywire.core.AppUpdates
 import com.skycoin.skywire.core.AppLanguage
@@ -249,7 +250,7 @@ fun SettingsScreen(
                     },
                 )
             }
-            item { AboutCard(state) }
+            item { AboutCard(state, onOpenSource = viewModel::openSourceCode) }
         }
     }
 
@@ -827,6 +828,13 @@ private fun UpdateCard(
         )
         Spacer(Modifier.height(10.dp))
 
+        // The F-Droid build: nothing to find, fetch or install — the F-Droid
+        // client does all three, and checkForUpdate never leaves Idle.
+        if (!BuildConfig.SELF_UPDATE) {
+            UpdateHint(stringResource(R.string.settings_update_fdroid))
+            return@SectionCard
+        }
+
         when (val update = state.update) {
             is UpdateStatus.Idle -> {
                 UpdateActions { FilledTonalButton(onClick = onCheck) { Text(stringResource(R.string.settings_update_check)) } }
@@ -1007,8 +1015,13 @@ private const val NOTES_CHARS = 300
 private fun megabytes(bytes: Long): String =
     if (bytes <= 0L) "?" else "%.1f".format(bytes / 1_048_576.0)
 
+/**
+ * Versions, and the license with the way to the source. The AGPL asks an
+ * interactive program to show its license notice, and "source code" is the
+ * promise the license makes — so it is a button here, not a line in a README.
+ */
 @Composable
-private fun AboutCard(state: SettingsUiState) {
+private fun AboutCard(state: SettingsUiState, onOpenSource: () -> Unit) {
     SectionCard {
         Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
@@ -1020,6 +1033,15 @@ private fun AboutCard(state: SettingsUiState) {
             label = stringResource(R.string.settings_core_version),
             value = state.coreVersion.ifEmpty { "—" },
         )
+        // The SPDX id, the same in every language.
+        InfoRow(
+            label = stringResource(R.string.settings_license),
+            value = "AGPL-3.0",
+        )
+        Spacer(Modifier.height(12.dp))
+        FilledTonalButton(onClick = onOpenSource) {
+            Text(stringResource(R.string.settings_source_code))
+        }
     }
 }
 

@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.skycoin.skywire.BuildConfig
 import com.skycoin.skywire.R
 import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.core.AppLanguage
@@ -301,6 +302,9 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
      * visit to Settings with an error about a check nobody asked for.
      */
     fun checkForUpdate(manual: Boolean) {
+        // The F-Droid build: F-Droid delivers the updates, and its APKs carry
+        // F-Droid's signature, so a GitHub build could not install over one.
+        if (!BuildConfig.SELF_UPDATE) return
         val current = mutable.value.update
         // A download in flight is the answer to "is there an update" — asking
         // again would replace what the user is watching with a fresh Checking.
@@ -438,6 +442,14 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             else -> AppUpdates.RELEASES_PAGE
         }
         if (!AppUpdates.openReleasePage(app, url)) {
+            report(app.getString(R.string.settings_update_no_browser))
+        }
+    }
+
+    /** The app's source, which the AGPL it is licensed under promises. */
+    fun openSourceCode() {
+        val app = getApplication<Application>()
+        if (!AppUpdates.openReleasePage(app, SOURCE_PAGE)) {
             report(app.getString(R.string.settings_update_no_browser))
         }
     }
@@ -673,6 +685,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val PING_INTERVAL_MS = 700L
+        const val SOURCE_PAGE = "https://github.com/skycoin/skywire"
     }
 
     /** One user action at a time, with its failure surfaced on the screen. */

@@ -445,6 +445,8 @@
     <string name="settings_about">Acerca de</string>
     <string name="settings_app_version">Versión de la app</string>
     <string name="settings_core_version">Versión del núcleo</string>
+    <string name="settings_license">Licencia</string>
+    <string name="settings_source_code">Código fuente</string>
 
     <!-- Settings — logs and diagnostics -->
     <string name="settings_diagnostics">Registros y diagnóstico</string>
@@ -849,6 +851,7 @@
     <string name="settings_update_open_page">Abrir en GitHub</string>
     <string name="settings_update_retry">Reintentar</string>
     <string name="settings_update_notes">Qué ha cambiado</string>
+    <string name="settings_update_fdroid">Las actualizaciones de esta versión llegan a través de F-Droid.</string>
     <string name="settings_battery">Batería</string>
     <string name="settings_battery_hint">Skywire sigue funcionando en segundo plano, pero Android todavía puede pausar su red cuando la pantalla lleva un rato apagada: los mensajes y las llamadas llegan entonces cuando el teléfono despierta y no cuando se enviaron. Permitir que Skywire ignore la optimización de batería cierra ese hueco. Cuesta batería, y la app funciona de las dos maneras.</string>
     <string name="settings_battery_exempt_hint">Skywire puede ignorar la optimización de batería, así que sus conexiones siguen en pie con la pantalla apagada. Los ajustes de batería de Android pueden retirar esto en cualquier momento.</string>
