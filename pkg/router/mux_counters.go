@@ -40,10 +40,18 @@ type MuxCounters struct {
 	// here died at that hop.
 	LegRehomesForwarded uint64 `json:"leg_rehomes_forwarded"`
 	LegSplitsForwarded  uint64 `json:"leg_splits_forwarded"`
-	LegSplitsSent       uint64 `json:"leg_splits_sent"`
-	LegSplitsReceived   uint64 `json:"leg_splits_received"`
-	LegSplitsAcked      uint64 `json:"leg_splits_acked"`
-	LegSplitsFailed     uint64 `json:"leg_splits_failed"`
+	// LegControlsInBandSent/LegControlsInBand count the IN-BAND leg control
+	// frames (mux_control_frame.go) this visor sent and received: the re-home
+	// and split messages carried inside a DataPacket, which every relay
+	// forwards whatever it runs. A re-home that is sent but never acked with
+	// these rising on both edges is an exit that refused, not a hop that
+	// dropped the control frame.
+	LegControlsInBandSent uint64 `json:"leg_controls_inband_sent"`
+	LegControlsInBand     uint64 `json:"leg_controls_inband_received"`
+	LegSplitsSent         uint64 `json:"leg_splits_sent"`
+	LegSplitsReceived     uint64 `json:"leg_splits_received"`
+	LegSplitsAcked        uint64 `json:"leg_splits_acked"`
+	LegSplitsFailed       uint64 `json:"leg_splits_failed"`
 	// ForwardFanoutEngaged/Released count noteForwardFanout(on=true/false):
 	// the forward direction's fan-out-under-load latch (unidir.go) turning on
 	// (MuxEventForwardFanout) or off (MuxEventForwardConfined).
@@ -72,6 +80,8 @@ type muxGlobalCounters struct {
 	legRehomesFailed      atomic.Uint64
 	legRehomesForwarded   atomic.Uint64
 	legSplitsForwarded    atomic.Uint64
+	legControlsInBandSent atomic.Uint64
+	legControlsInBand     atomic.Uint64
 	legSplitsSent         atomic.Uint64
 	legSplitsReceived     atomic.Uint64
 	legSplitsAcked        atomic.Uint64
@@ -106,6 +116,8 @@ func (c *muxGlobalCounters) snapshot() MuxCounters {
 		LegRehomesFailed:      c.legRehomesFailed.Load(),
 		LegRehomesForwarded:   c.legRehomesForwarded.Load(),
 		LegSplitsForwarded:    c.legSplitsForwarded.Load(),
+		LegControlsInBandSent: c.legControlsInBandSent.Load(),
+		LegControlsInBand:     c.legControlsInBand.Load(),
 		LegSplitsSent:         c.legSplitsSent.Load(),
 		LegSplitsReceived:     c.legSplitsReceived.Load(),
 		LegSplitsAcked:        c.legSplitsAcked.Load(),

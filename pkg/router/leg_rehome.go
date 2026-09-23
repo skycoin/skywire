@@ -25,7 +25,6 @@
 package router
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
@@ -33,6 +32,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -152,8 +152,13 @@ func rehomeChain(g, s *RouteGroup) error {
 	rehomeWaiters.Store(nonce, ackCh)
 	defer rehomeWaiters.Delete(nonce)
 
-	req := routing.MakeLegRehomePacket(fwd.NextRouteID(), nonce, g.desc.SrcPort(), g.desc.DstPort(), 0)
-	if err := s.writePacket(context.Background(), tp, req, fwd.KeyRouteID()); err != nil {
+	// The request rides IN-BAND (mux_control_frame.go): a mux control frame
+	// inside a DataPacket, which every relay forwards by route ID whatever
+	// build it runs. The raw LegRehomePacket is only ever answered now, never
+	// sent — a relay that does not know the type drops it, which is what made
+	// every transited re-home time out.
+	chain := &rehomeLeg{fwd: fwd, tp: tp}
+	if err := s.writeLegControl(chain, nonce, g.desc.SrcPort(), g.desc.DstPort(), 0, legControlInBand); err != nil {
 		return fmt.Errorf("send re-home request: %w", err)
 	}
 	globalMuxCounters.legRehomesSent.Add(1)
@@ -163,20 +168,24 @@ func rehomeChain(g, s *RouteGroup) error {
 	case flags = <-ackCh:
 	case <-time.After(legRehomeAckTimeout()):
 		globalMuxCounters.legRehomesFailed.Add(1)
-		// Name the chain the request went out on. A re-home that is never
-		// acked is otherwise silent, and the one thing that tells the two
-		// live failure modes apart — an exit that refused vs a hop that never
-		// relayed the frame — is whether this chain is transited at all.
+		// Name the chain the request went out on, the FAR end it was addressed
+		// to and the first hop it left on. A re-home that is never acked is
+		// otherwise silent, and the one thing that tells the two live failure
+		// modes apart — an exit that refused vs a hop that never relayed the
+		// frame — is which visor is at each end of the chain.
+		far := s.farEndPK()
 		s.logger.WithField("tp_id", tp.Entry.ID).
+			WithField("far_end", far.String()).
 			WithField("first_hop", tp.Remote().String()).
-			WithField("direct", tp.Remote() == s.desc.DstPK()).
+			WithField("direct", tp.Remote() == far).
 			WithField("route_id", fwd.NextRouteID()).
-			Debugf("Re-home: no ack within %s; compare leg_rehomes_forwarded on the first hop", legRehomeAckTimeout())
-		return fmt.Errorf("%w: no ack from %s within %s; both groups left intact", ErrRehomeNoAck, s.desc.DstPK(), legRehomeAckTimeout())
+			Debugf("Re-home: no ack within %s; compare leg_controls_inband_received at the far end", legRehomeAckTimeout())
+		return fmt.Errorf("%w: no ack from %s (first hop %s) within %s; both groups left intact",
+			ErrRehomeNoAck, far, tp.Remote(), legRehomeAckTimeout())
 	}
 	if flags&routing.LegRehomeRefused != 0 || flags&routing.LegRehomeAck == 0 {
 		globalMuxCounters.legRehomesFailed.Add(1)
-		return fmt.Errorf("%w: peer %s refused; both groups left intact", ErrRehomeNoAck, s.desc.DstPK())
+		return fmt.Errorf("%w: peer %s refused; both groups left intact", ErrRehomeNoAck, s.farEndPK())
 	}
 	globalMuxCounters.legRehomesAcked.Add(1)
 
@@ -191,10 +200,11 @@ func rehomeChain(g, s *RouteGroup) error {
 	}
 
 	// Commit: sent through the TARGET group's rules, so it lands on the exit's
-	// rewritten consume rule and promotes the leg it parked in standby.
-	commit := routing.MakeLegRehomePacket(leg.fwd.NextRouteID(), nonce,
-		g.desc.SrcPort(), g.desc.DstPort(), routing.LegRehomeCommit)
-	if err := g.writePacket(context.Background(), leg.tp, commit, leg.fwd.KeyRouteID()); err != nil {
+	// rewritten consume rule and promotes the leg it parked in standby. Sealed
+	// by the target group's mux for the same reason — that is the group the
+	// chain belongs to at the exit by now.
+	if err := g.writeLegControl(leg, nonce, g.desc.SrcPort(), g.desc.DstPort(),
+		routing.LegRehomeCommit, legControlInBand); err != nil {
 		g.logger.WithError(err).Warnf("Re-home: failed to send the commit for leg %d", idx)
 	}
 	s.noteTunnelConsumed(g.desc.DstPort())
@@ -230,6 +240,18 @@ func (rg *RouteGroup) handleLegRehomePacket(packet routing.Packet) error {
 	if !ok {
 		return nil
 	}
+	// A raw packet can only come from a peer that has not moved to the in-band
+	// frame, so its answers go back in the dialect it can read.
+	rg.dispatchLegControl(packet.RouteID(), nonce, srcPort, dstPort, flags, legControlLegacy)
+	return nil
+}
+
+// dispatchLegControl is the phase switch both dialects share: the same fields,
+// the same state machine, the same counters, whether the message arrived as an
+// in-band mux control frame or as a raw LegRehomePacket. dialect says how any
+// answer must be sent back.
+func (rg *RouteGroup) dispatchLegControl(routeID routing.RouteID, nonce uint64,
+	srcPort, dstPort routing.Port, flags byte, dialect legControlDialect) {
 	switch {
 	case flags&(routing.LegRehomeAck|routing.LegRehomeRefused) != 0:
 		if ch, loaded := rehomeWaiters.Load(nonce); loaded {
@@ -238,22 +260,34 @@ func (rg *RouteGroup) handleLegRehomePacket(packet routing.Packet) error {
 			default:
 			}
 		}
-		return nil
 	case flags&routing.LegRehomeCommit != 0:
-		rg.commitRehomedLeg(packet.RouteID())
-		return nil
+		rg.commitRehomedLeg(routeID)
 	case flags&routing.LegRehomeSplit != 0:
-		rg.acceptSplit(packet.RouteID(), nonce, srcPort, dstPort)
-		return nil
+		rg.acceptSplit(routeID, nonce, srcPort, dstPort, dialect)
 	default:
-		rg.acceptRehome(packet.RouteID(), nonce, srcPort, dstPort)
-		return nil
+		rg.acceptRehome(routeID, nonce, srcPort, dstPort, dialect)
 	}
+}
+
+// farEndPK is the OTHER end of this group's descriptor — the visor its chains
+// reach, never this one.
+//
+// The descriptor keeps the DIALER's orientation at BOTH ends (the acceptor is
+// handed the same one the setup node built), so Dst is the peer only on the
+// side that dialed. Naming Dst unconditionally, as the re-home and split
+// no-ack messages used to, prints the LOCAL visor's own public key on every
+// accepted group — the least useful thing a "nobody answered" message can say.
+func (rg *RouteGroup) farEndPK() cipher.PubKey {
+	if rg.initiator {
+		return rg.desc.DstPK()
+	}
+	return rg.desc.SrcPK()
 }
 
 // acceptRehome is the exit half: the request arrived on THIS group's chain and
 // names another group of the same peer as the chain's new owner.
-func (rg *RouteGroup) acceptRehome(routeID routing.RouteID, nonce uint64, srcPort, dstPort routing.Port) {
+func (rg *RouteGroup) acceptRehome(routeID routing.RouteID, nonce uint64, srcPort, dstPort routing.Port,
+	dialect legControlDialect) {
 	globalMuxCounters.legRehomesReceived.Add(1)
 	idx := rg.legIndexByConsumeRule(routeID)
 	target, err := rg.rehomeTarget(srcPort, dstPort)
@@ -277,10 +311,16 @@ func (rg *RouteGroup) acceptRehome(routeID routing.RouteID, nonce uint64, srcPor
 	if err != nil {
 		globalMuxCounters.legRehomesFailed.Add(1)
 		rg.logger.WithError(err).Debug("Re-home refused")
-		rg.replyRehome(idx, nonce, srcPort, dstPort, routing.LegRehomeRefused)
+		rg.replyRehome(idx, nonce, srcPort, dstPort, routing.LegRehomeRefused, dialect)
 		return
 	}
-	target.replyRehomeOn(leg, nonce, srcPort, dstPort, routing.LegRehomeAck)
+	// The ack is sealed by THIS group, not by the target the chain has just
+	// joined here: the initiator has not rewritten its own consume rule yet, so
+	// when the ack lands the chain is still the standby group's there, and an
+	// in-band frame is opened with the per-frame key of the group that owns it
+	// at the receiver. It rides the chain either way — the rewrite leaves the
+	// next-hop route ID alone.
+	rg.replyRehomeOn(leg, nonce, srcPort, dstPort, routing.LegRehomeAck, dialect)
 	rg.noteTunnelConsumed(dstPort)
 	go func() {
 		if err := rg.Close(); err != nil {
@@ -334,7 +374,8 @@ func (rg *RouteGroup) rehomeTarget(srcPort, dstPort routing.Port) (*RouteGroup, 
 }
 
 // replyRehome answers on the leg that is still ours (the refusal path).
-func (rg *RouteGroup) replyRehome(idx int, nonce uint64, srcPort, dstPort routing.Port, flags byte) {
+func (rg *RouteGroup) replyRehome(idx int, nonce uint64, srcPort, dstPort routing.Port, flags byte,
+	dialect legControlDialect) {
 	rg.mu.Lock()
 	var fwd routing.Rule
 	var tp *transport.ManagedTransport
@@ -345,18 +386,15 @@ func (rg *RouteGroup) replyRehome(idx int, nonce uint64, srcPort, dstPort routin
 	if fwd == nil || tp == nil {
 		return
 	}
-	rg.replyRehomeOn(&rehomeLeg{fwd: fwd, tp: tp}, nonce, srcPort, dstPort, flags)
+	rg.replyRehomeOn(&rehomeLeg{fwd: fwd, tp: tp}, nonce, srcPort, dstPort, flags, dialect)
 }
 
 // replyRehomeOn answers over a detached (or still-held) leg. The chain's
 // next-hop route ID toward the initiator is unchanged by the rewrite, so the
 // reply rides the same rule either way.
-func (rg *RouteGroup) replyRehomeOn(leg *rehomeLeg, nonce uint64, srcPort, dstPort routing.Port, flags byte) {
-	if leg == nil || leg.fwd == nil || leg.tp == nil {
-		return
-	}
-	pkt := routing.MakeLegRehomePacket(leg.fwd.NextRouteID(), nonce, srcPort, dstPort, flags)
-	if err := rg.writePacket(context.Background(), leg.tp, pkt, leg.fwd.KeyRouteID()); err != nil {
+func (rg *RouteGroup) replyRehomeOn(leg *rehomeLeg, nonce uint64, srcPort, dstPort routing.Port, flags byte,
+	dialect legControlDialect) {
+	if err := rg.writeLegControl(leg, nonce, srcPort, dstPort, flags, dialect); err != nil {
 		rg.logger.WithError(err).Debug("Re-home: failed to answer the request")
 	}
 }
