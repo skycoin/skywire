@@ -448,6 +448,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 	pubkey := ""
 	if err == nil && conf != nil {
 		pubkey = conf.PK.Hex()
+		msg3(fmt.Sprintf("config at %s: wisp section present=%v", resolved.configPath, conf.Wisp != nil))
 	}
 
 	if pubkey != "" {
