@@ -178,6 +178,13 @@ func (rg *RouteGroup) splitLeg(idx int, reason string) (*RouteGroup, error) {
 	case <-time.After(legRehomeAckTimeout()):
 		rg.mux.setLegStandby(idx, false)
 		globalMuxCounters.legSplitsFailed.Add(1)
+		// Same as the re-home timeout: say which chain, and whether it is
+		// transited, so a silent split can be placed on a hop.
+		rg.logger.WithField("tp_id", tp.Entry.ID).
+			WithField("first_hop", tp.Remote().String()).
+			WithField("direct", tp.Remote() == rg.desc.DstPK()).
+			WithField("route_id", fwd.NextRouteID()).
+			Debugf("Split: no ack within %s; compare leg_splits_forwarded on the first hop", legRehomeAckTimeout())
 		return nil, fmt.Errorf("%w: no split ack from %s within %s; the leg is left where it was",
 			ErrRehomeNoAck, rg.desc.DstPK(), legRehomeAckTimeout())
 	}
