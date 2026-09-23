@@ -4444,6 +4444,9 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		// default. It still only ACTIVATES when the peer also advertises it, so an
 		// old or non-opted peer simply never negotiates it and is unaffected.
 		caps := muxHandshakeCaps() | routing.CapLegState | routing.CapUniDir | routing.CapLegRehome
+		if DeliveryCRCAdvertised() {
+			caps |= routing.CapDeliveryCRC
+		}
 		if rg.cfg != nil && rg.cfg.FEC {
 			caps |= routing.CapFEC
 		}
@@ -4859,6 +4862,18 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 				if remoteCaps&routing.CapLegRehome != 0 {
 					rg.mux.legRehomeEnabled = true
 					rg.logger.Debug("Leg re-home enabled (both peers support CapLegRehome)")
+				}
+
+				// Delivery-check negotiation. Both edges must advertise
+				// CapDeliveryCRC, and we must still want it ourselves — the knob is
+				// read here as well as at advertise time so a group born while it was
+				// off never strips a trailer its peer was not told to stamp. From now
+				// on every data frame this group sends carries a CRC32C over
+				// (seq ‖ payload) and every frame it delivers is verified against it.
+				if remoteCaps&routing.CapDeliveryCRC != 0 && DeliveryCRCAdvertised() {
+					rg.mux.deliveryCRC = true
+					rg.mux.groupPort = rg.desc.SrcPort()
+					rg.logger.Debug("Delivery CRC enabled (both peers support CapDeliveryCRC)")
 				}
 
 				// FEC negotiation. Requires CapMux (rg.mux set above); enabled purely

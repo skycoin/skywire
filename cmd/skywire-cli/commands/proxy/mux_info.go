@@ -116,6 +116,8 @@ type muxCountersInfo struct {
 	LegRehomesFailed      uint64 `json:"leg_rehomes_failed"`
 	ForwardFanoutEngaged  uint64 `json:"forward_fanout_engaged"`
 	ForwardFanoutReleased uint64 `json:"forward_fanout_released"`
+	AEADFailures          uint64 `json:"aead_failures"`
+	DeliveryCRCFailures   uint64 `json:"delivery_crc_failures"`
 }
 
 // muxCountersFrom decodes the mux_counters field out of a *visor.StateSnapshot
@@ -151,9 +153,9 @@ func printMuxCounters(cmd *cobra.Command, mc *muxCountersInfo) {
 		internal.Catch(cmd.Flags(), cliout.Print(cmd, mc))
 		return
 	}
-	fmt.Printf("counters: promotions=%d  rehome sent/recv/acked/failed=%d/%d/%d/%d  fanout engage/release=%d/%d\n",
+	fmt.Printf("counters: promotions=%d  rehome sent/recv/acked/failed=%d/%d/%d/%d  fanout engage/release=%d/%d  integrity aead/delivery-crc=%d/%d\n",
 		mc.TunnelPromotions, mc.LegRehomesSent, mc.LegRehomesReceived, mc.LegRehomesAcked, mc.LegRehomesFailed,
-		mc.ForwardFanoutEngaged, mc.ForwardFanoutReleased)
+		mc.ForwardFanoutEngaged, mc.ForwardFanoutReleased, mc.AEADFailures, mc.DeliveryCRCFailures)
 }
 
 // muxRouteGroupInfo is a CLI-side mirror of visor.MuxRouteGroupInfo.
