@@ -14,15 +14,18 @@
 package router
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 // rehomeRigPair builds the active group G (ports 1/2) and the standby group S
@@ -158,4 +161,51 @@ func rehomeEventSeen(rg *RouteGroup, kind, want string) bool {
 		}
 	}
 	return false
+}
+
+// TestLegRehomeSurvivesAnIntermediate is the live regression of 2026-09-23: on
+// the fleet rig the initiator's leg_rehomes_sent climbed to 15 while the exit's
+// leg_rehomes_received stayed 0, and every re-home fell back to dialing a fresh
+// chain. The emu rigs above never caught it because their dispatcher hands a
+// frame straight to the group that owns its consume rule — the real path first
+// crosses the ROUTER's packet-type gate, at every fleet intermediate and at the
+// far edge, and that gate had no case for a LegRehomePacket. So the request was
+// dropped as ErrUnknownPacketType on hop one and never reached any handler.
+//
+// The assertion is the intermediate's job and nothing more: a re-home frame
+// arriving on a forward rule leaves on the next hop's transport, re-stamped with
+// the next route ID and with its nonce, ports and phase flags intact.
+func TestLegRehomeSurvivesAnIntermediate(t *testing.T) {
+	r, tm := newForwardTestRouter(t)
+	near, far := healthyLeg(t, "rehome-transit")
+	tpID := uuid.New()
+	injectTransport(t, tm, near, tpID)
+
+	const inKey, outKey = routing.RouteID(10), routing.RouteID(11)
+	require.NoError(t, r.rt.SaveRule(routing.IntermediaryForwardRule(time.Hour, inKey, outKey, tpID)))
+
+	const (
+		nonce   = uint64(0xfeedfacecafe)
+		srcPort = routing.Port(3)
+		dstPort = routing.Port(4)
+	)
+	for _, flags := range []byte{0, routing.LegRehomeAck, routing.LegRehomeCommit} {
+		require.NoError(t, r.handleTransportPacket(context.Background(),
+			routing.MakeLegRehomePacket(inKey, nonce, srcPort, dstPort, flags)),
+			"an intermediate dropped a leg re-home frame (flags=%d)", flags)
+
+		buf := make([]byte, 1<<10)
+		require.NoError(t, far.SetReadDeadline(time.Now().Add(5*time.Second)))
+		n, err := far.Read(buf)
+		require.NoError(t, err, "the re-home frame never left the intermediate (flags=%d)", flags)
+		got := routing.Packet(buf[:n])
+		require.Equal(t, routing.LegRehomePacket, got.Type())
+		require.Equal(t, outKey, got.RouteID(), "the next-hop route ID was not re-stamped")
+		gotNonce, gotSrc, gotDst, gotFlags, ok := got.LegRehomeFields()
+		require.True(t, ok)
+		require.Equal(t, nonce, gotNonce)
+		require.Equal(t, srcPort, gotSrc)
+		require.Equal(t, dstPort, gotDst)
+		require.Equal(t, flags, gotFlags)
+	}
 }
