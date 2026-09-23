@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -40,6 +41,7 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Stats
 	if conf != nil && conf.Disabled {
 		log.Info("Stats: disabled by config; skipping bbolt store and CXO publisher")
+		v.setTPDLeafPubReason("stats disabled by config")
 		return nil
 	}
 
@@ -265,15 +267,33 @@ func tpdCXOPeer(v *Visor) (cipher.PubKey, bool) {
 	return cipher.PubKey{}, false
 }
 
+// cxoPubStorage picks the CXO datastore backing for a visor-owned
+// publisher feed. Under js/wasm there is no on-disk CXDS — bbolt's mmap
+// and flock have no browser equivalent, so cxds.NewDriveCXDSWithOptions
+// is a stub that always errors (pkg/cxo/data/cxds/drive_js.go). A
+// publisher configured with a DataDir therefore fails at node
+// construction on that platform, and every CXO feed the visor owns is
+// silently lost — including the TPD transport-list snapshot leaf, which
+// drops transport registration back onto the HTTP re-register path.
+// Running the tree in memory is the supported wasm shape (see the
+// DataDir guard in skyobject.Container.createDB).
+func cxoPubStorage(dataDir string) (dir string, inMemory bool) {
+	if runtime.GOOS == "js" {
+		return "", true
+	}
+	return dataDir, false
+}
+
 // buildStatsPublisher constructs the visor's CXO publisher feed for
 // telemetry. Returns (nil, nil) when DMSG isn't available — the rest
 // of the stats subsystem still runs, just without push.
 func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, stats.Sink) {
 	if v.dmsgC == nil {
 		log.Debug("Stats: dmsg client absent; CXO publisher not started")
+		v.setTPDLeafPubReason("dmsg client absent")
 		return nil, nil
 	}
-	dataDir := filepath.Join(v.conf.LocalPath, "cxo-stats")
+	dataDir, inMemDB := cxoPubStorage(filepath.Join(v.conf.LocalPath, "cxo-stats"))
 	// Gate the feed: only the peer whitelist (hypervisors + dmsgpty
 	// whitelist + own PK) plus the consuming TPD may subscribe. TPD MUST
 	// be allowed or the announce-conn subscribe is rejected (the hook
@@ -292,6 +312,7 @@ func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, s
 		BatchWindow:         10 * time.Second,
 		Logger:              log,
 		DataDir:             dataDir,
+		InMemoryDB:          inMemDB,
 		SubscriberAllowlist: allow,
 		// Stats CXDS is content-addressed cache; the in-memory tree
 		// (regenerated from stats.db on each restart) authoritatively
@@ -301,6 +322,7 @@ func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, s
 	})
 	if err != nil {
 		log.WithError(err).Warn("Stats: CXO publisher init failed; continuing without push")
+		v.setTPDLeafPubReason("cxo publisher init failed: " + err.Error())
 		return nil, nil
 	}
 	log.WithField("feed_pk", pub.Feed()).WithField("data_dir", dataDir).
@@ -321,7 +343,7 @@ func buildTPListPublisher(v *Visor, log *logging.Logger) *treestore.Publisher {
 	if v.dmsgC == nil {
 		return nil
 	}
-	dataDir := filepath.Join(v.conf.LocalPath, "cxo-tplist")
+	dataDir, inMemDB := cxoPubStorage(filepath.Join(v.conf.LocalPath, "cxo-tplist"))
 	// Same gate as the telemetry feed: peer whitelist ∪ consuming TPD.
 	tpdPK, tpdOK := tpdCXOPeer(v)
 	allow := composeFeedAllowlist(v, tpdPK, tpdOK)
@@ -333,6 +355,7 @@ func buildTPListPublisher(v *Visor, log *logging.Logger) *treestore.Publisher {
 		BatchWindow:         2 * time.Second,
 		Logger:              log,
 		DataDir:             dataDir,
+		InMemoryDB:          inMemDB,
 		DmsgPort:            skyenv.DmsgVisorTPListCXOPort,
 		SubscriberAllowlist: allow,
 		// Content-addressed, rebuilt from the transport manager's live set

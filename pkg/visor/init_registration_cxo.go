@@ -61,7 +61,7 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 		return nil
 	}
 
-	dataDir := filepath.Join(v.conf.LocalPath, "cxo-registration")
+	dataDir, inMemDB := cxoPubStorage(filepath.Join(v.conf.LocalPath, "cxo-registration"))
 	// Gate the feed: peer whitelist (hypervisors + dmsgpty whitelist + own
 	// PK) plus the consuming dmsg-discovery. dmsgd MUST be allowed or its
 	// announce-conn subscribe is rejected by the OnSubscribeRemote hook.
@@ -72,6 +72,7 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 		BatchWindow:         registrationBatchWindow,
 		Logger:              log,
 		DataDir:             dataDir,
+		InMemoryDB:          inMemDB,
 		SubscriberAllowlist: allow,
 		// The entry is content-addressed and rebuilt from the dmsg client's
 		// live registration on every restart, so skipping per-tx fdatasync

@@ -81,6 +81,13 @@ type StateSnapshot struct {
 	// a query against the live visor (local or --via dmsg://<pk>).
 	CXOFeeds []CXOFeedState `json:"cxo,omitempty"`
 
+	// TPDLeafPub says whether the transport manager holds the CXO
+	// transport-list snapshot publisher, and — when it does not — why.
+	// Without it transport registration silently falls back to the HTTP
+	// re-register path, which an empty .cxo alone does not distinguish
+	// from "stats module still starting".
+	TPDLeafPub *TPDLeafPublisherState `json:"tpd_leaf_publisher,omitempty"`
+
 	// Proxy is the visor-side live proxystatus snapshot for the skysocks
 	// surface — the same per-leg mux telemetry, running flag, and (when the
 	// client pushes it) range-split summary the status.skysocks page renders.
@@ -436,6 +443,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		if cf := v.CXOFeedStates(); len(cf) > 0 {
 			snap.CXOFeeds = cf
 		}
+		snap.TPDLeafPub = v.tpdLeafPublisherState()
 	}
 
 	if want.has(SelectDiag) {

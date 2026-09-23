@@ -208,7 +208,7 @@ func initSDRegCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
-	dataDir := filepath.Join(v.conf.LocalPath, "cxo-sd-reg")
+	dataDir, inMemDB := cxoPubStorage(filepath.Join(v.conf.LocalPath, "cxo-sd-reg"))
 	// Gate the feed: peer whitelist (hypervisors + dmsgpty whitelist + own
 	// PK) plus the consuming SD. The SD MUST be allowed or its announce-conn
 	// subscribe is rejected by the OnSubscribeRemote hook. sdPK is always
@@ -219,6 +219,7 @@ func initSDRegCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 		BatchWindow:         sdRegBatchWindow,
 		Logger:              log,
 		DataDir:             dataDir,
+		InMemoryDB:          inMemDB,
 		SubscriberAllowlist: allow,
 		// The leaf is rebuilt from the SD clients' live registrations on
 		// every restart (they re-register on boot), so skipping per-tx

@@ -68,12 +68,13 @@ func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
-	dataDir := filepath.Join(v.conf.LocalPath, "cxo-ar-bind")
+	dataDir, inMemDB := cxoPubStorage(filepath.Join(v.conf.LocalPath, "cxo-ar-bind"))
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
 		DmsgPort:    skyenv.DmsgVisorARBindCXOPort,
 		BatchWindow: arBindBatchWindow,
 		Logger:      log,
 		DataDir:     dataDir,
+		InMemoryDB:  inMemDB,
 		// Each leaf is rebuilt from the AR client's live bind hook on every
 		// restart (the AR re-registers on boot), so skipping per-tx fdatasync
 		// is safe (matches the registration + telemetry publishers).
