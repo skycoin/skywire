@@ -7,8 +7,9 @@
 # file: fdroidserver reads it from android/fastlane/metadata/android/.
 #
 # The first build entry names the first mobile release cut after the F-Droid
-# work lands (mobile-v0.0.3 → versionCode 3, the Makefile's
-# major*10000+minor*100+patch). Adjust both if that release gets a different
+# work lands (mobile-v0.0.4 → versionCode 4, the Makefile's
+# major*10000+minor*100+patch). mobile-v0.0.3 predates it — no LICENSE, no
+# skywireFdroid switch — so F-Droid cannot build that one. Adjust both if that release gets a different
 # number; see the note at the bottom for later releases.
 #
 # Expect review questions on committed build artifacts that end up in the
@@ -38,9 +39,9 @@ RepoType: git
 Repo: https://github.com/skycoin/skywire.git
 
 Builds:
-  - versionName: 0.0.3
-    versionCode: 3
-    commit: mobile-v0.0.3
+  - versionName: 0.0.4
+    versionCode: 4
+    commit: mobile-v0.0.4
     subdir: android/app
     sudo:
       - apt-get update
@@ -57,8 +58,8 @@ Builds:
       # Strips the in-app updater and REQUEST_INSTALL_PACKAGES — F-Droid
       # delivers the updates. See android/app/build.gradle.kts.
       - skywireFdroid=true
-      - skywireVersionName=0.0.3
-      - skywireVersionCode=3
+      - skywireVersionName=0.0.4
+      - skywireVersionCode=4
     ndk: r27c
     build:
       # The Go core (libskywire-mobile.so) from vendored sources, into
@@ -73,5 +74,5 @@ Builds:
 # fdroiddata) until the version is committed to a file it can parse.
 AutoUpdateMode: None
 UpdateCheckMode: None
-CurrentVersion: 0.0.3
-CurrentVersionCode: 3
+CurrentVersion: 0.0.4
+CurrentVersionCode: 4
