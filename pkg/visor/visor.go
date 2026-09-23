@@ -302,6 +302,13 @@ type Visor struct {
 	// cxoUserFeedsMu. nil until initStats runs (or if Stats.Disabled).
 	systemCXOPub *treestore.Publisher
 
+	// tpdLeafPubReason records why the CXO transport-list snapshot
+	// publisher was never handed to the transport manager (empty while it
+	// is wired, or before initStats runs). Surfaced by
+	// tpdLeafPublisherState in `visor state --select cxo`. Guarded by
+	// cxoUserFeedsMu.
+	tpdLeafPubReason string
+
 	// tplistCXOPub is the DEDICATED transport-list discovery feed
 	// publisher (the SECOND CXO node initStats wires under the same visor
 	// identity PK on skyenv.DmsgVisorTPListCXOPort, carrying only the
