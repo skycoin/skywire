@@ -218,6 +218,11 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	addString("SKYNETWEBADDR", "skynetweb-addr", autoconfigVals.SkynetwebAddr)
 	addArray("RESOLVERS", "resolvers", autoconfigVals.Resolvers)
 
+	// Embedded Wisp server
+	addBool("WISP", "wisp", "no-wisp", autoconfigVals.Wisp, autoconfigVals.NoWisp)
+	addInt("WISPPORT", "wisp-port", autoconfigVals.WispPort)
+	addString("WISPSOCKS", "wisp-socks", autoconfigVals.WispSOCKS)
+
 	// Skychat
 	addBool("SKYCHAT", "skychat", "no-skychat", autoconfigVals.Skychat, autoconfigVals.NoSkychat)
 	addString("SKYCHATADDR", "chataddr", autoconfigVals.ChatAddr)

@@ -238,6 +238,19 @@ type Values struct {
 	// flag's help text for the spec grammar.
 	Resolvers string
 
+	// --- Embedded Wisp server ---
+	//
+	// The backend a browser-side Linux guest asks to open its connections,
+	// served on the virtual-loopback port rather than a WebSocket (a tab
+	// cannot listen, and a service worker cannot intercept ws://). This is
+	// the only way to turn it on where it matters: on a wasm visor
+	// autoconfig regenerates the config on every load, so a hand-edited
+	// wisp section does not survive.
+	Wisp      bool
+	NoWisp    bool
+	WispPort  int    // WISPPORT
+	WispSOCKS string // WISPSOCKS
+
 	// --- Skychat ---
 	Skychat         bool
 	NoSkychat       bool
@@ -409,6 +422,12 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().StringVar(&v.DmsgwebSK, "dmsgweb-sk", "", "secret key the embedded resolver answers under, instead of the visor's; attached in-process so it costs one session and no discovery entry — writes DMSGWEBSK in skywire.conf")
 	cmd.Flags().StringVar(&v.SkynetwebAddr, "skynetweb-addr", "", "host the .skynet SOCKS5 proxy binds to — writes SKYNETWEBADDR in skywire.conf")
 	cmd.Flags().StringVar(&v.Resolvers, "resolvers", "", "additional resolving proxies beyond the two above, comma-separated: <kind>:<port>[;name=|addr=|suffix=|sk=|upstream=|chain=|alias=] (kind is dmsg or skynet) — writes RESOLVERS in skywire.conf")
+
+	// --- Embedded Wisp server ---
+	cmd.Flags().BoolVar(&v.Wisp, "wisp", false, "enable the embedded Wisp server on the virtual-loopback port, so a browser-side guest's network runs over skywire — writes WISP=true in skywire.conf")
+	cmd.Flags().BoolVar(&v.NoWisp, "no-wisp", false, "disable the embedded Wisp server — writes WISP=false in skywire.conf")
+	cmd.Flags().IntVar(&v.WispPort, "wisp-port", 0, "virtual-loopback port the Wisp server serves on (0 = 6001) — writes WISPPORT in skywire.conf")
+	cmd.Flags().StringVar(&v.WispSOCKS, "wisp-socks", "", "SOCKS5 proxy the Wisp streams are carried over (empty = the local skysocks-client) — writes WISPSOCKS in skywire.conf")
 
 	// --- Skychat ---
 	cmd.Flags().BoolVar(&v.Skychat, "skychat", false, "autostart skychat — writes SKYCHAT=true in skywire.conf")
