@@ -483,3 +483,10 @@ Assembly                         3              9             13             20
 TOTAL                         4770          74993          89299         453065
 -------------------------------------------------------------------------------
 ```
+
+## License
+
+Skywire is licensed under the [GNU Affero General Public License v3.0](LICENSE)
+(AGPL-3.0-only). A commercial license is also available for use that cannot
+comply with the AGPL — see [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).
+Third-party code under `vendor/` keeps its own license.

@@ -323,3 +323,9 @@ android/
 ```
 
 Progress log: [implementation-report.md](implementation-report.md).
+
+## License
+
+Part of Skywire, licensed under the [GNU Affero General Public License v3.0](../LICENSE)
+(AGPL-3.0-only); a commercial license is also available — see
+[COMMERCIAL-LICENSE.md](../COMMERCIAL-LICENSE.md).

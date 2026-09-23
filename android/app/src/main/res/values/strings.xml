@@ -403,6 +403,8 @@
     <string name="settings_about">About</string>
     <string name="settings_app_version">App version</string>
     <string name="settings_core_version">Core version</string>
+    <string name="settings_license">License</string>
+    <string name="settings_source_code">Source code</string>
 
     <!-- Settings — logs and diagnostics -->
     <string name="settings_diagnostics">Logs &amp; diagnostics</string>
@@ -805,6 +807,7 @@
     <string name="settings_update_open_page">Open on GitHub</string>
     <string name="settings_update_retry">Try again</string>
     <string name="settings_update_notes">What changed</string>
+    <string name="settings_update_fdroid">Updates for this build come from F-Droid.</string>
     <string name="settings_battery">Battery</string>
     <string name="settings_battery_hint">Skywire keeps running in the background, but Android may still pause its network once the screen has been off for a while — messages and calls then arrive when the phone next wakes rather than when they were sent. Allowing Skywire to ignore battery optimisation closes that gap. It costs battery, and the app works either way.</string>
     <string name="settings_battery_exempt_hint">Skywire is allowed to ignore battery optimisation, so its connections stay up while the screen is off. Android\u2019s battery settings can take this back at any time.</string>

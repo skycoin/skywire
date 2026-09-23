@@ -19,6 +19,14 @@ val appVersionCode = (project.findProperty("skywireVersionCode") as String?)?.to
 // APK nobody can install.
 val keystoreFile = System.getenv("ANDROID_KEYSTORE_FILE")
 
+// F-Droid builds the app itself, signs it with its own key and delivers the
+// updates, so the F-Droid build (`-PskywireFdroid=true`, set by its recipe in
+// android/fdroid/) carries no updater: AppUpdates is switched off through
+// BuildConfig.SELF_UPDATE and REQUEST_INSTALL_PACKAGES is stripped by the
+// overlay manifest in src/fdroid/. A property rather than a product flavor so
+// every task name and output path the Makefile and workflows use stays as is.
+val fdroid = project.findProperty("skywireFdroid") == "true"
+
 android {
     namespace = "com.skycoin.skywire"
     compileSdk = 37
@@ -31,6 +39,7 @@ android {
         versionCode = appVersionCode
         versionName = appVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("boolean", "SELF_UPDATE", (!fdroid).toString())
         ndk {
             // The Go payload (libskywire-mobile.so) is arm64-only.
             abiFilters += "arm64-v8a"
@@ -72,6 +81,15 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    if (fdroid) {
+        // A build-type manifest merges over src/main's, so it can remove what
+        // main declares. Both build types, so a debug build is the same app.
+        for (buildType in listOf("debug", "release")) {
+            sourceSets.getByName(buildType).manifest.srcFile("src/fdroid/AndroidManifest.xml")
+        }
     }
 
     // The in-app language picker can only offer what is installed. Play's App

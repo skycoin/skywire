@@ -1,0 +1,77 @@
+# Draft F-Droid build recipe. It does not run from here: submit it as
+# metadata/com.skycoin.skywire.yml in a merge request to
+# https://gitlab.com/fdroid/fdroiddata, together with the fdroiddata
+# template's checklist.
+#
+# The store listing (title, descriptions, icon, changelogs) is NOT in this
+# file: fdroidserver reads it from android/fastlane/metadata/android/.
+#
+# The first build entry names the first mobile release cut after the F-Droid
+# work lands (mobile-v0.0.3 → versionCode 3, the Makefile's
+# major*10000+minor*100+patch). Adjust both if that release gets a different
+# number; see the note at the bottom for later releases.
+#
+# Expect review questions on committed build artifacts that end up in the
+# app, and have the answers ready:
+#   - pkg/router/policy/wasm/presets/bundle.wasm — embedded in the mobile
+#     binary; rebuilt from docs/examples/routing-policies/wasm/bundle with
+#     TinyGo by `make bundle-wasm`. Reviewers may ask for that to run in
+#     prebuild (TinyGo installed like Go below).
+#   - committed web UIs (skychat's embedded UI, the vendored skydex-client
+#     static assets) — built from sources that are in the tree.
+#   - pkg/geoip/GeoLite2-City.mmdb.gz and pkg/wasmhv/execwasm/blob are in the
+#     repo but NOT in the app: the `mobile` build tag excludes both.
+
+Categories:
+  - Connectivity
+  - Internet
+License: AGPL-3.0-only
+AuthorName: Skycoin
+WebSite: https://www.skycoin.com
+SourceCode: https://github.com/skycoin/skywire
+IssueTracker: https://github.com/skycoin/skywire/issues
+Changelog: https://github.com/skycoin/skywire/releases
+
+AutoName: Skywire
+
+RepoType: git
+Repo: https://github.com/skycoin/skywire.git
+
+Builds:
+  - versionName: 0.0.3
+    versionCode: 3
+    commit: mobile-v0.0.3
+    subdir: android/app
+    sudo:
+      - apt-get update
+      - apt-get install -y make
+      # The module needs Go 1.26.4; Debian's is older. Official tarball,
+      # pinned by checksum.
+      - curl -Lo /tmp/go.tar.gz https://go.dev/dl/go1.26.4.linux-amd64.tar.gz
+      - echo "1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f  /tmp/go.tar.gz"
+        | sha256sum -c -
+      - tar -C /opt -xzf /tmp/go.tar.gz
+    gradle:
+      - yes
+    gradleprops:
+      # Strips the in-app updater and REQUEST_INSTALL_PACKAGES — F-Droid
+      # delivers the updates. See android/app/build.gradle.kts.
+      - skywireFdroid=true
+      - skywireVersionName=0.0.3
+      - skywireVersionCode=3
+    ndk: r27c
+    build:
+      # The Go core (libskywire-mobile.so) from vendored sources, into
+      # app/src/main/jniLibs, before gradle packages it. The NDK lane is the
+      # release one: cgo resolves DNS through bionic.
+      - cd ../..
+      - PATH=/opt/go/bin:$PATH ANDROID_NDK_HOME=$$NDK$$ make android-mobile-ndk
+
+# The versionCode is computed from the tag by the Makefile and passed to
+# gradle as a property; no file in the tree holds it, so checkupdates has
+# nothing to read. Each release adds its build entry by hand (a small MR to
+# fdroiddata) until the version is committed to a file it can parse.
+AutoUpdateMode: None
+UpdateCheckMode: None
+CurrentVersion: 0.0.3
+CurrentVersionCode: 3
