@@ -7,8 +7,8 @@
 #   3. fdroid build         — what F-Droid's build server runs, scanner included
 #
 # for the commit checked out at $SRC. Runs as root inside F-Droid's own build
-# server image; .github/workflows/android-fdroid.yml starts it like this
-# (GitHub runner, not a laptop: the image is several GB):
+# server image; .github/workflows/android-fdroid.yml starts it like this after
+# each mobile-v* release (on a GitHub runner — the image is several GB):
 #
 #   docker run --rm -v "$PWD:/src" -v "$PWD/fdroid-out:/out" \
 #     registry.gitlab.com/fdroid/fdroidserver:buildserver-trixie \
@@ -61,6 +61,11 @@ echo "checking $APPID $name ($code) at $head_sha"
 cd "$home_vagrant"
 mkdir -p metadata logs tmp unsigned
 cp "$SRC/android/fdroid/$APPID.yml" metadata/
+# lint checks Categories against fdroiddata's own list, which lives in its
+# config/, not in fdroidserver. The icon lines point at files in fdroiddata.
+mkdir -p config
+curl -fsSL https://gitlab.com/fdroid/fdroiddata/-/raw/master/config/categories.yml \
+  | sed '/^ *icon:/d' > config/categories.yml
 chown -R vagrant "$home_vagrant"
 
 step "fdroid lint (the recipe exactly as it is submitted)"

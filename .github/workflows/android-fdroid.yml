@@ -1,30 +1,16 @@
-# F-Droid lane: lint the recipe, run F-Droid's update bot against this commit,
+# F-Droid lane: lint the recipe, run F-Droid's update bot against the tag,
 # and build the app on F-Droid's own build server image — the three things
 # F-Droid does with android/fdroid/com.skycoin.skywire.yml. See
 # android/fdroid/check.sh for what each step proves.
 #
-# android-release.yml calls this on every mobile-v* tag. PRs run it when they
-# touch something the F-Droid build depends on, so a break shows up before a
-# tag rather than on F-Droid.
+# Nothing here publishes: F-Droid's update bot finds the tag and publishes the
+# release on its own. This only tells us, on our side, whether F-Droid's run
+# of the same tag is going to work. android-release.yml calls it once a
+# mobile-v* tag's GitHub release is out; it has no trigger of its own.
 name: Android F-Droid
 
 on:
   workflow_call:
-  pull_request:
-    paths:
-      - 'android/fdroid/**'
-      - 'android/version.properties'
-      - 'android/app/build.gradle.kts'
-      - 'android/app/src/fdroid/**'
-      - 'android/gradle/**'
-      - 'android/*.kts'
-      - 'go.mod'
-      - 'Makefile'
-      - '.github/workflows/android-fdroid.yml'
-
-concurrency:
-  group: android-fdroid-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
