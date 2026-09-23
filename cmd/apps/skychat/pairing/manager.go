@@ -35,12 +35,13 @@ const resumeConnectTimeout = 15 * time.Second
 // Manager owns the persistent record set and live Pair instances.
 // Safe for concurrent use.
 type Manager struct {
-	store   *Store
-	dmsgC   *dmsg.Client
-	myPK    cipher.PubKey
-	mySK    cipher.SecKey
-	dataDir string
-	log     *logging.Logger
+	store      *Store
+	dmsgC      *dmsg.Client
+	myPK       cipher.PubKey
+	mySK       cipher.SecKey
+	dataDir    string
+	inMemoryDB bool
+	log        *logging.Logger
 
 	// onMessage is the user-supplied callback for inbound messages.
 	// Set via SetMessageHandler; applied to every Pair created or
@@ -70,6 +71,12 @@ type ManagerConfig struct {
 	// pub/<peer>/ and sub/<peer>/ subtrees.
 	DataDir string
 
+	// InMemoryDB runs every pair's CXO tree in memory (no DataDir /
+	// filesystem). Required for the browser (js/wasm) visor, where the
+	// on-disk CXDS is a stub that always errors. When set, DataDir may be
+	// empty and is ignored.
+	InMemoryDB bool
+
 	// Logger is optional.
 	Logger *logging.Logger
 }
@@ -83,21 +90,22 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 	if cfg.DmsgC == nil {
 		return nil, errors.New("pairing: NewManager: DmsgC required")
 	}
-	if cfg.DataDir == "" {
-		return nil, errors.New("pairing: NewManager: DataDir required")
+	if cfg.DataDir == "" && !cfg.InMemoryDB {
+		return nil, errors.New("pairing: NewManager: DataDir required (unless InMemoryDB)")
 	}
 	log := cfg.Logger
 	if log == nil {
 		log = logging.MustGetLogger("skychat-pair-manager")
 	}
 	return &Manager{
-		store:   cfg.Store,
-		dmsgC:   cfg.DmsgC,
-		myPK:    cfg.MyPK,
-		mySK:    cfg.MySK,
-		dataDir: cfg.DataDir,
-		log:     log,
-		pairs:   make(map[cipher.PubKey]*Pair),
+		store:      cfg.Store,
+		dmsgC:      cfg.DmsgC,
+		myPK:       cfg.MyPK,
+		mySK:       cfg.MySK,
+		dataDir:    cfg.DataDir,
+		inMemoryDB: cfg.InMemoryDB,
+		log:        log,
+		pairs:      make(map[cipher.PubKey]*Pair),
 	}, nil
 }
 
@@ -286,13 +294,14 @@ func (m *Manager) openPair(peerPK cipher.PubKey) (*Pair, error) {
 			Warn("pairing: could not read stored ratchet state; starting a fresh ratchet for this pair")
 	}
 	p, err := Open(Config{
-		MyPK:    m.myPK,
-		MySK:    m.mySK,
-		PeerPK:  peerPK,
-		DmsgC:   m.dmsgC,
-		DataDir: m.dataDir,
-		Logger:  m.log,
-		Ratchet: restored,
+		MyPK:       m.myPK,
+		MySK:       m.mySK,
+		PeerPK:     peerPK,
+		DmsgC:      m.dmsgC,
+		DataDir:    m.dataDir,
+		InMemoryDB: m.inMemoryDB,
+		Logger:     m.log,
+		Ratchet:    restored,
 		OnRatchetChange: func(st RatchetState) {
 			if err := m.store.SetRatchet(peerPK, st); err != nil {
 				m.log.WithError(err).WithField("peer", peerPK.Hex()).
