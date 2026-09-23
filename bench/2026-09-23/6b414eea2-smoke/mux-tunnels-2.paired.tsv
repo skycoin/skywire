@@ -1,0 +1,34 @@
+# paired reference: 0371ab4b (0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13@95839ad0-b588-0b1d-8475-45fba6ae993c,0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1@dc5330cf-5d85-0b70-88e9-e4ab169d17fd) via skysocks-client-ref@127.0.0.1:1081 — one reference row of the same cell immediately before every mux row
+# row	cell	ref_MBps	mux_MBps	ratio	ref_ok	mux_ok	ref_legs
+1	10down	mux-tunnels-2	2.18	-	row	1	1
+-
+2	10down	mux-tunnels-2	2.12	-	row	1	1
+-
+3	10down	mux-tunnels-2	2.02	-	row	1	1
+-
+4	10down	mux-tunnels-2	1.99	-	row	1	1
+-
+5	10down	mux-tunnels-2	2.11	-	row	1	1
+-
+6	10up	mux-tunnels-2	1.70	-	row	1	1
+-
+7	10up	mux-tunnels-2	3.93	-	row	1	1
+-
+8	10up	mux-tunnels-2	5.47	-	row	1	1
+-
+9	50down	mux-tunnels-2	2.95	-	row	1	1
+-
+10	50down	mux-tunnels-2	4.51	-	row	1	1
+-
+11	50down	mux-tunnels-2	4.86	-	row	1	1
+-
+12	50down	mux-tunnels-2	4.73	-	row	1	1
+-
+13	50down	mux-tunnels-2	4.82	-	row	1	1
+-
+14	50up	mux-tunnels-2	9.70	-	row	1	1
+-
+15	50up	mux-tunnels-2	10.06	-	row	1	1
+-
+16	50up	mux-tunnels-2	9.46	-	row	1	1
+-

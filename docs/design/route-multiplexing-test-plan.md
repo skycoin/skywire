@@ -1018,7 +1018,31 @@ Ratios are goodput against the paired single-route reference. Run 5's exit gate 
 attributed to the exit's full outbound transport mesh — roughly 1384 transports to 737 peers — not a
 leak.
 
-The final chain on develop head 6b414eea2 is running; its digest will be appended once it completes.
+The final chains ran on develop head e65f4df8c (#5110, which keeps `proxy mux info --json` to one
+document after #5101 had broken every bench leg assertion). Three chains were needed: chain 7 ran
+all five sets, but its compose and standby cells were invalidated by the develop-tracking
+intermediates auto-updating and restarting mid-chain (the merge had landed two minutes before
+launch), chain 8 reran compose and standby but its interleaved reference tunnel failed its probes so
+compose is unpaired, and chain 9 reran compose paired. Bench output is under `bench/2026-09-23/`.
+
+| chain / set | 10 MB down | 50 MB down | 100 MB down | 10 MB up | 50 MB up | legs | exit gate | flips |
+|---|---|---|---|---|---|---|---|---|
+| 7 tunnels-2 | 0.77 | 0.86 | - | 0.99 | 0.81 | active 1×2, standby 1×30 | PASS | 7 |
+| 7 legs-2 | 1.04 | 0.96 | - | 1.70 | 1.00 | one group, 2 legs | PASS | 1 |
+| 7 spread-3 | - | 2.63 MB/s | - | - | 9.43 MB/s | active 1×2, standby 1×30 | PASS | 2 |
+| 8 compose 2x2 (unpaired, MB/s) | 4.88 | 8.48 | 6.86 | 6.39 | 9.84 | active 2×2, standby 1×31 | PASS | 4 |
+| 8 standby-33 (cut) | 0.82 | 0.60 | - | 0.91 | 2.03 | active 1×2, standby 1×30 | PASS | - |
+| 9 compose 2x2 (paired) | 0.75 | 0.87 | 1.06 | 0.66 | 0.34 | active 2×2, standby 1×30 | FAIL | 10 |
+
+What the final chains prove: every standby tunnel holds exactly one leg and the active tunnels
+hold two, over a pool of 30-33 distinct routes, on every set of every chain; the delivery CRC's
+first live runs counted 0 AEAD and 0 CRC failures across all three chains; the standby cut promoted
+two tunnels with a 0.85 s time-to-first-byte after the cut and 5/5 hashes; the spread policy landed
+in 6 s and held three active routes. What they do not: criterion 10's cap (worst share 0.58 against
+0.48, as on the morning's 5b7858764 run), chain 9's 50 MB upload (0.34, three rows 0.74 → 0.28 →
+0.34 with ten promoter flips) and its exit gate (settled RSS +105 MiB), and one of five 100 MB
+downloads in chain 9 stalled at 2 MiB and timed out (a stall, not corruption). The standby set's
+local reorder-wedge counter read 2, as it read 1 on 5b7858764.
 
 ### Known weak spots, ticketed
 

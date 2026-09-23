@@ -1,0 +1,400 @@
+[2026-09-22T15:11:59-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:11:59-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:11:59-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=463.919113ms yamux_id=1075
+[2026-09-22T15:11:59-05:00] DEBUG [cli_rpc]: CLI RPC conn #2375 closed after 190ms (active: 0)
+[2026-09-22T15:11:59-05:00] DEBUG [cli_rpc]: CLI RPC conn #2376 accepted from 127.0.0.1:40910 (active: 1)
+[2026-09-22T15:11:59-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49249, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:11:59-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:11:59-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:00-05:00] DEBUG [cli_rpc]: CLI RPC conn #2376 closed after 159ms (active: 0)
+[2026-09-22T15:12:00-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:00-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:00-05:00] DEBUG [cli_rpc]: CLI RPC conn #2377 accepted from 127.0.0.1:40924 (active: 1)
+[2026-09-22T15:12:00-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=479.113592ms yamux_id=1077
+[2026-09-22T15:12:00-05:00] DEBUG [cli_rpc]: CLI RPC conn #2377 closed after 159ms (active: 0)
+[2026-09-22T15:12:00-05:00] DEBUG readPacket [tp:0254ee2aa0968b50ea1791df19260fd50ed78b6fa63d93583022b851425d04b83b]: Failed to read packet header. error=EOF
+[2026-09-22T15:12:00-05:00] DEBUG [tp:0254ee2aa0968b50ea1791df19260fd50ed78b6fa63d93583022b851425d04b83b]: Transport closed, stopping read loop error=EOF src="read_loop"
+[2026-09-22T15:12:00-05:00] DEBUG [tp:0254ee2aa0968b50ea1791df19260fd50ed78b6fa63d93583022b851425d04b83b]: Stopped serving. remaining_tps=1374 remote_pk=0254ee2aa0968b50ea1791df19260fd50ed78b6fa63d93583022b851425d04b83b tp_id=6888a914-854f-0c59-bbcf-74f2c76a3ba9 tp_index=527
+[2026-09-22T15:12:00-05:00] DEBUG [transport_manager]: Deletion nudge received, debouncing...
+[2026-09-22T15:12:00-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:00-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:00-05:00] DEBUG [cli_rpc]: CLI RPC conn #2378 accepted from 127.0.0.1:40932 (active: 1)
+[2026-09-22T15:12:00-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:00-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:00-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49241, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:00-05:00] DEBUG [cli_rpc]: CLI RPC conn #2378 closed after 108ms (active: 0)
+[2026-09-22T15:12:00-05:00] DEBUG [cli_rpc]: CLI RPC conn #2379 accepted from 127.0.0.1:40934 (active: 1)
+[2026-09-22T15:12:00-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49202, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:00-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49200, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:00-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=465.853181ms yamux_id=1079
+[2026-09-22T15:12:00-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:00-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:00-05:00] DEBUG [cli_rpc]: CLI RPC conn #2379 closed after 158ms (active: 0)
+[2026-09-22T15:12:01-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:01-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #2380 accepted from 127.0.0.1:40948 (active: 1)
+[2026-09-22T15:12:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #2380 closed after 116ms (active: 0)
+[2026-09-22T15:12:01-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49251, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #2381 accepted from 127.0.0.1:40962 (active: 1)
+[2026-09-22T15:12:01-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:01-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:01-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49203, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #2381 closed after 123ms (active: 0)
+[2026-09-22T15:12:01-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49205, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:01-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:01-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:01-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=471.813645ms yamux_id=1081
+[2026-09-22T15:12:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #2382 accepted from 127.0.0.1:44528 (active: 1)
+[2026-09-22T15:12:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #2382 closed after 137ms (active: 0)
+[2026-09-22T15:12:01-05:00] DEBUG [cli_rpc]: CLI RPC conn #2383 accepted from 127.0.0.1:44540 (active: 1)
+[2026-09-22T15:12:01-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:01-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:02-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:02-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:02-05:00] DEBUG [cli_rpc]: CLI RPC conn #2383 closed after 142ms (active: 0)
+[2026-09-22T15:12:02-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=467.060162ms yamux_id=1083
+[2026-09-22T15:12:02-05:00] DEBUG [cli_rpc]: CLI RPC conn #2384 accepted from 127.0.0.1:44556 (active: 1)
+[2026-09-22T15:12:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49230, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49231, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:02-05:00] DEBUG [cli_rpc]: CLI RPC conn #2384 closed after 153ms (active: 0)
+[2026-09-22T15:12:02-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:02-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:02-05:00] DEBUG [squicr]: Accepted connection from 89.238.167.166:18534
+[2026-09-22T15:12:02-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:02-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:02-05:00] DEBUG [cli_rpc]: CLI RPC conn #2385 accepted from 127.0.0.1:44564 (active: 1)
+[2026-09-22T15:12:02-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49249, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:02-05:00] DEBUG [squicr]: Sent handshake to 89.238.167.166:18534, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 02b50c46fcb75fafae690927110e31ee0be8e038128a513daa988acc2e3fff92b7:49186
+[2026-09-22T15:12:02-05:00] DEBUG [cli_rpc]: CLI RPC conn #2385 closed after 121ms (active: 0)
+[2026-09-22T15:12:02-05:00] DEBUG [transport_manager]: recv transport request: type(squicr) remote(02b50c46fcb75fafae690927110e31ee0be8e038128a513daa988acc2e3fff92b7)
+[2026-09-22T15:12:02-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T15:12:02-05:00] DEBUG [tp:02b50c46fcb75fafae690927110e31ee0be8e038128a513daa988acc2e3fff92b7]: no prior transport log entry; starting fresh transport=1b73096d-1abb-0d83-9eed-ef477107f6f6
+[2026-09-22T15:12:02-05:00] DEBUG [tp:02b50c46fcb75fafae690927110e31ee0be8e038128a513daa988acc2e3fff92b7]: Performing settlement handshake...
+[2026-09-22T15:12:02-05:00] DEBUG [tp:02b50c46fcb75fafae690927110e31ee0be8e038128a513daa988acc2e3fff92b7]: Serving. remote_pk=02b50c46fcb75fafae690927110e31ee0be8e038128a513daa988acc2e3fff92b7 tp_id=1b73096d-1abb-0d83-9eed-ef477107f6f6 tp_index=1375
+[2026-09-22T15:12:02-05:00] DEBUG [cli_rpc]: CLI RPC conn #2386 accepted from 127.0.0.1:44572 (active: 1)
+[2026-09-22T15:12:02-05:00] DEBUG [tp:02b50c46fcb75fafae690927110e31ee0be8e038128a513daa988acc2e3fff92b7]: Setting underlying transport...
+[2026-09-22T15:12:02-05:00] DEBUG [tp:02b50c46fcb75fafae690927110e31ee0be8e038128a513daa988acc2e3fff92b7]: Sent signal to 'mt.transportCh'.
+[2026-09-22T15:12:02-05:00] DEBUG [transport_manager]: accepted tp: type(squicr) remote(02b50c46fcb75fafae690927110e31ee0be8e038128a513daa988acc2e3fff92b7) tpID(1b73096d-1abb-0d83-9eed-ef477107f6f6) new(true)
+[2026-09-22T15:12:02-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-22T15:12:02-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:02-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:02-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=555.298241ms yamux_id=1085
+[2026-09-22T15:12:02-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:02-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:03-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49207, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: park-hysteresis: leg 1 stays parked (latency band: 49 ms is out of the active set's band); 30s hold not expired, refusing the adaptive re-admit (latency band: 150 ms back within the active set's band) app_name=skysocks-client
+[2026-09-22T15:12:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #2386 closed after 282ms (active: 0)
+[2026-09-22T15:12:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #2387 accepted from 127.0.0.1:44576 (active: 1)
+[2026-09-22T15:12:03-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49206, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:03-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49212, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #2387 closed after 111ms (active: 0)
+[2026-09-22T15:12:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #2388 accepted from 127.0.0.1:44580 (active: 1)
+[2026-09-22T15:12:03-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:03-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:03-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:03-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:03-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"03b6d86aa0ce2717fb1e64756600e3fe7d5654e4484b13c25b19d34acab87ceaf2","Addr":"167.61.182.245:34658"}
+[2026-09-22T15:12:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #2388 closed after 116ms (active: 0)
+[2026-09-22T15:12:03-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=458.836164ms yamux_id=1087
+[2026-09-22T15:12:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #2389 accepted from 127.0.0.1:44594 (active: 1)
+[2026-09-22T15:12:03-05:00] DEBUG [cli_rpc]: CLI RPC conn #2389 closed after 125ms (active: 0)
+[2026-09-22T15:12:03-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:03-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:03-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:03-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:04-05:00] DEBUG [cli_rpc]: CLI RPC conn #2390 accepted from 127.0.0.1:44598 (active: 1)
+[2026-09-22T15:12:04-05:00] DEBUG [cli_rpc]: CLI RPC conn #2390 closed after 125ms (active: 0)
+[2026-09-22T15:12:04-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49210, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:04-05:00] DEBUG [router]: GC: 134 rules, 0 expired. Oldest idle: rtID=359 idle=9m36.307360334s
+[2026-09-22T15:12:04-05:00] DEBUG [cli_rpc]: CLI RPC stats: active=0, total=2390, errors=0, peak=2
+[2026-09-22T15:12:04-05:00] DEBUG [cli_rpc]: CLI RPC conn #2391 accepted from 127.0.0.1:44610 (active: 1)
+[2026-09-22T15:12:04-05:00] DEBUG [cli_rpc]: CLI RPC conn #2391 closed after 142ms (active: 0)
+[2026-09-22T15:12:04-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:04-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:04-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:04-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49221, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:04-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49220, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:04-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49218, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:04-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49219, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:04-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:04-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49217, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:04-05:00] DEBUG [cli_rpc]: CLI RPC conn #2392 accepted from 127.0.0.1:44622 (active: 1)
+[2026-09-22T15:12:04-05:00] DEBUG [cli_rpc]: CLI RPC conn #2392 closed after 125ms (active: 0)
+[2026-09-22T15:12:04-05:00] DEBUG [cli_rpc]: CLI RPC conn #2393 accepted from 127.0.0.1:44624 (active: 1)
+[2026-09-22T15:12:04-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49222, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:04-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:04-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:04-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"03b6d86aa0ce2717fb1e64756600e3fe7d5654e4484b13c25b19d34acab87ceaf2","Addr":"167.61.182.245:34658"}
+[2026-09-22T15:12:04-05:00] DEBUG [cli_rpc]: CLI RPC conn #2393 closed after 130ms (active: 0)
+[2026-09-22T15:12:05-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:05-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:05-05:00] DEBUG [sudph]: Accepted connection from 167.61.182.245:34658
+[2026-09-22T15:12:05-05:00] DEBUG [cli_rpc]: CLI RPC conn #2394 accepted from 127.0.0.1:44626 (active: 1)
+[2026-09-22T15:12:05-05:00] DEBUG [sudph]: Sent handshake to 167.61.182.245:34658, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 03b6d86aa0ce2717fb1e64756600e3fe7d5654e4484b13c25b19d34acab87ceaf2:50055
+[2026-09-22T15:12:05-05:00] DEBUG [cli_rpc]: CLI RPC conn #2394 closed after 127ms (active: 0)
+[2026-09-22T15:12:05-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49207, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 0 active app_name=skysocks-client
+[2026-09-22T15:12:05-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49207, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 2 active app_name=skysocks-client
+[2026-09-22T15:12:05-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49213, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:05-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49209, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:05-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49211, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:05-05:00] DEBUG [cli_rpc]: CLI RPC conn #2395 accepted from 127.0.0.1:44634 (active: 1)
+[2026-09-22T15:12:05-05:00] DEBUG [transport_manager]: Deregistering 1 transports via CXO transport-list snapshot
+[2026-09-22T15:12:05-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:05-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:05-05:00] DEBUG [transport_manager]: recv transport request: type(sudph) remote(03b6d86aa0ce2717fb1e64756600e3fe7d5654e4484b13c25b19d34acab87ceaf2)
+[2026-09-22T15:12:05-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T15:12:05-05:00] DEBUG [tp:03b6d86aa0ce2717fb1e64756600e3fe7d5654e4484b13c25b19d34acab87ceaf2]: no prior transport log entry; starting fresh transport=b92ef7e8-7676-0780-b4a1-ce07662da387
+[2026-09-22T15:12:05-05:00] DEBUG [tp:03b6d86aa0ce2717fb1e64756600e3fe7d5654e4484b13c25b19d34acab87ceaf2]: Performing settlement handshake...
+[2026-09-22T15:12:05-05:00] DEBUG [tp:03b6d86aa0ce2717fb1e64756600e3fe7d5654e4484b13c25b19d34acab87ceaf2]: Serving. remote_pk=03b6d86aa0ce2717fb1e64756600e3fe7d5654e4484b13c25b19d34acab87ceaf2 tp_id=b92ef7e8-7676-0780-b4a1-ce07662da387 tp_index=1376
+[2026-09-22T15:12:05-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:05-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:05-05:00] DEBUG [cli_rpc]: CLI RPC conn #2395 closed after 113ms (active: 0)
+[2026-09-22T15:12:05-05:00] DEBUG [tp:03b6d86aa0ce2717fb1e64756600e3fe7d5654e4484b13c25b19d34acab87ceaf2]: Setting underlying transport...
+[2026-09-22T15:12:05-05:00] DEBUG [tp:03b6d86aa0ce2717fb1e64756600e3fe7d5654e4484b13c25b19d34acab87ceaf2]: Sent signal to 'mt.transportCh'.
+[2026-09-22T15:12:05-05:00] DEBUG [transport_manager]: accepted tp: type(sudph) remote(03b6d86aa0ce2717fb1e64756600e3fe7d5654e4484b13c25b19d34acab87ceaf2) tpID(b92ef7e8-7676-0780-b4a1-ce07662da387) new(true)
+[2026-09-22T15:12:05-05:00] DEBUG [cli_rpc]: CLI RPC conn #2396 accepted from 127.0.0.1:44644 (active: 1)
+[2026-09-22T15:12:05-05:00] DEBUG [cli_rpc]: CLI RPC conn #2396 closed after 140ms (active: 0)
+[2026-09-22T15:12:05-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:05-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:05-05:00] DEBUG [cli_rpc]: CLI RPC conn #2397 accepted from 127.0.0.1:44652 (active: 1)
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:06-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=870.208715ms yamux_id=1089
+[2026-09-22T15:12:06-05:00] DEBUG [cli_rpc]: CLI RPC conn #2397 closed after 150ms (active: 0)
+[2026-09-22T15:12:06-05:00] DEBUG [cli_rpc]: CLI RPC conn #2398 accepted from 127.0.0.1:44660 (active: 1)
+[2026-09-22T15:12:06-05:00] DEBUG [cli_rpc]: CLI RPC conn #2398 closed after 120ms (active: 0)
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:06-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49214, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:06-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49215, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T15:12:06-05:00] DEBUG [cli_rpc]: CLI RPC conn #2399 accepted from 127.0.0.1:44668 (active: 1)
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:06-05:00] DEBUG [cli_rpc]: CLI RPC conn #2399 closed after 116ms (active: 0)
+[2026-09-22T15:12:06-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=460.859309ms yamux_id=1091
+[2026-09-22T15:12:06-05:00] DEBUG [cli_rpc]: CLI RPC conn #2400 accepted from 127.0.0.1:44678 (active: 1)
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:06-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:06-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49212, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:12:07-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:07-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:07-05:00] DEBUG [cli_rpc]: CLI RPC conn #2400 closed after 157ms (active: 0)
+[2026-09-22T15:12:07-05:00] DEBUG [cli_rpc]: CLI RPC conn #2401 accepted from 127.0.0.1:44680 (active: 1)
+[2026-09-22T15:12:07-05:00] DEBUG [cli_rpc]: CLI RPC conn #2401 closed after 118ms (active: 0)
+[2026-09-22T15:12:07-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:07-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:07-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=557.419019ms yamux_id=1093
+[2026-09-22T15:12:07-05:00] DEBUG [cli_rpc]: CLI RPC conn #2402 accepted from 127.0.0.1:44696 (active: 1)
+[2026-09-22T15:12:07-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:07-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:07-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49241, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:07-05:00] DEBUG [cli_rpc]: CLI RPC conn #2402 closed after 119ms (active: 0)
+[2026-09-22T15:12:07-05:00] DEBUG [cli_rpc]: CLI RPC conn #2403 accepted from 127.0.0.1:44704 (active: 1)
+[2026-09-22T15:12:07-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49200, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:07-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49202, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:07-05:00] DEBUG [cli_rpc]: CLI RPC conn #2403 closed after 169ms (active: 0)
+[2026-09-22T15:12:07-05:00] DEBUG [transport_manager]: Publishing 1376 transports to TPD via CXO transport-list snapshot
+[2026-09-22T15:12:07-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:07-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:08-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49207, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=2 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:12:08-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49207, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: park-hysteresis: leg 1 stays parked (latency band: 49 ms is out of the active set's band); 30s hold not expired, refusing the adaptive re-admit (latency band: 150 ms back within the active set's band) app_name=skysocks-client
+[2026-09-22T15:12:08-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:08-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:08-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=474.368431ms yamux_id=1097
+[2026-09-22T15:12:08-05:00] DEBUG [cli_rpc]: CLI RPC conn #2404 accepted from 127.0.0.1:44714 (active: 1)
+[2026-09-22T15:12:08-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49251, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:08-05:00] DEBUG [cli_rpc]: CLI RPC conn #2404 closed after 177ms (active: 0)
+[2026-09-22T15:12:08-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:08-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:08-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49203, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:08-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49205, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:08-05:00] DEBUG [cli_rpc]: CLI RPC conn #2405 accepted from 127.0.0.1:44718 (active: 1)
+[2026-09-22T15:12:08-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:08-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:08-05:00] DEBUG [cli_rpc]: CLI RPC conn #2405 closed after 203ms (active: 0)
+[2026-09-22T15:12:08-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=467.586777ms yamux_id=1099
+[2026-09-22T15:12:08-05:00] DEBUG [stcpr]: Accepted connection from 143.177.188.119:57102
+[2026-09-22T15:12:08-05:00] DEBUG [stcpr]: Detected external STCPR connection from 143.177.188.119
+[2026-09-22T15:12:08-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:08-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:08-05:00] DEBUG [stcpr]: Sent handshake to 143.177.188.119:57102, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 026a913078651938783e19416a2de99c924df209e28512da2a571868c989bf3822:49375
+[2026-09-22T15:12:08-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:08-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:08-05:00] DEBUG [cli_rpc]: CLI RPC conn #2406 accepted from 127.0.0.1:44728 (active: 1)
+[2026-09-22T15:12:09-05:00] DEBUG [transport_manager]: recv transport request: type(stcpr) remote(026a913078651938783e19416a2de99c924df209e28512da2a571868c989bf3822)
+[2026-09-22T15:12:09-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T15:12:09-05:00] DEBUG [tp:026a913078651938783e19416a2de99c924df209e28512da2a571868c989bf3822]: Performing settlement handshake...
+[2026-09-22T15:12:09-05:00] DEBUG [tp:026a913078651938783e19416a2de99c924df209e28512da2a571868c989bf3822]: Serving. remote_pk=026a913078651938783e19416a2de99c924df209e28512da2a571868c989bf3822 tp_id=bf9b0de8-37e1-09ba-b743-0c529ae98372 tp_index=1377
+[2026-09-22T15:12:09-05:00] DEBUG [cli_rpc]: CLI RPC conn #2406 closed after 143ms (active: 0)
+[2026-09-22T15:12:09-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49230, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:09-05:00] DEBUG [tp:026a913078651938783e19416a2de99c924df209e28512da2a571868c989bf3822]: Setting underlying transport...
+[2026-09-22T15:12:09-05:00] DEBUG [tp:026a913078651938783e19416a2de99c924df209e28512da2a571868c989bf3822]: Sent signal to 'mt.transportCh'.
+[2026-09-22T15:12:09-05:00] DEBUG [transport_manager]: accepted tp: type(stcpr) remote(026a913078651938783e19416a2de99c924df209e28512da2a571868c989bf3822) tpID(bf9b0de8-37e1-09ba-b743-0c529ae98372) new(true)
+[2026-09-22T15:12:09-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-22T15:12:09-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49231, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:09-05:00] DEBUG [cli_rpc]: CLI RPC conn #2407 accepted from 127.0.0.1:44742 (active: 1)
+[2026-09-22T15:12:09-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:09-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:09-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=495.505977ms yamux_id=1101
+[2026-09-22T15:12:09-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49249, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:09-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:09-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:09-05:00] DEBUG [cli_rpc]: CLI RPC conn #2407 closed after 200ms (active: 0)
+[2026-09-22T15:12:09-05:00] DEBUG [cli_rpc]: CLI RPC conn #2408 accepted from 127.0.0.1:44744 (active: 1)
+[2026-09-22T15:12:09-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_port=50539
+[2026-09-22T15:12:09-05:00] DEBUG [cli_rpc]: CLI RPC conn #2408 closed after 134ms (active: 0)
+[2026-09-22T15:12:09-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:09-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:09-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:09-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:10-05:00] DEBUG [cli_rpc]: CLI RPC conn #2409 accepted from 127.0.0.1:44746 (active: 1)
+[2026-09-22T15:12:10-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=471.631502ms yamux_id=1103
+[2026-09-22T15:12:10-05:00] DEBUG [cli_rpc]: CLI RPC conn #2409 closed after 156ms (active: 0)
+[2026-09-22T15:12:10-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49212, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:10-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49206, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:10-05:00] DEBUG [cli_rpc]: CLI RPC conn #2410 accepted from 127.0.0.1:44758 (active: 1)
+[2026-09-22T15:12:10-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf src_pk=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_port=50539
+[2026-09-22T15:12:10-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:10-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:10-05:00] DEBUG [cli_rpc]: CLI RPC conn #2410 closed after 125ms (active: 0)
+[2026-09-22T15:12:10-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:10-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:10-05:00] DEBUG [cli_rpc]: CLI RPC conn #2411 accepted from 127.0.0.1:44764 (active: 1)
+[2026-09-22T15:12:10-05:00] DEBUG [cli_rpc]: CLI RPC conn #2411 closed after 144ms (active: 0)
+[2026-09-22T15:12:10-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=462.92517ms yamux_id=1105
+[2026-09-22T15:12:10-05:00] DEBUG [cli_rpc]: CLI RPC conn #2412 accepted from 127.0.0.1:44766 (active: 1)
+[2026-09-22T15:12:10-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:10-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:10-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf src_pk=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_port=50539
+[2026-09-22T15:12:11-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:11-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:11-05:00] DEBUG [cli_rpc]: CLI RPC conn #2412 closed after 146ms (active: 0)
+[2026-09-22T15:12:11-05:00] DEBUG [cli_rpc]: CLI RPC conn #2413 accepted from 127.0.0.1:44772 (active: 1)
+[2026-09-22T15:12:11-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49210, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:11-05:00] DEBUG [cli_rpc]: CLI RPC conn #2413 closed after 155ms (active: 0)
+[2026-09-22T15:12:11-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=454.785325ms yamux_id=1107
+[2026-09-22T15:12:11-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"035ab371dcc8ec4714071f4bb504f680c664f3ee87f925b15b07ceb662b0ce0ee4","Addr":"103.151.141.14:37734"}
+[2026-09-22T15:12:11-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:11-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:11-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49221, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:11-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49220, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:11-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49219, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:11-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49218, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:11-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:11-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:11-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49217, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:11-05:00] DEBUG [cli_rpc]: CLI RPC conn #2414 accepted from 127.0.0.1:44780 (active: 1)
+[2026-09-22T15:12:11-05:00] DEBUG [cli_rpc]: CLI RPC conn #2414 closed after 127ms (active: 0)
+[2026-09-22T15:12:11-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49205, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=334 after idle PTO app_name=skysocks-client
+[2026-09-22T15:12:11-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49200, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=334 after idle PTO app_name=skysocks-client
+[2026-09-22T15:12:11-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49213, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=332 after idle PTO app_name=skysocks-client
+[2026-09-22T15:12:11-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49221, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=331 after idle PTO app_name=skysocks-client
+[2026-09-22T15:12:11-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49206, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=332 after idle PTO app_name=skysocks-client
+[2026-09-22T15:12:11-05:00] DEBUG [cli_rpc]: CLI RPC conn #2415 accepted from 127.0.0.1:36986 (active: 1)
+[2026-09-22T15:12:11-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:11-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:11-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49222, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:11-05:00] DEBUG [cli_rpc]: CLI RPC conn #2415 closed after 128ms (active: 0)
+[2026-09-22T15:12:11-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:11-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:12-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"035ab371dcc8ec4714071f4bb504f680c664f3ee87f925b15b07ceb662b0ce0ee4","Addr":"103.151.141.14:37734"}
+[2026-09-22T15:12:12-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=466.285048ms yamux_id=1109
+[2026-09-22T15:12:12-05:00] DEBUG [cli_rpc]: CLI RPC conn #2416 accepted from 127.0.0.1:36994 (active: 1)
+[2026-09-22T15:12:12-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49207, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 0 active app_name=skysocks-client
+[2026-09-22T15:12:12-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49207, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 2 active app_name=skysocks-client
+[2026-09-22T15:12:12-05:00] DEBUG [cli_rpc]: CLI RPC conn #2416 closed after 179ms (active: 0)
+[2026-09-22T15:12:12-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49213, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:12-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49209, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:12-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49211, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:12-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:12-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:12-05:00] DEBUG [cli_rpc]: CLI RPC conn #2417 accepted from 127.0.0.1:37010 (active: 1)
+[2026-09-22T15:12:12-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:12-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:12-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=50153
+[2026-09-22T15:12:12-05:00] DEBUG [cli_rpc]: CLI RPC conn #2417 closed after 154ms (active: 0)
+[2026-09-22T15:12:12-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=452.224167ms yamux_id=1111
+[2026-09-22T15:12:12-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_port=50548
+[2026-09-22T15:12:12-05:00] DEBUG [cli_rpc]: CLI RPC conn #2418 accepted from 127.0.0.1:37026 (active: 1)
+[2026-09-22T15:12:12-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=50153
+[2026-09-22T15:12:12-05:00] DEBUG [cli_rpc]: CLI RPC conn #2418 closed after 127ms (active: 0)
+[2026-09-22T15:12:12-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:12-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:12-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:12-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=400, pktType=DataPacket)"
+[2026-09-22T15:12:13-05:00] DEBUG [cli_rpc]: CLI RPC conn #2419 accepted from 127.0.0.1:37038 (active: 1)
+[2026-09-22T15:12:13-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=50153
+[2026-09-22T15:12:13-05:00] DEBUG [cli_rpc]: CLI RPC conn #2419 closed after 137ms (active: 0)
+[2026-09-22T15:12:13-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf src_pk=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_port=50548
+[2026-09-22T15:12:13-05:00] DEBUG [cli_rpc]: CLI RPC conn #2420 accepted from 127.0.0.1:37048 (active: 1)
+[2026-09-22T15:12:13-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=462.249502ms yamux_id=1113
+[2026-09-22T15:12:13-05:00] DEBUG [cli_rpc]: CLI RPC conn #2420 closed after 114ms (active: 0)
+[2026-09-22T15:12:13-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T15:12:13-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49214, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:13-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49215, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:13-05:00] DEBUG [cli_rpc]: CLI RPC conn #2421 accepted from 127.0.0.1:37056 (active: 1)
+[2026-09-22T15:12:13-05:00] DEBUG [cli_rpc]: CLI RPC conn #2421 closed after 129ms (active: 0)
+[2026-09-22T15:12:13-05:00] DEBUG [cli_rpc]: CLI RPC conn #2422 accepted from 127.0.0.1:37062 (active: 1)
+[2026-09-22T15:12:13-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5:46 error=EOF ports_reserved=168 session=020e26d9f0da46daec8d3dccff5c100dd03685f7cbe608d93a8e8190892979f2a0
+[2026-09-22T15:12:13-05:00] DEBUG [dmsgC]: DialStream failed, trying next session error=EOF server=020e26d9f0da46daec8d3dccff5c100dd03685f7cbe608d93a8e8190892979f2a0
+[2026-09-22T15:12:13-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf src_pk=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_port=50548
+[2026-09-22T15:12:13-05:00] DEBUG [cli_rpc]: CLI RPC conn #2422 closed after 120ms (active: 0)
+[2026-09-22T15:12:13-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=458.991551ms yamux_id=1115
+[2026-09-22T15:12:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #2423 accepted from 127.0.0.1:37068 (active: 1)
+[2026-09-22T15:12:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #2423 closed after 117ms (active: 0)
+[2026-09-22T15:12:14-05:00] DEBUG [transport_manager]: Publishing 1377 transports to TPD via CXO transport-list snapshot
+[2026-09-22T15:12:14-05:00] DEBUG [router]: GC: 134 rules, 0 expired. Oldest idle: rtID=359 idle=9m46.307317723s
+[2026-09-22T15:12:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #2424 accepted from 127.0.0.1:37074 (active: 1)
+[2026-09-22T15:12:14-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=020e26d9f0da46daec8d3dccff5c100dd03685f7cbe608d93a8e8190892979f2a0 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=50155
+[2026-09-22T15:12:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #2424 closed after 118ms (active: 0)
+[2026-09-22T15:12:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #2425 accepted from 127.0.0.1:37088 (active: 1)
+[2026-09-22T15:12:14-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49241, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:14-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=461.824452ms yamux_id=1117
+[2026-09-22T15:12:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #2425 closed after 126ms (active: 0)
+[2026-09-22T15:12:14-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49200, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:14-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49202, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #2426 accepted from 127.0.0.1:37090 (active: 1)
+[2026-09-22T15:12:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #2426 closed after 17ms (active: 0)
+[2026-09-22T15:12:15-05:00] DEBUG [stcpr]: Accepted connection from 213.183.63.83:36514
+[2026-09-22T15:12:15-05:00] DEBUG [stcpr]: Detected external STCPR connection from 213.183.63.83
+[2026-09-22T15:12:15-05:00] DEBUG [cli_rpc]: CLI RPC conn #2427 accepted from 127.0.0.1:37094 (active: 1)
+[2026-09-22T15:12:15-05:00] DEBUG [cli_rpc]: CLI RPC conn #2427 closed after 129ms (active: 0)
+[2026-09-22T15:12:15-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=444.805591ms yamux_id=1119
+[2026-09-22T15:12:15-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49251, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:15-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found"
+[2026-09-22T15:12:15-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49203, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:15-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49205, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:15-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_port=50556
+[2026-09-22T15:12:15-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=50158
+[2026-09-22T15:12:15-05:00] DEBUG [stcpr]: Sent handshake to 213.183.63.83:36514, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 02efbdb0e6f8c81bf529297a4e6f19e18b3add5d5e568a9c6a64749a6ff8da4a39:49154
+[2026-09-22T15:12:15-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_port=50559
+[2026-09-22T15:12:16-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=880.361038ms yamux_id=1121
+[2026-09-22T15:12:16-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=50158
+[2026-09-22T15:12:16-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49230, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:16-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49231, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:16-05:00] DEBUG [transport_manager]: recv transport request: type(stcpr) remote(02efbdb0e6f8c81bf529297a4e6f19e18b3add5d5e568a9c6a64749a6ff8da4a39)
+[2026-09-22T15:12:16-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T15:12:16-05:00] DEBUG [tp:02efbdb0e6f8c81bf529297a4e6f19e18b3add5d5e568a9c6a64749a6ff8da4a39]: no prior transport log entry; starting fresh transport=6f759b5b-e703-02e8-9ed4-53451986d6b8
+[2026-09-22T15:12:16-05:00] DEBUG [tp:02efbdb0e6f8c81bf529297a4e6f19e18b3add5d5e568a9c6a64749a6ff8da4a39]: Performing settlement handshake...
+[2026-09-22T15:12:16-05:00] DEBUG [tp:02efbdb0e6f8c81bf529297a4e6f19e18b3add5d5e568a9c6a64749a6ff8da4a39]: Serving. remote_pk=02efbdb0e6f8c81bf529297a4e6f19e18b3add5d5e568a9c6a64749a6ff8da4a39 tp_id=6f759b5b-e703-02e8-9ed4-53451986d6b8 tp_index=1378
+[2026-09-22T15:12:16-05:00] DEBUG [cli_rpc]: CLI RPC conn #2428 accepted from 127.0.0.1:37102 (active: 1)
+[2026-09-22T15:12:16-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=62912 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_port=50158
+[2026-09-22T15:12:16-05:00] DEBUG [tp:02efbdb0e6f8c81bf529297a4e6f19e18b3add5d5e568a9c6a64749a6ff8da4a39]: Setting underlying transport...
+[2026-09-22T15:12:16-05:00] DEBUG [tp:02efbdb0e6f8c81bf529297a4e6f19e18b3add5d5e568a9c6a64749a6ff8da4a39]: Sent signal to 'mt.transportCh'.
+[2026-09-22T15:12:16-05:00] DEBUG [transport_manager]: accepted tp: type(stcpr) remote(02efbdb0e6f8c81bf529297a4e6f19e18b3add5d5e568a9c6a64749a6ff8da4a39) tpID(6f759b5b-e703-02e8-9ed4-53451986d6b8) new(true)
+[2026-09-22T15:12:16-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49249, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:12:16-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-22T15:12:16-05:00] DEBUG [cli_rpc]: CLI RPC conn #2428 closed after 293ms (active: 0)
+[2026-09-22T15:12:16-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49206, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
