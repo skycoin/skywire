@@ -7,9 +7,9 @@ plugins {
 
 // Version comes from the release tag when there is one, and from the
 // fallbacks below otherwise, so a local `./gradlew assembleDebug` needs no
-// arguments. The release workflow derives both from the `vX.Y.Z` tag (the same
-// tag that cuts every other release artifact) — see the `android` job in
-// .github/workflows/release.yml.
+// arguments. The Android release workflow derives both from the
+// `mobile-vX.Y.Z` tag through `make android-apk` — see
+// .github/workflows/android-release.yml.
 val appVersionName = (project.findProperty("skywireVersionName") as String?) ?: "0.1.0"
 val appVersionCode = (project.findProperty("skywireVersionCode") as String?)?.toInt() ?: 1
 

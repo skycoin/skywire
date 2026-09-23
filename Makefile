@@ -6,12 +6,10 @@
 .PHONY : generate services vet check-cg check-help check-inner check-ci
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
 
-# --match 'v[0-9]*' pins this to the SKYWIRE release tags. Mobile artifacts are
-# now cut from the same `v*` tags as everything else (release.yml), but the repo
-# still carries HISTORICAL `mobile-vX.Y.Z` APK tags, and an annotated one of
-# those sitting on HEAD would otherwise become the version every binary in the
-# tree reports. --always still falls back to a bare hash when no release tag is
-# reachable.
+# --match 'v[0-9]*' pins this to the SKYWIRE release tags. The repo also carries
+# `mobile-vX.Y.Z` APK tags, and an annotated one of those sitting on HEAD would
+# otherwise become the version every binary in the tree reports. --always still
+# falls back to a bare hash when no release tag is reachable.
 VERSION := $(shell git describe --always --match 'v[0-9]*')
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 COMMIT := $(shell git rev-list -1 HEAD)
@@ -255,17 +253,15 @@ ANDROID_MOBILE_MAX_BYTES := 73400320
 # on a checkout with no reachable tag `git describe --always` is a bare hash —
 # so fall back to a v0.0.0-<sha> pseudo-version.
 #
-# --match 'v[0-9]*' keeps this a clean SKYWIRE version. Mobile releases are now
-# cut from the same `v*` tag as the rest of the release (release.yml), so on a
-# release build `git describe --tags --match 'v[0-9]*'` resolves to that `vX.Y.Z`
-# tag — exactly the version the visor should report. The guard is kept as
-# defense-in-depth: the repo still carries HISTORICAL `mobile-vX.Y.Z` APK tags,
-# and a bare `git describe --tags` that resolved to one of those would stamp
-# "mobile-v0.0.2" as the visor version — `config gen` writes it into the config's
-# `version` field and every visor start would then die in visorconfig.Parse with
-# `Invalid character(s) found in major number "mobile-v0"`. The APK's own version
-# is passed separately (APK_VERSION, derived from the `v*` tag). The glob is
-# 'v[0-9]*' and not 'v*' because 'v*' still matches any `vpn-v1.2.3`-style tag.
+# --match 'v[0-9]*' keeps this a clean SKYWIRE version: the nearest `vX.Y.Z`
+# tag, exactly the version the visor should report. The repo also carries
+# `mobile-vX.Y.Z` APK tags, and a bare `git describe --tags` that resolved to one
+# of those would stamp "mobile-v0.0.2" as the visor version — `config gen` writes
+# it into the config's `version` field and every visor start would then die in
+# visorconfig.Parse with `Invalid character(s) found in major number
+# "mobile-v0"`. The APK's own version is passed separately (APK_VERSION,
+# derived from the `mobile-vX.Y.Z` tag). The glob is 'v[0-9]*' and not 'v*'
+# because 'v*' still matches any `vpn-v1.2.3`-style tag.
 MOBILE_VERSION := $(shell git describe --tags --match 'v[0-9]*' 2>/dev/null || echo "v0.0.0-$(VERSION)")
 MOBILE_APPINFO := -X $(SKYWIRE_BUILDINFO_PATH).version=$(MOBILE_VERSION) -X $(SKYWIRE_BUILDINFO_PATH).commit=$(COMMIT) -X $(SKYWIRE_BUILDINFO_PATH).date=$(DATE)
 
@@ -315,9 +311,10 @@ ANDROID_JAVA_HOME ?= /Applications/Android Studio.app/Contents/jbr/Contents/Home
 
 # APK_VERSION=X.Y.Z stamps the build; without it the committed gradle
 # fallbacks apply. The versionCode formula lives HERE and nowhere else — the
-# release workflow calls this target rather than computing its own — so a tag
-# build and a local build can never disagree about the number. Minor and patch
-# are capped at 99, past which the scheme stops being monotonic.
+# Android release workflow (android-release.yml) calls this target rather than
+# computing its own — so a tag build and a local build can never disagree about
+# the number. Minor and patch are capped at 99, past which the scheme stops
+# being monotonic.
 ifdef APK_VERSION
 APK_VERSION_CODE := $(shell printf '%s' '$(APK_VERSION)' | awk -F. \
 	'{ if (NF==3 && $$1$$2$$3 ~ /^[0-9]+$$/ && $$2<=99 && $$3<=99) print $$1*10000+$$2*100+$$3 }')
