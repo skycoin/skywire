@@ -579,23 +579,70 @@ func (rg *RouteGroup) releasePoolLegs(now time.Time, keep int) {
 	}
 }
 
-// releaseLegByTransport closes one pool-sourced leg and prunes it, WITHOUT the
-// self-heal top-up dropLegsByIndex triggers: the release is deliberate, and
-// re-dialing a replacement for a leg the group just decided it does not need is
-// the churn this whole file exists to avoid.
+// releaseLegByTransport gives ONE pool-sourced leg back: by SPLIT when the exit
+// can take the chain back as a standby group of its own, by closing the
+// transport when it cannot.
 func (rg *RouteGroup) releaseLegByTransport(t poolTakenLeg, reason string) {
+	idx := rg.releasableLegIndex(t.tpID)
+	if idx < 0 {
+		return
+	}
+	// A released leg is not a dead leg. Hand the whole chain back to the pool
+	// as a standby group of its own (leg_split.go) — same transport, same
+	// route IDs, no setup dial — so the next take can re-home it straight back
+	// in. Only a peer that never negotiated the capability, or one that does
+	// not answer, costs the transport the way every release used to.
+	if rg.splitOnRelease() {
+		tpID := tpEntryID(rg.legTransportAt(idx))
+		ns, err := rg.splitLeg(idx, reason)
+		if err == nil {
+			rg.logger.Infof("Split leg :%d back into standby group :%d", t.from, ns.desc.SrcPort())
+			// Still a pool_leg_released — the group gave the leg back. It just
+			// gave it back to the POOL rather than to the transport manager.
+			rg.noteMuxEvent(MuxEvent{
+				Event: MuxEventPoolLegReleased, By: MuxByLocal, LegIndex: idx, Legs: rg.legCount(), TpID: tpID,
+				Reason: reason + fmt.Sprintf("; split back out as standby group :%d, transport kept", ns.desc.SrcPort()),
+			})
+			return
+		}
+		rg.logger.WithError(err).Infof(
+			"Split of the leg taken from standby :%d is unavailable; closing its transport instead", t.from)
+		if idx = rg.releasableLegIndex(t.tpID); idx < 0 {
+			return
+		}
+	}
+	rg.closeReleasedLeg(idx, reason)
+}
+
+// releasableLegIndex finds the live leg riding transport tpID, or -1 when it is
+// already gone or is the group's last live leg — a group is never released down
+// to nothing.
+func (rg *RouteGroup) releasableLegIndex(tpID uuid.UUID) int {
 	rg.mu.Lock()
+	defer rg.mu.Unlock()
 	alive, idx := 0, -1
 	for i, tp := range rg.tps {
 		if tp == nil || tp.IsClosed() {
 			continue
 		}
 		alive++
-		if tp.Entry.ID == t.tpID {
+		if tp.Entry.ID == tpID {
 			idx = i
 		}
 	}
-	if idx < 0 || alive <= 1 {
+	if alive <= 1 {
+		return -1
+	}
+	return idx
+}
+
+// closeReleasedLeg is the pre-split release: the leg's transport is closed and
+// the leg pruned, WITHOUT the self-heal top-up dropLegsByIndex triggers — the
+// release is deliberate, and re-dialing a replacement for a leg the group just
+// decided it does not need is the churn this whole file exists to avoid.
+func (rg *RouteGroup) closeReleasedLeg(idx int, reason string) {
+	rg.mu.Lock()
+	if idx < 0 || idx >= len(rg.tps) || rg.tps[idx] == nil {
 		rg.mu.Unlock()
 		return
 	}

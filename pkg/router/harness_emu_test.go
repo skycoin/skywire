@@ -748,3 +748,49 @@ func (r *emuRig) legSentBytes(e *emuEnd) []uint64 {
 	}
 	return out
 }
+
+// splitGroupPort implements legSplitHost. The rig's ports are small and fixed,
+// so a split-out group takes the lowest free one rather than the router's
+// random ephemeral — the port only has to be free, and this keeps a failure
+// readable.
+func (h *emuHost) splitGroupPort(base routing.RouteDescriptor) (routing.Port, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for p := routing.Port(100); p < 200; p++ {
+		if _, ok := h.groups[routing.NewRouteDescriptor(base.SrcPK(), base.DstPK(), p, base.DstPort())]; !ok {
+			return p, nil
+		}
+	}
+	return 0, fmt.Errorf("no free port for a split-out group of %s", base.String())
+}
+
+// registerSplitGroup implements legSplitHost.
+func (h *emuHost) registerSplitGroup(rg *RouteGroup) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, ok := h.groups[rg.desc]; ok {
+		return fmt.Errorf("a group already holds %s", rg.desc.String())
+	}
+	h.groups[rg.desc] = rg
+	return nil
+}
+
+// singleLegGroupOn finds the group this end registered that holds exactly the
+// transport tpID — how a test names a group that did not exist when the rig was
+// built.
+func (h *emuHost) singleLegGroupOn(tpID uuid.UUID) *RouteGroup {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, rg := range h.groups {
+		if rg == nil || rg.isClosed() {
+			continue
+		}
+		rg.mu.Lock()
+		hit := len(rg.tps) == 1 && rg.tps[0] != nil && rg.tps[0].Entry.ID == tpID
+		rg.mu.Unlock()
+		if hit {
+			return rg
+		}
+	}
+	return nil
+}

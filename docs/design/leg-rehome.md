@@ -130,3 +130,38 @@ parallel and is **not** implemented here. The call site is
 `router.MuxLegController.RehomeStandbyLeg`. Both ports are the `dst_port`
 `proxy mux info --json` prints. Events land in the router's mux ring, so
 `visor state --select diag` and `proxy mux info --json` show the adoption.
+
+## The reverse direction: leg SPLIT
+
+A route has to move between stream level and packet level in both directions.
+The split is the same rewrite the other way: a leg leaves an active group and
+becomes a standalone STANDBY route group again — same transport, same reserved
+route IDs at every hop, a fresh local port and one re-keyed consume rule per
+edge. Nothing is dialed and nothing is closed.
+
+It rides the same packet and the same capability bit, with one more flag:
+
+    LegRehomeSplit (0x08)   the ports name a NEW standalone group of the
+                            initiator; the chain this packet arrives on is to
+                            leave the group it belongs to and become that
+                            group's only leg.
+
+Sequence (`pkg/router/leg_split.go`):
+
+1. The initiator picks a free local port, parks the leg in its own mux so the
+   scheduler stops striping onto it, and sends the request along that leg.
+2. The exit mirrors the ports the way `rehomeTarget` does, detaches the leg,
+   builds the mirrored group around it, registers it, and acks over the same
+   chain. A peer that cannot do any of that refuses, or simply never answers.
+3. On the ack the initiator detaches the leg and builds its own standby group
+   around it, registered so the pool arbiter and the edge dispatch see it.
+
+The split group never handshakes — its chain is already live — so its mux is
+inherited from the group the chain left (SACK, delivery CRC, the re-home bit).
+Both edges inherit from their own copy of the same group, so the two ends still
+agree. It carries no application stream: it is a chain held for the pool, ready
+to be re-homed forward again.
+
+`pool_arbiter.go releaseLegByTransport` tries this first and closes the
+transport only when it fails (`leg.split_on_release` turns it off). Counters:
+`leg_splits_sent/received/acked/failed` next to the re-home ones.
