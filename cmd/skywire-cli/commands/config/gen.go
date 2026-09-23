@@ -2650,6 +2650,11 @@ func writeConfigOutput(log *logging.Logger) {
 			log.Fatalf("Failed to write config file: %v", err)
 		}
 		log.Debugf("config gen: wrote %s (wisp set=%v enableWisp=%v dmsg_web set=%v skynet_web set=%v)", confPath, conf.Wisp != nil, enableWisp, conf.DmsgWeb != nil, conf.SkynetWeb != nil)
+		if back, rerr := os.ReadFile(confPath); rerr != nil { //nolint:gosec
+			log.WithError(rerr).Debug("config gen: read-back of the written config failed")
+		} else {
+			log.Debugf("config gen: read-back %s: %d bytes written, %d bytes read, wisp in written=%v, wisp in read=%v", confPath, len(jsonData), len(back), strings.Contains(string(jsonData), `"wisp"`), strings.Contains(string(back), `"wisp"`))
+		}
 	}
 	// Print results.
 	j, err := json.MarshalIndent(conf, "", "\t")
