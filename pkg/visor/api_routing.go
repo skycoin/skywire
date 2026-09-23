@@ -160,6 +160,9 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 			Shape:              info.Shape,
 			ShapeTarget:        info.ShapeTarget,
 			ShapeSource:        info.ShapeSource,
+			ShapeTunnels:       info.ShapeTunnels,
+			LastMove:           info.LastMove,
+			MoveCounts:         info.MoveCounts,
 		}
 		for _, leg := range info.Legs {
 			entry.AggSentBytes += leg.SentBytes

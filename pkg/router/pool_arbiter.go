@@ -725,6 +725,14 @@ func poolArbiterRound(active, pool []*RouteGroup, now time.Time,
 	for _, g := range active {
 		noteHeldFirstHops(g, held)
 	}
+
+	// An operator-named mux.shape owns this session: the converger makes at
+	// most one move toward it and the load/idle rules below stand down. Under
+	// mux.shape=auto shapeStep declines the session and today's arbiter runs
+	// unchanged — the default is bit-for-bit what it always was.
+	if shapeStep(active, pool, now, grow) != shapeVerdictAuto {
+		return
+	}
 	for _, g := range active {
 		if g == nil {
 			continue

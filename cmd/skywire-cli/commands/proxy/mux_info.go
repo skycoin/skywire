@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -211,6 +212,23 @@ type muxRouteGroupInfo struct {
 	Shape       string `json:"shape,omitempty"`
 	ShapeTarget string `json:"shape_target,omitempty"`
 	ShapeSource string `json:"shape_source,omitempty"`
+	// ShapeTunnels is the k the target asks for (0 under auto). LastMove is the
+	// session's most recent shape move and MoveCounts the tally per move name,
+	// so `mux info` shows WHY the shape is what it is without the event ring.
+	ShapeTunnels int               `json:"shape_tunnels,omitempty"`
+	LastMove     *muxShapeMoveInfo `json:"last_move,omitempty"`
+	MoveCounts   map[string]uint64 `json:"move_counts,omitempty"`
+}
+
+// muxShapeMoveInfo is the CLI-side mirror of router.MuxShapeMove (json tags are
+// the stable contract): one of the four shape primitives, the shapes either
+// side of it, and the sentence that explains it.
+type muxShapeMoveInfo struct {
+	Move   string    `json:"move"`
+	From   string    `json:"from"`
+	To     string    `json:"to"`
+	Reason string    `json:"reason"`
+	At     time.Time `json:"at"`
 }
 
 // muxRecoveryInfo is the CLI-side mirror of router.MuxRecovery (json tags are
@@ -392,6 +410,21 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 			if rg.ShapeSource != "" {
 				role += "(" + rg.ShapeSource + ")"
 			}
+		}
+		if rg.LastMove != nil {
+			role += "  last=" + rg.LastMove.Move
+		}
+		if n := rg.MoveCounts; len(n) > 0 {
+			keys := make([]string, 0, len(n))
+			for k := range n {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			parts := make([]string, 0, len(keys))
+			for _, k := range keys {
+				parts = append(parts, fmt.Sprintf("%s=%d", k, n[k]))
+			}
+			role += "  moves[" + strings.Join(parts, " ") + "]"
 		}
 		fmt.Printf("rg[%d] %s:%d → %s:%d  mux=%v sack=%v perframe=%v  legs=%d%s\n",
 			ri,

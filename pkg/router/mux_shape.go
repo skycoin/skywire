@@ -202,10 +202,18 @@ func applySessionShapes(infos []MuxInfo, in []shapeInput) {
 		s := byKey[key]
 		cur := newShape(s.legs)
 		target, source := shapeTarget(s.spec, s.widths)
+		counts, last := shapeMoves.read(key)
+		k := 0
+		if source == shapeSourceKnob {
+			k = target.Tunnels()
+		}
 		for _, i := range s.idx {
 			infos[i].Shape = cur.String()
 			infos[i].ShapeTarget = target.String()
 			infos[i].ShapeSource = source
+			infos[i].ShapeTunnels = k
+			infos[i].MoveCounts = counts
+			infos[i].LastMove = last
 		}
 	}
 }
