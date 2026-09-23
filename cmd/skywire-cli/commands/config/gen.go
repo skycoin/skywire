@@ -128,7 +128,7 @@ var pkFromSKCmd = &cobra.Command{
 
 var (
 	isEnvs     bool
-	skyenvfile = os.Getenv("SKYENV")
+	skyenvfile = resolveSkyenvFile()
 )
 var envfile string
 var envfileOut string
