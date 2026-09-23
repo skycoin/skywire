@@ -130,7 +130,7 @@ func (v *Visor) RegisterCXOFeed(name string, dmsgPort uint16, description string
 	}
 
 	log := v.MasterLogger().PackageLogger("cxo_user_feed:" + name)
-	dataDir := filepath.Join(v.conf.LocalPath, "cxo-user-feeds", name)
+	dataDir, inMemDB := cxoPubStorage(filepath.Join(v.conf.LocalPath, "cxo-user-feeds", name))
 	// Same 10s coalescing window as the stats publisher — user-feed
 	// puts are typically operator-driven (skychat hub broadcasts,
 	// custom RPC writes) where ~10s latency between publish and
@@ -140,6 +140,7 @@ func (v *Visor) RegisterCXOFeed(name string, dmsgPort uint16, description string
 		BatchWindow: 10 * time.Second,
 		Logger:      log,
 		DataDir:     dataDir,
+		InMemoryDB:  inMemDB,
 		DmsgPort:    dmsgPort,
 		// User-feed CXDS is content-addressed cache; the publisher's
 		// pub.Put callers re-feed values from RPC / app state on
