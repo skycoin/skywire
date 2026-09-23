@@ -12,8 +12,11 @@
 # after each mobile-v* release (on a GitHub runner — the image is several GB):
 #
 #   docker run --rm -v "$PWD:/src" -v "$PWD/fdroid-out:/out" \
+#     -v "$CI_DIR:/ci:ro" -e RECIPE=/ci/android/fdroid/com.skycoin.skywire.yml \
 #     registry.gitlab.com/fdroid/fdroidserver:buildserver-trixie \
-#     bash /src/android/fdroid/check.sh
+#     bash /ci/android/fdroid/check.sh
+#
+# where $CI_DIR holds android/fdroid from the branch the workflow runs from.
 #
 # The build half follows the "fdroid build" job of fdroiddata's .gitlab-ci.yml.
 # The unsigned APK F-Droid would sign lands in $OUT.
@@ -22,6 +25,9 @@ set -euo pipefail
 APPID=com.skycoin.skywire
 SRC=${SRC:-/src}
 OUT=${OUT:-/out}
+# The recipe to run: the tag's own copy unless the caller passes a newer one
+# (a manual re-run of an old tag uses develop's, see android-fdroid.yml).
+RECIPE=${RECIPE:-$SRC/android/fdroid/$APPID.yml}
 
 step() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 fail() { printf '\033[31mFAIL: %s\033[0m\n' "$*" >&2; exit 1; }
@@ -61,7 +67,7 @@ echo "checking $APPID $name ($code) at $head_sha"
 
 cd "$home_vagrant"
 mkdir -p metadata logs tmp unsigned
-cp "$SRC/android/fdroid/$APPID.yml" metadata/
+cp "$RECIPE" "metadata/$APPID.yml"
 # lint checks Categories against fdroiddata's own list, which lives in its
 # config/, not in fdroidserver. The icon lines point at files in fdroiddata.
 mkdir -p config
@@ -80,12 +86,17 @@ repo=/tmp/skywire.git
 rm -rf "$repo"
 git clone -q --bare --shared "$SRC" "$repo"
 git -C "$repo" branch -f fdroid-check "$head_sha"
+# $SRC is on a detached HEAD, so the copy's HEAD names no branch; point it at
+# this commit so a clone of the copy checks something out.
+git -C "$repo" symbolic-ref HEAD refs/heads/fdroid-check
 git -C "$repo" tag -f "fdroid-v$name" "$head_sha"
 sed -i "s|^Repo: .*|Repo: $repo|" "metadata/$APPID.yml"
 chown -R vagrant "$home_vagrant"
 
 step "fdroid checkupdates (the update bot: finds fdroid-v$name, reads its version)"
-fdroid checkupdates --auto --verbose "$APPID"
+# --allow-dirty: checkupdates otherwise insists on running inside the
+# fdroiddata git repo and checks it has no uncommitted changes.
+fdroid checkupdates --allow-dirty --auto --verbose "$APPID"
 grep -q "^CurrentVersionCode: $code\$" "metadata/$APPID.yml" \
   || fail "the update bot did not pick up $name ($code) from android/version.properties at fdroid-v$name"
 grep -q "^    versionCode: $code\$" "metadata/$APPID.yml" \
