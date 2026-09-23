@@ -12,13 +12,13 @@ import (
 )
 
 func TestFindRouteNumFor_DiversifyDialAsksForAWindow(t *testing.T) {
-	t.Cleanup(func() { SetDialDiversifyCandidates(20) })
+	t.Cleanup(func() { SetDialDiversifyCandidates(dialDiversifyCandidatesDefault) })
 
 	// Mux off is the finder's own default for a PLAIN dial — but a diversify
 	// dial wants alternatives whether or not it is muxing, so it still asks for
 	// the window.
 	require.Equal(t, uint16(0), findRouteNum(0), "plain dial: the finder's own default")
-	require.Equal(t, uint16(20), findRouteNumFor(0, &DialOptions{
+	require.Equal(t, uint16(dialDiversifyCandidatesDefault), findRouteNumFor(0, &DialOptions{
 		DiversifyTransports:     true,
 		RequireDisjointFirstHop: true,
 	}), "a non-mux pool fill still needs alternatives to choose from")
@@ -27,7 +27,7 @@ func TestFindRouteNumFor_DiversifyDialAsksForAWindow(t *testing.T) {
 	pool := &DialOptions{DiversifyTransports: true, RequireDisjointFirstHop: true}
 	require.Equal(t, uint16(baseRouteCandidates), findRouteNum(1),
 		"the plain dial is unchanged")
-	require.Equal(t, uint16(20), findRouteNumFor(1, pool),
+	require.Equal(t, uint16(dialDiversifyCandidatesDefault), findRouteNumFor(1, pool),
 		"a pool fill asks for the whole window, not the rank-ordered top 3")
 
 	// Live knob.

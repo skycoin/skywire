@@ -769,6 +769,7 @@ type router struct {
 	routeSource      routeSourceCounters                             // where routes came from (router_route_source.go)
 	datagramPorts    map[routing.Port]struct{}                       // local ports with faithful-UDP intent; the accept side builds a datagram sibling only for these (#2607 on-demand-by-local-intent)
 	acceptDatagram   chan datagramAccept                             // accept-side datagram siblings, drained by AcceptDatagram (the forwarded_ports.udp server loop)
+	firstHopHolds    dialFirstHopHolds                               // first hops claimed by IN-FLIGHT diversify dials, so concurrent pool fills can't all pick one transport (see dial_first_hop_holds.go, #5125)
 	pending          *pendingPackets                                 // frames parked during the rule-save -> route-group-register window (see router_pending.go)
 	pendingLegs      *pendingLegs                                    // aux mux legs buffered while their route group is still initializing (see router_pending_legs.go, #80)
 	rpcSrv           *rpc.Server

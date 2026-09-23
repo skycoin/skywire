@@ -1,9 +1,9 @@
 // router_dial_first_hop_relax_test.go: the RELAXED half of the first-hop
-// admission test. Past setup.first_hop_filter_max held first hops,
-// freeFirstHops stops refusing a reused first hop and starts offering it — on
-// the stated condition that the reused hop still leads somewhere new. These pin
-// both halves of that condition: the held count is of DISTINCT hops, and a
-// reused hop is only offered WITH a distinct intermediate.
+// admission test. Under pool.allow_duplicate_route, past setup.first_hop_filter_max
+// held first hops, freeFirstHops stops refusing a reused first hop and starts
+// offering it — on the stated condition that the reused hop still leads somewhere
+// new. These pin both halves of that condition, and the DEFAULT above them: with
+// the knob off, a reused first hop is never offered at all.
 //
 // The live failure these describe (campaign rig, 2026-09-18): a 32-tunnel
 // standby pool reporting "32 first-hop peer(s)" while running over 4 distinct
@@ -17,8 +17,92 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 )
+
+// allowDuplicateRoute opts this test into sharing a first hop. The relaxation
+// below exists only under that knob — by DEFAULT a pool that finds no free
+// first hop settles rather than putting a second tunnel on a held transport.
+func allowDuplicateRoute(t *testing.T) {
+	t.Helper()
+	setBool(routersettings.PoolAllowDuplicateRoute, true)
+	t.Cleanup(func() { setBool(routersettings.PoolAllowDuplicateRoute, false) })
+}
+
+// The user's rule, as a test: two tunnels to one exit never share a first-hop
+// transport. With pool.allow_duplicate_route off — the default — a candidate
+// that reuses a held first hop is refused however deep the pool is and however
+// fresh its intermediate, so the fill settles instead of doubling up.
+func TestFreeFirstHops_DefaultNeverOffersAReusedFirstHop(t *testing.T) {
+	src, dst := mustPK(t), mustPK(t)
+	reusedHop, freshMid := mustPK(t), mustPK(t)
+
+	held := []cipher.PubKey{reusedHop}
+	for len(held) <= SetupFirstHopFilterMax() {
+		held = append(held, mustPK(t))
+	}
+
+	// The candidate the old relaxation would have offered: a held first hop
+	// with an intermediate no sibling holds.
+	fresh := []routing.Hop{hop(src, reusedHop), hop(reusedHop, freshMid), hop(freshMid, dst)}
+
+	r := &router{}
+	opts := &DialOptions{
+		DiversifyTransports:     true,
+		RequireDisjointFirstHop: true,
+		ExcludeFirstHopPeers:    held,
+		ExcludeIntermediatePKs:  []cipher.PubKey{reusedHop},
+	}
+
+	require.Empty(t, r.freeFirstHops([][]routing.Hop{fresh}, opts),
+		"a reused first hop is not offered by default, distinct intermediate or not")
+	require.True(t, r.firstHopExcluded(fresh, opts),
+		"the pre-setup gate agrees, so the dial settles with ErrNoDisjointFirstHop")
+}
+
+// The window defect. The free first hop existed all along — it was candidate 21
+// of a list the dial asked 20 routes for, so the filter saw only held hops and
+// relaxed. freeFirstHops must find it when it is in the list, and the window a
+// diversify dial requests must be wide enough to contain it.
+func TestFreeFirstHops_FindsAFreeHopBeyondTheOldTwentyCandidateWindow(t *testing.T) {
+	src, dst := mustPK(t), mustPK(t)
+
+	// Twenty rank-ordered candidates over held first hops, then one that is
+	// free — the shape the rig produced with 750 transports to intermediates.
+	const window = 20
+	var (
+		held  []cipher.PubKey
+		cands [][]routing.Hop
+	)
+	for i := 0; i < window; i++ {
+		mid := mustPK(t)
+		held = append(held, mid)
+		cands = append(cands, []routing.Hop{hop(src, mid), hop(mid, dst)})
+	}
+	freeMid := mustPK(t)
+	free := []routing.Hop{hop(src, freeMid), hop(freeMid, dst)}
+	cands = append(cands, free)
+
+	require.Greater(t, len(held), SetupFirstHopFilterMax(),
+		"deep enough that the old code would have relaxed")
+
+	r := &router{}
+	opts := &DialOptions{
+		DiversifyTransports:     true,
+		RequireDisjointFirstHop: true,
+		ExcludeFirstHopPeers:    held,
+	}
+
+	got := r.freeFirstHops(cands, opts)
+	require.Len(t, got, 1, "the one free first hop, not a relaxed reuse of a held one")
+	require.Equal(t, freeMid, got[0][0].To)
+
+	// And the dial asks the finder for a window that can hold it: the whole
+	// defect was a 20-route request against a far deeper topology.
+	require.Greater(t, int(findRouteNumFor(1, opts)), window,
+		"a diversify dial must ask for more routes than the pool is deep")
+}
 
 // The exclusion lists carry one entry per sibling route group per transport, so
 // a pool collapsed onto a single first hop repeats that hop once per tunnel.
@@ -66,6 +150,8 @@ func TestFreeFirstHops_DuplicateHoldsDoNotUnlatchTheFilter(t *testing.T) {
 // held first hop is still refused: it has no intermediate, so reusing its first
 // hop reuses the whole path. This is the candidate that filled the live pool.
 func TestFreeFirstHops_RelaxedStillRefusesTheDirectClone(t *testing.T) {
+	allowDuplicateRoute(t)
+
 	src, dst := mustPK(t), mustPK(t)
 
 	// Enough DISTINCT held hops to relax the filter, the exit among them.
@@ -90,6 +176,8 @@ func TestFreeFirstHops_RelaxedStillRefusesTheDirectClone(t *testing.T) {
 // through an intermediate no sibling holds is a genuinely different path, and
 // must be offered.
 func TestFreeFirstHops_RelaxedOffersAReusedHopWithANewIntermediate(t *testing.T) {
+	allowDuplicateRoute(t)
+
 	src, dst := mustPK(t), mustPK(t)
 	reusedHop, freshMid, heldMid := mustPK(t), mustPK(t), mustPK(t)
 
