@@ -2047,6 +2047,27 @@ func (rg *RouteGroup) nextFastestTransport() (*transport.ManagedTransport, routi
 	return rg.tps[0], rg.fwd[0], 0, nil
 }
 
+// nextRetxTransport is nextFastestTransport for a retransmit: the fastest leg
+// other than lost, the transport the sequence was last sent on, whenever
+// another leg can be chosen. Being asked for a sequence again means that leg
+// did not deliver it, and the fastest leg is exactly where a leg cut in ONE
+// direction still looks alive — its reverse direction keeps its RTT fresh — so
+// re-sending there wedged the receiver's frontier until the transfer timed out
+// (TestEmuCutOfBusiestLegCompletes, whenever the leg cut was the fastest one).
+// Falls back to the plain choice when lost is the only candidate. Callers hold
+// rg.mu.
+func (rg *RouteGroup) nextRetxTransport(lost uuid.UUID) (*transport.ManagedTransport, routing.Rule, int, error) {
+	tp, rule, idx, err := rg.nextFastestTransport()
+	if err != nil || lost == uuid.Nil || tp == nil || tp.Entry.ID != lost ||
+		rg.mux == nil || len(rg.tps) < 2 || len(rg.tps) != len(rg.fwd) {
+		return tp, rule, idx, err
+	}
+	if otp, orule, oidx, oerr := rg.mux.selectFastestTransportExcept(rg.tps, rg.fwd, lost); oerr == nil {
+		return otp, orule, oidx, nil
+	}
+	return tp, rule, idx, err
+}
+
 // RouteHops returns the list of visor public keys that form the route path.
 // The first element is the first hop from the source, and the last element
 // is the destination visor.
@@ -5470,7 +5491,7 @@ func (rg *RouteGroup) resendSeqs(seqs []uint32) error {
 		}
 
 		rg.mu.Lock()
-		tp, rule, leg, err := rg.nextFastestTransport()
+		tp, rule, leg, err := rg.nextRetxTransport(rg.mux.retxTpOf(seq))
 		rg.mu.Unlock()
 		if err != nil {
 			rg.mux.retxSendErrors.Add(1)
