@@ -353,17 +353,6 @@ func (rb *retxBuffer) SetTpID(seq uint32, tpID uuid.UUID) {
 	}
 }
 
-// TpIDOf is the transport seq was last sent on, and false for a seq no longer
-// held.
-func (rb *retxBuffer) TpIDOf(seq uint32) (uuid.UUID, bool) {
-	rb.mu.Lock()
-	defer rb.mu.Unlock()
-	if e, ok := rb.entries[seq]; ok {
-		return e.tpID, true
-	}
-	return uuid.Nil, false
-}
-
 // HeldSeqsOnTps returns the held sequences whose last send rode one of the
 // given transports, sorted ascending. Entries with an unknown transport
 // (uuid.Nil) are included conservatively — better a redundant resend than a
