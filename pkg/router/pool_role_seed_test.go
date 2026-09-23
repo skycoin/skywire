@@ -59,7 +59,7 @@ func TestStandbySeededAtCreationNeverGetsASecondLeg(t *testing.T) {
 		[]routing.Hop{{TpID: uuid.New(), From: local, To: exit}}, 40, 0)
 	pending.SetAppName(app)
 	require.True(t, appReportsTunnelRoles(app), "a dial that carried a role registers its app at creation")
-	require.Equal(t, 1, pending.dialMuxTarget(width), "a role that has not landed yet is not a licence to widen")
+	require.Equal(t, 1, pending.dialMuxTarget(width), "a role that has not landed yet is not a license to widen")
 
 	// An ACTIVE tunnel of the same app keeps the visor width, at dial time and
 	// afterwards: the clamp is about the role, not about the app.

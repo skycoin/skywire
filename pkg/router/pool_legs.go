@@ -173,23 +173,6 @@ func hopPathSig(hops []routing.Hop) string {
 	return strings.Join(ids, ">")
 }
 
-// routePathSigs is the set of hop-path signatures this group's legs occupy.
-func (rg *RouteGroup) routePathSigs() map[string]struct{} {
-	rg.mu.Lock()
-	tps := append([]*transport.ManagedTransport(nil), rg.tps...)
-	rg.mu.Unlock()
-	out := make(map[string]struct{}, len(tps))
-	for _, tp := range tps {
-		if tp == nil {
-			continue
-		}
-		if s := hopPathSig(rg.legHopsFor(tp.Entry.ID)); s != "" {
-			out[s] = struct{}{}
-		}
-	}
-	return out
-}
-
 // rankPoolPlans orders plans best-first: measured end-to-end route latency
 // ascending, then the first hop's throughput prior descending.
 //
