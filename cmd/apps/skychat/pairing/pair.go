@@ -120,6 +120,12 @@ type Config struct {
 	// Pair carves its own pair/<peer-pk-hex>/ subtree inside it.
 	DataDir string
 
+	// InMemoryDB runs this pair's CXO tree in memory (no DataDir /
+	// filesystem). Required for the browser (js/wasm) visor, where the
+	// on-disk CXDS is a stub that always errors. When set, DataDir may be
+	// empty and is ignored.
+	InMemoryDB bool
+
 	// Logger is optional; nil falls back to a tag-based default.
 	Logger *logging.Logger
 
@@ -210,8 +216,8 @@ func Open(cfg Config) (*Pair, error) {
 	if cfg.PeerPK == (cipher.PubKey{}) {
 		return nil, errors.New("pairing: Open: PeerPK required")
 	}
-	if cfg.DataDir == "" {
-		return nil, errors.New("pairing: Open: DataDir required")
+	if cfg.DataDir == "" && !cfg.InMemoryDB {
+		return nil, errors.New("pairing: Open: DataDir required (unless InMemoryDB)")
 	}
 	log := cfg.Logger
 	if log == nil {
@@ -236,6 +242,7 @@ func Open(cfg Config) (*Pair, error) {
 		BatchWindow:         cfg.BatchWindow,
 		Logger:              log,
 		DataDir:             filepath.Join(cfg.DataDir, "pair", peerHex),
+		InMemoryDB:          cfg.InMemoryDB,
 		DmsgPort:            port,
 		SubscriberAllowlist: []cipher.PubKey{cfg.PeerPK},
 		// Pair messages are content-addressed and replayed on rejoin

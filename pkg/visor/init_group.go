@@ -83,14 +83,17 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 		profileStore = nil
 	}
 
+	// js/wasm has no on-disk CXDS; run each group session's CXO tree in memory there.
+	cxoDir, cxoInMem := cxoPubStorage(filepath.Join(dataDir, "cxo-groups"))
 	mgr, err := skychatgroup.NewManager(skychatgroup.ManagerConfig{
-		Store:   store,
-		DmsgC:   v.dmsgC,
-		MyPK:    v.conf.PK,
-		MySK:    v.conf.SK,
-		DataDir: filepath.Join(dataDir, "cxo-groups"),
-		Logger:  log,
-		Profile: profileProvider(profileStore),
+		Store:      store,
+		DmsgC:      v.dmsgC,
+		MyPK:       v.conf.PK,
+		MySK:       v.conf.SK,
+		DataDir:    cxoDir,
+		InMemoryDB: cxoInMem,
+		Logger:     log,
+		Profile:    profileProvider(profileStore),
 		// Owner-side heartbeat emission. Every group this visor owns
 		// publishes a no-op probe every interval so members can detect
 		// a silently-stalled CXO subscriber via "no heartbeat in N
