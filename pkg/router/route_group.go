@@ -767,6 +767,22 @@ type MuxInfo struct {
 	// and measured without carrying a stream.
 	AgeMS      float64
 	TunnelRole string
+	// Shape is the SESSION's measured multiplexing shape — every ACTIVE
+	// tunnel this app holds to this exit with its live leg count, written
+	// "<k>x<n>" when the tunnels are the same width and "n1,n2,…" when they
+	// are not. "4x1" is pure stream level, "1x4" pure packet level, "2x2"
+	// the default. ShapeTarget is the shape the session is being held at and
+	// ShapeSource where that target came from: "auto" (tunnel.count tunnels
+	// at pool.active_width legs, today's rule) or "mux.shape" when the knob
+	// names one. The target is ADVISORY — reported, not yet converged toward
+	// (docs/design/mux-shape-axis.md).
+	//
+	// All three are empty on any group that is not an active tunnel: a
+	// standby is the pool rather than the shape, and an accepting visor
+	// cannot see which of a client's tunnels are in standby.
+	Shape       string
+	ShapeTarget string
+	ShapeSource string
 }
 
 // MuxRecovery is a route group's LOSS-RECOVERY state: the sender-side

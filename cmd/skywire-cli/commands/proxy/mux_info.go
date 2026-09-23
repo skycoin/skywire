@@ -203,6 +203,14 @@ type muxRouteGroupInfo struct {
 	// tunnels, and empty when read from the EXIT — the accepting end does not
 	// know which of a peer's tunnels are in standby.
 	TunnelRole string `json:"tunnel_role,omitempty"`
+	// Shape / ShapeTarget / ShapeSource are the SESSION's multiplexing shape:
+	// what this app holds to this exit right now ("2x2" = two tunnels of two
+	// legs), the shape it is being held at, and whether that target came from
+	// the auto rule or from the mux.shape knob. Empty on a standby tunnel and
+	// on an accept-side group.
+	Shape       string `json:"shape,omitempty"`
+	ShapeTarget string `json:"shape_target,omitempty"`
+	ShapeSource string `json:"shape_source,omitempty"`
 }
 
 // muxRecoveryInfo is the CLI-side mirror of router.MuxRecovery (json tags are
@@ -373,6 +381,17 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 		role := ""
 		if rg.TunnelRole != "" {
 			role = "  role=" + rg.TunnelRole
+		}
+		// The session's shape, printed on the tunnel it was measured from:
+		// what this app holds to this exit, and what it is aimed at.
+		if rg.Shape != "" {
+			role += "  shape=" + rg.Shape
+			if rg.ShapeTarget != "" && rg.ShapeTarget != rg.Shape {
+				role += "->" + rg.ShapeTarget
+			}
+			if rg.ShapeSource != "" {
+				role += "(" + rg.ShapeSource + ")"
+			}
 		}
 		fmt.Printf("rg[%d] %s:%d → %s:%d  mux=%v sack=%v perframe=%v  legs=%d%s\n",
 			ri,

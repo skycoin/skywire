@@ -166,6 +166,20 @@ var (
 	// standby pool was a stream reserve only. An ACTIVE tunnel now targets at
 	// least this many legs under load; mux.app_width for the app overrides it.
 	PoolActiveWidth = RegisterMin("pool.active_width", KindCount, 2, 1, "legs an active tunnel of a role-reporting app targets under load, taking the extra ones from the standby pool; mux.app_width for the app overrides it")
+	// MuxShape is the SESSION-level shape target: k tunnels holding n_1..n_k
+	// legs, where a session is one (app, exit) pair. "4x1" is pure stream
+	// level (four tunnels, no packet striping), "1x4" pure packet level, and
+	// "auto" — the default — is today's behavior restated as a shape: one
+	// tunnel per tunnel the app holds, each at pool.active_width legs. An
+	// explicit value derives the widths instead, so pool.active_width and
+	// mux.app_width follow from n.
+	//
+	// ADVISORY as shipped: `visor state --select mux` reports it as a
+	// session's shape_target beside the shape it actually has, and nothing
+	// converges toward it yet (docs/design/mux-shape-axis.md step 5).
+	MuxShape = RegisterString("mux.shape", ShapeAuto,
+		"target multiplexing SHAPE of a session (one app, one exit): auto = as many tunnels as the app holds, each at pool.active_width legs; <k>x<n> = k tunnels of n legs (2x2, 4x1, 1x4); a comma list gives each tunnel its own leg count (2,1,1). ADVISORY: reported as shape_target, not yet converged toward",
+		ValidateShape)
 	// PoolComposeIdle is what makes the fail-over INSTANT. Packet-level
 	// multiplexing exists for privacy and for surviving a leg cut, not for
 	// throughput — and a second leg that is only taken once the load latches

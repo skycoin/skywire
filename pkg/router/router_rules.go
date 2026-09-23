@@ -128,12 +128,16 @@ func (r *router) RouteGroupMuxInfoForApp(appName string) []MuxInfo {
 	r.mx.Unlock()
 
 	out := make([]MuxInfo, 0, len(rgs))
+	in := make([]shapeInput, 0, len(rgs))
 	for _, nrg := range rgs {
 		if nrg.rg.AppName() != appName {
 			continue
 		}
 		out = append(out, nrg.rg.MuxStats())
+		in = append(in, shapeInputOf(nrg.rg))
 	}
+	// Before the sort: in is parallel to out as collected.
+	applySessionShapes(out, in)
 	sortMuxInfos(out)
 	return out
 }
@@ -153,9 +157,13 @@ func (r *router) RouteGroupMuxInfoAll() []MuxInfo {
 	r.mx.Unlock()
 
 	out := make([]MuxInfo, 0, len(rgs))
+	in := make([]shapeInput, 0, len(rgs))
 	for _, nrg := range rgs {
 		out = append(out, nrg.rg.MuxStats())
+		in = append(in, shapeInputOf(nrg.rg))
 	}
+	// Before the sort: in is parallel to out as collected.
+	applySessionShapes(out, in)
 	sortMuxInfos(out)
 	return out
 }
