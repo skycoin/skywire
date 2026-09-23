@@ -141,6 +141,25 @@ func (c *Client) NoteMuxEvent(localPort routing.Port, event, reason, role string
 	})
 }
 
+// GrowMuxFromPool asks the visor to widen the tunnel this app dialed from
+// localPort by legs packet-level mux legs, built on the routes of this app's
+// own STANDBY tunnels to the same exit rather than discovered from scratch.
+// minHops floors the hop count of a leg the pool cannot cover and the
+// route-finder has to plan (0 = the visor's own floor). Returns how many legs
+// were actually added — fewer than asked is normal and not an error: the
+// topology may simply not offer that many disjoint first hops.
+//
+// The division of knowledge is the same one NoteMuxEvent rests on: the app
+// knows which tunnel it wants wider and how many of its tunnels are parked, and
+// only the visor knows the routes behind them.
+func (c *Client) GrowMuxFromPool(localPort routing.Port, legs, minHops int) (int, error) {
+	return c.rpcC.GrowMux(appserver.GrowMuxReq{
+		LocalPort: localPort,
+		Legs:      legs,
+		MinHops:   minHops,
+	})
+}
+
 // ProxyStatus fetches the visor-built rich read-only status snapshot for this
 // app (per-leg mux telemetry, recent logs, route/transport events). An app that
 // serves its own reserved status host (skysocks-client's status.skysocks)

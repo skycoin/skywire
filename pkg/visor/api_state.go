@@ -7,6 +7,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/proxystatus"
+	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
@@ -57,6 +58,19 @@ type StateSnapshot struct {
 	// snapshot rather than one-app-at-a-time.
 	MuxRouteGroups []MuxRouteGroupInfo `json:"mux_route_groups,omitempty"`
 
+	// MuxCounters are the whole-router cumulative tallies (tunnel
+	// promotions/flips, leg re-homes sent/received/acked/failed, forward
+	// fan-out engage/release) that the bounded mux event ring does not keep
+	// once it wraps. Built alongside MuxRouteGroups (--select mux).
+	MuxCounters *router.MuxCounters `json:"mux_counters,omitempty"`
+
+	// Pool is the standby-tunnel pool table: one row per route group this
+	// visor's local end labeled "standby" (pool_arbiter.go), projected from
+	// the SAME MuxRouteGroupInfo entries MuxRouteGroups holds — local port,
+	// first-hop pk+transport type, hop count, capacity prior bps, audition
+	// age, leg source, and leg count, at a glance across the whole pool.
+	Pool []PoolTunnelInfo `json:"pool,omitempty"`
+
 	// CXOFeeds is the live publish-health of each CXO feed (system
 	// telemetry/tp-list feed first, then user feeds): dirty state, secs
 	// since last OK publish, in-memory leaf/node counts, and any standing
@@ -101,7 +115,8 @@ const (
 	SelectSummary    = "summary"    // summary
 	SelectHealth     = "health"     // health + service_health
 	SelectRouting    = "routing"    // routing_stats + route_groups + routing_policy + router_config
-	SelectMux        = "mux"        // mux_route_groups (+ route_groups count)
+	SelectMux        = "mux"        // mux_route_groups + mux_counters (+ route_groups count)
+	SelectPool       = "pool"       // pool: the standby-tunnel pool table
 	SelectApps       = "apps"       // apps
 	SelectTransports = "transports" // transports + persistent_transports
 	SelectModules    = "modules"    // modules
@@ -113,7 +128,7 @@ const (
 
 // StateSelectKeys is the documented set of --select keys, in help order.
 var StateSelectKeys = []string{
-	SelectSummary, SelectHealth, SelectRouting, SelectMux,
+	SelectSummary, SelectHealth, SelectRouting, SelectMux, SelectPool,
 	SelectApps, SelectTransports, SelectModules, SelectCXO, SelectProxy, SelectDiag,
 	SelectRoles,
 }
@@ -168,6 +183,59 @@ func (s stateFieldSet) has(k string) bool {
 		return s != nil && s[k]
 	}
 	return s == nil || s[k]
+}
+
+// PoolTunnelInfo is one row of the standby-tunnel pool table (`visor state
+// --select pool`). Every field is projected from the leading leg of a
+// MuxRouteGroupInfo entry whose TunnelRole is "standby" — see poolTableFrom.
+type PoolTunnelInfo struct {
+	// LocalPort is the standby route group's local port (Desc.SrcPort on
+	// this end) — the same port the pool arbiter and `mux_route_groups`
+	// already key on.
+	LocalPort routing.Port `json:"local_port"`
+	// FirstHopPK/TpType are the leading leg's remote pk and transport type.
+	FirstHopPK string `json:"first_hop_pk,omitempty"`
+	TpType     string `json:"tp_type,omitempty"`
+	// Hops is the leading leg's forward hop count (1 for a direct route).
+	Hops int `json:"hops"`
+	// CapacityPriorBps is the leading leg's PRIOR throughput estimate — the
+	// value the pool ranks candidates by before it has measured one.
+	CapacityPriorBps float64 `json:"capacity_prior_bps,omitempty"`
+	// AuditionAgeMS is how long this standby tunnel has been held open,
+	// pinged and measured without carrying a stream (MuxRouteGroupInfo.AgeMS).
+	AuditionAgeMS float64 `json:"audition_age_ms,omitempty"`
+	// LegSource names where the leading leg came from when it is not this
+	// group's own dial (e.g. "standby :4, re-homed in place").
+	LegSource string `json:"leg_source,omitempty"`
+	// Legs is this standby tunnel's total leg count.
+	Legs int `json:"legs"`
+}
+
+// poolTableFrom projects the standby-tunnel pool table out of mrgs — the
+// SAME MuxRouteGroupInfo slice the mux section builds — so the pool table
+// costs nothing beyond the AllRouteGroupMuxInfo call already made for it.
+func poolTableFrom(mrgs []MuxRouteGroupInfo) []PoolTunnelInfo {
+	var out []PoolTunnelInfo
+	for _, mrg := range mrgs {
+		if mrg.TunnelRole != "standby" {
+			continue
+		}
+		row := PoolTunnelInfo{
+			LocalPort:     mrg.Desc.SrcPort,
+			AuditionAgeMS: mrg.AgeMS,
+			Legs:          len(mrg.Legs),
+		}
+		if len(mrg.Legs) > 0 {
+			leg := mrg.Legs[0]
+			row.FirstHopPK = leg.RemotePK
+			row.TpType = leg.TpType
+			row.Hops = len(leg.Hops)
+			row.CapacityPriorBps = leg.CapacityPriorBps
+			row.LegSource = leg.Source
+		}
+		out = append(out, row)
+	}
+	return out
 }
 
 // EffectiveRoutingConfig is the routing configuration in force at
@@ -308,12 +376,26 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		}
 	}
 
-	if want.has(SelectMux) {
+	// mux and pool share ONE AllRouteGroupMuxInfo call: pool is a filtered
+	// projection of the exact same entries, never computed twice.
+	if want.has(SelectMux) || want.has(SelectPool) {
 		if mrgs, err := v.AllRouteGroupMuxInfo(); err != nil {
 			note("mux_route_groups", err)
-		} else if len(mrgs) > 0 {
-			snap.MuxRouteGroups = mrgs
+		} else {
+			if want.has(SelectMux) && len(mrgs) > 0 {
+				snap.MuxRouteGroups = mrgs
+			}
+			if want.has(SelectPool) {
+				if pool := poolTableFrom(mrgs); len(pool) > 0 {
+					snap.Pool = pool
+				}
+			}
 		}
+	}
+
+	if want.has(SelectMux) && v.router != nil {
+		mc := v.router.MuxCounters()
+		snap.MuxCounters = &mc
 	}
 
 	if want.has(SelectApps) {

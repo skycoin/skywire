@@ -442,3 +442,15 @@ func TestLogUIRootDoesNotTakeEnableMu(t *testing.T) {
 		t.Fatal("logUIRoot blocked while enableMu was held: it takes the mutex again")
 	}
 }
+
+// TestUIAutoReloaderIsSubpathSafe pins the two properties that stop the
+// injected reloader from looping under a subpath mount: it asks for the
+// fingerprint RELATIVE to the page, and it ignores a non-OK answer.
+func TestUIAutoReloaderIsSubpathSafe(t *testing.T) {
+	if strings.Contains(uiAutoReloadJS, "'/api/ui-version'") {
+		t.Fatal("reloader fetches an absolute /api/ui-version: under /vnet/<port>/ that is the outer origin's 404 page")
+	}
+	if !strings.Contains(uiAutoReloadJS, "'api/ui-version'") || !strings.Contains(uiAutoReloadJS, "r.ok") {
+		t.Fatal("reloader must fetch api/ui-version relative to the page and check r.ok")
+	}
+}

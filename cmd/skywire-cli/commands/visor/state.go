@@ -51,8 +51,12 @@ dozen subcommands. The visor's secret key is never included.
 
 --select builds ONLY the requested subtree(s) SERVER-side, so a cheap
 '--select mux' skips the ~307 KB transports build (full snapshot ~900 KB, mux
-~75 KB). Keys (comma-separated): summary, health, routing, mux, apps,
-transports, modules, cxo, proxy, diag, roles. The projected keys match the full
+~75 KB). Keys (comma-separated): summary, health, routing, mux, pool, apps,
+transports, modules, cxo, proxy, diag, roles. 'pool' is the standby-tunnel pool
+table (one row per standby tunnel: local port, first-hop pk+transport type, hop
+count, capacity prior bps, audition age, leg source, leg count); 'mux' also
+carries mux_counters (tunnel promotions, leg re-homes sent/received/acked/
+failed, forward fan-out engage/release). The projected keys match the full
 snapshot's JSON field names, so --jq expressions transfer unchanged. 'proxy' is
 opt-in (the visor-side skysocks proxystatus: per-leg mux + range-split when
 pushed). 'roles' is what this visor is FOR the network: the in-process dmsg

@@ -73,6 +73,10 @@ Examples:
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RouteGroupMuxInfo: %w", err))
 			}
 			newMuxRateTracker().render(cmd, infos)
+			snap, serr := rpcClient.StateSnapshotProjected([]string{"mux"})
+			if serr == nil {
+				printMuxCounters(cmd, muxCountersFrom(snap))
+			}
 			return
 		}
 
@@ -90,11 +94,66 @@ Examples:
 				fmt.Fprintf(os.Stderr, "RouteGroupMuxInfo: %v\n", err)
 			} else {
 				tracker.render(cmd, infos)
+				if snap, serr := rpcClient.StateSnapshotProjected([]string{"mux"}); serr == nil {
+					printMuxCounters(cmd, muxCountersFrom(snap))
+				}
 			}
 			fmt.Printf("\n[refresh %s — ctrl+c to stop]\n", muxInfoWatch)
 			<-ticker.C
 		}
 	},
+}
+
+// muxCountersInfo mirrors router.MuxCounters' JSON shape — the whole-router
+// tunnel-promotion / leg-re-home / forward-fan-out counters `visor state
+// --select mux` also carries as mux_counters. Printed next to the per-leg
+// table above rather than fetched via a second RPC surface for the same data.
+type muxCountersInfo struct {
+	TunnelPromotions      uint64 `json:"tunnel_promotions"`
+	LegRehomesSent        uint64 `json:"leg_rehomes_sent"`
+	LegRehomesReceived    uint64 `json:"leg_rehomes_received"`
+	LegRehomesAcked       uint64 `json:"leg_rehomes_acked"`
+	LegRehomesFailed      uint64 `json:"leg_rehomes_failed"`
+	ForwardFanoutEngaged  uint64 `json:"forward_fanout_engaged"`
+	ForwardFanoutReleased uint64 `json:"forward_fanout_released"`
+	AEADFailures          uint64 `json:"aead_failures"`
+	DeliveryCRCFailures   uint64 `json:"delivery_crc_failures"`
+}
+
+// muxCountersFrom decodes the mux_counters field out of a *visor.StateSnapshot
+// (passed as any to avoid importing the visor package here, matching render's
+// round-trip below). Best-effort: an older visor, a nil snapshot, or a nil
+// mux_counters all just yield nil rather than failing the command.
+func muxCountersFrom(snap any) *muxCountersInfo {
+	if snap == nil {
+		return nil
+	}
+	raw, err := json.Marshal(snap)
+	if err != nil {
+		return nil
+	}
+	var wrapper struct {
+		MuxCounters *muxCountersInfo `json:"mux_counters"`
+	}
+	if err := json.Unmarshal(raw, &wrapper); err != nil {
+		return nil
+	}
+	return wrapper.MuxCounters
+}
+
+// printMuxCounters prints the whole-router counters as a one-line human
+// summary. In --json mode it prints NOTHING: the command's JSON output is the
+// per-group array and must stay ONE document (bench/*.sh pipe it straight
+// into jq; a second value after the array broke every leg assertion on
+// 2026-09-22). The counters are already in `visor state --select mux`.
+// A nil mc (older visor / RPC error) prints nothing.
+func printMuxCounters(cmd *cobra.Command, mc *muxCountersInfo) {
+	if mc == nil || cliout.JSONMode(cmd) {
+		return
+	}
+	fmt.Printf("counters: promotions=%d  rehome sent/recv/acked/failed=%d/%d/%d/%d  fanout engage/release=%d/%d  integrity aead/delivery-crc=%d/%d\n",
+		mc.TunnelPromotions, mc.LegRehomesSent, mc.LegRehomesReceived, mc.LegRehomesAcked, mc.LegRehomesFailed,
+		mc.ForwardFanoutEngaged, mc.ForwardFanoutReleased, mc.AEADFailures, mc.DeliveryCRCFailures)
 }
 
 // muxRouteGroupInfo is a CLI-side mirror of visor.MuxRouteGroupInfo.

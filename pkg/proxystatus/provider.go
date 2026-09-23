@@ -83,6 +83,10 @@ type Leg struct {
 	GoodputDownBps float64
 	Alive          bool
 	Standby        bool
+	// Source names where a leg that is not this group's own dial came from:
+	// a leg the standby-pool arbiter took ("standby :4, re-homed in place").
+	// Empty for an ordinary dialed leg.
+	Source string `json:"source,omitempty"`
 	// Hops is the leg's full forward route (every hop to the destination),
 	// full PKs, per-hop transport type + latency where known.
 	Hops []Hop
@@ -97,6 +101,14 @@ type Hop struct {
 	To        string
 	TpType    string
 	LatencyMS float64
+	// ThroughputBps is the hop transport's passively observed peak goodput in
+	// bytes/s (transport.Entry.ThroughputBps), 0 when this visor holds no
+	// entry for the transport. It is what lets a route that has never carried
+	// a byte be given a capacity PRIOR instead of a guess: the first hop is
+	// always owned locally, and a deeper hop reports a number only when the
+	// visor happens to hold that transport too. RTT says how LONG a path is;
+	// this is the only field that says how WIDE it is.
+	ThroughputBps float64 `json:"throughput_bps,omitempty"`
 }
 
 // Snapshot is everything a status page renders for one surface. It is a
@@ -270,6 +282,22 @@ type Tunnel struct {
 	// single-tunnel session, or a route group belonging to something else.
 	// It is the local end's own label; an exit cannot know it.
 	Role string
+	// LocalPort is the route group's LOCAL port — the one name the app, the
+	// visor and the bench's carrier.tsv already share for one tunnel (the
+	// same port NoteMuxEvent is addressed by). It is what lets the dialing
+	// app match a tunnel in this snapshot to its own session rather than
+	// trusting the tunnel order. 0 when the visor could not name it.
+	// AuditionMS is how long this tunnel has existed. For a STANDBY tunnel it
+	// is its audition age: how long the pool has held it open, pinged and
+	// measured it without putting a stream on it.
+	AuditionMS float64 `json:"audition_ms,omitempty"`
+	LocalPort  uint16  `json:"local_port,omitempty"`
+	// OpenStreams is this tunnel's yamux session's current open-stream count
+	// (Session.NumStreams), overlaid by the skysocks-client from its own live
+	// session — the visor-built base above has no yamux session to read one
+	// from. 0 for a standby tunnel (it carries nothing) and for anything the
+	// overlay could not match to a live session (LocalPort unknown/0).
+	OpenStreams int `json:"open_streams"`
 }
 
 // Stream is one open tunneled stream on the surface's session to the exit — the

@@ -88,6 +88,63 @@ func init() {
 	tunnelCmd.AddCommand(tunnelRmCmd)
 	RootCmd.AddCommand(tunnelCmd)
 	addMuxSub(muxStandbyCmd, "mux-standby")
+	muxGrowCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose tunnel to widen")
+	muxGrowCmd.Flags().Uint16Var(&muxGrowTunnel, "tunnel", 0, "the tunnel's route group port, as 'mux info' prints it (desc.dst_port). Only needed when the app holds more than one tunnel")
+	muxGrowCmd.Flags().IntVar(&muxGrowLegs, "legs", 1, "how many legs to add")
+	muxGrowCmd.Flags().IntVar(&muxGrowMinHops, "min-hops", 0, "hop-count floor for a leg the pool can't cover and the route-finder has to plan (0 = the visor's own floor)")
+	addMuxSub(muxGrowCmd, "mux-grow")
+}
+
+var (
+	muxGrowTunnel  uint16
+	muxGrowLegs    int
+	muxGrowMinHops int
+)
+
+var muxGrowCmd = &cobra.Command{
+	Use:   "grow",
+	Short: "Widen a proxy tunnel with legs built on its standby tunnels' routes",
+	Long: `Add mux legs to one active tunnel, built on the routes the app's own STANDBY
+tunnels are already holding open, instead of discovering each leg from scratch.
+
+A standby tunnel is a whole route group with one leg: ranked by the app's
+promoter, measured end-to-end, first-hop transport already up. Its ROUTE is
+what is borrowed — the rules cannot be, since a chain's consume rule binds it
+to one route group — so the new leg is dialed onto a known path with no
+route-finder round trip. Plans are ranked by measured route latency, then by
+the first hop's observed throughput; a plan whose first hop the tunnel already
+holds is skipped, because two legs on one first hop are one link's capacity
+wearing two route IDs.
+
+Whatever the pool cannot cover is grown exactly as before, by the route
+finder — so with no standby pool this is today's 'mux' grow, and the reported
+count is what was really added (fewer than asked is normal: the topology may
+not offer that many disjoint first hops).
+
+Examples:
+  skywire cli proxy mux info                              # find the tunnel's dst_port
+  skywire cli proxy mux grow --tunnel 49170 --legs 2
+  skywire cli proxy mux info                              # confirm the legs appeared`,
+	Args:                  cobra.NoArgs,
+	DisableFlagsInUseLine: true,
+	Run: func(cmd *cobra.Command, _ []string) {
+		if muxGrowLegs < 1 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--legs must be a positive integer, got %d", muxGrowLegs))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+		}
+		defer rpcClient.Close() //nolint:errcheck,gosec
+
+		added, err := rpcClient.GrowMuxFromPool(muxOpsApp, muxGrowLegs, muxGrowMinHops, muxGrowTunnel)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("GrowMuxFromPool: %w", err))
+		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{
+			Op: "grow", App: muxOpsApp, Legs: added, Value: strconv.Itoa(int(muxGrowTunnel)),
+		}))
+	},
 }
 
 // muxWidthKnob sets (or reads) one of the two PER-APP mux width knobs.

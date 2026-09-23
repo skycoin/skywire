@@ -652,6 +652,12 @@ type Router interface {
 	RoutingTableStats() routing.RoutingTableStats
 	AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []routing.Hop) error
 	GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int) (int, error)
+	// GrowMuxFromPool grows the tunnel route group this visor dialed from
+	// localPort by up to legs additional mux legs, taking the plans from the
+	// app's STANDBY tunnels to the same exit (already ranked, first-hop
+	// transport already up) and falling back to GrowMuxRoute's route-finder
+	// path for whatever the pool cannot cover. See pool_legs.go.
+	GrowMuxFromPool(localPort routing.Port, legs, minHops int) (int, error)
 	RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.UUID) error
 
 	// SetMuxDirectionForApp applies a manual unidirectional direction pin
@@ -707,6 +713,12 @@ type Router interface {
 	// a leg that was in `proxy mux info` is gone: the visor log ring holds
 	// minutes, this holds the events.
 	MuxEvents() []MuxEvent
+
+	// MuxCounters returns the whole-router cumulative counters (tunnel
+	// promotions, leg re-homes sent/received/acked/failed, forward fan-out
+	// engage/release) that the bounded MuxEvents ring above does not retain
+	// once it wraps.
+	MuxCounters() MuxCounters
 
 	// NoteTunnelEvent records an event the APP that holds a tunnel decided —
 	// a standby tunnel promoted into the active set, an active one parked, a
@@ -926,6 +938,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 	}
 
 	go r.rulesGCLoop()
+	go r.poolArbiterLoop()
 
 	// Register the setup RPC gateway on r.rpcSrv. Build-tagged: native uses
 	// reflection (net/rpc-style Register); TinyGo uses explicit HandleFunc

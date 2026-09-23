@@ -3,6 +3,7 @@ package skysocks
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"sync"
@@ -132,13 +133,73 @@ func (s *Server) Serve(l net.Listener) error {
 			return fmt.Errorf("yamux server failure: %w", err)
 		}
 
-		go func() {
-			// socks.Serve blocks and only ever returns a non-nil error.
-			if err := s.socks.Serve(session); s.appCl != nil {
-				s.appCl.Log().Errorf("Failed to start SOCKS5 server: %v", err)
-			}
-		}()
+		go s.serveSession(session)
 	}
+}
+
+// serveSession accepts the session's streams and gives each one to the handler
+// its first byte names.
+//
+// This replaces socks.Serve, which would hand every stream to the SOCKS5
+// server. Almost all of them still go there; the exception is a datagram relay
+// (udp.go), which is not a SOCKS5 session at all. One byte is enough to tell
+// them apart and is the most that may be read: a client is entitled to send
+// only its three-byte greeting and wait, so a peek any longer than a single
+// byte would deadlock the connections that behave that way.
+func (s *Server) serveSession(session net.Listener) {
+	for {
+		stream, err := session.Accept()
+		if err != nil {
+			if !s.isClosed() && s.appCl != nil {
+				s.appCl.Log().Debugf("skysocks session ended: %v", err)
+			}
+			return
+		}
+		go s.serveStream(stream)
+	}
+}
+
+// serveStream dispatches one stream on its first byte.
+func (s *Server) serveStream(stream net.Conn) {
+	var first [1]byte
+	if _, err := io.ReadFull(stream, first[:]); err != nil {
+		stream.Close() //nolint:errcheck,gosec // nothing was ever served on it
+		return
+	}
+
+	if first[0] == udpMagic[0] {
+		defer stream.Close() //nolint:errcheck,gosec // the relay owns the stream
+		if err := readUDPRelayPreamble(stream); err != nil {
+			if s.appCl != nil {
+				s.appCl.Log().Debugf("skysocks: rejected a UDP relay stream: %v", err)
+			}
+			return
+		}
+		serveUDPRelay(stream, s.appCl)
+		return
+	}
+
+	// An ordinary SOCKS5 session. The byte already read is put back in
+	// front of the stream so the SOCKS5 server sees the greeting whole.
+	if err := s.socks.ServeConn(&prefixConn{Conn: stream, prefix: first[:]}); err != nil && s.appCl != nil {
+		s.appCl.Log().Debugf("skysocks: stream ended: %v", err)
+	}
+}
+
+// prefixConn is a net.Conn whose first reads return prefix before the
+// underlying connection's own bytes.
+type prefixConn struct {
+	net.Conn
+	prefix []byte
+}
+
+func (p *prefixConn) Read(b []byte) (int, error) {
+	if len(p.prefix) > 0 {
+		n := copy(b, p.prefix)
+		p.prefix = p.prefix[n:]
+		return n, nil
+	}
+	return p.Conn.Read(b)
 }
 
 // getRemotePK extracts the remote public key from the connection

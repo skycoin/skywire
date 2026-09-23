@@ -1,0 +1,22 @@
+# exit=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1 local=e65f4df8c exit_commit=e65f4df8c session=skysocks-client compose=2x2 tunnels=2 width=2 route_groups=32 active=2 standby=30 legs_per_rg=2+2 pinned=yes rg_ports=49190,49191 pin_assign=rg49190=0371ab4b,0281a102 rg49191=02c48393,02a2d4c3 groups=rg49190/active=[stcpr>0371ab4b@95839ad0;stcpr>0281a102@f1012467] rg49191/active=[stcpr>02c48393@ac40965a;stcpr>02a2d4c3@2c4ae7a5] rg49192/standby=[stcpr>02230b0a@e5faa6e0] rg49193/standby=[stcpr>028ce3ca@eaddf8ac] rg49194/standby=[stcpr>03f57e7c@fdab37dd] rg49195/standby=[stcpr>0335cab8@3e214e29] rg49196/standby=[stcpr>026a9130@bf9b0de8] rg49197/standby=[stcpr>0326baff@23e4154b] rg49198/standby=[stcpr>02b65e1f@a6d5bfb2] rg49199/standby=[stcpr>035f6c76@03f0e265] rg49200/standby=[stcpr>03bd7649@ebbe12da] rg49201/standby=[squicr>03360da7@c9910dff] rg49202/standby=[stcpr>02b1d9c5@475d59a5] rg49203/standby=[stcpr>031e6a72@770b2d43] rg49204/standby=[stcpr>02ea1b80@c2ee64dc] rg49205/standby=[stcpr>02bf4a7b@690554b9] rg49206/standby=[stcpr>031bb939@4470a453] rg49207/standby=[stcpr>035f532a@df4c1852] rg49208/standby=[stcpr>021ed11e@0d53f7b1] rg49209/standby=[stcpr>029a5ebc@337672ba] rg49210/standby=[stcpr>03e97788@977b7c08] rg49211/standby=[stcpr>02109a13@619865a5] rg49212/standby=[stcpr>02f65a51@4aa23edc] rg49213/standby=[stcpr>032fe1b4@a18cfda5] rg49214/standby=[squicr>020d8ac8@6989320b] rg49215/standby=[stcpr>03a7aa54@8a54bfd2] rg49216/standby=[squicr>03e38a3d@57d8b6ec] rg49217/standby=[stcpr>0269fcc9@77674aa7] rg49218/standby=[stcpr>03dd36b3@9739d411] rg49219/standby=[stcpr>022a2a1c@7c80edb8] rg49220/standby=[stcpr>03dd36b3@9739d411] rg49224/standby=[squicr>0306ad93@0e0393f2] sink=http://127.0.0.1:18080
+mux-compose-T2xL2-t1	down	10000000	3679667	200	10000000	2.717682	1
+mux-compose-T2xL2-t2	down	10000000	2516490	200	10000000	3.973841	1
+mux-compose-T2xL2-t3	down	10000000	3859314	200	10000000	2.591167	1
+mux-compose-T2xL2-t4	down	10000000	3183965	200	10000000	3.140800	1
+mux-compose-T2xL2-t5	down	10000000	4224887	200	10000000	2.367021	1
+mux-compose-T2xL2-t1	up	10000000	406895	200	10000000	24.576422	1
+mux-compose-T2xL2-t2	up	10000000	1369222	200	10000000	7.303528	1
+mux-compose-T2xL2-t3	up	10000000	2389567	200	10000000	4.184986	1
+mux-compose-T2xL2-t1	down	50000000	6646239	200	50000000	7.523082	1
+mux-compose-T2xL2-t2	down	50000000	6584793	200	50000000	7.593288	1
+mux-compose-T2xL2-t3	down	50000000	4863222	200	50000000	10.281279	1
+mux-compose-T2xL2-t4	down	50000000	7985646	200	50000000	6.261273	1
+mux-compose-T2xL2-t5	down	50000000	7386295	200	50000000	6.769350	1
+mux-compose-T2xL2-t1	up	50000000	3579706	200	50000000	13.967674	1
+mux-compose-T2xL2-t2	up	50000000	2126247	200	50000000	23.515658	1
+mux-compose-T2xL2-t3	up	50000000	3503977	200	50000000	14.269600	1
+mux-compose-T2xL2-t1	down	100000000	3198120	200	100000000	31.268442	1
+mux-compose-T2xL2-t2	down	100000000	14908	200	2097152	140.663813	0
+mux-compose-T2xL2-t3	down	100000000	9791766	200	100000000	10.212697	1
+mux-compose-T2xL2-t4	down	100000000	7531642	200	100000000	13.277353	1
+mux-compose-T2xL2-t5	down	100000000	8398073	200	100000000	11.907554	1

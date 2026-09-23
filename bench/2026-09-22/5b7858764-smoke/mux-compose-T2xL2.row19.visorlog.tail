@@ -1,0 +1,400 @@
+[2026-09-22T15:15:35-05:00] DEBUG [tp:03ddd57cd2e6684255e9e911beff30902aceed18648bce8d0ea42c9c1e0a78646c]: Serving. remote_pk=03ddd57cd2e6684255e9e911beff30902aceed18648bce8d0ea42c9c1e0a78646c tp_id=fe52c2c7-d6f0-06ba-a2d7-c11ded23d254 tp_index=1419
+[2026-09-22T15:15:35-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5:46 error=EOF ports_reserved=186 session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7
+[2026-09-22T15:15:35-05:00] DEBUG [dmsgC]: DialStream failed via connected server, trying next error=EOF server=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7
+[2026-09-22T15:15:35-05:00] DEBUG httpClient.BindQUIC [address_resolver]: Address resolver binding QUIC with: [192.168.1.117 70.121.13.123] port 7773
+[2026-09-22T15:15:35-05:00] DEBUG [tp:03ddd57cd2e6684255e9e911beff30902aceed18648bce8d0ea42c9c1e0a78646c]: Setting underlying transport...
+[2026-09-22T15:15:35-05:00] DEBUG [tp:03ddd57cd2e6684255e9e911beff30902aceed18648bce8d0ea42c9c1e0a78646c]: Sent signal to 'mt.transportCh'.
+[2026-09-22T15:15:35-05:00] DEBUG [transport_manager]: accepted tp: type(squicr) remote(03ddd57cd2e6684255e9e911beff30902aceed18648bce8d0ea42c9c1e0a78646c) tpID(fe52c2c7-d6f0-06ba-a2d7-c11ded23d254) new(true)
+[2026-09-22T15:15:35-05:00] DEBUG httpClient.BindWT [address_resolver]: Address resolver binding WT with: [192.168.1.117 70.121.13.123] port 7773 cert 686df24d11465b28d9b0a088ec6fab7324dae973a3720643666aded020dc88df
+[2026-09-22T15:15:36-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=308.576589ms yamux_id=7
+[2026-09-22T15:15:36-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=505.933762ms yamux_id=5
+[2026-09-22T15:15:36-05:00] DEBUG [dmsgC]: Peer forward failed, trying next. dst_addr=02aac1cf94f387cc6324e66d2241df11fbad5037efd32bb76cb214e426f08dc60a:46 error=EOF peer=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 src_addr=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434:50143 yamux_id=1489
+[2026-09-22T15:15:36-05:00] DEBUG [cli_rpc]: CLI RPC conn #2490 accepted from 127.0.0.1:52976 (active: 1)
+[2026-09-22T15:15:36-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49214, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:36-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49215, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:36-05:00] DEBUG [cli_rpc]: CLI RPC conn #2490 closed after 132ms (active: 0)
+[2026-09-22T15:15:36-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=455.796728ms yamux_id=1493
+[2026-09-22T15:15:36-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=322.911961ms yamux_id=9
+[2026-09-22T15:15:36-05:00] DEBUG [cli_rpc]: CLI RPC conn #2491 accepted from 127.0.0.1:52980 (active: 1)
+[2026-09-22T15:15:36-05:00] DEBUG [stcpr]: Successfully re-registered STCPR
+[2026-09-22T15:15:36-05:00] DEBUG [cli_rpc]: CLI RPC conn #2491 closed after 133ms (active: 0)
+[2026-09-22T15:15:36-05:00] DEBUG [cli_rpc]: CLI RPC conn #2492 accepted from 127.0.0.1:52988 (active: 1)
+[2026-09-22T15:15:37-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=539.327785ms yamux_id=11
+[2026-09-22T15:15:37-05:00] DEBUG [cli_rpc]: CLI RPC conn #2492 closed after 123ms (active: 0)
+[2026-09-22T15:15:37-05:00] DEBUG [dmsgC]: Peer forward failed, trying next. dst_addr=02aac1cf94f387cc6324e66d2241df11fbad5037efd32bb76cb214e426f08dc60a:46 error=EOF peer=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 src_addr=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434:50143 yamux_id=1489
+[2026-09-22T15:15:37-05:00] DEBUG [dmsgC]: Stream closed. error="dmsg error 307 - request cannot be forwarded because the next session is non-existent" session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=3.297381677s yamux_id=1489
+[2026-09-22T15:15:37-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=464.965934ms yamux_id=1495
+[2026-09-22T15:15:37-05:00] DEBUG [cli_rpc]: CLI RPC conn #2493 accepted from 127.0.0.1:52996 (active: 1)
+[2026-09-22T15:15:37-05:00] DEBUG [cli_rpc]: CLI RPC conn #2493 closed after 150ms (active: 0)
+[2026-09-22T15:15:37-05:00] DEBUG [cli_rpc]: CLI RPC conn #2494 accepted from 127.0.0.1:53002 (active: 1)
+[2026-09-22T15:15:37-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49241, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:37-05:00] DEBUG [cli_rpc]: CLI RPC conn #2494 closed after 137ms (active: 0)
+[2026-09-22T15:15:37-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49200, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:37-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49202, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:37-05:00] DEBUG [app_discovery]: Entry registered successfully entry="{"address":"0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:7773","geo":{"country":"US","lat":33.1494,"lon":-96.828,"region":"TX"},"local_ips":["192.168.1.117","70.121.13.123"],"type":"visor","version":"v1.3.97-0"}"
+[2026-09-22T15:15:37-05:00] DEBUG [app_discovery]: Service discovery heartbeat sent successfully
+[2026-09-22T15:15:37-05:00] DEBUG [cli_rpc]: CLI RPC conn #2495 accepted from 127.0.0.1:53016 (active: 1)
+[2026-09-22T15:15:37-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=662.60108ms yamux_id=13
+[2026-09-22T15:15:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #2495 closed after 141ms (active: 0)
+[2026-09-22T15:15:38-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=657.326895ms yamux_id=1499
+[2026-09-22T15:15:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #2496 accepted from 127.0.0.1:53026 (active: 1)
+[2026-09-22T15:15:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #2496 closed after 133ms (active: 0)
+[2026-09-22T15:15:38-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49251, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #2497 accepted from 127.0.0.1:53028 (active: 1)
+[2026-09-22T15:15:38-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49203, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:38-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49205, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:38-05:00] DEBUG [squicr]: Accepted connection from 182.9.231.51:10957
+[2026-09-22T15:15:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #2497 closed after 134ms (active: 0)
+[2026-09-22T15:15:38-05:00] DEBUG [rpc_client:02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd]: RPC call timed out; keeping conn (not yet at close threshold). consecutive_timeouts=1
+[2026-09-22T15:15:38-05:00] DEBUG [hypervisor]: Failed to push transitive hypervisor whitelist to visor error="context deadline exceeded"
+[2026-09-22T15:15:38-05:00] DEBUG [rpc_client:02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd]: RPC call timed out; keeping conn (not yet at close threshold). consecutive_timeouts=2
+[2026-09-22T15:15:38-05:00] DEBUG [hypervisor]: Failed to push LAN DMSG server info to visor error="context deadline exceeded"
+[2026-09-22T15:15:38-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=443.433009ms yamux_id=1501
+[2026-09-22T15:15:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #2498 accepted from 127.0.0.1:53032 (active: 1)
+[2026-09-22T15:15:38-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=511.380769ms yamux_id=15
+[2026-09-22T15:15:38-05:00] DEBUG [squicr]: Sent handshake to 182.9.231.51:10957, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73:49153
+[2026-09-22T15:15:38-05:00] DEBUG [squicr]: Accepted connection from 82.158.130.98:24142
+[2026-09-22T15:15:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #2498 closed after 162ms (active: 0)
+[2026-09-22T15:15:39-05:00] DEBUG [transport_manager]: recv transport request: type(squicr) remote(028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73)
+[2026-09-22T15:15:39-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T15:15:39-05:00] DEBUG [tp:028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73]: no prior transport log entry; starting fresh transport=ccecc1ee-67ab-07c7-ad2f-cc7846b5545c
+[2026-09-22T15:15:39-05:00] DEBUG [tp:028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73]: Performing settlement handshake...
+[2026-09-22T15:15:39-05:00] DEBUG [tp:028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73]: Serving. remote_pk=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 tp_id=ccecc1ee-67ab-07c7-ad2f-cc7846b5545c tp_index=1420
+[2026-09-22T15:15:39-05:00] DEBUG [squicr]: Sent handshake to 82.158.130.98:24142, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 03b120c32905556685584dee6aa404ee396989099f03f4edc0f0200d48c36f28c3:50390
+[2026-09-22T15:15:39-05:00] DEBUG [cli_rpc]: CLI RPC conn #2499 accepted from 127.0.0.1:53036 (active: 1)
+[2026-09-22T15:15:39-05:00] DEBUG [tp:028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73]: Setting underlying transport...
+[2026-09-22T15:15:39-05:00] DEBUG [tp:028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73]: Sent signal to 'mt.transportCh'.
+[2026-09-22T15:15:39-05:00] DEBUG [transport_manager]: accepted tp: type(squicr) remote(028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73) tpID(ccecc1ee-67ab-07c7-ad2f-cc7846b5545c) new(true)
+[2026-09-22T15:15:39-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49230, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:39-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49231, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:39-05:00] DEBUG [transport_manager]: Deregistering 1 transports via CXO transport-list snapshot
+[2026-09-22T15:15:39-05:00] DEBUG [transport_manager]: recv transport request: type(squicr) remote(03b120c32905556685584dee6aa404ee396989099f03f4edc0f0200d48c36f28c3)
+[2026-09-22T15:15:39-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T15:15:39-05:00] DEBUG [tp:03b120c32905556685584dee6aa404ee396989099f03f4edc0f0200d48c36f28c3]: no prior transport log entry; starting fresh transport=d3d65117-f71c-0a98-a6b6-9f8b596044cc
+[2026-09-22T15:15:39-05:00] DEBUG [tp:03b120c32905556685584dee6aa404ee396989099f03f4edc0f0200d48c36f28c3]: Performing settlement handshake...
+[2026-09-22T15:15:39-05:00] DEBUG [tp:03b120c32905556685584dee6aa404ee396989099f03f4edc0f0200d48c36f28c3]: Serving. remote_pk=03b120c32905556685584dee6aa404ee396989099f03f4edc0f0200d48c36f28c3 tp_id=d3d65117-f71c-0a98-a6b6-9f8b596044cc tp_index=1421
+[2026-09-22T15:15:39-05:00] DEBUG [cli_rpc]: CLI RPC conn #2499 closed after 337ms (active: 0)
+[2026-09-22T15:15:39-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:70, lAddr:028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73:49153]: TLP: probing tail seq=48 after idle PTO
+[2026-09-22T15:15:39-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49249, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:39-05:00] DEBUG [cli_rpc]: CLI RPC conn #2500 accepted from 127.0.0.1:53038 (active: 1)
+[2026-09-22T15:15:39-05:00] DEBUG [stcpr]: Accepted connection from 36.95.212.119:39510
+[2026-09-22T15:15:39-05:00] DEBUG [stcpr]: Detected external STCPR connection from 36.95.212.119
+[2026-09-22T15:15:39-05:00] DEBUG [tp:03b120c32905556685584dee6aa404ee396989099f03f4edc0f0200d48c36f28c3]: Setting underlying transport...
+[2026-09-22T15:15:39-05:00] DEBUG [tp:03b120c32905556685584dee6aa404ee396989099f03f4edc0f0200d48c36f28c3]: Sent signal to 'mt.transportCh'.
+[2026-09-22T15:15:39-05:00] DEBUG [transport_manager]: accepted tp: type(squicr) remote(03b120c32905556685584dee6aa404ee396989099f03f4edc0f0200d48c36f28c3) tpID(d3d65117-f71c-0a98-a6b6-9f8b596044cc) new(true)
+[2026-09-22T15:15:39-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=682.619621ms yamux_id=1503
+[2026-09-22T15:15:39-05:00] DEBUG [transport_manager]: Publishing 1421 transports to TPD via CXO transport-list snapshot
+[2026-09-22T15:15:39-05:00] DEBUG [cli_rpc]: CLI RPC conn #2500 closed after 174ms (active: 0)
+[2026-09-22T15:15:39-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:70, lAddr:028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73:49153]: RACK: DSACK seq=48 (spurious retransmit) → reorder factor widened to 1.50×
+[2026-09-22T15:15:39-05:00] DEBUG [cli_rpc]: CLI RPC conn #2501 accepted from 127.0.0.1:53054 (active: 1)
+[2026-09-22T15:15:39-05:00] DEBUG [stcpr]: Sent handshake to 36.95.212.119:39510, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 036b1b122dc3ae935f08629a2ad3fd16d0e6b5bc0538a2e3669007d37326735a5b:49411
+[2026-09-22T15:15:39-05:00] DEBUG [cli_rpc]: CLI RPC conn #2501 closed after 140ms (active: 0)
+[2026-09-22T15:15:40-05:00] DEBUG [cli_rpc]: CLI RPC conn #2502 accepted from 127.0.0.1:53060 (active: 1)
+[2026-09-22T15:15:40-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49215, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:40-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49214, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:40-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=459.424872ms yamux_id=1505
+[2026-09-22T15:15:40-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=506.323842ms yamux_id=17
+[2026-09-22T15:15:40-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49206, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:40-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49212, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:40-05:00] DEBUG [cli_rpc]: CLI RPC conn #2502 closed after 119ms (active: 0)
+[2026-09-22T15:15:40-05:00] DEBUG [transport_manager]: recv transport request: type(stcpr) remote(036b1b122dc3ae935f08629a2ad3fd16d0e6b5bc0538a2e3669007d37326735a5b)
+[2026-09-22T15:15:40-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T15:15:40-05:00] DEBUG [tp:036b1b122dc3ae935f08629a2ad3fd16d0e6b5bc0538a2e3669007d37326735a5b]: no prior transport log entry; starting fresh transport=bfafe9c3-87b9-04eb-a750-99b3328ca04c
+[2026-09-22T15:15:40-05:00] DEBUG [tp:036b1b122dc3ae935f08629a2ad3fd16d0e6b5bc0538a2e3669007d37326735a5b]: Performing settlement handshake...
+[2026-09-22T15:15:40-05:00] DEBUG [tp:036b1b122dc3ae935f08629a2ad3fd16d0e6b5bc0538a2e3669007d37326735a5b]: Serving. remote_pk=036b1b122dc3ae935f08629a2ad3fd16d0e6b5bc0538a2e3669007d37326735a5b tp_id=bfafe9c3-87b9-04eb-a750-99b3328ca04c tp_index=1422
+[2026-09-22T15:15:40-05:00] DEBUG [cli_rpc]: CLI RPC conn #2503 accepted from 127.0.0.1:53064 (active: 1)
+[2026-09-22T15:15:40-05:00] DEBUG readPacket [tp:03ddd57cd2e6684255e9e911beff30902aceed18648bce8d0ea42c9c1e0a78646c]: Failed to read packet header. error=EOF
+[2026-09-22T15:15:40-05:00] DEBUG [tp:03ddd57cd2e6684255e9e911beff30902aceed18648bce8d0ea42c9c1e0a78646c]: Transport closed, stopping read loop error=EOF src="read_loop"
+[2026-09-22T15:15:40-05:00] DEBUG [tp:03ddd57cd2e6684255e9e911beff30902aceed18648bce8d0ea42c9c1e0a78646c]: Stopped serving. remaining_tps=1421 remote_pk=03ddd57cd2e6684255e9e911beff30902aceed18648bce8d0ea42c9c1e0a78646c tp_id=cbbc6f49-9ef3-0ff0-88c5-d5d07cee60fe tp_index=1416
+[2026-09-22T15:15:40-05:00] DEBUG [transport_manager]: Deletion nudge received, debouncing...
+[2026-09-22T15:15:40-05:00] DEBUG [tp:036b1b122dc3ae935f08629a2ad3fd16d0e6b5bc0538a2e3669007d37326735a5b]: Setting underlying transport...
+[2026-09-22T15:15:40-05:00] DEBUG [tp:036b1b122dc3ae935f08629a2ad3fd16d0e6b5bc0538a2e3669007d37326735a5b]: Sent signal to 'mt.transportCh'.
+[2026-09-22T15:15:40-05:00] DEBUG [transport_manager]: accepted tp: type(stcpr) remote(036b1b122dc3ae935f08629a2ad3fd16d0e6b5bc0538a2e3669007d37326735a5b) tpID(bfafe9c3-87b9-04eb-a750-99b3328ca04c) new(true)
+[2026-09-22T15:15:40-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-22T15:15:40-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=252.42µs yamux_id=19
+[2026-09-22T15:15:40-05:00] DEBUG [cli_rpc]: CLI RPC conn #2503 closed after 294ms (active: 0)
+[2026-09-22T15:15:40-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5:46 error="i/o deadline reached" ports_reserved=186 session=02017e23aedb7223e7550544a828de632e1cea13f50b03e6bdbc07ca1444b548af
+[2026-09-22T15:15:40-05:00] DEBUG [dmsgC]: DialStream failed via connected server, trying next error="i/o deadline reached" server=02017e23aedb7223e7550544a828de632e1cea13f50b03e6bdbc07ca1444b548af
+[2026-09-22T15:15:40-05:00] DEBUG [cli_rpc]: CLI RPC conn #2504 accepted from 127.0.0.1:53068 (active: 1)
+[2026-09-22T15:15:40-05:00] DEBUG [cli_rpc]: CLI RPC conn #2504 closed after 128ms (active: 0)
+[2026-09-22T15:15:41-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=449.89011ms yamux_id=1507
+[2026-09-22T15:15:41-05:00] DEBUG [cli_rpc]: CLI RPC conn #2505 accepted from 127.0.0.1:53078 (active: 1)
+[2026-09-22T15:15:41-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49210, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:41-05:00] DEBUG [cli_rpc]: CLI RPC conn #2505 closed after 125ms (active: 0)
+[2026-09-22T15:15:41-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49207, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:41-05:00] DEBUG [cli_rpc]: CLI RPC conn #2506 accepted from 127.0.0.1:53086 (active: 1)
+[2026-09-22T15:15:41-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49221, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:41-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49219, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:41-05:00] DEBUG [cli_rpc]: CLI RPC conn #2506 closed after 139ms (active: 0)
+[2026-09-22T15:15:41-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49220, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:41-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49218, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:41-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49217, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:41-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=457.11638ms yamux_id=1509
+[2026-09-22T15:15:41-05:00] DEBUG [cli_rpc]: CLI RPC conn #2507 accepted from 127.0.0.1:39014 (active: 1)
+[2026-09-22T15:15:41-05:00] DEBUG [cli_rpc]: CLI RPC conn #2507 closed after 132ms (active: 0)
+[2026-09-22T15:15:41-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49222, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:41-05:00] DEBUG [cli_rpc]: CLI RPC conn #2508 accepted from 127.0.0.1:39030 (active: 1)
+[2026-09-22T15:15:42-05:00] DEBUG [cli_rpc]: CLI RPC conn #2508 closed after 126ms (active: 0)
+[2026-09-22T15:15:42-05:00] DEBUG [cli_rpc]: CLI RPC conn #2509 accepted from 127.0.0.1:39042 (active: 1)
+[2026-09-22T15:15:42-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49213, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:42-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=453.542297ms yamux_id=1511
+[2026-09-22T15:15:42-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49209, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:42-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49211, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:42-05:00] DEBUG [cli_rpc]: CLI RPC conn #2509 closed after 127ms (active: 0)
+[2026-09-22T15:15:42-05:00] DEBUG [cli_rpc]: CLI RPC conn #2510 accepted from 127.0.0.1:39044 (active: 1)
+[2026-09-22T15:15:42-05:00] DEBUG [cli_rpc]: CLI RPC conn #2510 closed after 133ms (active: 0)
+[2026-09-22T15:15:42-05:00] DEBUG [cli_rpc]: CLI RPC conn #2511 accepted from 127.0.0.1:39056 (active: 1)
+[2026-09-22T15:15:42-05:00] DEBUG [cli_rpc]: CLI RPC conn #2511 closed after 141ms (active: 0)
+[2026-09-22T15:15:42-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=499.585859ms yamux_id=1513
+[2026-09-22T15:15:43-05:00] DEBUG [router]: Mux add-leg: served disjoint plan from shared warm-route pool (skipped route-finder) app_name=skysocks-client first_tp=bac92dd4-675b-0587-941c-740a8adf8311 plan_source="pool plan from standby group :49199"
+[2026-09-22T15:15:43-05:00] DEBUG [cli_rpc]: CLI RPC conn #2512 accepted from 127.0.0.1:39070 (active: 1)
+[2026-09-22T15:15:43-05:00] DEBUG [cli_rpc]: CLI RPC conn #2512 closed after 116ms (active: 0)
+[2026-09-22T15:15:43-05:00] DEBUG [cli_rpc]: CLI RPC conn #2513 accepted from 127.0.0.1:39084 (active: 1)
+[2026-09-22T15:15:43-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49214, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:43-05:00] DEBUG [cli_rpc]: CLI RPC conn #2513 closed after 134ms (active: 0)
+[2026-09-22T15:15:43-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49215, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:43-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=461.433495ms yamux_id=1515
+[2026-09-22T15:15:43-05:00] DEBUG [cli_rpc]: CLI RPC conn #2514 accepted from 127.0.0.1:39100 (active: 1)
+[2026-09-22T15:15:43-05:00] DEBUG [cli_rpc]: CLI RPC conn #2514 closed after 136ms (active: 0)
+[2026-09-22T15:15:43-05:00] DEBUG [cli_rpc]: CLI RPC conn #2515 accepted from 127.0.0.1:39106 (active: 1)
+[2026-09-22T15:15:44-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49218, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:44-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49221, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:44-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49216, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:44-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49217, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:44-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49219, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:44-05:00] DEBUG [cli_rpc]: CLI RPC conn #2515 closed after 138ms (active: 0)
+[2026-09-22T15:15:44-05:00] DEBUG [cli_rpc]: CLI RPC conn #2516 accepted from 127.0.0.1:39122 (active: 1)
+[2026-09-22T15:15:44-05:00] DEBUG [router]: GC: 130 rules, 0 expired. Oldest idle: rtID=444 idle=1m25.982122875s
+[2026-09-22T15:15:44-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=469.78466ms yamux_id=1517
+[2026-09-22T15:15:44-05:00] DEBUG [cli_rpc]: CLI RPC conn #2516 closed after 119ms (active: 0)
+[2026-09-22T15:15:44-05:00] DEBUG [cli_rpc]: CLI RPC conn #2517 accepted from 127.0.0.1:39130 (active: 1)
+[2026-09-22T15:15:44-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49241, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:44-05:00] DEBUG [cli_rpc]: CLI RPC conn #2517 closed after 149ms (active: 0)
+[2026-09-22T15:15:44-05:00] DEBUG [cli_rpc]: CLI RPC conn #2518 accepted from 127.0.0.1:39140 (active: 1)
+[2026-09-22T15:15:44-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49200, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:44-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49202, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:44-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=451.603904ms yamux_id=1519
+[2026-09-22T15:15:44-05:00] DEBUG [cli_rpc]: CLI RPC conn #2518 closed after 134ms (active: 0)
+[2026-09-22T15:15:45-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=522.081365ms yamux_id=21
+[2026-09-22T15:15:45-05:00] DEBUG [router]: handling setup request: setupPK(024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438)
+[2026-09-22T15:15:45-05:00] DEBUG [cli_rpc]: CLI RPC conn #2519 accepted from 127.0.0.1:39142 (active: 1)
+[2026-09-22T15:15:45-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49232, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:45-05:00] DEBUG [cli_rpc]: CLI RPC conn #2519 closed after 128ms (active: 0)
+[2026-09-22T15:15:45-05:00] DEBUG [rpc_client:0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb]: RPC call timed out; keeping conn (not yet at close threshold). consecutive_timeouts=1
+[2026-09-22T15:15:45-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49251, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:45-05:00] DEBUG [cli_rpc]: CLI RPC conn #2520 accepted from 127.0.0.1:39154 (active: 1)
+[2026-09-22T15:15:45-05:00] DEBUG [transport_manager]: Deregistering 1 transports via CXO transport-list snapshot
+[2026-09-22T15:15:45-05:00] DEBUG [cli_rpc]: CLI RPC conn #2520 closed after 117ms (active: 0)
+[2026-09-22T15:15:45-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49203, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:45-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49205, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:45-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49222, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:45-05:00] DEBUG [transport_manager]: Publishing 1421 transports to TPD via CXO transport-list snapshot
+[2026-09-22T15:15:45-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=466.65119ms yamux_id=1521
+[2026-09-22T15:15:45-05:00] DEBUG [cli_rpc]: CLI RPC conn #2521 accepted from 127.0.0.1:39160 (active: 1)
+[2026-09-22T15:15:45-05:00] DEBUG [cli_rpc]: CLI RPC conn #2521 closed after 150ms (active: 0)
+[2026-09-22T15:15:45-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5:46 error="i/o deadline reached" ports_reserved=186 session=020171607da03fcad57826d08205652a92205ff9fd5c1dc6b8893e408c386c018d
+[2026-09-22T15:15:45-05:00] DEBUG [dmsgC]: DialStream failed via connected server, trying next error="i/o deadline reached" server=020171607da03fcad57826d08205652a92205ff9fd5c1dc6b8893e408c386c018d
+[2026-09-22T15:15:45-05:00] DEBUG [cli_rpc]: CLI RPC conn #2522 accepted from 127.0.0.1:39172 (active: 1)
+[2026-09-22T15:15:45-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=264.81825ms yamux_id=1523
+[2026-09-22T15:15:46-05:00] DEBUG [cli_rpc]: CLI RPC conn #2522 closed after 158ms (active: 0)
+[2026-09-22T15:15:46-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=553.946041ms yamux_id=23
+[2026-09-22T15:15:46-05:00] DEBUG [cli_rpc]: CLI RPC conn #2523 accepted from 127.0.0.1:39186 (active: 1)
+[2026-09-22T15:15:46-05:00] DEBUG [router]: Batched route setup sent app_name=skysocks-client routes=1 setup_node=024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438
+[2026-09-22T15:15:46-05:00] DEBUG [router]: Batched route setup failed; retrying as a single request app_name=skysocks-client error="batched route setup: destination rules on 022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1: failure code 1 (refusing to append mux leg over transport 11b37300-6182-02fc-8d46-93959968e7e5 already in the group)"
+[2026-09-22T15:15:46-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=469.738964ms yamux_id=1525
+[2026-09-22T15:15:46-05:00] DEBUG [dmsgC:disc:fallback]: Entry not in direct client, querying HTTP discovery pk=02aac1cf94f387cc6324e66d2241df11fbad5037efd32bb76cb214e426f08dc60a
+[2026-09-22T15:15:46-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49230, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:46-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49231, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:46-05:00] DEBUG [cli_rpc]: CLI RPC conn #2523 closed after 128ms (active: 0)
+[2026-09-22T15:15:46-05:00] DEBUG [cli_rpc]: CLI RPC conn #2524 accepted from 127.0.0.1:39198 (active: 1)
+[2026-09-22T15:15:46-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49249, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:46-05:00] DEBUG [cli_rpc]: CLI RPC conn #2524 closed after 113ms (active: 0)
+[2026-09-22T15:15:46-05:00] DEBUG [cli_rpc]: CLI RPC conn #2525 accepted from 127.0.0.1:39214 (active: 1)
+[2026-09-22T15:15:46-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=459.98051ms yamux_id=1529
+[2026-09-22T15:15:46-05:00] DEBUG [cli_rpc]: CLI RPC conn #2525 closed after 141ms (active: 0)
+[2026-09-22T15:15:47-05:00] DEBUG [cli_rpc]: CLI RPC conn #2526 accepted from 127.0.0.1:39226 (active: 1)
+[2026-09-22T15:15:47-05:00] DEBUG [cli_rpc]: CLI RPC conn #2526 closed after 117ms (active: 0)
+[2026-09-22T15:15:47-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49206, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:47-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49212, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:47-05:00] DEBUG [cli_rpc]: CLI RPC conn #2527 accepted from 127.0.0.1:39232 (active: 1)
+[2026-09-22T15:15:47-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:70, lAddr:028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73:49153]: TLP: probing tail seq=80 after idle PTO
+[2026-09-22T15:15:47-05:00] DEBUG [cli_rpc]: CLI RPC conn #2527 closed after 130ms (active: 0)
+[2026-09-22T15:15:47-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=454.958306ms yamux_id=1531
+[2026-09-22T15:15:47-05:00] DEBUG [cli_rpc]: CLI RPC conn #2528 accepted from 127.0.0.1:39234 (active: 1)
+[2026-09-22T15:15:47-05:00] DEBUG [cli_rpc]: CLI RPC conn #2528 closed after 142ms (active: 0)
+[2026-09-22T15:15:47-05:00] DEBUG [cli_rpc]: CLI RPC conn #2529 accepted from 127.0.0.1:39240 (active: 1)
+[2026-09-22T15:15:47-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:70, lAddr:028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73:49153]: RACK: DSACK seq=80 (spurious retransmit) → reorder factor widened to 1.50×
+[2026-09-22T15:15:48-05:00] DEBUG [cli_rpc]: CLI RPC conn #2529 closed after 161ms (active: 0)
+[2026-09-22T15:15:48-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=519.351074ms yamux_id=25
+[2026-09-22T15:15:48-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=463.399686ms yamux_id=1533
+[2026-09-22T15:15:48-05:00] DEBUG [router]: handling setup request: setupPK(024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438)
+[2026-09-22T15:15:48-05:00] DEBUG [cli_rpc]: CLI RPC conn #2530 accepted from 127.0.0.1:39244 (active: 1)
+[2026-09-22T15:15:48-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49210, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:48-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49207, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:48-05:00] DEBUG [cli_rpc]: CLI RPC conn #2530 closed after 183ms (active: 0)
+[2026-09-22T15:15:48-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49219, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:48-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49218, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:48-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49221, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:48-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49220, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:48-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49217, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:48-05:00] DEBUG [cli_rpc]: CLI RPC conn #2531 accepted from 127.0.0.1:39252 (active: 1)
+[2026-09-22T15:15:48-05:00] DEBUG [dmsgC]: Peer forward failed, trying next. dst_addr=02aac1cf94f387cc6324e66d2241df11fbad5037efd32bb76cb214e426f08dc60a:46 error=EOF peer=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 src_addr=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434:50165 yamux_id=1527
+[2026-09-22T15:15:48-05:00] DEBUG [cli_rpc]: CLI RPC conn #2531 closed after 167ms (active: 0)
+[2026-09-22T15:15:48-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=467.367973ms yamux_id=1535
+[2026-09-22T15:15:48-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=513.018246ms yamux_id=27
+[2026-09-22T15:15:48-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49222, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:48-05:00] DEBUG [cli_rpc]: CLI RPC conn #2532 accepted from 127.0.0.1:39262 (active: 1)
+[2026-09-22T15:15:49-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49220, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:49-05:00] DEBUG [cli_rpc]: CLI RPC conn #2532 closed after 214ms (active: 0)
+[2026-09-22T15:15:49-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49213, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:49-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49211, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:49-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49209, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:49-05:00] DEBUG [router]: Mux add-leg failed; route group keeps current leg set error="rotation add-leg: setup-node dial: route setup: failed to broadcast rules to destination router: failure code 1 (refusing to append mux leg over transport 11b37300-6182-02fc-8d46-93959968e7e5 already in the group)"
+[2026-09-22T15:15:49-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=1m41.750854617s yamux_id=1261
+[2026-09-22T15:15:49-05:00] DEBUG [rpc_client:02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd]: Accepted.
+[2026-09-22T15:15:49-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=459.375153ms yamux_id=1537
+[2026-09-22T15:15:49-05:00] DEBUG [cli_rpc]: CLI RPC conn #2533 accepted from 127.0.0.1:39272 (active: 1)
+[2026-09-22T15:15:49-05:00] DEBUG [dmsgC]: Peer forward failed, trying next. dst_addr=02aac1cf94f387cc6324e66d2241df11fbad5037efd32bb76cb214e426f08dc60a:46 error=EOF peer=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 src_addr=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434:50165 yamux_id=1527
+[2026-09-22T15:15:49-05:00] DEBUG [dmsgC]: Stream closed. error="dmsg error 307 - request cannot be forwarded because the next session is non-existent" session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=3.222562285s yamux_id=1527
+[2026-09-22T15:15:49-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=502.261341ms yamux_id=29
+[2026-09-22T15:15:49-05:00] DEBUG ClientSession.DialStream [dmsgC]: Stream closed on failure. close_error=<nil> dst_addr=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5:46 error=EOF ports_reserved=184 session=020e26d9f0da46daec8d3dccff5c100dd03685f7cbe608d93a8e8190892979f2a0
+[2026-09-22T15:15:49-05:00] DEBUG [dmsgC]: DialStream failed via connected server, trying next error=EOF server=020e26d9f0da46daec8d3dccff5c100dd03685f7cbe608d93a8e8190892979f2a0
+[2026-09-22T15:15:49-05:00] DEBUG [hypervisor_client]: Hypervisor is not published; waiting. error="dmsg error 100 - entry is not found in discovery: entry of public key is not found" hypervisor_pk=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5 wait=1m0s
+[2026-09-22T15:15:49-05:00] DEBUG [cli_rpc]: CLI RPC conn #2533 closed after 172ms (active: 0)
+[2026-09-22T15:15:49-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49230, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:49-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49231, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:49-05:00] DEBUG [cli_rpc]: CLI RPC conn #2534 accepted from 127.0.0.1:39276 (active: 1)
+[2026-09-22T15:15:49-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=326.115971ms yamux_id=33
+[2026-09-22T15:15:49-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=519.090719ms yamux_id=31
+[2026-09-22T15:15:49-05:00] DEBUG [cli_rpc]: CLI RPC conn #2534 closed after 132ms (active: 0)
+[2026-09-22T15:15:50-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=462.577555ms yamux_id=1539
+[2026-09-22T15:15:50-05:00] DEBUG [cli_rpc]: CLI RPC conn #2535 accepted from 127.0.0.1:39284 (active: 1)
+[2026-09-22T15:15:50-05:00] DEBUG [cli_rpc]: CLI RPC conn #2535 closed after 131ms (active: 0)
+[2026-09-22T15:15:50-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=529.740206ms yamux_id=35
+[2026-09-22T15:15:50-05:00] DEBUG [cli_rpc]: CLI RPC conn #2536 accepted from 127.0.0.1:39288 (active: 1)
+[2026-09-22T15:15:50-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49214, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:50-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49215, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:50-05:00] DEBUG [cli_rpc]: CLI RPC conn #2536 closed after 137ms (active: 0)
+[2026-09-22T15:15:50-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=527.601125ms yamux_id=37
+[2026-09-22T15:15:50-05:00] DEBUG [cli_rpc]: CLI RPC conn #2537 accepted from 127.0.0.1:39302 (active: 1)
+[2026-09-22T15:15:50-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=463.040232ms yamux_id=1541
+[2026-09-22T15:15:50-05:00] DEBUG [cli_rpc]: CLI RPC conn #2537 closed after 145ms (active: 0)
+[2026-09-22T15:15:50-05:00] DEBUG [cli_rpc]: CLI RPC conn #2538 accepted from 127.0.0.1:39318 (active: 1)
+[2026-09-22T15:15:50-05:00] DEBUG [squicr]: Accepted connection from 186.48.78.70:56938
+[2026-09-22T15:15:51-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=515.303328ms yamux_id=39
+[2026-09-22T15:15:51-05:00] DEBUG [cli_rpc]: CLI RPC conn #2538 closed after 150ms (active: 0)
+[2026-09-22T15:15:51-05:00] DEBUG [squicr]: Sent handshake to 186.48.78.70:56938, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 03cbcd9e02743ff6db25d3aca3eff3719711e3e0e173e1e5e1cbf8ad0ee57d4985:49243
+[2026-09-22T15:15:51-05:00] DEBUG [cli_rpc]: CLI RPC conn #2539 accepted from 127.0.0.1:39332 (active: 1)
+[2026-09-22T15:15:51-05:00] DEBUG [transport_manager]: recv transport request: type(squicr) remote(03cbcd9e02743ff6db25d3aca3eff3719711e3e0e173e1e5e1cbf8ad0ee57d4985)
+[2026-09-22T15:15:51-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T15:15:51-05:00] DEBUG [tp:03cbcd9e02743ff6db25d3aca3eff3719711e3e0e173e1e5e1cbf8ad0ee57d4985]: no prior transport log entry; starting fresh transport=b6775045-e6fd-0f08-9f51-db897fd6cd4b
+[2026-09-22T15:15:51-05:00] DEBUG [tp:03cbcd9e02743ff6db25d3aca3eff3719711e3e0e173e1e5e1cbf8ad0ee57d4985]: Performing settlement handshake...
+[2026-09-22T15:15:51-05:00] DEBUG [tp:03cbcd9e02743ff6db25d3aca3eff3719711e3e0e173e1e5e1cbf8ad0ee57d4985]: Serving. remote_pk=03cbcd9e02743ff6db25d3aca3eff3719711e3e0e173e1e5e1cbf8ad0ee57d4985 tp_id=b6775045-e6fd-0f08-9f51-db897fd6cd4b tp_index=1422
+[2026-09-22T15:15:51-05:00] DEBUG [cli_rpc]: CLI RPC conn #2539 closed after 155ms (active: 0)
+[2026-09-22T15:15:51-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=515.500636ms yamux_id=41
+[2026-09-22T15:15:51-05:00] DEBUG [cli_rpc]: CLI RPC conn #2540 accepted from 127.0.0.1:39342 (active: 1)
+[2026-09-22T15:15:51-05:00] DEBUG [tp:03cbcd9e02743ff6db25d3aca3eff3719711e3e0e173e1e5e1cbf8ad0ee57d4985]: Setting underlying transport...
+[2026-09-22T15:15:51-05:00] DEBUG [tp:03cbcd9e02743ff6db25d3aca3eff3719711e3e0e173e1e5e1cbf8ad0ee57d4985]: Sent signal to 'mt.transportCh'.
+[2026-09-22T15:15:51-05:00] DEBUG [transport_manager]: accepted tp: type(squicr) remote(03cbcd9e02743ff6db25d3aca3eff3719711e3e0e173e1e5e1cbf8ad0ee57d4985) tpID(b6775045-e6fd-0f08-9f51-db897fd6cd4b) new(true)
+[2026-09-22T15:15:51-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-22T15:15:51-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=638.492086ms yamux_id=1543
+[2026-09-22T15:15:51-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49241, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:51-05:00] DEBUG [cli_rpc]: CLI RPC conn #2540 closed after 159ms (active: 0)
+[2026-09-22T15:15:51-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49202, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:51-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49200, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:51-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=515.201639ms yamux_id=43
+[2026-09-22T15:15:51-05:00] DEBUG [cli_rpc]: CLI RPC conn #2541 accepted from 127.0.0.1:39894 (active: 1)
+[2026-09-22T15:15:51-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49212, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:51-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49206, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:51-05:00] DEBUG [cli_rpc]: CLI RPC conn #2541 closed after 138ms (active: 0)
+[2026-09-22T15:15:52-05:00] DEBUG [cli_rpc]: CLI RPC conn #2542 accepted from 127.0.0.1:39908 (active: 1)
+[2026-09-22T15:15:52-05:00] DEBUG [stcpr]: Accepted connection from 213.183.63.83:57826
+[2026-09-22T15:15:52-05:00] DEBUG [stcpr]: Detected external STCPR connection from 213.183.63.83
+[2026-09-22T15:15:52-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=458.094548ms yamux_id=1545
+[2026-09-22T15:15:52-05:00] DEBUG [cli_rpc]: CLI RPC conn #2542 closed after 116ms (active: 0)
+[2026-09-22T15:15:52-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49251, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:52-05:00] DEBUG [cli_rpc]: CLI RPC conn #2543 accepted from 127.0.0.1:39922 (active: 1)
+[2026-09-22T15:15:52-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49203, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:52-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49205, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:52-05:00] DEBUG [cli_rpc]: CLI RPC conn #2543 closed after 133ms (active: 0)
+[2026-09-22T15:15:52-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=518.241559ms yamux_id=45
+[2026-09-22T15:15:52-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49204, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:52-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49199, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:52-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49198, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:52-05:00] DEBUG [stcpr]: Sent handshake to 213.183.63.83:57826, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 0287ac4ef3d2ede7b124014ac5e2768c5b009c529c5d86861c371fb8ab4d0b0251:49183
+[2026-09-22T15:15:52-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49201, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:52-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49203, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:52-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49202, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:52-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49205, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:52-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49200, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:52-05:00] DEBUG [cli_rpc]: CLI RPC conn #2544 accepted from 127.0.0.1:39932 (active: 1)
+[2026-09-22T15:15:52-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49210, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:52-05:00] DEBUG [cli_rpc]: CLI RPC conn #2544 closed after 133ms (active: 0)
+[2026-09-22T15:15:52-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=457.926624ms yamux_id=1547
+[2026-09-22T15:15:52-05:00] DEBUG [cli_rpc]: CLI RPC conn #2545 accepted from 127.0.0.1:39940 (active: 1)
+[2026-09-22T15:15:53-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49208, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:53-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49207, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: Mux self-heal: dialing replacement leg to restore degree alive=1 app_name=skysocks-client target=2
+[2026-09-22T15:15:53-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49211, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:53-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49213, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:53-05:00] DEBUG [router]: Mux add-leg: served disjoint plan from shared warm-route pool (skipped route-finder) app_name=skysocks-client first_tp=bac92dd4-675b-0587-941c-740a8adf8311 plan_source="pool plan from standby group :49199"
+[2026-09-22T15:15:53-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49209, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:53-05:00] DEBUG [cli_rpc]: CLI RPC conn #2545 closed after 131ms (active: 0)
+[2026-09-22T15:15:53-05:00] DEBUG [transport_manager]: recv transport request: type(stcpr) remote(0287ac4ef3d2ede7b124014ac5e2768c5b009c529c5d86861c371fb8ab4d0b0251)
+[2026-09-22T15:15:53-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-22T15:15:53-05:00] DEBUG [tp:0287ac4ef3d2ede7b124014ac5e2768c5b009c529c5d86861c371fb8ab4d0b0251]: no prior transport log entry; starting fresh transport=f8ee855b-773b-0d60-a9b5-d9c71a6fa269
+[2026-09-22T15:15:53-05:00] DEBUG [tp:0287ac4ef3d2ede7b124014ac5e2768c5b009c529c5d86861c371fb8ab4d0b0251]: Performing settlement handshake...
+[2026-09-22T15:15:53-05:00] DEBUG [tp:0287ac4ef3d2ede7b124014ac5e2768c5b009c529c5d86861c371fb8ab4d0b0251]: Serving. remote_pk=0287ac4ef3d2ede7b124014ac5e2768c5b009c529c5d86861c371fb8ab4d0b0251 tp_id=f8ee855b-773b-0d60-a9b5-d9c71a6fa269 tp_index=1423
+[2026-09-22T15:15:53-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49230, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:53-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49231, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:53-05:00] DEBUG [cli_rpc]: CLI RPC conn #2546 accepted from 127.0.0.1:39942 (active: 1)
+[2026-09-22T15:15:53-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=511.625152ms yamux_id=49
+[2026-09-22T15:15:53-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49249, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:53-05:00] DEBUG [tp:0287ac4ef3d2ede7b124014ac5e2768c5b009c529c5d86861c371fb8ab4d0b0251]: Setting underlying transport...
+[2026-09-22T15:15:53-05:00] DEBUG [tp:0287ac4ef3d2ede7b124014ac5e2768c5b009c529c5d86861c371fb8ab4d0b0251]: Sent signal to 'mt.transportCh'.
+[2026-09-22T15:15:53-05:00] DEBUG [transport_manager]: accepted tp: type(stcpr) remote(0287ac4ef3d2ede7b124014ac5e2768c5b009c529c5d86861c371fb8ab4d0b0251) tpID(f8ee855b-773b-0d60-a9b5-d9c71a6fa269) new(true)
+[2026-09-22T15:15:53-05:00] DEBUG [cli_rpc]: CLI RPC conn #2546 closed after 489ms (active: 0)
+[2026-09-22T15:15:53-05:00] DEBUG [cli_rpc]: CLI RPC conn #2547 accepted from 127.0.0.1:39950 (active: 1)
+[2026-09-22T15:15:53-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=929.867807ms yamux_id=1549
+[2026-09-22T15:15:54-05:00] DEBUG [cli_rpc]: CLI RPC conn #2547 closed after 143ms (active: 0)
+[2026-09-22T15:15:54-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=511.308159ms yamux_id=51
+[2026-09-22T15:15:54-05:00] DEBUG [cli_rpc]: CLI RPC conn #2548 accepted from 127.0.0.1:39956 (active: 1)
+[2026-09-22T15:15:54-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49212, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:54-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49206, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:54-05:00] DEBUG [router]: GC: 128 rules, 0 expired. Oldest idle: rtID=315 idle=29.366148015s
+[2026-09-22T15:15:54-05:00] DEBUG [cli_rpc]: CLI RPC conn #2548 closed after 118ms (active: 0)
+[2026-09-22T15:15:54-05:00] DEBUG [cli_rpc]: CLI RPC conn #2549 accepted from 127.0.0.1:39962 (active: 1)
+[2026-09-22T15:15:54-05:00] DEBUG [cli_rpc]: CLI RPC conn #2549 closed after 20ms (active: 0)
+[2026-09-22T15:15:54-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=459.303224ms yamux_id=1551
+[2026-09-22T15:15:54-05:00] DEBUG [cli_rpc]: CLI RPC conn #2550 accepted from 127.0.0.1:39974 (active: 1)
+[2026-09-22T15:15:54-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=532.424826ms yamux_id=53
+[2026-09-22T15:15:54-05:00] DEBUG [cli_rpc]: CLI RPC conn #2550 closed after 126ms (active: 0)
+[2026-09-22T15:15:55-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49233, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:55-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49210, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:55-05:00] DEBUG [router]: handling setup request: setupPK(024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438)
+[2026-09-22T15:15:55-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49219, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:55-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49221, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:55-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49220, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:55-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49218, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:55-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49217, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:55-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=805.083394ms yamux_id=1553
+[2026-09-22T15:15:56-05:00] DEBUG [hypervisor]: Failed to push LAN DMSG server info to visor error=EOF
+[2026-09-22T15:15:56-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49240, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=9592 after idle PTO app_name=skysocks-client-ref
+[2026-09-22T15:15:56-05:00] DEBUG [router]: Dropped transport frame for stale route error="routing table: rule not found (routeID=470, pktType=Handshake)"
+[2026-09-22T15:15:56-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49222, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:56-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49251, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-22T15:15:56-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49213, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:56-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49209, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:56-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49211, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:56-05:00] DEBUG [router]: Batched route setup sent app_name=skysocks-client routes=1 setup_node=024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438
+[2026-09-22T15:15:56-05:00] DEBUG [router]: Saved routing rule: keyRtID=469 type=Forward (total rules: 129)
+[2026-09-22T15:15:56-05:00] DEBUG [router]: Save new Routing Rule with ID 469 FWD(keyRtID:469, nxtRtID:45, nxtTpID:bac92dd4-675b-0587-941c-740a8adf8311, rAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3, lAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49207)
+[2026-09-22T15:15:56-05:00] DEBUG [router]: Saved routing rule: keyRtID=470 type=Consume (total rules: 130)
+[2026-09-22T15:15:56-05:00] DEBUG [router]: Save new Routing Rule with ID 470 REV(keyRtID:470, rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49207, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3)
+[2026-09-22T15:15:56-05:00] DEBUG [router]: Appended asymmetric mux route (fwd=true rev=true) to RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49207, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3
+[2026-09-22T15:15:56-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=028b97b753680805cccb1146f663a49c147f006052319c133323e18eac6389ae73 took=934.073555ms yamux_id=55
+[2026-09-22T15:15:56-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49207, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 standby app_name=skysocks-client
+[2026-09-22T15:15:56-05:00] DEBUG [transport_manager]: Publishing 1423 transports to TPD via CXO transport-list snapshot
+[2026-09-22T15:15:56-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=02dfd3c622725791c74b75eefaf5885af5ddbfba02dd74c1a531f62baa31d70434 took=809.599085ms yamux_id=1555
+[2026-09-22T15:15:56-05:00] DEBUG [cli_rpc]: CLI RPC conn #2551 accepted from 127.0.0.1:39982 (active: 1)
+[2026-09-22T15:15:56-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49207, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=1991 after idle PTO app_name=skysocks-client
+[2026-09-22T15:15:56-05:00] DEBUG [cli_rpc]: CLI RPC conn #2551 closed after 157ms (active: 0)

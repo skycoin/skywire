@@ -308,6 +308,33 @@ type dcConn struct {
 	closed    bool
 	closeErr  error
 	rDeadline time.Time
+
+	// relOnce guards the teardown of raw/pc/signal, which is NOT the same
+	// event as closed. See release.
+	relOnce sync.Once
+}
+
+// release tears down the DataChannel, the PeerConnection and the signaling
+// stream, at most once.
+//
+// Split out of Close, and guarded by its own Once rather than by closed,
+// because "this conn has ended" and "its resources are freed" are different
+// events with different triggers. fail() ends the conn for readers — it is
+// called from pion's connection-state callback and owns nothing to free — and
+// a Close arriving afterwards used to see closed==true and return before ever
+// reaching pc.Close(). Since a dead ICE path is the ordinary way a WebRTC
+// transport ends, that quietly stranded a whole PeerConnection (ICE agent,
+// DTLS, SCTP and SRTP goroutines, ~13 each) on every failure, for the life of
+// the process. Measured on two public visors: ~1200 PeerConnections against
+// ~110 live webrtc transports, 96% CPU, growing monotonically with uptime.
+func (c *dcConn) release() {
+	c.relOnce.Do(func() {
+		c.raw.Close() //nolint:errcheck,gosec
+		c.pc.Close()  //nolint:errcheck,gosec
+		if c.signal != nil {
+			c.signal.Close() //nolint:errcheck,gosec
+		}
+	})
 }
 
 func newDCConn(raw datachannel.ReadWriteCloser, pc *webrtc.PeerConnection, signal io.Closer) *dcConn {
@@ -325,6 +352,12 @@ func newDCConn(raw datachannel.ReadWriteCloser, pc *webrtc.PeerConnection, signa
 	pc.OnConnectionStateChange(func(s webrtc.PeerConnectionState) {
 		if s == webrtc.PeerConnectionStateFailed || s == webrtc.PeerConnectionStateClosed {
 			c.fail(fmt.Errorf("webrtc: peer connection %s", s))
+			// Free it here too, rather than waiting for a Close that may never
+			// arrive: Failed and Closed are terminal, so there is nothing left
+			// to wait for and nobody else is guaranteed to come. On its own
+			// goroutine because this runs on pion's callback path, and calling
+			// pc.Close() from inside a pion state-change handler can deadlock.
+			go c.release()
 		}
 	})
 	go c.readPump()
@@ -417,21 +450,17 @@ func (c *dcConn) Write(p []byte) (int, error) {
 
 func (c *dcConn) Close() error {
 	c.mu.Lock()
-	if c.closed {
-		c.mu.Unlock()
-		return nil
+	if !c.closed {
+		c.closed = true
+		if c.closeErr == nil {
+			c.closeErr = net.ErrClosed
+		}
+		c.wake()
 	}
-	c.closed = true
-	if c.closeErr == nil {
-		c.closeErr = net.ErrClosed
-	}
-	c.wake()
 	c.mu.Unlock()
-	c.raw.Close() //nolint:errcheck,gosec
-	c.pc.Close()  //nolint:errcheck,gosec
-	if c.signal != nil {
-		c.signal.Close() //nolint:errcheck,gosec
-	}
+	// Unconditionally, even when fail() already marked the conn closed: that
+	// is the path that used to return here holding a live PeerConnection.
+	c.release()
 	return nil
 }
 

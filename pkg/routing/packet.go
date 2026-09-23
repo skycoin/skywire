@@ -83,6 +83,8 @@ func (t PacketType) String() string {
 		return "LegState"
 	case DirectionPacket:
 		return "Direction"
+	case LegRehomePacket:
+		return "LegRehome"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -166,6 +168,37 @@ const (
 	// fall through handlePacket harmlessly, so an OLD peer ignores this packet —
 	// a pin against such a peer is best-effort local-only.
 	DirectionPacket
+	// LegRehomePacket moves a whole route CHAIN from one route group to another
+	// between the same two visors, without a setup-node dial: both edges rewrite
+	// the chain's single ConsumeRule from the standby group's descriptor to the
+	// active group's, and the chain becomes one of the active group's mux legs
+	// (route ID > 0 — it is sent ON the chain being moved, so the chain is
+	// identified by the route the packet arrives on, exactly like an aux-leg
+	// HandshakePacket). The intermediate hops carry no descriptor and are never
+	// told. Payload: LegRehomeSize bytes, see MakeLegRehomePacket. Gated by
+	// CapLegRehome; a peer without it never receives one. See
+	// docs/design/leg-rehome.md.
+	LegRehomePacket
+)
+
+// LegRehomeSize is the LegRehomePacket payload:
+// nonce(8 BE) | flags(1) | srcPort(2 BE) | dstPort(2 BE).
+const LegRehomeSize = 13
+
+// LegRehomePacket payload flags.
+const (
+	// LegRehomeAck marks the exit's acceptance of a re-home request: its own
+	// consume rule has been rewritten and the chain now belongs to the target
+	// group on that side.
+	LegRehomeAck byte = 0x01
+	// LegRehomeCommit marks the initiator's third message, sent through the
+	// TARGET group's rules once its own rewrite is done: the exit may promote
+	// the adopted leg out of standby and start striping onto it.
+	LegRehomeCommit byte = 0x02
+	// LegRehomeRefused marks a refusal (no such target group, a different peer,
+	// mux not enabled). Carried with LegRehomeAck cleared; both groups are left
+	// exactly as they were.
+	LegRehomeRefused byte = 0x04
 )
 
 // FECRepairHdr is the fixed prefix of a RepairPacket payload: blockID(4) + idx(1)
@@ -236,11 +269,38 @@ const (
 	// mux) via LegState-style coordination. A peer without the bit keeps striping
 	// every leg both ways.
 	CapUniDir uint16 = 1 << 7
+	// CapLegRehome: the peer supports LEG RE-HOME — moving a standby route
+	// group's whole built chain into an ACTIVE group as one of its mux legs, in
+	// place, with no setup-node dial (LegRehomePacket). When BOTH edges advertise
+	// it (and CapMux, which it requires), each edge rewrites that chain's single
+	// consume rule from the standby group's descriptor to the active group's; the
+	// descriptorless intermediate hops are untouched. It takes the bit
+	// docs/design/shared-warm-route-pool.md Phase 3 reserved, and is the
+	// incremental half of it: one chain still terminates in one consume rule, it
+	// just changes owner. A peer without the bit never receives a LegRehomePacket
+	// and the caller falls back to dialing a pool-sourced leg.
+	CapLegRehome uint16 = 1 << 8
+	// CapDeliveryCRC: the peer supports the in-mux DELIVERY check. When BOTH
+	// edges advertise it (and CapMux, which it requires), every sequenced DATA
+	// frame's payload becomes app_payload ‖ crc32c(seq_be ‖ app_payload) —
+	// DeliveryCRCSize extra bytes, stamped before the per-frame AEAD seal so a
+	// retransmit or an FEC reconstruction reproduces identical bytes. The
+	// receiver verifies and strips the trailing 4 bytes at DELIVERY time (after
+	// reordering, on the in-order path), so a reorder/flush defect that hands
+	// the app the right bytes in the wrong order is caught in the router instead
+	// of surfacing as an application hash failure. Per-frame AEAD already covers
+	// wire corruption of ONE frame; this covers the reassembled run. A peer
+	// without the bit is never stamped and never strips.
+	CapDeliveryCRC uint16 = 1 << 9
 )
 
 // SeqSize is the byte size of the sequence number prepended to DataPacket
 // payloads when mux mode is active.
 const SeqSize = 4
+
+// DeliveryCRCSize is the byte size of the CRC32C (Castagnoli) trailer appended
+// to a sequenced DATA frame's payload when CapDeliveryCRC is negotiated.
+const DeliveryCRCSize = 4
 
 // SACKMaxWords bounds the SACK bitmap to the mux reorder window: each word
 // acknowledges 64 sequences, so 32 words cover 2048 outstanding sequences —
@@ -520,6 +580,41 @@ func MakeLegStatePacket(id RouteID, standby bool) Packet {
 func (p Packet) LegStateStandby() bool {
 	payload := p.Payload()
 	return len(payload) >= LegStatePayloadSize && payload[0] == 1
+}
+
+// MakeLegRehomePacket constructs a LegRehomePacket. id is the next-hop route ID
+// of the chain being moved, so the packet rides that chain and each edge
+// identifies it by the route it arrives on. srcPort/dstPort are the SENDER's own
+// ports for the TARGET group; the receiver mirrors them onto the arriving
+// chain's PK pair to find its own side of that group, which is what confines a
+// re-home to two groups already joining the same two visors. nonce ties the
+// request, the ack and the commit of one re-home together.
+func MakeLegRehomePacket(id RouteID, nonce uint64, srcPort, dstPort Port, flags byte) Packet {
+	packet := make([]byte, PacketHeaderSize+LegRehomeSize)
+	packet[PacketTypeOffset] = byte(LegRehomePacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], LegRehomeSize)
+	p := packet[PacketPayloadOffset:]
+	binary.BigEndian.PutUint64(p[0:8], nonce)
+	p[8] = flags
+	binary.BigEndian.PutUint16(p[9:11], uint16(srcPort))
+	binary.BigEndian.PutUint16(p[11:13], uint16(dstPort))
+	return packet
+}
+
+// LegRehomeFields reads a LegRehomePacket payload. ok is false for a malformed
+// or truncated one, which the receiver drops: a re-home never proceeds on a
+// half-read instruction, since it would move a live chain to the wrong group.
+func (p Packet) LegRehomeFields() (nonce uint64, srcPort, dstPort Port, flags byte, ok bool) {
+	payload := p.Payload()
+	if len(payload) < LegRehomeSize {
+		return 0, 0, 0, 0, false
+	}
+	nonce = binary.BigEndian.Uint64(payload[0:8])
+	flags = payload[8]
+	srcPort = Port(binary.BigEndian.Uint16(payload[9:11]))
+	dstPort = Port(binary.BigEndian.Uint16(payload[11:13]))
+	return nonce, srcPort, dstPort, flags, true
 }
 
 // DirectionPacket payload modes: the direction→leg-class mapping an operator

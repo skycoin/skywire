@@ -13,6 +13,9 @@ package router
 
 import (
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,11 +26,27 @@ const (
 	// emuMB scales every rate and transfer in this file. Rates are real
 	// bytes per second, so a scenario's duration is transfer/rate.
 	emuMB = 1 << 20
-	// emuTimeout bounds one transfer. Every scenario here is designed to
-	// finish in a couple of seconds; the timeout only turns a wedge into a
-	// failed assertion instead of a hung test binary.
-	emuTimeout = 25 * time.Second
 )
+
+// emuTimeout bounds one transfer. Every scenario here is designed to finish
+// in a couple of seconds on a developer box; the timeout only turns a wedge
+// into a failed assertion instead of a hung test binary. EMU_TIMEOUT_S raises
+// it for a slower runner (CI reached 3.0 of 8.4 MB in 25 s on 2026-09-22).
+var emuTimeout = emuTimeoutFromEnv(25 * time.Second)
+
+// emuTimeoutFromEnv reads EMU_TIMEOUT_S as a float number of seconds, or
+// returns def when it is unset or unparsable.
+func emuTimeoutFromEnv(def time.Duration) time.Duration {
+	v, ok := os.LookupEnv("EMU_TIMEOUT_S")
+	if !ok {
+		return def
+	}
+	f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+	if err != nil || f <= 0 {
+		return def
+	}
+	return time.Duration(f * float64(time.Second))
+}
 
 // emuBaseline runs the same transfer over a ONE-leg rig with the given leg —
 // the "that leg alone" bar every aggregation claim is measured against.
@@ -386,5 +405,195 @@ func TestEmuTransportRemovedUnderSoleLegErrorsAtOnce(t *testing.T) {
 		}
 	case <-time.After(emuTimeout):
 		t.Fatalf("the reader was never told: %v after its group's only transport was removed it is still parked in Read", emuTimeout)
+	}
+}
+
+// emuHopLeg builds a 2-HOP leg: same shape both ways, and a transport whose
+// remote is an intermediary rather than the peer. Two of these and no direct
+// leg is the legs-2 shape of the live rig, and the shape CapUniDir's
+// direction→leg-class mapping cannot act on at all, because both classes are
+// then "multihop".
+func emuHopLeg(name string, rateBps int64, rtt time.Duration, queue int64) emuLegSpec {
+	return symmetric(name, rateBps, rtt, queue)
+}
+
+// emuFanoutEvents returns the sender-side forward_fanout / forward_confined
+// lines of a summary.
+func emuFanoutEvents(s emu.Summary) []string {
+	var out []string
+	for _, e := range s.Events {
+		if strings.Contains(e, MuxEventForwardFanout) || strings.Contains(e, MuxEventForwardConfined) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// emuFanoutPair is the leg pair both upload scenarios use: two comparable
+// 2-hop legs, no direct leg, a 1.25x latency skew well inside the default
+// unidir.fanout_max_skew.
+func emuFanoutPair() (fast, slow emuLegSpec) {
+	return emuHopLeg("hop-120ms", 3*emuMB, 120*time.Millisecond, 768*1024),
+		emuHopLeg("hop-150ms", 3*emuMB, 150*time.Millisecond, 768*1024)
+}
+
+// TestEmuUploadHeavyFansForwardOverTheLegs is the upload cell the live campaign
+// never won. With CapUniDir the client-sent direction rides ONE leg, which is
+// what keeps an interactive session on the low-latency leg — and which also
+// caps a bulk upload at that one leg's rate: bench/2026-09-18/898591982-smoke
+// measured x0.69 (10 MB) and x0.88 (50 MB) of one leg alone, with 100 % of
+// every upload row's forward bytes on a single leg. A sustained upload must
+// widen over the sibling instead of waiting on it, and say so in the events.
+//
+// The bar is 1.25x. It is not higher because the emulated rig's own ceiling is
+// not: the same 16 MB over the same pair in the DOWNLOAD direction — which has
+// always aggregated — measures x1.42, and the fan-out measures x1.35-1.52
+// across runs. The property under test is that the forward direction now
+// aggregates at all; how close to the ceiling it gets is the live rig's to say.
+func TestEmuUploadHeavyFansForwardOverTheLegs(t *testing.T) {
+	const bytes = 16 * emuMB
+	fast, slow := emuFanoutPair()
+
+	base := emuBaseline(t, fast, emuUp, bytes)
+	t.Log(base.Table())
+
+	rig := newEmuRig(t, emuOpts{Legs: []emuLegSpec{fast, slow}, Directional: true})
+	x := rig.Transfer(emuUp, bytes, emuTimeout)
+	s := rig.Summary("upload-fanout", emuUp, x)
+	ratio := 0.0
+	if base.GoodputBps() > 0 {
+		ratio = s.GoodputBps() / base.GoodputBps()
+	}
+	events := emuFanoutEvents(s)
+	s.Notes = append(s.Notes, fmt.Sprintf("upload x%.2f of the lowest-latency leg alone; fan-out events: %v", ratio, events))
+	t.Log(s.Table())
+
+	if !s.HashOK {
+		t.Errorf("upload did not complete intact: got %d/%d bytes", s.Got, s.Bytes)
+	}
+	if len(events) == 0 {
+		t.Errorf("no %s mux event: the forward direction never fanned out, so the upload was capped at one leg",
+			MuxEventForwardFanout)
+	}
+	total := s.PayloadTotal()
+	if total == 0 {
+		t.Fatal("no payload was credited to any leg")
+	}
+	if share := s.Legs[1].Share(total); share < 0.25 {
+		t.Errorf("the sibling leg carried %.1f%% of the upload — the fan-out did not stride the band", 100*share)
+	}
+	if want := 1.25 * base.GoodputBps(); s.GoodputBps() < want {
+		t.Errorf("a 16 MB upload over two comparable legs ran at %.0f B/s (x%.2f), under the 1.25x bar (%.0f B/s): the forward direction did not aggregate",
+			s.GoodputBps(), ratio, want)
+	}
+}
+
+// TestEmuUploadFanoutRevertsWhenIdle is the other half of the trade the live
+// rig rejected in #5050: the widening must not outlive the load. Once the bulk
+// upload is over the forward direction goes back to its single lowest-latency
+// leg, so the next request does not ride the slower one.
+func TestEmuUploadFanoutRevertsWhenIdle(t *testing.T) {
+	fast, slow := emuFanoutPair()
+	rig := newEmuRig(t, emuOpts{Legs: []emuLegSpec{fast, slow}, Directional: true})
+
+	up := rig.Transfer(emuUp, 16*emuMB, emuTimeout)
+	s := rig.Summary("upload-then-idle", emuUp, up)
+	t.Log(s.Table())
+	if !s.HashOK {
+		t.Fatalf("the bulk upload did not complete intact: got %d/%d bytes", s.Got, s.Bytes)
+	}
+	if len(emuFanoutEvents(s)) == 0 {
+		t.Fatalf("the bulk upload never fanned out, so there is no revert to test")
+	}
+
+	// The load is gone: a small download, then the wait the latch is entitled
+	// to (unidir.fanout_release, 2 s by default, measured from the last frame
+	// the upload placed).
+	down := rig.Transfer(emuDown, 2*emuMB, emuTimeout)
+	if !down.HashOK {
+		t.Fatalf("the download did not complete intact: got %d/%d bytes", down.Got, down.Bytes)
+	}
+	deadline := time.Now().Add(6 * time.Second)
+	for rig.A.rg.mux.forwardFanoutActive() && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if rig.A.rg.mux.forwardFanoutActive() {
+		t.Fatal("the forward direction is still fanned out 6 s after the upload ended")
+	}
+
+	before := rig.legSentBytes(rig.A)
+	req := rig.Transfer(emuUp, 256*1024, emuTimeout)
+	if !req.HashOK {
+		t.Fatalf("the request-sized upload did not complete intact: got %d/%d bytes", req.Got, req.Bytes)
+	}
+	after := rig.legSentBytes(rig.A)
+	cur := rig.A.rg.mux.confinedForwardIdx()
+	d0, d1 := after[0]-before[0], after[1]-before[1]
+	t.Logf("after the revert the request put %d B on leg 0 and %d B on leg 1 (confined leg %d)", d0, d1, cur)
+
+	if directional, flipped := rig.A.rg.mux.dirState(); !directional || flipped {
+		t.Errorf("dirState = directional %v flipped %v — the direction→class mapping moved, which the fan-out must never do",
+			directional, flipped)
+	}
+	if cur != 0 {
+		t.Errorf("the forward direction is confined to leg %d, not the lowest-latency leg 0", cur)
+	}
+	if d0 == 0 || d1 > d0/4 {
+		t.Errorf("the post-upload request put %d B on leg 0 and %d B on leg 1 — it did not go back to the lowest-latency leg alone", d0, d1)
+	}
+}
+
+// TestEmuUploadFansOffAFullDirectLeg is the compose shape: the group HAS a
+// direct leg, which is the one the forward direction sits on by class, plus a
+// multihop sibling. A heavy upload must use both once the direct leg's window
+// is full — something the direction→leg-class mapping can never arrange,
+// because a flip only ever moves the direction from one single leg to another.
+//
+// The sibling is 70 ms against the direct leg's 40 ms, inside the default
+// unidir.fanout_max_skew of 2.0. A real compose tunnel's multihop leg often
+// measures 3-4x its direct leg and stays confined at that default: the band is
+// deliberately narrow, because #5050's unconditional widening across a 44 ms /
+// 166 ms pair measured x0.24 on the live rig. Where the default belongs is a
+// question for the rig, and unidir.fanout_max_skew is where it is asked.
+//
+// The gain here is small by design and the assertions say so: ECF keeps the
+// 40 ms leg primary and the sibling takes only what its window cannot hold, so
+// the multihop leg carries ~13 % and the transfer measures x1.05. What the
+// scenario proves is that the spill HAPPENS in a group that has a direct leg —
+// the case the direction→class mapping cannot reach at all — not that it wins
+// the same aggregation two comparable legs do.
+func TestEmuUploadFansOffAFullDirectLeg(t *testing.T) {
+	const bytes = 16 * emuMB
+	direct := symmetric("direct-40ms", 4*emuMB, 40*time.Millisecond, 768*1024)
+	direct.Direct = true
+	hop := emuHopLeg("hop-70ms", 3*emuMB, 70*time.Millisecond, 768*1024)
+
+	base := emuBaseline(t, direct, emuUp, bytes)
+	t.Log(base.Table())
+
+	rig := newEmuRig(t, emuOpts{Legs: []emuLegSpec{direct, hop}, Directional: true})
+	x := rig.Transfer(emuUp, bytes, emuTimeout)
+	s := rig.Summary("upload-off-full-direct-leg", emuUp, x)
+	ratio := 0.0
+	if base.GoodputBps() > 0 {
+		ratio = s.GoodputBps() / base.GoodputBps()
+	}
+	s.Notes = append(s.Notes, fmt.Sprintf("upload x%.2f of the direct leg alone; fan-out events: %v",
+		ratio, emuFanoutEvents(s)))
+	t.Log(s.Table())
+
+	if !s.HashOK {
+		t.Errorf("upload did not complete intact: got %d/%d bytes", s.Got, s.Bytes)
+	}
+	total := s.PayloadTotal()
+	if total == 0 {
+		t.Fatal("no payload was credited to any leg")
+	}
+	if share := s.Legs[1].Share(total); share < 0.10 {
+		t.Errorf("the multihop leg carried %.1f%% of the upload — the direct leg's full window never spilled", 100*share)
+	}
+	if s.GoodputBps() < base.GoodputBps() {
+		t.Errorf("the upload ran at %.0f B/s (x%.2f) over both legs, under the direct leg alone (%.0f B/s)",
+			s.GoodputBps(), ratio, base.GoodputBps())
 	}
 }

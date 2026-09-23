@@ -204,6 +204,17 @@ func (r *RPC) GrowMuxRoute(in *MuxRouteInput, out *int) (err error) {
 	return nil
 }
 
+// GrowMuxFromPool grows an app's tunnel by `legs` legs taken from its standby pool
+func (r *RPC) GrowMuxFromPool(in *MuxRouteInput, out *int) (err error) {
+	defer rpcutil.LogCall(r.log, "GrowMuxFromPool", in)(out, &err)
+	added, err := r.visor.GrowMuxFromPool(in.AppName, in.Legs, in.MinHops, in.SrcPort)
+	if err != nil {
+		return err
+	}
+	*out = added
+	return nil
+}
+
 // RemoveMuxRoute removes a mux route from an app's active connection
 func (r *RPC) RemoveMuxRoute(in *MuxRouteInput, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "RemoveMuxRoute", in)(nil, &err)

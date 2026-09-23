@@ -156,6 +156,7 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 			Events:             info.Events,
 			Recovery:           info.Recovery,
 			TunnelRole:         info.TunnelRole,
+			AgeMS:              info.AgeMS,
 		}
 		for _, leg := range info.Legs {
 			entry.AggSentBytes += leg.SentBytes
@@ -164,30 +165,32 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 			entry.AggGoodputUpBps += leg.GoodputUpBps
 			entry.AggGoodputDownBps += leg.GoodputDownBps
 			entry.Legs = append(entry.Legs, MuxLegInfo{
-				Index:          leg.Index,
-				TransportID:    leg.TransportID,
-				TpType:         leg.TpType,
-				RemotePK:       leg.RemotePK,
-				LatencyMS:      leg.LatencyMS,
-				RouteLatencyMS: leg.RouteLatencyMS,
-				AckDelayMS:     leg.AckDelayMS,
-				InflightBytes:  leg.InflightBytes,
-				WindowBytes:    leg.WindowBytes,
-				Direct:         leg.Direct,
-				Hops:           muxHopsFrom(leg.Hops),
-				SentBytes:      leg.SentBytes,
-				SentPackets:    leg.SentPackets,
-				RecvBytes:      leg.RecvBytes,
-				RecvPackets:    leg.RecvPackets,
-				PayloadBytes:   leg.PayloadBytes,
-				DupBytes:       leg.DupBytes,
-				RepairBytes:    leg.RepairBytes,
-				Retransmits:    leg.Retransmits,
-				GoodputBps:     leg.GoodputBps,
-				GoodputUpBps:   leg.GoodputUpBps,
-				GoodputDownBps: leg.GoodputDownBps,
-				Alive:          leg.Alive,
-				Standby:        leg.Standby,
+				Index:            leg.Index,
+				TransportID:      leg.TransportID,
+				TpType:           leg.TpType,
+				RemotePK:         leg.RemotePK,
+				Source:           leg.Source,
+				LatencyMS:        leg.LatencyMS,
+				RouteLatencyMS:   leg.RouteLatencyMS,
+				AckDelayMS:       leg.AckDelayMS,
+				InflightBytes:    leg.InflightBytes,
+				WindowBytes:      leg.WindowBytes,
+				Direct:           leg.Direct,
+				Hops:             muxHopsFrom(leg.Hops),
+				SentBytes:        leg.SentBytes,
+				SentPackets:      leg.SentPackets,
+				RecvBytes:        leg.RecvBytes,
+				RecvPackets:      leg.RecvPackets,
+				PayloadBytes:     leg.PayloadBytes,
+				DupBytes:         leg.DupBytes,
+				RepairBytes:      leg.RepairBytes,
+				Retransmits:      leg.Retransmits,
+				GoodputBps:       leg.GoodputBps,
+				GoodputUpBps:     leg.GoodputUpBps,
+				GoodputDownBps:   leg.GoodputDownBps,
+				Alive:            leg.Alive,
+				Standby:          leg.Standby,
+				CapacityPriorBps: leg.CapacityPriorBps,
 			})
 		}
 		out = append(out, entry)
@@ -357,6 +360,26 @@ func (v *Visor) GrowMuxRoute(appName string, target, minHops int, rgPort uint16)
 		return 0, err
 	}
 	return v.router.GrowMuxRoute(desc, target, minHops)
+}
+
+// GrowMuxFromPool implements API. Grows the app's tunnel by `legs` additional
+// mux legs, built on the routes of the app's STANDBY tunnels to the same exit
+// instead of discovered from scratch, with today's route-finder grow as the
+// fallback for whatever the pool cannot cover (see pool_legs.go). rgPort
+// disambiguates concurrent rg's exactly as AddMuxRoute does. Returns the
+// number of legs actually added.
+func (v *Visor) GrowMuxFromPool(appName string, legs, minHops int, rgPort uint16) (int, error) {
+	if v.router == nil {
+		return 0, errors.New("router not available")
+	}
+	desc, err := v.findRouteDescForApp(appName, rgPort)
+	if err != nil {
+		return 0, err
+	}
+	// The rg is keyed receive-side, so the tunnel's own (local, dialed-from)
+	// port is the descriptor's DST port — the value `proxy mux info` prints
+	// per rg and `--tunnel` names.
+	return v.router.GrowMuxFromPool(desc.DstPort(), legs, minHops)
 }
 
 // RemoveMuxRoute implements API. Drops the leg over the given

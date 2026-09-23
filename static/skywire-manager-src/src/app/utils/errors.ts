@@ -79,9 +79,22 @@ export function processServiceError(error: any): OperationError {
   // Check if the provided error is a known API error.
   const convertedError = error as HttpErrorResponse;
   if (convertedError.status !== null && convertedError.status !== undefined) {
-    if ((convertedError.status === 0) || (convertedError.status === 504)) {
+    if (convertedError.status === 0) {
       response.type = OperationErrorTypes.NoConnection;
       response.translatableErrorMsg = 'common.no-connection-error';
+    } else if (convertedError.status === 504) {
+      // A 504 is an answer, so it is not the same event as status 0 and should
+      // not be reported as one. When the UI is served over bottle's vnet
+      // service worker, the worker itself returns 504 ("no page answered for
+      // port N") if no window client answers within its 8s budget — which
+      // happens while the one client holding the vnet port table is busy, not
+      // because any network is down. Telling the operator their internet is
+      // gone sent them looking in the wrong place entirely.
+      //
+      // Same type, so the retry behaviour is unchanged; only what the toast
+      // says is different.
+      response.type = OperationErrorTypes.NoConnection;
+      response.translatableErrorMsg = 'common.hypervisor-busy-error';
     }
   }
 

@@ -97,6 +97,15 @@ const (
 	// below it for long enough (--forward-switch-margin, two consecutive samples).
 	// A run full of these is the flapping the margin exists to stop.
 	MuxEventForwardRehomed = "forward_rehomed"
+	// MuxEventForwardFanout / ...Confined bracket the FORWARD direction's
+	// load-triggered fan-out: the leg it is confined to sat at its send window
+	// for unidir.fanout_engage without a break and a sibling within
+	// unidir.fanout_max_skew took the overflow, and later the load subsided and
+	// the direction went back to the one leg. An upload that never raises one is
+	// an upload that fitted on a single leg — the confinement working, not the
+	// aggregation missing.
+	MuxEventForwardFanout   = "forward_fanout"
+	MuxEventForwardConfined = "forward_confined"
 	// MuxEventReorderWedge / ...Cleared bracket a RECEIVE-side reorder wedge:
 	// the frontier held past reorderTimeout because the sender's retransmit
 	// never refilled the missing sequence, and then it advanced again. Whole-
@@ -110,6 +119,14 @@ const (
 	// exclusions, candidate filtering, the chosen first hop), so a tunnel that
 	// shares a first hop with its siblings says why, from `visor state`.
 	MuxEventDialDecision = "dial_decision"
+
+	// MuxEventPoolLegTaken / ...Released bracket the standby-pool arbiter's dual
+	// use of a pooled tunnel (pool_arbiter.go): a LOADED active tunnel took a
+	// pooled chain as one more packet-level mux leg, and gave it back when the
+	// load was gone. The Reason names the load signal and the standby tunnel's
+	// own port, so a leg that is not the group's own dial says where it is from.
+	MuxEventPoolLegTaken    = "pool_leg_taken"
+	MuxEventPoolLegReleased = "pool_leg_released"
 
 	// The TUNNEL-level counterparts of the leg events above, decided by the
 	// APP that holds the tunnels (the skysocks standby pool) and reported into
@@ -126,6 +143,13 @@ const (
 	MuxEventTunnelPromoted = "tunnel_promoted"
 	MuxEventTunnelParked   = "tunnel_parked"
 	MuxEventTunnelRetired  = "tunnel_retired"
+	// MuxEventTunnelConsumed is a standby tunnel SPENT rather than lost: its
+	// whole built chain was re-homed into an active group as one more mux leg
+	// (leg_rehome.go), so the tunnel's own route group closed on purpose. The
+	// distinction matters to the app: a death re-arms the redial backoff and the
+	// pool fill, and doing that for a tunnel nobody lost is a redial storm. The
+	// Reason names the group the chain went to.
+	MuxEventTunnelConsumed = "tunnel_consumed"
 	// MuxEventTunnelSnubbed / ...Unsnubbed bracket a QUEUE-AWARE no-progress
 	// sit-out, borrowed from bittorrent: a tunnel holding outstanding chunks
 	// that has delivered no byte and no ack for its snub bound is snubbed, its
@@ -286,6 +310,23 @@ func (rg *RouteGroup) noteForwardRehome(prev, next int, tp *transport.ManagedTra
 	rg.noteLegEvent(MuxEventForwardRehomed, reason, MuxByAdaptive, next, legs, tp, nil)
 }
 
+// noteForwardFanout records the FORWARD direction fanning out over its sibling
+// legs under load, or returning to its single leg (MuxEventForwardFanout /
+// MuxEventForwardConfined). Wired into the mux as SetForwardFanoutFn, which is
+// called both from the writer (no locks held) and from the send path (rg.mu
+// held) — noteMuxEvent takes no locks, and legCount would, so the leg count is
+// read from the event's own leg index only.
+func (rg *RouteGroup) noteForwardFanout(on bool, idx int, reason string) {
+	kind := MuxEventForwardConfined
+	if on {
+		kind = MuxEventForwardFanout
+		globalMuxCounters.forwardFanoutEngaged.Add(1)
+	} else {
+		globalMuxCounters.forwardFanoutReleased.Add(1)
+	}
+	rg.noteMuxEvent(MuxEvent{Event: kind, Reason: reason, By: MuxByAdaptive, LegIndex: idx})
+}
+
 // noteLegProbeRuling records a leg being cut to a probe per window, or restored
 // to a full share (see routeMux.ruleProbeOnlyLegsLocked). Wired into the mux as
 // SetLegProbeRulingFn, so it is called from the window-refresh service with the
@@ -309,6 +350,9 @@ func (rg *RouteGroup) noteLegProbeRuling(idx, legs int, tp *transport.ManagedTra
 func (rg *RouteGroup) noteTunnelEvent(kind, reason string) {
 	if rg == nil {
 		return
+	}
+	if kind == MuxEventTunnelPromoted {
+		globalMuxCounters.tunnelPromotions.Add(1)
 	}
 	rg.mu.Lock()
 	var tp *transport.ManagedTransport

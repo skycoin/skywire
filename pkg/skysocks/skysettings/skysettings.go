@@ -81,6 +81,8 @@ const (
 
 	TunnelAuditionWindow   = "tunnel.audition_window"
 	TunnelAuditionEvery    = "tunnel.audition_every"
+	TunnelAuditionParallel = "tunnel.audition_parallel"
+	TunnelPriorRefresh     = "tunnel.prior_refresh"
 	TunnelExitOpenPenalty  = "tunnel.exit_open_penalty"
 	TunnelMeterSampleMin   = "tunnel.meter_sample_min"
 	TunnelMeterCapDecay    = "tunnel.meter_cap_decay"
@@ -90,6 +92,9 @@ const (
 	TunnelDepthMargin      = "tunnel.depth_margin"
 	TunnelCount            = "tunnel.count"
 	TunnelGroupDialCeiling = "tunnel.group_dial_ceiling"
+	TunnelRTTMinWindow     = "tunnel.rtt_min_window"
+	TunnelRTTSamplesCap    = "tunnel.rtt_samples_cap"
+	TunnelFreezeActive     = "tunnel.freeze_active"
 
 	MuxCap   = "mux.cap"
 	MuxWidth = "mux.width"
@@ -270,6 +275,10 @@ func init() {
 		"how long an audition offer stands before it expires")
 	register(TunnelAuditionEvery, KindDuration, int64(60*time.Second),
 		"minimum gap between two auditions of the same tunnel")
+	register(TunnelAuditionParallel, KindCount, 3,
+		"how many standby tunnels may audition AT ONCE while nothing is busy; one at a time measured a pool of eight in eight minutes of idleness, longer than the gap between two transfers ever is")
+	register(TunnelPriorRefresh, KindDuration, int64(30*time.Second),
+		"how often the app re-reads its tunnels' capacity PRIOR (the per-hop transport throughput) from the visor")
 	register(TunnelExitOpenPenalty, KindDuration, int64(10*time.Second),
 		"how long a tunnel sits out the picks after an exit open timed out")
 	register(TunnelMeterSampleMin, KindDuration, int64(500*time.Millisecond),
@@ -301,6 +310,13 @@ func init() {
 	// and is not bounded by this; nor is an explicit --routed.
 	register(TunnelGroupDialCeiling, KindDuration, int64(20*time.Second),
 		"how long the first tunnel may spend forming a route group before the dial decays to a direct session")
+
+	register(TunnelRTTMinWindow, KindDuration, int64(30*time.Second),
+		"how far back the promoter's minimum-RTT statistic looks; matches tunnel.park_min_hold so a tunnel must look worse for at least as long as a park lasts before one is taken")
+	register(TunnelRTTSamplesCap, KindCount, 64,
+		"most raw ping samples kept per tunnel in the minimum-RTT window")
+	register(TunnelFreezeActive, KindBool, boolVal(false),
+		"hold the ACTIVE set's membership still: the promoter makes no discretionary promotion or park. A dead active tunnel is still failed over, and pool.freeze's own hold (which also stops the pool filling or shrinking) is independent of this one")
 
 	// Per-APP mux width. The visor-wide adaptive ceiling and floor
 	// (`proxy mux cap|width --visor-wide`) remain the default for every app
@@ -379,13 +395,13 @@ func init() {
 	register(UploadBurstPlan, KindBool, boolVal(true),
 		"place a striped upload whose chunks are ALL admitted at once by measured upload capacity and RTT, keeping the object's last chunk off the slow route")
 
-	// The spread policy (docs/design/route-spread-policy.md). Every default is
-	// OFF: max_share 1.0 caps nothing, min_routes 0 asks for no floor, endgame
-	// is false and the weight is the capacity-proportional one, which is what
-	// the chunk assignment already aims at.
-	register(SpreadMaxShare, KindRatio, ratio(1.0),
+	// The spread policy (docs/design/route-spread-policy.md). The cap and the floor
+	// ship ON — max_share 0.4 over at least 3 routes, the values criterion 10 was
+	// measured with (2026-09-18) — endgame stays off and the weight is the
+	// capacity-proportional one, which is what the chunk assignment already aims at.
+	register(SpreadMaxShare, KindRatio, ratio(0.4),
 		"largest fraction of one object's bytes any single route may carry (1 = uncapped)")
-	registerZeroable(SpreadMinRoutes, 0,
+	registerZeroable(SpreadMinRoutes, 3,
 		"routes an object must be spread over, promoting standbys to reach it (0 = no floor)")
 	register(SpreadEndgame, KindBool, boolVal(false),
 		"duplicate the last chunks on the fastest idle route and take the first to finish")

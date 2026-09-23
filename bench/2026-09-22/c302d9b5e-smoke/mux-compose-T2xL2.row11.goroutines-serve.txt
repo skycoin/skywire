@@ -1,0 +1,8 @@
+goroutine 442 [runnable]:
+github.com/skycoin/skywire/pkg/router.(*router).handleTransportPacket(0x1380aaaa8800?, {0x9e5c2f8?, 0x1380adc0e6e0?}, {0x1380c5a64468?, 0x17?, 0x18?})
+	/home/d0mo/go/src/github.com/0magnet/skywire/pkg/router/router_packet.go:36 +0x2b7
+github.com/skycoin/skywire/pkg/router.(*router).serveTransportManager(0x1380aaaa8800, {0x9e5c2f8, 0x1380adc0e6e0})
+	/home/d0mo/go/src/github.com/0magnet/skywire/pkg/router/router_serve.go:184 +0xd9
+created by github.com/skycoin/skywire/pkg/router.(*router).Serve in goroutine 127
+	/home/d0mo/go/src/github.com/0magnet/skywire/pkg/router/router_serve.go:143 +0x777
+

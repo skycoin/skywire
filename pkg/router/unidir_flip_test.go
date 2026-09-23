@@ -3,6 +3,7 @@ package router
 
 import (
 	"testing"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -63,5 +64,53 @@ func TestFlipStep(t *testing.T) {
 		if _, c := m3.flipStep(flipMinGoodputDefault/2, 1); c {
 			t.Fatal("flipped on sub-floor idle traffic")
 		}
+	}
+}
+
+// TestForwardFanoutStep drives the forward fan-out latch with a synthetic
+// clock: an episode of full send windows engages it after the engage interval
+// and survives the gaps a rate-limited leg leaves, and only a whole release
+// interval with nothing written puts the direction back on its one leg.
+func TestForwardFanoutStep(t *testing.T) {
+	const (
+		engage  = 300 * time.Millisecond
+		release = 2 * time.Second
+		ms      = int64(time.Millisecond)
+		// A real caller passes time.Now().UnixNano(); 0 is the latch's "no
+		// episode" sentinel, so the synthetic clock starts where a real one is.
+		t0 = int64(1) << 60
+	)
+	m := newRouteMux(logging.NewMasterLogger().PackageLogger("fanout-test"), true)
+
+	// A full window that has not lasted the engage interval decides nothing.
+	if on, changed := m.forwardFanoutStep(t0, true, engage, release); on || changed {
+		t.Fatalf("the first full window engaged the fan-out: on=%v changed=%v", on, changed)
+	}
+	if on, changed := m.forwardFanoutStep(t0+200*ms, true, engage, release); on || changed {
+		t.Fatalf("200 ms of full window engaged the fan-out: on=%v changed=%v", on, changed)
+	}
+	// A gap inside the release interval does NOT restart the episode — a
+	// rate-limited leg fills and drains many times a second.
+	if on, changed := m.forwardFanoutStep(t0+250*ms, false, engage, release); on || changed {
+		t.Fatalf("a gap engaged or released the fan-out: on=%v changed=%v", on, changed)
+	}
+	if on, changed := m.forwardFanoutStep(t0+310*ms, true, engage, release); !on || !changed {
+		t.Fatalf("the episode reached the engage interval without engaging: on=%v changed=%v", on, changed)
+	}
+	// Held while the writer keeps going, even across gaps.
+	for _, at := range []int64{1000, 2500, 4000} {
+		if on, changed := m.forwardFanoutStep(t0+at*ms, true, engage, release); !on || changed {
+			t.Fatalf("the fan-out did not hold at %d ms: on=%v changed=%v", at, on, changed)
+		}
+	}
+	// A whole release interval with nothing written ends it, once.
+	if on, changed := m.forwardFanoutStep(t0+5000*ms, false, engage, release); !on || changed {
+		t.Fatalf("the fan-out released 1 s into a 2 s release interval: on=%v changed=%v", on, changed)
+	}
+	if on, changed := m.forwardFanoutStep(t0+6100*ms, false, engage, release); on || !changed {
+		t.Fatalf("the fan-out did not release after the release interval: on=%v changed=%v", on, changed)
+	}
+	if on, changed := m.forwardFanoutStep(t0+6200*ms, false, engage, release); on || changed {
+		t.Fatalf("the release repeated: on=%v changed=%v", on, changed)
 	}
 }

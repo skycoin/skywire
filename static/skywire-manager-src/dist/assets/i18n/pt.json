@@ -7,6 +7,7 @@
     "loading-error": "Ocorreu um erro ao obter os dados. Tentando novamente...",
     "operation-error": "Ocorreu um erro ao tentar concluir a operação.",
     "no-connection-error": "Não há conexão com a Internet ou conexão com o Hypervisor.",
+    "hypervisor-busy-error": "O Hypervisor não respondeu a tempo.",
     "error": "Erro:",
     "refreshed": "Dados atualizados.",
     "options": "Opções",

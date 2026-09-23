@@ -121,6 +121,7 @@ var (
 	embRouteSetup vinit.Module
 	// Embedded dmsgweb resolver (localhost SOCKS5 for .dmsg browsing)
 	embDmsgWeb vinit.Module
+	embWisp    vinit.Module
 	// Clearnet HTTP forward-proxy over dmsg (opt-in, whitelist-gated)
 	embFwdProxy vinit.Module
 	// Embedded skynetweb resolver (localhost SOCKS5 for .skynet browsing)
@@ -202,6 +203,11 @@ func registerModules(logger *logging.MasterLogger) {
 	embDmsgWeb = maker("embedded_dmsgweb", initEmbeddedDmsgWeb, &dmsgC)
 	embFwdProxy = maker("dmsg_forward_proxy", initDmsgForwardProxy, &dmsgC)
 	embSkymailBridge = maker("embedded_skymail_bridge", initEmbeddedSkymailBridge, &dmsgC)
+	// The embedded Wisp server needs nothing from the mesh at init: its
+	// egress is dialed per stream, so it binds its vnet port immediately and
+	// a page can connect before any route exists. launch is the dependency
+	// only so the skysocks-client it dials has had its chance to bind first.
+	embWisp = maker("embedded_wisp", initEmbeddedWisp, &launch)
 	// routerListener pre-opens DmsgAwaitSetupPort the moment dmsgC is
 	// ready so peers dialing it during the rt-init window (held up by
 	// &tr) don't hit "request has no associated listener". rt picks up
@@ -306,7 +312,7 @@ func registerModules(logger *logging.MasterLogger) {
 	// transport). See init_sd_reg_cxo.go.
 	sdRegCXOMod = maker("sd_reg_cxo", initSDRegCXO, &disc, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &ptyModule,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgSrv, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &embResolvers, &meshProxy, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod, &coinNodesMod, &regCXOMod, &arBindCXOMod, &sdRegCXOMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgSrv, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &embResolvers, &meshProxy, &embSkymailBridge, &embWisp, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod, &coinNodesMod, &regCXOMod, &arBindCXOMod, &sdRegCXOMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.

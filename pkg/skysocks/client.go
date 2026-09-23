@@ -290,14 +290,30 @@ type Client struct {
 	// The idle capacity audition. A standby tunnel has an RTT but never a
 	// capacity — tunnelMeter.sample only learns from a window in which the
 	// tunnel carried streams (#4965) — so the promoter's own statistic can
-	// never be checked against throughput. audition names the one standby
-	// tunnel allowed to take the next LONE stream while nothing else is busy,
-	// auditionUntil bounds the offer, and auditionedAt rate-limits how often
-	// one tunnel is offered. No extra bytes are moved: a stream that was
-	// going to be carried anyway is carried by a different tunnel.
-	audition      *yamux.Session
-	auditionUntil time.Time
-	auditionedAt  map[*yamux.Session]time.Time
+	// never be checked against throughput. auditions holds every standby
+	// tunnel currently allowed to take the next SIBLING stream, each mapped to
+	// the instant its offer expires; auditionedAt rate-limits how often one
+	// tunnel is offered. No extra bytes are moved: a stream that was going to
+	// be carried anyway is carried by a different tunnel.
+	//
+	// Up to tunnel.audition_parallel offers may stand at once. One at a time
+	// measured the pool at one tunnel per tunnel.audition_every (60 s), so a
+	// pool of eight took eight minutes of idleness to measure — longer than
+	// the gap between transfers ever is, which is how the spread policy kept
+	// finding unmeasured routes to promote. The rails are unchanged: offers
+	// are armed only while NOTHING is busy, taken only by a sibling stream,
+	// one stream per offer, one offer per tunnel per tunnel.audition_every.
+	auditions    map[*yamux.Session]time.Time
+	auditionedAt map[*yamux.Session]time.Time
+
+	// appProxyStatus PULLS the visor's rich per-tunnel snapshot, which is where
+	// a tunnel's capacity PRIOR comes from (the per-hop transport throughput
+	// the app cannot see for itself). Indirected like appSettings so a test can
+	// drive it without an app RPC, and nil wherever there is no visor to ask.
+	// priorsAt is when the last pull ran; it is touched only by the keepalive
+	// loop, like settingsApplied.
+	appProxyStatus func() (proxystatus.Snapshot, error)
+	priorsAt       time.Time
 }
 
 // tunnelNote is one queued mux event on its way to the visor.
@@ -319,6 +335,28 @@ const (
 	// carrying no streams while an active tunnel is live.
 	TunnelRoleStandby = "standby"
 )
+
+// DialTunnelRole is the role the app stamps on ONE dial, and the only place
+// that decision is made — the app's dial helper (cmd/apps/skysocks-client) and
+// this package's own tests read the same function.
+//
+// It must be right at DIAL time rather than at the first report: a role-less
+// group is a group the visor cannot place, and the router now refuses to widen
+// one at all (pool_arbiter.go poolWideningAllowed). Every dial that fills or
+// refills the ACTIVE set is active; every standby-pool fill is standby.
+//
+// tunnels is --tunnels, routed is --routed, standby marks a pool fill. A
+// single-tunnel session that never asked for a route group gets no role: it
+// has no pool and nothing to arbitrate.
+func DialTunnelRole(tunnels int, routed, standby bool) string {
+	if standby {
+		return TunnelRoleStandby
+	}
+	if tunnels > 1 || routed {
+		return TunnelRoleActive
+	}
+	return ""
+}
 
 // streamMeta is the per-stream detail the status page surfaces for an open
 // tunneled stream. sent/recv are pointers so the map-by-value copy shares the one
@@ -507,6 +545,20 @@ type tunnelMeter struct {
 	gpBps  float64
 	gpAt   time.Time
 	gpWins int
+	// priorBps is the tunnel's capacity PRIOR: what its route can be expected
+	// to carry from the transports it is built out of, before it has carried
+	// anything itself. It is the min over the tunnel's hops of each hop
+	// transport's observed peak goodput, taken over the tunnel's best leg
+	// (tunnelPriorBps), and it arrives from the visor over the ProxyStatus RPC
+	// — the app cannot see a transport, only the visor can.
+	//
+	// It is NOT a measurement and never becomes one: the moment a busy window
+	// gives the tunnel a real rxCapBps/txCapBps, that is what every caller
+	// reads and the prior is only the fallback again. Its whole job is to stop
+	// an unmeasured standby from being credited the best capacity present —
+	// the defect that let the spread policy promote a route that had never
+	// carried a byte and then weigh it like the fastest one.
+	priorBps float64
 	// snubC is closed while the tunnel is snubbed and replaced on un-snub, so a
 	// chunk in flight on the tunnel can select on the snub the way it selects
 	// on the session dying. Guarded by mu like the rest of this block.
@@ -693,6 +745,19 @@ func (m *tunnelMeter) goodput(now time.Time) (bps float64, ok bool) {
 	return m.gpBps, true
 }
 
+// goodputAt is when the tunnel's delivered-goodput estimate last moved; a zero
+// time means it never has. It is the age the parallel audition rotates on:
+// with several offers standing at once, the standby whose last measurement is
+// oldest is the one whose number is least worth trusting.
+func (m *tunnelMeter) goodputAt() time.Time {
+	if m == nil {
+		return time.Time{}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.gpAt
+}
+
 // capacityTx returns the tunnel's proven UPLOAD capacity in bytes/s — what a
 // striped-upload chunk will use. 0 means nothing proven yet. fresh says whether
 // a busy window updated the estimate within meterFresh of now.
@@ -711,6 +776,56 @@ func (m *tunnelMeter) capacityDir(now time.Time, up bool) (bps float64, fresh bo
 		return m.capacityTx(now)
 	}
 	return m.capacity(now)
+}
+
+// setPrior installs the tunnel's capacity prior (bytes/s; <= 0 clears it).
+func (m *tunnelMeter) setPrior(bps float64) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	if bps < 0 {
+		bps = 0
+	}
+	m.priorBps = bps
+	m.mu.Unlock()
+}
+
+// prior returns the tunnel's capacity prior, 0 when it has none.
+func (m *tunnelMeter) prior() float64 {
+	if m == nil {
+		return 0
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.priorBps
+}
+
+// capacityOrPrior is what a planner and the promoter read: the tunnel's proven
+// capacity in dir when a busy window has produced one, and its PRIOR when none
+// has.
+//
+// The three returns are the whole distinction the spread planner needs:
+//
+//   - bps > 0, prior == false: a measurement. fresh says whether a busy window
+//     updated it within tunnel.meter_fresh.
+//   - bps > 0, prior == true (fresh is then always false): no busy window has
+//     ever sampled this tunnel, and this is what its transports say it should
+//     manage. Weigh a share by it — but never mistake it for evidence.
+//   - bps == 0: nothing measured and no prior. This is the route the planner
+//     owes exactly one probe chunk and nothing more.
+func (m *tunnelMeter) capacityOrPrior(now time.Time, up bool) (bps float64, fresh, prior bool) {
+	if m == nil {
+		return 0, false, false
+	}
+	bps, fresh = m.capacityDir(now, up)
+	if bps > 0 {
+		return bps, fresh, false
+	}
+	if p := m.prior(); p > 0 {
+		return p, false, true
+	}
+	return 0, false, false
 }
 
 // pickDir is what a new stream will mostly do, for pickSessionFor.
@@ -838,6 +953,7 @@ func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 	if appCl != nil {
 		c.muxNote = appCl.NoteMuxEvent
 		c.appSettings = appCl.AppSettings
+		c.appProxyStatus = appCl.ProxyStatus
 	}
 	c.startMuxNotes()
 
@@ -1277,9 +1393,7 @@ func (c *Client) promoteBestStandby(reason string) *yamux.Session {
 	}
 	if best != nil {
 		delete(c.standby, best)
-		if c.audition == best {
-			c.audition = nil
-		}
+		delete(c.auditions, best)
 	}
 	c.sessionsMu.Unlock()
 	if best == nil {
@@ -1300,7 +1414,7 @@ func (c *Client) notePromoted(s *yamux.Session, reason string) *yamux.Session {
 }
 
 // promoteFastestStandby is promoteBestStandby for a SPREAD: the tunnel picked
-// is the standby with the highest measured capacity in dir, not the lowest RTT.
+// is the standby with the best CAPACITY in dir, not the lowest RTT.
 //
 // The distinction is the second half of the 5.13 vs 8.23 MB/s row. min_routes
 // promoted through the RTT rank, and the fastest standby of that run — the one
@@ -1310,17 +1424,29 @@ func (c *Client) notePromoted(s *yamux.Session, reason string) *yamux.Session {
 // statistic the planner itself assigns on (spreadCandidates), so the set it is
 // handed is now chosen on it too.
 //
-// A standby that has never carried bytes has no capacity sample, and a benched
-// one is not a candidate at all: with neither available this falls straight
-// back to promoteBestStandby, so the FAILOVER ranking is untouched — it is
-// still what runs when nothing has been measured, and it is still what the
-// failover paths call directly.
+// The rank is three tiers, and the tiers matter more than the numbers inside
+// them:
+//
+//  1. MEASURED. A standby with a busy-window capacity sample in dir, highest
+//     first. Evidence beats everything.
+//  2. PRIOR. No sample, but its hops' transports say what it should manage
+//     (tunnelMeter.priorBps), highest first. A guess from real transport
+//     throughput is worth more than a ping and less than a byte.
+//  3. NEITHER. Nothing measured and no prior: last, ranked among themselves on
+//     RTT. This is the tier the spread policy used to promote FIRST, by
+//     crediting an unmeasured route the best capacity present.
+//
+// A benched standby (its exit open timed out) is no candidate at all. With
+// every candidate in tier 3 this falls straight back to promoteBestStandby, so
+// the FAILOVER ranking is untouched — it is still what runs when nothing is
+// known, and it is still what the failover paths call directly.
 func (c *Client) promoteFastestStandby(dir spreadDir, reason string) *yamux.Session {
 	now := time.Now()
 	c.sessionsMu.Lock()
 	var (
-		best    *yamux.Session
-		bestBps float64
+		best     *yamux.Session
+		bestTier = 3
+		bestBps  float64
 	)
 	for _, s := range c.sessions {
 		if s == nil || s.IsClosed() || !c.standby[s] {
@@ -1330,21 +1456,21 @@ func (c *Client) promoteFastestStandby(dir spreadDir, reason string) *yamux.Sess
 		if m == nil || m.onBench(now) {
 			continue
 		}
-		var bps float64
-		if dir == spreadUp {
-			bps, _ = m.capacityTx(now)
-		} else {
-			bps, _ = m.capacity(now)
+		bps, _, isPrior := m.capacityOrPrior(now, dir == spreadUp)
+		if bps <= 0 {
+			continue // tier 3: promoteBestStandby's RTT rank owns these
 		}
-		if bps > bestBps {
-			best, bestBps = s, bps
+		tier := 1
+		if isPrior {
+			tier = 2
+		}
+		if tier < bestTier || (tier == bestTier && bps > bestBps) {
+			best, bestTier, bestBps = s, tier, bps
 		}
 	}
 	if best != nil {
 		delete(c.standby, best)
-		if c.audition == best {
-			c.audition = nil
-		}
+		delete(c.auditions, best)
 	}
 	c.sessionsMu.Unlock()
 	if best == nil {
@@ -1420,6 +1546,18 @@ func (c *Client) parkTunnel(s *yamux.Session, reason string) bool {
 // c.sessions holds sessionsMu for the whole read and none of them keeps an
 // index across the lock, so compacting here desynchronises nothing.
 func (c *Client) retireTunnel(s *yamux.Session, reason string) bool {
+	return c.retireTunnelAs(s, reason, router.MuxEventTunnelRetired, true)
+}
+
+// retireTunnelAs is retireTunnel with the two things a DEATH implies made
+// explicit, because a tunnel can also leave for a reason that is not a death:
+// event is what goes in the router's ring, and replace says whether to treat
+// the departure as a loss — reset the redial backoff and arm a pool fill. A
+// tunnel the router CONSUMED (its chain re-homed into an active group as a mux
+// leg, docs/design/leg-rehome.md) is spent, not lost: nothing needs replacing
+// in a hurry, and arming the fill for it is a redial storm for a tunnel the
+// operator deliberately spent.
+func (c *Client) retireTunnelAs(s *yamux.Session, reason, event string, replace bool) bool {
 	if s == nil {
 		return false
 	}
@@ -1443,7 +1581,7 @@ func (c *Client) retireTunnel(s *yamux.Session, reason string) bool {
 
 	_ = s.Close() //nolint:errcheck
 	c.forgetTunnel(s)
-	c.queueTunnelNote(port, router.MuxEventTunnelRetired, reason, "")
+	c.queueTunnelNote(port, event, reason, "")
 	// The death itself re-arms the fill and the re-dial backoff. The keepalive
 	// loop's level check (live < prevLive across two 15 s ticks) is a backstop,
 	// not the trigger: a death whose replacement lands inside the same window
@@ -1462,8 +1600,10 @@ func (c *Client) retireTunnel(s *yamux.Session, reason string) bool {
 	// after the death, which is about what the freed hop needs to come back.
 	// Liveness never waits on this: the failover promote below is immediate and
 	// this only schedules a dial that GROWS the pool.
-	c.resetRedialBackoff()
-	c.armPoolFillAfter(c.probeInterval)
+	if replace {
+		c.resetRedialBackoff()
+		c.armPoolFillAfter(c.probeInterval)
+	}
 	if !wasStandby {
 		c.promoteBestStandby("failover: active tunnel died")
 	}
@@ -2153,6 +2293,33 @@ func (c *Client) totalStreams() int {
 	return total
 }
 
+// tunnelStreamCounts is totalStreams broken out PER TUNNEL, keyed by the local
+// port tunnelLocalPort recorded for each session — the same name the visor's
+// proxystatus.Tunnel.LocalPort carries, so statusSnapshot can overlay a live
+// stream count onto the tunnel the visor already described. A session with no
+// recorded port (0; never an app conn) is skipped: 0 would collide across every
+// such session, and none of them can be matched to a Tunnel anyway.
+func (c *Client) tunnelStreamCounts() map[routing.Port]int {
+	sessions := c.snapshotSessions()
+	if len(sessions) == 0 {
+		return nil
+	}
+	out := make(map[routing.Port]int, len(sessions))
+	for _, s := range sessions {
+		if s == nil || s.IsClosed() {
+			continue
+		}
+		c.sessionsMu.Lock()
+		m := c.recvStamp[s]
+		c.sessionsMu.Unlock()
+		if m == nil || m.port == 0 {
+			continue
+		}
+		out[m.port] = s.NumStreams()
+	}
+	return out
+}
+
 // ListenAndServe start tcp listener on addr and proxies incoming
 // connection to a remote proxy server.
 func (c *Client) ListenAndServe(addr string) error {
@@ -2387,6 +2554,11 @@ func (c *Client) sessionKeepAliveLoop() {
 				snubTicker.Reset(snubTick())
 				ticker.Reset(c.livenessInterval())
 			}
+			// ...and so does the capacity-prior pull, on its own slower
+			// cadence: a standby tunnel carries nothing, so the only thing
+			// that can say what it might carry is the visor's per-hop
+			// transport throughput.
+			c.pullCapacityPriors(time.Now())
 			// Refresh every live tunnel's RTT, at most one probe outstanding per
 			// tunnel: a ping wedged behind a reorder gap must not pile up.
 			for _, s := range c.snapshotSessions() {
@@ -2700,6 +2872,17 @@ func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool, target 
 	}
 	req = append(req, portB...)
 	port := int(portB[0])<<8 | int(portB[1])
+
+	// UDP ASSOCIATE: the address just parsed is where the application says
+	// it will send datagrams FROM, not a destination, so neither the status
+	// host nor the exit's CONNECT path applies. The association is answered
+	// here and its datagrams ride this stream (udp.go). The CONNECT path
+	// below is untouched — this is the only command that diverges.
+	if rhdr[1] == cmdUDPAssociate {
+		clearDeadlines(conn, stream)
+		c.serveUDPAssociate(conn, stream)
+		return false, ""
+	}
 
 	// Reserved status host: serve the in-process page over HTTP. This is reached
 	// with NO exit involvement, so status.skysocks stays reachable when the exit is
@@ -3479,6 +3662,19 @@ func (c *Client) statusSnapshot() proxystatus.Snapshot {
 		if rgRTT := representativeRouteRTT(snap.Legs); rgRTT > 0 {
 			for i := range snap.Streams {
 				snap.Streams[i].LatencyMS = rgRTT
+			}
+		}
+		// Per-tunnel open-stream counts: the visor-built base above has no
+		// yamux session to read one from, so overlay it here from this
+		// process's own sessions, matched by the local port both sides
+		// already name the tunnel by.
+		if counts := c.tunnelStreamCounts(); len(counts) > 0 {
+			for i := range snap.Tunnels {
+				if port := routing.Port(snap.Tunnels[i].LocalPort); port != 0 {
+					if n, ok := counts[port]; ok {
+						snap.Tunnels[i].OpenStreams = n
+					}
+				}
 			}
 		}
 	} else {

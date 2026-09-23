@@ -69,6 +69,21 @@ type emuOpts struct {
 	HolRetx bool
 	// LegState negotiates CapLegState (park/promote mirrored to the peer).
 	LegState bool
+	// LegRehome negotiates CapLegRehome (a standby group's whole chain can be
+	// adopted as one of this group's mux legs in place — leg_rehome.go).
+	LegRehome bool
+	// SrcPort/DstPort are the group's ports. Zero means the defaults (1/2).
+	// A SECOND rig between the same two ends needs its own pair, exactly as two
+	// tunnels of one app do.
+	SrcPort, DstPort routing.Port
+	// RidBase offsets every route ID this rig reserves, so a second rig sharing
+	// an end's routing table does not collide with the first.
+	RidBase int
+	// Shared, when set, makes this rig use another rig's routing tables and
+	// register its groups with that rig's per-end dispatcher, so both rigs'
+	// chains are dispatched BY RULE at each end. That is what lets a chain move
+	// from one group to the other and keep being delivered (see emuHost).
+	Shared *emuShared
 	// Liveness starts the leg-liveness and data-progress service loops, the
 	// ones that demote and prune a leg that stops carrying. Off by default:
 	// they take tens of seconds to rule, so only a failover scenario wants
@@ -82,8 +97,68 @@ type emuOpts struct {
 type emuEnd struct {
 	rg    *RouteGroup
 	rt    routing.Table
+	host  *emuHost
 	conns []*emu.Conn
 	tps   []*transport.ManagedTransport
+}
+
+// emuHost is one visor's packet dispatch for a rig set: the routing table and
+// the descriptor→group map the real router keeps (router_packet.go
+// dispatchToRouteGroup). A single-rig scenario does not need it — every frame
+// on a leg belongs to that rig's only group — but a chain that is RE-HOMED from
+// one group to another stops being dispatchable by "which rig owns the conn",
+// which is exactly the property leg_rehome.go changes. Also serves as the
+// legRehomeHost the exit uses to resolve the target group.
+type emuHost struct {
+	mu     sync.Mutex
+	rt     routing.Table
+	groups map[routing.RouteDescriptor]*RouteGroup
+}
+
+func newEmuHost(rt routing.Table) *emuHost {
+	return &emuHost{rt: rt, groups: make(map[routing.RouteDescriptor]*RouteGroup)}
+}
+
+func (h *emuHost) register(rg *RouteGroup) {
+	h.mu.Lock()
+	h.groups[rg.desc] = rg
+	h.mu.Unlock()
+}
+
+// rehomeGroupFor implements legRehomeHost.
+func (h *emuHost) rehomeGroupFor(desc routing.RouteDescriptor) *RouteGroup {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.groups[desc]
+}
+
+// dispatch routes one frame the way the router does: rule by route ID,
+// descriptor from the rule, group from the descriptor.
+func (h *emuHost) dispatch(pkt routing.Packet) {
+	rule, err := h.rt.Rule(pkt.RouteID())
+	if err != nil || rule == nil {
+		return
+	}
+	if t := rule.Type(); t != routing.RuleReverse && t != routing.RuleForward {
+		return
+	}
+	if rg := h.rehomeGroupFor(rule.RouteDescriptor()); rg != nil {
+		_ = rg.handlePacket(pkt) //nolint:errcheck // a dropped packet is the SACK layer's problem
+	}
+}
+
+// emuShared is the pair of per-end hosts two rigs between the same two visors
+// share. Build one with newEmuShared and pass it to both rigs' emuOpts.
+type emuShared struct {
+	A, B *emuHost
+}
+
+// newEmuShared builds the two hosts (one per end) a rig set shares.
+func newEmuShared(ml *logging.MasterLogger) *emuShared {
+	return &emuShared{
+		A: newEmuHost(routing.NewTable(ml.PackageLogger("emu-rt-a"))),
+		B: newEmuHost(routing.NewTable(ml.PackageLogger("emu-rt-b"))),
+	}
 }
 
 // emuRig is a running two-endpoint emulated group.
@@ -204,17 +279,35 @@ func newEmuRig(t *testing.T, opts emuOpts) *emuRig {
 	rig := &emuRig{t: t, legs: opts.Legs, stop: make(chan struct{})}
 
 	// A is the INITIATOR (src), B the ACCEPTOR (dst).
-	rtA := routing.NewTable(ml.PackageLogger("emu-rt-a"))
-	rtB := routing.NewTable(ml.PackageLogger("emu-rt-b"))
-	rgA := NewRouteGroup(cfg, rtA, routing.NewRouteDescriptor(src, dst, 1, 2), ml)
-	rgB := NewRouteGroup(cfg, rtB, routing.NewRouteDescriptor(dst, src, 2, 1), ml)
+	srcPort, dstPort := opts.SrcPort, opts.DstPort
+	if srcPort == 0 {
+		srcPort = 1
+	}
+	if dstPort == 0 {
+		dstPort = 2
+	}
+	var hostA, hostB *emuHost
+	if opts.Shared != nil {
+		hostA, hostB = opts.Shared.A, opts.Shared.B
+	}
+	rtA, rtB := routing.NewTable(ml.PackageLogger("emu-rt-a")), routing.NewTable(ml.PackageLogger("emu-rt-b"))
+	if hostA != nil {
+		rtA, rtB = hostA.rt, hostB.rt
+	}
+	rgA := NewRouteGroup(cfg, rtA, routing.NewRouteDescriptor(src, dst, srcPort, dstPort), ml)
+	rgB := NewRouteGroup(cfg, rtB, routing.NewRouteDescriptor(dst, src, dstPort, srcPort), ml)
 	rgA.initiator = true
 	rgB.initiator = false
 	rgA.muxEvents = &muxEventRing{}
 	rgB.muxEvents = &muxEventRing{}
+	if hostA != nil {
+		rgA.rehomeHost, rgB.rehomeHost = hostA, hostB
+		hostA.register(rgA)
+		hostB.register(rgB)
+	}
 
-	rig.A = &emuEnd{rg: rgA, rt: rtA}
-	rig.B = &emuEnd{rg: rgB, rt: rtB}
+	rig.A = &emuEnd{rg: rgA, rt: rtA, host: hostA}
+	rig.B = &emuEnd{rg: rgB, rt: rtB, host: hostB}
 
 	var fwdA, rvsA, fwdB, rvsB []routing.Rule
 	for i, spec := range opts.Legs {
@@ -257,10 +350,11 @@ func newEmuRig(t *testing.T, opts emuOpts) *emuRig {
 			setRemoteForTest(mtB, hop)
 		}
 
-		aFwd := routing.ForwardRule(DefaultRouteKeepAlive, routing.RouteID(emuRidAFwd+i), routing.RouteID(emuRidBCon+i), tpID, src, dst, 1, 2) //nolint:gosec
-		aRvs := routing.ConsumeRule(DefaultRouteKeepAlive, routing.RouteID(emuRidACon+i), src, dst, 1, 2)                                      //nolint:gosec
-		bFwd := routing.ForwardRule(DefaultRouteKeepAlive, routing.RouteID(emuRidBFwd+i), routing.RouteID(emuRidACon+i), tpID, dst, src, 2, 1) //nolint:gosec
-		bRvs := routing.ConsumeRule(DefaultRouteKeepAlive, routing.RouteID(emuRidBCon+i), dst, src, 2, 1)                                      //nolint:gosec
+		rb := opts.RidBase
+		aFwd := routing.ForwardRule(DefaultRouteKeepAlive, routing.RouteID(emuRidAFwd+rb+i), routing.RouteID(emuRidBCon+rb+i), tpID, src, dst, srcPort, dstPort) //nolint:gosec
+		aRvs := routing.ConsumeRule(DefaultRouteKeepAlive, routing.RouteID(emuRidACon+rb+i), src, dst, srcPort, dstPort)                                         //nolint:gosec
+		bFwd := routing.ForwardRule(DefaultRouteKeepAlive, routing.RouteID(emuRidBFwd+rb+i), routing.RouteID(emuRidACon+rb+i), tpID, dst, src, dstPort, srcPort) //nolint:gosec
+		bRvs := routing.ConsumeRule(DefaultRouteKeepAlive, routing.RouteID(emuRidBCon+rb+i), dst, src, dstPort, srcPort)                                         //nolint:gosec
 		for _, r := range []struct {
 			rt routing.Table
 			ru routing.Rule
@@ -298,6 +392,7 @@ func (r *emuRig) wireEnd(e *emuEnd, fwd, rvs []routing.Rule, opts emuOpts, initi
 	m := newRouteMux(rg.logger, true) // SACK: CapSACK is advertised on every mux
 	m.holRetxEnabled = opts.HolRetx
 	m.legStateEnabled = opts.LegState
+	m.legRehomeEnabled = opts.LegRehome
 
 	rg.mu.Lock()
 	rg.mux = m
@@ -315,6 +410,7 @@ func (r *emuRig) wireEnd(e *emuEnd, fwd, rvs []routing.Rule, opts emuOpts, initi
 	rg.mu.Unlock()
 
 	m.SetForwardRehomeFn(rg.noteForwardRehome)
+	m.SetForwardFanoutFn(rg.noteForwardFanout)
 	m.SetLegProbeRulingFn(func(idx, legs int, tp *transport.ManagedTransport, probeOnly bool, reason string) {
 		rg.noteLegProbeRuling(idx, legs, tp, probeOnly, reason)
 		side := "acceptor"
@@ -368,6 +464,13 @@ func (r *emuRig) serveLeg(e *emuEnd, i int) {
 		}
 		pkt := make(routing.Packet, n)
 		copy(pkt, buf[:n])
+		// With a shared host, dispatch BY RULE — a re-homed chain's frames then
+		// reach whichever group now owns its consume rule, not the rig that
+		// happens to hold the conn.
+		if e.host != nil {
+			e.host.dispatch(pkt)
+			continue
+		}
 		_ = e.rg.handlePacket(pkt) //nolint:errcheck // a dropped packet is the SACK layer's problem
 	}
 }
@@ -631,4 +734,17 @@ func (r *emuRig) legBases(e *emuEnd) string {
 	}
 	b.WriteString("]")
 	return b.String()
+}
+
+// legSentBytes is one end's per-leg SENT byte counters — the counters a
+// scenario diffs across a transfer to say which leg carried it.
+func (r *emuRig) legSentBytes(e *emuEnd) []uint64 {
+	e.rg.mu.Lock()
+	legs := e.rg.mux.snapshotLegs()
+	e.rg.mu.Unlock()
+	out := make([]uint64, len(legs))
+	for i := range legs {
+		out[i] = legs[i].SentBytes
+	}
+	return out
 }
