@@ -2293,6 +2293,33 @@ func (c *Client) totalStreams() int {
 	return total
 }
 
+// tunnelStreamCounts is totalStreams broken out PER TUNNEL, keyed by the local
+// port tunnelLocalPort recorded for each session — the same name the visor's
+// proxystatus.Tunnel.LocalPort carries, so statusSnapshot can overlay a live
+// stream count onto the tunnel the visor already described. A session with no
+// recorded port (0; never an app conn) is skipped: 0 would collide across every
+// such session, and none of them can be matched to a Tunnel anyway.
+func (c *Client) tunnelStreamCounts() map[routing.Port]int {
+	sessions := c.snapshotSessions()
+	if len(sessions) == 0 {
+		return nil
+	}
+	out := make(map[routing.Port]int, len(sessions))
+	for _, s := range sessions {
+		if s == nil || s.IsClosed() {
+			continue
+		}
+		c.sessionsMu.Lock()
+		m := c.recvStamp[s]
+		c.sessionsMu.Unlock()
+		if m == nil || m.port == 0 {
+			continue
+		}
+		out[m.port] = s.NumStreams()
+	}
+	return out
+}
+
 // ListenAndServe start tcp listener on addr and proxies incoming
 // connection to a remote proxy server.
 func (c *Client) ListenAndServe(addr string) error {
@@ -3635,6 +3662,19 @@ func (c *Client) statusSnapshot() proxystatus.Snapshot {
 		if rgRTT := representativeRouteRTT(snap.Legs); rgRTT > 0 {
 			for i := range snap.Streams {
 				snap.Streams[i].LatencyMS = rgRTT
+			}
+		}
+		// Per-tunnel open-stream counts: the visor-built base above has no
+		// yamux session to read one from, so overlay it here from this
+		// process's own sessions, matched by the local port both sides
+		// already name the tunnel by.
+		if counts := c.tunnelStreamCounts(); len(counts) > 0 {
+			for i := range snap.Tunnels {
+				if port := routing.Port(snap.Tunnels[i].LocalPort); port != 0 {
+					if n, ok := counts[port]; ok {
+						snap.Tunnels[i].OpenStreams = n
+					}
+				}
 			}
 		}
 	} else {

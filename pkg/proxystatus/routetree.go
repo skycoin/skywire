@@ -236,7 +236,7 @@ func streamHeaderNode(t Tunnel, nLegs int) *bitree.Node {
 		// auditioning -- held open and measured without carrying anything.
 		parts = append(parts, "held "+compactAge(int64(t.AuditionMS)))
 	}
-	parts = append(parts, fmt.Sprintf("%d %s", nLegs, legWord), mux)
+	parts = append(parts, fmt.Sprintf("%d %s", nLegs, legWord), mux, fmt.Sprintf("streams=%d", t.OpenStreams))
 	return &bitree.Node{Label: strings.Join(parts, " · ")}
 }
 

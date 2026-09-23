@@ -49,9 +49,13 @@ func applyDialTunnelLegs(opts *DialOptions) int {
 		return 0
 	}
 	if want < 0 {
-		// TODO(mux): read the PER-APP mux width once the proxy mux ops expose
-		// one (visor.SetMuxWidth is still process-global — preset.SetAdaptRevActive).
-		want = preset.AdaptRevActive()
+		// The visor's mux width is process-global (preset.AdaptRevActive); an
+		// app with its own mux.app_width entry uses that instead.
+		if n, ok := muxAppWidthFor(opts.AppName); ok {
+			want = n
+		} else {
+			want = preset.AdaptRevActive()
+		}
 	}
 	if want <= 1 {
 		return 0

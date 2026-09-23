@@ -292,6 +292,12 @@ type Tunnel struct {
 	// measured it without putting a stream on it.
 	AuditionMS float64 `json:"audition_ms,omitempty"`
 	LocalPort  uint16  `json:"local_port,omitempty"`
+	// OpenStreams is this tunnel's yamux session's current open-stream count
+	// (Session.NumStreams), overlaid by the skysocks-client from its own live
+	// session — the visor-built base above has no yamux session to read one
+	// from. 0 for a standby tunnel (it carries nothing) and for anything the
+	// overlay could not match to a live session (LocalPort unknown/0).
+	OpenStreams int `json:"open_streams"`
 }
 
 // Stream is one open tunneled stream on the surface's session to the exit — the

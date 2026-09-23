@@ -150,6 +150,17 @@ func (rg *RouteGroup) dialMuxTarget(target int) int {
 	if target > 1 && !rg.poolWideningAllowed() {
 		return 1
 	}
+	// An ACTIVE group of an app with its own mux.app_width entry is capped
+	// there — the per-app knob overrides both the visor's mux width and
+	// whatever wider degree this dial otherwise asked for.
+	if target > 1 && rg.TunnelRole() == tunnelRoleActive {
+		if n, ok := muxAppWidthFor(rg.AppName()); ok && n < target {
+			target = n
+		}
+	}
+	if target < 1 {
+		target = 1
+	}
 	return target
 }
 
