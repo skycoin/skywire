@@ -649,72 +649,43 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 	return summaries
 }
 
+// storeLog attaches the app's file log hook at <local_path>/log/skywire.log.
 func storeLog(log *logging.MasterLogger, localPath string) {
-	hook, _ := lumberjackrus.NewHook( //nolint:errcheck
-		&lumberjackrus.LogFile{
-			Filename:   localPath + "/log/skywire.log",
-			MaxSize:    1,
-			MaxBackups: 1,
-			MaxAge:     1,
-			Compress:   false,
-			LocalTime:  false,
-		},
+	path := localPath + "/log/skywire.log"
+	hook, err := newAppLogHook(path)
+	if err != nil {
+		log.WithError(err).Warn("Failed to open the app log file; logging to stdout only")
+		return
+	}
+	log.Hooks.Add(hook)
+}
+
+// newAppLogHook builds the file hook for the app log at path.
+//
+// One writer, deliberately. lumberjackrus accepts a per-level LogFile map, and
+// this used to carry one entry per level, every one of them naming this same
+// file. That gave each level its own lumberjack.Logger over one path, and
+// rotation is per-writer: whichever level first crossed MaxSize renamed the
+// file and opened a fresh one while the others kept writing to the renamed —
+// then reaped — inode. DEBUG has the most volume so it always won, and the
+// INFO, WARN and ERROR lines were written to a file nobody could read. The
+// default logger alone, with no per-level overrides, keeps every level on a
+// single rotating writer. Same bug, same fix as pkg/visor/visor.go.
+func newAppLogHook(path string) (logrus.Hook, error) {
+	return lumberjackrus.NewHook(&lumberjackrus.LogFile{
+		Filename:   path,
+		MaxSize:    1,
+		MaxBackups: 1,
+		MaxAge:     1,
+		Compress:   false,
+		LocalTime:  false,
+	},
 		logrus.TraceLevel,
 		&logging.TextFormatter{
 			DisableColors:   true,
 			FullTimestamp:   true,
 			ForceFormatting: true,
 		},
-		&lumberjackrus.LogFileOpts{
-			logrus.InfoLevel: &lumberjackrus.LogFile{
-				Filename:   localPath + "/log/skywire.log",
-				MaxSize:    1,
-				MaxBackups: 1,
-				MaxAge:     1,
-				Compress:   false,
-				LocalTime:  false,
-			},
-			logrus.WarnLevel: &lumberjackrus.LogFile{
-				Filename:   localPath + "/log/skywire.log",
-				MaxSize:    1,
-				MaxBackups: 1,
-				MaxAge:     1,
-				Compress:   false,
-				LocalTime:  false,
-			},
-			logrus.TraceLevel: &lumberjackrus.LogFile{
-				Filename:   localPath + "/log/skywire.log",
-				MaxSize:    1,
-				MaxBackups: 1,
-				MaxAge:     1,
-				Compress:   false,
-				LocalTime:  false,
-			},
-			logrus.ErrorLevel: &lumberjackrus.LogFile{
-				Filename:   localPath + "/log/skywire.log",
-				MaxSize:    1,
-				MaxBackups: 1,
-				MaxAge:     1,
-				Compress:   false,
-				LocalTime:  false,
-			},
-			logrus.DebugLevel: &lumberjackrus.LogFile{
-				Filename:   localPath + "/log/skywire.log",
-				MaxSize:    1,
-				MaxBackups: 1,
-				MaxAge:     1,
-				Compress:   false,
-				LocalTime:  false,
-			},
-			logrus.FatalLevel: &lumberjackrus.LogFile{
-				Filename:   localPath + "/log/skywire.log",
-				MaxSize:    1,
-				MaxBackups: 1,
-				MaxAge:     1,
-				Compress:   false,
-				LocalTime:  false,
-			},
-		},
+		nil,
 	)
-	log.Hooks.Add(hook)
 }
