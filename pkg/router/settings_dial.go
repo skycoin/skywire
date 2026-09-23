@@ -23,6 +23,8 @@
 package router
 
 import (
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -180,6 +182,28 @@ func dialTunnelLegsFor(app string) int {
 
 // SetDialTunnelLegs installs that count. Values below -1 are refused.
 func SetDialTunnelLegs(n int) bool { return setInt(routersettings.DialTunnelLegs, int64(n)) }
+
+// muxAppWidthFor resolves the mux.app_width knob for one app: its "app=n"
+// entry in the list, if any. ok is false when app has no entry, or the entry
+// does not parse to a positive count — a malformed or missing entry falls
+// through to the caller's own default rather than widening/narrowing anything.
+func muxAppWidthFor(app string) (int, bool) {
+	if app == "" {
+		return 0, false
+	}
+	for _, tok := range routersettings.MuxAppWidth.Strings() {
+		name, val, found := strings.Cut(tok, "=")
+		if !found || name != app {
+			continue
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(val))
+		if err != nil || n <= 0 {
+			return 0, false
+		}
+		return n, true
+	}
+	return 0, false
+}
 
 // ---------------------------------------------------------------------------
 // Dead-route evidence and the warm plan cache.
