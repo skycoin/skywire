@@ -202,6 +202,27 @@ func (p *prefixConn) Read(b []byte) (int, error) {
 	return p.Conn.Read(b)
 }
 
+// CloseWrite forwards the origin's end of data to the client as a FIN.
+//
+// go-socks5 signals it by calling CloseWrite on the destination — but only if
+// the destination has the method, and a yamux stream does not, so without this
+// the signal was dropped on the floor. The stream then stayed open until the
+// client closed it, and a client waiting for exactly that EOF never did: an
+// FTP data connection, an HTTP/1.0 response delimited by close, or anything
+// piped through nc read the last byte and then hung forever.
+//
+// yamux's Close is the half close this needs: from an established stream it
+// sends the FIN and moves to streamLocalClose, leaving this side free to keep
+// reading whatever the client is still sending. A conn that has a CloseWrite
+// of its own — a TCP conn, in a test — gets that instead, since for those
+// Close would take the other direction down with it.
+func (p *prefixConn) CloseWrite() error {
+	if cw, ok := p.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return p.Conn.Close()
+}
+
 // getRemotePK extracts the remote public key from the connection
 func (s *Server) getRemotePK(conn net.Conn) (cipher.PubKey, error) {
 	// Try direct type assertion first (app framework connections already use appnet.Addr)
