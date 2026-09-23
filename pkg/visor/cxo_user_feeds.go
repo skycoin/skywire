@@ -220,6 +220,35 @@ func (v *Visor) setSystemCXOPub(pub *treestore.Publisher) {
 	v.cxoUserFeedsMu.Unlock()
 }
 
+// setTPDLeafPubReason records why no CXO transport-list publisher was
+// installed, so `skywire cli visor state --select cxo` can say which of
+// the several non-fatal bail-outs in initStats was taken instead of
+// leaving an empty .cxo to be guessed at. Guarded by cxoUserFeedsMu.
+func (v *Visor) setTPDLeafPubReason(reason string) {
+	v.cxoUserFeedsMu.Lock()
+	v.tpdLeafPubReason = reason
+	v.cxoUserFeedsMu.Unlock()
+}
+
+// tpdLeafPublisherState reports the live wiring of the CXO tp-list
+// publisher for the state snapshot.
+func (v *Visor) tpdLeafPublisherState() *TPDLeafPublisherState {
+	st := &TPDLeafPublisherState{}
+	if v.tpM != nil {
+		st.Wired = v.tpM.HasTPDLeafPublisher()
+	}
+	if st.Wired {
+		return st
+	}
+	v.cxoUserFeedsMu.Lock()
+	st.Reason = v.tpdLeafPubReason
+	v.cxoUserFeedsMu.Unlock()
+	if st.Reason == "" {
+		st.Reason = "stats module has not completed init (or its init failed)"
+	}
+	return st
+}
+
 // setRegCXOPub retains the registration-over-CXO publisher so its gating
 // (allowlist + denied subscribers) shows up in `skywire cli visor state`.
 func (v *Visor) setRegCXOPub(pub *treestore.Publisher) {
@@ -245,6 +274,18 @@ func (v *Visor) setTPListCXOPub(pub *treestore.Publisher) {
 	v.cxoUserFeedsMu.Lock()
 	v.tplistCXOPub = pub
 	v.cxoUserFeedsMu.Unlock()
+}
+
+// TPDLeafPublisherState reports whether the transport manager holds the
+// CXO transport-list snapshot publisher (transport.Manager.
+// SetTPDLeafPublisher). Wired=false means transport registration runs
+// over the HTTP/dmsg-HTTP re-register path instead, and Reason carries
+// why the publisher was never installed — the treestore construction
+// error, "dmsg client absent", "stats disabled by config", or
+// a generic "not completed init" note during the startup window.
+type TPDLeafPublisherState struct {
+	Wired  bool   `json:"wired"`
+	Reason string `json:"reason,omitempty"`
 }
 
 // CXOFeedState pairs a feed's identity (name + dmsg port) with its live
