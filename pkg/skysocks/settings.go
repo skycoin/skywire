@@ -117,6 +117,10 @@ func setTunnelPriorRefresh() time.Duration {
 func setExitOpenPenalty() time.Duration {
 	return skysettings.Dur(skysettings.TunnelExitOpenPenalty)
 }
+func setExitOpenTimeout() time.Duration {
+	return skysettings.Dur(skysettings.TunnelExitOpenTimeout)
+}
+func setExitOpenRTTFactor() int        { return skysettings.Count(skysettings.TunnelExitOpenRTTFactor) }
 func setMeterSampleMin() time.Duration { return skysettings.Dur(skysettings.TunnelMeterSampleMin) }
 func setMeterCapDecay() float64        { return skysettings.Ratio(skysettings.TunnelMeterCapDecay) }
 func setMeterFresh() time.Duration     { return skysettings.Dur(skysettings.TunnelMeterFresh) }
