@@ -20,6 +20,13 @@
 # The build entry is copied forward verbatim for each release, so it must not
 # name a version anywhere but versionName/versionCode/commit. The version
 # comes from android/version.properties and the Go toolchain from go.mod.
+# The one exception is TinyGo, pinned below with its checksum because Debian
+# does not package it: when the wasm-tinygo lane in .github/workflows/test.yml
+# moves to a newer TinyGo, bump it here and in fdroiddata's copy too.
+#
+# commit is a full hash, not the fdroid-v* tag: fdroiddata takes no tag or
+# branch names there, since those can be moved. The update bot resolves each
+# new fdroid-v* tag to its hash by itself.
 #
 # mobile-v0.0.3 and earlier predate the LICENSE and the skywireFdroid switch,
 # and fdroid-v0.0.4 kept its listing under android/fastlane/, where
@@ -46,30 +53,38 @@ Repo: https://github.com/skycoin/skywire.git
 Builds:
   - versionName: 0.0.5
     versionCode: 5
-    commit: fdroid-v0.0.5
+    commit: e8a4d78b1e32a81d8ed599e9b0e9d5af2bdaaf11
     subdir: android/app
     sudo:
       - apt-get update
-      - apt-get install -y golang-go make
+      - apt-get install -y golang-go make curl
+      # TinyGo, for the routing-policy presets built below: the upstream
+      # release, checked against its sha256.
+      - curl -fsSLo /tmp/tinygo.deb https://github.com/tinygo-org/tinygo/releases/download/v0.42.0/tinygo_0.42.0_amd64.deb
+      - echo "2082c4762fea6d5cc4cd1f4a243eaacf07b12f576717d4c6b74828bd163cb563  /tmp/tinygo.deb"
+        | sha256sum -c -
+      - apt-get install -y /tmp/tinygo.deb
     gradle:
       - yes
+    # The routing-policy presets the mobile binary embeds with go:embed. The
+    # committed copy is removed and built again from source in `build`.
+    rm:
+      - pkg/router/policy/wasm/presets/bundle.wasm
     # Prebuilt files in the repo that the mobile build does not use: the
     # `mobile` build tag excludes the GeoLite2 database and the wasm
-    # hypervisor, the wasm routing-policy examples are docs, and the two
+    # hypervisor, the compiled wasm routing-policy examples are docs (their
+    # sources stay: the presets are built from one of them), and the two
     # package.json files are npm metadata that vendored Go modules carry.
     scandelete:
       - pkg/geoip/GeoLite2-City.mmdb.gz
       - pkg/wasmhv/execwasm/blob
-      - docs/examples/routing-policies/wasm
+      - docs/examples/routing-policies/wasm/*/*.wasm
       - vendor/github.com/blang/semver/package.json
       - vendor/github.com/go-redis/redis/v8/package.json
-    # Generated files the mobile binary embeds with go:embed, so they have to
-    # stay: the pty web terminal page (gzipped HTML), and the routing-policy
-    # presets, built with TinyGo from
-    # docs/examples/routing-policies/wasm/bundle by `make bundle-wasm`.
+    # A generated file the mobile binary embeds with go:embed, so it has to
+    # stay: the pty web terminal page, gzipped HTML.
     scanignore:
       - pkg/pty/term.html.gz
-      - pkg/router/policy/wasm/presets/bundle.wasm
     gradleprops:
       # Strips the in-app updater and REQUEST_INSTALL_PACKAGES: F-Droid
       # delivers the updates. See android/app/build.gradle.kts.
@@ -84,6 +99,10 @@ Builds:
       # this entry never pins a Go version of its own.
       - cd ../..
       - export GOTOOLCHAIN=auto GOPROXY=https://proxy.golang.org,direct GOSUMDB=sum.golang.org
+      # The presets removed above, built with TinyGo from
+      # docs/examples/routing-policies/wasm/bundle; the target then checks
+      # that the fresh build decides exactly as the native presets do.
+      - make bundle-wasm
       - ANDROID_NDK_HOME=$$NDK$$ make android-mobile-ndk
 
 AutoUpdateMode: Version
