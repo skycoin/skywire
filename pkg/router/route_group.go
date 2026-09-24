@@ -299,6 +299,15 @@ type RouteGroup struct {
 	// and never mutated afterwards.
 	initiator bool
 
+	// localPK is this visor's own public key, copied from the noise config in
+	// saveRouteGroupRules. The descriptor alone cannot say which end is local:
+	// the setup node hands EACH edge the descriptor that points at that edge
+	// (setupnode.go initEdge/respEdge), so Dst is this visor on both sides.
+	// farEndPK needs the local key to name the peer without guessing from
+	// initiator. Null on a group built without a noise config (the emulated
+	// testbed), where farEndPK falls back to the descriptor's Src.
+	localPK cipher.PubKey
+
 	// 'tps' is transports used for writing/forward rules.
 	// It should have the same number of elements as 'fwd'
 	// where each element corresponds with the adjacent element in 'fwd'.

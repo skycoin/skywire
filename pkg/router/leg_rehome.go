@@ -119,8 +119,8 @@ func (r *router) RehomeStandbyLeg(target, standby routing.RouteDescriptor) error
 // descriptor lookup already done. Split out so the emulated testbed can drive
 // the real sequence against two route groups without a router.
 func rehomeChain(g, s *RouteGroup) error {
-	if g.desc.DstPK() != s.desc.DstPK() {
-		return fmt.Errorf("the two groups do not share a peer (%s vs %s)", g.desc.DstPK(), s.desc.DstPK())
+	if g.farEndPK() != s.farEndPK() {
+		return fmt.Errorf("the two groups do not share a peer (%s vs %s)", g.farEndPK(), s.farEndPK())
 	}
 	if g.mux == nil || s.mux == nil || !g.mux.legRehomeEnabled || !s.mux.legRehomeEnabled {
 		return g.poolSourcedLegFallback(s)
@@ -213,8 +213,15 @@ func rehomeChain(g, s *RouteGroup) error {
 			s.logger.WithError(err).Debug("Re-home: closing the consumed standby group")
 		}
 	}()
-	g.logger.Infof("Re-homed the chain of standby group :%d into :%d as leg %d",
-		s.desc.DstPort(), g.desc.DstPort(), idx)
+	// The chain that moved, named the way the no-ack line names it, so a
+	// per-attempt audit does not have to reach for the counters: which
+	// transport it left on and whether that transport IS the far end.
+	peer := g.farEndPK()
+	g.logger.WithField("first_hop", tp.Remote().String()).
+		WithField("direct", tp.Remote() == peer).
+		WithField("tp", tp.Entry.ID.String()).
+		Infof("Re-homed the chain of standby group :%d into :%d as leg %d",
+			s.desc.DstPort(), g.desc.DstPort(), idx)
 	return nil
 }
 
@@ -272,14 +279,25 @@ func (rg *RouteGroup) dispatchLegControl(routeID routing.RouteID, nonce uint64,
 // farEndPK is the OTHER end of this group's descriptor — the visor its chains
 // reach, never this one.
 //
-// The descriptor keeps the DIALER's orientation at BOTH ends (the acceptor is
-// handed the same one the setup node built), so Dst is the peer only on the
-// side that dialed. Naming Dst unconditionally, as the re-home and split
-// no-ack messages used to, prints the LOCAL visor's own public key on every
-// accepted group — the least useful thing a "nobody answered" message can say.
+// The setup node hands EACH edge the descriptor that points AT that edge —
+// initEdge carries the REVERSED descriptor and respEdge the forward one
+// (setupnode.go) — so Dst is THIS visor on both sides, which is why LocalAddr
+// is desc.Dst() and RemoteAddr is desc.Src() (route_group.go). Branching on
+// initiator and returning Dst therefore printed the LOCAL visor's own public
+// key as the far end of every DIALED group, which is what the re-home and
+// split no-ack messages were reporting.
+//
+// Decided by comparing against the local key rather than by orientation, so a
+// descriptor built either way round still names the peer; a group with no
+// noise config (the emulated testbed) keeps the descriptor's Src.
 func (rg *RouteGroup) farEndPK() cipher.PubKey {
-	if rg.initiator {
-		return rg.desc.DstPK()
+	if local := rg.localPK; !local.Null() {
+		if rg.desc.SrcPK() != local {
+			return rg.desc.SrcPK()
+		}
+		if rg.desc.DstPK() != local {
+			return rg.desc.DstPK()
+		}
 	}
 	return rg.desc.SrcPK()
 }
