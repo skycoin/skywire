@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -22,6 +23,12 @@ import (
 // DiagSnapshot is the `diag` section of a StateSnapshot.
 type DiagSnapshot struct {
 	Runtime DiagRuntime `json:"runtime"`
+	// Panics is the recovered-panic accounting: how many have happened since
+	// start and the most recent few with their stacks. An UNrecovered panic
+	// goes to local/log/skywire-crash.log (debug.SetCrashOutput, see
+	// storeLog); this is the other half, which nothing else records. Omitted
+	// when none have happened, so its presence is the signal.
+	Panics *DiagPanics `json:"panics,omitempty"`
 	// TransportReadQueue is the shared queue every transport read loop feeds
 	// and the router drains; at capacity, every transport stalls behind the
 	// router (pings and pongs included).
@@ -76,6 +83,14 @@ type DiagRuntime struct {
 	SysMB       float64 `json:"sys_mb"`
 	NumGC       uint32  `json:"num_gc"`
 	GoVersion   string  `json:"go_version"`
+}
+
+// DiagPanics is the recovered-panic accounting. Count keeps rising after Last
+// has wrapped, so the two together say whether what Last shows is the whole
+// story.
+type DiagPanics struct {
+	Count uint64               `json:"count"`
+	Last  []logging.PanicEntry `json:"last,omitempty"`
 }
 
 // DiagQueue is a bounded queue's depth and capacity.
@@ -157,6 +172,10 @@ func (v *Visor) DiagSnapshot() *DiagSnapshot {
 		NumGC:       m.NumGC,
 		GoVersion:   runtime.Version(),
 	}}
+
+	if n, last := logging.PanicStats(); n > 0 {
+		d.Panics = &DiagPanics{Count: n, Last: last}
+	}
 
 	if v.tpM != nil {
 		depth, capacity := v.tpM.ReadQueue()
