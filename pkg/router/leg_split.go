@@ -257,6 +257,7 @@ func (rg *RouteGroup) newSplitGroup(srcPort, dstPort routing.Port) *RouteGroup {
 	desc := routing.NewRouteDescriptor(rg.desc.SrcPK(), rg.desc.DstPK(), srcPort, dstPort)
 	ns := NewRouteGroup(rg.cfg, rg.rt, desc, nil)
 	ns.initiator = rg.initiator
+	ns.localPK = rg.localPK
 	ns.muxEvents = rg.muxEvents
 	ns.rehomeHost = rg.rehomeHost
 	ns.SetAppName(rg.AppName())

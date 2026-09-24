@@ -593,10 +593,22 @@ func (rg *RouteGroup) releaseLegByTransport(t poolTakenLeg, reason string) {
 	// in. Only a peer that never negotiated the capability, or one that does
 	// not answer, costs the transport the way every release used to.
 	if rg.splitOnRelease() {
-		tpID := tpEntryID(rg.legTransportAt(idx))
+		tp := rg.legTransportAt(idx)
+		tpID := tpEntryID(tp)
+		firstHop := cipher.PubKey{}
+		if tp != nil {
+			firstHop = tp.Remote()
+		}
 		ns, err := rg.splitLeg(idx, reason)
 		if err == nil {
-			rg.logger.Infof("Split leg :%d back into standby group :%d", t.from, ns.desc.SrcPort())
+			// Same fields as the re-home success line: the chain is named by
+			// the transport it kept and by whether that transport is the far
+			// end, so one line is a complete per-attempt audit.
+			peer := rg.farEndPK()
+			rg.logger.WithField("first_hop", firstHop.String()).
+				WithField("direct", tp != nil && firstHop == peer).
+				WithField("tp", tpID.String()).
+				Infof("Split leg :%d back into standby group :%d", t.from, ns.desc.SrcPort())
 			// Still a pool_leg_released — the group gave the leg back. It just
 			// gave it back to the POOL rather than to the transport manager.
 			rg.noteMuxEvent(MuxEvent{
