@@ -336,6 +336,7 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	// treated as a role in flight rather than as a group the pool rules skip.
 	rg.SetTunnelRole(role)
 	rg.initiator = nsConf.Initiator
+	rg.localPK = nsConf.LocalPK
 	// Per-frame noise (inverse-mux): hand the RG the same KK keys EncryptConn
 	// would use, and opt in per the env gate so the whole fleet isn't flipped at
 	// once. When both edges advertise CapPerFrameNoise the RG runs noise per mux
