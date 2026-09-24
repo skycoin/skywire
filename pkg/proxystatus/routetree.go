@@ -588,6 +588,9 @@ func compactBytes(n uint64) string {
 // the SOCKS streams a tunnel carries — a pooled group labeled "stream N" read
 // as an idle open stream (rig review, 2026-09-24).
 func tunnelWord(t Tunnel) string {
+	if t.LegReserve {
+		return "reserve"
+	}
 	if TunnelStandby(t) {
 		return "standby"
 	}
@@ -597,7 +600,7 @@ func tunnelWord(t Tunnel) string {
 // headerIdxOf extracts the route-group index from a header label built by
 // streamHeaderNode, whichever word names the group.
 func headerIdxOf(label string) int {
-	for _, w := range []string{"tunnel ", "standby "} {
+	for _, w := range []string{"tunnel ", "standby ", "reserve "} {
 		if strings.Contains(label, StreamHeaderGlyph+" "+w) {
 			return streamIdxOf(label, StreamHeaderGlyph+" "+w)
 		}

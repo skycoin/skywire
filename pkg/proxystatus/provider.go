@@ -290,6 +290,10 @@ type Tunnel struct {
 	// single-tunnel session, or a route group belonging to something else.
 	// It is the local end's own label; an exit cannot know it.
 	Role string
+	// LegReserve marks a standby group a leg split handed back to the pool: it
+	// can be composed back in as a leg but never becomes a tunnel, because no
+	// app session runs over it.
+	LegReserve bool
 	// LocalPort is the route group's LOCAL port — the one name the app, the
 	// visor and the bench's carrier.tsv already share for one tunnel (the
 	// same port NoteMuxEvent is addressed by). It is what lets the dialing

@@ -240,6 +240,12 @@ type RouteGroup struct {
 	// no idea which of a peer's tunnels are in standby. Set via
 	// SetTunnelRole from finishDial, read back in MuxStats.
 	tunnelRole string
+	// legReserve marks a group a leg split built (leg_split.go): a chain handed
+	// back to the pool with no app session and no end-to-end handshake of its
+	// own. It may be taken again as a LEG, never promoted to a tunnel: only
+	// the app that dialed a group can put streams on it. Set before the group
+	// is registered and never changed.
+	legReserve bool
 
 	handshakeProcessed     chan struct{}
 	handshakeProcessedOnce sync.Once
@@ -788,6 +794,9 @@ type MuxInfo struct {
 	// and measured without carrying a stream.
 	AgeMS      float64
 	TunnelRole string
+	// LegReserve is a standby group a leg split built: a chain the pool may
+	// compose back in as a leg, but not a tunnel the app can promote.
+	LegReserve bool
 	// Shape is the SESSION's measured multiplexing shape — every ACTIVE
 	// tunnel this app holds to this exit with its live leg count, written
 	// "<k>x<n>" when the tunnels are the same width and "n1,n2,…" when they
@@ -968,6 +977,7 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 	}
 	info.PerFrameNoise = rg.perFrameNoiseActive
 	info.TunnelRole = rg.tunnelRole
+	info.LegReserve = rg.legReserve
 	if !rg.createdAt.IsZero() {
 		info.AgeMS = float64(time.Since(rg.createdAt)) / float64(time.Millisecond)
 	}

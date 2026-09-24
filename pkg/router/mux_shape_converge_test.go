@@ -92,6 +92,8 @@ func TestShedLegsForStandbyReturnsChainsToThePool(t *testing.T) {
 	for _, id := range legs[1:] {
 		require.NotNil(t, rigs[0].A.host.singleLegGroupOn(id),
 			"every shed chain must be a standby group of its own, ready to be taken again")
+		require.True(t, rigs[0].A.host.singleLegGroupOn(id).legReserve,
+			"a split-out group has no app session: it is a leg reserve, never a tunnel")
 	}
 }
 
@@ -223,4 +225,38 @@ func TestShapeStepHoldsUnderShapeHold(t *testing.T) {
 	require.NoError(t, routersettings.SetApp(shapeEmuApp, routersettings.MuxShapeHold.Name(), "false"))
 	require.Equal(t, shapeVerdictMoved, shapeStep(active, pool, time.Now(), nil))
 	require.NotEqual(t, before, shapeOf(rigs), "the move the hold was deferring")
+}
+
+// TestShapeStepNeverPromotesALegReserve: a group a leg split built carries no
+// app session, so the app could never put a stream on it. A shape that wants
+// another tunnel promotes one of the app's own standby groups, and declines
+// when the pool holds only reserves.
+func TestShapeStepNeverPromotesALegReserve(t *testing.T) {
+	t.Cleanup(func() { routersettings.ResetApp(shapeEmuApp) })
+	rigs := shapeEmuRig(t, 1, 6)
+	require.NoError(t, routersettings.SetApp(shapeEmuApp, routersettings.MuxShape.Name(), "2x1"))
+
+	active, pool := shapeSession0(rigs)
+	for _, s := range pool {
+		s.legReserve = true
+	}
+	require.Equal(t, shapeVerdictHeld, shapeStep(active, pool, time.Now(), nil),
+		"a pool of leg reserves has nothing the app could use as a tunnel")
+	require.Equal(t, "1x1", shapeOf(rigs))
+
+	// Three of the app's own standby groups: enough to promote one and still
+	// leave pool.min_standby.
+	owned := map[*RouteGroup]bool{pool[1]: true, pool[3]: true, pool[5]: true}
+	for s := range owned {
+		s.legReserve = false
+	}
+	require.Equal(t, shapeVerdictMoved, shapeStep(active, pool, time.Now(), nil))
+	promoted := 0
+	for i, s := range pool {
+		if s.TunnelRole() == tunnelRoleActive {
+			promoted++
+			require.True(t, owned[s], "pool[%d] was promoted but is a leg reserve", i)
+		}
+	}
+	require.Equal(t, 1, promoted)
 }

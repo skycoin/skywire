@@ -210,6 +210,9 @@ type muxRouteGroupInfo struct {
 	// tunnels, and empty when read from the EXIT — the accepting end does not
 	// know which of a peer's tunnels are in standby.
 	TunnelRole string `json:"tunnel_role,omitempty"`
+	// LegReserve marks a standby group a leg split built: a leg the pool can
+	// re-take, never a tunnel.
+	LegReserve bool `json:"leg_reserve,omitempty"`
 	// Shape / ShapeTarget / ShapeSource are the SESSION's multiplexing shape:
 	// what this app holds to this exit right now ("2x2" = two tunnels of two
 	// legs), the shape it is being held at, and whether that target came from
@@ -405,6 +408,9 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 		role := ""
 		if rg.TunnelRole != "" {
 			role = "  role=" + rg.TunnelRole
+			if rg.LegReserve {
+				role += "(leg reserve)"
+			}
 		}
 		// The session's shape, printed on the tunnel it was measured from:
 		// what this app holds to this exit, and what it is aimed at.
