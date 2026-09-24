@@ -57,6 +57,7 @@ func TestSvcFetchCache_OneFetchAtATime(t *testing.T) {
 	var c svcFetchCache
 	var calls int32
 	release := make(chan struct{})
+	//nolint:unparam // matches the fetcher signature svcFetchCache takes; this one never fails
 	fetch := func() ([]byte, error) { atomic.AddInt32(&calls, 1); <-release; return []byte("list"), nil }
 	var wg sync.WaitGroup
 	results := make([]string, 5)
