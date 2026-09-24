@@ -148,6 +148,22 @@ func testMuxOverStcprTriangle(t *testing.T, env *TestEnv) {
 	require.NoErrorf(t, widthErr, "proxy mux width 2 failed: %s", widthOut)
 	t.Logf("proxy mux width 2 output: %s", widthOut)
 
+	// `proxy mux width` is a PERSISTED live knob: the visor writes it to
+	// app_settings in its config, so it outlives both the app and the visor
+	// restart the framework's reset performs. Leaving it set hands every later
+	// test on visor-c a two-leg skysocks-client — TestSkysocks documents itself
+	// as a single-route proxy and would silently be something else. Drop it
+	// here so the tests stay independent of each other's order.
+	defer func() {
+		resetCmd := fmt.Sprintf("/release/skywire cli proxy settings --reset --rpc %s:3435", visorC)
+		resetOut, resetErr := env.Exec(resetCmd)
+		if resetErr != nil {
+			t.Logf("could not reset visor-c app settings: %v (out: %s)", resetErr, resetOut)
+			return
+		}
+		t.Logf("reset visor-c app settings: %s", resetOut)
+	}()
+
 	env.VerifyAppRunning(t, visorC, skyenv.SkysocksClientName)
 
 	// Generate proxy traffic. Each request rides whichever route

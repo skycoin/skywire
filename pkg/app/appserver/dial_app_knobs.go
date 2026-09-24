@@ -39,6 +39,15 @@ import (
 // choice (skynet-client's --routes, the CLI's --mux) and wins; the knob only
 // bounds it.
 //
+// MuxRoutes == 0 is NOT "did not ask": it is the documented request for the
+// 0-hop AppDirect shortcut (appnet.directShortcutEligible), and it is the shape
+// skysocks-client's fallback takes when the first tunnel's route group cannot
+// be built — group=false, mux=0, a plain session over one transport. Widening
+// that back into a route-group dial defeated the fallback: the retrier then
+// re-ran the very dial that had just failed, the client never reached Running
+// and the proxy stopped instead of degrading. So a width stamps a dial that
+// asked for a group (1) and leaves the shortcut alone.
+//
 // Both are clamped together: with a cap set and no width, an explicit request
 // above the cap is pulled down to it; with both set, the width is what is
 // asked for, bounded by the cap.
@@ -58,7 +67,7 @@ func applyAppMuxKnobs(m ProcManager, appName string, req *DialOptionsReq) {
 	if width > 0 && capN > 0 && width > capN {
 		width = capN
 	}
-	if width > 0 && req.MuxRoutes <= 1 && req.ForwardMuxRoutes == 0 && req.ReverseMuxRoutes == 0 {
+	if width > 0 && req.MuxRoutes == 1 && req.ForwardMuxRoutes == 0 && req.ReverseMuxRoutes == 0 {
 		req.MuxRoutes = width
 	}
 	if capN > 0 {

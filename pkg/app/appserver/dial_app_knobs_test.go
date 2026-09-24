@@ -18,22 +18,26 @@ func TestApplyAppMuxKnobsIsPerApp(t *testing.T) {
 		skysettings.MuxCap:   3,
 	}, nil)
 
-	// The app that owns the knobs.
-	req := &DialOptionsReq{}
-	applyAppMuxKnobs(m, "skysocks-client", req)
-	require.Equal(t, 2, req.MuxRoutes, "the app's width shapes its own dial")
+	// MuxRoutes 1 is "form a route group", not a width, so the knob applies —
+	// this is the skysocks tunnel case the whole knob exists for.
+	group := &DialOptionsReq{MuxRoutes: 1}
+	applyAppMuxKnobs(m, "skysocks-client", group)
+	require.Equal(t, 2, group.MuxRoutes, "the app's width shapes its own group dial")
 
 	// A second app — the paired reference — is untouched, which is the whole
 	// reason the pair moved off the process-global atomics.
-	other := &DialOptionsReq{}
+	other := &DialOptionsReq{MuxRoutes: 1}
 	applyAppMuxKnobs(m, "skysocks-client-2", other)
-	require.Zero(t, other.MuxRoutes, "another app inherits the visor-wide value")
+	require.Equal(t, 1, other.MuxRoutes, "another app inherits the visor-wide value")
 
-	// MuxRoutes 1 is "form a route group", not a width, so the knob still
-	// applies — this is the skysocks tunnel case the whole knob exists for.
-	group := &DialOptionsReq{MuxRoutes: 1}
-	applyAppMuxKnobs(m, "skysocks-client", group)
-	require.Equal(t, 2, group.MuxRoutes)
+	// MuxRoutes 0 asks for the AppDirect shortcut, which is what
+	// skysocks-client's first-tunnel fallback dials with once the route group
+	// could not be built. A width must NOT widen it back into a group dial, or
+	// the fallback re-runs the dial that just failed and the session stops
+	// instead of degrading.
+	shortcut := &DialOptionsReq{}
+	applyAppMuxKnobs(m, "skysocks-client", shortcut)
+	require.Zero(t, shortcut.MuxRoutes, "the shortcut dial keeps its shortcut")
 
 	// An explicit per-call count above one wins, clamped by the cap.
 	explicit := &DialOptionsReq{MuxRoutes: 8}
@@ -54,7 +58,7 @@ func TestApplyAppMuxKnobsIsPerApp(t *testing.T) {
 		skysettings.MuxWidth: 9,
 		skysettings.MuxCap:   4,
 	}, nil)
-	narrow := &DialOptionsReq{}
+	narrow := &DialOptionsReq{MuxRoutes: 1}
 	applyAppMuxKnobs(m, "narrow", narrow)
 	require.Equal(t, 4, narrow.MuxRoutes)
 
