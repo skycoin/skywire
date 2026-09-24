@@ -179,6 +179,7 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 				// "active" / "standby", as the dialing app labeled it. Empty
 				// unless this visor is the one holding the tunnels.
 				Role:       info.TunnelRole,
+				LegReserve: info.LegReserve,
 				AuditionMS: info.AgeMS,
 				LocalPort:  uint16(localPort),
 			}
