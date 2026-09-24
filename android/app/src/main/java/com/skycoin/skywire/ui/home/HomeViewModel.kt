@@ -10,6 +10,7 @@ import com.skycoin.skywire.api.VisorSummary
 import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.AppVisibility
 import com.skycoin.skywire.core.BatteryOptimization
+import com.skycoin.skywire.core.FullScreenCalls
 import com.skycoin.skywire.core.ConfigManager
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
@@ -36,6 +37,8 @@ data class HomeUiState(
     val error: String? = null,
     /** Doze will pause this app's network; the user has not been asked yet. */
     val offerBatteryExemption: Boolean = false,
+    /** A call cannot take the screen; the user has not been asked yet. */
+    val offerFullScreenCalls: Boolean = false,
 ) {
     val connected: Boolean get() = coreState is CoreState.Running && apiUp
 }
@@ -58,6 +61,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      * held by the system and can be changed in a screen that is not ours.
      */
     private val batteryOffer = MutableStateFlow(false)
+    private val fullScreenOffer = MutableStateFlow(false)
 
     private data class LiveData(
         val apiUp: Boolean = false,
@@ -71,7 +75,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             CoreServiceState.state,
             live.asStateFlow(),
             batteryOffer.asStateFlow(),
-        ) { core, data, offerBattery ->
+            fullScreenOffer.asStateFlow(),
+        ) { core, data, offerBattery, offerCalls ->
             HomeUiState(
                 coreState = core,
                 apiUp = data.apiUp,
@@ -81,6 +86,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 // Only once the core is actually up: before that the question
                 // is about a background problem the user has not got yet.
                 offerBatteryExemption = offerBattery && core is CoreState.Running,
+                // One question at a time: the call one waits its turn behind
+                // the battery one, so Home never stacks two permission cards.
+                offerFullScreenCalls = offerCalls && !offerBattery && core is CoreState.Running,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
@@ -101,6 +109,22 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                         askable && !BatteryOptimization.isExempt(getApplication())
                 }
         }
+        // Same shape for the call screen: Android 14 stopped granting the
+        // full-screen intent to apps that are not the default dialer, and a
+        // phone that has not been asked rings with its screen dark. Settings
+        // has the same card permanently; this is the one place it is put in
+        // front of someone who never opens Settings.
+        viewModelScope.launch {
+            combine(
+                AppVisibility.isForeground,
+                AppVisibility.resumes,
+                prefs.boolean(FullScreenCalls.PREF_DISMISSED, false),
+            ) { foreground, _, dismissed -> foreground && !dismissed }
+                .collectLatest { askable ->
+                    fullScreenOffer.value =
+                        askable && !FullScreenCalls.isGranted(getApplication())
+                }
+        }
         viewModelScope.launch {
             CoreServiceState.state.collectLatest { core ->
                 live.value = LiveData()
@@ -116,6 +140,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun requestBatteryExemption() {
         BatteryOptimization.openRequest(getApplication())
+    }
+
+    /** "Not now" on the Home call prompt — silences it here and in Settings. */
+    fun dismissFullScreenCallsPrompt() {
+        viewModelScope.launch { prefs.putBoolean(FullScreenCalls.PREF_DISMISSED, true) }
+    }
+
+    fun requestFullScreenCalls() {
+        FullScreenCalls.openRequest(getApplication())
     }
 
     fun connect() {

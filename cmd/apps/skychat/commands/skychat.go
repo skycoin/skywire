@@ -322,6 +322,72 @@ func (h *sseHub) subscribe() (<-chan string, func()) {
 	}
 }
 
+// forgetPeer drops every replayable event of the 1:1 conversation with pk
+// from both rings, so a listener connecting later is not handed the
+// conversation back.
+//
+// This is the other half of forgetting a conversation. The history store is
+// one durable copy; the replay ring is a second, shorter-lived one, and the
+// page that deletes a chat re-subscribes to /sse the next time it loads —
+// on a phone, every return to the chat tab — and was handed the peer's last
+// messages again as live events, which re-created the thread it had just
+// deleted, store or no store.
+//
+// Group posts by the same peer stay: the group was not deleted. Entries
+// that name the peer as the conversation (an inbound message from them, or
+// this side's own outbound mirror to them) go.
+func (h *sseHub) forgetPeer(pk string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.replayLen > 0 {
+		kept := make([]string, 0, h.replayLen)
+		start := (h.replayHead - h.replayLen + len(h.replay)) % len(h.replay)
+		for i := 0; i < h.replayLen; i++ {
+			entry := h.replay[(start+i)%len(h.replay)]
+			if !legacySSENamesPeer(entry, pk) {
+				kept = append(kept, entry)
+			}
+		}
+		h.replay = make([]string, len(h.replay))
+		copy(h.replay, kept)
+		h.replayLen = len(kept)
+		h.replayHead = len(kept) % len(h.replay)
+	}
+
+	if h.eventsLen > 0 {
+		kept := make([]chatEvent, 0, h.eventsLen)
+		start := (h.eventsHead - h.eventsLen + len(h.events)) % len(h.events)
+		for i := 0; i < h.eventsLen; i++ {
+			ev := h.events[(start+i)%len(h.events)]
+			if ev.Channel == channelDM && (ev.From == pk || ev.To == pk) {
+				continue
+			}
+			kept = append(kept, ev)
+		}
+		h.events = make([]chatEvent, len(h.events))
+		copy(h.events, kept)
+		h.eventsLen = len(kept)
+		h.eventsHead = len(kept) % len(h.events)
+	}
+}
+
+// legacySSENamesPeer reports whether a legacy /sse entry belongs to the 1:1
+// conversation with pk: a DM (no channel key — group, pairing and status
+// envelopes carry one) sent by them or mirrored to them.
+func legacySSENamesPeer(entry, pk string) bool {
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(entry), &m); err != nil {
+		return false
+	}
+	if ch, _ := m["channel"].(string); ch != "" && ch != channelDM {
+		return false
+	}
+	sender, _ := m["sender"].(string)
+	to, _ := m["to"].(string)
+	return sender == pk || to == pk
+}
+
 // clientCount returns how many SSE subscribers are currently
 // connected. Used by /status for operator health probes.
 func (h *sseHub) clientCount() int {

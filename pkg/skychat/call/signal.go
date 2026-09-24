@@ -47,6 +47,14 @@ type Sig struct {
 	Codec     string        `json:"codec,omitempty"`
 	MediaPort uint16        `json:"media_port,omitempty"`
 	Reason    string        `json:"reason,omitempty"`
+	// Resume, on an Invite or Accept, says the sender can continue this call
+	// over a rebuilt transport (SigResume). Resumption is only armed when
+	// BOTH sides said so: a peer that predates it never sends the field, and
+	// never re-dials or takes a re-dial either, so arming it against one only
+	// turns that peer's hangup into a thirty-to-sixty-second wait for a
+	// reconnect that cannot come. Absent, a broken conn ends the call the way
+	// it did before resumption existed.
+	Resume bool `json:"resume,omitempty"`
 }
 
 const sigMaxLen = 64 << 10 // 64 KiB cap on a signaling frame
@@ -242,7 +250,7 @@ func (s *Signaler) Invite(ctx context.Context, peer cipher.PubKey, callID, codec
 	if err != nil {
 		return nil, Sig{}, fmt.Errorf("voice: signaling dial: %w", err)
 	}
-	inv := Sig{Type: SigInvite, CallID: callID, FromPK: s.localPK, Codec: codec, MediaPort: mediaPort}
+	inv := Sig{Type: SigInvite, CallID: callID, FromPK: s.localPK, Codec: codec, MediaPort: mediaPort, Resume: true}
 	if err := writeSig(conn, inv); err != nil {
 		_ = conn.Close() //nolint:errcheck
 		return nil, Sig{}, fmt.Errorf("voice: send invite: %w", err)
@@ -319,7 +327,7 @@ func (s *Signaler) Resume(ctx context.Context, peer cipher.PubKey, callID string
 		if reason == "" {
 			reason = sigTypeName(reply.Type)
 		}
-		return nil, fmt.Errorf("voice: resume refused: %s", reason)
+		return nil, fmt.Errorf("%w: %s", ErrResumeRefused, reason)
 	}
 	return conn, nil
 }

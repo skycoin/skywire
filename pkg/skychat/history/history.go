@@ -133,6 +133,20 @@ type Store interface {
 	// hydrates from history instead of its local cache.
 	DeleteByID(peer, id string) (bool, error)
 
+	// DeletePeer erases every stored 1:1 message of peer's conversation and
+	// reports how many there were. An unknown peer is not an error (there is
+	// nothing to erase, and the caller's intent is met); an empty peer is
+	// ErrEmptyPeer.
+	//
+	// This is the durable half of deleting a conversation, the way
+	// DeleteByID is of deleting a message. The browser's thread list is not
+	// the durable copy — the store is: the page re-adds every peer the
+	// store still names on each load (syncHistoryPeers) and refills the
+	// thread from it on open (loadHistoryFor). A delete that only edited
+	// the browser's copy came back the next time the page loaded, which on
+	// a phone is every return to the chat tab.
+	DeletePeer(peer string) (int, error)
+
 	// Peers returns the set of peer PKs that have any stored messages.
 	Peers() ([]string, error)
 
