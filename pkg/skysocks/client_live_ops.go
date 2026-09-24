@@ -48,16 +48,21 @@ func (c *Client) reconcileActiveSet(reason string) {
 		switch {
 		case active < target:
 			c.clearDraining()
-			if c.adoptInFlight.Load() {
-				return // an adoption is already filling a slot
-			}
-			// A leg reserve at least as good as the best own standby becomes the
-			// tunnel (tunnel_adopt.go); the standby is the fallback.
-			if c.reserveBeatsStandby() && c.maybeAdoptReserve(why, func() { c.promoteIfShort(why) }) {
+			// An adoption in flight is filling ONE slot (and fills it the old
+			// way itself if it fails); any further shortfall is promoted now.
+			inflight := c.adoptInFlight.Load()
+			if inflight && active+1 >= target {
 				return
 			}
+			// A leg reserve at least as good as the best own standby becomes the
+			// tunnel (tunnel_adopt.go).
+			if !inflight && c.reserveBeatsStandby() && c.maybeAdoptReserve(why) {
+				continue
+			}
 			if c.promoteBestStandby(why) == nil {
-				c.maybeAdoptReserve(why, nil)
+				if !inflight {
+					c.maybeAdoptReserve(why)
+				}
 				return // nothing held to promote; the pool fill grows it
 			}
 		case active > target:

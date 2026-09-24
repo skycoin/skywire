@@ -99,6 +99,7 @@ const (
 	TunnelRTTSamplesCap     = "tunnel.rtt_samples_cap"
 	TunnelFreezeActive      = "tunnel.freeze_active"
 	TunnelAdoptReserves     = "tunnel.adopt_reserves"
+	TunnelAdoptRefusedHold  = "tunnel.adopt_refused_hold"
 
 	MuxCap   = "mux.cap"
 	MuxWidth = "mux.width"
@@ -338,6 +339,8 @@ func init() {
 		"hold the ACTIVE set's membership still: the promoter makes no discretionary promotion or park. A dead active tunnel is still failed over, and pool.freeze's own hold (which also stops the pool filling or shrinking) is independent of this one")
 	register(TunnelAdoptReserves, KindBool, boolVal(true),
 		"when the active set needs another tunnel, turn a leg reserve (a chain the router split out of a tunnel back into packet-level standby) into a stream-level tunnel instead of dialing one, whenever it ranks at least as well as the best own standby or there is no own standby; off = promote own standbys and dial only")
+	register(TunnelAdoptRefusedHold, KindDuration, int64(5*time.Minute),
+		"how long the client stops adopting leg reserves after an adoption failed; a refusal is a property of the exit (an older build, no CapLegRehome), so every other reserve would be refused the same way")
 
 	// Per-APP mux width. The visor-wide adaptive ceiling and floor
 	// (`proxy mux cap|width --visor-wide`) remain the default for every app

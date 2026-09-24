@@ -342,6 +342,9 @@ type Client struct {
 	reserves      []legReserve
 	adoptFn       func(port uint16) (net.Conn, error)
 	adoptInFlight atomic.Bool
+	// adoptHeldUntil: no adoption before this (tunnel.adopt_refused_hold after
+	// a refusal). Guarded by redialMu.
+	adoptHeldUntil time.Time
 
 	// draining is the ACTIVE tunnels the shape wants parked that are carrying
 	// streams right now. The picker passes them over, so they finish what they
@@ -1667,7 +1670,7 @@ func (c *Client) retireTunnelAs(s *yamux.Session, reason, event string, replace 
 	// A failover takes the own standby first: it is instant, and an adoption
 	// costs a round trip and a handshake. Only an empty pool waits on one.
 	if !wasStandby && c.promoteBestStandby("failover: active tunnel died") == nil {
-		c.maybeAdoptReserve("failover: active tunnel died", nil)
+		c.maybeAdoptReserve("failover: active tunnel died")
 	}
 	return true
 }

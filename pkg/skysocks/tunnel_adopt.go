@@ -65,6 +65,33 @@ func reservesFrom(snap proxystatus.Snapshot) []legReserve {
 // tunnelAdoptReserves is the live toggle (tunnel.adopt_reserves).
 func tunnelAdoptReserves() bool { return skysettings.Bool(skysettings.TunnelAdoptReserves) }
 
+// tunnelAdoptRefusedHold is how long a failed adoption keeps the client from
+// trying another (tunnel.adopt_refused_hold).
+func tunnelAdoptRefusedHold() time.Duration {
+	return skysettings.Dur(skysettings.TunnelAdoptRefusedHold)
+}
+
+// adoptableLocked reports whether an adoption may be tried now: wired, on,
+// something to adopt, and no refusal hold running. The caller holds redialMu.
+func (c *Client) adoptableLocked() bool {
+	return c.adoptFn != nil && len(c.reserves) > 0 && tunnelAdoptReserves() &&
+		!time.Now().Before(c.adoptHeldUntil)
+}
+
+// holdAdoption stops adoptions for tunnel.adopt_refused_hold. A refusal is a
+// property of the EXIT — its build does not know the flag, or it did not
+// negotiate the capability — not of the one reserve that was tried, so every
+// other reserve would be refused the same way.
+func (c *Client) holdAdoption(port uint16, err error) {
+	hold := tunnelAdoptRefusedHold()
+	c.redialMu.Lock()
+	c.adoptHeldUntil = time.Now().Add(hold)
+	c.redialMu.Unlock()
+	if c.appCl != nil {
+		c.appCl.Log().Infof("Adopting leg reserve :%d failed (%v); no adoption to this exit for %s", port, err, hold)
+	}
+}
+
 // SetReserveAdopt wires the app's adopting dial: a dial to the exit's service
 // port that names the reserve by its far-end port.
 func (c *Client) SetReserveAdopt(fn func(port uint16) (net.Conn, error)) {
@@ -84,7 +111,7 @@ func (c *Client) noteReserves(rs []legReserve) {
 func (c *Client) bestReserve() (legReserve, bool) {
 	c.redialMu.Lock()
 	defer c.redialMu.Unlock()
-	if c.adoptFn == nil || len(c.reserves) == 0 || !tunnelAdoptReserves() {
+	if !c.adoptableLocked() {
 		return legReserve{}, false
 	}
 	return c.reserves[0], true
@@ -96,7 +123,7 @@ func (c *Client) bestReserve() (legReserve, bool) {
 func (c *Client) takeReserve() (legReserve, func(uint16) (net.Conn, error), bool) {
 	c.redialMu.Lock()
 	defer c.redialMu.Unlock()
-	if c.adoptFn == nil || len(c.reserves) == 0 || !tunnelAdoptReserves() {
+	if !c.adoptableLocked() {
 		return legReserve{}, nil, false
 	}
 	r := c.reserves[0]
@@ -118,8 +145,9 @@ func (c *Client) reserveBeatsStandby() bool {
 }
 
 // maybeAdoptReserve starts ONE adoption in the background and reports whether
-// it did. fallback, when set, runs if the adoption fails.
-func (c *Client) maybeAdoptReserve(reason string, fallback func()) bool {
+// it did. An adoption that does not land fills the slot the old way the moment
+// it fails (fillAfterFailedAdopt), never on a later tick.
+func (c *Client) maybeAdoptReserve(reason string) bool {
 	if _, ok := c.bestReserve(); !ok {
 		return false
 	}
@@ -127,12 +155,28 @@ func (c *Client) maybeAdoptReserve(reason string, fallback func()) bool {
 		return false
 	}
 	go func() {
-		defer c.adoptInFlight.Store(false)
-		if !c.runAdopt(reason) && fallback != nil {
-			fallback()
+		ok := c.runAdopt(reason)
+		// Released BEFORE the fallback: the re-dial stands down while an
+		// adoption is in flight.
+		c.adoptInFlight.Store(false)
+		if !ok {
+			c.fillAfterFailedAdopt(reason)
 		}
 	}()
 	return true
+}
+
+// fillAfterFailedAdopt is what the active set does when an adoption did not
+// land and it is still short: promote an own standby, and with none, dial.
+func (c *Client) fillAfterFailedAdopt(reason string) {
+	target, _ := c.tunnelTarget()
+	if c.activeLiveCount() >= target {
+		return
+	}
+	if c.promoteBestStandby(reason+"; the leg reserve was not adopted") != nil {
+		return
+	}
+	c.maybeRedial(c.liveSessionCount())
 }
 
 // adoptReserve is one adoption on the caller's goroutine (the re-dial runs
@@ -153,9 +197,7 @@ func (c *Client) runAdopt(reason string) bool {
 	}
 	conn, err := fn(r.port)
 	if err != nil {
-		if c.appCl != nil {
-			c.appCl.Log().Infof("Adopting leg reserve :%d failed (%v); falling back", r.port, err)
-		}
+		c.holdAdoption(r.port, err)
 		return false
 	}
 	s, err := c.addTunnelSession(conn, false)
@@ -169,13 +211,4 @@ func (c *Client) runAdopt(reason string) bool {
 			r.port, reason, c.activeLiveCount(), c.liveSessionCount())
 	}
 	return true
-}
-
-// promoteIfShort promotes an own standby only while the active set is still
-// below its target — the fallback of an adoption that did not land, by which
-// time something else may have filled the slot.
-func (c *Client) promoteIfShort(reason string) {
-	if target, _ := c.tunnelTarget(); c.activeLiveCount() < target {
-		c.promoteBestStandby(reason)
-	}
 }
