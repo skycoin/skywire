@@ -99,3 +99,23 @@ func TestLegOrderStableUnderIndexChurn(t *testing.T) {
 		}
 	}
 }
+
+// TestRouteTreeNamesStandbyGroups: an active route group is headed "tunnel N"
+// and a pooled one "standby N". "stream" stays reserved for SOCKS streams: the
+// pool labeled "stream N" read as idle open streams on the rig.
+func TestRouteTreeNamesStandbyGroups(t *testing.T) {
+	leg := Leg{Index: 0, Alive: true, GoodputDownBps: 1, Hops: []Hop{{From: "srcpk", To: "dstpk"}}}
+	root := RouteTree(Snapshot{Tunnels: []Tunnel{
+		{Index: 0, Role: RoleActive, Legs: []Leg{leg}},
+		{Index: 7, Role: RoleStandby, Legs: []Leg{leg}},
+	}})
+	if got := root.Right[0].Label; !strings.HasPrefix(got, StreamHeaderGlyph+" tunnel 0") {
+		t.Errorf("active header = %q, want it to start %q", got, StreamHeaderGlyph+" tunnel 0")
+	}
+	if got := root.Right[2].Label; !strings.HasPrefix(got, StreamHeaderGlyph+" standby 7") {
+		t.Errorf("standby header = %q, want it to start %q", got, StreamHeaderGlyph+" standby 7")
+	}
+	if got := headerIdxOf(root.Right[2].Label); got != 7 {
+		t.Errorf("headerIdxOf(standby) = %d, want 7", got)
+	}
+}
