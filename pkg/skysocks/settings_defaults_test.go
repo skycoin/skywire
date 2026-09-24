@@ -45,6 +45,7 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 	require.Equal(t, tunnelRTTMinWindow, setTunnelRTTMinWindow())
 	require.EqualValues(t, tunnelRTTSamplesCap, setTunnelRTTSamplesCap())
 	require.False(t, tunnelFreezeActive(), "tunnel.freeze_active holds nothing still until it is set")
+	require.True(t, tunnelAdoptReserves(), "tunnel.adopt_reserves: a leg reserve can become a tunnel again")
 	require.Equal(t, tunnelPriorRefresh, setTunnelPriorRefresh())
 	require.Equal(t, exitOpenPenalty, setExitOpenPenalty())
 	require.Equal(t, statusSniffTimeout, setExitOpenTimeout())

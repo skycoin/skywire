@@ -98,6 +98,7 @@ const (
 	TunnelRTTMinWindow      = "tunnel.rtt_min_window"
 	TunnelRTTSamplesCap     = "tunnel.rtt_samples_cap"
 	TunnelFreezeActive      = "tunnel.freeze_active"
+	TunnelAdoptReserves     = "tunnel.adopt_reserves"
 
 	MuxCap   = "mux.cap"
 	MuxWidth = "mux.width"
@@ -335,6 +336,8 @@ func init() {
 		"most raw ping samples kept per tunnel in the minimum-RTT window")
 	register(TunnelFreezeActive, KindBool, boolVal(false),
 		"hold the ACTIVE set's membership still: the promoter makes no discretionary promotion or park. A dead active tunnel is still failed over, and pool.freeze's own hold (which also stops the pool filling or shrinking) is independent of this one")
+	register(TunnelAdoptReserves, KindBool, boolVal(true),
+		"when the active set needs another tunnel, turn a leg reserve (a chain the router split out of a tunnel back into packet-level standby) into a stream-level tunnel instead of dialing one, whenever it ranks at least as well as the best own standby or there is no own standby; off = promote own standbys and dial only")
 
 	// Per-APP mux width. The visor-wide adaptive ceiling and floor
 	// (`proxy mux cap|width --visor-wide`) remain the default for every app

@@ -335,6 +335,14 @@ type Client struct {
 	shapeTunnels int
 	shapeSource  string
 
+	// Leg reserves (tunnel_adopt.go): chains the router split out of a tunnel
+	// into packet-level standby, read from the same snapshot, and the app's
+	// dial that turns one back into an ACTIVE tunnel. reserves and adoptFn are
+	// guarded by redialMu; adoptInFlight is the single-flight guard.
+	reserves      []legReserve
+	adoptFn       func(port uint16) (net.Conn, error)
+	adoptInFlight atomic.Bool
+
 	// draining is the ACTIVE tunnels the shape wants parked that are carrying
 	// streams right now. The picker passes them over, so they finish what they
 	// hold and are given nothing new, and the next tick parks each one as it
@@ -1107,16 +1115,22 @@ var ErrClientClosed = errors.New("skysocks: client is closed")
 // either this append happens first and Close's snapshot covers it, or Close
 // snapshots first and this call sees the closed channel.
 func (c *Client) addTunnel(conn net.Conn, standby bool) error {
+	_, err := c.addTunnelSession(conn, standby)
+	return err
+}
+
+// addTunnelSession is addTunnel returning the session it registered.
+func (c *Client) addTunnelSession(conn net.Conn, standby bool) (*yamux.Session, error) {
 	session, stamp, err := newYamuxSession(conn)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	c.sessionsMu.Lock()
 	select {
 	case <-c.closeC:
 		c.sessionsMu.Unlock()
 		_ = session.Close() //nolint:errcheck,gosec
-		return ErrClientClosed
+		return nil, ErrClientClosed
 	default:
 	}
 	c.sessions = append(c.sessions, session)
@@ -1131,7 +1145,7 @@ func (c *Client) addTunnel(conn net.Conn, standby bool) error {
 		c.standby[session] = true
 	}
 	c.sessionsMu.Unlock()
-	return nil
+	return session, nil
 }
 
 // SetTunnelTarget sets the desired number of live tunnels N. When a tunnel dies
@@ -1390,18 +1404,46 @@ const standbyRTTStale = 3 * tunnelRTTProbeInterval
 // The flip is two map entries and one event. No stream is migrated, because a
 // standby tunnel by definition carries none.
 func (c *Client) promoteBestStandby(reason string) *yamux.Session {
-	now := time.Now()
 	c.sessionsMu.Lock()
+	best, _ := c.bestStandbyLocked(time.Now())
+	if best != nil {
+		delete(c.standby, best)
+		delete(c.auditions, best)
+	}
+	c.sessionsMu.Unlock()
+	if best == nil {
+		return nil
+	}
+	return c.notePromoted(best, reason)
+}
+
+// standbyRank is promoteBestStandby's ordering key: benched, stale, rtt —
+// lower wins, in that order.
+type standbyRank [3]float64
+
+// less reports whether k ranks strictly better than o.
+func (k standbyRank) less(o standbyRank) bool {
+	for i := range k {
+		if k[i] != o[i] {
+			return k[i] < o[i]
+		}
+	}
+	return false
+}
+
+// bestStandbyLocked is the standby promoteBestStandby would pick and its rank
+// (nil when none is live). The caller holds sessionsMu.
+func (c *Client) bestStandbyLocked(now time.Time) (*yamux.Session, standbyRank) {
 	var (
 		best  *yamux.Session
-		bestK [3]float64 // benched, stale, rtt — lower wins, in that order
+		bestK standbyRank
 	)
 	for _, s := range c.sessions {
 		if s == nil || s.IsClosed() || !c.standby[s] {
 			continue
 		}
 		m := c.recvStamp[s]
-		k := [3]float64{0, 1, 0}
+		k := standbyRank{0, 1, 0}
 		if m != nil {
 			if m.onBench(now) {
 				k[0] = 1
@@ -1413,21 +1455,11 @@ func (c *Client) promoteBestStandby(reason string) *yamux.Session {
 				}
 			}
 		}
-		if best == nil || k[0] < bestK[0] ||
-			(k[0] == bestK[0] && k[1] < bestK[1]) ||
-			(k[0] == bestK[0] && k[1] == bestK[1] && k[2] < bestK[2]) {
+		if best == nil || k.less(bestK) {
 			best, bestK = s, k
 		}
 	}
-	if best != nil {
-		delete(c.standby, best)
-		delete(c.auditions, best)
-	}
-	c.sessionsMu.Unlock()
-	if best == nil {
-		return nil
-	}
-	return c.notePromoted(best, reason)
+	return best, bestK
 }
 
 // notePromoted publishes a promotion whose standby-map flip has already been
@@ -1632,8 +1664,10 @@ func (c *Client) retireTunnelAs(s *yamux.Session, reason, event string, replace 
 		c.resetRedialBackoff()
 		c.armPoolFillAfter(c.probeInterval)
 	}
-	if !wasStandby {
-		c.promoteBestStandby("failover: active tunnel died")
+	// A failover takes the own standby first: it is instant, and an adoption
+	// costs a round trip and a handshake. Only an empty pool waits on one.
+	if !wasStandby && c.promoteBestStandby("failover: active tunnel died") == nil {
+		c.maybeAdoptReserve("failover: active tunnel died", nil)
 	}
 	return true
 }
@@ -1950,7 +1984,7 @@ func (c *Client) maybeRedial(live int) {
 	backedOff := c.redialFails >= maxRedialFails
 	c.redialMu.Unlock()
 
-	if fn == nil || backedOff || c.activeLiveCount() >= target || live <= 0 {
+	if fn == nil || backedOff || c.activeLiveCount() >= target || live <= 0 || c.adoptInFlight.Load() {
 		return
 	}
 	if !c.redialInFlight.CompareAndSwap(false, true) {
@@ -1958,6 +1992,11 @@ func (c *Client) maybeRedial(live int) {
 	}
 	go func() {
 		defer c.redialInFlight.Store(false)
+		// A leg reserve is a tunnel that needs no route setup.
+		if c.adoptReserve("re-dial: active set short") {
+			c.resetRedialBackoff()
+			return
+		}
 		conn, err := fn()
 		if err != nil {
 			c.redialMu.Lock()
