@@ -16,14 +16,17 @@
 
 	j.writeFile('/etc/hostname', 'skywire-playground\n');
 	j.writeFile('/etc/os-release', 'PRETTY_NAME="Skywire Playground (wasm)"\nID=skywire-playground\n');
-	// The SKYENV file, exactly as the Linux packages ship it: PKGENV=true
-	// makes `skywire autoconfig` / `skywire cli config gen` resolve the
-	// package paths (/opt/skywire/skywire.json). Edit it with the shell
-	// the same way you would on Linux.
-	j.writeFile('/etc/skywire.conf',
-		'#/etc/skywire.conf\n' +
-		'#sourced by `skywire autoconfig` and `skywire cli config gen`\n' +
-		'PKGENV=true\n');
+	// /etc/skywire.conf is deliberately NOT seeded, for the same reason the
+	// deb/arch packages do not ship it: `skywire autoconfig` writes it from
+	// the annotated template on its first run and never overwrites it after,
+	// so the tab gets the SAME file a packaged host gets — every knob present
+	// and commented at its default, editable with the shell exactly as on
+	// Linux. A three-line stub here used to pre-empt that, which left the tab
+	// with no knobs to edit (ISHYPERVISOR among them) and made the browser
+	// visor diverge from a native one for no reason.
+	//
+	// The directory is still ours to make: autoconfig creates it too, but a
+	// shell that wants to drop a conf in before the first run should find it.
 	j.writeFile('/home/user/README',
 		'This is an in-memory filesystem shared by the shell and the skywire binary.\n' +
 		'skywire is "installed" under /opt/skywire — try:\n' +
