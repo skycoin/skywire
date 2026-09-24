@@ -142,6 +142,10 @@ type Client struct {
 	streamsMu sync.Mutex
 	streams   map[uint32]streamMeta
 
+	// accept counts what the SOCKS accept path did before a connection ever
+	// becomes a row in streams — see accept_stats.go.
+	accept acceptStats
+
 	// Multi-tunnel liveness management (docs/mux_aggregation_rfc.md steps 3-4).
 	// target is the desired number of live tunnels (N from --tunnels). When a
 	// tunnel dies and the live count falls below target — but at least one tunnel
@@ -2384,19 +2388,28 @@ func (c *Client) ListenAndServe(addr string) error {
 		if c.appCl != nil {
 			c.appCl.Log().Debug("Accepted skysocks client")
 		}
+		c.accept.accepted.Add(1)
 
 		// Stripe onto the least-loaded live tunnel. pickSession returns nil only
 		// when every tunnel is closed; in that (route-down) case there is no live
 		// session to Open() a real error from, so a sentinel drives the same
 		// interstitial + reconnect path a single closed session took before.
+		//
+		// picking is a cheap in-memory choice and stays on this loop, because
+		// "no tunnel at all" is the signal that decides whether to tear down.
+		// Open() does NOT: it writes to a mesh route and can take as long as
+		// that route does, and running it here made every other pending
+		// connection wait behind it — one slow open serialized the whole
+		// listener. It now runs in the connection's own goroutine (openAndServe),
+		// so N concurrent browser connections open N streams concurrently.
 		sess := c.pickSession()
-		var stream net.Conn
 		if sess != nil {
-			stream, err = sess.Open()
-		} else {
-			err = errAllTunnelsDown
+			go c.openAndServe(conn, sess)
+			continue
 		}
-		if sess == nil || err != nil {
+		c.accept.pickNil.Add(1)
+		err = errAllTunnelsDown
+		{
 			// The mesh route/session to the exit is down (exit restart, all
 			// mux legs dropped). Before tearing down for reconnect, serve the
 			// waiting browser a branded "building a route over skywire…"
@@ -2435,13 +2448,46 @@ func (c *Client) ListenAndServe(addr string) error {
 
 			return fmt.Errorf("error opening yamux stream: %w", err)
 		}
-
-		if c.appCl != nil {
-			c.appCl.Log().Debug("Opened session skysocks client")
-		}
-
-		go c.handleStream(conn, stream)
 	}
+}
+
+// openAndServe opens one stream on sess for an accepted connection and serves
+// it. It runs in the connection's OWN goroutine, off the accept loop, so a slow
+// or failing open holds up nothing but its own connection.
+//
+// The failure handling mirrors what the accept loop used to do inline: serve
+// the branded interstitial so a plaintext-HTTP browser retries, and tear the
+// client down for reconnect only when EVERY tunnel is closed. A single Open
+// failing does not mean the exit is gone — with another tunnel up the browser's
+// reload gets a stream on the next-picked one, and the listener keeps running.
+func (c *Client) openAndServe(conn net.Conn, sess *yamux.Session) {
+	start := time.Now()
+	stream, err := sess.Open()
+	c.accept.observeOpen(time.Since(start), err)
+	if err != nil {
+		reachable := c.anySessionLive()
+		if serr := proxyinterstitial.ServeSOCKS5(conn, proxyinterstitial.StatusLine(err), "skysocks", c.statusOverride, c.exitReachable); serr != nil && c.appCl != nil {
+			c.appCl.Log().Debugf("route-down interstitial not served: %v", serr)
+		}
+		conn.Close() //nolint:errcheck,gosec
+		if reachable {
+			if c.appCl != nil {
+				c.appCl.Log().Debugf("yamux stream open failed but a tunnel is up; keeping listener: %v", err)
+			}
+			return
+		}
+		// Every tunnel is closed. Closing the client signals closeC, which
+		// closes the listener, so the accept loop returns and the app's
+		// reconnect cycle restarts — the same outcome the inline path reached
+		// by returning an error from ListenAndServe.
+		c.close()
+		return
+	}
+
+	if c.appCl != nil {
+		c.appCl.Log().Debug("Opened session skysocks client")
+	}
+	c.handleStream(conn, stream)
 }
 
 // Liveness-probe tuning for sessionKeepAliveLoop. A route group can be
@@ -3688,6 +3734,7 @@ func (c *Client) statusSnapshot() proxystatus.Snapshot {
 		// RTT to the exit) rather than a faked per-stream number; the renderer
 		// labels the column as route-group latency.
 		snap.Streams = c.streamSnapshot()
+		snap.Accept = c.accept.snapshot()
 		if rgRTT := representativeRouteRTT(snap.Legs); rgRTT > 0 {
 			for i := range snap.Streams {
 				snap.Streams[i].LatencyMS = rgRTT
