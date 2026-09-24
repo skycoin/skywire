@@ -335,7 +335,11 @@ func hexDecodeRule(s string) (routing.Rule, error) {
 	if err != nil {
 		return nil, err
 	}
-	return routing.Rule(b), nil
+	rule := routing.Rule(b)
+	if err := rule.Validate(); err != nil {
+		return nil, err
+	}
+	return rule, nil
 }
 
 func hexToBytes(s string) ([]byte, error) {

@@ -31,6 +31,10 @@ func NewRPCGateway(router Router, mLog *logging.MasterLogger, noTransit bool) *R
 
 // AddEdgeRules adds edge rules.
 func (r *RPCGateway) AddEdgeRules(rules routing.EdgeRules, ok *bool) error {
+	if err := rules.Validate(); err != nil {
+		*ok = false
+		return routing.Failure{Code: routing.FailureAddRules, Msg: err.Error()}
+	}
 	if err := r.router.IntroduceRules(rules); err != nil {
 		*ok = false
 
@@ -53,6 +57,12 @@ func (r *RPCGateway) AddIntermediaryRules(rules []routing.Rule, ok *bool) error 
 		*ok = false
 		r.logger.Debug("Refusing intermediary rules: this visor does not transit routes.")
 		return routing.Failure{Code: routing.FailureAddRules, Msg: "visor does not transit routes"}
+	}
+	for _, rule := range rules {
+		if err := rule.Validate(); err != nil {
+			*ok = false
+			return routing.Failure{Code: routing.FailureAddRules, Msg: err.Error()}
+		}
 	}
 	if err := r.router.SaveRoutingRules(rules...); err != nil {
 		*ok = false
