@@ -434,6 +434,13 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 	// diverge from ALL prior ones (same discipline as establishMuxRoutes).
 	excludePKs := intermediatesOfRouteGroup(nrg, lPK, rPK)
 
+	// leg.hops_match: ask the finder for the group's own length. MinHops is only
+	// a floor, so the post-fetch gate below still refuses a longer plan.
+	hopsTarget := nrg.rg.legHopsTarget()
+	if hopsTarget > minHops {
+		minHops = hopsTarget
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -469,6 +476,25 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 		// (1-hop) case, and aux mux legs are multi-hop (min_hops>=1 here, and >=2
 		// for the multi-hop presets). Local calc is the fallback for a disjoint
 		// deep hop the finder can't reach.
+		if hopsTarget == 1 {
+			// A direct group grows with another direct transport. The finder
+			// ignores ExcludeTransportIDs and would hand back the one the group
+			// already rides.
+			hop, ok := r.directHopExcluding(lPK, rPK, excludeIDs)
+			if !ok {
+				log.Debugf("GrowMuxRoute: no other direct transport for leg %d/%d (leg.hops_match)", current+added+1, target)
+				break
+			}
+			fwd := []routing.Hop{hop}
+			if err := r.AddMuxRouteByHops(desc, fwd, reverseHops(fwd)); err != nil {
+				log.Debugf("GrowMuxRoute: direct leg %d/%d failed: %v", current+added+1, target, err)
+				break
+			}
+			excludeIDs = append(excludeIDs, hop.TpID)
+			added++
+			continue
+		}
+
 		fwd, rev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
 		if err != nil {
 			fwd, rev, err = r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
@@ -495,6 +521,17 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 			consecutiveFailures++
 			log.Debugf("GrowMuxRoute: candidate for leg %d/%d rejected — intra-route loop or intermediate overlap; re-requesting with strengthened excludes",
 				current+added+1, target)
+			if consecutiveFailures >= maxConsecutiveFailures {
+				break
+			}
+			continue
+		}
+
+		if hopsTarget > 0 && len(fwd) != hopsTarget {
+			excludePKs = append(excludePKs, intermediatesOfHops(fwd, lPK, rPK)...)
+			consecutiveFailures++
+			log.Debugf("GrowMuxRoute: candidate for leg %d/%d has %d hops, the group's legs have %d (leg.hops_match); re-requesting",
+				current+added+1, target, len(fwd), hopsTarget)
 			if consecutiveFailures >= maxConsecutiveFailures {
 				break
 			}

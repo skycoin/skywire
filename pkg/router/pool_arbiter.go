@@ -390,6 +390,9 @@ func poolCandidates(g *RouteGroup, pool []*RouteGroup, sibling map[uuid.UUID]str
 			continue
 		}
 		fwd := s.legHopsFor(first)
+		if !g.legHopsMatch(fwd) {
+			continue // a chain of another length would stripe unevenly (leg.hops_match)
+		}
 		out = append(out, poolCandidate{rg: s, plan: poolLegPlan{
 			fwd: fwd, rev: reverseHops(fwd), firstTp: first,
 			port: s.desc.DstPort(), latencyMS: lat, throughputBps: thr,
@@ -448,6 +451,9 @@ func poolArbiterStepExcluding(g *RouteGroup, pool []*RouteGroup, now time.Time,
 	}
 	cands := poolCandidates(g, pool, sibling)
 	if len(cands) == 0 {
+		if pooledAtOtherLength(g, pool) {
+			g.growAtHopLength(now, reason, grow)
+		}
 		return
 	}
 	// Never strand the pool: what is left after this take must still cover the
@@ -522,9 +528,13 @@ func (rg *RouteGroup) notePoolLegTaken(c poolCandidate, now time.Time, reason, h
 	legs := len(rg.tps)
 	rg.mu.Unlock()
 
+	took := fmt.Sprintf("took standby tunnel :%d as a mux leg", c.plan.port)
+	if c.rg == nil {
+		took = "dialed a mux leg"
+	}
 	rg.noteMuxEvent(MuxEvent{
 		Event: MuxEventPoolLegTaken, By: MuxByLocal, LegIndex: idx, Legs: legs, TpID: tpID,
-		Reason: fmt.Sprintf("%s; took standby tunnel :%d as a mux leg (%s)", reason, c.plan.port, how),
+		Reason: fmt.Sprintf("%s; %s (%s)", reason, took, how),
 	})
 }
 
@@ -707,8 +717,11 @@ func (r *router) poolArbiterTick(now time.Time) {
 	}
 	for k, active := range actives {
 		poolArbiterRound(active, pools[k], now, func(g, s *RouteGroup, exclude []uuid.UUID) error {
-			_, err := r.growMuxFromPool(g.desc.DstPort(), 1, 0, exclude)
-			if err == nil {
+			n, err := r.growMuxFromPool(g.desc.DstPort(), 1, 0, exclude)
+			if err == nil && n == 0 {
+				err = errNoLegGrown
+			}
+			if err == nil && s != nil {
 				s.noteTunnelConsumed(g.desc.DstPort())
 			}
 			return err

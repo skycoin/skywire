@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -3767,6 +3768,12 @@ func (r *router) establishMuxRoutes(
 			excludePKs = append(excludePKs, intermediatesOfHops(muxRev, rPK, lPK)...)
 			continue
 		}
+		if !nrg.rg.legHopsMatch(muxFwd) {
+			log.Debugf("Mux route %d/%d: candidate has %d hops, the group's legs have %d (leg.hops_match); skipping",
+				i+1, maxCount, len(muxFwd), nrg.rg.legHopsTarget())
+			excludePKs = append(excludePKs, intermediatesOfHops(muxFwd, lPK, rPK)...)
+			continue
+		}
 
 		// The route-finder fallback ignores ExcludeTransportIDs, so it can hand
 		// back a leg whose first hop reuses a transport already used by the
@@ -4048,6 +4055,10 @@ func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *D
 	// rotation goroutine keeps the current leg set and retries next tick).
 	if !validMuxLeg(muxFwd, muxRev, lPK, rPK, excludePKs, excludePKs) {
 		return errors.New("rotation add-leg: planned leg violates mux invariants (intra-route loop or intermediate overlap with an existing leg)")
+	}
+	if !nrg.rg.legHopsMatch(muxFwd) {
+		return fmt.Errorf("rotation add-leg: planned leg has %d hops, the group's legs have %d (leg.hops_match)",
+			len(muxFwd), nrg.rg.legHopsTarget())
 	}
 
 	// The route-finder honors ExcludeIntermediatePKs but NOT ExcludeTransportIDs,
@@ -4537,6 +4548,13 @@ func validMuxLeg(fwd, rev []routing.Hop, src, dst cipher.PubKey, usedFwd, usedRe
 // falling through to the route finder is the right answer there, not dialing
 // over something known to be down.
 func (r *router) directHop(src, dst cipher.PubKey) (routing.Hop, bool) {
+	return r.directHopExcluding(src, dst, nil)
+}
+
+// directHopExcluding is directHop with the transports in exclude ruled out, so a
+// direct mux group under leg.hops_match can take the NEXT direct transport to
+// the exit (squicr beside stcpr) for its second leg.
+func (r *router) directHopExcluding(src, dst cipher.PubKey, exclude []uuid.UUID) (routing.Hop, bool) {
 	if r.tm == nil {
 		return routing.Hop{}, false
 	}
@@ -4550,7 +4568,7 @@ func (r *router) directHop(src, dst cipher.PubKey) (routing.Hop, bool) {
 		if tp == nil || tp.IsClosed() || tp.Entry.Label == transport.LabelSetup {
 			return true
 		}
-		if tp.Entry.RemoteEdge(src) != dst {
+		if tp.Entry.RemoteEdge(src) != dst || slices.Contains(exclude, tp.Entry.ID) {
 			return true
 		}
 		if best == nil || betterDirectTransport(tp, best) {

@@ -408,6 +408,12 @@ func (r *router) growMuxFromPool(localPort routing.Port, legs, minHops int, excl
 		if !hit {
 			break
 		}
+		if !nrg.rg.legHopsMatch(fwd) {
+			// Another length than the group's legs (leg.hops_match): rule its
+			// first hop out and ask the pool again.
+			exclude = append(exclude, fwd[0].TpID)
+			continue
+		}
 		if err := r.AddMuxRouteByHops(desc, fwd, rev); err != nil {
 			// The plan was stale (a transport died, the exit refused it). Drop
 			// the whole bucket rather than re-serving it on the next turn of

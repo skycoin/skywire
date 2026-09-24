@@ -37,6 +37,7 @@ var (
 	LegParkMinHold            = RegisterMin("leg.park_min_hold", KindDuration, int64(30*time.Second), int64(time.Second), "how long an adaptive park holds before a leg may be re-admitted")
 	LegRehomeAckTimeout       = RegisterMin("leg.rehome_ack_timeout", KindDuration, int64(5*time.Second), int64(100*time.Millisecond), "how long a leg re-home waits for the exit's ack before both groups are left intact")
 	LegSplitOnRelease         = RegisterBool("leg.split_on_release", true, "hand a released pool leg back to the pool as its own standby route group (leg split) instead of closing its transport")
+	LegHopsMatch              = RegisterBool("leg.hops_match", true, "an automatically added mux leg must have the same forward hop count as the group's first leg, so a packet-level group never stripes a direct transport alongside a multi-hop chain (off: any length)")
 
 	// Idle suspension of the service loops that cannot act on a quiet or
 	// single-leg group (service_gate.go). The three loops it parks tick at 10,
