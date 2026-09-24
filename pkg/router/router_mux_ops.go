@@ -476,6 +476,25 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 		// (1-hop) case, and aux mux legs are multi-hop (min_hops>=1 here, and >=2
 		// for the multi-hop presets). Local calc is the fallback for a disjoint
 		// deep hop the finder can't reach.
+		if hopsTarget == 1 {
+			// A direct group grows with another direct transport. The finder
+			// ignores ExcludeTransportIDs and would hand back the one the group
+			// already rides.
+			hop, ok := r.directHopExcluding(lPK, rPK, excludeIDs)
+			if !ok {
+				log.Debugf("GrowMuxRoute: no other direct transport for leg %d/%d (leg.hops_match)", current+added+1, target)
+				break
+			}
+			fwd := []routing.Hop{hop}
+			if err := r.AddMuxRouteByHops(desc, fwd, reverseHops(fwd)); err != nil {
+				log.Debugf("GrowMuxRoute: direct leg %d/%d failed: %v", current+added+1, target, err)
+				break
+			}
+			excludeIDs = append(excludeIDs, hop.TpID)
+			added++
+			continue
+		}
+
 		fwd, rev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
 		if err != nil {
 			fwd, rev, err = r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)

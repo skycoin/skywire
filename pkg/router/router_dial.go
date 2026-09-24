@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -4547,6 +4548,13 @@ func validMuxLeg(fwd, rev []routing.Hop, src, dst cipher.PubKey, usedFwd, usedRe
 // falling through to the route finder is the right answer there, not dialing
 // over something known to be down.
 func (r *router) directHop(src, dst cipher.PubKey) (routing.Hop, bool) {
+	return r.directHopExcluding(src, dst, nil)
+}
+
+// directHopExcluding is directHop with the transports in exclude ruled out, so a
+// direct mux group under leg.hops_match can take the NEXT direct transport to
+// the exit (squicr beside stcpr) for its second leg.
+func (r *router) directHopExcluding(src, dst cipher.PubKey, exclude []uuid.UUID) (routing.Hop, bool) {
 	if r.tm == nil {
 		return routing.Hop{}, false
 	}
@@ -4560,7 +4568,7 @@ func (r *router) directHop(src, dst cipher.PubKey) (routing.Hop, bool) {
 		if tp == nil || tp.IsClosed() || tp.Entry.Label == transport.LabelSetup {
 			return true
 		}
-		if tp.Entry.RemoteEdge(src) != dst {
+		if tp.Entry.RemoteEdge(src) != dst || slices.Contains(exclude, tp.Entry.ID) {
 			return true
 		}
 		if best == nil || betterDirectTransport(tp, best) {
