@@ -59,6 +59,7 @@ const (
 	PoolRetryRounds     = "pool.retry_rounds"
 	PoolStandbyRTTStale = "pool.standby_rtt_stale"
 	PoolSize            = "pool.size"
+	PoolSizeCap         = "pool.size_cap"
 	PoolFreeze          = "pool.freeze"
 	PoolExcludePKs      = "pool.exclude_pks"
 	PoolRequireTpTypes  = "pool.require_tp_types"
@@ -230,12 +231,20 @@ func init() {
 		"rounds of failed dials before the pool fill rests until a death")
 	register(PoolStandbyRTTStale, KindDuration, int64(15*time.Second),
 		"how long a standby tunnel may be silent and still be promoted")
-	// The live twin of --standby-pool. Default 32 is skyenv.SkysocksClientStandbyPool
-	// (restated rather than imported: this package takes no skywire import so the
-	// CLI can read the catalog without linking the client). Unset, the boot flag
-	// still wins; set, the pool grows or shrinks to it on the next fill tick.
+	// The live twin of --standby-pool, for a FIXED ceiling. Unset, the boot flag
+	// wins, and its default (skyenv.SkysocksClientStandbyPool = -1) sizes the pool
+	// automatically: one tunnel per disjoint route to the exit, up to
+	// pool.size_cap. Set, the pool grows or shrinks to it on the next fill tick.
+	// The 32 below is only what a caller reading the knob unset would see.
 	registerZeroable(PoolSize, 32,
 		"CEILING on tunnels held to the exit including the active ones; overrides --standby-pool once set (0 = active tunnels only)")
+	// The bound on an AUTO-sized pool (--standby-pool -1, the default): the pool
+	// holds as many tunnels as there are disjoint routes to the exit (one
+	// intermediate each, plus the direct transports), never more than this. Every
+	// standby tunnel is a route group on the exit too, so this is what an
+	// operator turns to trade fail-over depth against exit load.
+	register(PoolSizeCap, KindCount, 128,
+		"ceiling on an auto-sized pool (--standby-pool -1): it holds one tunnel per disjoint route to the exit, up to this many")
 	register(PoolFreeze, KindBool, boolVal(false),
 		"hold the active set still: the promoter makes no discretionary swap and the pool neither fills nor shrinks. A dead tunnel is still replaced, and a reconcile the operator asks for still runs")
 	registerList(PoolExcludePKs,

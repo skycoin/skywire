@@ -158,4 +158,7 @@ func (c *Client) pullCapacityPriors(now time.Time) {
 	if c.applyShapeTarget(snap.ShapeTunnels, snap.ShapeSource) {
 		c.reconcileActiveSet("mux.shape target changed")
 	}
+	// And the count of disjoint routes to the exit, which an auto-sized pool
+	// follows (pool_auto.go).
+	c.applyRouteBound(snap.DisjointRoutes)
 }

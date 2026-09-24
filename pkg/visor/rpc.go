@@ -413,6 +413,9 @@ type MuxRouteGroupInfo struct {
 	// but not which of them are in standby, so this field is always empty in
 	// an accepting visor's `visor state`.
 	TunnelRole string `json:"tunnel_role,omitempty"`
+	// DisjointRoutes: routes to the far end sharing no intermediate and no first
+	// hop; what an auto-sized standby pool holds (0 = not yet counted).
+	DisjointRoutes int `json:"disjoint_routes,omitempty"`
 	// LegReserve: a standby group a leg split built — composable as a leg,
 	// never promotable to a tunnel (it has no app session).
 	LegReserve bool `json:"leg_reserve,omitempty"`

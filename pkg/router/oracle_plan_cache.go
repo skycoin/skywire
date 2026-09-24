@@ -40,6 +40,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // oraclePlanSet is one exit's ranked candidate set plus the claims against it.
@@ -56,10 +57,14 @@ type oraclePlanSet struct {
 // oraclePlanCache is the visor-level singleflight + claim ledger over the
 // RSN-oracle's candidate sets. Concurrent-safe; one instance per router.
 type oraclePlanCache struct {
-	mu       sync.Mutex
-	sets     map[batchKey]*oraclePlanSet
-	inflight map[batchKey]chan struct{}
-	now      func() time.Time
+	mu   sync.Mutex
+	sets map[batchKey]*oraclePlanSet
+	// firstHops is the number of distinct first hops in the last set fetched for
+	// each destination. Unlike sets it does not expire: it is a count reported
+	// to the app (routeBound), and a stale count is far better than none.
+	firstHops map[cipher.PubKey]int
+	inflight  map[batchKey]chan struct{}
+	now       func() time.Time
 
 	// metrics (read via stats(); never gate behavior)
 	queries uint64 // oracle queries actually issued
@@ -71,9 +76,10 @@ type oraclePlanCache struct {
 
 func newOraclePlanCache() *oraclePlanCache {
 	return &oraclePlanCache{
-		sets:     make(map[batchKey]*oraclePlanSet),
-		inflight: make(map[batchKey]chan struct{}),
-		now:      time.Now,
+		sets:      make(map[batchKey]*oraclePlanSet),
+		firstHops: make(map[cipher.PubKey]int),
+		inflight:  make(map[batchKey]chan struct{}),
+		now:       time.Now,
 	}
 }
 
@@ -132,6 +138,7 @@ func (c *oraclePlanCache) legsFor(ctx context.Context, src, dst cipher.PubKey, f
 				filled: c.now(),
 				claims: make(map[uuid.UUID]time.Time, len(legs)),
 			}
+			c.firstHops[key.dst] = distinctFirstHops(legs)
 		}
 		c.mu.Unlock()
 		close(done)
@@ -221,4 +228,64 @@ func (c *oraclePlanCache) stats() oraclePlanStats {
 		s.Legs += len(set.legs)
 	}
 	return s
+}
+
+// routeBound is how many one-intermediate routes to dst share no first hop,
+// from the last candidate set fetched for it; 0 when none has been fetched.
+func (c *oraclePlanCache) routeBound(dst cipher.PubKey) int {
+	if c == nil {
+		return 0
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.firstHops[dst]
+}
+
+// distinctFirstHops counts the first-hop transports among legs.
+func distinctFirstHops(legs []twoHopLeg) int {
+	seen := make(map[uuid.UUID]struct{}, len(legs))
+	for _, l := range legs {
+		if len(l.Forward) > 0 {
+			seen[l.Forward[0].TpID] = struct{}{}
+		}
+	}
+	return len(seen)
+}
+
+// disjointRouteBound is how many routes from this visor to dst share no
+// intermediate and no first hop: the one-intermediate routes the oracle last
+// found, plus every live direct transport to dst. 0 until the oracle has been
+// asked about dst — a direct count alone would understate a well-connected
+// visor by two orders of magnitude, and the app reads 0 as "not yet known".
+func (r *router) disjointRouteBound(dst cipher.PubKey) int {
+	n := r.oraclePlans.routeBound(dst)
+	if n == 0 || r.tm == nil {
+		return n
+	}
+	self := r.conf.PubKey
+	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if tp != nil && !tp.IsClosed() && tp.Entry.Label != transport.LabelSetup && tp.Entry.RemoteEdge(self) == dst {
+			n++
+		}
+		return true
+	})
+	return n
+}
+
+// applyRouteBounds stamps DisjointRoutes on every snapshot, counting each far
+// end once however many of its groups are in the set.
+func (r *router) applyRouteBounds(infos []MuxInfo) {
+	bounds := make(map[cipher.PubKey]int)
+	for i := range infos {
+		far := infos[i].FarEndPK
+		if far.Null() {
+			continue
+		}
+		n, ok := bounds[far]
+		if !ok {
+			n = r.disjointRouteBound(far)
+			bounds[far] = n
+		}
+		infos[i].DisjointRoutes = n
+	}
 }

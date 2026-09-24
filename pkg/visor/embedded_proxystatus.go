@@ -197,6 +197,11 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 				break
 			}
 		}
+		for _, info := range infos {
+			if info.DisjointRoutes > snap.DisjointRoutes {
+				snap.DisjointRoutes = info.DisjointRoutes
+			}
+		}
 		if len(snap.Tunnels) > 0 {
 			snap.MuxEnabled = snap.Tunnels[0].MuxEnabled
 			snap.Legs = snap.Tunnels[0].Legs
