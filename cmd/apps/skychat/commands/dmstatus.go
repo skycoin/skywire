@@ -154,10 +154,16 @@ func deleteHandler(ctx context.Context) http.HandlerFunc {
 	}
 }
 
-// forgetHandler serves POST /history/forget {pk, id}: drop OUR stored copy of
-// one message and tell nobody.
+// forgetHandler serves POST /history/forget {pk, id} — drop OUR stored copy of
+// one message and tell nobody — or {pk, all: true}: drop the whole
+// conversation, which is what "Delete chat" means.
 //
-// This is what makes "delete for me" on a DM stick. The browser's thread cache
+// This is what makes "delete for me" on a DM stick, and "Delete chat" too:
+// that one used to be, in its own words, a UI-local action, and the store
+// re-listed the peer on every page load (syncHistoryPeers) and refilled the
+// thread on open. On a phone, where the page reloads on every return to the
+// chat tab and persistence is always on, the deleted conversation was back
+// every time. The browser's thread cache
 // is not the durable copy — the visor's history store is, and selectRecipient
 // refills an empty thread from it on every open (loadHistoryFor). So a delete
 // that only edited the cache came back the moment the user left the
@@ -184,8 +190,9 @@ func forgetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		PK string `json:"pk"`
-		ID string `json:"id"`
+		PK  string `json:"pk"`
+		ID  string `json:"id"`
+		All bool   `json:"all"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
@@ -194,6 +201,26 @@ func forgetHandler(w http.ResponseWriter, r *http.Request) {
 	peer, err := parsePK(body.PK)
 	if err != nil {
 		http.Error(w, "invalid pk: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if body.All {
+		// The conversation's call records live in the same bucket
+		// (voice_calllog builds /calls from history), so they go with it:
+		// deleting a chat is "I am done with these messages", and a call
+		// record is one of them.
+		n, err := historyStore.DeletePeer(peer.Hex())
+		if err != nil {
+			appLog("skychat: history delete of the conversation with %s failed: %v", peer.Hex(), err)
+			http.Error(w, "history delete failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// And from the /sse replay ring, or the page's next load is handed
+		// the last few messages back as live events — see sseHub.forgetPeer.
+		if hub != nil {
+			hub.forgetPeer(peer.Hex())
+		}
+		chatLog.Debugf("history: forgot the conversation with %s (%d messages)", peer.Hex(), n)
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if strings.TrimSpace(body.ID) == "" {

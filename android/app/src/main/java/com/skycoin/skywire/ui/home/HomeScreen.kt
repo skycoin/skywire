@@ -117,6 +117,16 @@ fun HomeScreen(
                 onDismiss = viewModel::dismissBatteryPrompt,
             )
         }
+        if (state.offerFullScreenCalls) {
+            Spacer(Modifier.height(20.dp))
+            PermissionPrompt(
+                title = stringResource(R.string.home_calls_title),
+                body = stringResource(R.string.home_calls_body),
+                allow = stringResource(R.string.settings_calls_allow),
+                onAllow = viewModel::requestFullScreenCalls,
+                onDismiss = viewModel::dismissFullScreenCallsPrompt,
+            )
+        }
         state.summary?.let { summary ->
             Spacer(Modifier.height(24.dp))
             VisorInfoCard(state, summary, onOpenLogs)
@@ -134,14 +144,34 @@ fun HomeScreen(
  */
 @Composable
 private fun BatteryPrompt(onAllow: () -> Unit, onDismiss: () -> Unit) {
+    PermissionPrompt(
+        title = stringResource(R.string.home_battery_title),
+        body = stringResource(R.string.home_battery_body),
+        allow = stringResource(R.string.settings_battery_allow),
+        onAllow = onAllow,
+        onDismiss = onDismiss,
+    )
+}
+
+/**
+ * One permission, asked once, with the two answers side by side. The call
+ * screen prompt is the same card with different words: Android 14 stopped
+ * granting the full-screen intent to apps that are not the default dialer,
+ * and without it an incoming call cannot wake a phone whose screen is off.
+ */
+@Composable
+private fun PermissionPrompt(
+    title: String,
+    body: String,
+    allow: String,
+    onAllow: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     SectionCard {
-        Text(
-            stringResource(R.string.home_battery_title),
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Text(title, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(6.dp))
         Text(
-            stringResource(R.string.home_battery_body),
+            body,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -153,7 +183,7 @@ private fun BatteryPrompt(onAllow: () -> Unit, onDismiss: () -> Unit) {
         // like something you can press.
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             FilledTonalButton(onClick = onAllow) {
-                Text(stringResource(R.string.settings_battery_allow))
+                Text(allow)
             }
             FilledTonalButton(onClick = onDismiss) {
                 Text(stringResource(R.string.settings_battery_not_now))

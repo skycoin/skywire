@@ -1,5 +1,6 @@
 package com.skycoin.skywire.core
 
+import android.app.KeyguardManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -297,7 +298,7 @@ internal class VoiceCallWatcher(context: Context) {
      * the floor, not the design.
      */
     private fun showRinging(invite: VoiceInvite?) {
-        if (invite == null || AppVisibility.isForeground.value) {
+        if (invite == null || seen()) {
             if (showing != null) {
                 notifications.cancel(RINGING_NOTIFICATION_ID)
                 showing = null
@@ -357,6 +358,23 @@ internal class VoiceCallWatcher(context: Context) {
             .build()
         runCatching { notifications.notify(RINGING_NOTIFICATION_ID, note) }
             .onFailure { Log.w(TAG, "cannot raise the call screen", it) }
+    }
+
+    /**
+     * Whether the user can see the app, which is what makes a ringing
+     * notification redundant.
+     *
+     * "Started" is not "seen" while the phone is locked. A launch behind the
+     * lock screen reaches onStart without anyone seeing a thing, and the
+     * next poll then cancelled the notification — the only call UI a locked
+     * phone had. Re-posting it re-fired the full-screen intent, so the
+     * Activity flapped between start and stop. Behind the keyguard the
+     * notification stays up until the call is answered or gone.
+     */
+    private fun seen(): Boolean {
+        if (!AppVisibility.isForeground.value) return false
+        val keyguard = app.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        return keyguard?.isKeyguardLocked != true
     }
 
     /**

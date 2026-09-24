@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Runs for exactly as long as a call is connected, and does one thing: lend
@@ -55,7 +56,19 @@ class VoiceCallService : android.app.Service() {
         // not a silent mute — unless RECORD_AUDIO is already granted. A call can
         // arrive before the user has ever been asked, so claiming the microphone
         // up front would crash the app on the very call that needed it.
-        foreground(ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        if (!foreground(ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)) {
+            // Never in the foreground, so the platform's clock on the start is
+            // still running; stopping now is what stops it.
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        inForeground.set(true)
+        if (!wanted.get()) {
+            // The call ended before this got going — see stop(). Now that the
+            // start has been honoured, the stop can be.
+            stopSelf()
+            return START_NOT_STICKY
+        }
         engine.start(scope, onMicrophoneReady = {
             // Promote before a single frame is recorded. Recording from the
             // background is what the type buys, and a call may well be running
@@ -67,14 +80,15 @@ class VoiceCallService : android.app.Service() {
         return START_NOT_STICKY
     }
 
-    private fun foreground(type: Int) {
+    private fun foreground(type: Int): Boolean =
         runCatching { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), type) }
             .onFailure { Log.w(TAG, "could not enter the foreground as type $type", it) }
-    }
+            .isSuccess
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        inForeground.set(false)
         engine.stop()
         scope.cancel()
         super.onDestroy()
@@ -104,15 +118,39 @@ class VoiceCallService : android.app.Service() {
         private const val TAG = "SkywireVoice"
         private const val NOTIFICATION_ID = 3
 
+        /** Whether a call currently wants this service up: set by [start], cleared by [stop]. */
+        private val wanted = AtomicBoolean(false)
+
+        /** Set once startForeground has been honoured, cleared on destroy. */
+        private val inForeground = AtomicBoolean(false)
+
         fun start(context: Context) {
+            wanted.set(true)
             ContextCompat.startForegroundService(
                 context,
                 Intent(context, VoiceCallService::class.java),
             )
         }
 
+        /**
+         * Stop the service — but never from outside while it is still starting.
+         *
+         * `startForegroundService` starts a clock: the service must reach
+         * `startForeground` within seconds or the platform crashes the whole
+         * app, and it does so even when the service was stopped in between. A
+         * call that dropped eight seconds after connecting, on a phone whose
+         * main thread was busy tearing the chat page down for the call screen,
+         * had this service stopped before its `onStartCommand` had run —
+         * "Bringing down service while still waiting for start foreground",
+         * then ForegroundServiceDidNotStartInTimeException took the process.
+         * So while the start is pending, only the wish is recorded, and the
+         * service stops itself the moment it has entered the foreground.
+         */
         fun stop(context: Context) {
-            context.stopService(Intent(context, VoiceCallService::class.java))
+            wanted.set(false)
+            if (inForeground.get()) {
+                context.stopService(Intent(context, VoiceCallService::class.java))
+            }
         }
     }
 }

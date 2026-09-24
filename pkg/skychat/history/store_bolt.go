@@ -259,9 +259,40 @@ func (s *BoltStore) DeleteByID(peer, id string) (bool, error) {
 			}
 			found = true
 		}
+		// The last message going takes the conversation with it, as it does
+		// in MemStore. An empty bucket left behind is still a bucket, and
+		// Peers would go on listing a conversation with nothing in it.
+		if first, _ := peerBkt.Cursor().First(); found && first == nil {
+			return root.DeleteBucket([]byte(peer))
+		}
 		return nil
 	})
 	return found, err
+}
+
+// DeletePeer implements Store: the peer's whole bucket goes, in one
+// transaction.
+func (s *BoltStore) DeletePeer(peer string) (int, error) {
+	if peer == "" {
+		return 0, ErrEmptyPeer
+	}
+	n := 0
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		root := tx.Bucket([]byte(messagesBucket))
+		peerBkt := root.Bucket([]byte(peer))
+		if peerBkt == nil {
+			return nil
+		}
+		c := peerBkt.Cursor()
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			n++
+		}
+		return root.DeleteBucket([]byte(peer))
+	})
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 // ListRecent implements Store. Walks every peer bucket and merges by timestamp.
@@ -290,12 +321,22 @@ func (s *BoltStore) ListRecent(limit int) ([]Message, error) {
 	return all, nil
 }
 
-// Peers implements Store.
+// Peers implements Store. A bucket with nothing in it is not a conversation:
+// the TTL sweep and the per-peer eviction delete records and leave the bucket,
+// and listing those put a "New conversation" back on screen for a peer whose
+// every message was gone.
 func (s *BoltStore) Peers() ([]string, error) {
 	var peers []string
 	err := s.db.View(func(tx *bolt.Tx) error {
 		root := tx.Bucket([]byte(messagesBucket))
 		return root.ForEachBucket(func(k []byte) error {
+			peerBkt := root.Bucket(k)
+			if peerBkt == nil {
+				return nil
+			}
+			if first, _ := peerBkt.Cursor().First(); first == nil {
+				return nil
+			}
 			peers = append(peers, string(k))
 			return nil
 		})

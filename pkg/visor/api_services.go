@@ -285,6 +285,37 @@ func serviceFetchOrder(httpURL, dmsgURL string) []serviceHop {
 // the default service transport and a dmsg-only visor has no HTTP URL at all.
 // Plain HTTP is used only as the dual-config fallback or the http-only path.
 func (v *Visor) FetchServiceData(service, path string) ([]byte, error) {
+	return v.fetchServiceDataCtx(context.Background(), service, path)
+}
+
+// svcFetchFreshFor is how long a service-discovery list is served from the
+// cache without asking again, and svcFetchStaleFor how long a copy is still
+// worth serving when asking again fails. A minute is well inside how often a
+// public proxy or VPN server comes or goes; an hour-old list is still every
+// server the user could pick from a minute ago, which beats an error.
+const (
+	svcFetchFreshFor = time.Minute
+	svcFetchStaleFor = time.Hour
+)
+
+// fetchServiceDataCtx is FetchServiceData bounded by ctx.
+//
+// Service-discovery lists (service "sd") are cached, and one fetch at a time
+// runs per list, because they are what a phone asks for every time its
+// SkyVPN or SkySOCKS screen opens: every open used to be a fresh dmsg stream,
+// a Noise handshake and the whole uncompressed list, ten seconds or more on a
+// slow link, and two screens opening together ran two of them. The other
+// services are health and stats reads whose callers want them live.
+func (v *Visor) fetchServiceDataCtx(ctx context.Context, service, path string) ([]byte, error) {
+	if service != "sd" {
+		return v.fetchServiceDataUncached(ctx, service, path)
+	}
+	return v.svcFetch.get(ctx, service+" "+path, func() ([]byte, error) {
+		return v.fetchServiceDataUncached(ctx, service, path)
+	})
+}
+
+func (v *Visor) fetchServiceDataUncached(ctx context.Context, service, path string) ([]byte, error) {
 	var httpURL, dmsgURL string
 	switch service {
 	case "tpd":
@@ -313,19 +344,22 @@ func (v *Visor) FetchServiceData(service, path string) ([]byte, error) {
 	var lastErr error
 	for _, hop := range order {
 		url := strings.TrimSuffix(hop.baseURL, "/") + path
-		body, err := v.fetchServiceDataDmsg(url)
+		body, err := v.fetchServiceDataDmsg(ctx, url)
 		if err == nil {
 			return body, nil
 		}
 		lastErr = err
+		if ctx.Err() != nil {
+			break // the caller has gone; the next hop would only be asked for nobody
+		}
 	}
 	return nil, lastErr
 }
 
 // fetchServiceDataDmsg performs a GET over DMSG-HTTP using the visor's
 // authoritative dmsg client.
-func (v *Visor) fetchServiceDataDmsg(url string) ([]byte, error) {
-	resp, err := v.DmsgHTTP(DmsgHTTPRequest{URL: url, Method: http.MethodGet})
+func (v *Visor) fetchServiceDataDmsg(ctx context.Context, url string) ([]byte, error) {
+	resp, err := v.dmsgHTTPCtx(ctx, DmsgHTTPRequest{URL: url, Method: http.MethodGet})
 	if err != nil {
 		return nil, fmt.Errorf("fetch %s over dmsg: %w", url, err)
 	}

@@ -10,6 +10,7 @@ import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
+import com.skycoin.skywire.core.ServerListCache
 import com.skycoin.skywire.core.TransportPreference
 import com.skycoin.skywire.ui.components.SavedServer
 import kotlinx.coroutines.Job
@@ -92,6 +93,7 @@ class SocksViewModel(app: Application) : AndroidViewModel(app) {
 
     private val api = VisorApi.get(app)
     private val prefs = AppPreferences(app)
+    private val serverCache = ServerListCache(prefs)
     private val json = Json { ignoreUnknownKeys = true }
 
     private val mutable = MutableStateFlow(SocksUiState())
@@ -251,24 +253,29 @@ class SocksViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Fetch the server list, keeping the spinner up across [attempts]
-     * tries. Only the last failure is shown — an intermediate one just
-     * means dmsg wasn't ready yet.
+     * Fetch the server list: [attempts] tries with a growing pause between
+     * them, because the list rides dmsg and the first tries after the core
+     * comes up routinely find no session yet. Only the last failure is
+     * shown, and a list already on screen — the cached one, or the last
+     * fetch — stays there: a failed refresh is no reason to take it away.
      */
     private suspend fun loadServers(attempts: Int = 1) {
         mutable.update { it.copy(serversLoading = true, serversError = null) }
+        var pause = RETRY_FIRST_PAUSE_MS
         repeat(attempts) { attempt ->
             try {
                 // Service discovery is reached over dmsg; the list is then
                 // held in state and only refetched on demand.
                 val servers = api.services(PROXY_TYPE)
                 mutable.update { it.copy(servers = servers, serversLoading = false) }
+                serverCache.write(PROXY_TYPE, servers)
                 return
             } catch (e: Exception) {
                 if (attempt == attempts - 1) {
                     mutable.update { it.copy(serversLoading = false, serversError = e.message) }
                 } else {
-                    delay(RETRY_DELAY_MS)
+                    delay(pause)
+                    pause = (pause * 2).coerceAtMost(RETRY_MAX_PAUSE_MS)
                 }
             }
         }
@@ -318,7 +325,10 @@ class SocksViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_LAST_SERVER = "socks_last_server"
         const val PING_INTERVAL_MS = 700L
         const val POLL_INTERVAL_MS = 2_000L
-        const val INITIAL_LOAD_ATTEMPTS = 3
-        const val RETRY_DELAY_MS = 5_000L
+        // Six tries over about a minute (2, 4, 8, 16, 30s), which is the
+        // time dmsg can take to come up after the core does.
+        const val INITIAL_LOAD_ATTEMPTS = 6
+        const val RETRY_FIRST_PAUSE_MS = 2_000L
+        const val RETRY_MAX_PAUSE_MS = 30_000L
     }
 }

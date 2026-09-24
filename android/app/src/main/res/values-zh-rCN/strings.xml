@@ -770,6 +770,8 @@
     <string name="settings_battery_not_now">暂不</string>
     <string name="settings_battery_no_screen">这部手机没有可打开的电池优化设置页面。</string>
     <string name="home_battery_title">让 Skywire 在后台保持连接？</string>
+    <string name="home_calls_title">允许来电占据屏幕？</string>
+    <string name="home_calls_body">否则来电只是一条通知，熄屏的手机在响铃时仍然一片黑。允许 Skywire 显示通话界面后，来电会像普通电话一样点亮手机。</string>
     <string name="home_battery_body">屏幕熄灭一段时间后，Android 可能暂停本应用的网络。允许它忽略电池优化，消息就能即发即到。</string>
     <!-- Config encryption at rest. -->
     <string name="settings_encrypt">加密存储配置</string>
