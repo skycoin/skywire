@@ -55,15 +55,38 @@ type legAdoptHost interface {
 	acceptAdoptedChain(reserve *RouteGroup, rules routing.EdgeRules)
 }
 
-// acceptAdoptedChain implements legAdoptHost. The rules are already saved; the
-// send is the same one IntroduceRules makes, run off the caller's goroutine
-// because the caller is a packet-intake worker and the accept buffer can fill.
+// acceptAdoptedChain implements legAdoptHost. The rules are already saved.
+//
+// The responder handshake runs HERE, on its own goroutine, and only the
+// finished conn goes to AcceptRoutes (r.adopted). It must never ride r.accept:
+// the visor drains that queue with ONE serial loop (appnet serveRouteGroup)
+// that blocks up to handshakeAwaitTimeout on each item, so one adopted chain
+// whose initiator never handshakes (its ack was lost and it gave up) stalled
+// every route setup queued behind it past ITS initiator's timeout — and each of
+// those then stalled the next. On the rig that took an exit to zero route
+// groups for twenty minutes.
 func (r *router) acceptAdoptedChain(reserve *RouteGroup, rules routing.EdgeRules) {
 	r.dropGroupIfHeld(reserve)
 	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*handshakeAwaitTimeout)
+		defer cancel()
+		nsConf := noise.Config{
+			LocalPK:   r.conf.PubKey,
+			LocalSK:   r.conf.SecKey,
+			RemotePK:  rules.Desc.SrcPK(),
+			Initiator: false,
+		}
+		nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, "", "", r.isDatagramPort(rules.Desc.DstPort()))
+		if err != nil {
+			r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
+			r.logger.WithError(err).Infof("Adopted leg reserve on %s never completed its handshake; dropped", rules.Desc.String())
+			return
+		}
+		nrg.rg.startOffServiceLoops()
 		select {
-		case r.accept <- rules:
+		case r.adopted <- nrg:
 		case <-r.done:
+			_ = nrg.Close() //nolint:errcheck,gosec
 		}
 	}()
 }

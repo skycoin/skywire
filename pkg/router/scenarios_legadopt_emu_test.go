@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/noise"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/emu"
 	"github.com/skycoin/skywire/pkg/router/routersettings"
@@ -67,6 +68,7 @@ func newAdoptRouter(t *testing.T, pk cipher.PubKey, sk cipher.SecKey) *router {
 		pending:       newPendingPackets(),
 		pendingLegs:   newPendingLegs(),
 		accept:        make(chan routing.EdgeRules, acceptSize),
+		adopted:       make(chan net.Conn, acceptSize),
 		done:          make(chan struct{}),
 	}
 }
@@ -299,4 +301,63 @@ func TestAdoptRequiresALegReserve(t *testing.T) {
 	r := newAdoptRouter(t, aPK, aSK)
 	_, err := r.DialRoutes(context.Background(), bPK, adoptNewPort, adoptServicePort, &DialOptions{AdoptReservePort: 20000})
 	require.ErrorIs(t, err, ErrAdoptUnsupported)
+}
+
+// TestAdoptedChainNeverBlocksOrdinaryAccepts is the rig regression of
+// 2026-09-24: an exit that adopted a chain whose initiator then never
+// handshaked (it had given up waiting for the ack) queued it on the SAME serial
+// accept loop as every ordinary route setup, which blocked on it for the full
+// handshake timeout — long enough for the next setup's initiator to give up
+// too, and so on: zero route groups at the exit for twenty minutes. An ordinary
+// route queued behind such an adoption must still be accepted at once.
+func TestAdoptedChainNeverBlocksOrdinaryAccepts(t *testing.T) {
+	rig := newAdoptRig(t)
+	reserveB := rig.b.anyLegReserve()
+	require.NotNil(t, reserveB)
+
+	// The exit adopts the reserve's chain, but no handshake will ever come for
+	// it: the initiator's side of the chain is cut.
+	rig.connsA[1].Egress().Cut()
+	leg, err := reserveB.detachLegForRehome(0, "test: adopted, initiator gone")
+	require.NoError(t, err)
+	deadDesc := routing.NewRouteDescriptor(rig.aPK, rig.bPK, adoptNewPort, adoptServicePort)
+	rules, err := adoptedEdgeRules(rig.b.rt, leg, deadDesc)
+	require.NoError(t, err)
+	rig.b.acceptAdoptedChain(reserveB, rules)
+	time.Sleep(50 * time.Millisecond) // the adoption is queued FIRST
+
+	// An ordinary route setup over leg 0, arriving right behind it.
+	const ordPort routing.Port = 50000
+	tp := legTpID(t, rig.activeA, 0)
+	aF, aC, bF, bC := routing.RouteID(70), routing.RouteID(71), routing.RouteID(72), routing.RouteID(73)
+	descA := routing.NewRouteDescriptor(rig.bPK, rig.aPK, adoptServicePort, ordPort)
+	descB := routing.NewRouteDescriptor(rig.aPK, rig.bPK, ordPort, adoptServicePort)
+	rulesA := routing.EdgeRules{Desc: descA,
+		Forward: routing.ForwardRule(DefaultRouteKeepAlive, aF, bC, tp, rig.bPK, rig.aPK, adoptServicePort, ordPort),
+		Reverse: routing.ConsumeRule(DefaultRouteKeepAlive, aC, rig.bPK, rig.aPK, adoptServicePort, ordPort)}
+	rulesB := routing.EdgeRules{Desc: descB,
+		Forward: routing.ForwardRule(DefaultRouteKeepAlive, bF, aC, tp, rig.aPK, rig.bPK, ordPort, adoptServicePort),
+		Reverse: routing.ConsumeRule(DefaultRouteKeepAlive, bC, rig.aPK, rig.bPK, ordPort, adoptServicePort)}
+	require.NoError(t, rig.a.SaveRoutingRules(rulesA.Forward, rulesA.Reverse))
+	rig.b.accept <- rulesB
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	dialed := make(chan error, 1)
+	go func() {
+		_, err := rig.a.saveRouteGroupRules(ctx, rulesA, noise.Config{
+			LocalPK: rig.a.conf.PubKey, LocalSK: rig.a.conf.SecKey, RemotePK: rig.bPK, Initiator: true,
+		}, "", "", false)
+		dialed <- err
+	}()
+
+	start := time.Now()
+	conn, err := rig.b.AcceptRoutes(ctx)
+	require.NoError(t, err, "the ordinary route must be accepted")
+	require.Less(t, time.Since(start), handshakeAwaitTimeout/2,
+		"the ordinary accept must not wait behind the adopted chain's handshake")
+	nrg, ok := conn.(*NoiseRouteGroup)
+	require.True(t, ok)
+	require.Equal(t, descB, nrg.rg.desc, "the first accept is the ordinary route, not the adoption")
+	require.NoError(t, <-dialed, "the ordinary route's initiator completes its handshake")
 }

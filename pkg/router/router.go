@@ -782,6 +782,7 @@ type router struct {
 	pendingLegs      *pendingLegs                                    // aux mux legs buffered while their route group is still initializing (see router_pending_legs.go, #80)
 	rpcSrv           *rpc.Server
 	accept           chan routing.EdgeRules
+	adopted          chan net.Conn
 	done             chan struct{}
 	once             sync.Once
 	routeSetupHookMu sync.Mutex
@@ -924,6 +925,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		pendingLegs:     newPendingLegs(),
 		rpcSrv:          rpc.NewServer(),
 		accept:          make(chan routing.EdgeRules, acceptSize),
+		adopted:         make(chan net.Conn, acceptSize),
 		done:            make(chan struct{}),
 		trustedVisors:   trustedVisors,
 		routeSetupHooks: routeSetupHooks,
