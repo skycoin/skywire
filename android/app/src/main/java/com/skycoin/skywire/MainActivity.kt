@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 import com.skycoin.skywire.core.AppLocale
 import com.skycoin.skywire.core.AppLock
 import com.skycoin.skywire.core.AppPreferences
@@ -26,6 +27,9 @@ import com.skycoin.skywire.core.VoiceCalls
 import com.skycoin.skywire.ui.SkywireApp
 import com.skycoin.skywire.ui.components.BiometricGate
 import com.skycoin.skywire.ui.theme.SkywireTheme
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 /**
  * The one Activity: splash → [BiometricGate] → scaffold + NavHost.
@@ -58,6 +62,24 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         DeepLinks.offer(intent)
         offerCallAnswer(intent)
+        // Permission to cross the lock screen lasts exactly as long as the
+        // call that needs it. See the manifest for what declaring it there
+        // instead did: one Activity means one grant for the entire app, so
+        // a locked phone kept showing whatever screen was open, still
+        // working under the user's finger.
+        //
+        // Driven from here and NOT from Compose. With the screen off this
+        // Activity is stopped, and Compose's frame clock pauses with it, so
+        // a LaunchedEffect keyed on the call state never ran for a call that
+        // arrived then — which is the one call these flags exist for. The
+        // phone rang with the screen dark, because the Activity the
+        // full-screen intent raised was not yet allowed over the keyguard,
+        // and could not become so until it was shown. This scope runs while
+        // stopped and dies with the Activity.
+        showOverKeyguard(VoiceCalls.state.value.busy)
+        lifecycleScope.launch {
+            VoiceCalls.state.map { it.busy }.distinctUntilChanged().collect { showOverKeyguard(it) }
+        }
         // Short fade from the logo splash into Home.
         splash.setOnExitAnimationListener { provider ->
             provider.view.animate()
@@ -85,14 +107,6 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
-            // Permission to cross the lock screen lasts exactly as long as the
-            // call that needs it. See the manifest for what declaring it there
-            // instead did: one Activity means one grant for the entire app, so
-            // a locked phone kept showing whatever screen was open, still
-            // working under the user's finger.
-            val calls by VoiceCalls.state.collectAsState()
-            LaunchedEffect(calls.busy) { showOverKeyguard(calls.busy) }
-
             SkywireTheme(darkTheme = ThemeMode.of(theme).isDark(isSystemInDarkTheme())) {
                 BiometricGate {
                     SkywireApp()
@@ -110,6 +124,13 @@ class MainActivity : FragmentActivity() {
      * the keyguard has to take the screen back. Driven by the call state
      * rather than by a screen being open, so no navigation, crash or missed
      * teardown can leave the app parked in front of a locked phone.
+     *
+     * It has to be in place BEFORE the full-screen intent raises this
+     * Activity: the platform decides whether an Activity may show over the
+     * keyguard when it brings it forward, so flags set afterwards keep it
+     * behind the lock screen until the user unlocks by hand. The watcher
+     * publishes the call to [VoiceCalls] before it posts the notification,
+     * and the collector in [onCreate] sets the flags on that change.
      *
      * FLAG_KEEP_SCREEN_ON rides along because a call is the one time the user
      * is plainly using the phone without touching it — the timeout otherwise
@@ -160,6 +181,9 @@ class MainActivity : FragmentActivity() {
         // setIntent so anything reading getIntent() later sees the link that
         // actually brought the app forward, not the one it was launched with.
         setIntent(intent)
+        // The full-screen intent lands here on a running Activity; make sure
+        // the grant is current before it is shown.
+        showOverKeyguard(VoiceCalls.state.value.busy)
         DeepLinks.offer(intent)
         offerCallAnswer(intent)
     }

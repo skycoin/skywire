@@ -12325,11 +12325,14 @@
         delete this.messagesSeen[pk];
 
         // If this contact was paired via CXO, also revoke the pair
-        // server-side. Best-effort: deleteChat is a UI-local action,
-        // so a revoke failure shouldn't block the local cleanup.
+        // server-side. Best-effort: a revoke failure shouldn't block the
+        // local cleanup — but it is worth a line in the console, because
+        // syncPairedFromVisor puts a still-paired peer straight back.
         if (this.pairedSet && this.pairedSet.has(pk)) {
           this.pairedSet.delete(pk);
-          fetch(`/pair/${pk}`, { method: 'DELETE' }).catch(() => {});
+          fetch(`/pair/${pk}`, { method: 'DELETE' })
+            .then(res => { if (!res.ok) console.debug('skychat: unpair failed:', res.status); })
+            .catch(() => {});
         }
 
         document.querySelectorAll('.recipient-item').forEach(item => {
@@ -12348,6 +12351,14 @@
         this.saveRecipients();
         this.saveSeenList();
         localStorage.removeItem(`c_${pk}`);
+        // The visor's history store is the durable copy, not this page: on
+        // every load the store's peers are re-added to the list
+        // (syncHistoryPeers) and an empty thread is refilled from it on open
+        // (loadHistoryFor). Deleting only the page's copy brought the
+        // conversation back the next time the page loaded — on a phone,
+        // every return to the chat tab. 404/503 is persistence off, and then
+        // the removal above is already the whole story.
+        this._forgetStoredConversation(pk);
         // The address-book entry outlives the conversation: deleting a chat
         // is "I am done with these messages", not "I no longer know this
         // person". A saved contact keeps its name and picture, and Remove
@@ -12364,6 +12375,20 @@
 
         this.recipient = null;
         this.showToast('Conversation deleted.');
+      }
+
+      // _forgetStoredConversation drops the visor's stored copy of a whole
+      // conversation — the durable half of deleteChat. See _forgetStored for
+      // the one-message version.
+      _forgetStoredConversation(pk) {
+        const warn = () => this.showToast('The stored messages could not be deleted; the conversation may come back.');
+        fetch('/history/forget', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pk, all: true })
+        }).then(res => {
+          if (!res.ok && res.status !== 404 && res.status !== 503) warn();
+        }).catch(warn);
       }
 
       // _purgeSelfThread removes a phantom self-conversation (keyed by our own

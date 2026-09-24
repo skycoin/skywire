@@ -86,6 +86,11 @@ var mLog = initLogger()
 type Visor struct {
 	closeStack []closer
 
+	// svcFetch is the short-lived cache in front of FetchServiceData for the
+	// service-discovery lists, with one fetch in flight per key. See
+	// svcFetchCached.
+	svcFetch svcFetchCache
+
 	// Suspend/Resume state. Suspend tears down every network subsystem
 	// but keeps the local CLI RPC listener (cli.listener/cli.grpc) alive
 	// so Resume can arrive; Resume re-runs the module graph. See

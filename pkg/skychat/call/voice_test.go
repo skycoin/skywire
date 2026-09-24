@@ -15,7 +15,7 @@ import (
 
 func TestSigCodecRoundTrip(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
-	in := Sig{Type: SigInvite, CallID: "abc123", FromPK: pk, Codec: "pcm", MediaPort: 63}
+	in := Sig{Type: SigInvite, CallID: "abc123", FromPK: pk, Codec: "pcm", MediaPort: 63, Resume: true}
 	pr, pw := io.Pipe()
 	go func() { writeSig(pw, in); pw.Close() }() //nolint:errcheck,gosec
 	out, err := readSig(pr)
@@ -23,7 +23,7 @@ func TestSigCodecRoundTrip(t *testing.T) {
 		t.Fatalf("readSig: %v", err)
 	}
 	if out.Type != in.Type || out.CallID != in.CallID || out.FromPK != in.FromPK ||
-		out.Codec != in.Codec || out.MediaPort != in.MediaPort {
+		out.Codec != in.Codec || out.MediaPort != in.MediaPort || out.Resume != in.Resume {
 		t.Fatalf("round-trip mismatch: %+v != %+v", out, in)
 	}
 }
