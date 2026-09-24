@@ -56,7 +56,7 @@ func fakeRedis(reply string) func(context.Context, string, string) (net.Conn, er
 func testRedisStore(t *testing.T, dialer func(context.Context, string, string) (net.Conn, error)) *redisStore {
 	t.Helper()
 	cl := redis.NewClient(&redis.Options{Addr: "fake:6379", Dialer: dialer, MaxRetries: -1})
-	t.Cleanup(func() { cl.Close() }) //nolint:errcheck
+	t.Cleanup(func() { cl.Close() }) //nolint:errcheck,gosec
 	return &redisStore{client: cl}
 }
 
