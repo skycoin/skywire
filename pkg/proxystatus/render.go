@@ -766,8 +766,8 @@ func writeTunnelCount(b *strings.Builder, snap Snapshot) {
 // stream is present (single-stream trees carry no stream chrome to explain).
 func writeLayerLegend(b *strings.Builder) {
 	b.WriteString(`<div class="llayers">` +
-		`<span class="llayer stream-l"><b>` + StreamHeaderGlyph + ` stream</b> · independent route groups (--tunnels)</span>` +
-		`<span class="llayer leg-l"><b>` + StreamBandGlyph + `sN leg</b> · packet-striping mux within a stream</span>` +
+		`<span class="llayer stream-l"><b>` + StreamHeaderGlyph + ` tunnel</b> · independent route groups (--tunnels); <b>standby</b> = held in the pool, carrying nothing</span>` +
+		`<span class="llayer leg-l"><b>` + StreamBandGlyph + `sN leg</b> · packet-striping mux within a tunnel</span>` +
 		`</div>`)
 }
 
@@ -800,7 +800,7 @@ func htmlStyleCell(text string, kind bitree.CellKind, hopClasses map[string]stri
 		// which is tinted by state INSIDE the accent-colored badge, so the stream
 		// accent and the tunnel's role coding compose instead of overriding.
 		if strings.HasPrefix(strings.TrimSpace(text), StreamHeaderGlyph) {
-			return `<span class="streamhdr ` + streamAccentClass(streamIdxOf(text, "stream ")) + `">` +
+			return `<span class="streamhdr ` + streamAccentClass(headerIdxOf(text)) + `">` +
 				htmlTunnelRole(html.EscapeString(text)) + `</span>`
 		}
 		// A hop PK: color it by its role/depth (exit red, intermediates by level).
