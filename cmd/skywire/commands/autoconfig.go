@@ -295,23 +295,46 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 
 	msg2("Configuring skywire")
 
+	// Resolve the skyenv path FIRST so we know which file to create and
+	// edit — same lookup the downstream stages use, just lifted up.
+	pre := resolveConfig()
+	target := pre.skyenvPath
+	if target == "" {
+		target = defaultSkyenvPath()
+	}
+
+	// Create the SKYENV file from the template when it is absent, on the
+	// same terms the deb/arch install hook uses:
+	//
+	//	[[ ! -f /etc/skywire.conf ]] && skywire cli config gen -pqQ /etc/skywire.conf
+	//
+	// It is generate-once-if-absent and NEVER an overwrite, so operator
+	// edits survive every later run. Installs with no packaging hook — a
+	// `go install`, a release binary unpacked by hand, the browser visor —
+	// otherwise never get the file at all: every knob in it is invisible
+	// because there is nothing to read, and `--<flag>` below dies because
+	// skyenvfile.Update can only edit a file that already exists.
+	//
+	// A failure here is NOT fatal: an unwritable /etc is a perfectly
+	// ordinary unprivileged run, and autoconfig still generates a config
+	// from flags and defaults exactly as it did before. Only an edit that
+	// was actually requested still fails loudly, below.
+	if created, err := ensureSkyenvFile(target, pre.pkgEnv); err != nil {
+		msg3(fmt.Sprintf("%scould not create %s: %v%s", colorYellow, target, err, colorReset))
+	} else if created {
+		msg3(fmt.Sprintf("Wrote conf template to %s%s%s", colorPurple, target, colorReset))
+		// The file exists now, so re-resolve: every later stage sources it.
+		pre = resolveConfig()
+	}
+
 	// Apply any operator-requested skywire.conf edits before
 	// the rest of autoconfig sources the file. Each `--flag`
 	// rewrites the corresponding env line in place (uncomment +
 	// new value), preserving every other line. The subsequent
 	// `cli config gen` invocation reads the updated file via
 	// SKYENV so the new values take effect on the same run.
-	//
-	// Resolves the skyenv path FIRST so we know which file to
-	// edit — same lookup the downstream stages use, just lifted
-	// up to do the edits first.
 	edits := collectSkyenvEdits(cmd)
 	if len(edits) > 0 {
-		pre := resolveConfig()
-		target := pre.skyenvPath
-		if target == "" {
-			target = defaultSkyenvPath()
-		}
 		if err := updateSkyenvFile(target, edits); err != nil {
 			fmt.Printf("%s>>> FATAL:%s could not update %s: %v\n", colorRed, colorReset, target, err)
 			os.Exit(1)
