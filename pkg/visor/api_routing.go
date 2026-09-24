@@ -157,6 +157,7 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 			Events:             info.Events,
 			Recovery:           info.Recovery,
 			TunnelRole:         info.TunnelRole,
+			LegReserve:         info.LegReserve,
 			AgeMS:              info.AgeMS,
 			Shape:              info.Shape,
 			ShapeTarget:        info.ShapeTarget,

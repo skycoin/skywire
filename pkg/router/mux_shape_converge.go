@@ -41,6 +41,7 @@ package router
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -444,6 +445,9 @@ func (c *shapeConverge) decompose(g *RouteGroup, from Shape, why string) bool {
 func (c *shapeConverge) promote(from Shape) bool {
 	sibling := c.heldFirstHops(nil) // I3
 	cands := poolCandidates(nil, c.pool, sibling)
+	// A leg reserve has no app session, so the app could never put a stream on
+	// it: promoting one would count as a tunnel that carries nothing.
+	cands = slices.DeleteFunc(cands, func(p poolCandidate) bool { return p.rg.legReserve })
 	if len(cands) == 0 {
 		c.blocked(from, "no pooled chain is promotable; every standby shares a first hop with an active tunnel (I3)")
 		return false

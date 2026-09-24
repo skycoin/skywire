@@ -413,6 +413,9 @@ type MuxRouteGroupInfo struct {
 	// but not which of them are in standby, so this field is always empty in
 	// an accepting visor's `visor state`.
 	TunnelRole string `json:"tunnel_role,omitempty"`
+	// LegReserve: a standby group a leg split built — composable as a leg,
+	// never promotable to a tunnel (it has no app session).
+	LegReserve bool `json:"leg_reserve,omitempty"`
 	// AgeMS is how long this route group has existed â for a pooled STANDBY
 	// tunnel, its AUDITION age: how long it has been held open and measured
 	// without carrying a stream.

@@ -261,6 +261,7 @@ func (rg *RouteGroup) newSplitGroup(srcPort, dstPort routing.Port) *RouteGroup {
 	ns.muxEvents = rg.muxEvents
 	ns.rehomeHost = rg.rehomeHost
 	ns.SetAppName(rg.AppName())
+	ns.legReserve = true
 	// A chain handed back to the pool is a STANDBY tunnel whatever the group it
 	// left was doing; on the accept side the role is empty and stays empty
 	// (SetTunnelRole ignores the empty role).
