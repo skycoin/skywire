@@ -138,7 +138,7 @@ func (l *shapeLedger) read(key shapeSession) (map[string]uint64, *MuxShapeMove) 
 func shapeSessionKey(active []*RouteGroup) shapeSession {
 	for _, g := range active {
 		if g != nil {
-			return shapeSession{app: g.AppName(), exit: g.desc.DstPK()}
+			return sessionKeyFor(g)
 		}
 	}
 	return shapeSession{}

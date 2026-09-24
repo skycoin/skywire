@@ -116,6 +116,35 @@ type shapeSession struct {
 	exit cipher.PubKey
 }
 
+// sessionKeyFor names the session a route group belongs to: the app that DIALED
+// it and the FAR END of its descriptor.
+//
+// Desc.Dst is the LOCAL visor on BOTH edges — the setup node hands each edge
+// the descriptor that points at that edge (farEndPK, leg_rehome.go) — so keying
+// on Desc.DstPK() put every tunnel an app holds, to ANY exit, in ONE session:
+// a client dialing two exits had one session's target applied across both, so a
+// 2x2 for two exits converged as four tunnels of one session. The arbiter keyed
+// its buckets on Desc.SrcPK() and was right by accident; going through farEndPK
+// makes every consumer agree and keeps working on a descriptor built either way
+// round.
+func sessionKeyFor(rg *RouteGroup) shapeSession {
+	if rg == nil {
+		return shapeSession{}
+	}
+	return shapeSession{app: rg.AppName(), exit: rg.farEndPK()}
+}
+
+// sessionKeyOf is the same key off a snapshot, which carries the far end its
+// group measured (MuxInfo.FarEndPK). A snapshot built without one falls back to
+// the descriptor's Src, which farEndPK falls back to as well.
+func sessionKeyOf(in MuxInfo) shapeSession {
+	exit := in.FarEndPK
+	if exit.Null() {
+		exit = in.Desc.SrcPK()
+	}
+	return shapeSession{app: in.AppName, exit: exit}
+}
+
 // shapeInput is what one route group contributes to its session beyond its own
 // snapshot: the leg count the group is being held at (the auto rule's n for
 // that tunnel) and the mux.shape value in force for it, per-app overrides
@@ -186,7 +215,7 @@ func applySessionShapes(infos []MuxInfo, in []shapeInput) {
 		// app — so keying on it both merged two apps' tunnels into one session
 		// and missed every move the converger had recorded, which is why
 		// `proxy mux info` never printed last= or moves[].
-		key := shapeSession{app: infos[i].AppName, exit: infos[i].Desc.DstPK()}
+		key := sessionKeyOf(infos[i])
 		s := byKey[key]
 		if s == nil {
 			s = &session{spec: routersettings.ShapeAuto}

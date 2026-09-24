@@ -694,14 +694,10 @@ func (r *router) poolArbiterTick(now time.Time) {
 	}
 	r.mx.Unlock()
 
-	type key struct {
-		app  string
-		exit cipher.PubKey
-	}
-	pools := make(map[key][]*RouteGroup)
-	actives := make(map[key][]*RouteGroup)
+	pools := make(map[shapeSession][]*RouteGroup)
+	actives := make(map[shapeSession][]*RouteGroup)
 	for _, rg := range groups {
-		k := key{app: rg.AppName(), exit: rg.desc.SrcPK()}
+		k := sessionKeyFor(rg)
 		switch rg.TunnelRole() {
 		case tunnelRoleStandby:
 			pools[k] = append(pools[k], rg)
