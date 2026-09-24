@@ -138,6 +138,7 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 				DstPort: info.Desc.DstPort(),
 				SrcPort: info.Desc.SrcPort(),
 			},
+			FarEndPK:           info.FarEndPK,
 			MuxEnabled:         info.MuxEnabled,
 			SACKEnabled:        info.SACKEnabled,
 			PerFrameNoise:      info.PerFrameNoise,
@@ -324,7 +325,7 @@ func selectRouteDesc(infos []router.MuxInfo, appName string, port uint16) (routi
 	fmt.Fprintf(&b, "app %q has %d active rg's; pass --rg <port> (the dst_port below):\n", appName, len(infos))
 	for _, info := range infos {
 		fmt.Fprintf(&b, "  dst_port=%d  remote=%s  src_port=%d\n",
-			info.Desc.DstPort(), info.Desc.DstPK(), info.Desc.SrcPort())
+			info.Desc.DstPort(), info.FarEndPK, info.Desc.SrcPort())
 	}
 	return desc, errors.New(strings.TrimRight(b.String(), "\n"))
 }

@@ -157,6 +157,9 @@ type treeRouteGroup struct {
 		DstPK string `json:"dst_pk"`
 		SrcPK string `json:"src_pk"`
 	} `json:"desc"`
+	// FarEndPK is the peer the group reaches — the exit. Desc.DstPK is the LOCAL
+	// visor on both sides, so it is never the exit of a dialed group.
+	FarEndPK   string        `json:"far_end_pk,omitempty"`
 	MuxEnabled bool          `json:"mux_enabled"`
 	Legs       []treeLegInfo `json:"legs"`
 }
@@ -235,7 +238,7 @@ func snapshotFromGroups(rgs []treeRouteGroup) proxystatus.Snapshot {
 	for i, rg := range rgs {
 		snap.Tunnels = append(snap.Tunnels, proxystatus.Tunnel{
 			Index:      i,
-			ExitPK:     rg.Desc.DstPK,
+			ExitPK:     rg.farEnd(),
 			MuxEnabled: rg.MuxEnabled,
 			Legs:       rg.toLegs(),
 		})
@@ -245,4 +248,14 @@ func snapshotFromGroups(rgs []treeRouteGroup) proxystatus.Snapshot {
 		snap.Legs = snap.Tunnels[0].Legs
 	}
 	return snap
+}
+
+// farEnd is the route group's peer — the exit for a dialing client — as the
+// visor named it, falling back to the dialed orientation (the descriptor's Src,
+// since its Dst is the local visor) for a visor that sends no far_end_pk.
+func (rg treeRouteGroup) farEnd() string {
+	if pk := rg.FarEndPK; pk != "" && strings.Trim(pk, "0") != "" {
+		return pk
+	}
+	return rg.Desc.SrcPK
 }
