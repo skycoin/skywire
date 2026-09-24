@@ -415,7 +415,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Errorf("Panic in setup RPC handler: %v", r)
+					logging.LogRecovered(log, "setup RPC handler", r)
 				}
 				handlerCancel()
 				conn.Close() //nolint:errcheck,gosec,gosec

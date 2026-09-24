@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
-	"runtime/debug"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -355,7 +354,7 @@ func withInitCtx(f initFn) vinit.Hook {
 		defer func() {
 			if r := recover(); r != nil {
 				err = fmt.Errorf("module init panicked: %v", r)
-				log.WithField("stack", string(debug.Stack())).Errorf("module init panic recovered: %v", r)
+				logging.LogRecovered(log, "module init", r)
 			}
 		}()
 		return f(ctx, v, log)
