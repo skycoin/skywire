@@ -65,6 +65,24 @@ head_sha=$(git -C "$SRC" rev-parse HEAD)
 [ -n "$name" ] && [ -n "$code" ] || fail "android/version.properties has no versionName/versionCode"
 echo "checking $APPID $name ($code) at $head_sha"
 
+# The store listing F-Droid shows. fdroidserver reads it from the tag's
+# fastlane/metadata/android/<locale>/ at the repo root: it scans only the
+# root, the build's subdir (android/app) and src/<flavor>/, and anywhere else
+# is skipped as an "unknown subdir". Without it the app is listed with no
+# summary or description, which the fdroiddata reviewers send back.
+listing="$SRC/fastlane/metadata/android/en-US"
+[ -f "$listing/short_description.txt" ] && [ -f "$listing/full_description.txt" ] \
+  || fail "no store listing at fastlane/metadata/android/en-US/ (short_description.txt, full_description.txt)"
+short_len=$(tr -d '\n' < "$listing/short_description.txt" | wc -m | tr -d ' ')
+full_len=$(wc -m < "$listing/full_description.txt" | tr -d ' ')
+[ "$short_len" -le 80 ] || fail "short_description.txt is $short_len chars; F-Droid allows 80"
+[ "$full_len" -le 4000 ] || fail "full_description.txt is $full_len chars; F-Droid allows 4000"
+echo "store listing: $short_len/80 summary chars, $full_len/4000 description chars"
+# The changelog is in the tag's source too, so a re-run of this lane could not
+# add one; missing, it only costs the "what's new" text, not the release.
+[ -f "$listing/changelogs/$code.txt" ] \
+  || echo "::warning::no fastlane/metadata/android/en-US/changelogs/$code.txt; F-Droid shows no what's new for $name"
+
 cd "$home_vagrant"
 mkdir -p metadata logs tmp unsigned
 cp "$RECIPE" "metadata/$APPID.yml"
