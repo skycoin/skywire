@@ -963,6 +963,8 @@ func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err
 	// acks nothing is snubbed and its slots re-issued.
 	g := s.c.guardChunkTunnel(sess, st)
 	defer func() { err = g.err(err) }()
+	// The ack wait re-arms its deadline; after a snub it must stay in the past.
+	ackDeadline := g.deadliner(st, nil)
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
 	head := buildUploadHead(s.u.req, http.MethodPut, s.chunkURI(), int64(len(buf)),
@@ -999,7 +1001,7 @@ func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err
 		e := writeChunkBody(meteredWrite{Conn: st, m: m}, buf, setUploadIdleTimeout())
 		if e == nil {
 			// The chunk is out; the ack's own window starts now.
-			_ = st.SetReadDeadline(time.Now().Add(setUploadAckTimeout())) //nolint:errcheck
+			_ = ackDeadline.SetReadDeadline(time.Now().Add(setUploadAckTimeout())) //nolint:errcheck
 		}
 		werr <- e
 	}()
@@ -1010,7 +1012,7 @@ func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err
 		endBodyWriter(st, werr)
 		return ack, err
 	}
-	_ = st.SetReadDeadline(time.Now().Add(setUploadAckTimeout())) //nolint:errcheck
+	_ = ackDeadline.SetReadDeadline(time.Now().Add(setUploadAckTimeout())) //nolint:errcheck
 
 	resp, rerr := http.ReadResponse(bufio.NewReader(st), &http.Request{Method: http.MethodPut})
 	if rerr != nil {
