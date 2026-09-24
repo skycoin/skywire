@@ -6,7 +6,7 @@
 // tunnels already proved.
 //
 // A multi-tunnel proxy (skysocks-client's standby pool, skyenv.
-// SkysocksClientStandbyPool) holds up to 32 tunnels to one exit. Each one is a
+// SkysocksClientStandbyPool) holds one tunnel per disjoint route to the exit, up to pool.size_cap. Each one is a
 // whole route group with a SINGLE leg (the app dials MuxRoutes=1), already
 // ranked by the promoter and already carrying a live first-hop transport. When
 // the ACTIVE tunnel wants a second packet-level mux leg, today it discovers one

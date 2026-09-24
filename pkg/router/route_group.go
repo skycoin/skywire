@@ -794,6 +794,10 @@ type MuxInfo struct {
 	// and measured without carrying a stream.
 	AgeMS      float64
 	TunnelRole string
+	// DisjointRoutes is how many routes to this group.s far end share no
+	// intermediate and no first hop (router.disjointRouteBound). Set by the
+	// router on the snapshots it hands out; 0 when not yet counted.
+	DisjointRoutes int
 	// LegReserve is a standby group a leg split built: a chain the pool may
 	// compose back in as a leg, but not a tunnel the app can promote.
 	LegReserve bool

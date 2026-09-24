@@ -38,6 +38,7 @@ func setPoolRetryRounds() int { return skysettings.Count(skysettings.PoolRetryRo
 // unset, the flag the app was started with still wins; set, they are what the
 // client reconciles to on the next tick.
 func setPoolSize() int    { return skysettings.Count(skysettings.PoolSize) }
+func setPoolSizeCap() int { return skysettings.Count(skysettings.PoolSizeCap) }
 func setTunnelCount() int { return skysettings.Count(skysettings.TunnelCount) }
 func setPoolFreeze() bool { return skysettings.Bool(skysettings.PoolFreeze) }
 func poolExcludePKs() []string {

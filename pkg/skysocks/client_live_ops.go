@@ -115,7 +115,7 @@ func (c *Client) maybePoolShrink() {
 		return
 	}
 	c.redialMu.Lock()
-	poolMax := c.poolMax
+	poolMax := c.poolCeilingLocked()
 	c.redialMu.Unlock()
 	if poolMax <= 0 {
 		return

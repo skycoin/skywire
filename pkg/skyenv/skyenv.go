@@ -338,7 +338,14 @@ const (
 	// (CLI/GUI parity). --tunnels 1 still takes the AppDirect shortcut.
 	SkysocksClientTunnels = 2
 
-	// SkysocksClientStandbyPool is the default CEILING on how many tunnels the
+	// SkysocksClientStandbyPool is the default of --standby-pool: -1, AUTO. An
+	// auto-sized pool holds one tunnel per disjoint route to the exit (one
+	// intermediate each, plus the direct transports, as the router's route
+	// oracle counts them), up to the live knob pool.size_cap (pkg/skysocks
+	// pool_auto.go). A positive value is a fixed ceiling, as below; 0 disables
+	// the pool.
+	//
+	// History: this was a fixed default CEILING on how many tunnels the
 	// socks5 proxy client holds open to the exit, the active
 	// SkysocksClientTunnels included (--standby-pool). Everything beyond the
 	// active set is held in STANDBY: dialed, kept alive and measured, carrying
@@ -373,7 +380,7 @@ const (
 	// ONE home for the default so the CLI flag, the app's cobra flag and the
 	// app's launcher flag set cannot drift (CLI/GUI parity), exactly as with
 	// SkysocksClientTunnels. 0 disables the pool (active tunnels only).
-	SkysocksClientStandbyPool = 32
+	SkysocksClientStandbyPool = -1
 
 	// VPNServerName is the name of the vpn server app
 	VPNServerName = "vpn-server"

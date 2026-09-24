@@ -218,8 +218,15 @@ type Client struct {
 	// BOUNDED second look — poolRetryRounds rounds of maxRedialFails dials,
 	// each round behind a longer backoff — so the fill can still reach the
 	// real bound without ever becoming a loop. A dial that lands clears both.
-	poolDial          func() (net.Conn, error)
-	poolMax           int
+	poolDial func() (net.Conn, error)
+	poolMax  int
+	// poolAuto sizes the pool from the topology instead of poolMax: one tunnel
+	// per disjoint route to the exit (poolRouteBound, reported by the visor on
+	// the proxy-status snapshot), up to pool.size_cap. Set by SetStandbyPool(-1),
+	// the default. poolRouteBound is 0 until the visor has counted the routes,
+	// and the cap stands in for it until then.
+	poolAuto          bool
+	poolRouteBound    int
 	poolArmed         bool
 	poolFails         int
 	poolRetryAt       time.Time
@@ -1279,12 +1286,13 @@ func (c *Client) SetPoolDial(fn func() (net.Conn, error)) {
 // ceiling with plenty left — the rig's eighth pool dial had 124 free ranked
 // candidates. StandbyPoolState's reason says which happened.
 func (c *Client) SetStandbyPool(n int) {
+	c.redialMu.Lock()
+	c.poolAuto = n < 0
 	if n < 0 {
 		n = 0
 	}
-	c.redialMu.Lock()
 	c.poolMax = n
-	if n > 0 {
+	if c.poolCeilingLocked() > 0 {
 		c.poolArmed = true
 		c.poolFails = 0
 		c.poolRetryRound = 0
@@ -1642,7 +1650,7 @@ func (c *Client) armPoolFill() { c.armPoolFillAfter(0) }
 // fresh window, which is right — the newest freed hop is the one to wait for.
 func (c *Client) armPoolFillAfter(delay time.Duration) {
 	c.redialMu.Lock()
-	if c.poolMax > 0 {
+	if c.poolCeilingLocked() > 0 {
 		c.poolArmed = true
 		c.poolFails = 0
 		c.poolRetryRound = 0
@@ -1752,7 +1760,7 @@ func (c *Client) maybePoolFill() {
 	}
 	c.redialMu.Lock()
 	fn := c.poolDial
-	poolMax := c.poolMax
+	poolMax := c.poolCeilingLocked()
 	armed := c.poolArmed
 	retryAt := c.poolRetryAt
 	target := c.target
