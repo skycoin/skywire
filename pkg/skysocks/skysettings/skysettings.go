@@ -100,7 +100,8 @@ const (
 	MuxCap   = "mux.cap"
 	MuxWidth = "mux.width"
 
-	RangePort = "range.port"
+	RangePort            = "range.port"
+	RangeClassifyTimeout = "range.classify_timeout"
 
 	ChunkMaxBytes          = "chunk.max_bytes"
 	ChunkProbeBytes        = "chunk.probe_bytes"
@@ -341,6 +342,8 @@ func init() {
 
 	register(RangePort, KindCount, 80,
 		"destination port the splitter treats as plaintext HTTP; overrides --range-port once set")
+	register(RangeClassifyTimeout, KindDuration, int64(5*time.Second),
+		"how long a range-port connection may stay silent before it is spliced as non-HTTP")
 
 	register(ChunkMaxBytes, KindBytes, 4<<20,
 		"range-split chunk ceiling; overrides --range-chunk-kib once set")

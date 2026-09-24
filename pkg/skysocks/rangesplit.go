@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/textproto"
@@ -81,7 +82,7 @@ const (
 	rsChunkRetryBackoffMax = 2 * time.Second
 	rsHeadLimit            = 64 << 10
 	rsProbeTimeout         = 20 * time.Second
-	rsClassifyTimeout      = 5 * time.Second  // wait for the client's first request bytes
+	rsClassifyTimeout      = 5 * time.Second  // range.classify_timeout default: wait for the first request bytes
 	rsHeadReadTimeout      = 10 * time.Second // finish reading the header block
 	// rsFreeRetries bounds how many attempts a tunnel's death may buy a chunk
 	// for free (see retryWithBudget). Each free retry needs a tunnel that was
@@ -182,7 +183,7 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	// 2. Classify + read the browser's request head. Non-HTTP traffic on :80 (raw
 	//    tunnels, server-speaks-first protocols) is detected the instant the bytes
 	//    stop matching an HTTP method prefix and spliced with no meaningful delay.
-	reqHead, isHTTP := peekRequestHead(conn, rsHeadLimit)
+	reqHead, isHTTP, late := peekRequestHead(conn, rsHeadLimit)
 	clearDeadlines(conn)
 	var (
 		req *http.Request
@@ -236,7 +237,14 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	_ = stream.SetReadDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
 	reply, err := readSocks5Reply(stream)
 	if err != nil || len(reply) < 2 || reply[1] != 0x00 || injectErr != nil {
-		if isHTTP {
+		if late {
+			// The browser had not spoken by the classify deadline, yet it holds a
+			// success reply and may still send its GET. Finish classifying before
+			// answering: closing now drops an HTTP client with no bytes and no
+			// reason, which looks exactly like an empty reply.
+			reqHead, _, _ = continueRequestHead(conn, reqHead, rsHeadLimit)
+		}
+		if isHTTP || looksHTTP(reqHead) {
 			writeBadGateway(conn, connectFailure(host, reply, err, injectErr))
 		}
 		conn.Close()   //nolint:errcheck,gosec
@@ -264,6 +272,9 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 		return host, reqHead, false // let caller splice, replaying what we read
 	}
 
+	// The response head is read under chunk.idle_timeout: an exit that goes
+	// silent after its CONNECT reply must not hold this pair open forever.
+	_ = stream.SetReadDeadline(time.Now().Add(setChunkIdleTimeout())) //nolint:errcheck
 	br := bufio.NewReader(stream)
 	statusLine, err := br.ReadString('\n')
 	if err != nil {
@@ -275,14 +286,11 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 		// Origin ignored the Range (200) or returned a redirect/error. Relay it
 		// verbatim: the added Range header does not appear in such responses, so the
 		// browser sees exactly what its unmodified GET would have produced.
-		_, _ = conn.Write([]byte(statusLine)) //nolint:errcheck
-		if n := br.Buffered(); n > 0 {
-			b, _ := br.Peek(n)   //nolint:errcheck // peeking exactly Buffered() bytes never errors
-			_, _ = conn.Write(b) //nolint:errcheck
+		if err := relayResponse(conn, stream, br, statusLine, req, setChunkIdleTimeout()); err != nil && c.appCl != nil {
+			c.appCl.Log().Debugf("range-split: %s relay: %v", host, err)
 		}
-		_, _ = io.Copy(conn, stream) //nolint:errcheck
-		conn.Close()                 //nolint:errcheck,gosec
-		stream.Close()               //nolint:errcheck,gosec
+		conn.Close()   //nolint:errcheck,gosec
+		stream.Close() //nolint:errcheck,gosec
 		return host, nil, true
 	}
 
@@ -294,6 +302,7 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 		stream.Close() //nolint:errcheck,gosec
 		return host, nil, true
 	}
+	clearDeadlines(stream)
 	total, okTotal := parseContentRangeTotal(hdr.Get("Content-Range"))
 	if !okTotal || total <= 0 {
 		conn.Close()   //nolint:errcheck,gosec
@@ -1285,6 +1294,46 @@ func (c *Client) streamTailOnce(w net.Conn, req *http.Request, host, validator s
 	return copyWithIdleTimeout(w, resp.Body, st, total-start, rsRescueIdleTimeout)
 }
 
+// relayResponse relays the exit's non-206 reply to conn byte for byte and returns
+// when the RESPONSE ends, not when the exit's stream does. Every byte read from
+// the stream is written to conn as it is read (so the headers are the origin's
+// own wire bytes); net/http only frames the reply, and draining the body it frames
+// stops at Content-Length or after the chunked terminator and trailer. Waiting for
+// the stream's FIN instead leaked the pair forever against an exit that never
+// sends one on origin EOF. A reply with no length ends at EOF, and every read,
+// the head included, is bounded by idle.
+func relayResponse(conn, stream net.Conn, br *bufio.Reader, statusLine string, req *http.Request, idle time.Duration) error {
+	tee := io.TeeReader(io.MultiReader(strings.NewReader(statusLine), br), conn)
+	rbr := bufio.NewReader(tee)
+	for {
+		_ = stream.SetReadDeadline(time.Now().Add(idle)) //nolint:errcheck
+		resp, err := http.ReadResponse(rbr, req)
+		if err != nil {
+			// Not a reply net/http can frame: whatever was read is already out,
+			// so relay the rest until the exit ends it or goes idle.
+			return drainIdle(tee, stream, idle)
+		}
+		if err := drainIdle(resp.Body, stream, idle); err != nil {
+			return err
+		}
+		// A 1xx is interim: the final response follows on the same stream.
+		if resp.StatusCode < 200 && resp.StatusCode != http.StatusSwitchingProtocols {
+			continue
+		}
+		return nil
+	}
+}
+
+// drainIdle reads r to its end under a rolling idle deadline on under. What it
+// reads is discarded: relayResponse's tee has already delivered it.
+func drainIdle(r io.Reader, under net.Conn, idle time.Duration) error {
+	_, err := copyWithIdleTimeout(io.Discard, r, under, math.MaxInt64, idle)
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	return err
+}
+
 // copyWithIdleTimeout copies up to limit bytes from body to dst, refreshing a
 // read deadline on the underlying conn before every read — progress keeps the
 // copy alive indefinitely; idle silence fails it within one window. Returns the
@@ -1721,15 +1770,22 @@ func classifyHTTP(buf []byte) (decided, isHTTP bool) {
 // returns isHTTP=false — with everything it read, for verbatim replay — the instant
 // the bytes cannot be an HTTP method, when the head exceeds the cap, when extra
 // bytes trail the header terminator (pipelining we won't split), or on any error.
-func peekRequestHead(conn net.Conn, limit int) (head []byte, isHTTP bool) {
-	buf := make([]byte, 0, 1024)
+// late reports the one undecided outcome: the client had not sent enough to name
+// a method by the range.classify_timeout deadline, so it may still be HTTP.
+func peekRequestHead(conn net.Conn, limit int) (head []byte, isHTTP, late bool) {
+	return continueRequestHead(conn, nil, limit)
+}
+
+// continueRequestHead is peekRequestHead resumed over bytes already read.
+func continueRequestHead(conn net.Conn, prefix []byte, limit int) (head []byte, isHTTP, late bool) {
+	buf := append(make([]byte, 0, 1024), prefix...)
 	tmp := make([]byte, 1024)
 
-	_ = conn.SetReadDeadline(time.Now().Add(rsClassifyTimeout)) //nolint:errcheck
+	_ = conn.SetReadDeadline(time.Now().Add(setRangeClassifyTimeout())) //nolint:errcheck
 	for {
 		if decided, ok := classifyHTTP(buf); decided {
 			if !ok {
-				return buf, false
+				return buf, false, false
 			}
 			break
 		}
@@ -1738,7 +1794,7 @@ func peekRequestHead(conn net.Conn, limit int) (head []byte, isHTTP bool) {
 			buf = append(buf, tmp[:n]...)
 		}
 		if err != nil {
-			return buf, false
+			return buf, false, isTimeout(err)
 		}
 	}
 
@@ -1746,20 +1802,27 @@ func peekRequestHead(conn net.Conn, limit int) (head []byte, isHTTP bool) {
 	term := []byte("\r\n\r\n")
 	for !bytes.Contains(buf, term) {
 		if len(buf) >= limit {
-			return buf, false
+			return buf, false, false
 		}
 		n, err := conn.Read(tmp)
 		if n > 0 {
 			buf = append(buf, tmp[:n]...)
 		}
 		if err != nil {
-			return buf, false
+			return buf, false, false
 		}
 	}
 	if bytes.Index(buf, term)+4 < len(buf) {
-		return buf, false // bytes trail the header block (pipelined) — do not split
+		return buf, false, false // bytes trail the header block (pipelined) — do not split
 	}
-	return buf, true
+	return buf, true, false
+}
+
+// looksHTTP reports whether buf opens with an HTTP method: the client speaks
+// HTTP even when its head was too slow, too big or pipelined to split.
+func looksHTTP(buf []byte) bool {
+	decided, ok := classifyHTTP(buf)
+	return decided && ok
 }
 
 // splittableRequest reports whether req is a plain GET we can range-split.

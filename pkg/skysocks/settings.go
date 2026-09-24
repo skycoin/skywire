@@ -133,6 +133,9 @@ func setChunkFreeRetries() int           { return skysettings.Count(skysettings.
 func setChunkOutstandingFactor() int {
 	return skysettings.Count(skysettings.ChunkOutstandingFactor)
 }
+func setRangeClassifyTimeout() time.Duration {
+	return skysettings.Dur(skysettings.RangeClassifyTimeout)
+}
 
 // rsChunkSize is the range-split chunk ceiling in force: the knob when it has
 // been set, otherwise whatever --range-chunk-kib configured this client with.

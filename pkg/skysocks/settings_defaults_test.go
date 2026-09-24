@@ -53,6 +53,7 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 
 	require.Equal(t, rsChunkRetryBudget, setChunkRetryBudget())
 	require.Equal(t, rsChunkIdleTimeout, setChunkIdleTimeout())
+	require.Equal(t, rsClassifyTimeout, setRangeClassifyTimeout())
 	require.Equal(t, rsFreeRetries, setChunkFreeRetries())
 	require.Equal(t, rsOutstandingFactor, setChunkOutstandingFactor())
 
@@ -112,7 +113,7 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 
 	// Every knob in the catalog is reachable: a name registered with no use site
 	// reading it is a knob the bench can set and nothing obeys.
-	require.Len(t, skysettings.Catalog(), 78)
+	require.Len(t, skysettings.Catalog(), 79)
 
 	// The shape knobs default to the flags they twin (skyenv.SkysocksClientTunnels,
 	// skyenv.SkysocksClientStandbyPool), the per-app mux pair defaults to
