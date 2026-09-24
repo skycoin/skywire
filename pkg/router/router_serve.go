@@ -235,7 +235,7 @@ func (r *router) serveSetup() {
 		go func() {
 			defer func() {
 				if rec := recover(); rec != nil {
-					r.logger.Errorf("Panic in router RPC handler: %v", rec)
+					logging.LogRecovered(r.logger, "router RPC handler", rec)
 				}
 				conn.Close() //nolint:errcheck,gosec
 			}()
