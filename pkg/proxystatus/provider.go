@@ -156,6 +156,10 @@ type Snapshot struct {
 	Logs           []string // recent log lines, oldest first
 	Events         []string // route/transport events affecting this surface, oldest first
 	Streams        []Stream // per-stream detail for the open session (skysocks tunnel), when tracked
+	// Accept is the accept path's accounting, which covers the stage BEFORE a
+	// connection becomes a row in Streams. Nil until something has been
+	// accepted. See the Accept type.
+	Accept *Accept `json:"accept,omitempty"`
 	// RangeSplit summarizes transparent HTTP range-splitting activity on the
 	// surface (skysocks only): whether a split is firing right now and its
 	// cumulative shape. Nil when the surface does not range-split (every
@@ -401,4 +405,24 @@ func ServeConn(body []byte) net.Conn {
 		_, _ = srvConn.Write(body) //nolint:errcheck // best-effort; peer may have gone
 	}()
 	return cliConn
+}
+
+// Accept is the SOCKS accept path's accounting — the stage BEFORE a stream is
+// tracked in Streams. Streams starts at handleStream, so a connection that
+// dies at Accept, at picking a tunnel, or at opening a stream on one leaves no
+// row there at all; these counters are what distinguishes "nothing connected"
+// from "everything that connected died before it could be tracked".
+//
+// Accepted is every connection the listener handed over. NoTunnel counted no
+// live tunnel to put a stream on, OpenFailed opened one and failed, and Opened
+// got a stream and went on to be tracked in Streams. MaxOpenMS is the slowest
+// single open seen, which says whether opens are slow rather than merely
+// failing.
+type Accept struct {
+	Accepted    uint64  `json:"accepted"`
+	NoTunnel    uint64  `json:"no_tunnel,omitempty"`
+	OpenFailed  uint64  `json:"open_failed,omitempty"`
+	Opened      uint64  `json:"opened,omitempty"`
+	MaxOpenMS   float64 `json:"max_open_ms,omitempty"`
+	LastOpenErr string  `json:"last_open_err,omitempty"`
 }
