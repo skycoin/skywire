@@ -1,0 +1,1 @@
+First F-Droid release. Routing: an active tunnel never shares a first hop with another, relays forward leg re-home packets, and each app's tunnel width follows its mux shape. Config rewrites keep the wisp and app settings. One writer per log file.
