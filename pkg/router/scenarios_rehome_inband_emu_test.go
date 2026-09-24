@@ -27,6 +27,7 @@ import (
 // LegRehomePacket is dropped, so nothing but the in-band frame gets through.
 func oldRelayRigPair(t *testing.T, gLeg, sLeg emuLegSpec) (g, s *emuRig) {
 	t.Helper()
+	sbdOffForEmu(t)
 	ml := logging.NewMasterLogger()
 	ml.SetLevel(logrus.PanicLevel)
 	shared := newEmuShared(ml)
