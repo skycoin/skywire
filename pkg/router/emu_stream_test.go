@@ -930,6 +930,46 @@ func TestStreamBench(t *testing.T) {
 		assertLegDiscipline(t, 1, active, pool)
 	})
 
+	// 6b. leg-cut — compose 2x2 with two standby; the PRIMARY leg of tun0 is
+	// black-holed in both directions a quarter of the way in. tun0 keeps a
+	// healthy second leg, so nothing should notice beyond a short gap. Before
+	// sack.leg_silence the receiver's SACKs all rode the dead leg, tun0 froze,
+	// and the object waited ~28 s for the snub (the 2026-09-23 rig's 100 MB
+	// row stalled at 2 MiB the same way).
+	t.Run("leg-cut", func(t *testing.T) {
+		skysettings.Apply(base) //nolint:errcheck
+		active, pool, p := build(t, 2, 2, 2, false)
+		p.client.SetStandbyPool(len(active) + len(pool))
+		all := append(append([]*tunnel{}, active...), pool...)
+		clk := new(readClock)
+		cutAt := cfg.down / 4
+		cutDone := make(chan struct{})
+		go func() {
+			defer close(cutDone)
+			deadline := time.Now().Add(cfg.timeout)
+			for time.Now().Before(deadline) {
+				if clk.got() >= cutAt {
+					clk.mark()
+					active[0].rig.Leg(0).Cut()
+					return
+				}
+				time.Sleep(5 * time.Millisecond)
+			}
+		}()
+		x := download(t, p, sinkAddr, cfg.down, cfg, clk)
+		<-cutDone
+		gap := clk.gap()
+		record(t, &rows, "leg-cut", "down", x, all,
+			fmt.Sprintf("tun0's primary leg black-holed both ways at %d bytes; widest byte-free gap after the cut %v", cutAt, gap))
+		ratio(&rows[len(rows)-1])
+		if gap < 0 {
+			t.Error("no byte landed after the cut — the transfer never resumed")
+		} else if gap >= 10*time.Second {
+			t.Errorf("byte-free gap after a one-leg cut = %v, want under 10s (usually ms; ~6 s in a minority of runs)", gap)
+		}
+		assertLegDiscipline(t, 2, active, pool)
+	})
+
 	// 7. up2 — two concurrent uploads on tunnels-2; the row is their sum.
 	t.Run("up2", func(t *testing.T) {
 		skysettings.Apply(base) //nolint:errcheck

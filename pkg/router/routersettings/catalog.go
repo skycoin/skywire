@@ -86,6 +86,7 @@ var (
 	// SACK feedback cadence (route_mux.go, route_group.go).
 	SackMinInterval     = RegisterMin("sack.min_interval", KindDuration, int64(25*time.Millisecond), int64(time.Millisecond), "minimum spacing between receiver-side SACKs")
 	SackDelayedAckDelay = RegisterMin("sack.delayed_ack_delay", KindDuration, int64(100*time.Millisecond), int64(time.Millisecond), "how long after clean in-order delivery the one-shot delayed ack fires")
+	SackLegSilence      = RegisterMin("sack.leg_silence", KindDuration, int64(500*time.Millisecond), int64(50*time.Millisecond), "SACKs ride the primary leg unless it has received nothing for this long while another leg has; they then ride the leg that received last, so a leg dead in both directions cannot swallow every SACK")
 
 	// Tail-loss probe (rack_tlp.go).
 	TLPPTOFactor     = RegisterRatio("tlp.pto_factor", 2.0, 1.0, "probe timeout is this times the slowest active leg's RTT (RFC 8985)")

@@ -5433,9 +5433,14 @@ func (rg *RouteGroup) sendSACK() error {
 		rg.mu.Unlock()
 		return nil
 	}
-	// Use first available transport for SACK (control channel)
-	tp := rg.tps[0]
-	rule := rg.fwd[0]
+	// The primary leg carries the SACK (control channel) unless it has gone
+	// silent inbound while another leg has not — see routeMux.sackLeg.
+	i := rg.mux.sackLeg(routersettings.SackLegSilence.Duration(), time.Now().UnixNano())
+	if i >= len(rg.tps) || i >= len(rg.fwd) || rg.tps[i] == nil || rg.fwd[i] == nil {
+		i = 0
+	}
+	tp := rg.tps[i]
+	rule := rg.fwd[i]
 	rg.mu.Unlock()
 
 	if tp == nil {
