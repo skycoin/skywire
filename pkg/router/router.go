@@ -416,6 +416,14 @@ type DialOptions struct {
 	// accepting end (the exit) has no idea which of its peers' tunnels are in
 	// standby, so this field is always empty there.
 	TunnelRole string
+	// AdoptReservePort, when set, turns the dial into an ADOPTION: instead of
+	// setting up a new route, DialRoutes takes the leg reserve (a split's
+	// standalone group, leg_split.go) toward the same peer whose far-end port
+	// is this one, re-points its chain at the dial's own descriptor and runs
+	// the ordinary handshake on it (leg_adopt.go). It fails — and the caller
+	// dials the usual way — when no such reserve exists or the peer does not
+	// answer. 0 = an ordinary dial.
+	AdoptReservePort routing.Port
 	// dialNotes is the decision trail DialRoutes writes as it picks a route —
 	// sibling exclusions, candidate filtering, the first hop it settled on —
 	// which finishDial records on the group as a MuxEventDialDecision, so a

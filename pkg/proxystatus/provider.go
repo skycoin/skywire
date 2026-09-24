@@ -314,6 +314,10 @@ type Tunnel struct {
 	// measured it without putting a stream on it.
 	AuditionMS float64 `json:"audition_ms,omitempty"`
 	LocalPort  uint16  `json:"local_port,omitempty"`
+	// RemotePort is the route group's FAR-END port. For a leg reserve it is the
+	// one name the reserve has (its local port is shared with the tunnel it was
+	// split out of): the app adopts a reserve by it (DialOptions.AdoptReservePort).
+	RemotePort uint16 `json:"remote_port,omitempty"`
 	// OpenStreams is this tunnel's yamux session's current open-stream count
 	// (Session.NumStreams), overlaid by the skysocks-client from its own live
 	// session — the visor-built base above has no yamux session to read one

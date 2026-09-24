@@ -530,6 +530,10 @@ type DialOptionsReq struct {
 	// "standby" — for `visor state --select mux_route_groups` and the proxy
 	// status page. The dialing app's own label; empty everywhere else.
 	TunnelRole string
+	// AdoptReservePort asks for the new tunnel to be made from the leg reserve
+	// whose far-end port this is, instead of from a fresh route (see
+	// router.DialOptions.AdoptReservePort). 0 = an ordinary dial.
+	AdoptReservePort uint16
 }
 
 // Explicit reports whether the request carries any per-call option at all.
@@ -543,7 +547,8 @@ func (r DialOptionsReq) Explicit() bool {
 		len(r.ExcludeFirstHopPKs) > 0 ||
 		r.MuxRoutes != 0 || r.MinHops != 0 ||
 		r.ForwardMinHops != 0 || r.ReverseMinHops != 0 ||
-		r.ForwardMuxRoutes != 0 || r.ReverseMuxRoutes != 0
+		r.ForwardMuxRoutes != 0 || r.ReverseMuxRoutes != 0 ||
+		r.AdoptReservePort != 0
 }
 
 // Dial dials to the remote.
@@ -677,6 +682,7 @@ func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptions
 	opts.DiversifyTransports = req.DiversifyTransports
 	opts.RequireDisjointFirstHop = req.RequireDisjointFirstHop
 	opts.TunnelRole = req.TunnelRole
+	opts.AdoptReservePort = routing.Port(req.AdoptReservePort)
 	// pool.exclude_pks: a peer named here is neither a first hop nor an
 	// intermediate of this dial. Both lists, because excluding the peer alone
 	// still leaves it free to appear in the middle of the path.

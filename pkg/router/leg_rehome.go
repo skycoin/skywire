@@ -269,6 +269,8 @@ func (rg *RouteGroup) dispatchLegControl(routeID routing.RouteID, nonce uint64,
 		}
 	case flags&routing.LegRehomeCommit != 0:
 		rg.commitRehomedLeg(routeID)
+	case flags&routing.LegRehomeAdopt != 0:
+		rg.acceptAdopt(routeID, nonce, srcPort, dstPort, dialect)
 	case flags&routing.LegRehomeSplit != 0:
 		rg.acceptSplit(routeID, nonce, srcPort, dstPort, dialect)
 	default:

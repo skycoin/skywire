@@ -216,6 +216,14 @@ const (
 	// group's only leg. Echoed on the ack and on a refusal, so an answer is
 	// never mistaken for a forward re-home's.
 	LegRehomeSplit byte = 0x08
+	// LegRehomeAdopt marks a request to turn a LEG RESERVE (a split's group)
+	// back into a stream-level tunnel (router/leg_adopt.go): the ports name the
+	// INITIATOR's new tunnel descriptor, and the chain the packet arrives on
+	// leaves its reserve group and becomes that tunnel's primary leg, to be
+	// handshaked and accepted like a freshly set-up route group. Echoed on the
+	// ack and on a refusal. A peer that predates it reads it as a forward
+	// re-home naming a group that does not exist, and refuses.
+	LegRehomeAdopt byte = 0x10
 )
 
 // FECRepairHdr is the fixed prefix of a RepairPacket payload: blockID(4) + idx(1)
