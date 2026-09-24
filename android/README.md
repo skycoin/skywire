@@ -322,12 +322,23 @@ android/
     └── jniLibs/arm64-v8a/              # Go payload (gitignored build artifact)
 ```
 
+The store listing F-Droid shows (`title.txt`, the descriptions, the icon and
+the per-version changelogs) is not under `android/`: it lives at the repo root
+in `fastlane/metadata/android/en-US/`, because fdroidserver looks for it only
+in the repo root, the recipe's `subdir` (`android/app`) and `src/<flavor>/`.
+
 Progress log: [implementation-report.md](implementation-report.md).
 
 ## Releasing
 
 Tag the commit `mobile-vX.Y.Z` and push the tag. That is the whole release,
 F-Droid included.
+
+Before tagging, write the release's F-Droid changelog,
+`fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`, at most 500
+characters; the code is major*10000 + minor*100 + patch, so 0.0.5 is `5.txt`.
+The F-Droid lane only warns when it is missing, since the file is part of the
+tag's source and a re-run could not add it; F-Droid then shows no "what's new".
 
 The tag starts `.github/workflows/android-release.yml`, which publishes the
 signed APK and AAB to GitHub Releases. Then `android-fdroid.yml` writes X.Y.Z

@@ -12,18 +12,25 @@
 # build), and only then tags that commit fdroid-vX.Y.Z.
 #
 # The store listing (title, descriptions, icon, changelogs) is not in this
-# file: fdroidserver reads it from android/fastlane/metadata/android/.
+# file: fdroidserver reads it from fastlane/metadata/android/ at the repo
+# root. It scans only the root, the build's subdir (android/app) and
+# src/<flavor>/ for that directory, so android/fastlane/ would be skipped as
+# an "unknown subdir".
 #
 # The build entry is copied forward verbatim for each release, so it must not
 # name a version anywhere but versionName/versionCode/commit. The version
 # comes from android/version.properties and the Go toolchain from go.mod.
 #
 # mobile-v0.0.3 and earlier predate the LICENSE and the skywireFdroid switch,
-# so the first build is fdroid-v0.0.4, made by the mobile-v0.0.4 release.
+# and fdroid-v0.0.4 kept its listing under android/fastlane/, where
+# fdroidserver never looked. So the first build is fdroid-v0.0.5, made by the
+# mobile-v0.0.5 release.
 
 Categories:
   - Connectivity
-  - Internet
+  - Messaging
+  - VPN & Proxy
+  - Wallet
 License: AGPL-3.0-only
 AuthorName: Skycoin
 WebSite: https://www.skycoin.com
@@ -37,9 +44,9 @@ RepoType: git
 Repo: https://github.com/skycoin/skywire.git
 
 Builds:
-  - versionName: 0.0.4
-    versionCode: 4
-    commit: fdroid-v0.0.4
+  - versionName: 0.0.5
+    versionCode: 5
+    commit: fdroid-v0.0.5
     subdir: android/app
     sudo:
       - apt-get update
@@ -82,5 +89,5 @@ Builds:
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^fdroid-v[0-9]+\.[0-9]+\.[0-9]+$
 UpdateCheckData: android/version.properties|(?m)^versionCode=(\d+)$|android/version.properties|(?m)^versionName=(\S+)$
-CurrentVersion: 0.0.4
-CurrentVersionCode: 4
+CurrentVersion: 0.0.5
+CurrentVersionCode: 5
