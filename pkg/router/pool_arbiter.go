@@ -390,6 +390,9 @@ func poolCandidates(g *RouteGroup, pool []*RouteGroup, sibling map[uuid.UUID]str
 			continue
 		}
 		fwd := s.legHopsFor(first)
+		if !g.legHopsMatch(fwd) {
+			continue // a chain of another length would stripe unevenly (leg.hops_match)
+		}
 		out = append(out, poolCandidate{rg: s, plan: poolLegPlan{
 			fwd: fwd, rev: reverseHops(fwd), firstTp: first,
 			port: s.desc.DstPort(), latencyMS: lat, throughputBps: thr,

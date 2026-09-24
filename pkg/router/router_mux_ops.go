@@ -434,6 +434,13 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 	// diverge from ALL prior ones (same discipline as establishMuxRoutes).
 	excludePKs := intermediatesOfRouteGroup(nrg, lPK, rPK)
 
+	// leg.hops_match: ask the finder for the group's own length. MinHops is only
+	// a floor, so the post-fetch gate below still refuses a longer plan.
+	hopsTarget := nrg.rg.legHopsTarget()
+	if hopsTarget > minHops {
+		minHops = hopsTarget
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -495,6 +502,17 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 			consecutiveFailures++
 			log.Debugf("GrowMuxRoute: candidate for leg %d/%d rejected — intra-route loop or intermediate overlap; re-requesting with strengthened excludes",
 				current+added+1, target)
+			if consecutiveFailures >= maxConsecutiveFailures {
+				break
+			}
+			continue
+		}
+
+		if hopsTarget > 0 && len(fwd) != hopsTarget {
+			excludePKs = append(excludePKs, intermediatesOfHops(fwd, lPK, rPK)...)
+			consecutiveFailures++
+			log.Debugf("GrowMuxRoute: candidate for leg %d/%d has %d hops, the group's legs have %d (leg.hops_match); re-requesting",
+				current+added+1, target, len(fwd), hopsTarget)
 			if consecutiveFailures >= maxConsecutiveFailures {
 				break
 			}
