@@ -3,6 +3,7 @@ package httpauth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -54,15 +55,18 @@ func (s *redisStore) key(v string) string {
 
 func (s *redisStore) Nonce(ctx context.Context, remotePK cipher.PubKey) (Nonce, error) {
 	nonce, err := s.client.Get(ctx, s.key(fmt.Sprintf("nonces:%s", remotePK))).Result()
-	if err != nil {
+	if errors.Is(err, redis.Nil) {
+		// No request from this key has succeeded yet.
 		return 0, nil
 	}
+	if err != nil {
+		return 0, fmt.Errorf("redis: %w", err)
+	}
 
-	n, err := strconv.Atoi(nonce)
+	n, err := strconv.ParseUint(nonce, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("malformed nonce: %s", nonce)
 	}
-	//nolint:gosec
 	return Nonce(n), nil
 }
 
