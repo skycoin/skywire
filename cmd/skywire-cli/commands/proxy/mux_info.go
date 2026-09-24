@@ -173,9 +173,15 @@ type muxRouteGroupInfo struct {
 		DstPort int    `json:"dst_port"`
 		SrcPort int    `json:"src_port"`
 	} `json:"desc"`
-	MuxEnabled    bool `json:"mux_enabled"`
-	SACKEnabled   bool `json:"sack_enabled"`
-	PerFrameNoise bool `json:"per_frame_noise"`
+	// FarEndPK is the PEER this route group reaches — the exit for a dialing
+	// client. Desc.DstPK is the LOCAL visor on both sides (the setup node hands
+	// each edge the descriptor pointing AT that edge), so rendering it as the
+	// destination named this visor as its own exit. Empty from a visor older
+	// than this field; farEnd() falls back to the dialed orientation.
+	FarEndPK      string `json:"far_end_pk,omitempty"`
+	MuxEnabled    bool   `json:"mux_enabled"`
+	SACKEnabled   bool   `json:"sack_enabled"`
+	PerFrameNoise bool   `json:"per_frame_noise"`
 	// Directional/Flipped describe the unidirectional-mux state (CapUniDir): each
 	// direction rides a disjoint leg CLASS, and Flipped tells which class carries
 	// which direction. Absent before now, so "is this group directional" was
@@ -565,4 +571,17 @@ func humanBytes(n uint64) string {
 	default:
 		return fmt.Sprintf("%dB", n)
 	}
+}
+
+// farEnd is this route group's PEER — the exit for a dialing client. The visor
+// names it outright (far_end_pk) because the setup node hands EACH edge the
+// descriptor that points AT that edge: Desc.DstPK is the LOCAL visor on both
+// sides, so rendering it as the route's destination printed this visor's own
+// key as its exit. A visor older than the field sends nothing (or a null key),
+// and the dialed orientation — the descriptor's Src — is the answer then.
+func (rg muxRouteGroupInfo) farEnd() string {
+	if pk := rg.FarEndPK; pk != "" && strings.Trim(pk, "0") != "" {
+		return pk
+	}
+	return rg.Desc.SrcPK
 }

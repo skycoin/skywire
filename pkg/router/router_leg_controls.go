@@ -265,7 +265,7 @@ func (r *router) MuxNegotiatedForApp(appName string) []MuxNegotiated {
 		n := MuxNegotiated{
 			DstPort:             uint16(info.Desc.DstPort()), //nolint:gosec // routing.Port is uint16
 			SrcPort:             uint16(info.Desc.SrcPort()), //nolint:gosec // routing.Port is uint16
-			Remote:              info.Desc.DstPK().String(),
+			Remote:              info.FarEndPK.String(),
 			AppName:             appName,
 			Legs:                len(info.Legs),
 			MuxEnabled:          info.MuxEnabled,

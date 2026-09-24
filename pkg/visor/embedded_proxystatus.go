@@ -155,16 +155,22 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 	}
 	if infos, err := p.v.RouteGroupMuxInfo(app); err == nil {
 		for ti, info := range infos {
-			// The exit is the descriptor end that is NOT this visor. A client route
-			// group's descriptor carries the local visor as Dst and the exit as Src,
-			// so hardcoding DstPK mislabeled the local visor as the exit; pick the
-			// far end orientation-independently.
+			// The exit is the descriptor end that is NOT this visor, which the
+			// router now names outright: a client route group's descriptor carries
+			// the local visor as Dst and the exit as Src, so hardcoding DstPK
+			// mislabeled the local visor as the exit.
 			// The LOCAL port is the far end's mirror image: a route group's
 			// LocalAddr is desc.Dst(), so the port on whichever descriptor end
 			// is this visor is the one the dialing app knows its tunnel by.
-			exit, localPort := info.Desc.DstPK, info.Desc.SrcPort
-			if exit == self {
-				exit, localPort = info.Desc.SrcPK, info.Desc.DstPort
+			exit, localPort := info.FarEndPK, info.Desc.DstPort
+			if exit == info.Desc.DstPK {
+				localPort = info.Desc.SrcPort
+			}
+			if exit.Null() {
+				exit, localPort = info.Desc.DstPK, info.Desc.SrcPort
+				if exit == self {
+					exit, localPort = info.Desc.SrcPK, info.Desc.DstPort
+				}
 			}
 			t := proxystatus.Tunnel{
 				Index:      ti,

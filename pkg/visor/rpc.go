@@ -332,10 +332,16 @@ type RouteGroupInfo struct {
 // MuxRouteGroupInfo is one route-group's mux state plus per-leg
 // counters. Returned by RouteGroupMuxInfo for 'cli proxy mux-info'.
 type MuxRouteGroupInfo struct {
-	Desc          routing.RouteDescriptorFields `json:"desc"`
-	MuxEnabled    bool                          `json:"mux_enabled"`
-	SACKEnabled   bool                          `json:"sack_enabled"`
-	PerFrameNoise bool                          `json:"per_frame_noise"`
+	Desc routing.RouteDescriptorFields `json:"desc"`
+	// FarEndPK is the peer at the other end of this route group — the exit for
+	// a dialing client. The setup node gives each edge the descriptor that
+	// points AT that edge, so Desc.DstPK is the LOCAL visor on both sides and
+	// consumers reading it as the destination printed this visor as its own
+	// exit. Filled by the router; render this, never an end of Desc.
+	FarEndPK      cipher.PubKey `json:"far_end_pk"`
+	MuxEnabled    bool          `json:"mux_enabled"`
+	SACKEnabled   bool          `json:"sack_enabled"`
+	PerFrameNoise bool          `json:"per_frame_noise"`
 	// Directional: unidirectional send selection (CapUniDir) is active Ã¢ÂÂ each
 	// direction rides a disjoint leg class. Flipped: the direction->leg-class
 	// mapping is swapped (heavy direction took the mux). With per-leg `direct`,

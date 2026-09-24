@@ -698,6 +698,14 @@ func (rg *RouteGroup) TunnelRole() string {
 type MuxInfo struct {
 	// Desc identifies the route group.
 	Desc routing.RouteDescriptor
+	// FarEndPK is the OTHER end of Desc — the peer this group's chains reach,
+	// never this visor. The setup node hands EACH edge the descriptor that
+	// points AT that edge, so Desc.DstPK() is the LOCAL visor on BOTH sides
+	// (which is why LocalAddr is desc.Dst() and RemoteAddr is desc.Src());
+	// reading DstPK as the "destination"/"exit" therefore printed this visor's
+	// own key as the far end of every dialed group. Consumers render this
+	// instead of deriving an end from Desc.
+	FarEndPK cipher.PubKey
 	// MuxEnabled is false for non-mux'd rg's; the per-leg counters
 	// are still populated for the single transport in that case.
 	MuxEnabled bool
@@ -937,7 +945,7 @@ type MuxLeg struct {
 // MuxStats returns a point-in-time snapshot of the rg's per-leg
 // counters paired with each leg's transport identity.
 func (rg *RouteGroup) MuxStats() MuxInfo {
-	info := MuxInfo{Desc: rg.desc, Events: rg.ownEvents.lastN(rg.knInt(routersettings.MuxEventsPerGroup))}
+	info := MuxInfo{Desc: rg.desc, FarEndPK: rg.farEndPK(), Events: rg.ownEvents.lastN(rg.knInt(routersettings.MuxEventsPerGroup))}
 	info.AppName = rg.AppName()
 	info.KnobApp = rg.knobs().App()
 	rg.mu.Lock()
