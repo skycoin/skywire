@@ -221,9 +221,14 @@ func (m *Manager) dial(ctx context.Context, callID string, peer cipher.PubKey) (
 	sess := m.startSession(callID, peer, conn, ssrcFromPK(m.cfg.LocalPK))
 	// This side placed the call, so this side re-dials when the transport
 	// under it dies; the callee waits to be re-dialed. See resumeOutbound.
-	sess.SetResume(func(rctx context.Context, id string) (net.Conn, error) {
-		return m.resumeOutbound(rctx, id, peer)
-	})
+	// Only with a peer that can take the re-dial — see Sig.Resume.
+	if reply.Resume {
+		sess.SetResume(func(rctx context.Context, id string) (net.Conn, error) {
+			return m.resumeOutbound(rctx, id, peer)
+		})
+	} else {
+		m.log.WithField("call", callID).Debug("voice: the peer predates call resumption; a broken transport ends the call")
+	}
 	// The session runs independently of the (possibly short) invite ctx — it
 	// ends when the conn closes (Hangup or the peer hanging up), not when the
 	// caller's dial deadline elapses.
@@ -316,15 +321,20 @@ func (m *Manager) ringAndWait(inv Sig, gone <-chan struct{}) ringOutcome {
 
 // accept replies SigAccept and starts the media session over conn.
 func (m *Manager) accept(inv Sig, conn net.Conn) {
-	ack := Sig{Type: SigAccept, CallID: inv.CallID, FromPK: m.cfg.LocalPK, Codec: m.cfg.Codec.Name(), MediaPort: m.cfg.SignalPort}
+	ack := Sig{Type: SigAccept, CallID: inv.CallID, FromPK: m.cfg.LocalPK, Codec: m.cfg.Codec.Name(), MediaPort: m.cfg.SignalPort, Resume: true}
 	if err := writeSig(conn, ack); err != nil {
 		_ = conn.Close() //nolint:errcheck
 		return
 	}
 	sess := m.startSession(inv.CallID, inv.FromPK, conn, ssrcFromPK(m.cfg.LocalPK))
 	// We answered, so we wait to be re-dialed rather than dialing — only one
-	// side may, or a broken transport becomes two replacements.
-	sess.SetAwaitResume()
+	// side may, or a broken transport becomes two replacements. Only when the
+	// caller will re-dial at all — see Sig.Resume.
+	if inv.Resume {
+		sess.SetAwaitResume()
+	} else {
+		m.log.WithField("call", inv.CallID).Debug("voice: the caller predates call resumption; a broken transport ends the call")
+	}
 	go func() { sess.Run(context.Background()); m.dropCall(inv.CallID) }() //nolint:gosec // session outlives the invite/request ctx by design
 }
 
@@ -423,7 +433,9 @@ func (m *Manager) dropCall(callID string) {
 	}
 }
 
-// Hangup ends an active call by id (closes its media conn; the peer sees EOF).
+// Hangup ends an active call by id: a farewell on its media conn and then the
+// close, so the peer ends the call at once rather than trying to reconnect
+// (see byeFrame).
 func (m *Manager) Hangup(callID string) error {
 	m.mu.Lock()
 	sess := m.calls[callID]

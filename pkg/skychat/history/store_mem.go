@@ -186,6 +186,21 @@ func (s *MemStore) DeleteByID(peer, id string) (bool, error) {
 	return true, nil
 }
 
+// DeletePeer implements Store.
+func (s *MemStore) DeletePeer(peer string) (int, error) {
+	if peer == "" {
+		return 0, ErrEmptyPeer
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	msgs := s.byPeer[peer]
+	for _, m := range msgs {
+		s.totalBytes -= msgSize(m)
+	}
+	delete(s.byPeer, peer)
+	return len(msgs), nil
+}
+
 // ListRecent implements Store.
 func (s *MemStore) ListRecent(limit int) ([]Message, error) {
 	s.mu.Lock()

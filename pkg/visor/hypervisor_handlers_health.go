@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -57,10 +58,27 @@ func (hv *Hypervisor) getSvcFetch() http.HandlerFunc {
 				map[string]string{"error": "service and path query params required"})
 			return
 		}
-		body, err := hv.visor.FetchServiceData(service, path)
+		// The server's WriteTimeout (10s) is a deadline on the WHOLE
+		// response, armed as the request is read — and a fetch over dmsg can
+		// legitimately take longer: up to 30s waiting for dmsg to be up, then
+		// a dial, then the list. A fetch that finished at eleven seconds was
+		// thrown away at the socket, and the phone saw a broken connection
+		// where the list had just arrived. Cleared for this response only,
+		// the way the log stream does it; the /api group's 30s context
+		// timeout still bounds the fetch itself.
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(httpTimeout + 5*time.Second)); err != nil {
+			hv.log(r).WithError(err).Debug("getSvcFetch: could not extend the write deadline")
+		}
+		body, err := hv.visor.fetchServiceDataCtx(r.Context(), service, path)
 		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadGateway,
-				map[string]string{"error": err.Error()})
+			status := http.StatusBadGateway
+			if errors.Is(err, ErrDmsgNotReady) {
+				// Not a failure of the service: this visor has no dmsg
+				// session yet. 503 so a client backs off and asks again
+				// rather than reporting the service as down.
+				status = http.StatusServiceUnavailable
+			}
+			httputil.WriteJSON(w, r, status, map[string]string{"error": err.Error()})
 			return
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")

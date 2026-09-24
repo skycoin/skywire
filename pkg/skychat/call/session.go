@@ -22,6 +22,21 @@ import (
 // signaling (Sig.Codec), so the number is just a stable tag on the wire.
 const rtpPayloadType = 96
 
+// byeFrame is the end-of-call marker on the media stream: a frame of length
+// zero. RTP never produces one (a packet is at least its 12-byte header), so
+// nothing else on the wire looks like it; and a peer that predates it reads a
+// zero length, skips it — as this code used to — and then meets the close
+// behind it, which is how a hangup has always looked to that peer.
+//
+// It exists because the close alone is ambiguous. The media conn is one
+// stream on a SHARED dmsg session, and that session dying looks exactly like
+// the peer closing the stream: EOF. Resumption takes every EOF for the
+// transport failing and spends its whole budget re-dialing — thirty seconds
+// for the caller, sixty for the callee — before it concedes the call is over,
+// while the peer that hung up is long gone. Sent ahead of the close, this says
+// which of the two it is, and the call ends at once.
+var byeFrame = [2]byte{0, 0}
+
 // ResumeFunc re-establishes a call's media conn after the transport under it
 // died. It blocks until it has one or gives up, and owns its own budget — the
 // session has no deadline to lend it.
@@ -90,6 +105,13 @@ type Session struct {
 	spkMuted atomic.Bool
 
 	closeOnce sync.Once
+
+	// writeMu serializes writes to the media conn. A frame is one write, but
+	// the farewell (byeFrame) is written from another goroutine, and landing
+	// between a frame's header and its body would misframe everything after
+	// it — which the peer would read as the transport failing, the one
+	// thing the farewell exists to rule out.
+	writeMu sync.Mutex
 
 	// endReason is why the call ended, kept because it used to be thrown
 	// away. Every exit below dropped its error on the floor and the manager
@@ -174,6 +196,15 @@ func (s *Session) Peer() cipher.PubKey {
 	s.connMu.Lock()
 	defer s.connMu.Unlock()
 	return s.peer
+}
+
+// Closed reports whether the call has been hung up here. For a resume that
+// arrives after the fact: it must be declined, not accepted onto a conn the
+// close still unwinding is about to take away.
+func (s *Session) Closed() bool {
+	s.connMu.Lock()
+	defer s.connMu.Unlock()
+	return s.closed
 }
 
 // AdoptConn installs a replacement media conn the PEER re-dialed, and reports
@@ -274,6 +305,12 @@ func (s *Session) tryResume(ctx context.Context, gen uint64) bool {
 	if cur != gen {
 		return true // already rebuilt — by the other loop, or by an adoption
 	}
+	if ctx.Err() != nil {
+		// The other loop has ended the call — it read the peer's farewell,
+		// say — and this one is only finding the conn gone behind it. Not a
+		// transport failure, and not worth a log line claiming one.
+		return false
+	}
 
 	s.log.WithField("call", s.CallID).Info("voice: media transport failed — reconnecting")
 	// Ends the attempt the moment the call is hung up, rather than when the
@@ -352,6 +389,9 @@ func (s *Session) sendLoop(ctx context.Context) {
 	tick := time.NewTicker(frameMillis * time.Millisecond)
 	defer tick.Stop()
 	pcm := make([]int16, frameSamples)
+	// One frame is ONE write — header and body together — so nothing can
+	// land between them: see writeMu.
+	frame := make([]byte, 0, 2+1500)
 	var seq uint16
 	var ts uint32
 	for {
@@ -394,22 +434,15 @@ func (s *Session) sendLoop(ctx context.Context) {
 			s.log.WithError(err).Debug("voice: rtp marshal")
 			continue
 		}
-		var hdr [2]byte
 		if len(raw) > 0xffff {
 			continue
 		}
-		binary.BigEndian.PutUint16(hdr[:], uint16(len(raw))) //nolint:gosec // guarded above
+		frame = binary.BigEndian.AppendUint16(frame[:0], uint16(len(raw))) //nolint:gosec // guarded above
+		frame = append(frame, raw...)
 		conn, gen := s.media()
-		if _, err := conn.Write(hdr[:]); err != nil {
+		if err := s.writeMedia(conn, frame); err != nil {
 			if s.tryResume(ctx, gen) {
 				continue // this frame is lost; the next one goes on the new conn
-			}
-			s.noteEnd("send failed: " + err.Error())
-			return
-		}
-		if _, err := conn.Write(raw); err != nil {
-			if s.tryResume(ctx, gen) {
-				continue
 			}
 			s.noteEnd("send failed: " + err.Error())
 			return
@@ -438,7 +471,11 @@ func (s *Session) recvLoop(ctx context.Context) {
 		}
 		n := binary.BigEndian.Uint16(hdr[:])
 		if n == 0 {
-			continue
+			// The peer's farewell (byeFrame): the call is over, and this is
+			// the one end of a read that must not be taken for the transport
+			// failing — no tryResume.
+			s.noteEnd("peer hung up")
+			return
 		}
 		raw := make([]byte, n)
 		if _, err := io.ReadFull(conn, raw); err != nil {
@@ -471,6 +508,34 @@ func (s *Session) recvLoop(ctx context.Context) {
 	}
 }
 
+// writeMedia writes one whole frame to conn, serialized with every other
+// media write (see writeMu).
+func (s *Session) writeMedia(conn net.Conn, frame []byte) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	_, err := conn.Write(frame)
+	return err
+}
+
+// sayBye writes the end-of-call frame ahead of the close, best effort and
+// strictly bounded. The close behind it is what ends the call, and must not
+// wait on a conn that is already wedged — which is the state a hangup during
+// a dead transport finds it in. Same shape as cancelInvite's farewell, for
+// the same reason.
+func (s *Session) sayBye(conn net.Conn) {
+	sent := make(chan struct{})
+	go func() {
+		defer close(sent)
+		_ = s.writeMedia(conn, byeFrame[:]) //nolint:errcheck // a conn already gone reports so; the close is the point
+	}()
+	timer := time.NewTimer(hangupWriteGrace)
+	defer timer.Stop()
+	select {
+	case <-sent:
+	case <-timer.C:
+	}
+}
+
 // recvEndReason names what a failed media read means. A clean EOF is the peer
 // hanging up — the ordinary end of a call, and worth distinguishing from the
 // transport going out from under one, which is what a caller reporting a call
@@ -482,8 +547,8 @@ func recvEndReason(err error) string {
 	return "transport closed: " + err.Error()
 }
 
-// Close tears down the session's conn (idempotent). The Run loops observe the
-// conn error and exit. It also closes the source and sink if they are Closers:
+// Close tears down the session's conn (idempotent), telling the peer first.
+// The Run loops observe the conn error and exit. It also closes the source and sink if they are Closers:
 // a blocking Source.Read (e.g. an audio ring with no frames flowing) would
 // otherwise wedge sendLoop, so Run's wg.Wait would never return and the call
 // would never be dropped from the manager.
@@ -496,7 +561,16 @@ func (s *Session) Close() {
 		s.closed = true
 		conn := s.conn
 		s.connMu.Unlock()
+		// Recorded before the conn goes: closing it makes the loops fail,
+		// and "send failed: stream closed" is what the side that HUNG UP
+		// then reported as its reason — the one log line whose whole job is
+		// to tell a hangup from a transport failure said the wrong one. A
+		// loop that ended first has already set the reason and keeps it.
+		s.noteEnd("hung up here")
 		close(s.hungUp)
+		// Before the close, so the peer learns this is a hangup and not the
+		// transport failing under it: see byeFrame.
+		s.sayBye(conn)
 		_ = conn.Close() //nolint:errcheck
 		if c, ok := s.source.(io.Closer); ok {
 			_ = c.Close() //nolint:errcheck

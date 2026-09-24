@@ -3,6 +3,7 @@ package call
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -52,6 +53,15 @@ const resumeAttemptBudget = 8 * time.Second
 // budget with room to spare.
 const adoptWaitBudget = ResumeBudget + 30*time.Second
 
+// ErrResumeRefused is what Signaler.Resume returns when the peer answered and
+// said no. It is final: the peer has dropped the call, or predates resumption
+// and cannot take one, and asking again gets the same answer for the rest of
+// the budget — which is what a call that a pre-resumption peer had hung up on
+// used to do, for thirty seconds. Only the transport-level failures — no
+// route yet, the dial timing out — are worth retrying, because those are the
+// local dmsg client still reconnecting.
+var ErrResumeRefused = errors.New("voice: resume refused")
+
 // resumeOutbound rebuilds the media conn from the CALLER's side by re-dialing
 // the peer, retrying until the budget runs out.
 //
@@ -74,6 +84,9 @@ func (m *Manager) resumeOutbound(ctx context.Context, callID string, peer cipher
 			return conn, nil
 		}
 		lastErr = err
+		if errors.Is(err, ErrResumeRefused) {
+			return nil, err
+		}
 		select {
 		case <-ctx.Done():
 			// The last attempt's error, not the context's: "no route to the
@@ -108,10 +121,19 @@ func (m *Manager) handleResume(sig Sig, conn net.Conn) {
 		m.log.WithField("call", sig.CallID).Warn("voice: refused a resume that did not come from the call's peer")
 		return
 	}
+	if sess.Closed() {
+		// Hung up here, with the loops still unwinding and the call not yet
+		// dropped. Accepting would hand the dialer a conn the close is about
+		// to take away, which it would read as the transport failing again
+		// and start its budget over on. Say no now, and it ends there.
+		_ = writeSig(conn, Sig{Type: SigDecline, CallID: sig.CallID, FromPK: m.cfg.LocalPK, Reason: "call ended"}) //nolint:errcheck
+		_ = conn.Close()                                                                                           //nolint:errcheck
+		return
+	}
 	// Accept BEFORE adopting: the dialer starts sending media as soon as it
 	// reads this, and the session must already own the conn by then or those
 	// first frames land on nobody.
-	ack := Sig{Type: SigAccept, CallID: sig.CallID, FromPK: m.cfg.LocalPK, Codec: m.cfg.Codec.Name(), MediaPort: m.cfg.SignalPort}
+	ack := Sig{Type: SigAccept, CallID: sig.CallID, FromPK: m.cfg.LocalPK, Codec: m.cfg.Codec.Name(), MediaPort: m.cfg.SignalPort, Resume: true}
 	if err := writeSig(conn, ack); err != nil {
 		_ = conn.Close() //nolint:errcheck
 		return

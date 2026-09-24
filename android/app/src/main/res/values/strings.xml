@@ -815,6 +815,8 @@
     <string name="settings_battery_not_now">Not now</string>
     <string name="settings_battery_no_screen">This phone has no battery-optimisation screen to open.</string>
     <string name="home_battery_title">Keep Skywire connected in the background?</string>
+    <string name="home_calls_title">Let calls take over the screen?</string>
+    <string name="home_calls_body">Without this an incoming call is only a notification, and a phone with its screen off stays dark while it rings. Allow Skywire to show the call screen and a call lights the phone up the way a phone call does.</string>
     <string name="home_battery_body">Android can pause this app\u2019s network once the screen has been off for a while. Allow it to ignore battery optimisation and messages arrive as they are sent.</string>
     <!-- Config encryption at rest. -->
     <string name="settings_encrypt">Encrypt the config at rest</string>

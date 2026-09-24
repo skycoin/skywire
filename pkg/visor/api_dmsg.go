@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -818,6 +819,14 @@ func (v *Visor) SkynetProbe(pk cipher.PubKey, port uint16) (bool, error) {
 
 // DmsgHTTP implements API. Performs an HTTP request over dmsg using the visor's dmsg client.
 func (v *Visor) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
+	return v.dmsgHTTPCtx(context.Background(), req)
+}
+
+// dmsgHTTPCtx is DmsgHTTP bounded by ctx: a caller that has gone away — an
+// HTTP request whose client hung up, or whose server deadline passed — stops
+// the wait for dmsg, the dial and the read, instead of each running out its
+// own budget for nobody.
+func (v *Visor) dmsgHTTPCtx(ctx context.Context, req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	// Use the visor's main DMSG client (v.dmsgC) for HTTP-over-DMSG.
 	// Deployment services are registered in the DMSG discovery, so
 	// DialStream resolves them via normal lookup + delegated-server phases.
@@ -825,18 +834,33 @@ func (v *Visor) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	// Note: v.dmsgHTTP uses a SEPARATE dmsg.Client (dmsgDC) sharing the
 	// same PK, which causes session conflicts on DMSG servers. v.dmsgC
 	// is the authoritative client with stable sessions.
-	if err := v.mustWaitDmsgReady(); err != nil {
+	if v.dmsgC == nil {
+		return nil, fmt.Errorf("DMSG client not ready: %w", ErrDmsgNotReady)
+	}
+	if err := waitDmsgReady(ctx, v.dmsgC, 30*time.Second); err != nil {
 		return nil, fmt.Errorf("DMSG client not ready: %w", err)
 	}
 
 	// dmsg over skynet transports: reach the peer over the VStreamMux relay
 	// (no route, no dmsg-server) when possible; dmsg-servers are the fallback.
-	if resp, ok := v.dmsgOverSkynet(req); ok {
-		return resp, nil
+	//
+	// Not for the deployment services. They are dmsg-only clients with no
+	// skynet transport to reach, so the detour can only fail — and failing
+	// takes it up to twelve seconds (a TPD query, then every candidate relay
+	// waiting out its handshake), spent before the dmsg-server path this
+	// ends on has even been tried. On a phone that alone put the server
+	// lists past the API's write deadline.
+	if !v.isDmsgServicePK(req.URL) {
+		if resp, ok := v.dmsgOverSkynet(req); ok {
+			return resp, nil
+		}
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
 	httpClient := &http.Client{
-		Transport: &dmsgHTTPTransport{ctx: context.Background(), dmsgC: v.dmsgC},
+		Transport: &dmsgHTTPTransport{ctx: ctx, dmsgC: v.dmsgC},
 		Timeout:   15 * time.Second,
 	}
 
@@ -845,9 +869,6 @@ func (v *Visor) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	if len(req.Body) > 0 {
 		bodyReader = bytes.NewReader(req.Body)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
 
 	httpReq, err := http.NewRequestWithContext(ctx, req.Method, req.URL, bodyReader)
 	if err != nil {
@@ -894,6 +915,25 @@ func (v *Visor) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	}
 
 	return response, nil
+}
+
+// isDmsgServicePK reports whether rawURL names one of the deployment services
+// this visor is configured with (TPD, SD, AR, RF, UT, dmsg discovery).
+func (v *Visor) isDmsgServicePK(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	var pk cipher.PubKey
+	if err := pk.Set(u.Hostname()); err != nil {
+		return false
+	}
+	for _, svc := range v.dmsgServicePKs() {
+		if svc == pk {
+			return true
+		}
+	}
+	return false
 }
 
 // dmsgHTTPTransport implements http.RoundTripper using the visor's dmsg client

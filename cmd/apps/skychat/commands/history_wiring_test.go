@@ -327,4 +327,29 @@ func TestForgetHandler(t *testing.T) {
 			t.Errorf("GET: code=%d, want 405", rr.Code)
 		}
 	}
+
+	// The whole conversation ("Delete chat"). This is the exact path that
+	// brought a deleted chat back: /history/peers named the peer on the next
+	// page load, and syncHistoryPeers put the thread back in the list.
+	if err := st.Append(history.Message{Peer: pk.Hex(), ID: "m3", Text: "text-m3", Timestamp: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	if rr := post(`{"pk":"` + pk.Hex() + `","all":true}`); rr.Code != http.StatusNoContent {
+		t.Fatalf("forget all: code=%d body=%q, want 204", rr.Code, rr.Body.String())
+	}
+	if left, err := st.ListByPeer(pk.Hex(), 100); err != nil || len(left) != 0 {
+		t.Errorf("messages survived forgetting the conversation: %+v, %v", left, err)
+	}
+	peersRR := httptest.NewRecorder()
+	historyPeersHandler(peersRR, httptest.NewRequest(http.MethodGet, "/history/peers", nil))
+	if peersRR.Code != http.StatusOK {
+		t.Fatalf("/history/peers after forget all: code=%d body=%q", peersRR.Code, peersRR.Body.String())
+	}
+	if strings.Contains(peersRR.Body.String(), pk.Hex()) {
+		t.Errorf("/history/peers still names the deleted conversation: %s — the page will re-add it on its next load", peersRR.Body.String())
+	}
+	// Replayed by a second tab: nothing there, still not an error.
+	if rr := post(`{"pk":"` + pk.Hex() + `","all":true}`); rr.Code != http.StatusNoContent {
+		t.Errorf("repeat forget all: code=%d, want 204", rr.Code)
+	}
 }

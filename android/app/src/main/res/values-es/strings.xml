@@ -859,6 +859,8 @@
     <string name="settings_battery_not_now">Ahora no</string>
     <string name="settings_battery_no_screen">Este teléfono no tiene una pantalla de optimización de batería que abrir.</string>
     <string name="home_battery_title">¿Mantener Skywire conectada en segundo plano?</string>
+    <string name="home_calls_title">¿Dejar que las llamadas ocupen la pantalla?</string>
+    <string name="home_calls_body">Sin esto, una llamada entrante es solo una notificación, y un teléfono con la pantalla apagada sigue a oscuras mientras suena. Permite que Skywire muestre la pantalla de llamada y una llamada encenderá el teléfono como lo hace una llamada normal.</string>
     <string name="home_battery_body">Android puede pausar la red de esta app cuando la pantalla lleva un rato apagada. Permite que ignore la optimización de batería y los mensajes llegarán según se envían.</string>
     <!-- Config encryption at rest. -->
     <string name="settings_encrypt">Cifrar la configuración en reposo</string>
