@@ -344,6 +344,7 @@ func writeLiveRegion(b *strings.Builder, snap Snapshot) {
 
 	writeStreamsSection(b, snap)
 	writeRangeSplitSection(b, snap)
+	writeAcceptSection(b, snap)
 	writeMuxSection(b, snap)
 	writeLogSection(b, snap)
 }
@@ -553,6 +554,23 @@ func writeRangeSplitSection(b *strings.Builder, snap Snapshot) {
 		cls, html.EscapeString(state),
 		rs.TotalSplits, rs.TotalChunks, html.EscapeString(compactBytes(rs.TotalBytes)),
 		rs.StreamsPerSplit, html.EscapeString(compactBytes(uint64(rs.ChunkSize)))) //nolint:gosec // chunkSize>0
+}
+
+// writeAcceptSection renders the accept path's counters, which cover what
+// happened to a connection before it became a row in the streams table.
+// Omitted until something has been accepted.
+func writeAcceptSection(b *strings.Builder, snap Snapshot) {
+	a := snap.Accept
+	if a == nil {
+		return
+	}
+	fmt.Fprintf(b, `<p class="accept"><b>accept</b> `+
+		`<span class="rsagg">%d accepted · %d opened · %d open failed · %d no tunnel · slowest open %.0f ms</span>`,
+		a.Accepted, a.Opened, a.OpenFailed, a.NoTunnel, a.MaxOpenMS)
+	if a.LastOpenErr != "" {
+		fmt.Fprintf(b, ` <span class="rsagg">last error: %s</span>`, html.EscapeString(a.LastOpenErr))
+	}
+	b.WriteString(`</p>`)
 }
 
 // writeMuxSection renders the route group as ONE unified route tree rooted at
