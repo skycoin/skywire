@@ -853,9 +853,10 @@ func fetchProxyDirect(rpcClient visor.API, appName string) []directStreamInfo {
 }
 
 // renderProxyRoute formats the active route group(s) for `proxy status`: the
-// destination + each leg's first-hop transport (type, remote, latency). A
-// single-leg route is flagged since it has no failover — a first-hop flap drops
-// the whole session (the common cause of intermittent proxy drops).
+// far end (the exit for a dialing client) + each leg's first-hop transport
+// (type, remote, latency). A single-leg route is flagged since it has no
+// failover — a first-hop flap drops the whole session (the common cause of
+// intermittent proxy drops).
 // With no route group it falls through to the DIRECT path instead of
 // reporting nothing, which is what a shortcut-eligible dial produces.
 func renderProxyRoute(rgs []muxRouteGroupInfo, direct []directStreamInfo) string {
@@ -868,7 +869,7 @@ func renderProxyRoute(rgs []muxRouteGroupInfo, direct []directStreamInfo) string
 		if len(rg.Legs) == 1 {
 			plural = "leg"
 		}
-		fmt.Fprintf(&sb, "Route: %d %s to %s:%d", len(rg.Legs), plural, shortPK(rg.Desc.DstPK), rg.Desc.DstPort)
+		fmt.Fprintf(&sb, "Route: %d %s to %s  (rg %d)", len(rg.Legs), plural, shortPK(rg.farEnd()), rg.Desc.DstPort)
 		sort.SliceStable(rg.Legs, func(a, b int) bool { return rg.Legs[a].Index < rg.Legs[b].Index })
 		for _, leg := range rg.Legs {
 			lat := ""
