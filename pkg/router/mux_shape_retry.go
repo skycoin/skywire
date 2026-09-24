@@ -128,7 +128,7 @@ type shapeLeg struct {
 func (rg *RouteGroup) shapeLegs() []shapeLeg {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	dst := rg.desc.DstPK()
+	dst := rg.farEndPK()
 	out := make([]shapeLeg, 0, len(rg.tps))
 	for i, tp := range rg.tps {
 		if i == 0 || tp == nil || tp.IsClosed() {

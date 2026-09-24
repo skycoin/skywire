@@ -69,6 +69,7 @@ func TestSessionShapeCountsTunnelsAndLegs(t *testing.T) {
 	mk := func(role string, legs ...bool) MuxInfo {
 		in := MuxInfo{
 			Desc:       routing.NewRouteDescriptor(src, exit, 49150, 3),
+			FarEndPK:   exit,
 			AppName:    "skysocks-client",
 			TunnelRole: role,
 		}
@@ -125,6 +126,7 @@ func TestApplySessionShapesRendersAQuiescedLeg(t *testing.T) {
 	mk := func(legs ...bool) MuxInfo {
 		in := MuxInfo{
 			Desc:       routing.NewRouteDescriptor(src, exit, 49150, 3),
+			FarEndPK:   exit,
 			AppName:    "skysocks-client",
 			TunnelRole: tunnelRoleActive,
 		}
@@ -178,6 +180,7 @@ func TestApplySessionShapesReportsTargetAndSource(t *testing.T) {
 	mk := func(app string, exit cipher.PubKey, role string, legs int) MuxInfo {
 		in := MuxInfo{
 			Desc:       routing.NewRouteDescriptor(src, exit, 49150, 3),
+			FarEndPK:   exit,
 			AppName:    app,
 			KnobApp:    app,
 			TunnelRole: role,
