@@ -144,7 +144,7 @@ func (c *clientConfig) parseArgs(args []string) error {
 	fs.BoolVar(&c.routed, "routed", false, "always dial through a route group (skip the direct shortcut)")
 	fs.BoolVar(&c.dmsgFallback, "dmsg-fallback", false, "fall back to a direct dmsg stream if the skynet dial fails")
 	fs.Int64Var(&c.tunnels, "tunnels", skyenv.SkysocksClientTunnels, "number of independent tunnels to stripe connections across")
-	fs.Int64Var(&c.standbyPool, "standby-pool", skyenv.SkysocksClientStandbyPool, "cap on tunnels held to the exit including the active ones; extras are kept in standby (0 = active tunnels only)")
+	fs.Int64Var(&c.standbyPool, "standby-pool", skyenv.SkysocksClientStandbyPool, "cap on tunnels held to the exit including the active ones; extras are kept in standby (0 = active tunnels only; -1 = auto: one per disjoint route to the exit, up to pool.size_cap)")
 	// Range-split flags were absent from this launcher subset, so passing any of
 	// them via the visor's app args errored. Bind them here too so the feature is
 	// configurable when the visor launches the app.
@@ -192,7 +192,7 @@ func init() {
 	// it fills until the router reports no disjoint first hop is left and then
 	// rests. This value is the ceiling on that, including the active tunnels,
 	// so the setup-node load of one app start is bounded.
-	RootCmd.Flags().Int64Var(&standbyPool, "standby-pool", skyenv.SkysocksClientStandbyPool, "maximum tunnels held open to the exit INCLUDING the active --tunnels; the extras are held in standby (dialed, kept alive and measured, carrying no streams) so a failing tunnel is replaced instantly instead of re-dialed. The pool fills one tunnel at a time until the topology has no disjoint first hop left, then stops; this is the ceiling, not a target. 0 = hold only the active tunnels")
+	RootCmd.Flags().Int64Var(&standbyPool, "standby-pool", skyenv.SkysocksClientStandbyPool, "maximum tunnels held open to the exit INCLUDING the active --tunnels; the extras are held in standby (dialed, kept alive and measured, carrying no streams) so a failing tunnel is replaced instantly instead of re-dialed. The pool fills one tunnel at a time until the topology has no disjoint first hop left, then stops; this is the ceiling, not a target. 0 = hold only the active tunnels; -1 (default) = auto: one tunnel per disjoint route to the exit, up to pool.size_cap")
 	// Transparent HTTP range-splitting: a plain GET to a range-capable :80 origin is
 	// fetched as N concurrent byte ranges over separate tunnels and reassembled, so
 	// one unmodified download (curl or a browser on this proxy) aggregates across the

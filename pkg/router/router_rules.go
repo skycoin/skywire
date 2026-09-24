@@ -138,6 +138,7 @@ func (r *router) RouteGroupMuxInfoForApp(appName string) []MuxInfo {
 	}
 	// Before the sort: in is parallel to out as collected.
 	applySessionShapes(out, in)
+	r.applyRouteBounds(out)
 	sortMuxInfos(out)
 	return out
 }
@@ -164,6 +165,7 @@ func (r *router) RouteGroupMuxInfoAll() []MuxInfo {
 	}
 	// Before the sort: in is parallel to out as collected.
 	applySessionShapes(out, in)
+	r.applyRouteBounds(out)
 	sortMuxInfos(out)
 	return out
 }

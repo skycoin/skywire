@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -245,4 +246,28 @@ func TestOraclePlanCache_ClaimRespectsEligibility(t *testing.T) {
 
 	_, ok = c.claim(src, dst, legs, func(l twoHopLeg) bool { return l.Intermediate == want })
 	require.False(t, ok, "the only eligible candidate is already claimed")
+}
+
+// TestRouteBoundCountsDistinctFirstHops: the count an auto-sized standby pool
+// follows is the number of distinct first hops in the last candidate set, and
+// it outlives the set's TTL.
+func TestRouteBoundCountsDistinctFirstHops(t *testing.T) {
+	c := newOraclePlanCache()
+	src, _ := cipher.GenerateKeyPair()
+	dst, _ := cipher.GenerateKeyPair()
+	require.Zero(t, c.routeBound(dst), "nothing fetched yet")
+
+	shared := uuid.New()
+	legs := []twoHopLeg{
+		{Forward: []routing.Hop{{TpID: shared}}},
+		{Forward: []routing.Hop{{TpID: shared}}},
+		{Forward: []routing.Hop{{TpID: uuid.New()}}},
+		{},
+	}
+	_, err := c.legsFor(context.Background(), src, dst, func(context.Context) ([]twoHopLeg, error) { return legs, nil })
+	require.NoError(t, err)
+	require.Equal(t, 2, c.routeBound(dst))
+
+	c.now = func() time.Time { return time.Now().Add(24 * time.Hour) }
+	require.Equal(t, 2, c.routeBound(dst), "the count is kept after the set expires")
 }

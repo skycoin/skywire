@@ -145,11 +145,17 @@ type Snapshot struct {
 	// default. The dialing app FOLLOWS k with its own active set: the router
 	// can flip a route group's role, but only the app owns the yamux session
 	// that puts streams on one (pkg/skysocks reconcileActiveSet).
-	ShapeTunnels int      `json:"shape_tunnels,omitempty"`
-	ShapeSource  string   `json:"shape_source,omitempty"`
-	Logs         []string // recent log lines, oldest first
-	Events       []string // route/transport events affecting this surface, oldest first
-	Streams      []Stream // per-stream detail for the open session (skysocks tunnel), when tracked
+	ShapeTunnels int    `json:"shape_tunnels,omitempty"`
+	ShapeSource  string `json:"shape_source,omitempty"`
+	// DisjointRoutes is how many routes to the exit share no intermediate and
+	// no first hop: one per intermediate this visor and the exit both hold a
+	// transport to, plus the direct transports. 0 until the router has counted
+	// them. An auto-sized standby pool (--standby-pool -1) holds this many
+	// tunnels, up to pool.size_cap.
+	DisjointRoutes int      `json:"disjoint_routes,omitempty"`
+	Logs           []string // recent log lines, oldest first
+	Events         []string // route/transport events affecting this surface, oldest first
+	Streams        []Stream // per-stream detail for the open session (skysocks tunnel), when tracked
 	// RangeSplit summarizes transparent HTTP range-splitting activity on the
 	// surface (skysocks only): whether a split is firing right now and its
 	// cumulative shape. Nil when the surface does not range-split (every

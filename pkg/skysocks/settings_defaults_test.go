@@ -112,13 +112,16 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 
 	// Every knob in the catalog is reachable: a name registered with no use site
 	// reading it is a knob the bench can set and nothing obeys.
-	require.Len(t, skysettings.Catalog(), 77)
+	require.Len(t, skysettings.Catalog(), 78)
 
 	// The shape knobs default to the flags they twin (skyenv.SkysocksClientTunnels,
 	// skyenv.SkysocksClientStandbyPool), the per-app mux pair defaults to
 	// "inherit the visor-wide value", and every filter admits everything.
 	require.Equal(t, 2, setTunnelCount())
+	// pool.size twins a FIXED --standby-pool; the flag itself defaults to -1
+	// (auto), which pool.size_cap bounds.
 	require.Equal(t, 32, setPoolSize())
+	require.Equal(t, 128, setPoolSizeCap())
 	require.False(t, setPoolFreeze(), "pool.freeze holds nothing still until it is set")
 	require.Empty(t, poolExcludePKs())
 	require.Empty(t, poolRequireTpTypes())
