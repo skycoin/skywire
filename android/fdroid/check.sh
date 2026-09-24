@@ -4,7 +4,9 @@
 #   1. fdroid lint          — what fdroiddata's CI checks on the merge request
 #   2. fdroid checkupdates  — what F-Droid's update bot runs to find a new
 #                             fdroid-v* tag and add its build by itself
-#   3. fdroid build         — what F-Droid's build server runs, scanner included
+#   3. fdroid build         — what F-Droid's build server runs, scanner included,
+#                             after fdroid fetchsrclibs has cloned the srclibs
+#                             (android/fdroid/srclibs/) it names
 #
 # for the commit checked out at $SRC — the release's commit with its version
 # stamped into android/version.properties. Runs as root inside F-Droid's own
@@ -28,6 +30,8 @@ OUT=${OUT:-/out}
 # The recipe to run: the tag's own copy unless the caller passes a newer one
 # (a manual re-run of an old tag uses develop's, see android-fdroid.yml).
 RECIPE=${RECIPE:-$SRC/android/fdroid/$APPID.yml}
+# The srclibs the recipe names (Go, TinyGo), as fdroiddata's srclibs/ holds them.
+SRCLIBS=${SRCLIBS:-$(dirname "$RECIPE")/srclibs}
 
 step() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 fail() { printf '\033[31mFAIL: %s\033[0m\n' "$*" >&2; exit 1; }
@@ -84,8 +88,9 @@ echo "store listing: $short_len/80 summary chars, $full_len/4000 description cha
   || echo "::warning::no fastlane/metadata/android/en-US/changelogs/$code.txt; F-Droid shows no what's new for $name"
 
 cd "$home_vagrant"
-mkdir -p metadata logs tmp unsigned
+mkdir -p metadata logs tmp unsigned srclibs
 cp "$RECIPE" "metadata/$APPID.yml"
+cp "$SRCLIBS"/*.yml srclibs/
 # lint checks Categories against fdroiddata's own list, which lives in its
 # config/, not in fdroidserver. The icon lines point at files in fdroiddata.
 mkdir -p config
@@ -140,6 +145,25 @@ else:
     sys.exit(f"no commit line for versionCode {code}")
 open(path, "w").write("\n".join(lines))
 EOF
+
+step "fdroid fetchsrclibs $APPID:$code (clones the srclibs the build names)"
+# fdroiddata's CI clones them before `fdroid build --on-server`, which does
+# not, and with the production build server's git config: every fetched
+# object is fsck'd, against fdroiddata's skip lists (~/fdroiddata/config).
+# A repo whose history fails that fails there, so it fails here too.
+# The skip lists here are empty: they only exempt known-bad objects in other
+# apps' repos, so this is stricter than production, never looser. (gitlab.com's
+# raw endpoint also 404s config/fsck.skipList, which is there.)
+mkdir -p fdroiddata/config
+for list in fetch fsck receive transfer; do
+  : > "fdroiddata/config/$list.fsck.skipList"
+done
+curl -fsSL --retry 5 --retry-all-errors \
+  https://gitlab.com/fdroid/fdroid-bootstrap-buildserver/-/raw/master/roles/production_hardening/files/gitconfig \
+  > .gitconfig
+chown -R vagrant "$home_vagrant"
+fdroid fetchsrclibs "$APPID:$code" --verbose
+rm -rf fdroiddata .gitconfig
 
 step "fdroid build $APPID:$code (the build server, scanner included)"
 # fdroiddata's CI unsets CI for the build too.
