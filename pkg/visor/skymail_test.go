@@ -212,3 +212,40 @@ func TestMailSettingsApplyLiveAndPersist(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, enabled, "off survives a restart too")
 }
+
+// TestMailSettingsOverRPC: "off" and "default" are false and 0, which a
+// pointer loses in gob; over the real RPC they must still arrive.
+func TestMailSettingsOverRPC(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 1, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	b := mailVisor(t, ctx, env.AllClients()[0])
+
+	srv := rpc.NewServer()
+	require.NoError(t, srv.RegisterName(visorapi.RPCPrefix, &RPC{visor: b, log: logrus.New()}))
+	sc, cc := net.Pipe()
+	go srv.ServeConn(sc)
+	api := visorapi.NewRPCClient(nil, cc, visorapi.RPCPrefix, 30*time.Second)
+
+	small, zero, off, on := int64(4096), int64(0), false, true
+	require.NoError(t, api.MailSetSettings(visorapi.MailSettingsUpdate{MaxMessageSize: &small}))
+	st, err := api.MailStatus()
+	require.NoError(t, err)
+	require.Equal(t, small, st.Limits.MaxMessageSize)
+
+	require.NoError(t, api.MailSetSettings(visorapi.MailSettingsUpdate{MaxMessageSize: &zero}))
+	st, err = api.MailStatus()
+	require.NoError(t, err)
+	require.Equal(t, skymail.DefaultMaxMessageSize, st.Limits.MaxMessageSize, "0 over RPC means default")
+
+	require.NoError(t, api.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &off}))
+	st, err = api.MailStatus()
+	require.NoError(t, err)
+	require.False(t, st.Running, "false over RPC turns it off")
+	require.NoError(t, api.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &on}))
+	st, err = api.MailStatus()
+	require.NoError(t, err)
+	require.True(t, st.Running)
+}

@@ -82,7 +82,7 @@ func (r *RPC) MailAttachment(in *visorapi.MailAttachmentRequest, out *skymail.At
 }
 
 // MailSetSettings changes the mailbox settings. See Visor.MailSetSettings.
-func (r *RPC) MailSetSettings(in *visorapi.MailSettingsUpdate, _ *struct{}) (err error) {
+func (r *RPC) MailSetSettings(in *visorapi.MailSettingsWire, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "MailSetSettings", in)(nil, &err)
-	return r.visor.MailSetSettings(*in)
+	return r.visor.MailSetSettings(in.Update())
 }

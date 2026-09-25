@@ -75,3 +75,52 @@ type MailSettingsUpdate struct {
 	MaxTotalSize   *int64         `json:"max_total_size,omitempty"`
 	MaxAge         *time.Duration `json:"max_age,omitempty"`
 }
+
+// MailSettingsWire is MailSettingsUpdate as it crosses the RPC. gob
+// flattens pointers and drops zero values, so a pointer to false or to
+// 0 would arrive as nil: "leave it" instead of "turn it off" or "back
+// to the default". The Set flags carry the difference.
+type MailSettingsWire struct {
+	EnableSet, MaxMessageSizeSet, MaxTotalSizeSet, MaxAgeSet bool
+
+	Enable         bool
+	MaxMessageSize int64
+	MaxTotalSize   int64
+	MaxAge         time.Duration
+}
+
+// Wire encodes u for the RPC.
+func (u MailSettingsUpdate) Wire() MailSettingsWire {
+	var w MailSettingsWire
+	if u.Enable != nil {
+		w.EnableSet, w.Enable = true, *u.Enable
+	}
+	if u.MaxMessageSize != nil {
+		w.MaxMessageSizeSet, w.MaxMessageSize = true, *u.MaxMessageSize
+	}
+	if u.MaxTotalSize != nil {
+		w.MaxTotalSizeSet, w.MaxTotalSize = true, *u.MaxTotalSize
+	}
+	if u.MaxAge != nil {
+		w.MaxAgeSet, w.MaxAge = true, *u.MaxAge
+	}
+	return w
+}
+
+// Update decodes w.
+func (w MailSettingsWire) Update() MailSettingsUpdate {
+	var u MailSettingsUpdate
+	if w.EnableSet {
+		u.Enable = &w.Enable
+	}
+	if w.MaxMessageSizeSet {
+		u.MaxMessageSize = &w.MaxMessageSize
+	}
+	if w.MaxTotalSizeSet {
+		u.MaxTotalSize = &w.MaxTotalSize
+	}
+	if w.MaxAgeSet {
+		u.MaxAge = &w.MaxAge
+	}
+	return u
+}

@@ -2549,5 +2549,6 @@ func (rc *rpcClient) MailAttachment(folder, id string, n int) (*skymail.Attachme
 
 // MailSetSettings calls MailSetSettings.
 func (rc *rpcClient) MailSetSettings(u MailSettingsUpdate) error {
-	return rc.Call("MailSetSettings", &u, &struct{}{})
+	w := u.Wire()
+	return rc.Call("MailSetSettings", &w, &struct{}{})
 }
