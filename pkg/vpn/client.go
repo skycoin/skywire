@@ -35,13 +35,22 @@ const (
 
 // Client is a VPN client.
 type Client struct {
-	cfg            ClientConfig
-	appCl          *app.Client
-	directIPSMu    sync.Mutex
-	directIPs      []net.IP
-	defaultGateway net.IP
-	closeC         chan struct{}
-	closeOnce      sync.Once
+	cfg         ClientConfig
+	appCl       *app.Client
+	directIPSMu sync.Mutex
+	directIPs   []net.IP // every IP with a direct route installed
+	// pinned are the IPs the visor named at start (services, the sessions
+	// and transports up then): their routes stay for the client's life.
+	// refs counts the live dial events per IP, so the route of an IP two
+	// transports share survives one of them closing.
+	pinned map[string]bool
+	refs   map[string]int
+	// addDirect and delDirect install and remove one route; tests swap
+	// them to leave the OS routing table alone.
+	addDirect, delDirect func(net.IP) error
+	defaultGateway       net.IP
+	closeC               chan struct{}
+	closeOnce            sync.Once
 
 	prevTUNGateway   net.IP
 	prevTUNGatewayMu sync.Mutex
@@ -122,13 +131,15 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 
 	fmt.Printf("Got default network gateway IP: %s\n", defaultGateway)
 
-	return &Client{
+	c := &Client{
 		cfg:            cfg,
 		appCl:          appCl,
 		directIPs:      filterOutEqualIPs(directIPs),
 		defaultGateway: defaultGateway,
 		closeC:         make(chan struct{}),
-	}, nil
+	}
+	c.initDirectRoutes()
+	return c, nil
 }
 
 // Serve dials VPN server, sets up TUN and establishes VPN session.
@@ -251,44 +262,58 @@ func (c *Client) Close() {
 	})
 }
 
-// AddDirectRoute adds new direct route. Packets destined to `ip` will
-// go directly, ignoring VPN.
+// initDirectRoutes pins the start-time IPs and wires the route
+// operations.
+func (c *Client) initDirectRoutes() {
+	c.pinned = make(map[string]bool, len(c.directIPs))
+	for _, ip := range c.directIPs {
+		c.pinned[ip.String()] = true
+	}
+	c.refs = make(map[string]int)
+	if c.addDirect == nil {
+		c.addDirect = c.setupDirectRoute
+	}
+	if c.delDirect == nil {
+		c.delDirect = c.removeDirectRoute
+	}
+}
+
+// AddDirectRoute counts one more user of a direct route to ip — packets
+// to it go directly, ignoring the VPN — installing it on the first.
 func (c *Client) AddDirectRoute(ip net.IP) error {
 	c.directIPSMu.Lock()
 	defer c.directIPSMu.Unlock()
 
+	c.refs[ip.String()]++
 	for _, storedIP := range c.directIPs {
 		if ip.Equal(storedIP) {
 			return nil
 		}
 	}
-
 	c.directIPs = append(c.directIPs, ip)
-
-	return c.setupDirectRoute(ip)
+	return c.addDirect(ip)
 }
 
-func (c *Client) removeDirectRouteFn(ip net.IP, i int) error {
-	c.directIPs = append(c.directIPs[:i], c.directIPs[i+1:]...)
-
-	return c.removeDirectRoute(ip)
-}
-
-// RemoveDirectRoute removes direct route. Packets destined to `ip` will
-// go through VPN.
+// RemoveDirectRoute counts one user fewer, removing the route when none
+// is left — unless the visor named the IP at start, whose route stays.
 func (c *Client) RemoveDirectRoute(ip net.IP) error {
 	c.directIPSMu.Lock()
 	defer c.directIPSMu.Unlock()
 
+	key := ip.String()
+	if c.refs[key] > 0 {
+		c.refs[key]--
+	}
+	if c.refs[key] > 0 || c.pinned[key] {
+		return nil
+	}
+	delete(c.refs, key)
 	for i, storedIP := range c.directIPs {
 		if ip.Equal(storedIP) {
-			if err := c.removeDirectRouteFn(ip, i); err != nil {
-				return err
-			}
-			break
+			c.directIPs = append(c.directIPs[:i], c.directIPs[i+1:]...)
+			return c.delDirect(ip)
 		}
 	}
-
 	return nil
 }
 
