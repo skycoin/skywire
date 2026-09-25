@@ -21,15 +21,15 @@ func TestPoolCeilingFollowsTheRouteBound(t *testing.T) {
 
 	c := &Client{}
 	c.SetStandbyPool(-1)
-	require.Equal(t, 128, ceiling(c), "no count yet: the cap stands in")
+	require.Equal(t, 32, ceiling(c), "no count yet: the cap stands in")
 
-	c.applyRouteBound(40)
-	require.Equal(t, 40, ceiling(c), "the pool holds one tunnel per disjoint route")
+	c.applyRouteBound(20)
+	require.Equal(t, 20, ceiling(c), "the pool holds one tunnel per disjoint route")
 	c.applyRouteBound(0)
-	require.Equal(t, 40, ceiling(c), "an uncounted snapshot keeps the last count")
+	require.Equal(t, 20, ceiling(c), "an uncounted snapshot keeps the last count")
 
 	c.applyRouteBound(274)
-	require.Equal(t, 128, ceiling(c), "never past pool.size_cap")
+	require.Equal(t, 32, ceiling(c), "never past pool.size_cap")
 	require.True(t, skysettings.Apply(map[string]int64{skysettings.PoolSizeCap: 300}))
 	require.Equal(t, 274, ceiling(c), "the cap is live")
 

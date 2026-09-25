@@ -242,8 +242,10 @@ func init() {
 	// holds as many tunnels as there are disjoint routes to the exit (one
 	// intermediate each, plus the direct transports), never more than this. Every
 	// standby tunnel is a route group on the exit too, so this is what an
-	// operator turns to trade fail-over depth against exit load.
-	register(PoolSizeCap, KindCount, 128,
+	// operator turns to trade fail-over depth against exit load. 32 is the old
+	// fixed ceiling: 128 cost the rig exit ~90 route groups (+75 MiB) and churned
+	// uploads while the pool filled.
+	register(PoolSizeCap, KindCount, 32,
 		"ceiling on an auto-sized pool (--standby-pool -1): it holds one tunnel per disjoint route to the exit, up to this many")
 	register(PoolFreeze, KindBool, boolVal(false),
 		"hold the active set still: the promoter makes no discretionary swap and the pool neither fills nor shrinks. A dead tunnel is still replaced, and a reconcile the operator asks for still runs")

@@ -121,7 +121,7 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 	// pool.size twins a FIXED --standby-pool; the flag itself defaults to -1
 	// (auto), which pool.size_cap bounds.
 	require.Equal(t, 32, setPoolSize())
-	require.Equal(t, 128, setPoolSizeCap())
+	require.Equal(t, 32, setPoolSizeCap())
 	require.False(t, setPoolFreeze(), "pool.freeze holds nothing still until it is set")
 	require.Empty(t, poolExcludePKs())
 	require.Empty(t, poolRequireTpTypes())
