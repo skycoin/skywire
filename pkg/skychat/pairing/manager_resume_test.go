@@ -1,4 +1,4 @@
-// Package pairing cmd/apps/skychat/pairing/manager_resume_test.go
+// Package pairing pkg/skychat/pairing/manager_resume_test.go
 //
 // Covers the Manager/Pair surface integration_test.go left untouched: the
 // constructor + Open validation arms, the small accessors, and — the one that

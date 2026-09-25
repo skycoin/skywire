@@ -15,7 +15,7 @@ automatically when it comes back online.
 
 This document covers the design, threat model, HTTP/SSE schema,
 configuration, and operational notes. The implementation lives in
-`cmd/apps/skychat/pairing/` (transport-agnostic primitives),
+`pkg/skychat/pairing/` (transport-agnostic primitives),
 `pkg/visor/pairing.go` (visor RPC surface), and
 `cmd/apps/skychat/commands/pairing.go` (HTTP layer + handshake).
 

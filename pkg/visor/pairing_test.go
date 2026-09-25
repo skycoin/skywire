@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/cmd/apps/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skychat/pairing"
 )
 
 func TestPairInboxDeliverAndSnapshot(t *testing.T) {

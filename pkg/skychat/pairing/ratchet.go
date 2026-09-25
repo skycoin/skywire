@@ -1,4 +1,4 @@
-// Package pairing cmd/apps/skychat/pairing/ratchet.go c4-app-chat
+// Package pairing pkg/skychat/pairing/ratchet.go c4-app-chat
 // the per-pair ratchet: which short-lived keys we hold, which the peer
 // has announced, and when to move on.
 //

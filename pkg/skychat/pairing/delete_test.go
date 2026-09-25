@@ -1,4 +1,4 @@
-// Package pairing — cmd/apps/skychat/pairing/delete_test.go
+// Package pairing — pkg/skychat/pairing/delete_test.go
 //
 // Delete-for-everyone on the pair feed. A pair message had no identifier
 // either side could name, so a retraction was impossible over CXO: the id is

@@ -1,4 +1,4 @@
-// Package pairing — cmd/apps/skychat/pairing/integration_test.go:
+// Package pairing — pkg/skychat/pairing/integration_test.go:
 // end-to-end coverage of the pair primitive over a real DMSG mesh.
 //
 // Spins up a 1-server / 2-client dmsg env via dmsgtest, wires a

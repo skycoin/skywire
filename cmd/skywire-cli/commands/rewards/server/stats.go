@@ -20,9 +20,9 @@ import (
 	"github.com/bitfield/script"
 	geoip2 "github.com/oschwald/geoip2-golang/v2"
 
-	geoipcmd "github.com/skycoin/skywire/cmd/svc/geoip/commands"
 	"github.com/skycoin/skywire/deployment"
 	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
+	"github.com/skycoin/skywire/pkg/geoip"
 )
 
 var (
@@ -322,13 +322,13 @@ func generateAndCacheCountryStats() error {
 	// (avoids spawning a subprocess per IP)
 	ipCache := make(map[string]geoIPResult)
 
-	db, dbErr := geoip2.OpenBytes(geoipcmd.EmbeddedGeoIP())
+	db, dbErr := geoip2.OpenBytes(geoip.EmbeddedDB())
 	if dbErr != nil {
 		fmt.Printf("Warning: failed to open embedded GeoIP database: %v\n", dbErr)
 	} else {
 		defer db.Close() //nolint:errcheck,gosec
 		for ip := range ipToVisors {
-			res, err := geoipcmd.LookupIP(db, ip)
+			res, err := geoip.Lookup(db, ip)
 			if err != nil {
 				continue
 			}

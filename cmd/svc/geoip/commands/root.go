@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/netip"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -27,20 +26,6 @@ import (
 	"github.com/skycoin/skywire/pkg/metricsutil"
 )
 
-// EmbeddedGeoIP returns the embedded GeoLite2-City database bytes.
-// Kept for backwards-compat: callers should prefer pkg/geoip.EmbeddedDB.
-func EmbeddedGeoIP() []byte {
-	return geoip.EmbeddedDB()
-}
-
-// LookupResult holds a GeoIP lookup result.
-type LookupResult = lookupResult
-
-// LookupIP performs a GeoIP lookup using the given database reader.
-func LookupIP(db *geoip2.Reader, ipStr string) (*LookupResult, error) {
-	return lookupIP(db, ipStr)
-}
-
 // generateExamples creates example responses from actual struct types
 func generateExamples() string {
 	lat := 37.751
@@ -54,7 +39,7 @@ GET /?ip=8.8.8.8
 
 CLI: skywire svc ip 8.8.8.8
   (same response as above)`,
-		cmdutil.ExampleJSON(lookupResult{
+		cmdutil.ExampleJSON(geoip.Result{
 			IP:            "8.8.8.8",
 			Latitude:      &lat,
 			Longitude:     &lon,
@@ -65,21 +50,6 @@ CLI: skywire svc ip 8.8.8.8
 			Timezone:      "America/Chicago",
 		}),
 	)
-}
-
-type lookupResult struct {
-	IP            string   `json:"ip_address"`
-	Latitude      *float64 `json:"latitude"`
-	Longitude     *float64 `json:"longitude"`
-	PostalCode    string   `json:"postal_code"`
-	ContinentCode string   `json:"continent_code"`
-	ContinentName string   `json:"continent_name"`
-	CountryCode   string   `json:"country_code"`
-	CountryName   string   `json:"country_name"`
-	RegionCode    string   `json:"region_code"`
-	RegionName    string   `json:"region_name"`
-	CityName      string   `json:"city_name"`
-	Timezone      string   `json:"timezone"`
 }
 
 var (
@@ -168,7 +138,7 @@ Usage Examples:
 			logger.Fatalf("IP argument is required in CLI mode")
 		}
 
-		res, err := lookupIP(db, args[0])
+		res, err := geoip.Lookup(db, args[0])
 		if err != nil {
 			logger.Fatalf("lookup failed: %v", err)
 		}
@@ -184,45 +154,6 @@ Usage Examples:
 // Execute executes root CLI command
 func Execute() {
 	cmdutil.RunRoot(RootCmd)
-}
-
-func lookupIP(db *geoip2.Reader, ipStr string) (*lookupResult, error) {
-	parsed, err := netip.ParseAddr(ipStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid IP: %s", ipStr)
-	}
-
-	record, err := db.City(parsed)
-	if err != nil {
-		return nil, err
-	}
-
-	var lat, lon *float64
-	if record.Location.Latitude != nil && record.Location.Longitude != nil {
-		lat = record.Location.Latitude
-		lon = record.Location.Longitude
-	}
-
-	var region geoip2.CitySubdivision
-	if len(record.Subdivisions) > 0 {
-		region = record.Subdivisions[0]
-	}
-
-	res := &lookupResult{
-		IP:            ipStr,
-		CountryName:   record.Country.Names.English,
-		CountryCode:   record.Country.ISOCode,
-		RegionName:    region.Names.English,
-		RegionCode:    region.ISOCode,
-		CityName:      record.City.Names.English,
-		Latitude:      lat,
-		Longitude:     lon,
-		ContinentName: record.Continent.Names.English,
-		ContinentCode: record.Continent.Code,
-		Timezone:      record.Location.TimeZone,
-		PostalCode:    record.Postal.Code,
-	}
-	return res, nil
 }
 
 func startAPIServer(db *geoip2.Reader, addr string, logger *logging.Logger) {
@@ -242,7 +173,7 @@ func startAPIServer(db *geoip2.Reader, addr string, logger *logging.Logger) {
 			return
 		}
 
-		res, err := lookupIP(db, queryIP)
+		res, err := geoip.Lookup(db, queryIP)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("lookup failed: %v", err), http.StatusInternalServerError)
 			return

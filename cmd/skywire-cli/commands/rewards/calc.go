@@ -22,9 +22,9 @@ import (
 	"github.com/tidwall/pretty"
 
 	tgbot "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/tgbot"
-	geoipcmd "github.com/skycoin/skywire/cmd/svc/geoip/commands"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/rewards"
@@ -789,7 +789,7 @@ Architectures:
 		// Initialize GeoIP database for regional saturation scaling
 		var geoDB *geoip2.Reader
 		if saturationExponent < 1.0 {
-			geoDB, err = geoip2.OpenBytes(geoipcmd.EmbeddedGeoIP())
+			geoDB, err = geoip2.OpenBytes(geoip.EmbeddedDB())
 			if err != nil {
 				log.Warn("Failed to load embedded GeoIP database, disabling regional saturation: ", err)
 				saturationExponent = 1.0
@@ -1042,7 +1042,7 @@ Architectures:
 
 			// GeoIP country lookup
 			if geoDB != nil {
-				if geoRes, geoErr := geoipcmd.LookupIP(geoDB, ip); geoErr == nil && geoRes.CountryCode != "" {
+				if geoRes, geoErr := geoip.Lookup(geoDB, ip); geoErr == nil && geoRes.CountryCode != "" {
 					ni.Country = geoRes.CountryCode
 				} else {
 					ni.Country = "XX"

@@ -1,4 +1,4 @@
-// Package pairing — cmd/apps/skychat/pairing/baseline_test.go:
+// Package pairing — pkg/skychat/pairing/baseline_test.go:
 // baseline tests for 1:1 pair DMs (operator reset directive
 // 2026-05-17T22:53Z, Phase A).
 //

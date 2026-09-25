@@ -44,7 +44,7 @@ func TestGenerateExamples(t *testing.T) {
 }
 
 func TestEmbeddedGeoIP(t *testing.T) {
-	require.NotEmpty(t, EmbeddedGeoIP())
+	require.NotEmpty(t, geoip.EmbeddedDB())
 }
 
 // ---- lookupIP / LookupIP ---------------------------------------------------
@@ -55,20 +55,20 @@ func TestLookupIP(t *testing.T) {
 	defer func() { _ = db.Close() }() //nolint
 
 	t.Run("valid public IP via exported wrapper", func(t *testing.T) {
-		res, err := LookupIP(db, "8.8.8.8")
+		res, err := geoip.Lookup(db, "8.8.8.8")
 		require.NoError(t, err)
 		require.Equal(t, "8.8.8.8", res.IP)
 		require.Equal(t, "US", res.CountryCode)
 	})
 
 	t.Run("invalid IP string", func(t *testing.T) {
-		_, err := lookupIP(db, "not-an-ip")
+		_, err := geoip.Lookup(db, "not-an-ip")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid IP")
 	})
 
 	t.Run("private IP yields a result with no error", func(t *testing.T) {
-		res, err := lookupIP(db, "127.0.0.1")
+		res, err := geoip.Lookup(db, "127.0.0.1")
 		require.NoError(t, err)
 		require.Equal(t, "127.0.0.1", res.IP)
 	})
@@ -144,7 +144,7 @@ func TestStartAPIServer(t *testing.T) {
 		defer func() { _ = resp.Body.Close() }() //nolint
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
-		var res lookupResult
+		var res geoip.Result
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&res))
 		require.Equal(t, "8.8.8.8", res.IP)
 	})

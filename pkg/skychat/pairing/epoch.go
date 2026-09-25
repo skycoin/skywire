@@ -1,4 +1,4 @@
-// Package pairing cmd/apps/skychat/pairing/epoch.go c4-app-chat
+// Package pairing pkg/skychat/pairing/epoch.go c4-app-chat
 // forward-secret epoch keys for a chat pair.
 //
 // # What was wrong with one key per pair
