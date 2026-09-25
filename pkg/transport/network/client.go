@@ -527,3 +527,16 @@ func isPrivateIP(ip net.IP) bool {
 	}
 	return false
 }
+
+// announceDial tells apps that route around their own tunnel (the VPN
+// client) that this visor is about to talk to addr directly. It comes
+// BEFORE the first packet: a direct route added after the dial would be
+// too late for the handshake itself, which would go into the tunnel.
+// Every IP carrier calls it, stcp/stcpr and sudph/quic/ws/wt alike; addr
+// may be host:port or a URL, the client reduces it to an IP.
+func (c *genericClient) announceDial(netType types.Type, addr string) {
+	if c.eb == nil || addr == "" {
+		return
+	}
+	c.eb.SendTCPDial(context.Background(), string(netType), addr)
+}

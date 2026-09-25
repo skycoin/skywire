@@ -87,6 +87,7 @@ func (c *wsClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (T
 		return nil, ErrWSEntryNotFound
 	}
 	c.log.Debugf("Dialing WS %v @ %s", rPK, url)
+	c.announceDial(types.WS, url)
 
 	conn, err := wsDial(ctx, url)
 	if err != nil {

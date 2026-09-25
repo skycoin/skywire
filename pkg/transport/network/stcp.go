@@ -47,7 +47,7 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 	if !ok {
 		return nil, ErrStcpEntryNotFound
 	}
-	c.eb.SendTCPDial(context.Background(), string(types.STCP), addr)
+	c.announceDial(types.STCP, addr)
 	dialer := net.Dialer{}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
