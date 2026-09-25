@@ -25,8 +25,8 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
-	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -635,7 +635,7 @@ func fetchAllTransports(_ context.Context, cmdFlags *pflag.FlagSet, tpdAddr stri
 // path (pkg/router/rsn_oracle_routes.go), which already computes
 // single-intermediate routes from the destination's own transports —
 // giving operators a way to reproduce and test that planning offline.
-func fetchTPSTransports(rpcClient visor.API, srcPK, dstPK cipher.PubKey) ([]*transport.Entry, error) {
+func fetchTPSTransports(rpcClient visorapi.API, srcPK, dstPK cipher.PubKey) ([]*transport.Entry, error) {
 	if rpcClient == nil {
 		return nil, fmt.Errorf("--source tps requires a running visor RPC (TPS is served by the local visor)")
 	}

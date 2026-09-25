@@ -15,6 +15,7 @@ import (
 	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/routing"
 	tnspec "github.com/skycoin/skywire/pkg/transport/network/spec"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -316,9 +317,9 @@ func TestSetConfigFieldsNotFileBacked(t *testing.T) {
 
 func TestConfigFieldChangeString(t *testing.T) {
 	require.Equal(t, "is_public: false -> true (live)",
-		ConfigFieldChange{Path: "is_public", Old: []byte("false"), New: []byte("true"), Live: true}.String())
+		visorapi.ConfigFieldChange{Path: "is_public", Old: []byte("false"), New: []byte("true"), Live: true}.String())
 	require.Equal(t, "transport.transport_port: 0 -> 7777 (restart-required)",
-		ConfigFieldChange{Path: "transport.transport_port", Old: []byte("0"), New: []byte("7777")}.String())
+		visorapi.ConfigFieldChange{Path: "transport.transport_port", Old: []byte("0"), New: []byte("7777")}.String())
 }
 
 // dmsg.sessions_count is printed by `config show` but tagged `json:"-"` on the

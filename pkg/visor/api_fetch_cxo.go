@@ -16,12 +16,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"strings"
 	"time"
 )
 
 // FetchCXO implements API.
-func (v *Visor) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
+func (v *Visor) FetchCXO(args visorapi.FetchCXOArgs) (*visorapi.FetchCXOResult, error) {
 	switch args.Feed {
 	case "tpd-metrics":
 		// Path is "metrics/days/<n>" — the subscriber-side helper
@@ -29,30 +30,30 @@ func (v *Visor) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
 		// table feed-agnostic.
 		days := daysFromPath(args.Path, "metrics/days/")
 		if days <= 0 {
-			return &FetchCXOResult{Reason: "invalid path for tpd-metrics: " + args.Path}, nil
+			return &visorapi.FetchCXOResult{Reason: "invalid path for tpd-metrics: " + args.Path}, nil
 		}
 		body, ts, err := v.FetchTransportMetricsCXO(days)
 		if err != nil {
 			if errors.Is(err, ErrTPDMetricsNotReady) {
-				return &FetchCXOResult{Reason: "tpd-metrics: cache miss"}, nil
+				return &visorapi.FetchCXOResult{Reason: "tpd-metrics: cache miss"}, nil
 			}
-			return &FetchCXOResult{Reason: "tpd-metrics: " + err.Error()}, nil
+			return &visorapi.FetchCXOResult{Reason: "tpd-metrics: " + err.Error()}, nil
 		}
-		return &FetchCXOResult{Hit: true, Body: body, LastRootAt: ts}, nil
+		return &visorapi.FetchCXOResult{Hit: true, Body: body, LastRootAt: ts}, nil
 
 	case "tpd-uptime":
 		days := daysFromPath(args.Path, "uptimes/days/")
 		if days <= 0 {
-			return &FetchCXOResult{Reason: "invalid path for tpd-uptime: " + args.Path}, nil
+			return &visorapi.FetchCXOResult{Reason: "invalid path for tpd-uptime: " + args.Path}, nil
 		}
 		body, ts, err := v.FetchVisorUptimeCXO(days)
 		if err != nil {
 			if errors.Is(err, ErrTPDUptimeNotReady) {
-				return &FetchCXOResult{Reason: "tpd-uptime: cache miss"}, nil
+				return &visorapi.FetchCXOResult{Reason: "tpd-uptime: cache miss"}, nil
 			}
-			return &FetchCXOResult{Reason: "tpd-uptime: " + err.Error()}, nil
+			return &visorapi.FetchCXOResult{Reason: "tpd-uptime: " + err.Error()}, nil
 		}
-		return &FetchCXOResult{Hit: true, Body: body, LastRootAt: ts}, nil
+		return &visorapi.FetchCXOResult{Hit: true, Body: body, LastRootAt: ts}, nil
 
 	case "sd-services":
 		// Path is "type/<typeName>". Maps onto the SD HTTP endpoint
@@ -61,11 +62,11 @@ func (v *Visor) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
 		// is walked by servicesFromCXO (no extra subscriber needed).
 		const prefix = "type/"
 		if !strings.HasPrefix(args.Path, prefix) {
-			return &FetchCXOResult{Reason: "invalid path for sd-services: " + args.Path}, nil
+			return &visorapi.FetchCXOResult{Reason: "invalid path for sd-services: " + args.Path}, nil
 		}
 		serviceType := args.Path[len(prefix):]
 		if serviceType == "" {
-			return &FetchCXOResult{Reason: "sd-services: missing service type"}, nil
+			return &visorapi.FetchCXOResult{Reason: "sd-services: missing service type"}, nil
 		}
 		// Lazily hold FeedSDServices so the on-demand sync runs, mirroring
 		// tpd-metrics / tpd-uptime / all-transports (each AcquireFor's its tab
@@ -92,13 +93,13 @@ func (v *Visor) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
 		}
 		services, ok := v.servicesFromCXO(serviceType, "", "")
 		if !ok {
-			return &FetchCXOResult{Reason: "sd-services: cache miss"}, nil
+			return &visorapi.FetchCXOResult{Reason: "sd-services: cache miss"}, nil
 		}
 		body, err := json.Marshal(services)
 		if err != nil {
-			return &FetchCXOResult{Reason: "sd-services: marshal: " + err.Error()}, nil
+			return &visorapi.FetchCXOResult{Reason: "sd-services: marshal: " + err.Error()}, nil
 		}
-		return &FetchCXOResult{Hit: true, Body: body, LastRootAt: time.Now()}, nil
+		return &visorapi.FetchCXOResult{Hit: true, Body: body, LastRootAt: time.Now()}, nil
 
 	case "tpd-all-transports":
 		// Path is "with-self" or "without-self".
@@ -109,16 +110,16 @@ func (v *Visor) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
 		case "without-self":
 			withSelf = false
 		default:
-			return &FetchCXOResult{Reason: "invalid path for tpd-all-transports: " + args.Path}, nil
+			return &visorapi.FetchCXOResult{Reason: "invalid path for tpd-all-transports: " + args.Path}, nil
 		}
 		body, err := v.FetchAllTransportsCXO(withSelf)
 		if err != nil {
 			if errors.Is(err, ErrTPDAllTransportsNotReady) {
-				return &FetchCXOResult{Reason: "tpd-all-transports: cache miss"}, nil
+				return &visorapi.FetchCXOResult{Reason: "tpd-all-transports: cache miss"}, nil
 			}
-			return &FetchCXOResult{Reason: "tpd-all-transports: " + err.Error()}, nil
+			return &visorapi.FetchCXOResult{Reason: "tpd-all-transports: " + err.Error()}, nil
 		}
-		return &FetchCXOResult{Hit: true, Body: body, LastRootAt: time.Now()}, nil
+		return &visorapi.FetchCXOResult{Hit: true, Body: body, LastRootAt: time.Now()}, nil
 
 	case "tpd-stats":
 		// Path is "network", "versions" or "daily". The bodies are small
@@ -126,19 +127,19 @@ func (v *Visor) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
 		// daily), so LastRootAt is a real freshness signal here rather
 		// than the wall clock the bulk feeds report.
 		if _, ok := statsPathForKind(args.Path); !ok {
-			return &FetchCXOResult{Reason: "invalid path for tpd-stats: " + args.Path}, nil
+			return &visorapi.FetchCXOResult{Reason: "invalid path for tpd-stats: " + args.Path}, nil
 		}
 		body, ts, err := v.FetchTPDStatsCXO(args.Path)
 		if err != nil {
 			if errors.Is(err, ErrTPDStatsNotReady) {
-				return &FetchCXOResult{Reason: "tpd-stats: cache miss"}, nil
+				return &visorapi.FetchCXOResult{Reason: "tpd-stats: cache miss"}, nil
 			}
-			return &FetchCXOResult{Reason: "tpd-stats: " + err.Error()}, nil
+			return &visorapi.FetchCXOResult{Reason: "tpd-stats: " + err.Error()}, nil
 		}
-		return &FetchCXOResult{Hit: true, Body: body, LastRootAt: ts}, nil
+		return &visorapi.FetchCXOResult{Hit: true, Body: body, LastRootAt: ts}, nil
 
 	default:
-		return &FetchCXOResult{Reason: "unknown feed: " + args.Feed}, nil
+		return &visorapi.FetchCXOResult{Reason: "unknown feed: " + args.Feed}, nil
 	}
 }
 
@@ -151,10 +152,10 @@ func (v *Visor) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
 // Returns an empty slice when the manager hasn't been initialized
 // (e.g. visor still has no DMSG client). Errors only for genuine
 // internal failures; "no feeds yet" is not an error.
-func (v *Visor) CXOStatus() ([]FeedStatus, error) {
+func (v *Visor) CXOStatus() ([]visorapi.FeedStatus, error) {
 	mgr := v.CXOSubMgr()
 	if mgr == nil {
-		return []FeedStatus{}, nil
+		return []visorapi.FeedStatus{}, nil
 	}
 	return mgr.Status(), nil
 }
@@ -164,7 +165,7 @@ func (v *Visor) CXOStatus() ([]FeedStatus, error) {
 // expires. The returned FeedStatus reflects the snapshot *after* the
 // sync attempt, so the operator can tell at a glance whether the
 // publisher is reachable.
-func (v *Visor) CXORefreshFeed(args CXORefreshArgs) (*FeedStatus, error) {
+func (v *Visor) CXORefreshFeed(args visorapi.CXORefreshArgs) (*visorapi.FeedStatus, error) {
 	mgr := v.CXOSubMgr()
 	if mgr == nil {
 		return nil, errors.New("CXO subscription manager not initialized (no DMSG client?)")

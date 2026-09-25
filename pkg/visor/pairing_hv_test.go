@@ -7,15 +7,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func TestHypervisorFingerprint(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
-	fp := HypervisorFingerprint(pk)
+	fp := visorapi.HypervisorFingerprint(pk)
 	require.Len(t, fp, 11)
-	require.Equal(t, fp, HypervisorFingerprint(pk), "stable")
+	require.Equal(t, fp, visorapi.HypervisorFingerprint(pk), "stable")
 	pk2, _ := cipher.GenerateKeyPair()
-	require.NotEqual(t, fp, HypervisorFingerprint(pk2))
+	require.NotEqual(t, fp, visorapi.HypervisorFingerprint(pk2))
 }
 
 func TestHVPairing_PendingAndResolve(t *testing.T) {
@@ -29,7 +30,7 @@ func TestHVPairing_PendingAndResolve(t *testing.T) {
 	require.Equal(t, "rpc", list[0].Via, "an RPC attempt upgrades the reason")
 	require.Equal(t, now.Add(time.Second), list[0].LastSeen)
 
-	fp := HypervisorFingerprint(pk)
+	fp := visorapi.HypervisorFingerprint(pk)
 	got, err := p.resolve(fp)
 	require.NoError(t, err)
 	require.Equal(t, pk, got)

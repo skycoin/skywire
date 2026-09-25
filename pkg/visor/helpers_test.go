@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/visor/stats"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func TestCXOFeedStringRoundTrip(t *testing.T) {
@@ -64,17 +65,17 @@ func TestAppsContains(t *testing.T) {
 }
 
 func TestCandidateAddresses(t *testing.T) {
-	require.Empty(t, candidateAddresses(&LANDmsgServerInfo{}))
+	require.Empty(t, candidateAddresses(&visorapi.LANDmsgServerInfo{}))
 
 	// Address only.
-	require.Equal(t, []string{"1.2.3.4:80"}, candidateAddresses(&LANDmsgServerInfo{Address: "1.2.3.4:80"}))
+	require.Equal(t, []string{"1.2.3.4:80"}, candidateAddresses(&visorapi.LANDmsgServerInfo{Address: "1.2.3.4:80"}))
 
 	// Distinct public address → both.
-	got := candidateAddresses(&LANDmsgServerInfo{Address: "1.2.3.4:80", PublicAddress: "5.6.7.8:80"})
+	got := candidateAddresses(&visorapi.LANDmsgServerInfo{Address: "1.2.3.4:80", PublicAddress: "5.6.7.8:80"})
 	require.Len(t, got, 2)
 
 	// Identical public address → deduped to one.
-	got = candidateAddresses(&LANDmsgServerInfo{Address: "1.2.3.4:80", PublicAddress: "1.2.3.4:80"})
+	got = candidateAddresses(&visorapi.LANDmsgServerInfo{Address: "1.2.3.4:80", PublicAddress: "1.2.3.4:80"})
 	require.Len(t, got, 1)
 }
 

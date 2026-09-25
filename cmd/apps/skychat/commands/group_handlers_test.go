@@ -13,43 +13,43 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // groupAPI is a fake visor.API capturing the group calls the handlers make.
 type groupAPI struct {
 	visorAPIShim
-	groups   []visor.GroupInfo
-	created  visor.GroupCreateArgs
-	joined   visor.GroupJoinArgs
-	sent     []visor.GroupSendArgs
-	unsent   []visor.GroupUnsendArgs
+	groups   []visorapi.GroupInfo
+	created  visorapi.GroupCreateArgs
+	joined   visorapi.GroupJoinArgs
+	sent     []visorapi.GroupSendArgs
+	unsent   []visorapi.GroupUnsendArgs
 	deleted  []string
 	left     []string
 	promoted []cipher.PubKey
 	demoted  []cipher.PubKey
-	history  []visor.GroupMessage // returned by GroupHistory when non-nil
+	history  []visorapi.GroupMessage // returned by GroupHistory when non-nil
 	// fileKey, when set, is handed back by GroupFileKey as both the seal
 	// and open key — the encrypted-group case. Empty means a plaintext
 	// group.
 	fileKey      []byte
-	fileKeyCalls []visor.GroupFileKeyArgs
+	fileKeyCalls []visorapi.GroupFileKeyArgs
 }
 
-func (a *groupAPI) GroupList() ([]visor.GroupInfo, error) { return a.groups, nil }
-func (a *groupAPI) GroupCreate(args visor.GroupCreateArgs) (visor.GroupInfo, string, error) {
+func (a *groupAPI) GroupList() ([]visorapi.GroupInfo, error) { return a.groups, nil }
+func (a *groupAPI) GroupCreate(args visorapi.GroupCreateArgs) (visorapi.GroupInfo, string, error) {
 	a.created = args
-	return visor.GroupInfo{ID: "gid-1", Name: args.Name, Mode: args.Mode}, "skychat:invite:xyz", nil
+	return visorapi.GroupInfo{ID: "gid-1", Name: args.Name, Mode: args.Mode}, "skychat:invite:xyz", nil
 }
-func (a *groupAPI) GroupJoin(args visor.GroupJoinArgs) (visor.GroupInfo, error) {
+func (a *groupAPI) GroupJoin(args visorapi.GroupJoinArgs) (visorapi.GroupInfo, error) {
 	a.joined = args
-	return visor.GroupInfo{ID: "gid-2", Name: "joined"}, nil
+	return visorapi.GroupInfo{ID: "gid-2", Name: "joined"}, nil
 }
-func (a *groupAPI) GroupGet(id string) (visor.GroupInfo, error) {
-	return visor.GroupInfo{ID: id, Name: "g"}, nil
+func (a *groupAPI) GroupGet(id string) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{ID: id, Name: "g"}, nil
 }
 func (a *groupAPI) GroupInvite(string) (string, error) { return "skychat:invite:reemit", nil } //nolint
-func (a *groupAPI) GroupSend(args visor.GroupSendArgs) error {
+func (a *groupAPI) GroupSend(args visorapi.GroupSendArgs) error {
 	a.sent = append(a.sent, args)
 	return nil
 }
@@ -57,18 +57,18 @@ func (a *groupAPI) GroupSend(args visor.GroupSendArgs) error {
 // GroupFileKey answers the attachment-key lookup. Zero value = a plaintext
 // group (no key, nothing to seal), which is what most of these tests want;
 // set fileKey to exercise the sealed path.
-func (a *groupAPI) GroupFileKey(args visor.GroupFileKeyArgs) (visor.GroupFileKeyResult, error) {
+func (a *groupAPI) GroupFileKey(args visorapi.GroupFileKeyArgs) (visorapi.GroupFileKeyResult, error) {
 	a.fileKeyCalls = append(a.fileKeyCalls, args)
 	if len(a.fileKey) == 0 {
-		return visor.GroupFileKeyResult{}, nil
+		return visorapi.GroupFileKeyResult{}, nil
 	}
-	return visor.GroupFileKeyResult{
+	return visorapi.GroupFileKeyResult{
 		Seal:      a.fileKey,
 		Open:      [][]byte{a.fileKey},
 		Encrypted: true,
 	}, nil
 }
-func (a *groupAPI) GroupUnsend(args visor.GroupUnsendArgs) error {
+func (a *groupAPI) GroupUnsend(args visorapi.GroupUnsendArgs) error {
 	a.unsent = append(a.unsent, args)
 	return nil
 }
@@ -77,26 +77,26 @@ func (a *groupAPI) GroupDelete(id string) error {
 	a.deleted = append(a.deleted, id)
 	return nil
 }
-func (a *groupAPI) GroupPromoteAdmin(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
+func (a *groupAPI) GroupPromoteAdmin(id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
 	a.promoted = append(a.promoted, pk)
-	return visor.GroupInfo{ID: id, Admins: a.promoted}, nil
+	return visorapi.GroupInfo{ID: id, Admins: a.promoted}, nil
 }
-func (a *groupAPI) GroupDemoteAdmin(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
+func (a *groupAPI) GroupDemoteAdmin(id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
 	a.demoted = append(a.demoted, pk)
-	return visor.GroupInfo{ID: id}, nil
+	return visorapi.GroupInfo{ID: id}, nil
 }
-func (a *groupAPI) GroupHistory(id string, _ int) ([]visor.GroupMessage, error) {
+func (a *groupAPI) GroupHistory(id string, _ int) ([]visorapi.GroupMessage, error) {
 	if a.history != nil {
 		return a.history, nil
 	}
-	return []visor.GroupMessage{{GroupID: id, Text: "old", TS: time.Now().UTC()}}, nil
+	return []visorapi.GroupMessage{{GroupID: id, Text: "old", TS: time.Now().UTC()}}, nil
 }
 
 // GroupHistoryPage is what the /group/<id>/history route actually calls now
 // that history is paged. Answered from the same `history` field, filtered by
 // the Before cursor so a test can exercise paging without a real store:
 // without the filter a scroll-back would return the same page forever.
-func (a *groupAPI) GroupHistoryPage(args visor.GroupHistoryPageArgs) ([]visor.GroupMessage, error) {
+func (a *groupAPI) GroupHistoryPage(args visorapi.GroupHistoryPageArgs) ([]visorapi.GroupMessage, error) {
 	msgs, err := a.GroupHistory(args.GroupID, args.Limit)
 	if err != nil {
 		return nil, err
@@ -104,7 +104,7 @@ func (a *groupAPI) GroupHistoryPage(args visor.GroupHistoryPageArgs) ([]visor.Gr
 	if args.Before.IsZero() {
 		return msgs, nil
 	}
-	out := make([]visor.GroupMessage, 0, len(msgs))
+	out := make([]visorapi.GroupMessage, 0, len(msgs))
 	for _, m := range msgs {
 		if m.TS.Before(args.Before) {
 			out = append(out, m)
@@ -114,7 +114,7 @@ func (a *groupAPI) GroupHistoryPage(args visor.GroupHistoryPageArgs) ([]visor.Gr
 }
 
 func TestGroupRootHandler_ListAndCreate(t *testing.T) {
-	fake := &groupAPI{groups: []visor.GroupInfo{{ID: "a", Name: "one"}, {ID: "b", Name: "two"}}}
+	fake := &groupAPI{groups: []visorapi.GroupInfo{{ID: "a", Name: "one"}, {ID: "b", Name: "two"}}}
 	withFakePairRPC(t, fake)
 
 	// GET → list
@@ -123,7 +123,7 @@ func TestGroupRootHandler_ListAndCreate(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("GET /group: code=%d body=%q", rr.Code, rr.Body.String())
 	}
-	var list []visor.GroupInfo
+	var list []visorapi.GroupInfo
 	if err := json.Unmarshal(rr.Body.Bytes(), &list); err != nil || len(list) != 2 {
 		t.Fatalf("list decode err=%v len=%d", err, len(list))
 	}
@@ -136,8 +136,8 @@ func TestGroupRootHandler_ListAndCreate(t *testing.T) {
 		t.Fatalf("POST /group: code=%d body=%q", rr.Code, rr.Body.String())
 	}
 	var created struct {
-		Info   visor.GroupInfo `json:"info"`
-		Invite string          `json:"invite"`
+		Info   visorapi.GroupInfo `json:"info"`
+		Invite string             `json:"invite"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)

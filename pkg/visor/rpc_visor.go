@@ -9,6 +9,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // Health returns health information about the visor
@@ -56,15 +57,9 @@ func (r *RPC) DisableHypervisorUI(persist *bool, _ *struct{}) (err error) {
 	return r.visor.DisableHypervisorUIPersist(p)
 }
 
-// SetHypervisorAuthIn is the argument of SetHypervisorAuth.
-type SetHypervisorAuthIn struct {
-	Enable  bool
-	Persist bool
-}
-
 // SetHypervisorAuth turns the hypervisor web UI's login requirement on or off
 // at runtime, cycling only the UI's HTTP listener. Persists when Persist is set.
-func (r *RPC) SetHypervisorAuth(in *SetHypervisorAuthIn, _ *struct{}) (err error) {
+func (r *RPC) SetHypervisorAuth(in *visorapi.SetHypervisorAuthIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetHypervisorAuth", in)(nil, &err)
 	if in == nil {
 		return errors.New("nil argument")
@@ -92,7 +87,7 @@ func (r *RPC) DmsgPortHits(_ *struct{}, out *[]dmsg.PortHit) (err error) {
 	return nil
 }
 
-func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
+func (r *RPC) Health(_ *struct{}, out *visorapi.HealthInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "Health", nil)(out, &err)
 
 	healthInfo, err := r.visor.Health()
@@ -111,7 +106,7 @@ func (r *RPC) GoroutineDump(_ *struct{}, out *string) (err error) {
 }
 
 // RuntimeStats returns Go runtime statistics for the visor process.
-func (r *RPC) RuntimeStats(_ *struct{}, out *RuntimeStatsInfo) (err error) {
+func (r *RPC) RuntimeStats(_ *struct{}, out *visorapi.RuntimeStatsInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "RuntimeStats", nil)(out, &err)
 
 	stats, err := r.visor.RuntimeStats()
@@ -127,10 +122,10 @@ func (r *RPC) RuntimeStats(_ *struct{}, out *RuntimeStatsInfo) (err error) {
 // today's 5-minute slot bitmap. Surfaces ErrUptimeRecorderUnavailable
 // when the recorder isn't wired so the CLI can render a clear
 // "(recorder unavailable)" instead of an empty list.
-func (r *RPC) UptimeHistory(in *UptimeHistoryArgs, out *UptimeHistoryResponse) (err error) {
+func (r *RPC) UptimeHistory(in *visorapi.UptimeHistoryArgs, out *visorapi.UptimeHistoryResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "UptimeHistory", in)(out, &err)
 	if in == nil {
-		in = &UptimeHistoryArgs{}
+		in = &visorapi.UptimeHistoryArgs{}
 	}
 	hist, err := r.visor.UptimeHistory(*in)
 	if hist != nil {
@@ -158,7 +153,7 @@ func (r *RPC) SetRewardAddress(p string, out *string) (err error) {
 }
 
 // SetLANDmsgServer is called by the hypervisor to push LAN DMSG server info to this visor.
-func (r *RPC) SetLANDmsgServer(info LANDmsgServerInfo, out *bool) (err error) {
+func (r *RPC) SetLANDmsgServer(info visorapi.LANDmsgServerInfo, out *bool) (err error) {
 	defer rpcutil.LogCall(r.log, "SetLANDmsgServer", info)(out, &err)
 	err = r.visor.SetLANDmsgServer(info)
 	*out = err == nil
@@ -180,7 +175,7 @@ func (r *RPC) DeleteRewardAddress(_ *struct{}, _ *struct{}) (err error) {
 }
 
 // Summary provides an extra summary of the AppNode.
-func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
+func (r *RPC) Summary(_ *struct{}, out *visorapi.Summary) (err error) {
 	defer rpcutil.LogCall(r.log, "Summary", nil)(out, &err)
 	sum, err := r.visor.Summary()
 	if err != nil {
@@ -192,7 +187,7 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
 
 // StateSnapshot provides a curated, secrets-free snapshot of the visor's live
 // runtime state (see StateSnapshot in api_state.go).
-func (r *RPC) StateSnapshot(_ *struct{}, out *StateSnapshot) (err error) {
+func (r *RPC) StateSnapshot(_ *struct{}, out *visorapi.StateSnapshot) (err error) {
 	defer rpcutil.LogCall(r.log, "StateSnapshot", nil)(out, &err)
 	snap, err := r.visor.StateSnapshot()
 	if err != nil {
@@ -202,16 +197,10 @@ func (r *RPC) StateSnapshot(_ *struct{}, out *StateSnapshot) (err error) {
 	return nil
 }
 
-// StateSnapshotReq is the argument to StateSnapshotProjected: the subtree keys
-// (see the StateSelect* constants) to build. Empty builds the full snapshot.
-type StateSnapshotReq struct {
-	Fields []string
-}
-
 // StateSnapshotProjected builds only the requested subtree(s) of the snapshot
 // server-side, so a `--select mux` call skips the expensive transports build.
 // See StateSnapshotProjected in api_state.go.
-func (r *RPC) StateSnapshotProjected(in *StateSnapshotReq, out *StateSnapshot) (err error) {
+func (r *RPC) StateSnapshotProjected(in *visorapi.StateSnapshotReq, out *visorapi.StateSnapshot) (err error) {
 	defer rpcutil.LogCall(r.log, "StateSnapshotProjected", in)(out, &err)
 	var fields []string
 	if in != nil {
@@ -226,7 +215,7 @@ func (r *RPC) StateSnapshotProjected(in *StateSnapshotReq, out *StateSnapshot) (
 }
 
 // Overview provides a overview of the AppNode.
-func (r *RPC) Overview(_ *struct{}, out *Overview) (err error) {
+func (r *RPC) Overview(_ *struct{}, out *visorapi.Overview) (err error) {
 	defer rpcutil.LogCall(r.log, "Overview", nil)(out, &err)
 
 	overview, err := r.visor.Overview()
@@ -293,7 +282,7 @@ func (r *RPC) SetRuntimeConfig(rawJSON *[]byte, _ *struct{}) (err error) {
 // SetConfigFields applies a field-by-field edit to the running visor's
 // config. Live where a live setter is registered for the path, on-disk
 // (restart-required) otherwise. See api_config_fields.go.
-func (r *RPC) SetConfigFields(fields *map[string]json.RawMessage, out *[]ConfigFieldChange) (err error) {
+func (r *RPC) SetConfigFields(fields *map[string]json.RawMessage, out *[]visorapi.ConfigFieldChange) (err error) {
 	defer rpcutil.LogCall(r.log, "SetConfigFields", fields)(out, &err)
 	if fields == nil {
 		return errors.New("nil config fields payload")
@@ -308,7 +297,7 @@ func (r *RPC) SetConfigFields(fields *map[string]json.RawMessage, out *[]ConfigF
 
 // LocalTransportStats returns the visor's local per-transport
 // bandwidth + latency rollup from the bbolt stats store.
-func (r *RPC) LocalTransportStats(_ *struct{}, out *LocalTransportStatsResponse) (err error) {
+func (r *RPC) LocalTransportStats(_ *struct{}, out *visorapi.LocalTransportStatsResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "LocalTransportStats", nil)(nil, &err)
 	resp, err := r.visor.LocalTransportStats()
 	if err != nil {
@@ -323,10 +312,10 @@ func (r *RPC) LocalTransportStats(_ *struct{}, out *LocalTransportStatsResponse)
 // for the requested window. Mirror of /stats/uptime on the
 // logserver, reachable through the hypervisor RPC chain so the hvui
 // can fetch it without per-visor HTTP calls.
-func (r *RPC) LocalUptimeStats(args *LocalUptimeArgs, out *LocalUptimeResponse) (err error) {
+func (r *RPC) LocalUptimeStats(args *visorapi.LocalUptimeArgs, out *visorapi.LocalUptimeResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "LocalUptimeStats", nil)(nil, &err)
 	if args == nil {
-		args = &LocalUptimeArgs{}
+		args = &visorapi.LocalUptimeArgs{}
 	}
 	resp, err := r.visor.LocalUptimeStats(*args)
 	if err != nil {
@@ -342,10 +331,10 @@ func (r *RPC) LocalUptimeStats(args *LocalUptimeArgs, out *LocalUptimeResponse) 
 // the front of the RPC→DMSG→HTTP chain — when the visor already has
 // a fresh subscription the CLI can skip the network round-trip
 // entirely.
-func (r *RPC) FetchCXO(args *FetchCXOArgs, out *FetchCXOResult) (err error) {
+func (r *RPC) FetchCXO(args *visorapi.FetchCXOArgs, out *visorapi.FetchCXOResult) (err error) {
 	defer rpcutil.LogCall(r.log, "FetchCXO", args)(nil, &err)
 	if args == nil {
-		args = &FetchCXOArgs{}
+		args = &visorapi.FetchCXOArgs{}
 	}
 	resp, err := r.visor.FetchCXO(*args)
 	if err != nil {
@@ -357,7 +346,7 @@ func (r *RPC) FetchCXO(args *FetchCXOArgs, out *FetchCXOResult) (err error) {
 
 // CXOStatus exposes the CXO subscription manager's per-feed state for
 // `skywire cli visor cxo status`. See Visor.CXOStatus for semantics.
-func (r *RPC) CXOStatus(_ *struct{}, out *[]FeedStatus) (err error) {
+func (r *RPC) CXOStatus(_ *struct{}, out *[]visorapi.FeedStatus) (err error) {
 	defer rpcutil.LogCall(r.log, "CXOStatus", nil)(out, &err)
 	res, err := r.visor.CXOStatus()
 	if err != nil {
@@ -369,10 +358,10 @@ func (r *RPC) CXOStatus(_ *struct{}, out *[]FeedStatus) (err error) {
 
 // CXORefreshFeed forces a synchronous re-subscribe + first-Root + walk
 // for the named feed. See Visor.CXORefreshFeed for semantics.
-func (r *RPC) CXORefreshFeed(args *CXORefreshArgs, out *FeedStatus) (err error) {
+func (r *RPC) CXORefreshFeed(args *visorapi.CXORefreshArgs, out *visorapi.FeedStatus) (err error) {
 	defer rpcutil.LogCall(r.log, "CXORefreshFeed", args)(out, &err)
 	if args == nil {
-		args = &CXORefreshArgs{}
+		args = &visorapi.CXORefreshArgs{}
 	}
 	res, err := r.visor.CXORefreshFeed(*args)
 	if res != nil {
@@ -394,7 +383,7 @@ func (r *RPC) RuntimeLogs(_ *struct{}, out *string) (err error) {
 // RuntimeLogsSince returns only entries whose log_line is strictly
 // greater than since. Used by the hypervisor UI for diff-based live
 // tailing. Caller passes the previous response's Latest as `since`.
-func (r *RPC) RuntimeLogsSince(since *int64, out *RuntimeLogsDelta) (err error) {
+func (r *RPC) RuntimeLogsSince(since *int64, out *visorapi.RuntimeLogsDelta) (err error) {
 	defer rpcutil.LogCall(r.log, "RuntimeLogsSince", since)(out, &err)
 	d, err := r.visor.RuntimeLogsSince(*since)
 	*out = d
@@ -404,7 +393,7 @@ func (r *RPC) RuntimeLogsSince(since *int64, out *RuntimeLogsDelta) (err error) 
 // HostStats returns a host-level resource snapshot (CPU%, memory,
 // disk, network, plus the visor process slice). Backs the
 // hypervisor UI's Resource Monitor panel.
-func (r *RPC) HostStats(_ *struct{}, out *HostStatsInfo) (err error) {
+func (r *RPC) HostStats(_ *struct{}, out *visorapi.HostStatsInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "HostStats", nil)(out, &err)
 	stats, err := r.visor.HostStats()
 	if stats != nil {
@@ -415,7 +404,7 @@ func (r *RPC) HostStats(_ *struct{}, out *HostStatsInfo) (err error) {
 
 // NetworkView returns the SD/TPD/UT-aggregated network table that
 // `cli sd` prints. Backs the hypervisor UI's Network tab.
-func (r *RPC) NetworkView(_ *struct{}, out *NetworkViewResponse) (err error) {
+func (r *RPC) NetworkView(_ *struct{}, out *visorapi.NetworkViewResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "NetworkView", nil)(out, &err)
 	resp, err := r.visor.NetworkView()
 	if resp != nil {
@@ -433,7 +422,7 @@ func (r *RPC) SkychatPasswordIsSet(_ *struct{}, out *bool) (err error) {
 }
 
 // SetSkychatPassword sets / changes the skychat password.
-func (r *RPC) SetSkychatPassword(in *SkychatPasswordChangeIn, _ *struct{}) (err error) {
+func (r *RPC) SetSkychatPassword(in *visorapi.SkychatPasswordChangeIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetSkychatPassword", nil)(nil, &err)
 	return r.visor.SetSkychatPassword(in.OldPassword, in.NewPassword)
 }
@@ -471,7 +460,7 @@ func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
 
 // DmsgPtyExec runs a one-shot command on a remote visor via the
 // embedded dmsgpty host (see Visor.DmsgPtyExec).
-func (r *RPC) DmsgPtyExec(args *DmsgPtyExecArgs, out *pty.CommandExecResult) (err error) {
+func (r *RPC) DmsgPtyExec(args *visorapi.DmsgPtyExecArgs, out *pty.CommandExecResult) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgPtyExec", args)(out, &err)
 	if args == nil {
 		return fmt.Errorf("dmsgpty: nil args")
@@ -487,7 +476,7 @@ func (r *RPC) DmsgPtyExec(args *DmsgPtyExecArgs, out *pty.CommandExecResult) (er
 }
 
 // Ports return list of all ports used by visor services and apps
-func (r *RPC) Ports(_ *struct{}, out *map[string]PortDetail) (err error) {
+func (r *RPC) Ports(_ *struct{}, out *map[string]visorapi.PortDetail) (err error) {
 	defer rpcutil.LogCall(r.log, "Ports", nil)(out, &err)
 	ports, err := r.visor.Ports()
 	if ports != nil {
@@ -506,7 +495,7 @@ func (r *RPC) IsDMSGClientReady(_ *struct{}, out *bool) (err error) {
 }
 
 // DMSGServers returns list of connected DMSG servers with latencies
-func (r *RPC) DMSGServers(_ *struct{}, out *[]DMSGServerInfo) (err error) {
+func (r *RPC) DMSGServers(_ *struct{}, out *[]visorapi.DMSGServerInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "DMSGServers", nil)(out, &err)
 
 	servers, err := r.visor.DMSGServers()
@@ -515,7 +504,7 @@ func (r *RPC) DMSGServers(_ *struct{}, out *[]DMSGServerInfo) (err error) {
 }
 
 // TestVisor trying to test viosr by pinging to public visor.
-func (r *RPC) TestVisor(conf PingConfig, out *[]TestResult) (err error) {
+func (r *RPC) TestVisor(conf visorapi.PingConfig, out *[]visorapi.TestResult) (err error) {
 	defer rpcutil.LogCall(r.log, "TestVisor", conf)(out, &err)
 
 	*out, err = r.visor.TestVisor(conf)
@@ -548,7 +537,7 @@ func (r *RPC) StopUIServer(_ *struct{}, _ *struct{}) (err error) {
 }
 
 // UIServerStatus returns the status of the UI server.
-func (r *RPC) UIServerStatus(_ *struct{}, out *UIServerStatus) (err error) {
+func (r *RPC) UIServerStatus(_ *struct{}, out *visorapi.UIServerStatus) (err error) {
 	defer rpcutil.LogCall(r.log, "UIServerStatus", nil)(out, &err)
 
 	status, err := r.visor.UIServerStatus()

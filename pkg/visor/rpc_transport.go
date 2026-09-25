@@ -10,6 +10,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // TransportTypes lists all transport types supported by the Visor.
@@ -23,7 +24,7 @@ func (r *RPC) TransportTypes(_ *struct{}, out *[]string) (err error) {
 }
 
 // Transports lists Transports of the Visor and provides a summary of each.
-func (r *RPC) Transports(in *TransportsIn, out *[]*TransportSummary) (err error) {
+func (r *RPC) Transports(in *visorapi.TransportsIn, out *[]*visorapi.TransportSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "Transports", in)(out, &err)
 
 	transports, err := r.visor.Transports(in.FilterTypes, in.FilterPubKeys, in.ShowLogs)
@@ -33,7 +34,7 @@ func (r *RPC) Transports(in *TransportsIn, out *[]*TransportSummary) (err error)
 }
 
 // Transport obtains a Transport Summary of Transport of given Transport ID.
-func (r *RPC) Transport(in *uuid.UUID, out *TransportSummary) (err error) {
+func (r *RPC) Transport(in *uuid.UUID, out *visorapi.TransportSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "Transport", in)(out, &err)
 
 	tp, err := r.visor.Transport(*in)
@@ -45,7 +46,7 @@ func (r *RPC) Transport(in *uuid.UUID, out *TransportSummary) (err error) {
 }
 
 // AddTransport creates a transport for the visor.
-func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) (err error) {
+func (r *RPC) AddTransport(in *visorapi.AddTransportIn, out *visorapi.TransportSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "AddTransport", in)(out, &err)
 
 	tp, err := r.visor.AddTransport(in.RemotePK, in.TpType, in.Timeout, in.Label, in.NoRegister, in.SkipLatencyProbe)
@@ -57,7 +58,7 @@ func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) (err error
 }
 
 // SetSTCPAddr injects an STCP PK table entry at runtime.
-func (r *RPC) SetSTCPAddr(in *SetSTCPAddrIn, _ *struct{}) (err error) {
+func (r *RPC) SetSTCPAddr(in *visorapi.SetSTCPAddrIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetSTCPAddr", in)(nil, &err)
 	return r.visor.SetSTCPAddr(in.PK, in.Addr)
 }
@@ -115,7 +116,7 @@ func (r *RPC) SetPersistentTransports(pTs *[]transport.PersistentTransports, _ *
 }
 
 // GetTransportLogs returns transport log entries from the last N days.
-func (r *RPC) GetTransportLogs(days *int, out *[]TransportLogEntry) (err error) {
+func (r *RPC) GetTransportLogs(days *int, out *[]visorapi.TransportLogEntry) (err error) {
 	defer rpcutil.LogCall(r.log, "GetTransportLogs", *days)(out, &err)
 	entries, err := r.visor.GetTransportLogs(*days)
 	if err != nil {
@@ -179,7 +180,7 @@ func (r *RPC) SetExistingTPOnly(enabled *bool, _ *struct{}) (err error) {
 // Thin RPC handler: delegates to v.TransportRPCCall so the mux-sharing
 // and error-handling logic stays in one place (rpc_transport_proxy.go).
 // See the comment there for why we use a shared mux.
-func (r *RPC) TransportRPCCall(req *TransportRPCCallRequest, out *json.RawMessage) (err error) {
+func (r *RPC) TransportRPCCall(req *visorapi.TransportRPCCallRequest, out *json.RawMessage) (err error) {
 	defer rpcutil.LogCall(r.log, "TransportRPCCall", req)(out, &err)
 
 	v, ok := r.visor.(*Visor)

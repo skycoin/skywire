@@ -20,6 +20,7 @@ import (
 
 	"github.com/skycoin/skywire/cmd/apps/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // pairConnectTimeout bounds the dmsg dial in PairAdd. PairAdd is
@@ -28,52 +29,6 @@ import (
 // window. The publisher side is up regardless; the subscriber side
 // reconnects on next Resume.
 const pairConnectTimeout = 15 * time.Second
-
-// PairInfo is the public summary of a chat pair, returned by PairList
-// and used as the poll cursor for PairPoll.
-type PairInfo struct {
-	PeerPK        cipher.PubKey  `json:"peer_pk"`
-	Status        pairing.Status `json:"status"`
-	Port          uint16         `json:"port"`
-	EstablishedAt time.Time      `json:"established_at"`
-	LastMessageAt time.Time      `json:"last_message_at,omitempty"`
-
-	// Epoch is the short-lived key this conversation currently seals
-	// under, as hex. Empty means the pair has not derived one yet and is
-	// still on the legacy static key — which is worth showing, because
-	// the two have materially different guarantees and nothing else in
-	// the UI would distinguish them.
-	Epoch string `json:"epoch,omitempty"`
-
-	// ForwardSecret is true once an epoch exists, i.e. once messages
-	// stop being openable with the two visors' identity keys alone.
-	ForwardSecret bool `json:"forward_secret"`
-
-	// KeyGeneration is how many ratchet keys this side has minted for
-	// the pair. Each one retires the previous secret, so it doubles as
-	// "how many times has the window closed behind us".
-	KeyGeneration uint64 `json:"key_generation,omitempty"`
-}
-
-// PairMessage is one inbound message delivered through the visor's
-// pair inbox. Outbound messages (sent via PairSend) are not echoed
-// here; the caller already knows what it sent.
-type PairMessage struct {
-	PeerPK cipher.PubKey `json:"peer_pk"`
-	Text   string        `json:"text"`
-	TS     time.Time     `json:"ts"`
-
-	// ID names this message on both sides of the pair. On a chat message
-	// it is the message's own id (derived from the sender's timestamp);
-	// on a delete record it is the id of the message being retracted.
-	// Clients need it to correlate a delete with the bubble it removes.
-	ID string `json:"id,omitempty"`
-
-	// Type is empty for a chat message and pairing.MessageTypeDelete for
-	// a retraction. A client that only knows about chat messages should
-	// skip any record with a non-empty Type rather than render it.
-	Type string `json:"type,omitempty"`
-}
 
 // ErrPairingDisabled is returned by Visor pair methods when the
 // pairing manager isn't initialized (dmsg unavailable at startup,
@@ -120,7 +75,7 @@ func (v *Visor) PairAdd(peerPK cipher.PubKey) error {
 
 // PairList returns a snapshot of every persisted pair (pending /
 // active / revoked).
-func (v *Visor) PairList() ([]PairInfo, error) {
+func (v *Visor) PairList() ([]visorapi.PairInfo, error) {
 	v.initLock.RLock()
 	store := v.pairing.store
 	v.initLock.RUnlock()
@@ -132,9 +87,9 @@ func (v *Visor) PairList() ([]PairInfo, error) {
 		return nil, err
 	}
 	mgr := v.pairManager()
-	out := make([]PairInfo, 0, len(records))
+	out := make([]visorapi.PairInfo, 0, len(records))
 	for _, r := range records {
-		info := PairInfo{
+		info := visorapi.PairInfo{
 			PeerPK:        r.PeerPK,
 			Status:        r.Status,
 			Port:          r.Port,
@@ -239,7 +194,7 @@ func (v *Visor) PairDelete(peerPK cipher.PubKey, id string) error {
 // inbox window. Messages older than the inbox capacity are dropped
 // silently — clients that want guaranteed delivery should poll
 // often enough that the window doesn't roll over between polls.
-func (v *Visor) PairPoll(since time.Time) ([]PairMessage, error) {
+func (v *Visor) PairPoll(since time.Time) ([]visorapi.PairMessage, error) {
 	v.initLock.RLock()
 	inbox := v.pairing.inbox
 	v.initLock.RUnlock()
@@ -262,14 +217,14 @@ func (v *Visor) pairManager() *pairing.Manager {
 type pairInbox struct {
 	mu  sync.Mutex
 	cap int
-	buf []PairMessage
+	buf []visorapi.PairMessage
 }
 
 func newPairInbox(capacity int) *pairInbox {
 	if capacity <= 0 {
 		capacity = defaultInboxCap
 	}
-	return &pairInbox{cap: capacity, buf: make([]PairMessage, 0, capacity)}
+	return &pairInbox{cap: capacity, buf: make([]visorapi.PairMessage, 0, capacity)}
 }
 
 func (p *pairInbox) deliver(peerPK cipher.PubKey, msg pairing.Message) {
@@ -281,7 +236,7 @@ func (p *pairInbox) deliver(peerPK cipher.PubKey, msg pairing.Message) {
 	if msg.Type == "" {
 		id = msg.MsgID()
 	}
-	p.buf = append(p.buf, PairMessage{
+	p.buf = append(p.buf, visorapi.PairMessage{
 		PeerPK: peerPK,
 		Text:   msg.Text,
 		TS:     msg.TS,
@@ -296,10 +251,10 @@ func (p *pairInbox) deliver(peerPK cipher.PubKey, msg pairing.Message) {
 	}
 }
 
-func (p *pairInbox) snapshotAfter(since time.Time) []PairMessage {
+func (p *pairInbox) snapshotAfter(since time.Time) []visorapi.PairMessage {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	out := make([]PairMessage, 0, len(p.buf))
+	out := make([]visorapi.PairMessage, 0, len(p.buf))
 	for _, m := range p.buf {
 		if m.TS.After(since) {
 			out = append(out, m)

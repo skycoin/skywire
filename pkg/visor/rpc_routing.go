@@ -5,6 +5,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // RoutingRules obtains all routing rules of the RoutingTable.
@@ -38,7 +39,7 @@ func (r *RPC) RemoveRoutingRule(key *routing.RouteID, _ *struct{}) (err error) {
 }
 
 // RouteGroups retrieves routegroups via rules of the routing table.
-func (r *RPC) RouteGroups(_ *struct{}, out *[]RouteGroupInfo) (err error) {
+func (r *RPC) RouteGroups(_ *struct{}, out *[]visorapi.RouteGroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "RouteGroups", nil)(out, &err)
 
 	rgs, err := r.visor.RouteGroups()
@@ -59,7 +60,7 @@ func (r *RPC) RoutingStats(_ *struct{}, out *routing.RoutingTableStats) (err err
 
 // RoutingPolicies returns the installed routing-policy summary
 // (visor-wide default + per-app overrides) for the hypervisor UI.
-func (r *RPC) RoutingPolicies(_ *struct{}, out *RoutingPoliciesSummary) (err error) {
+func (r *RPC) RoutingPolicies(_ *struct{}, out *visorapi.RoutingPoliciesSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "RoutingPolicies", nil)(out, &err)
 	res, err := r.visor.RoutingPolicies()
 	if res != nil {
@@ -70,7 +71,7 @@ func (r *RPC) RoutingPolicies(_ *struct{}, out *RoutingPoliciesSummary) (err err
 
 // RouteGroupMuxInfo retrieves per-mux-leg counters for active rg's
 // tagged with the named app.
-func (r *RPC) RouteGroupMuxInfo(in *string, out *[]MuxRouteGroupInfo) (err error) {
+func (r *RPC) RouteGroupMuxInfo(in *string, out *[]visorapi.MuxRouteGroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "RouteGroupMuxInfo", in)(out, &err)
 	if in == nil {
 		empty := ""
@@ -82,7 +83,7 @@ func (r *RPC) RouteGroupMuxInfo(in *string, out *[]MuxRouteGroupInfo) (err error
 }
 
 // FetchServiceData proxies a GET request to a deployment service.
-func (r *RPC) FetchServiceData(in *FetchServiceDataIn, out *[]byte) (err error) {
+func (r *RPC) FetchServiceData(in *visorapi.FetchServiceDataIn, out *[]byte) (err error) {
 	defer rpcutil.LogCall(r.log, "FetchServiceData", in)(out, &err)
 	data, err := r.visor.FetchServiceData(in.Service, in.Path)
 	*out = data
@@ -90,7 +91,7 @@ func (r *RPC) FetchServiceData(in *FetchServiceDataIn, out *[]byte) (err error) 
 }
 
 // ServiceHealth checks all deployment services.
-func (r *RPC) ServiceHealth(_ *struct{}, out *[]ServiceHealthEntry) (err error) {
+func (r *RPC) ServiceHealth(_ *struct{}, out *[]visorapi.ServiceHealthEntry) (err error) {
 	defer rpcutil.LogCall(r.log, "ServiceHealth", nil)(out, &err)
 	entries, err := r.visor.ServiceHealth()
 	*out = entries
@@ -165,20 +166,20 @@ func (r *RPC) SetMuxStandby(n *int, _ *struct{}) (err error) {
 }
 
 // GetRouterSettings returns the unified runtime router knobs.
-func (r *RPC) GetRouterSettings(_ *struct{}, out *RouterSettings) (err error) {
+func (r *RPC) GetRouterSettings(_ *struct{}, out *visorapi.RouterSettings) (err error) {
 	defer rpcutil.LogCall(r.log, "GetRouterSettings", nil)(out, &err)
 	*out, err = r.visor.GetRouterSettings()
 	return
 }
 
 // SetRouterSettings sets the unified runtime router knobs.
-func (r *RPC) SetRouterSettings(s *RouterSettings, _ *struct{}) (err error) {
+func (r *RPC) SetRouterSettings(s *visorapi.RouterSettings, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetRouterSettings", s)(nil, &err)
 	return r.visor.SetRouterSettings(*s)
 }
 
 // ActiveRoutes returns all active routes with app associations and live stats
-func (r *RPC) ActiveRoutes(_ *struct{}, out *[]AppRouteStatus) (err error) {
+func (r *RPC) ActiveRoutes(_ *struct{}, out *[]visorapi.AppRouteStatus) (err error) {
 	defer rpcutil.LogCall(r.log, "ActiveRoutes", nil)(out, &err)
 	routes, err := r.visor.ActiveRoutes()
 	if routes != nil {
@@ -188,13 +189,13 @@ func (r *RPC) ActiveRoutes(_ *struct{}, out *[]AppRouteStatus) (err error) {
 }
 
 // AddMuxRoute adds a mux route to an app's active connection
-func (r *RPC) AddMuxRoute(in *MuxRouteInput, _ *struct{}) (err error) {
+func (r *RPC) AddMuxRoute(in *visorapi.MuxRouteInput, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "AddMuxRoute", in)(nil, &err)
 	return r.visor.AddMuxRoute(in.AppName, in.Forward, in.Reverse, in.SrcPort)
 }
 
 // GrowMuxRoute adds disjoint legs to an app's active rg up to a target count
-func (r *RPC) GrowMuxRoute(in *MuxRouteInput, out *int) (err error) {
+func (r *RPC) GrowMuxRoute(in *visorapi.MuxRouteInput, out *int) (err error) {
 	defer rpcutil.LogCall(r.log, "GrowMuxRoute", in)(out, &err)
 	added, err := r.visor.GrowMuxRoute(in.AppName, in.Target, in.MinHops, in.SrcPort)
 	if err != nil {
@@ -205,7 +206,7 @@ func (r *RPC) GrowMuxRoute(in *MuxRouteInput, out *int) (err error) {
 }
 
 // GrowMuxFromPool grows an app's tunnel by `legs` legs taken from its standby pool
-func (r *RPC) GrowMuxFromPool(in *MuxRouteInput, out *int) (err error) {
+func (r *RPC) GrowMuxFromPool(in *visorapi.MuxRouteInput, out *int) (err error) {
 	defer rpcutil.LogCall(r.log, "GrowMuxFromPool", in)(out, &err)
 	added, err := r.visor.GrowMuxFromPool(in.AppName, in.Legs, in.MinHops, in.SrcPort)
 	if err != nil {
@@ -216,14 +217,14 @@ func (r *RPC) GrowMuxFromPool(in *MuxRouteInput, out *int) (err error) {
 }
 
 // RemoveMuxRoute removes a mux route from an app's active connection
-func (r *RPC) RemoveMuxRoute(in *MuxRouteInput, _ *struct{}) (err error) {
+func (r *RPC) RemoveMuxRoute(in *visorapi.MuxRouteInput, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "RemoveMuxRoute", in)(nil, &err)
 	return r.visor.RemoveMuxRoute(in.AppName, in.TransportID, in.SrcPort)
 }
 
 // SetMuxDirection pins or releases the unidirectional direction mapping on all
 // of an app's active directional route groups
-func (r *RPC) SetMuxDirection(in *MuxDirectionInput, _ *struct{}) (err error) {
+func (r *RPC) SetMuxDirection(in *visorapi.MuxDirectionInput, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetMuxDirection", in)(nil, &err)
 	return r.visor.SetMuxDirection(in.AppName, in.Mode)
 }

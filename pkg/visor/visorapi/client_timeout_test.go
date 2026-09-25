@@ -1,5 +1,5 @@
 // Package visor pkg/visor/rpc_client_timeout_test.go
-package visor
+package visorapi
 
 import (
 	"io"

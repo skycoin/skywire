@@ -12,9 +12,7 @@ package visor
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
@@ -25,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 const (
@@ -47,24 +46,6 @@ var ErrPairCodeInvalid = errors.New("pairing: invalid code")
 // ErrNoPendingMatch is returned when a selection matches no pending key.
 var ErrNoPendingMatch = errors.New("pairing: no pending key matches")
 
-// PendingHypervisor is a peer that asked to drive this visor but is not yet
-// in its hypervisor list.
-type PendingHypervisor struct {
-	PK          cipher.PubKey `json:"pk"`
-	Fingerprint string        `json:"fingerprint"`
-	FirstSeen   time.Time     `json:"first_seen"`
-	LastSeen    time.Time     `json:"last_seen"`
-	// Via is how the peer was noticed: "transport" (it holds a same-origin
-	// transport to us) or "rpc" (it tried the transport RPC and was refused).
-	Via string `json:"via"`
-}
-
-// PairCode is a one-time pairing code and when it stops working.
-type PairCode struct {
-	Code    string    `json:"code"`
-	Expires time.Time `json:"expires"`
-}
-
 // PairStatus is the pre-auth view a tab gets of its own standing.
 type PairStatus struct {
 	PK          cipher.PubKey `json:"pk"`
@@ -73,24 +54,16 @@ type PairStatus struct {
 	Pending     bool          `json:"pending"`
 }
 
-// HypervisorFingerprint is the short, stable name a pending key is approved
-// by: the first 40 bits of sha256(pk) as two hex groups ("a1b2c-3d4e5").
-func HypervisorFingerprint(pk cipher.PubKey) string {
-	sum := sha256.Sum256(pk[:])
-	s := hex.EncodeToString(sum[:5])
-	return s[:5] + "-" + s[5:]
-}
-
 type hvPairing struct {
 	mu      sync.Mutex
-	pending map[cipher.PubKey]*PendingHypervisor
+	pending map[cipher.PubKey]*visorapi.PendingHypervisor
 	codes   map[string]time.Time // code → expiry
 	tries   int
 }
 
 func newHVPairing() *hvPairing {
 	return &hvPairing{
-		pending: make(map[cipher.PubKey]*PendingHypervisor),
+		pending: make(map[cipher.PubKey]*visorapi.PendingHypervisor),
 		codes:   make(map[string]time.Time),
 	}
 }
@@ -116,8 +89,8 @@ func (p *hvPairing) note(pk cipher.PubKey, via string, now time.Time) bool {
 		}
 		delete(p.pending, oldest)
 	}
-	p.pending[pk] = &PendingHypervisor{
-		PK: pk, Fingerprint: HypervisorFingerprint(pk), FirstSeen: now, LastSeen: now, Via: via,
+	p.pending[pk] = &visorapi.PendingHypervisor{
+		PK: pk, Fingerprint: visorapi.HypervisorFingerprint(pk), FirstSeen: now, LastSeen: now, Via: via,
 	}
 	return true
 }
@@ -135,9 +108,9 @@ func (p *hvPairing) isPending(pk cipher.PubKey) bool {
 	return ok
 }
 
-func (p *hvPairing) list() []PendingHypervisor {
+func (p *hvPairing) list() []visorapi.PendingHypervisor {
 	p.mu.Lock()
-	out := make([]PendingHypervisor, 0, len(p.pending))
+	out := make([]visorapi.PendingHypervisor, 0, len(p.pending))
 	for _, e := range p.pending {
 		out = append(out, *e)
 	}
@@ -159,7 +132,7 @@ func (p *hvPairing) resolve(sel string) (cipher.PubKey, error) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	var found *PendingHypervisor
+	var found *visorapi.PendingHypervisor
 	for _, e := range p.pending {
 		if e.Fingerprint == sel || strings.HasPrefix(e.Fingerprint, sel) {
 			if found != nil {
@@ -174,19 +147,19 @@ func (p *hvPairing) resolve(sel string) (cipher.PubKey, error) {
 	return found.PK, nil
 }
 
-func (p *hvPairing) newCode(ttl time.Duration, now time.Time) (PairCode, error) {
+func (p *hvPairing) newCode(ttl time.Duration, now time.Time) (visorapi.PairCode, error) {
 	if ttl <= 0 {
 		ttl = pairCodeDefaultTTL
 	}
 	buf := make([]byte, pairCodeLen)
 	if _, err := rand.Read(buf); err != nil {
-		return PairCode{}, err
+		return visorapi.PairCode{}, err
 	}
 	code := make([]byte, pairCodeLen)
 	for i, b := range buf {
 		code[i] = pairCodeAlphabet[int(b)%len(pairCodeAlphabet)]
 	}
-	c := PairCode{Code: string(code), Expires: now.Add(ttl)}
+	c := visorapi.PairCode{Code: string(code), Expires: now.Add(ttl)}
 	p.mu.Lock()
 	p.pruneLocked(now)
 	p.codes[c.Code] = c.Expires
@@ -273,7 +246,7 @@ func (v *Visor) notePendingHypervisor(pk cipher.PubKey, via string) {
 		return
 	}
 	if v.hvPairingState().note(pk, via, time.Now()) {
-		v.log.WithField("pk", pk.String()).WithField("fingerprint", HypervisorFingerprint(pk)).
+		v.log.WithField("pk", pk.String()).WithField("fingerprint", visorapi.HypervisorFingerprint(pk)).
 			WithField("via", via).Info("Pending hypervisor: approve with `skywire cli visor hv pair <fingerprint>`")
 	}
 }
@@ -293,7 +266,7 @@ func (v *Visor) scanPendingPairs() {
 }
 
 // PendingHypervisors implements API: the peers waiting to be approved.
-func (v *Visor) PendingHypervisors() ([]PendingHypervisor, error) {
+func (v *Visor) PendingHypervisors() ([]visorapi.PendingHypervisor, error) {
 	return v.hvPairingState().list(), nil
 }
 
@@ -312,7 +285,7 @@ func (v *Visor) ApproveHypervisor(sel string) (cipher.PubKey, error) {
 
 // NewPairCode implements API: a one-time code a tab can present to be
 // approved without the CLI seeing its fingerprint.
-func (v *Visor) NewPairCode(ttl time.Duration) (PairCode, error) {
+func (v *Visor) NewPairCode(ttl time.Duration) (visorapi.PairCode, error) {
 	return v.hvPairingState().newCode(ttl, time.Now())
 }
 
@@ -337,7 +310,7 @@ func (v *Visor) PairWithCode(pk cipher.PubKey, code string) error {
 // PairStatusOf reports whether pk is paired (trusted) or pending.
 func (v *Visor) PairStatusOf(pk cipher.PubKey) PairStatus {
 	return PairStatus{
-		PK: pk, Fingerprint: HypervisorFingerprint(pk),
+		PK: pk, Fingerprint: visorapi.HypervisorFingerprint(pk),
 		Paired:  v.isTrustedPeer(pk),
 		Pending: v.hvPairingState().isPending(pk),
 	}

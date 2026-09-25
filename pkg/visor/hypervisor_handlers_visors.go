@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skywire/pkg/httputil"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/rewards"
 )
 
@@ -35,13 +36,13 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 		if hv.visor != nil {
 			i++
 		}
-		overviews := make([]Overview, len(remotes)+i)
+		overviews := make([]visorapi.Overview, len(remotes)+i)
 
 		if hv.visor != nil {
 			overview, err := hv.visor.Overview()
 			if err != nil {
 				hv.logger.WithError(err).Warn("Failed to obtain overview of this visor.")
-				overview = &Overview{PubKey: hv.visor.conf.PK}
+				overview = &visorapi.Overview{PubKey: hv.visor.conf.PK}
 			}
 			overviews[0] = *overview
 		}
@@ -53,13 +54,13 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 				defer wg.Done()
 				// Per-visor timeout prevents one dead visor from blocking everything
 				done := make(chan struct{})
-				var overview *Overview
+				var overview *visorapi.Overview
 				go func() {
 					var err error
 					overview, err = c.API.Overview()
 					if err != nil {
 						hv.logger.WithError(err).WithField("pk", pk).Warn("Failed to obtain overview via RPC")
-						overview = &Overview{PubKey: pk}
+						overview = &visorapi.Overview{PubKey: pk}
 					}
 					close(done)
 				}()
@@ -68,7 +69,7 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 					overviews[idx] = *overview
 				case <-time.After(5 * time.Second):
 					hv.logger.WithField("pk", pk).Warn("Remote visor RPC timed out (5s)")
-					overviews[idx] = Overview{PubKey: pk}
+					overviews[idx] = visorapi.Overview{PubKey: pk}
 				}
 			}(entry.pk, entry.conn, i)
 			i++
@@ -85,10 +86,10 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 // how to render. Visor entries replicate across sections by design;
 // sections themselves dedup.
 type VisorTreeSection struct {
-	HypervisorPK cipher.PubKey   `json:"hypervisor_pk"`
-	ViaChain     []cipher.PubKey `json:"via_chain,omitempty"`
-	Visors       []Summary       `json:"visors"`
-	SubError     string          `json:"sub_error,omitempty"`
+	HypervisorPK cipher.PubKey      `json:"hypervisor_pk"`
+	ViaChain     []cipher.PubKey    `json:"via_chain,omitempty"`
+	Visors       []visorapi.Summary `json:"visors"`
+	SubError     string             `json:"sub_error,omitempty"`
 }
 
 // VisorTreeResponse wraps the tree sections for the UI's main node
@@ -153,23 +154,23 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 
 		type subResult struct {
 			hyperPK cipher.PubKey
-			entries []HVVisorEntry
+			entries []visorapi.HVVisorEntry
 			err     error
 		}
 		results := make([]subResult, len(remotes))
 		var wg sync.WaitGroup
 		wg.Add(len(remotes))
 		for i, e := range remotes {
-			go func(idx int, pk cipher.PubKey, api API) {
+			go func(idx int, pk cipher.PubKey, api visorapi.API) {
 				defer wg.Done()
 				done := make(chan struct {
-					vs  []HVVisorEntry
+					vs  []visorapi.HVVisorEntry
 					err error
 				}, 1)
 				go func() {
 					vs, err := api.HVListDirectVisors()
 					done <- struct {
-						vs  []HVVisorEntry
+						vs  []visorapi.HVVisorEntry
 						err error
 					}{vs, err}
 				}()
@@ -215,7 +216,7 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 			// (PK, version, uptime, transports, apps, IP, country)
 			// come through populateEntryFromSummary on the remote
 			// side, here projected back.
-			visors := make([]Summary, 0, len(sr.entries))
+			visors := make([]visorapi.Summary, 0, len(sr.entries))
 			type fetchTarget struct {
 				idx int
 				pk  cipher.PubKey
@@ -262,7 +263,7 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 				for _, ft := range fetchTargets {
 					go func(idx int, pk cipher.PubKey) {
 						defer fwg.Done()
-						done := make(chan *Summary, 1)
+						done := make(chan *visorapi.Summary, 1)
 						go func() {
 							s, err := hv.visor.HVVisorSummary(pk)
 							if err != nil {
@@ -342,7 +343,7 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 		// nil, so coerce every section to an empty array before writing.
 		for i := range sections {
 			if sections[i].Visors == nil {
-				sections[i].Visors = []Summary{}
+				sections[i].Visors = []visorapi.Summary{}
 			}
 		}
 
@@ -355,7 +356,7 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 // cache / dead-visor cleanup logic. Extracted from
 // getAllVisorsSummary so the tree endpoint can build the local
 // section without duplicating that wiring.
-func (hv *Hypervisor) collectLocalVisorSummaries() []Summary {
+func (hv *Hypervisor) collectLocalVisorSummaries() []visorapi.Summary {
 	// Reuse the existing handler's wire by serving it to a discard
 	// writer — keeps the cleanup + caching invariants intact. The
 	// summary set is small enough that the extra encode/decode is
@@ -364,7 +365,7 @@ func (hv *Hypervisor) collectLocalVisorSummaries() []Summary {
 	rec := newBufferingResponseRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/api/visors-summary", nil) //nolint:errcheck
 	hv.getAllVisorsSummary()(rec, req)
-	var out []Summary
+	var out []visorapi.Summary
 	if err := rec.decode(&out); err != nil {
 		hv.logger.WithError(err).Warn("getVisorsTreeSummary: failed to decode local section")
 		return nil
@@ -393,16 +394,16 @@ func (hv *Hypervisor) collectLocalVisorSummaries() []Summary {
 // just finds the fields it never read absent. TransportSummary's
 // MarshalJSON is what makes the dropped keys actually vanish rather
 // than serialize as zero-filled arrays.
-func compactTransportSummaries(in []*TransportSummary) []*TransportSummary {
+func compactTransportSummaries(in []*visorapi.TransportSummary) []*visorapi.TransportSummary {
 	if len(in) == 0 {
 		return in
 	}
-	out := make([]*TransportSummary, len(in))
+	out := make([]*visorapi.TransportSummary, len(in))
 	for i, t := range in {
 		if t == nil {
 			continue
 		}
-		out[i] = &TransportSummary{Type: t.Type, Initiator: t.Initiator}
+		out[i] = &visorapi.TransportSummary{Type: t.Type, Initiator: t.Initiator}
 	}
 	return out
 }
@@ -413,7 +414,7 @@ func compactTransportSummaries(in []*TransportSummary) []*TransportSummary {
 // Overview is copied rather than mutated in place: the *Overview a
 // Summary carries is shared with hv.summaryCache, and the per-visor
 // detail endpoints serve out of that cache.
-func compactSummaryTransports(in []Summary) []Summary {
+func compactSummaryTransports(in []visorapi.Summary) []visorapi.Summary {
 	for i := range in {
 		ov := in[i].Overview
 		if ov == nil || len(ov.Transports) == 0 {
@@ -433,7 +434,7 @@ func compactSummaryTransports(in []Summary) []Summary {
 // when the remote sub-hypervisor predates #2789 and only sent the
 // count — the per-type breakdown is unknown but the operator at
 // least sees the right total instead of a "-" dash.
-func projectEntryTransports(e HVVisorEntry) []*TransportSummary {
+func projectEntryTransports(e visorapi.HVVisorEntry) []*visorapi.TransportSummary {
 	if len(e.TransportSummaries) > 0 {
 		// Compacted here as well as at the source (see
 		// populateEntryFromSummary) because a sub-hypervisor running
@@ -443,9 +444,9 @@ func projectEntryTransports(e HVVisorEntry) []*TransportSummary {
 	if e.Transports <= 0 {
 		return nil
 	}
-	out := make([]*TransportSummary, e.Transports)
+	out := make([]*visorapi.TransportSummary, e.Transports)
 	for i := range out {
-		out[i] = &TransportSummary{Type: types.Type("?")}
+		out[i] = &visorapi.TransportSummary{Type: types.Type("?")}
 	}
 	return out
 }
@@ -456,8 +457,8 @@ func projectEntryTransports(e HVVisorEntry) []*TransportSummary {
 // the UI's per-row code already guards on field presence (see
 // node.service.ts comments around "Offline rows from the hypervisor
 // cache still carry the visor's last-known fields").
-func projectEntryToSummary(e HVVisorEntry) Summary {
-	overview := &Overview{
+func projectEntryToSummary(e visorapi.HVVisorEntry) visorapi.Summary {
+	overview := &visorapi.Overview{
 		PubKey:         e.PK,
 		LocalIP:        e.LocalIP,
 		PublicIP:       e.PublicIP,
@@ -496,11 +497,11 @@ func projectEntryToSummary(e HVVisorEntry) Summary {
 	//
 	// Offline (Online=false) keeps the empty Health so the UI's red
 	// dot path triggers.
-	var health *HealthInfo
+	var health *visorapi.HealthInfo
 	if e.ServicesHealth != "" {
-		health = &HealthInfo{ServicesHealth: e.ServicesHealth}
+		health = &visorapi.HealthInfo{ServicesHealth: e.ServicesHealth}
 	} else if e.Online {
-		health = &HealthInfo{ServicesHealth: "healthy"}
+		health = &visorapi.HealthInfo{ServicesHealth: "healthy"}
 	}
 	// IsHypervisor: the only sub-section row that's actually its
 	// section's hypervisor is the one whose PK matches the
@@ -508,7 +509,7 @@ func projectEntryToSummary(e HVVisorEntry) Summary {
 	// HVListDirectVisors response. Setting this drives the ★ icon on
 	// the sub-hypervisor's own row in its own section. Other rows
 	// (regular visors connected to that sub-hypervisor) stay false.
-	return Summary{
+	return visorapi.Summary{
 		Overview:      overview,
 		Health:        health,
 		BuildTag:      e.BuildTag,
@@ -594,7 +595,7 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 func (hv *Hypervisor) getNetworkView() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var (
-			resp *NetworkViewResponse
+			resp *visorapi.NetworkViewResponse
 			err  error
 		)
 		if r.URL.Query().Get("refresh") == "true" {
@@ -641,15 +642,15 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 		}
 		hv.mu.RUnlock()
 
-		summaries := make([]Summary, 0, len(remotes)+1)
+		summaries := make([]visorapi.Summary, 0, len(remotes)+1)
 
 		// Local visor summary
 		summary, err := hv.visor.Summary()
 		if err != nil {
 			hv.logger.WithError(err).Warn("Failed to obtain summary of this visor.")
-			summary = &Summary{
-				Overview: &Overview{PubKey: hv.visor.conf.PK},
-				Health:   &HealthInfo{},
+			summary = &visorapi.Summary{
+				Overview: &visorapi.Overview{PubKey: hv.visor.conf.PK},
+				Health:   &visorapi.HealthInfo{},
 			}
 		}
 		summaries = append(summaries, makeSummaryResp(err == nil, true, summary))
@@ -671,7 +672,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 		// must not have its FRESH conn deleted for the old conn's sins.
 		type deadVisor struct {
 			pk  cipher.PubKey
-			api API
+			api visorapi.API
 		}
 		var deadVisors []deadVisor
 		wg := new(sync.WaitGroup)
@@ -696,7 +697,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 				defer wg.Done()
 
 				type rpcResult struct {
-					sum    *Summary
+					sum    *visorapi.Summary
 					rpcErr error
 				}
 				resultCh := make(chan rpcResult, 1)

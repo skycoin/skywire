@@ -33,7 +33,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // pairRPCMu guards pairRPC. All reads/writes of the package-level
@@ -49,7 +49,7 @@ var pairRPCWatchdogCancel context.CancelFunc
 var errPairRPCUnavailable = errors.New("pair-rpc unavailable")
 
 // pairRPCGet returns the current client (may be nil).
-func pairRPCGet() visor.API {
+func pairRPCGet() visorapi.API {
 	pairRPCMu.RLock()
 	defer pairRPCMu.RUnlock()
 	return pairRPC
@@ -67,7 +67,7 @@ func pairRPCAlive() bool { return pairRPCGet() != nil }
 // Returns the new client (may be nil if dialing fails or pairing is
 // disabled). Callers can use the return value to retry immediately
 // without re-reading the global.
-func connectPairRPCLocked(reason string) visor.API {
+func connectPairRPCLocked(reason string) visorapi.API {
 	if !pairEnable {
 		return nil
 	}
@@ -89,7 +89,7 @@ func connectPairRPCLocked(reason string) visor.API {
 	// cli_addr empty, because on Android any installed app can reach another
 	// app's loopback port and the visor RPC has no authentication of its own.
 	// Without this, pairing, group chat and voice are dead there.
-	if api := visor.LocalAPI(); api != nil {
+	if api := visorapi.LocalAPI(); api != nil {
 		pairRPC = api
 		appLog("Pairing: using the in-process visor API (%s)", reason)
 		return pairRPC
@@ -102,7 +102,7 @@ func connectPairRPCLocked(reason string) visor.API {
 		return nil
 	}
 	log := logging.MustGetLogger(fmt.Sprintf("skychat-pair-rpc://%s", pairRPCAddr))
-	pairRPC = visor.NewRPCClient(log, conn, visor.RPCPrefix, 30*time.Second)
+	pairRPC = visorapi.NewRPCClient(log, conn, visorapi.RPCPrefix, 30*time.Second)
 	appLog("Pairing: connected to visor RPC at %s (%s)", pairRPCAddr, reason)
 	return pairRPC
 }
@@ -144,7 +144,7 @@ func isRPCShutdown(err error) bool {
 //
 // The op string is only used for log lines, e.g. "GroupList",
 // "PairAdd". Keep it short.
-func pairRPCCall(op string, fn func(visor.API) error) error {
+func pairRPCCall(op string, fn func(visorapi.API) error) error {
 	return pairRPCDo(op, pairRPCGet, connectPairRPCLocked, fn)
 }
 
@@ -153,9 +153,9 @@ func pairRPCCall(op string, fn func(visor.API) error) error {
 // the retry-on-shutdown behavior can be unit-tested without a real
 // visor RPC server.
 func pairRPCDo(op string,
-	get func() visor.API,
-	redial func(reason string) visor.API,
-	fn func(visor.API) error) error {
+	get func() visorapi.API,
+	redial func(reason string) visorapi.API,
+	fn func(visorapi.API) error) error {
 	cli := get()
 	if cli == nil {
 		return errPairRPCUnavailable

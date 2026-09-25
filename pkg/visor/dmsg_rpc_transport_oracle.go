@@ -19,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // dmsgRPCTransportOracle sources a destination visor's OWN transports over the
@@ -62,7 +63,7 @@ func (o *dmsgRPCTransportOracle) DstTransports(ctx context.Context, _, dst ciphe
 		_ = conn.SetDeadline(dl) //nolint:errcheck
 	}
 
-	api := NewRPCClient(o.log, conn, RPCPrefix, 0)
+	api := visorapi.NewRPCClient(o.log, conn, visorapi.RPCPrefix, 0)
 	sums, err := api.Transports(nil, nil, false)
 	if err != nil {
 		return nil, err

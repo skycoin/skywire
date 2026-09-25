@@ -16,8 +16,8 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -263,7 +263,7 @@ var testCmd = &cobra.Command{
 	Short: "Test the visor with public visors on network",
 	Long:  "\n  Creates routes to public visors and measures round-trip latency.",
 	Run: func(cmd *cobra.Command, _ []string) {
-		pingConfig := visor.PingConfig{Tries: tries, PcktSize: pcktSize, PubVisCount: pubVisCount}
+		pingConfig := visorapi.PingConfig{Tries: tries, PcktSize: pcktSize, PubVisCount: pubVisCount}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)

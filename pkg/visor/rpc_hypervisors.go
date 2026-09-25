@@ -6,10 +6,11 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // HVListVisors returns summaries of all visors connected to this hypervisor.
-func (r *RPC) HVListVisors(_ *struct{}, out *[]HVVisorEntry) (err error) {
+func (r *RPC) HVListVisors(_ *struct{}, out *[]visorapi.HVVisorEntry) (err error) {
 	defer rpcutil.LogCall(r.log, "HVListVisors", nil)(out, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -26,7 +27,7 @@ func (r *RPC) HVListVisors(_ *struct{}, out *[]HVVisorEntry) (err error) {
 // HVListDirectVisors returns summaries of visors DIRECTLY connected
 // to this hypervisor (no sub-hypervisor merging). Powers the tree
 // builder's per-sub-hypervisor section.
-func (r *RPC) HVListDirectVisors(_ *struct{}, out *[]HVVisorEntry) (err error) {
+func (r *RPC) HVListDirectVisors(_ *struct{}, out *[]visorapi.HVVisorEntry) (err error) {
 	defer rpcutil.LogCall(r.log, "HVListDirectVisors", nil)(out, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -42,7 +43,7 @@ func (r *RPC) HVListDirectVisors(_ *struct{}, out *[]HVVisorEntry) (err error) {
 
 // HVListVisorsTree returns the structured tree of hypervisor sections
 // for the UI's main node list.
-func (r *RPC) HVListVisorsTree(_ *struct{}, out *HVVisorTree) (err error) {
+func (r *RPC) HVListVisorsTree(_ *struct{}, out *visorapi.HVVisorTree) (err error) {
 	defer rpcutil.LogCall(r.log, "HVListVisorsTree", nil)(out, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -57,7 +58,7 @@ func (r *RPC) HVListVisorsTree(_ *struct{}, out *HVVisorTree) (err error) {
 }
 
 // HVVisorSummary returns a detailed summary of a specific remote visor.
-func (r *RPC) HVVisorSummary(pk *cipher.PubKey, out *Summary) (err error) {
+func (r *RPC) HVVisorSummary(pk *cipher.PubKey, out *visorapi.Summary) (err error) {
 	defer rpcutil.LogCall(r.log, "HVVisorSummary", pk)(out, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -72,7 +73,7 @@ func (r *RPC) HVVisorSummary(pk *cipher.PubKey, out *Summary) (err error) {
 }
 
 // HVStartApp starts an app on a remote visor.
-func (r *RPC) HVStartApp(in *HVAppArgs, _ *struct{}) (err error) {
+func (r *RPC) HVStartApp(in *visorapi.HVAppArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVStartApp", in)(nil, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -82,7 +83,7 @@ func (r *RPC) HVStartApp(in *HVAppArgs, _ *struct{}) (err error) {
 }
 
 // HVStopApp stops an app on a remote visor.
-func (r *RPC) HVStopApp(in *HVAppArgs, _ *struct{}) (err error) {
+func (r *RPC) HVStopApp(in *visorapi.HVAppArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVStopApp", in)(nil, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -92,7 +93,7 @@ func (r *RPC) HVStopApp(in *HVAppArgs, _ *struct{}) (err error) {
 }
 
 // HVSetMinHops sets min_hops on a remote visor.
-func (r *RPC) HVSetMinHops(in *HVMinHopsArgs, _ *struct{}) (err error) {
+func (r *RPC) HVSetMinHops(in *visorapi.HVMinHopsArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVSetMinHops", in)(nil, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -102,7 +103,7 @@ func (r *RPC) HVSetMinHops(in *HVMinHopsArgs, _ *struct{}) (err error) {
 }
 
 // HVSetRewardAddress sets the reward address on a remote visor.
-func (r *RPC) HVSetRewardAddress(in *HVRewardArgs, out *string) (err error) {
+func (r *RPC) HVSetRewardAddress(in *visorapi.HVRewardArgs, out *string) (err error) {
 	defer rpcutil.LogCall(r.log, "HVSetRewardAddress", in)(out, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -117,7 +118,7 @@ func (r *RPC) HVSetRewardAddress(in *HVRewardArgs, out *string) (err error) {
 }
 
 // HVRemoveTransport deletes a transport on a remote visor.
-func (r *RPC) HVRemoveTransport(in *HVTransportArgs, _ *struct{}) (err error) {
+func (r *RPC) HVRemoveTransport(in *visorapi.HVTransportArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVRemoveTransport", in)(nil, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -127,7 +128,7 @@ func (r *RPC) HVRemoveTransport(in *HVTransportArgs, _ *struct{}) (err error) {
 }
 
 // HVRemoveRoutingRule deletes a routing rule on a remote visor.
-func (r *RPC) HVRemoveRoutingRule(in *HVRoutingRuleArgs, _ *struct{}) (err error) {
+func (r *RPC) HVRemoveRoutingRule(in *visorapi.HVRoutingRuleArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVRemoveRoutingRule", in)(nil, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -137,7 +138,7 @@ func (r *RPC) HVRemoveRoutingRule(in *HVRoutingRuleArgs, _ *struct{}) (err error
 }
 
 // HVAddTransport creates a new transport on a remote visor.
-func (r *RPC) HVAddTransport(in *HVAddTransportArgs, out *TransportSummary) (err error) {
+func (r *RPC) HVAddTransport(in *visorapi.HVAddTransportArgs, out *visorapi.TransportSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "HVAddTransport", in)(out, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -152,7 +153,7 @@ func (r *RPC) HVAddTransport(in *HVAddTransportArgs, out *TransportSummary) (err
 }
 
 // HVSetPublicAutoconnect toggles public_autoconnect on a remote visor.
-func (r *RPC) HVSetPublicAutoconnect(in *HVAutoconnectArgs, _ *struct{}) (err error) {
+func (r *RPC) HVSetPublicAutoconnect(in *visorapi.HVAutoconnectArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVSetPublicAutoconnect", in)(nil, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -162,7 +163,7 @@ func (r *RPC) HVSetPublicAutoconnect(in *HVAutoconnectArgs, _ *struct{}) (err er
 }
 
 // HVSetCalculateRoutes toggles calculate_routes on a remote visor.
-func (r *RPC) HVSetCalculateRoutes(in *HVCalcRoutesArgs, _ *struct{}) (err error) {
+func (r *RPC) HVSetCalculateRoutes(in *visorapi.HVCalcRoutesArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVSetCalculateRoutes", in)(nil, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -192,7 +193,7 @@ func (r *RPC) HVShutdown(pk *cipher.PubKey, _ *struct{}) (err error) {
 }
 
 // HVServiceHealth returns deployment service health for a remote visor.
-func (r *RPC) HVServiceHealth(pk *cipher.PubKey, out *[]ServiceHealthEntry) (err error) {
+func (r *RPC) HVServiceHealth(pk *cipher.PubKey, out *[]visorapi.ServiceHealthEntry) (err error) {
 	defer rpcutil.LogCall(r.log, "HVServiceHealth", pk)(out, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -207,7 +208,7 @@ func (r *RPC) HVServiceHealth(pk *cipher.PubKey, out *[]ServiceHealthEntry) (err
 }
 
 // HVDmsgSessions returns the per-client dmsg sessions snapshot of a remote visor.
-func (r *RPC) HVDmsgSessions(pk *cipher.PubKey, out *DmsgClientSessions) (err error) {
+func (r *RPC) HVDmsgSessions(pk *cipher.PubKey, out *visorapi.DmsgClientSessions) (err error) {
 	defer rpcutil.LogCall(r.log, "HVDmsgSessions", pk)(out, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -222,7 +223,7 @@ func (r *RPC) HVDmsgSessions(pk *cipher.PubKey, out *DmsgClientSessions) (err er
 }
 
 // HVDmsgConnectAll triggers connect-all on a remote visor.
-func (r *RPC) HVDmsgConnectAll(pk *cipher.PubKey, out *DmsgConnectAllResult) (err error) {
+func (r *RPC) HVDmsgConnectAll(pk *cipher.PubKey, out *visorapi.DmsgConnectAllResult) (err error) {
 	defer rpcutil.LogCall(r.log, "HVDmsgConnectAll", pk)(out, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -237,7 +238,7 @@ func (r *RPC) HVDmsgConnectAll(pk *cipher.PubKey, out *DmsgConnectAllResult) (er
 }
 
 // HVSetDmsgSessionsCount persists sessions_count and triggers connect-all on a remote visor.
-func (r *RPC) HVSetDmsgSessionsCount(in *HVDmsgSessionsArgs, out *DmsgConnectAllResult) (err error) {
+func (r *RPC) HVSetDmsgSessionsCount(in *visorapi.HVDmsgSessionsArgs, out *visorapi.DmsgConnectAllResult) (err error) {
 	defer rpcutil.LogCall(r.log, "HVSetDmsgSessionsCount", in)(out, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -252,7 +253,7 @@ func (r *RPC) HVSetDmsgSessionsCount(in *HVDmsgSessionsArgs, out *DmsgConnectAll
 }
 
 // HVLogsSince fetches recent app logs from a remote visor.
-func (r *RPC) HVLogsSince(in *HVLogsArgs, out *[]string) (err error) {
+func (r *RPC) HVLogsSince(in *visorapi.HVLogsArgs, out *[]string) (err error) {
 	defer rpcutil.LogCall(r.log, "HVLogsSince", in)(out, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -267,7 +268,7 @@ func (r *RPC) HVLogsSince(in *HVLogsArgs, out *[]string) (err error) {
 }
 
 // HVSetAutoStart toggles autostart on a remote visor.
-func (r *RPC) HVSetAutoStart(in *HVAutostartArgs, _ *struct{}) (err error) {
+func (r *RPC) HVSetAutoStart(in *visorapi.HVAutostartArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVSetAutoStart", in)(nil, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -277,7 +278,7 @@ func (r *RPC) HVSetAutoStart(in *HVAutostartArgs, _ *struct{}) (err error) {
 }
 
 // HVEmbeddedProxies returns embedded resolving proxy status from a remote visor.
-func (r *RPC) HVEmbeddedProxies(pk *cipher.PubKey, out *EmbeddedProxiesStatus) (err error) {
+func (r *RPC) HVEmbeddedProxies(pk *cipher.PubKey, out *visorapi.EmbeddedProxiesStatus) (err error) {
 	defer rpcutil.LogCall(r.log, "HVEmbeddedProxies", pk)(out, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -292,7 +293,7 @@ func (r *RPC) HVEmbeddedProxies(pk *cipher.PubKey, out *EmbeddedProxiesStatus) (
 }
 
 // HVSetEmbeddedProxyEnabled flips a resolver on or off on a remote visor.
-func (r *RPC) HVSetEmbeddedProxyEnabled(in *HVProxyArgs, _ *struct{}) (err error) {
+func (r *RPC) HVSetEmbeddedProxyEnabled(in *visorapi.HVProxyArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVSetEmbeddedProxyEnabled", in)(nil, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -302,7 +303,7 @@ func (r *RPC) HVSetEmbeddedProxyEnabled(in *HVProxyArgs, _ *struct{}) (err error
 }
 
 // HVSetEmbeddedProxyUpstream sets a resolver's SOCKS5 fallthrough on a remote visor.
-func (r *RPC) HVSetEmbeddedProxyUpstream(in *HVProxyArgs, _ *struct{}) (err error) {
+func (r *RPC) HVSetEmbeddedProxyUpstream(in *visorapi.HVProxyArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVSetEmbeddedProxyUpstream", in)(nil, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -327,7 +328,7 @@ func (r *RPC) HVListTCPPorts(pk *cipher.PubKey, out *[]int) (err error) {
 }
 
 // HVRegisterTCPPort registers a skynet TCP port on a remote visor.
-func (r *RPC) HVRegisterTCPPort(in *HVTCPPortArgs, _ *struct{}) (err error) {
+func (r *RPC) HVRegisterTCPPort(in *visorapi.HVTCPPortArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVRegisterTCPPort", in)(nil, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -337,7 +338,7 @@ func (r *RPC) HVRegisterTCPPort(in *HVTCPPortArgs, _ *struct{}) (err error) {
 }
 
 // HVDeregisterTCPPort deregisters a skynet TCP port on a remote visor.
-func (r *RPC) HVDeregisterTCPPort(in *HVTCPPortArgs, _ *struct{}) (err error) {
+func (r *RPC) HVDeregisterTCPPort(in *visorapi.HVTCPPortArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVDeregisterTCPPort", in)(nil, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -347,7 +348,7 @@ func (r *RPC) HVDeregisterTCPPort(in *HVTCPPortArgs, _ *struct{}) (err error) {
 }
 
 // HVListForwardedPorts returns forwarded ports on a remote visor.
-func (r *RPC) HVListForwardedPorts(pk *cipher.PubKey, out *[]ForwardedPort) (err error) {
+func (r *RPC) HVListForwardedPorts(pk *cipher.PubKey, out *[]visorapi.ForwardedPort) (err error) {
 	defer rpcutil.LogCall(r.log, "HVListForwardedPorts", pk)(out, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -362,7 +363,7 @@ func (r *RPC) HVListForwardedPorts(pk *cipher.PubKey, out *[]ForwardedPort) (err
 }
 
 // HVRegisterForwardedPort registers a forwarded port on a remote visor.
-func (r *RPC) HVRegisterForwardedPort(in *HVForwardedPortArgs, _ *struct{}) (err error) {
+func (r *RPC) HVRegisterForwardedPort(in *visorapi.HVForwardedPortArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVRegisterForwardedPort", in)(nil, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {
@@ -372,7 +373,7 @@ func (r *RPC) HVRegisterForwardedPort(in *HVForwardedPortArgs, _ *struct{}) (err
 }
 
 // HVUpdateForwardedPort updates a forwarded port on a remote visor.
-func (r *RPC) HVUpdateForwardedPort(in *HVForwardedPortArgs, _ *struct{}) (err error) {
+func (r *RPC) HVUpdateForwardedPort(in *visorapi.HVForwardedPortArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVUpdateForwardedPort", in)(nil, &err)
 	v, ok := r.visor.(*Visor)
 	if !ok {

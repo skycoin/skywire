@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // clearPending resets the package-level pending-invite set so each test
@@ -92,7 +92,7 @@ func (a *pairControlAPI) PairRemove(pk cipher.PubKey) error {
 
 // withPairControlEnv turns pairing on, installs an SSE hub (notifyInviteSSE
 // needs one) and the fake RPC, and restores all globals on cleanup.
-func withPairControlEnv(t *testing.T, fake visor.API) {
+func withPairControlEnv(t *testing.T, fake visorapi.API) {
 	t.Helper()
 	origEnable, origHub := pairEnable, hub
 	pairEnable = true

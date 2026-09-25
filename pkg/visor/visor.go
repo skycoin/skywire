@@ -49,6 +49,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/stats"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorinit"
 )
@@ -69,8 +70,7 @@ var (
 )
 
 const (
-	supportedProtocolVersion = "0.1.0"
-	shortHashLen             = 6
+	shortHashLen = 6
 	// moduleShutdownTimeout is the timeout given to a module to shutdown cleanly.
 	// Otherwise the shutdown logic will continue and report a timeout error.
 	moduleShutdownTimeout = time.Second * 4
@@ -156,7 +156,7 @@ type Visor struct {
 	// dmsgSrvRole records the in-process dmsg server that actually started
 	// (nil = none), so `visor state --select roles` can report the running
 	// server's key and address rather than only what the config asked for.
-	dmsgSrvRole atomic.Pointer[DmsgServerRole]
+	dmsgSrvRole atomic.Pointer[visorapi.DmsgServerRole]
 
 	// dmsgSrv is the running own-key in-process dmsg server, kept so the
 	// state API can report the clients CONNECTED TO it. Every co-resident
@@ -607,7 +607,7 @@ func preflightSingleInstance(conf *visorconfig.V1, log logrus.FieldLogger) error
 		return nil // nothing listening → free to start
 	}
 	// Something answered. Identify it over the visor RPC before deciding.
-	rc := NewRPCClient(log, conn, RPCPrefix, 5*time.Second)
+	rc := visorapi.NewRPCClient(log, conn, visorapi.RPCPrefix, 5*time.Second)
 	defer rc.Close() //nolint:errcheck
 	ov, oerr := rc.Overview()
 	if oerr != nil {
@@ -920,8 +920,8 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, logBcast *logging.Broad
 	// would fall back to dialing cli_addr for the rest of its life. Individual
 	// API methods nil-guard the subsystems they read, so being reachable
 	// before those exist answers "not ready" rather than crashing.
-	RegisterLocalAPI(v)
-	v.pushCloseStack("visor.local_api", func() error { UnregisterLocalAPI(v); return nil })
+	visorapi.RegisterLocalAPI(v)
+	v.pushCloseStack("visor.local_api", func() error { visorapi.UnregisterLocalAPI(v); return nil })
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
 	if v.conf.Hypervisor == nil {
@@ -1198,7 +1198,7 @@ func (v *Visor) RecentAppLogMerged(appName string, minLevel logrus.Level) []logg
 //
 // Returns nil channel + a no-op cancel when grouping is disabled on
 // this visor (e.g. early init or tests).
-func (v *Visor) SubscribeGroupMessages(capacity int) (<-chan GroupMessage, func() uint64) {
+func (v *Visor) SubscribeGroupMessages(capacity int) (<-chan visorapi.GroupMessage, func() uint64) {
 	v.initLock.RLock()
 	inbox := v.grouping.inbox
 	v.initLock.RUnlock()
@@ -1228,7 +1228,7 @@ func (v *Visor) SubscribeGroupMessages(capacity int) (<-chan GroupMessage, func(
 // that's been disconnected longer than the buffer turnover will see
 // only the most recent groupInboxCap messages, not the full gap.
 // Same limitation as PairPoll/snapshotAfter.
-func (v *Visor) SnapshotGroupMessagesAfter(since time.Time) []GroupMessage {
+func (v *Visor) SnapshotGroupMessagesAfter(since time.Time) []visorapi.GroupMessage {
 	v.initLock.RLock()
 	inbox := v.grouping.inbox
 	v.initLock.RUnlock()
@@ -1255,7 +1255,7 @@ func (v *Visor) SnapshotGroupMessagesAfter(since time.Time) []GroupMessage {
 // Filter contract matches SnapshotGroupMessagesAfter: strict
 // greater-than (TS > since). The handler's lastSentNs dedup
 // depends on it.
-func (v *Visor) SnapshotGroupHistoryAfter(groupID string, since time.Time) []GroupMessage {
+func (v *Visor) SnapshotGroupHistoryAfter(groupID string, since time.Time) []visorapi.GroupMessage {
 	v.initLock.RLock()
 	hist := v.grouping.history
 	v.initLock.RUnlock()

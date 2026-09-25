@@ -40,7 +40,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skychat/dm"
 	"github.com/skycoin/skywire/pkg/skychat/message"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // --- fakes ------------------------------------------------------------------
@@ -59,7 +59,7 @@ type pairHandlersAPI struct {
 	markedActive []cipher.PubKey
 	sent         []pairSentMsg
 	deleted      []pairDeletedMsg
-	list         []visor.PairInfo
+	list         []visorapi.PairInfo
 
 	addErr        error
 	removeErr     error
@@ -129,13 +129,13 @@ func (a *pairHandlersAPI) PairDelete(pk cipher.PubKey, id string) error {
 	return nil
 }
 
-func (a *pairHandlersAPI) PairList() ([]visor.PairInfo, error) {
+func (a *pairHandlersAPI) PairList() ([]visorapi.PairInfo, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.list, a.listErr
 }
 
-func (a *pairHandlersAPI) PairPoll(time.Time) ([]visor.PairMessage, error) { return nil, nil }
+func (a *pairHandlersAPI) PairPoll(time.Time) ([]visorapi.PairMessage, error) { return nil, nil }
 
 func (a *pairHandlersAPI) snapshot() ([]cipher.PubKey, []cipher.PubKey, []cipher.PubKey, []pairSentMsg) {
 	a.mu.Lock()
@@ -223,7 +223,7 @@ func (c *capturingClient) closeAll() {
 // withPairHandlerEnv turns pairing on, gives the test a private SSE hub, a
 // fake visor RPC, and a chatCtrl wired to a capturing transport. Every global
 // it touches is restored on cleanup.
-func withPairHandlerEnv(t *testing.T, fake visor.API) *capturingClient {
+func withPairHandlerEnv(t *testing.T, fake visorapi.API) *capturingClient {
 	t.Helper()
 	clearPending()
 
@@ -301,7 +301,7 @@ func mustPK(t *testing.T) cipher.PubKey {
 
 func TestPairRootHandler_GetListsPairs(t *testing.T) {
 	peer := mustPK(t)
-	fake := &pairHandlersAPI{list: []visor.PairInfo{
+	fake := &pairHandlersAPI{list: []visorapi.PairInfo{
 		{PeerPK: peer, Port: 4242, EstablishedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)},
 	}}
 	withPairHandlerEnv(t, fake)
@@ -315,7 +315,7 @@ func TestPairRootHandler_GetListsPairs(t *testing.T) {
 	if ct := rr.Header().Get("Content-Type"); ct != "application/json" {
 		t.Errorf("Content-Type = %q, want application/json", ct)
 	}
-	var got []visor.PairInfo
+	var got []visorapi.PairInfo
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode body: %v (raw %q)", err, rr.Body.String())
 	}

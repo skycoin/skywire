@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // cacheTTL bounds how long a computed health snapshot is served before the
@@ -21,15 +22,6 @@ const cacheTTL = 60 * time.Second
 
 // nodeCheckTimeout bounds a single per-node discovery + dial + health-check.
 const nodeCheckTimeout = 10 * time.Second
-
-// NodeHealth represents the health status of a setup node.
-type NodeHealth struct {
-	PK          cipher.PubKey `json:"pk"`
-	Healthy     bool          `json:"healthy"`
-	LastChecked time.Time     `json:"last_checked"`
-	LastError   string        `json:"last_error,omitempty"`
-	Latency     time.Duration `json:"latency_ms"`
-}
 
 // NodeHealthTracker computes health status of TPS and RSN nodes on demand,
 // behind a short TTL cache. It re-seeds its node set from the supplied
@@ -49,8 +41,8 @@ type NodeHealthTracker struct {
 	baseCtx context.Context
 
 	mu        sync.RWMutex
-	tpsHealth map[cipher.PubKey]*NodeHealth
-	rsnHealth map[cipher.PubKey]*NodeHealth
+	tpsHealth map[cipher.PubKey]*visorapi.NodeHealth
+	rsnHealth map[cipher.PubKey]*visorapi.NodeHealth
 	lastCheck time.Time
 
 	// refreshMu serializes recompute so concurrent RPCs don't stampede the
@@ -59,7 +51,7 @@ type NodeHealthTracker struct {
 
 	// checkFn performs a single per-node check. It defaults to checkNode and
 	// is overridable in tests to avoid real dmsg dials.
-	checkFn func(ctx context.Context, pk cipher.PubKey, port uint16, kind string) *NodeHealth
+	checkFn func(ctx context.Context, pk cipher.PubKey, port uint16, kind string) *visorapi.NodeHealth
 }
 
 // NewNodeHealthTracker creates a new on-demand health tracker. The providers
@@ -71,8 +63,8 @@ func NewNodeHealthTracker(dmsgC *dmsg.Client, log *logging.Logger, tpsProvider, 
 		tpsProvider: tpsProvider,
 		rsnProvider: rsnProvider,
 		baseCtx:     context.Background(),
-		tpsHealth:   make(map[cipher.PubKey]*NodeHealth),
-		rsnHealth:   make(map[cipher.PubKey]*NodeHealth),
+		tpsHealth:   make(map[cipher.PubKey]*visorapi.NodeHealth),
+		rsnHealth:   make(map[cipher.PubKey]*visorapi.NodeHealth),
 	}
 	nht.checkFn = nht.checkNode
 	return nht
@@ -127,8 +119,8 @@ func (nht *NodeHealthTracker) recompute() {
 		rsnPKs = nht.rsnProvider()
 	}
 
-	tpsResults := make([]*NodeHealth, len(tpsPKs))
-	rsnResults := make([]*NodeHealth, len(rsnPKs))
+	tpsResults := make([]*visorapi.NodeHealth, len(tpsPKs))
+	rsnResults := make([]*visorapi.NodeHealth, len(rsnPKs))
 
 	var wg sync.WaitGroup
 	for i, pk := range tpsPKs {
@@ -147,7 +139,7 @@ func (nht *NodeHealthTracker) recompute() {
 	}
 	wg.Wait()
 
-	tpsMap := make(map[cipher.PubKey]*NodeHealth, len(tpsResults))
+	tpsMap := make(map[cipher.PubKey]*visorapi.NodeHealth, len(tpsResults))
 	tpsHealthy := 0
 	for _, h := range tpsResults {
 		tpsMap[h.PK] = h
@@ -155,7 +147,7 @@ func (nht *NodeHealthTracker) recompute() {
 			tpsHealthy++
 		}
 	}
-	rsnMap := make(map[cipher.PubKey]*NodeHealth, len(rsnResults))
+	rsnMap := make(map[cipher.PubKey]*visorapi.NodeHealth, len(rsnResults))
 	rsnHealthy := 0
 	for _, h := range rsnResults {
 		rsnMap[h.PK] = h
@@ -180,12 +172,12 @@ func (nht *NodeHealthTracker) recompute() {
 
 // checkNode performs a discovery lookup + dmsg dial + HealthCheck RPC against a
 // single setup node and returns its health. kind is "TPS" or "RSN" (for logs).
-func (nht *NodeHealthTracker) checkNode(ctx context.Context, pk cipher.PubKey, port uint16, kind string) *NodeHealth {
+func (nht *NodeHealthTracker) checkNode(ctx context.Context, pk cipher.PubKey, port uint16, kind string) *visorapi.NodeHealth {
 	start := time.Now()
 	err := nht.doHealthCheck(ctx, pk, port)
 	latency := time.Since(start)
 
-	h := &NodeHealth{PK: pk, LastChecked: time.Now(), Latency: latency}
+	h := &visorapi.NodeHealth{PK: pk, LastChecked: time.Now(), Latency: latency}
 	if err != nil {
 		h.Healthy = false
 		h.LastError = err.Error()
@@ -238,7 +230,7 @@ func (nht *NodeHealthTracker) GetTPSNodesSorted() []cipher.PubKey {
 	nht.mu.RLock()
 	defer nht.mu.RUnlock()
 
-	nodes := make([]*NodeHealth, 0, len(nht.tpsHealth))
+	nodes := make([]*visorapi.NodeHealth, 0, len(nht.tpsHealth))
 	for _, h := range nht.tpsHealth {
 		nodes = append(nodes, h)
 	}
@@ -266,7 +258,7 @@ func (nht *NodeHealthTracker) GetRSNNodesSorted() []cipher.PubKey {
 	nht.mu.RLock()
 	defer nht.mu.RUnlock()
 
-	nodes := make([]*NodeHealth, 0, len(nht.rsnHealth))
+	nodes := make([]*visorapi.NodeHealth, 0, len(nht.rsnHealth))
 	for _, h := range nht.rsnHealth {
 		nodes = append(nodes, h)
 	}
@@ -288,13 +280,13 @@ func (nht *NodeHealthTracker) GetRSNNodesSorted() []cipher.PubKey {
 }
 
 // GetTPSHealth returns health status for all TPS nodes.
-func (nht *NodeHealthTracker) GetTPSHealth() []NodeHealth {
+func (nht *NodeHealthTracker) GetTPSHealth() []visorapi.NodeHealth {
 	nht.ensureFresh()
 
 	nht.mu.RLock()
 	defer nht.mu.RUnlock()
 
-	result := make([]NodeHealth, 0, len(nht.tpsHealth))
+	result := make([]visorapi.NodeHealth, 0, len(nht.tpsHealth))
 	for _, h := range nht.tpsHealth {
 		result = append(result, *h)
 	}
@@ -302,13 +294,13 @@ func (nht *NodeHealthTracker) GetTPSHealth() []NodeHealth {
 }
 
 // GetRSNHealth returns health status for all RSN nodes.
-func (nht *NodeHealthTracker) GetRSNHealth() []NodeHealth {
+func (nht *NodeHealthTracker) GetRSNHealth() []visorapi.NodeHealth {
 	nht.ensureFresh()
 
 	nht.mu.RLock()
 	defer nht.mu.RUnlock()
 
-	result := make([]NodeHealth, 0, len(nht.rsnHealth))
+	result := make([]visorapi.NodeHealth, 0, len(nht.rsnHealth))
 	for _, h := range nht.rsnHealth {
 		result = append(result, *h)
 	}

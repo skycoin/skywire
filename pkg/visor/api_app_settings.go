@@ -22,33 +22,20 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router/routersettings"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
-
-// AppSettings is the CLI's read of an app's live tuning knobs: the values the
-// visor intends, the version they carry, and the version the app last reported
-// having installed. Version != Applied is a change still in flight — the app
-// installs it on its next pull (one tunnel.probe_interval, 5 s by default).
-type AppSettings struct {
-	AppName string           `json:"app_name"`
-	Values  map[string]int64 `json:"values,omitempty"`
-	// Text carries the LIST knobs (pool.exclude_pks, pool.require_tp_types),
-	// whose payload is a comma-separated set of tokens rather than an int64.
-	Text    map[string]string `json:"text,omitempty"`
-	Version uint64            `json:"version"`
-	Applied uint64            `json:"applied"`
-}
 
 // ErrProcManagerNotAvailable is returned when the app settings are asked for on
 // a visor with no proc manager (a hypervisor-only process, or a unit test).
 var ErrProcManagerNotAvailable = errors.New("proc manager not available")
 
 // GetAppSettings returns the live tuning knobs held for appName.
-func (v *Visor) GetAppSettings(appName string) (AppSettings, error) {
+func (v *Visor) GetAppSettings(appName string) (visorapi.AppSettings, error) {
 	if v.procM == nil {
-		return AppSettings{}, ErrProcManagerNotAvailable
+		return visorapi.AppSettings{}, ErrProcManagerNotAvailable
 	}
 	vals, text, version, applied := v.procM.AppSettingsState(appName)
-	return AppSettings{AppName: appName, Values: vals, Text: text, Version: version, Applied: applied}, nil
+	return visorapi.AppSettings{AppName: appName, Values: vals, Text: text, Version: version, Applied: applied}, nil
 }
 
 // SetAppSettings replaces the whole intended knob set for appName and returns
@@ -62,15 +49,15 @@ func (v *Visor) GetAppSettings(appName string) (AppSettings, error) {
 // which clears the app here and drops its entry from the config; the version
 // counter still MOVES, so the running app learns of the reset on its next pull
 // rather than keeping what it already installed.
-func (v *Visor) SetAppSettings(appName string, vals map[string]int64, text map[string]string) (AppSettings, error) {
+func (v *Visor) SetAppSettings(appName string, vals map[string]int64, text map[string]string) (visorapi.AppSettings, error) {
 	if v.procM == nil {
-		return AppSettings{}, ErrProcManagerNotAvailable
+		return visorapi.AppSettings{}, ErrProcManagerNotAvailable
 	}
 	version := v.procM.SetAppSettings(appName, vals, text)
 	v.mirrorShapeHold(appName, vals)
 	v.persistAppSettings()
 	_, _, _, applied := v.procM.AppSettingsState(appName)
-	return AppSettings{AppName: appName, Values: vals, Text: text, Version: version, Applied: applied}, nil
+	return visorapi.AppSettings{AppName: appName, Values: vals, Text: text, Version: version, Applied: applied}, nil
 }
 
 // persistAppSettings writes the whole per-app knob set to the config file. A

@@ -28,7 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cliout/clitp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -170,13 +170,13 @@ var tpCmd = &cobra.Command{
 			// Process and print results with streaming output
 			type remoteResult struct {
 				TargetPK   cipher.PubKey
-				Transports []visor.TPSTransportResponse
+				Transports []visorapi.TPSTransportResponse
 				Error      string
 			}
 			var allResults []remoteResult // for JSON output
 
 			for i, targetPK := range targetPKs {
-				var tpsTransports []visor.TPSTransportResponse
+				var tpsTransports []visorapi.TPSTransportResponse
 				var tpErr error
 
 				if useEmbeddedTPS {
@@ -369,7 +369,7 @@ var tpCmd = &cobra.Command{
 		}
 
 		// Get transport logs for bandwidth display
-		var logEntries []visor.TransportLogEntry
+		var logEntries []visorapi.TransportLogEntry
 		bwByTpID := make(map[string]struct{ recv, sent uint64 })
 		if bwDays > 0 {
 			logEntries, err = rpcClient.GetTransportLogs(bwDays)
@@ -533,7 +533,7 @@ var (
 )
 
 // PrintTransports prints transports used by the visor
-func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
+func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visorapi.TransportSummary) {
 	sortTransports(tps...)
 
 	var versionsByPK map[string]string
@@ -738,7 +738,7 @@ func formatLatencyMS(ms float64) string {
 	return fmt.Sprintf("%.0fms", ms)
 }
 
-func sortTransports(tps ...*visor.TransportSummary) {
+func sortTransports(tps ...*visorapi.TransportSummary) {
 	sort.Slice(tps, func(i, j int) bool {
 		return tps[i].ID.String() < tps[j].ID.String()
 	})
@@ -764,7 +764,7 @@ func formatBytes(bytes uint64) string {
 }
 
 // PrintTransportsWithBandwidth prints transports with bandwidth data from logs
-func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]struct{ recv, sent uint64 }, inactive []inactiveTransport, tps ...*visor.TransportSummary) {
+func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]struct{ recv, sent uint64 }, inactive []inactiveTransport, tps ...*visorapi.TransportSummary) {
 	sortTransports(tps...)
 
 	var versionsByPK map[string]string
@@ -1028,7 +1028,7 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 // doesn't change live). Bandwidth is read from each tick's
 // Transports() RPC — tp.Log already aggregates send/recv counters —
 // so the numbers tick up in place.
-func renderTransportListLive(rpcClient visor.API) (string, error) {
+func renderTransportListLive(rpcClient visorapi.API) (string, error) {
 	var pks cipher.PubKeys
 	if filterPubKeys != nil {
 		if err := pks.Set(strings.Join(filterPubKeys, ",")); err != nil {

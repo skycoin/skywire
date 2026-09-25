@@ -25,7 +25,7 @@ import (
 	"path/filepath"
 
 	"github.com/skycoin/skywire/pkg/skychat/xfer"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // groupFileKeys resolves the seal + open keys for one attachment.
@@ -42,10 +42,10 @@ func groupFileKeys(groupID, fileID string) (seal []byte, open [][]byte, err erro
 	if cxoGroupSess != nil && groupID == cxoGroup {
 		return cxoGroupSess.FileKeys(fileID)
 	}
-	var res visor.GroupFileKeyResult
-	if rErr := pairRPCCall("GroupFileKey", func(c visor.API) error {
+	var res visorapi.GroupFileKeyResult
+	if rErr := pairRPCCall("GroupFileKey", func(c visorapi.API) error {
 		var cErr error
-		res, cErr = c.GroupFileKey(visor.GroupFileKeyArgs{ID: groupID, FileID: fileID})
+		res, cErr = c.GroupFileKey(visorapi.GroupFileKeyArgs{ID: groupID, FileID: fileID})
 		return cErr
 	}); rErr != nil {
 		return nil, nil, fmt.Errorf("skychat: attachment keys: %w", rErr)

@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // RSNRemoteStat is the per-RSN entry returned by /api/route-setup-nodes/stats.
@@ -72,7 +73,7 @@ func (hv *Hypervisor) getRSNRemoteStats() http.HandlerFunc {
 func (hv *Hypervisor) fetchOneRSNStat(pk cipher.PubKey) RSNRemoteStat {
 	entry := RSNRemoteStat{PK: pk}
 	url := fmt.Sprintf("dmsg://%s:80/stats", pk.Hex())
-	resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
+	resp, err := hv.visor.DmsgHTTP(visorapi.DmsgHTTPRequest{
 		URL:    url,
 		Method: "GET",
 	})

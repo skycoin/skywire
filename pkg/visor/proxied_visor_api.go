@@ -28,6 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // ErrProxyNotSupported is returned by proxiedVisorAPI methods that
@@ -44,20 +45,20 @@ var ErrProxyNotSupported = errors.New("operation not supported on proxied visor"
 type proxiedVisorAPI struct {
 	proxyDefaultAPI
 	targetPK cipher.PubKey
-	hvAPI    API
+	hvAPI    visorapi.API
 }
 
-func newProxiedVisorAPI(targetPK cipher.PubKey, hvAPI API) *proxiedVisorAPI {
+func newProxiedVisorAPI(targetPK cipher.PubKey, hvAPI visorapi.API) *proxiedVisorAPI {
 	return &proxiedVisorAPI{targetPK: targetPK, hvAPI: hvAPI}
 }
 
 // --- Methods with direct HVxxx counterparts ---
 
-func (p *proxiedVisorAPI) Summary() (*Summary, error) {
+func (p *proxiedVisorAPI) Summary() (*visorapi.Summary, error) {
 	return p.hvAPI.HVVisorSummary(p.targetPK)
 }
 
-func (p *proxiedVisorAPI) Overview() (*Overview, error) {
+func (p *proxiedVisorAPI) Overview() (*visorapi.Overview, error) {
 	// HVVisorSummary returns a full Summary which includes Overview.
 	// Re-projecting saves us a second round-trip and matches the
 	// shape /api/visors/{pk} returns for direct visors.
@@ -71,7 +72,7 @@ func (p *proxiedVisorAPI) Overview() (*Overview, error) {
 	return s.Overview, nil
 }
 
-func (p *proxiedVisorAPI) Health() (*HealthInfo, error) {
+func (p *proxiedVisorAPI) Health() (*visorapi.HealthInfo, error) {
 	s, err := p.hvAPI.HVVisorSummary(p.targetPK)
 	if err != nil {
 		return nil, err
@@ -104,7 +105,7 @@ func (p *proxiedVisorAPI) Apps() ([]*appserver.AppState, error) {
 	return s.Overview.Apps, nil
 }
 
-func (p *proxiedVisorAPI) Transports(_ []string, _ []cipher.PubKey, _ bool) ([]*TransportSummary, error) {
+func (p *proxiedVisorAPI) Transports(_ []string, _ []cipher.PubKey, _ bool) ([]*visorapi.TransportSummary, error) {
 	s, err := p.hvAPI.HVVisorSummary(p.targetPK)
 	if err != nil {
 		return nil, err
@@ -134,7 +135,7 @@ func (p *proxiedVisorAPI) RoutingRules() ([]routing.Rule, error) {
 	return out, nil
 }
 
-func (p *proxiedVisorAPI) RouteGroups() ([]RouteGroupInfo, error) {
+func (p *proxiedVisorAPI) RouteGroups() ([]visorapi.RouteGroupInfo, error) {
 	s, err := p.hvAPI.HVVisorSummary(p.targetPK)
 	if err != nil {
 		return nil, err
@@ -205,7 +206,7 @@ func (p *proxiedVisorAPI) SetRewardAddress(addr string) (string, error) {
 	return p.hvAPI.HVSetRewardAddress(p.targetPK, addr)
 }
 
-func (p *proxiedVisorAPI) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, _ bool, _ bool) (*TransportSummary, error) {
+func (p *proxiedVisorAPI) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, _ bool, _ bool) (*visorapi.TransportSummary, error) {
 	return p.hvAPI.HVAddTransport(p.targetPK, remote, tpType, label, timeout)
 }
 
@@ -244,7 +245,7 @@ func (p *proxiedVisorAPI) Shutdown() error {
 	return p.hvAPI.HVShutdown(p.targetPK)
 }
 
-func (p *proxiedVisorAPI) ServiceHealth() ([]ServiceHealthEntry, error) {
+func (p *proxiedVisorAPI) ServiceHealth() ([]visorapi.ServiceHealthEntry, error) {
 	return p.hvAPI.HVServiceHealth(p.targetPK)
 }
 
@@ -252,7 +253,7 @@ func (p *proxiedVisorAPI) LogsSince(timestamp time.Time, appName string) ([]stri
 	return p.hvAPI.HVLogsSince(p.targetPK, timestamp, appName)
 }
 
-func (p *proxiedVisorAPI) DMSGServers() ([]DMSGServerInfo, error) {
+func (p *proxiedVisorAPI) DMSGServers() ([]visorapi.DMSGServerInfo, error) {
 	s, err := p.hvAPI.HVVisorSummary(p.targetPK)
 	if err != nil {
 		return nil, err
@@ -266,7 +267,7 @@ func (p *proxiedVisorAPI) DMSGServers() ([]DMSGServerInfo, error) {
 // EmbeddedProxies / RegisterTCPPort / RegisterForwardedPort etc.
 // reach the sub-hypervisor's HV methods directly.
 
-func (p *proxiedVisorAPI) EmbeddedProxies() (*EmbeddedProxiesStatus, error) {
+func (p *proxiedVisorAPI) EmbeddedProxies() (*visorapi.EmbeddedProxiesStatus, error) {
 	return p.hvAPI.HVEmbeddedProxies(p.targetPK)
 }
 
@@ -294,15 +295,15 @@ func (p *proxiedVisorAPI) DeregisterTCPPort(localPort int) error {
 	return p.hvAPI.HVDeregisterTCPPort(p.targetPK, localPort)
 }
 
-func (p *proxiedVisorAPI) ListForwardedPorts() ([]ForwardedPort, error) {
+func (p *proxiedVisorAPI) ListForwardedPorts() ([]visorapi.ForwardedPort, error) {
 	return p.hvAPI.HVListForwardedPorts(p.targetPK)
 }
 
-func (p *proxiedVisorAPI) RegisterForwardedPort(fp ForwardedPort) error {
+func (p *proxiedVisorAPI) RegisterForwardedPort(fp visorapi.ForwardedPort) error {
 	return p.hvAPI.HVRegisterForwardedPort(p.targetPK, fp)
 }
 
-func (p *proxiedVisorAPI) UpdateForwardedPort(fp ForwardedPort) error {
+func (p *proxiedVisorAPI) UpdateForwardedPort(fp visorapi.ForwardedPort) error {
 	return p.hvAPI.HVUpdateForwardedPort(p.targetPK, fp)
 }
 
@@ -371,7 +372,7 @@ func hexNibble(c byte) (byte, error) {
 }
 
 // Compile-time guard.
-var _ API = (*proxiedVisorAPI)(nil)
+var _ visorapi.API = (*proxiedVisorAPI)(nil)
 
 // Suppress unused-import warnings on the doc-only imports.
 var _ context.Context

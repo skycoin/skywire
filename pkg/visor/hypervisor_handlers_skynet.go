@@ -11,6 +11,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func (hv *Hypervisor) getPorts() http.HandlerFunc {
@@ -88,7 +89,7 @@ func (hv *Hypervisor) getForwardedPorts() http.HandlerFunc {
 
 func (hv *Hypervisor) postRegisterForwardedPort() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var p ForwardedPort
+		var p visorapi.ForwardedPort
 		if err := httputil.ReadJSON(r, &p); err != nil {
 			if err != io.EOF {
 				hv.log(r).Warnf("postRegisterForwardedPort: %v", err)
@@ -106,7 +107,7 @@ func (hv *Hypervisor) postRegisterForwardedPort() http.HandlerFunc {
 
 func (hv *Hypervisor) postUpdateForwardedPort() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var p ForwardedPort
+		var p visorapi.ForwardedPort
 		if err := httputil.ReadJSON(r, &p); err != nil {
 			if err != io.EOF {
 				hv.log(r).Warnf("postUpdateForwardedPort: %v", err)

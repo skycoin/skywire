@@ -6,13 +6,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"io"
 	"net/http"
 	"time"
 )
 
 // SkynetHTTP performs an HTTP request over skynet using the visor's router.
-func (v *Visor) SkynetHTTP(req SkynetHTTPRequest) (*SkynetHTTPResponse, error) {
+func (v *Visor) SkynetHTTP(req visorapi.SkynetHTTPRequest) (*visorapi.SkynetHTTPResponse, error) {
 	if v.router == nil {
 		return nil, fmt.Errorf("router not available")
 	}
@@ -85,7 +86,7 @@ func (v *Visor) SkynetHTTP(req SkynetHTTPRequest) (*SkynetHTTPResponse, error) {
 		headers[k] = resp.Header.Get(k)
 	}
 
-	return &SkynetHTTPResponse{
+	return &visorapi.SkynetHTTPResponse{
 		StatusCode: resp.StatusCode,
 		Status:     resp.Status,
 		Header:     headers,

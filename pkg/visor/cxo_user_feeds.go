@@ -30,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/telemetrywire"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // systemCXOFeedName is the well-known name of the visor's telemetry
@@ -233,8 +234,8 @@ func (v *Visor) setTPDLeafPubReason(reason string) {
 
 // tpdLeafPublisherState reports the live wiring of the CXO tp-list
 // publisher for the state snapshot.
-func (v *Visor) tpdLeafPublisherState() *TPDLeafPublisherState {
-	st := &TPDLeafPublisherState{}
+func (v *Visor) tpdLeafPublisherState() *visorapi.TPDLeafPublisherState {
+	st := &visorapi.TPDLeafPublisherState{}
 	if v.tpM != nil {
 		st.Wired = v.tpM.HasTPDLeafPublisher()
 	}
@@ -277,70 +278,12 @@ func (v *Visor) setTPListCXOPub(pub *treestore.Publisher) {
 	v.cxoUserFeedsMu.Unlock()
 }
 
-// TPDLeafPublisherState reports whether the transport manager holds the
-// CXO transport-list snapshot publisher (transport.Manager.
-// SetTPDLeafPublisher). Wired=false means transport registration runs
-// over the HTTP/dmsg-HTTP re-register path instead, and Reason carries
-// why the publisher was never installed — the treestore construction
-// error, "dmsg client absent", "stats disabled by config", or
-// a generic "not completed init" note during the startup window.
-type TPDLeafPublisherState struct {
-	Wired  bool   `json:"wired"`
-	Reason string `json:"reason,omitempty"`
-}
-
-// CXOFeedState pairs a feed's identity (name + dmsg port) with its live
-// publish-health snapshot. Surfaced by StateSnapshot under .cxo.
-type CXOFeedState struct {
-	Name string `json:"name"`
-	Port uint16 `json:"port,omitempty"`
-	treestore.PublishState
-	// CurrentLeaves is populated only for the "stats" telemetry feed: it
-	// reports the count of per-transport telemetry rows the feed carries
-	// across its ≤16 compact sharded leaves (transports/telemetry/<sh>).
-	// With the sharded shape every packed row is a LIVE transport (the
-	// sampler re-encodes each shard from the live set every tick), so Live
-	// == Total and Dead is structurally 0 — the stale-leaf bloat the old
-	// per-transport `current` format accumulated no longer exists.
-	CurrentLeaves *CurrentLeafStats `json:"current_leaves,omitempty"`
-	// Allowlist is the set of PKs currently permitted to subscribe to this
-	// feed (nil = OPEN to all). For a service-consumed feed (stats,
-	// tp-list, registration) this MUST contain the consuming service's PK
-	// or that service can't fill — its subscribe is rejected and it shows
-	// up under Denied below.
-	Allowlist []string `json:"allowlist,omitempty"`
-	// Denied lists would-be subscribers the allowlist turned away
-	// (most-recent first). A denied PK that isn't a known peer is the
-	// direct signature of a gating misconfiguration — e.g. TPD dialing in
-	// under a CXO node key that differs from the transport_discovery_dmsg
-	// PK the visor allowlisted.
-	Denied []DeniedSubscriber `json:"denied,omitempty"`
-}
-
-// DeniedSubscriber is one rejected-subscriber record for CXOFeedState.
-type DeniedSubscriber struct {
-	PK     string    `json:"pk"`
-	Count  int       `json:"count"`
-	LastAt time.Time `json:"last_at"`
-}
-
-// CurrentLeafStats is the live/dead breakdown of the telemetry feed's
-// per-transport telemetry rows, decoded from the compact sharded leaves
-// (transports/telemetry/<sh>). Each row is classified by whether its
-// transport is in the visor's live set; with the sharded shape the
-// sampler only ever packs live transports, so Dead is normally 0.
-type CurrentLeafStats struct {
-	Total int `json:"total"`
-	Live  int `json:"live"`
-	Dead  int `json:"dead"`
-}
-
 // currentLeafStats walks the publisher's transports/telemetry/<sh> shard
 // leaves, decodes each, and classifies every packed transport row by
 // whether it's in liveIDs. Cheap: ≤16 in-memory leaf decodes plus a map
 // lookup per row.
-func currentLeafStats(pub *treestore.Publisher, liveIDs map[uuid.UUID]struct{}) CurrentLeafStats {
-	var st CurrentLeafStats
+func currentLeafStats(pub *treestore.Publisher, liveIDs map[uuid.UUID]struct{}) visorapi.CurrentLeafStats {
+	var st visorapi.CurrentLeafStats
 	pub.Walk("transports", func(path string, value []byte) bool {
 		if _, ok := telemetryShardOfPath(path); !ok {
 			return true
@@ -369,7 +312,7 @@ func currentLeafStats(pub *treestore.Publisher, liveIDs map[uuid.UUID]struct{}) 
 // safe — see treestore.Publisher.PublishState.
 // feedGating snapshots a publisher's subscriber allowlist (as hex PKs;
 // nil = open) and the subscribers it has denied, for CXOFeedState.
-func feedGating(pub *treestore.Publisher) (allow []string, denied []DeniedSubscriber) {
+func feedGating(pub *treestore.Publisher) (allow []string, denied []visorapi.DeniedSubscriber) {
 	if pub == nil {
 		return nil, nil
 	}
@@ -377,7 +320,7 @@ func feedGating(pub *treestore.Publisher) (allow []string, denied []DeniedSubscr
 		allow = append(allow, pk.Hex())
 	}
 	for _, d := range pub.Denied() {
-		denied = append(denied, DeniedSubscriber{
+		denied = append(denied, visorapi.DeniedSubscriber{
 			PK:     d.PK.Hex(),
 			Count:  d.Count,
 			LastAt: time.Unix(0, d.LastNanos),
@@ -386,7 +329,7 @@ func feedGating(pub *treestore.Publisher) (allow []string, denied []DeniedSubscr
 	return allow, denied
 }
 
-func (v *Visor) CXOFeedStates() []CXOFeedState {
+func (v *Visor) CXOFeedStates() []visorapi.CXOFeedState {
 	v.cxoUserFeedsMu.Lock()
 	sysPub := v.systemCXOPub
 	tplistPub := v.tplistCXOPub
@@ -398,14 +341,14 @@ func (v *Visor) CXOFeedStates() []CXOFeedState {
 	}
 	v.cxoUserFeedsMu.Unlock()
 
-	var out []CXOFeedState
+	var out []visorapi.CXOFeedState
 	if sysPub != nil {
 		// Live/dead current-leaf breakdown for the telemetry feed: the
 		// feed's own current-leaf paths ∩ the live transport set. Directly
 		// quantifies the dead-leaf bloat that starves TPD's Root fill.
 		cls := currentLeafStats(sysPub, liveTransportIDs(v))
 		allow, denied := feedGating(sysPub)
-		out = append(out, CXOFeedState{
+		out = append(out, visorapi.CXOFeedState{
 			Name:          systemCXOFeedName,
 			Port:          skyenv.DmsgCXOPort,
 			PublishState:  sysPub.PublishState(),
@@ -419,7 +362,7 @@ func (v *Visor) CXOFeedStates() []CXOFeedState {
 	// then there is only the one telemetry entry above.
 	if tplistPub != nil {
 		allow, denied := feedGating(tplistPub)
-		out = append(out, CXOFeedState{
+		out = append(out, visorapi.CXOFeedState{
 			Name:         tplistCXOFeedName,
 			Port:         skyenv.DmsgVisorTPListCXOPort,
 			PublishState: tplistPub.PublishState(),
@@ -431,7 +374,7 @@ func (v *Visor) CXOFeedStates() []CXOFeedState {
 	// only way to see a dmsg-discovery whose subscribe is being refused.
 	if regPub != nil {
 		allow, denied := feedGating(regPub)
-		out = append(out, CXOFeedState{
+		out = append(out, visorapi.CXOFeedState{
 			Name:         "registration",
 			Port:         skyenv.DmsgDMSGDRegistrationCXOPort,
 			PublishState: regPub.PublishState(),
@@ -444,7 +387,7 @@ func (v *Visor) CXOFeedStates() []CXOFeedState {
 	// refused only shows up here.
 	if sdRegPub != nil {
 		allow, denied := feedGating(sdRegPub)
-		out = append(out, CXOFeedState{
+		out = append(out, visorapi.CXOFeedState{
 			Name:         "sd_registration",
 			Port:         skyenv.DmsgVisorSDRegCXOPort,
 			PublishState: sdRegPub.PublishState(),
@@ -457,7 +400,7 @@ func (v *Visor) CXOFeedStates() []CXOFeedState {
 			continue
 		}
 		allow, denied := feedGating(fd.pub)
-		out = append(out, CXOFeedState{
+		out = append(out, visorapi.CXOFeedState{
 			Name:         fd.name,
 			Port:         fd.port,
 			PublishState: fd.pub.PublishState(),

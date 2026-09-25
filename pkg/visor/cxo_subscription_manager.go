@@ -36,8 +36,6 @@ type (
 	CXOTab = cxosub.Tab
 	// CXOSubscriptionManager is the visor's alias for cxosub.Manager.
 	CXOSubscriptionManager = cxosub.Manager
-	// FeedStatus is one row of CXOSubscriptionManager.Status.
-	FeedStatus = cxosub.FeedStatus
 )
 
 // Re-exported feed constants.

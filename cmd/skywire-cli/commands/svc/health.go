@@ -25,7 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	skyvisor "github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -94,7 +94,7 @@ var healthCmd = &cobra.Command{
     --service / --dmsg-server narrow the check to ONE deployment service,
     optionally pinned through ONE dmsg server (per-server reachability).`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		var results []skyvisor.ServiceHealthEntry
+		var results []visorapi.ServiceHealthEntry
 
 		// Per-carrier DIRECT server-reachability mode: probe ONE dmsg server
 		// over each named carrier with a clean standalone client. Answers
@@ -111,7 +111,7 @@ var healthCmd = &cobra.Command{
 		// server Y", including direct-client services (the dmsg-discovery
 		// itself) that have no discovery entry.
 		if healthViaServer != "" {
-			printHealthResults(cmd, []skyvisor.ServiceHealthEntry{queryServiceViaServer(cmd)})
+			printHealthResults(cmd, []visorapi.ServiceHealthEntry{queryServiceViaServer(cmd)})
 			return
 		}
 
@@ -165,7 +165,7 @@ func extractPK(rawURL string) string {
 	return ""
 }
 
-func printHealthResults(cmd *cobra.Command, results []skyvisor.ServiceHealthEntry) {
+func printHealthResults(cmd *cobra.Command, results []visorapi.ServiceHealthEntry) {
 	isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 	if isJSON {
 		internal.PrintOutput(cmd.Flags(), results, "")
@@ -196,7 +196,7 @@ func printHealthResults(cmd *cobra.Command, results []skyvisor.ServiceHealthEntr
 	tw.Flush() //nolint:errcheck,gosec
 }
 
-func queryServicesDirect(cmdFlags *pflag.FlagSet) []skyvisor.ServiceHealthEntry {
+func queryServicesDirect(cmdFlags *pflag.FlagSet) []visorapi.ServiceHealthEntry {
 	// Honor --testenv (or SKYWIRETEST=1); per-service --*url overrides
 	// apply to the services svc can also query individually.
 	dep := svcDeployment()
@@ -211,7 +211,7 @@ func queryServicesDirect(cmdFlags *pflag.FlagSet) []skyvisor.ServiceHealthEntry 
 	// Query all services in parallel via visor RPC (DMSG).
 	// This reduces total time from sum(per-service) to max(per-service).
 	type result struct {
-		entry skyvisor.ServiceHealthEntry
+		entry visorapi.ServiceHealthEntry
 	}
 	ch := make(chan result, len(services))
 	expected := 0
@@ -223,7 +223,7 @@ func queryServicesDirect(cmdFlags *pflag.FlagSet) []skyvisor.ServiceHealthEntry 
 		expected++
 		go func(name, baseURL string) {
 			url := strings.TrimSuffix(baseURL, "/") + "/health"
-			entry := skyvisor.ServiceHealthEntry{Name: name, URL: baseURL}
+			entry := visorapi.ServiceHealthEntry{Name: name, URL: baseURL}
 
 			start := time.Now()
 			body, err := clirpc.FetchServiceURL(cmdFlags, url)
@@ -253,7 +253,7 @@ func queryServicesDirect(cmdFlags *pflag.FlagSet) []skyvisor.ServiceHealthEntry 
 		}(name, baseURL)
 	}
 
-	var results []skyvisor.ServiceHealthEntry
+	var results []visorapi.ServiceHealthEntry
 	for i := 0; i < expected; i++ {
 		r := <-ch
 		results = append(results, r.entry)
@@ -268,11 +268,11 @@ func queryServicesDirect(cmdFlags *pflag.FlagSet) []skyvisor.ServiceHealthEntry 
 // it works even for direct-client services (the dmsg-discovery itself)
 // that publish no discovery entry, because the direct client carries a
 // synthetic entry delegating only the pinned server.
-func queryServiceViaServer(cmd *cobra.Command) skyvisor.ServiceHealthEntry {
+func queryServiceViaServer(cmd *cobra.Command) visorapi.ServiceHealthEntry {
 	logging.SetLevel(logrus.ErrorLevel)
 	log := logging.MustGetLogger("svc-health")
 
-	entry := skyvisor.ServiceHealthEntry{Name: "service", Status: "DOWN"}
+	entry := visorapi.ServiceHealthEntry{Name: "service", Status: "DOWN"}
 
 	if healthService == "" {
 		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--dmsg-server requires --service <service-pk>"))

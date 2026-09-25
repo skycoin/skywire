@@ -26,7 +26,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skychat/address"
 	"github.com/skycoin/skywire/pkg/skychat/group"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // groupFileMeta is the file reference published on a group feed (as the message
@@ -137,8 +137,8 @@ func sendFileToVisorGroup(_ context.Context, groupID, path, name string) (string
 	if err != nil {
 		return "", "", err
 	}
-	if err := pairRPCCall("GroupSend", func(c visor.API) error {
-		return c.GroupSend(visor.GroupSendArgs{ID: groupID, Text: text})
+	if err := pairRPCCall("GroupSend", func(c visorapi.API) error {
+		return c.GroupSend(visorapi.GroupSendArgs{ID: groupID, Text: text})
 	}); err != nil {
 		return "", "", err
 	}
@@ -183,8 +183,8 @@ func startGroupPoller(parent context.Context) {
 				sinceJoinScan = 0
 				scanPendingJoins(pendingSeen)
 			}
-			var msgs []visor.GroupMessage
-			err := pairRPCCall("GroupPoll", func(c visor.API) error {
+			var msgs []visorapi.GroupMessage
+			err := pairRPCCall("GroupPoll", func(c visorapi.API) error {
 				out, e := c.GroupPoll(since)
 				msgs = out
 				return e
@@ -298,8 +298,8 @@ const joinScanEveryNPolls = 10
 // A group that disappears from the list is dropped from seen so a
 // rejoin later starts clean rather than comparing against a stale count.
 func scanPendingJoins(seen map[string]int) {
-	var groups []visor.GroupInfo
-	if err := pairRPCCall("GroupList", func(c visor.API) error {
+	var groups []visorapi.GroupInfo
+	if err := pairRPCCall("GroupList", func(c visorapi.API) error {
 		out, e := c.GroupList()
 		groups = out
 		return e
@@ -379,8 +379,8 @@ func groupRootHandler() http.HandlerFunc {
 		}
 		switch r.Method {
 		case http.MethodGet:
-			var groups []visor.GroupInfo
-			if err := pairRPCCall("GroupList", func(c visor.API) error {
+			var groups []visorapi.GroupInfo
+			if err := pairRPCCall("GroupList", func(c visorapi.API) error {
 				out, e := c.GroupList()
 				groups = out
 				return e
@@ -393,7 +393,7 @@ func groupRootHandler() http.HandlerFunc {
 			// status, they don't purge — the CLI can still audit them), but for
 			// the browser a deleted/left group must disappear, not reappear on
 			// the next sync.
-			active := make([]visor.GroupInfo, 0, len(groups))
+			active := make([]visorapi.GroupInfo, 0, len(groups))
 			for _, g := range groups {
 				if g.Status == group.StatusLeft || g.Status == group.StatusRevoked {
 					continue
@@ -447,10 +447,10 @@ func groupRootHandler() http.HandlerFunc {
 				http.Error(w, "invalid member pk: "+err.Error(), http.StatusBadRequest)
 				return
 			}
-			var info visor.GroupInfo
+			var info visorapi.GroupInfo
 			var link string
-			if err := pairRPCCall("GroupCreate", func(c visor.API) error {
-				i, l, e := c.GroupCreate(visor.GroupCreateArgs{
+			if err := pairRPCCall("GroupCreate", func(c visorapi.API) error {
+				i, l, e := c.GroupCreate(visorapi.GroupCreateArgs{
 					Name: body.Name, Kind: kind, InitialMembers: members,
 					DisablePeerBackfill: body.PeerBackfill != nil && !*body.PeerBackfill,
 					Listed:              body.Listed,
@@ -504,9 +504,9 @@ func groupJoinHandler() http.HandlerFunc {
 		if invite != "" && !address.IsInvite(invite) {
 			invite, addr = "", invite
 		}
-		var info visor.GroupInfo
-		if err := pairRPCCall("GroupJoin", func(c visor.API) error {
-			i, e := c.GroupJoin(visor.GroupJoinArgs{Invite: invite, Address: addr})
+		var info visorapi.GroupInfo
+		if err := pairRPCCall("GroupJoin", func(c visorapi.API) error {
+			i, e := c.GroupJoin(visorapi.GroupJoinArgs{Invite: invite, Address: addr})
 			info = i
 			return e
 		}); err != nil {
@@ -546,10 +546,10 @@ func groupCatalogHandler() http.HandlerFunc {
 			}
 		}
 		var (
-			entries   []visor.GroupCatalogEntry
+			entries   []visorapi.GroupCatalogEntry
 			truncated bool
 		)
-		if err := pairRPCCall("GroupCatalog", func(c visor.API) error {
+		if err := pairRPCCall("GroupCatalog", func(c visorapi.API) error {
 			e, t, cerr := c.GroupCatalog(host)
 			entries, truncated = e, t
 			return cerr
@@ -558,7 +558,7 @@ func groupCatalogHandler() http.HandlerFunc {
 			return
 		}
 		if entries == nil {
-			entries = []visor.GroupCatalogEntry{}
+			entries = []visorapi.GroupCatalogEntry{}
 		}
 		writeJSON(w, map[string]any{"entries": entries, "truncated": truncated})
 	}
@@ -602,9 +602,9 @@ func groupResolveHandler() http.HandlerFunc {
 			http.Error(w, "address required", http.StatusBadRequest)
 			return
 		}
-		var res visor.GroupResolveResult
-		if err := pairRPCCall("GroupResolve", func(c visor.API) error {
-			out, e := c.GroupResolve(visor.GroupResolveArgs{Address: raw})
+		var res visorapi.GroupResolveResult
+		if err := pairRPCCall("GroupResolve", func(c visorapi.API) error {
+			out, e := c.GroupResolve(visorapi.GroupResolveArgs{Address: raw})
 			res = out
 			return e
 		}); err != nil {
@@ -644,8 +644,8 @@ func groupItemHandler() http.HandlerFunc {
 
 		switch {
 		case action == "" && r.Method == http.MethodGet:
-			var info visor.GroupInfo
-			if err := pairRPCCall("GroupGet", func(c visor.API) error {
+			var info visorapi.GroupInfo
+			if err := pairRPCCall("GroupGet", func(c visorapi.API) error {
 				i, e := c.GroupGet(id)
 				info = i
 				return e
@@ -656,7 +656,7 @@ func groupItemHandler() http.HandlerFunc {
 			writeJSON(w, info)
 
 		case action == "" && r.Method == http.MethodDelete:
-			if err := pairRPCCall("GroupDelete", func(c visor.API) error { return c.GroupDelete(id) }); err != nil {
+			if err := pairRPCCall("GroupDelete", func(c visorapi.API) error { return c.GroupDelete(id) }); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -667,8 +667,8 @@ func groupItemHandler() http.HandlerFunc {
 			// "ask again" button). Everything is derived from the stored
 			// record, so no invite re-paste; it pays the same PoW +
 			// rate-limit gates as a first ask.
-			var info visor.GroupInfo
-			if err := pairRPCCall("GroupAskAgain", func(c visor.API) error {
+			var info visorapi.GroupInfo
+			if err := pairRPCCall("GroupAskAgain", func(c visorapi.API) error {
 				i, e := c.GroupAskAgain(id)
 				info = i
 				return e
@@ -680,7 +680,7 @@ func groupItemHandler() http.HandlerFunc {
 
 		case action == "invite" && r.Method == http.MethodGet:
 			var link string
-			if err := pairRPCCall("GroupInvite", func(c visor.API) error {
+			if err := pairRPCCall("GroupInvite", func(c visorapi.API) error {
 				l, e := c.GroupInvite(id)
 				link = l
 				return e
@@ -702,8 +702,8 @@ func groupItemHandler() http.HandlerFunc {
 				http.Error(w, "text required", http.StatusBadRequest)
 				return
 			}
-			if err := pairRPCCall("GroupSend", func(c visor.API) error {
-				return c.GroupSend(visor.GroupSendArgs{ID: id, Text: body.Text})
+			if err := pairRPCCall("GroupSend", func(c visorapi.API) error {
+				return c.GroupSend(visorapi.GroupSendArgs{ID: id, Text: body.Text})
 			}); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -726,24 +726,24 @@ func groupItemHandler() http.HandlerFunc {
 				http.Error(w, terr.Error(), http.StatusInternalServerError)
 				return
 			}
-			if err := pairRPCCall("GroupSend", func(c visor.API) error {
-				return c.GroupSend(visor.GroupSendArgs{ID: id, Text: tomb})
+			if err := pairRPCCall("GroupSend", func(c visorapi.API) error {
+				return c.GroupSend(visorapi.GroupSendArgs{ID: id, Text: tomb})
 			}); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 			// Best-effort byte erasure — a failure here is non-fatal; the
 			// tombstone already hides the message everywhere.
-			if err := pairRPCCall("GroupUnsend", func(c visor.API) error {
-				return c.GroupUnsend(visor.GroupUnsendArgs{ID: id, TS: tsNano})
+			if err := pairRPCCall("GroupUnsend", func(c visorapi.API) error {
+				return c.GroupUnsend(visorapi.GroupUnsendArgs{ID: id, TS: tsNano})
 			}); err != nil {
 				appLog("Group: unsend prune failed (tombstone still applies): %v", err)
 			}
 			w.WriteHeader(http.StatusNoContent)
 
 		case action == "requests" && r.Method == http.MethodGet:
-			var reqs []visor.GroupJoinRequest
-			if err := pairRPCCall("GroupJoinRequests", func(c visor.API) error {
+			var reqs []visorapi.GroupJoinRequest
+			if err := pairRPCCall("GroupJoinRequests", func(c visorapi.API) error {
 				out, e := c.GroupJoinRequests(id)
 				reqs = out
 				return e
@@ -755,7 +755,7 @@ func groupItemHandler() http.HandlerFunc {
 			// open on "what needs me", not on an audit log. ?all=1 returns
 			// decided entries too.
 			if r.URL.Query().Get("all") != "1" {
-				pending := make([]visor.GroupJoinRequest, 0, len(reqs))
+				pending := make([]visorapi.GroupJoinRequest, 0, len(reqs))
 				for _, q := range reqs {
 					if q.Status == group.JoinStatusPending {
 						pending = append(pending, q)
@@ -793,8 +793,8 @@ func groupItemHandler() http.HandlerFunc {
 				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
 				return
 			}
-			var info visor.GroupInfo
-			if err := pairRPCCall("GroupSetJoinPoW", func(c visor.API) error {
+			var info visorapi.GroupInfo
+			if err := pairRPCCall("GroupSetJoinPoW", func(c visorapi.API) error {
 				i, e := c.GroupSetJoinPoW(id, body.Bits)
 				info = i
 				return e
@@ -812,8 +812,8 @@ func groupItemHandler() http.HandlerFunc {
 				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
 				return
 			}
-			var info visor.GroupInfo
-			if err := pairRPCCall("GroupSetPeerBackfill", func(c visor.API) error {
+			var info visorapi.GroupInfo
+			if err := pairRPCCall("GroupSetPeerBackfill", func(c visorapi.API) error {
 				i, e := c.GroupSetPeerBackfill(id, body.Enabled)
 				info = i
 				return e
@@ -825,8 +825,8 @@ func groupItemHandler() http.HandlerFunc {
 
 		case action == "rotate-key" && r.Method == http.MethodPost:
 			// No body: rotation targets the group, not a peer.
-			var info visor.GroupInfo
-			if err := pairRPCCall("GroupRotateKey", func(c visor.API) error {
+			var info visorapi.GroupInfo
+			if err := pairRPCCall("GroupRotateKey", func(c visorapi.API) error {
 				i, e := c.GroupRotateKey(id)
 				info = i
 				return e
@@ -844,8 +844,8 @@ func groupItemHandler() http.HandlerFunc {
 				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
 				return
 			}
-			var info visor.GroupInfo
-			if err := pairRPCCall("GroupSetReadOnly", func(c visor.API) error {
+			var info visorapi.GroupInfo
+			if err := pairRPCCall("GroupSetReadOnly", func(c visorapi.API) error {
 				i, e := c.GroupSetReadOnly(id, body.ReadOnly)
 				info = i
 				return e
@@ -863,8 +863,8 @@ func groupItemHandler() http.HandlerFunc {
 				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
 				return
 			}
-			var info visor.GroupInfo
-			if err := pairRPCCall("GroupSetListed", func(c visor.API) error {
+			var info visorapi.GroupInfo
+			if err := pairRPCCall("GroupSetListed", func(c visorapi.API) error {
 				i, e := c.GroupSetListed(id, body.Listed)
 				info = i
 				return e
@@ -886,13 +886,13 @@ func groupItemHandler() http.HandlerFunc {
 				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
 				return
 			}
-			args := visor.GroupSetMetaArgs{ID: id, Name: body.Name}
+			args := visorapi.GroupSetMetaArgs{ID: id, Name: body.Name}
 			if body.Avatar != nil {
 				args.SetAvatar = true
 				args.Avatar = *body.Avatar
 			}
-			var info visor.GroupInfo
-			if err := pairRPCCall("GroupSetMeta", func(c visor.API) error {
+			var info visorapi.GroupInfo
+			if err := pairRPCCall("GroupSetMeta", func(c visorapi.API) error {
 				i, e := c.GroupSetMeta(args)
 				info = i
 				return e
@@ -914,8 +914,8 @@ func groupItemHandler() http.HandlerFunc {
 			// Best-effort on the visor side: an unreachable founder returns
 			// the local record unchanged, so this is safe to fire on every
 			// chat open.
-			var info visor.GroupInfo
-			if err := pairRPCCall("GroupRefreshMeta", func(c visor.API) error {
+			var info visorapi.GroupInfo
+			if err := pairRPCCall("GroupRefreshMeta", func(c visorapi.API) error {
 				i, e := c.GroupRefreshMeta(id)
 				info = i
 				return e
@@ -926,7 +926,7 @@ func groupItemHandler() http.HandlerFunc {
 			writeJSON(w, info)
 
 		case action == "leave" && r.Method == http.MethodPost:
-			if err := pairRPCCall("GroupLeave", func(c visor.API) error { return c.GroupLeave(id) }); err != nil {
+			if err := pairRPCCall("GroupLeave", func(c visorapi.API) error { return c.GroupLeave(id) }); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -951,9 +951,9 @@ func groupItemHandler() http.HandlerFunc {
 					before = time.Unix(0, ns).UTC()
 				}
 			}
-			var msgs []visor.GroupMessage
-			if err := pairRPCCall("GroupHistoryPage", func(c visor.API) error {
-				out, e := c.GroupHistoryPage(visor.GroupHistoryPageArgs{
+			var msgs []visorapi.GroupMessage
+			if err := pairRPCCall("GroupHistoryPage", func(c visorapi.API) error {
+				out, e := c.GroupHistoryPage(visorapi.GroupHistoryPageArgs{
 					GroupID: id, Before: before, Limit: limit,
 				})
 				msgs = out
@@ -1020,44 +1020,44 @@ func groupItemHandler() http.HandlerFunc {
 //
 // Deny is the one that doesn't return info; it re-reads the group so
 // the response shape stays uniform for the UI.
-var groupPeerActions = map[string]func(string, cipher.PubKey) (visor.GroupInfo, error){
-	"requests/approve": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
-		return groupPeerRPC("GroupApproveJoin", func(c visor.API) (visor.GroupInfo, error) {
+var groupPeerActions = map[string]func(string, cipher.PubKey) (visorapi.GroupInfo, error){
+	"requests/approve": func(id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
+		return groupPeerRPC("GroupApproveJoin", func(c visorapi.API) (visorapi.GroupInfo, error) {
 			return c.GroupApproveJoin(id, pk)
 		})
 	},
-	"requests/deny": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
-		if err := pairRPCCall("GroupDenyJoin", func(c visor.API) error {
+	"requests/deny": func(id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
+		if err := pairRPCCall("GroupDenyJoin", func(c visorapi.API) error {
 			return c.GroupDenyJoin(id, pk)
 		}); err != nil {
-			return visor.GroupInfo{}, err
+			return visorapi.GroupInfo{}, err
 		}
-		return groupPeerRPC("GroupGet", func(c visor.API) (visor.GroupInfo, error) {
+		return groupPeerRPC("GroupGet", func(c visorapi.API) (visorapi.GroupInfo, error) {
 			return c.GroupGet(id)
 		})
 	},
-	"members/remove": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
-		return groupPeerRPC("GroupRemoveMember", func(c visor.API) (visor.GroupInfo, error) {
+	"members/remove": func(id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
+		return groupPeerRPC("GroupRemoveMember", func(c visorapi.API) (visorapi.GroupInfo, error) {
 			return c.GroupRemoveMember(id, pk)
 		})
 	},
-	"members/ban": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
-		return groupPeerRPC("GroupBanMember", func(c visor.API) (visor.GroupInfo, error) {
+	"members/ban": func(id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
+		return groupPeerRPC("GroupBanMember", func(c visorapi.API) (visorapi.GroupInfo, error) {
 			return c.GroupBanMember(id, pk)
 		})
 	},
-	"members/unban": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
-		return groupPeerRPC("GroupUnbanMember", func(c visor.API) (visor.GroupInfo, error) {
+	"members/unban": func(id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
+		return groupPeerRPC("GroupUnbanMember", func(c visorapi.API) (visorapi.GroupInfo, error) {
 			return c.GroupUnbanMember(id, pk)
 		})
 	},
-	"members/mute": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
-		return groupPeerRPC("GroupMuteMember", func(c visor.API) (visor.GroupInfo, error) {
+	"members/mute": func(id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
+		return groupPeerRPC("GroupMuteMember", func(c visorapi.API) (visorapi.GroupInfo, error) {
 			return c.GroupMuteMember(id, pk)
 		})
 	},
-	"members/unmute": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
-		return groupPeerRPC("GroupUnmuteMember", func(c visor.API) (visor.GroupInfo, error) {
+	"members/unmute": func(id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
+		return groupPeerRPC("GroupUnmuteMember", func(c visorapi.API) (visorapi.GroupInfo, error) {
 			return c.GroupUnmuteMember(id, pk)
 		})
 	},
@@ -1066,13 +1066,13 @@ var groupPeerActions = map[string]func(string, cipher.PubKey) (visor.GroupInfo, 
 	// second admin. That made the founder a permanent single point of
 	// failure for admission — invites name the group's admins, and there
 	// was never more than one to name.
-	"members/promote": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
-		return groupPeerRPC("GroupPromoteAdmin", func(c visor.API) (visor.GroupInfo, error) {
+	"members/promote": func(id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
+		return groupPeerRPC("GroupPromoteAdmin", func(c visorapi.API) (visorapi.GroupInfo, error) {
 			return c.GroupPromoteAdmin(id, pk)
 		})
 	},
-	"members/demote": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
-		return groupPeerRPC("GroupDemoteAdmin", func(c visor.API) (visor.GroupInfo, error) {
+	"members/demote": func(id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
+		return groupPeerRPC("GroupDemoteAdmin", func(c visorapi.API) (visorapi.GroupInfo, error) {
 			return c.GroupDemoteAdmin(id, pk)
 		})
 	},
@@ -1080,9 +1080,9 @@ var groupPeerActions = map[string]func(string, cipher.PubKey) (visor.GroupInfo, 
 
 // groupPeerRPC adapts an info-returning visor call to pairRPCCall's
 // error-only closure shape.
-func groupPeerRPC(name string, call func(visor.API) (visor.GroupInfo, error)) (visor.GroupInfo, error) {
-	var info visor.GroupInfo
-	err := pairRPCCall(name, func(c visor.API) error {
+func groupPeerRPC(name string, call func(visorapi.API) (visorapi.GroupInfo, error)) (visorapi.GroupInfo, error) {
+	var info visorapi.GroupInfo
+	err := pairRPCCall(name, func(c visorapi.API) error {
 		i, e := call(c)
 		info = i
 		return e
