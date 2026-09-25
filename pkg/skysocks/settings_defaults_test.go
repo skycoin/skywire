@@ -3,6 +3,7 @@ package skysocks
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -45,6 +46,8 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 	require.Equal(t, tunnelRTTMinWindow, setTunnelRTTMinWindow())
 	require.EqualValues(t, tunnelRTTSamplesCap, setTunnelRTTSamplesCap())
 	require.False(t, tunnelFreezeActive(), "tunnel.freeze_active holds nothing still until it is set")
+	require.True(t, tunnelAdoptReserves(), "tunnel.adopt_reserves: a leg reserve can become a tunnel again")
+	require.Equal(t, 5*time.Minute, tunnelAdoptRefusedHold(), "tunnel.adopt_refused_hold")
 	require.Equal(t, tunnelPriorRefresh, setTunnelPriorRefresh())
 	require.Equal(t, exitOpenPenalty, setExitOpenPenalty())
 	require.Equal(t, statusSniffTimeout, setExitOpenTimeout())
@@ -115,7 +118,7 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 
 	// Every knob in the catalog is reachable: a name registered with no use site
 	// reading it is a knob the bench can set and nothing obeys.
-	require.Len(t, skysettings.Catalog(), 81)
+	require.Len(t, skysettings.Catalog(), 83)
 
 	// The shape knobs default to the flags they twin (skyenv.SkysocksClientTunnels,
 	// skyenv.SkysocksClientStandbyPool), the per-app mux pair defaults to

@@ -52,6 +52,9 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	case conn := <-r.adopted:
+		// An adopted leg reserve (leg_adopt.go), handshaked off this loop.
+		return conn, nil
 	case rules, ok = <-r.accept:
 	}
 

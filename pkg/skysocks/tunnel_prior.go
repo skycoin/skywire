@@ -151,6 +151,8 @@ func (c *Client) pullCapacityPriors(now time.Time) {
 		return
 	}
 	c.applyCapacityPriors(capacityPriorsFrom(snap))
+	// ...and the leg reserves an adoption can turn into a tunnel.
+	c.noteReserves(reservesFrom(snap))
 	// The same snapshot carries the SESSION shape the router is converging
 	// toward. An explicit mux.shape names how many tunnels must carry streams,
 	// which is this process's half of the shape: reconcile the moment it moves

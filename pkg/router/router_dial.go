@@ -62,6 +62,11 @@ func (r *router) DialRoutes(
 		return nil, fmt.Errorf("failed to dial routes: %w", err)
 	}
 
+	// An adoption builds no route: the chain already exists (leg_adopt.go).
+	if opts.AdoptReservePort != 0 {
+		return r.adoptLegReserve(ctx, log, rPK, lPort, rPort, opts)
+	}
+
 	// Operator-programmable routing policy hook (RFC #2882).
 	// When configured, the hook adjusts opts.MuxRoutes /
 	// opts.MinHops before route setup, and can refuse the dial
