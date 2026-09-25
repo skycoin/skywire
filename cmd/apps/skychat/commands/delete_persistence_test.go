@@ -16,11 +16,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/cmd/apps/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skychat/dm"
 	"github.com/skycoin/skywire/pkg/skychat/history"
+	"github.com/skycoin/skywire/pkg/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 

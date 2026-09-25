@@ -30,8 +30,8 @@ import (
 	"github.com/spf13/cobra"
 
 	clilog "github.com/skycoin/skywire/cmd/skywire-cli/commands/log"
-	geoipcmd "github.com/skycoin/skywire/cmd/svc/geoip/commands"
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/rewards"
@@ -335,7 +335,7 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 	var geoDB *geoip2.Reader
 	satExp := opts.SaturationExp
 	if satExp < 1.0 {
-		geoDB, err = geoip2.OpenBytes(geoipcmd.EmbeddedGeoIP())
+		geoDB, err = geoip2.OpenBytes(geoip.EmbeddedDB())
 		if err != nil {
 			log.Warnf("Failed to load embedded GeoIP database, disabling regional saturation: %v", err)
 			satExp = 1.0
@@ -419,7 +419,7 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 		}
 
 		if geoDB != nil {
-			if geoRes, geoErr := geoipcmd.LookupIP(geoDB, ip); geoErr == nil && geoRes.CountryCode != "" {
+			if geoRes, geoErr := geoip.Lookup(geoDB, ip); geoErr == nil && geoRes.CountryCode != "" {
 				ni.Country = geoRes.CountryCode
 			} else {
 				ni.Country = "XX"

@@ -22,9 +22,9 @@ import (
 	"github.com/google/uuid"
 	geoip2 "github.com/oschwald/geoip2-golang/v2"
 
-	geoipcmd "github.com/skycoin/skywire/cmd/svc/geoip/commands"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -447,7 +447,7 @@ func NewServer(cfg Config) *Server {
 	}
 	// Load the embedded GeoIP DB for full-fleet country grouping (best-effort:
 	// without it, country grouping falls back to the SD's registered-service geo).
-	if db, err := geoip2.OpenBytes(geoipcmd.EmbeddedGeoIP()); err != nil {
+	if db, err := geoip2.OpenBytes(geoip.EmbeddedDB()); err != nil {
 		s.log.WithError(err).Warn("GeoIP DB unavailable — country grouping limited to service-discovery geo")
 	} else {
 		s.geoDB = db
@@ -987,7 +987,7 @@ func (s *Server) refreshIPGroupsCache() {
 
 				// Full-fleet country: resolve the survey IP via the embedded GeoIP.
 				if s.geoDB != nil {
-					if res, gerr := geoipcmd.LookupIP(s.geoDB, survey.IPAddr); gerr == nil && res.CountryCode != "" {
+					if res, gerr := geoip.Lookup(s.geoDB, survey.IPAddr); gerr == nil && res.CountryCode != "" {
 						pkToCountry[pk] = res.CountryCode
 					}
 				}

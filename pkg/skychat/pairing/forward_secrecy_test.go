@@ -1,4 +1,4 @@
-// Package pairing cmd/apps/skychat/pairing/forward_secrecy_test.go
+// Package pairing pkg/skychat/pairing/forward_secrecy_test.go
 //
 // The dmsg-backed lane for epoch keys: two real visors have to converge
 // on an epoch with no coordination beyond the announcements they publish

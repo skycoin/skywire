@@ -1,4 +1,4 @@
-// Package pairing cmd/apps/skychat/pairing/ratchet_test.go
+// Package pairing pkg/skychat/pairing/ratchet_test.go
 //
 // The epoch machinery without a transport: derivation symmetry, the
 // announcement envelope, the ring, and the property the whole thing

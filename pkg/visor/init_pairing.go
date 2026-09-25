@@ -14,8 +14,8 @@ import (
 	"context"
 	"path/filepath"
 
-	"github.com/skycoin/skywire/cmd/apps/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skychat/pairing"
 )
 
 // pairingState holds the visor-side runtime state for chat pairs.

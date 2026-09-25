@@ -1,4 +1,4 @@
-// Package pairing — cmd/apps/skychat/pairing/pair_dm_comparison_test.go:
+// Package pairing — pkg/skychat/pairing/pair_dm_comparison_test.go:
 // Phase 1 of the operator's 2026-05-17 22:50Z reset. Per Alpha's
 // #2693-body split: Gamma takes "CXO-backed comparison tests".
 //

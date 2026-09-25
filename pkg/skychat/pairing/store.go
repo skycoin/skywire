@@ -1,4 +1,4 @@
-// Package pairing cmd/apps/skychat/pairing/store.go c4-app-chat
+// Package pairing pkg/skychat/pairing/store.go c4-app-chat
 // persistence for chat pairs.
 //
 // One bucket "pairs" with key = peer PK hex, value = JSON Record.
