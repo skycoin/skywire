@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skymail"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
@@ -1307,5 +1308,33 @@ func (proxyDefaultAPI) HVUpdateForwardedPort(_ cipher.PubKey, _ visorapi.Forward
 }
 
 func (proxyDefaultAPI) Close() error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) MailStatus() (*visorapi.MailStatus, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) MailList(_ string) ([]skymail.Summary, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) MailRead(_ string, _ string) (*skymail.Rendered, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) MailRaw(_ string, _ string) ([]byte, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) MailSend(_ skymail.Outgoing) (*skymail.SendResult, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) MailDelete(_ string, _ string) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) MailSetWhitelist(_ []cipher.PubKey) error {
 	return ErrProxyNotSupported
 }

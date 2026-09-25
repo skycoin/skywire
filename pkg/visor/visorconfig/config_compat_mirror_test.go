@@ -75,3 +75,53 @@ func TestWispSurvivesUnmarshal(t *testing.T) {
 		t.Errorf("Wisp.Port = %d, want 6001", v.Wisp.Port)
 	}
 }
+
+// TestV1UnmarshalCopiesEverySectionBack closes the gap the tag test
+// leaves: v1JSON can declare a field and V1.UnmarshalJSON can still
+// forget the line that copies it back to V1, and the section is then
+// dropped on load exactly as before. Every pointer or slice section is
+// set, round-tripped through JSON, and must come back set.
+func TestV1UnmarshalCopiesEverySectionBack(t *testing.T) {
+	var in V1
+	rv := reflect.ValueOf(&in).Elem()
+	typ := rv.Type()
+	var checked []int
+	for i := 0; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+		tag := f.Tag.Get("json")
+		if f.Anonymous || tag == "" || tag == "-" || !f.IsExported() {
+			continue
+		}
+		switch f.Type.Kind() {
+		case reflect.Ptr:
+			rv.Field(i).Set(reflect.New(f.Type.Elem()))
+		case reflect.Slice:
+			rv.Field(i).Set(reflect.MakeSlice(f.Type, 1, 1))
+		default:
+			continue
+		}
+		// A section whose empty value encodes as null (DmsgConfig with no
+		// deployment) legitimately loads back as nil.
+		if b, err := json.Marshal(rv.Field(i).Interface()); err != nil || string(b) == "null" {
+			continue
+		}
+		checked = append(checked, i)
+	}
+	raw, err := json.Marshal(&in)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var out V1
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	ov := reflect.ValueOf(&out).Elem()
+	for _, i := range checked {
+		if ov.Field(i).IsNil() {
+			t.Errorf("V1.%s was set but came back nil: V1.UnmarshalJSON does not copy it back from v1JSON", typ.Field(i).Name)
+		}
+	}
+	if len(checked) < 10 {
+		t.Fatalf("only %d sections checked; the reflection walk is not seeing V1's fields", len(checked))
+	}
+}

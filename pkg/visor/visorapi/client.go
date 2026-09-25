@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skymail"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"io"
@@ -2492,4 +2493,49 @@ func (rc *rpcClient) AppDirectStreams(appName string) ([]transport.VStreamInfo, 
 	var infos []transport.VStreamInfo
 	err := rc.Call("AppDirectStreams", &appName, &infos)
 	return infos, err
+}
+
+// MailStatus calls MailStatus.
+func (rc *rpcClient) MailStatus() (*MailStatus, error) {
+	var out MailStatus
+	err := rc.Call("MailStatus", &struct{}{}, &out)
+	return &out, err
+}
+
+// MailList calls MailList.
+func (rc *rpcClient) MailList(folder string) ([]skymail.Summary, error) {
+	var out []skymail.Summary
+	err := rc.Call("MailList", &folder, &out)
+	return out, err
+}
+
+// MailRead calls MailRead.
+func (rc *rpcClient) MailRead(folder, id string) (*skymail.Rendered, error) {
+	var out skymail.Rendered
+	err := rc.Call("MailRead", &MailMessageRequest{Folder: folder, ID: id}, &out)
+	return &out, err
+}
+
+// MailRaw calls MailRaw.
+func (rc *rpcClient) MailRaw(folder, id string) ([]byte, error) {
+	var out []byte
+	err := rc.Call("MailRaw", &MailMessageRequest{Folder: folder, ID: id}, &out)
+	return out, err
+}
+
+// MailSend calls MailSend.
+func (rc *rpcClient) MailSend(msg skymail.Outgoing) (*skymail.SendResult, error) {
+	var out skymail.SendResult
+	err := rc.Call("MailSend", &msg, &out)
+	return &out, err
+}
+
+// MailDelete calls MailDelete.
+func (rc *rpcClient) MailDelete(folder, id string) error {
+	return rc.Call("MailDelete", &MailMessageRequest{Folder: folder, ID: id}, &struct{}{})
+}
+
+// MailSetWhitelist calls MailSetWhitelist.
+func (rc *rpcClient) MailSetWhitelist(pks []cipher.PubKey) error {
+	return rc.Call("MailSetWhitelist", &pks, &struct{}{})
 }

@@ -31,6 +31,7 @@ type V1 struct {
 	Resolvers     []ResolverConfig     `json:"resolvers,omitempty"`
 	BrowseOrigin  *BrowseOriginConfig  `json:"browse_origin,omitempty"`
 	SkymailBridge *SkymailBridgeConfig `json:"skymail_bridge,omitempty"`
+	Skymail       *SkymailConfig       `json:"skymail,omitempty"`
 	Rewards       *RewardsConfig       `json:"rewards,omitempty"`
 	STCP          *tnspec.STCPConfig   `json:"skywire-tcp,omitempty"`
 	Transport     *Transport           `json:"transport"`
@@ -594,6 +595,19 @@ type SkymailBridgeConfig struct {
 	// expose Postfix's smtpd on this port via
 	// `skywire cli serve add 25 --to 127.0.0.1:25`.
 	RemotePort uint16 `json:"remote_port,omitempty"`
+}
+
+// SkymailConfig configures the visor's own mailbox (pkg/skymail): mail
+// to <anything>@<base32-pk>.skynet or .dmsg, received over SMTP on
+// port 25 and kept in a Maildir. The section is optional. Absent, the
+// mailbox runs on js/wasm, where no MTA can, and stays off on native
+// hosts, which may already forward port 25 to Postfix.
+type SkymailConfig struct {
+	// Enable starts the mailbox.
+	Enable bool `json:"enable"`
+	// Dir is the Maildir root. Default: "mail" beside the local path
+	// (outside it, because the wasm visor never persists local/).
+	Dir string `json:"dir,omitempty"`
 }
 
 // Transport defines a transport config.

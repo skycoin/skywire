@@ -1,5 +1,32 @@
 # Email over skywire — operator setup
 
+## The visor's own mailbox (no MTA)
+
+Every wasm visor, and any native visor with `"skymail": {"enable": true}`
+in its config, has a mailbox of its own (`pkg/skymail`). Mail to
+`<anything>@<base32-pk>.skynet` (or `.dmsg`) arrives over SMTP on
+port 25 and is kept verbatim in a Maildir (default `mail/` beside the
+local path, which the browser tab persists to IndexedDB). There is no
+domain, certificate, SPF or DKIM: the transport authenticates the
+sender's PK. The mailbox stamps it into an `X-Skymail-Peer` header and
+shows mail as *verified* when the From address names that same PK.
+
+```sh
+skywire cli mail                        # your address, unread count
+skywire cli mail inbox
+skywire cli mail read <id>
+skywire cli mail send bob@<base32-pk>.skynet -s hello -m "hi"
+skywire cli mail whitelist add <pk>     # empty whitelist = accept anyone
+```
+
+In the browser desk the same actions are the ☰ **mail** app. Sending is
+immediate: a recipient whose visor is offline gets an error, and nothing
+is queued. The mailbox also delivers to a Postfix host set up as below:
+`user@<vhost>.<pk>.skynet` reaches `user@<vhost>` there. A native visor
+whose port 25 is already forwarded (`serve add 25`) leaves it to Postfix.
+
+## Postfix hosts
+
 End-to-end recipe for running e-mail over `.skynet` / `.dmsg`
 addresses using a regular Postfix install backed by the visor's
 embedded SMTP bridge (`pkg/visor/embedded_skymail_bridge.go`,

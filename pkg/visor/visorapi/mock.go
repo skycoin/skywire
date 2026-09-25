@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skymail"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
@@ -1849,3 +1850,28 @@ func (mc *mockRPCClient) ARSelfInfo() (*ARSelfRegistration, error) {
 func (mc *mockRPCClient) Close() error {
 	return nil
 }
+
+// MailStatus implements API.
+func (mc *mockRPCClient) MailStatus() (*MailStatus, error) { return &MailStatus{}, nil }
+
+// MailList implements API.
+func (mc *mockRPCClient) MailList(string) ([]skymail.Summary, error) { return nil, nil }
+
+// MailRead implements API.
+func (mc *mockRPCClient) MailRead(string, string) (*skymail.Rendered, error) {
+	return &skymail.Rendered{}, nil
+}
+
+// MailRaw implements API.
+func (mc *mockRPCClient) MailRaw(string, string) ([]byte, error) { return nil, nil }
+
+// MailSend implements API.
+func (mc *mockRPCClient) MailSend(skymail.Outgoing) (*skymail.SendResult, error) {
+	return &skymail.SendResult{}, nil
+}
+
+// MailDelete implements API.
+func (mc *mockRPCClient) MailDelete(string, string) error { return nil }
+
+// MailSetWhitelist implements API.
+func (mc *mockRPCClient) MailSetWhitelist([]cipher.PubKey) error { return nil }

@@ -284,6 +284,10 @@ func marshalV1Native(w *strings.Builder, v *visorconfig.V1, indent int) {
 		o.field("skymail_bridge")
 		marshalSkymailBridgeNative(w, v.SkymailBridge, o.indent+1)
 	}
+	if v.Skymail != nil {
+		o.field("skymail")
+		marshalSkymailNative(w, v.Skymail, o.indent+1)
+	}
 	if v.Rewards != nil {
 		o.field("rewards")
 		marshalRewardsNative(w, v.Rewards, o.indent+1)
@@ -1383,6 +1387,17 @@ func marshalLANDmsgServerNative(w *strings.Builder, l *visorconfig.LANDmsgServer
 	if l.PublicDiscoveryURL != "" {
 		o.field("public_discovery_url")
 		writeQuotedNative(w, l.PublicDiscoveryURL)
+	}
+	o.close()
+}
+
+func marshalSkymailNative(w *strings.Builder, s *visorconfig.SkymailConfig, indent int) {
+	o := newObjNative(w, indent)
+	o.field("enable")
+	writeBoolNative(w, s.Enable)
+	if s.Dir != "" {
+		o.field("dir")
+		writeQuotedNative(w, s.Dir)
 	}
 	o.close()
 }

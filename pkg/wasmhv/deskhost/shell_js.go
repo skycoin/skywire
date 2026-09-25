@@ -22,7 +22,7 @@
 // its hypervisor UI listens on the virtual loopback (vnet:8001) — so the
 // visor applets call that API over vnet, exactly as the dashboard tab renders
 // it. A page that still publishes the legacy globalThis.skywireVisor proxy
-// (the in-page visor of cmd/wasm-visor) is honoured first, so one code path
+// (the in-page visor of cmd/wasm-visor) is honored first, so one code path
 // serves both.
 //
 // Exposed to the UI as skywireShell.open(el) → { close, fit, focus, run }.
@@ -763,7 +763,7 @@ func jsOpenShell(_ js.Value, args []js.Value) interface{} {
 	submit := func(sess *shellSession, cmd string) {
 		sess.term.WriteString(cmd + "\r\n")
 		go func() {
-			defer func() { _ = recover() }() // session closed under us — drop the line
+			defer func() { _ = recover() }() //nolint:errcheck // session closed under us — drop the line
 			sess.lines <- cmd
 		}()
 	}

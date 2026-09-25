@@ -266,6 +266,10 @@ func marshalV1(w *strings.Builder, v *visorconfig.V1, indent int) {
 		o.field("skymail_bridge")
 		marshalSkymailBridge(w, v.SkymailBridge, o.indent+1)
 	}
+	if v.Skymail != nil {
+		o.field("skymail")
+		marshalSkymail(w, v.Skymail, o.indent+1)
+	}
 	if v.Rewards != nil {
 		o.field("rewards")
 		marshalRewards(w, v.Rewards, o.indent+1)
@@ -1368,6 +1372,17 @@ func marshalLANDmsgServer(w *strings.Builder, l *visorconfig.LANDmsgServerConf, 
 	if l.PublicDiscoveryURL != "" {
 		o.field("public_discovery_url")
 		writeQuoted(w, l.PublicDiscoveryURL)
+	}
+	o.close()
+}
+
+func marshalSkymail(w *strings.Builder, s *visorconfig.SkymailConfig, indent int) {
+	o := newObj(w, indent)
+	o.field("enable")
+	writeBool(w, s.Enable)
+	if s.Dir != "" {
+		o.field("dir")
+		writeQuoted(w, s.Dir)
 	}
 	o.close()
 }

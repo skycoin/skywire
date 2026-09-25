@@ -27,9 +27,7 @@ import (
 	"io"
 	"net"
 	"net/smtp"
-	"net/textproto"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -128,10 +126,9 @@ func (c Config) Validate() error {
 	return nil
 }
 
-// Serve runs the bridge until ctx is canceled or lis is closed.
-// Each accepted connection gets a dedicated goroutine that walks
-// one or more SMTP envelopes; lis.Close() is the canonical shutdown
-// signal.
+// Serve runs the bridge until ctx is canceled or lis is closed: every
+// envelope accepted from the local MTA is relayed to the peer named by
+// its recipients' PK label.
 func Serve(ctx context.Context, lis net.Listener, dialer Dialer, cfg Config, log logrus.FieldLogger) error {
 	if dialer == nil {
 		return errors.New("skymailbridge: Dialer is nil")
@@ -140,34 +137,52 @@ func Serve(ctx context.Context, lis net.Listener, dialer Dialer, cfg Config, log
 		return err
 	}
 	cfg = cfg.withDefaults()
-	if log == nil {
-		log = logrus.NewEntry(logrus.New())
+	return ServeHandler(ctx, lis, &relayHandler{dialer: dialer, cfg: cfg, log: orDefaultLog(log)}, cfg.HeloName, log)
+}
+
+// relayHandler is the bridge's Handler: it accepts only skynet
+// recipients that share one peer, and delivers by relaying the
+// envelope to that peer.
+type relayHandler struct {
+	dialer Dialer
+	cfg    Config
+	log    logrus.FieldLogger
+}
+
+func (h *relayHandler) Rcpt(_ net.Conn, _, rcpt string, accepted []string) error {
+	pk, _, isSkynet, err := ParseRecipient(rcpt, h.cfg.Suffix, h.cfg.Mode)
+	if err != nil {
+		return &Reply{Code: 550, Enhanced: "5.1.3", Text: err.Error()}
 	}
-
-	var wg sync.WaitGroup
-	go func() {
-		<-ctx.Done()
-		_ = lis.Close() //nolint:errcheck,gosec
-	}()
-
-	for {
-		c, err := lis.Accept()
-		if err != nil {
-			if errors.Is(err, net.ErrClosed) {
-				break
-			}
-			log.WithError(err).Warn("skymailbridge: accept")
-			continue
+	if !isSkynet {
+		return &Reply{Code: 550, Enhanced: "5.7.1", Text: fmt.Sprintf("%s does not end in %s; skymail-bridge only handles skynet recipients", rcpt, h.cfg.Suffix)}
+	}
+	// All RCPT TOs in one envelope must dial the same peer; per-recipient
+	// fanout would require splitting the DATA stream. 451 makes the
+	// upstream MTA retry the extra recipient separately.
+	if len(accepted) > 0 {
+		first, _, _, _ := ParseRecipient(accepted[0], h.cfg.Suffix, h.cfg.Mode) //nolint:errcheck // accepted only after parsing cleanly
+		if first != pk {
+			return &Reply{Code: 451, Enhanced: "4.7.1", Text: fmt.Sprintf("skymail-bridge: envelope mixes peers (%s vs %s); requeue per-recipient", first, pk)}
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer c.Close() //nolint:errcheck,gosec
-			handleSession(ctx, c, dialer, cfg, log)
-		}()
 	}
-	wg.Wait()
 	return nil
+}
+
+func (h *relayHandler) Deliver(ctx context.Context, env Envelope) (string, error) {
+	rcpts := make([]Recipient, 0, len(env.Rcpts))
+	for _, r := range env.Rcpts {
+		pk, fwd, _, err := ParseRecipient(r, h.cfg.Suffix, h.cfg.Mode)
+		if err != nil {
+			return "", err
+		}
+		rcpts = append(rcpts, Recipient{Original: r, Forward: fwd, PeerPK: pk})
+	}
+	if err := Relay(ctx, h.dialer, h.cfg, env.From, rcpts, env.Body, h.log); err != nil {
+		h.log.WithError(err).Warn("skymailbridge: relay")
+		return "", &Reply{Code: 451, Enhanced: "4.4.1", Text: "peer relay failed: " + err.Error()}
+	}
+	return "Ok: queued via skymail-bridge", nil
 }
 
 // Recipient is one parsed RCPT TO entry.
@@ -255,109 +270,6 @@ func ParseRecipient(addr, suffix, mode string) (cipher.PubKey, string, bool, err
 		return pk, local + "@" + hostPart, true, nil
 	}
 	return cipher.PubKey{}, "", false, fmt.Errorf("unknown mode %q", mode)
-}
-
-// handleSession runs one SMTP conversation: the bridge plays the
-// server role to the local Postfix, then the client role to the
-// peer's Postfix once the envelope is complete.
-func handleSession(ctx context.Context, c net.Conn, dialer Dialer, cfg Config, log logrus.FieldLogger) {
-	br := bufio.NewReaderSize(c, readLineLimit)
-	tp := textproto.NewWriter(bufio.NewWriter(c))
-
-	if err := tp.PrintfLine("220 %s skymail-bridge", cfg.HeloName); err != nil {
-		return
-	}
-
-	var (
-		from  string
-		rcpts []Recipient
-	)
-	reset := func() {
-		from = ""
-		rcpts = nil
-	}
-
-	for {
-		line, err := readSMTPLine(br)
-		if err != nil {
-			return
-		}
-		cmd, arg := splitCommand(line)
-		switch strings.ToUpper(cmd) {
-		case "HELO":
-			_ = tp.PrintfLine("250 %s", cfg.HeloName) //nolint:errcheck,gosec
-		case "EHLO":
-			_ = tp.PrintfLine("250-%s", cfg.HeloName)       //nolint:errcheck,gosec
-			_ = tp.PrintfLine("250-SIZE %d", dataSizeLimit) //nolint:errcheck,gosec
-			_ = tp.PrintfLine("250 8BITMIME")               //nolint:errcheck,gosec
-		case "MAIL":
-			addr, perr := parseAngleAddr(arg, "FROM")
-			if perr != nil {
-				_ = tp.PrintfLine("501 5.5.4 malformed MAIL FROM: %s", perr) //nolint:errcheck,gosec
-				continue
-			}
-			from = addr
-			_ = tp.PrintfLine("250 2.1.0 OK") //nolint:errcheck,gosec
-		case "RCPT":
-			if from == "" {
-				_ = tp.PrintfLine("503 5.5.1 need MAIL before RCPT") //nolint:errcheck,gosec
-				continue
-			}
-			addr, perr := parseAngleAddr(arg, "TO")
-			if perr != nil {
-				_ = tp.PrintfLine("501 5.5.4 malformed RCPT TO: %s", perr) //nolint:errcheck,gosec
-				continue
-			}
-			pk, forward, isSkynet, perr := ParseRecipient(addr, cfg.Suffix, cfg.Mode)
-			if perr != nil {
-				_ = tp.PrintfLine("550 5.1.3 %s", perr) //nolint:errcheck,gosec
-				continue
-			}
-			if !isSkynet {
-				_ = tp.PrintfLine("550 5.7.1 %s does not end in %s; skymail-bridge only handles skynet recipients", addr, cfg.Suffix) //nolint:errcheck,gosec
-				continue
-			}
-			// All RCPT TOs in one envelope must dial the same peer;
-			// per-recipient fanout would require splitting the DATA
-			// stream. Reject the extra rcpt with 451 so the upstream
-			// Postfix retries it separately.
-			if len(rcpts) > 0 && rcpts[0].PeerPK != pk {
-				_ = tp.PrintfLine("451 4.7.1 skymail-bridge: envelope mixes peers (%s vs %s); requeue per-recipient", rcpts[0].PeerPK, pk) //nolint:errcheck,gosec
-				continue
-			}
-			rcpts = append(rcpts, Recipient{Original: addr, Forward: forward, PeerPK: pk})
-			_ = tp.PrintfLine("250 2.1.5 OK") //nolint:errcheck,gosec
-		case "DATA":
-			if from == "" || len(rcpts) == 0 {
-				_ = tp.PrintfLine("503 5.5.1 need MAIL+RCPT before DATA") //nolint:errcheck,gosec
-				continue
-			}
-			_ = tp.PrintfLine("354 end with <CR><LF>.<CR><LF>") //nolint:errcheck,gosec
-			body, derr := readDATA(br)
-			if derr != nil {
-				_ = tp.PrintfLine("451 4.3.0 read DATA: %s", derr) //nolint:errcheck,gosec
-				reset()
-				continue
-			}
-			if rerr := Relay(ctx, dialer, cfg, from, rcpts, body, log); rerr != nil {
-				log.WithError(rerr).Warn("skymailbridge: relay")
-				_ = tp.PrintfLine("451 4.4.1 peer relay failed: %s", rerr) //nolint:errcheck,gosec
-			} else {
-				_ = tp.PrintfLine("250 2.0.0 Ok: queued via skymail-bridge") //nolint:errcheck,gosec
-			}
-			reset()
-		case "RSET":
-			reset()
-			_ = tp.PrintfLine("250 2.0.0 OK") //nolint:errcheck,gosec
-		case "NOOP":
-			_ = tp.PrintfLine("250 2.0.0 OK") //nolint:errcheck,gosec
-		case "QUIT":
-			_ = tp.PrintfLine("221 2.0.0 bye") //nolint:errcheck,gosec
-			return
-		default:
-			_ = tp.PrintfLine("502 5.5.2 unknown command %q", cmd) //nolint:errcheck,gosec
-		}
-	}
 }
 
 // Relay dials the peer via dialer and forwards an SMTP envelope.

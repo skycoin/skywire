@@ -47,7 +47,7 @@ func runCurlX(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, args
 	next := func(flag string) (string, bool) {
 		i++
 		if i >= len(args) {
-			fmt.Fprintf(hc.Stderr, "curl: %s needs a value\n", flag)
+			fmt.Fprintf(hc.Stderr, "curl: %s needs a value\n", flag) //nolint:errcheck // terminal output
 			return "", false
 		}
 		return args[i], true
@@ -90,14 +90,14 @@ func runCurlX(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, args
 			}
 			proxyAddr = v
 		case strings.HasPrefix(a, "-"):
-			fmt.Fprintf(hc.Stderr, "curl: unknown flag %s\nusage: %s\n", a, curlHelp)
+			fmt.Fprintf(hc.Stderr, "curl: unknown flag %s\nusage: %s\n", a, curlHelp) //nolint:errcheck // terminal output
 			return 2
 		default:
 			rawURL = a
 		}
 	}
 	if rawURL == "" {
-		fmt.Fprintf(hc.Stderr, "usage: %s\n", curlHelp)
+		fmt.Fprintf(hc.Stderr, "usage: %s\n", curlHelp) //nolint:errcheck // terminal output
 		return 2
 	}
 	if !strings.Contains(rawURL, "://") {
@@ -115,13 +115,13 @@ func runCurlX(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, args
 	if proxyAddr != "" {
 		sa := socksAddrOf(proxyAddr)
 		if sa == "" {
-			fmt.Fprintf(hc.Stderr, "curl: unsupported proxy %q (use socks5h://host:port)\n", proxyAddr)
+			fmt.Fprintf(hc.Stderr, "curl: unsupported proxy %q (use socks5h://host:port)\n", proxyAddr) //nolint:errcheck // terminal output
 			return 2
 		}
 		var err error
 		client, err = socksProxyHTTPClient(sa)
 		if err != nil {
-			fmt.Fprintf(hc.Stderr, "curl: proxy %s: %v\n", sa, err)
+			fmt.Fprintf(hc.Stderr, "curl: proxy %s: %v\n", sa, err) //nolint:errcheck // terminal output
 			return 1
 		}
 	}
@@ -132,7 +132,7 @@ func runCurlX(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, args
 	}
 	req, err := http.NewRequest(method, rawURL, body)
 	if err != nil {
-		fmt.Fprintf(hc.Stderr, "curl: %v\n", err)
+		fmt.Fprintf(hc.Stderr, "curl: %v\n", err) //nolint:errcheck // terminal output
 		return 1
 	}
 	if data != "" {
@@ -149,17 +149,17 @@ func runCurlX(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, args
 		if proxyAddr == "" {
 			hint = " (no -x: browser fetch, cross-origin needs CORS)"
 		}
-		fmt.Fprintf(hc.Stderr, "curl: %v%s\n", err, hint)
+		fmt.Fprintf(hc.Stderr, "curl: %v%s\n", err, hint) //nolint:errcheck // terminal output
 		return 1
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
-		fmt.Fprintf(hc.Stderr, "curl: read body: %v\n", err)
+		fmt.Fprintf(hc.Stderr, "curl: read body: %v\n", err) //nolint:errcheck // terminal output
 		return 1
 	}
 	if !silent {
-		fmt.Fprintf(hc.Stderr, "curl: %s → %s (%d bytes)\n", rawURL, resp.Status, len(b))
+		fmt.Fprintf(hc.Stderr, "curl: %s → %s (%d bytes)\n", rawURL, resp.Status, len(b)) //nolint:errcheck // terminal output
 	}
 	var head string
 	if include {
@@ -176,20 +176,20 @@ func runCurlX(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, args
 	}
 	if outFile != "" {
 		if err := os.WriteFile(outFile, b, 0o644); err != nil { //nolint:gosec
-			fmt.Fprintf(hc.Stderr, "curl: write %s: %v\n", outFile, err)
+			fmt.Fprintf(hc.Stderr, "curl: write %s: %v\n", outFile, err) //nolint:errcheck // terminal output
 			return 1
 		}
 		if !silent {
-			fmt.Fprintf(hc.Stderr, "curl: saved %s\n", outFile)
+			fmt.Fprintf(hc.Stderr, "curl: saved %s\n", outFile) //nolint:errcheck // terminal output
 		}
 		return 0
 	}
 	if head != "" {
-		fmt.Fprint(hc.Stdout, head)
+		fmt.Fprint(hc.Stdout, head) //nolint:errcheck // terminal output
 	}
 	_, _ = hc.Stdout.Write(b) //nolint:errcheck
 	if len(b) > 0 && b[len(b)-1] != '\n' {
-		fmt.Fprintln(hc.Stdout)
+		fmt.Fprintln(hc.Stdout) //nolint:errcheck // terminal output
 	}
 	return 0
 }

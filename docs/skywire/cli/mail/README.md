@@ -2,7 +2,14 @@
 
 [← skywire cli](../README.md)
 
-Status, enable, and disable the visor's embedded SMTP bridge.
+The visor's own mailbox, and the embedded SMTP bridge for hosts
+that run Postfix.
+
+The mailbox receives mail to <anything>@<base32-pk>.skynet (or .dmsg)
+on port 25 over skywire and keeps it in a Maildir. It needs no MTA,
+domain or certificate: the transport authenticates every sender's PK.
+It runs by default on the wasm visor; set "skymail": {"enable": true}
+in the config to run it on a native visor.
 
 The bridge accepts SMTP from a co-located Postfix's transport_map
 and dials peer visors over the visor's existing dmsg client. With
@@ -13,12 +20,14 @@ the bridge running, a Postfix transport_map line
 routes envelopes addressed to user@<host>.<base32-pk>.skynet (or
 user@<base32-pk>.skynet) over skywire to the peer's Postfix smtpd.
 
-Without arguments, prints current state.
+Without arguments, prints the state of both.
 
 Examples:
   skywire cli mail                                  # status
-  skywire cli mail up                               # turn on
-  skywire cli mail down                             # turn off
+  skywire cli mail inbox                            # list mail
+  skywire cli mail send bob@<base32-pk>.skynet -s hi -m "hello"
+  skywire cli mail up                               # bridge on
+  skywire cli mail down                             # bridge off
 
 ## Usage
 
@@ -29,7 +38,13 @@ skywire cli mail
 ## Subcommands
 
 - [down](down/README.md) — Disable the embedded SMTP bridge
+- [inbox](inbox/README.md) — List the mailbox, newest first
+- [read](read/README.md) — Show a message and mark it read
+- [rm](rm/README.md) — Delete messages
+- [send](send/README.md) — Send mail now to skywire addresses
+- [sent](sent/README.md) — List sent mail, newest first
 - [up](up/README.md) — Enable the embedded SMTP bridge
+- [whitelist](whitelist/README.md) — Show or change which PKs may deliver mail
 
 ## Global Flags
 

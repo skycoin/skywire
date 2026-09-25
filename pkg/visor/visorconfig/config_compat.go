@@ -44,6 +44,7 @@ type v1JSON struct {
 	Resolvers     []ResolverConfig     `json:"resolvers,omitempty"`
 	BrowseOrigin  *BrowseOriginConfig  `json:"browse_origin,omitempty"`
 	SkymailBridge *SkymailBridgeConfig `json:"skymail_bridge,omitempty"`
+	Skymail       *SkymailConfig       `json:"skymail,omitempty"`
 	Rewards       *RewardsConfig       `json:"rewards,omitempty"`
 	STCP          *tnspec.STCPConfig   `json:"skywire-tcp,omitempty"`
 	Transport     *Transport           `json:"transport"`
@@ -112,6 +113,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.Resolvers = mirror.Resolvers
 	v.BrowseOrigin = mirror.BrowseOrigin
 	v.SkymailBridge = mirror.SkymailBridge
+	v.Skymail = mirror.Skymail
 	v.Rewards = mirror.Rewards
 	v.STCP = mirror.STCP
 	v.Transport = mirror.Transport
