@@ -10,12 +10,21 @@ import (
 
 	"github.com/0magnet/yamux"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/skysocks/skysettings"
 )
 
 // newAnsweringSession is newTestSession's peer with a working skysocks exit on
 // the far end: it answers every stream's SOCKS5 greeting with 05 00, so
 // openExit on it succeeds.
 func newAnsweringSession(t *testing.T) (*yamux.Session, func()) {
+	t.Helper()
+	return newAnsweringSessionAfter(t, 0)
+}
+
+// newAnsweringSessionAfter is newAnsweringSession on a slow path: each greeting
+// is answered only after delay, as an exit one long round trip away would be.
+func newAnsweringSessionAfter(t *testing.T, delay time.Duration) (*yamux.Session, func()) {
 	t.Helper()
 	a, b := net.Pipe()
 	ssess, err := yamux.Server(b, yamux.DefaultConfig())
@@ -34,6 +43,7 @@ func newAnsweringSession(t *testing.T) (*yamux.Session, func()) {
 				if _, e := io.ReadFull(st, make([]byte, int(hdr[1]))); e != nil {
 					return
 				}
+				time.Sleep(delay)
 				_, _ = st.Write([]byte{0x05, 0x00}) //nolint:errcheck
 				_, _ = io.Copy(io.Discard, st)      //nolint:errcheck
 			}(st)
@@ -179,4 +189,47 @@ func TestExitOpenPenaltyExpires(t *testing.T) {
 
 	mA.bench(time.Now())
 	require.Same(t, b, c.pickSessionFor(pickRecv), "a fresh bench does")
+}
+
+// TestExitOpenWindowScalesWithTunnelRTT: the greeting reply is one exit round
+// trip away, so on a slow path (the live case: a 7–9 s RTT against a 15 s
+// window) a healthy exit answering past tunnel.exit_open_timeout must still be
+// waited for, up to tunnel.exit_open_rtt_factor x the tunnel's smoothed RTT.
+// Scaled down: a 300 ms knob, a 150 ms RTT (floor 600 ms), a reply at 450 ms.
+func TestExitOpenWindowScalesWithTunnelRTT(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	skysettings.Apply(map[string]int64{skysettings.TunnelExitOpenTimeout: int64(300 * time.Millisecond)})
+
+	slow, closeSlow := newAnsweringSessionAfter(t, 450*time.Millisecond)
+	defer closeSlow()
+	m := new(tunnelMeter)
+	c := &Client{
+		sessions:  []*yamux.Session{slow},
+		recvStamp: map[*yamux.Session]*tunnelMeter{slow: m},
+		closeC:    make(chan struct{}),
+	}
+
+	// No RTT measured: the plain knob governs and the slow reply misses it.
+	require.Error(t, openExitOnce(t, c, slow), "unmeasured, the 300 ms knob cuts a 450 ms reply")
+	m.unbench()
+
+	m.mu.Lock()
+	m.rttMs = 150
+	m.mu.Unlock()
+	require.NoError(t, openExitOnce(t, c, slow), "4 x 150 ms RTT waits out the 450 ms reply")
+	require.False(t, m.onBench(time.Now()))
+
+	// A truly silent exit on the same RTT still times out, at the floor, and benches.
+	dead, closeDead := newTestSession(t)
+	defer closeDead()
+	md := new(tunnelMeter)
+	md.rttMs = 150
+	c.sessions = append(c.sessions, dead)
+	c.recvStamp[dead] = md
+	started := time.Now()
+	err := openExitOnce(t, c, dead)
+	require.Error(t, err)
+	require.True(t, isTimeout(err), "got %v", err)
+	require.GreaterOrEqual(t, time.Since(started), 600*time.Millisecond, "the window is the RTT floor, not the knob")
+	require.True(t, md.onBench(time.Now()), "a real timeout still benches the tunnel")
 }
