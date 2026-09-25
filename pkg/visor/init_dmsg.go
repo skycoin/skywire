@@ -68,34 +68,34 @@ func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	// --dmsg-server pins the direct dmsg client (dmsgDC) to a single
 	// server. The discovery-driven dmsgC is pinned separately by
 	// dmsg.Client.serve() via the "dmsgServer" context value.
-	if dmsgServer != "" {
+	if v.opts.DmsgServer != "" {
 		var pinned []*dmsgdisc.Entry
-		if dmsgServerAddr != "" {
+		if v.opts.DmsgServerAddr != "" {
 			// pk@host:port form: synthesize the entry from the flag so
 			// dmsg-http works on a bootstrap visor that has no cached
 			// servers and possibly no working discovery.
 			var pk cipher.PubKey
-			if err := pk.Set(dmsgServer); err != nil {
-				log.WithError(err).WithField("dmsg_server", dmsgServer).
+			if err := pk.Set(v.opts.DmsgServer); err != nil {
+				log.WithError(err).WithField("dmsg_server", v.opts.DmsgServer).
 					Error("--dmsg-server: invalid public key; dmsg-http will be unavailable")
 			} else {
 				pinned = []*dmsgdisc.Entry{{
 					Static: pk,
-					Server: &dmsgdisc.Server{Address: dmsgServerAddr},
+					Server: &dmsgdisc.Server{Address: v.opts.DmsgServerAddr},
 				}}
-				log.WithField("dmsg_server", dmsgServer).
-					WithField("addr", dmsgServerAddr).
+				log.WithField("dmsg_server", v.opts.DmsgServer).
+					WithField("addr", v.opts.DmsgServerAddr).
 					Info("--dmsg-server pk@host:port: skipping discovery for dmsg-http")
 			}
 		} else {
 			for _, e := range configured {
-				if e != nil && e.Static.Hex() == dmsgServer {
+				if e != nil && e.Static.Hex() == v.opts.DmsgServer {
 					pinned = []*dmsgdisc.Entry{e}
 					break
 				}
 			}
 			if len(pinned) == 0 {
-				log.WithField("dmsg_server", dmsgServer).
+				log.WithField("dmsg_server", v.opts.DmsgServer).
 					Warn("--dmsg-server PK not in configured/cached servers; dmsg-http will be unavailable")
 			}
 		}
@@ -218,7 +218,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	// server is reachable. Deep-copy Deployments so the override stays
 	// local to this dmsgConf and doesn't leak into v.conf.Dmsg via the
 	// shared slice header.
-	if dmsgServer != "" {
+	if v.opts.DmsgServer != "" {
 		if len(dmsgConf.Deployments) > 0 {
 			deps := make([]dmsgc.Deployment, len(dmsgConf.Deployments))
 			copy(deps, dmsgConf.Deployments)
@@ -226,7 +226,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 			dmsgConf.Deployments = deps
 		}
 		dmsgConf.SessionsCount = 1
-		log.WithField("dmsg_server", dmsgServer).
+		log.WithField("dmsg_server", v.opts.DmsgServer).
 			Info("--dmsg-server set: forcing dmsg.sessions_count=1")
 	}
 
@@ -327,12 +327,12 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	//     backoff (5s → 60s), so 5 attempts is on the order of
 	//     2–3 minutes before shutdown.
 	const dmsgInitTimeout = 30 * time.Second
-	if dmsgServer != "" {
-		maxAttempts := dmsgServerMaxAttempts
+	if v.opts.DmsgServer != "" {
+		maxAttempts := v.opts.DmsgServerMaxAttempts
 		if maxAttempts <= 0 {
 			maxAttempts = 5
 		}
-		log.WithField("dmsg_server", dmsgServer).
+		log.WithField("dmsg_server", v.opts.DmsgServer).
 			WithField("max_attempts", maxAttempts).
 			Info("--dmsg-server set: waiting for pinned server (will abort after max attempts)")
 		ticker := time.NewTicker(1 * time.Second)
@@ -348,11 +348,11 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 			case <-ticker.C:
 				if attempts := dmsgC.PinnedFailureCount(); attempts >= int64(maxAttempts) {
 					ticker.Stop()
-					log.WithField("dmsg_server", dmsgServer).
+					log.WithField("dmsg_server", v.opts.DmsgServer).
 						WithField("attempts", attempts).
 						WithField("max_attempts", maxAttempts).
 						Error("--dmsg-server pinned but unreachable; aborting startup")
-					return fmt.Errorf("dmsg server %s (from --dmsg-server) unreachable after %d attempts", dmsgServer, attempts)
+					return fmt.Errorf("dmsg server %s (from --dmsg-server) unreachable after %d attempts", v.opts.DmsgServer, attempts)
 				}
 			}
 		}

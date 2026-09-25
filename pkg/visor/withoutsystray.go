@@ -5,8 +5,9 @@
 package visor
 
 import (
-	"context"
 	"sync"
+
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
@@ -14,18 +15,11 @@ var (
 	stopVisorFn   func()
 )
 
-func runAppSystray() {
-	// no-op: systray not available
-}
+// RunSystray is a no-op: this build has no systray.
+func RunSystray(_ *visorconfig.V1, _ Options) {}
 
-func runApp() {
-	err := run(context.Background(), nil)
-	if err != nil {
-		mLog.WithError(err).Fatal("a fatal error occurred")
-	}
-}
-
-func runTrayOnly() {
+// RunTrayOnly exits: this build has no systray.
+func RunTrayOnly(_ string) {
 	// systray not available in this build (built with the 'withoutsystray' tag).
 	mLog.Fatal("this build has no systray support (built with the 'withoutsystray' tag); rebuild without it to use --systray-only")
 }

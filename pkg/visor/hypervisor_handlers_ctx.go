@@ -110,7 +110,7 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 		return nil, false
 	}
 
-	if useCsrf && (r.Method == "POST" || r.Method == "PUT" || r.Method == "DELETE") {
+	if hv.useCsrf() && (r.Method == "POST" || r.Method == "PUT" || r.Method == "DELETE") {
 		csrfToken := r.Header.Get(CSRFHeaderName)
 		if csrfToken == "" {
 			errMsg := fmt.Errorf("no csrf token for %s request", r.Method)

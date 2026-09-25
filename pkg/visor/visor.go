@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -106,6 +105,7 @@ type Visor struct {
 
 	ctx      context.Context // stored so RPC handlers can derive child contexts
 	conf     *visorconfig.V1
+	opts     Options
 	log      *logging.Logger
 	logstore logstore.Store
 	logBcast *logging.Broadcaster // fans entries out to gRPC StreamAppLogs subscribers
@@ -563,16 +563,21 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 }
 
 func reload(v *Visor) error {
-	if confPath == visorconfig.Stdin {
-		v.log.Error("Cannot reload visor ; config was piped via stdin")
-		return nil
+	opts := v.opts
+	if opts.LoadConfig == nil {
+		return errors.New("cannot reload: the visor was started with a config it cannot read again")
 	}
+	conf, err := opts.LoadConfig()
+	if err != nil {
+		return fmt.Errorf("cannot reload: %w", err)
+	}
+	opts.LaunchBrowser = false // the browser was opened on the first start
 	if err := v.Close(); err != nil {
 		v.log.WithError(err).Error("Visor closed with error.")
 		return err
 	}
 	v = nil
-	return run(context.Background(), nil)
+	return run(context.Background(), conf, opts)
 }
 
 // Run is the exported entry point used by pkg/services/visor. parentCtx
@@ -580,10 +585,10 @@ func reload(v *Visor) error {
 // when the multi-service supervisor cancels its ctx, the visor's
 // signal-derived ctx cancels too and the visor unwinds cleanly.
 //
-// Behaves identically to the standalone cobra path when parentCtx is
-// context.Background(), which is what runApp / runAppSystray pass.
-func Run(parentCtx context.Context, conf *visorconfig.V1) error {
-	return run(parentCtx, conf)
+// The standalone command (cmd/skywire-visor/commands) calls it with
+// context.Background().
+func Run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
+	return run(parentCtx, conf, opts)
 }
 
 // preflightSingleInstance refuses to start when another visor is already
@@ -621,7 +626,7 @@ func preflightSingleInstance(conf *visorconfig.V1, log logrus.FieldLogger) error
 // run is the implementation for both the standalone cobra entry point
 // and the multi-service supervisor. parentCtx is the parent of the
 // SignalContext built around it.
-func run(parentCtx context.Context, conf *visorconfig.V1) error {
+func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 	// The runtime-log hook JSON-encodes every entry it accepts under a
 	// process-wide mutex, so it captures info and above by default rather than
 	// every level (see logstore.DefaultHookLevel). SKYWIRE_LOG_HOOK_LEVEL puts
@@ -636,41 +641,34 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 	logBroadcaster := logging.NewBroadcaster()
 	mLog.AddHook(logBroadcaster)
 
-	stopPProf := dmsgcmdutil.InitPProf(mLog.PackageLogger("pprof"), pprofMode, pprofAddr)
+	stopPProf := dmsgcmdutil.InitPProf(mLog.PackageLogger("pprof"), opts.PprofMode, opts.PprofAddr)
 	defer stopPProf()
-
-	if conf == nil {
-		conf = initConfig()
-	}
 
 	conf.MasterLogger().AddHook(hook)
 	conf.MasterLogger().AddHook(logBroadcaster)
 
-	if disableHypervisorPKs {
+	if opts.NoHypervisors {
 		conf.Hypervisors = []cipher.PubKey{}
 	}
 
 	pubkey := cipher.PubKey{}
-	if remoteHypervisorPKs != "" {
-		hypervisorPKsSlice := strings.Split(remoteHypervisorPKs, ",")
-		for _, pubkeyString := range hypervisorPKsSlice {
-			if err := pubkey.Set(pubkeyString); err != nil {
-				mLog.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
-				continue
-			}
-			mLog.Infof("%s PK added as remote hypervisor PK", pubkeyString)
-			conf.Hypervisors = append(conf.Hypervisors, pubkey)
+	for _, pubkeyString := range opts.Hypervisors {
+		if err := pubkey.Set(pubkeyString); err != nil {
+			mLog.Warnf("Cannot add %s PK as remote hypervisor PK due to: %s", pubkeyString, err)
+			continue
 		}
+		mLog.Infof("%s PK added as remote hypervisor PK", pubkeyString)
+		conf.Hypervisors = append(conf.Hypervisors, pubkey)
 	}
 
-	if logLvl != "" {
+	if opts.LogLevel != "" {
 		//validate & set log level
-		_, err := logging.LevelFromString(logLvl)
+		_, err := logging.LevelFromString(opts.LogLevel)
 		if err != nil {
-			mLog.WithError(err).Error("Invalid log level specified: ", logLvl)
+			mLog.WithError(err).Error("Invalid log level specified: ", opts.LogLevel)
 		} else {
-			conf.LogLevel = logLvl
-			mLog.Info("setting log level to: ", logLvl)
+			conf.LogLevel = opts.LogLevel
+			mLog.Info("setting log level to: ", opts.LogLevel)
 		}
 	}
 
@@ -682,6 +680,9 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 	}
 
 	if conf.Hypervisor != nil {
+		if *uiAssets == nil {
+			return errors.New("missing embedded assets for hypervisor ui")
+		}
 		conf.Hypervisor.UIAssets = *uiAssets
 	}
 
@@ -737,7 +738,7 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 	}
 
 	ctx, cancel := cmdutil.SignalContext(parentCtx, mLog)
-	vis, ok := NewVisor(ctx, conf, logBroadcaster, store)
+	vis, ok := NewVisor(ctx, conf, opts, logBroadcaster, store)
 	if !ok {
 		select {
 		case <-ctx.Done():
@@ -763,12 +764,12 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 	// init) so the --verbose stream and `cli visor log` work during startup; no
 	// post-init wiring needed here.
 	//	vis.uiAssets = uiAssets
-	if launchBrowser {
+	if opts.LaunchBrowser {
 		if conf.Hypervisor == nil {
 			mLog.Errorln("Hypervisor not started - hypervisor UI unavailable")
+		} else {
+			runBrowser(conf.Hypervisor.HTTPAddr, conf.Hypervisor.EnableTLS)
 		}
-		runBrowser(conf.Hypervisor.HTTPAddr, conf.Hypervisor.EnableTLS)
-		launchBrowser = false
 	}
 	// Wait.
 	<-ctx.Done()
@@ -783,18 +784,15 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 // while the visor is still starting up — the RPC binds during module init, so
 // wiring these afterward left a window where a log query hit a nil field and
 // segfaulted the process. Both may be nil (e.g. tests); all readers nil-guard.
-func NewVisor(ctx context.Context, conf *visorconfig.V1, logBcast *logging.Broadcaster, logStore logstore.Store) (*Visor, bool) {
-	if conf == nil {
-		conf = initConfig()
-	}
-
-	if isForceColor {
+func NewVisor(ctx context.Context, conf *visorconfig.V1, opts Options, logBcast *logging.Broadcaster, logStore logstore.Store) (*Visor, bool) {
+	if opts.ForceColor {
 		setForceColor(conf)
 	}
 
 	v := &Visor{
 		log:                       conf.MasterLogger().PackageLogger("visor"),
 		conf:                      conf,
+		opts:                      opts,
 		dmsgHTTPReady:             make(chan struct{}),
 		initLock:                  new(sync.RWMutex),
 		closeMu:                   new(sync.RWMutex),
@@ -888,8 +886,8 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, logBcast *logging.Broad
 	applyMemoryLimit(v.log, conf.MemoryLimit)
 	// Platform GC default (wasm keeps its heap peak forever; see gctune_js.go).
 	applyGCTuning(v.log)
-	if isStoreLog {
-		storeLog(conf)
+	if opts.StoreLog {
+		storeLog(conf, opts.LogJSON)
 	}
 	log := v.MasterLogger().PackageLogger("visor:startup")
 	log.WithField("public_key", conf.PK).
@@ -897,16 +895,16 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, logBcast *logging.Broad
 	ctx = context.WithValue(ctx, visorKey, v)
 	v.runtimeErrors = make(chan error)
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
-	if dmsgServer != "" {
+	if opts.DmsgServer != "" {
 		// dmsg.Client.serve() reads ctx.Value("dmsgServer") (string key)
 		// to pin discovery to a single server PK. Match that key exactly
 		// — a private struct type here would silently disable pinning.
-		ctx = context.WithValue(ctx, "dmsgServer", dmsgServer) //nolint:staticcheck // SA1029: matches dmsg.Client's existing string key
-		if dmsgServerAddr != "" {
+		ctx = context.WithValue(ctx, "dmsgServer", opts.DmsgServer) //nolint:staticcheck // SA1029: matches dmsg.Client's existing string key
+		if opts.DmsgServerAddr != "" {
 			// --dmsg-server pk@host:port form. dmsg.Client.serve() reads
 			// "dmsgServerAddr" alongside "dmsgServer" and skips discovery
 			// when both are set, dialing host:port directly.
-			ctx = context.WithValue(ctx, "dmsgServerAddr", dmsgServerAddr) //nolint:staticcheck // SA1029: matches dmsg.Client's existing string key
+			ctx = context.WithValue(ctx, "dmsgServerAddr", opts.DmsgServerAddr) //nolint:staticcheck // SA1029: matches dmsg.Client's existing string key
 		}
 	}
 	// Wrap the fully value-decorated ctx in a cancelable child stored on
@@ -1349,7 +1347,7 @@ func initUI() *fs.FS {
 
 }
 
-func storeLog(conf *visorconfig.V1) {
+func storeLog(conf *visorconfig.V1, logJSON bool) {
 	logPath := conf.LocalPath + "/log"
 	logFile := logPath + "/skywire.log"
 
@@ -1404,7 +1402,7 @@ func storeLog(conf *visorconfig.V1) {
 		conf.MasterLogger().Hooks.Add(hook)
 	}
 
-	if isLogJSON {
+	if logJSON {
 		addJSONLogHook(conf)
 	}
 }

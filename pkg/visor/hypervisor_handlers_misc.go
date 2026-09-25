@@ -21,7 +21,7 @@ func (hv *Hypervisor) getPong() http.HandlerFunc {
 
 func (hv *Hypervisor) getCsrf() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if useCsrf {
+		if hv.useCsrf() {
 			token, err := newCSRFToken()
 			if err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
@@ -115,4 +115,10 @@ func (hv *Hypervisor) getPty() http.HandlerFunc {
 		customCommand["update"] = visorconfig.UpdateCommand()
 		ctx.PtyUI.PtyUI.Handler(customCommand)(w, r)
 	})
+}
+
+// useCsrf reports whether state-changing requests need a CSRF token. A
+// hypervisor with no visor behind it (tests) keeps the default, which is on.
+func (hv *Hypervisor) useCsrf() bool {
+	return hv.visor == nil || !hv.visor.opts.NoCSRF
 }
