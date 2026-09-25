@@ -1,4 +1,4 @@
-// Package pairing cmd/apps/skychat/pairing/store_seal.go c4-app-chat
+// Package pairing pkg/skychat/pairing/store_seal.go c4-app-chat
 // sealing a pair's ratchet secrets at rest.
 //
 // The pair store gained something worth protecting when the ratchet

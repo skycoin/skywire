@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/cmd/apps/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 

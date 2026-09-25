@@ -24,9 +24,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/skycoin/skywire/cmd/apps/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/telemetrywire"
 	"github.com/skycoin/skywire/pkg/visor/logserver"

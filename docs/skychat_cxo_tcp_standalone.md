@@ -23,7 +23,7 @@ sidesteps the exact blocker that stalled the visor-hosted version.
 CXO chat machinery is present and transport-pluggable:
 
 - `pkg/cxo/treestore` — `Publisher` / `Subscriber` over a `pkg/cxo/node.Node`.
-- `cmd/apps/skychat/pairing` (1:1) and `cmd/apps/skychat/group` (group) Managers
+- `pkg/skychat/pairing` (1:1) and `cmd/apps/skychat/group` (group) Managers
   — each needs only `{transport, SK, DataDir, Logger}`.
 - The CXO node **natively supports TCP** (`config.go`: `cfg.TCP.Listen=":8870"`).
   `treestore.NewWithDMSG` deliberately *disables* TCP/UDP/RPC and swaps in a dmsg
