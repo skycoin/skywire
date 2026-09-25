@@ -1587,6 +1587,7 @@ func (c *Client) exitWriteConnect(st net.Conn, host string, port int, payload []
 // splicePrefixed is the original two-way splice, optionally replaying bytes already
 // read from the browser to the exit first (so the exit sees an identical stream).
 func (c *Client) splicePrefixed(conn, stream net.Conn, clientPrefix []byte) {
+	var browserDone atomic.Bool
 	go func() {
 		var src io.Reader = conn
 		if len(clientPrefix) > 0 {
@@ -1610,15 +1611,46 @@ func (c *Client) splicePrefixed(conn, stream net.Conn, clientPrefix []byte) {
 		// request is complete (nc -N among them). Forward the end of data and
 		// leave the download running.
 		halfCloseWrite(stream)
+		// …but not forever. The client has nothing more to say, so the reply
+		// is all that is left, and an exit that never sends FIN (every exit
+		// before #5123 on origin EOF) would hold the pair open for good. From
+		// here the download runs under a rolling idle deadline.
+		browserDone.Store(true)
+		_ = stream.SetReadDeadline(time.Now().Add(setChunkIdleTimeout())) //nolint:errcheck
 	}()
 
 	// The download direction owns the lifetime: when the exit has finished,
 	// the transaction is over and closing conn also unblocks the copy above.
-	if _, err := io.Copy(conn, stream); err != nil && c.appCl != nil {
+	if err := spliceDown(conn, stream, &browserDone); err != nil && c.appCl != nil {
 		c.appCl.Log().Debugf("Copy error: %v", err)
 	}
 	conn.Close()   //nolint:errcheck,gosec
 	stream.Close() //nolint:errcheck,gosec
+}
+
+// spliceDown copies the exit's reply to the client until the exit ends it. Once
+// browserDone is set every read that makes progress pushes the idle deadline
+// out again, so a reply that is still flowing is never cut; one that has gone
+// silent for chunk.idle_timeout ends the splice.
+func spliceDown(conn, stream net.Conn, browserDone *atomic.Bool) error {
+	buf := make([]byte, 32<<10)
+	for {
+		n, err := stream.Read(buf)
+		if n > 0 {
+			if _, werr := conn.Write(buf[:n]); werr != nil {
+				return werr
+			}
+			if browserDone.Load() {
+				_ = stream.SetReadDeadline(time.Now().Add(setChunkIdleTimeout())) //nolint:errcheck
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return err
+		}
+	}
 }
 
 // halfCloseWrite passes on "I have finished sending" without disturbing the
