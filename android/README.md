@@ -343,14 +343,27 @@ tag's source and a re-run could not add it; F-Droid then shows no "what's new".
 The tag starts `.github/workflows/android-release.yml`, which publishes the
 signed APK and AAB to GitHub Releases. Then `android-fdroid.yml` writes X.Y.Z
 into `version.properties` on a commit over the tag, builds it the way F-Droid
-will (lint, update bot, build), and if that passes tags it `fdroid-vX.Y.Z`.
-F-Droid's update bot watches `fdroid-v*` tags and publishes each one by
-itself, using the recipe in `fdroid/com.skycoin.skywire.yml`.
+will (lint, update bot, build), signs that build with the release key and adds
+it to the release as `skywire-X.Y.Z-fdroid.apk`, and if all of that passes
+tags it `fdroid-vX.Y.Z`. F-Droid's update bot watches `fdroid-v*` tags and
+publishes each one by itself, using the recipe in `fdroid/com.skycoin.skywire.yml`.
+
+The F-Droid build is reproducible: F-Droid builds the same commit, checks
+that its build is byte-identical to `skywire-X.Y.Z-fdroid.apk` (the recipe's
+`Binaries`), and ships that APK with our signature rather than its own
+(`AllowedAPKSigningKeys` pins the certificate). GitHub and F-Droid installs
+therefore carry the same signature and update each other, and the release
+key is the one key behind both: keep a backup of it (and its passwords)
+outside GitHub, because a lost key means no install anywhere can be updated
+again.
 
 If the F-Droid step fails, fix it on `develop` and run it again for the same
 tag: Actions → Android F-Droid → Run workflow, or
 `gh workflow run android-fdroid.yml -f tag=mobile-vX.Y.Z`. No new release is
-needed; the tag's source is built with `develop`'s script and recipe.
+needed; the tag's source is built with `develop`'s script and recipe. A re-run
+builds the existing `fdroid-vX.Y.Z` commit if there is one, and checks a
+`skywire-X.Y.Z-fdroid.apk` already on the release against its build instead of
+replacing it.
 
 ## License
 
