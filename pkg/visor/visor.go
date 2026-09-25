@@ -920,17 +920,17 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, opts Options, logBcast 
 	// before those exist answers "not ready" rather than crashing.
 	visorapi.RegisterLocalAPI(v)
 	v.pushCloseStack("visor.local_api", func() error { visorapi.UnregisterLocalAPI(v); return nil })
-	registerModules(v.MasterLogger())
+	mods := registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
 	if v.conf.Hypervisor == nil {
-		mainModule = vis
+		mainModule = mods.vis
 	} else {
 		log.Info("main module set to hypervisor")
 
-		mainModule = hv
+		mainModule = mods.hv
 	}
 	// run Transport module in a non blocking mode
-	go tm.InitConcurrent(ctx)
+	go mods.tm.InitConcurrent(ctx)
 	mainModule.InitConcurrent(ctx)
 	if err := mainModule.Wait(ctx); err != nil {
 		select {
@@ -947,7 +947,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, opts Options, logBcast 
 		}
 		return nil, false
 	}
-	if err := tm.Wait(ctx); err != nil {
+	if err := mods.tm.Wait(ctx); err != nil {
 		select {
 		case <-ctx.Done():
 		default:
