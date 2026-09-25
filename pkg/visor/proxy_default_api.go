@@ -32,6 +32,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -58,23 +59,23 @@ var _ visorconfig.Duration
 
 type proxyDefaultAPI struct{}
 
-func (proxyDefaultAPI) Overview() (*Overview, error) {
+func (proxyDefaultAPI) Overview() (*visorapi.Overview, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) Summary() (*Summary, error) {
+func (proxyDefaultAPI) Summary() (*visorapi.Summary, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) StateSnapshot() (*StateSnapshot, error) {
+func (proxyDefaultAPI) StateSnapshot() (*visorapi.StateSnapshot, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) StateSnapshotProjected(_ []string) (*StateSnapshot, error) {
+func (proxyDefaultAPI) StateSnapshotProjected(_ []string) (*visorapi.StateSnapshot, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) Health() (*HealthInfo, error) {
+func (proxyDefaultAPI) Health() (*visorapi.HealthInfo, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -130,11 +131,11 @@ func (proxyDefaultAPI) Uptime() (float64, error) {
 	return 0, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) UptimeHistory(_ UptimeHistoryArgs) (*UptimeHistoryResponse, error) {
+func (proxyDefaultAPI) UptimeHistory(_ visorapi.UptimeHistoryArgs) (*visorapi.UptimeHistoryResponse, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) RuntimeStats() (*RuntimeStatsInfo, error) {
+func (proxyDefaultAPI) RuntimeStats() (*visorapi.RuntimeStatsInfo, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -154,15 +155,15 @@ func (proxyDefaultAPI) RuntimeLogs() (string, error) {
 	return "", ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) RuntimeLogsSince(_ int64) (RuntimeLogsDelta, error) {
-	return RuntimeLogsDelta{}, ErrProxyNotSupported
+func (proxyDefaultAPI) RuntimeLogsSince(_ int64) (visorapi.RuntimeLogsDelta, error) {
+	return visorapi.RuntimeLogsDelta{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) HostStats() (*HostStatsInfo, error) {
+func (proxyDefaultAPI) HostStats() (*visorapi.HostStatsInfo, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) NetworkView() (*NetworkViewResponse, error) {
+func (proxyDefaultAPI) NetworkView() (*visorapi.NetworkViewResponse, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -186,7 +187,7 @@ func (proxyDefaultAPI) RemoteVisors() ([]string, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) DmsgPtyExec(_ DmsgPtyExecArgs) (*pty.CommandExecResult, error) {
+func (proxyDefaultAPI) DmsgPtyExec(_ visorapi.DmsgPtyExecArgs) (*pty.CommandExecResult, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -194,11 +195,11 @@ func (proxyDefaultAPI) IsDMSGClientReady() (bool, error) {
 	return false, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) DMSGServers() ([]DMSGServerInfo, error) {
+func (proxyDefaultAPI) DMSGServers() ([]visorapi.DMSGServerInfo, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) Ports() (map[string]PortDetail, error) {
+func (proxyDefaultAPI) Ports() (map[string]visorapi.PortDetail, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -214,7 +215,7 @@ func (proxyDefaultAPI) DeleteRewardAddress() error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) SetLANDmsgServer(_ LANDmsgServerInfo) error {
+func (proxyDefaultAPI) SetLANDmsgServer(_ visorapi.LANDmsgServerInfo) error {
 	return ErrProxyNotSupported
 }
 
@@ -318,12 +319,12 @@ func (proxyDefaultAPI) SetAppArgs(_ string, _ []string) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GetAppSettings(_ string) (AppSettings, error) {
-	return AppSettings{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GetAppSettings(_ string) (visorapi.AppSettings, error) {
+	return visorapi.AppSettings{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) SetAppSettings(_ string, _ map[string]int64, _ map[string]string) (AppSettings, error) {
-	return AppSettings{}, ErrProxyNotSupported
+func (proxyDefaultAPI) SetAppSettings(_ string, _ map[string]int64, _ map[string]string) (visorapi.AppSettings, error) {
+	return visorapi.AppSettings{}, ErrProxyNotSupported
 }
 
 // CutAppTunnel implements API.
@@ -399,7 +400,7 @@ func (proxyDefaultAPI) ProxyServers(_ string, _ string) ([]servicedisc.Service, 
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) TestProxy(_ ProxyTestConfig) ([]ProxyTestResult, error) {
+func (proxyDefaultAPI) TestProxy(_ visorapi.ProxyTestConfig) ([]visorapi.ProxyTestResult, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -411,11 +412,11 @@ func (proxyDefaultAPI) SetForceLocalRoutes(_ bool) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GetRouterSettings() (RouterSettings, error) {
-	return RouterSettings{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GetRouterSettings() (visorapi.RouterSettings, error) {
+	return visorapi.RouterSettings{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) SetRouterSettings(_ RouterSettings) error {
+func (proxyDefaultAPI) SetRouterSettings(_ visorapi.RouterSettings) error {
 	return ErrProxyNotSupported
 }
 
@@ -439,15 +440,15 @@ func (proxyDefaultAPI) TransportTypes() ([]string, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) Transports(_ []string, _ []cipher.PubKey, _ bool) ([]*TransportSummary, error) {
+func (proxyDefaultAPI) Transports(_ []string, _ []cipher.PubKey, _ bool) ([]*visorapi.TransportSummary, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) Transport(_ uuid.UUID) (*TransportSummary, error) {
+func (proxyDefaultAPI) Transport(_ uuid.UUID) (*visorapi.TransportSummary, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) AddTransport(_ cipher.PubKey, _ string, _ time.Duration, _ string, _ bool, _ bool) (*TransportSummary, error) {
+func (proxyDefaultAPI) AddTransport(_ cipher.PubKey, _ string, _ time.Duration, _ string, _ bool, _ bool) (*visorapi.TransportSummary, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -483,27 +484,27 @@ func (proxyDefaultAPI) SetRuntimeConfig(_ []byte) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) SetConfigFields(_ map[string]json.RawMessage) ([]ConfigFieldChange, error) {
+func (proxyDefaultAPI) SetConfigFields(_ map[string]json.RawMessage) ([]visorapi.ConfigFieldChange, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) LocalTransportStats() (*LocalTransportStatsResponse, error) {
+func (proxyDefaultAPI) LocalTransportStats() (*visorapi.LocalTransportStatsResponse, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) LocalUptimeStats(_ LocalUptimeArgs) (*LocalUptimeResponse, error) {
+func (proxyDefaultAPI) LocalUptimeStats(_ visorapi.LocalUptimeArgs) (*visorapi.LocalUptimeResponse, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) FetchCXO(_ FetchCXOArgs) (*FetchCXOResult, error) {
+func (proxyDefaultAPI) FetchCXO(_ visorapi.FetchCXOArgs) (*visorapi.FetchCXOResult, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) CXOStatus() ([]FeedStatus, error) {
+func (proxyDefaultAPI) CXOStatus() ([]visorapi.FeedStatus, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) CXORefreshFeed(_ CXORefreshArgs) (*FeedStatus, error) {
+func (proxyDefaultAPI) CXORefreshFeed(_ visorapi.CXORefreshArgs) (*visorapi.FeedStatus, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -531,7 +532,7 @@ func (proxyDefaultAPI) SetPersistentTransports(_ []transport.PersistentTransport
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GetTransportLogs(_ int) ([]TransportLogEntry, error) {
+func (proxyDefaultAPI) GetTransportLogs(_ int) ([]visorapi.TransportLogEntry, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -559,7 +560,7 @@ func (proxyDefaultAPI) RemoveRoutingRule(_ routing.RouteID) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) RouteGroups() ([]RouteGroupInfo, error) {
+func (proxyDefaultAPI) RouteGroups() ([]visorapi.RouteGroupInfo, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -567,7 +568,7 @@ func (proxyDefaultAPI) RoutingStats() (routing.RoutingTableStats, error) {
 	return routing.RoutingTableStats{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) RoutingPolicies() (*RoutingPoliciesSummary, error) {
+func (proxyDefaultAPI) RoutingPolicies() (*visorapi.RoutingPoliciesSummary, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -575,11 +576,11 @@ func (proxyDefaultAPI) AppDirectStreams(_ string) ([]transport.VStreamInfo, erro
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) RouteGroupMuxInfo(_ string) ([]MuxRouteGroupInfo, error) {
+func (proxyDefaultAPI) RouteGroupMuxInfo(_ string) ([]visorapi.MuxRouteGroupInfo, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) ActiveRoutes() ([]AppRouteStatus, error) {
+func (proxyDefaultAPI) ActiveRoutes() ([]visorapi.AppRouteStatus, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -603,7 +604,7 @@ func (proxyDefaultAPI) SetMuxDirection(_, _ string) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) ServiceHealth() ([]ServiceHealthEntry, error) {
+func (proxyDefaultAPI) ServiceHealth() ([]visorapi.ServiceHealthEntry, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -651,15 +652,15 @@ func (proxyDefaultAPI) ListTCPPorts() ([]int, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) RegisterForwardedPort(_ ForwardedPort) error {
+func (proxyDefaultAPI) RegisterForwardedPort(_ visorapi.ForwardedPort) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) UpdateForwardedPort(_ ForwardedPort) error {
+func (proxyDefaultAPI) UpdateForwardedPort(_ visorapi.ForwardedPort) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) ListForwardedPorts() ([]ForwardedPort, error) {
+func (proxyDefaultAPI) ListForwardedPorts() ([]visorapi.ForwardedPort, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -675,15 +676,15 @@ func (proxyDefaultAPI) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, er
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) DialPing(_ PingConfig) error {
+func (proxyDefaultAPI) DialPing(_ visorapi.PingConfig) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) Ping(_ PingConfig) ([]time.Duration, error) {
+func (proxyDefaultAPI) Ping(_ visorapi.PingConfig) ([]time.Duration, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) PingOnce(_ PingConfig) (time.Duration, error) {
+func (proxyDefaultAPI) PingOnce(_ visorapi.PingConfig) (time.Duration, error) {
 	return 0, ErrProxyNotSupported
 }
 
@@ -707,11 +708,11 @@ func (proxyDefaultAPI) DialDmsgRPC(_ cipher.PubKey) (net.Conn, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) DmsgPing(_ PingConfig) ([]time.Duration, error) {
+func (proxyDefaultAPI) DmsgPing(_ visorapi.PingConfig) ([]time.Duration, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) DmsgPingOnce(_ PingConfig) (time.Duration, error) {
+func (proxyDefaultAPI) DmsgPingOnce(_ visorapi.PingConfig) (time.Duration, error) {
 	return 0, ErrProxyNotSupported
 }
 
@@ -731,15 +732,15 @@ func (proxyDefaultAPI) GetPreferredDmsgServer(_ cipher.PubKey) (cipher.PubKey, e
 	return cipher.PubKey{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) BandwidthTest(_ BandwidthTestConfig) (BandwidthResult, error) {
-	return BandwidthResult{}, ErrProxyNotSupported
+func (proxyDefaultAPI) BandwidthTest(_ visorapi.BandwidthTestConfig) (visorapi.BandwidthResult, error) {
+	return visorapi.BandwidthResult{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) DmsgBandwidthTest(_ BandwidthTestConfig) (BandwidthResult, error) {
-	return BandwidthResult{}, ErrProxyNotSupported
+func (proxyDefaultAPI) DmsgBandwidthTest(_ visorapi.BandwidthTestConfig) (visorapi.BandwidthResult, error) {
+	return visorapi.BandwidthResult{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) TestVisor(_ PingConfig) ([]TestResult, error) {
+func (proxyDefaultAPI) TestVisor(_ visorapi.PingConfig) ([]visorapi.TestResult, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -759,7 +760,7 @@ func (proxyDefaultAPI) StopUIServer() error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) UIServerStatus() (*UIServerStatus, error) {
+func (proxyDefaultAPI) UIServerStatus() (*visorapi.UIServerStatus, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -779,35 +780,35 @@ func (proxyDefaultAPI) SkynetProbe(_ cipher.PubKey, _ uint16) (bool, error) {
 	return false, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) DmsgHTTP(_ DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
+func (proxyDefaultAPI) DmsgHTTP(_ visorapi.DmsgHTTPRequest) (*visorapi.DmsgHTTPResponse, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) SkynetHTTP(_ SkynetHTTPRequest) (*SkynetHTTPResponse, error) {
+func (proxyDefaultAPI) SkynetHTTP(_ visorapi.SkynetHTTPRequest) (*visorapi.SkynetHTTPResponse, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) VisorSCP(_ VisorSCPRequest) error {
+func (proxyDefaultAPI) VisorSCP(_ visorapi.VisorSCPRequest) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) VisorCat(_ VisorCatRequest) (*VisorCatResponse, error) {
+func (proxyDefaultAPI) VisorCat(_ visorapi.VisorCatRequest) (*visorapi.VisorCatResponse, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) DmsgConnectAll() (*DmsgConnectAllResult, error) {
+func (proxyDefaultAPI) DmsgConnectAll() (*visorapi.DmsgConnectAllResult, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) SetDmsgSessionsCount(_ int) (*DmsgConnectAllResult, error) {
+func (proxyDefaultAPI) SetDmsgSessionsCount(_ int) (*visorapi.DmsgConnectAllResult, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) DmsgSessions() (*DmsgClientSessions, error) {
+func (proxyDefaultAPI) DmsgSessions() (*visorapi.DmsgClientSessions, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) DmsgConverge(_ []string) (*DmsgConvergeResult, error) {
+func (proxyDefaultAPI) DmsgConverge(_ []string) (*visorapi.DmsgConvergeResult, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -827,7 +828,7 @@ func (proxyDefaultAPI) PairAdd(_ cipher.PubKey) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) PairList() ([]PairInfo, error) {
+func (proxyDefaultAPI) PairList() ([]visorapi.PairInfo, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -847,139 +848,139 @@ func (proxyDefaultAPI) PairDelete(_ cipher.PubKey, _ string) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) PairPoll(_ time.Time) ([]PairMessage, error) {
+func (proxyDefaultAPI) PairPoll(_ time.Time) ([]visorapi.PairMessage, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupCreate(_ GroupCreateArgs) (GroupInfo, string, error) {
-	return GroupInfo{}, "", ErrProxyNotSupported
+func (proxyDefaultAPI) GroupCreate(_ visorapi.GroupCreateArgs) (visorapi.GroupInfo, string, error) {
+	return visorapi.GroupInfo{}, "", ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupJoin(_ GroupJoinArgs) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupJoin(_ visorapi.GroupJoinArgs) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupResolve(_ GroupResolveArgs) (GroupResolveResult, error) {
-	return GroupResolveResult{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupResolve(_ visorapi.GroupResolveArgs) (visorapi.GroupResolveResult, error) {
+	return visorapi.GroupResolveResult{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) ProfileGet() (Profile, error) {
-	return Profile{}, ErrProxyNotSupported
+func (proxyDefaultAPI) ProfileGet() (visorapi.Profile, error) {
+	return visorapi.Profile{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) ProfileSet(_ ProfileSetArgs) (Profile, error) {
-	return Profile{}, ErrProxyNotSupported
+func (proxyDefaultAPI) ProfileSet(_ visorapi.ProfileSetArgs) (visorapi.Profile, error) {
+	return visorapi.Profile{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) ProfileFetch(_ cipher.PubKey) (Profile, error) {
-	return Profile{}, ErrProxyNotSupported
+func (proxyDefaultAPI) ProfileFetch(_ cipher.PubKey) (visorapi.Profile, error) {
+	return visorapi.Profile{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupSetListed(_ string, _ bool) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupSetListed(_ string, _ bool) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupSetMeta(_ GroupSetMetaArgs) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupSetMeta(_ visorapi.GroupSetMetaArgs) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupRefreshMeta(_ string) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupRefreshMeta(_ string) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupCatalog(_ cipher.PubKey) ([]GroupCatalogEntry, bool, error) {
+func (proxyDefaultAPI) GroupCatalog(_ cipher.PubKey) ([]visorapi.GroupCatalogEntry, bool, error) {
 	return nil, false, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupAskAgain(_ string) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupAskAgain(_ string) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupList() ([]GroupInfo, error) {
+func (proxyDefaultAPI) GroupList() ([]visorapi.GroupInfo, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupGet(_ string) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupGet(_ string) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
 func (proxyDefaultAPI) GroupInvite(_ string) (string, error) {
 	return "", ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupAddMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupAddMember(_ string, _ cipher.PubKey) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupJoinRequests(_ string) ([]GroupJoinRequest, error) {
+func (proxyDefaultAPI) GroupJoinRequests(_ string) ([]visorapi.GroupJoinRequest, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupApproveJoin(_ string, _ cipher.PubKey) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupApproveJoin(_ string, _ cipher.PubKey) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
 func (proxyDefaultAPI) GroupDenyJoin(_ string, _ cipher.PubKey) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupRemoveMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupRemoveMember(_ string, _ cipher.PubKey) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupBanMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupBanMember(_ string, _ cipher.PubKey) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupUnbanMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupUnbanMember(_ string, _ cipher.PubKey) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupMuteMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupMuteMember(_ string, _ cipher.PubKey) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupUnmuteMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupUnmuteMember(_ string, _ cipher.PubKey) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupSetReadOnly(_ string, _ bool) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupSetReadOnly(_ string, _ bool) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupPromoteAdmin(_ string, _ cipher.PubKey) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupPromoteAdmin(_ string, _ cipher.PubKey) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupSetJoinPoW(_ string, _ uint8) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupSetJoinPoW(_ string, _ uint8) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupSetPeerBackfill(_ string, _ bool) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupSetPeerBackfill(_ string, _ bool) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupRotateKey(_ string) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupRotateKey(_ string) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupDemoteAdmin(_ string, _ cipher.PubKey) (GroupInfo, error) {
-	return GroupInfo{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupDemoteAdmin(_ string, _ cipher.PubKey) (visorapi.GroupInfo, error) {
+	return visorapi.GroupInfo{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupSend(_ GroupSendArgs) error {
+func (proxyDefaultAPI) GroupSend(_ visorapi.GroupSendArgs) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupFileKey(_ GroupFileKeyArgs) (GroupFileKeyResult, error) {
-	return GroupFileKeyResult{}, ErrProxyNotSupported
+func (proxyDefaultAPI) GroupFileKey(_ visorapi.GroupFileKeyArgs) (visorapi.GroupFileKeyResult, error) {
+	return visorapi.GroupFileKeyResult{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupUnsend(_ GroupUnsendArgs) error {
+func (proxyDefaultAPI) GroupUnsend(_ visorapi.GroupUnsendArgs) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupPoll(_ time.Time) ([]GroupMessage, error) {
+func (proxyDefaultAPI) GroupPoll(_ time.Time) ([]visorapi.GroupMessage, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -1023,7 +1024,7 @@ func (proxyDefaultAPI) VoiceDial(_ cipher.PubKey) (string, error) {
 }
 
 // VoiceDialing implements API (not proxied).
-func (proxyDefaultAPI) VoiceDialing() ([]VoiceDialingInfo, error) {
+func (proxyDefaultAPI) VoiceDialing() ([]visorapi.VoiceDialingInfo, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -1037,11 +1038,11 @@ func (proxyDefaultAPI) VoiceMute(_ string, _, _ bool) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupHistory(_ string, _ int) ([]GroupMessage, error) {
+func (proxyDefaultAPI) GroupHistory(_ string, _ int) ([]visorapi.GroupMessage, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GroupHistoryPage(_ GroupHistoryPageArgs) ([]GroupMessage, error) {
+func (proxyDefaultAPI) GroupHistoryPage(_ visorapi.GroupHistoryPageArgs) ([]visorapi.GroupMessage, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -1049,11 +1050,11 @@ func (proxyDefaultAPI) GroupHistoryGroups() ([]string, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) TPSStatus() (*TPSStatus, error) {
+func (proxyDefaultAPI) TPSStatus() (*visorapi.TPSStatus, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) TPSAddTransport(_ cipher.PubKey, _ cipher.PubKey, _ string) (*TPSTransportResponse, error) {
+func (proxyDefaultAPI) TPSAddTransport(_ cipher.PubKey, _ cipher.PubKey, _ string) (*visorapi.TPSTransportResponse, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -1061,7 +1062,7 @@ func (proxyDefaultAPI) TPSRemoveTransport(_ cipher.PubKey, _ uuid.UUID) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) TPSGetTransports(_ cipher.PubKey) ([]TPSTransportResponse, error) {
+func (proxyDefaultAPI) TPSGetTransports(_ cipher.PubKey) ([]visorapi.TPSTransportResponse, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -1077,11 +1078,11 @@ func (proxyDefaultAPI) GetRouteSetupNodesSorted() ([]cipher.PubKey, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GetTPSHealth() ([]NodeHealth, error) {
+func (proxyDefaultAPI) GetTPSHealth() ([]visorapi.NodeHealth, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GetRSNHealth() ([]NodeHealth, error) {
+func (proxyDefaultAPI) GetRSNHealth() ([]visorapi.NodeHealth, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -1089,7 +1090,7 @@ func (proxyDefaultAPI) RouteSetupStats() (*setupmetrics.StatsSnapshot, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) EmbeddedProxies() (*EmbeddedProxiesStatus, error) {
+func (proxyDefaultAPI) EmbeddedProxies() (*visorapi.EmbeddedProxiesStatus, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -1113,19 +1114,19 @@ func (proxyDefaultAPI) TPSExternalHealthCheck(_ cipher.PubKey) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) TPSExternalAddTransport(_ cipher.PubKey, _ cipher.PubKey, _ cipher.PubKey, _ string) (*TPSTransportResponse, error) {
+func (proxyDefaultAPI) TPSExternalAddTransport(_ cipher.PubKey, _ cipher.PubKey, _ cipher.PubKey, _ string) (*visorapi.TPSTransportResponse, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) TPSExternalGetTransports(_ cipher.PubKey, _ cipher.PubKey) ([]TPSTransportResponse, error) {
+func (proxyDefaultAPI) TPSExternalGetTransports(_ cipher.PubKey, _ cipher.PubKey) ([]visorapi.TPSTransportResponse, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) DmsgPorterStats() (*DmsgPorterStatus, error) {
+func (proxyDefaultAPI) DmsgPorterStats() (*visorapi.DmsgPorterStatus, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) DmsgPorterReset() (*DmsgPorterStatus, error) {
+func (proxyDefaultAPI) DmsgPorterReset() (*visorapi.DmsgPorterStatus, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -1145,7 +1146,7 @@ func (proxyDefaultAPI) AddHypervisor(_ cipher.PubKey) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) PendingHypervisors() ([]PendingHypervisor, error) {
+func (proxyDefaultAPI) PendingHypervisors() ([]visorapi.PendingHypervisor, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -1153,8 +1154,8 @@ func (proxyDefaultAPI) ApproveHypervisor(_ string) (cipher.PubKey, error) {
 	return cipher.PubKey{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) NewPairCode(_ time.Duration) (PairCode, error) {
-	return PairCode{}, ErrProxyNotSupported
+func (proxyDefaultAPI) NewPairCode(_ time.Duration) (visorapi.PairCode, error) {
+	return visorapi.PairCode{}, ErrProxyNotSupported
 }
 
 func (proxyDefaultAPI) RemoveHypervisor(_ cipher.PubKey) error {
@@ -1177,7 +1178,7 @@ func (proxyDefaultAPI) CheckAREntry(_ string) ([]string, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) ARSelfInfo() (*ARSelfRegistration, error) {
+func (proxyDefaultAPI) ARSelfInfo() (*visorapi.ARSelfRegistration, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -1185,19 +1186,19 @@ func (proxyDefaultAPI) TransportRPCCall(_ cipher.PubKey, _ string, _ json.RawMes
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) HVListVisors() ([]HVVisorEntry, error) {
+func (proxyDefaultAPI) HVListVisors() ([]visorapi.HVVisorEntry, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) HVListDirectVisors() ([]HVVisorEntry, error) {
+func (proxyDefaultAPI) HVListDirectVisors() ([]visorapi.HVVisorEntry, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) HVListVisorsTree() (*HVVisorTree, error) {
+func (proxyDefaultAPI) HVListVisorsTree() (*visorapi.HVVisorTree, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) HVVisorSummary(_ cipher.PubKey) (*Summary, error) {
+func (proxyDefaultAPI) HVVisorSummary(_ cipher.PubKey) (*visorapi.Summary, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -1225,7 +1226,7 @@ func (proxyDefaultAPI) HVRemoveRoutingRule(_ cipher.PubKey, _ routing.RouteID) e
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) HVAddTransport(_ cipher.PubKey, _ cipher.PubKey, _ string, _ string, _ time.Duration) (*TransportSummary, error) {
+func (proxyDefaultAPI) HVAddTransport(_ cipher.PubKey, _ cipher.PubKey, _ string, _ string, _ time.Duration) (*visorapi.TransportSummary, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -1245,19 +1246,19 @@ func (proxyDefaultAPI) HVShutdown(_ cipher.PubKey) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) HVServiceHealth(_ cipher.PubKey) ([]ServiceHealthEntry, error) {
+func (proxyDefaultAPI) HVServiceHealth(_ cipher.PubKey) ([]visorapi.ServiceHealthEntry, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) HVDmsgSessions(_ cipher.PubKey) (*DmsgClientSessions, error) {
+func (proxyDefaultAPI) HVDmsgSessions(_ cipher.PubKey) (*visorapi.DmsgClientSessions, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) HVDmsgConnectAll(_ cipher.PubKey) (*DmsgConnectAllResult, error) {
+func (proxyDefaultAPI) HVDmsgConnectAll(_ cipher.PubKey) (*visorapi.DmsgConnectAllResult, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) HVSetDmsgSessionsCount(_ cipher.PubKey, _ int) (*DmsgConnectAllResult, error) {
+func (proxyDefaultAPI) HVSetDmsgSessionsCount(_ cipher.PubKey, _ int) (*visorapi.DmsgConnectAllResult, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -1269,7 +1270,7 @@ func (proxyDefaultAPI) HVSetAutoStart(_ cipher.PubKey, _ string, _ bool) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) HVEmbeddedProxies(_ cipher.PubKey) (*EmbeddedProxiesStatus, error) {
+func (proxyDefaultAPI) HVEmbeddedProxies(_ cipher.PubKey) (*visorapi.EmbeddedProxiesStatus, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -1293,15 +1294,15 @@ func (proxyDefaultAPI) HVDeregisterTCPPort(_ cipher.PubKey, _ int) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) HVListForwardedPorts(_ cipher.PubKey) ([]ForwardedPort, error) {
+func (proxyDefaultAPI) HVListForwardedPorts(_ cipher.PubKey) ([]visorapi.ForwardedPort, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) HVRegisterForwardedPort(_ cipher.PubKey, _ ForwardedPort) error {
+func (proxyDefaultAPI) HVRegisterForwardedPort(_ cipher.PubKey, _ visorapi.ForwardedPort) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) HVUpdateForwardedPort(_ cipher.PubKey, _ ForwardedPort) error {
+func (proxyDefaultAPI) HVUpdateForwardedPort(_ cipher.PubKey, _ visorapi.ForwardedPort) error {
 	return ErrProxyNotSupported
 }
 

@@ -20,7 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -178,7 +178,7 @@ func formatAppList(states []*appserver.AppState) ([]appLsState, string) {
 	return out, b.String()
 }
 
-func renderAppListLive(rpcClient visor.API) (string, error) {
+func renderAppListLive(rpcClient visorapi.API) (string, error) {
 	states, err := rpcClient.Apps()
 	if err != nil {
 		return "", err

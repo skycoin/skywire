@@ -19,28 +19,16 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/visor/stats"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
-
-// LocalTransportStatsResponse is the wire shape returned by
-// LocalTransportStats. Keep this stable independent of the bbolt
-// schema — additive fields only on changes.
-type LocalTransportStatsResponse struct {
-	// Transports is the per-transport rollup, sorted by total
-	// bytes (sent+recv) descending so the busiest transports
-	// come first.
-	Transports []*stats.TransportRecord `json:"transports"`
-	// FetchedAt is when the snapshot was assembled. Lets the
-	// hvui surface a "last sample" timestamp.
-	FetchedAt time.Time `json:"fetched_at"`
-}
 
 // LocalTransportStats returns every per-transport record from the
 // local stats store, sorted busiest-first. Returns an empty slice
 // (no error) when the stats subsystem isn't initialized — the hvui
 // then surfaces "no data" rather than an error.
-func (v *Visor) LocalTransportStats() (*LocalTransportStatsResponse, error) {
+func (v *Visor) LocalTransportStats() (*visorapi.LocalTransportStatsResponse, error) {
 	if v.statsTracker == nil {
-		return &LocalTransportStatsResponse{
+		return &visorapi.LocalTransportStatsResponse{
 			Transports: []*stats.TransportRecord{},
 			FetchedAt:  time.Now().UTC(),
 		}, nil
@@ -63,7 +51,7 @@ func (v *Visor) LocalTransportStats() (*LocalTransportStatsResponse, error) {
 		// same order even when the data hasn't changed.
 		return recs[i].ID.String() < recs[j].ID.String()
 	})
-	return &LocalTransportStatsResponse{
+	return &visorapi.LocalTransportStatsResponse{
 		Transports: recs,
 		FetchedAt:  time.Now().UTC(),
 	}, nil

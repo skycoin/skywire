@@ -19,7 +19,7 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil/livetui"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -108,8 +108,8 @@ a "(restart loop?)" tag.
 
 // buildUptimeArgs centralizes the flag-to-args translation so the live
 // path and the one-shot path stay aligned.
-func buildUptimeArgs() (visor.UptimeHistoryArgs, error) {
-	args := visor.UptimeHistoryArgs{Limit: uptimeLimit}
+func buildUptimeArgs() (visorapi.UptimeHistoryArgs, error) {
+	args := visorapi.UptimeHistoryArgs{Limit: uptimeLimit}
 	if uptimeSince != "" {
 		t, err := parseSince(uptimeSince)
 		if err != nil {
@@ -130,7 +130,7 @@ func buildUptimeArgs() (visor.UptimeHistoryArgs, error) {
 	return args, nil
 }
 
-func renderUptimeHuman(hist *visor.UptimeHistoryResponse, args visor.UptimeHistoryArgs) string {
+func renderUptimeHuman(hist *visorapi.UptimeHistoryResponse, args visorapi.UptimeHistoryArgs) string {
 	if hist.Current.StartedAt.IsZero() && len(hist.Sessions) == 0 {
 		return "(no sessions recorded — recorder may be unavailable)\n"
 	}

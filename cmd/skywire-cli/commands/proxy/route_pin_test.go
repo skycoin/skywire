@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // pinStub is a visor whose route group appears only after `coldTicks` reads —
@@ -26,16 +26,16 @@ type pinStub struct {
 	removes   int
 }
 
-func (s *pinStub) RouteGroupMuxInfo(string) ([]visor.MuxRouteGroupInfo, error) {
+func (s *pinStub) RouteGroupMuxInfo(string) ([]visorapi.MuxRouteGroupInfo, error) {
 	s.reads++
 	if s.reads <= s.coldTicks {
 		return nil, nil // no group yet: selectAutoRG refuses, pinRoutes waits
 	}
-	rg := visor.MuxRouteGroupInfo{}
+	rg := visorapi.MuxRouteGroupInfo{}
 	for i, tp := range s.legs {
-		rg.Legs = append(rg.Legs, visor.MuxLegInfo{Index: i, TransportID: tp})
+		rg.Legs = append(rg.Legs, visorapi.MuxLegInfo{Index: i, TransportID: tp})
 	}
-	return []visor.MuxRouteGroupInfo{rg}, nil
+	return []visorapi.MuxRouteGroupInfo{rg}, nil
 }
 
 func (s *pinStub) AddMuxRoute(_ string, fwd, _ []routing.Hop, _ uint16) error {

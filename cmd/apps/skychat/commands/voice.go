@@ -24,7 +24,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // registerVoiceHTTPHandlers wires the /voice endpoints onto mux. No-op when
@@ -35,12 +35,12 @@ func registerVoiceHTTPHandlers(mux *http.ServeMux) {
 		return
 	}
 	mux.HandleFunc("/voice/call", requireAuthFunc(voiceCallHandler()))
-	mux.HandleFunc("/voice/answer", requireAuthFunc(voiceActionHandler(func(c visor.API, id string) error { return c.VoiceAnswer(id) })))
-	mux.HandleFunc("/voice/decline", requireAuthFunc(voiceActionHandler(func(c visor.API, id string) error { return c.VoiceDecline(id) })))
-	mux.HandleFunc("/voice/hangup", requireAuthFunc(voiceActionHandler(func(c visor.API, id string) error { return c.VoiceHangup(id) })))
+	mux.HandleFunc("/voice/answer", requireAuthFunc(voiceActionHandler(func(c visorapi.API, id string) error { return c.VoiceAnswer(id) })))
+	mux.HandleFunc("/voice/decline", requireAuthFunc(voiceActionHandler(func(c visorapi.API, id string) error { return c.VoiceDecline(id) })))
+	mux.HandleFunc("/voice/hangup", requireAuthFunc(voiceActionHandler(func(c visorapi.API, id string) error { return c.VoiceHangup(id) })))
 	mux.HandleFunc("/voice/mute", requireAuthFunc(voiceMuteHandler()))
-	mux.HandleFunc("/voice/active", requireAuthFunc(voiceListHandler("VoiceActive", func(c visor.API) ([]string, error) { return c.VoiceActive() })))
-	mux.HandleFunc("/voice/incoming", requireAuthFunc(voiceListHandler("VoiceIncoming", func(c visor.API) ([]string, error) { return c.VoiceIncoming() })))
+	mux.HandleFunc("/voice/active", requireAuthFunc(voiceListHandler("VoiceActive", func(c visorapi.API) ([]string, error) { return c.VoiceActive() })))
+	mux.HandleFunc("/voice/incoming", requireAuthFunc(voiceListHandler("VoiceIncoming", func(c visorapi.API) ([]string, error) { return c.VoiceIncoming() })))
 	mux.HandleFunc("/voice/dialing", requireAuthFunc(voiceDialingHandler()))
 	mux.HandleFunc("/voice/levels", requireAuthFunc(voiceLevelsHandler()))
 	mux.HandleFunc("/voice/audio", requireAuthFunc(voiceAudioHandler()))
@@ -92,7 +92,7 @@ func voiceCallHandler() http.HandlerFunc {
 		// Dial, not Call: this server's write timeout is 10s and a ring runs
 		// far longer, so a blocking call could never answer the browser — every
 		// outgoing call reported "Call failed" while ringing perfectly well.
-		if err := pairRPCCall("VoiceDial", func(c visor.API) error {
+		if err := pairRPCCall("VoiceDial", func(c visorapi.API) error {
 			id, e := c.VoiceDial(peer)
 			callID = id
 			return e
@@ -109,7 +109,7 @@ func voiceCallHandler() http.HandlerFunc {
 }
 
 // voiceActionHandler serves POST {call_id} → {ok:true} for answer/decline/hangup.
-func voiceActionHandler(action func(c visor.API, callID string) error) http.HandlerFunc {
+func voiceActionHandler(action func(c visorapi.API, callID string) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if voiceRPCDown(w) {
 			return
@@ -129,7 +129,7 @@ func voiceActionHandler(action func(c visor.API, callID string) error) http.Hand
 			http.Error(w, "call_id required", http.StatusBadRequest)
 			return
 		}
-		if err := pairRPCCall("VoiceAction", func(c visor.API) error {
+		if err := pairRPCCall("VoiceAction", func(c visorapi.API) error {
 			return action(c, body.CallID)
 		}); err != nil {
 			http.Error(w, err.Error(), voiceErrStatus(err))
@@ -162,7 +162,7 @@ func voiceMuteHandler() http.HandlerFunc {
 			http.Error(w, "call_id required", http.StatusBadRequest)
 			return
 		}
-		if err := pairRPCCall("VoiceMute", func(c visor.API) error {
+		if err := pairRPCCall("VoiceMute", func(c visorapi.API) error {
 			return c.VoiceMute(body.CallID, body.Mic, body.Speaker)
 		}); err != nil {
 			http.Error(w, err.Error(), voiceErrStatus(err))
@@ -192,8 +192,8 @@ func voiceDialingHandler() http.HandlerFunc {
 			http.Error(w, "GET only", http.StatusMethodNotAllowed)
 			return
 		}
-		var calls []visor.VoiceDialingInfo
-		if err := pairRPCCall("VoiceDialing", func(c visor.API) error {
+		var calls []visorapi.VoiceDialingInfo
+		if err := pairRPCCall("VoiceDialing", func(c visorapi.API) error {
 			out, e := c.VoiceDialing()
 			calls = out
 			return e
@@ -202,7 +202,7 @@ func voiceDialingHandler() http.HandlerFunc {
 			return
 		}
 		if calls == nil {
-			calls = []visor.VoiceDialingInfo{}
+			calls = []visorapi.VoiceDialingInfo{}
 		}
 		writeJSON(w, calls)
 	}
@@ -210,7 +210,7 @@ func voiceDialingHandler() http.HandlerFunc {
 
 // voiceListHandler serves GET → a JSON array of strings for active/incoming.
 // VoiceIncoming entries are formatted "<call-id> from <peer-pk>" by the visor.
-func voiceListHandler(op string, list func(c visor.API) ([]string, error)) http.HandlerFunc {
+func voiceListHandler(op string, list func(c visorapi.API) ([]string, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if voiceRPCDown(w) {
 			return
@@ -220,7 +220,7 @@ func voiceListHandler(op string, list func(c visor.API) ([]string, error)) http.
 			return
 		}
 		var ids []string
-		if err := pairRPCCall(op, func(c visor.API) error {
+		if err := pairRPCCall(op, func(c visorapi.API) error {
 			out, e := list(c)
 			ids = out
 			return e
@@ -252,7 +252,7 @@ func voiceLevelsHandler() http.HandlerFunc {
 			return
 		}
 		var sent, recv []int16
-		if err := pairRPCCall("VoiceCallAudio", func(c visor.API) error {
+		if err := pairRPCCall("VoiceCallAudio", func(c visorapi.API) error {
 			s, rc, e := c.VoiceCallAudio(callID)
 			sent, recv = s, rc
 			return e
@@ -283,7 +283,7 @@ func voiceAudioHandler() http.HandlerFunc {
 			return
 		}
 		var sent, recv []int16
-		if err := pairRPCCall("VoiceCallAudio", func(c visor.API) error {
+		if err := pairRPCCall("VoiceCallAudio", func(c visorapi.API) error {
 			s, rc, e := c.VoiceCallAudio(callID)
 			sent, recv = s, rc
 			return e

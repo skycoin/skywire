@@ -23,7 +23,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/uptimestats"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -171,26 +171,26 @@ var summaryCmd = &cobra.Command{
 			connectedHvPKs = append(connectedHvPKs, pk.String())
 		}
 		outputJSON := struct {
-			PublicKey            string                    `json:"public_key"`
-			Hostname             string                    `json:"hostname,omitempty"`
-			IsSymmetricNAT       bool                      `json:"symmetric_nat"`
-			LocalIP              string                    `json:"local_ip"`
-			PublicIP             string                    `json:"public_ip"`
-			CountryCode          string                    `json:"country_code,omitempty"`
-			RegionName           string                    `json:"region_name,omitempty"`
-			CityName             string                    `json:"city_name,omitempty"`
-			DMSGServers          []visor.DMSGServerInfo    `json:"dmsg_servers"`
-			DmsgLatency          string                    `json:"dmsg_latency"`
-			VisorVersion         string                    `json:"visor_version"`
-			ConfigVersion        string                    `json:"config_version"`
-			UptimeTracker        string                    `json:"uptime_tracker"`
-			TimeOnline           float64                   `json:"time_online"`
-			BuildTag             string                    `json:"build_tag"`
-			ARRegistration       *visor.ARSelfRegistration `json:"ar_registration,omitempty"`
-			IsHypervisor         bool                      `json:"is_hypervisor"`
-			HypervisorAddr       string                    `json:"hypervisor_addr,omitempty"`
-			Hypervisors          []string                  `json:"hypervisors,omitempty"`
-			ConnectedHypervisors []string                  `json:"connected_hypervisors,omitempty"`
+			PublicKey            string                       `json:"public_key"`
+			Hostname             string                       `json:"hostname,omitempty"`
+			IsSymmetricNAT       bool                         `json:"symmetric_nat"`
+			LocalIP              string                       `json:"local_ip"`
+			PublicIP             string                       `json:"public_ip"`
+			CountryCode          string                       `json:"country_code,omitempty"`
+			RegionName           string                       `json:"region_name,omitempty"`
+			CityName             string                       `json:"city_name,omitempty"`
+			DMSGServers          []visorapi.DMSGServerInfo    `json:"dmsg_servers"`
+			DmsgLatency          string                       `json:"dmsg_latency"`
+			VisorVersion         string                       `json:"visor_version"`
+			ConfigVersion        string                       `json:"config_version"`
+			UptimeTracker        string                       `json:"uptime_tracker"`
+			TimeOnline           float64                      `json:"time_online"`
+			BuildTag             string                       `json:"build_tag"`
+			ARRegistration       *visorapi.ARSelfRegistration `json:"ar_registration,omitempty"`
+			IsHypervisor         bool                         `json:"is_hypervisor"`
+			HypervisorAddr       string                       `json:"hypervisor_addr,omitempty"`
+			Hypervisors          []string                     `json:"hypervisors,omitempty"`
+			ConnectedHypervisors []string                     `json:"connected_hypervisors,omitempty"`
 		}{
 			PublicKey:            summary.Overview.PubKey.String(),
 			Hostname:             summary.Overview.Hostname,
@@ -333,7 +333,7 @@ var dmsgServersCmd = &cobra.Command{
 	},
 }
 
-func formatDMSGServers(servers []visor.DMSGServerInfo) string {
+func formatDMSGServers(servers []visorapi.DMSGServerInfo) string {
 	msg := "+--------------------------------------------------------------------+-------------+---------+\n"
 	msg += fmt.Sprintf("| %-66s | %11s | %7s |\n", "Server Public Key", "Latency", "Streams")
 	msg += "|--------------------------------------------------------------------+-------------+---------|\n"
@@ -356,7 +356,7 @@ func formatDMSGServers(servers []visor.DMSGServerInfo) string {
 	return msg
 }
 
-func renderDMSGServersLive(rpcClient visor.API) (string, error) {
+func renderDMSGServersLive(rpcClient visorapi.API) (string, error) {
 	servers, err := rpcClient.DMSGServers()
 	if err != nil {
 		return "", err
@@ -634,10 +634,10 @@ var runtimeStatsCmd = &cobra.Command{
 // nil, false) when the stats store isn't available — same shape and
 // shading as `cli ut tpd graph` so an operator can eyeball the local
 // view next to TPD's network-wide one without doing mental conversion.
-func localUptime24h(rpc visor.API) (map[string]string, map[string]float64, bool) {
+func localUptime24h(rpc visorapi.API) (map[string]string, map[string]float64, bool) {
 	until := time.Now().UTC()
 	since := until.Add(-24 * time.Hour)
-	resp, err := rpc.LocalUptimeStats(visor.LocalUptimeArgs{Since: since, Until: until})
+	resp, err := rpc.LocalUptimeStats(visorapi.LocalUptimeArgs{Since: since, Until: until})
 	if err != nil || resp == nil || len(resp.Tiers) == 0 {
 		return nil, nil, false
 	}
@@ -727,7 +727,7 @@ func shadeForCount(count int) string { return uptimestats.ShadeForCount(count) }
 // buildSummaryMessage is the livetui Refresh callback wrapper: returns
 // only the human-readable text. The one-shot Run path uses the richer
 // buildSummaryMessageWithData below so it can also emit JSON.
-func buildSummaryMessage(rpcClient visor.API) (string, error) {
+func buildSummaryMessage(rpcClient visorapi.API) (string, error) {
 	msg, _, _, err := buildSummaryMessageWithData(rpcClient)
 	return msg, err
 }
@@ -736,7 +736,7 @@ func buildSummaryMessage(rpcClient visor.API) (string, error) {
 // registration and returns the rendered human-readable string plus
 // the raw structs so the caller can build a JSON payload. Extracted
 // from summaryCmd.Run so it can be re-invoked on every livetui tick.
-func buildSummaryMessageWithData(rpcClient visor.API) (string, *visor.Summary, *visor.ARSelfRegistration, error) {
+func buildSummaryMessageWithData(rpcClient visorapi.API) (string, *visorapi.Summary, *visorapi.ARSelfRegistration, error) {
 	summary, err := rpcClient.Summary()
 	if err != nil {
 		return "", nil, nil, err
@@ -828,7 +828,7 @@ func buildSummaryMessageWithData(rpcClient visor.API) (string, *visor.Summary, *
 	// AR registration: best-effort. A failure here means we'll skip the
 	// AR section in human output and emit nothing for it in JSON; the
 	// rest of the summary is still useful.
-	var arSelf *visor.ARSelfRegistration
+	var arSelf *visorapi.ARSelfRegistration
 	if reg, regErr := rpcClient.ARSelfInfo(); regErr == nil {
 		arSelf = reg
 		msg += renderARSection(reg)
@@ -893,7 +893,7 @@ func buildSummaryMessageWithData(rpcClient visor.API) (string, *visor.Summary, *
 //
 // Nil-safe because it must be: the hypervisor path deliberately leaves this nil
 // when stats are missing, and this call site used to dereference it blind.
-func dmsgLatency(summary *visor.Summary) string {
+func dmsgLatency(summary *visorapi.Summary) string {
 	if summary.DmsgStats == nil || summary.DmsgStats.RoundTrip <= 0 {
 		return ""
 	}
@@ -908,7 +908,7 @@ func dmsgLatency(summary *visor.Summary) string {
 // Only the visor knows which of those it means, and an older one — reached
 // over --via or --rpc, since locally the CLI and the visor are one binary —
 // reports no Queried list, so its silence must stay silent here.
-func renderARSection(reg *visor.ARSelfRegistration) string {
+func renderARSection(reg *visorapi.ARSelfRegistration) string {
 	if reg == nil || len(reg.Entries) == 0 {
 		return "AR Registration: (none)\n"
 	}
@@ -951,7 +951,7 @@ func pluralVisors(n int) string {
 	return fmt.Sprintf("%d visors", n)
 }
 
-func formatARAddr(e visor.ARSelfEntry) string {
+func formatARAddr(e visorapi.ARSelfEntry) string {
 	v4 := formatARAddrV4(e)
 	if e.RemoteAddrV6 == "" {
 		return v4
@@ -967,7 +967,7 @@ func formatARAddr(e visor.ARSelfEntry) string {
 // formatARAddr so dual-stack rendering can reuse the existing logic
 // without duplicating it. Pre-#1525 callers see no behavior change
 // (formatARAddr falls through to this when no v6 is set).
-func formatARAddrV4(e visor.ARSelfEntry) string {
+func formatARAddrV4(e visorapi.ARSelfEntry) string {
 	if e.RemoteAddr == "" && e.Port == "" {
 		return "(unknown)"
 	}

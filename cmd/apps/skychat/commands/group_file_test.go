@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func TestEncodeParseGroupFileText_RoundTrip(t *testing.T) {
@@ -149,7 +149,7 @@ func TestGroupHistory_EnrichesFileRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	base := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
-	fake := &groupAPI{history: []visor.GroupMessage{
+	fake := &groupAPI{history: []visorapi.GroupMessage{
 		{GroupID: "g9", Text: "plain hello", TS: base},
 		{GroupID: "g9", Text: fileText, TS: base.Add(time.Second)},
 	}}

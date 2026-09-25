@@ -26,7 +26,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -194,7 +194,7 @@ func curlViaVisor(cmd *cobra.Command, ctx context.Context, log *logging.Logger, 
 	}
 
 	// Prepare request
-	req := visor.DmsgHTTPRequest{
+	req := visorapi.DmsgHTTPRequest{
 		URL:    dmsgURL,
 		Method: http.MethodGet,
 		Header: map[string]string{
@@ -228,7 +228,7 @@ func curlViaVisor(cmd *cobra.Command, ctx context.Context, log *logging.Logger, 
 		// can interrupt the wait. The visor's server-side handler
 		// has its own 15s HTTP timeout, so it returns regardless.
 		type result struct {
-			resp *visor.DmsgHTTPResponse
+			resp *visorapi.DmsgHTTPResponse
 			err  error
 		}
 		done := make(chan result, 1)
@@ -237,7 +237,7 @@ func curlViaVisor(cmd *cobra.Command, ctx context.Context, log *logging.Logger, 
 			done <- result{resp, err}
 		}()
 
-		var resp *visor.DmsgHTTPResponse
+		var resp *visorapi.DmsgHTTPResponse
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -459,14 +459,14 @@ func startDmsgClientWT(ctx context.Context, log *logging.Logger, pk cipher.PubKe
 	return dmsgC, closer, nil
 }
 
-func rpcClient(_ *cobra.Command) (visor.API, error) {
+func rpcClient(_ *cobra.Command) (visorapi.API, error) {
 	const rpcDialTimeout = time.Second * 5
 	conn, err := vnet.DialTimeout("tcp", rpcAddr, rpcDialTimeout)
 	if err != nil {
 		return nil, err
 	}
 	log := logging.MustGetLogger("rpc")
-	return visor.NewRPCClient(log, conn, visor.RPCPrefix, 0), nil
+	return visorapi.NewRPCClient(log, conn, visorapi.RPCPrefix, 0), nil
 }
 
 func prepareOutputFile(path string, replace bool) (*os.File, error) {

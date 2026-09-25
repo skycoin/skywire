@@ -40,6 +40,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/vpn"
 )
@@ -690,9 +691,9 @@ func (a *visorPingAdapter) IncGroupStreamSend() {
 
 func (a *visorPingAdapter) DialPing(conf rpcgrpc.PingConf) error {
 	// Convert rpcgrpc.RouteHopInfo to RouteHopInfo
-	var forwardHops, reverseHops []RouteHopInfo
+	var forwardHops, reverseHops []visorapi.RouteHopInfo
 	for _, h := range conf.ForwardHops {
-		forwardHops = append(forwardHops, RouteHopInfo{
+		forwardHops = append(forwardHops, visorapi.RouteHopInfo{
 			TpID:   h.TpID,
 			From:   h.From,
 			To:     h.To,
@@ -700,14 +701,14 @@ func (a *visorPingAdapter) DialPing(conf rpcgrpc.PingConf) error {
 		})
 	}
 	for _, h := range conf.ReverseHops {
-		reverseHops = append(reverseHops, RouteHopInfo{
+		reverseHops = append(reverseHops, visorapi.RouteHopInfo{
 			TpID:   h.TpID,
 			From:   h.From,
 			To:     h.To,
 			TpType: h.TpType,
 		})
 	}
-	return a.v.DialPing(PingConfig{
+	return a.v.DialPing(visorapi.PingConfig{
 		PK:           conf.PK,
 		Tries:        conf.Tries,
 		PcktSize:     conf.PcktSize,
@@ -722,7 +723,7 @@ func (a *visorPingAdapter) DialPing(conf rpcgrpc.PingConf) error {
 }
 
 func (a *visorPingAdapter) PingOnce(conf rpcgrpc.PingConf) (time.Duration, error) {
-	return a.v.PingOnce(PingConfig{
+	return a.v.PingOnce(visorapi.PingConfig{
 		PK:         conf.PK,
 		Tries:      conf.Tries,
 		PcktSize:   conf.PcktSize,
@@ -787,7 +788,7 @@ func (a *visorPingAdapter) DialDmsgPing(pk cipher.PubKey) error {
 }
 
 func (a *visorPingAdapter) DmsgPingOnce(conf rpcgrpc.PingConf) (time.Duration, error) {
-	return a.v.DmsgPingOnce(PingConfig{
+	return a.v.DmsgPingOnce(visorapi.PingConfig{
 		PK:       conf.PK,
 		Tries:    conf.Tries,
 		PcktSize: conf.PcktSize,
@@ -795,7 +796,7 @@ func (a *visorPingAdapter) DmsgPingOnce(conf rpcgrpc.PingConf) (time.Duration, e
 }
 
 func (a *visorPingAdapter) PingOnceWithEcho(conf rpcgrpc.PingConf, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
-	return a.v.PingOnceWithEcho(PingConfig{
+	return a.v.PingOnceWithEcho(visorapi.PingConfig{
 		PK:         conf.PK,
 		Tries:      conf.Tries,
 		PcktSize:   conf.PcktSize,
@@ -806,7 +807,7 @@ func (a *visorPingAdapter) PingOnceWithEcho(conf rpcgrpc.PingConf, echoFull bool
 }
 
 func (a *visorPingAdapter) DmsgPingOnceWithEcho(conf rpcgrpc.PingConf, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
-	return a.v.DmsgPingOnceWithEcho(PingConfig{
+	return a.v.DmsgPingOnceWithEcho(visorapi.PingConfig{
 		PK:       conf.PK,
 		Tries:    conf.Tries,
 		PcktSize: conf.PcktSize,

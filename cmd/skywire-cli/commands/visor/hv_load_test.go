@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func TestHvLsHeader_LoadColumns(t *testing.T) {
@@ -23,22 +23,22 @@ func TestHvLsHeader_LoadColumns(t *testing.T) {
 func TestFmtLoadCells(t *testing.T) {
 	tests := []struct {
 		name string
-		e    visor.HVVisorEntry
+		e    visorapi.HVVisorEntry
 		want string
 	}{
 		{
 			name: "nil load → dashes",
-			e:    visor.HVVisorEntry{},
+			e:    visorapi.HVVisorEntry{},
 			want: "-\t-\t-",
 		},
 		{
 			name: "with cores → load/cores",
-			e:    visor.HVVisorEntry{Load: &visor.LoadStats{Load1: 9.43, CPUCores: 4, MemUsedPercent: 35.2, DiskUsedPercent: 100}},
+			e:    visorapi.HVVisorEntry{Load: &visorapi.LoadStats{Load1: 9.43, CPUCores: 4, MemUsedPercent: 35.2, DiskUsedPercent: 100}},
 			want: "9.43/4\t35%\t100%",
 		},
 		{
 			name: "no cores → bare load",
-			e:    visor.HVVisorEntry{Load: &visor.LoadStats{Load1: 1.07, CPUCores: 0, MemUsedPercent: 12.9, DiskUsedPercent: 48.4}},
+			e:    visorapi.HVVisorEntry{Load: &visorapi.LoadStats{Load1: 1.07, CPUCores: 0, MemUsedPercent: 12.9, DiskUsedPercent: 48.4}},
 			want: "1.07\t13%\t48%",
 		},
 	}

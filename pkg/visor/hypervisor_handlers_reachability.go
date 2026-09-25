@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // pingTargetReq is the JSON body the UI sends to start a one-shot
@@ -64,7 +65,7 @@ func (hv *Hypervisor) postPingTarget() http.HandlerFunc {
 		if req.Size <= 0 {
 			req.Size = 1
 		}
-		conf := PingConfig{
+		conf := visorapi.PingConfig{
 			PK:       pk,
 			Tries:    req.Tries,
 			PcktSize: req.Size,
@@ -116,7 +117,7 @@ func (hv *Hypervisor) postDmsgPingTarget() http.HandlerFunc {
 		if req.Size <= 0 {
 			req.Size = 1
 		}
-		conf := PingConfig{PK: pk, Tries: req.Tries, PcktSize: req.Size}
+		conf := visorapi.PingConfig{PK: pk, Tries: req.Tries, PcktSize: req.Size}
 		if err := ctx.API.DialDmsgPing(pk); err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadGateway,
 				map[string]string{"error": "DialDmsgPing: " + err.Error()})

@@ -18,7 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	types "github.com/skycoin/skywire/pkg/transport/types"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // isVisorUnreachableError checks if the error indicates the remote visor is unreachable
@@ -204,7 +204,7 @@ var addPvCmd = &cobra.Command{
 			useEmbeddedTPS := tpsStatusErr == nil && tpsStatus != nil && tpsStatus.Enabled
 
 			// Process remote visors sequentially with streaming output
-			var tpsResults []*visor.TPSTransportResponse
+			var tpsResults []*visorapi.TPSTransportResponse
 			totalSuccess := 0
 			totalFail := 0
 
@@ -225,7 +225,7 @@ var addPvCmd = &cobra.Command{
 						continue
 					}
 
-					var tpResp *visor.TPSTransportResponse
+					var tpResp *visorapi.TPSTransportResponse
 					var tpErr error
 
 					if useEmbeddedTPS {
@@ -315,7 +315,7 @@ var addPvCmd = &cobra.Command{
 		}
 
 		// Add transports to candidates
-		var results []*visor.TransportSummary
+		var results []*visorapi.TransportSummary
 		successCount := 0
 		failCount := 0
 
@@ -347,7 +347,7 @@ var addPvCmd = &cobra.Command{
 				continue
 			}
 
-			var tp *visor.TransportSummary
+			var tp *visorapi.TransportSummary
 			var tpErr error
 
 			if pvTransportType != "" {

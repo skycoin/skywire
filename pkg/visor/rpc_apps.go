@@ -5,10 +5,11 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // LogsSince returns all logs from an specific app since the timestamp
-func (r *RPC) LogsSince(in *AppLogsRequest, out *[]string) (err error) {
+func (r *RPC) LogsSince(in *visorapi.AppLogsRequest, out *[]string) (err error) {
 	defer rpcutil.LogCall(r.log, "LogsSince", in)(out, &err)
 
 	logs, err := r.visor.LogsSince(in.TimeStamp, in.AppName)
@@ -19,7 +20,7 @@ func (r *RPC) LogsSince(in *AppLogsRequest, out *[]string) (err error) {
 
 // RecentAppLog returns the recent app-scoped route/transport events + log lines
 // captured in the log broadcaster's per-app ring.
-func (r *RPC) RecentAppLog(in *RecentAppLogRequest, out *[]string) (err error) {
+func (r *RPC) RecentAppLog(in *visorapi.RecentAppLogRequest, out *[]string) (err error) {
 	defer rpcutil.LogCall(r.log, "RecentAppLog", in)(out, &err)
 
 	lines, err := r.visor.RecentAppLog(in.AppName, in.Level)
@@ -29,14 +30,14 @@ func (r *RPC) RecentAppLog(in *RecentAppLogRequest, out *[]string) (err error) {
 }
 
 // SetAppDetailedStatus sets app's detailed status.
-func (r *RPC) SetAppDetailedStatus(in *SetAppStatusIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppDetailedStatus(in *visorapi.SetAppStatusIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppDetailedStatus", in)(nil, &err)
 
 	return r.visor.SetAppDetailedStatus(in.AppName, in.Status)
 }
 
 // SetAppError sets app's error.
-func (r *RPC) SetAppError(in *SetAppErrorIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppError(in *visorapi.SetAppErrorIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppError", in)(nil, &err)
 
 	return r.visor.SetAppError(in.AppName, in.Err)
@@ -71,7 +72,7 @@ func (r *RPC) Apps(_ *struct{}, reply *[]*appserver.AppState) (err error) {
 }
 
 // StartApp start App with provided name.
-func (r *RPC) StartApp(in *StartAppIn, _ *struct{}) (err error) {
+func (r *RPC) StartApp(in *visorapi.StartAppIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StartApp", in)(nil, &err)
 
 	return r.visor.StartAppWithMode(in.AppName, in.LauncherMode)
@@ -81,50 +82,50 @@ func (r *RPC) StartApp(in *StartAppIn, _ *struct{}) (err error) {
 // / "none") a per-app routing-policy override at runtime.
 // Backend dispatched by file extension; the running app picks
 // up the change on its next dial.
-func (r *RPC) SetAppRoutingPolicy(in *SetAppRoutingPolicyIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppRoutingPolicy(in *visorapi.SetAppRoutingPolicyIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppRoutingPolicy", in)(nil, &err)
 	return r.visor.SetAppRoutingPolicy(in.AppName, in.Path)
 }
 
 // AddApp add app to config
-func (r *RPC) AddApp(in *SetAppAddIn, _ *struct{}) (err error) {
+func (r *RPC) AddApp(in *visorapi.SetAppAddIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "AddApp", in)(nil, &err)
 
 	return r.visor.AddApp(in.AppName, in.BinaryName)
 }
 
 // DeleteApp removes an app entry from the launcher config (and stops it first if running).
-func (r *RPC) DeleteApp(in *AppNameIn, _ *struct{}) (err error) {
+func (r *RPC) DeleteApp(in *visorapi.AppNameIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "DeleteApp", in)(nil, &err)
 	return r.visor.DeleteApp(in.AppName)
 }
 
 // DoCustomSetting set custom setting to apps arguments
-func (r *RPC) DoCustomSetting(in *SetAppMapIn, _ *struct{}) (err error) {
+func (r *RPC) DoCustomSetting(in *visorapi.SetAppMapIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "DoCustomSetting", in)(nil, &err)
 	return r.visor.DoCustomSetting(in.AppName, in.Val)
 }
 
 // SetAppEnv sets/replaces/deletes a single KEY=value entry on an app's environment.
-func (r *RPC) SetAppEnv(in *SetAppEnvIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppEnv(in *visorapi.SetAppEnvIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppEnv", in)(nil, &err)
 	return r.visor.SetAppEnv(in.AppName, in.Key, in.Value)
 }
 
 // SetAppEnvBatch is the multi-key counterpart to SetAppEnv.
-func (r *RPC) SetAppEnvBatch(in *SetAppEnvBatchIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppEnvBatch(in *visorapi.SetAppEnvBatchIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppEnvBatch", in)(nil, &err)
 	return r.visor.SetAppEnvBatch(in.AppName, in.Env)
 }
 
 // SetAppArgs replaces the entire Args slice on an app.
-func (r *RPC) SetAppArgs(in *SetAppArgsIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppArgs(in *visorapi.SetAppArgsIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppArgs", in)(nil, &err)
 	return r.visor.SetAppArgs(in.AppName, in.Args)
 }
 
 // GetAppSettings returns the live tuning knobs held for an app.
-func (r *RPC) GetAppSettings(appName *string, out *AppSettings) (err error) {
+func (r *RPC) GetAppSettings(appName *string, out *visorapi.AppSettings) (err error) {
 	defer rpcutil.LogCall(r.log, "GetAppSettings", *appName)(out, &err)
 	s, err := r.visor.GetAppSettings(*appName)
 	if err != nil {
@@ -135,7 +136,7 @@ func (r *RPC) GetAppSettings(appName *string, out *AppSettings) (err error) {
 }
 
 // SetAppSettings replaces the live tuning knobs held for an app.
-func (r *RPC) SetAppSettings(in *SetAppSettingsIn, out *AppSettings) (err error) {
+func (r *RPC) SetAppSettings(in *visorapi.SetAppSettingsIn, out *visorapi.AppSettings) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppSettings", in)(out, &err)
 	s, err := r.visor.SetAppSettings(in.AppName, in.Values, in.Text)
 	if err != nil {
@@ -146,19 +147,19 @@ func (r *RPC) SetAppSettings(in *SetAppSettingsIn, out *AppSettings) (err error)
 }
 
 // SetAppEnvFull replaces the entire Env slice on an app.
-func (r *RPC) SetAppEnvFull(in *SetAppEnvFullIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppEnvFull(in *visorapi.SetAppEnvFullIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppEnvFull", in)(nil, &err)
 	return r.visor.SetAppEnvFull(in.AppName, in.Env)
 }
 
 // SetAppLauncherMode persists the launcher-mode preference for an app.
-func (r *RPC) SetAppLauncherMode(in *SetAppLauncherModeIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppLauncherMode(in *visorapi.SetAppLauncherModeIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppLauncherMode", in)(nil, &err)
 	return r.visor.SetAppLauncherMode(in.AppName, in.Mode)
 }
 
 // AppHelp returns the captured `<binary> --help` output for an app.
-func (r *RPC) AppHelp(in *AppNameIn, reply *string) (err error) {
+func (r *RPC) AppHelp(in *visorapi.AppNameIn, reply *string) (err error) {
 	defer rpcutil.LogCall(r.log, "AppHelp", in)(reply, &err)
 	out, err := r.visor.AppHelp(in.AppName)
 	if err != nil {
@@ -197,7 +198,7 @@ func (r *RPC) KillApp(name *string, _ *struct{}) (err error) {
 }
 
 // StartVPNClient starts VPNClient App
-func (r *RPC) StartVPNClient(in *StartVPNClientIn, _ *struct{}) (err error) {
+func (r *RPC) StartVPNClient(in *visorapi.StartVPNClientIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StartVPNClient", in)(nil, &err)
 
 	return r.visor.StartVPNClientWithMode(in.PK, in.LauncherMode)
@@ -232,49 +233,49 @@ func (r *RPC) RestartApp(name *string, _ *struct{}) (err error) {
 }
 
 // SetAutoStart sets auto-start settings for an app.
-func (r *RPC) SetAutoStart(in *SetAutoStartIn, _ *struct{}) (err error) {
+func (r *RPC) SetAutoStart(in *visorapi.SetAutoStartIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAutoStart", in)(nil, &err)
 
 	return r.visor.SetAutoStart(in.AppName, in.AutoStart)
 }
 
 // SetAppWhitelist sets the connection whitelist for skysocks / vpn-server.
-func (r *RPC) SetAppWhitelist(in *SetAppWhitelistIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppWhitelist(in *visorapi.SetAppWhitelistIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppWhitelist", in)(nil, &err)
 
 	return r.visor.SetAppWhitelist(in.AppName, in.Whitelist)
 }
 
 // SetAppNetworkInterface sets network interface for the app.
-func (r *RPC) SetAppNetworkInterface(in *SetAppNetworkInterfaceIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppNetworkInterface(in *visorapi.SetAppNetworkInterfaceIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppNetworkInterface", in)(nil, &err)
 
 	return r.visor.SetAppNetworkInterface(in.AppName, in.NetIfc)
 }
 
 // SetAppPK sets PK for the app.
-func (r *RPC) SetAppPK(in *SetAppPKIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppPK(in *visorapi.SetAppPKIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppPK", in)(nil, &err)
 
 	return r.visor.SetAppPK(in.AppName, in.PK)
 }
 
 // SetAppKillswitch sets killswitch flag for the app
-func (r *RPC) SetAppKillswitch(in *SetAppBoolIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppKillswitch(in *visorapi.SetAppBoolIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppKillswitch", in)(nil, &err)
 
 	return r.visor.SetAppKillswitch(in.AppName, in.Val)
 }
 
 // SetAppSecure sets secure flag for the app
-func (r *RPC) SetAppSecure(in *SetAppBoolIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppSecure(in *visorapi.SetAppBoolIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppSecure", in)(nil, &err)
 
 	return r.visor.SetAppSecure(in.AppName, in.Val)
 }
 
 // SetAppAddress sets addr flag for the app
-func (r *RPC) SetAppAddress(in *SetAppStringIn, _ *struct{}) (err error) {
+func (r *RPC) SetAppAddress(in *visorapi.SetAppStringIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppAddress", in)(nil, &err)
 
 	return r.visor.SetAppAddress(in.AppName, in.Val)
@@ -317,7 +318,7 @@ func (r *RPC) GetAppConnectionsSummary(appName *string, out *[]appserver.Connect
 }
 
 // CutAppTunnel closes one of an app's tunnels by its route group port.
-func (r *RPC) CutAppTunnel(in *CutAppTunnelIn, seq *uint64) (err error) {
+func (r *RPC) CutAppTunnel(in *visorapi.CutAppTunnelIn, seq *uint64) (err error) {
 	defer rpcutil.LogCall(r.log, "CutAppTunnel", in)(seq, &err)
 	s, err := r.visor.CutAppTunnel(in.AppName, in.RGPort)
 	if err != nil {

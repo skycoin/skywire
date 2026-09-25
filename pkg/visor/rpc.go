@@ -2,29 +2,23 @@
 package visor
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/rpc"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
-	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/network"
-	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 const (
-	// RPCPrefix is the prefix used with all RPC calls.
-	RPCPrefix = "app-visor"
+
 	// HealthTimeout defines timeout for /health endpoint calls done from hypervisor.
 	HealthTimeout = skyenv.HealthTimeout
 	// InnerHealthTimeout defines timeout for /health endpoint calls done from visor.
@@ -32,15 +26,13 @@ const (
 )
 
 var (
-	// ErrNotImplemented occurs when a method is not implemented.
-	ErrNotImplemented = errors.New("not implemented")
 
 	// ErrNotFound is returned when a requested resource is not found.
 	ErrNotFound = errors.New("not found")
 )
 
 type RPC struct {
-	visor API
+	visor visorapi.API
 	log   logrus.FieldLogger
 }
 
@@ -51,111 +43,15 @@ func newRPCServer(v *Visor, remoteName string) (*rpc.Server, error) {
 		log:   v.MasterLogger().PackageLogger("visor_rpc:" + remoteName),
 	}
 
-	if err := rpcS.RegisterName(RPCPrefix, rpcG); err != nil {
+	if err := rpcS.RegisterName(visorapi.RPCPrefix, rpcG); err != nil {
 		return nil, fmt.Errorf("failed to create visor RPC server: %w", err)
 	}
 
 	return rpcS, nil
 }
 
-type AppLogsRequest struct {
-	// TimeStamp should be time.RFC3339Nano formatted
-	TimeStamp time.Time `json:"time_stamp"`
-	// AppName should match the app name in visor config
-	AppName string `json:"app_name"`
-}
-
-// RecentAppLogRequest asks for the recent app-scoped route/transport events +
-// log lines captured in the log broadcaster's per-app ring.
-type RecentAppLogRequest struct {
-	// AppName should match the app name in visor config.
-	AppName string `json:"app_name"`
-	// Level is the minimum severity ("trace"|"debug"|"info"|"warn"|"error").
-	// Empty defaults to "debug".
-	Level string `json:"level"`
-}
-type TransportSummary struct {
-	ID      uuid.UUID           `json:"id"`
-	Local   cipher.PubKey       `json:"local_pk"`
-	Remote  cipher.PubKey       `json:"remote_pk"`
-	Type    types.Type          `json:"type"`
-	Log     *transport.LogEntry `json:"log,omitempty"`
-	IsSetup bool                `json:"is_setup"`
-	Label   transport.Label     `json:"label"`
-	// LatencyMS is the smoothed average inter-visor RTT for this
-	// transport in milliseconds, measured by transport-level
-	// ping/pong (or RSN-fallback for old peers). Zero means no
-	// measurement yet. Populated from tp.GetLatency().
-	LatencyMS float64 `json:"latency_ms,omitempty"`
-	// ThroughputBps is the passively-observed peak goodput (bytes/sec)
-	// this transport has carried Ã¢ÂÂ a measured CAPACITY lower-bound,
-	// distinct from RTT (a low-latency link can still be low-throughput,
-	// e.g. webrtc). Zero until real traffic has flowed. Populated from
-	// tp.GetThroughputBps().
-	ThroughputBps float64 `json:"throughput_bps,omitempty"`
-	// Initiator is true when this visor dialed out to establish the
-	// transport (outgoing); false when it accepted an inbound dial
-	// (incoming). The transport is bidirectional Ã¢ÂÂ this records only
-	// who originated it, for in/out reporting.
-	Initiator bool `json:"initiator"`
-	// RemoteIP is the host portion of the underlying transport's raw
-	// remote address (e.g. "1.2.3.4"). Empty for dmsg Ã¢ÂÂ which relays
-	// through a server rather than dialing the peer directly, so an
-	// empty RemoteIP is itself the "relayed, not direct" signal.
-	// Populated from tp.RemoteIP().
-	RemoteIP string `json:"remote_ip,omitempty"`
-	// RemoteCountry is the ISO country code the embedded geoip db maps
-	// RemoteIP to (the same db the routing-policy provider uses). Empty
-	// when there is no direct IP (dmsg) or no geoip hit.
-	RemoteCountry string `json:"remote_country,omitempty"`
-	// Endpoint carries the per-transport-type low-level connection
-	// metadata Ã¢ÂÂ the direct IP:port for stcp/stcpr/sudph/squicr, the
-	// relaying dmsg server PK for dmsg, the QUIC TLS fingerprint/ALPN
-	// for squicr, the selected ICE candidate for webrtc. Secrets-free
-	// (dmsg = server PK only, never a secret key). nil when the
-	// transport isn't serving or its type exposes no details.
-	// Populated from tp.ConnDetails().
-	Endpoint *network.ConnDetails `json:"endpoint,omitempty"`
-}
-
-// MarshalJSON emits id / local_pk / remote_pk only when they are set.
-//
-// encoding/json's `omitempty` cannot express this: uuid.UUID and
-// cipher.PubKey are fixed-size arrays, and omitempty never treats an
-// array as empty Ã¢ÂÂ so an otherwise-blank entry still costs ~170 bytes
-// of "000Ã¢ÂÂ¦0" on the wire. That is what makes the node-list projection
-// worth doing at all (see compactTransportSummaries, which emits type
-// and direction only). A real transport has all three set and
-// serializes exactly as it did before.
-func (ts TransportSummary) MarshalJSON() ([]byte, error) {
-	type alias TransportSummary
-	out := struct {
-		*alias
-		ID     *uuid.UUID     `json:"id,omitempty"`
-		Local  *cipher.PubKey `json:"local_pk,omitempty"`
-		Remote *cipher.PubKey `json:"remote_pk,omitempty"`
-	}{alias: (*alias)(&ts)}
-	if ts.ID != (uuid.UUID{}) {
-		out.ID = &ts.ID
-	}
-	if !ts.Local.Null() {
-		out.Local = &ts.Local
-	}
-	if !ts.Remote.Null() {
-		out.Remote = &ts.Remote
-	}
-	return json.Marshal(out)
-}
-
-type TransportLogEntry struct {
-	TpID      uuid.UUID `json:"tp_id"`
-	RecvBytes uint64    `json:"recv_bytes"`
-	SentBytes uint64    `json:"sent_bytes"`
-	Timestamp int64     `json:"timestamp"`
-}
-
-func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, includeLogs, isSetup bool) *TransportSummary {
-	summary := &TransportSummary{
+func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, includeLogs, isSetup bool) *visorapi.TransportSummary {
+	summary := &visorapi.TransportSummary{
 		ID:            tp.Entry.ID,
 		Local:         tm.Local(),
 		Remote:        tp.Remote(),
@@ -175,454 +71,6 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 		summary.RemoteCountry = geoCountryForIP(summary.RemoteIP)
 	}
 	return summary
-}
-
-type SetAppStatusIn struct {
-	AppName string
-	Status  string
-}
-type SetAppErrorIn struct {
-	AppName string
-	Err     string
-}
-type StartAppIn struct {
-	AppName      string
-	LauncherMode string // "internal", "external", or "" for default
-}
-
-// SetAppRoutingPolicyIn carries (app name, policy-path) for the
-// runtime per-app routing-policy swap RPC. Path forms match the
-// config field: "@/path.star", "@/path.wasm", inline-Starlark,
-// or "" / "none" to clear.
-type SetAppRoutingPolicyIn struct {
-	AppName string
-	Path    string
-}
-type SetAppAddIn struct {
-	AppName    string
-	BinaryName string
-}
-
-// AppNameIn carries a single app name for RPCs whose only argument
-// is the target's name (DeleteApp, etc.).
-type AppNameIn struct {
-	AppName string
-}
-type StartVPNClientIn struct {
-	PK           cipher.PubKey
-	LauncherMode string // "internal", "external", or "" for default
-}
-type SetAutoStartIn struct {
-	AppName   string
-	AutoStart bool
-}
-
-// SetAppWhitelistIn carries a comma-separated list of public keys
-// allowed to connect to skysocks / vpn-server. Empty = open to all
-// authenticated peers. Replaces the prior SetAppPasswordIn Ã¢ÂÂ those
-// apps no longer accept a passcode flag.
-type SetAppWhitelistIn struct {
-	AppName   string
-	Whitelist string
-}
-type SetAppNetworkInterfaceIn struct {
-	AppName string
-	NetIfc  string
-}
-type SetAppPKIn struct {
-	AppName string
-	PK      cipher.PubKey
-}
-type SetAppBoolIn struct {
-	AppName string
-	Val     bool
-}
-type SetAppStringIn struct {
-	AppName string
-	Val     string
-}
-type SetAppMapIn struct {
-	AppName string
-	Val     map[string]any
-}
-
-// SetAppEnvIn carries a single KEY=value mutation for an app's
-// environment. Empty Value deletes the entry.
-type SetAppEnvIn struct {
-	AppName string
-	Key     string
-	Value   string
-}
-
-// SetAppEnvBatchIn carries a multi-key environment mutation. Map
-// values are strings (env vars are KEY=string by definition);
-// empty values delete.
-type SetAppEnvBatchIn struct {
-	AppName string
-	Env     map[string]string
-}
-
-// SetAppArgsIn replaces the entire Args slice on an app.
-type SetAppArgsIn struct {
-	AppName string
-	Args    []string
-}
-
-// SetAppSettingsIn replaces the whole live tuning knob set for an app. An
-// empty Values is a full reset to the compiled defaults.
-type SetAppSettingsIn struct {
-	AppName string
-	Values  map[string]int64
-	// Text carries the LIST knobs, whose payload is a token set rather than an
-	// int64. Empty Values AND empty Text is the full reset.
-	Text map[string]string
-}
-
-// CutAppTunnelIn names one tunnel of one app: the route group port `proxy mux
-// info` prints as dst_port.
-type CutAppTunnelIn struct {
-	AppName string
-	RGPort  uint16
-}
-
-// SetAppEnvFullIn replaces the entire Env slice on an app.
-type SetAppEnvFullIn struct {
-	AppName string
-	Env     []string
-}
-
-// SetAppLauncherModeIn persists the launcher-mode preference.
-// Mode is "" / "internal" / "external".
-type SetAppLauncherModeIn struct {
-	AppName string
-	Mode    string
-}
-type TransportsIn struct {
-	FilterTypes   []string
-	FilterPubKeys []cipher.PubKey
-	ShowLogs      bool
-}
-type AddTransportIn struct {
-	RemotePK         cipher.PubKey
-	TpType           string
-	Timeout          time.Duration
-	Label            string // "user" or "skycoin" (default: "skycoin")
-	NoRegister       bool   // skip transport discovery registration (only valid for "user" label)
-	SkipLatencyProbe bool   // deprecated: latency is now measured at the transport level
-}
-type SetSTCPAddrIn struct {
-	PK   cipher.PubKey
-	Addr string
-}
-type RouteGroupInfo struct {
-	ConsumeRuleID routing.RouteID               `json:"consume_rule_id"`
-	FwdRuleID     routing.RouteID               `json:"fwd_rule_id"`
-	Desc          routing.RouteDescriptorFields `json:"desc"`
-	FwdNextTpID   string                        `json:"fwd_next_tp_id,omitempty"`
-	// Initiator is true when this visor dialed the remote end of the
-	// route, false when the route was accepted from a remote setup-node
-	// request. Distinguishes outbound proxy/VPN client connections from
-	// inbound listener connections.
-	Initiator bool `json:"initiator"`
-	// Hops is the stored forward route path (transport IDs, edges, types)
-	// for this route group, populated when the route group is active.
-	Hops []RouteHopInfo `json:"hops,omitempty"`
-}
-
-// MuxRouteGroupInfo is one route-group's mux state plus per-leg
-// counters. Returned by RouteGroupMuxInfo for 'cli proxy mux-info'.
-type MuxRouteGroupInfo struct {
-	Desc routing.RouteDescriptorFields `json:"desc"`
-	// FarEndPK is the peer at the other end of this route group — the exit for
-	// a dialing client. The setup node gives each edge the descriptor that
-	// points AT that edge, so Desc.DstPK is the LOCAL visor on both sides and
-	// consumers reading it as the destination printed this visor as its own
-	// exit. Filled by the router; render this, never an end of Desc.
-	FarEndPK      cipher.PubKey `json:"far_end_pk"`
-	MuxEnabled    bool          `json:"mux_enabled"`
-	SACKEnabled   bool          `json:"sack_enabled"`
-	PerFrameNoise bool          `json:"per_frame_noise"`
-	// Directional: unidirectional send selection (CapUniDir) is active Ã¢ÂÂ each
-	// direction rides a disjoint leg class. Flipped: the direction->leg-class
-	// mapping is swapped (heavy direction took the mux). With per-leg `direct`,
-	// this tells which class carries which direction without log-grepping.
-	Directional bool `json:"directional,omitempty"`
-	Flipped     bool `json:"flipped,omitempty"`
-	// FlipPinned is the operator's MANUAL direction pin on a directional group:
-	// "auto" (flip controller in charge), "default" or "flipped" (mapping pinned,
-	// controller dormant until released). Empty on a non-directional mux.
-	FlipPinned string `json:"flip_pinned,omitempty"`
-	// Distribution names how the mux spreads outbound packets across its legs
-	// (weight mode: "auto", "round-robin", "weighted", "capacity",
-	// "latency-adaptive", "sticky:5tuple", "size-threshold", "dscp-priority").
-	// Empty for a single-leg / non-mux group.
-	Distribution string `json:"distribution,omitempty"`
-	// ReorderPending is the number of received packets buffered out-of-order
-	// (head-of-line-blocking depth); ReorderGapAgeMS is how long the current
-	// reorder frontier gap has stayed open in ms (0 when contiguous). A rising
-	// pending count with a growing gap age marks a stalled/black-holing leg.
-	ReorderPending  int     `json:"reorder_pending,omitempty"`
-	ReorderGapAgeMS float64 `json:"reorder_gap_age_ms,omitempty"`
-	// WriteSeq is the total DATA frames this mux has emitted outbound Ã¢ÂÂ a cheap
-	// aggregate send-progress counter across all legs.
-	WriteSeq uint32 `json:"write_seq,omitempty"`
-	// AggSentBytes / AggRecvBytes are the rg-scoped totals summed across every
-	// leg (what this route group moved, distinct from per-transport totals that
-	// also count other groups sharing the transport).
-	AggSentBytes uint64 `json:"agg_sent_bytes,omitempty"`
-	AggRecvBytes uint64 `json:"agg_recv_bytes,omitempty"`
-	// AggGoodputBps is the route-group's recent goodput Ã¢ÂÂ the sum of the
-	// per-leg goodput RATES (bytes/sec), i.e. what the whole group is moving
-	// right now, distinct from the cumulative AggSentBytes/AggRecvBytes totals.
-	// AggGoodputUpBps/AggGoodputDownBps split it by direction (sum of the
-	// per-leg send-rates / recv-rates); AggGoodputBps is their sum.
-	AggGoodputBps     float64 `json:"agg_goodput_bps,omitempty"`
-	AggGoodputUpBps   float64 `json:"agg_goodput_up_bps,omitempty"`
-	AggGoodputDownBps float64 `json:"agg_goodput_down_bps,omitempty"`
-	// FEC (forward error correction) telemetry. FECEnabled reports whether both
-	// peers negotiated CapFEC on this group. FECRepairBytesSent/Recv are cumulative
-	// repair-frame bytes scheduled onto / received from legs Ã¢ÂÂ the TRUE FEC
-	// overhead, separable from data (AggRecvBytes) and retransmit (per-leg
-	// Retransmits). FECReconstructs counts frontier frames recovered from repair
-	// (each a slow-leg head-of-line stall this group avoided).
-	FECEnabled         bool         `json:"fec_enabled,omitempty"`
-	FECRepairBytesSent uint64       `json:"fec_repair_bytes_sent,omitempty"`
-	FECRepairBytesRecv uint64       `json:"fec_repair_bytes_recv,omitempty"`
-	FECReconstructs    uint64       `json:"fec_reconstructs,omitempty"`
-	Legs               []MuxLegInfo `json:"legs"`
-	// Events is this route group's most recent leg/group changes with their
-	// reasons, oldest first Ã¢ÂÂ the churn next to the legs, so a reading that
-	// shows a leg missing also shows who took it and why. The whole-visor ring
-	// is diag.mux_events in `visor state`.
-	Events []router.MuxEvent `json:"events,omitempty"`
-	// Recovery is the group's loss-recovery state: the sender-side retransmit
-	// machinery (retx buffer occupancy and held seq range, retransmits sent /
-	// skipped-because-no-longer-held / failed, tail-loss probes, inbound SACK
-	// feedback) next to the receiver-side reorder frontier (the seq waited on,
-	// the packets dammed behind it, outbound SACK feedback, wedge counters). A
-	// reorder wedge is a two-ended failure, and before this only the RECEIVER
-	// logged anything Ã¢ÂÂ the sender had nothing to show. Nil when the group has
-	// no mux.
-	Recovery *router.MuxRecovery `json:"recovery,omitempty"`
-	// TunnelRole is the DIALING end's label for this route group Ã¢ÂÂ "active"
-	// (it carries streams) or "standby" (held open, kept alive and measured,
-	// carrying nothing, ready to take over). Absent for every route group that
-	// is not one of a multi-tunnel app's tunnels.
-	//
-	// Read it on the LOCAL end. An exit sees how many tunnels a client holds
-	// but not which of them are in standby, so this field is always empty in
-	// an accepting visor's `visor state`.
-	TunnelRole string `json:"tunnel_role,omitempty"`
-	// DisjointRoutes: routes to the far end sharing no intermediate and no first
-	// hop; what an auto-sized standby pool holds (0 = not yet counted).
-	DisjointRoutes int `json:"disjoint_routes,omitempty"`
-	// LegReserve: a standby group a leg split built — composable as a leg,
-	// never promotable to a tunnel (it has no app session).
-	LegReserve bool `json:"leg_reserve,omitempty"`
-	// AgeMS is how long this route group has existed â for a pooled STANDBY
-	// tunnel, its AUDITION age: how long it has been held open and measured
-	// without carrying a stream.
-	AgeMS float64 `json:"age_ms,omitempty"`
-	// Shape is the SESSION's measured multiplexing shape: every ACTIVE tunnel
-	// this app holds to this exit with its live leg count — "2x2" is two
-	// tunnels of two legs, "4x1" pure stream level, "1x4" pure packet level.
-	// ShapeTarget is the shape it is being held at, ShapeSource whether that
-	// came from the auto rule (tunnel.count x pool.active_width) or from the
-	// mux.shape knob. Advisory: reported, not yet converged toward. Empty on
-	// a standby tunnel and on every accept-side group.
-	Shape       string `json:"shape,omitempty"`
-	ShapeTarget string `json:"shape_target,omitempty"`
-	ShapeSource string `json:"shape_source,omitempty"`
-	// ShapeTunnels is the k the target asks for (0 under auto); LastMove and
-	// MoveCounts are the session's shape-move history, keyed by the four move
-	// names pool_leg_taken / pool_leg_released / tunnel_promoted /
-	// tunnel_parked.
-	ShapeTunnels int                  `json:"shape_tunnels,omitempty"`
-	LastMove     *router.MuxShapeMove `json:"last_move,omitempty"`
-	MoveCounts   map[string]uint64    `json:"move_counts,omitempty"`
-}
-
-// MuxLegInfo is one route in a mux'd group.
-type MuxLegInfo struct {
-	Index       int    `json:"index"`
-	TransportID string `json:"transport_id"`
-	TpType      string `json:"tp_type"`
-	RemotePK    string `json:"remote_pk"`
-	// Source names where a leg that is not this group's own dial came from —
-	// a leg the standby-pool arbiter took ("standby :4, re-homed in place").
-	Source string `json:"source,omitempty"`
-	// LatencyMS is the FIRST-HOP transport RTT; RouteLatencyMS is the leg's
-	// TRUE end-to-end route latency (all hops, from the leg-liveness pong) Ã¢ÂÂ
-	// on a multihop leg the two differ sharply. Direct is true for a 1-hop
-	// route straight to the destination, false for a relayed (multihop) leg.
-	LatencyMS      float64 `json:"latency_ms,omitempty"`
-	RouteLatencyMS float64 `json:"route_latency_ms,omitempty"`
-	// AckDelayMS is the leg's own EWMA sendÃ¢ÂÂack delay; InflightBytes and
-	// WindowBytes are its real unacknowledged bytes and the send window they
-	// are bounded by (see router.MuxLeg).
-	AckDelayMS    float64 `json:"ack_delay_ms"`
-	InflightBytes float64 `json:"inflight_bytes"`
-	WindowBytes   float64 `json:"window_bytes"`
-	Direct        bool    `json:"direct"`
-	SentBytes     uint64  `json:"sent_bytes"`
-	SentPackets   uint64  `json:"sent_packets"`
-	RecvBytes     uint64  `json:"recv_bytes"`
-	RecvPackets   uint64  `json:"recv_packets"`
-	// PayloadBytes is the UNIQUE in-order payload this leg delivered (each seq
-	// counted once, retransmits/duplicates excluded) Ã¢ÂÂ so per-leg values sum to
-	// the transfer size and cleanly attribute which legs carried a direction's
-	// data, unlike RecvBytes which includes retransmit inflation.
-	PayloadBytes uint64 `json:"payload_bytes"`
-	// DupBytes is inbound DUPLICATE data (seqs already delivered/buffered on
-	// arrival) Ã¢ÂÂ the peer's spurious-retransmit waste, which rides the fastest
-	// leg. RepairBytes is inbound FEC repair frames (deliberate overhead).
-	// With PayloadBytes they decompose RecvBytes, so a standby leg showing
-	// traffic is attributable from telemetry.
-	DupBytes    uint64 `json:"dup_bytes"`
-	RepairBytes uint64 `json:"repair_bytes"`
-	// Retransmits is SACK retransmit packets carried by this leg (loss
-	// signal). Alive/Standby are the leg's gate_state: Alive=false once the
-	// transport is closed; Standby=true for a warm standby (rules kept,
-	// not sending). Surfaced for the per-leg telemetry harness.
-	Retransmits uint64 `json:"retransmits"`
-	// GoodputBps is this leg's recent goodput Ã¢ÂÂ the EWMA of (sent+recv) bytes
-	// per second over the telemetry refresh window (~1s for the status page).
-	// The RATE the leg is currently moving, as opposed to the cumulative
-	// SentBytes/RecvBytes totals. 0 until a second sample lands.
-	// GoodputUpBps/GoodputDownBps split it by direction (send-rate / recv-rate);
-	// GoodputBps is their sum.
-	GoodputBps     float64 `json:"goodput_bps,omitempty"`
-	GoodputUpBps   float64 `json:"goodput_up_bps,omitempty"`
-	GoodputDownBps float64 `json:"goodput_down_bps,omitempty"`
-	Alive          bool    `json:"alive"`
-	Standby        bool    `json:"standby"`
-	// Hops is the leg's full forward route (every hop to the destination),
-	// with full PKs and per-hop transport type + latency where known.
-	Hops []MuxHopInfo `json:"hops,omitempty"`
-	// CapacityPriorBps is the pool arbiter's PRIOR throughput estimate for
-	// this leg (router.throughputPrior) — what a standby tunnel is ranked by
-	// before it has carried anything to measure.
-	CapacityPriorBps float64 `json:"capacity_prior_bps,omitempty"`
-}
-
-// MuxHopInfo is one hop of a mux leg's forward route. From/To are FULL
-// public keys (never truncated). LatencyMS is the hop's transport RTT
-// where known (first hop owned; single-intermediate far hop derived).
-type MuxHopInfo struct {
-	TpID      string  `json:"tp_id"`
-	From      string  `json:"from"`
-	To        string  `json:"to"`
-	TpType    string  `json:"tp_type"`
-	LatencyMS float64 `json:"latency_ms,omitempty"`
-}
-type FetchServiceDataIn struct {
-	Service string
-	Path    string
-}
-type MuxRouteInput struct {
-	AppName string
-	// Forward and Reverse are the caller-supplied hop lists for
-	// AddMuxRoute. Same shape 'cli route calc' emits. Empty for
-	// RemoveMuxRoute.
-	Forward []routing.Hop
-	Reverse []routing.Hop
-	// TransportID identifies the leg to remove; unused by AddMuxRoute.
-	TransportID uuid.UUID
-	// Target is the desired total leg count for GrowMuxRoute and MinHops
-	// is the hop-count floor for the legs it adds. Both unused by
-	// Add/RemoveMuxRoute.
-	Target  int
-	MinHops int
-	// Legs is the RELATIVE leg count for GrowMuxFromPool Ã¢ÂÂ "grow this group
-	// by k legs" Ã¢ÂÂ as opposed to Target's absolute "grow it to N legs".
-	// Unused by every other op.
-	Legs int
-	// SrcPort disambiguates between concurrent rg's owned by the same
-	// app (one per concurrent SOCKS5 connection on skysocks-client,
-	// etc.). Zero means "auto-pick if exactly one rg is active for
-	// the app, error otherwise."
-	SrcPort uint16
-}
-
-// MuxDirectionInput carries the app-scoped manual direction pin for
-// SetMuxDirection: Mode is "auto" (release), "default" or "flipped".
-type MuxDirectionInput struct {
-	AppName string
-	Mode    string
-}
-type FilterServersIn struct {
-	Version string
-	Country string
-}
-type DeregisterServiceIn struct {
-	PKs         []cipher.PubKey
-	ServiceType string
-}
-
-// SkychatPasswordChangeIn carries the old + new password for the
-// hypervisor's "Skychat password" set/change flow. Mirrors the
-// shape of usermanager.ChangePassword.
-type SkychatPasswordChangeIn struct {
-	OldPassword string
-	NewPassword string
-}
-
-type ConnectIn struct {
-	// Network selects the underlying transport for the reverse proxy.
-	// "skynet" (default; empty string treated as skynet) or "dmsg".
-	Network    string
-	RemotePK   cipher.PubKey
-	RemotePort int
-	LocalPort  int
-}
-
-// UDPForwardIn is the argument for DialUDPForward (#2607): dial a remote
-// forwarded_ports.udp service and bridge it to a local UDP socket.
-type UDPForwardIn struct {
-	RemotePK   cipher.PubKey
-	RemotePort int
-	LocalPort  int
-}
-type StopAllPingsOut struct {
-	Stopped int
-	Errors  []string
-}
-type DialDmsgPingViaServerIn struct {
-	PK       cipher.PubKey
-	ServerPK cipher.PubKey
-}
-type SetEmbeddedProxyEnabledRequest struct {
-	Kind   string
-	Enable bool
-}
-type SetEmbeddedProxyUpstreamRequest struct {
-	Kind string
-	Addr string // upstream SOCKS5 address, "" to clear
-}
-
-type SetEmbeddedProxyBindRequest struct {
-	Kind string
-	Addr string // SOCKS5 bind host, "" = loopback
-}
-type DmsgProbeRequest struct {
-	PK   cipher.PubKey
-	Port uint16
-}
-
-// DmsgProbeViaServerRequest is the argument for the DmsgProbeViaServer RPC.
-type DmsgProbeViaServerRequest struct {
-	PK       cipher.PubKey
-	Port     uint16
-	ServerPK cipher.PubKey
-}
-type TPSAddTransportIn struct {
-	TargetPK cipher.PubKey
-	RemotePK cipher.PubKey
-	TpType   string
-}
-type TPSRemoveTransportIn struct {
-	TargetPK cipher.PubKey
-	TpID     uuid.UUID
 }
 
 func (r *RPC) GetTransportSetupNodes(_ *struct{}, out *[]cipher.PubKey) (err error) {
@@ -655,7 +103,7 @@ func (r *RPC) GetRouteSetupNodesSorted(_ *struct{}, out *[]cipher.PubKey) (err e
 	*out = nodes
 	return nil
 }
-func (r *RPC) GetTPSHealth(_ *struct{}, out *[]NodeHealth) (err error) {
+func (r *RPC) GetTPSHealth(_ *struct{}, out *[]visorapi.NodeHealth) (err error) {
 	defer rpcutil.LogCall(r.log, "GetTPSHealth", nil)(out, &err)
 
 	health, err := r.visor.GetTPSHealth()
@@ -665,7 +113,7 @@ func (r *RPC) GetTPSHealth(_ *struct{}, out *[]NodeHealth) (err error) {
 	*out = health
 	return nil
 }
-func (r *RPC) GetRSNHealth(_ *struct{}, out *[]NodeHealth) (err error) {
+func (r *RPC) GetRSNHealth(_ *struct{}, out *[]visorapi.NodeHealth) (err error) {
 	defer rpcutil.LogCall(r.log, "GetRSNHealth", nil)(out, &err)
 
 	health, err := r.visor.GetRSNHealth()
@@ -689,16 +137,6 @@ func (r *RPC) ResetRouteSetupStats(_ *struct{}, _ *struct{}) (err error) {
 	return r.visor.ResetRouteSetupStats()
 }
 
-type TPSExternalAddTransportIn struct {
-	TPSPK    cipher.PubKey
-	TargetPK cipher.PubKey
-	RemotePK cipher.PubKey
-	TpType   string
-}
-type TPSExternalGetTransportsIn struct {
-	TPSPK    cipher.PubKey
-	TargetPK cipher.PubKey
-}
 type DHTGetIn struct {
 	PK   string `json:"pk"`
 	Salt string `json:"salt"`
@@ -715,7 +153,7 @@ func (r *RPC) AddHypervisor(in *cipher.PubKey, _ *struct{}) (err error) {
 }
 
 // PendingHypervisors lists peers waiting to be approved as hypervisors.
-func (r *RPC) PendingHypervisors(_ *struct{}, out *[]PendingHypervisor) (err error) {
+func (r *RPC) PendingHypervisors(_ *struct{}, out *[]visorapi.PendingHypervisor) (err error) {
 	defer rpcutil.LogCall(r.log, "PendingHypervisors", nil)(out, &err)
 	*out, err = r.visor.PendingHypervisors()
 	return err
@@ -729,7 +167,7 @@ func (r *RPC) ApproveHypervisor(sel *string, out *cipher.PubKey) (err error) {
 }
 
 // NewPairCode mints a one-time pairing code.
-func (r *RPC) NewPairCode(ttl *time.Duration, out *PairCode) (err error) {
+func (r *RPC) NewPairCode(ttl *time.Duration, out *visorapi.PairCode) (err error) {
 	defer rpcutil.LogCall(r.log, "NewPairCode", ttl)(out, &err)
 	*out, err = r.visor.NewPairCode(*ttl)
 	return err
@@ -753,18 +191,10 @@ func (r *RPC) RemoveAllHypervisors(_ *struct{}, out *int) (err error) {
 	return err
 }
 
-// HypervisorPasswordChangeIn carries the old + new password for the
-// hypervisor UI "admin" account. Mirrors the shape of
-// usermanager.ChangePassword and SkychatPasswordChangeIn.
-type HypervisorPasswordChangeIn struct {
-	OldPassword string
-	NewPassword string
-}
-
 // SetHypervisorPassword changes the hypervisor UI admin password.
 // Local-only RPC; the HTTP session check that /api/change-password
 // enforces is intentionally absent here.
-func (r *RPC) SetHypervisorPassword(in *HypervisorPasswordChangeIn, _ *struct{}) (err error) {
+func (r *RPC) SetHypervisorPassword(in *visorapi.HypervisorPasswordChangeIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetHypervisorPassword", nil)(nil, &err)
 	return r.visor.SetHypervisorPassword(in.OldPassword, in.NewPassword)
 }
@@ -773,7 +203,7 @@ func (r *RPC) SetHypervisorPassword(in *HypervisorPasswordChangeIn, _ *struct{})
 // without the old one (reset / first-time set). Local-only RPC; same
 // privileged-local rationale as SetHypervisorPassword. OldPassword in the
 // request is ignored.
-func (r *RPC) SetHypervisorPasswordForce(in *HypervisorPasswordChangeIn, _ *struct{}) (err error) {
+func (r *RPC) SetHypervisorPasswordForce(in *visorapi.HypervisorPasswordChangeIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetHypervisorPasswordForce", nil)(nil, &err)
 	return r.visor.SetHypervisorPasswordForce(in.NewPassword)
 }
@@ -782,75 +212,8 @@ type DHTSyncRequest struct {
 	RemotePK string `json:"remote_pk"`
 	Salt     string `json:"salt"`
 }
-type TransportRPCCallRequest struct {
-	RemotePK cipher.PubKey   `json:"remote_pk"`
-	Method   string          `json:"method"`
-	Args     json.RawMessage `json:"args,omitempty"` // JSON-encoded RPC arguments
-}
-type HVAppArgs struct {
-	PK      cipher.PubKey
-	AppName string
-}
-type HVMinHopsArgs struct {
-	PK   cipher.PubKey
-	Hops uint16
-}
-type HVRewardArgs struct {
-	PK   cipher.PubKey
-	Addr string
-}
-type HVTransportArgs struct {
-	PK  cipher.PubKey
-	TID uuid.UUID
-}
-type HVRoutingRuleArgs struct {
-	PK  cipher.PubKey
-	Key routing.RouteID
-}
-type HVAddTransportArgs struct {
-	PK      cipher.PubKey
-	Remote  cipher.PubKey
-	TpType  string
-	Label   string
-	Timeout time.Duration
-}
-type HVAutoconnectArgs struct {
-	PK     cipher.PubKey
-	Enable bool
-}
+
 type HVMuxArgs struct {
 	PK cipher.PubKey
 	N  int
-}
-type HVCalcRoutesArgs struct {
-	PK     cipher.PubKey
-	Enable bool
-}
-type HVDmsgSessionsArgs struct {
-	PK    cipher.PubKey
-	Count int
-}
-type HVLogsArgs struct {
-	PK      cipher.PubKey
-	Since   time.Time
-	AppName string
-}
-type HVAutostartArgs struct {
-	PK        cipher.PubKey
-	AppName   string
-	Autostart bool
-}
-type HVProxyArgs struct {
-	PK     cipher.PubKey
-	Kind   string // "dmsg" or "skynet"
-	Enable bool
-	Addr   string // SOCKS5 upstream
-}
-type HVTCPPortArgs struct {
-	PK   cipher.PubKey
-	Port int
-}
-type HVForwardedPortArgs struct {
-	PK   cipher.PubKey
-	Port ForwardedPort
 }

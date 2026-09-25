@@ -12,7 +12,7 @@ import (
 
 	"github.com/skycoin/skywire/example/http-server/html"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func homepage(w http.ResponseWriter, _ *http.Request) {
@@ -77,12 +77,12 @@ func main() {
 	}
 }
 
-func client() (visor.API, error) {
+func client() (visorapi.API, error) {
 	const rpcDialTimeout = time.Second * 5
 	conn, err := net.DialTimeout("tcp", "localhost:3435", rpcDialTimeout)
 	if err != nil {
 		return nil, err
 	}
 	logger := logging.MustGetLogger("api")
-	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, 0), nil
+	return visorapi.NewRPCClient(logger, conn, visorapi.RPCPrefix, 0), nil
 }

@@ -9,15 +9,16 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // newTestTracker builds a tracker with a stubbed per-node check so no real
 // dmsg dials occur. checks counts how many times the stub ran.
 func newTestTracker(tps, rsn func() []cipher.PubKey, checks *int32) *NodeHealthTracker {
 	nht := NewNodeHealthTracker(nil, logging.MustGetLogger("node_health_test"), tps, rsn)
-	nht.checkFn = func(_ context.Context, pk cipher.PubKey, _ uint16, _ string) *NodeHealth {
+	nht.checkFn = func(_ context.Context, pk cipher.PubKey, _ uint16, _ string) *visorapi.NodeHealth {
 		atomic.AddInt32(checks, 1)
-		return &NodeHealth{PK: pk, Healthy: true, LastChecked: time.Now()}
+		return &visorapi.NodeHealth{PK: pk, Healthy: true, LastChecked: time.Now()}
 	}
 	return nht
 }

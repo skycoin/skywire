@@ -8,10 +8,11 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // ConnectRawTCP creates a raw TCP connection with the remote visor
-func (r *RPC) ConnectRawTCP(in *ConnectIn, out *uuid.UUID) (err error) {
+func (r *RPC) ConnectRawTCP(in *visorapi.ConnectIn, out *uuid.UUID) (err error) {
 	defer rpcutil.LogCall(r.log, "ConnectRawTCP", in)(out, &err)
 
 	id, err := r.visor.ConnectRawTCP(in.Network, in.RemotePK, in.RemotePort, in.LocalPort)
@@ -36,7 +37,7 @@ func (r *RPC) ListRawTCP(_ *struct{}, out *map[uuid.UUID]*appnet.RawTCPForwardCo
 
 // EmbeddedProxies returns the runtime state of the in-process
 // resolving proxies. See Visor.EmbeddedProxies for semantics.
-func (r *RPC) EmbeddedProxies(_ *struct{}, out *EmbeddedProxiesStatus) (err error) {
+func (r *RPC) EmbeddedProxies(_ *struct{}, out *visorapi.EmbeddedProxiesStatus) (err error) {
 	defer rpcutil.LogCall(r.log, "EmbeddedProxies", nil)(out, &err)
 
 	status, err := r.visor.EmbeddedProxies()
@@ -49,7 +50,7 @@ func (r *RPC) EmbeddedProxies(_ *struct{}, out *EmbeddedProxiesStatus) (err erro
 
 // SetEmbeddedProxyEnabled toggles a resolver (dmsg/skynet) on or off
 // at runtime without editing the config file.
-func (r *RPC) SetEmbeddedProxyEnabled(req *SetEmbeddedProxyEnabledRequest, _ *struct{}) (err error) {
+func (r *RPC) SetEmbeddedProxyEnabled(req *visorapi.SetEmbeddedProxyEnabledRequest, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetEmbeddedProxyEnabled", req)(nil, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -58,7 +59,7 @@ func (r *RPC) SetEmbeddedProxyEnabled(req *SetEmbeddedProxyEnabledRequest, _ *st
 }
 
 // SetEmbeddedProxyUpstream changes the upstream SOCKS5 address for a resolver.
-func (r *RPC) SetEmbeddedProxyUpstream(req *SetEmbeddedProxyUpstreamRequest, _ *struct{}) (err error) {
+func (r *RPC) SetEmbeddedProxyUpstream(req *visorapi.SetEmbeddedProxyUpstreamRequest, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetEmbeddedProxyUpstream", req)(nil, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -67,7 +68,7 @@ func (r *RPC) SetEmbeddedProxyUpstream(req *SetEmbeddedProxyUpstreamRequest, _ *
 }
 
 // SetEmbeddedProxyBind sets a resolver's SOCKS5 bind host (and persists it).
-func (r *RPC) SetEmbeddedProxyBind(req *SetEmbeddedProxyBindRequest, _ *struct{}) (err error) {
+func (r *RPC) SetEmbeddedProxyBind(req *visorapi.SetEmbeddedProxyBindRequest, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetEmbeddedProxyBind", req)(nil, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")

@@ -5,20 +5,13 @@ import (
 	"fmt"
 
 	"github.com/skycoin/skywire/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
-
-// DmsgPorterStatus contains DMSG porter diagnostics.
-type DmsgPorterStatus struct {
-	MainPorts int `json:"main_ports"`
-	RSNPorts  int `json:"rsn_ports,omitempty"`
-	MainFreed int `json:"main_freed,omitempty"`
-	RSNFreed  int `json:"rsn_freed,omitempty"`
-}
 
 // DmsgPorterStats returns the current ephemeral port reservation
 // counts for the main and embedded RSN DMSG clients.
-func (v *Visor) DmsgPorterStats() (*DmsgPorterStatus, error) {
-	s := &DmsgPorterStatus{}
+func (v *Visor) DmsgPorterStats() (*visorapi.DmsgPorterStatus, error) {
+	s := &visorapi.DmsgPorterStatus{}
 	if v.dmsgC != nil {
 		s.MainPorts = v.dmsgC.PorterCount()
 	}
@@ -30,8 +23,8 @@ func (v *Visor) DmsgPorterStats() (*DmsgPorterStatus, error) {
 
 // DmsgPorterReset frees all ephemeral port reservations on the main
 // and embedded RSN DMSG clients. Returns the number of ports freed.
-func (v *Visor) DmsgPorterReset() (*DmsgPorterStatus, error) {
-	s := &DmsgPorterStatus{}
+func (v *Visor) DmsgPorterReset() (*visorapi.DmsgPorterStatus, error) {
+	s := &visorapi.DmsgPorterStatus{}
 	if v.dmsgC != nil {
 		s.MainFreed = v.dmsgC.ResetPorter()
 		s.MainPorts = v.dmsgC.PorterCount()

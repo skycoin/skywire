@@ -13,7 +13,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
 	types "github.com/skycoin/skywire/pkg/transport/types"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -175,7 +175,7 @@ var addTpCmd = &cobra.Command{
 			tpsStatus, tpsStatusErr := rpcClient.TPSStatus()
 			useEmbeddedTPS := tpsStatusErr == nil && tpsStatus != nil && tpsStatus.Enabled
 
-			var tpsResults []*visor.TPSTransportResponse
+			var tpsResults []*visorapi.TPSTransportResponse
 			totalSuccess := 0
 			totalFail := 0
 
@@ -193,7 +193,7 @@ var addTpCmd = &cobra.Command{
 						fmt.Printf("[%d/%d] Requesting transport on %s to %s via TPS...\n", i+1, len(pks), targetPK.String(), pk.String())
 					}
 
-					var tpResp *visor.TPSTransportResponse
+					var tpResp *visorapi.TPSTransportResponse
 					var tpErr error
 
 					if useEmbeddedTPS {
@@ -294,7 +294,7 @@ var addTpCmd = &cobra.Command{
 		}
 
 		// Process each public key
-		var results []*visor.TransportSummary
+		var results []*visorapi.TransportSummary
 		var lastErr error
 		successCount := 0
 		failCount := 0
@@ -313,7 +313,7 @@ var addTpCmd = &cobra.Command{
 			// via other servers). For an explicit reachability check use
 			// `skywire cli dmsg probe <pk> 136`.)
 
-			var tp *visor.TransportSummary
+			var tp *visorapi.TransportSummary
 			var tpErr error
 
 			if transportType != "" {

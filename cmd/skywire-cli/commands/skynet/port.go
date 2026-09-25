@@ -12,7 +12,7 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -73,7 +73,7 @@ var portLsCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		if len(ports) == 0 {
-			internal.PrintOutput(cmd.Flags(), []visor.ForwardedPort{}, "No forwarded ports.\n")
+			internal.PrintOutput(cmd.Flags(), []visorapi.ForwardedPort{}, "No forwarded ports.\n")
 			return
 		}
 		var buf strings.Builder
@@ -131,7 +131,7 @@ Examples:
 				wl = append(wl, pk)
 			}
 		}
-		fp := visor.ForwardedPort{
+		fp := visorapi.ForwardedPort{
 			Port:          port,
 			LocalPort:     portLocalPort,
 			Label:         portLabel,

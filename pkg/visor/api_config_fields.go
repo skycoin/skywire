@@ -49,30 +49,9 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
-
-// ConfigFieldChange reports one field's before/after from SetConfigFields.
-type ConfigFieldChange struct {
-	// Path is the dotted config path as the caller supplied it.
-	Path string `json:"path"`
-	// Old and New are the field's JSON values before and after.
-	// Old is null when the path addressed an absent map key.
-	Old json.RawMessage `json:"old"`
-	New json.RawMessage `json:"new"`
-	// Live is true when a running subsystem took the value; false
-	// means it is on disk and applies at the next visor start.
-	Live bool `json:"live"`
-}
-
-// String renders one change the way `config set` prints it.
-func (c ConfigFieldChange) String() string {
-	state := "restart-required"
-	if c.Live {
-		state = "live"
-	}
-	return fmt.Sprintf("%s: %s -> %s (%s)", c.Path, string(c.Old), string(c.New), state)
-}
 
 // ConfigFieldDoc is one row of the live-field table, for command help.
 type ConfigFieldDoc struct {
@@ -325,7 +304,7 @@ var ownedConfigPaths = map[string]string{
 // not leave the first two half-applied.
 //
 // Returns one ConfigFieldChange per field, sorted by path.
-func (v *Visor) SetConfigFields(fields map[string]json.RawMessage) ([]ConfigFieldChange, error) {
+func (v *Visor) SetConfigFields(fields map[string]json.RawMessage) ([]visorapi.ConfigFieldChange, error) {
 	if v.conf == nil {
 		return nil, errors.New("visor has no current config")
 	}
@@ -348,7 +327,7 @@ func (v *Visor) SetConfigFields(fields map[string]json.RawMessage) ([]ConfigFiel
 	type pending struct {
 		target *configTarget
 		newVal reflect.Value
-		change ConfigFieldChange
+		change visorapi.ConfigFieldChange
 	}
 	plan := make([]pending, 0, len(paths))
 	needFlush := false
@@ -379,7 +358,7 @@ func (v *Visor) SetConfigFields(fields map[string]json.RawMessage) ([]ConfigFiel
 		plan = append(plan, pending{
 			target: tgt,
 			newVal: nv,
-			change: ConfigFieldChange{Path: p, Old: oldJSON, New: newJSON, Live: isLive},
+			change: visorapi.ConfigFieldChange{Path: p, Old: oldJSON, New: newJSON, Live: isLive},
 		})
 	}
 
@@ -390,7 +369,7 @@ func (v *Visor) SetConfigFields(fields map[string]json.RawMessage) ([]ConfigFiel
 
 	// Phase 2 — apply. Restart-required fields land in v.conf first and are
 	// flushed once; the live setters flush themselves as they always have.
-	out := make([]ConfigFieldChange, 0, len(plan))
+	out := make([]visorapi.ConfigFieldChange, 0, len(plan))
 	for _, p := range plan {
 		if !p.change.Live {
 			p.target.set(p.newVal)

@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // voiceAPI is a fake visor.API capturing the voice calls the handlers make.
@@ -21,7 +21,7 @@ type voiceAPI struct {
 	visorAPIShim
 	called   cipher.PubKey
 	dialed   cipher.PubKey
-	dialing  []visor.VoiceDialingInfo
+	dialing  []visorapi.VoiceDialingInfo
 	answered []string
 	declined []string
 	hungup   []string
@@ -47,12 +47,12 @@ func (a *voiceAPI) VoiceDial(peer cipher.PubKey) (string, error) {
 	return "call-1", nil
 }
 
-func (a *voiceAPI) VoiceDialing() ([]visor.VoiceDialingInfo, error) { return a.dialing, nil }
-func (a *voiceAPI) VoiceAnswer(id string) error                     { a.answered = append(a.answered, id); return nil }
-func (a *voiceAPI) VoiceDecline(id string) error                    { a.declined = append(a.declined, id); return nil }
-func (a *voiceAPI) VoiceHangup(id string) error                     { a.hungup = append(a.hungup, id); return nil }
-func (a *voiceAPI) VoiceActive() ([]string, error)                  { return a.active, nil }
-func (a *voiceAPI) VoiceIncoming() ([]string, error)                { return a.incoming, nil }
+func (a *voiceAPI) VoiceDialing() ([]visorapi.VoiceDialingInfo, error) { return a.dialing, nil }
+func (a *voiceAPI) VoiceAnswer(id string) error                        { a.answered = append(a.answered, id); return nil }
+func (a *voiceAPI) VoiceDecline(id string) error                       { a.declined = append(a.declined, id); return nil }
+func (a *voiceAPI) VoiceHangup(id string) error                        { a.hungup = append(a.hungup, id); return nil }
+func (a *voiceAPI) VoiceActive() ([]string, error)                     { return a.active, nil }
+func (a *voiceAPI) VoiceIncoming() ([]string, error)                   { return a.incoming, nil }
 func (a *voiceAPI) VoiceCallAudio(string) ([]int16, []int16, error) {
 	return a.sent, a.recv, nil
 }
@@ -107,8 +107,8 @@ func TestVoiceActionHandlers(t *testing.T) {
 	fake := &voiceAPI{}
 	withFakePairRPC(t, fake)
 
-	answer := voiceActionHandler(func(c visor.API, id string) error { return c.VoiceAnswer(id) })
-	hangup := voiceActionHandler(func(c visor.API, id string) error { return c.VoiceHangup(id) })
+	answer := voiceActionHandler(func(c visorapi.API, id string) error { return c.VoiceAnswer(id) })
+	hangup := voiceActionHandler(func(c visorapi.API, id string) error { return c.VoiceHangup(id) })
 
 	// Answer {call_id}.
 	rr := httptest.NewRecorder()
@@ -153,8 +153,8 @@ func TestVoiceListHandlers(t *testing.T) {
 	}
 	withFakePairRPC(t, fake)
 
-	active := voiceListHandler("VoiceActive", func(c visor.API) ([]string, error) { return c.VoiceActive() })
-	incoming := voiceListHandler("VoiceIncoming", func(c visor.API) ([]string, error) { return c.VoiceIncoming() })
+	active := voiceListHandler("VoiceActive", func(c visorapi.API) ([]string, error) { return c.VoiceActive() })
+	incoming := voiceListHandler("VoiceIncoming", func(c visorapi.API) ([]string, error) { return c.VoiceIncoming() })
 
 	rr := httptest.NewRecorder()
 	active(rr, httptest.NewRequest(http.MethodGet, "/voice/active", nil))
@@ -183,7 +183,7 @@ func TestVoiceListHandlers(t *testing.T) {
 // called off and one that cannot.
 func TestVoiceDialingHandler(t *testing.T) {
 	fake := &voiceAPI{
-		dialing: []visor.VoiceDialingInfo{{CallID: "c9", Peer: "abcdef"}},
+		dialing: []visorapi.VoiceDialingInfo{{CallID: "c9", Peer: "abcdef"}},
 	}
 	withFakePairRPC(t, fake)
 
@@ -192,7 +192,7 @@ func TestVoiceDialingHandler(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("dialing: code=%d body=%q", rr.Code, rr.Body.String())
 	}
-	var got []visor.VoiceDialingInfo
+	var got []visorapi.VoiceDialingInfo
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("dialing: body=%q err=%v", rr.Body.String(), err)
 	}
@@ -286,9 +286,9 @@ func TestVoiceHandlers_503WhenRPCDown(t *testing.T) {
 		req  *http.Request
 	}{
 		{"call", voiceCallHandler(), httptest.NewRequest(http.MethodPost, "/voice/call", strings.NewReader(`{}`))},
-		{"answer", voiceActionHandler(func(c visor.API, id string) error { return c.VoiceAnswer(id) }), httptest.NewRequest(http.MethodPost, "/voice/answer", strings.NewReader(`{}`))},
+		{"answer", voiceActionHandler(func(c visorapi.API, id string) error { return c.VoiceAnswer(id) }), httptest.NewRequest(http.MethodPost, "/voice/answer", strings.NewReader(`{}`))},
 		{"mute", voiceMuteHandler(), httptest.NewRequest(http.MethodPost, "/voice/mute", strings.NewReader(`{}`))},
-		{"active", voiceListHandler("VoiceActive", func(c visor.API) ([]string, error) { return c.VoiceActive() }), httptest.NewRequest(http.MethodGet, "/voice/active", nil)},
+		{"active", voiceListHandler("VoiceActive", func(c visorapi.API) ([]string, error) { return c.VoiceActive() }), httptest.NewRequest(http.MethodGet, "/voice/active", nil)},
 		{"levels", voiceLevelsHandler(), httptest.NewRequest(http.MethodGet, "/voice/levels?call=x", nil)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

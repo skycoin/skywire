@@ -39,7 +39,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skychat/history"
 	"github.com/skycoin/skywire/pkg/skychat/xfer"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // fileMgr is the process-wide file-transfer manager, initialized by startFileXfer.
@@ -494,7 +494,7 @@ func isChannelGroup(groupID string) bool {
 		return false
 	}
 	var kind string
-	if err := pairRPCCall("GroupGet", func(c visor.API) error {
+	if err := pairRPCCall("GroupGet", func(c visorapi.API) error {
 		info, err := c.GroupGet(groupID)
 		kind = string(info.Kind)
 		return err

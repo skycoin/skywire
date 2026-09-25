@@ -26,7 +26,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgscp"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // scpPKPathRe matches a `PK:path` argument. The PK is a 66-char
@@ -186,7 +186,7 @@ standalone dmsg path; the VisorSCP RPC uses the visor's own PK.`,
 			if scpStandalone {
 				return fmt.Errorf("dmsg scp: --standalone is dmsg-only; skynet requires the local visor")
 			}
-			return runVisorSCP(visor.VisorSCPTransportSkynet, peerPK, direction, localPath, remotePath, cmd)
+			return runVisorSCP(visorapi.VisorSCPTransportSkynet, peerPK, direction, localPath, remotePath, cmd)
 		}
 
 		// Auto path (without --standalone): try the visor's RPC first.
@@ -195,7 +195,7 @@ standalone dmsg path; the VisorSCP RPC uses the visor's own PK.`,
 		// standalone dmsg when --rpc is unreachable (typical for an
 		// operator running the CLI on a host without a local visor).
 		if eff == scpTransportAuto && !scpStandalone {
-			err := runVisorSCP(visor.VisorSCPTransportDmsg, peerPK, direction, localPath, remotePath, cmd)
+			err := runVisorSCP(visorapi.VisorSCPTransportDmsg, peerPK, direction, localPath, remotePath, cmd)
 			if err == nil {
 				return nil
 			}
@@ -264,11 +264,11 @@ func runVisorSCP(transport string, peerPK cipher.PubKey, direction scpDirection,
 	if err != nil {
 		return fmt.Errorf("VisorSCP: resolve local path: %w", err)
 	}
-	dir := visor.VisorSCPUpload
+	dir := visorapi.VisorSCPUpload
 	if direction == scpDirDownload {
-		dir = visor.VisorSCPDownload
+		dir = visorapi.VisorSCPDownload
 	}
-	req := visor.VisorSCPRequest{
+	req := visorapi.VisorSCPRequest{
 		RemotePK:   peerPK,
 		Port:       scpPort,
 		Direction:  dir,

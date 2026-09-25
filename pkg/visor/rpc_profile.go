@@ -9,10 +9,11 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // ProfileGet returns what this visor publishes about itself.
-func (r *RPC) ProfileGet(_ *struct{}, out *Profile) (err error) {
+func (r *RPC) ProfileGet(_ *struct{}, out *visorapi.Profile) (err error) {
 	defer rpcutil.LogCall(r.log, "ProfileGet", nil)(out, &err)
 	p, err := r.visor.ProfileGet()
 	if err != nil {
@@ -24,7 +25,7 @@ func (r *RPC) ProfileGet(_ *struct{}, out *Profile) (err error) {
 
 // ProfileSet writes this visor's published profile and returns the stored
 // result.
-func (r *RPC) ProfileSet(req *ProfileSetArgs, out *Profile) (err error) {
+func (r *RPC) ProfileSet(req *visorapi.ProfileSetArgs, out *visorapi.Profile) (err error) {
 	defer rpcutil.LogCall(r.log, "ProfileSet", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -38,7 +39,7 @@ func (r *RPC) ProfileSet(req *ProfileSetArgs, out *Profile) (err error) {
 }
 
 // ProfileFetch asks the visor at pk who it is. A zero key means this visor.
-func (r *RPC) ProfileFetch(pk *cipher.PubKey, out *Profile) (err error) {
+func (r *RPC) ProfileFetch(pk *cipher.PubKey, out *visorapi.Profile) (err error) {
 	defer rpcutil.LogCall(r.log, "ProfileFetch", pk)(out, &err)
 	if pk == nil {
 		return fmt.Errorf("nil request")

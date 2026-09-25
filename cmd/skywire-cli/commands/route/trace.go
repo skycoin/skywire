@@ -37,7 +37,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cliout/cliroute"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -195,7 +195,7 @@ type traceHopResult = cliroute.TraceHop
 // dmsg twin exists for traceRfURL (production default — the visor
 // already has the route-finder PK seeded). Operator-supplied
 // non-deployment route-finder URLs fall back to the plain-HTTP rfclient.
-func fetchForwardRoute(cmd *cobra.Command, rpcClient visor.API, srcPK, dstPK cipher.PubKey) []routing.Hop {
+func fetchForwardRoute(cmd *cobra.Command, rpcClient visorapi.API, srcPK, dstPK cipher.PubKey) []routing.Hop {
 	forward := [2]cipher.PubKey{srcPK, dstPK}
 	ctx, cancel := context.WithTimeout(context.Background(), traceTimeout)
 	defer cancel()
@@ -229,7 +229,7 @@ func fetchForwardRoute(cmd *cobra.Command, rpcClient visor.API, srcPK, dstPK cip
 // rfclient.apiClient.FindRoutes builds inline; kept as a tight inline
 // helper rather than a sibling client in pkg/rfclient because the
 // DmsgHTTP RPC dependency is CLI-scoped.
-func findRoutesViaDmsgRPC(ctx context.Context, rc visor.API, dmsgRfURL string, edge [2]cipher.PubKey) ([]routing.Hop, error) {
+func findRoutesViaDmsgRPC(ctx context.Context, rc visorapi.API, dmsgRfURL string, edge [2]cipher.PubKey) ([]routing.Hop, error) {
 	reqBody := &rfclient.FindRoutesRequest{
 		Edges: []routing.PathEdges{edge},
 		Opts:  &rfclient.RouteOptions{MinHops: traceMinHops, MaxHops: traceMaxHops},
@@ -242,7 +242,7 @@ func findRoutesViaDmsgRPC(ctx context.Context, rc visor.API, dmsgRfURL string, e
 	// the timeout is enforced upstream by the cobra command's traceTimeout
 	// via the route-finder side.
 
-	resp, err := rc.DmsgHTTP(visor.DmsgHTTPRequest{
+	resp, err := rc.DmsgHTTP(visorapi.DmsgHTTPRequest{
 		URL:    strings.TrimRight(dmsgRfURL, "/") + "/routes",
 		Method: http.MethodPost,
 		Header: map[string]string{"Content-Type": "application/json"},
@@ -270,7 +270,7 @@ func findRoutesViaDmsgRPC(ctx context.Context, rc visor.API, dmsgRfURL string, e
 // can spike on a single sample; the per-hop indicator the operator
 // cares about is the floor, not the average. Caller already
 // provides --count for re-sample.
-func bestOfDmsgPings(rc visor.API, pk cipher.PubKey, samples int) (time.Duration, error) {
+func bestOfDmsgPings(rc visorapi.API, pk cipher.PubKey, samples int) (time.Duration, error) {
 	if err := rc.DialDmsgPing(pk); err != nil {
 		return 0, fmt.Errorf("dmsg dial: %w", err)
 	}
@@ -278,7 +278,7 @@ func bestOfDmsgPings(rc visor.API, pk cipher.PubKey, samples int) (time.Duration
 	var best time.Duration
 	var firstErr error
 	for i := 0; i < samples; i++ {
-		rtt, err := rc.DmsgPingOnce(visor.PingConfig{PK: pk, Tries: 1, PcktSize: 32})
+		rtt, err := rc.DmsgPingOnce(visorapi.PingConfig{PK: pk, Tries: 1, PcktSize: 32})
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err

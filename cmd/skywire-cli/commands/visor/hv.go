@@ -15,7 +15,7 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -413,7 +413,7 @@ func hvLsHeader(showLoad bool) string {
 // 1-minute average over the core count ("9.43/4") so saturation is obvious at a
 // glance; a value >= cores means the run queue is backed up. "-" when the visor
 // reported no load snapshot (older binary, or the metric was unavailable).
-func fmtLoadCells(e visor.HVVisorEntry) string {
+func fmtLoadCells(e visorapi.HVVisorEntry) string {
 	if e.Load == nil {
 		return "-\t-\t-"
 	}
@@ -428,7 +428,7 @@ func fmtLoadCells(e visor.HVVisorEntry) string {
 // row-indent prefix. Centralized so the flat-mode and tree-mode renderings
 // stay in lockstep (same columns, same width, same null sentinels). When
 // showLoad is set it appends the LOAD / MEM% / DISK% cells.
-func formatHVVisorRow(tw *tabwriter.Writer, e visor.HVVisorEntry, indent string, showLoad bool) {
+func formatHVVisorRow(tw *tabwriter.Writer, e visorapi.HVVisorEntry, indent string, showLoad bool) {
 	pk := e.PK.String()
 	status := "ok"
 	if e.IsLocal {
@@ -609,7 +609,7 @@ outstanding one. Fingerprint = first 40 bits of sha256(pk).`,
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
 			internal.PrintOutput(cmd.Flags(), map[string]any{"pk": pk.Hex(), "paired": true},
-				fmt.Sprintf("Paired %s (%s)\n", pk.Hex(), visor.HypervisorFingerprint(pk)))
+				fmt.Sprintf("Paired %s (%s)\n", pk.Hex(), visorapi.HypervisorFingerprint(pk)))
 		default:
 			pending, err := rpcClient.PendingHypervisors()
 			if err != nil {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func (hv *Hypervisor) getRouterSettings() http.HandlerFunc {
@@ -28,7 +29,7 @@ func (hv *Hypervisor) getRouterSettings() http.HandlerFunc {
 
 func (hv *Hypervisor) putRouterSettings() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var s RouterSettings
+		var s visorapi.RouterSettings
 		if err := httputil.ReadJSON(r, &s); err != nil {
 			if err != io.EOF {
 				hv.log(r).Warnf("putRouterSettings request: %v", err)

@@ -22,7 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -419,7 +419,7 @@ A target scheme that disagrees with an explicit --transport errors.`,
 		// removes the unix-socket-permission gate that the standalone
 		// dmsgpty-cli still hits.
 		rpcCli := ptyRPCClient(cmd.Flags())
-		resp, err := rpcCli.DmsgPtyExec(visor.DmsgPtyExecArgs{
+		resp, err := rpcCli.DmsgPtyExec(visorapi.DmsgPtyExecArgs{
 			RemotePK:   addr,
 			RemotePort: uint16(port),
 			Req: pty.CommandExecReq{
@@ -623,13 +623,13 @@ var ptyURLCmd = &cobra.Command{
 	},
 }
 
-func ptyRPCClient(cmdFlags *pflag.FlagSet) visor.API {
+func ptyRPCClient(cmdFlags *pflag.FlagSet) visorapi.API {
 	const rpcDialTimeout = time.Second * 5
 	conn, err := vnet.DialTimeout("tcp", ptyRpcAddr, rpcDialTimeout)
 	if err != nil {
 		internal.PrintFatalError(cmdFlags, fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
 	}
-	return visor.NewRPCClient(ptyLogger, conn, visor.RPCPrefix, 0)
+	return visorapi.NewRPCClient(ptyLogger, conn, visorapi.RPCPrefix, 0)
 }
 
 // execInterruptWatch reports an interrupted `pty exec` and exits 130 — but ONLY

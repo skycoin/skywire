@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func TestForwardedPorts_IsWhitelisted(t *testing.T) {
@@ -20,14 +21,14 @@ func TestForwardedPorts_IsWhitelisted(t *testing.T) {
 
 	t.Run("empty whitelist allows everyone", func(t *testing.T) {
 		fp := NewForwardedPorts("")
-		assert.NoError(t, fp.Register(ForwardedPort{Port: 8080, Skynet: true}))
+		assert.NoError(t, fp.Register(visorapi.ForwardedPort{Port: 8080, Skynet: true}))
 		assert.True(t, fp.IsWhitelisted(8080, pk1))
 		assert.True(t, fp.IsWhitelisted(8080, pk2))
 	})
 
 	t.Run("whitelist allows listed PKs only", func(t *testing.T) {
 		fp := NewForwardedPorts("")
-		assert.NoError(t, fp.Register(ForwardedPort{
+		assert.NoError(t, fp.Register(visorapi.ForwardedPort{
 			Port:      8080,
 			Skynet:    true,
 			Whitelist: []cipher.PubKey{pk1, pk2},
@@ -39,7 +40,7 @@ func TestForwardedPorts_IsWhitelisted(t *testing.T) {
 
 	t.Run("clearing whitelist re-opens port", func(t *testing.T) {
 		fp := NewForwardedPorts("")
-		assert.NoError(t, fp.Register(ForwardedPort{
+		assert.NoError(t, fp.Register(visorapi.ForwardedPort{
 			Port:      8080,
 			Skynet:    true,
 			Whitelist: []cipher.PubKey{pk1},
@@ -47,7 +48,7 @@ func TestForwardedPorts_IsWhitelisted(t *testing.T) {
 		assert.False(t, fp.IsWhitelisted(8080, pk2))
 		// Re-register with empty whitelist — the in-place update path
 		// used by `cli serve whitelist <port> clear`.
-		assert.NoError(t, fp.Register(ForwardedPort{Port: 8080, Skynet: true}))
+		assert.NoError(t, fp.Register(visorapi.ForwardedPort{Port: 8080, Skynet: true}))
 		assert.True(t, fp.IsWhitelisted(8080, pk2))
 	})
 }

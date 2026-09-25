@@ -34,6 +34,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/utclient"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -1155,7 +1156,7 @@ func (a *visorAPIAdapter) Ping(ctx context.Context, pk string, useDMSG, localRou
 		mode = "route (local)"
 	}
 
-	conf := PingConfig{
+	conf := visorapi.PingConfig{
 		PK:         targetPK,
 		Tries:      tries,
 		PcktSize:   sizeKB,

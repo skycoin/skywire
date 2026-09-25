@@ -4,230 +4,22 @@ package visor
 import (
 	"time"
 
-	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/proxystatus"
-	"github.com/skycoin/skywire/pkg/router"
-	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
-
-// StateSnapshot is a curated, secrets-free view of the visor's live runtime
-// state, aggregated from the same RPC-safe DTOs the individual CLI subcommands
-// return. It exists so an operator (or an agent) can introspect the whole
-// runtime in ONE call — `skywire cli visor state` — and project exactly the
-// field they want with the shared --jq / --shape flags, instead of stitching
-// together a dozen subcommands.
-//
-// SAFETY: every embedded field is an existing API response type, i.e. already
-// designed to cross the RPC boundary — so this carries no mutexes, channels,
-// contexts, live connections, or secret keys. The visor's secret key is NEVER
-// included; identity is public-key only (via Summary.Overview.PubKey). Each
-// section is populated best-effort: a section that errors (e.g. a subsystem not
-// yet initialized, or the visor suspended) is left nil and the reason recorded
-// in Notes, so a partially-up or suspended visor still returns a useful snapshot
-// rather than failing the whole call.
-type StateSnapshot struct {
-	At        time.Time `json:"at"`
-	Suspended bool      `json:"suspended"`
-
-	Summary       *Summary                         `json:"summary,omitempty"`
-	Health        *HealthInfo                      `json:"health,omitempty"`
-	ServiceHealth []ServiceHealthEntry             `json:"service_health,omitempty"`
-	RoutingStats  *routing.RoutingTableStats       `json:"routing_stats,omitempty"`
-	RouteGroups   int                              `json:"route_groups"`
-	RoutingPolicy *RoutingPoliciesSummary          `json:"routing_policy,omitempty"`
-	Apps          []*appserver.AppState            `json:"apps,omitempty"`
-	Transports    []*TransportSummary              `json:"transports,omitempty"`
-	Persistent    []transport.PersistentTransports `json:"persistent_transports,omitempty"`
-	Modules       *ModulePresence                  `json:"modules,omitempty"`
-
-	// RouterConfig is the routing configuration actually IN FORCE at
-	// runtime (min_hops / mux_routes / force_local / existing_tp_only
-	// / transport_preference are the live router values, which can
-	// differ from the config file after a runtime set; cascade +
-	// policy_per_dial are the configured source). This is the
-	// policy-vs-globals view — what the router will do independent of
-	// any per-app routing policy.
-	RouterConfig *EffectiveRoutingConfig `json:"router_config,omitempty"`
-	// MuxRouteGroups is the per-leg mux shape of EVERY active route
-	// group (the same RouteGroupMuxInfo 'mux plot' reads), so the live
-	// multipath layout — each leg's transport, type, remote, rtt,
-	// bandwidth, and alive/standby gate state — is visible in one
-	// snapshot rather than one-app-at-a-time.
-	MuxRouteGroups []MuxRouteGroupInfo `json:"mux_route_groups,omitempty"`
-
-	// MuxCounters are the whole-router cumulative tallies (tunnel
-	// promotions/flips, leg re-homes sent/received/acked/failed, forward
-	// fan-out engage/release) that the bounded mux event ring does not keep
-	// once it wraps. Built alongside MuxRouteGroups (--select mux).
-	MuxCounters *router.MuxCounters `json:"mux_counters,omitempty"`
-
-	// Pool is the standby-tunnel pool table: one row per route group this
-	// visor's local end labeled "standby" (pool_arbiter.go), projected from
-	// the SAME MuxRouteGroupInfo entries MuxRouteGroups holds — local port,
-	// first-hop pk+transport type, hop count, capacity prior bps, audition
-	// age, leg source, and leg count, at a glance across the whole pool.
-	Pool []PoolTunnelInfo `json:"pool,omitempty"`
-
-	// CXOFeeds is the live publish-health of each CXO feed (system
-	// telemetry/tp-list feed first, then user feeds): dirty state, secs
-	// since last OK publish, in-memory leaf/node counts, and any standing
-	// publish error with its concrete type + isMissingObject verdict.
-	// This is the diagnostic surface for TPD-agreement issues — a frozen
-	// stats feed (Frozen=true, a climbing SecsSinceOKPublish, a LastErr)
-	// is exactly why TPD under-reports a visor's transports, and it's now
-	// a query against the live visor (local or --via dmsg://<pk>).
-	CXOFeeds []CXOFeedState `json:"cxo,omitempty"`
-
-	// TPDLeafPub says whether the transport manager holds the CXO
-	// transport-list snapshot publisher, and — when it does not — why.
-	// Without it transport registration silently falls back to the HTTP
-	// re-register path, which an empty .cxo alone does not distinguish
-	// from "stats module still starting".
-	TPDLeafPub *TPDLeafPublisherState `json:"tpd_leaf_publisher,omitempty"`
-
-	// Proxy is the visor-side live proxystatus snapshot for the skysocks
-	// surface — the same per-leg mux telemetry, running flag, and (when the
-	// client pushes it) range-split summary the status.skysocks page renders.
-	// It is OPT-IN: built only for `--select proxy`, never in the full/default
-	// snapshot, so the default payload is unchanged.
-	Proxy *proxystatus.Snapshot `json:"proxy,omitempty"`
-
-	// Diag is the in-process plumbing view (router intake, transport read
-	// queue and handlers, VStream muxes, dmsg ping/relay state, Go runtime) —
-	// see DiagSnapshot. Cheap; part of the default snapshot.
-	Diag *DiagSnapshot `json:"diag,omitempty"`
-
-	// Roles is what this visor is FOR the network: the in-process dmsg
-	// server (if any, and on which key/address), both directions of the dmsg
-	// relay, and whether it refuses transit. See RolesSnapshot. Cheap; part
-	// of the default snapshot.
-	Roles *RolesSnapshot `json:"roles,omitempty"`
-
-	// Notes collects per-section errors ("routing: <err>") so the snapshot is
-	// self-describing about what it could and could not read.
-	Notes []string `json:"notes,omitempty"`
-}
-
-// State*-select keys name the projectable subtrees of a StateSnapshot. Passing a
-// subset to StateSnapshotProjected makes the SERVER build and marshal ONLY those
-// sections, so a cheap `--select mux` skips the expensive transports build (the
-// full snapshot is ~900 KB, dominated by transports at ~307 KB; mux is ~75 KB).
-// The keys match the snapshot's JSON field names (or a short alias) so a --jq
-// expression written against the full snapshot transfers to a projection
-// unchanged.
-const (
-	SelectSummary    = "summary"    // summary
-	SelectHealth     = "health"     // health + service_health
-	SelectRouting    = "routing"    // routing_stats + route_groups + routing_policy + router_config
-	SelectMux        = "mux"        // mux_route_groups + mux_counters (+ route_groups count)
-	SelectPool       = "pool"       // pool: the standby-tunnel pool table
-	SelectApps       = "apps"       // apps
-	SelectTransports = "transports" // transports + persistent_transports
-	SelectModules    = "modules"    // modules
-	SelectCXO        = "cxo"        // cxo feed publish-health
-	SelectProxy      = "proxy"      // visor-side proxystatus snapshot (skysocks); opt-in only
-	SelectDiag       = "diag"       // router intake, transport queues/handlers, vstream, dmsg ping/relay, runtime
-	SelectRoles      = "roles"      // in-process dmsg server, dmsg relay (both directions), transit refusal
-)
-
-// StateSelectKeys is the documented set of --select keys, in help order.
-var StateSelectKeys = []string{
-	SelectSummary, SelectHealth, SelectRouting, SelectMux, SelectPool,
-	SelectApps, SelectTransports, SelectModules, SelectCXO, SelectProxy, SelectDiag,
-	SelectRoles,
-}
-
-// stateSelectAliases maps a snapshot JSON field name onto the --select key
-// that builds it, for the sections whose key is a short alias rather than the
-// field name. The doc comment above promises "the keys match the snapshot's
-// JSON field names (or a short alias)", and `--select mux_route_groups`
-// silently built NOTHING (an unrecognized key matches no section) — which reads
-// as "this visor has no mux route groups" rather than "wrong key".
-var stateSelectAliases = map[string]string{
-	"mux_route_groups":      SelectMux,
-	"routing_stats":         SelectRouting,
-	"route_groups":          SelectRouting,
-	"routing_policy":        SelectRouting,
-	"router_config":         SelectRouting,
-	"service_health":        SelectHealth,
-	"persistent_transports": SelectTransports,
-}
-
-// StateFieldSet is the parsed --select set. A nil set means "everything in the
-// default full snapshot" (proxy stays opt-in even then). An entry present but
-// unknown is ignored here and surfaced as a Note by the builder.
-type StateFieldSet map[string]bool
-
-// NewStateFieldSet parses the requested field keys. An empty/nil fields slice
-// returns a nil set, i.e. build the full default snapshot.
-func NewStateFieldSet(fields []string) StateFieldSet {
-	if len(fields) == 0 {
-		return nil
-	}
-	set := make(StateFieldSet, len(fields))
-	for _, f := range fields {
-		if f == "" {
-			continue
-		}
-		if alias, ok := stateSelectAliases[f]; ok {
-			f = alias
-		}
-		set[f] = true
-	}
-	if len(set) == 0 {
-		return nil
-	}
-	return set
-}
-
-// Has reports whether section k should be built. A nil set (no --select) builds
-// every default section; proxy is never a default section (see wantProxy).
-func (s StateFieldSet) Has(k string) bool {
-	if k == SelectProxy {
-		return s != nil && s[k]
-	}
-	return s == nil || s[k]
-}
-
-// PoolTunnelInfo is one row of the standby-tunnel pool table (`visor state
-// --select pool`). Every field is projected from the leading leg of a
-// MuxRouteGroupInfo entry whose TunnelRole is "standby" — see poolTableFrom.
-type PoolTunnelInfo struct {
-	// LocalPort is the standby route group's local port (Desc.SrcPort on
-	// this end) — the same port the pool arbiter and `mux_route_groups`
-	// already key on.
-	LocalPort routing.Port `json:"local_port"`
-	// FirstHopPK/TpType are the leading leg's remote pk and transport type.
-	FirstHopPK string `json:"first_hop_pk,omitempty"`
-	TpType     string `json:"tp_type,omitempty"`
-	// Hops is the leading leg's forward hop count (1 for a direct route).
-	Hops int `json:"hops"`
-	// CapacityPriorBps is the leading leg's PRIOR throughput estimate — the
-	// value the pool ranks candidates by before it has measured one.
-	CapacityPriorBps float64 `json:"capacity_prior_bps,omitempty"`
-	// AuditionAgeMS is how long this standby tunnel has been held open,
-	// pinged and measured without carrying a stream (MuxRouteGroupInfo.AgeMS).
-	AuditionAgeMS float64 `json:"audition_age_ms,omitempty"`
-	// LegSource names where the leading leg came from when it is not this
-	// group's own dial (e.g. "standby :4, re-homed in place").
-	LegSource string `json:"leg_source,omitempty"`
-	// Legs is this standby tunnel's total leg count.
-	Legs int `json:"legs"`
-}
 
 // poolTableFrom projects the standby-tunnel pool table out of mrgs — the
 // SAME MuxRouteGroupInfo slice the mux section builds — so the pool table
 // costs nothing beyond the AllRouteGroupMuxInfo call already made for it.
-func poolTableFrom(mrgs []MuxRouteGroupInfo) []PoolTunnelInfo {
-	var out []PoolTunnelInfo
+func poolTableFrom(mrgs []visorapi.MuxRouteGroupInfo) []visorapi.PoolTunnelInfo {
+	var out []visorapi.PoolTunnelInfo
 	for _, mrg := range mrgs {
 		if mrg.TunnelRole != "standby" {
 			continue
 		}
-		row := PoolTunnelInfo{
+		row := visorapi.PoolTunnelInfo{
 			LocalPort:     mrg.Desc.SrcPort,
 			AuditionAgeMS: mrg.AgeMS,
 			Legs:          len(mrg.Legs),
@@ -245,58 +37,9 @@ func poolTableFrom(mrgs []MuxRouteGroupInfo) []PoolTunnelInfo {
 	return out
 }
 
-// EffectiveRoutingConfig is the routing configuration in force at
-// runtime. MinHops/MuxRoutes/ForceLocalRoutes/ExistingTPOnly/
-// TransportPreference are read from the live router (GetRouterSettings),
-// so they reflect any runtime set that diverged from the config file;
-// EnableCascadeRouteSetup and PolicyPerDial are the configured source
-// (PolicyPerDial is a path/inline-source string, never a secret).
-type EffectiveRoutingConfig struct {
-	MinHops                 uint16   `json:"min_hops"`
-	ForceLocalRoutes        bool     `json:"force_local_routes"`
-	ExistingTPOnly          bool     `json:"existing_tp_only"`
-	TransportPreference     []string `json:"transport_preference,omitempty"`
-	EnableCascadeRouteSetup bool     `json:"enable_cascade_route_setup"`
-	PolicyPerDial           string   `json:"policy_per_dial,omitempty"`
-}
-
-// ModulePresence reports which optional subsystems are wired on this visor.
-// A false here means the module was not configured/started (nil), which is
-// often exactly the thing being debugged ("why is there no stats feed?").
-type ModulePresence struct {
-	StatsTracker       bool `json:"stats_tracker"`
-	UptimeRecorder     bool `json:"uptime_recorder"`
-	EmbeddedTPS        bool `json:"embedded_transport_setup"`
-	EmbeddedRouteSetup bool `json:"embedded_route_setup"`
-
-	// ExecWasm describes the js/wasm command module this binary serves to
-	// browser desks. Queryable rather than log-only on purpose: `go build .`
-	// embeds whatever pkg/wasmhv/execwasm/blob already holds instead of
-	// rebuilding it, so a current binary can serve a module many commits
-	// old, and the only other signal is a startup warning that scrolls past.
-	ExecWasm *ExecWasmInfo `json:"exec_wasm,omitempty"`
-}
-
-// ExecWasmInfo reports the embedded js/wasm command module's provenance.
-type ExecWasmInfo struct {
-	// Present is false for a plain source build, which embeds only the
-	// placeholder README and falls back to an on-disk module.
-	Present bool `json:"present"`
-	// Revision is the commit the module was built from, recorded beside it
-	// by `make embed-exec-wasm`. Empty when the module predates that.
-	Revision string `json:"revision,omitempty"`
-	// BinaryRevision is this visor's own commit, for comparison.
-	BinaryRevision string `json:"binary_revision,omitempty"`
-	// Stale is true when both revisions are known and differ: the desk is
-	// serving older code than the visor. Fix with `make embed-exec-wasm`.
-	Stale bool `json:"stale"`
-	// Stamp is the served content fingerprint, which the page polls.
-	Stamp string `json:"stamp,omitempty"`
-}
-
 // StateSnapshot assembles the full runtime StateSnapshot (every default
 // section). It is StateSnapshotProjected(nil).
-func (v *Visor) StateSnapshot() (*StateSnapshot, error) {
+func (v *Visor) StateSnapshot() (*visorapi.StateSnapshot, error) {
 	return v.StateSnapshotProjected(nil)
 }
 
@@ -310,9 +53,9 @@ func (v *Visor) StateSnapshot() (*StateSnapshot, error) {
 // initialized subsystem; failures are recorded in Notes. Secrets are never
 // included (see the StateSnapshot type doc). At + Suspended are always populated
 // (both cheap).
-func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) {
-	want := NewStateFieldSet(fields)
-	snap := &StateSnapshot{At: time.Now()}
+func (v *Visor) StateSnapshotProjected(fields []string) (*visorapi.StateSnapshot, error) {
+	want := visorapi.NewStateFieldSet(fields)
+	snap := &visorapi.StateSnapshot{At: time.Now()}
 	note := func(section string, err error) {
 		if err != nil {
 			snap.Notes = append(snap.Notes, section+": "+err.Error())
@@ -325,7 +68,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		snap.Suspended = susp
 	}
 
-	if want.Has(SelectSummary) {
+	if want.Has(visorapi.SelectSummary) {
 		if sum, err := v.Summary(); err != nil {
 			note("summary", err)
 		} else {
@@ -333,7 +76,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		}
 	}
 
-	if want.Has(SelectHealth) {
+	if want.Has(visorapi.SelectHealth) {
 		if h, err := v.Health(); err != nil {
 			note("health", err)
 		} else {
@@ -346,7 +89,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		}
 	}
 
-	if want.Has(SelectRouting) {
+	if want.Has(visorapi.SelectRouting) {
 		if rs, err := v.RoutingStats(); err != nil {
 			note("routing_stats", err)
 		} else {
@@ -355,7 +98,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		if rc, err := v.GetRouterSettings(); err != nil {
 			note("router_config", err)
 		} else {
-			erc := &EffectiveRoutingConfig{
+			erc := &visorapi.EffectiveRoutingConfig{
 				MinHops:             rc.MinHops,
 				ForceLocalRoutes:    rc.ForceLocalRoutes,
 				ExistingTPOnly:      rc.ExistingTPOnly,
@@ -375,7 +118,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 	}
 
 	// route_groups is a cheap count wanted by both the routing and mux views.
-	if want.Has(SelectRouting) || want.Has(SelectMux) {
+	if want.Has(visorapi.SelectRouting) || want.Has(visorapi.SelectMux) {
 		if rgs, err := v.RouteGroups(); err != nil {
 			note("route_groups", err)
 		} else {
@@ -385,14 +128,14 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 
 	// mux and pool share ONE AllRouteGroupMuxInfo call: pool is a filtered
 	// projection of the exact same entries, never computed twice.
-	if want.Has(SelectMux) || want.Has(SelectPool) {
+	if want.Has(visorapi.SelectMux) || want.Has(visorapi.SelectPool) {
 		if mrgs, err := v.AllRouteGroupMuxInfo(); err != nil {
 			note("mux_route_groups", err)
 		} else {
-			if want.Has(SelectMux) && len(mrgs) > 0 {
+			if want.Has(visorapi.SelectMux) && len(mrgs) > 0 {
 				snap.MuxRouteGroups = mrgs
 			}
-			if want.Has(SelectPool) {
+			if want.Has(visorapi.SelectPool) {
 				if pool := poolTableFrom(mrgs); len(pool) > 0 {
 					snap.Pool = pool
 				}
@@ -400,12 +143,12 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		}
 	}
 
-	if want.Has(SelectMux) && v.router != nil {
+	if want.Has(visorapi.SelectMux) && v.router != nil {
 		mc := v.router.MuxCounters()
 		snap.MuxCounters = &mc
 	}
 
-	if want.Has(SelectApps) {
+	if want.Has(visorapi.SelectApps) {
 		if apps, err := v.Apps(); err != nil {
 			note("apps", err)
 		} else {
@@ -413,7 +156,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		}
 	}
 
-	if want.Has(SelectTransports) {
+	if want.Has(visorapi.SelectTransports) {
 		// logs=true so each TransportSummary.Log carries the transport's
 		// cumulative recv/sent byte counters — the passive throughput totals an
 		// operator debugging a slow/idle link wants, surfaced without a second call.
@@ -429,8 +172,8 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		}
 	}
 
-	if want.Has(SelectModules) {
-		snap.Modules = &ModulePresence{
+	if want.Has(visorapi.SelectModules) {
+		snap.Modules = &visorapi.ModulePresence{
 			StatsTracker:       v.statsTracker != nil,
 			UptimeRecorder:     v.uptimeRecorder != nil,
 			EmbeddedTPS:        v.embeddedTPS != nil,
@@ -439,25 +182,25 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		}
 	}
 
-	if want.Has(SelectCXO) {
+	if want.Has(visorapi.SelectCXO) {
 		if cf := v.CXOFeedStates(); len(cf) > 0 {
 			snap.CXOFeeds = cf
 		}
 		snap.TPDLeafPub = v.tpdLeafPublisherState()
 	}
 
-	if want.Has(SelectDiag) {
+	if want.Has(visorapi.SelectDiag) {
 		snap.Diag = v.DiagSnapshot()
 	}
 
-	if want.Has(SelectRoles) {
+	if want.Has(visorapi.SelectRoles) {
 		snap.Roles = v.RolesSnapshot()
 	}
 
 	// proxy is opt-in (never in the default snapshot): the visor-side
 	// proxystatus snapshot for the skysocks surface — per-leg mux telemetry,
 	// running flag, and the range-split summary when the client has pushed it.
-	if want.Has(SelectProxy) {
+	if want.Has(visorapi.SelectProxy) {
 		if ps, err := v.proxyStatusProvider().StatusSnapshot(proxystatus.SurfaceSkysocks); err != nil {
 			note("proxy", err)
 		} else {
@@ -471,7 +214,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 // execWasmInfo describes the embedded js/wasm command module for the state
 // snapshot. Nil when nothing is embedded and nothing is recorded — a plain
 // source build has no module and no story to tell about one.
-func execWasmInfo() *ExecWasmInfo {
+func execWasmInfo() *visorapi.ExecWasmInfo {
 	present := execwasm.Present()
 	rev := execwasm.Revision()
 	if !present && rev == "" {
@@ -481,7 +224,7 @@ func execWasmInfo() *ExecWasmInfo {
 	if bin == "unknown" {
 		bin = ""
 	}
-	return &ExecWasmInfo{
+	return &visorapi.ExecWasmInfo{
 		Present:        present,
 		Revision:       rev,
 		BinaryRevision: bin,

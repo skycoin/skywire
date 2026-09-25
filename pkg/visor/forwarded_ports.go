@@ -15,99 +15,13 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
-
-// ForwardedPort describes a single forwarded port with its metadata.
-type ForwardedPort struct {
-	// Port is the DMSG/skynet port exposed to the network.
-	Port int `json:"port"`
-	// LocalPort is the TCP port on localhost to forward to. If zero,
-	// defaults to Port (same port number locally and remotely).
-	LocalPort     int             `json:"local_port,omitempty"`
-	Label         string          `json:"label,omitempty"`
-	Description   string          `json:"description,omitempty"`
-	ShowOnLanding bool            `json:"show_on_landing"`
-	Whitelist     []cipher.PubKey `json:"whitelist,omitempty"` // empty = accessible to all authenticated peers
-	Skynet        bool            `json:"skynet"`              // forward over skynet (sky-forwarding server)
-	DMSG          bool            `json:"dmsg"`                // forward over DMSG (service registry)
-	// UDP, when true, enables UDP-datagram semantics on this
-	// forward rather than the default TCP-stream semantics.
-	// Implementation rides DatagramRouteGroup (see
-	// pkg/router/datagram_route_group.go and the faithful-UDP
-	// design in #2607): faithful loss, no head-of-line blocking on
-	// reorder, per-datagram AEAD. For DNS / NTP / VoIP / gaming —
-	// anything where a late packet is worse than a lost one.
-	//
-	// Stage 4 of #2607: this field is recognized by the visor's
-	// forwarded-port listener loop, which binds a local UDP socket
-	// at EffectiveLocalPort() and pumps datagrams to/from the
-	// peer-side DatagramRouteGroup. The route-setup machinery that
-	// constructs the DatagramRouteGroup itself lives in stage 5's
-	// app API.
-	UDP bool `json:"udp,omitempty"`
-	// ProxyAddr is an optional local address (e.g., "127.0.0.1:3000")
-	// to reverse-proxy to. For port 80, this replaces the visor's
-	// default landing page with content from the local service.
-	ProxyAddr string `json:"proxy_addr,omitempty"`
-	// PreserveHost controls the Host header on the request the
-	// reverse-proxy emits to the backend. Currently effective on the
-	// port-80 HTTP reverse-proxy (the only forward type that touches
-	// HTTP headers; raw-TCP forwards don't see HTTP at all).
-	//
-	//   false (default): visor rewrites Host to the backend's address
-	//                    (target.Host). Useful when the backend
-	//                    validates Host against its listening address
-	//                    — the historical behavior.
-	//   true:            visor preserves whatever Host the incoming
-	//                    request already carried (e.g. magnetosphere
-	//                    .net after the skynetweb resolver's
-	//                    subdomain rewrite). Required when the
-	//                    backend (Caddy, nginx, traefik) dispatches
-	//                    its virtual hosts by Host header.
-	PreserveHost bool `json:"preserve_host,omitempty"`
-	// InjectPK, when true, makes this forward HTTP-aware: instead of a
-	// raw TCP splice, the visor terminates HTTP and reverse-proxies to
-	// the backend, stamping the noise-authenticated caller into request
-	// headers the backend can trust:
-	//
-	//   X-Skywire-Remote-PK   the caller's 66-hex public key (omitted if
-	//                         the peer can't be identified)
-	//   X-Skywire-Transport   "dmsg" or "skynet"
-	//
-	// Any client-supplied copies of those headers are stripped first, so
-	// they cannot be spoofed over this path. This lets a forwarded website
-	// do per-PK behavior (auth, personalization) that a raw splice can't,
-	// because the backend otherwise never learns who is connecting.
-	//
-	// HTTP only — enabling it on a non-HTTP service breaks the stream. The
-	// header is only trustworthy if the backend is reachable ONLY through
-	// the visor (bind it to loopback); see docs/guides/skynet-website-auth.md.
-	InjectPK bool `json:"inject_pk,omitempty"`
-}
-
-// EffectiveLocalPort returns the local TCP port to forward to.
-// Returns LocalPort if set, otherwise Port.
-func (fp *ForwardedPort) EffectiveLocalPort() int {
-	if fp.LocalPort > 0 {
-		return fp.LocalPort
-	}
-	return fp.Port
-}
-
-// DialTarget returns the address that incoming forwarded connections
-// should be proxied to. ProxyAddr wins when set ("host:port" or
-// "ip:port"); otherwise it falls back to localhost:EffectiveLocalPort.
-func (fp *ForwardedPort) DialTarget() string {
-	if fp.ProxyAddr != "" {
-		return fp.ProxyAddr
-	}
-	return fmt.Sprintf("localhost:%d", fp.EffectiveLocalPort())
-}
 
 // ForwardedPorts is a thread-safe collection of forwarded port definitions.
 type ForwardedPorts struct {
 	mu       sync.RWMutex
-	ports    map[int]*ForwardedPort
+	ports    map[int]*visorapi.ForwardedPort
 	filePath string // persistence path; empty = in-memory only
 }
 
@@ -115,7 +29,7 @@ type ForwardedPorts struct {
 // If filePath is non-empty, the store loads from and saves to that file.
 func NewForwardedPorts(filePath string) *ForwardedPorts {
 	fp := &ForwardedPorts{
-		ports:    make(map[int]*ForwardedPort),
+		ports:    make(map[int]*visorapi.ForwardedPort),
 		filePath: filePath,
 	}
 	if filePath != "" {
@@ -125,7 +39,7 @@ func NewForwardedPorts(filePath string) *ForwardedPorts {
 }
 
 // Register adds or updates a forwarded port. Saves to disk if configured.
-func (fp *ForwardedPorts) Register(p ForwardedPort) error {
+func (fp *ForwardedPorts) Register(p visorapi.ForwardedPort) error {
 	if p.Port < 1 || p.Port > 65535 {
 		return fmt.Errorf("invalid port %d", p.Port)
 	}
@@ -144,7 +58,7 @@ func (fp *ForwardedPorts) Deregister(port int) error {
 }
 
 // Get returns a copy of a single port definition, or nil.
-func (fp *ForwardedPorts) Get(port int) *ForwardedPort {
+func (fp *ForwardedPorts) Get(port int) *visorapi.ForwardedPort {
 	fp.mu.RLock()
 	defer fp.mu.RUnlock()
 	p, ok := fp.ports[port]
@@ -156,10 +70,10 @@ func (fp *ForwardedPorts) Get(port int) *ForwardedPort {
 }
 
 // List returns all forwarded ports, sorted by port number.
-func (fp *ForwardedPorts) List() []ForwardedPort {
+func (fp *ForwardedPorts) List() []visorapi.ForwardedPort {
 	fp.mu.RLock()
 	defer fp.mu.RUnlock()
-	out := make([]ForwardedPort, 0, len(fp.ports))
+	out := make([]visorapi.ForwardedPort, 0, len(fp.ports))
 	for _, p := range fp.ports {
 		out = append(out, *p)
 	}
@@ -168,10 +82,10 @@ func (fp *ForwardedPorts) List() []ForwardedPort {
 }
 
 // LandingPagePorts returns ports visible on the landing page, sorted.
-func (fp *ForwardedPorts) LandingPagePorts() []ForwardedPort {
+func (fp *ForwardedPorts) LandingPagePorts() []visorapi.ForwardedPort {
 	fp.mu.RLock()
 	defer fp.mu.RUnlock()
-	var out []ForwardedPort
+	var out []visorapi.ForwardedPort
 	for _, p := range fp.ports {
 		if p.ShowOnLanding {
 			out = append(out, *p)

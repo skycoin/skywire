@@ -26,74 +26,17 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
 
-// RouterDialSettings bundles the visor-wide DIAL-TIME router knobs — the
-// route-ranking priors, the candidate counts, the warm-plan cache shape, the
-// dead-route young-death window, the dial-time tunnel width and the operator's
-// prefer-these-peers list.
-//
-// It is a separate struct from RouterSettings (which carries the live-group
-// knobs) so the two commands stay independently readable and a caller parsing
-// `route settings dial --json` gets one document, not a merged one.
-//
-// On a SET, a zero field means "leave unchanged" — the same tri-state
-// RouterSettings uses — except PreferPKs, where an explicitly empty
-// (non-nil, length-0) slice clears the list. ClearPreferPKs makes that
-// unambiguous over the wire, where nil and empty do not survive the round trip
-// distinctly.
-type RouterDialSettings struct {
-	UnknownLatencyCostMs float64  `json:"unknown_latency_cost_ms"`
-	UnknownHopPenaltyMs  float64  `json:"unknown_hop_penalty_ms"`
-	TypePriorScale       float64  `json:"type_prior_scale"`
-	ThroughputPriorScale float64  `json:"throughput_prior_scale"`
-	RouteCandidates      int      `json:"route_candidates"`
-	MuxRouteHeadroom     int      `json:"mux_route_headroom"`
-	ForegroundMux        int      `json:"foreground_mux"`
-	TunnelLegs           int      `json:"tunnel_legs"`
-	DeadRouteYoungAgeMs  int64    `json:"dead_route_young_age_ms"`
-	WarmPlanTTLMs        int64    `json:"warm_plan_ttl_ms"`
-	WarmPlanBucketCap    int      `json:"warm_plan_bucket_cap"`
-	PreferPKs            []string `json:"prefer_pks,omitempty"`
-	ClearPreferPKs       bool     `json:"clear_prefer_pks,omitempty"`
-	// TypePriorScaleSet / ThroughputPriorScaleSet mark the two multipliers as
-	// given, since 0 is meaningful for them (it drops the term from the score)
-	// and so cannot double as "unset".
-	TypePriorScaleSet       bool `json:"type_prior_scale_set,omitempty"`
-	ThroughputPriorScaleSet bool `json:"throughput_prior_scale_set,omitempty"`
-	// TunnelLegsSet distinguishes "set tunnel legs to 0" (turn the dial-time
-	// widening off) from "leave it alone", since 0 is both the default and a
-	// meaningful instruction.
-	TunnelLegsSet bool `json:"tunnel_legs_set,omitempty"`
-}
-
-// MuxWeightsInput is the argument of the SetMuxWeights / ClearMuxWeights /
-// MuxWeights RPCs. Weights are keyed by the leg's first-hop transport id as a
-// string, so the wire form matches what `mux info` prints and what an operator
-// types.
-type MuxWeightsInput struct {
-	AppName string
-	RGPort  uint16
-	Weights map[string]float64
-}
-
-// MuxRehomeInput is the argument of the RehomeTunnelLeg RPC: the app, the
-// ACTIVE tunnel that is to gain a leg, and the STANDBY tunnel whose chain it
-// takes. Both ports are the dst_port `proxy mux info` prints.
-type MuxRehomeInput struct {
-	AppName     string
-	TargetPort  uint16
-	StandbyPort uint16
-}
-
 // GetRouterDialSettings implements API. Reads the live dial-time knobs.
-func (v *Visor) GetRouterDialSettings() (RouterDialSettings, error) {
+func (v *Visor) GetRouterDialSettings() (visorapi.RouterDialSettings, error) {
 	pks := router.DialPreferPKs()
-	out := RouterDialSettings{
+	out := visorapi.RouterDialSettings{
 		UnknownLatencyCostMs: router.DialUnknownLatencyCostMs(),
 		UnknownHopPenaltyMs:  router.DialUnknownHopPenaltyMs(),
 		TypePriorScale:       router.DialTypePriorScale(),
@@ -117,7 +60,7 @@ func (v *Visor) GetRouterDialSettings() (RouterDialSettings, error) {
 // accessors validate — is reported rather than silently dropped, and the
 // settings applied before it stay applied: the caller asked for each one
 // independently.
-func (v *Visor) SetRouterDialSettings(s RouterDialSettings) error {
+func (v *Visor) SetRouterDialSettings(s visorapi.RouterDialSettings) error {
 	var bad []string
 	set := func(ok bool, name string) {
 		if !ok {
@@ -307,47 +250,47 @@ func (v *Visor) RouteGroupMuxNegotiated(appName string) ([]router.MuxNegotiated,
 // --- RPC server ---------------------------------------------------------
 
 // GetRouterDialSettings returns the live dial-time router knobs.
-func (r *RPC) GetRouterDialSettings(_ *struct{}, out *RouterDialSettings) (err error) {
+func (r *RPC) GetRouterDialSettings(_ *struct{}, out *visorapi.RouterDialSettings) (err error) {
 	defer rpcutil.LogCall(r.log, "GetRouterDialSettings", nil)(out, &err)
 	*out, err = r.visor.GetRouterDialSettings()
 	return err
 }
 
 // SetRouterDialSettings applies dial-time router knobs.
-func (r *RPC) SetRouterDialSettings(s *RouterDialSettings, _ *struct{}) (err error) {
+func (r *RPC) SetRouterDialSettings(s *visorapi.RouterDialSettings, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetRouterDialSettings", s)(nil, &err)
 	return r.visor.SetRouterDialSettings(*s)
 }
 
 // SetMuxWeights pins per-leg send weights on an app's route group.
-func (r *RPC) SetMuxWeights(in *MuxWeightsInput, out *router.MuxWeightsView) (err error) {
+func (r *RPC) SetMuxWeights(in *visorapi.MuxWeightsInput, out *router.MuxWeightsView) (err error) {
 	defer rpcutil.LogCall(r.log, "SetMuxWeights", in)(out, &err)
 	*out, err = r.visor.SetMuxWeights(in.AppName, in.Weights, in.RGPort)
 	return err
 }
 
 // ClearMuxWeights releases a per-leg weight pin.
-func (r *RPC) ClearMuxWeights(in *MuxWeightsInput, out *router.MuxWeightsView) (err error) {
+func (r *RPC) ClearMuxWeights(in *visorapi.MuxWeightsInput, out *router.MuxWeightsView) (err error) {
 	defer rpcutil.LogCall(r.log, "ClearMuxWeights", in)(out, &err)
 	*out, err = r.visor.ClearMuxWeights(in.AppName, in.RGPort)
 	return err
 }
 
 // MuxWeights reports the per-leg weights and scheduler mode in force.
-func (r *RPC) MuxWeights(in *MuxWeightsInput, out *router.MuxWeightsView) (err error) {
+func (r *RPC) MuxWeights(in *visorapi.MuxWeightsInput, out *router.MuxWeightsView) (err error) {
 	defer rpcutil.LogCall(r.log, "MuxWeights", in)(out, &err)
 	*out, err = r.visor.MuxWeights(in.AppName, in.RGPort)
 	return err
 }
 
 // AddMuxRouteForward adds a forward-only leg over the caller-supplied route.
-func (r *RPC) AddMuxRouteForward(in *MuxRouteInput, _ *struct{}) (err error) {
+func (r *RPC) AddMuxRouteForward(in *visorapi.MuxRouteInput, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "AddMuxRouteForward", in)(nil, &err)
 	return r.visor.AddMuxRouteForward(in.AppName, in.Forward, in.Reverse, in.SrcPort)
 }
 
 // RehomeTunnelLeg adopts a standby tunnel's chain into an active one as a leg.
-func (r *RPC) RehomeTunnelLeg(in *MuxRehomeInput, _ *struct{}) (err error) {
+func (r *RPC) RehomeTunnelLeg(in *visorapi.MuxRehomeInput, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "RehomeTunnelLeg", in)(nil, &err)
 	return r.visor.RehomeTunnelLeg(in.AppName, in.TargetPort, in.StandbyPort)
 }
@@ -365,89 +308,12 @@ func (r *RPC) RouteGroupMuxNegotiated(in *string, out *[]router.MuxNegotiated) (
 
 // --- RPC client ---------------------------------------------------------
 
-// GetRouterDialSettings implements API.
-func (rc *rpcClient) GetRouterDialSettings() (RouterDialSettings, error) {
-	var out RouterDialSettings
-	if err := rc.Call("GetRouterDialSettings", &struct{}{}, &out); err != nil {
-		return RouterDialSettings{}, err
-	}
-	return out, nil
-}
-
-// SetRouterDialSettings implements API.
-func (rc *rpcClient) SetRouterDialSettings(s RouterDialSettings) error {
-	return rc.Call("SetRouterDialSettings", &s, &struct{}{})
-}
-
-// SetMuxWeights implements API.
-func (rc *rpcClient) SetMuxWeights(appName string, weights map[string]float64, rgPort uint16) (router.MuxWeightsView, error) {
-	var out router.MuxWeightsView
-	err := rc.Call("SetMuxWeights", &MuxWeightsInput{AppName: appName, RGPort: rgPort, Weights: weights}, &out)
-	return out, err
-}
-
-// ClearMuxWeights implements API.
-func (rc *rpcClient) ClearMuxWeights(appName string, rgPort uint16) (router.MuxWeightsView, error) {
-	var out router.MuxWeightsView
-	err := rc.Call("ClearMuxWeights", &MuxWeightsInput{AppName: appName, RGPort: rgPort}, &out)
-	return out, err
-}
-
-// MuxWeights implements API.
-func (rc *rpcClient) MuxWeights(appName string, rgPort uint16) (router.MuxWeightsView, error) {
-	var out router.MuxWeightsView
-	err := rc.Call("MuxWeights", &MuxWeightsInput{AppName: appName, RGPort: rgPort}, &out)
-	return out, err
-}
-
-// AddMuxRouteForward implements API.
-func (rc *rpcClient) AddMuxRouteForward(appName string, fwd, rev []routing.Hop, rgPort uint16) error {
-	return rc.Call("AddMuxRouteForward", &MuxRouteInput{
-		AppName: appName, Forward: fwd, Reverse: rev, SrcPort: rgPort,
-	}, &struct{}{})
-}
-
-// RehomeTunnelLeg implements API.
-func (rc *rpcClient) RehomeTunnelLeg(appName string, targetPort, standbyPort uint16) error {
-	return rc.Call("RehomeTunnelLeg", &MuxRehomeInput{
-		AppName: appName, TargetPort: targetPort, StandbyPort: standbyPort,
-	}, &struct{}{})
-}
-
-// RouteGroupMuxNegotiated implements API.
-func (rc *rpcClient) RouteGroupMuxNegotiated(appName string) ([]router.MuxNegotiated, error) {
-	var out []router.MuxNegotiated
-	err := rc.Call("RouteGroupMuxNegotiated", &appName, &out)
-	return out, err
-}
-
 // --- stubs for the non-visor API implementations ------------------------
 
-func (*mockRPCClient) GetRouterDialSettings() (RouterDialSettings, error) {
-	return RouterDialSettings{}, nil
+func (proxyDefaultAPI) GetRouterDialSettings() (visorapi.RouterDialSettings, error) {
+	return visorapi.RouterDialSettings{}, ErrProxyNotSupported
 }
-func (*mockRPCClient) SetRouterDialSettings(RouterDialSettings) error { return nil }
-func (*mockRPCClient) SetMuxWeights(string, map[string]float64, uint16) (router.MuxWeightsView, error) {
-	return router.MuxWeightsView{}, nil
-}
-func (*mockRPCClient) ClearMuxWeights(string, uint16) (router.MuxWeightsView, error) {
-	return router.MuxWeightsView{}, nil
-}
-func (*mockRPCClient) MuxWeights(string, uint16) (router.MuxWeightsView, error) {
-	return router.MuxWeightsView{}, nil
-}
-func (*mockRPCClient) AddMuxRouteForward(string, []routing.Hop, []routing.Hop, uint16) error {
-	return nil
-}
-func (*mockRPCClient) RouteGroupMuxNegotiated(string) ([]router.MuxNegotiated, error) {
-	return nil, nil
-}
-func (*mockRPCClient) RehomeTunnelLeg(string, uint16, uint16) error { return nil }
-
-func (proxyDefaultAPI) GetRouterDialSettings() (RouterDialSettings, error) {
-	return RouterDialSettings{}, ErrProxyNotSupported
-}
-func (proxyDefaultAPI) SetRouterDialSettings(RouterDialSettings) error {
+func (proxyDefaultAPI) SetRouterDialSettings(visorapi.RouterDialSettings) error {
 	return ErrProxyNotSupported
 }
 func (proxyDefaultAPI) SetMuxWeights(string, map[string]float64, uint16) (router.MuxWeightsView, error) {

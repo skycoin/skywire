@@ -12,6 +12,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -47,7 +48,7 @@ func TestHealth(t *testing.T) {
 		rpc := &RPC{visor: v, log: logrus.New()}
 		// mock initUptimeTracker
 		v.isServicesHealthy.set()
-		h := &HealthInfo{}
+		h := &visorapi.HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
 
@@ -68,7 +69,7 @@ func TestHealth(t *testing.T) {
 
 		v.isServicesHealthy.init()
 		rpc := &RPC{visor: v, log: logrus.New()}
-		h := &HealthInfo{}
+		h := &visorapi.HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
 

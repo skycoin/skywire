@@ -24,17 +24,18 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // Overview implements API.
-func (v *Visor) Overview() (*Overview, error) {
-	var tSummaries []*TransportSummary
+func (v *Visor) Overview() (*visorapi.Overview, error) {
+	var tSummaries []*visorapi.TransportSummary
 	var publicIP string
 	var isSymmetricNAT bool
 	var natType string
 	if v == nil {
-		return &Overview{}, ErrVisorNotAvailable
+		return &visorapi.Overview{}, ErrVisorNotAvailable
 	}
 
 	// Collect transport summaries if transport manager and router are ready
@@ -70,10 +71,10 @@ func (v *Visor) Overview() (*Overview, error) {
 		routesCount = v.router.RoutesCount()
 	}
 
-	overview := &Overview{
+	overview := &visorapi.Overview{
 		PubKey:              v.conf.PK,
 		BuildInfo:           buildinfo.Get(),
-		AppProtoVersion:     SupportedProtocolVersion,
+		AppProtoVersion:     visorapi.SupportedProtocolVersion,
 		Apps:                apps,
 		Transports:          tSummaries,
 		RoutesCount:         routesCount,
@@ -136,7 +137,7 @@ func (v *Visor) Overview() (*Overview, error) {
 }
 
 // Summary implements API.
-func (v *Visor) Summary() (*Summary, error) {
+func (v *Visor) Summary() (*visorapi.Summary, error) {
 	overview, err := v.Overview()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get visor overview: %w", err)
@@ -157,9 +158,9 @@ func (v *Visor) Summary() (*Summary, error) {
 		return nil, fmt.Errorf("failed to get routing rules: %w", err)
 	}
 
-	extraRoutes := make([]RoutingRuleResp, 0, len(routes))
+	extraRoutes := make([]visorapi.RoutingRuleResp, 0, len(routes))
 	for _, route := range routes {
-		extraRoutes = append(extraRoutes, RoutingRuleResp{
+		extraRoutes = append(extraRoutes, visorapi.RoutingRuleResp{
 			Key:     route.KeyRouteID(),
 			Rule:    hex.EncodeToString(route),
 			Summary: route.Summary(),
@@ -215,7 +216,7 @@ func (v *Visor) Summary() (*Summary, error) {
 	}
 	v.survey.mu.RUnlock()
 
-	summary := &Summary{
+	summary := &visorapi.Summary{
 		Overview:               overview,
 		Health:                 health,
 		Uptime:                 uptime,
@@ -244,11 +245,11 @@ func (v *Visor) Summary() (*Summary, error) {
 }
 
 // Health implements API.
-func (v *Visor) Health() (*HealthInfo, error) {
+func (v *Visor) Health() (*visorapi.HealthInfo, error) {
 	if v.isServicesHealthy == nil {
-		return &HealthInfo{}, nil
+		return &visorapi.HealthInfo{}, nil
 	}
-	hi := &HealthInfo{
+	hi := &visorapi.HealthInfo{
 		ServicesHealth: v.isServicesHealthy.value(),
 	}
 	if v.isUptimeTrackerHealthy != nil {
@@ -439,7 +440,7 @@ func (v *Visor) Uptime() (float64, error) {
 // recorder's bbolt store. Returns ErrUptimeRecorderUnavailable when
 // the recorder isn't wired (recorder open failed at startup or the
 // visor is running without LocalPath access).
-func (v *Visor) UptimeHistory(args UptimeHistoryArgs) (*UptimeHistoryResponse, error) {
+func (v *Visor) UptimeHistory(args visorapi.UptimeHistoryArgs) (*visorapi.UptimeHistoryResponse, error) {
 	rec := v.UptimeRecorder()
 	if rec == nil {
 		return nil, ErrUptimeRecorderUnavailable
@@ -452,7 +453,7 @@ func (v *Visor) UptimeHistory(args UptimeHistoryArgs) (*UptimeHistoryResponse, e
 	if args.Limit > 0 && args.Limit < len(sessions) {
 		sessions = sessions[len(sessions)-args.Limit:]
 	}
-	resp := &UptimeHistoryResponse{
+	resp := &visorapi.UptimeHistoryResponse{
 		Current:  rec.CurrentSession(),
 		Sessions: sessions,
 	}
@@ -478,11 +479,11 @@ func (v *Visor) UptimeHistory(args UptimeHistoryArgs) (*UptimeHistoryResponse, e
 var ErrUptimeRecorderUnavailable = errors.New("service-self uptime recorder not configured")
 
 // RuntimeStats implements API.
-func (v *Visor) RuntimeStats() (*RuntimeStatsInfo, error) {
+func (v *Visor) RuntimeStats() (*visorapi.RuntimeStatsInfo, error) {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
-	return &RuntimeStatsInfo{
+	return &visorapi.RuntimeStatsInfo{
 		NumGoroutine:  runtime.NumGoroutine(),
 		NumCPU:        runtime.NumCPU(),
 		GOMAXPROCS:    runtime.GOMAXPROCS(0),
@@ -589,36 +590,19 @@ func (v *Visor) RuntimeLogs() (string, error) {
 	return builder.String(), nil
 }
 
-// RuntimeLogsDelta is the diff-streaming response shape: only the
-// entries newer than the caller's cursor, plus the new cursor and
-// a count of entries the caller missed because they aged out of
-// the ring buffer between calls (0 when keeping up).
-type RuntimeLogsDelta struct {
-	// Entries is the JSON-encoded log lines (each is one full JSON
-	// object, same shape returned by RuntimeLogs's array elements).
-	Entries []string `json:"entries"`
-	// Latest is the highest log_line currently buffered. Pass it as
-	// `since` on the next call to receive only newly-arrived entries.
-	Latest int64 `json:"latest"`
-	// Dropped tells the caller how many entries they missed since
-	// their last cursor (because the buffer wrapped past them).
-	// Zero when the caller is keeping up with the poll cadence.
-	Dropped int64 `json:"dropped"`
-}
-
 // RuntimeLogsSince returns only entries whose log_line is strictly
 // greater than since. Used for diff-based live tailing of the
 // runtime-logs buffer; pass the previous response's Latest as
 // `since` to fetch only the new entries since the last poll.
-func (v *Visor) RuntimeLogsSince(since int64) (RuntimeLogsDelta, error) {
+func (v *Visor) RuntimeLogsSince(since int64) (visorapi.RuntimeLogsDelta, error) {
 	// Defensive nil-guard — see RuntimeLogs. A `cli visor log --follow` polls
 	// this on a tight loop and reconnects the instant RPC binds on restart, so
 	// it is the most likely caller to race a not-yet-wired logstore.
 	if v.logstore == nil {
-		return RuntimeLogsDelta{}, nil
+		return visorapi.RuntimeLogsDelta{}, nil
 	}
 	logs, dropped, latest := v.logstore.GetLogsSince(since)
-	return RuntimeLogsDelta{
+	return visorapi.RuntimeLogsDelta{
 		Entries: logs,
 		Latest:  latest,
 		Dropped: dropped,

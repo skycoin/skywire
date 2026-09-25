@@ -6,6 +6,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // VoiceCall places a 1:1 voice call to the given peer PK; replies with the call id.
@@ -83,7 +84,7 @@ func (r *RPC) VoiceIncoming(_ *struct{}, out *[]string) (err error) {
 }
 
 // VoiceDialing replies with the calls this visor is placing.
-func (r *RPC) VoiceDialing(_ *struct{}, out *[]VoiceDialingInfo) (err error) {
+func (r *RPC) VoiceDialing(_ *struct{}, out *[]visorapi.VoiceDialingInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "VoiceDialing", nil)(out, &err)
 	calls, err := r.visor.VoiceDialing()
 	if err != nil {
@@ -93,15 +94,8 @@ func (r *RPC) VoiceDialing(_ *struct{}, out *[]VoiceDialingInfo) (err error) {
 	return nil
 }
 
-// VoiceMuteReq toggles the mic/speaker mute of a call.
-type VoiceMuteReq struct {
-	CallID  string
-	Mic     bool
-	Speaker bool
-}
-
 // VoiceMute toggles the mic (send) and speaker (playback) mute of an active call.
-func (r *RPC) VoiceMute(req *VoiceMuteReq, _ *struct{}) (err error) {
+func (r *RPC) VoiceMute(req *visorapi.VoiceMuteReq, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "VoiceMute", req)(nil, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -109,14 +103,8 @@ func (r *RPC) VoiceMute(req *VoiceMuteReq, _ *struct{}) (err error) {
 	return r.visor.VoiceMute(req.CallID, req.Mic, req.Speaker)
 }
 
-// VoiceAudioSnapshot is the recent sent/received PCM of an active call.
-type VoiceAudioSnapshot struct {
-	Sent []int16
-	Recv []int16
-}
-
 // VoiceCallAudio replies with the recent sent + received PCM of a call.
-func (r *RPC) VoiceCallAudio(callID *string, out *VoiceAudioSnapshot) (err error) {
+func (r *RPC) VoiceCallAudio(callID *string, out *visorapi.VoiceAudioSnapshot) (err error) {
 	defer rpcutil.LogCall(r.log, "VoiceCallAudio", callID)(nil, &err)
 	if callID == nil {
 		return fmt.Errorf("nil request")

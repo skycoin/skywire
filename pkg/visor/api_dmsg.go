@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // DialDmsgPing implements API. Dials a remote visor over dmsg for ping.
@@ -203,7 +204,7 @@ func (v *Visor) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error) 
 // dmsgPing.mu only for the map lookup, release before wire I/O.
 // Lets concurrent DmsgPing calls on different PKs proceed in
 // parallel instead of serializing through one global lock.
-func (v *Visor) DmsgPing(conf PingConfig) ([]time.Duration, error) {
+func (v *Visor) DmsgPing(conf visorapi.PingConfig) ([]time.Duration, error) {
 	v.dmsgPing.mu.Lock()
 	pingEntry, ok := v.dmsgPing.conns[conf.PK]
 	v.dmsgPing.mu.Unlock()
@@ -216,7 +217,7 @@ func (v *Visor) DmsgPing(conf PingConfig) ([]time.Duration, error) {
 
 // DmsgPingViaServer implements API. Performs a ping through a specific DMSG server.
 // This is a convenience method that handles dial, ping, and cleanup.
-func (v *Visor) DmsgPingViaServer(conf PingConfig, serverPK cipher.PubKey) ([]time.Duration, error) {
+func (v *Visor) DmsgPingViaServer(conf visorapi.PingConfig, serverPK cipher.PubKey) ([]time.Duration, error) {
 	// Dial the ping connection via the specific server
 	if err := v.DialDmsgPingViaServer(conf.PK, serverPK); err != nil {
 		return nil, fmt.Errorf("dial via server %s: %w", serverPK.String(), err)
@@ -240,7 +241,7 @@ func (v *Visor) DmsgPingViaServer(conf PingConfig, serverPK cipher.PubKey) ([]ti
 // DmsgPingOnce implements API. Performs a single ping over dmsg connection.
 //
 // See DmsgPing for mutex-scoping rationale.
-func (v *Visor) DmsgPingOnce(conf PingConfig) (time.Duration, error) {
+func (v *Visor) DmsgPingOnce(conf visorapi.PingConfig) (time.Duration, error) {
 	v.dmsgPing.mu.Lock()
 	pingEntry, ok := v.dmsgPing.conns[conf.PK]
 	v.dmsgPing.mu.Unlock()
@@ -304,7 +305,7 @@ func (v *Visor) DmsgPingOnce(conf PingConfig) (time.Duration, error) {
 // If echoFull is true, server echoes full payload (for bandwidth testing).
 //
 // See DmsgPing for mutex-scoping rationale.
-func (v *Visor) DmsgPingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
+func (v *Visor) DmsgPingOnceWithEcho(conf visorapi.PingConfig, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
 	v.dmsgPing.mu.Lock()
 	dmsgEntry, ok := v.dmsgPing.conns[conf.PK]
 	v.dmsgPing.mu.Unlock()
@@ -404,7 +405,7 @@ func (v *Visor) StopDmsgPing(pk cipher.PubKey) error {
 
 // DmsgBandwidthTest implements API.
 // Performs a bandwidth test over dmsg by sending and receiving data for the specified duration.
-func (v *Visor) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error) {
+func (v *Visor) DmsgBandwidthTest(conf visorapi.BandwidthTestConfig) (visorapi.BandwidthResult, error) {
 	// First establish a dmsg ping connection if not already connected
 	v.dmsgPing.mu.Lock()
 	_, exists := v.dmsgPing.conns[conf.PK]
@@ -412,7 +413,7 @@ func (v *Visor) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, er
 
 	if !exists {
 		if err := v.DialDmsgPing(conf.PK); err != nil {
-			return BandwidthResult{}, fmt.Errorf("failed to dial dmsg: %w", err)
+			return visorapi.BandwidthResult{}, fmt.Errorf("failed to dial dmsg: %w", err)
 		}
 	}
 
@@ -420,7 +421,7 @@ func (v *Visor) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, er
 	dmsgEntry, ok := v.dmsgPing.conns[conf.PK]
 	if !ok {
 		v.dmsgPing.mu.Unlock()
-		return BandwidthResult{}, fmt.Errorf("no dmsg ping connection for %s", conf.PK)
+		return visorapi.BandwidthResult{}, fmt.Errorf("no dmsg ping connection for %s", conf.PK)
 	}
 	conn := dmsgEntry.conn
 	v.dmsgPing.mu.Unlock()
@@ -444,7 +445,7 @@ func (v *Visor) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, er
 		}
 		ping, err := json.Marshal(msg)
 		if err != nil {
-			return BandwidthResult{}, err
+			return visorapi.BandwidthResult{}, err
 		}
 
 		// Request full echo for download measurement
@@ -454,12 +455,12 @@ func (v *Visor) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, er
 		}
 		size, err := json.Marshal(pingSizeMsg)
 		if err != nil {
-			return BandwidthResult{}, err
+			return visorapi.BandwidthResult{}, err
 		}
 
 		// Send size message
 		if _, err = conn.Write(size); err != nil {
-			return BandwidthResult{}, fmt.Errorf("write size: %w", err)
+			return visorapi.BandwidthResult{}, fmt.Errorf("write size: %w", err)
 		}
 		bytesSent += uint64(len(size))
 
@@ -469,14 +470,14 @@ func (v *Visor) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, er
 		n, err := conn.Read(buf)
 		if err != nil {
 			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
-			return BandwidthResult{}, fmt.Errorf("read ack: %w", err)
+			return visorapi.BandwidthResult{}, fmt.Errorf("read ack: %w", err)
 		}
 		bytesReceived += uint64(n) //nolint:gosec
 
 		// Send ping data
 		if _, err = conn.Write(ping); err != nil {
 			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
-			return BandwidthResult{}, fmt.Errorf("write ping: %w", err)
+			return visorapi.BandwidthResult{}, fmt.Errorf("write ping: %w", err)
 		}
 		bytesSent += uint64(len(ping))
 
@@ -487,7 +488,7 @@ func (v *Visor) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, er
 			n, err = conn.Read(buf)
 			if err != nil {
 				conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
-				return BandwidthResult{}, fmt.Errorf("read echo: %w", err)
+				return visorapi.BandwidthResult{}, fmt.Errorf("read echo: %w", err)
 			}
 			received += n
 			bytesReceived += uint64(n) //nolint:gosec
@@ -498,7 +499,7 @@ func (v *Visor) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, er
 	duration := time.Since(start)
 	durationSec := duration.Seconds()
 
-	return BandwidthResult{
+	return visorapi.BandwidthResult{
 		BytesSent:     bytesSent,
 		BytesReceived: bytesReceived,
 		Duration:      duration,
@@ -520,7 +521,7 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 
 // DMSGServers returns list of connected DMSG servers with their latencies.
 // Servers are sorted by latency (lowest first). Servers with latency 0 have not been measured yet.
-func (v *Visor) DMSGServers() ([]DMSGServerInfo, error) {
+func (v *Visor) DMSGServers() ([]visorapi.DMSGServerInfo, error) {
 	if v.dmsgC == nil {
 		return nil, errors.New("dmsg client not available")
 	}
@@ -528,7 +529,7 @@ func (v *Visor) DMSGServers() ([]DMSGServerInfo, error) {
 	// Get connected servers
 	serverPKs := v.dmsgC.ConnectedServersPK()
 	if len(serverPKs) == 0 {
-		return []DMSGServerInfo{}, nil
+		return []visorapi.DMSGServerInfo{}, nil
 	}
 
 	// Map each server PK to the carrier/protocol of its live session, so the UI
@@ -549,7 +550,7 @@ func (v *Visor) DMSGServers() ([]DMSGServerInfo, error) {
 	}
 
 	// Build list with latencies
-	servers := make([]DMSGServerInfo, 0, len(serverPKs))
+	servers := make([]visorapi.DMSGServerInfo, 0, len(serverPKs))
 	v.dmsgLatency.mu.RLock()
 	for _, pkStr := range serverPKs {
 		var pk cipher.PubKey
@@ -562,7 +563,7 @@ func (v *Visor) DMSGServers() ([]DMSGServerInfo, error) {
 		if !ok {
 			n = -1
 		}
-		info := DMSGServerInfo{
+		info := visorapi.DMSGServerInfo{
 			PK:       pk,
 			Latency:  v.dmsgLatency.servers[pk],
 			Carrier:  carrier[pk],
@@ -589,14 +590,6 @@ func (v *Visor) DMSGServers() ([]DMSGServerInfo, error) {
 	return servers, nil
 }
 
-// DmsgConnectAllResult summarizes the result of DmsgConnectAll.
-type DmsgConnectAllResult struct {
-	Total            int               `json:"total"`             // total servers in discovery
-	AlreadyConnected int               `json:"already_connected"` // sessions in place before the call
-	NewlyConnected   int               `json:"newly_connected"`   // sessions opened by the call
-	Failed           map[string]string `json:"failed,omitempty"`  // server PK → error text for any that could not be connected
-}
-
 // DmsgConnectAll enumerates every dmsg server in discovery and ensures the
 // visor's dmsg client has an active session to each one. This is a one-shot
 // action intended for RSN / TPS visors that need to reach arbitrary
@@ -604,7 +597,7 @@ type DmsgConnectAllResult struct {
 // setup. It does not mutate the visor's configured sessions_count — for
 // persistent behavior use SetDmsgSessionsCount with 0 (connect to all)
 // or edit sessions_count in the visor config.
-func (v *Visor) DmsgConnectAll() (*DmsgConnectAllResult, error) {
+func (v *Visor) DmsgConnectAll() (*visorapi.DmsgConnectAllResult, error) {
 	if err := v.mustWaitDmsgReady(); err != nil {
 		return nil, err
 	}
@@ -615,7 +608,7 @@ func (v *Visor) DmsgConnectAll() (*DmsgConnectAllResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := &DmsgConnectAllResult{
+	out := &visorapi.DmsgConnectAllResult{
 		Total:            res.Total,
 		AlreadyConnected: res.AlreadyConnected,
 		NewlyConnected:   res.NewlyConnected,
@@ -640,7 +633,7 @@ func (v *Visor) DmsgConnectAll() (*DmsgConnectAllResult, error) {
 // runtime — the change takes full effect on next visor restart. The
 // DmsgConnectAll one-shot is invoked inline so the visor reaches the
 // desired connectivity immediately in addition to persisting the change.
-func (v *Visor) SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error) {
+func (v *Visor) SetDmsgSessionsCount(count int) (*visorapi.DmsgConnectAllResult, error) {
 	if count < 0 {
 		return nil, errors.New("sessions_count must be >= 0")
 	}
@@ -665,12 +658,12 @@ func (v *Visor) SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error) {
 // (if configured). Each of these runs under a DIFFERENT identity/key and
 // maintains its OWN session set, so checking `visor info` alone does not
 // tell you whether the RSN or TPS is actually reaching the network.
-func (v *Visor) DmsgSessions() (*DmsgClientSessions, error) {
-	out := &DmsgClientSessions{}
+func (v *Visor) DmsgSessions() (*visorapi.DmsgClientSessions, error) {
+	out := &visorapi.DmsgClientSessions{}
 
 	if v.dmsgC != nil {
 		servers, sessions := dmsgClientServerSessions(v.dmsgC)
-		out.Main = &DmsgClientSessionInfo{
+		out.Main = &visorapi.DmsgClientSessionInfo{
 			PK:           v.conf.PK,
 			Role:         "main",
 			Count:        len(servers),
@@ -688,7 +681,7 @@ func (v *Visor) DmsgSessions() (*DmsgClientSessions, error) {
 
 	if rsn != nil && rsn.DmsgClient() != nil {
 		servers, sessions := dmsgClientServerSessions(rsn.DmsgClient())
-		out.RouteSetup = &DmsgClientSessionInfo{
+		out.RouteSetup = &visorapi.DmsgClientSessionInfo{
 			PK:       rsn.PK(),
 			Role:     "route_setup",
 			Count:    len(servers),
@@ -698,7 +691,7 @@ func (v *Visor) DmsgSessions() (*DmsgClientSessions, error) {
 	}
 	if tps != nil && tps.DmsgClient() != nil {
 		servers, sessions := dmsgClientServerSessions(tps.DmsgClient())
-		out.TransportSetup = &DmsgClientSessionInfo{
+		out.TransportSetup = &visorapi.DmsgClientSessionInfo{
 			PK:       tps.PK(),
 			Role:     "transport_setup",
 			Count:    len(servers),
@@ -709,19 +702,12 @@ func (v *Visor) DmsgSessions() (*DmsgClientSessions, error) {
 	return out, nil
 }
 
-// DmsgConvergeResult reports the outcome of a carrier-convergence pass.
-type DmsgConvergeResult struct {
-	Carriers  []string              `json:"carriers"`  // the effective ordered preference used
-	Converged int                   `json:"converged"` // sessions re-dialed to a more-preferred carrier
-	Sessions  []dmsg.SessionCarrier `json:"sessions"`  // per-session carrier after the pass
-}
-
 // DmsgConverge optionally sets the main dmsg client's ordered carrier
 // preference (empty = leave as-is) and runs one carrier-convergence pass,
 // re-dialing each server session onto the most-preferred carrier it currently
 // advertises. Returns the effective preference, how many sessions converged,
 // and the resulting per-session carriers.
-func (v *Visor) DmsgConverge(carriers []string) (*DmsgConvergeResult, error) {
+func (v *Visor) DmsgConverge(carriers []string) (*visorapi.DmsgConvergeResult, error) {
 	if v.dmsgC == nil {
 		return nil, errors.New("dmsg client not available")
 	}
@@ -730,7 +716,7 @@ func (v *Visor) DmsgConverge(carriers []string) (*DmsgConvergeResult, error) {
 		v.log.WithField("carriers", carriers).Info("dmsg: carrier preference set")
 	}
 	n := v.dmsgC.ConvergeCarriers()
-	return &DmsgConvergeResult{
+	return &visorapi.DmsgConvergeResult{
 		Carriers:  v.dmsgC.Carriers(),
 		Converged: n,
 		Sessions:  v.dmsgC.SessionCarriers(),
@@ -741,11 +727,11 @@ func (v *Visor) DmsgConverge(carriers []string) (*DmsgConvergeResult, error) {
 // has an active session with, both as bare PKs (Servers, kept for existing
 // consumers) and enriched with the protocol each was reached over (Sessions).
 // Both slices are sorted by server PK for stable output.
-func dmsgClientServerSessions(c *dmsg.Client) ([]cipher.PubKey, []DmsgServerSession) {
+func dmsgClientServerSessions(c *dmsg.Client) ([]cipher.PubKey, []visorapi.DmsgServerSession) {
 	all := c.AllSessions()
-	sessions := make([]DmsgServerSession, 0, len(all))
+	sessions := make([]visorapi.DmsgServerSession, 0, len(all))
 	for _, s := range all {
-		sessions = append(sessions, DmsgServerSession{
+		sessions = append(sessions, visorapi.DmsgServerSession{
 			PK:       s.RemotePK(),
 			Carrier:  s.Carrier(),
 			Protocol: s.Protocol(),
@@ -818,7 +804,7 @@ func (v *Visor) SkynetProbe(pk cipher.PubKey, port uint16) (bool, error) {
 }
 
 // DmsgHTTP implements API. Performs an HTTP request over dmsg using the visor's dmsg client.
-func (v *Visor) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
+func (v *Visor) DmsgHTTP(req visorapi.DmsgHTTPRequest) (*visorapi.DmsgHTTPResponse, error) {
 	return v.dmsgHTTPCtx(context.Background(), req)
 }
 
@@ -826,7 +812,7 @@ func (v *Visor) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 // HTTP request whose client hung up, or whose server deadline passed — stops
 // the wait for dmsg, the dial and the read, instead of each running out its
 // own budget for nobody.
-func (v *Visor) dmsgHTTPCtx(ctx context.Context, req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
+func (v *Visor) dmsgHTTPCtx(ctx context.Context, req visorapi.DmsgHTTPRequest) (*visorapi.DmsgHTTPResponse, error) {
 	// Use the visor's main DMSG client (v.dmsgC) for HTTP-over-DMSG.
 	// Deployment services are registered in the DMSG discovery, so
 	// DialStream resolves them via normal lookup + delegated-server phases.
@@ -901,7 +887,7 @@ func (v *Visor) dmsgHTTPCtx(ctx context.Context, req DmsgHTTPRequest) (*DmsgHTTP
 	}
 
 	// Build response
-	response := &DmsgHTTPResponse{
+	response := &visorapi.DmsgHTTPResponse{
 		StatusCode: resp.StatusCode,
 		Status:     resp.Status,
 		Header:     make(map[string]string),

@@ -1,19 +1,12 @@
-// Package visor pkg/visor/rpc_client_mock.go c3-vis-core
-// rpc_client_mock.go contains the mock RPC client for testing.
-package visor
+// Package visorapi pkg/visor/visorapi/mock.go c3-vis-core
+package visorapi
 
 import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math/rand"
-	"net"
-	"sync"
-	"time"
-
 	"github.com/google/uuid"
-
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -31,6 +24,10 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
+	"math/rand"
+	"net"
+	"sync"
+	"time"
 )
 
 // MockRPCClient mocks API.
@@ -817,7 +814,8 @@ func (mc *mockRPCClient) SetMuxStandby(_ int) error {
 }
 
 func (*mockRPCClient) GetRouterSettings() (RouterSettings, error) { return RouterSettings{}, nil }
-func (*mockRPCClient) SetRouterSettings(RouterSettings) error     { return nil }
+
+func (*mockRPCClient) SetRouterSettings(RouterSettings) error { return nil }
 
 func (mc *mockRPCClient) ActiveRoutes() ([]AppRouteStatus, error) {
 	return nil, nil

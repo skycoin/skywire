@@ -12,10 +12,11 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
-func summaryWith(tps ...*TransportSummary) *Summary {
-	return &Summary{Overview: &Overview{Transports: tps}}
+func summaryWith(tps ...*visorapi.TransportSummary) *visorapi.Summary {
+	return &visorapi.Summary{Overview: &visorapi.Overview{Transports: tps}}
 }
 
 func TestAttachedEntriesFromSummaries(t *testing.T) {
@@ -29,15 +30,15 @@ func TestAttachedEntriesFromSummaries(t *testing.T) {
 
 	cache := map[cipher.PubKey]cachedSummary{
 		a: {seenAt: now, sum: summaryWith(
-			&TransportSummary{ID: abID, Local: a, Remote: b, Type: tptypes.STCPR, LatencyMS: 12},
-			&TransportSummary{Local: a, Remote: c, Type: tptypes.SUDPH}, // zero ID: derived
-			&TransportSummary{Local: a, Remote: rsn, Type: tptypes.DMSG, IsSetup: true},
+			&visorapi.TransportSummary{ID: abID, Local: a, Remote: b, Type: tptypes.STCPR, LatencyMS: 12},
+			&visorapi.TransportSummary{Local: a, Remote: c, Type: tptypes.SUDPH}, // zero ID: derived
+			&visorapi.TransportSummary{Local: a, Remote: rsn, Type: tptypes.DMSG, IsSetup: true},
 		)},
 		b: {seenAt: now.Add(-time.Second), sum: summaryWith(
-			&TransportSummary{ID: abID, Local: b, Remote: a, Type: tptypes.STCPR, ThroughputBps: 5000}, // other end
+			&visorapi.TransportSummary{ID: abID, Local: b, Remote: a, Type: tptypes.STCPR, ThroughputBps: 5000}, // other end
 		)},
 		d: {seenAt: now.Add(-attachedGraphStaleAfter - time.Second), sum: summaryWith(
-			&TransportSummary{Local: d, Remote: c, Type: tptypes.STCPR},
+			&visorapi.TransportSummary{Local: d, Remote: c, Type: tptypes.STCPR},
 		)},
 	}
 
@@ -70,8 +71,8 @@ func TestAttachedEntriesFromSummaries(t *testing.T) {
 		t.Fatal("hash not stable for an unchanged set")
 	}
 	cache[b] = cachedSummary{seenAt: now, sum: summaryWith(
-		&TransportSummary{ID: abID, Local: b, Remote: a, Type: tptypes.STCPR},
-		&TransportSummary{Local: b, Remote: c, Type: tptypes.STCPR},
+		&visorapi.TransportSummary{ID: abID, Local: b, Remote: a, Type: tptypes.STCPR},
+		&visorapi.TransportSummary{Local: b, Remote: c, Type: tptypes.STCPR},
 	)}
 	_, sum3 := attachedEntriesFromSummaries(cache, now)
 	if sum == sum3 {

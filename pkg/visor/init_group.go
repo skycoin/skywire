@@ -18,6 +18,7 @@ import (
 	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/skychat/history"
 	skychatprofile "github.com/skycoin/skywire/pkg/skychat/profile"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // groupState holds the visor-side runtime state for chat groups.
@@ -240,12 +241,12 @@ func (a *groupHistoryAdapter) AppendGroup(groupID, senderPK, text string, ts tim
 // ListByGroup implements GroupHistoryFetcher (read path). Converts
 // history.GroupMessage → visor.GroupMessage so RPC callers see the
 // existing on-the-wire shape (matching GroupPoll's return type).
-func (a *groupHistoryAdapter) ListByGroup(groupID string, limit int) ([]GroupMessage, error) {
+func (a *groupHistoryAdapter) ListByGroup(groupID string, limit int) ([]visorapi.GroupMessage, error) {
 	hMsgs, err := a.store.ListByGroup(groupID, limit)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]GroupMessage, 0, len(hMsgs))
+	out := make([]visorapi.GroupMessage, 0, len(hMsgs))
 	for _, m := range hMsgs {
 		var senderPK cipher.PubKey
 		if err := senderPK.Set(m.SenderPK); err != nil {
@@ -256,7 +257,7 @@ func (a *groupHistoryAdapter) ListByGroup(groupID string, limit int) ([]GroupMes
 			a.log.WithError(err).WithField("group", groupID).Debug("grouping: history skip bad pk")
 			continue
 		}
-		out = append(out, GroupMessage{
+		out = append(out, visorapi.GroupMessage{
 			GroupID:  m.GroupID,
 			SenderPK: senderPK,
 			Text:     m.Text,
@@ -273,7 +274,7 @@ func (a *groupHistoryAdapter) Groups() ([]string, error) {
 
 // ListGroupBefore implements GroupHistoryFetcher (backward page cursor).
 // Same invalid-PK-skip defense as ListByGroup.
-func (a *groupHistoryAdapter) ListGroupBefore(groupID string, before time.Time, limit int) ([]GroupMessage, error) {
+func (a *groupHistoryAdapter) ListGroupBefore(groupID string, before time.Time, limit int) ([]visorapi.GroupMessage, error) {
 	hMsgs, err := a.store.ListGroupBefore(groupID, before, limit)
 	if err != nil {
 		return nil, err
@@ -288,8 +289,8 @@ func (a *groupHistoryAdapter) ListGroupBefore(groupID string, before time.Time, 
 // record written by a path that failed to validate should not be able to
 // fail one query and pass another. `what` names the caller in the debug
 // line so a bad row is traceable to the query that hit it.
-func (a *groupHistoryAdapter) toVisorMessages(groupID string, hMsgs []history.GroupMessage, what string) []GroupMessage {
-	out := make([]GroupMessage, 0, len(hMsgs))
+func (a *groupHistoryAdapter) toVisorMessages(groupID string, hMsgs []history.GroupMessage, what string) []visorapi.GroupMessage {
+	out := make([]visorapi.GroupMessage, 0, len(hMsgs))
 	for _, m := range hMsgs {
 		var senderPK cipher.PubKey
 		if err := senderPK.Set(m.SenderPK); err != nil {
@@ -297,7 +298,7 @@ func (a *groupHistoryAdapter) toVisorMessages(groupID string, hMsgs []history.Gr
 				Debugf("grouping: %s skip bad pk", what)
 			continue
 		}
-		out = append(out, GroupMessage{
+		out = append(out, visorapi.GroupMessage{
 			GroupID:  m.GroupID,
 			SenderPK: senderPK,
 			Text:     m.Text,
@@ -318,19 +319,19 @@ func (a *groupHistoryAdapter) toVisorMessages(groupID string, hMsgs []history.Gr
 // Invalid-PK records on disk are skipped with a debug log (same
 // defense-in-depth as ListByGroup); the rest of the result stream
 // is preserved.
-func (a *groupHistoryAdapter) ListGroupSince(groupID string, since time.Time) ([]GroupMessage, error) {
+func (a *groupHistoryAdapter) ListGroupSince(groupID string, since time.Time) ([]visorapi.GroupMessage, error) {
 	hMsgs, err := a.store.ListGroupSince(groupID, since)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]GroupMessage, 0, len(hMsgs))
+	out := make([]visorapi.GroupMessage, 0, len(hMsgs))
 	for _, m := range hMsgs {
 		var senderPK cipher.PubKey
 		if err := senderPK.Set(m.SenderPK); err != nil {
 			a.log.WithError(err).WithField("group", groupID).Debug("grouping: history-since skip bad pk")
 			continue
 		}
-		out = append(out, GroupMessage{
+		out = append(out, visorapi.GroupMessage{
 			GroupID:  m.GroupID,
 			SenderPK: senderPK,
 			Text:     m.Text,

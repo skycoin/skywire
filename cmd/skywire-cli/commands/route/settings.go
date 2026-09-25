@@ -15,7 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/skysocks/skysettings"
 	types "github.com/skycoin/skywire/pkg/transport/types"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -148,7 +148,7 @@ below remain for compatibility; they name the same knobs.`,
 		}
 		changed = changed || len(knobs) > 0 || settingsReset
 		if changed {
-			next := visor.RouterSettings{
+			next := visorapi.RouterSettings{
 				ForceLocalRoutes: cur.ForceLocalRoutes,
 				ExistingTPOnly:   cur.ExistingTPOnly,
 				MinHops:          cur.MinHops,
@@ -288,7 +288,7 @@ func mustBytes(cmd *cobra.Command, raw string) int64 {
 // knobDetail turns the RPC's knob rows into the map the JSON output carries:
 // per knob the compiled default, whether it was explicitly set, and what the
 // visor config holds — the persisted-vs-live comparison.
-func knobDetail(rows []visor.RouterKnob) map[string]cliroute.Knob {
+func knobDetail(rows []visorapi.RouterKnob) map[string]cliroute.Knob {
 	if len(rows) == 0 {
 		return nil
 	}

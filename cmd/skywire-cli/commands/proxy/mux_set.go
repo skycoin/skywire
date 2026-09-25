@@ -38,7 +38,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cliout/cliproxy"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // legReconcile is the outcome of reconcileLegs: the first-hop transport ids of
@@ -56,7 +56,7 @@ type legReconcile struct {
 // app's route groups, add a leg, remove a leg. Narrow so the reconcile can be
 // driven by a stub in a test.
 type muxLegAPI interface {
-	RouteGroupMuxInfo(appName string) ([]visor.MuxRouteGroupInfo, error)
+	RouteGroupMuxInfo(appName string) ([]visorapi.MuxRouteGroupInfo, error)
 	AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint16) error
 	RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error
 }

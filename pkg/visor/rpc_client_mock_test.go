@@ -13,6 +13,7 @@
 package visor
 
 import (
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"math/rand"
 	"reflect"
 	"testing"
@@ -20,7 +21,7 @@ import (
 )
 
 func TestMockRPCClient_AllMethods(t *testing.T) {
-	_, api, err := NewMockRPCClient(rand.New(rand.NewSource(1)), 5, 5) //nolint:gosec
+	_, api, err := visorapi.NewMockRPCClient(rand.New(rand.NewSource(1)), 5, 5) //nolint:gosec
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +29,7 @@ func TestMockRPCClient_AllMethods(t *testing.T) {
 		t.Fatal("nil mock")
 	}
 
-	apiType := reflect.TypeOf((*API)(nil)).Elem()
+	apiType := reflect.TypeOf((*visorapi.API)(nil)).Elem()
 	v := reflect.ValueOf(api)
 
 	for i := 0; i < apiType.NumMethod(); i++ {

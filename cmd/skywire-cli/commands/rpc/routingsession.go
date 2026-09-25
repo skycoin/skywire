@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // RoutingSessionOpts carries the routing-session options shared by the app-start
@@ -44,7 +44,7 @@ type RoutingSessionOpts struct {
 // router.SelfHealTargeter). A fixed dial-time number fought it: the self-heal
 // storm toward a stale dial-time degree is exactly that conflict. Reshape a live
 // session with `cli proxy mux width/standby` instead.
-func ApplyRoutingSession(rc visor.API, o RoutingSessionOpts) error {
+func ApplyRoutingSession(rc visorapi.API, o RoutingSessionOpts) error {
 	if o.ExistingTP != nil {
 		if err := rc.SetExistingTPOnly(*o.ExistingTP); err != nil {
 			return fmt.Errorf("failed to set existing-transport-only mode: %w", err)

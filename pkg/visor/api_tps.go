@@ -19,15 +19,16 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/tpviz"
 	types "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // TPSStatus returns the status of the embedded Transport Setup Node.
-func (v *Visor) TPSStatus() (*TPSStatus, error) {
+func (v *Visor) TPSStatus() (*visorapi.TPSStatus, error) {
 	v.initLock.RLock()
 	tps := v.embeddedTPS
 	v.initLock.RUnlock()
 
-	status := &TPSStatus{
+	status := &visorapi.TPSStatus{
 		Enabled: tps != nil,
 	}
 	if tps != nil {
@@ -37,7 +38,7 @@ func (v *Visor) TPSStatus() (*TPSStatus, error) {
 }
 
 // TPSAddTransport uses the embedded TPS to add a transport on a target visor.
-func (v *Visor) TPSAddTransport(targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error) {
+func (v *Visor) TPSAddTransport(targetPK, remotePK cipher.PubKey, tpType string) (*visorapi.TPSTransportResponse, error) {
 	v.initLock.RLock()
 	tps := v.embeddedTPS
 	v.initLock.RUnlock()
@@ -54,7 +55,7 @@ func (v *Visor) TPSAddTransport(targetPK, remotePK cipher.PubKey, tpType string)
 		return nil, err
 	}
 
-	return &TPSTransportResponse{
+	return &visorapi.TPSTransportResponse{
 		ID:     resp.ID,
 		Local:  resp.Local,
 		Remote: resp.Remote,
@@ -79,7 +80,7 @@ func (v *Visor) TPSRemoveTransport(targetPK cipher.PubKey, tpID uuid.UUID) error
 }
 
 // TPSGetTransports uses the embedded TPS to get transports from a target visor.
-func (v *Visor) TPSGetTransports(targetPK cipher.PubKey) ([]TPSTransportResponse, error) {
+func (v *Visor) TPSGetTransports(targetPK cipher.PubKey) ([]visorapi.TPSTransportResponse, error) {
 	v.initLock.RLock()
 	tps := v.embeddedTPS
 	v.initLock.RUnlock()
@@ -96,9 +97,9 @@ func (v *Visor) TPSGetTransports(targetPK cipher.PubKey) ([]TPSTransportResponse
 		return nil, err
 	}
 
-	result := make([]TPSTransportResponse, len(resp))
+	result := make([]visorapi.TPSTransportResponse, len(resp))
 	for i, tr := range resp {
-		result[i] = TPSTransportResponse{
+		result[i] = visorapi.TPSTransportResponse{
 			ID:     tr.ID,
 			Local:  tr.Local,
 			Remote: tr.Remote,
@@ -132,7 +133,7 @@ func (v *Visor) GetRouteSetupNodesSorted() ([]cipher.PubKey, error) {
 }
 
 // GetTPSHealth returns health status for all configured TPS nodes.
-func (v *Visor) GetTPSHealth() ([]NodeHealth, error) {
+func (v *Visor) GetTPSHealth() ([]visorapi.NodeHealth, error) {
 	if v.nodeHealthTracker == nil {
 		return nil, fmt.Errorf("node health tracker not initialized")
 	}
@@ -140,7 +141,7 @@ func (v *Visor) GetTPSHealth() ([]NodeHealth, error) {
 }
 
 // GetRSNHealth returns health status for all configured RSN nodes.
-func (v *Visor) GetRSNHealth() ([]NodeHealth, error) {
+func (v *Visor) GetRSNHealth() ([]visorapi.NodeHealth, error) {
 	if v.nodeHealthTracker == nil {
 		return nil, fmt.Errorf("node health tracker not initialized")
 	}
@@ -194,7 +195,7 @@ func (v *Visor) TPSExternalHealthCheck(tpsPK cipher.PubKey) error {
 }
 
 // TPSExternalAddTransport dials an external TPS over dmsg and requests transport setup.
-func (v *Visor) TPSExternalAddTransport(tpsPK, targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error) {
+func (v *Visor) TPSExternalAddTransport(tpsPK, targetPK, remotePK cipher.PubKey, tpType string) (*visorapi.TPSTransportResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -217,7 +218,7 @@ func (v *Visor) TPSExternalAddTransport(tpsPK, targetPK, remotePK cipher.PubKey,
 		return nil, fmt.Errorf("AddTransport RPC failed: %w", err)
 	}
 
-	return &TPSTransportResponse{
+	return &visorapi.TPSTransportResponse{
 		ID:     reply.ID,
 		Local:  reply.Local,
 		Remote: reply.Remote,
@@ -226,7 +227,7 @@ func (v *Visor) TPSExternalAddTransport(tpsPK, targetPK, remotePK cipher.PubKey,
 }
 
 // TPSExternalGetTransports dials an external TPS over dmsg and requests transport list.
-func (v *Visor) TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]TPSTransportResponse, error) {
+func (v *Visor) TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]visorapi.TPSTransportResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -245,9 +246,9 @@ func (v *Visor) TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]TPSTr
 		return nil, fmt.Errorf("GetTransports RPC failed: %w", err)
 	}
 
-	result := make([]TPSTransportResponse, len(reply.Transports))
+	result := make([]visorapi.TPSTransportResponse, len(reply.Transports))
 	for i, tr := range reply.Transports {
-		result[i] = TPSTransportResponse(tr)
+		result[i] = visorapi.TPSTransportResponse(tr)
 	}
 	return result, nil
 }
@@ -336,11 +337,11 @@ func (v *Visor) StopUIServer() error {
 }
 
 // UIServerStatus returns the current status of the UI server.
-func (v *Visor) UIServerStatus() (*UIServerStatus, error) {
+func (v *Visor) UIServerStatus() (*visorapi.UIServerStatus, error) {
 	v.ui.mu.Lock()
 	defer v.ui.mu.Unlock()
 
-	status := &UIServerStatus{
+	status := &visorapi.UIServerStatus{
 		Running: v.ui.running,
 	}
 

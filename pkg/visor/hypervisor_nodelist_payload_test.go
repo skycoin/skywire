@@ -9,6 +9,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	types "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // A fully-populated TransportSummary must serialize exactly as it did
@@ -18,7 +19,7 @@ func TestTransportSummaryMarshalJSONKeepsSetIdentifiers(t *testing.T) {
 	remote, _ := cipher.GenerateKeyPair()
 	id := uuid.New()
 
-	b, err := json.Marshal(TransportSummary{
+	b, err := json.Marshal(visorapi.TransportSummary{
 		ID:     id,
 		Local:  pk,
 		Remote: remote,
@@ -39,7 +40,7 @@ func TestTransportSummaryMarshalJSONKeepsSetIdentifiers(t *testing.T) {
 // arrays), so a regression here silently costs ~170 bytes per transport
 // on every node-list poll.
 func TestTransportSummaryMarshalJSONOmitsZeroIdentifiers(t *testing.T) {
-	b, err := json.Marshal(TransportSummary{Type: types.Type("dmsg"), Initiator: true})
+	b, err := json.Marshal(visorapi.TransportSummary{Type: types.Type("dmsg"), Initiator: true})
 	require.NoError(t, err)
 
 	s := string(b)
@@ -53,7 +54,7 @@ func TestTransportSummaryMarshalJSONOmitsZeroIdentifiers(t *testing.T) {
 
 func TestCompactTransportSummariesKeepsOnlyTypeAndDirection(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
-	in := []*TransportSummary{{
+	in := []*visorapi.TransportSummary{{
 		ID:            uuid.New(),
 		Local:         pk,
 		Remote:        pk,
@@ -87,12 +88,12 @@ func TestCompactTransportSummariesKeepsOnlyTypeAndDirection(t *testing.T) {
 // endpoints, which do need the full transport records.
 func TestCompactSummaryTransportsDoesNotMutateSharedOverview(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
-	shared := &Overview{
+	shared := &visorapi.Overview{
 		PubKey:     pk,
-		Transports: []*TransportSummary{{ID: uuid.New(), Local: pk, Remote: pk, Type: types.Type("dmsg")}},
+		Transports: []*visorapi.TransportSummary{{ID: uuid.New(), Local: pk, Remote: pk, Type: types.Type("dmsg")}},
 	}
 
-	out := compactSummaryTransports([]Summary{{Overview: shared}})
+	out := compactSummaryTransports([]visorapi.Summary{{Overview: shared}})
 	require.Len(t, out, 1)
 	require.NotSame(t, shared, out[0].Overview)
 	require.True(t, out[0].Overview.Transports[0].Local.Null())

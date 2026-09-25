@@ -11,6 +11,7 @@ import (
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func (hv *Hypervisor) getRoutes() http.HandlerFunc {
@@ -27,7 +28,7 @@ func (hv *Hypervisor) getRoutes() http.HandlerFunc {
 			return
 		}
 
-		resp := make([]RoutingRuleResp, len(rules))
+		resp := make([]visorapi.RoutingRuleResp, len(rules))
 		for i, rule := range rules {
 			resp[i] = makeRoutingRuleResp(rule.KeyRouteID(), rule, qSummary)
 		}
@@ -216,7 +217,7 @@ func (hv *Hypervisor) getRouteMux() http.HandlerFunc {
 			return
 		}
 		if infos == nil {
-			infos = []MuxRouteGroupInfo{}
+			infos = []visorapi.MuxRouteGroupInfo{}
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, infos)
 	})
@@ -233,7 +234,7 @@ func (hv *Hypervisor) getRoutingPolicies() http.HandlerFunc {
 			return
 		}
 		if summary == nil {
-			summary = &RoutingPoliciesSummary{PerApp: map[string]*RoutingPolicyInfo{}}
+			summary = &visorapi.RoutingPoliciesSummary{PerApp: map[string]*visorapi.RoutingPolicyInfo{}}
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, summary)
 	})

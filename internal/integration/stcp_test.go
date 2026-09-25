@@ -29,7 +29,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cliout/clitp"
 	types "github.com/skycoin/skywire/pkg/transport/types"
-	skyvisor "github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // stcpTpView is the CLI transport view. It is the CLI's own output type,
@@ -44,7 +44,7 @@ type stcpTpView = clitp.Transport
 // VisorTpAddSTCP adds an STCP transport from visor to pk, dialing the given
 // ip:port (or host:port). STCP has no address resolver, so the peer's TCP
 // endpoint must be supplied explicitly via --addr.
-func (env *TestEnv) VisorTpAddSTCP(visor, pk, addr string) (*skyvisor.TransportSummary, error) {
+func (env *TestEnv) VisorTpAddSTCP(visor, pk, addr string) (*visorapi.TransportSummary, error) {
 	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp add %s --type stcp --addr %s --json", visor, pk, addr)
 	out, err := env.visorTpExec(cmd)
 	if err != nil {
@@ -104,7 +104,7 @@ func TestEnv_STCPDataRoute(t *testing.T) {
 	// container hostname — no pk_table / address resolver involved.
 	addr := fmt.Sprintf("%s:7777", visorB)
 
-	var stcpTp *skyvisor.TransportSummary
+	var stcpTp *visorapi.TransportSummary
 	var err error
 	for attempt := 1; attempt <= 3; attempt++ {
 		stcpTp, err = env.VisorTpAddSTCP(visorA, pkB, addr)

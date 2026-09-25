@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // pairPollAPI is a fake visor.API that returns a fixed PairPoll
@@ -32,20 +32,20 @@ import (
 // would panic); the handler only calls PairPoll.
 type pairPollAPI struct {
 	visorAPIShim
-	msgs []visor.PairMessage
+	msgs []visorapi.PairMessage
 	err  error
 	// lastSince captures the `since` arg the handler passed through.
 	lastSince time.Time
 }
 
-func (p *pairPollAPI) PairPoll(since time.Time) ([]visor.PairMessage, error) {
+func (p *pairPollAPI) PairPoll(since time.Time) ([]visorapi.PairMessage, error) {
 	p.lastSince = since
 	return p.msgs, p.err
 }
 
 // withFakePairRPC installs a fake visor.API as the package-level
 // pairRPC for the duration of the test. Restores on Cleanup.
-func withFakePairRPC(t *testing.T, fake visor.API) {
+func withFakePairRPC(t *testing.T, fake visorapi.API) {
 	t.Helper()
 	if appLog == nil {
 		appLog = func(string, ...interface{}) {}
@@ -61,10 +61,10 @@ func withFakePairRPC(t *testing.T, fake visor.API) {
 	})
 }
 
-func mkPairMsg(t *testing.T, text string, ts time.Time) visor.PairMessage {
+func mkPairMsg(t *testing.T, text string, ts time.Time) visorapi.PairMessage {
 	t.Helper()
 	pk, _ := cipher.GenerateKeyPair()
-	return visor.PairMessage{PeerPK: pk, Text: text, TS: ts}
+	return visorapi.PairMessage{PeerPK: pk, Text: text, TS: ts}
 }
 
 func TestPairInboxHandler_EmptyInboxReturnsEmptyArray(t *testing.T) {
@@ -82,7 +82,7 @@ func TestPairInboxHandler_EmptyInboxReturnsEmptyArray(t *testing.T) {
 
 func TestPairInboxHandler_ReturnsAllMessagesAsJSONArray(t *testing.T) {
 	base := time.Date(2026, 5, 18, 0, 0, 0, 0, time.UTC)
-	fake := &pairPollAPI{msgs: []visor.PairMessage{
+	fake := &pairPollAPI{msgs: []visorapi.PairMessage{
 		mkPairMsg(t, "first", base.Add(1*time.Second)),
 		mkPairMsg(t, "second", base.Add(2*time.Second)),
 		mkPairMsg(t, "third", base.Add(3*time.Second)),
@@ -96,7 +96,7 @@ func TestPairInboxHandler_ReturnsAllMessagesAsJSONArray(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rr.Code)
 	}
-	var got []visor.PairMessage
+	var got []visorapi.PairMessage
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("response is not a JSON array of PairMessage: %v\nbody=%q", err, rr.Body.String())
 	}
@@ -117,7 +117,7 @@ func TestPairInboxHandler_LimitTruncatesOldestFirst(t *testing.T) {
 	// the newest N). This pins the contract so a future refactor that
 	// flipped the slice direction is caught.
 	base := time.Date(2026, 5, 18, 0, 0, 0, 0, time.UTC)
-	fake := &pairPollAPI{msgs: []visor.PairMessage{
+	fake := &pairPollAPI{msgs: []visorapi.PairMessage{
 		mkPairMsg(t, "oldest", base.Add(1*time.Second)),
 		mkPairMsg(t, "middle", base.Add(2*time.Second)),
 		mkPairMsg(t, "newest", base.Add(3*time.Second)),
@@ -131,7 +131,7 @@ func TestPairInboxHandler_LimitTruncatesOldestFirst(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rr.Code)
 	}
-	var got []visor.PairMessage
+	var got []visorapi.PairMessage
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode response: %v\nbody=%q", err, rr.Body.String())
 	}

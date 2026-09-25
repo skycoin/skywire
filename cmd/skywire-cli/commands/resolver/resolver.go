@@ -27,7 +27,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // Listener ports of the embedded resolvers. Match
@@ -224,7 +224,7 @@ turn off just one.`,
 // renderResolverStatus formats the status table for human display.
 // Returns the rendered string so PrintOutput can decide to print it
 // (text mode) or skip it in favor of raw JSON (--json mode).
-func renderResolverStatus(s *visor.EmbeddedProxiesStatus) string {
+func renderResolverStatus(s *visorapi.EmbeddedProxiesStatus) string {
 	if s == nil || (s.DmsgWeb == nil && s.SkynetWeb == nil) {
 		return "(no embedded resolvers configured)\n"
 	}
@@ -232,7 +232,7 @@ func renderResolverStatus(s *visor.EmbeddedProxiesStatus) string {
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "name\tenabled\trunning\tdomain\tsocks\tupstream\trequests\tactive\tfailures") //nolint:errcheck,gosec
 	fmt.Fprintln(w, "----\t-------\t-------\t------\t-----\t--------\t--------\t------\t--------") //nolint:errcheck,gosec
-	row := func(name string, p *visor.EmbeddedProxyInfo) {
+	row := func(name string, p *visorapi.EmbeddedProxyInfo) {
 		if p == nil {
 			return
 		}

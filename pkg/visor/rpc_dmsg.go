@@ -4,10 +4,11 @@ package visor
 import (
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // BandwidthTest performs a bandwidth test over skywire route.
-func (r *RPC) BandwidthTest(conf BandwidthTestConfig, out *BandwidthResult) (err error) {
+func (r *RPC) BandwidthTest(conf visorapi.BandwidthTestConfig, out *visorapi.BandwidthResult) (err error) {
 	defer rpcutil.LogCall(r.log, "BandwidthTest", conf)(out, &err)
 
 	*out, err = r.visor.BandwidthTest(conf)
@@ -15,7 +16,7 @@ func (r *RPC) BandwidthTest(conf BandwidthTestConfig, out *BandwidthResult) (err
 }
 
 // DmsgBandwidthTest performs a bandwidth test over dmsg.
-func (r *RPC) DmsgBandwidthTest(conf BandwidthTestConfig, out *BandwidthResult) (err error) {
+func (r *RPC) DmsgBandwidthTest(conf visorapi.BandwidthTestConfig, out *visorapi.BandwidthResult) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgBandwidthTest", conf)(out, &err)
 
 	*out, err = r.visor.DmsgBandwidthTest(conf)
@@ -23,7 +24,7 @@ func (r *RPC) DmsgBandwidthTest(conf BandwidthTestConfig, out *BandwidthResult) 
 }
 
 // DmsgProbe checks dmsg reachability of a remote PK on a given port.
-func (r *RPC) DmsgProbe(req *DmsgProbeRequest, out *bool) (err error) {
+func (r *RPC) DmsgProbe(req *visorapi.DmsgProbeRequest, out *bool) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgProbe", req)(out, &err)
 
 	reachable, err := r.visor.DmsgProbe(req.PK, req.Port)
@@ -34,26 +35,20 @@ func (r *RPC) DmsgProbe(req *DmsgProbeRequest, out *bool) (err error) {
 	return nil
 }
 
-// DmsgProbeReasonResponse carries a probe result together with why it failed.
-type DmsgProbeReasonResponse struct {
-	Reachable bool
-	Reason    string
-}
-
 // DmsgProbeReason checks dmsg reachability and reports the failure reason.
-func (r *RPC) DmsgProbeReason(req *DmsgProbeRequest, out *DmsgProbeReasonResponse) (err error) {
+func (r *RPC) DmsgProbeReason(req *visorapi.DmsgProbeRequest, out *visorapi.DmsgProbeReasonResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgProbeReason", req)(out, &err)
 
 	reachable, reason, err := r.visor.DmsgProbeReason(req.PK, req.Port)
 	if err != nil {
 		return err
 	}
-	*out = DmsgProbeReasonResponse{Reachable: reachable, Reason: reason}
+	*out = visorapi.DmsgProbeReasonResponse{Reachable: reachable, Reason: reason}
 	return nil
 }
 
 // DmsgProbeViaServer probes dmsg reachability forced through a specific server.
-func (r *RPC) DmsgProbeViaServer(req *DmsgProbeViaServerRequest, out *bool) (err error) {
+func (r *RPC) DmsgProbeViaServer(req *visorapi.DmsgProbeViaServerRequest, out *bool) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgProbeViaServer", req)(out, &err)
 
 	reachable, err := r.visor.DmsgProbeViaServer(req.PK, req.Port, req.ServerPK)
@@ -65,7 +60,7 @@ func (r *RPC) DmsgProbeViaServer(req *DmsgProbeViaServerRequest, out *bool) (err
 }
 
 // SkynetProbe probes reachability of a remote PK:port over skynet.
-func (r *RPC) SkynetProbe(req *DmsgProbeRequest, out *bool) (err error) {
+func (r *RPC) SkynetProbe(req *visorapi.DmsgProbeRequest, out *bool) (err error) {
 	defer rpcutil.LogCall(r.log, "SkynetProbe", req)(out, &err)
 
 	reachable, err := r.visor.SkynetProbe(req.PK, req.Port)
@@ -76,7 +71,7 @@ func (r *RPC) SkynetProbe(req *DmsgProbeRequest, out *bool) (err error) {
 	return nil
 }
 
-func (r *RPC) DmsgHTTP(req *DmsgHTTPRequest, out *DmsgHTTPResponse) (err error) {
+func (r *RPC) DmsgHTTP(req *visorapi.DmsgHTTPRequest, out *visorapi.DmsgHTTPResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgHTTP", req)(out, &err)
 
 	resp, err := r.visor.DmsgHTTP(*req)
@@ -88,7 +83,7 @@ func (r *RPC) DmsgHTTP(req *DmsgHTTPRequest, out *DmsgHTTPResponse) (err error) 
 }
 
 // SkynetHTTP performs an HTTP request over skynet using the visor's router.
-func (r *RPC) SkynetHTTP(req *SkynetHTTPRequest, out *SkynetHTTPResponse) (err error) {
+func (r *RPC) SkynetHTTP(req *visorapi.SkynetHTTPRequest, out *visorapi.SkynetHTTPResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "SkynetHTTP", req)(out, &err)
 
 	resp, err := r.visor.SkynetHTTP(*req)
@@ -102,7 +97,7 @@ func (r *RPC) SkynetHTTP(req *SkynetHTTPRequest, out *SkynetHTTPResponse) (err e
 // VisorSCP runs a dmsgscp transfer to the peer using the visor's
 // own dmsg.Client / appnet so the caller can pick either transport
 // without an appnet shim on its side. See api_visor_scp.go.
-func (r *RPC) VisorSCP(req *VisorSCPRequest, out *bool) (err error) {
+func (r *RPC) VisorSCP(req *visorapi.VisorSCPRequest, out *bool) (err error) {
 	defer rpcutil.LogCall(r.log, "VisorSCP", req)(out, &err)
 	if err := r.visor.VisorSCP(*req); err != nil {
 		return err
@@ -114,7 +109,7 @@ func (r *RPC) VisorSCP(req *VisorSCPRequest, out *bool) (err error) {
 // VisorCat opens or accepts a peer stream over the chosen transport
 // and bridges it to a 127.0.0.1 loopback the CLI dials to splice
 // stdio. See api_visor_cat.go.
-func (r *RPC) VisorCat(req *VisorCatRequest, out *VisorCatResponse) (err error) {
+func (r *RPC) VisorCat(req *visorapi.VisorCatRequest, out *visorapi.VisorCatResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "VisorCat", req)(out, &err)
 	resp, err := r.visor.VisorCat(*req)
 	if err != nil {
@@ -125,7 +120,7 @@ func (r *RPC) VisorCat(req *VisorCatRequest, out *VisorCatResponse) (err error) 
 }
 
 // DmsgConnectAll reaches every dmsg server in discovery and ensures a session to each.
-func (r *RPC) DmsgConnectAll(_ *struct{}, out *DmsgConnectAllResult) (err error) {
+func (r *RPC) DmsgConnectAll(_ *struct{}, out *visorapi.DmsgConnectAllResult) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgConnectAll", nil)(out, &err)
 	resp, err := r.visor.DmsgConnectAll()
 	if err != nil {
@@ -138,7 +133,7 @@ func (r *RPC) DmsgConnectAll(_ *struct{}, out *DmsgConnectAllResult) (err error)
 // SetDmsgSessionsCount updates the persisted sessions_count in the visor
 // config and triggers a one-shot connect-all so the running dmsg client
 // reaches the new target immediately.
-func (r *RPC) SetDmsgSessionsCount(count *int, out *DmsgConnectAllResult) (err error) {
+func (r *RPC) SetDmsgSessionsCount(count *int, out *visorapi.DmsgConnectAllResult) (err error) {
 	defer rpcutil.LogCall(r.log, "SetDmsgSessionsCount", count)(out, &err)
 	resp, err := r.visor.SetDmsgSessionsCount(*count)
 	if err != nil {
@@ -150,7 +145,7 @@ func (r *RPC) SetDmsgSessionsCount(count *int, out *DmsgConnectAllResult) (err e
 
 // DmsgSessions returns the current dmsg session state of every dmsg client
 // running inside the visor.
-func (r *RPC) DmsgSessions(_ *struct{}, out *DmsgClientSessions) (err error) {
+func (r *RPC) DmsgSessions(_ *struct{}, out *visorapi.DmsgClientSessions) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgSessions", nil)(out, &err)
 	resp, err := r.visor.DmsgSessions()
 	if err != nil {
@@ -162,7 +157,7 @@ func (r *RPC) DmsgSessions(_ *struct{}, out *DmsgClientSessions) (err error) {
 
 // DmsgConverge optionally sets the dmsg carrier preference (empty = leave
 // as-is) and runs one carrier-convergence pass on the main dmsg client.
-func (r *RPC) DmsgConverge(carriers *[]string, out *DmsgConvergeResult) (err error) {
+func (r *RPC) DmsgConverge(carriers *[]string, out *visorapi.DmsgConvergeResult) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgConverge", carriers)(out, &err)
 	var cs []string
 	if carriers != nil {
@@ -177,7 +172,7 @@ func (r *RPC) DmsgConverge(carriers *[]string, out *DmsgConvergeResult) (err err
 }
 
 // DmsgPorterStats returns ephemeral port reservation counts.
-func (r *RPC) DmsgPorterStats(_ *struct{}, out *DmsgPorterStatus) (err error) {
+func (r *RPC) DmsgPorterStats(_ *struct{}, out *visorapi.DmsgPorterStatus) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgPorterStats", nil)(out, &err)
 	s, err := r.visor.DmsgPorterStats()
 	if err != nil {
@@ -188,7 +183,7 @@ func (r *RPC) DmsgPorterStats(_ *struct{}, out *DmsgPorterStatus) (err error) {
 }
 
 // DmsgPorterReset frees all ephemeral port reservations.
-func (r *RPC) DmsgPorterReset(_ *struct{}, out *DmsgPorterStatus) (err error) {
+func (r *RPC) DmsgPorterReset(_ *struct{}, out *visorapi.DmsgPorterStatus) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgPorterReset", nil)(out, &err)
 	s, err := r.visor.DmsgPorterReset()
 	if err != nil {

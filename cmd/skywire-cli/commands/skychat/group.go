@@ -43,8 +43,8 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	skychataddr "github.com/skycoin/skywire/pkg/skychat/address"
 	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
-	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -136,7 +136,7 @@ var groupCreateCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		info, link, err := rpcClient.GroupCreate(visor.GroupCreateArgs{
+		info, link, err := rpcClient.GroupCreate(visorapi.GroupCreateArgs{
 			Name:                groupCreateName,
 			Kind:                kind,
 			InitialMembers:      members,
@@ -150,10 +150,10 @@ var groupCreateCmd = &cobra.Command{
 	},
 }
 
-func printGroupCreated(cmd *cobra.Command, info visor.GroupInfo, link string) {
+func printGroupCreated(cmd *cobra.Command, info visorapi.GroupInfo, link string) {
 	out := struct {
-		Info   visor.GroupInfo `json:"info"`
-		Invite string          `json:"invite"`
+		Info   visorapi.GroupInfo `json:"info"`
+		Invite string             `json:"invite"`
 	}{Info: info, Invite: link}
 	human := fmt.Sprintf("group created\n  id:     %s\n  name:   %s\n  mode:   %s\n  port:   %d\n  members: %d\n\ninvite link (share with members):\n  %s\n",
 		info.ID, info.Name, info.Mode, info.Port, len(info.Members), link)
@@ -219,7 +219,7 @@ var groupInfoCmd = &cobra.Command{
 // peer_last_inbound (group is a live member-side session with one
 // or more peerSubs). A zero time is rendered as "never" to make
 // "subscriber up, this peer is silent" obvious vs an absent row.
-func renderGroupInfo(info visor.GroupInfo) string {
+func renderGroupInfo(info visorapi.GroupInfo) string {
 	var buf strings.Builder
 	last := "-"
 	if !info.LastMessageAt.IsZero() {
@@ -399,7 +399,7 @@ somebody gave you.`,
 
 // humanCatalog renders a catalog as a table, leading with the kind so a
 // channel is distinguishable from a group at a glance.
-func humanCatalog(entries []visor.GroupCatalogEntry, truncated bool) string {
+func humanCatalog(entries []visorapi.GroupCatalogEntry, truncated bool) string {
 	if len(entries) == 0 {
 		return "nothing published\n"
 	}
@@ -478,7 +478,7 @@ asking the host.`,
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		res, err := rpcClient.GroupResolve(visor.GroupResolveArgs{Address: args[0]})
+		res, err := rpcClient.GroupResolve(visorapi.GroupResolveArgs{Address: args[0]})
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -488,7 +488,7 @@ asking the host.`,
 
 // humanResolve renders a resolve result for a terminal, leading with the
 // action the operator would take next.
-func humanResolve(res visor.GroupResolveResult) string {
+func humanResolve(res visorapi.GroupResolveResult) string {
 	var b strings.Builder
 	if res.Group == nil {
 		fmt.Fprintf(&b, "direct message with %s\n  address: %s\n", res.PK, res.Address)
@@ -541,9 +541,9 @@ name the group, not a way around its door.`,
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		join := visor.GroupJoinArgs{Invite: args[0]}
+		join := visorapi.GroupJoinArgs{Invite: args[0]}
 		if !skychataddr.IsInvite(args[0]) {
-			join = visor.GroupJoinArgs{Address: args[0]}
+			join = visorapi.GroupJoinArgs{Address: args[0]}
 		}
 		info, err := rpcClient.GroupJoin(join)
 		if err != nil {
@@ -773,7 +773,7 @@ var groupSendCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		if err := rpcClient.GroupSend(visor.GroupSendArgs{ID: id, Text: text}); err != nil {
+		if err := rpcClient.GroupSend(visorapi.GroupSendArgs{ID: id, Text: text}); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintf("sent to %s\n", id))
@@ -801,7 +801,7 @@ archived the message cannot be forced to forget it.`,
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		if err := rpcClient.GroupUnsend(visor.GroupUnsendArgs{ID: id, TS: ts}); err != nil {
+		if err := rpcClient.GroupUnsend(visorapi.GroupUnsendArgs{ID: id, TS: ts}); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintf("unsent %d from %s\n", ts, id))
