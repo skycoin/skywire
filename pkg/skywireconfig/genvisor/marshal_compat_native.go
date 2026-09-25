@@ -1399,5 +1399,17 @@ func marshalSkymailNative(w *strings.Builder, s *visorconfig.SkymailConfig, inde
 		o.field("dir")
 		writeQuotedNative(w, s.Dir)
 	}
+	if s.MaxMessageSize != 0 {
+		o.field("max_message_size")
+		writeIntNative(w, s.MaxMessageSize)
+	}
+	if s.MaxTotalSize != 0 {
+		o.field("max_total_size")
+		writeIntNative(w, s.MaxTotalSize)
+	}
+	if s.MaxAge != 0 {
+		o.field("max_age")
+		writeDurationNative(w, s.MaxAge)
+	}
 	o.close()
 }

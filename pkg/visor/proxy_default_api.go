@@ -1338,3 +1338,11 @@ func (proxyDefaultAPI) MailDelete(_ string, _ string) error {
 func (proxyDefaultAPI) MailSetWhitelist(_ []cipher.PubKey) error {
 	return ErrProxyNotSupported
 }
+
+func (proxyDefaultAPI) MailAttachment(_ string, _ string, _ int) (*skymail.AttachmentData, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) MailSetSettings(_ visorapi.MailSettingsUpdate) error {
+	return ErrProxyNotSupported
+}

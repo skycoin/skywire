@@ -24,6 +24,7 @@ skywire cli mail send <to>...
 ## Flags
 
 ```
+      --attach stringArray   attach a file (repeatable)
       --cc strings           carbon-copy recipients
       --from string          local part of your address (default "mail")
       --in-reply-to string   Message-ID this replies to

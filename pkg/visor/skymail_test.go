@@ -5,7 +5,7 @@ import (
 	"net"
 	"net/rpc"
 	"path/filepath"
-	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -24,7 +24,7 @@ import (
 
 func TestSkymailDefaults(t *testing.T) {
 	conf := &visorconfig.V1{LocalPath: "/opt/skywire/local"}
-	require.Equal(t, runtime.GOOS == "js", skymailEnabled(conf), "no section: on only where no MTA can run")
+	require.True(t, skymailEnabled(conf), "no section: on, with the default limits")
 	require.Equal(t, "/opt/skywire/mail", skymailDir(conf), "beside local/, which the wasm visor never persists")
 
 	conf.Skymail = &visorconfig.SkymailConfig{Enable: true, Dir: "/srv/mail"}
@@ -52,8 +52,8 @@ func mailVisor(t *testing.T, ctx context.Context, c *dmsg.Client) *Visor {
 	return v
 }
 
-func dmsgAddr(local string, pk cipher.PubKey) string {
-	return local + "@" + pk.DNSLabel() + ".dmsg"
+func bobAt(pk cipher.PubKey) string {
+	return "bob@" + pk.DNSLabel() + ".dmsg"
 }
 
 // TestMailboxOverRealDmsg sends between two visors over dmsg streams,
@@ -73,7 +73,7 @@ func TestMailboxOverRealDmsg(t *testing.T) {
 	require.True(t, st.Running)
 	require.Equal(t, "mail@"+pkB.DNSLabel()+".skynet", st.Address)
 
-	res, err := a.MailSend(skymail.Outgoing{From: "alice", To: []string{dmsgAddr("bob", pkB)}, Subject: "over dmsg", Body: "hello"})
+	res, err := a.MailSend(skymail.Outgoing{From: "alice", To: []string{bobAt(pkB)}, Subject: "over dmsg", Body: "hello"})
 	require.NoError(t, err)
 	require.Empty(t, res.Recipients[0].Err)
 
@@ -94,7 +94,7 @@ func TestMailboxOverRealDmsg(t *testing.T) {
 	require.Equal(t, 0, st.Unread, "reading marks it seen")
 
 	require.NoError(t, b.MailSetWhitelist([]cipher.PubKey{pkC}))
-	res, err = a.MailSend(skymail.Outgoing{To: []string{dmsgAddr("bob", pkB)}, Body: "again"})
+	res, err = a.MailSend(skymail.Outgoing{To: []string{bobAt(pkB)}, Body: "again"})
 	require.Error(t, err)
 	require.Contains(t, res.Recipients[0].Err, "not whitelisted")
 }
@@ -142,11 +142,110 @@ func TestMailSendRPCCarriesTheReasons(t *testing.T) {
 	go srv.ServeConn(sc)
 	api := visorapi.NewRPCClient(nil, cc, visorapi.RPCPrefix, 30*time.Second)
 
-	res, err := api.MailSend(skymail.Outgoing{To: []string{dmsgAddr("bob", clients[1].LocalPK())}, Body: "x"})
+	res, err := api.MailSend(skymail.Outgoing{To: []string{bobAt(clients[1].LocalPK())}, Body: "x"})
 	require.NoError(t, err, "a send that reached nobody still answers")
 	require.Len(t, res.Recipients, 1)
 	require.Contains(t, res.Recipients[0].Err, "not whitelisted")
 
 	_, err = api.MailSend(skymail.Outgoing{Body: "x"})
 	require.Error(t, err, "a send with no result is still an error")
+}
+
+// TestMailSettingsApplyLiveAndPersist: off, on again (port 25 re-binds
+// at once) and new limits, all without a restart, and all in the file.
+func TestMailSettingsApplyLiveAndPersist(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 2, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	clients := env.AllClients()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	a, b := mailVisor(t, ctx, clients[0]), mailVisor(t, ctx, clients[1])
+
+	off, on := false, true
+	require.NoError(t, b.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &off}))
+	st, err := b.MailStatus()
+	require.NoError(t, err)
+	require.False(t, st.Running)
+	require.Equal(t, "disabled", st.Reason)
+	_, err = a.MailSend(skymail.Outgoing{To: []string{bobAt(clients[1].LocalPK())}, Body: "x"})
+	require.Error(t, err, "nothing listens on 25 while it is off")
+
+	small, age := int64(2048), time.Hour
+	require.NoError(t, b.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &on, MaxMessageSize: &small, MaxAge: &age}))
+	st, err = b.MailStatus()
+	require.NoError(t, err)
+	require.True(t, st.Running, "port 25 bound again straight away")
+	require.Equal(t, small, st.Limits.MaxMessageSize)
+	require.Equal(t, skymail.DefaultMaxTotalSize, st.Limits.MaxTotalSize, "unset fields keep their default")
+
+	// The send made while it was off leaves dmsg refusing this peer for
+	// about two seconds (error 202), so wait for the answer to come from
+	// the mailbox itself.
+	var res *skymail.SendResult
+	require.Eventually(t, func() bool {
+		res, _ = a.MailSend(skymail.Outgoing{To: []string{bobAt(clients[1].LocalPK())}, Body: strings.Repeat("z", 4000)}) //nolint:errcheck
+		return res != nil && strings.Contains(res.Recipients[0].Err, "552")
+	}, 10*time.Second, 200*time.Millisecond, "the new size limit applies at once")
+	res, err = a.MailSend(skymail.Outgoing{To: []string{bobAt(clients[1].LocalPK())}, Body: "fits"})
+	require.NoError(t, err)
+	require.Equal(t, "dmsg", res.Recipients[0].Via)
+
+	// A restart, or a tab reload that regenerates the config: a fresh
+	// visor on the same mail directory and a config that knows nothing of
+	// the change still comes up with it.
+	fresh := &Visor{
+		conf: &visorconfig.V1{
+			Common:    &visorconfig.Common{PK: clients[1].LocalPK()},
+			LocalPath: b.conf.LocalPath,
+		},
+		initLock: new(sync.RWMutex),
+	}
+	enabled, limits, err := skymailEffective(fresh.conf)
+	require.NoError(t, err)
+	require.True(t, enabled)
+	require.Equal(t, small, limits.MaxMessageSize)
+	require.Equal(t, age, limits.MaxAge)
+
+	require.NoError(t, b.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &off}))
+	enabled, _, err = skymailEffective(fresh.conf)
+	require.NoError(t, err)
+	require.False(t, enabled, "off survives a restart too")
+}
+
+// TestMailSettingsOverRPC: "off" and "default" are false and 0, which a
+// pointer loses in gob; over the real RPC they must still arrive.
+func TestMailSettingsOverRPC(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 1, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	b := mailVisor(t, ctx, env.AllClients()[0])
+
+	srv := rpc.NewServer()
+	require.NoError(t, srv.RegisterName(visorapi.RPCPrefix, &RPC{visor: b, log: logrus.New()}))
+	sc, cc := net.Pipe()
+	go srv.ServeConn(sc)
+	api := visorapi.NewRPCClient(nil, cc, visorapi.RPCPrefix, 30*time.Second)
+
+	small, zero, off, on := int64(4096), int64(0), false, true
+	require.NoError(t, api.MailSetSettings(visorapi.MailSettingsUpdate{MaxMessageSize: &small}))
+	st, err := api.MailStatus()
+	require.NoError(t, err)
+	require.Equal(t, small, st.Limits.MaxMessageSize)
+
+	require.NoError(t, api.MailSetSettings(visorapi.MailSettingsUpdate{MaxMessageSize: &zero}))
+	st, err = api.MailStatus()
+	require.NoError(t, err)
+	require.Equal(t, skymail.DefaultMaxMessageSize, st.Limits.MaxMessageSize, "0 over RPC means default")
+
+	require.NoError(t, api.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &off}))
+	st, err = api.MailStatus()
+	require.NoError(t, err)
+	require.False(t, st.Running, "false over RPC turns it off")
+	require.NoError(t, api.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &on}))
+	st, err = api.MailStatus()
+	require.NoError(t, err)
+	require.True(t, st.Running)
 }

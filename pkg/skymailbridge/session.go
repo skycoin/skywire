@@ -42,6 +42,22 @@ type Handler interface {
 	Deliver(ctx context.Context, env Envelope) (string, error)
 }
 
+// SizeLimiter is implemented by a Handler that takes smaller messages
+// than the session ceiling (dataSizeLimit). It is asked per session, so
+// a limit changed at runtime applies to the next connection.
+type SizeLimiter interface {
+	MaxMessageSize() int64
+}
+
+func sessionLimit(h Handler) int64 {
+	if sl, ok := h.(SizeLimiter); ok {
+		if n := sl.MaxMessageSize(); n > 0 && n < dataSizeLimit {
+			return n
+		}
+	}
+	return dataSizeLimit
+}
+
 // Reply is an SMTP reply a Handler returns as an error to pick the code
 // the session sends.
 type Reply struct {
@@ -111,6 +127,7 @@ func ServeHandler(ctx context.Context, lis net.Listener, h Handler, heloName str
 // handleSession runs one SMTP conversation, server side.
 func handleSession(ctx context.Context, c net.Conn, h Handler, heloName string) {
 	br := bufio.NewReaderSize(c, readLineLimit)
+	limit := sessionLimit(h)
 	tp := textproto.NewWriter(bufio.NewWriter(c))
 
 	if err := tp.PrintfLine("220 %s ESMTP skymail", heloName); err != nil {
@@ -136,13 +153,17 @@ func handleSession(ctx context.Context, c net.Conn, h Handler, heloName string) 
 		case "HELO":
 			_ = tp.PrintfLine("250 %s", heloName) //nolint:errcheck,gosec
 		case "EHLO":
-			_ = tp.PrintfLine("250-%s", heloName)           //nolint:errcheck,gosec
-			_ = tp.PrintfLine("250-SIZE %d", dataSizeLimit) //nolint:errcheck,gosec
-			_ = tp.PrintfLine("250 8BITMIME")               //nolint:errcheck,gosec
+			_ = tp.PrintfLine("250-%s", heloName)   //nolint:errcheck,gosec
+			_ = tp.PrintfLine("250-SIZE %d", limit) //nolint:errcheck,gosec
+			_ = tp.PrintfLine("250 8BITMIME")       //nolint:errcheck,gosec
 		case "MAIL":
 			addr, perr := parseAngleAddr(arg, "FROM")
 			if perr != nil {
 				_ = tp.PrintfLine("501 5.5.4 malformed MAIL FROM: %s", perr) //nolint:errcheck,gosec
+				continue
+			}
+			if n := sizeParam(arg); n > limit {
+				_ = tp.PrintfLine("552 5.3.4 message size %d exceeds the limit of %d", n, limit) //nolint:errcheck,gosec
 				continue
 			}
 			// The null reverse path <> (bounces) is a valid sender.
@@ -171,7 +192,12 @@ func handleSession(ctx context.Context, c net.Conn, h Handler, heloName string) 
 				continue
 			}
 			_ = tp.PrintfLine("354 end with <CR><LF>.<CR><LF>") //nolint:errcheck,gosec
-			body, derr := readDATA(br)
+			body, derr := readDATA(br, limit)
+			if errors.Is(derr, errTooBig) {
+				_ = tp.PrintfLine("552 5.3.4 message exceeds the limit of %d octets", limit) //nolint:errcheck,gosec
+				reset()
+				continue
+			}
 			if derr != nil {
 				_ = tp.PrintfLine("451 4.3.0 read DATA: %s", derr) //nolint:errcheck,gosec
 				reset()

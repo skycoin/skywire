@@ -1384,5 +1384,17 @@ func marshalSkymail(w *strings.Builder, s *visorconfig.SkymailConfig, indent int
 		o.field("dir")
 		writeQuoted(w, s.Dir)
 	}
+	if s.MaxMessageSize != 0 {
+		o.field("max_message_size")
+		writeInt(w, s.MaxMessageSize)
+	}
+	if s.MaxTotalSize != 0 {
+		o.field("max_total_size")
+		writeInt(w, s.MaxTotalSize)
+	}
+	if s.MaxAge != 0 {
+		o.field("max_age")
+		writeDuration(w, s.MaxAge)
+	}
 	o.close()
 }
