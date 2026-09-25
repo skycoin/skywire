@@ -163,14 +163,14 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 			// The LOCAL port is the far end's mirror image: a route group's
 			// LocalAddr is desc.Dst(), so the port on whichever descriptor end
 			// is this visor is the one the dialing app knows its tunnel by.
-			exit, localPort := info.FarEndPK, info.Desc.DstPort
+			exit, localPort, remotePort := info.FarEndPK, info.Desc.DstPort, info.Desc.SrcPort
 			if exit == info.Desc.DstPK {
-				localPort = info.Desc.SrcPort
+				localPort, remotePort = info.Desc.SrcPort, info.Desc.DstPort
 			}
 			if exit.Null() {
-				exit, localPort = info.Desc.DstPK, info.Desc.SrcPort
+				exit, localPort, remotePort = info.Desc.DstPK, info.Desc.SrcPort, info.Desc.DstPort
 				if exit == self {
-					exit, localPort = info.Desc.SrcPK, info.Desc.DstPort
+					exit, localPort, remotePort = info.Desc.SrcPK, info.Desc.DstPort, info.Desc.SrcPort
 				}
 			}
 			t := proxystatus.Tunnel{
@@ -183,6 +183,7 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 				LegReserve: info.LegReserve,
 				AuditionMS: info.AgeMS,
 				LocalPort:  uint16(localPort),
+				RemotePort: uint16(remotePort),
 			}
 			for _, leg := range info.Legs {
 				t.Legs = append(t.Legs, proxyLegFrom(leg, p.hopThroughputBps))

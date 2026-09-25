@@ -170,7 +170,8 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 //     carry the session, which knows whose it is regardless, so hops buy no
 //     privacy and cost the bootstrap.
 func (r *SkywireNetworker) directShortcutEligible(opts *router.DialOptions, carrier bool) bool {
-	if opts.MuxRoutes != 0 {
+	// An adoption re-points an existing route group; there is no shortcut to it.
+	if opts.MuxRoutes != 0 || opts.AdoptReservePort != 0 {
 		return false
 	}
 	// Not expressible as a per-dial min-hops value: EffectiveMinHops takes the

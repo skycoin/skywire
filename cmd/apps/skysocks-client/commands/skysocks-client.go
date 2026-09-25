@@ -449,6 +449,12 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 					return dialServer(cycleCtx, cfg, appCl, pk, true, true, poolFilter{excludePKs: excl, requireTpTypes: types})
 				})
 				client.SetStandbyPool(int(cfg.standbyPool))
+				// Leg reserves: the visor turns one back into a tunnel on this
+				// dial instead of setting up a route (router/leg_adopt.go).
+				client.SetReserveAdopt(func(port uint16) (net.Conn, error) {
+					return appCl.DialWithOptions(appnet.Addr{Net: netType, PubKey: pk, Port: serverPort},
+						appserver.DialOptionsReq{MuxRoutes: 1, TunnelRole: skysocks.TunnelRoleActive, AdoptReservePort: port})
+				})
 			},
 			log: log,
 		}.start()
