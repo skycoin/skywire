@@ -19,10 +19,16 @@
 #
 # The build entry is copied forward verbatim for each release, so it must not
 # name a version anywhere but versionName/versionCode/commit. The version
-# comes from android/version.properties and the Go toolchain from go.mod.
-# The one exception is TinyGo, pinned below with its checksum because Debian
-# does not package it: when the wasm-tinygo lane in .github/workflows/test.yml
-# moves to a newer TinyGo, bump it here and in fdroiddata's copy too.
+# comes from android/version.properties, and Go is built from source at the
+# version go.mod names (the go srclib's ref below is only where its clone
+# starts). The one exception is TinyGo, also built from source, from the
+# srclib pinned below: when the wasm-tinygo lane in .github/workflows/test.yml
+# moves to a newer TinyGo, bump the srclib's commit here and in fdroiddata's
+# copy too.
+#
+# srclibs/ next to this file holds the srclib definitions check.sh builds
+# with: tinygo.yml is new and is submitted to fdroiddata with the recipe,
+# go.yml is a verbatim copy of fdroiddata's own.
 #
 # commit is a full hash, not the fdroid-v* tag: fdroiddata takes no tag or
 # branch names there, since those can be moved. The update bot resolves each
@@ -57,15 +63,20 @@ Builds:
     subdir: android/app
     sudo:
       - apt-get update
-      - apt-get install -y golang-go make curl
-      # TinyGo, for the routing-policy presets built below: the upstream
-      # release, checked against its sha256.
-      - curl -fsSLo /tmp/tinygo.deb https://github.com/tinygo-org/tinygo/releases/download/v0.42.0/tinygo_0.42.0_amd64.deb
-      - echo "2082c4762fea6d5cc4cd1f4a243eaacf07b12f576717d4c6b74828bd163cb563  /tmp/tinygo.deb"
-        | sha256sum -c -
-      - apt-get install -y /tmp/tinygo.deb
+      # Debian's Go only bootstraps the Go built in `build`: Go 1.26 needs
+      # 1.24.6 or newer for that, and trixie has 1.24.4, backports 1.26.
+      - apt-get install -y make
+      - apt-get install -y -t trixie-backports golang-go
+      # What TinyGo is built with and against in `build`: Debian's LLVM 19
+      # (trixie's), a C++ compiler for its cgo, and binaryen for the wasm-opt
+      # it runs on every wasm binary.
+      - apt-get install -y g++ llvm-19-dev libclang-19-dev clang-19 lld-19 binaryen
     gradle:
       - yes
+    # Go itself, and TinyGo 0.42.0 for the routing-policy presets built below.
+    srclibs:
+      - go@go1.26.4
+      - tinygo@bdc4a21af007d8f059b5cefe5644b7ee7bda5b2d
     # The routing-policy presets the mobile binary embeds with go:embed. The
     # committed copy is removed and built again from source in `build`.
     rm:
@@ -91,18 +102,43 @@ Builds:
       - skywireFdroid=true
     ndk: r27c
     build:
-      # The Go core (libskywire-mobile.so) from vendored sources, into
-      # app/src/main/jniLibs, before gradle packages it. The NDK lane is the
-      # release one: cgo resolves DNS through bionic.
-      # Debian's Go is older than go.mod asks for; GOTOOLCHAIN=auto has it
-      # fetch exactly the go.mod version, verified against sum.golang.org, so
-      # this entry never pins a Go version of its own.
       - cd ../..
-      - export GOTOOLCHAIN=auto GOPROXY=https://proxy.golang.org,direct GOSUMDB=sum.golang.org
+      # Go from the srclib, at the version go.mod names, bootstrapped by
+      # Debian's. Everything below uses it and no other: GOTOOLCHAIN=local
+      # never switches to a downloaded toolchain. TinyGo needs this too: it
+      # refuses to compile with a newer Go than the one it was built with.
+      - git -C $$go$$ checkout -q -f "go$(sed -n 's/^go //p' go.mod)"
+      - (cd $$go$$/src && ./make.bash)
+      - export PATH="$$go$$/bin:$PATH" GOTOOLCHAIN=local
+      - go version
+      # TinyGo from the srclib, linked against Debian's LLVM 19 (-tags=llvm19,
+      # as TinyGo's own compat CI builds it). It compiles its C runtime
+      # libraries from source on first use: wasi-libc from its submodule, and
+      # compiler-rt's builtins from the llvm-project commit TinyGo pins in
+      # llvm-version.txt, of which only compiler-rt/lib/builtins is fetched.
+      # Its Go modules come from the module proxy, checked against
+      # sum.golang.org.
+      - git -C $$tinygo$$ submodule update --init lib/wasi-libc
+      - git init -q $$tinygo$$/llvm-project
+      - git -C $$tinygo$$/llvm-project sparse-checkout set compiler-rt/lib/builtins
+      - git -C $$tinygo$$/llvm-project fetch -q --depth=1 --filter=blob:none
+        https://github.com/tinygo-org/llvm-project "$(cat $$tinygo$$/llvm-version.txt)"
+      - git -C $$tinygo$$/llvm-project checkout -q FETCH_HEAD
+      - (cd $$tinygo$$ && GOPROXY=https://proxy.golang.org,direct GOSUMDB=sum.golang.org
+        go build -tags=llvm19 -o build/tinygo .)
+      - export PATH="$$tinygo$$/build:$PATH"
+      - tinygo version
+      # From here on nothing is downloaded: skywire builds from vendor/, and
+      # with the module proxy off, a toolchain fetch would be an error, not a
+      # prebuilt Go.
+      - export GOPROXY=off
       # The presets removed above, built with TinyGo from
       # docs/examples/routing-policies/wasm/bundle; the target then checks
       # that the fresh build decides exactly as the native presets do.
       - make bundle-wasm
+      # The Go core (libskywire-mobile.so) from vendored sources, into
+      # app/src/main/jniLibs, before gradle packages it. The NDK lane is the
+      # release one: cgo resolves DNS through bionic.
       - ANDROID_NDK_HOME=$$NDK$$ make android-mobile-ndk
 
 AutoUpdateMode: Version
