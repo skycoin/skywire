@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -145,8 +146,22 @@ func (e *EmbeddedSkymailBridge) serve(ctx context.Context, lis net.Listener) {
 		HeloName:   e.cfg.HeloName,
 		RemotePort: e.cfg.RemotePort,
 	}
-	dialer := &visorDmsgDialer{c: e.dmsgC}
-	if err := skymailbridge.Serve(ctx, lis, dialer, cfg, e.log); err != nil && err != context.Canceled {
+	// Each suffix travels the network it names: .dmsg over dmsg, the
+	// skywire suffix (".skynet" unless configured otherwise) over a route.
+	skynetSuffix := cfg.Suffix
+	if skynetSuffix == "" {
+		skynetSuffix = skymailbridge.DefaultSuffix
+	}
+	if !strings.HasPrefix(skynetSuffix, ".") {
+		skynetSuffix = "." + skynetSuffix
+	}
+	cfg.Dialers = map[string]skymailbridge.Dialer{
+		".dmsg": &visorDmsgDialer{c: e.dmsgC},
+	}
+	if skynetSuffix != ".dmsg" {
+		cfg.Dialers[skynetSuffix] = skynetMailDialer{}
+	}
+	if err := skymailbridge.Serve(ctx, lis, nil, cfg, e.log); err != nil && err != context.Canceled {
 		e.log.WithError(err).Warn("skymail-bridge runtime stopped")
 	}
 }
