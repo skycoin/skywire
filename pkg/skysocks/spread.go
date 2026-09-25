@@ -252,6 +252,9 @@ func (p *spreadPlanner) pick(size int64) *yamux.Session {
 		return nil
 	}
 	sessions, caps, priors := p.c.spreadCandidates(p.dir)
+	if p.refillRoutes(len(sessions)) {
+		sessions, caps, priors = p.c.spreadCandidates(p.dir)
+	}
 	if len(sessions) < 2 {
 		return nil
 	}
@@ -267,6 +270,31 @@ func (p *spreadPlanner) pick(size int64) *yamux.Session {
 	}
 	p.chargeLocked(sessions[i], size)
 	return sessions[i]
+}
+
+// refillRoutes holds min_routes MID-object, not only before the first chunk.
+// A route that dies, is snubbed or is benched while the object is in flight
+// drops out of spreadCandidates, and with fewer than min_routes candidates left
+// max_share cannot hold: two routes cannot both stay under 0.4. The cap is then
+// waived by spreadChoose's never-stall rule and one route takes the rest of the
+// object — 58 % on the 2026-09-23 rig. So a pick that finds the candidate set
+// short first retires any tunnel whose session has closed without a chunk on
+// it to notice (sweepClosedTunnels; the guard only watches tunnels holding a
+// fetch), then promotes standbys until the set is back at min_routes. It never
+// dials. It reports whether it changed the set, so the caller re-snapshots.
+func (p *spreadPlanner) refillRoutes(have int) bool {
+	if p.pol.minRoutes < 2 || have >= p.pol.minRoutes {
+		return false
+	}
+	changed := p.c.sweepClosedTunnels() > 0
+	for have < p.pol.minRoutes {
+		if p.c.promoteFastestStandby(p.dir, "spread.min_routes: a route left mid-object") == nil {
+			break
+		}
+		changed = true
+		have++
+	}
+	return changed
 }
 
 // pickIdle returns the fastest tunnel carrying NO stream right now, for an
