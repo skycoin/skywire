@@ -2,8 +2,7 @@
 
 ## The visor's own mailbox (no MTA)
 
-Every wasm visor, and any native visor with `"skymail": {"enable": true}`
-in its config, has a mailbox of its own (`pkg/skymail`). Mail to
+Every visor has a mailbox of its own (`pkg/skymail`), on by default. Mail to
 `<anything>@<base32-pk>.skynet` (or `.dmsg`) arrives over SMTP on
 port 25 and is kept verbatim in a Maildir (default `mail/` beside the
 local path, which the browser tab persists to IndexedDB). There is no
@@ -16,8 +15,19 @@ skywire cli mail                        # your address, unread count
 skywire cli mail inbox
 skywire cli mail read <id>
 skywire cli mail send bob@<base32-pk>.skynet -s hello -m "hi"
+skywire cli mail send bob@<base32-pk>.skynet -s file --attach ./notes.pdf
+skywire cli mail attachment <id> 0      # save attachment 0
 skywire cli mail whitelist add <pk>     # empty whitelist = accept anyone
+skywire cli mail settings max_total_size=64MiB max_age=30d
+skywire cli mail settings enable=false  # stop receiving
 ```
+
+Because it is open to every PK by default, the mailbox keeps little: a
+message over 1 MiB is refused, a mailbox holding 16 MiB (Inbox and Sent
+together) refuses mail until some is deleted or expires, and mail older
+than 7 days is deleted. `mail settings` changes any of these live and
+saves them to the config (`skymail.max_message_size`, `max_total_size`,
+`max_age`; `none` removes a bound).
 
 In the browser desk the same actions are the ☰ **mail** app. Sending is
 immediate: a recipient whose visor is offline gets an error, and nothing
