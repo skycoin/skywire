@@ -1,8 +1,14 @@
-// Package visor pkg/visor/cmd.go c3-vis-core
-package visor
+// Package commands cmd/skywire-visor/commands/root.go c4-vis-cli
+//
+// Package commands is the skywire visor command: its flags, which config file
+// to read, and how the visor is started (alone, with a system tray, or as a
+// tray for a visor running elsewhere).
+package commands
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,7 +21,9 @@ import (
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -49,6 +57,7 @@ var (
 	root bool // nolint:unused
 	// visorBuildInfo holds information about the build
 	visorBuildInfo        *buildinfo.Info
+	mLog                  = logging.NewMasterLogger()
 	dmsgServer            string
 	dmsgServerAddr        string // populated from --dmsg-server when given as pk@host:port; empty means "use discovery"
 	dmsgServerMaxAttempts int
@@ -313,19 +322,59 @@ var RootCmd = &cobra.Command{
 
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		switch {
-		case runSystrayOnly:
-			runTrayOnly()
-		case runAsSystray:
-			runAppSystray()
-		default:
-			runApp()
+		if runSystrayOnly {
+			visor.RunTrayOnly(systrayRPCAddr)
+			return
+		}
+		conf, err := loadConfig()
+		if err != nil {
+			mLog.PackageLogger("visor:config").WithError(err).Fatal("Failed to load config.")
+		}
+		if runAsSystray {
+			visor.RunSystray(conf, options())
+			return
+		}
+		if err := visor.Run(context.Background(), conf, options()); err != nil {
+			mLog.WithError(err).Fatal("a fatal error occurred")
 		}
 	},
 	Version: buildinfo.Version(),
 }
 
-func initConfig() *visorconfig.V1 {
+// options turns the flags into the visor's start options.
+func options() visor.Options {
+	var hvs []string
+	if remoteHypervisorPKs != "" {
+		hvs = strings.Split(remoteHypervisorPKs, ",")
+	}
+	return visor.Options{
+		LoadConfig:            reloadConfig,
+		LogLevel:              logLvl,
+		PprofMode:             pprofMode,
+		PprofAddr:             pprofAddr,
+		Hypervisors:           hvs,
+		NoHypervisors:         disableHypervisorPKs,
+		LaunchBrowser:         launchBrowser,
+		NoCSRF:                !useCsrf,
+		DmsgServer:            dmsgServer,
+		DmsgServerAddr:        dmsgServerAddr,
+		DmsgServerMaxAttempts: dmsgServerMaxAttempts,
+		StoreLog:              isStoreLog,
+		LogJSON:               isLogJSON,
+		ForceColor:            isForceColor,
+	}
+}
+
+// reloadConfig reads the config again for Visor.Reload.
+func reloadConfig() (*visorconfig.V1, error) {
+	if confPath == visorconfig.Stdin {
+		return nil, errors.New("the config was piped via stdin")
+	}
+	return loadConfig()
+}
+
+// loadConfig reads the config the flags point at.
+func loadConfig() (*visorconfig.V1, error) {
 	log := mLog.PackageLogger("visor:config")
 
 	var r io.Reader
@@ -344,7 +393,7 @@ func initConfig() *visorconfig.V1 {
 		log.WithField("filepath", confPath).Info()
 		f, err := os.ReadFile(filepath.Clean(confPath))
 		if err != nil {
-			log.WithError(err).Fatal("Failed to read config file.")
+			return nil, fmt.Errorf("failed to read config file: %w", err)
 		}
 		confPath = filepath.Clean(confPath)
 		r = bytes.NewReader(f)
@@ -352,20 +401,14 @@ func initConfig() *visorconfig.V1 {
 
 	conf, compat, err := visorconfig.Parse(log, r, confPath, visorBuildInfo)
 	if err != nil {
-		log.WithError(err).Fatal("Failed to read in config.")
+		return nil, fmt.Errorf("failed to read in config: %w", err)
 	}
 	if !compat {
-		log.Fatalf("failed to start skywire - config version is incompatible")
+		return nil, errors.New("config version is incompatible")
 	}
 	if hypervisorUI {
 		config := visorconfig.GenerateWorkDirConfig(false)
 		conf.Hypervisor = &config
-	}
-	if conf.Hypervisor != nil {
-		if *uiAssets == nil {
-			log.Fatalf("missing embedded assets for hypervisor ui")
-		}
-		conf.Hypervisor.UIAssets = *uiAssets
 	}
 	if noHypervisorUI {
 		conf.Hypervisor = nil
@@ -378,7 +421,7 @@ func initConfig() *visorconfig.V1 {
 	}
 
 	visorconfig.VisorConfigFile = confPath
-	return conf
+	return conf, nil
 }
 
 // Execute executes root CLI command.

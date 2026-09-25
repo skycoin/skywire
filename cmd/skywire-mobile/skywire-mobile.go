@@ -26,9 +26,9 @@ import (
 	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
 	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
+	visor "github.com/skycoin/skywire/cmd/skywire-visor/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/flags"
-	"github.com/skycoin/skywire/pkg/visor"
 )
 
 // RootCmd is the skywire-mobile root: visor + config + the app subtree.

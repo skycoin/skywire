@@ -121,10 +121,10 @@ func (v *Visor) Resume() error {
 	// still tears the visor down on real shutdown).
 	ctx := context.WithValue(v.ctx, visorKey, v)
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
-	if dmsgServer != "" {
-		ctx = context.WithValue(ctx, "dmsgServer", dmsgServer) //nolint:staticcheck // SA1029: matches dmsg.Client's string key
-		if dmsgServerAddr != "" {
-			ctx = context.WithValue(ctx, "dmsgServerAddr", dmsgServerAddr) //nolint:staticcheck // SA1029: matches dmsg.Client's string key
+	if v.opts.DmsgServer != "" {
+		ctx = context.WithValue(ctx, "dmsgServer", v.opts.DmsgServer) //nolint:staticcheck // SA1029: matches dmsg.Client's string key
+		if v.opts.DmsgServerAddr != "" {
+			ctx = context.WithValue(ctx, "dmsgServerAddr", v.opts.DmsgServerAddr) //nolint:staticcheck // SA1029: matches dmsg.Client's string key
 		}
 	}
 	v.networkCtx, v.networkCancel = context.WithCancel(ctx)
