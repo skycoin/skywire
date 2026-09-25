@@ -45,7 +45,7 @@ func TestParseSettings(t *testing.T) {
 	require.Equal(t, int64(64<<20), *u.MaxTotalSize)
 	require.Equal(t, 30*24*time.Hour, *u.MaxAge)
 	require.Equal(t, int64(-1), *u.MaxMessageSize)
-	_, err = parseSettings([]string{"colour=blue"})
+	_, err = parseSettings([]string{"flavor=blue"})
 	require.Error(t, err)
 	_, err = parseSettings([]string{"enable"})
 	require.Error(t, err)
