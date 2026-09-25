@@ -683,6 +683,11 @@ func (m *tunnelMeter) sample(now time.Time, busy bool) {
 	secs := dt.Seconds()
 	rxRate := float64(rx-m.lastRx) / secs
 	txRate := float64(tx-m.lastTx) / secs
+	// A window is busy if the tunnel held work at any point in it, not only at
+	// the instant of the sample: a fast tunnel finishes its chunks between
+	// samples, and judging it by NumStreams() alone discarded every window it
+	// carried, so it was never measured and the planner weighed it as a probe.
+	busy = busy || m.outstanding.Load() > 0 || m.workAt.Load() >= m.lastAt.UnixNano()
 	m.lastAt, m.lastRx, m.lastTx = now, rx, tx
 	if !busy {
 		return
