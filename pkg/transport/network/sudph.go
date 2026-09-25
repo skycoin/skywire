@@ -200,6 +200,7 @@ func (c *sudphClient) acceptAddresses(conn net.PacketConn, addrCh <-chan addrres
 					if err != nil {
 						continue
 					}
+					c.announceDial(types.SUDPH, udpAddr.String())
 					conn.WriteTo([]byte(holePunchMessage), udpAddr) //nolint:errcheck,gosec
 				}
 				continue // Skip the public IP hole punch
@@ -211,6 +212,7 @@ func (c *sudphClient) acceptAddresses(conn net.PacketConn, addrCh <-chan addrres
 			c.log.WithError(err).Errorf("Failed to resolve UDP address %q", addr)
 			continue
 		}
+		c.announceDial(types.SUDPH, udpAddr.String())
 
 		conn.WriteTo([]byte(holePunchMessage), udpAddr) //nolint:errcheck,gosec
 	}
@@ -296,6 +298,7 @@ func (c *sudphClient) dial(remoteAddr string) (net.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("net.ResolveUDPAddr (remote): %w", err)
 	}
+	c.announceDial(types.SUDPH, rAddr.String())
 
 	dialConn := c.filter.NewConn(dialConnPriority, packetfilter.NewKCPConversationFilter(c.mLog))
 

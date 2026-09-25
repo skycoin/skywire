@@ -240,6 +240,7 @@ func (c *quicClient) dial(ctx context.Context, addr string, rPK cipher.PubKey) (
 	if err != nil {
 		return nil, fmt.Errorf("resolve udp addr %q: %w", addr, err)
 	}
+	c.announceDial(types.QUIC, udpAddr.String())
 	// Dial from a fresh ephemeral UDP socket. (Reusing the listen socket
 	// for both roles needs quic.Transport routing — a later optimization;
 	// ephemeral dial sockets work for publicly-reachable peers, which is the

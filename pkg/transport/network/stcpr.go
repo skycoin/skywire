@@ -58,7 +58,7 @@ func (c *stcprClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 }
 
 func (c *stcprClient) dial(ctx context.Context, addr string) (net.Conn, error) {
-	c.eb.SendTCPDial(context.Background(), string(types.STCPR), addr)
+	c.announceDial(types.STCPR, addr)
 	dialer := net.Dialer{}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {

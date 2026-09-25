@@ -18,10 +18,12 @@ import "net"
 // set is correct for the browser (there is no OS routing table to protect),
 // and acceptable for any embedder that manages its own underlay reachability.
 func NewClientEmbedded(cfg ClientConfig) *Client {
-	return &Client{
+	c := &Client{
 		cfg:    cfg,
 		closeC: make(chan struct{}),
 	}
+	c.initDirectRoutes()
+	return c
 }
 
 // TunReady reports whether the tunnel device exists — it flips once the
