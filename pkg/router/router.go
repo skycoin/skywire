@@ -787,28 +787,24 @@ type router struct {
 	once             sync.Once
 	routeSetupHookMu sync.Mutex
 	routeSetupHooks  []RouteSetupHook // see RouteSetupHook description
-	existingTpOnly   bool             // when true, don't create new transports for routing
-	existingTpOnlyMu sync.Mutex       // protects existingTpOnly
+	existingTpOnly   atomic.Bool      // when true, don't create new transports for routing
 	// sameLANPeersFn overrides where the same-LAN peer set comes from. nil in
 	// production — sameLANExcludedPKs then asks the transport manager
 	// (Manager.SameLANPeers, the #4253 check). Present so the LAN-neighbor
 	// refusal can be exercised without standing up real transports.
-	sameLANPeersFn     func() []cipher.PubKey
-	forceLocalRoutes   bool       // when true, skip route finder and use local route calculation
-	forceLocalRoutesMu sync.Mutex // protects forceLocalRoutes
+	sameLANPeersFn   func() []cipher.PubKey
+	forceLocalRoutes atomic.Bool // when true, skip route finder and use local route calculation
 	// responderBulkSpread, when true (the default), puts a mux-enabled
 	// responder route group into the capacity bulk-spread distribution so the
 	// download it serves aggregates bandwidth across its legs instead of
 	// piling onto the single fastest leg (the auto/latency-weighted default).
 	// See router_serve.go. Runtime-settable via SetResponderBulkSpread.
-	responderBulkSpread   bool
-	responderBulkSpreadMu sync.Mutex
+	responderBulkSpread atomic.Bool
 	// protects conf.MinHops, which SetMinHop changes at runtime while dials
 	// are reading it — see SetMinHop / MinHops.
 	minHopsMu         sync.RWMutex
 	muxMode           WeightMode        // default weight mode for new mux connections
-	lastRouteCalcTime time.Duration     // last route calculation time (for local routes)
-	lastRouteCalcMu   sync.Mutex        // protects lastRouteCalcTime
+	lastRouteCalcTime atomic.Int64      // nanoseconds the last local route calculation took
 	tpdCache          *tpdSnapshotCache // one-snapshot TTL cache of GetAllTransports, see tpd_cache.go
 	localRoutes       *localRouteMemo   // memoized calculateLocalRoutes BFS, keyed on snapshot version + local first-hop set
 	suspects          *suspectHopCache  // short-TTL penalty cache for intermediates that lost/failed a setup race (see parallel_route_setup.go)
@@ -935,12 +931,12 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		deadRoutes:      newDeadRouteCache(0, 0), // 0 = follow the live route-settings knobs
 		warmRoutes:      newWarmRoutePool(0),     // 0 = follow the live route-settings knob
 		oraclePlans:     newOraclePlanCache(),
-		// Default a mux responder to capacity bulk-spread for the downloads it
-		// serves (see router_serve.go); operators can disable via
-		// SetResponderBulkSpread(false).
-		responderBulkSpread: true,
 	}
 	r.muxFEC.Store(config.MuxFEC)
+	// Default a mux responder to capacity bulk-spread for the downloads it
+	// serves (see router_serve.go); operators can disable via
+	// SetResponderBulkSpread(false).
+	r.responderBulkSpread.Store(true)
 
 	// A transport that closes takes its legs with it, at the close rather than
 	// at whatever timeout above happens to notice the silence (transport_close.go).

@@ -60,18 +60,14 @@ func (r *router) EffectiveMinHops(opts *DialOptions) uint16 {
 // SetExistingTPOnly sets whether to only use existing transports for routing.
 // When true, no new transports will be created when dialing routes.
 func (r *router) SetExistingTPOnly(enabled bool) {
-	r.existingTpOnlyMu.Lock()
-	defer r.existingTpOnlyMu.Unlock()
-	r.existingTpOnly = enabled
+	r.existingTpOnly.Store(enabled)
 	r.logger.Infof("SetExistingTPOnly: %v", enabled)
 }
 
 // SetForceLocalRoutes sets whether to skip the route finder and use local route calculation.
 // When true, routes are calculated locally using transport manager and TPD data.
 func (r *router) SetForceLocalRoutes(enabled bool) {
-	r.forceLocalRoutesMu.Lock()
-	defer r.forceLocalRoutesMu.Unlock()
-	r.forceLocalRoutes = enabled
+	r.forceLocalRoutes.Store(enabled)
 	r.logger.Infof("SetForceLocalRoutes: %v", enabled)
 }
 
@@ -96,40 +92,30 @@ func (r *router) SetMuxMode(mode WeightMode) {
 // should be put into the capacity bulk-spread distribution for the downloads
 // it serves. Default true; see router_serve.go.
 func (r *router) ResponderBulkSpread() bool {
-	r.responderBulkSpreadMu.Lock()
-	defer r.responderBulkSpreadMu.Unlock()
-	return r.responderBulkSpread
+	return r.responderBulkSpread.Load()
 }
 
 // SetResponderBulkSpread toggles responder-side capacity bulk-spread at
 // runtime. Existing route groups are unaffected until they re-establish; an
 // operator `proxy mux mode <x>` still overrides live groups via SetMuxMode.
 func (r *router) SetResponderBulkSpread(on bool) {
-	r.responderBulkSpreadMu.Lock()
-	r.responderBulkSpread = on
-	r.responderBulkSpreadMu.Unlock()
+	r.responderBulkSpread.Store(on)
 	r.logger.Infof("SetResponderBulkSpread: %v", on)
 }
 
 // GetExistingTPOnly returns the current value of the existing-tp-only flag.
 func (r *router) GetExistingTPOnly() bool {
-	r.existingTpOnlyMu.Lock()
-	defer r.existingTpOnlyMu.Unlock()
-	return r.existingTpOnly
+	return r.existingTpOnly.Load()
 }
 
 // GetForceLocalRoutes returns the current value of the force-local-routes flag.
 func (r *router) GetForceLocalRoutes() bool {
-	r.forceLocalRoutesMu.Lock()
-	defer r.forceLocalRoutesMu.Unlock()
-	return r.forceLocalRoutes
+	return r.forceLocalRoutes.Load()
 }
 
 // GetLastRouteCalcTime returns the time it took to calculate the last local route.
 func (r *router) GetLastRouteCalcTime() time.Duration {
-	r.lastRouteCalcMu.Lock()
-	defer r.lastRouteCalcMu.Unlock()
-	return r.lastRouteCalcTime
+	return time.Duration(r.lastRouteCalcTime.Load())
 }
 
 // Close safely stops Router.
