@@ -115,6 +115,10 @@ func (mb *Mailbox) Send(ctx context.Context, out Outgoing) (*SendResult, error) 
 		go func(i int, g *peerGroup) {
 			defer wg.Done()
 			err := mb.deliverGroup(ctx, from, g, msg)
+			if err != nil {
+				mb.log.WithError(err).WithField("peer", g.pk.Hex()).WithField("via", g.suffix).
+					Warn("skymail: not delivered")
+			}
 			for _, r := range g.rcpts {
 				rr := RcptResult{Rcpt: r.Original}
 				if err != nil {

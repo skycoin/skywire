@@ -44,14 +44,18 @@ func (r *RPC) MailRaw(in *visorapi.MailMessageRequest, out *[]byte) (err error) 
 	return err
 }
 
-// MailSend sends a message. See Visor.MailSend.
+// MailSend sends a message. See Visor.MailSend. A send that reached no
+// recipient still answers with its per-recipient reasons: net/rpc drops
+// the reply of a call that returns an error, and the reasons are the
+// useful part, so only a failure with no result is returned as one.
 func (r *RPC) MailSend(in *skymail.Outgoing, out *skymail.SendResult) (err error) {
 	defer rpcutil.LogCall(r.log, "MailSend", nil)(nil, &err)
 	res, err := r.visor.MailSend(*in)
-	if res != nil {
-		*out = *res
+	if res == nil {
+		return err
 	}
-	return err
+	*out = *res
+	return nil
 }
 
 // MailDelete removes one message. See Visor.MailDelete.

@@ -2,12 +2,15 @@ package visor
 
 import (
 	"context"
+	"net"
+	"net/rpc"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -118,4 +121,32 @@ func TestMailboxYieldsForwardedPort25(t *testing.T) {
 	require.False(t, st.Running, "Postfix keeps port 25")
 	_, err = v.MailList("")
 	require.ErrorIs(t, err, errMailboxOff)
+}
+
+// TestMailSendRPCCarriesTheReasons: net/rpc drops the reply of a call
+// that returns an error, which once turned "B refused A's PK" into a
+// bare "not delivered to any recipient" at the CLI.
+func TestMailSendRPCCarriesTheReasons(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 3, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	clients := env.AllClients()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	a, b := mailVisor(t, ctx, clients[0]), mailVisor(t, ctx, clients[1])
+	require.NoError(t, b.MailSetWhitelist([]cipher.PubKey{clients[2].LocalPK()}))
+
+	srv := rpc.NewServer()
+	require.NoError(t, srv.RegisterName(visorapi.RPCPrefix, &RPC{visor: a, log: logrus.New()}))
+	sc, cc := net.Pipe()
+	go srv.ServeConn(sc)
+	api := visorapi.NewRPCClient(nil, cc, visorapi.RPCPrefix, 30*time.Second)
+
+	res, err := api.MailSend(skymail.Outgoing{To: []string{dmsgAddr("bob", clients[1].LocalPK())}, Body: "x"})
+	require.NoError(t, err, "a send that reached nobody still answers")
+	require.Len(t, res.Recipients, 1)
+	require.Contains(t, res.Recipients[0].Err, "not whitelisted")
+
+	_, err = api.MailSend(skymail.Outgoing{Body: "x"})
+	require.Error(t, err, "a send with no result is still an error")
 }

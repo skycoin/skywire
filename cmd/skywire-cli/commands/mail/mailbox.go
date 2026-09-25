@@ -202,13 +202,26 @@ Examples:
 		res, err := mailClient(cmd).MailSend(skymail.Outgoing{
 			From: sendFrom, To: args, Cc: sendCc, Subject: sendSubj, Body: body, InReplyTo: sendReply,
 		})
-		out := renderSend(res)
 		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		out := renderSend(res)
+		if delivered(res) == 0 {
 			// Per-recipient reasons are the useful part of a failure.
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("%w\n%s", err, out))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("not delivered to any recipient\n%s", out))
 		}
 		internal.PrintOutput(cmd.Flags(), res, out)
 	},
+}
+
+func delivered(res *skymail.SendResult) int {
+	n := 0
+	for _, r := range res.Recipients {
+		if r.Err == "" {
+			n++
+		}
+	}
+	return n
 }
 
 func renderSend(res *skymail.SendResult) string {
