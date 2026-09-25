@@ -26,13 +26,13 @@ import (
 	dmsg "github.com/skycoin/skywire/cmd/dmsg/dmsg/commands"
 	dmsgprobe "github.com/skycoin/skywire/cmd/dmsg/dmsgprobe/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
+	visor "github.com/skycoin/skywire/cmd/skywire-visor/commands"
 	"github.com/skycoin/skywire/cmd/skywire/commands/doc"
 	"github.com/skycoin/skywire/cmd/skywire/tui"
 	services "github.com/skycoin/skywire/cmd/svc/skywire-services/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/flags"
-	"github.com/skycoin/skywire/pkg/visor"
 )
 
 var (

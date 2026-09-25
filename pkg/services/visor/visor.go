@@ -91,5 +91,5 @@ func (s *service) Run(ctx context.Context) error {
 	if !compat {
 		return fmt.Errorf("visor: config %q version is incompatible with this binary", path)
 	}
-	return visor.Run(ctx, conf)
+	return visor.Run(ctx, conf, visor.Options{})
 }

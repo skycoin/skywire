@@ -1,5 +1,5 @@
-// Package visor pkg/visor/etc.go c3-vis-core
-package visor
+// Package commands cmd/skywire-visor/commands/etc.go c4-vis-cli
+package commands
 
 import (
 	"fmt"
