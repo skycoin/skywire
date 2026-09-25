@@ -24,13 +24,12 @@ skywire cli mail send <to>...
 ## Flags
 
 ```
-      --attach stringArray          attach a file (repeatable)
-      --attach-base64 stringArray   attach name=BASE64DATA (repeatable; what the desk mail app uses)
-      --cc strings                  carbon-copy recipients
-      --from string                 local part of your address (default "mail")
-      --in-reply-to string          Message-ID this replies to
-  -m, --message string              body (default: read from stdin)
-  -s, --subject string              subject
+      --attach stringArray   attach a file (repeatable)
+      --cc strings           carbon-copy recipients
+      --from string          local part of your address (default "mail")
+      --in-reply-to string   Message-ID this replies to
+  -m, --message string       body (default: read from stdin)
+  -s, --subject string       subject
 ```
 
 ## Global Flags
