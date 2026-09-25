@@ -130,12 +130,12 @@ func (v *Visor) Resume() error {
 	v.networkCtx, v.networkCancel = context.WithCancel(ctx)
 	ctx = v.networkCtx
 
-	registerModules(v.MasterLogger())
-	mainModule := vis
+	mods := registerModules(v.MasterLogger())
+	mainModule := mods.vis
 	if v.conf.Hypervisor != nil {
-		mainModule = hv
+		mainModule = mods.hv
 	}
-	go tm.InitConcurrent(ctx)
+	go mods.tm.InitConcurrent(ctx)
 	mainModule.InitConcurrent(ctx)
 	if err := mainModule.Wait(ctx); err != nil {
 		select {
@@ -145,7 +145,7 @@ func (v *Visor) Resume() error {
 		}
 		return fmt.Errorf("resume: module init failed: %w", err)
 	}
-	if err := tm.Wait(ctx); err != nil {
+	if err := mods.tm.Wait(ctx); err != nil {
 		return fmt.Errorf("resume: transport module init failed: %w", err)
 	}
 	if !v.processRuntimeErrs() {
