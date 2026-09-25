@@ -95,7 +95,10 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 }
 
 // ServeFrames runs one Wisp session over any transport. v2 selects the INFO
-// exchange; false starts with the v1 CONTINUE instead.
+// exchange; false starts with the v1 CONTINUE instead. A v2 session whose
+// client ignores the INFO and opens a stream falls back to v1 rather than
+// refusing it, so a framed transport — which has no handshake to negotiate
+// with — serves v1 and v2 clients alike.
 //
 // It owns frames and closes them before returning.
 func (s *Server) ServeFrames(ctx context.Context, frames Frames, v2 bool) {
@@ -208,8 +211,9 @@ func (s *session) handshake(ctx context.Context) bool {
 		Extensions: []Extension{{ID: ExtUDP}},
 	}))
 
-	// The client answers with its own INFO, or refuses with a CLOSE on
-	// stream 0 when it cannot live with our extension set.
+	// The client answers with its own INFO, refuses with a CLOSE on stream 0
+	// when it cannot live with our extension set, or — being a v1 client that
+	// has no INFO at all — ignores it and opens a stream.
 	rctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	data, err := s.frames.ReadFrame(rctx)
@@ -234,6 +238,24 @@ func (s *session) handshake(ctx context.Context) bool {
 	case PacketClose:
 		s.log.Debug("v2 client refused our extensions")
 		return false
+	case PacketConnect:
+		// A v1 client. v1 has no INFO packet, so a v1 client drops ours on the
+		// floor and opens a stream — that CONNECT is the only version signal
+		// there is. On a framed transport there is no negotiation channel to
+		// read one from either: only the WebSocket handshake carries
+		// Sec-WebSocket-Protocol, and ServeConn has no handshake, so it asks
+		// for v2 unconditionally. Refusing here made every v1 client on a
+		// framed transport unusable — it got a CLOSE instead of its CONTINUE
+		// and never saw a byte.
+		//
+		// So serve it as v1. The CONTINUE it has been waiting for is queued
+		// first, then the CONNECT it already sent; one writer owns the socket,
+		// so they reach the client in that order.
+		s.v2 = false
+		s.log.Debug("v1 session open: client ignored our INFO and opened a stream")
+		s.send(ctx, EncodeContinue(0, s.srv.cfg.Buffer))
+		s.handle(ctx, pkt)
+		return true
 	default:
 		s.send(ctx, EncodeClose(0, CloseInvalidInfo))
 		return false
