@@ -9,17 +9,27 @@
 #   2. runs android/fdroid/check.sh on that commit: fdroid lint, fdroid
 #      checkupdates (the update bot) and fdroid build, in F-Droid's own build
 #      server image;
-#   3. only if all of that passed, pushes the tag fdroid-vX.Y.Z on that commit.
+#   3. signs that build with the release key (android/fdroid/sign.sh), checks
+#      it the way F-Droid will, and attaches it to the mobile-vX.Y.Z release as
+#      skywire-X.Y.Z-fdroid.apk;
+#   4. only if all of that passed, pushes the tag fdroid-vX.Y.Z on that commit.
 #
 # fdroid-v* tags are what the recipe (android/fdroid/com.skycoin.skywire.yml)
 # tells F-Droid's bot to watch, so F-Droid only ever sees a release this lane
-# already built. Publishing is F-Droid's: nothing here uploads anything.
+# already built. The build is reproducible: F-Droid builds the same commit,
+# checks that its build matches skywire-X.Y.Z-fdroid.apk (the recipe's
+# Binaries), and then publishes that APK, signed with our key, rather than
+# signing its own. F-Droid does the publishing; this lane only adds that one
+# file to the release.
 #
 # Run it by hand (Actions → Android F-Droid → Run workflow, or
 # `gh workflow run android-fdroid.yml -f tag=mobile-vX.Y.Z`) to redo this for
 # a tag that already has its release, e.g. after fixing this lane. The source
 # is the tag's; check.sh and the recipe are those of the branch it is run
-# from, so a fix does not need a new release.
+# from, so a fix does not need a new release. If fdroid-vX.Y.Z already exists,
+# that commit is what gets built, since it is what F-Droid builds, and a
+# skywire-X.Y.Z-fdroid.apk already on the release is checked against the new
+# build and left in place, not replaced.
 name: Android F-Droid
 
 on:
@@ -46,12 +56,32 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
-      contents: write # the fdroid-v tag
+      contents: write # the fdroid-v tag, the signed APK on the release
     steps:
       - name: Check the tag name
         run: |
           printf '%s' "$TAG" | grep -qE '^mobile-v[0-9]+\.[0-9]+\.[0-9]+$' \
             || { echo "::error::'$TAG' is not mobile-vX.Y.Z"; exit 1; }
+
+      # The same four secrets android-release.yml signs with. Checked first so
+      # a missing one fails now, not after the build. When android-release.yml
+      # calls this lane it passes them on with `secrets: inherit`.
+      - name: Require signing secrets
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=""
+          [ -n "$KEYSTORE" ]   || missing="$missing ANDROID_KEYSTORE_BASE64"
+          [ -n "$STORE_PASS" ] || missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -n "$KEY_ALIAS" ]  || missing="$missing ANDROID_KEY_ALIAS"
+          [ -n "$KEY_PASS" ]   || missing="$missing ANDROID_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing (see android-release.yml)"
+            exit 1
+          fi
 
       - uses: actions/checkout@v7
         with:
@@ -67,21 +97,39 @@ jobs:
           git archive "$GITHUB_SHA" android/fdroid | tar -x -C "$RUNNER_TEMP/fdroid-ci"
           ls "$RUNNER_TEMP/fdroid-ci/android/fdroid"
 
+      # A re-run for a tag that already has its fdroid-v tag builds that
+      # commit instead of stamping a new one. The APK carries its commit's
+      # hash and date, so only a build of that very commit can match what
+      # F-Droid builds.
       - name: Stamp the tag's version into android/version.properties
         id: version
         run: |
           raw="${TAG#mobile-v}"
           major=${raw%%.*}; rest=${raw#*.}; minor=${rest%%.*}; patch=${rest#*.}
           code=$((major * 10000 + minor * 100 + patch))
-          sed -i -e "s/^versionName=.*/versionName=$raw/" \
-                 -e "s/^versionCode=.*/versionCode=$code/" android/version.properties
-          grep -E '^version(Name|Code)=' android/version.properties
-          if ! git diff --quiet; then
-            git -c user.name='github-actions[bot]' \
-                -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-                commit -q -am "android: version $raw for F-Droid (from $TAG)"
+          fdroid_tag="fdroid-v$raw"
+          if git rev-parse -q --verify "refs/tags/$fdroid_tag^{commit}" >/dev/null; then
+            git merge-base --is-ancestor "refs/tags/$TAG" "refs/tags/$fdroid_tag" \
+              || { echo "::error::$fdroid_tag is not on top of $TAG"; exit 1; }
+            git checkout -q --detach "refs/tags/$fdroid_tag"
+            echo "$fdroid_tag exists; building its commit $(git rev-parse HEAD)"
+          else
+            sed -i -e "s/^versionName=.*/versionName=$raw/" \
+                   -e "s/^versionCode=.*/versionCode=$code/" android/version.properties
+            if ! git diff --quiet; then
+              git -c user.name='github-actions[bot]' \
+                  -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+                  commit -q -am "android: version $raw for F-Droid (from $TAG)"
+            fi
           fi
+          if ! grep -qx "versionName=$raw" android/version.properties \
+             || ! grep -qx "versionCode=$code" android/version.properties; then
+            echo "::error::android/version.properties is not $raw ($code)"
+            exit 1
+          fi
+          grep -E '^version(Name|Code)=' android/version.properties
           echo "name=$raw" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
 
       # The build server image carries a full Android SDK, the NDK is
       # downloaded on top, and the Go payload builds from a full clone. The
@@ -107,6 +155,52 @@ jobs:
           name: fdroid-unsigned-apk
           path: fdroid-out/*.apk
           if-no-files-found: error
+
+      # In a container of its own, so the key is never in the one that ran the
+      # build. A re-run hands sign.sh the APK the release already has, which
+      # must match this build; it is never replaced (F-Droid may already have
+      # checked it).
+      - name: Sign the F-Droid build with the release key and check it as F-Droid will
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          asset="skywire-${{ steps.version.outputs.name }}-fdroid.apk"
+          published=""
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+               --jq '.assets[].name' | grep -qx "$asset"; then
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --pattern "$asset" --dir fdroid-published
+            published="/src/fdroid-published/$asset"
+          fi
+          ks="$RUNNER_TEMP/keystore"
+          mkdir -p "$ks"
+          trap 'rm -rf "$ks"' EXIT
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$ks/release.jks"
+          docker run --rm \
+            -v "$PWD:/src" -v "$ks:/ks:ro" \
+            -v "$RUNNER_TEMP/fdroid-ci:/ci:ro" \
+            -e KEYSTORE=/ks/release.jks \
+            -e ANDROID_KEYSTORE_PASSWORD -e ANDROID_KEY_ALIAS -e ANDROID_KEY_PASSWORD \
+            -e RECIPE=/ci/android/fdroid/com.skycoin.skywire.yml \
+            registry.gitlab.com/fdroid/fdroidserver:buildserver-trixie \
+            bash /ci/android/fdroid/sign.sh \
+              "/src/fdroid-out/com.skycoin.skywire_${{ steps.version.outputs.code }}.apk" \
+              "/src/fdroid-signed/$asset" $published
+
+      - name: Attach skywire-${{ steps.version.outputs.name }}-fdroid.apk to the ${{ env.TAG }} release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          asset="skywire-${{ steps.version.outputs.name }}-fdroid.apk"
+          if [ -f "fdroid-published/$asset" ]; then
+            echo "$asset is already on the release and matches this build; leaving it"
+            exit 0
+          fi
+          gh release upload "$TAG" "fdroid-signed/$asset" --repo "$GITHUB_REPOSITORY"
 
       # Last, so a failure anywhere above means F-Droid never sees this
       # release. A re-run finds the tag already there and leaves it.
