@@ -3,6 +3,7 @@ package deskhost
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"mvdan.cc/sh/v3/shell"
@@ -58,12 +59,14 @@ func TestCliResult(t *testing.T) {
 func TestReplyTo(t *testing.T) {
 	r := replyTo(&skymail.Rendered{
 		From: "Bob <bob@x.skynet>", Subject: "hi", Date: "Mon", MessageID: "<m@x>", Text: "one\r\ntwo\r\n",
-	})
+		To: "carol@elsewhere.skynet, Alice <alice@host.MINE.skynet>",
+	}, "mail@mine.skynet")
 	require.Equal(t, []string{"bob@x.skynet"}, r.To)
 	require.Equal(t, "Re: hi", r.Subject)
 	require.Equal(t, "<m@x>", r.InReplyTo)
+	require.Equal(t, "alice@host.MINE.skynet", r.From, "reply from the address it was sent to")
 	require.Equal(t, "\n\nMon, Bob <bob@x.skynet> wrote:\n> one\n> two\n", r.Body)
-	require.Equal(t, "RE: hi", replyTo(&skymail.Rendered{Subject: "RE: hi"}).Subject)
+	require.Equal(t, "RE: hi", replyTo(&skymail.Rendered{Subject: "RE: hi"}, "").Subject)
 }
 
 func TestSplitAddrs(t *testing.T) {
@@ -75,4 +78,37 @@ func TestMailListAndStatusCmds(t *testing.T) {
 	require.Equal(t, []string{"skywire", "cli", "mail", "inbox", "--json"}, words(t, mailListCmd(skymail.FolderInbox)))
 	require.Equal(t, []string{"skywire", "cli", "mail", "sent", "--json"}, words(t, mailListCmd(skymail.FolderSent)))
 	require.Equal(t, []string{"skywire", "cli", "mail", "--json"}, words(t, mailStatusCmd))
+}
+
+func TestAddressedToFallsBackToDefault(t *testing.T) {
+	m := &skymail.Rendered{To: "someone@other.skynet", Cc: "x@mine.dmsg"}
+	require.Equal(t, "x@mine.dmsg", addressedTo(m, "mail@mine.skynet"), "Cc counts, and .dmsg is the same PK")
+	require.Equal(t, "", addressedTo(&skymail.Rendered{To: "a@other.skynet"}, "mail@mine.skynet"), "not ours: default From")
+	require.Equal(t, "", addressedTo(m, ""))
+}
+
+func TestSendCmdCarriesAttachments(t *testing.T) {
+	got := words(t, mailSendCmd(skymail.Outgoing{
+		To: []string{"b@x.skynet"}, Subject: "s", Body: "b",
+		Attachments: []skymail.OutgoingAttachment{{Name: "it's.bin", Data: []byte{0, 255}}},
+	}))
+	require.Contains(t, got, "it's.bin=AP8=")
+}
+
+func TestAttachmentAndSettingsCmds(t *testing.T) {
+	require.Equal(t, []string{"skywire", "cli", "mail", "attachment", "--sent", "--json", "--", "id", "2"},
+		words(t, mailAttachmentCmd(skymail.FolderSent, "id", 2)))
+	require.Equal(t, []string{"skywire", "cli", "mail", "settings", "--json"}, words(t, mailSettingsCmd(nil)))
+	require.Equal(t, []string{"skywire", "cli", "mail", "settings", "--json", "--", "max_age=7d", "enable=true"},
+		words(t, mailSettingsCmd([]string{"max_age=7d", "enable=true"})))
+}
+
+func TestFmtLimits(t *testing.T) {
+	require.Equal(t, "16MiB", fmtSize(16<<20))
+	require.Equal(t, "1.5MiB", fmtSize(3<<19))
+	require.Equal(t, "2KiB", fmtSize(2048))
+	require.Equal(t, "none", fmtSize(-1))
+	require.Equal(t, "7d", fmtAge(7*24*time.Hour))
+	require.Equal(t, "36h0m0s", fmtAge(36*time.Hour))
+	require.Equal(t, "none", fmtAge(-1))
 }

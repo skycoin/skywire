@@ -8,9 +8,13 @@
 package deskhost
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net/mail"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/skymail"
 )
@@ -72,6 +76,9 @@ func mailSendCmd(out skymail.Outgoing) string {
 	if out.InReplyTo != "" {
 		b.WriteString(" --in-reply-to " + shQuote(out.InReplyTo))
 	}
+	for _, a := range out.Attachments {
+		b.WriteString(" --attach-base64 " + shQuote(a.Name+"="+base64.StdEncoding.EncodeToString(a.Data)))
+	}
 	b.WriteString(" --")
 	for _, to := range out.To {
 		b.WriteString(" " + shQuote(to))
@@ -111,8 +118,9 @@ func cliResult(out string, runErr error, v any) error {
 	return json.Unmarshal([]byte(out), v)
 }
 
-// replyTo prefills a reply to m.
-func replyTo(m *skymail.Rendered) skymail.Outgoing {
+// replyTo prefills a reply to m, sent from whichever of this mailbox's
+// addresses it was sent to (own is any one of them).
+func replyTo(m *skymail.Rendered, own string) skymail.Outgoing {
 	subj := m.Subject
 	if !strings.HasPrefix(strings.ToLower(subj), "re:") {
 		subj = "Re: " + subj
@@ -127,5 +135,82 @@ func replyTo(m *skymail.Rendered) skymail.Outgoing {
 	if i, j := strings.LastIndex(to, "<"), strings.LastIndex(to, ">"); i >= 0 && j > i {
 		to = to[i+1 : j]
 	}
-	return skymail.Outgoing{To: []string{to}, Subject: subj, Body: quoted.String(), InReplyTo: m.MessageID}
+	return skymail.Outgoing{
+		From: addressedTo(m, own), To: []string{to}, Subject: subj, Body: quoted.String(), InReplyTo: m.MessageID,
+	}
+}
+
+// addressedTo is the first To or Cc address at own's PK label, or "".
+func addressedTo(m *skymail.Rendered, own string) string {
+	label := pkLabel(own)
+	if label == "" {
+		return ""
+	}
+	for _, field := range []string{m.To, m.Cc} {
+		list, err := mail.ParseAddressList(field)
+		if err != nil {
+			continue
+		}
+		for _, a := range list {
+			if pkLabel(a.Address) == label {
+				return a.Address
+			}
+		}
+	}
+	return ""
+}
+
+// pkLabel is the PK label of a skywire address: the domain label just
+// before .skynet or .dmsg, lowercased.
+func pkLabel(addr string) string {
+	at := strings.LastIndex(addr, "@")
+	if at < 0 {
+		return ""
+	}
+	labels := strings.Split(strings.ToLower(addr[at+1:]), ".")
+	if len(labels) < 2 {
+		return ""
+	}
+	return labels[len(labels)-2]
+}
+
+func mailAttachmentCmd(folder, id string, n int) string {
+	return "skywire cli mail attachment" + mailFolderFlag(folder) + " --json -- " + shQuote(id) + " " + strconv.Itoa(n)
+}
+
+func mailSettingsCmd(kvs []string) string {
+	cmd := "skywire cli mail settings --json"
+	if len(kvs) == 0 {
+		return cmd
+	}
+	cmd += " --"
+	for _, kv := range kvs {
+		cmd += " " + shQuote(kv)
+	}
+	return cmd
+}
+
+// fmtSize and fmtAge write limits the way `mail settings` reads them.
+func fmtSize(n int64) string {
+	switch {
+	case n < 0:
+		return "none"
+	case n >= 1<<20 && n%(1<<20) == 0:
+		return strconv.FormatInt(n>>20, 10) + "MiB"
+	case n >= 1<<20:
+		return strconv.FormatFloat(float64(n)/(1<<20), 'f', 1, 64) + "MiB"
+	case n >= 1<<10:
+		return strconv.FormatFloat(float64(n)/(1<<10), 'f', 0, 64) + "KiB"
+	}
+	return strconv.FormatInt(n, 10) + "B"
+}
+
+func fmtAge(d time.Duration) string {
+	switch {
+	case d < 0:
+		return "none"
+	case d%(24*time.Hour) == 0:
+		return strconv.FormatInt(int64(d/(24*time.Hour)), 10) + "d"
+	}
+	return d.String()
 }
