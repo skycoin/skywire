@@ -73,7 +73,7 @@ func (v *Visor) Overview() (*Overview, error) {
 	overview := &Overview{
 		PubKey:              v.conf.PK,
 		BuildInfo:           buildinfo.Get(),
-		AppProtoVersion:     supportedProtocolVersion,
+		AppProtoVersion:     SupportedProtocolVersion,
 		Apps:                apps,
 		Transports:          tSummaries,
 		RoutesCount:         routesCount,
@@ -157,9 +157,9 @@ func (v *Visor) Summary() (*Summary, error) {
 		return nil, fmt.Errorf("failed to get routing rules: %w", err)
 	}
 
-	extraRoutes := make([]routingRuleResp, 0, len(routes))
+	extraRoutes := make([]RoutingRuleResp, 0, len(routes))
 	for _, route := range routes {
-		extraRoutes = append(extraRoutes, routingRuleResp{
+		extraRoutes = append(extraRoutes, RoutingRuleResp{
 			Key:     route.KeyRouteID(),
 			Rule:    hex.EncodeToString(route),
 			Summary: route.Summary(),

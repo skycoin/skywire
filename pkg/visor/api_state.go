@@ -156,18 +156,18 @@ var stateSelectAliases = map[string]string{
 	"persistent_transports": SelectTransports,
 }
 
-// stateFieldSet is the parsed --select set. A nil set means "everything in the
+// StateFieldSet is the parsed --select set. A nil set means "everything in the
 // default full snapshot" (proxy stays opt-in even then). An entry present but
 // unknown is ignored here and surfaced as a Note by the builder.
-type stateFieldSet map[string]bool
+type StateFieldSet map[string]bool
 
-// newStateFieldSet parses the requested field keys. An empty/nil fields slice
+// NewStateFieldSet parses the requested field keys. An empty/nil fields slice
 // returns a nil set, i.e. build the full default snapshot.
-func newStateFieldSet(fields []string) stateFieldSet {
+func NewStateFieldSet(fields []string) StateFieldSet {
 	if len(fields) == 0 {
 		return nil
 	}
-	set := make(stateFieldSet, len(fields))
+	set := make(StateFieldSet, len(fields))
 	for _, f := range fields {
 		if f == "" {
 			continue
@@ -183,9 +183,9 @@ func newStateFieldSet(fields []string) stateFieldSet {
 	return set
 }
 
-// has reports whether section k should be built. A nil set (no --select) builds
+// Has reports whether section k should be built. A nil set (no --select) builds
 // every default section; proxy is never a default section (see wantProxy).
-func (s stateFieldSet) has(k string) bool {
+func (s StateFieldSet) Has(k string) bool {
 	if k == SelectProxy {
 		return s != nil && s[k]
 	}
@@ -311,7 +311,7 @@ func (v *Visor) StateSnapshot() (*StateSnapshot, error) {
 // included (see the StateSnapshot type doc). At + Suspended are always populated
 // (both cheap).
 func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) {
-	want := newStateFieldSet(fields)
+	want := NewStateFieldSet(fields)
 	snap := &StateSnapshot{At: time.Now()}
 	note := func(section string, err error) {
 		if err != nil {
@@ -325,7 +325,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		snap.Suspended = susp
 	}
 
-	if want.has(SelectSummary) {
+	if want.Has(SelectSummary) {
 		if sum, err := v.Summary(); err != nil {
 			note("summary", err)
 		} else {
@@ -333,7 +333,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		}
 	}
 
-	if want.has(SelectHealth) {
+	if want.Has(SelectHealth) {
 		if h, err := v.Health(); err != nil {
 			note("health", err)
 		} else {
@@ -346,7 +346,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		}
 	}
 
-	if want.has(SelectRouting) {
+	if want.Has(SelectRouting) {
 		if rs, err := v.RoutingStats(); err != nil {
 			note("routing_stats", err)
 		} else {
@@ -375,7 +375,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 	}
 
 	// route_groups is a cheap count wanted by both the routing and mux views.
-	if want.has(SelectRouting) || want.has(SelectMux) {
+	if want.Has(SelectRouting) || want.Has(SelectMux) {
 		if rgs, err := v.RouteGroups(); err != nil {
 			note("route_groups", err)
 		} else {
@@ -385,14 +385,14 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 
 	// mux and pool share ONE AllRouteGroupMuxInfo call: pool is a filtered
 	// projection of the exact same entries, never computed twice.
-	if want.has(SelectMux) || want.has(SelectPool) {
+	if want.Has(SelectMux) || want.Has(SelectPool) {
 		if mrgs, err := v.AllRouteGroupMuxInfo(); err != nil {
 			note("mux_route_groups", err)
 		} else {
-			if want.has(SelectMux) && len(mrgs) > 0 {
+			if want.Has(SelectMux) && len(mrgs) > 0 {
 				snap.MuxRouteGroups = mrgs
 			}
-			if want.has(SelectPool) {
+			if want.Has(SelectPool) {
 				if pool := poolTableFrom(mrgs); len(pool) > 0 {
 					snap.Pool = pool
 				}
@@ -400,12 +400,12 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		}
 	}
 
-	if want.has(SelectMux) && v.router != nil {
+	if want.Has(SelectMux) && v.router != nil {
 		mc := v.router.MuxCounters()
 		snap.MuxCounters = &mc
 	}
 
-	if want.has(SelectApps) {
+	if want.Has(SelectApps) {
 		if apps, err := v.Apps(); err != nil {
 			note("apps", err)
 		} else {
@@ -413,7 +413,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		}
 	}
 
-	if want.has(SelectTransports) {
+	if want.Has(SelectTransports) {
 		// logs=true so each TransportSummary.Log carries the transport's
 		// cumulative recv/sent byte counters — the passive throughput totals an
 		// operator debugging a slow/idle link wants, surfaced without a second call.
@@ -429,7 +429,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		}
 	}
 
-	if want.has(SelectModules) {
+	if want.Has(SelectModules) {
 		snap.Modules = &ModulePresence{
 			StatsTracker:       v.statsTracker != nil,
 			UptimeRecorder:     v.uptimeRecorder != nil,
@@ -439,25 +439,25 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		}
 	}
 
-	if want.has(SelectCXO) {
+	if want.Has(SelectCXO) {
 		if cf := v.CXOFeedStates(); len(cf) > 0 {
 			snap.CXOFeeds = cf
 		}
 		snap.TPDLeafPub = v.tpdLeafPublisherState()
 	}
 
-	if want.has(SelectDiag) {
+	if want.Has(SelectDiag) {
 		snap.Diag = v.DiagSnapshot()
 	}
 
-	if want.has(SelectRoles) {
+	if want.Has(SelectRoles) {
 		snap.Roles = v.RolesSnapshot()
 	}
 
 	// proxy is opt-in (never in the default snapshot): the visor-side
 	// proxystatus snapshot for the skysocks surface — per-leg mux telemetry,
 	// running flag, and the range-split summary when the client has pushed it.
-	if want.has(SelectProxy) {
+	if want.Has(SelectProxy) {
 		if ps, err := v.proxyStatusProvider().StatusSnapshot(proxystatus.SurfaceSkysocks); err != nil {
 			note("proxy", err)
 		} else {

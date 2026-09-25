@@ -286,8 +286,8 @@ type GroupCreateArgs struct {
 	Listed bool `json:"listed,omitempty"`
 }
 
-// kind resolves the group type from either field, defaulting to public.
-func (a GroupCreateArgs) kind() skychatgroup.Kind {
+// ResolvedKind resolves the group type from either field, defaulting to public.
+func (a GroupCreateArgs) ResolvedKind() skychatgroup.Kind {
 	if a.Kind != "" {
 		return a.Kind
 	}
@@ -447,7 +447,7 @@ func (v *Visor) GroupCreate(args GroupCreateArgs) (GroupInfo, string, error) {
 	if mgr == nil {
 		return GroupInfo{}, "", ErrGroupingDisabled
 	}
-	r, err := mgr.Create(args.Name, args.kind(), args.InitialMembers,
+	r, err := mgr.Create(args.Name, args.ResolvedKind(), args.InitialMembers,
 		skychatgroup.WithPeerBackfill(!args.DisablePeerBackfill),
 		skychatgroup.WithListed(args.Listed))
 	if err != nil {

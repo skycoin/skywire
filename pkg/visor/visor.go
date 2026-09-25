@@ -69,7 +69,8 @@ var (
 )
 
 const (
-	supportedProtocolVersion = "0.1.0"
+	// SupportedProtocolVersion is the app protocol version a visor reports.
+	SupportedProtocolVersion = "0.1.0"
 	shortHashLen             = 6
 	// moduleShutdownTimeout is the timeout given to a module to shutdown cleanly.
 	// Otherwise the shutdown logic will continue and report a timeout error.

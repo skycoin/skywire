@@ -1329,14 +1329,17 @@ type LogsRes struct {
 type publicAutoconnectReq struct {
 	PublicAutoconnect bool `json:"public_autoconnect"`
 }
-type routingRuleResp struct {
+
+// RoutingRuleResp is one routing rule as the summary and the hypervisor API
+// report it: its route ID and a hex or summarized form of the rule.
+type RoutingRuleResp struct {
 	Key     routing.RouteID      `json:"key"`
 	Rule    string               `json:"rule"`
 	Summary *routing.RuleSummary `json:"rule_summary,omitempty"`
 }
 
-func makeRoutingRuleResp(key routing.RouteID, rule routing.Rule, summary bool) routingRuleResp {
-	resp := routingRuleResp{
+func makeRoutingRuleResp(key routing.RouteID, rule routing.Rule, summary bool) RoutingRuleResp {
+	resp := RoutingRuleResp{
 		Key:  key,
 		Rule: hex.EncodeToString(rule),
 	}

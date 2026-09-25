@@ -606,7 +606,7 @@ type Summary struct {
 	Overview     *Overview         `json:"overview"`
 	Health       *HealthInfo       `json:"health"`
 	Uptime       float64           `json:"uptime"`
-	Routes       []routingRuleResp `json:"routes"`
+	Routes       []RoutingRuleResp `json:"routes"`
 	RouteGroups  []RouteGroupInfo  `json:"route_groups,omitempty"`
 	IsHypervisor bool              `json:"is_hypervisor,omitempty"`
 	// HypervisorAddr is the host:port the hypervisor UI is bound to

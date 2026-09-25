@@ -209,12 +209,12 @@ func TestDmsgRelayRole_RefusesToRelay(t *testing.T) {
 // roles is its own --select subtree: asking for it builds nothing else (the
 // full snapshot is ~900 KB and a projected select must stay cheap).
 func TestStateFieldSet_RolesProjection(t *testing.T) {
-	set := newStateFieldSet([]string{SelectRoles})
-	require.True(t, set.has(SelectRoles))
+	set := NewStateFieldSet([]string{SelectRoles})
+	require.True(t, set.Has(SelectRoles))
 	for _, k := range []string{SelectSummary, SelectHealth, SelectRouting, SelectMux,
 		SelectApps, SelectTransports, SelectModules, SelectCXO, SelectProxy, SelectDiag} {
-		require.False(t, set.has(k), "--select roles must not build %q", k)
+		require.False(t, set.Has(k), "--select roles must not build %q", k)
 	}
-	require.True(t, newStateFieldSet(nil).has(SelectRoles), "roles is in the default snapshot")
+	require.True(t, NewStateFieldSet(nil).Has(SelectRoles), "roles is in the default snapshot")
 	require.Contains(t, StateSelectKeys, SelectRoles, "the key must be documented in --select help")
 }

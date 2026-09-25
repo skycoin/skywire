@@ -115,7 +115,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 		o: &Overview{
 			PubKey:          localPK,
 			BuildInfo:       buildinfo.Get(),
-			AppProtoVersion: supportedProtocolVersion,
+			AppProtoVersion: SupportedProtocolVersion,
 			Apps: []*appserver.AppState{
 				{AppConfig: appserver.AppConfig{Name: "foo.v1.0", Binary: "foo.v1.0", AutoStart: false, Port: 10}},
 				{AppConfig: appserver.AppConfig{Name: "bar.v2.0", Binary: "bar.v2.0", AutoStart: false, Port: 20}},
@@ -176,7 +176,7 @@ func (mc *mockRPCClient) StateSnapshotProjected(fields []string) (*StateSnapshot
 	if err != nil {
 		return nil, err
 	}
-	if set := newStateFieldSet(fields); set != nil && !set.has(SelectSummary) {
+	if set := NewStateFieldSet(fields); set != nil && !set.Has(SelectSummary) {
 		snap.Summary = nil
 	}
 	return snap, nil
@@ -204,9 +204,9 @@ func (mc *mockRPCClient) Summary() (*Summary, error) {
 		return nil, err
 	}
 
-	extraRoutes := make([]routingRuleResp, 0, len(routes))
+	extraRoutes := make([]RoutingRuleResp, 0, len(routes))
 	for _, route := range routes {
-		extraRoutes = append(extraRoutes, routingRuleResp{
+		extraRoutes = append(extraRoutes, RoutingRuleResp{
 			Key:     route.KeyRouteID(),
 			Rule:    hex.EncodeToString(route),
 			Summary: route.Summary(),

@@ -27,7 +27,7 @@ func (hv *Hypervisor) getRoutes() http.HandlerFunc {
 			return
 		}
 
-		resp := make([]routingRuleResp, len(rules))
+		resp := make([]RoutingRuleResp, len(rules))
 		for i, rule := range rules {
 			resp[i] = makeRoutingRuleResp(rule.KeyRouteID(), rule, qSummary)
 		}
