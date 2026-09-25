@@ -129,6 +129,15 @@ func TestAcceptLoopKeepsAcceptingWhileAnOpenIsBlocked(t *testing.T) {
 		"accepted = %d, want >= %d — the accept loop is serializing behind a blocked Open",
 		c.accept.accepted.Load(), n)
 
-	// And none of them completed an open while the write was wedged.
-	require.Zero(t, c.accept.opened.Load(), "an open completed while the conn was blocked")
+	// And the opens really were wedged — otherwise the accepts above would
+	// prove nothing, since n fast opens also reach n accepts.
+	//
+	// Not zero: yamux can carry one Open through before the blocked write
+	// bites, so exactly how many complete is timing- and platform-dependent.
+	// Asserting zero passed on linux/darwin and failed on windows with
+	// "Should be zero, but was 1". What the blocked conn guarantees is that
+	// they cannot ALL complete.
+	require.Less(t, c.accept.opened.Load(), uint64(n),
+		"every open completed while the conn was blocked — the write is not actually wedging Open, "+
+			"so this test would pass with the fix reverted")
 }
