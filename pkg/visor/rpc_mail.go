@@ -69,3 +69,20 @@ func (r *RPC) MailSetWhitelist(in *[]cipher.PubKey, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "MailSetWhitelist", in)(nil, &err)
 	return r.visor.MailSetWhitelist(*in)
 }
+
+// MailAttachment decodes one attachment. See Visor.MailAttachment.
+func (r *RPC) MailAttachment(in *visorapi.MailAttachmentRequest, out *skymail.AttachmentData) (err error) {
+	defer rpcutil.LogCall(r.log, "MailAttachment", in)(nil, &err)
+	a, err := r.visor.MailAttachment(in.Folder, in.ID, in.N)
+	if err != nil {
+		return err
+	}
+	*out = *a
+	return nil
+}
+
+// MailSetSettings changes the mailbox settings. See Visor.MailSetSettings.
+func (r *RPC) MailSetSettings(in *visorapi.MailSettingsUpdate, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "MailSetSettings", in)(nil, &err)
+	return r.visor.MailSetSettings(*in)
+}

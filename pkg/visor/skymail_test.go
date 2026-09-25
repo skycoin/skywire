@@ -5,7 +5,7 @@ import (
 	"net"
 	"net/rpc"
 	"path/filepath"
-	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -24,7 +24,7 @@ import (
 
 func TestSkymailDefaults(t *testing.T) {
 	conf := &visorconfig.V1{LocalPath: "/opt/skywire/local"}
-	require.Equal(t, runtime.GOOS == "js", skymailEnabled(conf), "no section: on only where no MTA can run")
+	require.True(t, skymailEnabled(conf), "no section: on, with the default limits")
 	require.Equal(t, "/opt/skywire/mail", skymailDir(conf), "beside local/, which the wasm visor never persists")
 
 	conf.Skymail = &visorconfig.SkymailConfig{Enable: true, Dir: "/srv/mail"}
@@ -149,4 +149,59 @@ func TestMailSendRPCCarriesTheReasons(t *testing.T) {
 
 	_, err = api.MailSend(skymail.Outgoing{Body: "x"})
 	require.Error(t, err, "a send with no result is still an error")
+}
+
+// TestMailSettingsApplyLiveAndPersist: off, on again (port 25 re-binds
+// at once) and new limits, all without a restart, and all in the file.
+func TestMailSettingsApplyLiveAndPersist(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 2, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	clients := env.AllClients()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	a, b := mailVisor(t, ctx, clients[0]), mailVisor(t, ctx, clients[1])
+
+	path := filepath.Join(t.TempDir(), "config.json")
+	_, sk := cipher.GenerateKeyPair()
+	common, err := visorconfig.NewCommon(logging.NewMasterLogger(), path, &sk)
+	require.NoError(t, err)
+	common.PK = clients[1].LocalPK()
+	b.conf.Common = common
+
+	off, on := false, true
+	require.NoError(t, b.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &off}))
+	st, err := b.MailStatus()
+	require.NoError(t, err)
+	require.False(t, st.Running)
+	require.Equal(t, "disabled", st.Reason)
+	_, err = a.MailSend(skymail.Outgoing{To: []string{dmsgAddr("bob", clients[1].LocalPK())}, Body: "x"})
+	require.Error(t, err, "nothing listens on 25 while it is off")
+
+	small, age := int64(2048), time.Hour
+	require.NoError(t, b.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &on, MaxMessageSize: &small, MaxAge: &age}))
+	st, err = b.MailStatus()
+	require.NoError(t, err)
+	require.True(t, st.Running, "port 25 bound again straight away")
+	require.Equal(t, small, st.Limits.MaxMessageSize)
+	require.Equal(t, skymail.DefaultMaxTotalSize, st.Limits.MaxTotalSize, "unset fields keep their default")
+
+	// The send made while it was off leaves dmsg refusing this peer for
+	// about two seconds (error 202), so wait for the answer to come from
+	// the mailbox itself.
+	var res *skymail.SendResult
+	require.Eventually(t, func() bool {
+		res, _ = a.MailSend(skymail.Outgoing{To: []string{dmsgAddr("bob", clients[1].LocalPK())}, Body: strings.Repeat("z", 4000)}) //nolint:errcheck
+		return res != nil && strings.Contains(res.Recipients[0].Err, "552")
+	}, 10*time.Second, 200*time.Millisecond, "the new size limit applies at once")
+	res, err = a.MailSend(skymail.Outgoing{To: []string{dmsgAddr("bob", clients[1].LocalPK())}, Body: "fits"})
+	require.NoError(t, err)
+	require.Equal(t, "dmsg", res.Recipients[0].Via)
+
+	saved, err := visorconfig.ReadFile(path)
+	require.NoError(t, err)
+	require.NotNil(t, saved.Skymail)
+	require.True(t, saved.Skymail.Enable)
+	require.Equal(t, small, saved.Skymail.MaxMessageSize)
+	require.Equal(t, visorconfig.Duration(age), saved.Skymail.MaxAge)
 }

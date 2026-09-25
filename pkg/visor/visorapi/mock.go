@@ -1875,3 +1875,11 @@ func (mc *mockRPCClient) MailDelete(string, string) error { return nil }
 
 // MailSetWhitelist implements API.
 func (mc *mockRPCClient) MailSetWhitelist([]cipher.PubKey) error { return nil }
+
+// MailAttachment implements API.
+func (mc *mockRPCClient) MailAttachment(string, string, int) (*skymail.AttachmentData, error) {
+	return &skymail.AttachmentData{}, nil
+}
+
+// MailSetSettings implements API.
+func (mc *mockRPCClient) MailSetSettings(MailSettingsUpdate) error { return nil }
