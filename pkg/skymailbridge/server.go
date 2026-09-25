@@ -27,6 +27,7 @@ import (
 	"io"
 	"net"
 	"net/smtp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -93,6 +94,10 @@ type Config struct {
 	// HeloName is the EHLO/HELO name sent to the peer. Defaults to
 	// DefaultHeloName when empty.
 	HeloName string
+	// Dialers, when set, maps each accepted suffix to the dialer for
+	// its network (".skynet" to a skywire route, ".dmsg" to dmsg); Serve's
+	// dialer and Suffix are then unused.
+	Dialers map[string]Dialer
 	// RemotePort is the peer routing port to dial. Defaults to 25
 	// (matching the SMTP convention) when zero.
 	RemotePort uint16
@@ -129,42 +134,70 @@ func (c Config) Validate() error {
 
 // Serve runs the bridge until ctx is canceled or lis is closed: every
 // envelope accepted from the local MTA is relayed to the peer named by
-// its recipients' PK label.
+// its recipients' PK label, over the network its suffix names. With
+// cfg.Dialers set, each suffix there is accepted and dialed with its
+// own dialer; otherwise cfg.Suffix is, with dialer.
 func Serve(ctx context.Context, lis net.Listener, dialer Dialer, cfg Config, log logrus.FieldLogger) error {
-	if dialer == nil {
-		return errors.New("skymailbridge: Dialer is nil")
-	}
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
 	cfg = cfg.withDefaults()
-	return ServeHandler(ctx, lis, &relayHandler{dialer: dialer, cfg: cfg, log: orDefaultLog(log)}, cfg.HeloName, log)
+	dialers := cfg.Dialers
+	if len(dialers) == 0 {
+		if dialer == nil {
+			return errors.New("skymailbridge: Dialer is nil")
+		}
+		dialers = map[string]Dialer{cfg.Suffix: dialer}
+	}
+	suffixes := make([]string, 0, len(dialers))
+	for s := range dialers {
+		suffixes = append(suffixes, s)
+	}
+	sort.Strings(suffixes)
+	h := &relayHandler{dialers: dialers, suffixes: suffixes, cfg: cfg, log: orDefaultLog(log)}
+	return ServeHandler(ctx, lis, h, cfg.HeloName, log)
 }
 
-// relayHandler is the bridge's Handler: it accepts only skynet
-// recipients that share one peer, and delivers by relaying the
-// envelope to that peer.
+// relayHandler is the bridge's Handler: it accepts skywire recipients
+// that share one peer and one network, and delivers by relaying the
+// envelope to that peer over that network. It never switches networks:
+// the suffix is the sender's choice.
 type relayHandler struct {
-	dialer Dialer
-	cfg    Config
-	log    logrus.FieldLogger
+	dialers  map[string]Dialer
+	suffixes []string
+	cfg      Config
+	log      logrus.FieldLogger
+}
+
+// parse finds the suffix rcpt ends in and parses it under that suffix.
+func (h *relayHandler) parse(rcpt string) (suffix string, r Recipient, err error) {
+	for _, s := range h.suffixes {
+		pk, fwd, ok, err := ParseRecipient(rcpt, s, h.cfg.Mode)
+		if err != nil {
+			return "", Recipient{}, err
+		}
+		if ok {
+			return s, Recipient{Original: rcpt, Forward: fwd, PeerPK: pk}, nil
+		}
+	}
+	return "", Recipient{}, nil
 }
 
 func (h *relayHandler) Rcpt(_ net.Conn, _, rcpt string, accepted []string) error {
-	pk, _, isSkynet, err := ParseRecipient(rcpt, h.cfg.Suffix, h.cfg.Mode)
+	suffix, r, err := h.parse(rcpt)
 	if err != nil {
 		return &Reply{Code: 550, Enhanced: "5.1.3", Text: err.Error()}
 	}
-	if !isSkynet {
-		return &Reply{Code: 550, Enhanced: "5.7.1", Text: fmt.Sprintf("%s does not end in %s; skymail-bridge only handles skynet recipients", rcpt, h.cfg.Suffix)}
+	if suffix == "" {
+		return &Reply{Code: 550, Enhanced: "5.7.1", Text: fmt.Sprintf("%s does not end in %s; skymail-bridge only handles skywire recipients", rcpt, strings.Join(h.suffixes, " or "))}
 	}
-	// All RCPT TOs in one envelope must dial the same peer; per-recipient
-	// fanout would require splitting the DATA stream. 451 makes the
-	// upstream MTA retry the extra recipient separately.
+	// All RCPT TOs in one envelope must reach the same peer the same
+	// way; per-recipient fanout would require splitting the DATA stream.
+	// 451 makes the upstream MTA retry the extra recipient separately.
 	if len(accepted) > 0 {
-		first, _, _, _ := ParseRecipient(accepted[0], h.cfg.Suffix, h.cfg.Mode) //nolint:errcheck // accepted only after parsing cleanly
-		if first != pk {
-			return &Reply{Code: 451, Enhanced: "4.7.1", Text: fmt.Sprintf("skymail-bridge: envelope mixes peers (%s vs %s); requeue per-recipient", first, pk)}
+		firstSuffix, first, _ := h.parse(accepted[0]) //nolint:errcheck // accepted only after parsing cleanly
+		if first.PeerPK != r.PeerPK || firstSuffix != suffix {
+			return &Reply{Code: 451, Enhanced: "4.7.1", Text: fmt.Sprintf("skymail-bridge: envelope mixes peers or networks (%s vs %s); requeue per-recipient", accepted[0], rcpt)}
 		}
 	}
 	return nil
@@ -172,18 +205,22 @@ func (h *relayHandler) Rcpt(_ net.Conn, _, rcpt string, accepted []string) error
 
 func (h *relayHandler) Deliver(ctx context.Context, env Envelope) (string, error) {
 	rcpts := make([]Recipient, 0, len(env.Rcpts))
-	for _, r := range env.Rcpts {
-		pk, fwd, _, err := ParseRecipient(r, h.cfg.Suffix, h.cfg.Mode)
+	var suffix string
+	for _, rc := range env.Rcpts {
+		s, r, err := h.parse(rc)
 		if err != nil {
 			return "", err
 		}
-		rcpts = append(rcpts, Recipient{Original: r, Forward: fwd, PeerPK: pk})
+		suffix = s
+		rcpts = append(rcpts, r)
 	}
-	if err := Relay(ctx, h.dialer, h.cfg, env.From, rcpts, env.Body, h.log); err != nil {
+	cfg := h.cfg
+	cfg.Suffix = suffix
+	if err := Relay(ctx, h.dialers[suffix], cfg, env.From, rcpts, env.Body, h.log); err != nil {
 		h.log.WithError(err).Warn("skymailbridge: relay")
 		return "", &Reply{Code: 451, Enhanced: "4.4.1", Text: "peer relay failed: " + err.Error()}
 	}
-	return "Ok: queued via skymail-bridge", nil
+	return "Ok: queued via skymail-bridge (" + strings.TrimPrefix(suffix, ".") + ")", nil
 }
 
 // Recipient is one parsed RCPT TO entry.

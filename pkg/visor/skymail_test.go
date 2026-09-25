@@ -249,3 +249,27 @@ func TestMailSettingsOverRPC(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, st.Running)
 }
+
+// TestSkynetAddressNeverFallsBackToDmsg: dmsg reaches B, but there is no
+// skynet networker here, so B's .skynet address must fail — the suffix
+// names the network, and the mailbox does not quietly swap it.
+func TestSkynetAddressNeverFallsBackToDmsg(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 2, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	clients := env.AllClients()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	a, b := mailVisor(t, ctx, clients[0]), mailVisor(t, ctx, clients[1])
+
+	res, err := a.MailSend(skymail.Outgoing{To: []string{"bob@" + clients[1].LocalPK().DNSLabel() + ".skynet"}, Body: "x"})
+	require.Error(t, err)
+	require.NotEmpty(t, res.Recipients[0].Err)
+	inbox, err := b.MailList(skymail.FolderInbox)
+	require.NoError(t, err)
+	require.Empty(t, inbox, "not delivered over dmsg behind the sender's back")
+
+	res, err = a.MailSend(skymail.Outgoing{To: []string{bobAt(clients[1].LocalPK())}, Body: "x"})
+	require.NoError(t, err, ".dmsg still reaches it")
+	require.Equal(t, "dmsg", res.Recipients[0].Via)
+}
