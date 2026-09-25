@@ -965,6 +965,15 @@ func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err
 	defer func() { err = g.err(err) }()
 	// The ack wait re-arms its deadline; after a snub it must stay in the past.
 	ackDeadline := g.deadliner(st, nil)
+	// The abort (abortStream) unblocks the ack read with a deadline error, so
+	// an attempt taken away under its body can fail as a timeout, a write
+	// error or a refusal, whichever lands first. All of them are OUR doing:
+	// name the abandonment, which g.err above then classifies. Runs before it.
+	defer func() {
+		if err != nil && g.abandoned() {
+			ack, err = chunkAck{}, errChunkAbandoned
+		}
+	}()
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
 	head := buildUploadHead(s.u.req, http.MethodPut, s.chunkURI(), int64(len(buf)),
