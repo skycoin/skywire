@@ -796,7 +796,10 @@ func TestStreamBench(t *testing.T) {
 			// tun2 goes silent rather than away: it is SNUBBED (its socket
 			// stays open, so no guard and no sweep retires it) and sits out
 			// for the rest of the object — a route leaving mid-object.
-			skysettings.TunnelSnubAfter: int64(time.Second),
+			// The bound stays above the router's 1.5 s reorder timeout: every
+			// leg here has loss, and at 1 s a live tunnel wedged behind one
+			// lost packet was snubbed too and then sat out the whole hold.
+			skysettings.TunnelSnubAfter: int64(3 * time.Second),
 			skysettings.TunnelSnubHold:  int64(time.Minute),
 		}))
 		slow := cfg.hopLeg("slow", 2, nextSeed())
@@ -856,11 +859,12 @@ func TestStreamBench(t *testing.T) {
 		if top > 0.4+slack {
 			t.Errorf("top route carried %.1f%% of the object, over the %.1f%% cap", 100*top, 100*(0.4+slack))
 		}
-		// The snubbed chunks sat out rsProbeTimeout (20 s) before the abort
-		// unblocked their reads; with it the cell runs in ~11 s at 2 MB/s,
-		// paced by the slow route the cap forces a third of the object onto.
+		// The cell is paced by the slow route: the cap leaves it the 20 % the
+		// two fast routes cannot take, ~10 MB at 1 MB/s, after the 3 s snub —
+		// ~15 s. It ran 21-24 s when the planner weighed the fast routes as
+		// unmeasured probes and loaded the slow one to its cap instead.
 		if x.elapsed >= 20*time.Second {
-			t.Errorf("object took %v: the snubbed tunnel's chunks waited out their read deadline", x.elapsed)
+			t.Errorf("object took %v: the slow route carried more than the cap forces onto it", x.elapsed)
 		}
 		assertIntegrity(t)
 	})

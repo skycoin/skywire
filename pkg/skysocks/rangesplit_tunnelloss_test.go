@@ -296,10 +296,11 @@ func TestRangeSplitChunkFailoverOnTunnelLoss(t *testing.T) {
 		t.Fatal("reassembled body does not match origin after the tunnel died")
 	}
 
-	// No chunk may be issued to the dead tunnel afterwards.
-	if n := bAccepted.Load(); n != acceptedAtCut {
-		t.Fatalf("tunnel B accepted %d stream(s) after it was closed", n-acceptedAtCut)
-	}
+	// No chunk may be issued to the dead tunnel afterwards. B's accept count
+	// cannot show that: yamux refuses Open on a closed session, so the only
+	// streams B's far end can still accept are ones whose SYN was in flight at
+	// the cut, and counting them failed this test about one run in 30. What
+	// can go wrong is the pick, so that is what is checked.
 	for i := 0; i < 64; i++ {
 		if s := client.pickSessionFor(pickRecv); s == bSess {
 			t.Fatal("pickSessionFor returned the closed tunnel")

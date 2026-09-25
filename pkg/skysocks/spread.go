@@ -485,6 +485,7 @@ func (c *Client) spreadCandidates(dir spreadDir) (sessions []*yamux.Session, cap
 		}
 		var bps, prior float64
 		if m != nil {
+			m.sample(now, s.NumStreams() > 0)
 			bps, _ = m.capacityDir(now, dir == spreadUp)
 			prior = m.prior()
 		}
