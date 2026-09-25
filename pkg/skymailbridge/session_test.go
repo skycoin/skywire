@@ -94,3 +94,46 @@ func TestBridgeRefusesNonSkynetRecipients(t *testing.T) {
 		t.Fatalf("err = %v, want a 550", err)
 	}
 }
+
+// TestBridgeDialsTheNetworkTheSuffixNames: with a dialer per suffix,
+// .skynet mail goes out on the skynet dialer and .dmsg mail on the dmsg
+// one, never the other; an envelope mixing them is deferred.
+func TestBridgeDialsTheNetworkTheSuffixNames(t *testing.T) {
+	var mu sync.Mutex
+	used := map[string]int{}
+	peer := &recorder{}
+	network := func(name string) Dialer {
+		return pipeDialer{serve: func(c net.Conn) {
+			mu.Lock()
+			used[name]++
+			mu.Unlock()
+			defer c.Close() //nolint:errcheck
+			handleSession(context.Background(), c, peer, "peer")
+		}}
+	}
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go Serve(ctx, lis, nil, Config{Dialers: map[string]Dialer{".skynet": network("skynet"), ".dmsg": network("dmsg")}}, logrus.New()) //nolint:errcheck
+
+	pk := mustPK(t)
+	for _, sfx := range []string{".skynet", ".dmsg"} {
+		if err := smtp.SendMail(lis.Addr().String(), nil, "a@b.c", []string{"u@" + pk.DNSLabel() + sfx}, []byte("x\r\n")); err != nil {
+			t.Fatalf("%s: %v", sfx, err)
+		}
+	}
+	mu.Lock()
+	if used["skynet"] != 1 || used["dmsg"] != 1 {
+		t.Fatalf("dials per network = %v, want one each", used)
+	}
+	mu.Unlock()
+
+	err = smtp.SendMail(lis.Addr().String(), nil, "a@b.c",
+		[]string{"u@" + pk.DNSLabel() + ".skynet", "v@" + pk.DNSLabel() + ".dmsg"}, []byte("x\r\n"))
+	if err == nil || !strings.Contains(err.Error(), "451") {
+		t.Fatalf("mixed networks: err = %v, want a 451", err)
+	}
+}

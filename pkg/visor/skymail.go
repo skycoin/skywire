@@ -22,7 +22,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
-	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skymail"
@@ -33,11 +32,6 @@ import (
 
 // skymailPort is SMTP's port, on dmsg and skynet alike.
 const skymailPort = 25
-
-// skymailSkynetDialTimeout bounds the skynet attempt of a .skynet
-// delivery before it falls back to dmsg, so a peer without a route yet
-// is still reached within the relay's own dial budget.
-const skymailSkynetDialTimeout = 12 * time.Second
 
 // errMailboxOff answers every mail call while the mailbox is not running.
 var errMailboxOff = errors.New("mailbox is not running on this visor")
@@ -239,7 +233,7 @@ func (v *Visor) startSkymail() error {
 			return remotePK(c.RemoteAddr())
 		},
 		Dialers: map[string]skymailbridge.Dialer{
-			".skynet": skynetThenDmsgDialer{dmsgC: v.dmsgC},
+			".skynet": skynetMailDialer{},
 			".dmsg":   &visorDmsgDialer{c: v.dmsgC},
 		},
 		Limits: limits,
@@ -290,26 +284,15 @@ func (v *Visor) stopSkymail(reason string) {
 	h.reason = reason
 }
 
-// skynetThenDmsgDialer reaches a .skynet address over a route when one
-// can be built in time, and over dmsg otherwise. Both authenticate the
-// peer by PK, which is all the mailbox relies on.
-type skynetThenDmsgDialer struct{ dmsgC *dmsg.Client }
+// skynetMailDialer reaches a .skynet address over a skywire route and
+// nothing else: the suffix is the sender's choice of network, so a
+// failed route is reported, not quietly replaced with dmsg. (A .dmsg
+// address goes to the dmsg client, whose sessions may themselves ride
+// skynet; that choice is dmsg's.)
+type skynetMailDialer struct{}
 
-func (d skynetThenDmsgDialer) Dial(ctx context.Context, peer cipher.PubKey, port uint16) (net.Conn, error) {
-	sctx, cancel := context.WithTimeout(ctx, skymailSkynetDialTimeout)
-	conn, err := appnet.DialContext(sctx, appnet.Addr{Net: appnet.TypeSkynet, PubKey: peer, Port: routing.Port(port)})
-	cancel()
-	if err == nil {
-		return conn, nil
-	}
-	if ctx.Err() != nil {
-		return nil, fmt.Errorf("skynet: %w", err)
-	}
-	conn, derr := d.dmsgC.Dial(ctx, dmsg.Addr{PK: peer, Port: port})
-	if derr != nil {
-		return nil, fmt.Errorf("skynet: %v; dmsg: %w", err, derr)
-	}
-	return conn, nil
+func (skynetMailDialer) Dial(ctx context.Context, peer cipher.PubKey, port uint16) (net.Conn, error) {
+	return appnet.DialContext(ctx, appnet.Addr{Net: appnet.TypeSkynet, PubKey: peer, Port: routing.Port(port)})
 }
 
 func (v *Visor) mailbox() (*skymailRuntime, error) {

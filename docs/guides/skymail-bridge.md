@@ -30,6 +30,11 @@ keeps the change in `settings.json` beside the mail (`none` removes a
 bound). The config section `skymail` (`enable`, `max_message_size`,
 `max_total_size`, `max_age`) sets the baseline those override.
 
+The suffix picks the network, strictly: `.dmsg` goes over dmsg (whose
+sessions may themselves ride skynet) and `.skynet` over a skywire
+route. A `.skynet` delivery that cannot get a route fails rather than
+taking dmsg instead; each delivery reports the network that carried it.
+
 In the browser desk the same actions are the ☰ **mail** app. Sending is
 immediate: a recipient whose visor is offline gets an error, and nothing
 is queued. The mailbox also delivers to a Postfix host set up as below:
@@ -97,6 +102,8 @@ The `.skynet` and `.dmsg` suffixes both terminate at the bridge,
 which then picks the underlying transport based on the suffix —
 `.skynet` uses the skywire router (works over arbitrary visor
 transports including stcpr / sudph); `.dmsg` uses dmsg directly.
+Neither falls back to the other. The standalone `smb` bridge has no
+router, so it handles its one suffix over dmsg.
 
 ## Required Postfix overrides for synthetic domains
 
