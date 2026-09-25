@@ -221,9 +221,7 @@ func (r *router) DialRoutes(
 	}
 
 	// Check if existing transport only mode is set on the router
-	r.existingTpOnlyMu.Lock()
-	routerExistingTpOnly := r.existingTpOnly
-	r.existingTpOnlyMu.Unlock()
+	routerExistingTpOnly := r.existingTpOnly.Load()
 
 	// Only run route setup hooks (which may create new transports) if UseExistingTpOnly is false
 	// on both the router level and the dial options level
@@ -280,9 +278,7 @@ func (r *router) DialRoutes(
 	// transport cache (~1s, 1.5k entries) for the same answer. Fail fast in
 	// that mode, and don't emit the "Route finder failed" wording either,
 	// since no route-finder query was ever made.
-	r.forceLocalRoutesMu.Lock()
-	forceLocal := r.forceLocalRoutes
-	r.forceLocalRoutesMu.Unlock()
+	forceLocal := r.forceLocalRoutes.Load()
 	// maxRetries bounds how many candidate routes the fallback loop below
 	// walks before giving up. On each setup failure we exclude the failing
 	// intermediate and re-fetch a fresh route (a different intermediate), so
@@ -1143,9 +1139,7 @@ func (r *router) PingRoute(
 	// If full route is specified, use it directly without route calculation
 	if len(opts.ForwardHops) > 0 && len(opts.ReverseHops) > 0 {
 		log.Debugf("Using specified %d-hop route to %s", len(opts.ForwardHops), rPK)
-		r.lastRouteCalcMu.Lock()
-		r.lastRouteCalcTime = 0 // No calculation needed
-		r.lastRouteCalcMu.Unlock()
+		r.lastRouteCalcTime.Store(int64(0)) // No calculation needed
 		return r.setupPingRoute(ctx, forwardDesc, opts.ForwardHops, opts.ReverseHops, rPK, opts)
 	}
 
@@ -1154,9 +1148,7 @@ func (r *router) PingRoute(
 		log.Debugf("Using specified transport %s for direct route to %s", opts.TransportID, rPK)
 		forwardPath := []routing.Hop{{TpID: opts.TransportID, From: lPK, To: rPK}}
 		reversePath := []routing.Hop{{TpID: opts.TransportID, From: rPK, To: lPK}}
-		r.lastRouteCalcMu.Lock()
-		r.lastRouteCalcTime = 0 // No calculation needed
-		r.lastRouteCalcMu.Unlock()
+		r.lastRouteCalcTime.Store(int64(0)) // No calculation needed
 		return r.setupPingRoute(ctx, forwardDesc, forwardPath, reversePath, rPK, opts)
 	}
 
@@ -1164,9 +1156,7 @@ func (r *router) PingRoute(
 	// fetch is deterministic so 3× the same calc just wastes ~3s
 	// of cache rebuilds. The "Ping route finder failed" wording is
 	// equally misleading when no route finder was queried.
-	r.forceLocalRoutesMu.Lock()
-	pingForceLocal := r.forceLocalRoutes
-	r.forceLocalRoutesMu.Unlock()
+	pingForceLocal := r.forceLocalRoutes.Load()
 	// Match DialRoutes: walk up to 6 candidate intermediates (excluding the
 	// dead route's hops each time) before giving up, so a flaky intermediate
 	// that ACKs install but won't forward doesn't fail the whole probe.
@@ -1288,9 +1278,7 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 	}
 
 	// Check if force local routes is enabled
-	r.forceLocalRoutesMu.Lock()
-	forceLocal := r.forceLocalRoutes
-	r.forceLocalRoutesMu.Unlock()
+	forceLocal := r.forceLocalRoutes.Load()
 
 	if forceLocal {
 		log.Info("Calculating route locally (--local-route enabled)")
@@ -1298,9 +1286,7 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 		calcStart := time.Now()
 		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
 		calcTime := time.Since(calcStart)
-		r.lastRouteCalcMu.Lock()
-		r.lastRouteCalcTime = calcTime
-		r.lastRouteCalcMu.Unlock()
+		r.lastRouteCalcTime.Store(int64(calcTime))
 		if localErr == nil {
 			log.Infof("Local route calculated in %v: Forward=%v, Reverse=%v", calcTime, localFwd, localRev)
 		}
