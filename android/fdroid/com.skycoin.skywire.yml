@@ -11,6 +11,17 @@
 # recipe the way F-Droid does (android/fdroid/check.sh: lint, checkupdates,
 # build), and only then tags that commit fdroid-vX.Y.Z.
 #
+# The build is reproducible, and F-Droid ships it signed with our release
+# key: that lane also signs the APK its build produced and attaches it to the
+# mobile-vX.Y.Z release as skywire-X.Y.Z-fdroid.apk (Binaries below; no
+# "arm64" in the name, so the in-app updater of GitHub installs never takes
+# it). F-Droid builds the same commit, copies that APK's signature onto its
+# own build, and publishes ours only if the signature still verifies, which
+# needs its build to be byte-identical, and only if the key is the one
+# AllowedAPKSigningKeys names: the SHA-256 of the release certificate, the
+# key the GitHub APKs are signed with too. So GitHub and F-Droid installs
+# update each other, and losing that key would stop both.
+#
 # The store listing (title, descriptions, icon, changelogs) is not in this
 # file: fdroidserver reads it from fastlane/metadata/android/ at the repo
 # root. It scans only the root, the build's subdir (android/app) and
@@ -55,6 +66,7 @@ AutoName: Skywire
 
 RepoType: git
 Repo: https://github.com/skycoin/skywire.git
+Binaries: https://github.com/skycoin/skywire/releases/download/mobile-v%v/skywire-%v-fdroid.apk
 
 Builds:
   - versionName: 0.0.5
@@ -138,8 +150,14 @@ Builds:
       - make bundle-wasm
       # The Go core (libskywire-mobile.so) from vendored sources, into
       # app/src/main/jniLibs, before gradle packages it. The NDK lane is the
-      # release one: cgo resolves DNS through bionic.
-      - ANDROID_NDK_HOME=$$NDK$$ make android-mobile-ndk
+      # release one: cgo resolves DNS through bionic. DATE is the build date
+      # the binary reports; the Makefile takes it from the clock, and it was
+      # the one thing that differed between two builds of one commit, so it
+      # is the commit's date here. That keeps the build reproducible.
+      - ANDROID_NDK_HOME=$$NDK$$ make android-mobile-ndk DATE="$(TZ=UTC git log -1 --format=%cd
+        --date=format-local:%Y-%m-%dT%H:%M:%SZ)"
+
+AllowedAPKSigningKeys: 8b960eab847e8acc3e21e641b1d708d8415754971f53bb1caaee2998f267037d
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^fdroid-v[0-9]+\.[0-9]+\.[0-9]+$

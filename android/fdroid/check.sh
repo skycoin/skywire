@@ -21,7 +21,7 @@
 # where $CI_DIR holds android/fdroid from the branch the workflow runs from.
 #
 # The build half follows the "fdroid build" job of fdroiddata's .gitlab-ci.yml.
-# The unsigned APK F-Droid would sign lands in $OUT.
+# The unsigned APK lands in $OUT, for sign.sh to sign as the recipe's Binaries.
 set -euo pipefail
 
 APPID=com.skycoin.skywire
@@ -164,6 +164,12 @@ curl -fsSL --retry 5 --retry-all-errors \
 chown -R vagrant "$home_vagrant"
 fdroid fetchsrclibs "$APPID:$code" --verbose
 rm -rf fdroiddata .gitconfig
+
+# With Binaries, `fdroid build` downloads the release's signed F-Droid APK and
+# checks its own build against it. This build is what that APK gets signed
+# from, so on a new release there is nothing there yet: sign.sh runs the same
+# check (fdroidserver's verify_apks) once it has signed this build.
+sed -i '/^Binaries:/d' "metadata/$APPID.yml"
 
 step "fdroid build $APPID:$code (the build server, scanner included)"
 # fdroiddata's CI unsets CI for the build too.
