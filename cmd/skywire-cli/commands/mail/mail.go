@@ -1,7 +1,8 @@
 // Package climail cmd/skywire-cli/commands/mail/mail.go c4-vis-cli
 //
-// `skywire cli mail` — runtime control surface for the visor's
-// in-process SMTP→skywire bridge (pkg/visor/embedded_skymail_bridge.go).
+// `skywire cli mail` — the visor's mailbox (mailbox.go) and the runtime
+// control surface for its in-process SMTP→skywire bridge
+// (pkg/visor/embedded_skymail_bridge.go).
 //
 // SMTP-side analog of `skywire cli resolver`. Bare `mail` prints
 // status; `up`/`down` toggle the bridge via the same
@@ -32,8 +33,15 @@ func init() {
 // when invoked bare.
 var RootCmd = &cobra.Command{
 	Use:   "mail",
-	Short: "Embedded SMTP→skywire bridge (skymail-bridge)",
-	Long: `Status, enable, and disable the visor's embedded SMTP bridge.
+	Short: "The visor's mailbox, and its SMTP bridge to Postfix",
+	Long: `The visor's own mailbox, and the embedded SMTP bridge for hosts
+that run Postfix.
+
+The mailbox receives mail to <anything>@<base32-pk>.skynet (or .dmsg)
+on port 25 over skywire and keeps it in a Maildir. It needs no MTA,
+domain or certificate: the transport authenticates every sender's PK.
+It runs by default on the wasm visor; set "skymail": {"enable": true}
+in the config to run it on a native visor.
 
 The bridge accepts SMTP from a co-located Postfix's transport_map
 and dials peer visors over the visor's existing dmsg client. With
@@ -44,23 +52,31 @@ the bridge running, a Postfix transport_map line
 routes envelopes addressed to user@<host>.<base32-pk>.skynet (or
 user@<base32-pk>.skynet) over skywire to the peer's Postfix smtpd.
 
-Without arguments, prints current state.
+Without arguments, prints the state of both.
 
 Examples:
   skywire cli mail                                  # status
-  skywire cli mail up                               # turn on
-  skywire cli mail down                             # turn off
+  skywire cli mail inbox                            # list mail
+  skywire cli mail send bob@<base32-pk>.skynet -s hi -m "hello"
+  skywire cli mail up                               # bridge on
+  skywire cli mail down                             # bridge off
 `,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
+		mbox, err := rpcClient.MailStatus()
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("MailStatus RPC failed: %w", err))
+		}
 		status, err := rpcClient.EmbeddedProxies()
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("EmbeddedProxies RPC failed: %w", err))
 		}
-		internal.PrintOutput(cmd.Flags(), status, renderMailStatus(status))
+		internal.PrintOutput(cmd.Flags(),
+			map[string]any{"mailbox": mbox, "bridge": status.SkymailBridge},
+			renderMailbox(mbox)+"\nbridge:\n"+renderMailStatus(status))
 	},
 }
 

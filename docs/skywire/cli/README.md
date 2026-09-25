@@ -23,7 +23,7 @@ skywire cli
 - [halt](halt/README.md) — Stop a running visor (alias for `cli visor halt`)
 - [hv](hv/README.md) — Hypervisor / wasm-visor tools
 - [log](log/README.md) — Survey & transport-log collection
-- [mail](mail/README.md) — Embedded SMTP→skywire bridge (skymail-bridge)
+- [mail](mail/README.md) — The visor's mailbox, and its SMTP bridge to Postfix
 - [mdisc](mdisc/README.md) — Query DMSG Discovery
 - [pk](pk/README.md) — Public key of the visor (alias for `cli visor pk`)
 - [proxy](proxy/README.md) — Skysocks client

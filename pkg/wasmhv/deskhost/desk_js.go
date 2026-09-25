@@ -140,6 +140,7 @@ func installDesk() {
 	})
 	registerPairingApps()
 	registerInstallApp()
+	registerMailApp()
 	// The hypervisor UI is a browser TAB, not a window of its own — the desk
 	// puts surfaces in tabs wherever the pane already has them, and the
 	// dashboard is just a page. DirectLoader is what makes that tab render
@@ -188,7 +189,7 @@ func installDesk() {
 		// Already the served form. Matched on "/vnet/" anywhere in a
 		// same-origin URL rather than on origin+"/vnet/": under a base path the
 		// served form is /<base>/vnet/<port>/, which an origin-anchored test
-		// does not recognise, and the URL would be run through the rewrite a
+		// does not recognize, and the URL would be run through the rewrite a
 		// second time.
 		if strings.HasPrefix(u, origin+"/") && strings.Contains(u[len(origin):], "/vnet/") {
 			return u, true
@@ -224,7 +225,7 @@ func installDesk() {
 			if built, ok := vnetBase(port, path); ok {
 				return built, true
 			}
-			return origin + "/vnet/" + port + path, true // vnet absent: old behaviour
+			return origin + "/vnet/" + port + path, true // vnet absent: old behavior
 		}
 		return "", false
 	}

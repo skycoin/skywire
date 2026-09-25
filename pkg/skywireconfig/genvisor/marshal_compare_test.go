@@ -1,3 +1,5 @@
+//go:build !js
+
 package genvisor
 
 import (
@@ -113,6 +115,7 @@ func TestMustMarshalJSONNative_ResolverBlocks(t *testing.T) {
 	v.Wisp = &visorconfig.WispConfig{
 		Enable: true, Port: 6001, UpstreamSOCKS: "127.0.0.1:1080", Buffer: 128,
 	}
+	v.Skymail = &visorconfig.SkymailConfig{Enable: true, Dir: "/opt/skywire/mail"}
 	v.Resolvers = []visorconfig.ResolverConfig{
 		{
 			Name: "lan", Kind: visorconfig.ResolverKindDmsg, Enable: true, SecretKey: &sk,
