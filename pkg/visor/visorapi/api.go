@@ -27,9 +27,25 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/netview"
 )
 
-// API represents visor API.
+// API is everything a visor answers over RPC. Callers that need one part of
+// it can take the narrower interface it embeds.
 type API interface {
-	//visor
+	Node
+	Hypervisors
+	Chat
+	CXO
+	Proxies
+	Apps
+	Forwarding
+	Diagnostics
+	Dmsg
+	Routing
+	Transports
+}
+
+// Node is the visor itself: status, lifecycle, configuration, rewards and
+// the UI server.
+type Node interface {
 	Overview() (*Overview, error)
 	Summary() (*Summary, error)
 	StateSnapshot() (*StateSnapshot, error)
@@ -46,7 +62,6 @@ type API interface {
 	IsHypervisorUIServing() bool
 	SetHypervisorAuthPersist(enable, persist bool) error
 	IsHypervisorAuthEnabled() bool
-	DmsgPortHits() []dmsg.PortHit
 	Uptime() (float64, error)
 	UptimeHistory(args UptimeHistoryArgs) (*UptimeHistoryResponse, error)
 	RuntimeStats() (*RuntimeStatsInfo, error)
@@ -60,25 +75,182 @@ type API interface {
 	RuntimeLogsSince(since int64) (RuntimeLogsDelta, error)
 	HostStats() (*HostStatsInfo, error)
 	NetworkView() (*NetworkViewResponse, error)
+	Ports() (map[string]PortDetail, error)
+	SetRewardAddress(string) (string, error)
+	GetRewardAddress() (string, error)
+	DeleteRewardAddress() error
+	GetRuntimeConfig() ([]byte, error)
+	SetRuntimeConfig(rawJSON []byte) error
+	SetConfigFields(fields map[string]json.RawMessage) ([]ConfigFieldChange, error)
+	GetConfigPath() (string, error)
+	ReinitiateModule(module string) error
+	DeregisterService(pks []cipher.PubKey, serviceType string) error
+	StartUIServer(addr string) error
+	StopUIServer() error
+	UIServerStatus() (*UIServerStatus, error)
+	CheckAREntry(pk string) ([]string, error)
+	ARSelfInfo() (*ARSelfRegistration, error)
+	// Close closes the API connection (for RPC clients)
+	Close() error
+}
+
+// Hypervisors is pairing this visor with hypervisors, and a hypervisor's control of the visors paired with it.
+type Hypervisors interface {
+	RemoteVisors() ([]string, error)
+	AddHypervisor(pk cipher.PubKey) error
+	// PendingHypervisors lists peers waiting to be approved as hypervisors
+	// (a same-origin transport or a refused RPC), by fingerprint.
+	PendingHypervisors() ([]PendingHypervisor, error)
+	// ApproveHypervisor approves a pending key by public key or fingerprint
+	// (or unique prefix); it is AddHypervisor with a lookup in front.
+	ApproveHypervisor(sel string) (cipher.PubKey, error)
+	// NewPairCode mints a one-time pairing code valid for ttl (0 = default).
+	NewPairCode(ttl time.Duration) (PairCode, error)
+	RemoveHypervisor(pk cipher.PubKey) error
+	RemoveAllHypervisors() (int, error)
+	SetHypervisorPassword(oldPassword, newPassword string) error
+	SetHypervisorPasswordForce(newPassword string) error
+	TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error)
+	HVListVisors() ([]HVVisorEntry, error)
+	HVListDirectVisors() ([]HVVisorEntry, error)
+	HVListVisorsTree() (*HVVisorTree, error)
+	HVVisorSummary(pk cipher.PubKey) (*Summary, error)
+	HVStartApp(pk cipher.PubKey, appName string) error
+	HVStopApp(pk cipher.PubKey, appName string) error
+	HVSetMinHops(pk cipher.PubKey, hops uint16) error
+	HVSetRewardAddress(pk cipher.PubKey, addr string) (string, error)
+	HVRemoveTransport(pk cipher.PubKey, tid uuid.UUID) error
+	HVRemoveRoutingRule(pk cipher.PubKey, key routing.RouteID) error
+	HVAddTransport(pk, remote cipher.PubKey, tpType, label string, timeout time.Duration) (*TransportSummary, error)
+	HVSetPublicAutoconnect(pk cipher.PubKey, enable bool) error
+	HVSetCalculateRoutes(pk cipher.PubKey, enable bool) error
+	HVReload(pk cipher.PubKey) error
+	HVShutdown(pk cipher.PubKey) error
+	HVServiceHealth(pk cipher.PubKey) ([]ServiceHealthEntry, error)
+	HVDmsgSessions(pk cipher.PubKey) (*DmsgClientSessions, error)
+	HVDmsgConnectAll(pk cipher.PubKey) (*DmsgConnectAllResult, error)
+	HVSetDmsgSessionsCount(pk cipher.PubKey, count int) (*DmsgConnectAllResult, error)
+	HVLogsSince(pk cipher.PubKey, since time.Time, appName string) ([]string, error)
+	HVSetAutoStart(pk cipher.PubKey, appName string, autostart bool) error
+	HVEmbeddedProxies(pk cipher.PubKey) (*EmbeddedProxiesStatus, error)
+	HVSetEmbeddedProxyEnabled(pk cipher.PubKey, kind string, enable bool) error
+	HVSetEmbeddedProxyUpstream(pk cipher.PubKey, kind, addr string) error
+	HVListTCPPorts(pk cipher.PubKey) ([]int, error)
+	HVRegisterTCPPort(pk cipher.PubKey, port int) error
+	HVDeregisterTCPPort(pk cipher.PubKey, port int) error
+	HVListForwardedPorts(pk cipher.PubKey) ([]ForwardedPort, error)
+	HVRegisterForwardedPort(pk cipher.PubKey, p ForwardedPort) error
+	HVUpdateForwardedPort(pk cipher.PubKey, p ForwardedPort) error
+}
+
+// Chat is skychat's pairing, profiles, groups and voice calls.
+type Chat interface {
 	SkychatPasswordIsSet() (bool, error)
 	SetSkychatPassword(oldPassword, newPassword string) error
 	ClearSkychatPassword(oldPassword string) error
 	SkychatLocalAddr() (string, error)
-	RemoteVisors() ([]string, error)
-	DmsgPtyExec(args DmsgPtyExecArgs) (*pty.CommandExecResult, error)
-	IsDMSGClientReady() (bool, error)
-	DMSGServers() ([]DMSGServerInfo, error)
-	Ports() (map[string]PortDetail, error)
+	// Chat-pair feeds — per-partner CXO feeds with read-side
+	// allowlists. See pkg/visor/pairing.go.
+	PairAdd(peerPK cipher.PubKey) error
+	PairList() ([]PairInfo, error)
+	PairRemove(peerPK cipher.PubKey) error
+	PairMarkActive(peerPK cipher.PubKey) error
+	PairSend(peerPK cipher.PubKey, text string) (string, error)
+	PairDelete(peerPK cipher.PubKey, id string) error
+	PairPoll(since time.Time) ([]PairMessage, error)
+	// Skychat profile — this visor's published display name and avatar,
+	// and a peer's. See pkg/visor/profile.go.
+	ProfileGet() (Profile, error)
+	ProfileSet(args ProfileSetArgs) (Profile, error)
+	ProfileFetch(pk cipher.PubKey) (Profile, error)
+	// Chat-group feeds — D1 owner-centric CXO feeds with multi-PK
+	// allowlists. See pkg/visor/group.go.
+	GroupCreate(args GroupCreateArgs) (GroupInfo, string, error)
+	GroupJoin(args GroupJoinArgs) (GroupInfo, error)
+	GroupResolve(args GroupResolveArgs) (GroupResolveResult, error)
+	GroupAskAgain(id string) (GroupInfo, error)
+	GroupList() ([]GroupInfo, error)
+	GroupGet(id string) (GroupInfo, error)
+	GroupInvite(id string) (string, error)
+	GroupAddMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupJoinRequests(id string) ([]GroupJoinRequest, error)
+	GroupApproveJoin(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupDenyJoin(id string, pk cipher.PubKey) error
+	GroupRemoveMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupBanMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupUnbanMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupMuteMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupUnmuteMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupSetReadOnly(id string, readOnly bool) (GroupInfo, error)
+	GroupSetListed(id string, listed bool) (GroupInfo, error)
+	GroupSetMeta(args GroupSetMetaArgs) (GroupInfo, error)
+	GroupRefreshMeta(id string) (GroupInfo, error)
+	GroupCatalog(host cipher.PubKey) ([]GroupCatalogEntry, bool, error)
+	GroupPromoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupDemoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupRotateKey(id string) (GroupInfo, error)
+	GroupSetPeerBackfill(id string, enabled bool) (GroupInfo, error)
+	GroupSetJoinPoW(id string, bits uint8) (GroupInfo, error)
+	GroupSend(args GroupSendArgs) error
+	GroupFileKey(args GroupFileKeyArgs) (GroupFileKeyResult, error)
+	GroupUnsend(args GroupUnsendArgs) error
+	GroupPoll(since time.Time) ([]GroupMessage, error)
+	GroupDelete(id string) error
+	GroupLeave(id string) error
+	GroupHistory(groupID string, limit int) ([]GroupMessage, error)
+	GroupHistoryPage(args GroupHistoryPageArgs) ([]GroupMessage, error)
+	GroupHistoryGroups() ([]string, error)
+	// Skychat 1:1 voice calls (pkg/skychat/call).
+	VoiceCall(peer cipher.PubKey) (string, error)
+	// VoiceDial places a call and returns its id without waiting for an
+	// answer — what a UI needs, and what an HTTP handler can actually
+	// deliver. See Visor.VoiceDial.
+	VoiceDial(peer cipher.PubKey) (string, error)
+	VoiceHangup(callID string) error
+	VoiceActive() ([]string, error)
+	VoiceAnswer(callID string) error
+	VoiceDecline(callID string) error
+	VoiceIncoming() ([]string, error)
+	// VoiceDialing lists the calls this visor is PLACING and that have not
+	// been answered yet. It is what lets a UI show "calling…" and, more to
+	// the point, call it off: hanging up takes a call id, and until the
+	// invite is answered this is the only place one exists.
+	VoiceDialing() ([]VoiceDialingInfo, error)
+	VoiceCallAudio(callID string) (sent, recv []int16, err error)
+	VoiceMute(callID string, mic, speaker bool) error
+}
 
-	//reward setting
-	SetRewardAddress(string) (string, error)
-	GetRewardAddress() (string, error)
-	DeleteRewardAddress() error
+// CXO is the visor's CXO feeds.
+type CXO interface {
+	FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error)
+	CXOStatus() ([]FeedStatus, error)
+	CXORefreshFeed(args CXORefreshArgs) (*FeedStatus, error)
+	// CXO user feeds — visor-published TreeStore feeds beyond the
+	// always-on telemetry one. See pkg/visor/cxo_user_feeds.go.
+	RegisterCXOFeed(name string, dmsgPort uint16, description string) error
+	UnregisterCXOFeed(name string) error
+	ListCXOFeeds() []logserver.CXOFeedEntry
+}
 
-	// LAN DMSG server
-	SetLANDmsgServer(LANDmsgServerInfo) error
+// Proxies is the visor's embedded proxies.
+type Proxies interface {
+	// EmbeddedProxies reports the runtime state of the in-process
+	// .dmsg / .skynet resolving proxies. Hypervisor UI consumes this
+	// to render the "browser proxy" widget — listener addresses,
+	// domain suffix, running state.
+	EmbeddedProxies() (*EmbeddedProxiesStatus, error)
+	// SetEmbeddedProxyEnabled flips a resolver on or off at runtime.
+	// `kind` is "dmsg" or "skynet"; `enable` true starts the
+	// resolver, false stops it. Idempotent. Only affects the live
+	// runtime — the on-disk config is unchanged, so a visor restart
+	// reverts to the config's Enable flag.
+	SetEmbeddedProxyEnabled(kind string, enable bool) error
+	SetEmbeddedProxyUpstream(kind, addr string) error
+	SetEmbeddedProxyBind(kind, addr string) error
+}
 
-	//app controls
+// Apps is starting, stopping and configuring apps, the VPN and skysocks clients among them.
+type Apps interface {
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
@@ -129,20 +301,92 @@ type API interface {
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
-
-	//vpn controls
 	StartVPNClient(pk cipher.PubKey) error
 	StartVPNClientWithMode(pk cipher.PubKey, launcherMode string) error
 	StopVPNClient(appName string) error
 	VPNServers(version, country string) ([]servicedisc.Service, error)
-
-	//skysocks-client controls
 	StartSkysocksClient(pk string) error
 	StopSkysocksClients() error
 	ProxyServers(version, country string) ([]servicedisc.Service, error)
 	TestProxy(config ProxyTestConfig) ([]ProxyTestResult, error)
+	// AppDirectStreams reports the live DIRECT (0-hop) streams the named
+	// app holds — the AppDirectMux shortcut's counterpart to
+	// RouteGroupMuxInfo. A dial eligible for that shortcut builds no route
+	// group, so an app using it has a well-defined path that the
+	// route-group queries above cannot see. Empty appName reports all.
+	AppDirectStreams(appName string) ([]transport.VStreamInfo, error)
+}
 
-	//transport settings
+// Forwarding is exposing local ports over skynet and dmsg, and forwarding remote ones.
+type Forwarding interface {
+	RegisterTCPPort(localPort int) error
+	DeregisterTCPPort(localPort int) error
+	ListTCPPorts() ([]int, error)
+	RegisterForwardedPort(p ForwardedPort) error
+	UpdateForwardedPort(p ForwardedPort) error
+	ListForwardedPorts() ([]ForwardedPort, error)
+	// DialUDPForward / StopUDPForward / ListUDPForwards drive client-side
+	// faithful-UDP port forwarding (#2607): bridge a local UDP socket to
+	// a remote forwarded_ports.udp service via DialPacket.
+	DialUDPForward(remotePK cipher.PubKey, remotePort, localPort int) error
+	StopUDPForward(localPort int) error
+	ListUDPForwards() ([]int, error)
+	ConnectRawTCP(network string, remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
+	DisconnectRawTCP(id uuid.UUID) error
+	ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error)
+}
+
+// Diagnostics is pings, bandwidth tests and probes.
+type Diagnostics interface {
+	DialPing(config PingConfig) error
+	Ping(config PingConfig) ([]time.Duration, error)
+	PingOnce(config PingConfig) (time.Duration, error)
+	StopPing(pk cipher.PubKey) error
+	StopAllPings() (int, []string, error)
+	DialDmsgPing(pk cipher.PubKey) error
+	DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) error
+	DmsgPing(conf PingConfig) ([]time.Duration, error)
+	DmsgPingOnce(conf PingConfig) (time.Duration, error)
+	StopDmsgPing(pk cipher.PubKey) error
+	GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey, error)
+	GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error)
+	GetPreferredDmsgServer(remotePK cipher.PubKey) (cipher.PubKey, error)
+	BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
+	DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
+	TestVisor(config PingConfig) ([]TestResult, error)
+	DmsgProbe(pk cipher.PubKey, port uint16) (bool, error)
+	DmsgProbeReason(pk cipher.PubKey, port uint16) (bool, string, error)
+	DmsgProbeViaServer(pk cipher.PubKey, port uint16, serverPK cipher.PubKey) (bool, error)
+	SkynetProbe(pk cipher.PubKey, port uint16) (bool, error)
+}
+
+// Dmsg is the visor's dmsg client and the requests it makes over dmsg and skynet.
+type Dmsg interface {
+	DmsgPortHits() []dmsg.PortHit
+	DmsgPtyExec(args DmsgPtyExecArgs) (*pty.CommandExecResult, error)
+	IsDMSGClientReady() (bool, error)
+	DMSGServers() ([]DMSGServerInfo, error)
+	// LAN DMSG server
+	SetLANDmsgServer(LANDmsgServerInfo) error
+	DialDmsgRPC(pk cipher.PubKey) (net.Conn, error)
+	DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error)
+	SkynetHTTP(req SkynetHTTPRequest) (*SkynetHTTPResponse, error)
+	VisorSCP(req VisorSCPRequest) error
+	VisorCat(req VisorCatRequest) (*VisorCatResponse, error)
+	DmsgConnectAll() (*DmsgConnectAllResult, error)
+	SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error)
+	DmsgSessions() (*DmsgClientSessions, error)
+	DmsgConverge(carriers []string) (*DmsgConvergeResult, error)
+	// DMSG diagnostics
+	DmsgPorterStats() (*DmsgPorterStatus, error)
+	DmsgPorterReset() (*DmsgPorterStatus, error)
+	DmsgPorterDiag() (*netutil.EphemeralDiagResult, error)
+	DmsgReconnect() (int, error)
+	DmsgSetMinSessions(n int) error
+}
+
+// Routing is routes, route groups, their multiplexing and the router's settings.
+type Routing interface {
 	SetExistingTPOnly(enabled bool) error
 	SetForceLocalRoutes(enabled bool) error
 	GetRouterSettings() (RouterSettings, error)
@@ -151,38 +395,6 @@ type API interface {
 	SetMuxCap(n int) error
 	SetMuxWidth(n int) error
 	SetMuxStandby(n int) error
-
-	//transports
-	TransportTypes() ([]string, error)
-	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
-	Transport(tid uuid.UUID) (*TransportSummary, error)
-	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool, skipLatencyProbe bool) (*TransportSummary, error)
-	SetSTCPAddr(pk cipher.PubKey, addr string) error
-	RemoveTransport(tid uuid.UUID) error
-	RemoveAllTransports() error
-	SetPublicAutoconnect(pAc bool) error
-	SetIsPublic(isPublic bool) error
-	GetIsPublic() bool
-	GetRuntimeConfig() ([]byte, error)
-	SetRuntimeConfig(rawJSON []byte) error
-	SetConfigFields(fields map[string]json.RawMessage) ([]ConfigFieldChange, error)
-	LocalTransportStats() (*LocalTransportStatsResponse, error)
-	LocalUptimeStats(args LocalUptimeArgs) (*LocalUptimeResponse, error)
-	FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error)
-	CXOStatus() ([]FeedStatus, error)
-	CXORefreshFeed(args CXORefreshArgs) (*FeedStatus, error)
-	GetConfigPath() (string, error)
-	StartPublicAutoconnect() error
-	StopPublicAutoconnect() error
-	PublicAutoconnectStatus() (bool, error)
-	GetPersistentTransports() ([]transport.PersistentTransports, error)
-	SetPersistentTransports([]transport.PersistentTransports) error
-	GetTransportLogs(days int) ([]TransportLogEntry, error)
-	//transport discovery
-	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error)
-	DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error)
-
-	//routing
 	RoutingRules() ([]routing.Rule, error)
 	RoutingRule(key routing.RouteID) (routing.Rule, error)
 	SaveRoutingRule(rule routing.Rule) error
@@ -200,12 +412,6 @@ type API interface {
 	// app (skysocks-client, vpn-client, etc.). Empty slice when
 	// nothing is currently dialed via that app.
 	RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error)
-	// AppDirectStreams reports the live DIRECT (0-hop) streams the named
-	// app holds — the AppDirectMux shortcut's counterpart to
-	// RouteGroupMuxInfo. A dial eligible for that shortcut builds no route
-	// group, so an app using it has a well-defined path that the
-	// route-group queries above cannot see. Empty appName reports all.
-	AppDirectStreams(appName string) ([]transport.VStreamInfo, error)
 	ActiveRoutes() ([]AppRouteStatus, error)
 	AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint16) error
 	GrowMuxRoute(appName string, target, minHops int, srcPort uint16) (int, error)
@@ -247,235 +453,47 @@ type API interface {
 	GetMinHops() (uint16, error)
 	SetCalculateRoutes(enabled bool) error
 	GetCalculateRoutes() (bool, error)
+	GetRouteSetupNodesSorted() ([]cipher.PubKey, error)
+	GetRSNHealth() ([]NodeHealth, error)
+	// Embedded Route Setup Node (RSN) stats
+	RouteSetupStats() (*setupmetrics.StatsSnapshot, error)
+	ResetRouteSetupStats() error
+}
 
-	RegisterTCPPort(localPort int) error
-	DeregisterTCPPort(localPort int) error
-	ListTCPPorts() ([]int, error)
-	RegisterForwardedPort(p ForwardedPort) error
-	UpdateForwardedPort(p ForwardedPort) error
-	ListForwardedPorts() ([]ForwardedPort, error)
-	// DialUDPForward / StopUDPForward / ListUDPForwards drive client-side
-	// faithful-UDP port forwarding (#2607): bridge a local UDP socket to
-	// a remote forwarded_ports.udp service via DialPacket.
-	DialUDPForward(remotePK cipher.PubKey, remotePort, localPort int) error
-	StopUDPForward(localPort int) error
-	ListUDPForwards() ([]int, error)
-	ConnectRawTCP(network string, remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
-	DisconnectRawTCP(id uuid.UUID) error
-	ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error)
-	DialPing(config PingConfig) error
-	Ping(config PingConfig) ([]time.Duration, error)
-	PingOnce(config PingConfig) (time.Duration, error)
-	StopPing(pk cipher.PubKey) error
-	StopAllPings() (int, []string, error)
-	DialDmsgPing(pk cipher.PubKey) error
-	DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) error
-	DialDmsgRPC(pk cipher.PubKey) (net.Conn, error)
-	DmsgPing(conf PingConfig) ([]time.Duration, error)
-	DmsgPingOnce(conf PingConfig) (time.Duration, error)
-	StopDmsgPing(pk cipher.PubKey) error
-	GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey, error)
-	GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error)
-	GetPreferredDmsgServer(remotePK cipher.PubKey) (cipher.PubKey, error)
-	BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
-	DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
-
-	TestVisor(config PingConfig) ([]TestResult, error)
-
-	ReinitiateModule(module string) error
-
-	//service discovery management (network monitor functionality)
-	DeregisterService(pks []cipher.PubKey, serviceType string) error
-
-	//ui server controls
-	StartUIServer(addr string) error
-	StopUIServer() error
-	UIServerStatus() (*UIServerStatus, error)
-
-	//dmsg utilities
-	DmsgProbe(pk cipher.PubKey, port uint16) (bool, error)
-	DmsgProbeReason(pk cipher.PubKey, port uint16) (bool, string, error)
-	DmsgProbeViaServer(pk cipher.PubKey, port uint16, serverPK cipher.PubKey) (bool, error)
-	SkynetProbe(pk cipher.PubKey, port uint16) (bool, error)
-	DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error)
-	SkynetHTTP(req SkynetHTTPRequest) (*SkynetHTTPResponse, error)
-	VisorSCP(req VisorSCPRequest) error
-	VisorCat(req VisorCatRequest) (*VisorCatResponse, error)
-	DmsgConnectAll() (*DmsgConnectAllResult, error)
-	SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error)
-	DmsgSessions() (*DmsgClientSessions, error)
-	DmsgConverge(carriers []string) (*DmsgConvergeResult, error)
-
-	// CXO user feeds — visor-published TreeStore feeds beyond the
-	// always-on telemetry one. See pkg/visor/cxo_user_feeds.go.
-	RegisterCXOFeed(name string, dmsgPort uint16, description string) error
-	UnregisterCXOFeed(name string) error
-	ListCXOFeeds() []logserver.CXOFeedEntry
-
-	// Chat-pair feeds — per-partner CXO feeds with read-side
-	// allowlists. See pkg/visor/pairing.go.
-	PairAdd(peerPK cipher.PubKey) error
-	PairList() ([]PairInfo, error)
-	PairRemove(peerPK cipher.PubKey) error
-	PairMarkActive(peerPK cipher.PubKey) error
-	PairSend(peerPK cipher.PubKey, text string) (string, error)
-	PairDelete(peerPK cipher.PubKey, id string) error
-	PairPoll(since time.Time) ([]PairMessage, error)
-
-	// Skychat profile — this visor's published display name and avatar,
-	// and a peer's. See pkg/visor/profile.go.
-	ProfileGet() (Profile, error)
-	ProfileSet(args ProfileSetArgs) (Profile, error)
-	ProfileFetch(pk cipher.PubKey) (Profile, error)
-
-	// Chat-group feeds — D1 owner-centric CXO feeds with multi-PK
-	// allowlists. See pkg/visor/group.go.
-	GroupCreate(args GroupCreateArgs) (GroupInfo, string, error)
-	GroupJoin(args GroupJoinArgs) (GroupInfo, error)
-	GroupResolve(args GroupResolveArgs) (GroupResolveResult, error)
-	GroupAskAgain(id string) (GroupInfo, error)
-	GroupList() ([]GroupInfo, error)
-	GroupGet(id string) (GroupInfo, error)
-	GroupInvite(id string) (string, error)
-	GroupAddMember(id string, pk cipher.PubKey) (GroupInfo, error)
-	GroupJoinRequests(id string) ([]GroupJoinRequest, error)
-	GroupApproveJoin(id string, pk cipher.PubKey) (GroupInfo, error)
-	GroupDenyJoin(id string, pk cipher.PubKey) error
-	GroupRemoveMember(id string, pk cipher.PubKey) (GroupInfo, error)
-	GroupBanMember(id string, pk cipher.PubKey) (GroupInfo, error)
-	GroupUnbanMember(id string, pk cipher.PubKey) (GroupInfo, error)
-	GroupMuteMember(id string, pk cipher.PubKey) (GroupInfo, error)
-	GroupUnmuteMember(id string, pk cipher.PubKey) (GroupInfo, error)
-	GroupSetReadOnly(id string, readOnly bool) (GroupInfo, error)
-	GroupSetListed(id string, listed bool) (GroupInfo, error)
-	GroupSetMeta(args GroupSetMetaArgs) (GroupInfo, error)
-	GroupRefreshMeta(id string) (GroupInfo, error)
-	GroupCatalog(host cipher.PubKey) ([]GroupCatalogEntry, bool, error)
-	GroupPromoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
-	GroupDemoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
-	GroupRotateKey(id string) (GroupInfo, error)
-	GroupSetPeerBackfill(id string, enabled bool) (GroupInfo, error)
-	GroupSetJoinPoW(id string, bits uint8) (GroupInfo, error)
-	GroupSend(args GroupSendArgs) error
-	GroupFileKey(args GroupFileKeyArgs) (GroupFileKeyResult, error)
-	GroupUnsend(args GroupUnsendArgs) error
-	GroupPoll(since time.Time) ([]GroupMessage, error)
-	GroupDelete(id string) error
-	GroupLeave(id string) error
-	GroupHistory(groupID string, limit int) ([]GroupMessage, error)
-	GroupHistoryPage(args GroupHistoryPageArgs) ([]GroupMessage, error)
-	GroupHistoryGroups() ([]string, error)
-
-	// Skychat 1:1 voice calls (pkg/skychat/call).
-	VoiceCall(peer cipher.PubKey) (string, error)
-	// VoiceDial places a call and returns its id without waiting for an
-	// answer — what a UI needs, and what an HTTP handler can actually
-	// deliver. See Visor.VoiceDial.
-	VoiceDial(peer cipher.PubKey) (string, error)
-	VoiceHangup(callID string) error
-	VoiceActive() ([]string, error)
-	VoiceAnswer(callID string) error
-	VoiceDecline(callID string) error
-	VoiceIncoming() ([]string, error)
-	// VoiceDialing lists the calls this visor is PLACING and that have not
-	// been answered yet. It is what lets a UI show "calling…" and, more to
-	// the point, call it off: hanging up takes a call id, and until the
-	// invite is answered this is the only place one exists.
-	VoiceDialing() ([]VoiceDialingInfo, error)
-	VoiceCallAudio(callID string) (sent, recv []int16, err error)
-	VoiceMute(callID string, mic, speaker bool) error
-
+// Transports is the visor's transports, transport discovery and transport setup.
+type Transports interface {
+	TransportTypes() ([]string, error)
+	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
+	Transport(tid uuid.UUID) (*TransportSummary, error)
+	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool, skipLatencyProbe bool) (*TransportSummary, error)
+	SetSTCPAddr(pk cipher.PubKey, addr string) error
+	RemoveTransport(tid uuid.UUID) error
+	RemoveAllTransports() error
+	SetPublicAutoconnect(pAc bool) error
+	SetIsPublic(isPublic bool) error
+	GetIsPublic() bool
+	LocalTransportStats() (*LocalTransportStatsResponse, error)
+	LocalUptimeStats(args LocalUptimeArgs) (*LocalUptimeResponse, error)
+	StartPublicAutoconnect() error
+	StopPublicAutoconnect() error
+	PublicAutoconnectStatus() (bool, error)
+	GetPersistentTransports() ([]transport.PersistentTransports, error)
+	SetPersistentTransports([]transport.PersistentTransports) error
+	GetTransportLogs(days int) ([]TransportLogEntry, error)
+	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error)
+	DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error)
 	// Embedded Transport Setup Node (TPS) controls
 	TPSStatus() (*TPSStatus, error)
 	TPSAddTransport(targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error)
 	TPSRemoveTransport(targetPK cipher.PubKey, tpID uuid.UUID) error
 	TPSGetTransports(targetPK cipher.PubKey) ([]TPSTransportResponse, error)
-
 	// External TPS operations (dial external TPS over dmsg)
 	GetTransportSetupNodes() ([]cipher.PubKey, error)
 	GetTransportSetupNodesSorted() ([]cipher.PubKey, error)
-	GetRouteSetupNodesSorted() ([]cipher.PubKey, error)
 	GetTPSHealth() ([]NodeHealth, error)
-	GetRSNHealth() ([]NodeHealth, error)
-
-	// Embedded Route Setup Node (RSN) stats
-	RouteSetupStats() (*setupmetrics.StatsSnapshot, error)
-
-	// EmbeddedProxies reports the runtime state of the in-process
-	// .dmsg / .skynet resolving proxies. Hypervisor UI consumes this
-	// to render the "browser proxy" widget — listener addresses,
-	// domain suffix, running state.
-	EmbeddedProxies() (*EmbeddedProxiesStatus, error)
-
-	// SetEmbeddedProxyEnabled flips a resolver on or off at runtime.
-	// `kind` is "dmsg" or "skynet"; `enable` true starts the
-	// resolver, false stops it. Idempotent. Only affects the live
-	// runtime — the on-disk config is unchanged, so a visor restart
-	// reverts to the config's Enable flag.
-	SetEmbeddedProxyEnabled(kind string, enable bool) error
-	SetEmbeddedProxyUpstream(kind, addr string) error
-	SetEmbeddedProxyBind(kind, addr string) error
-	ResetRouteSetupStats() error
-
 	TPSExternalHealthCheck(tpsPK cipher.PubKey) error
 	TPSExternalAddTransport(tpsPK, targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error)
 	TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]TPSTransportResponse, error)
-
-	// DMSG diagnostics
-	DmsgPorterStats() (*DmsgPorterStatus, error)
-	DmsgPorterReset() (*DmsgPorterStatus, error)
-	DmsgPorterDiag() (*netutil.EphemeralDiagResult, error)
-	DmsgReconnect() (int, error)
-	DmsgSetMinSessions(n int) error
-	AddHypervisor(pk cipher.PubKey) error
-	// PendingHypervisors lists peers waiting to be approved as hypervisors
-	// (a same-origin transport or a refused RPC), by fingerprint.
-	PendingHypervisors() ([]PendingHypervisor, error)
-	// ApproveHypervisor approves a pending key by public key or fingerprint
-	// (or unique prefix); it is AddHypervisor with a lookup in front.
-	ApproveHypervisor(sel string) (cipher.PubKey, error)
-	// NewPairCode mints a one-time pairing code valid for ttl (0 = default).
-	NewPairCode(ttl time.Duration) (PairCode, error)
-	RemoveHypervisor(pk cipher.PubKey) error
-	RemoveAllHypervisors() (int, error)
-	SetHypervisorPassword(oldPassword, newPassword string) error
-	SetHypervisorPasswordForce(newPassword string) error
-	CheckAREntry(pk string) ([]string, error)
-	ARSelfInfo() (*ARSelfRegistration, error)
-	TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error)
-	HVListVisors() ([]HVVisorEntry, error)
-	HVListDirectVisors() ([]HVVisorEntry, error)
-	HVListVisorsTree() (*HVVisorTree, error)
-	HVVisorSummary(pk cipher.PubKey) (*Summary, error)
-	HVStartApp(pk cipher.PubKey, appName string) error
-	HVStopApp(pk cipher.PubKey, appName string) error
-	HVSetMinHops(pk cipher.PubKey, hops uint16) error
-	HVSetRewardAddress(pk cipher.PubKey, addr string) (string, error)
-	HVRemoveTransport(pk cipher.PubKey, tid uuid.UUID) error
-	HVRemoveRoutingRule(pk cipher.PubKey, key routing.RouteID) error
-	HVAddTransport(pk, remote cipher.PubKey, tpType, label string, timeout time.Duration) (*TransportSummary, error)
-	HVSetPublicAutoconnect(pk cipher.PubKey, enable bool) error
-	HVSetCalculateRoutes(pk cipher.PubKey, enable bool) error
-	HVReload(pk cipher.PubKey) error
-	HVShutdown(pk cipher.PubKey) error
-	HVServiceHealth(pk cipher.PubKey) ([]ServiceHealthEntry, error)
-	HVDmsgSessions(pk cipher.PubKey) (*DmsgClientSessions, error)
-	HVDmsgConnectAll(pk cipher.PubKey) (*DmsgConnectAllResult, error)
-	HVSetDmsgSessionsCount(pk cipher.PubKey, count int) (*DmsgConnectAllResult, error)
-	HVLogsSince(pk cipher.PubKey, since time.Time, appName string) ([]string, error)
-	HVSetAutoStart(pk cipher.PubKey, appName string, autostart bool) error
-	HVEmbeddedProxies(pk cipher.PubKey) (*EmbeddedProxiesStatus, error)
-	HVSetEmbeddedProxyEnabled(pk cipher.PubKey, kind string, enable bool) error
-	HVSetEmbeddedProxyUpstream(pk cipher.PubKey, kind, addr string) error
-	HVListTCPPorts(pk cipher.PubKey) ([]int, error)
-	HVRegisterTCPPort(pk cipher.PubKey, port int) error
-	HVDeregisterTCPPort(pk cipher.PubKey, port int) error
-	HVListForwardedPorts(pk cipher.PubKey) ([]ForwardedPort, error)
-	HVRegisterForwardedPort(pk cipher.PubKey, p ForwardedPort) error
-	HVUpdateForwardedPort(pk cipher.PubKey, p ForwardedPort) error
-
-	// Close closes the API connection (for RPC clients)
-	Close() error
 }
 
 // UIServerStatus contains the status of the UI server.
