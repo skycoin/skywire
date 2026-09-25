@@ -37,12 +37,14 @@ skywire cli mail
 
 ## Subcommands
 
+- [attachment](attachment/README.md) — Save attachment n of a message
 - [down](down/README.md) — Disable the embedded SMTP bridge
 - [inbox](inbox/README.md) — List the mailbox, newest first
 - [read](read/README.md) — Show a message and mark it read
 - [rm](rm/README.md) — Delete messages
 - [send](send/README.md) — Send mail now to skywire addresses
 - [sent](sent/README.md) — List sent mail, newest first
+- [settings](settings/README.md) — Show or change the mailbox's settings, live
 - [up](up/README.md) — Enable the embedded SMTP bridge
 - [whitelist](whitelist/README.md) — Show or change which PKs may deliver mail
 

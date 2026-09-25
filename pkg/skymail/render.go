@@ -4,6 +4,7 @@ package skymail
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -61,9 +62,35 @@ type Rendered struct {
 // its attachments. It prefers text/plain; an HTML-only message is
 // reduced to text, never rendered, so nothing in a message can run.
 func Render(raw []byte) (*Rendered, error) {
-	m, err := mail.ReadMessage(bytes.NewReader(raw))
+	r, _, err := render(raw)
+	return r, err
+}
+
+// AttachmentData is one attachment, decoded.
+type AttachmentData struct {
+	Name        string `json:"name"`
+	ContentType string `json:"content_type"`
+	Data        []byte `json:"data"`
+}
+
+// ExtractAttachment decodes attachment n, numbered as Render lists them.
+func ExtractAttachment(raw []byte, n int) (*AttachmentData, error) {
+	r, data, err := render(raw)
 	if err != nil {
 		return nil, err
+	}
+	if n < 0 || n >= len(data) {
+		return nil, fmt.Errorf("skymail: no attachment %d (message has %d)", n, len(data))
+	}
+	a := r.Attachments[n]
+	return &AttachmentData{Name: a.Name, ContentType: a.ContentType, Data: data[n]}, nil
+}
+
+// render is Render plus each attachment's decoded bytes, in order.
+func render(raw []byte) (*Rendered, [][]byte, error) {
+	m, err := mail.ReadMessage(bytes.NewReader(raw))
+	if err != nil {
+		return nil, nil, err
 	}
 	h := m.Header
 	r := &Rendered{
@@ -77,7 +104,10 @@ func Render(raw []byte) (*Rendered, error) {
 	}
 	r.Verified = fromNamesPK(r.From, r.PeerPK)
 
-	var plain, html string
+	var (
+		plain, html string
+		data        [][]byte
+	)
 	walkPart(h.Get("Content-Type"), h.Get("Content-Transfer-Encoding"), h.Get("Content-Disposition"), m.Body, 0,
 		func(ct, name string, body []byte) {
 			switch {
@@ -87,6 +117,7 @@ func Render(raw []byte) (*Rendered, error) {
 				html = string(body)
 			default:
 				r.Attachments = append(r.Attachments, Attachment{Name: name, ContentType: ct, Size: len(body)})
+				data = append(data, body)
 			}
 		})
 	switch {
@@ -95,7 +126,7 @@ func Render(raw []byte) (*Rendered, error) {
 	case html != "":
 		r.Text, r.FromHTML = htmlToText(html), true
 	}
-	return r, nil
+	return r, data, nil
 }
 
 // walkPart visits every leaf part, decoding its transfer encoding.

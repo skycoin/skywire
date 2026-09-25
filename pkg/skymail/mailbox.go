@@ -42,7 +42,9 @@ type Config struct {
 	// Dialers reach a peer's port 25, keyed by address suffix. A
 	// suffix with no dialer cannot be sent to.
 	Dialers map[string]skymailbridge.Dialer
-	Log     logrus.FieldLogger
+	// Limits bound what the mailbox keeps; zero fields take defaults.
+	Limits Limits
+	Log    logrus.FieldLogger
 }
 
 // Mailbox is one PK's mail: a Maildir, an SMTP receiver policy, and a
@@ -55,6 +57,8 @@ type Mailbox struct {
 
 	wlMu      sync.RWMutex
 	whitelist map[cipher.PubKey]struct{}
+
+	lim limitState
 }
 
 // Open creates (or reopens) the mailbox under cfg.Dir.
@@ -78,6 +82,7 @@ func Open(cfg Config) (*Mailbox, error) {
 		log = logrus.NewEntry(logrus.New())
 	}
 	mb := &Mailbox{cfg: cfg, inbox: inbox, sent: sent, log: log}
+	mb.SetLimits(cfg.Limits)
 	if err := mb.loadWhitelist(); err != nil {
 		return nil, err
 	}
@@ -196,6 +201,9 @@ func (mb *Mailbox) Serve(ctx context.Context, lis net.Listener) error {
 // set so Rcpt/Deliver read as SMTP verbs, not mailbox operations.
 type receiver struct{ mb *Mailbox }
 
+// MaxMessageSize makes the session enforce the mailbox's own limit.
+func (r receiver) MaxMessageSize() int64 { return r.mb.MaxMessageSize() }
+
 func (r receiver) Rcpt(c net.Conn, _, rcpt string, _ []string) error {
 	peer, ok := r.mb.peerPK(c)
 	if !ok || !r.mb.allowed(peer) {
@@ -209,12 +217,18 @@ func (r receiver) Rcpt(c net.Conn, _, rcpt string, _ []string) error {
 		// A mailbox, never a relay.
 		return &skymailbridge.Reply{Code: 550, Enhanced: "5.7.1", Text: rcpt + " is not a mailbox of this visor"}
 	}
+	if r.mb.full() {
+		return &skymailbridge.Reply{Code: 452, Enhanced: "4.2.2", Text: "mailbox full"}
+	}
 	return nil
 }
 
 func (r receiver) Deliver(_ context.Context, env skymailbridge.Envelope) (string, error) {
 	peer, _ := r.mb.peerPK(env.Conn)
 	id, err := r.mb.deliverLocal(peer, env.Body)
+	if errors.Is(err, ErrMailboxFull) {
+		return "", &skymailbridge.Reply{Code: 452, Enhanced: "4.2.2", Text: "mailbox full"}
+	}
 	if err != nil {
 		r.mb.log.WithError(err).Warn("skymail: store")
 		return "", &skymailbridge.Reply{Code: 451, Enhanced: "4.3.0", Text: "mailbox store failed"}
@@ -240,7 +254,7 @@ func (mb *Mailbox) deliverLocal(peer cipher.PubKey, body []byte) (string, error)
 	fmt.Fprintf(&buf, "Received: from %s by %s with ESMTP (skymail); %s\r\n",
 		peer.DNSLabel()+Suffixes[0], mb.cfg.PK.DNSLabel()+Suffixes[0], time.Now().Format(time.RFC1123Z))
 	buf.Write(body)
-	return mb.inbox.put(buf.Bytes(), false)
+	return mb.store(mb.inbox, buf.Bytes(), false)
 }
 
 func (mb *Mailbox) folder(name string) (*maildir, error) {
@@ -357,4 +371,13 @@ func fromNamesPK(from, peerHex string) bool {
 		}
 	}
 	return false
+}
+
+// Attachment decodes attachment n of a message.
+func (mb *Mailbox) Attachment(folder, id string, n int) (*AttachmentData, error) {
+	raw, err := mb.Raw(folder, id)
+	if err != nil {
+		return nil, err
+	}
+	return ExtractAttachment(raw, n)
 }

@@ -2539,3 +2539,16 @@ func (rc *rpcClient) MailDelete(folder, id string) error {
 func (rc *rpcClient) MailSetWhitelist(pks []cipher.PubKey) error {
 	return rc.Call("MailSetWhitelist", &pks, &struct{}{})
 }
+
+// MailAttachment calls MailAttachment.
+func (rc *rpcClient) MailAttachment(folder, id string, n int) (*skymail.AttachmentData, error) {
+	var out skymail.AttachmentData
+	err := rc.Call("MailAttachment", &MailAttachmentRequest{Folder: folder, ID: id, N: n}, &out)
+	return &out, err
+}
+
+// MailSetSettings calls MailSetSettings.
+func (rc *rpcClient) MailSetSettings(u MailSettingsUpdate) error {
+	w := u.Wire()
+	return rc.Call("MailSetSettings", &w, &struct{}{})
+}

@@ -27,6 +27,7 @@ import (
 	"io"
 	"net"
 	"net/smtp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -340,29 +341,60 @@ func readSMTPLine(br *bufio.Reader) (string, error) {
 	return strings.TrimRight(line, "\r\n"), nil
 }
 
+// errTooBig is readDATA's answer to a message over the limit. The body
+// has been read through its terminator, so the session is back in step.
+var errTooBig = errors.New("message exceeds the size limit")
+
 // readDATA reads the message body up to the lone-"." terminator,
-// undoing dot-stuffing per RFC 5321 §4.5.2.
-func readDATA(br *bufio.Reader) ([]byte, error) {
+// undoing dot-stuffing per RFC 5321 §4.5.2. A body over limit is read
+// to its end and discarded: stopping early would leave the rest of it
+// to be parsed as commands.
+func readDATA(br *bufio.Reader, limit int64) ([]byte, error) {
 	var buf []byte
+	over := false
 	for {
 		line, err := br.ReadString('\n')
 		if err != nil {
 			return nil, err
 		}
-		if len(buf)+len(line) > dataSizeLimit {
-			return nil, fmt.Errorf("DATA exceeds %d octets", dataSizeLimit)
-		}
 		trimmed := strings.TrimRight(line, "\r\n")
 		if trimmed == "." {
+			if over {
+				return nil, errTooBig
+			}
 			return buf, nil
+		}
+		if over {
+			continue
 		}
 		// Un-dot-stuff per RFC 5321 §4.5.2: a leading "." that
 		// isn't itself the terminator was added by the sender and
 		// must be stripped before storage.
 		trimmed = strings.TrimPrefix(trimmed, ".")
+		if int64(len(buf)+len(trimmed)+2) > limit {
+			over, buf = true, nil
+			continue
+		}
 		buf = append(buf, trimmed...)
 		buf = append(buf, '\r', '\n')
 	}
+}
+
+// sizeParam returns the RFC 1870 SIZE= value of a MAIL FROM argument,
+// or -1 when the client declared none.
+func sizeParam(arg string) int64 {
+	end := strings.Index(arg, ">")
+	if end < 0 {
+		return -1
+	}
+	for _, p := range strings.Fields(arg[end+1:]) {
+		if k, v, ok := strings.Cut(p, "="); ok && strings.EqualFold(k, "SIZE") {
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+				return n
+			}
+		}
+	}
+	return -1
 }
 
 // splitCommand splits an SMTP command line into verb + remainder.

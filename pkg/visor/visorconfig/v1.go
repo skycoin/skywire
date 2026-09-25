@@ -599,15 +599,21 @@ type SkymailBridgeConfig struct {
 
 // SkymailConfig configures the visor's own mailbox (pkg/skymail): mail
 // to <anything>@<base32-pk>.skynet or .dmsg, received over SMTP on
-// port 25 and kept in a Maildir. The section is optional. Absent, the
-// mailbox runs on js/wasm, where no MTA can, and stays off on native
-// hosts, which may already forward port 25 to Postfix.
+// port 25 and kept in a Maildir. The section is optional: absent, the
+// mailbox runs with the default limits. A visor whose port 25 is
+// forwarded to Postfix (`serve add 25`) leaves it to Postfix.
 type SkymailConfig struct {
 	// Enable starts the mailbox.
 	Enable bool `json:"enable"`
 	// Dir is the Maildir root. Default: "mail" beside the local path
 	// (outside it, because the wasm visor never persists local/).
 	Dir string `json:"dir,omitempty"`
+	// MaxMessageSize, MaxTotalSize (bytes, Inbox and Sent together) and
+	// MaxAge bound what the mailbox keeps: 0 means the default (1 MiB,
+	// 16 MiB, 7 days), a negative value no bound.
+	MaxMessageSize int64    `json:"max_message_size,omitempty"`
+	MaxTotalSize   int64    `json:"max_total_size,omitempty"`
+	MaxAge         Duration `json:"max_age,omitempty"`
 }
 
 // Transport defines a transport config.

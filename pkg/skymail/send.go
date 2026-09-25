@@ -4,11 +4,16 @@ package skymail
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"mime"
+	"mime/multipart"
 	"mime/quotedprintable"
+	"net"
 	"net/mail"
+	"net/textproto"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +32,15 @@ type Outgoing struct {
 	Subject   string   `json:"subject"`
 	Body      string   `json:"body"`
 	InReplyTo string   `json:"in_reply_to,omitempty"`
+	// Attachments go after the text as a multipart/mixed message.
+	Attachments []OutgoingAttachment `json:"attachments,omitempty"`
+}
+
+// OutgoingAttachment is one file to send.
+type OutgoingAttachment struct {
+	Name        string `json:"name"`
+	ContentType string `json:"content_type,omitempty"` // default application/octet-stream
+	Data        []byte `json:"data"`
 }
 
 // RcptResult is the outcome for one recipient. Delivery is immediate:
@@ -35,6 +49,9 @@ type Outgoing struct {
 type RcptResult struct {
 	Rcpt string `json:"rcpt"`
 	Err  string `json:"error,omitempty"`
+	// Via is the network that carried it: "skynet", "dmsg", or "local"
+	// for this mailbox's own PK.
+	Via string `json:"via,omitempty"`
 }
 
 // SendResult is what Send reports.
@@ -114,15 +131,15 @@ func (mb *Mailbox) Send(ctx context.Context, out Outgoing) (*SendResult, error) 
 		wg.Add(1)
 		go func(i int, g *peerGroup) {
 			defer wg.Done()
-			err := mb.deliverGroup(ctx, from, g, msg)
+			via, err := mb.deliverGroup(ctx, from, g, msg)
 			if err != nil {
 				mb.log.WithError(err).WithField("peer", g.pk.Hex()).WithField("via", g.suffix).
 					Warn("skymail: not delivered")
 			}
 			for _, r := range g.rcpts {
-				rr := RcptResult{Rcpt: r.Original}
+				rr := RcptResult{Rcpt: r.Original, Via: via}
 				if err != nil {
-					rr.Err = err.Error()
+					rr.Err, rr.Via = err.Error(), ""
 				}
 				results[i] = append(results[i], rr)
 			}
@@ -143,7 +160,7 @@ func (mb *Mailbox) Send(ctx context.Context, out Outgoing) (*SendResult, error) 
 	if delivered == 0 {
 		return res, errors.New("skymail: not delivered to any recipient")
 	}
-	if id, err := mb.sent.put(msg, true); err != nil {
+	if id, err := mb.store(mb.sent, msg, true); err != nil {
 		mb.log.WithError(err).Warn("skymail: keep Sent copy")
 	} else {
 		res.ID = id
@@ -151,14 +168,16 @@ func (mb *Mailbox) Send(ctx context.Context, out Outgoing) (*SendResult, error) 
 	return res, nil
 }
 
-func (mb *Mailbox) deliverGroup(ctx context.Context, from string, g *peerGroup, msg []byte) error {
+// deliverGroup delivers one SMTP transaction and names the network that
+// carried it.
+func (mb *Mailbox) deliverGroup(ctx context.Context, from string, g *peerGroup, msg []byte) (string, error) {
 	if g.pk == mb.cfg.PK {
 		_, err := mb.deliverLocal(mb.cfg.PK, msg)
-		return err
+		return "local", err
 	}
 	dialer := mb.cfg.Dialers[g.suffix]
 	if dialer == nil {
-		return fmt.Errorf("no route to %s addresses from this visor", g.suffix)
+		return "", fmt.Errorf("no route to %s addresses from this visor", g.suffix)
 	}
 	cfg := skymailbridge.Config{
 		Suffix:     g.suffix,
@@ -166,7 +185,25 @@ func (mb *Mailbox) deliverGroup(ctx context.Context, from string, g *peerGroup, 
 		HeloName:   mb.cfg.PK.DNSLabel() + g.suffix,
 		RemotePort: 25,
 	}
-	return skymailbridge.Relay(ctx, dialer, cfg, from, g.rcpts, msg, mb.log)
+	rd := &recordingDialer{d: dialer}
+	err := skymailbridge.Relay(ctx, rd, cfg, from, g.rcpts, msg, mb.log)
+	return rd.network, err
+}
+
+// recordingDialer notes the network of the connection it hands out: a
+// .skynet address may have fallen back to dmsg, and the sender wants to
+// know.
+type recordingDialer struct {
+	d       skymailbridge.Dialer
+	network string
+}
+
+func (r *recordingDialer) Dial(ctx context.Context, peer cipher.PubKey, port uint16) (net.Conn, error) {
+	c, err := r.d.Dial(ctx, peer, port)
+	if err == nil {
+		r.network = c.RemoteAddr().Network()
+	}
+	return c, err
 }
 
 // parseRcpt accepts only skywire addresses: this mailbox sends nowhere
@@ -203,8 +240,9 @@ func (mb *Mailbox) fromAddress(from, suffix string) (string, error) {
 	return from, nil
 }
 
-// compose builds an RFC 5322 message. The body goes quoted-printable
-// so any line length and any UTF-8 survive every hop unchanged.
+// compose builds an RFC 5322 message. Text goes quoted-printable so any
+// line length and any UTF-8 survive every hop unchanged; attachments go
+// base64 in a multipart/mixed after it.
 func compose(from string, out Outgoing, msgID string) []byte {
 	var b bytes.Buffer
 	hdr := func(k, v string) { fmt.Fprintf(&b, "%s: %s\r\n", k, v) }
@@ -221,13 +259,53 @@ func compose(from string, out Outgoing, msgID string) []byte {
 		hdr("References", out.InReplyTo)
 	}
 	hdr("MIME-Version", "1.0")
-	hdr("Content-Type", "text/plain; charset=utf-8")
-	hdr("Content-Transfer-Encoding", "quoted-printable")
+	if len(out.Attachments) == 0 {
+		hdr("Content-Type", textContentType)
+		hdr("Content-Transfer-Encoding", "quoted-printable")
+		b.WriteString("\r\n")
+		writeQP(&b, out.Body)
+		return b.Bytes()
+	}
+	mw := multipart.NewWriter(&b)
+	hdr("Content-Type", mime.FormatMediaType("multipart/mixed", map[string]string{"boundary": mw.Boundary()}))
 	b.WriteString("\r\n")
-	body := strings.ReplaceAll(strings.ReplaceAll(out.Body, "\r\n", "\n"), "\n", "\r\n")
-	qp := quotedprintable.NewWriter(&b)
-	_, _ = qp.Write([]byte(body)) //nolint:errcheck // bytes.Buffer cannot fail
-	_ = qp.Close()                //nolint:errcheck
-	b.WriteString("\r\n")
+	tw, _ := mw.CreatePart(textproto.MIMEHeader{ //nolint:errcheck // bytes.Buffer cannot fail
+		"Content-Type":              {textContentType},
+		"Content-Transfer-Encoding": {"quoted-printable"},
+	})
+	writeQP(tw, out.Body)
+	for _, a := range out.Attachments {
+		ct := a.ContentType
+		if _, _, err := mime.ParseMediaType(ct); ct == "" || err != nil {
+			ct = "application/octet-stream"
+		}
+		name := a.Name
+		if name == "" {
+			name = "attachment"
+		}
+		h := textproto.MIMEHeader{}
+		h.Set("Content-Type", ct)
+		h.Set("Content-Transfer-Encoding", "base64")
+		h.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
+		pw, _ := mw.CreatePart(h) //nolint:errcheck // bytes.Buffer cannot fail
+		enc := base64.StdEncoding.EncodeToString(a.Data)
+		for len(enc) > 76 {
+			_, _ = pw.Write([]byte(enc[:76] + "\r\n")) //nolint:errcheck
+			enc = enc[76:]
+		}
+		_, _ = pw.Write([]byte(enc + "\r\n")) //nolint:errcheck
+	}
+	_ = mw.Close() //nolint:errcheck
 	return b.Bytes()
+}
+
+const textContentType = "text/plain; charset=utf-8"
+
+// writeQP writes body quoted-printable with CRLF line breaks.
+func writeQP(w io.Writer, body string) {
+	body = strings.ReplaceAll(strings.ReplaceAll(body, "\r\n", "\n"), "\n", "\r\n")
+	qp := quotedprintable.NewWriter(w)
+	_, _ = qp.Write([]byte(body)) //nolint:errcheck
+	_ = qp.Close()                //nolint:errcheck
+	fmt.Fprint(w, "\r\n")         //nolint:errcheck
 }
