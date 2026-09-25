@@ -56,19 +56,6 @@ func (p *rawPeer) recv() Packet {
 	return pkt
 }
 
-// tryRecv is recv for a peer that may legitimately see the session end instead
-// of a packet. It reports the read or parse error rather than failing the test.
-func (p *rawPeer) tryRecv() (Packet, error) {
-	p.t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	data, err := p.cf.ReadFrame(ctx)
-	if err != nil {
-		return Packet{}, err
-	}
-	return Parse(data)
-}
-
 func (p *rawPeer) send(frame []byte) {
 	p.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -148,21 +135,21 @@ func TestServeConnStillRefusesANonConnectHandshakePacket(t *testing.T) {
 	// A CONTINUE is server->client only; from a client it is nonsense.
 	p.send(EncodeContinue(0, 64))
 
-	// The refusal must not serve the session. It may or may not be preceded by
-	// the CLOSE: run() cancels the session context the moment handshake returns
-	// false, which races the writer draining that queued frame, so the far end
-	// legitimately sees either CLOSE(invalid info) or a bare EOF. Asserting the
-	// CLOSE specifically is a coin flip. What is invariant is that no CONTINUE
-	// is ever sent — that is the difference between refused and served.
-	pkt, err := p.tryRecv()
-	if err != nil {
-		return // session torn down without serving: refused
-	}
+	// Two things have to hold. The session must not be served — no CONTINUE,
+	// ever, since that is the difference between refused and served. And the
+	// refusal must SAY SO: the CLOSE carrying the reason is the only thing
+	// that distinguishes "your handshake was wrong" from the connection
+	// having dropped, and flushPending is what makes it reliable rather than
+	// a coin flip against the writer's teardown.
+	pkt := p.recv()
 	if pkt.Type == PacketContinue {
 		t.Fatalf("got CONTINUE on stream %d — the session was SERVED, want refused", pkt.StreamID)
 	}
 	if pkt.Type != PacketClose {
-		t.Fatalf("got type=%#x, want CLOSE or a torn-down session", pkt.Type)
+		t.Fatalf("got type=%#x, want CLOSE", pkt.Type)
+	}
+	if pkt.StreamID != 0 {
+		t.Fatalf("close on stream %d, want the session stream 0", pkt.StreamID)
 	}
 	if len(pkt.Payload) == 0 || pkt.Payload[0] != CloseInvalidInfo {
 		t.Fatalf("close reason = %v, want CloseInvalidInfo (%#x)", pkt.Payload, CloseInvalidInfo)

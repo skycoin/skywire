@@ -173,6 +173,13 @@ func (s *session) run(parent context.Context) {
 	if !s.handshake(ctx) {
 		cancel()
 		<-writerDone
+		// A refused handshake queues its CLOSE and returns; the writer above
+		// selects between that queue and ctx.Done(), so once cancel() fires the
+		// two are both ready and Go picks between them at random. Half the time
+		// the CLOSE is dropped and the client gets a bare EOF instead of the one
+		// frame that says WHY it was refused. writerDone is closed, so nothing
+		// else owns the socket now and the leftovers can go out safely.
+		s.flushPending()
 		return
 	}
 
@@ -192,6 +199,30 @@ func (s *session) run(parent context.Context) {
 
 	cancel()
 	<-writerDone
+}
+
+// flushPending writes whatever the writer goroutine left in the queue. It is
+// only safe once writerDone is closed — coder/websocket permits one concurrent
+// Write, and this is the second writer to touch the socket in a session's life.
+//
+// The deadline is its own because the session context is already canceled by
+// the time this runs; without a fresh one every write here would fail
+// immediately and the frame would be lost exactly as before.
+func (s *session) flushPending() {
+	for {
+		select {
+		case frame := <-s.writes:
+			wctx, wcancel := context.WithTimeout(context.Background(), 5*time.Second)
+			err := s.frames.WriteFrame(wctx, frame)
+			wcancel()
+			if err != nil {
+				s.log.WithError(err).Debug("flush after refusal failed")
+				return
+			}
+		default:
+			return
+		}
+	}
 }
 
 // handshake performs the version-appropriate opening exchange. It reports
