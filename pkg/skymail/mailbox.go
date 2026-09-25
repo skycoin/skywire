@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/mail"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -76,7 +77,11 @@ func Open(cfg Config) (*Mailbox, error) {
 	if log == nil {
 		log = logrus.NewEntry(logrus.New())
 	}
-	return &Mailbox{cfg: cfg, inbox: inbox, sent: sent, log: log}, nil
+	mb := &Mailbox{cfg: cfg, inbox: inbox, sent: sent, log: log}
+	if err := mb.loadWhitelist(); err != nil {
+		return nil, err
+	}
+	return mb, nil
 }
 
 // Address returns the mailbox's address for local part and suffix,
@@ -91,9 +96,53 @@ func (mb *Mailbox) Address(local, suffix string) string {
 	return local + "@" + mb.cfg.PK.DNSLabel() + suffix
 }
 
-// SetWhitelist replaces the set of PKs allowed to deliver. An empty set
-// accepts mail from any PK, as an unrestricted `serve` port does.
-func (mb *Mailbox) SetWhitelist(pks []cipher.PubKey) {
+// whitelistFile holds the whitelist inside the mailbox directory, one
+// hex PK per line, so it persists wherever the mail does (on js/wasm,
+// in the IndexedDB snapshot) with no config write.
+const whitelistFile = "whitelist"
+
+func (mb *Mailbox) loadWhitelist() error {
+	raw, err := os.ReadFile(filepath.Join(mb.cfg.Dir, whitelistFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var pks []cipher.PubKey
+	for _, line := range strings.Fields(string(raw)) {
+		var pk cipher.PubKey
+		if err := pk.Set(line); err != nil {
+			return fmt.Errorf("skymail: whitelist entry %q: %w", line, err)
+		}
+		pks = append(pks, pk)
+	}
+	mb.setWhitelist(pks)
+	return nil
+}
+
+// SetWhitelist replaces the set of PKs allowed to deliver and saves it.
+// An empty set accepts mail from any PK, as an unrestricted `serve`
+// port does.
+func (mb *Mailbox) SetWhitelist(pks []cipher.PubKey) error {
+	var b strings.Builder
+	for _, pk := range pks {
+		b.WriteString(pk.Hex())
+		b.WriteByte('\n')
+	}
+	path := filepath.Join(mb.cfg.Dir, whitelistFile)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(b.String()), 0o600); err != nil {
+		return fmt.Errorf("skymail: save whitelist: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("skymail: save whitelist: %w", err)
+	}
+	mb.setWhitelist(pks)
+	return nil
+}
+
+func (mb *Mailbox) setWhitelist(pks []cipher.PubKey) {
 	wl := make(map[cipher.PubKey]struct{}, len(pks))
 	for _, pk := range pks {
 		wl[pk] = struct{}{}

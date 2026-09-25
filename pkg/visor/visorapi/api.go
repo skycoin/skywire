@@ -41,6 +41,7 @@ type API interface {
 	Dmsg
 	Routing
 	Transports
+	Mail
 }
 
 // Node is the visor itself: status, lifecycle, configuration, rewards and

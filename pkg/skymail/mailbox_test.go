@@ -176,7 +176,7 @@ func TestSendDeliversVerbatimWithTheVerifiedSender(t *testing.T) {
 func TestWhitelistRefusesOtherPKs(t *testing.T) {
 	n := newTestNet()
 	a, b, c := n.addVisor(t), n.addVisor(t), n.addVisor(t)
-	b.mb.SetWhitelist([]cipher.PubKey{c.pk})
+	require.NoError(t, b.mb.SetWhitelist([]cipher.PubKey{c.pk}))
 
 	res, err := a.mb.Send(context.Background(), Outgoing{To: []string{addr("bob", b.pk)}, Subject: "hi", Body: "x"})
 	require.Error(t, err)
@@ -187,7 +187,7 @@ func TestWhitelistRefusesOtherPKs(t *testing.T) {
 	_, err = c.mb.Send(context.Background(), Outgoing{To: []string{addr("bob", b.pk)}, Subject: "hi", Body: "x"})
 	require.NoError(t, err)
 
-	b.mb.SetWhitelist(nil)
+	require.NoError(t, b.mb.SetWhitelist(nil))
 	_, err = a.mb.Send(context.Background(), Outgoing{To: []string{addr("bob", b.pk)}, Subject: "hi", Body: "x"})
 	require.NoError(t, err, "an empty whitelist accepts everyone")
 	inbox, _ := b.mb.List(FolderInbox) //nolint:errcheck
@@ -299,4 +299,23 @@ func TestMessageIDsCannotLeaveTheFolder(t *testing.T) {
 	}
 	_, err := a.mb.List("../../etc")
 	require.Error(t, err)
+}
+
+func TestWhitelistPersistsAcrossReopen(t *testing.T) {
+	dir := t.TempDir()
+	pk, _ := cipher.GenerateKeyPair()
+	allowed, _ := cipher.GenerateKeyPair()
+	mb, err := Open(Config{Dir: dir, PK: pk})
+	require.NoError(t, err)
+	require.Empty(t, mb.Whitelist())
+	require.NoError(t, mb.SetWhitelist([]cipher.PubKey{allowed}))
+
+	again, err := Open(Config{Dir: dir, PK: pk})
+	require.NoError(t, err)
+	require.Equal(t, []cipher.PubKey{allowed}, again.Whitelist())
+
+	require.NoError(t, again.SetWhitelist(nil))
+	again, err = Open(Config{Dir: dir, PK: pk})
+	require.NoError(t, err)
+	require.Empty(t, again.Whitelist(), "clearing it opens the mailbox to everyone again")
 }
