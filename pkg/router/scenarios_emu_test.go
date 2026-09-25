@@ -225,6 +225,64 @@ func TestEmuCutOfBusiestLegCompletes(t *testing.T) {
 	}
 }
 
+// TestEmuBothWayCutOfALegCompletes is scenario (d) with the PRIMARY leg
+// black-holed in BOTH directions — a first hop that stops answering, not one
+// that stops sending. The receiver's SACKs ride the primary, so they are lost
+// with its frames and nothing reports the loss: before sack.leg_silence the
+// group froze at the byte the cut landed on, CRC-clean, until the transfer
+// timed out (the 2026-09-23 rig's 100 MB row stalled at 2 MiB the same way).
+// Two legs, so the survivor must carry everything, in both directions.
+func TestEmuBothWayCutOfALegCompletes(t *testing.T) {
+	for _, dir := range []emuDir{emuDown, emuUp} {
+		dir := dir
+		t.Run(string(dir), func(t *testing.T) {
+			const bytes = 8 * emuMB
+			legs := []emuLegSpec{
+				symmetric("a", 3*emuMB, 60*time.Millisecond, 2*emuMB),
+				symmetric("b", 3*emuMB, 70*time.Millisecond, 2*emuMB),
+			}
+			rig := newEmuRig(t, emuOpts{Legs: legs})
+
+			cutAt := make(chan time.Duration, 1)
+			go func() {
+				deadline := time.Now().Add(emuTimeout)
+				for time.Now().Before(deadline) && rig.Progress() <= bytes/4 {
+					time.Sleep(10 * time.Millisecond)
+				}
+				before := rig.Progress()
+				at := time.Now()
+				rig.Leg(0).Cut()
+				for time.Since(at) < emuTimeout {
+					if rig.Progress() > before {
+						break
+					}
+					time.Sleep(5 * time.Millisecond)
+				}
+				cutAt <- time.Since(at)
+			}()
+
+			x := rig.Transfer(dir, bytes, emuTimeout)
+			ttfb := <-cutAt
+			s := rig.Summary("cut-primary-both-ways", dir, x)
+			s.TTFB = ttfb
+			t.Log(s.Table())
+
+			if !s.HashOK {
+				t.Errorf("the transfer did not survive a both-way cut of the primary: got %d/%d bytes", s.Got, s.Bytes)
+			}
+			// sack.leg_silence (500 ms) plus a SACK round: ~0.65 s in most
+			// runs, ~2 s in a minority (an unexplained second mode). What
+			// this guards is the transfer resuming at all.
+			if ttfb > 3*time.Second {
+				t.Errorf("the stream resumed %v after the cut, past the 3 s bar", ttfb)
+			}
+			if s.Elapsed > 10*time.Second {
+				t.Errorf("8 MB took %v on a surviving 3 MB/s leg", s.Elapsed)
+			}
+		})
+	}
+}
+
 // TestEmuFlappingLegDoesNotWedge is scenario (e): three legs, one cut and
 // restored every 500 ms for the whole transfer. The no-skip reorder frontier
 // must keep advancing — a flapping leg is the shape that wedged the group at

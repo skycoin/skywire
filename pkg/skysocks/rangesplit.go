@@ -1035,7 +1035,7 @@ func watchLost(st net.Conn, lost <-chan struct{}) *lostWatcher {
 	go func() {
 		select {
 		case <-lost:
-			st.Close() //nolint:errcheck,gosec
+			abortStream(st)
 		case <-w.done:
 		}
 	}()
@@ -1044,6 +1044,50 @@ func watchLost(st net.Conn, lost <-chan struct{}) *lostWatcher {
 }
 
 func (w *lostWatcher) stop() { w.once.Do(func() { close(w.done) }) }
+
+// abortStream takes an in-flight exit stream away from the attempt reading it.
+// Close alone does not: yamux serves reads after a LOCAL close (0magnet/yamux
+// stream.go — LocalClose only prohibits further local writes), so on a tunnel
+// that has gone silent without dying — exactly the one a snub is for — the
+// reader stayed parked until its own deadline, rsProbeTimeout (20 s) in the
+// handshake. The snub fired at its bound and the chunk still moved 20 s later,
+// with the whole object's in-order writer waiting behind it. A deadline in the
+// past unblocks the read now.
+func abortStream(st net.Conn) {
+	_ = st.SetDeadline(time.Unix(1, 0)) //nolint:errcheck,gosec
+	_ = st.Close()                      //nolint:errcheck,gosec
+}
+
+// abortedDeadliner is the rolling-deadline half of abortStream: a read loop
+// that re-arms its deadline after the abort landed would otherwise push the
+// past deadline forward again and park once more. Once gone() says the attempt
+// was taken away, every deadline it sets is in the past.
+type abortedDeadliner struct {
+	st   readDeadliner
+	gone func() bool
+}
+
+func (d abortedDeadliner) SetReadDeadline(t time.Time) error {
+	if d.gone() {
+		t = time.Unix(1, 0)
+	}
+	return d.st.SetReadDeadline(t)
+}
+
+// deadliner wraps st so its rolling read deadline respects an abort by this
+// guard, or by the endgame's lost channel (nil for none).
+func (g *tunnelGuard) deadliner(st readDeadliner, lost <-chan struct{}) readDeadliner {
+	return abortedDeadliner{st: st, gone: func() bool {
+		if lost != nil {
+			select {
+			case <-lost:
+				return true
+			default:
+			}
+		}
+		return g.abandoned()
+	}}
+}
 
 // tunnelGuard closes an in-flight range stream the moment its tunnel dies, and
 // remembers that it did so.
@@ -1115,7 +1159,7 @@ func (c *Client) guard(sess *yamux.Session, st net.Conn, m *tunnelMeter) *tunnel
 		select {
 		case <-sess.CloseChan():
 			g.fired.Store(true)
-			st.Close() //nolint:errcheck,gosec
+			abortStream(st)
 			if g.c != nil {
 				g.c.retireTunnel(sess, "tunnel closed under a range fetch")
 			}
@@ -1126,7 +1170,7 @@ func (c *Client) guard(sess *yamux.Session, st net.Conn, m *tunnelMeter) *tunnel
 			// tunnel is alive, and it gets its one-chunk probe back after the
 			// hold.
 			g.snubbed.Store(true)
-			st.Close() //nolint:errcheck,gosec
+			abortStream(st)
 		case <-g.done:
 		}
 	}()
@@ -1343,7 +1387,7 @@ func (c *Client) fetchChunk(req *http.Request, host, validator string, start, en
 	// which is the download half of the snub's progress evidence. It is stamped
 	// per TUNNEL and not per chunk on purpose — a chunk queued behind two others
 	// is not a silent tunnel, and the bytes those two are delivering say so.
-	got, rerr := readChunkBodyProgress(st, meteredBody{r: resp.Body, m: c.meterOf(sess)}, buf[:end-start+1], setChunkIdleTimeout(), onRead)
+	got, rerr := readChunkBodyProgress(g.deadliner(st, p.lost), meteredBody{r: resp.Body, m: c.meterOf(sess)}, buf[:end-start+1], setChunkIdleTimeout(), onRead)
 	return int64(got), rerr
 }
 

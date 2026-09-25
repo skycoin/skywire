@@ -780,6 +780,91 @@ func TestStreamBench(t *testing.T) {
 		}
 	})
 
+	// 5b. spread-cut — criterion 10 when a route LEAVES mid-object, the shape
+	// of the 2026-09-23 rig row 4 (bench/2026-09-23/e65f4df8c-smoke/
+	// mux-spread-3: a route dropped out, the slow standby that replaced it took
+	// 5.8 %, and one route carried 58 %). Three active routes and one slow,
+	// never-measured standby; tun2 is black-holed at the first byte, so it is
+	// snubbed rather than retired and drops out of the planner's candidates.
+	// Two routes cannot both stay under 0.4, so the cap holds only if the
+	// planner refills min_routes from the pool mid-object. The black hole also
+	// times the snub's abort: the object must not wait out rsProbeTimeout.
+	t.Run("spread-cut", func(t *testing.T) {
+		skysettings.Apply(withKnobs(base, map[string]int64{ //nolint:errcheck
+			skysettings.SpreadMaxShare:  mustRatio(t, "0.4"),
+			skysettings.SpreadMinRoutes: 3,
+			// tun2 goes silent rather than away: it is SNUBBED (its socket
+			// stays open, so no guard and no sweep retires it) and sits out
+			// for the rest of the object — a route leaving mid-object.
+			skysettings.TunnelSnubAfter: int64(time.Second),
+			skysettings.TunnelSnubHold:  int64(time.Minute),
+		}))
+		slow := cfg.hopLeg("slow", 2, nextSeed())
+		slow.Up.Delay, slow.Down.Delay = 245*time.Millisecond, 245*time.Millisecond
+		slow.Up.RateBps, slow.Down.RateBps = cfg.hopBpsMin/3, cfg.hopBpsMin/3
+		slow.LatencyMs = 490
+		slow.Name = "slow-245ms-1.0MBs"
+		active := []*tunnel{
+			newTunnel(t, "tun0", []router.EmuLegSpec{cfg.directLeg(nextSeed())}),
+			newTunnel(t, "tun1", []router.EmuLegSpec{cfg.hopLeg("t1", 0, nextSeed())}),
+			newTunnel(t, "tun2", []router.EmuLegSpec{cfg.hopLeg("t2", 1, nextSeed())}),
+		}
+		for _, tn := range active {
+			tn.rig.SetRole("active")
+		}
+		pool := []*tunnel{newTunnel(t, "pool0", []router.EmuLegSpec{slow})}
+		pool[0].rig.SetRole("standby")
+		p := newProxy(t, cfg, active, pool, sinkPort)
+		all := append(append([]*tunnel{}, active...), pool...)
+		// The pool ceiling counts every held tunnel, active ones included;
+		// newProxy's len(standby) would let the pool-shrink pass retire pool0
+		// before the object starts, and the rig's pool is never that tight.
+		p.client.SetStandbyPool(len(all))
+
+		clk := new(readClock)
+		cutAt := int64(1) // the first byte: every chunk after it is still to place
+		cutDone := make(chan struct{})
+		go func() {
+			defer close(cutDone)
+			deadline := time.Now().Add(cfg.timeout)
+			for time.Now().Before(deadline) {
+				if clk.got() >= cutAt {
+					active[2].rig.Leg(0).Cut()
+					return
+				}
+				time.Sleep(5 * time.Millisecond)
+			}
+		}()
+		x := download(t, p, sinkAddr, cfg.down, cfg, clk)
+		<-cutDone
+
+		_, sh := shares(all, true)
+		carried, top := 0, 0.0
+		for _, s := range sh {
+			if s > 0.01 {
+				carried++
+			}
+			if s > top {
+				top = s
+			}
+		}
+		slack := float64(cfg.chunk) / float64(cfg.down)
+		record(t, &rows, "spread-cut", "down", x, all,
+			fmt.Sprintf("tun2 black-holed at byte %d and snubbed, slow pool0 in the pool; spread.max_share=0.4 min_routes=3: %d routes carried, top=%.1f%% (cap %.1f%%)",
+				cutAt, carried, 100*top, 100*(0.4+slack)))
+		ratio(&rows[len(rows)-1])
+		if top > 0.4+slack {
+			t.Errorf("top route carried %.1f%% of the object, over the %.1f%% cap", 100*top, 100*(0.4+slack))
+		}
+		// The snubbed chunks sat out rsProbeTimeout (20 s) before the abort
+		// unblocked their reads; with it the cell runs in ~11 s at 2 MB/s,
+		// paced by the slow route the cap forces a third of the object onto.
+		if x.elapsed >= 20*time.Second {
+			t.Errorf("object took %v: the snubbed tunnel's chunks waited out their read deadline", x.elapsed)
+		}
+		assertIntegrity(t)
+	})
+
 	// 6. standby-cut — 2 active + 4 standby; one active tunnel's legs are
 	// black-holed a quarter of the way into the download. The object must still
 	// arrive intact and the next byte must land inside two seconds.
@@ -843,6 +928,46 @@ func TestStreamBench(t *testing.T) {
 		// role could clamp the dial).
 		pool[0].rig.SimulateEstablishMuxRoutesWiden(2) //nolint:errcheck // return checked via assertLegDiscipline below
 		assertLegDiscipline(t, 1, active, pool)
+	})
+
+	// 6b. leg-cut — compose 2x2 with two standby; the PRIMARY leg of tun0 is
+	// black-holed in both directions a quarter of the way in. tun0 keeps a
+	// healthy second leg, so nothing should notice beyond a short gap. Before
+	// sack.leg_silence the receiver's SACKs all rode the dead leg, tun0 froze,
+	// and the object waited ~28 s for the snub (the 2026-09-23 rig's 100 MB
+	// row stalled at 2 MiB the same way).
+	t.Run("leg-cut", func(t *testing.T) {
+		skysettings.Apply(base) //nolint:errcheck
+		active, pool, p := build(t, 2, 2, 2, false)
+		p.client.SetStandbyPool(len(active) + len(pool))
+		all := append(append([]*tunnel{}, active...), pool...)
+		clk := new(readClock)
+		cutAt := cfg.down / 4
+		cutDone := make(chan struct{})
+		go func() {
+			defer close(cutDone)
+			deadline := time.Now().Add(cfg.timeout)
+			for time.Now().Before(deadline) {
+				if clk.got() >= cutAt {
+					clk.mark()
+					active[0].rig.Leg(0).Cut()
+					return
+				}
+				time.Sleep(5 * time.Millisecond)
+			}
+		}()
+		x := download(t, p, sinkAddr, cfg.down, cfg, clk)
+		<-cutDone
+		gap := clk.gap()
+		record(t, &rows, "leg-cut", "down", x, all,
+			fmt.Sprintf("tun0's primary leg black-holed both ways at %d bytes; widest byte-free gap after the cut %v", cutAt, gap))
+		ratio(&rows[len(rows)-1])
+		if gap < 0 {
+			t.Error("no byte landed after the cut — the transfer never resumed")
+		} else if gap >= 10*time.Second {
+			t.Errorf("byte-free gap after a one-leg cut = %v, want under 10s (usually ms; ~6 s in a minority of runs)", gap)
+		}
+		assertLegDiscipline(t, 2, active, pool)
 	})
 
 	// 7. up2 — two concurrent uploads on tunnels-2; the row is their sum.

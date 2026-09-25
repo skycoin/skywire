@@ -93,7 +93,10 @@ type legCounters struct {
 	sentPackets atomic.Uint64 // atomic
 	recvBytes   atomic.Uint64 // atomic
 	recvPackets atomic.Uint64 // atomic
-	retransmits atomic.Uint64 // atomic
+	// lastRecvNano is when this leg last delivered an inbound frame (UnixNano,
+	// 0 = never): the evidence sackLeg reads to keep SACKs off a dead leg.
+	lastRecvNano atomic.Int64
+	retransmits  atomic.Uint64 // atomic
 	// payloadBytes is the UNIQUE in-order payload this leg delivered: each
 	// sequence credited once, to the leg it FIRST arrived on. Unlike recvBytes
 	// (every inbound frame, incl. retransmits/duplicates), a retransmit of a seq
@@ -1469,8 +1472,40 @@ func (m *routeMux) recordRecv(idx int, n uint64) {
 	if idx < len(m.legs) {
 		m.legs[idx].recvBytes.Add(n)
 		m.legs[idx].recvPackets.Add(1)
+		m.legs[idx].lastRecvNano.Store(time.Now().UnixNano())
 	}
 	m.legMu.RUnlock()
+}
+
+// sackLeg picks the leg a receiver-side SACK rides. The primary (0), as it
+// always has — unless the primary has received nothing for `silence` while
+// another leg has received since; then the leg that received last. A SACK
+// pinned to the primary is lost whole when the primary is black-holed in both
+// directions: the sender hears no loss, its windows fill with frames nobody
+// will ever acknowledge, and the group delivers nothing more over a survivor
+// that is perfectly healthy (TestEmuBothWayCutOfALegCompletes; the 2026-09-23
+// rig's 100 MB row stalled at 2 MiB). A leg that is receiving is a leg whose
+// path answers, so its reverse direction is the best evidence available.
+func (m *routeMux) sackLeg(silence time.Duration, now int64) int {
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	if len(m.legs) < 2 || m.legs[0] == nil {
+		return 0
+	}
+	primary := m.legs[0].lastRecvNano.Load()
+	if now-primary < int64(silence) {
+		return 0
+	}
+	best, bestAt := 0, primary
+	for i := 1; i < len(m.legs); i++ {
+		if m.legs[i] == nil {
+			continue
+		}
+		if at := m.legs[i].lastRecvNano.Load(); at > bestAt {
+			best, bestAt = i, at
+		}
+	}
+	return best
 }
 
 // recordPayload atomically credits leg idx with n bytes of UNIQUE in-order
