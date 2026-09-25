@@ -26,8 +26,9 @@ Because it is open to every PK by default, the mailbox keeps little: a
 message over 1 MiB is refused, a mailbox holding 16 MiB (Inbox and Sent
 together) refuses mail until some is deleted or expires, and mail older
 than 7 days is deleted. `mail settings` changes any of these live and
-saves them to the config (`skymail.max_message_size`, `max_total_size`,
-`max_age`; `none` removes a bound).
+keeps the change in `settings.json` beside the mail (`none` removes a
+bound). The config section `skymail` (`enable`, `max_message_size`,
+`max_total_size`, `max_age`) sets the baseline those override.
 
 In the browser desk the same actions are the ☰ **mail** app. Sending is
 immediate: a recipient whose visor is offline gets an error, and nothing

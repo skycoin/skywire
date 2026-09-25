@@ -162,13 +162,6 @@ func TestMailSettingsApplyLiveAndPersist(t *testing.T) {
 	t.Cleanup(cancel)
 	a, b := mailVisor(t, ctx, clients[0]), mailVisor(t, ctx, clients[1])
 
-	path := filepath.Join(t.TempDir(), "config.json")
-	_, sk := cipher.GenerateKeyPair()
-	common, err := visorconfig.NewCommon(logging.NewMasterLogger(), path, &sk)
-	require.NoError(t, err)
-	common.PK = clients[1].LocalPK()
-	b.conf.Common = common
-
 	off, on := false, true
 	require.NoError(t, b.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &off}))
 	st, err := b.MailStatus()
@@ -198,10 +191,24 @@ func TestMailSettingsApplyLiveAndPersist(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "dmsg", res.Recipients[0].Via)
 
-	saved, err := visorconfig.ReadFile(path)
+	// A restart, or a tab reload that regenerates the config: a fresh
+	// visor on the same mail directory and a config that knows nothing of
+	// the change still comes up with it.
+	fresh := &Visor{
+		conf: &visorconfig.V1{
+			Common:    &visorconfig.Common{PK: clients[1].LocalPK()},
+			LocalPath: b.conf.LocalPath,
+		},
+		initLock: new(sync.RWMutex),
+	}
+	enabled, limits, err := skymailEffective(fresh.conf)
 	require.NoError(t, err)
-	require.NotNil(t, saved.Skymail)
-	require.True(t, saved.Skymail.Enable)
-	require.Equal(t, small, saved.Skymail.MaxMessageSize)
-	require.Equal(t, visorconfig.Duration(age), saved.Skymail.MaxAge)
+	require.True(t, enabled)
+	require.Equal(t, small, limits.MaxMessageSize)
+	require.Equal(t, age, limits.MaxAge)
+
+	require.NoError(t, b.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &off}))
+	enabled, _, err = skymailEffective(fresh.conf)
+	require.NoError(t, err)
+	require.False(t, enabled, "off survives a restart too")
 }

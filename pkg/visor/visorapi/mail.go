@@ -32,7 +32,7 @@ type Mail interface {
 	// accepts everyone. Persisted with the mail.
 	MailSetWhitelist(pks []cipher.PubKey) error
 	// MailSetSettings changes whether the mailbox runs and its limits,
-	// at once, and saves them to the config.
+	// at once, and keeps them beside the mail (settings.json).
 	MailSetSettings(u MailSettingsUpdate) error
 }
 

@@ -509,8 +509,8 @@ func (p *mailPane) showWhitelist() {
 	}
 }
 
-// showSettings edits the live settings: they apply at once and are saved
-// to the visor config.
+// showSettings edits the live settings: they apply at once and are kept
+// beside the mail, so a tab reload keeps them.
 func (p *mailPane) showSettings() {
 	var st *visorapi.MailStatus
 	if err := p.call(func(a visorapi.API) (err error) { st, err = a.MailStatus(); return err }); err != nil {

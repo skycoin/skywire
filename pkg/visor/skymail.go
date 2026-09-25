@@ -6,14 +6,16 @@
 // no certificate, so it runs as-is in a browser tab. It is on by
 // default everywhere; the size and age limits keep an open mailbox from
 // filling the storage it lives in. Enable and every limit are live
-// settings (MailSetSettings), persisted to the config.
+// settings (MailSetSettings), kept in settings.json beside the mail.
 package visor
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -106,11 +108,78 @@ func skymailLimits(conf *visorconfig.V1) skymail.Limits {
 	}
 }
 
+// skymailSettingsFile keeps the settings changed at runtime beside the
+// mail, like the whitelist. The config cannot hold them: the wasm desk
+// regenerates the visor config on every boot, so a flushed change was
+// gone after a tab reload. Order of precedence: this file, the config
+// section, the defaults.
+const skymailSettingsFile = "settings.json"
+
+type skymailSaved struct {
+	Enable         *bool                 `json:"enable,omitempty"`
+	MaxMessageSize *int64                `json:"max_message_size,omitempty"`
+	MaxTotalSize   *int64                `json:"max_total_size,omitempty"`
+	MaxAge         *visorconfig.Duration `json:"max_age,omitempty"`
+}
+
+func loadSkymailSaved(dir string) (skymailSaved, error) {
+	var s skymailSaved
+	raw, err := os.ReadFile(filepath.Join(dir, skymailSettingsFile)) //nolint:gosec // our own file
+	if errors.Is(err, os.ErrNotExist) {
+		return s, nil
+	}
+	if err != nil {
+		return s, err
+	}
+	return s, json.Unmarshal(raw, &s)
+}
+
+func (s skymailSaved) save(dir string) error {
+	raw, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, skymailSettingsFile)
+	if err := os.WriteFile(path+".tmp", raw, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(path+".tmp", path)
+}
+
+// skymailEffective is whether the mailbox should run and its limits.
+func skymailEffective(conf *visorconfig.V1) (bool, skymail.Limits, error) {
+	enabled, l := skymailEnabled(conf), skymailLimits(conf)
+	s, err := loadSkymailSaved(skymailDir(conf))
+	if s.Enable != nil {
+		enabled = *s.Enable
+	}
+	if s.MaxMessageSize != nil {
+		l.MaxMessageSize = *s.MaxMessageSize
+	}
+	if s.MaxTotalSize != nil {
+		l.MaxTotalSize = *s.MaxTotalSize
+	}
+	if s.MaxAge != nil {
+		l.MaxAge = time.Duration(*s.MaxAge)
+	}
+	return enabled, l, err
+}
+
 func initSkymail(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.mail.mu.Lock()
 	v.mail.ctx, v.mail.log = ctx, log
 	v.mail.mu.Unlock()
-	if v.conf == nil || !skymailEnabled(v.conf) {
+	if v.conf == nil {
+		return nil
+	}
+	enabled, _, err := skymailEffective(v.conf)
+	if err != nil {
+		log.WithError(err).Warn("mailbox: unreadable " + skymailSettingsFile + "; using the config")
+	}
+	if !enabled {
 		v.mail.mu.Lock()
 		v.mail.reason = "disabled"
 		v.mail.mu.Unlock()
@@ -160,7 +229,8 @@ func (v *Visor) startSkymail() error {
 	}
 
 	v.initLock.Lock()
-	dir, limits := skymailDir(v.conf), skymailLimits(v.conf)
+	dir := skymailDir(v.conf)
+	_, limits, _ := skymailEffective(v.conf) //nolint:errcheck // reported at init
 	v.initLock.Unlock()
 	mb, err := skymail.Open(skymail.Config{
 		Dir: dir,
@@ -254,8 +324,9 @@ func (v *Visor) mailbox() (*skymailRuntime, error) {
 // MailStatus implements visorapi.API.
 func (v *Visor) MailStatus() (*visorapi.MailStatus, error) {
 	v.initLock.Lock()
-	enabled, limits := skymailEnabled(v.conf), skymailLimits(v.conf).WithDefaults()
+	enabled, limits, _ := skymailEffective(v.conf) //nolint:errcheck // a status line
 	v.initLock.Unlock()
+	limits = limits.WithDefaults()
 	st := &visorapi.MailStatus{Enabled: enabled, Limits: limits, Whitelist: []cipher.PubKey{}}
 	rt, err := v.mailbox()
 	if err != nil {
@@ -285,42 +356,48 @@ func (v *Visor) MailStatus() (*visorapi.MailStatus, error) {
 	return st, nil
 }
 
-// MailSetSettings implements visorapi.API: it applies at once and
-// persists to the config.
+// MailSetSettings implements visorapi.API: it applies at once and is
+// kept in the mailbox's settings.json, which survives a restart and, in
+// a browser tab, a reload.
 func (v *Visor) MailSetSettings(u visorapi.MailSettingsUpdate) error {
 	v.initLock.Lock()
-	if v.conf.Skymail == nil {
-		v.conf.Skymail = &visorconfig.SkymailConfig{Enable: skymailEnabled(v.conf)}
+	dir := skymailDir(v.conf)
+	v.initLock.Unlock()
+	s, err := loadSkymailSaved(dir)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", skymailSettingsFile, err)
 	}
-	s := v.conf.Skymail
 	if u.Enable != nil {
-		s.Enable = *u.Enable
+		s.Enable = u.Enable
 	}
 	if u.MaxMessageSize != nil {
-		s.MaxMessageSize = *u.MaxMessageSize
+		s.MaxMessageSize = u.MaxMessageSize
 	}
 	if u.MaxTotalSize != nil {
-		s.MaxTotalSize = *u.MaxTotalSize
+		s.MaxTotalSize = u.MaxTotalSize
 	}
 	if u.MaxAge != nil {
-		s.MaxAge = visorconfig.Duration(*u.MaxAge)
+		d := visorconfig.Duration(*u.MaxAge)
+		s.MaxAge = &d
 	}
-	enable, limits := s.Enable, skymailLimits(v.conf)
-	v.initLock.Unlock()
+	if err := s.save(dir); err != nil {
+		return fmt.Errorf("save %s: %w", skymailSettingsFile, err)
+	}
 
-	var err error
-	if enable {
-		err = v.startSkymail()
-		if rt, rerr := v.mailbox(); rerr == nil {
-			rt.mb.SetLimits(limits)
-		}
-	} else {
+	v.initLock.Lock()
+	enable, limits, _ := skymailEffective(v.conf) //nolint:errcheck // just written
+	v.initLock.Unlock()
+	if !enable {
 		v.stopSkymail("disabled")
+		return nil
 	}
-	if ferr := v.conf.Flush(); ferr != nil && err == nil {
-		err = fmt.Errorf("applied, but not saved: %w", ferr)
+	if err := v.startSkymail(); err != nil {
+		return err
 	}
-	return err
+	if rt, err := v.mailbox(); err == nil {
+		rt.mb.SetLimits(limits)
+	}
+	return nil
 }
 
 // MailList implements visorapi.API.

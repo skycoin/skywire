@@ -3,7 +3,9 @@
 [← skywire cli mail](../README.md)
 
 Show or change the mailbox's settings. Changes apply at once and are
-saved to the visor config.
+kept in settings.json beside the mail, so they survive a restart and,
+in a browser tab, a reload. The config's skymail section is the
+baseline they override.
 
 Keys:
   enable            true|false — run the mailbox
