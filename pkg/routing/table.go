@@ -120,6 +120,9 @@ func (mt *memTable) reserveKeysImpl(n int) (first, last RouteID, err error) {
 }
 
 func (mt *memTable) SaveRule(rule Rule) error {
+	if err := rule.Validate(); err != nil {
+		return err
+	}
 	key := rule.KeyRouteID()
 	now := time.Now()
 

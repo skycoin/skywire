@@ -6,6 +6,7 @@ package router
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -203,15 +204,36 @@ func (c *SetupClient) Capabilities(ctx context.Context) ([]string, error) {
 func (c *SetupClient) DialRouteGroupBatch(ctx context.Context, batch routing.BidirectionalRouteBatch) (routing.BidirectionalRouteBatchReply, error) {
 	var resp routing.BidirectionalRouteBatchReply
 	err := c.call(ctx, rpcName+".DialRouteGroupBatch", &batch, &resp)
-	return resp, err
+	if err != nil {
+		return resp, err
+	}
+	// A malformed member fails alone, like any other per-route failure.
+	for i := range resp.Results {
+		res := &resp.Results[i]
+		if res.Failed() {
+			continue
+		}
+		if err := res.Rules.Validate(); err != nil {
+			res.Rules = routing.EdgeRules{}
+			res.Error = "setup node reply: " + err.Error()
+		}
+	}
+	return resp, nil
 }
 
 // DialRouteGroup generates rules for routes from a visor and sends them to visors.
 func (c *SetupClient) DialRouteGroup(ctx context.Context, req routing.BidirectionalRoute) (routing.EdgeRules, error) {
 	var resp routing.EdgeRules
 	err := c.call(ctx, rpcName+".DialRouteGroup", req, &resp)
-
-	return resp, err
+	if err != nil {
+		return resp, err
+	}
+	// The setup node's reply becomes this visor's route group; a malformed
+	// rule in it must fail the dial, not panic an accessor later.
+	if err := resp.Validate(); err != nil {
+		return routing.EdgeRules{}, fmt.Errorf("setup node reply: %w", err)
+	}
+	return resp, nil
 }
 
 func (c *SetupClient) call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error {

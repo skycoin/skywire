@@ -40,8 +40,8 @@ func TestClient_AddEdgeRules(t *testing.T) {
 
 	rules := routing.EdgeRules{
 		Desc:    desc,
-		Forward: routing.Rule{0, 0, 0},
-		Reverse: routing.Rule{1, 1, 1},
+		Forward: testFwdRule,
+		Reverse: testRevRule,
 	}
 
 	r := &MockRouter{}
@@ -57,8 +57,8 @@ func TestClient_AddEdgeRules(t *testing.T) {
 }
 
 func TestClient_AddIntermediaryRules(t *testing.T) {
-	rule1 := routing.Rule{0, 0, 0}
-	rule2 := routing.Rule{1, 1, 1}
+	rule1 := testInterRule
+	rule2 := testInterRule2
 	rulesIfc := []interface{}{rule1, rule2}
 	rules := []routing.Rule{rule1, rule2}
 

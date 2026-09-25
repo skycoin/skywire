@@ -213,6 +213,9 @@ func (ch *CascadeHandler) processInstall(msg *routing.CascadeSetup) (*routing.Ca
 			return nil, fmt.Errorf("cascade edge install: expected 2 rules, got %d", len(rules))
 		}
 		edge := routing.EdgeRules{Desc: msg.EdgeDesc, Forward: rules[0], Reverse: rules[1]}
+		if err := edge.Validate(); err != nil {
+			return nil, fmt.Errorf("cascade edge install: %w", err)
+		}
 		if err := ch.introduceRules(edge); err != nil {
 			return nil, fmt.Errorf("introduce edge rules: %w", err)
 		}

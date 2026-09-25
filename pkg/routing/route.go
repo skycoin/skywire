@@ -120,6 +120,24 @@ type EdgeRules struct {
 	Reverse Rule
 }
 
+// Validate checks that Forward is a valid forward rule and Reverse a valid
+// consume rule, the roles every consumer of EdgeRules reads them in.
+func (er EdgeRules) Validate() error {
+	if err := er.Forward.Validate(); err != nil {
+		return fmt.Errorf("forward: %w", err)
+	}
+	if t := er.Forward.Type(); t != RuleForward {
+		return fmt.Errorf("%w: forward edge rule has type %s", ErrInvalidRule, t)
+	}
+	if err := er.Reverse.Validate(); err != nil {
+		return fmt.Errorf("reverse: %w", err)
+	}
+	if t := er.Reverse.Type(); t != RuleReverse {
+		return fmt.Errorf("%w: reverse edge rule has type %s", ErrInvalidRule, t)
+	}
+	return nil
+}
+
 // String implements fmt.Stringer
 func (er EdgeRules) String() string {
 	m := map[string]interface{}{

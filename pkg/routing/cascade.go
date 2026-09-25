@@ -334,6 +334,9 @@ func DeserializeRules(data []byte) ([]Rule, error) {
 		}
 		rule := make(Rule, ruleLen)
 		copy(rule, data[off:off+ruleLen])
+		if err := rule.Validate(); err != nil {
+			return nil, fmt.Errorf("cascade: rule %d: %w", i, err)
+		}
 		rules = append(rules, rule)
 		off += ruleLen
 	}
