@@ -610,12 +610,12 @@ func (r *router) DialRoutes(
 		// accepts but never replies can't wedge the whole dial (and the app in
 		// "starting"). On timeout we fall through to the retry-with-exclude loop
 		// below, which re-fetches a fresh route and tries again. See
-		// routeSetupDialTimeout.
+		// routeSetupDialTimeout and setupAttemptTimeout.
 		setupCtx := ctx
 		if escalateToLegacy {
 			setupCtx = WithForceLegacyRouteSetup(ctx)
 		}
-		dialCtx, cancelDial := context.WithTimeout(setupCtx, routeSetupDialTimeout)
+		dialCtx, cancelDial := context.WithTimeout(setupCtx, setupAttemptTimeout(ctx))
 		rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(dialCtx, log, r.dmsgC, r.conf.SetupNodes, req)
 		cancelDial()
 		if err != nil {
@@ -1367,4 +1367,32 @@ func (r *router) dialPolicyHook(opts *DialOptions, rPort routing.Port) DialHook 
 		return nil
 	}
 	return r.effectiveDialHook(rPort)
+}
+
+// setupAttemptTimeout sizes one route-setup attempt from the time the dial
+// has left. A single attempt allowed the whole budget leaves the retry
+// loop nothing: callers commonly bound the entire dial by 30 s — the
+// dmsg-over-skynet session dial, the mailbox relay — which is exactly
+// routeSetupDialTimeout, so one setup that hung (a relay through a
+// neighbor that accepted and went quiet) failed the dial with no second
+// candidate tried. Each attempt gets half of what is left, at least
+// routeSetupAttemptFloor (or whatever remains, if less) and at most
+// routeSetupDialTimeout; a dial with no deadline keeps the full bound.
+func setupAttemptTimeout(ctx context.Context) time.Duration {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return routeSetupDialTimeout
+	}
+	remaining := time.Until(deadline)
+	t := remaining / 2
+	if t < routeSetupAttemptFloor {
+		t = routeSetupAttemptFloor
+	}
+	if t > remaining {
+		t = remaining
+	}
+	if t > routeSetupDialTimeout {
+		t = routeSetupDialTimeout
+	}
+	return t
 }

@@ -280,6 +280,13 @@ func (ce *Client) getClientEntryCached(ctx context.Context, clientPK cipher.PubK
 	entry, err := getClientEntry(ctx, ce.dc, clientPK)
 	if err != nil {
 		ce.LookupHTTPMisses.Add(1)
+		// Stale-if-error: see entryStaleMaxAge.
+		if stale, ok := ce.getStaleEntry(clientPK, entryStaleMaxAge); ok && stale.Client != nil {
+			ce.LookupStaleHits.Add(1)
+			ce.log.WithError(err).WithField("remote_pk", clientPK.Hex()).
+				Debug("Discovery lookup failed; dialing with the expired cached entry")
+			return stale, nil
+		}
 		return nil, err
 	}
 	ce.LookupHTTPHits.Add(1)

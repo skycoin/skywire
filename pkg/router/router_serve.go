@@ -108,6 +108,7 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 // Serve starts transport listening loop.
 func (r *router) Serve(ctx context.Context) error {
 	r.logger.Debug("Starting router")
+	go r.warmTPDSnapshot(ctx)
 
 	// Initialize cascade handler so visors can process cascade route
 	// setup messages arriving on route ID 0 of any transport.

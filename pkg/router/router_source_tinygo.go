@@ -92,3 +92,6 @@ func (stubRouteGroupDialer) Dial(_ context.Context, _ *logging.Logger, _ *dmsg.C
 // NewSetupNodeDialer returns the edge-only stub dialer. The native
 // implementation (wrappers.go) builds a real setup-node-backed dialer.
 func NewSetupNodeDialer() RouteGroupDialer { return stubRouteGroupDialer{} }
+
+// warmTPDSnapshot is a no-op where local route calculation is compiled out.
+func (r *router) warmTPDSnapshot(_ context.Context) {}

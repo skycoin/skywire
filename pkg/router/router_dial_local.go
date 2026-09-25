@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -807,4 +808,29 @@ func firstHopsOf(paths [][]routing.Hop) string {
 		out = append(out, p[0].TpID.String()[:8])
 	}
 	return strings.Join(out, ",")
+}
+
+// tpdWarmDelay lets boot settle before the first full TPD fetch.
+const tpdWarmDelay = 20 * time.Second
+
+// warmTPDSnapshot fills the TPD snapshot once, in the background, so the
+// first dial that falls back to a local route calculation reads it from
+// memory instead of fetching and indexing the whole transport set on its
+// own deadline (about 19 s in a browser tab: the dial's entire budget).
+// Later refreshes happen behind the cache (see tpdSnapshotCache.snapshot).
+func (r *router) warmTPDSnapshot(ctx context.Context) {
+	if r.tpdCache == nil || r.tm == nil || r.tm.Conf == nil || r.tm.Conf.DiscoveryClient == nil {
+		return
+	}
+	select {
+	case <-time.After(tpdWarmDelay):
+	case <-ctx.Done():
+		return
+	}
+	dc := r.tm.Conf.DiscoveryClient
+	wctx, cancel := context.WithTimeout(ctx, tpdBackgroundRefreshTimeout)
+	defer cancel()
+	if _, err := r.tpdCache.snapshot(wctx, dc.GetAllTransports, versionProbe(dc)); err != nil {
+		r.logger.WithError(err).Debug("TPD snapshot warm-up failed; the first local route calculation will fetch it")
+	}
 }

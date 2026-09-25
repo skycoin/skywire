@@ -74,6 +74,11 @@ const (
 	// while staying well under the per-dial ceiling.
 	routeSetupDialTimeout = 30 * time.Second
 
+	// routeSetupAttemptFloor is the least one setup attempt is given when
+	// the dial's remaining budget is split (see setupAttemptTimeout): a
+	// healthy cascade takes 2-5 s, a slow multi-hop one more.
+	routeSetupAttemptFloor = 8 * time.Second
+
 	maxHops       = 1000
 	retryDuration = 2 * time.Second
 	retryInterval = 500 * time.Millisecond
