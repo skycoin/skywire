@@ -117,6 +117,10 @@ func setTunnelPriorRefresh() time.Duration {
 func setExitOpenPenalty() time.Duration {
 	return skysettings.Dur(skysettings.TunnelExitOpenPenalty)
 }
+func setExitOpenTimeout() time.Duration {
+	return skysettings.Dur(skysettings.TunnelExitOpenTimeout)
+}
+func setExitOpenRTTFactor() int        { return skysettings.Count(skysettings.TunnelExitOpenRTTFactor) }
 func setMeterSampleMin() time.Duration { return skysettings.Dur(skysettings.TunnelMeterSampleMin) }
 func setMeterCapDecay() float64        { return skysettings.Ratio(skysettings.TunnelMeterCapDecay) }
 func setMeterFresh() time.Duration     { return skysettings.Dur(skysettings.TunnelMeterFresh) }
@@ -132,6 +136,9 @@ func setChunkIdleTimeout() time.Duration { return skysettings.Dur(skysettings.Ch
 func setChunkFreeRetries() int           { return skysettings.Count(skysettings.ChunkFreeRetries) }
 func setChunkOutstandingFactor() int {
 	return skysettings.Count(skysettings.ChunkOutstandingFactor)
+}
+func setRangeClassifyTimeout() time.Duration {
+	return skysettings.Dur(skysettings.RangeClassifyTimeout)
 }
 
 // rsChunkSize is the range-split chunk ceiling in force: the knob when it has

@@ -80,27 +80,30 @@ const (
 	TunnelPromoteQuietBytes    = "tunnel.promote_quiet_bytes"
 	TunnelPromoteIdleBps       = "tunnel.promote_idle_bps"
 
-	TunnelAuditionWindow   = "tunnel.audition_window"
-	TunnelAuditionEvery    = "tunnel.audition_every"
-	TunnelAuditionParallel = "tunnel.audition_parallel"
-	TunnelPriorRefresh     = "tunnel.prior_refresh"
-	TunnelExitOpenPenalty  = "tunnel.exit_open_penalty"
-	TunnelMeterSampleMin   = "tunnel.meter_sample_min"
-	TunnelMeterCapDecay    = "tunnel.meter_cap_decay"
-	TunnelMeterFresh       = "tunnel.meter_fresh"
-	TunnelSnubAfter        = "tunnel.snub_after"
-	TunnelSnubHold         = "tunnel.snub_hold"
-	TunnelDepthMargin      = "tunnel.depth_margin"
-	TunnelCount            = "tunnel.count"
-	TunnelGroupDialCeiling = "tunnel.group_dial_ceiling"
-	TunnelRTTMinWindow     = "tunnel.rtt_min_window"
-	TunnelRTTSamplesCap    = "tunnel.rtt_samples_cap"
-	TunnelFreezeActive     = "tunnel.freeze_active"
+	TunnelAuditionWindow    = "tunnel.audition_window"
+	TunnelAuditionEvery     = "tunnel.audition_every"
+	TunnelAuditionParallel  = "tunnel.audition_parallel"
+	TunnelPriorRefresh      = "tunnel.prior_refresh"
+	TunnelExitOpenPenalty   = "tunnel.exit_open_penalty"
+	TunnelMeterSampleMin    = "tunnel.meter_sample_min"
+	TunnelMeterCapDecay     = "tunnel.meter_cap_decay"
+	TunnelMeterFresh        = "tunnel.meter_fresh"
+	TunnelSnubAfter         = "tunnel.snub_after"
+	TunnelExitOpenTimeout   = "tunnel.exit_open_timeout"
+	TunnelExitOpenRTTFactor = "tunnel.exit_open_rtt_factor"
+	TunnelSnubHold          = "tunnel.snub_hold"
+	TunnelDepthMargin       = "tunnel.depth_margin"
+	TunnelCount             = "tunnel.count"
+	TunnelGroupDialCeiling  = "tunnel.group_dial_ceiling"
+	TunnelRTTMinWindow      = "tunnel.rtt_min_window"
+	TunnelRTTSamplesCap     = "tunnel.rtt_samples_cap"
+	TunnelFreezeActive      = "tunnel.freeze_active"
 
 	MuxCap   = "mux.cap"
 	MuxWidth = "mux.width"
 
-	RangePort = "range.port"
+	RangePort            = "range.port"
+	RangeClassifyTimeout = "range.classify_timeout"
 
 	ChunkMaxBytes          = "chunk.max_bytes"
 	ChunkProbeBytes        = "chunk.probe_bytes"
@@ -300,6 +303,10 @@ func init() {
 		"how long a busy window's capacity estimate stays authoritative")
 	register(TunnelSnubAfter, KindDuration, int64(20*time.Second),
 		"no byte and no ack for this long, with work outstanding, snubs a tunnel (floored at 2x its smoothed RTT; kept above the longest measured reorder-wedge clear so a head-of-line-blocked tunnel is not re-issued)")
+	register(TunnelExitOpenTimeout, KindDuration, int64(15*time.Second),
+		"how long a new stream waits for the exit to answer its SOCKS5 greeting before the tunnel is benched (floored at tunnel.exit_open_rtt_factor x its smoothed RTT)")
+	register(TunnelExitOpenRTTFactor, KindCount, 4,
+		"multiple of a tunnel's smoothed RTT the exit-open wait is floored at, so a slow path is not cut at tunnel.exit_open_timeout")
 	register(TunnelSnubHold, KindDuration, int64(10*time.Second),
 		"how long a snubbed tunnel sits out before it is re-tried with ONE chunk")
 	register(TunnelDepthMargin, KindDuration, int64(50*time.Millisecond),
@@ -341,6 +348,8 @@ func init() {
 
 	register(RangePort, KindCount, 80,
 		"destination port the splitter treats as plaintext HTTP; overrides --range-port once set")
+	register(RangeClassifyTimeout, KindDuration, int64(5*time.Second),
+		"how long a range-port connection may stay silent before it is spliced as non-HTTP")
 
 	register(ChunkMaxBytes, KindBytes, 4<<20,
 		"range-split chunk ceiling; overrides --range-chunk-kib once set")

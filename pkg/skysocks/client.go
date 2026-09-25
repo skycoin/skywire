@@ -121,14 +121,14 @@ type Client struct {
 
 	// exitOpenTimeouts is the client's cumulative count of exit opens that timed
 	// out — a stream whose exit never answered the SOCKS5 greeting inside
-	// statusSniffTimeout, which returns the browser nothing at all. Kept here as
+	// its exit-open window, which returns the browser nothing at all. Kept here as
 	// well as per-tunnel because a retired tunnel's meter is dropped, and the
 	// status page's number must not go backwards. Surfaced as
 	// proxystatus.Snapshot.ExitOpenTimeouts.
 	exitOpenTimeouts atomic.Uint64
 
-	// sniffTimeout overrides statusSniffTimeout for this client's exit opens.
-	// Zero (the only value production sets) means statusSniffTimeout. It is a
+	// sniffTimeout overrides tunnel.exit_open_timeout for this client's exit opens.
+	// Zero (the only value production sets) means the knob. It is a
 	// per-client field rather than a package var because the package vars the
 	// keepalive loop used to read raced across tests; see probeInterval above.
 	sniffTimeout time.Duration
@@ -3022,7 +3022,7 @@ func (c *Client) openExit(stream net.Conn, greeting []byte) error {
 // CONNECT that was already queued is never acted on beyond the exit's own dial.
 func (c *Client) openExitPipelined(stream net.Conn, greeting, pipelined []byte) error {
 	started := time.Now()
-	_ = stream.SetReadDeadline(started.Add(c.exitOpenWindow())) //nolint:errcheck
+	_ = stream.SetReadDeadline(started.Add(c.exitOpenWindow(stream))) //nolint:errcheck
 	head := greeting
 	if len(pipelined) > 0 {
 		head = make([]byte, 0, len(greeting)+len(pipelined))
@@ -3049,13 +3049,29 @@ func (c *Client) openExitPipelined(stream net.Conn, greeting, pipelined []byte) 
 	return nil
 }
 
+// exitOpenRTTFactor is the default of tunnel.exit_open_rtt_factor.
+const exitOpenRTTFactor = 4
+
 // exitOpenWindow is how long openExit waits for the exit's method-selection
-// reply: statusSniffTimeout unless this client was given a shorter one.
-func (c *Client) exitOpenWindow() time.Duration {
+// reply on stream: tunnel.exit_open_timeout (or this client's test override),
+// floored at tunnel.exit_open_rtt_factor x the tunnel's smoothed RTT. The reply
+// is one exit round trip away, so a fixed window cut every open on a path whose
+// RTT had drifted near it — and cut it with nothing sent to the browser — while
+// a fast path keeps the plain knob.
+func (c *Client) exitOpenWindow(stream net.Conn) time.Duration {
+	win := setExitOpenTimeout()
 	if c.sniffTimeout > 0 {
-		return c.sniffTimeout
+		win = c.sniffTimeout
 	}
-	return statusSniffTimeout
+	if m, _ := c.tunnelOf(stream); m != nil {
+		if rtt, ok := m.rtt(); ok {
+			floor := time.Duration(float64(setExitOpenRTTFactor()) * rtt * float64(time.Millisecond))
+			if floor > win {
+				win = floor
+			}
+		}
+	}
+	return win
 }
 
 // isTimeout reports whether err is a deadline expiry rather than a real error.
@@ -3116,7 +3132,7 @@ func (c *Client) noteExitOpenTimeout(stream net.Conn, elapsed time.Duration, err
 // client is never the loopback browser hitting status.skysocks, so leaving status
 // interception off this path is correct.
 func (c *Client) forwardExitHandshake(conn, stream net.Conn, greeting []byte) (proceed bool, target string) {
-	_ = stream.SetReadDeadline(time.Now().Add(statusSniffTimeout)) //nolint:errcheck
+	_ = stream.SetReadDeadline(time.Now().Add(c.exitOpenWindow(stream))) //nolint:errcheck
 	if _, err := stream.Write(greeting); err != nil {
 		return false, ""
 	}
