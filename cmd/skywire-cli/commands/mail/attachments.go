@@ -2,7 +2,6 @@
 package climail
 
 import (
-	"encoding/base64"
 	"fmt"
 	"mime"
 	"os"
@@ -63,9 +62,8 @@ func safeName(name string) string {
 	return name
 }
 
-// readAttachments loads --attach files and decodes --attach-base64
-// name=DATA pairs.
-func readAttachments(files, b64 []string) ([]skymail.OutgoingAttachment, error) {
+// readAttachments loads --attach files.
+func readAttachments(files []string) ([]skymail.OutgoingAttachment, error) {
 	var out []skymail.OutgoingAttachment
 	for _, p := range files {
 		data, err := os.ReadFile(p) //nolint:gosec // the user named it
@@ -74,19 +72,6 @@ func readAttachments(files, b64 []string) ([]skymail.OutgoingAttachment, error) 
 		}
 		out = append(out, skymail.OutgoingAttachment{
 			Name: filepath.Base(p), ContentType: mime.TypeByExtension(filepath.Ext(p)), Data: data,
-		})
-	}
-	for _, pair := range b64 {
-		name, enc, ok := strings.Cut(pair, "=")
-		if !ok || name == "" {
-			return nil, fmt.Errorf("--attach-base64 %q: want name=BASE64", pair)
-		}
-		data, err := base64.StdEncoding.DecodeString(enc)
-		if err != nil {
-			return nil, fmt.Errorf("--attach-base64 %s: %w", name, err)
-		}
-		out = append(out, skymail.OutgoingAttachment{
-			Name: name, ContentType: mime.TypeByExtension(filepath.Ext(name)), Data: data,
 		})
 	}
 	return out, nil

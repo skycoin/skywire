@@ -33,7 +33,6 @@ var (
 	sendCc    []string
 	sendReply string
 	sendFiles []string
-	sendB64   []string
 	attSent   bool
 	attOut    string
 )
@@ -49,7 +48,6 @@ func init() {
 	sendCmd.Flags().StringSliceVar(&sendCc, "cc", nil, "carbon-copy recipients")
 	sendCmd.Flags().StringVar(&sendReply, "in-reply-to", "", "Message-ID this replies to")
 	sendCmd.Flags().StringArrayVar(&sendFiles, "attach", nil, "attach a file (repeatable)")
-	sendCmd.Flags().StringArrayVar(&sendB64, "attach-base64", nil, "attach name=BASE64DATA (repeatable; what the desk mail app uses)")
 	attachmentCmd.Flags().BoolVar(&attSent, "sent", false, "from Sent instead of the inbox")
 	attachmentCmd.Flags().StringVarP(&attOut, "output", "o", "", "file to write (default: the attachment's own name; - for stdout)")
 }
@@ -210,7 +208,7 @@ Examples:
 			}
 			body = string(raw)
 		}
-		att, err := readAttachments(sendFiles, sendB64)
+		att, err := readAttachments(sendFiles)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -383,5 +381,5 @@ func renderMailbox(st *visorapi.MailStatus) string {
 	}
 	return fmt.Sprintf("mailbox: %d message(s), %d unread; accepts mail from %s\n  %s\n  %s\n  (any local part works; maildir %s)\n  %s of %s used; mail over %s is refused, mail older than %s is deleted\n",
 		st.Total, st.Unread, wl, st.Address, st.AddressDmsg, st.Dir,
-		formatSize(st.Usage), formatSize(st.Limits.MaxTotalSize), formatSize(st.Limits.MaxMessageSize), formatAge(st.Limits.MaxAge))
+		skymail.FormatSize(st.Usage), skymail.FormatSize(st.Limits.MaxTotalSize), skymail.FormatSize(st.Limits.MaxMessageSize), skymail.FormatAge(st.Limits.MaxAge))
 }
