@@ -73,11 +73,15 @@ func (a *Auth) Verify(in []byte) error {
 	return Verify(in, a.Nonce, a.Key, a.Sig)
 }
 
+// errNonceStore marks a failure to read the nonce store: the server could not
+// check the request, which is not the caller's fault.
+var errNonceStore = errors.New("nonce store")
+
 // verifyAuth verifies Request's signature.
 func verifyAuth(store NonceStore, r *http.Request, auth *Auth) error {
 	cur, err := store.Nonce(r.Context(), auth.Key)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", errNonceStore, err)
 	}
 
 	if auth.Nonce != cur {

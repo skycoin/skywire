@@ -32,7 +32,7 @@ func TestRPCGateway_NoTransitRefusesIntermediaryRules(t *testing.T) {
 // Without it, nothing changes: the rules are saved as before.
 func TestRPCGateway_TransitAllowedByDefault(t *testing.T) {
 	mlog := logging.NewMasterLogger()
-	rule := routing.Rule{0, 0, 0}
+	rule := testInterRule
 	r := &MockRouter{}
 	r.On("SaveRoutingRules", rule).Return(testhelpers.NoErr)
 	gw := NewRPCGateway(r, mlog, false)
@@ -48,7 +48,7 @@ func TestRPCGateway_TransitAllowedByDefault(t *testing.T) {
 func TestRPCGateway_NoTransitStillAcceptsEdgeRules(t *testing.T) {
 	mlog := logging.NewMasterLogger()
 	r := &MockRouter{}
-	edge := routing.EdgeRules{Forward: routing.Rule{0, 0, 0}, Reverse: routing.Rule{1, 1, 1}}
+	edge := routing.EdgeRules{Forward: testFwdRule, Reverse: testRevRule}
 	r.On("IntroduceRules", edge).Return(testhelpers.NoErr)
 	gw := NewRPCGateway(r, mlog, true)
 

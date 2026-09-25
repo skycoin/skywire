@@ -108,8 +108,12 @@ func WithAuth(store NonceStore, original http.Handler, shouldVerifyAuth bool) ht
 		if shouldVerifyAuth {
 			err = verifyAuth(store, r, auth)
 			if err != nil {
-				httputil.WriteJSON(w, r, http.StatusUnauthorized,
-					NewHTTPErrorResponse(http.StatusUnauthorized,
+				status := http.StatusUnauthorized
+				if errors.Is(err, errNonceStore) {
+					status = http.StatusInternalServerError
+				}
+				httputil.WriteJSON(w, r, status,
+					NewHTTPErrorResponse(status,
 						err.Error()))
 				return
 			}

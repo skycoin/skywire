@@ -16,8 +16,9 @@ import (
 // neverDial is the Dial of a side that only ever answers.
 func neverDial(context.Context, cipher.PubKey, uint16) (net.Conn, error) { return nil, io.EOF }
 
-// waitNoActive blocks until m lists no live call.
-func waitNoActive(t *testing.T, m *Manager, within time.Duration, who string) {
+// waitNoActive blocks until m lists no live call, failing after a second.
+func waitNoActive(t *testing.T, m *Manager, who string) {
+	const within = time.Second
 	t.Helper()
 	deadline := time.After(within)
 	for len(m.Active()) > 0 {
@@ -110,8 +111,8 @@ func TestPeerHangsUpAtOnce(t *testing.T) {
 			if err := hanger.Hangup(sessA.CallID); err != nil {
 				t.Fatalf("Hangup: %v", err)
 			}
-			waitNoActive(t, other, time.Second, "the side hung up on")
-			waitNoActive(t, hanger, time.Second, "the side that hung up")
+			waitNoActive(t, other, "the side hung up on")
+			waitNoActive(t, hanger, "the side that hung up")
 			if r := otherSess.EndReason(); r != "peer hung up" {
 				t.Fatalf("the side hung up on ended for %q, want \"peer hung up\"", r)
 			}
@@ -194,7 +195,7 @@ func TestNoResumeWithPeerThatPredatesIt(t *testing.T) {
 		if sess.resume != nil {
 			t.Fatal("resumption was armed against a peer that never offered it")
 		}
-		waitNoActive(t, mgrA, time.Second, "the caller")
+		waitNoActive(t, mgrA, "the caller")
 		if got := dialer.count(); got != 1 {
 			t.Fatalf("re-dialed a peer that cannot take a resume: %d conns, want 1", got)
 		}
@@ -235,6 +236,6 @@ func TestNoResumeWithPeerThatPredatesIt(t *testing.T) {
 			t.Fatal("the callee armed resumption against a caller that never offered it")
 		}
 		_ = c.Close() //nolint:errcheck // the old caller's hangup
-		waitNoActive(t, mgrB, time.Second, "the callee")
+		waitNoActive(t, mgrB, "the callee")
 	})
 }

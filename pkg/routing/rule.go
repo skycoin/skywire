@@ -87,6 +87,41 @@ const (
 // There are two types of routing rules; App and Forward.
 type Rule []byte
 
+// ErrInvalidRule is returned for rule bytes that are too short for their type
+// or carry an unknown type. Rules from outside the process are checked with
+// [Rule.Validate] before use; the accessors below assume a valid rule.
+var ErrInvalidRule = errors.New("invalid routing rule")
+
+// minRuleSize is the shortest encoding of each rule type.
+func minRuleSize(t RuleType) (int, bool) {
+	switch t {
+	case RuleReverse:
+		return RuleHeaderSize + routeDescriptorSize, true
+	case RuleForward:
+		return RuleHeaderSize + routeDescriptorSize + 4 + uuidSize, true
+	case RuleIntermediary:
+		return RuleHeaderSize + 4 + uuidSize, true
+	}
+	return 0, false
+}
+
+// Validate reports whether r is long enough for its type and of a known type,
+// so that every accessor can read it without panicking.
+func (r Rule) Validate() error {
+	if len(r) < RuleHeaderSize {
+		return fmt.Errorf("%w: %d bytes, want at least %d", ErrInvalidRule, len(r), RuleHeaderSize)
+	}
+	t := RuleType(r[8])
+	want, ok := minRuleSize(t)
+	if !ok {
+		return fmt.Errorf("%w: unknown type %s", ErrInvalidRule, t)
+	}
+	if len(r) < want {
+		return fmt.Errorf("%w: %s rule of %d bytes, want at least %d", ErrInvalidRule, t, len(r), want)
+	}
+	return nil
+}
+
 func (r Rule) assertLen(l int) {
 	if len(r) < l {
 		panic("bad rule length")
@@ -197,7 +232,7 @@ func (r Rule) NextTransportID() uuid.UUID {
 		offset += routeDescriptorSize
 		fallthrough
 	case RuleIntermediary:
-		r.assertLen(offset + 4)
+		r.assertLen(offset + uuidSize)
 
 		return uuid.Must(uuid.FromBytes(r[offset : offset+uuidSize]))
 	default:
@@ -214,7 +249,7 @@ func (r Rule) setNextTransportID(id uuid.UUID) {
 		offset += routeDescriptorSize
 		fallthrough
 	case RuleIntermediary:
-		r.assertLen(offset + 4)
+		r.assertLen(offset + uuidSize)
 		copy(r[offset:offset+uuidSize], id[:])
 	default:
 		panic(fmt.Sprintf("invalid rule: %v", t.String()))
