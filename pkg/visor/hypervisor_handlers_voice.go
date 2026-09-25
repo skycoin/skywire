@@ -19,6 +19,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // writeVoiceErr maps a voice error to an HTTP status: ErrVoiceDisabled →
@@ -159,12 +160,12 @@ func (hv *Hypervisor) getVoiceLevels() http.HandlerFunc {
 func (hv *Hypervisor) getVoiceDialing() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		if ctx.isRemote || hv.visor == nil {
-			httputil.WriteJSON(w, r, http.StatusOK, []VoiceDialingInfo{})
+			httputil.WriteJSON(w, r, http.StatusOK, []visorapi.VoiceDialingInfo{})
 			return
 		}
 		out, err := hv.visor.VoiceDialing()
 		if err != nil || out == nil {
-			out = []VoiceDialingInfo{}
+			out = []visorapi.VoiceDialingInfo{}
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, out)
 	})

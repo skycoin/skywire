@@ -20,7 +20,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cliout/cliroute"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -113,7 +113,7 @@ Examples:
 			changed = changed || cmd.Flags().Changed(name)
 		}
 		if changed {
-			var next visor.RouterDialSettings
+			var next visorapi.RouterDialSettings
 			if cmd.Flags().Changed("unknown-latency-cost-ms") {
 				next.UnknownLatencyCostMs = dialUnknownLatency
 			}

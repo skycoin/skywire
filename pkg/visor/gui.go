@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/static/icons"
 )
@@ -41,7 +42,7 @@ var (
 	stopVisorFnMx sync.Mutex
 	stopVisorFn   func()
 	closeDmsgDC   func()
-	rpcC          API
+	rpcC          visorapi.API
 )
 
 var (
@@ -208,7 +209,7 @@ func initClientTray(t *appTray, label, desc string, conf *visorconfig.V1, httpCl
 // appStatusBtn polls the client app's connection summary and reflects it
 // in the tray's status line + button title. lastStatus: 0=off, 1=alive,
 // 2=connecting, 3=just-requested.
-func appStatusBtn(t *appTray, rpcClient API) {
+func appStatusBtn(t *appTray, rpcClient visorapi.API) {
 	for {
 		t.mx.Lock()
 		stats, _ := rpcClient.GetAppConnectionsSummary(t.name) //nolint:errcheck
@@ -242,7 +243,7 @@ func appStatusBtn(t *appTray, rpcClient API) {
 	}
 }
 
-func serversBtn(t *appTray, rpcClient API) {
+func serversBtn(t *appTray, rpcClient visorapi.API) {
 	btnChannel := make(chan int)
 	for index, server := range t.servers {
 		go func(chn chan int, server *systray.MenuItem, index int) {
@@ -276,7 +277,7 @@ func serversBtn(t *appTray, rpcClient API) {
 	}
 }
 
-func handleAppButton(t *appTray, rpcClient API) {
+func handleAppButton(t *appTray, rpcClient visorapi.API) {
 	stats, _ := rpcClient.GetAppConnectionsSummary(t.name) //nolint:errcheck
 	if len(stats) == 1 {
 		rpcClient.StopApp(t.name) //nolint:errcheck,gosec
@@ -299,7 +300,7 @@ func initVisorControlBtns(conf *visorconfig.V1) {
 
 // visorControlPoll keeps the Suspend/Resume toggle label and the
 // autoconnect checkbox in sync with the visor's actual state.
-func visorControlPoll(rpcClient API) {
+func visorControlPoll(rpcClient visorapi.API) {
 	for {
 		if rpcClient != nil {
 			if suspended, err := rpcClient.IsSuspended(); err == nil {
@@ -315,7 +316,7 @@ func visorControlPoll(rpcClient API) {
 }
 
 // handleSuspendButton toggles the visor between running and suspended.
-func handleSuspendButton(rpcClient API) {
+func handleSuspendButton(rpcClient visorapi.API) {
 	if rpcClient == nil {
 		return
 	}
@@ -337,7 +338,7 @@ func handleSuspendButton(rpcClient API) {
 
 // handleAutoconnectButton toggles public autoconnect and reflects the new
 // state in the checkbox.
-func handleAutoconnectButton(rpcClient API) {
+func handleAutoconnectButton(rpcClient visorapi.API) {
 	if rpcClient == nil {
 		return
 	}
@@ -582,7 +583,7 @@ func getVPNAddr(conf *visorconfig.V1) string {
 	return hvAddr + "/#/vpn/" + conf.PK.Hex() + "/status"
 }
 
-func rpcClientSystray(conf *visorconfig.V1, logger *logging.Logger) API {
+func rpcClientSystray(conf *visorconfig.V1, logger *logging.Logger) visorapi.API {
 	var conn net.Conn
 	var err error
 	var rpcConnected bool
@@ -597,5 +598,5 @@ func rpcClientSystray(conf *visorconfig.V1, logger *logging.Logger) API {
 		time.Sleep(2 * time.Second)
 	}
 	logger.Info("RPC Connection established")
-	return NewRPCClient(logger, conn, RPCPrefix, 0)
+	return visorapi.NewRPCClient(logger, conn, visorapi.RPCPrefix, 0)
 }

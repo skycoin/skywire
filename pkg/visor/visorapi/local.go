@@ -1,5 +1,10 @@
-// Package visor pkg/visor/local_api.go c3-vis-core
-//
+// Package visorapi pkg/visor/visorapi/local.go c3-vis-core
+package visorapi
+
+import (
+	"sync"
+)
+
 // The visor of THIS process, published for the apps that run inside it.
 //
 // An app launched in internal mode shares the visor's address space, so it can
@@ -18,9 +23,6 @@
 // The mirror image of this already exists: an internal app publishes its HTTP
 // handler (launcher.RegisterHTTPHandler) and the visor serves it directly
 // instead of dialing the app's own port.
-package visor
-
-import "sync"
 
 var (
 	localAPIMu sync.RWMutex

@@ -12,6 +12,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	skycall "github.com/skycoin/skywire/pkg/skychat/call"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // ErrVoiceDisabled is returned when the voice manager isn't running (voice
@@ -103,12 +104,6 @@ func (v *Visor) VoiceIncoming() ([]string, error) {
 	return out, nil
 }
 
-// VoiceDialingInfo is one call this visor is placing, before it is answered.
-type VoiceDialingInfo struct {
-	CallID string `json:"call_id"`
-	Peer   string `json:"peer"`
-}
-
 // VoiceDialing returns the calls being placed right now.
 //
 // It was deliberately kept OFF the API interface, on the grounds that a
@@ -122,13 +117,13 @@ type VoiceDialingInfo struct {
 //
 // The hypervisor route still answers empty for a REMOTE visor, so what a
 // remote operator can see is unchanged by this.
-func (v *Visor) VoiceDialing() ([]VoiceDialingInfo, error) {
+func (v *Visor) VoiceDialing() ([]visorapi.VoiceDialingInfo, error) {
 	if v.voice == nil {
 		return nil, ErrVoiceDisabled
 	}
-	out := make([]VoiceDialingInfo, 0)
+	out := make([]visorapi.VoiceDialingInfo, 0)
 	for _, d := range v.voice.Dialing() {
-		out = append(out, VoiceDialingInfo{CallID: d.CallID, Peer: d.Peer.Hex()})
+		out = append(out, visorapi.VoiceDialingInfo{CallID: d.CallID, Peer: d.Peer.Hex()})
 	}
 	return out, nil
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	types "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -338,7 +339,7 @@ func (v *Visor) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error) {
 
 // RegisterTCPPort implements API (legacy — wraps RegisterForwardedPort with skynet-only defaults).
 func (v *Visor) RegisterTCPPort(localPort int) error {
-	return v.RegisterForwardedPort(ForwardedPort{
+	return v.RegisterForwardedPort(visorapi.ForwardedPort{
 		Port:          localPort,
 		Skynet:        true,
 		ShowOnLanding: true,
@@ -393,7 +394,7 @@ func (v *Visor) ListTCPPorts() ([]int, error) {
 }
 
 // RegisterForwardedPort registers a port with full metadata.
-func (v *Visor) RegisterForwardedPort(p ForwardedPort) error {
+func (v *Visor) RegisterForwardedPort(p visorapi.ForwardedPort) error {
 	if err := v.forwardedPorts.Register(p); err != nil {
 		return err
 	}
@@ -422,7 +423,7 @@ func (v *Visor) RegisterForwardedPort(p ForwardedPort) error {
 }
 
 // UpdateForwardedPort updates metadata for an existing forwarded port.
-func (v *Visor) UpdateForwardedPort(p ForwardedPort) error {
+func (v *Visor) UpdateForwardedPort(p visorapi.ForwardedPort) error {
 	if v.forwardedPorts.Get(p.Port) == nil {
 		return fmt.Errorf("port %d not registered", p.Port)
 	}
@@ -444,7 +445,7 @@ func (v *Visor) UpdateForwardedPort(p ForwardedPort) error {
 }
 
 // ListForwardedPorts returns all forwarded ports with metadata.
-func (v *Visor) ListForwardedPorts() ([]ForwardedPort, error) {
+func (v *Visor) ListForwardedPorts() ([]visorapi.ForwardedPort, error) {
 	return v.forwardedPorts.List(), nil
 }
 

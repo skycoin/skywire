@@ -19,29 +19,8 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/visor/stats"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
-
-// LocalUptimeResponse is the wire shape for LocalUptimeStats.
-//
-// The tier name is whatever the tracker recorded (the visor uses
-// "process", "dmsg", "skynet"; future probes may add more — keep
-// the renderer name-agnostic). Dates are UTC YYYY-MM-DD; bitmaps
-// are 288 chars where '.' = online slot and ' ' = offline slot.
-type LocalUptimeResponse struct {
-	Tiers     map[string]map[string]string `json:"tiers"`
-	Since     time.Time                    `json:"since"`
-	Until     time.Time                    `json:"until"`
-	FetchedAt time.Time                    `json:"fetched_at"`
-}
-
-// LocalUptimeArgs is the request shape. Empty Since/Until mean
-// "default 7-day window ending now" — caller-side defaults match
-// the logserver's own /stats/uptime behavior so a hypervisor and a
-// direct curl agree on the rendered timeline.
-type LocalUptimeArgs struct {
-	Since time.Time `json:"since,omitempty"`
-	Until time.Time `json:"until,omitempty"`
-}
 
 // localUptimeDefaultWindow is the implicit `since` when the caller
 // hasn't passed one. Same value the logserver uses for /stats/*
@@ -52,7 +31,7 @@ const localUptimeDefaultWindow = 7 * 24 * time.Hour
 // requested window. Returns an empty Tiers map (no error) when the
 // stats subsystem isn't initialized so the hvui surfaces "no data"
 // rather than an error.
-func (v *Visor) LocalUptimeStats(args LocalUptimeArgs) (*LocalUptimeResponse, error) {
+func (v *Visor) LocalUptimeStats(args visorapi.LocalUptimeArgs) (*visorapi.LocalUptimeResponse, error) {
 	now := time.Now().UTC()
 	until := args.Until
 	if until.IsZero() {
@@ -70,7 +49,7 @@ func (v *Visor) LocalUptimeStats(args LocalUptimeArgs) (*LocalUptimeResponse, er
 		return nil, errors.New("since must be <= until")
 	}
 
-	resp := &LocalUptimeResponse{
+	resp := &visorapi.LocalUptimeResponse{
 		Tiers:     map[string]map[string]string{},
 		Since:     since,
 		Until:     until,

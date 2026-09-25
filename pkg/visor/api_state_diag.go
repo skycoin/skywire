@@ -12,160 +12,19 @@ import (
 	"sort"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
-
-// DiagSnapshot is the `diag` section of a StateSnapshot.
-type DiagSnapshot struct {
-	Runtime DiagRuntime `json:"runtime"`
-	// Panics is the recovered-panic accounting: how many have happened since
-	// start and the most recent few with their stacks. An UNrecovered panic
-	// goes to local/log/skywire-crash.log (debug.SetCrashOutput, see
-	// storeLog); this is the other half, which nothing else records. Omitted
-	// when none have happened, so its presence is the signal.
-	Panics *DiagPanics `json:"panics,omitempty"`
-	// TransportReadQueue is the shared queue every transport read loop feeds
-	// and the router drains; at capacity, every transport stalls behind the
-	// router (pings and pongs included).
-	TransportReadQueue *DiagQueue `json:"transport_read_queue,omitempty"`
-	// Intake is the router's inbound-path view: unknown/control packets by
-	// type, stale-route drops, and each route group's app queue depth.
-	Intake *router.IntakeStats `json:"intake,omitempty"`
-	// RouteSource is where multi-hop routes came from: the local graph (a
-	// hypervisor's attached visors), the route finder, or the local fallback.
-	RouteSource *router.RouteSourceStats `json:"route_source,omitempty"`
-	// RouteSetup is how this visor's route setups were ISSUED: batched vs
-	// single vs fell back because the setup node is un-upgraded, plus whether
-	// the RSN-oracle queried once per fill and whether the concurrent dials of a
-	// fill landed on distinct intermediates.
-	RouteSetup *router.SetupPathStats `json:"route_setup,omitempty"`
-	// VStream is one entry per virtual-stream mux (skynet forwarding,
-	// app-direct dials, visor RPC): open streams, relay legs, and frames that
-	// arrived for streams this side does not have.
-	VStream []DiagVStreamMux `json:"vstream,omitempty"`
-	// Dmsg is per-session ping health plus the relay nominee/backoff state.
-	Dmsg *DiagDmsg `json:"dmsg,omitempty"`
-	// Transports is per-transport liveness: missed pongs, last packet age,
-	// and which route-ID-0 handlers are wired (a missing one means that
-	// packet type is dropped by the router — #4725).
-	Transports []DiagTransport `json:"transports,omitempty"`
-	// TransportEvents is the last transport.TransportEventRingSize opens and
-	// closes, oldest first, each close with the reason the code gave. This is
-	// where to look when a transport that was in `tp ls` is gone: the visor log
-	// ring holds minutes; this holds the events.
-	TransportEvents []transport.TransportEvent `json:"transport_events,omitempty"`
-	// TransportLastClose is the last close event of each of the last
-	// transport.TransportLastCloseMax transports that closed, keyed by
-	// transport id. TransportEvents is a ring and on a public visor it is
-	// flooded by autoconnect opens — 256 entries spanned three minutes on one
-	// exit visor — so the one close being chased was already gone. This
-	// survives any amount of open churn: look up the transport id here to get
-	// the reason it died and how old it was.
-	TransportLastClose map[uuid.UUID]transport.TransportEvent `json:"transport_last_close,omitempty"`
-	// MuxEvents is the last router.MuxEventRingSize route-group and mux-leg
-	// changes, oldest first, each with the reason the code gave and who
-	// initiated it (local/remote/operator/adaptive/policy). This is where to
-	// look when a leg that was in `proxy mux info` is gone and
-	// transport_events shows its transport still open — the removal came from
-	// the router, not the transport layer.
-	MuxEvents []router.MuxEvent `json:"mux_events,omitempty"`
-}
-
-// DiagRuntime is the Go runtime at a glance.
-type DiagRuntime struct {
-	Goroutines  int     `json:"goroutines"`
-	HeapAllocMB float64 `json:"heap_alloc_mb"`
-	SysMB       float64 `json:"sys_mb"`
-	NumGC       uint32  `json:"num_gc"`
-	GoVersion   string  `json:"go_version"`
-}
-
-// DiagPanics is the recovered-panic accounting. Count keeps rising after Last
-// has wrapped, so the two together say whether what Last shows is the whole
-// story.
-type DiagPanics struct {
-	Count uint64               `json:"count"`
-	Last  []logging.PanicEntry `json:"last,omitempty"`
-}
-
-// DiagQueue is a bounded queue's depth and capacity.
-type DiagQueue struct {
-	Depth    int `json:"depth"`
-	Capacity int `json:"capacity"`
-}
-
-// DiagVStreamMux names one VStream mux and carries its counters, plus one row
-// per live stream. The rows are what turn "streams: 27" into an answer: which
-// app (or none) opened each one, over which transport, how long ago, and how
-// deep its inbound queue is right now.
-type DiagVStreamMux struct {
-	Name string `json:"name"`
-	transport.VStreamMuxStats
-	StreamList []transport.VStreamInfo `json:"stream_list,omitempty"`
-}
-
-// DiagDmsg is the dmsg client's session and relay state.
-type DiagDmsg struct {
-	// Unpublished: this client publishes no discovery entry (a browser visor).
-	Unpublished   bool              `json:"unpublished"`
-	Sessions      []DiagDmsgSession `json:"sessions,omitempty"`
-	RelayNominees []cipher.PubKey   `json:"relay_nominees,omitempty"`
-	RelayingFor   []DiagRelayClient `json:"relaying_for,omitempty"`
-	RelayBackoff  []DiagRelayTimer  `json:"relay_backoff,omitempty"`
-	RelayDialSkip []DiagRelayTimer  `json:"relay_dial_skip,omitempty"`
-}
-
-// DiagDmsgSession is one dmsg session's liveness.
-type DiagDmsgSession struct {
-	PK        cipher.PubKey `json:"pk"`
-	Carrier   string        `json:"carrier"`
-	Protocol  string        `json:"protocol"`
-	Streams   int           `json:"streams"`
-	LatencyMS float64       `json:"latency_ms"`
-	// PingFails is the consecutive liveness-ping failures; 2 closes the session.
-	PingFails int `json:"ping_fails"`
-}
-
-// DiagRelayClient is a peer attached to this visor as its dmsg relay.
-type DiagRelayClient struct {
-	PK      cipher.PubKey `json:"pk"`
-	Streams int           `json:"streams"`
-}
-
-// DiagRelayTimer is a relay-side backoff or skip with its remaining time.
-type DiagRelayTimer struct {
-	PK         cipher.PubKey `json:"pk"`
-	RemainingS float64       `json:"remaining_s"`
-}
-
-// DiagTransport is one transport's liveness and wiring.
-type DiagTransport struct {
-	ID          uuid.UUID     `json:"id"`
-	Remote      cipher.PubKey `json:"remote"`
-	Type        string        `json:"type"`
-	MissedPongs int64         `json:"missed_pongs"`
-	PongSeen    bool          `json:"pong_seen"`
-	// LastRecvAgoS is seconds since the read loop last received any packet
-	// (-1 = never). A transport with pongs flowing but climbing app-level
-	// timeouts is the router-intake case, not a link problem.
-	LastRecvAgoS float64 `json:"last_recv_ago_s"`
-	// MalformedFrames counts frames whose type byte was outside the known
-	// range — the peer wrote a packet whose size field did not match it.
-	MalformedFrames int64    `json:"malformed_frames"`
-	Handlers        []string `json:"handlers,omitempty"`
-}
 
 // DiagSnapshot builds the diag section. Every part is best-effort on a
 // partially initialized visor: a missing subsystem leaves its field nil.
-func (v *Visor) DiagSnapshot() *DiagSnapshot {
+func (v *Visor) DiagSnapshot() *visorapi.DiagSnapshot {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	d := &DiagSnapshot{Runtime: DiagRuntime{
+	d := &visorapi.DiagSnapshot{Runtime: visorapi.DiagRuntime{
 		Goroutines:  runtime.NumGoroutine(),
 		HeapAllocMB: float64(m.HeapAlloc) / (1 << 20),
 		SysMB:       float64(m.Sys) / (1 << 20),
@@ -174,12 +33,12 @@ func (v *Visor) DiagSnapshot() *DiagSnapshot {
 	}}
 
 	if n, last := logging.PanicStats(); n > 0 {
-		d.Panics = &DiagPanics{Count: n, Last: last}
+		d.Panics = &visorapi.DiagPanics{Count: n, Last: last}
 	}
 
 	if v.tpM != nil {
 		depth, capacity := v.tpM.ReadQueue()
-		d.TransportReadQueue = &DiagQueue{Depth: depth, Capacity: capacity}
+		d.TransportReadQueue = &visorapi.DiagQueue{Depth: depth, Capacity: capacity}
 		d.TransportEvents = v.tpM.Events()
 		d.TransportLastClose = v.tpM.LastCloses()
 		now := time.Now()
@@ -191,7 +50,7 @@ func (v *Visor) DiagSnapshot() *DiagSnapshot {
 			if at := mt.LastRecvAt(); !at.IsZero() {
 				ago = now.Sub(at).Seconds()
 			}
-			d.Transports = append(d.Transports, DiagTransport{
+			d.Transports = append(d.Transports, visorapi.DiagTransport{
 				ID:              mt.Entry.ID,
 				Remote:          mt.Remote(),
 				Type:            string(mt.Type()),
@@ -240,7 +99,7 @@ func (v *Visor) DiagSnapshot() *DiagSnapshot {
 		if mux.m == nil {
 			continue
 		}
-		d.VStream = append(d.VStream, DiagVStreamMux{
+		d.VStream = append(d.VStream, visorapi.DiagVStreamMux{
 			Name:            mux.name,
 			VStreamMuxStats: mux.m.Stats(),
 			StreamList:      mux.m.StreamInfo(""),
@@ -248,9 +107,9 @@ func (v *Visor) DiagSnapshot() *DiagSnapshot {
 	}
 
 	if v.dmsgC != nil {
-		dd := &DiagDmsg{Unpublished: v.dmsgC.Unpublished()}
+		dd := &visorapi.DiagDmsg{Unpublished: v.dmsgC.Unpublished()}
 		for _, s := range v.dmsgC.AllSessions() {
-			dd.Sessions = append(dd.Sessions, DiagDmsgSession{
+			dd.Sessions = append(dd.Sessions, visorapi.DiagDmsgSession{
 				PK:        s.RemotePK(),
 				Carrier:   s.Carrier(),
 				Protocol:  s.Protocol(),
@@ -262,7 +121,7 @@ func (v *Visor) DiagSnapshot() *DiagSnapshot {
 		sort.Slice(dd.Sessions, func(i, j int) bool { return dd.Sessions[i].PK.String() < dd.Sessions[j].PK.String() })
 		dd.RelayNominees = sortedPKs(v.dmsgC.RelayPeers())
 		for pk, n := range v.dmsgC.RelaySessionStreams() {
-			dd.RelayingFor = append(dd.RelayingFor, DiagRelayClient{PK: pk, Streams: n})
+			dd.RelayingFor = append(dd.RelayingFor, visorapi.DiagRelayClient{PK: pk, Streams: n})
 		}
 		sort.Slice(dd.RelayingFor, func(i, j int) bool { return dd.RelayingFor[i].PK.String() < dd.RelayingFor[j].PK.String() })
 		dd.RelayBackoff = relayTimers(v.dmsgC.RelayBackoffs())
@@ -272,14 +131,14 @@ func (v *Visor) DiagSnapshot() *DiagSnapshot {
 	return d
 }
 
-func relayTimers(m map[cipher.PubKey]time.Time) []DiagRelayTimer {
+func relayTimers(m map[cipher.PubKey]time.Time) []visorapi.DiagRelayTimer {
 	if len(m) == 0 {
 		return nil
 	}
 	now := time.Now()
-	out := make([]DiagRelayTimer, 0, len(m))
+	out := make([]visorapi.DiagRelayTimer, 0, len(m))
 	for pk, until := range m {
-		out = append(out, DiagRelayTimer{PK: pk, RemainingS: until.Sub(now).Seconds()})
+		out = append(out, visorapi.DiagRelayTimer{PK: pk, RemainingS: until.Sub(now).Seconds()})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].PK.String() < out[j].PK.String() })
 	return out

@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 const (
@@ -189,13 +189,13 @@ func (p *presenceStore) sweep(ctx context.Context) {
 // fails still counts as online — just without a latency to show.
 func probePeerViaVisor(pk cipher.PubKey) peerPresence {
 	res := peerPresence{At: time.Now().Unix()}
-	if err := pairRPCCall("DialDmsgPing", func(c visor.API) error {
+	if err := pairRPCCall("DialDmsgPing", func(c visorapi.API) error {
 		return c.DialDmsgPing(pk)
 	}); err != nil {
 		return res
 	}
 	defer func() {
-		_ = pairRPCCall("StopDmsgPing", func(c visor.API) error { //nolint:errcheck
+		_ = pairRPCCall("StopDmsgPing", func(c visorapi.API) error { //nolint:errcheck
 			return c.StopDmsgPing(pk)
 		})
 	}()
@@ -203,9 +203,9 @@ func probePeerViaVisor(pk cipher.PubKey) peerPresence {
 
 	start := time.Now()
 	var rtt time.Duration
-	if err := pairRPCCall("DmsgPingOnce", func(c visor.API) error {
+	if err := pairRPCCall("DmsgPingOnce", func(c visorapi.API) error {
 		var perr error
-		rtt, perr = c.DmsgPingOnce(visor.PingConfig{PK: pk, Tries: 1})
+		rtt, perr = c.DmsgPingOnce(visorapi.PingConfig{PK: pk, Tries: 1})
 		return perr
 	}); err != nil {
 		return res

@@ -25,6 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetweb"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 const browseFetchTimeout = 60 * time.Second
@@ -80,12 +81,12 @@ func (v *Visor) browseAliases() map[string]cipher.PubKey {
 // is NOT a real endpoint, so resolve+fetch would reach nothing. This mirrors the
 // SOCKS5 resolving proxy's isHomeHost → serveHomeInProcess path (dmsgweb.runtime)
 // so the native browser's home.dmsg matches `curl -x socks5h://… http://home.dmsg/`.
-func (v *Visor) browseHomePage(host string) *SkynetHTTPResponse {
+func (v *Visor) browseHomePage(host string) *visorapi.SkynetHTTPResponse {
 	host = browseStripHost(host)
 	for _, suffix := range []string{".dmsg", ".skynet"} {
 		if dmsgweb.IsHomeHost(host, suffix) {
 			body := dmsgweb.RenderHomePage(v.browseAliases(), suffix, v.conf.PK)
-			return &SkynetHTTPResponse{
+			return &visorapi.SkynetHTTPResponse{
 				StatusCode: 200,
 				Status:     "200 OK",
 				Header:     map[string]string{"Content-Type": "text/html; charset=utf-8"},
@@ -155,7 +156,7 @@ func (v *Visor) resolveBrowseHost(host string, reqPort uint16) (cipher.PubKey, u
 
 // BrowseFetch performs the request over skynet and/or dmsg per Scheme, returning
 // the response in the shared SkynetHTTPResponse shape.
-func (v *Visor) BrowseFetch(req BrowseFetchRequest) (*SkynetHTTPResponse, error) {
+func (v *Visor) BrowseFetch(req BrowseFetchRequest) (*visorapi.SkynetHTTPResponse, error) {
 	// home.dmsg / home.skynet is the resolver's synthetic alias directory, served
 	// in-process (it has no real endpoint) — handle it before resolve+fetch.
 	if resp := v.browseHomePage(req.Host); resp != nil {
@@ -187,11 +188,11 @@ func (v *Visor) BrowseFetch(req BrowseFetchRequest) (*SkynetHTTPResponse, error)
 
 	switch scheme {
 	case "skynet":
-		return v.SkynetHTTP(SkynetHTTPRequest{PK: pk, Port: port, Method: method, Path: path, Body: req.Body})
+		return v.SkynetHTTP(visorapi.SkynetHTTPRequest{PK: pk, Port: port, Method: method, Path: path, Body: req.Body})
 	case "dmsg":
 		return v.dmsgHTTPFetch(pk, port, method, path, req.Body)
 	case "auto":
-		resp, err := v.SkynetHTTP(SkynetHTTPRequest{PK: pk, Port: port, Method: method, Path: path, Body: req.Body})
+		resp, err := v.SkynetHTTP(visorapi.SkynetHTTPRequest{PK: pk, Port: port, Method: method, Path: path, Body: req.Body})
 		if err == nil {
 			return resp, nil
 		}
@@ -202,7 +203,7 @@ func (v *Visor) BrowseFetch(req BrowseFetchRequest) (*SkynetHTTPResponse, error)
 	}
 }
 
-func (v *Visor) dmsgHTTPFetch(pk cipher.PubKey, port uint16, method, path string, body []byte) (*SkynetHTTPResponse, error) {
+func (v *Visor) dmsgHTTPFetch(pk cipher.PubKey, port uint16, method, path string, body []byte) (*visorapi.SkynetHTTPResponse, error) {
 	if v.dmsgHTTP == nil {
 		return nil, fmt.Errorf("dmsg HTTP client not ready")
 	}
@@ -244,7 +245,7 @@ type BrowseClearnetRequest struct {
 // BrowseClearnet originates a route group to the skysocks server, runs SOCKS5
 // over a yamux stream, and performs the HTTP(S) request — TLS terminates here
 // (system cert pool), so the exit only relays ciphertext for https.
-func (v *Visor) BrowseClearnet(req BrowseClearnetRequest) (*SkynetHTTPResponse, error) {
+func (v *Visor) BrowseClearnet(req BrowseClearnetRequest) (*visorapi.SkynetHTTPResponse, error) {
 	if strings.TrimSpace(req.Proxy) != "" {
 		return v.proxyClearnetFetch(req)
 	}
@@ -317,7 +318,7 @@ func (v *Visor) BrowseClearnet(req BrowseClearnetRequest) (*SkynetHTTPResponse, 
 
 // directClearnetFetch performs the request straight to the clearnet over the
 // host's default network (no skysocks hop) — the self-PK browse-upstream path.
-func (v *Visor) directClearnetFetch(req BrowseClearnetRequest) (*SkynetHTTPResponse, error) {
+func (v *Visor) directClearnetFetch(req BrowseClearnetRequest) (*visorapi.SkynetHTTPResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), browseFetchTimeout)
 	defer cancel()
 	method := req.Method
@@ -339,14 +340,14 @@ func (v *Visor) directClearnetFetch(req BrowseClearnetRequest) (*SkynetHTTPRespo
 	return readBrowseResp(resp)
 }
 
-func readBrowseResp(resp *http.Response) (*SkynetHTTPResponse, error) {
+func readBrowseResp(resp *http.Response) (*visorapi.SkynetHTTPResponse, error) {
 	defer resp.Body.Close()                                         //nolint:errcheck
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, browseMaxBody)) //nolint:errcheck
 	headers := make(map[string]string)
 	for k := range resp.Header {
 		headers[k] = resp.Header.Get(k)
 	}
-	return &SkynetHTTPResponse{StatusCode: resp.StatusCode, Status: resp.Status, Header: headers, Body: body}, nil
+	return &visorapi.SkynetHTTPResponse{StatusCode: resp.StatusCode, Status: resp.Status, Header: headers, Body: body}, nil
 }
 
 // yamuxStreamDialer opens a fresh yamux stream per SOCKS5 Dial.
@@ -458,7 +459,7 @@ func parseBrowseProxy(s string) (*url.URL, error) {
 
 // proxyClearnetFetch fetches req.URL through the proxy req.Proxy names, dialed
 // by this visor.
-func (v *Visor) proxyClearnetFetch(req BrowseClearnetRequest) (*SkynetHTTPResponse, error) {
+func (v *Visor) proxyClearnetFetch(req BrowseClearnetRequest) (*visorapi.SkynetHTTPResponse, error) {
 	pu, err := parseBrowseProxy(req.Proxy)
 	if err != nil {
 		return nil, err

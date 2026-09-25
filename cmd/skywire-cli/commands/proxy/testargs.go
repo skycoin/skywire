@@ -13,7 +13,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // proxyArgsRestorer puts an app's argument list back the way the operator had
@@ -26,7 +26,7 @@ import (
 // for good.
 type proxyArgsRestorer struct {
 	cmd      *cobra.Command
-	rpc      visor.API
+	rpc      visorapi.API
 	appName  string
 	args     []string
 	once     sync.Once
@@ -36,7 +36,7 @@ type proxyArgsRestorer struct {
 // restoreProxyArgsOnExit snapshots appName's current args and arranges for them
 // to be restored when the caller is done (`defer r.done()`), on a fatal error
 // (r.fatal) or on ctrl+c.
-func restoreProxyArgsOnExit(cmd *cobra.Command, rpcClient visor.API, appName string) *proxyArgsRestorer {
+func restoreProxyArgsOnExit(cmd *cobra.Command, rpcClient visorapi.API, appName string) *proxyArgsRestorer {
 	r := &proxyArgsRestorer{
 		cmd:      cmd,
 		rpc:      rpcClient,

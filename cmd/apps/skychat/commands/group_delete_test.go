@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func TestGroupDeleteEnvelopeRoundTrip(t *testing.T) {
@@ -71,7 +71,7 @@ func TestGroupHistory_FiltersDeleted(t *testing.T) {
 	target := time.Unix(0, 1700000000000000000).UTC()
 	tomb, _ := encodeGroupDeleteText(groupDeleteMeta{ToTSNano: target.UnixNano()}) //nolint:errcheck
 
-	fake := &groupAPI{history: []visor.GroupMessage{
+	fake := &groupAPI{history: []visorapi.GroupMessage{
 		{GroupID: "g", SenderPK: author, Text: "keep me", TS: time.Unix(0, 1699000000000000000).UTC()},
 		{GroupID: "g", SenderPK: author, Text: "delete me", TS: target},
 		{GroupID: "g", SenderPK: author, Text: tomb, TS: time.Unix(0, 1700000000000000001).UTC()},

@@ -19,13 +19,14 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // dmsgOverSkynet tries to serve a DmsgHTTP request over the visor-relay instead
 // of a dmsg-server session. Returns (resp, true) on success; (nil, false) to
 // fall back to the dmsg-server path. Reaching the peer's :80 over skynet works
 // because a visor mirrors :80 over both dmsg and its skynet forwarding server.
-func (v *Visor) dmsgOverSkynet(req DmsgHTTPRequest) (*DmsgHTTPResponse, bool) {
+func (v *Visor) dmsgOverSkynet(req visorapi.DmsgHTTPRequest) (*visorapi.DmsgHTTPResponse, bool) {
 	if v.router == nil || v.tpM == nil || v.skynetFwdMux == nil {
 		return nil, false
 	}
@@ -91,7 +92,7 @@ func (v *Visor) dmsgOverSkynet(req DmsgHTTPRequest) (*DmsgHTTPResponse, bool) {
 	if err != nil {
 		return nil, false
 	}
-	out := &DmsgHTTPResponse{
+	out := &visorapi.DmsgHTTPResponse{
 		StatusCode: resp.StatusCode,
 		Status:     resp.Status,
 		Header:     make(map[string]string, len(resp.Header)),

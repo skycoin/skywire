@@ -27,27 +27,14 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 	gnet "github.com/shirou/gopsutil/v3/net"
 	"github.com/shirou/gopsutil/v3/process"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
-
-// LoadStats is a lightweight, always-meaningful resource snapshot used by
-// `cli visor hv ls --load`: load averages (which, unlike a single CPUPercent
-// sample, need no prior baseline to be meaningful) plus instantaneous memory
-// and root-disk usage percentages. Cheap to gather (a few /proc reads + one
-// statfs), so it's populated on every Summary without a sampling interval.
-type LoadStats struct {
-	Load1           float64 `json:"load1"`
-	Load5           float64 `json:"load5"`
-	Load15          float64 `json:"load15"`
-	CPUCores        int     `json:"cpu_cores"`
-	MemUsedPercent  float64 `json:"mem_used_percent"`
-	DiskUsedPercent float64 `json:"disk_used_percent"`
-}
 
 // collectLoadStats gathers a LoadStats snapshot. Every field degrades
 // independently: a metric whose syscall fails (e.g. load.Avg on Windows) is
 // left at zero rather than failing the whole snapshot.
-func collectLoadStats() *LoadStats {
-	ls := &LoadStats{}
+func collectLoadStats() *visorapi.LoadStats {
+	ls := &visorapi.LoadStats{}
 	if avg, err := load.Avg(); err == nil && avg != nil {
 		ls.Load1, ls.Load5, ls.Load15 = avg.Load1, avg.Load5, avg.Load15
 	}
@@ -63,76 +50,11 @@ func collectLoadStats() *LoadStats {
 	return ls
 }
 
-// HostStatsInfo carries a snapshot of host system + visor process
-// resource utilization. Returned by Visor.HostStats and surfaced
-// to the hypervisor UI via /visors/<pk>/host-stats.
-//
-// All byte counts are bytes (not KB/MB); the UI is responsible for
-// scaling for display.
-type HostStatsInfo struct {
-	// Host identity (mostly static; useful as a header above the
-	// graphs so the user knows which box they're looking at).
-	Hostname      string `json:"hostname,omitempty"`
-	OS            string `json:"os,omitempty"`
-	Platform      string `json:"platform,omitempty"`
-	Arch          string `json:"arch,omitempty"`
-	UptimeSeconds uint64 `json:"uptime_seconds,omitempty"`
-
-	// CPU
-	CPUPercent      float64 `json:"cpu_percent"`
-	CPUCount        int     `json:"cpu_count"`
-	CPULogicalCount int     `json:"cpu_logical_count"`
-
-	// Memory (bytes)
-	MemTotal     uint64  `json:"mem_total"`
-	MemUsed      uint64  `json:"mem_used"`
-	MemAvailable uint64  `json:"mem_available"`
-	MemPercent   float64 `json:"mem_percent"`
-	SwapTotal    uint64  `json:"swap_total,omitempty"`
-	SwapUsed     uint64  `json:"swap_used,omitempty"`
-	SwapPercent  float64 `json:"swap_percent,omitempty"`
-
-	// Disk — root filesystem only. Per-mount breakdown can be a
-	// follow-up; "/" is the signal users care about for "is the
-	// visor about to run out of room for its log buffer / cxo
-	// tree-store?"
-	DiskTotal   uint64  `json:"disk_total,omitempty"`
-	DiskUsed    uint64  `json:"disk_used,omitempty"`
-	DiskFree    uint64  `json:"disk_free,omitempty"`
-	DiskPercent float64 `json:"disk_percent,omitempty"`
-
-	// Network — cumulative across all interfaces since boot. Client
-	// diffs to derive Bps. Per-interface breakdown is omitted to
-	// keep the payload small; can be added later as a `Per []…`
-	// field if a user wants it.
-	NetBytesSent   uint64 `json:"net_bytes_sent"`
-	NetBytesRecv   uint64 `json:"net_bytes_recv"`
-	NetPacketsSent uint64 `json:"net_packets_sent,omitempty"`
-	NetPacketsRecv uint64 `json:"net_packets_recv,omitempty"`
-
-	// Visor process specifics. Process is nil when we can't read
-	// our own /proc entry (rare; surface as null in JSON).
-	Process *ProcessStatsInfo `json:"process,omitempty"`
-}
-
-// ProcessStatsInfo is the visor process's slice of HostStats —
-// what process.NewProcess(os.Getpid()) returns from gopsutil.
-type ProcessStatsInfo struct {
-	PID         int32   `json:"pid"`
-	CPUPercent  float64 `json:"cpu_percent"`
-	MemRSS      uint64  `json:"mem_rss"`
-	MemVMS      uint64  `json:"mem_vms,omitempty"`
-	NumThreads  int32   `json:"num_threads,omitempty"`
-	NumFDs      int32   `json:"num_fds,omitempty"`
-	StartTimeMS int64   `json:"start_time_ms,omitempty"`
-	OpenConns   int     `json:"open_conns,omitempty"`
-}
-
 // HostStats implements API. Best-effort: a probe failure on one
 // subsystem (e.g., disk usage on an unusual mount layout) doesn't
 // take down the whole call — that field is left at its zero value.
-func (v *Visor) HostStats() (*HostStatsInfo, error) {
-	out := &HostStatsInfo{}
+func (v *Visor) HostStats() (*visorapi.HostStatsInfo, error) {
+	out := &visorapi.HostStatsInfo{}
 
 	// Host identity
 	if h, err := host.Info(); err == nil && h != nil {
@@ -190,7 +112,7 @@ func (v *Visor) HostStats() (*HostStatsInfo, error) {
 
 	// Visor process
 	if p, err := process.NewProcess(int32(os.Getpid())); err == nil && p != nil { //nolint:gosec // pid fits
-		ps := &ProcessStatsInfo{PID: p.Pid}
+		ps := &visorapi.ProcessStatsInfo{PID: p.Pid}
 		if cp, err := p.CPUPercent(); err == nil {
 			ps.CPUPercent = cp
 		}

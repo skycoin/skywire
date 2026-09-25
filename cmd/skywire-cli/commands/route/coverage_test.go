@@ -26,8 +26,8 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
-	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func mustPK(t *testing.T) cipher.PubKey {
@@ -194,9 +194,9 @@ func TestPercentile(t *testing.T) {
 
 // --- route.go: rules + render via mock RPC ---------------------------
 
-func newMock(t *testing.T) visor.API {
+func newMock(t *testing.T) visorapi.API {
 	t.Helper()
-	_, rc, err := visor.NewMockRPCClient(rand.New(rand.NewSource(1)), 5, 5) //nolint:gosec
+	_, rc, err := visorapi.NewMockRPCClient(rand.New(rand.NewSource(1)), 5, 5) //nolint:gosec
 	require.NoError(t, err)
 	return rc
 }
@@ -232,20 +232,20 @@ func TestRenderRoutingRulesLive(t *testing.T) {
 // renderer gets controlled data — the mock's own RouteGroups() panics
 // ("invalid rule: Consume"), so it can't be used directly here.
 type rgStub struct {
-	visor.API
-	rgs []visor.RouteGroupInfo
+	visorapi.API
+	rgs []visorapi.RouteGroupInfo
 	err error
 }
 
-func (s rgStub) RouteGroups() ([]visor.RouteGroupInfo, error) { return s.rgs, s.err }
+func (s rgStub) RouteGroups() ([]visorapi.RouteGroupInfo, error) { return s.rgs, s.err }
 
 func TestRenderRouteGroupsLive(t *testing.T) {
 	a, b := mustPK(t), mustPK(t)
-	rgs := []visor.RouteGroupInfo{
+	rgs := []visorapi.RouteGroupInfo{
 		{
 			Initiator: true, FwdNextTpID: "tp1", FwdRuleID: 2, ConsumeRuleID: 3,
 			Desc: routing.RouteDescriptorFields{DstPK: a, SrcPK: b, DstPort: 80, SrcPort: 81},
-			Hops: []visor.RouteHopInfo{{TpID: uuid.New().String(), From: a.Hex(), To: b.Hex(), TpType: "stcpr"}},
+			Hops: []visorapi.RouteHopInfo{{TpID: uuid.New().String(), From: a.Hex(), To: b.Hex(), TpType: "stcpr"}},
 		},
 		{Initiator: false}, // responder, empty FwdNextTpID → "-", no hops
 	}
@@ -347,19 +347,19 @@ func TestValidCalcSource(t *testing.T) {
 // TPSGetTransports (a REMOTE visor's own transports, served via the
 // setup node). Everything else defers to the mock.
 type tpsStub struct {
-	visor.API
+	visorapi.API
 	localPK cipher.PubKey
-	local   []*visor.TransportSummary
-	tps     map[cipher.PubKey][]visor.TPSTransportResponse
+	local   []*visorapi.TransportSummary
+	tps     map[cipher.PubKey][]visorapi.TPSTransportResponse
 }
 
-func (s tpsStub) Overview() (*visor.Overview, error) {
-	return &visor.Overview{PubKey: s.localPK}, nil
+func (s tpsStub) Overview() (*visorapi.Overview, error) {
+	return &visorapi.Overview{PubKey: s.localPK}, nil
 }
-func (s tpsStub) Transports(_ []string, _ []cipher.PubKey, _ bool) ([]*visor.TransportSummary, error) {
+func (s tpsStub) Transports(_ []string, _ []cipher.PubKey, _ bool) ([]*visorapi.TransportSummary, error) {
 	return s.local, nil
 }
-func (s tpsStub) TPSGetTransports(pk cipher.PubKey) ([]visor.TPSTransportResponse, error) {
+func (s tpsStub) TPSGetTransports(pk cipher.PubKey) ([]visorapi.TPSTransportResponse, error) {
 	if v, ok := s.tps[pk]; ok {
 		return v, nil
 	}
@@ -380,11 +380,11 @@ func TestFetchTPSTransports(t *testing.T) {
 	stub := tpsStub{
 		API:     newMock(t),
 		localPK: src,
-		local: []*visor.TransportSummary{
+		local: []*visorapi.TransportSummary{
 			{ID: uuid.New(), Local: src, Remote: inter, Type: tptypes.STCPR},
 			{ID: uuid.New(), Local: src, Remote: inter, Type: tptypes.STCPR, IsSetup: true}, // must be dropped
 		},
-		tps: map[cipher.PubKey][]visor.TPSTransportResponse{
+		tps: map[cipher.PubKey][]visorapi.TPSTransportResponse{
 			dst: {{ID: uuid.New(), Local: dst, Remote: inter, Type: string(tptypes.STCPR)}},
 		},
 	}

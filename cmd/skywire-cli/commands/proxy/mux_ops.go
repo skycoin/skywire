@@ -49,7 +49,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cliout/cliproxy"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skysocks/skysettings"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -516,7 +516,7 @@ Example:
 
 // muxSwitchSelectRG fetches the app's mux route groups and selects the target
 // one (by --rg port — dst_port then src_port — when set, else the sole group).
-func muxSwitchSelectRG(rpcClient visor.API) (muxRouteGroupInfo, error) {
+func muxSwitchSelectRG(rpcClient visorapi.API) (muxRouteGroupInfo, error) {
 	infos, err := rpcClient.RouteGroupMuxInfo(muxOpsApp)
 	if err != nil {
 		return muxRouteGroupInfo{}, fmt.Errorf("RouteGroupMuxInfo: %w", err)
@@ -556,7 +556,7 @@ func primaryLegTpID(rg muxRouteGroupInfo) (uuid.UUID, error) {
 // retiring the old primary promotes the survivor into the active primary slot;
 // requiring non-standby here would deadlock, since the adaptive policy parks a
 // freshly-added leg in the warm pool until load widens the active set.
-func muxSwitchWaitReady(rpcClient visor.API, newTpID uuid.UUID, timeout time.Duration) error {
+func muxSwitchWaitReady(rpcClient visorapi.API, newTpID uuid.UUID, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	want := newTpID.String()
 	for {

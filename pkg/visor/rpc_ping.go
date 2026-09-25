@@ -6,17 +6,18 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // DialPing dials to the ping module using the provided pk as a hop.
-func (r *RPC) DialPing(conf PingConfig, _ *struct{}) (err error) {
+func (r *RPC) DialPing(conf visorapi.PingConfig, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "DialPing", conf)(nil, &err)
 
 	return r.visor.DialPing(conf)
 }
 
 // Ping pings the connected route via DialPing.
-func (r *RPC) Ping(conf PingConfig, out *[]time.Duration) (err error) {
+func (r *RPC) Ping(conf visorapi.PingConfig, out *[]time.Duration) (err error) {
 	defer rpcutil.LogCall(r.log, "Ping", conf)(out, &err)
 
 	*out, err = r.visor.Ping(conf)
@@ -24,7 +25,7 @@ func (r *RPC) Ping(conf PingConfig, out *[]time.Duration) (err error) {
 }
 
 // PingOnce performs a single ping on the connected route.
-func (r *RPC) PingOnce(conf PingConfig, out *time.Duration) (err error) {
+func (r *RPC) PingOnce(conf visorapi.PingConfig, out *time.Duration) (err error) {
 	defer rpcutil.LogCall(r.log, "PingOnce", conf)(out, &err)
 
 	*out, err = r.visor.PingOnce(conf)
@@ -39,7 +40,7 @@ func (r *RPC) StopPing(pk *cipher.PubKey, _ *struct{}) (err error) {
 }
 
 // StopAllPings stops all active ping connections.
-func (r *RPC) StopAllPings(_ *struct{}, out *StopAllPingsOut) (err error) {
+func (r *RPC) StopAllPings(_ *struct{}, out *visorapi.StopAllPingsOut) (err error) {
 	defer rpcutil.LogCall(r.log, "StopAllPings", nil)(out, &err)
 
 	count, errs, err := r.visor.StopAllPings()
@@ -56,7 +57,7 @@ func (r *RPC) DialDmsgPing(pk *cipher.PubKey, _ *struct{}) (err error) {
 }
 
 // DmsgPing pings over dmsg connection.
-func (r *RPC) DmsgPing(conf PingConfig, out *[]time.Duration) (err error) {
+func (r *RPC) DmsgPing(conf visorapi.PingConfig, out *[]time.Duration) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgPing", conf)(out, &err)
 
 	*out, err = r.visor.DmsgPing(conf)
@@ -64,7 +65,7 @@ func (r *RPC) DmsgPing(conf PingConfig, out *[]time.Duration) (err error) {
 }
 
 // DmsgPingOnce performs a single ping over dmsg connection.
-func (r *RPC) DmsgPingOnce(conf PingConfig, out *time.Duration) (err error) {
+func (r *RPC) DmsgPingOnce(conf visorapi.PingConfig, out *time.Duration) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgPingOnce", conf)(out, &err)
 
 	*out, err = r.visor.DmsgPingOnce(conf)
@@ -79,7 +80,7 @@ func (r *RPC) StopDmsgPing(pk *cipher.PubKey, _ *struct{}) (err error) {
 }
 
 // DialDmsgPingViaServer dials to a remote visor over dmsg via a specific server.
-func (r *RPC) DialDmsgPingViaServer(in *DialDmsgPingViaServerIn, _ *struct{}) (err error) {
+func (r *RPC) DialDmsgPingViaServer(in *visorapi.DialDmsgPingViaServerIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "DialDmsgPingViaServer", in)(nil, &err)
 
 	return r.visor.DialDmsgPingViaServer(in.PK, in.ServerPK)

@@ -43,7 +43,7 @@ import (
 
 	"github.com/skycoin/skywire/cmd/apps/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // Pairing flags.
@@ -55,7 +55,7 @@ var (
 
 // pairRPC is the connection to the local visor's RPC. nil when
 // --pair-enable is false or the dial failed.
-var pairRPC visor.API
+var pairRPC visorapi.API
 
 // pairPollerCancel stops the SSE-bridge goroutine on shutdown.
 var pairPollerCancel context.CancelFunc
@@ -200,8 +200,8 @@ func startPairPoller(parent context.Context) {
 				return
 			case <-ticker.C:
 			}
-			var msgs []visor.PairMessage
-			err := pairRPCCall("PairPoll", func(c visor.API) error {
+			var msgs []visorapi.PairMessage
+			err := pairRPCCall("PairPoll", func(c visorapi.API) error {
 				out, e := c.PairPoll(since)
 				msgs = out
 				return e
@@ -330,8 +330,8 @@ func pairInboxHandler() http.HandlerFunc {
 			}
 			since = t
 		}
-		var msgs []visor.PairMessage
-		if err := pairRPCCall("PairPoll", func(c visor.API) error {
+		var msgs []visorapi.PairMessage
+		if err := pairRPCCall("PairPoll", func(c visorapi.API) error {
 			out, e := c.PairPoll(since)
 			msgs = out
 			return e
@@ -402,14 +402,14 @@ func pairInvitesItemHandler(ctx context.Context) http.HandlerFunc {
 			// Create the local pair (status starts at pending; the
 			// initiator's PairMarkActive on receiving our ack will
 			// flip them, but on this side we'd want active too).
-			if err := pairRPCCall("PairAdd", func(c visor.API) error { return c.PairAdd(peer) }); err != nil {
+			if err := pairRPCCall("PairAdd", func(c visorapi.API) error { return c.PairAdd(peer) }); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 			// Mark our own side active immediately — the user
 			// just consented, so there's no further confirmation
 			// needed.
-			if err := pairRPCCall("PairMarkActive", func(c visor.API) error { return c.PairMarkActive(peer) }); err != nil {
+			if err := pairRPCCall("PairMarkActive", func(c visorapi.API) error { return c.PairMarkActive(peer) }); err != nil {
 				appLog("Pairing: PairMarkActive after accept failed: %v", err)
 			}
 			pendingDelete(peer)
@@ -443,8 +443,8 @@ func pairRootHandler(ctx context.Context) http.HandlerFunc {
 		}
 		switch r.Method {
 		case http.MethodGet:
-			var pairs []visor.PairInfo
-			err := pairRPCCall("PairList", func(c visor.API) error {
+			var pairs []visorapi.PairInfo
+			err := pairRPCCall("PairList", func(c visorapi.API) error {
 				out, e := c.PairList()
 				pairs = out
 				return e
@@ -469,7 +469,7 @@ func pairRootHandler(ctx context.Context) http.HandlerFunc {
 				http.Error(w, "invalid peer_pk: "+err.Error(), http.StatusBadRequest)
 				return
 			}
-			if err := pairRPCCall("PairAdd", func(c visor.API) error { return c.PairAdd(peer) }); err != nil {
+			if err := pairRPCCall("PairAdd", func(c visorapi.API) error { return c.PairAdd(peer) }); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -512,7 +512,7 @@ func pairItemHandler(ctx context.Context) http.HandlerFunc {
 
 		switch {
 		case len(segments) == 1 && r.Method == http.MethodDelete:
-			if err := pairRPCCall("PairRemove", func(c visor.API) error { return c.PairRemove(peer) }); err != nil {
+			if err := pairRPCCall("PairRemove", func(c visorapi.API) error { return c.PairRemove(peer) }); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -531,7 +531,7 @@ func pairItemHandler(ctx context.Context) http.HandlerFunc {
 			// it the browser has no name for this bubble and can't offer
 			// "delete for everyone" on it.
 			var msgID string
-			if err := pairRPCCall("PairSend", func(c visor.API) error {
+			if err := pairRPCCall("PairSend", func(c visorapi.API) error {
 				id, e := c.PairSend(peer, body.Text)
 				msgID = id
 				return e
@@ -555,7 +555,7 @@ func pairItemHandler(ctx context.Context) http.HandlerFunc {
 				http.Error(w, "missing id", http.StatusBadRequest)
 				return
 			}
-			if err := pairRPCCall("PairDelete", func(c visor.API) error { return c.PairDelete(peer, id) }); err != nil {
+			if err := pairRPCCall("PairDelete", func(c visorapi.API) error { return c.PairDelete(peer, id) }); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -613,7 +613,7 @@ func handlePairControlFrame(ctx context.Context, peerPK cipher.PubKey, raw []byt
 		// pending pair record to active so the UI shows it as
 		// confirmed.
 		appLog("Pairing: pair-ack from %s — peer accepted", peerPK.Hex())
-		if err := pairRPCCall("PairMarkActive", func(c visor.API) error { return c.PairMarkActive(peerPK) }); err != nil {
+		if err := pairRPCCall("PairMarkActive", func(c visorapi.API) error { return c.PairMarkActive(peerPK) }); err != nil {
 			appLog("Pairing: PairMarkActive after ack failed: %v", err)
 		}
 		notifyInviteSSE(peerPK, "accepted")
@@ -623,7 +623,7 @@ func handlePairControlFrame(ctx context.Context, peerPK cipher.PubKey, raw []byt
 		// Initiator side: the peer declined our invite. Drop the
 		// pending pair record so it doesn't sit in pending forever.
 		appLog("Pairing: pair-decline from %s — peer declined", peerPK.Hex())
-		if err := pairRPCCall("PairRemove", func(c visor.API) error { return c.PairRemove(peerPK) }); err != nil {
+		if err := pairRPCCall("PairRemove", func(c visorapi.API) error { return c.PairRemove(peerPK) }); err != nil {
 			appLog("Pairing: PairRemove after decline failed: %v", err)
 		}
 		notifyInviteSSE(peerPK, "declined")

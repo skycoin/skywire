@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	skychataddr "github.com/skycoin/skywire/pkg/skychat/address"
 	skychatprofile "github.com/skycoin/skywire/pkg/skychat/profile"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // ErrProfileDisabled is returned when the profile store failed to open, so
@@ -26,56 +27,6 @@ import (
 // Distinct from "no profile set", which is not an error: an empty profile
 // is the normal state of a visor whose operator never opened the dialog.
 var ErrProfileDisabled = errors.New("profile: store not initialized")
-
-// Profile is the RPC-facing shape of a skychat profile.
-//
-// Re-declared rather than aliased for the same reason GroupDescriptor is:
-// the RPC surface carries display-oriented additions the protocol type has
-// no business knowing about — here, the public key it belongs to and a
-// ready-to-render data URI, both of which are derived by the receiver.
-type Profile struct {
-	// PK is whose profile this is. Filled in by the visor from the key it
-	// was asked about (or its own), never from the answer's body — a host
-	// that could name the key in its own response could name someone
-	// else's.
-	PK cipher.PubKey `json:"pk"`
-
-	Name string `json:"name,omitempty"`
-
-	// Avatar is the encoded image, bounded by profile.MaxAvatarDim and
-	// profile.MaxAvatarBytes on the way in. Carried as a
-	// data URI rather than raw bytes because the only consumer is a
-	// browser <img>, and building it here keeps the declared MIME type
-	// the one the visor actually decoded.
-	Avatar string `json:"avatar,omitempty"`
-
-	Updated time.Time `json:"updated,omitzero"`
-
-	// Address is the canonical skychat:// form of this key, so a caller
-	// holding a profile can render, copy or QR-encode the address without
-	// knowing the grammar.
-	Address string `json:"address,omitempty"`
-}
-
-// ProfileSetArgs is the RPC input for ProfileSet.
-type ProfileSetArgs struct {
-	Name string `json:"name"`
-
-	// Avatar is the new image as a data URI (what a browser's canvas
-	// produces) or raw base64. Empty clears the avatar; see Clear for
-	// removing the profile entirely.
-	//
-	// A string rather than []byte so the one caller that matters can pass
-	// exactly what `canvas.toDataURL()` gave it, with no re-encoding step
-	// to get wrong on the way.
-	Avatar string `json:"avatar,omitempty"`
-
-	// Clear removes the published profile entirely rather than saving an
-	// empty one. Distinct from sending blank fields because "I have no
-	// profile" and "my name is empty" want the same disk state and the
-	// caller should not have to know that.
-	Clear bool `json:"clear,omitempty"`
-}
 
 // profileFetchBudget caps one remote profile fetch. Tight: it sits under a
 // user watching a name appear in a dialog that is already usable without
@@ -94,14 +45,14 @@ func (v *Visor) profileStore() *skychatprofile.Store {
 // An unset profile is reported as an empty one with the key and address
 // filled in, not as an error: those two fields are what the "my address"
 // dialog needs, and they are true whether or not a name was ever set.
-func (v *Visor) ProfileGet() (Profile, error) {
+func (v *Visor) ProfileGet() (visorapi.Profile, error) {
 	store := v.profileStore()
 	if store == nil {
-		return Profile{}, ErrProfileDisabled
+		return visorapi.Profile{}, ErrProfileDisabled
 	}
 	p, err := store.Load()
 	if err != nil {
-		return Profile{}, err
+		return visorapi.Profile{}, err
 	}
 	return toProfile(v.conf.PK, p), nil
 }
@@ -110,24 +61,24 @@ func (v *Visor) ProfileGet() (Profile, error) {
 // actually stored — normalization may have trimmed the name, and the caller
 // should show the user what their peers will see rather than what they
 // typed.
-func (v *Visor) ProfileSet(args ProfileSetArgs) (Profile, error) {
+func (v *Visor) ProfileSet(args visorapi.ProfileSetArgs) (visorapi.Profile, error) {
 	store := v.profileStore()
 	if store == nil {
-		return Profile{}, ErrProfileDisabled
+		return visorapi.Profile{}, ErrProfileDisabled
 	}
 	if args.Clear {
 		if err := store.Clear(); err != nil {
-			return Profile{}, err
+			return visorapi.Profile{}, err
 		}
 		return toProfile(v.conf.PK, skychatprofile.Profile{}), nil
 	}
 	avatar, err := skychatprofile.DecodeAvatar(args.Avatar)
 	if err != nil {
-		return Profile{}, err
+		return visorapi.Profile{}, err
 	}
 	saved, err := store.Save(skychatprofile.Profile{Name: args.Name, Avatar: avatar})
 	if err != nil {
-		return Profile{}, err
+		return visorapi.Profile{}, err
 	}
 	return toProfile(v.conf.PK, saved), nil
 }
@@ -142,10 +93,10 @@ func (v *Visor) ProfileSet(args ProfileSetArgs) (Profile, error) {
 // call site has the public key itself as a perfectly good fallback. It is
 // still returned as an error here so the caller can tell "reachable, says
 // nothing" from "could not ask", which are different things to show.
-func (v *Visor) ProfileFetch(pk cipher.PubKey) (Profile, error) {
+func (v *Visor) ProfileFetch(pk cipher.PubKey) (visorapi.Profile, error) {
 	mgr := v.groupManager()
 	if mgr == nil {
-		return Profile{}, ErrGroupingDisabled
+		return visorapi.Profile{}, ErrGroupingDisabled
 	}
 	if pk == (cipher.PubKey{}) || pk == v.conf.PK {
 		return v.ProfileGet()
@@ -154,15 +105,15 @@ func (v *Visor) ProfileFetch(pk cipher.PubKey) (Profile, error) {
 	defer cancel()
 	p, err := mgr.FetchProfile(ctx, pk)
 	if err != nil {
-		return Profile{}, err
+		return visorapi.Profile{}, err
 	}
 	return toProfile(pk, p), nil
 }
 
 // toProfile converts a stored/fetched profile into the RPC shape, deriving
 // the data URI and the address from the key the caller asked about.
-func toProfile(pk cipher.PubKey, p skychatprofile.Profile) Profile {
-	return Profile{
+func toProfile(pk cipher.PubKey, p skychatprofile.Profile) visorapi.Profile {
+	return visorapi.Profile{
 		PK:      pk,
 		Name:    p.Name,
 		Avatar:  p.AvatarDataURI(),

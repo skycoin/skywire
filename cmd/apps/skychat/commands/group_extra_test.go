@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func TestParsePKList(t *testing.T) {
@@ -43,7 +43,7 @@ func TestParsePKList(t *testing.T) {
 // collectGroupHealth's rpc-error branch.
 type groupListErrAPI struct{ visorAPIShim }
 
-func (groupListErrAPI) GroupList() ([]visor.GroupInfo, error) {
+func (groupListErrAPI) GroupList() ([]visorapi.GroupInfo, error) {
 	return nil, errors.New("upstream GroupList boom")
 }
 
@@ -69,7 +69,7 @@ func TestCollectGroupHealth_LiveMapping(t *testing.T) {
 	m1, _ := cipher.GenerateKeyPair()
 	m2, _ := cipher.GenerateKeyPair()
 	now := time.Now().UTC()
-	fake := &groupAPI{groups: []visor.GroupInfo{
+	fake := &groupAPI{groups: []visorapi.GroupInfo{
 		{
 			ID:              "g1",
 			Name:            "one",

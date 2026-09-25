@@ -14,6 +14,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // RoutingRules implements API.
@@ -59,7 +60,7 @@ func (v *Visor) RoutingStats() (routing.RoutingTableStats, error) {
 	return v.router.RoutingTableStats(), nil
 }
 
-func (v *Visor) RouteGroups() (rgs []RouteGroupInfo, err error) {
+func (v *Visor) RouteGroups() (rgs []visorapi.RouteGroupInfo, err error) {
 	if v.router == nil {
 		return nil, nil
 	}
@@ -72,9 +73,9 @@ func (v *Visor) RouteGroups() (rgs []RouteGroupInfo, err error) {
 	}()
 
 	statuses := v.router.ActiveRouteStatuses()
-	rgs = make([]RouteGroupInfo, 0, len(statuses))
+	rgs = make([]visorapi.RouteGroupInfo, 0, len(statuses))
 	for _, s := range statuses {
-		info := RouteGroupInfo{
+		info := visorapi.RouteGroupInfo{
 			Desc: routing.RouteDescriptorFields{
 				DstPK:   s.LocalPK,
 				SrcPK:   s.RemotePK,
@@ -91,9 +92,9 @@ func (v *Visor) RouteGroups() (rgs []RouteGroupInfo, err error) {
 			info.FwdNextTpID = s.Transports[0].ID.String()
 		}
 		if len(s.Hops) > 0 {
-			hops := make([]RouteHopInfo, len(s.Hops))
+			hops := make([]visorapi.RouteHopInfo, len(s.Hops))
 			for i, h := range s.Hops {
-				hops[i] = RouteHopInfo{TpID: h.TpID, From: h.From, To: h.To, TpType: h.TpType}
+				hops[i] = visorapi.RouteHopInfo{TpID: h.TpID, From: h.From, To: h.To, TpType: h.TpType}
 			}
 			info.Hops = hops
 		}
@@ -107,7 +108,7 @@ func (v *Visor) RouteGroups() (rgs []RouteGroupInfo, err error) {
 // latency counters for every active route group tagged with the
 // named app. The visor's router holds the rg's; we just transcribe
 // the internal MuxInfo into the wire-friendly visor-level shape.
-func (v *Visor) RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error) {
+func (v *Visor) RouteGroupMuxInfo(appName string) ([]visorapi.MuxRouteGroupInfo, error) {
 	if v.router == nil {
 		return nil, nil
 	}
@@ -118,7 +119,7 @@ func (v *Visor) RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error) {
 // EVERY active route group on the visor, regardless of app — the
 // whole-runtime view surfaced in `cli visor state`. Same transcription
 // as RouteGroupMuxInfo, only without the app filter.
-func (v *Visor) AllRouteGroupMuxInfo() ([]MuxRouteGroupInfo, error) {
+func (v *Visor) AllRouteGroupMuxInfo() ([]visorapi.MuxRouteGroupInfo, error) {
 	if v.router == nil {
 		return nil, nil
 	}
@@ -128,10 +129,10 @@ func (v *Visor) AllRouteGroupMuxInfo() ([]MuxRouteGroupInfo, error) {
 // muxRouteGroupInfoFrom transcribes the router's internal MuxInfo slice
 // into the wire-friendly visor-level MuxRouteGroupInfo shape. Shared by
 // the per-app and all-groups queries so the two stay identical.
-func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
-	out := make([]MuxRouteGroupInfo, 0, len(infos))
+func muxRouteGroupInfoFrom(infos []router.MuxInfo) []visorapi.MuxRouteGroupInfo {
+	out := make([]visorapi.MuxRouteGroupInfo, 0, len(infos))
 	for _, info := range infos {
-		entry := MuxRouteGroupInfo{
+		entry := visorapi.MuxRouteGroupInfo{
 			Desc: routing.RouteDescriptorFields{
 				DstPK:   info.Desc.DstPK(),
 				SrcPK:   info.Desc.SrcPK(),
@@ -153,7 +154,7 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 			FECRepairBytesSent: info.FECRepairBytesSent,
 			FECRepairBytesRecv: info.FECRepairBytesRecv,
 			FECReconstructs:    info.FECReconstructs,
-			Legs:               make([]MuxLegInfo, 0, len(info.Legs)),
+			Legs:               make([]visorapi.MuxLegInfo, 0, len(info.Legs)),
 			Events:             info.Events,
 			Recovery:           info.Recovery,
 			TunnelRole:         info.TunnelRole,
@@ -173,7 +174,7 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 			entry.AggGoodputBps += leg.GoodputBps
 			entry.AggGoodputUpBps += leg.GoodputUpBps
 			entry.AggGoodputDownBps += leg.GoodputDownBps
-			entry.Legs = append(entry.Legs, MuxLegInfo{
+			entry.Legs = append(entry.Legs, visorapi.MuxLegInfo{
 				Index:            leg.Index,
 				TransportID:      leg.TransportID,
 				TpType:           leg.TpType,
@@ -209,13 +210,13 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 
 // muxHopsFrom transcribes the router's per-leg RouteHopInfo slice into the
 // wire-friendly MuxHopInfo shape (full PKs preserved).
-func muxHopsFrom(hops []router.RouteHopInfo) []MuxHopInfo {
+func muxHopsFrom(hops []router.RouteHopInfo) []visorapi.MuxHopInfo {
 	if len(hops) == 0 {
 		return nil
 	}
-	out := make([]MuxHopInfo, len(hops))
+	out := make([]visorapi.MuxHopInfo, len(hops))
 	for i, h := range hops {
-		out[i] = MuxHopInfo{
+		out[i] = visorapi.MuxHopInfo{
 			TpID:      h.TpID,
 			From:      h.From,
 			To:        h.To,
@@ -228,7 +229,7 @@ func muxHopsFrom(hops []router.RouteHopInfo) []MuxHopInfo {
 
 // ActiveRoutes implements API.
 // Returns all active routes with their app associations and live stats.
-func (v *Visor) ActiveRoutes() ([]AppRouteStatus, error) {
+func (v *Visor) ActiveRoutes() ([]visorapi.AppRouteStatus, error) {
 	if v.router == nil {
 		return nil, nil
 	}
@@ -253,13 +254,13 @@ func (v *Visor) ActiveRoutes() ([]AppRouteStatus, error) {
 		}
 	}
 
-	result := make([]AppRouteStatus, 0, len(statuses))
+	result := make([]visorapi.AppRouteStatus, 0, len(statuses))
 	for _, s := range statuses {
 		appName := portToApp[s.LocalPort]
 		if appName == "" {
 			appName = fmt.Sprintf("port:%d", s.LocalPort)
 		}
-		result = append(result, AppRouteStatus{
+		result = append(result, visorapi.AppRouteStatus{
 			AppName: appName,
 			Route:   s,
 		})

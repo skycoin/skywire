@@ -8,7 +8,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func init() {
@@ -53,8 +53,8 @@ when the main visor is healthy.`,
 	},
 }
 
-func printDmsgSessions(result *visor.DmsgClientSessions) {
-	printOne := func(info *visor.DmsgClientSessionInfo) {
+func printDmsgSessions(result *visorapi.DmsgClientSessions) {
+	printOne := func(info *visorapi.DmsgClientSessionInfo) {
 		if info == nil {
 			return
 		}

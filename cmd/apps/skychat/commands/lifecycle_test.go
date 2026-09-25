@@ -40,7 +40,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skychat/dm"
 	"github.com/skycoin/skywire/pkg/skychat/history"
 	"github.com/skycoin/skywire/pkg/skychat/message"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // --- harness ----------------------------------------------------------------
@@ -505,8 +505,8 @@ func TestRegisterHandlers_EnabledRegistersRoutes(t *testing.T) {
 type pollAPI struct {
 	visorAPIShim
 	mu     sync.Mutex
-	pair   []visor.PairMessage
-	group  []visor.GroupMessage
+	pair   []visorapi.PairMessage
+	group  []visorapi.GroupMessage
 	pairN  int
 	groupN int
 	// polled fires once per poll. stopPairPoller/stopGroupPoller only CANCEL
@@ -542,7 +542,7 @@ func (p *pollAPI) awaitQuiet(t *testing.T, n int) { //nolint
 	}
 }
 
-func (p *pollAPI) PairPoll(time.Time) ([]visor.PairMessage, error) {
+func (p *pollAPI) PairPoll(time.Time) ([]visorapi.PairMessage, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.pairN++
@@ -552,7 +552,7 @@ func (p *pollAPI) PairPoll(time.Time) ([]visor.PairMessage, error) {
 	return out, nil
 }
 
-func (p *pollAPI) GroupPoll(time.Time) ([]visor.GroupMessage, error) {
+func (p *pollAPI) GroupPoll(time.Time) ([]visorapi.GroupMessage, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.groupN++
@@ -592,7 +592,7 @@ func TestPairPoller_BridgesInboundToSSE(t *testing.T) {
 
 	peer, _ := cipher.GenerateKeyPair()
 	fake := newPollAPI()
-	fake.pair = []visor.PairMessage{{PeerPK: peer, Text: "from the pair feed", TS: time.Now().UTC()}}
+	fake.pair = []visorapi.PairMessage{{PeerPK: peer, Text: "from the pair feed", TS: time.Now().UTC()}}
 	withFakePairRPC(t, fake)
 
 	raw, unsub := hub.subscribe()
@@ -620,7 +620,7 @@ func TestGroupPoller_BridgesInboundToSSE(t *testing.T) {
 
 	peer, _ := cipher.GenerateKeyPair()
 	fake := newPollAPI()
-	fake.group = []visor.GroupMessage{{GroupID: "g-1", SenderPK: peer, Text: "from the group feed", TS: time.Now().UTC()}}
+	fake.group = []visorapi.GroupMessage{{GroupID: "g-1", SenderPK: peer, Text: "from the group feed", TS: time.Now().UTC()}}
 	withFakePairRPC(t, fake)
 
 	raw, unsub := hub.subscribe()
@@ -792,7 +792,7 @@ type pingAPI struct {
 
 func (p *pingAPI) DialDmsgPing(cipher.PubKey) error { return p.dialErr }
 func (p *pingAPI) StopDmsgPing(cipher.PubKey) error { p.stopped++; return nil }
-func (p *pingAPI) DmsgPingOnce(visor.PingConfig) (time.Duration, error) {
+func (p *pingAPI) DmsgPingOnce(visorapi.PingConfig) (time.Duration, error) {
 	return p.rtt, p.pingErr
 }
 

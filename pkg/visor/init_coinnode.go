@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -150,7 +151,7 @@ func initCoinNodes(_ context.Context, v *Visor, log *logging.Logger) error {
 		// caller reaches the API without the operator having to weaken the
 		// daemon's local header-check. The stamped X-Skywire-Remote-PK header is
 		// a harmless bonus the node may use for caller attribution.
-		fp := ForwardedPort{
+		fp := visorapi.ForwardedPort{
 			Port:      int(node.DmsgPort),
 			ProxyAddr: node.LocalAddr,
 			Label:     "coin",

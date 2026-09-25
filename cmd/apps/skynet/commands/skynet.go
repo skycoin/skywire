@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -21,7 +22,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/visor"
 )
 
 var (
@@ -173,14 +173,14 @@ func RunSkynet(ctx context.Context, args []string) error {
 	return nil
 }
 
-func createRPCClient(addr string) (visor.API, error) {
+func createRPCClient(addr string) (visorapi.API, error) {
 	const rpcDialTimeout = time.Second * 5
 	conn, err := net.DialTimeout("tcp", addr, rpcDialTimeout)
 	if err != nil {
 		return nil, err
 	}
 	logger := logging.MustGetLogger("visor-rpc")
-	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, 0), nil
+	return visorapi.NewRPCClient(logger, conn, visorapi.RPCPrefix, 0), nil
 }
 
 // Execute executes root CLI command.

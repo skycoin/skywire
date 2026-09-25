@@ -7,6 +7,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxystatus"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -103,10 +104,10 @@ func TestStatusSnapshotSkynetLayer(t *testing.T) {
 
 	// One skynet forward and one dmsg-only forward: only the former belongs on
 	// the skynet page.
-	if err := v.forwardedPorts.Register(ForwardedPort{Port: 8080, LocalPort: 3000, Label: "web", Skynet: true}); err != nil {
+	if err := v.forwardedPorts.Register(visorapi.ForwardedPort{Port: 8080, LocalPort: 3000, Label: "web", Skynet: true}); err != nil {
 		t.Fatalf("register skynet port: %v", err)
 	}
-	if err := v.forwardedPorts.Register(ForwardedPort{Port: 9090, DMSG: true}); err != nil {
+	if err := v.forwardedPorts.Register(visorapi.ForwardedPort{Port: 9090, DMSG: true}); err != nil {
 		t.Fatalf("register dmsg port: %v", err)
 	}
 

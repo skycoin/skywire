@@ -3,6 +3,7 @@ package visor
 
 import (
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // RegisterTCPPort registers the local port to be accessed by remote visors
@@ -12,7 +13,7 @@ func (r *RPC) RegisterTCPPort(port *int, _ *struct{}) (err error) {
 }
 
 // DialUDPForward starts a client-side faithful-UDP forward (#2607).
-func (r *RPC) DialUDPForward(in *UDPForwardIn, _ *struct{}) (err error) {
+func (r *RPC) DialUDPForward(in *visorapi.UDPForwardIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "DialUDPForward", in)(nil, &err)
 	return r.visor.DialUDPForward(in.RemotePK, in.RemotePort, in.LocalPort)
 }
@@ -46,19 +47,19 @@ func (r *RPC) ListTCPPorts(_ *struct{}, out *[]int) (err error) {
 }
 
 // RegisterForwardedPort registers a port with full metadata.
-func (r *RPC) RegisterForwardedPort(p *ForwardedPort, _ *struct{}) (err error) {
+func (r *RPC) RegisterForwardedPort(p *visorapi.ForwardedPort, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "RegisterForwardedPort", p)(nil, &err)
 	return r.visor.RegisterForwardedPort(*p)
 }
 
 // UpdateForwardedPort updates metadata for an existing forwarded port.
-func (r *RPC) UpdateForwardedPort(p *ForwardedPort, _ *struct{}) (err error) {
+func (r *RPC) UpdateForwardedPort(p *visorapi.ForwardedPort, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "UpdateForwardedPort", p)(nil, &err)
 	return r.visor.UpdateForwardedPort(*p)
 }
 
 // ListForwardedPorts returns all forwarded ports with metadata.
-func (r *RPC) ListForwardedPorts(_ *struct{}, out *[]ForwardedPort) (err error) {
+func (r *RPC) ListForwardedPorts(_ *struct{}, out *[]visorapi.ForwardedPort) (err error) {
 	defer rpcutil.LogCall(r.log, "ListForwardedPorts", nil)(out, &err)
 	ports, err := r.visor.ListForwardedPorts()
 	*out = ports

@@ -11,19 +11,13 @@ import (
 
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
-
-// RegisterCXOFeedRequest is the input to RPC.RegisterCXOFeed.
-type RegisterCXOFeedRequest struct {
-	Name        string `json:"name"`
-	DmsgPort    uint16 `json:"dmsg_port"`
-	Description string `json:"description,omitempty"`
-}
 
 // RegisterCXOFeed creates a new user-published CXO TreeStore feed
 // listening on dmsgPort under the visor's PK. The feed is reachable
 // from any peer that subscribes to (visor PK, dmsgPort) over DMSG.
-func (r *RPC) RegisterCXOFeed(req *RegisterCXOFeedRequest, _ *struct{}) (err error) {
+func (r *RPC) RegisterCXOFeed(req *visorapi.RegisterCXOFeedRequest, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "RegisterCXOFeed", req)(nil, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")

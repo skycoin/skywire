@@ -13,7 +13,7 @@ import (
 	"net/rpc"
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func init() {
@@ -70,14 +70,14 @@ type sentinelAPI struct {
 // visorAPIShim is a typed shim so embedding it satisfies visor.API.
 // The methods aren't called in tests; the type only exists so
 // sentinelAPI compiles.
-type visorAPIShim struct{ visor.API }
+type visorAPIShim struct{ visorapi.API }
 
 func TestPairRPCDoRetryOnShutdown(t *testing.T) {
 	t.Run("no client returns unavailable", func(t *testing.T) {
 		err := pairRPCDo("Op",
-			func() visor.API { return nil },
-			func(string) visor.API { return nil },
-			func(visor.API) error { t.Fatal("fn must not be called"); return nil },
+			func() visorapi.API { return nil },
+			func(string) visorapi.API { return nil },
+			func(visorapi.API) error { t.Fatal("fn must not be called"); return nil },
 		)
 		if !errors.Is(err, errPairRPCUnavailable) {
 			t.Fatalf("want errPairRPCUnavailable, got %v", err)
@@ -89,9 +89,9 @@ func TestPairRPCDoRetryOnShutdown(t *testing.T) {
 		calls := 0
 		redials := 0
 		err := pairRPCDo("Op",
-			func() visor.API { return first },
-			func(string) visor.API { redials++; return &sentinelAPI{id: 2} },
-			func(c visor.API) error {
+			func() visorapi.API { return first },
+			func(string) visorapi.API { redials++; return &sentinelAPI{id: 2} },
+			func(c visorapi.API) error {
 				calls++
 				if c != first {
 					t.Fatalf("call %d: unexpected client", calls)
@@ -113,9 +113,9 @@ func TestPairRPCDoRetryOnShutdown(t *testing.T) {
 		calls := 0
 		redials := 0
 		err := pairRPCDo("Op",
-			func() visor.API { return first },
-			func(string) visor.API { redials++; return &sentinelAPI{id: 2} },
-			func(visor.API) error { calls++; return boom },
+			func() visorapi.API { return first },
+			func(string) visorapi.API { redials++; return &sentinelAPI{id: 2} },
+			func(visorapi.API) error { calls++; return boom },
 		)
 		if !errors.Is(err, boom) {
 			t.Fatalf("want boom, got %v", err)
@@ -131,9 +131,9 @@ func TestPairRPCDoRetryOnShutdown(t *testing.T) {
 		calls := 0
 		redials := 0
 		err := pairRPCDo("Op",
-			func() visor.API { return first },
-			func(string) visor.API { redials++; return second },
-			func(c visor.API) error {
+			func() visorapi.API { return first },
+			func(string) visorapi.API { redials++; return second },
+			func(c visorapi.API) error {
 				calls++
 				switch calls {
 				case 1:
@@ -165,9 +165,9 @@ func TestPairRPCDoRetryOnShutdown(t *testing.T) {
 		calls := 0
 		redials := 0
 		err := pairRPCDo("Op",
-			func() visor.API { return first },
-			func(string) visor.API { redials++; return nil },
-			func(visor.API) error { calls++; return rpc.ErrShutdown },
+			func() visorapi.API { return first },
+			func(string) visorapi.API { redials++; return nil },
+			func(visorapi.API) error { calls++; return rpc.ErrShutdown },
 		)
 		if !errors.Is(err, errPairRPCUnavailable) {
 			t.Fatalf("want errPairRPCUnavailable, got %v", err)
@@ -183,9 +183,9 @@ func TestPairRPCDoRetryOnShutdown(t *testing.T) {
 		calls := 0
 		redials := 0
 		err := pairRPCDo("Op",
-			func() visor.API { return first },
-			func(string) visor.API { redials++; return second },
-			func(visor.API) error { calls++; return rpc.ErrShutdown },
+			func() visorapi.API { return first },
+			func(string) visorapi.API { redials++; return second },
+			func(visorapi.API) error { calls++; return rpc.ErrShutdown },
 		)
 		if !errors.Is(err, rpc.ErrShutdown) {
 			t.Fatalf("want rpc.ErrShutdown, got %v", err)

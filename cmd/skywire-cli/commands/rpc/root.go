@@ -30,7 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 const (
@@ -94,7 +94,7 @@ func getDefaultRPCAddr() string {
 // so one-shot callers see the cause. Long-running reconnect loops
 // (group listen, skychat listen) should use ClientQuiet to suppress
 // per-retry spam.
-func Client(cmdFlags *pflag.FlagSet) (visor.API, error) {
+func Client(cmdFlags *pflag.FlagSet) (visorapi.API, error) {
 	return clientImpl(cmdFlags, false)
 }
 
@@ -103,11 +103,11 @@ func Client(cmdFlags *pflag.FlagSet) (visor.API, error) {
 // callsite that retries on failure (a noisy loop spamming the same
 // "RPC connection failed" line is worse than no message at all —
 // the caller knows the dial failed because err is non-nil).
-func ClientQuiet(cmdFlags *pflag.FlagSet) (visor.API, error) {
+func ClientQuiet(cmdFlags *pflag.FlagSet) (visorapi.API, error) {
 	return clientImpl(cmdFlags, true)
 }
 
-func clientImpl(cmdFlags *pflag.FlagSet, quiet bool) (visor.API, error) {
+func clientImpl(cmdFlags *pflag.FlagSet, quiet bool) (visorapi.API, error) {
 	// --via takes precedence over --rpc scheme shortcuts. Schemes
 	// on --rpc are kept as aliases for backward compat (a brief
 	// transition; remove in a later release).
@@ -145,7 +145,7 @@ func clientImpl(cmdFlags *pflag.FlagSet, quiet bool) (visor.API, error) {
 	rpcCallTimeout := time.Duration(Timeout) * time.Second
 	// Use logger with RPC address as tag for better identification
 	rpcLogger := logging.MustGetLogger(fmt.Sprintf("rpc://%s", Addr))
-	return visor.NewRPCClient(rpcLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
+	return visorapi.NewRPCClient(rpcLogger, conn, visorapi.RPCPrefix, rpcCallTimeout), nil
 }
 
 // viaClient dispatches a `--via <scheme>://<pk>` request to the
@@ -157,7 +157,7 @@ func clientImpl(cmdFlags *pflag.FlagSet, quiet bool) (visor.API, error) {
 // straight gob to the remote's rpc.Server through the bridge —
 // no protocol translation, no JSON-vs-gob wire format issues, all
 // 167 typed visor.API methods work transparently.
-func viaClient(cmdFlags *pflag.FlagSet, via string, quiet bool) (visor.API, error) {
+func viaClient(cmdFlags *pflag.FlagSet, via string, quiet bool) (visorapi.API, error) {
 	var rest string
 	var scheme byte
 	switch {
@@ -242,7 +242,7 @@ func BridgeConn(scheme byte, remotePK cipher.PubKey, port uint16) (net.Conn, err
 	return conn, nil
 }
 
-func bridgeClient(cmdFlags *pflag.FlagSet, scheme byte, pkStr string, port uint16, quiet bool) (visor.API, error) {
+func bridgeClient(cmdFlags *pflag.FlagSet, scheme byte, pkStr string, port uint16, quiet bool) (visorapi.API, error) {
 	var remotePK cipher.PubKey
 	if err := remotePK.UnmarshalText([]byte(pkStr)); err != nil {
 		if !quiet {
@@ -265,11 +265,11 @@ func bridgeClient(cmdFlags *pflag.FlagSet, scheme byte, pkStr string, port uint1
 		schemeName = "skynet"
 	}
 	rpcLogger := logging.MustGetLogger(fmt.Sprintf("%s://%s", schemeName, pkStr))
-	return visor.NewRPCClient(rpcLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
+	return visorapi.NewRPCClient(rpcLogger, conn, visorapi.RPCPrefix, rpcCallTimeout), nil
 }
 
 // DmsgClient creates an RPC client over dmsg
-func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
+func DmsgClient(cmdFlags *pflag.FlagSet) (visorapi.API, error) {
 	// Parse visor public key
 	visorPubKey := cipher.PubKey{}
 	if err := visorPubKey.UnmarshalText([]byte(VisorPK)); err != nil {
@@ -353,7 +353,7 @@ func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	rpcCallTimeout := time.Duration(Timeout) * time.Second
 	// Use logger with dmsg address as tag for better identification
 	dmsgLogger := logging.MustGetLogger(fmt.Sprintf("dmsg://%s", VisorPK))
-	return visor.NewRPCClient(dmsgLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
+	return visorapi.NewRPCClient(dmsgLogger, conn, visorapi.RPCPrefix, rpcCallTimeout), nil
 }
 
 var (
@@ -976,7 +976,7 @@ func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 	if !NoCXO {
 		if feed, path, ok := cxoFeedForURL(url); ok {
 			if rpcClient, err := Client(cmdFlags); err == nil {
-				resp, err := rpcClient.FetchCXO(visor.FetchCXOArgs{Feed: feed, Path: path})
+				resp, err := rpcClient.FetchCXO(visorapi.FetchCXOArgs{Feed: feed, Path: path})
 				if err == nil && resp != nil && resp.Hit && len(resp.Body) > 0 {
 					// Trace, not Debug: the deployment-service fetch chain
 					// (CXO → RPC → DMSG) is normal plumbing, and the CLI's
@@ -1014,7 +1014,7 @@ func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 	if !NoRPC && (rpcURL != url || isDmsgURL(url)) {
 		rpcClient, err := Client(cmdFlags)
 		if err == nil {
-			resp, err := rpcClient.DmsgHTTP(visor.DmsgHTTPRequest{
+			resp, err := rpcClient.DmsgHTTP(visorapi.DmsgHTTPRequest{
 				URL:    rpcURL,
 				Method: "GET",
 			})

@@ -17,7 +17,7 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil/livetui"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cliout"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -111,7 +111,7 @@ var listCmd = &cobra.Command{
 // filterActiveRoutes applies --filter (initiator/responder/all) to the
 // route-group list. Returns the filtered slice or an error if the
 // filter value is unknown.
-func filterActiveRoutes(routes []visor.AppRouteStatus) ([]visor.AppRouteStatus, error) {
+func filterActiveRoutes(routes []visorapi.AppRouteStatus) ([]visorapi.AppRouteStatus, error) {
 	switch strings.ToLower(statusFilter) {
 	case "", "all":
 		return routes, nil
@@ -139,7 +139,7 @@ func filterActiveRoutes(routes []visor.AppRouteStatus) ([]visor.AppRouteStatus, 
 // writeRouteGroupTable renders the active-route-groups table to w.
 // Pulled out of listCmd so both the one-shot and --live paths share a
 // single formatting implementation.
-func writeRouteGroupTable(w *tabwriter.Writer, routes []visor.AppRouteStatus) {
+func writeRouteGroupTable(w *tabwriter.Writer, routes []visorapi.AppRouteStatus) {
 	fmt.Fprintln(w, "APP\tROLE\tREMOTE\tPORTS\tLATENCY\tTX\tRX\tUP\tDOWN\tROUTES\tMUX") //nolint:errcheck,gosec
 	for _, r := range routes {
 		remote := r.Route.RemotePK.String() + ".."
@@ -197,7 +197,7 @@ func writeRouteGroupTable(w *tabwriter.Writer, routes []visor.AppRouteStatus) {
 // renderRouteGroupListLive returns a fresh snapshot of the route-group
 // table as a string for the livetui watcher. Same columns as the
 // one-shot path; bandwidth/latency from the latest ActiveRoutes() RPC.
-func renderRouteGroupListLive(rpcClient visor.API) (string, error) {
+func renderRouteGroupListLive(rpcClient visorapi.API) (string, error) {
 	routes, err := rpcClient.ActiveRoutes()
 	if err != nil {
 		return "", err

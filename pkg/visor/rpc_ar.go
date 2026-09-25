@@ -3,6 +3,7 @@ package visor
 
 import (
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // CheckAREntry checks if a PK is registered in the address resolver.
@@ -17,7 +18,7 @@ func (r *RPC) CheckAREntry(pk *string, out *[]string) (err error) {
 }
 
 // ARSelfInfo returns the visor's own AR registration (STCPR + SUDPH).
-func (r *RPC) ARSelfInfo(_ *struct{}, out *ARSelfRegistration) (err error) {
+func (r *RPC) ARSelfInfo(_ *struct{}, out *visorapi.ARSelfRegistration) (err error) {
 	defer rpcutil.LogCall(r.log, "ARSelfInfo", nil)(out, &err)
 	reg, err := r.visor.ARSelfInfo()
 	if err != nil {

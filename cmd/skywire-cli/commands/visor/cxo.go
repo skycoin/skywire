@@ -28,7 +28,7 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil/livetui"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -105,7 +105,7 @@ cycle goroutine refresh.`,
 	},
 }
 
-func formatCXOStatus(st []visor.FeedStatus) string {
+func formatCXOStatus(st []visorapi.FeedStatus) string {
 	if len(st) == 0 {
 		return "(no CXO feeds acquired this process — try `skywire cli visor cxo refresh sd-services` to start one)\n"
 	}
@@ -186,14 +186,14 @@ dmsgd-clients-by-server, tpd-all-transports, tpd-stats.`,
 			feeds = []string{args[0]}
 		}
 
-		results := make([]visor.FeedStatus, 0, len(feeds))
+		results := make([]visorapi.FeedStatus, 0, len(feeds))
 		for _, f := range feeds {
-			st, refErr := rpcClient.CXORefreshFeed(visor.CXORefreshArgs{
+			st, refErr := rpcClient.CXORefreshFeed(visorapi.CXORefreshArgs{
 				Feed:    f,
 				Timeout: cxoRefreshWait,
 			})
 			if st == nil {
-				st = &visor.FeedStatus{Feed: f}
+				st = &visorapi.FeedStatus{Feed: f}
 			}
 			if refErr != nil {
 				st.LastErr = refErr.Error()
@@ -239,7 +239,7 @@ Paths per feed:
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		feed, path := args[0], args[1]
-		res, err := rpcClient.FetchCXO(visor.FetchCXOArgs{Feed: feed, Path: path})
+		res, err := rpcClient.FetchCXO(visorapi.FetchCXOArgs{Feed: feed, Path: path})
 		if err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}

@@ -30,7 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/tcpproxy"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -334,7 +334,7 @@ var deregisterCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("RPC connection failed; is skywire running?: %v", err)
 			}
-			rpcClient := visor.NewRPCClient(logger, conn, visor.RPCPrefix, 30*time.Second)
+			rpcClient := visorapi.NewRPCClient(logger, conn, visorapi.RPCPrefix, 30*time.Second)
 			defer rpcClient.Close() //nolint:errcheck
 
 			// Perform deregistration for each service type

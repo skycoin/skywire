@@ -28,6 +28,7 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func (hv *Hypervisor) getNetworkTransports() http.HandlerFunc {
@@ -78,7 +79,7 @@ func (hv *Hypervisor) getNetworkTransports() http.HandlerFunc {
 		if strings.HasPrefix(tpdDmsg, "dmsg://") {
 			dmsgURL := tpdDmsg + path
 			log.Debugf("fetching TPD metrics via DMSG: %s", dmsgURL)
-			resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
+			resp, err := hv.visor.DmsgHTTP(visorapi.DmsgHTTPRequest{
 				URL:    dmsgURL,
 				Method: "GET",
 			})
@@ -189,7 +190,7 @@ func (hv *Hypervisor) getNetworkVisorUptime() http.HandlerFunc {
 		if tpdDmsg != "" {
 			dmsgURL := tpdDmsg + path
 			log.Debugf("fetching TPD /uptimes via DMSG: %s", dmsgURL)
-			resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{URL: dmsgURL, Method: "GET"})
+			resp, err := hv.visor.DmsgHTTP(visorapi.DmsgHTTPRequest{URL: dmsgURL, Method: "GET"})
 			if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("X-Skywire-Uptime-Source", "dmsg-http")

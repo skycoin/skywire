@@ -8,6 +8,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // restoreDialKnobs puts every dial knob back when the test ends, so moving one
@@ -37,7 +38,7 @@ func TestRouterDialSettingsRoundTrip(t *testing.T) {
 	require.Empty(t, cur.PreferPKs)
 
 	pk := "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"
-	require.NoError(t, v.SetRouterDialSettings(RouterDialSettings{
+	require.NoError(t, v.SetRouterDialSettings(visorapi.RouterDialSettings{
 		RouteCandidates:      7,
 		MuxRouteHeadroom:     5,
 		UnknownLatencyCostMs: 250,
@@ -56,13 +57,13 @@ func TestRouterDialSettingsRoundTrip(t *testing.T) {
 	require.Equal(t, cur.WarmPlanBucketCap, got.WarmPlanBucketCap, "an unset field is left alone")
 
 	// 0 is a meaningful value for the two scales, so it needs the explicit bit.
-	require.NoError(t, v.SetRouterDialSettings(RouterDialSettings{TypePriorScale: 0, TypePriorScaleSet: true}))
+	require.NoError(t, v.SetRouterDialSettings(visorapi.RouterDialSettings{TypePriorScale: 0, TypePriorScaleSet: true}))
 	got, err = v.GetRouterDialSettings()
 	require.NoError(t, err)
 	require.Equal(t, 0.0, got.TypePriorScale)
 
 	// And the prefer list can be cleared.
-	require.NoError(t, v.SetRouterDialSettings(RouterDialSettings{ClearPreferPKs: true}))
+	require.NoError(t, v.SetRouterDialSettings(visorapi.RouterDialSettings{ClearPreferPKs: true}))
 	got, err = v.GetRouterDialSettings()
 	require.NoError(t, err)
 	require.Empty(t, got.PreferPKs)
@@ -72,15 +73,15 @@ func TestRouterDialSettingsRejectsBadValues(t *testing.T) {
 	restoreDialKnobs(t)
 	v := &Visor{log: logging.MustGetLogger("dial_settings_reject_test")}
 
-	require.ErrorContains(t, v.SetRouterDialSettings(RouterDialSettings{
+	require.ErrorContains(t, v.SetRouterDialSettings(visorapi.RouterDialSettings{
 		TypePriorScale: -1, TypePriorScaleSet: true,
 	}), "dial-type-prior-scale")
 
-	require.ErrorContains(t, v.SetRouterDialSettings(RouterDialSettings{
+	require.ErrorContains(t, v.SetRouterDialSettings(visorapi.RouterDialSettings{
 		TunnelLegs: -5, TunnelLegsSet: true,
 	}), "dial-tunnel-legs")
 
-	require.ErrorContains(t, v.SetRouterDialSettings(RouterDialSettings{
+	require.ErrorContains(t, v.SetRouterDialSettings(visorapi.RouterDialSettings{
 		PreferPKs: []string{"not-a-public-key"},
 	}), "invalid public key")
 }

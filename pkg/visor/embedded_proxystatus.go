@@ -34,6 +34,7 @@ import (
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetweb"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -321,7 +322,7 @@ func (p *visorStatusProvider) chainTargetState(addr string) string {
 // listForwardedPortsSafe is ListForwardedPorts with the registry-not-yet-built
 // case folded in: a half-initialized visor reports "no forwards" instead of
 // panicking on the status page's request path.
-func (v *Visor) listForwardedPortsSafe() ([]ForwardedPort, error) {
+func (v *Visor) listForwardedPortsSafe() ([]visorapi.ForwardedPort, error) {
 	if v.forwardedPorts == nil {
 		return nil, nil
 	}
@@ -541,7 +542,7 @@ func appendNote(existing, add string) string {
 // throughput resolves a hop's transport id to its observed peak goodput; nil
 // leaves every hop's ThroughputBps at 0 (the shape every caller had before the
 // capacity prior existed).
-func proxyLegFrom(leg MuxLegInfo, throughput func(string) float64) proxystatus.Leg {
+func proxyLegFrom(leg visorapi.MuxLegInfo, throughput func(string) float64) proxystatus.Leg {
 	return proxystatus.Leg{
 		Index:          leg.Index,
 		TransportID:    leg.TransportID,
@@ -569,7 +570,7 @@ func proxyLegFrom(leg MuxLegInfo, throughput func(string) float64) proxystatus.L
 // proxystatus.Hop shape the status page renders (full PKs preserved), stamping
 // each hop with the transport's observed peak goodput where the visor holds
 // the transport.
-func proxyHopsFrom(hops []MuxHopInfo, throughput func(string) float64) []proxystatus.Hop {
+func proxyHopsFrom(hops []visorapi.MuxHopInfo, throughput func(string) float64) []proxystatus.Hop {
 	if len(hops) == 0 {
 		return nil
 	}

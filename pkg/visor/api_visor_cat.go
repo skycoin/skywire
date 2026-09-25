@@ -39,6 +39,7 @@ import (
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // Bounds on the loopback wait + remote dial/accept. Dial is short
@@ -62,29 +63,29 @@ const (
 //     remote unreachable.
 //   - Listen: dmsg.Listen / appnet.ListenContext failures, whitelist
 //     rejection of the first peer.
-func (v *Visor) VisorCat(req VisorCatRequest) (*VisorCatResponse, error) {
+func (v *Visor) VisorCat(req visorapi.VisorCatRequest) (*visorapi.VisorCatResponse, error) {
 	transport := req.Transport
 	if transport == "" {
-		transport = VisorCatTransportDmsg
+		transport = visorapi.VisorCatTransportDmsg
 	}
 	switch transport {
-	case VisorCatTransportDmsg, VisorCatTransportSkynet:
+	case visorapi.VisorCatTransportDmsg, visorapi.VisorCatTransportSkynet:
 	default:
 		return nil, fmt.Errorf("VisorCat: bad transport %q (want %q or %q)",
-			transport, VisorCatTransportDmsg, VisorCatTransportSkynet)
+			transport, visorapi.VisorCatTransportDmsg, visorapi.VisorCatTransportSkynet)
 	}
 	if req.Port == 0 {
 		return nil, errors.New("VisorCat: port required")
 	}
 
 	switch req.Mode {
-	case VisorCatModeDial:
+	case visorapi.VisorCatModeDial:
 		return v.visorCatDial(req, transport)
-	case VisorCatModeListen:
+	case visorapi.VisorCatModeListen:
 		return v.visorCatListen(req, transport)
 	default:
 		return nil, fmt.Errorf("VisorCat: bad mode %q (want %q or %q)",
-			req.Mode, VisorCatModeDial, VisorCatModeListen)
+			req.Mode, visorapi.VisorCatModeDial, visorapi.VisorCatModeListen)
 	}
 }
 
@@ -92,7 +93,7 @@ func (v *Visor) VisorCat(req VisorCatRequest) (*VisorCatResponse, error) {
 // to the CLI's RPC call), then spawns the loopback-listener
 // goroutine. The CLI dials the returned LocalAddr to finish the
 // splice.
-func (v *Visor) visorCatDial(req VisorCatRequest, transport string) (*VisorCatResponse, error) {
+func (v *Visor) visorCatDial(req visorapi.VisorCatRequest, transport string) (*visorapi.VisorCatResponse, error) {
 	if req.RemotePK.Null() {
 		return nil, errors.New("VisorCat: remote_pk required in dial mode")
 	}
@@ -141,7 +142,7 @@ func (v *Visor) visorCatDial(req VisorCatRequest, transport string) (*VisorCatRe
 		_ = splice(local, remote) //nolint:errcheck // best-effort splice; conn lifecycle owned by caller
 	}()
 
-	return &VisorCatResponse{LocalAddr: lis.Addr().String()}, nil
+	return &visorapi.VisorCatResponse{LocalAddr: lis.Addr().String()}, nil
 }
 
 // visorCatListen binds the remote-side listener(s) eagerly so the RPC
@@ -153,7 +154,7 @@ func (v *Visor) visorCatDial(req VisorCatRequest, transport string) (*VisorCatRe
 // requested port — matching dmsgscp's dual-transport posture — and
 // races them. The transport argument is accepted for symmetry with
 // the dial-mode path but is otherwise ignored here.
-func (v *Visor) visorCatListen(req VisorCatRequest, transport string) (*VisorCatResponse, error) {
+func (v *Visor) visorCatListen(req visorapi.VisorCatRequest, transport string) (*visorapi.VisorCatResponse, error) {
 	timeout := req.Timeout
 	if timeout <= 0 {
 		timeout = visorCatDefaultListenTimeout
@@ -390,7 +391,7 @@ func (v *Visor) visorCatListen(req VisorCatRequest, transport string) (*VisorCat
 		_ = spliceHalfClose(local, remote) //nolint:errcheck // best-effort splice; conn lifecycle owned by caller
 	}()
 
-	return &VisorCatResponse{LocalAddr: loopLis.Addr().String()}, nil
+	return &visorapi.VisorCatResponse{LocalAddr: loopLis.Addr().String()}, nil
 }
 
 // dialCatTransport opens a remote stream over the requested transport.
@@ -400,12 +401,12 @@ func (v *Visor) visorCatListen(req VisorCatRequest, transport string) (*VisorCat
 // mux layer, so the caller still sees a single ordered net.Conn.
 func (v *Visor) dialCatTransport(ctx context.Context, transport string, rPK cipher.PubKey, port uint16, routes int) (net.Conn, error) {
 	switch transport {
-	case VisorCatTransportDmsg:
+	case visorapi.VisorCatTransportDmsg:
 		if err := v.mustWaitDmsgReady(); err != nil {
 			return nil, err
 		}
 		return v.dmsgC.DialStream(ctx, dmsg.Addr{PK: rPK, Port: port})
-	case VisorCatTransportSkynet:
+	case visorapi.VisorCatTransportSkynet:
 		nw, err := appnet.ResolveNetworker(appnet.TypeSkynet)
 		if err != nil {
 			return nil, fmt.Errorf("skynet networker not registered: %w", err)

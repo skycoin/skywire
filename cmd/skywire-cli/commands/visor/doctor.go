@@ -26,7 +26,7 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cliout"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 const (
@@ -158,7 +158,7 @@ func runDoctor(cmd *cobra.Command) doctorReport {
 // probeVisor populates r.Visor from the Summary + IsStartupComplete
 // RPC calls. Reachability errors at this layer escalate the verdict
 // to RED; degraded subsystems escalate to YELLOW.
-func probeVisor(r *doctorReport, rc visor.API) {
+func probeVisor(r *doctorReport, rc visorapi.API) {
 	summary, err := rc.Summary()
 	if err != nil {
 		r.Verdict = verdictRed

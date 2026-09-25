@@ -34,7 +34,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // proxyTestClient is a minimal interface for proxy testing
@@ -45,7 +45,7 @@ type proxyTestClient interface {
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	DoCustomSetting(appName string, customSetting map[string]any) error
-	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool, skipLatencyProbe bool) (*visor.TransportSummary, error)
+	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool, skipLatencyProbe bool) (*visorapi.TransportSummary, error)
 }
 
 // isRPCConnectionError returns true if the error indicates a dead RPC connection
@@ -139,7 +139,7 @@ func init() {
 // `cli visor app start --routing-policy`: install happens pre-start so
 // the very first dial the proxy makes already runs through the policy.
 // Passing "" / "none" clears a previously-installed override.
-func applyRoutingPolicy(cmd *cobra.Command, rpcClient visor.API, clientName string) {
+func applyRoutingPolicy(cmd *cobra.Command, rpcClient visorapi.API, clientName string) {
 	// --direct is policy-free by definition (a 1-hop control route the policy
 	// engine must not re-home onto the overlay). Actively clear any per-app
 	// policy so a previously-installed override can't linger and fight the
@@ -666,7 +666,7 @@ const stopRouteGroupWait = 5 * time.Second
 // and returns how many are still registered when the budget runs out (0 on a
 // clean stop). A group outliving its app is what made the next
 // `proxy start --route <pins>` abort with "app=… has N active route groups".
-func awaitNoRouteGroups(rpcClient visor.API, app string) int {
+func awaitNoRouteGroups(rpcClient visorapi.API, app string) int {
 	deadline := time.Now().Add(stopRouteGroupWait)
 	left := 0
 	for {
@@ -800,7 +800,7 @@ var statusCmd = &cobra.Command{
 // proxy app (same data as `proxy mux info`), decoded via the local mirror
 // struct so the JSON contract stays the boundary. Returns nil on any error — a
 // running proxy that hasn't finished dialing simply has no route yet.
-func fetchProxyRoute(rpcClient visor.API, appName string) []muxRouteGroupInfo {
+func fetchProxyRoute(rpcClient visorapi.API, appName string) []muxRouteGroupInfo {
 	infos, err := rpcClient.RouteGroupMuxInfo(appName)
 	if err != nil {
 		return nil
@@ -832,7 +832,7 @@ type directStreamInfo struct {
 // Consulted when there is no route group: a dial that took the AppDirectMux
 // shortcut has a real path — a vstream over a named transport to the server —
 // and reporting nothing about it reads as a broken proxy when it is working.
-func fetchProxyDirect(rpcClient visor.API, appName string) []directStreamInfo {
+func fetchProxyDirect(rpcClient visorapi.API, appName string) []directStreamInfo {
 	infos, err := rpcClient.AppDirectStreams(appName)
 	if err != nil || len(infos) == 0 {
 		return nil
@@ -1939,7 +1939,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 
 			// Wrapper to allow reconnection during test
 			type rpcClientWrapper struct {
-				client visor.API
+				client visorapi.API
 				mu     sync.RWMutex
 			}
 			rpcWrapper := &rpcClientWrapper{client: rpcClient}
@@ -1962,7 +1962,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				return true
 			}
 
-			getRPCClient := func() visor.API {
+			getRPCClient := func() visorapi.API {
 				rpcWrapper.mu.RLock()
 				defer rpcWrapper.mu.RUnlock()
 				return rpcWrapper.client

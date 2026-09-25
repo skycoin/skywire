@@ -10,6 +10,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -60,7 +61,7 @@ func TestDmsgServerRole_OwnKeySharedPort(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	started := time.Now()
 
-	role := dmsgServerRole(testConf(pk, &dmsgspec.DmsgServerConfig{Enabled: true}), &DmsgServerRole{
+	role := dmsgServerRole(testConf(pk, &dmsgspec.DmsgServerConfig{Enabled: true}), &visorapi.DmsgServerRole{
 		Mode:                dmsgServerModeOwnKey,
 		PK:                  pk,
 		OwnKey:              true,
@@ -86,7 +87,7 @@ func TestDmsgServerRole_OwnKeyOwnAddress(t *testing.T) {
 
 	role := dmsgServerRole(testConf(pk, &dmsgspec.DmsgServerConfig{
 		Enabled: true, LocalAddress: ":8081", PublicAddress: "1.2.3.4:8081",
-	}), &DmsgServerRole{
+	}), &visorapi.DmsgServerRole{
 		Mode: dmsgServerModeOwnKey, PK: pk, OwnKey: true,
 		LocalAddress: ":8081", PublicAddress: "1.2.3.4:8081",
 	})
@@ -105,7 +106,7 @@ func TestDmsgServerRole_ConfigPath(t *testing.T) {
 
 	role := dmsgServerRole(testConf(visorPK, &dmsgspec.DmsgServerConfig{
 		Enabled: true, ConfigPath: "/etc/skywire-dmsg.json",
-	}), &DmsgServerRole{
+	}), &visorapi.DmsgServerRole{
 		Mode:          dmsgServerModeConfigPath,
 		ConfigPath:    "/etc/skywire-dmsg.json",
 		PK:            srvPK,
@@ -209,12 +210,12 @@ func TestDmsgRelayRole_RefusesToRelay(t *testing.T) {
 // roles is its own --select subtree: asking for it builds nothing else (the
 // full snapshot is ~900 KB and a projected select must stay cheap).
 func TestStateFieldSet_RolesProjection(t *testing.T) {
-	set := newStateFieldSet([]string{SelectRoles})
-	require.True(t, set.has(SelectRoles))
-	for _, k := range []string{SelectSummary, SelectHealth, SelectRouting, SelectMux,
-		SelectApps, SelectTransports, SelectModules, SelectCXO, SelectProxy, SelectDiag} {
-		require.False(t, set.has(k), "--select roles must not build %q", k)
+	set := visorapi.NewStateFieldSet([]string{visorapi.SelectRoles})
+	require.True(t, set.Has(visorapi.SelectRoles))
+	for _, k := range []string{visorapi.SelectSummary, visorapi.SelectHealth, visorapi.SelectRouting, visorapi.SelectMux,
+		visorapi.SelectApps, visorapi.SelectTransports, visorapi.SelectModules, visorapi.SelectCXO, visorapi.SelectProxy, visorapi.SelectDiag} {
+		require.False(t, set.Has(k), "--select roles must not build %q", k)
 	}
-	require.True(t, newStateFieldSet(nil).has(SelectRoles), "roles is in the default snapshot")
-	require.Contains(t, StateSelectKeys, SelectRoles, "the key must be documented in --select help")
+	require.True(t, visorapi.NewStateFieldSet(nil).Has(visorapi.SelectRoles), "roles is in the default snapshot")
+	require.Contains(t, visorapi.StateSelectKeys, visorapi.SelectRoles, "the key must be documented in --select help")
 }

@@ -9,15 +9,16 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func (hv *Hypervisor) getLANDmsgServer() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if hv.lanDmsg == nil {
-			httputil.WriteJSON(w, r, http.StatusOK, LANDmsgServerInfo{Enabled: false})
+			httputil.WriteJSON(w, r, http.StatusOK, visorapi.LANDmsgServerInfo{Enabled: false})
 			return
 		}
-		httputil.WriteJSON(w, r, http.StatusOK, LANDmsgServerInfo{
+		httputil.WriteJSON(w, r, http.StatusOK, visorapi.LANDmsgServerInfo{
 			Enabled:       true,
 			PK:            hv.lanDmsg.PK,
 			Address:       hv.lanDmsg.Address,
@@ -41,7 +42,7 @@ func (hv *Hypervisor) getDmsg() http.HandlerFunc {
 func (hv *Hypervisor) getDmsgSessions() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if hv.visor == nil {
-			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, &DmsgClientSessions{})
+			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, &visorapi.DmsgClientSessions{})
 			return
 		}
 		sessions, err := hv.visor.DmsgSessions()
@@ -159,7 +160,7 @@ func (hv *Hypervisor) getVisorDmsgSessions() http.HandlerFunc {
 			return
 		}
 		if sessions == nil {
-			httputil.WriteJSON(w, r, http.StatusOK, &DmsgClientSessions{})
+			httputil.WriteJSON(w, r, http.StatusOK, &visorapi.DmsgClientSessions{})
 			return
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, sessions)

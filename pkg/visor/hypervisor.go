@@ -34,6 +34,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/tpviz"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -48,7 +49,7 @@ const (
 type Conn struct {
 	Addr  dmsg.Addr
 	SrvPK cipher.PubKey
-	API   API
+	API   visorapi.API
 	PtyUI *dmsgPtyUI
 }
 type Hypervisor struct {
@@ -98,7 +99,7 @@ type Hypervisor struct {
 
 // cachedSummary is one entry in Hypervisor.summaryCache.
 type cachedSummary struct {
-	sum    *Summary
+	sum    *visorapi.Summary
 	seenAt time.Time
 }
 
@@ -533,7 +534,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 				visorConn := &Conn{
 					Addr:  dmsg.Addr{PK: peerPK, Port: dmsgPort},
 					SrvPK: cipher.PubKey{},
-					API:   NewRPCClient(log, conn, RPCPrefix, skyenv.RPCTimeout),
+					API:   visorapi.NewRPCClient(log, conn, visorapi.RPCPrefix, skyenv.RPCTimeout),
 					PtyUI: setupDmsgPtyUI(hv.dmsgC, peerPK),
 				}
 				if hv.visor.isDTMReady() {
@@ -561,7 +562,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 						discoveryURL = hv.discoveryURLForVisor()
 					}
 					go func(vc *Conn) {
-						if err := vc.API.SetLANDmsgServer(LANDmsgServerInfo{
+						if err := vc.API.SetLANDmsgServer(visorapi.LANDmsgServerInfo{
 							Enabled:       true,
 							PK:            hv.lanDmsg.PK,
 							Address:       hv.lanDmsg.Address,
@@ -591,7 +592,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		visorConn := &Conn{
 			Addr:  addr,
 			SrvPK: conn.ServerPK(),
-			API:   NewRPCClient(log, conn, RPCPrefix, skyenv.RPCTimeout),
+			API:   visorapi.NewRPCClient(log, conn, visorapi.RPCPrefix, skyenv.RPCTimeout),
 			PtyUI: setupDmsgPtyUI(hv.dmsgC, addr.PK),
 		}
 		if hv.visor.isDTMReady() {
@@ -630,7 +631,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 				discoveryURL = hv.discoveryURLForVisor()
 			}
 			go func() {
-				if err := visorConn.API.SetLANDmsgServer(LANDmsgServerInfo{
+				if err := visorConn.API.SetLANDmsgServer(visorapi.LANDmsgServerInfo{
 					Enabled:       true,
 					PK:            hv.lanDmsg.PK,
 					Address:       hv.lanDmsg.Address,
@@ -709,7 +710,7 @@ func (hv *Hypervisor) runBackgroundSummaryPoll(ctx context.Context) {
 // elapsed ticks, so we don't pile up goroutines on a slow round.
 func (hv *Hypervisor) pollAllForCache(ctx context.Context) {
 	hv.mu.RLock()
-	remotes := make(map[cipher.PubKey]API, len(hv.remoteVisors))
+	remotes := make(map[cipher.PubKey]visorapi.API, len(hv.remoteVisors))
 	for pk, c := range hv.remoteVisors {
 		remotes[pk] = c.API
 	}
@@ -722,7 +723,7 @@ func (hv *Hypervisor) pollAllForCache(ctx context.Context) {
 	var wg sync.WaitGroup
 	wg.Add(len(remotes))
 	for pk, api := range remotes {
-		go func(pk cipher.PubKey, api API) {
+		go func(pk cipher.PubKey, api visorapi.API) {
 			defer wg.Done()
 			if ctx.Err() != nil {
 				return
@@ -740,7 +741,7 @@ func (hv *Hypervisor) pollAllForCache(ctx context.Context) {
 // No-op when this hypervisor has no hypervisors configured. The
 // caller spawns it in a goroutine; failures are logged at debug and
 // the next reconnect retries.
-func (hv *Hypervisor) pushHypervisorWhitelist(api API) {
+func (hv *Hypervisor) pushHypervisorWhitelist(api visorapi.API) {
 	if api == nil {
 		return
 	}
@@ -759,7 +760,7 @@ func (hv *Hypervisor) pushHypervisorWhitelist(api API) {
 // the next getAllVisorsSummary poll will retry the Summary call
 // itself and surface whatever it finds. Idempotent; concurrent calls
 // for the same PK race on the cache lock and the last writer wins.
-func (hv *Hypervisor) warmSummaryCache(pk cipher.PubKey, api API) {
+func (hv *Hypervisor) warmSummaryCache(pk cipher.PubKey, api visorapi.API) {
 	if api == nil {
 		return
 	}
@@ -789,7 +790,7 @@ func (hv *Hypervisor) AddMockData(config MockConfig) error {
 	r := rand.New(rand.NewSource(time.Now().UnixNano())) // nolint:gosec
 
 	for i := 0; i < config.Visors; i++ {
-		pk, client, err := NewMockRPCClient(r, config.MaxTpsPerVisor, config.MaxRoutesPerVisor)
+		pk, client, err := visorapi.NewMockRPCClient(r, config.MaxTpsPerVisor, config.MaxRoutesPerVisor)
 		if err != nil {
 			return err
 		}
@@ -1294,29 +1295,16 @@ type About struct {
 	DmsgConnected bool            `json:"dmsg_connected"` // Whether the DMSG client is connected to servers.
 	DmsgSessions  int             `json:"dmsg_sessions"`  // Number of active DMSG server sessions.
 }
-type LANDmsgServerInfo struct {
-	Enabled       bool          `json:"enabled"`
-	PK            cipher.PubKey `json:"pk,omitempty"`
-	Address       string        `json:"address,omitempty"`        // LAN-routable "host:port" advertised by the hypervisor.
-	PublicAddress string        `json:"public_address,omitempty"` // Operator-set WAN-routable "host:port"; empty when not configured.
-	// DiscoveryURL is the hypervisor-hosted dmsg-discovery proxy URL that
-	// receiving visors should use as their primary discovery (with their
-	// existing public dmsg-discovery as fall-through behind it). Empty
-	// when the hypervisor's HTTP address isn't remotely reachable AND the
-	// operator hasn't set lan_dmsg_server.public_discovery_url. Visors
-	// that receive a non-empty value save it to config; the change takes
-	// effect on the next visor restart.
-	DiscoveryURL string `json:"discovery_url,omitempty"`
-}
+
 type dmsgSessionsCountRequest struct {
 	Count int `json:"count"`
 }
 type Health struct {
 	Status int `json:"status"`
-	*HealthInfo
+	*visorapi.HealthInfo
 }
 
-func makeSummaryResp(online, hyper bool, sum *Summary) Summary {
+func makeSummaryResp(online, hyper bool, sum *visorapi.Summary) visorapi.Summary {
 	sum.Online = online
 	sum.IsHypervisor = hyper
 	return *sum
@@ -1329,14 +1317,9 @@ type LogsRes struct {
 type publicAutoconnectReq struct {
 	PublicAutoconnect bool `json:"public_autoconnect"`
 }
-type routingRuleResp struct {
-	Key     routing.RouteID      `json:"key"`
-	Rule    string               `json:"rule"`
-	Summary *routing.RuleSummary `json:"rule_summary,omitempty"`
-}
 
-func makeRoutingRuleResp(key routing.RouteID, rule routing.Rule, summary bool) routingRuleResp {
-	resp := routingRuleResp{
+func makeRoutingRuleResp(key routing.RouteID, rule routing.Rule, summary bool) visorapi.RoutingRuleResp {
+	resp := visorapi.RoutingRuleResp{
 		Key:  key,
 		Rule: hex.EncodeToString(rule),
 	}
@@ -1354,10 +1337,10 @@ type routeGroupResp struct {
 	Desc          routing.RouteDescriptorFields `json:"desc"`
 	FwdNextTpID   string                        `json:"fwd_next_tp_id,omitempty"`
 	Initiator     bool                          `json:"initiator"`
-	Hops          []RouteHopInfo                `json:"hops,omitempty"`
+	Hops          []visorapi.RouteHopInfo       `json:"hops,omitempty"`
 }
 
-func makeRouteGroupResp(info RouteGroupInfo) routeGroupResp {
+func makeRouteGroupResp(info visorapi.RouteGroupInfo) routeGroupResp {
 	return routeGroupResp(info)
 }
 
@@ -1375,7 +1358,7 @@ type httpCtx struct {
 	App *appserver.AppState
 
 	// Transport
-	Tp *TransportSummary
+	Tp *visorapi.TransportSummary
 
 	// Route
 	RtKey routing.RouteID

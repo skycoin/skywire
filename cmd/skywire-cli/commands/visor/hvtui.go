@@ -20,7 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func init() {
@@ -76,7 +76,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 
 		// --- State ---
 		var (
-			visors []visor.HVVisorEntry
+			visors []visorapi.HVVisorEntry
 			mu     sync.RWMutex
 		)
 
@@ -149,7 +149,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			}
 			showModal(list, 80, height)
 		}
-		fetchSummary := func(pk cipher.PubKey) (*visor.Summary, error) {
+		fetchSummary := func(pk cipher.PubKey) (*visorapi.Summary, error) {
 			return rpcClient.HVVisorSummary(pk)
 		}
 		showRegisterForwardedPortModal := func(targetPK cipher.PubKey) {
@@ -182,7 +182,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 					setStatus("forwarded port: port required")
 					return
 				}
-				fp := visor.ForwardedPort{
+				fp := visorapi.ForwardedPort{
 					Port:          port,
 					LocalPort:     local,
 					Label:         label,
@@ -236,7 +236,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 		}
 
 		// --- Populate table ---
-		updateTable := func(entries []visor.HVVisorEntry) {
+		updateTable := func(entries []visorapi.HVVisorEntry) {
 			table.Clear()
 			headers := []string{"#", "PK", "VERSION", "UPTIME", "TP", "APPS", "IP", "CC", "STATUS"}
 			for i, h := range headers {
@@ -295,7 +295,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 		}
 
 		// --- Show detail for selected visor ---
-		showDetail := func(e visor.HVVisorEntry) {
+		showDetail := func(e visorapi.HVVisorEntry) {
 			var sb strings.Builder
 			sb.WriteString(fmt.Sprintf("[yellow]Public Key:[white] %s\n", e.PK.String()))
 			sb.WriteString(fmt.Sprintf("[yellow]Version:[white]    %s\n", e.Version))
@@ -422,13 +422,13 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 		})
 
 		// --- Action helpers ---
-		selectedVisor := func() (visor.HVVisorEntry, bool) {
+		selectedVisor := func() (visorapi.HVVisorEntry, bool) {
 			row, _ := table.GetSelection()
 			idx := row - 1
 			mu.RLock()
 			defer mu.RUnlock()
 			if idx < 0 || idx >= len(visors) {
-				return visor.HVVisorEntry{}, false
+				return visorapi.HVVisorEntry{}, false
 			}
 			return visors[idx], true
 		}
@@ -975,7 +975,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						}
 						type item struct {
 							kind string
-							info *visor.EmbeddedProxyInfo
+							info *visorapi.EmbeddedProxyInfo
 						}
 						items := []item{
 							{"dmsg", st.DmsgWeb},

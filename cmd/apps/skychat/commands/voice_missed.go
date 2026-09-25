@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/skychat/history"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // Every call leaves one of these in the conversation. The shared handset
@@ -123,7 +123,7 @@ func watchMissedCalls(ctx context.Context) {
 		}
 
 		var incoming, active []string
-		err := pairRPCCall("VoiceIncoming", func(c visor.API) error {
+		err := pairRPCCall("VoiceIncoming", func(c visorapi.API) error {
 			out, e := c.VoiceIncoming()
 			incoming = out
 			return e
@@ -141,7 +141,7 @@ func watchMissedCalls(ctx context.Context) {
 			voiceWatchFailed = false
 			appLog("Voice: call list readable again")
 		}
-		if err := pairRPCCall("VoiceActive", func(c visor.API) error {
+		if err := pairRPCCall("VoiceActive", func(c visorapi.API) error {
 			out, e := c.VoiceActive()
 			active = out
 			return e

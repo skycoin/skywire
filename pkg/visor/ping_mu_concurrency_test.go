@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // TestPingOnceWithEcho_DoesNotSerializeAcrossRouteIndexes verifies
@@ -55,7 +56,7 @@ func TestPingOnceWithEcho_DoesNotSerializeAcrossRouteIndexes(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			//nolint:errcheck // intentionally discarded — this test asserts on wall-clock concurrency, not per-call success
-			_, _, _, _ = v.PingOnceWithEcho(PingConfig{
+			_, _, _, _ = v.PingOnceWithEcho(visorapi.PingConfig{
 				PK:         pk,
 				RouteIndex: idx, // distinct ref → distinct lookup
 				PcktSize:   1,
@@ -93,7 +94,7 @@ func TestPingMu_NotHeldDuringConnAbsentCallpath(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 
 	//nolint:errcheck // intentionally discarded — this test asserts the mutex was released after return, not on the call result
-	_, _, _, _ = v.PingOnceWithEcho(PingConfig{PK: pk, RouteIndex: 0, PcktSize: 1}, false)
+	_, _, _, _ = v.PingOnceWithEcho(visorapi.PingConfig{PK: pk, RouteIndex: 0, PcktSize: 1}, false)
 
 	// Lock should be acquirable immediately. Use a short timeout
 	// loop via TryLock-equivalent: spawn a goroutine that locks +

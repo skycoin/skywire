@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func (hv *Hypervisor) shutdown() http.HandlerFunc {
@@ -178,7 +179,7 @@ func (hv *Hypervisor) proxyRewardSystem() http.HandlerFunc {
 		}
 		dmsgURL := rewardDmsg + "/" + path
 		log.Debugf("Fetching reward data via DMSG: %s", dmsgURL)
-		resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
+		resp, err := hv.visor.DmsgHTTP(visorapi.DmsgHTTPRequest{
 			URL:    dmsgURL,
 			Method: "GET",
 		})
@@ -281,7 +282,7 @@ func (hv *Hypervisor) getLocalTransportStats() http.HandlerFunc {
 // before until, no until means now.
 func (hv *Hypervisor) getLocalUptimeStats() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var args LocalUptimeArgs
+		var args visorapi.LocalUptimeArgs
 		if s := r.URL.Query().Get("since"); s != "" {
 			t, err := time.Parse(time.RFC3339, s)
 			if err != nil {

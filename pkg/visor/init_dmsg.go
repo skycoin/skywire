@@ -45,6 +45,7 @@ import (
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorcore"
 )
@@ -1204,7 +1205,7 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 	}
 	v.dmsgSrv.Store(srv)
-	v.dmsgSrvRole.Store(&DmsgServerRole{
+	v.dmsgSrvRole.Store(&visorapi.DmsgServerRole{
 		Mode:                dmsgServerModeOwnKey,
 		PK:                  v.conf.PK,
 		OwnKey:              true,
@@ -1385,7 +1386,7 @@ func initDmsgServerLatency(ctx context.Context, v *Visor, log *logging.Logger) e
 
 			// Self-ping via this server (ping our own PK through the server)
 			start := time.Now()
-			conf := PingConfig{
+			conf := visorapi.PingConfig{
 				PK:       v.conf.PK,
 				Tries:    3,
 				PcktSize: 2, // 2KB
@@ -1559,7 +1560,7 @@ func initDmsgServerFromFile(_ context.Context, v *Visor, log *logging.Logger, pa
 	}()
 	log.WithField("config_path", path).Info("Started in-process dmsg server from config file")
 
-	role := &DmsgServerRole{
+	role := &visorapi.DmsgServerRole{
 		Mode:       dmsgServerModeConfigPath,
 		ConfigPath: path,
 		StartedAt:  time.Now(),

@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsgweb"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skynetweb"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -26,8 +27,8 @@ import (
 // want to show "disabled" as distinct from "absent" so operators
 // can tell the difference between "resolver present but toggled
 // off" and "config section missing".
-func (v *Visor) EmbeddedProxies() (*EmbeddedProxiesStatus, error) {
-	out := &EmbeddedProxiesStatus{}
+func (v *Visor) EmbeddedProxies() (*visorapi.EmbeddedProxiesStatus, error) {
+	out := &visorapi.EmbeddedProxiesStatus{}
 	if v == nil || v.conf == nil {
 		return out, nil
 	}
@@ -236,8 +237,8 @@ func (v *Visor) SetEmbeddedProxyBind(kind, addr string) error {
 	}
 }
 
-func dmsgProxyInfo(cfg *visorconfig.DmsgWebConfig, runtime *EmbeddedDmsgWeb) *EmbeddedProxyInfo {
-	info := &EmbeddedProxyInfo{
+func dmsgProxyInfo(cfg *visorconfig.DmsgWebConfig, runtime *EmbeddedDmsgWeb) *visorapi.EmbeddedProxyInfo {
+	info := &visorapi.EmbeddedProxyInfo{
 		Enabled:       cfg.Enable,
 		DomainSuffix:  stringOrDefault(cfg.DomainSuffix, dmsgweb.DefaultDomainSuffix),
 		SocksAddr:     localSocksAddr(true, uintOrDefault(cfg.ProxyPort, defaultDmsgWebProxyPort)),
@@ -257,8 +258,8 @@ func dmsgProxyInfo(cfg *visorconfig.DmsgWebConfig, runtime *EmbeddedDmsgWeb) *Em
 // shape. Distinct from {dmsg,skynet}ProxyInfo because the bridge
 // has no SOCKS5 / upstream concepts — just a TCP listener and the
 // rewrite-mode knob.
-func skymailBridgeInfo(cfg *visorconfig.SkymailBridgeConfig, runtime *EmbeddedSkymailBridge) *EmbeddedSkymailInfo {
-	info := &EmbeddedSkymailInfo{
+func skymailBridgeInfo(cfg *visorconfig.SkymailBridgeConfig, runtime *EmbeddedSkymailBridge) *visorapi.EmbeddedSkymailInfo {
+	info := &visorapi.EmbeddedSkymailInfo{
 		Enabled: cfg.Enable,
 		Addr:    cfg.Addr,
 		Mode:    cfg.Mode,
@@ -285,8 +286,8 @@ func skymailBridgeInfo(cfg *visorconfig.SkymailBridgeConfig, runtime *EmbeddedSk
 	return info
 }
 
-func skynetProxyInfo(cfg *visorconfig.SkynetWebConfig, runtime *EmbeddedSkynetWeb) *EmbeddedProxyInfo {
-	info := &EmbeddedProxyInfo{
+func skynetProxyInfo(cfg *visorconfig.SkynetWebConfig, runtime *EmbeddedSkynetWeb) *visorapi.EmbeddedProxyInfo {
+	info := &visorapi.EmbeddedProxyInfo{
 		Enabled:       cfg.Enable,
 		DomainSuffix:  stringOrDefault(cfg.DomainSuffix, skynetweb.DefaultDomainSuffix),
 		SocksAddr:     localSocksAddr(true, uintOrDefault(cfg.ProxyPort, defaultSkynetWebProxyPort)),
@@ -347,8 +348,8 @@ func localSocksAddr(enabled bool, port uint) string {
 // the source types differ per package (no shared interface) and the
 // conversion is trivial; a future type unification would collapse
 // both into one adapter.
-func dmsgStatsToAPI(s dmsgweb.StatsSnapshot) *EmbeddedProxyStats {
-	return &EmbeddedProxyStats{
+func dmsgStatsToAPI(s dmsgweb.StatsSnapshot) *visorapi.EmbeddedProxyStats {
+	return &visorapi.EmbeddedProxyStats{
 		StartedAt:     s.StartedAt,
 		UptimeSec:     s.UptimeSec,
 		TotalRequests: s.TotalRequests,
@@ -362,8 +363,8 @@ func dmsgStatsToAPI(s dmsgweb.StatsSnapshot) *EmbeddedProxyStats {
 	}
 }
 
-func skynetStatsToAPI(s skynetweb.StatsSnapshot) *EmbeddedProxyStats {
-	return &EmbeddedProxyStats{
+func skynetStatsToAPI(s skynetweb.StatsSnapshot) *visorapi.EmbeddedProxyStats {
+	return &visorapi.EmbeddedProxyStats{
 		StartedAt:     s.StartedAt,
 		UptimeSec:     s.UptimeSec,
 		TotalRequests: s.TotalRequests,

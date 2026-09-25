@@ -6,40 +6,15 @@ package visor
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
-
-// PairAddRequest is the input to RPC.PairAdd.
-type PairAddRequest struct {
-	PeerPK cipher.PubKey `json:"peer_pk"`
-}
-
-// PairSendRequest is the input to RPC.PairSend.
-type PairSendRequest struct {
-	PeerPK cipher.PubKey `json:"peer_pk"`
-	Text   string        `json:"text"`
-}
-
-// PairDeleteRequest is the input to RPC.PairDelete.
-type PairDeleteRequest struct {
-	PeerPK cipher.PubKey `json:"peer_pk"`
-	// ID is the message id returned by PairSend.
-	ID string `json:"id"`
-}
-
-// PairPollRequest is the input to RPC.PairPoll.
-type PairPollRequest struct {
-	// Since is the lower bound (exclusive). Pass time.Time{} (zero)
-	// to retrieve the entire current inbox window.
-	Since time.Time `json:"since"`
-}
 
 // PairAdd creates a pair record and brings up the local publisher /
 // subscriber.
-func (r *RPC) PairAdd(req *PairAddRequest, _ *struct{}) (err error) {
+func (r *RPC) PairAdd(req *visorapi.PairAddRequest, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "PairAdd", req)(nil, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -48,7 +23,7 @@ func (r *RPC) PairAdd(req *PairAddRequest, _ *struct{}) (err error) {
 }
 
 // PairList returns every persisted pair (pending / active / revoked).
-func (r *RPC) PairList(_ *struct{}, out *[]PairInfo) (err error) {
+func (r *RPC) PairList(_ *struct{}, out *[]visorapi.PairInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "PairList", nil)(out, &err)
 	pairs, err := r.visor.PairList()
 	if err != nil {
@@ -78,7 +53,7 @@ func (r *RPC) PairMarkActive(peerPK *cipher.PubKey, _ *struct{}) (err error) {
 
 // PairSend publishes one message into the pair feed, replying with the
 // new message's id so the caller can later retract it.
-func (r *RPC) PairSend(req *PairSendRequest, out *string) (err error) {
+func (r *RPC) PairSend(req *visorapi.PairSendRequest, out *string) (err error) {
 	defer rpcutil.LogCall(r.log, "PairSend", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -92,7 +67,7 @@ func (r *RPC) PairSend(req *PairSendRequest, out *string) (err error) {
 }
 
 // PairDelete retracts a previously sent message from the pair feed.
-func (r *RPC) PairDelete(req *PairDeleteRequest, _ *struct{}) (err error) {
+func (r *RPC) PairDelete(req *visorapi.PairDeleteRequest, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "PairDelete", req)(nil, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -101,7 +76,7 @@ func (r *RPC) PairDelete(req *PairDeleteRequest, _ *struct{}) (err error) {
 }
 
 // PairPoll drains inbound pair messages with TS strictly after Since.
-func (r *RPC) PairPoll(req *PairPollRequest, out *[]PairMessage) (err error) {
+func (r *RPC) PairPoll(req *visorapi.PairPollRequest, out *[]visorapi.PairMessage) (err error) {
 	defer rpcutil.LogCall(r.log, "PairPoll", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")

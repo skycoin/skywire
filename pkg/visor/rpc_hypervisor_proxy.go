@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // sortHVVisorEntries orders an HVVisorEntry slice deterministically so
@@ -42,8 +43,8 @@ import (
 //
 // localPublicIP is the local hypervisor's WAN IP (empty string is
 // fine — disables the bucket-2 priority but the rest still applies).
-func sortHVVisorEntries(entries []HVVisorEntry, localPublicIP string) {
-	bucket := func(e *HVVisorEntry) int {
+func sortHVVisorEntries(entries []visorapi.HVVisorEntry, localPublicIP string) {
+	bucket := func(e *visorapi.HVVisorEntry) int {
 		switch {
 		case e.IsLocal:
 			return 0
@@ -64,65 +65,7 @@ func sortHVVisorEntries(entries []HVVisorEntry, localPublicIP string) {
 	})
 }
 
-// HVVisorEntry is a summary of a remote visor connected to this hypervisor.
-type HVVisorEntry struct {
-	PK             cipher.PubKey `json:"pk"`
-	Online         bool          `json:"online"`
-	IsLocal        bool          `json:"is_local,omitempty"`
-	Version        string        `json:"version,omitempty"`
-	BuildTag       string        `json:"build_tag,omitempty"`
-	Uptime         float64       `json:"uptime_seconds,omitempty"`
-	LocalIP        string        `json:"local_ip,omitempty"`
-	PublicIP       string        `json:"public_ip,omitempty"`
-	CountryCode    string        `json:"country_code,omitempty"`
-	IsSymmetricNAT bool          `json:"symmetric_nat,omitempty"`
-	Transports     int           `json:"transports"`
-	// TransportSummaries is the full per-transport detail (type,
-	// remote PK, sent/recv counters, etc.) the hvui's node-list
-	// table needs to render its Transports column. Populated by
-	// populateEntryFromSummary from summary.Overview.Transports.
-	// omitempty so older sub-hypervisor binaries that don't fill
-	// this field don't blow the JSON shape.
-	TransportSummaries []*TransportSummary `json:"transport_summaries,omitempty"`
-	Apps               int                 `json:"apps"`
-	RewardAddress      string              `json:"reward_address,omitempty"`
-	ConfigVersion      string              `json:"config_version,omitempty"`
-	// ServicesHealth is the remote visor's most recent
-	// HealthInfo.ServicesHealth ("healthy", "unhealthy",
-	// "connecting", ""). Carried so the hvui's tree-summary
-	// sub-section can render the same green / yellow / gray status
-	// dot that the local section's main table does — without this,
-	// every sub-section row falls through to nodeStatusClass's
-	// "online but health unknown" branch and renders as a gray
-	// outline circle even when the visor is fully healthy.
-	ServicesHealth string `json:"services_health,omitempty"`
-	// Hostname is the visor's os.Hostname(). The hvui's main node
-	// list uses this as the default Label when no explicit label is
-	// set; without it, sub-section rows render with an empty Label
-	// column even though the visor itself reports a valid hostname.
-	// Carried separately from PK because Overview.Hostname doesn't
-	// survive the HVVisorEntry round-trip otherwise.
-	Hostname string `json:"hostname,omitempty"`
-	Error    string `json:"error,omitempty"`
-	// ProxiedVia is set when this entry was discovered through a connected
-	// sub-hypervisor rather than a direct connection. The value is the PK
-	// of the sub-hypervisor that proxies operations on this visor.
-	ProxiedVia *cipher.PubKey `json:"proxied_via,omitempty"`
-	// Load is the visor's resource snapshot (load average, mem %, disk %),
-	// from summary.Load. Rendered by `hv ls --load`. omitempty so older
-	// sub-hypervisor binaries that don't carry it don't break the JSON shape.
-	Load *LoadStats `json:"load,omitempty"`
-	// Hypervisors is the set of hypervisors THIS visor is configured to be
-	// managed by (its conf.Hypervisors), reported by the visor itself. An
-	// attached visor commonly answers to more than one hypervisor, and until
-	// now the only way to learn the others was to ask that visor directly:
-	// the tree sections describe hypervisors THIS one can reach, not the ones
-	// its peers have set. omitempty so an older visor that does not report
-	// them is absent rather than empty.
-	Hypervisors []cipher.PubKey `json:"hypervisors,omitempty"`
-}
-
-func populateEntryFromSummary(entry *HVVisorEntry, summary *Summary) {
+func populateEntryFromSummary(entry *visorapi.HVVisorEntry, summary *visorapi.Summary) {
 	entry.Version = summary.Overview.BuildInfo.Version
 	entry.BuildTag = summary.BuildTag
 	entry.Uptime = summary.Uptime
@@ -158,7 +101,7 @@ func populateEntryFromSummary(entry *HVVisorEntry, summary *Summary) {
 //
 // Local visor is included first (with IsLocal=true) when this visor
 // has the hypervisor flag enabled, matching HVListVisors's shape.
-func (v *Visor) HVListDirectVisors() ([]HVVisorEntry, error) {
+func (v *Visor) HVListDirectVisors() ([]visorapi.HVVisorEntry, error) {
 	if v.hvInstance == nil {
 		return nil, fmt.Errorf("hypervisor not running")
 	}
@@ -180,11 +123,11 @@ func (v *Visor) HVListDirectVisors() ([]HVVisorEntry, error) {
 
 	log := logging.MustGetLogger("hv_list_direct_visors")
 
-	results := make([]HVVisorEntry, len(remotes))
+	results := make([]visorapi.HVVisorEntry, len(remotes))
 	var wg sync.WaitGroup
 	wg.Add(len(remotes))
 	for i, e := range remotes {
-		go func(idx int, pk cipher.PubKey, api API) {
+		go func(idx int, pk cipher.PubKey, api visorapi.API) {
 			defer wg.Done()
 			results[idx] = hvVisorEntryFor(hv, pk, api, log, "HVListDirectVisors")
 		}(i, e.pk, e.conn.API)
@@ -193,10 +136,10 @@ func (v *Visor) HVListDirectVisors() ([]HVVisorEntry, error) {
 
 	// Build the local entry first so we can use its PublicIP as the
 	// "LAN-adjacent" sort key for the remote entries.
-	var localEntry HVVisorEntry
+	var localEntry visorapi.HVVisorEntry
 	hasLocal := false
 	if hv.visor != nil {
-		localEntry = HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
+		localEntry = visorapi.HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
 		if localSummary, err := v.Summary(); err == nil {
 			populateEntryFromSummary(&localEntry, localSummary)
 		}
@@ -204,13 +147,13 @@ func (v *Visor) HVListDirectVisors() ([]HVVisorEntry, error) {
 	}
 	sortHVVisorEntries(results, localEntry.PublicIP)
 	if hasLocal {
-		results = append([]HVVisorEntry{localEntry}, results...)
+		results = append([]visorapi.HVVisorEntry{localEntry}, results...)
 	}
 	return results, nil
 }
 
 // HVListVisors returns summaries of all visors connected to this hypervisor.
-func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
+func (v *Visor) HVListVisors() ([]visorapi.HVVisorEntry, error) {
 	if v.hvInstance == nil {
 		return nil, fmt.Errorf("hypervisor not running")
 	}
@@ -233,12 +176,12 @@ func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
 	log := logging.MustGetLogger("hv_list_visors")
 
 	// Query each visor in parallel with a per-visor timeout
-	results := make([]HVVisorEntry, len(remotes))
+	results := make([]visorapi.HVVisorEntry, len(remotes))
 	var wg sync.WaitGroup
 	wg.Add(len(remotes))
 
 	for i, e := range remotes {
-		go func(idx int, pk cipher.PubKey, api API) {
+		go func(idx int, pk cipher.PubKey, api visorapi.API) {
 			defer wg.Done()
 			results[idx] = hvVisorEntryFor(hv, pk, api, log, "HVListVisors")
 		}(i, e.pk, e.conn.API)
@@ -249,9 +192,9 @@ func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
 	// sort. We append rather than prepend here — the single sortHVVisor-
 	// Entries call at the end of this function bubbles IsLocal=true to
 	// the top, so position-on-insert doesn't matter.
-	var localEntry HVVisorEntry
+	var localEntry visorapi.HVVisorEntry
 	if hv.visor != nil {
-		localEntry = HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
+		localEntry = visorapi.HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
 		if localSummary, err := v.Summary(); err == nil {
 			populateEntryFromSummary(&localEntry, localSummary)
 		}
@@ -267,15 +210,15 @@ func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
 	for _, e := range results {
 		seen[e.PK] = true
 	}
-	subResults := make([][]HVVisorEntry, len(remotes))
+	subResults := make([][]visorapi.HVVisorEntry, len(remotes))
 	subPKs := make([]cipher.PubKey, len(remotes))
 	var subWg sync.WaitGroup
 	subWg.Add(len(remotes))
 	for i, e := range remotes {
 		subPKs[i] = e.pk
-		go func(idx int, hyperPK cipher.PubKey, api API) {
+		go func(idx int, hyperPK cipher.PubKey, api visorapi.API) {
 			defer subWg.Done()
-			done := make(chan []HVVisorEntry, 1)
+			done := make(chan []visorapi.HVVisorEntry, 1)
 			go func() {
 				sub, err := api.HVListVisors()
 				if err != nil {
@@ -324,39 +267,6 @@ func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
 	return results, nil
 }
 
-// HVVisorTreeNode is one hypervisor's section in the tree response:
-// the hypervisor's PK, the chain of hypervisors from the local one
-// down to this one (empty for the local hypervisor itself), and the
-// visors directly connected to this hypervisor (NOT transitively
-// merged from any sub-hypervisors below it).
-//
-// Sub-hypervisors that fail to respond surface their error via the
-// SubError field instead of being silently dropped — the UI can
-// render a placeholder row with the error text, and operators can
-// tell "no sub-visors" from "query failed."
-type HVVisorTreeNode struct {
-	HypervisorPK cipher.PubKey   `json:"hypervisor_pk"`
-	ViaChain     []cipher.PubKey `json:"via_chain,omitempty"`
-	Visors       []HVVisorEntry  `json:"visors"`
-	SubError     string          `json:"sub_error,omitempty"`
-}
-
-// HVVisorTree is the structured response of HVListVisorsTree — a
-// flat list of hypervisor sections. The first entry is the local
-// hypervisor; subsequent entries are sub-hypervisors reachable from
-// it. Each section's `via_chain` documents the path from the local
-// hypervisor down to that sub-hypervisor, so the UI can render a
-// breadcrumb without recomputing.
-//
-// Visor entries replicate across sections: a visor V that's connected
-// to both the local hypervisor and a sub-hypervisor will appear in
-// BOTH sections — the semantics are "every table shows every visor
-// directly connected to that hypervisor," intentionally. Tables
-// themselves dedup: two paths to the same sub-hypervisor render once.
-type HVVisorTree struct {
-	Sections []HVVisorTreeNode `json:"sections"`
-}
-
 // HVListVisorsTree builds a tree-shaped response of every hypervisor
 // reachable from this one (local + direct sub-hypervisors only, depth
 // 2). Each section reports the visors DIRECTLY connected to that
@@ -375,9 +285,9 @@ type HVVisorTree struct {
 // last-known state (version, IP, label) is sitting in the cache. The row is
 // marked offline (Online=false) with the error kept alongside the cached age,
 // so staleness is explicit, never disguised as live state.
-func hvVisorEntryFor(hv *Hypervisor, pk cipher.PubKey, api API, log *logging.Logger, tag string) HVVisorEntry {
+func hvVisorEntryFor(hv *Hypervisor, pk cipher.PubKey, api visorapi.API, log *logging.Logger, tag string) visorapi.HVVisorEntry {
 	type sumResult struct {
-		summary *Summary
+		summary *visorapi.Summary
 		err     error
 	}
 	// Buffered so the Summary goroutine never blocks on send — if we time
@@ -390,7 +300,7 @@ func hvVisorEntryFor(hv *Hypervisor, pk cipher.PubKey, api API, log *logging.Log
 		sumCh <- sumResult{summary, err}
 	}()
 
-	entry := HVVisorEntry{PK: pk}
+	entry := visorapi.HVVisorEntry{PK: pk}
 	select {
 	case r := <-sumCh:
 		if r.err == nil && r.summary != nil {
@@ -433,7 +343,7 @@ func hvVisorEntryFor(hv *Hypervisor, pk cipher.PubKey, api API, log *logging.Log
 // transitively to depth N would need a request-scoped visited-set
 // on the wire so each hop knows what NOT to recurse into;
 // out-of-scope for v1.
-func (v *Visor) HVListVisorsTree() (*HVVisorTree, error) {
+func (v *Visor) HVListVisorsTree() (*visorapi.HVVisorTree, error) {
 	if v.hvInstance == nil {
 		return nil, fmt.Errorf("hypervisor not running")
 	}
@@ -447,7 +357,7 @@ func (v *Visor) HVListVisorsTree() (*HVVisorTree, error) {
 		return nil, err
 	}
 
-	sections := []HVVisorTreeNode{
+	sections := []visorapi.HVVisorTreeNode{
 		{
 			HypervisorPK: localPK,
 			ViaChain:     nil,
@@ -475,23 +385,23 @@ func (v *Visor) HVListVisorsTree() (*HVVisorTree, error) {
 	// reachable) are skipped; the error gets logged for operators.
 	type subResult struct {
 		hyperPK cipher.PubKey
-		visors  []HVVisorEntry
+		visors  []visorapi.HVVisorEntry
 		err     error
 	}
 	results := make([]subResult, len(remotes))
 	var wg sync.WaitGroup
 	wg.Add(len(remotes))
 	for i, e := range remotes {
-		go func(idx int, hyperPK cipher.PubKey, api API) {
+		go func(idx int, hyperPK cipher.PubKey, api visorapi.API) {
 			defer wg.Done()
 			done := make(chan struct {
-				vs  []HVVisorEntry
+				vs  []visorapi.HVVisorEntry
 				err error
 			}, 1)
 			go func() {
 				vs, err := api.HVListDirectVisors()
 				done <- struct {
-					vs  []HVVisorEntry
+					vs  []visorapi.HVVisorEntry
 					err error
 				}{vs, err}
 			}()
@@ -526,7 +436,7 @@ func (v *Visor) HVListVisorsTree() (*HVVisorTree, error) {
 				continue
 			}
 			rendered[r.hyperPK] = true
-			sections = append(sections, HVVisorTreeNode{
+			sections = append(sections, visorapi.HVVisorTreeNode{
 				HypervisorPK: r.hyperPK,
 				ViaChain:     []cipher.PubKey{localPK},
 				SubError:     r.err.Error(),
@@ -534,7 +444,7 @@ func (v *Visor) HVListVisorsTree() (*HVVisorTree, error) {
 			continue
 		}
 		rendered[r.hyperPK] = true
-		sections = append(sections, HVVisorTreeNode{
+		sections = append(sections, visorapi.HVVisorTreeNode{
 			HypervisorPK: r.hyperPK,
 			ViaChain:     []cipher.PubKey{localPK},
 			Visors:       r.visors,
@@ -572,7 +482,7 @@ func (v *Visor) HVListVisorsTree() (*HVVisorTree, error) {
 				pubIPByPK[e.PK] = e.PublicIP
 			}
 		}
-		sectionBucket := func(s *HVVisorTreeNode) int {
+		sectionBucket := func(s *visorapi.HVVisorTreeNode) int {
 			pip, ok := pubIPByPK[s.HypervisorPK]
 			switch {
 			case !ok:
@@ -593,7 +503,7 @@ func (v *Visor) HVListVisorsTree() (*HVVisorTree, error) {
 		})
 	}
 
-	return &HVVisorTree{Sections: sections}, nil
+	return &visorapi.HVVisorTree{Sections: sections}, nil
 }
 
 // isNotHypervisorErr identifies the well-known "remote isn't running
@@ -629,13 +539,13 @@ func isNotHypervisorErr(err error) bool {
 }
 
 // HVVisorSummary returns detailed info about a specific remote visor.
-func (v *Visor) HVVisorSummary(pk cipher.PubKey) (*Summary, error) {
+func (v *Visor) HVVisorSummary(pk cipher.PubKey) (*visorapi.Summary, error) {
 	direct, sub, err := v.hvDispatch(pk)
 	if err != nil {
 		return nil, err
 	}
 	if direct != nil {
-		if direct == API(v) {
+		if direct == visorapi.API(v) {
 			return v.Summary()
 		}
 		return direct.Summary()
@@ -652,7 +562,7 @@ func (v *Visor) HVVisorSummary(pk cipher.PubKey) (*Summary, error) {
 // Sub-hypervisor lookup queries each direct remote's HVListVisors with a 10s
 // timeout. Cycle protection relies on the timeout: a mutual hypervisor pair
 // will fail-fast with timeouts rather than recurse forever.
-func (v *Visor) hvDispatch(pk cipher.PubKey) (direct API, sub API, err error) {
+func (v *Visor) hvDispatch(pk cipher.PubKey) (direct visorapi.API, sub visorapi.API, err error) {
 	if v.hvInstance == nil {
 		return nil, nil, fmt.Errorf("hypervisor not running")
 	}
@@ -675,8 +585,8 @@ func (v *Visor) hvDispatch(pk cipher.PubKey) (direct API, sub API, err error) {
 	v.hvInstance.mu.RUnlock()
 
 	for _, e := range remotes {
-		listDone := make(chan []HVVisorEntry, 1)
-		go func(api API) {
+		listDone := make(chan []visorapi.HVVisorEntry, 1)
+		go func(api visorapi.API) {
 			out, err := api.HVListVisors()
 			if err != nil {
 				listDone <- nil
@@ -772,7 +682,7 @@ func (v *Visor) HVRemoveRoutingRule(pk cipher.PubKey, key routing.RouteID) error
 }
 
 // HVAddTransport creates a new transport on the visor identified by pk.
-func (v *Visor) HVAddTransport(pk, remote cipher.PubKey, tpType, label string, timeout time.Duration) (*TransportSummary, error) {
+func (v *Visor) HVAddTransport(pk, remote cipher.PubKey, tpType, label string, timeout time.Duration) (*visorapi.TransportSummary, error) {
 	direct, sub, err := v.hvDispatch(pk)
 	if err != nil {
 		return nil, err
@@ -838,7 +748,7 @@ func (v *Visor) HVShutdown(pk cipher.PubKey) error {
 }
 
 // HVServiceHealth returns deployment service health entries for the visor identified by pk.
-func (v *Visor) HVServiceHealth(pk cipher.PubKey) ([]ServiceHealthEntry, error) {
+func (v *Visor) HVServiceHealth(pk cipher.PubKey) ([]visorapi.ServiceHealthEntry, error) {
 	direct, sub, err := v.hvDispatch(pk)
 	if err != nil {
 		return nil, err
@@ -852,7 +762,7 @@ func (v *Visor) HVServiceHealth(pk cipher.PubKey) ([]ServiceHealthEntry, error) 
 // HVDmsgSessions returns the per-client dmsg sessions snapshot for
 // the visor identified by pk. Locally — short-circuits to the
 // in-process visor; remotely — forwards over the hypervisor proxy.
-func (v *Visor) HVDmsgSessions(pk cipher.PubKey) (*DmsgClientSessions, error) {
+func (v *Visor) HVDmsgSessions(pk cipher.PubKey) (*visorapi.DmsgClientSessions, error) {
 	direct, sub, err := v.hvDispatch(pk)
 	if err != nil {
 		return nil, err
@@ -864,7 +774,7 @@ func (v *Visor) HVDmsgSessions(pk cipher.PubKey) (*DmsgClientSessions, error) {
 }
 
 // HVDmsgConnectAll triggers a one-shot connect-all on the visor identified by pk.
-func (v *Visor) HVDmsgConnectAll(pk cipher.PubKey) (*DmsgConnectAllResult, error) {
+func (v *Visor) HVDmsgConnectAll(pk cipher.PubKey) (*visorapi.DmsgConnectAllResult, error) {
 	direct, sub, err := v.hvDispatch(pk)
 	if err != nil {
 		return nil, err
@@ -876,7 +786,7 @@ func (v *Visor) HVDmsgConnectAll(pk cipher.PubKey) (*DmsgConnectAllResult, error
 }
 
 // HVSetDmsgSessionsCount persists the dmsg sessions_count and triggers connect-all on the visor identified by pk.
-func (v *Visor) HVSetDmsgSessionsCount(pk cipher.PubKey, count int) (*DmsgConnectAllResult, error) {
+func (v *Visor) HVSetDmsgSessionsCount(pk cipher.PubKey, count int) (*visorapi.DmsgConnectAllResult, error) {
 	direct, sub, err := v.hvDispatch(pk)
 	if err != nil {
 		return nil, err
@@ -912,7 +822,7 @@ func (v *Visor) HVSetAutoStart(pk cipher.PubKey, appName string, autostart bool)
 }
 
 // HVEmbeddedProxies returns embedded resolving proxy status on the visor identified by pk.
-func (v *Visor) HVEmbeddedProxies(pk cipher.PubKey) (*EmbeddedProxiesStatus, error) {
+func (v *Visor) HVEmbeddedProxies(pk cipher.PubKey) (*visorapi.EmbeddedProxiesStatus, error) {
 	direct, sub, err := v.hvDispatch(pk)
 	if err != nil {
 		return nil, err
@@ -984,7 +894,7 @@ func (v *Visor) HVDeregisterTCPPort(pk cipher.PubKey, port int) error {
 }
 
 // HVListForwardedPorts returns the configured forwarded ports on the visor identified by pk.
-func (v *Visor) HVListForwardedPorts(pk cipher.PubKey) ([]ForwardedPort, error) {
+func (v *Visor) HVListForwardedPorts(pk cipher.PubKey) ([]visorapi.ForwardedPort, error) {
 	direct, sub, err := v.hvDispatch(pk)
 	if err != nil {
 		return nil, err
@@ -996,7 +906,7 @@ func (v *Visor) HVListForwardedPorts(pk cipher.PubKey) ([]ForwardedPort, error) 
 }
 
 // HVRegisterForwardedPort registers a forwarded port on the visor identified by pk.
-func (v *Visor) HVRegisterForwardedPort(pk cipher.PubKey, p ForwardedPort) error {
+func (v *Visor) HVRegisterForwardedPort(pk cipher.PubKey, p visorapi.ForwardedPort) error {
 	direct, sub, err := v.hvDispatch(pk)
 	if err != nil {
 		return err
@@ -1008,7 +918,7 @@ func (v *Visor) HVRegisterForwardedPort(pk cipher.PubKey, p ForwardedPort) error
 }
 
 // HVUpdateForwardedPort updates a forwarded port on the visor identified by pk.
-func (v *Visor) HVUpdateForwardedPort(pk cipher.PubKey, p ForwardedPort) error {
+func (v *Visor) HVUpdateForwardedPort(pk cipher.PubKey, p visorapi.ForwardedPort) error {
 	direct, sub, err := v.hvDispatch(pk)
 	if err != nil {
 		return err

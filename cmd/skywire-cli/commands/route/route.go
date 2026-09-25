@@ -29,7 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -185,12 +185,12 @@ is assumed as the source.`,
 // rfAddr may be a dmsg:// or http(s):// route-finder address; the visor
 // resolves and dials it. The response is decoded exactly as rfclient's
 // direct HTTP path does (PathEdges keys unmarshal from their "pk:pk" text).
-func findRoutesViaVisor(rpcClient visor.API, rfAddr string, edges []routing.PathEdges, opts *rfclient.RouteOptions) (map[routing.PathEdges][][]routing.Hop, error) {
+func findRoutesViaVisor(rpcClient visorapi.API, rfAddr string, edges []routing.PathEdges, opts *rfclient.RouteOptions) (map[routing.PathEdges][][]routing.Hop, error) {
 	body, err := json.Marshal(&rfclient.FindRoutesRequest{Edges: edges, Opts: opts})
 	if err != nil {
 		return nil, err
 	}
-	resp, err := rpcClient.DmsgHTTP(visor.DmsgHTTPRequest{
+	resp, err := rpcClient.DmsgHTTP(visorapi.DmsgHTTPRequest{
 		URL:    strings.TrimSuffix(rfAddr, "/") + "/routes",
 		Method: http.MethodPost,
 		Header: map[string]string{"Content-Type": "application/json"},
@@ -778,7 +778,7 @@ we accepted). Use --hops to also print the full forward path.`,
 // columns but writes to a string (no PrintOutput / no JSON branch);
 // the watcher re-invokes this every tick so the operator sees rules
 // being installed and expiring without re-running the command.
-func renderRoutingRulesLive(rpcClient visor.API) (string, error) {
+func renderRoutingRulesLive(rpcClient visorapi.API) (string, error) {
 	rules, err := rpcClient.RoutingRules()
 	if err != nil {
 		return "", err
@@ -825,7 +825,7 @@ func renderRoutingRulesLive(rpcClient visor.API) (string, error) {
 // string instead of printing. Used by --live to re-render the table
 // each tick. Re-applies --filter and --hops just like the one-shot
 // path so the watch view tracks the operator's chosen scope.
-func renderRouteGroupsLive(rpcClient visor.API) (string, error) {
+func renderRouteGroupsLive(rpcClient visorapi.API) (string, error) {
 	rgs, err := rpcClient.RouteGroups()
 	if err != nil {
 		return "", fmt.Errorf("failed to get route groups: %w", err)

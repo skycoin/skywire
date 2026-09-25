@@ -9,7 +9,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var setSessionsCount int
@@ -99,7 +99,7 @@ reconnecting to any that drop" — recommended for RSN / TPS visors.`,
 	},
 }
 
-func printConnectAllResult(cmd *cobra.Command, result *visor.DmsgConnectAllResult) {
+func printConnectAllResult(cmd *cobra.Command, result *visorapi.DmsgConnectAllResult) {
 	isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 	if isJSON {
 		internal.PrintOutput(cmd.Flags(), result, "")

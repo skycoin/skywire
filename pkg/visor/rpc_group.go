@@ -6,33 +6,15 @@ package visor
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
-
-// GroupCreateResponse pairs the persisted GroupInfo with the
-// freshly-encoded invite link the operator should distribute.
-type GroupCreateResponse struct {
-	Info   GroupInfo `json:"info"`
-	Invite string    `json:"invite"`
-}
-
-// GroupAddMemberRequest is the input to RPC.GroupAddMember.
-type GroupAddMemberRequest struct {
-	ID    string        `json:"id"`
-	NewPK cipher.PubKey `json:"new_pk"`
-}
-
-// GroupPollRequest is the input to RPC.GroupPoll.
-type GroupPollRequest struct {
-	Since time.Time `json:"since"`
-}
 
 // GroupCreate constructs a new owner-side group on this visor and
 // returns the persisted info + the invite link.
-func (r *RPC) GroupCreate(req *GroupCreateArgs, out *GroupCreateResponse) (err error) {
+func (r *RPC) GroupCreate(req *visorapi.GroupCreateArgs, out *visorapi.GroupCreateResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupCreate", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -41,13 +23,13 @@ func (r *RPC) GroupCreate(req *GroupCreateArgs, out *GroupCreateResponse) (err e
 	if err != nil {
 		return err
 	}
-	*out = GroupCreateResponse{Info: info, Invite: link}
+	*out = visorapi.GroupCreateResponse{Info: info, Invite: link}
 	return nil
 }
 
 // GroupJoin accepts an invite link and registers a member-side
 // record.
-func (r *RPC) GroupJoin(req *GroupJoinArgs, out *GroupInfo) (err error) {
+func (r *RPC) GroupJoin(req *visorapi.GroupJoinArgs, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupJoin", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -62,7 +44,7 @@ func (r *RPC) GroupJoin(req *GroupJoinArgs, out *GroupInfo) (err error) {
 
 // GroupResolve reports what a skychat address points at — a person, or a
 // group/channel and what joining it involves.
-func (r *RPC) GroupResolve(req *GroupResolveArgs, out *GroupResolveResult) (err error) {
+func (r *RPC) GroupResolve(req *visorapi.GroupResolveArgs, out *visorapi.GroupResolveResult) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupResolve", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -75,22 +57,9 @@ func (r *RPC) GroupResolve(req *GroupResolveArgs, out *GroupResolveResult) (err 
 	return nil
 }
 
-// GroupSetListedRequest is the input to RPC.GroupSetListed.
-type GroupSetListedRequest struct {
-	ID     string `json:"id"`
-	Listed bool   `json:"listed"`
-}
-
-// GroupCatalogResponse pairs the discovered entries with whether the host
-// had more than it sent.
-type GroupCatalogResponse struct {
-	Entries   []GroupCatalogEntry `json:"entries"`
-	Truncated bool                `json:"truncated,omitempty"`
-}
-
 // GroupSetListed publishes or un-publishes a group in this visor's
 // discovery catalog.
-func (r *RPC) GroupSetListed(req *GroupSetListedRequest, out *GroupInfo) (err error) {
+func (r *RPC) GroupSetListed(req *visorapi.GroupSetListedRequest, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupSetListed", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -104,7 +73,7 @@ func (r *RPC) GroupSetListed(req *GroupSetListedRequest, out *GroupInfo) (err er
 }
 
 // GroupSetMeta updates a group's display metadata (name and/or picture).
-func (r *RPC) GroupSetMeta(req *GroupSetMetaArgs, out *GroupInfo) (err error) {
+func (r *RPC) GroupSetMeta(req *visorapi.GroupSetMetaArgs, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupSetMeta", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -119,7 +88,7 @@ func (r *RPC) GroupSetMeta(req *GroupSetMetaArgs, out *GroupInfo) (err error) {
 
 // GroupRefreshMeta re-reads a group's display metadata from its founding
 // visor.
-func (r *RPC) GroupRefreshMeta(id *string, out *GroupInfo) (err error) {
+func (r *RPC) GroupRefreshMeta(id *string, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupRefreshMeta", id)(out, &err)
 	if id == nil {
 		return fmt.Errorf("nil request")
@@ -134,7 +103,7 @@ func (r *RPC) GroupRefreshMeta(id *string, out *GroupInfo) (err error) {
 
 // GroupCatalog asks a visor what groups and channels it publishes. A zero
 // host means this visor.
-func (r *RPC) GroupCatalog(host *cipher.PubKey, out *GroupCatalogResponse) (err error) {
+func (r *RPC) GroupCatalog(host *cipher.PubKey, out *visorapi.GroupCatalogResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupCatalog", host)(out, &err)
 	if host == nil {
 		return fmt.Errorf("nil request")
@@ -143,12 +112,12 @@ func (r *RPC) GroupCatalog(host *cipher.PubKey, out *GroupCatalogResponse) (err 
 	if err != nil {
 		return err
 	}
-	*out = GroupCatalogResponse{Entries: entries, Truncated: truncated}
+	*out = visorapi.GroupCatalogResponse{Entries: entries, Truncated: truncated}
 	return nil
 }
 
 // GroupList returns every persisted group on this visor.
-func (r *RPC) GroupList(_ *struct{}, out *[]GroupInfo) (err error) {
+func (r *RPC) GroupList(_ *struct{}, out *[]visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupList", nil)(out, &err)
 	all, err := r.visor.GroupList()
 	if err != nil {
@@ -159,7 +128,7 @@ func (r *RPC) GroupList(_ *struct{}, out *[]GroupInfo) (err error) {
 }
 
 // GroupGet returns one group's info by ID.
-func (r *RPC) GroupGet(id *string, out *GroupInfo) (err error) {
+func (r *RPC) GroupGet(id *string, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupGet", id)(out, &err)
 	if id == nil {
 		return fmt.Errorf("nil request")
@@ -188,7 +157,7 @@ func (r *RPC) GroupInvite(id *string, out *string) (err error) {
 }
 
 // GroupAddMember extends the allowlist + persisted member list.
-func (r *RPC) GroupAddMember(req *GroupAddMemberRequest, out *GroupInfo) (err error) {
+func (r *RPC) GroupAddMember(req *visorapi.GroupAddMemberRequest, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupAddMember", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -201,30 +170,8 @@ func (r *RPC) GroupAddMember(req *GroupAddMemberRequest, out *GroupInfo) (err er
 	return nil
 }
 
-// GroupPromoteAdminRequest is the input to RPC.GroupPromoteAdmin /
-// GroupDemoteAdmin. Shape mirrors GroupAddMemberRequest.
-type GroupPromoteAdminRequest struct {
-	ID string        `json:"id"`
-	PK cipher.PubKey `json:"pk"`
-}
-
-// GroupPeerRequest is the (group, peer) input shared by every
-// admission + moderation command: approve, deny, remove, ban, unban,
-// mute, unmute. One request type rather than seven identical ones —
-// the method name already carries the verb.
-type GroupPeerRequest struct {
-	ID string        `json:"id"`
-	PK cipher.PubKey `json:"pk"`
-}
-
-// GroupReadOnlyRequest toggles group-wide read-only.
-type GroupReadOnlyRequest struct {
-	ID       string `json:"id"`
-	ReadOnly bool   `json:"read_only"`
-}
-
 // GroupAskAgain re-submits a declined join request (the UI's "ask again").
-func (r *RPC) GroupAskAgain(id *string, out *GroupInfo) (err error) {
+func (r *RPC) GroupAskAgain(id *string, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupAskAgain", id)(out, &err)
 	info, err := r.visor.GroupAskAgain(*id)
 	if err != nil {
@@ -235,7 +182,7 @@ func (r *RPC) GroupAskAgain(id *string, out *GroupInfo) (err error) {
 }
 
 // GroupJoinRequests returns the admission queue for a group.
-func (r *RPC) GroupJoinRequests(id *string, out *[]GroupJoinRequest) (err error) {
+func (r *RPC) GroupJoinRequests(id *string, out *[]visorapi.GroupJoinRequest) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupJoinRequests", id)(out, &err)
 	if id == nil {
 		return fmt.Errorf("nil request")
@@ -249,7 +196,7 @@ func (r *RPC) GroupJoinRequests(id *string, out *[]GroupJoinRequest) (err error)
 }
 
 // GroupApproveJoin admits a queued requester.
-func (r *RPC) GroupApproveJoin(req *GroupPeerRequest, out *GroupInfo) (err error) {
+func (r *RPC) GroupApproveJoin(req *visorapi.GroupPeerRequest, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupApproveJoin", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -263,7 +210,7 @@ func (r *RPC) GroupApproveJoin(req *GroupPeerRequest, out *GroupInfo) (err error
 }
 
 // GroupDenyJoin declines a queued request.
-func (r *RPC) GroupDenyJoin(req *GroupPeerRequest, _ *struct{}) (err error) {
+func (r *RPC) GroupDenyJoin(req *visorapi.GroupPeerRequest, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupDenyJoin", req)(nil, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -272,7 +219,7 @@ func (r *RPC) GroupDenyJoin(req *GroupPeerRequest, _ *struct{}) (err error) {
 }
 
 // GroupRemoveMember evicts a peer from the roster.
-func (r *RPC) GroupRemoveMember(req *GroupPeerRequest, out *GroupInfo) (err error) {
+func (r *RPC) GroupRemoveMember(req *visorapi.GroupPeerRequest, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupRemoveMember", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -286,7 +233,7 @@ func (r *RPC) GroupRemoveMember(req *GroupPeerRequest, out *GroupInfo) (err erro
 }
 
 // GroupBanMember bars a peer from the group.
-func (r *RPC) GroupBanMember(req *GroupPeerRequest, out *GroupInfo) (err error) {
+func (r *RPC) GroupBanMember(req *visorapi.GroupPeerRequest, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupBanMember", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -300,7 +247,7 @@ func (r *RPC) GroupBanMember(req *GroupPeerRequest, out *GroupInfo) (err error) 
 }
 
 // GroupUnbanMember lifts a ban.
-func (r *RPC) GroupUnbanMember(req *GroupPeerRequest, out *GroupInfo) (err error) {
+func (r *RPC) GroupUnbanMember(req *visorapi.GroupPeerRequest, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupUnbanMember", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -314,7 +261,7 @@ func (r *RPC) GroupUnbanMember(req *GroupPeerRequest, out *GroupInfo) (err error
 }
 
 // GroupMuteMember restricts a peer from posting.
-func (r *RPC) GroupMuteMember(req *GroupPeerRequest, out *GroupInfo) (err error) {
+func (r *RPC) GroupMuteMember(req *visorapi.GroupPeerRequest, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupMuteMember", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -328,7 +275,7 @@ func (r *RPC) GroupMuteMember(req *GroupPeerRequest, out *GroupInfo) (err error)
 }
 
 // GroupUnmuteMember lifts a posting restriction.
-func (r *RPC) GroupUnmuteMember(req *GroupPeerRequest, out *GroupInfo) (err error) {
+func (r *RPC) GroupUnmuteMember(req *visorapi.GroupPeerRequest, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupUnmuteMember", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -343,7 +290,7 @@ func (r *RPC) GroupUnmuteMember(req *GroupPeerRequest, out *GroupInfo) (err erro
 
 // GroupRotateKey mints a new key for an encrypted group and distributes
 // it to every current member, sealed per member.
-func (r *RPC) GroupRotateKey(id *string, out *GroupInfo) (err error) {
+func (r *RPC) GroupRotateKey(id *string, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupRotateKey", id)(out, &err)
 	if id == nil {
 		return fmt.Errorf("nil request")
@@ -356,15 +303,8 @@ func (r *RPC) GroupRotateKey(id *string, out *GroupInfo) (err error) {
 	return nil
 }
 
-// GroupPeerBackfillRequest toggles whether any online member may serve
-// the group's history to a joiner.
-type GroupPeerBackfillRequest struct {
-	ID      string `json:"id"`
-	Enabled bool   `json:"enabled"`
-}
-
 // GroupSetPeerBackfill sets the group's backfill-from-any-member policy.
-func (r *RPC) GroupSetPeerBackfill(req *GroupPeerBackfillRequest, out *GroupInfo) (err error) {
+func (r *RPC) GroupSetPeerBackfill(req *visorapi.GroupPeerBackfillRequest, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupSetPeerBackfill", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -377,14 +317,8 @@ func (r *RPC) GroupSetPeerBackfill(req *GroupPeerBackfillRequest, out *GroupInfo
 	return nil
 }
 
-// GroupJoinPoWRequest sets the join proof-of-work difficulty.
-type GroupJoinPoWRequest struct {
-	ID   string `json:"id"`
-	Bits uint8  `json:"bits"`
-}
-
 // GroupSetJoinPoW sets how much proof of work a join request must carry.
-func (r *RPC) GroupSetJoinPoW(req *GroupJoinPoWRequest, out *GroupInfo) (err error) {
+func (r *RPC) GroupSetJoinPoW(req *visorapi.GroupJoinPoWRequest, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupSetJoinPoW", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -398,7 +332,7 @@ func (r *RPC) GroupSetJoinPoW(req *GroupJoinPoWRequest, out *GroupInfo) (err err
 }
 
 // GroupSetReadOnly suspends or resumes posting for non-admins.
-func (r *RPC) GroupSetReadOnly(req *GroupReadOnlyRequest, out *GroupInfo) (err error) {
+func (r *RPC) GroupSetReadOnly(req *visorapi.GroupReadOnlyRequest, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupSetReadOnly", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -413,7 +347,7 @@ func (r *RPC) GroupSetReadOnly(req *GroupReadOnlyRequest, out *GroupInfo) (err e
 
 // GroupPromoteAdmin grants roster authority to PK on the named group.
 // Callable by any existing admin on this visor.
-func (r *RPC) GroupPromoteAdmin(req *GroupPromoteAdminRequest, out *GroupInfo) (err error) {
+func (r *RPC) GroupPromoteAdmin(req *visorapi.GroupPromoteAdminRequest, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupPromoteAdmin", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -428,7 +362,7 @@ func (r *RPC) GroupPromoteAdmin(req *GroupPromoteAdminRequest, out *GroupInfo) (
 
 // GroupDemoteAdmin revokes roster authority from PK on the named
 // group. Refuses to demote the founder (immutable recovery anchor).
-func (r *RPC) GroupDemoteAdmin(req *GroupPromoteAdminRequest, out *GroupInfo) (err error) {
+func (r *RPC) GroupDemoteAdmin(req *visorapi.GroupPromoteAdminRequest, out *visorapi.GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupDemoteAdmin", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -443,7 +377,7 @@ func (r *RPC) GroupDemoteAdmin(req *GroupPromoteAdminRequest, out *GroupInfo) (e
 
 // GroupSend publishes one message into the named group's feed.
 // Owner-side only in v1.
-func (r *RPC) GroupSend(req *GroupSendArgs, _ *struct{}) (err error) {
+func (r *RPC) GroupSend(req *visorapi.GroupSendArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupSend", req)(nil, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -452,7 +386,7 @@ func (r *RPC) GroupSend(req *GroupSendArgs, _ *struct{}) (err error) {
 }
 
 // GroupUnsend deletes a message the local visor published, by UnixNano TS.
-func (r *RPC) GroupUnsend(req *GroupUnsendArgs, _ *struct{}) (err error) {
+func (r *RPC) GroupUnsend(req *visorapi.GroupUnsendArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupUnsend", req)(nil, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -461,7 +395,7 @@ func (r *RPC) GroupUnsend(req *GroupUnsendArgs, _ *struct{}) (err error) {
 }
 
 // GroupPoll drains inbound group messages with TS strictly after Since.
-func (r *RPC) GroupPoll(req *GroupPollRequest, out *[]GroupMessage) (err error) {
+func (r *RPC) GroupPoll(req *visorapi.GroupPollRequest, out *[]visorapi.GroupMessage) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupPoll", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -492,19 +426,12 @@ func (r *RPC) GroupLeave(id *string, _ *struct{}) (err error) {
 	return r.visor.GroupLeave(*id)
 }
 
-// GroupHistoryRequest is the input shape for GroupHistory. GroupID is
-// required; Limit caps the result set (0 = all).
-type GroupHistoryRequest struct {
-	GroupID string `json:"group_id"`
-	Limit   int    `json:"limit"`
-}
-
 // GroupHistory returns persisted group messages for a given group.
 // Returns ErrGroupHistoryDisabled when persistence is off — operators
 // enable it via Skychat.GroupHistoryDB in the visor config. Unlike
 // GroupPoll (which drains the in-memory ring), this RPC reads from
 // disk and survives visor restarts.
-func (r *RPC) GroupHistory(req *GroupHistoryRequest, out *[]GroupMessage) (err error) {
+func (r *RPC) GroupHistory(req *visorapi.GroupHistoryRequest, out *[]visorapi.GroupMessage) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupHistory", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -521,7 +448,7 @@ func (r *RPC) GroupHistory(req *GroupHistoryRequest, out *[]GroupMessage) (err e
 // messages strictly older than Before, newest last. A zero Before asks for
 // the newest page, so the first request and every "older, please" request
 // have the same shape.
-func (r *RPC) GroupHistoryPage(req *GroupHistoryPageArgs, out *[]GroupMessage) (err error) {
+func (r *RPC) GroupHistoryPage(req *visorapi.GroupHistoryPageArgs, out *[]visorapi.GroupMessage) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupHistoryPage", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -555,7 +482,7 @@ func (r *RPC) GroupHistoryGroups(_ *struct{}, out *[]string) (err error) {
 // attachment key grants strictly less than what the same caller has. What
 // the scoping does buy is that the answer cannot be replayed against any
 // OTHER file, or against the group's message history.
-func (r *RPC) GroupFileKey(req *GroupFileKeyArgs, out *GroupFileKeyResult) (err error) {
+func (r *RPC) GroupFileKey(req *visorapi.GroupFileKeyArgs, out *visorapi.GroupFileKeyResult) (err error) {
 	// Deliberately NOT logged through rpcutil.LogCall's result path: the
 	// response carries key material, and an RPC log line is the one place
 	// it would come to rest in plaintext.

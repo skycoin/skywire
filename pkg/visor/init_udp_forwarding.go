@@ -14,6 +14,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // udpForwardLivenessPoll is how often a UDP-forward bridge checks whether
@@ -60,7 +61,7 @@ func (v *Visor) serveUDPForwards(log *logging.Logger) {
 // bridgeUDPForward pumps datagrams between an accepted skynet sibling and
 // the local UDP service the forwarded port targets, until either the
 // route or the visor goes away.
-func (v *Visor) bridgeUDPForward(dg *router.DatagramRouteGroup, fp ForwardedPort, log *logging.Logger) {
+func (v *Visor) bridgeUDPForward(dg *router.DatagramRouteGroup, fp visorapi.ForwardedPort, log *logging.Logger) {
 	target := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: fp.EffectiveLocalPort()}
 
 	// Ephemeral local socket that talks to the service. skynetToLocal

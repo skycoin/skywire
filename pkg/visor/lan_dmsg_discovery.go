@@ -8,6 +8,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // dialLANTimeout bounds each address attempt when reaching the hypervisor's
@@ -54,7 +55,7 @@ func (v *Visor) discoverLANDmsgServer() {
 // about the hypervisor's embedded DMSG server. The visor connects to it (LAN
 // address first, public fallback if set) and saves both entries to config so
 // future restarts can reach the server without depending on a fresh push.
-func (v *Visor) SetLANDmsgServer(info LANDmsgServerInfo) error {
+func (v *Visor) SetLANDmsgServer(info visorapi.LANDmsgServerInfo) error {
 	log := v.MasterLogger().PackageLogger("lan_dmsg_discovery")
 
 	if !info.Enabled || info.PK.Null() {
@@ -126,7 +127,7 @@ func (v *Visor) saveHypervisorDiscoveryURL(url string) {
 
 // candidateAddresses returns the addresses to try, in order: LAN first,
 // public second. Empty slots are skipped; identical LAN/public collapse.
-func candidateAddresses(info *LANDmsgServerInfo) []string {
+func candidateAddresses(info *visorapi.LANDmsgServerInfo) []string {
 	addresses := make([]string, 0, 2)
 	if info.Address != "" {
 		addresses = append(addresses, info.Address)
@@ -149,7 +150,7 @@ func serverEntry(pk cipher.PubKey, address string) *dmsgdisc.Entry {
 
 // saveLANServerToConfig saves both LAN and public address entries to the
 // visor's config so future startups can re-attempt either path.
-func (v *Visor) saveLANServerToConfig(info *LANDmsgServerInfo) {
+func (v *Visor) saveLANServerToConfig(info *visorapi.LANDmsgServerInfo) {
 	log := v.MasterLogger().PackageLogger("lan_dmsg_discovery")
 
 	if v.conf == nil || v.conf.Dmsg == nil {

@@ -25,7 +25,7 @@ import (
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // fetchHistoryPeers calls the chat-app's /history/peers endpoint and
@@ -88,7 +88,7 @@ func localVisorPKFromStatus(addr string) string {
 // fetchGroupList queries the visor RPC for the operator's known
 // groups. Quietly returns an empty slice if grouping is disabled or
 // the RPC dial fails — picker still renders DMs.
-func fetchGroupList() ([]visor.GroupInfo, error) {
+func fetchGroupList() ([]visorapi.GroupInfo, error) {
 	c, err := clirpc.ClientQuiet(nil)
 	if err != nil {
 		return nil, err
@@ -159,7 +159,7 @@ func groupSendRPC(groupID, text string) error {
 	if err != nil {
 		return err
 	}
-	return c.GroupSend(visor.GroupSendArgs{ID: groupID, Text: text})
+	return c.GroupSend(visorapi.GroupSendArgs{ID: groupID, Text: text})
 }
 
 // groupJoinRPC accepts an invite token and joins the group via RPC.
@@ -176,7 +176,7 @@ func groupJoinRPC(invite string) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.GroupJoin(visor.GroupJoinArgs{Invite: "skychat:invite:" + invite})
+	_, err = c.GroupJoin(visorapi.GroupJoinArgs{Invite: "skychat:invite:" + invite})
 	return err
 }
 
@@ -192,7 +192,7 @@ func groupCreateRPC(name string) error {
 	if err != nil {
 		return err
 	}
-	_, _, err = c.GroupCreate(visor.GroupCreateArgs{
+	_, _, err = c.GroupCreate(visorapi.GroupCreateArgs{
 		Name: name,
 		Mode: skychatgroup.ModePublic,
 	})

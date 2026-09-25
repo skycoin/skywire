@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
 	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // getGroups → GET /skychat/groups : list every group this visor knows.
@@ -32,7 +33,7 @@ func (hv *Hypervisor) getGroups() http.HandlerFunc {
 			return
 		}
 		if groups == nil {
-			groups = []GroupInfo{}
+			groups = []visorapi.GroupInfo{}
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, groups)
 	})
@@ -57,14 +58,14 @@ func (hv *Hypervisor) postGroupCreate() http.HandlerFunc {
 		if rb.Mode == "private" {
 			mode = skychatgroup.ModePrivate
 		}
-		info, invite, err := ctx.API.GroupCreate(GroupCreateArgs{Name: rb.Name, Mode: mode})
+		info, invite, err := ctx.API.GroupCreate(visorapi.GroupCreateArgs{Name: rb.Name, Mode: mode})
 		if err != nil {
 			hv.writeGroupErr(w, r, err)
 			return
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, struct {
-			Info   GroupInfo `json:"info"`
-			Invite string    `json:"invite"`
+			Info   visorapi.GroupInfo `json:"info"`
+			Invite string             `json:"invite"`
 		}{Info: info, Invite: invite})
 	})
 }
@@ -83,7 +84,7 @@ func (hv *Hypervisor) postGroupJoin() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invite required"})
 			return
 		}
-		info, err := ctx.API.GroupJoin(GroupJoinArgs{Invite: rb.Invite})
+		info, err := ctx.API.GroupJoin(visorapi.GroupJoinArgs{Invite: rb.Invite})
 		if err != nil {
 			hv.writeGroupErr(w, r, err)
 			return
@@ -107,7 +108,7 @@ func (hv *Hypervisor) postGroupSend() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "id and text required"})
 			return
 		}
-		if err := ctx.API.GroupSend(GroupSendArgs{ID: rb.ID, Text: rb.Text}); err != nil {
+		if err := ctx.API.GroupSend(visorapi.GroupSendArgs{ID: rb.ID, Text: rb.Text}); err != nil {
 			hv.writeGroupErr(w, r, err)
 			return
 		}
@@ -132,7 +133,7 @@ func (hv *Hypervisor) getGroupMessages() http.HandlerFunc {
 			return
 		}
 		gid := r.URL.Query().Get("group_id")
-		out := make([]GroupMessage, 0, len(msgs))
+		out := make([]visorapi.GroupMessage, 0, len(msgs))
 		for _, m := range msgs {
 			if gid == "" || m.GroupID == gid {
 				out = append(out, m)
@@ -189,7 +190,7 @@ func (hv *Hypervisor) getGroupJoinRequests() http.HandlerFunc {
 // groupPeerAction wraps the shared shape of every {id, pk} admin
 // command: decode, parse the PK, call, render the updated info. One
 // helper rather than seven near-identical handlers.
-func (hv *Hypervisor) groupPeerAction(op func(*httpCtx, string, cipher.PubKey) (GroupInfo, error)) http.HandlerFunc {
+func (hv *Hypervisor) groupPeerAction(op func(*httpCtx, string, cipher.PubKey) (visorapi.GroupInfo, error)) http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var rb struct {
 			ID string `json:"id"`
@@ -215,7 +216,7 @@ func (hv *Hypervisor) groupPeerAction(op func(*httpCtx, string, cipher.PubKey) (
 
 // postGroupApproveJoin → POST /skychat/groups/requests/approve {id, pk}.
 func (hv *Hypervisor) postGroupApproveJoin() http.HandlerFunc {
-	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (GroupInfo, error) {
+	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
 		return ctx.API.GroupApproveJoin(id, pk)
 	})
 }
@@ -246,35 +247,35 @@ func (hv *Hypervisor) postGroupDenyJoin() http.HandlerFunc {
 
 // postGroupRemoveMember → POST /skychat/groups/remove-member {id, pk}.
 func (hv *Hypervisor) postGroupRemoveMember() http.HandlerFunc {
-	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (GroupInfo, error) {
+	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
 		return ctx.API.GroupRemoveMember(id, pk)
 	})
 }
 
 // postGroupBanMember → POST /skychat/groups/ban {id, pk}.
 func (hv *Hypervisor) postGroupBanMember() http.HandlerFunc {
-	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (GroupInfo, error) {
+	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
 		return ctx.API.GroupBanMember(id, pk)
 	})
 }
 
 // postGroupUnbanMember → POST /skychat/groups/unban {id, pk}.
 func (hv *Hypervisor) postGroupUnbanMember() http.HandlerFunc {
-	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (GroupInfo, error) {
+	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
 		return ctx.API.GroupUnbanMember(id, pk)
 	})
 }
 
 // postGroupMuteMember → POST /skychat/groups/mute {id, pk}.
 func (hv *Hypervisor) postGroupMuteMember() http.HandlerFunc {
-	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (GroupInfo, error) {
+	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
 		return ctx.API.GroupMuteMember(id, pk)
 	})
 }
 
 // postGroupUnmuteMember → POST /skychat/groups/unmute {id, pk}.
 func (hv *Hypervisor) postGroupUnmuteMember() http.HandlerFunc {
-	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (GroupInfo, error) {
+	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (visorapi.GroupInfo, error) {
 		return ctx.API.GroupUnmuteMember(id, pk)
 	})
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // CheckAREntry checks if a public key is registered in the address
@@ -53,51 +54,6 @@ func (v *Visor) CheckAREntry(pk string) ([]string, error) {
 // a question an operator needs answered, and it was previously unanswerable
 // from the CLI.
 var arSelfTypes = []string{"stcpr", "sudph", "wt"}
-
-// ARSelfEntry is one transport-type-row of this visor's own AR registration:
-// the IP:port it is reachable on according to the address-resolver.
-//
-// RemoteAddrV6 is the optional IPv6 counterpart of RemoteAddr, populated
-// when this visor has bound the AR over an IPv6 HTTP client (#2719's
-// secondary bind). Empty for v4-only deployments and on older AR servers
-// that don't capture family — same backward-compat shape as the underlying
-// addrresolver.VisorData (#2715).
-type ARSelfEntry struct {
-	Type         string   `json:"type"`                     // "stcpr", "sudph" or "wt"
-	RemoteAddr   string   `json:"remote_addr,omitempty"`    // public IPv4 as AR sees the visor
-	RemoteAddrV6 string   `json:"remote_addr_v6,omitempty"` // public IPv6 as AR sees the visor (#1525 Phase 4a)
-	Port         string   `json:"port,omitempty"`           // listen port
-	Addresses    []string `json:"addresses,omitempty"`      // local interface addresses the visor advertised
-	// CertHash is the SHA-256 of the self-signed certificate a WebTransport
-	// dialler must pin, lowercase hex. WT only — the other carriers have no
-	// certificate. Empty from a visor too old to report it, which is why the
-	// CLI omits the field rather than rendering "(none)": absent here means
-	// "not said", and only a visor that knows about WT can distinguish that
-	// from "not registered".
-	CertHash string `json:"cert_hash,omitempty"`
-}
-
-// ARSelfRegistration is the visor's own AR record across transport types.
-// One ARSelfEntry per transport the visor is currently registered for.
-// Empty when the visor has not (yet) bound any transport with AR.
-type ARSelfRegistration struct {
-	Entries []ARSelfEntry `json:"entries,omitempty"`
-	// Queried lists the transport types this visor actually checked, whether or
-	// not it is registered for them. It exists so a caller can tell "asked, not
-	// registered" from "never asked".
-	//
-	// Without it the two are the same silence, and the CLI cannot say which it
-	// is looking at: a type missing from Entries might be unregistered, or the
-	// answering visor might predate that type entirely. That is not
-	// hypothetical here — `--via dmsg://<pk>` and `--rpc` point these commands
-	// at other people's visors across the mesh, running whatever version they
-	// are running. Locally it cannot happen, because the CLI and the visor are
-	// the same binary.
-	//
-	// Empty from a visor too old to report it, which is itself the signal:
-	// nothing can be concluded from a type's absence.
-	Queried []string `json:"queried,omitempty"`
-}
 
 // arSelfState caches the visor's own AR-side bind state, populated by a
 // refresh loop that calls Resolve(self) periodically.
@@ -180,7 +136,7 @@ func (s *arSelfState) snapshot() map[string]addrresolver.VisorData { //nolint:un
 
 // ARSelfInfo returns the visor's own cached AR registration. Reads the
 // in-memory cache populated by the refresh loop — no HTTP round-trip.
-func (v *Visor) ARSelfInfo() (*ARSelfRegistration, error) {
+func (v *Visor) ARSelfInfo() (*visorapi.ARSelfRegistration, error) {
 	// Refresh on demand: the background loop is deliberately slow (see
 	// arSelfRefreshLoop), so a query answers from a cache no older than
 	// arSelfMaxAge, refreshing synchronously when it is.
@@ -189,13 +145,13 @@ func (v *Visor) ARSelfInfo() (*ARSelfRegistration, error) {
 		v.arSelfRefreshOnce(ctx, nil)
 		cancel()
 	}
-	out := &ARSelfRegistration{Queried: append([]string(nil), arSelfTypes...)}
+	out := &visorapi.ARSelfRegistration{Queried: append([]string(nil), arSelfTypes...)}
 	for _, tpType := range arSelfTypes {
 		d, ok := v.arSelf.get(tpType)
 		if !ok {
 			continue
 		}
-		out.Entries = append(out.Entries, ARSelfEntry{
+		out.Entries = append(out.Entries, visorapi.ARSelfEntry{
 			Type:         tpType,
 			RemoteAddr:   d.RemoteAddr,
 			RemoteAddrV6: d.RemoteAddrV6,

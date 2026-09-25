@@ -17,7 +17,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/logging"
 	types "github.com/skycoin/skywire/pkg/transport/types"
-	skyvisor "github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // The e2e environment currently requires `make e2e-run` (docker-compose) before tests.
@@ -279,7 +279,7 @@ func TestEnv_VisorAddTp(t *testing.T) {
 	pkA := env.visorPKs[visorA]
 
 	t.Logf("Adding transport from visor-b to visor-a (pk: %s)", pkA[:16]+"...")
-	var out *skyvisor.TransportSummary
+	var out *visorapi.TransportSummary
 	var err error
 	for attempt := 1; attempt <= 3; attempt++ {
 		out, err = env.VisorTpAddDefault(visorB, pkA)
@@ -314,7 +314,7 @@ func TestEnv_VisorAddTp_second(t *testing.T) {
 	for _, visor := range []string{visorA, visorC} {
 		pk := env.visorPKs[visor]
 
-		var out *skyvisor.TransportSummary
+		var out *visorapi.TransportSummary
 		var err error
 		for attempt := 1; attempt <= 3; attempt++ {
 			out, err = env.VisorTpAddDefault(visorB, pk)

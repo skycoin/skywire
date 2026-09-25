@@ -18,7 +18,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 const proxyKind = "bridge"
@@ -99,7 +99,7 @@ var downCmd = &cobra.Command{
 // renderMailStatus is the human-readable status table. Returns "(no
 // skymail_bridge configured)" rather than an empty table so the
 // operator can distinguish absent from disabled.
-func renderMailStatus(s *visor.EmbeddedProxiesStatus) string {
+func renderMailStatus(s *visorapi.EmbeddedProxiesStatus) string {
 	if s == nil || s.SkymailBridge == nil {
 		return "(no skymail_bridge configured)\n"
 	}

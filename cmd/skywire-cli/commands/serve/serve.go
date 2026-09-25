@@ -32,7 +32,7 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -134,7 +134,7 @@ Examples:
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid port: %s", args[0]))
 		}
 
-		fp := visor.ForwardedPort{
+		fp := visorapi.ForwardedPort{
 			Port:          port,
 			Label:         serveLabel,
 			Description:   serveDesc,
@@ -253,7 +253,7 @@ Examples:
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		var fp *visor.ForwardedPort
+		var fp *visorapi.ForwardedPort
 		for i := range ports {
 			if ports[i].Port == port {
 				fp = &ports[i]
@@ -372,7 +372,7 @@ func listForwardedPorts(cmd *cobra.Command) {
 		internal.PrintFatalError(cmd.Flags(), err)
 	}
 	if len(ports) == 0 {
-		internal.PrintOutput(cmd.Flags(), []visor.ForwardedPort{}, "No registered ports.\n")
+		internal.PrintOutput(cmd.Flags(), []visorapi.ForwardedPort{}, "No registered ports.\n")
 		return
 	}
 	var buf strings.Builder

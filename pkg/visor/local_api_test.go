@@ -2,6 +2,7 @@ package visor
 
 import (
 	"errors"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"testing"
 )
 
@@ -24,10 +25,10 @@ func (*stubAPI) Resume() error              { return ErrProxyNotSupported }
 func (*stubAPI) IsSuspended() (bool, error) { return false, ErrProxyNotSupported }
 
 func TestLocalAPIUnsetIsNil(t *testing.T) {
-	t.Cleanup(func() { RegisterLocalAPI(nil) })
-	RegisterLocalAPI(nil)
+	t.Cleanup(func() { visorapi.RegisterLocalAPI(nil) })
+	visorapi.RegisterLocalAPI(nil)
 
-	if got := LocalAPI(); got != nil {
+	if got := visorapi.LocalAPI(); got != nil {
 		t.Fatalf("LocalAPI() = %v, want nil when no visor is registered", got)
 	}
 }
@@ -35,10 +36,10 @@ func TestLocalAPIUnsetIsNil(t *testing.T) {
 // The registered visor must be reachable, and reachable in a form whose Close
 // cannot shut it down: skychat closes what it holds whenever it redials.
 func TestLocalAPICloseDoesNotReachTheVisor(t *testing.T) {
-	t.Cleanup(func() { RegisterLocalAPI(nil) })
-	RegisterLocalAPI(&stubAPI{id: 1})
+	t.Cleanup(func() { visorapi.RegisterLocalAPI(nil) })
+	visorapi.RegisterLocalAPI(&stubAPI{id: 1})
 
-	api := LocalAPI()
+	api := visorapi.LocalAPI()
 	if api == nil {
 		t.Fatal("LocalAPI() = nil after registering")
 	}
@@ -54,19 +55,19 @@ func TestLocalAPICloseDoesNotReachTheVisor(t *testing.T) {
 // Unregister is compare-and-clear: a visor finishing its shutdown after a
 // replacement has registered must not take the live one out.
 func TestUnregisterLocalAPIOnlyClearsItsOwn(t *testing.T) {
-	t.Cleanup(func() { RegisterLocalAPI(nil) })
+	t.Cleanup(func() { visorapi.RegisterLocalAPI(nil) })
 
 	first, second := &stubAPI{id: 1}, &stubAPI{id: 2}
-	RegisterLocalAPI(first)
-	RegisterLocalAPI(second)
+	visorapi.RegisterLocalAPI(first)
+	visorapi.RegisterLocalAPI(second)
 
-	UnregisterLocalAPI(first)
-	if LocalAPI() == nil {
+	visorapi.UnregisterLocalAPI(first)
+	if visorapi.LocalAPI() == nil {
 		t.Fatal("the replacement was cleared by the outgoing visor's unregister")
 	}
 
-	UnregisterLocalAPI(second)
-	if got := LocalAPI(); got != nil {
+	visorapi.UnregisterLocalAPI(second)
+	if got := visorapi.LocalAPI(); got != nil {
 		t.Fatalf("LocalAPI() = %v, want nil after the current visor unregistered", got)
 	}
 }

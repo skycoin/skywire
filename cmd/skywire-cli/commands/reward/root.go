@@ -16,8 +16,8 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -157,7 +157,7 @@ func longText() string {
 	conn, dialErr := vnet.DialTimeout("tcp", clirpc.Addr, rpcDialTimeout)
 	if dialErr == nil {
 		rpcLogger := logging.MustGetLogger("rpc-reward")
-		client := visor.NewRPCClient(rpcLogger, conn, visor.RPCPrefix, 0)
+		client := visorapi.NewRPCClient(rpcLogger, conn, visorapi.RPCPrefix, 0)
 		rwdAdd, err := client.GetRewardAddress()
 		if err == nil && strings.TrimSpace(rwdAdd) != "" {
 			_, _, err = rewardconfig.ValidateRewardAddress(strings.TrimSpace(rwdAdd))
@@ -351,7 +351,7 @@ var rewardCmd = &cobra.Command{
 
 // collectBulkPKs resolves the target set for a bulk reward operation.
 // Explicit --pks wins; --all-visors falls through to HVListVisors.
-func collectBulkPKs(client visor.API, csv string, allVisors bool) ([]string, error) {
+func collectBulkPKs(client visorapi.API, csv string, allVisors bool) ([]string, error) {
 	var pks []string
 	seen := make(map[string]bool)
 	add := func(s string) {
@@ -383,7 +383,7 @@ func collectBulkPKs(client visor.API, csv string, allVisors bool) ([]string, err
 // Per-visor result is printed (PK + outcome) and failures are recorded
 // but don't abort the loop — operators usually want the rest of the
 // fleet updated even if one visor is unreachable.
-func applyBulkRewardAddress(flags *pflag.FlagSet, client visor.API, pks []string, addr string) {
+func applyBulkRewardAddress(flags *pflag.FlagSet, client visorapi.API, pks []string, addr string) {
 	type result struct {
 		PK  string `json:"pk"`
 		Set string `json:"set,omitempty"`

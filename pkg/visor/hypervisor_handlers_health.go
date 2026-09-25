@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // getServiceHealth returns the health status of all configured deployment
@@ -16,7 +17,7 @@ import (
 func (hv *Hypervisor) getServiceHealth() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if hv.visor == nil {
-			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, []ServiceHealthEntry{})
+			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, []visorapi.ServiceHealthEntry{})
 			return
 		}
 		entries, err := hv.visor.ServiceHealth()
@@ -98,7 +99,7 @@ func (hv *Hypervisor) getHealth() http.HandlerFunc {
 		vh := &Health{}
 
 		type healthRes struct {
-			h   *HealthInfo
+			h   *visorapi.HealthInfo
 			err error
 		}
 

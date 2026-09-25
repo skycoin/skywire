@@ -4,10 +4,11 @@ package visor
 import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // VPNServers gets available public VPN server from service discovery URL
-func (r *RPC) VPNServers(vc *FilterServersIn, out *[]servicedisc.Service) (err error) {
+func (r *RPC) VPNServers(vc *visorapi.FilterServersIn, out *[]servicedisc.Service) (err error) {
 	defer rpcutil.LogCall(r.log, "VPNServers", nil)(out, &err)
 	vpnServers, err := r.visor.VPNServers(vc.Version, vc.Country)
 	if vpnServers != nil {
@@ -17,7 +18,7 @@ func (r *RPC) VPNServers(vc *FilterServersIn, out *[]servicedisc.Service) (err e
 }
 
 // ProxyServers gets available socks5 proxy servers from service discovery URL
-func (r *RPC) ProxyServers(vc *FilterServersIn, out *[]servicedisc.Service) (err error) {
+func (r *RPC) ProxyServers(vc *visorapi.FilterServersIn, out *[]servicedisc.Service) (err error) {
 	defer rpcutil.LogCall(r.log, "ProxyServers", nil)(out, &err)
 	proxyServers, err := r.visor.ProxyServers(vc.Version, vc.Country)
 	if proxyServers != nil {
@@ -27,13 +28,13 @@ func (r *RPC) ProxyServers(vc *FilterServersIn, out *[]servicedisc.Service) (err
 }
 
 // DeregisterService deregisters services from service discovery
-func (r *RPC) DeregisterService(in *DeregisterServiceIn, out *struct{}) (err error) {
+func (r *RPC) DeregisterService(in *visorapi.DeregisterServiceIn, out *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "DeregisterService", in)(out, &err)
 	return r.visor.DeregisterService(in.PKs, in.ServiceType)
 }
 
 // TestProxy tests proxy servers by connecting through them.
-func (r *RPC) TestProxy(conf ProxyTestConfig, out *[]ProxyTestResult) (err error) {
+func (r *RPC) TestProxy(conf visorapi.ProxyTestConfig, out *[]visorapi.ProxyTestResult) (err error) {
 	defer rpcutil.LogCall(r.log, "TestProxy", conf)(out, &err)
 
 	*out, err = r.visor.TestProxy(conf)

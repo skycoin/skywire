@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -57,14 +58,8 @@ func (v *Visor) AddPtyWhitelist(pks []cipher.PubKey) error {
 	return nil
 }
 
-// AddPtyWhitelistIn carries the PKs to merge into the visor's shared
-// peer whitelist (a hypervisor pushing its own hypervisors).
-type AddPtyWhitelistIn struct {
-	PKs []cipher.PubKey
-}
-
 // AddPtyWhitelist is the RPC gateway for Visor.AddPtyWhitelist.
-func (r *RPC) AddPtyWhitelist(in *AddPtyWhitelistIn, _ *struct{}) (err error) {
+func (r *RPC) AddPtyWhitelist(in *visorapi.AddPtyWhitelistIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "AddPtyWhitelist", in)(nil, &err)
 
 	return r.visor.AddPtyWhitelist(in.PKs)

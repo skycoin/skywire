@@ -22,126 +22,13 @@ package visor
 
 import (
 	"sort"
-	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
-
-// RolesSnapshot is the `roles` section of a StateSnapshot.
-type RolesSnapshot struct {
-	// PK is the visor's own public key — the key the own-key dmsg server and
-	// the relay acceptor both answer under.
-	PK cipher.PubKey `json:"pk"`
-	// NoTransit reports routing.no_transit: this visor refuses to be an
-	// INTERMEDIATE hop on someone else's route (its own edges still work).
-	NoTransit bool `json:"no_transit"`
-
-	DmsgServer DmsgServerRole `json:"dmsg_server"`
-	DmsgRelay  DmsgRelayRole  `json:"dmsg_relay"`
-}
-
-// DmsgServerRole is the in-process dmsg server (dmsg.server.* in the config).
-type DmsgServerRole struct {
-	// Enabled is what the config asks for; Running is what actually started.
-	// Enabled && !Running is the interesting case — e.g. no dmsg discovery PK
-	// to register with, so the server no-opped at init.
-	Enabled bool `json:"enabled"`
-	Running bool `json:"running"`
-	// Mode distinguishes the two servers a visor can host: "own_key" is the
-	// bare server sharing the visor's PK/SK and dmsg client, "config_path" is
-	// the whole standalone dmsg-server service run in-process from its own
-	// config file, on its OWN key. Empty when no server is configured.
-	Mode string `json:"mode,omitempty"`
-	// PK is the key the server registers under: the visor's own key in
-	// "own_key" mode, the config file's key in "config_path" mode.
-	PK cipher.PubKey `json:"pk,omitempty"`
-	// OwnKey is true when the server shares the visor's identity, i.e. one
-	// discovery entry carries both the Client and the Server section.
-	OwnKey bool `json:"own_key"`
-	// SharedTransportPort: the server took the dmsg branch of the transport
-	// port's TCP multiplexer instead of opening a listener of its own, so no
-	// second port is bound or forwarded.
-	SharedTransportPort bool   `json:"shared_transport_port"`
-	LocalAddress        string `json:"local_address,omitempty"`
-	PublicAddress       string `json:"public_address,omitempty"`
-	ConfigPath          string `json:"config_path,omitempty"`
-	// StartedAt is when the server was started (zero when it is not running).
-	StartedAt time.Time `json:"started_at,omitempty"`
-	// SessionCount is how many dmsg sessions this server currently holds, and
-	// Clients names them. Answering "who is actually on this dmsg server" used
-	// to require asking the discovery — which reports what CLIENTS claim about
-	// their delegated servers, not what the server itself is holding, and says
-	// nothing about how much traffic each one is running. A co-resident visor
-	// knows the real answer; this reports it.
-	//
-	// Peers are separated from ordinary clients because a server-to-server link
-	// is not a client at all: counting the two together makes a server look
-	// busier than it is, and the peer mesh is the part an operator tunes
-	// separately.
-	//
-	// Only populated in own_key mode — config_path mode runs the server inside
-	// an unexported service type that exposes no session handle.
-	SessionCount int                `json:"session_count"`
-	PeerCount    int                `json:"peer_count"`
-	Clients      []DmsgServerClient `json:"clients,omitempty"`
-}
-
-// DmsgServerClient is one session held by this visor's in-process dmsg server:
-// the connected key, how many streams it has open, and whether the session is
-// another dmsg server (a peer link) rather than a client.
-type DmsgServerClient struct {
-	PK      cipher.PubKey `json:"pk"`
-	Streams int           `json:"streams"`
-	Peer    bool          `json:"peer,omitempty"`
-}
-
-// DmsgRelayRole is both directions of the dmsg relay: the relays this visor
-// attaches to, and the peers it relays for.
-type DmsgRelayRole struct {
-	// Port is the dmsg port the relay acceptor listens on over skynet.
-	Port uint16 `json:"relay_port"`
-	// RelayPeers are the peers this visor NOMINATED as its relays
-	// (relayNominees → dmsg.Client.SetRelayPeers). Same field name and
-	// meaning as `dmsg sessions`.
-	RelayPeers []cipher.PubKey `json:"relay_peers,omitempty"`
-	// Attached is the subset of RelayPeers this visor currently holds a
-	// session with, and the carrier that session rides. Carrier "skynet" is
-	// an actual relay attachment; anything else means the nominee was reached
-	// as a plain dmsg server instead.
-	Attached []DmsgRelayAttachment `json:"attached,omitempty"`
-	// RelayClients are the peers attached TO this visor's relay acceptor,
-	// each with the streams open on its relay session. Same field name and
-	// meaning as `dmsg sessions`, which reports the keys alone.
-	RelayClients []DmsgRelayClient `json:"relay_clients,omitempty"`
-	// RelayedStreams is the relay slots in use across all attached peers, and
-	// MaxRelayedStreams the cap they are charged against (dmsg.relay_max_streams).
-	// A cap of 0 or less means this visor relays for nobody.
-	RelayedStreams    int `json:"relayed_streams"`
-	MaxRelayedStreams int `json:"max_relayed_streams"`
-	// RelayRefused counts stream requests turned away at capacity (dmsg error
-	// 308) since start. Nonzero means this hub refused traffic it was asked to
-	// carry — at the dialer that refusal is indistinguishable from the
-	// destination being down, so without this it is only ever diagnosed from
-	// the wrong end.
-	RelayRefused int `json:"relay_refused"`
-}
-
-// DmsgRelayAttachment is one nominated relay this visor holds a session with.
-type DmsgRelayAttachment struct {
-	PK        cipher.PubKey `json:"pk"`
-	Carrier   string        `json:"carrier"`
-	Streams   int           `json:"streams"`
-	LatencyMS float64       `json:"latency_ms"`
-}
-
-// DmsgRelayClient is a peer attached to this visor as its dmsg relay.
-type DmsgRelayClient struct {
-	PK      cipher.PubKey `json:"pk"`
-	Streams int           `json:"streams"`
-}
 
 // dmsgSessionView is the handful of fields the roles section needs from a live
 // dmsg session, extracted so the assembly below is a pure function.
@@ -155,8 +42,8 @@ type dmsgSessionView struct {
 // RolesSnapshot builds the roles section. Cheap and best-effort: a
 // not-yet-initialized dmsg client or config leaves the corresponding role
 // zero-valued rather than failing.
-func (v *Visor) RolesSnapshot() *RolesSnapshot {
-	r := &RolesSnapshot{DmsgServer: dmsgServerRole(v.conf, v.dmsgSrvRole.Load())}
+func (v *Visor) RolesSnapshot() *visorapi.RolesSnapshot {
+	r := &visorapi.RolesSnapshot{DmsgServer: dmsgServerRole(v.conf, v.dmsgSrvRole.Load())}
 	if srv := v.dmsgSrv.Load(); srv != nil {
 		r.DmsgServer.SessionCount, r.DmsgServer.PeerCount, r.DmsgServer.Clients = dmsgServerSessions(srv)
 	}
@@ -193,8 +80,8 @@ func (v *Visor) RolesSnapshot() *RolesSnapshot {
 // dmsgServerRole reports the in-process dmsg server: what the config asks for,
 // overlaid with what the running server recorded at init (live == nil means no
 // server started).
-func dmsgServerRole(conf *visorconfig.V1, live *DmsgServerRole) DmsgServerRole {
-	var role DmsgServerRole
+func dmsgServerRole(conf *visorconfig.V1, live *visorapi.DmsgServerRole) visorapi.DmsgServerRole {
+	var role visorapi.DmsgServerRole
 	if conf != nil && conf.Dmsg != nil && conf.Dmsg.Server != nil {
 		s := conf.Dmsg.Server
 		role.Enabled = s.Enabled
@@ -246,9 +133,9 @@ const (
 // clientStreams the per-peer stream count of the peers attached to this visor,
 // and relayed/max the slot usage against the configured cap.
 func dmsgRelayRole(nominees []cipher.PubKey, sessions []dmsgSessionView,
-	clientStreams map[cipher.PubKey]int, relayed, maxStreams, refused int) DmsgRelayRole {
+	clientStreams map[cipher.PubKey]int, relayed, maxStreams, refused int) visorapi.DmsgRelayRole {
 
-	role := DmsgRelayRole{
+	role := visorapi.DmsgRelayRole{
 		Port:              skyenv.DmsgRelayPort,
 		RelayPeers:        sortedPKs(nominees),
 		RelayedStreams:    relayed,
@@ -264,12 +151,12 @@ func dmsgRelayRole(nominees []cipher.PubKey, sessions []dmsgSessionView,
 		if _, ok := nominated[s.PK]; !ok {
 			continue
 		}
-		role.Attached = append(role.Attached, DmsgRelayAttachment(s))
+		role.Attached = append(role.Attached, visorapi.DmsgRelayAttachment(s))
 	}
 	sort.Slice(role.Attached, func(i, j int) bool { return role.Attached[i].PK.String() < role.Attached[j].PK.String() })
 
 	for pk, n := range clientStreams {
-		role.RelayClients = append(role.RelayClients, DmsgRelayClient{PK: pk, Streams: n})
+		role.RelayClients = append(role.RelayClients, visorapi.DmsgRelayClient{PK: pk, Streams: n})
 	}
 	sort.Slice(role.RelayClients, func(i, j int) bool {
 		return role.RelayClients[i].PK.String() < role.RelayClients[j].PK.String()
@@ -286,9 +173,9 @@ func dmsgRelayRole(nominees []cipher.PubKey, sessions []dmsgSessionView,
 // self-reported, lags reality by the entry refresh interval, and carries no
 // per-client stream count at all. For "which clients is this server actually
 // carrying, and how hard", only the server knows.
-func dmsgServerSessions(srv *dmsg.Server) (total, peers int, clients []DmsgServerClient) {
+func dmsgServerSessions(srv *dmsg.Server) (total, peers int, clients []visorapi.DmsgServerClient) {
 	sessions := srv.GetSessions()
-	clients = make([]DmsgServerClient, 0, len(sessions))
+	clients = make([]visorapi.DmsgServerClient, 0, len(sessions))
 	for pk, ses := range sessions {
 		if ses == nil {
 			continue
@@ -297,7 +184,7 @@ func dmsgServerSessions(srv *dmsg.Server) (total, peers int, clients []DmsgServe
 		if isPeer {
 			peers++
 		}
-		clients = append(clients, DmsgServerClient{
+		clients = append(clients, visorapi.DmsgServerClient{
 			PK:      pk,
 			Streams: ses.NumStreams(),
 			Peer:    isPeer,

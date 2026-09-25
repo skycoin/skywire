@@ -16,137 +16,8 @@ import (
 	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
-
-// RouterSettings bundles the visor-wide router knobs the universal
-// "Router Settings" UI panel surfaces. Mirrors the per-flag CLI
-// surface ('cli proxy start --local-route' etc.) so the UI can
-// achieve parity in one round-trip rather than four separate calls.
-type RouterSettings struct {
-	ForceLocalRoutes bool   `json:"force_local_routes"`
-	ExistingTPOnly   bool   `json:"existing_tp_only"`
-	MinHops          uint16 `json:"min_hops"`
-	// TransportPreference is the transport-type priority order: which type
-	// is tried first when a transport has to be created, and which existing
-	// one a route rides when several reach the same peer. GET always answers
-	// the full order in effect. On PUT:
-	//   omitted / null — leave the order unchanged;
-	//   []             — revert to the built-in default;
-	//   non-empty      — that order, most-preferred first (unlisted types
-	//                    sort after it).
-	// Written to routing.transport_preference, so it survives a restart —
-	// but not a config regen (no skywire.conf field).
-	TransportPreference []string `json:"transport_preference,omitempty"`
-
-	// The mux send-window shape and the adaptive park hold, live from
-	// pkg/router/settings.go. Each zero value means "leave unchanged" on PUT,
-	// so an older client that does not know a field cannot reset it. GET always
-	// answers the values in force.
-	//
-	// windowRefreshInterval is deliberately absent: it becomes a per-route-group
-	// ticker when the group is built, so moving it live is a locking change
-	// rather than a knob.
-	EcfMaxWindowBytes int64         `json:"ecf_max_window_bytes,omitempty"`
-	EcfMinWindowBytes int64         `json:"ecf_min_window_bytes,omitempty"`
-	EcfWindowMargin   float64       `json:"ecf_window_margin,omitempty"`
-	SendWindowWaitMax time.Duration `json:"send_window_wait_max,omitempty"`
-	LegParkMinHold    time.Duration `json:"leg_park_min_hold,omitempty"`
-
-	// The dead-route exclusion window and its ceiling, live from
-	// pkg/router/settings.go with the same zero-means-unchanged rule.
-	DeadRouteHold    time.Duration `json:"dead_route_hold,omitempty"`
-	DeadRouteHoldMax time.Duration `json:"dead_route_hold_max,omitempty"`
-
-	// Shared-bottleneck detection: how many per-leg delay samples a verdict
-	// needs, and the minimum spacing between two per-SACK samples for one leg.
-	// Same zero-means-unchanged rule.
-	SBDMinSamples     int           `json:"sbd_min_samples,omitempty"`
-	SBDSampleInterval time.Duration `json:"sbd_sample_interval,omitempty"`
-
-	// The terms of the park TRIAL that qualifies a shared-bottleneck ruling: how
-	// long the park is held before the aggregate goodput is re-read, the fraction
-	// of goodput it may cost before it is undone, and the first exemption window
-	// the vindicated pair earns. Same zero-means-unchanged rule.
-	SBDTrialWindow time.Duration `json:"sbd_trial_window,omitempty"`
-	SBDTrialLoss   float64       `json:"sbd_trial_loss,omitempty"`
-	SBDBackoff     time.Duration `json:"sbd_backoff,omitempty"`
-
-	// SBDMinEvidenceRate is the aggregate delivered-bytes rate (B/s) a group must
-	// be carrying before a shared-bottleneck ruling may park one of its legs: no
-	// traffic, no ruling. Same zero-means-unchanged rule.
-	SBDMinEvidenceRate int64 `json:"sbd_min_evidence_rate,omitempty"`
-
-	// ForwardSpill lets a FORWARD frame leave the confined leg when that leg is at
-	// its send window (the pre-fix behavior). Off by default: the writer waits for
-	// the window instead, because every live row that spilled an upload across two
-	// skewed legs collapsed. Tri-state on PUT like SBDDemote — nil leaves it alone.
-	ForwardSpill *bool `json:"forward_spill,omitempty"`
-
-	// ForwardSwitchMargin is how much LOWER a challenger leg must measure before the
-	// forward direction moves off the leg it holds (0.2 = 20 %), for two consecutive
-	// samples. Same zero-means-unchanged rule.
-	ForwardSwitchMargin float64 `json:"forward_switch_margin,omitempty"`
-
-	// LegStarveRatio is how many times the best ready leg's delay basis a leg's
-	// own must exceed before the scheduler cuts it to a probe per window, and
-	// LegProbeBytes is that probe. Same zero-means-unchanged rule; a very large
-	// ratio disables the gate.
-	LegStarveRatio float64 `json:"leg_starve_ratio,omitempty"`
-	LegProbeBytes  int64   `json:"leg_probe_bytes,omitempty"`
-
-	// SBDDemote gates the DEMOTION half of shared-bottleneck detection: false (the
-	// default) records every ruling as an sbd_ruling mux event and parks nothing.
-	// Like MuxFEC it is a tri-state on PUT — nil leaves it alone — because a bool
-	// has no "zero means unchanged" spelling.
-	SBDDemote *bool `json:"sbd_demote,omitempty"`
-
-	// MuxFEC advertises FEC on mux route groups created from now on; unlike
-	// the rest it is a tri-state on PUT, see SetRouterSettings.
-	MuxFEC *bool `json:"mux_fec,omitempty"`
-
-	// Knobs is the whole catalog as one map of catalog-name to formatted value.
-	// On PUT it is applied as a PARTIAL set — a knob the map does not name is
-	// left alone — which is what lets a sweep move one value without restating
-	// the other eighty. On GET it carries every knob's live value, so a bench
-	// runner can save it and restore it verbatim.
-	Knobs map[string]string `json:"knobs,omitempty"`
-
-	// KnobApp scopes a PUT's Knobs to the route groups owned by one app rather
-	// than the whole visor. Empty is the visor-wide set.
-	KnobApp string `json:"knob_app,omitempty"`
-
-	// KnobReset restores every knob to its compiled default and drops every
-	// per-app override, before Knobs (if any) is applied. With KnobApp set it
-	// drops only that app's overrides.
-	KnobReset bool `json:"knob_reset,omitempty"`
-
-	// KnobState is the GET-side detail: every knob with its live value, its
-	// compiled default, whether it was explicitly set, and what is written in
-	// the config — the persisted-vs-live comparison an operator needs before a
-	// restart.
-	KnobState []RouterKnob `json:"knob_state,omitempty"`
-
-	// AppKnobs is every app's override map on GET, app name to knob map.
-	AppKnobs map[string]map[string]string `json:"app_knobs,omitempty"`
-}
-
-// RouterKnob is one row of RouterSettings.KnobState.
-type RouterKnob struct {
-	Name string `json:"name"`
-	Kind string `json:"kind"`
-	// Value is the live value, formatted the way `route settings` takes it back.
-	Value string `json:"value"`
-	// Default is what the binary compiled with.
-	Default string `json:"default"`
-	// Set reports an explicit set, as opposed to a value that merely equals the
-	// default.
-	Set bool `json:"set"`
-	// Persisted is what the visor config holds for this knob, empty when nothing
-	// is written. A Persisted that differs from Value is a change that will be
-	// lost — or gained — at the next restart.
-	Persisted string `json:"persisted,omitempty"`
-	Doc       string `json:"doc,omitempty"`
-}
 
 // GetRouterSettings returns the current runtime values of the four
 // router knobs. MinHops and MuxRoutes are written to Routing.* and
@@ -155,13 +26,13 @@ type RouterKnob struct {
 // CLI's behavior. Surviving a restart is not the same as surviving a
 // config regen — of these, only MinHops has a skywire.conf field
 // (MINHOPS) and is preserved by `config gen -r`.
-func (v *Visor) GetRouterSettings() (RouterSettings, error) {
+func (v *Visor) GetRouterSettings() (visorapi.RouterSettings, error) {
 	if v.router == nil {
-		return RouterSettings{}, errors.New("router not available")
+		return visorapi.RouterSettings{}, errors.New("router not available")
 	}
 	hops, err := v.GetMinHops()
 	if err != nil {
-		return RouterSettings{}, err
+		return visorapi.RouterSettings{}, err
 	}
 	order := types.PreferenceOrder()
 	preference := make([]string, 0, len(order))
@@ -171,7 +42,7 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 	fec := v.router.GetMuxFEC()
 	sbdDemote := router.SBDDemote()
 	forwardSpill := router.ForwardSpill()
-	return RouterSettings{
+	return visorapi.RouterSettings{
 		ForceLocalRoutes:    v.router.GetForceLocalRoutes(),
 		ExistingTPOnly:      v.router.GetExistingTPOnly(),
 		MinHops:             hops,
@@ -215,15 +86,15 @@ func knobMap() map[string]string {
 // knobState pairs every knob's live value with what the config holds for it, so
 // an operator can see before a restart which live values are persisted and which
 // are not.
-func (v *Visor) knobState() []RouterKnob {
+func (v *Visor) knobState() []visorapi.RouterKnob {
 	var persisted map[string]string
 	if v.conf != nil && v.conf.Routing != nil {
 		persisted = v.conf.Routing.RouterSettings
 	}
 	snap := routersettings.Snapshot()
-	out := make([]RouterKnob, 0, len(snap))
+	out := make([]visorapi.RouterKnob, 0, len(snap))
 	for _, e := range snap {
-		out = append(out, RouterKnob{
+		out = append(out, visorapi.RouterKnob{
 			Name:      e.Name,
 			Kind:      string(e.Kind),
 			Value:     e.Formatted,
@@ -241,7 +112,7 @@ func (v *Visor) knobState() []RouterKnob {
 // existing per-knob setter so the same persistence rules apply.
 // Returns an error mid-way if any setter fails; partial application
 // is possible — UI surfaces should re-fetch on error.
-func (v *Visor) SetRouterSettings(s RouterSettings) error {
+func (v *Visor) SetRouterSettings(s visorapi.RouterSettings) error {
 	if v.router == nil {
 		return errors.New("router not available")
 	}
@@ -463,8 +334,8 @@ func (v *Visor) TransportTypes() ([]string, error) {
 }
 
 // Transports implements API.
-func (v *Visor) Transports(typeFilters []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error) {
-	var result []*TransportSummary
+func (v *Visor) Transports(typeFilters []string, pks []cipher.PubKey, logs bool) ([]*visorapi.TransportSummary, error) {
+	var result []*visorapi.TransportSummary
 
 	typeIncluded := func(tType types.Type) bool {
 		if typeFilters != nil {
@@ -501,7 +372,7 @@ func (v *Visor) Transports(typeFilters []string, pks []cipher.PubKey, logs bool)
 }
 
 // Transport implements API.
-func (v *Visor) Transport(tid uuid.UUID) (*TransportSummary, error) {
+func (v *Visor) Transport(tid uuid.UUID) (*visorapi.TransportSummary, error) {
 	tp := v.tpM.Transport(tid)
 	if tp == nil {
 		return nil, ErrNotFound
@@ -511,7 +382,7 @@ func (v *Visor) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements API.
-func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool, _ bool) (*TransportSummary, error) {
+func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool, _ bool) (*visorapi.TransportSummary, error) {
 	if v.tpM == nil {
 		return nil, ErrTrpMangerNotAvailable
 	}
@@ -635,7 +506,7 @@ func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error) {
 // CSV semantics, where the per-day file accumulated bytes from a
 // zero-anchored start-of-day baseline). Timestamp is the start of the
 // UTC day, expressed as a Unix epoch second.
-func (v *Visor) GetTransportLogs(days int) ([]TransportLogEntry, error) {
+func (v *Visor) GetTransportLogs(days int) ([]visorapi.TransportLogEntry, error) {
 	if days <= 0 {
 		return nil, nil
 	}
@@ -653,7 +524,7 @@ func (v *Visor) GetTransportLogs(days int) ([]TransportLogEntry, error) {
 	// daily-rollup date format is YYYY-MM-DD.
 	cutoff := time.Now().UTC().AddDate(0, 0, -(days - 1)).Format("2006-01-02")
 
-	var out []TransportLogEntry
+	var out []visorapi.TransportLogEntry
 	for _, rec := range records {
 		for _, d := range rec.Daily {
 			if d.Date < cutoff {
@@ -663,7 +534,7 @@ func (v *Visor) GetTransportLogs(days int) ([]TransportLogEntry, error) {
 			if perr != nil {
 				continue
 			}
-			out = append(out, TransportLogEntry{
+			out = append(out, visorapi.TransportLogEntry{
 				TpID:      rec.ID,
 				RecvBytes: d.RecvBytes,
 				SentBytes: d.SentBytes,

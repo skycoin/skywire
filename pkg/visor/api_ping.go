@@ -21,11 +21,12 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorcore"
 )
 
 // DialPing implements API.
-func (v *Visor) DialPing(conf PingConfig) error {
+func (v *Visor) DialPing(conf visorapi.PingConfig) error {
 	v.ping.pcktSize = conf.PcktSize
 	// waiting for at least one transport to initialize
 	<-v.tpM.Ready()
@@ -128,7 +129,7 @@ func (v *Visor) DialPing(conf PingConfig) error {
 // method's wire I/O will close the conn; the resulting Read/Write
 // errors are caller-visible (and surfaced via MuxRouteFailure
 // for mux-bw — see #2756) rather than indefinite-block.
-func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
+func (v *Visor) Ping(conf visorapi.PingConfig) ([]time.Duration, error) {
 	v.ping.mu.Lock()
 	pingEntry, ok := v.ping.conns[PingRouteRef{PK: conf.PK, Index: conf.RouteIndex}]
 	v.ping.mu.Unlock()
@@ -141,7 +142,7 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 
 // doPingRoundTrips performs the ping protocol: send size, read ack, send data, read echo.
 // Shared by Ping() and DmsgPing() which differ only in connection lookup.
-func doPingRoundTrips(conn net.Conn, conf PingConfig) ([]time.Duration, error) {
+func doPingRoundTrips(conn net.Conn, conf visorapi.PingConfig) ([]time.Duration, error) {
 	latencies := []time.Duration{}
 	data := make([]byte, conf.PcktSize*1024)
 
@@ -196,7 +197,7 @@ func doPingRoundTrips(conn net.Conn, conf PingConfig) ([]time.Duration, error) {
 //
 // See Ping for the mutex-scoping rationale — same pattern: hold
 // ping.mu only for the map lookup, do wire I/O without the lock.
-func (v *Visor) PingOnce(conf PingConfig) (time.Duration, error) {
+func (v *Visor) PingOnce(conf visorapi.PingConfig) (time.Duration, error) {
 	v.ping.mu.Lock()
 	pingEntry, ok := v.ping.conns[PingRouteRef{PK: conf.PK, Index: conf.RouteIndex}]
 	v.ping.mu.Unlock()
@@ -287,7 +288,7 @@ func (v *Visor) PingOnce(conf PingConfig) (time.Duration, error) {
 // to suppress the resulting MuxRouteFailure event (task #131).
 // 10s gives the pump 3+ failed iterations within its window so a
 // stuck-route error reliably reaches the consumer.
-func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
+func (v *Visor) PingOnceWithEcho(conf visorapi.PingConfig, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
 	v.ping.mu.Lock()
 	pingEntry, ok := v.ping.conns[PingRouteRef{PK: conf.PK, Index: conf.RouteIndex}]
 	v.ping.mu.Unlock()
@@ -487,9 +488,9 @@ func (v *Visor) GetLastRouteCalcTime() time.Duration {
 
 // BandwidthTest implements API.
 // Performs a bandwidth test over a skywire route by sending and receiving data for the specified duration.
-func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error) {
+func (v *Visor) BandwidthTest(conf visorapi.BandwidthTestConfig) (visorapi.BandwidthResult, error) {
 	// First establish a ping connection if not already connected
-	pingConf := PingConfig{
+	pingConf := visorapi.PingConfig{
 		PK:         conf.PK,
 		Tries:      1,
 		PcktSize:   conf.PacketSize,
@@ -505,7 +506,7 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 
 	if !exists {
 		if err := v.DialPing(pingConf); err != nil {
-			return BandwidthResult{}, fmt.Errorf("failed to dial: %w", err)
+			return visorapi.BandwidthResult{}, fmt.Errorf("failed to dial: %w", err)
 		}
 	}
 
@@ -513,7 +514,7 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 	pingEntry, ok := v.ping.conns[primary]
 	if !ok {
 		v.ping.mu.Unlock()
-		return BandwidthResult{}, fmt.Errorf("no ping connection for %s", conf.PK)
+		return visorapi.BandwidthResult{}, fmt.Errorf("no ping connection for %s", conf.PK)
 	}
 	conn := pingEntry.conn
 	v.ping.mu.Unlock()
@@ -537,7 +538,7 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 		}
 		ping, err := json.Marshal(msg)
 		if err != nil {
-			return BandwidthResult{}, err
+			return visorapi.BandwidthResult{}, err
 		}
 
 		// Request full echo for download measurement
@@ -547,12 +548,12 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 		}
 		size, err := json.Marshal(pingSizeMsg)
 		if err != nil {
-			return BandwidthResult{}, err
+			return visorapi.BandwidthResult{}, err
 		}
 
 		// Send size message
 		if _, err = conn.Write(size); err != nil {
-			return BandwidthResult{}, fmt.Errorf("write size: %w", err)
+			return visorapi.BandwidthResult{}, fmt.Errorf("write size: %w", err)
 		}
 		bytesSent += uint64(len(size))
 
@@ -562,14 +563,14 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 		n, err := conn.Read(buf)
 		if err != nil {
 			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
-			return BandwidthResult{}, fmt.Errorf("read ack: %w", err)
+			return visorapi.BandwidthResult{}, fmt.Errorf("read ack: %w", err)
 		}
 		bytesReceived += uint64(n) //nolint:gosec
 
 		// Send ping data
 		if _, err = conn.Write(ping); err != nil {
 			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
-			return BandwidthResult{}, fmt.Errorf("write ping: %w", err)
+			return visorapi.BandwidthResult{}, fmt.Errorf("write ping: %w", err)
 		}
 		bytesSent += uint64(len(ping))
 
@@ -580,7 +581,7 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 			n, err = conn.Read(buf)
 			if err != nil {
 				conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
-				return BandwidthResult{}, fmt.Errorf("read echo: %w", err)
+				return visorapi.BandwidthResult{}, fmt.Errorf("read echo: %w", err)
 			}
 			received += n
 			bytesReceived += uint64(n) //nolint:gosec
@@ -591,7 +592,7 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 	duration := time.Since(start)
 	durationSec := duration.Seconds()
 
-	return BandwidthResult{
+	return visorapi.BandwidthResult{
 		BytesSent:     bytesSent,
 		BytesReceived: bytesReceived,
 		Duration:      duration,
@@ -601,8 +602,8 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 }
 
 // TestVisor trying to test visor
-func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
-	result := []TestResult{}
+func (v *Visor) TestVisor(conf visorapi.PingConfig) ([]visorapi.TestResult, error) {
+	result := []visorapi.TestResult{}
 	if v.dmsgC == nil {
 		return result, errors.New("dmsgC is not available")
 	}
@@ -626,13 +627,13 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 		}
 		err := v.DialPing(conf)
 		if err != nil {
-			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
+			result = append(result, visorapi.TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
 			continue
 		}
 		latencies, err := v.Ping(conf)
 		if err != nil {
 			go v.StopPing(conf.PK) //nolint:errcheck,gosec
-			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
+			result = append(result, visorapi.TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
 			continue
 		}
 		var maxx, minn, mean, sumLatency time.Duration
@@ -647,15 +648,15 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 			sumLatency += latency
 		}
 		mean = sumLatency / time.Duration(len(latencies))
-		result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(maxx), Min: fmt.Sprint(minn), Mean: fmt.Sprint(mean), Status: "Success"})
+		result = append(result, visorapi.TestResult{PK: conf.PK.String(), Max: fmt.Sprint(maxx), Min: fmt.Sprint(minn), Mean: fmt.Sprint(mean), Status: "Success"})
 		v.StopPing(conf.PK) //nolint:errcheck,gosec
 	}
 	return result, nil
 }
 
 // TestProxy tests proxy servers by connecting through them and fetching a test URL
-func (v *Visor) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
-	results := make([]ProxyTestResult, 0, len(conf.Servers))
+func (v *Visor) TestProxy(conf visorapi.ProxyTestConfig) ([]visorapi.ProxyTestResult, error) {
+	results := make([]visorapi.ProxyTestResult, 0, len(conf.Servers))
 
 	// Set defaults
 	if conf.TestURL == "" {
@@ -669,7 +670,7 @@ func (v *Visor) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
 	socksAddr := skyenv.SkysocksClientAddr
 
 	for _, serverPK := range conf.Servers {
-		result := ProxyTestResult{
+		result := visorapi.ProxyTestResult{
 			PK: serverPK.String(),
 		}
 

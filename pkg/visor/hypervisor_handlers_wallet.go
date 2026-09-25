@@ -31,6 +31,7 @@ import (
 	"github.com/skycoin/skywire/pkg/btcgateway"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/wallet/coins"
 	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
 )
@@ -363,7 +364,7 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 	if vhost != "" {
 		header["Host"] = vhost
 	}
-	resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
+	resp, err := hv.visor.DmsgHTTP(visorapi.DmsgHTTPRequest{
 		URL:    fmt.Sprintf("dmsg://%s:%d%s", pk.Hex(), port, path),
 		Method: r.Method,
 		Header: header,

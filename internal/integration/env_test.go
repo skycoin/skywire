@@ -34,7 +34,7 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
-	skyvisor "github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 type TestEnv struct {
@@ -456,13 +456,13 @@ func (env *TestEnv) VisorTpType(visor string) ([]tptypes.Type, error) {
 	return types, nil
 }
 
-func (env *TestEnv) VisorTpLs(visor string) ([]*skyvisor.TransportSummary, error) {
+func (env *TestEnv) VisorTpLs(visor string) ([]*visorapi.TransportSummary, error) {
 	// Listing accepts empty results — a visor with 0 transports is valid state.
 	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp --json", visor)
 	return env.visorTpExecAllowEmpty(cmd)
 }
 
-func (env *TestEnv) VisorTpID(visor string, tpID uuid.UUID) (*skyvisor.TransportSummary, error) {
+func (env *TestEnv) VisorTpID(visor string, tpID uuid.UUID) (*visorapi.TransportSummary, error) {
 	// Use the --id / -i flag, not a positional. The old `tp id <uuid>`
 	// positional syntax silently fell through to the parent tp command
 	// and returned the entire transport list (tests passed by checking
@@ -479,7 +479,7 @@ func (env *TestEnv) VisorTpID(visor string, tpID uuid.UUID) (*skyvisor.Transport
 	return output[0], nil
 }
 
-func (env *TestEnv) VisorTpAddDefault(visor string, pk string) (*skyvisor.TransportSummary, error) {
+func (env *TestEnv) VisorTpAddDefault(visor string, pk string) (*visorapi.TransportSummary, error) {
 	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp add %v --json", visor, pk)
 	output, err := env.visorTpExec(cmd)
 	if err != nil {
@@ -488,7 +488,7 @@ func (env *TestEnv) VisorTpAddDefault(visor string, pk string) (*skyvisor.Transp
 	return output[0], nil
 }
 
-func (env *TestEnv) VisorTpAdd(visor, pk string, tpType tptypes.Type) (*skyvisor.TransportSummary, error) {
+func (env *TestEnv) VisorTpAdd(visor, pk string, tpType tptypes.Type) (*visorapi.TransportSummary, error) {
 	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp add %s --type %s --json", visor, pk, tpType)
 	output, err := env.visorTpExec(cmd)
 	if err != nil {
@@ -498,7 +498,7 @@ func (env *TestEnv) VisorTpAdd(visor, pk string, tpType tptypes.Type) (*skyvisor
 }
 
 // VisorTpAddWithRetry attempts to add a transport with retry logic for transient failures
-func (env *TestEnv) VisorTpAddWithRetry(visor, pk string, tpType tptypes.Type, maxRetries int) (*skyvisor.TransportSummary, error) {
+func (env *TestEnv) VisorTpAddWithRetry(visor, pk string, tpType tptypes.Type, maxRetries int) (*visorapi.TransportSummary, error) {
 	var lastErr error
 
 	// Use longer delays for transports that need time to stabilize
@@ -550,7 +550,7 @@ func (env *TestEnv) VisorTpRm(visor string, tpID uuid.UUID) (string, error) {
 // visorTpExec runs a tp CLI command and requires at least one transport in
 // the JSON output. Used for commands like tp add / tp id where the caller
 // expects a specific transport to be returned.
-func (env *TestEnv) visorTpExec(cmd string) ([]*skyvisor.TransportSummary, error) {
+func (env *TestEnv) visorTpExec(cmd string) ([]*visorapi.TransportSummary, error) {
 	out, err := env.visorTpExecAllowEmpty(cmd)
 	if err != nil {
 		return nil, err
@@ -564,8 +564,8 @@ func (env *TestEnv) visorTpExec(cmd string) ([]*skyvisor.TransportSummary, error
 // visorTpExecAllowEmpty runs a tp CLI command and tolerates an empty output
 // list. Used for tp list / tp discover style commands where zero results is
 // a valid state.
-func (env *TestEnv) visorTpExecAllowEmpty(cmd string) ([]*skyvisor.TransportSummary, error) {
-	var summaries []*skyvisor.TransportSummary
+func (env *TestEnv) visorTpExecAllowEmpty(cmd string) ([]*visorapi.TransportSummary, error) {
+	var summaries []*visorapi.TransportSummary
 	if err := env.ExecJSON(cmd, &summaries); err != nil {
 		return nil, err
 	}
@@ -841,7 +841,7 @@ func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
 	return env
 }
 
-func (env *TestEnv) VisorGetTransportUUID(tp Transport) ([]*skyvisor.TransportSummary, error) {
+func (env *TestEnv) VisorGetTransportUUID(tp Transport) ([]*visorapi.TransportSummary, error) {
 	if len(env.visorPKs) == 0 {
 		env.GatherVisorPKs(env.visorNames)
 	}

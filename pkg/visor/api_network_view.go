@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/visor/netview"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // NetworkViewEntry / NetworkViewResponse are the network-view table types. They
@@ -23,7 +24,6 @@ import (
 // the same view without importing pkg/visor, which doesn't compile for js/wasm)
 // and are aliased here for the rest of pkg/visor that consumes them.
 type NetworkViewEntry = netview.Entry
-type NetworkViewResponse = netview.Response
 
 // networkViewCacheTTL is the freshness window for the combined
 // fetch. SD/TPD/UT update at the 30s+ scale; 5 minutes is plenty
@@ -35,7 +35,7 @@ const networkViewCacheTTL = 5 * time.Minute
 type networkViewCache struct {
 	mu       sync.Mutex
 	cachedAt time.Time
-	response *NetworkViewResponse
+	response *visorapi.NetworkViewResponse
 }
 
 var networkViewCacheInstance = &networkViewCache{}
@@ -46,17 +46,17 @@ var networkViewCacheInstance = &networkViewCache{}
 // is reserved for future use (e.g., reporting that *all* upstream
 // services were unreachable); today the underlying compute never
 // returns an error — partial fetches yield partial tables.
-func (v *Visor) NetworkView() (*NetworkViewResponse, error) {
+func (v *Visor) NetworkView() (*visorapi.NetworkViewResponse, error) {
 	return v.networkView(false)
 }
 
 // NetworkViewRefresh forces re-aggregation regardless of cache age.
 // Used by the UI's manual-refresh button.
-func (v *Visor) NetworkViewRefresh() (*NetworkViewResponse, error) {
+func (v *Visor) NetworkViewRefresh() (*visorapi.NetworkViewResponse, error) {
 	return v.networkView(true)
 }
 
-func (v *Visor) networkView(forceRefresh bool) (*NetworkViewResponse, error) {
+func (v *Visor) networkView(forceRefresh bool) (*visorapi.NetworkViewResponse, error) {
 	networkViewCacheInstance.mu.Lock()
 	defer networkViewCacheInstance.mu.Unlock()
 
@@ -80,7 +80,7 @@ func (v *Visor) networkView(forceRefresh bool) (*NetworkViewResponse, error) {
 // failure on one of the three SD types or on UT/TPD doesn't fail
 // the whole call — the missing slice is treated as empty so the
 // table still renders with what we got.
-func (v *Visor) computeNetworkView() *NetworkViewResponse {
+func (v *Visor) computeNetworkView() *visorapi.NetworkViewResponse {
 	return netview.Compute(v.FetchServiceData)
 }
 

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func TestParseSelect(t *testing.T) {
@@ -36,7 +36,7 @@ func TestParseSelect(t *testing.T) {
 // TestWriteNDJSON_Whole: no --jq → the whole snapshot on ONE line ending in \n,
 // and it parses back as JSON (a clean NDJSON record).
 func TestWriteNDJSON_Whole(t *testing.T) {
-	snap := &visor.StateSnapshot{RouteGroups: 3}
+	snap := &visorapi.StateSnapshot{RouteGroups: 3}
 	var buf bytes.Buffer
 	if err := writeNDJSON(&buf, snap, ""); err != nil {
 		t.Fatalf("writeNDJSON: %v", err)
@@ -48,7 +48,7 @@ func TestWriteNDJSON_Whole(t *testing.T) {
 	if strings.Contains(strings.TrimSpace(out), "\n") {
 		t.Fatalf("record must be a single line, got %q", out)
 	}
-	var back visor.StateSnapshot
+	var back visorapi.StateSnapshot
 	if err := json.Unmarshal([]byte(out), &back); err != nil {
 		t.Fatalf("NDJSON line does not parse: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestWriteNDJSON_Whole(t *testing.T) {
 
 // TestWriteNDJSON_JQ: --jq projects each tick to a compact line (here a scalar).
 func TestWriteNDJSON_JQ(t *testing.T) {
-	snap := &visor.StateSnapshot{RouteGroups: 7}
+	snap := &visorapi.StateSnapshot{RouteGroups: 7}
 	var buf bytes.Buffer
 	if err := writeNDJSON(&buf, snap, ".route_groups"); err != nil {
 		t.Fatalf("writeNDJSON: %v", err)

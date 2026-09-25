@@ -12,7 +12,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cliout"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func init() {
@@ -96,10 +96,10 @@ var rewardCmd = &cobra.Command{
 	},
 }
 
-func fetchAndDisplayReward(cmd *cobra.Command, rpcClient visor.API, rewardDmsg, pk string) {
+func fetchAndDisplayReward(cmd *cobra.Command, rpcClient visorapi.API, rewardDmsg, pk string) {
 	url := fmt.Sprintf("%s/skycoin-rewards/visor/%s?days=%d", rewardDmsg, pk, rewardDays)
 
-	resp, err := rpcClient.DmsgHTTP(visor.DmsgHTTPRequest{
+	resp, err := rpcClient.DmsgHTTP(visorapi.DmsgHTTPRequest{
 		URL:    url,
 		Method: "GET",
 	})

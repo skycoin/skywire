@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorcore"
 )
@@ -52,7 +53,7 @@ import (
 //     non-empty DelegatedServers list (RSN/TPS don't serve HTTP /health
 //     over DMSG, so discovery registration is the health signal)
 //   - Transport Setup Nodes: same scheme as RSN
-func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
+func (v *Visor) ServiceHealth() ([]visorapi.ServiceHealthEntry, error) {
 	// ---------- HTTP / DMSG services (ordered) ----------
 	type svcURLs struct {
 		httpURL, dmsgURL string
@@ -86,7 +87,7 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 		// Not ready yet; services report N/A this poll.
 	}
 
-	httpResults := make([]ServiceHealthEntry, len(httpServices))
+	httpResults := make([]visorapi.ServiceHealthEntry, len(httpServices))
 	var wg sync.WaitGroup
 	for i, svc := range httpServices {
 		dmsgURL := svc.urls.dmsgURL
@@ -94,7 +95,7 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 			dmsgURL = svc.urls.httpURL
 		}
 		if !strings.HasPrefix(dmsgURL, "dmsg://") || dmsgClient == nil {
-			httpResults[i] = ServiceHealthEntry{Name: svc.name, Status: "N/A"}
+			httpResults[i] = visorapi.ServiceHealthEntry{Name: svc.name, Status: "N/A"}
 			continue
 		}
 		wg.Add(1)
@@ -105,7 +106,7 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 	}
 	wg.Wait()
 
-	results := make([]ServiceHealthEntry, 0, len(httpResults)+16)
+	results := make([]visorapi.ServiceHealthEntry, 0, len(httpResults)+16)
 	for _, e := range httpResults {
 		if e.Name != "" {
 			results = append(results, e)
@@ -134,8 +135,8 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 const healthProbeTimeout = 4 * time.Second
 
 // doHealthProbe performs a single GET {baseURL}/health and populates a ServiceHealthEntry.
-func doHealthProbe(client *http.Client, name, baseURL, transport string) ServiceHealthEntry { //nolint:unparam
-	entry := ServiceHealthEntry{Name: name, URL: baseURL, Transport: transport}
+func doHealthProbe(client *http.Client, name, baseURL, transport string) visorapi.ServiceHealthEntry { //nolint:unparam
+	entry := visorapi.ServiceHealthEntry{Name: name, URL: baseURL, Transport: transport}
 
 	reqURL := strings.TrimSuffix(baseURL, "/") + "/health"
 	ctx, cancel := context.WithTimeout(context.Background(), healthProbeTimeout)
@@ -198,7 +199,7 @@ func (v *Visor) confServiceDmsg() string {
 // measured ping RTT (0 if unmeasured). Entries are sorted by PK so the
 // UI order remains stable across polls (DMSGServers() sorts by latency
 // which flips between samples and causes visible reordering).
-func (v *Visor) dmsgServerHealth(httpClient *http.Client) []ServiceHealthEntry {
+func (v *Visor) dmsgServerHealth(httpClient *http.Client) []visorapi.ServiceHealthEntry {
 	servers, err := v.DMSGServers()
 	if err != nil || len(servers) == 0 {
 		return nil
@@ -219,11 +220,11 @@ func (v *Visor) dmsgServerHealth(httpClient *http.Client) []ServiceHealthEntry {
 		}
 	}
 
-	out := make([]ServiceHealthEntry, len(servers))
+	out := make([]visorapi.ServiceHealthEntry, len(servers))
 	var wg sync.WaitGroup
 	for i, s := range servers {
 		latStr := s.Latency.Milliseconds()
-		out[i] = ServiceHealthEntry{
+		out[i] = visorapi.ServiceHealthEntry{
 			Name:      "DMSG Server",
 			URL:       "dmsg://" + s.PK.String() + ":80",
 			Status:    "OK",
@@ -359,7 +360,7 @@ func (v *Visor) fetchServiceDataUncached(ctx context.Context, service, path stri
 // fetchServiceDataDmsg performs a GET over DMSG-HTTP using the visor's
 // authoritative dmsg client.
 func (v *Visor) fetchServiceDataDmsg(ctx context.Context, url string) ([]byte, error) {
-	resp, err := v.dmsgHTTPCtx(ctx, DmsgHTTPRequest{URL: url, Method: http.MethodGet})
+	resp, err := v.dmsgHTTPCtx(ctx, visorapi.DmsgHTTPRequest{URL: url, Method: http.MethodGet})
 	if err != nil {
 		return nil, fmt.Errorf("fetch %s over dmsg: %w", url, err)
 	}
@@ -617,7 +618,7 @@ func (v *Visor) ConfiguredHypervisors() []cipher.PubKey {
 // reach :3435). Trust model downstream is unchanged: the remote
 // dmsgpty host enforces its whitelist on the dmsg stream this visor
 // opens; the remote sees this visor's PK as the peer.
-func (v *Visor) DmsgPtyExec(args DmsgPtyExecArgs) (*pty.CommandExecResult, error) {
+func (v *Visor) DmsgPtyExec(args visorapi.DmsgPtyExecArgs) (*pty.CommandExecResult, error) {
 	if v.dmsgPty == nil {
 		return nil, fmt.Errorf("dmsgpty: not initialized on this visor")
 	}
@@ -670,53 +671,53 @@ func (v *Visor) DmsgPtyExec(args DmsgPtyExecArgs) (*pty.CommandExecResult, error
 }
 
 // Ports return list of all ports used by visor services and apps
-func (v *Visor) Ports() (map[string]PortDetail, error) {
+func (v *Visor) Ports() (map[string]visorapi.PortDetail, error) {
 	ctx := context.Background()
-	var ports = make(map[string]PortDetail)
+	var ports = make(map[string]visorapi.PortDetail)
 
 	// Every optional section really is optional here: mobile-profile configs
 	// ship without pty/skywire-tcp and with an empty cli_addr, and this
 	// endpoint must not panic on them.
 	if v.conf.Hypervisor != nil {
-		ports["hypervisor"] = PortDetail{Port: addrPort(v.conf.Hypervisor.HTTPAddr), Type: "TCP"}
+		ports["hypervisor"] = visorapi.PortDetail{Port: addrPort(v.conf.Hypervisor.HTTPAddr), Type: "TCP"}
 		if d := v.conf.Hypervisor.EffectiveDeskAddr(); d != "" {
-			ports["hypervisor-desk"] = PortDetail{Port: addrPort(d), Type: "TCP"}
+			ports["hypervisor-desk"] = visorapi.PortDetail{Port: addrPort(d), Type: "TCP"}
 		}
 	}
 
 	if v.conf.Pty != nil {
-		ports["dmsg_pty"] = PortDetail{Port: fmt.Sprint(v.conf.Pty.DmsgPort), Type: "DMSG"}
+		ports["dmsg_pty"] = visorapi.PortDetail{Port: fmt.Sprint(v.conf.Pty.DmsgPort), Type: "DMSG"}
 	}
 	if v.conf.CLIAddr != "" {
-		ports["cli_addr"] = PortDetail{Port: addrPort(v.conf.CLIAddr), Type: "TCP"}
+		ports["cli_addr"] = visorapi.PortDetail{Port: addrPort(v.conf.CLIAddr), Type: "TCP"}
 	}
 	if v.conf.Launcher != nil {
-		ports["proc_addr"] = PortDetail{Port: addrPort(v.conf.Launcher.ServerAddr), Type: "TCP"}
+		ports["proc_addr"] = visorapi.PortDetail{Port: addrPort(v.conf.Launcher.ServerAddr), Type: "TCP"}
 	}
 	if v.conf.STCP != nil {
-		ports["stcp_addr"] = PortDetail{Port: addrPort(v.conf.STCP.ListeningAddress), Type: "TCP"}
+		ports["stcp_addr"] = visorapi.PortDetail{Port: addrPort(v.conf.STCP.ListeningAddress), Type: "TCP"}
 	}
 
 	if v.arClient != nil {
 		sudphPort := v.arClient.Addresses(ctx)
 		if sudphPort != "" {
-			ports["sudph"] = PortDetail{Port: sudphPort, Type: "UDP"}
+			ports["sudph"] = visorapi.PortDetail{Port: sudphPort, Type: "UDP"}
 		}
 	}
 	if v.stun.client != nil {
 		if v.stun.client.PublicIP != nil {
-			ports["public_visor"] = PortDetail{Port: fmt.Sprint(v.stun.client.PublicIP.Port()), Type: "TCP"}
+			ports["public_visor"] = visorapi.PortDetail{Port: fmt.Sprint(v.stun.client.PublicIP.Port()), Type: "TCP"}
 		}
 	}
 	if v.dmsgC != nil {
 		dmsgSessions := v.dmsgC.AllSessions()
 		for i, session := range dmsgSessions {
-			ports[fmt.Sprintf("dmsg_session_%d", i)] = PortDetail{Port: addrPort(session.LocalTCPAddr().String()), Type: "TCP"}
+			ports[fmt.Sprintf("dmsg_session_%d", i)] = visorapi.PortDetail{Port: addrPort(session.LocalTCPAddr().String()), Type: "TCP"}
 		}
 
 		dmsgStreams := v.dmsgC.AllStreams()
 		for i, stream := range dmsgStreams {
-			ports[fmt.Sprintf("dmsg_stream_%d", i)] = PortDetail{Port: addrPort(stream.LocalAddr().String()), Type: "DMSG"}
+			ports[fmt.Sprintf("dmsg_stream_%d", i)] = visorapi.PortDetail{Port: addrPort(stream.LocalAddr().String()), Type: "DMSG"}
 		}
 	}
 	if v.procM != nil {
@@ -724,13 +725,13 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 		for _, app := range apps {
 			port, err := v.procM.GetAppPort(app.Name)
 			if err == nil {
-				ports[app.Name] = PortDetail{Port: fmt.Sprint(port), Type: "SKYNET"}
+				ports[app.Name] = visorapi.PortDetail{Port: fmt.Sprint(port), Type: "SKYNET"}
 
 				switch app.Name {
 				case "skysocks_client":
-					ports["skysocks_client_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkysocksClientAddr, ":")[1]), Type: "TCP"}
+					ports["skysocks_client_addr"] = visorapi.PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkysocksClientAddr, ":")[1]), Type: "TCP"}
 				case "skychat":
-					ports["skychat_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkychatAddr, ":")[1]), Type: "TCP"}
+					ports["skychat_addr"] = visorapi.PortDetail{Port: fmt.Sprint(strings.Split(skyenv.SkychatAddr, ":")[1]), Type: "TCP"}
 				}
 			}
 		}

@@ -18,7 +18,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skychat/address"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // registerProfileHTTPHandlers wires the /profile endpoints onto mux.
@@ -50,8 +50,8 @@ func profileHandler() http.HandlerFunc {
 		}
 		switch r.Method {
 		case http.MethodGet:
-			var p visor.Profile
-			if err := pairRPCCall("ProfileGet", func(c visor.API) error {
+			var p visorapi.Profile
+			if err := pairRPCCall("ProfileGet", func(c visorapi.API) error {
 				out, e := c.ProfileGet()
 				p = out
 				return e
@@ -62,13 +62,13 @@ func profileHandler() http.HandlerFunc {
 			writeJSON(w, p)
 
 		case http.MethodPost:
-			var body visor.ProfileSetArgs
+			var body visorapi.ProfileSetArgs
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
 				return
 			}
-			var p visor.Profile
-			if err := pairRPCCall("ProfileSet", func(c visor.API) error {
+			var p visorapi.Profile
+			if err := pairRPCCall("ProfileSet", func(c visorapi.API) error {
 				out, e := c.ProfileSet(body)
 				p = out
 				return e
@@ -122,8 +122,8 @@ func profilePeerHandler() http.HandlerFunc {
 			http.Error(w, "invalid pk: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		var p visor.Profile
-		if err := pairRPCCall("ProfileFetch", func(c visor.API) error {
+		var p visorapi.Profile
+		if err := pairRPCCall("ProfileFetch", func(c visorapi.API) error {
 			out, e := c.ProfileFetch(pk)
 			p = out
 			return e

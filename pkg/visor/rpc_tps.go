@@ -4,10 +4,11 @@ package visor
 import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // TPSStatus returns the status of the embedded TPS.
-func (r *RPC) TPSStatus(_ *struct{}, out *TPSStatus) (err error) {
+func (r *RPC) TPSStatus(_ *struct{}, out *visorapi.TPSStatus) (err error) {
 	defer rpcutil.LogCall(r.log, "TPSStatus", nil)(out, &err)
 
 	status, err := r.visor.TPSStatus()
@@ -19,7 +20,7 @@ func (r *RPC) TPSStatus(_ *struct{}, out *TPSStatus) (err error) {
 }
 
 // TPSAddTransport adds a transport on a target visor using the embedded TPS.
-func (r *RPC) TPSAddTransport(in *TPSAddTransportIn, out *TPSTransportResponse) (err error) {
+func (r *RPC) TPSAddTransport(in *visorapi.TPSAddTransportIn, out *visorapi.TPSTransportResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "TPSAddTransport", in)(out, &err)
 
 	resp, err := r.visor.TPSAddTransport(in.TargetPK, in.RemotePK, in.TpType)
@@ -31,13 +32,13 @@ func (r *RPC) TPSAddTransport(in *TPSAddTransportIn, out *TPSTransportResponse) 
 }
 
 // TPSRemoveTransport removes a transport on a target visor using the embedded TPS.
-func (r *RPC) TPSRemoveTransport(in *TPSRemoveTransportIn, _ *struct{}) (err error) {
+func (r *RPC) TPSRemoveTransport(in *visorapi.TPSRemoveTransportIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "TPSRemoveTransport", in)(nil, &err)
 	return r.visor.TPSRemoveTransport(in.TargetPK, in.TpID)
 }
 
 // TPSGetTransports gets transports from a target visor using the embedded TPS.
-func (r *RPC) TPSGetTransports(targetPK *cipher.PubKey, out *[]TPSTransportResponse) (err error) {
+func (r *RPC) TPSGetTransports(targetPK *cipher.PubKey, out *[]visorapi.TPSTransportResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "TPSGetTransports", targetPK)(out, &err)
 
 	resp, err := r.visor.TPSGetTransports(*targetPK)
@@ -55,7 +56,7 @@ func (r *RPC) TPSExternalHealthCheck(tpsPK *cipher.PubKey, _ *struct{}) (err err
 }
 
 // TPSExternalAddTransport requests transport setup via an external TPS.
-func (r *RPC) TPSExternalAddTransport(in *TPSExternalAddTransportIn, out *TPSTransportResponse) (err error) {
+func (r *RPC) TPSExternalAddTransport(in *visorapi.TPSExternalAddTransportIn, out *visorapi.TPSTransportResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "TPSExternalAddTransport", in)(out, &err)
 
 	resp, err := r.visor.TPSExternalAddTransport(in.TPSPK, in.TargetPK, in.RemotePK, in.TpType)
@@ -67,7 +68,7 @@ func (r *RPC) TPSExternalAddTransport(in *TPSExternalAddTransportIn, out *TPSTra
 }
 
 // TPSExternalGetTransports gets transports from a target visor via an external TPS.
-func (r *RPC) TPSExternalGetTransports(in *TPSExternalGetTransportsIn, out *[]TPSTransportResponse) (err error) {
+func (r *RPC) TPSExternalGetTransports(in *visorapi.TPSExternalGetTransportsIn, out *[]visorapi.TPSTransportResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "TPSExternalGetTransports", in)(out, &err)
 
 	resp, err := r.visor.TPSExternalGetTransports(in.TPSPK, in.TargetPK)

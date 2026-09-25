@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgscp"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // visorSCPDefaultTimeout bounds the whole transfer (dial + scp
@@ -46,7 +47,7 @@ const visorSCPDefaultTimeout = 5 * time.Minute
 //     registered when initRouter raced this call.
 //   - Protocol: the dmsgscp.Client surface returns the same
 //     fmt.Errorf-wrapped sentinels the standalone client does.
-func (v *Visor) VisorSCP(req VisorSCPRequest) error {
+func (v *Visor) VisorSCP(req visorapi.VisorSCPRequest) error {
 	if req.RemotePK.Null() {
 		return errors.New("VisorSCP: remote_pk required")
 	}
@@ -60,14 +61,14 @@ func (v *Visor) VisorSCP(req VisorSCPRequest) error {
 		return errors.New("VisorSCP: remote_path required")
 	}
 	switch req.Direction {
-	case VisorSCPUpload, VisorSCPDownload:
+	case visorapi.VisorSCPUpload, visorapi.VisorSCPDownload:
 	default:
 		return fmt.Errorf("VisorSCP: bad direction %q (want %q or %q)",
-			req.Direction, VisorSCPUpload, VisorSCPDownload)
+			req.Direction, visorapi.VisorSCPUpload, visorapi.VisorSCPDownload)
 	}
 	transport := req.Transport
 	if transport == "" {
-		transport = VisorSCPTransportDmsg
+		transport = visorapi.VisorSCPTransportDmsg
 	}
 	timeout := req.Timeout
 	if timeout <= 0 {
@@ -81,13 +82,13 @@ func (v *Visor) VisorSCP(req VisorSCPRequest) error {
 		err  error
 	)
 	switch transport {
-	case VisorSCPTransportDmsg:
+	case visorapi.VisorSCPTransportDmsg:
 		conn, err = v.dialSCPDmsg(ctx, req.RemotePK, req.Port)
-	case VisorSCPTransportSkynet:
+	case visorapi.VisorSCPTransportSkynet:
 		conn, err = v.dialSCPSkynet(ctx, req.RemotePK, req.Port)
 	default:
 		return fmt.Errorf("VisorSCP: bad transport %q (want %q or %q)",
-			transport, VisorSCPTransportDmsg, VisorSCPTransportSkynet)
+			transport, visorapi.VisorSCPTransportDmsg, visorapi.VisorSCPTransportSkynet)
 	}
 	if err != nil {
 		return fmt.Errorf("VisorSCP: dial %s %s:%d: %w",
@@ -98,9 +99,9 @@ func (v *Visor) VisorSCP(req VisorSCPRequest) error {
 	defer client.Close() //nolint:errcheck,gosec
 
 	switch req.Direction {
-	case VisorSCPUpload:
+	case visorapi.VisorSCPUpload:
 		return client.Upload(req.LocalPath, req.RemotePath)
-	case VisorSCPDownload:
+	case visorapi.VisorSCPDownload:
 		return client.Download(req.RemotePath, req.LocalPath)
 	}
 	// Unreachable — direction validated above.

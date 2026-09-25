@@ -25,7 +25,7 @@ import (
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // isSkywireURL reports whether the URL uses one of the visor-routed
@@ -109,7 +109,7 @@ func requestSkywire(cmd *cobra.Command, target skywireTarget, method string, hdr
 
 	switch target.scheme {
 	case "skynet":
-		req := visor.SkynetHTTPRequest{
+		req := visorapi.SkynetHTTPRequest{
 			PK:     target.pk,
 			Port:   target.port,
 			Path:   target.path,
@@ -131,7 +131,7 @@ func requestSkywire(cmd *cobra.Command, target skywireTarget, method string, hdr
 		// DmsgHTTP wants the full URL string (it parses the host:port
 		// internally), unlike SkynetHTTP which takes pk+port directly.
 		urlStr := fmt.Sprintf("dmsg://%s:%d%s", target.pk.String(), target.port, target.path)
-		req := visor.DmsgHTTPRequest{
+		req := visorapi.DmsgHTTPRequest{
 			URL:    urlStr,
 			Method: method,
 			Header: hdr,

@@ -21,7 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skychat/dm"
 	"github.com/skycoin/skywire/pkg/skychat/history"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // storedIDs lists the ids currently persisted for peer.
@@ -198,7 +198,7 @@ func TestPairPoller_RetractionTombstonesInsteadOfRendering(t *testing.T) {
 	}
 
 	fake := newPollAPI()
-	fake.pair = []visor.PairMessage{{
+	fake.pair = []visorapi.PairMessage{{
 		PeerPK: peer,
 		TS:     time.Now().UTC(),
 		Type:   pairing.MessageTypeDelete,
@@ -236,7 +236,7 @@ func TestPairPoller_BridgesMessageID(t *testing.T) {
 
 	peer, _ := cipher.GenerateKeyPair()
 	fake := newPollAPI()
-	fake.pair = []visor.PairMessage{{
+	fake.pair = []visorapi.PairMessage{{
 		PeerPK: peer, Text: "hello", TS: time.Now().UTC(), ID: "1700000000000000002",
 	}}
 	withFakePairRPC(t, fake)
@@ -268,7 +268,7 @@ func TestPairPoller_SkipsUnknownRecordType(t *testing.T) {
 
 	peer, _ := cipher.GenerateKeyPair()
 	fake := newPollAPI()
-	fake.pair = []visor.PairMessage{
+	fake.pair = []visorapi.PairMessage{
 		{PeerPK: peer, TS: time.Now().UTC(), Type: "some-future-thing", ID: "x"},
 		{PeerPK: peer, Text: "a real message", TS: time.Now().UTC(), ID: "1700000000000000003-1"},
 	}

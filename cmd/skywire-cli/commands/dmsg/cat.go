@@ -37,7 +37,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -138,14 +138,14 @@ dmsg path; the VisorCat RPC uses the visor's own PK.`,
 
 		// Skynet path requires the visor — CLI has no appnet runtime.
 		if catTransport == catTransportSkynet {
-			return runVisorCatDial(visor.VisorCatTransportSkynet, peerPK, port, cmd)
+			return runVisorCatDial(visorapi.VisorCatTransportSkynet, peerPK, port, cmd)
 		}
 
 		// Auto path: try the visor's RPC first. The visor's own PK is
 		// stable + already on the peer's whitelist, so we save the
 		// operator from threading --sk.
 		if catTransport == catTransportAuto {
-			err := runVisorCatDial(visor.VisorCatTransportDmsg, peerPK, port, cmd)
+			err := runVisorCatDial(visorapi.VisorCatTransportDmsg, peerPK, port, cmd)
 			if err == nil {
 				return nil
 			}
@@ -238,8 +238,8 @@ func runVisorCatDial(transport string, peerPK cipher.PubKey, port uint16, cmd *c
 	if err != nil {
 		return fmt.Errorf("VisorCat RPC client: %w", err)
 	}
-	req := visor.VisorCatRequest{
-		Mode:      visor.VisorCatModeDial,
+	req := visorapi.VisorCatRequest{
+		Mode:      visorapi.VisorCatModeDial,
 		RemotePK:  peerPK,
 		Port:      port,
 		Transport: transport,
@@ -276,8 +276,8 @@ func runVisorCatListen(port uint16, cmd *cobra.Command) error {
 	if err != nil {
 		return fmt.Errorf("VisorCat RPC client: %w", err)
 	}
-	req := visor.VisorCatRequest{
-		Mode:    visor.VisorCatModeListen,
+	req := visorapi.VisorCatRequest{
+		Mode:    visorapi.VisorCatModeListen,
 		Port:    port,
 		Timeout: catTimeout,
 	}

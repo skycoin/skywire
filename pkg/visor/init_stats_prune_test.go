@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/telemetrywire"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func currentPath(id uuid.UUID) string { return "transports/" + id.String() + "/current" }
@@ -77,14 +78,14 @@ func TestPruneStaleTelemetryLeavesAfterHydrate(t *testing.T) {
 	// Sanity: the shard leaves decode; the live shard's row is live, the
 	// dead shard's row is dead. (Legacy current leaves are not shard leaves,
 	// so currentLeafStats — now shard-based — doesn't count them.)
-	require.Equal(t, CurrentLeafStats{Total: 2, Live: 1, Dead: 1},
+	require.Equal(t, visorapi.CurrentLeafStats{Total: 2, Live: 1, Dead: 1},
 		currentLeafStats(pub2, liveIDs), "one live + one dead shard row after hydrate")
 
 	// Prune: both legacy current leaves + the dead-only shard = 3 deletes.
 	require.Equal(t, 3, pruneStaleTelemetryLeaves(pub2, sink, liveIDs))
 
 	// Only the live shard leaf remains.
-	require.Equal(t, CurrentLeafStats{Total: 1, Live: 1, Dead: 0},
+	require.Equal(t, visorapi.CurrentLeafStats{Total: 1, Live: 1, Dead: 0},
 		currentLeafStats(pub2, liveIDs), "only the live shard remains after prune")
 	_, ok := pub2.Get(telemetrywire.LeafPath(telemetrywire.ShardOf(liveID)))
 	require.True(t, ok, "live shard leaf should remain")

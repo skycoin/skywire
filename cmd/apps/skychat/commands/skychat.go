@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 
 	"github.com/0magnet/calvin"
 	ipc "github.com/0magnet/golang-ipc"
@@ -42,7 +43,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skychat/history"
 	"github.com/skycoin/skywire/pkg/skychat/message"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/visor"
 )
 
 var r = netutil.NewRetrier(nil, 50*time.Millisecond, netutil.DefaultMaxBackoff, 5, 2)
@@ -1763,8 +1763,8 @@ func collectGroupHealth() ([]groupHealth, string) {
 	if !pairRPCAlive() {
 		return []groupHealth{}, "pair-rpc-disabled"
 	}
-	var infos []visor.GroupInfo
-	err := pairRPCCall("GroupList", func(c visor.API) error {
+	var infos []visorapi.GroupInfo
+	err := pairRPCCall("GroupList", func(c visorapi.API) error {
 		out, e := c.GroupList()
 		infos = out
 		return e
