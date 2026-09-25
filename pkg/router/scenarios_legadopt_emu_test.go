@@ -259,6 +259,28 @@ func TestAdoptLegReserveAsTunnel(t *testing.T) {
 	require.Equal(t, 1, legCount(rig.activeA))
 	require.False(t, rig.activeA.isClosed())
 	echo(t, rig.activeA, rig.activeB, []byte("the old tunnel still carries"))
+
+	// Nothing of the adoption outlives the tunnel: closing it leaves each end
+	// holding exactly the old tunnel's group and its one leg's two rules.
+	require.NoError(t, conn.Close())
+	require.Eventually(t, func() bool {
+		return rig.a.rt.Count() == 2 && rig.b.rt.Count() == 2 &&
+			rig.a.liveGroups() == 1 && rig.b.liveGroups() == 1
+	}, 15*time.Second, 50*time.Millisecond, "the adopted tunnel and its reserve leave no rules or groups behind")
+}
+
+// liveGroups counts the route groups the router still holds, open or
+// initializing.
+func (r *router) liveGroups() int {
+	r.mx.Lock()
+	defer r.mx.Unlock()
+	n := len(r.rgsRaw)
+	for _, nrg := range r.rgsNs {
+		if nrg != nil && !nrg.isClosed() {
+			n++
+		}
+	}
+	return n
 }
 
 // TestAdoptLegReserveNoAckLeavesItIntact is the fallback: an exit that never
@@ -360,4 +382,18 @@ func TestAdoptedChainNeverBlocksOrdinaryAccepts(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, descB, nrg.rg.desc, "the first accept is the ordinary route, not the adoption")
 	require.NoError(t, <-dialed, "the ordinary route's initiator completes its handshake")
+
+	// The adoption that never handshook is dropped whole: its rules deleted,
+	// no group left initializing, nothing parked for AcceptRoutes.
+	require.Eventually(t, func() bool {
+		_, err := rig.b.rt.Rule(rules.Reverse.KeyRouteID())
+		return err != nil && rig.b.initializingCount() == 0 && len(rig.b.adopted) == 0
+	}, 3*handshakeAwaitTimeout, 100*time.Millisecond, "a failed adoption leaves nothing behind at the exit")
+}
+
+// initializingCount is how many groups are still mid-handshake.
+func (r *router) initializingCount() int {
+	r.mx.Lock()
+	defer r.mx.Unlock()
+	return len(r.rgsRaw)
 }
