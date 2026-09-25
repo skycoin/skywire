@@ -32,10 +32,14 @@ var (
 	sendFrom  string
 	sendCc    []string
 	sendReply string
+	sendFiles []string
+	sendB64   []string
+	attSent   bool
+	attOut    string
 )
 
 func init() {
-	RootCmd.AddCommand(inboxCmd, sentCmd, readCmd, sendCmd, rmCmd, whitelistCmd)
+	RootCmd.AddCommand(inboxCmd, sentCmd, readCmd, sendCmd, rmCmd, whitelistCmd, attachmentCmd)
 	readCmd.Flags().BoolVar(&readSent, "sent", false, "read from Sent instead of the inbox")
 	readCmd.Flags().BoolVar(&readRaw, "raw", false, "print the message exactly as stored")
 	rmCmd.Flags().BoolVar(&rmSent, "sent", false, "remove from Sent instead of the inbox")
@@ -44,6 +48,10 @@ func init() {
 	sendCmd.Flags().StringVar(&sendFrom, "from", "", "local part of your address (default \"mail\")")
 	sendCmd.Flags().StringSliceVar(&sendCc, "cc", nil, "carbon-copy recipients")
 	sendCmd.Flags().StringVar(&sendReply, "in-reply-to", "", "Message-ID this replies to")
+	sendCmd.Flags().StringArrayVar(&sendFiles, "attach", nil, "attach a file (repeatable)")
+	sendCmd.Flags().StringArrayVar(&sendB64, "attach-base64", nil, "attach name=BASE64DATA (repeatable; what the desk mail app uses)")
+	attachmentCmd.Flags().BoolVar(&attSent, "sent", false, "from Sent instead of the inbox")
+	attachmentCmd.Flags().StringVarP(&attOut, "output", "o", "", "file to write (default: the attachment's own name; - for stdout)")
 }
 
 func mailClient(cmd *cobra.Command) visorapi.API {
@@ -160,8 +168,11 @@ func renderMessage(m *skymail.Rendered) string {
 		fmt.Fprintf(&b, "Cc:      %s\n", m.Cc)
 	}
 	fmt.Fprintf(&b, "Date:    %s\nSubject: %s\n", m.Date, m.Subject)
-	for _, a := range m.Attachments {
-		fmt.Fprintf(&b, "Attachment: %s (%s, %d bytes)\n", a.Name, a.ContentType, a.Size)
+	for i, a := range m.Attachments {
+		fmt.Fprintf(&b, "Attachment %d: %s (%s, %d bytes)\n", i, a.Name, a.ContentType, a.Size)
+	}
+	if len(m.Attachments) > 0 {
+		b.WriteString("         (save one: skywire cli mail attachment <id> <n>)\n")
 	}
 	if m.FromHTML {
 		b.WriteString("(HTML-only message, shown as text)\n")
@@ -199,8 +210,13 @@ Examples:
 			}
 			body = string(raw)
 		}
+		att, err := readAttachments(sendFiles, sendB64)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
 		res, err := mailClient(cmd).MailSend(skymail.Outgoing{
 			From: sendFrom, To: args, Cc: sendCc, Subject: sendSubj, Body: body, InReplyTo: sendReply,
+			Attachments: att,
 		})
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
@@ -231,10 +247,13 @@ func renderSend(res *skymail.SendResult) string {
 	var b strings.Builder
 	for _, r := range res.Recipients {
 		if r.Err == "" {
-			fmt.Fprintf(&b, "delivered  %s\n", r.Rcpt)
+			fmt.Fprintf(&b, "delivered  %s (via %s)\n", r.Rcpt, r.Via)
 		} else {
 			fmt.Fprintf(&b, "FAILED     %s: %s\n", r.Rcpt, r.Err)
 		}
+	}
+	if res.ID == "" && delivered(res) > 0 {
+		b.WriteString("(no copy kept in Sent: the mailbox is full)\n")
 	}
 	return b.String()
 }
@@ -362,6 +381,7 @@ func renderMailbox(st *visorapi.MailStatus) string {
 	if n := len(st.Whitelist); n > 0 {
 		wl = fmt.Sprintf("%d whitelisted PK(s)", n)
 	}
-	return fmt.Sprintf("mailbox: %d message(s), %d unread; accepts mail from %s\n  %s\n  %s\n  (any local part works; maildir %s)\n",
-		st.Total, st.Unread, wl, st.Address, st.AddressDmsg, st.Dir)
+	return fmt.Sprintf("mailbox: %d message(s), %d unread; accepts mail from %s\n  %s\n  %s\n  (any local part works; maildir %s)\n  %s of %s used; mail over %s is refused, mail older than %s is deleted\n",
+		st.Total, st.Unread, wl, st.Address, st.AddressDmsg, st.Dir,
+		formatSize(st.Usage), formatSize(st.Limits.MaxTotalSize), formatSize(st.Limits.MaxMessageSize), formatAge(st.Limits.MaxAge))
 }
