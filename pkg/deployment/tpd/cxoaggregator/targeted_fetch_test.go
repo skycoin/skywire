@@ -1,6 +1,8 @@
 package cxoaggregator
 
 import (
+	"github.com/google/uuid"
+
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -394,5 +396,37 @@ func TestDedicatedTPListFeedFillsCompletely(t *testing.T) {
 	}
 	if len(entries) != nTransports {
 		t.Fatalf("dedicated feed reconciled %d transports, want all %d", len(entries), nTransports)
+	}
+}
+
+// TestFailedFetchReappliesCachedListWithoutDeleting: after a failed fetch the
+// aggregator keeps the reporter's last good list alive — as a refresh, never
+// a reconcile, because that list's absences are transports created since.
+func TestFailedFetchReappliesCachedListWithoutDeleting(t *testing.T) {
+	sink := &recordingSink{}
+	a := &Aggregator{
+		sink:     sink,
+		log:      logging.MustGetLogger("test"),
+		lastList: make(map[skycipher.PubKey]cachedList),
+		fetching: make(map[skycipher.PubKey]struct{}),
+	}
+	var pub skycipher.PubKey
+	pub[0] = 2
+	reporter := cipher.PubKey(pub)
+	a.lastList[pub] = cachedList{entries: []*transport.Entry{{ID: uuid.New()}}, version: "v-old"}
+
+	a.reapplyCached(pub, reporter)
+	if len(sink.reconciles) != 0 {
+		t.Fatalf("cached re-apply went through the deleting reconcile %d time(s)", len(sink.reconciles))
+	}
+	if len(sink.refreshes) != 1 || sink.refreshes[0].version != "v-old" {
+		t.Fatalf("expected one refresh of the cached list, got %+v", sink.refreshes)
+	}
+
+	var other skycipher.PubKey
+	other[0] = 3
+	a.reapplyCached(other, cipher.PubKey(other))
+	if len(sink.refreshes) != 1 {
+		t.Fatal("no cached list: nothing to re-apply")
 	}
 }

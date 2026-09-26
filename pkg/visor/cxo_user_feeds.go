@@ -240,6 +240,7 @@ func (v *Visor) tpdLeafPublisherState() *visorapi.TPDLeafPublisherState {
 		st.Wired = v.tpM.HasTPDLeafPublisher()
 	}
 	if st.Wired {
+		st.Announce = v.tpdAnnounce.state()
 		return st
 	}
 	v.cxoUserFeedsMu.Lock()

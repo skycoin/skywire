@@ -403,6 +403,7 @@ type Visor struct {
 	// Accepts inbound SMTP from a co-located Postfix and dials peers via
 	// the visor's dmsg client. Standalone hosts use cmd/smb.
 	embeddedSkymailBridge *EmbeddedSkymailBridge
+	tpdAnnounce           tpdAnnounceStats // announces of the transport-list feed, for visor state
 	mail                  skymailHost
 	embeddedWisp          *EmbeddedWisp
 	// Shared VStreamMux for skynet forwarding (route ID 0).

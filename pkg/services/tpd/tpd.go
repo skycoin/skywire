@@ -368,6 +368,11 @@ func (s *aggregatorSink) ReconcileTransportsFromCXO(ctx context.Context, entries
 	return s.api.ReconcileTransportsFromCXO(ctx, entries, reporter, version)
 }
 
+// RefreshTransportsFromCXO implements cxoaggregator.Sink.
+func (s *aggregatorSink) RefreshTransportsFromCXO(ctx context.Context, entries []*transport.Entry, reporter cipher.PubKey, version string) error {
+	return s.api.RefreshTransportsFromCXO(ctx, entries, reporter, version)
+}
+
 func (s *aggregatorSink) DeregisterTransportFromCXO(ctx context.Context, id uuid.UUID, reporter cipher.PubKey) error {
 	return s.api.DeregisterTransportFromCXO(ctx, id, reporter)
 }
