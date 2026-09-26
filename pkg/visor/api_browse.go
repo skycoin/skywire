@@ -7,6 +7,7 @@ package visor
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +20,8 @@ import (
 
 	"github.com/0magnet/yamux"
 	"golang.org/x/net/proxy"
+
+	"github.com/0magnet/bottle/vnet"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsgweb"
@@ -294,6 +297,7 @@ func (v *Visor) BrowseClearnet(req BrowseClearnetRequest) (*visorapi.SkynetHTTPR
 		Transport: &http.Transport{
 			DialContext:         func(_ context.Context, network, addr string) (net.Conn, error) { return sd.Dial(network, addr) },
 			TLSHandshakeTimeout: 20 * time.Second,
+			TLSClientConfig:     &tls.Config{RootCAs: browseRootCAs(), MinVersion: tls.VersionTLS12},
 		},
 		Timeout: browseFetchTimeout,
 	}
@@ -459,24 +463,38 @@ func parseBrowseProxy(s string) (*url.URL, error) {
 
 // proxyClearnetFetch fetches req.URL through the proxy req.Proxy names, dialed
 // by this visor.
+// browseProxyDialer reaches the chosen proxy through vnet, so in a browser tab
+// 127.0.0.1:<port> is the tab's own skysocks-client; natively it is
+// net.DialTimeout.
+type browseProxyDialer struct{}
+
+func (browseProxyDialer) Dial(network, addr string) (net.Conn, error) {
+	return vnet.DialTimeout(network, addr, browseProxyDialTimeout)
+}
+
 func (v *Visor) proxyClearnetFetch(req BrowseClearnetRequest) (*visorapi.SkynetHTTPResponse, error) {
 	pu, err := parseBrowseProxy(req.Proxy)
 	if err != nil {
 		return nil, err
 	}
-	tr := &http.Transport{TLSHandshakeTimeout: 20 * time.Second}
+	tr := &http.Transport{
+		TLSHandshakeTimeout: 20 * time.Second,
+		TLSClientConfig:     &tls.Config{RootCAs: browseRootCAs(), MinVersion: tls.VersionTLS12},
+	}
 	switch pu.Scheme {
 	case "socks5", "socks5h":
 		// A proxy that does not answer (an unroutable address) must fail in
 		// seconds, not after the OS connect timeout: the browser is waiting.
-		sd, err := proxy.SOCKS5("tcp", pu.Host, nil, &net.Dialer{Timeout: browseProxyDialTimeout})
+		sd, err := proxy.SOCKS5("tcp", pu.Host, nil, browseProxyDialer{})
 		if err != nil {
 			return nil, err
 		}
 		tr.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) { return sd.Dial(network, addr) }
 	default:
 		tr.Proxy = http.ProxyURL(pu)
-		tr.DialContext = (&net.Dialer{Timeout: browseProxyDialTimeout}).DialContext
+		tr.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) {
+			return vnet.DialTimeout(network, addr, browseProxyDialTimeout)
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), browseFetchTimeout)
 	defer cancel()

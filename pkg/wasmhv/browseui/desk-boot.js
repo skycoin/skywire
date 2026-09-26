@@ -569,6 +569,23 @@
 				// so it is the browser's egress when no proxy has been chosen, and it
 				// answers status.skysocks in-process.
 				var SKYSOCKS_PORT = 1080;
+				// The tab's hypervisor; its /api/browse/clearnet makes a whole request,
+				// TLS included, through the tab's proxy. The proxy named is the tab's own
+				// skysocks-client, whose session to an exit is already up.
+				var HV_PORT = 8001;
+				function tabBrowseClearnet(url) {
+					var body = new TextEncoder().encode(JSON.stringify({ method: 'GET', url: url, proxy: 'vnet:' + SKYSOCKS_PORT }));
+					return Promise.resolve(globalThis.vnet.httpFetch(HV_PORT, 'POST', '/api/browse/clearnet', body, { 'Content-Type': 'application/json' })).then(function (r) {
+						var j = {};
+						try { j = JSON.parse(new TextDecoder().decode((r && r.body) || new Uint8Array(0))); } catch (e) { /* not JSON */ }
+						if (!r || r.status >= 300 || j.error) return proxyError('skywire browse: ' + String(j.error || (r && r.status)).replace(/</g, '&lt;'));
+						var s = atob(j.body || ''), b = new Uint8Array(s.length);
+						for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+						var h = new Headers();
+						if (j.header) { for (var k in j.header) { try { h.set(k, j.header[k]); } catch (e) { /* forbidden name */ } } }
+						return new Response(b, { status: j.status_code || 200, headers: h });
+					});
+				}
 				function viaResolver() {
 					return !!(globalThis.vnet && globalThis.vnet.listening(RESOLVER_PORT) && globalThis.vnet.socksHttpFetch);
 				}
@@ -666,10 +683,15 @@
 						if (sv.fetchClearnet) {
 							return Promise.resolve(sv.fetchClearnet('', 'GET', url, null)).then(respond);
 						}
-						// No proxy chosen: the tab's own skysocks-client. A page speaks SOCKS5
-						// to it for http only; it cannot do TLS through it.
+						// No proxy chosen. https: the visor makes the request (TLS verified
+						// against its embedded roots) through its own proxy, via the browse API
+						// its hypervisor serves on vnet; the page itself cannot do TLS.
+						if (u.protocol === 'https:') {
+							if (!(globalThis.vnet && globalThis.vnet.listening(HV_PORT))) return Promise.resolve(proxyError('https needs this tab\'s hypervisor (vnet:' + HV_PORT + '), which is not running: skywire cli visor hv enable'));
+							return tabBrowseClearnet(url);
+						}
+						// http: the tab's own skysocks-client, spoken to directly as SOCKS5.
 						if (globalThis.vnet && globalThis.vnet.listening(SKYSOCKS_PORT)) {
-							if (u.protocol === 'https:') return Promise.resolve(proxyError('https:// pages cannot go through this tab\'s own proxy yet (the page cannot do TLS over it); try the http:// address'));
 							return Promise.resolve(globalThis.vnet.socksHttpFetch(SKYSOCKS_PORT, u.hostname + ':' + (u.port || 80), 'GET', path, null, {})).then(respond);
 						}
 						return Promise.resolve(proxyError('no proxy is running in this tab (skysocks-client on vnet:' + SKYSOCKS_PORT + '); start it with: skywire cli proxy start'));
