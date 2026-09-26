@@ -157,6 +157,12 @@ type Core struct {
 	subMu       sync.Mutex
 	subscribing map[*node.Conn]struct{}
 	subSem      chan struct{}
+
+	// filled holds the newest filled Root per feed awaiting OnRootFilled, and
+	// draining marks feeds whose drainer is running. Guarded by fillMu.
+	fillMu   sync.Mutex
+	filled   map[skycipher.PubKey]*registry.Root
+	draining map[skycipher.PubKey]struct{}
 }
 
 // maxConcurrentSubscribes bounds the Subscribe requests in flight. Each can
@@ -263,6 +269,8 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, dmsgPort uint16, opts Options) (*
 		orphanStrikes: make(map[skycipher.PubKey]int),
 		subscribing:   make(map[*node.Conn]struct{}),
 		subSem:        make(chan struct{}, maxConcurrentSubscribes),
+		filled:        make(map[skycipher.PubKey]*registry.Root),
+		draining:      make(map[skycipher.PubKey]struct{}),
 	}
 
 	// Subscribe the moment a visor dials in, on that conn alone, rather than
@@ -278,7 +286,7 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, dmsgPort uint16, opts Options) (*
 		cxoNode.Config().OnRootReceived = h
 	}
 	if h := opts.OnRootFilled; h != nil {
-		cxoNode.Config().OnRootFilled = func(_ *node.Node, r *registry.Root) { h(r) }
+		cxoNode.Config().OnRootFilled = func(_ *node.Node, r *registry.Root) { c.queueFilled(r, h) }
 	}
 	if h := opts.OnFillingBreaks; h != nil {
 		cxoNode.Config().OnFillingBreaks = func(_ *node.Node, r *registry.Root, reason error) { h(r, reason) }
@@ -499,4 +507,39 @@ func (c *Core) reclaimOrphanFeeds(cont *skyobject.Container) {
 		c.log.WithField("visor", cipher.PubKey(feed)).
 			Debug(c.tag + ": reclaimed orphan feed (no connected conn)")
 	}
+}
+
+// queueFilled hands a filled Root to its feed's drainer and returns at once.
+// The node calls OnRootFilled on the feed's fill loop, and while it runs the
+// node-wide feeds loop blocks handing that feed its next Root, which stalls
+// every OnConnect and Subscribe on the node. Services apply Roots with store
+// writes that take seconds under load; run inline, they held new conns short
+// of "established" until the idle watchdog killed them. Only the newest
+// pending Root per feed is kept, since a later Root supersedes an earlier one.
+func (c *Core) queueFilled(r *registry.Root, apply func(*registry.Root)) {
+	if r == nil {
+		return
+	}
+	c.fillMu.Lock()
+	c.filled[r.Pub] = r
+	if _, running := c.draining[r.Pub]; running {
+		c.fillMu.Unlock()
+		return
+	}
+	c.draining[r.Pub] = struct{}{}
+	c.fillMu.Unlock()
+	go func() {
+		for {
+			c.fillMu.Lock()
+			next, ok := c.filled[r.Pub]
+			if !ok {
+				delete(c.draining, r.Pub)
+				c.fillMu.Unlock()
+				return
+			}
+			delete(c.filled, r.Pub)
+			c.fillMu.Unlock()
+			apply(next)
+		}
+	}()
 }
