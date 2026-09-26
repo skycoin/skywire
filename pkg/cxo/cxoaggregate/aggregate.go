@@ -151,7 +151,17 @@ type Core struct {
 	// orphanStrikes counts consecutive cleanup ticks a feed has had no
 	// connected conn. Touched only from cleanup() (single goroutine).
 	orphanStrikes map[skycipher.PubKey]int
+
+	// subscribing holds the conns with a Subscribe in flight, so a pass never
+	// starts a second one on the same conn; subSem caps how many run at once.
+	subMu       sync.Mutex
+	subscribing map[*node.Conn]struct{}
+	subSem      chan struct{}
 }
+
+// maxConcurrentSubscribes bounds the Subscribe requests in flight. Each can
+// wait up to the node's ResponseTimeout (59 s) on a peer that never answers.
+const maxConcurrentSubscribes = 64
 
 // New constructs the shared aggregator engine.
 //
@@ -251,14 +261,17 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, dmsgPort uint16, opts Options) (*
 		done:          make(chan struct{}),
 		nudge:         make(chan struct{}, 1),
 		orphanStrikes: make(map[skycipher.PubKey]int),
+		subscribing:   make(map[*node.Conn]struct{}),
+		subSem:        make(chan struct{}, maxConcurrentSubscribes),
 	}
 
-	// Subscribe the moment a visor dials in, rather than waiting up to a
-	// full ReconcileInterval. The conn's handshake completes (peerID set)
-	// before OnConnect fires, so the nudged reconcile can subscribe at
-	// once; it stays idempotent via alreadySubscribed.
-	cxoNode.Config().OnConnect = func(_ *node.Conn) error {
-		c.Nudge()
+	// Subscribe the moment a visor dials in, on that conn alone, rather than
+	// queueing a pass over every conn: an announce conn carries nothing until
+	// it is subscribed and the node idles it out after 90 s, so a subscribe
+	// that waits behind the rest of the fleet lands on a dead conn. The
+	// handshake completes (peerID set) before OnConnect fires.
+	cxoNode.Config().OnConnect = func(conn *node.Conn) error {
+		c.subscribe(conn)
 		return nil
 	}
 	if h := opts.OnRootReceived; h != nil {
@@ -348,20 +361,57 @@ func (c *Core) loop(ctx context.Context) {
 // reconcile subscribes to every connected peer's own feed (feed PK ==
 // peer PK) that isn't already subscribed. Conns that dropped since the
 // last reconcile simply aren't in the list anymore.
+//
+// Each Subscribe runs on its own goroutine. They used to run one after
+// another, and one peer that never answers holds a Subscribe for up to the
+// 59 s ResponseTimeout: on a fleet-sized conn set a pass outlasted the 90 s a
+// silent announce conn survives, so most subscribes reached conns that had
+// already been idled out — 6,089 "Subscribe failed: closed" against 253
+// subscribed in 25 minutes on production TPD, and a browser-tab visor that
+// was never subscribed at all.
 func (c *Core) reconcile() {
-	for _, conn := range c.cxoNode.Connections() {
-		peerPK := conn.PeerID()
-		if peerPK == (skycipher.PubKey{}) {
-			// Conn handshake hasn't completed; skip until next tick.
-			continue
+	conns := c.cxoNode.Connections()
+	started := 0
+	for _, conn := range conns {
+		if c.subscribe(conn) {
+			started++
 		}
-		if alreadySubscribed(conn, peerPK) {
-			continue
-		}
+	}
+	c.log.WithField("conns", len(conns)).WithField("subscribes_started", started).
+		Debug(c.tag + ": reconcile pass")
+}
+
+// subscribe starts a Subscribe to conn's peer feed unless one is running on
+// that conn or it is already subscribed; it reports whether it started one.
+func (c *Core) subscribe(conn *node.Conn) bool {
+	peerPK := conn.PeerID()
+	if peerPK == (skycipher.PubKey{}) {
+		// Conn handshake hasn't completed; the next pass retries.
+		return false
+	}
+	if alreadySubscribed(conn, peerPK) {
+		return false
+	}
+	c.subMu.Lock()
+	if _, busy := c.subscribing[conn]; busy {
+		c.subMu.Unlock()
+		return false
+	}
+	c.subscribing[conn] = struct{}{}
+	c.subMu.Unlock()
+
+	go func() {
+		defer func() {
+			c.subMu.Lock()
+			delete(c.subscribing, conn)
+			c.subMu.Unlock()
+		}()
+		c.subSem <- struct{}{}
+		defer func() { <-c.subSem }()
 		if err := conn.Subscribe(peerPK); err != nil {
 			c.log.WithError(err).WithField("visor", cipher.PubKey(peerPK)).
 				Debug(c.tag + ": Subscribe failed; will retry next reconcile")
-			continue
+			return
 		}
 		// Info, not Debug: this is the state change that answers "is
 		// registration-over-CXO actually working for this service", it fires once
@@ -372,7 +422,8 @@ func (c *Core) reconcile() {
 		// the feature being switched off.
 		c.log.WithField("visor", cipher.PubKey(peerPK)).
 			Info(c.tag + ": subscribed to visor feed")
-	}
+	}()
+	return true
 }
 
 // alreadySubscribed reports whether conn is already subscribed to the
