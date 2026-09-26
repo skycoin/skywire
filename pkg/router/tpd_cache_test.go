@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -73,38 +74,84 @@ func TestTPDSnapshotCache_ReusesWithinTTL(t *testing.T) {
 	assert.Equal(t, 1, calls, "20 lookups within TTL must collapse to a single fetch")
 }
 
+// countingFetch returns a fetch that records its calls atomically (a
+// refresh runs on its own goroutine) and hands out snapshots whose one
+// entry carries the call number as its latency.
+func countingFetch(calls *atomic.Int32) func(context.Context) ([]*transport.Entry, error) {
+	return func(context.Context) ([]*transport.Entry, error) {
+		n := calls.Add(1)
+		return []*transport.Entry{entry(uuid.New(), float64(n))}, nil
+	}
+}
+
+// latencyOf is the one entry's latency: which fetch built the snapshot.
+func latencyOf(s *tpdSnapshot) float64 {
+	for _, e := range s.byID {
+		return e.Latency
+	}
+	return 0
+}
+
 // TestTPDSnapshotCache_RefreshAfterTTL: once the TTL elapses the next
-// call re-fetches.
+// call is served the old snapshot at once, and a background refresh
+// replaces it.
 func TestTPDSnapshotCache_RefreshAfterTTL(t *testing.T) {
 	clk := newFakeClock()
 	c := newTestCache(clk)
-
-	var calls int
-	fetch := func(context.Context) ([]*transport.Entry, error) {
-		calls++
-		return []*transport.Entry{entry(uuid.New(), 1)}, nil
-	}
+	var calls atomic.Int32
+	fetch := countingFetch(&calls)
 
 	_, err := c.snapshot(context.Background(), fetch, nil)
 	require.NoError(t, err)
-	assert.Equal(t, 1, calls)
+	assert.Equal(t, int32(1), calls.Load())
 
 	// Still fresh just before expiry.
 	clk.advance(defaultTPDSnapshotTTL - time.Second)
 	_, err = c.snapshot(context.Background(), fetch, nil)
 	require.NoError(t, err)
-	assert.Equal(t, 1, calls)
+	assert.Equal(t, int32(1), calls.Load())
 
-	// Expired → refetch.
+	// Expired: served stale now, refreshed behind it.
 	clk.advance(2 * time.Second)
-	_, err = c.snapshot(context.Background(), fetch, nil)
+	snap, err := c.snapshot(context.Background(), fetch, nil)
 	require.NoError(t, err)
-	assert.Equal(t, 2, calls)
+	assert.Equal(t, 1.0, latencyOf(snap), "the caller does not wait for the refresh")
+	require.Eventually(t, func() bool {
+		s, _ := c.snapshot(context.Background(), fetch, nil) //nolint:errcheck
+		return latencyOf(s) == 2
+	}, 5*time.Second, 5*time.Millisecond)
+	assert.Equal(t, int32(2), calls.Load(), "one refresh, however many callers saw it stale")
+}
+
+// TestTPDSnapshotCache_StaleRefreshNeverBlocksTheCaller is the reason for
+// the background refresh: a fetch that hangs (a slow TPD over dmsg in a
+// browser tab) must not spend a dial's budget when a snapshot exists.
+func TestTPDSnapshotCache_StaleRefreshNeverBlocksTheCaller(t *testing.T) {
+	clk := newFakeClock()
+	c := newTestCache(clk)
+	var calls atomic.Int32
+	_, err := c.snapshot(context.Background(), countingFetch(&calls), nil)
+	require.NoError(t, err)
+
+	release := make(chan struct{})
+	defer close(release)
+	hang := func(context.Context) ([]*transport.Entry, error) {
+		<-release
+		return nil, errors.New("released")
+	}
+	clk.advance(defaultTPDSnapshotTTL + time.Second)
+	start := time.Now()
+	for i := 0; i < 5; i++ {
+		snap, err := c.snapshot(context.Background(), hang, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 1.0, latencyOf(snap))
+	}
+	assert.Less(t, time.Since(start), time.Second)
 }
 
 // TestTPDSnapshotCache_StaleOnRefreshError: a refresh failure after a
-// prior success serves the stale snapshot (plus the error) rather than
-// dropping to nil — a transient TPD blip must not break routing.
+// prior success keeps serving the stale snapshot rather than dropping to
+// nil — a transient TPD blip must not break routing.
 func TestTPDSnapshotCache_StaleOnRefreshError(t *testing.T) {
 	clk := newFakeClock()
 	c := newTestCache(clk)
@@ -117,13 +164,19 @@ func TestTPDSnapshotCache_StaleOnRefreshError(t *testing.T) {
 	require.NoError(t, err)
 
 	clk.advance(defaultTPDSnapshotTTL + time.Second)
-	boom := errors.New("429 Too Many Requests")
-	snap, err := c.snapshot(context.Background(), func(context.Context) ([]*transport.Entry, error) {
-		return nil, boom
-	}, nil)
-	require.ErrorIs(t, err, boom)
-	require.NotNil(t, snap, "stale snapshot must be served on refresh error")
+	var failed atomic.Int32
+	boom := func(context.Context) ([]*transport.Entry, error) {
+		failed.Add(1)
+		return nil, errors.New("429 Too Many Requests")
+	}
+	snap, err := c.snapshot(context.Background(), boom, nil)
+	require.NoError(t, err)
+	require.NotNil(t, snap, "stale snapshot must be served while refreshing")
 	assert.Equal(t, 7.0, snap.byID[id].Latency)
+	require.Eventually(t, func() bool { return failed.Load() == 1 && !c.refreshing.Load() }, 5*time.Second, 5*time.Millisecond)
+	snap, err = c.snapshot(context.Background(), good, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 7.0, snap.byID[id].Latency, "a failed refresh keeps the snapshot")
 }
 
 // TestTPDSnapshotCache_ColdFailureReturnsNil: with no prior snapshot a
@@ -195,43 +248,36 @@ func TestTPDSnapshotCache_ConcurrentReads(t *testing.T) {
 // TestTPDSnapshotCache_VersionKeyedInvalidation: when a version probe is
 // supplied (the CXO path), the cache serves until the reported timestamp
 // advances — and does NOT refetch on the wall-clock TTL while the version
-// is unchanged. This is the "no independent 5-minute timer over an
-// already-event-driven CXO snapshot" behavior.
+// is unchanged. An advanced version refreshes once, in the background.
 func TestTPDSnapshotCache_VersionKeyedInvalidation(t *testing.T) {
 	clk := newFakeClock()
 	c := newTestCache(clk)
+	var calls atomic.Int32
+	fetch := countingFetch(&calls)
+	var ver atomic.Int64
+	ver.Store(1_000)
+	version := func() (time.Time, bool) { return time.Unix(ver.Load(), 0), true }
 
-	var calls int
-	fetch := func(context.Context) ([]*transport.Entry, error) {
-		calls++
-		return []*transport.Entry{entry(uuid.New(), 1)}, nil
-	}
-	ver := time.Unix(1_000, 0)
-	version := func() (time.Time, bool) { return ver, true }
-
-	// Stable version within the TTL: the many repeat calls collapse to ONE
-	// fetch — this is the per-call rebuild the fix removes from the hot path.
 	for i := 0; i < 10; i++ {
 		_, err := c.snapshot(context.Background(), fetch, version)
 		require.NoError(t, err)
 	}
-	assert.Equal(t, 1, calls, "stable CXO version within TTL must collapse to one fetch")
+	assert.Equal(t, int32(1), calls.Load(), "stable CXO version must collapse to one fetch")
 
-	// Advancing the wall clock past the TTL must NOT refetch while the CXO
-	// version is unchanged: the pinned subscription keeps lastSyncAt live,
-	// so a stable version means transports genuinely haven't changed — no
-	// timer refresh over an already-live CXO snapshot.
 	clk.advance(10 * defaultTPDSnapshotTTL)
 	_, err := c.snapshot(context.Background(), fetch, version)
 	require.NoError(t, err)
-	assert.Equal(t, 1, calls, "stable CXO version must not refetch on the wall clock")
+	assert.Equal(t, int32(1), calls.Load(), "stable CXO version must not refetch on the wall clock")
 
-	// A new CXO snapshot timestamp (a real transport change pushed by the
-	// live subscription) triggers exactly one refetch — no clock movement.
-	ver = time.Unix(2_000, 0)
-	_, err = c.snapshot(context.Background(), fetch, version)
+	ver.Store(2_000)
+	snap, err := c.snapshot(context.Background(), fetch, version)
 	require.NoError(t, err)
-	assert.Equal(t, 2, calls, "advanced CXO version must refetch once")
+	assert.Equal(t, 1.0, latencyOf(snap), "served the current snapshot while refreshing")
+	require.Eventually(t, func() bool {
+		s, _ := c.snapshot(context.Background(), fetch, version) //nolint:errcheck
+		return latencyOf(s) == 2
+	}, 5*time.Second, 5*time.Millisecond)
+	assert.Equal(t, int32(2), calls.Load(), "advanced CXO version refetches once")
 }
 
 // TestTPDSnapshotCache_VersionFallsBackToTTL: a version probe that reports
@@ -239,28 +285,21 @@ func TestTPDSnapshotCache_VersionKeyedInvalidation(t *testing.T) {
 func TestTPDSnapshotCache_VersionFallsBackToTTL(t *testing.T) {
 	clk := newFakeClock()
 	c := newTestCache(clk)
-
-	var calls int
-	fetch := func(context.Context) ([]*transport.Entry, error) {
-		calls++
-		return []*transport.Entry{entry(uuid.New(), 1)}, nil
-	}
+	var calls atomic.Int32
+	fetch := countingFetch(&calls)
 	notPrimed := func() (time.Time, bool) { return time.Time{}, false }
 
 	_, err := c.snapshot(context.Background(), fetch, notPrimed)
 	require.NoError(t, err)
-	assert.Equal(t, 1, calls)
-
-	// Within TTL: served from cache.
 	_, err = c.snapshot(context.Background(), fetch, notPrimed)
 	require.NoError(t, err)
-	assert.Equal(t, 1, calls)
+	assert.Equal(t, int32(1), calls.Load(), "within TTL: served from cache")
 
-	// Past TTL: refetch, since version can't drive invalidation.
 	clk.advance(defaultTPDSnapshotTTL + time.Second)
 	_, err = c.snapshot(context.Background(), fetch, notPrimed)
 	require.NoError(t, err)
-	assert.Equal(t, 2, calls)
+	require.Eventually(t, func() bool { return calls.Load() == 2 }, 5*time.Second, 5*time.Millisecond,
+		"past TTL: refreshed, since version can't drive invalidation")
 }
 
 // TestDeriveTransportLookups: byEdge excludes setup-labeled transports,

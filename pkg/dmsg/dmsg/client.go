@@ -47,6 +47,16 @@ type entryCacheEntry struct {
 // cached delegated-server list.
 const entryCacheTTL = 5 * time.Minute
 
+// entryStaleMaxAge is how old a cached client entry may be and still be
+// used when a fresh lookup FAILS. Past entryCacheTTL an entry is looked up
+// again; if that lookup cannot reach discovery (it is itself a dmsg dial,
+// and a browser tab that shares no server with discovery must open a new
+// WebSocket session to one — which can hang), the entry that worked a few
+// minutes ago is a far better answer than none: peer entries change only
+// on a dmsg-server reconnect, and a wrong one fails the dial exactly as the
+// failed lookup would have.
+const entryStaleMaxAge = time.Hour
+
 // SessionDialCallback is triggered BEFORE a session is dialed to.
 // If a non-nil error is returned, the session dial is instantly terminated.
 type SessionDialCallback func(network, addr string) (err error)
@@ -319,6 +329,7 @@ type Client struct {
 	LookupResolverHits atomic.Int64 // resolved from an injected EntryResolver
 	LookupHTTPHits     atomic.Int64 // resolved from HTTP discovery
 	LookupHTTPMisses   atomic.Int64 // HTTP discovery returned not found
+	LookupStaleHits    atomic.Int64 // a failed lookup answered from an expired cached entry
 
 	// pinnedFailures counts consecutive failed Serve-loop passes
 	// while in pinned mode (--dmsg-server / ctx.Value("dmsgServer")
@@ -1227,6 +1238,17 @@ func (ce *Client) getCachedEntry(pk cipher.PubKey) (*disc.Entry, bool) {
 	cached, ok := ce.entryCache[pk]
 	ce.entryCacheMx.RUnlock()
 	if !ok || time.Since(cached.fetchedAt) > entryCacheTTL {
+		return nil, false
+	}
+	return cached.entry, true
+}
+
+// getStaleEntry returns a cached entry up to maxAge old, expired or not.
+func (ce *Client) getStaleEntry(pk cipher.PubKey, maxAge time.Duration) (*disc.Entry, bool) {
+	ce.entryCacheMx.RLock()
+	cached, ok := ce.entryCache[pk]
+	ce.entryCacheMx.RUnlock()
+	if !ok || cached.entry == nil || time.Since(cached.fetchedAt) > maxAge {
 		return nil, false
 	}
 	return cached.entry, true
