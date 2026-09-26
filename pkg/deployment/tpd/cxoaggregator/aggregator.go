@@ -114,6 +114,10 @@ type Sink interface {
 	// the per-transport entry/tombstone leaves — self-healing, since a
 	// missed update is corrected by the next snapshot.
 	ReconcileTransportsFromCXO(ctx context.Context, entries []*transport.Entry, reporter cipher.PubKey, version string) error
+	// RefreshTransportsFromCXO registers and refreshes the listed entries but
+	// deletes nothing: for re-applying a reporter's CACHED list after a failed
+	// fetch, whose absences only mean "created since".
+	RefreshTransportsFromCXO(ctx context.Context, entries []*transport.Entry, reporter cipher.PubKey, version string) error
 }
 
 // BandwidthSink is retained as an alias for callers that only need the
@@ -711,12 +715,7 @@ func (a *Aggregator) reconcileTargeted(conn *node.Conn, r *registry.Root) {
 		// transports survive the redis TTL until a later Root lands fresh.
 		// Gated on receiving a Root, so a truly-gone visor (no more Roots)
 		// stops being refreshed and its transports expire normally.
-		a.mu.Lock()
-		cached, has := a.lastList[r.Pub]
-		a.mu.Unlock()
-		if has {
-			a.applyReconcile(cached.entries, reporter, cached.version)
-		}
+		a.reapplyCached(r.Pub, reporter)
 	}()
 }
 
@@ -769,6 +768,27 @@ func (a *Aggregator) fetchDiscoveryLeafWithGetter(g skyobject.Getter, r *registr
 // the fresh targeted fetch and the cached re-apply; the sink call is
 // declarative (register-all + deregister-absent) so repeated application is a
 // no-op.
+// reapplyCached keeps a reporter's last good list alive after a failed fetch.
+// Refresh only: the cached list predates whatever the reporter has gained
+// since, so its absences must not delete anything.
+func (a *Aggregator) reapplyCached(pub skycipher.PubKey, reporter cipher.PubKey) {
+	a.mu.Lock()
+	cached, has := a.lastList[pub]
+	a.mu.Unlock()
+	if has {
+		a.applyRefresh(cached.entries, reporter, cached.version)
+	}
+}
+
+func (a *Aggregator) applyRefresh(entries []*transport.Entry, reporter cipher.PubKey, version string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := a.sink.RefreshTransportsFromCXO(ctx, entries, reporter, version); err != nil {
+		a.log.WithError(err).WithField("reporter", reporter).
+			Debug("CXO aggregator: cached-list RefreshTransportsFromCXO failed")
+	}
+}
+
 func (a *Aggregator) applyReconcile(entries []*transport.Entry, reporter cipher.PubKey, version string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

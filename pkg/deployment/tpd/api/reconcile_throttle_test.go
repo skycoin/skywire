@@ -117,3 +117,46 @@ func TestReconcileTransportsFromCXO_ThrottlesRepeats(t *testing.T) {
 	require.Equal(t, e1.ID, got.ID)
 	require.EqualValues(t, 2, cs.registered.Load())
 }
+
+func newThrottleTestAPI(t *testing.T) (*API, *countingStore, store.Store) {
+	t.Helper()
+	ctx := context.Background()
+	base, err := store.New(ctx, storeconfig.Config{Type: storeconfig.Memory}, 10*time.Minute, logging.MustGetLogger("test"))
+	require.NoError(t, err)
+	cs := &countingStore{Store: base}
+	nonceMock, err := httpauth.NewNonceStore(ctx, storeconfig.Config{Type: storeconfig.Memory}, "")
+	require.NoError(t, err)
+	return New(nil, cs, nonceMock, false, tpdiscmetrics.NewEmpty(), "", ""), cs, base
+}
+
+// TestRefreshKeepsWhatAnOldListLacks: a hub's cached list predates the
+// transport a browser tab just opened to it. Re-applying that list (after
+// a failed fetch) must not delete the tab's transport; only a fresh
+// reconcile's absences mean anything.
+func TestRefreshKeepsWhatAnOldListLacks(t *testing.T) {
+	ctx := context.Background()
+	api, _, base := newThrottleTestAPI(t)
+	hub, _ := cipher.GenerateKeyPair()
+	tab, _ := cipher.GenerateKeyPair()
+	peer, _ := cipher.GenerateKeyPair()
+	old := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(hub, peer), Type: "stcpr"}
+	fresh := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(hub, tab), Type: "swtr"}
+
+	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, []*transport.Entry{old}, hub, "v"))
+	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, []*transport.Entry{fresh}, tab, "v"))
+
+	require.NoError(t, api.RefreshTransportsFromCXO(ctx, []*transport.Entry{old}, hub, "v"))
+	_, err := base.GetTransportByID(ctx, fresh.ID)
+	require.NoError(t, err, "a stale list's absence must not delete the tab's transport")
+
+	// A fresh reconcile from the hub that lacks it does delete it...
+	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, []*transport.Entry{old}, hub, "v"))
+	_, err = base.GetTransportByID(ctx, fresh.ID)
+	require.ErrorIs(t, err, store.ErrTransportNotFound)
+
+	// ...and the tab's next snapshot puts it straight back, not after the
+	// throttle's refresh gap: the removal cleared the shared mark.
+	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, []*transport.Entry{fresh}, tab, "v"))
+	_, err = base.GetTransportByID(ctx, fresh.ID)
+	require.NoError(t, err, "the other edge re-registers at once")
+}

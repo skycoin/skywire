@@ -18,6 +18,21 @@ import (
 type TPDLeafPublisherState struct {
 	Wired  bool   `json:"wired"`
 	Reason string `json:"reason,omitempty"`
+	// Announce is how the dials that let TPD fetch this feed are going.
+	// A wired publisher whose announces fail is invisible to TPD, and the
+	// route finder with it; before this the failures were Trace-only.
+	Announce *TPDAnnounceState `json:"announce,omitempty"`
+}
+
+// TPDAnnounceState counts the announces of the transport-list feed to TPD.
+// A Secs* field is -1 when the event has not happened.
+type TPDAnnounceState struct {
+	To                string  `json:"to"`
+	OK                int64   `json:"ok"`
+	Failed            int64   `json:"failed"`
+	SecsSinceOK       float64 `json:"secs_since_ok"`
+	LastError         string  `json:"last_error,omitempty"`
+	SecsSinceLastFail float64 `json:"secs_since_last_fail"`
 }
 
 // CXOFeedState pairs a feed's identity (name + dmsg port) with its live
