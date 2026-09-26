@@ -104,6 +104,20 @@ func (api *API) DeregisterTransportFromCXO(ctx context.Context, id uuid.UUID, re
 // existing transports that are ABSENT from the list (absence = deletion). Idempotent
 // and self-healing — a dropped update is corrected by the next snapshot.
 func (api *API) ReconcileTransportsFromCXO(ctx context.Context, entries []*transport.Entry, reporter cipher.PubKey, version string) error {
+	return api.reconcileFromCXO(ctx, entries, reporter, version, true)
+}
+
+// RefreshTransportsFromCXO registers and refreshes the reporter's listed
+// transports like ReconcileTransportsFromCXO, but deletes nothing. It is for a
+// list that is known to be old — the aggregator re-applying a reporter's last
+// good snapshot after a failed fetch — whose absences prove nothing: a
+// transport created since (say by a browser tab dialing this hub) is simply
+// not in it, and deleting on that basis removed the other edge's fresh entry.
+func (api *API) RefreshTransportsFromCXO(ctx context.Context, entries []*transport.Entry, reporter cipher.PubKey, version string) error {
+	return api.reconcileFromCXO(ctx, entries, reporter, version, false)
+}
+
+func (api *API) reconcileFromCXO(ctx context.Context, entries []*transport.Entry, reporter cipher.PubKey, version string, deregisterAbsent bool) error {
 	// Accept only entries the reporter is actually an edge of (auth parity with the
 	// per-entry path); build the authoritative keep-set.
 	keep := make(map[uuid.UUID]struct{}, len(entries))
@@ -138,6 +152,13 @@ func (api *API) ReconcileTransportsFromCXO(ctx context.Context, entries []*trans
 			_ = err //nolint:errcheck // uptime is auxiliary; store logs
 		}
 	}
+	if !deregisterAbsent {
+		api.mirrorEdges(ctx, touchedEdges)
+		if err := api.store.RecordHeartbeat(ctx, reporter, version); err != nil {
+			_ = err //nolint:errcheck // visor-level heartbeat is auxiliary
+		}
+		return nil
+	}
 	// Deregister any of the reporter's existing transports absent from the snapshot.
 	// A transport the reporter no longer lists is a deregister signal for that edge —
 	// exactly what a tombstone was in the delta model.
@@ -155,6 +176,7 @@ func (api *API) ReconcileTransportsFromCXO(ctx context.Context, entries []*trans
 		}
 		return fmt.Errorf("get existing: %w", err)
 	}
+	var removed []*transport.Entry
 	for _, e := range existing {
 		if _, ok := keep[e.ID]; ok {
 			continue
@@ -164,9 +186,14 @@ func (api *API) ReconcileTransportsFromCXO(ctx context.Context, entries []*trans
 			// snapshot; the aggregator logs if the whole reconcile returns an error.
 			continue
 		}
+		removed = append(removed, e)
 		touchedEdges[e.Edges[0]] = struct{}{}
 		touchedEdges[e.Edges[1]] = struct{}{}
 	}
+	// Forget the throttle marks of what was just removed: the mark is shared
+	// by both edges, and a stale "written moments ago" would make the OTHER
+	// edge's next snapshot skip re-registering a transport it still has.
+	api.reconcile.forget(removed)
 
 	api.mirrorEdges(ctx, touchedEdges)
 	if err := api.store.RecordHeartbeat(ctx, reporter, version); err != nil {

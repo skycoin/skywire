@@ -189,12 +189,20 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 	// and subscribes back to our feed (PK = our own PK).
 	if pub != nil {
 		if tpdPK, ok := tpdCXOPeer(v); ok {
-			go runAnnounceLoop(v.ctx, pub, tpdPK, log)
+			// Record the announces of whichever feed carries the transport
+			// list: the combined feed, unless a dedicated one is configured.
+			var pubStats, tplistStats *tpdAnnounceStats
+			if tplistPub != nil {
+				tplistStats = &v.tpdAnnounce
+			} else {
+				pubStats = &v.tpdAnnounce
+			}
+			go runAnnounceLoop(v.ctx, pub, tpdPK, log, pubStats)
 			// Announce the dedicated tp-list feed to TPD too, on its own
 			// port (DmsgVisorTPListCXOPort) — this is the conn TPD's second
 			// aggregator accepts and fills the tiny discovery Root over.
 			if tplistPub != nil {
-				go runAnnounceLoop(v.ctx, tplistPub, tpdPK, log)
+				go runAnnounceLoop(v.ctx, tplistPub, tpdPK, log, tplistStats)
 			}
 		} else {
 			log.Debug("Stats: no Transport.DiscoveryDmsg PK; skipping CXO announce loop")
@@ -211,28 +219,30 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 // negligible overhead.
 const announceInterval = 30 * time.Second
 
-func runAnnounceLoop(ctx context.Context, pub *treestore.Publisher, tpdPK cipher.PubKey, log *logging.Logger) {
+func runAnnounceLoop(ctx context.Context, pub *treestore.Publisher, tpdPK cipher.PubKey, log *logging.Logger, stats *tpdAnnounceStats) {
 	t := time.NewTicker(announceInterval)
 	defer t.Stop()
-	announceOnce(ctx, pub, tpdPK, log)
+	announceOnce(ctx, pub, tpdPK, log, stats)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			announceOnce(ctx, pub, tpdPK, log)
+			announceOnce(ctx, pub, tpdPK, log, stats)
 		}
 	}
 }
 
-func announceOnce(ctx context.Context, pub *treestore.Publisher, tpdPK cipher.PubKey, log *logging.Logger) {
+func announceOnce(ctx context.Context, pub *treestore.Publisher, tpdPK cipher.PubKey, log *logging.Logger, stats *tpdAnnounceStats) {
 	// Per-attempt deadline bounds the dmsg dial: announceInterval is
 	// 30s, but the publisher's CXO ConnectPK can block on a half-dead
 	// transport much longer than that. Cap each attempt at half the
 	// interval so a stuck dial doesn't starve the next tick.
 	dctx, cancel := context.WithTimeout(ctx, announceInterval/2)
 	defer cancel()
-	if err := pub.AnnounceTo(dctx, tpdPK); err != nil {
+	err := pub.AnnounceTo(dctx, tpdPK)
+	stats.record(tpdPK, err)
+	if err != nil {
 		// Trace-level: this races with TPD start-up and DMSG
 		// readiness; transient failures are normal.
 		log.WithError(err).WithField("tpd_pk", tpdPK).Trace("Stats: CXO announce to TPD failed")

@@ -270,6 +270,7 @@ func bytesEqual(a, b []byte) bool {
 // chose to forward (vs drop on the partial-zero gate).
 type recordingSink struct {
 	mu          sync.Mutex
+	refreshes   []recordedReconcile
 	bandwidths  int
 	throughputs []float64
 	latencies   []struct{ min, max, avg float64 }
@@ -628,4 +629,11 @@ func TestDispatchLeafTransportListSnapshot(t *testing.T) {
 	if got.reporter != pkA || got.version != "v1.2.3" {
 		t.Errorf("reconcile reporter/version mismatch: %v %q", got.reporter, got.version)
 	}
+}
+
+func (s *recordingSink) RefreshTransportsFromCXO(_ context.Context, entries []*transport.Entry, reporter cipher.PubKey, version string) error {
+	s.mu.Lock()
+	s.refreshes = append(s.refreshes, recordedReconcile{entries: entries, reporter: reporter, version: version})
+	s.mu.Unlock()
+	return nil
 }
