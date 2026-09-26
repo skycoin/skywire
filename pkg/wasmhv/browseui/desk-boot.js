@@ -565,6 +565,10 @@
 				// SOCKS5-over-vnet. Falls back to the in-page core for a page that
 				// booted it (nothing on the desk does today).
 				var RESOLVER_PORT = 4445;
+				// The tab's own skysocks-client: it picks and connects an exit by itself,
+				// so it is the browser's egress when no proxy has been chosen, and it
+				// answers status.skysocks in-process.
+				var SKYSOCKS_PORT = 1080;
 				function viaResolver() {
 					return !!(globalThis.vnet && globalThis.vnet.listening(RESOLVER_PORT) && globalThis.vnet.socksHttpFetch);
 				}
@@ -638,6 +642,9 @@
 							' — this tab\'s visor has no such app running. (Loopback addresses resolve to this page\'s vnet, never to a remote exit.)</body>',
 							{ status: 502, headers: new Headers({ 'content-type': 'text/html' }) }));
 					}
+					if (/^status\.skysocks$/i.test(u.hostname) && globalThis.vnet && globalThis.vnet.listening(SKYSOCKS_PORT)) {
+						return Promise.resolve(globalThis.vnet.socksHttpFetch(SKYSOCKS_PORT, u.hostname + ':80', 'GET', path, null, {})).then(respond);
+					}
 					if (mesh && viaResolver()) {
 						return Promise.resolve(globalThis.vnet.socksHttpFetch(RESOLVER_PORT, resolverHost(u.hostname) + ':80', 'GET', path, null, {})).then(respond);
 					}
@@ -659,7 +666,13 @@
 						if (sv.fetchClearnet) {
 							return Promise.resolve(sv.fetchClearnet('', 'GET', url, null)).then(respond);
 						}
-					return fetch(url);
+						// No proxy chosen: the tab's own skysocks-client. A page speaks SOCKS5
+						// to it for http only; it cannot do TLS through it.
+						if (globalThis.vnet && globalThis.vnet.listening(SKYSOCKS_PORT)) {
+							if (u.protocol === 'https:') return Promise.resolve(proxyError('https:// pages cannot go through this tab\'s own proxy yet (the page cannot do TLS over it); try the http:// address'));
+							return Promise.resolve(globalThis.vnet.socksHttpFetch(SKYSOCKS_PORT, u.hostname + ':' + (u.port || 80), 'GET', path, null, {})).then(respond);
+						}
+						return Promise.resolve(proxyError('no proxy is running in this tab (skysocks-client on vnet:' + SKYSOCKS_PORT + '); start it with: skywire cli proxy start'));
 				};
 				// The desk chrome comes from the library (0magnet/desk), mounted by
 				// the desk host module itself (installDesk); its façade carries the
