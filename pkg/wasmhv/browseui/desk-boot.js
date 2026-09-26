@@ -786,7 +786,15 @@
 					// The visor terminal opens either way — running autoconfig
 					// (which ends by starting the visor in the foreground), or idle
 					// at the prompt when the operator had stopped it.
-					var autoconfigCmd = 'skywire autoconfig';
+					//
+					// --ishv: the desk's browser is served by this visor's own
+					// hypervisor (vnet:8001), so the desk needs it on. Saying so
+					// records ISHYPERVISOR=true in /etc/skywire.conf, which every
+					// regen reads. Without it the choice lived only in the derived
+					// skywire.json: autoconfig re-enables a hypervisor only when
+					// that file already has it on, so one boot that wrote it off
+					// left it off on every reload after.
+					var autoconfigCmd = 'skywire autoconfig --ishv';
 					if (opts.attach && opts.attach.pk && attachable) {
 						// Attached to the hypervisor that served this page: the visor's one
 						// transport is a WebSocket back to this origin — an address the page
