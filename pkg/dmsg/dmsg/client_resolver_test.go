@@ -155,3 +155,31 @@ func TestNoResolversIsUnchanged(t *testing.T) {
 		t.Error("resolver hit counter moved with no resolvers installed")
 	}
 }
+
+// TestExpiredEntryAnswersAFailedLookup: past its TTL an entry is looked up
+// again, and when that lookup fails (discovery unreachable — for a browser
+// tab it is itself a dmsg dial that can hang), the expired entry is used
+// rather than failing every dial to that peer.
+func TestExpiredEntryAnswersAFailedLookup(t *testing.T) {
+	c := newResolverTestClient(t)
+	c.dc = disc.NewMock(0) // knows no entries: every lookup fails
+	peer, _ := cipher.GenerateKeyPair()
+	srv, _ := cipher.GenerateKeyPair()
+
+	c.entryCache[peer] = entryCacheEntry{entry: clientEntry(peer, srv), fetchedAt: time.Now().Add(-2 * entryCacheTTL)}
+	got, err := c.getClientEntryCached(context.Background(), peer)
+	if err != nil {
+		t.Fatalf("expired entry not used on a failed lookup: %v", err)
+	}
+	if got.Client.DelegatedServers[0] != srv {
+		t.Fatalf("wrong entry: %+v", got)
+	}
+	if c.LookupStaleHits.Load() != 1 {
+		t.Errorf("stale hit counter = %d, want 1", c.LookupStaleHits.Load())
+	}
+
+	c.entryCache[peer] = entryCacheEntry{entry: clientEntry(peer, srv), fetchedAt: time.Now().Add(-2 * entryStaleMaxAge)}
+	if _, err := c.getClientEntryCached(context.Background(), peer); err == nil {
+		t.Fatal("an entry older than entryStaleMaxAge must not be used")
+	}
+}

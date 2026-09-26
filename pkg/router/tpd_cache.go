@@ -38,6 +38,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -67,6 +68,8 @@ type tpdSnapshotCache struct {
 	gen   uint64
 	ttl   time.Duration
 	clock func() time.Time // injectable for tests
+	// refreshing is set while a background rebuild runs.
+	refreshing atomic.Bool
 }
 
 // tpdSnapshot is one immutable view of the transport-discovery set.
@@ -174,16 +177,6 @@ func newTPDSnapshotCache() *tpdSnapshotCache {
 	}
 }
 
-// fresh returns the current snapshot if it exists and hasn't expired.
-func (c *tpdSnapshotCache) fresh() *tpdSnapshot {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if c.snap != nil && c.clock().Before(c.snap.expires) {
-		return c.snap
-	}
-	return nil
-}
-
 // buildSnapshot materializes a snapshot (and its derived lookups) from a
 // freshly-fetched entry set, stamping it with the CXO version (zero on the
 // TTL path), the next generation counter, and the wall-clock TTL floor.
@@ -225,70 +218,83 @@ func (c *tpdSnapshotCache) buildSnapshot(entries []*transport.Entry, version tim
 // (non-CXO client, or the feed isn't primed yet) it falls back to the TTL.
 //
 // fetchAll is typically DiscoveryClient.GetAllTransports.
+//
+// Only a cold cache fetches on the caller's time. A stale snapshot — the
+// CXO version moved, or the TTL ran out — is served as it is while ONE
+// background refresh rebuilds it: the full set is ~16k entries, which in
+// a browser tab took ~19 s to fetch and rebuild, and doing that inside
+// whichever dial came next spent that dial's whole budget on data that
+// was minutes old either way.
 func (c *tpdSnapshotCache) snapshot(
 	ctx context.Context,
 	fetchAll func(context.Context) ([]*transport.Entry, error),
 	version func() (time.Time, bool),
 ) (*tpdSnapshot, error) {
-	// CXO-driven path: serve until the source's snapshot timestamp moves —
-	// no wall clock involved. The visor pins FeedTPDAllTransports (see
-	// Manager.Pin), so its CXO subscription is held continuously and
-	// liveServe pushes each new Root into the snapshot; lastSyncAt advances
-	// only on a real transport change. Rebuilding the derived lookups
-	// exactly then — and not otherwise — is correct and event-driven: a
-	// steady network rebuilds nothing, a changed one rebuilds once. There
-	// is deliberately no TTL here; a periodic refetch over an already-live
-	// CXO snapshot would just be a timer cache, which is the thing this
-	// replaces. (The TTL below still governs the non-CXO fallback, where
+	// CXO-driven path: a snapshot is current until the source's snapshot
+	// timestamp moves — no wall clock involved. The visor pins
+	// FeedTPDAllTransports (see Manager.Pin), so its CXO subscription is
+	// held continuously and lastSyncAt advances only on a real transport
+	// change. (The TTL below still governs the non-CXO fallback, where
 	// there is no version signal at all.)
+	var ts time.Time
+	versioned := false
 	if version != nil {
-		if ts, ok := version(); ok {
-			c.mu.RLock()
-			cur := c.snap
-			c.mu.RUnlock()
-			if cur != nil && !cur.version.IsZero() && cur.version.Equal(ts) {
-				return cur, nil
-			}
-			c.mu.Lock()
-			defer c.mu.Unlock()
-			if c.snap != nil && !c.snap.version.IsZero() && c.snap.version.Equal(ts) {
-				return c.snap, nil
-			}
-			entries, err := fetchAll(ctx)
-			if err != nil {
-				if c.snap != nil {
-					return c.snap, err
-				}
-				return nil, err
-			}
-			c.snap = c.buildSnapshot(entries, ts)
-			return c.snap, nil
+		ts, versioned = version()
+	}
+
+	c.mu.RLock()
+	cur := c.snap
+	c.mu.RUnlock()
+	if cur != nil {
+		var current bool
+		if versioned {
+			current = !cur.version.IsZero() && cur.version.Equal(ts)
+		} else {
+			current = c.clock().Before(cur.expires)
 		}
+		if !current {
+			c.refreshInBackground(fetchAll, ts)
+		}
+		return cur, nil
 	}
 
-	// TTL fallback (non-CXO client, or CXO feed not primed yet).
-	if s := c.fresh(); s != nil {
-		return s, nil
-	}
-
+	// Cold: nothing to serve, so this caller waits, bounded by its ctx.
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// Double-check: another goroutine may have refreshed while we
-	// waited for the write lock.
-	if c.snap != nil && c.clock().Before(c.snap.expires) {
+	if c.snap != nil { // another caller filled it while we waited
 		return c.snap, nil
 	}
-
 	entries, err := fetchAll(ctx)
 	if err != nil {
-		// Serve the prior snapshot stale rather than dropping to
-		// empty — a transient TPD failure shouldn't break routing.
-		if c.snap != nil {
-			return c.snap, err
-		}
 		return nil, err
 	}
-
-	c.snap = c.buildSnapshot(entries, time.Time{})
+	c.snap = c.buildSnapshot(entries, ts)
 	return c.snap, nil
+}
+
+// tpdBackgroundRefreshTimeout bounds one background rebuild.
+const tpdBackgroundRefreshTimeout = 2 * time.Minute
+
+// refreshInBackground rebuilds the snapshot off the caller's path; at
+// most one runs at a time. A failed refresh keeps the snapshot that is
+// being served — a transient TPD failure should not break routing.
+func (c *tpdSnapshotCache) refreshInBackground(
+	fetchAll func(context.Context) ([]*transport.Entry, error),
+	ts time.Time,
+) {
+	if !c.refreshing.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer c.refreshing.Store(false)
+		ctx, cancel := context.WithTimeout(context.Background(), tpdBackgroundRefreshTimeout)
+		defer cancel()
+		entries, err := fetchAll(ctx)
+		if err != nil {
+			return
+		}
+		c.mu.Lock()
+		c.snap = c.buildSnapshot(entries, ts)
+		c.mu.Unlock()
+	}()
 }
