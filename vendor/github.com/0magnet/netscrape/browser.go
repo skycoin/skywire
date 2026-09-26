@@ -61,19 +61,55 @@ const navShim = `<script>
 })();
 </script>`
 
-var (
-	doc    js.Value
-	strip  js.Value // tab strip
-	views  js.Value // stacked iframe area
-	addr   js.Value // shared address bar
-	back   js.Value // history buttons, greyed when there is nowhere to go
-	fwd    js.Value
-	reload js.Value
-	tabs   []*tab
-	active = -1
-)
+// browser holds one window's worth of chrome state: the DOM elements, the
+// tab list, which tab is active, and the tab currently mid-drag. A desk can
+// open more than one browser window on one page (see Open's root keydown
+// comment), so this used to be a single set of package globals that every
+// open() call reassigned to the newest window — switching tabs in one window
+// then hid another window's iframes (activate walked the shared tab list),
+// and closing the newer window left the survivor's tab switches writing into
+// a shared address bar the closed window still pointed at. Every per-window
+// handler now closes over its own *browser instead.
+type browser struct {
+	root                                       js.Value // the mounted element; Get("isConnected") says whether this window is still open
+	doc, strip, views, addr, back, fwd, reload js.Value
+	tabs                                       []*tab
+	active                                     int
+	dragging                                   *tab // the tab being dragged across the strip, nil between drags
+}
+
+// browsers lists every window Open has built, oldest first.
+var browsers []*browser
+
+// registerBrowser adds b as the newest window and drops any earlier ones that
+// have since closed, so the list stays no bigger than the windows actually
+// open. See currentBrowser.
+func registerBrowser(b *browser) {
+	live := browsers[:0]
+	for _, x := range browsers {
+		if x.root.Truthy() && x.root.Get("isConnected").Bool() {
+			live = append(live, x)
+		}
+	}
+	browsers = append(live, b)
+}
+
+// currentBrowser is the most recently opened window that is still on the
+// page, or nil when none is. Navigate, NewTab and TabStrip take no window
+// argument, so this is what they act on: the newest LIVE one, never a closed
+// one — a caller that means a particular window has to reach it some other
+// way (skywire's desk gets there via each window's own DOM subtree instead).
+func currentBrowser() *browser {
+	for i := len(browsers) - 1; i >= 0; i-- {
+		if browsers[i].root.Truthy() && browsers[i].root.Get("isConnected").Bool() {
+			return browsers[i]
+		}
+	}
+	return nil
+}
 
 type tab struct {
+	br                   *browser // the window this tab belongs to
 	btn, lbl, ico, frame js.Value
 	hist                 []string
 	pos                  int
@@ -88,7 +124,14 @@ type tab struct {
 	directNavWired bool
 }
 
-func mk(tag string) js.Value { return doc.Call("createElement", tag) }
+// isFront reports whether t is the tab its own window currently has in
+// front, so a handler knows whether it should touch that window's address
+// bar rather than some other tab's.
+func (t *tab) isFront() bool {
+	return t.br != nil && t.br.active >= 0 && t.br.tabs[t.br.active] == t
+}
+
+func (b *browser) mk(tag string) js.Value { return b.doc.Call("createElement", tag) }
 
 // fetchVia is the transport seam. A host can inject
 // globalThis.__netscrapeFetch(url) → a Response-like promise (with
@@ -104,11 +147,11 @@ func fetchVia(url string) js.Value {
 	return g.Call("fetch", "/fetch?url="+enc)
 }
 
-func btn(label, style string) js.Value {
-	b := mk("button")
-	b.Set("textContent", label)
-	b.Get("style").Set("cssText", "background:#2a2342;color:#cdd2da;border:1px solid #3a3352;cursor:pointer;font:13px monospace;"+style)
-	return b
+func (b *browser) btn(label, style string) js.Value {
+	el := b.mk("button")
+	el.Set("textContent", label)
+	el.Get("style").Set("cssText", "background:#2a2342;color:#cdd2da;border:1px solid #3a3352;cursor:pointer;font:13px monospace;"+style)
+	return el
 }
 
 // labelFor is a tab's name: the host, which is the part a person recognizes.
@@ -183,8 +226,8 @@ func load(t *tab, url string) {
 	}
 	if url == startURL {
 		renderStart(t)
-		if active >= 0 && tabs[active] == t {
-			addr.Set("value", "")
+		if t.isFront() {
+			t.br.addr.Set("value", "")
 		}
 		return
 	}
@@ -209,16 +252,16 @@ func load(t *tab, url string) {
 				// icon can simply be read once it has loaded — no transcoding
 				// pass to pick them out of.
 				watchDirect(t, url)
-				if active >= 0 && tabs[active] == t {
-					addr.Set("value", url)
+				if t.isFront() {
+					t.br.addr.Set("value", url)
 				}
 				return
 			}
 		}
 		fetchPage(t, url)
 	}
-	if active >= 0 && tabs[active] == t {
-		addr.Set("value", url)
+	if t.isFront() {
+		t.br.addr.Set("value", url)
 	}
 }
 
@@ -278,12 +321,12 @@ func navigate(t *tab, url string) {
 	load(t, url)
 }
 
-func activate(i int) {
-	if i < 0 || i >= len(tabs) {
+func (b *browser) activate(i int) {
+	if i < 0 || i >= len(b.tabs) {
 		return
 	}
-	active = i
-	for j, t := range tabs {
+	b.active = i
+	for j, t := range b.tabs {
 		on := j == i
 		if on {
 			t.frame.Get("style").Set("display", "block")
@@ -293,14 +336,14 @@ func activate(i int) {
 			t.btn.Get("style").Set("background", "transparent")
 		}
 	}
-	addr.Set("value", addrText(tabs[i].hist[tabs[i].pos]))
-	syncNav()
+	b.addr.Set("value", addrText(b.tabs[i].hist[b.tabs[i].pos]))
+	b.syncNav()
 }
 
 // syncNav greys the history buttons when there is nowhere to go, so they say
 // whether they will do anything before they are pressed.
-func syncNav() {
-	t := cur()
+func (b *browser) syncNav() {
+	t := b.cur()
 	set := func(el js.Value, on bool) {
 		if !el.Truthy() {
 			return
@@ -314,14 +357,14 @@ func syncNav() {
 			el.Get("style").Set("cursor", "default")
 		}
 	}
-	set(back, t != nil && t.pos > 0)
-	set(fwd, t != nil && t.pos < len(t.hist)-1)
+	set(b.back, t != nil && t.pos > 0)
+	set(b.fwd, t != nil && t.pos < len(t.hist)-1)
 }
 
-// cur is the tab in front, or nil when the browser has not opened one yet.
-func cur() *tab {
-	if active >= 0 && active < len(tabs) {
-		return tabs[active]
+// cur is the tab in front, or nil when this window has not opened one yet.
+func (b *browser) cur() *tab {
+	if b.active >= 0 && b.active < len(b.tabs) {
+		return b.tabs[b.active]
 	}
 	return nil
 }
@@ -339,13 +382,13 @@ func setLoading(t *tab, on bool) {
 	} else {
 		t.btn.Get("style").Set("opacity", "1")
 	}
-	if t == cur() && reload.Truthy() {
+	if t == t.br.cur() && t.br.reload.Truthy() {
 		if on {
-			reload.Set("textContent", "×")
-			reload.Set("title", "stop")
+			t.br.reload.Set("textContent", "×")
+			t.br.reload.Set("title", "stop")
 		} else {
-			reload.Set("textContent", "⟳")
-			reload.Set("title", "reload")
+			t.br.reload.Set("textContent", "⟳")
+			t.br.reload.Set("title", "reload")
 		}
 	}
 }
@@ -470,10 +513,10 @@ func watchDirectNav(t *tab) {
 		t.hist = append(t.hist, shown)
 		t.pos = len(t.hist) - 1
 		t.lbl.Set("textContent", labelFor(shown))
-		if active >= 0 && tabs[active] == t {
-			addr.Set("value", shown)
+		if t.isFront() {
+			t.br.addr.Set("value", shown)
 		}
-		syncNav()
+		t.br.syncNav()
 		return nil
 	}))
 }
@@ -620,13 +663,17 @@ func onClick(el js.Value, fn func()) {
 	}))
 }
 
-// indexOf finds a tab's CURRENT position. Handlers close over the tab itself
-// rather than the index it happened to have when it was created: indices shift
-// every time a tab closes, and the old fix for that — cloning the button to
-// drop its listeners — silently detached the label and icon nodes the tab still
-// held references to, so a tab could never update its own title again.
+// indexOf finds a tab's CURRENT position in its own window. Handlers close
+// over the tab itself rather than the index it happened to have when it was
+// created: indices shift every time a tab closes, and the old fix for that —
+// cloning the button to drop its listeners — silently detached the label and
+// icon nodes the tab still held references to, so a tab could never update
+// its own title again.
 func indexOf(t *tab) int {
-	for i, x := range tabs {
+	if t == nil || t.br == nil {
+		return -1
+	}
+	for i, x := range t.br.tabs {
 		if x == t {
 			return i
 		}
@@ -634,65 +681,65 @@ func indexOf(t *tab) int {
 	return -1
 }
 
-func addTab(url string) {
-	t := &tab{}
-	t.btn = mk("div")
+func (b *browser) addTab(url string) {
+	t := &tab{br: b}
+	t.btn = b.mk("div")
 	t.btn.Get("style").Set("cssText", "display:flex;align-items:center;gap:.4em;max-width:12em;padding:.25em .6em;cursor:pointer;font:11px monospace;color:#cdd2da;border:1px solid #2a2342;border-bottom:0;border-radius:5px 5px 0 0;white-space:nowrap")
 	// The favicon sits where every browser puts it, and holds its space from
 	// the start so a tab does not jump sideways when the icon arrives.
-	t.ico = mk("img")
+	t.ico = b.mk("img")
 	t.ico.Get("style").Set("cssText", "width:12px;height:12px;flex:0 0 12px;object-fit:contain;visibility:hidden")
-	t.lbl = mk("span")
+	t.lbl = b.mk("span")
 	t.lbl.Set("textContent", "new tab")
 	t.lbl.Get("style").Set("cssText", "overflow:hidden;text-overflow:ellipsis;white-space:nowrap")
-	x := mk("span")
+	x := b.mk("span")
 	x.Set("textContent", "×")
 	x.Get("style").Set("cssText", "opacity:.6;flex:0 0 auto")
 	t.btn.Call("appendChild", t.ico)
 	t.btn.Call("appendChild", t.lbl)
 	t.btn.Call("appendChild", x)
 
-	t.frame = mk("iframe")
+	t.frame = b.mk("iframe")
 	t.frame.Get("style").Set("cssText", "position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff;display:none")
-	if len(tabs) == 0 {
+	if len(b.tabs) == 0 {
 		t.frame.Set("id", "browser-frame") // the first tab's frame, for harnesses
 	}
 
-	onClick(t.btn, func() { activate(indexOf(t)) })
-	onClick(x, func() { closeTab(indexOf(t)) })
+	onClick(t.btn, func() { b.activate(indexOf(t)) })
+	onClick(x, func() { b.closeTab(indexOf(t)) })
 	wireTabDrag(t)
 	// Middle-click closes a tab, as everywhere else.
 	t.btn.Call("addEventListener", "auxclick", js.FuncOf(func(_ js.Value, a []js.Value) any {
 		if len(a) > 0 && a[0].Get("button").Int() == 1 {
 			a[0].Call("preventDefault")
-			closeTab(indexOf(t))
+			b.closeTab(indexOf(t))
 		}
 		return nil
 	}))
 
-	strip.Call("insertBefore", t.btn, strip.Get("lastChild")) // before the + button
-	views.Call("appendChild", t.frame)
-	tabs = append(tabs, t)
+	b.strip.Call("insertBefore", t.btn, b.strip.Get("lastChild")) // before the + button
+	b.views.Call("appendChild", t.frame)
+	b.tabs = append(b.tabs, t)
 	navigate(t, url)
-	activate(indexOf(t))
+	b.activate(indexOf(t))
 	// A new tab is for typing an address into, so the bar takes the cursor.
 	if url == startURL {
-		addr.Call("focus")
+		b.addr.Call("focus")
 	}
 }
 
-func closeTab(i int) {
-	if i < 0 || i >= len(tabs) || len(tabs) <= 1 {
+func (b *browser) closeTab(i int) {
+	if i < 0 || i >= len(b.tabs) || len(b.tabs) <= 1 {
 		return // keep at least one tab
 	}
-	t := tabs[i]
+	t := b.tabs[i]
 	t.btn.Call("remove")
 	t.frame.Call("remove")
-	tabs = append(tabs[:i], tabs[i+1:]...)
-	if active >= len(tabs) {
-		active = len(tabs) - 1
+	b.tabs = append(b.tabs[:i], b.tabs[i+1:]...)
+	if b.active >= len(b.tabs) {
+		b.active = len(b.tabs) - 1
 	}
-	activate(active)
+	b.activate(b.active)
 }
 
 // relayResource fetches a resource through the /fetch proxy on the sandbox's
@@ -749,11 +796,18 @@ func relayResource(source, id js.Value, url string) {
 // Transport is globalThis.__netscrapeFetch(url) if the host set one (the visor
 // plugs in its dmsg/clearnet fetch there); otherwise the same-origin /fetch
 // proxy.
+//
+// Each call builds its own *browser and registers it as the current one (see
+// currentBrowser) — a desk that opens several of these windows gets several
+// independent instances, none of them able to reach into another's tabs.
 func Open(root js.Value) {
 	if !root.Truthy() {
 		return
 	}
-	doc = js.Global().Get("document")
+	b := &browser{root: root, active: -1}
+	b.doc = js.Global().Get("document")
+	registerBrowser(b)
+
 	// Style the host WITHOUT clobbering its geometry. Overwriting cssText here
 	// destroyed the positioning a window manager had already given the element:
 	// mounted into a desk window's body, the browser covered the whole frame,
@@ -770,82 +824,82 @@ func Open(root js.Value) {
 	st.Set("background", "#15131c")
 	st.Set("overflow", "hidden")
 
-	strip = mk("div")
-	strip.Get("style").Set("cssText", "display:flex;gap:2px;align-items:flex-end;background:#100d18;border-bottom:1px solid #2a2342;padding:3px 3px 0;min-height:24px")
-	plus := btn("+", "padding:.2em .55em;border-radius:5px 5px 0 0")
-	onClick(plus, func() { addTab(home()) })
-	strip.Call("appendChild", plus)
+	b.strip = b.mk("div")
+	b.strip.Get("style").Set("cssText", "display:flex;gap:2px;align-items:flex-end;background:#100d18;border-bottom:1px solid #2a2342;padding:3px 3px 0;min-height:24px")
+	plus := b.btn("+", "padding:.2em .55em;border-radius:5px 5px 0 0")
+	onClick(plus, func() { b.addTab(home()) })
+	b.strip.Call("appendChild", plus)
 
-	bar := mk("div")
+	bar := b.mk("div")
 	bar.Get("style").Set("cssText", "display:flex;gap:4px;padding:4px;background:#100d18;border-bottom:1px solid #2a2342")
-	back, fwd, reload = btn("◀", "padding:2px 8px"), btn("▶", "padding:2px 8px"), btn("⟳", "padding:2px 8px")
-	back.Set("title", "back")
-	fwd.Set("title", "forward")
-	reload.Set("title", "reload")
-	addr = mk("input")
-	addr.Set("spellcheck", false)
-	addr.Set("placeholder", "search or enter address")
-	addr.Get("style").Set("cssText", "flex:1;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:2px 8px;font:13px monospace")
+	b.back, b.fwd, b.reload = b.btn("◀", "padding:2px 8px"), b.btn("▶", "padding:2px 8px"), b.btn("⟳", "padding:2px 8px")
+	b.back.Set("title", "back")
+	b.fwd.Set("title", "forward")
+	b.reload.Set("title", "reload")
+	b.addr = b.mk("input")
+	b.addr.Set("spellcheck", false)
+	b.addr.Set("placeholder", "search or enter address")
+	b.addr.Get("style").Set("cssText", "flex:1;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:2px 8px;font:13px monospace")
 	// Clicking the address bar selects the whole URL, so typing replaces it
 	// rather than landing in the middle of what is already there.
-	addr.Call("addEventListener", "focus", js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		addr.Call("select")
+	b.addr.Call("addEventListener", "focus", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		b.addr.Call("select")
 		return nil
 	}))
-	goBtn := btn("Go", "padding:2px 8px")
-	proxyBtn, proxyRow := proxyPanel()
-	for _, el := range []js.Value{back, fwd, reload, addr, goBtn, proxyBtn} {
+	goBtn := b.btn("Go", "padding:2px 8px")
+	proxyBtn, proxyRow := b.proxyPanel()
+	for _, el := range []js.Value{b.back, b.fwd, b.reload, b.addr, goBtn, proxyBtn} {
 		bar.Call("appendChild", el)
 	}
 
-	views = mk("div")
-	views.Get("style").Set("cssText", "position:relative;flex:1;min-height:0")
+	b.views = b.mk("div")
+	b.views.Get("style").Set("cssText", "position:relative;flex:1;min-height:0")
 
-	root.Call("appendChild", strip)
+	root.Call("appendChild", b.strip)
 	root.Call("appendChild", bar)
 	root.Call("appendChild", proxyRow)
-	root.Call("appendChild", views)
+	root.Call("appendChild", b.views)
 
 	onClick(goBtn, func() {
-		if t := cur(); t != nil {
-			navigate(t, addr.Get("value").String())
+		if t := b.cur(); t != nil {
+			navigate(t, b.addr.Get("value").String())
 		}
 	})
-	onClick(reload, func() {
-		if t := cur(); t != nil {
+	onClick(b.reload, func() {
+		if t := b.cur(); t != nil {
 			load(t, t.hist[t.pos])
 		}
 	})
-	onClick(back, func() {
-		if t := cur(); t != nil && t.pos > 0 {
+	onClick(b.back, func() {
+		if t := b.cur(); t != nil && t.pos > 0 {
 			t.pos--
 			load(t, t.hist[t.pos])
-			syncNav()
+			b.syncNav()
 		}
 	})
-	onClick(fwd, func() {
-		if t := cur(); t != nil && t.pos < len(t.hist)-1 {
+	onClick(b.fwd, func() {
+		if t := b.cur(); t != nil && t.pos < len(t.hist)-1 {
 			t.pos++
 			load(t, t.hist[t.pos])
-			syncNav()
+			b.syncNav()
 		}
 	})
-	addr.Call("addEventListener", "keydown", js.FuncOf(func(_ js.Value, a []js.Value) any {
+	b.addr.Call("addEventListener", "keydown", js.FuncOf(func(_ js.Value, a []js.Value) any {
 		if len(a) == 0 {
 			return nil
 		}
 		switch a[0].Get("key").String() {
 		case "Enter":
-			if t := cur(); t != nil {
-				navigate(t, addr.Get("value").String())
-				addr.Call("blur")
+			if t := b.cur(); t != nil {
+				navigate(t, b.addr.Get("value").String())
+				b.addr.Call("blur")
 			}
 		case "Escape":
 			// Put back what the tab is actually showing, as browsers do.
-			if t := cur(); t != nil {
-				addr.Set("value", addrText(t.hist[t.pos]))
+			if t := b.cur(); t != nil {
+				b.addr.Set("value", addrText(t.hist[t.pos]))
 			}
-			addr.Call("blur")
+			b.addr.Call("blur")
 		}
 		return nil
 	}))
@@ -866,25 +920,25 @@ func Open(root js.Value) {
 		switch {
 		case ctrl && key == "t":
 			stop()
-			addTab(home())
+			b.addTab(home())
 		case ctrl && key == "w":
 			stop()
-			closeTab(active)
+			b.closeTab(b.active)
 		case ctrl && key == "l":
 			stop()
-			addr.Call("focus")
+			b.addr.Call("focus")
 		case ctrl && key == "r", key == "f5":
 			stop()
-			if t := cur(); t != nil {
+			if t := b.cur(); t != nil {
 				load(t, t.hist[t.pos])
 			}
 		case ctrl && key == "tab":
 			stop()
-			if n := len(tabs); n > 1 {
-				activate((active + 1) % n)
+			if n := len(b.tabs); n > 1 {
+				b.activate((b.active + 1) % n)
 			}
 		case key == "escape":
-			if t := cur(); t != nil && t.loading {
+			if t := b.cur(); t != nil && t.loading {
 				stop()
 				setLoading(t, false)
 			}
@@ -892,7 +946,10 @@ func Open(root js.Value) {
 		return nil
 	}))
 
-	// The relay: a sandboxed page's navShim posts navigation intent here.
+	// The relay: a sandboxed page's navShim posts navigation intent here. This
+	// listens on the window, which every browser instance shares, so it acts
+	// on THIS window's own current tab rather than a package-level one — the
+	// bug this file used to have.
 	js.Global().Call("addEventListener", "message", js.FuncOf(func(_ js.Value, a []js.Value) any {
 		if len(a) == 0 {
 			return nil
@@ -902,7 +959,7 @@ func Open(root js.Value) {
 			return nil
 		}
 		if nav := data.Get("shipyardNav"); nav.Truthy() {
-			if t := cur(); t != nil {
+			if t := b.cur(); t != nil {
 				navigate(t, nav.String())
 			}
 		}
@@ -912,22 +969,27 @@ func Open(root js.Value) {
 		return nil
 	}))
 
-	addTab(home())
+	b.addTab(home())
 }
 
 // Navigate loads url in the ACTIVE tab, recording it in that tab's history —
 // exactly what typing it in the address bar and pressing Go does. A no-op
-// before Open has mounted the browser or when no tab exists.
+// before Open has mounted a browser or when no tab exists.
 //
 // It exists for hosts that drive the browser programmatically: a desk that
 // opens a browser window already pointed at a page (the skywire desk points
 // one at the hypervisor UI on its virtual loopback) needs an entry point that
 // is not a click.
+//
+// Takes no window: it acts on currentBrowser, the most recently opened window
+// still on the page. A host driving a specific window among several has no
+// way to say which through this call.
 func Navigate(url string) {
-	if doc.IsUndefined() || active < 0 || active >= len(tabs) {
+	b := currentBrowser()
+	if b == nil || b.active < 0 || b.active >= len(b.tabs) {
 		return
 	}
-	navigate(tabs[active], url)
+	navigate(b.tabs[b.active], url)
 }
 
 // NewTab opens url in a new tab. With background true the current tab keeps
@@ -940,19 +1002,22 @@ func Navigate(url string) {
 // with a "new tab" nobody asked for sitting first in the strip. The
 // replacement happens only while that tab is still the untouched start page —
 // one tab, no history — so a person who has begun using it keeps it.
+//
+// Takes no window, for the same reason as Navigate: it acts on currentBrowser.
 func NewTab(url string, background bool) {
-	if doc.IsUndefined() {
+	b := currentBrowser()
+	if b == nil {
 		return
 	}
-	if len(tabs) == 1 && isUntouchedStart(tabs[0]) {
-		navigate(tabs[0], url)
-		activate(0)
+	if len(b.tabs) == 1 && isUntouchedStart(b.tabs[0]) {
+		navigate(b.tabs[0], url)
+		b.activate(0)
 		return
 	}
-	prev := active
-	addTab(url)
-	if background && prev >= 0 && prev < len(tabs) {
-		activate(prev)
+	prev := b.active
+	b.addTab(url)
+	if background && prev >= 0 && prev < len(b.tabs) {
+		b.activate(prev)
 	}
 }
 
@@ -967,12 +1032,16 @@ func isUntouchedStart(t *tab) bool {
 // browser keeps its tabs, level with the window controls. The strip keeps
 // working wherever it lives: tabs are wired to their frames, not to their
 // parent. Undefined before Open.
+//
+// Takes no window, for the same reason as Navigate: it acts on currentBrowser,
+// which is right for the caller in practice — a host calls this once, right
+// after the Open call that just created the window it wants the strip for.
 func TabStrip() js.Value {
-	return strip
+	if b := currentBrowser(); b != nil {
+		return b.strip
+	}
+	return js.Value{}
 }
-
-// dragging is the tab being dragged across the strip, nil between drags.
-var dragging *tab
 
 // wireTabDrag lets a tab be picked up and dropped on another to reorder them,
 // the way every browser's strip works. HTML5 drag events, not pointer math:
@@ -981,7 +1050,7 @@ var dragging *tab
 func wireTabDrag(t *tab) {
 	t.btn.Set("draggable", true)
 	t.btn.Call("addEventListener", "dragstart", js.FuncOf(func(_ js.Value, a []js.Value) any {
-		dragging = t
+		t.br.dragging = t
 		if len(a) > 0 {
 			if dt := a[0].Get("dataTransfer"); dt.Truthy() {
 				dt.Set("effectAllowed", "move")
@@ -992,7 +1061,7 @@ func wireTabDrag(t *tab) {
 		return nil
 	}))
 	t.btn.Call("addEventListener", "dragover", js.FuncOf(func(_ js.Value, a []js.Value) any {
-		if dragging != nil && dragging != t && len(a) > 0 {
+		if t.br.dragging != nil && t.br.dragging != t && len(a) > 0 {
 			a[0].Call("preventDefault") // allow the drop
 			if dt := a[0].Get("dataTransfer"); dt.Truthy() {
 				dt.Set("dropEffect", "move")
@@ -1004,37 +1073,37 @@ func wireTabDrag(t *tab) {
 		if len(a) > 0 {
 			a[0].Call("preventDefault")
 		}
-		if dragging != nil && dragging != t {
-			moveTab(indexOf(dragging), indexOf(t))
+		if t.br.dragging != nil && t.br.dragging != t {
+			t.br.moveTab(indexOf(t.br.dragging), indexOf(t))
 		}
-		dragging = nil
+		t.br.dragging = nil
 		return nil
 	}))
 	t.btn.Call("addEventListener", "dragend", js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		dragging = nil
+		t.br.dragging = nil
 		return nil
 	}))
 }
 
 // moveTab moves the tab at from to position to, in the slice and in the strip,
 // keeping the active tab active.
-func moveTab(from, to int) {
-	if from < 0 || to < 0 || from >= len(tabs) || to >= len(tabs) || from == to {
+func (b *browser) moveTab(from, to int) {
+	if from < 0 || to < 0 || from >= len(b.tabs) || to >= len(b.tabs) || from == to {
 		return
 	}
-	cur := tabs[active]
-	t := tabs[from]
-	tabs = append(tabs[:from], tabs[from+1:]...)
-	rest := append([]*tab{}, tabs[to:]...)
-	tabs = append(append(tabs[:to], t), rest...)
+	cur := b.tabs[b.active]
+	t := b.tabs[from]
+	b.tabs = append(b.tabs[:from], b.tabs[from+1:]...)
+	rest := append([]*tab{}, b.tabs[to:]...)
+	b.tabs = append(append(b.tabs[:to], t), rest...)
 	// Re-place the button before the one now following it, or before the +
 	// button when it moved to the end.
-	if to+1 < len(tabs) {
-		strip.Call("insertBefore", t.btn, tabs[to+1].btn)
+	if to+1 < len(b.tabs) {
+		b.strip.Call("insertBefore", t.btn, b.tabs[to+1].btn)
 	} else {
-		strip.Call("insertBefore", t.btn, strip.Get("lastChild"))
+		b.strip.Call("insertBefore", t.btn, b.strip.Get("lastChild"))
 	}
-	active = indexOf(cur)
+	b.active = indexOf(cur)
 }
 
 // Proxy setting. netscrape does not carry traffic itself — the host's
@@ -1046,6 +1115,12 @@ func moveTab(from, to int) {
 // localhost:<port>) to its own virtual-loopback SOCKS and hands anything else
 // to the visor behind the page to dial. It persists in localStorage so a
 // person's choice survives a reload, the way a browser's proxy setting does.
+//
+// This one preference is genuinely process-wide, not per-window: it is
+// published under one globalThis key and stored under one localStorage key,
+// so every browser window's proxy panel reads and writes the same setting —
+// unlike the per-window chrome state above, there is no "which window's
+// proxy" question to get wrong.
 const proxyStoreKey = "netscrape.proxy"
 
 var proxyAddr = ""
@@ -1116,18 +1191,18 @@ func validProxyAddr(s string) bool {
 // proxyPanel builds the ⚙ button and the settings row it toggles: one field,
 // the proxy address clearnet pages go through. Returns the button (for the
 // address bar) and the panel (for below it).
-func proxyPanel() (button, panel js.Value) {
-	button = btn("⚙", "padding:2px 8px")
+func (b *browser) proxyPanel() (button, panel js.Value) {
+	button = b.btn("⚙", "padding:2px 8px")
 	button.Set("title", "proxy settings")
-	panel = mk("div")
+	panel = b.mk("div")
 	panel.Get("style").Set("cssText", "display:none;gap:8px;align-items:center;padding:4px 6px;background:#100d18;border-bottom:1px solid #2a2342;font:12px monospace;color:#cdd2da")
-	label := mk("span")
+	label := b.mk("span")
 	label.Set("textContent", "clearnet pages via proxy")
-	addr := mk("input")
+	addr := b.mk("input")
 	addr.Set("spellcheck", false)
 	addr.Set("placeholder", "[scheme://]host:port — empty: the visor's default egress; e.g. vnet:1080 or socks5://192.168.1.2:1080")
 	addr.Get("style").Set("cssText", "flex:1;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:1px 6px;font:12px monospace")
-	status := mk("span")
+	status := b.mk("span")
 	status.Get("style").Set("cssText", "opacity:.7")
 	sync := func() {
 		addr.Set("value", proxyAddr)
