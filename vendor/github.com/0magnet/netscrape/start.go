@@ -8,7 +8,7 @@ import (
 )
 
 // startURL names the built-in start page in a tab's history. It is not a URL
-// a frame could load: load recognises it and renders the page itself, and the
+// a frame could load: load recognizes it and renders the page itself, and the
 // address bar shows it as empty, the way every browser shows a new tab — a
 // blank prompt for an address, which is what a new tab is for.
 const startURL = "about:newtab"
@@ -87,7 +87,7 @@ func renderStart(t *tab) {
 	setLoading(t, false)
 }
 
-// startCSS is the start page's whole look: the chrome's colours, tiles that
+// startCSS is the start page's whole look: the chrome's colors, tiles that
 // read as buttons, nothing that competes with the address bar above.
 const startCSS = `html,body{margin:0;height:100%;background:#15131c;color:#cdd2da;font:14px system-ui,sans-serif}` +
 	`main{min-height:100%;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2em;padding:2em}` +
