@@ -295,6 +295,29 @@ type Aggregator struct {
 	// lands. Dropped when the feed is reclaimed (reclaimOrphanFeeds).
 	// Guarded by mu.
 	lastList map[skycipher.PubKey]cachedList
+
+	// ingest bounds how many store writes run at once across all feeds (see
+	// maxConcurrentIngest). Nil means unbounded (tests build bare Aggregators).
+	ingest chan struct{}
+}
+
+// maxConcurrentIngest caps concurrent leaf dispatches and list reconciles.
+// Visors publish telemetry on a shared beat, so hundreds of filled Roots
+// arrive together; unbounded, each ran its rows serially against redis at
+// once, drained the pool, and every write timed out. Waiting here holds the
+// feed's fill goroutine, which is the backpressure we want.
+const maxConcurrentIngest = 8
+
+// telemetryShardTimeout bounds applying one telemetry shard's rows.
+var telemetryShardTimeout = 10 * time.Second
+
+// acquireIngest blocks for an ingest slot and returns its release.
+func (a *Aggregator) acquireIngest() func() {
+	if a.ingest == nil {
+		return func() {}
+	}
+	a.ingest <- struct{}{}
+	return func() { <-a.ingest }
 }
 
 // cachedList is the last good decoded transport-list snapshot for a
@@ -372,6 +395,7 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggrega
 		log:      conf.Logger,
 		fetching: make(map[skycipher.PubKey]struct{}),
 		lastList: make(map[skycipher.PubKey]cachedList),
+		ingest:   make(chan struct{}, maxConcurrentIngest),
 	}
 
 	core, err := cxoaggregate.New(dmsgC, sk, dmsgPort, cxoaggregate.Options{
@@ -781,6 +805,7 @@ func (a *Aggregator) reapplyCached(pub skycipher.PubKey, reporter cipher.PubKey)
 }
 
 func (a *Aggregator) applyRefresh(entries []*transport.Entry, reporter cipher.PubKey, version string) {
+	defer a.acquireIngest()()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := a.sink.RefreshTransportsFromCXO(ctx, entries, reporter, version); err != nil {
@@ -790,6 +815,7 @@ func (a *Aggregator) applyRefresh(entries []*transport.Entry, reporter cipher.Pu
 }
 
 func (a *Aggregator) applyReconcile(entries []*transport.Entry, reporter cipher.PubKey, version string) {
+	defer a.acquireIngest()()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := a.sink.ReconcileTransportsFromCXO(ctx, entries, reporter, version); err != nil {
@@ -895,6 +921,7 @@ func (a *Aggregator) walkAndDispatch(pack registry.Pack, n *treestore.TreeNode, 
 // Tier and service bitmaps still flow through the CXO cache but
 // aren't yet projected into TPD's redis uptime tables.
 func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubKey, skipCurrent bool) {
+	defer a.acquireIngest()()
 	// Sharded telemetry (upgraded visors): one binary leaf per shard packs
 	// every transport in that shard. Decode and apply each row exactly as a
 	// legacy `current` snapshot is applied — bandwidth, throughput, latency,
@@ -995,9 +1022,15 @@ func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter c
 		a.log.WithError(err).WithField("path", path).Debug("CXO aggregator: telemetry shard decode failed")
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), telemetryShardTimeout)
 	defer cancel()
 	for i := range entries {
+		if ctx.Err() != nil {
+			// Every remaining write would fail at once; say so once.
+			a.log.WithField("path", path).WithField("skipped", len(entries)-i).
+				Debug("CXO aggregator: telemetry shard ran out of time")
+			return
+		}
 		e := &entries[i]
 		// Belt-and-suspenders: a row whose ID doesn't belong to this shard
 		// signals a malformed/spoofed blob — skip it rather than mis-apply.

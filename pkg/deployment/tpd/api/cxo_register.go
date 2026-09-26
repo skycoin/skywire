@@ -148,6 +148,9 @@ func (api *API) reconcileFromCXO(ctx context.Context, entries []*transport.Entry
 		}
 	}
 	for _, e := range toHeartbeat {
+		if ctx.Err() != nil {
+			break // the rest would fail at once; they come due again next gap
+		}
 		if err := api.store.RecordTransportHeartbeat(ctx, e.ID, string(e.Type), time.Time{}); err != nil {
 			_ = err //nolint:errcheck // uptime is auxiliary; store logs
 		}
