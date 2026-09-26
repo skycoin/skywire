@@ -198,7 +198,7 @@ func viaClient(via string) (*http.Client, error) {
 	if via == "" {
 		return nil, nil //nolint:nilnil // no client means "use the default", which is what websocket.Dial wants
 	}
-	d, err := proxy.SOCKS5("tcp", via, nil, proxy.Direct)
+	d, err := proxy.SOCKS5("tcp", via, nil, internal.LoopbackDialer)
 	if err != nil {
 		return nil, fmt.Errorf("--proxy %s: %w", via, err)
 	}

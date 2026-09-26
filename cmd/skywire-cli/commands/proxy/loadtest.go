@@ -131,7 +131,7 @@ var loadtestRunCmd = &cobra.Command{
 		if !strings.HasPrefix(loadtestAddr, ":") {
 			socks = loadtestAddr
 		}
-		dialer, err := proxy.SOCKS5("tcp", socks, nil, proxy.Direct)
+		dialer, err := proxy.SOCKS5("tcp", socks, nil, internal.LoopbackDialer)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SOCKS5 dialer: %w", err))
 		}

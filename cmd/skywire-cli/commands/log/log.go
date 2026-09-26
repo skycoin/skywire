@@ -24,6 +24,7 @@ import (
 	"github.com/spf13/pflag"
 	"golang.org/x/net/proxy"
 
+	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -539,7 +540,7 @@ func visorURL(pubkey, path string) string {
 // addr, resolving hostnames REMOTELY (socks5h) so <pk>.dmsg names are resolved by the
 // proxy (e.g. a running `skywire dmsg web`) rather than locally.
 func socks5Transport(addr string) (*http.Transport, error) {
-	d, err := proxy.SOCKS5("tcp", addr, nil, proxy.Direct)
+	d, err := proxy.SOCKS5("tcp", addr, nil, cliutil.LoopbackDialer)
 	if err != nil {
 		return nil, err
 	}

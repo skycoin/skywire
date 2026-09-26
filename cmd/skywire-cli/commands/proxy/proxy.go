@@ -1462,7 +1462,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				proxyAddr = addr
 			}
 
-			dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
+			dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, internal.LoopbackDialer)
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to create SOCKS5 dialer: %w", err))
 			}
@@ -1816,7 +1816,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 
 				// Test with HTTP request
 				start := time.Now()
-				dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
+				dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, internal.LoopbackDialer)
 				if err != nil {
 					result.Error = fmt.Sprintf("SOCKS5 dialer: %v", err)
 					results[i] = result
@@ -2359,7 +2359,7 @@ func testProxyWithPooledClient(rpcClient proxyTestClient, clientName string, por
 
 	// HTTP request (with separate timeout) - no mutex needed, this is network I/O
 	start := time.Now()
-	dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
+	dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, internal.LoopbackDialer)
 	if err != nil {
 		result.err = fmt.Errorf("SOCKS5: %w", err)
 		return result
