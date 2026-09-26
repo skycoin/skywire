@@ -74,6 +74,10 @@ type Node struct {
 	// by treestore TestPeerSubMissesAfterReattach under -race.
 	callbackMu sync.RWMutex
 
+	// objBodies shares encoded large objects across the requests that fetch
+	// them (see objectBodyCache).
+	objBodies objectBodyCache
+
 	//
 	// stat
 	//

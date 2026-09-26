@@ -1010,7 +1010,7 @@ func (c *Conn) handleRqObject(seq uint32, rq *msg.RqObject) {
 	select {
 	case obj := <-gc:
 		// got
-		c.sendMsg(c.nextSeq(), seq, &msg.Object{Value: obj.Val}) //nolint:errcheck,gosec
+		c.sendSharedBody(c.nextSeq(), seq, c.n.objBodies.body(rq.Key, obj.Val)) //nolint:errcheck,gosec
 		return
 	default:
 		// wait
@@ -1025,7 +1025,7 @@ func (c *Conn) handleRqObject(seq uint32, rq *msg.RqObject) {
 
 	select {
 	case obj := <-gc:
-		c.sendMsg(c.nextSeq(), seq, &msg.Object{Value: obj.Val}) //nolint:errcheck,gosec
+		c.sendSharedBody(c.nextSeq(), seq, c.n.objBodies.body(rq.Key, obj.Val)) //nolint:errcheck,gosec
 	case <-tc:
 		c.sendMsg(c.nextSeq(), seq, &msg.Err{}) //nolint:errcheck,gosec // timeout
 	case <-c.closeq:
