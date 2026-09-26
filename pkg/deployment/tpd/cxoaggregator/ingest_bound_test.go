@@ -63,7 +63,7 @@ func TestIngestIsBounded(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			a.dispatchLeaf(telemetrywire.LeafPath(1), blob, reporter, false)
+			a.dispatchLeafSlot(telemetrywire.LeafPath(1), blob, reporter)
 		}()
 	}
 	wg.Wait()

@@ -311,6 +311,13 @@ const maxConcurrentIngest = 8
 // telemetryShardTimeout bounds applying one telemetry shard's rows.
 var telemetryShardTimeout = 10 * time.Second
 
+// dispatchLeafSlot dispatches one leaf outside a Root walk, under its own
+// ingest slot.
+func (a *Aggregator) dispatchLeafSlot(path string, leaf []byte, reporter cipher.PubKey) {
+	defer a.acquireIngest()()
+	a.dispatchLeaf(path, leaf, reporter, false)
+}
+
 // acquireIngest blocks for an ingest slot and returns its release.
 func (a *Aggregator) acquireIngest() func() {
 	if a.ingest == nil {
@@ -568,6 +575,10 @@ func (a *Aggregator) handleRootFilled(r *registry.Root) {
 	if r == nil || len(r.Refs) == 0 {
 		return
 	}
+	// One slot per Root, held across decode and dispatch: taking it per leaf
+	// let every feed decode its tree at once and wait holding it, which put
+	// TPD at 3.6 GB on each telemetry beat.
+	defer a.acquireIngest()()
 	pack, err := a.cxoNode.Container().Pack(r, treestore.Registry)
 	if err != nil {
 		a.log.WithError(err).Debug("CXO aggregator: get pack failed")
@@ -661,7 +672,7 @@ func (a *Aggregator) recoverTransportListOnBreak(r *registry.Root) {
 	leafCopy := append([]byte(nil), leaf...)
 	// This recovery only ever dispatches the tp-list discovery leaf, never a
 	// current leaf, so skipCurrent is irrelevant (pass false).
-	go a.dispatchLeaf(dispatchPath, leafCopy, reporter, false)
+	go a.dispatchLeafSlot(dispatchPath, leafCopy, reporter)
 }
 
 // reconcileTargeted decouples discovery from the whole-Root telemetry fill.
@@ -921,7 +932,6 @@ func (a *Aggregator) walkAndDispatch(pack registry.Pack, n *treestore.TreeNode, 
 // Tier and service bitmaps still flow through the CXO cache but
 // aren't yet projected into TPD's redis uptime tables.
 func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubKey, skipCurrent bool) {
-	defer a.acquireIngest()()
 	// Sharded telemetry (upgraded visors): one binary leaf per shard packs
 	// every transport in that shard. Decode and apply each row exactly as a
 	// legacy `current` snapshot is applied — bandwidth, throughput, latency,
