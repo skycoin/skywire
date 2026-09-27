@@ -1346,3 +1346,11 @@ func (proxyDefaultAPI) MailAttachment(_ string, _ string, _ int) (*skymail.Attac
 func (proxyDefaultAPI) MailSetSettings(_ visorapi.MailSettingsUpdate) error {
 	return ErrProxyNotSupported
 }
+
+func (proxyDefaultAPI) Skyenv() (visorapi.SkyenvState, error) {
+	return visorapi.SkyenvState{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) SetSkyenv(_ visorapi.SkyenvEdits) (visorapi.SkyenvState, error) {
+	return visorapi.SkyenvState{}, ErrProxyNotSupported
+}

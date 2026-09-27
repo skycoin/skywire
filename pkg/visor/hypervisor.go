@@ -971,6 +971,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/runtime-stats", hv.getRuntimeStats())
 				r.Get("/visors/{pk}/host-stats", hv.getHostStats())
 				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
+				r.Get("/visors/{pk}/skyenv", hv.getSkyenv())
+				r.Put("/visors/{pk}/skyenv", hv.putSkyenv())
 				r.Get("/visors/{pk}/persistent-transports", hv.getPersistentTransports())
 				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
 				r.Get("/visors/{pk}/reward", hv.getRewardAddress())

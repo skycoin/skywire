@@ -1883,3 +1883,9 @@ func (mc *mockRPCClient) MailAttachment(string, string, int) (*skymail.Attachmen
 
 // MailSetSettings implements API.
 func (mc *mockRPCClient) MailSetSettings(MailSettingsUpdate) error { return nil }
+
+// Skyenv implements API.
+func (mc *mockRPCClient) Skyenv() (SkyenvState, error) { return SkyenvState{}, nil }
+
+// SetSkyenv implements API.
+func (mc *mockRPCClient) SetSkyenv(_ SkyenvEdits) (SkyenvState, error) { return SkyenvState{}, nil }

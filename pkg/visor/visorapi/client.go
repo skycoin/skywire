@@ -852,6 +852,20 @@ func (rc *rpcClient) SetConfigFields(fields map[string]json.RawMessage) ([]Confi
 	return out, err
 }
 
+// Skyenv implements API.
+func (rc *rpcClient) Skyenv() (SkyenvState, error) {
+	var out SkyenvState
+	err := rc.Call("Skyenv", &struct{}{}, &out)
+	return out, err
+}
+
+// SetSkyenv implements API.
+func (rc *rpcClient) SetSkyenv(edits SkyenvEdits) (SkyenvState, error) {
+	var out SkyenvState
+	err := rc.Call("SetSkyenv", &edits, &out)
+	return out, err
+}
+
 // LocalTransportStats implements API.
 func (rc *rpcClient) LocalTransportStats() (*LocalTransportStatsResponse, error) {
 	var resp LocalTransportStatsResponse
