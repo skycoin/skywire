@@ -82,6 +82,17 @@
 
          The identity is meant to move deliberately, through Export config;
          the wallet is meant to be restored from its twelve words. -->
+    <!-- SkyVPN's "only these apps" / "all but these apps" lists: the apps on
+         the launcher are the ones a person would choose. Visible from
+         Android 11 only when declared; QUERY_ALL_PACKAGES would show every
+         package installed, for a list nobody needs. See InstalledApps. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
         android:name=".SkywireApplication"
         android:allowBackup="false"

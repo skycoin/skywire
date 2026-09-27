@@ -234,6 +234,24 @@
     <string name="vpn_stats_total">本机累计</string>
     <string name="vpn_stats_interface">接口地址</string>
 
+    <string name="vpn_apps_title">使用 SkyVPN 的应用</string>
+    <string name="vpn_apps_mode_all">所有应用</string>
+    <string name="vpn_apps_mode_all_hint">所有应用的流量都经过隧道。</string>
+    <string name="vpn_apps_mode_only">仅所选应用</string>
+    <string name="vpn_apps_mode_only_hint">只有你选择的应用经过隧道，其他应用使用正常网络，不受影响。</string>
+    <string name="vpn_apps_mode_except">除所选应用外的所有应用</string>
+    <string name="vpn_apps_mode_except_hint">除你选择的应用外，所有应用都经过隧道。</string>
+    <string name="vpn_apps_choose">选择应用</string>
+    <plurals name="vpn_apps_count">
+        <item quantity="other">已选 %d 个应用</item>
+    </plurals>
+    <string name="vpn_apps_none">尚未选择应用。至少选择一个应用后 SkyVPN 才会连接。</string>
+    <string name="vpn_apps_picker_only">使用 SkyVPN 的应用</string>
+    <string name="vpn_apps_picker_except">不使用 SkyVPN 的应用</string>
+    <string name="vpn_apps_search">搜索应用</string>
+    <string name="vpn_apps_done">完成</string>
+    <string name="vpn_apps_empty">没有匹配的应用。</string>
+    <string name="vpn_error_no_apps">请至少为 SkyVPN 选择一个应用，或切换到“所有应用”。</string>
     <string name="vpn_killswitch_title">断网保护</string>
     <string name="vpn_killswitch_hint">隧道断开时保留网络接口，使流量不会绕过它泄漏出去。在隧道恢复之前，其他应用将无法联网。</string>
     <string name="vpn_killswitch_always_on">“始终开启的 VPN”设置</string>
