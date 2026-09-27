@@ -43,7 +43,7 @@ func TestSkyenvRoundTrip(t *testing.T) {
 		t.Errorf("ISHYPERVISOR = %q", st.Values["ISHYPERVISOR"])
 	}
 	for _, k := range []string{"SK", "VPNROUTERPASSPHRASE"} {
-		if st.Values[k] != SkyenvRedacted {
+		if st.Values[k] != visorapi.SkyenvRedacted {
 			t.Errorf("%s leaked: %q", k, st.Values[k])
 		}
 	}
@@ -51,7 +51,7 @@ func TestSkyenvRoundTrip(t *testing.T) {
 		t.Error("no flag metadata")
 	}
 
-	if _, err := v.SetSkyenv(visorapi.SkyenvEdits{Set: map[string]string{"vpnrouter-passphrase": SkyenvRedacted}}); err != nil {
+	if _, err := v.SetSkyenv(visorapi.SkyenvEdits{Set: map[string]string{"vpnrouter-passphrase": visorapi.SkyenvRedacted}}); err != nil {
 		t.Fatal(err)
 	}
 	if got := readTestFile(t, p); !strings.Contains(got, "VPNROUTERPASSPHRASE='hunter22'") {

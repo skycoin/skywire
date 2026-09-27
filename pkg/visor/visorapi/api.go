@@ -1383,6 +1383,20 @@ type SkyenvState struct {
 	Flags []autoconfigcmd.Flag `json:"flags"`
 }
 
+// SkyenvRedacted is what Skyenv reports in place of a secret's value, and
+// what SetSkyenv ignores when a form sends it back unchanged.
+const SkyenvRedacted = "(set)"
+
+// SkyenvSecret reports variables whose value never leaves the visor: Skyenv
+// reports only that they are set.
+func SkyenvSecret(key string) bool {
+	switch key {
+	case "SK", "DMSGWEBSK", "VPNROUTERPASSPHRASE":
+		return true
+	}
+	return false
+}
+
 // SkyenvEdits is one SetSkyenv request, addressed by autoconfig flag name.
 type SkyenvEdits struct {
 	// Set maps a flag name (e.g. "ishv", "hvpks") to its value as the flag

@@ -38,14 +38,6 @@ var skyenvRefused = map[string]string{
 	"sk": "the secret key is the visor's identity; change it on the host with `skywire autoconfig --sk`",
 }
 
-// skyenvSecret are variables whose value never leaves the visor: Skyenv
-// reports only that they are set. A form must therefore send a field back
-// only when the operator changed it.
-var skyenvSecret = map[string]bool{"SK": true, "DMSGWEBSK": true, "VPNROUTERPASSPHRASE": true}
-
-// SkyenvRedacted is what Skyenv reports in place of a secret's value.
-const SkyenvRedacted = "(set)"
-
 // Skyenv implements visorapi.API.
 func (v *Visor) Skyenv() (visorapi.SkyenvState, error) {
 	path := skyenvfile.Path()
@@ -55,8 +47,8 @@ func (v *Visor) Skyenv() (visorapi.SkyenvState, error) {
 	case err == nil:
 		st.Exists = true
 		for k := range vals {
-			if skyenvSecret[k] && vals[k] != "" {
-				vals[k] = SkyenvRedacted
+			if visorapi.SkyenvSecret(k) && vals[k] != "" {
+				vals[k] = visorapi.SkyenvRedacted
 			}
 		}
 		st.Values = vals
@@ -79,7 +71,7 @@ func (v *Visor) SetSkyenv(req visorapi.SkyenvEdits) (visorapi.SkyenvState, error
 		if err != nil {
 			return visorapi.SkyenvState{}, err
 		}
-		if skyenvSecret[e.Key] && val == SkyenvRedacted {
+		if visorapi.SkyenvSecret(e.Key) && val == visorapi.SkyenvRedacted {
 			continue // a form echoing back what Skyenv showed it: leave the secret alone
 		}
 		edits = append(edits, e)
