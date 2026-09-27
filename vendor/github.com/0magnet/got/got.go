@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0magnet/bottle/vnet"
 	"golang.org/x/net/proxy"
 )
 
@@ -80,7 +81,7 @@ func NewWithProxy(ctx context.Context, proxyAddr string) (*Got, error) {
 		return nil, err
 	}
 
-	dialer, err := proxy.SOCKS5("tcp", addr, nil, proxy.Direct)
+	dialer, err := proxy.SOCKS5("tcp", addr, nil, vnetDialer{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SOCKS5 dialer: %w", err)
 	}
@@ -277,4 +278,17 @@ func NormalizeURL(rawURL string) (string, error) {
 		rawURL = "https://" + rawURL
 	}
 	return rawURL, nil
+}
+
+// proxyDialTimeout bounds the connection to the proxy itself.
+const proxyDialTimeout = 20 * time.Second
+
+// vnetDialer reaches the proxy through bottle/vnet: a real socket natively,
+// and under js/wasm the page's virtual loopback, where a browser visor's
+// proxies listen. net.Dial cannot reach that loopback, so a proxy on
+// 127.0.0.1 in a browser tab was always "connection refused".
+type vnetDialer struct{}
+
+func (vnetDialer) Dial(network, addr string) (net.Conn, error) {
+	return vnet.DialTimeout(network, addr, proxyDialTimeout)
 }

@@ -27,9 +27,11 @@ import (
 
 	"github.com/0magnet/sh/v3/interp"
 	"github.com/0magnet/websh/shell"
+
+	"github.com/skycoin/skywire/pkg/proxyenv"
 )
 
-const curlHelp = "fetch a URL: curl [-s] [-i] [-o file] [-X method] [-H 'K: V']... [-d body] [-x socks5h://host:port] <url>"
+const curlHelp = "fetch a URL: curl [-s] [-i] [-o file] [-X method] [-H 'K: V']... [-d body] [-x socks5h://host:port] <url> — without -x, ALL_PROXY / https_proxy / http_proxy minus NO_PROXY"
 
 func registerCurl() {
 	shell.RegisterApplet("curl", curlHelp, runCurlX)
@@ -40,6 +42,7 @@ func runCurlX(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, args
 		silent, include bool
 		outFile, method string
 		proxyAddr, data string
+		proxySet        bool
 		headers         []string
 		rawURL          string
 	)
@@ -88,7 +91,7 @@ func runCurlX(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, args
 			if !ok {
 				return 2
 			}
-			proxyAddr = v
+			proxyAddr, proxySet = v, true
 		case strings.HasPrefix(a, "-"):
 			fmt.Fprintf(hc.Stderr, "curl: unknown flag %s\nusage: %s\n", a, curlHelp) //nolint:errcheck // terminal output
 			return 2
@@ -102,6 +105,12 @@ func runCurlX(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, args
 	}
 	if !strings.Contains(rawURL, "://") {
 		rawURL = "http://" + rawURL
+	}
+	// Without -x the shell's proxy environment decides, as it does for curl:
+	// the desk exports ALL_PROXY=socks5h://127.0.0.1:4445 and NO_PROXY for its
+	// own loopback. -x "" asks for no proxy.
+	if !proxySet {
+		proxyAddr = proxyenv.For(rawURL, func(name string) string { return hc.Env.Get(name).String() })
 	}
 	if method == "" {
 		if data != "" {
@@ -147,7 +156,7 @@ func runCurlX(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, args
 	if err != nil {
 		hint := ""
 		if proxyAddr == "" {
-			hint = " (no -x: browser fetch, cross-origin needs CORS)"
+			hint = " (no proxy: browser fetch, cross-origin needs CORS; set ALL_PROXY or -x)"
 		}
 		fmt.Fprintf(hc.Stderr, "curl: %v%s\n", err, hint) //nolint:errcheck // terminal output
 		return 1
