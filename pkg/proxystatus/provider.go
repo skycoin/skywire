@@ -37,11 +37,13 @@ import (
 // the page.
 type Surface string
 
-// The three proxy surfaces that serve a status page.
+// The surfaces that serve a status page. SurfaceSkywire is not one proxy: it
+// is every app and visor subsystem that holds a route or a direct stream.
 const (
 	SurfaceDmsg     Surface = "dmsg"
 	SurfaceSkynet   Surface = "skynet"
 	SurfaceSkysocks Surface = "skysocks"
+	SurfaceSkywire  Surface = "skywire"
 )
 
 // statusLabel is the reserved first label of every status host.
@@ -194,7 +196,11 @@ type Snapshot struct {
 	// the one failure mode the page reported neither as a leg nor as a stream.
 	// Zero (omitted) for every other surface.
 	ExitOpenTimeouts uint64 `json:"exit_open_timeouts,omitempty"`
-	Note             string // optional human note (e.g. why a section is empty)
+	// Consumers is the skywire surface's content: one entry per app or visor
+	// subsystem holding a route group or a direct stream. Empty for every
+	// other surface.
+	Consumers []Consumer `json:"consumers,omitempty"`
+	Note      string     // optional human note (e.g. why a section is empty)
 }
 
 // Layer is the live state of one resolving-proxy layer (dmsg_web on :4445,
@@ -285,6 +291,18 @@ type RangeSplit struct {
 	ChunkSize       int64  `json:"chunk_size"`        // bytes per range request
 }
 
+// Consumer is one user of the route plane on the skywire surface: an app that
+// dialed route groups or direct streams, or the visor answering someone else's
+// dial. Tunnels render with the same route tree as a proxy surface.
+type Consumer struct {
+	// Name is the app name, or "inbound :<port>" for a route group this visor
+	// accepted rather than dialed.
+	Name    string
+	Inbound bool
+	Running bool
+	Tunnels []Tunnel
+}
+
 // Tunnel is one STREAM-level route group — a single --tunnels stream to the exit,
 // carrying its own PACKET-level mux Legs. With --tunnels N there are N tunnels,
 // each auto-steered onto a disjoint first-hop transport; with a single tunnel
@@ -371,7 +389,7 @@ func Match(host string) (Surface, bool) {
 		return "", false
 	}
 	switch Surface(rest) {
-	case SurfaceDmsg, SurfaceSkynet, SurfaceSkysocks:
+	case SurfaceDmsg, SurfaceSkynet, SurfaceSkysocks, SurfaceSkywire:
 		return Surface(rest), true
 	default:
 		return "", false
