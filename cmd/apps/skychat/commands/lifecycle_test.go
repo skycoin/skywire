@@ -552,6 +552,10 @@ func (p *pollAPI) PairPoll(time.Time) ([]visorapi.PairMessage, error) {
 	return out, nil
 }
 
+// PairList feeds the poller's revoked-peer filter: no pairs listed, so no
+// message is ever filtered out (the pre-filter behavior).
+func (p *pollAPI) PairList() ([]visorapi.PairInfo, error) { return nil, nil }
+
 func (p *pollAPI) GroupPoll(time.Time) ([]visorapi.GroupMessage, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
