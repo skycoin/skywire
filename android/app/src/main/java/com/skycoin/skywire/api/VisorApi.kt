@@ -10,8 +10,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
@@ -397,7 +400,7 @@ class VisorApi(context: Context) {
      * ringing list (that is the callee's) nor the active list (that starts at
      * "answered"), so without this there is nothing to show for the whole ring.
      */
-    suspend fun voiceDialing(): List<VoiceInvite> = withContext(Dispatchers.IO) {
+    suspend fun voiceDialing(): List<OutgoingCall> = withContext(Dispatchers.IO) {
         getWithRelogin("/api/visors/${localPk()}/skychat/voice/dialing").use { resp ->
             if (resp.code == HTTP_UNAVAILABLE || !resp.isSuccessful) {
                 return@withContext emptyList()
@@ -407,8 +410,31 @@ class VisorApi(context: Context) {
                 emptyList()
             } else {
                 json.decodeFromString(ListSerializer(VoiceDialing.serializer()), body)
-                    .map { VoiceInvite(it.callId, it.peer) }
+                    .map { OutgoingCall(it.callId, it.peer, DialState.parse(it.state), it.ringback) }
             }
+        }
+    }
+
+    /**
+     * The other side's ringback tone for an outbound call, or null while it
+     * has not arrived — and for a peer that plays none. Up to a megabyte.
+     */
+    suspend fun voiceDialRingback(callId: String): ByteArray? = withContext(Dispatchers.IO) {
+        val id = URLEncoder.encode(callId, "UTF-8")
+        getWithRelogin("/api/visors/${localPk()}/skychat/voice/ringback?call=$id").use { resp ->
+            if (!resp.isSuccessful) null else resp.body.bytes().takeIf { it.isNotEmpty() }
+        }
+    }
+
+    /** Place a call to [peer]; returns its id at once, before it is answered. */
+    suspend fun voiceCall(peer: String): String = withContext(Dispatchers.IO) {
+        val body = buildJsonObject { put("peer", JsonPrimitive(peer)) }.toString()
+        postWithRelogin("/api/visors/${localPk()}/skychat/voice/call", body).use { resp ->
+            if (!resp.isSuccessful) {
+                throw IOException("voice call failed (${resp.code}): ${errorBody(resp)}")
+            }
+            (json.parseToJsonElement(resp.body.string()) as? JsonObject)
+                ?.get("call_id")?.jsonPrimitive?.contentOrNull.orEmpty()
         }
     }
 

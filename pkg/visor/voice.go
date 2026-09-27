@@ -123,9 +123,54 @@ func (v *Visor) VoiceDialing() ([]visorapi.VoiceDialingInfo, error) {
 	}
 	out := make([]visorapi.VoiceDialingInfo, 0)
 	for _, d := range v.voice.Dialing() {
-		out = append(out, visorapi.VoiceDialingInfo{CallID: d.CallID, Peer: d.Peer.Hex()})
+		out = append(out, visorapi.VoiceDialingInfo{
+			CallID:   d.CallID,
+			Peer:     d.Peer.Hex(),
+			State:    string(d.State),
+			Reason:   d.Reason,
+			Ringback: d.Ringback,
+		})
 	}
 	return out, nil
+}
+
+// ErrNoRingback is returned for an outbound call whose peer's ringback tone is
+// not here — it plays none, or it has not arrived yet.
+var ErrNoRingback = errors.New("voice: no ringback tone for that call")
+
+// VoiceSetRingback sets the tone callers hear while this visor rings, and keeps
+// it for the next start; empty data clears it.
+func (v *Visor) VoiceSetRingback(t visorapi.VoiceRingback) error {
+	if v.voice == nil {
+		return ErrVoiceDisabled
+	}
+	if err := v.voice.SetRingback(t.Data, t.Mime); err != nil {
+		return err
+	}
+	data, mime := v.voice.Ringback()
+	return saveRingback(v.conf.LocalPath, data, mime)
+}
+
+// VoiceRingback returns this visor's own ringback tone.
+func (v *Visor) VoiceRingback() (visorapi.VoiceRingback, error) {
+	if v.voice == nil {
+		return visorapi.VoiceRingback{}, ErrVoiceDisabled
+	}
+	data, mime := v.voice.Ringback()
+	return visorapi.VoiceRingback{Data: data, Mime: mime}, nil
+}
+
+// VoiceDialRingback returns the ringback tone the peer of an outbound call
+// plays, once it has arrived.
+func (v *Visor) VoiceDialRingback(callID string) (visorapi.VoiceRingback, error) {
+	if v.voice == nil {
+		return visorapi.VoiceRingback{}, ErrVoiceDisabled
+	}
+	data, mime, ok := v.voice.DialRingback(callID)
+	if !ok {
+		return visorapi.VoiceRingback{}, ErrNoRingback
+	}
+	return visorapi.VoiceRingback{Data: data, Mime: mime}, nil
 }
 
 // VoiceCallAudio returns the most recent buffered sent + received PCM for an
