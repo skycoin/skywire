@@ -73,22 +73,6 @@ func refreshSkyenvDefaults(fs *pflag.FlagSet) {
 	}
 }
 
-// skyenvDefaultValues reports the registration-time and current values
-// of one recorded flag. Used to log what the refresh changed.
-func skyenvDefaultValues(fs *pflag.FlagSet, name string) (initVal, runVal string) {
-	for _, d := range skyenvFlagDefaults[fs] {
-		if d.name != name {
-			continue
-		}
-		runVal = d.initVal
-		if f := fs.Lookup(d.name); f != nil {
-			runVal = f.Value.String()
-		}
-		return d.initVal, runVal
-	}
-	return "", ""
-}
-
 // The registration helpers below mirror the pflag methods they wrap,
 // taking the SKYENV expression where pflag takes a literal default.
 
@@ -125,9 +109,4 @@ func skyenvBoolVarP(fs *pflag.FlagSet, p *bool, name, shorthand, expr, usage str
 func skyenvIntVar(fs *pflag.FlagSet, p *int, name, expr, usage string) {
 	fs.IntVar(p, name, scriptExecInt(expr), usage)
 	recordSkyenvDefault(fs, name, expr, func() string { return strconv.Itoa(scriptExecInt(expr)) })
-}
-
-func skyenvUintVar(fs *pflag.FlagSet, p *uint, name, expr, usage string) {
-	fs.UintVar(p, name, scriptExecUint(expr), usage)
-	recordSkyenvDefault(fs, name, expr, func() string { return strconv.FormatUint(uint64(scriptExecUint(expr)), 10) })
 }

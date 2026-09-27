@@ -285,15 +285,9 @@ const envfileLinux = `#
 #SKYNETWEBADDR='0.0.0.0'
 
 #--	Embedded Wisp server: the backend a browser-side Linux guest asks to open
-#--	its connections, served on the virtual-loopback port rather than a
-#--	WebSocket (a tab cannot listen). Its streams leave over skywire. Off by
-#--	default.
-#WISP=true
-
-#--	Virtual-loopback port the Wisp server serves on.
-#WISPPORT=6001
-
-#--	SOCKS5 proxy the Wisp streams are carried over.
+#--	its connections. Every browser visor runs it on virtual-loopback port
+#--	6001, and no native visor does. Its streams leave over skywire, through
+#--	this SOCKS5 proxy.
 #--	Leave unset for the local skysocks-client, i.e. the clearnet exit.
 #WISPSOCKS='127.0.0.1:1080'
 

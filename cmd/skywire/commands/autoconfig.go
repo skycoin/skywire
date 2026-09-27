@@ -219,8 +219,6 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	addArray("RESOLVERS", "resolvers", autoconfigVals.Resolvers)
 
 	// Embedded Wisp server
-	addBool("WISP", "wisp", "no-wisp", autoconfigVals.Wisp, autoconfigVals.NoWisp)
-	addInt("WISPPORT", "wisp-port", autoconfigVals.WispPort)
 	addString("WISPSOCKS", "wisp-socks", autoconfigVals.WispSOCKS)
 
 	// Skychat
@@ -467,14 +465,10 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 	// Public key — read from the freshly-generated config rather
 	// than spawning another `skywire cli visor pk` (which would
 	// race against a still-restarting visor RPC port).
-	if raw, rerr := os.ReadFile(resolved.configPath); rerr == nil { //nolint:gosec
-		msg3(fmt.Sprintf("config at %s: %d bytes on disk, contains wisp=%v", resolved.configPath, len(raw), strings.Contains(string(raw), `"wisp"`)))
-	}
 	conf, err := visorconfig.ReadFile(resolved.configPath)
 	pubkey := ""
 	if err == nil && conf != nil {
 		pubkey = conf.PK.Hex()
-		msg3(fmt.Sprintf("config at %s: wisp section present=%v", resolved.configPath, conf.Wisp != nil))
 	}
 
 	if pubkey != "" {
