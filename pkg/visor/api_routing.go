@@ -140,6 +140,7 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []visorapi.MuxRouteGroupInfo 
 				SrcPort: info.Desc.SrcPort(),
 			},
 			FarEndPK:           info.FarEndPK,
+			AppName:            info.AppName,
 			MuxEnabled:         info.MuxEnabled,
 			SACKEnabled:        info.SACKEnabled,
 			PerFrameNoise:      info.PerFrameNoise,

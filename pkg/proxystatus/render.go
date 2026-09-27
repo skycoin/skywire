@@ -59,14 +59,18 @@ func Render(snap Snapshot) []byte {
 	// fontFace (the ~38 KB embedded mononoki woff2) rides in the page shell only, so
 	// the tree's box-drawing glyphs align in a true fixed-width font; it is NOT part
 	// of css/RenderFragment, which the WebSocket restreams every ~1s.
-	fmt.Fprintf(&b, "<title>%s proxy status · skywire</title><style>%s%s</style></head><body>", surface, fontFace, css)
+	kind := "proxy status"
+	if snap.Surface == SurfaceSkywire {
+		kind = "route status"
+	}
+	fmt.Fprintf(&b, "<title>%s %s · skywire</title><style>%s%s</style></head><body>", surface, kind, fontFace, css)
 
 	// Header + brand. The live indicator sits OUTSIDE <main id="live"> (in the
 	// static header) on purpose: the WebSocket swap replaces the live region's
 	// innerHTML, so an indicator inside it would be wiped on every push. liveScript
 	// drives it (connecting → live → reconnecting); it renders as a neutral dot for
 	// no-JS / non-skysocks surfaces.
-	b.WriteString(`<header><div class="brand"><b>skywire</b> proxy status</div>`)
+	fmt.Fprintf(&b, `<header><div class="brand"><b>skywire</b> %s</div>`, kind)
 	// Live up/down throughput meters ride in the header, between the brand and the
 	// surface name. They are driven by the inline script, which differences the
 	// cumulative byte counters (kept hidden inside the live region, refreshed on
@@ -345,7 +349,12 @@ func writeLiveRegion(b *strings.Builder, snap Snapshot) {
 	writeStreamsSection(b, snap)
 	writeRangeSplitSection(b, snap)
 	writeAcceptSection(b, snap)
-	writeMuxSection(b, snap)
+	if snap.Surface == SurfaceSkywire {
+		// One tree per route user instead of a single surface's route group.
+		writeConsumersSection(b, snap)
+	} else {
+		writeMuxSection(b, snap)
+	}
 	writeLogSection(b, snap)
 }
 
@@ -633,33 +642,7 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	// without disturbing column alignment (layout is computed from the plain text).
 	// The tree is NOT boxed: it flows with the surrounding text at page margins and
 	// scrolls horizontally in its OWN overflow container only if a long PK runs wide.
-	hLeft, hLabel, hCols := TreeHeader()
-	// Per-hop color classes, keyed by PK: the exit red, each intermediate hop
-	// LEVEL its own hue (see hopClassMap). Captured in the StyleCell closure so the
-	// PK label cells can be wrapped without disturbing bitree's plain-text layout.
-	hopClasses := hopClassMap(snap)
-	// The tunnel census, above the tree: how many route groups this proxy holds
-	// and how they are SPLIT by role. Inside the live region, so each ~1s push
-	// re-renders it from the fresh snapshot.
-	writeTunnelCount(b, snap)
-	// When more than one stream is present, name the two multiplexing LAYERS above
-	// the tree so the stream-boundary nodes and per-stream leg bands below are
-	// self-explanatory.
-	if len(snap.Tunnels) > 1 {
-		writeLayerLegend(b)
-	}
-	b.WriteString(`<div class="tree">`)
-	b.WriteString(`<pre class="bitree">`)
-	b.WriteString(bitree.Render(RouteTree(snap), bitree.Options{
-		StyleCell: func(text string, kind bitree.CellKind) string {
-			return htmlStyleCell(text, kind, hopClasses)
-		},
-		HeaderLeft:  hLeft,
-		HeaderLabel: hLabel,
-		HeaderCols:  hCols,
-	}))
-	b.WriteString(`</pre>`)
-	b.WriteString(`</div>`)
+	writeRouteTree(b, snap)
 	// Legend BELOW the tree: the state words are themselves colored (source accent,
 	// active green, standby amber) — no separate swatch dot.
 	writeTreeLegend(b)
@@ -1310,7 +1293,7 @@ func writeControlSeam(b *strings.Builder, snap Snapshot) {
 func writeFooter(b *strings.Builder, snap Snapshot) {
 	b.WriteString(`<footer>other surfaces: `)
 	first := true
-	for _, s := range []Surface{SurfaceDmsg, SurfaceSkynet, SurfaceSkysocks} {
+	for _, s := range []Surface{SurfaceSkywire, SurfaceDmsg, SurfaceSkynet, SurfaceSkysocks} {
 		if s == snap.Surface {
 			continue
 		}
