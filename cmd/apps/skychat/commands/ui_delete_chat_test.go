@@ -70,7 +70,9 @@ func TestDeletePairedChatStaysDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read index.html: %v", err)
 	}
-	page := string(b)
+	// A Windows checkout may turn the file into CRLF, and the anchors below
+	// are written with \n — the Windows lane failed on exactly that.
+	page := strings.ReplaceAll(string(b), "\r\n", "\n")
 
 	// syncPairedFromVisor: the revoked check must come before the peer is
 	// added to pairedSet (or re-added as a recipient). Anchored past the
