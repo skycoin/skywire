@@ -1476,6 +1476,47 @@
       transform: scaleX(-1);  /* a self-view reads as a mirror; the file isn't flipped */
     }
 
+    /* The square shape: the same frame with its corners back. */
+    .video-bubble.square { border-radius: 18px; }
+
+    /* The rear camera is not a self-view, so it is not a mirror either. */
+    .video-bubble.rear video { transform: none; }
+
+    /* Beside the self-view while a video take runs: switch camera, switch
+       shape. They take pointer events (the bubble does not), and sit clear of
+       the bubble so a finger dragging the composer button up to the lock
+       never lands on one. */
+    .video-ctl {
+      position: absolute;
+      right: calc(var(--composer-pad) + var(--rec-bubble) + 10px);
+      bottom: 100%;
+      margin-bottom: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 5;
+    }
+
+    .video-ctl.hidden { display: none; }
+
+    .video-ctl-btn {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border-color);
+      border-radius: 50%;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      box-shadow: var(--shadow);
+      cursor: pointer;
+    }
+
+    .video-ctl-btn:hover { background: var(--bg-secondary); }
+    .video-ctl-btn.hidden { display: none; }
+    .video-ctl-btn:disabled { opacity: 0.5; cursor: progress; }
+
     /* Icon swap: a quick pop so the morph is legible instead of instant. */
     .composer-btn .composer-icon {
       display: block;
@@ -1882,6 +1923,31 @@
     }
 
     .vm-round.playing .vm-badge { opacity: 0; }
+
+    /* A square video message: the round player's frame with its corners
+       back, and a bar along the bottom where the round one has its ring. */
+    .vm-square .vm-round-frame { border-radius: 16px; }
+
+    .vm-bar {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      bottom: 6px;
+      height: 3px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.25);
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .vm-bar-fill {
+      display: block;
+      width: 0;
+      height: 100%;
+      background: var(--accent-blue);
+    }
+
+    .vm-square .vm-time { bottom: 14px; }
 
     .vm-round .vm-time {
       position: absolute;
@@ -3684,6 +3750,15 @@
       <div id="videoBubble" class="video-bubble hidden" aria-hidden="true">
         <video id="videoPreview" muted playsinline autoplay></video>
       </div>
+      <!-- While a video take runs: switch between the front and rear camera
+           (shown only where there is another one to switch to), and between
+           a round video and a square one. -->
+      <div id="videoCtl" class="video-ctl hidden">
+        <button type="button" id="camFlip" class="video-ctl-btn hidden" title="Switch camera"
+                aria-label="Switch camera" onclick="app.flipCamera()"><svg class="ic" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 18.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2H8L9.5 5h5L16 7.5h2.5a2 2 0 0 1 2 2z"/><path d="M8.8 13.2a3.2 3.2 0 0 1 5.6-2.1M15.2 13.8a3.2 3.2 0 0 1-5.6 2.1"/><path d="M14.6 9.3v1.9h-1.9M9.4 17.7v-1.9h1.9"/></svg></button>
+        <button type="button" id="videoShape" class="video-ctl-btn" title="Switch to a square video"
+                aria-label="Switch to a square video" onclick="app.toggleVideoShape()"></button>
+      </div>
       <!-- Floats above the mic button while recording unlocked; slide the
            pointer up onto it to go hands-free. -->
       <div id="lockPill" class="lock-pill hidden" aria-hidden="true">
@@ -4442,6 +4517,8 @@
       bellOff: '<path d="M17.9 12.3c.1-1 .1-2.1.1-3.1a6 6 0 0 0-8.5-5.5M6.2 6.9A6 6 0 0 0 6 9.2c0 5.8-2.4 7.3-2.4 7.3h13.2"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/><path d="M4 4l16 16"/>',
       chart: '<path d="M4.5 20.5V11M9.5 20.5V4M14.5 20.5v-6.5M19.5 20.5V8"/>',
       camera: '<path d="M20.5 18.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2H8L9.5 5h5L16 7.5h2.5a2 2 0 0 1 2 2z"/><circle cx="12" cy="13.5" r="3.4"/>',
+      cameraFlip: '<path d="M20.5 18.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2H8L9.5 5h5L16 7.5h2.5a2 2 0 0 1 2 2z"/><path d="M8.8 13.2a3.2 3.2 0 0 1 5.6-2.1M15.2 13.8a3.2 3.2 0 0 1-5.6 2.1"/><path d="M14.6 9.3v1.9h-1.9M9.4 17.7v-1.9h1.9"/>',
+      square: '<rect x="4.5" y="4.5" width="15" height="15" rx="3.5"/>',
       image: '<rect x="3" y="4.5" width="18" height="15" rx="2.6"/><circle cx="8.6" cy="10" r="1.7"/><path d="m3.5 17.6 4.9-4.9 4.4 4.4 3.1-2.6 5.1 4.3"/>',
       copy: '<rect x="8.5" y="8.5" width="12" height="12" rx="2.6"/><path d="M15.5 8.5V6a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 6v7a2.5 2.5 0 0 0 2.5 2.5h2.5"/>',
       reply: '<path d="M9.5 15.5 4 10l5.5-5.5"/><path d="M4 10h9a7 7 0 0 1 7 7v2.5"/>',
@@ -4553,6 +4630,13 @@
           rafId: 0, levels: [], peak: 0, lastPush: 0,
           waveCanvas: null, waveCtx: null,
           videoEl: null,     // the round self-view, while a video take runs
+          // A video take records a canvas, not the camera: the camera draws
+          // into it, which is what lets the camera change mid-take (a
+          // recorder cannot swap the tracks it records). camTrack is the
+          // camera drawing into it now; facing, which way that camera looks.
+          camTrack: null, facing: 'user', flipping: false,
+          canvasTimer: null, canvasStream: null,
+          pointerId: null,   // the pointer holding the button, for the safety net below
           mime: '', ext: 'weba',
           startedAt: 0, clockTimer: null,
           dest: null,        // {key, isGroup} the recording belongs to
@@ -4625,7 +4709,13 @@
         });
         // Safety net for a release that never reaches the button (finger lifted
         // outside the window). _onComposerUp is a no-op when nothing is running.
-        window.addEventListener('pointerup', () => this._onComposerUp());
+        // Only the pointer that is holding the button: a second finger tapping
+        // the camera switch mid-hold must not end the take.
+        window.addEventListener('pointerup', e => {
+          if (this.rec.pointerId == null || !e || e.pointerId === undefined || e.pointerId === this.rec.pointerId) {
+            this._onComposerUp();
+          }
+        });
         // Tab hidden: the belt to blur's braces (switching virtual desktops or
         // minimising doesn't always blur). Coming back, repaint the waveform —
         // requestAnimationFrame is frozen while hidden, so a hands-free take's
@@ -5729,7 +5819,12 @@
       }
 
       isVideoMessage(file) {
-        return /^video-\d/i.test((file && file.name) || '') && this.isVideoFile(file);
+        return /^video-(sq-)?\d/i.test((file && file.name) || '') && this.isVideoFile(file);
+      }
+
+      // A video message recorded square rather than round (video-sq-<stamp>).
+      isSquareVideoMessage(file) {
+        return /^video-sq-\d/i.test((file && file.name) || '') && this.isVideoFile(file);
       }
 
       humanSize(n) {
@@ -5811,7 +5906,7 @@
           // you use it while the clip is running.
           const acts = this._mediaActs([this._speedPill()]);
           if (this.isVoiceMessage(file)) return this._renderVoicePlayer(urlAttr, sizeStr, acts);
-          if (this.isVideoMessage(file)) return this._renderRoundPlayer(urlAttr, sizeStr, acts);
+          if (this.isVideoMessage(file)) return this._renderRoundPlayer(urlAttr, sizeStr, acts, this.isSquareVideoMessage(file));
           const isVideo = this.isVideoFile(file);
           const tag = isVideo ? 'video' : 'audio';
           const cls = isVideo ? 'media-video' : 'media-audio';
@@ -6205,18 +6300,22 @@
           </div>`;
       }
 
-      _renderRoundPlayer(urlAttr, sizeStr, acts) {
+      _renderRoundPlayer(urlAttr, sizeStr, acts, square) {
         // r=47 in a 100-unit box leaves room for the 4-unit ring stroke; the
-        // circumference is set as the dash pattern in _vmPaint.
-        return `<div class="vm-round">
+        // circumference is set as the dash pattern in _vmPaint. A square one
+        // has a bar along its bottom edge instead of the ring.
+        const progress = square
+          ? '<span class="vm-bar" aria-hidden="true"><span class="vm-bar-fill"></span></span>'
+          : `<svg class="vm-ring" viewBox="0 0 100 100" aria-hidden="true">
+                <circle class="vm-ring-track" cx="50" cy="50" r="47"></circle>
+                <circle class="vm-ring-fill" cx="50" cy="50" r="47"></circle>
+              </svg>`;
+        return `<div class="vm-round${square ? ' vm-square' : ''}">
             <div class="vm-round-frame" role="button" tabindex="0" title="Play video message"
                  aria-label="Play video message" onclick="app.vmToggle(this)">
               <video class="vm-media" src="${urlAttr}" preload="metadata" playsinline
                      data-ms-title="Video message"></video>
-              <svg class="vm-ring" viewBox="0 0 100 100" aria-hidden="true">
-                <circle class="vm-ring-track" cx="50" cy="50" r="47"></circle>
-                <circle class="vm-ring-fill" cx="50" cy="50" r="47"></circle>
-              </svg>
+              ${progress}
               <span class="vm-badge"><span class="vm-icon">${icon('play', 17)}</span></span>
               <span class="vm-time">0:00</span>
             </div>
@@ -6355,6 +6454,8 @@
         if (time) time.textContent = this._vmFmt((playing || cur > 0) ? cur : total);
 
         const ratio = total ? Math.min(1, cur / total) : 0;
+        const bar = box.querySelector('.vm-bar-fill');
+        if (bar) bar.style.width = `${(ratio * 100).toFixed(2)}%`;
         const ring = box.querySelector('.vm-ring-fill');
         if (ring) {
           const circ = 2 * Math.PI * 47;
@@ -7490,17 +7591,34 @@
       // Capture constraints. The video track is asked for a square-ish frame
       // because the preview — and the Part 6 player — crop it to a circle;
       // 'ideal' keeps it a preference, so a camera that can't do it still runs.
+      // It opens the camera the last take ended on (front, the first time).
       _recConstraints(kind) {
         if ((kind || this._recKind()) !== 'video') return { audio: true };
         return {
           audio: true,
-          video: {
-            width: { ideal: 480 },
-            height: { ideal: 480 },
-            frameRate: { ideal: 30 },
-            facingMode: 'user',
-          },
+          video: Object.assign(this._recVideoSize(), { facingMode: this._recFacing() }),
         };
+      }
+
+      _recVideoSize() {
+        return { width: { ideal: 480 }, height: { ideal: 480 }, frameRate: { ideal: 30 } };
+      }
+
+      // The recorded frame: a square this many pixels a side, cropped from
+      // the middle of whatever the camera gives.
+      _recSide() { return 480; }
+
+      _recFacing() {
+        let v = null;
+        try { v = localStorage.getItem('skychat_video_facing'); } catch (e) { /* storage off */ }
+        return v === 'environment' ? 'environment' : 'user';
+      }
+
+      // Round is how a video message has always looked; square is the choice.
+      _videoShape() {
+        let v = null;
+        try { v = localStorage.getItem('skychat_video_shape'); } catch (e) { /* storage off */ }
+        return v === 'square' ? 'square' : 'round';
       }
 
       _onComposerDown(e) {
@@ -7513,6 +7631,7 @@
         // Capture the pointer so the release — and every move in between —
         // reaches us even once the finger has drifted off the button.
         try { btn.setPointerCapture(e.pointerId); } catch (err) { /* not fatal */ }
+        this.rec.pointerId = e.pointerId === undefined ? null : e.pointerId;
         this.rec.startX = e.clientX;
         this.rec.startY = e.clientY;
         this.rec.holdTimer = setTimeout(() => {
@@ -7610,12 +7729,24 @@
           return;
         }
 
+        // A video take records a square canvas the camera draws into, so the
+        // camera can be switched without the recorder noticing. Where a canvas
+        // cannot be recorded, it records the camera directly, as it used to,
+        // and there is no switching mid-take.
+        let recStream = stream;
+        if (kind === 'video') {
+          this.rec.camTrack = stream.getVideoTracks()[0] || null;
+          this.rec.facing = this._recTrackFacing(this.rec.camTrack, this._recFacing());
+          this._recStartPreview(new MediaStream(stream.getVideoTracks()));
+          const drawn = this._recStartCanvas();
+          if (drawn) recStream = new MediaStream([drawn, ...stream.getAudioTracks()]);
+        }
+
         let recorder;
         try {
-          recorder = new MediaRecorder(stream, { mimeType: codec.mime });
+          recorder = new MediaRecorder(recStream, { mimeType: codec.mime });
         } catch (err) {
-          stream.getTracks().forEach(t => t.stop());
-          this.rec.pending = false;
+          this._recAbortStart(stream);
           this.showToast(`Can't start recorder: ${(err && err.message) || 'unknown error'}`, 'error');
           return;
         }
@@ -7625,9 +7756,8 @@
         const disk = await this._recOpenDisk(codec.ext);
         // Opening the file is another await: the hold may have ended during it.
         if (this.rec.released) {
-          stream.getTracks().forEach(t => t.stop());
+          this._recAbortStart(stream);
           this._recDiscardDisk(disk);
-          this.rec.pending = false;
           this.showToast(`${spec.device} ready — hold ${spec.icon} to record.`);
           return;
         }
@@ -7641,10 +7771,7 @@
         // A capture device can vanish mid-take — unplugged, or claimed by
         // another app. 'ended' is final, so wind the take up and keep what was
         // captured; 'mute' can be temporary, so only say so.
-        stream.getTracks().forEach(track => {
-          track.addEventListener('ended', () => this._recDeviceLost(spec));
-          track.addEventListener('mute', () => this._recDeviceMuted(spec));
-        });
+        stream.getTracks().forEach(track => this._recWatchTrack(track, spec));
 
         this.rec.recorder = recorder;
         this.rec.stream = stream;
@@ -7660,7 +7787,7 @@
         // streamed to disk instead of accumulating in memory.
         recorder.start(this._recSliceMs());
         this._recShowUI(true);
-        if (kind === 'video') this._recStartPreview(stream);
+        if (kind === 'video') this._recCheckCameras();
         this._recStartMeter(stream); // after the UI is up, so the canvas can be measured
       }
 
@@ -7787,8 +7914,11 @@
 
       // The track ended for good (device unplugged, or the OS took it). Keep
       // what was captured instead of recording silence until the user notices.
-      _recDeviceLost(spec) {
+      _recDeviceLost(spec, track) {
         if (!this.rec.active || this.rec.stopping) return;
+        // A camera we are switching away from, or already have: some phones
+        // end the old camera's track the moment the other one opens.
+        if (track && track.kind === 'video' && (this.rec.flipping || (this.rec.camTrack && track !== this.rec.camTrack))) return;
         this.showToast(`${spec.device} disconnected — sending what was recorded.`, 'error');
         this._stopRecording(false);
       }
@@ -7828,6 +7958,8 @@
         el.srcObject = stream;
         const played = el.play();
         if (played && played.catch) played.catch(() => { /* autoplay blocked; recording is unaffected */ });
+        wrap.classList.toggle('square', this._videoShape() === 'square');
+        wrap.classList.toggle('rear', this.rec.facing === 'environment');
         wrap.classList.remove('hidden');
         this.rec.videoEl = el;
       }
@@ -7841,6 +7973,215 @@
           el.srcObject = null; // drop the stream reference so the camera light goes out
         }
         this.rec.videoEl = null;
+      }
+
+      // ---- The recorded frame: a canvas the camera draws into ------------
+      //
+      // A MediaRecorder records the tracks it was started with, and stops (or
+      // errors) if they change — so a take recorded straight from the camera
+      // can never change camera. Recording a canvas instead, with the live
+      // preview drawn into it, can: switching camera only changes what the
+      // preview shows. It also gives every take the same square frame,
+      // centre-cropped from whatever each camera delivers, which is what the
+      // round and square players both show.
+      //
+      // Drawn on a timer rather than on animation frames, which stop while
+      // the page is hidden: a hands-free take goes on recording then, and a
+      // throttled timer keeps it moving where frames would freeze it.
+
+      _recStartCanvas() {
+        const el = this.rec.videoEl || document.getElementById('videoPreview');
+        if (!el || typeof document.createElement !== 'function') return null;
+        let canvas, ctx, out;
+        try {
+          canvas = document.createElement('canvas');
+          if (typeof canvas.captureStream !== 'function') return null;
+          canvas.width = canvas.height = this._recSide();
+          ctx = canvas.getContext('2d');
+          if (!ctx) return null;
+          out = canvas.captureStream(30);
+        } catch (e) {
+          return null;
+        }
+        const track = out.getVideoTracks()[0];
+        if (!track) return null;
+        const draw = () => {
+          const w = el.videoWidth, h = el.videoHeight;
+          // Nothing to draw yet (starting, or between two cameras): keep the
+          // last frame rather than recording a black one.
+          if (!w || !h) return;
+          const side = Math.min(w, h);
+          try {
+            ctx.drawImage(el, (w - side) / 2, (h - side) / 2, side, side, 0, 0, canvas.width, canvas.height);
+          } catch (e) { /* a frame the element could not hand over; try the next */ }
+        };
+        this.rec.canvasTimer = setInterval(draw, Math.round(1000 / 30));
+        this.rec.canvasStream = out;
+        return track;
+      }
+
+      _recStopCanvas() {
+        if (this.rec.canvasTimer) clearInterval(this.rec.canvasTimer);
+        this.rec.canvasTimer = null;
+        if (this.rec.canvasStream) this.rec.canvasStream.getTracks().forEach(t => t.stop());
+        this.rec.canvasStream = null;
+      }
+
+      // _recAbortStart unwinds a take that got its devices but never started.
+      _recAbortStart(stream) {
+        this._recStopCanvas();
+        this._recStopPreview();
+        stream.getTracks().forEach(t => t.stop());
+        if (this.rec.camTrack) this.rec.camTrack.stop();
+        this.rec.camTrack = null;
+        this.rec.pending = false;
+      }
+
+      _recWatchTrack(track, spec) {
+        track.addEventListener('ended', () => this._recDeviceLost(spec, track));
+        track.addEventListener('mute', () => this._recDeviceMuted(spec));
+      }
+
+      // Which way a camera track looks. Desktops rarely say; a camera that
+      // does not is treated as the one it was asked for.
+      _recTrackFacing(track, fallback) {
+        let f = '';
+        try { f = (track && track.getSettings && track.getSettings().facingMode) || ''; } catch (e) { /* no settings */ }
+        if (f === 'environment' || f === 'user') return f;
+        return fallback === 'environment' ? 'environment' : 'user';
+      }
+
+      // _recCheckCameras shows the switch only where there is another camera
+      // to switch to, and only when the take is recording a canvas.
+      async _recCheckCameras() {
+        const btn = document.getElementById('camFlip');
+        if (!btn) return;
+        btn.classList.add('hidden');
+        if (!this.rec.canvasStream || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+        try {
+          const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+          if (this.rec.active && this.rec.kind === 'video' && cams.length > 1) btn.classList.remove('hidden');
+        } catch (e) { /* no list, no switch */ }
+      }
+
+      // flipCamera moves a running video take to the other camera — front to
+      // rear or back — without stopping it.
+      async flipCamera() {
+        const r = this.rec;
+        if (!r.active || r.kind !== 'video' || r.flipping || !r.canvasStream) return;
+        r.flipping = true;
+        const btn = document.getElementById('camFlip');
+        if (btn) btn.disabled = true;
+        const old = r.camTrack;
+        const next = r.facing === 'environment' ? 'user' : 'environment';
+        const open = async extra => {
+          const s = await navigator.mediaDevices.getUserMedia({ video: Object.assign(this._recVideoSize(), extra) });
+          return s.getVideoTracks()[0];
+        };
+        let fresh = null;
+        let oldStopped = false;
+        // Which way the camera we end up with is taken to look, when it does
+        // not say.
+        let wanted = next;
+        try {
+          try {
+            fresh = await open({ facingMode: { exact: next } });
+          } catch (err) {
+            const name = err && err.name;
+            if (name === 'NotReadableError' || name === 'AbortError') {
+              // This phone cannot hold two cameras open at once: let the
+              // one we have go first.
+              if (old) old.stop();
+              oldStopped = true;
+              fresh = await open({ facingMode: { exact: next } });
+            } else {
+              // Nothing facing the other way (a desktop's cameras say no
+              // direction at all): step to the next camera there is, which
+              // faces whichever way the last one did.
+              wanted = r.facing;
+              fresh = await open({ deviceId: { exact: await this._recNextCameraId(old) } });
+            }
+          }
+        } catch (err) {
+          if (oldStopped && r.active) {
+            // The old one is gone and the new one would not open: get the
+            // old one back rather than recording a still frame.
+            wanted = r.facing;
+            try { fresh = await open({ facingMode: r.facing }); } catch (e) { fresh = null; }
+            if (fresh) this.showToast('Could not switch camera.', 'error');
+          }
+          if (!fresh) {
+            r.flipping = false;
+            if (btn) btn.disabled = false;
+            if (oldStopped && r.active) {
+              this.showToast('The camera stopped — sending what was recorded.', 'error');
+              this._stopRecording(false);
+            } else {
+              this.showToast('No other camera to switch to.', 'error');
+            }
+            return;
+          }
+        }
+        if (!r.active) {
+          // The take ended while the camera was opening.
+          fresh.stop();
+          r.flipping = false;
+          if (btn) btn.disabled = false;
+          return;
+        }
+        if (old && !oldStopped) old.stop();
+        r.camTrack = fresh;
+        r.facing = this._recTrackFacing(fresh, wanted);
+        this._recWatchTrack(fresh, this._recSpec('video'));
+        const el = r.videoEl;
+        if (el) {
+          el.srcObject = new MediaStream([fresh]);
+          const played = el.play();
+          if (played && played.catch) played.catch(() => { /* recording is unaffected */ });
+        }
+        const wrap = document.getElementById('videoBubble');
+        if (wrap) wrap.classList.toggle('rear', r.facing === 'environment');
+        try { localStorage.setItem('skychat_video_facing', r.facing); } catch (e) { /* storage off */ }
+        r.flipping = false;
+        if (btn) btn.disabled = false;
+      }
+
+      // _recNextCameraId is the camera after the one in use, in the order the
+      // browser lists them.
+      async _recNextCameraId(track) {
+        const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput' && d.deviceId);
+        if (cams.length < 2) {
+          const err = new Error('no other camera');
+          err.name = 'NotFoundError';
+          throw err;
+        }
+        let current = '';
+        try { current = (track && track.getSettings && track.getSettings().deviceId) || ''; } catch (e) { /* no settings */ }
+        const at = cams.findIndex(c => c.deviceId === current);
+        return cams[(at + 1) % cams.length].deviceId;
+      }
+
+      // toggleVideoShape switches between a round video message and a square
+      // one. It can change mid-take — the recording is the same square frame
+      // either way, and the shape is what it is sent as — and it sticks for
+      // the takes after.
+      toggleVideoShape() {
+        const next = this._videoShape() === 'square' ? 'round' : 'square';
+        try { localStorage.setItem('skychat_video_shape', next); } catch (e) { /* storage off */ }
+        const wrap = document.getElementById('videoBubble');
+        if (wrap) wrap.classList.toggle('square', next === 'square');
+        this._syncVideoShapeBtn();
+      }
+
+      // The button shows the shape it would switch TO.
+      _syncVideoShapeBtn() {
+        const btn = document.getElementById('videoShape');
+        if (!btn) return;
+        const square = this._videoShape() === 'square';
+        const label = square ? 'Switch to a round video' : 'Switch to a square video';
+        btn.innerHTML = icon(square ? 'circle' : 'square', 19);
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
       }
 
       // ---- Live waveform ----------------------------------------------------
@@ -8041,6 +8382,8 @@
         const take = {
           chunks: this.rec.chunks, disk: this.rec.disk, mime: this.rec.mime, ext: this.rec.ext,
           startedAt: this.rec.startedAt, dest: this.rec.dest, cancelled: this.rec.cancelled,
+          // The shape it is sent in is the one showing when it ends.
+          square: this.rec.kind === 'video' && this._videoShape() === 'square',
         };
         const spec = this._recSpec();
         const ms = Date.now() - take.startedAt;
@@ -8063,8 +8406,12 @@
           }
           // voice-<ts>.weba / video-<ts>.webm — the prefix is what Part 6 keys
           // "this is a recorded message" off, and the extension is what makes
-          // renderFile() play it as <audio> or <video>.
-          const name = `${spec.prefix}-${this._recStamp(new Date(take.startedAt))}.${take.ext}`;
+          // renderFile() play it as <audio> or <video>. A square one is
+          // video-sq-<ts>.webm: a receiver that predates it does not match
+          // video-<digit>, and shows an ordinary video player instead of a
+          // round one — the right fallback for a square video.
+          const prefix = take.square ? `${spec.prefix}-sq` : spec.prefix;
+          const name = `${prefix}-${this._recStamp(new Date(take.startedAt))}.${take.ext}`;
           this._uploadFile(new File([blob], name, { type: take.mime }), {
             dest: take.dest,
             text: `${spec.icon} ${spec.noun}`,
@@ -8079,8 +8426,14 @@
       // indicator (and holds the mic/camera) after the clip is done.
       _recReset() {
         this._recStopMeter();
+        this._recStopCanvas();
         this._recStopPreview();
         if (this.rec.stream) this.rec.stream.getTracks().forEach(t => t.stop());
+        // A camera switched to mid-take is not in the stream it started with.
+        if (this.rec.camTrack) this.rec.camTrack.stop();
+        this.rec.camTrack = null;
+        this.rec.flipping = false;
+        this.rec.pointerId = null;
         if (this.rec.clockTimer) clearInterval(this.rec.clockTimer);
         this.rec.kind = 'mic';
         this.rec.active = false;
@@ -8127,6 +8480,12 @@
           // A video take puts the round self-view where the pill sits, so the
           // lock target climbs above it.
           pill.classList.toggle('raised', on && this._recKind() === 'video');
+        }
+        const ctl = document.getElementById('videoCtl');
+        if (ctl) {
+          ctl.classList.toggle('hidden', !(on && this._recKind() === 'video'));
+          if (on) this._syncVideoShapeBtn();
+          else { const flip = document.getElementById('camFlip'); if (flip) flip.classList.add('hidden'); }
         }
         if (hint) {
           hint.style.transform = '';
