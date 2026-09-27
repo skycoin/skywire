@@ -223,6 +223,14 @@ type Chat interface {
 	// the point, call it off: hanging up takes a call id, and until the
 	// invite is answered this is the only place one exists.
 	VoiceDialing() ([]VoiceDialingInfo, error)
+	// VoiceSetRingback sets the tone callers hear while this visor rings;
+	// empty Data clears it. It is kept across restarts.
+	VoiceSetRingback(tone VoiceRingback) error
+	// VoiceRingback returns this visor's own ringback tone.
+	VoiceRingback() (VoiceRingback, error)
+	// VoiceDialRingback returns the ringback tone the peer of an outbound
+	// call plays, once it has arrived (VoiceDialingInfo.Ringback).
+	VoiceDialRingback(callID string) (VoiceRingback, error)
 	VoiceCallAudio(callID string) (sent, recv []int16, err error)
 	VoiceMute(callID string, mic, speaker bool) error
 }

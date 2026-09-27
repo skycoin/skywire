@@ -1029,6 +1029,21 @@ func (proxyDefaultAPI) VoiceDialing() ([]visorapi.VoiceDialingInfo, error) {
 	return nil, ErrProxyNotSupported
 }
 
+// VoiceSetRingback implements API (not proxied).
+func (proxyDefaultAPI) VoiceSetRingback(_ visorapi.VoiceRingback) error {
+	return ErrProxyNotSupported
+}
+
+// VoiceRingback implements API (not proxied).
+func (proxyDefaultAPI) VoiceRingback() (visorapi.VoiceRingback, error) {
+	return visorapi.VoiceRingback{}, ErrProxyNotSupported
+}
+
+// VoiceDialRingback implements API (not proxied).
+func (proxyDefaultAPI) VoiceDialRingback(_ string) (visorapi.VoiceRingback, error) {
+	return visorapi.VoiceRingback{}, ErrProxyNotSupported
+}
+
 // VoiceCallAudio implements API (not proxied).
 func (proxyDefaultAPI) VoiceCallAudio(_ string) (sent, recv []int16, err error) {
 	return nil, nil, ErrProxyNotSupported

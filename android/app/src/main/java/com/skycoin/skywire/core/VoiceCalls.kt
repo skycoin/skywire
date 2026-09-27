@@ -12,6 +12,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import com.skycoin.skywire.MainActivity
 import com.skycoin.skywire.R
+import com.skycoin.skywire.api.OutgoingCall
 import com.skycoin.skywire.api.SkychatApi
 import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.api.VoiceInvite
@@ -34,7 +35,7 @@ import kotlin.coroutines.coroutineContext
 /** What the phone knows about calls right now. */
 data class VoiceCallState(
     val ringing: List<VoiceInvite> = emptyList(),
-    val dialing: List<VoiceInvite> = emptyList(),
+    val dialing: List<OutgoingCall> = emptyList(),
     val activeIds: List<String> = emptyList(),
 ) {
     val inCall: Boolean get() = activeIds.isNotEmpty()
@@ -42,8 +43,11 @@ data class VoiceCallState(
     /** The call to offer an answer for — one at a time is all a phone shows. */
     val invite: VoiceInvite? get() = ringing.firstOrNull()
 
-    /** The call being placed, if any. */
-    val outgoing: VoiceInvite? get() = dialing.firstOrNull()
+    /**
+     * The call being placed, if any — or, for a few seconds after one ended
+     * unanswered, that call and why ([OutgoingCall.state]). A live one wins.
+     */
+    val outgoing: OutgoingCall? get() = dialing.firstOrNull { !it.state.ended } ?: dialing.firstOrNull()
 
     /** True whenever there is a call to put on screen, in either direction. */
     val busy: Boolean get() = inCall || invite != null || outgoing != null
@@ -97,6 +101,11 @@ object VoiceCalls {
     /** The notification's Answer was tapped for [callId]. */
     fun requestAnswer(callId: String) {
         answerRequests.tryEmit(callId)
+    }
+
+    /** Poll the visor now rather than at the next tick — a call was just placed. */
+    fun refresh() {
+        nudges.tryEmit(Unit)
     }
 
     /** The request has been acted on; a later screen must not answer it again. */
@@ -168,7 +177,7 @@ object VoiceCalls {
 
     internal fun set(
         ringing: List<VoiceInvite>,
-        dialing: List<VoiceInvite>,
+        dialing: List<OutgoingCall>,
         activeIds: List<String>,
     ) {
         // Ids the visor has stopped reporting have served their purpose and

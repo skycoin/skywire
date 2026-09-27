@@ -255,6 +255,54 @@ data class AppLogs(
 internal data class VoiceDialing(
     @SerialName("call_id") val callId: String = "",
     @SerialName("peer") val peer: String = "",
+    // Absent from a visor that predates dial progress: reads as CALLING.
+    @SerialName("state") val state: String = "",
+    @SerialName("reason") val reason: String = "",
+    @SerialName("ringback") val ringback: Boolean = false,
+)
+
+/**
+ * How a call this phone is placing is going. The first three are progress;
+ * the rest are why it ended unanswered, which the visor keeps listing for a
+ * few seconds so the call screen can say so instead of just closing.
+ */
+enum class DialState {
+    CONNECTING,
+    CALLING,
+    RINGING,
+    OFFLINE,
+    DECLINED,
+    BUSY,
+    NO_ANSWER,
+    FAILED,
+    ;
+
+    val ended: Boolean get() = ordinal >= OFFLINE.ordinal
+
+    companion object {
+        fun parse(value: String): DialState = when (value) {
+            "connecting" -> CONNECTING
+            "ringing" -> RINGING
+            "offline" -> OFFLINE
+            "declined" -> DECLINED
+            "busy" -> BUSY
+            "no_answer" -> NO_ANSWER
+            "failed" -> FAILED
+            // "calling", and a visor that sends no state at all.
+            else -> CALLING
+        }
+    }
+}
+
+/**
+ * A call this phone is placing. [ringback] is true once the other side's own
+ * ringback tone has arrived and can be played (`…/skychat/voice/ringback`).
+ */
+data class OutgoingCall(
+    val callId: String,
+    val peerPk: String,
+    val state: DialState = DialState.CALLING,
+    val ringback: Boolean = false,
 )
 
 /**

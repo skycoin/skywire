@@ -1525,6 +1525,17 @@ func (mc *mockRPCClient) VoiceDialing() ([]VoiceDialingInfo, error) { return nil
 // VoiceIncoming implements API.
 func (mc *mockRPCClient) VoiceIncoming() ([]string, error) { return nil, nil }
 
+// VoiceSetRingback implements API.
+func (mc *mockRPCClient) VoiceSetRingback(_ VoiceRingback) error { return nil }
+
+// VoiceRingback implements API.
+func (mc *mockRPCClient) VoiceRingback() (VoiceRingback, error) { return VoiceRingback{}, nil }
+
+// VoiceDialRingback implements API.
+func (mc *mockRPCClient) VoiceDialRingback(_ string) (VoiceRingback, error) {
+	return VoiceRingback{}, nil
+}
+
 // VoiceCallAudio implements API.
 func (mc *mockRPCClient) VoiceCallAudio(_ string) (sent, recv []int16, err error) {
 	return nil, nil, nil

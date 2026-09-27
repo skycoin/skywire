@@ -566,14 +566,34 @@ func (s *VStream) Read(p []byte) (int, error) {
 		if !ok {
 			return 0, io.EOF
 		}
-		n := copy(p, data)
-		if n < len(data) {
-			s.readLeft = data[n:]
-		}
-		return n, nil
+		return s.take(p, data), nil
 	case <-s.closed:
+		// A peer's FIN closes the stream the moment it arrives, but every
+		// frame the peer wrote before it has already been queued — frames
+		// are delivered in order, and deliver blocks until each is. Hand
+		// those over before the EOF. select picks at random between ready
+		// cases, so a peer that wrote and then closed used to lose its last
+		// frames about half the time: a request answered and hung up on
+		// read as a bare EOF.
+		select {
+		case data, ok := <-s.readBuf:
+			if ok {
+				return s.take(p, data), nil
+			}
+		default:
+		}
 		return 0, io.EOF
 	}
+}
+
+// take copies one queued frame into p, keeping what does not fit for the next
+// Read.
+func (s *VStream) take(p, data []byte) int {
+	n := copy(p, data)
+	if n < len(data) {
+		s.readLeft = data[n:]
+	}
+	return n
 }
 
 // vstreamMaxData is the most payload one DATA frame carries: the transport

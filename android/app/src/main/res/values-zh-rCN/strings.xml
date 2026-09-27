@@ -105,6 +105,15 @@
     <string name="call_channel_ongoing">通话中</string>
     <string name="call_incoming_title">来电</string>
     <string name="call_dialing">正在呼叫…</string>
+    <string name="call_connecting">正在连接…</string>
+    <string name="call_ringing">对方响铃中…</string>
+    <string name="call_offline">对方不在线</string>
+    <string name="call_declined">对方已拒接</string>
+    <string name="call_busy">对方忙线</string>
+    <string name="call_no_answer">无人接听</string>
+    <string name="call_failed">呼叫失败</string>
+    <string name="call_close">关闭</string>
+    <string name="call_again">重新呼叫</string>
     <string name="call_answer">接听</string>
     <string name="call_decline">拒接</string>
     <string name="call_ongoing_title">通话中</string>

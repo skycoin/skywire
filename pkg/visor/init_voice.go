@@ -191,6 +191,7 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	mgr := skycall.NewManager(cfg)
 	v.voice = mgr
+	loadRingback(v.conf.LocalPath, mgr, log)
 
 	// dmsg signaling listener on the shared port, now.
 	var listeners []net.Listener
