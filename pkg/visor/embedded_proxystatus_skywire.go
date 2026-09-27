@@ -7,9 +7,12 @@ package visor
 
 import (
 	"fmt"
+	"net"
 	"sort"
+	"strings"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/proxyroute"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
@@ -98,6 +101,7 @@ func (p *visorStatusProvider) directTunnel(index int, s transport.VStreamInfo, s
 // accepted; it is named after the local app listening on its port.
 func (p *visorStatusProvider) skywireSnapshot() proxystatus.Snapshot {
 	snap := proxystatus.Snapshot{Surface: proxystatus.SurfaceSkywire, App: "visor", Running: true}
+	snap.DomainRoutes = p.domainRoutes()
 	var self cipher.PubKey
 	if p.v.conf != nil && p.v.conf.Common != nil {
 		self = p.v.conf.PK
@@ -172,4 +176,74 @@ func (p *visorStatusProvider) inboundName(port uint16) string {
 		}
 	}
 	return fmt.Sprintf("inbound :%d", port)
+}
+
+// domainRoutes lists the resolvers' per-domain upstream rules, then the
+// default they fall back to. The rules are the same on both resolvers
+// (`cli resolver route` sets both); skynet_web is read first because its
+// default is the one that leaves the visor, where dmsg_web's is skynet_web.
+func (p *visorStatusProvider) domainRoutes() []proxystatus.DomainRoute {
+	var rules []proxyroute.Rule
+	var def string
+	if rt := p.v.embeddedSkynetWeb; rt != nil {
+		rules, def = rt.UpstreamRules(), rt.Upstream()
+	}
+	if len(rules) == 0 {
+		if rt := p.v.embeddedDmsgWeb; rt != nil {
+			rules = rt.UpstreamRules()
+		}
+	}
+	if len(rules) == 0 {
+		return nil
+	}
+	if n, err := proxyroute.Normalize(rules); err == nil {
+		rules = n
+	}
+	out := make([]proxystatus.DomainRoute, 0, len(rules)+1)
+	for _, r := range rules {
+		out = append(out, proxystatus.DomainRoute{Suffix: r.Suffix, Upstream: r.Upstream, Via: p.upstreamApp(r.Upstream)})
+	}
+	if def == "" {
+		def = proxyroute.Direct
+	}
+	return append(out, proxystatus.DomainRoute{Suffix: "*", Upstream: def, Via: p.upstreamApp(def)})
+}
+
+// upstreamApp names the launcher app whose --addr listens on addr's port,
+// with its run state, so the page can say which skysocks-client instance —
+// and so which exit — a domain goes through.
+func (p *visorStatusProvider) upstreamApp(addr string) string {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil || p.v.conf == nil || p.v.conf.Launcher == nil {
+		return ""
+	}
+	for _, app := range p.v.conf.Launcher.Apps {
+		if !argsListenOn(app.Args, port) {
+			continue
+		}
+		running := false
+		if p.v.procM != nil {
+			proc, ok := p.v.procM.ProcByName(app.Name)
+			running = ok && proc != nil
+		}
+		return app.Name + " · " + runLabel(running)
+	}
+	return ""
+}
+
+// argsListenOn reports whether an app's args carry --addr on port.
+func argsListenOn(args []string, port string) bool {
+	for i, a := range args {
+		v, ok := strings.CutPrefix(a, "--addr=")
+		if !ok {
+			if a != "--addr" || i+1 >= len(args) {
+				continue
+			}
+			v = args[i+1]
+		}
+		if _, p, err := net.SplitHostPort(v); err == nil && p == port {
+			return true
+		}
+	}
+	return false
 }
