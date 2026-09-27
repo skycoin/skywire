@@ -141,9 +141,9 @@ func renderRules(rules []proxyroute.Rule) string {
 	}
 	var b strings.Builder
 	w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "DOMAIN\tUPSTREAM")
+	_, _ = fmt.Fprintln(w, "DOMAIN\tUPSTREAM") //nolint:errcheck
 	for _, r := range rules {
-		fmt.Fprintf(w, "%s\t%s\n", r.Suffix, r.Upstream)
+		_, _ = fmt.Fprintf(w, "%s\t%s\n", r.Suffix, r.Upstream) //nolint:errcheck
 	}
 	_ = w.Flush() //nolint:errcheck
 	return b.String()
