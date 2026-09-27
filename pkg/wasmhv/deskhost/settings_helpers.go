@@ -132,7 +132,9 @@ func settingsEdits(rows []settingRow, form map[string]settingInput) (visorapi.Sk
 		}
 		switch {
 		case in.Unset:
-			if !r.Set {
+			// A variable set to nothing (WSPEERS=('')) shows as an empty
+			// field; leaving it empty is not a change.
+			if !r.Set || r.Value == "" {
 				continue
 			}
 			edits.Unset = append(edits.Unset, r.Flag)

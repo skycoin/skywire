@@ -270,7 +270,8 @@
       "resources": "Resources",
       "terminal": "Terminal",
       "wallet": "Wallet",
-      "logs": "Logs"
+      "logs": "Logs",
+      "settings": "Settings"
     },
     "error-load": "An error occurred while refreshing the data. Retrying..."
   },
