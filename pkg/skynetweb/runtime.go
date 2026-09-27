@@ -29,6 +29,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxyfront"
 	"github.com/skycoin/skywire/pkg/proxyinterstitial"
 	"github.com/skycoin/skywire/pkg/proxyroute"
 	"github.com/skycoin/skywire/pkg/proxystatus"
@@ -495,6 +496,11 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 	if err != nil {
 		return fmt.Errorf("SOCKS5 listen: %w", err)
 	}
+	// The same port answers HTTP proxy requests (CONNECT and absolute URLs)
+	// through the same resolver and dial path, for clients that only speak
+	// HTTP proxy — Android's VpnService.Builder.setHttpProxy among them.
+	httpDial := proxyfront.SOCKSDial(conf.Resolver, conf.Dial)
+	lis = proxyfront.Split(lis, func(c net.Conn) { proxyfront.ServeHTTP(ctx, c, httpDial) })
 	go func() {
 		<-ctx.Done()
 		_ = lis.Close() //nolint:errcheck
