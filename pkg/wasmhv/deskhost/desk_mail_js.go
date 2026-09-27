@@ -11,15 +11,12 @@
 package deskhost
 
 import (
-	"errors"
 	"fmt"
-	"net"
 	"strings"
 	"sync"
 	"syscall/js"
 	"time"
 
-	"github.com/0magnet/bottle/vnet"
 	"github.com/0magnet/desk"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -30,8 +27,6 @@ import (
 const (
 	// mailRefresh is how often an open list looks for new mail.
 	mailRefresh = 15 * time.Second
-	// mailRPCAddr is the tab visor's RPC port on vnet.
-	mailRPCAddr = "127.0.0.1:3435"
 	// mailRPCTimeout covers a send, whose skynet attempt alone may take
 	// twelve seconds before it falls back to dmsg.
 	mailRPCTimeout = 90 * time.Second
@@ -42,7 +37,9 @@ func registerMailApp() {
 		Name: "mail", Title: "mail",
 		Help:  "e-mail over skywire: this tab's mailbox",
 		Width: 860, Height: 560,
-		Open: func(_ []string) (desk.Pane, error) { return &mailPane{}, nil },
+		Open: func(_ []string) (desk.Pane, error) {
+			return &mailPane{visorRPC: visorRPC{timeout: mailRPCTimeout}}, nil
+		},
 	})
 }
 
@@ -59,49 +56,7 @@ type mailPane struct {
 	stop   chan struct{}
 	funcs  []js.Func
 
-	rpcMu   sync.Mutex
-	rpcConn net.Conn
-	rpc     visorapi.API
-}
-
-// api is the visor's mail API, dialed on first use and again after a
-// connection failure.
-func (p *mailPane) api() (visorapi.API, error) {
-	p.rpcMu.Lock()
-	defer p.rpcMu.Unlock()
-	if p.rpc != nil {
-		return p.rpc, nil
-	}
-	conn, err := vnet.DialTimeout("tcp", mailRPCAddr, 10*time.Second)
-	if err != nil {
-		return nil, fmt.Errorf("visor RPC: %w", err)
-	}
-	p.rpcConn, p.rpc = conn, visorapi.NewRPCClient(nil, conn, visorapi.RPCPrefix, mailRPCTimeout)
-	return p.rpc, nil
-}
-
-// call runs f against the API and redials next time if the connection
-// broke. A mailbox error is only an error, not a broken connection.
-func (p *mailPane) call(f func(visorapi.API) error) error {
-	a, err := p.api()
-	if err != nil {
-		return err
-	}
-	err = f(a)
-	var netErr net.Error
-	if err != nil && (errors.As(err, &netErr) || strings.Contains(err.Error(), "shut down") || strings.Contains(err.Error(), "EOF")) {
-		p.dropRPC()
-	}
-	return err
-}
-
-func (p *mailPane) dropRPC() {
-	p.rpcMu.Lock()
-	defer p.rpcMu.Unlock()
-	if p.rpcConn != nil {
-		_ = p.rpcConn.Close() //nolint:errcheck
-	}
-	p.rpcConn, p.rpc = nil, nil
+	visorRPC
 }
 
 func (p *mailPane) Mount(el js.Value) error {
