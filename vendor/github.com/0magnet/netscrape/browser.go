@@ -1138,12 +1138,18 @@ func (b *browser) moveTab(from, to int) {
 // Proxy setting. netscrape does not carry traffic itself — the host's
 // __netscrapeFetch does — so the proxy control is a published preference the
 // host reads: globalThis.__netscrapeProxy = {proxy}. proxy is one
-// [scheme://]host:port — the address of a SOCKS5 (default) or HTTP proxy the
-// host should send clearnet pages through — or "" for the host's default
-// egress. A host running in a browser maps a loopback address (vnet:<port>,
-// localhost:<port>) to its own virtual-loopback SOCKS and hands anything else
-// to the visor behind the page to dial. It persists in localStorage so a
-// person's choice survives a reload, the way a browser's proxy setting does.
+// [scheme://]host:port, the address of a SOCKS5 (default scheme) or HTTP proxy
+// every page goes through, as a browser's proxy setting is. A host running in
+// a browser maps a loopback address (vnet:<port>, localhost:<port>) to its own
+// virtual-loopback port and hands anything else to the visor behind the page
+// to dial.
+//
+// The host names its default in globalThis.__netscrapeDefaultProxy before the
+// browser opens — a skywire desk names its resolving proxy, the one a native
+// browser beside a visor is pointed at. The field always shows the address in
+// effect: the person's choice, or that default when they have made none.
+// Clearing the field returns to the default. The choice persists in
+// localStorage so it survives a reload.
 //
 // This one preference is genuinely process-wide, not per-window: it is
 // published under one globalThis key and stored under one localStorage key,
@@ -1152,20 +1158,35 @@ func (b *browser) moveTab(from, to int) {
 // proxy" question to get wrong.
 const proxyStoreKey = "netscrape.proxy"
 
+// proxyAddr is the person's choice; "" means the host's default.
 var proxyAddr = ""
 
-// Proxy reports the current proxy preference: "[scheme://]host:port", or ""
-// for the host's default.
-func Proxy() string { return proxyAddr }
+// defaultProxy is the host's default, read from
+// globalThis.__netscrapeDefaultProxy.
+func defaultProxy() string {
+	if d := js.Global().Get("__netscrapeDefaultProxy"); d.Type() == js.TypeString {
+		return strings.TrimSpace(d.String())
+	}
+	return ""
+}
+
+// Proxy reports the proxy in effect: the person's choice, else the host's
+// default, else "" when the host names none.
+func Proxy() string {
+	if proxyAddr != "" {
+		return proxyAddr
+	}
+	return defaultProxy()
+}
 
 func loadProxy() {
+	defer publishProxy()
 	ls := js.Global().Get("localStorage")
 	if !ls.Truthy() {
 		return
 	}
 	raw := ls.Call("getItem", proxyStoreKey)
 	if raw.Type() != js.TypeString || raw.String() == "" {
-		publishProxy()
 		return
 	}
 	obj := js.Global().Get("JSON").Call("parse", raw.String())
@@ -1173,7 +1194,6 @@ func loadProxy() {
 		proxyAddr = strings.TrimSpace(p.String())
 	}
 	// An older {mode, exit} value is dropped: the address field replaced it.
-	publishProxy()
 }
 
 func saveProxy() {
@@ -1187,7 +1207,7 @@ func saveProxy() {
 
 func publishProxy() {
 	obj := js.Global().Get("Object").New()
-	obj.Set("proxy", proxyAddr)
+	obj.Set("proxy", Proxy())
 	js.Global().Set("__netscrapeProxy", obj)
 }
 
@@ -1226,29 +1246,39 @@ func (b *browser) proxyPanel() (button, panel js.Value) {
 	panel = b.mk("div")
 	panel.Get("style").Set("cssText", "display:none;gap:8px;align-items:center;padding:4px 6px;background:#100d18;border-bottom:1px solid #2a2342;font:12px monospace;color:#cdd2da")
 	label := b.mk("span")
-	label.Set("textContent", "clearnet pages via proxy")
+	label.Set("textContent", "proxy")
 	addr := b.mk("input")
 	addr.Set("spellcheck", false)
-	addr.Set("placeholder", "[scheme://]host:port — empty: the visor's default egress; e.g. vnet:1080 or socks5://192.168.1.2:1080")
+	addr.Set("placeholder", "[scheme://]host:port — e.g. vnet:4445 or socks5://192.168.1.2:1080; empty returns to the default")
 	addr.Get("style").Set("cssText", "flex:1;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:1px 6px;font:12px monospace")
 	status := b.mk("span")
 	status.Get("style").Set("cssText", "opacity:.7")
 	sync := func() {
-		addr.Set("value", proxyAddr)
-		if validProxyAddr(proxyAddr) {
-			status.Set("textContent", "")
-		} else {
+		addr.Set("value", Proxy())
+		switch {
+		case !validProxyAddr(Proxy()):
 			status.Set("textContent", "needs [scheme://]host:port")
+		case proxyAddr == "" && Proxy() != "":
+			status.Set("textContent", "default")
+		case Proxy() == "":
+			status.Set("textContent", "no proxy")
+		default:
+			status.Set("textContent", "")
 		}
 	}
 	addr.Call("addEventListener", "change", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		proxyAddr = strings.TrimSpace(addr.Get("value").String())
+		// The default typed back in is the default: keep following it.
+		if proxyAddr == defaultProxy() {
+			proxyAddr = ""
+		}
 		saveProxy()
 		sync()
 		return nil
 	}))
 	onClick(button, func() {
 		if panel.Get("style").Get("display").String() == "none" {
+			sync() // another window may have changed it
 			panel.Get("style").Set("display", "flex")
 		} else {
 			panel.Get("style").Set("display", "none")

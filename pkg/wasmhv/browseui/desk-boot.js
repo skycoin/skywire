@@ -559,19 +559,13 @@
 				// The desk's REAL visor is the root binary running in a terminal —
 				// a separate wasm instance the page cannot call. The desk host's
 				// own skywireVisor core is deliberately never booted here, so the
-				// nested browser reaches the mesh THROUGH the running visor's
-				// resolving proxy on the virtual loopback (dmsgweb, vnet:4445,
-				// chained to skynetweb + the proxy client): dmsg/skynet fetches go
-				// SOCKS5-over-vnet. Falls back to the in-page core for a page that
-				// booted it (nothing on the desk does today).
+				// nested browser reaches everything THROUGH the running visor: its
+				// hypervisor makes each request via the resolving proxy on the
+				// virtual loopback (dmsgweb, vnet:4445, chained to skynetweb and the
+				// proxy client) — the same chain a native browser is pointed at.
 				var RESOLVER_PORT = 4445;
-				// The tab's own skysocks-client: it picks and connects an exit by itself,
-				// so it is the browser's egress when no proxy has been chosen, and it
-				// answers status.skysocks in-process.
-				var SKYSOCKS_PORT = 1080;
 				// The tab's hypervisor; its /api/browse/clearnet makes a whole request,
-				// TLS included, through the tab's proxy. The proxy named is the tab's own
-				// skysocks-client, whose session to an exit is already up.
+				// TLS included, through the proxy it is handed.
 				var HV_PORT = 8001;
 				// b64of encodes a request body for the JSON API: Go unmarshals a
 				// []byte field from base64. Chunked, because fromCharCode.apply on a
@@ -581,13 +575,13 @@
 					for (var i = 0; i < u8.length; i += C) { s += String.fromCharCode.apply(null, u8.subarray(i, i + C)); }
 					return btoa(s);
 				}
-				// tabBrowseClearnet asks THIS tab's hypervisor to make the request:
-				// the page cannot do TLS through its own loopback proxy, so https
-				// clearnet goes through the visor, which verifies against its own
-				// roots. It used to hardcode a bodyless GET, which made every form
+				// tabBrowseClearnet asks THIS tab's hypervisor to make the request
+				// through the proxy on vnet:egressPort. The page cannot do TLS itself,
+				// so every request goes through the visor, which verifies against its
+				// own roots. It used to hardcode a bodyless GET, which made every form
 				// POST on an https site silently arrive as a GET.
-				function tabBrowseClearnet(url, method, reqBody, reqHeaders) {
-					var payload = { method: method || 'GET', url: url, proxy: 'vnet:' + SKYSOCKS_PORT };
+				function tabBrowseClearnet(url, method, reqBody, reqHeaders, egressPort) {
+					var payload = { method: method || 'GET', url: url, proxy: 'vnet:' + egressPort };
 					if (reqBody && reqBody.length) { payload.body = b64of(reqBody); }
 					for (var hk in (reqHeaders || {})) { payload.header = reqHeaders; break; }
 					var body = new TextEncoder().encode(JSON.stringify(payload));
@@ -601,9 +595,6 @@
 						if (j.header) { for (var k in j.header) { try { h.set(k, j.header[k]); } catch (e) { /* forbidden name */ } } }
 						return new Response(b, { status: j.status_code || 200, headers: h });
 					});
-				}
-				function viaResolver() {
-					return !!(globalThis.vnet && globalThis.vnet.listening(RESOLVER_PORT) && globalThis.vnet.socksHttpFetch);
 				}
 				function resolverHost(pkHost) {
 					var h = String(pkHost || '');
@@ -633,7 +624,7 @@
 					return 0;
 				}
 					// The browser's proxy setting (netscrape's ⚙ field) is one
-					// [scheme://]host:port, or empty for the visor's default egress.
+					// [scheme://]host:port — netscrape publishes the address in effect.
 					// proxyPort reads it: {addr, port, err} — port is set when the
 					// address is this tab's own loopback (vnet:<port>, localhost:<port>),
 					// the one proxy a page can speak SOCKS5 to itself; err names an
@@ -651,10 +642,12 @@
 						return new Response('<body style="font:14px sans-serif;padding:2em;color:#a33">' + msg + '</body>',
 							{ status: 502, headers: new Headers({ 'content-type': 'text/html' }) });
 					}
+				// netscrape's proxy default: this tab's resolving proxy, which a person
+				// sees in the ⚙ field and can change, as in a browser's proxy settings.
+				if (!bridged) globalThis.__netscrapeDefaultProxy = 'socks5://vnet:' + RESOLVER_PORT;
 				globalThis.__netscrapeFetch = function (url, init) {
 					var u;
 					try { u = new URL(url, 'http://x/'); } catch (e) { return fetch(url); }
-					var mesh = /\.(dmsg|skysocks|skynet)$/i.test(u.hostname) || /^[0-9a-f]{66}$/i.test(u.hostname);
 					var path = (u.pathname || '/') + (u.search || '');
 					// init is optional and backward compatible: a caller passing only a
 					// URL still gets the GET this transport has always done. A REAL
@@ -670,9 +663,9 @@
 						return new Response((r && r.body) || new Uint8Array(0), { status: (r && r.status) || 200, headers: h });
 					}
 					// Loopback first, and it NEVER falls through: a loopback address
-					// that reached the clearnet branch would be dialed by the exit,
-					// against the exit's own localhost — wrong, and a surprise. When
-					// nothing listens on the vnet port, say so.
+					// that reached the proxy would be dialed by the exit, against the
+					// exit's own localhost — wrong, and a surprise. When nothing listens
+					// on the vnet port, say so.
 					var lp = vnetPort(u);
 					if (lp) {
 						if (globalThis.vnet && globalThis.vnet.listening(lp)) {
@@ -683,42 +676,29 @@
 							' — this tab\'s visor has no such app running. (Loopback addresses resolve to this page\'s vnet, never to a remote exit.)</body>',
 							{ status: 502, headers: new Headers({ 'content-type': 'text/html' }) }));
 					}
-					if (/^status\.skysocks$/i.test(u.hostname) && globalThis.vnet && globalThis.vnet.listening(SKYSOCKS_PORT)) {
-						return Promise.resolve(globalThis.vnet.socksHttpFetch(SKYSOCKS_PORT, u.hostname + ':80', rqM, path, rqB, rqH)).then(respond);
+					// Everything else goes through the proxy in netscrape's ⚙ field,
+					// exactly as a browser beside a native visor goes through the proxy
+					// it is set to. Its default, named below, is the resolving proxy on
+					// this tab's loopback — the 127.0.0.1:4445 of the native setup — and
+					// the resolver decides what each name is: .dmsg/.skynet over the
+					// mesh, its status hosts in-process, per-domain rules, the rest out
+					// through skysocks-client. The tab's hypervisor makes the request,
+					// because the page cannot do TLS itself.
+					// netscrape publishes its setting once a window has opened; until then
+					// the setting is the default it would show.
+					var pp = proxyPort(globalThis.__netscrapeProxy || { proxy: globalThis.__netscrapeDefaultProxy });
+					if (pp.err) return Promise.resolve(proxyError(pp.err));
+					if (!pp.addr) return Promise.resolve(proxyError('no proxy is set: enter one in the ⚙ panel, e.g. vnet:' + RESOLVER_PORT));
+					if (!pp.port) return Promise.resolve(proxyError('a browser visor can only use a proxy on its own loopback (vnet:&lt;port&gt;); ' + pp.addr + ' is not one'));
+					if (!(globalThis.vnet && globalThis.vnet.listening(pp.port))) return Promise.resolve(proxyError('the proxy ' + pp.addr + ' is not running: nothing is listening on vnet port ' + pp.port));
+					if (!globalThis.vnet.listening(HV_PORT)) return Promise.resolve(proxyError('browsing needs this tab\'s hypervisor (vnet:' + HV_PORT + '), which is not running: skywire cli visor hv enable'));
+					// A mesh site is fetched as http: this tab's resolver does not
+					// intercept TLS, and the real-origin substrate carries https for it.
+					var target = url;
+					if (/\.(dmsg|skynet|skysocks)$/i.test(u.hostname) || /^[0-9a-f]{66}$/i.test(u.hostname)) {
+						target = 'http://' + resolverHost(u.hostname) + (u.port && u.port !== '443' ? ':' + u.port : '') + path;
 					}
-					if (mesh && viaResolver()) {
-						return Promise.resolve(globalThis.vnet.socksHttpFetch(RESOLVER_PORT, resolverHost(u.hostname) + ':80', rqM, path, rqB, rqH)).then(respond);
-					}
-					if (mesh && sv.fetchDmsg) {
-						return Promise.resolve(sv.fetchDmsg(u.hostname, rqM, path, rqB)).then(respond);
-					}
-						// A loopback proxy is this tab's own visor (its skysocks-client on
-						// the virtual loopback): the page speaks SOCKS5 to it directly, for
-						// http — it cannot do TLS through it. A page cannot reach any other
-						// proxy; the host-bridged desk below hands those to the visor.
-						var pp = proxyPort(globalThis.__netscrapeProxy);
-						if (pp.err) return Promise.resolve(proxyError(pp.err));
-						if (pp.port) {
-							if (u.protocol === 'https:') return Promise.resolve(proxyError('https through a loopback proxy needs the visor: use a proxy address the host can dial, or leave the field empty'));
-							if (!(globalThis.vnet && globalThis.vnet.listening(pp.port))) return Promise.resolve(proxyError('nothing is listening on vnet port ' + pp.port));
-							return Promise.resolve(globalThis.vnet.socksHttpFetch(pp.port, u.hostname + ':' + (u.port || 80), rqM, path, rqB, rqH)).then(respond);
-						}
-						if (pp.addr) return Promise.resolve(proxyError('a browser visor can only use a proxy on its own loopback (vnet:&lt;port&gt;); ' + pp.addr + ' is not one'));
-						if (sv.fetchClearnet) {
-							return Promise.resolve(sv.fetchClearnet('', rqM, url, rqB)).then(respond);
-						}
-						// No proxy chosen. https: the visor makes the request (TLS verified
-						// against its embedded roots) through its own proxy, via the browse API
-						// its hypervisor serves on vnet; the page itself cannot do TLS.
-						if (u.protocol === 'https:') {
-							if (!(globalThis.vnet && globalThis.vnet.listening(HV_PORT))) return Promise.resolve(proxyError('https needs this tab\'s hypervisor (vnet:' + HV_PORT + '), which is not running: skywire cli visor hv enable'));
-							return tabBrowseClearnet(url, rqM, rqB, rqH);
-						}
-						// http: the tab's own skysocks-client, spoken to directly as SOCKS5.
-						if (globalThis.vnet && globalThis.vnet.listening(SKYSOCKS_PORT)) {
-							return Promise.resolve(globalThis.vnet.socksHttpFetch(SKYSOCKS_PORT, u.hostname + ':' + (u.port || 80), rqM, path, rqB, rqH)).then(respond);
-						}
-						return Promise.resolve(proxyError('no proxy is running in this tab (skysocks-client on vnet:' + SKYSOCKS_PORT + '); start it with: skywire cli proxy start'));
+					return tabBrowseClearnet(target, rqM, rqB, rqH, pp.port);
 				};
 				// The desk chrome comes from the library (0magnet/desk), mounted by
 				// the desk host module itself (installDesk); its façade carries the

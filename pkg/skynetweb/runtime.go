@@ -496,7 +496,13 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 					addr = net.JoinHostPort(origHost, port)
 				}
 				log.WithField("addr", addr).Debug("SOCKS5 → upstream")
-				return upstream.Dial(network, addr)
+				c, err := upstream.Dial(network, addr)
+				if err != nil {
+					return nil, err
+				}
+				// go-socks5 asserts *net.TCPAddr on the conn it is handed; a vnet
+				// conn to a browser tab's skysocks-client carries its own addr type.
+				return &tcpAddrConn{Conn: c}, nil
 			}
 			return net.Dial(network, addr)
 		},
