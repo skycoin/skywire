@@ -1687,6 +1687,79 @@
       will-change: transform;
     }
 
+    /* Video viewer — a video from the chat, full screen. The overlay is the
+       fallback and the frame: where the browser allows it the overlay itself
+       goes truly full screen (see openVideoViewer), and where it does not
+       (a phone WebView that has no full-screen view to offer) it still fills
+       the whole window, which is most of the point. Above the lightbox;
+       below the call banners, which must never be hidden by a video. */
+    .video-viewer {
+      position: fixed;
+      inset: 0;
+      z-index: 210;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+    }
+
+    .video-viewer.hidden { display: none; }
+
+    .vv-video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+
+    .vv-close {
+      position: absolute;
+      top: max(12px, env(safe-area-inset-top));
+      right: max(12px, env(safe-area-inset-right));
+      width: 42px;
+      height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.55);
+      color: #fff;
+      cursor: pointer;
+      z-index: 1;
+    }
+
+    .vv-close:hover { background: rgba(0, 0, 0, 0.75); }
+
+    /* The "full screen" pill beside the speed pill: same shape, an icon for a
+       label. */
+    .mc-full {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* A round video message's own way into the viewer: a small button in the
+       frame's corner, so a tap anywhere else still plays it in place. */
+    .vm-expand {
+      position: absolute;
+      top: 10%;
+      right: 10%;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.5);
+      color: #fff;
+      cursor: pointer;
+      opacity: 0.85;
+    }
+
+    .vm-expand:hover { opacity: 1; background: rgba(0, 0, 0, 0.7); }
+
     /* Inline video & audio players */
     .media-video {
       display: block;
@@ -4409,6 +4482,13 @@
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
 
+  <!-- Video viewer: a video from the chat, full screen. See openVideoViewer. -->
+  <div id="videoViewer" class="video-viewer hidden" role="dialog" aria-modal="true" aria-label="Video">
+    <video id="vvVideo" class="vv-video" controls playsinline preload="metadata"></video>
+    <button type="button" class="vv-close" title="Close" aria-label="Close video"
+            onclick="app.closeVideoViewer()"><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+
   <!-- Image Lightbox -->
   <div id="lightbox" class="lightbox-overlay" onclick="app.closeLightbox(event)">
     <img id="lightboxImg" class="lightbox-img" src="" alt="" />
@@ -4499,6 +4579,7 @@
       check: '<path d="m4.5 12.5 5 5 10-11"/>',
       checkDouble: '<path d="m2 12.5 4.5 4.5 9-10"/><path d="m10.5 15.7 1.3 1.3 9-10"/>',
       close: '<path d="M6 6l12 12M18 6 6 18"/>',
+      expand: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
       alert: '<path d="M12 3.6 21.2 19.6H2.8z"/><path d="M12 9.8v4.3M12 17.2v.1"/>',
       circle: '<circle cx="12" cy="12" r="6.8"/>',
       clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
@@ -5870,8 +5951,8 @@
           // data-ms-title is what the OS media controls put on the lock screen
           // for this clip; an attached file is known by its name.
           return `<${tag} class="${cls}" src="${urlAttr}" controls preload="metadata"
-              data-ms-title="${nameAttr}"></${tag}>
-            ${this._mediaCaption(name, nameAttr, sizeStr, [this._speedPill()])}`;
+              data-ms-title="${nameAttr}"${isVideo ? ' ondblclick="app.openVideoViewer(this)"' : ''}></${tag}>
+            ${this._mediaCaption(name, nameAttr, sizeStr, [this._speedPill(), isVideo ? this._fullscreenPill() : ''])}`;
         }
         // No bytes to play (never received / pruned): fall through to the file
         // card, but still name a recorded clip for what it is. The card keeps
@@ -5954,6 +6035,12 @@
         return `<button type="button" class="mc-speed${this.speed === 1 ? '' : ' on'}"
                 title="Playback speed" aria-label="Playback speed ${label}"
                 onclick="app.cycleSpeed(event)">${label}</button>`;
+      }
+
+      // _fullscreenPill opens the video it sits under in the viewer.
+      _fullscreenPill() {
+        return `<button type="button" class="mc-speed mc-full" title="Full screen"
+                aria-label="Play full screen" onclick="app.openVideoViewer(this)">${icon('expand', 12)}</button>`;
       }
 
       // cycleSpeed advances to the next rate and applies it to everything at
@@ -6271,6 +6358,8 @@
               </svg>
               <span class="vm-badge"><span class="vm-icon">${icon('play', 17)}</span></span>
               <span class="vm-time">0:00</span>
+              <button type="button" class="vm-expand" title="Full screen" aria-label="Play full screen"
+                      onclick="event.stopPropagation(); app.openVideoViewer(this)">${icon('expand', 15)}</button>
             </div>
             <div class="media-caption vm-meta">
               <div class="mc-name"><span class="mc-size">${this.escapeHtml(sizeStr)}</span></div>
@@ -6516,6 +6605,130 @@
           out.push(rms);
         }
         return out.map(v => Math.max(0.08, Math.min(1, Math.pow(max ? v / max : 0, 0.65))));
+      }
+
+      // ---- Video viewer ------------------------------------------------
+      //
+      // A video in a bubble is thumbnail-sized, and the one way the browser
+      // offers out of that — its own full-screen button — is not on offer
+      // everywhere this page runs: the phone app's WebView had no full-screen
+      // view to show it in, and a recorded (round) video message has no
+      // native controls at all. So the page has its own: the same file, from
+      // where the bubble had got to, filling the screen.
+      //
+      // It asks the browser for real full screen (no address bar, no system
+      // bars) and, for a landscape video on a phone, for landscape; either
+      // can be refused, and the overlay still fills the window. It pushes a
+      // history entry, so the phone's back gesture closes it rather than
+      // leaving the chat.
+
+      videoViewerOpen() {
+        const el = document.getElementById('videoViewer');
+        return !!(el && !el.classList.contains('hidden'));
+      }
+
+      // openVideoViewer shows the video a control belongs to — the pill under
+      // it, the button on a round message, or the video itself.
+      openVideoViewer(el) {
+        const holder = el && el.closest && el.closest('.message-bubble, .vm-round');
+        const source = (el && el.tagName === 'VIDEO') ? el : (holder && holder.querySelector('video'));
+        const src = source && source.getAttribute('src');
+        const viewer = document.getElementById('videoViewer');
+        const video = document.getElementById('vvVideo');
+        if (!src || !viewer || !video) return;
+        const startAt = isFinite(source.currentTime) ? source.currentTime : 0;
+        try { source.pause(); } catch (e) { /* not playing */ }
+        this._vv = { source, startAt, fullscreen: false };
+        video.playbackRate = this.speed || 1;
+        video.src = src;
+        viewer.classList.remove('hidden');
+        const start = () => {
+          video.removeEventListener('loadedmetadata', start);
+          this._vvSeekAndPlay(video, startAt);
+          this._vvOrient(video);
+        };
+        video.addEventListener('loadedmetadata', start);
+        history.pushState({ skychat: 'video' }, '');
+        this._vvEnterFullscreen(viewer);
+      }
+
+      // _vvSeekAndPlay starts the viewer where the bubble was. A recorded
+      // WebM has no duration until the browser has scanned to its end (see
+      // _vmFixDuration); seeking before that lands at 0, so scan first.
+      _vvSeekAndPlay(video, startAt) {
+        const play = () => {
+          if (startAt > 0) { try { video.currentTime = startAt; } catch (e) { /* not seekable */ } }
+          const p = video.play();
+          if (p && p.catch) p.catch(() => { /* the user can press play */ });
+        };
+        if (isFinite(video.duration) || startAt <= 0) { play(); return; }
+        const settle = () => {
+          if (!isFinite(video.duration)) return;
+          video.removeEventListener('timeupdate', settle);
+          play();
+        };
+        video.addEventListener('timeupdate', settle);
+        try { video.currentTime = 1e101; } catch (e) { video.removeEventListener('timeupdate', settle); play(); }
+      }
+
+      _vvEnterFullscreen(viewer) {
+        const request = viewer.requestFullscreen || viewer.webkitRequestFullscreen;
+        if (!request) return;
+        try {
+          const p = request.call(viewer, { navigationUI: 'hide' });
+          const entered = () => { if (this._vv) this._vv.fullscreen = true; };
+          if (p && p.then) p.then(entered).catch(() => { /* the overlay is the fallback */ });
+          else entered();
+        } catch (e) { /* the overlay is the fallback */ }
+      }
+
+      // _vvOrient turns a phone to landscape for a landscape video. Only
+      // possible in full screen, and only where the platform lets a page ask.
+      _vvOrient(video) {
+        const o = window.screen && screen.orientation;
+        if (!o || !o.lock || !(video.videoWidth > video.videoHeight)) return;
+        o.lock('landscape').catch(() => { /* not allowed here; the user can turn the phone */ });
+      }
+
+      // closeVideoViewer closes the viewer and hands the position back to the
+      // bubble it came from. popHistory is false when a popstate is what
+      // closed it — the entry is already gone.
+      closeVideoViewer(popHistory = true) {
+        const viewer = document.getElementById('videoViewer');
+        const video = document.getElementById('vvVideo');
+        if (!viewer || viewer.classList.contains('hidden')) return;
+        const state = this._vv;
+        this._vv = null;
+        if (video) {
+          try { video.pause(); } catch (e) { /* not playing */ }
+          if (state && state.source && isFinite(video.currentTime) && video.currentTime > 0) {
+            try { state.source.currentTime = video.currentTime; } catch (e) { /* not seekable */ }
+          }
+          video.removeAttribute('src');
+          try { video.load(); } catch (e) { /* nothing loaded */ }
+        }
+        viewer.classList.add('hidden');
+        const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+        if (fsEl) {
+          const exit = document.exitFullscreen || document.webkitExitFullscreen;
+          try { const p = exit && exit.call(document); if (p && p.catch) p.catch(() => {}); } catch (e) { /* already out */ }
+        }
+        const o = window.screen && screen.orientation;
+        if (o && o.unlock) { try { o.unlock(); } catch (e) { /* never locked */ } }
+        if (popHistory && history.state && history.state.skychat === 'video') {
+          // The popstate this causes is ours, not the user stepping back
+          // out of the chat — see the listener.
+          this._vvPopping = true;
+          history.back();
+        }
+      }
+
+      // Leaving full screen — Esc on a desktop, back on a phone — is leaving
+      // the video: the viewer was opened to be full screen, and an overlay
+      // left behind would need closing a second time.
+      _vvFullscreenChanged() {
+        if (!this._vv || !this._vv.fullscreen) return;
+        if (!(document.fullscreenElement || document.webkitFullscreenElement)) this.closeVideoViewer();
       }
 
       // openLightbox shows an image full-size in an in-app overlay (rather
@@ -14290,14 +14503,28 @@
     // rather than leaving the app. Only meaningful in the one-pane layout,
     // where opening a chat pushed the entry this pops.
     window.addEventListener('popstate', function() {
+      // The video viewer popping its own entry on close: nothing else moved.
+      if (app._vvPopping) {
+        app._vvPopping = false;
+        return;
+      }
+      // A video open full screen is the step back takes first: its entry
+      // sits on top of the chat's.
+      if (app.videoViewerOpen()) {
+        app.closeVideoViewer(false);
+        return;
+      }
       // popHistory=false: the browser has already moved back, so calling
       // history.back() again here would navigate away from the app.
       app.showChatList(false);
     });
+    document.addEventListener('fullscreenchange', function() { app._vvFullscreenChanged(); });
+    document.addEventListener('webkitfullscreenchange', function() { app._vvFullscreenChanged(); });
 
     // Keyboard shortcuts
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
+        app.closeVideoViewer();
         app.closeSettings();
         app.closeLightbox();
         // Both the popup menus and the per-message ⋯, so Escape can never

@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.util.Log
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.PermissionRequest
@@ -82,8 +83,9 @@ internal object ChatWebView {
         settings.loadWithOverviewMode = false
         settings.setSupportZoom(false)
         settings.builtInZoomControls = false
-        // Inline playback for received voice/video messages — full-screen
-        // handoff is the WebChromeClient path we deliberately don't take.
+        // Voice/video messages play inline; a video the user asks to see
+        // full screen goes through the chrome client's custom view — see
+        // FullscreenVideo.
         settings.mediaPlaybackRequiresUserGesture = true
         // The page's own QR decoding (BarcodeDetector) does not exist in this
         // WebView, so the host lends it zxing — see QrBridge. Narrow surface:
@@ -189,7 +191,19 @@ internal object ChatWebView {
         isDark: () -> Boolean,
         onPermissionRequest: (PermissionRequest) -> Unit,
         onFileChooser: (ValueCallback<Array<Uri>>, WebChromeClient.FileChooserParams) -> Boolean,
+        onShowFullscreen: (View, WebChromeClient.CustomViewCallback) -> Unit,
+        onHideFullscreen: () -> Unit,
     ): WebChromeClient = object : JsDialogChromeClient(isDark) {
+
+        // A video going full screen: the player's own button, or the page's
+        // viewer asking for it. Without these the request went nowhere.
+        override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+            onShowFullscreen(view, callback)
+        }
+
+        override fun onHideCustomView() {
+            onHideFullscreen()
+        }
 
         override fun onPermissionRequest(request: PermissionRequest) {
             onPermissionRequest.invoke(request)
