@@ -407,6 +407,9 @@ func TestSBDRulingIsRateLimitedPerPair(t *testing.T) {
 	prev := SBDBackoff()
 	require.True(t, SetSBDBackoff(time.Nanosecond))
 	t.Cleanup(func() { SetSBDBackoff(prev) })
+	// Past one tick of the clock: Windows can return the same time for two
+	// reads milliseconds apart, and an unchanged time is inside any window.
+	time.Sleep(20 * time.Millisecond)
 	sbdTick(rg, ids, 25_000_000, 21_500_000)
 	require.Equal(t, 2, countEvents(rg, MuxEventSBDRuling), "a new backoff window records the pair again")
 }
