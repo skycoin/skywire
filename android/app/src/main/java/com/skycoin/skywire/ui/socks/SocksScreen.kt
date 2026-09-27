@@ -61,6 +61,8 @@ import com.skycoin.skywire.ui.components.InfoRow
 import com.skycoin.skywire.ui.components.PENDING_AMBER
 import com.skycoin.skywire.ui.components.SavedServer
 import com.skycoin.skywire.ui.components.SectionCard
+import com.skycoin.skywire.ui.components.FavoriteStar
+import com.skycoin.skywire.ui.components.FavoritesHeader
 import com.skycoin.skywire.ui.components.ServerRow
 import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
@@ -114,6 +116,22 @@ fun SocksScreen(
             }
 
             if (state.coreReady) {
+                // Starred proxies first — see FavoriteServers.
+                val favorites = state.favoriteRows
+                if (favorites.isNotEmpty()) {
+                    item { FavoritesHeader(favorites.size) }
+                    items(favorites, key = { "fav:" + it.entry.pk }) { row ->
+                        ServerRow(
+                            server = row.entry,
+                            selected = row.entry.pk == state.selectedPk,
+                            enabled = !state.busy,
+                            onClick = { viewModel.connect(SavedServer.of(row.entry)) },
+                            favorite = true,
+                            onToggleFavorite = { viewModel.toggleFavorite(SavedServer.of(row.entry)) },
+                            unlisted = !row.listed,
+                        )
+                    }
+                }
                 item { ServersHeader(state, viewModel) }
                 items(state.filteredServers, key = { it.address }) { server ->
                     ServerRow(
@@ -121,6 +139,8 @@ fun SocksScreen(
                         selected = server.pk == state.selectedPk,
                         enabled = !state.busy,
                         onClick = { viewModel.connect(SavedServer.of(server)) },
+                        favorite = state.isFavorite(server.pk),
+                        onToggleFavorite = { viewModel.toggleFavorite(SavedServer.of(server)) },
                     )
                 }
                 item { ServersFooter(state, viewModel) }
@@ -197,18 +217,28 @@ private fun StatusCard(state: SocksUiState, viewModel: SocksViewModel) {
 
         state.selectedPk?.let { pk ->
             Spacer(Modifier.height(12.dp))
-            InfoRow(
-                label = stringResource(R.string.socks_server),
-                value = listOfNotNull(
-                    state.selectedCountry?.let(::flagEmoji),
-                    shortPk(pk),
-                ).joinToString(" "),
-                mono = true,
-                modifier = Modifier.clickable {
-                    clipboard.setText(AnnotatedString(pk))
-                    Toast.makeText(context, copied, Toast.LENGTH_SHORT).show()
-                },
-            )
+            // The star is here as well as on the list: the moment a proxy
+            // turns out to be fast is while connected to it.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                InfoRow(
+                    label = stringResource(R.string.socks_server),
+                    value = listOfNotNull(
+                        state.selectedCountry?.let(::flagEmoji),
+                        shortPk(pk),
+                    ).joinToString(" "),
+                    mono = true,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable {
+                            clipboard.setText(AnnotatedString(pk))
+                            Toast.makeText(context, copied, Toast.LENGTH_SHORT).show()
+                        },
+                )
+                FavoriteStar(
+                    favorite = state.isFavorite(pk),
+                    onToggle = { state.selectedServer?.let(viewModel::toggleFavorite) },
+                )
+            }
         }
 
         state.connection?.let { connection ->

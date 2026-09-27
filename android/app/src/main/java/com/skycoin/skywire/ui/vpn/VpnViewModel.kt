@@ -18,7 +18,11 @@ import com.skycoin.skywire.core.TransportPreference
 import com.skycoin.skywire.core.VpnTunnel
 import com.skycoin.skywire.core.VpnTunnelState
 import com.skycoin.skywire.ui.components.AppStatus
+import com.skycoin.skywire.ui.components.FavoriteRow
+import com.skycoin.skywire.ui.components.FavoriteServers
 import com.skycoin.skywire.ui.components.SavedServer
+import com.skycoin.skywire.ui.components.favoriteRows
+import com.skycoin.skywire.ui.components.matches
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -64,6 +68,8 @@ data class VpnUiState(
     /** Last summary overview — the device's own address comes off this. */
     val overview: Overview? = null,
     val lastServer: SavedServer? = null,
+    /** The servers the user starred in this list — see FavoriteServers. */
+    val favorites: List<SavedServer> = emptyList(),
     /** Bytes this phone has moved through SkyVPN, across all sessions. */
     val lifetimeBytes: Long = 0,
     /** A start/stop/settings call is in flight. */
@@ -118,17 +124,24 @@ data class VpnUiState(
     val sessionBytes: Long
         get() = connection?.let { it.bandwidthSent + it.bandwidthReceived } ?: 0
 
-    val filteredServers: List<ServiceEntry>
-        get() = if (query.isBlank()) {
-            servers
-        } else {
-            servers.filter {
-                it.pk.contains(query, true) ||
-                    it.geo?.country.orEmpty().contains(query, true) ||
-                    it.geo?.region.orEmpty().contains(query, true) ||
-                    it.version.contains(query, true)
-            }
+    /** Every server in the list with a star — the section above the full list. */
+    val favoriteRows: List<FavoriteRow> get() = favoriteRows(favorites, servers, query)
+
+    fun isFavorite(pk: String): Boolean = favorites.any { it.pk == pk }
+
+    /**
+     * The selected server as it would be starred from the status card: with
+     * its location and version when the list or the saved server knows them.
+     */
+    val selectedServer: SavedServer?
+        get() = selectedPk?.let { pk ->
+            servers.firstOrNull { it.pk == pk }?.let(SavedServer::of)
+                ?: lastServer?.takeIf { it.pk == pk }
+                ?: SavedServer(pk)
         }
+
+    val filteredServers: List<ServiceEntry>
+        get() = servers.filter { it.matches(query) }
 }
 
 /**
@@ -146,6 +159,7 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
     private val api = VisorApi.get(app)
     private val prefs = AppPreferences(app)
     private val serverCache = ServerListCache(prefs)
+    private val favoriteStore = FavoriteServers(prefs)
     private val json = Json { ignoreUnknownKeys = true }
 
     private val mutable = MutableStateFlow(VpnUiState())
@@ -161,6 +175,11 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
     private var unsavedBytes = 0L
 
     init {
+        viewModelScope.launch {
+            favoriteStore.flow(VPN_TYPE).collect { favorites ->
+                mutable.update { it.copy(favorites = favorites) }
+            }
+        }
         viewModelScope.launch {
             mutable.update {
                 it.copy(
@@ -223,6 +242,11 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setQuery(query: String) {
         mutable.update { it.copy(query = query) }
+    }
+
+    /** Star or unstar [server]. On the phone only; nothing to wait for. */
+    fun toggleFavorite(server: SavedServer) {
+        viewModelScope.launch { favoriteStore.toggle(VPN_TYPE, server) }
     }
 
     fun refreshServers() {
