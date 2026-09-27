@@ -573,8 +573,24 @@
 				// TLS included, through the tab's proxy. The proxy named is the tab's own
 				// skysocks-client, whose session to an exit is already up.
 				var HV_PORT = 8001;
-				function tabBrowseClearnet(url) {
-					var body = new TextEncoder().encode(JSON.stringify({ method: 'GET', url: url, proxy: 'vnet:' + SKYSOCKS_PORT }));
+				// b64of encodes a request body for the JSON API: Go unmarshals a
+				// []byte field from base64. Chunked, because fromCharCode.apply on a
+				// whole upload overflows the argument limit.
+				function b64of(u8) {
+					var s = '', C = 0x8000;
+					for (var i = 0; i < u8.length; i += C) { s += String.fromCharCode.apply(null, u8.subarray(i, i + C)); }
+					return btoa(s);
+				}
+				// tabBrowseClearnet asks THIS tab's hypervisor to make the request:
+				// the page cannot do TLS through its own loopback proxy, so https
+				// clearnet goes through the visor, which verifies against its own
+				// roots. It used to hardcode a bodyless GET, which made every form
+				// POST on an https site silently arrive as a GET.
+				function tabBrowseClearnet(url, method, reqBody, reqHeaders) {
+					var payload = { method: method || 'GET', url: url, proxy: 'vnet:' + SKYSOCKS_PORT };
+					if (reqBody && reqBody.length) { payload.body = b64of(reqBody); }
+					for (var hk in (reqHeaders || {})) { payload.header = reqHeaders; break; }
+					var body = new TextEncoder().encode(JSON.stringify(payload));
 					return Promise.resolve(globalThis.vnet.httpFetch(HV_PORT, 'POST', '/api/browse/clearnet', body, { 'Content-Type': 'application/json' })).then(function (r) {
 						var j = {};
 						try { j = JSON.parse(new TextDecoder().decode((r && r.body) || new Uint8Array(0))); } catch (e) { /* not JSON */ }
@@ -635,11 +651,19 @@
 						return new Response('<body style="font:14px sans-serif;padding:2em;color:#a33">' + msg + '</body>',
 							{ status: 502, headers: new Headers({ 'content-type': 'text/html' }) });
 					}
-				globalThis.__netscrapeFetch = function (url) {
+				globalThis.__netscrapeFetch = function (url, init) {
 					var u;
 					try { u = new URL(url, 'http://x/'); } catch (e) { return fetch(url); }
 					var mesh = /\.(dmsg|skysocks|skynet)$/i.test(u.hostname) || /^[0-9a-f]{66}$/i.test(u.hostname);
 					var path = (u.pathname || '/') + (u.search || '');
+					// init is optional and backward compatible: a caller passing only a
+					// URL still gets the GET this transport has always done. A REAL
+					// origin needs more — a form submit is a POST with a body, an XHR
+					// carries its own Content-Type — so the method, headers and body
+					// come from init wherever the underlying call can carry them.
+					var rqM = (init && init.method) || 'GET';
+					var rqH = (init && init.headers) || {};
+					var rqB = (init && init.body) || null;
 					function respond(r) {
 						var h = new Headers();
 						if (r && r.headers) { try { for (var k in r.headers) h.set(k, r.headers[k]); } catch (e) { /* ignore */ } }
@@ -652,7 +676,7 @@
 					var lp = vnetPort(u);
 					if (lp) {
 						if (globalThis.vnet && globalThis.vnet.listening(lp)) {
-							return Promise.resolve(globalThis.vnet.httpFetch(lp, 'GET', path, null, {})).then(respond);
+							return Promise.resolve(globalThis.vnet.httpFetch(lp, rqM, path, rqB, rqH)).then(respond);
 						}
 						return Promise.resolve(new Response(
 							'<body style="font:14px sans-serif;padding:2em;color:#a33">nothing is listening on vnet port ' + lp +
@@ -660,13 +684,13 @@
 							{ status: 502, headers: new Headers({ 'content-type': 'text/html' }) }));
 					}
 					if (/^status\.skysocks$/i.test(u.hostname) && globalThis.vnet && globalThis.vnet.listening(SKYSOCKS_PORT)) {
-						return Promise.resolve(globalThis.vnet.socksHttpFetch(SKYSOCKS_PORT, u.hostname + ':80', 'GET', path, null, {})).then(respond);
+						return Promise.resolve(globalThis.vnet.socksHttpFetch(SKYSOCKS_PORT, u.hostname + ':80', rqM, path, rqB, rqH)).then(respond);
 					}
 					if (mesh && viaResolver()) {
-						return Promise.resolve(globalThis.vnet.socksHttpFetch(RESOLVER_PORT, resolverHost(u.hostname) + ':80', 'GET', path, null, {})).then(respond);
+						return Promise.resolve(globalThis.vnet.socksHttpFetch(RESOLVER_PORT, resolverHost(u.hostname) + ':80', rqM, path, rqB, rqH)).then(respond);
 					}
 					if (mesh && sv.fetchDmsg) {
-						return Promise.resolve(sv.fetchDmsg(u.hostname, 'GET', path, null)).then(respond);
+						return Promise.resolve(sv.fetchDmsg(u.hostname, rqM, path, rqB)).then(respond);
 					}
 						// A loopback proxy is this tab's own visor (its skysocks-client on
 						// the virtual loopback): the page speaks SOCKS5 to it directly, for
@@ -677,22 +701,22 @@
 						if (pp.port) {
 							if (u.protocol === 'https:') return Promise.resolve(proxyError('https through a loopback proxy needs the visor: use a proxy address the host can dial, or leave the field empty'));
 							if (!(globalThis.vnet && globalThis.vnet.listening(pp.port))) return Promise.resolve(proxyError('nothing is listening on vnet port ' + pp.port));
-							return Promise.resolve(globalThis.vnet.socksHttpFetch(pp.port, u.hostname + ':' + (u.port || 80), 'GET', path, null, {})).then(respond);
+							return Promise.resolve(globalThis.vnet.socksHttpFetch(pp.port, u.hostname + ':' + (u.port || 80), rqM, path, rqB, rqH)).then(respond);
 						}
 						if (pp.addr) return Promise.resolve(proxyError('a browser visor can only use a proxy on its own loopback (vnet:&lt;port&gt;); ' + pp.addr + ' is not one'));
 						if (sv.fetchClearnet) {
-							return Promise.resolve(sv.fetchClearnet('', 'GET', url, null)).then(respond);
+							return Promise.resolve(sv.fetchClearnet('', rqM, url, rqB)).then(respond);
 						}
 						// No proxy chosen. https: the visor makes the request (TLS verified
 						// against its embedded roots) through its own proxy, via the browse API
 						// its hypervisor serves on vnet; the page itself cannot do TLS.
 						if (u.protocol === 'https:') {
 							if (!(globalThis.vnet && globalThis.vnet.listening(HV_PORT))) return Promise.resolve(proxyError('https needs this tab\'s hypervisor (vnet:' + HV_PORT + '), which is not running: skywire cli visor hv enable'));
-							return tabBrowseClearnet(url);
+							return tabBrowseClearnet(url, rqM, rqB, rqH);
 						}
 						// http: the tab's own skysocks-client, spoken to directly as SOCKS5.
 						if (globalThis.vnet && globalThis.vnet.listening(SKYSOCKS_PORT)) {
-							return Promise.resolve(globalThis.vnet.socksHttpFetch(SKYSOCKS_PORT, u.hostname + ':' + (u.port || 80), 'GET', path, null, {})).then(respond);
+							return Promise.resolve(globalThis.vnet.socksHttpFetch(SKYSOCKS_PORT, u.hostname + ':' + (u.port || 80), rqM, path, rqB, rqH)).then(respond);
 						}
 						return Promise.resolve(proxyError('no proxy is running in this tab (skysocks-client on vnet:' + SKYSOCKS_PORT + '); start it with: skywire cli proxy start'));
 				};
@@ -729,7 +753,13 @@
 								});
 							});
 					};
-					globalThis.__netscrapeFetch = function (url) {
+					globalThis.__netscrapeFetch = function (url, init) {
+						// Same init contract as the wasm desk's transport above: a caller
+						// passing only a URL still gets a GET. Both desks feed the SAME
+						// real-origin browser, so a POST must survive on either one.
+						var rqM = (init && init.method) || 'GET';
+						var rqH = (init && init.headers) || {};
+						var rqB = (init && init.body) || null;
 						var u;
 						try { u = new URL(url, location.href); } catch (e) { return fetch(url); }
 						var host = u.hostname || '';
@@ -741,7 +771,7 @@
 						var lp = vnetPort(u);
 						if (lp) {
 							if (globalThis.vnet && globalThis.vnet.listening(lp)) {
-								return Promise.resolve(globalThis.vnet.httpFetch(lp, 'GET', (u.pathname || '/') + (u.search || ''), null, {})).then(function (r) {
+								return Promise.resolve(globalThis.vnet.httpFetch(lp, rqM, (u.pathname || '/') + (u.search || ''), rqB, rqH)).then(function (r) {
 									var h = new Headers();
 									if (r && r.headers) { try { for (var k in r.headers) h.set(k, r.headers[k]); } catch (e) { /* ignore */ } }
 									return new Response((r && r.body) || new Uint8Array(0), { status: (r && r.status) || 200, headers: h });
@@ -750,7 +780,10 @@
 							return Promise.resolve(proxyError('nothing is listening on vnet port ' + lp));
 						}
 						if (/\.(dmsg|skynet|skysocks)$/i.test(host) || /^[0-9a-f]{66}$/i.test(host)) {
-							return browsePost('/api/browse/fetch', { host: host, port: u.port ? (parseInt(u.port, 10) || 80) : 80, method: 'GET', path: (u.pathname || '/') + (u.search || '') });
+							var mreq = { host: host, port: u.port ? (parseInt(u.port, 10) || 80) : 80, method: rqM, path: (u.pathname || '/') + (u.search || '') };
+							if (rqB && rqB.length) { mreq.body = b64of(rqB); }
+							for (var hk1 in rqH) { mreq.header = rqH; break; }
+							return browsePost('/api/browse/fetch', mreq);
 						}
 							// The proxy field: a loopback address is this tab's own visor's
 							// SOCKS on the virtual loopback (http only — the page cannot do
@@ -758,13 +791,15 @@
 							var pp = proxyPort(globalThis.__netscrapeProxy);
 							if (pp.err) return Promise.resolve(proxyError(pp.err));
 							if (pp.port && u.protocol !== 'https:' && globalThis.vnet && globalThis.vnet.listening(pp.port)) {
-								return Promise.resolve(globalThis.vnet.socksHttpFetch(pp.port, host + ':' + (u.port || 80), 'GET', (u.pathname || '/') + (u.search || ''), null, {})).then(function (r) {
+								return Promise.resolve(globalThis.vnet.socksHttpFetch(pp.port, host + ':' + (u.port || 80), rqM, (u.pathname || '/') + (u.search || ''), rqB, rqH)).then(function (r) {
 									var h = new Headers();
 									if (r && r.headers) { try { for (var k in r.headers) h.set(k, r.headers[k]); } catch (e) { /* ignore */ } }
 									return new Response((r && r.body) || new Uint8Array(0), { status: (r && r.status) || 200, headers: h });
 								});
 							}
-							var req = { method: 'GET', url: u.href };
+							var req = { method: rqM, url: u.href };
+							if (rqB && rqB.length) { req.body = b64of(rqB); }
+							for (var hk2 in rqH) { req.header = rqH; break; }
 							if (pp.addr && !pp.port) { req.proxy = pp.addr; }
 							return browsePost('/api/browse/clearnet', req);
 					};
