@@ -26,7 +26,8 @@ func TestDeleteChatReachesTheStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read index.html: %v", err)
 	}
-	page := string(b)
+	// A Windows checkout may turn the file into CRLF.
+	page := strings.ReplaceAll(string(b), "\r\n", "\n")
 
 	// The body of deleteChat: from its declaration to the next method.
 	m := regexp.MustCompile(`(?s)\n\s+deleteChat\(\) \{\n(.*?)\n\s+\}\n\n\s+//`).FindStringSubmatch(page)
