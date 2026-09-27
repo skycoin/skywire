@@ -33,6 +33,7 @@ import { DmsgSettingsComponent } from './components/pages/dmsg-settings/dmsg-set
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { SkynetComponent } from './components/pages/node/skynet/skynet.component';
+import { NodeSettingsComponent } from './components/pages/node/node-settings/node-settings.component';
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
 import { VpnAuthGuardService } from './services/vpn-auth-guard.service';
 
@@ -226,6 +227,10 @@ const routes: Routes = [
           {
             path: 'skynet',
             component: SkynetComponent
+          },
+          {
+            path: 'settings',
+            component: NodeSettingsComponent
           },
           // /dmsg is handled by the redirect-to-info entry above
           // (line ~187). Reachability tab was dropped from the

@@ -43,6 +43,7 @@ import { LogFilterComponent } from './components/pages/node/apps/node-apps-list/
 import { InitialSetupComponent } from './components/pages/login/initial-setup/initial-setup.component';
 import { ProxySettingsComponent } from './components/pages/node/actions/proxy-settings/proxy-settings.component';
 import { SkynetComponent } from './components/pages/node/skynet/skynet.component';
+import { NodeSettingsComponent } from './components/pages/node/node-settings/node-settings.component';
 import { NodeInfoContentComponent } from './components/pages/node/node-info/node-info-content/node-info-content.component';
 import { ResourceMonitorComponent } from './components/pages/node/resource-monitor/resource-monitor.component';
 import { NodeResourcesComponent } from './components/pages/node/node-resources/node-resources.component';
@@ -105,6 +106,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         InitialSetupComponent,
         ProxySettingsComponent,
         SkynetComponent,
+        NodeSettingsComponent,
         NodeInfoContentComponent,
         ResourceMonitorComponent,
         NodeResourcesComponent,

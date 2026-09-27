@@ -60,7 +60,7 @@ func TestSettingRowsOnePerVariable(t *testing.T) {
 func TestSettingsEdits(t *testing.T) {
 	rows := settingRows(testState(map[string]string{
 		"MINDMSGSESS": "3", "HYPERVISORPKS": "aa bb", "DMSGWEBSK": visorapi.SkyenvRedacted,
-		"PROXYSERVER": "true", "LOGLVL": "debug",
+		"PROXYSERVER": "true", "LOGLVL": "debug", "SURVEYPKS": "",
 	}))
 	edits, changes, err := settingsEdits(rows, map[string]settingInput{
 		"MINDMSGSESS":   {Value: "3"},      // unchanged
@@ -73,6 +73,7 @@ func TestSettingsEdits(t *testing.T) {
 		"ISHYPERVISOR":  {Value: "false"},  // the desk owns it
 		"ROUTESETUPPKS": {Value: "cc\ndd"}, // newline-separated list
 		"VPNROUTERSSID": {Value: "home"},   // host-only rows are still editable
+		"SURVEYPKS":     {Value: ""},       // set to nothing and left empty
 	})
 	if err != nil {
 		t.Fatal(err)

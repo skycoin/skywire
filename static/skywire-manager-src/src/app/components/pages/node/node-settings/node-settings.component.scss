@@ -1,0 +1,139 @@
+.settings-container {
+  padding: 20px;
+  max-width: 960px;
+}
+
+.mono {
+  font-family: monospace;
+}
+
+code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.status {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  margin-bottom: 12px;
+
+  &.error { color: #ef5350; }
+  &.ok { color: #4caf50; }
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 8px 0 12px;
+}
+
+.spacer { flex: 1; }
+
+.count {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+}
+
+input, select {
+  background: rgba(0, 0, 0, 0.25);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 13px;
+  box-sizing: border-box;
+
+  &::placeholder { color: rgba(255, 255, 255, 0.4); }
+}
+
+select option {
+  background: #1f2533;
+}
+
+.filter { width: 220px; }
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  padding: 8px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+  &.is-set .name .mono { color: #4caf50; }
+}
+
+.about {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.name {
+  font-size: 13px;
+}
+
+.flag {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.help {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 12px;
+}
+
+.note {
+  color: #ffb74d;
+  font-size: 12px;
+}
+
+.field {
+  flex: none;
+  width: 300px;
+  max-width: 100%;
+
+  input, select { width: 100%; }
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+
+  th, td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    word-break: break-all;
+  }
+
+  th {
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 500;
+    font-size: 12px;
+  }
+}
+
+.cmd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+
+  code {
+    flex: 1;
+    padding: 8px;
+    word-break: break-all;
+  }
+}
+
+// The theme's outlined button is dark text on the dark page.
+.secondary {
+  color: #fff !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+}
