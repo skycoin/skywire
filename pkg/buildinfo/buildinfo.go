@@ -51,6 +51,9 @@ type ModuleInfo struct {
 var commitRegex = regexp.MustCompile(`[a-f0-9]{12,}$`) // <-- match commit from end of string
 var dateRegex = regexp.MustCompile(`\d{14}`)           // <-- match date anywhere
 
+// releaseRegex matches a tagged release: vX.Y.Z and nothing after it.
+var releaseRegex = regexp.MustCompile(`^v\d+\.\d+\.\d+$`)
+
 // init() is split across buildinfo_native.go (!js) and
 // buildinfo_js.go (js). The !js variant parses ldflags-injected
 // `golist` via json.Unmarshal; the js variant skips that branch
@@ -199,14 +202,17 @@ func DebugBuildInfo() *debug.BuildInfo {
 
 // Get returns a summary of build information.
 func Get() *Info {
-	// Build complete version string with commit
+	// A tagged release is its own name. Anything else (a pseudo-version, a
+	// dev build) carries the commit it was built from.
 	ver := Version()
-	if c := Commit(); c != "" && c != unknown && !strings.Contains(ver, c) {
-		// Append commit to version if not already present
+	if c := Commit(); c != "" && c != unknown && !releaseRegex.MatchString(ver) {
+		// A pseudo-version already names the 12-character short commit.
 		if len(c) > 12 {
 			c = c[:12]
 		}
-		ver = ver + "-" + c
+		if !strings.Contains(ver, c) {
+			ver = ver + "-" + c
+		}
 	}
 	// Note: Go's module system already adds +dirty to version when built from dirty repo
 	return &Info{
