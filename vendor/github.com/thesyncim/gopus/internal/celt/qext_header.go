@@ -20,10 +20,7 @@ func encodeQEXTHeader(enc *rangecoding.Encoder, channels int, hdr qextHeader) {
 	enc.EncodeBit(boolToInt(wide), 1)
 
 	if channels == 2 {
-		intensity := max(hdr.Intensity, 0)
-		if intensity > hdr.EndBands {
-			intensity = hdr.EndBands
-		}
+		intensity := min(max(hdr.Intensity, 0), hdr.EndBands)
 		enc.EncodeUniform(uint32(intensity), uint32(hdr.EndBands+1))
 		if intensity != 0 {
 			enc.EncodeBit(boolToInt(hdr.DualStereo), 1)

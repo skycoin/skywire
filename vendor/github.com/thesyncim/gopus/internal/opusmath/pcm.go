@@ -34,7 +34,7 @@ func Float32ToInt16Raw(y float32) int16 {
 	if y < -32768.0 {
 		return -32768
 	}
-	return int16(roundFloat32ToInt32Even(y))
+	return int16(roundClampedFloat32ToInt32Even(y))
 }
 
 // Float32ToInt16OSCEOutputScale mirrors libopus OSCE SCALE_OUTPUT quantization.
@@ -50,7 +50,22 @@ func Float32ToInt16OSCEOutputScale(x float32) int16 {
 	if y < -32767.0 {
 		return -32767
 	}
-	return int16(roundFloat32ToInt32Even(y))
+	return int16(roundClampedFloat32ToInt32Even(y))
+}
+
+// roundHalfEvenMagic32 is 1.5 * 2^23. Adding it to a float32 y with |y| < 2^22
+// forces the sum into [2^23, 2^24), where the float32 ULP is exactly 1.0, so
+// the IEEE round-to-nearest-even addition rounds y to an integer; subtracting
+// the constant back recovers that integer exactly.
+const roundHalfEvenMagic32 = float32(12582912.0)
+
+// roundClampedFloat32ToInt32Even is the branchless round-to-nearest-even used
+// on already-clamped 16-bit-scale values (|y| <= 32768). It is bit-exact with
+// [roundFloat32ToInt32Even] for |y| < 2^22 but avoids that helper's
+// data-dependent branches, which mispredict on roughly every other audio
+// sample.
+func roundClampedFloat32ToInt32Even(y float32) int32 {
+	return int32((y + roundHalfEvenMagic32) - roundHalfEvenMagic32)
 }
 
 // roundFloat32ToInt32Even rounds y to the nearest integer with ties to even,

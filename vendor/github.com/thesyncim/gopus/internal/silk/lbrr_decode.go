@@ -266,7 +266,7 @@ func (d *Decoder) decodeStereoFECFrames(
 			return nil, ErrDecodeFailed
 		}
 		output = make([]float32, n*2)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			output[i*2] = leftScratch[i]
 			output[i*2+1] = rightScratch[i]
 		}
@@ -324,7 +324,7 @@ func (d *Decoder) decodeFECLostFrameInto(channel int, st *decoderState, frameOut
 		concealedQ0 := plc.ConcealSILKWithLTP(view, state, int(lossCnt), frameLength)
 		const scale = float32(1.0 / 32768.0)
 		n := min(len(concealedQ0), frameLength)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			concealed[i] = float32(concealedQ0[i]) * scale
 		}
 		if lag := int((state.PitchLQ8 + 128) >> 8); lag > 0 {

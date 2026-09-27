@@ -72,10 +72,7 @@ func (d *Decoder) decodeCoarseEnergyIntoWithPrevState(dst []celtGLog, nbBands in
 			qi := 0
 			remaining := budget - tell
 			if remaining >= 15 {
-				pi := 2 * band
-				if pi > 40 {
-					pi = 40
-				}
+				pi := min(2*band, 40)
 				fs := int(prob[pi]) << 7
 				decay := int(prob[pi+1]) << 6
 				qi = d.decodeLaplace(fs, decay)
@@ -156,17 +153,11 @@ func (d *Decoder) prepareQEXTDecodeRange(payload []byte, mainRD *rangecoding.Dec
 	var qextMode *qextModeConfig
 	if end == MaxBands {
 		if cfg, ok := computeQEXTModeConfig(int(d.sampleRate), qextShortMDCTSize(frameSize)); ok {
-			qextEnd := hdr.EndBands
-			if qextEnd > cfg.EffBands {
-				qextEnd = cfg.EffBands
-			}
+			qextEnd := min(hdr.EndBands, cfg.EffBands)
 			if qextEnd > 0 {
 				qext.cfg = cfg
 				qext.end = qextEnd
-				qext.intensity = hdr.Intensity
-				if qext.intensity > qext.end {
-					qext.intensity = qext.end
-				}
+				qext.intensity = min(hdr.Intensity, qext.end)
 				if d.channels == 2 && hdr.DualStereo && qext.intensity != 0 {
 					qext.dualStereo = 1
 				}

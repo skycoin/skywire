@@ -31,7 +31,7 @@ self.addEventListener('activate', function (e) {
   e.waitUntil(self.clients.claim());
 });
 
-// bridgeFetch asks a controlling B page to fulfil req and resolves to a
+// bridgeFetch asks a controlling B page to fulfill req and resolves to a
 // Response. A per-request MessageChannel keeps concurrent subresource loads from
 // colliding.
 function bridgeFetch(req, clientId) {

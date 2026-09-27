@@ -113,10 +113,10 @@ func parseFloat(s string) (float64, error) {
 			// ParseFloat doesn't handle "nan" with sign prefix, so handle it here.
 			return math.NaN(), nil
 		}
-		if len(s) > 3 && hasHexPrefix(s[1:]) && strings.IndexByte(s, 'p') < 0 {
+		if len(s) > 3 && hasHexPrefix(s[1:]) && strings.IndexByte(s, 'p') < 0 && strings.IndexByte(s, 'P') < 0 {
 			s += "p0"
 		}
-	} else if len(s) > 2 && hasHexPrefix(s) && strings.IndexByte(s, 'p') < 0 {
+	} else if len(s) > 2 && hasHexPrefix(s) && strings.IndexByte(s, 'p') < 0 && strings.IndexByte(s, 'P') < 0 {
 		s += "p0"
 	}
 	n, err := strconv.ParseFloat(s, 64)
@@ -132,27 +132,39 @@ func parseFloat(s string) (float64, error) {
 // use floatFormat.
 func (v value) str(floatFormat string) string {
 	if v.typ == typeNum {
-		switch {
-		case math.IsNaN(v.n):
-			return "nan"
-		case math.IsInf(v.n, 0):
-			if v.n < 0 {
-				return "-inf"
-			} else {
-				return "inf"
-			}
-		case v.n == float64(int64(v.n)):
-			return strconv.FormatInt(int64(v.n), 10)
-		default:
-			if floatFormat == "%.6g" {
-				return strconv.FormatFloat(v.n, 'g', 6, 64)
-			}
-			return fmt.Sprintf(floatFormat, v.n)
-		}
+		return numToStr(v.n, floatFormat)
 	}
 	// For typeStr and typeNumStr we already have the string, for
 	// typeNull v.s == "".
 	return v.s
+}
+
+// Convert a number to a string using the given Go float format. Integers and
+// nan/inf are special cases and don't use floatFormat.
+func numToStr(n float64, floatFormat string) string {
+	switch {
+	case math.IsNaN(n):
+		return "nan"
+	case math.IsInf(n, 0):
+		if n < 0 {
+			return "-inf"
+		} else {
+			return "inf"
+		}
+	case n == float64(int64(n)):
+		return strconv.FormatInt(int64(n), 10)
+	case floatFormat == "%.6g": // speed up the default case
+		return strconv.FormatFloat(n, 'g', 6, 64)
+	default:
+		return fmt.Sprintf(floatFormat, n)
+	}
+}
+
+// Report whether converting the number n to a string actually applies CONVFMT
+// or OFMT: integers and nan/inf are converted without reference to the format
+// (as in other AWKs).
+func needsNumFormat(n float64) bool {
+	return !math.IsNaN(n) && !math.IsInf(n, 0) && n != float64(int64(n))
 }
 
 // Return value's number value, converting from string if necessary

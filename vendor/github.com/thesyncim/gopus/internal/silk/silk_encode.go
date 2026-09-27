@@ -129,10 +129,7 @@ func EncodeStereoWithEncoderVADAnalyzersWithSide(
 	if len(left) < frameLength20ms {
 		frameLength20ms = len(left)
 	}
-	nFrames := max(len(left)/frameLength20ms, 1)
-	if nFrames > maxFramesPerPacket {
-		nFrames = maxFramesPerPacket
-	}
+	nFrames := min(max(len(left)/frameLength20ms, 1), maxFramesPerPacket)
 
 	// Reset packet state for both encoders
 	enc.ResetPacketState()

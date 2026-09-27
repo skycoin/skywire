@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/transport/v4/deadline"
+	"github.com/pion/transport/v5/deadline"
 )
 
 const (
@@ -327,7 +327,7 @@ func (s *Stream) WriteSCTP(payload []byte, ppi PayloadProtocolIdentifier) (int, 
 	useInterleaving := s.association.useInterleaving
 	chunks, unordered := s.packetize(payload, ppi)
 	n := len(payload)
-	err := s.association.sendPayloadData(s.writeDeadline, chunks)
+	err := s.association.sendPayloadData(s.writeDeadline.Context(), chunks)
 	if err != nil { //nolint:nestif
 		s.lock.Lock()
 		s.bufferedAmount -= uint64(n)
@@ -403,6 +403,7 @@ func (s *Stream) packetize(raw []byte, ppi PayloadProtocolIdentifier) ([]*chunkP
 		copy(userData, raw[offset:offset+fragmentSize])
 
 		chunk := &chunkPayloadData{
+			stream:                 s,
 			streamIdentifier:       s.streamIdentifier,
 			userData:               userData,
 			unordered:              unordered,

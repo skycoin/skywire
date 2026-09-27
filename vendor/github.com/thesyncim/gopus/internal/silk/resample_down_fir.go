@@ -361,10 +361,7 @@ func (r *DownsamplingResampler) processWithDelay(out []int16, in []int16) {
 		return
 	}
 
-	nSamples := max(int(r.fsInKHz-r.inputDelay), 0)
-	if nSamples > inLen {
-		nSamples = inLen
-	}
+	nSamples := min(max(int(r.fsInKHz-r.inputDelay), 0), inLen)
 
 	// Copy to delay buffer (preserve first inputDelay samples from previous call).
 	if nSamples > 0 {
@@ -378,10 +375,7 @@ func (r *DownsamplingResampler) processWithDelay(out []int16, in []int16) {
 
 	// Process remaining input, excluding the last inputDelay samples.
 	if inLen > int(r.fsInKHz) && len(out) > int(r.fsOutKHz) {
-		end := max(inLen-int(r.inputDelay), nSamples)
-		if end > inLen {
-			end = inLen
-		}
+		end := min(max(inLen-int(r.inputDelay), nSamples), inLen)
 		r.processInt16(out[r.fsOutKHz:], in[nSamples:end])
 	}
 

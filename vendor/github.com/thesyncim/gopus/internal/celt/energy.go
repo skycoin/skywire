@@ -68,10 +68,7 @@ func decodeLaplaceWithRangeDecoder(rd *rangecoding.Decoder, fs int, decay int) i
 	} else {
 		fl += fs
 	}
-	fh := fl + fs
-	if fh > laplaceFS {
-		fh = laplaceFS
-	}
+	fh := min(fl+fs, laplaceFS)
 	rd.Update(uint32(fl), uint32(fh), uint32(laplaceFS))
 	return val
 }
@@ -137,10 +134,7 @@ func (d *Decoder) decodeCoarseEnergyGLogInto(dst []celtGLog, nbBands int, intra 
 			qi := 0
 			remaining := budget - tell
 			if remaining >= 15 {
-				pi := 2 * band
-				if pi > 40 {
-					pi = 40
-				}
+				pi := min(2*band, 40)
 				fs := int(prob[pi]) << 7
 				decay := int(prob[pi+1]) << 6
 				qi = decodeLaplaceWithRangeDecoder(rd, fs, decay)
@@ -236,10 +230,7 @@ func (d *Decoder) decodeCoarseEnergyRangeGLog(start, end int, intra bool, lm int
 			qi := 0
 			remaining := budget - tell
 			if remaining >= 15 {
-				pi := 2 * band
-				if pi > 40 {
-					pi = 40
-				}
+				pi := min(2*band, 40)
 				fs := int(prob[pi]) << 7
 				decay := int(prob[pi+1]) << 6
 				qi = d.decodeLaplace(fs, decay)

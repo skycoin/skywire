@@ -494,10 +494,7 @@ func (r *LibopusResampler) processInt16Core(in []int16, inLen int32) []int16 {
 		r.up2HQ(outInt16[:int(r.fsOutKHz)], r.delayBuf[:int(r.fsInKHz)])
 
 		if inLen > r.fsInKHz {
-			end := max(inLen-r.inputDelay, nSamples)
-			if end > inLen {
-				end = inLen
-			}
+			end := min(max(inLen-r.inputDelay, nSamples), inLen)
 			r.up2HQ(outInt16[int(r.fsOutKHz):], in[int(nSamples):int(end)])
 		}
 
@@ -517,10 +514,7 @@ func (r *LibopusResampler) processInt16Core(in []int16, inLen int32) []int16 {
 	r.resampleIIRFIRSliceWithScratch(outInt16[:int(r.fsOutKHz)], r.delayBuf[:int(r.fsInKHz)], r.scratchBuf)
 
 	if inLen > r.fsInKHz {
-		end := max(inLen-r.inputDelay, nSamples)
-		if end > inLen {
-			end = inLen
-		}
+		end := min(max(inLen-r.inputDelay, nSamples), inLen)
 		r.resampleIIRFIRSliceWithScratch(outInt16[int(r.fsOutKHz):], in[int(nSamples):int(end)], r.scratchBuf)
 	}
 

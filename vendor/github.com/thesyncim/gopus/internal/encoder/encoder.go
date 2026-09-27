@@ -42,6 +42,7 @@ import (
 	"errors"
 	"math"
 
+	"github.com/thesyncim/gopus/internal/arena"
 	"github.com/thesyncim/gopus/internal/celt"
 	"github.com/thesyncim/gopus/internal/dnnblob"
 	"github.com/thesyncim/gopus/internal/extsupport"
@@ -279,6 +280,16 @@ type Encoder struct {
 	silkMonoInputHist   [2]float32
 	scratchSilkAligned  []float32
 
+	// scratchF32 backs the four max-size preallocated float32 work buffers
+	// (scratchPCM32/Left/Right/Mono) with one contiguous allocation; see NewEncoder.
+	scratchF32 arena.Bump[float32]
+
+	// pcmBump backs the three frameSize-sized input-domain PCM scratch buffers
+	// (scratchInputPCM/scratchQuantPCM/scratchDCPCM) with one contiguous
+	// allocation, carved per-frame at the encode entry and re-carved only when a
+	// larger frame is seen (so it sizes to the current frame, not the max).
+	pcmBump arena.Bump[opusRes]
+
 	// Scratch buffers for zero-allocation encoding
 	scratchDCPCM     []opusRes // DC rejected PCM buffer
 	scratchInputPCM  []opusRes // Public PCM rounded into the libopus opus_res domain
@@ -320,7 +331,7 @@ func NewEncoder(sampleRate, channels int) *Encoder {
 	}
 	maxSamples := 5760 * channels
 
-	return &Encoder{
+	e := &Encoder{
 		mode:                   ModeAuto,
 		bandwidth:              types.BandwidthFullband,
 		sampleRate:             int32(sampleRate),
@@ -346,10 +357,6 @@ func NewEncoder(sampleRate, channels int) *Encoder {
 		predictionDisabled:     false,
 		phaseInversionDisabled: false,
 		analyzer:               NewTonalityAnalysisState(sampleRate),
-		scratchPCM32:           make([]float32, maxSamples),
-		scratchLeft:            make([]float32, maxSamples),
-		scratchRight:           make([]float32, maxSamples),
-		scratchMono:            make([]float32, maxSamples),
 		scratchPacket:          make([]byte, defaultScratchPacketBytes),
 		prevMode:               ModeAuto,
 		prevPacketMode:         ModeAuto,
@@ -362,6 +369,13 @@ func NewEncoder(sampleRate, channels int) *Encoder {
 		autoBandwidth:          types.BandwidthFullband,
 		first:                  true,
 	}
+	// Back the four max-size float32 work buffers with one contiguous arena.
+	e.scratchF32.Ensure(4 * maxSamples)
+	e.scratchPCM32 = e.scratchF32.AllocN(maxSamples)
+	e.scratchLeft = e.scratchF32.AllocN(maxSamples)
+	e.scratchRight = e.scratchF32.AllocN(maxSamples)
+	e.scratchMono = e.scratchF32.AllocN(maxSamples)
+	return e
 }
 
 // SetMode sets the encoding mode.
@@ -913,6 +927,16 @@ func (e *Encoder) EncodeWithAnalysisMaxBytes(pcm []float32, frameSize int, analy
 	if len(analysisPCM) < expectedLen || len(analysisPCM)%channels != 0 {
 		return nil, ErrInvalidFrameSize
 	}
+	// Back the three frameSize-sized input-domain PCM scratch buffers with one
+	// contiguous arena (carved to the current frame; the ensure* helpers reslice
+	// within their slots, falling back to a fresh make only if a stage ever needs
+	// more than expectedLen).
+	if expectedLen > 0 {
+		e.pcmBump.Ensure(3 * expectedLen)
+		e.scratchInputPCM = e.pcmBump.AllocN(expectedLen)
+		e.scratchQuantPCM = e.pcmBump.AllocN(expectedLen)
+		e.scratchDCPCM = e.pcmBump.AllocN(expectedLen)
+	}
 	inputPCM := e.ensureInputPCM(expectedLen)
 	copy(inputPCM, pcm[:expectedLen])
 	e.SetFloatInputFrame(pcm)
@@ -1088,11 +1112,14 @@ func (e *Encoder) encodeOpusResWithAnalysisMaxBytes(inputPCM []opusRes, frameSiz
 		e.lbrrCoded = decideFEC(e.fecEnabled, e.packetLoss, e.lbrrCoded,
 			requestedMode, &bw, equivRate)
 		e.bandwidth = bw
-		if requestedMode == ModeSILK && e.bandwidth > types.BandwidthWideband {
+		// libopus opus_encoder.c:1688-1695: only the restricted-SILK
+		// application pins the bandwidth to WB; a plain forced-SILK request
+		// with a wider bandwidth is promoted to Hybrid (and forced Hybrid at
+		// <=WB drops to SILK), exactly like the auto path.
+		if e.restrictedSilkApp && e.bandwidth > types.BandwidthWideband {
 			e.bandwidth = types.BandwidthWideband
-		} else {
-			requestedMode = autoModeFixup(requestedMode, e.bandwidth)
 		}
+		requestedMode = autoModeFixup(requestedMode, e.bandwidth)
 	}
 	actualMode, prevModeNext := e.applyCELTTransitionDelay(frameSize, requestedMode)
 	transitionToCELT := requestedMode == ModeCELT && actualMode != ModeCELT
@@ -1791,26 +1818,71 @@ func (e *Encoder) hpCutoff(in []opusRes, frameSize int) []opusRes {
 		src32 = nil
 	}
 
-	// silk_biquad_res, float path (Direct Form II Transposed), per channel.
-	for c := range channels {
-		s0 := e.hpMem[2*c]
-		s1 := e.hpMem[2*c+1]
-		for i := range frameSize {
-			idx := i*channels + c
-			var inval float32
-			if src32 != nil {
-				inval = src32[idx]
-			} else {
-				inval = float32(in[idx])
+	// silk_biquad_res, float path (Direct Form II Transposed). The src32 branch is
+	// hoisted out of the inner loop, and stereo runs both channels' independent
+	// recurrences in one interleaved pass so the OoO engine overlaps the two
+	// latency-bound filter chains. Per-sample arithmetic is byte-identical to the
+	// per-channel form (each channel's state depends only on its own history).
+	if channels == 1 {
+		s0 := e.hpMem[0]
+		s1 := e.hpMem[1]
+		if src32 != nil {
+			for i := range frameSize {
+				inval := src32[i]
+				vout := s0 + b[0]*inval
+				s0 = s1 - vout*a[0] + b[1]*inval
+				s1 = -vout*a[1] + b[2]*inval + verySmall
+				out[i] = opusRes(vout)
 			}
-			vout := s0 + b[0]*inval
-			s0 = s1 - vout*a[0] + b[1]*inval
-			s1 = -vout*a[1] + b[2]*inval + verySmall
-			out[idx] = opusRes(vout)
+		} else {
+			for i := range frameSize {
+				inval := float32(in[i])
+				vout := s0 + b[0]*inval
+				s0 = s1 - vout*a[0] + b[1]*inval
+				s1 = -vout*a[1] + b[2]*inval + verySmall
+				out[i] = opusRes(vout)
+			}
 		}
-		e.hpMem[2*c] = s0
-		e.hpMem[2*c+1] = s1
+		e.hpMem[0] = s0
+		e.hpMem[1] = s1
+		return out
 	}
+
+	s0L := e.hpMem[0]
+	s1L := e.hpMem[1]
+	s0R := e.hpMem[2]
+	s1R := e.hpMem[3]
+	if src32 != nil {
+		for i := range frameSize {
+			l := src32[2*i]
+			voutL := s0L + b[0]*l
+			s0L = s1L - voutL*a[0] + b[1]*l
+			s1L = -voutL*a[1] + b[2]*l + verySmall
+			out[2*i] = opusRes(voutL)
+			r := src32[2*i+1]
+			voutR := s0R + b[0]*r
+			s0R = s1R - voutR*a[0] + b[1]*r
+			s1R = -voutR*a[1] + b[2]*r + verySmall
+			out[2*i+1] = opusRes(voutR)
+		}
+	} else {
+		for i := range frameSize {
+			l := float32(in[2*i])
+			voutL := s0L + b[0]*l
+			s0L = s1L - voutL*a[0] + b[1]*l
+			s1L = -voutL*a[1] + b[2]*l + verySmall
+			out[2*i] = opusRes(voutL)
+			r := float32(in[2*i+1])
+			voutR := s0R + b[0]*r
+			s0R = s1R - voutR*a[0] + b[1]*r
+			s1R = -voutR*a[1] + b[2]*r + verySmall
+			out[2*i+1] = opusRes(voutR)
+		}
+	}
+	e.hpMem[0] = s0L
+	e.hpMem[1] = s1L
+	e.hpMem[2] = s0R
+	e.hpMem[3] = s1R
 	return out
 }
 
@@ -2524,13 +2596,10 @@ func (e *Encoder) applySilkTransitionPrefillRamp(prefill []opusRes, prefillFrame
 	sampleRate := int(e.sampleRate)
 	delayComp := sampleRate / 250
 	prefillLen := sampleRate / 400
-	start := max(prefillFrameSize-delayComp-prefillLen, 0)
-	if start > prefillFrameSize {
-		start = prefillFrameSize
-	}
+	start := min(max(prefillFrameSize-delayComp-prefillLen, 0), prefillFrameSize)
 
 	prefix := min(start*channels, len(prefill))
-	for i := 0; i < prefix; i++ {
+	for i := range prefix {
 		prefill[i] = 0
 	}
 	if prefillLen <= 0 {
@@ -3230,10 +3299,7 @@ func (e *Encoder) silkBustMaxDataBytes(frameSize, maxDataBytes int) int {
 	if e.bitrateMode != ModeCBR {
 		return maxDataBytes
 	}
-	cbrBytes := min(e.targetBytesForBitrate(int(e.bitrate), frameSize), maxDataBytes)
-	if cbrBytes < 1 {
-		cbrBytes = 1
-	}
+	cbrBytes := max(min(e.targetBytesForBitrate(int(e.bitrate), frameSize), maxDataBytes), 1)
 	return cbrBytes
 }
 
@@ -4249,10 +4315,7 @@ func computeSilkFrameLayout(pcmLen, fsKHz int) (frameSamples, nFrames int) {
 	if pcmLen < frameSamples {
 		frameSamples = pcmLen
 	}
-	nFrames = max(pcmLen/frameSamples, 1)
-	if nFrames > silk.MaxFramesPerPacket {
-		nFrames = silk.MaxFramesPerPacket
-	}
+	nFrames = min(max(pcmLen/frameSamples, 1), silk.MaxFramesPerPacket)
 	return frameSamples, nFrames
 }
 

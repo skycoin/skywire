@@ -302,7 +302,7 @@ func float32ToInt16SoftClip(samples []float32, n, channels int, declipMem []floa
 
 	tmp := append([]float32(nil), samples[:total]...)
 	opusmath.PCMSoftClip(tmp, n, channels, declipMem)
-	for i := 0; i < total; i++ {
+	for i := range total {
 		output[i] = opusmath.Float32ToInt16(tmp[i])
 	}
 	return output

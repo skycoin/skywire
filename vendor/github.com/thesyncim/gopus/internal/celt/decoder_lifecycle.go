@@ -235,7 +235,6 @@ func (s *bandDecodeScratch) clearForReset() {
 	}
 	clearInt32Cap(s.pvqPulses)
 	clearNormCap(s.pvqNorm)
-	clearNormCap(s.pvqNorm32)
 	clearNormCap(s.foldResult)
 	clearUint32Cap(s.cwrsU)
 	clearNormCap(s.hadamardTmpNorm)

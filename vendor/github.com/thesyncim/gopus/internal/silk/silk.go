@@ -187,10 +187,7 @@ func (d *Decoder) recordNativeStereoFromFloat32(leftNative, rightNative []float3
 	if !nativeLowbandCaptureEnabled {
 		return
 	}
-	n := min(len(leftNative), len(d.stereoLeftNative))
-	if n > len(rightNative) {
-		n = len(rightNative)
-	}
+	n := min(min(len(leftNative), len(d.stereoLeftNative)), len(rightNative))
 	if n > len(d.stereoRightNative) {
 		n = len(d.stereoRightNative)
 	}
@@ -566,7 +563,7 @@ func (d *Decoder) DecodeStereoWithDecoderInto(
 	if n < 0 || n*2 > len(output) {
 		return 0, ErrDecodeFailed
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		output[i*2] = leftScratch[i]
 		output[i*2+1] = rightScratch[i]
 	}

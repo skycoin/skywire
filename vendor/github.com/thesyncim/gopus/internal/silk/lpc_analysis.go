@@ -437,7 +437,7 @@ func (e *Encoder) burgModifiedFLPZeroAllocF32(x []float32, minInvGainVal float32
 			xend := x[xPtr+subfrLength-n-1]
 			tmp1 := silkCReal(xn)
 			tmp2 := silkCReal(xend)
-			for k := 0; k < n; k++ {
+			for k := range n {
 				xnk := x[xPtr+n-k-1]
 				xbk := x[xPtr+subfrLength-n+k]
 				CFirstRow[k] -= silkCReal(noFMA32(xn, xnk))
@@ -457,7 +457,7 @@ func (e *Encoder) burgModifiedFLPZeroAllocF32(x []float32, minInvGainVal float32
 
 		tmp1 := CFirstRow[n]
 		tmp2 := CLastRow[n]
-		for k := 0; k < n; k++ {
+		for k := range n {
 			Atmp := Af[k]
 			tmp1 += noFMA64(CLastRow[n-k-1], Atmp)
 			tmp2 += noFMA64(CFirstRow[n-k-1], Atmp)
@@ -468,7 +468,7 @@ func (e *Encoder) burgModifiedFLPZeroAllocF32(x []float32, minInvGainVal float32
 		num := CAb[n+1]
 		nrgB := CAb[0]
 		nrgF := CAf[0]
-		for k := 0; k < n; k++ {
+		for k := range n {
 			Atmp := Af[k]
 			num += noFMA64(CAb[n-k], Atmp)
 			nrgB += noFMA64(CAb[k+1], Atmp)

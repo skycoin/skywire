@@ -1,4 +1,4 @@
-//go:build purego || !arm64 || !gopus_neon_tone_lpc_corr
+//go:build purego || !arm64
 
 package celt
 

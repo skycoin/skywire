@@ -15,34 +15,7 @@ var EMeans = [25]celtGLog{
 	3.750000, 3.750000, 3.750000, 3.750000, 3.750000,
 }
 
-const (
-	leakBands      = 19
-	leakageOffset  = float32(2.5)
-	leakageSlope   = float32(2.0)
-	leakageDivisor = float32(4.0)
-	// Libopus dynalloc consumes only analysis->leak_boost when analysis is valid.
-	approxLeakBoostEnabled = false
-)
-
-// Analysis-band boundaries used by libopus analysis.c leak_boost shaping.
-// This is NB_TBANDS+1 from src/analysis.c (24 kHz analysis bins).
-var analysisTBands = [19]int{
-	4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 136, 160, 192, 240,
-}
-
-func minF32(a, b float32) float32 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxF32(a, b float32) float32 {
-	if a > b {
-		return a
-	}
-	return b
-}
+const leakBands = 19
 
 func dynallocImportanceFromFollower(follower float32) int32 {
 	if follower > 4.0 {
@@ -50,72 +23,6 @@ func dynallocImportanceFromFollower(follower float32) int32 {
 	}
 	imp := float32(0.5) + float32(13.0)*celtExp2(follower)
 	return int32(floor32ToInt(imp))
-}
-
-// applyLeakBoostApprox derives a leak_boost proxy from current CELT band energies
-// using the same leakage_from/leakage_to equations as libopus analysis.c.
-func applyLeakBoostApprox(
-	follower, bandLogE32 []float32,
-	nbBands, start, end, channels, lm int,
-	bandLog2, leakFrom, leakTo []float32,
-) {
-	_ = lm
-	leakEnd := end
-	if leakEnd > leakBands {
-		leakEnd = leakBands
-	}
-	if leakEnd <= start || leakEnd <= 0 || len(follower) < leakEnd {
-		return
-	}
-	if len(bandLog2) < leakEnd || len(leakFrom) < leakEnd || len(leakTo) < leakEnd {
-		return
-	}
-
-	// Build a per-band log-energy track (max across channels for stereo).
-	for b := 0; b < leakEnd; b++ {
-		v := float32(0)
-		if b < len(bandLogE32) {
-			v = bandLogE32[b]
-		}
-		if channels == 2 {
-			idx := nbBands + b
-			if idx < len(bandLogE32) && bandLogE32[idx] > v {
-				v = bandLogE32[idx]
-			}
-		}
-		// bandLogE32 is mean-relative (amp2Log2 - eMeans). Add eMeans back to
-		// approximate analysis.c absolute band_log2.
-		if b < len(EMeans) {
-			v += float32(EMeans[b])
-		}
-		bandLog2[b] = v
-	}
-
-	leakFrom[0] = bandLog2[0]
-	leakTo[0] = bandLog2[0] - leakageOffset
-	for b := 1; b < leakEnd; b++ {
-		width := 4
-		if b < len(analysisTBands) {
-			width = analysisTBands[b] - analysisTBands[b-1]
-		}
-		leakSlope := leakageSlope * float32(width) / leakageDivisor
-		leakFrom[b] = minF32(leakFrom[b-1]+leakSlope, bandLog2[b])
-		leakTo[b] = maxF32(leakTo[b-1]-leakSlope, bandLog2[b]-leakageOffset)
-	}
-	for b := leakEnd - 2; b >= 0; b-- {
-		width := 4
-		if b+1 < len(analysisTBands) {
-			width = analysisTBands[b+1] - analysisTBands[b]
-		}
-		leakSlope := leakageSlope * float32(width) / leakageDivisor
-		leakFrom[b] = minF32(leakFrom[b], leakFrom[b+1]+leakSlope)
-		leakTo[b] = maxF32(leakTo[b], leakTo[b+1]-leakSlope)
-	}
-
-	for b := start; b < leakEnd; b++ {
-		boost := maxF32(0, leakTo[b]-bandLog2[b]) + maxF32(0, bandLog2[b]-(leakFrom[b]+leakageOffset))
-		follower[b] += boost
-	}
 }
 
 // DynallocResult contains the output of dynalloc_analysis.
@@ -368,10 +275,7 @@ func DynallocAnalysis(
 			smr := sig[i] - maskThresh
 
 			// Clamp shift to [0, 5] range
-			shift := max(-floor32ToInt(0.5+smr), 0)
-			if shift > 5 {
-				shift = 5
-			}
+			shift := min(max(-floor32ToInt(0.5+smr), 0), 5)
 			result.SpreadWeight[i] = 32 >> shift
 		}
 	}
@@ -574,30 +478,13 @@ func DynallocAnalysis(
 		if analysisValid {
 			// Match libopus dynalloc: follower += analysis->leak_boost/64 on the
 			// first LEAK_BANDS when analysis is valid.
-			leakEnd := end
-			if leakEnd > leakBands {
-				leakEnd = leakBands
-			}
+			leakEnd := min(end, leakBands)
 			if leakEnd > start {
 				for i := start; i < leakEnd; i++ {
 					if i < len(analysisLeakBoost) {
 						follower[i] += float32(analysisLeakBoost[i]) * (1.0 / 64.0)
 					}
 				}
-			}
-		}
-		if approxLeakBoostEnabled && analysisValid {
-			// Add a local proxy of analysis leak_boost derived from current CELT
-			// bands to compensate when top-level analysis under-estimates leakage.
-			leakEnd := end
-			if leakEnd > leakBands {
-				leakEnd = leakBands
-			}
-			if leakEnd > start {
-				bandLog2 := make([]float32, leakEnd)
-				leakFrom := make([]float32, leakEnd)
-				leakTo := make([]float32, leakEnd)
-				applyLeakBoostApprox(follower, bandLogE32, nbBands, start, end, channels, lm, bandLog2, leakFrom, leakTo)
 			}
 		}
 
@@ -686,9 +573,6 @@ type DynallocScratch struct {
 	Sig       []float32
 	Follower  []float32
 	BandLogE3 []float32
-	LeakBand  []float32
-	LeakFrom  []float32
-	LeakTo    []float32
 }
 
 // EnsureDynallocScratch ensures scratch buffers are large enough.
@@ -733,21 +617,6 @@ func (s *DynallocScratch) EnsureDynallocScratch(nbBands, channels int) {
 		s.BandLogE3 = make([]float32, nbBands)
 	} else {
 		s.BandLogE3 = s.BandLogE3[:nbBands]
-	}
-	if cap(s.LeakBand) < nbBands {
-		s.LeakBand = make([]float32, nbBands)
-	} else {
-		s.LeakBand = s.LeakBand[:nbBands]
-	}
-	if cap(s.LeakFrom) < nbBands {
-		s.LeakFrom = make([]float32, nbBands)
-	} else {
-		s.LeakFrom = s.LeakFrom[:nbBands]
-	}
-	if cap(s.LeakTo) < nbBands {
-		s.LeakTo = make([]float32, nbBands)
-	} else {
-		s.LeakTo = s.LeakTo[:nbBands]
 	}
 }
 
@@ -913,10 +782,7 @@ func DynallocAnalysisWithScratch(
 		}
 		smr := sig[i] - maskThresh
 
-		shift := max(-floor32ToInt(0.5+smr), 0)
-		if shift > 5 {
-			shift = 5
-		}
+		shift := min(max(-floor32ToInt(0.5+smr), 0), 5)
 		result.SpreadWeight[i] = 32 >> shift
 	}
 
@@ -1107,30 +973,13 @@ func DynallocAnalysisWithScratch(
 		if analysisValid {
 			// Match libopus dynalloc: follower += analysis->leak_boost/64 on the
 			// first LEAK_BANDS when analysis is valid.
-			leakEnd := end
-			if leakEnd > leakBands {
-				leakEnd = leakBands
-			}
+			leakEnd := min(end, leakBands)
 			if leakEnd > start {
 				for i := start; i < leakEnd; i++ {
 					if i < len(analysisLeakBoost) {
 						follower[i] += float32(analysisLeakBoost[i]) * (1.0 / 64.0)
 					}
 				}
-			}
-		}
-		if approxLeakBoostEnabled && analysisValid {
-			// Add a local proxy of analysis leak_boost derived from current CELT
-			// bands to compensate when top-level analysis under-estimates leakage.
-			leakEnd := end
-			if leakEnd > leakBands {
-				leakEnd = leakBands
-			}
-			if leakEnd > start {
-				bandLog2 := scratch.LeakBand[:leakEnd]
-				leakFrom := scratch.LeakFrom[:leakEnd]
-				leakTo := scratch.LeakTo[:leakEnd]
-				applyLeakBoostApprox(follower, bandLogE32, nbBands, start, end, channels, lm, bandLog2, leakFrom, leakTo)
 			}
 		}
 

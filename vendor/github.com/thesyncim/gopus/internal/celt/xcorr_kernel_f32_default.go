@@ -6,8 +6,8 @@ package celt
 // scalar/SSE/AVX2 pitch kernels are used and the amd64/purego oracle holds.
 const pitchXcorrUsesNeonFMA = false
 
-// xcorrKernel4Float32Neon is never called off arm64 (guarded by
+// xcorrKernel4Float32Neon4Acc is never called off arm64 (guarded by
 // pitchXcorrUsesNeonFMA); the stub keeps the package building on all targets.
-func xcorrKernel4Float32Neon(x, y []float32, sum *[4]float32, length int) {
+func xcorrKernel4Float32Neon4Acc(x, y []float32, sum *[4]float32, length int) {
 	xcorrKernel4Float32(x, y, sum, length)
 }

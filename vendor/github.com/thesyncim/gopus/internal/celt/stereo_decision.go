@@ -52,10 +52,7 @@ func stereoAnalysisDecision(normL, normR []celtNorm, lm, nbBands int) bool {
 		return false
 	}
 
-	maxBand := 13
-	if nbBands < maxBand {
-		maxBand = nbBands
-	}
+	maxBand := min(nbBands, 13)
 	if maxBand <= 0 || len(EBands) <= 13 {
 		return false
 	}

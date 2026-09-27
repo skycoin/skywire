@@ -54,10 +54,7 @@ func (d *Decoder) effectiveEndBand(frameSize int) int {
 		end := max(mode.EffBands, 1)
 		return end
 	}
-	end := EffectiveBandsForFrameSize(d.bandwidth, frameSize)
-	if end > mode.EffBands {
-		end = mode.EffBands
-	}
+	end := min(EffectiveBandsForFrameSize(d.bandwidth, frameSize), mode.EffBands)
 	if end < 1 {
 		end = 1
 	}
@@ -380,10 +377,7 @@ func (d *Decoder) SynthesizeStereo(coeffsL, coeffsR []float32, transient bool, s
 	}
 
 	// Interleave stereo output
-	n := len(outputL)
-	if len(outputR) < n {
-		n = len(outputR)
-	}
+	n := min(len(outputR), len(outputL))
 
 	stereo := ensureFloat32Slice(&d.scratchStereoF32, n*2)
 	for i := 0; i < n; i++ {

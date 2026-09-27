@@ -6,10 +6,13 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -19,6 +22,66 @@ import (
 	"github.com/benhoyt/goawk/internal/resolver"
 	"github.com/benhoyt/goawk/lexer"
 )
+
+// osFS is the default filesystem, backed by the operating system's filesystem
+// relative to the process working directory. It implements WriteFS.
+//
+// This isn't a strictly valid fs.FS implementation, as it allows absolute paths
+// and paths with "." and ".." in them (these don't satisfy fs.ValidPath).
+type osFS struct{}
+
+func (osFS) Open(name string) (fs.File, error) {
+	return os.Open(name)
+}
+
+func (osFS) Create(name string) (io.WriteCloser, error) {
+	return os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+}
+
+func (osFS) Append(name string) (io.WriteCloser, error) {
+	return os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
+}
+
+// awkFS wraps the fs.FS given by Config.FileSystem, converting AWK filenames
+// to valid fs.FS paths where possible (see fsName). This means a strict
+// filesystem like the one returned by os.DirFS can be used directly.
+type awkFS struct {
+	fsys fs.FS
+}
+
+func (f awkFS) Open(name string) (fs.File, error) {
+	return f.fsys.Open(fsName(name))
+}
+
+// awkWriteFS is like awkFS, but for a filesystem that also implements WriteFS,
+// so that output redirection is allowed as well as reading.
+type awkWriteFS struct {
+	wfs WriteFS
+}
+
+func (f awkWriteFS) Open(name string) (fs.File, error) {
+	return f.wfs.Open(fsName(name))
+}
+
+func (f awkWriteFS) Create(name string) (io.WriteCloser, error) {
+	return f.wfs.Create(fsName(name))
+}
+
+func (f awkWriteFS) Append(name string) (io.WriteCloser, error) {
+	return f.wfs.Append(fsName(name))
+}
+
+// fsName converts an AWK filename to a valid fs.FS path if it can.
+func fsName(name string) string {
+	cleaned := path.Clean(name)
+	if !fs.ValidPath(cleaned) {
+		return name
+	}
+	return cleaned
+}
+
+// errCantOpen is returned by getInputScannerFile when the file can't be opened.
+var errCantOpen = errors.New("can't open file")
 
 // Print a line of output followed by a newline
 func (p *interp) printLine(writer io.Writer, line string) error {
@@ -35,7 +98,7 @@ func (p *interp) printArgs(writer io.Writer, args []value) error {
 	case CSVMode, TSVMode:
 		fields := make([]string, 0, 7) // up to 7 args won't require a heap allocation
 		for _, arg := range args {
-			fields = append(fields, arg.str(p.outputFormat))
+			fields = append(fields, p.toOutputString(arg))
 		}
 		err := p.writeCSV(writer, fields)
 		if err != nil {
@@ -50,7 +113,7 @@ func (p *interp) printArgs(writer io.Writer, args []value) error {
 					return err
 				}
 			}
-			err := writeOutput(writer, arg.str(p.outputFormat), p.newlineOutputCRLF)
+			err := writeOutput(writer, p.toOutputString(arg), p.newlineOutputCRLF)
 			if err != nil {
 				return err
 			}
@@ -129,13 +192,17 @@ func (p *interp) getOutputStream(redirect lexer.Token, destValue value) (io.Writ
 			return p.output, nil
 		}
 
-		flags := os.O_CREATE | os.O_WRONLY
-		if redirect == lexer.GREATER {
-			flags |= os.O_TRUNC
-		} else {
-			flags |= os.O_APPEND
+		wfs, ok := p.fileSystem.(WriteFS)
+		if !ok {
+			return nil, newError("can't write to file %q: filesystem is read-only", name)
 		}
-		f, err := os.OpenFile(name, flags, 0644)
+		var f io.WriteCloser
+		var err error
+		if redirect == lexer.GREATER {
+			f, err = wfs.Create(name)
+		} else {
+			f, err = wfs.Append(name)
+		}
 		if err != nil {
 			return nil, newError("output redirection error: %s", err)
 		}
@@ -203,9 +270,9 @@ func (p *interp) getInputScannerFile(name string) (*bufio.Scanner, error) {
 	if p.noFileReads {
 		return nil, newError("can't read from file due to NoFileReads")
 	}
-	f, err := os.Open(name)
+	f, err := p.fileSystem.Open(name)
 	if err != nil {
-		return nil, err // *os.PathError is handled by caller (getline returns -1)
+		return nil, fmt.Errorf("%w: %w", errCantOpen, err) // caller returns -1
 	}
 	in := newInFileStream(f)
 	scanner := p.newScanner(in, make([]byte, inputBufSize))
@@ -266,7 +333,7 @@ func (p *interp) newScanner(input io.Reader, buffer []byte) *bufio.Scanner {
 		scanner.Split(splitter.scan)
 	case utf8.RuneCountInString(p.recordSep) >= 1:
 		// Multi-byte and single char but multi-byte RS use regex
-		splitter := regexSplitter{re: p.recordSepRegex, terminator: &p.recordTerminator}
+		splitter := regexSplitter{re: &p.recordSepRegex, terminator: &p.recordTerminator}
 		scanner.Split(splitter.scan)
 	}
 	scanner.Buffer(buffer, maxRecordLength)
@@ -381,9 +448,11 @@ func (s byteSplitter) scan(data []byte, atEOF bool) (advance int, token []byte, 
 	return 0, nil, nil
 }
 
-// Splitter that splits records on the given regular expression
+// Splitter that splits records on the given regular expression.
 type regexSplitter struct {
-	re         *regexp.Regexp
+	// Use a pointer to a *Regexp (&p.recordSepRegex) so that the splitter always reads
+	// the current regex, allowing dynamic changes to RS during execution.
+	re         **regexp.Regexp
 	terminator *string
 }
 
@@ -391,7 +460,7 @@ func (s regexSplitter) scan(data []byte, atEOF bool) (advance int, token []byte,
 	if atEOF && len(data) == 0 {
 		return 0, nil, nil
 	}
-	loc := s.re.FindIndex(data)
+	loc := (*s.re).FindIndex(data)
 	// Note: for a regex such as "()", loc[0]==loc[1]. Gawk behavior for this
 	// case is to match the entire input.
 	if loc != nil && loc[0] != loc[1] {
@@ -621,7 +690,7 @@ func nextRune(b []byte) rune {
 // Setup for a new input file with given name (empty string if stdin)
 func (p *interp) setFile(filename string) {
 	p.filename = numStr(filename)
-	p.fileLineNum = 0
+	p.fileLineNum = num(0)
 	p.hadFiles = true
 }
 
@@ -715,7 +784,7 @@ func (p *interp) ensureFields() {
 	for range p.fields {
 		p.fieldsIsTrueStr = append(p.fieldsIsTrueStr, false)
 	}
-	p.numFields = len(p.fields)
+	p.numFields = num(float64(len(p.fields)))
 }
 
 // Fetch next line (record) of input from current input file, opening
@@ -727,13 +796,13 @@ func (p *interp) nextLine() (string, error) {
 				// Previous input is file, close it
 				_ = prevInput.Close()
 			}
-			if p.filenameIndex >= p.argc && !p.hadFiles {
+			if p.filenameIndex >= int(p.argc.num()) && !p.hadFiles {
 				// Moved past number of ARGV args and haven't seen
 				// any files yet, use stdin
 				p.input = p.stdin
 				p.setFile("-")
 			} else {
-				if p.filenameIndex >= p.argc {
+				if p.filenameIndex >= int(p.argc.num()) {
 					// Done with ARGV args, all done with input
 					return "", io.EOF
 				}
@@ -777,7 +846,7 @@ func (p *interp) nextLine() (string, error) {
 					if p.noFileReads {
 						return "", newError("can't read from file due to NoFileReads")
 					}
-					input, err := os.Open(filename)
+					input, err := p.fileSystem.Open(filename)
 					if err != nil {
 						return "", err
 					}
@@ -804,8 +873,8 @@ func (p *interp) nextLine() (string, error) {
 	}
 
 	// Got a line (record) of input, return it
-	p.lineNum++
-	p.fileLineNum++
+	p.lineNum = num(p.lineNum.num() + 1)
+	p.fileLineNum = num(p.fileLineNum.num() + 1)
 	return p.scanner.Text(), nil
 }
 

@@ -152,12 +152,12 @@ func (e *Encoder) EncodeFrame(pcm []float32, lookahead []float32, vadFlag bool) 
 	if e.lpState.Mode != 0 {
 		lpBuf := ensureInt16Slice(&e.scratchLPInt16, frameSamples)
 		scale := float32(silkSampleScale)
-		for i := 0; i < frameSamples; i++ {
+		for i := range frameSamples {
 			lpBuf[i] = int16(floatToInt16Round(pcm[i] * scale))
 		}
 		e.lpState.LPVariableCutoff(lpBuf, frameSamples)
 		invScale := float32(1.0 / silkSampleScale)
-		for i := 0; i < frameSamples; i++ {
+		for i := range frameSamples {
 			pcm[i] = float32(lpBuf[i]) * invScale
 		}
 	}
@@ -878,12 +878,12 @@ func (e *Encoder) PrefillFrame(pcm []float32) {
 	if e.lpState.Mode != 0 {
 		lpBuf := ensureInt16Slice(&e.scratchLPInt16, frameSamples)
 		scale := float32(silkSampleScale)
-		for i := 0; i < frameSamples; i++ {
+		for i := range frameSamples {
 			lpBuf[i] = int16(floatToInt16Round(pcm[i] * scale))
 		}
 		e.lpState.LPVariableCutoff(lpBuf, frameSamples)
 		invScale := float32(1.0 / silkSampleScale)
-		for i := 0; i < frameSamples; i++ {
+		for i := range frameSamples {
 			pcm[i] = float32(lpBuf[i]) * invScale
 		}
 	}
@@ -1055,15 +1055,9 @@ func (e *Encoder) EncodePacketWithFECWithVADStates(pcm []float32, lookahead []fl
 	e.ResetPacketState()
 	config := GetBandwidthConfig(e.bandwidth)
 	frameSamples := min(len(pcm), config.SampleRate*20/1000)
-	nFrames := max(len(pcm)/frameSamples, 1)
-	if nFrames > maxFramesPerPacket {
-		nFrames = maxFramesPerPacket
-	}
+	nFrames := min(max(len(pcm)/frameSamples, 1), maxFramesPerPacket)
 	e.nFramesPerPacket = int32(nFrames)
-	bufSize := max(len(pcm)/2+100, 150)
-	if bufSize < maxSilkPacketBytes {
-		bufSize = maxSilkPacketBytes
-	}
+	bufSize := max(max(len(pcm)/2+100, 150), maxSilkPacketBytes)
 	output := ensureByteSlice(&e.scratchOutput, bufSize)
 	e.scratchRangeEncoder.Init(output)
 	e.rangeEncoder = &e.scratchRangeEncoder

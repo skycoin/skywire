@@ -536,35 +536,78 @@ func (e *Encoder) transientAnalysisMonoFloat32(pcm []float32, frameSize int, all
 		backwardScale  = float32(0.125)
 		warmupPairs    = 6
 	)
-	var hp0, hp1 float32
 	var mask float32
 	mean := float32(0)
 	src := pcm[:samplesPerChannel]
 	_ = src[2*len2-1]
-	for i := range len2 {
-		j := i << 1
 
-		x0 := src[j]
-		y0 := hp0 + x0
-		hp00 := hp0
-		hp0 = hp0 - x0 + hpFeedback*hp1
-		hp1 = x0 - hp00
+	if celtFusedFloat {
+		// Numerically-equivalent reform of the libopus high-pass filter. The
+		// reference form per sample is
+		//     y = a + x ; a' = a - x + hpFeedback*b ; b' = x - a
+		// which serializes as FSUB->FMADD on the (a,b) state. Substituting
+		// b_n = x_{n-1} - a_{n-1} collapses it to a single second-order
+		// recurrence whose input term is state-independent:
+		//     a_{n+1} = a_n + ((hpFeedback*x_{n-1} - x_n) - hpFeedback*a_{n-1})
+		// leaving one add on the critical path instead of two ops, ~2x shorter.
+		// The (hp0,hp1) state is frame-local (reset each call), so only the y
+		// sequence must match; it does within ~1 ULP, which the quality-gated
+		// fused build allows (same posture as the decode de-emphasis reform).
+		var a, aPrev, xPrev float32
+		for i := range len2 {
+			j := i << 1
 
-		x1 := src[j+1]
-		y1 := hp0 + x1
-		hp00 = hp0
-		hp0 = hp0 - x1 + hpFeedback*hp1
-		hp1 = x1 - hp00
+			x0 := src[j]
+			term0 := (hpFeedback*xPrev - x0) - hpFeedback*aPrev
+			y0 := a + x0
+			aPrev = a
+			a = a + term0
+			xPrev = x0
 
-		if i < warmupPairs {
-			y0 = 0
-			y1 = 0
+			x1 := src[j+1]
+			term1 := (hpFeedback*xPrev - x1) - hpFeedback*aPrev
+			y1 := a + x1
+			aPrev = a
+			a = a + term1
+			xPrev = x1
+
+			if i < warmupPairs {
+				y0 = 0
+				y1 = 0
+			}
+
+			pair := y0*y0 + y1*y1
+			mean += pair
+			mask = pair + forwardRetain*mask
+			energy[i] = forwardDecay * mask
 		}
+	} else {
+		var hp0, hp1 float32
+		for i := range len2 {
+			j := i << 1
 
-		pair := y0*y0 + y1*y1
-		mean += pair
-		mask = pair + forwardRetain*mask
-		energy[i] = forwardDecay * mask
+			x0 := src[j]
+			y0 := hp0 + x0
+			hp00 := hp0
+			hp0 = hp0 - x0 + hpFeedback*hp1
+			hp1 = x0 - hp00
+
+			x1 := src[j+1]
+			y1 := hp0 + x1
+			hp00 = hp0
+			hp0 = hp0 - x1 + hpFeedback*hp1
+			hp1 = x1 - hp00
+
+			if i < warmupPairs {
+				y0 = 0
+				y1 = 0
+			}
+
+			pair := y0*y0 + y1*y1
+			mean += pair
+			mask = pair + forwardRetain*mask
+			energy[i] = forwardDecay * mask
+		}
 	}
 
 	var maxE float32
@@ -574,9 +617,7 @@ func (e *Encoder) transientAnalysisMonoFloat32(pcm []float32, frameSize int, all
 		mask = energy[i] + backwardRetain*mask
 		ei := backwardScale * mask
 		energy[i] = ei
-		if ei > maxE {
-			maxE = ei
-		}
+		maxE = max(maxE, ei)
 	}
 
 	meanGeom := opusmath.SqrtF32(mean * maxE * float32(0.5*float32(len2)))
@@ -586,10 +627,7 @@ func (e *Encoder) transientAnalysisMonoFloat32(pcm []float32, frameSize int, all
 	const epsF32 = float32(1e-15)
 	var unmask int
 	for i := 12; i < len2-5; i += 4 {
-		id := int(normE * (energy[i] + epsF32))
-		if id > 127 {
-			id = 127
-		}
+		id := min(int(normE*(energy[i]+epsF32)), 127)
 		unmask += transientInvTable[id]
 	}
 
@@ -735,41 +773,31 @@ func (e *Encoder) transientAnalysisScratchF32(pcm []float32, frameSize int, allo
 			}
 			idx += 4
 
-			yL0 := hp0L + xL0
-			hp00L := hp0L
+			// L and R high-pass filter computations interleaved so the CPU
+			// can overlap their independent chains to hide IIR multiply latency.
+			yL0 := hp0L + xL0; yR0 := hp0R + xR0
+			hp00L := hp0L; hp00R := hp0R
 			hp0L = hp0L - xL0 + hpFeedback*hp1L
-			hp1L = xL0 - hp00L
-
-			yL1 := hp0L + xL1
-			hp00L = hp0L
-			hp0L = hp0L - xL1 + hpFeedback*hp1L
-			hp1L = xL1 - hp00L
-
-			yR0 := hp0R + xR0
-			hp00R := hp0R
 			hp0R = hp0R - xR0 + hpFeedback*hp1R
-			hp1R = xR0 - hp00R
+			hp1L = xL0 - hp00L; hp1R = xR0 - hp00R
 
-			yR1 := hp0R + xR1
-			hp00R = hp0R
+			yL1 := hp0L + xL1; yR1 := hp0R + xR1
+			hp00L = hp0L; hp00R = hp0R
+			hp0L = hp0L - xL1 + hpFeedback*hp1L
 			hp0R = hp0R - xR1 + hpFeedback*hp1R
-			hp1R = xR1 - hp00R
+			hp1L = xL1 - hp00L; hp1R = xR1 - hp00R
 
 			if i < warmupPairs {
-				yL0 = 0
-				yL1 = 0
-				yR0 = 0
-				yR1 = 0
+				yL0, yL1, yR0, yR1 = 0, 0, 0, 0
 			}
 
+			// Energy and masking for both channels interleaved.
 			pairL := yL0*yL0 + yL1*yL1
-			meanL += pairL
-			maskL = pairL + forwardRetain*maskL
-			energy[i] = forwardDecay * maskL
-
 			pairR := yR0*yR0 + yR1*yR1
-			meanR += pairR
+			meanL += pairL; meanR += pairR
+			maskL = pairL + forwardRetain*maskL
 			maskR = pairR + forwardRetain*maskR
+			energy[i] = forwardDecay * maskL
 			energyR[i] = forwardDecay * maskR
 		}
 
@@ -778,18 +806,15 @@ func (e *Encoder) transientAnalysisScratchF32(pcm []float32, frameSize int, allo
 		maskR = 0
 		for i := len2 - 1; i >= 0; i-- {
 			maskL = energy[i] + backwardRetain*maskL
-			eiL := backwardScale * maskL
-			energy[i] = eiL
-			if eiL > maxEL {
-				maxEL = eiL
-			}
-
 			maskR = energyR[i] + backwardRetain*maskR
+			eiL := backwardScale * maskL
 			eiR := backwardScale * maskR
+			energy[i] = eiL
 			energyR[i] = eiR
-			if eiR > maxER {
-				maxER = eiR
-			}
+			// Branchless running max (FMAXS): bit-identical for these non-negative
+			// finite energies, avoids a per-sample data-dependent branch.
+			maxEL = max(maxEL, eiL)
+			maxER = max(maxER, eiR)
 		}
 
 		const epsilon = 1e-15
@@ -799,16 +824,10 @@ func (e *Encoder) transientAnalysisScratchF32(pcm []float32, frameSize int, allo
 		const epsF32 = float32(1e-15)
 		var unmaskL, unmaskR int
 		for i := 12; i < len2-5; i += 4 {
-			idL := int(normEL * (energy[i] + epsF32))
-			if idL > 127 {
-				idL = 127
-			}
+			idL := min(int(normEL*(energy[i]+epsF32)), 127)
 			unmaskL += transientInvTable[idL]
 
-			idR := int(normER * (energyR[i] + epsF32))
-			if idR > 127 {
-				idR = 127
-			}
+			idR := min(int(normER*(energyR[i]+epsF32)), 127)
 			unmaskR += transientInvTable[idR]
 		}
 
@@ -926,9 +945,7 @@ func (e *Encoder) transientAnalysisScratchF32(pcm []float32, frameSize int, allo
 			mask = energy[i] + backwardRetain*mask
 			ei := backwardScale * mask
 			energy[i] = ei
-			if ei > maxE {
-				maxE = ei
-			}
+			maxE = max(maxE, ei)
 		}
 
 		// Compute frame energy as geometric mean of mean and max
@@ -947,10 +964,7 @@ func (e *Encoder) transientAnalysisScratchF32(pcm []float32, frameSize int, allo
 			// Map energy to table index
 			// For non-negative values, int(x) truncates toward zero which equals floor.
 			// energy[i] + epsilon is always >= 0, so int() is equivalent to math.Floor.
-			id := int(normE * (energy[i] + epsF32))
-			if id > 127 {
-				id = 127
-			}
+			id := min(int(normE*(energy[i]+epsF32)), 127)
 			unmask += transientInvTable[id]
 		}
 

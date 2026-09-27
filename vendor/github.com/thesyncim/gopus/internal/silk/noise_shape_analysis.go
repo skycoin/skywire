@@ -358,11 +358,11 @@ func warpedAutocorrelationFLP32(out, state, in []float32, warping float32, lengt
 	}
 
 	maxOut := min(order+1, len(out))
-	for i := 0; i < maxOut; i++ {
+	for i := range maxOut {
 		out[i] = float32(corr[i])
 	}
 	maxState := min(order+1, len(state))
-	for i := 0; i < maxState; i++ {
+	for i := range maxState {
 		state[i] = float32(st[i])
 	}
 }

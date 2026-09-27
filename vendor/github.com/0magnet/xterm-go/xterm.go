@@ -63,6 +63,11 @@ type Terminal struct {
 	// OnSelectionChange fires when the selected text changes, including when
 	// it is cleared.
 	OnSelectionChange func()
+	// OnProtocolChange fires with the event mask of the mouse protocol an
+	// application has asked for, zero when it gives the mouse back. The
+	// browser layer already uses it to mark the element, so this is the
+	// hook for anything else a host wants to do with the news.
+	OnProtocolChange func(events int)
 
 	// CopyOnSelect puts the selection on the clipboard as soon as the mouse is
 	// released, the way X11 fills its primary selection. Off by default: it
@@ -303,6 +308,15 @@ func (t *Terminal) wireCoreEvents() {
 		// grid while the next frame is still drawn against the old one.
 		if t.OnResize != nil {
 			t.OnResize(cols, rows)
+		}
+	}
+	t.Core.OnProtocolChange = func(events int) {
+		// An application that has asked for the mouse is told apart from
+		// one that has not by a class on the root element, which is what
+		// the cursor rule keys off.
+		t.element.Get("classList").Call("toggle", "enable-mouse-events", events != 0)
+		if t.OnProtocolChange != nil {
+			t.OnProtocolChange(events)
 		}
 	}
 	t.Core.OnCursorMove = func() {
@@ -1045,6 +1059,10 @@ func ensureStylesheet() {
 .xterm .xterm-viewport::-webkit-scrollbar-thumb:hover { background: #6b727c; }
 .xterm .xterm-viewport::-webkit-scrollbar-corner { background: transparent; }
 .xterm .xterm-screen { position: relative; z-index: 1; cursor: text; }
+/* When mouse events are enabled (eg. tmux), revert to the standard pointer
+   cursor. The clicks belong to the application now rather than to the
+   selection, and an I-beam over a full-screen UI offers the wrong thing. */
+.xterm.enable-mouse-events .xterm-screen { cursor: default; }
 /* The terminal draws its own selection, as a range of buffer cells, so that
    selecting works the same under both renderers — the WebGL one hides these
    rows entirely and paints to a canvas, where there is no text for the browser
@@ -1094,3 +1112,42 @@ func (t *Terminal) RefreshGlyphs() {
 		r.glyphs.clear()
 	}
 }
+
+// SetFontSize changes the cell size and refits the grid to the element the
+// terminal is mounted on — the terminal's own zoom, which is what a terminal
+// emulator's ctrl+scroll and ctrl+plus do.
+//
+// THE POINT IS THE GRID AND NOT THE TYPE. A smaller cell in the same box is
+// more rows and columns, and for a terminal that is drawing something rather
+// than printing to it — a full-screen panel, a plot, an image as text — that
+// is resolution. It is the difference between a dial you can put a pointer on
+// and a dial you can put an arc on.
+//
+// The cell has to be re-measured rather than scaled: a font's advance width is
+// not linear in its size at small sizes, because hinting rounds it to whole
+// pixels, so computing the new cell from the old one drifts and the grid ends
+// up not quite fitting its box. Re-measuring costs one hidden probe element.
+//
+// The WebGL renderer holds a texture atlas built for the old cell, so it is
+// rebuilt: nothing else here knows how to tell it its glyphs changed size.
+func (t *Terminal) SetFontSize(px float64) {
+	if !t.opened || px <= 0 || px == t.Core.Options.FontSize {
+		return
+	}
+	t.Core.Options.FontSize = px
+	t.element.Get("style").Set("fontSize", jsPx(px))
+	t.measureCharSize()
+	t.refreshRowEls()
+	t.updateScrollArea()
+	if _, ok := t.renderer.(*webglRenderer); ok {
+		// Rebuild rather than resize: the atlas is keyed by cell size and
+		// there is no way in from out here to say it changed.
+		t.DisableWebGL()
+		_ = t.EnableWebGL() //nolint:errcheck // it worked a moment ago; the DOM renderer is the fallback either way
+	}
+	t.Fit()
+	t.scheduleRender(true)
+}
+
+// FontSize is the cell size the terminal is drawing at.
+func (t *Terminal) FontSize() float64 { return t.Core.Options.FontSize }

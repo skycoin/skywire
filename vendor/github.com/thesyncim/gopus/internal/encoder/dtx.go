@@ -95,14 +95,22 @@ func isDigitalSilenceRes(pcm []opusRes, lsbDepth int32) bool {
 // computeFrameEnergyRes computes mean energy of the PCM frame.
 // Matches libopus compute_frame_energy() from opus_encoder.c:1107-1111.
 func computeFrameEnergyRes(pcm []opusRes) opusVal32 {
-	if len(pcm) == 0 {
+	n := len(pcm)
+	if n == 0 {
 		return 0
 	}
-	var energy opusVal32
-	for _, v := range pcm {
-		energy += v * v
+	var a0, a1, a2, a3 opusVal32
+	for len(pcm) >= 4 {
+		a0 += pcm[0] * pcm[0]
+		a1 += pcm[1] * pcm[1]
+		a2 += pcm[2] * pcm[2]
+		a3 += pcm[3] * pcm[3]
+		pcm = pcm[4:]
 	}
-	return energy / opusVal32(len(pcm))
+	for _, v := range pcm {
+		a0 += v * v
+	}
+	return (a0 + a1 + a2 + a3) / opusVal32(n)
 }
 
 // shouldUseDTXRes determines if frame should be suppressed (DTX mode).

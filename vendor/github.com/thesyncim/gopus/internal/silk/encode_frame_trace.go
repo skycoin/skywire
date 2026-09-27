@@ -91,10 +91,7 @@ func fillCtrlTrace(tr *encodeFrameTrace, signalType, quantOffset, numSubframes i
 		}
 	}
 	if params != nil {
-		n := min(numSubframes*maxShapeLpcOrder, len(tr.ctrlARShpQ13))
-		if n > len(params.ARShpQ13) {
-			n = len(params.ARShpQ13)
-		}
+		n := min(min(numSubframes*maxShapeLpcOrder, len(tr.ctrlARShpQ13)), len(params.ARShpQ13))
 		copy(tr.ctrlARShpQ13[:n], params.ARShpQ13[:n])
 	}
 }

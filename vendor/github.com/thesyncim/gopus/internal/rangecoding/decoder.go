@@ -26,7 +26,7 @@ type Decoder struct {
 	storage    uint32 // Buffer size
 	offs       uint32 // Current read offset
 	endOffs    uint32 // End offset for raw bits
-	endWindow  uint32 // Window for raw bits at end
+	endWindow  uint64 // Window for raw bits at end (wider than libopus' ec_window for fewer refills; same bit stream)
 	nendBits   int32  // Number of valid bits in end window; libopus ec_ctx.nend_bits is C int.
 	nbitsTotal int32  // Total bits read; libopus ec_ctx.nbits_total is C int.
 	rng        uint32 // Range size (must stay > EC_CODE_BOT after normalize)
@@ -1106,10 +1106,19 @@ func (d *Decoder) StorageBits() int {
 
 // ShrinkStorage reduces the effective input size by the given number of bytes.
 // This is used to exclude trailing redundancy bytes from the range decoder
-// while preserving the current decoding state.
+// while preserving the current decoding state. The raw-bits window may have
+// read ahead past what was consumed, so whole unconsumed bytes are first
+// returned to the pool — making the observable state identical to a reader
+// that refills one byte at a time — before the end offset is rebased onto
+// the shrunk buffer.
 func (d *Decoder) ShrinkStorage(bytes int) {
 	if bytes <= 0 {
 		return
+	}
+	if back := uint32(d.nendBits) >> 3; back > 0 {
+		d.endOffs -= back
+		d.nendBits -= int32(back << 3)
+		d.endWindow &= 1<<uint(d.nendBits) - 1
 	}
 	if uint32(bytes) >= d.storage {
 		d.storage = 0
@@ -1215,22 +1224,23 @@ func (d *Decoder) DecodeUniform(ft uint32) uint32 {
 
 		rawBits := uint(ftb)
 		endWindow := d.endWindow
-		endOffs := d.endOffs
 		nendBits := int(d.nendBits)
-		storage := d.storage
-		buf := d.buf
-		for nendBits < ftb {
-			if endOffs < storage {
+		if nendBits < ftb {
+			endOffs := d.endOffs
+			storage := d.storage
+			buf := d.buf
+			for nendBits <= 56 && endOffs < storage {
 				endOffs++
-				endWindow |= uint32(buf[storage-endOffs]) << nendBits
+				endWindow |= uint64(buf[storage-endOffs]) << uint(nendBits)
 				nendBits += 8
-			} else {
+			}
+			if nendBits < ftb {
 				nendBits = ftb
 			}
+			d.endOffs = endOffs
 		}
-		raw := endWindow & ((1 << rawBits) - 1)
+		raw := uint32(endWindow) & ((1 << rawBits) - 1)
 		d.endWindow = endWindow >> rawBits
-		d.endOffs = endOffs
 		d.nendBits = int32(nendBits - ftb)
 		d.nbitsTotal += int32(ftb)
 
@@ -1438,24 +1448,29 @@ func (d *Decoder) DecodeRawBits(bits uint) uint32 {
 	}
 
 	endWindow := d.endWindow
-	endOffs := d.endOffs
 	nendBits := int(d.nendBits)
-	storage := d.storage
-	buf := d.buf
 
-	for nendBits < int(bits) {
-		if endOffs < storage {
+	if nendBits < int(bits) {
+		// Refill the whole 64-bit window. Reading ahead is purely a
+		// buffering choice: the window holds the same end-of-buffer bit
+		// stream, so every (call, bits) sequence sees identical values, and
+		// exhaustion still pads with zeros from the same bit position.
+		endOffs := d.endOffs
+		storage := d.storage
+		buf := d.buf
+		for nendBits <= 56 && endOffs < storage {
 			endOffs++
-			endWindow |= uint32(buf[storage-endOffs]) << nendBits
+			endWindow |= uint64(buf[storage-endOffs]) << uint(nendBits)
 			nendBits += 8
-		} else {
+		}
+		if nendBits < int(bits) {
 			nendBits = int(bits)
 		}
+		d.endOffs = endOffs
 	}
 
-	val := endWindow & ((1 << bits) - 1)
+	val := uint32(endWindow) & ((1 << bits) - 1)
 	d.endWindow = endWindow >> bits
-	d.endOffs = endOffs
 	d.nendBits = int32(nendBits - int(bits))
 	d.nbitsTotal += int32(bits)
 
@@ -1467,13 +1482,13 @@ func (d *Decoder) DecodeRawBit() uint32 {
 	if d.nendBits == 0 {
 		if d.endOffs < d.storage {
 			d.endOffs++
-			d.endWindow |= uint32(d.buf[d.storage-d.endOffs])
+			d.endWindow |= uint64(d.buf[d.storage-d.endOffs])
 			d.nendBits = 8
 		} else {
 			d.nendBits = 1
 		}
 	}
-	val := d.endWindow & 1
+	val := uint32(d.endWindow) & 1
 	d.endWindow >>= 1
 	d.nendBits--
 	d.nbitsTotal++

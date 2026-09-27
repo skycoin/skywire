@@ -49,10 +49,7 @@ func (e *Encoder) encodeLaplaceIntensity(val int, decay int) {
 
 	// Compute center frequency (probability of value 0)
 	laplaceScale := laplaceFS - laplaceNMin
-	fs0 := laplaceNMin + (laplaceScale*decay)>>15
-	if fs0 > laplaceFS-1 {
-		fs0 = laplaceFS - 1
-	}
+	fs0 := min(laplaceNMin+(laplaceScale*decay)>>15, laplaceFS-1)
 
 	if val == 0 {
 		re.Encode(0, uint32(fs0), uint32(laplaceFS))
@@ -246,10 +243,7 @@ func DeinterleaveStereoIntoF32(interleaved, left, right []float32) {
 // InterleaveStereoInto combines separate L and R arrays into a pre-allocated interleaved slice.
 // interleaved must have capacity >= 2*min(len(left), len(right)).
 func InterleaveStereoInto(left, right, interleaved []celtNorm) {
-	n := len(left)
-	if len(right) < n {
-		n = len(right)
-	}
+	n := min(len(right), len(left))
 	if len(interleaved) < n*2 || n <= 0 {
 		return
 	}
@@ -265,10 +259,7 @@ func InterleaveStereoInto(left, right, interleaved []celtNorm) {
 // InterleaveStereoF32 combines separate float-build L and R arrays into
 // interleaved format.
 func InterleaveStereoF32(left, right []float32) []float32 {
-	n := len(left)
-	if len(right) < n {
-		n = len(right)
-	}
+	n := min(len(right), len(left))
 	if n == 0 {
 		return nil
 	}
@@ -284,10 +275,7 @@ func InterleaveStereoF32(left, right []float32) []float32 {
 // InterleaveStereoIntoF32 combines separate float-build L and R arrays into a
 // pre-allocated interleaved slice.
 func InterleaveStereoIntoF32(left, right, interleaved []float32) {
-	n := len(left)
-	if len(right) < n {
-		n = len(right)
-	}
+	n := min(len(right), len(left))
 	if len(interleaved) < n*2 || n <= 0 {
 		return
 	}

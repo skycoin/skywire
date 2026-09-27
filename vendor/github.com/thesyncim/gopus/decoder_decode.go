@@ -725,10 +725,7 @@ func float32ToInt24Slice(dst []int32, src []float32, n, channels int) {
 	if channels < 1 || n < 1 || len(src) == 0 || len(dst) == 0 {
 		return
 	}
-	total := min(n*channels, len(src))
-	if total > len(dst) {
-		total = len(dst)
-	}
+	total := min(min(n*channels, len(src)), len(dst))
 	if total <= 0 {
 		return
 	}

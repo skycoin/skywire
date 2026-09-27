@@ -72,12 +72,6 @@ func CELTCosNormF32(x float32) float32 {
 	return float32(math.Cos(halfPi * float64(x)))
 }
 
-// AtanF32 mirrors C atan() narrowed to float, used by the CELT stereo-angle
-// estimator.
-func AtanF32(x float32) float32 {
-	return float32(math.Atan(float64(x)))
-}
-
 // AcosF32 mirrors C acos() narrowed to float.
 func AcosF32(x float32) float32 {
 	return float32(math.Acos(float64(x)))

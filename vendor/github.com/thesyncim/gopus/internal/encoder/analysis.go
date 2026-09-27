@@ -1060,10 +1060,7 @@ func (s *TonalityAnalysisState) tonalityAnalysis(pcm []float32, channels int) {
 	bandwidthMask := float32(0)
 	bandwidth := 0
 	maxE := float32(0)
-	lsbDepth := max(int(s.LSBDepth), 8)
-	if lsbDepth > 24 {
-		lsbDepth = 24
-	}
+	lsbDepth := min(max(int(s.LSBDepth), 8), 24)
 	noiseFloor := float32(5.7e-4) / float32(uint(1)<<uint(max(0, lsbDepth-8)))
 	belowMaxPitch := float32(0)
 	aboveMaxPitch := float32(0)
@@ -1342,10 +1339,7 @@ func (s *TonalityAnalysisState) tonalityAnalysis(pcm []float32, channels int) {
 	info.VADProb = frameProbs[1]
 	for b := range NbTBands + 1 {
 		boost := maxf(0, leakageTo[b]-bandLog2[b]) + maxf(0, bandLog2[b]-(leakageFrom[b]+leakageOffset))
-		q6 := min(int(opusmath.FloorHalfPlusF32ToInt32(float32(64)*boost)), 255)
-		if q6 < 0 {
-			q6 = 0
-		}
+		q6 := max(min(int(opusmath.FloorHalfPlusF32ToInt32(float32(64)*boost)), 255), 0)
 		info.LeakBoost[b] = uint8(q6)
 	}
 	s.PrevBandwidth = int32(bandwidth)
@@ -1535,10 +1529,7 @@ func (s *TonalityAnalysisState) tonalityGetInfo(frameSize int) AnalysisInfo {
 		pmin := probMin
 		pmax := probMax
 		pos = pos0
-		history := min(int(s.Count-1), 15)
-		if history < 0 {
-			history = 0
-		}
+		history := max(min(int(s.Count-1), 15), 0)
 		for i := 0; i < history; i++ {
 			pos--
 			if pos < 0 {

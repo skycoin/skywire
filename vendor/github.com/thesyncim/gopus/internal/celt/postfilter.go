@@ -262,10 +262,7 @@ func updateInterleavedStereoHistoryRingSig(histL, histR []celtSig, samples []flo
 	if start < 0 || start >= history {
 		start = 0
 	}
-	first := history - start
-	if first > frameSize {
-		first = frameSize
-	}
+	first := min(history-start, frameSize)
 	src := 0
 	for i := 0; i < first; i++ {
 		histL[start+i] = celtSig(samples[src])
@@ -410,10 +407,7 @@ func (d *Decoder) materializePostfilterHistorySuffixFromPLC(need int) {
 }
 
 func postfilterHistoryNeed(t0, t1, t1b, t2 int) int {
-	need := max(t1, t0)
-	if t1b > need {
-		need = t1b
-	}
+	need := max(t1b, max(t1, t0))
 	if t2 > need {
 		need = t2
 	}
@@ -462,10 +456,7 @@ func updatePlanarHistoryRingFromFloat32(hist []celtSig, samples []float32, frame
 	if start < 0 || start >= history {
 		start = 0
 	}
-	first := history - start
-	if first > frameSize {
-		first = frameSize
-	}
+	first := min(history-start, frameSize)
 	copyFloat32ToSig(hist[start:start+first], samples[:first])
 	copyFloat32ToSig(hist[:frameSize-first], samples[first:frameSize])
 }
@@ -742,10 +733,47 @@ func combFilterConstValue(base, g10, g11, g12, center, plus1, minus1, plus2, min
 	return sum
 }
 
+// combFilterConstDispatch runs the constant-gain comb body, handing whole
+// 4-wide blocks to the NEON kernel on the fused arm64 build (bit-identical
+// per element). A scalar head keeps the incoming carry semantics, and the
+// carries reload from the delay line afterwards.
+func combFilterConstDispatch(dst, delay []float32, g10, g11, g12 float32, x4, x3, x2, x1 float32) (float32, float32, float32, float32, bool) {
+	n := len(dst)
+	if !combUsesNeon || n < 9 {
+		return x4, x3, x2, x1, false
+	}
+	delay = delay[:n:n]
+	i := 0
+	for ; i < 4; i++ {
+		x0 := delay[i]
+		dst[i] = combFilterConstValue(dst[i], g10, g11, g12, x2, x1, x3, x0, x4)
+		x4, x3, x2, x1 = x3, x2, x1, x0
+	}
+	blocks := (n - i) >> 2
+	combFilterConstNeon(dst[i:], delay[i-4:], g10, g11, g12, blocks)
+	i += blocks * 4
+	x1 = delay[i-1]
+	x2 = delay[i-2]
+	x3 = delay[i-3]
+	x4 = delay[i-4]
+	for ; i < n; i++ {
+		x0 := delay[i]
+		dst[i] = combFilterConstValue(dst[i], g10, g11, g12, x2, x1, x3, x0, x4)
+		x4 = x3
+		x3 = x2
+		x2 = x1
+		x1 = x0
+	}
+	return x4, x3, x2, x1, true
+}
+
 func combFilterConstFloat32Hist(dst []float32, delay []celtSig, g10, g11, g12 float32, x4, x3, x2, x1 float32) (float32, float32, float32, float32) {
 	n := len(dst)
 	if n == 0 {
 		return x4, x3, x2, x1
+	}
+	if a4, a3, a2, a1, ok := combFilterConstDispatch(dst, delay, g10, g11, g12, x4, x3, x2, x1); ok {
+		return a4, a3, a2, a1
 	}
 	delay = delay[:n:n]
 	_ = dst[n-1]
@@ -782,6 +810,9 @@ func combFilterConstFloat32(dst, delay []float32, g10, g11, g12 float32, x4, x3,
 	n := len(dst)
 	if n == 0 {
 		return x4, x3, x2, x1
+	}
+	if a4, a3, a2, a1, ok := combFilterConstDispatch(dst, delay, g10, g11, g12, x4, x3, x2, x1); ok {
+		return a4, a3, a2, a1
 	}
 	delay = delay[:n:n]
 	_ = dst[n-1]
@@ -941,10 +972,7 @@ func combFilterWithSquarePlanarFloat32(samples []float32, hist []celtSig, histor
 	x2 = combPlanarAtFloat32(samples, hist, history, base1+i+2)
 	x1 = combPlanarAtFloat32(samples, hist, history, base1+i+3)
 	histEnd := t1 - frameOffset - 2
-	histLimit := histEnd
-	if histLimit > n {
-		histLimit = n
-	}
+	histLimit := min(histEnd, n)
 	if i < histLimit {
 		dst := samples[frameOffset+i : frameOffset+histLimit]
 		delay := hist[base1+i+4 : base1+histLimit+4]
@@ -1009,10 +1037,6 @@ func combFilterWithInputSig(dst, src []celtSig, start int, t0, t1, n int, g0, g1
 	srcFrame := src[start:]
 	dstFrame := dst[start:]
 	delay1 := src[start-t1-2:]
-	x1 := float32(delay1[3])
-	x2 := float32(delay1[2])
-	x3 := float32(delay1[1])
-	x4 := float32(delay1[0])
 	var delay0 []celtSig
 
 	if g0 == g1 && t0 == t1 && tapset0 == tapset1 {
@@ -1021,25 +1045,23 @@ func combFilterWithInputSig(dst, src []celtSig, start int, t0, t1, n int, g0, g1
 		delay0 = src[start-t0-2:]
 	}
 
+	// Reading delay1[i..i+4] directly per iteration instead of carrying
+	// a shift register removes 4 serial moves and lets the compiler reorder
+	// the FP work freely. The loop is short (~overlap) so unrolling is
+	// unnecessary; ILP comes from the 6 independent FMUL chains in `sum`.
 	i := 0
 	for ; i < overlap; i++ {
 		w := window[i]
 		f := noFMA32Mul(w, w)
 		oneMinus := float32(1.0) - f
-		x0 := float32(delay1[i+4])
 		sum := float32(srcFrame[i]) +
 			(oneMinus*g00)*float32(delay0[i+2]) +
 			(oneMinus*g01)*(float32(delay0[i+3])+float32(delay0[i+1])) +
 			(oneMinus*g02)*(float32(delay0[i+4])+float32(delay0[i])) +
-			(f*g10)*x2 +
-			(f*g11)*(x1+x3) +
-			(f*g12)*(x0+x4)
+			(f*g10)*float32(delay1[i+2]) +
+			(f*g11)*(float32(delay1[i+3])+float32(delay1[i+1])) +
+			(f*g12)*(float32(delay1[i+4])+float32(delay1[i]))
 		dstFrame[i] = celtSig(sum)
-
-		x4 = x3
-		x3 = x2
-		x2 = x1
-		x1 = x0
 	}
 
 	if g1 == 0 {
@@ -1049,17 +1071,26 @@ func combFilterWithInputSig(dst, src []celtSig, start int, t0, t1, n int, g0, g1
 		return
 	}
 
-	x4 = float32(delay1[i])
-	x3 = float32(delay1[i+1])
-	x2 = float32(delay1[i+2])
-	x1 = float32(delay1[i+3])
+	// For each position i the args are fixed offsets into delay1:
+	// center=delay1[i+2], plus1=delay1[i+3], minus1=delay1[i+1],
+	// plus2=delay1[i+4], minus2=delay1[i]. Reading directly (no shift
+	// register) removes 4 serial moves per iteration and exposes 4-wide
+	// ILP when the loop is unrolled.
+	_ = delay1[n+4-1] // BCE hint
+	_ = srcFrame[n-1] // BCE hint
+	_ = dstFrame[n-1] // BCE hint
+	for ; i+3 < n; i += 4 {
+		d0, d1 := float32(delay1[i]), float32(delay1[i+1])
+		d2, d3 := float32(delay1[i+2]), float32(delay1[i+3])
+		d4, d5 := float32(delay1[i+4]), float32(delay1[i+5])
+		d6, d7 := float32(delay1[i+6]), float32(delay1[i+7])
+		dstFrame[i] = celtSig(combFilterConstValue(float32(srcFrame[i]), g10, g11, g12, d2, d3, d1, d4, d0))
+		dstFrame[i+1] = celtSig(combFilterConstValue(float32(srcFrame[i+1]), g10, g11, g12, d3, d4, d2, d5, d1))
+		dstFrame[i+2] = celtSig(combFilterConstValue(float32(srcFrame[i+2]), g10, g11, g12, d4, d5, d3, d6, d2))
+		dstFrame[i+3] = celtSig(combFilterConstValue(float32(srcFrame[i+3]), g10, g11, g12, d5, d6, d4, d7, d3))
+	}
 	for ; i < n; i++ {
-		x0 := float32(delay1[i+4])
-		dstFrame[i] = celtSig(combFilterConstValue(float32(srcFrame[i]), g10, g11, g12, x2, x1, x3, x0, x4))
-
-		x4 = x3
-		x3 = x2
-		x2 = x1
-		x1 = x0
+		dstFrame[i] = celtSig(combFilterConstValue(float32(srcFrame[i]), g10, g11, g12,
+			float32(delay1[i+2]), float32(delay1[i+3]), float32(delay1[i+1]), float32(delay1[i+4]), float32(delay1[i])))
 	}
 }

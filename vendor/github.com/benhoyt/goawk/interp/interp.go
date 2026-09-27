@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
 	"math/rand"
 	"os"
@@ -87,6 +88,7 @@ type interp struct {
 	csvOutput     *bufio.Writer
 	noArgVars     bool
 	splitBuffer   []byte
+	fileSystem    fs.FS
 
 	// Scalars, arrays, and function state
 	globals       []value
@@ -104,20 +106,20 @@ type interp struct {
 	filename        value
 	line            string
 	lineIsTrueStr   bool
-	lineNum         int
-	fileLineNum     int
+	lineNum         value
+	fileLineNum     value
 	fields          []string
 	fieldsIsTrueStr []bool
-	numFields       int
+	numFields       value
 	haveFields      bool
 	fieldNames      []string
 	fieldIndexes    map[string]int
 	reparseCSV      bool
 
 	// Built-in variables
-	argc             int
-	convertFormat    string
-	outputFormat     string
+	argc             value
+	convertFormat    numFormat
+	outputFormat     numFormat
 	fieldSep         string
 	fieldSepRegex    *regexp.Regexp
 	recordSep        string
@@ -126,8 +128,8 @@ type interp struct {
 	outputFieldSep   string
 	outputRecordSep  string
 	subscriptSep     string
-	matchLength      int
-	matchStart       int
+	matchLength      value
+	matchStart       value
 	inputMode        IOMode
 	csvInputConfig   CSVInputConfig
 	outputMode       IOMode
@@ -321,6 +323,41 @@ type Config struct {
 	// output. The default is "smart", meaning no translation on Linux/Unix
 	// and CRLF translation on Windows.
 	NewlineOutput NewlineMode
+
+	// FileSystem specifies the filesystem used for file-based I/O: files named
+	// on the command line or in ARGV, in getline <"f" reads, and in print >"f"
+	// or print >>"f" writes. For read-only access it may be any [fs.FS]; to
+	// allow output redirection it must also implement [WriteFS].
+	//
+	// The default is to use the operating system's regular filesystem, relative
+	// to the working directory. Note that the default isn't strictly a valid
+	// fs.FS, as it allows absolute paths and paths with "." or ".." in them,
+	// unlike fs.ValidPath.
+	//
+	// AWK filenames don't have to satisfy [fs.ValidPath], so before a filename
+	// is passed to the filesystem set here, GoAWK uses path.Clean to convert
+	// it to a valid fs.FS path, for example, "./data.txt" and "sub/../data.txt"
+	// both become "data.txt". Filenames with no valid equivalent, such as
+	// "/etc/passwd" and "../data.txt", are passed through unchanged and will
+	// be rejected by a strict filesystem like the ones returned by [os.DirFS].
+	//
+	// If the filesystem returns an error when opening a file for reading,
+	// "getline <file" returns -1 rather than it being a fatal error. Errors
+	// from Create and Append are fatal.
+	FileSystem fs.FS
+}
+
+// WriteFS is an interface extension for an [fs.FS] assigned to [Config.FileSystem].
+// If the filesystem implements WriteFS, output redirection is allowed: print >"f"
+// uses Create and print >>"f" uses Append.
+type WriteFS interface {
+	fs.FS
+
+	// Create creates or truncates the named file and returns it for writing.
+	Create(name string) (io.WriteCloser, error)
+
+	// Append opens the named file for appending, creating it if it doesn't exist.
+	Append(name string) (io.WriteCloser, error)
 }
 
 // IOMode specifies the input parsing or print output mode.
@@ -412,14 +449,20 @@ func newInterp(program *parser.Program) *interp {
 	p.randSeed = 1.0
 	seed := math.Float64bits(p.randSeed)
 	p.random = rand.New(rand.NewSource(int64(seed)))
-	p.convertFormat = "%.6g"
-	p.outputFormat = "%.6g"
+	p.convertFormat = defaultNumFormat
+	p.outputFormat = defaultNumFormat
 	p.fieldSep = " "
 	p.savedFieldSep = " "
 	p.recordSep = "\n"
 	p.outputFieldSep = " "
 	p.outputRecordSep = "\n"
 	p.subscriptSep = "\x1c"
+	p.lineNum = num(0)
+	p.fileLineNum = num(0)
+	p.numFields = num(0)
+	p.matchStart = num(0)
+	p.matchLength = num(0)
+	// p.argc is initialized in setExecuteConfig based on config.Args
 
 	p.inputStreams = make(map[string]inputStream)
 	p.outputStreams = make(map[string]outputStream)
@@ -472,11 +515,19 @@ func (p *interp) setExecuteConfig(config *Config) error {
 			return newError("output mode configuration not valid in default output mode")
 		}
 	}
+	switch fsys := config.FileSystem.(type) {
+	case nil:
+		p.fileSystem = osFS{}
+	case WriteFS:
+		p.fileSystem = awkWriteFS{wfs: fsys}
+	default:
+		p.fileSystem = awkFS{fsys: fsys}
+	}
 
 	// Set up ARGV and other variables from config
 	argvIndex := p.arrayIndexes["ARGV"]
 	p.setArrayValue(resolver.Global, argvIndex, "0", str(config.Argv0))
-	p.argc = len(config.Args) + 1
+	p.argc = num(float64(len(config.Args) + 1))
 	for i, arg := range config.Args {
 		p.setArrayValue(resolver.Global, argvIndex, strconv.Itoa(i+1), numStr(arg))
 	}
@@ -736,25 +787,25 @@ func (p *interp) getSpecial(index int) value {
 	switch index {
 	case ast.V_NF:
 		p.ensureFields()
-		return num(float64(p.numFields))
+		return p.numFields
 	case ast.V_NR:
-		return num(float64(p.lineNum))
+		return p.lineNum
 	case ast.V_RLENGTH:
-		return num(float64(p.matchLength))
+		return p.matchLength
 	case ast.V_RSTART:
-		return num(float64(p.matchStart))
+		return p.matchStart
 	case ast.V_FNR:
-		return num(float64(p.fileLineNum))
+		return p.fileLineNum
 	case ast.V_ARGC:
-		return num(float64(p.argc))
+		return p.argc
 	case ast.V_CONVFMT:
-		return str(p.convertFormat)
+		return str(p.convertFormat.format)
 	case ast.V_FILENAME:
 		return p.filename
 	case ast.V_FS:
 		return str(p.fieldSep)
 	case ast.V_OFMT:
-		return str(p.outputFormat)
+		return str(p.outputFormat.format)
 	case ast.V_OFS:
 		return str(p.outputFieldSep)
 	case ast.V_ORS:
@@ -801,33 +852,33 @@ func (p *interp) setSpecial(index int, v value) error {
 			return newError("NF set too large: %d", numFields)
 		}
 		p.ensureFields()
-		p.numFields = numFields
-		if p.numFields < len(p.fields) {
-			p.fields = p.fields[:p.numFields]
-			p.fieldsIsTrueStr = p.fieldsIsTrueStr[:p.numFields]
+		p.numFields = v
+		if numFields < len(p.fields) {
+			p.fields = p.fields[:numFields]
+			p.fieldsIsTrueStr = p.fieldsIsTrueStr[:numFields]
 		}
-		for i := len(p.fields); i < p.numFields; i++ {
+		for i := len(p.fields); i < numFields; i++ {
 			p.fields = append(p.fields, "")
 			p.fieldsIsTrueStr = append(p.fieldsIsTrueStr, false)
 		}
 		p.line = p.joinFields(p.fields)
 		p.lineIsTrueStr = true
 	case ast.V_NR:
-		p.lineNum = int(v.num())
+		p.lineNum = v
 	case ast.V_RLENGTH:
-		p.matchLength = int(v.num())
+		p.matchLength = v
 	case ast.V_RSTART:
-		p.matchStart = int(v.num())
+		p.matchStart = v
 	case ast.V_FNR:
-		p.fileLineNum = int(v.num())
+		p.fileLineNum = v
 	case ast.V_ARGC:
 		argc := int(v.num())
 		if argc > maxFieldIndex {
 			return newError("ARGC set too large: %d", argc)
 		}
-		p.argc = argc
+		p.argc = v
 	case ast.V_CONVFMT:
-		p.convertFormat = p.toString(v)
+		p.convertFormat = p.parseNumFormat(p.toString(v))
 	case ast.V_FILENAME:
 		p.filename = v
 	case ast.V_FS:
@@ -841,7 +892,10 @@ func (p *interp) setSpecial(index int, v value) error {
 			p.fieldSepRegex = re
 		}
 	case ast.V_OFMT:
-		p.outputFormat = p.toString(v)
+		p.outputFormat = p.parseNumFormat(p.toString(v))
+		// An %s conversion is fine in OFMT (it converts the number using
+		// CONVFMT); hasStr only guards CONVFMT referring back to itself.
+		p.outputFormat.hasStr = false
 	case ast.V_OFS:
 		p.outputFieldSep = p.toString(v)
 	case ast.V_ORS:
@@ -850,7 +904,11 @@ func (p *interp) setSpecial(index int, v value) error {
 		p.recordSep = p.toString(v)
 		switch { // compare to interp.newScanner
 		case len(p.recordSep) <= 1:
-			// Simple cases use specialized splitters, not regex
+			// Simple cases use specialized splitters, not regex. However, we still update
+			// recordSepRegex in case an active regexSplitter is still using it.
+			sep := regexp.QuoteMeta(p.recordSep)
+			p.recordSepRegex = regexp.MustCompile(sep)
+			p.recordSepRegex.Longest() // other awks use leftmost-longest matching
 		case utf8.RuneCountInString(p.recordSep) == 1:
 			// Multi-byte unicode char falls back to regex splitter
 			sep := regexp.QuoteMeta(p.recordSep) // not strictly necessary as no multi-byte chars are regex meta chars
@@ -989,7 +1047,7 @@ func (p *interp) setField(index int, value string) error {
 	}
 	p.fields[index-1] = value
 	p.fieldsIsTrueStr[index-1] = true
-	p.numFields = len(p.fields)
+	p.numFields = num(float64(len(p.fields)))
 	p.line = p.joinFields(p.fields)
 	p.lineIsTrueStr = true
 	return nil
@@ -1010,7 +1068,36 @@ func (p *interp) joinFields(fields []string) string {
 
 // Convert value to string using current CONVFMT
 func (p *interp) toString(v value) string {
-	return v.str(p.convertFormat)
+	if v.typ != typeNum {
+		// For typeStr and typeNumStr we already have the string, for
+		// typeNull v.s == "".
+		return v.s
+	}
+	return p.numToString(v.n, p.convertFormat)
+}
+
+// Convert value to string using current OFMT (used by "print")
+func (p *interp) toOutputString(v value) string {
+	if v.typ != typeNum {
+		return v.s
+	}
+	return p.numToString(v.n, p.outputFormat)
+}
+
+// Convert a number to a string using the given CONVFMT or OFMT value.
+func (p *interp) numToString(n float64, f numFormat) string {
+	if !f.isFloat && needsNumFormat(n) {
+		if f.hasStr {
+			// Converting a number with a CONVFMT that has an %s conversion
+			// would recurse forever, as %s converts using CONVFMT. Gawk and
+			// mawk produce an empty string here, so do the same.
+			return ""
+		}
+		// A format such as "%d" or "%c" that needs the number converted to
+		// something other than a float: hand it to sprintf.
+		return p.formatNum(f, num(n))
+	}
+	return numToStr(n, f.goFormat)
 }
 
 // Compile regex string (or fetch from regex cache)

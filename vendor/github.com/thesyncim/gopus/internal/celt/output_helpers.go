@@ -36,10 +36,7 @@ func (d *Decoder) deemphCoefficient() float32 {
 // Reference: celt/celt_decoder.c deemphasis(), coef[1]!=0 branch.
 func (d *Decoder) applyDeemphasis2TapInterleaved(dst, samples []float32, scale float32) {
 	channels := max(int(d.channels), 1)
-	n := len(samples)
-	if len(dst) < n {
-		n = len(dst)
-	}
+	n := min(len(dst), len(samples))
 	frames := n / channels
 	if frames <= 0 {
 		return
@@ -49,7 +46,7 @@ func (d *Decoder) applyDeemphasis2TapInterleaved(dst, samples []float32, scale f
 	coef1 := d.deemphCoef1
 	// coef3 folded with the SIG2RES scale (the caller's 1/32768).
 	out := noFMA32Mul(d.deemphCoef3, scale)
-	for c := 0; c < channels; c++ {
+	for c := range channels {
 		m := float32(d.preemphState[c])
 		for j := range frames {
 			idx := j*channels + c
@@ -243,11 +240,50 @@ func (d *Decoder) applyDeemphasisAndScale(samples []float32, scale float32) {
 	}
 }
 
-func (d *Decoder) applyDeemphasisAndScaleStereoPlanarToFloat32(dst []float32, left, right []float32, scale float32) {
-	n := len(left)
-	if len(right) < n {
-		n = len(right)
+// deemphasisStereoPlanar2StepFused is the fused-build de-emphasis for planar
+// stereo input written to interleaved float32 output. It mirrors the mono
+// 2-step FMADD recurrence (see applyDeemphasisAndScaleMonoFloat32ToFloat32) on
+// each channel: state stays coef*tmp, while the per-sample input term and the
+// state*(scale/coef) output term sit off the recurrence's critical path. The
+// two channels plus each channel's 2-step give four independent FMADD chains.
+// Quality-gated (celtFusedFloat), so the ~1 ULP difference vs the scalar core
+// is permitted exactly as for the mono path; end-to-end quality is held by the
+// opus_compare RFC-conformance gate.
+func deemphasisStereoPlanar2StepFused(dst, left, right []float32, n int, scale, stateL, stateR float32) (float32, float32) {
+	const verySmall float32 = 1e-30
+	const coef float32 = float32(PreemphCoef)
+	outScale := scale / coef
+	c2 := coef * coef
+	i := 0
+	for ; i+1 < n; i += 2 {
+		lc0 := coef * (left[i] + verySmall)
+		lc1 := coef * (left[i+1] + verySmall)
+		lp := coef*lc0 + lc1
+		ls0 := coef*stateL + lc0
+		stateL = c2*stateL + lp
+
+		rc0 := coef * (right[i] + verySmall)
+		rc1 := coef * (right[i+1] + verySmall)
+		rp := coef*rc0 + rc1
+		rs0 := coef*stateR + rc0
+		stateR = c2*stateR + rp
+
+		dst[2*i] = ls0 * outScale
+		dst[2*i+1] = rs0 * outScale
+		dst[2*i+2] = stateL * outScale
+		dst[2*i+3] = stateR * outScale
 	}
+	for ; i < n; i++ {
+		stateL = coef*stateL + coef*(left[i]+verySmall)
+		stateR = coef*stateR + coef*(right[i]+verySmall)
+		dst[2*i] = stateL * outScale
+		dst[2*i+1] = stateR * outScale
+	}
+	return stateL, stateR
+}
+
+func (d *Decoder) applyDeemphasisAndScaleStereoPlanarToFloat32(dst []float32, left, right []float32, scale float32) {
+	n := min(len(right), len(left))
 	if n == 0 {
 		return
 	}
@@ -283,7 +319,11 @@ func (d *Decoder) applyDeemphasisAndScaleStereoPlanarToFloat32(dst []float32, le
 	const coef float32 = float32(PreemphCoef)
 	stateL := d.preemphState[0]
 	stateR := d.preemphState[1]
-	stateL, stateR = deemphasisStereoPlanarF32Core(dst, left, right, n, scale, stateL, stateR, coef, verySmall)
+	if celtFusedFloat {
+		stateL, stateR = deemphasisStereoPlanar2StepFused(dst, left, right, n, scale, stateL, stateR)
+	} else {
+		stateL, stateR = deemphasisStereoPlanarF32Core(dst, left, right, n, scale, stateL, stateR, coef, verySmall)
+	}
 
 	d.preemphState[0] = stateL
 	d.preemphState[1] = stateR
@@ -322,6 +362,38 @@ func (d *Decoder) applyDeemphasisAndScaleMonoFloat32ToFloat32(dst []float32, sam
 	state := d.preemphState[0]
 	_ = samples[n-1]
 	_ = dst[n-1]
+
+	if celtFusedFloat {
+		// Quality-gated fused build: rewrite the de-emphasis IIR so the
+		// recurrence is a single FMADD instead of the bit-exact build's
+		// FADD-then-FMUL barrier chain. state stays coef*tmp (so cross-frame
+		// continuity is preserved); the per-sample input term coef*(x+verySmall)
+		// and the output term state*(scale/coef) are off the recurrence's
+		// critical path. The 2-step (coef^2) form keeps only one FMADD on the
+		// serial path per pair of samples. Algebraically identical; differs by
+		// ~1 ULP, which the fused build's opus_compare gate (not bit-exact
+		// oracle, see requireBitExactFloat) allows.
+		outScale := scale / coef
+		c2 := coef * coef
+		i := 0
+		for ; i+1 < n; i += 2 {
+			cxv0 := coef * (samples[i] + verySmall)
+			cxv1 := coef * (samples[i+1] + verySmall)
+			p := coef*cxv0 + cxv1
+			s0 := coef*state + cxv0
+			state = c2*state + p
+			dst[i] = s0 * outScale
+			dst[i+1] = state * outScale
+		}
+		for ; i < n; i++ {
+			cxv := coef * (samples[i] + verySmall)
+			state = coef*state + cxv
+			dst[i] = state * outScale
+		}
+		d.preemphState[0] = state
+		return
+	}
+
 	i := 0
 	for ; i+7 < n; i += 8 {
 		tmp0 := samples[i] + verySmall + state
@@ -382,10 +454,7 @@ func (d *Decoder) applyDeemphasisAndScaleMonoFloat32ToFloat32(dst []float32, sam
 }
 
 func (d *Decoder) applyDeemphasisAndScaleStereoPlanarFloat32ToFloat32(dst []float32, left, right []float32, scale float32) {
-	n := len(left)
-	if len(right) < n {
-		n = len(right)
-	}
+	n := min(len(right), len(left))
 	if n == 0 {
 		return
 	}
@@ -421,7 +490,11 @@ func (d *Decoder) applyDeemphasisAndScaleStereoPlanarFloat32ToFloat32(dst []floa
 	const coef float32 = float32(PreemphCoef)
 	stateL := d.preemphState[0]
 	stateR := d.preemphState[1]
-	stateL, stateR = deemphasisStereoPlanarF32Core(dst, left, right, n, scale, stateL, stateR, coef, verySmall)
+	if celtFusedFloat {
+		stateL, stateR = deemphasisStereoPlanar2StepFused(dst, left, right, n, scale, stateL, stateR)
+	} else {
+		stateL, stateR = deemphasisStereoPlanarF32Core(dst, left, right, n, scale, stateL, stateR, coef, verySmall)
+	}
 
 	d.preemphState[0] = stateL
 	d.preemphState[1] = stateR
@@ -677,10 +750,7 @@ func (d *Decoder) applyDeemphasisAndScaleDownsampleToFloat32(dst []float32, samp
 	const coef float32 = float32(PreemphCoef)
 
 	if d.channels == 1 {
-		n := len(samples) / downsample
-		if len(dst) < n {
-			n = len(dst)
-		}
+		n := min(len(dst), len(samples)/downsample)
 		if n <= 0 {
 			return
 		}
@@ -713,10 +783,7 @@ func (d *Decoder) applyDeemphasisAndScaleDownsampleToFloat32(dst []float32, samp
 	}
 
 	frames := len(samples) / 2
-	n := frames / downsample
-	if len(dst)/2 < n {
-		n = len(dst) / 2
-	}
+	n := min(len(dst)/2, frames/downsample)
 	if n <= 0 {
 		return
 	}
@@ -758,10 +825,7 @@ func (d *Decoder) applyDeemphasisAndScaleMonoFloat32DownsampleToFloat32(dst []fl
 		d.applyDeemphasisAndScaleMonoFloat32ToFloat32(dst, samples, scale)
 		return
 	}
-	n := len(samples) / downsample
-	if len(dst) < n {
-		n = len(dst)
-	}
+	n := min(len(dst), len(samples)/downsample)
 	if n <= 0 {
 		return
 	}
@@ -799,14 +863,8 @@ func (d *Decoder) applyDeemphasisAndScaleStereoPlanarFloat32DownsampleToFloat32(
 		d.applyDeemphasisAndScaleStereoPlanarFloat32ToFloat32(dst, left, right, scale)
 		return
 	}
-	frames := len(left)
-	if len(right) < frames {
-		frames = len(right)
-	}
-	n := frames / downsample
-	if len(dst)/2 < n {
-		n = len(dst) / 2
-	}
+	frames := min(len(right), len(left))
+	n := min(len(dst)/2, frames/downsample)
 	if n <= 0 {
 		return
 	}

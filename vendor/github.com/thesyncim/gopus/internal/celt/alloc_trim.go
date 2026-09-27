@@ -124,10 +124,7 @@ func allocTrimAnalysisDetailed(
 	// Positive diff = more energy in lower bands (tilted down)
 	// Negative diff = more energy in higher bands (tilted up)
 	var diff opusVal32
-	end := nbBands
-	if end > len(bandLogE)/channels {
-		end = len(bandLogE) / channels
-	}
+	end := min(nbBands, len(bandLogE)/channels)
 
 	for c := range channels {
 		for i := 0; i < end-1; i++ {
@@ -189,10 +186,7 @@ func allocTrimAnalysisDetailed(
 
 	// Convert to integer with rounding and clamp to valid range
 	// Reference: libopus lines 947-949
-	trimIndex := max(int(trim+opusVal16(0.5)), 0)
-	if trimIndex > 10 {
-		trimIndex = 10
-	}
+	trimIndex := min(max(int(trim+opusVal16(0.5)), 0), 10)
 
 	return trimIndex, detail
 }

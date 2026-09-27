@@ -146,17 +146,11 @@ func stereoEncodePred(enc *rangecoding.Encoder, ix StereoQuantIndices) {
 	// Encode individual indices for each predictor
 	for i := range 2 {
 		// Encode ix[n][0] using uniform3 (3 symbols: 0, 1, 2)
-		idx0 := max(int(ix.Ix[i][0]), 0)
-		if idx0 > 2 {
-			idx0 = 2
-		}
+		idx0 := min(max(int(ix.Ix[i][0]), 0), 2)
 		enc.EncodeICDF(idx0, silk_uniform3_iCDF, 8)
 
 		// Encode ix[n][1] using uniform5 (5 symbols: 0, 1, 2, 3, 4)
-		idx1 := max(int(ix.Ix[i][1]), 0)
-		if idx1 > 4 {
-			idx1 = 4
-		}
+		idx1 := min(max(int(ix.Ix[i][1]), 0), 4)
 		enc.EncodeICDF(idx1, silk_uniform5_iCDF, 8)
 	}
 }
@@ -624,14 +618,11 @@ func (e *Encoder) StereoLRToMSWithRates(
 	if midRate < minMidRate {
 		midRate = minMidRate
 		sideRate = total - midRate
-		widthQ14Raw := max(silkDiv32VarQ(
+		widthQ14Raw := min(max(silkDiv32VarQ(
 			silkLSHIFT(int32(sideRate), 1)-int32(minMidRate),
 			silkSMULWB(int32(silkFixConst(1, 16))+frac3Q16, int32(minMidRate)),
 			14+2,
-		), 0)
-		if widthQ14Raw > int32(silkFixConst(1, 14)) {
-			widthQ14Raw = int32(silkFixConst(1, 14))
-		}
+		), 0), int32(silkFixConst(1, 14)))
 		widthQ14 = int16(widthQ14Raw)
 	} else {
 		sideRate = total - midRate

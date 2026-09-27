@@ -276,7 +276,7 @@ func (d *streamState) addHybridToSilkFadeOut(out []float32) error {
 		return err
 	}
 	n := min(len(scratch), len(out))
-	for i := 0; i < n; i++ {
+	for i := range n {
 		out[i] += scratch[i]
 	}
 	return nil

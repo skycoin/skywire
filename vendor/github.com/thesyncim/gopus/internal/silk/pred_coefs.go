@@ -280,7 +280,7 @@ func (e *Encoder) computeResidualEnergies(ltpRes []float32, predCoefQ12 []int16,
 	if length > 0 {
 		lpcRes := ensureFloat32Slice(&e.scratchLpcResF32, length)
 		lpcAnalysisFilterF32(lpcRes, coeffs, ltpRes[:length], length, order)
-		for k := 0; k < subframesInFirstHalf; k++ {
+		for k := range subframesInFirstHalf {
 			start := order + k*subfrLen
 			end := min(start+subframeSamples, len(lpcRes))
 			energy := energyF32Libopus(lpcRes[start:end], end-start)

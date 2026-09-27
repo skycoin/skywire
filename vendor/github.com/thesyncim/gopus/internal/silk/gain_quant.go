@@ -125,7 +125,7 @@ func GainQ16FromPCM(pcm []int16, subframeSamples int) int32 {
 	var sumSq int64
 	n := min(subframeSamples, len(pcm))
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		val := int64(pcm[i])
 		sumSq += val * val
 	}

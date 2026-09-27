@@ -208,10 +208,7 @@ func (d *Decoder) SetPrevEnergyWithPrev(prev, energies []float32) {
 
 	// Determine nbBands from the energies array length
 	channels := int(d.channels)
-	nbBands := len(energies) / channels
-	if nbBands > MaxBands {
-		nbBands = MaxBands
-	}
+	nbBands := min(len(energies)/channels, MaxBands)
 
 	// Copy with layout conversion: compact [c*nbBands+band] -> prediction-stride
 	// [c*predStride+band] (predStride == MaxBands for the static codec, the mode's
@@ -241,10 +238,7 @@ func (d *Decoder) setPrevEnergyGLogWithPrev(prev []celtGLog, energies []celtGLog
 
 	// Determine nbBands from the energies array length
 	channels := int(d.channels)
-	nbBands := len(energies) / channels
-	if nbBands > MaxBands {
-		nbBands = MaxBands
-	}
+	nbBands := min(len(energies)/channels, MaxBands)
 
 	// Copy with layout conversion: compact [c*nbBands+band] -> prediction-stride.
 	stride := d.predStride()
@@ -320,10 +314,7 @@ func (d *Decoder) updateBackgroundEnergy(lm int) {
 		lm = 30
 	}
 	m := 1 << uint(lm)
-	maxIncUnits := int(d.plcLossDuration) + m
-	if maxIncUnits > 160 {
-		maxIncUnits = 160
-	}
+	maxIncUnits := min(int(d.plcLossDuration)+m, 160)
 	maxBackgroundIncrease := celtGLog(float32(maxIncUnits) * 0.001)
 	for i := range d.backgroundEnergy {
 		bg := d.backgroundEnergy[i] + maxBackgroundIncrease
