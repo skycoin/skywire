@@ -935,12 +935,16 @@ func warnStaleExecModule(log *logging.Logger) {
 // for it to shake hands with.
 //
 // scheme/port describe the PUBLIC browse origin, which is not always this
-// listener. Local mode host-routes B on the V listener, so they match. Hosted
-// mode runs B on BrowseOriginAddr behind a proxy that terminates TLS on 443, so
-// the scheme comes from the configured V origin and the port is implicit.
+// listener. Only a .localhost suffix is host-routed on the V listener, so only
+// then do they match. Any other suffix names origins behind a proxy that
+// terminates TLS on 443 — this process's own BrowseOriginAddr in hosted mode, or
+// a deployment's *.haltingstate.net serving a desk run elsewhere — so the scheme
+// is https (or the configured V origin's) and the port is implicit. Keying it on
+// BrowseOriginAddr alone sent a local desk on the real browse domain to
+// https://<id>.haltingstate.net:8443, which nothing serves.
 func wasmBrowseOriginScripts(cfg WasmServeConfig, localScheme, localPort, suffix string) string {
 	scheme, port := localScheme, localPort
-	if cfg.BrowseOriginAddr != "" {
+	if cfg.BrowseOriginAddr != "" || !strings.HasSuffix(strings.ToLower(suffix), ".localhost") {
 		scheme, port = "https", ""
 		if u, err := url.Parse(strings.TrimSpace(strings.Split(cfg.VOrigin, ",")[0])); err == nil && u.Scheme != "" {
 			scheme = u.Scheme
