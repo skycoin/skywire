@@ -200,65 +200,111 @@ func startPairPoller(parent context.Context) {
 				return
 			case <-ticker.C:
 			}
-			var msgs []visorapi.PairMessage
-			err := pairRPCCall("PairPoll", func(c visorapi.API) error {
-				out, e := c.PairPoll(since)
-				msgs = out
-				return e
-			})
-			if err != nil {
-				if !errors.Is(err, errPairRPCUnavailable) {
-					appLog("Pairing: PairPoll error: %v", err)
-				}
-				continue
-			}
-			for _, m := range msgs {
-				if m.TS.After(since) {
-					since = m.TS
-				}
-				// A typed record is control traffic, not a chat line, and must
-				// never reach the browser as a message — an unrecognized one
-				// would render as an empty bubble.
-				if m.Type != "" {
-					// A retraction: the peer deleted a message they sent us,
-					// so drop our stored copy and tell the browser to remove
-					// the bubble. Same dm-status event the framed-conn
-					// OnDelete emits, so the UI has one code path for both.
-					if m.Type == pairing.MessageTypeDelete {
-						forgetPersisted(m.PeerPK.Hex(), m.ID)
-						broadcastDMStatus(m.ID, dmStatusDeleted, m.PeerPK.Hex())
-					} else {
-						appLog("Pairing: skipping unknown record type %q from %s", m.Type, m.PeerPK.Hex())
-					}
-					continue
-				}
-				envelope := map[string]string{
-					"sender":  m.PeerPK.Hex(),
-					"message": m.Text,
-					"peer":    m.PeerPK.Hex(),
-					"ts":      m.TS.Format(time.RFC3339Nano),
-					"channel": "pair",
-					// The feed-derived message id, so the browser can name
-					// this bubble for a later delete (and dedup on reload).
-					"id": m.ID,
-				}
-				body, err := json.Marshal(envelope)
-				if err != nil {
-					appLog("Pairing: marshal SSE message: %v", err)
-					continue
-				}
-				hub.broadcast(string(body))
-				hub.recordEvent(chatEvent{
-					ID:        newEventID(),
-					Channel:   channelPair,
-					Transport: "pair",
-					Dir:       "in",
-					From:      m.PeerPK.Hex(),
-					Text:      m.Text,
-				})
-			}
+			since = pollPairInboxOnce(since)
 		}
 	}()
+}
+
+// pollPairInboxOnce drains one tick of the visor's pair inbox onto the SSE
+// pipeline and returns the advanced cursor. Split out of startPairPoller's
+// loop so the per-tick policy — including which messages must NOT go out —
+// is testable without a ticker.
+//
+// Pair messages have no history-store copy (the inbox window and the SSE
+// rings are their only replay), so the startup tick re-broadcasts the whole
+// window from a zero cursor. That replay is delivery for live pairs — and,
+// for a pair the user has deleted the chat of, it was the resurrection: the
+// record only turns revoked, and the visor's ring still held the old
+// messages. Revoked peers are therefore skipped here, on every tick.
+func pollPairInboxOnce(since time.Time) time.Time {
+	var msgs []visorapi.PairMessage
+	err := pairRPCCall("PairPoll", func(c visorapi.API) error {
+		out, e := c.PairPoll(since)
+		msgs = out
+		return e
+	})
+	if err != nil {
+		if !errors.Is(err, errPairRPCUnavailable) {
+			appLog("Pairing: PairPoll error: %v", err)
+		}
+		return since
+	}
+	revoked := revokedPairSet()
+	for _, m := range msgs {
+		if m.TS.After(since) {
+			since = m.TS
+		}
+		// A revoked pair is a conversation the user deleted; its surviving
+		// inbox entries are that conversation's messages. The cursor still
+		// advances past them, so they are never reconsidered.
+		if revoked[m.PeerPK.Hex()] {
+			continue
+		}
+		// A typed record is control traffic, not a chat line, and must
+		// never reach the browser as a message — an unrecognized one
+		// would render as an empty bubble.
+		if m.Type != "" {
+			// A retraction: the peer deleted a message they sent us,
+			// so drop our stored copy and tell the browser to remove
+			// the bubble. Same dm-status event the framed-conn
+			// OnDelete emits, so the UI has one code path for both.
+			if m.Type == pairing.MessageTypeDelete {
+				forgetPersisted(m.PeerPK.Hex(), m.ID)
+				broadcastDMStatus(m.ID, dmStatusDeleted, m.PeerPK.Hex())
+			} else {
+				appLog("Pairing: skipping unknown record type %q from %s", m.Type, m.PeerPK.Hex())
+			}
+			continue
+		}
+		envelope := map[string]string{
+			"sender":  m.PeerPK.Hex(),
+			"message": m.Text,
+			"peer":    m.PeerPK.Hex(),
+			"ts":      m.TS.Format(time.RFC3339Nano),
+			"channel": "pair",
+			// The feed-derived message id, so the browser can name
+			// this bubble for a later delete (and dedup on reload).
+			"id": m.ID,
+		}
+		body, err := json.Marshal(envelope)
+		if err != nil {
+			appLog("Pairing: marshal SSE message: %v", err)
+			continue
+		}
+		hub.broadcast(string(body))
+		hub.recordEvent(chatEvent{
+			ID:        newEventID(),
+			Channel:   channelPair,
+			Transport: "pair",
+			Dir:       "in",
+			From:      m.PeerPK.Hex(),
+			Text:      m.Text,
+		})
+	}
+	return since
+}
+
+// revokedPairSet returns the hex PKs of pairs whose record is revoked.
+// Refreshed on every poll tick (not cached at startup) so a peer that is
+// re-paired mid-session starts flowing again on the next tick rather than
+// after a restart. An empty set on error: a failed listing must not turn
+// into dropped messages.
+func revokedPairSet() map[string]bool {
+	out := map[string]bool{}
+	var pairs []visorapi.PairInfo
+	if err := pairRPCCall("PairList", func(c visorapi.API) error {
+		list, e := c.PairList()
+		pairs = list
+		return e
+	}); err != nil {
+		return out
+	}
+	for _, p := range pairs {
+		if p.Status == pairing.StatusRevoked {
+			out[p.PeerPK.Hex()] = true
+		}
+	}
+	return out
 }
 
 // stopPairPoller cancels the inbound-poll goroutine. Idempotent.
