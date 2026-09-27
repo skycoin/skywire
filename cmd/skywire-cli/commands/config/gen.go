@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -1164,6 +1165,21 @@ func mergeExistingApps(log *logging.Logger) {
 	}
 	if len(carried) > 0 {
 		log.Infof("regen: preserved %d custom app(s): %s", len(carried), strings.Join(carried, ", "))
+	}
+}
+
+// noServerAppsOn turns off vpn-server and skysocks autostart on js. A browser
+// tab can neither forward IP nor dial raw TCP, so either server there only
+// errors or accepts clients it cannot serve. It runs after mergeExistingApps
+// because a regen would otherwise restore the old config's autostart.
+func noServerAppsOn(goos string, apps []appserver.AppConfig) {
+	if goos != "js" {
+		return
+	}
+	for i := range apps {
+		if apps[i].Name == skyenv.VPNServerName || apps[i].Name == skyenv.SkysocksName {
+			apps[i].AutoStart = false
+		}
 	}
 }
 
@@ -2404,6 +2420,7 @@ func configureApps(log *logging.Logger) {
 			}
 		}
 	}
+	noServerAppsOn(runtime.GOOS, conf.Launcher.Apps)
 
 	switch setVPNClientKillswitch {
 	case "true":
