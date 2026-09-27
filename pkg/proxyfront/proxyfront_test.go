@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/armon/go-socks5"
 	"github.com/stretchr/testify/require"
@@ -35,7 +36,7 @@ func front(t *testing.T, target string) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	sl := Split(l, func(c net.Conn) { ServeHTTP(ctx, c, SOCKSDial(conf.Resolver, conf.Dial)) })
 	t.Cleanup(func() { cancel(); _ = sl.Close() }) //nolint:errcheck
-	go srv.Serve(sl)                                //nolint:errcheck
+	go srv.Serve(sl)                               //nolint:errcheck
 	return l.Addr().String()
 }
 
@@ -50,8 +51,8 @@ func httpOrigin(t *testing.T) string {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "%s %s", r.Host, r.URL.Path) //nolint:errcheck
+	srv := &http.Server{ReadHeaderTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "%s %s", r.Host, r.URL.Path) //nolint:errcheck,gosec // test origin, plain text
 	})}
 	t.Cleanup(func() { _ = srv.Close() }) //nolint:errcheck
 	go srv.Serve(l)                       //nolint:errcheck
@@ -62,22 +63,25 @@ func TestSOCKS5StillServed(t *testing.T) {
 	addr := front(t, httpOrigin(t))
 	d, err := proxy.SOCKS5("tcp", addr, nil, proxy.Direct)
 	require.NoError(t, err)
-	c := &http.Client{Transport: &http.Transport{Dial: d.Dial}}
+	c := &http.Client{Transport: &http.Transport{DialContext: func(_ context.Context, n, a string) (net.Conn, error) { return d.Dial(n, a) }}}
 	resp, err := c.Get("http://site.dmsg/socks")
 	require.NoError(t, err)
 	defer resp.Body.Close() //nolint:errcheck
-	b, _ := io.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
 	require.Equal(t, "site.dmsg /socks", string(b))
 }
 
 func TestHTTPAbsoluteURL(t *testing.T) {
 	addr := front(t, httpOrigin(t))
-	pu, _ := url.Parse("http://" + addr)
+	pu, err := url.Parse("http://" + addr)
+	require.NoError(t, err)
 	c := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(pu)}}
 	for _, path := range []string{"/one", "/two"} {
 		resp, err := c.Get("http://site.skynet" + path)
 		require.NoError(t, err)
-		b, _ := io.ReadAll(resp.Body)
+		b, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
 		_ = resp.Body.Close() //nolint:errcheck
 		require.Equal(t, "site.skynet "+path, string(b))
 	}
@@ -99,7 +103,8 @@ func TestHTTPConnect(t *testing.T) {
 	require.NoError(t, err)
 	resp, err = http.ReadResponse(br, nil)
 	require.NoError(t, err)
-	b, _ := io.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
 	require.Equal(t, "site.dmsg /tunnel", string(b))
 }
 
@@ -114,9 +119,9 @@ func TestHTTPConnectHalfClose(t *testing.T) {
 		if err != nil {
 			return
 		}
-		b, _ := io.ReadAll(c)
+		b, _ := io.ReadAll(c)                                //nolint:errcheck // a short read still gets echoed
 		_, _ = io.WriteString(c, strings.ToUpper(string(b))) //nolint:errcheck
-		_ = c.Close()                                         //nolint:errcheck
+		_ = c.Close()                                        //nolint:errcheck
 	}()
 
 	addr := front(t, l.Addr().String())
@@ -145,7 +150,8 @@ func TestHTTPDialFailureIs502(t *testing.T) {
 	require.NoError(t, l.Close())
 
 	addr := front(t, dead)
-	pu, _ := url.Parse("http://" + addr)
+	pu, err := url.Parse("http://" + addr)
+	require.NoError(t, err)
 	c := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(pu)}}
 	resp, err := c.Get("http://gone.dmsg/")
 	require.NoError(t, err)
