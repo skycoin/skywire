@@ -164,6 +164,18 @@ Three things are worth knowing before changing any of it:
   rewriting argv; the visor owns both spellings. The phone's stored preference
   wins and is re-applied whenever the core comes up.
 
+The **VPN hotspot** (`core/VpnHotspot.kt` + `pkg/vpn/share*.go`) shares the
+tunnel with devices on the phone's hotspot, as an HTTP + SOCKS5 proxy on port
+8118. Tethered traffic is forwarded below `VpnService` and no app without root
+can pull it in, and this app is excluded from its own tunnel, so neither side
+can just forward. The app listens, keeps only connections that arrived on a
+hotspot interface (not a network the phone is joined to), and passes each
+socket to the visor as an `SCM_RIGHTS` descriptor on a second abstract socket.
+vpn-client proxies it from a gVisor netstack that uses the **tunnel's own
+address**, so the server's per-client rules still apply. Replies are split from
+the kernel's by destination port: the netstack's ephemeral range is
+61000–65535, above Linux's 32768–60999.
+
 **SkyDEX** (`ui/dex/`) is native above, embedded below. The market public key
 is a native field with a recent-markets dropdown; connecting writes
 `--market-pk` into the app's argv (`PUT …/apps/skydex-client` with `args`,

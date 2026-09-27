@@ -299,6 +299,24 @@
     <string name="vpn_killswitch_hint">Mantiene la interfaz de red en pie mientras el túnel está caído, para que nada se escape por fuera. Las demás apps se quedan sin conexión hasta que vuelva.</string>
     <string name="vpn_killswitch_always_on">Ajustes de VPN siempre activa</string>
     <string name="vpn_killswitch_always_on_hint">Para la garantía más fuerte —bloquear incluso antes de que la app arranque— activa «VPN siempre activa» y «Bloquear conexiones sin VPN» para Skywire en los ajustes de Android.</string>
+    <string name="vpn_hotspot_title">Zona Wi-Fi con VPN</string>
+    <string name="vpn_hotspot_hint">Comparte SkyVPN con los dispositivos conectados a la zona Wi-Fi de este teléfono. La usan a través de un proxy en este teléfono.</string>
+    <string name="vpn_hotspot_error">No se pudo abrir el puerto %1$d: %2$s</string>
+    <string name="vpn_hotspot_waiting">Se inicia cuando SkyVPN se conecta.</string>
+    <string name="vpn_hotspot_no_hotspot">Activa la zona Wi-Fi de este teléfono (o el anclaje por USB o Bluetooth) y conecta a ella el otro dispositivo.</string>
+    <string name="vpn_hotspot_proxy">Proxy para el otro dispositivo</string>
+    <string name="vpn_hotspot_host">Host</string>
+    <string name="vpn_hotspot_port">Puerto</string>
+    <string name="vpn_hotspot_setup">En el otro dispositivo, configura esto como su proxy. HTTP y SOCKS5 funcionan en el mismo puerto. Lo que pasa por el proxy usa SkyVPN, incluidas las búsquedas de nombres.</string>
+    <string name="vpn_hotspot_not_carrying">SkyVPN no está conectada, así que los dispositivos compartidos todavía no pueden conectarse a internet a través del proxy.</string>
+    <plurals name="vpn_hotspot_devices">
+        <item quantity="one">%d dispositivo lo usó en los últimos minutos</item>
+        <item quantity="many">%d de dispositivos lo usaron en los últimos minutos</item>
+        <item quantity="other">%d dispositivos lo usaron en los últimos minutos</item>
+    </plurals>
+    <string name="vpn_hotspot_leak_hint">Solo el tráfico enviado al proxy pasa por SkyVPN. La zona Wi-Fi sigue dando al otro dispositivo la conexión normal de este teléfono, así que una app que ignore el ajuste de proxy se salta la VPN.</string>
+    <string name="vpn_hotspot_settings">Ajustes de la zona Wi-Fi</string>
+    <string name="vpn_hotspot_no_settings">Este teléfono no tiene una pantalla de ajustes de zona Wi-Fi que abrir.</string>
 
     <string name="vpn_error_no_consent">Android no ha concedido el permiso de VPN.</string>
     <string name="vpn_error_socket">El servicio VPN no pudo abrir su socket de traspaso: %1$s</string>

@@ -65,6 +65,12 @@ type Client struct {
 	connectedDuration int64
 
 	defaultSystemDNS string //nolint:unused
+
+	// sharing is set once, before the first session, on builds that pass
+	// other devices' connections into the tunnel (see share.go). share is
+	// the live session as that proxy sees it; nil between sessions.
+	sharing bool
+	share   atomic.Pointer[shareSession]
 }
 
 // NewClient creates VPN client instance.
@@ -157,6 +163,12 @@ func (c *Client) Serve() error {
 	defer func() {
 		c.removeDirectRoutes()
 	}()
+
+	// Other devices' connections, when this build has a way to receive them
+	// (the phone's hotspot). They wait for a tunnel session and die with it.
+	if stop := c.startSharing(); stop != nil {
+		defer stop()
+	}
 
 	// Optional mesh gateway: let the host resolve *.dmsg / *.skynet by name and
 	// proxy those over the mesh (bypassing the tunnel). Opt-in; Linux-only.
@@ -450,13 +462,27 @@ func (c *Client) serveConn(conn net.Conn) error {
 
 	// we release privileges here (user is not root for Mac OS systems from here on)
 
+	// With sharing on, the conn has a second writer — the shared netstack —
+	// and the server's replies to it are picked out on the way in.
+	inbound, outbound := io.Writer(tun), io.Writer(conn)
+	if c.sharing {
+		lw := &lockedWriter{w: conn}
+		sess := newShareSession(tunIP, lw.Write)
+		c.share.Store(sess)
+		defer func() {
+			c.share.CompareAndSwap(sess, nil)
+			sess.close()
+		}()
+		inbound, outbound = shareDemux{tun: tun, sess: sess}, lw
+	}
+
 	connToTunDoneCh := make(chan struct{})
 	tunToConnCh := make(chan struct{})
 	// read all system traffic and pass it to the remote VPN server
 	go func() {
 		defer close(connToTunDoneCh)
 
-		if _, err := io.Copy(tun, conn); err != nil {
+		if _, err := io.Copy(inbound, conn); err != nil {
 			if !c.isClosed() {
 				print(fmt.Sprintf("Error resending traffic from TUN %s to VPN server: %v\n", tun.Name(), err))
 				// when the vpn-server is closed we get the error EOF
@@ -469,7 +495,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 	go func() {
 		defer close(tunToConnCh)
 
-		if _, err := io.Copy(conn, tun); err != nil {
+		if _, err := io.Copy(outbound, tun); err != nil {
 			if !c.isClosed() {
 				print(fmt.Sprintf("Error resending traffic from VPN server to TUN %s: %v\n", tun.Name(), err))
 			}

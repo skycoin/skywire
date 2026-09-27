@@ -66,12 +66,14 @@ class SkywirePaths(context: Context) {
  * when the core knows the device API level — which a CGO-free build cannot
  * discover for itself. `SKYWIRE_ANDROID_VPN_SOCKET` is where vpn-client asks
  * for a TUN: the app owns the interface, so it also owns the name of the
- * socket it hands descriptors out on. The leading `@` is Go's spelling of the
- * abstract namespace [SkyVpnService] binds in.
+ * socket it hands descriptors out on. `SKYWIRE_ANDROID_VPN_SHARE_SOCKET` is
+ * where it collects the VPN hotspot's connections ([VpnHotspot]). The leading
+ * `@` is Go's spelling of the abstract namespace both are bound in.
  */
 internal fun coreEnv(paths: SkywirePaths): Map<String, String> = mapOf(
     "HOME" to paths.dataDir.absolutePath,
     "TMPDIR" to paths.tmpDir.absolutePath,
     "SKYWIRE_ANDROID_API_LEVEL" to android.os.Build.VERSION.SDK_INT.toString(),
     "SKYWIRE_ANDROID_VPN_SOCKET" to "@" + SkyVpnService.SOCKET_NAME,
+    "SKYWIRE_ANDROID_VPN_SHARE_SOCKET" to "@" + VpnHotspot.SOCKET_NAME,
 )
