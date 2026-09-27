@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"sync"
 
 	"golang.org/x/sys/unix"
 )
@@ -58,3 +59,48 @@ func fdConn(fd int) (net.Conn, error) {
 	defer f.Close() //nolint:errcheck
 	return net.FileConn(f)
 }
+
+// connQueue is a net.Listener fed by hand: on the phone the app accepts shared
+// clients itself — it knows which interface is the hotspot — and passes each
+// connection over (share_android.go).
+type connQueue struct {
+	conns chan net.Conn
+	done  chan struct{}
+	once  sync.Once
+}
+
+func newConnQueue() *connQueue {
+	return &connQueue{conns: make(chan net.Conn), done: make(chan struct{})}
+}
+
+// push hands conn to Accept, closing it instead when the queue has closed.
+func (q *connQueue) push(conn net.Conn) bool {
+	select {
+	case q.conns <- conn:
+		return true
+	case <-q.done:
+		_ = conn.Close() //nolint:errcheck
+		return false
+	}
+}
+
+func (q *connQueue) Accept() (net.Conn, error) {
+	select {
+	case conn := <-q.conns:
+		return conn, nil
+	case <-q.done:
+		return nil, net.ErrClosed
+	}
+}
+
+func (q *connQueue) Close() error {
+	q.once.Do(func() { close(q.done) })
+	return nil
+}
+
+func (q *connQueue) Addr() net.Addr { return shareAddr{} }
+
+type shareAddr struct{}
+
+func (shareAddr) Network() string { return "share" }
+func (shareAddr) String() string  { return "hotspot" }
