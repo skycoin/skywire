@@ -168,3 +168,53 @@ func meshOriginForOrDie(t *testing.T, host string) (string, string) {
 	}
 	return network, resolver
 }
+
+// TestClearnetOriginFor pins the retired engine's clearnet rule: every http or
+// https site that is not a mesh or loopback address earns an origin keyed by
+// "skysocks|<origin>".
+func TestClearnetOriginFor(t *testing.T) {
+	for _, tc := range []struct {
+		scheme, host, origin string
+		want                 string
+	}{
+		{"https:", "skycoin.com", "https://skycoin.com", "https://skycoin.com"},
+		{"http:", "example.org", "http://example.org:8080", "http://example.org:8080"},
+		{"https:", "Explorer.Skycoin.com", "https://explorer.skycoin.com", "https://explorer.skycoin.com"},
+	} {
+		base, ok := clearnetOriginFor(tc.scheme, tc.host, tc.origin)
+		if !ok || base != tc.want {
+			t.Errorf("clearnetOriginFor(%q,%q,%q) = (%q,%v), want (%q,true)", tc.scheme, tc.host, tc.origin, base, ok, tc.want)
+		}
+	}
+	for _, tc := range []struct{ scheme, host, origin string }{
+		{"https:", hexPK + ".dmsg", "https://" + hexPK + ".dmsg"}, // mesh has its own key
+		{"http:", "home.skynet", "http://home.skynet"},
+		{"http:", hexPK, "http://" + hexPK},
+		{"http:", "status.skysocks", "http://status.skysocks"}, // the visor's own page
+		{"http:", "vnet", "http://vnet:8001"},
+		{"http:", "8001.vnet", "http://8001.vnet"},
+		{"http:", "localhost", "http://localhost:4445"},
+		{"http:", "127.0.0.1", "http://127.0.0.1"},
+		{"ftp:", "example.org", "ftp://example.org"},
+		{"about:", "", "null"},
+	} {
+		if _, ok := clearnetOriginFor(tc.scheme, tc.host, tc.origin); ok {
+			t.Errorf("clearnetOriginFor(%q,%q,%q) claimed it", tc.scheme, tc.host, tc.origin)
+		}
+	}
+}
+
+// TestCanonicalClearnetTargetAgreesWithRealorigin: the engine keyed clearnet
+// by "skysocks|<origin>"; the id must be realorigin's and round-trip through
+// the browse host, as the mesh key does.
+func TestCanonicalClearnetTargetAgreesWithRealorigin(t *testing.T) {
+	if got := canonicalClearnetTarget("https://skycoin.com"); got != "skysocks|https://skycoin.com" {
+		t.Fatalf("canonical = %q", got)
+	}
+	canonical := canonicalClearnetTarget("https://explorer.skycoin.com")
+	id := realorigin.ID(canonical)
+	back, ok := realorigin.IDFromHost(realorigin.Host(canonical, ".haltingstate.net"), ".haltingstate.net")
+	if !ok || back != id || len(id) != realorigin.IDLen {
+		t.Errorf("clearnet browse host did not round-trip (%q, %v, id %q)", back, ok, id)
+	}
+}
