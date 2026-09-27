@@ -58,9 +58,10 @@ func TestV1JSONMirrorsEveryTaggedField(t *testing.T) {
 }
 
 // TestWispSurvivesUnmarshal is the concrete case that exposed the
-// drift: a config file carrying a wisp section must populate V1.Wisp.
+// drift: a config file carrying a wisp section must populate V1.Wisp. The
+// enable and port keys of older configs are ignored, not an error.
 func TestWispSurvivesUnmarshal(t *testing.T) {
-	const raw = `{"wisp": {"enable": true, "port": 6001}}`
+	const raw = `{"wisp": {"enable": true, "port": 6001, "upstream_socks": "127.0.0.1:1081"}}`
 	var v V1
 	if err := json.Unmarshal([]byte(raw), &v); err != nil {
 		t.Fatalf("UnmarshalJSON: %v", err)
@@ -68,11 +69,8 @@ func TestWispSurvivesUnmarshal(t *testing.T) {
 	if v.Wisp == nil {
 		t.Fatal("V1.Wisp was nil; the wisp section was dropped on load")
 	}
-	if !v.Wisp.Enable {
-		t.Error("Wisp.Enable = false, want true")
-	}
-	if v.Wisp.Port != 6001 {
-		t.Errorf("Wisp.Port = %d, want 6001", v.Wisp.Port)
+	if v.Wisp.UpstreamSOCKS != "127.0.0.1:1081" {
+		t.Errorf("Wisp.UpstreamSOCKS = %q, want 127.0.0.1:1081", v.Wisp.UpstreamSOCKS)
 	}
 }
 

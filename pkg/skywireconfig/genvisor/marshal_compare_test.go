@@ -113,7 +113,7 @@ func TestMustMarshalJSONNative_ResolverBlocks(t *testing.T) {
 		SelfLoopback: &no, Alias: "gw", SelfLoopbackAuthenticated: &yes,
 	}
 	v.Wisp = &visorconfig.WispConfig{
-		Enable: true, Port: 6001, UpstreamSOCKS: "127.0.0.1:1080", Buffer: 128,
+		UpstreamSOCKS: "127.0.0.1:1080", Buffer: 128,
 	}
 	v.Skymail = &visorconfig.SkymailConfig{Enable: true, Dir: "/opt/skywire/mail", MaxMessageSize: 2 << 20, MaxTotalSize: -1, MaxAge: visorconfig.Duration(72 * time.Hour)}
 	v.Resolvers = []visorconfig.ResolverConfig{

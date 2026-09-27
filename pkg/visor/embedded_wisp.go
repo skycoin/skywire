@@ -16,9 +16,10 @@
 //     WebSocket endpoint could not be reached even if one existed.
 //
 // So the session is framed over a plain conn (wisp.Server.ServeConn) and
-// carried on a vnet port, which page JS reaches with vnet.dial(port). On a
-// native visor bottle's vnet is net, so the same code binds ordinary loopback
-// and the session is reachable with `wisp.DialConn`.
+// carried on a vnet port, which page JS reaches with vnet.dial(port). Only a
+// browser-tab visor runs it (initEmbeddedWisp). Natively bottle's vnet is net,
+// which is how the tests bind ordinary loopback and reach it with
+// `wisp.DialConn`.
 //
 // Egress is the visor's own skysocks-client. Reaching it needs bottle's vnet
 // as the forward dialer: in a tab the proxy's port lives in the page's port
@@ -30,6 +31,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime"
 	"sync"
 	"time"
 
@@ -57,21 +59,27 @@ func (vnetForward) Dial(network, addr string) (net.Conn, error) {
 type EmbeddedWisp struct {
 	cfg *visorconfig.WispConfig
 	log *logging.Logger
+	// bindPort replaces DefaultWispPort; tests use it to bind a free port.
+	bindPort uint
 
 	mu     sync.Mutex
 	lis    net.Listener
 	cancel context.CancelFunc
 }
 
-// newEmbeddedWisp builds the runtime without starting it.
+// newEmbeddedWisp builds the runtime without starting it. A nil cfg is the
+// defaults.
 func newEmbeddedWisp(cfg *visorconfig.WispConfig, log *logging.Logger) *EmbeddedWisp {
+	if cfg == nil {
+		cfg = &visorconfig.WispConfig{}
+	}
 	return &EmbeddedWisp{cfg: cfg, log: log}
 }
 
 // port is the virtual-loopback port to bind.
 func (w *EmbeddedWisp) port() uint {
-	if w.cfg.Port != 0 {
-		return w.cfg.Port
+	if w.bindPort != 0 {
+		return w.bindPort
 	}
 	return visorconfig.DefaultWispPort
 }
@@ -167,29 +175,26 @@ func (w *EmbeddedWisp) Stop() error {
 	return err
 }
 
-// initEmbeddedWisp constructs the runtime so it can be started and stopped
-// without a visor restart, then auto-starts it when Enable=true. Construction
-// is unconditional within "config section present", Start is conditional —
-// mirroring initEmbeddedSkymailBridge.
+// initEmbeddedWisp starts the server on a browser-tab visor, the only place
+// anything can reach it: page JS dials its vnet port. A native visor has no
+// such page, so it never runs one; the wisp section only tunes the server.
 func initEmbeddedWisp(_ context.Context, v *Visor, log *logging.Logger) error {
-	if v.conf == nil || v.conf.Wisp == nil {
-		log.Debug("wisp section absent; not constructing the server")
+	if runtime.GOOS != "js" {
 		return nil
 	}
-
-	runtime := newEmbeddedWisp(v.conf.Wisp, log)
+	var cfg *visorconfig.WispConfig
+	if v.conf != nil {
+		cfg = v.conf.Wisp
+	}
+	w := newEmbeddedWisp(cfg, log)
 	v.initLock.Lock()
-	v.embeddedWisp = runtime
+	v.embeddedWisp = w
 	v.initLock.Unlock()
 
-	if !v.conf.Wisp.Enable {
-		log.Info("Embedded wisp server constructed but not started (enable=false)")
-		return nil
-	}
-	if err := runtime.Start(); err != nil {
+	if err := w.Start(); err != nil {
 		// Not fatal: a port already claimed by another wasm instance in
 		// the same page is a normal collision, not a broken visor.
-		log.WithError(err).Warn("failed to auto-start the embedded wisp server")
+		log.WithError(err).Warn("failed to start the embedded wisp server")
 	}
 	return nil
 }
