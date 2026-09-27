@@ -288,6 +288,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/terminal') ||
       this.lastUrl.includes('/wallet') ||
       this.lastUrl.includes('/logs') ||
+      this.lastUrl.includes('/settings') ||
       (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')))) {
 
       this.titleParts = ['nodes.title', 'node.title'];
@@ -392,6 +393,11 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           label: 'node.tabs.logs',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'logs'] : null,
         },
+        {
+          icon: 'tune',
+          label: 'node.tabs.settings',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'settings'] : null,
+        },
       ];
 
       // A browser/wasm visor can't back several tabs with anything usable, so
@@ -400,6 +406,8 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       //   bandwidth / uptime / rewards / web-proxy — no host data source (404).
       //   resources — host CPU/mem/disk/net; a tab has none (renders all-zeros).
       //   terminal  — dmsgpty needs a native shell; a tab can't run one.
+      //   settings  — the desk's own settings window edits the tab's conf, and
+      //               knows which variables the desk sets on every load.
       // The wallet tab IS shown on wasm: the browser-tab visor serves /wallet/
       // (client-side wallets, node/backend proxied over dmsg) just like the
       // native HV-served wallet — the daemon-instance controls simply hide there.
@@ -408,7 +416,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       // computed by route below, so a shorter array stays correct.
       if (this.node && (this.node as any).arch === 'wasm') {
         const wasmHiddenTabs = new Set(['bandwidth', 'uptime', 'rewards', 'web-proxy',
-          'vpn', 'resources', 'terminal']);
+          'vpn', 'resources', 'terminal', 'settings']);
         this.tabsData = this.tabsData.filter(t => {
           const seg = t.linkParts ? t.linkParts[t.linkParts.length - 1] : '';
 

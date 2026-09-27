@@ -1,0 +1,103 @@
+<div class="container-elevated-translucid mt-4.5 settings-container">
+  @if (loading) {
+    <div class="text-center py-2">
+      <mat-spinner diameter="24" class="mx-auto"></mat-spinner>
+    </div>
+  }
+
+  @if (!loading && loadError) {
+    <p class="status error">{{ loadError }}</p>
+    <button mat-stroked-button class="secondary" (click)="load()">Retry</button>
+  }
+
+  @if (!loading && state && !loadError) {
+    <p class="status">
+      <span class="mono">{{ state.path }}</span>
+      @if (!state.exists) {
+        — does not exist yet; saving creates it.
+      }
+      @if (!state.writable) {
+        — this visor cannot write it. Review a change to get the
+        <code>sudo skywire autoconfig</code> command that makes it.
+      }
+      <br>
+      The visor reads skywire.json, which <code>skywire autoconfig</code> regenerates from this file.
+      A change applies once autoconfig runs again and the visor restarts.
+    </p>
+
+    @if (!reviewing) {
+      <div class="bar">
+        <input class="filter" type="search" placeholder="Filter" [(ngModel)]="filter">
+        <mat-checkbox [(ngModel)]="setOnly" color="primary">Set in the file only</mat-checkbox>
+        <span class="count">{{ visibleCount }} of {{ rows.length }}</span>
+        <span class="spacer"></span>
+        <button mat-raised-button color="primary" (click)="review()">Review changes</button>
+      </div>
+
+      @for (r of rows; track r.key) {
+        @if (visible(r)) {
+          <div class="row" [class.is-set]="r.set">
+            <div class="about">
+              <div class="name"><span class="mono">{{ r.key }}</span> <span class="flag">--{{ r.flag }}</span></div>
+              <div class="help">{{ r.help }}</div>
+              @if (r.note) {
+                <div class="note">{{ r.note }}</div>
+              }
+            </div>
+            <div class="field">
+              @if (r.format === 'bool') {
+                <select [(ngModel)]="form[r.key]">
+                  <option value="">default{{ r.default ? ' (' + (r.default === 'true' ? 'on' : 'off') + ')' : '' }}</option>
+                  <option value="true">on</option>
+                  <option value="false">off</option>
+                </select>
+              } @else {
+                <input [type]="r.secret ? 'password' : 'text'" [(ngModel)]="form[r.key]"
+                  [placeholder]="placeholder(r)" spellcheck="false" autocomplete="off">
+              }
+            </div>
+          </div>
+        }
+      }
+    }
+
+    @if (reviewing) {
+      <div class="review">
+        @if (saved) {
+          <p class="status ok">Saved to {{ state.path }}.</p>
+          <p class="status">
+            The visor runs with its old settings until skywire.json is regenerated and it restarts:
+          </p>
+          <div class="cmd">
+            <code class="mono">sudo skywire autoconfig</code>
+            <button mat-icon-button (click)="copyCommand('sudo skywire autoconfig')"><mat-icon>content_copy</mat-icon></button>
+          </div>
+        } @else {
+          <table class="data-table">
+            <tr><th>Variable</th><th>Now</th><th>After</th></tr>
+            @for (c of changes; track c.key) {
+              <tr><td class="mono">{{ c.key }}</td><td class="mono">{{ c.from }}</td><td class="mono">{{ c.to }}</td></tr>
+            }
+          </table>
+          @if (command) {
+            <p class="status">Run this on the visor's host; it edits the file, regenerates skywire.json and restarts the visor:</p>
+            <div class="cmd">
+              <code class="mono">{{ command }}</code>
+              <button mat-icon-button (click)="copyCommand(command)"><mat-icon>content_copy</mat-icon></button>
+            </div>
+          }
+        }
+        <div class="bar">
+          @if (!saved) {
+            <button mat-stroked-button class="secondary" (click)="back()">Back</button>
+            @if (state.writable) {
+              <button mat-raised-button color="primary" [disabled]="saving" (click)="save()">Save</button>
+            }
+          } @else {
+            <button mat-stroked-button class="secondary" (click)="done()">Back to settings</button>
+          }
+        </div>
+      </div>
+    }
+  }
+</div>
