@@ -28,8 +28,10 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -218,7 +220,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// loopback the nested browser opens it maximized on top. A visor the
 	// operator stopped stays stopped across reloads (desk-boot's session).
 	serveBytes("/desk-boot.js", "text/javascript", wasmhv.DeskBootJS())
-	deskPage := deskShellHTML(wasmDeskScripts(), deskWasmBootOpts(cfg.DeskHelpTerminal, cfg.DeskDocsPort))
+	deskPage := deskShellHTML(wasmDeskScripts(wasmBrowseOriginScripts(cfg, browseScheme, bport, suffix)), deskWasmBootOpts(cfg.DeskHelpTerminal, cfg.DeskDocsPort))
 	if cfg.Harness {
 		// --harness injects ctl-bridge.js (its presence IS the harness
 		// signal). On the desk it registers the tab and mirrors the foreground visor
@@ -776,9 +778,10 @@ func deskWasmBootOpts(helpTerminal bool, docsPort int) string {
 // rebuilt skywire.wasm now makes it do — and the exec worker the tab's visor
 // runs in dies with the page, so the reload boots the new module. The stamp
 // is the servedVersionToken; the root handler fills it per request.
-func wasmDeskScripts() string {
+func wasmDeskScripts(browseOriginJS string) string {
 	return `<script src="/wasm_exec.js"></script>` + "\n" +
 		`<script src="/browse.js"></script>` + "\n" +
+		browseOriginJS +
 		`<script>window.__SKYWIRE_WASM_VERSION__="` + servedVersionToken + `";</script>` + "\n" +
 		`<script src="/autoupdate.js"></script>` + "\n" +
 		`<script src="/desk-boot.js"></script>`
@@ -916,4 +919,35 @@ func warnStaleExecModule(log *logging.Logger) {
 		WithField("binary_revision", binRev).
 		Warn("The embedded skywire command module was built from a different commit than this binary — " +
 			"the desk is serving older code than the visor. Run `make embed-exec-wasm` and rebuild.")
+}
+
+// wasmBrowseOriginScripts is the real-origin browser's V-side half for the
+// wasm-served desk: the config the transport reads, then realorigin's responder
+// (which owns the trust boundary and publishes globalThis.realOrigin), then
+// skywire's transport (which calls realOrigin.configure). That order is load
+// bearing — configure would throw against an undefined realOrigin.
+//
+// This desk did not load any of it before, which is why the real-origin browser
+// was dormant wherever `hv serve` served the page, theskywirenetwork.net
+// included: browseOriginInjectJS is called only from the NATIVE hypervisor
+// handlers, and wasmDeskScripts listed neither script. B was deployed, DNS and
+// wildcard TLS were issued and the bootstrap answered — but V had no responder
+// for it to shake hands with.
+//
+// scheme/port describe the PUBLIC browse origin, which is not always this
+// listener. Local mode host-routes B on the V listener, so they match. Hosted
+// mode runs B on BrowseOriginAddr behind a proxy that terminates TLS on 443, so
+// the scheme comes from the configured V origin and the port is implicit.
+func wasmBrowseOriginScripts(cfg WasmServeConfig, localScheme, localPort, suffix string) string {
+	scheme, port := localScheme, localPort
+	if cfg.BrowseOriginAddr != "" {
+		scheme, port = "https", ""
+		if u, err := url.Parse(strings.TrimSpace(strings.Split(cfg.VOrigin, ",")[0])); err == nil && u.Scheme != "" {
+			scheme = u.Scheme
+		}
+	}
+	return `<script>window.__SKYWIRE_BROWSE_ORIGIN__={suffix:` + strconv.Quote(suffix) +
+		`,scheme:` + strconv.Quote(scheme) + `,port:` + strconv.Quote(port) + `};</script>` + "\n" +
+		`<script src="/browse-responder.js"></script>` + "\n" +
+		`<script src="/browse-transport.js"></script>` + "\n"
 }

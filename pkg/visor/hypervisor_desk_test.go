@@ -242,7 +242,7 @@ func TestNativeDeskServing(t *testing.T) {
 // the shared skeleton: `hv serve`'s desk must still wire the wasm assets and
 // the harness injection anchor exactly as before.
 func TestDeskShellHTMLWasmMode(t *testing.T) {
-	page := string(deskShellHTML(wasmDeskScripts(), deskWasmBootOpts(false, 0)))
+	page := string(deskShellHTML(wasmDeskScripts(wasmBrowseOriginScripts(WasmServeConfig{}, "http", "8443", ".mesh.localhost")), deskWasmBootOpts(false, 0)))
 	for _, want := range []string{
 		"wasmURL: '/skywire.wasm'",
 		"autostartVisor: true",
@@ -254,6 +254,12 @@ func TestDeskShellHTMLWasmMode(t *testing.T) {
 		// its visor runs has been rebuilt (one sat 22 h on a stale blob).
 		`window.__SKYWIRE_WASM_VERSION__="` + servedVersionToken + `"`,
 		`<script src="/autoupdate.js"></script>`,
+		// The real-origin browser's V-side half. Omitting these is what left
+		// the browser dormant on every `hv serve` desk: B was deployed and
+		// answering, V had no responder to shake hands with.
+		`<script src="/browse-responder.js"></script>`,
+		`<script src="/browse-transport.js"></script>`,
+		`window.__SKYWIRE_BROWSE_ORIGIN__=`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("wasm desk page lacks %s", want)
@@ -453,4 +459,66 @@ func TestUIAutoReloaderIsSubpathSafe(t *testing.T) {
 	if !strings.Contains(uiAutoReloadJS, "'api/ui-version'") || !strings.Contains(uiAutoReloadJS, "r.ok") {
 		t.Fatal("reloader must fetch api/ui-version relative to the page and check r.ok")
 	}
+}
+
+// TestWasmBrowseOriginScripts pins the V-side half of the real-origin browser:
+// the order the three pieces load in, and the PUBLIC browse origin each serving
+// mode advertises.
+//
+// Order is load bearing. browse-transport.js calls realOrigin.configure, which
+// browse-responder.js defines, and reads __SKYWIRE_BROWSE_ORIGIN__, which the
+// inline config sets. Any other order throws on a page nobody is watching.
+func TestWasmBrowseOriginScripts(t *testing.T) {
+	t.Run("local mode shares the V listener", func(t *testing.T) {
+		got := wasmBrowseOriginScripts(WasmServeConfig{}, "http", "8443", ".mesh.localhost")
+		for _, want := range []string{
+			`suffix:".mesh.localhost"`,
+			`scheme:"http"`,
+			// B is host-routed on this very listener, so it carries the port.
+			`port:"8443"`,
+		} {
+			if !strings.Contains(got, want) {
+				t.Errorf("local browse-origin config lacks %s\ngot: %s", want, got)
+			}
+		}
+	})
+
+	t.Run("hosted mode takes the public scheme and drops the port", func(t *testing.T) {
+		got := wasmBrowseOriginScripts(WasmServeConfig{
+			BrowseOriginAddr: "127.0.0.1:7998",
+			VOrigin:          "https://theskywirenetwork.net",
+		}, "http", "7999", ".haltingstate.net")
+		// The listener is plain http behind Caddy; the ORIGIN the browser sees
+		// is https on 443. Advertising the listener's scheme and port here
+		// builds a browse URL that resolves to nothing.
+		if !strings.Contains(got, `scheme:"https"`) || !strings.Contains(got, `port:""`) {
+			t.Errorf("hosted browse-origin config should be https with no port\ngot: %s", got)
+		}
+		if !strings.Contains(got, `suffix:".haltingstate.net"`) {
+			t.Errorf("hosted browse-origin config lacks the configured suffix\ngot: %s", got)
+		}
+	})
+
+	t.Run("a multi-V deployment takes the scheme of the first origin", func(t *testing.T) {
+		got := wasmBrowseOriginScripts(WasmServeConfig{
+			BrowseOriginAddr: "127.0.0.1:7998",
+			VOrigin:          "https://theskywirenetwork.net,https://linuxontab.magnetosphere.net",
+		}, "http", "7999", ".haltingstate.net")
+		if !strings.Contains(got, `scheme:"https"`) {
+			t.Errorf("comma-separated V origins should still yield a scheme\ngot: %s", got)
+		}
+	})
+
+	t.Run("configure cannot run before realOrigin exists", func(t *testing.T) {
+		got := wasmBrowseOriginScripts(WasmServeConfig{}, "https", "8443", ".mesh.localhost")
+		cfgAt := strings.Index(got, "__SKYWIRE_BROWSE_ORIGIN__")
+		respAt := strings.Index(got, "browse-responder.js")
+		transAt := strings.Index(got, "browse-transport.js")
+		if cfgAt < 0 || respAt < 0 || transAt < 0 {
+			t.Fatalf("a piece is missing: %s", got)
+		}
+		if !(cfgAt < respAt && respAt < transAt) {
+			t.Errorf("want config < responder < transport, got %d %d %d", cfgAt, respAt, transAt)
+		}
+	})
 }

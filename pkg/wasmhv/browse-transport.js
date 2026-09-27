@@ -5,18 +5,22 @@
 // target resolution, handing the frame a port bound to one target — and calls in
 // here to actually fetch.
 //
-// A browse frame supplies a path. The target comes from the descriptor browse.js
-// registered, so a frame can never ask for another site's content, and nothing
-// here ever sees the identity key: it calls V's own first-party skywireVisor,
-// which holds it.
+// A browse frame supplies a path. The target comes from the descriptor the
+// browser registered, so a frame can never ask for another site's content, and
+// nothing here ever sees the identity key.
+//
+// It calls globalThis.__netscrapeFetch — the ONE mesh/clearnet transport the
+// desk installs (desk-boot.js), the same one netscrape's transcoder uses. It
+// used to call globalThis.skywireVisor.fetchDmsg instead, which is the function
+// table of the legacy in-page visor (cmd/wasm-visor). The SERVED desk publishes
+// no skywireVisor at all — its visor is a separate instance in the exec worker,
+// reached only over the virtual loopback — so every fetch through here answered
+// "visor not ready" and the real-origin browser could not work on `hv serve`.
+// Sharing one transport is also what keeps the two render paths from drifting.
 (function () {
   'use strict';
   if (globalThis.__skywireBrowseTransportInstalled) { return; }
   globalThis.__skywireBrowseTransportInstalled = true;
-
-  function pathOf(u, fb) {
-    try { var x = new URL(u); return x.pathname + x.search; } catch (e) { return fb || '/'; }
-  }
 
   function isBrowseOrigin(origin) {
     try {
@@ -25,35 +29,57 @@
     } catch (e) { return false; }
   }
 
-  // fetchFor is the transport realorigin calls. descriptor is what browse.js
-  // registered: {net:'dmsg'|'skynet', host} or {net:'skysocks', base}.
-  function fetchFor(descriptor, req) {
-    var v = globalThis.skywireVisor;
-    if (!v || !v.fetchDmsg) { return Promise.reject(new Error('visor not ready')); }
-    var method = req.method || 'GET';
-    var headers = req.headers || {};
-    var bodyU8 = req.body ? new Uint8Array(req.body) : null;
+  // headersOf flattens a Response's headers into the plain object realorigin
+  // hands back to the browse frame's service worker.
+  function headersOf(res) {
+    var out = {};
+    try { res.headers.forEach(function (v, k) { out[k] = v; }); } catch (e) { /* no iterator */ }
+    return out;
+  }
+
+  // urlFor maps a request arriving from browse origin B onto the address the
+  // transport understands. B's hostname is a content-addressed hash and means
+  // nothing to the mesh, so the DESCRIPTOR supplies the real target and B
+  // supplies only the path — the property that stops one frame asking for
+  // another site's content.
+  function urlFor(descriptor, req) {
+    var path = '/';
+    try { var x = new URL(req.url); path = x.pathname + x.search; } catch (e) { path = req.path || '/'; }
     if (descriptor.net === 'skysocks') {
-      // Map a request aimed at origin B back to its real clearnet URL. An
-      // absolute cross-origin request is already a real URL and passes through.
-      var realUrl = req.url;
+      // An absolute cross-origin request is already a real URL and passes
+      // through; one aimed at B is rebased onto the site it stands for.
       try {
         var u = new URL(req.url);
-        if (isBrowseOrigin(u.origin)) { realUrl = descriptor.base + u.pathname + u.search; }
-      } catch (e) {}
-      return v.fetchClearnet('', method, realUrl, bodyU8, 'browse', headers);
+        if (!isBrowseOrigin(u.origin)) { return req.url; }
+      } catch (e) { /* relative — rebase it */ }
+      return descriptor.base + path;
     }
-    return v.fetchDmsg(descriptor.host, method, pathOf(req.url, req.path), bodyU8, headers);
+    // dmsg / skynet: the descriptor host already carries its network suffix
+    // (normResolverHost appends it), which is how __netscrapeFetch routes.
+    return 'http://' + descriptor.host + path;
+  }
+
+  function fetchFor(descriptor, req) {
+    var t = globalThis.__netscrapeFetch;
+    if (typeof t !== 'function') { return Promise.reject(new Error('no mesh transport on this page')); }
+    return Promise.resolve(t(urlFor(descriptor, req), {
+      method: req.method || 'GET',
+      headers: req.headers || {},
+      // bottle's httpExchange wants a Uint8Array (it sets Content-Length from
+      // .length); realorigin hands over an ArrayBuffer.
+      body: req.body ? new Uint8Array(req.body) : null,
+    })).then(function (res) {
+      return res.arrayBuffer().then(function (buf) {
+        return { status: res.status, headers: headersOf(res), body: new Uint8Array(buf) };
+      });
+    });
   }
 
   // The visor's skysocks-lite path calls __skywireProxyLog(winId, line) for every
   // route-setup and exit-selection step — the same trace `skywire cli proxy start
   // --verbose` prints. Wrap it so those lines reach both places that want them:
-  // browse.js's per-window panes, and the interstitial of whichever browse frame
-  // is still waiting on its first response.
-  //
-  // Order-independent with browse.js, whichever loads first: this replicates the
-  // pane routing, and browse.js only installs its own sink if none exists.
+  // the browser's per-window panes, and the interstitial of whichever browse
+  // frame is still waiting on its first response.
   if (!(globalThis.__skywireProxyLog && globalThis.__skywireProxyLog.__browseWrapped)) {
     var sink = function (winId, line) {
       try {

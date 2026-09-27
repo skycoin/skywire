@@ -188,6 +188,29 @@ func labelFor(url string) string {
 // itself serves.
 var DirectLoader func(url string) (src string, ok bool)
 
+// OriginLoader lets a host claim a URL for rendering on a REAL, ISOLATED
+// ORIGIN the host mints per site: a page with genuine cookies, storage, a
+// service worker, a secure context and native subresource loading, instead of
+// one transcoded into a sandboxed srcdoc. Everything DirectLoader does not
+// claim is offered here before the transcoder gets it.
+//
+// It is ASYNCHRONOUS where DirectLoader is not, because minting the origin is
+// a round trip inside the host — skywire hashes the target to a
+// content-addressed label so one wildcard certificate covers every site — so
+// it returns a Promise of the src rather than the src. A rejection is not
+// fatal: the URL falls back to the transcoder, which is what the reader had
+// before any of this.
+//
+// The claimed frame is CROSS-ORIGIN, and that is the point — it cannot reach
+// this page's storage or the host's identity key. Two consequences are
+// deliberate rather than missing: this browser cannot read the frame's title,
+// so a claimed tab is named after its URL, and it cannot read the frame's
+// location, so a link the reader clicks INSIDE the page does not reach the
+// tab's history the way watchDirectNav records one for a same-origin page.
+// Recovering those needs the origin to report its own navigations; it is not
+// something the embedder can read out of a cross-origin frame.
+var OriginLoader func(url string) (promise js.Value, ok bool)
+
 // DirectAddress is the inverse of DirectLoader, for DISPLAY. A frame the host
 // claimed navigates itself to more of the host's served URLs, and those are
 // the rewritten form — skywire's "<origin>/vnet/<port>/path" — which is an
@@ -255,6 +278,12 @@ func load(t *tab, url string) {
 				if t.isFront() {
 					t.br.addr.Set("value", url)
 				}
+				return
+			}
+		}
+		if OriginLoader != nil {
+			if p, ok := OriginLoader(url); ok && p.Truthy() && p.Get("then").Type() == js.TypeFunction {
+				loadOrigin(t, url, p)
 				return
 			}
 		}
@@ -1231,4 +1260,59 @@ func (b *browser) proxyPanel() (button, panel js.Value) {
 	loadProxy()
 	sync()
 	return button, panel
+}
+
+// loadOrigin renders a URL the host claimed for a real isolated origin. The
+// host's promise resolves to the src to put on the frame; this awaits it, drops
+// the transcoder's sandbox and hands the whole load to the browser.
+//
+// A rejection — or a resolve with nothing — falls back to the transcoder rather
+// than erroring the tab. A site the host could not mint an origin for is still
+// a site the reader asked to see, and the sandboxed render is exactly what they
+// would have got before the real-origin path existed. The one thing that must
+// not happen is a blank tab.
+//
+// The address bar keeps the address the reader typed, never the minted one:
+// the origin is a content-addressed hash, an implementation detail of how the
+// host serves the page, and nobody can type it or would recognize it.
+func loadOrigin(t *tab, url string, p js.Value) {
+	setLoading(t, true)
+	var onOK, onErr js.Func
+	release := func() {
+		onOK.Release()
+		onErr.Release()
+	}
+	onOK = js.FuncOf(func(_ js.Value, a []js.Value) any {
+		defer release()
+		src := ""
+		if len(a) > 0 && a[0].Type() == js.TypeString {
+			src = a[0].String()
+		}
+		if src == "" {
+			fetchPage(t, url)
+			return nil
+		}
+		t.frame.Call("removeAttribute", "srcdoc")
+		// Unsandboxed, like the DirectLoader path: the isolation here comes
+		// from the frame being a different ORIGIN, which is stronger than the
+		// sandbox and, unlike it, leaves the platform intact.
+		t.frame.Call("removeAttribute", "sandbox")
+		t.directSrc = src
+		t.frame.Set("src", src)
+		// Named from the URL: the frame's own <title> is unreadable across the
+		// origin boundary. watchDirectNav is deliberately NOT wired for the
+		// same reason — it reads contentWindow.location, which throws here.
+		setTitle(t, "", url)
+		setLoading(t, false)
+		if t.isFront() {
+			t.br.addr.Set("value", url)
+		}
+		return nil
+	})
+	onErr = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		defer release()
+		fetchPage(t, url)
+		return nil
+	})
+	p.Call("then", onOK).Call("catch", onErr)
 }
