@@ -189,6 +189,15 @@ fun VpnScreen(
                 )
             }
             item {
+                HotspotCard(
+                    on = state.hotspot,
+                    hotspot = state.hotspotState,
+                    serviceUp = state.tunnel.serviceUp,
+                    carrying = state.carrying,
+                    onChange = viewModel::setHotspot,
+                )
+            }
+            item {
                 TransportPreferenceCard(
                     primary = state.transportPrimary,
                     enabled = !state.busy,

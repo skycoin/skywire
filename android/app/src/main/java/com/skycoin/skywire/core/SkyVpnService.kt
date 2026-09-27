@@ -17,6 +17,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -54,6 +55,9 @@ import java.util.Collections
  *    before it stops carrying traffic, and the interface goes away so the
  *    phone gets its normal networking back.
  *
+ * It also runs the VPN hotspot ([HotspotShare]), which shares the tunnel with
+ * devices on the phone's hotspot and so cannot outlive it either.
+ *
  * Not a foreground service, deliberately: it shares a process with
  * [SkywireCoreService], which is one and runs whenever the VPN could — the
  * VPN cannot outlive the visor that carries it (see the core watcher below).
@@ -68,7 +72,12 @@ class SkyVpnService : VpnService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
-    private val appRouting by lazy { VpnAppRoutingStore(AppPreferences(this)) }
+    private val prefs by lazy { AppPreferences(this) }
+    private val appRouting by lazy { VpnAppRoutingStore(prefs) }
+
+    /** The VPN hotspot: shares this tunnel with devices on the phone's hotspot. */
+    private val hotspot by lazy { HotspotShare(this, scope) }
+    @Volatile private var hotspotSwitch: Job? = null
 
     /** One interface change at a time, whichever connection asks. */
     private val mutex = Mutex()
@@ -105,6 +114,7 @@ class SkyVpnService : VpnService() {
                 killswitch = intent?.getBooleanExtra(EXTRA_KILLSWITCH, killswitch) ?: killswitch
                 listen()
                 watchCore()
+                shareHotspot()
             }
         }
         // The interface dies with this process, so there is nothing for a
@@ -123,6 +133,20 @@ class SkyVpnService : VpnService() {
         shutdown()
         scope.cancel()
         super.onDestroy()
+    }
+
+    // --- the VPN hotspot ---
+
+    /**
+     * The hotspot follows its switch for as long as this service runs; the
+     * switch is stored, so a change made with the VPN down applies here.
+     */
+    private fun shareHotspot() {
+        hotspot.start()
+        if (hotspotSwitch?.isActive == true) return
+        hotspotSwitch = scope.launch {
+            prefs.boolean(VpnHotspot.PREF_KEY).distinctUntilChanged().collect(hotspot::setEnabled)
+        }
     }
 
     // --- the control socket ---
@@ -396,6 +420,9 @@ class SkyVpnService : VpnService() {
     }
 
     private fun shutdown() {
+        hotspotSwitch?.cancel()
+        hotspotSwitch = null
+        hotspot.stop()
         acceptor?.cancel()
         acceptor = null
         coreWatcher?.cancel()

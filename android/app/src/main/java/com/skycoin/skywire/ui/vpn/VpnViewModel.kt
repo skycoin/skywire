@@ -15,6 +15,8 @@ import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.InstalledApp
 import com.skycoin.skywire.core.InstalledApps
 import com.skycoin.skywire.core.VpnAppMode
+import com.skycoin.skywire.core.VpnHotspot
+import com.skycoin.skywire.core.VpnHotspotState
 import com.skycoin.skywire.core.VpnAppRouting
 import com.skycoin.skywire.core.VpnAppRoutingStore
 import com.skycoin.skywire.core.ServerListCache
@@ -71,6 +73,10 @@ data class VpnUiState(
     val appRouting: VpnAppRouting = VpnAppRouting(),
     /** The apps that can be chosen for it; null until first asked for. */
     val installedApps: List<InstalledApp>? = null,
+    /** The VPN hotspot switch — see [VpnHotspot]. A phone preference. */
+    val hotspot: Boolean = false,
+    /** What the hotspot is doing while SkyVpnService runs. */
+    val hotspotState: VpnHotspotState = VpnHotspotState(),
     /**
      * Whether this visor builds transports to public visors. Route lengths
      * above one hop have nothing to route through without it — see
@@ -223,6 +229,12 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
             VpnTunnel.state.collect { tunnel -> mutable.update { it.copy(tunnel = tunnel) } }
         }
         viewModelScope.launch {
+            prefs.boolean(VpnHotspot.PREF_KEY).collect { on -> mutable.update { it.copy(hotspot = on) } }
+        }
+        viewModelScope.launch {
+            VpnHotspot.state.collect { hotspot -> mutable.update { it.copy(hotspotState = hotspot) } }
+        }
+        viewModelScope.launch {
             CoreServiceState.state.collectLatest { core ->
                 mutable.update {
                     it.copy(coreState = core, apiUp = false, app = null, connection = null)
@@ -359,6 +371,16 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
         appRouting.setApps(mode, apps)
         val routing = appRouting.read()
         if (routing.mode == mode) redialFor(routing)
+    }
+
+    /**
+     * Turn the VPN hotspot on or off. Stored on the phone; SkyVpnService
+     * follows the stored value while it runs, so there is nothing to re-dial
+     * and a running tunnel is not touched.
+     */
+    fun setHotspot(on: Boolean) {
+        mutable.update { it.copy(hotspot = on) }
+        viewModelScope.launch { prefs.putBoolean(VpnHotspot.PREF_KEY, on) }
     }
 
     /** Load the apps that can be chosen, once per screen. */
