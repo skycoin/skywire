@@ -828,6 +828,15 @@
 						console.info('skywire desk: hypervisor ' + opts.attach.pk.slice(0, 8) +
 							'… not answering — starting the visor in roaming mode');
 					}
+					if (!attachOrigin) {
+						// Not attached: clear what an attached boot wrote. autoconfig
+						// records every flag it is given in /etc/skywire.conf, and
+						// config gen reads WSPEERS and DISABLEPUBLICAUTOCONN back from
+						// there — so without this, one attached load pinned every later
+						// roaming load to a WebSocket peer nobody answers, with public
+						// autoconnect off.
+						autoconfigCmd += ' --disable-public-autoconn=false --ws-peer=';
+					}
 					// ?loglvl=debug on the page URL boots the visor at that log level: the
 					// config is regenerated on every load, so this is the one place a
 					// level for the tab's visor can be set. Letters only, so the URL
