@@ -499,6 +499,15 @@ func TestWasmBrowseOriginScripts(t *testing.T) {
 		}
 	})
 
+	t.Run("a local desk on a deployed browse domain drops the port", func(t *testing.T) {
+		// hv serve --browse-suffix .haltingstate.net with no --browse-origin: the
+		// desk is local, its browse origins are the deployment's, on 443.
+		got := wasmBrowseOriginScripts(WasmServeConfig{}, "https", "8443", ".haltingstate.net")
+		if !strings.Contains(got, `scheme:"https"`) || !strings.Contains(got, `port:""`) {
+			t.Errorf("a non-.localhost suffix should be https with no port\ngot: %s", got)
+		}
+	})
+
 	t.Run("a multi-V deployment takes the scheme of the first origin", func(t *testing.T) {
 		got := wasmBrowseOriginScripts(WasmServeConfig{
 			BrowseOriginAddr: "127.0.0.1:7998",
