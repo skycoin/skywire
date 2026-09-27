@@ -25,7 +25,7 @@ import (
 func TestSkymailDefaults(t *testing.T) {
 	conf := &visorconfig.V1{LocalPath: "/opt/skywire/local"}
 	require.True(t, skymailEnabled(conf), "no section: on, with the default limits")
-	require.Equal(t, "/opt/skywire/mail", skymailDir(conf), "beside local/, which the wasm visor never persists")
+	require.Equal(t, filepath.FromSlash("/opt/skywire/mail"), skymailDir(conf), "beside local/, which the wasm visor never persists")
 
 	conf.Skymail = &visorconfig.SkymailConfig{Enable: true, Dir: "/srv/mail"}
 	require.True(t, skymailEnabled(conf))

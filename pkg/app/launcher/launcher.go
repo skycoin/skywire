@@ -787,12 +787,17 @@ func (l *AppLauncher) killHangingProc(appName string, pid int) {
 }
 
 func (l *AppLauncher) killApp(appName string) error {
-	log := l.log.WithField("func", "killHangingProcesses")
+	log := l.log.WithField("func", "killApp")
 
 	pidF, err := l.pidFile()
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err := pidF.Close(); err != nil {
+			log.WithError(err).Error("Failed to close file")
+		}
+	}()
 	filename := pidF.Name()
 	log = log.WithField("pid_file", filename)
 
