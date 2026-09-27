@@ -14,14 +14,6 @@ import (
 var useNEONApproxActivation = runtime.GOARCH == "arm64"
 var useNEONCgemvQuantize = runtime.GOARCH == "arm64"
 
-// SigmoidApprox mirrors libopus' DNN ACTIVATION_SIGMOID path.
-func SigmoidApprox(x float32) float32 {
-	if useNEONApproxActivation {
-		return sigmoidApproxNEON(x)
-	}
-	return SigmoidScalarApprox(x)
-}
-
 // TanhApprox mirrors libopus' DNN ACTIVATION_TANH path.
 func TanhApprox(x float32) float32 {
 	if useNEONApproxActivation {

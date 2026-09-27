@@ -628,10 +628,7 @@ func (e *Encoder) detectPitch(pcm []float32, numSubframes int, searchThres1, sea
 		}
 		for k := range numSubframes {
 			cbOffset := lagCBStage3[k][CBimax]
-			pitchLag := max(lagNew+int(cbOffset), minLag)
-			if pitchLag > maxPitchLag {
-				pitchLag = maxPitchLag
-			}
+			pitchLag := min(max(lagNew+int(cbOffset), minLag), maxPitchLag)
 			pitchLags[k] = int32(pitchLag)
 		}
 		lag = lagNew
@@ -644,10 +641,7 @@ func (e *Encoder) detectPitch(pcm []float32, numSubframes int, searchThres1, sea
 			} else if lagCBPtr10ms != nil && k < 2 && CBimax < cbkSize {
 				cbOffset = lagCBPtr10ms[k][CBimax]
 			}
-			pitchLag := max(lag+int(cbOffset), minLag8kHz)
-			if pitchLag > maxPitchLag8kHz {
-				pitchLag = maxPitchLag8kHz
-			}
+			pitchLag := min(max(lag+int(cbOffset), minLag8kHz), maxPitchLag8kHz)
 			pitchLags[k] = int32(pitchLag)
 		}
 	}
@@ -829,7 +823,7 @@ func pitchAnalysisCalcCorrSt3(out []float32, frame []float32, startLag, sfLength
 			continue
 		}
 		lagCount := min(lagHigh-lagLow+1, len(scratchMem))
-		for i := 0; i < lagCount; i++ {
+		for i := range lagCount {
 			scratchMem[i] = 0
 		}
 		for j := lagLow; j <= lagHigh && (j-lagLow) < lagCount; j++ {
@@ -1025,10 +1019,7 @@ func findBestPitchContour(pitchLags []int32, numSubframes int, minLag, maxLag in
 		for sf := 0; sf < numSubframes && sf < len(pitchLags); sf++ {
 			sumLag += int(pitchLags[sf]) - int(contours[sf][cIdx])
 		}
-		baseLag := max(sumLag/numSubframes, minLag)
-		if baseLag > maxLag {
-			baseLag = maxLag
-		}
+		baseLag := min(max(sumLag/numSubframes, minLag), maxLag)
 
 		var dist int
 		for sf := 0; sf < numSubframes && sf < len(pitchLags); sf++ {

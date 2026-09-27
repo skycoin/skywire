@@ -34,7 +34,7 @@ func int16ToFloat32Slice(out []float32, in []int16) {
 	}
 	_ = in[n-1]  // BCE hint
 	_ = out[n-1] // BCE hint
-	for i := 0; i < n; i++ {
+	for i := range n {
 		out[i] = float32(in[i])
 	}
 }
@@ -47,7 +47,7 @@ func resamplerDown2(state *[2]int32, out []int16, in []int16) int {
 	}
 	_ = in[2*outLen-1] // BCE hint: prove all in[2*k] and in[2*k+1] accesses are valid
 	_ = out[outLen-1]  // BCE hint
-	for k := 0; k < outLen; k++ {
+	for k := range outLen {
 		in32 := int32(in[2*k]) << 10
 		y := in32 - state[0]
 		x := silkSMLAWB(y, y, resamplerDown2_1)
@@ -68,7 +68,7 @@ func resamplerDown2(state *[2]int32, out []int16, in []int16) int {
 
 func resamplerPrivateAR2(state *[2]int32, out []int32, in []int16, a0, a1 int16) {
 	n := min(len(out), len(in))
-	for k := 0; k < n; k++ {
+	for k := range n {
 		out32 := silkADD_LSHIFT32(state[0], int32(in[k]), 8)
 		out[k] = out32
 		out32 = out32 << 2

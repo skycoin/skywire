@@ -1,6 +1,7 @@
 package silk
 
 import (
+	"github.com/thesyncim/gopus/internal/arena"
 	"github.com/thesyncim/gopus/internal/plc"
 	"github.com/thesyncim/gopus/internal/rangecoding"
 )
@@ -77,6 +78,15 @@ type Decoder struct {
 	// - maxLtpMemLength = 320 (20ms * 16kHz)
 	// - maxFrameLength = 320 (4 subframes * 80 samples)
 	// - maxFramesPerPacket = 3
+	//
+	// The fixed-size scratch slices below are carved from three per-type arenas
+	// (one allocation each instead of ~27 separate buffers) in NewDecoder; see
+	// the scratch carve there. They are pure per-frame scratch (overwritten before
+	// read), so sharing a backing per type is bit-exact.
+	scratchI16 arena.Bump[int16]
+	scratchI32 arena.Bump[int32]
+	scratchF32 arena.Bump[float32]
+
 	scratchSLPC     []int32   // Size: maxSubFrameLength + maxLPCOrder = 96
 	scratchSLTP     []int16   // Size: maxLtpMemLength = 320
 	scratchSLTPQ15  []int32   // Size: maxLtpMemLength + maxFrameLength = 640
@@ -244,39 +254,48 @@ func NewDecoder() *Decoder {
 		prevLSFQ15:    make([]int16, 16),    // Max for WB (d_LPC = 16)
 		outputHistory: make([]float32, 322), // Max pitch lag (288) + LTP taps (5) + margin
 
-		// Pre-allocated scratch buffers for hot-path performance
-		scratchSLPC:     make([]int32, maxSLPCSize),
-		scratchSLTP:     make([]int16, maxSLTPSize),
-		scratchSLTPQ15:  make([]int32, maxSLTPQ15Size),
-		scratchPresQ14:  make([]int32, maxPresQ14Size),
-		scratchOutInt16: make([]int16, maxOutInt16Size),
-		scratchFECOut:   make([]int16, maxOutInt16Size),
-		scratchPulses:   make([]int16, maxPulsesSize),
-		scratchOutput:   make([]float32, maxOutputSize),
-
-		// Additional scratch buffers for zero-allocation decoding
-		scratchEcIx:            make([]int16, maxLPCOrder),
-		scratchPredQ8:          make([]uint8, maxLPCOrder),
-		scratchSumPulses:       make([]int32, maxIterSize),
-		scratchNLshifts:        make([]int32, maxIterSize),
-		resamplerScratchIn:     make([]int16, maxResamplerIn),
-		resamplerScratchOut:    make([]int16, maxResamplerOut),
-		resamplerScratchResult: make([]float32, maxResamplerOut),
-		resamplerScratchBuf:    make([]int16, maxResamplerBuf),
-		upsampleScratch:        make([]float32, maxUpsampleSize),
-		monoResamplerIn:        make([]int16, maxOutInt16Size),
-		monoOutput:             make([]int16, maxOutInt16Size),
-		buildMonoInputScratch:  make([]float32, maxOutInt16Size),
-		stereoLeftNative:       make([]int16, maxOutInt16Size),
-		stereoRightNative:      make([]int16, maxOutInt16Size),
-		stereoMidFrame:         make([]int16, maxFrameLength+2),
-		stereoSideFrame:        make([]int16, maxFrameLength+2),
-		plcMidNative:           make([]float32, maxOutInt16Size),
-		plcSideNative:          make([]float32, maxOutInt16Size),
-		plcLeftUp:              make([]float32, maxOutInt16Size),
-		plcRightUp:             make([]float32, maxOutInt16Size),
-		plcState:               plc.NewState(),
+		// scratchPredQ8 is the only fixed scratch kept standalone (uint8); the rest
+		// are carved from the per-type arenas below.
+		scratchPredQ8: make([]uint8, maxLPCOrder),
+		plcState:      plc.NewState(),
 	}
+	// Carve the fixed-size scratch into one arena per element type (a single
+	// allocation each, in one contiguous cache region, instead of ~27 separate
+	// buffers). All of these are pure per-frame scratch — overwritten before read —
+	// so backing them from a shared per-type arena is bit-exact.
+	d.scratchI16.Ensure(maxSLTPSize + maxPulsesSize + maxLPCOrder + maxResamplerIn +
+		maxResamplerOut + maxResamplerBuf + 6*maxOutInt16Size + 2*(maxFrameLength+2))
+	d.scratchSLTP = d.scratchI16.AllocN(maxSLTPSize)
+	d.scratchOutInt16 = d.scratchI16.AllocN(maxOutInt16Size)
+	d.scratchFECOut = d.scratchI16.AllocN(maxOutInt16Size)
+	d.scratchPulses = d.scratchI16.AllocN(maxPulsesSize)
+	d.scratchEcIx = d.scratchI16.AllocN(maxLPCOrder)
+	d.resamplerScratchIn = d.scratchI16.AllocN(maxResamplerIn)
+	d.resamplerScratchOut = d.scratchI16.AllocN(maxResamplerOut)
+	d.resamplerScratchBuf = d.scratchI16.AllocN(maxResamplerBuf)
+	d.monoResamplerIn = d.scratchI16.AllocN(maxOutInt16Size)
+	d.monoOutput = d.scratchI16.AllocN(maxOutInt16Size)
+	d.stereoLeftNative = d.scratchI16.AllocN(maxOutInt16Size)
+	d.stereoRightNative = d.scratchI16.AllocN(maxOutInt16Size)
+	d.stereoMidFrame = d.scratchI16.AllocN(maxFrameLength + 2)
+	d.stereoSideFrame = d.scratchI16.AllocN(maxFrameLength + 2)
+
+	d.scratchI32.Ensure(maxSLPCSize + maxSLTPQ15Size + maxPresQ14Size + 2*maxIterSize)
+	d.scratchSLPC = d.scratchI32.AllocN(maxSLPCSize)
+	d.scratchSLTPQ15 = d.scratchI32.AllocN(maxSLTPQ15Size)
+	d.scratchPresQ14 = d.scratchI32.AllocN(maxPresQ14Size)
+	d.scratchSumPulses = d.scratchI32.AllocN(maxIterSize)
+	d.scratchNLshifts = d.scratchI32.AllocN(maxIterSize)
+
+	d.scratchF32.Ensure(maxOutputSize + maxResamplerOut + maxUpsampleSize + 5*maxOutInt16Size)
+	d.scratchOutput = d.scratchF32.AllocN(maxOutputSize)
+	d.resamplerScratchResult = d.scratchF32.AllocN(maxResamplerOut)
+	d.upsampleScratch = d.scratchF32.AllocN(maxUpsampleSize)
+	d.buildMonoInputScratch = d.scratchF32.AllocN(maxOutInt16Size)
+	d.plcMidNative = d.scratchF32.AllocN(maxOutInt16Size)
+	d.plcSideNative = d.scratchF32.AllocN(maxOutInt16Size)
+	d.plcLeftUp = d.scratchF32.AllocN(maxOutInt16Size)
+	d.plcRightUp = d.scratchF32.AllocN(maxOutInt16Size)
 	if nativeLowbandCaptureEnabled {
 		d.stereoMidNative = make([]int16, maxOutInt16Size)
 	}

@@ -742,7 +742,7 @@ func (c *compiler) expr(expr ast.Expr) {
 		}
 		if e.Pre {
 			c.dupeIndexLValue(e.Expr)
-			c.expr(&ast.NumExpr{1})
+			c.expr(&ast.NumExpr{Value: 1})
 			c.add(op)
 			c.add(Dupe)
 			c.assignRoteIndex(e.Expr)
@@ -750,7 +750,7 @@ func (c *compiler) expr(expr ast.Expr) {
 			c.dupeIndexLValue(e.Expr)
 			c.add(UnaryPlus) // coerce result to number
 			c.add(Dupe)
-			c.expr(&ast.NumExpr{1})
+			c.expr(&ast.NumExpr{Value: 1})
 			c.add(op)
 			c.assignRoteIndex(e.Expr)
 		}
@@ -802,7 +802,12 @@ func (c *compiler) expr(expr ast.Expr) {
 			scope, index := c.arrayInfo(varExpr.Name)
 			if len(e.Args) > 2 {
 				c.expr(e.Args[2])
-				c.add(CallSplitSep, Opcode(scope), opcodeInt(index))
+				strExpr, isStr := e.Args[2].(*ast.StrExpr)
+				sepIsRegex := 0
+				if isStr && strExpr.Regex {
+					sepIsRegex = 1
+				}
+				c.add(CallSplitSep, Opcode(scope), opcodeInt(index), Opcode(sepIsRegex))
 			} else {
 				c.add(CallSplit, Opcode(scope), opcodeInt(index))
 			}
@@ -812,7 +817,7 @@ func (c *compiler) expr(expr ast.Expr) {
 			if e.Func == lexer.F_GSUB {
 				op = BuiltinGsub
 			}
-			var target ast.Expr = &ast.FieldExpr{&ast.NumExpr{0}} // default value and target is $0
+			var target ast.Expr = &ast.FieldExpr{Index: &ast.NumExpr{}} // default value and target is $0
 			if len(e.Args) == 3 {
 				target = e.Args[2]
 			}
@@ -823,7 +828,13 @@ func (c *compiler) expr(expr ast.Expr) {
 				c.expr(e.Args[1])
 				c.add(Rote)
 				c.add(CallBuiltin, Opcode(op))
-				c.assignRoteIndex(target)
+				c.add(Rote)
+				if index, ok := target.(*ast.IndexExpr); ok {
+					c.assignIndexExpr(index)
+				} else {
+					// Avoid rebuilding $0 when no substitutions were made
+					c.add(AssignFieldSub)
+				}
 			case *ast.VarExpr:
 				c.expr(e.Args[0])
 				c.expr(e.Args[1])

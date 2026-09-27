@@ -693,40 +693,7 @@ func haar1PairNorm(x []celtNorm, idx0, idx1 int, invSqrt2 float32) {
 }
 
 func expRotation1(x []celtNorm, length, stride int, c, s opusVal16) {
-	if length <= 0 {
-		return
-	}
-	x = x[:length:length]
-	_ = x[length-1]
-	c32 := float32(c)
-	s32 := float32(s)
-	ms32 := -s32
-
-	end := length - stride
-	i := 0
-	for ; i+1 < end; i += 2 {
-		x1 := float32(x[i])
-		x2 := float32(x[i+stride])
-		x[i+stride] = celtNorm(expRotationMac32(c32, x2, s32, x1))
-		x[i] = celtNorm(expRotationMac32(c32, x1, ms32, x2))
-
-		x3 := float32(x[i+1])
-		x4 := float32(x[i+1+stride])
-		x[i+1+stride] = celtNorm(expRotationMac32(c32, x4, s32, x3))
-		x[i+1] = celtNorm(expRotationMac32(c32, x3, ms32, x4))
-	}
-	for ; i < end; i++ {
-		x1 := float32(x[i])
-		x2 := float32(x[i+stride])
-		x[i+stride] = celtNorm(expRotationMac32(c32, x2, s32, x1))
-		x[i] = celtNorm(expRotationMac32(c32, x1, ms32, x2))
-	}
-	for i := length - 2*stride - 1; i >= 0; i-- {
-		x1 := float32(x[i])
-		x2 := float32(x[i+stride])
-		x[i+stride] = celtNorm(expRotationMac32(c32, x2, s32, x1))
-		x[i] = celtNorm(expRotationMac32(c32, x1, ms32, x2))
-	}
+	expRotation1Norm(x, length, stride, c, s)
 }
 
 func expRotation1Norm(x []celtNorm, length, stride int, c, s opusVal16) {
@@ -734,35 +701,44 @@ func expRotation1Norm(x []celtNorm, length, stride int, c, s opusVal16) {
 		return
 	}
 	x = x[:length:length]
-	_ = x[length-1]
+	if stride <= 0 || stride >= length {
+		return
+	}
+	// With stride >= 4 four consecutive indices belong to four independent
+	// rotation chains, so the fused arm64 build runs both passes 4-wide
+	// (bit-identical per element); the scalar loops stay the purego oracle
+	// and the stride<4 path.
+	if expRotationUsesNeon && stride >= 4 {
+		expRotation1StrideNeon(x, length, stride, c, s)
+		return
+	}
+	expRotation1NormScalar(x, length, stride, c, s)
+}
+
+func expRotation1NormScalar(x []celtNorm, length, stride int, c, s opusVal16) {
+	// xs[i] aliases x[i+stride] and has exactly length-stride elements — the
+	// trip count of the forward pass — so every access below is bounds-check
+	// free. The rotation itself is a serial cascade (each pair reads the
+	// previous pair's write), so only loop overhead is reducible here.
+	xs := x[stride:]
 	c32 := float32(c)
 	s32 := float32(s)
 	ms32 := -s32
 
-	end := length - stride
-	i := 0
-	for ; i+1 < end; i += 2 {
+	for i := range xs {
 		x1 := float32(x[i])
-		x2 := float32(x[i+stride])
-		x[i+stride] = celtNorm(expRotationMac32(c32, x2, s32, x1))
-		x[i] = celtNorm(expRotationMac32(c32, x1, ms32, x2))
-
-		x3 := float32(x[i+1])
-		x4 := float32(x[i+1+stride])
-		x[i+1+stride] = celtNorm(expRotationMac32(c32, x4, s32, x3))
-		x[i+1] = celtNorm(expRotationMac32(c32, x3, ms32, x4))
-	}
-	for ; i < end; i++ {
-		x1 := float32(x[i])
-		x2 := float32(x[i+stride])
-		x[i+stride] = celtNorm(expRotationMac32(c32, x2, s32, x1))
+		x2 := float32(xs[i])
+		xs[i] = celtNorm(expRotationMac32(c32, x2, s32, x1))
 		x[i] = celtNorm(expRotationMac32(c32, x1, ms32, x2))
 	}
-	for i := length - 2*stride - 1; i >= 0; i-- {
-		x1 := float32(x[i])
-		x2 := float32(x[i+stride])
-		x[i+stride] = celtNorm(expRotationMac32(c32, x2, s32, x1))
-		x[i] = celtNorm(expRotationMac32(c32, x1, ms32, x2))
+	if n2 := length - 2*stride; n2 > 0 {
+		xb, xsb := x[:n2], xs[:n2]
+		for i := len(xsb) - 1; i >= 0; i-- {
+			x1 := float32(xb[i])
+			x2 := float32(xsb[i])
+			xsb[i] = celtNorm(expRotationMac32(c32, x2, s32, x1))
+			xb[i] = celtNorm(expRotationMac32(c32, x1, ms32, x2))
+		}
 	}
 }
 
@@ -1302,23 +1278,35 @@ func seededZeroPulseResynth(x []celtNorm, lowband []celtNorm, seed *uint32, gain
 	_ = x[n-1]
 
 	seedVal := *seed
+	// Parallelize the LCG (s = s*A + C). uint32-modular arithmetic is exactly
+	// associative, so the four taps of an unrolled step can each be expressed
+	// from the step-entry seed via precomputed A^k (bit-identical to the serial
+	// chain), leaving only A^4 on the dependency chain (~4x shorter) and letting
+	// the per-element float conversions pipeline. Powers are runtime vars because
+	// A*A overflows a typed uint32 const.
+	lcgA := uint32(1664525)
+	lcgC := uint32(1013904223)
+	a2 := lcgA * lcgA
+	a3 := a2 * lcgA
+	a4 := a3 * lcgA
+	c2 := lcgA*lcgC + lcgC
+	c3 := lcgA*c2 + lcgC
+	c4 := lcgA*c3 + lcgC
 	if lowband == nil {
 		i := 0
 		for ; i+3 < n; i += 4 {
-			seedVal = seedVal*1664525 + 1013904223
-			x[i] = celtNorm(float32(int32(seedVal) >> 20))
-
-			seedVal = seedVal*1664525 + 1013904223
-			x[i+1] = celtNorm(float32(int32(seedVal) >> 20))
-
-			seedVal = seedVal*1664525 + 1013904223
-			x[i+2] = celtNorm(float32(int32(seedVal) >> 20))
-
-			seedVal = seedVal*1664525 + 1013904223
-			x[i+3] = celtNorm(float32(int32(seedVal) >> 20))
+			s1 := lcgA*seedVal + lcgC
+			s2 := a2*seedVal + c2
+			s3 := a3*seedVal + c3
+			s4 := a4*seedVal + c4
+			x[i] = celtNorm(float32(int32(s1) >> 20))
+			x[i+1] = celtNorm(float32(int32(s2) >> 20))
+			x[i+2] = celtNorm(float32(int32(s3) >> 20))
+			x[i+3] = celtNorm(float32(int32(s4) >> 20))
+			seedVal = s4
 		}
 		for ; i < n; i++ {
-			seedVal = seedVal*1664525 + 1013904223
+			seedVal = seedVal*lcgA + lcgC
 			x[i] = celtNorm(float32(int32(seedVal) >> 20))
 		}
 		*seed = seedVal
@@ -1334,20 +1322,18 @@ func seededZeroPulseResynth(x []celtNorm, lowband []celtNorm, seed *uint32, gain
 	const foldNoise = 1.0 / 256.0
 	i := 0
 	for ; i+3 < n; i += 4 {
-		seedVal = seedVal*1664525 + 1013904223
-		x[i] = celtNorm(float32(lowband[i]) + float32(foldNoise)*float32(int32(((seedVal>>15)&1)<<1)-1))
-
-		seedVal = seedVal*1664525 + 1013904223
-		x[i+1] = celtNorm(float32(lowband[i+1]) + float32(foldNoise)*float32(int32(((seedVal>>15)&1)<<1)-1))
-
-		seedVal = seedVal*1664525 + 1013904223
-		x[i+2] = celtNorm(float32(lowband[i+2]) + float32(foldNoise)*float32(int32(((seedVal>>15)&1)<<1)-1))
-
-		seedVal = seedVal*1664525 + 1013904223
-		x[i+3] = celtNorm(float32(lowband[i+3]) + float32(foldNoise)*float32(int32(((seedVal>>15)&1)<<1)-1))
+		s1 := lcgA*seedVal + lcgC
+		s2 := a2*seedVal + c2
+		s3 := a3*seedVal + c3
+		s4 := a4*seedVal + c4
+		x[i] = celtNorm(float32(lowband[i]) + float32(foldNoise)*float32(int32(((s1>>15)&1)<<1)-1))
+		x[i+1] = celtNorm(float32(lowband[i+1]) + float32(foldNoise)*float32(int32(((s2>>15)&1)<<1)-1))
+		x[i+2] = celtNorm(float32(lowband[i+2]) + float32(foldNoise)*float32(int32(((s3>>15)&1)<<1)-1))
+		x[i+3] = celtNorm(float32(lowband[i+3]) + float32(foldNoise)*float32(int32(((s4>>15)&1)<<1)-1))
+		seedVal = s4
 	}
 	for ; i < n; i++ {
-		seedVal = seedVal*1664525 + 1013904223
+		seedVal = seedVal*lcgA + lcgC
 		x[i] = celtNorm(float32(lowband[i]) + float32(foldNoise)*float32(int32(((seedVal>>15)&1)<<1)-1))
 	}
 	*seed = seedVal
@@ -1454,15 +1440,13 @@ func algUnquantNoExtInto(shape []celtNorm, rd *rangecoding.Decoder, n, k, spread
 		pulses = make([]int32, n)
 	}
 	yy := opusVal16(decodePulsesInto32(idx, n, k, pulses, scratch))
-	var norm []celtNorm
-	if scratch != nil {
-		norm = scratch.ensurePVQNorm32(n)
-	} else {
-		norm = make([]celtNorm, n)
-	}
-	cm := normalizeResidualKnownEnergyIntoAndCollapse32(norm, pulses, opusVal16(gain), yy, b)
-	expRotationNorm(norm, n, -1, b, k, spread)
-	copy(shape, norm)
+	// Normalize and rotate directly into the caller's shape buffer. shape is a
+	// distinct float32 destination from the int32 pulses scratch, and
+	// normalizeResidual/expRotation are point-wise (out[i] from pulses[i], then
+	// in-place rotation), so writing into shape is bit-identical to the prior
+	// scratch+copy and drops one frame-size clear and memmove per band.
+	cm := normalizeResidualKnownEnergyIntoAndCollapse32(shape, pulses, opusVal16(gain), yy, b)
+	expRotationNorm(shape, n, -1, b, k, spread)
 	return cm
 }
 
@@ -1573,15 +1557,9 @@ func algUnquantInto(shape []celtNorm, rd *rangecoding.Decoder, band, n, k, sprea
 		}
 		yy = sumSq
 	}
-	var norm []celtNorm
-	if scratch != nil {
-		norm = scratch.ensurePVQNorm32(n)
-	} else {
-		norm = make([]celtNorm, n)
-	}
-	cm := normalizeResidualKnownEnergyIntoAndCollapse32(norm, pulses, opusVal16(gain), yy, b)
-	expRotationNorm(norm, n, -1, b, k, spread)
-	copy(shape, norm)
+	// Normalize and rotate directly into shape (see algUnquantNoExtInto).
+	cm := normalizeResidualKnownEnergyIntoAndCollapse32(shape, pulses, opusVal16(gain), yy, b)
+	expRotationNorm(shape, n, -1, b, k, spread)
 	return cm
 }
 
@@ -1603,6 +1581,11 @@ func algQuantScratch(re *rangecoding.Encoder, band int, x []celtNorm, n, k, spre
 	var xNorm []celtNorm
 	var yy32 opusVal16
 	normPath := false
+	// xNormAliased is set when the no-extra-bits path works the normalized vector
+	// directly in the caller's x buffer (no clone): the search, resynth and inverse
+	// rotation all write x in place, so the trailing copy(x, xNorm) is a self-copy
+	// and is skipped. End state of x is byte-identical to the clone+copy form.
+	xNormAliased := false
 
 	// Scratch buffer pointers
 	var iyBuf *[]int32
@@ -1621,7 +1604,7 @@ func algQuantScratch(re *rangecoding.Encoder, band int, x []celtNorm, n, k, spre
 
 	if extraBits >= 2 && extEnc != nil {
 		if xNormBuf != nil {
-			xNorm = ensureNormSlice(xNormBuf, n)
+			xNorm = ensureNormSliceNoClear(xNormBuf, n)
 		} else {
 			xNorm = make([]celtNorm, n)
 		}
@@ -1667,12 +1650,11 @@ func algQuantScratch(re *rangecoding.Encoder, band int, x []celtNorm, n, k, spre
 			}
 		}
 	} else {
-		if xNormBuf != nil {
-			xNorm = ensureNormSlice(xNormBuf, n)
-		} else {
-			xNorm = make([]celtNorm, n)
-		}
-		copy(xNorm, x[:n])
+		// Work in place on the caller's x: forward rotation, PVQ search (with its
+		// abs writeback), resynth and inverse rotation all target x directly,
+		// removing the per-band clone and the trailing copy-back.
+		xNorm = x[:n:n]
+		xNormAliased = true
 		expRotationNorm(xNorm, n, 1, b, k, spread)
 		pulses, yy32 = opPVQSearchScratchNormWithInputMutation(xNorm, k, iyBuf, signxBuf, yBuf, absXBuf, true)
 		yy = yy32
@@ -1707,7 +1689,9 @@ func algQuantScratch(re *rangecoding.Encoder, band int, x []celtNorm, n, k, spre
 			if normPath {
 				cm = normalizeResidualKnownEnergyIntoAndCollapse32(xNorm, pulses, opusVal16(gain), yy32, b)
 				expRotationNorm(xNorm, n, -1, b, k, spread)
-				copy(x[:n], xNorm)
+				if !xNormAliased {
+					copy(x[:n], xNorm)
+				}
 				_ = encodedIndex
 				return cm
 			}
@@ -1717,7 +1701,7 @@ func algQuantScratch(re *rangecoding.Encoder, band int, x []celtNorm, n, k, spre
 	} else if len(collapsePulses) > 0 {
 		cm = extractCollapseMask(collapsePulses, n, b)
 	}
-	if normPath {
+	if normPath && !xNormAliased {
 		copy(x[:n], xNorm)
 	}
 	_ = encodedIndex
@@ -1739,10 +1723,7 @@ func computeQn(n, b, offset, pulseCap int, stereo bool) int {
 		return 1
 	}
 	qn := computeQnExp2Table[qb&0x7] >> (14 - (qb >> bitRes))
-	qn = ((qn + 1) >> 1) << 1
-	if qn > 256 {
-		qn = 256
-	}
+	qn = min(((qn+1)>>1)<<1, 256)
 	return qn
 }
 
@@ -1757,41 +1738,15 @@ func stereoItheta(x, y []celtNorm, stereo bool) int {
 // The value represents atan2(side, mid) * 2/pi, scaled to [0, 1<<30].
 // Standard itheta (14-bit) can be obtained by shifting right by 16.
 func stereoIthetaQ30(x, y []celtNorm, stereo bool) int {
-	return stereoIthetaQ30WithScratch(x, y, stereo, nil)
-}
-
-func stereoIthetaQ30WithScratch(x, y []celtNorm, stereo bool, scratch *bandEncodeScratch) int {
-	if len(x) == 0 || len(y) == 0 {
-		return 0
-	}
-	n := len(x)
-	if len(y) < n {
-		n = len(y)
-	}
-	if n <= 0 {
-		return 0
-	}
-	var xn, yn []celtNorm
-	if scratch != nil {
-		xn = scratch.ensureThetaX(n)
-		yn = scratch.ensureThetaY(n)
-	} else {
-		xn = make([]celtNorm, n)
-		yn = make([]celtNorm, n)
-	}
-	copy(xn, x[:n])
-	copy(yn, y[:n])
-	return stereoIthetaQ30Norm(xn, yn, stereo)
+	// stereoIthetaQ30Norm only reads x/y (sum of squares), so no scratch copy is needed.
+	return stereoIthetaQ30Norm(x, y, stereo)
 }
 
 func stereoIthetaQ30Norm(x, y []celtNorm, stereo bool) int {
 	if len(x) == 0 || len(y) == 0 {
 		return 0
 	}
-	n := len(x)
-	if len(y) < n {
-		n = len(y)
-	}
+	n := min(len(y), len(x))
 	if n <= 0 {
 		return 0
 	}
@@ -1856,7 +1811,12 @@ func celtFloatMulAdd(a, b, c float32) float32 {
 	if celtUseFusedFloatMath {
 		// libopus arm/pitch_neon_intr.c:celt_inner_prod_neon forces
 		// vfmaq_f32 for NEON lanes; this is the scalar lane equivalent.
-		return mdctFMA32(a, b, c)
+		// celtUseFusedFloatMath is true only on arm64, where fma32 contracts
+		// to one FMADDS — the same single rounding as mdctFMA32's math.FMA
+		// without its FCVT round-trips (this is a runtime-data path, so the
+		// constant-folding caveat that keeps mdctFMA32 on math.FMA does not
+		// apply).
+		return fma32(a, b, c)
 	}
 	return a*b + c
 }
@@ -1893,26 +1853,17 @@ func celtInnerProdSSEStyleNorm(x, y []celtNorm) float32 {
 // celtInnerProd8FMA32 implements this in NEON asm on arm64 and a bit-identical
 // math.FMA fallback under the purego tag.
 func celtInnerProdNeonStyle(x, y []celtNorm) float32 {
-	n := len(x)
-	if len(y) < n {
-		n = len(y)
-	}
+	n := min(len(y), len(x))
 	return celtInnerProd8FMA32(x[:n:n], y[:n:n], n)
 }
 
 func celtInnerProdNeonStyleNorm(x, y []celtNorm) float32 {
-	n := len(x)
-	if len(y) < n {
-		n = len(y)
-	}
+	n := min(len(y), len(x))
 	return celtInnerProd8FMA32(x[:n:n], y[:n:n], n)
 }
 
 func celtInnerProdLibopusOrder(x, y []celtNorm) float32 {
-	n := len(x)
-	if len(y) < n {
-		n = len(y)
-	}
+	n := min(len(y), len(x))
 	x = x[:n:n]
 	y = y[:n:n]
 	if celtUseFusedFloatMath {
@@ -1994,10 +1945,7 @@ func stereoSplit(x, y []celtNorm) {
 	if len(x) == 0 || len(y) == 0 {
 		return
 	}
-	n := len(x)
-	if len(y) < n {
-		n = len(y)
-	}
+	n := min(len(y), len(x))
 	const invSqrt2 float32 = 0.70710678
 	for i := 0; i < n; i++ {
 		l := noFMA32Mul(invSqrt2, float32(x[i]))
@@ -2011,10 +1959,7 @@ func intensityStereoWeighted(x, y []celtNorm, leftEnergy, rightEnergy celtEner) 
 	if len(x) == 0 || len(y) == 0 {
 		return
 	}
-	n := len(x)
-	if len(y) < n {
-		n = len(y)
-	}
+	n := min(len(y), len(x))
 	if leftEnergy < 0 {
 		leftEnergy = 0
 	}
@@ -2302,7 +2247,7 @@ func computeThetaExt(ctx *bandCtx, sctx *splitCtx, x, y []celtNorm, n int, b *in
 	if ctx.encode {
 		// Match libopus: derive raw theta before qn decisions so qn==1
 		// can still drive phase inversion signaling.
-		ithetaQ30 = stereoIthetaQ30WithScratch(x, y, stereo, ctx.encScratch)
+		ithetaQ30 = stereoIthetaQ30Norm(x, y, stereo)
 		itheta = ithetaQ30 >> 16
 		rawItheta = itheta
 	}
@@ -2334,10 +2279,7 @@ func computeThetaExt(ctx *bandCtx, sctx *splitCtx, x, y []celtNorm, n int, b *in
 				} else {
 					bias = -32767 / qn
 				}
-				down := max((itheta*qn+bias)>>14, 0)
-				if down > qn-1 {
-					down = qn - 1
-				}
+				down := min(max((itheta*qn+bias)>>14, 0), qn-1)
 				if ctx.thetaRound < 0 {
 					itheta = down
 				} else {
@@ -2439,10 +2381,7 @@ func computeThetaExt(ctx *bandCtx, sctx *splitCtx, x, y []celtNorm, n int, b *in
 			}
 			if *extB >= 2*n<<bitRes && extRemainingBits-1 > 2<<bitRes {
 				extTellBefore := extTellFrac
-				extraBits := max(celtSudiv(*extB, (2*n-1)<<bitRes), 2)
-				if extraBits > 12 {
-					extraBits = 12
-				}
+				extraBits := min(max(celtSudiv(*extB, (2*n-1)<<bitRes), 2), 12)
 
 				encodedVal := 0
 				if ctx.encode {
@@ -2464,10 +2403,7 @@ func computeThetaExt(ctx *bandCtx, sctx *splitCtx, x, y []celtNorm, n int, b *in
 				}
 
 				encodedVal -= (1 << (extraBits - 1)) - 1
-				ithetaQ30 = max((itheta<<16)+int((int64(encodedVal)*(1<<30))/int64(qn*((1<<extraBits)-1))), 0)
-				if ithetaQ30 > 1<<30 {
-					ithetaQ30 = 1 << 30
-				}
+				ithetaQ30 = min(max((itheta<<16)+int((int64(encodedVal)*(1<<30))/int64(qn*((1<<extraBits)-1))), 0), 1<<30)
 				*extB -= extTellFrac - extTellBefore
 				codedExtendedTheta = true
 			}
@@ -3361,7 +3297,7 @@ func prepareQuantBandLowband(dst, src []celtNorm, n, B, tfChange int, scratch *b
 	N_B := celtUdiv(n, B)
 	recombine := max(tfChange, 0)
 	if recombine != 0 {
-		for k := 0; k < recombine; k++ {
+		for k := range recombine {
 			haar1Norm(dst, n>>k, 1<<k)
 		}
 	}
@@ -4019,6 +3955,14 @@ func quantAllBandsDecodeWithScratchWithMode(rd *rangecoding.Decoder, channels, f
 		return nil, nil, nil
 	}
 	N := frameSize
+	normOffset := M * edges[start]
+	normLen := max(M*edges[maxBands-1]-normOffset, 0)
+	maxBand := M * (edges[end] - edges[end-1])
+	if scratch != nil {
+		// Back the band-decode-local float scratch with one contiguous arena
+		// before the inline/getter sizing below reslices within each slot.
+		scratch.ensureFloatScratch(channels, N, normLen, maxBand)
+	}
 	if scratch == nil {
 		left = make([]celtNorm, N)
 		if channels == 2 {
@@ -4041,25 +3985,22 @@ func quantAllBandsDecodeWithScratchWithMode(rd *rangecoding.Decoder, channels, f
 		}
 	}
 
-	normOffset := M * edges[start]
-	normLen := max(M*edges[maxBands-1]-normOffset, 0)
 	var norm []celtNorm
 	if scratch == nil {
 		norm = make([]celtNorm, channels*normLen)
 	} else {
-		norm = ensureNormSlice(&scratch.norm, channels*normLen)
+		norm = ensureNormSliceNoClear(&scratch.norm, channels*normLen)
 	}
 	var norm2 []celtNorm
 	if channels == 2 {
 		norm2 = norm[normLen:]
 	}
 
-	maxBand := M * (edges[end] - edges[end-1])
 	var lowbandScratch []celtNorm
 	if scratch == nil {
 		lowbandScratch = make([]celtNorm, maxBand)
 	} else {
-		lowbandScratch = ensureNormSlice(&scratch.lowband, maxBand)
+		lowbandScratch = ensureNormSliceNoClear(&scratch.lowband, maxBand)
 	}
 
 	lowbandOffset := 0
@@ -4190,10 +4131,7 @@ func quantAllBandsDecodeWithScratchWithMode(rd *rangecoding.Decoder, channels, f
 		if dualStereo != 0 && i == intensity {
 			dualStereo = 0
 			if ctx.resynth {
-				mergeLimit := max(M*edges[i]-normOffset, 0)
-				if mergeLimit > len(norm) {
-					mergeLimit = len(norm)
-				}
+				mergeLimit := min(max(M*edges[i]-normOffset, 0), len(norm))
 				if channels == 2 && mergeLimit > len(norm2) {
 					mergeLimit = len(norm2)
 				}
@@ -4333,9 +4271,7 @@ func quantAllBandsEncodeScratchWithMode(re *rangecoding.Encoder, channels, frame
 	// Use scratch buffers if available
 	if scratch != nil {
 		collapse = scratch.ensureCollapse(channels * maxBands)
-		for i := range collapse {
-			collapse[i] = 0
-		}
+		clear(collapse)
 	} else {
 		collapse = make([]byte, channels*maxBands)
 	}
@@ -4345,10 +4281,8 @@ func quantAllBandsEncodeScratchWithMode(re *rangecoding.Encoder, channels, frame
 
 	var norm []celtNorm
 	if scratch != nil {
+		// ensureNorm already zero-fills (via ensureNormSlice clear).
 		norm = scratch.ensureNorm(channels * normLen)
-		for i := range norm {
-			norm[i] = 0
-		}
 	} else {
 		norm = make([]celtNorm, channels*normLen)
 	}
@@ -4512,10 +4446,7 @@ func quantAllBandsEncodeScratchWithMode(re *rangecoding.Encoder, channels, frame
 		if dualStereo != 0 && i == intensity {
 			dualStereo = 0
 			if ctx.resynth {
-				mergeLimit := max(M*edges[i]-normOffset, 0)
-				if mergeLimit > len(norm) {
-					mergeLimit = len(norm)
-				}
+				mergeLimit := min(max(M*edges[i]-normOffset, 0), len(norm))
 				if channels == 2 && mergeLimit > len(norm2) {
 					mergeLimit = len(norm2)
 				}

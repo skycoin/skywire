@@ -180,6 +180,76 @@ func warpedARFeedback24States4(psDelDec []nsqDelDecState, arShpQ13 *[24]int16, w
 	out[3] = acc3
 }
 
+// warpedARFeedback20States3 computes the 20-tap warped AR feedback for the
+// three delayed-decision states used at libopus complexity 6 and 7. Each
+// state's arithmetic order matches warpedARFeedbackGeneric for order 20; the
+// states are only interleaved.
+func warpedARFeedback20States3(psDelDec []nsqDelDecState, arShpQ13 *[20]int16, warpQ16 int32, out *[maxDelDecStates]int32) {
+	_ = psDelDec[2]
+	s0 := &psDelDec[0].sAR2Q14
+	s1 := &psDelDec[1].sAR2Q14
+	s2 := &psDelDec[2].sAR2Q14
+	_ = s0[19]
+	_ = s1[19]
+	_ = s2[19]
+
+	w := int64(warpQ16)
+	c0 := int64(arShpQ13[0])
+
+	tmp20 := psDelDec[0].diffQ14 + int32((int64(s0[0])*w)>>16)
+	tmp21 := psDelDec[1].diffQ14 + int32((int64(s1[0])*w)>>16)
+	tmp22 := psDelDec[2].diffQ14 + int32((int64(s2[0])*w)>>16)
+
+	tmp10 := s0[0] + int32((int64(s0[1]-tmp20)*w)>>16)
+	tmp11 := s1[0] + int32((int64(s1[1]-tmp21)*w)>>16)
+	tmp12 := s2[0] + int32((int64(s2[1]-tmp22)*w)>>16)
+
+	s0[0] = tmp20
+	s1[0] = tmp21
+	s2[0] = tmp22
+
+	acc0 := int32(10) + int32((int64(tmp20)*c0)>>16)
+	acc1 := int32(10) + int32((int64(tmp21)*c0)>>16)
+	acc2 := int32(10) + int32((int64(tmp22)*c0)>>16)
+
+	for j := 2; j < 20; j += 2 {
+		cPrev := int64(arShpQ13[j-1])
+		cCur := int64(arShpQ13[j])
+
+		tmp20 = s0[j-1] + int32((int64(s0[j]-tmp10)*w)>>16)
+		tmp21 = s1[j-1] + int32((int64(s1[j]-tmp11)*w)>>16)
+		tmp22 = s2[j-1] + int32((int64(s2[j]-tmp12)*w)>>16)
+		s0[j-1] = tmp10
+		s1[j-1] = tmp11
+		s2[j-1] = tmp12
+		acc0 += int32((int64(tmp10) * cPrev) >> 16)
+		acc1 += int32((int64(tmp11) * cPrev) >> 16)
+		acc2 += int32((int64(tmp12) * cPrev) >> 16)
+
+		tmp10 = s0[j] + int32((int64(s0[j+1]-tmp20)*w)>>16)
+		tmp11 = s1[j] + int32((int64(s1[j+1]-tmp21)*w)>>16)
+		tmp12 = s2[j] + int32((int64(s2[j+1]-tmp22)*w)>>16)
+		s0[j] = tmp20
+		s1[j] = tmp21
+		s2[j] = tmp22
+		acc0 += int32((int64(tmp20) * cCur) >> 16)
+		acc1 += int32((int64(tmp21) * cCur) >> 16)
+		acc2 += int32((int64(tmp22) * cCur) >> 16)
+	}
+
+	cLast := int64(arShpQ13[19])
+	s0[19] = tmp10
+	s1[19] = tmp11
+	s2[19] = tmp12
+	acc0 += int32((int64(tmp10) * cLast) >> 16)
+	acc1 += int32((int64(tmp11) * cLast) >> 16)
+	acc2 += int32((int64(tmp12) * cLast) >> 16)
+
+	out[0] = acc0
+	out[1] = acc1
+	out[2] = acc2
+}
+
 // warpedARFeedback16 computes 16-tap warped AR noise shaping feedback.
 // Sequential dependencies prevent SIMD parallelism.
 func warpedARFeedback16(sAR2Q14 *[maxShapeLpcOrder]int32, diffQ14 int32, arShpQ13 *[16]int16, warpQ16 int32) int32 {

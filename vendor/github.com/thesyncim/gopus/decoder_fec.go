@@ -509,7 +509,7 @@ func (d *Decoder) decodeHybridFEC(pcm []float32, frameSize int) (int, error) {
 		d.downsampleFrame48ToAPI(celtAPI, celt48, frameSize)
 	}
 	limit := min(needed, frameSize*channels)
-	for i := 0; i < limit; i++ {
+	for i := range limit {
 		pcm[i] += celtAPI[i]
 	}
 	d.mainDecodeRng = d.celtDecoder.FinalRange()

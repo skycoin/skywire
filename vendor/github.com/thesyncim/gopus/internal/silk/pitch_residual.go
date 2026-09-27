@@ -217,7 +217,7 @@ func (e *Encoder) computePitchResidual(numSubframes int) ([]float32, int, int, p
 	if copyLen > 0 {
 		_ = src[copyLen-1]    // BCE hint
 		_ = input32[needed-1] // BCE hint
-		for i := 0; i < copyLen; i++ {
+		for i := range copyLen {
 			input32[i] = src[i] * silkSampleScale
 		}
 	}

@@ -175,10 +175,7 @@ func quantCoarseEnergyImpl(
 			// Encode the quantized value
 			if remaining >= 15 {
 				// Use Laplace encoding
-				pi := 2 * i
-				if pi > 40 {
-					pi = 40
-				}
+				pi := min(2*i, 40)
 				fs := int(probModel[pi]) << 7
 				decay := int(probModel[pi+1]) << 6
 				qi = encodeLaplaceEnergy(re, qi, fs, decay)
@@ -258,16 +255,9 @@ func encodeLaplaceEnergy(re *rangecoding.Encoder, val int, fs int, decay int) in
 		if fs == 0 {
 			ndiMax := (laplaceFS - fl + laplaceMinP - 1) >> laplaceLogMinP
 			ndiMax = (ndiMax - s) >> 1
-			di := absVal - i
-			if di > ndiMax-1 {
-				di = ndiMax - 1
-			}
+			di := min(absVal-i, ndiMax-1)
 			fl += (2*di + 1 + s) * laplaceMinP
-			if laplaceFS-fl < laplaceMinP {
-				fs = laplaceFS - fl
-			} else {
-				fs = laplaceMinP
-			}
+			fs = min(laplaceFS-fl, laplaceMinP)
 			absVal = i + di
 			val = (absVal + s) ^ s
 		} else {
@@ -311,10 +301,7 @@ func QuantCoarseEnergy(
 	// Compute parameters
 	budget := params.Budget
 	tell := re.Tell()
-	lm := max(params.LM, 0)
-	if lm > 3 {
-		lm = 3
-	}
+	lm := min(max(params.LM, 0), 3)
 
 	start := params.Start
 	end := params.End
@@ -517,12 +504,9 @@ func QuantFineEnergy(
 			// libopus float: q2 = (int)floor((error[i+c*m->nbEBands]*(1<<prev)+.5f)*extra)
 			// where extra = 1 << extra_quant[i]
 			scaledError := errorVal[idx]*float32(uint(1)<<prev) + 0.5
-			q2 := floor32ToInt(scaledError * float32(extraLevels))
-
-			// Clamp to valid range
-			if q2 > extraLevels-1 {
-				q2 = extraLevels - 1
-			}
+			q2 := min(
+				// Clamp to valid range
+				floor32ToInt(scaledError*float32(extraLevels)), extraLevels-1)
 			if q2 < 0 {
 				q2 = 0
 			}

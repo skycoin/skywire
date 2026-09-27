@@ -206,21 +206,117 @@ func ComputeImportance(bandLogE, oldBandE []celtGLog, nbBands, channels, lm, lsb
 }
 
 func l1MetricNorm(tmp []celtNorm, N int, LM int, bias float32) float32 {
-	n := N
-	if n > len(tmp) {
-		n = len(tmp)
-	}
+	n := min(N, len(tmp))
 	var L1 float32
 	if celtAbsSumUsesNeon {
 		L1 = l1AbsSumNeon(tmp, n)
 	} else {
-		for i := 0; i < n; i++ {
-			v := float32(tmp[i])
+		// Sixteen independent accumulators fill the FADD throughput slots:
+		// 16 ops / 4 dispatch = 4 cycles per 16-element block, exactly matching
+		// the 4-cycle FADD latency so no stall on any chain between iterations.
+		// Each conditional negate emits a FABS-style instruction without branching.
+		buf := tmp[:n]
+		var a0, a1, a2, a3, a4, a5, a6, a7 float32
+		var a8, a9, a10, a11, a12, a13, a14, a15 float32
+		for len(buf) >= 16 {
+			v0, v1, v2, v3 := buf[0], buf[1], buf[2], buf[3]
+			v4, v5, v6, v7 := buf[4], buf[5], buf[6], buf[7]
+			v8, v9, v10, v11 := buf[8], buf[9], buf[10], buf[11]
+			v12, v13, v14, v15 := buf[12], buf[13], buf[14], buf[15]
+			if v0 < 0 {
+				v0 = -v0
+			}
+			if v1 < 0 {
+				v1 = -v1
+			}
+			if v2 < 0 {
+				v2 = -v2
+			}
+			if v3 < 0 {
+				v3 = -v3
+			}
+			if v4 < 0 {
+				v4 = -v4
+			}
+			if v5 < 0 {
+				v5 = -v5
+			}
+			if v6 < 0 {
+				v6 = -v6
+			}
+			if v7 < 0 {
+				v7 = -v7
+			}
+			if v8 < 0 {
+				v8 = -v8
+			}
+			if v9 < 0 {
+				v9 = -v9
+			}
+			if v10 < 0 {
+				v10 = -v10
+			}
+			if v11 < 0 {
+				v11 = -v11
+			}
+			if v12 < 0 {
+				v12 = -v12
+			}
+			if v13 < 0 {
+				v13 = -v13
+			}
+			if v14 < 0 {
+				v14 = -v14
+			}
+			if v15 < 0 {
+				v15 = -v15
+			}
+			a0 += v0
+			a1 += v1
+			a2 += v2
+			a3 += v3
+			a4 += v4
+			a5 += v5
+			a6 += v6
+			a7 += v7
+			a8 += v8
+			a9 += v9
+			a10 += v10
+			a11 += v11
+			a12 += v12
+			a13 += v13
+			a14 += v14
+			a15 += v15
+			buf = buf[16:]
+		}
+		// 4-wide tail for remaining elements
+		for len(buf) >= 4 {
+			v0, v1, v2, v3 := buf[0], buf[1], buf[2], buf[3]
+			if v0 < 0 {
+				v0 = -v0
+			}
+			if v1 < 0 {
+				v1 = -v1
+			}
+			if v2 < 0 {
+				v2 = -v2
+			}
+			if v3 < 0 {
+				v3 = -v3
+			}
+			a0 += v0
+			a1 += v1
+			a2 += v2
+			a3 += v3
+			buf = buf[4:]
+		}
+		for _, v := range buf {
 			if v < 0 {
 				v = -v
 			}
-			L1 += v
+			a0 += v
 		}
+		L1 = (a0 + a1 + a2 + a3) + (a4 + a5 + a6 + a7) + (a8 + a9 + a10 + a11) + (a12 + a13 + a14 + a15)
 	}
 	return L1 + float32(LM)*bias*L1
 }
@@ -497,22 +593,20 @@ func TFAnalysis(X []celtNorm, N0, nbEBands int, isTransient bool, lm int, tfEsti
 }
 
 // TFAnalysisScratch holds pre-allocated buffers for TF analysis.
+//
+// Metric and the Viterbi path arrays are no longer fields: they are addressed
+// only by index inside TFAnalysisWithScratch and never escape, so they live on
+// the stack there (see the band-count guarded block in that function). TfRes is
+// returned to the caller, and Tmp/Tmp1 are handed to the haar1/l1 kernels, so
+// those stay pooled here.
 type TFAnalysisScratch struct {
-	Metric []int32    // Per-band metric (size: nbEBands)
-	Tmp    []celtNorm // Band coefficients working buffer
-	Tmp1   []celtNorm // Copy for transient analysis
-	Path0  []int32    // Viterbi path state 0
-	Path1  []int32    // Viterbi path state 1
-	TfRes  []int32    // Output buffer
+	Tmp   []celtNorm // Band coefficients working buffer
+	Tmp1  []celtNorm // Copy for transient analysis
+	TfRes []int32    // Output buffer
 }
 
 // EnsureTFAnalysisScratch ensures scratch buffers are large enough.
 func (s *TFAnalysisScratch) EnsureTFAnalysisScratch(nbEBands, maxBandWidth int) {
-	if cap(s.Metric) < nbEBands {
-		s.Metric = make([]int32, nbEBands)
-	} else {
-		s.Metric = s.Metric[:nbEBands]
-	}
 	if cap(s.Tmp) < maxBandWidth {
 		s.Tmp = make([]celtNorm, maxBandWidth)
 	} else {
@@ -522,16 +616,6 @@ func (s *TFAnalysisScratch) EnsureTFAnalysisScratch(nbEBands, maxBandWidth int) 
 		s.Tmp1 = make([]celtNorm, maxBandWidth)
 	} else {
 		s.Tmp1 = s.Tmp1[:maxBandWidth]
-	}
-	if cap(s.Path0) < nbEBands {
-		s.Path0 = make([]int32, nbEBands)
-	} else {
-		s.Path0 = s.Path0[:nbEBands]
-	}
-	if cap(s.Path1) < nbEBands {
-		s.Path1 = make([]int32, nbEBands)
-	} else {
-		s.Path1 = s.Path1[:nbEBands]
 	}
 	if cap(s.TfRes) < nbEBands {
 		s.TfRes = make([]int32, nbEBands)
@@ -570,7 +654,20 @@ func TFAnalysisWithScratch(X []celtNorm, N0, nbEBands int, isTransient bool, lm 
 	// Keep TF metric arithmetic in float32 to mirror libopus float path.
 	bias := float32(tfAnalysisBias(tfEstimate))
 
-	metric := scratch.Metric[:nbEBands]
+	// metric and the Viterbi path arrays are addressed only by index here and
+	// never escape, so keep them on the stack for the common (<= MaxBands) band
+	// counts. Non-standard custom/QEXT layouts (rare) fall back to a heap slice.
+	var metricArr, path0Arr, path1Arr [MaxBands]int32
+	var metric, path0, path1 []int32
+	if nbEBands <= MaxBands {
+		metric = metricArr[:nbEBands]
+		path0 = path0Arr[:nbEBands]
+		path1 = path1Arr[:nbEBands]
+	} else {
+		metric = make([]int32, nbEBands)
+		path0 = make([]int32, nbEBands)
+		path1 = make([]int32, nbEBands)
+	}
 	tmp := scratch.Tmp
 
 	for i := range nbEBands {
@@ -677,8 +774,6 @@ func TFAnalysisWithScratch(X []celtNorm, N0, nbEBands int, isTransient bool, lm 
 
 	// Viterbi forward pass
 	isTransientInt := boolToInt(isTransient)
-	path0 := scratch.Path0[:nbEBands]
-	path1 := scratch.Path1[:nbEBands]
 
 	imp0 := int32(13)
 	if importance != nil && len(importance) > 0 {

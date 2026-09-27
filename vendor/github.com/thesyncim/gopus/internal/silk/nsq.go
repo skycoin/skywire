@@ -767,10 +767,7 @@ var quantOffsets = [2][2]int{
 
 // getQuantizationOffset returns the quantization offset based on signal type and offset type.
 func getQuantizationOffset(signalType, quantOffsetType int) int {
-	sigIdx := max(signalType>>1, 0)
-	if sigIdx > 1 {
-		sigIdx = 1
-	}
+	sigIdx := min(max(signalType>>1, 0), 1)
 	if quantOffsetType < 0 {
 		quantOffsetType = 0
 	}

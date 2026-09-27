@@ -61,10 +61,7 @@ func (e *Encoder) quantizeLSF(lsfQ15 []int16, bandwidth Bandwidth, signalType in
 	}
 
 	muQ20 := computeNLSFMuQ20(speechActivityQ8, numSubframes)
-	nSurvivors := min(int(e.nlsfSurvivors), nVectors)
-	if nSurvivors < 2 {
-		nSurvivors = 2
-	}
+	nSurvivors := max(min(int(e.nlsfSurvivors), nVectors), 2)
 
 	stage1Idx, residuals, _ := e.nlsfEncode(lsfQ15, cb, wQ2, muQ20, nSurvivors, signalType)
 
@@ -129,10 +126,7 @@ func (e *Encoder) quantizeLSFWithInterp(lsfQ15 []int16, bandwidth Bandwidth, sig
 	}
 
 	muQ20 := computeNLSFMuQ20(speechActivityQ8, numSubframes)
-	nSurvivors := min(int(e.nlsfSurvivors), nVectors)
-	if nSurvivors < 2 {
-		nSurvivors = 2
-	}
+	nSurvivors := max(min(int(e.nlsfSurvivors), nVectors), 2)
 
 	stage1Idx, residuals, _ := e.nlsfEncode(lsfQ15, cb, wQ2, muQ20, nSurvivors, signalType)
 
@@ -261,7 +255,7 @@ func (e *Encoder) buildPredCoefQ12(predCoefQ12 []int16, nlsfQ15 []int16, interpI
 	// Handle interpolation for first subframes when allowed.
 	if interpIdx < 4 && !e.firstFrameAfterResetActive() {
 		var interpNLSF [maxLPCOrder]int16
-		for i := 0; i < order; i++ {
+		for i := range order {
 			diff := int32(nlsfQ15[i]) - int32(e.prevLSFQ15[i])
 			interpNLSF[i] = int16(int32(e.prevLSFQ15[i]) + (int32(interpIdx) * diff >> 2))
 		}

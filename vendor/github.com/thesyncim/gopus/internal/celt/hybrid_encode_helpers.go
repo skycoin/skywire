@@ -5,7 +5,7 @@ import "github.com/thesyncim/gopus/internal/rangecoding"
 // NormalizeBandsToArrayMonoWithBandE normalizes MDCT coefficients for mono
 // and returns the normalized coefficients and linear band amplitudes.
 func (e *Encoder) NormalizeBandsToArrayMonoWithBandE(mdctCoeffs []float32, nbBands, frameSize int) (norm []celtNorm, bandE []celtEner) {
-	norm = ensureNormSlice(&e.scratch.normL, frameSize)
+	norm = ensureNormSliceNoClear(&e.scratch.normL, frameSize)
 	bandE = ensureEnerSlice(&e.scratch.bandE, nbBands)
 	NormalizeBandsToArrayInto(mdctCoeffs, nbBands, frameSize, norm, bandE)
 	if e.lfe {
@@ -18,7 +18,7 @@ func (e *Encoder) NormalizeBandsToArrayMonoWithBandE(mdctCoeffs []float32, nbBan
 // NormalizeBandsToArrayMonoWithBandEF32 normalizes float-build MDCT
 // coefficients for mono and returns normalized coefficients plus amplitudes.
 func (e *Encoder) NormalizeBandsToArrayMonoWithBandEF32(mdctCoeffs []float32, nbBands, frameSize int) (norm []celtNorm, bandE []celtEner) {
-	norm = ensureNormSlice(&e.scratch.normL, frameSize)
+	norm = ensureNormSliceNoClear(&e.scratch.normL, frameSize)
 	bandE = ensureEnerSlice(&e.scratch.bandE, nbBands)
 	NormalizeBandsToArrayIntoF32(mdctCoeffs, nbBands, frameSize, norm, bandE)
 	if e.lfe {
@@ -32,8 +32,8 @@ func (e *Encoder) NormalizeBandsToArrayMonoWithBandEF32(mdctCoeffs []float32, nb
 // and returns normalized L/R coefficients plus combined linear band amplitudes.
 // The bandE layout is [L bands][R bands].
 func (e *Encoder) NormalizeBandsToArrayStereoWithBandE(mdctLeft, mdctRight []float32, nbBands, frameSize int) (normL, normR []celtNorm, bandE []celtEner) {
-	normL = ensureNormSlice(&e.scratch.normL, frameSize)
-	normR = ensureNormSlice(&e.scratch.normR, frameSize)
+	normL = ensureNormSliceNoClear(&e.scratch.normL, frameSize)
+	normR = ensureNormSliceNoClear(&e.scratch.normR, frameSize)
 	bandEL := ensureEnerSlice(&e.scratch.bandEL, nbBands)
 	bandER := ensureEnerSlice(&e.scratch.bandER, nbBands)
 	NormalizeBandsToArrayInto(mdctLeft, nbBands, frameSize, normL, bandEL)
@@ -52,8 +52,8 @@ func (e *Encoder) NormalizeBandsToArrayStereoWithBandE(mdctLeft, mdctRight []flo
 // NormalizeBandsToArrayStereoWithBandEF32 normalizes float-build MDCT
 // coefficients for stereo. The bandE layout is [L bands][R bands].
 func (e *Encoder) NormalizeBandsToArrayStereoWithBandEF32(mdctLeft, mdctRight []float32, nbBands, frameSize int) (normL, normR []celtNorm, bandE []celtEner) {
-	normL = ensureNormSlice(&e.scratch.normL, frameSize)
-	normR = ensureNormSlice(&e.scratch.normR, frameSize)
+	normL = ensureNormSliceNoClear(&e.scratch.normL, frameSize)
+	normR = ensureNormSliceNoClear(&e.scratch.normR, frameSize)
 	bandEL := ensureEnerSlice(&e.scratch.bandEL, nbBands)
 	bandER := ensureEnerSlice(&e.scratch.bandER, nbBands)
 	NormalizeBandsToArrayIntoF32(mdctLeft, nbBands, frameSize, normL, bandEL)
@@ -75,7 +75,7 @@ func (e *Encoder) NormalizeBandsToArrayStereoWithBandEF32(mdctLeft, mdctRight []
 // native 96 kHz HD mode where M != frameSize/120.
 func (e *Encoder) normalizeBandsMonoBinMulF32(mdctCoeffs []float32, nbBands, binMul int) (norm []celtNorm, bandE []celtEner) {
 	frameSize := len(mdctCoeffs)
-	norm = ensureNormSlice(&e.scratch.normL, frameSize)
+	norm = ensureNormSliceNoClear(&e.scratch.normL, frameSize)
 	bandE = ensureEnerSlice(&e.scratch.bandE, nbBands)
 	if pm := e.perMode; pm != nil {
 		normalizeBandsToArrayIntoF32BinMulWidths(mdctCoeffs, nbBands, binMul, norm, bandE, pm.eBandWidths, pm.nbEBands)
@@ -97,8 +97,8 @@ func (e *Encoder) normalizeBandsMonoBinMulF32(mdctCoeffs []float32, nbBands, bin
 // using an explicit bin multiplier M=1<<LM. The bandE layout is [L bands][R bands].
 func (e *Encoder) normalizeBandsStereoBinMulF32(mdctLeft, mdctRight []float32, nbBands, binMul int) (normL, normR []celtNorm, bandE []celtEner) {
 	frameSize := len(mdctLeft)
-	normL = ensureNormSlice(&e.scratch.normL, frameSize)
-	normR = ensureNormSlice(&e.scratch.normR, frameSize)
+	normL = ensureNormSliceNoClear(&e.scratch.normL, frameSize)
+	normR = ensureNormSliceNoClear(&e.scratch.normR, frameSize)
 	bandEL := ensureEnerSlice(&e.scratch.bandEL, nbBands)
 	bandER := ensureEnerSlice(&e.scratch.bandER, nbBands)
 	if pm := e.perMode; pm != nil {
@@ -153,10 +153,7 @@ func (e *Encoder) ComputeAllocationHybridScratch(re *rangecoding.Encoder, totalB
 	if nbBands < 0 {
 		nbBands = 0
 	}
-	channels := max(e.codedChannels(), 1)
-	if channels > 2 {
-		channels = 2
-	}
+	channels := min(max(e.codedChannels(), 1), 2)
 	if lm < 0 {
 		lm = 0
 	}
@@ -441,7 +438,7 @@ func (e *Encoder) UpdateEnergyErrorHybridFromError(start, end, nbBands int) {
 	channels := max(int(e.channels), 1)
 	errorVals := ensureGLogSliceNoClear(&e.scratch.coarseError, nbBands*channels)
 
-	for c := 0; c < channels; c++ {
+	for c := range channels {
 		baseState := c * MaxBands
 		baseFrame := c * nbBands
 		for band := start; band < end; band++ {
@@ -491,10 +488,7 @@ func (e *Encoder) ApplyHybridPrefilter(preemph []float32, frameSize int, tfEstim
 // TransientAnalysisHybrid performs transient analysis and updates preemph overlap state.
 // Returns transient flags, tf/tone metrics, shortBlocks choice, and optional bandLogE2.
 func (e *Encoder) TransientAnalysisHybrid(preemph []float32, frameSize, nbBands, lm int, allowWeakTransients bool) (transient bool, weakTransient bool, tfEstimate, toneFreq, toneishness float32, shortBlocks int, bandLogE2 []celtGLog) {
-	overlap := Overlap
-	if overlap > frameSize {
-		overlap = frameSize
-	}
+	overlap := min(Overlap, frameSize)
 
 	channels := int(e.channels)
 	preemphBufSize := overlap * channels
@@ -660,14 +654,6 @@ func (e *Encoder) TFAnalysisHybridScratch(norm []celtNorm, nbBands int, transien
 	return TFAnalysisWithScratch(norm, len(norm), nbBands, transient, lm, tfEstimate, effectiveBytes, importance, &e.tfScratch)
 }
 
-// UpdateTonalityAnalysisHybrid updates tonality metrics for VBR decisions.
-func (e *Encoder) UpdateTonalityAnalysisHybrid(normCoeffs []celtNorm, energies []celtGLog, nbBands, frameSize int) {
-	if !e.vbr {
-		return
-	}
-	e.updateTonalityAnalysis(normCoeffs, energies, nbBands, frameSize)
-}
-
 // BitrateToBits exposes bitrate_to_bits for hybrid callers.
 func (e *Encoder) BitrateToBits(frameSize int) int {
 	return e.bitrateToBits(frameSize)
@@ -732,10 +718,7 @@ func (e *Encoder) ComputeMDCTWithHistoryScratch(inputScratch, samples, history [
 		return nil
 	}
 
-	overlap := Overlap
-	if overlap > len(samples) {
-		overlap = len(samples)
-	}
+	overlap := min(Overlap, len(samples))
 	input := inputScratch[:len(samples)+overlap]
 
 	// Copy history overlap into the head of the input buffer.

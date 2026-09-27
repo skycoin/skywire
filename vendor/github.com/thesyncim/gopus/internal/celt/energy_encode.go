@@ -93,10 +93,7 @@ func computeBandEnergiesGLogInto(mdctCoeffs []float32, nbBands, frameSize, chann
 	silence := float32(0.5) * celtLog2(float32(1e-27))
 	for c := 0; c < channels; c++ {
 		channelStart := c * coeffsPerChannel
-		channelEnd := channelStart + coeffsPerChannel
-		if channelEnd > len(mdctCoeffs) {
-			channelEnd = len(mdctCoeffs)
-		}
+		channelEnd := min(channelStart+coeffsPerChannel, len(mdctCoeffs))
 		channelCoeffs := mdctCoeffs[channelStart:channelEnd]
 
 		for band := 0; band < nbBands; band++ {
@@ -187,10 +184,7 @@ func computeBandEnergiesGLogF32IntoEdges(mdctCoeffs []float32, nbBands, frameSiz
 	silence := float32(0.5) * celtLog2(float32(1e-27))
 	for c := 0; c < channels; c++ {
 		channelStart := c * coeffsPerChannel
-		channelEnd := channelStart + coeffsPerChannel
-		if channelEnd > len(mdctCoeffs) {
-			channelEnd = len(mdctCoeffs)
-		}
+		channelEnd := min(channelStart+coeffsPerChannel, len(mdctCoeffs))
 		channelCoeffs := mdctCoeffs[channelStart:channelEnd]
 
 		for band := 0; band < nbBands; band++ {
@@ -256,10 +250,7 @@ func computeBandEnergiesFloat32Into(mdctCoeffs []float32, nbBands, frameSize, ch
 	silence := float32(0.5) * celtLog2(float32(1e-27))
 	for c := 0; c < channels; c++ {
 		channelStart := c * coeffsPerChannel
-		channelEnd := channelStart + coeffsPerChannel
-		if channelEnd > len(mdctCoeffs) {
-			channelEnd = len(mdctCoeffs)
-		}
+		channelEnd := min(channelStart+coeffsPerChannel, len(mdctCoeffs))
 		channelCoeffs := mdctCoeffs[channelStart:channelEnd]
 
 		for band := 0; band < nbBands; band++ {
@@ -578,10 +569,7 @@ func (e *Encoder) encodeCoarseEnergyPass(energies []celtGLog, startBand, nbBands
 			}
 
 			if remaining >= 15 {
-				pi := 2 * band
-				if pi > 40 {
-					pi = 40
-				}
+				pi := min(2*band, 40)
 				fs := int(prob[pi]) << 7
 				decay := int(prob[pi+1]) << 6
 				qi = e.encodeLaplace(qi, fs, decay)
@@ -1032,10 +1020,7 @@ func (e *Encoder) EncodeCoarseEnergyRange(energies []celtGLog, start, end int, i
 			}
 
 			if budget-tell >= 15 {
-				pi := 2 * band
-				if pi > 40 {
-					pi = 40
-				}
+				pi := min(2*band, 40)
 				fs := int(prob[pi]) << 7
 				decay := int(prob[pi+1]) << 6
 				qi = e.encodeLaplace(qi, fs, decay)
@@ -1115,16 +1100,9 @@ func (e *Encoder) encodeLaplace(val int, fs int, decay int) int {
 		if fs == 0 {
 			ndiMax := (laplaceFS - fl + laplaceMinP - 1) >> laplaceLogMinP
 			ndiMax = (ndiMax - s) >> 1
-			di := absVal - i
-			if di > ndiMax-1 {
-				di = ndiMax - 1
-			}
+			di := min(absVal-i, ndiMax-1)
 			fl += (2*di + 1 + s) * laplaceMinP
-			if laplaceFS-fl < laplaceMinP {
-				fs = laplaceFS - fl
-			} else {
-				fs = laplaceMinP
-			}
+			fs = min(laplaceFS-fl, laplaceMinP)
 			absVal = i + di
 			val = (absVal + s) ^ s
 		} else {
@@ -1245,10 +1223,7 @@ func (e *Encoder) encodeFineEnergyFromError(quantizedEnergies []celtGLog, nbBand
 
 			// libopus float: q2 = floor((error + 0.5) * extra)
 			err := float32(errorVals[idx])
-			q2 := max(floor32ToInt((err+0.5)*scale32), 0)
-			if q2 > extra-1 {
-				q2 = extra - 1
-			}
+			q2 := min(max(floor32ToInt((err+0.5)*scale32), 0), extra-1)
 
 			re.EncodeRawBits(uint32(q2), uint(bits))
 
@@ -1274,10 +1249,7 @@ func (e *Encoder) EncodeFineEnergyRange(energies []celtGLog, quantizedCoarse []c
 		return
 	}
 
-	nbBands := end
-	if nbBands > len(fineBits) {
-		nbBands = len(fineBits)
-	}
+	nbBands := min(end, len(fineBits))
 
 	channels := int(e.channels)
 	if len(energies) < nbBands*channels {
@@ -1330,10 +1302,7 @@ func (e *Encoder) EncodeFineEnergyRangeFromError(quantizedEnergies []celtGLog, s
 		return
 	}
 
-	nbBands := end
-	if nbBands > len(fineBits) {
-		nbBands = len(fineBits)
-	}
+	nbBands := min(end, len(fineBits))
 	channels := max(int(e.channels), 1)
 
 	required := nbBands * channels
@@ -1364,10 +1333,7 @@ func (e *Encoder) EncodeFineEnergyRangeFromError(quantizedEnergies []celtGLog, s
 			}
 
 			err := float32(errorVals[idx])
-			q2 := max(floor32ToInt((err+0.5)*scale32), 0)
-			if q2 > extra-1 {
-				q2 = extra - 1
-			}
+			q2 := min(max(floor32ToInt((err+0.5)*scale32), 0), extra-1)
 
 			re.EncodeRawBits(uint32(q2), uint(bits))
 
@@ -1732,10 +1698,7 @@ func (e *Encoder) encodeFineEnergyFromErrorWithPrev(quantizedEnergies []celtGLog
 			}
 
 			err := float32(errorVals[idx])
-			q2 := max(floor32ToInt((err*prevScale32+0.5)*scale32), 0)
-			if q2 > extra-1 {
-				q2 = extra - 1
-			}
+			q2 := min(max(floor32ToInt((err*prevScale32+0.5)*scale32), 0), extra-1)
 
 			re.EncodeRawBits(uint32(q2), uint(extraBits))
 

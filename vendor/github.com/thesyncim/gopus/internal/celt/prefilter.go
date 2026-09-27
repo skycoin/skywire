@@ -37,25 +37,29 @@ func (e *Encoder) runPrefilter(preemph []float32, frameSize int, tapset int, ena
 	// filter runs at that scale; only the analysis buffers/search use the
 	// QEXT-scaled period). Clamp it the same way libopus clamps
 	// st->prefilter_period inside run_prefilter.
-	prevPeriod := max(e.prefilterPeriod, combFilterMinPeriod)
-	if prevPeriod > combFilterMaxPeriod-2 {
-		prevPeriod = combFilterMaxPeriod - 2
-	}
+	prevPeriod := min(max(e.prefilterPeriod, combFilterMinPeriod), combFilterMaxPeriod-2)
 	prevTapset := max(e.prefilterTapset, 0)
 	if prevTapset >= len(combFilterGains) {
 		prevTapset = len(combFilterGains) - 1
 	}
+	if !enabled && e.prefilterGain == 0 {
+		overlap := min(e.analysisOverlap(), frameSize)
+		e.updatePrefilterNoopStateFromPreemph(preemph, frameSize, channels, overlap)
+		e.prefilterPeriod = combFilterMinPeriod
+		e.prefilterGain = 0
+		e.prefilterTapset = tapset
+		result.tapset = tapset
+		return result
+	}
 	perChanLen := maxPeriod + frameSize
-	pre := ensureSigSlice(&e.scratch.prefilterPre, perChanLen*channels)
-	out := ensureSigSlice(&e.scratch.prefilterOut, perChanLen*channels)
+	pre := ensureSigSliceNoClear(&e.scratch.prefilterPre, perChanLen*channels)
 
 	if channels == 1 {
 		hist := e.prefilterMem[:maxPeriod]
 		preCh := pre[:perChanLen]
 		copy(preCh[:maxPeriod], hist)
-		for i := range frameSize {
-			preCh[maxPeriod+i] = celtSig(preemph[i])
-		}
+		// celtSig is a float32 alias, so the per-sample copy is a plain memmove.
+		copy(preCh[maxPeriod:maxPeriod+frameSize], preemph[:frameSize])
 	} else {
 		histL := e.prefilterMem[:maxPeriod]
 		histR := e.prefilterMem[maxPeriod : 2*maxPeriod]
@@ -88,10 +92,7 @@ func (e *Encoder) runPrefilter(preemph []float32, frameSize int, tapset int, ena
 			multiple++
 		}
 		if freq*float32(qextScale) > 0.006148 {
-			pitchIndex = int(0.5 + 2*pi32*float32(multiple)/(freq*float32(qextScale)))
-			if pitchIndex > combFilterMaxPeriod-2 {
-				pitchIndex = combFilterMaxPeriod - 2
-			}
+			pitchIndex = min(int(0.5+2*pi32*float32(multiple)/(freq*float32(qextScale))), combFilterMaxPeriod-2)
 		} else {
 			pitchIndex = combFilterMinPeriod
 		}
@@ -165,18 +166,12 @@ func (e *Encoder) runPrefilter(preemph []float32, frameSize int, tapset int, ena
 		if abs32(gain1-e.prefilterGain) < 0.1 {
 			gain1 = e.prefilterGain
 		}
-		qg = max(int(0.5+gain1*32.0/3.0)-1, 0)
-		if qg > 7 {
-			qg = 7
-		}
+		qg = min(max(int(0.5+gain1*32.0/3.0)-1, 0), 7)
 		gain1 = float32(0.09375) * float32(qg+1)
 		pfOn = true
 	}
 
-	overlap := e.analysisOverlap()
-	if overlap > frameSize {
-		overlap = frameSize
-	}
+	overlap := min(e.analysisOverlap(), frameSize)
 	if gain1 == 0 && e.prefilterGain == 0 {
 		e.updatePrefilterNoopState(pre, perChanLen, frameSize, channels, overlap)
 		e.prefilterPeriod = pitchIndex
@@ -187,6 +182,7 @@ func (e *Encoder) runPrefilter(preemph []float32, frameSize int, tapset int, ena
 		return result
 	}
 
+	out := ensureSigSliceNoClear(&e.scratch.prefilterOut, perChanLen*channels)
 	mode := e.modeConfig(frameSize)
 	shortMdctSize := frameSize / mode.ShortBlocks
 	offset := max(shortMdctSize-overlap, 0)
@@ -335,6 +331,96 @@ func (e *Encoder) updatePrefilterNoopState(pre []celtSig, perChanLen, frameSize,
 	}
 }
 
+func (e *Encoder) updatePrefilterNoopStateFromPreemph(preemph []float32, frameSize, channels, overlap int) {
+	if channels <= 0 || frameSize <= 0 || len(preemph) < frameSize*channels {
+		return
+	}
+	maxPeriod := e.combMaxPeriod()
+	if overlap > 0 {
+		need := channels * overlap
+		if len(e.overlapBuffer) < need {
+			newBuf := make([]celtSig, need)
+			copy(newBuf, e.overlapBuffer)
+			e.overlapBuffer = newBuf
+		}
+	}
+
+	if channels == 1 {
+		mem := e.prefilterMem[:maxPeriod]
+		if frameSize > maxPeriod {
+			copyFloat32ToSig(mem, preemph[frameSize-maxPeriod:frameSize])
+		} else {
+			copy(mem, mem[frameSize:])
+			copyFloat32ToSig(mem[maxPeriod-frameSize:], preemph[:frameSize])
+		}
+		if overlap > 0 && frameSize >= overlap && len(e.overlapBuffer) >= overlap {
+			copyFloat32ToSig(e.overlapBuffer[:overlap], preemph[frameSize-overlap:frameSize])
+		}
+		return
+	}
+
+	if channels == 2 {
+		memL := e.prefilterMem[:maxPeriod]
+		memR := e.prefilterMem[maxPeriod : 2*maxPeriod]
+		if frameSize > maxPeriod {
+			src := (frameSize - maxPeriod) * 2
+			for i := range maxPeriod {
+				memL[i] = celtSig(preemph[src])
+				memR[i] = celtSig(preemph[src+1])
+				src += 2
+			}
+		} else {
+			copy(memL, memL[frameSize:])
+			copy(memR, memR[frameSize:])
+			dst := maxPeriod - frameSize
+			src := 0
+			for i := range frameSize {
+				memL[dst+i] = celtSig(preemph[src])
+				memR[dst+i] = celtSig(preemph[src+1])
+				src += 2
+			}
+		}
+		if overlap > 0 && frameSize >= overlap && len(e.overlapBuffer) >= 2*overlap {
+			histL := e.overlapBuffer[:overlap]
+			histR := e.overlapBuffer[overlap : 2*overlap]
+			src := (frameSize - overlap) * 2
+			for i := range overlap {
+				histL[i] = celtSig(preemph[src])
+				histR[i] = celtSig(preemph[src+1])
+				src += 2
+			}
+		}
+		return
+	}
+
+	for ch := range channels {
+		mem := e.prefilterMem[ch*maxPeriod : (ch+1)*maxPeriod]
+		if frameSize > maxPeriod {
+			src := (frameSize-maxPeriod)*channels + ch
+			for i := range maxPeriod {
+				mem[i] = celtSig(preemph[src])
+				src += channels
+			}
+		} else {
+			copy(mem, mem[frameSize:])
+			dst := maxPeriod - frameSize
+			src := ch
+			for i := range frameSize {
+				mem[dst+i] = celtSig(preemph[src])
+				src += channels
+			}
+		}
+		if overlap > 0 && frameSize >= overlap && len(e.overlapBuffer) >= (ch+1)*overlap {
+			hist := e.overlapBuffer[ch*overlap : (ch+1)*overlap]
+			src := (frameSize-overlap)*channels + ch
+			for i := range overlap {
+				hist[i] = celtSig(preemph[src])
+				src += channels
+			}
+		}
+	}
+}
+
 func pitchDownsampleSig(x []celtSig, xLP []float32, length, channels, factor int) {
 	if length <= 0 || factor <= 0 || len(xLP) < length {
 		return
@@ -346,29 +432,67 @@ func pitchDownsampleSig(x []celtSig, xLP []float32, length, channels, factor int
 	handled := false
 	if factor == 2 {
 		if channels == 1 {
-			idx := 2
-			for i := 1; i < length; i++ {
-				v := firQuarter*float32(x[idx-1]) + firQuarter*float32(x[idx+1]) + firHalf*float32(x[idx])
-				xLP[i] = v
-				idx += 2
-			}
+			// Sliding-window FIR: each output xLP[i] = 0.25*(x[2i-1]+x[2i+1]) + 0.5*x[2i].
+			// Slicing src to exactly 2*length lets the compiler prove every window
+			// access (win[0:3]) is in bounds, eliminating per-sample bounds checks.
 			xLP[0] = firQuarter*float32(x[1]) + firHalf*float32(x[0])
+			if length > 1 && len(x) >= 2*length {
+				src := x[:2*length]
+				win := src[1:] // win[0]=x[2i-1], win[1]=x[2i], win[2]=x[2i+1] at i=1
+				dst := xLP[1:length]
+				// 4-output unroll: consecutive outputs share y[2i+1]=y[2(i+1)-1],
+				// reducing loads from 12 to 9 per 4 outputs.
+				for len(dst) >= 4 && len(win) >= 9 {
+					w0, w1, w2, w3, w4, w5, w6, w7, w8 := win[0], win[1], win[2], win[3], win[4], win[5], win[6], win[7], win[8]
+					dst[0] = firQuarter*float32(w0) + firQuarter*float32(w2) + firHalf*float32(w1)
+					dst[1] = firQuarter*float32(w2) + firQuarter*float32(w4) + firHalf*float32(w3)
+					dst[2] = firQuarter*float32(w4) + firQuarter*float32(w6) + firHalf*float32(w5)
+					dst[3] = firQuarter*float32(w6) + firQuarter*float32(w8) + firHalf*float32(w7)
+					win = win[8:]
+					dst = dst[4:]
+				}
+				for len(dst) > 0 && len(win) >= 3 {
+					v := firQuarter*float32(win[0]) + firQuarter*float32(win[2]) + firHalf*float32(win[1])
+					dst[0] = v
+					win = win[2:]
+					dst = dst[1:]
+				}
+			}
 		} else if channels == 2 {
 			chStride := len(x) / 2
 			x0 := x[:chStride]
 			x1 := x[chStride:]
-			idx := 2
-			for i := 1; i < length; i++ {
-				v0 := firQuarter*float32(x0[idx-1]) + firQuarter*float32(x0[idx+1]) + firHalf*float32(x0[idx])
-				v1 := firQuarter*float32(x1[idx-1]) + firQuarter*float32(x1[idx+1]) + firHalf*float32(x1[idx])
-				xLP[i] = v0
-				xLP[i] += v1
-				idx += 2
-			}
 			v0 := firQuarter*float32(x0[1]) + firHalf*float32(x0[0])
 			v1 := firQuarter*float32(x1[1]) + firHalf*float32(x1[0])
-			xLP[0] = v0
-			xLP[0] += v1
+			xLP[0] = v0 + v1
+			if length > 1 && len(x0) >= 2*length && len(x1) >= 2*length {
+				s0 := x0[:2*length]
+				s1 := x1[:2*length]
+				w0 := s0[1:]
+				w1 := s1[1:]
+				dst := xLP[1:length]
+				// 2× unroll: w0[2] shared between pair; L and R independent (12
+				// FMULs per 2 outputs saturate 4-wide dispatch with latency hiding).
+				for len(dst) >= 2 && len(w0) >= 5 && len(w1) >= 5 {
+					vv0_0 := firQuarter*float32(w0[0]) + firQuarter*float32(w0[2]) + firHalf*float32(w0[1])
+					vv1_0 := firQuarter*float32(w1[0]) + firQuarter*float32(w1[2]) + firHalf*float32(w1[1])
+					vv0_1 := firQuarter*float32(w0[2]) + firQuarter*float32(w0[4]) + firHalf*float32(w0[3])
+					vv1_1 := firQuarter*float32(w1[2]) + firQuarter*float32(w1[4]) + firHalf*float32(w1[3])
+					dst[0] = vv0_0 + vv1_0
+					dst[1] = vv0_1 + vv1_1
+					w0 = w0[4:]
+					w1 = w1[4:]
+					dst = dst[2:]
+				}
+				for len(dst) > 0 && len(w0) >= 3 && len(w1) >= 3 {
+					vv0 := firQuarter*float32(w0[0]) + firQuarter*float32(w0[2]) + firHalf*float32(w0[1])
+					vv1 := firQuarter*float32(w1[0]) + firQuarter*float32(w1[2]) + firHalf*float32(w1[1])
+					dst[0] = vv0 + vv1
+					w0 = w0[2:]
+					w1 = w1[2:]
+					dst = dst[1:]
+				}
+			}
 		}
 		handled = true
 	}
@@ -434,14 +558,36 @@ func pitchSearch(xLP []float32, y []float32, length, maxPitch int, scratch *enco
 	yLP4 := ensureFloat32Slice(&scratch.prefilterYLP4, quarterLag)
 	xcorr := ensureFloat32Slice(&scratch.prefilterXcorr, halfPitch)
 
-	for j, idx := 0, 0; j < quarterLen; j, idx = j+1, idx+2 {
-		xLP4[j] = xLP[idx]
+	{
+		_ = xLP[2*quarterLen-1]
+		_ = xLP4[quarterLen-1]
+		j := 0
+		for ; j+3 < quarterLen; j += 4 {
+			xLP4[j] = xLP[2*j]
+			xLP4[j+1] = xLP[2*j+2]
+			xLP4[j+2] = xLP[2*j+4]
+			xLP4[j+3] = xLP[2*j+6]
+		}
+		for ; j < quarterLen; j++ {
+			xLP4[j] = xLP[2*j]
+		}
 	}
-	for j, idx := 0, 0; j < quarterLag; j, idx = j+1, idx+2 {
-		yLP4[j] = y[idx]
+	{
+		_ = y[2*quarterLag-1]
+		_ = yLP4[quarterLag-1]
+		j := 0
+		for ; j+3 < quarterLag; j += 4 {
+			yLP4[j] = y[2*j]
+			yLP4[j+1] = y[2*j+2]
+			yLP4[j+2] = y[2*j+4]
+			yLP4[j+3] = y[2*j+6]
+		}
+		for ; j < quarterLag; j++ {
+			yLP4[j] = y[2*j]
+		}
 	}
 
-	pitchXCorrFloat32(xLP4, yLP4, xcorr, quarterLen, quarterPitch)
+	pitchXCorrFloat32Quality(xLP4, yLP4, xcorr, quarterLen, quarterPitch)
 	bestPitch := [2]int{0, 0}
 	findBestPitchF32(xcorr, yLP4, quarterLen, quarterPitch, &bestPitch)
 
@@ -451,10 +597,7 @@ func pitchSearch(xLP []float32, y []float32, length, maxPitch int, scratch *enco
 			continue
 		}
 		lo := max(r.lo-1, 0)
-		hi := r.hi + 2
-		if hi > halfPitch {
-			hi = halfPitch
-		}
+		hi := min(r.hi+2, halfPitch)
 		clear(xcorr[lo:hi])
 	}
 	Syy := float32(1)
@@ -479,7 +622,7 @@ func pitchSearch(xLP []float32, y []float32, length, maxPitch int, scratch *enco
 			}
 		}
 		n := r.hi - r.lo + 1
-		pitchXCorrFloat32(xLP, y[r.lo:], xcorr[r.lo:], halfLen, n)
+		pitchXCorrFloat32Quality(xLP, y[r.lo:], xcorr[r.lo:], halfLen, n)
 		for ; i <= r.hi; i++ {
 			if xcorr[i] < -1 {
 				xcorr[i] = -1
@@ -684,12 +827,20 @@ func removeDoubling(x []float32, maxPeriod, minPeriod, N int, T0 *int, prevPerio
 	yyLookup := ensureFloat32Slice(&scratch.prefilterYYLookup, maxPeriod+1)
 	yy := xx
 	yyLookup[0] = yy
-	for i := 1; i <= maxPeriod; i++ {
-		v1 := xBase[maxPeriod-i]
-		v2 := xBase[maxPeriod+N-i]
+	// Hoist the two descending input windows into fixed-length slices so the
+	// per-iteration index is provably in range, dropping three bounds checks
+	// per iteration on this maxPeriod-long critical loop. Bit-exact.
+	v1s := xBase[:maxPeriod]
+	v2s := xBase[N : N+maxPeriod]
+	yl := yyLookup[:maxPeriod+1]
+	// idx descends (== i ascending) so the loop counter is directly provable
+	// in [0,maxPeriod), preserving the exact yy accumulation order.
+	for idx := maxPeriod - 1; idx >= 0; idx-- {
+		v1 := v1s[idx]
+		v2 := v2s[idx]
 		yy += v1 * v1
 		yy -= v2 * v2
-		yyLookup[i] = maxFloat32(0, yy)
+		yl[maxPeriod-idx] = maxFloat32(0, yy)
 	}
 
 	yy = yyLookup[T0val]

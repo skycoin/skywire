@@ -117,7 +117,7 @@ func (d *Decoder) prepareStereoTransition(packetStereo bool, bandwidth silk.Band
 
 func addFloat32ToFloat32(dst []float32, src []float32) {
 	n := min(len(src), len(dst))
-	for i := 0; i < n; i++ {
+	for i := range n {
 		dst[i] += src[i]
 	}
 }

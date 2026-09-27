@@ -1,4 +1,4 @@
-//go:build (arm64 && gopus_neon_tone_lpc_corr) && !purego
+//go:build arm64 && !purego
 
 #include "textflag.h"
 

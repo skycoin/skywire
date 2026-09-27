@@ -6,6 +6,16 @@ import (
 	"unicode/utf8"
 )
 
+// sliceOffset reports where part starts in whole when part is a suffix backed
+// by the same byte slice.
+func sliceOffset(whole, part []byte) (int, bool) {
+	if len(part) == 0 {
+		return len(whole), len(whole) == 0
+	}
+	base := len(whole) - len(part)
+	return base, base >= 0 && &whole[base] == &part[0]
+}
+
 // IsEmpty returns the length of a blank line at the start of data,
 // or 0 if the line is not blank. It is okay to call on an empty buffer.
 func IsEmpty(data []byte) int {
@@ -25,8 +35,7 @@ func IsEmpty(data []byte) int {
 
 // skipChar advances i as long as data[i] == c
 func skipChar(data []byte, i int, c byte) int {
-	n := len(data)
-	for i < n && data[i] == c {
+	for i < len(data) && data[i] == c {
 		i++
 	}
 	return i
@@ -34,8 +43,7 @@ func skipChar(data []byte, i int, c byte) int {
 
 // like skipChar but only skips up to max characters
 func skipCharN(data []byte, i int, c byte, max int) int {
-	n := len(data)
-	for i < n && max > 0 && data[i] == c {
+	for i < len(data) && max > 0 && data[i] == c {
 		i++
 		max--
 	}
@@ -44,24 +52,28 @@ func skipCharN(data []byte, i int, c byte, max int) int {
 
 // skipUntilChar advances i as long as data[i] != c
 func skipUntilChar(data []byte, i int, c byte) int {
-	n := len(data)
-	for i < n && data[i] != c {
+	for i < len(data) && data[i] != c {
 		i++
 	}
 	return i
 }
 
 func skipAlnum(data []byte, i int) int {
-	n := len(data)
-	for i < n && IsAlnum(data[i]) {
+	for i < len(data) && IsAlnum(data[i]) {
 		i++
 	}
 	return i
 }
 
 func skipSpace(data []byte, i int) int {
-	n := len(data)
-	for i < n && IsSpace(data[i]) {
+	for i < len(data) && IsSpace(data[i]) {
+		i++
+	}
+	return i
+}
+
+func skipHSpace(data []byte, i int) int {
+	for i < len(data) && (data[i] == ' ' || data[i] == '\t') {
 		i++
 	}
 	return i
@@ -81,14 +93,26 @@ func backUntilChar(data []byte, i int, c byte) int {
 	return i
 }
 
+func prefixedBlock(data []byte, marker string) int {
+	i := skipCharN(data, 0, ' ', 3)
+	if !bytes.HasPrefix(data[i:], []byte(marker)) {
+		return 0
+	}
+	i += len(marker)
+	if i < len(data) && data[i] == ' ' {
+		i++
+	}
+	return i
+}
+
+func terminatesPrefixedBlock(data []byte, begin, end int, prefix func([]byte) int) bool {
+	return IsEmpty(data[begin:]) > 0 &&
+		(end >= len(data) || prefix(data[end:]) == 0 && IsEmpty(data[end:]) == 0)
+}
+
 // IsPunctuation returns true if c is a punctuation symbol.
 func IsPunctuation(c byte) bool {
-	for _, r := range []byte("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~") {
-		if c == r {
-			return true
-		}
-	}
-	return false
+	return bytes.IndexByte([]byte("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"), c) >= 0
 }
 
 func IsPunctuation2(d []byte) bool {
@@ -111,15 +135,10 @@ func IsSpace(c byte) bool {
 }
 
 // IsLetter returns true if c is ascii letter
-func IsLetter(c byte) bool {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-}
+func IsLetter(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' }
 
-// IsAlnum returns true if c is a digit or letter
-// TODO: check when this is looking for ASCII alnum and when it should use unicode
-func IsAlnum(c byte) bool {
-	return (c >= '0' && c <= '9') || IsLetter(c)
-}
+// IsAlnum returns true if c is an ASCII digit or letter.
+func IsAlnum(c byte) bool { return c >= '0' && c <= '9' || IsLetter(c) }
 
 func NormalizeNewlines(d []byte) []byte {
 	if bytes.IndexByte(d, '\r') < 0 {

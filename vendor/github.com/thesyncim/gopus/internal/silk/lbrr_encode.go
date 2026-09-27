@@ -313,10 +313,7 @@ func (e *Encoder) encodeLBRRIndices(re *rangecoding.Encoder, frameIdx, condCodin
 	}
 
 	// Encode signal type and quantizer offset (LBRR uses VAD table)
-	typeOffset := max(2*signalType+quantOffset, 2)
-	if typeOffset > 5 {
-		typeOffset = 5
-	}
+	typeOffset := min(max(2*signalType+quantOffset, 2), 5)
 	re.EncodeICDF(typeOffset-2, silk_type_offset_VAD_iCDF, 8)
 
 	// Encode gains
@@ -325,10 +322,7 @@ func (e *Encoder) encodeLBRRIndices(re *rangecoding.Encoder, frameIdx, condCodin
 			re.EncodeICDF(int(indices.GainsIndices[i]), silk_delta_gain_iCDF, 8)
 		}
 	} else {
-		gainIdx := max(int(indices.GainsIndices[0]), 0)
-		if gainIdx > nLevelsQGain-1 {
-			gainIdx = nLevelsQGain - 1
-		}
+		gainIdx := min(max(int(indices.GainsIndices[0]), 0), nLevelsQGain-1)
 		msb := gainIdx >> 3
 		lsb := gainIdx & 7
 		stype := signalType
@@ -376,10 +370,7 @@ func (e *Encoder) encodeLBRRIndices(re *rangecoding.Encoder, frameIdx, condCodin
 	}
 
 	if nbSubfr == maxNbSubfr {
-		interp := max(int(indices.NLSFInterpCoefQ2), 0)
-		if interp > 4 {
-			interp = 4
-		}
+		interp := min(max(int(indices.NLSFInterpCoefQ2), 0), 4)
 		re.EncodeICDF(interp, silk_NLSF_interpolation_factor_iCDF, 8)
 	}
 
@@ -421,16 +412,10 @@ func (e *Encoder) encodeLBRRIndices(re *rangecoding.Encoder, frameIdx, condCodin
 			*prevLagIndex = int(indices.lagIndex)
 		}
 
-		contourIdx := max(int(indices.contourIndex), 0)
-		if contourIdx > len(contourICDF)-1 {
-			contourIdx = len(contourICDF) - 1
-		}
+		contourIdx := min(max(int(indices.contourIndex), 0), len(contourICDF)-1)
 		re.EncodeICDF(contourIdx, contourICDF, 8)
 
-		per := max(int(indices.PERIndex), 0)
-		if per > 2 {
-			per = 2
-		}
+		per := min(max(int(indices.PERIndex), 0), 2)
 		re.EncodeICDF(per, silk_LTP_per_index_iCDF, 8)
 		for k := 0; k < nbSubfr; k++ {
 			idx := max(int(indices.LTPIndex[k]), 0)
@@ -442,10 +427,7 @@ func (e *Encoder) encodeLBRRIndices(re *rangecoding.Encoder, frameIdx, condCodin
 		}
 
 		if condCoding == codeIndependently {
-			ltpScale := max(int(indices.LTPScaleIndex), 0)
-			if ltpScale > 2 {
-				ltpScale = 2
-			}
+			ltpScale := min(max(int(indices.LTPScaleIndex), 0), 2)
 			re.EncodeICDF(ltpScale, silk_LTPscale_iCDF, 8)
 		}
 	}
@@ -454,10 +436,7 @@ func (e *Encoder) encodeLBRRIndices(re *rangecoding.Encoder, frameIdx, condCodin
 		*prevSignalType = signalType
 	}
 
-	seed := max(int(indices.Seed), 0)
-	if seed > 3 {
-		seed = 3
-	}
+	seed := min(max(int(indices.Seed), 0), 3)
 	re.EncodeICDF(seed, silk_uniform4_iCDF, 8)
 }
 

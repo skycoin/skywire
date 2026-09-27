@@ -480,10 +480,7 @@ func (e *Encoder) encodeHybridFrameWithMaxPacketAndTransition(pcm []opusRes, cel
 	if e.channels == 2 {
 		targetWidthQ14 := int16(16384)
 		if e.hybridState != nil {
-			targetWidthQ14 = max(e.hybridState.silkStereoWidthQ14, 0)
-			if targetWidthQ14 > 16384 {
-				targetWidthQ14 = 16384
-			}
+			targetWidthQ14 = min(max(e.hybridState.silkStereoWidthQ14, 0), 16384)
 		}
 		if e.hybridState.stereoWidthQ14 < (1<<14) || targetWidthQ14 < (1<<14) {
 			celtInput = e.applyStereoWidthFade(celtInput, e.hybridState.stereoWidthQ14, targetWidthQ14)
@@ -999,7 +996,7 @@ func (e *Encoder) resampleHybridSILKLowband(samples []opusRes, frameSize int) []
 	interleaved := e.scratchPCM32[:n*2]
 	leftOut = leftOut[:n]
 	rightOut = rightOut[:n]
-	for i := 0; i < n; i++ {
+	for i := range n {
 		// Use two-element sub-slice to prove both accesses in bounds with one check.
 		pair := interleaved[i*2 : i*2+2 : i*2+2]
 		pair[0] = leftOut[i]
@@ -1047,7 +1044,7 @@ func (e *Encoder) applyGainFade(samples []opusRes, g1, g2 opusVal16) []opusRes {
 
 	// Apply windowed gain fade during overlap region
 	if channels == 1 {
-		for i := 0; i < overlap; i++ {
+		for i := range overlap {
 			w := opusVal16(window[i])
 			w2 := w * w // Square the window (libopus does this)
 			g := g1*(1-w2) + g2*w2
@@ -1058,7 +1055,7 @@ func (e *Encoder) applyGainFade(samples []opusRes, g1, g2 opusVal16) []opusRes {
 			samples[i] *= g2
 		}
 	} else {
-		for i := 0; i < overlap; i++ {
+		for i := range overlap {
 			w := opusVal16(window[i])
 			w2 := w * w
 			g := g1*(1-w2) + g2*w2
@@ -1125,7 +1122,7 @@ func (e *Encoder) applyStereoWidthFade(samples []opusRes, widthQ14Prev, widthQ14
 		return samples
 	}
 
-	for i := 0; i < overlap; i++ {
+	for i := range overlap {
 		w := opusVal16(window[i*inc])
 		w2 := w * w
 		g := g1*(1.0-w2) + g2*w2
@@ -1499,10 +1496,7 @@ func (e *Encoder) encodeCELTHybridImproved(pcm []opusRes, frameSize int, targetP
 	// Hybrid CELT only encodes bands starting at HybridCELTStartBand.
 	start := celt.HybridCELTStartBand
 	bw := celtBandwidthFromTypes(e.effectiveBandwidth())
-	end := min(celt.EffectiveBandsForFrameSize(bw, frameSize), mode.EffBands)
-	if end < 1 {
-		end = 1
-	}
+	end := max(min(celt.EffectiveBandsForFrameSize(bw, frameSize), mode.EffBands), 1)
 	if end < start {
 		end = start
 	}
@@ -1634,9 +1628,6 @@ func (e *Encoder) encodeCELTHybridImproved(pcm []opusRes, frameSize int, targetP
 	if maxLen := nbBands * channels; maxLen > 0 && len(oldBandE) > maxLen {
 		oldBandE = oldBandE[:maxLen]
 	}
-
-	// Update tonality analysis for next frame's VBR decisions.
-	e.celtEncoder.UpdateTonalityAnalysisHybrid(normL, analysisEnergies, nbBands, frameSize)
 
 	// Compute dynalloc analysis for TF/spread and offsets.
 	lsbDepth := int(e.lsbDepth)
@@ -1963,7 +1954,7 @@ func computeMDCTForHybridScratch(samples []float32, frameSize, channels int, his
 				hs.scratchMDCTInput = make([]float32, needed)
 			}
 			input := hs.scratchMDCTInput[:needed]
-			for i := 0; i < overlap; i++ {
+			for i := range overlap {
 				input[i] = history[i]
 			}
 			copy(input[overlap:], samples)
@@ -1978,7 +1969,7 @@ func computeMDCTForHybridScratch(samples []float32, frameSize, channels int, his
 			hs.scratchMDCTInput = make([]float32, needed)
 		}
 		input := hs.scratchMDCTInput[:needed]
-		for i := 0; i < overlap; i++ {
+		for i := range overlap {
 			input[i] = 0
 		}
 		copy(input[overlap:], samples)
@@ -2007,7 +1998,7 @@ func computeMDCTForHybridScratch(samples []float32, frameSize, channels int, his
 		}
 		input := hs.scratchMDCTInput[:needed]
 		// Left channel with rounded overlap history.
-		for i := 0; i < overlap; i++ {
+		for i := range overlap {
 			input[i] = history[i]
 		}
 		copy(input[overlap:], left)
@@ -2026,7 +2017,7 @@ func computeMDCTForHybridScratch(samples []float32, frameSize, channels int, his
 		copy(result[:leftLen], mdctLeft)
 
 		// Right channel with rounded overlap history.
-		for i := 0; i < overlap; i++ {
+		for i := range overlap {
 			input[i] = history[overlap+i]
 		}
 		copy(input[overlap:], right)
@@ -2046,7 +2037,7 @@ func computeMDCTForHybridScratch(samples []float32, frameSize, channels int, his
 	}
 	input := hs.scratchMDCTInput[:needed]
 	// Left channel
-	for i := 0; i < overlap; i++ {
+	for i := range overlap {
 		input[i] = 0
 	}
 	copy(input[overlap:], left)
@@ -2067,7 +2058,7 @@ func computeMDCTForHybridScratch(samples []float32, frameSize, channels int, his
 	copy(result[:leftLen], mdctLeft)
 
 	// Right channel
-	for i := 0; i < overlap; i++ {
+	for i := range overlap {
 		input[i] = 0
 	}
 	copy(input[overlap:], right)

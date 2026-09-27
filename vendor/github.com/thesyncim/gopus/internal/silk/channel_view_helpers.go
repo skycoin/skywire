@@ -34,10 +34,7 @@ func plcLPCCoefficientsQ12(state *plc.SILKPLCState) []int16 {
 	if state == nil {
 		return nil
 	}
-	order := max(int(state.LPCOrder), 0)
-	if order > maxLPCOrder {
-		order = maxLPCOrder
-	}
+	order := min(max(int(state.LPCOrder), 0), maxLPCOrder)
 	return state.PrevLPCQ12[:order]
 }
 

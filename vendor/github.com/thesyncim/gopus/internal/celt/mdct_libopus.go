@@ -26,10 +26,7 @@ func LibopusIMDCTF32(spectrum []float32, prevOverlap []float32, overlap int) []f
 
 	// Copy prevOverlap to out[0:overlap] for TDAC
 	if overlap > 0 && len(prevOverlap) > 0 {
-		copyLen := overlap
-		if len(prevOverlap) < copyLen {
-			copyLen = len(prevOverlap)
-		}
+		copyLen := min(len(prevOverlap), overlap)
 		copy(out[:copyLen], prevOverlap[:copyLen])
 	}
 

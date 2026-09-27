@@ -29,7 +29,7 @@ func (p Parsed) ForRequest(req Request) Result {
 // into dst and returns the number of entries written.
 func (r Result) FillQuantizerLevels(dst []int32) int {
 	n := min(r.Availability.MaxLatents, len(dst))
-	for i := 0; i < n; i++ {
+	for i := range n {
 		dst[i] = r.Parsed.Header.QuantizerLevel(i)
 	}
 	return n
