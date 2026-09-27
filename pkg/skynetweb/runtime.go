@@ -130,6 +130,9 @@ type Config struct {
 	// TLSPort selects the destination port treated as TLS for MITM.
 	// Defaults to 443. Ignored when TLSMITM is false.
 	TLSPort uint16
+	// TLSUpstreamPort is the destination port a MITM'd TLS connection is
+	// sent to once decrypted. Defaults to 80, where visors serve HTTP.
+	TLSUpstreamPort uint16
 	// LeafMinter mints per-host leaf certs. Required when TLSMITM
 	// is true; ignored otherwise.
 	LeafMinter skynetca.LeafMinter
@@ -206,6 +209,9 @@ func Run(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cfg Conf
 		}
 		if cfg.TLSPort == 0 {
 			cfg.TLSPort = 443
+		}
+		if cfg.TLSUpstreamPort == 0 {
+			cfg.TLSUpstreamPort = 80
 		}
 	}
 
@@ -379,15 +385,31 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 					return nil, fmt.Errorf("skynet dial: %w", err)
 				}
 
+				// A MITM'd TLS connection arrives decrypted, so it goes to the
+				// site's plain-HTTP port rather than the TLS port the browser named.
+				mitm := cfg.TLSMITM && hport == cfg.TLSPort
+				dialPort := hport
+				if mitm {
+					dialPort = cfg.TLSUpstreamPort
+				}
+
 				// Self-lookup short-circuit: serve a request destined for THIS
 				// visor from the local service in-process instead of routing out
 				// over skynet back to ourselves. SelfLoopback=false forces the
 				// full self-route path (a valid self-transport test).
 				if cfg.SelfLoopback && cfg.SelfDial != nil && dest == cfg.LocalPK && len(route) == 0 {
 					log.WithField("port", hport).Debug("SOCKS5 → skynet self-loopback (in-process)")
-					c, derr := cfg.SelfDial(hport)
+					c, derr := cfg.SelfDial(dialPort)
 					if derr != nil {
 						return nil, derr
+					}
+					if mitm {
+						leaf, lerr := cfg.LeafMinter.For(origHost)
+						if lerr != nil {
+							_ = c.Close() //nolint:errcheck,gosec
+							return nil, fmt.Errorf("skynet mitm leaf: %w", lerr)
+						}
+						return &tcpAddrConn{Conn: skynetca.MITMTerminate(c, leaf)}, nil
 					}
 					// Wrap so LocalAddr()/RemoteAddr() return *net.TCPAddr —
 					// go-socks5 (request.go:194) does an unchecked assertion
@@ -402,7 +424,7 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 					WithField("hops", len(route)).
 					Debug("SOCKS5 → skynet")
 
-				conn, err := dialer.DialSkynet(dialCtx, dest, hport, route)
+				conn, err := dialer.DialSkynet(dialCtx, dest, dialPort, route)
 				if err != nil {
 					done(err)
 					return nil, fmt.Errorf("skynet dial: %w", err)
@@ -448,7 +470,7 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				// underlying skywire conn is already authenticated
 				// by visor pubkey; the local cert exists only to
 				// satisfy the browser's secure-context machinery.
-				if cfg.TLSMITM && hport == cfg.TLSPort {
+				if mitm {
 					leaf, lerr := cfg.LeafMinter.For(origHost)
 					if lerr != nil {
 						_ = stack.Close() //nolint:errcheck,gosec
@@ -552,6 +574,9 @@ func skynetRedialProbe(dialer SkynetDialer, cfg Config, upstream *proxyroute.For
 			_, route, dest, hport, err := ParseResolverHost(hostWithPort, cfg.DomainSuffix, cfg.Aliases)
 			if err != nil {
 				return err
+			}
+			if cfg.TLSMITM && hport == cfg.TLSPort {
+				hport = cfg.TLSUpstreamPort
 			}
 			c, e := dialer.DialSkynet(ctx, dest, hport, route)
 			if e == nil {

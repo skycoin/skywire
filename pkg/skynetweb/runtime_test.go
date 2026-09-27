@@ -45,7 +45,9 @@ func TestSOCKS5_MITMHandshakeAndSplice(t *testing.T) {
 	minter := skynetca.NewMinter(ca, caKey, skynetca.LeafOptions{})
 	proxyPort := pickFreePort(t)
 
+	dialed := make(chan uint16, 1)
 	dialer := fakeDialer{
+		dialed: dialed,
 		onDial: func() (net.Conn, error) {
 			client, server := net.Pipe()
 			go func() {
@@ -73,7 +75,7 @@ func TestSOCKS5_MITMHandshakeAndSplice(t *testing.T) {
 		})
 	}()
 
-	if err := waitForListener("127.0.0.1", proxyPort, 2*time.Second); err != nil {
+	if err := waitForListener(proxyPort); err != nil {
 		t.Fatal(err)
 	}
 
@@ -100,6 +102,9 @@ func TestSOCKS5_MITMHandshakeAndSplice(t *testing.T) {
 	body, _ := io.ReadAll(tlsConn) //nolint:errcheck,gosec
 	if !strings.Contains(string(body), "hello") {
 		t.Errorf("body = %q, want to contain hello", string(body))
+	}
+	if got := <-dialed; got != 80 {
+		t.Errorf("MITM dialed port %d, want 80: the decrypted stream goes to the site's HTTP port", got)
 	}
 }
 
@@ -135,7 +140,7 @@ func TestSOCKS5_NonTLSPortStillSplices(t *testing.T) {
 			LeafMinter: minter,
 		})
 	}()
-	if err := waitForListener("127.0.0.1", proxyPort, 2*time.Second); err != nil {
+	if err := waitForListener(proxyPort); err != nil {
 		t.Fatal(err)
 	}
 
@@ -157,9 +162,14 @@ func TestSOCKS5_NonTLSPortStillSplices(t *testing.T) {
 
 type fakeDialer struct {
 	onDial func() (net.Conn, error)
+	// dialed, when set, receives the port of every dial.
+	dialed chan uint16
 }
 
-func (f fakeDialer) DialSkynet(_ context.Context, _ cipher.PubKey, _ uint16, _ []RouteLabel) (net.Conn, error) {
+func (f fakeDialer) DialSkynet(_ context.Context, _ cipher.PubKey, port uint16, _ []RouteLabel) (net.Conn, error) {
+	if f.dialed != nil {
+		f.dialed <- port
+	}
 	if f.onDial == nil {
 		return nil, errors.New("fakeDialer: no onDial set")
 	}
@@ -177,9 +187,9 @@ func pickFreePort(t *testing.T) uint {
 	return port
 }
 
-func waitForListener(host string, port uint, max time.Duration) error {
-	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
-	deadline := time.Now().Add(max)
+func waitForListener(port uint) error {
+	addr := net.JoinHostPort("127.0.0.1", fmt.Sprintf("%d", port))
+	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		c, err := net.Dial("tcp", addr)
 		if err == nil {
@@ -188,5 +198,68 @@ func waitForListener(host string, port uint, max time.Duration) error {
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
-	return fmt.Errorf("listener at %s not up within %s", addr, max)
+	return fmt.Errorf("listener at %s not up within 2s", addr)
+}
+
+// TestSOCKS5_MITMSelfLoopback: a MITM'd request for this visor's own name is
+// served in-process from the plain-HTTP port, behind the minted leaf.
+func TestSOCKS5_MITMSelfLoopback(t *testing.T) {
+	ca, caKey, err := skynetca.GenerateCA(skynetca.CAOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var local cipher.PubKey
+	if err := local.Set(testPK); err != nil {
+		t.Fatal(err)
+	}
+	proxyPort := pickFreePort(t)
+	selfPorts := make(chan uint16, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		_ = Run(ctx, logging.MustGetLogger("skynetweb-test"), fakeDialer{}, Config{ //nolint:errcheck,gosec
+			ProxyPort:    proxyPort,
+			TLSMITM:      true,
+			LeafMinter:   skynetca.NewMinter(ca, caKey, skynetca.LeafOptions{}),
+			LocalPK:      local,
+			SelfLoopback: true,
+			SelfDial: func(port uint16) (net.Conn, error) {
+				selfPorts <- port
+				client, server := net.Pipe()
+				go func() {
+					defer server.Close() //nolint:errcheck,gosec
+					buf := make([]byte, 4096)
+					_, _ = server.Read(buf)                                                                              //nolint:errcheck,gosec
+					_, _ = server.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\nself")) //nolint:errcheck,gosec
+				}()
+				return client, nil
+			},
+		})
+	}()
+	if err := waitForListener(proxyPort); err != nil {
+		t.Fatal(err)
+	}
+	socksDialer, _ := proxy.SOCKS5("tcp", fmt.Sprintf("127.0.0.1:%d", proxyPort), nil, proxy.Direct) //nolint:errcheck,gosec
+	host := testPK + ".skynet"
+	conn, err := socksDialer.Dial("tcp", host+":443")
+	if err != nil {
+		t.Fatalf("SOCKS5 dial: %v", err)
+	}
+	defer conn.Close() //nolint:errcheck,gosec
+	pool := x509.NewCertPool()
+	pool.AddCert(ca)
+	tlsConn := tls.Client(conn, &tls.Config{ServerName: host, RootCAs: pool})
+	if err := tlsConn.Handshake(); err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	if _, err := tlsConn.Write([]byte("GET / HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	body, _ := io.ReadAll(tlsConn) //nolint:errcheck,gosec
+	if !strings.Contains(string(body), "self") {
+		t.Errorf("body = %q, want the local service's reply", string(body))
+	}
+	if got := <-selfPorts; got != 80 {
+		t.Errorf("self-loopback dialed port %d, want 80", got)
+	}
 }

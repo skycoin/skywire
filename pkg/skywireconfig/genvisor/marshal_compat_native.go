@@ -56,6 +56,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
+	"github.com/skycoin/skywire/pkg/proxyroute"
 	tnspec "github.com/skycoin/skywire/pkg/transport/network/spec"
 	tspec "github.com/skycoin/skywire/pkg/transport/spec"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -192,6 +193,27 @@ func writeStringSliceNative(w *strings.Builder, vals []string, indent int) {
 		w.WriteByte('\n')
 		writeIndentNative(w, indent+1)
 		writeQuotedNative(w, s)
+	}
+	w.WriteByte('\n')
+	writeIndentNative(w, indent)
+	w.WriteByte(']')
+}
+
+// writeRulesNative writes a JSON array of per-domain upstream rules.
+func writeRulesNative(w *strings.Builder, rules []proxyroute.Rule, indent int) {
+	w.WriteByte('[')
+	for i, r := range rules {
+		if i > 0 {
+			w.WriteByte(',')
+		}
+		w.WriteByte('\n')
+		writeIndentNative(w, indent+1)
+		o := newObjNative(w, indent+1)
+		o.field("suffix")
+		writeQuotedNative(w, r.Suffix)
+		o.field("upstream")
+		writeQuotedNative(w, r.Upstream)
+		o.close()
 	}
 	w.WriteByte('\n')
 	writeIndentNative(w, indent)
@@ -705,6 +727,10 @@ func marshalDmsgWebNative(w *strings.Builder, d *visorconfig.DmsgWebConfig, inde
 		o.field("upstream_socks")
 		writeQuotedNative(w, d.UpstreamSOCKS)
 	}
+	if len(d.UpstreamRules) > 0 {
+		o.field("upstream_rules")
+		writeRulesNative(w, d.UpstreamRules, o.indent+1)
+	}
 	if d.TLSMITM {
 		o.field("tls_mitm")
 		writeBoolNative(w, d.TLSMITM)
@@ -712,6 +738,10 @@ func marshalDmsgWebNative(w *strings.Builder, d *visorconfig.DmsgWebConfig, inde
 	if d.TLSPort != 0 {
 		o.field("tls_port")
 		writeUintNative(w, uint64(d.TLSPort))
+	}
+	if d.TLSUpstreamPort != 0 {
+		o.field("tls_upstream_port")
+		writeUintNative(w, uint64(d.TLSUpstreamPort))
 	}
 	if d.TLSCAPath != "" {
 		o.field("tls_ca_path")
@@ -786,6 +816,10 @@ func marshalSkynetWebNative(w *strings.Builder, s *visorconfig.SkynetWebConfig, 
 		o.field("upstream_socks")
 		writeQuotedNative(w, s.UpstreamSOCKS)
 	}
+	if len(s.UpstreamRules) > 0 {
+		o.field("upstream_rules")
+		writeRulesNative(w, s.UpstreamRules, o.indent+1)
+	}
 	if s.RouteTimeout != 0 {
 		o.field("route_timeout")
 		writeDurationNative(w, s.RouteTimeout)
@@ -797,6 +831,10 @@ func marshalSkynetWebNative(w *strings.Builder, s *visorconfig.SkynetWebConfig, 
 	if s.TLSPort != 0 {
 		o.field("tls_port")
 		writeUintNative(w, uint64(s.TLSPort))
+	}
+	if s.TLSUpstreamPort != 0 {
+		o.field("tls_upstream_port")
+		writeUintNative(w, uint64(s.TLSUpstreamPort))
 	}
 	if s.TLSCAPath != "" {
 		o.field("tls_ca_path")
@@ -877,6 +915,10 @@ func marshalResolversNative(w *strings.Builder, rs []visorconfig.ResolverConfig,
 			o.field("upstream_socks")
 			writeQuotedNative(w, r.UpstreamSOCKS)
 		}
+		if len(r.UpstreamRules) > 0 {
+			o.field("upstream_rules")
+			writeRulesNative(w, r.UpstreamRules, o.indent+1)
+		}
 		if r.Chain != nil {
 			o.field("chain")
 			writeBoolNative(w, *r.Chain)
@@ -904,6 +946,10 @@ func marshalResolversNative(w *strings.Builder, rs []visorconfig.ResolverConfig,
 		if r.TLSPort != 0 {
 			o.field("tls_port")
 			writeUintNative(w, uint64(r.TLSPort))
+		}
+		if r.TLSUpstreamPort != 0 {
+			o.field("tls_upstream_port")
+			writeUintNative(w, uint64(r.TLSUpstreamPort))
 		}
 		if r.TLSCAPath != "" {
 			o.field("tls_ca_path")
