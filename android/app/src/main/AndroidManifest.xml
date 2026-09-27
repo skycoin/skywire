@@ -110,8 +110,15 @@
              MainActivity turns both on for exactly as long as there is a call
              (VoiceCallState.busy) and off again after — same privilege, held
              for the moment that needs it. -->
+        <!-- configChanges: turning the phone must not rebuild the Activity.
+             A rebuild takes the chat's WebView with it — the page reloads,
+             an open conversation and a recording in progress are lost — and
+             a full-screen video, the one thing people turn the phone for,
+             is closed by the very rotation that was meant to show it (see
+             FullscreenVideo). Compose re-lays itself out for the new size. -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
             android:exported="true"
             android:launchMode="singleTask"
             android:theme="@style/Theme.Skywire.Splash">
