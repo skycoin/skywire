@@ -47,6 +47,16 @@ func TestForgetAllPurgesTheReplayRing(t *testing.T) {
 	hub.publishEvent(chatEvent{ID: "other", Channel: channelDM, Dir: "in", From: kept.Hex(), Text: "someone else"})
 	// The same peer's post in a group is not part of the conversation.
 	hub.broadcast(`{"channel":"group","group_id":"g1","sender":"` + gone.Hex() + `","message":"in a group"}`)
+	// A CXO-paired conversation rides channel "pair" — same 1:1 conversation,
+	// other channel. These used to survive the purge (only no-channel DM
+	// entries were scrubbed), so the deleted thread came back with its
+	// messages and its pair badge on the next load. Seeded exactly the way
+	// the pair poller seeds them: a raw legacy envelope, plus a structured
+	// event on the /events ring.
+	hub.broadcast(`{"channel":"pair","sender":"` + gone.Hex() + `","peer":"` + gone.Hex() + `","message":"via cxo","id":"p1"}`)
+	hub.broadcast(`{"channel":"pair","sender":"` + kept.Hex() + `","peer":"` + kept.Hex() + `","message":"still paired","id":"p2"}`)
+	hub.recordEvent(chatEvent{ID: "pin", Channel: channelPair, Dir: "in", From: gone.Hex(), Text: "via cxo"})
+	hub.recordEvent(chatEvent{ID: "pkeep", Channel: channelPair, Dir: "in", From: kept.Hex(), Text: "still paired"})
 	if err := historyStore.Append(history.Message{Peer: gone.Hex(), ID: "in", Text: "from them", Timestamp: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +70,7 @@ func TestForgetAllPurgesTheReplayRing(t *testing.T) {
 	ch, unsubscribe := hub.subscribe()
 	defer unsubscribe()
 	replayed := drain(ch)
-	var sawGroup, sawKept bool
+	var sawGroup, sawKept, sawKeptPair bool
 	for _, m := range replayed {
 		if strings.Contains(m, `"channel":"group"`) {
 			sawGroup = true
@@ -71,6 +81,9 @@ func TestForgetAllPurgesTheReplayRing(t *testing.T) {
 		}
 		if strings.Contains(m, kept.Hex()) {
 			sawKept = true
+			if strings.Contains(m, `"channel":"pair"`) {
+				sawKeptPair = true
+			}
 		}
 	}
 	if !sawGroup {
@@ -79,18 +92,21 @@ func TestForgetAllPurgesTheReplayRing(t *testing.T) {
 	if !sawKept {
 		t.Error("another peer's message was purged")
 	}
+	if !sawKeptPair {
+		t.Error("another peer's pair message was purged with the conversation")
+	}
 
 	// The structured /events ring too.
 	hub.mu.Lock()
 	for i := 0; i < hub.eventsLen; i++ {
 		ev := hub.events[i]
-		if ev.Channel == channelDM && (ev.From == gone.Hex() || ev.To == gone.Hex()) {
+		if (ev.Channel == channelDM || ev.Channel == channelPair) && (ev.From == gone.Hex() || ev.To == gone.Hex()) {
 			t.Errorf("the forgotten conversation is still in the /events ring: %+v", ev)
 		}
 	}
 	n := hub.eventsLen
 	hub.mu.Unlock()
-	if n != 1 {
-		t.Errorf("/events ring holds %d events after the purge, want 1 (the other peer's)", n)
+	if n != 2 {
+		t.Errorf("/events ring holds %d events after the purge, want 2 (the other peer's DM and pair message)", n)
 	}
 }
