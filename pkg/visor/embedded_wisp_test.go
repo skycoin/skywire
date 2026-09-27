@@ -152,11 +152,8 @@ func TestEmbeddedWispServesASessionOnItsPort(t *testing.T) {
 	proxyAddr := connectSocks(t)
 	port := freePort(t)
 
-	w := newEmbeddedWisp(&visorconfig.WispConfig{
-		Enable:        true,
-		Port:          port,
-		UpstreamSOCKS: proxyAddr,
-	}, logging.MustGetLogger("wisp-test"))
+	w := newEmbeddedWisp(&visorconfig.WispConfig{UpstreamSOCKS: proxyAddr}, logging.MustGetLogger("wisp-test"))
+	w.bindPort = port
 
 	if err := w.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -214,11 +211,8 @@ func TestEmbeddedWispServesASessionOnItsPort(t *testing.T) {
 
 func TestEmbeddedWispStopReleasesThePort(t *testing.T) {
 	port := freePort(t)
-	w := newEmbeddedWisp(&visorconfig.WispConfig{
-		Enable:        true,
-		Port:          port,
-		UpstreamSOCKS: "127.0.0.1:1",
-	}, logging.MustGetLogger("wisp-test"))
+	w := newEmbeddedWisp(&visorconfig.WispConfig{UpstreamSOCKS: "127.0.0.1:1"}, logging.MustGetLogger("wisp-test"))
+	w.bindPort = port
 
 	if err := w.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -246,7 +240,7 @@ func TestEmbeddedWispStopReleasesThePort(t *testing.T) {
 }
 
 func TestEmbeddedWispDefaults(t *testing.T) {
-	w := newEmbeddedWisp(&visorconfig.WispConfig{}, logging.MustGetLogger("wisp-test"))
+	w := newEmbeddedWisp(nil, logging.MustGetLogger("wisp-test"))
 	if got := w.port(); got != visorconfig.DefaultWispPort {
 		t.Fatalf("port() = %d, want %d", got, visorconfig.DefaultWispPort)
 	}
@@ -254,38 +248,23 @@ func TestEmbeddedWispDefaults(t *testing.T) {
 		t.Fatalf("upstream() = %q, want the local skysocks-client", got)
 	}
 
-	w = newEmbeddedWisp(&visorconfig.WispConfig{Port: 7, UpstreamSOCKS: "1.2.3.4:9"}, logging.MustGetLogger("wisp-test"))
-	if got := w.port(); got != 7 {
-		t.Fatalf("port() = %d, want the configured 7", got)
-	}
+	w = newEmbeddedWisp(&visorconfig.WispConfig{UpstreamSOCKS: "1.2.3.4:9"}, logging.MustGetLogger("wisp-test"))
 	if got := w.upstream(); got != "1.2.3.4:9" {
 		t.Fatalf("upstream() = %q, want the configured proxy", got)
 	}
 }
 
-// TestInitEmbeddedWispSkipsAnAbsentSection keeps a config written before this
-// existed booting exactly as it did.
-func TestInitEmbeddedWispSkipsAnAbsentSection(t *testing.T) {
-	v := &Visor{conf: &visorconfig.V1{}, initLock: new(sync.RWMutex)}
-	if err := initEmbeddedWisp(context.Background(), v, logging.MustGetLogger("wisp-test")); err != nil {
-		t.Fatalf("initEmbeddedWisp: %v", err)
-	}
-	if v.embeddedWisp != nil {
-		t.Fatal("a runtime was constructed for an absent wisp section")
-	}
-}
-
-// TestInitEmbeddedWispConstructsWithoutStarting covers enable=false: the
-// runtime exists so it can be toggled later, but nothing is bound.
-func TestInitEmbeddedWispConstructsWithoutStarting(t *testing.T) {
-	v := &Visor{conf: &visorconfig.V1{Wisp: &visorconfig.WispConfig{Enable: false, Port: freePort(t)}}, initLock: new(sync.RWMutex)}
-	if err := initEmbeddedWisp(context.Background(), v, logging.MustGetLogger("wisp-test")); err != nil {
-		t.Fatalf("initEmbeddedWisp: %v", err)
-	}
-	if v.embeddedWisp == nil {
-		t.Fatal("no runtime was constructed for enable=false")
-	}
-	if v.embeddedWisp.Running() {
-		t.Fatal("the server bound a port despite enable=false")
+// TestInitEmbeddedWispNativeRunsNothing: nothing on a native host can reach
+// the server, so a native visor never starts one, wisp section or not. (These
+// tests run natively; the tab starts it unconditionally.)
+func TestInitEmbeddedWispNativeRunsNothing(t *testing.T) {
+	for _, conf := range []*visorconfig.V1{{}, {Wisp: &visorconfig.WispConfig{UpstreamSOCKS: "127.0.0.1:1"}}} {
+		v := &Visor{conf: conf, initLock: new(sync.RWMutex)}
+		if err := initEmbeddedWisp(context.Background(), v, logging.MustGetLogger("wisp-test")); err != nil {
+			t.Fatalf("initEmbeddedWisp: %v", err)
+		}
+		if v.embeddedWisp != nil {
+			t.Fatal("a native visor constructed a wisp server")
+		}
 	}
 }

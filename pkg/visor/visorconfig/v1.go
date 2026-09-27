@@ -452,12 +452,12 @@ type BrowseOriginConfig struct {
 	PortSpan int `json:"port_span,omitempty"`
 }
 
-// DefaultWispPort is the virtual-loopback port the embedded Wisp server binds,
-// matching `skywire cli wisp serve`'s default so the two are one address in
-// two places rather than two conventions.
+// DefaultWispPort is the virtual-loopback port the embedded Wisp server binds
+// and page JS dials, matching `skywire cli wisp serve`'s default so the two
+// are one address in two places rather than two conventions.
 const DefaultWispPort = 6001
 
-// WispConfig enables the embedded Wisp server: a multiplexer that carries many
+// WispConfig tunes the embedded Wisp server: a multiplexer that carries many
 // TCP and UDP sockets for a page over one connection, which is how a
 // browser-side Linux guest is given a network.
 //
@@ -470,12 +470,11 @@ const DefaultWispPort = 6001
 // Streams leave through UpstreamSOCKS, which defaults to the visor's own
 // skysocks-client — putting a guest's traffic on a route to an exit instead of
 // through whatever central relay the page shipped with.
+//
+// The server runs on every browser-tab visor and never on a native one, where
+// nothing can reach it: a browser there has no raw TCP, and `skywire cli wisp
+// serve` is the WebSocket backend for it. This section only tunes it.
 type WispConfig struct {
-	// Enable must be true for the server to start.
-	Enable bool `json:"enable"`
-	// Port is the virtual-loopback port to serve on. Zero means
-	// DefaultWispPort.
-	Port uint `json:"port,omitempty"`
 	// UpstreamSOCKS is the SOCKS5 proxy that carries the streams. Empty
 	// means the local skysocks-client.
 	UpstreamSOCKS string `json:"upstream_socks,omitempty"`

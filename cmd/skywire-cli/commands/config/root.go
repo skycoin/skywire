@@ -123,8 +123,6 @@ var (
 	proxyServerWhitelist       string
 	enableDmsgWeb              bool
 	enableSkynetWeb            bool
-	enableWisp                 bool
-	wispPort                   uint
 	wispUpstreamSOCKS          string
 	enableSkymailBridge        bool
 	dmsgWebUpstreamSOCKS       string
@@ -242,7 +240,6 @@ func scriptExecString(s string) string { return cmdutil.SkyenvString(s, skyenvfi
 func scriptExecBool(s string) bool     { return cmdutil.SkyenvBool(s, skyenvfile) }
 func scriptExecArray(s string) string  { return cmdutil.SkyenvArray(s, skyenvfile) }
 func scriptExecInt(s string) int       { return cmdutil.SkyenvInt(s, skyenvfile) }
-func scriptExecUint(s string) uint     { return cmdutil.SkyenvUint(s, skyenvfile) }
 func parseDefault(s string) string     { return cmdutil.SkyenvDefault(s) } //nolint:unused
 
 // vpnRouterArgs builds the vpn-router launcher args from the config-gen knobs,

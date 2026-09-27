@@ -71,7 +71,4 @@ func TestRefreshSkyenvDefaults(t *testing.T) {
 	if f := fs.Lookup("wisp"); f != nil && f.Changed {
 		t.Errorf("refresh marked wisp as Changed; a refreshed default is still a default")
 	}
-	if initVal, runVal := skyenvDefaultValues(fs, "wisp"); initVal != "false" || runVal != "true" {
-		t.Errorf("skyenvDefaultValues(wisp) = %q, %q; want \"false\", \"true\"", initVal, runVal)
-	}
 }

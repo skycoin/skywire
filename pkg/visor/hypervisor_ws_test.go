@@ -1,4 +1,4 @@
-//go:build !mobile
+//go:build !mobile && !js
 
 // Package visor pkg/visor/hypervisor_ws_test.go c3-vis-core
 package visor

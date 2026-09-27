@@ -23,7 +23,6 @@ import (
 	"strings"
 
 	appspec "github.com/skycoin/skywire/pkg/app/appserver/spec"
-	"github.com/skycoin/skywire/pkg/routing"
 )
 
 // appsList wraps []appspec.AppConfig so the JSON I/O layer can
@@ -33,36 +32,6 @@ import (
 // is identical to appspec.AppConfig (alias) so callers that read
 // the on-disk config through this package keep working unchanged.
 type appsList []appspec.AppConfig
-
-// appConfigOnDisk mirrors appspec.AppConfig with Args as a string.
-// Only used at the JSON boundary (in args_native.go).
-type appConfigOnDisk struct {
-	Name         string       `json:"name"`
-	Binary       string       `json:"binary,omitempty"`
-	Args         string       `json:"args,omitempty"`
-	AutoStart    bool         `json:"auto_start"`
-	Port         routing.Port `json:"port"`
-	User         string       `json:"user,omitempty"`
-	Group        string       `json:"group,omitempty"`
-	WorkDir      string       `json:"work_dir,omitempty"`
-	Env          []string     `json:"env,omitempty"`
-	LauncherMode string       `json:"launcher_mode,omitempty"`
-}
-
-func toOnDisk(c appspec.AppConfig) appConfigOnDisk {
-	return appConfigOnDisk{
-		Name:         c.Name,
-		Binary:       c.Binary,
-		Args:         joinArgs(c.Args),
-		AutoStart:    c.AutoStart,
-		Port:         c.Port,
-		User:         c.User,
-		Group:        c.Group,
-		WorkDir:      c.WorkDir,
-		Env:          c.Env,
-		LauncherMode: c.LauncherMode,
-	}
-}
 
 // SplitArgs is the exported counterpart to splitArgs — same parser,
 // available to callers outside the package (e.g. config-gen wants

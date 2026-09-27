@@ -654,12 +654,6 @@ func marshalRewards(w *strings.Builder, r *visorconfig.RewardsConfig, indent int
 // rather than a config that silently loses the section in a tab.
 func marshalWisp(w *strings.Builder, s *visorconfig.WispConfig, indent int) {
 	o := newObj(w, indent)
-	o.field("enable")
-	writeBool(w, s.Enable)
-	if s.Port != 0 {
-		o.field("port")
-		writeUint(w, uint64(s.Port))
-	}
 	if s.UpstreamSOCKS != "" {
 		o.field("upstream_socks")
 		writeQuoted(w, s.UpstreamSOCKS)

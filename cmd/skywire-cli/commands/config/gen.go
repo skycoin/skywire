@@ -334,9 +334,7 @@ func init() {
 	skyenvBoolVar(genConfigCmd.Flags(), &enableDmsgWeb, "dmsgweb", "${DMSGWEB:-false}", "enable embedded .dmsg resolving SOCKS5 proxy on 127.0.0.1:4445")
 	skyenvStringVar(genConfigCmd.Flags(), &dmsgWebSecretKey, "dmsgweb-sk", "${DMSGWEBSK}", "run the embedded resolver under THIS secret key instead of the visor's, attached in-process (for a key a deployment already knows, e.g. a survey whitelist)")
 	skyenvBoolVar(genConfigCmd.Flags(), &enableSkynetWeb, "skynetweb", "${SKYNETWEB:-false}", "enable embedded .skynet resolving SOCKS5 proxy on 127.0.0.1:4446")
-	skyenvBoolVar(genConfigCmd.Flags(), &enableWisp, "wisp", "${WISP:-false}", "enable the embedded Wisp server on the virtual-loopback port, for a browser-side guest's network")
-	skyenvUintVar(genConfigCmd.Flags(), &wispPort, "wisp-port", "${WISPPORT:-"+strconv.Itoa(visorconfig.DefaultWispPort)+"}", "port for --wisp")
-	skyenvStringVar(genConfigCmd.Flags(), &wispUpstreamSOCKS, "wisp-socks", "${WISPSOCKS}", "SOCKS5 proxy --wisp carries streams over (default: the local skysocks-client)")
+	skyenvStringVar(genConfigCmd.Flags(), &wispUpstreamSOCKS, "wisp-socks", "${WISPSOCKS}", "SOCKS5 proxy the embedded Wisp server (browser visor only) carries streams over (default: the local skysocks-client)")
 	skyenvBoolVar(genConfigCmd.Flags(), &enableSkymailBridge, "skymail-bridge", "${SKYMAILBRIDGE:-false}", "enable SMTP to skywire bridge on 127.0.0.1:1025")
 	skyenvStringVar(genConfigCmd.Flags(), &dmsgWebUpstreamSOCKS, "dmsgweb-upstream", "${DMSGWEBUPSTREAM}", "upstream SOCKS5 for non .dmsg traffic (empty chains to skynetweb)")
 	gHiddenFlags = append(gHiddenFlags, "dmsgweb-upstream")
@@ -549,8 +547,6 @@ var genConfigCmd = &cobra.Command{
 		// anything reads a flag — is where its path is final.
 		skyenvfile = resolveSkyenvFile()
 		refreshSkyenvDefaults(cmd.Flags())
-		initWisp, runWisp := skyenvDefaultValues(cmd.Flags(), "wisp")
-		log.Debugf("config gen: wisp default at init=%v, at run=%v", initWisp, runWisp)
 		if isEnvs || envfileOut != "" {
 			if skyenv.OS == "windows" {
 				envfile = envfileWindows
@@ -2531,12 +2527,10 @@ func configureResolvingProxies(log *logging.Logger) {
 			ProxyAddr:     skynetWebProxyAddr,
 		}
 	}
-	if enableWisp {
-		conf.Wisp = &visorconfig.WispConfig{
-			Enable:        true,
-			Port:          wispPort,
-			UpstreamSOCKS: wispUpstreamSOCKS,
-		}
+	// The embedded Wisp server runs on every browser visor and no native one;
+	// the section only tunes it.
+	if wispUpstreamSOCKS != "" {
+		conf.Wisp = &visorconfig.WispConfig{UpstreamSOCKS: wispUpstreamSOCKS}
 	}
 	if enableSkymailBridge {
 		conf.SkymailBridge = &visorconfig.SkymailBridgeConfig{
@@ -2649,7 +2643,7 @@ func writeConfigOutput(log *logging.Logger) {
 		if err != nil {
 			log.Fatalf("Failed to write config file: %v", err)
 		}
-		log.Debugf("config gen: wrote %s (wisp set=%v enableWisp=%v dmsg_web set=%v skynet_web set=%v)", confPath, conf.Wisp != nil, enableWisp, conf.DmsgWeb != nil, conf.SkynetWeb != nil)
+		log.Debugf("config gen: wrote %s (wisp set=%v dmsg_web set=%v skynet_web set=%v)", confPath, conf.Wisp != nil, conf.DmsgWeb != nil, conf.SkynetWeb != nil)
 		if back, rerr := os.ReadFile(confPath); rerr != nil { //nolint:gosec
 			log.WithError(rerr).Debug("config gen: read-back of the written config failed")
 		} else {
@@ -2760,11 +2754,6 @@ var (
 		// chain was silently off; found live with nothing on 4445 or 4446.
 		"dmsgweb":   "DMSGWEB=true",
 		"skynetweb": "SKYNETWEB=true",
-		// Same reason again: without this, autoconfig writes WISP=true to the
-		// conf and gen never hears about it. On the browser build gen re-enters
-		// IN-PROCESS, so its flag defaults were read before the edit — the
-		// embedded Wisp server stayed off with nothing on vnet:6001.
-		"wisp": "WISP=true",
 	}
 	// String flags: KEY='value' lines.
 	valueFlagToEnv = map[string]string{
@@ -2790,7 +2779,6 @@ var (
 		"sudph":              "SUDPHPORT",
 		"min-hops":           "MINHOPS",
 		"ar-transport-limit": "ARTRANSPORTLIMIT",
-		"wisp-port":          "WISPPORT",
 	}
 	// Array-shaped flags: bash-array lines KEY=('a' 'b' 'c'), taken
 	// comma-separated on the CLI (`--hvpks PK1,PK2`) — split, trimmed, empties
@@ -2929,7 +2917,7 @@ func hvAuthFromEnv(s string) (value, ok bool) {
 // flagDigits reads an integer-shaped flag as the digits it was set to.
 //
 // GetInt is typed and fails on a flag declared as any other integer kind —
-// --wisp-port is a uint — returning 0 with the error dropped, so the conf got
+// a uint, say — returning 0 with the error dropped, so the conf got
 // KEY=0 no matter what the operator passed. A flag's own string value is
 // already the number, whatever width or signedness it was declared with.
 func flagDigits(cmd *cobra.Command, name string) string {
