@@ -25,6 +25,8 @@ import (
 
 	"github.com/0magnet/sh/v3/interp"
 	"github.com/0magnet/websh/shell"
+
+	"github.com/skycoin/skywire/pkg/proxyenv"
 )
 
 func registerSkywireCmd() {
@@ -129,13 +131,24 @@ func runSkywireWasm(ctx context.Context, s *shell.Shell, hc *interp.HandlerConte
 	// Terminal identity for the command instance: the help styling (the
 	// coloredcobra colors, the Matrix rain backdrop) decides by TERM/COLUMNS
 	// under js — isatty can't answer through a pipe, so the host says.
+	env := map[string]interface{}{}
 	if s != nil && s.Size != nil {
 		if cols, rows := s.Size(); cols > 0 {
-			hooks.Set("env", js.ValueOf(map[string]interface{}{
-				"COLUMNS": fmt.Sprintf("%d", cols),
-				"LINES":   fmt.Sprintf("%d", rows),
-			}))
+			env["COLUMNS"] = fmt.Sprintf("%d", cols)
+			env["LINES"] = fmt.Sprintf("%d", rows)
 		}
+	}
+	// The shell's exported proxy variables reach the command, as a real shell
+	// passes its environment on: `skywire cli got` reads ALL_PROXY the way the
+	// shell's curl does. Only these: the rest of this virtual shell's
+	// environment (HOME, PATH) describes its own filesystem, not the visor's.
+	for _, name := range proxyenv.Names {
+		if v := hc.Env.Get(name); v.Exported && v.String() != "" {
+			env[name] = v.String()
+		}
+	}
+	if len(env) > 0 {
+		hooks.Set("env", js.ValueOf(env))
 	}
 
 	exec.Invoke(js.ValueOf(jsArgs), hooks).Call("then", thenF).Call("catch", catchF)

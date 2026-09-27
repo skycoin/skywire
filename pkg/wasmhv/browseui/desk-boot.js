@@ -645,6 +645,12 @@
 				// netscrape's proxy default: this tab's resolving proxy, which a person
 				// sees in the ⚙ field and can change, as in a browser's proxy settings.
 				if (!bridged) globalThis.__netscrapeDefaultProxy = 'socks5://vnet:' + RESOLVER_PORT;
+				// The desk shell's profile: the same resolving proxy for curl, got and
+				// anything else that honors ALL_PROXY, as a shell profile beside a
+				// native visor would set it; NO_PROXY keeps the tab's own loopback
+				// (vnet, <port>.vnet, localhost) out of it. deskhost reads this when
+				// it opens a shell.
+				if (!bridged) globalThis.__skywireShellEnv = { ALL_PROXY: 'socks5h://127.0.0.1:' + RESOLVER_PORT, NO_PROXY: 'localhost,127.0.0.1,::1,vnet' };
 				globalThis.__netscrapeFetch = function (url, init) {
 					var u;
 					try { u = new URL(url, 'http://x/'); } catch (e) { return fetch(url); }
