@@ -221,6 +221,10 @@
     <string name="socks_refresh">Actualizar</string>
 
     <!-- Shared server-list pieces (SkySOCKS, SkyVPN) -->
+    <string name="servers_favorites">Favoritos (%1$d)</string>
+    <string name="favorite_add">Añadir a favoritos</string>
+    <string name="favorite_remove">Quitar de favoritos</string>
+    <string name="favorite_unlisted">No está en la lista actual</string>
     <string name="server_location_unknown">Ubicación desconocida</string>
 
     <!-- Durations, rendered a part at a time so a language that writes its

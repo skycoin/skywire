@@ -10,8 +10,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -188,13 +193,23 @@ fun InfoRow(
     }
 }
 
-/** One row of a service-discovery list: flag, location, key, version. */
+/**
+ * One row of a service-discovery list: flag, location, key, version, and the
+ * star that keeps it among the favorites.
+ *
+ * [unlisted] marks a favorite that discovery does not list right now: it can
+ * still be tried (the server may only have dropped out of the list), but the
+ * row says so, so a failed connection is not a surprise.
+ */
 @Composable
 fun ServerRow(
     server: ServiceEntry,
     selected: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
+    favorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    unlisted: Boolean = false,
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -230,6 +245,13 @@ fun ServerRow(
                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (unlisted) {
+                    Text(
+                        stringResource(R.string.favorite_unlisted),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             server.version.takeIf { it.isNotEmpty() }?.let { version ->
                 Spacer(Modifier.width(12.dp))
@@ -239,6 +261,34 @@ fun ServerRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            FavoriteStar(favorite = favorite, onToggle = onToggleFavorite)
         }
     }
+}
+
+/**
+ * The favorite toggle: a filled star for a favorite, an outline for the rest.
+ * Always enabled — keeping a server for later is not a connection, so it does
+ * not wait for one to finish.
+ */
+@Composable
+fun FavoriteStar(favorite: Boolean, onToggle: () -> Unit) {
+    IconButton(onClick = onToggle) {
+        Icon(
+            if (favorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
+            contentDescription = stringResource(
+                if (favorite) R.string.favorite_remove else R.string.favorite_add,
+            ),
+            tint = if (favorite) SkyAccents.warning else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** The heading over a server list's favorites. */
+@Composable
+fun FavoritesHeader(count: Int) {
+    Text(
+        stringResource(R.string.servers_favorites, count),
+        style = MaterialTheme.typography.titleMedium,
+    )
 }
