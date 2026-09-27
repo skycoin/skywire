@@ -273,7 +273,7 @@ func moduleFromBuild() string {
 func (r *report) human() string {
 	var b strings.Builder
 	li := r.Local
-	fmt.Fprintf(&b, "skywire %s  (local build)\n", li.Version)
+	fmt.Fprintf(&b, "skywire %s  (this binary)\n", li.Version)
 	fmt.Fprintf(&b, "  commit  %s\n", orUnknown(li.Commit))
 	fmt.Fprintf(&b, "  built   %s\n", orUnknown(li.Date))
 	fmt.Fprintf(&b, "  go      %s  %s/%s\n", li.Go, li.OS, li.Arch)
