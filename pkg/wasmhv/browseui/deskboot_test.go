@@ -47,7 +47,8 @@ func TestDeskBootHasNoCodeBeforeItsHeader(t *testing.T) {
 // TestDeskBootAttachBuildsTheWSPeer pins the attached boot: when the page is
 // served with attach:{pk,path}, the visor the desk starts is told to hold ONE
 // WebSocket transport back to the page origin (--ws-peer <pk>@<ws(s)://origin
-// + path>) and to stay off public autoconnect. The address comes from
+// + path>) and to stay off public autoconnect; every other boot clears both,
+// since autoconfig records them in skywire.conf. The address comes from
 // location, so the same page works on any hostname the host is reached by.
 func TestDeskBootAttachBuildsTheWSPeer(t *testing.T) {
 	b, err := os.ReadFile("desk-boot.js")
@@ -59,6 +60,8 @@ func TestDeskBootAttachBuildsTheWSPeer(t *testing.T) {
 		"if (opts.attach && opts.attach.pk)",
 		"location.host + (opts.attach.path || '/tp/ws')",
 		"' --disable-public-autoconn --ws-peer ' + opts.attach.pk + '@' + tpURL",
+		"if (!attachOrigin) {",
+		"autoconfigCmd += ' --disable-public-autoconn=false --ws-peer='",
 		"new URLSearchParams(location.search).get('loglvl')",
 		"autoconfigCmd += ' --loglvl ' + loglvl",
 		"initCmd: startVisor ? autoconfigCmd : ''",
