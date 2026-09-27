@@ -40,10 +40,12 @@ import java.util.Collections
  *
  * Two things about this service carry the design:
  *
- *  - **`addDisallowedApplication(self)`.** The visor runs as a child of this
+ *  - **This app stays outside the tunnel.** The visor runs as a child of this
  *    app, so it shares this UID; excluding the package excludes it. Without
  *    that the visor's own dmsg traffic would be routed into the tunnel it is
- *    carrying, and the VPN would deadlock on the first packet.
+ *    carrying, and the VPN would deadlock on the first packet. Which OTHER
+ *    apps the tunnel takes is the user's choice ([VpnAppRouting]), read at
+ *    every build — see [applyAppRules].
  *  - **The interface outlives the connection.** This service keeps its own
  *    descriptor open, so the interface stays up even after the core closes
  *    its copy. While the tunnel is down nothing drains the interface, and the
@@ -66,6 +68,7 @@ class SkyVpnService : VpnService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
+    private val appRouting by lazy { VpnAppRoutingStore(AppPreferences(this)) }
 
     /** One interface change at a time, whichever connection asks. */
     private val mutex = Mutex()
@@ -230,13 +233,17 @@ class SkyVpnService : VpnService() {
      * descriptor is only closed *after* the new one exists — closing first
      * would open a window with no VPN and leak traffic straight out.
      */
-    private fun establish(client: LocalSocket, request: TunRequest) {
+    private suspend fun establish(client: LocalSocket, request: TunRequest) {
         val address = request.addr.substringBefore('/')
         val prefix = request.addr.substringAfter('/', "").toIntOrNull()
         if (address.isEmpty() || prefix == null) {
             reply(client, ok = false, error = "malformed address ${request.addr}")
             return
         }
+        // Read here, not handed in by whoever started the service: the
+        // screen, the hub's quick toggle and a core reconnect all end up in
+        // this one place, and each must build the tunnel the user chose.
+        val routing = appRouting.read()
 
         val established = try {
             val builder = Builder()
@@ -255,10 +262,15 @@ class SkyVpnService : VpnService() {
                 // park in the kernel with no way to interrupt them.
                 .setBlocking(false)
                 .setConfigureIntent(configureIntent())
-            // The visor is our own child process and shares this UID, so its
-            // dmsg traffic — the traffic CARRYING the tunnel — must stay out
-            // of it. Excluding the package is what keeps it out.
-            builder.addDisallowedApplication(packageName)
+            if (!applyAppRules(builder, routing)) {
+                val error = getString(R.string.vpn_error_no_apps)
+                reply(client, ok = false, error = error)
+                VpnTunnel.mutableState.value = VpnTunnel.mutableState.value.copy(
+                    established = false,
+                    error = error,
+                )
+                return
+            }
             builder.establish()
         } catch (e: PackageManager.NameNotFoundException) {
             reply(client, ok = false, error = "cannot exclude self from the tunnel: ${e.message}")
@@ -299,6 +311,43 @@ class SkyVpnService : VpnService() {
             established = true,
             address = request.addr,
         )
+    }
+
+    /**
+     * Tells [builder] which apps the tunnel takes. False when that would be
+     * none: "only these apps" whose apps have all been uninstalled since they
+     * were chosen — and Android reads an empty allow-list as every app, the
+     * visor included, so building it anyway would deadlock the tunnel.
+     *
+     * An app uninstalled since it was chosen is skipped rather than failing
+     * the build; excluding this app itself must succeed, and a failure there
+     * surfaces as the NameNotFoundException the caller reports.
+     */
+    private fun applyAppRules(builder: Builder, routing: VpnAppRouting): Boolean {
+        val rules = tunAppRules(routing, packageName)
+        var allowed = 0
+        rules.allowed.forEach { app ->
+            try {
+                builder.addAllowedApplication(app)
+                allowed++
+            } catch (e: PackageManager.NameNotFoundException) {
+                // Uninstalled since it was chosen.
+            }
+        }
+        if (routing.mode == VpnAppMode.ONLY && allowed == 0) return false
+        rules.disallowed.forEach { app ->
+            if (app == packageName) {
+                // The visor's own traffic — the traffic CARRYING the tunnel.
+                builder.addDisallowedApplication(app)
+            } else {
+                try {
+                    builder.addDisallowedApplication(app)
+                } catch (e: PackageManager.NameNotFoundException) {
+                    // Uninstalled since it was chosen.
+                }
+            }
+        }
+        return true
     }
 
     /** Drops the interface, handing the phone back its normal networking. */

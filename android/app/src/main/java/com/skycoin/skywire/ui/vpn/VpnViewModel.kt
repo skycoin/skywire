@@ -8,9 +8,15 @@ import com.skycoin.skywire.api.AppState
 import com.skycoin.skywire.api.Overview
 import com.skycoin.skywire.api.ServiceEntry
 import com.skycoin.skywire.api.VisorApi
+import com.skycoin.skywire.R
 import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
+import com.skycoin.skywire.core.InstalledApp
+import com.skycoin.skywire.core.InstalledApps
+import com.skycoin.skywire.core.VpnAppMode
+import com.skycoin.skywire.core.VpnAppRouting
+import com.skycoin.skywire.core.VpnAppRoutingStore
 import com.skycoin.skywire.core.ServerListCache
 import com.skycoin.skywire.core.PublicAutoconnect
 import com.skycoin.skywire.core.SkyVpnService
@@ -23,6 +29,7 @@ import com.skycoin.skywire.ui.components.FavoriteServers
 import com.skycoin.skywire.ui.components.SavedServer
 import com.skycoin.skywire.ui.components.favoriteRows
 import com.skycoin.skywire.ui.components.matches
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -33,6 +40,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 
 /** Everything the SkyVPN screen renders. */
@@ -59,6 +67,10 @@ data class VpnUiState(
      */
     val minHops: Int = 0,
     val killswitch: Boolean = false,
+    /** Which apps the tunnel takes — see [VpnAppRouting]. */
+    val appRouting: VpnAppRouting = VpnAppRouting(),
+    /** The apps that can be chosen for it; null until first asked for. */
+    val installedApps: List<InstalledApp>? = null,
     /**
      * Whether this visor builds transports to public visors. Route lengths
      * above one hop have nothing to route through without it — see
@@ -159,6 +171,7 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
     private val api = VisorApi.get(app)
     private val prefs = AppPreferences(app)
     private val serverCache = ServerListCache(prefs)
+    private val appRouting = VpnAppRoutingStore(prefs)
     private val favoriteStore = FavoriteServers(prefs)
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -175,6 +188,9 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
     private var unsavedBytes = 0L
 
     init {
+        viewModelScope.launch {
+            appRouting.flow().collect { routing -> mutable.update { it.copy(appRouting = routing) } }
+        }
         viewModelScope.launch {
             favoriteStore.flow(VPN_TYPE).collect { favorites ->
                 mutable.update { it.copy(favorites = favorites) }
@@ -254,7 +270,15 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Route the phone through [server]. Consent is the screen's business. */
-    fun connect(server: SavedServer) = action { startWith(server) }
+    fun connect(server: SavedServer) = action {
+        // "Only these apps" with none chosen would carry nothing — and to
+        // Android an empty allow-list means every app, the visor included.
+        // The service refuses it too; saying so here is saying it sooner.
+        if (!appRouting.read().usable) {
+            throw IllegalStateException(getApplication<Application>().getString(R.string.vpn_error_no_apps))
+        }
+        startWith(server)
+    }
 
     /** Reconnect to whatever the app is already pointed at. */
     fun reconnect() {
@@ -311,6 +335,47 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
             return@action
         }
         val pk = state.selectedPk ?: return@action
+        startWith(state.lastServer?.takeIf { it.pk == pk } ?: SavedServer(pk))
+    }
+
+    /**
+     * Choose which apps the tunnel takes: all, only the chosen ones, or all
+     * but the chosen ones.
+     *
+     * Stored on the phone and read by the service each time it builds the
+     * interface, so it holds whatever starts the tunnel. A running tunnel is
+     * re-dialed to apply it — the app list is fixed when the interface is
+     * built — unless the new choice cannot be built yet ("only these apps"
+     * with none chosen): then the tunnel carries on as it was until apps are
+     * chosen.
+     */
+    fun setAppMode(mode: VpnAppMode) = action {
+        appRouting.setMode(mode)
+        redialFor(appRouting.read())
+    }
+
+    /** Save the apps chosen for [mode], and re-dial when they are the ones in use. */
+    fun setApps(mode: VpnAppMode, apps: Set<String>) = action {
+        appRouting.setApps(mode, apps)
+        val routing = appRouting.read()
+        if (routing.mode == mode) redialFor(routing)
+    }
+
+    /** Load the apps that can be chosen, once per screen. */
+    fun loadInstalledApps() {
+        if (mutable.value.installedApps != null) return
+        viewModelScope.launch {
+            val apps = withContext(Dispatchers.IO) {
+                runCatching { InstalledApps.load(getApplication()) }.getOrDefault(emptyList())
+            }
+            mutable.update { it.copy(installedApps = apps) }
+        }
+    }
+
+    private suspend fun redialFor(routing: VpnAppRouting) {
+        val state = mutable.value
+        if (!routing.usable || !(state.running || state.starting)) return
+        val pk = state.selectedPk ?: return
         startWith(state.lastServer?.takeIf { it.pk == pk } ?: SavedServer(pk))
     }
 
