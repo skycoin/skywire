@@ -35,6 +35,7 @@ func wireSkynetTLSMITM(cfg *skynetweb.Config, vcfg *visorconfig.SkynetWebConfig,
 	}
 	cfg.TLSMITM = true
 	cfg.TLSPort = vcfg.TLSPort
+	cfg.TLSUpstreamPort = vcfg.TLSUpstreamPort
 	cfg.LeafMinter = skynetca.NewMinter(ca, key, skynetca.LeafOptions{})
 	log.WithField("ca_fingerprint", skynetca.Fingerprint(ca)).
 		Info("skynetweb TLS MITM enabled")
@@ -54,6 +55,7 @@ func wireDmsgTLSMITM(cfg *dmsgweb.Config, vcfg *visorconfig.DmsgWebConfig, log *
 	}
 	cfg.TLSMITM = true
 	cfg.TLSPort = vcfg.TLSPort
+	cfg.TLSUpstreamPort = vcfg.TLSUpstreamPort
 	cfg.LeafMinter = skynetca.NewMinter(ca, key, skynetca.LeafOptions{})
 	log.WithField("ca_fingerprint", skynetca.Fingerprint(ca)).
 		Info("dmsgweb TLS MITM enabled")

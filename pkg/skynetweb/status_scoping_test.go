@@ -57,7 +57,7 @@ func TestSOCKS5StatusScoping(t *testing.T) {
 			StatusSurface:  proxystatus.SurfaceSkynet,
 		})
 	}()
-	if err := waitForListener("127.0.0.1", proxyPort, 2*time.Second); err != nil {
+	if err := waitForListener(proxyPort); err != nil {
 		t.Fatal(err)
 	}
 

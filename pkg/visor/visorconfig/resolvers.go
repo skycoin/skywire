@@ -129,14 +129,15 @@ type ResolverConfig struct {
 	// RouteTimeout is the keepalive for routes a SKYNET resolver creates.
 	// Zero uses the router default. Meaningless for a dmsg resolver.
 	RouteTimeout Duration `json:"route_timeout,omitempty"`
-	// TLSMITM / TLSPort / TLSCAPath / TLSCAKeyPath mirror the primaries' TLS
+	// TLSMITM / TLSPort / TLSUpstreamPort / TLSCAPath / TLSCAKeyPath mirror the primaries' TLS
 	// interception knobs; see DmsgWebConfig for the trust model. Off by
 	// default, and a CA that fails to load downgrades to plain HTTP with a
 	// warning rather than failing the resolver.
-	TLSMITM      bool   `json:"tls_mitm,omitempty"`
-	TLSPort      uint16 `json:"tls_port,omitempty"`
-	TLSCAPath    string `json:"tls_ca_path,omitempty"`
-	TLSCAKeyPath string `json:"tls_ca_key_path,omitempty"`
+	TLSMITM         bool   `json:"tls_mitm,omitempty"`
+	TLSPort         uint16 `json:"tls_port,omitempty"`
+	TLSUpstreamPort uint16 `json:"tls_upstream_port,omitempty"`
+	TLSCAPath       string `json:"tls_ca_path,omitempty"`
+	TLSCAKeyPath    string `json:"tls_ca_key_path,omitempty"`
 }
 
 // IsSkynet reports whether this entry resolves over skywire routing.
@@ -172,6 +173,7 @@ func (r *ResolverConfig) ToDmsgWeb() *DmsgWebConfig {
 		SelfLoopbackAuthenticated: r.SelfLoopbackAuthenticated,
 		TLSMITM:                   r.TLSMITM,
 		TLSPort:                   r.TLSPort,
+		TLSUpstreamPort:           r.TLSUpstreamPort,
 		TLSCAPath:                 r.TLSCAPath,
 		TLSCAKeyPath:              r.TLSCAKeyPath,
 	}
@@ -193,6 +195,7 @@ func (r *ResolverConfig) ToSkynetWeb() *SkynetWebConfig {
 		SelfLoopbackAuthenticated: r.SelfLoopbackAuthenticated,
 		TLSMITM:                   r.TLSMITM,
 		TLSPort:                   r.TLSPort,
+		TLSUpstreamPort:           r.TLSUpstreamPort,
 		TLSCAPath:                 r.TLSCAPath,
 		TLSCAKeyPath:              r.TLSCAKeyPath,
 	}

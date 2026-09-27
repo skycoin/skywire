@@ -38,6 +38,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
+	"github.com/skycoin/skywire/pkg/proxyroute"
 	tnspec "github.com/skycoin/skywire/pkg/transport/network/spec"
 	tspec "github.com/skycoin/skywire/pkg/transport/spec"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -174,6 +175,27 @@ func writeStringSlice(w *strings.Builder, vals []string, indent int) {
 		w.WriteByte('\n')
 		writeIndent(w, indent+1)
 		writeQuoted(w, s)
+	}
+	w.WriteByte('\n')
+	writeIndent(w, indent)
+	w.WriteByte(']')
+}
+
+// writeRules writes a JSON array of per-domain upstream rules.
+func writeRules(w *strings.Builder, rules []proxyroute.Rule, indent int) {
+	w.WriteByte('[')
+	for i, r := range rules {
+		if i > 0 {
+			w.WriteByte(',')
+		}
+		w.WriteByte('\n')
+		writeIndent(w, indent+1)
+		o := newObj(w, indent+1)
+		o.field("suffix")
+		writeQuoted(w, r.Suffix)
+		o.field("upstream")
+		writeQuoted(w, r.Upstream)
+		o.close()
 	}
 	w.WriteByte('\n')
 	writeIndent(w, indent)
@@ -706,6 +728,10 @@ func marshalDmsgWeb(w *strings.Builder, d *visorconfig.DmsgWebConfig, indent int
 		o.field("upstream_socks")
 		writeQuoted(w, d.UpstreamSOCKS)
 	}
+	if len(d.UpstreamRules) > 0 {
+		o.field("upstream_rules")
+		writeRules(w, d.UpstreamRules, o.indent+1)
+	}
 	if d.TLSMITM {
 		o.field("tls_mitm")
 		writeBool(w, d.TLSMITM)
@@ -713,6 +739,10 @@ func marshalDmsgWeb(w *strings.Builder, d *visorconfig.DmsgWebConfig, indent int
 	if d.TLSPort != 0 {
 		o.field("tls_port")
 		writeUint(w, uint64(d.TLSPort))
+	}
+	if d.TLSUpstreamPort != 0 {
+		o.field("tls_upstream_port")
+		writeUint(w, uint64(d.TLSUpstreamPort))
 	}
 	if d.TLSCAPath != "" {
 		o.field("tls_ca_path")
@@ -771,6 +801,10 @@ func marshalSkynetWeb(w *strings.Builder, s *visorconfig.SkynetWebConfig, indent
 		o.field("upstream_socks")
 		writeQuoted(w, s.UpstreamSOCKS)
 	}
+	if len(s.UpstreamRules) > 0 {
+		o.field("upstream_rules")
+		writeRules(w, s.UpstreamRules, o.indent+1)
+	}
 	if s.RouteTimeout != 0 {
 		o.field("route_timeout")
 		writeDuration(w, s.RouteTimeout)
@@ -782,6 +816,10 @@ func marshalSkynetWeb(w *strings.Builder, s *visorconfig.SkynetWebConfig, indent
 	if s.TLSPort != 0 {
 		o.field("tls_port")
 		writeUint(w, uint64(s.TLSPort))
+	}
+	if s.TLSUpstreamPort != 0 {
+		o.field("tls_upstream_port")
+		writeUint(w, uint64(s.TLSUpstreamPort))
 	}
 	if s.TLSCAPath != "" {
 		o.field("tls_ca_path")
@@ -862,6 +900,10 @@ func marshalResolvers(w *strings.Builder, rs []visorconfig.ResolverConfig, inden
 			o.field("upstream_socks")
 			writeQuoted(w, r.UpstreamSOCKS)
 		}
+		if len(r.UpstreamRules) > 0 {
+			o.field("upstream_rules")
+			writeRules(w, r.UpstreamRules, o.indent+1)
+		}
 		if r.Chain != nil {
 			o.field("chain")
 			writeBool(w, *r.Chain)
@@ -889,6 +931,10 @@ func marshalResolvers(w *strings.Builder, rs []visorconfig.ResolverConfig, inden
 		if r.TLSPort != 0 {
 			o.field("tls_port")
 			writeUint(w, uint64(r.TLSPort))
+		}
+		if r.TLSUpstreamPort != 0 {
+			o.field("tls_upstream_port")
+			writeUint(w, uint64(r.TLSUpstreamPort))
 		}
 		if r.TLSCAPath != "" {
 			o.field("tls_ca_path")
