@@ -92,6 +92,9 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
         pendingFiles = null
     }
 
+    // --- full screen: a video the page asks to show over everything ---
+    val fullscreen = remember(context) { context.findActivity()?.let(::FullscreenVideo) }
+
     // --- getUserMedia: voice messages now, video messages next ---
     var pendingMedia by remember { mutableStateOf<PermissionRequest?>(null) }
     val mediaPermissions = rememberLauncherForActivityResult(
@@ -115,6 +118,11 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
         if (canGoBack && view != null) view.goBack() else onBack()
     }
     BackHandler(enabled = canGoBack) { webView?.goBack() }
+    // Back leaves a full-screen video before it leaves anything else. After
+    // the handler above on purpose: the last one registered is asked first,
+    // and a video the player itself made full screen has no history entry
+    // of its own — the page's back would change the chat underneath it.
+    BackHandler(enabled = fullscreen?.showing == true) { fullscreen?.exit() }
 
     // A skychat:// link another app opened us for. It waits here rather than
     // at the Activity for as long as it has to: the core may still be
@@ -224,6 +232,13 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
                                         false
                                     }
                                 },
+                                onShowFullscreen = { view, callback ->
+                                    // No Activity to put it in (never, in
+                                    // practice): refuse, so the page is not
+                                    // left believing it is full screen.
+                                    fullscreen?.show(view, callback) ?: callback.onCustomViewHidden()
+                                },
+                                onHideFullscreen = { fullscreen?.hide() },
                             )
                             view.setDownloadListener { link, _, disposition, mime, _ ->
                                 ChatWebView.download(ctx, link, disposition, mime, password.value)
@@ -250,6 +265,9 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
                         }
                     },
                     onRelease = { view ->
+                        // A video left full screen would outlive the page
+                        // it belongs to — over a call screen, even.
+                        fullscreen?.hide()
                         // A live SSE stream survives the composable otherwise.
                         // The media notification must not: the page IS the
                         // player, so controls for a destroyed one are buttons
