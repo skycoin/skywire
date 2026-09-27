@@ -12,7 +12,11 @@ import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.ServerListCache
 import com.skycoin.skywire.core.TransportPreference
+import com.skycoin.skywire.ui.components.FavoriteRow
+import com.skycoin.skywire.ui.components.FavoriteServers
 import com.skycoin.skywire.ui.components.SavedServer
+import com.skycoin.skywire.ui.components.favoriteRows
+import com.skycoin.skywire.ui.components.matches
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,6 +43,8 @@ data class SocksUiState(
     /** Transport type the visor tries first — see [TransportPreference]. */
     val transportPrimary: String = TransportPreference.DEFAULT,
     val lastServer: SavedServer? = null,
+    /** The servers the user starred in this list — see FavoriteServers. */
+    val favorites: List<SavedServer> = emptyList(),
     /** A start/stop/settings call is in flight. */
     val busy: Boolean = false,
     val error: String? = null,
@@ -66,17 +72,24 @@ data class SocksUiState(
 
     val listenAddress: String get() = "${SocksArgs.HOST}:$listenPort"
 
-    val filteredServers: List<ServiceEntry>
-        get() = if (query.isBlank()) {
-            servers
-        } else {
-            servers.filter {
-                it.pk.contains(query, true) ||
-                    it.geo?.country.orEmpty().contains(query, true) ||
-                    it.geo?.region.orEmpty().contains(query, true) ||
-                    it.version.contains(query, true)
-            }
+    /** Every server in the list with a star — the section above the full list. */
+    val favoriteRows: List<FavoriteRow> get() = favoriteRows(favorites, servers, query)
+
+    fun isFavorite(pk: String): Boolean = favorites.any { it.pk == pk }
+
+    /**
+     * The selected server as it would be starred from the status card: with
+     * its location and version when the list or the saved server knows them.
+     */
+    val selectedServer: SavedServer?
+        get() = selectedPk?.let { pk ->
+            servers.firstOrNull { it.pk == pk }?.let(SavedServer::of)
+                ?: lastServer?.takeIf { it.pk == pk }
+                ?: SavedServer(pk)
         }
+
+    val filteredServers: List<ServiceEntry>
+        get() = servers.filter { it.matches(query) }
 }
 
 /**
@@ -94,6 +107,7 @@ class SocksViewModel(app: Application) : AndroidViewModel(app) {
     private val api = VisorApi.get(app)
     private val prefs = AppPreferences(app)
     private val serverCache = ServerListCache(prefs)
+    private val favoriteStore = FavoriteServers(prefs)
     private val json = Json { ignoreUnknownKeys = true }
 
     private val mutable = MutableStateFlow(SocksUiState())
@@ -102,6 +116,11 @@ class SocksViewModel(app: Application) : AndroidViewModel(app) {
     private var actionJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            favoriteStore.flow(PROXY_TYPE).collect { favorites ->
+                mutable.update { it.copy(favorites = favorites) }
+            }
+        }
         viewModelScope.launch {
             val saved = readLastServer()
             mutable.update { it.copy(lastServer = saved) }
@@ -133,6 +152,11 @@ class SocksViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setQuery(query: String) {
         mutable.update { it.copy(query = query) }
+    }
+
+    /** Star or unstar [server]. On the phone only; nothing to wait for. */
+    fun toggleFavorite(server: SavedServer) {
+        viewModelScope.launch { favoriteStore.toggle(PROXY_TYPE, server) }
     }
 
     fun refreshServers() {
