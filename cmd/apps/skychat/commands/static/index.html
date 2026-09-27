@@ -7046,6 +7046,13 @@
             this.pairEpochs = this.pairEpochs || {};
             (pairs || []).forEach(p => {
               if (p && p.peer_pk) {
+                // A revoked record is a tombstone, not a contact: unpairing
+                // keeps the record for audit, and treating it as a live pair
+                // here put a conversation the user had just deleted straight
+                // back in the list. On a phone, where the page reloads on
+                // every return to the chat tab, that reads as "chats cannot
+                // be deleted" — the CXO badge came back with the row.
+                if (p.status === 'revoked') return;
                 const pk = this.processPk(p.peer_pk);
                 this.pairedSet.add(pk);
                 // Remember the forward-secrecy state per peer so the
@@ -12326,13 +12333,16 @@
 
         // If this contact was paired via CXO, also revoke the pair
         // server-side. Best-effort: a revoke failure shouldn't block the
-        // local cleanup — but it is worth a line in the console, because
-        // syncPairedFromVisor puts a still-paired peer straight back.
+        // local cleanup — but it is worth saying out loud, because a pair
+        // the visor still holds puts the conversation straight back on the
+        // next load (syncPairedFromVisor). 503 is pairing itself being off:
+        // nothing to revoke, and nothing that can resurrect the chat.
         if (this.pairedSet && this.pairedSet.has(pk)) {
           this.pairedSet.delete(pk);
+          const warn = () => this.showToast('The pair could not be revoked; the conversation may come back.', 'error');
           fetch(`/pair/${pk}`, { method: 'DELETE' })
-            .then(res => { if (!res.ok) console.debug('skychat: unpair failed:', res.status); })
-            .catch(() => {});
+            .then(res => { if (!res.ok && res.status !== 404 && res.status !== 503) warn(); })
+            .catch(warn);
         }
 
         document.querySelectorAll('.recipient-item').forEach(item => {

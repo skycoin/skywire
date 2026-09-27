@@ -335,7 +335,10 @@ func (h *sseHub) subscribe() (<-chan string, func()) {
 //
 // Group posts by the same peer stay: the group was not deleted. Entries
 // that name the peer as the conversation (an inbound message from them, or
-// this side's own outbound mirror to them) go.
+// this side's own outbound mirror to them) go — on either channel the 1:1
+// conversation uses: plain DMs, and CXO pair messages (the pair itself is
+// revoked by the same Delete chat; leaving those entries replayed the
+// deleted thread, pair badge and all, on the next load).
 func (h *sseHub) forgetPeer(pk string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -360,7 +363,7 @@ func (h *sseHub) forgetPeer(pk string) {
 		start := (h.eventsHead - h.eventsLen + len(h.events)) % len(h.events)
 		for i := 0; i < h.eventsLen; i++ {
 			ev := h.events[(start+i)%len(h.events)]
-			if ev.Channel == channelDM && (ev.From == pk || ev.To == pk) {
+			if (ev.Channel == channelDM || ev.Channel == channelPair) && (ev.From == pk || ev.To == pk) {
 				continue
 			}
 			kept = append(kept, ev)
@@ -373,14 +376,17 @@ func (h *sseHub) forgetPeer(pk string) {
 }
 
 // legacySSENamesPeer reports whether a legacy /sse entry belongs to the 1:1
-// conversation with pk: a DM (no channel key — group, pairing and status
-// envelopes carry one) sent by them or mirrored to them.
+// conversation with pk: a DM (no channel key) or a CXO pair message
+// (channel="pair") sent by them, or this side's own outbound mirror to them.
+// Group and status envelopes carry other channel keys and stay.
 func legacySSENamesPeer(entry, pk string) bool {
 	var m map[string]interface{}
 	if err := json.Unmarshal([]byte(entry), &m); err != nil {
 		return false
 	}
-	if ch, _ := m["channel"].(string); ch != "" && ch != channelDM {
+	switch ch, _ := m["channel"].(string); ch {
+	case channelDM, channelPair, "":
+	default:
 		return false
 	}
 	sender, _ := m["sender"].(string)
