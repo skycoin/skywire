@@ -256,6 +256,22 @@
     <string name="vpn_killswitch_hint">隧道断开时保留网络接口，使流量不会绕过它泄漏出去。在隧道恢复之前，其他应用将无法联网。</string>
     <string name="vpn_killswitch_always_on">“始终开启的 VPN”设置</string>
     <string name="vpn_killswitch_always_on_hint">若要获得最强的保障——在应用启动前就开始拦截——请在 Android 设置中为 Skywire 打开“始终开启的 VPN”和“阻止不使用 VPN 的连接”。</string>
+    <string name="vpn_hotspot_title">VPN 热点</string>
+    <string name="vpn_hotspot_hint">与连接到这部手机热点的设备共享 SkyVPN。它们通过这部手机上的代理来使用。</string>
+    <string name="vpn_hotspot_error">无法打开端口 %1$d：%2$s</string>
+    <string name="vpn_hotspot_waiting">SkyVPN 连接后启动。</string>
+    <string name="vpn_hotspot_no_hotspot">请打开这部手机的热点（WLAN 热点、USB 或蓝牙共享网络），并让另一台设备连接到它。</string>
+    <string name="vpn_hotspot_proxy">供另一台设备使用的代理</string>
+    <string name="vpn_hotspot_host">主机</string>
+    <string name="vpn_hotspot_port">端口</string>
+    <string name="vpn_hotspot_setup">在另一台设备上把它设为代理。HTTP 和 SOCKS5 使用同一个端口。经过代理的流量都走 SkyVPN，包括域名解析。</string>
+    <string name="vpn_hotspot_not_carrying">SkyVPN 尚未连接，共享的设备暂时无法通过代理上网。</string>
+    <plurals name="vpn_hotspot_devices">
+        <item quantity="other">最近几分钟有 %d 台设备使用过</item>
+    </plurals>
+    <string name="vpn_hotspot_leak_hint">只有发往代理的流量才经过 SkyVPN。热点本身仍会给另一台设备提供这部手机的普通网络，因此那台设备上忽略代理设置的应用会绕过 VPN。</string>
+    <string name="vpn_hotspot_settings">热点设置</string>
+    <string name="vpn_hotspot_no_settings">这部手机没有可打开的热点设置页面。</string>
 
     <string name="vpn_error_no_consent">Android 尚未授予 VPN 权限。</string>
     <string name="vpn_error_socket">VPN 服务无法打开其交接套接字：%1$s</string>
