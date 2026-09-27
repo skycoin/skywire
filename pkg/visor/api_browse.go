@@ -48,6 +48,10 @@ type BrowseFetchRequest struct {
 	Method string `json:"method"`
 	Path   string `json:"path"`
 	Body   []byte `json:"body,omitempty"`
+	// Header is the request headers to send, on either the skynet or the dmsg
+	// leg. A form POST to a mesh-hosted site needs its Content-Type just as a
+	// clearnet one does.
+	Header map[string]string `json:"header,omitempty"`
 	// Scheme: "" / "auto" (skynet route first, dmsg-HTTP fallback), "skynet", or
 	// "dmsg". A visor serves port 80 over BOTH a skynet mirror and dmsg (see
 	// goServeSkynetMirror), so "auto" reaches the same content either way.
@@ -191,22 +195,22 @@ func (v *Visor) BrowseFetch(req BrowseFetchRequest) (*visorapi.SkynetHTTPRespons
 
 	switch scheme {
 	case "skynet":
-		return v.SkynetHTTP(visorapi.SkynetHTTPRequest{PK: pk, Port: port, Method: method, Path: path, Body: req.Body})
+		return v.SkynetHTTP(visorapi.SkynetHTTPRequest{PK: pk, Port: port, Method: method, Path: path, Body: req.Body, Header: req.Header})
 	case "dmsg":
-		return v.dmsgHTTPFetch(pk, port, method, path, req.Body)
+		return v.dmsgHTTPFetch(pk, port, method, path, req.Body, req.Header)
 	case "auto":
-		resp, err := v.SkynetHTTP(visorapi.SkynetHTTPRequest{PK: pk, Port: port, Method: method, Path: path, Body: req.Body})
+		resp, err := v.SkynetHTTP(visorapi.SkynetHTTPRequest{PK: pk, Port: port, Method: method, Path: path, Body: req.Body, Header: req.Header})
 		if err == nil {
 			return resp, nil
 		}
 		// skynet route miss / no skynet web server on that port → dmsg-HTTP.
-		return v.dmsgHTTPFetch(pk, port, method, path, req.Body)
+		return v.dmsgHTTPFetch(pk, port, method, path, req.Body, req.Header)
 	default:
 		return nil, fmt.Errorf("invalid scheme %q (use auto|skynet|dmsg)", scheme)
 	}
 }
 
-func (v *Visor) dmsgHTTPFetch(pk cipher.PubKey, port uint16, method, path string, body []byte) (*visorapi.SkynetHTTPResponse, error) {
+func (v *Visor) dmsgHTTPFetch(pk cipher.PubKey, port uint16, method, path string, body []byte, header map[string]string) (*visorapi.SkynetHTTPResponse, error) {
 	if v.dmsgHTTP == nil {
 		return nil, fmt.Errorf("dmsg HTTP client not ready")
 	}
@@ -220,6 +224,7 @@ func (v *Visor) dmsgHTTPFetch(pk cipher.PubKey, port uint16, method, path string
 	if err != nil {
 		return nil, err
 	}
+	applyBrowseHeaders(httpReq, header)
 	resp, err := v.dmsgHTTP.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("dmsg fetch: %w", err)
@@ -243,6 +248,10 @@ type BrowseClearnetRequest struct {
 	Method string `json:"method"`
 	URL    string `json:"url"`
 	Body   []byte `json:"body,omitempty"`
+	// Header is the request headers to send. A POST that cannot declare its
+	// Content-Type is a form the origin rejects, so the real-origin browser
+	// needs these; before it, every fetch here was a bare GET.
+	Header map[string]string `json:"header,omitempty"`
 }
 
 // BrowseClearnet originates a route group to the skysocks server, runs SOCKS5
@@ -313,6 +322,7 @@ func (v *Visor) BrowseClearnet(req BrowseClearnetRequest) (*visorapi.SkynetHTTPR
 	if err != nil {
 		return nil, err
 	}
+	applyBrowseHeaders(httpReq, req.Header)
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("fetch via skysocks: %w", err)
@@ -337,6 +347,7 @@ func (v *Visor) directClearnetFetch(req BrowseClearnetRequest) (*visorapi.Skynet
 	if err != nil {
 		return nil, err
 	}
+	applyBrowseHeaders(httpReq, req.Header)
 	resp, err := (&http.Client{Timeout: browseFetchTimeout}).Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("direct clearnet fetch: %w", err)
@@ -510,9 +521,31 @@ func (v *Visor) proxyClearnetFetch(req BrowseClearnetRequest) (*visorapi.SkynetH
 	if err != nil {
 		return nil, err
 	}
+	applyBrowseHeaders(httpReq, req.Header)
 	resp, err := (&http.Client{Transport: tr, Timeout: browseFetchTimeout}).Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("fetch via proxy %s: %w", pu.Redacted(), err)
 	}
 	return readBrowseResp(resp)
+}
+
+// applyBrowseHeaders copies the caller's request headers onto an outgoing
+// browse fetch. The three clearnet paths (skysocks exit, direct, explicit
+// proxy) all build their request the same way and all need it.
+//
+// Hop-by-hop headers are dropped (RFC 7230 §6.1): this is a NEW connection the
+// visor opens, not a relayed one, so a Connection or Transfer-Encoding from the
+// caller describes a hop that no longer exists. Content-Length goes too —
+// net/http derives it from the body, and a stale one from the caller truncates
+// or hangs the request. Host is not a header here; net/http takes it from the
+// URL, which is the address actually being dialed.
+func applyBrowseHeaders(httpReq *http.Request, h map[string]string) {
+	for k, v := range h {
+		switch strings.ToLower(k) {
+		case "host", "connection", "keep-alive", "proxy-connection",
+			"transfer-encoding", "upgrade", "te", "trailer", "content-length":
+			continue
+		}
+		httpReq.Header.Set(k, v)
+	}
 }

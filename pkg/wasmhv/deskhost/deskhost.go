@@ -61,11 +61,13 @@ func Run(role string) {
 		installShell()
 		installBrowser()
 		installDesk()
+		installOriginLoader()
 		installCipher()
 		fmt.Println("deskhost: shell role — call skywireShell.open(el) / skywireBrowser.open(el)")
 	case "browser":
 		installBrowser()
 		installBrowserDirectLoader()
+		installOriginLoader()
 		fmt.Println("deskhost: browser role — call skywireBrowser.open(el)")
 	case "netview":
 		installNetView()
@@ -78,6 +80,7 @@ func Run(role string) {
 			installShell()
 			installBrowser()
 			installDesk()
+			installOriginLoader()
 			installCipher()
 			fmt.Println("deskhost: ready — skywireShell / skywireBrowser / __skywireDesk / SkycoinCipher installed")
 		} else {

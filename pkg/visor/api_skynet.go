@@ -60,9 +60,11 @@ func (v *Visor) SkynetHTTP(req visorapi.SkynetHTTPRequest) (*visorapi.SkynetHTTP
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Host = fmt.Sprintf("%s:%d", req.PK.Hex(), req.Port)
-	for k, val := range req.Header {
-		httpReq.Header.Set(k, val)
-	}
+	// Same header policy as the clearnet legs: this is a request the visor
+	// originates over a fresh skynet stream, so the caller's hop-by-hop
+	// headers describe a connection that does not exist here. It used to Set
+	// every name it was given, Content-Length included.
+	applyBrowseHeaders(httpReq, req.Header)
 
 	// Send request
 	if err := httpReq.Write(conn); err != nil {
