@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
+	"github.com/skycoin/skywire/pkg/skywireconfig/autoconfigcmd"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
@@ -83,6 +84,11 @@ type Node interface {
 	GetRuntimeConfig() ([]byte, error)
 	SetRuntimeConfig(rawJSON []byte) error
 	SetConfigFields(fields map[string]json.RawMessage) ([]ConfigFieldChange, error)
+	// Skyenv reads /etc/skywire.conf: the durable settings every config
+	// regen is built from. SetSkyenv edits it the way `skywire autoconfig
+	// --<flag>` does; it takes effect at the next regen.
+	Skyenv() (SkyenvState, error)
+	SetSkyenv(edits SkyenvEdits) (SkyenvState, error)
 	GetConfigPath() (string, error)
 	ReinitiateModule(module string) error
 	DeregisterService(pks []cipher.PubKey, serviceType string) error
@@ -1358,4 +1364,30 @@ func (c ConfigFieldChange) String() string {
 		state = "live"
 	}
 	return fmt.Sprintf("%s: %s -> %s (%s)", c.Path, string(c.Old), string(c.New), state)
+}
+
+// SkyenvState is the visor's /etc/skywire.conf as a settings form needs it.
+type SkyenvState struct {
+	// Path is the file the visor resolved (SKYENV, else the OS default).
+	Path string `json:"path"`
+	// Exists is false before the first `skywire autoconfig` run creates it.
+	Exists bool `json:"exists"`
+	// Writable is whether this visor can edit the file. A visor running as
+	// an ordinary user cannot edit a root-owned /etc/skywire.conf; a form
+	// should then show the `sudo skywire autoconfig --<flag>` to run instead.
+	Writable bool `json:"writable"`
+	// Values holds the ACTIVE assignments only; a commented line means the
+	// variable is at its default and is absent here.
+	Values map[string]string `json:"values"`
+	// Flags describes every autoconfig flag and the variable it writes.
+	Flags []autoconfigcmd.Flag `json:"flags"`
+}
+
+// SkyenvEdits is one SetSkyenv request, addressed by autoconfig flag name.
+type SkyenvEdits struct {
+	// Set maps a flag name (e.g. "ishv", "hvpks") to its value as the flag
+	// would take it: "true"/"false", a number, or a comma-separated list.
+	Set map[string]string `json:"set,omitempty"`
+	// Unset lists flag names whose variable returns to its default.
+	Unset []string `json:"unset,omitempty"`
 }

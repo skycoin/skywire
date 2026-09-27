@@ -48,3 +48,34 @@ func TestUpdateReplacesCommentedKeyAndAppendsMissing(t *testing.T) {
 		t.Errorf("empty array = %q", FormatBashArray(""))
 	}
 }
+
+func TestUpdateUnsetCommentsOutAndNeverAppends(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "skywire.conf")
+	src := "PKGENV=true\nISHYPERVISOR=true\n#HYPERVISORPKS=('')\n"
+	if err := os.WriteFile(p, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	edits := []Edit{
+		{Key: "ISHYPERVISOR", Unset: true},
+		{Key: "HYPERVISORPKS", Unset: true},
+		{Key: "VISORISPUBLIC", Unset: true},
+	}
+	if err := Update(p, edits); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(p) //nolint:gosec // G304: p is this test's own temp file
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "PKGENV=true\n#ISHYPERVISOR=true\n#HYPERVISORPKS=('')\n"
+	if string(got) != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	vals, err := Values(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := vals["ISHYPERVISOR"]; ok {
+		t.Errorf("unset key still active: %v", vals)
+	}
+}
