@@ -105,10 +105,7 @@ func canonicalMeshTarget(network, host string) string { return network + "|" + h
 //     origin's service worker cannot reach — it is a different origin with a
 //     different worker. DirectLoader claims them for native same-origin
 //     rendering instead, and it runs first.
-//   - clearnet. It was a real origin once (via skysocks) and should be again,
-//     but the guard the retired engine used for it is not recorded anywhere I
-//     could read, and guessing at which clearnet URLs to mint origins for is
-//     how every site a reader visits quietly becomes a new origin.
+//   - clearnet, which clearnetOriginFor claims under its own key.
 func meshOriginFor(host string) (network, resolverHost string, ok bool) {
 	h := strings.ToLower(strings.TrimSpace(host))
 	if h == "" || isLoopbackHost(h) {
@@ -137,3 +134,35 @@ func isLoopbackHost(h string) bool {
 	}
 	return false
 }
+
+// clearnetOriginFor decides whether a clearnet URL earns a real isolated
+// origin. It is the retired engine's rule, recovered from browse.js (#3809,
+// deleted in #4477): every http or https URL that is not a mesh or loopback
+// address loads at its own origin. The site is still fetched through the
+// browser's proxy — only the origin its frame runs in changes.
+//
+// scheme is URL.protocol ("https:"), host URL.hostname, and origin URL.origin,
+// which is the base the page is rebased onto and the one spelling that must
+// not drift: the canonical target is "skysocks|" + origin, as the engine had
+// it, so a site keeps the origin and storage it had there. .skysocks names a
+// page the visor serves itself, never clearnet.
+func clearnetOriginFor(scheme, host, origin string) (base string, ok bool) {
+	h := strings.ToLower(strings.TrimSpace(host))
+	if scheme != "http:" && scheme != "https:" {
+		return "", false
+	}
+	if h == "" || isLoopbackHost(h) || strings.HasSuffix(h, ".skysocks") {
+		return "", false
+	}
+	if _, _, mesh := meshOriginFor(h); mesh {
+		return "", false
+	}
+	if origin == "" || origin == "null" {
+		return "", false
+	}
+	return origin, true
+}
+
+// canonicalClearnetTarget is the string a clearnet browse origin is the hash
+// of: "skysocks|<origin>", the retired engine's key.
+func canonicalClearnetTarget(base string) string { return "skysocks|" + base }
