@@ -96,6 +96,15 @@
     <string name="call_channel_ongoing">Call in progress</string>
     <string name="call_incoming_title">Incoming call</string>
     <string name="call_dialing">Calling…</string>
+    <string name="call_connecting">Connecting…</string>
+    <string name="call_ringing">Ringing…</string>
+    <string name="call_offline">Offline</string>
+    <string name="call_declined">Call declined</string>
+    <string name="call_busy">Busy</string>
+    <string name="call_no_answer">No answer</string>
+    <string name="call_failed">Call failed</string>
+    <string name="call_close">Close</string>
+    <string name="call_again">Call again</string>
     <string name="call_answer">Answer</string>
     <string name="call_decline">Decline</string>
     <string name="call_ongoing_title">Call in progress</string>

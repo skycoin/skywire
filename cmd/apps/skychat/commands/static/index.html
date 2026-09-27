@@ -2979,6 +2979,21 @@
     .ic-btn.answer { background: var(--accent-green); color: var(--onok); }
     .ic-btn.decline { background: var(--accent-red); color: var(--onbad); }
     .ic-btn:hover { filter: brightness(1.1); }
+    .ic-btn.neutral { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); }
+    .ic-btn.hidden { display: none; }
+    /* The caller's banner, by how the call is going: a live dial pulses the
+       way the ringing one does; an outcome is still, and coloured by what
+       happened. */
+    .incoming-call .ic-note { font-size: 12px; color: var(--text-secondary); margin-top: 2px; max-width: 260px; }
+    .incoming-call .ic-note.hidden { display: none; }
+    .incoming-call.dial-connecting { animation: none; }
+    .incoming-call.dial-ended { animation: none; }
+    .incoming-call.dial-ended .ic-title { font-weight: 700; color: var(--accent-red); }
+    .incoming-call.dial-no_answer .ic-title,
+    .incoming-call.dial-busy .ic-title { color: var(--accent-orange); }
+    @media (max-width: 520px) {
+      .incoming-call { left: 12px; right: 12px; transform: none; gap: 12px; flex-wrap: wrap; justify-content: space-between; }
+    }
 
     /* Voice call — active-call panel */
     .call-panel {
@@ -3951,16 +3966,23 @@
        side, and it exists for one reason: to carry a Cancel. An unanswered
        outbound call is in no active list, so the in-call panel's hang-up
        button has no id for it — this is where the id lives. -->
-  <div id="outgoingCall" class="incoming-call hidden">
+  <!-- It also says how the call is going — connecting, ringing — and, once
+       it is over without being answered, why: offline, declined, no answer.
+       Before that a caller saw "Calling…" and then nothing at all, and could
+       not tell a phone that was ringing from one that was switched off. -->
+  <div id="outgoingCall" class="incoming-call hidden" role="status" aria-live="polite">
     <div class="ic-info">
       <div class="ic-avatar"><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 16.9v2.4a1.8 1.8 0 0 1-2 1.8 17.4 17.4 0 0 1-7.6-2.7 17.1 17.1 0 0 1-5.3-5.3A17.4 17.4 0 0 1 3 5.5a1.8 1.8 0 0 1 1.8-2h2.4a1.8 1.8 0 0 1 1.8 1.5c.1.9.3 1.7.6 2.5a1.8 1.8 0 0 1-.4 1.9l-1 1a14 14 0 0 0 5.3 5.3l1-1a1.8 1.8 0 0 1 1.9-.4c.8.3 1.6.5 2.5.6a1.8 1.8 0 0 1 1.6 1.9z"/></svg></div>
       <div>
-        <div class="ic-title">Calling…</div>
+        <div class="ic-title" id="ocTitle">Calling…</div>
         <div class="ic-from" id="ocTo">-</div>
+        <div class="ic-note hidden" id="ocNote"></div>
       </div>
     </div>
     <div class="ic-actions">
-      <button class="ic-btn decline" onclick="app.cancelOutgoing()">Cancel</button>
+      <button class="ic-btn decline" id="ocCancel" onclick="app.cancelOutgoing()">Cancel</button>
+      <button class="ic-btn answer hidden" id="ocRedial" onclick="app.redialOutcome()">Call again</button>
+      <button class="ic-btn neutral hidden" id="ocClose" onclick="app.dismissOutcome()">Close</button>
     </div>
   </div>
 
@@ -4021,6 +4043,29 @@
         </div>
         <div class="notif-muted-title">Muted chats &amp; groups</div>
         <div id="notifMutedList" class="notif-muted-list"></div>
+
+        <!-- Shown only while the visor's voice calls are reachable: the tone
+             lives in the visor, which is what rings. -->
+        <div id="ringbackSection" class="hidden">
+          <div class="settings-section">Calls</div>
+          <div class="notif-setting">
+            <div>
+              <div class="notif-label">Ringback tone</div>
+              <div class="notif-desc">What people hear while they wait for you to answer. Up to 1 MB of audio.</div>
+              <div class="notif-desc" id="ringbackDesc"></div>
+            </div>
+          </div>
+          <div class="xfer-actions">
+            <label class="btn btn-secondary xfer-import">
+              Choose audio…
+              <input type="file" id="ringbackFile" accept="audio/*,.mp3,.ogg,.oga,.opus,.weba,.webm,.wav,.m4a,.aac,.flac"
+                     style="display:none" onchange="app.setRingback(event)" />
+            </label>
+            <button class="btn btn-secondary" id="ringbackPlay" onclick="app.previewRingback()">Play</button>
+            <button class="btn btn-secondary" id="ringbackClear" onclick="app.clearRingback()">Use the plain ring</button>
+          </div>
+          <div id="ringbackStatus" class="xfer-status"></div>
+        </div>
 
         <div class="settings-section">Import / export chat</div>
         <div class="notif-desc">
@@ -4672,7 +4717,14 @@
         // control surface that polls /voice/{incoming,active} and drives
         // /voice/{call,answer,decline,hangup,mute,levels}. Auto-hides when voice
         // is unavailable (no --pair-enable / no visor RPC / built without audio).
-        this.voice = { available: null, ring: null, dialing: null, activeId: null, micMuted: false, spkMuted: false, startedAt: 0, specOn: false, specChan: 'recv' };
+        this.voice = { available: null, ring: null, dialing: null, activeId: null, micMuted: false, spkMuted: false, startedAt: 0, specOn: false, specChan: 'recv',
+          // outcome: how the last call this page placed ended unanswered, on
+          // screen for a few seconds. knownDials / dismissedDials: the ids
+          // this page has seen ringing, and the ones it is done showing.
+          outcome: null, knownDials: new Set(), dismissedDials: new Set() };
+        // What the caller hears while a call rings: the callee's own tone
+        // when it has one, an ordinary ring otherwise.
+        this._rb = { audio: null, audioFor: null, tone: null };
         this._voiceLevelTimer = null;
         this._voiceClockTimer = null;
         this._specTimer = null;
@@ -8381,6 +8433,7 @@
       openAppSettings() {
         this._xferStatus('');
         this._renderNotifModal();
+        this._renderRingbackSetting();
         document.getElementById('appSettingsModal').classList.add('visible');
         this._ensureNotifPermission();
       }
@@ -12766,6 +12819,7 @@
         this._refreshHeaderMenu();
         if (!v) { // voice went away — tear down any UI
           this.voice.ring = null; this._renderIncoming();
+          this.voice.outcome = null;
           this._updateDialing([]);
           if (this.voice.activeId) this._endCallUI();
         }
@@ -12800,20 +12854,130 @@
       // between the invite going out and the callee answering. It is the one
       // window in which a call can be called off, and until /voice/dialing
       // existed the UI could not see into it.
+      //
+      // Each entry also says how the call is going (state: connecting,
+      // calling, ringing) and, for a few seconds after it ended unanswered,
+      // why (offline, declined, busy, no_answer, failed). An entry from a
+      // visor that predates that has no state and reads as "calling".
       _updateDialing(list) {
-        const call = (Array.isArray(list) && list.length) ? list[0] : null;
+        const calls = Array.isArray(list) ? list : [];
+        const listed = new Set(calls.map(c => c.call_id));
+        // Forget ids the visor no longer lists, so these sets stay the size
+        // of the handful of calls currently in play.
+        for (const id of [...this.voice.dismissedDials]) if (!listed.has(id)) this.voice.dismissedDials.delete(id);
+        for (const id of [...this.voice.knownDials]) {
+          if (!listed.has(id) && !(this.voice.dialing && this.voice.dialing.call_id === id)) this.voice.knownDials.delete(id);
+        }
+        const shown = c => c && !this.voice.dismissedDials.has(c.call_id) && this.voice.activeId !== c.call_id;
         // Once connected the in-call panel owns it; two banners for one call
         // would be one too many.
-        this.voice.dialing = (call && this.voice.activeId !== call.call_id) ? call : null;
+        const live = calls.find(c => shown(c) && !this._dialEnded(c.state)) || null;
+        // An outcome is only news about a call this page saw ringing — one
+        // placed from the CLI or another tab, or before a reload, is not.
+        const ended = calls.find(c => shown(c) && this._dialEnded(c.state) && this.voice.knownDials.has(c.call_id));
+        if (live) {
+          this.voice.knownDials.add(live.call_id);
+          this.voice.dialing = live;
+          if (this.voice.outcome && this.voice.outcome.call_id !== live.call_id) this.voice.outcome = null;
+        } else {
+          this.voice.dialing = null;
+          if (ended && (!this.voice.outcome || this.voice.outcome.call_id !== ended.call_id)) this._showOutcome(ended);
+        }
+        this._renderDialing();
+        this._syncRingback();
+        // While a call is being placed, look again sooner than the regular
+        // poll: "ringing" three seconds late is most of the ring.
+        clearTimeout(this._dialPollTimer);
+        if (this.voice.dialing) this._dialPollTimer = setTimeout(() => this._pollVoice(), 1000);
+      }
+
+      _dialEnded(state) {
+        return ['offline', 'declined', 'busy', 'no_answer', 'failed'].includes(state);
+      }
+
+      // _dialTitle is the banner's headline for a call's state.
+      _dialTitle(state) {
+        switch (state) {
+          case 'connecting': return 'Connecting…';
+          case 'ringing': return 'Ringing…';
+          case 'offline': return 'Offline';
+          case 'declined': return 'Call declined';
+          case 'busy': return 'Busy';
+          case 'no_answer': return 'No answer';
+          case 'failed': return 'Call failed';
+          default: return 'Calling…';
+        }
+      }
+
+      // _dialNote is the line under the name that says what the state means
+      // for the person waiting.
+      _dialNote(call) {
+        switch (call.state) {
+          case 'connecting': return 'Reaching them over the network…';
+          case 'offline': return 'They are offline or cannot be reached right now.';
+          case 'declined': return 'They declined the call.';
+          case 'busy': return 'They are on another call.';
+          case 'no_answer': return 'They did not pick up.';
+          case 'failed': return call.reason ? String(call.reason) : 'The call could not be connected.';
+          default: return '';
+        }
+      }
+
+      _renderDialing() {
         const el = document.getElementById('outgoingCall');
         if (!el) return;
-        if (this.voice.dialing) {
-          document.getElementById('ocTo').textContent =
-            this.shortPk(this.voice.dialing.peer) || 'unknown';
-          el.classList.remove('hidden');
-        } else {
-          el.classList.add('hidden');
+        const call = this.voice.dialing || this.voice.outcome;
+        if (!call) { el.classList.add('hidden'); return; }
+        const state = call.state || 'calling';
+        const ended = this._dialEnded(state);
+        el.className = `incoming-call dial-${state}${ended ? ' dial-ended' : ''}`;
+        const set = (id, text) => { const n = document.getElementById(id); if (n) n.textContent = text; };
+        set('ocTitle', this._dialTitle(state));
+        set('ocTo', this.shortPk(call.peer) || 'unknown');
+        const note = document.getElementById('ocNote');
+        if (note) {
+          const text = this._dialNote(call);
+          note.textContent = text;
+          note.classList.toggle('hidden', !text);
         }
+        const toggle = (id, on) => { const b = document.getElementById(id); if (b) b.classList.toggle('hidden', !on); };
+        toggle('ocCancel', !ended);
+        toggle('ocRedial', ended && state !== 'declined');
+        toggle('ocClose', ended);
+      }
+
+      // _showOutcome puts a finished call's outcome on the banner for a few
+      // seconds — long enough to read, not so long it is in the way.
+      _showOutcome(call) {
+        this.voice.outcome = call;
+        this._rbPlayEnded();
+        clearTimeout(this._outcomeTimer);
+        this._outcomeTimer = setTimeout(() => {
+          if (this.voice.outcome && this.voice.outcome.call_id === call.call_id) this.dismissOutcome();
+        }, 6000);
+      }
+
+      // dismissOutcome closes the outcome banner. The visor drops the entry on
+      // a hang-up, so the next poll does not bring it back.
+      dismissOutcome() {
+        const call = this.voice.outcome;
+        this.voice.outcome = null;
+        clearTimeout(this._outcomeTimer);
+        this._renderDialing();
+        if (!call) return;
+        this.voice.dismissedDials.add(call.call_id);
+        fetch('/voice/hangup', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ call_id: call.call_id }),
+        }).catch(() => { /* it expires on its own in a few seconds */ });
+      }
+
+      // redialOutcome tries the same peer again from the outcome banner.
+      redialOutcome() {
+        const call = this.voice.outcome;
+        if (!call) return;
+        this.dismissOutcome();
+        this.callPeer(call.peer);
       }
 
       // cancelOutgoing calls off a call that is still ringing. Hanging up a
@@ -12823,14 +12987,289 @@
         const call = this.voice.dialing;
         if (!call) return;
         this.voice.dialing = null;
-        const el = document.getElementById('outgoingCall');
-        if (el) el.classList.add('hidden');
+        this.voice.dismissedDials.add(call.call_id);
+        this._renderDialing();
+        this._syncRingback();
         try {
           await fetch('/voice/hangup', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ call_id: call.call_id }),
           });
         } catch (e) { /* best-effort; the next poll re-reads the truth */ }
+      }
+
+      // _startDialing shows a call this page just placed, before the first
+      // poll has anything to say about it.
+      _startDialing(callID, peer) {
+        this.voice.outcome = null;
+        clearTimeout(this._outcomeTimer);
+        this.voice.knownDials.add(callID);
+        this._updateDialing([{ call_id: callID, peer, state: 'connecting' }]);
+      }
+
+      // ---- Ringback: what the caller hears while it rings ---------------
+      //
+      // The callee may have chosen a tone of its own; the visor fetches it
+      // while the call rings and says so (ringback: true), and it plays from
+      // /voice/ringback. Until then — and for a callee with none, or one that
+      // predates tones — an ordinary ring plays: 440+480 Hz, two seconds on,
+      // four off. Nothing plays while the call is still connecting: there is
+      // no ringing to report yet, and silence is what says so.
+      //
+      // Not in the phone app's embedded page: the app's own call screen plays
+      // the ring there, and two would play over each other.
+
+      _rbWanted() {
+        const d = this.voice.dialing;
+        return !!(d && (d.state === 'ringing' || d.state === 'calling' || !d.state));
+      }
+
+      _syncRingback() {
+        if (typeof window.SkywireQr !== 'undefined' || !this._rbWanted()) {
+          this._rbStop();
+          return;
+        }
+        const d = this.voice.dialing;
+        if (d.ringback) {
+          if (this._rb.audioFor === d.call_id) return;
+          this._rbStopTone();
+          this._rbStopAudio();
+          const audio = new Audio('/voice/ringback?call=' + encodeURIComponent(d.call_id));
+          audio.loop = true;
+          this._rb.audio = audio;
+          this._rb.audioFor = d.call_id;
+          const played = audio.play();
+          // The tone would not play (a format this browser lacks, or it was
+          // pruned): fall back to the ordinary ring rather than to silence.
+          if (played && played.catch) {
+            played.catch(() => {
+              if (this._rb.audio !== audio) return;
+              this._rbStopAudio();
+              this._rb.audioFor = d.call_id; // don't retry the same tone every poll
+              if (this._rbWanted()) this._rbStartTone();
+            });
+          }
+          return;
+        }
+        if (!this._rb.audio) this._rbStartTone();
+      }
+
+      _rbContext() {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return null;
+        if (!this._rbCtx) {
+          try { this._rbCtx = new Ctx(); } catch (e) { return null; }
+        }
+        if (this._rbCtx.state === 'suspended' && this._rbCtx.resume) this._rbCtx.resume().catch(() => {});
+        return this._rbCtx;
+      }
+
+      // _rbBeep schedules one burst of a two-frequency tone on ctx and keeps
+      // it in _rb.bursts until it has played, so a stop can cut it short.
+      _rbBeep(ctx, f1, f2, at, secs, level) {
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0, at);
+        gain.gain.linearRampToValueAtTime(level, at + 0.02);
+        gain.gain.setValueAtTime(level, at + secs - 0.02);
+        gain.gain.linearRampToValueAtTime(0, at + secs);
+        gain.connect(ctx.destination);
+        const burst = { gain, oscs: [] };
+        burst.oscs = [f1, f2].map(f => {
+          const o = ctx.createOscillator();
+          o.frequency.value = f;
+          o.connect(gain);
+          o.start(at);
+          o.stop(at + secs + 0.05);
+          return o;
+        });
+        const bursts = this._rb.bursts || (this._rb.bursts = new Set());
+        bursts.add(burst);
+        burst.oscs[1].onended = () => {
+          bursts.delete(burst);
+          try { gain.disconnect(); } catch (e) { /* gone */ }
+        };
+      }
+
+      // _rbSilence cuts every burst still scheduled or sounding — a Cancel
+      // must not leave two seconds of ring behind it.
+      _rbSilence() {
+        const bursts = this._rb.bursts;
+        if (!bursts) return;
+        for (const b of bursts) {
+          try { b.gain.disconnect(); } catch (e) { /* gone */ }
+          b.oscs.forEach(o => { try { o.stop(); } catch (e) { /* not started / stopped */ } });
+        }
+        bursts.clear();
+      }
+
+      _rbStartTone() {
+        if (this._rb.tone) return;
+        const ctx = this._rbContext();
+        if (!ctx) return;
+        const ring = () => {
+          try { this._rbBeep(ctx, 440, 480, ctx.currentTime + 0.05, 2, 0.08); } catch (e) { /* decorative */ }
+        };
+        ring();
+        this._rb.tone = setInterval(ring, 6000);
+      }
+
+      _rbStopTone() {
+        if (this._rb.tone) clearInterval(this._rb.tone);
+        this._rb.tone = null;
+        this._rbSilence();
+      }
+
+      _rbStopAudio() {
+        const a = this._rb.audio;
+        this._rb.audio = null;
+        this._rb.audioFor = null;
+        if (a) { try { a.pause(); a.removeAttribute('src'); a.load(); } catch (e) { /* gone */ } }
+      }
+
+      _rbStop() {
+        this._rbStopTone();
+        this._rbStopAudio();
+      }
+
+      // _rbPlayEnded plays a short "the call did not go through" signal: three
+      // bursts of the busy tone.
+      _rbPlayEnded() {
+        this._rbStop();
+        if (typeof window.SkywireQr !== 'undefined') return;
+        const ctx = this._rbContext();
+        if (!ctx) return;
+        try {
+          for (let i = 0; i < 3; i++) this._rbBeep(ctx, 480, 620, ctx.currentTime + 0.05 + i * 0.5, 0.25, 0.07);
+        } catch (e) { /* decorative */ }
+      }
+
+      // ---- Settings: this visor's own ringback tone ---------------------
+
+      async _renderRingbackSetting() {
+        const section = document.getElementById('ringbackSection');
+        if (!section) return;
+        section.classList.toggle('hidden', !this.voice.available);
+        if (!this.voice.available) return;
+        const desc = document.getElementById('ringbackDesc');
+        const play = document.getElementById('ringbackPlay');
+        const clear = document.getElementById('ringbackClear');
+        try {
+          const r = await fetch('/voice/my-ringback?info=1');
+          if (!r.ok) throw new Error(String(r.status));
+          const info = await r.json();
+          if (desc) desc.textContent = info.set
+            ? `Your tone: ${this.humanSize(info.size)} (${info.type}).`
+            : 'Callers hear an ordinary ring.';
+          if (play) play.disabled = !info.set;
+          if (clear) clear.disabled = !info.set;
+        } catch (e) {
+          if (desc) desc.textContent = 'Could not read the current tone.';
+        }
+      }
+
+      _ringbackStatus(text, kind) {
+        const el = document.getElementById('ringbackStatus');
+        if (!el) return;
+        el.textContent = text || '';
+        el.className = 'xfer-status' + (kind ? ' ' + kind : '');
+      }
+
+      // _ringbackType names the audio type of a picked file: the browser's
+      // idea when it has one, else the extension's.
+      _ringbackType(file) {
+        if (file.type && file.type.startsWith('audio/')) return file.type;
+        const ext = ((file.name || '').match(/\.([a-z0-9]+)$/i) || [])[1] || '';
+        return ({ mp3: 'audio/mpeg', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', weba: 'audio/webm',
+          webm: 'audio/webm', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac' })[ext.toLowerCase()] || '';
+      }
+
+      // _ringbackPlayable checks this browser can play the file at all, so a
+      // tone nobody could hear is not what callers get.
+      _ringbackPlayable(file) {
+        return new Promise(resolve => {
+          const url = URL.createObjectURL(file);
+          const a = new Audio();
+          let done = false;
+          const finish = ok => {
+            if (done) return;
+            done = true;
+            URL.revokeObjectURL(url);
+            resolve(ok);
+          };
+          a.addEventListener('loadedmetadata', () => finish(true));
+          a.addEventListener('error', () => finish(false));
+          setTimeout(() => finish(true), 4000); // slow to decide is not a no
+          a.preload = 'metadata';
+          a.src = url;
+        });
+      }
+
+      async setRingback(ev) {
+        const input = ev && ev.target;
+        const file = input && input.files && input.files[0];
+        if (input) input.value = '';
+        if (!file) return;
+        const max = 1024 * 1024;
+        if (file.size > max) {
+          this._ringbackStatus(`That file is ${this.humanSize(file.size)} — a ringback tone can be up to 1 MB. Try a shorter clip.`, 'err');
+          return;
+        }
+        const type = this._ringbackType(file);
+        if (!type) {
+          this._ringbackStatus('That is not an audio file this can use (mp3, ogg/opus, webm, wav, m4a, aac or flac).', 'err');
+          return;
+        }
+        if (!(await this._ringbackPlayable(file))) {
+          this._ringbackStatus('This browser cannot play that file, so callers could not either.', 'err');
+          return;
+        }
+        this._ringbackStatus('Saving…');
+        try {
+          const r = await fetch('/voice/my-ringback', { method: 'PUT', headers: { 'Content-Type': type }, body: file });
+          if (!r.ok) throw new Error((await r.text()).trim() || String(r.status));
+          this._ringbackStatus('Saved. Callers hear it from their next call.', 'ok');
+        } catch (e) {
+          this._ringbackStatus('Could not save it: ' + ((e && e.message) || e), 'err');
+        }
+        this._renderRingbackSetting();
+      }
+
+      async clearRingback() {
+        this._stopRingbackPreview();
+        try {
+          const r = await fetch('/voice/my-ringback', { method: 'DELETE' });
+          if (!r.ok) throw new Error((await r.text()).trim() || String(r.status));
+          this._ringbackStatus('Callers hear an ordinary ring again.', 'ok');
+        } catch (e) {
+          this._ringbackStatus('Could not clear it: ' + ((e && e.message) || e), 'err');
+        }
+        this._renderRingbackSetting();
+      }
+
+      // previewRingback plays the tone as callers will hear it; a second press
+      // stops it.
+      previewRingback() {
+        const btn = document.getElementById('ringbackPlay');
+        if (this._rbPreview) { this._stopRingbackPreview(); return; }
+        const a = new Audio('/voice/my-ringback?t=' + Date.now());
+        this._rbPreview = a;
+        if (btn) btn.textContent = 'Stop';
+        a.addEventListener('ended', () => this._stopRingbackPreview());
+        const played = a.play();
+        if (played && played.catch) {
+          played.catch(() => {
+            this._stopRingbackPreview();
+            this._ringbackStatus('Could not play the tone here.', 'err');
+          });
+        }
+      }
+
+      _stopRingbackPreview() {
+        const a = this._rbPreview;
+        this._rbPreview = null;
+        if (a) { try { a.pause(); } catch (e) { /* gone */ } }
+        const btn = document.getElementById('ringbackPlay');
+        if (btn) btn.textContent = 'Play';
       }
 
       _updateActive(list) {
@@ -12845,6 +13284,10 @@
       // _enterCall shows the in-call panel and starts the level + clock timers.
       _enterCall(callID, peerHex) {
         this.voice.activeId = callID;
+        // Answered: the ring stops the instant the voice starts.
+        if (this.voice.dialing && this.voice.dialing.call_id === callID) this.voice.dialing = null;
+        this._renderDialing();
+        this._rbStop();
         this.voice.startedAt = Date.now();
         this.voice.micMuted = false;
         this.voice.spkMuted = false;
@@ -12904,7 +13347,6 @@
         // second press from placing a second call — and the callee would ring
         // twice for one caller who pressed twice.
         if (this.voice.dialing) { this.showToast('Already calling.', 'error'); return; }
-        this.showToast('Calling ' + this.shortPk(peer) + '…');
         try {
           const r = await fetch('/voice/call', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -12912,10 +13354,9 @@
           });
           if (!r.ok) { this.showToast('Call failed: ' + (await r.text()).trim(), 'error'); return; }
           const d = await r.json();
-          // Ringing, not connected — show it as such. _updateActive promotes
+          // Placed, not connected — show it as such. _updateActive promotes
           // it to the in-call panel if and when the callee answers.
-          this.voice.dialing = { call_id: d.call_id, peer };
-          this._updateDialing([this.voice.dialing]);
+          this._startDialing(d.call_id, peer);
         } catch (e) {
           this.showToast('Call failed.', 'error');
         }
@@ -13002,7 +13443,6 @@
         // twice for one caller who pressed twice.
         if (this.voice.dialing) { this.showToast('Already calling.', 'error'); return; }
         const peer = this.recipient;
-        this.showToast('Calling ' + this.shortPk(peer) + '…');
         try {
           const r = await fetch('/voice/call', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -13010,10 +13450,9 @@
           });
           if (!r.ok) { this.showToast('Call failed: ' + (await r.text()).trim(), 'error'); return; }
           const d = await r.json();
-          // Ringing, not connected — show it as such. _updateActive promotes
+          // Placed, not connected — show it as such. _updateActive promotes
           // it to the in-call panel if and when the callee answers.
-          this.voice.dialing = { call_id: d.call_id, peer };
-          this._updateDialing([this.voice.dialing]);
+          this._startDialing(d.call_id, peer);
         } catch (e) {
           this.showToast('Call failed.', 'error');
         }

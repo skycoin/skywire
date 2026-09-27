@@ -115,7 +115,7 @@ func (m *Manager) handleResume(sig Sig, conn net.Conn) {
 		_ = conn.Close()                                                                                             //nolint:errcheck
 		return
 	}
-	if !resumeIsFromPeer(sess.Peer(), sig, conn) {
+	if !isFromPeer(sess.Peer(), sig, conn) {
 		_ = writeSig(conn, Sig{Type: SigDecline, CallID: sig.CallID, FromPK: m.cfg.LocalPK, Reason: "resume from the wrong peer"}) //nolint:errcheck
 		_ = conn.Close()                                                                                                           //nolint:errcheck
 		m.log.WithField("call", sig.CallID).Warn("voice: refused a resume that did not come from the call's peer")
@@ -151,8 +151,8 @@ type peerNamed interface {
 	RemotePK() cipher.PubKey
 }
 
-// resumeIsFromPeer checks that a resume really comes from the party on the
-// call.
+// isFromPeer checks that a resume — or a ringback tone request — really comes
+// from the party on the call.
 //
 // A resume attaches to a live call without ringing anyone, so it is worth more
 // care than an invite, which at least ends up in front of a human. Where the
@@ -162,7 +162,7 @@ type peerNamed interface {
 // invite has always stood on, narrowed by a resume being possible only for a
 // live call, only while its transport is down, and only with its 64 random bits
 // of id.
-func resumeIsFromPeer(peer cipher.PubKey, sig Sig, conn net.Conn) bool {
+func isFromPeer(peer cipher.PubKey, sig Sig, conn net.Conn) bool {
 	if pn, ok := conn.(peerNamed); ok {
 		return pn.RemotePK() == peer
 	}

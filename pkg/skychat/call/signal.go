@@ -35,6 +35,16 @@ const (
 	// it reads an unknown type, answers SigDecline("expected invite"), and the
 	// call ends the way it used to instead of misbehaving.
 	SigResume
+	// SigRinging tells a caller that the callee has started ringing (callee →
+	// caller, on the invite's own conn, ahead of the answer). Sent only when
+	// the invite asked for it (Sig.Progress): a caller that predates it reads
+	// every frame but an Accept as the end of the call, so an unrequested one
+	// would hang up on it.
+	SigRinging
+	// SigTone asks for, and carries, the callee's ringback tone. The caller
+	// opens a SEPARATE conn for it, so the tone never queues ahead of the
+	// answer on the call's own. See ringback.go.
+	SigTone
 )
 
 // Sig is one signaling message. It carries the call id, the sender, and — on
@@ -55,6 +65,19 @@ type Sig struct {
 	// reconnect that cannot come. Absent, a broken conn ends the call the way
 	// it did before resumption existed.
 	Resume bool `json:"resume,omitempty"`
+	// Progress, on an Invite, asks the callee to say when it starts ringing
+	// (SigRinging). It is what lets a caller tell "reached, and ringing" from
+	// "still trying to reach them" — before it, both were the same silence.
+	Progress bool `json:"progress,omitempty"`
+	// Tone names a ringback tone by the hex SHA-256 of its bytes: on
+	// SigRinging, the tone the callee plays to its callers ("" for none); on
+	// SigTone, the tone asked for or being sent. ToneMime and ToneSize
+	// describe it, so a caller can bound the fetch before it starts.
+	Tone     string `json:"tone,omitempty"`
+	ToneMime string `json:"tone_mime,omitempty"`
+	ToneSize int    `json:"tone_size,omitempty"`
+	// Data is one piece of a ringback tone, on a SigTone reply.
+	Data []byte `json:"data,omitempty"`
 }
 
 const sigMaxLen = 64 << 10 // 64 KiB cap on a signaling frame
@@ -110,6 +133,11 @@ type DialFunc func(ctx context.Context, peer cipher.PubKey, port uint16) (net.Co
 // declines if it knows of no such call awaiting one.
 type ResumeHandler func(sig Sig, conn net.Conn)
 
+// ToneHandler is called when a caller asks for this endpoint's ringback tone.
+// It receives the request and the conn it came on, answers it, and closes the
+// conn.
+type ToneHandler func(req Sig, conn net.Conn)
+
 // InviteHandler is called when an inbound invite arrives. It receives the
 // invite and the live signaling conn; the implementation decides to accept
 // (reply SigAccept and set up media) or decline. It must not block long.
@@ -128,6 +156,7 @@ type Signaler struct {
 	mu       sync.Mutex
 	onInv    InviteHandler
 	onResume ResumeHandler
+	onTone   ToneHandler
 	serving  []net.Listener
 }
 
@@ -152,6 +181,14 @@ func (s *Signaler) SetInviteHandler(h InviteHandler) {
 func (s *Signaler) SetResumeHandler(h ResumeHandler) {
 	s.mu.Lock()
 	s.onResume = h
+	s.mu.Unlock()
+}
+
+// SetToneHandler registers the callback for a ringback tone request. Left
+// unset, every request is declined.
+func (s *Signaler) SetToneHandler(h ToneHandler) {
+	s.mu.Lock()
+	s.onTone = h
 	s.mu.Unlock()
 }
 
@@ -224,8 +261,21 @@ func (s *Signaler) handleInbound(conn net.Conn) {
 		h(sig, conn)
 		return
 	}
+	if sig.Type == SigTone {
+		s.mu.Lock()
+		h := s.onTone
+		s.mu.Unlock()
+		if h == nil {
+			_ = writeSig(conn, Sig{Type: SigDecline, CallID: sig.CallID, FromPK: s.localPK, Reason: "no ringback tone"}) //nolint:errcheck
+			_ = conn.Close()                                                                                             //nolint:errcheck
+			return
+		}
+		h(sig, conn)
+		return
+	}
 	if sig.Type != SigInvite {
-		// Only an invite or a resume legitimately opens a fresh signaling conn.
+		// Only an invite, a resume or a tone request legitimately opens a
+		// fresh signaling conn.
 		_ = writeSig(conn, Sig{Type: SigDecline, CallID: sig.CallID, FromPK: s.localPK, Reason: "expected invite"}) //nolint:errcheck
 		_ = conn.Close()                                                                                            //nolint:errcheck
 		return
@@ -241,21 +291,41 @@ func (s *Signaler) handleInbound(conn net.Conn) {
 	h(sig, conn)
 }
 
+// ErrUnreachable marks a call that never reached the peer: the signaling
+// dial failed. From a caller's seat that is "offline" — the peer is not on the
+// network, or is on it and cannot be reached from here — and it is a
+// different thing to say than "rang and nobody answered".
+var ErrUnreachable = errors.New("peer unreachable")
+
+// inviteHooks is what an invite reports before its answer arrives. Either may
+// be nil.
+type inviteHooks struct {
+	// sent: the invite was written to the peer's signaling port — the peer
+	// is reachable and has it.
+	sent func()
+	// ringing: the peer said it is ringing (SigRinging).
+	ringing func(Sig)
+}
+
 // Invite dials the peer's signaling port (over whichever network DialFunc
 // resolves), sends an Invite, and returns the live conn + the peer's reply
 // (SigAccept or SigDecline/SigBusy). On a non-accept reply it closes the conn
-// and returns the reply with a nil conn.
-func (s *Signaler) Invite(ctx context.Context, peer cipher.PubKey, callID, codec string, mediaPort uint16) (net.Conn, Sig, error) {
+// and returns the reply with a nil conn. A dial that fails wraps
+// ErrUnreachable.
+func (s *Signaler) Invite(ctx context.Context, peer cipher.PubKey, callID, codec string, mediaPort uint16, hooks inviteHooks) (net.Conn, Sig, error) {
 	conn, err := s.dial(ctx, peer, s.port)
 	if err != nil {
-		return nil, Sig{}, fmt.Errorf("voice: signaling dial: %w", err)
+		return nil, Sig{}, fmt.Errorf("voice: signaling dial: %w: %w", ErrUnreachable, err)
 	}
-	inv := Sig{Type: SigInvite, CallID: callID, FromPK: s.localPK, Codec: codec, MediaPort: mediaPort, Resume: true}
+	inv := Sig{Type: SigInvite, CallID: callID, FromPK: s.localPK, Codec: codec, MediaPort: mediaPort, Resume: true, Progress: true}
 	if err := writeSig(conn, inv); err != nil {
 		_ = conn.Close() //nolint:errcheck
 		return nil, Sig{}, fmt.Errorf("voice: send invite: %w", err)
 	}
-	reply, err := awaitReply(ctx, conn, func(c net.Conn) { s.cancelInvite(c, callID) })
+	if hooks.sent != nil {
+		hooks.sent()
+	}
+	reply, err := awaitReply(ctx, conn, hooks.ringing, func(c net.Conn) { s.cancelInvite(c, callID) })
 	if err != nil {
 		_ = conn.Close() //nolint:errcheck
 		return nil, Sig{}, fmt.Errorf("voice: read invite reply: %w", err)
@@ -280,12 +350,21 @@ func (s *Signaler) Invite(ctx context.Context, peer cipher.PubKey, callID, codec
 // On success the read deadline is CLEARED. Past this point the conn is the
 // media conn, and a call would otherwise end the moment the request's budget
 // elapsed.
-func awaitReply(ctx context.Context, conn net.Conn, onGiveUp func(net.Conn)) (Sig, error) {
+//
+// With onRinging set, SigRinging frames are progress rather than the reply:
+// each is handed to it and the wait goes on. Without it, one is the reply like
+// any other frame — which is what a caller that never asked for progress has
+// always done with an unexpected frame.
+func awaitReply(ctx context.Context, conn net.Conn, onRinging func(Sig), onGiveUp func(net.Conn)) (Sig, error) {
 	if dl, ok := ctx.Deadline(); ok {
 		_ = conn.SetReadDeadline(dl) //nolint:errcheck // not every conn honors one; onGiveUp still does
 	}
 	stop := context.AfterFunc(ctx, func() { onGiveUp(conn) })
 	reply, err := readSig(conn)
+	for err == nil && reply.Type == SigRinging && onRinging != nil {
+		onRinging(reply)
+		reply, err = readSig(conn)
+	}
 	stop()
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -316,7 +395,7 @@ func (s *Signaler) Resume(ctx context.Context, peer cipher.PubKey, callID string
 		_ = conn.Close() //nolint:errcheck
 		return nil, fmt.Errorf("voice: send resume: %w", err)
 	}
-	reply, err := awaitReply(ctx, conn, func(c net.Conn) { _ = c.Close() }) //nolint:errcheck // best effort; the read below reports the outcome
+	reply, err := awaitReply(ctx, conn, nil, func(c net.Conn) { _ = c.Close() }) //nolint:errcheck // best effort; the read below reports the outcome
 	if err != nil {
 		_ = conn.Close() //nolint:errcheck
 		return nil, fmt.Errorf("voice: resume reply: %w", err)

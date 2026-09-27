@@ -94,6 +94,41 @@ func (r *RPC) VoiceDialing(_ *struct{}, out *[]visorapi.VoiceDialingInfo) (err e
 	return nil
 }
 
+// VoiceSetRingback sets (or, with no data, clears) this visor's ringback tone.
+// The tone is not logged: it is up to a megabyte of audio.
+func (r *RPC) VoiceSetRingback(in *visorapi.VoiceRingback, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceSetRingback", nil)(nil, &err)
+	if in == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.VoiceSetRingback(*in)
+}
+
+// VoiceRingback replies with this visor's own ringback tone.
+func (r *RPC) VoiceRingback(_ *struct{}, out *visorapi.VoiceRingback) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceRingback", nil)(nil, &err)
+	t, err := r.visor.VoiceRingback()
+	if err != nil {
+		return err
+	}
+	*out = t
+	return nil
+}
+
+// VoiceDialRingback replies with the ringback tone of an outbound call's peer.
+func (r *RPC) VoiceDialRingback(callID *string, out *visorapi.VoiceRingback) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceDialRingback", callID)(nil, &err)
+	if callID == nil {
+		return fmt.Errorf("nil request")
+	}
+	t, err := r.visor.VoiceDialRingback(*callID)
+	if err != nil {
+		return err
+	}
+	*out = t
+	return nil
+}
+
 // VoiceMute toggles the mic (send) and speaker (playback) mute of an active call.
 func (r *RPC) VoiceMute(req *visorapi.VoiceMuteReq, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "VoiceMute", req)(nil, &err)
