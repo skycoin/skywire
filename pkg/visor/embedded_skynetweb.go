@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxyroute"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -210,6 +211,7 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		ProxyPort:     uintOrDefault(e.cfg.ProxyPort, defaultSkynetWebProxyPort),
 		ProxyAddr:     e.cfg.ProxyAddr,
 		UpstreamSOCKS: e.cfg.UpstreamSOCKS,
+		UpstreamRules: e.cfg.UpstreamRules,
 		Stats:         e.stats,
 	}
 
@@ -632,4 +634,28 @@ func buildSkynetWebAppFunc(rt *EmbeddedSkynetWeb, log *logging.Logger) appcommon
 		appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 		return nil
 	}
+}
+
+// SetUpstreamRules replaces the per-domain upstream rules and restarts the
+// resolver so they take effect immediately. Pass nil to clear them.
+func (e *EmbeddedSkynetWeb) SetUpstreamRules(rules []proxyroute.Rule) error {
+	e.mu.Lock()
+	e.cfg.UpstreamRules = rules
+	wasRunning := e.running
+	e.mu.Unlock()
+
+	if wasRunning {
+		if err := e.Stop(); err != nil {
+			return fmt.Errorf("stop before upstream rules change: %w", err)
+		}
+		return e.Start()
+	}
+	return nil
+}
+
+// UpstreamRules returns the current per-domain upstream rules.
+func (e *EmbeddedSkynetWeb) UpstreamRules() []proxyroute.Rule {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]proxyroute.Rule(nil), e.cfg.UpstreamRules...)
 }

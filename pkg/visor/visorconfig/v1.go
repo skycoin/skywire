@@ -6,6 +6,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
+	"github.com/skycoin/skywire/pkg/proxyroute"
 	tnspec "github.com/skycoin/skywire/pkg/transport/network/spec"
 	tspec "github.com/skycoin/skywire/pkg/transport/spec"
 )
@@ -357,6 +358,10 @@ type DmsgWebConfig struct {
 	// upstream SOCKS5 server (e.g. "127.0.0.1:1080" for a chained
 	// skysocks-client). Empty = direct connect.
 	UpstreamSOCKS string `json:"upstream_socks,omitempty"`
+	// UpstreamRules send chosen domains to another upstream (a second
+	// skysocks-client, say) or "direct", ahead of UpstreamSOCKS. The longest
+	// matching suffix wins.
+	UpstreamRules []proxyroute.Rule `json:"upstream_rules,omitempty"`
 	// TLSMITM enables on-the-fly TLS termination for browser
 	// connections to <pk>.dmsg on TLSPort, using a leaf cert minted
 	// from a locally-installed CA at TLSCAPath/TLSCAKeyPath. Off by
@@ -508,6 +513,10 @@ type SkynetWebConfig struct {
 	DomainSuffix string `json:"domain_suffix,omitempty"`
 	// UpstreamSOCKS forwards non-matching CONNECTs to this upstream.
 	UpstreamSOCKS string `json:"upstream_socks,omitempty"`
+	// UpstreamRules send chosen domains to another upstream (a second
+	// skysocks-client, say) or "direct", ahead of UpstreamSOCKS. The longest
+	// matching suffix wins.
+	UpstreamRules []proxyroute.Rule `json:"upstream_rules,omitempty"`
 	// RouteTimeout is the keepalive duration for routes created by the
 	// resolving proxy. Routes idle longer than this are expired by GC.
 	// Zero means use DefaultRouteKeepAlive (10 min). A very large value

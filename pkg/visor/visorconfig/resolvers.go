@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/proxyroute"
 )
 
 // Resolver kinds. A ResolverConfig with an empty Kind is a dmsg resolver —
@@ -106,6 +107,10 @@ type ResolverConfig struct {
 	// SOCKS5 server. Set explicitly it always wins; left empty its value
 	// depends on Chain.
 	UpstreamSOCKS string `json:"upstream_socks,omitempty"`
+	// UpstreamRules send chosen domains to another upstream (a second
+	// skysocks-client, say) or "direct", ahead of UpstreamSOCKS. The longest
+	// matching suffix wins.
+	UpstreamRules []proxyroute.Rule `json:"upstream_rules,omitempty"`
 	// Chain, when nil or true (the default), gives an empty UpstreamSOCKS the
 	// same auto-chain the matching primary gets: a dmsg resolver chains to the
 	// skynet_web listener (so one browser proxy entry covers .dmsg and .skynet),
@@ -161,6 +166,7 @@ func (r *ResolverConfig) ToDmsgWeb() *DmsgWebConfig {
 		ProxyAddr:                 r.ProxyAddr,
 		DomainSuffix:              r.DomainSuffix,
 		UpstreamSOCKS:             r.UpstreamSOCKS,
+		UpstreamRules:             r.UpstreamRules,
 		Alias:                     r.Alias,
 		SelfLoopback:              r.SelfLoopback,
 		SelfLoopbackAuthenticated: r.SelfLoopbackAuthenticated,
@@ -180,6 +186,7 @@ func (r *ResolverConfig) ToSkynetWeb() *SkynetWebConfig {
 		ProxyAddr:                 r.ProxyAddr,
 		DomainSuffix:              r.DomainSuffix,
 		UpstreamSOCKS:             r.UpstreamSOCKS,
+		UpstreamRules:             r.UpstreamRules,
 		RouteTimeout:              r.RouteTimeout,
 		Alias:                     r.Alias,
 		SelfLoopback:              r.SelfLoopback,

@@ -243,10 +243,12 @@ func dmsgProxyInfo(cfg *visorconfig.DmsgWebConfig, runtime *EmbeddedDmsgWeb) *vi
 		DomainSuffix:  stringOrDefault(cfg.DomainSuffix, dmsgweb.DefaultDomainSuffix),
 		SocksAddr:     localSocksAddr(true, uintOrDefault(cfg.ProxyPort, defaultDmsgWebProxyPort)),
 		UpstreamSOCKS: cfg.UpstreamSOCKS,
+		UpstreamRules: cfg.UpstreamRules,
 	}
 	if runtime != nil {
 		info.Running = runtime.IsRunning()
 		info.Stats = dmsgStatsToAPI(runtime.Stats())
+		info.UpstreamRules = runtime.UpstreamRules()
 		if u := runtime.Upstream(); u != "" {
 			info.UpstreamSOCKS = u
 		}
@@ -292,10 +294,12 @@ func skynetProxyInfo(cfg *visorconfig.SkynetWebConfig, runtime *EmbeddedSkynetWe
 		DomainSuffix:  stringOrDefault(cfg.DomainSuffix, skynetweb.DefaultDomainSuffix),
 		SocksAddr:     localSocksAddr(true, uintOrDefault(cfg.ProxyPort, defaultSkynetWebProxyPort)),
 		UpstreamSOCKS: cfg.UpstreamSOCKS,
+		UpstreamRules: cfg.UpstreamRules,
 	}
 	if runtime != nil {
 		info.Running = runtime.IsRunning()
 		info.Stats = skynetStatsToAPI(runtime.Stats())
+		info.UpstreamRules = runtime.UpstreamRules()
 		if u := runtime.Upstream(); u != "" {
 			info.UpstreamSOCKS = u
 		}

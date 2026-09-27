@@ -37,6 +37,7 @@ import (
 	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/dmsgweb"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxyroute"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -251,6 +252,7 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 		ProxyPort:     uintOrDefault(e.cfg.ProxyPort, defaultDmsgWebProxyPort),
 		ProxyAddr:     e.cfg.ProxyAddr,
 		UpstreamSOCKS: e.cfg.UpstreamSOCKS,
+		UpstreamRules: e.cfg.UpstreamRules,
 		Stats:         e.stats,
 	}
 
@@ -609,4 +611,28 @@ func (v *Visor) dmsgWebGuestClient(ctx context.Context, name string, cfg *visorc
 	log.WithField("resolver", name).WithField("resolver_pk", pk).WithField("host_pk", v.conf.PK).
 		Info("Resolver running under its own dmsg identity, attached in-process to this visor")
 	return guest, pk, nil
+}
+
+// SetUpstreamRules replaces the per-domain upstream rules and restarts the
+// resolver so they take effect immediately. Pass nil to clear them.
+func (e *EmbeddedDmsgWeb) SetUpstreamRules(rules []proxyroute.Rule) error {
+	e.mu.Lock()
+	e.cfg.UpstreamRules = rules
+	wasRunning := e.running
+	e.mu.Unlock()
+
+	if wasRunning {
+		if err := e.Stop(); err != nil {
+			return fmt.Errorf("stop before upstream rules change: %w", err)
+		}
+		return e.Start()
+	}
+	return nil
+}
+
+// UpstreamRules returns the current per-domain upstream rules.
+func (e *EmbeddedDmsgWeb) UpstreamRules() []proxyroute.Rule {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]proxyroute.Rule(nil), e.cfg.UpstreamRules...)
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/proxyroute"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
@@ -537,6 +538,8 @@ type EmbeddedProxyInfo struct {
 	SocksAddr string `json:"socks_addr,omitempty"`
 	// UpstreamSOCKS is the configured fallthrough, empty for direct.
 	UpstreamSOCKS string `json:"upstream_socks,omitempty"`
+	// UpstreamRules are the per-domain upstreams, longest suffix first.
+	UpstreamRules []proxyroute.Rule `json:"upstream_rules,omitempty"`
 	// Stats is the cumulative request counter snapshot. Zero-valued
 	// when the resolver has never been constructed.
 	Stats *EmbeddedProxyStats `json:"stats,omitempty"`
