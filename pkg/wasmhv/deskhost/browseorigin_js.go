@@ -1,7 +1,8 @@
 //go:build js && wasm
 
 // Package deskhost pkg/wasmhv/deskhost/browseorigin_js.go c3-vis-wasm
-// Installs netscrape's OriginLoader: the half that turns a mesh address into a
+// Installs netscrape's OriginLoader: the half that turns a mesh address or a
+// clearnet site into a
 // REAL isolated browse origin instead of a sandboxed srcdoc.
 //
 // This is what was missing. realorigin shipped the substrate, wasm-serve
@@ -43,15 +44,23 @@ func installOriginLoader() {
 		if !ok {
 			return js.Undefined(), false
 		}
-		network, host, claimed := meshOriginFor(parsed.Get("hostname").String())
-		if !claimed {
-			return js.Undefined(), false
-		}
-
 		// The descriptor is what the responder binds to the frame's private
 		// port, and what browse-transport.js fetches against. The frame never
-		// sees it and can never name another site's.
-		descriptor := map[string]any{"net": network, "host": host}
+		// sees it and can never name another site's. A mesh address is keyed by
+		// its network and resolver host; a clearnet site by its origin, which
+		// browse-transport.js rebases the frame's requests onto.
+		var descriptor map[string]any
+		var canonical string
+		hostname := parsed.Get("hostname").String()
+		if network, host, mesh := meshOriginFor(hostname); mesh {
+			descriptor = map[string]any{"net": network, "host": host}
+			canonical = canonicalMeshTarget(network, host)
+		} else if base, clearnet := clearnetOriginFor(parsed.Get("protocol").String(), hostname, parsed.Get("origin").String()); clearnet {
+			descriptor = map[string]any{"net": "skysocks", "base": base}
+			canonical = canonicalClearnetTarget(base)
+		} else {
+			return js.Undefined(), false
+		}
 		suffix := stringOr(cfg.Get("suffix"), ".mesh.localhost")
 		scheme := stringOr(cfg.Get("scheme"), "https")
 		port := stringOr(cfg.Get("port"), "")
@@ -60,7 +69,7 @@ func installOriginLoader() {
 			path = "/"
 		}
 
-		promise := ro.Call("register", canonicalMeshTarget(network, host), descriptor)
+		promise := ro.Call("register", canonical, descriptor)
 		var build js.Func
 		build = js.FuncOf(func(_ js.Value, a []js.Value) any {
 			defer build.Release()
@@ -80,7 +89,7 @@ func installOriginLoader() {
 // parseURL runs the platform's URL parser, which is the one the rest of this
 // path agrees with. It reports false rather than throwing on a bad URL.
 func parseURL(u string) (js.Value, bool) {
-	defer func() { _ = recover() }()
+	defer func() { _ = recover() }() //nolint:errcheck // a throwing URL constructor reports false
 	ctor := js.Global().Get("URL")
 	if ctor.Type() != js.TypeFunction {
 		return js.Undefined(), false

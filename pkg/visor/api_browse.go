@@ -488,9 +488,13 @@ func (v *Visor) proxyClearnetFetch(req BrowseClearnetRequest) (*visorapi.SkynetH
 	if err != nil {
 		return nil, err
 	}
+	// One transport per request, so a kept-alive connection could never be
+	// reused, only left open: each one held its proxy stream, and in a browser
+	// tab the skysocks-client stopped answering after the first page.
 	tr := &http.Transport{
 		TLSHandshakeTimeout: 20 * time.Second,
 		TLSClientConfig:     &tls.Config{RootCAs: browseRootCAs(), MinVersion: tls.VersionTLS12},
+		DisableKeepAlives:   true,
 	}
 	switch pu.Scheme {
 	case "socks5", "socks5h":
