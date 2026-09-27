@@ -93,6 +93,9 @@ func (v *Visor) proxyStatusProvider() proxystatus.Provider { return &visorStatus
 // note rather than failing the whole page — a status page must render even when
 // the surface is idle or half-up.
 func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxystatus.Snapshot, error) {
+	if surface == proxystatus.SurfaceSkywire {
+		return p.skywireSnapshot(), nil
+	}
 	app := surfaceApp(surface)
 	if app == "" {
 		return proxystatus.Snapshot{Surface: surface}, fmt.Errorf("unknown surface %q", surface)
@@ -156,39 +159,7 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 	}
 	if infos, err := p.v.RouteGroupMuxInfo(app); err == nil {
 		for ti, info := range infos {
-			// The exit is the descriptor end that is NOT this visor, which the
-			// router now names outright: a client route group's descriptor carries
-			// the local visor as Dst and the exit as Src, so hardcoding DstPK
-			// mislabeled the local visor as the exit.
-			// The LOCAL port is the far end's mirror image: a route group's
-			// LocalAddr is desc.Dst(), so the port on whichever descriptor end
-			// is this visor is the one the dialing app knows its tunnel by.
-			exit, localPort, remotePort := info.FarEndPK, info.Desc.DstPort, info.Desc.SrcPort
-			if exit == info.Desc.DstPK {
-				localPort, remotePort = info.Desc.SrcPort, info.Desc.DstPort
-			}
-			if exit.Null() {
-				exit, localPort, remotePort = info.Desc.DstPK, info.Desc.SrcPort, info.Desc.DstPort
-				if exit == self {
-					exit, localPort, remotePort = info.Desc.SrcPK, info.Desc.DstPort, info.Desc.SrcPort
-				}
-			}
-			t := proxystatus.Tunnel{
-				Index:      ti,
-				ExitPK:     exit.String(),
-				MuxEnabled: info.MuxEnabled,
-				// "active" / "standby", as the dialing app labeled it. Empty
-				// unless this visor is the one holding the tunnels.
-				Role:       info.TunnelRole,
-				LegReserve: info.LegReserve,
-				AuditionMS: info.AgeMS,
-				LocalPort:  uint16(localPort),
-				RemotePort: uint16(remotePort),
-			}
-			for _, leg := range info.Legs {
-				t.Legs = append(t.Legs, proxyLegFrom(leg, p.hopThroughputBps))
-			}
-			snap.Tunnels = append(snap.Tunnels, t)
+			snap.Tunnels = append(snap.Tunnels, p.tunnelFrom(ti, info, self))
 		}
 		// The session-level shape target rides the same call: every ACTIVE
 		// snapshot of a session carries it, so the first one that has it is
@@ -215,41 +186,7 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 		if len(snap.Tunnels) == 0 {
 			if direct, derr := p.v.AppDirectStreams(app); derr == nil {
 				for di, s := range direct {
-					tpType, rtt := p.directTpDetail(s.TpID)
-					snap.Tunnels = append(snap.Tunnels, proxystatus.Tunnel{
-						Index:  di,
-						ExitPK: s.RemotePK.String(),
-						Legs: []proxystatus.Leg{{
-							Index:       di,
-							TransportID: s.TpID.String(),
-							TpType:      tpType,
-							RemotePK:    s.RemotePK.String(),
-							LatencyMS:   rtt,
-							// The direct path IS one hop, so describe it as one
-							// rather than as a leg with no path. hopToNode then
-							// renders the type, transport id and RTT exactly as
-							// it does for a routed hop — without it the tree drew
-							// a bare public key and nothing else.
-							Hops: []proxystatus.Hop{{
-								From:          self.String(),
-								To:            s.RemotePK.String(),
-								TpID:          s.TpID.String(),
-								TpType:        tpType,
-								LatencyMS:     rtt,
-								ThroughputBps: p.hopThroughputBps(s.TpID.String()),
-							}},
-							Direct: true,
-							// Alive is what the tree renderer gates on: it skips
-							// every leg that is not alive, so leaving this false
-							// drew a tree with the local PK and nothing under it
-							// — no exit — on a proxy that was carrying traffic.
-							// A stream in the mux's live map IS alive; StreamInfo
-							// lists no other kind.
-							Alive:     true,
-							SentBytes: s.SentBytes,
-							RecvBytes: s.RecvBytes,
-						}},
-					})
+					snap.Tunnels = append(snap.Tunnels, p.directTunnel(di, s, self))
 				}
 				if len(snap.Tunnels) > 0 {
 					snap.Legs = snap.Tunnels[0].Legs

@@ -167,7 +167,9 @@ type Config struct {
 // status surface: true when no surface is configured (serve-any) or the matched
 // surface is exactly the one this layer owns.
 func (cfg Config) ownsStatusSurface(s proxystatus.Surface) bool {
-	return cfg.StatusSurface == "" || cfg.StatusSurface == s
+	// status.skywire belongs to no one proxy: whichever layer the browser
+	// enters the chain through answers it.
+	return cfg.StatusSurface == "" || cfg.StatusSurface == s || s == proxystatus.SurfaceSkywire
 }
 
 // statusSnapshot fetches the surface's snapshot from the provider, degrading a
