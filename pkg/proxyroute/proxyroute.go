@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0magnet/bottle/vnet"
 	"golang.org/x/net/proxy"
 )
 
@@ -148,7 +149,7 @@ func (f *Forwarder) Upstream(host string) string { return Pick(f.rules, f.def, h
 func (f *Forwarder) Dial(network, addr string) (net.Conn, error) {
 	up := f.Upstream(addr)
 	if up == "" {
-		return net.Dial(network, addr)
+		return vnet.DialTimeout(network, addr, dialTimeout)
 	}
 	f.mu.Lock()
 	if t := f.failedAt[up]; !t.IsZero() && time.Since(t) < upstreamCooldown {
@@ -157,7 +158,7 @@ func (f *Forwarder) Dial(network, addr string) (net.Conn, error) {
 	}
 	d := f.dialers[up]
 	if d == nil {
-		nd, err := proxy.SOCKS5("tcp", up, nil, proxy.Direct)
+		nd, err := proxy.SOCKS5("tcp", up, nil, vnetDialer{})
 		if err != nil {
 			f.mu.Unlock()
 			return nil, err
@@ -176,4 +177,17 @@ func (f *Forwarder) Dial(network, addr string) (net.Conn, error) {
 	}
 	f.mu.Unlock()
 	return conn, err
+}
+
+// dialTimeout bounds one dial to an upstream or a direct destination.
+const dialTimeout = 20 * time.Second
+
+// vnetDialer reaches an upstream through bottle/vnet: a real socket natively,
+// and under js/wasm the page's virtual loopback, where a browser visor's
+// skysocks-client listens. net.Dial cannot reach that loopback, so a resolver
+// in a browser tab could never forward to its own skysocks-client.
+type vnetDialer struct{}
+
+func (vnetDialer) Dial(network, addr string) (net.Conn, error) {
+	return vnet.DialTimeout(network, addr, dialTimeout)
 }
