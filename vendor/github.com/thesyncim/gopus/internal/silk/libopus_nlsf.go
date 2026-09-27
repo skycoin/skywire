@@ -86,10 +86,7 @@ func silkNLSFDecodeInto(nlsfQ15 []int16, indices []int8, cb *nlsfCB, ecIx []int1
 		if wght == 0 {
 			wght = 1
 		}
-		val := max(silkADD_LSHIFT32(int32(resQ10Val<<14)/wght, int32(cbBase[i]), 7), 0)
-		if val > 32767 {
-			val = 32767
-		}
+		val := min(max(silkADD_LSHIFT32(int32(resQ10Val<<14)/wght, int32(cbBase[i]), 7), 0), 32767)
 		nlsfQ15[i] = int16(val)
 	}
 

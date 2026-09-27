@@ -160,6 +160,39 @@ Nothing here is specific to that: the transport was always behind an interface,
 because the service worker runs on the untrusted origin and must not know what
 the credential is for.
 
-## Licence
+## License
 
 MIT.
+
+## Dependency Graph
+
+Made with [goda](https://github.com/loov/goda):
+
+```
+go run github.com/loov/goda@latest graph github.com/0magnet/realorigin/... | dot -Tsvg -o docs/realorigin-goda-graph.svg
+```
+
+![Dependency Graph](docs/realorigin-goda-graph.svg "github.com/0magnet/realorigin Dependency Graph")
+
+## Lines of Code
+
+Made with [gocloc](https://github.com/hhatto/gocloc) (excludes `vendor/`, `node_modules/`, `.git/`):
+
+```
+gocloc --not-match-d='(vendor|node_modules|\.git)' .
+```
+
+```
+-------------------------------------------------------------------------------
+Language                     files          blank        comment           code
+-------------------------------------------------------------------------------
+Go                               8             80            211            741
+HTML                             2             24             35            221
+JavaScript                       2             21             71            165
+Markdown                         1             36              0            129
+YAML                             1              0              7             98
+Makefile                         1             10              0             22
+-------------------------------------------------------------------------------
+TOTAL                           15            171            324           1376
+-------------------------------------------------------------------------------
+```

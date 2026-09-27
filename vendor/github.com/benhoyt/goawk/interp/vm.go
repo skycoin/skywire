@@ -3,9 +3,9 @@
 package interp
 
 import (
+	"errors"
 	"io"
 	"math"
-	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -147,6 +147,18 @@ func (p *interp) execute(code []compiler.Opcode) error {
 			err := p.setField(int(index.num()), p.toString(right))
 			if err != nil {
 				return err
+			}
+
+		case compiler.AssignFieldSub:
+			// Like AssignField, but only assign if sub/gsub made a
+			// substitution (n>0), to avoid rebuilding $0 in that case.
+			right, index := p.popTwo()
+			n := p.peekTop()
+			if n.num() > 0 {
+				err := p.setField(int(index.num()), p.toString(right))
+				if err != nil {
+					return err
+				}
 			}
 
 		case compiler.AssignGlobal:
@@ -657,7 +669,7 @@ func (p *interp) execute(code []compiler.Opcode) error {
 			arrayIndex := code[ip+1]
 			ip += 2
 			s := p.toString(p.peekTop())
-			n, err := p.split(s, resolver.Scope(arrayScope), int(arrayIndex), p.fieldSep, p.inputMode)
+			n, err := p.split(s, resolver.Scope(arrayScope), int(arrayIndex), p.fieldSep, false, p.inputMode)
 			if err != nil {
 				return err
 			}
@@ -666,10 +678,11 @@ func (p *interp) execute(code []compiler.Opcode) error {
 		case compiler.CallSplitSep:
 			arrayScope := code[ip]
 			arrayIndex := code[ip+1]
-			ip += 2
+			sepIsRegex := code[ip+2] != 0
+			ip += 3
 			s, fieldSep := p.peekPop()
 			// 3-argument form of split() ignores input mode
-			n, err := p.split(p.toString(s), resolver.Scope(arrayScope), int(arrayIndex), p.toString(fieldSep), DefaultMode)
+			n, err := p.split(p.toString(s), resolver.Scope(arrayScope), int(arrayIndex), p.toString(fieldSep), sepIsRegex, DefaultMode)
 			if err != nil {
 				return err
 			}
@@ -1022,16 +1035,16 @@ func (p *interp) callBuiltin(builtinOp compiler.BuiltinOp) error {
 		}
 		loc := re.FindStringIndex(s)
 		if loc == nil {
-			p.matchStart = 0
-			p.matchLength = -1
+			p.matchStart = num(0)
+			p.matchLength = num(-1)
 		} else if p.chars {
-			p.matchStart = utf8.RuneCountInString(s[:loc[0]]) + 1
-			p.matchLength = utf8.RuneCountInString(s[loc[0]:loc[1]])
+			p.matchStart = num(float64(utf8.RuneCountInString(s[:loc[0]]) + 1))
+			p.matchLength = num(float64(utf8.RuneCountInString(s[loc[0]:loc[1]])))
 		} else {
-			p.matchStart = loc[0] + 1
-			p.matchLength = loc[1] - loc[0]
+			p.matchStart = num(float64(loc[0] + 1))
+			p.matchLength = num(float64(loc[1] - loc[0]))
 		}
-		p.replaceTop(num(float64(p.matchStart)))
+		p.replaceTop(p.matchStart)
 
 	case compiler.BuiltinRand:
 		p.push(num(p.random.Float64()))
@@ -1250,8 +1263,9 @@ func (p *interp) getline(redirect lexer.Token) (float64, string, error) {
 		name := p.toString(p.pop())
 		scanner, err := p.getInputScannerFile(name)
 		if err != nil {
-			if _, ok := err.(*os.PathError); ok {
-				// File not found is not a hard error, getline just returns -1.
+			if errors.Is(err, errCantOpen) {
+				// Not being able to open the file is not a hard error,
+				// getline just returns -1 as in other AWK implementations.
 				// See: https://github.com/benhoyt/goawk/issues/41
 				return -1, "", nil
 			}

@@ -43,7 +43,7 @@ func LatentSpanSamples(sampleRate int) int {
 // into dst and returns the number of entries written.
 func (h Header) FillQuantizerLevels(dst []int32, maxDredSamples, sampleRate int) int {
 	n := min(h.Availability(maxDredSamples, sampleRate).MaxLatents, len(dst))
-	for i := 0; i < n; i++ {
+	for i := range n {
 		dst[i] = h.QuantizerLevel(i)
 	}
 	return n

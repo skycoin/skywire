@@ -138,10 +138,7 @@ func (lp *LPState) LPVariableCutoff(frame []int16, frameLength int) {
 	lpInterpolateFilterTaps(&bQ28, &aQ28, int(ind), facQ16)
 
 	// Update transition frame number for next frame
-	next := max(lp.TransitionFrameNo+int32(lp.Mode), 0)
-	if next > int32(transitionFrames) {
-		next = int32(transitionFrames)
-	}
+	next := min(max(lp.TransitionFrameNo+int32(lp.Mode), 0), int32(transitionFrames))
 	lp.TransitionFrameNo = next
 
 	// ARMA low-pass filtering

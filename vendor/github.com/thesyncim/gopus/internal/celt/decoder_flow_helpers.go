@@ -30,16 +30,10 @@ func denormalizeBandsPackedDownsampleIntoFloat32(dst []float32, src []celtNorm, 
 		bound = len(dst)
 	}
 	if start != 0 {
-		prefix := edges[start] * M
-		if prefix > len(dst) {
-			prefix = len(dst)
-		}
+		prefix := min(edges[start]*M, len(dst))
 		clear(dst[:prefix])
 	}
-	f := edges[start] * M
-	if f > len(dst) {
-		f = len(dst)
-	}
+	f := min(edges[start]*M, len(dst))
 
 	for band := start; band < end; band++ {
 		j := edges[band] * M
@@ -268,10 +262,7 @@ func (d *Decoder) replicateMonoEnergyToSecondChannel() {
 	if stride <= 0 || len(d.prevEnergy) < stride*2 {
 		return
 	}
-	nbEBands := d.modeNbEBands()
-	if nbEBands > stride {
-		nbEBands = stride
-	}
+	nbEBands := min(d.modeNbEBands(), stride)
 	for band := 0; band < nbEBands; band++ {
 		d.prevEnergy[stride+band] = d.prevEnergy[band]
 		if len(d.prevLogE) >= stride*2 {

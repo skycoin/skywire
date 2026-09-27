@@ -575,7 +575,7 @@ func burgAnalysis(dst, x []float32, minInvGain float32, subfrLength, nbSubfr, or
 			xPtr := x[s*subfrLength:]
 			tmp1 := opusmath.CReal(xPtr[n])
 			tmp2 := opusmath.CReal(xPtr[subfrLength-n-1])
-			for k := 0; k < n; k++ {
+			for k := range n {
 				first[k] -= opusmath.CReal(xPtr[n]) * opusmath.CReal(xPtr[n-k-1])
 				last[k] -= opusmath.CReal(xPtr[subfrLength-n-1]) * opusmath.CReal(xPtr[subfrLength-n+k])
 				atmp := af[k]
@@ -589,7 +589,7 @@ func burgAnalysis(dst, x []float32, minInvGain float32, subfrLength, nbSubfr, or
 		}
 		tmp1 := first[n]
 		tmp2 := last[n]
-		for k := 0; k < n; k++ {
+		for k := range n {
 			atmp := af[k]
 			tmp1 += last[n-k-1] * atmp
 			tmp2 += first[n-k-1] * atmp
@@ -600,7 +600,7 @@ func burgAnalysis(dst, x []float32, minInvGain float32, subfrLength, nbSubfr, or
 		num := cab[n+1]
 		nrgB := cab[0]
 		nrgF := caf[0]
-		for k := 0; k < n; k++ {
+		for k := range n {
 			atmp := af[k]
 			num += cab[n-k] * atmp
 			nrgB += cab[k+1] * atmp

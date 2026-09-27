@@ -199,10 +199,7 @@ func (e *Encoder) applyPreemphasisWithScalingAndSilenceCore(pcm []float32, outpu
 	}
 
 	channels := int(e.channels)
-	total := frameSize * channels
-	if total > len(pcm) {
-		total = len(pcm)
-	}
+	total := min(frameSize*channels, len(pcm))
 	if total > len(output) {
 		total = len(output)
 	}
@@ -211,10 +208,7 @@ func (e *Encoder) applyPreemphasisWithScalingAndSilenceCore(pcm []float32, outpu
 		return true
 	}
 
-	split := max((frameSize-overlap)*channels, 0)
-	if split > total {
-		split = total
-	}
+	split := min(max((frameSize-overlap)*channels, 0), total)
 
 	// Native 96 kHz HD mode uses libopus's 2-tap pre-emphasis
 	// (celt_preemphasis() coef[1] != 0 path). hd96kPreemph[1] == 0 selects the

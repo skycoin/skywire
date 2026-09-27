@@ -147,10 +147,7 @@ func (d *Decoder) applyPendingPLCPrefilterAndFold() {
 }
 
 func (d *Decoder) accumulatePLCLossDuration(frameSize int) {
-	lm := max(GetModeConfig(frameSize).LM, 0)
-	if lm > 30 {
-		lm = 30
-	}
+	lm := min(max(GetModeConfig(frameSize).LM, 0), 30)
 	d.plcLossDuration += 1 << uint(lm)
 	if d.plcLossDuration > 10000 {
 		d.plcLossDuration = 10000
@@ -274,10 +271,7 @@ func (d *Decoder) DecodeHybridFECPLC(frameSize int) ([]float32, error) {
 	// only the coded CELT band range [start,end) gets decayed/floored.
 	mode := GetModeConfig(frameSize)
 	start := HybridCELTStartBand
-	end := EffectiveBandsForFrameSize(d.bandwidth, frameSize)
-	if end > mode.EffBands {
-		end = mode.EffBands
-	}
+	end := min(EffectiveBandsForFrameSize(d.bandwidth, frameSize), mode.EffBands)
 	if end < start {
 		end = start
 	}
@@ -420,10 +414,7 @@ func (d *Decoder) concealNoisePLC(dst []float32, frameSize, prevLossDuration int
 		decayDB = 1.5
 	}
 	start := 0
-	end := EffectiveBandsForFrameSize(d.bandwidth, frameSize)
-	if end > mode.EffBands {
-		end = mode.EffBands
-	}
+	end := min(EffectiveBandsForFrameSize(d.bandwidth, frameSize), mode.EffBands)
 	if end < start {
 		end = start
 	}
@@ -684,10 +675,7 @@ func (d *Decoder) computePLCAutocorr(frame []celtSig, window []float32, ac []flo
 	x := d.scratchPLCWindowed[:n]
 	copy(x, frame)
 
-	overlap := Overlap
-	if overlap > n>>1 {
-		overlap = n >> 1
-	}
+	overlap := min(Overlap, n>>1)
 	for i := 0; i < overlap && i < len(window); i++ {
 		w := float32(window[i])
 		x[i] = celtSig(float32(x[i]) * w)
@@ -846,6 +834,18 @@ func pitchXCorrFloat32(x, y, xcorr []float32, length, maxPitch int) {
 		return
 	}
 	i := 0
+	for ; i < maxPitch-7; i += 8 {
+		var sum [8]float32
+		xcorrKernel8Float32(x, y[i:], &sum, length)
+		xcorr[i] = sum[0]
+		xcorr[i+1] = sum[1]
+		xcorr[i+2] = sum[2]
+		xcorr[i+3] = sum[3]
+		xcorr[i+4] = sum[4]
+		xcorr[i+5] = sum[5]
+		xcorr[i+6] = sum[6]
+		xcorr[i+7] = sum[7]
+	}
 	for ; i < maxPitch-3; i += 4 {
 		var sum [4]float32
 		xcorrKernel4Float32(x, y[i:], &sum, length)
@@ -859,15 +859,67 @@ func pitchXCorrFloat32(x, y, xcorr []float32, length, maxPitch int) {
 	}
 }
 
+// pitchXCorrFloat32Quality is the encoder-only pitch cross-correlation. It
+// mirrors pitchXCorrFloat32 but uses xcorrKernel4Float32Fast (16 independent
+// phase accumulators) for the 4-lag tail instead of the parity-matched serial
+// kernel. The encoder pitch search is quality-gated so the changed accumulation
+// order is safe; parity-sensitive callers (pitchAutocorr5F32, PLC) must use the
+// original pitchXCorrFloat32.
+func pitchXCorrFloat32Quality(x, y, xcorr []float32, length, maxPitch int) {
+	if length <= 0 || maxPitch <= 0 {
+		return
+	}
+	_ = x[length-1]
+	_ = y[maxPitch+length-2]
+	_ = xcorr[maxPitch-1]
+	if libopusFloatPitchXCorrUsesAVX2FMA() {
+		pitchXCorrFloat32AVX2FMAOrder(x, y, xcorr, length, maxPitch)
+		return
+	}
+	if libopusFloatInnerProdUsesSSEOrder {
+		pitchXCorrFloat32SSEOrder(x, y, xcorr, length, maxPitch)
+		return
+	}
+	if pitchXcorrUsesNeonFMA {
+		pitchXCorrFloat32NeonFMA(x, y, xcorr, length, maxPitch)
+		return
+	}
+	i := 0
+	for ; i < maxPitch-7; i += 8 {
+		var sum [8]float32
+		xcorrKernel8Float32(x, y[i:], &sum, length)
+		xcorr[i] = sum[0]
+		xcorr[i+1] = sum[1]
+		xcorr[i+2] = sum[2]
+		xcorr[i+3] = sum[3]
+		xcorr[i+4] = sum[4]
+		xcorr[i+5] = sum[5]
+		xcorr[i+6] = sum[6]
+		xcorr[i+7] = sum[7]
+	}
+	for ; i < maxPitch-3; i += 4 {
+		var sum [4]float32
+		xcorrKernel4Float32Fast(x, y[i:], &sum, length)
+		xcorr[i] = sum[0]
+		xcorr[i+1] = sum[1]
+		xcorr[i+2] = sum[2]
+		xcorr[i+3] = sum[3]
+	}
+	for ; i < maxPitch; i++ {
+		xcorr[i] = innerProdFloat32(x, y[i:], length)
+	}
+}
+
 // pitchXCorrFloat32NeonFMA is the fused arm64 pitch cross-correlation. The
-// 4-lag blocks use the NEON FMLA kernel; the scalar tail uses celtInnerProd's
-// fused arm64 path so the whole correlation runs single-rounding. Only reached
-// when pitchXcorrUsesNeonFMA is set (arm64 && !purego).
+// 4-lag blocks use the four-phase NEON FMLA kernel; the scalar tail uses
+// celtInnerProd's fused arm64 path so the whole correlation runs
+// single-rounding. Only reached when pitchXcorrUsesNeonFMA is set
+// (arm64 && !purego).
 func pitchXCorrFloat32NeonFMA(x, y, xcorr []float32, length, maxPitch int) {
 	i := 0
 	for ; i < maxPitch-3; i += 4 {
 		var sum [4]float32
-		xcorrKernel4Float32Neon(x, y[i:], &sum, length)
+		xcorrKernel4Float32Neon4Acc(x, y[i:], &sum, length)
 		xcorr[i] = sum[0]
 		xcorr[i+1] = sum[1]
 		xcorr[i+2] = sum[2]
@@ -882,7 +934,43 @@ func pitchXCorrSig(x, y []celtSig, xcorr []float32, length, maxPitch int) {
 	if length <= 0 || maxPitch <= 0 {
 		return
 	}
-	pitchXCorrFloat32(x, y, xcorr, length, maxPitch)
+	pitchXCorrFloat32PLC(x, y, xcorr, length, maxPitch)
+}
+
+// pitchXCorrFloat32PLC is the loss-concealment pitch cross-correlation. It is
+// pitchXCorrFloat32 without the four-phase NEON branch: PLC output is held to
+// a tight libopus PCM tolerance, so the arm64 decode path keeps the
+// scalar-order kernel (whose contracted FMAs are bit-identical to the
+// single-chain NEON accumulation libopus uses). The amd64 SSE/AVX2 branches
+// match libopus' own x86 PLC kernels and stay as-is. Encoder pitch search,
+// which is only quality-gated, uses pitchXCorrFloat32 with the fast kernel.
+func pitchXCorrFloat32PLC(x, y, xcorr []float32, length, maxPitch int) {
+	if length <= 0 || maxPitch <= 0 {
+		return
+	}
+	_ = x[length-1]
+	_ = y[maxPitch+length-2]
+	_ = xcorr[maxPitch-1]
+	if libopusFloatPitchXCorrUsesAVX2FMA() {
+		pitchXCorrFloat32AVX2FMAOrder(x, y, xcorr, length, maxPitch)
+		return
+	}
+	if libopusFloatInnerProdUsesSSEOrder {
+		pitchXCorrFloat32SSEOrder(x, y, xcorr, length, maxPitch)
+		return
+	}
+	i := 0
+	for ; i < maxPitch-3; i += 4 {
+		var sum [4]float32
+		xcorrKernel4Float32(x, y[i:], &sum, length)
+		xcorr[i] = sum[0]
+		xcorr[i+1] = sum[1]
+		xcorr[i+2] = sum[2]
+		xcorr[i+3] = sum[3]
+	}
+	for ; i < maxPitch; i++ {
+		xcorr[i] = innerProdFloat32(x, y[i:], length)
+	}
 }
 
 func pitchXCorrFloat32SSEOrder(x, y, xcorr []float32, length, maxPitch int) {
@@ -901,66 +989,77 @@ func pitchXCorrFloat32SSEOrder(x, y, xcorr []float32, length, maxPitch int) {
 }
 
 func xcorrKernel4Float32SSEOrder(x, y []float32, sum *[4]float32, length int) {
+	if length <= 0 {
+		return
+	}
 	// libopus celt/x86/pitch_sse.c:xcorr_kernel_sse() keeps even and odd
 	// source samples in separate SIMD accumulators, then adds them lane-wise.
-	var sum1 [4]float32
-	var sum2 [4]float32
-	for lane := range sum1 {
-		sum1[lane] = sum[lane]
+	// The kernel reads x[0:length] and y[0:length+3]; slicing to those bounds
+	// and advancing the slices (prove cannot reason about stride-4 counters)
+	// removes every per-access bounds check, and scalar accumulators keep the
+	// 8 lanes in FP registers. The multiply/add sequence is unchanged.
+	x = x[:length]
+	y = y[:length+3]
+	s10, s11, s12, s13 := sum[0], sum[1], sum[2], sum[3]
+	var s20, s21, s22, s23 float32
+
+	for len(x) >= 4 && len(y) >= 7 {
+		x0 := x[0]
+		s10 = noFMA32Add(s10, noFMA32Mul(x0, y[0]))
+		s11 = noFMA32Add(s11, noFMA32Mul(x0, y[1]))
+		s12 = noFMA32Add(s12, noFMA32Mul(x0, y[2]))
+		s13 = noFMA32Add(s13, noFMA32Mul(x0, y[3]))
+
+		x1 := x[1]
+		s20 = noFMA32Add(s20, noFMA32Mul(x1, y[1]))
+		s21 = noFMA32Add(s21, noFMA32Mul(x1, y[2]))
+		s22 = noFMA32Add(s22, noFMA32Mul(x1, y[3]))
+		s23 = noFMA32Add(s23, noFMA32Mul(x1, y[4]))
+
+		x2 := x[2]
+		s10 = noFMA32Add(s10, noFMA32Mul(x2, y[2]))
+		s11 = noFMA32Add(s11, noFMA32Mul(x2, y[3]))
+		s12 = noFMA32Add(s12, noFMA32Mul(x2, y[4]))
+		s13 = noFMA32Add(s13, noFMA32Mul(x2, y[5]))
+
+		x3 := x[3]
+		s20 = noFMA32Add(s20, noFMA32Mul(x3, y[3]))
+		s21 = noFMA32Add(s21, noFMA32Mul(x3, y[4]))
+		s22 = noFMA32Add(s22, noFMA32Mul(x3, y[5]))
+		s23 = noFMA32Add(s23, noFMA32Mul(x3, y[6]))
+
+		x = x[4:]
+		y = y[4:]
 	}
-
-	j := 0
-	for ; j < length-3; j += 4 {
-		x0 := x[j]
-		sum1[0] = noFMA32Add(sum1[0], noFMA32Mul(x0, y[j]))
-		sum1[1] = noFMA32Add(sum1[1], noFMA32Mul(x0, y[j+1]))
-		sum1[2] = noFMA32Add(sum1[2], noFMA32Mul(x0, y[j+2]))
-		sum1[3] = noFMA32Add(sum1[3], noFMA32Mul(x0, y[j+3]))
-
-		x1 := x[j+1]
-		sum2[0] = noFMA32Add(sum2[0], noFMA32Mul(x1, y[j+1]))
-		sum2[1] = noFMA32Add(sum2[1], noFMA32Mul(x1, y[j+2]))
-		sum2[2] = noFMA32Add(sum2[2], noFMA32Mul(x1, y[j+3]))
-		sum2[3] = noFMA32Add(sum2[3], noFMA32Mul(x1, y[j+4]))
-
-		x2 := x[j+2]
-		sum1[0] = noFMA32Add(sum1[0], noFMA32Mul(x2, y[j+2]))
-		sum1[1] = noFMA32Add(sum1[1], noFMA32Mul(x2, y[j+3]))
-		sum1[2] = noFMA32Add(sum1[2], noFMA32Mul(x2, y[j+4]))
-		sum1[3] = noFMA32Add(sum1[3], noFMA32Mul(x2, y[j+5]))
-
-		x3 := x[j+3]
-		sum2[0] = noFMA32Add(sum2[0], noFMA32Mul(x3, y[j+3]))
-		sum2[1] = noFMA32Add(sum2[1], noFMA32Mul(x3, y[j+4]))
-		sum2[2] = noFMA32Add(sum2[2], noFMA32Mul(x3, y[j+5]))
-		sum2[3] = noFMA32Add(sum2[3], noFMA32Mul(x3, y[j+6]))
-	}
-	if j < length {
-		xj := x[j]
-		sum1[0] = noFMA32Add(sum1[0], noFMA32Mul(xj, y[j]))
-		sum1[1] = noFMA32Add(sum1[1], noFMA32Mul(xj, y[j+1]))
-		sum1[2] = noFMA32Add(sum1[2], noFMA32Mul(xj, y[j+2]))
-		sum1[3] = noFMA32Add(sum1[3], noFMA32Mul(xj, y[j+3]))
-		j++
-		if j < length {
-			xj = x[j]
-			sum2[0] = noFMA32Add(sum2[0], noFMA32Mul(xj, y[j]))
-			sum2[1] = noFMA32Add(sum2[1], noFMA32Mul(xj, y[j+1]))
-			sum2[2] = noFMA32Add(sum2[2], noFMA32Mul(xj, y[j+2]))
-			sum2[3] = noFMA32Add(sum2[3], noFMA32Mul(xj, y[j+3]))
-			j++
-			if j < length {
-				xj = x[j]
-				sum1[0] = noFMA32Add(sum1[0], noFMA32Mul(xj, y[j]))
-				sum1[1] = noFMA32Add(sum1[1], noFMA32Mul(xj, y[j+1]))
-				sum1[2] = noFMA32Add(sum1[2], noFMA32Mul(xj, y[j+2]))
-				sum1[3] = noFMA32Add(sum1[3], noFMA32Mul(xj, y[j+3]))
+	if len(x) >= 1 && len(y) >= 4 {
+		xj := x[0]
+		s10 = noFMA32Add(s10, noFMA32Mul(xj, y[0]))
+		s11 = noFMA32Add(s11, noFMA32Mul(xj, y[1]))
+		s12 = noFMA32Add(s12, noFMA32Mul(xj, y[2]))
+		s13 = noFMA32Add(s13, noFMA32Mul(xj, y[3]))
+		x = x[1:]
+		y = y[1:]
+		if len(x) >= 1 && len(y) >= 4 {
+			xj = x[0]
+			s20 = noFMA32Add(s20, noFMA32Mul(xj, y[0]))
+			s21 = noFMA32Add(s21, noFMA32Mul(xj, y[1]))
+			s22 = noFMA32Add(s22, noFMA32Mul(xj, y[2]))
+			s23 = noFMA32Add(s23, noFMA32Mul(xj, y[3]))
+			x = x[1:]
+			y = y[1:]
+			if len(x) >= 1 && len(y) >= 4 {
+				xj = x[0]
+				s10 = noFMA32Add(s10, noFMA32Mul(xj, y[0]))
+				s11 = noFMA32Add(s11, noFMA32Mul(xj, y[1]))
+				s12 = noFMA32Add(s12, noFMA32Mul(xj, y[2]))
+				s13 = noFMA32Add(s13, noFMA32Mul(xj, y[3]))
 			}
 		}
 	}
-	for lane := range sum {
-		sum[lane] = noFMA32Add(sum1[lane], sum2[lane])
-	}
+	sum[0] = noFMA32Add(s10, s20)
+	sum[1] = noFMA32Add(s11, s21)
+	sum[2] = noFMA32Add(s12, s22)
+	sum[3] = noFMA32Add(s13, s23)
 }
 
 func pitchXCorrFloat32AVX2FMAOrder(x, y, xcorr []float32, length, maxPitch int) {
@@ -997,55 +1096,86 @@ func innerProdFloat32(x, y []float32, length int) float32 {
 	if libopusFloatInnerProdUsesSSEOrder {
 		return innerProdFloat32SSEOrder(x, y, length)
 	}
-	sum := float32(0)
-	for i := range length {
-		sum += x[i] * y[i]
+	x = x[:length]
+	y = y[:length]
+	var acc0, acc1, acc2, acc3 float32
+	for len(x) >= 4 {
+		acc0 += x[0] * y[0]
+		acc1 += x[1] * y[1]
+		acc2 += x[2] * y[2]
+		acc3 += x[3] * y[3]
+		x = x[4:]
+		y = y[4:]
 	}
-	return sum
+	for i := range x {
+		acc0 += x[i] * y[i]
+	}
+	return acc0 + acc1 + acc2 + acc3
 }
 
 func innerProdFloat32SSEOrder(x, y []float32, length int) float32 {
-	var acc [4]float32
-	i := 0
-	for ; i < length-3; i += 4 {
-		acc[0] = noFMA32Add(acc[0], noFMA32Mul(x[i], y[i]))
-		acc[1] = noFMA32Add(acc[1], noFMA32Mul(x[i+1], y[i+1]))
-		acc[2] = noFMA32Add(acc[2], noFMA32Mul(x[i+2], y[i+2]))
-		acc[3] = noFMA32Add(acc[3], noFMA32Mul(x[i+3], y[i+3]))
+	if length <= 0 {
+		return 0
 	}
-	xy0 := noFMA32Add(acc[0], acc[2])
-	xy1 := noFMA32Add(acc[1], acc[3])
+	// Slicing to length, advancing the slices (prove cannot reason about
+	// stride-4 counters), and using scalar accumulators keeps the 4 lanes in
+	// FP registers with no bounds checks; the multiply/add sequence and the
+	// horizontal reduction order are unchanged.
+	x = x[:length]
+	y = y[:length]
+	var acc0, acc1, acc2, acc3 float32
+	for len(x) >= 4 && len(y) >= 4 {
+		acc0 = noFMA32Add(acc0, noFMA32Mul(x[0], y[0]))
+		acc1 = noFMA32Add(acc1, noFMA32Mul(x[1], y[1]))
+		acc2 = noFMA32Add(acc2, noFMA32Mul(x[2], y[2]))
+		acc3 = noFMA32Add(acc3, noFMA32Mul(x[3], y[3]))
+		x = x[4:]
+		y = y[4:]
+	}
+	xy0 := noFMA32Add(acc0, acc2)
+	xy1 := noFMA32Add(acc1, acc3)
 	sum := noFMA32Add(xy0, xy1)
-	for ; i < length; i++ {
+	for i := 0; i < len(x) && i < len(y); i++ {
 		sum = noFMA32Add(sum, noFMA32Mul(x[i], y[i]))
 	}
 	return sum
 }
 
 func innerProdFloat32NeonOrder(x, y []float32, length int) float32 {
-	var acc [4]float32
-	i := 0
-	for ; i < length-7; i += 8 {
-		acc[0] = fma32(x[i], y[i], acc[0])
-		acc[1] = fma32(x[i+1], y[i+1], acc[1])
-		acc[2] = fma32(x[i+2], y[i+2], acc[2])
-		acc[3] = fma32(x[i+3], y[i+3], acc[3])
-		acc[0] = fma32(x[i+4], y[i+4], acc[0])
-		acc[1] = fma32(x[i+5], y[i+5], acc[1])
-		acc[2] = fma32(x[i+6], y[i+6], acc[2])
-		acc[3] = fma32(x[i+7], y[i+7], acc[3])
+	if length <= 0 {
+		return 0
 	}
-	if length-i >= 4 {
-		acc[0] = fma32(x[i], y[i], acc[0])
-		acc[1] = fma32(x[i+1], y[i+1], acc[1])
-		acc[2] = fma32(x[i+2], y[i+2], acc[2])
-		acc[3] = fma32(x[i+3], y[i+3], acc[3])
-		i += 4
+	// Slicing to length, advancing the slices (prove cannot reason about
+	// stride-8 counters), and using scalar accumulators keeps the 4 lanes in
+	// FP registers with no bounds checks; the FMA sequence and the horizontal
+	// reduction order are unchanged.
+	x = x[:length]
+	y = y[:length]
+	var acc0, acc1, acc2, acc3 float32
+	for len(x) >= 8 && len(y) >= 8 {
+		acc0 = fma32(x[0], y[0], acc0)
+		acc1 = fma32(x[1], y[1], acc1)
+		acc2 = fma32(x[2], y[2], acc2)
+		acc3 = fma32(x[3], y[3], acc3)
+		acc0 = fma32(x[4], y[4], acc0)
+		acc1 = fma32(x[5], y[5], acc1)
+		acc2 = fma32(x[6], y[6], acc2)
+		acc3 = fma32(x[7], y[7], acc3)
+		x = x[8:]
+		y = y[8:]
 	}
-	xy0 := acc[0] + acc[2]
-	xy1 := acc[1] + acc[3]
+	if len(x) >= 4 && len(y) >= 4 {
+		acc0 = fma32(x[0], y[0], acc0)
+		acc1 = fma32(x[1], y[1], acc1)
+		acc2 = fma32(x[2], y[2], acc2)
+		acc3 = fma32(x[3], y[3], acc3)
+		x = x[4:]
+		y = y[4:]
+	}
+	xy0 := acc0 + acc2
+	xy1 := acc1 + acc3
 	sum := xy0 + xy1
-	for ; i < length; i++ {
+	for i := 0; i < len(x) && i < len(y); i++ {
 		sum += x[i] * y[i]
 	}
 	return sum
@@ -1068,7 +1198,7 @@ func pitchSearchPLC(xLP []float32, y []float32, length, maxPitch int, scratch *p
 		yLP4[j] = y[2*j]
 	}
 
-	pitchXCorrFloat32(xLP4, yLP4, xcorr, length>>2, maxPitch>>2)
+	pitchXCorrFloat32PLC(xLP4, yLP4, xcorr, length>>2, maxPitch>>2)
 	bestPitch := [2]int{0, 0}
 	findBestPitchF32(xcorr, yLP4, length>>2, maxPitch>>2, &bestPitch)
 

@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,10 +23,10 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/mdns/v2"
 	"github.com/pion/stun/v4"
-	"github.com/pion/transport/v4"
-	"github.com/pion/transport/v4/packetio"
-	"github.com/pion/transport/v4/stdnet"
-	"github.com/pion/transport/v4/vnet"
+	"github.com/pion/transport/v5"
+	"github.com/pion/transport/v5/packetio"
+	"github.com/pion/transport/v5/stdnet"
+	"github.com/pion/transport/v5/vnet"
 	"github.com/pion/turn/v5"
 	"golang.org/x/net/proxy"
 )
@@ -35,6 +36,7 @@ type bindingRequest struct {
 	transactionID   [stun.TransactionIDSize]byte
 	destination     netip.AddrPort
 	networkType     NetworkType // Transport the request was sent over; destination alone omits it.
+	isControlling   bool        // Role advertised in this request.
 	isUseCandidate  bool
 	nominationValue *uint32 // Tracks nomination value for renomination requests
 }
@@ -63,8 +65,9 @@ type Agent struct {
 	tieBreaker uint64
 	lite       bool
 
-	connectionState ConnectionState
-	gatheringState  GatheringState
+	connectionState  ConnectionState
+	gatheringState   GatheringState
+	gatherGeneration uint64
 
 	mDNSMode MulticastDNSMode
 	mDNSName string
@@ -221,11 +224,7 @@ func newAgentFromConfig(config *AgentConfig, opts ...AgentOption) (*Agent, error
 			typ = config.NAT1To1IPCandidateType
 		}
 
-		rules, err := legacyNAT1To1Rules(config.NAT1To1IPs, typ)
-		if err != nil {
-			return nil, err
-		}
-		agent.addressRewriteRules = rules
+		agent.addressRewriteRules = legacyNAT1To1Rules(config.NAT1To1IPs, typ)
 	}
 
 	return newAgentWithConfig(agent, opts...)
@@ -284,7 +283,7 @@ func validateLegacyNAT1To1Entry(mapping string, hasIPv4CatchAll, hasIPv6CatchAll
 	return hasIPv4CatchAll, true, nil
 }
 
-func legacyNAT1To1Rules(ips []string, candidateType CandidateType) ([]AddressRewriteRule, error) {
+func legacyNAT1To1Rules(ips []string, candidateType CandidateType) []AddressRewriteRule {
 	var rules []AddressRewriteRule
 
 	for _, mapping := range ips {
@@ -294,37 +293,17 @@ func legacyNAT1To1Rules(ips []string, candidateType CandidateType) ([]AddressRew
 		}
 
 		parts := strings.Split(trimmed, "/")
-		switch len(parts) {
-		case 1:
-			rules = append(rules, AddressRewriteRule{
-				External:        []string{parts[0]},
-				AsCandidateType: candidateType,
-			})
-		case 2:
-			ext := strings.TrimSpace(parts[0])
-			local := strings.TrimSpace(parts[1])
-			if ext == "" || local == "" {
-				return nil, ErrInvalidNAT1To1IPMapping
-			}
-
-			if _, _, err := validateIPString(ext); err != nil {
-				return nil, err
-			}
-			if _, _, err := validateIPString(local); err != nil {
-				return nil, err
-			}
-
-			rules = append(rules, AddressRewriteRule{
-				External:        []string{ext},
-				Local:           local,
-				AsCandidateType: candidateType,
-			})
-		default:
-			return nil, ErrInvalidNAT1To1IPMapping
+		rule := AddressRewriteRule{
+			External:        []string{strings.TrimSpace(parts[0])},
+			AsCandidateType: candidateType,
 		}
+		if len(parts) == 2 {
+			rule.Local = strings.TrimSpace(parts[1])
+		}
+		rules = append(rules, rule)
 	}
 
-	return rules, nil
+	return rules
 }
 
 func createAgentBase(config *AgentConfig) (*Agent, error) {
@@ -668,10 +647,9 @@ func (a *Agent) startConnectivityChecks(isControlling bool, remoteUfrag, remoteP
 	a.log.Debugf("Started agent: isControlling? %t, remoteUfrag: %q, remotePwd: %q", isControlling, remoteUfrag, remotePwd)
 
 	return a.loop.Run(a.loop, func(_ context.Context) {
-		a.isControlling.Store(isControlling)
 		a.remoteUfrag = remoteUfrag
 		a.remotePwd = remotePwd
-		a.setSelector()
+		a.setRole(isControlling)
 
 		a.startedFn()
 
@@ -1012,6 +990,19 @@ func (a *Agent) AddRemoteCandidate(cand Candidate) error {
 	}()
 
 	return nil
+}
+
+// AddVirtualCandidate registers a virtual candidate as a local ICE candidate,
+// using the supplied packet connection to send and receive packets.
+func (a *Agent) AddVirtualCandidate(cand Candidate, candidateConn net.PacketConn) error {
+	if cand == nil {
+		return nil
+	}
+	if candidateConn == nil {
+		return errCandidatePacketConnNil
+	}
+
+	return a.addCandidate(a.loop, cand, candidateConn, nil, true)
 }
 
 func isMulticastDNSCandidate(cand Candidate) bool {
@@ -1397,38 +1388,68 @@ func (a *Agent) shouldAcceptRemoteCandidate(cand Candidate) bool {
 	return true
 }
 
-func (a *Agent) addCandidate(ctx context.Context, cand Candidate, candidateConn net.PacketConn) error {
+func (a *Agent) cleanupCandidate(cand Candidate, candidateConn net.PacketConn, reason string) {
+	if err := cand.close(); err != nil {
+		a.log.Warnf("Failed to close %s candidate: %v", reason, err)
+	}
+	if err := candidateConn.Close(); err != nil {
+		a.log.Warnf("Failed to close %s candidate connection: %v", reason, err)
+	}
+}
+
+func (a *Agent) addCandidate(
+	ctx context.Context,
+	cand Candidate,
+	candidateConn net.PacketConn,
+	generation *uint64,
+	errorOnDuplicate bool,
+) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	return a.loop.Run(ctx, func(context.Context) {
+	var addErr error
+	err := a.loop.Run(ctx, func(context.Context) {
+		candidateGeneration := a.gatherGeneration
+		if generation != nil {
+			candidateGeneration = *generation
+		}
+		if a.gatherGeneration != candidateGeneration {
+			a.log.Debugf(
+				"Ignoring candidate from different gather generation (a: %d c: %d)",
+				a.gatherGeneration,
+				candidateGeneration,
+			)
+			a.cleanupCandidate(cand, candidateConn, "old")
+
+			return
+		}
+
 		set := a.localCandidates[cand.NetworkType()]
 		for _, candidate := range set {
 			if candidate.Equal(cand) {
+				if errorOnDuplicate {
+					addErr = errDuplicateCandidate
+
+					return
+				}
+
 				a.log.Debugf("Ignore duplicate candidate: %s", cand)
-				if err := cand.close(); err != nil {
-					a.log.Warnf("Failed to close duplicate candidate: %v", err)
-				}
-				if err := candidateConn.Close(); err != nil {
-					a.log.Warnf("Failed to close duplicate candidate connection: %v", err)
-				}
+				a.cleanupCandidate(cand, candidateConn, "duplicate")
 
 				return
 			}
 		}
 
-		a.setCandidateExtensions(cand)
+		a.setCandidateExtensions(cand, candidateGeneration)
 		cand.start(a, candidateConn, a.startedCh)
 		a.setUniqueLiteCandidatePriority(cand)
 
 		set = append(set, cand)
 		a.localCandidates[cand.NetworkType()] = set
 
-		if remoteCandidates, ok := a.remoteCandidates[cand.NetworkType()]; ok {
-			for _, remoteCandidate := range remoteCandidates {
-				a.addPair(cand, remoteCandidate)
-			}
+		for _, remoteCandidate := range a.remoteCandidates[cand.NetworkType()] {
+			a.addPair(cand, remoteCandidate)
 		}
 
 		a.requestConnectivityCheck()
@@ -1437,15 +1458,28 @@ func (a *Agent) addCandidate(ctx context.Context, cand Candidate, candidateConn 
 			a.candidateNotifier.EnqueueCandidate(cand)
 		}
 	})
+	if err != nil {
+		return err
+	}
+
+	return addErr
 }
 
-func (a *Agent) setCandidateExtensions(cand Candidate) {
+func (a *Agent) setCandidateExtensions(cand Candidate, candidateGeneration uint64) {
 	err := cand.AddExtension(CandidateExtension{
 		Key:   "ufrag",
 		Value: a.localUfrag,
 	})
 	if err != nil {
 		a.log.Errorf("Failed to add ufrag extension to candidate: %v", err)
+	}
+
+	err = cand.AddExtension(CandidateExtension{
+		Key:   "generation",
+		Value: strconv.FormatUint(candidateGeneration, 10),
+	})
+	if err != nil {
+		a.log.Errorf("Failed to add generation extension to candidate: %v", err)
 	}
 }
 
@@ -1662,6 +1696,7 @@ func (a *Agent) sendBindingRequest(msg *stun.Message, local, remote Candidate) {
 		transactionID:   msg.TransactionID,
 		destination:     remote.addrPort(),
 		networkType:     remote.NetworkType(),
+		isControlling:   msg.Contains(stun.AttrICEControlling),
 		isUseCandidate:  msg.Contains(stun.AttrUseCandidate),
 		nominationValue: nominationValue,
 	})
@@ -1771,13 +1806,12 @@ func (a *Agent) handleRoleConflict(msg *stun.Message, local, remote Candidate, r
 			a.sendSTUN(roleConflictMsg, local, remote)
 		}
 	} else {
-		a.isControlling.Store(!a.isControlling.Load())
-		a.setSelector()
+		a.setRole(!a.isControlling.Load())
 	}
 }
 
 // handleInbound processes STUN traffic from a remote candidate.
-func (a *Agent) handleInbound(msg *stun.Message, local Candidate, remote netip.AddrPort) {
+func (a *Agent) handleInbound(msg *stun.Message, local Candidate, remote netip.AddrPort) { //nolint:cyclop
 	if msg == nil || local == nil {
 		return
 	}
@@ -1800,6 +1834,10 @@ func (a *Agent) handleInbound(msg *stun.Message, local Candidate, remote netip.A
 		if remoteCandidate, ok = a.handleInboundRequest(remoteCandidate, local, remote, msg); !ok {
 			return
 		}
+	case stun.ClassErrorResponse:
+		a.handleInboundErrorResponse(remoteCandidate, local, remote, msg)
+
+		return
 	default:
 	}
 
@@ -1812,7 +1850,8 @@ func canHandleInbound(msg *stun.Message) bool {
 	return msg.Type.Method == stun.MethodBinding &&
 		(msg.Type.Class == stun.ClassSuccessResponse ||
 			msg.Type.Class == stun.ClassRequest ||
-			msg.Type.Class == stun.ClassIndication)
+			msg.Type.Class == stun.ClassIndication ||
+			msg.Type.Class == stun.ClassErrorResponse)
 }
 
 func (a *Agent) handleInboundResponse(
@@ -1909,6 +1948,76 @@ func (a *Agent) handleInboundRequest(
 	a.getSelector().HandleBindingRequest(msg, local, remoteCandidate)
 
 	return remoteCandidate, true
+}
+
+func (a *Agent) handleInboundErrorResponse(
+	remoteCandidate, local Candidate, remote netip.AddrPort, msg *stun.Message,
+) bool {
+	a.log.Tracef("Inbound STUN (Error) from %s to %s", remote, local)
+
+	// Verify message integrity
+	if err := stun.MessageIntegrity([]byte(a.remotePwd)).Check(msg); err != nil {
+		a.log.Warnf("Discard error response with broken integrity from (%s), %v", remote, err)
+
+		return false
+	}
+
+	// Extract error code from the message
+	var errCode stun.ErrorCodeAttribute
+	if err := errCode.GetFrom(msg); err != nil {
+		a.log.Warnf("Failed to get error code from error response: %v", err)
+
+		return false
+	}
+
+	if errCode.Code != stun.CodeRoleConflict {
+		a.log.Debugf("Received STUN error response %d (%s) from %s", errCode.Code, errCode.Reason, remote)
+
+		return false
+	}
+
+	a.log.Warnf("Received role conflict error (487) from %s, switching role", remote)
+
+	found, bindingReq, _ := a.handleInboundBindingSuccess(msg.TransactionID)
+	if !found {
+		a.log.Debugf("Received role conflict error for unknown transaction ID, ignoring")
+
+		return false
+	}
+
+	if !responseSymmetric(bindingReq, local, remote) {
+		a.log.Debugf(
+			"Discard message: transaction source and destination does not match expected(%s), actual(%s)",
+			bindingReq.destination,
+			remote,
+		)
+
+		return false
+	}
+
+	// The new role is determined by the role advertised in the request, not
+	// by the agent's current role. Other in-flight checks may have already
+	// caused the same role switch before this response arrives.
+	oldRole := a.role()
+	newIsControlling := !bindingReq.isControlling
+	if a.isControlling.Load() != newIsControlling {
+		a.setRole(newIsControlling)
+	}
+	a.tieBreaker = globalMathRandomGenerator.Uint64()
+
+	a.log.Debugf("Switched ICE role %s → %s after receiving 487 error", oldRole, a.role())
+
+	// Re-enqueue the candidate pair in the triggered-check queue per RFC 8445 §7.2.5.1.
+	if remoteCandidate == nil {
+		a.log.Warnf("Cannot re-enqueue candidate pair, remote candidate not found for %s", bindingReq.destination)
+	} else if pair := a.findPair(local, remoteCandidate); pair != nil {
+		pair.state = CandidatePairStateWaiting
+		pair.bindingRequestCount = 0
+	} else {
+		a.log.Warnf("Cannot re-enqueue candidate pair for %s, not found in checklist", bindingReq.destination)
+	}
+
+	return true
 }
 
 // validateNonSTUNTraffic processes non STUN traffic from a remote candidate,
@@ -2043,10 +2152,12 @@ func (a *Agent) Restart(ufrag, pwd string) error { //nolint:cyclop
 	}
 
 	if runErr := a.loop.Run(a.loop, func(_ context.Context) {
-		// Cancel unconditionally: a gather goroutine that has started but not yet
-		// marked Gathering would otherwise outlive the restart and later
-		// overwrite the fresh New state.
+		// Cancel the previous gather before resetting its state.
 		a.gatherCandidateCancel()
+		if a.constructed {
+			a.gatherGeneration++
+		}
+		a.gatheringState = GatheringStateNew
 
 		// Clear all agent needed to take back to fresh state
 		a.removeUfragFromMux()
@@ -2055,7 +2166,6 @@ func (a *Agent) Restart(ufrag, pwd string) error { //nolint:cyclop
 		a.remoteUfrag = ""
 		a.remotePwd = ""
 		a.remoteCandidateGeneration++
-		a.gatheringState = GatheringStateNew
 		a.checklist = make([]*CandidatePair, 0)
 		a.pairsByID = make(map[uint64]*CandidatePair)
 		a.pendingBindingRequests = make([]bindingRequest, 0)
@@ -2075,32 +2185,19 @@ func (a *Agent) Restart(ufrag, pwd string) error { //nolint:cyclop
 	return nil
 }
 
-// setGatheringState applies newState and reports whether it was applied. A write
-// from a cycle canceled by Restart is dropped and reported false, so it can't
-// clobber the fresh New state and wedge the next gather.
-func (a *Agent) setGatheringState(gatherCtx context.Context, newState GatheringState) (bool, error) {
-	done := make(chan struct{})
-	applied := false
-	if err := a.loop.Run(a.loop, func(context.Context) { //nolint:contextcheck
-		defer close(done)
-
-		if gatherCtx.Err() != nil {
+func (a *Agent) completeGathering(generation uint64) error {
+	if err := a.loop.Run(a.loop, func(context.Context) {
+		if generation != a.gatherGeneration || a.gatheringState != GatheringStateGathering {
 			return
 		}
 
-		if a.gatheringState != newState && newState == GatheringStateComplete {
-			a.candidateNotifier.EnqueueCandidate(nil)
-		}
-
-		a.gatheringState = newState
-		applied = true
+		a.gatheringState = GatheringStateComplete
+		a.candidateNotifier.EnqueueCandidate(nil)
 	}); err != nil {
-		return false, err
+		return err
 	}
 
-	<-done
-
-	return applied, nil
+	return nil
 }
 
 func (a *Agent) needsToCheckPriorityOnNominated() bool {
@@ -2113,6 +2210,17 @@ func (a *Agent) role() Role {
 	}
 
 	return Controlled
+}
+
+func (a *Agent) setRole(isControlling bool) {
+	a.isControlling.Store(isControlling)
+	for _, pair := range a.checklist {
+		pair.iceRoleControlling = isControlling
+		// Overrides preserve a priority computed for the previous role. A role
+		// switch requires every pair priority to be recomputed.
+		pair.hasPriorityOverride = false
+	}
+	a.setSelector()
 }
 
 func (a *Agent) setSelector() {

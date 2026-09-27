@@ -408,8 +408,8 @@ func (e *Encoder) NormalizeBandsToArray(mdctCoeffs []float32, energies []celtGLo
 		return nil
 	}
 
-	// Use scratch buffers
-	norm := ensureNormSlice(&e.scratch.normL, frameSize)
+	// Use scratch buffers (NormalizeBandsToArrayInto writes all norm elements).
+	norm := ensureNormSliceNoClear(&e.scratch.normL, frameSize)
 	bandE := ensureEnerSlice(&e.scratch.bandE, nbBands)
 
 	NormalizeBandsToArrayInto(mdctCoeffs, nbBands, frameSize, norm, bandE)

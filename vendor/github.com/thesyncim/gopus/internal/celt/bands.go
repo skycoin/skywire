@@ -431,10 +431,7 @@ func denormalizeNormCoeffsDownsample(coeffs []celtNorm, energies []celtGLog, nbB
 		if width <= 0 {
 			continue
 		}
-		end := offset + width
-		if end > coeffsLen {
-			end = coeffsLen
-		}
+		end := min(offset+width, coeffsLen)
 		if end > offset {
 			gain := denormalizeBandGain(energies, band)
 			for i := offset; i < end; i++ {

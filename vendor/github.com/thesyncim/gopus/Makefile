@@ -302,11 +302,11 @@ bench-testvectors-report: ensure-libopus ensure-testvectors
 
 perf-asm: ensure-libopus-simd
 	$(GO_WORK_ENV) GOPUS_BENCH_TIER=asm \
-		$(GO) test -tags gopus_libopus_bench -run TestScoreboardSummary -v -count=1 .
+		$(GO) test $(PGO_FLAG) -tags gopus_libopus_bench -run TestScoreboardSummary -v -count=1 .
 
 perf-purego: ensure-libopus
 	$(GO_WORK_ENV) GOPUS_BENCH_TIER=purego \
-		$(GO) test -tags 'gopus_libopus_bench purego' -run TestScoreboardSummary -v -count=1 .
+		$(GO) test $(PGO_FLAG) -tags 'gopus_libopus_bench purego' -run TestScoreboardSummary -v -count=1 .
 
 perf-fair: perf-asm perf-purego
 

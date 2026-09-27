@@ -1,6 +1,10 @@
 package multistream
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/thesyncim/gopus/internal/arena"
+)
 
 // Errors for multistream packet parsing.
 var (
@@ -76,7 +80,7 @@ func parseMultistreamPacketInto(scratch [][]byte, data []byte, numStreams int) (
 // carved as non-overlapping slices of arena (sized once to len(data)) so all of
 // them coexist for the per-stream decode loop that follows. parser/arena may be
 // nil to fall back to per-packet allocation.
-func parseMultistreamPacketScratch(scratch [][]byte, parser *packetScratch, arena *[]byte, data []byte, numStreams int) ([][]byte, error) {
+func parseMultistreamPacketScratch(scratch [][]byte, parser *packetScratch, ba *arena.Bump[byte], data []byte, numStreams int) ([][]byte, error) {
 	if numStreams < 1 {
 		return nil, ErrInvalidStreamCount
 	}
@@ -88,16 +92,12 @@ func parseMultistreamPacketScratch(scratch [][]byte, parser *packetScratch, aren
 	packets = packets[:numStreams]
 	offset := 0
 
-	var buf []byte
-	if arena != nil && numStreams > 1 {
+	useArena := ba != nil && numStreams > 1
+	if useArena {
 		// A reframed standard packet is never larger than the self-delimited
 		// bytes it consumes, so the whole arena is bounded by len(data).
-		if cap(*arena) < len(data) {
-			*arena = make([]byte, len(data))
-		}
-		buf = (*arena)[:len(data)]
+		ba.Ensure(len(data))
 	}
-	arenaOff := 0
 
 	// Parse first N-1 packets with self-delimited framing and convert them
 	// back to standard framing for the elementary decoders.
@@ -106,13 +106,12 @@ func parseMultistreamPacketScratch(scratch [][]byte, parser *packetScratch, aren
 			return nil, ErrPacketTooShort
 		}
 
-		if buf != nil {
-			written, consumed, err := decodeSelfDelimitedPacketInto(parser, buf[arenaOff:], data[offset:])
+		if useArena {
+			written, consumed, err := decodeSelfDelimitedPacketInto(parser, ba.Tail(), data[offset:])
 			if err != nil {
 				return nil, err
 			}
-			packets[i] = buf[arenaOff : arenaOff+written]
-			arenaOff += written
+			packets[i] = ba.AllocN(written)
 			offset += consumed
 			continue
 		}

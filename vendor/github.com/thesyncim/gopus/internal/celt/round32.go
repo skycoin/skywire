@@ -12,14 +12,9 @@ func round32(x float32) float32 {
 	return float32(x)
 }
 
-// mulAdd32Ref, mulSub32Ref, and subMul32Ref are the scalar-C-semantics
-// multiply-accumulate forms: the product rounds to float32 before the add/sub,
-// so no FMADD/FMSUB forms across the boundary.
+// mulAdd32Ref is the scalar-C-semantics multiply-accumulate form: the product
+// rounds to float32 before the add, so no FMADD form across the boundary.
 func mulAdd32Ref(a, b, c float32) float32 { return round32(a*b) + c }
-
-func mulSub32Ref(a, b, c float32) float32 { return round32(a*b) - c }
-
-func subMul32Ref(c, a, b float32) float32 { return c - round32(a*b) }
 
 // fma32 computes a*b+c and lets the arm64 backend contract it into a single
 // FMADD where the code explicitly wants fusion (the kiss-FFT twiddle hot path);

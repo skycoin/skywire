@@ -140,12 +140,8 @@ func (e *Encoder) assembleMultistreamPacket(streamPackets [][]byte) ([]byte, err
 		}
 		arenaNeed += len(streamPackets[i]) + 2
 	}
-	if cap(e.assembleArena) < arenaNeed {
-		e.assembleArena = make([]byte, arenaNeed)
-	}
-	arena := e.assembleArena[:arenaNeed]
+	e.assembleArena.Ensure(arenaNeed)
 
-	arenaOff := 0
 	totalSize := 0
 	for i, packet := range streamPackets {
 		if len(packet) == 0 {
@@ -153,12 +149,11 @@ func (e *Encoder) assembleMultistreamPacket(streamPackets [][]byte) ([]byte, err
 		}
 
 		if i < n-1 {
-			written, err := makeSelfDelimitedPacketInto(&e.packetParser, arena[arenaOff:], packet)
+			written, err := makeSelfDelimitedPacketInto(&e.packetParser, e.assembleArena.Tail(), packet)
 			if err != nil {
 				return nil, err
 			}
-			packet = arena[arenaOff : arenaOff+written]
-			arenaOff += written
+			packet = e.assembleArena.AllocN(written)
 		}
 		encoded[i] = packet
 		totalSize += len(packet)

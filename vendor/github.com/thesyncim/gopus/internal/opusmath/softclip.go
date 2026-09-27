@@ -21,7 +21,7 @@ func PCMSoftClip(x []float32, n, channels int, declipMem []float32) {
 	total := min(n*channels, len(x))
 
 	allWithinNeg1Pos1 := true
-	for i := 0; i < total; i++ {
+	for i := range total {
 		v := x[i]
 		if v > 2 {
 			x[i] = 2

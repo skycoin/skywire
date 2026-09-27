@@ -10,72 +10,10 @@ import (
 )
 
 func mdctMul(a, b float32) float32 {
-	if mdctUseNativeMulEnabled {
-		return a * b
-	}
 	return noFMA32Mul(a, b)
-}
-
-func mdctMathFlagsForFrame(frameSize int) bool {
-	useNativeMul := mdctUseNativeMulEnabled
-	if frameSize == 240 && mdctUseNativeMulShort240Enabled {
-		useNativeMul = true
-	}
-	return useNativeMul
-}
-
-func mdctMulWith(useNativeMul bool, a, b float32) float32 {
-	if useNativeMul {
-		return a * b
-	}
-	return noFMA32Mul(a, b)
-}
-
-func mdctMulAddMixWith(useNativeMul bool, a, b, c, d float32) float32 {
-	if useNativeMul {
-		return a*c + b*d
-	}
-	if mdctUseFMALikeMixEnabled {
-		return mdctFMA32(a, c, mdctMulWith(useNativeMul, b, d))
-	}
-	return mdctMulWith(useNativeMul, a, c) + mdctMulWith(useNativeMul, b, d)
-}
-
-func mdctMulSubMixWith(useNativeMul bool, a, b, c, d float32) float32 {
-	if useNativeMul {
-		return a*c - b*d
-	}
-	if mdctUseFMALikeMixEnabled {
-		return mdctFMA32(a, c, -mdctMulWith(useNativeMul, b, d))
-	}
-	return mdctMulWith(useNativeMul, a, c) - mdctMulWith(useNativeMul, b, d)
-}
-
-func mdctMulSubMixAltWith(useNativeMul bool, a, b, c, d float32) float32 {
-	if useNativeMul {
-		return a*c - b*d
-	}
-	return mdctMulWith(useNativeMul, a, c) - mdctMulWith(useNativeMul, b, d)
-}
-
-func mdctStoreDirectStageWith(useNativeMul bool, dst []kissCpx, idx int, scale, re, im, t0, t1 float32) {
-	yr := mdctMulWith(useNativeMul, re, t0) - mdctMulWith(useNativeMul, im, t1)
-	yi := mdctMulWith(useNativeMul, im, t0) + mdctMulWith(useNativeMul, re, t1)
-	dst[idx].r = yr * scale
-	dst[idx].i = yi * scale
-}
-
-func mdctStoreDirectStageFMALikeWith(useNativeMul bool, dst []kissCpx, idx int, scale, re, im, t0, t1 float32) {
-	yr := mdctFMA32(re, t0, -mdctMulWith(useNativeMul, im, t1))
-	yi := mdctFMA32(im, t0, mdctMulWith(useNativeMul, re, t1))
-	dst[idx].r = yr * scale
-	dst[idx].i = yi * scale
 }
 
 func mdctMulAddMix(a, b, c, d float32) float32 {
-	if mdctUseNativeMulEnabled {
-		return a*c + b*d
-	}
 	// Mirror the clang -ffp-contract=on float path of libopus celt/mdct.c
 	// clt_mdct_backward_c() TDAC mix (S_MUL(x2,*wp1)+S_MUL(x1,*wp2)): the second
 	// product is rounded on its own and the first multiply is fused into the
@@ -89,9 +27,6 @@ func mdctMulAddMix(a, b, c, d float32) float32 {
 }
 
 func mdctMulSubMix(a, b, c, d float32) float32 {
-	if mdctUseNativeMulEnabled {
-		return a*c - b*d
-	}
 	// Mirror libopus celt/mdct.c clt_mdct_backward_c() TDAC mix
 	// (S_MUL(x2,*wp2)-S_MUL(x1,*wp1)) under clang -ffp-contract=on: round the
 	// subtracted product, fuse the first multiply into the subtract.
@@ -102,9 +37,6 @@ func mdctMulSubMix(a, b, c, d float32) float32 {
 }
 
 func mdctMulSubMixAlt(a, b, c, d float32) float32 {
-	if mdctUseNativeMulEnabled {
-		return a*c - b*d
-	}
 	return mdctMul(a, c) - mdctMul(b, d)
 }
 
@@ -116,7 +48,30 @@ func mdctStoreDirectStage(dst []kissCpx, idx int, scale, re, im, t0, t1 float32)
 }
 
 func mdctStoreDirectStageFMALike(dst []kissCpx, idx int, scale, re, im, t0, t1 float32) {
-	mdctStoreDirectStage(dst, idx, scale, re, im, t0, t1)
+	yr := mdctEncodeFMA32(re, t0, -mdctMul(im, t1))
+	yi := mdctEncodeFMA32(im, t0, mdctMul(re, t1))
+	dst[idx].r = yr * scale
+	dst[idx].i = yi * scale
+}
+
+// mdctMulAddMixEncode and mdctMulSubMixEncode are the encoder-only variants
+// of the TDAC windowed-fold mix. They mirror mdctMulAddMix / mdctMulSubMix
+// exactly on every build (same mdctUseFMALikeMixEnabled gating, same
+// non-FMA path on amd64), so the amd64 bit-exact libopus oracle stays
+// byte-parity. The win on arm64 purego is just that mdctEncodeFMA32 uses the
+// Go backend's FMADDS contraction instead of mdctFMA32's wider helper, which
+// the encoder pitch-search is free to use because that path is quality-gated.
+func mdctMulAddMixEncode(a, b, c, d float32) float32 {
+	if mdctUseFMALikeMixEnabled {
+		return mdctEncodeFMA32(a, c, mdctMul(b, d))
+	}
+	return mdctMul(a, c) + mdctMul(b, d)
+}
+func mdctMulSubMixEncode(a, b, c, d float32) float32 {
+	if mdctUseFMALikeMixEnabled {
+		return mdctEncodeFMA32(a, c, -mdctMul(b, d))
+	}
+	return mdctMul(a, c) - mdctMul(b, d)
 }
 
 // MDCT computes the forward Modified Discrete Cosine Transform.
@@ -228,10 +183,7 @@ func applyMDCTWindow(samples []float32) {
 	}
 
 	// CELT uses short overlap of 120 samples
-	overlap := Overlap
-	if overlap > n/2 {
-		overlap = n / 2
-	}
+	overlap := min(Overlap, n/2)
 
 	// Get precomputed window for overlap region
 	window := GetWindowBufferF32(overlap)
@@ -292,7 +244,6 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 	if frameSize <= 0 {
 		return
 	}
-	useNativeMul := mdctMathFlagsForFrame(frameSize)
 
 	n2 := frameSize
 	n := n2 * 2
@@ -359,12 +310,54 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 		_ = bitrev[n4-1]
 		_ = fftStage[n4-1]
 		if mdctUseFMALikeMixEnabled {
+			// Leading windowed fold: whole 4-wide blocks go to the NEON
+			// kernel (bit-identical per element); the scalar loop finishes
+			// the remainder. The kernel's paired loads touch one extra odd
+			// lane above each stream start and run the descending streams
+			// down to start-2*done+2, so gate on those exact bounds.
+			if lead := limit1 - i; mdctUseNeonMidFold && lead >= 4 {
+				blocks := lead >> 2
+				done := blocks * 4
+				if xp2-n2-2*done+2 >= 0 && wp2-2*done+2 >= 0 &&
+					xp1+n2+2*done-1 < len(samples) && xp2+1 < len(samples) &&
+					wp1+2*done-1 < len(window) && wp2+1 < len(window) {
+					mdctFold1StoreNeon(fftStage, bitrev, samples, window, trig, i, n4, n2, xp1, xp2, wp1, wp2, blocks, preScale)
+					i += done
+					xp1 += 2 * done
+					xp2 -= 2 * done
+					wp1 += 2 * done
+					wp2 -= 2 * done
+				}
+			}
+			for ; i+1 < limit1; i += 2 {
+				re0 := mdctMulAddMixEncode(float32(samples[xp1+n2]), float32(samples[xp2]), window[wp2], window[wp1])
+				im0 := mdctMulSubMixEncode(float32(samples[xp1]), float32(samples[xp2-n2]), window[wp1], window[wp2])
+				re1 := mdctMulAddMixEncode(float32(samples[xp1+n2+2]), float32(samples[xp2-2]), window[wp2-2], window[wp1+2])
+				im1 := mdctMulSubMixEncode(float32(samples[xp1+2]), float32(samples[xp2-n2-2]), window[wp1+2], window[wp2-2])
+				t00, t10, t01, t11 := trig[i], trig[n4+i], trig[i+1], trig[n4+i+1]
+				yr0 := mdctEncodeFMA32(re0, t00, -mdctMul(im0, t10))
+				yi0 := mdctEncodeFMA32(im0, t00, mdctMul(re0, t10))
+				yr1 := mdctEncodeFMA32(re1, t01, -mdctMul(im1, t11))
+				yi1 := mdctEncodeFMA32(im1, t01, mdctMul(re1, t11))
+				b0, b1 := bitrev[i], bitrev[i+1]
+				fftStage[b0].r = yr0 * preScale
+				fftStage[b0].i = yi0 * preScale
+				fftStage[b1].r = yr1 * preScale
+				fftStage[b1].i = yi1 * preScale
+				xp1 += 4
+				xp2 -= 4
+				wp1 += 4
+				wp2 -= 4
+			}
 			for ; i < limit1; i++ {
-				re := mdctMulAddMixWith(useNativeMul, float32(samples[xp1+n2]), float32(samples[xp2]), window[wp2], window[wp1])
-				im := mdctMulSubMixWith(useNativeMul, float32(samples[xp1]), float32(samples[xp2-n2]), window[wp1], window[wp2])
-				t0 := trig[i]
-				t1 := trig[n4+i]
-				mdctStoreDirectStageFMALikeWith(useNativeMul, fftStage, bitrev[i], preScale, re, im, t0, t1)
+				re := mdctMulAddMixEncode(float32(samples[xp1+n2]), float32(samples[xp2]), window[wp2], window[wp1])
+				im := mdctMulSubMixEncode(float32(samples[xp1]), float32(samples[xp2-n2]), window[wp1], window[wp2])
+				t0, t1 := trig[i], trig[n4+i]
+				yr := mdctEncodeFMA32(re, t0, -mdctMul(im, t1))
+				yi := mdctEncodeFMA32(im, t0, mdctMul(re, t1))
+				b := bitrev[i]
+				fftStage[b].r = yr * preScale
+				fftStage[b].i = yi * preScale
 				xp1 += 2
 				xp2 -= 2
 				wp1 += 2
@@ -373,22 +366,100 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 
 			wp1 = 0
 			wp2 = overlap - 1
+			// The no-window middle region is elementwise; hand whole 4-wide
+			// blocks to the NEON kernel (bit-identical per element) and let
+			// the scalar loop finish the remainder. The kernel's paired loads
+			// touch samples[xp2-2*done+2 : xp2+2] and samples[xp1 : xp1+2*done],
+			// so gate on those exact bounds.
+			if mid := n4 - limit1 - i; mdctUseNeonMidFold && mid >= 4 {
+				blocks := mid >> 2
+				done := blocks * 4
+				if xp2-2*done+2 >= 0 && xp2+1 < len(samples) && xp1+2*done-1 < len(samples) {
+					mdctMidFoldStoreNeon(fftStage, bitrev, samples, trig, i, n4, xp1, xp2, blocks, preScale)
+					i += done
+					xp1 += 2 * done
+					xp2 -= 2 * done
+				}
+			}
+			// 2× unrolled: each pair of iterations uses 4 independent FMUL/FMAD
+			// chains, saturating all 4 FP dispatch slots and hiding FADD latency.
+			// Manual inline of mdctStoreDirectStageFMALike avoids the function
+			// call overhead on this path (inlining cost 103 > budget 80).
+			for ; i+1 < n4-limit1; i += 2 {
+				re0 := float32(samples[xp2])
+				im0 := float32(samples[xp1])
+				re1 := float32(samples[xp2-2])
+				im1 := float32(samples[xp1+2])
+				t00 := trig[i]
+				t10 := trig[n4+i]
+				t01 := trig[i+1]
+				t11 := trig[n4+i+1]
+				yr0 := mdctEncodeFMA32(re0, t00, -mdctMul(im0, t10))
+				yi0 := mdctEncodeFMA32(im0, t00, mdctMul(re0, t10))
+				yr1 := mdctEncodeFMA32(re1, t01, -mdctMul(im1, t11))
+				yi1 := mdctEncodeFMA32(im1, t01, mdctMul(re1, t11))
+				b0, b1 := bitrev[i], bitrev[i+1]
+				fftStage[b0].r = yr0 * preScale
+				fftStage[b0].i = yi0 * preScale
+				fftStage[b1].r = yr1 * preScale
+				fftStage[b1].i = yi1 * preScale
+				xp1 += 4
+				xp2 -= 4
+			}
 			for ; i < n4-limit1; i++ {
 				re := float32(samples[xp2])
 				im := float32(samples[xp1])
 				t0 := trig[i]
 				t1 := trig[n4+i]
-				mdctStoreDirectStageFMALikeWith(useNativeMul, fftStage, bitrev[i], preScale, re, im, t0, t1)
+				mdctStoreDirectStageFMALike(fftStage, bitrev[i], preScale, re, im, t0, t1)
 				xp1 += 2
 				xp2 -= 2
 			}
 
+			// Trailing windowed fold, same blocked NEON treatment.
+			if tail := n4 - i; mdctUseNeonMidFold && tail >= 4 {
+				blocks := tail >> 2
+				done := blocks * 4
+				if xp2-2*done+2 >= 0 && wp2-2*done+2 >= 0 && xp1-n2 >= 0 &&
+					xp1+2*done-1 < len(samples) && xp2+n2+1 < len(samples) &&
+					wp1+2*done-1 < len(window) && wp2+1 < len(window) {
+					mdctFold3StoreNeon(fftStage, bitrev, samples, window, trig, i, n4, n2, xp1, xp2, wp1, wp2, blocks, preScale)
+					i += done
+					xp1 += 2 * done
+					xp2 -= 2 * done
+					wp1 += 2 * done
+					wp2 -= 2 * done
+				}
+			}
+			for ; i+1 < n4; i += 2 {
+				re0 := mdctMulSubMixAlt(float32(samples[xp2]), float32(samples[xp1-n2]), window[wp2], window[wp1])
+				im0 := mdctMulAddMixEncode(float32(samples[xp1]), float32(samples[xp2+n2]), window[wp2], window[wp1])
+				re1 := mdctMulSubMixAlt(float32(samples[xp2-2]), float32(samples[xp1-n2+2]), window[wp2-2], window[wp1+2])
+				im1 := mdctMulAddMixEncode(float32(samples[xp1+2]), float32(samples[xp2+n2-2]), window[wp2-2], window[wp1+2])
+				t00, t10, t01, t11 := trig[i], trig[n4+i], trig[i+1], trig[n4+i+1]
+				yr0 := mdctEncodeFMA32(re0, t00, -mdctMul(im0, t10))
+				yi0 := mdctEncodeFMA32(im0, t00, mdctMul(re0, t10))
+				yr1 := mdctEncodeFMA32(re1, t01, -mdctMul(im1, t11))
+				yi1 := mdctEncodeFMA32(im1, t01, mdctMul(re1, t11))
+				b0, b1 := bitrev[i], bitrev[i+1]
+				fftStage[b0].r = yr0 * preScale
+				fftStage[b0].i = yi0 * preScale
+				fftStage[b1].r = yr1 * preScale
+				fftStage[b1].i = yi1 * preScale
+				xp1 += 4
+				xp2 -= 4
+				wp1 += 4
+				wp2 -= 4
+			}
 			for ; i < n4; i++ {
-				re := mdctMulSubMixAltWith(useNativeMul, float32(samples[xp2]), float32(samples[xp1-n2]), window[wp2], window[wp1])
-				im := mdctMulAddMixWith(useNativeMul, float32(samples[xp1]), float32(samples[xp2+n2]), window[wp2], window[wp1])
-				t0 := trig[i]
-				t1 := trig[n4+i]
-				mdctStoreDirectStageFMALikeWith(useNativeMul, fftStage, bitrev[i], preScale, re, im, t0, t1)
+				re := mdctMulSubMixAlt(float32(samples[xp2]), float32(samples[xp1-n2]), window[wp2], window[wp1])
+				im := mdctMulAddMixEncode(float32(samples[xp1]), float32(samples[xp2+n2]), window[wp2], window[wp1])
+				t0, t1 := trig[i], trig[n4+i]
+				yr := mdctEncodeFMA32(re, t0, -mdctMul(im, t1))
+				yi := mdctEncodeFMA32(im, t0, mdctMul(re, t1))
+				b := bitrev[i]
+				fftStage[b].r = yr * preScale
+				fftStage[b].i = yi * preScale
 				xp1 += 2
 				xp2 -= 2
 				wp1 += 2
@@ -396,11 +467,11 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 			}
 		} else {
 			for ; i < limit1; i++ {
-				re := mdctMulAddMixWith(useNativeMul, float32(samples[xp1+n2]), float32(samples[xp2]), window[wp2], window[wp1])
-				im := mdctMulSubMixWith(useNativeMul, float32(samples[xp1]), float32(samples[xp2-n2]), window[wp1], window[wp2])
+				re := mdctMulAddMixEncode(float32(samples[xp1+n2]), float32(samples[xp2]), window[wp2], window[wp1])
+				im := mdctMulSubMixEncode(float32(samples[xp1]), float32(samples[xp2-n2]), window[wp1], window[wp2])
 				t0 := trig[i]
 				t1 := trig[n4+i]
-				mdctStoreDirectStageWith(useNativeMul, fftStage, bitrev[i], preScale, re, im, t0, t1)
+				mdctStoreDirectStage(fftStage, bitrev[i], preScale, re, im, t0, t1)
 				xp1 += 2
 				xp2 -= 2
 				wp1 += 2
@@ -414,17 +485,17 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 				im := float32(samples[xp1])
 				t0 := trig[i]
 				t1 := trig[n4+i]
-				mdctStoreDirectStageWith(useNativeMul, fftStage, bitrev[i], preScale, re, im, t0, t1)
+				mdctStoreDirectStage(fftStage, bitrev[i], preScale, re, im, t0, t1)
 				xp1 += 2
 				xp2 -= 2
 			}
 
 			for ; i < n4; i++ {
-				re := mdctMulSubMixAltWith(useNativeMul, float32(samples[xp2]), float32(samples[xp1-n2]), window[wp2], window[wp1])
-				im := mdctMulAddMixWith(useNativeMul, float32(samples[xp1]), float32(samples[xp2+n2]), window[wp2], window[wp1])
+				re := mdctMulSubMixAlt(float32(samples[xp2]), float32(samples[xp1-n2]), window[wp2], window[wp1])
+				im := mdctMulAddMixEncode(float32(samples[xp1]), float32(samples[xp2+n2]), window[wp2], window[wp1])
 				t0 := trig[i]
 				t1 := trig[n4+i]
-				mdctStoreDirectStageWith(useNativeMul, fftStage, bitrev[i], preScale, re, im, t0, t1)
+				mdctStoreDirectStage(fftStage, bitrev[i], preScale, re, im, t0, t1)
 				xp1 += 2
 				xp2 -= 2
 				wp1 += 2
@@ -436,8 +507,8 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 		_ = f[2*n4-1]
 
 		for ; i < limit1; i++ {
-			f[2*i] = mdctMulAddMixWith(useNativeMul, float32(samples[xp1+n2]), float32(samples[xp2]), window[wp2], window[wp1])
-			f[2*i+1] = mdctMulSubMixWith(useNativeMul, float32(samples[xp1]), float32(samples[xp2-n2]), window[wp1], window[wp2])
+			f[2*i] = mdctMulAddMixEncode(float32(samples[xp1+n2]), float32(samples[xp2]), window[wp2], window[wp1])
+			f[2*i+1] = mdctMulSubMixEncode(float32(samples[xp1]), float32(samples[xp2-n2]), window[wp1], window[wp2])
 			xp1 += 2
 			xp2 -= 2
 			wp1 += 2
@@ -454,8 +525,8 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 		}
 
 		for ; i < n4; i++ {
-			f[2*i] = mdctMulSubMixAltWith(useNativeMul, float32(samples[xp2]), float32(samples[xp1-n2]), window[wp2], window[wp1])
-			f[2*i+1] = mdctMulAddMixWith(useNativeMul, float32(samples[xp1]), float32(samples[xp2+n2]), window[wp2], window[wp1])
+			f[2*i] = mdctMulSubMixAlt(float32(samples[xp2]), float32(samples[xp1-n2]), window[wp2], window[wp1])
+			f[2*i+1] = mdctMulAddMixEncode(float32(samples[xp1]), float32(samples[xp2+n2]), window[wp2], window[wp1])
 			xp1 += 2
 			xp2 -= 2
 			wp1 += 2
@@ -478,7 +549,7 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 					im := f[2*i+1]
 					t0 := trig[i]
 					t1 := trig[n4+i]
-					mdctStoreDirectStageFMALikeWith(useNativeMul, fftStage, bitrev[i], preScale, re, im, t0, t1)
+					mdctStoreDirectStageFMALike(fftStage, bitrev[i], preScale, re, im, t0, t1)
 				}
 			} else {
 				for i = range n4 {
@@ -486,7 +557,7 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 					im := f[2*i+1]
 					t0 := trig[i]
 					t1 := trig[n4+i]
-					mdctStoreDirectStageWith(useNativeMul, fftStage, bitrev[i], preScale, re, im, t0, t1)
+					mdctStoreDirectStage(fftStage, bitrev[i], preScale, re, im, t0, t1)
 				}
 			}
 		}
@@ -500,8 +571,8 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 			im := f[2*i+1]
 			t0 := trig[i]
 			t1 := trig[n4+i]
-			yr := mdctMulWith(useNativeMul, re, t0) - mdctMulWith(useNativeMul, im, t1)
-			yi := mdctMulWith(useNativeMul, im, t0) + mdctMulWith(useNativeMul, re, t1)
+			yr := mdctMul(re, t0) - mdctMul(im, t1)
+			yi := mdctMul(im, t0) + mdctMul(re, t1)
 			fftIn[i] = complex(yr*preScale, yi*preScale)
 		}
 		kissFFT32To(fftOut, fftIn[:n4], fftTmp)
@@ -514,7 +585,46 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 		_ = trigHi[n4-1]
 		lo := 0
 		hi := n2 - 1
-		for i = range n4 {
+		i = 0
+		// Mirror 4-wide block pairs tile both coefficient ends contiguously;
+		// the NEON kernel runs them with the exact scalar op sequence
+		// (bit-identical per element), and the scalar loop finishes the
+		// n4%8 middle. QEXT moves the scale here, so that build keeps the
+		// scalar loop.
+		if mdctUsePostTwiddleNeon && !mdctQEXTScalePlacement {
+			if pairBlocks := n4 >> 3; pairBlocks > 0 {
+				mdctPostTwiddleNeon(coeffs, fftStage, trig, n2, n4, pairBlocks)
+				i = 4 * pairBlocks
+				lo += 2 * i
+				hi -= 2 * i
+			}
+		}
+		top := n4 - i
+		if !mdctQEXTScalePlacement {
+			// 2x unroll: 8 independent FMULs per pair of iterations hide
+			// 2-cycle FMUL latency and saturate the 4-wide FP dispatch.
+			for ; i+1 < top; i += 2 {
+				re0 := fftStage[i].r
+				im0 := fftStage[i].i
+				re1 := fftStage[i+1].r
+				im1 := fftStage[i+1].i
+				t00 := trig[i]
+				t10 := trigHi[i]
+				t01 := trig[i+1]
+				t11 := trigHi[i+1]
+				yr0 := mdctMul(im0, t10) - mdctMul(re0, t00)
+				yi0 := mdctMul(re0, t10) + mdctMul(im0, t00)
+				yr1 := mdctMul(im1, t11) - mdctMul(re1, t01)
+				yi1 := mdctMul(re1, t11) + mdctMul(im1, t01)
+				coeffs[lo] = yr0
+				coeffs[hi] = yi0
+				coeffs[lo+2] = yr1
+				coeffs[hi-2] = yi1
+				lo += 4
+				hi -= 4
+			}
+		}
+		for ; i < top; i++ {
 			re := fftStage[i].r
 			im := fftStage[i].i
 			t0 := trig[i]
@@ -523,8 +633,8 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 				t0 *= postScale
 				t1 *= postScale
 			}
-			yr := mdctMulWith(useNativeMul, im, t1) - mdctMulWith(useNativeMul, re, t0)
-			yi := mdctMulWith(useNativeMul, re, t1) + mdctMulWith(useNativeMul, im, t0)
+			yr := mdctMul(im, t1) - mdctMul(re, t0)
+			yi := mdctMul(re, t1) + mdctMul(im, t0)
 			coeffs[lo] = yr
 			coeffs[hi] = yi
 			lo += 2
@@ -544,8 +654,8 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 				t0 *= postScale
 				t1 *= postScale
 			}
-			yr := mdctMulWith(useNativeMul, im, t1) - mdctMulWith(useNativeMul, re, t0)
-			yi := mdctMulWith(useNativeMul, re, t1) + mdctMulWith(useNativeMul, im, t0)
+			yr := mdctMul(im, t1) - mdctMul(re, t0)
+			yi := mdctMul(re, t1) + mdctMul(im, t0)
 			coeffs[lo] = yr
 			coeffs[hi] = yi
 			lo += 2

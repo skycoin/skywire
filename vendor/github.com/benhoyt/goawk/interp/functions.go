@@ -4,7 +4,6 @@ package interp
 
 import (
 	"bufio"
-	"bytes"
 	"errors"
 	"fmt"
 	"reflect"
@@ -243,7 +242,7 @@ func validNativeType(typ reflect.Type) bool {
 }
 
 // Guts of the split() function
-func (p *interp) split(s string, scope resolver.Scope, index int, fs string, mode IOMode) (int, error) {
+func (p *interp) split(s string, scope resolver.Scope, index int, sep string, sepIsRegex bool, mode IOMode) (int, error) {
 	var parts []string
 	switch {
 	case mode == CSVMode || mode == TSVMode:
@@ -264,14 +263,14 @@ func (p *interp) split(s string, scope resolver.Scope, index int, fs string, mod
 		// Parse one record. Errors shouldn't happen, but if there is one,
 		// len(parts) will be 0.
 		scanner.Scan()
-	case fs == " ":
+	case !sepIsRegex && sep == " ":
 		parts = strings.Fields(s)
 	case s == "":
 		// Leave parts 0 length on empty string
-	case utf8.RuneCountInString(fs) <= 1:
-		parts = strings.Split(s, fs)
+	case !sepIsRegex && utf8.RuneCountInString(sep) <= 1:
+		parts = strings.Split(s, sep)
 	default:
-		re, err := p.compileRegex(fs)
+		re, err := p.compileRegex(sep)
 		if err != nil {
 			return 0, err
 		}
@@ -340,55 +339,77 @@ func (p *interp) parseFmtTypes(s string) (format string, types []byte, err error
 		return item.format, item.types, nil
 	}
 
-	out := []byte(s)
+	out := make([]byte, 0, len(s))
 	for i := 0; i < len(s); i++ {
-		if s[i] == '%' {
-			i++
-			if i >= len(s) {
-				return "", nil, errors.New("expected type specifier after %")
-			}
-			if s[i] == '%' {
-				continue
-			}
-			for i < len(s) && bytes.IndexByte([]byte(" .-+*#0123456789"), s[i]) >= 0 {
-				if s[i] == '*' {
-					types = append(types, 'd')
-				}
-				i++
-			}
-			if i >= len(s) {
-				return "", nil, errors.New("expected type specifier after %")
-			}
-			var t byte
-			switch s[i] {
-			case 's':
-				t = 's'
-			case 'd':
-				t = 'd'
-			case 'o', 'x', 'X':
-				t = 'u'
-			case 'i':
-				t = 'd'
-				out[i] = 'd'
-			case 'f', 'e', 'E', 'g', 'G':
-				t = 'f'
-			case 'a':
-				t = 'f'
-				out[i] = 'x'
-			case 'A':
-				t = 'f'
-				out[i] = 'X'
-			case 'u':
-				t = 'u'
-				out[i] = 'd'
-			case 'c':
-				t = 'c'
-				out[i] = 's'
-			default:
-				return "", nil, fmt.Errorf("invalid format type %q", s[i])
-			}
-			types = append(types, t)
+		if s[i] != '%' {
+			out = append(out, s[i])
+			continue
 		}
+		out = append(out, '%')
+		i++
+		if i >= len(s) {
+			return "", nil, errors.New("expected type specifier after %")
+		}
+		if s[i] == '%' {
+			out = append(out, '%')
+			continue
+		}
+		dotSeen := false
+		for i < len(s) && strings.IndexByte(" .-+*#0123456789", s[i]) >= 0 {
+			if s[i] == '*' {
+				types = append(types, 'd')
+			}
+			if s[i] == '.' {
+				dotSeen = true
+			}
+			out = append(out, s[i])
+			i++
+		}
+		if i >= len(s) {
+			return "", nil, errors.New("expected type specifier after %")
+		}
+		var t byte
+		switch s[i] {
+		case 's':
+			t = 's'
+			out = append(out, 's')
+		case 'd':
+			t = 'd'
+			out = append(out, 'd')
+		case 'o', 'x', 'X':
+			t = 'u'
+			out = append(out, s[i])
+		case 'i':
+			t = 'd'
+			out = append(out, 'd')
+		case 'f', 'e', 'E':
+			t = 'f'
+			out = append(out, s[i])
+		case 'g', 'G':
+			t = 'f'
+			// C's %g/%G default to 6 significant digits, but Go's fmt uses the
+			// shortest round-trippable representation when no precision is given.
+			// Inject the C default so a bare %g matches POSIX awk, gawk, etc.
+			if !dotSeen {
+				out = append(out, '.', '6')
+			}
+			out = append(out, s[i])
+		case 'a':
+			t = 'f'
+			out = append(out, 'x')
+		case 'A':
+			t = 'f'
+			out = append(out, 'X')
+		case 'u':
+			t = 'u'
+			out = append(out, 'd')
+		case 'c':
+			t = 'c'
+			out = append(out, 's')
+		default:
+			return "", nil, fmt.Errorf("invalid format type %q", s[i])
+		}
+		types = append(types, t)
 	}
 
 	// Dumb, non-LRU cache: just cache the first N formats
@@ -397,6 +418,53 @@ func (p *interp) parseFmtTypes(s string) (format string, types []byte, err error
 		p.formatCache[s] = cachedFormat{format, types}
 	}
 	return format, types, nil
+}
+
+// numFormat is a parsed CONVFMT or OFMT value. Parsing it when the special
+// variable is set (rather than on every conversion) keeps number-to-string
+// conversion fast in the usual case.
+type numFormat struct {
+	format   string // format as set by the AWK program (what getSpecial returns)
+	goFormat string // equivalent Go format string (only used if isFloat)
+	isFloat  bool   // format is a single float conversion, so value.str can do it
+	hasStr   bool   // format includes an %s conversion (see interp.numToString)
+}
+
+// The default CONVFMT and OFMT, also used as the fallback for a format that
+// value.str can't apply directly.
+var defaultNumFormat = numFormat{format: "%.6g", goFormat: "%.6g", isFloat: true}
+
+// Parse a CONVFMT or OFMT value for later use by interp.formatNum.
+func (p *interp) parseNumFormat(format string) numFormat {
+	goFormat, types, err := p.parseFmtTypes(format)
+	if err == nil && len(types) == 1 && types[0] == 'f' {
+		// A single floating-point conversion: the normal case, which
+		// value.str can format directly.
+		return numFormat{format: format, goFormat: goFormat, isFloat: true}
+	}
+	// Anything else (no conversions at all, or one that needs the number
+	// converted to an integer or character, such as %d or %c) goes via sprintf.
+	f := numFormat{format: format, goFormat: defaultNumFormat.goFormat}
+	for _, t := range types {
+		if t == 's' {
+			f.hasStr = true
+		}
+	}
+	return f
+}
+
+// Format a number using a CONVFMT or OFMT value that value.str can't apply
+// directly, such as "%d" or "%c". Only called for values that actually need
+// formatting (see needsNumFormat).
+func (p *interp) formatNum(f numFormat, v value) string {
+	s, err := p.sprintf(f.format, []value{v})
+	if err != nil {
+		// Format is invalid or needs more than one argument. Other AWKs
+		// raise an error here; we use the format as a literal string, which
+		// is what Gawk does for an invalid conversion.
+		return f.format
+	}
+	return s
 }
 
 // Guts of sprintf() function (also used by "printf" statement)

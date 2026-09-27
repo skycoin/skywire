@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/thesyncim/gopus/internal/arena"
 	"github.com/thesyncim/gopus/internal/celt"
 	"github.com/thesyncim/gopus/internal/dnnblob"
 	"github.com/thesyncim/gopus/internal/extsupport"
@@ -709,7 +710,7 @@ type Decoder struct {
 	// elementary decoders. The arena slices coexist across the per-stream decode
 	// loop but never escape the decode call.
 	packetParser packetScratch
-	reframeArena []byte
+	reframeArena arena.Bump[byte]
 }
 
 // NewDecoder creates a new multistream decoder.

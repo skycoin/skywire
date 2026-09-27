@@ -180,10 +180,7 @@ func (d *Decoder) decodeMonoPacketToStereo(data []byte, frameSize int) ([]float3
 
 	mode := GetModeConfig(frameSize)
 	lm := mode.LM
-	end := EffectiveBandsForFrameSize(d.bandwidth, frameSize)
-	if end > mode.EffBands {
-		end = mode.EffBands
-	}
+	end := min(EffectiveBandsForFrameSize(d.bandwidth, frameSize), mode.EffBands)
 	if end < 1 {
 		end = 1
 	}
@@ -423,10 +420,7 @@ func (d *Decoder) decodeStereoPacketToMono(data []byte, frameSize int) ([]float3
 
 	mode := GetModeConfig(frameSize)
 	lm := mode.LM
-	end := EffectiveBandsForFrameSize(d.bandwidth, frameSize)
-	if end > mode.EffBands {
-		end = mode.EffBands
-	}
+	end := min(EffectiveBandsForFrameSize(d.bandwidth, frameSize), mode.EffBands)
 	if end < 1 {
 		end = 1
 	}
@@ -673,10 +667,7 @@ func (d *Decoder) decodeMonoPacketToStereoHybrid(rd *rangecoding.Decoder, frameS
 
 	mode := GetModeConfig(frameSize)
 	lm := mode.LM
-	end := EffectiveBandsForFrameSize(d.bandwidth, frameSize)
-	if end > mode.EffBands {
-		end = mode.EffBands
-	}
+	end := min(EffectiveBandsForFrameSize(d.bandwidth, frameSize), mode.EffBands)
 	if end < 1 {
 		end = 1
 	}
@@ -852,10 +843,7 @@ func (d *Decoder) decodeStereoPacketToMonoHybrid(rd *rangecoding.Decoder, frameS
 
 	mode := GetModeConfig(frameSize)
 	lm := mode.LM
-	end := EffectiveBandsForFrameSize(d.bandwidth, frameSize)
-	if end > mode.EffBands {
-		end = mode.EffBands
-	}
+	end := min(EffectiveBandsForFrameSize(d.bandwidth, frameSize), mode.EffBands)
 	if end < 1 {
 		end = 1
 	}

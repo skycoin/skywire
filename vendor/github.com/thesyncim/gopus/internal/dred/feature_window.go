@@ -59,7 +59,7 @@ func (r Result) FeatureWindow(decodeOffsetSamples, frameSizeSamples, initFrames 
 // newest to oldest, into dst and returns the number of entries written.
 func (w FeatureWindow) FillFeatureOffsets(dst []int32) int {
 	n := min(w.NeededFeatureFrames, len(dst))
-	for i := 0; i < n; i++ {
+	for i := range n {
 		dst[i] = int32(w.FeatureOffsetBase - i)
 	}
 	return n

@@ -30,8 +30,28 @@ type Shell struct {
 	// Size, when set, reports the terminal dimensions.
 	Size func() (cols, rows int)
 
+	// Exec, when set, is offered any command that is not a built-in applet,
+	// before the filesystem is searched. It runs IN THIS PROCESS on the
+	// shell's own goroutine, which is the whole reason it exists: a program
+	// exec'd from the filesystem on js/wasm is a separate wasm instance (see
+	// exec_js.go) and cannot touch the embedder's own state.
+	//
+	// That is what an embedded shell is usually wanted for. A page that runs
+	// websh inside some larger program — an instrument, an editor, a desk —
+	// has one thing the shell cannot otherwise reach: the program it is
+	// embedded in. This is the door to it, and a command reached through it
+	// can be a full-screen one, because RawMode and Size are right here.
+	//
+	// handled false means "I do not know this command", and the shell carries
+	// on to the filesystem and then to "command not found". Applets are tried
+	// FIRST and win a name clash, so an embedder cannot quietly replace cd or
+	// echo with something else.
+	Exec func(ctx context.Context, args []string) (code int, handled bool)
+
 	parser  *syntax.Parser
 	pending strings.Builder // continuation lines of an incomplete input
+	// exited records what Run found before it reset the runner. See Exited.
+	exited bool
 }
 
 // New creates a shell over the given filesystem (nil = fresh in-memory
@@ -169,13 +189,26 @@ func (s *Shell) Run(ctx context.Context, line string) (needMore bool, err error)
 	}
 	s.pending.Reset()
 	err = s.Runner.Run(ctx, file)
-	if s.Runner.Exited() {
+	// Remembered before the reset, because the reset is what erases it.
+	// The runner keeps this only until the next Run, and resetting here
+	// — so the shell stays usable whatever the embedder decides to do
+	// about the exit — clears it at once. A caller that asked the runner
+	// afterwards was always told no, which is why `exit` could not be
+	// acted on from outside.
+	s.exited = s.Runner.Exited()
+	if s.exited {
 		// plain `exit` in the top level shell: reset so the terminal
 		// session keeps working
 		s.Runner.Reset()
 	}
 	return false, err
 }
+
+// Exited reports whether the line just run exited the shell — the
+// `exit` builtin, or anything else the interpreter treats that way.
+//
+// Valid until the next Run, like the runner's own flag it stands in for.
+func (s *Shell) Exited() bool { return s.exited }
 
 // resolve makes a path absolute against the interpreter cwd.
 func resolve(ctx context.Context, path string) string {
@@ -249,6 +282,20 @@ func (s *Shell) execHandler(next interp.ExecHandlerFunc) interp.ExecHandlerFunc 
 				return interp.ExitStatus(code)
 			}
 			return nil
+		}
+		// The embedder's own commands, in this process. See Shell.Exec.
+		if s.Exec != nil {
+			// With the shell in it, so a full-screen command can find its own
+			// terminal rather than the embedder's memory of one. See shellctx.go.
+			if code, handled := s.Exec(WithShell(ctx, s), args); handled {
+				if code < 0 || code > 255 {
+					code = 1
+				}
+				if code != 0 {
+					return interp.ExitStatus(code)
+				}
+				return nil
+			}
 		}
 		// Not a built-in applet: try to exec it as a program on the
 		// filesystem. On js/wasm this spawns a wasm binary as a child process
