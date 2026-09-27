@@ -253,6 +253,23 @@
     <string name="vpn_killswitch_hint">Keeps the network interface in place while the tunnel is down, so nothing leaks out around it. Other apps have no connection until it comes back.</string>
     <string name="vpn_killswitch_always_on">Always-on VPN settings</string>
     <string name="vpn_killswitch_always_on_hint">For the strongest guarantee — blocking even before the app starts — turn on “Always-on VPN” and “Block connections without VPN” for Skywire in Android’s settings.</string>
+    <string name="vpn_hotspot_title">VPN hotspot</string>
+    <string name="vpn_hotspot_hint">Share SkyVPN with devices on this phone’s hotspot. They use it through a proxy on this phone.</string>
+    <string name="vpn_hotspot_error">Could not open port %1$d: %2$s</string>
+    <string name="vpn_hotspot_waiting">Starts when SkyVPN connects.</string>
+    <string name="vpn_hotspot_no_hotspot">Turn on this phone’s hotspot (Wi-Fi, USB or Bluetooth tethering) and connect the other device to it.</string>
+    <string name="vpn_hotspot_proxy">Proxy for the other device</string>
+    <string name="vpn_hotspot_host">Host</string>
+    <string name="vpn_hotspot_port">Port</string>
+    <string name="vpn_hotspot_setup">On the other device, set this as its proxy. HTTP and SOCKS5 both work on the same port. What goes through the proxy uses SkyVPN, name lookups included.</string>
+    <string name="vpn_hotspot_not_carrying">SkyVPN is not connected, so shared devices cannot go online through the proxy yet.</string>
+    <plurals name="vpn_hotspot_devices">
+        <item quantity="one">%d device used it in the last few minutes</item>
+        <item quantity="other">%d devices used it in the last few minutes</item>
+    </plurals>
+    <string name="vpn_hotspot_leak_hint">Only traffic sent to the proxy goes through SkyVPN. The hotspot still gives the other device this phone’s normal connection, so an app there that ignores the proxy setting skips the VPN.</string>
+    <string name="vpn_hotspot_settings">Hotspot settings</string>
+    <string name="vpn_hotspot_no_settings">This phone has no hotspot settings screen to open.</string>
 
     <string name="vpn_error_no_consent">Android has not granted the VPN permission.</string>
     <string name="vpn_error_socket">The VPN service could not open its handoff socket: %1$s</string>
