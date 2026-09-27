@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Person
@@ -37,6 +38,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
+import com.skycoin.skywire.api.DialState
 import com.skycoin.skywire.ui.theme.SkyAccents
 
 /**
@@ -92,14 +94,18 @@ fun CallScreen(viewModel: CallViewModel = viewModel()) {
                     fontFamily = FontFamily.Monospace,
                 )
                 Spacer(Modifier.height(8.dp))
+                val dialState = state.dialState
+                val outcome = dialState?.ended == true
                 Text(
                     text = when {
                         state.connected -> state.elapsed
+                        dialState != null -> stringResource(dialStatus(dialState))
                         state.dialing -> stringResource(R.string.call_dialing)
                         else -> stringResource(R.string.call_incoming_title)
                     },
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = if (outcome) MaterialTheme.typography.titleMedium
+                    else MaterialTheme.typography.bodyLarge,
+                    color = if (outcome) DeclineRed else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
@@ -110,6 +116,14 @@ fun CallScreen(viewModel: CallViewModel = viewModel()) {
                     onToggleMic = viewModel::toggleMic,
                     onToggleSpeaker = viewModel::toggleSpeakerphone,
                     onHangUp = viewModel::hangUp,
+                )
+                // It ended unanswered: say so, and offer to try again —
+                // except after a decline, where calling straight back is
+                // not what the other side asked for.
+                state.dialState?.ended == true -> OutcomeControls(
+                    canCallAgain = state.dialState != DialState.DECLINED,
+                    onClose = viewModel::dismiss,
+                    onCallAgain = viewModel::callAgain,
                 )
                 // Placing a call: the only thing to offer is giving up on it,
                 // which cancels the invite rather than closing a session.
@@ -157,6 +171,42 @@ private fun DialingControls(onCancel: () -> Unit) {
             onClick = onCancel,
         )
     }
+}
+
+@Composable
+private fun OutcomeControls(canCallAgain: Boolean, onClose: () -> Unit, onCallAgain: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (canCallAgain) Arrangement.SpaceEvenly else Arrangement.Center,
+    ) {
+        CallButton(
+            icon = Icons.Default.Close,
+            label = stringResource(R.string.call_close),
+            background = MaterialTheme.colorScheme.surfaceVariant,
+            content = MaterialTheme.colorScheme.onSurface,
+            onClick = onClose,
+        )
+        if (canCallAgain) {
+            CallButton(
+                icon = Icons.Default.Call,
+                label = stringResource(R.string.call_again),
+                background = AnswerGreen,
+                onClick = onCallAgain,
+            )
+        }
+    }
+}
+
+/** The line under the name while calling: how it is going, or why it ended. */
+private fun dialStatus(state: DialState): Int = when (state) {
+    DialState.CONNECTING -> R.string.call_connecting
+    DialState.CALLING -> R.string.call_dialing
+    DialState.RINGING -> R.string.call_ringing
+    DialState.OFFLINE -> R.string.call_offline
+    DialState.DECLINED -> R.string.call_declined
+    DialState.BUSY -> R.string.call_busy
+    DialState.NO_ANSWER -> R.string.call_no_answer
+    DialState.FAILED -> R.string.call_failed
 }
 
 @Composable

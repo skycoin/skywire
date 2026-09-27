@@ -2013,6 +2013,25 @@ func (rc *rpcClient) VoiceDialing() ([]VoiceDialingInfo, error) {
 	return out, err
 }
 
+// VoiceSetRingback implements API.
+func (rc *rpcClient) VoiceSetRingback(tone VoiceRingback) error {
+	return rc.Call("VoiceSetRingback", &tone, &struct{}{})
+}
+
+// VoiceRingback implements API.
+func (rc *rpcClient) VoiceRingback() (VoiceRingback, error) {
+	var out VoiceRingback
+	err := rc.Call("VoiceRingback", &struct{}{}, &out)
+	return out, err
+}
+
+// VoiceDialRingback implements API.
+func (rc *rpcClient) VoiceDialRingback(callID string) (VoiceRingback, error) {
+	var out VoiceRingback
+	err := rc.Call("VoiceDialRingback", &callID, &out)
+	return out, err
+}
+
 // VoiceIncoming implements API.
 func (rc *rpcClient) VoiceIncoming() ([]string, error) {
 	var out []string

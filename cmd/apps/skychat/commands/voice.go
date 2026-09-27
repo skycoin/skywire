@@ -20,8 +20,11 @@ package commands
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
@@ -42,6 +45,8 @@ func registerVoiceHTTPHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/voice/active", requireAuthFunc(voiceListHandler("VoiceActive", func(c visorapi.API) ([]string, error) { return c.VoiceActive() })))
 	mux.HandleFunc("/voice/incoming", requireAuthFunc(voiceListHandler("VoiceIncoming", func(c visorapi.API) ([]string, error) { return c.VoiceIncoming() })))
 	mux.HandleFunc("/voice/dialing", requireAuthFunc(voiceDialingHandler()))
+	mux.HandleFunc("/voice/ringback", requireAuthFunc(voiceDialRingbackHandler()))
+	mux.HandleFunc("/voice/my-ringback", requireAuthFunc(voiceMyRingbackHandler()))
 	mux.HandleFunc("/voice/levels", requireAuthFunc(voiceLevelsHandler()))
 	mux.HandleFunc("/voice/audio", requireAuthFunc(voiceAudioHandler()))
 }
@@ -172,8 +177,12 @@ func voiceMuteHandler() http.HandlerFunc {
 	}
 }
 
-// voiceDialingHandler serves GET /voice/dialing → [{call_id, peer}] for the
-// calls this visor is PLACING and that have not been answered yet.
+// voiceDialingHandler serves GET /voice/dialing → [{call_id, peer, state,
+// reason, ringback}] for the calls this visor is PLACING and that have not been
+// answered yet — how each is going (connecting, calling, ringing), and for a
+// few seconds after one ended unanswered, why (offline, declined, busy,
+// no_answer, failed). ringback says the callee's own tone is at
+// /voice/ringback.
 //
 // Not part of voiceListHandler because these are not bare ids: hanging up
 // needs the id and the UI needs the peer to say who is being called, and the
@@ -205,6 +214,149 @@ func voiceDialingHandler() http.HandlerFunc {
 			calls = []visorapi.VoiceDialingInfo{}
 		}
 		writeJSON(w, calls)
+	}
+}
+
+// maxRingbackUpload caps a ringback tone upload. The visor enforces the real
+// limit (call.MaxRingbackSize, the same megabyte); this only stops a larger
+// body being read into memory to be told so.
+const maxRingbackUpload = 1 << 20
+
+// isNoRingback reports whether a proxied error is the visor saying there is no
+// tone to serve — a 404, not a failure.
+func isNoRingback(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "no ringback tone")
+}
+
+// writeRingback serves a tone as audio and as nothing else. Its type came from
+// the visor, which only ever hands out audio types — and for a peer's tone,
+// from a whitelist, since another visor chose it. Checked again here all the
+// same: it is served from this page's own origin, where anything but audio
+// would be a page with the user's session.
+func writeRingback(w http.ResponseWriter, tone visorapi.VoiceRingback) {
+	mime := strings.ToLower(strings.TrimSpace(tone.Mime))
+	if !strings.HasPrefix(mime, "audio/") {
+		mime = "application/octet-stream"
+	}
+	h := w.Header()
+	h.Set("Content-Type", mime)
+	h.Set("Content-Length", strconv.Itoa(len(tone.Data)))
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Content-Security-Policy", "sandbox")
+	h.Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(tone.Data) //nolint:errcheck
+}
+
+// voiceDialRingbackHandler serves GET /voice/ringback?call=<id> → the ringback
+// tone the peer of an outbound call plays, for this page to play while the
+// call rings. 404 until it has arrived — and for a peer that plays none, when
+// the page plays an ordinary ring of its own.
+func voiceDialRingbackHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if voiceRPCDown(w) {
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "GET only", http.StatusMethodNotAllowed)
+			return
+		}
+		callID := strings.TrimSpace(r.URL.Query().Get("call"))
+		if callID == "" {
+			http.Error(w, "call required", http.StatusBadRequest)
+			return
+		}
+		var tone visorapi.VoiceRingback
+		err := pairRPCCall("VoiceDialRingback", func(c visorapi.API) error {
+			t, e := c.VoiceDialRingback(callID)
+			tone = t
+			return e
+		})
+		if isNoRingback(err) || (err == nil && len(tone.Data) == 0) {
+			http.Error(w, "no ringback tone for that call", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), voiceErrStatus(err))
+			return
+		}
+		writeRingback(w, tone)
+	}
+}
+
+// voiceMyRingbackHandler serves /voice/my-ringback — the tone people hear
+// while THIS visor rings:
+//
+//	GET    → the tone as audio (to preview it), 404 when none is set;
+//	         with ?info=1, {set, size, type} instead of the audio
+//	PUT    → set it: the body is the audio, Content-Type its type
+//	DELETE → clear it; callers hear an ordinary ring again
+//
+// The visor keeps it (and across restarts): it is the visor that rings, and
+// that answers the caller asking for the tone.
+func voiceMyRingbackHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if voiceRPCDown(w) {
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			var tone visorapi.VoiceRingback
+			if err := pairRPCCall("VoiceRingback", func(c visorapi.API) error {
+				t, e := c.VoiceRingback()
+				tone = t
+				return e
+			}); err != nil {
+				http.Error(w, err.Error(), voiceErrStatus(err))
+				return
+			}
+			if r.URL.Query().Get("info") != "" {
+				writeJSON(w, map[string]any{"set": len(tone.Data) > 0, "size": len(tone.Data), "type": tone.Mime})
+				return
+			}
+			if len(tone.Data) == 0 {
+				http.Error(w, "no ringback tone set", http.StatusNotFound)
+				return
+			}
+			writeRingback(w, tone)
+		case http.MethodPut:
+			data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRingbackUpload))
+			if err != nil {
+				var tooBig *http.MaxBytesError
+				if errors.As(err, &tooBig) {
+					http.Error(w, "ringback tone too large (the limit is 1 MB)", http.StatusRequestEntityTooLarge)
+					return
+				}
+				http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			if len(data) == 0 {
+				http.Error(w, "empty body — DELETE clears the tone", http.StatusBadRequest)
+				return
+			}
+			tone := visorapi.VoiceRingback{Data: data, Mime: r.Header.Get("Content-Type")}
+			if err := pairRPCCall("VoiceSetRingback", func(c visorapi.API) error {
+				return c.VoiceSetRingback(tone)
+			}); err != nil {
+				status := voiceErrStatus(err)
+				if strings.Contains(err.Error(), "audio format") || strings.Contains(err.Error(), "the limit is") {
+					status = http.StatusBadRequest
+				}
+				http.Error(w, err.Error(), status)
+				return
+			}
+			writeJSON(w, map[string]any{"ok": true, "size": len(data)})
+		case http.MethodDelete:
+			if err := pairRPCCall("VoiceSetRingback", func(c visorapi.API) error {
+				return c.VoiceSetRingback(visorapi.VoiceRingback{})
+			}); err != nil {
+				http.Error(w, err.Error(), voiceErrStatus(err))
+				return
+			}
+			writeJSON(w, map[string]bool{"ok": true})
+		default:
+			http.Error(w, "GET, PUT or DELETE", http.StatusMethodNotAllowed)
+		}
 	}
 }
 

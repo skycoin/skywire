@@ -6,7 +6,9 @@
 package commands
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -33,6 +35,24 @@ type voiceAPI struct {
 	incoming []string
 	sent     []int16
 	recv     []int16
+	// ringback tones: the visor's own, and the one per outbound call.
+	myTone   visorapi.VoiceRingback
+	dialTone map[string]visorapi.VoiceRingback
+}
+
+func (a *voiceAPI) VoiceSetRingback(t visorapi.VoiceRingback) error {
+	if len(t.Data) > 0 && !strings.HasPrefix(t.Mime, "audio/") {
+		return errors.New("voice: \"" + t.Mime + "\" is not an audio format a ringback tone can be")
+	}
+	a.myTone = t
+	return nil
+}
+func (a *voiceAPI) VoiceRingback() (visorapi.VoiceRingback, error) { return a.myTone, nil }
+func (a *voiceAPI) VoiceDialRingback(id string) (visorapi.VoiceRingback, error) {
+	if t, ok := a.dialTone[id]; ok {
+		return t, nil
+	}
+	return visorapi.VoiceRingback{}, errors.New("voice: no ringback tone for that call")
 }
 
 func (a *voiceAPI) VoiceCall(peer cipher.PubKey) (string, error) {
@@ -298,5 +318,119 @@ func TestVoiceHandlers_503WhenRPCDown(t *testing.T) {
 				t.Errorf("code=%d, want 503", rr.Code)
 			}
 		})
+	}
+}
+
+// TestVoiceMyRingbackHandler: the tone this visor plays to its callers can be
+// set, previewed and cleared — and only as audio.
+func TestVoiceMyRingbackHandler(t *testing.T) {
+	fake := &voiceAPI{}
+	withFakePairRPC(t, fake)
+	h := voiceMyRingbackHandler()
+
+	// None set → 404, so the settings screen can say "ordinary ring".
+	rr := httptest.NewRecorder()
+	h(rr, httptest.NewRequest(http.MethodGet, "/voice/my-ringback", nil))
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("get with none set: code=%d, want 404", rr.Code)
+	}
+
+	// PUT the audio with its type.
+	tone := []byte("ID3 not really an mp3")
+	req := httptest.NewRequest(http.MethodPut, "/voice/my-ringback", bytes.NewReader(tone))
+	req.Header.Set("Content-Type", "audio/mpeg")
+	rr = httptest.NewRecorder()
+	h(rr, req)
+	if rr.Code != http.StatusOK || !bytes.Equal(fake.myTone.Data, tone) || fake.myTone.Mime != "audio/mpeg" {
+		t.Fatalf("put: code=%d body=%q stored=%q %q", rr.Code, rr.Body.String(), fake.myTone.Data, fake.myTone.Mime)
+	}
+
+	// ?info=1 says so without sending the audio.
+	rr = httptest.NewRecorder()
+	h(rr, httptest.NewRequest(http.MethodGet, "/voice/my-ringback?info=1", nil))
+	var info struct {
+		Set  bool   `json:"set"`
+		Size int    `json:"size"`
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &info); err != nil || !info.Set || info.Size != len(tone) || info.Type != "audio/mpeg" {
+		t.Fatalf("info: %q err=%v", rr.Body.String(), err)
+	}
+
+	// GET plays it back, typed and never sniffed.
+	rr = httptest.NewRecorder()
+	h(rr, httptest.NewRequest(http.MethodGet, "/voice/my-ringback", nil))
+	if rr.Code != http.StatusOK || !bytes.Equal(rr.Body.Bytes(), tone) {
+		t.Fatalf("get: code=%d body=%q", rr.Code, rr.Body.String())
+	}
+	if ct := rr.Header().Get("Content-Type"); ct != "audio/mpeg" {
+		t.Errorf("Content-Type = %q", ct)
+	}
+	if rr.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Error("the tone is served sniffable")
+	}
+
+	// A type the visor refuses is the user's mistake, not a gateway error.
+	req = httptest.NewRequest(http.MethodPut, "/voice/my-ringback", strings.NewReader("<script>"))
+	req.Header.Set("Content-Type", "text/html")
+	rr = httptest.NewRecorder()
+	h(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("put text/html: code=%d, want 400", rr.Code)
+	}
+
+	// Over the limit is refused before it reaches the visor.
+	req = httptest.NewRequest(http.MethodPut, "/voice/my-ringback", bytes.NewReader(make([]byte, maxRingbackUpload+1)))
+	req.Header.Set("Content-Type", "audio/mpeg")
+	rr = httptest.NewRecorder()
+	h(rr, req)
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("oversized put: code=%d, want 413", rr.Code)
+	}
+
+	// DELETE clears it.
+	rr = httptest.NewRecorder()
+	h(rr, httptest.NewRequest(http.MethodDelete, "/voice/my-ringback", nil))
+	if rr.Code != http.StatusOK || len(fake.myTone.Data) != 0 {
+		t.Fatalf("delete: code=%d still stored=%q", rr.Code, fake.myTone.Data)
+	}
+}
+
+// TestVoiceDialRingbackHandler: the peer's tone for an outbound call is served
+// once it is here, 404 until then — and a peer-chosen type that is not audio
+// is never what the page is served as.
+func TestVoiceDialRingbackHandler(t *testing.T) {
+	fake := &voiceAPI{dialTone: map[string]visorapi.VoiceRingback{
+		"c1":   {Data: []byte("tone"), Mime: "audio/ogg"},
+		"evil": {Data: []byte("<script>alert(1)</script>"), Mime: "text/html"},
+	}}
+	withFakePairRPC(t, fake)
+	h := voiceDialRingbackHandler()
+
+	rr := httptest.NewRecorder()
+	h(rr, httptest.NewRequest(http.MethodGet, "/voice/ringback?call=c1", nil))
+	if rr.Code != http.StatusOK || rr.Body.String() != "tone" || rr.Header().Get("Content-Type") != "audio/ogg" {
+		t.Fatalf("c1: code=%d type=%q body=%q", rr.Code, rr.Header().Get("Content-Type"), rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	h(rr, httptest.NewRequest(http.MethodGet, "/voice/ringback?call=nope", nil))
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("unknown call: code=%d, want 404", rr.Code)
+	}
+
+	rr = httptest.NewRecorder()
+	h(rr, httptest.NewRequest(http.MethodGet, "/voice/ringback?call=evil", nil))
+	if ct := rr.Header().Get("Content-Type"); ct != "application/octet-stream" {
+		t.Errorf("a non-audio tone was served as %q", ct)
+	}
+	if rr.Header().Get("Content-Security-Policy") != "sandbox" {
+		t.Error("the tone is not sandboxed")
+	}
+
+	rr = httptest.NewRecorder()
+	h(rr, httptest.NewRequest(http.MethodGet, "/voice/ringback", nil))
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("no call: code=%d, want 400", rr.Code)
 	}
 }

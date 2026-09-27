@@ -141,6 +141,15 @@
     <string name="call_channel_ongoing">Llamada en curso</string>
     <string name="call_incoming_title">Llamada entrante</string>
     <string name="call_dialing">Llamando…</string>
+    <string name="call_connecting">Conectando…</string>
+    <string name="call_ringing">Sonando…</string>
+    <string name="call_offline">Desconectado</string>
+    <string name="call_declined">Llamada rechazada</string>
+    <string name="call_busy">Ocupado</string>
+    <string name="call_no_answer">Sin respuesta</string>
+    <string name="call_failed">La llamada falló</string>
+    <string name="call_close">Cerrar</string>
+    <string name="call_again">Volver a llamar</string>
     <string name="call_answer">Responder</string>
     <string name="call_decline">Rechazar</string>
     <string name="call_ongoing_title">Llamada en curso</string>

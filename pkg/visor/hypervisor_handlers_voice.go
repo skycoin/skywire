@@ -14,11 +14,14 @@
 package visor
 
 import (
+	"errors"
 	"math"
 	"net/http"
+	"strconv"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
+	skycall "github.com/skycoin/skywire/pkg/skychat/call"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
@@ -169,6 +172,53 @@ func (hv *Hypervisor) getVoiceDialing() http.HandlerFunc {
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, out)
 	})
+}
+
+// getVoiceDialRingback → GET /skychat/voice/ringback?call=<id> : the ringback
+// tone the peer of an outbound call plays, as audio, for the caller's screen
+// to play while it rings. 404 until it has arrived, and for a peer that plays
+// none — the screen then plays an ordinary ring. Local visor only, like
+// getVoiceDialing: it is the local caller's call.
+func (hv *Hypervisor) getVoiceDialRingback() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		callID := r.URL.Query().Get("call")
+		if callID == "" {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "call required"})
+			return
+		}
+		if ctx.isRemote || hv.visor == nil {
+			httputil.WriteJSON(w, r, http.StatusNotFound, map[string]string{"error": ErrNoRingback.Error()})
+			return
+		}
+		tone, err := hv.visor.VoiceDialRingback(callID)
+		if errors.Is(err, ErrNoRingback) {
+			httputil.WriteJSON(w, r, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		if err != nil {
+			hv.writeVoiceErr(w, r, err)
+			return
+		}
+		WriteRingback(w, tone)
+	})
+}
+
+// WriteRingback serves a ringback tone. The type was chosen by another visor,
+// so it is served as nothing but audio: whitelisted by the call manager, never
+// sniffed, and sandboxed in case anything opens it as a page.
+func WriteRingback(w http.ResponseWriter, tone visorapi.VoiceRingback) {
+	mime := skycall.NormalizeToneMime(tone.Mime)
+	if mime == "" {
+		mime = "application/octet-stream"
+	}
+	h := w.Header()
+	h.Set("Content-Type", mime)
+	h.Set("Content-Length", strconv.Itoa(len(tone.Data)))
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Content-Security-Policy", "sandbox")
+	h.Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(tone.Data) //nolint:errcheck
 }
 
 // getVoiceAudio → GET /skychat/voice/audio?call=<id> : recent sent/received PCM

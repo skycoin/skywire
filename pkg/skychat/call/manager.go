@@ -71,6 +71,8 @@ type Config struct {
 type ringingCall struct {
 	inv     Sig
 	decided chan bool // buffered(1): true=answer, false=decline
+	// toneFetches counts the caller's requests for our ringback tone.
+	toneFetches int
 }
 
 // Manager owns the local voice endpoint: it accepts inbound calls via the
@@ -90,20 +92,39 @@ type Manager struct {
 	// callee's list) nor Active (that starts at "answered"), so a UI had
 	// nothing to show for the ten seconds a caller most wants feedback.
 	dialing map[string]*dialingCall
+	// ownTone is the ringback tone this endpoint plays to its callers; nil
+	// for none. tones holds the ones peers we called play, by peer.
+	ownTone *tone
+	tones   map[cipher.PubKey]*tone
 }
 
-// dialingCall is an outbound invite in flight.
+// dialingCall is an outbound invite in flight, or — for DialOutcomeLinger
+// after it ended unanswered — the outcome of one.
 type dialingCall struct {
 	peer cipher.PubKey
 	// cancel aborts the invite. It is what makes hanging up DURING the ring
 	// possible — there is no session to close yet.
 	cancel context.CancelFunc
+	state  DialState
+	reason string
+	// tone is the hash of the ringback tone the peer announced; toneReady,
+	// whether its bytes are here to play.
+	tone      string
+	toneReady bool
 }
 
-// Dial is one call this visor is placing, for a UI to show as "calling…".
+// Dial is one call this visor is placing, for a UI to show how it is going:
+// still connecting, ringing, or — briefly, once over — why it did not connect.
 type Dial struct {
 	CallID string
 	Peer   cipher.PubKey
+	State  DialState
+	// Reason is the detail behind an outcome, for a UI that wants more than
+	// the state ("dmsg error 100 - entry is not found in discovery").
+	Reason string
+	// Ringback is true once the peer's own ringback tone is here to play
+	// (DialRingback). False means play an ordinary ring.
+	Ringback bool
 }
 
 // NewManager constructs a Manager. Call Serve to start accepting.
@@ -126,10 +147,11 @@ func NewManager(cfg Config) *Manager {
 	if cfg.NewSink == nil {
 		cfg.NewSink = func() Sink { return NullSink{} }
 	}
-	m := &Manager{cfg: cfg, log: cfg.Logger, calls: make(map[string]*Session), ringing: make(map[string]*ringingCall), taps: make(map[string]*callTap), dialing: make(map[string]*dialingCall)}
+	m := &Manager{cfg: cfg, log: cfg.Logger, calls: make(map[string]*Session), ringing: make(map[string]*ringingCall), taps: make(map[string]*callTap), dialing: make(map[string]*dialingCall), tones: make(map[cipher.PubKey]*tone)}
 	m.sig = NewSignaler(cfg.LocalPK, cfg.SignalPort, cfg.Dial, cfg.Logger)
 	m.sig.SetInviteHandler(m.handleInvite)
 	m.sig.SetResumeHandler(m.handleResume)
+	m.sig.SetToneHandler(m.handleTone)
 	return m
 }
 
@@ -149,16 +171,19 @@ func (m *Manager) AddListener(ctx context.Context, lis net.Listener) {
 // beginDial registers an outbound call before its invite goes out, so the very
 // first poll of a UI already sees it — and, more to the point, has an id to
 // cancel it with. Returns the id, the cancellable dial context, and the
-// cleanup that deregisters it.
+// cleanup that deregisters it — unless it ended with an outcome to show, which
+// then lingers on its own timer (see endDial).
 func (m *Manager) beginDial(ctx context.Context, peer cipher.PubKey) (string, context.Context, func()) {
 	callID := newCallID()
 	dctx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel is called by the returned func
 	m.mu.Lock()
-	m.dialing[callID] = &dialingCall{peer: peer, cancel: cancel}
+	m.dialing[callID] = &dialingCall{peer: peer, cancel: cancel, state: DialConnecting}
 	m.mu.Unlock()
 	return callID, dctx, func() {
 		m.mu.Lock()
-		delete(m.dialing, callID)
+		if d := m.dialing[callID]; d != nil && !d.state.Ended() {
+			delete(m.dialing, callID)
+		}
 		m.mu.Unlock()
 		cancel()
 	}
@@ -205,13 +230,22 @@ func (m *Manager) Dial(peer cipher.PubKey, budget time.Duration) string {
 	return callID
 }
 
-// dial sends the invite and, on accept, starts the media session.
+// dial sends the invite and, on accept, starts the media session. Along the
+// way it keeps the call's DialState current, and on a failure records why.
 func (m *Manager) dial(ctx context.Context, callID string, peer cipher.PubKey) (*Session, error) {
-	conn, reply, err := m.sig.Invite(ctx, peer, callID, m.cfg.Codec.Name(), m.cfg.SignalPort)
+	conn, reply, err := m.sig.Invite(ctx, peer, callID, m.cfg.Codec.Name(), m.cfg.SignalPort, inviteHooks{
+		sent:    func() { m.setDialState(callID, DialCalling) },
+		ringing: func(r Sig) { m.noteRinging(callID, peer, r) },
+	})
 	if err != nil {
+		if state, why, ok := dialErrOutcome(ctx, m.dialState(callID), err); ok {
+			m.endDial(callID, state, why)
+		}
 		return nil, err
 	}
 	if reply.Type != SigAccept {
+		state, why := replyOutcome(reply)
+		m.endDial(callID, state, why)
 		reason := reply.Reason
 		if reason == "" {
 			reason = sigTypeName(reply.Type)
@@ -246,7 +280,20 @@ func (m *Manager) handleInvite(inv Sig, conn net.Conn) {
 		// and now instead of leaving it to run out the timeout. Everything
 		// downstream reads through the watch — see ringWatch.
 		w := watchRing(conn)
-		switch m.ringAndWait(inv, w.gone) {
+		// A caller that asked is told we are ringing, once we are — after
+		// the call is registered, so the ringback tone it may then ask for
+		// is already servable.
+		var ringSent <-chan struct{}
+		announce := func() {}
+		if inv.Progress {
+			announce = func() { ringSent = m.announceRinging(w, inv) }
+		}
+		out := m.ringAndWait(inv, w.gone, announce)
+		if !announced(ringSent) {
+			_ = w.Close() //nolint:errcheck // wedged mid-frame; an answer behind it would be garbled
+			return
+		}
+		switch out {
 		case ringAnswered:
 			w.answer()
 			m.accept(inv, w)
@@ -254,9 +301,14 @@ func (m *Manager) handleInvite(inv Sig, conn net.Conn) {
 			// Nobody to decline to: the caller has already hung up, and the
 			// write would only block on a conn that is on its way out.
 			_ = w.Close() //nolint:errcheck
-		default:
+		case ringTimedOut:
 			_ = writeSig(w, Sig{Type: SigDecline, CallID: inv.CallID, FromPK: m.cfg.LocalPK, Reason: "no answer"}) //nolint:errcheck
 			_ = w.Close()                                                                                          //nolint:errcheck
+		default:
+			// Said apart from the ring running out, so the caller can be
+			// told which: this used to say "no answer" for both.
+			_ = writeSig(w, Sig{Type: SigDecline, CallID: inv.CallID, FromPK: m.cfg.LocalPK, Reason: "declined"}) //nolint:errcheck
+			_ = w.Close()                                                                                         //nolint:errcheck
 		}
 		return
 	}
@@ -274,9 +326,11 @@ type ringOutcome int
 const (
 	// ringAnswered: someone picked up.
 	ringAnswered ringOutcome = iota
-	// ringDeclined: an explicit decline, or the ring timing out — either way
-	// the caller is still there and is owed an answer.
+	// ringDeclined: an explicit decline. The caller is still there and is
+	// owed an answer.
 	ringDeclined
+	// ringTimedOut: nobody picked up before the ring timeout. Also owed one.
+	ringTimedOut
 	// ringAbandoned: the caller hung up before anyone picked up.
 	ringAbandoned
 )
@@ -286,13 +340,17 @@ const (
 //
 // gone is the caller-hung-up signal from the call's ringWatch. It is what
 // makes a ring end when the call does rather than when the timeout says so.
-func (m *Manager) ringAndWait(inv Sig, gone <-chan struct{}) ringOutcome {
+// announce runs once the call is ringing; it must not block.
+func (m *Manager) ringAndWait(inv Sig, gone <-chan struct{}, announce func()) ringOutcome {
 	rc := &ringingCall{inv: inv, decided: make(chan bool, 1)}
 	m.mu.Lock()
 	m.ringing[inv.CallID] = rc
 	m.mu.Unlock()
 	if m.cfg.Ring != nil {
 		m.cfg.Ring(inv)
+	}
+	if announce != nil {
+		announce()
 	}
 	m.log.WithField("from", inv.FromPK.Hex()).WithField("call", inv.CallID).
 		Info("voice: incoming call RINGING — answer with `skychat voice answer <id>`")
@@ -308,6 +366,7 @@ func (m *Manager) ringAndWait(inv Sig, gone <-chan struct{}) ringOutcome {
 	case <-gone:
 		out = ringAbandoned
 	case <-timeout.C:
+		out = ringTimedOut
 	}
 	m.mu.Lock()
 	delete(m.ringing, inv.CallID)
@@ -359,15 +418,26 @@ func (m *Manager) decide(callID string, ok bool) error {
 }
 
 // Dialing returns the calls this visor is placing and that have not been
-// answered yet.
+// answered yet, with how far each has got — and, for DialOutcomeLinger after
+// one ended unanswered, how it ended (State.Ended()).
 func (m *Manager) Dialing() []Dial {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := make([]Dial, 0, len(m.dialing))
 	for id, d := range m.dialing {
-		out = append(out, Dial{CallID: id, Peer: d.peer})
+		out = append(out, Dial{CallID: id, Peer: d.peer, State: d.state, Reason: d.reason, Ringback: d.toneReady})
 	}
 	return out
+}
+
+// dialState is where the outbound call callID has got to; "" once it is gone.
+func (m *Manager) dialState(callID string) DialState {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if d := m.dialing[callID]; d != nil {
+		return d.state
+	}
+	return ""
 }
 
 // Incoming returns the invites of calls currently ringing (awaiting answer).
@@ -447,9 +517,15 @@ func (m *Manager) Hangup(callID string) error {
 	}
 	// Still ringing at the other end: there is no session to close, so
 	// canceling the invite IS the hang-up. Without this the caller could
-	// only wait out the dial timeout.
+	// only wait out the dial timeout. On a call that already ended
+	// unanswered it is the UI dismissing the outcome it has shown.
 	if dial != nil {
 		dial.cancel()
+		m.mu.Lock()
+		if dial.state.Ended() && m.dialing[callID] == dial {
+			delete(m.dialing, callID)
+		}
+		m.mu.Unlock()
 		return nil
 	}
 	return errors.New("voice: no such call")
@@ -498,6 +574,8 @@ func sigTypeName(t SigType) string {
 		return "declined"
 	case SigBusy:
 		return "busy"
+	case SigHangup:
+		return "hung up"
 	default:
 		return fmt.Sprintf("sig(%d)", t)
 	}
