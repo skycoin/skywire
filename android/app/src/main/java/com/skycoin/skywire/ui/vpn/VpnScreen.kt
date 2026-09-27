@@ -66,6 +66,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.ui.components.CONNECTED_GREEN
+import com.skycoin.skywire.ui.components.FavoriteStar
+import com.skycoin.skywire.ui.components.FavoritesHeader
 import com.skycoin.skywire.ui.components.InfoRow
 import com.skycoin.skywire.ui.components.PENDING_AMBER
 import com.skycoin.skywire.ui.components.SavedServer
@@ -184,6 +186,23 @@ fun VpnScreen(
             }
 
             if (state.coreReady) {
+                // Starred exits first, where they can be found again without
+                // scrolling or searching — see FavoriteServers.
+                val favorites = state.favoriteRows
+                if (favorites.isNotEmpty()) {
+                    item { FavoritesHeader(favorites.size) }
+                    items(favorites, key = { "fav:" + it.entry.pk }) { row ->
+                        ServerRow(
+                            server = row.entry,
+                            selected = row.entry.pk == state.selectedPk,
+                            enabled = !state.busy,
+                            onClick = { connect(SavedServer.of(row.entry)) },
+                            favorite = true,
+                            onToggleFavorite = { viewModel.toggleFavorite(SavedServer.of(row.entry)) },
+                            unlisted = !row.listed,
+                        )
+                    }
+                }
                 item { ServersHeader(state, viewModel) }
                 items(state.filteredServers, key = { it.address }) { server ->
                     ServerRow(
@@ -191,6 +210,8 @@ fun VpnScreen(
                         selected = server.pk == state.selectedPk,
                         enabled = !state.busy,
                         onClick = { connect(SavedServer.of(server)) },
+                        favorite = state.isFavorite(server.pk),
+                        onToggleFavorite = { viewModel.toggleFavorite(SavedServer.of(server)) },
                     )
                 }
                 item { ServersFooter(state, viewModel) }
@@ -260,18 +281,28 @@ private fun StatusCard(
 
         state.selectedPk?.let { pk ->
             Spacer(Modifier.height(12.dp))
-            InfoRow(
-                label = stringResource(R.string.vpn_server),
-                value = listOfNotNull(
-                    state.selectedCountry?.let(::flagEmoji),
-                    shortPk(pk),
-                ).joinToString(" "),
-                mono = true,
-                modifier = Modifier.clickable {
-                    clipboard.setText(AnnotatedString(pk))
-                    Toast.makeText(context, copied, Toast.LENGTH_SHORT).show()
-                },
-            )
+            // The star is here as well as on the list: the moment a server
+            // turns out to be fast is while connected to it.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                InfoRow(
+                    label = stringResource(R.string.vpn_server),
+                    value = listOfNotNull(
+                        state.selectedCountry?.let(::flagEmoji),
+                        shortPk(pk),
+                    ).joinToString(" "),
+                    mono = true,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable {
+                            clipboard.setText(AnnotatedString(pk))
+                            Toast.makeText(context, copied, Toast.LENGTH_SHORT).show()
+                        },
+                )
+                FavoriteStar(
+                    favorite = state.isFavorite(pk),
+                    onToggle = { state.selectedServer?.let(viewModel::toggleFavorite) },
+                )
+            }
         }
 
         if (state.blocked && state.killswitch) {

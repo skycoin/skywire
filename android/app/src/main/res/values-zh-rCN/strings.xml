@@ -185,6 +185,10 @@
     <string name="socks_refresh">刷新</string>
 
     <!-- 服务器列表共用部分（SkySOCKS、SkyVPN） -->
+    <string name="servers_favorites">收藏（%1$d）</string>
+    <string name="favorite_add">添加到收藏</string>
+    <string name="favorite_remove">从收藏中移除</string>
+    <string name="favorite_unlisted">当前列表中没有</string>
     <string name="server_location_unknown">位置未知</string>
 
     <!-- 时长单位。中文不加空格，所以分隔符为空 -->
