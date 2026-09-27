@@ -279,6 +279,26 @@ func (r *RPC) SetRuntimeConfig(rawJSON *[]byte, _ *struct{}) (err error) {
 	return r.visor.SetRuntimeConfig(*rawJSON)
 }
 
+// Skyenv returns the visor's /etc/skywire.conf settings. See api_skyenv.go.
+func (r *RPC) Skyenv(_ *struct{}, out *visorapi.SkyenvState) (err error) {
+	defer rpcutil.LogCall(r.log, "Skyenv", nil)(out, &err)
+	st, err := r.visor.Skyenv()
+	*out = st
+	return err
+}
+
+// SetSkyenv edits /etc/skywire.conf the way `skywire autoconfig --<flag>` does.
+func (r *RPC) SetSkyenv(edits *visorapi.SkyenvEdits, out *visorapi.SkyenvState) (err error) {
+	// nil args: the values may be secrets.
+	defer rpcutil.LogCall(r.log, "SetSkyenv", nil)(out, &err)
+	if edits == nil {
+		return errors.New("nil skyenv edits")
+	}
+	st, err := r.visor.SetSkyenv(*edits)
+	*out = st
+	return err
+}
+
 // SetConfigFields applies a field-by-field edit to the running visor's
 // config. Live where a live setter is registered for the path, on-disk
 // (restart-required) otherwise. See api_config_fields.go.

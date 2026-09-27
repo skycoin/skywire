@@ -53,6 +53,9 @@ type Edit struct {
 	Key   string // bash variable name (e.g. "HYPERVISORPKS")
 	Value string // RHS, including quoting / array parens / value
 	Raw   string // the value as the flag gave it: bool text, string, number, or comma-separated list
+	// Unset comments out every active KEY= line instead, so config gen
+	// falls back to its default. Value and Raw are ignored.
+	Unset bool
 }
 
 // Update applies the edits to the file at path. The file
@@ -75,12 +78,14 @@ func Update(path string, edits []Edit) error {
 	// append-tail case. Map provides constant-time lookup during the
 	// scan; slice holds order for the eventual append.
 	desired := make(map[string]string, len(edits))
+	unset := make(map[string]bool, len(edits))
 	ordered := make([]string, 0, len(edits))
 	for _, e := range edits {
 		if _, ok := desired[e.Key]; !ok {
 			ordered = append(ordered, e.Key)
 		}
 		desired[e.Key] = e.Value
+		unset[e.Key] = e.Unset
 	}
 
 	src, err := os.Open(path) //nolint:gosec
@@ -98,8 +103,15 @@ func Update(path string, edits []Edit) error {
 		line := scanner.Text()
 		if k := LineKey(line); k != "" {
 			if v, ok := desired[k]; ok {
-				out = append(out, k+"="+v)
 				matched[k] = true
+				if unset[k] {
+					if !strings.HasPrefix(strings.TrimSpace(line), "#") {
+						line = "#" + line
+					}
+					out = append(out, line)
+					continue
+				}
+				out = append(out, k+"="+v)
 				continue
 			}
 		}
@@ -117,7 +129,7 @@ func Update(path string, edits []Edit) error {
 	// scanning the file later can tell autoconfig wrote it.
 	var appended []string
 	for _, k := range ordered {
-		if !matched[k] {
+		if !matched[k] && !unset[k] {
 			appended = append(appended, k+"="+desired[k])
 		}
 	}
