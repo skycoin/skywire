@@ -2,10 +2,12 @@ package visorconfig
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/proxyroute"
 )
 
 // TestParseResolverSpec covers the grammar RESOLVERS entries are written in.
@@ -259,7 +261,8 @@ func TestResolverConfigRoundTrip(t *testing.T) {
 		Name: "lan", Kind: ResolverKindDmsg, Enable: true, SecretKey: &sk,
 		ProxyPort: 4447, ProxyAddr: "0.0.0.0", DomainSuffix: ".dmsg",
 		UpstreamSOCKS: "127.0.0.1:1080", Chain: boolPtr(false), Alias: "gw",
-		SelfLoopback: boolPtr(false), SelfLoopbackAuthenticated: boolPtr(false),
+		UpstreamRules: []proxyroute.Rule{{Suffix: "example.com", Upstream: "127.0.0.1:1081"}},
+		SelfLoopback:  boolPtr(false), SelfLoopbackAuthenticated: boolPtr(false),
 		TLSMITM: true, TLSPort: 443, TLSCAPath: "/ca.pem", TLSCAKeyPath: "/ca.key",
 	}
 	b, err := json.Marshal(want)
@@ -280,7 +283,7 @@ func TestResolverConfigRoundTrip(t *testing.T) {
 	got.Chain, want.Chain = nil, nil
 	got.SelfLoopback, want.SelfLoopback = nil, nil
 	got.SelfLoopbackAuthenticated, want.SelfLoopbackAuthenticated = nil, nil
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("round-trip changed the entry:\n got %+v\nwant %+v", got, want)
 	}
 }

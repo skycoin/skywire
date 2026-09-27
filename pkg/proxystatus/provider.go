@@ -200,7 +200,11 @@ type Snapshot struct {
 	// subsystem holding a route group or a direct stream. Empty for every
 	// other surface.
 	Consumers []Consumer `json:"consumers,omitempty"`
-	Note      string     // optional human note (e.g. why a section is empty)
+	// DomainRoutes are the resolvers' per-domain upstream rules, last the
+	// default every other host takes. Skywire surface only; empty when no
+	// rule is set.
+	DomainRoutes []DomainRoute `json:"domain_routes,omitempty"`
+	Note         string        // optional human note (e.g. why a section is empty)
 }
 
 // Layer is the live state of one resolving-proxy layer (dmsg_web on :4445,
@@ -447,4 +451,17 @@ type Accept struct {
 	Opened      uint64  `json:"opened,omitempty"`
 	MaxOpenMS   float64 `json:"max_open_ms,omitempty"`
 	LastOpenErr string  `json:"last_open_err,omitempty"`
+}
+
+// DomainRoute is one per-domain upstream rule of the resolving proxies.
+type DomainRoute struct {
+	// Suffix is the domain the rule covers, with its subdomains; "*" for
+	// the default.
+	Suffix string `json:"suffix"`
+	// Upstream is the SOCKS5 address hosts matching Suffix leave through,
+	// or "direct".
+	Upstream string `json:"upstream"`
+	// Via names the local app listening on Upstream and whether it runs,
+	// empty when none is known.
+	Via string `json:"via,omitempty"`
 }

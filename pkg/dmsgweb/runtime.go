@@ -28,19 +28,18 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/0magnet/bottle/vnet"
 	"github.com/armon/go-socks5"
 	"github.com/chen3feng/safecast"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/ioutil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxyinterstitial"
+	"github.com/skycoin/skywire/pkg/proxyroute"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/skynetweb"
@@ -108,6 +107,9 @@ type Config struct {
 	// requests through this upstream SOCKS5 (e.g. "127.0.0.1:1080").
 	// Matches the existing `--addproxy` CLI flag.
 	UpstreamSOCKS string
+	// UpstreamRules send chosen domains to a different upstream, or
+	// "direct", ahead of UpstreamSOCKS.
+	UpstreamRules []proxyroute.Rule
 
 	// Stats, when non-nil, is updated for every SOCKS5 dial. The visor
 	// layer allocates one per resolver lifetime so counters persist
@@ -318,12 +320,16 @@ func normalize(cfg Config) Config {
 // panics if RemoteAddr() doesn't return *net.TCPAddr, so DMSG
 // streams are wrapped in tcpAddrConn.
 func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Config) error {
-	// Build the upstream SOCKS5 dialer ONCE and reuse it across requests
-	// (proxy.SOCKS5 returns a shareable proxy.Dialer). nil when no upstream
-	// is configured — those requests dial direct.
-	var upstream *upstreamForwarder
-	if cfg.UpstreamSOCKS != "" {
-		upstream = &upstreamForwarder{addr: cfg.UpstreamSOCKS}
+	// One forwarder per serve: it caches a SOCKS5 dialer per upstream and
+	// picks each host's upstream from UpstreamRules, falling back to
+	// UpstreamSOCKS. nil when neither is set — those requests dial direct.
+	rules, err := proxyroute.Normalize(cfg.UpstreamRules)
+	if err != nil {
+		return fmt.Errorf("upstream rules: %w", err)
+	}
+	var upstream *proxyroute.Forwarder
+	if fw := proxyroute.NewForwarder(cfg.UpstreamSOCKS, rules); fw.Active() {
+		upstream = fw
 	}
 	conf := &socks5.Config{
 		// Route go-socks5's own [ERR] lines through logrus so they match the
@@ -560,7 +566,7 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 				if origHost != "" {
 					addr = net.JoinHostPort(origHost, origPort)
 				}
-				return upstream.dial(network, addr)
+				return upstream.Dial(network, addr)
 			}
 			return net.Dial(network, addr)
 		},
@@ -591,59 +597,6 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 	return nil
 }
 
-// upstreamCooldown is how long forwarded dials fast-fail after a recent
-// upstream failure, so a burst of requests during the boot window (when the
-// upstream, e.g. skysocks-client on :1080, is not yet connected and refuses
-// the connection) doesn't each pay a full refused dial. Short by design —
-// the client retries.
-const upstreamCooldown = 500 * time.Millisecond
-
-// upstreamForwarder lazily builds and caches a SOCKS5 dialer to the upstream
-// proxy and reuses it across requests. proxy.SOCKS5 returns a proxy.Dialer
-// that is safe to share, so building it once — instead of per request —
-// avoids a wasteful allocation on every forwarded CONNECT. After a failed
-// dial it fast-fails subsequent requests for upstreamCooldown rather than
-// blocking or queueing them.
-type upstreamForwarder struct {
-	addr string
-
-	mu       sync.Mutex
-	dialer   proxy.Dialer
-	failedAt time.Time
-}
-
-// dial forwards through the cached upstream dialer, building it on first use.
-// It fast-fails during the cooldown window following a recent failure, and
-// records/clears the failure timestamp based on the dial outcome.
-func (f *upstreamForwarder) dial(network, addr string) (net.Conn, error) {
-	f.mu.Lock()
-	if !f.failedAt.IsZero() && time.Since(f.failedAt) < upstreamCooldown {
-		f.mu.Unlock()
-		return nil, fmt.Errorf("upstream SOCKS %s not ready (cooling down)", f.addr)
-	}
-	d := f.dialer
-	if d == nil {
-		nd, err := proxy.SOCKS5("tcp", f.addr, nil, proxy.Direct)
-		if err != nil {
-			f.mu.Unlock()
-			return nil, err
-		}
-		f.dialer = nd
-		d = nd
-	}
-	f.mu.Unlock()
-
-	conn, err := d.Dial(network, addr)
-	f.mu.Lock()
-	if err != nil {
-		f.failedAt = time.Now()
-	} else {
-		f.failedAt = time.Time{}
-	}
-	f.mu.Unlock()
-	return conn, err
-}
-
 // dmsgRedialProbe builds a proxyinterstitial.Probe that re-attempts the dial the
 // streaming interstitial stands in for, reporting the route ready (nil) once it
 // succeeds. It is a READINESS probe: for a .dmsg destination it re-dials the
@@ -652,7 +605,7 @@ func (f *upstreamForwarder) dial(network, addr string) (net.Conn, error) {
 // pkg/proxyinterstitial/stream.go). A non-.dmsg target re-attempts the
 // upstream/direct forward. On success the opened stream is closed immediately;
 // the browser's reload then rides the now-warm session/route.
-func dmsgRedialProbe(dmsgC *dmsg.Client, upstream *upstreamForwarder, cfg Config, origHost, addr, origPort string) proxyinterstitial.Probe {
+func dmsgRedialProbe(dmsgC *dmsg.Client, upstream *proxyroute.Forwarder, cfg Config, origHost, addr, origPort string) proxyinterstitial.Probe {
 	return func(ctx context.Context) error {
 		hostOnly := origHost
 		if i := strings.IndexByte(hostOnly, ':'); i >= 0 {
@@ -678,7 +631,7 @@ func dmsgRedialProbe(dmsgC *dmsg.Client, upstream *upstreamForwarder, cfg Config
 			e error
 		)
 		if upstream != nil {
-			c, e = upstream.dial("tcp", addr)
+			c, e = upstream.Dial("tcp", addr)
 		} else {
 			c, e = net.Dial("tcp", addr)
 		}

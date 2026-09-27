@@ -47,6 +47,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxyroute"
 	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
@@ -244,6 +245,12 @@ var liveConfigFieldTable = []liveConfigField{
 			return v.setEmbeddedProxyUpstreamPersist("dmsg", nv.String())
 		},
 	}, {
+		Path: "dmsg_web.upstream_rules",
+		Desc: "per-domain upstreams for the .dmsg proxy — [{suffix,upstream}], upstream is host:port or \"direct\"",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			return v.setEmbeddedProxyRulesPersist("dmsg", nv.Interface().([]proxyroute.Rule))
+		},
+	}, {
 		Path: "skynet_web.enable",
 		Desc: "run the .skynet resolving proxy",
 		apply: func(v *Visor, _ string, nv reflect.Value) error {
@@ -260,6 +267,12 @@ var liveConfigFieldTable = []liveConfigField{
 		Desc: "SOCKS5 upstream the .skynet proxy forwards non-matching CONNECTs to",
 		apply: func(v *Visor, _ string, nv reflect.Value) error {
 			return v.setEmbeddedProxyUpstreamPersist("skynet", nv.String())
+		},
+	}, {
+		Path: "skynet_web.upstream_rules",
+		Desc: "per-domain upstreams for the .skynet proxy — [{suffix,upstream}], upstream is host:port or \"direct\"",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			return v.setEmbeddedProxyRulesPersist("skynet", nv.Interface().([]proxyroute.Rule))
 		},
 	},
 }
@@ -781,4 +794,45 @@ func mirroredJSONField(block reflect.Value, name string) bool {
 		}
 	}
 	return false
+}
+
+// setEmbeddedProxyRulesPersist validates rules, applies them to the running
+// resolver and writes them to the config. Validation comes first so a bad rule
+// neither reaches the file nor stops the resolver.
+func (v *Visor) setEmbeddedProxyRulesPersist(kind string, rules []proxyroute.Rule) error {
+	rules, err := proxyroute.Normalize(rules)
+	if err != nil {
+		return err
+	}
+	if len(rules) == 0 {
+		rules = nil
+	}
+	v.initLock.Lock()
+	dw, sw := v.embeddedDmsgWeb, v.embeddedSkynetWeb
+	v.initLock.Unlock()
+	switch kind {
+	case "dmsg":
+		if dw != nil {
+			if err := dw.SetUpstreamRules(rules); err != nil {
+				return err
+			}
+		}
+		if v.conf.DmsgWeb == nil {
+			v.conf.DmsgWeb = &visorconfig.DmsgWebConfig{}
+		}
+		v.conf.DmsgWeb.UpstreamRules = rules
+	case "skynet":
+		if sw != nil {
+			if err := sw.SetUpstreamRules(rules); err != nil {
+				return err
+			}
+		}
+		if v.conf.SkynetWeb == nil {
+			v.conf.SkynetWeb = &visorconfig.SkynetWebConfig{}
+		}
+		v.conf.SkynetWeb.UpstreamRules = rules
+	default:
+		return fmt.Errorf("unknown proxy kind %q", kind)
+	}
+	return v.conf.Flush()
 }

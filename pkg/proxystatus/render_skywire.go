@@ -60,6 +60,7 @@ func writeConsumersSection(b *strings.Builder, snap Snapshot) {
 	if snap.Surface != SurfaceSkywire {
 		return
 	}
+	writeDomainRoutes(b, snap.DomainRoutes)
 	fmt.Fprintf(b, `<section><h2>route users <small>%d</small></h2>`, len(snap.Consumers))
 	if len(snap.Consumers) == 0 {
 		b.WriteString(`<p class="empty">Nothing on this visor holds a route or a direct stream right now.</p></section>`)
@@ -113,4 +114,23 @@ func writeConsumersSection(b *strings.Builder, snap Snapshot) {
 		b.WriteString(`</section>`)
 	}
 	writeTreeLegend(b)
+}
+
+// writeDomainRoutes is the table of per-domain upstreams: which exit each
+// domain leaves through. Nothing is written when no rule is set.
+func writeDomainRoutes(b *strings.Builder, routes []DomainRoute) {
+	if len(routes) == 0 {
+		return
+	}
+	b.WriteString(`<section><h2>domain routes</h2><table class="strm"><thead><tr>` +
+		`<th>domain</th><th>upstream</th><th>via</th></tr></thead><tbody>`)
+	for _, r := range routes {
+		suffix := r.Suffix
+		if suffix == "*" {
+			suffix = "everything else"
+		}
+		fmt.Fprintf(b, `<tr><td>%s</td><td><code>%s</code></td><td>%s</td></tr>`,
+			html.EscapeString(suffix), html.EscapeString(r.Upstream), html.EscapeString(r.Via))
+	}
+	b.WriteString(`</tbody></table></section>`)
 }

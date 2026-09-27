@@ -33,3 +33,19 @@ func TestMatchSkywire(t *testing.T) {
 		t.Fatalf("status.skywire: got %q %v", s, ok)
 	}
 }
+
+func TestRenderSkywireDomainRoutes(t *testing.T) {
+	snap := Snapshot{Surface: SurfaceSkywire, DomainRoutes: []DomainRoute{
+		{Suffix: "example.com", Upstream: "127.0.0.1:1085", Via: "skysocks-client-2 · running"},
+		{Suffix: "*", Upstream: "127.0.0.1:1080", Via: "skysocks-client · running"},
+	}}
+	out := string(Render(snap))
+	for _, want := range []string{"domain routes", "example.com", "127.0.0.1:1085", "skysocks-client-2 · running", "everything else"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("page lacks %q", want)
+		}
+	}
+	if strings.Contains(string(Render(Snapshot{Surface: SurfaceSkywire})), "domain routes") {
+		t.Fatal("domain routes section drawn with no rules")
+	}
+}
