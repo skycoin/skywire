@@ -126,6 +126,9 @@ type Config struct {
 	// TLSPort selects the destination port treated as TLS for MITM.
 	// Defaults to 443. Ignored when TLSMITM is false.
 	TLSPort uint16
+	// TLSUpstreamPort is the destination port a MITM'd TLS connection is
+	// sent to once decrypted. Defaults to 80, where visors serve HTTP.
+	TLSUpstreamPort uint16
 	// LeafMinter mints per-host leaf certs. Required when TLSMITM
 	// is true; ignored otherwise.
 	LeafMinter skynetca.LeafMinter
@@ -237,6 +240,9 @@ func Run(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Confi
 		}
 		if cfg.TLSPort == 0 {
 			cfg.TLSPort = 443
+		}
+		if cfg.TLSUpstreamPort == 0 {
+			cfg.TLSUpstreamPort = 80
 		}
 	}
 
@@ -461,6 +467,14 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 					return nil, fmt.Errorf("invalid port: %w", err)
 				}
 
+				// A MITM'd TLS connection arrives decrypted, so it goes to the
+				// site's plain-HTTP port rather than the TLS port the browser named.
+				mitm := cfg.TLSMITM && uint16(port) == cfg.TLSPort
+				dialPort := uint16(port)
+				if mitm {
+					dialPort = cfg.TLSUpstreamPort
+				}
+
 				// Self-lookup short-circuit: a request whose destination is THIS
 				// visor is served from the local service in-process, rather than
 				// dialing out over dmsg back to ourselves (a wasteful, 202-prone
@@ -468,9 +482,17 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 				// full self-transport path for testing.
 				if cfg.SelfLoopback && cfg.SelfDial != nil && dest == cfg.LocalPK && len(route) == 0 {
 					log.WithField("port", port).Debug("SOCKS5 → DMSG self-loopback (in-process)")
-					c, derr := cfg.SelfDial(uint16(port))
+					c, derr := cfg.SelfDial(dialPort)
 					if derr != nil {
 						return nil, derr
+					}
+					if mitm {
+						leaf, lerr := cfg.LeafMinter.For(origHost)
+						if lerr != nil {
+							_ = c.Close() //nolint:errcheck,gosec
+							return nil, fmt.Errorf("dmsg mitm leaf: %w", lerr)
+						}
+						return &tcpAddrConn{Conn: skynetca.MITMTerminate(c, leaf)}, nil
 					}
 					// Wrap so LocalAddr()/RemoteAddr() return *net.TCPAddr —
 					// go-socks5 (request.go:194) does an unchecked assertion
@@ -480,7 +502,7 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 					return &tcpAddrConn{Conn: c}, nil
 				}
 
-				dstAddr := dmsg.Addr{PK: dest, Port: uint16(port)}
+				dstAddr := dmsg.Addr{PK: dest, Port: dialPort}
 				var stream net.Conn
 				_, isDirectServer := cfg.DirectServerPKs[dest]
 				switch {
@@ -550,7 +572,7 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 				// already authenticated by visor pubkey; the local
 				// cert exists only to satisfy the browser's
 				// secure-context machinery.
-				if cfg.TLSMITM && uint16(port) == cfg.TLSPort {
+				if mitm {
 					leaf, lerr := cfg.LeafMinter.For(origHost)
 					if lerr != nil {
 						_ = stream.Close() //nolint:errcheck,gosec
@@ -625,6 +647,9 @@ func dmsgRedialProbe(dmsgC *dmsg.Client, upstream *proxyroute.Forwarder, cfg Con
 			_, _, dest, port, perr := skynetweb.ParseResolverHost(hp, cfg.DomainSuffix, cfg.Aliases)
 			if perr != nil {
 				return perr
+			}
+			if cfg.TLSMITM && port == cfg.TLSPort {
+				port = cfg.TLSUpstreamPort
 			}
 			c, e := dmsgC.Dial(ctx, dmsg.Addr{PK: dest, Port: port})
 			if e == nil {

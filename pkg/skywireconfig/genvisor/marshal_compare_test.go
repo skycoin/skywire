@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/proxyroute"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -20,24 +21,40 @@ import (
 // the two implementations.
 func TestMustMarshalJSONNative_MatchesStdlib(t *testing.T) {
 	cases := []struct {
-		name string
-		opts Options
+		name   string
+		opts   Options
+		mutate func(*visorconfig.V1)
 	}{
-		{"defaults", Options{}},
-		{"hypervisor", Options{IsHypervisor: true}},
+		{"defaults", Options{}, nil},
+		{"hypervisor", Options{IsHypervisor: true}, nil},
 		{"reward+public", Options{
 			RewardAddress: "2jnZqqJsCMB1v4VUKk6f1PDN9EuLZQxqoqp",
 			IsPublic:      true,
-		}},
+		}, nil},
 		{"pinned-sk", func() Options {
 			_, sk := cipher.GenerateKeyPair()
 			return Options{SecretKey: sk}
-		}()},
-		{"testenv", Options{TestEnv: true}},
+		}(), nil},
+		{"testenv", Options{TestEnv: true}, nil},
+		{"resolver-rules-tls", Options{}, func(v *visorconfig.V1) {
+			rules := []proxyroute.Rule{{Suffix: "example.com", Upstream: "127.0.0.1:1081"}, {Suffix: "lan.example", Upstream: proxyroute.Direct}}
+			if v.DmsgWeb == nil {
+				v.DmsgWeb = &visorconfig.DmsgWebConfig{}
+			}
+			if v.SkynetWeb == nil {
+				v.SkynetWeb = &visorconfig.SkynetWebConfig{}
+			}
+			v.DmsgWeb.UpstreamRules, v.DmsgWeb.TLSMITM, v.DmsgWeb.TLSPort, v.DmsgWeb.TLSUpstreamPort = rules, true, 443, 8080
+			v.SkynetWeb.UpstreamRules, v.SkynetWeb.TLSMITM, v.SkynetWeb.TLSUpstreamPort = rules, true, 8080
+			v.Resolvers = []visorconfig.ResolverConfig{{Name: "lan", Enable: true, ProxyPort: 4447, UpstreamRules: rules, TLSUpstreamPort: 8080}}
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			v, err := Generate(c.opts)
+			if err == nil && c.mutate != nil {
+				c.mutate(v)
+			}
 			if err != nil {
 				t.Fatalf("Generate: %v", err)
 			}
