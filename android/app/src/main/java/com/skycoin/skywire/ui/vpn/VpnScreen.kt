@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
 import com.skycoin.skywire.core.CoreState
+import com.skycoin.skywire.core.VpnAppMode
 import com.skycoin.skywire.ui.components.CONNECTED_GREEN
 import com.skycoin.skywire.ui.components.FavoriteStar
 import com.skycoin.skywire.ui.components.FavoritesHeader
@@ -103,6 +104,7 @@ fun VpnScreen(
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     var transportSheetOpen by remember { mutableStateOf(false) }
+    var appPickerOpen by remember { mutableStateOf(false) }
 
     // Android will not create a TUN until the user has agreed to it, in the
     // system's own dialog. prepare() returns the intent that asks; a null
@@ -165,6 +167,28 @@ fun VpnScreen(
                 )
             }
             item {
+                AppRoutingCard(
+                    routing = state.appRouting,
+                    // A phone preference, like the killswitch: changeable with
+                    // the core down, applied the next time the tunnel is built.
+                    enabled = !state.busy,
+                    onMode = { mode ->
+                        viewModel.setAppMode(mode)
+                        // Choosing "only these" or "all but these" with
+                        // nothing chosen yet goes straight to choosing.
+                        val chosen = if (mode == VpnAppMode.ONLY) state.appRouting.only else state.appRouting.except
+                        if (mode != VpnAppMode.ALL && chosen.isEmpty()) {
+                            viewModel.loadInstalledApps()
+                            appPickerOpen = true
+                        }
+                    },
+                    onChooseApps = {
+                        viewModel.loadInstalledApps()
+                        appPickerOpen = true
+                    },
+                )
+            }
+            item {
                 TransportPreferenceCard(
                     primary = state.transportPrimary,
                     enabled = !state.busy,
@@ -217,6 +241,20 @@ fun VpnScreen(
                 item { ServersFooter(state, viewModel) }
             }
         }
+    }
+
+    if (appPickerOpen && state.appRouting.mode != VpnAppMode.ALL) {
+        val mode = state.appRouting.mode
+        AppPickerSheet(
+            mode = mode,
+            apps = state.installedApps,
+            initial = state.appRouting.selected,
+            onDismiss = { appPickerOpen = false },
+            onDone = { apps ->
+                viewModel.setApps(mode, apps)
+                appPickerOpen = false
+            },
+        )
     }
 
     if (transportSheetOpen) {

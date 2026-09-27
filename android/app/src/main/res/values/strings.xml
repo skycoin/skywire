@@ -230,6 +230,25 @@
     <string name="vpn_stats_total">Total on this phone</string>
     <string name="vpn_stats_interface">Interface</string>
 
+    <string name="vpn_apps_title">Apps using SkyVPN</string>
+    <string name="vpn_apps_mode_all">All apps</string>
+    <string name="vpn_apps_mode_all_hint">Every app goes through the tunnel.</string>
+    <string name="vpn_apps_mode_only">Only selected apps</string>
+    <string name="vpn_apps_mode_only_hint">Only the apps you choose go through the tunnel. The rest use your normal connection, unaffected.</string>
+    <string name="vpn_apps_mode_except">All apps except selected</string>
+    <string name="vpn_apps_mode_except_hint">Every app goes through the tunnel except the ones you choose.</string>
+    <string name="vpn_apps_choose">Choose apps</string>
+    <plurals name="vpn_apps_count">
+        <item quantity="one">%d app chosen</item>
+        <item quantity="other">%d apps chosen</item>
+    </plurals>
+    <string name="vpn_apps_none">No apps chosen yet. SkyVPN will not connect until you choose at least one.</string>
+    <string name="vpn_apps_picker_only">Apps that use SkyVPN</string>
+    <string name="vpn_apps_picker_except">Apps that skip SkyVPN</string>
+    <string name="vpn_apps_search">Search apps</string>
+    <string name="vpn_apps_done">Done</string>
+    <string name="vpn_apps_empty">No apps match.</string>
+    <string name="vpn_error_no_apps">Choose at least one app for SkyVPN, or switch to All apps.</string>
     <string name="vpn_killswitch_title">Killswitch</string>
     <string name="vpn_killswitch_hint">Keeps the network interface in place while the tunnel is down, so nothing leaks out around it. Other apps have no connection until it comes back.</string>
     <string name="vpn_killswitch_always_on">Always-on VPN settings</string>

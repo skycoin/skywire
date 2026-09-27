@@ -275,6 +275,26 @@
     <string name="vpn_stats_total">Total en este teléfono</string>
     <string name="vpn_stats_interface">Interfaz</string>
 
+    <string name="vpn_apps_title">Aplicaciones que usan SkyVPN</string>
+    <string name="vpn_apps_mode_all">Todas las aplicaciones</string>
+    <string name="vpn_apps_mode_all_hint">Todas las aplicaciones pasan por el túnel.</string>
+    <string name="vpn_apps_mode_only">Solo las aplicaciones elegidas</string>
+    <string name="vpn_apps_mode_only_hint">Solo las aplicaciones que elijas pasan por el túnel. El resto usa tu conexión normal, sin cambios.</string>
+    <string name="vpn_apps_mode_except">Todas excepto las elegidas</string>
+    <string name="vpn_apps_mode_except_hint">Todas las aplicaciones pasan por el túnel excepto las que elijas.</string>
+    <string name="vpn_apps_choose">Elegir aplicaciones</string>
+    <plurals name="vpn_apps_count">
+        <item quantity="one">%d aplicación elegida</item>
+        <item quantity="many">%d de aplicaciones elegidas</item>
+        <item quantity="other">%d aplicaciones elegidas</item>
+    </plurals>
+    <string name="vpn_apps_none">Todavía no has elegido ninguna aplicación. SkyVPN no se conectará hasta que elijas al menos una.</string>
+    <string name="vpn_apps_picker_only">Aplicaciones que usan SkyVPN</string>
+    <string name="vpn_apps_picker_except">Aplicaciones que no usan SkyVPN</string>
+    <string name="vpn_apps_search">Buscar aplicaciones</string>
+    <string name="vpn_apps_done">Listo</string>
+    <string name="vpn_apps_empty">Ninguna aplicación coincide.</string>
+    <string name="vpn_error_no_apps">Elige al menos una aplicación para SkyVPN o cambia a Todas las aplicaciones.</string>
     <string name="vpn_killswitch_title">Kill switch</string>
     <string name="vpn_killswitch_hint">Mantiene la interfaz de red en pie mientras el túnel está caído, para que nada se escape por fuera. Las demás apps se quedan sin conexión hasta que vuelva.</string>
     <string name="vpn_killswitch_always_on">Ajustes de VPN siempre activa</string>
