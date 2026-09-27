@@ -32,3 +32,11 @@ var Pool = sync.OnceValue(func() *x509.CertPool {
 	p.AppendCertsFromPEM(pem)
 	return p
 })
+
+// InstallFallback makes the bundle the roots crypto/x509 falls back to when
+// the platform has none, which under js/wasm is always. After it, a Go TLS
+// client that names no RootCAs of its own — `skywire cli got`, for one —
+// verifies against this bundle instead of failing every certificate. Call it
+// on the way into such a client, not at init, for the reason Pool is lazy.
+// It is idempotent; natively the platform verifier still wins.
+var InstallFallback = sync.OnceFunc(func() { x509.SetFallbackRoots(Pool()) })

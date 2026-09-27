@@ -10,6 +10,8 @@ import (
 
 	"github.com/0magnet/got"
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/pkg/proxyenv"
 )
 
 var (
@@ -32,21 +34,21 @@ func init() {
 	dlCmd.Flags().UintVarP(&concurrency, "concurrency", "c", 0, "number of concurrent chunks (0 = auto)")
 	dlCmd.Flags().Uint64Var(&chunkSize, "chunk-size", 0, "chunk size in bytes (0 = auto)")
 	dlCmd.Flags().StringSliceVarP(&headers, "header", "H", nil, `HTTP header "Key: Value"`)
-	dlCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "SOCKS5 proxy (host:port, socks5://host:port, or socks5h://host:port — h has the proxy resolve the destination, e.g. dmsgweb's <pk>.dmsg)")
+	dlCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "SOCKS5 proxy (host:port, socks5://host:port, or socks5h://host:port — h has the proxy resolve the destination, e.g. dmsgweb's <pk>.dmsg); unset: ALL_PROXY / https_proxy / http_proxy, minus NO_PROXY; '': none")
 	dlCmd.Flags().StringVarP(&userAgent, "agent", "A", "", "user agent string")
 	dlCmd.Flags().BoolVarP(&resume, "resume", "r", false, "resume interrupted download")
 
 	// Request flags
 	reqCmd.Flags().StringVarP(&output, "output", "o", "", "write response body to file")
 	reqCmd.Flags().StringSliceVarP(&headers, "header", "H", nil, `HTTP header "Key: Value"`)
-	reqCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "SOCKS5 proxy (host:port, socks5://host:port, or socks5h://host:port — h has the proxy resolve the destination, e.g. dmsgweb's <pk>.dmsg)")
+	reqCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "SOCKS5 proxy (host:port, socks5://host:port, or socks5h://host:port — h has the proxy resolve the destination, e.g. dmsgweb's <pk>.dmsg); unset: ALL_PROXY / https_proxy / http_proxy, minus NO_PROXY; '': none")
 	reqCmd.Flags().StringVarP(&userAgent, "agent", "A", "", "user agent string")
 	reqCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "print response headers")
 	reqCmd.Flags().StringVarP(&data, "data", "D", "", `request body (or @filename to read from file)`)
 
 	// Head flags
 	headCmd.Flags().StringSliceVarP(&headers, "header", "H", nil, `HTTP header "Key: Value"`)
-	headCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "SOCKS5 proxy (host:port, socks5://host:port, or socks5h://host:port — h has the proxy resolve the destination, e.g. dmsgweb's <pk>.dmsg)")
+	headCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "SOCKS5 proxy (host:port, socks5://host:port, or socks5h://host:port — h has the proxy resolve the destination, e.g. dmsgweb's <pk>.dmsg); unset: ALL_PROXY / https_proxy / http_proxy, minus NO_PROXY; '': none")
 	headCmd.Flags().StringVarP(&userAgent, "agent", "A", "", "user agent string")
 
 	RootCmd.AddCommand(dlCmd, reqCmd, headCmd)
@@ -103,7 +105,7 @@ SkynetHTTP / DmsgHTTP RPC and complete in a single GET (no chunking).`,
 			return
 		}
 
-		g, err := newGot()
+		g, err := newGot(cmd, httpURLs[0])
 		if err != nil {
 			fatal(err)
 		}
@@ -171,7 +173,7 @@ Examples:
 			fatal(err)
 		}
 
-		g, err := newGot()
+		g, err := newGot(cmd, url)
 		if err != nil {
 			fatal(err)
 		}
@@ -239,7 +241,7 @@ var headCmd = &cobra.Command{
 			fatal(err)
 		}
 
-		g, err := newGot()
+		g, err := newGot(cmd, url)
 		if err != nil {
 			fatal(err)
 		}
@@ -263,13 +265,24 @@ var headCmd = &cobra.Command{
 	},
 }
 
-func newGot() (*got.Got, error) {
+// newGot builds the client for rawURL. -x names the proxy; without it the proxy
+// environment decides, as it does for curl: ALL_PROXY, https_proxy, http_proxy
+// and NO_PROXY (see pkg/proxyenv). A browser visor's desk shell exports
+// ALL_PROXY=socks5h://127.0.0.1:4445, its resolving proxy. -x "" asks for no
+// proxy at all.
+func newGot(cmd *cobra.Command, rawURL string) (*got.Got, error) {
 	if userAgent != "" {
 		got.UserAgent = userAgent
 	}
 
-	if proxyAddr != "" {
-		return got.NewWithProxy(context.TODO(), proxyAddr)
+	useBundledRoots()
+
+	p := proxyAddr
+	if p == "" && (cmd == nil || !cmd.Flags().Changed("proxy")) {
+		p = proxyenv.For(rawURL, os.Getenv)
+	}
+	if p != "" {
+		return got.NewWithProxy(context.TODO(), p)
 	}
 
 	return got.New(), nil

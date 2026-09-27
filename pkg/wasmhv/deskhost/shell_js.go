@@ -535,7 +535,7 @@ func openShell(el js.Value) *shellSession {
 	s.stdinW = stdinW
 
 	vfs := sharedShellFS()
-	sh, err := shell.New(vfs, stdinR, out, out)
+	sh, err := shell.New(vfs, stdinR, out, out, deskShellEnv()...)
 	if err != nil {
 		term.WriteString("failed to start the shell: " + err.Error() + "\r\n")
 		return s

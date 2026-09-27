@@ -92,8 +92,8 @@ github.com/0magnet/gobrpc v0.0.0-20260906144809-5215ec59d553 h1:Ko3+QbLQffRCkBiw
 github.com/0magnet/gobrpc v0.0.0-20260906144809-5215ec59d553/go.mod h1:5joDnUjX144nn7nIcxUhRcTFl28mchWE+io9jRRWaLw=
 github.com/0magnet/golang-ipc v1.2.5-0.20260905172007-25d9c1a262d0 h1:wOukXHivOHjwpZBgb2g+BKr+BSRKhCpc32ydXlOol1M=
 github.com/0magnet/golang-ipc v1.2.5-0.20260905172007-25d9c1a262d0/go.mod h1:gPwsOt0fgslUScuHXpWzt4vDmmEEXygLIAr7xBKk8X8=
-github.com/0magnet/got v0.0.0-20260915170035-135ca6205ee9 h1:SYPqeEhD15BB2mFbLkqps8kTTOuWiJJRsqXHdgIytVg=
-github.com/0magnet/got v0.0.0-20260915170035-135ca6205ee9/go.mod h1:YAmKbOC6S0QKVnzAS0908rr88/OhMbmpiD+/yVgr5C8=
+github.com/0magnet/got v0.0.0-20260927223336-eaa93e36502d h1:/prhZPiIsI4mo2kRA/X3DyJaffchpulkWVCsb1DGWys=
+github.com/0magnet/got v0.0.0-20260927223336-eaa93e36502d/go.mod h1:ROa90xYcmmhMJDR9oWyMDR+YSpcLB7LvQ6ttW5aZc4s=
 github.com/0magnet/gotop/v4 v4.2.1-0.20260914190639-4f45ea554d47 h1:SbttY7dk1jvFj0/+P/9I2GTNjEzdNiUe1kr1UweWGbE=
 github.com/0magnet/gotop/v4 v4.2.1-0.20260914190639-4f45ea554d47/go.mod h1:haYbhBW68wqSPNiH6Q0ZOBBQhgEufUS2ZECSpagUSVc=
 github.com/0magnet/lolcat-go v0.0.0-20260915170035-9435f1eb43a8 h1:GykYi9LaVcXcWVhtYwqUDLjVa+nzyu0gZZXRgZGU1ZM=

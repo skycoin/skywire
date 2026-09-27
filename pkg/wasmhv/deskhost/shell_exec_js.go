@@ -49,7 +49,7 @@ func runHeadless(ctx context.Context, cmd string) (string, error) {
 	registerMeshApplets()
 	registerCurl()
 	out := &lockedBuffer{}
-	sh, err := shell.New(sharedShellFS(), strings.NewReader(""), out, out)
+	sh, err := shell.New(sharedShellFS(), strings.NewReader(""), out, out, deskShellEnv()...)
 	if err != nil {
 		return "", err
 	}

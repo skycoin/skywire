@@ -148,14 +148,14 @@ func TestNewGot(t *testing.T) {
 
 	t.Run("default (no proxy)", func(t *testing.T) {
 		userAgent, proxyAddr = "", ""
-		g, err := newGot()
+		g, err := newGot(nil, "https://example.com/")
 		require.NoError(t, err)
 		require.NotNil(t, g)
 	})
 
 	t.Run("custom user agent", func(t *testing.T) {
 		userAgent, proxyAddr = "MyAgent/1.0", ""
-		g, err := newGot()
+		g, err := newGot(nil, "https://example.com/")
 		require.NoError(t, err)
 		require.NotNil(t, g)
 		require.Equal(t, "MyAgent/1.0", got.UserAgent)
@@ -163,7 +163,7 @@ func TestNewGot(t *testing.T) {
 
 	t.Run("with proxy", func(t *testing.T) {
 		userAgent, proxyAddr = "", "127.0.0.1:1080"
-		g, err := newGot()
+		g, err := newGot(nil, "https://example.com/")
 		require.NoError(t, err) // SOCKS5 dialer is built lazily, no dial here
 		require.NotNil(t, g)
 	})
@@ -196,4 +196,22 @@ func TestCommandWiring(t *testing.T) {
 	require.NotNil(t, reqCmd.Flags().Lookup("data"))
 	require.NotNil(t, reqCmd.Flags().Lookup("verbose"))
 	require.NotNil(t, headCmd.Flags().Lookup("header"))
+}
+
+// TestNewGotReadsProxyEnv: with no -x, ALL_PROXY picks the proxy, as curl's
+// environment does; a malformed one is an error rather than a silent direct
+// fetch.
+func TestNewGotReadsProxyEnv(t *testing.T) {
+	origProxy := proxyAddr
+	defer func() { proxyAddr = origProxy }()
+	proxyAddr = ""
+
+	t.Setenv("ALL_PROXY", "socks5h://127.0.0.1:4445")
+	g, err := newGot(nil, "https://example.com/")
+	require.NoError(t, err)
+	require.NotNil(t, g)
+
+	t.Setenv("ALL_PROXY", "ftp://nope:1")
+	_, err = newGot(nil, "https://example.com/")
+	require.Error(t, err, "an unusable ALL_PROXY must not fall back to a direct fetch")
 }
