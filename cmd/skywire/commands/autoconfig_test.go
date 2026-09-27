@@ -315,3 +315,27 @@ func TestBuildGenArgs_NoOutputKeepsModeFlag(t *testing.T) {
 		})
 	}
 }
+
+// TestCollectSkyenvEdits_ClearsAttachFlags pins what an unattached desk boot
+// passes to undo an attached one: autoconn back to false and no WebSocket
+// peers, written in the template's own empty-array form.
+func TestCollectSkyenvEdits_ClearsAttachFlags(t *testing.T) {
+	restore := autoconfigVals
+	t.Cleanup(func() { autoconfigVals = restore })
+	autoconfigVals = autoconfigcmd.Values{}
+	cmd := autoconfigcmd.New(&autoconfigVals)
+
+	if err := cmd.ParseFlags([]string{"--ishv", "--disable-public-autoconn=false", "--ws-peer="}); err != nil {
+		t.Fatalf("ParseFlags: %v", err)
+	}
+	got := map[string]string{}
+	for _, e := range collectSkyenvEdits(cmd) {
+		got[e.Key] = e.Value
+	}
+	if got["DISABLEPUBLICAUTOCONN"] != "false" {
+		t.Errorf("DISABLEPUBLICAUTOCONN = %q; want %q", got["DISABLEPUBLICAUTOCONN"], "false")
+	}
+	if got["WSPEERS"] != "('')" {
+		t.Errorf("WSPEERS = %q; want %q", got["WSPEERS"], "('')")
+	}
+}
