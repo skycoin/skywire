@@ -1238,8 +1238,8 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	// (2.5) Swap out a SUSTAINED-unhealthy PRIMARY (safety — bypasses the
 	// cooldown). Leg 0 can't be parked to standby (setLegStandby refuses idx 0 —
 	// the group must always have a send leg), so a gross-outlier primary escapes
-	// rule (2) entirely. DROP it instead: dropLegsByIndex flushes leg 0's in-
-	// flight window onto a healthy active leg first, then removeLegs compacts and
+	// rule (2) entirely. DROP it instead: the router's rotation apply resends leg 0's in-flight
+	// window onto a surviving leg (rotationServiceFn), removeLegs compacts and
 	// promotes the next aux into the primary slot, and self-heal (fired by the
 	// drop) re-dials a replacement into the reserve — a hot-swap of the primary
 	// with the retx buffer rescued. Only fires with a healthy active alternative

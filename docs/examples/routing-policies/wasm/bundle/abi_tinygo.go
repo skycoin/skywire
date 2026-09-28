@@ -15,11 +15,9 @@ import (
 	"github.com/skycoin/skywire/pkg/router/policy/preset"
 )
 
-// engine holds the adaptive tick controllers' per-transport_id state for this
-// module instance. One instance mirrors the bundle's original package-global
-// tick state (the host instantiates one wazero module per policy load, so this
-// is created fresh per load); the native visor constructs its own preset.Engine
-// per evaluator the same way.
+// engines holds the adaptive tick controllers' state for this module
+// instance, one Engine per route group (preset.Engines): the host loads one
+// module per app and ticks it for every route group that app holds.
 //
 // It is created LAZILY on the first tick, NOT as a package-var initializer
 // (`var engine = preset.New()`). TinyGo's compile-time interp pass partially
@@ -28,16 +26,19 @@ import (
 // the guest. Constructing it at runtime through engineForTick sidesteps the
 // interp pass entirely; the parity test's coupled/ledbat/adaptive tick cases
 // guard against a regression.
-var engine *preset.Engine
+var engines *preset.Engines
 
-// engineForTick returns the module's Engine, constructing it on first use.
+// engineForTick returns the Engine for the route group ctx names, constructing
+// the table on first use. The host ticks one module for every route group an
+// app holds, so the controller state is kept per group (see preset.Engines);
+// a host that sends no local port gets the one shared Engine as before.
 // on_tick is serialized by the host (one wazero call at a time), so no locking
 // is needed.
-func engineForTick() *preset.Engine {
-	if engine == nil {
-		engine = preset.New()
+func engineForTick(ctx routingContextWire) *preset.Engine {
+	if engines == nil {
+		engines = &preset.Engines{}
 	}
-	return engine
+	return engines.For(preset.GroupKey(ctx.PeerPK, ctx.Port, ctx.LocalPort))
 }
 
 // Required: host-driven memory management.
@@ -109,7 +110,7 @@ func onTick(inPtr, inLen uint32) uint64 {
 		return 0
 	}
 	applyTunables(input.AdaptCap, input.AdaptRevActive, input.AdaptStandbyMax)
-	action := engineForTick().OnTick(input.Preset, legsToPreset(input.Legs))
+	action := engineForTick(input.Ctx).OnTick(input.Preset, legsToPreset(input.Legs))
 	out, err := json.Marshal(actionToWire(action))
 	if err != nil {
 		return 0

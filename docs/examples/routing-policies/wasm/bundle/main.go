@@ -50,6 +50,7 @@ type routingContextWire struct {
 	App               string            `json:"app"`
 	PeerPK            string            `json:"peer_pk"`
 	Port              uint16            `json:"port"`
+	LocalPort         uint16            `json:"local_port,omitempty"`
 	NowUnixNano       int64             `json:"now_unix_nano"`
 	CLIOverrides      map[string]string `json:"cli_overrides"`
 	IsDirectDial      bool              `json:"is_direct_dial"`
