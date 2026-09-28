@@ -78,6 +78,7 @@ type compactTransportRow struct {
 type compactTransportMetrics struct {
 	Metrics          []compactTransportRow `json:"metrics"`
 	Total            int                   `json:"total"`
+	Live             int                   `json:"live"`
 	Returned         int                   `json:"returned"`
 	NetworkBandwidth uint64                `json:"network_bandwidth"`
 	Partial          bool                  `json:"partial"`
@@ -101,7 +102,7 @@ const maxMetricsLimit = 10000
 // failing outright. That matters because the upstream response IS routinely
 // truncated on a large deployment, and a partial answer is worth far more here
 // than an error page.
-func reduceTransportMetrics(body []byte, limit int) (compactTransportMetrics, error) {
+func reduceTransportMetrics(body []byte, limit int, liveOnly bool) (compactTransportMetrics, error) {
 	if limit <= 0 {
 		limit = defaultMetricsLimit
 	}
@@ -132,8 +133,20 @@ func reduceTransportMetrics(body []byte, limit int) (compactTransportMetrics, er
 			break
 		}
 		out.Total++
+		if m.Live {
+			out.Live++
+		}
 
 		if len(m.Edges) < 2 {
+			continue
+		}
+		// TPD keeps a transport's bandwidth history long after it dies, and on
+		// the production mesh the dead vastly outnumber the living — 153k of
+		// 168k in a 2026-09-28 sample. Sorting by bandwidth therefore fills the
+		// page with history unless the caller asks for live only, so the filter
+		// has to happen BEFORE the cap; applying it afterwards would leave the
+		// reader a handful of rows and no way to see the rest.
+		if liveOnly && !m.Live {
 			continue
 		}
 		sent, recv := foldDailyBandwidth(m.Daily)

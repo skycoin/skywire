@@ -63,6 +63,10 @@ func (hv *Hypervisor) getNetworkTransports() http.HandlerFunc {
 				limit = n
 			}
 		}
+
+		// The cap is applied after this filter, so "live only" means the top N
+		// LIVE transports rather than whatever survives filtering the top N.
+		liveOnly := r.URL.Query().Get("live") == "true"
 		path := fmt.Sprintf("/metrics?days=%d&bandwidth=true&latency=true&edges=true", days)
 
 		log := hv.visor.MasterLogger().PackageLogger("tpd_proxy")
@@ -72,7 +76,7 @@ func (hv *Hypervisor) getNetworkTransports() http.HandlerFunc {
 		// X-Skywire-Metrics-Source = cxo lets the UI surface the
 		// path used (handy for diagnosing slow loads).
 		if body, ts, err := hv.visor.FetchTransportMetricsCXO(days); err == nil && len(body) > 0 {
-			reduced, rerr := reduceTransportMetrics(body, limit)
+			reduced, rerr := reduceTransportMetrics(body, limit, liveOnly)
 			if rerr != nil {
 				log.WithError(rerr).Warn("TPD metrics from CXO did not decode")
 			} else {
@@ -105,7 +109,7 @@ func (hv *Hypervisor) getNetworkTransports() http.HandlerFunc {
 				Method: "GET",
 			})
 			if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				reduced, rerr := reduceTransportMetrics(resp.Body, limit)
+				reduced, rerr := reduceTransportMetrics(resp.Body, limit, liveOnly)
 				if rerr != nil {
 					log.WithError(rerr).Warn("TPD metrics did not decode")
 					httputil.WriteJSON(w, r, http.StatusBadGateway,

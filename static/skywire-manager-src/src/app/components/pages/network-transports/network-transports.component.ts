@@ -38,6 +38,7 @@ interface NetworkTransportsResponse {
   metrics: TransportMetric[];
   total: number;
   returned: number;
+  live: number;
   network_bandwidth: number;
   partial: boolean;
 }
@@ -113,6 +114,7 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
   // cut off before it finished. Both are shown, because a table that silently
   // displays 2000 of 180000 transports is worse than one that says so.
   returnedCount = 0;
+  liveTotal = 0;
   partial = false;
   networkBandwidth = 0;
   byTransport: ByTransportRow[] = [];
@@ -164,7 +166,15 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
   }
 
   setHideOffline(hide: boolean) {
+    if (hide === this.hideOffline) {
+      return;
+    }
     this.hideOffline = hide;
+    // Refetch rather than filtering what we already have. The hypervisor caps
+    // the response, and dead transports carry most of the historical bandwidth
+    // on a real mesh, so filtering the capped rows locally would leave almost
+    // nothing. Asking the server for live-only gets the top N that are live.
+    this.fetch().subscribe();
   }
 
   /** Compact-view rows after applying the offline filter. */
@@ -197,7 +207,9 @@ return {
   private fetch() {
     this.loading = this.byTransport.length === 0 && this.byVisor.length === 0;
 
-    return this.api.get(`network/transports?days=${this.days}`).pipe(
+    return this.api.get(
+      `network/transports?days=${this.days}` + (this.hideOffline ? '&live=true' : '')
+    ).pipe(
       catchError((err) => {
         this.error = err?.message || 'Failed to fetch transports';
         this.loading = false;
@@ -224,6 +236,7 @@ return {
 
     this.rawCount = Array.isArray(resp) ? metrics.length : (resp?.total ?? metrics.length);
     this.returnedCount = Array.isArray(resp) ? metrics.length : (resp?.returned ?? metrics.length);
+    this.liveTotal = Array.isArray(resp) ? 0 : (resp?.live ?? 0);
     this.partial = Array.isArray(resp) ? false : !!resp?.partial;
 
     let networkBw = Array.isArray(resp) ? 0 : (resp?.network_bandwidth ?? 0);

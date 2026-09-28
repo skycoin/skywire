@@ -92,9 +92,14 @@
         <div class="summary-line cap-note">
           <mat-icon>filter_list</mat-icon>
           <span class="ml-1">
-            Showing the {{ returnedCount }} highest-bandwidth of {{ rawCount }}{{ partial ? '+' : '' }} transports.
+            Showing the {{ returnedCount }} highest-bandwidth
+            @if (hideOffline) { <span>live</span> }
+            of {{ rawCount }}{{ partial ? '+' : '' }} transports
+            @if (!hideOffline && liveTotal > 0) {
+              <span>({{ liveTotal }} of them live)</span>
+            }.
             @if (partial) {
-              <span>The network is large enough that the metrics feed was cut short, so the total is a floor.</span>
+              <span>The metrics feed was cut short upstream, so that total is a floor.</span>
             }
           </span>
         </div>

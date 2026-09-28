@@ -21,7 +21,7 @@ func TestReduceTransportMetrics_FoldsAndCaps(t *testing.T) {
 	  "daily":[{"date":"d1","a":{"sent":0,"recv":0},"b":{"sent":0,"recv":0}}]}
 	]`
 
-	got, err := reduceTransportMetrics([]byte(body), 0)
+	got, err := reduceTransportMetrics([]byte(body), 0, false)
 	require.NoError(t, err)
 
 	// Every record TPD sent is counted, including the ones not rendered.
@@ -59,7 +59,7 @@ func TestReduceTransportMetrics_TruncatedBodyKeepsWhatArrived(t *testing.T) {
 	// Cut mid-record, exactly as the wire does.
 	b.WriteString(`{"id":"tp50","type":"stcpr","live":true,"edges":["pkA","pk`)
 
-	got, err := reduceTransportMetrics([]byte(b.String()), 0)
+	got, err := reduceTransportMetrics([]byte(b.String()), 0, false)
 	require.NoError(t, err, "a truncated array must not be an error")
 	require.True(t, got.Partial, "truncation must be reported")
 	require.Equal(t, 50, got.Total)
@@ -82,26 +82,69 @@ func TestReduceTransportMetrics_CapBounded(t *testing.T) {
 	}
 	b.WriteString("]")
 
-	got, err := reduceTransportMetrics([]byte(b.String()), 5)
+	got, err := reduceTransportMetrics([]byte(b.String()), 5, false)
 	require.NoError(t, err)
 	require.Equal(t, 30, got.Total, "total counts everything, not just what fits")
 	require.Equal(t, 5, got.Returned)
 	require.Len(t, got.Metrics, 5)
 
 	// A caller cannot lift the cap past the point the browser chokes.
-	got, err = reduceTransportMetrics([]byte(b.String()), maxMetricsLimit*10)
+	got, err = reduceTransportMetrics([]byte(b.String()), maxMetricsLimit*10, false)
 	require.NoError(t, err)
 	require.Equal(t, 30, got.Returned, "all 30 fit under the ceiling")
 }
 
 func TestReduceTransportMetrics_NonArrayIsAnError(t *testing.T) {
-	_, err := reduceTransportMetrics([]byte(`{"error":"tpd exploded"}`), 0)
+	_, err := reduceTransportMetrics([]byte(`{"error":"tpd exploded"}`), 0, false)
 	require.ErrorIs(t, err, errNotAnArray)
 }
 
 func TestReduceTransportMetrics_EmptyArray(t *testing.T) {
-	got, err := reduceTransportMetrics([]byte(`[]`), 0)
+	got, err := reduceTransportMetrics([]byte(`[]`), 0, false)
 	require.NoError(t, err)
 	require.Equal(t, 0, got.Total)
 	require.NotNil(t, got.Metrics, "must marshal as [] and not null")
+}
+
+// TPD keeps dead transports' bandwidth history, and on the real mesh they
+// outnumber the living ten to one and carry the larger totals. Filtering has
+// to precede the cap, or "live only" returns the handful of live rows that
+// happened to fall inside the top N by bandwidth.
+func TestReduceTransportMetrics_LiveFilterPrecedesTheCap(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("[")
+	// 20 dead transports with the HIGHEST bandwidth...
+	for i := 0; i < 20; i++ {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		fmt.Fprintf(&b, `{"id":"dead%02d","type":"","live":false,"edges":["pkD%d","pkE%d"],`, i, i, i)
+		fmt.Fprintf(&b, `"daily":[{"date":"d1","a":{"sent":%d,"recv":0},"b":null}]}`, 100000+i)
+	}
+	// ...and 5 live ones with much less.
+	for i := 0; i < 5; i++ {
+		fmt.Fprintf(&b, `,{"id":"live%02d","type":"stcpr","live":true,"edges":["pkL%d","pkM%d"],`, i, i, i)
+		fmt.Fprintf(&b, `"daily":[{"date":"d1","a":{"sent":%d,"recv":0},"b":null}]}`, 10+i)
+	}
+	b.WriteString("]")
+
+	// Unfiltered with a cap of 3: all three are dead, because they carried more.
+	all, err := reduceTransportMetrics([]byte(b.String()), 3, false)
+	require.NoError(t, err)
+	require.Equal(t, 25, all.Total)
+	require.Equal(t, 5, all.Live)
+	for _, row := range all.Metrics {
+		require.False(t, row.Live, "top-by-bandwidth is dead history on this data")
+	}
+
+	// Live only, same cap: three LIVE rows, not zero.
+	live, err := reduceTransportMetrics([]byte(b.String()), 3, true)
+	require.NoError(t, err)
+	require.Equal(t, 25, live.Total, "total still counts the whole mesh")
+	require.Equal(t, 5, live.Live)
+	require.Equal(t, 3, live.Returned)
+	for _, row := range live.Metrics {
+		require.True(t, row.Live)
+	}
+	require.Equal(t, "live04", live.Metrics[0].ID, "highest-bandwidth live one first")
 }
