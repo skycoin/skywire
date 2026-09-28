@@ -190,7 +190,32 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 	}
 
 	if len(action.DropLegs) > 0 {
+		// A dropped ACTIVE leg strands its in-flight sequences exactly as a
+		// demote does, and closing it means no SACK round-trip will ever be
+		// answered on it. Name its transports before the drop compacts tps[],
+		// then resend their held sequences onto a surviving leg — the same
+		// narrowed flush as the demote above. Without it an aged-out sequence
+		// left the receiver's no-skip reorder gap open for good and the stream
+		// wedged: requests on the group failed until the app restarted.
+		var droppedTps []uuid.UUID
+		if rg.mux != nil {
+			rg.mu.Lock()
+			for _, idx := range action.DropLegs {
+				if idx >= 0 && idx < len(rg.tps) && rg.tps[idx] != nil && !rg.mux.isLegStandby(idx) {
+					droppedTps = append(droppedTps, rg.tps[idx].Entry.ID)
+				}
+			}
+			rg.mu.Unlock()
+		}
 		rg.dropLegsByIndex(action.DropLegs)
+		if len(droppedTps) > 0 { // only set when rg.mux != nil
+			if seqs := rg.mux.heldRetxSeqsOnTps(droppedTps); len(seqs) > 0 {
+				rg.mux.retxReqFlush.Add(uint64(len(seqs)))
+				if err := rg.resendSeqs(seqs); err != nil {
+					rg.logger.WithError(err).Debug("drop retx flush: no surviving leg to resend on")
+				}
+			}
+		}
 	}
 
 	if action.AddLeg && applyAdd != nil {

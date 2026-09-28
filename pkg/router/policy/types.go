@@ -40,6 +40,11 @@ type RoutingContext struct {
 	// Port is the routing port being dialed on the remote.
 	Port uint16
 
+	// LocalPort is the route group's own local routing port. With PeerPK and
+	// Port it names one route group, which on_tick uses to keep a separate
+	// controller per group. Zero when no route group exists yet (decide_route).
+	LocalPort uint16
+
 	// Now is the current wall-clock time at policy invocation, in
 	// the operator's configured timezone. Used by datetime stdlib;
 	// injectable for tests via the Evaluator's Clock.

@@ -450,6 +450,7 @@ func wireFromCtx(r policy.RoutingContext) RoutingContextWire {
 		App:               r.App,
 		PeerPK:            r.PeerPK,
 		Port:              r.Port,
+		LocalPort:         r.LocalPort,
 		NowUnixNano:       r.Now.UnixNano(),
 		CLIOverrides:      r.CLIOverrides,
 		IsDirectDial:      r.IsDirectDial,
