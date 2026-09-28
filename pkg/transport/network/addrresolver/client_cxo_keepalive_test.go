@@ -1,6 +1,6 @@
 // Package addrresolver pkg/transport/network/addrresolver/client_cxo_keepalive_test.go:
-// an unchanged re-bind skips the HTTP POST only while the CXO keepalive is
-// healthy and the last accepted bind is recent.
+// an unchanged re-bind skips the HTTP POST while the CXO keepalive is healthy
+// on the epoch of the last accepted bind, and never on a timer.
 package addrresolver
 
 import (
@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
@@ -29,26 +28,26 @@ func TestBindSkipsUnchangedWhileCXOHealthy(t *testing.T) {
 	c.SetPublicIP("", "")
 	ctx := context.Background()
 	var healthy atomic.Bool
-	c.SetCXOKeepaliveHealthyFunc(healthy.Load)
+	var epoch atomic.Uint64
+	c.SetCXOKeepaliveHealthyFunc(func() (bool, uint64) { return healthy.Load(), epoch.Load() })
 
 	require.NoError(t, c.BindQUIC(ctx, "30300"))
 	require.NoError(t, c.BindQUIC(ctx, "30300"))
 	require.EqualValues(t, 2, posts.Load(), "unhealthy: every bind posts")
 
 	healthy.Store(true)
-	require.NoError(t, c.BindQUIC(ctx, "30300"))
+	for i := 0; i < 3; i++ {
+		require.NoError(t, c.BindQUIC(ctx, "30300"))
+	}
 	require.EqualValues(t, 2, posts.Load(), "healthy + unchanged: skipped")
 
 	require.NoError(t, c.BindQUIC(ctx, "30301"))
 	require.EqualValues(t, 3, posts.Load(), "changed payload: posts")
 
-	c.boundMu.Lock()
-	b := c.bound["squicr"]
-	b.at = time.Now().Add(-cxoHealthyRefreshInterval)
-	c.bound["squicr"] = b
-	c.boundMu.Unlock()
+	epoch.Add(1)
 	require.NoError(t, c.BindQUIC(ctx, "30301"))
-	require.EqualValues(t, 4, posts.Load(), "refresh interval elapsed: posts")
+	require.NoError(t, c.BindQUIC(ctx, "30301"))
+	require.EqualValues(t, 4, posts.Load(), "new epoch: posts once")
 
 	c.forgetBound("squicr")
 	require.NoError(t, c.BindQUIC(ctx, "30301"))

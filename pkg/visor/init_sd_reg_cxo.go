@@ -10,11 +10,11 @@
 // handshake (the secp256k1 handshakeResponder that dominates discovery-
 // service CPU), onto one warm CXO connection.
 //
-// Dual-write: the SD clients keep the HTTP POST / DELETE (the authoritative
-// path), and this feed is inert until an SD subscribes to it. Once the SD is
-// subscribed and answering, its ingest of the heartbeat Roots refreshes the
-// entries' TTL, so unchanged heartbeats skip HTTP for up to 30 minutes
-// (servicedisc.KeepaliveSink); any change still goes over HTTP at once.
+// The feed is inert until an SD subscribes to it. Once the SD is subscribed
+// and answering, its ingest of the heartbeat Roots refreshes the entries' TTL
+// and unchanged heartbeats skip HTTP (servicedisc.KeepaliveSink). HTTP carries
+// a changed entry, the first registration, deletes, and one registration after
+// the SD resubscribes on a new conn or stops answering.
 //
 // # What is published
 //
@@ -92,7 +92,7 @@ type sdEntryMirror struct {
 	log     *logging.Logger
 	// healthy reports whether the SD is keeping the entries alive over CXO
 	// (see cxoKeepaliveHealthy); nil until the feed runs.
-	healthy atomic.Pointer[func() bool]
+	healthy atomic.Pointer[func() (bool, uint64)]
 }
 
 var _ servicedisc.KeepaliveSink = (*sdEntryMirror)(nil)
@@ -138,18 +138,22 @@ func (m *sdEntryMirror) DelEntry(entry servicedisc.Service) {
 	m.flushLocked()
 }
 
-// KeepaliveHealthy implements servicedisc.KeepaliveSink: while true, the SD
-// clients skip unchanged HTTP heartbeats.
-func (m *sdEntryMirror) KeepaliveHealthy() bool {
+// KeepaliveHealthy implements servicedisc.KeepaliveSink: while healthy on the
+// epoch of their last HTTP registration, the SD clients skip unchanged
+// heartbeats.
+func (m *sdEntryMirror) KeepaliveHealthy() (bool, uint64) {
 	if m == nil {
-		return false
+		return false, 0
 	}
 	fn := m.healthy.Load()
-	return fn != nil && (*fn)()
+	if fn == nil {
+		return false, 0
+	}
+	return (*fn)()
 }
 
 // setKeepalive installs (or, with nil, clears) the keepalive predicate.
-func (m *sdEntryMirror) setKeepalive(fn func() bool) {
+func (m *sdEntryMirror) setKeepalive(fn func() (bool, uint64)) {
 	if fn == nil {
 		m.healthy.Store(nil)
 		return
