@@ -188,3 +188,11 @@ docs/playground/wasm_exec.js
 /skywire.wasm
 /skywire
 /bin/
+
+# iOS planning docs: kept beside the project locally, never committed.
+# Named one by one so ios/README.md and the rest of the iOS project stay
+# trackable.
+/ios/skywire-mobile-ios.md
+/ios/skywire-mobile-ios-release-testflight.md
+/ios/skywire-mobile-ios-proposal.md
+/ios/skywire-mobile-ios-playbook.md
