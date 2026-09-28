@@ -45,7 +45,7 @@
 
   // ------------------------------------------------------------------- steps
 
-  function buildSteps(mode, nodePath, visorList) {
+  function buildSteps(mode, nodePath, visorList, localVisor) {
     return [
       // --- the front page: the visor list, read left to right ---------------
       {
@@ -126,8 +126,12 @@
       },
 
       // --- inside this visor ------------------------------------------------
+      // Entered through #/nodes/local rather than a PK, so that on a hypervisor
+      // managing several visors the tour opens the one it keeps calling "your
+      // visor". The redirect leaves that PK in the hash and every step after
+      // this one reads it from there.
       {
-        route: function () { return nodePath("info"); },
+        route: localVisor,
         sel: "app-node-info-content .info-line", has: "DMSG servers",
         title: "Inside your visor: Info",
         body: {
@@ -291,17 +295,28 @@
       return v == null ? "" : v;
     }
 
-    // This visor's PK, so navigating steps can open its own tabs. Any
-    // /nodes/<pk>/ link in the DOM carries it (a list row, or the top-bar chip
-    // when we're already inside a visor), and the URL has it once we navigate.
-    // Resolved lazily, so a step still finds it if the DOM wasn't ready at start.
+    // The PK the "inside your visor" steps address.
+    //
+    // The URL wins, and is re-read every time rather than cached: the walk into
+    // the visor goes through #/nodes/local, the route that resolves THIS
+    // hypervisor's own visor and redirects to it, so after that step the hash
+    // holds the PK the copy actually means by "your visor".
+    //
+    // A /nodes/<pk>/ link in the DOM is only a fallback, and a poor one on a
+    // hypervisor managing more than one visor: it is whichever row happens to
+    // sort first, which is how the first draft of this tour ended up saying
+    // "your visor" over somebody else's. It is kept for the case where the
+    // local route is unavailable, and never cached over a URL answer.
     var visorList = "#/nodes/list/1";
+    var localVisor = "#/nodes/local";
     var selfPK = "";
     function resolveSelfPK() {
-      if (selfPK) { return selfPK; }
       try {
         var m = (win.location.hash || "").match(/nodes\/([0-9a-fA-F]{66})/);
         if (m) { selfPK = m[1]; return selfPK; }
+      } catch (e) { /* ignore */ }
+      if (selfPK) { return selfPK; }
+      try {
         var links = doc.querySelectorAll('a[href*="/nodes/"]');
         for (var k = 0; k < links.length; k++) {
           var mm = (links[k].getAttribute("href") || "").match(/nodes\/([0-9a-fA-F]{66})/);
@@ -310,16 +325,16 @@
       } catch (e) { /* ignore */ }
       return selfPK;
     }
-    resolveSelfPK();
 
-    // Falls back to the list, so a step navigates somewhere valid rather than
-    // to a broken hash, if the PK cannot be resolved at all.
+    // Falls back to the local route rather than the list: a step that cannot
+    // name the PK should still land on the right visor, and #/nodes/local is
+    // the router's own answer to "which one is mine".
     function nodePath(tab) {
       var pk = resolveSelfPK();
-      return pk ? "#/nodes/" + pk + "/" + tab : visorList;
+      return pk ? "#/nodes/" + pk + "/" + tab : localVisor;
     }
 
-    var steps = buildSteps(mode, nodePath, visorList).filter(function (s) {
+    var steps = buildSteps(mode, nodePath, visorList, localVisor).filter(function (s) {
       return !(s.nativeOnly && mode !== "native") && !(s.wasmOnly && mode !== "wasm");
     });
 
@@ -478,7 +493,14 @@
       "background:#12161c;color:#e8eef7;border:1px solid #2a3442;border-radius:10px;",
       "padding:16px 18px;box-shadow:0 12px 40px rgba(0,0,0,.55);",
       "font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;",
+      // The dashboard sets letter-spacing on headings and body copy. Inheriting
+      // it pushes the glyphs of an apostrophe apart — "you're" renders as
+      // "you ' re" — so the callout states its own spacing rather than taking
+      // whatever the page around it happens to use.
+      "letter-spacing:normal;word-spacing:normal;text-transform:none;",
       "transition:top .18s,left .18s}",
+      ".skywire-tour-call h3,.skywire-tour-call div,.skywire-tour-call summary,",
+      ".skywire-tour-call button{letter-spacing:normal;text-transform:none}",
       ".skywire-tour-call h3{margin:.1em 0 .5em;font-size:17px;color:#fff}",
       ".skywire-tour-call code{background:#1e2530;padding:.08em .35em;border-radius:3px;font-size:.92em}",
       ".skywire-tour-count{float:right;opacity:.5;font-size:12px;letter-spacing:.04em}",

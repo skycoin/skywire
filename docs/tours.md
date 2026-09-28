@@ -89,6 +89,13 @@ an uptime record) and **Resources** (a browser tab has no host to measure).
 - **The desk tour closes only what the reader has not touched.** `windowMark`
   records position, size and the min/max/full flags when a step opens a window;
   if any of it changed, the window has been adopted and the tour leaves it open.
+- **Address the visor through `#/nodes/local`, not a PK scraped from the DOM.**
+  A hypervisor manages many visors, and the first `/nodes/<pk>/` link in the page
+  is whichever row sorted first — the first draft said "your visor" over somebody
+  else's for eleven steps. The local route is the router's own answer to which
+  visor is mine; the redirect puts that PK in the hash and the later steps read
+  it from there.
+
 - **`localStorage` can throw**, in a private window or with site data blocked.
   Every read and write of the seen-flag is wrapped, and a throw means "do not
   nag", not "show it again".
