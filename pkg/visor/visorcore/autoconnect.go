@@ -78,6 +78,18 @@ func (c *Connector) ConnectToVisors(
 	)
 	sem := make(chan struct{}, dialConcurrency)
 
+	// A budgeted phase (maxCount > 0 — the few WT/WS/QUIC slots, and for a
+	// browser visor with no raw sockets its ONLY transports) spends its slots on
+	// distinct MACHINES. Public visors are often several to a host, so random
+	// picks put most of a tab's handful of relays on one machine, and when that
+	// machine dropped its sessions the tab lost nearly every relay at once —
+	// every leg of every tunnel. hosts is seeded with the hosts our automatic
+	// transports already reach; a new transport to one of them is closed again.
+	var hosts map[string]bool
+	if maxCount > 0 {
+		hosts = c.automaticTransportHosts()
+	}
+
 	for _, pk := range ShufflePubKeys(targets) {
 		select {
 		case <-ctx.Done():
@@ -168,6 +180,24 @@ func (c *Connector) ConnectToVisors(
 					mu.Unlock()
 				}
 				return
+			}
+
+			if hosts != nil {
+				if tp, err := c.Tm.GetTransport(pk, tpType); err == nil && tp != nil {
+					if h := tp.RemoteIP(); h != "" {
+						mu.Lock()
+						dup := hosts[h]
+						hosts[h] = true
+						mu.Unlock()
+						if dup {
+							c.Tm.DeleteTransport(tp.Entry.ID)
+							wait := c.noteFailure(pk, tpType, time.Now())
+							logger.WithField("host", h).WithField("retry_in", wait).
+								Debugln("Closed a transport to a host we already reach; spending the slot on another machine")
+							return
+						}
+					}
+				}
 			}
 
 			mu.Lock()
@@ -273,4 +303,19 @@ func (c *Connector) isSameLAN(ctx context.Context, pk cipher.PubKey, netType tpt
 func isContextError(err error) bool {
 	return errors.Is(err, context.Canceled) ||
 		errors.Is(err, context.DeadlineExceeded)
+}
+
+// automaticTransportHosts is the set of hosts the automatic transports already
+// reach (their remote IP, or the hostname a browser carrier dialed).
+func (c *Connector) automaticTransportHosts() map[string]bool {
+	hosts := make(map[string]bool)
+	if c.Tm == nil {
+		return hosts
+	}
+	for _, tp := range c.Tm.GetTransportsByLabel(transport.LabelAutomatic) {
+		if h := tp.RemoteIP(); h != "" {
+			hosts[h] = true
+		}
+	}
+	return hosts
 }

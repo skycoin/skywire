@@ -302,9 +302,13 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				countSTCPR += phase1.Count
 				connectedPublicVisors = phase1.Connected
 			} else {
-				// No stcpr locally: pick public visors for the later phases.
+				// No stcpr locally (a browser visor): pick public visors for the
+				// later phases. Three candidates per slot: the WT/WS phases keep
+				// their budget of maxPublicVisors but spend it on distinct hosts
+				// (visorcore.ConnectToVisors), and public visors are often several
+				// to a machine, so exactly maxPublicVisors picks could not fill it.
 				for _, pk := range visorcore.ShufflePubKeys(absent1) {
-					if len(connectedPublicVisors) >= maxPublicVisors {
+					if len(connectedPublicVisors) >= 3*maxPublicVisors {
 						break
 					}
 					if pk != v.conf.PK {

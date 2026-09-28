@@ -208,14 +208,7 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 			rg.mu.Unlock()
 		}
 		rg.dropLegsByIndex(action.DropLegs)
-		if len(droppedTps) > 0 { // only set when rg.mux != nil
-			if seqs := rg.mux.heldRetxSeqsOnTps(droppedTps); len(seqs) > 0 {
-				rg.mux.retxReqFlush.Add(uint64(len(seqs)))
-				if err := rg.resendSeqs(seqs); err != nil {
-					rg.logger.WithError(err).Debug("drop retx flush: no surviving leg to resend on")
-				}
-			}
-		}
+		rg.resendHeldOn(droppedTps, "drop")
 	}
 
 	if action.AddLeg && applyAdd != nil {

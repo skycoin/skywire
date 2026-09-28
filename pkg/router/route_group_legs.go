@@ -1583,6 +1583,11 @@ func (rg *RouteGroup) pruneDeadLegs(deadIDs []uuid.UUID, reason, hookEvent strin
 	for _, idx := range droppedIdx {
 		rg.fireLegChange(hookEvent, idx)
 	}
+	// The pruned legs' in-flight sequences are stranded: their transport is
+	// gone or black-holing, so no SACK round-trip will ever be answered on them,
+	// and they can age out of the bounded retx buffer before the receiver asks.
+	// Resend them on a surviving leg now (a relay dropping mid-download).
+	rg.resendHeldOn(deadIDs, "prune")
 	rg.signalRotate()
 	rg.maybeSelfHeal()
 	return len(droppedIdx)
@@ -1823,4 +1828,24 @@ type bandLeg struct {
 type legGoodput struct {
 	idx int
 	gp  uint64
+}
+
+// resendHeldOn resends the in-flight sequences last sent over any of tps onto
+// a leg that is still carrying — the recovery for legs that just stopped:
+// demoted to standby, dropped by the policy, or pruned because their
+// transport closed. Only those legs' sequences are resent; everything riding
+// a live leg heals through the normal SACK path. A no-op without a mux, or
+// with nothing held.
+func (rg *RouteGroup) resendHeldOn(tps []uuid.UUID, why string) {
+	if rg.mux == nil || len(tps) == 0 {
+		return
+	}
+	seqs := rg.mux.heldRetxSeqsOnTps(tps)
+	if len(seqs) == 0 {
+		return
+	}
+	rg.mux.retxReqFlush.Add(uint64(len(seqs)))
+	if err := rg.resendSeqs(seqs); err != nil {
+		rg.logger.WithError(err).Debugf("%s retx flush: no live leg to resend on", why)
+	}
 }
