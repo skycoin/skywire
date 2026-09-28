@@ -11,11 +11,14 @@ drives the visor through its authenticated local REST API on
 
 ## Status
 
-Planning. Nothing in this directory builds yet; the Xcode project, the Go
-build target and the CI lanes land milestone by milestone. This README is
-the only tracked file. The planning documents (the two briefs, the
-proposal and the playbook) live in this folder on the maintainer's machine
-and are gitignored on purpose; ask for them if you need the background.
+The Go side is in (milestone M0): `make ios-core` builds
+`SkywireCore.xcframework` from `cmd/skywire-mobile-core`, and `pkg/mobilecore`
+starts, stops and restarts the lite core inside one process. The Xcode
+project, the app and its CI lanes land milestone by milestone from M1 on.
+Gate records and their evidence live in `gates/`. The planning documents
+(the two briefs, the proposal and the playbook) live in this folder on the
+maintainer's machine and are gitignored on purpose; ask for them if you need
+the background.
 
 The port is developed and verified on the Xcode Simulator until the end,
 and the device-only parts (the packet-tunnel extension, SkyVPN, signing,
@@ -52,15 +55,22 @@ ios/
 └── Frameworks/SkywireCore.xcframework   # build output, gitignored
 ```
 
-## Building and running (planned)
+## Building and running
 
 Everything runs from the repo root, as for Android:
 
 ```sh
-make ios-core        # Go core → ios/Frameworks/SkywireCore.xcframework (device + Simulator slices)
+make ios-core        # Go core → ios/Frameworks/SkywireCore.xcframework (device + Simulator arm64 slices)
+make mobile-test     # pkg/mobilecore: start/stop/start in one process, on the lite module set
+# from M1 on (the Xcode project does not exist yet):
 xcodebuild -project ios/Skywire.xcodeproj -scheme Skywire \
   -destination 'platform=iOS Simulator,name=iPhone 18 Pro' test CODE_SIGNING_ALLOWED=NO
 ```
+
+`make ios-core` needs Xcode (macOS); `IOS_SIM_X86_64=1` adds an Intel
+Simulator slice. The core's C API is eight functions, documented in
+`cmd/skywire-mobile-core/main.go` and declared in the generated
+`skywire_core.h` inside the xcframework.
 
 Rule of thumb, same as Android: whenever the Go side changed, run
 `make ios-core` first; Xcode's Run does not rebuild the core.

@@ -22,7 +22,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
-	tpdapi "github.com/skycoin/skywire/pkg/deployment/tpd/api"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/tpdpaths"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -43,9 +43,9 @@ func (v *Visor) FetchAllTransportsCXO(withSelf bool) ([]byte, error) {
 	mgr.AcquireFor(TabCLITransports)
 	defer mgr.ReleaseFor(TabCLITransports)
 
-	path := tpdapi.AllTransportsPathWithoutSelf
+	path := tpdpaths.AllTransportsPathWithoutSelf
 	if withSelf {
-		path = tpdapi.AllTransportsPathWithSelf
+		path = tpdpaths.AllTransportsPathWithSelf
 	}
 	body, _, ok := mgr.Get(FeedTPDAllTransports, path)
 	if !ok || len(body) == 0 {

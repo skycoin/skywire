@@ -19,14 +19,18 @@ const (
 )
 
 // serveLockWatchdog periodically probes tm.mx and screams if it is stuck.
-// Started as one of the Serve goroutines; exits on ctx cancel.
-func (tm *Manager) serveLockWatchdog(done <-chan struct{}) {
+// Started as one of the Serve goroutines; exits on ctx cancel or when the
+// manager closes (tm.done). Close waits for it, and a visor closes its
+// transport manager before it cancels the serve context.
+func (tm *Manager) serveLockWatchdog(ctxDone <-chan struct{}) {
 	t := time.NewTicker(lockWatchdogInterval)
 	defer t.Stop()
 	stalledSince := time.Time{}
 	for {
 		select {
-		case <-done:
+		case <-ctxDone:
+			return
+		case <-tm.done:
 			return
 		case <-t.C:
 		}

@@ -1,3 +1,5 @@
+//go:build !mobile
+
 // Package rpcgrpc — pkg/visor/rpcgrpc/systemstats_test.go: exercises the
 // gopsutil-backed SystemStatsCollector against the real host. These are
 // best-effort collectors — every sub-collector swallows its error in
