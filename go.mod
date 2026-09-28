@@ -128,8 +128,8 @@ require (
 require (
 	github.com/0magnet/afero v1.15.1-0.20260816202415-9f9d46a34dcd
 	github.com/0magnet/cosmos-go v0.0.0-20260915170035-328675079868
-	github.com/0magnet/sh/v3 v3.13.2-0.20260818190530-13d0024da85c
-	github.com/0magnet/websh v0.0.0-20260924101532-76422c7ff9c3
+	github.com/0magnet/sh/v3 v3.13.2-0.20260928172341-4c52a7abff02
+	github.com/0magnet/websh v0.0.0-20260928172614-900c2c6df638
 	github.com/0magnet/xterm-go v0.0.0-20260923132223-00c1a8e687cc
 	github.com/benhoyt/goawk v1.32.0 // indirect
 )
@@ -193,7 +193,7 @@ require (
 	github.com/prometheus/common v0.71.0 // indirect
 	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/rogpeppe/go-internal v1.15.0 // indirect
+	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/wlynxg/anet v0.0.5
