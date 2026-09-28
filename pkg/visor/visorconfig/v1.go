@@ -7,6 +7,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/proxyroute"
+	"github.com/skycoin/skywire/pkg/services"
 	tnspec "github.com/skycoin/skywire/pkg/transport/network/spec"
 	tspec "github.com/skycoin/skywire/pkg/transport/spec"
 )
@@ -39,6 +40,12 @@ type V1 struct {
 	Routing       *Routing             `json:"routing"`
 	UptimeTracker *UptimeTracker       `json:"uptime_tracker,omitempty"`
 	Launcher      *Launcher            `json:"launcher"`
+	// EmbeddedServices are deployment services (transport-discovery,
+	// address-resolver, route-finder, service-discovery) this visor runs
+	// in-process, each mounted under a path prefix on its dmsg HTTP port
+	// and addressed as dmsg://<visor pk>:80/<prefix>/... Blocks have the
+	// same shape as a services.json entry plus an optional "prefix".
+	EmbeddedServices []services.Block `json:"embedded_services,omitempty"`
 
 	// Stats configures the visor-local telemetry store. Nil/zero
 	// values use defaults; Disabled=true skips the store entirely.

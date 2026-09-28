@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -104,15 +105,11 @@ type service struct {
 	log *logging.Logger
 }
 
-func (s *service) Run(ctx context.Context) error {
+// build creates the transport store and the API and warms the route
+// graph. dmsgAddr is what the API reports on /health. The returned
+// close releases the store.
+func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr string) (*api.API, func(), error) {
 	cfg := s.cfg
-
-	tag := cfg.Tag
-	if tag == "" {
-		tag = "route_finder"
-	}
-	logger := services.NewLogger(tag, cfg.LogLevel)
-	_ = s.log // logger is replaced with a tag-scoped one
 
 	redisURL := cfg.Redis
 	if redisURL == "" {
@@ -137,16 +134,51 @@ func (s *service) Run(ctx context.Context) error {
 
 	metricsutil.ServePProf(logger, cfg.PprofAddr, "route-finder")
 
-	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	// Route finder uses a longer TTL since it only reads transport data
 	// and doesn't need the same expiration as TPD.
-	transportStore, err := store.New(runCtx, storeConfig, 10*time.Minute, logger)
+	transportStore, err := store.New(ctx, storeConfig, 10*time.Minute, logger)
 	if err != nil {
-		return fmt.Errorf("route-finder: init store: %w", err)
+		return nil, nil, fmt.Errorf("route-finder: init store: %w", err)
 	}
-	defer transportStore.Close()
+
+	metricsutil.ServeHTTPMetrics(logger, cfg.MetricsAddr)
+
+	enableMetrics := cfg.MetricsAddr != ""
+	rfAPI := api.New(transportStore, logger, enableMetrics, dmsgAddr)
+	// Warm the shared route graph in the background (bound to the server context)
+	// so route requests reuse it instead of each building a per-source graph.
+	rfAPI.StartGraphCache(ctx)
+	return rfAPI, transportStore.Close, nil
+}
+
+// Embed runs route-finder inside a host process: the API is returned
+// for the host to mount under a path prefix on its own dmsg HTTP port.
+// Nothing listens.
+func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, error) {
+	logger := host.Log
+	if logger == nil {
+		logger = services.NewLogger("route_finder", s.cfg.LogLevel)
+	}
+	rfAPI, closeStore, err := s.build(ctx, logger, host.DmsgAddr)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		<-ctx.Done()
+		closeStore()
+	}()
+	return rfAPI, nil
+}
+
+func (s *service) Run(ctx context.Context) error {
+	cfg := s.cfg
+
+	tag := cfg.Tag
+	if tag == "" {
+		tag = "route_finder"
+	}
+	logger := services.NewLogger(tag, cfg.LogLevel)
+	_ = s.log // logger is replaced with a tag-scoped one
 
 	pk := cfg.PubKey
 	sk := cfg.SecKey
@@ -158,8 +190,6 @@ func (s *service) Run(ctx context.Context) error {
 		}
 	}
 
-	metricsutil.ServeHTTPMetrics(logger, cfg.MetricsAddr)
-
 	dmsgPort := cfg.DmsgPort
 	if dmsgPort == 0 {
 		dmsgPort = dmsg.DefaultDmsgHTTPPort
@@ -169,11 +199,14 @@ func (s *service) Run(ctx context.Context) error {
 		dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
 	}
 
-	enableMetrics := cfg.MetricsAddr != ""
-	rfAPI := api.New(transportStore, logger, enableMetrics, dmsgAddr)
-	// Warm the shared route graph in the background (bound to the server context)
-	// so route requests reuse it instead of each building a per-source graph.
-	rfAPI.StartGraphCache(runCtx)
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	rfAPI, closeStore, err := s.build(runCtx, logger, dmsgAddr)
+	if err != nil {
+		return err
+	}
+	defer closeStore()
 
 	resolvedMode, err := svcmode.ResolveMode(cfg.Mode, !sk.Null())
 	if err != nil {

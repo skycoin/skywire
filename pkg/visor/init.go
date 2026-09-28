@@ -97,6 +97,8 @@ type modules struct {
 	dmsgCtrl vinit.Module
 	// Dmsg http log server module
 	dmsgHTTPLogServer vinit.Module
+	// Embedded deployment services on the dmsg HTTP port
+	embeddedServices vinit.Module
 	// System survey module
 	systemSurvey vinit.Module
 	// Dmsg http module
@@ -198,6 +200,9 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	// must run after pty has finished its setup.
 	m.dmsgHTTPLogServer = maker("dmsghttp_logserver", initDmsgHTTPLogServer, &m.dmsgC, &m.tr, &m.ptyModule)
 	m.systemSurvey = maker("system_survey", initSystemSurvey, &m.dmsgHTTPLogServer)
+	// Embedded services mount on the mux dmsghttp_logserver creates and
+	// run their CXO work on the dmsg client.
+	m.embeddedServices = maker("embedded_services", initEmbeddedServices, &m.dmsgC, &m.dmsgHTTPLogServer)
 	m.dmsgTrackers = maker("dmsg_trackers", initDmsgTrackers, &m.dmsgC)
 
 	m.ptyModule = maker("dmsg_pty", initDmsgpty, &m.dmsgC)
@@ -317,7 +322,7 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	// transport). See init_sd_reg_cxo.go.
 	m.sdRegCXOMod = maker("sd_reg_cxo", initSDRegCXO, &m.disc, &m.dmsgC)
 	m.vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &m.ebc, &m.ar, &m.disc, &m.ptyModule,
-		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.ut, &m.pv, &m.pvs, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC, &m.skyFwd, &m.pi, &m.dmsgPi, &m.dmsgSrv, &m.dmsgServerLatency, &m.systemSurvey, &m.tc, &m.tpdco, &m.embTPS, &m.embRouteSetup, &m.embDmsgWeb, &m.embFwdProxy, &m.embSkynetWeb, &m.embResolvers, &m.meshProxy, &m.embSkymailBridge, &m.skymail, &m.embWisp, &m.uiServer, &m.nodeHealth, &m.selfProbe, &m.skynetPorts, &m.statsMod, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.voiceMod, &m.coinNodesMod, &m.regCXOMod, &m.arBindCXOMod, &m.sdRegCXOMod)
+		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.ut, &m.pv, &m.pvs, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC, &m.skyFwd, &m.pi, &m.dmsgPi, &m.dmsgSrv, &m.dmsgServerLatency, &m.systemSurvey, &m.tc, &m.tpdco, &m.embTPS, &m.embRouteSetup, &m.embDmsgWeb, &m.embFwdProxy, &m.embSkynetWeb, &m.embResolvers, &m.meshProxy, &m.embSkymailBridge, &m.skymail, &m.embWisp, &m.uiServer, &m.nodeHealth, &m.selfProbe, &m.skynetPorts, &m.statsMod, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.voiceMod, &m.coinNodesMod, &m.regCXOMod, &m.arBindCXOMod, &m.sdRegCXOMod, &m.embeddedServices)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.

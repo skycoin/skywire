@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -55,6 +56,130 @@ type service struct {
 	log *logging.Logger
 }
 
+// build connects redis, creates the store, the nonce store and the API,
+// and starts the API's background tasks. dmsgAddr is what the API
+// reports on /health; plainHTTP says whether a plain-HTTP surface will
+// be served, the only path that needs a durable nonce store.
+func (s *service) build(ctx context.Context, log *logging.Logger, dmsgAddr string, plainHTTP bool) (*api.API, error) {
+	cfg := s.cfg
+
+	metricsutil.ServePProf(log, cfg.PprofAddr, "service-discovery")
+
+	redisURL := cfg.Redis
+	if redisURL == "" {
+		redisURL = "redis://localhost:6379"
+	}
+	redisPassword := storeconfig.RedisPassword()
+	opt, err := redis.ParseURL(redisURL)
+	if err != nil {
+		return nil, fmt.Errorf("service-discovery: parse redis URL: %w", err)
+	}
+	opt.Password = redisPassword
+
+	redisClient := redis.NewClient(opt)
+	if _, err := redisClient.Ping(ctx).Result(); err != nil {
+		return nil, fmt.Errorf("service-discovery: redis ping failed: %w", err)
+	}
+	log.Printf("Redis connected.")
+
+	db, err := store.NewStore(ctx, redisClient, log, cfg.EntryTimeout.Std())
+	if err != nil {
+		return nil, fmt.Errorf("service-discovery: init store: %w", err)
+	}
+	log.Printf("Service entry timeout: %v", cfg.EntryTimeout)
+
+	// Requests over dmsg are authenticated by the stream's key; only a
+	// plain-HTTP surface checks nonces, so only that needs them durable.
+	var nonceDB httpauth.NonceStore
+	if plainHTTP && !cfg.TestMode {
+		nonceStoreConfig := storeconfig.Config{
+			URL:      redisURL,
+			Type:     storeconfig.Redis,
+			Password: storeconfig.RedisPassword(),
+		}
+		nonceDB, err = httpauth.NewNonceStore(ctx, nonceStoreConfig, redisPrefix)
+		if err != nil {
+			return nil, fmt.Errorf("service-discovery: init nonce store: %w", err)
+		}
+	}
+
+	metricsutil.ServeHTTPMetrics(log, cfg.MetricsAddr)
+
+	var m sdmetrics.Metrics
+	if cfg.MetricsAddr == "" {
+		m = sdmetrics.NewEmpty()
+	} else {
+		m = sdmetrics.NewVictoriaMetrics()
+	}
+
+	enableMetrics := cfg.MetricsAddr != ""
+	geoipURL := cfg.GeoIP
+	if geoipURL == "" {
+		geoipURL = deployment.Prod.GeoIP
+	}
+	sdAPI := api.New(log, db, nonceDB, enableMetrics, m, dmsgAddr, geoipURL)
+
+	for _, k := range cfg.Whitelist {
+		k = strings.TrimSpace(k)
+		if k != "" {
+			api.WhitelistPKs.Set(k)
+		}
+	}
+
+	go sdAPI.RunBackgroundTasks(ctx, log)
+	return sdAPI, nil
+}
+
+// startCXO brings up the services publisher and the registration
+// aggregator on dmsgC under sk. Best-effort; the returned close stops
+// the aggregator (the publisher stops with ctx).
+func (s *service) startCXO(ctx context.Context, dmsgC *dmsg.Client, sdAPI *api.API, sk cipher.SecKey, log *logging.Logger) func() {
+	s.startServicesCXO(ctx, dmsgC, sdAPI, sk, log)
+
+	// SD-registration-over-CXO aggregator: always-on fan-in path where
+	// visors publish their live service-entry set as a CXO feed instead
+	// of re-POSTing it over a fresh dmsg stream (each a full Noise
+	// handshake) every 90s. Inert until visors subscribe (just a
+	// listener), purely additive to the authoritative HTTP register, so
+	// it needs no gate. The API is the Sink (IngestServiceFromCXO). The
+	// node identity is bound to the SD's service SecKey so gated visors
+	// accept its subscribe (see #4168). Best-effort — HTTP registration
+	// is unaffected if it fails to start.
+	agg, aerr := regcxo.New(dmsgC, sk, sdAPI, regcxo.Config{Logger: log})
+	if aerr != nil {
+		log.WithError(aerr).Error("Failed to start SD-registration-over-CXO aggregator, continuing without it")
+		return func() {}
+	}
+	agg.Run(ctx)
+	log.WithField("feed_pk", agg.FeedPK()).
+		WithField("port", skyenv.DmsgVisorSDRegCXOPort).
+		Info("SD-registration-over-CXO aggregator running")
+	return func() { _ = agg.Close() } //nolint:errcheck
+}
+
+// Embed runs service-discovery inside a host process: the API is
+// returned for the host to mount under a path prefix on its own dmsg
+// HTTP port, and the CXO publisher and aggregator run on the host's
+// dmsg client under the host's key. Nothing listens.
+func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, error) {
+	log := host.Log
+	if log == nil {
+		log = s.log
+	}
+	sdAPI, err := s.build(ctx, log, host.DmsgAddr, false)
+	if err != nil {
+		return nil, err
+	}
+	if host.DmsgClient != nil {
+		closeCXO := s.startCXO(ctx, host.DmsgClient, sdAPI, host.SK, log)
+		go func() {
+			<-ctx.Done()
+			closeCXO()
+		}()
+	}
+	return sdAPI, nil
+}
+
 func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 	log := s.log
@@ -72,53 +197,6 @@ func (s *service) Run(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	metricsutil.ServePProf(log, cfg.PprofAddr, "service-discovery")
-
-	redisURL := cfg.Redis
-	if redisURL == "" {
-		redisURL = "redis://localhost:6379"
-	}
-	redisPassword := storeconfig.RedisPassword()
-	opt, err := redis.ParseURL(redisURL)
-	if err != nil {
-		return fmt.Errorf("service-discovery: parse redis URL: %w", err)
-	}
-	opt.Password = redisPassword
-
-	redisClient := redis.NewClient(opt)
-	if _, err := redisClient.Ping(runCtx).Result(); err != nil {
-		return fmt.Errorf("service-discovery: redis ping failed: %w", err)
-	}
-	log.Printf("Redis connected.")
-
-	db, err := store.NewStore(runCtx, redisClient, log, cfg.EntryTimeout.Std())
-	if err != nil {
-		return fmt.Errorf("service-discovery: init store: %w", err)
-	}
-	log.Printf("Service entry timeout: %v", cfg.EntryTimeout)
-
-	var nonceDB httpauth.NonceStore
-	if !cfg.TestMode {
-		nonceStoreConfig := storeconfig.Config{
-			URL:      redisURL,
-			Type:     storeconfig.Redis,
-			Password: storeconfig.RedisPassword(),
-		}
-		nonceDB, err = httpauth.NewNonceStore(runCtx, nonceStoreConfig, redisPrefix)
-		if err != nil {
-			return fmt.Errorf("service-discovery: init nonce store: %w", err)
-		}
-	}
-
-	metricsutil.ServeHTTPMetrics(log, cfg.MetricsAddr)
-
-	var m sdmetrics.Metrics
-	if cfg.MetricsAddr == "" {
-		m = sdmetrics.NewEmpty()
-	} else {
-		m = sdmetrics.NewVictoriaMetrics()
-	}
-
 	dmsgPort := cfg.DmsgPort
 	if dmsgPort == 0 {
 		dmsgPort = dmsg.DefaultDmsgHTTPPort
@@ -128,21 +206,10 @@ func (s *service) Run(ctx context.Context) error {
 		dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
 	}
 
-	enableMetrics := cfg.MetricsAddr != ""
-	geoipURL := cfg.GeoIP
-	if geoipURL == "" {
-		geoipURL = deployment.Prod.GeoIP
+	sdAPI, err := s.build(runCtx, log, dmsgAddr, true)
+	if err != nil {
+		return err
 	}
-	sdAPI := api.New(log, db, nonceDB, enableMetrics, m, dmsgAddr, geoipURL)
-
-	for _, k := range cfg.Whitelist {
-		k = strings.TrimSpace(k)
-		if k != "" {
-			api.WhitelistPKs.Set(k)
-		}
-	}
-
-	go sdAPI.RunBackgroundTasks(runCtx, log)
 
 	resolvedMode, err := svcmode.ResolveMode(cfg.Mode, !sk.Null())
 	if err != nil {
@@ -186,27 +253,8 @@ func (s *service) Run(ctx context.Context) error {
 	defer h.Close()
 
 	if h.DmsgClient != nil {
-		s.startServicesCXO(runCtx, h.DmsgClient, sdAPI, sk, log)
-
-		// SD-registration-over-CXO aggregator: always-on fan-in path where
-		// visors publish their live service-entry set as a CXO feed instead
-		// of re-POSTing it over a fresh dmsg stream (each a full Noise
-		// handshake) every 90s. Inert until visors subscribe (just a
-		// listener), purely additive to the authoritative HTTP register, so
-		// it needs no gate. The API is the Sink (IngestServiceFromCXO). The
-		// node identity is bound to the SD's service SecKey so gated visors
-		// accept its subscribe (see #4168). Best-effort — HTTP registration
-		// is unaffected if it fails to start.
-		agg, aerr := regcxo.New(h.DmsgClient, sk, sdAPI, regcxo.Config{Logger: log})
-		if aerr != nil {
-			log.WithError(aerr).Error("Failed to start SD-registration-over-CXO aggregator, continuing without it")
-		} else {
-			agg.Run(runCtx)
-			defer func() { _ = agg.Close() }() //nolint:errcheck
-			log.WithField("feed_pk", agg.FeedPK()).
-				WithField("port", skyenv.DmsgVisorSDRegCXOPort).
-				Info("SD-registration-over-CXO aggregator running")
-		}
+		closeCXO := s.startCXO(runCtx, h.DmsgClient, sdAPI, sk, log)
+		defer closeCXO()
 	}
 
 	select {
