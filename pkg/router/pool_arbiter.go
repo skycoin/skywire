@@ -451,9 +451,11 @@ func poolArbiterStepExcluding(g *RouteGroup, pool []*RouteGroup, now time.Time,
 	}
 	cands := poolCandidates(g, pool, sibling)
 	if len(cands) == 0 {
-		if pooledAtOtherLength(g, pool) {
-			g.growAtHopLength(now, reason, grow)
-		}
+		// Nothing takeable: dial a leg of the group's own length instead, paced
+		// by pool.leg_interval. Settling here left a tunnel that had just lost
+		// a leg on its last one whenever standby dials were failing — the
+		// browser visor sat for minutes on one flaky relay with an empty pool.
+		g.growAtHopLength(now, reason, grow)
 		return
 	}
 	// Never strand the pool: what is left after this take must still cover the
