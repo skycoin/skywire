@@ -96,6 +96,13 @@ an uptime record) and **Resources** (a browser tab has no host to measure).
   visor is mine; the redirect puts that PK in the hash and the later steps read
   it from there.
 
+- **Watch the route with a poll, not `hashchange`.** Angular's router navigates
+  with `history.pushState`, and `pushState` fires no event at all — not
+  `hashchange`, not `popstate`. A `hashchange` listener therefore sees a
+  hand-edited address bar and nothing the app itself does, so the launcher was
+  hidden at load on `#/login` and never came back after logging in. `watchRoute`
+  keeps the events for responsiveness and adds a one-second poll for
+  correctness.
 - **`localStorage` can throw**, in a private window or with site data blocked.
   Every read and write of the seen-flag is wrapped, and a throw means "do not
   nag", not "show it again".
