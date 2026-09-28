@@ -382,9 +382,10 @@ func (h *Hook) OnTick(info router.DialInfo, legs []router.LegInfo) router.Rotati
 		})
 	}
 	rctx := RoutingContext{
-		App:    info.AppName,
-		PeerPK: info.PeerPK.Hex(),
-		Port:   uint16(info.RPort),
+		App:       info.AppName,
+		PeerPK:    info.PeerPK.Hex(),
+		Port:      uint16(info.RPort),
+		LocalPort: uint16(info.LPort),
 	}
 	action, err := loader.OnTick(context.Background(), rctx, policyLegs)
 	if err != nil {
