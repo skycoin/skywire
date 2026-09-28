@@ -7,11 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/xtaci/kcp-go"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/ar/api"
 	armetrics "github.com/skycoin/skywire/pkg/deployment/ar/metrics"
@@ -55,15 +57,20 @@ type service struct {
 	log *logging.Logger
 }
 
-func (s *service) Run(ctx context.Context) error {
-	cfg := s.cfg
+// built is everything Run and Embed share: the API with its store, the
+// SUDPH UDP listener, and no HTTP listener yet.
+type built struct {
+	api   *api.API
+	store store.Store
+	close func()
+}
 
-	tag := cfg.Tag
-	if tag == "" {
-		tag = "address_resolver"
-	}
-	logger := services.NewLogger(tag, cfg.LogLevel)
-	_ = s.log // logger is replaced with a tag-scoped one
+// build creates the store, the nonce store, the API and the SUDPH UDP
+// listener. dmsgAddr is what the API reports on /health; plainHTTP says
+// whether a plain-HTTP surface will be served, the only path that needs
+// a durable nonce store.
+func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr string, plainHTTP bool) (*built, error) {
+	cfg := s.cfg
 
 	redisURL := cfg.Redis
 	if redisURL == "" {
@@ -87,12 +94,9 @@ func (s *service) Run(ctx context.Context) error {
 
 	metricsutil.ServePProf(logger, cfg.PprofAddr, "address-resolver")
 
-	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	transportStore, err := store.New(runCtx, storeConfig, cfg.EntryTimeout.Std(), logger)
+	transportStore, err := store.New(ctx, storeConfig, cfg.EntryTimeout.Std(), logger)
 	if err != nil {
-		return fmt.Errorf("address-resolver: init store: %w", err)
+		return nil, fmt.Errorf("address-resolver: init store: %w", err)
 	}
 
 	for _, k := range cfg.Whitelist {
@@ -102,19 +106,15 @@ func (s *service) Run(ctx context.Context) error {
 		}
 	}
 
-	nonceStore, err := httpauth.NewNonceStore(runCtx, storeConfig, redisPrefix)
-	if err != nil {
-		return fmt.Errorf("address-resolver: init nonce store: %w", err)
+	// Requests over dmsg are authenticated by the stream's key; only a
+	// plain-HTTP surface checks nonces, so only that needs them durable.
+	nonceConfig := storeConfig
+	if !plainHTTP {
+		nonceConfig.Type = storeconfig.Memory
 	}
-
-	pk := cfg.PubKey
-	sk := cfg.SecKey
-	if pk.Null() && !sk.Null() {
-		if derived, err := sk.PubKey(); err != nil {
-			logger.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
-		} else {
-			pk = derived
-		}
+	nonceStore, err := httpauth.NewNonceStore(ctx, nonceConfig, redisPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("address-resolver: init nonce store: %w", err)
 	}
 
 	metricsutil.ServeHTTPMetrics(logger, cfg.MetricsAddr)
@@ -126,15 +126,6 @@ func (s *service) Run(ctx context.Context) error {
 		m = armetrics.NewVictoriaMetrics()
 	}
 
-	dmsgPort := cfg.DmsgPort
-	if dmsgPort == 0 {
-		dmsgPort = dmsg.DefaultDmsgHTTPPort
-	}
-	var dmsgAddr string
-	if !pk.Null() {
-		dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
-	}
-
 	enableMetrics := cfg.MetricsAddr != ""
 	arAPI := api.New(logger, transportStore, nonceStore, enableMetrics, m, dmsgAddr, cfg.PublicUDPAddr)
 
@@ -144,11 +135,130 @@ func (s *service) Run(ctx context.Context) error {
 	}
 	udpListener, err := kcp.Listen(udpAddr)
 	if err != nil {
-		return fmt.Errorf("address-resolver: open UDP listener on %s: %w", udpAddr, err)
+		arAPI.Close()
+		return nil, fmt.Errorf("address-resolver: open UDP listener on %s: %w", udpAddr, err)
 	}
 
 	go arAPI.ListenUDP(udpListener)
 	logger.Infof("UDP listener (SUDPH) on %s", udpAddr)
+
+	return &built{api: arAPI, store: transportStore, close: func() {
+		arAPI.Close()
+		_ = udpListener.Close() //nolint:errcheck
+	}}, nil
+}
+
+// startCXO brings up the AR-bind aggregator and the bindings publisher
+// on dmsgC under sk. Both are best-effort; the returned close stops
+// whichever came up.
+func (s *service) startCXO(ctx context.Context, dmsgC *dmsg.Client, sk cipher.SecKey, b *built, logger *logging.Logger) func() {
+	var closers []func()
+	// AR-bind-over-CXO aggregator: always-on fan-in path where visors publish
+	// their AR bindings as a CXO feed instead of re-registering over a fresh
+	// dmsg stream (each a full Noise handshake) on a timer. Inert until visors
+	// subscribe (just a listener), purely additive to the authoritative
+	// HTTP/UDP bind path, so it needs no gate. Needs the dmsg client; the API
+	// is the Sink (IngestBindFromCXO). The node identity is bound to the AR's
+	// service SecKey so gated visors accept its subscribe (see #4168).
+	// Best-effort — HTTP/UDP registration is unaffected if it fails to start.
+	agg, aerr := regcxo.New(dmsgC, sk, b.api, regcxo.Config{Logger: logger})
+	if aerr != nil {
+		logger.WithError(aerr).Error("Failed to start AR-bind-over-CXO aggregator, continuing without it")
+	} else {
+		agg.Run(ctx)
+		closers = append(closers, func() { _ = agg.Close() }) //nolint:errcheck
+		logger.WithField("feed_pk", agg.FeedPK()).
+			WithField("port", skyenv.DmsgVisorARBindCXOPort).
+			Info("AR-bind-over-CXO aggregator running")
+	}
+
+	// CXO bindings publisher: the READ side, keyed by peer public key, so a
+	// caller can look one peer's addresses up over an already-open CXO
+	// connection with Preview instead of an authenticated HTTP round-trip —
+	// and without subscribing to (and holding) the whole set. Additive: GET
+	// /resolve is unchanged and stays authoritative, and the feed is inert
+	// until something reads it. Best-effort, like the aggregator above.
+	bindPub, berr := api.StartBindingsCXOPublisher(dmsgC, sk, b.store, logger)
+	if berr != nil {
+		logger.WithError(berr).Error("Failed to start CXO bindings publisher, continuing without it")
+	} else {
+		b.api.SetBindingsCXOPublisher(bindPub)
+		closers = append(closers, func() {
+			b.api.SetBindingsCXOPublisher(nil)
+			_ = bindPub.Close() //nolint:errcheck
+		})
+	}
+	return func() {
+		for i := len(closers) - 1; i >= 0; i-- {
+			closers[i]()
+		}
+	}
+}
+
+// Embed runs address-resolver inside a host process: the API is
+// returned for the host to mount under a path prefix on its own dmsg
+// HTTP port, the SUDPH UDP listener opens as configured, and the CXO
+// aggregator and publisher run on the host's dmsg client under the
+// host's key.
+func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, error) {
+	logger := host.Log
+	if logger == nil {
+		logger = services.NewLogger("address_resolver", s.cfg.LogLevel)
+	}
+	b, err := s.build(ctx, logger, host.DmsgAddr, false)
+	if err != nil {
+		return nil, err
+	}
+	closeCXO := func() {}
+	if host.DmsgClient != nil {
+		closeCXO = s.startCXO(ctx, host.DmsgClient, host.SK, b, logger)
+	}
+	go func() {
+		<-ctx.Done()
+		closeCXO()
+		b.close()
+	}()
+	return b.api, nil
+}
+
+func (s *service) Run(ctx context.Context) error {
+	cfg := s.cfg
+
+	tag := cfg.Tag
+	if tag == "" {
+		tag = "address_resolver"
+	}
+	logger := services.NewLogger(tag, cfg.LogLevel)
+	_ = s.log // logger is replaced with a tag-scoped one
+
+	pk := cfg.PubKey
+	sk := cfg.SecKey
+	if pk.Null() && !sk.Null() {
+		if derived, err := sk.PubKey(); err != nil {
+			logger.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
+		} else {
+			pk = derived
+		}
+	}
+
+	dmsgPort := cfg.DmsgPort
+	if dmsgPort == 0 {
+		dmsgPort = dmsg.DefaultDmsgHTTPPort
+	}
+	var dmsgAddr string
+	if !pk.Null() {
+		dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	b, err := s.build(runCtx, logger, dmsgAddr, true)
+	if err != nil {
+		return err
+	}
+	defer b.close()
+	arAPI := b.api
 
 	resolvedMode, err := svcmode.ResolveMode(cfg.Mode, !sk.Null())
 	if err != nil {
@@ -195,47 +305,11 @@ func (s *service) Run(ctx context.Context) error {
 	}
 	defer h.Close()
 
-	// AR-bind-over-CXO aggregator: always-on fan-in path where visors publish
-	// their AR bindings as a CXO feed instead of re-registering over a fresh
-	// dmsg stream (each a full Noise handshake) on a timer. Inert until visors
-	// subscribe (just a listener), purely additive to the authoritative
-	// HTTP/UDP bind path, so it needs no gate. Needs the dmsg client; the API
-	// is the Sink (IngestBindFromCXO). The node identity is bound to the AR's
-	// service SecKey so gated visors accept its subscribe (see #4168).
-	// Best-effort — HTTP/UDP registration is unaffected if it fails to start.
 	if h.DmsgClient != nil {
-		agg, aerr := regcxo.New(h.DmsgClient, sk, arAPI, regcxo.Config{Logger: logger})
-		if aerr != nil {
-			logger.WithError(aerr).Error("Failed to start AR-bind-over-CXO aggregator, continuing without it")
-		} else {
-			agg.Run(runCtx)
-			defer func() { _ = agg.Close() }() //nolint:errcheck
-			logger.WithField("feed_pk", agg.FeedPK()).
-				WithField("port", skyenv.DmsgVisorARBindCXOPort).
-				Info("AR-bind-over-CXO aggregator running")
-		}
+		closeCXO := s.startCXO(runCtx, h.DmsgClient, sk, b, logger)
+		defer closeCXO()
 	}
 
-	// CXO bindings publisher: the READ side, keyed by peer public key, so a
-	// caller can look one peer's addresses up over an already-open CXO
-	// connection with Preview instead of an authenticated HTTP round-trip —
-	// and without subscribing to (and holding) the whole set. Additive: GET
-	// /resolve is unchanged and stays authoritative, and the feed is inert
-	// until something reads it. Best-effort, like the aggregator above.
-	if h.DmsgClient != nil {
-		bindPub, berr := api.StartBindingsCXOPublisher(h.DmsgClient, sk, transportStore, logger)
-		if berr != nil {
-			logger.WithError(berr).Error("Failed to start CXO bindings publisher, continuing without it")
-		} else {
-			arAPI.SetBindingsCXOPublisher(bindPub)
-			defer func() {
-				arAPI.SetBindingsCXOPublisher(nil)
-				_ = bindPub.Close() //nolint:errcheck
-			}()
-		}
-	}
-
-	defer arAPI.Close()
 	select {
 	case <-runCtx.Done():
 		return nil

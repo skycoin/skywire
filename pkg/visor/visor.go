@@ -118,6 +118,7 @@ type Visor struct {
 	dmsgDC             *dmsg.Client       // dmsg direct client
 	dClient            dmsgdisc.APIClient // dmsg direct api client
 	dmsgHTTP           *http.Client       // dmsghttp client
+	dmsgHTTPMux        *http.ServeMux     // what the dmsg HTTP port serves: the log server at /, embedded services under their prefixes
 	dmsgHTTPReady      chan struct{}      // closed when dmsgHTTP is set
 	awaitSetupListener *dmsg.Listener     // pre-opened DmsgAwaitSetupPort listener; consumed by initRouter
 

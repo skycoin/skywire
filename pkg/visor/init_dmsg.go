@@ -254,7 +254,15 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	// skynet carrier: seeded "skynet://<pk>:70" server entries are dialed as a
 	// skywire route to that visor's dmsg relay (init_dmsg_relay.go).
 	dmsgC.SetSessionDialer(skynetSessionDialer)
-	httpC.Transport = dmsghttp.MakeHTTPTransport(ctx, dmsgC)
+	dmsgTr := dmsghttp.MakeHTTPTransport(ctx, dmsgC)
+	// A request for this visor's own key (a service it hosts under
+	// embedded_services, its own log server) is served in-process: dmsg does
+	// not loop back. The caller identity is the visor's own key, which its
+	// whitelists always carry.
+	dmsgTr.SetSelfDialer(v.conf.PK, func(port uint16) (net.Conn, error) {
+		return v.services.SelfDialAs(port, v.conf.PK)
+	})
+	httpC.Transport = dmsgTr
 
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
@@ -653,12 +661,17 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	v.logServer.api = lsAPI
 	v.initLock.Unlock()
 
-	// Register the log server handler so the sky-forwarding server
-	// can dispatch skynet connections to it directly (no localhost
-	// TCP bounce). Uses the SAME handler (lsAPI) as the DMSG HTTP
-	// server — a request arriving via skynet is served identically
-	// to one arriving via DMSG.
-	v.services.Register(visorconfig.DmsgHTTPPort, "log_server", HTTPHandler(lsAPI))
+	// The dmsg HTTP port serves one mux: the log server at / and any
+	// embedded deployment service under its prefix (init_embedded_services.go).
+	mux := http.NewServeMux()
+	mux.Handle("/", lsAPI)
+	v.dmsgHTTPMux = mux
+
+	// Register the handler so the sky-forwarding server can dispatch
+	// skynet connections to it directly (no localhost TCP bounce). Uses
+	// the SAME mux as the DMSG HTTP server — a request arriving via
+	// skynet is served identically to one arriving via DMSG.
+	v.services.Register(visorconfig.DmsgHTTPPort, "log_server", HTTPHandler(mux))
 	logger.WithField("port", visorconfig.DmsgHTTPPort).Info("Registered log server in service registry")
 
 	// Wire the service catalog so /services on the log server shows
@@ -721,7 +734,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		WriteTimeout:      skyenv.HTTPWriteTimeout,
 		IdleTimeout:       skyenv.HTTPIdleTimeout,
 		ReadHeaderTimeout: skyenv.HTTPReadHeaderTimeout,
-		Handler:           lsAPI,
+		Handler:           mux,
 	}
 
 	wg := new(sync.WaitGroup)

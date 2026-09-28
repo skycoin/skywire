@@ -8,11 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 )
 
@@ -58,6 +60,9 @@ var idleEvictDelay = poolIdleTimeout
 // Do not confuse with a Skywire Transport implementation.
 type HTTPTransport struct {
 	dmsgC *dmsg.Client
+	// selfPK and selfDial: see SetSelfDialer.
+	selfPK   cipher.PubKey
+	selfDial func(port uint16) (net.Conn, error)
 
 	mu       sync.Mutex
 	idle     map[dmsg.Addr][]*pooledStream
@@ -67,7 +72,7 @@ type HTTPTransport struct {
 
 // pooledStream wraps a dmsg.Stream with the timestamp it became idle.
 type pooledStream struct {
-	s         *dmsg.Stream
+	s         net.Conn
 	br        *bufio.Reader
 	host      dmsg.Addr
 	idleAt    time.Time
@@ -89,6 +94,17 @@ func MakeHTTPTransport(_ context.Context, dmsgC *dmsg.Client) *HTTPTransport {
 		idle:     make(map[dmsg.Addr][]*pooledStream),
 		tracking: make(map[*pooledStream]struct{}),
 	}
+}
+
+// SetSelfDialer makes requests addressed to pk, the owner of this
+// transport, go to dial instead of over dmsg: dial returns an in-process
+// connection to whatever the owner serves on that dmsg port. A visor
+// that hosts a deployment service under its own key reaches it this way.
+func (t *HTTPTransport) SetSelfDialer(pk cipher.PubKey, dial func(port uint16) (net.Conn, error)) {
+	t.mu.Lock()
+	t.selfPK = pk
+	t.selfDial = dial
+	t.mu.Unlock()
 }
 
 // RoundTrip implements http.RoundTripper. Reuses an idle stream to the
@@ -162,7 +178,15 @@ func (t *HTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		// fall through to fresh dial
 	}
 
-	stream, err := t.dmsgC.DialStream(req.Context(), hostAddr)
+	var stream net.Conn
+	var err error
+	if t.selfDial != nil && hostAddr.PK == t.selfPK {
+		// A request for our own key never leaves the process: dmsg does not
+		// loop back, and the handler is right here.
+		stream, err = t.selfDial(hostAddr.Port)
+	} else {
+		stream, err = t.dmsgC.DialStream(req.Context(), hostAddr)
+	}
 	if err != nil {
 		return nil, err
 	}

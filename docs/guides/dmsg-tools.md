@@ -109,6 +109,40 @@ and run `skywire autoconfig`. The server keeps its own key, ports, wss domain
 and health endpoint from that file; it appears in `skywire cli mdisc servers`
 as before. In the visor config this is `dmsg.server.config_path`.
 
+## Run deployment services inside the visor
+
+transport-discovery, address-resolver, route-finder and service-discovery
+can run in the visor process instead of as their own containers. Each is
+served under a path prefix on the visor's dmsg HTTP port, so it is
+addressed by the visor's key: `dmsg://<visor pk>:80/tpd/...`,
+`/ar/...`, `/rf/...`, `/sd/...`. The service keeps no key and no
+listener of its own; its CXO aggregators and publishers run on the
+visor's dmsg client under the visor's key. Requests over dmsg carry the
+caller's key, so the services' whitelists behave as before.
+
+In the visor config, `embedded_services` takes the same blocks as a
+`services.json` for `skywire svc run`, plus an optional `prefix`:
+
+```json
+"embedded_services": [
+  { "type": "transport-discovery", "redis": "redis://127.0.0.1:6379", "entry_timeout": "5m" },
+  { "type": "route-finder", "redis": "redis://127.0.0.1:6379" },
+  { "type": "address-resolver", "redis": "redis://127.0.0.1:6379", "udp_addr": ":30178" }
+]
+```
+
+`/tpd/health` and the other services' `/health` stay where they were,
+under their prefix; the visor's own `/health` is unchanged. Clients take
+the prefixed address in place of the service's old `dmsg://<service pk>:80`.
+A block's `addr` is honored as well: the same handler, without the
+prefix, on that plain-HTTP address, for callers that still reach the
+service the old way. The visor's own clients reach a service it hosts
+in-process, so its config may point at its own key.
+
+The e2e suite runs this shape: `visor-s` in `docker/docker-compose.yml`
+hosts the four services (`docker/integration/visorS.json`), and every
+other visor's config addresses them by its key.
+
 ## Keeping the embedded server list fresh (maintainers)
 
 The binary embeds a snapshot of the deployment's dmsg servers
