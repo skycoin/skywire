@@ -50,12 +50,43 @@ both answering `/api/ping` for the whole run:
 | lite core (after) | 105,296 | 140,192 |
 | full core (before) | 111,984 | 160,512 |
 
-These are **host** numbers for a process of its own, not the iOS in-app or
-extension footprint (M1 measures `phys_footprint` on the Simulator, D3 the
-extension on a device). They are ~3× the ~50 MB packet-tunnel budget the
-proposal (§5.2) names as the top risk: the memory levers there
-(`debug.SetMemoryLimit`, fewer sessions, lazy listeners) are needed before
-Lane D, whatever M1 measures.
+These are **host RSS** numbers, and RSS is the wrong metric for the
+extension budget. It counts the binary's clean code pages (~24 MB of
+`__TEXT`, which iOS does not charge) and heap that Go has already released.
+What jetsam charges is `phys_footprint`, which macOS reports with
+`footprint -p <pid>`. A first version of this README compared the RSS above
+with the ~50 MB packet-tunnel budget and called it ~3× over. That comparison
+was wrong.
+
+**Re-measured 2026-09-29** at `3d6a5e669` (this tree with develop merged; the
+Android payload has the same byte count). Two lite cores ran side by side on
+this `phone-profile.json` with fresh identities, idle but connected, and
+`/api/ping` answered throughout. Both ran
+`GODEBUG=gctrace=1 skywire-mobile visor -c <config> --pprofmode http`, with
+`footprint -p` and `ps -o rss=` every 30 s for 10 min and `/debug/pprof/heap`
+at the end:
+
+| | RSS (KB) | `phys_footprint` |
+|---|---|---|
+| lite core as the phone runs it (no Go memory limit) | 94,096–98,800 | 43–62 MB (peak ~1 min after start; 51–53 MB at 10 min) |
+| lite core, `GOMEMLIMIT=40MiB` | 84,416–85,920 | 42–45 MB throughout |
+
+At 10 min the live heap after GC is 18–19 MB. Go's default (GOGC=100) lets the
+heap grow to a ~37 MB goal before it collects, and that headroom is what a
+memory limit takes away: 40 GCs in 10 min instead of 18, each under 5 ms.
+About 12 MB does not move: the binary's dirty data segments (~8.5 MB), GC
+metadata (~4.7 MB) and ~156 goroutine stacks (~1.7 MB). The largest
+live-heap holders are the router's TPD snapshot (~3.7 MB), skychat's SSE hub
+(~2.5 MB) and the CXO subscriber walk (~1.6 MB).
+
+So the lite core sits at the ~50 MB budget the proposal (§5.2) names, not 3×
+over it. With a memory limit it fits when idle. It still falls short of the
+20 % margin D3 asks for (≤ 40 MB), and nothing here measures VPN traffic, the
+extension's own Swift/NetworkExtension overhead, or a device. The existing
+`memory_limit` setting cannot apply that limit on iOS. `"auto"` reads
+`/proc/meminfo`, which iOS and macOS do not have, so the core logs "Could not
+detect available memory" and sets no limit. `memlimit.go` also raises any
+value below 64 MiB to 64 MiB. Playbook item 1.7 (M1) fixes both.
 
 The size budget stays at 70 MiB. The payload grew 1.65 MB in the five days
 before this change, so a budget tight enough to catch the cut regrowing would
