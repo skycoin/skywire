@@ -79,19 +79,14 @@ type EntrySink interface {
 
 // KeepaliveSink is an EntrySink that can also keep the registered entries
 // alive by itself (the visor's SD-registration-over-CXO feed, whose Roots
-// refresh the SD's stored entries). While KeepaliveHealthy is true, an
-// unchanged re-registration is sent over HTTP only once per
-// cxoHealthyRefreshInterval instead of on every heartbeat.
+// refresh the SD's stored entries). While KeepaliveHealthy reports healthy on
+// the epoch of the last HTTP registration, an unchanged heartbeat skips HTTP.
+// A new epoch (the SD resubscribed, possibly after losing its store) makes the
+// next heartbeat register over HTTP once.
 type KeepaliveSink interface {
 	EntrySink
-	KeepaliveHealthy() bool
+	KeepaliveHealthy() (healthy bool, epoch uint64)
 }
-
-// cxoHealthyRefreshInterval bounds how long an unchanged entry goes without an
-// HTTP re-registration while a KeepaliveSink is healthy. The HTTP refresh
-// restores an entry the SD lost (a restart on a memory store) that the CXO
-// ingest cannot re-create on its own. Matches the dmsg client's stretch.
-const cxoHealthyRefreshInterval = 30 * time.Minute
 
 // HTTPClient is responsible for interacting with the service-discovery
 type HTTPClient struct {
@@ -103,9 +98,10 @@ type HTTPClient struct {
 	client         *http.Client
 	clientPublicIP string
 	// posted is the entry as the next unchanged heartbeat would send it,
-	// and postedAt when it was last accepted over HTTP. Guarded by entryMx.
-	posted   []byte
-	postedAt time.Time
+	// and postedEpoch the CXO keepalive epoch when it was last accepted over
+	// HTTP. Guarded by entryMx.
+	posted      []byte
+	postedEpoch uint64
 }
 
 // NewClient creates a new HTTPClient.
@@ -312,17 +308,22 @@ func (c *HTTPClient) registerEntry(ctx context.Context) (Service, error) {
 	}
 	c.entry = entry
 	c.posted, _ = json.Marshal(&c.entry) //nolint:errcheck // a nil memo only forces the next POST
-	c.postedAt = time.Now()
+	if ks, ok := c.conf.Sink.(KeepaliveSink); ok {
+		_, c.postedEpoch = ks.KeepaliveHealthy()
+	}
 	c.log.WithField("entry", c.entry.String()).Debug("Entry registered successfully")
 	return c.entry, nil
 }
 
 // cxoKeepsAlive reports whether this heartbeat can skip the HTTP POST: the
-// entry is byte-identical to the one last accepted, that was recent, and the
-// sink is keeping it alive over CXO. Caller holds entryMx.
+// entry is byte-identical to the one last accepted, and the sink is keeping it
+// alive over CXO on the epoch of that registration. Caller holds entryMx.
 func (c *HTTPClient) cxoKeepsAlive() bool {
 	ks, ok := c.conf.Sink.(KeepaliveSink)
-	if !ok || c.posted == nil || time.Since(c.postedAt) >= cxoHealthyRefreshInterval || !ks.KeepaliveHealthy() {
+	if !ok || c.posted == nil {
+		return false
+	}
+	if healthy, epoch := ks.KeepaliveHealthy(); !healthy || epoch != c.postedEpoch {
 		return false
 	}
 	raw, err := json.Marshal(&c.entry)

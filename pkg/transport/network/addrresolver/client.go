@@ -168,26 +168,22 @@ type httpClient struct {
 	bindHookMu      sync.RWMutex
 	bindPublishHook func(netType string, payload LocalAddresses)
 
-	// cxoHealthy, when set and true, means the CXO AR-bind feed is keeping
-	// this visor's bindings alive, so an unchanged re-bind goes over HTTP only
-	// once per cxoHealthyRefreshInterval. bound memoizes the last payload the
-	// AR accepted per transport type. Guarded by boundMu.
-	cxoHealthy func() bool
+	// cxoHealthy, when set, reports whether the CXO AR-bind feed is keeping
+	// this visor's bindings alive, and the epoch of the AR's subscription.
+	// While healthy on the epoch of the last accepted bind, an unchanged
+	// re-bind skips HTTP. bound memoizes the last payload the AR accepted per
+	// transport type. Guarded by boundMu.
+	cxoHealthy func() (bool, uint64)
 	boundMu    sync.Mutex
 	bound      map[string]boundBind
 }
 
-// boundBind is the last payload the AR accepted for one transport type.
+// boundBind is the last payload the AR accepted for one transport type, and
+// the CXO keepalive epoch at the time.
 type boundBind struct {
-	raw []byte
-	at  time.Time
+	raw   []byte
+	epoch uint64
 }
-
-// cxoHealthyRefreshInterval bounds how long an unchanged binding goes without
-// an HTTP re-bind while the CXO keepalive is healthy. The HTTP refresh restores
-// a record the AR lost, which the CXO ingest leaves to the HTTP path for
-// SUDPH. Matches the dmsg client's stretch.
-const cxoHealthyRefreshInterval = 30 * time.Minute
 
 // BindPublisher is the optional extension a caller type-asserts the APIClient
 // to in order to mirror AR bindings onto a side channel (the CXO AR-bind
@@ -200,9 +196,9 @@ type BindPublisher interface {
 	// "squicr", "swtr") and the LocalAddresses the visor just registered.
 	SetBindPublishHook(fn func(netType string, payload LocalAddresses))
 	// SetCXOKeepaliveHealthyFunc installs fn (or clears it with nil). While fn
-	// returns true, an unchanged re-bind skips the HTTP POST until
-	// cxoHealthyRefreshInterval has passed since the last accepted one.
-	SetCXOKeepaliveHealthyFunc(fn func() bool)
+	// reports healthy on the epoch of the last accepted bind, an unchanged
+	// re-bind skips the HTTP POST.
+	SetCXOKeepaliveHealthyFunc(fn func() (healthy bool, epoch uint64))
 }
 
 // SetBindPublishHook implements BindPublisher.
@@ -213,20 +209,23 @@ func (c *httpClient) SetBindPublishHook(fn func(netType string, payload LocalAdd
 }
 
 // SetCXOKeepaliveHealthyFunc implements BindPublisher.
-func (c *httpClient) SetCXOKeepaliveHealthyFunc(fn func() bool) {
+func (c *httpClient) SetCXOKeepaliveHealthyFunc(fn func() (healthy bool, epoch uint64)) {
 	c.boundMu.Lock()
 	c.cxoHealthy = fn
 	c.boundMu.Unlock()
 }
 
 // cxoKeepsBindAlive reports whether a re-bind of payload can skip the HTTP
-// POST: it is identical to the one the AR last accepted for netType, that was
-// recent, and the CXO keepalive is healthy.
+// POST: it is identical to the one the AR last accepted for netType, and the
+// CXO keepalive is healthy on the epoch that bind was made in.
 func (c *httpClient) cxoKeepsBindAlive(netType string, payload LocalAddresses) bool {
 	c.boundMu.Lock()
-	healthy, last := c.cxoHealthy, c.bound[netType]
+	health, last := c.cxoHealthy, c.bound[netType]
 	c.boundMu.Unlock()
-	if healthy == nil || last.raw == nil || time.Since(last.at) >= cxoHealthyRefreshInterval || !healthy() {
+	if health == nil || last.raw == nil {
+		return false
+	}
+	if healthy, epoch := health(); !healthy || epoch != last.epoch {
 		return false
 	}
 	raw, err := json.Marshal(payload)
@@ -240,10 +239,14 @@ func (c *httpClient) noteBound(netType string, payload LocalAddresses) {
 		return
 	}
 	c.boundMu.Lock()
+	var epoch uint64
+	if c.cxoHealthy != nil {
+		_, epoch = c.cxoHealthy()
+	}
 	if c.bound == nil {
 		c.bound = make(map[string]boundBind)
 	}
-	c.bound[netType] = boundBind{raw: raw, at: time.Now()}
+	c.bound[netType] = boundBind{raw: raw, epoch: epoch}
 	c.boundMu.Unlock()
 }
 
