@@ -12,10 +12,8 @@ import (
 
 	"github.com/xtaci/kcp-go"
 
-	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/node"
-	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/ar/api"
 	armetrics "github.com/skycoin/skywire/pkg/deployment/ar/metrics"
 	"github.com/skycoin/skywire/pkg/deployment/ar/regcxo"
@@ -32,10 +30,7 @@ import (
 // Type is the registry key used in services.json blocks.
 const Type = "address-resolver"
 
-const (
-	redisPrefix = "address-resolver"
-	redisScheme = "redis://"
-)
+const redisPrefix = "address-resolver"
 
 func init() {
 	services.Register(Type, factory)
@@ -84,25 +79,7 @@ type built struct {
 func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr string, plainHTTP bool) (*built, error) {
 	cfg := s.cfg
 
-	redisURL := cfg.Redis
-	if redisURL == "" {
-		redisURL = "redis://localhost:6379"
-	}
-	if !strings.HasPrefix(redisURL, redisScheme) {
-		redisURL = redisScheme + redisURL
-	}
-	storeConfig := storeconfig.Config{
-		Type:     storeconfig.Redis,
-		URL:      redisURL,
-		Password: storeconfig.RedisPassword(),
-		PoolSize: cfg.RedisPoolSize,
-	}
-	if storeConfig.PoolSize == 0 {
-		storeConfig.PoolSize = 10
-	}
-	if cfg.Testing {
-		storeConfig.Type = storeconfig.Memory
-	}
+	storeConfig := cfg.StoreConfig()
 
 	metricsutil.ServePProf(logger, cfg.PprofAddr, "address-resolver")
 
@@ -119,12 +96,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 		}
 	}
 
-	// Requests over dmsg are authenticated by the stream's key; only a
-	// plain-HTTP surface checks nonces, so only that needs them durable.
-	nonceConfig := storeConfig
-	if !plainHTTP {
-		nonceConfig.Type = storeconfig.Memory
-	}
+	nonceConfig := cfg.NonceStoreConfig(plainHTTP)
 	s.nonceStore = services.StoreKind(nonceConfig.Type)
 	nonceStore, err := httpauth.NewNonceStore(ctx, nonceConfig, redisPrefix)
 	if err != nil {
@@ -190,7 +162,7 @@ func (s *service) startCXO(ctx context.Context, dmsgC *dmsg.Client, host service
 func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, error) {
 	logger := host.Log
 	if logger == nil {
-		logger = services.NewLogger("address_resolver", s.cfg.LogLevel)
+		logger = services.NewLogger(s.cfg.LogTag("address_resolver"), s.cfg.LogLevel)
 	}
 	b, err := s.build(ctx, logger, host.DmsgAddr, false)
 	if err != nil {
@@ -209,12 +181,7 @@ func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, 
 func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 
-	tag := cfg.Tag
-	if tag == "" {
-		tag = "address_resolver"
-	}
-	logger := services.NewLogger(tag, cfg.LogLevel)
-	_ = s.log // logger is replaced with a tag-scoped one
+	logger := services.NewLogger(cfg.LogTag("address_resolver"), cfg.LogLevel)
 
 	pk := cfg.PubKey
 	sk := cfg.SecKey
@@ -256,13 +223,7 @@ func (s *service) Run(ctx context.Context) error {
 		dmsgDiscDmsg = dmsg.DiscAddr(false)
 	}
 	embeddedServers := dmsgDiscEntries(cfg.Dmsg.Servers)
-	surveyWL := deployment.Prod.SurveyWhitelist
-	if cfg.TestEnvironment {
-		surveyWL = deployment.Test.SurveyWhitelist
-	}
-	if len(cfg.SurveyWhitelist) > 0 {
-		surveyWL = cfg.SurveyWhitelist
-	}
+	surveyWL := cfg.SurveyKeys()
 
 	addr := cfg.Addr
 	if addr == "" {

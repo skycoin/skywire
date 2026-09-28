@@ -104,12 +104,12 @@ func init() {
 	RootCmd.Flags().StringVar(&publicUDPAddr, "public-udp-address", "", "externally-reachable host:port advertised in /health for SUDPH\n\rrequired for visors that reach this AR over dmsghttp")
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\n\r")
+	RootCmd.Flags().StringVar(&redisURL, "redis", "", "redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)\n\r")
 	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\n\r")
 	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 5*time.Minute, "address binding TTL (0 to disable)\n\r")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
 	RootCmd.Flags().StringVar(&tag, "tag", "address_resolver", "logging tag\n\r")
-	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
+	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "run for a test network: keep entries in memory unless --redis is set")
 	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(false), "url of dmsg discovery\n\r")
 	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration")
 	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment")
@@ -182,22 +182,24 @@ func buildConfig() (*ar.Config, error) {
 		}
 	}
 	cfg := &ar.Config{
-		SecKey:          sk,
-		Addr:            addr,
-		UDPAddr:         udpAddr,
-		PublicUDPAddr:   publicUDPAddr,
-		MetricsAddr:     metricsAddr,
-		PprofAddr:       pprofAddr,
-		Redis:           redisURL,
-		RedisPoolSize:   redisPoolSize,
-		EntryTimeout:    services.Duration(entryTimeout),
-		Tag:             tag,
-		LogLevel:        logLvl,
-		Testing:         testing,
-		Mode:            mode,
-		Whitelist:       cmdutil.CommaSplit(whitelistKeys),
-		TestEnvironment: testEnvironment,
-		DmsgPort:        dmsgPort,
+		Common: services.Common{
+			SecKey:          sk,
+			Addr:            addr,
+			MetricsAddr:     metricsAddr,
+			PprofAddr:       pprofAddr,
+			Redis:           redisURL,
+			RedisPoolSize:   redisPoolSize,
+			EntryTimeout:    services.Duration(entryTimeout),
+			Tag:             tag,
+			LogLevel:        logLvl,
+			Testing:         testing,
+			Mode:            mode,
+			TestEnvironment: testEnvironment,
+			DmsgPort:        dmsgPort,
+		},
+		UDPAddr:       udpAddr,
+		PublicUDPAddr: publicUDPAddr,
+		Whitelist:     cmdutil.CommaSplit(whitelistKeys),
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  dmsgDisc,
 			ServerType: dmsgServerType,

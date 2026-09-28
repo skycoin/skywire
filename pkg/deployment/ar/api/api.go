@@ -141,19 +141,8 @@ type dhtMirror interface {
 	Delete(subjectPK cipher.PubKey)
 }
 
-// HealthCheckResponse is struct of /health endpoint
-type HealthCheckResponse struct {
-	ServiceName string          `json:"service_name,omitempty"`
-	BuildInfo   *buildinfo.Info `json:"build_info,omitempty"`
-	StartedAt   time.Time       `json:"started_at"`
-	DmsgAddr    string          `json:"dmsg_address,omitempty"`
-	DmsgServers []string        `json:"dmsg_servers,omitempty"`
-	// UDPAddr is the externally-reachable host:port of this AR's SUDPH
-	// listener. Visors that connect over dmsghttp use this value to
-	// register SUDPH — without it the dmsg-only URL has no IP to dial.
-	// Omitted when the operator did not configure --public-udp-address.
-	UDPAddr string `json:"udp_address,omitempty"`
-}
+// HealthCheckResponse is the /health body every service shares.
+type HealthCheckResponse = httputil.HealthCheckResponse
 
 // ArData has all the visors that have registered with sudph or stcpr transport
 type ArData struct {
