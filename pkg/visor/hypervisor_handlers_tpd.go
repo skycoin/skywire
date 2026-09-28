@@ -19,7 +19,6 @@
 package visor
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -39,12 +38,11 @@ func (hv *Hypervisor) getNetworkTransports() http.HandlerFunc {
 			return
 		}
 
-		// TPD's /metrics is a whole-mesh dump — 60 MB and 180k records on the
-		// production deployment, taking half a minute to arrive over dmsg. That
-		// is far past the server's 10s WriteTimeout, which would close the
-		// connection with nothing written and leave the browser staring at
-		// ERR_EMPTY_RESPONSE. Slow aggregating endpoints have to set their own
-		// deadline; see hypervisor_handlers_visors.go for the same pattern.
+		// Reducing 180k records takes a moment, and FetchTransportMetricsCXO
+		// waits out the feed's first sync on a cold cache. Both happen before a
+		// byte goes out, which the server's 10s WriteTimeout would cut short —
+		// slow aggregating endpoints set their own deadline. See
+		// hypervisor_handlers_visors.go for the same pattern.
 		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(120 * time.Second)); err != nil {
 			hv.log(r).WithError(err).Debug("network transports: could not extend write deadline")
 		}
@@ -67,79 +65,52 @@ func (hv *Hypervisor) getNetworkTransports() http.HandlerFunc {
 		// The cap is applied after this filter, so "live only" means the top N
 		// LIVE transports rather than whatever survives filtering the top N.
 		liveOnly := r.URL.Query().Get("live") == "true"
-		path := fmt.Sprintf("/metrics?days=%d&bandwidth=true&latency=true&edges=true", days)
 
 		log := hv.visor.MasterLogger().PackageLogger("tpd_proxy")
 
-		// Step 1: CXO subscriber cache. Hits when TPD has pushed a
-		// Root for this day window since visor startup. The header
-		// X-Skywire-Metrics-Source = cxo lets the UI surface the
-		// path used (handy for diagnosing slow loads).
-		if body, ts, err := hv.visor.FetchTransportMetricsCXO(days); err == nil && len(body) > 0 {
-			reduced, rerr := reduceTransportMetrics(body, limit, liveOnly)
-			if rerr != nil {
-				log.WithError(rerr).Warn("TPD metrics from CXO did not decode")
-			} else {
-				if !ts.IsZero() {
-					w.Header().Set("X-Skywire-Metrics-Updated", ts.UTC().Format(time.RFC3339))
-				}
-				w.Header().Set("X-Skywire-Metrics-Source", "cxo")
-				httputil.WriteJSON(w, r, http.StatusOK, reduced)
-				return
-			}
-		}
-
-		// TPD is reached over dmsg only — plain HTTP to deployment services is no
-		// longer supported. The dmsg URL may live in either field (the dmsg-only
-		// default stores it in the "http" field).
-		tpdDmsg := strings.TrimSuffix(hv.visor.conf.Transport.DiscoveryDmsg, "/")
-		if !strings.HasPrefix(tpdDmsg, "dmsg://") {
-			tpdDmsg = strings.TrimSuffix(hv.visor.conf.Transport.Discovery, "/")
-		}
-		if !strings.HasPrefix(tpdDmsg, "dmsg://") {
-			tpdDmsg = strings.TrimSuffix(deployment.Prod.TransportDiscoveryDmsg, "/")
-		}
-
-		// DMSG-HTTP via the visor's DmsgHTTP RPC.
-		if strings.HasPrefix(tpdDmsg, "dmsg://") {
-			dmsgURL := tpdDmsg + path
-			log.Debugf("fetching TPD metrics via DMSG: %s", dmsgURL)
-			resp, err := hv.visor.DmsgHTTP(visorapi.DmsgHTTPRequest{
-				URL:    dmsgURL,
-				Method: "GET",
-			})
-			if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				reduced, rerr := reduceTransportMetrics(resp.Body, limit, liveOnly)
-				if rerr != nil {
-					log.WithError(rerr).Warn("TPD metrics did not decode")
-					httputil.WriteJSON(w, r, http.StatusBadGateway,
-						map[string]string{"error": "tpd metrics unreadable"})
-
-					return
-				}
-				if reduced.Partial {
-					// Expected on a large mesh: TPD's body is cut off mid-record
-					// upstream. Returning the records that did arrive beats
-					// failing, and the flag lets the UI say so.
-					log.Warnf("TPD metrics truncated upstream after %d records", reduced.Total)
-				}
-				w.Header().Set("X-Skywire-Metrics-Source", "dmsg-http")
-				httputil.WriteJSON(w, r, http.StatusOK, reduced)
-
-				return
-			}
+		// CXO is the only path. The visor holds a long-lived subscriber to
+		// TPD's metrics publisher, and FetchTransportMetricsCXO waits out the
+		// feed's first sync when the cache is cold, so a miss here means the
+		// feed genuinely has nothing yet — not that another transport might.
+		//
+		// There used to be a dmsg-HTTP fallback. It could not work and made
+		// things worse: this payload is ~60 MB, one request pulls the whole
+		// mesh, and the body came back truncated mid-record after about 30s.
+		// All the fallback bought was another ~50s of waiting before the same
+		// failure, turning a fast "not ready yet" into a two-minute hang.
+		body, ts, err := hv.visor.FetchTransportMetricsCXO(days)
+		if err != nil || len(body) == 0 {
 			if err != nil {
-				log.WithError(err).Warn("TPD metrics DMSG fetch failed")
-			} else {
-				log.Warnf("TPD metrics DMSG fetch returned %d", resp.StatusCode)
+				log.WithError(err).Debug("TPD metrics not in the CXO cache yet")
 			}
-			httputil.WriteJSON(w, r, http.StatusBadGateway,
-				map[string]string{"error": "tpd unreachable over dmsg"})
+			// 503 + Retry-After, not 502: nothing is broken, the feed is still
+			// filling. The UI can say "warming up" and try again.
+			w.Header().Set("Retry-After", "20")
+			httputil.WriteJSON(w, r, http.StatusServiceUnavailable,
+				map[string]string{"error": "tpd metrics feed is still syncing"})
+
 			return
 		}
 
-		httputil.WriteJSON(w, r, http.StatusServiceUnavailable,
-			map[string]string{"error": "no TPD dmsg URL configured"})
+		reduced, rerr := reduceTransportMetrics(body, limit, liveOnly)
+		if rerr != nil {
+			log.WithError(rerr).Warn("TPD metrics from CXO did not decode")
+			httputil.WriteJSON(w, r, http.StatusBadGateway,
+				map[string]string{"error": "tpd metrics unreadable"})
+
+			return
+		}
+		if reduced.Partial {
+			// The assembled feed ended mid-record. Returning what arrived beats
+			// failing, and the flag lets the UI say the total is a floor.
+			log.Warnf("TPD metrics truncated after %d records", reduced.Total)
+		}
+
+		if !ts.IsZero() {
+			w.Header().Set("X-Skywire-Metrics-Updated", ts.UTC().Format(time.RFC3339))
+		}
+		w.Header().Set("X-Skywire-Metrics-Source", "cxo")
+		httputil.WriteJSON(w, r, http.StatusOK, reduced)
 	}
 }
 

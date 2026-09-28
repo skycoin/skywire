@@ -115,6 +115,9 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
   // displays 2000 of 180000 transports is worse than one that says so.
   returnedCount = 0;
   liveTotal = 0;
+  // The metrics feed is a CXO subscription; on a cold start it needs a moment
+  // to fill. That is a wait, not an error.
+  syncing = false;
   partial = false;
   networkBandwidth = 0;
   byTransport: ByTransportRow[] = [];
@@ -211,7 +214,13 @@ return {
       `network/transports?days=${this.days}` + (this.hideOffline ? '&live=true' : '')
     ).pipe(
       catchError((err) => {
-        this.error = err?.message || 'Failed to fetch transports';
+        // 503 means the CXO metrics feed is still syncing — not a failure, and
+        // it clears on its own. Saying "failed" there sends people looking for
+        // a fault that isn't present.
+        this.syncing = err?.status === 503;
+        this.error = this.syncing
+          ? null
+          : err?.message || 'Failed to fetch transports';
         this.loading = false;
         this.cdr.markForCheck();
 
@@ -307,6 +316,7 @@ return {
     this.networkBandwidth = networkBw;
     this.loading = false;
     this.error = null;
+    this.syncing = false;
     this.lastUpdated = new Date();
     this.cdr.markForCheck();
   }

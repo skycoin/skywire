@@ -61,6 +61,17 @@
       </div>
     }
 
+    <!-- A cold CXO subscription is a wait, not a fault. -->
+    @if (syncing && byTransport.length === 0 && byVisor.length === 0) {
+      <div class="loading-row">
+        <mat-icon>cloud_sync</mat-icon>
+        <span class="ml-2">
+          The transport metrics feed is still syncing from the network. This
+          takes a moment after the visor starts; it will appear on its own.
+        </span>
+      </div>
+    }
+
     @if (error && byTransport.length === 0 && byVisor.length === 0) {
       <div class="error-row">
         <mat-icon>error_outline</mat-icon>
