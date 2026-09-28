@@ -4,6 +4,7 @@ package dmsg
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -385,6 +386,14 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 
 // bridgeStream forwards a request to a destination session and bridges the two streams.
 func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteCloser, dst ServerSession, req StreamRequest) error {
+	_, err := ss.bridge(log, yStr, dst, req)
+	return err
+}
+
+// bridge is bridgeStream that also reports whether dst accepted the request.
+// Before acceptance yStr is untouched and the caller may try another session;
+// after it, yStr belongs to the bridge.
+func (ss *ServerSession) bridge(log logrus.FieldLogger, yStr io.ReadWriteCloser, dst ServerSession, req StreamRequest) (forwarded bool, err error) {
 	// A bridge where either side is a peer session, or whose request arrived
 	// over a client session on another key's behalf, is a *relayed* stream —
 	// this server carrying traffic for someone that is not its own client.
@@ -394,7 +403,7 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 		if !ss.entity.tryAcquireRelaySlot(ss.rPK) {
 			ss.m.RecordStream(metrics.DeltaFailed)
 			ss.entity.relayRefused.Add(1)
-			return ErrRelayCapacityReached
+			return false, ErrRelayCapacityReached
 		}
 		defer ss.entity.releaseRelaySlot(ss.rPK)
 	}
@@ -402,7 +411,7 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 	yStr2, resp, err := dst.forwardRequest(req)
 	if err != nil {
 		ss.m.RecordStream(metrics.DeltaFailed)
-		return err
+		return false, err
 	}
 	if logging.TraceEnabled() {
 		logging.Trace(log, "Forwarded stream request.")
@@ -422,7 +431,7 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 		// RAM" incident.
 		_ = yStr2.Close() //nolint:errcheck
 		ss.m.RecordStream(metrics.DeltaFailed)
-		return err
+		return true, err
 	}
 	if logging.TraceEnabled() {
 		logging.Trace(log, "Forwarded stream response.")
@@ -446,7 +455,7 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 	}
 	ss.m.RecordStream(metrics.DeltaConnect)
 	defer ss.m.RecordStream(metrics.DeltaDisconnect)
-	return netutil.CopyReadWriteCloser(yStr, yStr2)
+	return true, netutil.CopyReadWriteCloser(yStr, yStr2)
 }
 
 // idleTimeoutConn wraps a ReadWriteCloser with per-operation deadlines.
@@ -496,12 +505,21 @@ func (c *idleTimeoutConn) SetWriteDeadline(t time.Time) error {
 // forwardViaPeer tries to forward a stream request through peer server sessions.
 // This is only called for client-originated requests (not peer-originated, enforcing 1-hop max).
 func (ss *ServerSession) forwardViaPeer(log logrus.FieldLogger, yStr io.ReadWriteCloser, req StreamRequest) error {
-	peers := ss.entity.forwardSessions(req.DstAddr.PK)
+	dst := req.DstAddr.PK
+	// Every peer said "not here" moments ago: answer at once. An offline
+	// hypervisor or signaling peer is redialed by every visor that names it,
+	// and each such request otherwise costs one stream per peer.
+	if ss.entity.peerMissed(dst) {
+		ss.m.RecordStream(metrics.DeltaFailed)
+		return ErrReqNoNextSession
+	}
+	peers := ss.entity.forwardSessions(dst)
 	if len(peers) == 0 {
 		ss.m.RecordStream(metrics.DeltaFailed)
 		return ErrReqNoNextSession
 	}
 
+	tried, missed := 0, 0
 	for _, peer := range peers {
 		// Don't forward back to the session the request came from.
 		if peer.RemotePK() == ss.rPK {
@@ -513,18 +531,37 @@ func (ss *ServerSession) forwardViaPeer(log logrus.FieldLogger, yStr io.ReadWrit
 			logging.Trace(log, "Trying peer server for forwarding.")
 		}
 
-		err := ss.bridgeStream(log, yStr, peer, req)
-		if err == nil {
-			return nil
+		forwarded, err := ss.bridge(log, yStr, peer, req)
+		if forwarded {
+			// The peer carried it. Whatever ended the bridge, yStr is spent,
+			// so there is no next peer to try.
+			ss.entity.clearPeerMiss(dst)
+			return err
+		}
+		tried++
+		if isPeerMiss(err) {
+			missed++
 		}
 		log.WithError(err).Debug("Peer forward failed, trying next.")
 		if ss.relayInbound && ss.entity.forwardFailedFunc != nil {
-			ss.entity.forwardFailedFunc(req.DstAddr.PK, peer.RemotePK())
+			ss.entity.forwardFailedFunc(dst, peer.RemotePK())
 		}
+	}
+	if tried > 0 && missed == tried {
+		ss.entity.notePeerMiss(dst)
 	}
 
 	ss.m.RecordStream(metrics.DeltaFailed)
 	return ErrReqNoNextSession
+}
+
+// isPeerMiss reports whether a peer's failure to forward means the
+// destination is not on that peer. A peer without the destination closes the
+// stream without a response, so the forwarder reads EOF. A signed refusal
+// (the destination answered), a timeout or a local capacity refusal is not a
+// miss and never feeds the peer-miss cache.
+func isPeerMiss(err error) bool {
+	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
 }
 
 func addrToIP(addr net.Addr) (net.IP, error) {

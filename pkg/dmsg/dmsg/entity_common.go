@@ -194,6 +194,12 @@ type EntityCommon struct {
 	// reason for the same purpose.
 	relayRefused atomic.Int64
 
+	// peerMiss holds destinations that every peer recently reported absent,
+	// until the recorded instant (see peerMissTTL). forwardViaPeer refuses
+	// them at once instead of opening a stream on every peer again.
+	peerMiss   map[cipher.PubKey]time.Time
+	peerMissMx sync.Mutex
+
 	// acceptRelayedRequests admits a stream request over a CLIENT session
 	// whose SrcAddr.PK is not the session's remote key (see
 	// ServerConfig.AcceptRelayedRequests). Such a request is charged to the
