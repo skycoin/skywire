@@ -66,7 +66,6 @@ func TestArbiterDialsAtTheGroupsLengthWhenThePoolHasNone(t *testing.T) {
 	}
 	require.Equal(t, 1, rig.active.legHopsTarget())
 	require.Empty(t, poolCandidates(rig.active, rig.pool, nil))
-	require.True(t, pooledAtOtherLength(rig.active, rig.pool))
 
 	calls := 0
 	inner := rig.grow(t)
@@ -85,4 +84,29 @@ func TestArbiterDialsAtTheGroupsLengthWhenThePoolHasNone(t *testing.T) {
 	rig.closeLeg(t, rig.grownTps[0])
 	poolArbiterStep(rig.active, rig.pool, now.Add(time.Millisecond), grow)
 	require.Equal(t, 1, calls)
+}
+
+// TestArbiterDialsWhenThePoolIsEmpty: an active tunnel below its idle width
+// with no standby at all still dials a spare leg, once per pool.leg_interval.
+// Settling instead left the browser visor on one flaky relay for minutes
+// whenever its standby dials were failing.
+func TestArbiterDialsWhenThePoolIsEmpty(t *testing.T) {
+	rig := newComposeRig(t, "skysocks-client-empty-pool-test", 0)
+	require.Empty(t, rig.pool)
+
+	calls := 0
+	inner := rig.grow(t)
+	grow := func(s *RouteGroup) error {
+		calls++
+		require.Nil(t, s, "an empty pool has no standby to name")
+		return inner(nil)
+	}
+	now := time.Now()
+	poolArbiterStep(rig.active, rig.pool, now, grow)
+	require.Equal(t, 1, calls)
+	require.Equal(t, 2, rig.active.aliveLegCount())
+
+	rig.closeLeg(t, rig.grownTps[0])
+	poolArbiterStep(rig.active, rig.pool, now.Add(time.Millisecond), grow)
+	require.Equal(t, 1, calls, "the retry is paced by pool.leg_interval")
 }
