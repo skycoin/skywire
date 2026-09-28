@@ -565,10 +565,27 @@
     if (b) { b.style.display = insideApp() ? "" : "none"; }
   }
 
+  // Angular's router navigates with history.pushState, and pushState does NOT
+  // fire hashchange — so listening for that event alone catches a hand-edited
+  // address bar and nothing the app itself does. Logging in is a router
+  // navigation, which is precisely the transition the launcher has to notice.
+  // A once-a-second poll is the whole of the fix; the events just make it feel
+  // instant when they do fire.
+  function watchRoute(onChange) {
+    var last = insideApp();
+    function check() {
+      var now = insideApp();
+      if (now !== last) { last = now; onChange(); }
+    }
+    window.addEventListener("hashchange", check);
+    window.addEventListener("popstate", check);
+    setInterval(check, 1000);
+  }
+
   function boot() {
     addLauncher(document);
     syncLauncher(document);
-    window.addEventListener("hashchange", function () { syncLauncher(document); });
+    watchRoute(function () { syncLauncher(document); });
 
     var seen = true;
     try { seen = !!localStorage.getItem(SEEN_KEY); } catch (e) { /* private mode: do not nag */ }
