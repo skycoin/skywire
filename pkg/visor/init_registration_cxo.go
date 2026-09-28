@@ -115,16 +115,14 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 	go runRegistrationAnnounceLoop(v.ctx, pub, dmsgdPK, lastAnnounceOK, log)
 
 	// Tell the dmsg client the CXO registration keepalive is healthy while we
-	// have recently reached dmsg-discovery over the feed conn. While healthy,
+	// have recently reached dmsg-discovery and it is subscribed to the feed
+	// (see cxoKeepaliveHealthy). While healthy,
 	// the client stretches its periodic HTTP keepalive re-PUT (see
 	// EntityCommon.cxoKeepaliveHealthyFn); if the feed conn drops, announces
 	// stop succeeding and this falls back to false within the window, so the
 	// frequent HTTP keepalive resumes. Delegated-server CHANGES are unaffected
 	// (they publish immediately over both HTTP and CXO).
-	v.dmsgC.SetCXOKeepaliveHealthyFunc(func() bool {
-		last := lastAnnounceOK.Load()
-		return last != 0 && time.Since(time.Unix(0, last)) < cxoKeepaliveHealthyWindow
-	})
+	v.dmsgC.SetCXOKeepaliveHealthyFunc(cxoKeepaliveHealthy(pub, dmsgdPK, lastAnnounceOK))
 
 	v.pushCloseStack("registration_cxo", func() error {
 		v.dmsgC.SetCXOKeepaliveHealthyFunc(nil)
@@ -149,6 +147,19 @@ const registrationAnnounceInterval = 30 * time.Second
 // fallback, while a genuinely dropped feed conn falls back within a minute or
 // two.
 const cxoKeepaliveHealthyWindow = 95 * time.Second
+
+// cxoKeepaliveHealthy is the predicate every registration client (dmsg entry,
+// SD services, AR binds) consults before stretching its HTTP keepalive. The
+// service is keeping this feed's entries alive when it answered an announce
+// within cxoKeepaliveHealthyWindow AND holds a live subscription to the feed,
+// so the publisher's heartbeat Roots reach its ingest, which refreshes the
+// stored entries' TTL. A reachable service that never subscribed is not.
+func cxoKeepaliveHealthy(pub *treestore.Publisher, peer cipher.PubKey, lastOK *atomic.Int64) func() bool {
+	return func() bool {
+		last := lastOK.Load()
+		return last != 0 && time.Since(time.Unix(0, last)) < cxoKeepaliveHealthyWindow && pub.SubscribedBy(peer)
+	}
+}
 
 // runRegistrationAnnounceLoop dials dmsg-discovery on a ticker (ConnectPK is
 // idempotent — a live conn is a no-op, a dropped one redials) and stamps

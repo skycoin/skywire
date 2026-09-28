@@ -9,8 +9,10 @@
 // with a full Noise handshake (the secp256k1 ECDH handshakeResponder that
 // dominates AR CPU), onto one warm CXO connection.
 //
-// Purely ADDITIVE dual-write: the AR client keeps doing the HTTP POST /
-// UDP registration exactly as before (the authoritative/fallback path).
+// Dual-write: the AR client keeps the HTTP POST / UDP registration (the
+// authoritative path). Once the AR is subscribed and answering, its ingest of
+// the heartbeat Roots refreshes the bindings' TTL, so unchanged HTTP re-binds
+// are skipped for up to 30 minutes; a changed payload still goes at once.
 // The publisher is fed by a hook the AR client fires on every successful
 // bind (see addrresolver.BindPublisher), so the CXO leaf always carries
 // the exact LocalAddresses the visor last registered. It is inert until an
@@ -107,7 +109,12 @@ func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 	lastAnnounceOK := new(atomic.Int64)
 	go runARBindAnnounceLoop(v.ctx, pub, arPK, lastAnnounceOK, log)
 
+	// While the AR is subscribed and answering, its ingest of the heartbeat
+	// Roots keeps the bindings alive, so unchanged re-binds skip HTTP.
+	bp.SetCXOKeepaliveHealthyFunc(cxoKeepaliveHealthy(pub, arPK, lastAnnounceOK))
+
 	v.pushCloseStack("ar_bind_cxo", func() error {
+		bp.SetCXOKeepaliveHealthyFunc(nil)
 		bp.SetBindPublishHook(nil)
 		return pub.Close()
 	})

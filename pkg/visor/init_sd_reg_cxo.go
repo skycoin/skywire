@@ -10,10 +10,11 @@
 // handshake (the secp256k1 handshakeResponder that dominates discovery-
 // service CPU), onto one warm CXO connection.
 //
-// Purely ADDITIVE dual-write, exactly as for the AR-bind, dmsg-registration
-// and TPD feeds: the SD clients keep doing the HTTP POST / DELETE on the
-// same schedule (the authoritative path), and this feed is inert until an
-// SD subscribes to it.
+// Dual-write: the SD clients keep the HTTP POST / DELETE (the authoritative
+// path), and this feed is inert until an SD subscribes to it. Once the SD is
+// subscribed and answering, its ingest of the heartbeat Roots refreshes the
+// entries' TTL, so unchanged heartbeats skip HTTP for up to 30 minutes
+// (servicedisc.KeepaliveSink); any change still goes over HTTP at once.
 //
 // # What is published
 //
@@ -89,7 +90,12 @@ type sdEntryMirror struct {
 	entries map[string]servicedisc.Service
 	pub     *treestore.Publisher
 	log     *logging.Logger
+	// healthy reports whether the SD is keeping the entries alive over CXO
+	// (see cxoKeepaliveHealthy); nil until the feed runs.
+	healthy atomic.Pointer[func() bool]
 }
+
+var _ servicedisc.KeepaliveSink = (*sdEntryMirror)(nil)
 
 func newSDEntryMirror() *sdEntryMirror {
 	return &sdEntryMirror{entries: make(map[string]servicedisc.Service)}
@@ -130,6 +136,25 @@ func (m *sdEntryMirror) DelEntry(entry servicedisc.Service) {
 	}
 	delete(m.entries, key)
 	m.flushLocked()
+}
+
+// KeepaliveHealthy implements servicedisc.KeepaliveSink: while true, the SD
+// clients skip unchanged HTTP heartbeats.
+func (m *sdEntryMirror) KeepaliveHealthy() bool {
+	if m == nil {
+		return false
+	}
+	fn := m.healthy.Load()
+	return fn != nil && (*fn)()
+}
+
+// setKeepalive installs (or, with nil, clears) the keepalive predicate.
+func (m *sdEntryMirror) setKeepalive(fn func() bool) {
+	if fn == nil {
+		m.healthy.Store(nil)
+		return
+	}
+	m.healthy.Store(&fn)
 }
 
 // setPublisher attaches (or, with nil, detaches) the CXO publisher and
@@ -250,7 +275,12 @@ func initSDRegCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 	lastAnnounceOK := new(atomic.Int64)
 	go runSDRegAnnounceLoop(v.ctx, pub, sdPK, lastAnnounceOK, log)
 
+	// While the SD is subscribed and answering, its ingest of the heartbeat
+	// Roots keeps the entries alive, so unchanged heartbeats skip HTTP.
+	v.sdEntryMirror.setKeepalive(cxoKeepaliveHealthy(pub, sdPK, lastAnnounceOK))
+
 	v.pushCloseStack("sd_reg_cxo", func() error {
+		v.sdEntryMirror.setKeepalive(nil)
 		v.sdEntryMirror.setPublisher(nil, nil)
 		return pub.Close()
 	})
