@@ -30,7 +30,7 @@ func resetGlobals(t *testing.T) {
 	dmsgServerType, mode, authPassphrase, pprofMode, pprofAddr = "", "", "", "", ""
 	configPath, keyFile = "", ""
 	entryTimeout, dmsgPort = 0, 0
-	testMode, enableLoadTesting, testEnvironment = false, false, false
+	testNetwork, enableLoadTesting, testEnvironment = false, false, false
 	sk = cipher.SecKey{}
 	t.Cleanup(func() {
 		configPath, keyFile = "", ""
@@ -56,20 +56,27 @@ func TestCommaSplit(t *testing.T) {
 func TestMergeFile(t *testing.T) {
 	t.Run("all fields override", func(t *testing.T) {
 		_, srcSK := cipher.GenerateKeyPair()
-		dst := &dmsgdisc.Config{Addr: "flag-addr", Redis: "flag-redis"}
+		dst := &dmsgdisc.Config{
+			Common: services.Common{
+				Addr:  "flag-addr",
+				Redis: "flag-redis",
+			},
+		}
 		src := &dmsgdisc.Config{
-			SecKey:            srcSK,
-			Addr:              "file-addr",
-			Redis:             "file-redis",
-			DmsgPort:          81,
-			EntryTimeout:      services.Duration(time.Minute),
-			Mode:              "dual",
+			Common: services.Common{
+				SecKey:          srcSK,
+				Addr:            "file-addr",
+				Redis:           "file-redis",
+				DmsgPort:        81,
+				EntryTimeout:    services.Duration(time.Minute),
+				Mode:            "dual",
+				TestEnvironment: true,
+				Testing:         true,
+			},
 			AuthPassphrase:    "secret",
 			OfficialServers:   []string{"pk1"},
 			DmsgServerType:    "type",
-			TestMode:          true,
 			EnableLoadTesting: true,
-			TestEnvironment:   true,
 			Whitelist:         []string{"wl1"},
 		}
 
@@ -84,14 +91,20 @@ func TestMergeFile(t *testing.T) {
 		assert.Equal(t, "secret", dst.AuthPassphrase)
 		assert.Equal(t, []string{"pk1"}, dst.OfficialServers)
 		assert.Equal(t, "type", dst.DmsgServerType)
-		assert.True(t, dst.TestMode)
+		assert.True(t, dst.Testing)
 		assert.True(t, dst.EnableLoadTesting)
 		assert.True(t, dst.TestEnvironment)
 		assert.Equal(t, []string{"wl1"}, dst.Whitelist)
 	})
 
 	t.Run("zero src leaves dst untouched", func(t *testing.T) {
-		dst := &dmsgdisc.Config{Addr: "keep", Redis: "keep-redis", DmsgPort: 99}
+		dst := &dmsgdisc.Config{
+			Common: services.Common{
+				Addr:     "keep",
+				Redis:    "keep-redis",
+				DmsgPort: 99,
+			},
+		}
 		mergeFile(dst, &dmsgdisc.Config{})
 		assert.Equal(t, "keep", dst.Addr)
 		assert.Equal(t, "keep-redis", dst.Redis)
@@ -110,7 +123,7 @@ func TestBuildConfigFromFlags(t *testing.T) {
 	mode = "http"
 	officialServers = "pkA, pkB"
 	whitelistKeys = "wl1,wl2"
-	testMode = true
+	testNetwork = true
 
 	cfg, err := buildConfig()
 	require.NoError(t, err)
@@ -122,7 +135,7 @@ func TestBuildConfigFromFlags(t *testing.T) {
 	assert.Equal(t, "http", cfg.Mode)
 	assert.Equal(t, []string{"pkA", "pkB"}, cfg.OfficialServers)
 	assert.Equal(t, []string{"wl1", "wl2"}, cfg.Whitelist)
-	assert.True(t, cfg.TestMode)
+	assert.True(t, cfg.Testing)
 }
 
 // TestBuildConfigWithSecKey verifies an explicitly set secret key is carried
