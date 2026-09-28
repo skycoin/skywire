@@ -61,7 +61,7 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 		return nil
 	}
 
-	dataDir, inMemDB := cxoPubStorage(filepath.Join(v.conf.LocalPath, "cxo-registration"))
+	dataDir, inMemDB := v.hostCXOPubStorage(filepath.Join(v.conf.LocalPath, "cxo-registration"), skyenv.DmsgDMSGDRegistrationCXOPort)
 	// Gate the feed: peer whitelist (hypervisors + dmsgpty whitelist + own
 	// PK) plus the consuming dmsg-discovery. dmsgd MUST be allowed or its
 	// announce-conn subscribe is rejected by the OnSubscribeRemote hook.
@@ -83,6 +83,7 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 		log.WithError(err).Warn("Registration-CXO: publisher init failed; continuing with HTTP registration only")
 		return nil
 	}
+	v.trackCXOPublisher(skyenv.DmsgDMSGDRegistrationCXOPort, pub)
 
 	// Register so the feed's subscriber allowlist is recomputed and
 	// re-applied when the peer whitelist changes at runtime. The initial

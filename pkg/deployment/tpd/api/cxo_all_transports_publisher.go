@@ -208,3 +208,6 @@ func (a *AllTransportsCXOPublisher) LastError() error {
 	defer a.mu.Unlock()
 	return a.lastError
 }
+
+// Publisher returns the underlying feed publisher, for introspection.
+func (x *AllTransportsCXOPublisher) Publisher() *treestore.Publisher { return x.pub }

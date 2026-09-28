@@ -15,6 +15,7 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/sd/api"
 	sdmetrics "github.com/skycoin/skywire/pkg/deployment/sd/metrics"
@@ -54,6 +55,18 @@ func New(cfg *Config, log *logging.Logger) services.Service {
 type service struct {
 	cfg *Config
 	log *logging.Logger
+
+	// state, set by build and startCXO, is reported by State.
+	nonceStore string
+	cxo        services.CXOSet
+}
+
+// State implements services.Stater. Service discovery always stores in
+// redis.
+func (s *service) State() services.State {
+	st := services.State{Store: "redis", NonceStore: s.nonceStore}
+	s.cxo.State(&st)
+	return st
 }
 
 // build connects redis, creates the store, the nonce store and the API,
@@ -94,6 +107,7 @@ func (s *service) build(ctx context.Context, log *logging.Logger, dmsgAddr strin
 	// (clients fetch one before their first request, so none can register)
 	// and skips the check that an entry's key is the caller's.
 	var nonceDB httpauth.NonceStore
+	s.nonceStore = "none"
 	if !cfg.TestMode {
 		nonceStoreConfig := storeconfig.Config{Type: storeconfig.Memory}
 		if plainHTTP {
@@ -103,6 +117,7 @@ func (s *service) build(ctx context.Context, log *logging.Logger, dmsgAddr strin
 				Password: storeconfig.RedisPassword(),
 			}
 		}
+		s.nonceStore = services.StoreKind(nonceStoreConfig.Type)
 		nonceDB, err = httpauth.NewNonceStore(ctx, nonceStoreConfig, redisPrefix)
 		if err != nil {
 			return nil, fmt.Errorf("service-discovery: init nonce store: %w", err)
@@ -136,31 +151,16 @@ func (s *service) build(ctx context.Context, log *logging.Logger, dmsgAddr strin
 	return sdAPI, nil
 }
 
-// startCXO brings up the services publisher and the registration
-// aggregator on dmsgC under sk. Best-effort; the returned close stops
-// the aggregator (the publisher stops with ctx).
-func (s *service) startCXO(ctx context.Context, dmsgC *dmsg.Client, sdAPI *api.API, sk cipher.SecKey, log *logging.Logger) func() {
+// startCXO brings up the services publisher and the SD-registration
+// aggregator (visors publish their live service entries as a CXO feed
+// instead of re-POSTing them over a fresh dmsg stream every 90 s), on dmsgC
+// under sk, until ctx ends. When embedded, host lends the visor's node for
+// the registration port. Each piece is best-effort.
+func (s *service) startCXO(ctx context.Context, dmsgC *dmsg.Client, host services.CXOHost, sdAPI *api.API, sk cipher.SecKey, log *logging.Logger) {
 	s.startServicesCXO(ctx, dmsgC, sdAPI, sk, log)
-
-	// SD-registration-over-CXO aggregator: always-on fan-in path where
-	// visors publish their live service-entry set as a CXO feed instead
-	// of re-POSTing it over a fresh dmsg stream (each a full Noise
-	// handshake) every 90s. Inert until visors subscribe (just a
-	// listener), purely additive to the authoritative HTTP register, so
-	// it needs no gate. The API is the Sink (IngestServiceFromCXO). The
-	// node identity is bound to the SD's service SecKey so gated visors
-	// accept its subscribe (see #4168). Best-effort — HTTP registration
-	// is unaffected if it fails to start.
-	agg, aerr := regcxo.New(dmsgC, sk, sdAPI, regcxo.Config{Logger: log})
-	if aerr != nil {
-		log.WithError(aerr).Error("Failed to start SD-registration-over-CXO aggregator, continuing without it")
-		return func() {}
-	}
-	agg.Run(ctx)
-	log.WithField("feed_pk", agg.FeedPK()).
-		WithField("port", skyenv.DmsgVisorSDRegCXOPort).
-		Info("SD-registration-over-CXO aggregator running")
-	return func() { _ = agg.Close() } //nolint:errcheck
+	s.cxo.StartAggregator(ctx, host, log, "sd-reg", skyenv.DmsgVisorSDRegCXOPort, func(n *node.Node) (services.Aggregator, error) {
+		return regcxo.New(dmsgC, sk, sdAPI, regcxo.Config{Node: n, Logger: log})
+	})
 }
 
 // Embed runs service-discovery inside a host process: the API is
@@ -177,11 +177,7 @@ func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, 
 		return nil, err
 	}
 	if host.DmsgClient != nil {
-		closeCXO := s.startCXO(ctx, host.DmsgClient, sdAPI, host.SK, log)
-		go func() {
-			<-ctx.Done()
-			closeCXO()
-		}()
+		s.startCXO(ctx, host.DmsgClient, host.CXO, sdAPI, host.SK, log)
 	}
 	return sdAPI, nil
 }
@@ -259,8 +255,7 @@ func (s *service) Run(ctx context.Context) error {
 	defer h.Close()
 
 	if h.DmsgClient != nil {
-		closeCXO := s.startCXO(runCtx, h.DmsgClient, sdAPI, sk, log)
-		defer closeCXO()
+		s.startCXO(runCtx, h.DmsgClient, nil, sdAPI, sk, log)
 	}
 
 	select {
@@ -288,8 +283,8 @@ func (s *service) startServicesCXO(
 	log *logging.Logger,
 ) {
 	pub, perr := api.StartServicesCXOPublisher(ctx, dmsgC, sk, log)
+	s.cxo.AddPublisher(ctx, log, "services", skyenv.DmsgSDServicesCXOPort, pub, perr)
 	if perr != nil {
-		log.WithError(perr).Error("Failed to start CXO services publisher, continuing without it")
 		return
 	}
 	sdAPI.SetServicesCXOPublisher(pub)
@@ -315,11 +310,15 @@ func (s *service) startServicesCXO(
 		for {
 			select {
 			case <-ctx.Done():
-				pub.Close() //nolint:errcheck,gosec
 				return
 			case <-t.C:
 				sdAPI.WarmCXOFromStore(ctx)
 			}
 		}
 	}()
+}
+
+// AggregatorPorts implements services.CXOAggregating.
+func (s *service) AggregatorPorts() []uint16 {
+	return []uint16{skyenv.DmsgVisorSDRegCXOPort}
 }

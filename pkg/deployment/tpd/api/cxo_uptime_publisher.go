@@ -302,3 +302,6 @@ func trimSummariesToDays(in []store.VisorSummary, days int, now time.Time) []sto
 	}
 	return out
 }
+
+// Publisher returns the underlying feed publisher, for introspection.
+func (x *UptimeCXOPublisher) Publisher() *treestore.Publisher { return x.pub }
