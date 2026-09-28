@@ -281,7 +281,7 @@ func initSDRegCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	// While the SD is subscribed and answering, its ingest of the heartbeat
 	// Roots keeps the entries alive, so unchanged heartbeats skip HTTP.
-	v.sdEntryMirror.setKeepalive(cxoKeepaliveHealthy(pub, sdPK, lastAnnounceOK))
+	v.sdEntryMirror.setKeepalive(cxoKeepaliveHealthy(pub, sdPK, lastAnnounceOK, log))
 
 	v.pushCloseStack("sd_reg_cxo", func() error {
 		v.sdEntryMirror.setKeepalive(nil)

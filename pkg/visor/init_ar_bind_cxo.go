@@ -111,7 +111,7 @@ func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	// While the AR is subscribed and answering, its ingest of the heartbeat
 	// Roots keeps the bindings alive, so unchanged re-binds skip HTTP.
-	bp.SetCXOKeepaliveHealthyFunc(cxoKeepaliveHealthy(pub, arPK, lastAnnounceOK))
+	bp.SetCXOKeepaliveHealthyFunc(cxoKeepaliveHealthy(pub, arPK, lastAnnounceOK, log))
 
 	v.pushCloseStack("ar_bind_cxo", func() error {
 		bp.SetCXOKeepaliveHealthyFunc(nil)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 func TestCXOKeepaliveHealthy(t *testing.T) {
@@ -26,18 +27,19 @@ func TestCXOKeepaliveHealthy(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Close() }) //nolint:errcheck
 	stranger, _ := cipher.GenerateKeyPair()
+	testLog := logging.MustGetLogger("cxo-keepalive-test")
 	lastOK := new(atomic.Int64)
-	ok, _ := cxoKeepaliveHealthy(pub, stranger, lastOK)()
+	ok, _ := cxoKeepaliveHealthy(pub, stranger, lastOK, testLog)()
 	require.False(t, ok, "never announced")
 	lastOK.Store(time.Now().UnixNano())
-	ok, _ = cxoKeepaliveHealthy(pub, stranger, lastOK)()
+	ok, _ = cxoKeepaliveHealthy(pub, stranger, lastOK, testLog)()
 	require.False(t, ok, "announced but not subscribed")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	require.NoError(t, sub.ConnectTCP(ctx, pub.Node().TCP().Address()))
 	require.Eventually(t, func() bool { return len(pub.Node().Connections()) == 1 }, 10*time.Second, 10*time.Millisecond)
-	health := cxoKeepaliveHealthy(pub, cipher.PubKey(pub.Node().Connections()[0].PeerID()), lastOK)
+	health := cxoKeepaliveHealthy(pub, cipher.PubKey(pub.Node().Connections()[0].PeerID()), lastOK, testLog)
 	require.Eventually(t, func() bool { ok, _ := health(); return ok }, 10*time.Second, 10*time.Millisecond)
 
 	_, e1 := health()

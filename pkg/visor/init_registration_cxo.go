@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -124,7 +125,7 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 	// dmsg-discovery resubscribes on a new conn, the next tick re-registers
 	// over HTTP. Delegated-server CHANGES are unaffected
 	// (they publish immediately over both HTTP and CXO).
-	v.dmsgC.SetCXOKeepaliveHealthyFunc(cxoKeepaliveHealthy(pub, dmsgdPK, lastAnnounceOK))
+	v.dmsgC.SetCXOKeepaliveHealthyFunc(cxoKeepaliveHealthy(pub, dmsgdPK, lastAnnounceOK, log))
 
 	v.pushCloseStack("registration_cxo", func() error {
 		v.dmsgC.SetCXOKeepaliveHealthyFunc(nil)
@@ -161,7 +162,7 @@ const cxoKeepaliveHealthyWindow = 95 * time.Second
 // the service reconnected, possibly after a restart that lost its store, and
 // the clients re-register once over HTTP: that path can create entries the
 // CXO ingest cannot (a type=visor SD entry needs the observed IP).
-func cxoKeepaliveHealthy(pub *treestore.Publisher, peer cipher.PubKey, lastOK *atomic.Int64) func() (bool, uint64) {
+func cxoKeepaliveHealthy(pub *treestore.Publisher, peer cipher.PubKey, lastOK *atomic.Int64, log *logging.Logger) func() (bool, uint64) {
 	var (
 		mu    sync.Mutex
 		conn  *node.Conn
@@ -174,14 +175,20 @@ func cxoKeepaliveHealthy(pub *treestore.Publisher, peer cipher.PubKey, lastOK *a
 		if last == 0 || time.Since(time.Unix(0, last)) >= cxoKeepaliveHealthyWindow {
 			return false, epoch
 		}
-		c := pub.Subscription(peer)
-		if c == nil {
+		subs := pub.Subscriptions(peer)
+		if len(subs) == 0 {
 			return false, epoch
 		}
-		if c != conn {
-			conn = c
-			epoch++
+		// Stay on the current conn while it is still subscribed: the peer
+		// can hold two (announce-dialed and self-dialed), listed in no
+		// particular order.
+		if slices.Contains(subs, conn) {
+			return true, epoch
 		}
+		conn = subs[0]
+		epoch++
+		log.WithField("peer", peer).WithField("epoch", epoch).WithField("conns", len(subs)).
+			Debug("CXO keepalive: subscription on a new conn; next registration goes over HTTP")
 		return true, epoch
 	}
 }
