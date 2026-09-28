@@ -24,10 +24,12 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -116,11 +118,11 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 
 	// Tell the dmsg client the CXO registration keepalive is healthy while we
 	// have recently reached dmsg-discovery and it is subscribed to the feed
-	// (see cxoKeepaliveHealthy). While healthy,
-	// the client stretches its periodic HTTP keepalive re-PUT (see
-	// EntityCommon.cxoKeepaliveHealthyFn); if the feed conn drops, announces
-	// stop succeeding and this falls back to false within the window, so the
-	// frequent HTTP keepalive resumes. Delegated-server CHANGES are unaffected
+	// (see cxoKeepaliveHealthy). While healthy on the epoch of its last update,
+	// the client makes no periodic HTTP re-PUT at all (see
+	// EntityCommon.cxoKeepaliveHealthyFn); if the feed conn drops or
+	// dmsg-discovery resubscribes on a new conn, the next tick re-registers
+	// over HTTP. Delegated-server CHANGES are unaffected
 	// (they publish immediately over both HTTP and CXO).
 	v.dmsgC.SetCXOKeepaliveHealthyFunc(cxoKeepaliveHealthy(pub, dmsgdPK, lastAnnounceOK))
 
@@ -149,15 +151,38 @@ const registrationAnnounceInterval = 30 * time.Second
 const cxoKeepaliveHealthyWindow = 95 * time.Second
 
 // cxoKeepaliveHealthy is the predicate every registration client (dmsg entry,
-// SD services, AR binds) consults before stretching its HTTP keepalive. The
-// service is keeping this feed's entries alive when it answered an announce
+// SD services, AR binds) consults before a no-change HTTP re-registration.
+// The service keeps this feed's entries alive when it answered an announce
 // within cxoKeepaliveHealthyWindow AND holds a live subscription to the feed,
 // so the publisher's heartbeat Roots reach its ingest, which refreshes the
 // stored entries' TTL. A reachable service that never subscribed is not.
-func cxoKeepaliveHealthy(pub *treestore.Publisher, peer cipher.PubKey, lastOK *atomic.Int64) func() bool {
-	return func() bool {
+//
+// The epoch counts the conns that subscription has arrived on. A new one means
+// the service reconnected, possibly after a restart that lost its store, and
+// the clients re-register once over HTTP: that path can create entries the
+// CXO ingest cannot (a type=visor SD entry needs the observed IP).
+func cxoKeepaliveHealthy(pub *treestore.Publisher, peer cipher.PubKey, lastOK *atomic.Int64) func() (bool, uint64) {
+	var (
+		mu    sync.Mutex
+		conn  *node.Conn
+		epoch uint64
+	)
+	return func() (bool, uint64) {
+		mu.Lock()
+		defer mu.Unlock()
 		last := lastOK.Load()
-		return last != 0 && time.Since(time.Unix(0, last)) < cxoKeepaliveHealthyWindow && pub.SubscribedBy(peer)
+		if last == 0 || time.Since(time.Unix(0, last)) >= cxoKeepaliveHealthyWindow {
+			return false, epoch
+		}
+		c := pub.Subscription(peer)
+		if c == nil {
+			return false, epoch
+		}
+		if c != conn {
+			conn = c
+			epoch++
+		}
+		return true, epoch
 	}
 }
 

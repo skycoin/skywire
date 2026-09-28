@@ -9,10 +9,10 @@
 // with a full Noise handshake (the secp256k1 ECDH handshakeResponder that
 // dominates AR CPU), onto one warm CXO connection.
 //
-// Dual-write: the AR client keeps the HTTP POST / UDP registration (the
-// authoritative path). Once the AR is subscribed and answering, its ingest of
-// the heartbeat Roots refreshes the bindings' TTL, so unchanged HTTP re-binds
-// are skipped for up to 30 minutes; a changed payload still goes at once.
+// Once the AR is subscribed and answering, its ingest of the heartbeat Roots
+// refreshes the bindings' TTL and unchanged re-binds skip HTTP. HTTP carries a
+// changed payload, the first bind, and one re-bind after the AR resubscribes
+// on a new conn or stops answering (see cxoKeepaliveHealthy).
 // The publisher is fed by a hook the AR client fires on every successful
 // bind (see addrresolver.BindPublisher), so the CXO leaf always carries
 // the exact LocalAddresses the visor last registered. It is inert until an

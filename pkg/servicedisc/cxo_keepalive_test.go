@@ -1,5 +1,6 @@
 // Package servicedisc pkg/servicedisc/cxo_keepalive_test.go: an unchanged
-// heartbeat skips the HTTP POST only while a KeepaliveSink is healthy.
+// heartbeat skips the HTTP POST while a KeepaliveSink is healthy on the epoch
+// of the last registration, and never on a timer.
 package servicedisc
 
 import (
@@ -9,16 +10,20 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
-type fakeKeepaliveSink struct{ healthy atomic.Bool }
+type fakeKeepaliveSink struct {
+	healthy atomic.Bool
+	epoch   atomic.Uint64
+}
 
-func (*fakeKeepaliveSink) PutEntry(Service)         {}
-func (*fakeKeepaliveSink) DelEntry(Service)         {}
-func (s *fakeKeepaliveSink) KeepaliveHealthy() bool { return s.healthy.Load() }
+func (*fakeKeepaliveSink) PutEntry(Service) {}
+func (*fakeKeepaliveSink) DelEntry(Service) {}
+func (s *fakeKeepaliveSink) KeepaliveHealthy() (bool, uint64) {
+	return s.healthy.Load(), s.epoch.Load()
+}
 
 func TestRegisterEntrySkipsUnchangedWhileCXOHealthy(t *testing.T) {
 	var posts atomic.Int32
@@ -54,9 +59,10 @@ func TestRegisterEntrySkipsUnchangedWhileCXOHealthy(t *testing.T) {
 	require.NoError(t, c.RegisterEntry(ctx))
 	require.EqualValues(t, 3, posts.Load(), "changed entry: posts")
 
-	c.postedAt = time.Now().Add(-cxoHealthyRefreshInterval)
+	sink.epoch.Add(1)
 	require.NoError(t, c.RegisterEntry(ctx))
-	require.EqualValues(t, 4, posts.Load(), "refresh interval elapsed: posts")
+	require.NoError(t, c.RegisterEntry(ctx))
+	require.EqualValues(t, 4, posts.Load(), "new epoch: posts once")
 
 	require.NoError(t, c.DeleteEntry(ctx))
 	require.NoError(t, c.RegisterEntry(ctx))
