@@ -196,3 +196,14 @@ docs/playground/wasm_exec.js
 /ios/skywire-mobile-ios-release-testflight.md
 /ios/skywire-mobile-ios-proposal.md
 /ios/skywire-mobile-ios-playbook.md
+# The brief handed to a gate reviewer quotes the playbook; the gate record
+# (ios/gates/G<n>.md) is what gets committed.
+/ios/review-ask.txt
+
+# iOS build outputs: the Go core's c-archives and the xcframework built from
+# them (make ios-core), Xcode's derived data and archives. Built from source
+# every time; never committed.
+/ios/Frameworks/
+/ios/build/
+/ios/DerivedData/
+*.xcarchive

@@ -437,6 +437,11 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 		v.tpM.SetSkynetForwardHandler(skynetMux.HandlePacket)
 		v.skynetFwdMux = skynetMux
 		wireDirectDialPolicyHook(v, skynetMux)
+		// Closing the mux ends the accept loop below (Accept returns on
+		// done). Without it every visor close left the loop parked for the
+		// life of the process — one leaked goroutine per restart for a
+		// process that restarts its visor in place (the phone core).
+		v.pushCloseStack("sky_forwarding_direct_mux", skynetMux.Close)
 		go func() {
 			for {
 				stream, err := skynetMux.Accept()
@@ -473,6 +478,9 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 		v.appDirectMux = appDirectMux
 		v.tpM.SetAppDirectHandler(appDirectMux.HandlePacket)
 		wireDirectDialPolicyHook(v, appDirectMux)
+		// Ends the networker's accept loop on this mux (serveDirectMux), as
+		// above.
+		v.pushCloseStack("app_direct_mux", appDirectMux.Close)
 		if n, err := appnet.ResolveNetworker(appnet.TypeSkynet); err == nil {
 			if sn, ok := n.(*appnet.SkywireNetworker); ok {
 				sn.SetAppDirectMux(appDirectMux)

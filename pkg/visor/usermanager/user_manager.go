@@ -329,7 +329,10 @@ func (s *UserManager) newSession(w http.ResponseWriter, session Session) error {
 	return nil
 }
 
-// Close closes the underlying db, used for Windows.
+// Close closes the underlying db (users.db). The store outlives the
+// hypervisor's Enable/Disable toggles; the visor's shutdown closes it
+// (initHypervisor's close-stack entry), so a visor restarted inside the same
+// process (pkg/mobilecore) can open it again.
 func (s *UserManager) Close() error {
 	return s.db.Close()
 }

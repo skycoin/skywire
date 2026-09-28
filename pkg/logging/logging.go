@@ -60,6 +60,17 @@ func AddHook(hook logrus.Hook) {
 	log.AddHook(hook)
 }
 
+// SetExitFunc sets what a Fatal on the global logger calls after logging, in
+// place of os.Exit, and returns the previous function so the caller can put
+// it back; nil means os.Exit. For a host that runs command code inside its
+// own process (the phone core's in-process `config gen`), where a Fatal would
+// end the host. Not safe to call concurrently with a Fatal on this logger.
+func SetExitFunc(fn func(int)) (prev func(int)) {
+	prev = log.ExitFunc
+	log.ExitFunc = fn
+	return prev
+}
+
 // EnableColors enables colored logging
 func EnableColors() {
 	log.EnableColors()

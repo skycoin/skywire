@@ -45,4 +45,9 @@ type Options struct {
 	LogJSON bool
 	// ForceColor colors the log even when it is not a terminal.
 	ForceColor bool
+
+	// inProcess is set by StartInProcess: the visor runs inside another
+	// program's process, and Reload and Shutdown hand over to it instead of
+	// re-running run() or ending the process.
+	inProcess *InProcessHost
 }

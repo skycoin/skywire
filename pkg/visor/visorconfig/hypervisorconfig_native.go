@@ -16,7 +16,7 @@ package visorconfig
 
 import (
 	"encoding/json"
-	"log"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -35,8 +35,7 @@ func (c *CookieConfig) SameSite() http.SameSite {
 // don't have filesystem access anyway, so the method has no use
 // under js/wasm — callers in that context should construct
 // HypervisorConfig in memory.
-func (c *HypervisorConfig) Parse(path string) error {
-	var err error
+func (c *HypervisorConfig) Parse(path string) (err error) {
 	if path, err = filepath.Abs(path); err != nil {
 		return err
 	}
@@ -47,8 +46,8 @@ func (c *HypervisorConfig) Parse(path string) error {
 	}
 
 	defer func() {
-		if err := f.Close(); err != nil {
-			log.Fatalf("Failed to close file %s: %v", f.Name(), err)
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("failed to close file %s: %w", f.Name(), cerr)
 		}
 	}()
 

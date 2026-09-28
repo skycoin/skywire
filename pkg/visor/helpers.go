@@ -54,3 +54,29 @@ func shufflePubKeys(in []cipher.PubKey) []cipher.PubKey {
 	}
 	return in
 }
+
+// formatHostStatsErrors keeps a placeholder for future error
+// aggregation. Currently we swallow per-subsystem errors silently
+// because partial data is more useful than a total failure on a
+// quirky system; if something is consistently zero in the UI, that's
+// a flag for the user to investigate the host.
+//
+//nolint:unused
+func formatHostStatsErrors(errs []error) error {
+	if len(errs) == 0 {
+		return nil
+	}
+	return fmt.Errorf("host stats: %d subsystem errors (first: %w)", len(errs), errs[0])
+}
+
+// secondsAgo helps the UI render uptime cleanly when StartTimeMS is
+// available; kept as a small helper rather than embedded so the
+// formatting choice stays on the client.
+//
+//nolint:unused
+func secondsAgo(unixMS int64) int64 {
+	if unixMS <= 0 {
+		return 0
+	}
+	return time.Now().UnixMilli()/1 - unixMS/1
+}

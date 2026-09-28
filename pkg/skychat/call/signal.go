@@ -198,7 +198,10 @@ func (s *Signaler) SetToneHandler(h ToneHandler) {
 // every listener has failed.
 func (s *Signaler) Serve(ctx context.Context, listeners ...net.Listener) {
 	s.mu.Lock()
-	s.serving = listeners
+	// Appended, not assigned: a listener AddListener joined before this ran
+	// (Serve is started on its own goroutine) must stay on the list that
+	// closeListeners closes.
+	s.serving = append(s.serving, listeners...)
 	s.mu.Unlock()
 
 	var wg sync.WaitGroup
@@ -224,6 +227,15 @@ func (s *Signaler) AddListener(ctx context.Context, lis net.Listener) {
 		return
 	}
 	s.mu.Lock()
+	// Serve closes s.serving once ctx is done. A listener that arrives after
+	// that close would never be closed and its accept loop never returns, so
+	// close it here instead. Checked under mu: ctx.Err is set before Done
+	// fires, so either this sees it or closeListeners sees the listener.
+	if ctx.Err() != nil {
+		s.mu.Unlock()
+		_ = lis.Close() //nolint:errcheck
+		return
+	}
 	s.serving = append(s.serving, lis)
 	s.mu.Unlock()
 	go s.acceptLoop(ctx, lis)

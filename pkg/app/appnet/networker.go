@@ -121,6 +121,19 @@ func ResolveNetworker(t Type) (Networker, error) {
 	return n, nil
 }
 
+// RemoveNetworker removes the networker registered for t if it is still n; a
+// networker registered since then is left alone. A visor that closes takes
+// its networkers out this way, so the next visor started in the same process
+// never finds the old one before registering its own.
+func RemoveNetworker(t Type, n Networker) {
+	networkersMx.Lock()
+	defer networkersMx.Unlock()
+
+	if cur, ok := networkers[t]; ok && cur == n {
+		delete(networkers, t)
+	}
+}
+
 // ClearNetworkers removes all the stored networkers.
 func ClearNetworkers() {
 	networkersMx.Lock()

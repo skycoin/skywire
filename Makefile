@@ -3,6 +3,7 @@
 .PHONY : update-deps update-dmsg update-skycoin push-deps
 .PHONY : build clean install format  bin build-race
 .PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-aab android-apk-debug check-mobile-version
+.PHONY : ios-core ios-deps-check mobile-test
 .PHONY : generate services vet check-cg check-help check-inner check-ci
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
 
@@ -231,7 +232,9 @@ build-merged-cgo: ## Build with CGO optimization for faster DMSG handshakes (req
 # One binary: visor + cli `config` subtree + the 4 client apps (in-proc via the
 # launcher registry). The `mobile` tag strips the embedded desktop assets
 # (geoip db 30 MB, manager UI 6.8 MB, vendored browser wallet 11 MB, tpviz
-# legacy 2.8 MB). `nomsgpack` is gin's own tag: it drops the ugorji msgpack
+# legacy 2.8 MB) and selects the lite module set
+# (pkg/visor/init_modules_mobile.go): no host stats, metrics, server roles or
+# embedded infrastructure nodes. `nomsgpack` is gin's own tag: it drops the ugorji msgpack
 # codec (2.8 MB of code, the biggest third-party package in the payload) — gin
 # is on the phone only for the log server and the rewards server, both JSON.
 # Output lands in the android project's jniLibs so Android
@@ -241,8 +244,11 @@ ANDROID_JNILIBS := android/app/src/main/jniLibs/arm64-v8a
 MOBILE_TAGS := mobile,withoutsystray,nomsgpack
 # Size budget for the android payload, in bytes (70 MiB). The CI lane fails
 # over it so the lite variant can't silently rot or regain the stripped fat.
-# It gates the pure-Go lane, which measured 68.8 MB (65.6 MiB) on 2026-09-23;
-# the NDK release lane is 6 MB smaller again (packed relocations).
+# It gates the pure-Go lane, which measured 68.8 MB (65.6 MiB) on 2026-09-23
+# and 67.7 MB (64.6 MiB) on 2026-09-28 with the lite module set; the NDK
+# release lane is 6 MB smaller again (packed relocations). The budget is not
+# what keeps the desktop-only packages out of the phone build — ios-deps-check
+# (run by android-mobile-check) fails on the first one that returns.
 ANDROID_MOBILE_MAX_BYTES := 73400320
 
 # MOBILE_APPINFO stamps the same symbols as $(BUILDINFO) with the phone's own
@@ -284,13 +290,89 @@ android-mobile: check-mobile-version ## Build libskywire-mobile.so (android/arm6
 	GOOS=android GOARCH=arm64 CGO_ENABLED=0 ${OPTS} go build -tags $(MOBILE_TAGS) "-ldflags=$(BUILDINFO) $(MOBILE_APPINFO) -w -s -checklinkname=0" -mod=vendor -o $(ANDROID_JNILIBS)/libskywire-mobile.so ./cmd/skywire-mobile
 	@ls -la $(ANDROID_JNILIBS)/libskywire-mobile.so
 
-android-mobile-check: android-mobile ## CI lane: android-mobile + fail over the size budget
+android-mobile-check: ios-deps-check android-mobile ## CI lane: android-mobile + fail over the size budget (+ the iOS import-graph guard)
 	@size=$$(wc -c < $(ANDROID_JNILIBS)/libskywire-mobile.so | tr -d '[:space:]'); \
 	echo "libskywire-mobile.so: $$size bytes (budget $(ANDROID_MOBILE_MAX_BYTES))"; \
 	if [ "$$size" -gt "$(ANDROID_MOBILE_MAX_BYTES)" ]; then \
 		echo "ERROR: libskywire-mobile.so exceeds the size budget — the mobile variant regained fat"; \
 		exit 1; \
 	fi
+
+# ---- skywire-mobile-core: the same lite core as a C library, for iOS -------
+# iOS cannot exec a child process, so the app links the core instead:
+# cmd/skywire-mobile-core exports pkg/mobilecore as eight C functions and is
+# built with -buildmode=c-archive, one archive per slice, then packaged as
+# SkywireCore.xcframework (a build output, never committed). The flag set is
+# Go's own iOS wrapper ($GOROOT/misc/ios/clangwrap.sh): the SDK's clang, its
+# sysroot and a platform/minimum-version target — the Simulator slice differs
+# from the device slice only in the SDK and the "-simulator" target suffix.
+# -checklinkname=0 as for Android (wlynxg/anet's //go:linkname into net).
+# IOS_SIM_X86_64=1 adds an Intel Simulator slice (lipo'd into the Simulator
+# library); off by default.
+IOS_MIN_VERSION := 16.0
+IOS_CORE_BUILD := ios/build/core
+IOS_XCFRAMEWORK := ios/Frameworks/SkywireCore.xcframework
+IOS_SIM_X86_64 ?= 0
+IOS_CORE_LDFLAGS = $(BUILDINFO) $(MOBILE_APPINFO) -w -s -buildid= -checklinkname=0
+
+ios-core: check-mobile-version ios-deps-check ## Build ios/Frameworks/SkywireCore.xcframework (iOS device + Simulator c-archives of the lite core); macOS + Xcode only
+	@set -e; \
+	command -v xcrun >/dev/null || { echo "ios-core needs Xcode (xcrun not found)"; exit 1; }; \
+	rm -rf $(IOS_CORE_BUILD) $(IOS_XCFRAMEWORK); \
+	build_slice() { \
+		sdk=$$1; goarch=$$2; target=$$3; out=$(IOS_CORE_BUILD)/$$4; \
+		sysroot=$$(xcrun --sdk $$sdk --show-sdk-path); \
+		mkdir -p $$out; \
+		echo "ios-core: $$4 ($$target)"; \
+		GOOS=ios GOARCH=$$goarch CGO_ENABLED=1 \
+		CC="$$(xcrun --sdk $$sdk --find clang)" \
+		CGO_CFLAGS="-O2 -isysroot $$sysroot -target $$target" \
+		CGO_LDFLAGS="-isysroot $$sysroot -target $$target" \
+		${OPTS} go build -buildmode=c-archive -trimpath -tags $(MOBILE_TAGS) "-ldflags=$(IOS_CORE_LDFLAGS)" -mod=vendor \
+			-o $$out/libskywire-core.a ./cmd/skywire-mobile-core; \
+	}; \
+	build_slice iphoneos arm64 arm64-apple-ios$(IOS_MIN_VERSION) ios-arm64; \
+	build_slice iphonesimulator arm64 arm64-apple-ios$(IOS_MIN_VERSION)-simulator ios-arm64-simulator; \
+	sim=$(IOS_CORE_BUILD)/ios-arm64-simulator; \
+	if [ "$(IOS_SIM_X86_64)" = "1" ]; then \
+		build_slice iphonesimulator amd64 x86_64-apple-ios$(IOS_MIN_VERSION)-simulator ios-x86_64-simulator; \
+		mkdir -p $(IOS_CORE_BUILD)/ios-arm64_x86_64-simulator; \
+		lipo -create $$sim/libskywire-core.a $(IOS_CORE_BUILD)/ios-x86_64-simulator/libskywire-core.a \
+			-output $(IOS_CORE_BUILD)/ios-arm64_x86_64-simulator/libskywire-core.a; \
+		cp $$sim/libskywire-core.h $(IOS_CORE_BUILD)/ios-arm64_x86_64-simulator/; \
+		sim=$(IOS_CORE_BUILD)/ios-arm64_x86_64-simulator; \
+	fi; \
+	for d in $(IOS_CORE_BUILD)/ios-arm64 $$sim; do \
+		mkdir -p $$d/include; mv $$d/libskywire-core.h $$d/include/skywire_core.h; \
+	done; \
+	xcodebuild -create-xcframework \
+		-library $(IOS_CORE_BUILD)/ios-arm64/libskywire-core.a -headers $(IOS_CORE_BUILD)/ios-arm64/include \
+		-library $$sim/libskywire-core.a -headers $$sim/include \
+		-output $(IOS_XCFRAMEWORK); \
+	for a in $(IOS_XCFRAMEWORK)/*/libskywire-core.a; do \
+		printf '%s: %s bytes; ' "$$a" "$$(wc -c < $$a | tr -d '[:space:]')"; lipo -info "$$a"; \
+	done
+
+# The iOS import graph of the lite core must stay free of the packages that
+# cannot build for iOS: gopsutil + go-m1cpu (cgo against libproc.h/IOKit, not
+# in the iOS SDK) and 0magnet/metrics (no process-metrics source for ios).
+# The mobile build variant keeps them out (host stats, VictoriaMetrics, the
+# in-process dmsg server and the rewards UI are all tag-paired); this is the
+# guard that they stay out. `go list` evaluates build constraints only, so it
+# runs on any host (it is part of the Android CI lane, android-mobile-check).
+ios-deps-check: ## Fail if the iOS import graph of the mobile core reaches gopsutil, go-m1cpu or 0magnet/metrics
+	@deps=$$(GOOS=ios GOARCH=arm64 CGO_ENABLED=1 go list -mod=vendor -deps -tags $(MOBILE_TAGS) ./cmd/skywire-mobile ./cmd/skywire-mobile-core) || exit 1; \
+	bad=$$(printf '%s\n' "$$deps" | grep -E 'shirou/gopsutil|shoenig/go-m1cpu|0magnet/metrics' || true); \
+	if [ -n "$$bad" ]; then \
+		echo "ERROR: the mobile core's iOS import graph reaches packages that cannot build for iOS:"; \
+		printf '%s\n' "$$bad"; exit 1; \
+	fi; \
+	echo "ios-deps-check: iOS import graph clean ($$(printf '%s\n' "$$deps" | wc -l | tr -d '[:space:]') packages)"
+
+# pkg/mobilecore's start/stop/start tests run a real visor on a phone-profile
+# config and need the lite module set, hence the tags.
+mobile-test: ## Run pkg/mobilecore's tests on the lite (mobile) module set, three times
+	go test -mod=vendor -tags $(MOBILE_TAGS) ./pkg/mobilecore/... -count=3 -timeout 30m
 
 # --pack-dyn-relocs=android: the payload is a PIE, and its 7 MB .rela table of
 # dynamic relocations packs into Android's compact format (−6 MB on disk,

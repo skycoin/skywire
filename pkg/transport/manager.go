@@ -224,10 +224,13 @@ func (tm *Manager) InitDmsgClient(ctx context.Context, dmsgC *dmsg.Client) {
 // from all those clients
 // Additionally, it runs cleanup and persistent reconnection routines
 func (tm *Manager) Serve(ctx context.Context) {
-	// for cleanup, reconnect, re-registration, deferred deletion, and
-	// transport-maintenance goroutines (the latter replaces what used
-	// to be 2 goroutines per ManagedTransport)
-	tm.wg.Add(7)
+	// for cleanup, reconnect, re-registration, deferred deletion,
+	// transport-maintenance (which replaces what used to be 2 goroutines per
+	// ManagedTransport) and lock-watchdog goroutines. The count must match the
+	// goroutines started below: one too many and Close waits forever on
+	// tm.wg while holding tm.mx, wedging every transport reader behind it
+	// (TestManagerCloseAfterServe).
+	tm.wg.Add(6)
 	go tm.cleanupTransports(ctx)
 	go tm.runReconnectPersistent(ctx)
 	go tm.runReRegisterTransports(ctx)
@@ -982,7 +985,10 @@ func (tm *Manager) runClient(ctx context.Context, netType types.Type) {
 			tm.Logger.WithError(err).Debugf("network %s is dial-only on this build (cannot listen)", client.Type())
 			return
 		}
-		tm.Logger.WithError(err).Fatalf("failed to listen on network '%s' of port '%d'",
+		// Logged, not fatal: the other networks keep serving (as they do when
+		// Start fails above), and a visor hosted inside an app (the iOS core,
+		// pkg/mobilecore) must not end the app's process over one network.
+		tm.Logger.WithError(err).Errorf("failed to listen on network '%s' of port '%d'",
 			client.Type(), skyenv.TransportPort)
 		return
 	}
@@ -1837,6 +1843,18 @@ func (tm *Manager) Close() {
 	default:
 	}
 	close(tm.done)
+	tm.closeLocked()
+	// Wait for the Serve and accept goroutines outside tm.mx: they exit on
+	// tm.done or once their listener closed (above), but one may be about to
+	// take the lock first — cleanupTransports on its tick, an accept saving a
+	// transport — and waiting for it while holding the lock deadlocks.
+	tm.wg.Wait()
+	close(tm.readCh)
+}
+
+// closeLocked deregisters and closes every transport and network client, under
+// tm.mx.
+func (tm *Manager) closeLocked() {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
 
@@ -1886,8 +1904,6 @@ func (tm *Manager) Close() {
 	if err := tm.closeARClient(); err != nil {
 		tm.Logger.WithError(err).Warnf("Failed to close arClient")
 	}
-	tm.wg.Wait()
-	close(tm.readCh)
 }
 
 func (tm *Manager) isClosing() bool {

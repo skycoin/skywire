@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !tinygo && !mobile
 
 // Package metrics pkg/dmsg/dmsg/metrics/victoria_metrics.go c1-net-dmsg
 //
@@ -6,7 +6,9 @@
 // (runtime.MemStats fields TinyGo doesn't expose) + pkg/metricsutil, so it is
 // tagged out of the TinyGo build. NewVictoriaMetrics is only constructed by the
 // dmsg SERVER services (dmsgsrv/dmsgdisc), never the client core, which uses the
-// no-op Empty metrics. See docs/design/tinygo-dmsg-client.md.
+// no-op Empty metrics. See docs/design/tinygo-dmsg-client.md. The mobile build
+// tags it out for the same reason plus one: 0magnet/metrics has no
+// process-metrics source for GOOS=ios, so it would not compile there.
 package metrics
 
 import (

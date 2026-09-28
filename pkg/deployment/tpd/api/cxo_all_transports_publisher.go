@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/tpdpaths"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -76,11 +77,11 @@ func toWireEntries(entries []*transport.Entry) []allTransportsWireEntry {
 // memoizes between ticks so the actual cost is bounded.
 const allTransportsPublishInterval = 60 * time.Second
 
-// Published paths. Exported so visor-side subscribers don't have to
-// duplicate the format strings.
+// Published paths. Defined in tpdpaths so visor-side subscribers can name
+// them without importing this package.
 const (
-	AllTransportsPathWithSelf    = "transports/all/with-self"
-	AllTransportsPathWithoutSelf = "transports/all/without-self"
+	AllTransportsPathWithSelf    = tpdpaths.AllTransportsPathWithSelf
+	AllTransportsPathWithoutSelf = tpdpaths.AllTransportsPathWithoutSelf
 )
 
 // AllTransportsCXOPublisher periodically reads the store's

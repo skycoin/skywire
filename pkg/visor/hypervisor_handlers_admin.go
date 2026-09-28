@@ -3,6 +3,7 @@ package visor
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -233,11 +234,20 @@ func (hv *Hypervisor) getRuntimeStats() http.HandlerFunc {
 	})
 }
 
+// errHostStatsUnavailable is what HostStats answers on a build without host
+// stats (the mobile build, api_host_stats_mobile.go); getHostStats maps it to
+// 501 so a caller can tell "not on this build" from a failed probe.
+var errHostStatsUnavailable = errors.New("host stats are not available on this build")
+
 // getHostStats — psutil-style host metrics (CPU%, mem, disk, net,
 // visor process). Polled by the Resource Monitor "Host" tab.
 func (hv *Hypervisor) getHostStats() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		stats, err := ctx.API.HostStats()
+		if errors.Is(err, errHostStatsUnavailable) {
+			httputil.WriteJSON(w, r, http.StatusNotImplemented, err)
+			return
+		}
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return

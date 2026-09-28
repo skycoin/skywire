@@ -23,7 +23,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
-	tpdapi "github.com/skycoin/skywire/pkg/deployment/tpd/api"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/tpdpaths"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -54,7 +54,7 @@ func (c *cxoAwareTPD) getAllTransportsBase(ctx context.Context) ([]*transport.En
 		if mgr := c.v.CXOSubMgr(); mgr != nil {
 			mgr.AcquireFor(TabCLITransports)
 			defer mgr.ReleaseFor(TabCLITransports)
-			body, _, ok := mgr.Get(FeedTPDAllTransports, tpdapi.AllTransportsPathWithoutSelf)
+			body, _, ok := mgr.Get(FeedTPDAllTransports, tpdpaths.AllTransportsPathWithoutSelf)
 			if ok && len(body) > 0 {
 				body = cxoutils.Gunzip(body) // publisher gzips; raw bodies pass through
 				var entries []*transport.Entry
@@ -92,7 +92,7 @@ func (c *cxoAwareTPD) allTransportsSyncedAtCXO() (time.Time, bool) {
 	if mgr == nil {
 		return time.Time{}, false
 	}
-	return mgr.SyncedAt(FeedTPDAllTransports, tpdapi.AllTransportsPathWithoutSelf)
+	return mgr.SyncedAt(FeedTPDAllTransports, tpdpaths.AllTransportsPathWithoutSelf)
 }
 
 // wrapDiscoveryClientWithCXO returns a CXO-aware wrapper around dc.
