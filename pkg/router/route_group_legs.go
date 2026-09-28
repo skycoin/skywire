@@ -1882,3 +1882,20 @@ func (rg *RouteGroup) resendHeldOn(tps []uuid.UUID, why string) {
 		rg.logger.WithError(err).Debugf("%s retx flush: no live leg to resend on", why)
 	}
 }
+
+// resetLegLiveness forgets the pong-miss tally of the leg on transport id.
+// The tally is keyed by first-hop transport, and transport IDs are
+// deterministic per relay, so a leg pruned for missed echoes and re-grown over
+// the same relay before the next liveness tick inherited the full count and
+// was pruned again on its first probe — the browser visor churned one leg
+// every few seconds that way. A new leg starts with a clean slate. Caller may
+// hold rg.mu (the rg.mu → legLivenessMu order is respected).
+func (rg *RouteGroup) resetLegLiveness(id uuid.UUID) {
+	if id == uuid.Nil {
+		return
+	}
+	rg.legLivenessMu.Lock()
+	delete(rg.legMissed, id)
+	delete(rg.legPongSeen, id)
+	rg.legLivenessMu.Unlock()
+}
