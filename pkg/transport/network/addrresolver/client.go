@@ -167,7 +167,27 @@ type httpClient struct {
 	// into the publisher's batch window).
 	bindHookMu      sync.RWMutex
 	bindPublishHook func(netType string, payload LocalAddresses)
+
+	// cxoHealthy, when set and true, means the CXO AR-bind feed is keeping
+	// this visor's bindings alive, so an unchanged re-bind goes over HTTP only
+	// once per cxoHealthyRefreshInterval. bound memoizes the last payload the
+	// AR accepted per transport type. Guarded by boundMu.
+	cxoHealthy func() bool
+	boundMu    sync.Mutex
+	bound      map[string]boundBind
 }
+
+// boundBind is the last payload the AR accepted for one transport type.
+type boundBind struct {
+	raw []byte
+	at  time.Time
+}
+
+// cxoHealthyRefreshInterval bounds how long an unchanged binding goes without
+// an HTTP re-bind while the CXO keepalive is healthy. The HTTP refresh restores
+// a record the AR lost, which the CXO ingest leaves to the HTTP path for
+// SUDPH. Matches the dmsg client's stretch.
+const cxoHealthyRefreshInterval = 30 * time.Minute
 
 // BindPublisher is the optional extension a caller type-asserts the APIClient
 // to in order to mirror AR bindings onto a side channel (the CXO AR-bind
@@ -179,6 +199,10 @@ type BindPublisher interface {
 	// with the canonical transport-type wire name ("stcpr", "sudph",
 	// "squicr", "swtr") and the LocalAddresses the visor just registered.
 	SetBindPublishHook(fn func(netType string, payload LocalAddresses))
+	// SetCXOKeepaliveHealthyFunc installs fn (or clears it with nil). While fn
+	// returns true, an unchanged re-bind skips the HTTP POST until
+	// cxoHealthyRefreshInterval has passed since the last accepted one.
+	SetCXOKeepaliveHealthyFunc(fn func() bool)
 }
 
 // SetBindPublishHook implements BindPublisher.
@@ -186,6 +210,48 @@ func (c *httpClient) SetBindPublishHook(fn func(netType string, payload LocalAdd
 	c.bindHookMu.Lock()
 	c.bindPublishHook = fn
 	c.bindHookMu.Unlock()
+}
+
+// SetCXOKeepaliveHealthyFunc implements BindPublisher.
+func (c *httpClient) SetCXOKeepaliveHealthyFunc(fn func() bool) {
+	c.boundMu.Lock()
+	c.cxoHealthy = fn
+	c.boundMu.Unlock()
+}
+
+// cxoKeepsBindAlive reports whether a re-bind of payload can skip the HTTP
+// POST: it is identical to the one the AR last accepted for netType, that was
+// recent, and the CXO keepalive is healthy.
+func (c *httpClient) cxoKeepsBindAlive(netType string, payload LocalAddresses) bool {
+	c.boundMu.Lock()
+	healthy, last := c.cxoHealthy, c.bound[netType]
+	c.boundMu.Unlock()
+	if healthy == nil || last.raw == nil || time.Since(last.at) >= cxoHealthyRefreshInterval || !healthy() {
+		return false
+	}
+	raw, err := json.Marshal(payload)
+	return err == nil && bytes.Equal(raw, last.raw)
+}
+
+// noteBound records payload as the one the AR just accepted for netType.
+func (c *httpClient) noteBound(netType string, payload LocalAddresses) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	c.boundMu.Lock()
+	if c.bound == nil {
+		c.bound = make(map[string]boundBind)
+	}
+	c.bound[netType] = boundBind{raw: raw, at: time.Now()}
+	c.boundMu.Unlock()
+}
+
+// forgetBound drops the memo for netType so its next bind reaches the AR.
+func (c *httpClient) forgetBound(netType string) {
+	c.boundMu.Lock()
+	delete(c.bound, netType)
+	c.boundMu.Unlock()
 }
 
 // fireBindPublishHook invokes the installed bind-publish hook, if any. Safe to
@@ -569,6 +635,10 @@ func (c *httpClient) BindQUIC(ctx context.Context, port string) error {
 		PublicIPv6: c.localPublicIPv6Raw(),
 	}
 	log.Debugf("Address resolver binding QUIC with: %v port %s", addresses, port)
+	if c.cxoKeepsBindAlive("squicr", localAddresses) {
+		log.Debug("Binding unchanged and kept alive over CXO; skipping HTTP re-registration")
+		return nil
+	}
 	resp, err := c.Post(ctx, quicBindPath, localAddresses)
 	if err != nil {
 		return err
@@ -585,6 +655,7 @@ func (c *httpClient) BindQUIC(ctx context.Context, port string) error {
 		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauthclient.ExtractError(resp.Body))
 	}
 	// Mirror onto the CXO AR-bind feed. Wire name matches types.QUIC.
+	c.noteBound("squicr", localAddresses)
 	c.fireBindPublishHook("squicr", localAddresses)
 	return nil
 }
@@ -634,6 +705,10 @@ func (c *httpClient) BindWT(ctx context.Context, port, certHash string) error {
 		CertHash:   certHash,
 	}
 	log.Debugf("Address resolver binding WT with: %v port %s cert %s", addresses, port, certHash)
+	if c.cxoKeepsBindAlive("swtr", localAddresses) {
+		log.Debug("Binding unchanged and kept alive over CXO; skipping HTTP re-registration")
+		return nil
+	}
 	resp, err := c.Post(ctx, wtBindPath, localAddresses)
 	if err != nil {
 		return err
@@ -650,6 +725,7 @@ func (c *httpClient) BindWT(ctx context.Context, port, certHash string) error {
 		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauthclient.ExtractError(resp.Body))
 	}
 	// Mirror onto the CXO AR-bind feed. Wire name matches types.WT.
+	c.noteBound("swtr", localAddresses)
 	c.fireBindPublishHook("swtr", localAddresses)
 	return nil
 }
@@ -704,6 +780,10 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		PublicIPv6: c.localPublicIPv6Raw(),
 	}
 	log.Debugf("Address resolver binding with: %v", addresses)
+	if c.cxoKeepsBindAlive("stcpr", localAddresses) {
+		log.Debug("Binding unchanged and kept alive over CXO; skipping HTTP re-registration")
+		return nil
+	}
 	resp, err := c.Post(ctx, stcprBindPath, localAddresses)
 	if err != nil {
 		return err
@@ -725,6 +805,7 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 
 	// Mirror the just-registered binding onto the CXO AR-bind feed (when a
 	// publisher installed a hook). Wire name matches types.STCPR.
+	c.noteBound("stcpr", localAddresses)
 	c.fireBindPublishHook("stcpr", localAddresses)
 
 	// #1525 Phase 2b: when v6 is available, fire a SECONDARY POST over
@@ -778,6 +859,7 @@ func (c *httpClient) postV6BindSTCPR(ctx context.Context, payload LocalAddresses
 // delBindSTCPR uinbinds STCPR entry PK to IP:port on address resolver.
 func (c *httpClient) delBindSTCPR(ctx context.Context) error {
 	log := c.log.WithField("func", "httpClient.delBindSTCPR")
+	c.forgetBound("stcpr")
 	if !c.isReady() {
 		log.Debug("Address resolver is not ready yet, waiting...")
 		<-c.ready

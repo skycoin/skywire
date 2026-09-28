@@ -77,6 +77,22 @@ type EntrySink interface {
 	DelEntry(entry Service)
 }
 
+// KeepaliveSink is an EntrySink that can also keep the registered entries
+// alive by itself (the visor's SD-registration-over-CXO feed, whose Roots
+// refresh the SD's stored entries). While KeepaliveHealthy is true, an
+// unchanged re-registration is sent over HTTP only once per
+// cxoHealthyRefreshInterval instead of on every heartbeat.
+type KeepaliveSink interface {
+	EntrySink
+	KeepaliveHealthy() bool
+}
+
+// cxoHealthyRefreshInterval bounds how long an unchanged entry goes without an
+// HTTP re-registration while a KeepaliveSink is healthy. The HTTP refresh
+// restores an entry the SD lost (a restart on a memory store) that the CXO
+// ingest cannot re-create on its own. Matches the dmsg client's stretch.
+const cxoHealthyRefreshInterval = 30 * time.Minute
+
 // HTTPClient is responsible for interacting with the service-discovery
 type HTTPClient struct {
 	log            logrus.FieldLogger
@@ -86,6 +102,10 @@ type HTTPClient struct {
 	entryMx        sync.Mutex // only used if RegisterEntry && DeleteEntry functions are used.
 	client         *http.Client
 	clientPublicIP string
+	// posted is the entry as the next unchanged heartbeat would send it,
+	// and postedAt when it was last accepted over HTTP. Guarded by entryMx.
+	posted   []byte
+	postedAt time.Time
 }
 
 // NewClient creates a new HTTPClient.
@@ -281,13 +301,32 @@ func (c *HTTPClient) registerEntry(ctx context.Context) (Service, error) {
 		}
 	}
 
+	if c.cxoKeepsAlive() {
+		c.log.Debug("Entry unchanged and kept alive over CXO; skipping HTTP re-registration")
+		return c.entry, nil
+	}
+
 	entry, err := c.postEntry(ctx)
 	if err != nil {
 		return Service{}, err
 	}
 	c.entry = entry
+	c.posted, _ = json.Marshal(&c.entry) //nolint:errcheck // a nil memo only forces the next POST
+	c.postedAt = time.Now()
 	c.log.WithField("entry", c.entry.String()).Debug("Entry registered successfully")
 	return c.entry, nil
+}
+
+// cxoKeepsAlive reports whether this heartbeat can skip the HTTP POST: the
+// entry is byte-identical to the one last accepted, that was recent, and the
+// sink is keeping it alive over CXO. Caller holds entryMx.
+func (c *HTTPClient) cxoKeepsAlive() bool {
+	ks, ok := c.conf.Sink.(KeepaliveSink)
+	if !ok || c.posted == nil || time.Since(c.postedAt) >= cxoHealthyRefreshInterval || !ks.KeepaliveHealthy() {
+		return false
+	}
+	raw, err := json.Marshal(&c.entry)
+	return err == nil && bytes.Equal(raw, c.posted)
 }
 
 // postEntry calls 'POST /api/services' and sends current service entry
@@ -366,6 +405,8 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) error {
 func (c *HTTPClient) deleteEntry(ctx context.Context) (removed Service, err error) {
 	c.entryMx.Lock()
 	defer c.entryMx.Unlock()
+	// The next register must reach the SD over HTTP.
+	c.posted = nil
 
 	auth, err := c.Auth(ctx)
 	if err != nil {
