@@ -519,17 +519,19 @@ func (p *Publisher) Feed() cipher.PubKey {
 	return p.pk
 }
 
-// Subscription returns the conn on which peer holds a live subscription to
-// this feed (it receives every Root this publisher sends, heartbeats
-// included), or nil. A different conn than last time means peer resubscribed.
-func (p *Publisher) Subscription(peer cipher.PubKey) *node.Conn {
+// Subscriptions returns the conns on which peer holds a live subscription to
+// this feed (each receives every Root this publisher sends, heartbeats
+// included), in no particular order. A peer can hold more than one: the conn
+// this side dialed to announce and the one the peer dialed itself.
+func (p *Publisher) Subscriptions(peer cipher.PubKey) []*node.Conn {
 	want := skycipher.PubKey(peer)
+	var out []*node.Conn
 	for _, c := range p.cxoNode.ConnectionsOfFeed(skycipher.PubKey(p.pk)) {
 		if c.PeerID() == want {
-			return c
+			out = append(out, c)
 		}
 	}
-	return nil
+	return out
 }
 
 // Node returns the underlying CXO node. Exposed so callers can
