@@ -912,24 +912,40 @@ func (n *Node) connReaper() {
 		case <-n.reaperStop:
 			return
 		case <-t.C:
-			now := time.Now()
-			n.conns.rangeActive(func(c *Conn) {
-				last := c.lastActivityNs.Load()
-				if last == 0 {
-					// receiveMsg hasn't seeded lastActivityNs yet — skip
-					// this tick; a real value lands before the next one
-					// (or the conn closes if receive errored).
-					return
-				}
-				idle := now.Sub(time.Unix(0, last))
-				if idle < idleWatchdogThreshold {
-					return
-				}
-				n.Debugf(ConnPin, "[%s] idle watchdog: %s since last inbound, closing", c.String(), idle)
-				c.Close() //nolint:errcheck,gosec
-			})
+			n.reapIdle(time.Now())
 		}
 	}
+}
+
+// reapIdle is one connReaper tick. A conn silent for idleProbeAfter gets a
+// probe, whose answer is inbound traffic on both ends; one silent for
+// idleWatchdogThreshold, probes included, is closed.
+//
+// Without the probe a healthy conn with nothing to say was closed too: a
+// visor's registration feed publishes only when its entry changes, so its
+// conn to dmsg-discovery went quiet, was reaped within two minutes, and was
+// redialed by the visor's 30 s announce, costing a handshake and a
+// resubscribe each cycle for every visor in the fleet.
+func (n *Node) reapIdle(now time.Time) {
+	n.conns.rangeActive(func(c *Conn) {
+		last := c.lastActivityNs.Load()
+		if last == 0 {
+			// receiveMsg hasn't seeded lastActivityNs yet — skip
+			// this tick; a real value lands before the next one
+			// (or the conn closes if receive errored).
+			return
+		}
+		idle := now.Sub(time.Unix(0, last))
+		if idle < idleProbeAfter {
+			return
+		}
+		if idle < idleWatchdogThreshold {
+			c.probe()
+			return
+		}
+		n.Debugf(ConnPin, "[%s] idle watchdog: %s since last inbound, closing", c.String(), idle)
+		c.Close() //nolint:errcheck,gosec
+	})
 }
 
 func (n *Node) JoinSwarm(
