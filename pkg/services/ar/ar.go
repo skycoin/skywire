@@ -14,6 +14,7 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/ar/api"
 	armetrics "github.com/skycoin/skywire/pkg/deployment/ar/metrics"
@@ -55,6 +56,17 @@ func New(cfg *Config, log *logging.Logger) services.Service {
 type service struct {
 	cfg *Config
 	log *logging.Logger
+
+	// state, set by build and startCXO, is reported by State.
+	store, nonceStore string
+	cxo               services.CXOSet
+}
+
+// State implements services.Stater.
+func (s *service) State() services.State {
+	st := services.State{Store: s.store, NonceStore: s.nonceStore}
+	s.cxo.State(&st)
+	return st
 }
 
 // built is everything Run and Embed share: the API with its store, the
@@ -94,6 +106,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 
 	metricsutil.ServePProf(logger, cfg.PprofAddr, "address-resolver")
 
+	s.store = services.StoreKind(storeConfig.Type)
 	transportStore, err := store.New(ctx, storeConfig, cfg.EntryTimeout.Std(), logger)
 	if err != nil {
 		return nil, fmt.Errorf("address-resolver: init store: %w", err)
@@ -112,6 +125,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	if !plainHTTP {
 		nonceConfig.Type = storeconfig.Memory
 	}
+	s.nonceStore = services.StoreKind(nonceConfig.Type)
 	nonceStore, err := httpauth.NewNonceStore(ctx, nonceConfig, redisPrefix)
 	if err != nil {
 		return nil, fmt.Errorf("address-resolver: init nonce store: %w", err)
@@ -148,51 +162,24 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	}}, nil
 }
 
-// startCXO brings up the AR-bind aggregator and the bindings publisher
-// on dmsgC under sk. Both are best-effort; the returned close stops
-// whichever came up.
-func (s *service) startCXO(ctx context.Context, dmsgC *dmsg.Client, sk cipher.SecKey, b *built, logger *logging.Logger) func() {
-	var closers []func()
-	// AR-bind-over-CXO aggregator: always-on fan-in path where visors publish
-	// their AR bindings as a CXO feed instead of re-registering over a fresh
-	// dmsg stream (each a full Noise handshake) on a timer. Inert until visors
-	// subscribe (just a listener), purely additive to the authoritative
-	// HTTP/UDP bind path, so it needs no gate. Needs the dmsg client; the API
-	// is the Sink (IngestBindFromCXO). The node identity is bound to the AR's
-	// service SecKey so gated visors accept its subscribe (see #4168).
-	// Best-effort — HTTP/UDP registration is unaffected if it fails to start.
-	agg, aerr := regcxo.New(dmsgC, sk, b.api, regcxo.Config{Logger: logger})
-	if aerr != nil {
-		logger.WithError(aerr).Error("Failed to start AR-bind-over-CXO aggregator, continuing without it")
-	} else {
-		agg.Run(ctx)
-		closers = append(closers, func() { _ = agg.Close() }) //nolint:errcheck
-		logger.WithField("feed_pk", agg.FeedPK()).
-			WithField("port", skyenv.DmsgVisorARBindCXOPort).
-			Info("AR-bind-over-CXO aggregator running")
-	}
-
-	// CXO bindings publisher: the READ side, keyed by peer public key, so a
-	// caller can look one peer's addresses up over an already-open CXO
-	// connection with Preview instead of an authenticated HTTP round-trip —
-	// and without subscribing to (and holding) the whole set. Additive: GET
-	// /resolve is unchanged and stays authoritative, and the feed is inert
-	// until something reads it. Best-effort, like the aggregator above.
-	bindPub, berr := api.StartBindingsCXOPublisher(dmsgC, sk, b.store, logger)
-	if berr != nil {
-		logger.WithError(berr).Error("Failed to start CXO bindings publisher, continuing without it")
-	} else {
+// startCXO brings up the AR-bind aggregator (visors publish their
+// bindings as a CXO feed instead of re-registering over a fresh dmsg
+// stream on a timer) and the bindings publisher (peers look a key up with
+// a CXO Preview), on dmsgC under sk, until ctx ends. When embedded, host
+// lends the visor's node for the bind port. Each piece is best-effort.
+func (s *service) startCXO(ctx context.Context, dmsgC *dmsg.Client, host services.CXOHost, sk cipher.SecKey, b *built, logger *logging.Logger) {
+	s.cxo.StartAggregator(ctx, host, logger, "ar-bind", skyenv.DmsgVisorARBindCXOPort, func(n *node.Node) (services.Aggregator, error) {
+		return regcxo.New(dmsgC, sk, b.api, regcxo.Config{Node: n, Logger: logger})
+	})
+	bindPub, err := api.StartBindingsCXOPublisher(dmsgC, sk, b.store, logger)
+	if err == nil {
 		b.api.SetBindingsCXOPublisher(bindPub)
-		closers = append(closers, func() {
+		go func() {
+			<-ctx.Done()
 			b.api.SetBindingsCXOPublisher(nil)
-			_ = bindPub.Close() //nolint:errcheck
-		})
+		}()
 	}
-	return func() {
-		for i := len(closers) - 1; i >= 0; i-- {
-			closers[i]()
-		}
-	}
+	s.cxo.AddPublisher(ctx, logger, "bindings", skyenv.DmsgARBindingsCXOPort, bindPub, err)
 }
 
 // Embed runs address-resolver inside a host process: the API is
@@ -209,13 +196,11 @@ func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, 
 	if err != nil {
 		return nil, err
 	}
-	closeCXO := func() {}
 	if host.DmsgClient != nil {
-		closeCXO = s.startCXO(ctx, host.DmsgClient, host.SK, b, logger)
+		s.startCXO(ctx, host.DmsgClient, host.CXO, host.SK, b, logger)
 	}
 	go func() {
 		<-ctx.Done()
-		closeCXO()
 		b.close()
 	}()
 	return b.api, nil
@@ -306,8 +291,7 @@ func (s *service) Run(ctx context.Context) error {
 	defer h.Close()
 
 	if h.DmsgClient != nil {
-		closeCXO := s.startCXO(runCtx, h.DmsgClient, sk, b, logger)
-		defer closeCXO()
+		s.startCXO(runCtx, h.DmsgClient, nil, sk, b, logger)
 	}
 
 	select {
@@ -317,4 +301,9 @@ func (s *service) Run(ctx context.Context) error {
 		logger.WithError(err).Error("listener failed")
 		return err
 	}
+}
+
+// AggregatorPorts implements services.CXOAggregating.
+func (s *service) AggregatorPorts() []uint16 {
+	return []uint16{skyenv.DmsgVisorARBindCXOPort}
 }

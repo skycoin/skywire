@@ -248,6 +248,9 @@ type Config struct {
 	// satisfy CXO's filling protocol).
 	InMemoryDB bool
 	DataDir    string
+	// Node, when set, is the host's CXO node on this port to attach to
+	// (see cxoaggregate.Options.Node).
+	Node *node.Node
 	// DmsgPort is the DMSG port this aggregator's CXO node listens on
 	// (and dials visors back on). Zero falls back to
 	// cxotransport.DefaultCXOPort (50), the visor telemetry feed. TPD
@@ -418,6 +421,7 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggrega
 		LogTag:           "CXO aggregator",
 		InMemoryDB:       conf.InMemoryDB,
 		DataDir:          conf.DataDir,
+		Node:             conf.Node,
 		NodeConfig: func(cfg *node.Config) {
 			// Wire the cxo node's internal logger so its FillPin /
 			// MsgReceivePin / connection-handshake debug output goes to
@@ -1193,3 +1197,10 @@ func parseTransportLeafByName(path, suffix string) (uuid.UUID, bool) {
 	}
 	return id, true
 }
+
+// Ingest applies a Root the host published itself, on the node it lent this
+// aggregator (see cxoaggregate.Core.Ingest).
+func (a *Aggregator) Ingest(r *registry.Root) { a.core.Ingest(r) }
+
+// Stats reports the aggregator's current state.
+func (a *Aggregator) Stats() cxoaggregate.Stats { return a.core.Stats() }

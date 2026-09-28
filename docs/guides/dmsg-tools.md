@@ -139,6 +139,19 @@ prefix, on that plain-HTTP address, for callers that still reach the
 service the old way. The visor's own clients reach a service it hosts
 in-process, so its config may point at its own key.
 
+Registration and telemetry reach the services over CXO. Visors publish
+each feed on a fixed dmsg port, and the service aggregates it on the
+same port. The visor publishes on those ports too, under the same key,
+so an embedded service's aggregator runs on the visor's own publisher
+node for that port. The visor hands the service its own feed in-process.
+A publisher on such a port keeps its store in memory.
+
+`skywire cli visor state --select services` lists each embedded service:
+its address, whether it is running, its store and nonce store, and each
+CXO aggregator and publisher. For an aggregator it shows the port,
+whether it shares the visor's node, and its connection and subscription
+counts.
+
 The e2e suite runs this shape: `visor-s` in `docker/docker-compose.yml`
 hosts the four services (`docker/integration/visorS.json`), and every
 other visor's config addresses them by its key.
