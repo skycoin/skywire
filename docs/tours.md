@@ -96,6 +96,14 @@ an uptime record) and **Resources** (a browser tab has no host to measure).
   visor is mine; the redirect puts that PK in the hash and the later steps read
   it from there.
 
+- **Do not put `system-ui` first in the callout's font stack.** On the Linux
+  box this was tested on it resolves to a face that gives `'` (U+0027) the
+  advance width of an `o` — 30.7px against 29.9px at 52px — so "you're" reads
+  as "you ' re". The stack leads with the dashboard's own `Skycoin` face, which
+  also makes the callout look like part of the app, and the prose uses the
+  typographic `’` (U+2019), which measures normally in every face here. The
+  first draft blamed the dashboard's `letter-spacing` and was wrong; canvas
+  `measureText` settles it in one call.
 - **Watch the route with a poll, not `hashchange`.** Angular's router navigates
   with `history.pushState`, and `pushState` fires no event at all — not
   `hashchange`, not `popstate`. A `hashchange` listener therefore sees a
