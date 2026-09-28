@@ -89,13 +89,19 @@ func (s *service) build(ctx context.Context, log *logging.Logger, dmsgAddr strin
 	log.Printf("Service entry timeout: %v", cfg.EntryTimeout)
 
 	// Requests over dmsg are authenticated by the stream's key; only a
-	// plain-HTTP surface checks nonces, so only that needs them durable.
+	// plain-HTTP surface checks nonces, so only that needs them durable. The
+	// store must exist either way: without it the API serves no nonce route
+	// (clients fetch one before their first request, so none can register)
+	// and skips the check that an entry's key is the caller's.
 	var nonceDB httpauth.NonceStore
-	if plainHTTP && !cfg.TestMode {
-		nonceStoreConfig := storeconfig.Config{
-			URL:      redisURL,
-			Type:     storeconfig.Redis,
-			Password: storeconfig.RedisPassword(),
+	if !cfg.TestMode {
+		nonceStoreConfig := storeconfig.Config{Type: storeconfig.Memory}
+		if plainHTTP {
+			nonceStoreConfig = storeconfig.Config{
+				URL:      redisURL,
+				Type:     storeconfig.Redis,
+				Password: storeconfig.RedisPassword(),
+			}
 		}
 		nonceDB, err = httpauth.NewNonceStore(ctx, nonceStoreConfig, redisPrefix)
 		if err != nil {
