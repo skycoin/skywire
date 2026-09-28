@@ -50,109 +50,113 @@ type tourStep struct {
 	args []string
 }
 
+// The copy narrates rather than instructs — it describes what a thing is, not
+// what the reader should do with it. This tour carries the claim the dashboard
+// tour deliberately does not make: a visor running in a browser tab, with a
+// desktop around it, is an unusual thing. The Angular dashboard next door is an
+// ordinary admin console and says so.
 func tourSteps() []tourStep {
 	return []tourStep{
 		{
-			title: "A desktop, in a browser tab",
-			body: "This is a <b>desk</b> — a window manager rendered by the same wasm " +
-				"binary as the visor serving this page. The windows are real: they move, " +
-				"resize, dock, minimize and stack. Nothing here is a screenshot and nothing " +
-				"is a remote session; every app you are about to see runs inside this tab.",
+			title: "A visor, running in a browser tab",
+			body: "Not a page describing Skywire, and not a remote session: the " +
+				"<b>wasm binary serving this page is a full visor</b>, routing on the mesh " +
+				"from inside this tab. Around it is a <b>desk</b> — a real window manager " +
+				"whose windows move, resize, dock and stack. Nothing was installed. " +
+				"Nothing is running on a server on the reader's behalf. Everything in " +
+				"the following windows executes here.",
 		},
 		{
 			title: "The launcher",
-			body: "Everything opens from the <b>launcher</b> in the taskbar, and this tour " +
-				"is in there too — so you can close it and come back. From here on each " +
-				"step <b>opens the app it is describing</b>, beside this window. Drag them " +
-				"apart if they overlap; a window you move is yours and the tour will stop " +
-				"closing it for you.",
+			body: "Every app opens from the <b>launcher</b> in the taskbar, this tour " +
+				"included, so it can be closed and reopened. From here each step " +
+				"<b>opens the app it describes</b>, beside this window. Windows that get " +
+				"moved or resized are left alone afterwards; untouched ones are tidied up.",
 		},
 		{
-			title: "browser — the mesh, and the clearnet",
-			body: "<b>netscrape</b> browses two networks at once. A <code>&lt;pk&gt;.dmsg</code> " +
-				"address fetches a site straight from another visor over dmsg — no DNS, no " +
-				"certificate authority, the <b>public key is both the address and the " +
-				"authentication</b>. A clearnet address goes out through an <b>exit visor</b> " +
-				"instead, so the site sees the exit's IP and not yours. Named aliases like " +
-				"<code>skywire.dmsg</code> are a local convenience, not a global namespace " +
-				"anyone can squat.",
+			title: "browser — two networks at once",
+			body: "<b>netscrape</b> resolves two kinds of address. A " +
+				"<code>&lt;pk&gt;.dmsg</code> address fetches a site directly from another " +
+				"visor over dmsg: no DNS, no certificate authority, the <b>public key is " +
+				"the address and the authentication at once</b>. A clearnet address is " +
+				"fetched by an <b>exit visor</b> instead — selected automatically unless one " +
+				"is pinned — so the site sees the exit's address. Names like " +
+				"<code>skywire.dmsg</code> are a local convenience, not a namespace anyone " +
+				"can squat.",
 			app: "browser",
 		},
 		{
-			title: "…and the hypervisor UI is a tab in it",
-			body: "The <b>hypervisor dashboard</b> — the visor list, transports, routing, the " +
-				"network views — is not a window of its own. It is an Angular app this visor " +
-				"serves on its virtual loopback, and the browser opens it as a native tab at " +
-				"<code>vnet:8001</code>. That is the seam: <b>this</b> tour covers the desktop; " +
-				"the dashboard has <b>its own tour</b>, behind the <b>?</b> button in its " +
-				"bottom-right corner. Two surfaces, two walks.",
+			title: "The dashboard is a tab in it",
+			body: "The <b>hypervisor dashboard</b> — visor list, transports, routing, the " +
+				"mesh-wide views — is not a window here. It is an Angular app this visor " +
+				"serves on its virtual loopback, opened as a native tab at " +
+				"<code>vnet:8001</code>. That is the seam. It is ordinary admin software, " +
+				"which is why it gets a separate, plainer tour, behind the <b>?</b> button " +
+				"in its bottom-right corner.",
 		},
 		{
-			title: "console — a real shell, in the tab",
-			body: "The console is <b>websh</b>, running in the same wasm runtime as the visor. " +
-				"Not a remote terminal: there is no server on the other end. Pipes, globbing, " +
-				"control flow, job control, <code>jq</code> and <code>awk</code> — and the " +
-				"visor's own commands emit JSON straight into the pipeline, so you can " +
-				"inspect and script this visor exactly as you would a native one with " +
-				"<code>skywire cli</code>.",
+			title: "console — a shell with no server",
+			body: "The console is <b>websh</b>, running in the same wasm runtime as the " +
+				"visor. There is no host on the other end of it. Pipes, globbing, control " +
+				"flow, job control, <code>jq</code> and <code>awk</code> all work, and the " +
+				"visor's own commands emit JSON into the pipeline — the same scripting " +
+				"surface <code>skywire cli</code> gives a native visor.",
 			app: "console",
 		},
 		{
-			title: "files — the same filesystem, seen twice",
-			body: "The file browser and the shell share <b>one in-memory filesystem</b>. Write " +
-				"<code>echo hi &gt; /notes.txt</code> in the console and it appears here; edit " +
-				"it here and <code>cat /notes.txt</code> shows your change. Nothing touches " +
-				"the host disk — it is a sandbox in the tab, and like the tab it is " +
-				"ephemeral unless you save it out.",
+			title: "files — one filesystem, two views",
+			body: "The file browser and the shell share a single in-memory filesystem. " +
+				"<code>echo hi &gt; /notes.txt</code> in the console appears here; an edit " +
+				"here is visible to <code>cat</code>. Nothing touches the host disk, and " +
+				"like the tab itself it is ephemeral unless exported.",
 			app: "files",
 		},
 		{
-			title: "mail — e-mail over skywire",
-			body: "A mailbox addressed by <b>public key</b>, delivered over the mesh rather " +
-				"than through a mail provider. No account to register and no server holding " +
-				"your messages; the whitelist decides who may reach you.",
+			title: "mail — addressed by key",
+			body: "A mailbox whose address is a <b>public key</b>, delivered across the " +
+				"mesh rather than through a provider. There is no account to register and " +
+				"no server holding the messages; a whitelist decides who can deliver.",
 			app: "mail",
 		},
 		{
 			title: "identity — the key is the visor",
 			body: "This tab's visor <i>is</i> a keypair, and this is where it lives. " +
-				"<b>Export it</b> to back it up or to move this visor to another device; " +
-				"import one and a reload restarts the visor under that key. The secret half " +
-				"never leaves the tab except as text you copy. Lose it and the identity is " +
-				"gone — there is nobody to ask for it back.",
+				"<b>Export</b> backs it up or moves the visor to another device; importing " +
+				"one and reloading restarts the visor under that key. The secret half " +
+				"leaves the tab only as copied text. There is nobody to recover it from.",
 			app: "identity",
 		},
 		{
-			title: "pair — let this tab drive the host",
+			title: "pair — driving the host visor",
 			body: "Pairing asks the visor serving this page to accept <b>this tab</b> as its " +
-				"hypervisor. The operator sees a fingerprint in <code>skywire cli visor hv " +
-				"pair</code> and approves it, or hands over a one-time code. After that the " +
-				"dashboard tab is managing a real visor on the host, from the browser.",
+				"hypervisor. The operator approves a fingerprint shown by <code>skywire cli " +
+				"visor hv pair</code>, or hands over a one-time code. After that the " +
+				"dashboard tab is managing a real visor on the host.",
 			app: "pair",
 		},
 		{
-			title: "settings — what each reload generates",
+			title: "settings — what each reload builds",
 			body: "This tab's <code>skywire.conf</code>: the services it points at and the " +
-				"options every reload builds the visor's config from. A browser visor is " +
-				"rebuilt from this file each time it starts, so this is where a change has " +
-				"to go to survive a reload.",
+				"options every reload generates the visor's config from. A browser visor is " +
+				"rebuilt from this file on each start, so changes have to land here to " +
+				"survive one.",
 			app: "settings",
 		},
 		{
-			title: "install — keep it when the address goes away",
-			body: "Install the desk as an app and it opens on its own, out of the browser's " +
-				"own storage. It keeps working when the address that served it is " +
-				"unreachable — which for a mesh tool is the point: the thing that browses " +
-				"the network should not need the network to start.",
+			title: "install — surviving the address",
+			body: "Installed as an app, the desk opens on its own from the browser's " +
+				"storage and keeps working when the address that served it is unreachable. " +
+				"For a tool whose job is browsing a mesh, not needing the network in order " +
+				"to start is most of the point.",
 			app: installAppName,
 		},
 		{
-			title: "Yours, and ephemeral",
-			body: "No install, no account, no server. A visor, a desktop, a shell, a browser " +
-				"and a mailbox, all in one tab — and all of it gone when you close it, " +
-				"unless you exported your key or installed the desk.<br><br>" +
-				"Reopen this tour any time from the launcher. The <b>hypervisor dashboard</b> " +
-				"has its own, behind the <b>?</b> button in its corner.",
+			title: "Ephemeral by default",
+			body: "No install, no account, no server: a visor, a desktop, a shell, a " +
+				"browser and a mailbox in one tab, and all of it gone when the tab closes " +
+				"unless the key was exported or the desk installed.<br><br>" +
+				"This tour reopens from the launcher. The <b>dashboard</b> has its own, " +
+				"behind the <b>?</b> button in its corner.",
 		},
 	}
 }

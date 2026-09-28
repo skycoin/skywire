@@ -60,6 +60,39 @@ settings, and the rest); the mesh-wide tabs (transports, network, visualizer,
 services health, uptime, and — native only — rewards and resources); the
 hypervisor-wide settings page.
 
+## Voice, and which surface gets to claim novelty
+
+Both tours **narrate**. They describe what is on the screen rather than
+addressing a reader: "Each row is a visor", never "you can see your visors
+here". Two reasons, and they are not style preferences:
+
+- The same dashboard text is read by two quite different arrivals — someone who
+  installed and configured a daemon, and someone who clicked a link. Second
+  person keeps addressing the wrong one.
+- Instructional copy on a familiar screen reads as condescension.
+
+Which matters because **the dashboard is not the unusual thing**. It is an
+Angular admin console, and a deliberately unremarkable one. The first draft
+opened it with "This is not a normal web page", which spent the reader's
+credulity on the wrong screen. The genuinely unprecedented part — a full visor
+routing on a mesh from inside a browser tab, with a window manager around it —
+is the **desk**, so the desk tour makes that claim and the dashboard tour opens
+flatly with what a hypervisor is.
+
+## The two audiences
+
+They can do nearly the same things, but they did not arrive the same way, and
+the wasm-side copy should not forget it:
+
+- **Browser visor** — arrived by following a link. Nothing installed, nothing
+  persists, the key is gone with the tab unless exported. Clearnet fetches leave
+  through an **exit visor chosen automatically** (`skysocks-client-lite`, no
+  local port), which is what makes netscrape work — and netscrape lives in the
+  desk, not in the dashboard.
+- **Native visor** — went to real trouble to get here. Persistent, holds its key
+  on disk, binds local ports, can serve other machines, and accrues the uptime
+  record that rewards pay against.
+
 ## Native vs. wasm, inside the hypervisor-UI tour
 
 The dashboard is *one* build served two ways, so its tour keeps the per-platform
