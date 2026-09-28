@@ -500,6 +500,7 @@ func (rg *RouteGroup) adoptRehomedLeg(leg *rehomeLeg, reason string, standby boo
 	rg.rvs = append(rg.rvs, rvs)
 	rg.tps = append(rg.tps, leg.tp)
 	idx := len(rg.tps) - 1
+	rg.resetLegLiveness(tpEntryID(leg.tp))
 	if rg.mux != nil {
 		rg.mux.growLegs(len(rg.tps))
 		rg.mux.rebuildWeights(rg.tps)

@@ -78,6 +78,19 @@ func (c *Connector) ConnectToVisors(
 	)
 	sem := make(chan struct{}, dialConcurrency)
 
+	// A budgeted phase (maxCount > 0 — the few WT/WS/QUIC slots, and for a
+	// browser visor with no raw sockets its ONLY transports) spends its slots on
+	// distinct MACHINES. Public visors are often several to a host, so random
+	// picks put most of a tab's handful of relays on one machine, and when that
+	// machine dropped its sessions the tab lost nearly every relay at once —
+	// every leg of every tunnel. hosts is seeded with the hosts our automatic
+	// transports already reach; a new transport to one of them does not count.
+	var hosts map[string]bool
+	sameHostExtra := 0
+	if maxCount > 0 {
+		hosts = c.automaticTransportHosts()
+	}
+
 	for _, pk := range ShufflePubKeys(targets) {
 		select {
 		case <-ctx.Done():
@@ -170,9 +183,34 @@ func (c *Connector) ConnectToVisors(
 				return
 			}
 
+			// A transport to a host we already reach is KEPT — it is still another
+			// relay, and a browser visor may have few machines to choose from —
+			// but it does not use up a budget slot, so the phase keeps dialing for
+			// a new machine. sameHostExtra bounds those extras to maxCount, so a
+			// phase opens at most 2*maxCount transports.
+			counts := true
+			if hosts != nil {
+				if tp, err := c.Tm.GetTransport(pk, tpType); err == nil && tp != nil {
+					if h := tp.RemoteIP(); h != "" {
+						mu.Lock()
+						if hosts[h] && sameHostExtra < maxCount {
+							sameHostExtra++
+							counts = false
+						}
+						hosts[h] = true
+						mu.Unlock()
+						if !counts {
+							logger.WithField("host", h).Debugln("Transport reaches a host we already reach; kept, but dialing on for another machine")
+						}
+					}
+				}
+			}
+
 			mu.Lock()
 			c.noteSuccess(pk, tpType)
-			result.Count++
+			if counts {
+				result.Count++
+			}
 			result.Connected = append(result.Connected, pk)
 			mu.Unlock()
 		}(pk)
@@ -273,4 +311,19 @@ func (c *Connector) isSameLAN(ctx context.Context, pk cipher.PubKey, netType tpt
 func isContextError(err error) bool {
 	return errors.Is(err, context.Canceled) ||
 		errors.Is(err, context.DeadlineExceeded)
+}
+
+// automaticTransportHosts is the set of hosts the automatic transports already
+// reach (their remote IP, or the hostname a browser carrier dialed).
+func (c *Connector) automaticTransportHosts() map[string]bool {
+	hosts := make(map[string]bool)
+	if c.Tm == nil {
+		return hosts
+	}
+	for _, tp := range c.Tm.GetTransportsByLabel(transport.LabelAutomatic) {
+		if h := tp.RemoteIP(); h != "" {
+			hosts[h] = true
+		}
+	}
+	return hosts
 }

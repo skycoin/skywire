@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -18,27 +17,14 @@ import (
 type Config struct {
 	Path string `json:"-"`
 
-	PubKey cipher.PubKey `json:"public_key,omitempty"`
-	SecKey cipher.SecKey `json:"secret_key,omitempty"`
+	services.Common
 
-	Addr            string            `json:"addr,omitempty"`
-	MetricsAddr     string            `json:"metrics_addr,omitempty"`
-	PprofAddr       string            `json:"pprof_addr,omitempty"`
-	Redis           string            `json:"redis,omitempty"`
-	EntryTimeout    services.Duration `json:"entry_timeout,omitempty"`
-	LogLevel        string            `json:"log_level,omitempty"`
-	TestMode        bool              `json:"test_mode,omitempty"`
-	Mode            string            `json:"mode,omitempty"`
-	Whitelist       []string          `json:"whitelist_keys,omitempty"`
-	SurveyWhitelist []cipher.PubKey   `json:"survey_whitelist,omitempty"`
+	Whitelist []string `json:"whitelist_keys,omitempty"`
 
 	// GeoIP is the URL of the geoip service. Visors populate Geo on
 	// their entries directly post-#2439; field kept for backward
 	// compatibility.
 	GeoIP string `json:"geoip,omitempty"`
-
-	// DmsgPort is the dmsghttp listener port (default 80).
-	DmsgPort uint16 `json:"dmsg_port,omitempty"`
 
 	// Dmsg is the dmsg-related config block — same shape across
 	// every deployment service that uses it.

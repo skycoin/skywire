@@ -164,12 +164,14 @@ func TestRunInMemoryHTTPLifecycle(t *testing.T) {
 	wlPK, _ := cipher.GenerateKeyPair() // survey-whitelist entry
 
 	cfg := &Config{
-		PubKey:          pk,
-		Addr:            freeTCPAddr(t),
-		Testing:         true, // in-memory transport store
-		LogLevel:        "info",
-		TestEnvironment: true,                  // survey-whitelist test branch
-		SurveyWhitelist: []cipher.PubKey{wlPK}, // survey-whitelist override branch
+		Common: services.Common{
+			PubKey:          pk,
+			Addr:            freeTCPAddr(t),
+			Testing:         true, // in-memory transport store
+			LogLevel:        "info",
+			TestEnvironment: true,                  // survey-whitelist test branch
+			SurveyWhitelist: []cipher.PubKey{wlPK}, // survey-whitelist override branch
+		},
 	}
 	svc := New(cfg, testLog()).(*service)
 
@@ -196,7 +198,12 @@ func TestRunInMemoryHTTPLifecycle(t *testing.T) {
 func TestRunInvalidMode(t *testing.T) {
 	// Testing=true keeps the store in-memory so Run reaches the mode
 	// resolution, where an unknown mode string is rejected.
-	cfg := &Config{Testing: true, Mode: "bogus-mode"}
+	cfg := &Config{
+		Common: services.Common{
+			Testing: true,
+			Mode:    "bogus-mode",
+		},
+	}
 	svc := New(cfg, testLog()).(*service)
 	err := svc.Run(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "invalid mode") {
@@ -210,7 +217,11 @@ func TestRunRedisStoreFails(t *testing.T) {
 	// scheme-prefix branch, since the value has no redis:// prefix) and
 	// the init-store error branch. The redis store retries until the
 	// context deadline, so bound it tightly.
-	cfg := &Config{Redis: closedHostPort(t)}
+	cfg := &Config{
+		Common: services.Common{
+			Redis: closedHostPort(t),
+		},
+	}
 	svc := New(cfg, testLog()).(*service)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

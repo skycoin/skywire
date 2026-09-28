@@ -89,8 +89,9 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	// advertising; every server role and embedded infrastructure node; the
 	// browsing proxies and resolvers; skymail; the tpviz UI server; node
 	// health; skynet port auto-registration and the self-probe; coin-node
-	// forwarding (the wallet calls nodes directly); and the
-	// registration/AR/SD mirrors over CXO (the HTTP paths stay).
+	// forwarding (the wallet calls nodes directly); the registration/AR/SD
+	// mirrors over CXO (the HTTP paths stay); and the deployment services
+	// embedded on dmsg :80.
 	m.ptyModule = dropped("dmsg_pty")
 	m.dmsgHTTPLogServer = dropped("dmsghttp_logserver")
 	m.systemSurvey = dropped("system_survey")
@@ -118,6 +119,7 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.regCXOMod = dropped("registration_cxo")
 	m.arBindCXOMod = dropped("ar_bind_cxo")
 	m.sdRegCXOMod = dropped("sd_reg_cxo")
+	m.embeddedServices = dropped("embedded_services")
 
 	m.vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &m.ebc, &m.ar, &m.disc,
 		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.pv, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC,

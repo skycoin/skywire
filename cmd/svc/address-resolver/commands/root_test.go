@@ -127,23 +127,25 @@ func TestMergeFile_AllFieldsOverride(t *gotesting.T) {
 	dst := &ar.Config{}
 	pk, _ := cipher.GenerateKeyPair()
 	src := &ar.Config{
-		SecKey:          cipher.SecKey{1},
-		Addr:            ":addr",
-		UDPAddr:         ":udp",
-		PublicUDPAddr:   ":pubudp",
-		MetricsAddr:     ":metrics",
-		PprofAddr:       ":pprof",
-		Redis:           "redis://x",
-		RedisPoolSize:   5,
-		EntryTimeout:    services.Duration(time.Minute),
-		Tag:             "tag",
-		LogLevel:        "debug",
-		Testing:         true,
-		Mode:            "dual",
-		Whitelist:       []string{"a"},
-		SurveyWhitelist: []cipher.PubKey{pk},
-		TestEnvironment: true,
-		DmsgPort:        81,
+		Common: services.Common{
+			SecKey:          cipher.SecKey{1},
+			Addr:            ":addr",
+			MetricsAddr:     ":metrics",
+			PprofAddr:       ":pprof",
+			Redis:           "redis://x",
+			RedisPoolSize:   5,
+			EntryTimeout:    services.Duration(time.Minute),
+			Tag:             "tag",
+			LogLevel:        "debug",
+			Testing:         true,
+			Mode:            "dual",
+			SurveyWhitelist: []cipher.PubKey{pk},
+			TestEnvironment: true,
+			DmsgPort:        81,
+		},
+		UDPAddr:       ":udp",
+		PublicUDPAddr: ":pubudp",
+		Whitelist:     []string{"a"},
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  "http://disc",
 			ServerType: "stcpr",
@@ -157,8 +159,14 @@ func TestMergeFile_AllFieldsOverride(t *gotesting.T) {
 
 func TestMergeFile_ZeroSrcLeavesDst(t *gotesting.T) {
 	orig := &ar.Config{
-		Addr: ":keep", UDPAddr: ":keepudp", Tag: "keep", RedisPoolSize: 9, DmsgPort: 80,
-		Dmsg: cmdutil.DmsgConfig{Discovery: "http://keep"},
+		Common: services.Common{
+			Addr:          ":keep",
+			Tag:           "keep",
+			RedisPoolSize: 9,
+			DmsgPort:      80,
+		},
+		UDPAddr: ":keepudp",
+		Dmsg:    cmdutil.DmsgConfig{Discovery: "http://keep"},
 	}
 	dst := *orig
 

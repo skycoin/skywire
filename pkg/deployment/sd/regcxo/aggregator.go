@@ -28,6 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoaggregate"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
+	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -74,6 +75,9 @@ type Config struct {
 	Logger            *logging.Logger
 	InMemoryDB        bool
 	DataDir           string
+	// Node, when set, is the host's CXO node on this port to attach to
+	// (see cxoaggregate.Options.Node).
+	Node *node.Node
 }
 
 // Aggregator receives visor SD-registration feeds. It is the shared
@@ -105,6 +109,7 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggrega
 		LogTag:            logTag,
 		InMemoryDB:        conf.InMemoryDB,
 		DataDir:           conf.DataDir,
+		Node:              conf.Node,
 		OnRootFilled:      a.handleRootFilled,
 		OnFillingBreaks: func(r *registry.Root, reason error) {
 			a.log.WithError(reason).WithField("visor", cipher.PubKey(r.Pub)).
@@ -184,3 +189,10 @@ func decodeServicesBatch(body []byte) ([]servicedisc.Service, bool) {
 	}
 	return out, true
 }
+
+// Ingest applies a Root the host published itself, on the node it lent this
+// aggregator (see cxoaggregate.Core.Ingest).
+func (a *Aggregator) Ingest(r *registry.Root) { a.core.Ingest(r) }
+
+// Stats reports the aggregator's current state.
+func (a *Aggregator) Stats() cxoaggregate.Stats { return a.core.Stats() }

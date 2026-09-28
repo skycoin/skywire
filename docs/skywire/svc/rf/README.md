@@ -88,7 +88,7 @@ skywire svc rf
   -m, --metrics string            address to bind metrics API to
       --mode string               listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)
       --pprof string              address to bind pprof debug server (e.g. localhost:6060)
-      --redis string              connections string for a redis store
+      --redis string              redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)
                                    (default "redis://localhost:6379")
       --redis-pool-size int       redis connection pool size
                                    (default 10)
@@ -96,7 +96,7 @@ skywire svc rf
                                    (default 0000000000000000000000000000000000000000000000000000000000000000)
       --tag string                logging tag
                                    (default "route_finder")
-  -t, --testing                   enable testing to start without redis
+  -t, --testing                   run for a test network: keep entries in memory unless --redis is set
 ```
 
 ## Global Flags

@@ -25,7 +25,7 @@ const (
 func TestRedisStoreClientEntry(t *testing.T) {
 	ctx := context.TODO()
 	log := logging.MustGetLogger("test")
-	redis, err := newRedis(ctx, redisURL, redisPassword, 0, log)
+	redis, err := newRedis(ctx, redisURL, redisPassword, 0, 0, log)
 	require.NoError(t, err)
 	require.NoError(t, redis.(*redisStore).client.FlushDB(ctx).Err())
 
@@ -56,7 +56,7 @@ func TestRedisStoreClientEntry(t *testing.T) {
 func TestRedisStoreServerEntry(t *testing.T) {
 	ctx := context.TODO()
 	log := logging.MustGetLogger("test")
-	redis, err := newRedis(ctx, redisURL, redisPassword, 0, log)
+	redis, err := newRedis(ctx, redisURL, redisPassword, 0, 0, log)
 	require.NoError(t, err)
 	require.NoError(t, redis.(*redisStore).client.FlushDB(ctx).Err())
 
@@ -94,7 +94,7 @@ func TestRedisStoreServerEntry(t *testing.T) {
 func TestRedisCountEntries(t *testing.T) {
 	ctx := context.TODO()
 	log := logging.MustGetLogger("test")
-	redis, err := newRedis(ctx, redisURL, redisPassword, 0, log)
+	redis, err := newRedis(ctx, redisURL, redisPassword, 0, 0, log)
 	require.NoError(t, err)
 	require.NoError(t, redis.(*redisStore).client.FlushDB(ctx).Err())
 

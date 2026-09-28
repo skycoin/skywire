@@ -70,7 +70,10 @@ func NewEnv() *TestEnv {
 			// uptime-tracker was removed — uptime tracking is now
 			// integrated into the discovery services. network-monitor
 			// is intentionally disabled in the production deployment.
+			// tpd, rf, ar and sd have since moved into visor-s, a visor
+			// that runs them in-process under its own key.
 			"/deployment-services",
+			"/visor-s",
 		},
 		visorNames: []string{
 			"/" + visorA,
@@ -790,8 +793,8 @@ func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
 					}
 				}
 			}
-			// address-resolver is collapsed into deployment-services post-#2471
-			arLogs, arErr := env.ReadLog("deployment-services")
+			// address-resolver runs inside visor-s
+			arLogs, arErr := env.ReadLog("visor-s")
 			if arErr == nil {
 				for _, line := range strings.Split(arLogs, "\n") {
 					lower := strings.ToLower(line)
@@ -1403,9 +1406,9 @@ func (env *TestEnv) CheckServicesDmsgReachable(timeout time.Duration) error {
 		name string
 		url  string
 	}{
-		{"transport-discovery", "dmsg://02a5993cb6792eb18908cb7c6c9c742ef5fbe3dcfcce2862bbc4615a5f35cbed46:80/health"},
-		{"address-resolver", "dmsg://02252c40a1ac021dcf6d93f1aae38023e8fd20bb0d35b7d07cba9435a7cb7ef34f:80/health"},
-		{"route-finder", "dmsg://02b88fe426b2f6f83f19b151c427c155aae186d734cbd45f12b57ddbd237b49278:80/health"},
+		{"transport-discovery", "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/tpd/health"},
+		{"address-resolver", "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/ar/health"},
+		{"route-finder", "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/rf/health"},
 	}
 
 	for _, svc := range services {

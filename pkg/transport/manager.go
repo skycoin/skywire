@@ -1208,11 +1208,53 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 
 	tm.Logger.Debugf("recv transport request: type(%s) remote(%s)", lis.Network(), transport.RemotePK())
 
+	mTp, isNew, err := tm.prepareAccept(transport)
+	if err != nil {
+		return err
+	}
+	if mTp == nil {
+		return nil // rejected: the existing transport carries active routes
+	}
+
+	// The settlement handshake blocks on the remote for up to 20s. It runs
+	// OUTSIDE tm.mx: a dialer that connects and never sends its entry must not
+	// freeze the transport map for every other peer of this visor. Seen live on
+	// prod01 (2026-09-28): three such dialers back to back held the lock 59s,
+	// and every transport on the relay stopped reading for that long.
+	if err := mTp.Accept(ctx, transport); err != nil {
+		// Close the transport to prevent CLOSE_WAIT connection leak
+		if closeErr := transport.Close(); closeErr != nil {
+			tm.Logger.WithError(closeErr).Warn("Failed to close transport after Accept error")
+		}
+		return err
+	}
+
+	tm.Logger.Debugf("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), transport.RemotePK(), mTp.Entry.ID, isNew)
+
+	// Nudge the re-registration loop to batch-register this transport with TPD soon.
+	// Registration is deferred to avoid per-transport HTTP calls that hit rate limits.
+	select {
+	case tm.regNudge <- struct{}{}:
+	default: // nudge already pending
+	}
+
+	// NOTE: Do NOT measure latency on the accepting side.
+	// Only the initiating side measures latency to avoid race conditions where
+	// both visors try to set up ping routes simultaneously on the same port.
+
+	return nil
+}
+
+// prepareAccept finds or creates the managed transport an incoming connection
+// belongs to, under tm.mx. It returns (nil, false, nil) when the connection is
+// rejected because the existing transport carries active routes. The caller
+// runs the settlement handshake on the result without holding the lock.
+func (tm *Manager) prepareAccept(transport network.Transport) (*ManagedTransport, bool, error) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
 
 	if tm.isClosing() {
-		return errors.New("transport.Manager is closing. Skipping incoming transport")
+		return nil, false, errors.New("transport.Manager is closing. Skipping incoming transport")
 	}
 
 	// For transports for purpose(data).
@@ -1221,7 +1263,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 
 	client, ok := tm.netClients[transport.Network()]
 	if !ok {
-		return fmt.Errorf("client not found for the type %s", transport.Network())
+		return nil, false, fmt.Errorf("client not found for the type %s", transport.Network())
 	}
 
 	mTp, ok := tm.tps[tpID]
@@ -1278,33 +1320,11 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			if err := transport.Close(); err != nil {
 				tm.Logger.WithError(err).Warn("Failed to close incoming transport rejected due to active routes")
 			}
-			return nil
+			return nil, false, nil
 		}
 		tm.Logger.Debugln("TP found, accepting...")
 	}
-
-	if err := mTp.Accept(ctx, transport); err != nil {
-		// Close the transport to prevent CLOSE_WAIT connection leak
-		if closeErr := transport.Close(); closeErr != nil {
-			tm.Logger.WithError(closeErr).Warn("Failed to close transport after Accept error")
-		}
-		return err
-	}
-
-	tm.Logger.Debugf("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), transport.RemotePK(), tpID, !ok)
-
-	// Nudge the re-registration loop to batch-register this transport with TPD soon.
-	// Registration is deferred to avoid per-transport HTTP calls that hit rate limits.
-	select {
-	case tm.regNudge <- struct{}{}:
-	default: // nudge already pending
-	}
-
-	// NOTE: Do NOT measure latency on the accepting side.
-	// Only the initiating side measures latency to avoid race conditions where
-	// both visors try to set up ping routes simultaneously on the same port.
-
-	return nil
+	return mTp, !ok, nil
 }
 
 // ErrNotFound is returned when requested transport is not found

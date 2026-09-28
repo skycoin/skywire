@@ -208,7 +208,7 @@ func initSDRegCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
-	dataDir, inMemDB := cxoPubStorage(filepath.Join(v.conf.LocalPath, "cxo-sd-reg"))
+	dataDir, inMemDB := v.hostCXOPubStorage(filepath.Join(v.conf.LocalPath, "cxo-sd-reg"), skyenv.DmsgVisorSDRegCXOPort)
 	// Gate the feed: peer whitelist (hypervisors + dmsgpty whitelist + own
 	// PK) plus the consuming SD. The SD MUST be allowed or its announce-conn
 	// subscribe is rejected by the OnSubscribeRemote hook. sdPK is always
@@ -230,6 +230,7 @@ func initSDRegCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 		log.WithError(err).Warn("SD-reg-CXO: publisher init failed; continuing with HTTP service registration only")
 		return nil
 	}
+	v.trackCXOPublisher(skyenv.DmsgVisorSDRegCXOPort, pub)
 
 	// Register so the feed's subscriber allowlist is recomputed and
 	// re-applied when the peer whitelist changes at runtime. The initial

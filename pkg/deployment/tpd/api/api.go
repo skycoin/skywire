@@ -14,7 +14,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 
-	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/monitor/nmpk"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/deployment/tpd/metrics"
@@ -107,14 +106,8 @@ type API struct {
 	}
 }
 
-// HealthCheckResponse is struct of /health endpoint
-type HealthCheckResponse struct {
-	ServiceName string          `json:"service_name,omitempty"`
-	BuildInfo   *buildinfo.Info `json:"build_info,omitempty"`
-	StartedAt   time.Time       `json:"started_at"`
-	DmsgAddr    string          `json:"dmsg_address,omitempty"`
-	DmsgServers []string        `json:"dmsg_servers,omitempty"`
-}
+// HealthCheckResponse is the /health body every service shares.
+type HealthCheckResponse = httputil.HealthCheckResponse
 
 // New constructs a new API instance.
 func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,

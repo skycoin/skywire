@@ -954,6 +954,7 @@ func (a *API) postUptimes(w http.ResponseWriter, r *http.Request) {
 func (a *API) serviceHealth(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
 	a.writeJSON(w, r, http.StatusOK, httputil.HealthCheckResponse{
+		ServiceName: "dmsg-discovery",
 		BuildInfo:   info,
 		StartedAt:   a.startedAt,
 		DmsgAddr:    a.dmsgAddr,

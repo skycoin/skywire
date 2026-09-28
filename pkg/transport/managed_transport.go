@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1543,11 +1544,29 @@ func (mt *ManagedTransport) RemoteIP() string {
 	if addr == nil {
 		return ""
 	}
-	host, _, err := net.SplitHostPort(addr.String())
-	if err != nil {
+	return hostOfRawAddr(addr.String())
+}
+
+// hostOfRawAddr is the host of a transport's raw remote address: "1.2.3.4" for
+// "1.2.3.4:5000". A browser carrier reports its DIAL URL as the address instead
+// — a tab's WebTransport or WebSocket conn is "https://1.2.3.4:36011/skywire" —
+// and SplitHostPort rejects that, so RemoteIP was "" for every transport a
+// browser visor has. Every same-host check keyed on it (sibling tunnels and mux
+// legs kept off one machine) was then off in a tab, which leaned on four
+// visors of one host as if they were independent relays and lost them together.
+func hostOfRawAddr(s string) string {
+	// URL first: SplitHostPort splits "wss://host/path" at the scheme's colon
+	// and calls the host "wss".
+	if strings.Contains(s, "://") {
+		if u, err := url.Parse(s); err == nil && u.Host != "" {
+			return u.Hostname()
+		}
 		return ""
 	}
-	return host
+	if host, _, err := net.SplitHostPort(s); err == nil {
+		return host
+	}
+	return ""
 }
 
 // ConnDetails returns the underlying network.Transport's curated,

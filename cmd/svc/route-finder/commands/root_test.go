@@ -10,6 +10,7 @@
 package commands
 
 import (
+	"github.com/skycoin/skywire/pkg/services"
 	"os"
 	"path/filepath"
 	gotesting "testing"
@@ -114,18 +115,20 @@ func TestMergeFile_AllFieldsOverride(t *gotesting.T) {
 	dst := &rf.Config{}
 	pk, _ := cipher.GenerateKeyPair()
 	src := &rf.Config{
-		SecKey:          cipher.SecKey{1},
-		Addr:            ":addr",
-		MetricsAddr:     ":metrics",
-		PprofAddr:       ":pprof",
-		Redis:           "redis://x",
-		RedisPoolSize:   5,
-		LogLevel:        "debug",
-		Tag:             "tag",
-		Testing:         true,
-		Mode:            "dual",
-		SurveyWhitelist: []cipher.PubKey{pk},
-		DmsgPort:        81,
+		Common: services.Common{
+			SecKey:          cipher.SecKey{1},
+			Addr:            ":addr",
+			MetricsAddr:     ":metrics",
+			PprofAddr:       ":pprof",
+			Redis:           "redis://x",
+			RedisPoolSize:   5,
+			LogLevel:        "debug",
+			Tag:             "tag",
+			Testing:         true,
+			Mode:            "dual",
+			SurveyWhitelist: []cipher.PubKey{pk},
+			DmsgPort:        81,
+		},
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  "http://disc",
 			ServerType: "stcpr",
@@ -154,7 +157,12 @@ func TestMergeFile_AllFieldsOverride(t *gotesting.T) {
 
 func TestMergeFile_ZeroSrcLeavesDst(t *gotesting.T) {
 	orig := &rf.Config{
-		Addr: ":keep", Tag: "keep", RedisPoolSize: 9, DmsgPort: 80,
+		Common: services.Common{
+			Addr:          ":keep",
+			Tag:           "keep",
+			RedisPoolSize: 9,
+			DmsgPort:      80,
+		},
 		Dmsg: cmdutil.DmsgConfig{Discovery: "http://keep"},
 	}
 	dst := *orig

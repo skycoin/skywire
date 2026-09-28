@@ -90,12 +90,15 @@ type redisStore struct {
 	cache   *entryCache
 }
 
-func newRedis(ctx context.Context, url, password string, timeout time.Duration, log *logging.Logger) (Storer, error) {
+func newRedis(ctx context.Context, url, password string, timeout time.Duration, poolSize int, log *logging.Logger) (Storer, error) {
 	opt, err := redis.ParseURL(url)
 	if err != nil {
 		return nil, err
 	}
 	opt.Password = password
+	if poolSize > 0 {
+		opt.PoolSize = poolSize
+	}
 
 	client := redis.NewClient(opt)
 

@@ -14,7 +14,7 @@ dozen subcommands. The visor's secret key is never included.
 --select builds ONLY the requested subtree(s) SERVER-side, so a cheap
 '--select mux' skips the ~307 KB transports build (full snapshot ~900 KB, mux
 ~75 KB). Keys (comma-separated): summary, health, routing, mux, apps,
-transports, modules, cxo, proxy, diag, roles. The projected keys match the full
+transports, modules, cxo, services, proxy, diag, roles. The projected keys match the full
 snapshot's JSON field names, so --jq expressions transfer unchanged. 'proxy' is
 opt-in (the visor-side skysocks proxystatus: per-leg mux + range-split when
 pushed). 'roles' is what this visor is FOR the network: the in-process dmsg
@@ -46,7 +46,7 @@ skywire cli visor state
 ## Flags
 
 ```
-      --select string    server-side projection: build only these subtree(s), comma-separated (summary,health,routing,mux,apps,transports,modules,cxo,proxy,diag,roles)
+      --select string    server-side projection: build only these subtree(s), comma-separated (summary,health,routing,mux,pool,apps,transports,modules,cxo,services,proxy,diag,roles)
       --watch duration   stream snapshots as NDJSON every <interval> (e.g. 1s) until Ctrl-C
 ```
 

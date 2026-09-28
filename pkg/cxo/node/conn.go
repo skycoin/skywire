@@ -188,7 +188,25 @@ func (c *Conn) run() {
 const (
 	idleWatchdogThreshold = 90 * time.Second
 	idleWatchdogInterval  = 30 * time.Second
+	// idleProbeAfter is the inbound silence after which the reaper probes a
+	// conn instead of waiting for it to talk (see Conn.probe).
+	idleProbeAfter = idleWatchdogInterval
 )
+
+// probe asks the peer for its feed list without waiting for the answer. Every
+// node, old or new, answers a list request (with the list, or an error when
+// it is not public) and ignores an answer nobody is waiting for as a delayed
+// response. So a probe from either end refreshes the idle clock on both ends,
+// and a conn whose transport is dead gets no answer and is still reaped.
+// Never blocks: a full send queue means the conn is already in trouble.
+func (c *Conn) probe() {
+	f := c.encodeMsg(c.nextSeq(), 0, &msg.RqList{})
+	select {
+	case <-c.closeq:
+	case c.sendq <- f:
+	default:
+	}
+}
 
 // The idle-connection watchdog now lives at the Node level as the
 // single shared Node.connReaper goroutine (node.go); the per-Conn

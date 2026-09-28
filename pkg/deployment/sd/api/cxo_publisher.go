@@ -364,3 +364,6 @@ func BatchLeafPath(svcType string) string { return batchLeafPath(svcType) }
 func batchLeafPath(svcType string) string {
 	return fmt.Sprintf("services/%s/all", svcType)
 }
+
+// Publisher returns the underlying feed publisher, for introspection.
+func (x *ServicesCXOPublisher) Publisher() *treestore.Publisher { return x.pub }

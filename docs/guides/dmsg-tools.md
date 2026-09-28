@@ -109,6 +109,53 @@ and run `skywire autoconfig`. The server keeps its own key, ports, wss domain
 and health endpoint from that file; it appears in `skywire cli mdisc servers`
 as before. In the visor config this is `dmsg.server.config_path`.
 
+## Run deployment services inside the visor
+
+transport-discovery, address-resolver, route-finder and service-discovery
+can run in the visor process instead of as their own containers. Each is
+served under a path prefix on the visor's dmsg HTTP port, so it is
+addressed by the visor's key: `dmsg://<visor pk>:80/tpd/...`,
+`/ar/...`, `/rf/...`, `/sd/...`. The service keeps no key and no
+listener of its own; its CXO aggregators and publishers run on the
+visor's dmsg client under the visor's key. Requests over dmsg carry the
+caller's key, so the services' whitelists behave as before.
+
+In the visor config, `embedded_services` takes the same blocks as a
+`services.json` for `skywire svc run`, plus an optional `prefix`:
+
+```json
+"embedded_services": [
+  { "type": "transport-discovery", "redis": "redis://127.0.0.1:6379", "entry_timeout": "5m" },
+  { "type": "route-finder", "redis": "redis://127.0.0.1:6379" },
+  { "type": "address-resolver", "redis": "redis://127.0.0.1:6379", "udp_addr": ":30178" }
+]
+```
+
+`/tpd/health` and the other services' `/health` stay where they were,
+under their prefix; the visor's own `/health` is unchanged. Clients take
+the prefixed address in place of the service's old `dmsg://<service pk>:80`.
+A block's `addr` is honored as well: the same handler, without the
+prefix, on that plain-HTTP address, for callers that still reach the
+service the old way. The visor's own clients reach a service it hosts
+in-process, so its config may point at its own key.
+
+Registration and telemetry reach the services over CXO. Visors publish
+each feed on a fixed dmsg port, and the service aggregates it on the
+same port. The visor publishes on those ports too, under the same key,
+so an embedded service's aggregator runs on the visor's own publisher
+node for that port. The visor hands the service its own feed in-process.
+A publisher on such a port keeps its store in memory.
+
+`skywire cli visor state --select services` lists each embedded service:
+its address, whether it is running, its store and nonce store, and each
+CXO aggregator and publisher. For an aggregator it shows the port,
+whether it shares the visor's node, and its connection and subscription
+counts.
+
+The e2e suite runs this shape: `visor-s` in `docker/docker-compose.yml`
+hosts the four services (`docker/integration/visorS.json`), and every
+other visor's config addresses them by its key.
+
 ## Keeping the embedded server list fresh (maintainers)
 
 The binary embeds a snapshot of the deployment's dmsg servers

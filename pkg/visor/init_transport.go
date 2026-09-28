@@ -901,7 +901,12 @@ func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging
 	// serviceDisc.Client is typed `any` (it is net/http-free on the appdisc
 	// struct so appdisc compiles under TinyGo); recover the *http.Client here.
 	httpClient, _ := v.serviceDisc.Client.(*http.Client)
-	connector := MakeConnector(conf, 3, v.tpM, v.dmsgC, httpClient, pIP, log, v.MasterLogger())
+	// 0 = every public visor. The quantity only reaches the HTTP service-
+	// discovery fallback, which a visor uses when its CXO snapshot has no public
+	// visors — a browser visor, typically. Asking for 3 there left a tab three
+	// candidates (and so at most three relays, often on one machine) where a
+	// native visor reads every public visor from the snapshot.
+	connector := MakeConnector(conf, 0, v.tpM, v.dmsgC, httpClient, pIP, log, v.MasterLogger())
 
 	cctx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel stored in v.autoconnect.cancel, called in pushCloseStack
 	v.autoconnect.cancel = cancel

@@ -97,7 +97,7 @@ type service struct {
 //  5. Block on ctx.Done()
 func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
-	log := s.log
+	log := services.NewLogger(cfg.LogTag("dmsg_disc"), cfg.LogLevel)
 
 	pk, sk := cfg.PubKey, cfg.SecKey
 	if pk.Null() && !sk.Null() {
@@ -107,7 +107,7 @@ func (s *service) Run(ctx context.Context) error {
 		}
 	}
 
-	stopPProf := dmsgcmdutil.InitPProf(log, cfg.PProfMode, cfg.PProfAddr)
+	stopPProf := dmsgcmdutil.InitPProf(log, cfg.PProfMode, cfg.PprofAddr)
 	defer stopPProf()
 
 	metricsutil.ServeHTTPMetrics(log, cfg.MetricsAddr)
@@ -134,7 +134,7 @@ func (s *service) Run(ctx context.Context) error {
 	}
 	enableMetrics := cfg.MetricsAddr != ""
 	entryTimeout := cfg.EntryTimeout.Std()
-	a := api.New(log, db, m, cfg.TestMode, cfg.EnableLoadTesting, enableMetrics, dmsgAddr, cfg.AuthPassphrase, entryTimeout)
+	a := api.New(log, db, m, cfg.Testing, cfg.EnableLoadTesting, enableMetrics, dmsgAddr, cfg.AuthPassphrase, entryTimeout)
 
 	for _, k := range cfg.Whitelist {
 		api.WhitelistPKs.Set(k)
@@ -253,10 +253,7 @@ func (s *service) runDMSG(
 	// never bootstrap an empty deployment on its own.
 	go connectConfiguredServers(ctx, servers, a, dClient, dmsgDC, cfg.DmsgServerType, log)
 
-	wl := deployment.Prod.SurveyWhitelist
-	if cfg.TestEnvironment {
-		wl = deployment.Test.SurveyWhitelist
-	}
+	wl := cfg.SurveyKeys()
 	// Fold pprof + /debug/log onto the main dmsg :80 (survey-gated) instead of a
 	// separate :81 listener. The ring buffer captures recent global-logger output.
 	rb := logging.NewRingBuffer(0)
@@ -312,19 +309,20 @@ func (s *service) runDMSG(
 }
 
 func openStore(ctx context.Context, cfg *Config, log *logging.Logger) (store.Storer, error) {
-	// test_mode WITHOUT a redis URL → in-memory mock store, so a small
+	// testing WITHOUT a redis URL → in-memory mock store, so a small
 	// all-in-one / native e2e deployment needs no redis. Production and the
 	// docker e2e set `redis` explicitly and keep using it; this only triggers
-	// when the operator opted into test_mode AND left redis empty. Mirrors the
-	// Testing→Memory store switch in tpd/ar/rf.
-	if cfg.TestMode && cfg.Redis == "" {
-		log.Info("test_mode with no redis URL: using in-memory dmsg-discovery store")
+	// when the operator opted into testing AND left redis empty. Same rule as
+	// services.Common.StoreType in every service.
+	if cfg.Testing && cfg.Redis == "" {
+		log.Info("testing with no redis URL: using in-memory dmsg-discovery store")
 		return store.NewStore(ctx, "mock", &store.Config{}, log)
 	}
 	dbConf := &store.Config{
 		URL:      cfg.Redis,
 		Password: os.Getenv(RedisPasswordEnvName),
 		Timeout:  cfg.EntryTimeout.Std(),
+		PoolSize: cfg.PoolSize(),
 	}
 	if dbConf.URL == "" {
 		dbConf.URL = store.DefaultURL

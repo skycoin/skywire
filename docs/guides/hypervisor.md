@@ -105,6 +105,9 @@ dashboard as its first tab. Set the desk address with `HVDESKADDR` in
 command module has nothing to host a desk out of and serves only the
 dashboard.
 
+For what the desk's own windows do — and which of them a native hypervisor
+changes — see [the desk tour](../wasm-visor-ui-tour.md).
+
 ## Hypervisor terminal UI
 
 A terminal-based hypervisor that mirrors the web UI's read and write actions

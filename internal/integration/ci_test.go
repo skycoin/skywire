@@ -25,10 +25,12 @@ import (
 
 const (
 	// testURLLAN     = "http://dmsg-discovery:9090/dmsg-discovery/available_servers"
-	testURLWAN     = "https://www.google.com"
-	visorA         = "visor-a"
-	visorB         = "visor-b"
-	visorC         = "visor-c"
+	testURLWAN = "https://www.google.com"
+	visorA     = "visor-a"
+	visorB     = "visor-b"
+	visorC     = "visor-c"
+	// visorS hosts the embedded deployment services.
+	visorS         = "visor-s"
 	visorVPNServer = visorA
 	visorVPNClient = visorC
 	statusRunning  = swarm.TaskStateRunning

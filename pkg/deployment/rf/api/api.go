@@ -43,14 +43,8 @@ type API struct {
 	DmsgServers                 []string
 }
 
-// HealthCheckResponse is struct of /health endpoint
-type HealthCheckResponse struct {
-	ServiceName string          `json:"service_name,omitempty"`
-	BuildInfo   *buildinfo.Info `json:"build_info,omitempty"`
-	StartedAt   time.Time       `json:"started_at"`
-	DmsgAddr    string          `json:"dmsg_address,omitempty"`
-	DmsgServers []string        `json:"dmsg_servers,omitempty"`
-}
+// HealthCheckResponse is the /health body every service shares.
+type HealthCheckResponse = httputil.HealthCheckResponse
 
 // New creates a new api
 func New(s store.Store, logger logrus.FieldLogger, enableMetrics bool, dmsgAddr string) *API {

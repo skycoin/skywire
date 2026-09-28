@@ -68,7 +68,7 @@ func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
-	dataDir, inMemDB := cxoPubStorage(filepath.Join(v.conf.LocalPath, "cxo-ar-bind"))
+	dataDir, inMemDB := v.hostCXOPubStorage(filepath.Join(v.conf.LocalPath, "cxo-ar-bind"), skyenv.DmsgVisorARBindCXOPort)
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
 		DmsgPort:    skyenv.DmsgVisorARBindCXOPort,
 		BatchWindow: arBindBatchWindow,
@@ -84,6 +84,7 @@ func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 		log.WithError(err).Warn("AR-bind-CXO: publisher init failed; continuing with HTTP/UDP AR registration only")
 		return nil
 	}
+	v.trackCXOPublisher(skyenv.DmsgVisorARBindCXOPort, pub)
 
 	// Mirror every successful AR bind onto the feed, one leaf per transport
 	// type (leaf name == the type's canonical wire string). The hook runs on

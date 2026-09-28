@@ -94,6 +94,20 @@ func (r *router) establishMuxRoutes(
 	rPK := forwardDesc.DstPK()
 	excludeIDs := []uuid.UUID{primaryTpID}
 
+	// Hosts the group's legs already leave this visor for. Two relays on one
+	// machine are one failure domain: a leg over each is lost together when that
+	// machine goes away, so an aux leg prefers a first hop on a different host.
+	usedHosts := make(map[string]bool)
+	for _, id := range excludeIDs {
+		if h := r.transportHost(id); h != "" {
+			usedHosts[h] = true
+		}
+	}
+	// sameHostSkips bounds that preference: after maxSameHostSkips retries of a
+	// slot a same-host leg is taken, because it still beats no second leg.
+	const maxSameHostSkips = 3
+	sameHostSkips := 0
+
 	// Far-end transports the group's live legs (here: the primary) already
 	// occupy. See DialOptions.ExcludeRemoteTransportIDs — the destination
 	// refuses a leg whose reverse path leaves it over one of these, so the
@@ -250,6 +264,20 @@ func (r *router) establishMuxRoutes(
 			continue
 		}
 
+		// A first hop on a host that already carries one of the group's legs is
+		// not an independent path. Neither planner applies this as a preference
+		// (local calc treats ExcludeFirstHopIPs as a hard cut), so check here:
+		// steer off this candidate's intermediates and retry the SAME slot
+		// (i--), a bounded number of times, before settling for it.
+		if h := r.firstHopHost(muxFwd); h != "" && usedHosts[h] && sameHostSkips < maxSameHostSkips {
+			sameHostSkips++
+			log.Debugf("Mux route %d/%d: candidate leaves for host %s, which already carries a leg of this group; trying another host (%d/%d)",
+				i+1, maxCount, h, sameHostSkips, maxSameHostSkips)
+			excludePKs = append(excludePKs, intermediatesOfHops(muxFwd, lPK, rPK)...)
+			i--
+			continue
+		}
+
 		// The route-finder fallback ignores ExcludeTransportIDs, so it can hand
 		// back a leg whose first hop reuses a transport already used by the
 		// group (or an earlier planned leg). If we planned + dialed it, the
@@ -275,6 +303,9 @@ func (r *router) establishMuxRoutes(
 			// Reserve this leg's first-hop transport so later plans (and the
 			// local-calc exclude set) diverge from it too.
 			excludeIDs = append(excludeIDs, muxFwd[0].TpID)
+			if h := r.transportHost(muxFwd[0].TpID); h != "" {
+				usedHosts[h] = true
+			}
 		}
 
 		// Destination-side twin of the check above. The setup node installs the
@@ -622,4 +653,24 @@ func validMuxLeg(fwd, rev []routing.Hop, src, dst cipher.PubKey, usedFwd, usedRe
 		return false
 	}
 	return disjointFrom(routeIntermediates(rev, dst, src), usedRev)
+}
+
+// transportHost is the host a local transport leaves this visor for (its
+// remote IP, or the hostname a browser carrier dialed), "" when unknown.
+func (r *router) transportHost(id uuid.UUID) string {
+	if r.tm == nil {
+		return ""
+	}
+	if tp := r.tm.Transport(id); tp != nil {
+		return tp.RemoteIP()
+	}
+	return ""
+}
+
+// firstHopHost is transportHost of a planned route's first hop.
+func (r *router) firstHopHost(hops []routing.Hop) string {
+	if len(hops) == 0 {
+		return ""
+	}
+	return r.transportHost(hops[0].TpID)
 }

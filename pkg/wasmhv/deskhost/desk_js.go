@@ -142,6 +142,7 @@ func installDesk() {
 	registerInstallApp()
 	registerMailApp()
 	registerSettingsApp()
+	registerTourApp()
 	// The hypervisor UI is a browser TAB, not a window of its own — the desk
 	// puts surfaces in tabs wherever the pane already has them, and the
 	// dashboard is just a page. DirectLoader is what makes that tab render
