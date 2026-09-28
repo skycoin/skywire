@@ -91,7 +91,7 @@ func TestBuildConfig_ConfigFileOverrides(t *testing.T) {
 	keyFile = ""
 
 	// Raw JSON (no key fields) so strict-parse doesn't reject a zero secret key.
-	raw := []byte(`{"addr":":FILE","mode":"dmsg","test_mode":true}`)
+	raw := []byte(`{"addr":":FILE","mode":"dmsg","testing":true}`)
 	path := filepath.Join(t.TempDir(), "sd.json")
 	require.NoError(t, os.WriteFile(path, raw, 0o600))
 	configPath = path
@@ -100,7 +100,7 @@ func TestBuildConfig_ConfigFileOverrides(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ":FILE", cfg.Addr) // file wins
 	require.Equal(t, "dmsg", cfg.Mode)
-	require.True(t, cfg.TestMode)
+	require.True(t, cfg.Testing)
 }
 
 func TestBuildConfig_BadConfigPath(t *testing.T) {
@@ -119,18 +119,20 @@ func TestMergeFile_AllFieldsOverride(t *testing.T) {
 	dst := &sd.Config{}
 	pk, _ := cipher.GenerateKeyPair()
 	src := &sd.Config{
-		SecKey:          cipher.SecKey{1},
-		Addr:            ":addr",
-		MetricsAddr:     ":metrics",
-		PprofAddr:       ":pprof",
-		Redis:           "redis://x",
-		EntryTimeout:    services.Duration(time.Minute),
-		TestMode:        true,
-		Mode:            "dual",
-		Whitelist:       []string{"a"},
-		SurveyWhitelist: []cipher.PubKey{pk},
-		GeoIP:           "http://geo",
-		DmsgPort:        81,
+		Common: services.Common{
+			SecKey:          cipher.SecKey{1},
+			Addr:            ":addr",
+			MetricsAddr:     ":metrics",
+			PprofAddr:       ":pprof",
+			Redis:           "redis://x",
+			EntryTimeout:    services.Duration(time.Minute),
+			Mode:            "dual",
+			SurveyWhitelist: []cipher.PubKey{pk},
+			DmsgPort:        81,
+			Testing:         true,
+		},
+		Whitelist: []string{"a"},
+		GeoIP:     "http://geo",
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  "http://disc",
 			ServerType: "stcpr",
@@ -144,8 +146,13 @@ func TestMergeFile_AllFieldsOverride(t *testing.T) {
 
 func TestMergeFile_ZeroSrcLeavesDst(t *testing.T) {
 	orig := &sd.Config{
-		Addr: ":keep", Redis: "redis://keep", GeoIP: "http://keep", DmsgPort: 80,
-		Dmsg: cmdutil.DmsgConfig{Discovery: "http://keep"},
+		Common: services.Common{
+			Addr:     ":keep",
+			Redis:    "redis://keep",
+			DmsgPort: 80,
+		},
+		GeoIP: "http://keep",
+		Dmsg:  cmdutil.DmsgConfig{Discovery: "http://keep"},
 	}
 	dst := *orig
 
@@ -158,7 +165,7 @@ func TestMergeFile_ZeroSrcLeavesDst(t *testing.T) {
 func TestRootCmd_Metadata(t *testing.T) {
 	require.Equal(t, "Service discovery server", RootCmd.Short)
 	require.NotNil(t, RootCmd.Run)
-	for _, name := range []string{"addr", "config", "redis", "test", "mode", "dmsg-port", "keyfile", "geoip"} {
+	for _, name := range []string{"addr", "config", "redis", "testing", "mode", "dmsg-port", "keyfile", "geoip"} {
 		require.NotNil(t, RootCmd.Flags().Lookup(name), "flag %q should be registered", name)
 	}
 	require.Equal(t, ":9098", RootCmd.Flags().Lookup("addr").DefValue)

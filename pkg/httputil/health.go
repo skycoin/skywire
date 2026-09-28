@@ -32,6 +32,9 @@ type HealthCheckResponse struct {
 	TransportCounts map[string]int `json:"transport_counts,omitempty"`
 	NetworkTypes    []string       `json:"network_types,omitempty"`
 	DHTBootstrap    bool           `json:"dht_bootstrap,omitempty"`
+	// UDPAddr is an address resolver's public SUDPH address: visors that
+	// reach it over dmsg register SUDPH with it. Empty when not configured.
+	UDPAddr string `json:"udp_address,omitempty"`
 }
 
 // GetServiceHealth gets the response from the given service url

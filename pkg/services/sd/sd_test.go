@@ -163,7 +163,12 @@ func TestRunInvalidRedisURL(t *testing.T) {
 	// any connection attempt. PubKey set → the sk-derivation branch is
 	// skipped.
 	pk, _ := cipher.GenerateKeyPair()
-	svc := New(&Config{PubKey: pk, Redis: "ftp://localhost"}, testLog()).(*service)
+	svc := New(&Config{
+		Common: services.Common{
+			PubKey: pk,
+			Redis:  "ftp://localhost",
+		},
+	}, testLog()).(*service)
 	err := svc.Run(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "redis URL") {
 		t.Fatalf("expected redis URL parse error, got %v", err)
@@ -176,7 +181,12 @@ func TestRunRedisPingFails(t *testing.T) {
 	// the pk = sk.PubKey() derivation branch.
 	_, sk := cipher.GenerateKeyPair()
 	addr := closedAddr(t)
-	svc := New(&Config{SecKey: sk, Redis: "redis://" + addr}, testLog()).(*service)
+	svc := New(&Config{
+		Common: services.Common{
+			SecKey: sk,
+			Redis:  "redis://" + addr,
+		},
+	}, testLog()).(*service)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

@@ -4,6 +4,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"github.com/skycoin/skywire/pkg/services"
 	"log"
 	"os"
 	"path/filepath"
@@ -76,11 +77,11 @@ func init() {
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9092", "address to bind to\n\r")
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\n\r")
+	RootCmd.Flags().StringVar(&redisURL, "redis", "", "redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)\n\r")
 	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\n\r")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
 	RootCmd.Flags().StringVar(&tag, "tag", "route_finder", "logging tag\n\r")
-	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
+	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "run for a test network: keep entries in memory unless --redis is set")
 	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsg.DiscURL(false), "url of dmsg discovery\n\r")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
 	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
@@ -144,17 +145,19 @@ func buildConfig() (*rf.Config, error) {
 		}
 	}
 	cfg := &rf.Config{
-		SecKey:        sk,
-		Addr:          addr,
-		MetricsAddr:   metricsAddr,
-		PprofAddr:     pprofAddr,
-		Redis:         redisURL,
-		RedisPoolSize: redisPoolSize,
-		LogLevel:      logLvl,
-		Tag:           tag,
-		Testing:       testing,
-		Mode:          mode,
-		DmsgPort:      dmsgPort,
+		Common: services.Common{
+			SecKey:        sk,
+			Addr:          addr,
+			MetricsAddr:   metricsAddr,
+			PprofAddr:     pprofAddr,
+			Redis:         redisURL,
+			RedisPoolSize: redisPoolSize,
+			LogLevel:      logLvl,
+			Tag:           tag,
+			Testing:       testing,
+			Mode:          mode,
+			DmsgPort:      dmsgPort,
+		},
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  dmsgDisc,
 			ServerType: dmsgServerType,

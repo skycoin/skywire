@@ -17,12 +17,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/cxo/node"
-	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/api"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/cxoaggregator"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/deployment/tpd/metrics"
@@ -41,10 +39,7 @@ import (
 // Type is the registry key used in services.json blocks.
 const Type = "transport-discovery"
 
-const (
-	redisPrefix = "transport-discovery"
-	redisScheme = "redis://"
-)
+const redisPrefix = "transport-discovery"
 
 func init() {
 	services.Register(Type, factory)
@@ -101,26 +96,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 		}
 	}
 
-	redisURL := cfg.Redis
-	if redisURL == "" {
-		redisURL = "redis://localhost:6379"
-	}
-	if !strings.HasPrefix(redisURL, redisScheme) {
-		redisURL = redisScheme + redisURL
-	}
-
-	storeCfg := storeconfig.Config{
-		Type:     storeconfig.Redis,
-		URL:      redisURL,
-		Password: storeconfig.RedisPassword(),
-		PoolSize: cfg.RedisPoolSize,
-	}
-	if storeCfg.PoolSize == 0 {
-		storeCfg.PoolSize = 10
-	}
-	if cfg.Testing {
-		storeCfg.Type = storeconfig.Memory
-	}
+	storeCfg := cfg.StoreConfig()
 
 	// Service-self uptime recorder. Opened before subsystem init so
 	// a panic in the redis or DMSG bring-up still leaves a session
@@ -159,17 +135,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	}
 	closers = append(closers, st.Close)
 
-	// Requests over dmsg are authenticated by the stream's key; only a
-	// plain-HTTP surface checks nonces, so only that needs them durable.
-	nonceStoreConfig := storeconfig.Config{
-		Type:     storeconfig.Memory,
-		URL:      redisURL,
-		Password: storeconfig.RedisPassword(),
-		PoolSize: storeCfg.PoolSize,
-	}
-	if plainHTTP && !cfg.Testing {
-		nonceStoreConfig.Type = storeconfig.Redis
-	}
+	nonceStoreConfig := cfg.NonceStoreConfig(plainHTTP)
 	s.nonceStore = services.StoreKind(nonceStoreConfig.Type)
 	nonceStore, err := httpauth.NewNonceStore(ctx, nonceStoreConfig, redisPrefix)
 	if err != nil {
@@ -210,7 +176,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, error) {
 	logger := host.Log
 	if logger == nil {
-		logger = services.NewLogger("transport_discovery", s.cfg.LogLevel)
+		logger = services.NewLogger(s.cfg.LogTag("transport_discovery"), s.cfg.LogLevel)
 	}
 	b, err := s.build(ctx, logger, host.DmsgAddr, false)
 	if err != nil {
@@ -234,11 +200,7 @@ func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, 
 func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 
-	if cfg.Tag == "" {
-		cfg.Tag = "transport_discovery"
-	}
-	logger := services.NewLogger(cfg.Tag, cfg.LogLevel)
-	_ = s.log // logger is replaced with a tag-scoped one
+	logger := services.NewLogger(cfg.LogTag("transport_discovery"), cfg.LogLevel)
 
 	pk := cfg.PubKey
 	sk := cfg.SecKey
@@ -286,13 +248,7 @@ func (s *service) Run(ctx context.Context) error {
 		dmsgDiscDmsg = dmsg.DiscAddr(false)
 	}
 	embeddedServers := dmsgDiscEntries(cfg.Dmsg.Servers)
-	surveyWL := deployment.Prod.SurveyWhitelist
-	if cfg.TestEnvironment {
-		surveyWL = deployment.Test.SurveyWhitelist
-	}
-	if len(cfg.SurveyWhitelist) > 0 {
-		surveyWL = cfg.SurveyWhitelist
-	}
+	surveyWL := cfg.SurveyKeys()
 
 	h, err := svcmode.Start(runCtx, svcmode.Config{
 		Mode:                resolvedMode,

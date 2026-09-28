@@ -252,7 +252,7 @@ skywire dmsg disc
       --official-servers string                                                        list of official dmsg servers keys separated by comma
       --pprofaddr string                                                               pprof http port (default "localhost:6060")
       --pprofmode string                                                               [ cpu | mem | mutex | block | trace | http ]
-      --redis string                                                                   connections string for a redis store
+      --redis string                                                                   redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)
                                                                                         (default "redis://localhost:6379")
       --sk cipher.SecKey                                                               dmsg secret key
                                                                                         (default 0000000000000000000000000000000000000000000000000000000000000000)
@@ -261,7 +261,7 @@ skywire dmsg disc
       --syslog-net string                                                              network in which to dial to syslog server (default "udp")
       --tag string                                                                     tag used for logging and metrics (default "dmsg_disc")
       --test-environment                                                               distinguished between prod and test environment
-  -t, --test-mode                                                                      in testing mode
+  -t, --testing                                                                        run for a test network: relaxed server checks, entries in memory unless --redis is set
       --whitelist-keys string                                                          list of whitelisted keys of network monitor used for deregistration
 ```
 

@@ -121,11 +121,11 @@ skywire svc sd
   -m, --metrics string            address to bind metrics API to
       --mode string               listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)
       --pprof string              address to bind pprof debug server (e.g. localhost:6060)
-  -r, --redis string              connections string for a redis store
+  -r, --redis string              redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)
                                    (default "redis://localhost:6379")
   -s, --sk cipher.SecKey          dmsg secret key
                                    (default 0000000000000000000000000000000000000000000000000000000000000000)
-  -t, --test                      run in test mode and disable auth
+  -t, --testing                   run for a test network: keep entries in memory unless --redis is set
   -w, --whitelist-keys string     list of whitelisted keys of network monitor used for deregistration
 ```
 

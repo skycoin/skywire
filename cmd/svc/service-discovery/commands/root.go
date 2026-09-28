@@ -29,7 +29,7 @@ var (
 	addr           string
 	metricsAddr    string
 	redisURL       string
-	testMode       bool
+	testNetwork    bool
 	dmsgDisc       string
 	whitelistKeys  string
 	sk             cipher.SecKey
@@ -98,9 +98,9 @@ func init() {
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9098", "address to bind to\n\r")
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVarP(&redisURL, "redis", "r", "redis://localhost:6379", "connections string for a redis store\n\r")
+	RootCmd.Flags().StringVarP(&redisURL, "redis", "r", "", "redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)\n\r")
 	RootCmd.Flags().StringVarP(&whitelistKeys, "whitelist-keys", "w", "", "list of whitelisted keys of network monitor used for deregistration")
-	RootCmd.Flags().BoolVarP(&testMode, "test", "t", false, "run in test mode and disable auth")
+	RootCmd.Flags().BoolVarP(&testNetwork, "testing", "t", false, "run for a test network: keep entries in memory unless --redis is set")
 	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", dmsg.DiscURL(false), "url of dmsg-discovery\n\r")
 	RootCmd.Flags().StringVar(&geoipURL, "geoip", deployment.Prod.GeoIP, "url of geoip service\n\r")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
@@ -169,17 +169,19 @@ func buildConfig() (*sd.Config, error) {
 		}
 	}
 	cfg := &sd.Config{
-		SecKey:       sk,
-		Addr:         addr,
-		MetricsAddr:  metricsAddr,
-		PprofAddr:    pprofAddr,
-		Redis:        redisURL,
-		EntryTimeout: services.Duration(entryTimeout),
-		TestMode:     testMode,
-		Mode:         mode,
-		Whitelist:    cmdutil.CommaSplit(whitelistKeys),
-		GeoIP:        geoipURL,
-		DmsgPort:     dmsgPort,
+		Common: services.Common{
+			SecKey:       sk,
+			Addr:         addr,
+			MetricsAddr:  metricsAddr,
+			PprofAddr:    pprofAddr,
+			Redis:        redisURL,
+			EntryTimeout: services.Duration(entryTimeout),
+			Mode:         mode,
+			DmsgPort:     dmsgPort,
+			Testing:      testNetwork,
+		},
+		Whitelist: cmdutil.CommaSplit(whitelistKeys),
+		GeoIP:     geoipURL,
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  dmsgDisc,
 			ServerType: dmsgServerType,
@@ -214,8 +216,8 @@ func mergeFile(dst, src *sd.Config) {
 	if src.EntryTimeout != 0 {
 		dst.EntryTimeout = src.EntryTimeout
 	}
-	if src.TestMode {
-		dst.TestMode = true
+	if src.Testing {
+		dst.Testing = true
 	}
 	if src.Mode != "" {
 		dst.Mode = src.Mode

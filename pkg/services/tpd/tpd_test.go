@@ -8,6 +8,7 @@ package tpd
 import (
 	"context"
 	"encoding/json"
+	"github.com/skycoin/skywire/pkg/services"
 	"os"
 	"path/filepath"
 	"testing"
@@ -162,7 +163,13 @@ func TestAggregatorSink_Delegation(t *testing.T) {
 func TestRun_InvalidMode(t *testing.T) {
 	// An unrecognized mode makes svcmode.ResolveMode fail before any
 	// listener is started.
-	svc := New(&Config{Testing: true, Mode: "bogus", Addr: "127.0.0.1:0"}, testLog())
+	svc := New(&Config{
+		Common: services.Common{
+			Testing: true,
+			Mode:    "bogus",
+			Addr:    "127.0.0.1:0",
+		},
+	}, testLog())
 	err := runWithin(t, 10*time.Second, func() error { return svc.Run(context.Background()) })
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid mode")
@@ -171,7 +178,12 @@ func TestRun_InvalidMode(t *testing.T) {
 func TestRun_DmsgModeNoSecKey(t *testing.T) {
 	// mode=dmsg with a null secret key: svcmode.Start refuses to bring up
 	// the dmsghttp listener, so Run returns the wrapped start error.
-	svc := New(&Config{Testing: true, Mode: "dmsg"}, testLog())
+	svc := New(&Config{
+		Common: services.Common{
+			Testing: true,
+			Mode:    "dmsg",
+		},
+	}, testLog())
 	err := runWithin(t, 10*time.Second, func() error { return svc.Run(context.Background()) })
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "start listeners")
@@ -181,7 +193,13 @@ func TestRun_TestingHTTPCanceledCtx(t *testing.T) {
 	// Testing=true uses in-memory stores (no redis), mode=http with a null
 	// SK means no dmsg bootstrap, and a canceled context makes the run loop
 	// unwind immediately with nil.
-	svc := New(&Config{Testing: true, Mode: "http", Addr: "127.0.0.1:0"}, testLog())
+	svc := New(&Config{
+		Common: services.Common{
+			Testing: true,
+			Mode:    "http",
+			Addr:    "127.0.0.1:0",
+		},
+	}, testLog())
 	err := runWithin(t, 10*time.Second, func() error { return svc.Run(canceledCtx()) })
 	require.NoError(t, err)
 }
@@ -192,13 +210,15 @@ func TestRun_WithUptimeDBAndMetrics(t *testing.T) {
 	// context. Defaults Tag/Addr/StoreDataPath are also taken here.
 	dir := t.TempDir()
 	svc := New(&Config{
-		Testing:       true,
-		Mode:          "http",
+		Common: services.Common{
+			Testing:     true,
+			Mode:        "http",
+			MetricsAddr: "127.0.0.1:0",
+			LogLevel:    "info",
+		},
 		UptimeDB:      filepath.Join(dir, "uptime.db"),
-		MetricsAddr:   "127.0.0.1:0",
 		StoreDataPath: filepath.Join(dir, "bandwidth"),
 		Whitelist:     []string{"  pk1  ", ""},
-		LogLevel:      "info",
 	}, testLog())
 	err := runWithin(t, 10*time.Second, func() error { return svc.Run(canceledCtx()) })
 	require.NoError(t, err)
@@ -210,6 +230,13 @@ func TestRun_WithSecKeyDerivesPubKey(t *testing.T) {
 	// assert on the error value (bootstrap may or may not surface one); we
 	// only require that Run returns rather than hangs.
 	_, sk := cipher.GenerateKeyPair()
-	svc := New(&Config{Testing: true, Mode: "http", SecKey: sk, Addr: "127.0.0.1:0"}, testLog())
+	svc := New(&Config{
+		Common: services.Common{
+			Testing: true,
+			Mode:    "http",
+			SecKey:  sk,
+			Addr:    "127.0.0.1:0",
+		},
+	}, testLog())
 	_ = runWithin(t, 15*time.Second, func() error { return svc.Run(canceledCtx()) }) //nolint
 }

@@ -93,6 +93,7 @@ type Config struct {
 	URL      string        // database URI
 	Password string        // database password
 	Timeout  time.Duration // database entry timeout (0 == none)
+	PoolSize int           // redis connection pool size (0 == the client default)
 }
 
 // Config defaults.
@@ -119,7 +120,7 @@ func NewStore(ctx context.Context, name string, conf *Config, log *logging.Logge
 	case "mock":
 		return NewMock(), nil
 	case "redis":
-		return newRedis(ctx, conf.URL, conf.Password, conf.Timeout, log)
+		return newRedis(ctx, conf.URL, conf.Password, conf.Timeout, conf.PoolSize, log)
 	default:
 		return nil, errors.New("no such store type")
 	}

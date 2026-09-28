@@ -57,14 +57,13 @@ type service struct {
 	log *logging.Logger
 
 	// state, set by build and startCXO, is reported by State.
-	nonceStore string
-	cxo        services.CXOSet
+	store, nonceStore string
+	cxo               services.CXOSet
 }
 
-// State implements services.Stater. Service discovery always stores in
-// redis.
+// State implements services.Stater.
 func (s *service) State() services.State {
-	st := services.State{Store: "redis", NonceStore: s.nonceStore}
+	st := services.State{Store: s.store, NonceStore: s.nonceStore}
 	s.cxo.State(&st)
 	return st
 }
@@ -78,50 +77,47 @@ func (s *service) build(ctx context.Context, log *logging.Logger, dmsgAddr strin
 
 	metricsutil.ServePProf(log, cfg.PprofAddr, "service-discovery")
 
+	storeType := cfg.StoreType()
+	s.store = services.StoreKind(storeType)
 	redisURL := cfg.Redis
 	if redisURL == "" {
 		redisURL = "redis://localhost:6379"
 	}
-	redisPassword := storeconfig.RedisPassword()
-	opt, err := redis.ParseURL(redisURL)
-	if err != nil {
-		return nil, fmt.Errorf("service-discovery: parse redis URL: %w", err)
-	}
-	opt.Password = redisPassword
-
-	redisClient := redis.NewClient(opt)
-	if _, err := redisClient.Ping(ctx).Result(); err != nil {
-		return nil, fmt.Errorf("service-discovery: redis ping failed: %w", err)
-	}
-	log.Printf("Redis connected.")
-
-	db, err := store.NewStore(ctx, redisClient, log, cfg.EntryTimeout.Std())
-	if err != nil {
-		return nil, fmt.Errorf("service-discovery: init store: %w", err)
+	var db store.Store
+	if storeType == storeconfig.Memory {
+		db = store.NewMemoryStore(cfg.EntryTimeout.Std())
+		log.Info("Testing without a redis URL: service entries are kept in memory.")
+	} else {
+		opt, err := redis.ParseURL(redisURL)
+		if err != nil {
+			return nil, fmt.Errorf("service-discovery: parse redis URL: %w", err)
+		}
+		opt.Password = storeconfig.RedisPassword()
+		opt.PoolSize = cfg.PoolSize()
+		redisClient := redis.NewClient(opt)
+		if _, err := redisClient.Ping(ctx).Result(); err != nil {
+			return nil, fmt.Errorf("service-discovery: redis ping failed: %w", err)
+		}
+		log.Printf("Redis connected.")
+		if db, err = store.NewStore(ctx, redisClient, log, cfg.EntryTimeout.Std()); err != nil {
+			return nil, fmt.Errorf("service-discovery: init store: %w", err)
+		}
 	}
 	log.Printf("Service entry timeout: %v", cfg.EntryTimeout)
 
-	// Requests over dmsg are authenticated by the stream's key; only a
-	// plain-HTTP surface checks nonces, so only that needs them durable. The
-	// store must exist either way: without it the API serves no nonce route
-	// (clients fetch one before their first request, so none can register)
-	// and skips the check that an entry's key is the caller's.
-	var nonceDB httpauth.NonceStore
-	s.nonceStore = "none"
-	if !cfg.TestMode {
-		nonceStoreConfig := storeconfig.Config{Type: storeconfig.Memory}
-		if plainHTTP {
-			nonceStoreConfig = storeconfig.Config{
-				URL:      redisURL,
-				Type:     storeconfig.Redis,
-				Password: storeconfig.RedisPassword(),
-			}
-		}
-		s.nonceStore = services.StoreKind(nonceStoreConfig.Type)
-		nonceDB, err = httpauth.NewNonceStore(ctx, nonceStoreConfig, redisPrefix)
-		if err != nil {
-			return nil, fmt.Errorf("service-discovery: init nonce store: %w", err)
-		}
+	// Every service keeps a nonce store: without it the API serves no
+	// nonce route, so no client can register, and it skips the check that
+	// an entry's key is the caller's. See services.NonceStoreType.
+	nonceStoreConfig := storeconfig.Config{Type: services.NonceStoreType(storeType, plainHTTP)}
+	if nonceStoreConfig.Type == storeconfig.Redis {
+		nonceStoreConfig.URL = redisURL
+		nonceStoreConfig.Password = storeconfig.RedisPassword()
+		nonceStoreConfig.PoolSize = cfg.PoolSize()
+	}
+	s.nonceStore = services.StoreKind(nonceStoreConfig.Type)
+	nonceDB, err := httpauth.NewNonceStore(ctx, nonceStoreConfig, redisPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("service-discovery: init nonce store: %w", err)
 	}
 
 	metricsutil.ServeHTTPMetrics(log, cfg.MetricsAddr)
@@ -137,6 +133,9 @@ func (s *service) build(ctx context.Context, log *logging.Logger, dmsgAddr strin
 	geoipURL := cfg.GeoIP
 	if geoipURL == "" {
 		geoipURL = deployment.Prod.GeoIP
+		if cfg.TestEnvironment {
+			geoipURL = deployment.Test.GeoIP
+		}
 	}
 	sdAPI := api.New(log, db, nonceDB, enableMetrics, m, dmsgAddr, geoipURL)
 
@@ -170,7 +169,7 @@ func (s *service) startCXO(ctx context.Context, dmsgC *dmsg.Client, host service
 func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, error) {
 	log := host.Log
 	if log == nil {
-		log = s.log
+		log = services.NewLogger(s.cfg.LogTag("service_discovery"), s.cfg.LogLevel)
 	}
 	sdAPI, err := s.build(ctx, log, host.DmsgAddr, false)
 	if err != nil {
@@ -184,7 +183,7 @@ func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, 
 
 func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
-	log := s.log
+	log := services.NewLogger(cfg.LogTag("service_discovery"), cfg.LogLevel)
 
 	pk := cfg.PubKey
 	sk := cfg.SecKey
@@ -224,10 +223,7 @@ func (s *service) Run(ctx context.Context) error {
 		dmsgDiscDmsg = dmsg.DiscAddr(false)
 	}
 	embeddedServers := dmsgDiscEntries(cfg.Dmsg.Servers)
-	surveyWL := deployment.Prod.SurveyWhitelist
-	if len(cfg.SurveyWhitelist) > 0 {
-		surveyWL = cfg.SurveyWhitelist
-	}
+	surveyWL := cfg.SurveyKeys()
 
 	addr := cfg.Addr
 	if addr == "" {
