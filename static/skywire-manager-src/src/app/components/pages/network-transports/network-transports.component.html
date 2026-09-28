@@ -85,6 +85,21 @@
         }
       </div>
 
+      <!-- The hypervisor caps what it sends: the whole mesh is far more than a
+           table can render. Say so rather than presenting the top slice as if
+           it were everything. -->
+      @if (returnedCount < rawCount) {
+        <div class="summary-line cap-note">
+          <mat-icon>filter_list</mat-icon>
+          <span class="ml-1">
+            Showing the {{ returnedCount }} highest-bandwidth of {{ rawCount }}{{ partial ? '+' : '' }} transports.
+            @if (partial) {
+              <span>The network is large enough that the metrics feed was cut short, so the total is a floor.</span>
+            }
+          </span>
+        </div>
+      }
+
       <!-- Compact: by-transport rows -->
       @if (viewMode === 'compact') {
         <table class="responsive-table-translucid mt-3 nt-compact">

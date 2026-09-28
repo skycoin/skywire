@@ -39,11 +39,28 @@ func (hv *Hypervisor) getNetworkTransports() http.HandlerFunc {
 			return
 		}
 
+		// TPD's /metrics is a whole-mesh dump — 60 MB and 180k records on the
+		// production deployment, taking half a minute to arrive over dmsg. That
+		// is far past the server's 10s WriteTimeout, which would close the
+		// connection with nothing written and leave the browser staring at
+		// ERR_EMPTY_RESPONSE. Slow aggregating endpoints have to set their own
+		// deadline; see hypervisor_handlers_visors.go for the same pattern.
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(120 * time.Second)); err != nil {
+			hv.log(r).WithError(err).Debug("network transports: could not extend write deadline")
+		}
+
 		// Bound days to the TPD's documented range.
 		days := 1
 		if d := r.URL.Query().Get("days"); d != "" {
 			if n, err := strconv.Atoi(d); err == nil && n >= 0 && n <= 35 {
 				days = n
+			}
+		}
+
+		limit := defaultMetricsLimit
+		if l := r.URL.Query().Get("limit"); l != "" {
+			if n, err := strconv.Atoi(l); err == nil && n > 0 {
+				limit = n
 			}
 		}
 		path := fmt.Sprintf("/metrics?days=%d&bandwidth=true&latency=true&edges=true", days)
@@ -55,13 +72,17 @@ func (hv *Hypervisor) getNetworkTransports() http.HandlerFunc {
 		// X-Skywire-Metrics-Source = cxo lets the UI surface the
 		// path used (handy for diagnosing slow loads).
 		if body, ts, err := hv.visor.FetchTransportMetricsCXO(days); err == nil && len(body) > 0 {
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("X-Skywire-Metrics-Source", "cxo")
-			if !ts.IsZero() {
-				w.Header().Set("X-Skywire-Metrics-Updated", ts.UTC().Format(time.RFC3339))
+			reduced, rerr := reduceTransportMetrics(body, limit)
+			if rerr != nil {
+				log.WithError(rerr).Warn("TPD metrics from CXO did not decode")
+			} else {
+				if !ts.IsZero() {
+					w.Header().Set("X-Skywire-Metrics-Updated", ts.UTC().Format(time.RFC3339))
+				}
+				w.Header().Set("X-Skywire-Metrics-Source", "cxo")
+				httputil.WriteJSON(w, r, http.StatusOK, reduced)
+				return
 			}
-			_, _ = w.Write(body) //nolint:errcheck,gosec
-			return
 		}
 
 		// TPD is reached over dmsg only — plain HTTP to deployment services is no
@@ -84,10 +105,23 @@ func (hv *Hypervisor) getNetworkTransports() http.HandlerFunc {
 				Method: "GET",
 			})
 			if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				w.Header().Set("Content-Type", "application/json")
+				reduced, rerr := reduceTransportMetrics(resp.Body, limit)
+				if rerr != nil {
+					log.WithError(rerr).Warn("TPD metrics did not decode")
+					httputil.WriteJSON(w, r, http.StatusBadGateway,
+						map[string]string{"error": "tpd metrics unreadable"})
+
+					return
+				}
+				if reduced.Partial {
+					// Expected on a large mesh: TPD's body is cut off mid-record
+					// upstream. Returning the records that did arrive beats
+					// failing, and the flag lets the UI say so.
+					log.Warnf("TPD metrics truncated upstream after %d records", reduced.Total)
+				}
 				w.Header().Set("X-Skywire-Metrics-Source", "dmsg-http")
-				w.WriteHeader(resp.StatusCode)
-				_, _ = w.Write(resp.Body) //nolint:errcheck,gosec
+				httputil.WriteJSON(w, r, http.StatusOK, reduced)
+
 				return
 			}
 			if err != nil {
