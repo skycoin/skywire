@@ -56,7 +56,7 @@ func TestEnv_DmsgHTTP(t *testing.T) {
 	// `cli dmsg curl <dmsg://pk:80/path>` with NO --sk goes through the visor's
 	// DmsgHTTP RPC → the visor's dmsg client → dmsghttp RoundTripper. Port 80 is
 	// the services' dmsghttp port; /health is served by the AR's dmsghttp handler.
-	url := fmt.Sprintf("dmsg://%s:80/health", arDmsgPK)
+	url := fmt.Sprintf("dmsg://%s:80/ar/health", servicesPK)
 	cmd := fmt.Sprintf("/release/skywire cli --rpc %s:3435 dmsg curl %s", visorB, url)
 
 	var body string
@@ -72,6 +72,6 @@ func TestEnv_DmsgHTTP(t *testing.T) {
 
 	// The health JSON must carry the AR's own dmsg address — confirms the dmsghttp
 	// request reached THIS service over dmsg (not a local/HTTP fallback).
-	require.Contains(t, body, arDmsgPK, "AR /health should advertise its own dmsg_address")
+	require.Contains(t, body, servicesPK, "AR /health should advertise its host visor's dmsg_address")
 	t.Logf("dmsghttp fetched AR /health over dmsg (%d bytes) in %v", len(body), time.Since(start).Round(time.Second))
 }

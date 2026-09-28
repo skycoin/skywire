@@ -24,10 +24,10 @@ const (
 	// deployment. This is the same PK listed in transport_setup in
 	// services-config.json and in each visor's transport_setup config.
 	transportSetupPK = "0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
-	// DMSG PKs for services reachable on port 80 over DMSG.
-	tpdDmsgPK = "02a5993cb6792eb18908cb7c6c9c742ef5fbe3dcfcce2862bbc4615a5f35cbed46"
-	arDmsgPK  = "02252c40a1ac021dcf6d93f1aae38023e8fd20bb0d35b7d07cba9435a7cb7ef34f"
-	rfDmsgPK  = "02b88fe426b2f6f83f19b151c427c155aae186d734cbd45f12b57ddbd237b49278"
+	// servicesPK is visor-s: transport-discovery, address-resolver,
+	// route-finder and service-discovery run inside it and answer on its dmsg
+	// port 80 under /tpd, /ar, /rf and /sd.
+	servicesPK = "032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977"
 )
 
 // DiagContext bundles everything a diagnostic pass needs. The intent is that
@@ -375,11 +375,11 @@ func (env *TestEnv) checkVisorSelfHealthOverDmsg(visor string) bool {
 // parallel so one slow service doesn't serialize the whole diagnostic pass.
 func (env *TestEnv) checkServicesDmsgHealth() bool {
 	services := []struct {
-		name, pk string
+		name, prefix string
 	}{
-		{"transport-discovery", tpdDmsgPK},
-		{"address-resolver", arDmsgPK},
-		{"route-finder", rfDmsgPK},
+		{"transport-discovery", "/tpd"},
+		{"address-resolver", "/ar"},
+		{"route-finder", "/rf"},
 	}
 	type result struct {
 		name    string
@@ -389,8 +389,8 @@ func (env *TestEnv) checkServicesDmsgHealth() bool {
 	}
 	results := make(chan result, len(services))
 	for _, svc := range services {
-		go func(name, pk string) {
-			dmsgURL := fmt.Sprintf("dmsg://%s:80/health", pk)
+		go func(name, prefix string) {
+			dmsgURL := fmt.Sprintf("dmsg://%s:80%s/health", servicesPK, prefix)
 			// Route through visor-a's established dmsg client (its RPC). A
 			// standalone client here can't bootstrap discovery over dmsg in
 			// this dmsg-only deployment: -Z/UseHTTP FATALs (no plain-HTTP
@@ -401,7 +401,7 @@ func (env *TestEnv) checkServicesDmsgHealth() bool {
 			out, err := env.Exec(cmd)
 			healthy := err == nil && strings.Contains(out, "build_info")
 			results <- result{name: name, out: out, err: err, healthy: healthy}
-		}(svc.name, svc.pk)
+		}(svc.name, svc.prefix)
 	}
 	healthy := true
 	for i := 0; i < len(services); i++ {

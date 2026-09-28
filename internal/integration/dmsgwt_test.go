@@ -127,7 +127,7 @@ func TestEnv_DmsgWebTransport(t *testing.T) {
 	// NOTE: `cli dmsg curl` (clidmsg) — NOT the top-level `skywire dmsg curl`,
 	// which is a different command that has no --wt/--disc flags. --sk selects
 	// the standalone client; --wt+--disc force the strict WebTransport carrier.
-	url := fmt.Sprintf("dmsg://%s:%d/health", arDmsgPK, dmsgHTTPPort)
+	url := fmt.Sprintf("dmsg://%s:%d/ar/health", servicesPK, dmsgHTTPPort)
 	cmd := fmt.Sprintf("/release/skywire cli dmsg curl --sk %s --wt --disc %s %s",
 		testDmsgClientSK, dmsgDiscoveryURL, url)
 
@@ -146,6 +146,6 @@ func TestEnv_DmsgWebTransport(t *testing.T) {
 
 	// The health JSON must carry the AR's own dmsg address — confirms the request
 	// reached THIS service over dmsg (not a local/HTTP fallback), over WT.
-	require.Contains(t, body, arDmsgPK, "AR /health should advertise its own dmsg_address")
+	require.Contains(t, body, servicesPK, "AR /health should advertise its host visor's dmsg_address")
 	t.Logf("dmsg-over-WebTransport fetched AR /health (%d bytes) in %v", len(body), time.Since(start).Round(time.Second))
 }
