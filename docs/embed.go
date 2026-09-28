@@ -18,9 +18,9 @@
 // Deliberately excluded:
 //
 //	graph/    37 MB of dependency graphs
-//	img/      5.2 MB, mostly a 2.1 MB TUI gif and a CLI screenshot — both of
-//	          surfaces the desk demonstrates live, so a still of them is the
-//	          weaker copy
+//	img/      3.5 MB, mostly a 2.1 MB TUI gif, a CLI screenshot and the desk
+//	          tour's shots — all of them surfaces the desk demonstrates live,
+//	          so a still is the weaker copy
 //	skywire/  the generated CLI reference, served from the cobra tree instead
 //	specs/    derived by scripts/docs-prepare.sh at docs-build time and
 //	rewards/  gitignored, so neither exists when `go build` runs
