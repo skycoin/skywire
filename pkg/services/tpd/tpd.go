@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -66,19 +67,27 @@ type service struct {
 	log *logging.Logger
 }
 
-// Run is the long-lived run loop. Mirrors the previous
-// `skywire svc tpd` cobra Run callback — same redis store init,
-// same nonce store, same API construction, same svcmode.Start, same
-// optional CXO aggregator + metrics/uptime publishers — but takes
-// its config from the Config struct rather than package vars.
-func (s *service) Run(ctx context.Context) error {
-	cfg := s.cfg
+// built is everything Run and Embed share: the API and the stores
+// behind it, up and running, with no listener attached yet.
+type built struct {
+	api    *api.API
+	st     store.Store
+	logger *logging.Logger
+	close  func()
+}
 
-	if cfg.Tag == "" {
-		cfg.Tag = "transport_discovery"
+// build creates the store, the nonce store and the API and starts the
+// API's background tasks. dmsgAddr is what the API reports on /health;
+// plainHTTP says whether a plain-HTTP surface will be served, which is
+// the only path that needs a durable nonce store.
+func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr string, plainHTTP bool) (*built, error) {
+	cfg := s.cfg
+	var closers []func()
+	closeAll := func() {
+		for i := len(closers) - 1; i >= 0; i-- {
+			closers[i]()
+		}
 	}
-	logger := services.NewLogger(cfg.Tag, cfg.LogLevel)
-	_ = s.log // logger is replaced with a tag-scoped one
 
 	redisURL := cfg.Redis
 	if redisURL == "" {
@@ -116,7 +125,7 @@ func (s *service) Run(ctx context.Context) error {
 			logger.WithError(rErr).Warn("Service-self uptime recorder unavailable")
 		} else {
 			uptimeRec = rec
-			defer func() { _ = uptimeRec.Close() }() //nolint:errcheck
+			closers = append(closers, func() { _ = uptimeRec.Close() }) //nolint:errcheck
 			uptimeRec.Start()
 		}
 	}
@@ -130,37 +139,28 @@ func (s *service) Run(ctx context.Context) error {
 		}
 	}
 
-	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	st, err := store.New(runCtx, storeCfg, cfg.EntryTimeout.Std(), logger)
+	st, err := store.New(ctx, storeCfg, cfg.EntryTimeout.Std(), logger)
 	if err != nil {
-		return fmt.Errorf("transport-discovery: create store: %w", err)
+		closeAll()
+		return nil, fmt.Errorf("transport-discovery: create store: %w", err)
 	}
-	defer st.Close()
+	closers = append(closers, st.Close)
 
+	// Requests over dmsg are authenticated by the stream's key; only a
+	// plain-HTTP surface checks nonces, so only that needs them durable.
 	nonceStoreConfig := storeconfig.Config{
 		Type:     storeconfig.Memory,
 		URL:      redisURL,
 		Password: storeconfig.RedisPassword(),
 		PoolSize: storeCfg.PoolSize,
 	}
-	if !cfg.Testing {
+	if plainHTTP && !cfg.Testing {
 		nonceStoreConfig.Type = storeconfig.Redis
 	}
-	nonceStore, err := httpauth.NewNonceStore(runCtx, nonceStoreConfig, redisPrefix)
+	nonceStore, err := httpauth.NewNonceStore(ctx, nonceStoreConfig, redisPrefix)
 	if err != nil {
-		return fmt.Errorf("transport-discovery: init nonce store: %w", err)
-	}
-
-	pk := cfg.PubKey
-	sk := cfg.SecKey
-	if pk.Null() && !sk.Null() {
-		if derived, err := sk.PubKey(); err != nil {
-			logger.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
-		} else {
-			pk = derived
-		}
+		closeAll()
+		return nil, fmt.Errorf("transport-discovery: init nonce store: %w", err)
 	}
 
 	metricsutil.ServeHTTPMetrics(logger, cfg.MetricsAddr)
@@ -170,15 +170,6 @@ func (s *service) Run(ctx context.Context) error {
 		m = tpdiscmetrics.NewEmpty()
 	} else {
 		m = tpdiscmetrics.NewVictoriaMetrics()
-	}
-
-	dmsgPort := cfg.DmsgPort
-	if dmsgPort == 0 {
-		dmsgPort = dmsg.DefaultDmsgHTTPPort
-	}
-	var dmsgAddr string
-	if !pk.Null() {
-		dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
 	}
 
 	enableMetrics := cfg.MetricsAddr != ""
@@ -191,15 +182,84 @@ func (s *service) Run(ctx context.Context) error {
 	if uptimeRec != nil {
 		tpdAPI.SetUptimeRecorder(uptimeRec)
 	}
+	logger.Infof("Transport entry timeout: %v", cfg.EntryTimeout)
+
+	go tpdAPI.RunBackgroundTasks(ctx, logger)
+
+	return &built{api: tpdAPI, st: st, logger: logger, close: closeAll}, nil
+}
+
+// Embed runs transport-discovery inside a host process: the API is
+// returned for the host to mount under a path prefix on its own dmsg
+// HTTP port, and the CXO aggregators and publishers run on the host's
+// dmsg client under the host's key. Nothing listens.
+func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, error) {
+	logger := host.Log
+	if logger == nil {
+		logger = services.NewLogger("transport_discovery", s.cfg.LogLevel)
+	}
+	b, err := s.build(ctx, logger, host.DmsgAddr, false)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		<-ctx.Done()
+		b.close()
+	}()
+	if host.DmsgClient != nil {
+		s.startCXO(ctx, host.DmsgClient, b.st, b.api, host.SK, logger)
+	}
+	return b.api, nil
+}
+
+// Run is the long-lived run loop. Mirrors the previous
+// `skywire svc tpd` cobra Run callback — same redis store init,
+// same nonce store, same API construction, same svcmode.Start, same
+// optional CXO aggregator + metrics/uptime publishers — but takes
+// its config from the Config struct rather than package vars.
+func (s *service) Run(ctx context.Context) error {
+	cfg := s.cfg
+
+	if cfg.Tag == "" {
+		cfg.Tag = "transport_discovery"
+	}
+	logger := services.NewLogger(cfg.Tag, cfg.LogLevel)
+	_ = s.log // logger is replaced with a tag-scoped one
+
+	pk := cfg.PubKey
+	sk := cfg.SecKey
+	if pk.Null() && !sk.Null() {
+		if derived, err := sk.PubKey(); err != nil {
+			logger.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
+		} else {
+			pk = derived
+		}
+	}
+
+	dmsgPort := cfg.DmsgPort
+	if dmsgPort == 0 {
+		dmsgPort = dmsg.DefaultDmsgHTTPPort
+	}
+	var dmsgAddr string
+	if !pk.Null() {
+		dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	b, err := s.build(runCtx, logger, dmsgAddr, true)
+	if err != nil {
+		return err
+	}
+	defer b.close()
+	tpdAPI := b.api
 
 	addr := cfg.Addr
 	if addr == "" {
 		addr = ":9091"
 	}
 	logger.Infof("Listening on %s", addr)
-	logger.Infof("Transport entry timeout: %v", cfg.EntryTimeout)
-
-	go tpdAPI.RunBackgroundTasks(runCtx, logger)
 
 	resolvedMode, err := svcmode.ResolveMode(cfg.Mode, !sk.Null())
 	if err != nil {
@@ -242,7 +302,7 @@ func (s *service) Run(ctx context.Context) error {
 	defer h.Close()
 
 	if h.DmsgClient != nil {
-		s.startCXO(runCtx, h, st, tpdAPI, sk, logger)
+		s.startCXO(runCtx, h.DmsgClient, b.st, tpdAPI, sk, logger)
 	}
 
 	select {
@@ -260,14 +320,14 @@ func (s *service) Run(ctx context.Context) error {
 // HTTP/DMSG TPD.
 func (s *service) startCXO(
 	ctx context.Context,
-	h *svcmode.Handle,
+	dmsgC *dmsg.Client,
 	st store.Store,
 	tpdAPI *api.API,
 	sk cipher.SecKey,
 	logger *logging.Logger,
 ) {
 	sink := &aggregatorSink{Store: st, api: tpdAPI}
-	agg, err := cxoaggregator.New(h.DmsgClient, sk, sink, cxoaggregator.Config{
+	agg, err := cxoaggregator.New(dmsgC, sk, sink, cxoaggregator.Config{
 		Logger: logging.MustGetLogger("tpd-cxo-aggregator"),
 	})
 	if err != nil {
@@ -293,7 +353,7 @@ func (s *service) startCXO(
 	// A visor that publishes only the legacy combined feed (older binary)
 	// simply never dials this port — the port-50 aggregator above still
 	// reconciles its tp-list from the combined feed (back-compat fallback).
-	tplAgg, err := cxoaggregator.New(h.DmsgClient, sk, sink, cxoaggregator.Config{
+	tplAgg, err := cxoaggregator.New(dmsgC, sk, sink, cxoaggregator.Config{
 		DmsgPort: skyenv.DmsgVisorTPListCXOPort,
 		Logger:   logging.MustGetLogger("tpd-cxo-tplist-aggregator"),
 	})
@@ -309,7 +369,7 @@ func (s *service) startCXO(
 			Info("CXO tp-list aggregator running: accepting inbound visor tp-list discovery feeds")
 	}
 
-	if pub, perr := api.StartMetricsCXOPublisher(ctx, tpdAPI, h.DmsgClient, sk, logger); perr != nil {
+	if pub, perr := api.StartMetricsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger); perr != nil {
 		logger.WithError(perr).Error("Failed to start CXO metrics publisher, continuing without it")
 	} else {
 		go func() {
@@ -318,7 +378,7 @@ func (s *service) startCXO(
 		}()
 	}
 
-	if pub, perr := api.StartUptimeCXOPublisher(ctx, tpdAPI, h.DmsgClient, sk, logger); perr != nil {
+	if pub, perr := api.StartUptimeCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger); perr != nil {
 		logger.WithError(perr).Error("Failed to start CXO uptime publisher, continuing without it")
 	} else {
 		go func() {
@@ -327,7 +387,7 @@ func (s *service) startCXO(
 		}()
 	}
 
-	if pub, perr := api.StartAllTransportsCXOPublisher(ctx, tpdAPI, h.DmsgClient, sk, logger); perr != nil {
+	if pub, perr := api.StartAllTransportsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger); perr != nil {
 		logger.WithError(perr).Error("Failed to start CXO all-transports publisher, continuing without it")
 	} else {
 		go func() {
@@ -336,7 +396,7 @@ func (s *service) startCXO(
 		}()
 	}
 
-	if pub, perr := api.StartStatsCXOPublisher(ctx, tpdAPI, h.DmsgClient, sk, logger); perr != nil {
+	if pub, perr := api.StartStatsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger); perr != nil {
 		logger.WithError(perr).Error("Failed to start CXO stats publisher, continuing without it")
 	} else {
 		go func() {

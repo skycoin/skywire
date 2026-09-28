@@ -70,7 +70,10 @@ func NewEnv() *TestEnv {
 			// uptime-tracker was removed — uptime tracking is now
 			// integrated into the discovery services. network-monitor
 			// is intentionally disabled in the production deployment.
+			// tpd, rf, ar and sd have since moved into visor-s, a visor
+			// that runs them in-process under its own key.
 			"/deployment-services",
+			"/visor-s",
 		},
 		visorNames: []string{
 			"/" + visorA,
@@ -790,8 +793,8 @@ func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
 					}
 				}
 			}
-			// address-resolver is collapsed into deployment-services post-#2471
-			arLogs, arErr := env.ReadLog("deployment-services")
+			// address-resolver runs inside visor-s
+			arLogs, arErr := env.ReadLog("visor-s")
 			if arErr == nil {
 				for _, line := range strings.Split(arLogs, "\n") {
 					lower := strings.ToLower(line)

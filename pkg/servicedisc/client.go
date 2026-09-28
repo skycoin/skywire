@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -111,7 +112,9 @@ func (c *HTTPClient) addr(path, serviceType, version, country string, quantity i
 	if err != nil {
 		return "", errors.New("invalid service discovery address in config: " + addr)
 	}
-	url.Path = path
+	// Keep a path prefix from the configured address (a service mounted
+	// under dmsg://<pk>:80/sd) in front of the endpoint path.
+	url.Path = strings.TrimSuffix(url.Path, "/") + path
 	q := url.Query()
 	if serviceType != "" {
 		q.Set(discServiceTypeParam, serviceType)

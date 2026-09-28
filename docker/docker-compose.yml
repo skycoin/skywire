@@ -69,24 +69,16 @@ services:
       srv:
         ipv4_address: 175.0.0.2
         aliases:
-          - transport-discovery
-          - route-finder
           - dmsg-discovery
           - dmsg-server
           - setup-node
-          - service-discovery
-          - address-resolver
           - transport-setup
       intra:
         ipv4_address: 174.0.0.17
         aliases:
-          - transport-discovery
-          - route-finder
           - dmsg-discovery
           - dmsg-server
           - setup-node
-          - service-discovery
-          - address-resolver
           - transport-setup
           - stun-server
       visors:
@@ -118,20 +110,73 @@ services:
         target: /release/transport-setup.json
         read_only: true
     healthcheck:
-      # All four pprof /debug/service endpoints (TPD, SD, AR, RF)
-      # share one process — checking any one of them validates the
-      # supervisor is up and at least one HTTP listener is live.
-      # Nine services all starting concurrently on a 2-core CI
-      # runner contends much more than the previous staged
-      # bring-up; bump start_period so a slow goroutine schedule
-      # doesn't get marked unhealthy during its first 30s.
-      test: ["CMD", "curl", "-sf", "http://127.0.0.1:6094/debug/service"]
+      # dmsg-discovery's /health stands for the whole process: the
+      # services share one supervisor, so one live HTTP listener
+      # means it is up. Several services starting concurrently on a
+      # 2-core CI runner contend, so start_period is generous.
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:9090/health"]
       interval: 3s
       timeout: 3s
       retries: 30
       start_period: 60s
     stdin_open: true # docker run -i
     tty: true        # docker run -t
+
+  # visor-s runs transport-discovery, route-finder, address-resolver
+  # and service-discovery INSIDE a visor (config.embedded_services),
+  # the way a deployment host does: each is mounted under a prefix on
+  # the visor's dmsg HTTP port and addressed by the visor's key
+  # (dmsg://<visor-s pk>:80/tpd, /rf, /ar, /sd — see
+  # docker/integration/services-config.json). The same handlers are
+  # also served on their old plain-HTTP ports so the suite's direct
+  # curls keep working; the service hostnames now alias this container.
+  visor-s:
+    privileged: true
+    image: "${REGISTRY}/skywire:${DOCKER_TAG}"
+    container_name: "visor-s"
+    hostname: visor-s
+    networks:
+      srv:
+        ipv4_address: 175.0.0.3
+        aliases:
+          - transport-discovery
+          - route-finder
+          - address-resolver
+          - service-discovery
+      intra:
+        ipv4_address: 174.0.0.18
+        aliases:
+          - transport-discovery
+          - route-finder
+          - address-resolver
+          - service-discovery
+    extra_hosts:
+      - "dmsg-discovery:174.0.0.17"
+      - "dmsg-server:174.0.0.17"
+      - "setup-node:174.0.0.17"
+      - "stun-server:174.0.0.17"
+      - "transport-setup:174.0.0.17"
+    volumes:
+      - type: bind
+        source: ../docker/integration/visorS.json
+        target: /opt/skywire/skywire-visor.json
+        read_only: false
+    depends_on:
+      redis:
+        condition: service_healthy
+      deployment-services:
+        condition: service_healthy
+    restart: always
+    environment:
+      - GODEBUG=madvdontneed=1
+    entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
+    healthcheck:
+      # transport-discovery's plain-HTTP /health, served by the visor.
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:9094/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 60s
 
   # NOTE: the standalone uptime-tracker service (+ its postgres + redis) was
   # removed — uptime tracking is now integrated into every discovery service
@@ -182,10 +227,10 @@ services:
       - "visor-c:173.0.0.13"
       - "dmsg-discovery:174.0.0.17"
       - "dmsg-server:174.0.0.17"
-      - "transport-discovery:174.0.0.17"
-      - "route-finder:174.0.0.17"
-      - "address-resolver:174.0.0.17"
-      - "service-discovery:174.0.0.17"
+      - "transport-discovery:174.0.0.18"
+      - "route-finder:174.0.0.18"
+      - "address-resolver:174.0.0.18"
+      - "service-discovery:174.0.0.18"
       - "setup-node:174.0.0.17"
       - "stun-server:174.0.0.17"
       - "transport-setup:174.0.0.17"
@@ -230,10 +275,10 @@ services:
       - "visor-c:173.0.0.13"
       - "dmsg-discovery:174.0.0.17"
       - "dmsg-server:174.0.0.17"
-      - "transport-discovery:174.0.0.17"
-      - "route-finder:174.0.0.17"
-      - "address-resolver:174.0.0.17"
-      - "service-discovery:174.0.0.17"
+      - "transport-discovery:174.0.0.18"
+      - "route-finder:174.0.0.18"
+      - "address-resolver:174.0.0.18"
+      - "service-discovery:174.0.0.18"
       - "setup-node:174.0.0.17"
       - "stun-server:174.0.0.17"
       - "transport-setup:174.0.0.17"
@@ -252,6 +297,8 @@ services:
         read_only: false
     depends_on:
       deployment-services:
+        condition: service_healthy
+      visor-s:
         condition: service_healthy
     restart: always
     environment:
@@ -286,10 +333,10 @@ services:
       - "visor-b:173.0.0.12"
       - "dmsg-discovery:174.0.0.17"
       - "dmsg-server:174.0.0.17"
-      - "transport-discovery:174.0.0.17"
-      - "route-finder:174.0.0.17"
-      - "address-resolver:174.0.0.17"
-      - "service-discovery:174.0.0.17"
+      - "transport-discovery:174.0.0.18"
+      - "route-finder:174.0.0.18"
+      - "address-resolver:174.0.0.18"
+      - "service-discovery:174.0.0.18"
       - "setup-node:174.0.0.17"
       - "stun-server:174.0.0.17"
       - "transport-setup:174.0.0.17"
@@ -338,10 +385,10 @@ services:
       - "visor-c:173.0.0.13"
       - "dmsg-discovery:174.0.0.17"
       - "dmsg-server:174.0.0.17"
-      - "transport-discovery:174.0.0.17"
-      - "route-finder:174.0.0.17"
-      - "address-resolver:174.0.0.17"
-      - "service-discovery:174.0.0.17"
+      - "transport-discovery:174.0.0.18"
+      - "route-finder:174.0.0.18"
+      - "address-resolver:174.0.0.18"
+      - "service-discovery:174.0.0.18"
       - "setup-node:174.0.0.17"
       - "stun-server:174.0.0.17"
       - "transport-setup:174.0.0.17"

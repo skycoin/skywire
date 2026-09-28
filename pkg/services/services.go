@@ -80,6 +80,9 @@ type Block struct {
 // service-specific fields live alongside "type" / "name" in the same
 // object and reach the factory via Raw.
 func (b *Block) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		return nil
+	}
 	var probe struct {
 		Type     string `json:"type"`
 		Name     string `json:"name,omitempty"`
