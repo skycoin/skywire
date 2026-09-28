@@ -117,7 +117,7 @@ skywire svc ar
       --pprof string                address to bind pprof debug server (e.g. localhost:6060)
       --public-udp-address string   externally-reachable host:port advertised in /health for SUDPH
                                     required for visors that reach this AR over dmsghttp
-      --redis string                connections string for a redis store
+      --redis string                redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)
                                      (default "redis://localhost:6379")
       --redis-pool-size int         redis connection pool size
                                      (default 10)
@@ -126,7 +126,7 @@ skywire svc ar
       --tag string                  logging tag
                                      (default "address_resolver")
       --test-environment            distinguished between prod and test environment
-  -t, --testing                     enable testing to start without redis
+  -t, --testing                     run for a test network: keep entries in memory unless --redis is set
       --udp-addr string             UDP address to bind to for SUDPH
                                      (default ":30178")
       --whitelist-keys string       list of whitelisted keys of network monitor used for deregistration

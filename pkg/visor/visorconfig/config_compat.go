@@ -17,6 +17,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
+	"github.com/skycoin/skywire/pkg/services"
 	tnspec "github.com/skycoin/skywire/pkg/transport/network/spec"
 	tspec "github.com/skycoin/skywire/pkg/transport/spec"
 )
@@ -51,6 +52,8 @@ type v1JSON struct {
 	Routing       *Routing             `json:"routing"`
 	UptimeTracker *UptimeTracker       `json:"uptime_tracker,omitempty"`
 	Launcher      *Launcher            `json:"launcher"`
+
+	EmbeddedServices []services.Block `json:"embedded_services,omitempty"`
 
 	Stats   *Stats        `json:"stats,omitempty"`
 	Skychat *Skychat      `json:"skychat,omitempty"`
@@ -120,6 +123,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.Routing = mirror.Routing
 	v.UptimeTracker = mirror.UptimeTracker
 	v.Launcher = mirror.Launcher
+	v.EmbeddedServices = mirror.EmbeddedServices
 	v.Stats = mirror.Stats
 	v.Skychat = mirror.Skychat
 	v.Wallet = mirror.Wallet

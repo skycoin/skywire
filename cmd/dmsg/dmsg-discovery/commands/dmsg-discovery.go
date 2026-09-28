@@ -31,7 +31,7 @@ var (
 	redisURL          string
 	whitelistKeys     string
 	entryTimeout      time.Duration
-	testMode          bool
+	testNetwork       bool
 	enableLoadTesting bool
 	testEnvironment   bool
 	sk                cipher.SecKey
@@ -54,14 +54,14 @@ func init() {
 	RootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
 	RootCmd.Flags().StringVar(&authPassphrase, "auth", "", "auth passphrase as simple auth for official dmsg servers registration")
 	RootCmd.Flags().StringVar(&officialServers, "official-servers", "", "list of official dmsg servers keys separated by comma")
-	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\n\r")
+	RootCmd.Flags().StringVar(&redisURL, "redis", "", "redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)\n\r")
 	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration")
 	// 60m is 12× the client refresh interval (DefaultUpdateInterval*5 = 5m),
 	// giving ~2-3 missed refreshes of slack before Redis prunes an entry.
 	// Set to 0 to disable expiration (legacy behavior, stale entries
 	// will accumulate forever).
 	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 60*time.Minute, "client discovery entry TTL (0 to disable)\n\r")
-	RootCmd.Flags().BoolVarP(&testMode, "test-mode", "t", false, "in testing mode")
+	RootCmd.Flags().BoolVarP(&testNetwork, "testing", "t", false, "run for a test network: relaxed server checks, entries in memory unless --redis is set")
 	RootCmd.Flags().BoolVar(&enableLoadTesting, "enable-load-testing", false, "enable load testing")
 	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
@@ -134,21 +134,23 @@ Example:
 // the flag default.
 func buildConfig() (*dmsgdisc.Config, error) {
 	cfg := &dmsgdisc.Config{
-		Addr:              addr,
-		Redis:             redisURL,
-		DmsgPort:          dmsgPort,
-		EntryTimeout:      services.Duration(entryTimeout),
-		Mode:              mode,
+		Common: services.Common{
+			Addr:            addr,
+			Redis:           redisURL,
+			DmsgPort:        dmsgPort,
+			EntryTimeout:    services.Duration(entryTimeout),
+			Mode:            mode,
+			TestEnvironment: testEnvironment,
+			MetricsAddr:     sf.MetricsAddr,
+			PprofAddr:       pprofAddr,
+			Testing:         testNetwork,
+		},
 		AuthPassphrase:    authPassphrase,
 		OfficialServers:   cmdutil.CommaSplit(officialServers),
 		DmsgServerType:    dmsgServerType,
-		TestMode:          testMode,
 		EnableLoadTesting: enableLoadTesting,
-		TestEnvironment:   testEnvironment,
 		Whitelist:         cmdutil.CommaSplit(whitelistKeys),
-		MetricsAddr:       sf.MetricsAddr,
 		PProfMode:         pprofMode,
-		PProfAddr:         pprofAddr,
 	}
 
 	if keyFile != "" {
@@ -203,8 +205,8 @@ func mergeFile(dst, src *dmsgdisc.Config) {
 	if src.DmsgServerType != "" {
 		dst.DmsgServerType = src.DmsgServerType
 	}
-	if src.TestMode {
-		dst.TestMode = true
+	if src.Testing {
+		dst.Testing = true
 	}
 	if src.EnableLoadTesting {
 		dst.EnableLoadTesting = true

@@ -104,6 +104,8 @@ type modules struct {
 	dmsgCtrl vinit.Module
 	// Dmsg http log server module
 	dmsgHTTPLogServer vinit.Module
+	// Embedded deployment services on the dmsg HTTP port
+	embeddedServices vinit.Module
 	// System survey module
 	systemSurvey vinit.Module
 	// Dmsg http module

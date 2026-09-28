@@ -54,7 +54,7 @@
       "name": "dmsgd",
       "addr": ":9090",
       "secret_key": "b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714",
-      "test_mode": true,
+      "testing": true,
       "dmsg_servers": [
         {
           "version": "",

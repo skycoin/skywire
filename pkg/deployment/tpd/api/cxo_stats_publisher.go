@@ -593,3 +593,6 @@ func (c *completenessTracker) observe(now time.Time, value int) completenessVerd
 		return completenessVerdict{complete: false, confidence: ConfidenceRefilling, peak: peak}
 	}
 }
+
+// Publisher returns the underlying feed publisher, for introspection.
+func (x *StatsCXOPublisher) Publisher() *treestore.Publisher { return x.pub }
