@@ -82,6 +82,8 @@ type StateSnapshot struct {
 	// a query against the live visor (local or --via dmsg://<pk>).
 	CXOFeeds []CXOFeedState `json:"cxo,omitempty"`
 
+	Services []EmbeddedServiceState `json:"services,omitempty"`
+
 	// TPDLeafPub says whether the transport manager holds the CXO
 	// transport-list snapshot publisher, and — when it does not — why.
 	// Without it transport registration silently falls back to the HTTP
@@ -129,6 +131,7 @@ const (
 	SelectTransports = "transports" // transports + persistent_transports
 	SelectModules    = "modules"    // modules
 	SelectCXO        = "cxo"        // cxo feed publish-health
+	SelectServices   = "services"   // deployment services the visor embeds: stores, CXO aggregators and publishers
 	SelectProxy      = "proxy"      // visor-side proxystatus snapshot (skysocks); opt-in only
 	SelectDiag       = "diag"       // router intake, transport queues/handlers, vstream, dmsg ping/relay, runtime
 	SelectRoles      = "roles"      // in-process dmsg server, dmsg relay (both directions), transit refusal
@@ -137,7 +140,7 @@ const (
 // StateSelectKeys is the documented set of --select keys, in help order.
 var StateSelectKeys = []string{
 	SelectSummary, SelectHealth, SelectRouting, SelectMux, SelectPool,
-	SelectApps, SelectTransports, SelectModules, SelectCXO, SelectProxy, SelectDiag,
+	SelectApps, SelectTransports, SelectModules, SelectCXO, SelectServices, SelectProxy, SelectDiag,
 	SelectRoles,
 }
 

@@ -202,7 +202,8 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.systemSurvey = maker("system_survey", initSystemSurvey, &m.dmsgHTTPLogServer)
 	// Embedded services mount on the mux dmsghttp_logserver creates and
 	// run their CXO work on the dmsg client.
-	m.embeddedServices = maker("embedded_services", initEmbeddedServices, &m.dmsgC, &m.dmsgHTTPLogServer)
+	m.embeddedServices = maker("embedded_services", initEmbeddedServices, &m.dmsgC, &m.dmsgHTTPLogServer,
+		&m.statsMod, &m.regCXOMod, &m.arBindCXOMod, &m.sdRegCXOMod)
 	m.dmsgTrackers = maker("dmsg_trackers", initDmsgTrackers, &m.dmsgC)
 
 	m.ptyModule = maker("dmsg_pty", initDmsgpty, &m.dmsgC)

@@ -189,6 +189,10 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*visorapi.StateSnapshot
 		snap.TPDLeafPub = v.tpdLeafPublisherState()
 	}
 
+	if want.Has(visorapi.SelectServices) {
+		snap.Services = v.embeddedServiceStates()
+	}
+
 	if want.Has(visorapi.SelectDiag) {
 		snap.Diag = v.DiagSnapshot()
 	}

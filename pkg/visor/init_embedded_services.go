@@ -37,8 +37,8 @@ import (
 )
 
 func initEmbeddedServices(ctx context.Context, v *Visor, log *logging.Logger) error {
-	blocks := v.conf.EmbeddedServices
-	if len(blocks) == 0 {
+	svcs := v.embeddedServices()
+	if len(svcs) == 0 {
 		return nil
 	}
 	if v.dmsgHTTPMux == nil {
@@ -49,45 +49,34 @@ func initEmbeddedServices(ctx context.Context, v *Visor, log *logging.Logger) er
 		PK:         v.conf.PK,
 		SK:         v.conf.SK,
 		DmsgAddr:   fmt.Sprintf("%s:%d", v.conf.PK.Hex(), visorconfig.DmsgHTTPPort),
+		CXO:        visorCXOHost{v},
 	}
-	seen := map[string]string{}
-	for i, b := range blocks {
-		factory, ok := services.Lookup(b.Type)
-		if !ok {
-			return fmt.Errorf("embedded services: block #%d (%s): unknown type %q (registered: %v)",
-				i, b.Label(), b.Type, services.RegisteredTypes())
+	for _, es := range svcs {
+		if es.err != nil {
+			return fmt.Errorf("embedded services: %w", es.err)
 		}
-		prefix := b.Prefix()
-		if other, dup := seen[prefix]; dup {
-			return fmt.Errorf("embedded services: block #%d (%s) and %s both mount at %s", i, b.Label(), other, prefix)
-		}
-		seen[prefix] = b.Label()
-
-		svcLog := v.MasterLogger().PackageLogger(b.Label())
-		svc, err := factory(b.Raw, svcLog)
+		host.Log = es.log
+		handler, err := es.svc.Embed(ctx, host)
 		if err != nil {
-			return fmt.Errorf("embedded services: block #%d (%s): build: %w", i, b.Label(), err)
+			es.mu.Lock()
+			es.startErr = fmt.Errorf("start: %w", err)
+			es.mu.Unlock()
+			return fmt.Errorf("embedded services: %s: start: %w", es.label, err)
 		}
-		emb, ok := svc.(services.Embeddable)
-		if !ok {
-			return fmt.Errorf("embedded services: block #%d (%s): type %q cannot run inside the visor", i, b.Label(), b.Type)
-		}
-		host.Log = svcLog
-		handler, err := emb.Embed(ctx, host)
-		if err != nil {
-			return fmt.Errorf("embedded services: block #%d (%s): start: %w", i, b.Label(), err)
-		}
-		services.Mount(v.dmsgHTTPMux, prefix, handler)
-		log.WithField("service", b.Label()).WithField("type", b.Type).
-			WithField("addr", fmt.Sprintf("dmsg://%s%s", host.DmsgAddr, prefix)).
+		services.Mount(v.dmsgHTTPMux, es.prefix, handler)
+		es.mu.Lock()
+		es.running = true
+		es.mu.Unlock()
+		log.WithField("service", es.label).WithField("type", es.block.Type).
+			WithField("addr", fmt.Sprintf("dmsg://%s%s", host.DmsgAddr, es.prefix)).
 			Info("Embedded service mounted")
 
 		// A block's plain-HTTP "addr" is honored too, for a host that is
 		// still reached the old way during a transition: the same handler,
 		// without the prefix, on that address.
-		if addr := blockAddr(b); addr != "" {
-			if err := servePlainHTTP(ctx, addr, handler, svcLog); err != nil {
-				return fmt.Errorf("embedded services: block #%d (%s): listen on %s: %w", i, b.Label(), addr, err)
+		if addr := blockAddr(es.block); addr != "" {
+			if err := servePlainHTTP(ctx, addr, handler, es.log); err != nil {
+				return fmt.Errorf("embedded services: %s: listen on %s: %w", es.label, addr, err)
 			}
 		}
 	}

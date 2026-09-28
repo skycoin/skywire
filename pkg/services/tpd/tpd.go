@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/api"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/cxoaggregator"
@@ -65,6 +66,17 @@ func New(cfg *Config, log *logging.Logger) services.Service {
 type service struct {
 	cfg *Config
 	log *logging.Logger
+
+	// state, set by build and startCXO, is reported by State.
+	store, nonceStore string
+	cxo               services.CXOSet
+}
+
+// State implements services.Stater.
+func (s *service) State() services.State {
+	st := services.State{Store: s.store, NonceStore: s.nonceStore}
+	s.cxo.State(&st)
+	return st
 }
 
 // built is everything Run and Embed share: the API and the stores
@@ -139,6 +151,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 		}
 	}
 
+	s.store = services.StoreKind(storeCfg.Type)
 	st, err := store.New(ctx, storeCfg, cfg.EntryTimeout.Std(), logger)
 	if err != nil {
 		closeAll()
@@ -157,6 +170,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	if plainHTTP && !cfg.Testing {
 		nonceStoreConfig.Type = storeconfig.Redis
 	}
+	s.nonceStore = services.StoreKind(nonceStoreConfig.Type)
 	nonceStore, err := httpauth.NewNonceStore(ctx, nonceStoreConfig, redisPrefix)
 	if err != nil {
 		closeAll()
@@ -207,7 +221,7 @@ func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, 
 		b.close()
 	}()
 	if host.DmsgClient != nil {
-		s.startCXO(ctx, host.DmsgClient, b.st, b.api, host.SK, logger)
+		s.startCXO(ctx, host.DmsgClient, host.CXO, b.st, b.api, host.SK, logger)
 	}
 	return b.api, nil
 }
@@ -302,7 +316,7 @@ func (s *service) Run(ctx context.Context) error {
 	defer h.Close()
 
 	if h.DmsgClient != nil {
-		s.startCXO(runCtx, h.DmsgClient, b.st, tpdAPI, sk, logger)
+		s.startCXO(runCtx, h.DmsgClient, nil, b.st, tpdAPI, sk, logger)
 	}
 
 	select {
@@ -314,96 +328,47 @@ func (s *service) Run(ctx context.Context) error {
 	}
 }
 
-// startCXO brings up the inbound aggregator and the outbound metrics
-// + uptime publishers. Each one degrades to a warning on failure; we
-// don't want a CXO bring-up problem to take down a perfectly healthy
-// HTTP/DMSG TPD.
+// startCXO brings up TPD's CXO aggregators (visor telemetry, and the
+// dedicated tp-list feed) and its publishers on dmsgC under sk. When
+// embedded, host lends the visor's nodes: the aggregators run on the
+// visor's publisher node for their port and take the visor's own feed
+// in-process. Each piece is best-effort.
 func (s *service) startCXO(
 	ctx context.Context,
 	dmsgC *dmsg.Client,
+	host services.CXOHost,
 	st store.Store,
 	tpdAPI *api.API,
 	sk cipher.SecKey,
 	logger *logging.Logger,
 ) {
 	sink := &aggregatorSink{Store: st, api: tpdAPI}
-	agg, err := cxoaggregator.New(dmsgC, sk, sink, cxoaggregator.Config{
-		Logger: logging.MustGetLogger("tpd-cxo-aggregator"),
+	s.cxo.StartAggregator(ctx, host, logger, "telemetry", skyenv.DmsgCXOPort, func(n *node.Node) (services.Aggregator, error) {
+		return cxoaggregator.New(dmsgC, sk, sink, cxoaggregator.Config{
+			Node:   n,
+			Logger: logging.MustGetLogger("tpd-cxo-aggregator"),
+		})
 	})
-	if err != nil {
-		logger.WithError(err).Error("Failed to start CXO aggregator, continuing without it")
-	} else {
-		agg.Run(ctx)
-		go func() {
-			<-ctx.Done()
-			agg.Close() //nolint:errcheck,gosec
-		}()
-		logger.WithField("feed_pk", agg.FeedPK()).Info("CXO aggregator running: accepting inbound visor stats feeds")
-	}
-
-	// Second aggregator for the visors' DEDICATED tp-list discovery feed
-	// (DmsgVisorTPListCXOPort). That feed's Root is just the compact
-	// transport-list snapshot leaf, so it fills completely in ~1 round-trip
-	// — the durable cure for the ~10% transport under-report on busy hubs,
-	// whose combined telemetry Root on port 50 can't finish its fill in the
-	// announce conn's window. It shares the same sink: only the declarative
-	// ReconcileTransportsFromCXO path fires (the tp-list feed carries no
-	// per-transport telemetry leaves). Kept on its own node/port so a
-	// visor's tp-list Root never head-collides with its telemetry Root.
-	// A visor that publishes only the legacy combined feed (older binary)
-	// simply never dials this port — the port-50 aggregator above still
-	// reconciles its tp-list from the combined feed (back-compat fallback).
-	tplAgg, err := cxoaggregator.New(dmsgC, sk, sink, cxoaggregator.Config{
-		DmsgPort: skyenv.DmsgVisorTPListCXOPort,
-		Logger:   logging.MustGetLogger("tpd-cxo-tplist-aggregator"),
+	// The visors' DEDICATED tp-list feed (opt-in on the visor side): its
+	// Root is just the transport-list snapshot leaf, so it fills in about one
+	// round-trip. Same sink; only the declarative reconcile path fires. A
+	// visor that publishes only the combined feed never dials this port.
+	s.cxo.StartAggregator(ctx, host, logger, "tp-list", skyenv.DmsgVisorTPListCXOPort, func(n *node.Node) (services.Aggregator, error) {
+		return cxoaggregator.New(dmsgC, sk, sink, cxoaggregator.Config{
+			DmsgPort: skyenv.DmsgVisorTPListCXOPort,
+			Node:     n,
+			Logger:   logging.MustGetLogger("tpd-cxo-tplist-aggregator"),
+		})
 	})
-	if err != nil {
-		logger.WithError(err).Error("Failed to start CXO tp-list aggregator, continuing without it")
-	} else {
-		tplAgg.Run(ctx)
-		go func() {
-			<-ctx.Done()
-			tplAgg.Close() //nolint:errcheck,gosec
-		}()
-		logger.WithField("feed_pk", tplAgg.FeedPK()).WithField("dmsg_port", skyenv.DmsgVisorTPListCXOPort).
-			Info("CXO tp-list aggregator running: accepting inbound visor tp-list discovery feeds")
-	}
 
-	if pub, perr := api.StartMetricsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger); perr != nil {
-		logger.WithError(perr).Error("Failed to start CXO metrics publisher, continuing without it")
-	} else {
-		go func() {
-			<-ctx.Done()
-			pub.Close() //nolint:errcheck,gosec
-		}()
-	}
-
-	if pub, perr := api.StartUptimeCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger); perr != nil {
-		logger.WithError(perr).Error("Failed to start CXO uptime publisher, continuing without it")
-	} else {
-		go func() {
-			<-ctx.Done()
-			pub.Close() //nolint:errcheck,gosec
-		}()
-	}
-
-	if pub, perr := api.StartAllTransportsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger); perr != nil {
-		logger.WithError(perr).Error("Failed to start CXO all-transports publisher, continuing without it")
-	} else {
-		go func() {
-			<-ctx.Done()
-			pub.Close() //nolint:errcheck,gosec
-		}()
-	}
-
-	if pub, perr := api.StartStatsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger); perr != nil {
-		logger.WithError(perr).Error("Failed to start CXO stats publisher, continuing without it")
-	} else {
-		go func() {
-			<-ctx.Done()
-			pub.Close() //nolint:errcheck,gosec
-		}()
-	}
+	mp, err := api.StartMetricsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
+	s.cxo.AddPublisher(ctx, logger, "metrics", skyenv.DmsgTPDMetricsCXOPort, mp, err)
+	up, err := api.StartUptimeCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
+	s.cxo.AddPublisher(ctx, logger, "uptime", skyenv.DmsgTPDUptimeCXOPort, up, err)
+	ap, err := api.StartAllTransportsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
+	s.cxo.AddPublisher(ctx, logger, "all-transports", skyenv.DmsgTPDAllTransportsCXOPort, ap, err)
+	sp, err := api.StartStatsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
+	s.cxo.AddPublisher(ctx, logger, "stats", skyenv.DmsgTPDStatsCXOPort, sp, err)
 }
 
 // aggregatorSink composes the cxoaggregator.Sink contract from the
@@ -447,3 +412,8 @@ var (
 	DefaultRedisPoolSize = 10
 	_                    = cmdutil.DmsgConfig{} // keep cmdutil import in this file when refactored
 )
+
+// AggregatorPorts implements services.CXOAggregating.
+func (s *service) AggregatorPorts() []uint16 {
+	return []uint16{skyenv.DmsgCXOPort, skyenv.DmsgVisorTPListCXOPort}
+}

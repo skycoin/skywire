@@ -303,7 +303,7 @@ func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, s
 		v.setTPDLeafPubReason("dmsg client absent")
 		return nil, nil
 	}
-	dataDir, inMemDB := cxoPubStorage(filepath.Join(v.conf.LocalPath, "cxo-stats"))
+	dataDir, inMemDB := v.hostCXOPubStorage(filepath.Join(v.conf.LocalPath, "cxo-stats"), skyenv.DmsgCXOPort)
 	// Gate the feed: only the peer whitelist (hypervisors + dmsgpty
 	// whitelist + own PK) plus the consuming TPD may subscribe. TPD MUST
 	// be allowed or the announce-conn subscribe is rejected (the hook
@@ -335,6 +335,7 @@ func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, s
 		v.setTPDLeafPubReason("cxo publisher init failed: " + err.Error())
 		return nil, nil
 	}
+	v.trackCXOPublisher(skyenv.DmsgCXOPort, pub)
 	log.WithField("feed_pk", pub.Feed()).WithField("data_dir", dataDir).
 		Info("Stats: CXO publisher running")
 	return pub, &cxoSink{pub: pub, log: log}
@@ -353,7 +354,7 @@ func buildTPListPublisher(v *Visor, log *logging.Logger) *treestore.Publisher {
 	if v.dmsgC == nil {
 		return nil
 	}
-	dataDir, inMemDB := cxoPubStorage(filepath.Join(v.conf.LocalPath, "cxo-tplist"))
+	dataDir, inMemDB := v.hostCXOPubStorage(filepath.Join(v.conf.LocalPath, "cxo-tplist"), skyenv.DmsgVisorTPListCXOPort)
 	// Same gate as the telemetry feed: peer whitelist ∪ consuming TPD.
 	tpdPK, tpdOK := tpdCXOPeer(v)
 	allow := composeFeedAllowlist(v, tpdPK, tpdOK)
@@ -377,6 +378,7 @@ func buildTPListPublisher(v *Visor, log *logging.Logger) *treestore.Publisher {
 			"falling back to the combined telemetry feed for discovery")
 		return nil
 	}
+	v.trackCXOPublisher(skyenv.DmsgVisorTPListCXOPort, pub)
 	log.WithField("feed_pk", pub.Feed()).WithField("dmsg_port", skyenv.DmsgVisorTPListCXOPort).
 		WithField("data_dir", dataDir).Info("Stats: dedicated tp-list CXO publisher running")
 	return pub

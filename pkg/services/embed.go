@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/node"
+	cxoregistry "github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -34,6 +36,9 @@ type Host struct {
 	DmsgAddr string
 	// Log is the host-supplied logger for the service.
 	Log *logging.Logger
+	// CXO lends the host's CXO nodes to the service's aggregators. Nil
+	// when the host has none: the service then builds its own nodes.
+	CXO CXOHost
 }
 
 // Embeddable is a Service that can also run inside a host process.
@@ -95,4 +100,19 @@ func (b Block) MarshalJSON() ([]byte, error) {
 func Mount(mux *http.ServeMux, prefix string, handler http.Handler) {
 	prefix = "/" + strings.Trim(prefix, "/")
 	mux.Handle(prefix+"/", http.StripPrefix(prefix, handler))
+}
+
+// CXOHost is the host's CXO publishing, lent to an embedded service. A
+// service aggregates a feed on the same DMSG port visors publish it on, and
+// its host is a visor publishing on that port too, under the same key. A
+// port takes one listener, so the service's aggregator runs on the host's
+// node for that port, and the host's own feed, which no peer delivers to
+// its own node, is handed over in-process.
+type CXOHost interface {
+	// CXONode returns the host's node listening on port, or nil when the
+	// host publishes nothing there.
+	CXONode(port uint16) *node.Node
+	// OnLocalRoot registers fn to receive every Root the host publishes
+	// on port, starting with the current one.
+	OnLocalRoot(port uint16, fn func(*cxoregistry.Root))
 }

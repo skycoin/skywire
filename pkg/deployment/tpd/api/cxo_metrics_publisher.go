@@ -483,3 +483,6 @@ func gzipRecords(metrics []store.TransportMetric) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
+
+// Publisher returns the underlying feed publisher, for introspection.
+func (x *MetricsCXOPublisher) Publisher() *treestore.Publisher { return x.pub }
