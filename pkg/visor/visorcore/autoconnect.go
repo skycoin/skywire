@@ -84,8 +84,9 @@ func (c *Connector) ConnectToVisors(
 	// picks put most of a tab's handful of relays on one machine, and when that
 	// machine dropped its sessions the tab lost nearly every relay at once —
 	// every leg of every tunnel. hosts is seeded with the hosts our automatic
-	// transports already reach; a new transport to one of them is closed again.
+	// transports already reach; a new transport to one of them does not count.
 	var hosts map[string]bool
+	sameHostExtra := 0
 	if maxCount > 0 {
 		hosts = c.automaticTransportHosts()
 	}
@@ -182,19 +183,24 @@ func (c *Connector) ConnectToVisors(
 				return
 			}
 
+			// A transport to a host we already reach is KEPT — it is still another
+			// relay, and a browser visor may have few machines to choose from —
+			// but it does not use up a budget slot, so the phase keeps dialing for
+			// a new machine. sameHostExtra bounds those extras to maxCount, so a
+			// phase opens at most 2*maxCount transports.
+			counts := true
 			if hosts != nil {
 				if tp, err := c.Tm.GetTransport(pk, tpType); err == nil && tp != nil {
 					if h := tp.RemoteIP(); h != "" {
 						mu.Lock()
-						dup := hosts[h]
+						if hosts[h] && sameHostExtra < maxCount {
+							sameHostExtra++
+							counts = false
+						}
 						hosts[h] = true
 						mu.Unlock()
-						if dup {
-							c.Tm.DeleteTransport(tp.Entry.ID)
-							wait := c.noteFailure(pk, tpType, time.Now())
-							logger.WithField("host", h).WithField("retry_in", wait).
-								Debugln("Closed a transport to a host we already reach; spending the slot on another machine")
-							return
+						if !counts {
+							logger.WithField("host", h).Debugln("Transport reaches a host we already reach; kept, but dialing on for another machine")
 						}
 					}
 				}
@@ -202,7 +208,9 @@ func (c *Connector) ConnectToVisors(
 
 			mu.Lock()
 			c.noteSuccess(pk, tpType)
-			result.Count++
+			if counts {
+				result.Count++
+			}
 			result.Connected = append(result.Connected, pk)
 			mu.Unlock()
 		}(pk)

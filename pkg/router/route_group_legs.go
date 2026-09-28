@@ -157,6 +157,38 @@ func (rg *RouteGroup) healReplaceSoleLeg() {
 	add(nil) // one setup-node dial; appends one fresh leg on success
 }
 
+// topUpBelowTarget is the periodic retry behind maybeSelfHeal, run once per
+// leg-liveness tick. maybeSelfHeal fires only on a leg drop and settles after
+// selfHealNoProgressLimit fruitless adds, so a group whose replacement found no
+// path (the relays it could use had just dropped) stayed short a leg until the
+// next drop — measured in the browser visor as four minutes on one flaky leg
+// while autoconnect had long since brought fresh relays up. One add per tick,
+// never concurrent with a heal, keeps the retry from becoming a dial storm.
+func (rg *RouteGroup) topUpBelowTarget() {
+	rg.mu.Lock()
+	add := rg.selfHealAdd
+	target := rg.selfHealTarget
+	rg.mu.Unlock()
+	if add == nil || target <= 1 || rg.isClosed() || !rg.poolWideningAllowed() {
+		return
+	}
+	if rg.aliveLegCount() >= target {
+		return
+	}
+	if !rg.healInFlight.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer rg.healInFlight.Store(false)
+		if rg.logger != nil {
+			rg.logger.WithField("alive", rg.aliveLegCount()).
+				WithField("target", target).
+				Debug("Mux self-heal: below target, retrying one replacement leg")
+		}
+		add(nil)
+	}()
+}
+
 func (rg *RouteGroup) maybeSelfHeal() {
 	rg.mu.Lock()
 	add := rg.selfHealAdd
@@ -1790,7 +1822,8 @@ func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
 // grow the live leg count before the heal concludes the destination's disjoint-
 // intermediate set is exhausted for now and stops (instead of hammering the
 // setup node for the full uncapped target). A later leg death or newly-online
-// transport re-triggers the heal, so this is a backoff, not a cap.
+// transport re-triggers the heal (topUpBelowTarget retries one leg per
+// leg-liveness tick), so this is a backoff, not a cap.
 const selfHealNoProgressLimit = 4
 
 // legRecvDelta is one active-or-standby leg's rg-scoped recv progress over a

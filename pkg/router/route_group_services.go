@@ -240,6 +240,7 @@ func (rg *RouteGroup) legLivenessServiceFn(_ time.Duration) {
 	if rg.isClosed() {
 		return
 	}
+	rg.topUpBelowTarget()
 
 	type legProbe struct {
 		tp   *transport.ManagedTransport
