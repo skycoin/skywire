@@ -158,6 +158,7 @@ func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.M
 	rg.rvs = append(rg.rvs, reverse)
 	rg.tps = append(rg.tps, tp)
 	newIdx := len(rg.tps) - 1
+	rg.resetLegLiveness(tpEntryID(tp))
 	legs := len(rg.tps)
 
 	// Rebuild transport weights when transports change
@@ -201,6 +202,7 @@ func (rg *RouteGroup) appendForwardLeg(forward routing.Rule, tp *transport.Manag
 	rg.fwd = append(rg.fwd, forward)
 	rg.tps = append(rg.tps, tp)
 	newIdx := len(rg.tps) - 1
+	rg.resetLegLiveness(tpEntryID(tp))
 	legs := len(rg.tps)
 
 	if rg.mux != nil && len(rg.tps) > 1 {

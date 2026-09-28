@@ -157,6 +157,38 @@ func (rg *RouteGroup) healReplaceSoleLeg() {
 	add(nil) // one setup-node dial; appends one fresh leg on success
 }
 
+// topUpBelowTarget is the periodic retry behind maybeSelfHeal, run once per
+// leg-liveness tick. maybeSelfHeal fires only on a leg drop and settles after
+// selfHealNoProgressLimit fruitless adds, so a group whose replacement found no
+// path (the relays it could use had just dropped) stayed short a leg until the
+// next drop — measured in the browser visor as four minutes on one flaky leg
+// while autoconnect had long since brought fresh relays up. One add per tick,
+// never concurrent with a heal, keeps the retry from becoming a dial storm.
+func (rg *RouteGroup) topUpBelowTarget() {
+	rg.mu.Lock()
+	add := rg.selfHealAdd
+	target := rg.selfHealTarget
+	rg.mu.Unlock()
+	if add == nil || target <= 1 || rg.isClosed() || !rg.poolWideningAllowed() {
+		return
+	}
+	if rg.aliveLegCount() >= target {
+		return
+	}
+	if !rg.healInFlight.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer rg.healInFlight.Store(false)
+		if rg.logger != nil {
+			rg.logger.WithField("alive", rg.aliveLegCount()).
+				WithField("target", target).
+				Debug("Mux self-heal: below target, retrying one replacement leg")
+		}
+		add(nil)
+	}()
+}
+
 func (rg *RouteGroup) maybeSelfHeal() {
 	rg.mu.Lock()
 	add := rg.selfHealAdd
@@ -1583,6 +1615,11 @@ func (rg *RouteGroup) pruneDeadLegs(deadIDs []uuid.UUID, reason, hookEvent strin
 	for _, idx := range droppedIdx {
 		rg.fireLegChange(hookEvent, idx)
 	}
+	// The pruned legs' in-flight sequences are stranded: their transport is
+	// gone or black-holing, so no SACK round-trip will ever be answered on them,
+	// and they can age out of the bounded retx buffer before the receiver asks.
+	// Resend them on a surviving leg now (a relay dropping mid-download).
+	rg.resendHeldOn(deadIDs, "prune")
 	rg.signalRotate()
 	rg.maybeSelfHeal()
 	return len(droppedIdx)
@@ -1785,7 +1822,8 @@ func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
 // grow the live leg count before the heal concludes the destination's disjoint-
 // intermediate set is exhausted for now and stops (instead of hammering the
 // setup node for the full uncapped target). A later leg death or newly-online
-// transport re-triggers the heal, so this is a backoff, not a cap.
+// transport re-triggers the heal (topUpBelowTarget retries one leg per
+// leg-liveness tick), so this is a backoff, not a cap.
 const selfHealNoProgressLimit = 4
 
 // legRecvDelta is one active-or-standby leg's rg-scoped recv progress over a
@@ -1823,4 +1861,41 @@ type bandLeg struct {
 type legGoodput struct {
 	idx int
 	gp  uint64
+}
+
+// resendHeldOn resends the in-flight sequences last sent over any of tps onto
+// a leg that is still carrying — the recovery for legs that just stopped:
+// demoted to standby, dropped by the policy, or pruned because their
+// transport closed. Only those legs' sequences are resent; everything riding
+// a live leg heals through the normal SACK path. A no-op without a mux, or
+// with nothing held.
+func (rg *RouteGroup) resendHeldOn(tps []uuid.UUID, why string) {
+	if rg.mux == nil || len(tps) == 0 {
+		return
+	}
+	seqs := rg.mux.heldRetxSeqsOnTps(tps)
+	if len(seqs) == 0 {
+		return
+	}
+	rg.mux.retxReqFlush.Add(uint64(len(seqs)))
+	if err := rg.resendSeqs(seqs); err != nil {
+		rg.logger.WithError(err).Debugf("%s retx flush: no live leg to resend on", why)
+	}
+}
+
+// resetLegLiveness forgets the pong-miss tally of the leg on transport id.
+// The tally is keyed by first-hop transport, and transport IDs are
+// deterministic per relay, so a leg pruned for missed echoes and re-grown over
+// the same relay before the next liveness tick inherited the full count and
+// was pruned again on its first probe — the browser visor churned one leg
+// every few seconds that way. A new leg starts with a clean slate. Caller may
+// hold rg.mu (the rg.mu → legLivenessMu order is respected).
+func (rg *RouteGroup) resetLegLiveness(id uuid.UUID) {
+	if id == uuid.Nil {
+		return
+	}
+	rg.legLivenessMu.Lock()
+	delete(rg.legMissed, id)
+	delete(rg.legPongSeen, id)
+	rg.legLivenessMu.Unlock()
 }

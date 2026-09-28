@@ -3,6 +3,8 @@ package router
 import (
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -61,6 +63,38 @@ func TestMuxDropFlushesInFlightSeqs(t *testing.T) {
 		}
 		if survivor[got[i]] {
 			t.Fatalf("resend included seq %d which rides the surviving leg", got[i])
+		}
+	}
+}
+
+// TestMuxPruneFlushesInFlightSeqs: a leg pruned because its transport closed
+// (a relay going away) or stopped echoing strands its in-flight sequences the
+// same way a policy drop does. They must be resent on a surviving leg at the
+// prune, not left to age out of the retx buffer before a SACK asks for them.
+func TestMuxPruneFlushesInFlightSeqs(t *testing.T) {
+	rg, conns := createCapturingMuxRouteGroup(t)
+	leg1ID := rg.tps[1].Entry.ID
+
+	const nPkts = 12
+	want := make([]uint32, 0, nPkts)
+	for i := 0; i < nPkts; i++ {
+		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i), 0xDD}, leg1ID)
+		if err != nil {
+			t.Fatalf("wrapPayload: %v", err)
+		}
+		want = append(want, seq)
+	}
+
+	if n := rg.pruneDeadLegs([]uuid.UUID{leg1ID}, "test: transport closed under the leg", "transport-closed"); n != 1 {
+		t.Fatalf("pruned %d legs, want 1", n)
+	}
+	got := conns[0].dataSeqs()
+	if len(got) != len(want) {
+		t.Fatalf("surviving leg resent %d seqs, want the pruned leg's %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("resend[%d] = seq %d, want %d", i, got[i], want[i])
 		}
 	}
 }
