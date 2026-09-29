@@ -42,6 +42,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -990,17 +991,31 @@ func (m *Manager) liveServe(ctx context.Context, fk Feed, f *managedFeed) error 
 		return fmt.Errorf("dial publisher: %w", err)
 	}
 
+	// The CXO node bounds a first fill itself — one that stalls for
+	// node.MaxFillingTime breaks, and none runs past node.MaxTotalFillTime —
+	// so wait for it. Tearing the subscriber down after syncTimeout threw away
+	// everything fetched and started over from nothing: a feed whose first
+	// fill needs longer (a large tree, a slow link) never synced at all, which
+	// is how the routing and metrics feeds sat at "syncing". Past syncTimeout
+	// the status says so.
 	syncTimeout := FeedFirstSyncTimeout(fk)
-	first := time.NewTimer(syncTimeout)
-	defer first.Stop()
-	select {
-	case <-updateCh:
-		first.Stop()
-		m.walkIntoSnapshot(sub, prefix, f)
-	case <-first.C:
-		return fmt.Errorf("timeout waiting for Root after %s", syncTimeout)
-	case <-ctx.Done():
-		return nil
+	slow := time.NewTimer(syncTimeout)
+	defer slow.Stop()
+	giveUp := time.NewTimer(node.MaxTotalFillTime + syncTimeout)
+	defer giveUp.Stop()
+firstRoot:
+	for {
+		select {
+		case <-updateCh:
+			m.walkIntoSnapshot(sub, prefix, f)
+			break firstRoot
+		case <-slow.C:
+			f.recordErr(fmt.Errorf("still waiting for the first Root after %s", syncTimeout))
+		case <-giveUp.C:
+			return fmt.Errorf("no Root after %s", node.MaxTotalFillTime+syncTimeout)
+		case <-ctx.Done():
+			return nil
+		}
 	}
 
 	for {
