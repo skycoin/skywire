@@ -307,6 +307,12 @@ type Aggregator struct {
 	// tel skips re-applying telemetry shards a Root re-delivers unchanged and
 	// paces uptime heartbeats (see telemetry_dedup.go).
 	tel telemetryState
+
+	// roots holds, per reporter, the tree hash of the last Root applied in
+	// full and when, so a Root that repeats it is not re-applied (see
+	// rootIsRepeat). Guarded by rootsMu; zero value usable.
+	rootsMu sync.Mutex
+	roots   map[cipher.PubKey]appliedRoot
 }
 
 // maxConcurrentIngest caps concurrent leaf dispatches and list reconciles.
@@ -506,6 +512,7 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggrega
 		OnFeedReclaimed: func(feed skycipher.PubKey) {
 			a.mu.Lock()
 			delete(a.lastList, feed)
+			a.forgetRoot(cipher.PubKey(feed))
 			a.mu.Unlock()
 		},
 	})
@@ -582,6 +589,9 @@ func (a *Aggregator) ensureConn(feedPK skycipher.PubKey) {
 // reporter PK for any bandwidth dispatches.
 func (a *Aggregator) handleRootFilled(r *registry.Root) {
 	if r == nil || len(r.Refs) == 0 {
+		return
+	}
+	if rep := cipher.PubKey(r.Pub); rep != (cipher.PubKey{}) && a.rootIsRepeat(rep, r, time.Now()) {
 		return
 	}
 	// One slot per Root, held across decode and dispatch: taking it per leaf
@@ -1235,3 +1245,45 @@ func (a *Aggregator) Ingest(r *registry.Root) { a.core.Ingest(r) }
 
 // Stats reports the aggregator's current state.
 func (a *Aggregator) Stats() cxoaggregate.Stats { return a.core.Stats() }
+
+// noChangeFullEvery is how often a feed whose Roots stop changing is still
+// applied in full: inside both the 5-minute registration TTL its transport
+// list refreshes and the 90 s uptime heartbeat cadence (telemetry_dedup.go).
+const noChangeFullEvery = 90 * time.Second
+
+// appliedRoot is the tree hash of a reporter's last Root applied in full.
+type appliedRoot struct {
+	tree skycipher.SHA256
+	at   time.Time
+}
+
+// rootIsRepeat reports whether r carries the same tree as the reporter's
+// last Root applied in full, applied less than noChangeFullEvery ago.
+//
+// A visor republishes its Root every 45 s even when nothing changed; the
+// objects are content-addressed, so on the wire that heartbeat is only the
+// small signed Root — a "no change". TPD applied every such Root as if it
+// were new: every telemetry shard and the whole transport list, for every
+// visor, every 45 s. A repeat is skipped; the periodic full apply keeps
+// registrations and uptime alive.
+func (a *Aggregator) rootIsRepeat(reporter cipher.PubKey, r *registry.Root, now time.Time) bool {
+	tree := r.Refs[0].Hash
+	a.rootsMu.Lock()
+	defer a.rootsMu.Unlock()
+	if a.roots == nil {
+		a.roots = make(map[cipher.PubKey]appliedRoot)
+	}
+	if last, ok := a.roots[reporter]; ok && last.tree == tree && now.Sub(last.at) < noChangeFullEvery {
+		return true
+	}
+	a.roots[reporter] = appliedRoot{tree: tree, at: now}
+	return false
+}
+
+// forgetRoot drops a reporter's applied-Root record, when its feed is
+// reclaimed.
+func (a *Aggregator) forgetRoot(reporter cipher.PubKey) {
+	a.rootsMu.Lock()
+	delete(a.roots, reporter)
+	a.rootsMu.Unlock()
+}
