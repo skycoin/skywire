@@ -177,7 +177,7 @@ var tabFeedDeps = map[Tab][]Feed{
 	TabNetworkVisualizer: {FeedSDServices, FeedDMSGDClientsByServer, FeedTPDMetrics},
 	TabMetrics:           {FeedTPDMetrics, FeedTPDUptime},
 	TabUptime:            {FeedTPDUptime},
-	TabAutoconnect:       {FeedSDServices},
+	TabAutoconnect:       {FeedSDServices, FeedTPDStats},
 	TabCLIServices:       {FeedSDServices},
 	TabCLITransports:     {FeedTPDRouting},
 	TabRoutingPolicy:     {FeedSDServices},

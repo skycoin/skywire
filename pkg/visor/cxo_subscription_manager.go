@@ -108,15 +108,6 @@ func (v *Visor) CXOSubMgr() *CXOSubscriptionManager {
 		}
 	}
 	v.cxoSubMgr = NewCXOSubscriptionManager(v, interval, v.MasterLogger().PackageLogger("cxo_subscription_manager"))
-	// Keep the routing subscription up continuously. Route calculation
-	// reads FeedTPDRouting on every dial; letting the
-	// ~10s-grace teardown drop it between dials just forces a fresh CXO
-	// subscription — a new dmsg dial + Noise/PQ handshake — on the next
-	// one, which on the single-threaded wasm visor is pure churn. Pinned
-	// once here (released only on Close), so liveServe stays connected and
-	// pushes Root updates live; the router's route-calc cache then tracks
-	// real transport changes instead of a timer.
-	v.cxoSubMgr.Pin(FeedTPDRouting)
 	return v.cxoSubMgr
 }
 

@@ -456,6 +456,9 @@ type Visor struct {
 	// nil otherwise. Tabs that source CXO data call AcquireFor on
 	// open and ReleaseFor on close.
 	cxoSubMgr *CXOSubscriptionManager
+	// routingPinOnce pins FeedTPDRouting on the first route calculation
+	// (see cxoAwareTPD.getAllTransportsBase).
+	routingPinOnce sync.Once
 }
 
 // pingState manages Skywire transport ping connections. Keyed by
