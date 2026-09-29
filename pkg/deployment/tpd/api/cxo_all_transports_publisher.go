@@ -19,6 +19,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"sync"
 	"time"
 
@@ -48,7 +49,6 @@ type allTransportsWireEntry struct {
 	Type          types.Type       `json:"type"`
 	Label         transport.Label  `json:"label"`
 	Latency       float64          `json:"latency_ms,omitempty"`
-	Bandwidth     uint64           `json:"bandwidth,omitempty"`
 	ThroughputBps float64          `json:"throughput_bps,omitempty"`
 }
 
@@ -63,9 +63,8 @@ func toWireEntries(entries []*transport.Entry) []allTransportsWireEntry {
 			Edges:         e.Edges,
 			Type:          e.Type,
 			Label:         e.Label,
-			Latency:       e.Latency,
-			Bandwidth:     e.Bandwidth,
-			ThroughputBps: e.ThroughputBps,
+			Latency:       math.Round(e.Latency*10) / 10,
+			ThroughputBps: roundSig(e.ThroughputBps, 3),
 		})
 	}
 	return out
@@ -164,35 +163,56 @@ func (a *AllTransportsCXOPublisher) loop(ctx context.Context) {
 }
 
 func (a *AllTransportsCXOPublisher) publishOnce(ctx context.Context) {
-	for _, v := range []struct {
-		path     string
-		withSelf bool
-	}{
-		{AllTransportsPathWithoutSelf, false},
-		{AllTransportsPathWithSelf, true},
-	} {
-		entries, err := a.api.store.GetAllTransports(ctx, v.withSelf)
-		if err != nil {
-			a.log.WithError(err).WithField("path", v.path).Debug("all-transports fetch failed; will retry next tick")
+	entries, err := a.routingSnapshot(ctx)
+	if err != nil {
+		a.log.WithError(err).Debug("all-transports fetch failed; will retry next tick")
+		a.recordError(err)
+		return
+	}
+	body, err := json.Marshal(toWireEntries(entries))
+	if err != nil {
+		a.log.WithError(err).Warn("all-transports marshal failed")
+		a.recordError(err)
+		return
+	}
+	// gzip the snapshot before publishing: CXO stores + propagates object
+	// bytes verbatim, so a raw JSON body travels uncompressed. Subscribers
+	// auto-detect + gunzip (cxoutils.Gunzip).
+	//
+	// The same bytes go to both paths. with-self differed only by self-loops,
+	// which are not routes; identical bytes are one CXO object, so a
+	// subscriber fetches the snapshot once instead of twice.
+	gz := cxoutils.Gzip(body)
+	for _, path := range []string{AllTransportsPathWithoutSelf, AllTransportsPathWithSelf} {
+		if err := a.pub.Put(path, gz); err != nil {
+			a.log.WithError(err).WithField("path", path).Warn("publisher Put failed")
 			a.recordError(err)
-			continue
-		}
-		body, err := json.Marshal(toWireEntries(entries))
-		if err != nil {
-			a.log.WithError(err).WithField("path", v.path).Warn("all-transports marshal failed")
-			a.recordError(err)
-			continue
-		}
-		// gzip the snapshot before publishing: CXO stores + propagates object
-		// bytes verbatim, so a raw JSON body travels uncompressed. Subscribers
-		// auto-detect + gunzip (cxoutils.Gunzip). See docs — this keeps the CXO
-		// feed from being a bandwidth regression vs the gzipped HTTP endpoint.
-		if err := a.pub.Put(v.path, cxoutils.Gzip(body)); err != nil {
-			a.log.WithError(err).WithField("path", v.path).Warn("publisher Put failed")
-			a.recordError(err)
-			continue
 		}
 	}
+}
+
+// routingSnapshot is what routers need: the transports that exist now —
+// registrations refreshed within the entry TTL, withdrawn at once when a
+// visor's published transport list drops one — with the latency and
+// throughput routes are weighed by. It used to be the metric-free read, so
+// every visor synced ~80k transports and not one latency figure.
+func (a *AllTransportsCXOPublisher) routingSnapshot(ctx context.Context) ([]*transport.Entry, error) {
+	if qs, ok := a.api.store.(interface {
+		GetAllTransportsWithLatency(context.Context, bool) ([]*transport.Entry, error)
+	}); ok {
+		return qs.GetAllTransportsWithLatency(ctx, false)
+	}
+	return a.api.store.GetAllTransports(ctx, false)
+}
+
+// roundSig rounds v to n significant digits, so a figure that only jitters
+// does not change the published bytes.
+func roundSig(v float64, n int) float64 {
+	if v == 0 {
+		return 0
+	}
+	p := math.Pow(10, float64(n)-math.Ceil(math.Log10(math.Abs(v))))
+	return math.Round(v*p) / p
 }
 
 func (a *AllTransportsCXOPublisher) recordError(err error) {
