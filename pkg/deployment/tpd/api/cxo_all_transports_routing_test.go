@@ -46,9 +46,9 @@ func TestRoutingSnapshotCarriesMetricsNotBandwidth(t *testing.T) {
 	require.NotContains(t, got[0], "bandwidth", "registration bandwidth is not routing data")
 }
 
-func TestRoundSig(t *testing.T) {
-	require.Equal(t, 0.0, roundSig(0, 3))
-	require.Equal(t, 123000.0, roundSig(123456.7, 3))
-	require.Equal(t, 0.00123, roundSig(0.0012345, 3))
-	require.Equal(t, 9.99, roundSig(9.994, 3))
+func TestRoundSig3(t *testing.T) {
+	require.Equal(t, 0.0, roundSig3(0))
+	require.Equal(t, 123000.0, roundSig3(123456.7))
+	require.Equal(t, 0.00123, roundSig3(0.0012345))
+	require.Equal(t, 9.99, roundSig3(9.994))
 }

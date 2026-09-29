@@ -64,7 +64,7 @@ func toWireEntries(entries []*transport.Entry) []allTransportsWireEntry {
 			Type:          e.Type,
 			Label:         e.Label,
 			Latency:       math.Round(e.Latency*10) / 10,
-			ThroughputBps: roundSig(e.ThroughputBps, 3),
+			ThroughputBps: roundSig3(e.ThroughputBps),
 		})
 	}
 	return out
@@ -205,13 +205,13 @@ func (a *AllTransportsCXOPublisher) routingSnapshot(ctx context.Context) ([]*tra
 	return a.api.store.GetAllTransports(ctx, false)
 }
 
-// roundSig rounds v to n significant digits, so a figure that only jitters
+// roundSig3 rounds v to three significant digits, so a figure that only jitters
 // does not change the published bytes.
-func roundSig(v float64, n int) float64 {
+func roundSig3(v float64) float64 {
 	if v == 0 {
 		return 0
 	}
-	p := math.Pow(10, float64(n)-math.Ceil(math.Log10(math.Abs(v))))
+	p := math.Pow(10, 3-math.Ceil(math.Log10(math.Abs(v))))
 	return math.Round(v*p) / p
 }
 
