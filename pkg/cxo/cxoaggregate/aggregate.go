@@ -472,14 +472,12 @@ func (c *Core) subscribe(conn *node.Conn) bool {
 }
 
 // alreadySubscribed reports whether conn is already subscribed to the
-// given feed. Keeps reconcile idempotent across repeat ticks.
+// given feed. Keeps reconcile idempotent across repeat ticks. Asked for
+// every conn on every pass, so it must not walk the node's feeds: with
+// Conn.Feeds it cost TPD a fifth of its CPU, all on the node's single feeds
+// loop.
 func alreadySubscribed(conn *node.Conn, feed skycipher.PubKey) bool {
-	for _, f := range conn.Feeds() {
-		if f == feed {
-			return true
-		}
-	}
-	return false
+	return conn.HasFeed(feed)
 }
 
 // cleanup prunes superseded Roots (keeping only the latest per feed),

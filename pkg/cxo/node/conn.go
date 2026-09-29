@@ -269,6 +269,14 @@ func (c *Conn) Feeds() (feeds []cipher.PubKey) {
 	return c.n.fs.feedsOfConnection(c)
 }
 
+// HasFeed reports whether this connection is subscribed to feed. Unlike
+// Feeds, which walks every feed of the node, it is two map lookups on the
+// node's feeds loop, so it is the one to ask per connection on a node
+// holding thousands of feeds.
+func (c *Conn) HasFeed(feed cipher.PubKey) bool {
+	return c.n.fs.hasConnFeed(c, feed)
+}
+
 func connString(isIncoming, isTCP bool, addr string) (s string) {
 	if isIncoming == true { //nolint:staticcheck
 		s = "↓ "
