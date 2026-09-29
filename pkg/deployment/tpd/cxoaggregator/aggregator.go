@@ -40,6 +40,7 @@ package cxoaggregator
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"os"
@@ -302,6 +303,10 @@ type Aggregator struct {
 	// ingest bounds how many store writes run at once across all feeds (see
 	// maxConcurrentIngest). Nil means unbounded (tests build bare Aggregators).
 	ingest chan struct{}
+
+	// tel skips re-applying telemetry shards a Root re-delivers unchanged and
+	// paces uptime heartbeats (see telemetry_dedup.go).
+	tel telemetryState
 }
 
 // maxConcurrentIngest caps concurrent leaf dispatches and list reconciles.
@@ -1036,6 +1041,9 @@ func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter c
 		a.log.WithError(err).WithField("path", path).Debug("CXO aggregator: telemetry shard decode failed")
 		return
 	}
+	now := time.Now().UTC()
+	sum := sha256.Sum256(leaf)
+	unchanged := a.tel.unchanged(reporter, shard, sum, now)
 	ctx, cancel := context.WithTimeout(context.Background(), telemetryShardTimeout)
 	defer cancel()
 	for i := range entries {
@@ -1051,12 +1059,20 @@ func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter c
 		if telemetrywire.ShardOf(e.ID) != shard {
 			continue
 		}
+		if unchanged {
+			// Already applied; the Root only proves the transport is up now.
+			a.heartbeat(ctx, e.ID, telemetrywire.CodeToType(e.Type), now)
+			continue
+		}
 		var at time.Time
 		if e.SampledAtUnix > 0 {
 			at = time.Unix(int64(e.SampledAtUnix), 0).UTC()
 		}
 		a.applyTelemetry(ctx, e.ID, reporter, e.SentBytes, e.RecvBytes, float64(e.ThroughputBps),
 			float64(e.LatMin), float64(e.LatMax), float64(e.LatAvg), telemetrywire.CodeToType(e.Type), at)
+	}
+	if !unchanged {
+		a.tel.applied(reporter, shard, sum, now)
 	}
 }
 
@@ -1088,10 +1104,25 @@ func (a *Aggregator) applyTelemetry(ctx context.Context, id uuid.UUID, reporter 
 	// entries — skip those rather than push a heartbeat the store would
 	// drop on the type filter (RecordTransportHeartbeat early-returns on
 	// any non-p2p type, but routing here saves the redis round-trip).
-	if tpType != "" {
-		if err := a.sink.RecordTransportHeartbeat(ctx, id, tpType, at); err != nil {
-			a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: RecordTransportHeartbeat failed")
-		}
+	a.heartbeat(ctx, id, tpType, at)
+}
+
+// heartbeat records a transport's uptime heartbeat, at most once per
+// heartbeatEvery whichever edge reports it (see telemetry_dedup.go). at is
+// when the transport was seen up; zero means now.
+func (a *Aggregator) heartbeat(ctx context.Context, id uuid.UUID, tpType string, at time.Time) {
+	if tpType == "" {
+		return
+	}
+	now := time.Now().UTC()
+	if at.IsZero() {
+		at = now
+	}
+	if !a.tel.beatDue(id, now) {
+		return
+	}
+	if err := a.sink.RecordTransportHeartbeat(ctx, id, tpType, at); err != nil {
+		a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: RecordTransportHeartbeat failed")
 	}
 }
 
