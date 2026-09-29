@@ -58,6 +58,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"slices"
+	"sort"
 	"sync"
 	"time"
 
@@ -70,6 +72,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // Published paths. Exported so visor-side subscribers don't have to
@@ -85,6 +88,11 @@ const (
 	// GET /metric shape plus a completeness stamp) — per-day
 	// bandwidth, latency and by-type breakdown over statsDailyDays.
 	StatsPathDaily = "stats/daily"
+	// StatsPathWebRTCVisors lists the visors holding a WebRTC transport — the
+	// only sign a visor accepts WebRTC, since it advertises the capability by
+	// making WebRTC to public visors. Public autoconnect reads it to reach
+	// such visors directly; it used to download every transport for it.
+	StatsPathWebRTCVisors = "stats/webrtc-visors"
 )
 
 // statsPublishInterval is the recompute cadence. Both bodies are read
@@ -110,6 +118,12 @@ const (
 	// minutes is indistinguishable from twelve seconds to any consumer,
 	// and every consumer of this path already caches on top of it.
 	statsDailyInterval = 5 * time.Minute
+
+	// statsWebRTCInterval is how often the WebRTC-capable set is
+	// recomputed. Autoconnect cycles are minutes apart and a visor that
+	// gains WebRTC keeps it, so a slower cadence than the network stats
+	// loses nothing and keeps the leaf from rewriting every tick.
+	statsWebRTCInterval = 5 * time.Minute
 )
 
 // Completeness-judgment tunables. See completenessTracker.
@@ -259,6 +273,10 @@ type StatsCXOPublisher struct {
 	// error backs off to statsDailyInterval instead of retrying the
 	// 30-day query on every 12 s tick.
 	lastDailyAt time.Time
+	// lastWebRTCAt and lastWebRTC are the last WebRTC-capable recompute and
+	// the set it wrote, so an unchanged set is not rewritten.
+	lastWebRTCAt time.Time
+	lastWebRTC   []string
 	// dailyByDate holds each day's aggregate as last read while it was
 	// open. A settled day is final (store.OpenMetricsDays), so after the
 	// startup read only the open days are read again.
@@ -362,6 +380,39 @@ func (s *StatsCXOPublisher) publishOnce(ctx context.Context) {
 		s.lastDailyAt = now
 		s.publishDaily(ctx, now)
 	}
+	if s.lastWebRTCAt.IsZero() || now.Sub(s.lastWebRTCAt) >= statsWebRTCInterval {
+		s.lastWebRTCAt = now
+		s.publishWebRTCVisors(now)
+	}
+}
+
+// publishWebRTCVisors writes StatsPathWebRTCVisors: the sorted keys of the
+// visors holding a WebRTC transport, read off the same warm cache as the
+// network stats. Rewritten only when the set changes.
+func (s *StatsCXOPublisher) publishWebRTCVisors(now time.Time) {
+	entries := s.api.getTransportsFromCache(true)
+	if entries == nil {
+		return
+	}
+	set := make(map[string]struct{})
+	for _, e := range entries {
+		if e == nil || e.Type != tptypes.WEBRTC {
+			continue
+		}
+		for _, edge := range e.Edges {
+			set[edge.Hex()] = struct{}{}
+		}
+	}
+	visors := make([]string, 0, len(set))
+	for pk := range set {
+		visors = append(visors, pk)
+	}
+	sort.Strings(visors)
+	if slices.Equal(visors, s.lastWebRTC) {
+		return
+	}
+	s.lastWebRTC = visors
+	s.put(StatsPathWebRTCVisors, visors, true, now)
 }
 
 // publishNetwork writes StatsPathNetwork. It reads the same warm cache

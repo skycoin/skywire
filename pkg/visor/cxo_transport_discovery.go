@@ -52,6 +52,14 @@ type cxoAwareTPD struct {
 func (c *cxoAwareTPD) getAllTransportsBase(ctx context.Context) ([]*transport.Entry, error) {
 	if c.v != nil {
 		if mgr := c.v.CXOSubMgr(); mgr != nil {
+			// Keep the routing subscription up from the first route calculation
+			// on: letting the ~10s-grace teardown drop it between dials forces a
+			// fresh subscription — a new dmsg dial and handshake — on the next
+			// one. It is pinned here, on first use, not when the manager is built:
+			// autoconnect and dmsg lookups build the manager on every visor, and
+			// pinning there made every visor hold the whole transport graph
+			// whether it ever routed or not.
+			c.v.routingPinOnce.Do(func() { mgr.Pin(FeedTPDRouting) })
 			mgr.AcquireFor(TabCLITransports)
 			defer mgr.ReleaseFor(TabCLITransports)
 			if entries, ok := routingTransports(mgr); ok {
