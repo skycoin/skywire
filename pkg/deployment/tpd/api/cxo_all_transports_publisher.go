@@ -28,6 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -197,12 +198,18 @@ func (a *AllTransportsCXOPublisher) publishOnce(ctx context.Context) {
 // throughput routes are weighed by. It used to be the metric-free read, so
 // every visor synced ~80k transports and not one latency figure.
 func (a *AllTransportsCXOPublisher) routingSnapshot(ctx context.Context) ([]*transport.Entry, error) {
-	if qs, ok := a.api.store.(interface {
+	return routingEntries(ctx, a.api.store)
+}
+
+// routingEntries is the routing read shared by the all-transports and
+// routing feeds.
+func routingEntries(ctx context.Context, st store.Store) ([]*transport.Entry, error) {
+	if qs, ok := st.(interface {
 		GetAllTransportsWithLatency(context.Context, bool) ([]*transport.Entry, error)
 	}); ok {
 		return qs.GetAllTransportsWithLatency(ctx, false)
 	}
-	return a.api.store.GetAllTransports(ctx, false)
+	return st.GetAllTransports(ctx, false)
 }
 
 // roundSig3 rounds v to three significant digits, so a figure that only jitters

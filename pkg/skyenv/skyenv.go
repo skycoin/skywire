@@ -108,6 +108,13 @@ const (
 	// subscribe to one TPD feed without dragging in the others.
 	DmsgTPDAllTransportsCXOPort uint16 = 55
 
+	// DmsgTPDRoutingCXOPort is the DMSG port of the TPD's routing feed: the
+	// transports that exist now, with the latency and throughput routes are
+	// weighed by, one leaf per visor (routing/<pk>) so a change ships only
+	// the shards it touched. Visors route on it; the all-transports feed
+	// stays for readers that predate it.
+	DmsgTPDRoutingCXOPort uint16 = 75
+
 	// DmsgTPDStatsCXOPort is the DMSG port the TPD's CXO network-aggregate
 	// stats publisher listens on. It carries the sub-kilobyte reductions the
 	// bulk feeds are otherwise downloaded to compute — the /all-transports/stats
