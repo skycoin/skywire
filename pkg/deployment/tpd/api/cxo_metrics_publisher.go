@@ -82,17 +82,6 @@ const (
 	// open hvui expects.
 	metricsTick = 60 * time.Second
 
-	// metricsFullEvery is how many ticks pass between full-window
-	// republishes. A settled day does not change, but three things
-	// still move it: bandwidth for yesterday keeps arriving for a
-	// while after UTC midnight, the store's expired-transport
-	// recovery adds records for past days, and days fall out of the
-	// window and must be retired. Republishing all 30 leaves every 30
-	// minutes covers all three at the cost of ONE 30-day store query
-	// — and the 29 settled leaves re-encode to the bytes they already
-	// had, so CXO ships nothing for them.
-	metricsFullEvery = 30
-
 	// legacyMetricsPrefix is the sub-tree the pre-day-leaf publisher
 	// wrote (metrics/days/<n>). Pruned once at startup so a feed
 	// backed by a persistent DB cannot serve a stale window forever.
@@ -115,11 +104,6 @@ type MetricsCXOPublisher struct {
 	// to retire leaves that are no longer produced. Only the publish
 	// loop touches it.
 	parts map[string]int
-	// curDate is the date the last cycle treated as "today", so a UTC
-	// midnight rollover can force a full republish instead of leaving
-	// yesterday's leaf carrying stale Live/Latency for up to 30
-	// minutes.
-	curDate string
 
 	mu        sync.Mutex
 	lastError error
@@ -197,12 +181,12 @@ func (m *MetricsCXOPublisher) loop(ctx context.Context) {
 
 	t := time.NewTicker(metricsTick)
 	defer t.Stop()
-	for n := 1; ; n++ {
+	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			m.publish(ctx, n%metricsFullEvery == 0)
+			m.publish(ctx, false)
 		}
 	}
 }
@@ -212,23 +196,17 @@ func (m *MetricsCXOPublisher) loop(ctx context.Context) {
 // MaxObjectSize covers the encoding overhead CXO adds around the payload.
 const maxPublishBody = 12 * 1024 * 1024
 
-// publish recomputes and writes the day leaves. full=false refreshes
-// only the current day, which is the only leaf that can move
-// minute-to-minute; full=true recomputes the whole window, rewrites
-// every day leaf (settled ones re-encode to their existing bytes and
-// cost nothing on the wire) and retires the days that dropped out.
+// publish writes the day leaves. A settled day never changes, so it is
+// computed once — by the full cycle at startup, or on its last day open —
+// and never read from the store again: each tick reads only the open days
+// (store.OpenMetricsDays: today, and yesterday for a few minutes after
+// UTC midnight) and retires days that left the window. The whole window
+// used to be re-read every 30 minutes — one HGETALL per transport per day,
+// over ~180k transports — to re-encode 29 leaves to the bytes they held.
 func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
 	now := time.Now().UTC()
-	today := now.Format(store.MetricsDateFormat)
-	if today != m.curDate {
-		// A UTC rollover means yesterday's leaf still carries the Live
-		// and Latency fields only the current day is supposed to hold.
-		// Rewrite the window rather than leaving that until the next
-		// scheduled full cycle.
-		full = true
-	}
-
-	days := 1
+	window := store.MetricsWindowDates(now, metricsWindowDays)
+	days := store.OpenMetricsDays(now)
 	if full {
 		days = metricsWindowDays
 	}
@@ -248,11 +226,11 @@ func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
 		return
 	}
 
-	dates := store.MetricsWindowDates(now, days)
-	byDate := store.PivotDailyMetrics(metrics, dates)
+	fresh := window[:days]
+	byDate := store.PivotDailyMetrics(metrics, fresh)
 
-	bodies := make(map[string][][]byte, len(dates))
-	for _, date := range dates {
+	bodies := make(map[string][][]byte, len(fresh))
+	for _, date := range fresh {
 		parts, gerr := gzipParts(byDate[date], maxPublishBody)
 		if gerr != nil {
 			m.log.WithError(gerr).WithField("date", date).Warn("metrics marshal failed")
@@ -262,13 +240,15 @@ func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
 		bodies[date] = parts
 	}
 
-	ops, next := planDayOps(bodies, dates, m.parts, full)
+	// The whole window, so settled days are kept (planDayOps leaves a date
+	// with no body untouched) and days that left it are retired.
+	ops, next := planDayOps(bodies, window, m.parts, true)
 	if err := m.pub.PutBatch(ops); err != nil {
 		m.log.WithError(err).Warn("publisher PutBatch failed")
 		m.recordError(err)
 		return
 	}
-	m.parts, m.curDate = next, today
+	m.parts = next
 }
 
 // planDayOps turns one cycle's gzipped bodies into the PutBatch that

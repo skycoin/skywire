@@ -102,10 +102,10 @@ const (
 	statsDailyDays = 30
 
 	// statsDailyInterval is how often the daily aggregate is
-	// recomputed. Deliberately far slower than statsPublishInterval:
-	// unlike the other two paths this one is a 30-day store query
-	// (GetNetworkMetrics pipelines one HGetAll per transport per day),
-	// so the cost is the recompute, not the ~2.7 KB body. The figures
+	// refreshed. Deliberately far slower than statsPublishInterval:
+	// each refresh reads the open days from the store (GetNetworkMetrics
+	// pipelines one HGetAll per transport per day; settled days are held,
+	// see dailyByDate), so the cost is the read, not the ~2.7 KB body. The figures
 	// are calendar-day totals — they move slowly enough that five
 	// minutes is indistinguishable from twelve seconds to any consumer,
 	// and every consumer of this path already caches on top of it.
@@ -259,6 +259,10 @@ type StatsCXOPublisher struct {
 	// error backs off to statsDailyInterval instead of retrying the
 	// 30-day query on every 12 s tick.
 	lastDailyAt time.Time
+	// dailyByDate holds each day's aggregate as last read while it was
+	// open. A settled day is final (store.OpenMetricsDays), so after the
+	// startup read only the open days are read again.
+	dailyByDate map[string]store.DailyAggregate
 
 	// putFn writes one already-gzipped leaf. Always s.pub.Put in
 	// production; a seam so the publish path (gzip, holdover, the set
@@ -455,8 +459,15 @@ func (s *StatsCXOPublisher) publishVersions(now time.Time) {
 // all-or-nothing at request time while a subscriber reads a snapshot it
 // already holds.
 func (s *StatsCXOPublisher) publishDaily(ctx context.Context, now time.Time) {
+	// The whole window once; after that only the days that can still
+	// change. Re-reading all 30 every cycle was one HGETALL per transport
+	// per day for figures that no longer move.
+	days := store.OpenMetricsDays(now)
+	if len(s.dailyByDate) == 0 {
+		days = statsDailyDays
+	}
 	resp, err := s.api.store.GetNetworkMetrics(ctx, store.MetricsQuery{
-		Days:      statsDailyDays,
+		Days:      days,
 		Live:      "all",
 		Bandwidth: true,
 		Latency:   true,
@@ -468,13 +479,17 @@ func (s *StatsCXOPublisher) publishDaily(ctx context.Context, now time.Time) {
 	}
 	// An empty series is not news, it is a store that has not answered.
 	// Publishing it would overwrite a good body with nothing.
-	if resp == nil || len(resp.Daily) == 0 {
+	if resp == nil {
+		return
+	}
+	daily, cumulative := s.foldDaily(now, resp.Daily)
+	if len(daily) == 0 {
 		return
 	}
 	verdict := s.lastTransportVerdict
 	body := DailyStats{
-		Daily:                 resp.Daily,
-		Cumulative:            resp.Cumulative,
+		Daily:                 daily,
+		Cumulative:            cumulative,
 		Days:                  statsDailyDays,
 		ObservedAt:            now,
 		Complete:              verdict.complete,
@@ -602,3 +617,40 @@ func (c *completenessTracker) observe(now time.Time, value int) completenessVerd
 
 // Publisher returns the underlying feed publisher, for introspection.
 func (x *StatsCXOPublisher) Publisher() *treestore.Publisher { return x.pub }
+
+// foldDaily records the days just read, drops days that left the window,
+// and returns the window's series, newest first, with its cumulative
+// totals.
+func (s *StatsCXOPublisher) foldDaily(now time.Time, read []store.DailyAggregate) ([]store.DailyAggregate, *store.CumulativeAggregate) {
+	if s.dailyByDate == nil {
+		s.dailyByDate = make(map[string]store.DailyAggregate, statsDailyDays)
+	}
+	for _, d := range read {
+		s.dailyByDate[d.Date] = d
+	}
+	window := store.MetricsWindowDates(now, statsDailyDays)
+	inWindow := make(map[string]bool, len(window))
+	daily := make([]store.DailyAggregate, 0, len(window))
+	cumulative := &store.CumulativeAggregate{ByType: make(map[string]*store.TypeMetricAggregate)}
+	for _, date := range window {
+		inWindow[date] = true
+		d, ok := s.dailyByDate[date]
+		if !ok {
+			continue
+		}
+		daily = append(daily, d)
+		cumulative.Bandwidth += d.Bandwidth
+		for t, a := range d.ByType {
+			if cumulative.ByType[t] == nil {
+				cumulative.ByType[t] = &store.TypeMetricAggregate{}
+			}
+			cumulative.ByType[t].Bandwidth += a.Bandwidth
+		}
+	}
+	for date := range s.dailyByDate {
+		if !inWindow[date] {
+			delete(s.dailyByDate, date)
+		}
+	}
+	return daily, cumulative
+}
