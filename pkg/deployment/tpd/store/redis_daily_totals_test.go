@@ -2,10 +2,10 @@ package store
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -13,23 +13,19 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
-// testRedisURL is a scratch database the tests flush. CI's redis-store job
-// serves it; without a redis the tests skip.
-const testRedisURL = "redis://localhost:6379/15"
+// testRedisEnv names a scratch redis database the tests flush. CI's
+// redis-store job sets it, so there the tests must reach redis; unset, they
+// skip.
+const testRedisEnv = "SKYWIRE_TEST_REDIS"
 
 func newTestRedisStore(t *testing.T) *redisStore {
 	t.Helper()
-	ctx := context.Background()
-	opt, err := redis.ParseURL(testRedisURL)
-	require.NoError(t, err)
-	opt.MaxRetries, opt.DialTimeout = -1, time.Second
-	probe := redis.NewClient(opt)
-	perr := probe.Ping(ctx).Err()
-	_ = probe.Close() //nolint:errcheck
-	if perr != nil {
-		t.Skipf("no redis at %s: %v", testRedisURL, perr)
+	url := os.Getenv(testRedisEnv)
+	if url == "" {
+		t.Skipf("%s unset; no redis to test against", testRedisEnv)
 	}
-	s, err := newRedisStore(ctx, testRedisURL, "", 4, time.Minute, logging.MustGetLogger("test"))
+	ctx := context.Background()
+	s, err := newRedisStore(ctx, url, "", 4, time.Minute, logging.MustGetLogger("test"))
 	require.NoError(t, err)
 	require.NoError(t, s.client.FlushDB(ctx).Err())
 	t.Cleanup(func() { _ = s.client.FlushDB(ctx).Err() }) //nolint:errcheck
