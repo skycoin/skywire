@@ -27,28 +27,23 @@ func (s *qosStore) GetAllTransportsWithLatency(_ context.Context, self bool) ([]
 	return s.entries, nil
 }
 
-func TestRoutingSnapshotCarriesMetricsNotBandwidth(t *testing.T) {
+// The routing read is the QoS one; the all-transports feed carries topology
+// only, as it always did — metrics are the routing feed's.
+func TestRoutingEntriesCarryMetricsLegacyDoesNot(t *testing.T) {
 	a, _ := cipher.GenerateKeyPair()
 	b, _ := cipher.GenerateKeyPair()
 	e := &transport.Entry{Edges: transport.SortEdges(a, b), Type: tptypes.STCPR, Latency: 12.3456, ThroughputBps: 123456.7, Bandwidth: 999}
-	p := &AllTransportsCXOPublisher{api: &API{store: &qosStore{entries: []*transport.Entry{e}}}}
 
-	entries, err := p.routingSnapshot(context.Background())
+	entries, err := routingEntries(context.Background(), &qosStore{entries: []*transport.Entry{e}})
 	require.NoError(t, err)
+	require.Equal(t, 12.3456, entries[0].Latency)
+
 	body, err := json.Marshal(toWireEntries(entries))
 	require.NoError(t, err)
-
 	var got []map[string]any
 	require.NoError(t, json.Unmarshal(body, &got))
 	require.Len(t, got, 1)
-	require.Equal(t, 12.3, got[0]["latency_ms"])
-	require.Equal(t, 123000.0, got[0]["throughput_bps"])
-	require.NotContains(t, got[0], "bandwidth", "registration bandwidth is not routing data")
-}
-
-func TestRoundSig3(t *testing.T) {
-	require.Equal(t, 0.0, roundSig3(0))
-	require.Equal(t, 123000.0, roundSig3(123456.7))
-	require.Equal(t, 0.00123, roundSig3(0.0012345))
-	require.Equal(t, 9.99, roundSig3(9.994))
+	for _, k := range []string{"latency_ms", "throughput_bps", "bandwidth"} {
+		require.NotContains(t, got[0], k)
+	}
 }

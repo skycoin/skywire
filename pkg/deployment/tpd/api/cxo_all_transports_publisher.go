@@ -19,7 +19,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"math"
 	"sync"
 	"time"
 
@@ -61,20 +60,22 @@ func toWireEntries(entries []*transport.Entry) []allTransportsWireEntry {
 			continue
 		}
 		out = append(out, allTransportsWireEntry{
-			Edges:         e.Edges,
-			Type:          e.Type,
-			Label:         e.Label,
-			Latency:       math.Round(e.Latency*10) / 10,
-			ThroughputBps: roundSig3(e.ThroughputBps),
+			Edges: e.Edges,
+			Type:  e.Type,
+			Label: e.Label,
 		})
 	}
 	return out
 }
 
-// allTransportsPublishInterval is the recompute cadence. 60s matches
-// the metrics/uptime publishers; the store's allTransportsCache
-// memoizes between ticks so the actual cost is bounded.
-const allTransportsPublishInterval = 60 * time.Second
+// allTransportsPublishInterval is the recompute cadence. The snapshot is
+// the whole network — ~2.6 MB gzipped at ~80k transports — and the
+// transport set churns every minute, so each republish is a full download
+// for every subscriber. Visors now route on the routing feed, which ships
+// only changed shards; this feed serves readers that predate it, and a
+// registration only lapses after the 5-minute entry TTL, so a snapshot per
+// TTL is as fresh as the data it lists.
+const allTransportsPublishInterval = 5 * time.Minute
 
 // Published paths. Exported so visor-side subscribers don't have to
 // duplicate the format strings.
@@ -164,7 +165,9 @@ func (a *AllTransportsCXOPublisher) loop(ctx context.Context) {
 }
 
 func (a *AllTransportsCXOPublisher) publishOnce(ctx context.Context) {
-	entries, err := a.routingSnapshot(ctx)
+	// Topology only, as this feed always was: metrics belong to the routing
+	// feed, where a change ships only its own shard.
+	entries, err := a.api.store.GetAllTransports(ctx, false)
 	if err != nil {
 		a.log.WithError(err).Debug("all-transports fetch failed; will retry next tick")
 		a.recordError(err)
@@ -192,17 +195,10 @@ func (a *AllTransportsCXOPublisher) publishOnce(ctx context.Context) {
 	}
 }
 
-// routingSnapshot is what routers need: the transports that exist now —
+// routingEntries is what routers need: the transports that exist now —
 // registrations refreshed within the entry TTL, withdrawn at once when a
 // visor's published transport list drops one — with the latency and
-// throughput routes are weighed by. It used to be the metric-free read, so
-// every visor synced ~80k transports and not one latency figure.
-func (a *AllTransportsCXOPublisher) routingSnapshot(ctx context.Context) ([]*transport.Entry, error) {
-	return routingEntries(ctx, a.api.store)
-}
-
-// routingEntries is the routing read shared by the all-transports and
-// routing feeds.
+// throughput routes are weighed by.
 func routingEntries(ctx context.Context, st store.Store) ([]*transport.Entry, error) {
 	if qs, ok := st.(interface {
 		GetAllTransportsWithLatency(context.Context, bool) ([]*transport.Entry, error)
@@ -210,16 +206,6 @@ func routingEntries(ctx context.Context, st store.Store) ([]*transport.Entry, er
 		return qs.GetAllTransportsWithLatency(ctx, false)
 	}
 	return st.GetAllTransports(ctx, false)
-}
-
-// roundSig3 rounds v to three significant digits, so a figure that only jitters
-// does not change the published bytes.
-func roundSig3(v float64) float64 {
-	if v == 0 {
-		return 0
-	}
-	p := math.Pow(10, 3-math.Ceil(math.Log10(math.Abs(v))))
-	return math.Round(v*p) / p
 }
 
 func (a *AllTransportsCXOPublisher) recordError(err error) {
