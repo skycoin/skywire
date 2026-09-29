@@ -91,8 +91,6 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 
 	storeConfig := cfg.StoreConfig()
 
-	metricsutil.ServePProf(logger, cfg.PprofAddr, "route-finder")
-
 	// The route finder only reads transport data, so its TTL defaults longer
 	// than TPD's.
 	ttl := cfg.EntryTimeout.Std()
@@ -137,6 +135,7 @@ func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 
 	logger := services.NewLogger(cfg.LogTag("route_finder"), cfg.LogLevel)
+	defer cfg.StartPprof(logger)()
 
 	pk := cfg.PubKey
 	sk := cfg.SecKey

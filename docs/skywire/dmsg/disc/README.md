@@ -29,9 +29,9 @@ Response Examples:
 GET /health
 {
       "build_info": {
-        "commit": "abc1234",
-        "date": "2024-01-15T10:30:00Z",
-        "version": "v1.3.29"
+        "commit": "<commit>",
+        "date": "<build-date>",
+        "version": "<version>"
       },
       "dmsg_address": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7:80",
       "dmsg_servers": [
@@ -63,11 +63,9 @@ GET /dmsg-discovery/entry/{pk} (server entry)
       "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
       "server": {
         "address": "172.105.179.5:30085",
-        "address_udp": "172.105.179.5:30085",
         "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.theskywirenetwork.net/dmsg",
         "availableSessions": 0
-      },
-      "protocol": "quic"
+      }
     }
 
 POST /dmsg-discovery/entry/ (new entry)
@@ -109,11 +107,9 @@ GET /dmsg-discovery/entries (all client and server entries)
         "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
         "server": {
           "address": "172.105.179.5:30085",
-          "address_udp": "172.105.179.5:30085",
           "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.theskywirenetwork.net/dmsg",
           "availableSessions": 0
-        },
-        "protocol": "quic"
+        }
       },
       {
         "version": "",
@@ -122,11 +118,9 @@ GET /dmsg-discovery/entries (all client and server entries)
         "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server": {
           "address": "139.162.160.227:30086",
-          "address_udp": "139.162.160.227:30086",
           "address_ws": "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.theskywirenetwork.net/dmsg",
           "availableSessions": 0
-        },
-        "protocol": "quic"
+        }
       }
     ]
 
@@ -155,11 +149,9 @@ GET /dmsg-discovery/available_servers (servers with available_streams > 0)
         "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
         "server": {
           "address": "172.105.179.5:30085",
-          "address_udp": "172.105.179.5:30085",
           "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.theskywirenetwork.net/dmsg",
           "availableSessions": 0
-        },
-        "protocol": "quic"
+        }
       },
       {
         "version": "",
@@ -168,11 +160,9 @@ GET /dmsg-discovery/available_servers (servers with available_streams > 0)
         "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server": {
           "address": "139.162.160.227:30086",
-          "address_udp": "139.162.160.227:30086",
           "address_ws": "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.theskywirenetwork.net/dmsg",
           "availableSessions": 0
-        },
-        "protocol": "quic"
+        }
       }
     ]
 
@@ -185,11 +175,9 @@ GET /dmsg-discovery/all_servers (all server entries)
         "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
         "server": {
           "address": "172.105.179.5:30085",
-          "address_udp": "172.105.179.5:30085",
           "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.theskywirenetwork.net/dmsg",
           "availableSessions": 0
-        },
-        "protocol": "quic"
+        }
       },
       {
         "version": "",
@@ -198,11 +186,9 @@ GET /dmsg-discovery/all_servers (all server entries)
         "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server": {
           "address": "139.162.160.227:30086",
-          "address_udp": "139.162.160.227:30086",
           "address_ws": "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.theskywirenetwork.net/dmsg",
           "availableSessions": 0
-        },
-        "protocol": "quic"
+        }
       }
     ]
 
@@ -234,35 +220,30 @@ skywire dmsg disc
 ## Flags
 
 ```
-  -a, --addr string                                                                    address to bind to
-                                                                                        (default ":9090")
-      --auth string                                                                    auth passphrase as simple auth for official dmsg servers registration
-  -c, --config skywire cli config gen --dmsgdisc -o /etc/skywire/dmsg-discovery.json   path to JSON config file. When set, every other CLI flag below is ignored — fields come from the config file. Generate one with skywire cli config gen --dmsgdisc -o /etc/skywire/dmsg-discovery.json.
-                                                                                       
-      --dmsg-server-type string                                                        type of dmsg server on dmsghttp handler
-      --dmsgPort uint16                                                                dmsg port value
-                                                                                        (default 80)
-      --enable-load-testing                                                            enable load testing
-      --entry-timeout duration                                                         client discovery entry TTL (0 to disable)
-                                                                                        (default 1h0m0s)
-      --keyfile string                                                                 path to file containing secret key (auto-generated if missing)
-                                                                                       
-  -m, --metrics string                                                                 address to serve metrics API from
-      --mode string                                                                    listener mode: http|dual (dmsg-only is rejected — dmsg-servers reach this service over HTTP)
-      --official-servers string                                                        list of official dmsg servers keys separated by comma
-      --pprofaddr string                                                               pprof http port (default "localhost:6060")
-      --pprofmode string                                                               [ cpu | mem | mutex | block | trace | http ]
-      --redis string                                                                   redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)
-                                                                                        (default "redis://localhost:6379")
-      --sk cipher.SecKey                                                               dmsg secret key
-                                                                                        (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --syslog string                                                                  address in which to dial to syslog server
-      --syslog-lvl string                                                              minimum log level to report (default "info")
-      --syslog-net string                                                              network in which to dial to syslog server (default "udp")
-      --tag string                                                                     tag used for logging and metrics (default "dmsg_disc")
-      --test-environment                                                               distinguished between prod and test environment
-  -t, --testing                                                                        run for a test network: relaxed server checks, entries in memory unless --redis is set
-      --whitelist-keys string                                                          list of whitelisted keys of network monitor used for deregistration
+  -a, --addr string               plain-HTTP listen address (default ":9090")
+      --auth string               auth passphrase as simple auth for official dmsg servers registration
+  -c, --config string             path to a JSON config file; keys it sets override these flags
+                                  (generate one with: skywire cli config gen --dmsgdisc)
+      --dmsg-port uint16          dmsghttp listener port (default 80)
+      --dmsg-server-type string   type of dmsg server on dmsghttp handler
+      --enable-load-testing       enable load testing
+      --entry-timeout duration    how long an entry lives without a refresh (default 1h0m0s)
+      --keyfile string            file holding the secret key (generated if missing)
+  -l, --loglvl string             log level [trace|debug|info|warn|error|fatal|panic] (default "info")
+  -m, --metrics string            address to serve Prometheus metrics on
+      --mode string               listeners: http|dmsg|dual (default dual with a key, else http; env SKYWIRE_SVC_MODE overrides)
+      --official-servers string   list of official dmsg servers keys separated by comma
+  -r, --pprofaddr string          address http profiling serves on; alone it implies --pprofmode http (default localhost:6060)
+  -q, --pprofmode string          [ cpu | mem | mutex | block | trace | http ]
+      --redis string              redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)
+      --redis-pool-size int       redis connection pool size (default 10)
+      --sk cipher.SecKey          dmsg secret key (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --syslog string             address in which to dial to syslog server
+      --syslog-net string         network in which to dial to syslog server (default "udp")
+      --tag string                logging tag (default "dmsg_disc")
+      --test-environment          use the test deployment's defaults instead of production's
+  -t, --testing                   run for a test network: keep entries in memory unless --redis is set
+      --whitelist-keys string     network-monitor keys allowed to deregister entries, comma-separated
 ```
 
 ## Global Flags

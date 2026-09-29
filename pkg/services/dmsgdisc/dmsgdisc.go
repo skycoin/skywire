@@ -32,7 +32,6 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
-	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/disc/metrics"
@@ -107,8 +106,7 @@ func (s *service) Run(ctx context.Context) error {
 		}
 	}
 
-	stopPProf := dmsgcmdutil.InitPProf(log, cfg.PProfMode, cfg.PprofAddr)
-	defer stopPProf()
+	defer cfg.StartPprof(log)()
 
 	metricsutil.ServeHTTPMetrics(log, cfg.MetricsAddr)
 

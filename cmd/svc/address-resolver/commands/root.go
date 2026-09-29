@@ -15,7 +15,6 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/deployment/ar/api"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -25,26 +24,12 @@ import (
 )
 
 var (
-	configPath      string
-	addr            string
-	udpAddr         string
-	publicUDPAddr   string
-	metricsAddr     string
-	redisURL        string
-	redisPoolSize   int
-	entryTimeout    time.Duration
-	tag             string
-	logLvl          string
-	testing         bool
-	dmsgDisc        string
-	whitelistKeys   string
-	testEnvironment bool
-	sk              cipher.SecKey
-	keyFile         string
-	dmsgPort        uint16
-	dmsgServerType  string
-	pprofAddr       string
-	mode            string
+	flags          services.Flags
+	udpAddr        string
+	publicUDPAddr  string
+	dmsgDisc       string
+	whitelistKeys  string
+	dmsgServerType string
 )
 
 func generateExamples() string {
@@ -98,27 +83,12 @@ GET /security/nonces/{pk}
 }
 
 func init() {
-	RootCmd.Flags().StringVarP(&configPath, "config", "c", "", "path to JSON config file. Generate with: skywire cli config gen --ar -o /etc/skywire/address-resolver.json\n\r")
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9093", "address to bind to\n\r")
-	RootCmd.Flags().StringVar(&udpAddr, "udp-addr", ":30178", "UDP address to bind to for SUDPH\n\r")
-	RootCmd.Flags().StringVar(&publicUDPAddr, "public-udp-address", "", "externally-reachable host:port advertised in /health for SUDPH\n\rrequired for visors that reach this AR over dmsghttp")
-	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
-	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVar(&redisURL, "redis", "", "redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)\n\r")
-	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\n\r")
-	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 5*time.Minute, "address binding TTL (0 to disable)\n\r")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
-	RootCmd.Flags().StringVar(&tag, "tag", "address_resolver", "logging tag\n\r")
-	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "run for a test network: keep entries in memory unless --redis is set")
-	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(false), "url of dmsg discovery\n\r")
-	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration")
-	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment")
-	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
-	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsg-port", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
-	RootCmd.Flags().SetNormalizeFunc(cmdutil.LegacySvcFlagNormalizer)
+	flags.Bind(RootCmd.Flags(), services.FlagDefaults{Gen: "ar", Addr: ":9093", Tag: "address_resolver", EntryTimeout: 5 * time.Minute})
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(false), "url of dmsg-discovery")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
-	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)")
+	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "network-monitor keys allowed to deregister entries, comma-separated")
+	RootCmd.Flags().StringVar(&udpAddr, "udp-addr", ":30178", "UDP address to bind to for SUDPH")
+	RootCmd.Flags().StringVar(&publicUDPAddr, "public-udp-address", "", "externally-reachable host:port advertised in /health for SUDPH\n\rrequired for visors that reach this AR over dmsghttp")
 }
 
 // RootCmd contains the root command
@@ -161,7 +131,7 @@ Example:
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}
-		logger := logging.MustGetLogger(tag)
+		logger := logging.MustGetLogger(flags.LogTag("address_resolver"))
 
 		cfg, err := buildConfig()
 		if err != nil {
@@ -176,27 +146,12 @@ Example:
 }
 
 func buildConfig() (*ar.Config, error) {
-	if keyFile != "" {
-		if err := cmdutil.LoadOrGenerateKey(keyFile, &sk); err != nil {
-			return nil, err
-		}
+	common, err := flags.Resolve()
+	if err != nil {
+		return nil, err
 	}
 	cfg := &ar.Config{
-		Common: services.Common{
-			SecKey:          sk,
-			Addr:            addr,
-			MetricsAddr:     metricsAddr,
-			PprofAddr:       pprofAddr,
-			Redis:           redisURL,
-			RedisPoolSize:   redisPoolSize,
-			EntryTimeout:    services.Duration(entryTimeout),
-			Tag:             tag,
-			LogLevel:        logLvl,
-			Testing:         testing,
-			Mode:            mode,
-			TestEnvironment: testEnvironment,
-			DmsgPort:        dmsgPort,
-		},
+		Common:        common,
 		UDPAddr:       udpAddr,
 		PublicUDPAddr: publicUDPAddr,
 		Whitelist:     cmdutil.CommaSplit(whitelistKeys),
@@ -205,8 +160,8 @@ func buildConfig() (*ar.Config, error) {
 			ServerType: dmsgServerType,
 		},
 	}
-	if configPath != "" {
-		fileCfg, err := ar.LoadFile(configPath)
+	if flags.ConfigPath != "" {
+		fileCfg, err := ar.LoadFile(flags.ConfigPath)
 		if err != nil {
 			return nil, err
 		}
@@ -216,66 +171,17 @@ func buildConfig() (*ar.Config, error) {
 }
 
 func mergeFile(dst, src *ar.Config) {
-	if src.SecKey != (cipher.SecKey{}) {
-		dst.SecKey = src.SecKey
-	}
-	if src.Addr != "" {
-		dst.Addr = src.Addr
-	}
+	services.MergeCommon(&dst.Common, src.Common)
 	if src.UDPAddr != "" {
 		dst.UDPAddr = src.UDPAddr
 	}
 	if src.PublicUDPAddr != "" {
 		dst.PublicUDPAddr = src.PublicUDPAddr
 	}
-	if src.MetricsAddr != "" {
-		dst.MetricsAddr = src.MetricsAddr
-	}
-	if src.PprofAddr != "" {
-		dst.PprofAddr = src.PprofAddr
-	}
-	if src.Redis != "" {
-		dst.Redis = src.Redis
-	}
-	if src.RedisPoolSize > 0 {
-		dst.RedisPoolSize = src.RedisPoolSize
-	}
-	if src.EntryTimeout != 0 {
-		dst.EntryTimeout = src.EntryTimeout
-	}
-	if src.Tag != "" {
-		dst.Tag = src.Tag
-	}
-	if src.LogLevel != "" {
-		dst.LogLevel = src.LogLevel
-	}
-	if src.Testing {
-		dst.Testing = true
-	}
-	if src.Mode != "" {
-		dst.Mode = src.Mode
-	}
-	if src.TestEnvironment {
-		dst.TestEnvironment = true
-	}
 	if len(src.Whitelist) > 0 {
 		dst.Whitelist = src.Whitelist
 	}
-	if len(src.SurveyWhitelist) > 0 {
-		dst.SurveyWhitelist = src.SurveyWhitelist
-	}
-	if src.DmsgPort != 0 {
-		dst.DmsgPort = src.DmsgPort
-	}
-	if src.Dmsg.Discovery != "" {
-		dst.Dmsg.Discovery = src.Dmsg.Discovery
-	}
-	if src.Dmsg.ServerType != "" {
-		dst.Dmsg.ServerType = src.Dmsg.ServerType
-	}
-	if len(src.Dmsg.Servers) > 0 {
-		dst.Dmsg.Servers = src.Dmsg.Servers
-	}
+	dst.Dmsg.Merge(src.Dmsg)
 }
 
 // Execute executes root CLI command

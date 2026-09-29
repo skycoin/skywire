@@ -118,8 +118,6 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 		}
 	}
 
-	metricsutil.ServePProf(logger, cfg.PprofAddr, "transport-discovery")
-
 	for _, k := range cfg.Whitelist {
 		k = strings.TrimSpace(k)
 		if k != "" {
@@ -201,6 +199,7 @@ func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 
 	logger := services.NewLogger(cfg.LogTag("transport_discovery"), cfg.LogLevel)
+	defer cfg.StartPprof(logger)()
 
 	pk := cfg.PubKey
 	sk := cfg.SecKey

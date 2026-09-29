@@ -14,7 +14,6 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -25,21 +24,11 @@ import (
 var log = logging.MustGetLogger("service-discovery")
 
 var (
-	configPath     string
-	addr           string
-	metricsAddr    string
-	redisURL       string
-	testNetwork    bool
+	flags          services.Flags
 	dmsgDisc       string
 	whitelistKeys  string
-	sk             cipher.SecKey
-	keyFile        string
-	dmsgPort       uint16
 	dmsgServerType string
 	geoipURL       string
-	pprofAddr      string
-	entryTimeout   time.Duration
-	mode           string
 )
 
 // generateExamples creates example responses from actual struct types
@@ -94,25 +83,11 @@ GET /security/nonces/{pk}
 }
 
 func init() {
-	RootCmd.Flags().StringVarP(&configPath, "config", "c", "", "path to JSON config file. Generate with: skywire cli config gen --sd -o /etc/skywire/service-discovery.json\n\r")
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9098", "address to bind to\n\r")
-	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
-	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVarP(&redisURL, "redis", "r", "", "redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)\n\r")
-	RootCmd.Flags().StringVarP(&whitelistKeys, "whitelist-keys", "w", "", "list of whitelisted keys of network monitor used for deregistration")
-	RootCmd.Flags().BoolVarP(&testNetwork, "testing", "t", false, "run for a test network: keep entries in memory unless --redis is set")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", dmsg.DiscURL(false), "url of dmsg-discovery\n\r")
-	RootCmd.Flags().StringVar(&geoipURL, "geoip", deployment.Prod.GeoIP, "url of geoip service\n\r")
+	flags.Bind(RootCmd.Flags(), services.FlagDefaults{Gen: "sd", Addr: ":9098", Tag: "service_discovery", EntryTimeout: 5 * time.Minute})
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(false), "url of dmsg-discovery")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
-	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\n\r")
-	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsg-port", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
-	RootCmd.Flags().SetNormalizeFunc(cmdutil.LegacySvcFlagNormalizer)
-	// 5 min is ~3.3× the 90s client refresh interval
-	// (skyenv.ServiceDiscUpdateInterval), giving safe margin for one
-	// or two dropped refreshes without expiring a live entry.
-	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 5*time.Minute, "client service entry TTL (0 to disable)\n\r")
-	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)")
+	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "network-monitor keys allowed to deregister entries, comma-separated")
+	RootCmd.Flags().StringVar(&geoipURL, "geoip", deployment.Prod.GeoIP, "url of geoip service")
 }
 
 // RootCmd contains the root service-discovery command
@@ -163,23 +138,12 @@ Example:
 // buildConfig collects flag values + the optional --config file
 // into one sd.Config. File values override flag values where set.
 func buildConfig() (*sd.Config, error) {
-	if keyFile != "" {
-		if err := cmdutil.LoadOrGenerateKey(keyFile, &sk); err != nil {
-			return nil, err
-		}
+	common, err := flags.Resolve()
+	if err != nil {
+		return nil, err
 	}
 	cfg := &sd.Config{
-		Common: services.Common{
-			SecKey:       sk,
-			Addr:         addr,
-			MetricsAddr:  metricsAddr,
-			PprofAddr:    pprofAddr,
-			Redis:        redisURL,
-			EntryTimeout: services.Duration(entryTimeout),
-			Mode:         mode,
-			DmsgPort:     dmsgPort,
-			Testing:      testNetwork,
-		},
+		Common:    common,
 		Whitelist: cmdutil.CommaSplit(whitelistKeys),
 		GeoIP:     geoipURL,
 		Dmsg: cmdutil.DmsgConfig{
@@ -187,8 +151,8 @@ func buildConfig() (*sd.Config, error) {
 			ServerType: dmsgServerType,
 		},
 	}
-	if configPath != "" {
-		fileCfg, err := sd.LoadFile(configPath)
+	if flags.ConfigPath != "" {
+		fileCfg, err := sd.LoadFile(flags.ConfigPath)
 		if err != nil {
 			return nil, err
 		}
@@ -198,51 +162,14 @@ func buildConfig() (*sd.Config, error) {
 }
 
 func mergeFile(dst, src *sd.Config) {
-	if src.SecKey != (cipher.SecKey{}) {
-		dst.SecKey = src.SecKey
-	}
-	if src.Addr != "" {
-		dst.Addr = src.Addr
-	}
-	if src.MetricsAddr != "" {
-		dst.MetricsAddr = src.MetricsAddr
-	}
-	if src.PprofAddr != "" {
-		dst.PprofAddr = src.PprofAddr
-	}
-	if src.Redis != "" {
-		dst.Redis = src.Redis
-	}
-	if src.EntryTimeout != 0 {
-		dst.EntryTimeout = src.EntryTimeout
-	}
-	if src.Testing {
-		dst.Testing = true
-	}
-	if src.Mode != "" {
-		dst.Mode = src.Mode
-	}
+	services.MergeCommon(&dst.Common, src.Common)
 	if len(src.Whitelist) > 0 {
 		dst.Whitelist = src.Whitelist
-	}
-	if len(src.SurveyWhitelist) > 0 {
-		dst.SurveyWhitelist = src.SurveyWhitelist
 	}
 	if src.GeoIP != "" {
 		dst.GeoIP = src.GeoIP
 	}
-	if src.DmsgPort != 0 {
-		dst.DmsgPort = src.DmsgPort
-	}
-	if src.Dmsg.Discovery != "" {
-		dst.Dmsg.Discovery = src.Dmsg.Discovery
-	}
-	if src.Dmsg.ServerType != "" {
-		dst.Dmsg.ServerType = src.Dmsg.ServerType
-	}
-	if len(src.Dmsg.Servers) > 0 {
-		dst.Dmsg.Servers = src.Dmsg.Servers
-	}
+	dst.Dmsg.Merge(src.Dmsg)
 }
 
 // Execute executes root CLI command.

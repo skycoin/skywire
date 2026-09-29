@@ -46,6 +46,26 @@ type DmsgConfig struct {
 	Servers []*disc.Entry `json:"servers,omitempty"`
 }
 
+// Merge overlays every field src sets onto d, the way each service lays
+// its config file over its command-line flags.
+func (d *DmsgConfig) Merge(src DmsgConfig) {
+	if src.Discovery != "" {
+		d.Discovery = src.Discovery
+	}
+	if src.DiscoveryDmsg != "" {
+		d.DiscoveryDmsg = src.DiscoveryDmsg
+	}
+	if src.SessionsCount != 0 {
+		d.SessionsCount = src.SessionsCount
+	}
+	if src.ServerType != "" {
+		d.ServerType = src.ServerType
+	}
+	if len(src.Servers) > 0 {
+		d.Servers = src.Servers
+	}
+}
+
 // PKFromDmsgURL extracts the dmsg PK from a URL of the form
 // `dmsg://<PK>:<port>[/path]`. Returns the zero PK when the URL is
 // empty, malformed, or doesn't carry a valid PK in the host part.

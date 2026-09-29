@@ -183,38 +183,28 @@ skywire svc tpd
 ## Flags
 
 ```
-  -a, --addr string               address to bind to
-                                   (default ":9091")
-  -c, --config string             path to JSON config file. When set, fields below come from the config file. Generate one with: skywire cli config gen --tpd -o /etc/skywire/transport-discovery.json
-                                  
-      --dmsg-disc string          url of dmsg-discovery
-                                   (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
-      --dmsg-port uint16          dmsg port value
-                                   (default 80)
+  -a, --addr string               plain-HTTP listen address (default ":9091")
+  -c, --config string             path to a JSON config file; keys it sets override these flags
+                                  (generate one with: skywire cli config gen --tpd)
+      --dmsg-disc string          url of dmsg-discovery (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
+      --dmsg-port uint16          dmsghttp listener port (default 80)
       --dmsg-server-type string   type of dmsg server on dmsghttp handler
-      --entry-timeout duration    transport entry TTL (0 to disable)
-                                   (default 5m0s)
-      --keyfile string            path to file containing secret key (auto-generated if missing)
-                                  
-  -l, --loglvl string             [info|error|warn|debug|trace|panic]
-                                   (default "info")
-  -m, --metrics string            address to bind metrics API to
-      --mode string               listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)
-      --pprof string              address to bind pprof debug server (e.g. localhost:6060)
+      --entry-timeout duration    how long an entry lives without a refresh (default 5m0s)
+      --keyfile string            file holding the secret key (generated if missing)
+  -l, --loglvl string             log level [trace|debug|info|warn|error|fatal|panic] (default "info")
+  -m, --metrics string            address to serve Prometheus metrics on
+      --mode string               listeners: http|dmsg|dual (default dual with a key, else http; env SKYWIRE_SVC_MODE overrides)
+  -r, --pprofaddr string          address http profiling serves on; alone it implies --pprofmode http (default localhost:6060)
+  -q, --pprofmode string          [ cpu | mem | mutex | block | trace | http ]
       --redis string              redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)
-                                   (default "redis://localhost:6379")
-      --redis-pool-size int       redis connection pool size
-                                   (default 10)
-      --sk cipher.SecKey          dmsg secret key
-                                   (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --store-data-path string    path for bandwidth backup files
-                                   (default "/var/lib/skywire/tpd/bandwidth")
-      --tag string                logging tag
-                                   (default "transport_discovery")
-      --test-environment          distinguished between prod and test environment
+      --redis-pool-size int       redis connection pool size (default 10)
+      --sk cipher.SecKey          dmsg secret key (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --store-data-path string    path for bandwidth backup files (default "/var/lib/skywire/tpd/bandwidth")
+      --tag string                logging tag (default "transport_discovery")
+      --test-environment          use the test deployment's defaults instead of production's
   -t, --testing                   run for a test network: keep entries in memory unless --redis is set
       --uptime-db string          path for the service-self uptime bbolt store (empty disables) (default "/var/lib/skywire/tpd/uptime.db")
-      --whitelist-keys string     list of whitelisted keys of network monitor used for deregistration
+      --whitelist-keys string     network-monitor keys allowed to deregister entries, comma-separated
 ```
 
 ## Global Flags

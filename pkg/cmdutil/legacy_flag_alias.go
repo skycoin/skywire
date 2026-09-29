@@ -26,6 +26,12 @@ var legacyFlagAliases = map[string]string{
 	// Renamed to --dmsg-port for consistency with --dmsg-disc,
 	// --dmsg-server-type, etc. Old form kept as a silent alias.
 	"dmsgPort": "dmsg-port",
+	// 2026-09-29: tpd/ar/rf/sd took --pprof <addr>; every service now takes
+	// --pprofmode/--pprofaddr like the visor and the dmsg tools, and an
+	// address alone still means http.
+	"pprof": "pprofaddr",
+	// dmsg disc took its log level as --syslog-lvl; every service uses --loglvl.
+	"syslog-lvl": "loglvl",
 }
 
 // LegacySvcFlagNormalizer is the NormalizeFunc every svc command's
