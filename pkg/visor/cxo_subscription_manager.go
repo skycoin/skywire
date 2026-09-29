@@ -46,6 +46,7 @@ const (
 	FeedDMSGDClientsByServer = cxosub.FeedDMSGDClientsByServer
 	FeedTPDAllTransports     = cxosub.FeedTPDAllTransports
 	FeedTPDStats             = cxosub.FeedTPDStats
+	FeedTPDRouting           = cxosub.FeedTPDRouting
 )
 
 // Re-exported tab constants.
@@ -107,15 +108,15 @@ func (v *Visor) CXOSubMgr() *CXOSubscriptionManager {
 		}
 	}
 	v.cxoSubMgr = NewCXOSubscriptionManager(v, interval, v.MasterLogger().PackageLogger("cxo_subscription_manager"))
-	// Keep the transport-snapshot subscription up continuously. Route
-	// calculation reads FeedTPDAllTransports on every dial; letting the
+	// Keep the routing subscription up continuously. Route calculation
+	// reads FeedTPDRouting on every dial; letting the
 	// ~10s-grace teardown drop it between dials just forces a fresh CXO
 	// subscription — a new dmsg dial + Noise/PQ handshake — on the next
 	// one, which on the single-threaded wasm visor is pure churn. Pinned
 	// once here (released only on Close), so liveServe stays connected and
 	// pushes Root updates live; the router's route-calc cache then tracks
 	// real transport changes instead of a timer.
-	v.cxoSubMgr.Pin(FeedTPDAllTransports)
+	v.cxoSubMgr.Pin(FeedTPDRouting)
 	return v.cxoSubMgr
 }
 
@@ -163,6 +164,12 @@ func (v *Visor) cxoFeedSpec(fk cxosub.Feed) (cipher.PubKey, uint16, string, erro
 			return cipher.PubKey{}, 0, "", errors.New("no TPD CXO peer (transport.discovery_dmsg unset)")
 		}
 		return pk, skyenv.DmsgTPDStatsCXOPort, "stats/", nil
+	case FeedTPDRouting:
+		pk, ok := tpdCXOPeer(v)
+		if !ok {
+			return cipher.PubKey{}, 0, "", errors.New("no TPD CXO peer (transport.discovery_dmsg unset)")
+		}
+		return pk, skyenv.DmsgTPDRoutingCXOPort, "routing/", nil
 	}
 	return cipher.PubKey{}, 0, "", fmt.Errorf("unknown feed: %d", fk)
 }

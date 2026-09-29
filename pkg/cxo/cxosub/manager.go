@@ -80,6 +80,11 @@ const (
 	// republished on a timer — the feed a chart reads instead of
 	// downloading a bulk snapshot to reduce it locally.
 	FeedTPDStats
+	// FeedTPDRouting is TPD's routing feed: the transports that exist
+	// now with their latency and throughput, one leaf per visor
+	// (routing/<pk>). What visors route on; a change ships only the
+	// shards it touched.
+	FeedTPDRouting
 )
 
 // FeedRoute returns the fixed dmsg CXO port and TreeStore path prefix a feed's
@@ -106,6 +111,8 @@ func FeedRoute(f Feed) (port uint16, prefix string, ok bool) {
 		return skyenv.DmsgTPDAllTransportsCXOPort, "transports/all/", true
 	case FeedTPDStats:
 		return skyenv.DmsgTPDStatsCXOPort, "stats/", true
+	case FeedTPDRouting:
+		return skyenv.DmsgTPDRoutingCXOPort, "routing/", true
 	}
 	return 0, "", false
 }
@@ -171,7 +178,7 @@ var tabFeedDeps = map[Tab][]Feed{
 	TabUptime:            {FeedTPDUptime},
 	TabAutoconnect:       {FeedSDServices},
 	TabCLIServices:       {FeedSDServices},
-	TabCLITransports:     {FeedTPDAllTransports},
+	TabCLITransports:     {FeedTPDRouting},
 	TabRoutingPolicy:     {FeedSDServices},
 	TabDmsgEntryLookup:   {FeedDMSGDClientsByServer},
 	TabNetworkStats:      {FeedTPDStats},
@@ -273,7 +280,7 @@ const largeFeedFirstSyncTimeout = 45 * time.Second
 // fast feeds.
 func FeedFirstSyncTimeout(f Feed) time.Duration {
 	switch f {
-	case FeedTPDAllTransports, FeedSDServices, FeedTPDMetrics:
+	case FeedTPDAllTransports, FeedTPDRouting, FeedSDServices, FeedTPDMetrics:
 		return largeFeedFirstSyncTimeout
 	}
 	return FirstSyncTimeout
@@ -682,6 +689,8 @@ func FeedString(feed Feed) string {
 		return "tpd-all-transports"
 	case FeedTPDStats:
 		return "tpd-stats"
+	case FeedTPDRouting:
+		return "tpd-routing"
 	}
 	return fmt.Sprintf("feed#%d", feed)
 }
@@ -702,6 +711,8 @@ func FeedFromString(name string) (Feed, bool) {
 		return FeedTPDAllTransports, true
 	case "tpd-stats":
 		return FeedTPDStats, true
+	case "tpd-routing":
+		return FeedTPDRouting, true
 	}
 	return 0, false
 }

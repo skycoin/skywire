@@ -18,12 +18,6 @@ package visor
 import (
 	"encoding/json"
 	"errors"
-
-	"github.com/google/uuid"
-
-	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
-	tpdapi "github.com/skycoin/skywire/pkg/deployment/tpd/api"
-	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // ErrTPDAllTransportsNotReady is returned when the CXO subscriber
@@ -31,11 +25,12 @@ import (
 // synced).
 var ErrTPDAllTransportsNotReady = errors.New("tpd all-transports: cxo cache miss")
 
-// FetchAllTransportsCXO returns the cached JSON for the requested
-// variant (withSelf true → transports/all/with-self, else
-// transports/all/without-self). Caller treats the not-ready error
-// as a cache miss and falls through to HTTP.
-func (v *Visor) FetchAllTransportsCXO(withSelf bool) ([]byte, error) {
+// FetchAllTransportsCXO returns the network's transport list as JSON, from
+// TPD's routing feed — the same list route calculation uses. withSelf is
+// kept for the callers that pass it: self-loops are not transports anyone
+// routes over, and neither feed variant carries them any more. Caller
+// treats the not-ready error as a cache miss and falls through to HTTP.
+func (v *Visor) FetchAllTransportsCXO(_ bool) ([]byte, error) {
 	mgr := v.CXOSubMgr()
 	if mgr == nil {
 		return nil, ErrTPDAllTransportsNotReady
@@ -43,49 +38,9 @@ func (v *Visor) FetchAllTransportsCXO(withSelf bool) ([]byte, error) {
 	mgr.AcquireFor(TabCLITransports)
 	defer mgr.ReleaseFor(TabCLITransports)
 
-	path := tpdapi.AllTransportsPathWithoutSelf
-	if withSelf {
-		path = tpdapi.AllTransportsPathWithSelf
-	}
-	body, _, ok := mgr.Get(FeedTPDAllTransports, path)
-	if !ok || len(body) == 0 {
+	entries, ok := routingTransports(mgr)
+	if !ok {
 		return nil, ErrTPDAllTransportsNotReady
 	}
-	// The CXO publisher gzips the snapshot; return decompressed JSON to callers
-	// (raw bodies from an older publisher pass through unchanged).
-	return restoreTransportIDs(cxoutils.Gunzip(body)), nil
-}
-
-// restoreTransportIDs reconstitutes the derivable t_id the current publisher
-// drops from each all-transports entry (see allTransportsWireEntry in the TPD
-// publisher). It unmarshals the entries, recomputes any zero t_id from
-// (edges, type) via transport.MakeTransportID, and re-marshals — so downstream
-// consumers (`tp tree`, `tp viz`) see complete entries just like the HTTP
-// /all-transports body. Dual-parse: an entry that already carries a non-zero
-// t_id (older publisher) is left untouched. On any decode error the original
-// bytes are returned verbatim so a wire-shape we don't recognize still flows.
-func restoreTransportIDs(body []byte) []byte {
-	if len(body) == 0 {
-		return body
-	}
-	var entries []*transport.Entry
-	if err := json.Unmarshal(body, &entries); err != nil {
-		return body
-	}
-	changed := false
-	for _, e := range entries {
-		if e == nil || e.ID != (uuid.UUID{}) {
-			continue
-		}
-		e.ID = transport.MakeTransportID(e.Edges[0], e.Edges[1], e.Type)
-		changed = true
-	}
-	if !changed {
-		return body
-	}
-	out, err := json.Marshal(entries)
-	if err != nil {
-		return body
-	}
-	return out
+	return json.Marshal(entries)
 }

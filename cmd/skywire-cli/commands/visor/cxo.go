@@ -220,14 +220,16 @@ Paths per feed:
   tpd-uptime              uptimes/days/<N>          e.g. uptimes/days/30
   sd-services             type/<typeName>           e.g. type/proxy
   tpd-all-transports      with-self | without-self
+                          (both: the transports that exist now, with
+                           latency and throughput, from the routing feed)
   tpd-stats               network | versions | daily
                           the small network aggregates: transports by
                           type and unique visors (network), the fleet
                           version histogram (versions), and the daily
                           bandwidth/latency series the /metric endpoint
                           serves (daily). network and versions
-                          republish every ~12s; daily is a 30-day store
-                          query and republishes every ~5m. All three are
+                          republish every ~12s; daily republishes every
+                          ~5m, reading only days that can still change. All three are
                           stamped with a completeness verdict — see the
                           "complete"/"confidence" fields before charting
                           an absolute count
