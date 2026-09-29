@@ -544,6 +544,37 @@ func (i *Index) LastRootSeq(
 	return
 }
 
+// RootSeqs returns the seq numbers of the Roots stored for given head of
+// given feed, ascending. It lists what is there, so a caller pruning old
+// Roots touches only those rather than probing every seq down to zero.
+func (i *Index) RootSeqs(
+	pk cipher.PubKey, // : feed
+	nonce uint64, //     : head
+) (
+	seqs []uint64, //    : stored seqs, ascending
+	err error, //        : an error
+) {
+
+	i.mx.Lock()
+	defer i.mx.Unlock()
+
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) error {
+		hs, err := feeds.Heads(pk)
+		if err != nil {
+			return err
+		}
+		rs, err := hs.Roots(nonce)
+		if err != nil {
+			return err
+		}
+		return rs.Ascend(func(r *data.Root) error {
+			seqs = append(seqs, r.Seq)
+			return nil
+		})
+	})
+	return seqs, err
+}
+
 // LastRoot returns last Root of given head of given feed.
 // The last Root is Root with the greatest seq number. If
 // given head of the feed is blank, then the LastRoot
