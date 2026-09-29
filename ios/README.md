@@ -13,8 +13,11 @@ drives the visor through its authenticated local REST API on
 
 The Go side is in (milestone M0): `make ios-core` builds
 `SkywireCore.xcframework` from `cmd/skywire-mobile-core`, and `pkg/mobilecore`
-starts, stops and restarts the lite core inside one process. The Xcode
-project, the app and its CI lanes land milestone by milestone from M1 on.
+starts, stops and restarts the lite core inside one process. Milestone M1
+adds the Xcode project: the `CoreBridge` package over the core's C API, an
+in-app core host, and a single spike screen (Connect, state, `/api/ping`, the
+process footprint, a log tail). The real screens, CI lanes and the rest land
+milestone by milestone from M2 on.
 Gate records and their evidence live in `gates/`. The planning documents
 (the two briefs, the proposal and the playbook) live in this folder on the
 maintainer's machine and are gitignored on purpose; ask for them if you need
@@ -37,48 +40,83 @@ that can host a VPN and stay alive in the background; on the Simulator, where
 extensions do not run, the same core runs in the app process. The wallet is a
 Swift port of the Kotlin `android/wallet-core` module and does not touch Go.
 
-## Planned layout
+## Layout
 
 ```
 ios/
 ├── README.md
-├── Skywire.xcodeproj
-├── Config/                      # xcconfig: bundle id, groups, versions (one place)
-├── Skywire/                     # app target: App, Views, ViewModels, Services, Resources
-├── PacketTunnel/                # NetworkExtension target: hosts the core on devices
+├── Skywire.xcodeproj            # hand-maintained, no generator; folders are synchronized groups
+├── Config/Shared.xcconfig       # bundle id, groups, URL scheme, versions (one place)
+├── Skywire/                     # app target
+│   ├── Core/                    # CoreHost, InAppCoreHost, ConfigProfile, CoreLog, Footprint
+│   └── Spike/                   # the M1 screen
+├── SkywireTests/                # XCTest, no host app: the core runs in the test process
 ├── Packages/
-│   ├── CoreBridge/              # C interop + module map (the only place that sees C)
-│   ├── CoreClient/              # local-API client + models, tested against a stub server
-│   └── WalletCore/              # Swift port of android/wallet-core, tested with its vectors
-├── SkywireTests/
-├── gates/                       # milestone gate records (text only)
-└── Frameworks/SkywireCore.xcframework   # build output, gitignored
+│   └── CoreBridge/              # the only code that sees the C API (module SkywireCore)
+├── gates/                       # milestone gate records and their evidence (text only)
+└── Frameworks/SkywireCore.xcframework   # build output of make ios-core, gitignored
 ```
+
+Still to come: `PacketTunnel/` (the NetworkExtension target that hosts the
+core on devices), `Packages/CoreClient` (the local-API client) and
+`Packages/WalletCore` (the Swift port of `android/wallet-core`).
 
 ## Building and running
 
-Everything runs from the repo root, as for Android:
+Everything runs from the repo root, as for Android. Xcode 27 or later with
+an iOS Simulator runtime; Go as in `go.mod`.
 
 ```sh
 make ios-core        # Go core → ios/Frameworks/SkywireCore.xcframework (device + Simulator arm64 slices)
 make mobile-test     # pkg/mobilecore: start/stop/start in one process, on the lite module set
-# from M1 on (the Xcode project does not exist yet):
+
+# app + tests on the Simulator (no signing)
 xcodebuild -project ios/Skywire.xcodeproj -scheme Skywire \
-  -destination 'platform=iOS Simulator,name=iPhone 18 Pro' test CODE_SIGNING_ALLOWED=NO
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
+  -derivedDataPath ios/DerivedData test CODE_SIGNING_ALLOWED=NO
+
+# run it
+xcrun simctl boot "iPhone 18 Pro"
+xcodebuild -project ios/Skywire.xcodeproj -scheme Skywire \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
+  -derivedDataPath ios/DerivedData build CODE_SIGNING_ALLOWED=NO
+xcrun simctl install booted ios/DerivedData/Build/Products/Debug-iphonesimulator/Skywire.app
+xcrun simctl launch booted com.skycoin.skywire
+curl -s http://127.0.0.1:8000/api/ping     # "PONG!" once Connect has finished
+xcrun simctl spawn booted log stream --level info --predicate 'subsystem == "com.skycoin.skywire"'
 ```
 
 `make ios-core` needs Xcode (macOS); `IOS_SIM_X86_64=1` adds an Intel
 Simulator slice. The core's C API is eight functions, documented in
 `cmd/skywire-mobile-core/main.go` and declared in the generated
-`skywire_core.h` inside the xcframework.
+`skywire_core.h` inside the xcframework, which also carries the module map
+that makes it the Swift module `SkywireCore`.
 
 Rule of thumb, same as Android: whenever the Go side changed, run
-`make ios-core` first; Xcode's Run does not rebuild the core.
+`make ios-core` first; Xcode's Run does not rebuild the core. Without the
+xcframework the project does not open cleanly: the `CoreBridge` package
+points at it.
 
 The Simulator shares the Mac's loopback, so `curl http://127.0.0.1:8000/api/ping`
 from the Mac reaches the app's visor, and a desktop visor or the docker e2e
 lane on the same ports clashes with it. Stop those before a Simulator
-session.
+session. The tests bind 127.0.0.1:8000 as well, so the app must not be
+connected while they run.
+
+Notes:
+
+- **The core's log** goes to the unified log (subsystem = the bundle ID,
+  category `core`), and the spike screen shows its last 200 lines.
+  The process footprint is logged once a minute (category `footprint`).
+- **Connect is remembered.** A relaunch after a force-quit connects again
+  if the core was left connected, like Android's sticky core service.
+- **Memory limit.** The profile writes `memory_limit: "40MiB"`, the value
+  the packet-tunnel extension will need. To measure without it, launch with
+  `xcrun simctl launch booted com.skycoin.skywire -SkywireMemoryLimit none`
+  (a launch argument, so it lasts one launch).
+- **Debugging from Xcode.** The Go runtime uses signals (`SIGURG` for
+  preemption, `SIGPIPE`). If LLDB stops on them, run `process handle SIGURG
+  SIGPIPE -n false -p true -s false` in the debugger console.
 
 ## Releasing (planned)
 

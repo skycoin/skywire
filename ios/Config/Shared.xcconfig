@@ -1,0 +1,33 @@
+// ios/Config/Shared.xcconfig: the identifiers an Apple developer account
+// will own, and the versions, in one place (playbook rule 8, §6 D-1). All
+// provisional: nothing here is registered anywhere until the account exists
+// (Lane D1), and Simulator builds run unsigned (CODE_SIGNING_ALLOWED=NO).
+// The project's Debug and Release configurations are based on this file.
+
+// Bundle ID: Android's application id. The test bundle appends ".tests".
+SKYWIRE_BUNDLE_ID = com.skycoin.skywire
+// App Group the app and the packet-tunnel extension (M7) will share.
+SKYWIRE_APP_GROUP = group.com.skycoin.skywire
+// Keychain access group (the team ID prefix is added once signing exists).
+SKYWIRE_KEYCHAIN_GROUP = com.skycoin.skywire.shared
+// Deep-link scheme: Android's (core/DeepLinks.kt). An app-level name, not
+// something Apple registers.
+SKYWIRE_URL_SCHEME = skychat
+
+// ios-release.yml (M2) sets both from the mobile-vX.Y.Z tag and the workflow
+// run; a local build reports these.
+MARKETING_VERSION = 0.0.0
+CURRENT_PROJECT_VERSION = 1
+
+// The app's minimum (§6 D-3). The test bundle overrides it with 17.0 in the
+// project: Xcode 27's XCTest is built for iOS 17, and the tests only ever run
+// on this Xcode's Simulator runtimes.
+IPHONEOS_DEPLOYMENT_TARGET = 16.0
+SWIFT_VERSION = 6.0
+
+// Linking the Go core (item 1.6): its c-archive imports from libSystem,
+// libresolv, CoreFoundation and Security, and nothing else (`nm -u` on both
+// slices, every symbol checked against the SDK's .tbd stubs). The three
+// beyond libSystem are declared beside the archive, in
+// ios/Packages/CoreBridge/Package.swift (linkerSettings), so any target that
+// links CoreBridge gets them and no target sets OTHER_LDFLAGS for the core.
