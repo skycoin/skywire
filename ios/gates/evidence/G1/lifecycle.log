@@ -1,0 +1,18 @@
+12:42:45 install new build (terminates the running app)
+12:42:46 launch (core was left connected -> reconnects)
+com.skycoin.skywire: 92861
+PONG after 58s
+12:43:46 foreground ping: rc=0 "PONG!" http=200
+12:43:46 background: open Settings
+12:43:56 +10s app ps: Ss 01:10   ping: rc=28  http=000
+12:44:50 +60s app ps: Ss 02:04   ping: rc=28  http=000
+12:45:53 +120s app ps: Ss 03:07   ping: rc=28  http=000
+12:45:56 foreground the app
+12:45:58 +2s after foreground: rc=0 "PONG!" http=200
+PONG after 0s
+12:45:59 force-quit
+12:46:00 after force-quit ping: rc=7  http=000
+12:46:00 relaunch
+PONG after 31s
+12:46:32 after relaunch: rc=0 "PONG!" http=200
+12:46:32 done

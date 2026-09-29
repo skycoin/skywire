@@ -198,7 +198,7 @@ docs/playground/wasm_exec.js
 /ios/skywire-mobile-ios-playbook.md
 # The brief handed to a gate reviewer quotes the playbook; the gate record
 # (ios/gates/G<n>.md) is what gets committed.
-/ios/review-ask.txt
+/ios/review-ask*.txt
 
 # iOS build outputs: the Go core's c-archives and the xcframework built from
 # them (make ios-core), Xcode's derived data and archives. Built from source
@@ -207,3 +207,9 @@ docs/playground/wasm_exec.js
 /ios/build/
 /ios/DerivedData/
 *.xcarchive
+# Xcode's and SwiftPM's per-user and cache state beside the project.
+xcuserdata/
+/ios/Packages/*/.build/
+/ios/Packages/*/.swiftpm/
+# Gate screenshots go on the gate's PR, not into git (playbook §5).
+/ios/gates/evidence/**/*.png

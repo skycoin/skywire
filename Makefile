@@ -308,7 +308,10 @@ android-mobile-check: ios-deps-check android-mobile ## CI lane: android-mobile +
 # from the device slice only in the SDK and the "-simulator" target suffix.
 # -checklinkname=0 as for Android (wlynxg/anet's //go:linkname into net).
 # IOS_SIM_X86_64=1 adds an Intel Simulator slice (lipo'd into the Simulator
-# library); off by default.
+# library); off by default. Each slice's Headers/SkywireCore/ holds the cgo
+# header and a module map, so Swift imports it as the module SkywireCore
+# (ios/Packages/CoreBridge). The subdirectory keeps the module map from
+# colliding with another xcframework's in Xcode's shared include/ folder.
 IOS_MIN_VERSION := 16.0
 IOS_CORE_BUILD := ios/build/core
 IOS_XCFRAMEWORK := ios/Frameworks/SkywireCore.xcframework
@@ -343,7 +346,8 @@ ios-core: check-mobile-version ios-deps-check ## Build ios/Frameworks/SkywireCor
 		sim=$(IOS_CORE_BUILD)/ios-arm64_x86_64-simulator; \
 	fi; \
 	for d in $(IOS_CORE_BUILD)/ios-arm64 $$sim; do \
-		mkdir -p $$d/include; mv $$d/libskywire-core.h $$d/include/skywire_core.h; \
+		mkdir -p $$d/include/SkywireCore; mv $$d/libskywire-core.h $$d/include/SkywireCore/skywire_core.h; \
+		printf 'module SkywireCore {\n    header "skywire_core.h"\n    export *\n}\n' > $$d/include/SkywireCore/module.modulemap; \
 	done; \
 	xcodebuild -create-xcframework \
 		-library $(IOS_CORE_BUILD)/ios-arm64/libskywire-core.a -headers $(IOS_CORE_BUILD)/ios-arm64/include \
