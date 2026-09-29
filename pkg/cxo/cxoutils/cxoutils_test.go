@@ -124,3 +124,28 @@ func TestRemoveRootObjectsSurvivesMissingMidSeq(t *testing.T) {
 		t.Fatalf("last seq after sweep: want %d got %d", total-1, last)
 	}
 }
+
+// TestRemoveRootObjectsKeepsNewestStored: keepLast counts stored Roots, so
+// with a hole below the newest ones the two newest survive and every older
+// one goes.
+func TestRemoveRootObjectsKeepsNewestStored(t *testing.T) {
+	c := newTestContainer(t)
+	defer c.Close() //nolint:errcheck
+	pk, sk := cipher.GenerateKeyPair()
+	const nonce = uint64(7)
+	saveRoots(t, c, pk, sk, nonce, 6)
+	if err := c.DelRoot(pk, nonce, 2); err != nil {
+		t.Fatalf("seed DelRoot(2): %v", err)
+	}
+
+	if err := RemoveRootObjects(c, 2); err != nil {
+		t.Fatalf("RemoveRootObjects: %v", err)
+	}
+	seqs, err := c.RootSeqs(pk, nonce)
+	if err != nil {
+		t.Fatalf("RootSeqs: %v", err)
+	}
+	if len(seqs) != 2 || seqs[0] != 4 || seqs[1] != 5 {
+		t.Fatalf("stored seqs after sweep: want [4 5], got %v", seqs)
+	}
+}
