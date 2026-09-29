@@ -51,10 +51,14 @@ type LatencyRecord struct {
 	UpdatedAt int64 `json:"updated_at"`
 }
 
-// latencyTTL is how long a latency record sits in redis without being
-// refreshed before it ages out. Mirrors bw:daily:* retention so the two
-// telemetry types share the same observability window.
-const latencyTTL = 35 * 24 * time.Hour
+// latencyTTL is how long a latency record outlives its last report. The
+// record describes a transport that is up: routing and today's metrics
+// leaf read it, and a day's history lives in the per-day hash (see
+// redis_daily_totals.go). It used to be kept 35 days, so a transport long
+// gone — ~8 in 9 of those seen in that window — kept its metrics for a
+// month: over a million keys. Thirty minutes rides out missed report
+// cycles.
+const latencyTTL = 30 * time.Minute
 
 // ThroughputRecord is the durable per-transport PEAK-goodput snapshot
 // persisted at transport-discovery:tput:<id>. Bps is the passively
@@ -68,8 +72,8 @@ type ThroughputRecord struct {
 	UpdatedAt int64   `json:"updated_at"`
 }
 
-// throughputTTL mirrors latencyTTL — the peak-goodput record shares the
-// same observability window as the other CXO-fed telemetry types.
+// throughputTTL mirrors latencyTTL: the peak-goodput record describes a
+// transport that is up.
 const throughputTTL = latencyTTL
 
 type redisStore struct {
