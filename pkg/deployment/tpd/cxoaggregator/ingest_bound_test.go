@@ -23,7 +23,7 @@ type slowSink struct {
 	peak     atomic.Int32
 }
 
-func (s *slowSink) UpdateBandwidth(ctx context.Context, id string, pk cipher.PubKey, sent, recv uint64) error {
+func (s *slowSink) UpdateBandwidth(ctx context.Context, id string, pk cipher.PubKey, sent, recv uint64, tpType string) error {
 	n := s.inFlight.Add(1)
 	for {
 		p := s.peak.Load()
@@ -36,7 +36,7 @@ func (s *slowSink) UpdateBandwidth(ctx context.Context, id string, pk cipher.Pub
 	case <-ctx.Done():
 	}
 	s.inFlight.Add(-1)
-	return s.recordingSink.UpdateBandwidth(ctx, id, pk, sent, recv)
+	return s.recordingSink.UpdateBandwidth(ctx, id, pk, sent, recv, tpType)
 }
 
 func shardBlob(shard uint8, rows int) []byte {

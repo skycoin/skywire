@@ -227,11 +227,11 @@ type TransportStore interface {
 	// Bandwidth ingest (called by the CXO aggregator with the
 	// reporter's cumulative counters; deltas are computed
 	// internally against the per-reporter previous snapshot).
-	UpdateBandwidth(ctx context.Context, transportID string, reporterPK cipher.PubKey, sent, recv uint64) error
+	UpdateBandwidth(ctx context.Context, transportID string, reporterPK cipher.PubKey, sent, recv uint64, tpType string) error
 	// Latency ingest (called by the CXO aggregator with the
 	// reporter's window min/max/avg in milliseconds). RTT-symmetric,
 	// so last-writer-wins across the two edges is acceptable.
-	UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64) error
+	UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64, tpType string) error
 	// Throughput ingest (called by the CXO aggregator with the
 	// reporter's passively-observed PEAK goodput estimate in bytes/sec,
 	// carried on the sharded telemetry feed). Recorded per-transport with

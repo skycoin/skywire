@@ -175,12 +175,12 @@ func (s *memoryStore) Close() {
 // UpdateBandwidth is a no-op for the in-memory store; bandwidth
 // aggregation is a redis-backed concern and the memory store is only
 // used by tests of higher-level handlers that don't exercise it.
-func (s *memoryStore) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubKey, _, _ uint64) error {
+func (s *memoryStore) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubKey, _, _ uint64, _ string) error {
 	return nil
 }
 
 // UpdateLatency is a no-op for the same reason as UpdateBandwidth.
-func (s *memoryStore) UpdateLatency(_ context.Context, _ string, _, _, _ float64) error {
+func (s *memoryStore) UpdateLatency(_ context.Context, _ string, _, _, _ float64, _ string) error {
 	return nil
 }
 

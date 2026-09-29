@@ -75,8 +75,8 @@ import (
 // in cmd/svc/transport-discovery/commands/root.go composes a sink
 // adapter that delegates each method to the appropriate place.
 type Sink interface {
-	UpdateBandwidth(ctx context.Context, transportID string, reporterPK cipher.PubKey, sent, recv uint64) error
-	UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64) error
+	UpdateBandwidth(ctx context.Context, transportID string, reporterPK cipher.PubKey, sent, recv uint64, tpType string) error
+	UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64, tpType string) error
 	// UpdateThroughput records a transport's passively-observed PEAK
 	// goodput estimate (bytes/sec), carried on the sharded telemetry feed
 	// alongside the cumulative sent/recv counters. It is a real capacity
@@ -1065,7 +1065,7 @@ func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter c
 // latency (partial-zero-gated), and per-type uptime heartbeat.
 func (a *Aggregator) applyTelemetry(ctx context.Context, id uuid.UUID, reporter cipher.PubKey,
 	sent, recv uint64, throughputBps, latMin, latMax, latAvg float64, tpType string, at time.Time) {
-	if err := a.sink.UpdateBandwidth(ctx, id.String(), reporter, sent, recv); err != nil {
+	if err := a.sink.UpdateBandwidth(ctx, id.String(), reporter, sent, recv, tpType); err != nil {
 		a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateBandwidth failed")
 	}
 	if throughputBps > 0 {
@@ -1078,7 +1078,7 @@ func (a *Aggregator) applyTelemetry(ctx context.Context, id uuid.UUID, reporter 
 	// a partial-zero snapshot from an edge whose probe never completed
 	// can't clobber a good record written by the other edge.
 	if latMin > 0 && latMax > 0 && latAvg > 0 {
-		if err := a.sink.UpdateLatency(ctx, id.String(), latMin, latMax, latAvg); err != nil {
+		if err := a.sink.UpdateLatency(ctx, id.String(), latMin, latMax, latAvg, tpType); err != nil {
 			a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateLatency failed")
 		}
 	}

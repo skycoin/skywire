@@ -94,10 +94,10 @@ func TestCalcMemStore(t *testing.T) {
 		if all, err := store.GetAllTransports(ctx, true); err != nil || all != nil {
 			t.Errorf("GetAllTransports = (%v, %v), want (nil, nil)", all, err)
 		}
-		if err := store.UpdateBandwidth(ctx, "tp", pkA, 1, 2); err != nil {
+		if err := store.UpdateBandwidth(ctx, "tp", pkA, 1, 2, "stcpr"); err != nil {
 			t.Errorf("UpdateBandwidth: %v", err)
 		}
-		if err := store.UpdateLatency(ctx, "tp", 1, 2, 3); err != nil {
+		if err := store.UpdateLatency(ctx, "tp", 1, 2, 3, "stcpr"); err != nil {
 			t.Errorf("UpdateLatency: %v", err)
 		}
 		if _, err := store.GetTransportBandwidth(ctx, id, "h", 1); err != nil {

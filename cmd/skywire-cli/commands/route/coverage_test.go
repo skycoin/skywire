@@ -132,8 +132,8 @@ func TestMemoryStore(t *testing.T) {
 	require.NoError(t, s.DeregisterTransport(ctx, id))
 	_, _ = s.GetTransportByID(ctx, id)  //nolint
 	_, _ = s.GetNumberOfTransports(ctx) //nolint
-	require.NoError(t, s.UpdateBandwidth(ctx, "tp", a, 1, 2))
-	require.NoError(t, s.UpdateLatency(ctx, "tp", 1, 2, 3))
+	require.NoError(t, s.UpdateBandwidth(ctx, "tp", a, 1, 2, "stcpr"))
+	require.NoError(t, s.UpdateLatency(ctx, "tp", 1, 2, 3, "stcpr"))
 	_, _ = s.GetTransportBandwidth(ctx, id, "h", 1) //nolint
 	_, _ = s.GetVisorBandwidth(ctx, a, "h", 1)      //nolint
 	_, _ = s.GetAllVisorSummaries(ctx, true, true)  //nolint
