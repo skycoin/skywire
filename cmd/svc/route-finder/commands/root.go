@@ -9,13 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -23,21 +23,9 @@ import (
 )
 
 var (
-	configPath     string
-	addr           string
-	metricsAddr    string
-	redisURL       string
-	redisPoolSize  int
-	logLvl         string
-	tag            string
-	testing        bool
+	flags          services.Flags
 	dmsgDisc       string
-	sk             cipher.SecKey
-	keyFile        string
-	dmsgPort       uint16
 	dmsgServerType string
-	pprofAddr      string
-	mode           string
 )
 
 func generateExamples() string {
@@ -73,22 +61,9 @@ POST /routes
 }
 
 func init() {
-	RootCmd.Flags().StringVarP(&configPath, "config", "c", "", "path to JSON config file. Generate with: skywire cli config gen --rf -o /etc/skywire/route-finder.json\n\r")
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9092", "address to bind to\n\r")
-	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
-	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVar(&redisURL, "redis", "", "redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)\n\r")
-	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\n\r")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
-	RootCmd.Flags().StringVar(&tag, "tag", "route_finder", "logging tag\n\r")
-	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "run for a test network: keep entries in memory unless --redis is set")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsg.DiscURL(false), "url of dmsg discovery\n\r")
-	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
-	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsg-port", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
-	RootCmd.Flags().SetNormalizeFunc(cmdutil.LegacySvcFlagNormalizer)
+	flags.Bind(RootCmd.Flags(), services.FlagDefaults{Gen: "rf", Addr: ":9092", Tag: "route_finder", EntryTimeout: 10 * time.Minute})
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(false), "url of dmsg-discovery")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
-	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)")
 }
 
 // RootCmd contains the root command
@@ -124,7 +99,7 @@ Example:
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}
-		logger := logging.MustGetLogger(tag)
+		logger := logging.MustGetLogger(flags.LogTag("route_finder"))
 
 		cfg, err := buildConfig()
 		if err != nil {
@@ -139,32 +114,19 @@ Example:
 }
 
 func buildConfig() (*rf.Config, error) {
-	if keyFile != "" {
-		if err := cmdutil.LoadOrGenerateKey(keyFile, &sk); err != nil {
-			return nil, err
-		}
+	common, err := flags.Resolve()
+	if err != nil {
+		return nil, err
 	}
 	cfg := &rf.Config{
-		Common: services.Common{
-			SecKey:        sk,
-			Addr:          addr,
-			MetricsAddr:   metricsAddr,
-			PprofAddr:     pprofAddr,
-			Redis:         redisURL,
-			RedisPoolSize: redisPoolSize,
-			LogLevel:      logLvl,
-			Tag:           tag,
-			Testing:       testing,
-			Mode:          mode,
-			DmsgPort:      dmsgPort,
-		},
+		Common: common,
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  dmsgDisc,
 			ServerType: dmsgServerType,
 		},
 	}
-	if configPath != "" {
-		fileCfg, err := rf.LoadFile(configPath)
+	if flags.ConfigPath != "" {
+		fileCfg, err := rf.LoadFile(flags.ConfigPath)
 		if err != nil {
 			return nil, err
 		}
@@ -174,51 +136,8 @@ func buildConfig() (*rf.Config, error) {
 }
 
 func mergeFile(dst, src *rf.Config) {
-	if src.SecKey != (cipher.SecKey{}) {
-		dst.SecKey = src.SecKey
-	}
-	if src.Addr != "" {
-		dst.Addr = src.Addr
-	}
-	if src.MetricsAddr != "" {
-		dst.MetricsAddr = src.MetricsAddr
-	}
-	if src.PprofAddr != "" {
-		dst.PprofAddr = src.PprofAddr
-	}
-	if src.Redis != "" {
-		dst.Redis = src.Redis
-	}
-	if src.RedisPoolSize > 0 {
-		dst.RedisPoolSize = src.RedisPoolSize
-	}
-	if src.LogLevel != "" {
-		dst.LogLevel = src.LogLevel
-	}
-	if src.Tag != "" {
-		dst.Tag = src.Tag
-	}
-	if src.Testing {
-		dst.Testing = true
-	}
-	if src.Mode != "" {
-		dst.Mode = src.Mode
-	}
-	if len(src.SurveyWhitelist) > 0 {
-		dst.SurveyWhitelist = src.SurveyWhitelist
-	}
-	if src.DmsgPort != 0 {
-		dst.DmsgPort = src.DmsgPort
-	}
-	if src.Dmsg.Discovery != "" {
-		dst.Dmsg.Discovery = src.Dmsg.Discovery
-	}
-	if src.Dmsg.ServerType != "" {
-		dst.Dmsg.ServerType = src.Dmsg.ServerType
-	}
-	if len(src.Dmsg.Servers) > 0 {
-		dst.Dmsg.Servers = src.Dmsg.Servers
-	}
+	services.MergeCommon(&dst.Common, src.Common)
+	dst.Dmsg.Merge(src.Dmsg)
 }
 
 // Execute executes root CLI command.
