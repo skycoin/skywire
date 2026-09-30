@@ -12,7 +12,8 @@ import (
 // The streamed head keeps every value of a repeated header, drops the
 // connection-level ones, names where redirects landed, and closes.
 func TestBrowseStreamHead(t *testing.T) {
-	final, _ := url.Parse("https://example.org/landed")
+	final, err := url.Parse("https://example.org/landed")
+	require.NoError(t, err)
 	resp := &http.Response{
 		StatusCode: 404,
 		Header: http.Header{

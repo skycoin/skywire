@@ -540,9 +540,27 @@ func (v *Visor) proxyClearnetDo(ctx context.Context, req BrowseClearnetRequest, 
 		return nil, err
 	}
 	applyBrowseHeaders(httpReq, req.Header)
-	resp, err := (&http.Client{Transport: tr, Jar: browseJar(), Timeout: timeout}).Do(httpReq)
+	applyPageCookies(httpReq, browseJar())
+	// The client follows redirects itself, so a Set-Cookie on a redirect (a
+	// login's 302 is the usual place) would reach the jar but never the page.
+	// Carry each hop's onto the final response.
+	var hopCookies []string
+	client := &http.Client{Transport: tr, Jar: browseJar(), Timeout: timeout,
+		CheckRedirect: func(next *http.Request, via []*http.Request) error {
+			if next.Response != nil {
+				hopCookies = append(hopCookies, next.Response.Header.Values("Set-Cookie")...)
+			}
+			if len(via) >= 10 {
+				return errors.New("stopped after 10 redirects")
+			}
+			return nil
+		}}
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("fetch via proxy %s: %w", pu.Redacted(), err)
+	}
+	if len(hopCookies) > 0 {
+		resp.Header["Set-Cookie"] = append(hopCookies, resp.Header.Values("Set-Cookie")...)
 	}
 	return resp, nil
 }
