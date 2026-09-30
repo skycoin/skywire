@@ -141,9 +141,7 @@ func (a *Aggregator) flushPaced(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			for _, h := range a.pace.due(time.Now()) {
-				a.applySnap(ctx, h.k, h.s)
-			}
+			a.applyDue(ctx, a.pace.due(time.Now()))
 		}
 	}
 }
