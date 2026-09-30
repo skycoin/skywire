@@ -430,3 +430,34 @@ func TestFailedFetchReappliesCachedListWithoutDeleting(t *testing.T) {
 		t.Fatal("no cached list: nothing to re-apply")
 	}
 }
+
+// A Root republishing an unchanged leaf reuses the decoded list; a changed
+// leaf (another reporter's root here) is decoded afresh.
+func TestTargetedFetchReusesUnchangedLeaf(t *testing.T) {
+	src, r, _ := buildBigRoot(t, 20, 0)
+	a := &Aggregator{
+		cxoNode:  newInMemNode(t),
+		sink:     &recordingSink{},
+		log:      logging.MustGetLogger("test"),
+		lastList: make(map[skycipher.PubKey]cachedList),
+		fetching: make(map[skycipher.PubKey]struct{}),
+	}
+	first, _, ok := a.fetchDiscoveryLeafWithGetter(&servingGetter{src: src}, r)
+	if !ok || len(first) != 20 {
+		t.Fatalf("first fetch: ok=%v n=%d", ok, len(first))
+	}
+	again, _, ok := a.fetchDiscoveryLeafWithGetter(&servingGetter{src: src}, r)
+	if !ok || len(again) != 20 || &again[0] != &first[0] {
+		t.Fatalf("unchanged leaf was decoded again (ok=%v n=%d)", ok, len(again))
+	}
+
+	a.mu.Lock()
+	c := a.lastList[r.Pub]
+	c.sum++ // as if the cached list came from different bytes
+	a.lastList[r.Pub] = c
+	a.mu.Unlock()
+	fresh, _, ok := a.fetchDiscoveryLeafWithGetter(&servingGetter{src: src}, r)
+	if !ok || len(fresh) != 20 || &fresh[0] == &first[0] {
+		t.Fatalf("changed leaf reused the cache (ok=%v n=%d)", ok, len(fresh))
+	}
+}
