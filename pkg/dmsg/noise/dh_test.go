@@ -4,15 +4,20 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/skycoin/skycoin/src/cipher"
 	secp256k1 "github.com/skycoin/skycoin/src/cipher/secp256k1-go"
 )
 
-// mustDH runs dh.DH and fails the test/benchmark on error. Every call site
+// staticDH is the DH a handshake between these two static keys builds, so
+// DH(sk, pk) on it is the cached static-static step.
+func staticDH(sk, pk []byte) Secp256k1 { return Secp256k1{staticSK: sk, peerStatic: pk} }
+
+// mustDH runs the static-static DH and fails the test/benchmark on error. Every call site
 // here uses valid secp256k1 inputs, so an error is a real bug, not an expected
 // path. Takes testing.TB so tests and benchmarks share it.
-func mustDH(tb testing.TB, dh Secp256k1, sk, pk []byte) []byte {
+func mustDH(tb testing.TB, sk, pk []byte) []byte {
 	tb.Helper()
-	out, err := dh.DH(sk, pk)
+	out, err := staticDH(sk, pk).DH(sk, pk)
 	if err != nil {
 		tb.Fatalf("DH: %v", err)
 	}
@@ -30,10 +35,8 @@ func TestDHCacheConsistency(t *testing.T) {
 	pk1, sk1 := secp256k1.GenerateKeyPair()
 	pk2, sk2 := secp256k1.GenerateKeyPair()
 
-	dh := Secp256k1{}
-
-	first := mustDH(t, dh, sk1, pk2)  // miss → compute + cache
-	second := mustDH(t, dh, sk1, pk2) // hit
+	first := mustDH(t, sk1, pk2)  // miss → compute + cache
+	second := mustDH(t, sk1, pk2) // hit
 	if !bytes.Equal(first, second) {
 		t.Fatalf("cache hit returned different bytes: %x vs %x", first, second)
 	}
@@ -43,7 +46,7 @@ func TestDHCacheConsistency(t *testing.T) {
 	// generate a cache-lookup key with a guaranteed-different DH
 	// output.
 	pk3, _ := secp256k1.GenerateKeyPair()
-	other := mustDH(t, dh, sk1, pk3)
+	other := mustDH(t, sk1, pk3)
 	if bytes.Equal(first, other) {
 		t.Fatalf("unrelated (sk,pk) pairs produced the same DH output: %x", first)
 	}
@@ -52,14 +55,14 @@ func TestDHCacheConsistency(t *testing.T) {
 	// cleared still matches the cached value (cache is a no-op
 	// optimization, not a divergence source).
 	resetDHCache()
-	fresh := mustDH(t, dh, sk1, pk2)
+	fresh := mustDH(t, sk1, pk2)
 	if !bytes.Equal(first, fresh) {
 		t.Fatalf("post-reset compute disagrees with cached value: %x vs %x", fresh, first)
 	}
 
 	// Sanity check: DH is commutative (each party should derive the
 	// same shared secret from their own SK + the peer's PK).
-	commutative := mustDH(t, dh, sk2, pk1)
+	commutative := mustDH(t, sk2, pk1)
 	if !bytes.Equal(first, commutative) {
 		t.Fatalf("DH not commutative: DH(sk1, pk2)=%x DH(sk2, pk1)=%x", first, commutative)
 	}
@@ -69,13 +72,11 @@ func TestDHCacheConsistency(t *testing.T) {
 // stream of unique inputs (the ephemeral-DH miss pattern).
 func TestDHCacheEviction(t *testing.T) {
 	resetDHCache()
-
-	dh := Secp256k1{}
 	// Push 2× the cap of unique pairs and confirm size never grows
 	// past the cap.
 	for i := 0; i < dhCacheMax*2; i++ {
 		pk, sk := secp256k1.GenerateKeyPair()
-		mustDH(t, dh, sk, pk)
+		mustDH(t, sk, pk)
 		if size := dhCacheSize(); size > dhCacheMax {
 			t.Fatalf("cache exceeded cap: %d > %d at iteration %d", size, dhCacheMax, i)
 		}
@@ -98,18 +99,16 @@ func resetDHCache() {
 // cap triggers an eviction per overflow insertion.
 func TestDHCacheStats(t *testing.T) {
 	resetDHCache()
-
-	dh := Secp256k1{}
 	pk1, sk1 := secp256k1.GenerateKeyPair()
 	pk2, sk2 := secp256k1.GenerateKeyPair()
 
 	// First call on each pair = miss.
-	mustDH(t, dh, sk1, pk2)
-	mustDH(t, dh, sk2, pk1)
+	mustDH(t, sk1, pk2)
+	mustDH(t, sk2, pk1)
 	// Repeat — both hits.
-	mustDH(t, dh, sk1, pk2)
-	mustDH(t, dh, sk2, pk1)
-	mustDH(t, dh, sk1, pk2)
+	mustDH(t, sk1, pk2)
+	mustDH(t, sk2, pk1)
+	mustDH(t, sk1, pk2)
 
 	s := GetCacheStats()
 	if s.Hits != 3 {
@@ -131,7 +130,7 @@ func TestDHCacheStats(t *testing.T) {
 	// Push past the cap to trigger evictions.
 	for i := 0; i < dhCacheMax*2; i++ {
 		pk, sk := secp256k1.GenerateKeyPair()
-		mustDH(t, dh, sk, pk)
+		mustDH(t, sk, pk)
 	}
 	s = GetCacheStats()
 	if s.Evictions == 0 {
@@ -155,9 +154,9 @@ func dhCacheSize() int {
 // raw secp256k1 ECDH cost we're skipping.
 func BenchmarkDHCacheHit(b *testing.B) {
 	resetDHCache()
-	dh := Secp256k1{}
 	pk, sk := secp256k1.GenerateKeyPair()
-	mustDH(b, dh, sk, pk) // prime the cache
+	dh := staticDH(sk, pk)
+	mustDH(b, sk, pk) // prime the cache
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = dh.DH(sk, pk) //nolint:errcheck // hot loop; correctness covered by tests
@@ -180,5 +179,67 @@ func BenchmarkDHCacheMiss(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = dh.DH(keys[i][0], keys[i][1]) //nolint:errcheck // hot loop; correctness covered by tests
+	}
+}
+
+// TestDHEphemeralSkipsCache checks that a DH which is not the handshake's
+// static-static step is computed but never cached: those keys never repeat.
+func TestDHEphemeralSkipsCache(t *testing.T) {
+	resetDHCache()
+	pkS, skS := secp256k1.GenerateKeyPair()
+	pkP, _ := secp256k1.GenerateKeyPair()
+	dh := staticDH(skS, pkP)
+
+	pkE, skE := secp256k1.GenerateKeyPair()
+	for _, in := range [][2][]byte{{skS, pkE}, {skE, pkP}, {skE, pkS}} {
+		if _, err := dh.DH(in[0], in[1]); err != nil {
+			t.Fatalf("DH: %v", err)
+		}
+	}
+	if _, err := (Secp256k1{}).DH(skS, pkP); err != nil {
+		t.Fatalf("DH: %v", err)
+	}
+	if s := GetCacheStats(); s.Size != 0 || s.Misses != 0 || s.Hits != 0 {
+		t.Fatalf("ephemeral DHs touched the cache: %+v", s)
+	}
+	if _, err := dh.DH(skS, pkP); err != nil {
+		t.Fatalf("DH: %v", err)
+	}
+	if s := GetCacheStats(); s.Size != 1 || s.Misses != 1 {
+		t.Fatalf("static-static DH not cached: %+v", s)
+	}
+}
+
+// TestDHMatchesCipherECDH pins the output to cipher.ECDH (padded to DHLen):
+// peers on older builds derive their keys that way.
+func TestDHMatchesCipherECDH(t *testing.T) {
+	for i := 0; i < 50; i++ {
+		pk1, _ := cipher.GenerateKeyPair()
+		_, sk2 := cipher.GenerateKeyPair()
+		want, err := cipher.ECDH(pk1, sk2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := (Secp256k1{}).DH(sk2[:], pk1[:])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 33 || !bytes.Equal(got[:32], want) || got[32] != 0 {
+			t.Fatalf("DH %x, cipher.ECDH %x", got, want)
+		}
+	}
+}
+
+// TestDHRejectsInvalidPubKey checks that a point off the curve is refused,
+// not multiplied.
+func TestDHRejectsInvalidPubKey(t *testing.T) {
+	_, sk := secp256k1.GenerateKeyPair()
+	// About half of all x values have no point on the curve; find one.
+	bad := make([]byte, 33)
+	bad[0] = 2
+	for bad[32] = 1; secp256k1.VerifyPubkey(bad) == 1; bad[32]++ {
+	}
+	if _, err := (Secp256k1{}).DH(sk, bad); err == nil {
+		t.Fatal("DH accepted an invalid public key")
 	}
 }

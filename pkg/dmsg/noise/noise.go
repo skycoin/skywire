@@ -78,7 +78,11 @@ func (ns *Noise) PQActive() bool { return ns.pqActive }
 //   - provided pattern for handshake.
 //   - Secp256k1 for the curve.
 func New(pattern noise.HandshakePattern, config Config) (*Noise, error) {
-	suite := noise.NewCipherSuite(Secp256k1{}, noise.CipherChaChaPoly, noise.HashSHA256)
+	dh := Secp256k1{staticSK: config.LocalSK[:]}
+	if !config.RemotePK.Null() {
+		dh.peerStatic = config.RemotePK[:]
+	}
+	suite := noise.NewCipherSuite(dh, noise.CipherChaChaPoly, noise.HashSHA256)
 	nc := noise.Config{
 		CipherSuite: suite,
 		Random:      rand.Reader,
