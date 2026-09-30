@@ -51,10 +51,14 @@ type LatencyRecord struct {
 	UpdatedAt int64 `json:"updated_at"`
 }
 
-// latencyTTL is how long a latency record sits in redis without being
-// refreshed before it ages out. Mirrors bw:daily:* retention so the two
-// telemetry types share the same observability window.
-const latencyTTL = 35 * 24 * time.Hour
+// latencyTTL is how long a latency record outlives its last report. The
+// record describes a transport that is up: routing and today's metrics
+// leaf read it, and a day's history lives in the per-day hash (see
+// redis_daily_totals.go). It used to be kept 35 days, so a transport long
+// gone — ~8 in 9 of those seen in that window — kept its metrics for a
+// month: over a million keys. Thirty minutes rides out missed report
+// cycles.
+const latencyTTL = 30 * time.Minute
 
 // ThroughputRecord is the durable per-transport PEAK-goodput snapshot
 // persisted at transport-discovery:tput:<id>. Bps is the passively
@@ -68,8 +72,8 @@ type ThroughputRecord struct {
 	UpdatedAt int64   `json:"updated_at"`
 }
 
-// throughputTTL mirrors latencyTTL — the peak-goodput record shares the
-// same observability window as the other CXO-fed telemetry types.
+// throughputTTL mirrors latencyTTL: the peak-goodput record describes a
+// transport that is up.
 const throughputTTL = latencyTTL
 
 type redisStore struct {
@@ -80,6 +84,12 @@ type redisStore struct {
 	edgeCache   *edgeEntriesCache
 	allTpsCache *allTransportsCache
 	bwIndex     *bwIndexCache
+	// beats keeps transport heartbeats to one write per timeline slot.
+	beats transportBeatMemo
+	// today keeps today's per-transport metrics current (today_metrics.go).
+	today todayMetrics
+	// live is the in-memory transport set, on in the writing process (live_set.go).
+	live liveSet
 }
 
 func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl time.Duration, logger *logging.Logger) (*redisStore, error) {
@@ -132,10 +142,8 @@ func (s *redisStore) Close() {
 const timelineSlots = 24 * 60 / 5
 const uptimeHistoryDays = 7
 
-// expectedHeartbeatsPerDay is the denominator for TRANSPORT uptime: transports
-// re-register on a ~90-second cadence (transport.Manager.runReRegisterTransports),
-// so a continuously-registered transport lands ~960 RecordHeartbeat calls/day.
-const expectedHeartbeatsPerDay = float64(24*60*60) / float64(90) // 960
+// Transport uptime is the share of the day's timelineSlots whose timeline
+// bit is set: exact, however many paths report the transport.
 
 // expectedVisorHeartbeatsPerDay is the denominator for VISOR uptime. A visor's
 // dedicated presence heartbeat fires every 5 minutes (tickDuration in
@@ -229,4 +237,8 @@ func (s *redisStore) RecordHeartbeat(ctx context.Context, pk cipher.PubKey, vers
 }
 
 const minP2PTransportsOnline = 2
-const onlineThresholdTP = 5 * time.Minute
+
+// onlineThresholdTP is how recent a transport's last heartbeat must be for it
+// to count as online. Heartbeats are written once per 5-minute slot, so the
+// newest can be up to a slot plus a report interval old.
+const onlineThresholdTP = 10 * time.Minute

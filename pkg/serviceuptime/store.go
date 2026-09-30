@@ -19,6 +19,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"sync/atomic"
 	"time"
@@ -105,6 +107,12 @@ func (s *Store) update(fn func(tx *bbolt.Tx) error) error {
 // open and never rewritten; it identifies the on-disk database
 // independently of any single session.
 func OpenStore(path string) (*Store, error) {
+	// A service run with its default path (e.g. /var/lib/skywire/tpd/uptime.db)
+	// in a fresh container has no such directory yet; without this every start
+	// logged "no such file or directory" and recorded no uptime at all.
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, fmt.Errorf("serviceuptime: create %s: %w", filepath.Dir(path), err)
+	}
 	// Repair-on-corrupt: bbolt panics inside the internal batch
 	// goroutine on a corrupt freelist page, which is unrecoverable
 	// from caller code. The local uptime DB is recreatable from

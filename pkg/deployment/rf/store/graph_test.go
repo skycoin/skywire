@@ -79,11 +79,11 @@ func (m *mockStore) GetTransportSummary(context.Context, bool) (*tpdstore.Transp
 
 func (m *mockStore) Close() {}
 
-func (m *mockStore) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubKey, _, _ uint64) error {
+func (m *mockStore) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubKey, _, _ uint64, _ string) error {
 	return nil
 }
 
-func (m *mockStore) UpdateLatency(_ context.Context, _ string, _, _, _ float64) error {
+func (m *mockStore) UpdateLatency(_ context.Context, _ string, _, _, _ float64, _ string) error {
 	return nil
 }
 

@@ -91,8 +91,6 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 
 	storeConfig := cfg.StoreConfig()
 
-	metricsutil.ServePProf(logger, cfg.PprofAddr, "route-finder")
-
 	// The route finder only reads transport data, so its TTL defaults longer
 	// than TPD's.
 	ttl := cfg.EntryTimeout.Std()
@@ -108,6 +106,9 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 
 	enableMetrics := cfg.MetricsAddr != ""
 	rfAPI := api.New(transportStore, logger, enableMetrics, dmsgAddr)
+	// A TPD run in the same process (svc run) holds the transport set in
+	// memory; the graph is built from it rather than reread from redis.
+	rfAPI.ShareTransportsFrom(storeConfig.URL)
 	// Warm the shared route graph in the background (bound to the server context)
 	// so route requests reuse it instead of each building a per-source graph.
 	rfAPI.StartGraphCache(ctx)
@@ -137,6 +138,7 @@ func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 
 	logger := services.NewLogger(cfg.LogTag("route_finder"), cfg.LogLevel)
+	defer cfg.StartPprof(logger)()
 
 	pk := cfg.PubKey
 	sk := cfg.SecKey

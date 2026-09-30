@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/deployment/ar/arfeed"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
@@ -28,9 +29,6 @@ const PublicServiceDelay = skyenv.PublicAutoconnectInterval
 // enough for dmsg + transport clients to be up, short enough that a client
 // visor reaches the mesh in seconds rather than 5 minutes.
 const initialAutoconnectDelay = 3 * time.Second
-
-// sudphCacheTTL defines how long the cached SUDPH-capable visors list remains valid.
-const sudphCacheTTL = 5 * time.Minute
 
 // ConnectFn provides a way to connect to remote service
 type ConnectFn func(context.Context, cipher.PubKey) error
@@ -54,9 +52,6 @@ type autoconnector struct {
 	// owns the native-coupled loop + public-visor sourcing and delegates the
 	// per-target transport establishment to conn.
 	conn *visorcore.Connector
-
-	sudphVisors        map[cipher.PubKey]struct{}
-	sudphVisorsFetched time.Time
 }
 
 // MakeConnector returns a new connector that will try to connect to at most maxConns
@@ -173,71 +168,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				a.log.Debug("This visor is configured as public")
 			}
 
-			// Fetch ALL transport discovery data once per cycle to reduce API load
-			// This replaces individual DiscoverTransportsByPK calls throughout the cycle
-			a.log.Debug("Fetching all transport discovery data for caching")
-			transportCache, err := a.buildTransportCache(ctx, v)
-			if err != nil {
-				a.log.WithError(err).Warn("Failed to fetch transport discovery cache, continuing without it")
-				transportCache = &transportDiscoveryCache{
-					entriesByPK:     make(map[cipher.PubKey][]*transport.Entry),
-					transportCounts: make(map[cipher.PubKey]int),
-					webrtcCapable:   make(map[cipher.PubKey]struct{}),
-				}
-			} else {
-				a.log.WithField("cached_keys", len(transportCache.transportCounts)).
-					Debug("Successfully cached transport discovery data")
-			}
-
-			// absent2 = visors CONNECTED TO public visors (the network shape beyond the
-			// public core). Computed for every visor now: the WebRTC phase uses it to
-			// broaden the direct mesh to non-public peers. Sudph Phase 3 stays gated to
-			// non-public visors below.
-			var absent2 []cipher.PubKey
-			{
-				absentSet := make(map[cipher.PubKey]struct{}, len(addrs))
-				for _, pk := range addrs {
-					absentSet[pk] = struct{}{}
-				}
-
-				autoTransports := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
-				absent2Set := make(map[cipher.PubKey]struct{})
-
-				// Use cached transport data instead of individual API calls
-				for _, pk := range addrs {
-					entries := transportCache.entriesByPK[pk]
-
-					seen := make(map[cipher.PubKey]struct{})
-					for _, entry := range entries {
-						for _, edge := range entry.Edges {
-							if edge != v.conf.PK {
-								seen[edge] = struct{}{}
-							}
-						}
-					}
-
-					entryKeys := make([]cipher.PubKey, 0, len(seen))
-					for edge := range seen {
-						entryKeys = append(entryKeys, edge)
-					}
-
-					filtered := a.filterDuplicates(entryKeys, autoTransports)
-					for _, newPK := range filtered {
-						if _, inAbsent := absentSet[newPK]; inAbsent {
-							continue
-						}
-						if _, seen := absent2Set[newPK]; seen {
-							continue
-						}
-
-						absent2Set[newPK] = struct{}{}
-						absent2 = append(absent2, newPK)
-					}
-				}
-			}
-
-			a.log.WithField("total", len(append(absent1, absent2...))).
-				Debugln("Found visors to connect to")
+			a.log.WithField("public", len(absent1)).Debugln("Public visors to connect to")
 
 			// Public autoconnect logic:
 			// Phase 1:  STCPR to public visors lacking one (first in the preference order)
@@ -279,6 +210,11 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				}
 			}
 
+			// What the address resolver knows about reaching each peer, per type
+			// (autoconnect_reach.go). Read once per cycle.
+			reach := a.loadReach(ctx, v)
+			selfNAT := v.selfNAT()
+
 			// Track which public visors we connect to
 			connectedPublicVisors := make([]cipher.PubKey, 0, maxPublicVisors)
 
@@ -294,8 +230,8 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// Phase 1: STCPR to every public visor that lacks one.
 			if localSupportsSTCPR {
 				a.log.Debug("Phase 1: Connecting to public visors via STCPR")
-				phase1, err := a.conn.ConnectToVisors(ctx, v.conf.PK, a.filterDuplicatesOfType(addrs, tptypes.STCPR, autoTPs), tptypes.STCPR,
-					existingByPK, nil, 0, 0, true)
+				phase1, err := a.connectByReach(ctx, v.conf.PK, a.filterDuplicatesOfType(addrs, tptypes.STCPR, autoTPs), tptypes.STCPR,
+					existingByPK, reach, selfNAT, 0, 0, 0, true)
 				if err != nil {
 					return err
 				}
@@ -322,26 +258,20 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// Budgeted per cycle so the peer count grows gradually.
 			if localSupportsSQUICR {
 				a.log.Debug("Phase 2: Connecting to public visors via QUIC (squicr)")
-				phase2, err := a.conn.ConnectToVisors(ctx, v.conf.PK, a.filterDuplicatesOfType(addrs, tptypes.QUIC, autoTPs), tptypes.QUIC,
-					existingByPK, nil, maxPublicVisors, 0, false)
+				phase2, err := a.connectByReach(ctx, v.conf.PK, a.filterDuplicatesOfType(addrs, tptypes.QUIC, autoTPs), tptypes.QUIC,
+					existingByPK, reach, selfNAT, maxPublicVisors, 0, 0, false)
 				if err != nil {
 					return err
 				}
 				countSQUICR += phase2.Count
 			}
 
-			// Fetch SUDPH-capable visors from address resolver (cached for 5 minutes)
-			var sudphCapable map[cipher.PubKey]struct{}
-			if localSupportsSUDPH {
-				sudphCapable = a.fetchSUDPHVisors(ctx)
-			}
-
 			// Phase 2b: SUDPH to public visors that still have NO direct transport
 			// after the stcpr and squicr phases (re-read: those phases just added some).
 			if localSupportsSUDPH {
 				a.log.Debug("Phase 2b: Connecting to direct-unreachable public visors via SUDPH")
-				phase2b, err := a.conn.ConnectToVisors(ctx, v.conf.PK, a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic)), tptypes.SUDPH,
-					existingByPK, sudphCapable, 0, 0, false)
+				phase2b, err := a.connectByReach(ctx, v.conf.PK, a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic)), tptypes.SUDPH,
+					existingByPK, reach, selfNAT, 0, 0, reachExplorePerCycle, false)
 				if err != nil {
 					return err
 				}
@@ -349,10 +279,15 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			}
 
 			// Phase 3: SUDPH to other connected visors (non-public visors only)
-			if localSupportsSUDPH && !visorIsPublic && len(absent2) > 0 {
+			// The candidates are the visors the reach feed lists as bound for sudph;
+			// connectByReach drops those without a live UDP control connection at
+			// the AR or with a NAT class this visor cannot punch to, and dials the
+			// ones that recently accepted a sudph first.
+			sudphPeers := a.nonPublicPeers(v.conf.PK, reachPeers(reach, arfeed.TypeSUDPH), addrs)
+			if localSupportsSUDPH && !visorIsPublic && len(sudphPeers) > 0 {
 				a.log.Debug("Phase 3: Connecting to other visors via SUDPH")
-				phase3, err := a.conn.ConnectToVisors(ctx, v.conf.PK, absent2, tptypes.SUDPH,
-					existingByPK, sudphCapable, 0, countSUDPH, false)
+				phase3, err := a.connectByReach(ctx, v.conf.PK, sudphPeers, tptypes.SUDPH,
+					existingByPK, reach, selfNAT, 0, countSUDPH, reachExplorePerCycle, false)
 				if err != nil {
 					return err
 				}
@@ -388,8 +323,8 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				}
 				if len(wtwsTargets) > 0 && localSupportsWT {
 					a.log.Debug("Phase 3b: Connecting to direct-unreachable public visors via WT (swtr)")
-					phaseWT, err := a.conn.ConnectToVisors(ctx, v.conf.PK, wtwsTargets, tptypes.WT,
-						existingByPK, nil, maxPublicVisors, countSWTR, false)
+					phaseWT, err := a.connectByReach(ctx, v.conf.PK, wtwsTargets, tptypes.WT,
+						existingByPK, reach, selfNAT, maxPublicVisors, countSWTR, 0, false)
 					if err != nil {
 						return err
 					}
@@ -407,8 +342,8 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					}
 					if len(wsTargets) > 0 {
 						a.log.Debug("Phase 3c: Connecting to direct-unreachable public visors via WS (swsr)")
-						phaseWS, err := a.conn.ConnectToVisors(ctx, v.conf.PK, wsTargets, tptypes.WS,
-							existingByPK, nil, maxPublicVisors, countSWSR, false)
+						phaseWS, err := a.connectByReach(ctx, v.conf.PK, wsTargets, tptypes.WS,
+							existingByPK, reach, selfNAT, maxPublicVisors, countSWSR, 0, false)
 						if err != nil {
 							return err
 						}
@@ -421,10 +356,10 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// carrier (stcpr/sudph/squicr) could establish. WebRTC's ICE/STUN reaches
 			// more NAT types than sudph hole-punch, but it's heavy, so we spend it
 			// only where nothing lighter works. dmsg does NOT count as "reachable"
-			// here — the point is a DIRECT path better than dmsg relay. To public
-			// visors it's unconditional (bootstraps our webrtc-capable advertisement
-			// and reaches NAT'd publics); to non-public peers it's gated by the
-			// webrtcCapable signal so we don't blind-dial incapable visors.
+			// here — the point is a DIRECT path better than dmsg relay. Candidates are
+			// the public visors plus the peers that declare they accept WebRTC; a
+			// peer that declares it does not, or whose NAT class cannot pair with
+			// ours, is skipped (autoconnect_reach.go).
 			if localSupportsWEBRTC {
 				hasDirect := map[cipher.PubKey]bool{}
 				hasWebRTC := map[cipher.PubKey]bool{}
@@ -444,18 +379,15 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 						webrtcTargets = append(webrtcTargets, pk)
 					}
 				}
-				for _, pk := range absent2 {
-					if hasDirect[pk] || hasWebRTC[pk] {
-						continue
-					}
-					if _, ok := transportCache.webrtcCapable[pk]; ok {
+				for _, pk := range a.nonPublicPeers(v.conf.PK, reachPeers(reach, arfeed.TypeWEBRTC), addrs) {
+					if !hasDirect[pk] && !hasWebRTC[pk] {
 						webrtcTargets = append(webrtcTargets, pk)
 					}
 				}
 				if len(webrtcTargets) > 0 {
 					a.log.Debug("Phase 4: WebRTC fallback to direct-unreachable visors")
-					phase4, err := a.conn.ConnectToVisors(ctx, v.conf.PK, webrtcTargets, tptypes.WEBRTC,
-						existingByPK, nil, maxWEBRTC, countWEBRTC, false)
+					phase4, err := a.connectByReach(ctx, v.conf.PK, webrtcTargets, tptypes.WEBRTC,
+						existingByPK, reach, selfNAT, maxWEBRTC, countWEBRTC, reachExplorePerCycle, false)
 					if err != nil {
 						return err
 					}
@@ -579,47 +511,6 @@ func (a *autoconnector) filterDuplicates(pks []cipher.PubKey, trs []*transport.M
 	return absent
 }
 
-// fetchSUDPHVisors returns the set of visors registered for SUDPH in the address resolver,
-// using a cached result if it is less than sudphCacheTTL old.
-func (a *autoconnector) fetchSUDPHVisors(ctx context.Context) map[cipher.PubKey]struct{} {
-	if a.sudphVisors != nil && time.Since(a.sudphVisorsFetched) < sudphCacheTTL {
-		return a.sudphVisors
-	}
-
-	arClient := a.tm.ARClient()
-	if arClient == nil {
-		a.log.Warn("Address resolver client not available for SUDPH visor lookup")
-		return a.sudphVisors
-	}
-
-	result, err := arClient.TransportsType(ctx, tptypes.SUDPH)
-	if err != nil {
-		a.log.WithError(err).Warn("Failed to fetch SUDPH visors from address resolver")
-		return a.sudphVisors
-	}
-
-	sudphSet := make(map[cipher.PubKey]struct{}, len(result))
-	for pk := range result {
-		sudphSet[pk] = struct{}{}
-	}
-	a.sudphVisors = sudphSet
-	a.sudphVisorsFetched = time.Now()
-	a.log.WithField("count", len(sudphSet)).Debug("Cached SUDPH-capable visors from address resolver")
-	return sudphSet
-}
-
-// transportDiscoveryCache holds cached transport discovery data to reduce API calls
-type transportDiscoveryCache struct {
-	entriesByPK     map[cipher.PubKey][]*transport.Entry
-	transportCounts map[cipher.PubKey]int
-	// webrtcCapable is the set of visors observed holding at least one WebRTC
-	// transport in discovery. Like sudph, the only reliable signal that a visor
-	// can accept a WebRTC transport is that it already has one — so a visor
-	// advertises the capability by making WebRTC to public visors, and others
-	// use this set to reach it directly without blind trial.
-	webrtcCapable map[cipher.PubKey]struct{}
-}
-
 // fetchFallbackVisors queries TPD per-key-stats to find well-connected visors
 // when service discovery returns no public visors.
 // It returns visors with at least minFallbackTransports transports.
@@ -661,37 +552,25 @@ func (a *autoconnector) fetchFallbackVisors(ctx context.Context, v *Visor) ([]ci
 	return candidates, nil
 }
 
-// buildTransportCache fetches all transport discovery data once and builds lookup maps.
-// This replaces hundreds of individual DiscoverTransportsByPK API calls with a single
-// GetAllTransports call, dramatically reducing load on the transport discovery service.
-func (a *autoconnector) buildTransportCache(ctx context.Context, v *Visor) (*transportDiscoveryCache, error) {
-	tpD := v.tpDiscClient()
-
-	// Fetch ALL transports in one API call (instead of per-key calls)
-	allEntries, err := tpD.GetAllTransports(ctx)
-	if err != nil {
-		return nil, err
+// nonPublicPeers returns the candidates that are not public visors (the
+// earlier phases reach those), not this visor, and not already reached by an
+// automatic transport.
+func (a *autoconnector) nonPublicPeers(self cipher.PubKey, candidates map[cipher.PubKey]struct{}, public []cipher.PubKey) []cipher.PubKey {
+	if len(candidates) == 0 {
+		return nil
 	}
-
-	cache := &transportDiscoveryCache{
-		entriesByPK:     make(map[cipher.PubKey][]*transport.Entry),
-		transportCounts: make(map[cipher.PubKey]int),
-		webrtcCapable:   make(map[cipher.PubKey]struct{}),
+	skip := make(map[cipher.PubKey]struct{}, len(public)+1)
+	skip[self] = struct{}{}
+	for _, pk := range public {
+		skip[pk] = struct{}{}
 	}
-
-	// Build lookup maps: pk -> entries and pk -> count. A visor with any WebRTC
-	// transport in discovery is WebRTC-capable (see webrtcCapable doc).
-	for _, entry := range allEntries {
-		for _, edge := range entry.Edges {
-			cache.entriesByPK[edge] = append(cache.entriesByPK[edge], entry)
-			cache.transportCounts[edge]++
-			if entry.Type == tptypes.WEBRTC {
-				cache.webrtcCapable[edge] = struct{}{}
-			}
+	pks := make([]cipher.PubKey, 0, len(candidates))
+	for pk := range candidates {
+		if _, s := skip[pk]; !s {
+			pks = append(pks, pk)
 		}
 	}
-
-	return cache, nil
+	return a.filterDuplicates(pks, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
 }
 
 // filterDuplicatesOfType returns the pks that have no transport of type t in trs.
