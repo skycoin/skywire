@@ -136,7 +136,7 @@ github.com/0magnet/wfdrive/bidi
 # github.com/0magnet/winbox-go v0.0.0-20260915183431-ca6572e4c323
 ## explicit; go 1.24
 github.com/0magnet/winbox-go
-# github.com/0magnet/xterm-go v0.0.0-20260923132223-00c1a8e687cc
+# github.com/0magnet/xterm-go v0.0.0-20260930222402-0c2fc5d977f0
 ## explicit; go 1.24
 github.com/0magnet/xterm-go
 github.com/0magnet/xterm-go/vt

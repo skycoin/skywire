@@ -134,6 +134,8 @@ github.com/0magnet/winbox-go v0.0.0-20260915183431-ca6572e4c323 h1:v9S+e+vX65JTs
 github.com/0magnet/winbox-go v0.0.0-20260915183431-ca6572e4c323/go.mod h1:19+/rRQWd/tc9/8CFcUr6C+3AipeZmHyyda2tVombe4=
 github.com/0magnet/xterm-go v0.0.0-20260923132223-00c1a8e687cc h1:TGprWZha/nFbAiaBO7wnsXm4frNDIquWPlGVvHtQ8Wc=
 github.com/0magnet/xterm-go v0.0.0-20260923132223-00c1a8e687cc/go.mod h1:W6c6ofSTsxXuQEr1rSZ3qmfOj5a3LGB3uLQBL0/TiKc=
+github.com/0magnet/xterm-go v0.0.0-20260930222402-0c2fc5d977f0 h1:rZs4QejAT5xKKMM8iU4mblRSJ0+ObYOG13c0Y14zDE4=
+github.com/0magnet/xterm-go v0.0.0-20260930222402-0c2fc5d977f0/go.mod h1:W6c6ofSTsxXuQEr1rSZ3qmfOj5a3LGB3uLQBL0/TiKc=
 github.com/0magnet/yamux v0.1.3-0.20260905172050-450c4058f851 h1:kCRHPdm/JLtNrPlHUyb/HiNRb5XJQEFtCKYtLEUlQT4=
 github.com/0magnet/yamux v0.1.3-0.20260905172050-450c4058f851/go.mod h1:Yu78IjOQxwmdP7GXF2D6ty5iyxdBiTU8JidU1WtNzbw=
 github.com/ActiveState/termtest/conpty v0.5.0 h1:JLUe6YDs4Jw4xNPCU+8VwTpniYOGeKzQg4SM2YHQNA8=
