@@ -2,6 +2,8 @@
 package noise
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -64,35 +66,27 @@ func tryGenerateDHKey() (key noise.DHKey, ok bool) {
 	return noise.DHKey{Private: sec, Public: pub}, true
 }
 
-// Secp256k1 implements `noise.DHFunc`.
-type Secp256k1 struct{}
+// Secp256k1 implements `noise.DHFunc`. The zero value computes every DH.
+// Built with the handshake's own static secret key and the peer's static
+// public key (see New), it caches the one DH that repeats between the same
+// two peers: static-static.
+type Secp256k1 struct {
+	staticSK   []byte
+	peerStatic []byte
+}
 
 // GenerateKeypair helps to implement `noise.DHFunc`.
 func (Secp256k1) GenerateKeypair(_ io.Reader) (noise.DHKey, error) {
 	return <-keypairPool, nil
 }
 
-// dhCache memoizes ECDH outputs by (sk, pk) so repeated handshakes
-// between the same two peers don't redo the static-static DH on
-// every session.
-//
-// Why this is safe — in the KK and XK Noise patterns used by DMSG,
-// every handshake mixes in four DH operations: e (fresh keypair),
-// es / se (one side ephemeral), ee (both ephemeral), and ss (both
-// static). The ephemeral DHs use a fresh ephemeral key on every
-// handshake (see keypairPool above), so their (sk, pk) inputs are
-// almost never repeated — those entries get cached once on miss,
-// then evicted by the LRU bound without ever hitting. The ss DH
-// uses *long-lived static keys* on both sides — same inputs every
-// session for the same peer pair — so it hits the cache after the
-// first handshake between any given pair. Forward secrecy comes
-// from the ephemeral DHs, which we never cache.
-//
-// CPU profile motivation: production address-resolver / TPD spend
-// ~24-31% of CPU in cipher.ECDH → secp256k1-go2 EC multiply on
-// inbound DMSG handshakes; ss accounts for roughly a quarter of
-// the DH calls per handshake, so caching it saves ~5-6% absolute
-// CPU on every DMSG-handshaking service.
+// dhCache memoizes the static-static DH (the KK pattern's ss) by (sk, pk),
+// so repeated stream handshakes between the same two peers don't redo it.
+// The other DHs of a handshake involve a fresh ephemeral key and never
+// repeat; they skip the cache. When they were cached too (at ~500 DH/s on
+// the address resolver) they cycled the whole cache every few seconds and
+// evicted the ss entries before a peer came back. Forward secrecy comes from
+// the ephemeral DHs, which are never cached.
 const dhCacheMax = 4096 // ~ (65 + 33) * 4096 ≈ 400 KB worst case
 
 // dhCacheKey packs pk (33 bytes, compressed secp256k1) || sk
@@ -117,10 +111,11 @@ func makeDHKey(sk, pk []byte) dhCacheKey {
 }
 
 // DH helps to implement `noise.DHFunc`.
-// Keys are already validated by the noise handshake state machine, so we
-// skip the redundant NewPubKey/NewSecKey validation and copy directly.
-// cipher.ECDH still performs its own internal validation.
-func (Secp256k1) DH(sk, pk []byte) ([]byte, error) {
+func (d Secp256k1) DH(sk, pk []byte) ([]byte, error) {
+	static := len(d.staticSK) > 0 && bytes.Equal(sk, d.staticSK) && bytes.Equal(pk, d.peerStatic)
+	if !static {
+		return ecdh(sk, pk)
+	}
 	k := makeDHKey(sk, pk)
 	dhCacheMu.RLock()
 	cached, hit := dhCache[k]
@@ -132,21 +127,10 @@ func (Secp256k1) DH(sk, pk []byte) ([]byte, error) {
 		return out, nil
 	}
 	dhCacheMisses.Add(1)
-
-	var pubKey cipher.PubKey
-	var secKey cipher.SecKey
-	copy(pubKey[:], pk)
-	copy(secKey[:], sk)
-	ecdh, err := cipher.ECDH(pubKey, secKey)
+	out, err := ecdh(sk, pk)
 	if err != nil {
-		// flynn/noise's DHFunc returns an error (the old skycoin/noise fork's
-		// signature did not) — surface it as a handshake failure instead of
-		// panicking the whole visor on a malformed peer key.
-		return nil, fmt.Errorf("noise DH: ECDH failed: %w", err)
+		return nil, err
 	}
-	// DHLen() returns 33; ECDH returns 32-byte SHA256 hash, pad to 33.
-	out := make([]byte, 33)
-	copy(out, ecdh)
 
 	var entry [33]byte
 	copy(entry[:], out)
@@ -154,9 +138,7 @@ func (Secp256k1) DH(sk, pk []byte) ([]byte, error) {
 	if len(dhCache) >= dhCacheMax {
 		// Bounded random eviction — Go map iteration order is
 		// randomized, so dropping the first element we see is a
-		// cheap O(1) approximation of LRU. Ephemeral entries
-		// dominate the miss stream; the long-lived static-static
-		// pair is statistically likely to survive any given pass.
+		// cheap O(1) approximation of LRU.
 		for k0 := range dhCache {
 			delete(dhCache, k0)
 			break
@@ -165,6 +147,27 @@ func (Secp256k1) DH(sk, pk []byte) ([]byte, error) {
 	}
 	dhCache[k] = entry
 	dhCacheMu.Unlock()
+	return out, nil
+}
+
+// ecdh is cipher.ECDH without its extra public key check:
+// secp256k1.ECDH validates both keys itself (and must: an off-curve peer
+// point would otherwise be multiplied), so the one in cipher.ECDH repeated
+// a point decompression, ~12% of each DH. The output is the same,
+// SHA256 of the shared point, padded to DHLen.
+func ecdh(sk, pk []byte) ([]byte, error) {
+	if len(sk) != 32 || len(pk) != 33 {
+		return nil, fmt.Errorf("noise DH: bad key length (sk %d, pk %d)", len(sk), len(pk))
+	}
+	shared := secp256k1.ECDH(pk, sk)
+	if shared == nil {
+		// flynn/noise's DHFunc returns an error — surface it as a
+		// handshake failure instead of panicking on a malformed peer key.
+		return nil, errors.New("noise DH: ECDH failed: invalid key")
+	}
+	h := cipher.SumSHA256(shared)
+	out := make([]byte, 33)
+	copy(out, h[:])
 	return out, nil
 }
 
