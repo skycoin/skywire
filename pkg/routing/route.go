@@ -196,8 +196,12 @@ func (p PathEdges) MarshalText() ([]byte, error) {
 	return res.Bytes(), nil
 }
 
-// UnmarshalText implements json.Unmarshaler
+// UnmarshalText implements json.Unmarshaler. The form is "<pk>:<pk>"; anything
+// else is an error, not a panic — it arrives straight from a request body.
 func (p *PathEdges) UnmarshalText(b []byte) error {
+	if len(b) != 133 || b[66] != ':' {
+		return fmt.Errorf("path edges: want \"<pk>:<pk>\", got %d bytes", len(b))
+	}
 	err := p[0].UnmarshalText(b[:66])
 	if err != nil {
 		return err
