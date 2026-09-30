@@ -65,7 +65,7 @@ var (
 
 func init() {
 	addPvCmd.Flags().IntVarP(&pvCount, "count", "n", 5, "number of public visors to add transports to")
-	addPvCmd.Flags().StringVarP(&pvTransportType, "type", "t", "", "transport type (stcpr, sudph, squicr, swtr, dmsg; default stcpr, swtr in a browser)")
+	addPvCmd.Flags().StringVarP(&pvTransportType, "type", "t", "", "transport type ("+knownTypes()+"; default stcpr, swtr in a browser)")
 	addPvCmd.Flags().DurationVarP(&pvTimeout, "timeout", "o", 0, "operation timeout")
 	addPvCmd.Flags().StringVarP(&pvSDURL, "sdurl", "a", deployment.Prod.ServiceDiscovery, "service discovery url")
 	addPvCmd.Flags().StringVarP(&pvUTURL, "uturl", "w", deployment.Prod.TransportDiscovery, "uptime tracker url (TPD integrated)")
@@ -95,10 +95,8 @@ var addPvCmd = &cobra.Command{
   transports to the top N visors (by transport count). This is useful for
   improving network connectivity and reachability.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		switch pvTransportType {
-		case "", "stcpr", "sudph", "squicr", "swtr", "dmsg":
-		default:
-			logger.Fatal("Invalid transport type for public visors (use stcpr, sudph, squicr, swtr or dmsg): ", pvTransportType)
+		if pvTransportType != "" && !types.Valid(types.Type(pvTransportType)) {
+			logger.Fatal("Invalid transport type (use one of "+knownTypes()+"): ", pvTransportType)
 		}
 
 		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
@@ -438,4 +436,14 @@ var addPvCmd = &cobra.Command{
 			os.Exit(1)
 		}
 	},
+}
+
+// knownTypes lists every transport type, for help and error text.
+func knownTypes() string {
+	known := types.Known()
+	names := make([]string, len(known))
+	for i, t := range known {
+		names[i] = string(t)
+	}
+	return strings.Join(names, ", ")
 }
