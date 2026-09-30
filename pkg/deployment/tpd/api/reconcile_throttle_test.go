@@ -27,17 +27,19 @@ func TestReconcileThrottle_Plan(t *testing.T) {
 	e2 := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "sudph"}
 	t0 := time.Date(2026, 9, 10, 19, 0, 0, 0, time.UTC)
 
-	reg, hb := th.plan(t0, []*transport.Entry{e1, e2})
+	reg, touch, hb := th.plan(t0, []*transport.Entry{e1, e2})
 	require.Len(t, reg, 2, "first sight registers everything")
+	require.Empty(t, touch)
 	require.Len(t, hb, 2)
 
 	// The other edge's snapshot 20 s later: nothing to write.
-	reg, hb = th.plan(t0.Add(20*time.Second), []*transport.Entry{e1, e2})
+	reg, touch, hb = th.plan(t0.Add(20*time.Second), []*transport.Entry{e1, e2})
 	require.Empty(t, reg)
+	require.Empty(t, touch)
 	require.Empty(t, hb)
 
 	// 45 s: heartbeat due again, registration is not.
-	reg, hb = th.plan(t0.Add(45*time.Second), []*transport.Entry{e1, e2})
+	reg, _, hb = th.plan(t0.Add(45*time.Second), []*transport.Entry{e1, e2})
 	require.Empty(t, reg)
 	require.Len(t, hb, 2)
 
@@ -45,27 +47,29 @@ func TestReconcileThrottle_Plan(t *testing.T) {
 	// says "user"): not a change, nothing to write.
 	e1b := *e1
 	e1b.Label = "user"
-	reg, _ = th.plan(t0.Add(50*time.Second), []*transport.Entry{&e1b, e2})
+	reg, _, _ = th.plan(t0.Add(50*time.Second), []*transport.Entry{&e1b, e2})
 	require.Empty(t, reg, "edges disagreeing on the label must not re-register")
 
 	// A changed type is a change: registered at once; the sibling waits.
 	e1c := *e1
 	e1c.Type = "squicr"
-	reg, _ = th.plan(t0.Add(60*time.Second), []*transport.Entry{&e1c, e2})
+	reg, _, _ = th.plan(t0.Add(60*time.Second), []*transport.Entry{&e1c, e2})
 	require.Equal(t, []*transport.Entry{&e1c}, reg)
 
-	// The refresh gap elapses: the unchanged entry is registered again.
-	reg, _ = th.plan(t0.Add(100*time.Second), []*transport.Entry{&e1c, e2})
-	require.Equal(t, []*transport.Entry{e2}, reg)
+	// The refresh gap elapses: the unchanged entry is touched, not rewritten.
+	reg, touch, _ = th.plan(t0.Add(100*time.Second), []*transport.Entry{&e1c, e2})
+	require.Empty(t, reg)
+	require.Equal(t, []*transport.Entry{e2}, touch)
 	e1b = e1c
 
 	// A failed write is retried on the very next snapshot.
 	th.forget([]*transport.Entry{e2})
-	reg, _ = th.plan(t0.Add(101*time.Second), []*transport.Entry{&e1b, e2})
+	reg, _, _ = th.plan(t0.Add(101*time.Second), []*transport.Entry{&e1b, e2})
 	require.Equal(t, []*transport.Entry{e2}, reg)
 
 	// Marks of transports not reported for a while are dropped.
-	reg, _ = th.plan(t0.Add(10*time.Minute), []*transport.Entry{e2})
+	// (Its own mark was swept too, so it is written in full again.)
+	reg, _, _ = th.plan(t0.Add(10*time.Minute), []*transport.Entry{e2})
 	require.Len(t, reg, 1)
 	th.mu.Lock()
 	_, hasE1 := th.marks[e1.ID]
@@ -77,6 +81,7 @@ func TestReconcileThrottle_Plan(t *testing.T) {
 type countingStore struct {
 	store.Store
 	registered atomic.Int64
+	touched    atomic.Int64
 	heartbeats atomic.Int64
 }
 
@@ -88,6 +93,22 @@ func (c *countingStore) RegisterTransportsBatch(ctx context.Context, r cipher.Pu
 func (c *countingStore) RecordTransportHeartbeat(ctx context.Context, id uuid.UUID, typ string, at time.Time) error {
 	c.heartbeats.Add(1)
 	return c.Store.RecordTransportHeartbeat(ctx, id, typ, at)
+}
+
+// The batch forms (store.BatchStore), counted the same way.
+
+func (c *countingStore) TouchTransports(ctx context.Context, r cipher.PubKey, ids []uuid.UUID) error {
+	c.touched.Add(int64(len(ids)))
+	return c.Store.(store.BatchStore).TouchTransports(ctx, r, ids)
+}
+
+func (c *countingStore) RecordTransportHeartbeats(ctx context.Context, es []*transport.Entry, at time.Time) error {
+	c.heartbeats.Add(int64(len(es)))
+	return c.Store.(store.BatchStore).RecordTransportHeartbeats(ctx, es, at)
+}
+
+func (c *countingStore) DeregisterTransports(ctx context.Context, ids []uuid.UUID) ([]*transport.Entry, error) {
+	return c.Store.(store.BatchStore).DeregisterTransports(ctx, ids)
 }
 
 // Two snapshots of the same list in quick succession (the two edges, or one
@@ -167,4 +188,29 @@ func TestRefreshKeepsWhatAnOldListLacks(t *testing.T) {
 	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, []*transport.Entry{fresh}, tab, "v"))
 	_, err = base.GetTransportByID(ctx, fresh.ID)
 	require.NoError(t, err, "the other edge re-registers at once")
+}
+
+// A due refresh of an unchanged transport extends its lifetime; it is not
+// written again. The reporter's live subscription is what keeps it.
+func TestReconcileRefreshTouchesInsteadOfRewriting(t *testing.T) {
+	ctx := context.Background()
+	api, cs, _ := newThrottleTestAPI(t)
+	a, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	e1 := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "stcpr"}
+	e2 := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "sudph"}
+
+	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, []*transport.Entry{e1, e2}, a, "v"))
+	require.EqualValues(t, 2, cs.registered.Load())
+
+	// Age the registrations past the refresh gap (the heartbeat marks stay
+	// recent, so nothing is swept).
+	api.reconcile.mu.Lock()
+	for _, m := range api.reconcile.marks {
+		m.registeredAt = m.registeredAt.Add(-2 * api.reconcile.refreshGap)
+	}
+	api.reconcile.mu.Unlock()
+	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, []*transport.Entry{e1, e2}, a, "v"))
+	require.EqualValues(t, 2, cs.registered.Load(), "nothing rewritten")
+	require.EqualValues(t, 2, cs.touched.Load(), "both touched")
 }

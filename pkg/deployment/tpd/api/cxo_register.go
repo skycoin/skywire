@@ -133,10 +133,17 @@ func (api *API) reconcileFromCXO(ctx context.Context, entries []*transport.Entry
 		touchedEdges[e.Edges[1]] = struct{}{}
 	}
 
-	// Register/refresh what is new, changed, or due for a TTL refresh, and
-	// record heartbeats that are due; the rest was written moments ago by
-	// this or the other edge's snapshot (see reconcileThrottle).
-	toRegister, toHeartbeat := api.reconcile.plan(time.Now(), accepted)
+	// Write what is new or changed, extend the lifetime of what is unchanged
+	// and due (no rewrite), and record heartbeats that are due; the rest was
+	// handled moments ago by this or the other edge's snapshot (see
+	// reconcileThrottle). Each is one pipeline for the whole snapshot.
+	bs, batched := api.store.(store.BatchStore)
+	toRegister, toTouch, toHeartbeat := api.reconcile.plan(time.Now(), accepted)
+	if !batched {
+		// A store without batch writes refreshes by rewriting.
+		toRegister = append(toRegister, toTouch...)
+		toTouch = nil
+	}
 	if len(toRegister) > 0 {
 		signed := make([]*transport.SignedEntry, 0, len(toRegister))
 		for _, e := range toRegister {
@@ -147,12 +154,27 @@ func (api *API) reconcileFromCXO(ctx context.Context, entries []*transport.Entry
 			return fmt.Errorf("register batch: %w", err)
 		}
 	}
-	for _, e := range toHeartbeat {
-		if ctx.Err() != nil {
-			break // the rest would fail at once; they come due again next gap
+	if len(toTouch) > 0 {
+		ids := make([]uuid.UUID, len(toTouch))
+		for i, e := range toTouch {
+			ids[i] = e.ID
 		}
-		if err := api.store.RecordTransportHeartbeat(ctx, e.ID, string(e.Type), time.Time{}); err != nil {
+		if err := bs.TouchTransports(ctx, reporter, ids); err != nil {
+			api.reconcile.forget(toTouch) // rewritten in full next snapshot
+		}
+	}
+	if batched {
+		if err := bs.RecordTransportHeartbeats(ctx, toHeartbeat, time.Time{}); err != nil {
 			_ = err //nolint:errcheck // uptime is auxiliary; store logs
+		}
+	} else {
+		for _, e := range toHeartbeat {
+			if ctx.Err() != nil {
+				break // the rest would fail at once; they come due again next gap
+			}
+			if err := api.store.RecordTransportHeartbeat(ctx, e.ID, string(e.Type), time.Time{}); err != nil {
+				_ = err //nolint:errcheck // uptime is auxiliary; store logs
+			}
 		}
 	}
 	if !deregisterAbsent {
@@ -179,17 +201,31 @@ func (api *API) reconcileFromCXO(ctx context.Context, entries []*transport.Entry
 		}
 		return fmt.Errorf("get existing: %w", err)
 	}
-	var removed []*transport.Entry
+	var absent []*transport.Entry
 	for _, e := range existing {
-		if _, ok := keep[e.ID]; ok {
-			continue
+		if _, ok := keep[e.ID]; !ok {
+			absent = append(absent, e)
 		}
-		if err := api.store.DeregisterTransport(ctx, e.ID); err != nil {
-			// Best-effort — a failed absent-deregister self-corrects on the next
-			// snapshot; the aggregator logs if the whole reconcile returns an error.
-			continue
+	}
+	var removed []*transport.Entry
+	if batched && len(absent) > 0 {
+		ids := make([]uuid.UUID, len(absent))
+		for i, e := range absent {
+			ids[i] = e.ID
 		}
-		removed = append(removed, e)
+		// Best-effort — a failed delete self-corrects on the next snapshot.
+		removed, _ = bs.DeregisterTransports(ctx, ids) //nolint:errcheck
+	} else {
+		for _, e := range absent {
+			if err := api.store.DeregisterTransport(ctx, e.ID); err != nil {
+				// Best-effort — a failed absent-deregister self-corrects on the next
+				// snapshot; the aggregator logs if the whole reconcile returns an error.
+				continue
+			}
+			removed = append(removed, e)
+		}
+	}
+	for _, e := range removed {
 		touchedEdges[e.Edges[0]] = struct{}{}
 		touchedEdges[e.Edges[1]] = struct{}{}
 	}

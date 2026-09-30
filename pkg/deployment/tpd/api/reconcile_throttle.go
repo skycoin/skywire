@@ -21,9 +21,10 @@ import (
 // ~460k of redis's 640k commands a minute (2026-09-10).
 //
 // reconcileThrottle remembers, per transport, what was last written and
-// when: an unchanged entry is re-registered only once refreshGap has
-// passed (a third of the TTL by default, so a refresh is never missed),
-// and its heartbeat recorded at most once per heartbeatGap.
+// when: a new or changed entry is written in full; an unchanged one only has
+// its lifetime extended (EXPIRE), once refreshGap has passed (a third of the
+// TTL, so a refresh is never missed) — the reporter's live subscription is
+// what keeps it; and its heartbeat is recorded at most once per heartbeatGap.
 
 const (
 	// defaultReconcileRefreshGap is used until SetEntryTimeout is called.
@@ -82,11 +83,13 @@ func entryFingerprint(e *transport.Entry) uint64 {
 	return h.Sum64()
 }
 
-// plan splits entries into those that must be (re)registered now and those
-// whose heartbeat is due, marking both as done as of now. A registration
-// that then fails must be handed back through forget so it is retried on
-// the next snapshot.
-func (t *reconcileThrottle) plan(now time.Time, entries []*transport.Entry) (register, heartbeat []*transport.Entry) {
+// plan splits entries into those that must be written now (new, changed, or
+// forgotten after a failed write or a delete), those whose registration only
+// needs its lifetime extended (unchanged, refresh due: a touch, not a
+// rewrite), and those whose heartbeat is due — marking all as done as of now.
+// A write that then fails must be handed back through forget so it is retried
+// on the next snapshot.
+func (t *reconcileThrottle) plan(now time.Time, entries []*transport.Entry) (register, touch, heartbeat []*transport.Entry) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.sweepLocked(now)
@@ -97,16 +100,20 @@ func (t *reconcileThrottle) plan(now time.Time, entries []*transport.Entry) (reg
 			m = &reconcileMark{}
 			t.marks[e.ID] = m
 		}
-		if m.fp != fp || now.Sub(m.registeredAt) >= t.refreshGap {
+		switch {
+		case m.fp != fp || m.registeredAt.IsZero():
 			m.fp, m.registeredAt = fp, now
 			register = append(register, e)
+		case now.Sub(m.registeredAt) >= t.refreshGap:
+			m.registeredAt = now
+			touch = append(touch, e)
 		}
 		if now.Sub(m.heartbeatAt) >= t.heartbeatGap {
 			m.heartbeatAt = now
 			heartbeat = append(heartbeat, e)
 		}
 	}
-	return register, heartbeat
+	return register, touch, heartbeat
 }
 
 // forget clears the registration mark of entries whose write failed.
