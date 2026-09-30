@@ -47,6 +47,7 @@ const (
 	FeedTPDAllTransports     = cxosub.FeedTPDAllTransports
 	FeedTPDStats             = cxosub.FeedTPDStats
 	FeedTPDRouting           = cxosub.FeedTPDRouting
+	FeedARReach              = cxosub.FeedARReach
 )
 
 // Re-exported tab constants.
@@ -161,6 +162,12 @@ func (v *Visor) cxoFeedSpec(fk cxosub.Feed) (cipher.PubKey, uint16, string, erro
 			return cipher.PubKey{}, 0, "", errors.New("no TPD CXO peer (transport.discovery_dmsg unset)")
 		}
 		return pk, skyenv.DmsgTPDRoutingCXOPort, "routing/", nil
+	case FeedARReach:
+		pk, ok := arBindCXOPeer(v)
+		if !ok {
+			return cipher.PubKey{}, 0, "", errors.New("no AR CXO peer (transport.address_resolver is not dmsg://)")
+		}
+		return pk, skyenv.DmsgARReachCXOPort, "reach/", nil
 	}
 	return cipher.PubKey{}, 0, "", fmt.Errorf("unknown feed: %d", fk)
 }
