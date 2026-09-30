@@ -84,7 +84,11 @@ func Run(ctx context.Context, file File, master *logging.MasterLogger) error {
 			return fmt.Errorf("services: block #%d (%s): unknown type %q (registered: %v)",
 				i, b.Label(), b.Type, RegisteredTypes())
 		}
-		s, err := factory(b.Raw, master.PackageLogger(b.Label()))
+		raw, err := withKeyFile(b.Raw)
+		if err != nil {
+			return fmt.Errorf("services: block #%d (%s): %w", i, b.Label(), err)
+		}
+		s, err := factory(raw, master.PackageLogger(b.Label()))
 		if err != nil {
 			return fmt.Errorf("services: block #%d (%s): build: %w", i, b.Label(), err)
 		}
