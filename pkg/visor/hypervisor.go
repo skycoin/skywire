@@ -1143,6 +1143,14 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			}
 			r.Get("/", hv.visor.serveBrowseWS)
 		})
+		// A browse frame's requests, streamed (api_browse_stream.go); out here
+		// so a long download is not cut at the /api timeout.
+		r.Route("/api/browse-stream", func(r chi.Router) {
+			if hv.c.EnableAuth {
+				r.Use(hv.users.Authorize)
+			}
+			r.Post("/", hv.visor.serveBrowseStream)
+		})
 
 		// A call's audio, for a visor whose device belongs to the app that
 		// started it (Android) — see hypervisor_handlers_voice_audio.go.

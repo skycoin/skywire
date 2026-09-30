@@ -114,6 +114,8 @@ github.com/0magnet/realorigin v0.2.3-0.20260930213059-37a639d80c0b h1:jCG8PG68HB
 github.com/0magnet/realorigin v0.2.3-0.20260930213059-37a639d80c0b/go.mod h1:JyBJs48D0cN2TlOdp/pjTqxpQyO2mu4ybkFmsQBFRKg=
 github.com/0magnet/realorigin v0.2.3-0.20260930221610-f72aa1d9ba6a h1:u3fSZVt6xYfZQPfTCapVykdtLJCwJjwMsVLapXRG2MM=
 github.com/0magnet/realorigin v0.2.3-0.20260930221610-f72aa1d9ba6a/go.mod h1:JyBJs48D0cN2TlOdp/pjTqxpQyO2mu4ybkFmsQBFRKg=
+github.com/0magnet/realorigin v0.2.3-0.20260930224655-088c88759728 h1:1tohQre5q1u4d3DC+QqSjBV3EPwiZ3gHwVnl9rRFwBc=
+github.com/0magnet/realorigin v0.2.3-0.20260930224655-088c88759728/go.mod h1:JyBJs48D0cN2TlOdp/pjTqxpQyO2mu4ybkFmsQBFRKg=
 github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076 h1:25bEd9CynC/HmPEo+vqxcm3ne1j4/x2Ee1iIKKXf0Ww=
 github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076/go.mod h1:QaGfTxerTG6grc5YQD3C+0AkkbFmPmZtZF8ZW5D5Tro=
 github.com/0magnet/sh/v3 v3.13.2-0.20260928172341-4c52a7abff02 h1:N3EWOkb1IMPiZqZ0PMDWEPciTB09hZ00njS+N9xswoM=
