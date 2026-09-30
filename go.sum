@@ -110,8 +110,8 @@ github.com/0magnet/realorigin v0.2.2 h1:mbHLgSuu5hKqXa7fg56mVhG0NRQwwSbrNCtXyUVA
 github.com/0magnet/realorigin v0.2.2/go.mod h1:JyBJs48D0cN2TlOdp/pjTqxpQyO2mu4ybkFmsQBFRKg=
 github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076 h1:25bEd9CynC/HmPEo+vqxcm3ne1j4/x2Ee1iIKKXf0Ww=
 github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076/go.mod h1:QaGfTxerTG6grc5YQD3C+0AkkbFmPmZtZF8ZW5D5Tro=
-github.com/0magnet/sh/v3 v3.13.2-0.20260818190530-13d0024da85c h1:qKcMe7/qRLFPbk/HWEYy5QuYY+luINKnlen9BhDPRZU=
-github.com/0magnet/sh/v3 v3.13.2-0.20260818190530-13d0024da85c/go.mod h1:IdyC3iqIKArn4KOl0a58dV2spH0PH6pLJKOZYB2kFR0=
+github.com/0magnet/sh/v3 v3.13.2-0.20260928172341-4c52a7abff02 h1:N3EWOkb1IMPiZqZ0PMDWEPciTB09hZ00njS+N9xswoM=
+github.com/0magnet/sh/v3 v3.13.2-0.20260928172341-4c52a7abff02/go.mod h1:ngQcnC5AqtrdAe3n1WaXvxXU63Jex0A7zKpJ4xQMfmQ=
 github.com/0magnet/spheregraph v0.0.0-20260906144810-35af719bf2f1 h1:ec89d2yMSHms03rZCDs5wVuH5hWkaLw5IJWJG2yQOIE=
 github.com/0magnet/spheregraph v0.0.0-20260906144810-35af719bf2f1/go.mod h1:Lo6dEOjpVn+ra0q7gNWsvxxcd/SUF7Pg3dkRhykOScI=
 github.com/0magnet/sysinfo v1.1.4-0.20260905172033-914ade4a2548 h1:J7C/fYqBFSM4JF9+aRO3/s9f6uyriTQWv40sYc5p8Fg=
@@ -120,8 +120,8 @@ github.com/0magnet/termanim v0.0.0-20260916100333-d501f348ee17 h1:haAs+7Tb5q91PJ
 github.com/0magnet/termanim v0.0.0-20260916100333-d501f348ee17/go.mod h1:MYXXCesDzLpSA5ULDgbrzOq+I5tIdSzfJiwa5s6qXYA=
 github.com/0magnet/u-root v0.16.1-0.20260907161518-7972ea755b47 h1:uYelfGoqdFDxsKGgiIZ9/cvbrBSR+e6mA29OhVMVlFw=
 github.com/0magnet/u-root v0.16.1-0.20260907161518-7972ea755b47/go.mod h1:YBQz88D4gXBLb9++oXsiZZjfbtRC0bp4c2pduFOyZts=
-github.com/0magnet/websh v0.0.0-20260924101532-76422c7ff9c3 h1:TT0V4GyEqBEYfX53XcosrROm2aiI/T47EUa6J+fHnvA=
-github.com/0magnet/websh v0.0.0-20260924101532-76422c7ff9c3/go.mod h1:BHkVBuUrZM8itlUgErK1Ui+bnR0MpXzJ+WPSRd972+8=
+github.com/0magnet/websh v0.0.0-20260928172614-900c2c6df638 h1:1arQ23T+GgPRJ9CpuQoIRp9cAH5z196Uh/L0N7uHDHk=
+github.com/0magnet/websh v0.0.0-20260928172614-900c2c6df638/go.mod h1:9PsSs8cwrFxc2NA2lAru/LNMq9b9jjK5EGxdWq60tms=
 github.com/0magnet/wfdrive v0.3.1 h1:VKwgCprNRKJtyAO5RQ40yLsYec1QqaeLXykoDV9kT08=
 github.com/0magnet/wfdrive v0.3.1/go.mod h1:ckGVOflE4OC+G0MTrcin3hRoOwEFOCtRxY8nWxVt2bw=
 github.com/0magnet/winbox-go v0.0.0-20260915183431-ca6572e4c323 h1:v9S+e+vX65JTsUoAvw/QBRaDuveNwV+fdW57qxj6yWI=
@@ -867,8 +867,8 @@ github.com/rogpeppe/fastuuid v1.2.0/go.mod h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6L
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
 github.com/rogpeppe/go-internal v1.6.1/go.mod h1:xXDCJY+GAPziupqXw64V24skbSoqbTEfhy4qGm1nDQc=
 github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/fJaraNFVN+nFs=
-github.com/rogpeppe/go-internal v1.15.0 h1:D0RCU5rMAp+SpgkiNdrjfJ+LX4J1M32V2NeCY7EJ6hc=
-github.com/rogpeppe/go-internal v1.15.0/go.mod h1:DrUVZyrJU+txYW5/1kwtXQSMFio52ZOxX7yM1VHvnxs=
+github.com/rogpeppe/go-internal v1.16.0 h1:O9DK+vNMDVGLr2BeZqmpLeMjiMNkuXfcqntWbZV6S5g=
+github.com/rogpeppe/go-internal v1.16.0/go.mod h1:DrUVZyrJU+txYW5/1kwtXQSMFio52ZOxX7yM1VHvnxs=
 github.com/rs/cors v1.11.1 h1:eU3gRzXLRK57F5rKMGMZURNdIG4EoAmX8k94r9wXWHA=
 github.com/rs/cors v1.11.1/go.mod h1:XyqrcTp5zjWr1wsJ8PIRZssZ8b/WMcMf71DJnit4EMU=
 github.com/rtr7/dhcp4 v0.0.0-20220302171438-18c84d089b46 h1:3psQveH4RUiv5yc3p7kRySilf1nSXLQhAvJFwg4fgnE=

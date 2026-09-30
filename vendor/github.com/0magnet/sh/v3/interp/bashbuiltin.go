@@ -297,13 +297,15 @@ func (r *Runner) compgenWords(ctx context.Context, action compgenAction, word st
 	case "file", "directory":
 		out = append(out, r.compgenPaths(ctx, word, action == "directory")...)
 	case "job":
-		for _, i := range r.jobIndexes() {
-			out = append(out, r.bgProcs[i].cmd)
+		for _, bg := range r.jobList() {
+			out = append(out, bg.cmd)
 		}
 	case "group", "service", "user", "hostname", "setopt", "shopt", "signal":
 		if action == "signal" {
-			for _, name := range signalNames {
-				if name != "" {
+			// Walked rather than ranged over a table, so the names are the
+			// platform's own; see signalName in os_unix.go.
+			for num := 1; num <= maxSignal; num++ {
+				if name := signalName(num); name != "" {
 					out = append(out, "SIG"+name)
 				}
 			}
