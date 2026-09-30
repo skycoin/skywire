@@ -8,8 +8,14 @@
   SkywireKeychainGroup: the Keychain access group SecretStore writes in, so
   the packet-tunnel extension (Lane D) reads the same items; from the
   xcconfig, with the team prefix once signing exists.
-  NSFaceIDUsageDescription: the app lock (Settings); translated in
-  InfoPlist.xcstrings.
+  NSFaceIDUsageDescription: the app lock (Settings). NSMicrophoneUsageDescription
+  and NSCameraUsageDescription: the chat page's voice and video messages and
+  its QR scanner (getUserMedia; without them the app is killed at the first
+  capture). NSPhotoLibraryAddUsageDescription: the share sheet's "Save Image"
+  and "Save Video" for a chat download. All translated in InfoPlist.xcstrings.
+  CFBundleURLTypes: skychat: links (the xcconfig's SKYWIRE_URL_SCHEME), which
+  the chat page shows in its Add-by-address dialog (ChatRouter). Only skychat:
+  is claimed; skycoin: belongs to the Skycoin wallet.
 -->
 <plist version="1.0">
 <dict>
@@ -17,6 +23,23 @@
 	<string>$(AppIdentifierPrefix)$(SKYWIRE_KEYCHAIN_GROUP)</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Skywire uses Face ID to unlock the app when the app lock is on.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SkyChat uses the microphone to record voice and video messages.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>SkyChat uses the camera to record video messages and scan QR codes.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Skywire saves the pictures and videos you choose to your photo library.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).skychat</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(SKYWIRE_URL_SCHEME)</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

@@ -31,6 +31,11 @@ public enum SkychatProfile {
         URL(string: "http://\(AppArgs.loopbackHost):\(port)/")!
     }
 
+    /// The same listener as an origin (no path), for `LoopbackTransport`.
+    public static func origin(port: Int) -> URL {
+        URL(string: "http://\(AppArgs.loopbackHost):\(port)")!
+    }
+
     public static func listenPort(_ args: [String]) -> Int {
         AppArgs.listenPort(args, defaultPort: defaultPort)
     }

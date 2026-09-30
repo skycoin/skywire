@@ -1,28 +1,46 @@
 import SwiftUI
 
-/// The tabs, under the app lock. Chat, the apps hub and Wallet join Home and
+/// The tabs, under the app lock. The apps hub and Wallet join Home, Chat and
 /// Settings in later milestones (Android's bar: Home, Chat, hub, Wallet,
 /// Settings).
 struct RootView: View {
     @EnvironmentObject private var app: AppModel
     @EnvironmentObject private var lock: AppLock
+    @EnvironmentObject private var router: ChatRouter
+    @EnvironmentObject private var notifications: NotificationBridge
     @ObservedObject private var settings: AppSettings
     @Environment(\.scenePhase) private var scenePhase
+    @State private var tab = AppTab.home
 
     init(settings: AppSettings) {
         self.settings = settings
     }
 
     var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             HomeView()
                 .tabItem { Label("tab_home", systemImage: "house") }
+                .tag(AppTab.home)
+            ChatView()
+                .tabItem { Label("tab_chat", systemImage: "bubble.left.and.bubble.right") }
+                .badge(notifications.unread ?? 0)
+                .tag(AppTab.chat)
             SettingsView()
                 .tabItem { Label("tab_settings", systemImage: "gearshape") }
+                .tag(AppTab.settings)
         }
         .tint(.skywire)
         .modifier(LockCover(lock: lock, enabled: settings.appLockEnabled))
-        .onAppear { app.launch() }
+        .onAppear {
+            app.launch()
+            // A link or a tap that launched the app.
+            if router.pending != nil { tab = .chat }
+        }
+        // Whichever screen is up: the hub is read while the core is connected.
+        .task(id: app.connected) { await notifications.run(app) }
+        .onChange(of: router.pending) { request in
+            if request != nil { tab = .chat }
+        }
         .onChange(of: scenePhase) { phase in
             switch phase {
             case .background:
@@ -37,4 +55,9 @@ struct RootView: View {
             lock.willEnterForeground()
         }
     }
+}
+
+/// The tab bar's tabs, in order.
+enum AppTab: Hashable {
+    case home, chat, settings
 }

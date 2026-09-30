@@ -247,3 +247,41 @@ func TestGetNotifyStream_OmitsEmptyTag(t *testing.T) {
 		t.Errorf("body = %q, want no tag field when Tag is empty", w.Body.String())
 	}
 }
+
+// TestGetNotifyStream_OpensWithAComment pins the opening comment: the first
+// body bytes arrive as soon as the handler subscribed, not with the first ping
+// 20 s later. The iOS app's HTTP client surfaces the response only once body
+// bytes arrive, so without them a live stream looks like a hung connect.
+func TestGetNotifyStream_OpensWithAComment(t *testing.T) {
+	hub := NewNotifyHub(nil)
+	hv := &Hypervisor{visor: &Visor{notifyHub: hub}}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/notifications/stream", nil).WithContext(ctx)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		hv.getNotifyStream()(w, r)
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for hub.SubscriberCount() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("handler never subscribed to the hub")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	hub.Publish(appserver.NotifyReq{App: "skychat", Title: "alice", Body: "hi"})
+	cancel()
+	<-done
+
+	body := w.Body.String()
+	if !strings.HasPrefix(body, ": connected\n\n") {
+		t.Errorf("body = %q, want it to open with the \": connected\" comment", body)
+	}
+	if !strings.Contains(body, `data: {"app":"skychat","title":"alice","body":"hi"}`) {
+		t.Errorf("body = %q, want the event after the opening comment", body)
+	}
+}

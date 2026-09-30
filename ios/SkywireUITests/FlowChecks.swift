@@ -38,7 +38,7 @@ final class FlowChecks: XCTestCase {
     func testLogLevelReachesTheCore() {
         let app = connectedApp()
         setLogLevel("debug", app)
-        openTab(1, in: app)
+        openTab(.settings, in: app)
         let diagnostics = app.buttons["diagnostics-link"]
         scroll(to: diagnostics, in: app)
         diagnostics.tap()
@@ -47,14 +47,14 @@ final class FlowChecks: XCTestCase {
         XCTAssertTrue(debugLine.waitForExistence(timeout: 30), "no DEBUG line in the process log")
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        openTab(0, in: app)
+        openTab(.home, in: app)
         setLogLevel("info", app)
     }
 
     /// Settings > Logs & diagnostics > Core log level, confirmed, and back on
     /// Home until the restarted core is connected again.
     private func setLogLevel(_ level: String, _ app: XCUIApplication) {
-        openTab(1, in: app)
+        openTab(.settings, in: app)
         let diagnostics = app.buttons["diagnostics-link"]
         scroll(to: diagnostics, in: app)
         diagnostics.tap()
@@ -69,7 +69,7 @@ final class FlowChecks: XCTestCase {
         let changed = confirm.waitForExistence(timeout: 5)
         if changed { confirm.tap() }
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        openTab(0, in: app)
+        openTab(.home, in: app)
         if changed {
             wait(for: state(app), anyOf: ["stopping", "stopped", "starting", "running"], timeout: 30)
         }
@@ -84,7 +84,7 @@ final class FlowChecks: XCTestCase {
     /// restarts a running core.
     private func toggleFleet(to on: Bool) {
         let app = connectedApp()
-        openTab(1, in: app)
+        openTab(.settings, in: app)
         let toggle = app.switches["fleet-toggle"]
         scroll(to: toggle, in: app)
         let isOn = (toggle.value as? String) == "1"
@@ -92,7 +92,7 @@ final class FlowChecks: XCTestCase {
         toggle.switches.firstMatch.tap()
         XCTAssertEqual(toggle.value as? String, on ? "1" : "0")
         // The core's state is on Home.
-        openTab(0, in: app)
+        openTab(.home, in: app)
         wait(for: state(app), anyOf: ["stopping", "stopped", "starting", "running"], timeout: 30)
         wait(for: state(app), anyOf: ["connected"], timeout: 180)
     }
@@ -114,7 +114,7 @@ final class FlowChecks: XCTestCase {
         if unlock.waitForExistence(timeout: 5) {
             answeringFaceID { waitGone(unlock) }
         }
-        openTab(1, in: app)
+        openTab(.settings, in: app)
         let toggle = app.switches["app-lock-toggle"]
         scroll(to: toggle, in: app)
         XCTAssertTrue(toggle.isEnabled, "no Face ID or passcode on this Simulator")
@@ -176,47 +176,5 @@ final class FlowChecks: XCTestCase {
         step()
     }
 
-    private static let faceIDFlag = NSTemporaryDirectory() + "faceid-match"
-
-    private func connectedApp() -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launch()
-        XCTAssertTrue(state(app).waitForExistence(timeout: 15))
-        if state(app).value as? String == "stopped" {
-            app.buttons["connect-button"].tap()
-        }
-        wait(for: state(app), anyOf: ["connected"], timeout: 180)
-        return app
-    }
-
-    /// Selects a tab and waits until it is the selected one.
-    private func openTab(_ index: Int, in app: XCUIApplication) {
-        let tab = app.tabBars.buttons.element(boundBy: index)
-        XCTAssertTrue(tab.waitForExistence(timeout: 10))
-        // A tap can land while a system sheet (Face ID) is still leaving.
-        for _ in 0..<3 where !tab.isSelected {
-            tab.tap()
-            let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isSelected == true"), object: tab)
-            _ = XCTWaiter().wait(for: [selected], timeout: 3)
-        }
-        XCTAssertTrue(tab.isSelected, "tab \(index) not selected")
-    }
-
-    /// Swipes up until `element` can be tapped, a few times at most.
-    private func scroll(to element: XCUIElement, in app: XCUIApplication) {
-        for _ in 0..<6 where !element.isHittable {
-            app.swipeUp()
-        }
-        XCTAssertTrue(element.isHittable, "\(element) not reachable by scrolling")
-    }
-
-    private func state(_ app: XCUIApplication) -> XCUIElement {
-        app.descendants(matching: .any)["core-state"]
-    }
-
-    private func wait(for element: XCUIElement, anyOf values: [String], timeout: TimeInterval) {
-        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value IN %@", values), object: element)
-        XCTAssertEqual(XCTWaiter().wait(for: [expectation], timeout: timeout), .completed,
-                       "core-state stayed \(element.value ?? "nil"), not one of \(values)")
-    }
+    private nonisolated static let faceIDFlag = NSTemporaryDirectory() + "faceid-match"
 }

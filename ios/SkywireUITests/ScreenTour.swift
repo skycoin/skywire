@@ -41,6 +41,7 @@ final class ScreenTour: XCTestCase {
         snap("\(language)-1-home-disconnected")
 
         connect.tap()
+        allowNotificationsIfAsked()
         // A start dials dmsg discovery and can take a minute.
         wait(for: state, anyOf: ["connected"], timeout: 180)
         let card = app.descendants(matching: .any)["visor-card"]
@@ -48,30 +49,30 @@ final class ScreenTour: XCTestCase {
         app.buttons["visor-expand"].tap()
         snap("\(language)-2-home-connected")
 
-        app.tabBars.buttons.element(boundBy: 1).tap()
-        snap("\(language)-3-settings")
+        // The chat page, once skychat answered and the page drew its list.
+        app.tabBars.buttons.element(boundBy: Tab.chat.rawValue).tap()
+        let page = app.webViews["chat-webview"]
+        XCTAssertTrue(page.waitForExistence(timeout: 60), "the chat page never came up")
+        XCTAssertTrue(page.buttons.firstMatch.waitForExistence(timeout: 30), "the chat page drew nothing")
+        snap("\(language)-3-chat")
+
+        app.tabBars.buttons.element(boundBy: Tab.settings.rawValue).tap()
+        snap("\(language)-4-settings")
         app.buttons["transport-link"].tap()
-        snap("\(language)-4-transport")
+        snap("\(language)-5-transport")
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.swipeUp()
-        snap("\(language)-5-settings-lower")
+        snap("\(language)-6-settings-lower")
         app.swipeUp()
         app.buttons["diagnostics-link"].tap()
-        snap("\(language)-6-diagnostics")
+        snap("\(language)-7-diagnostics")
 
         app.buttons["logs-source-core"].tap()
         XCTAssertTrue(app.navigationBars.element.waitForExistence(timeout: 5))
         // A few polls' worth of the runtime log.
         sleep(4)
-        snap("\(language)-7-logs-core")
+        snap("\(language)-8-logs-core")
         app.terminate()
-    }
-
-    private func wait(for element: XCUIElement, anyOf values: [String], timeout: TimeInterval) {
-        let predicate = NSPredicate(format: "value IN %@", values)
-        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
-        XCTAssertEqual(XCTWaiter().wait(for: [expectation], timeout: timeout), .completed,
-                       "core-state stayed \(element.value ?? "nil"), not one of \(values)")
     }
 
     private func snap(_ name: String) {

@@ -94,12 +94,19 @@ private struct StatusLine: View {
 /// slow network, and stopping aborts it.
 private struct ConnectButton: View {
     @EnvironmentObject private var app: AppModel
+    @EnvironmentObject private var notifications: NotificationBridge
 
     var body: some View {
         let stopping = app.coreState == .stopping
         let showDisconnect = app.coreState == .running || app.coreState == .starting
         Button {
-            showDisconnect ? app.disconnect() : app.connect()
+            if showDisconnect {
+                app.disconnect()
+            } else {
+                app.connect()
+                // Asked here, as Android asks at Connect; once per install.
+                notifications.requestAuthorization()
+            }
         } label: {
             ZStack {
                 Circle()
