@@ -85,18 +85,32 @@ enum QrDecoder {
         return decode(image)
     }
 
+    /// Vision first (it copes better with a tilted or blurred code), Core
+    /// Image's detector whenever Vision found nothing. Not only when it
+    /// throws: where Vision cannot run its model (a Simulator in a VM, as
+    /// the CI runners are: "On-device compilation within a VM only supports
+    /// CPU") it returns no result without an error, which kept the fallback
+    /// from ever running (G3).
     static func decode(_ image: CIImage) -> String {
+        let seen = decodeWithVision(image)
+        return seen.isEmpty ? decodeWithCoreImage(image) : seen
+    }
+
+    static func decodeWithVision(_ image: CIImage) -> String {
         let request = VNDetectBarcodesRequest()
         request.symbologies = [.qr]
         do {
             try VNImageRequestHandler(ciImage: image, options: [:]).perform([request])
-            return request.results?.lazy.compactMap(\.payloadStringValue).first ?? ""
         } catch {
-            // Vision can be unavailable (a Simulator without its models): Core
-            // Image's detector reads QR codes with no model at all.
-            let detector = CIDetector(ofType: CIDetectorTypeQRCode, context: nil, options: [CIDetectorAccuracy: CIDetectorAccuracyHigh])
-            let codes = detector?.features(in: image).compactMap { ($0 as? CIQRCodeFeature)?.messageString }
-            return codes?.first ?? ""
+            return ""
         }
+        return request.results?.lazy.compactMap(\.payloadStringValue).first ?? ""
+    }
+
+    /// Core Image's QR detector: no model at all, so it runs everywhere.
+    static func decodeWithCoreImage(_ image: CIImage) -> String {
+        let detector = CIDetector(ofType: CIDetectorTypeQRCode, context: nil, options: [CIDetectorAccuracy: CIDetectorAccuracyHigh])
+        let codes = detector?.features(in: image).compactMap { ($0 as? CIQRCodeFeature)?.messageString }
+        return codes?.first ?? ""
     }
 }

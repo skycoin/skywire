@@ -2,6 +2,7 @@ import CoreBridge
 import CoreClient
 import Foundation
 import os
+import UIKit
 
 /// The app's model of the core: its lifecycle, whether its local API is up,
 /// the session, and the user's Connect. Every screen reads it; only it starts
@@ -31,6 +32,9 @@ final class AppModel: ObservableObject {
     let paths: CorePaths
     private let host: any CoreHost
     private let footprintLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "skywire", category: "footprint")
+    private let lifecycleLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "skywire", category: "lifecycle")
+    /// The background grace in progress, if any (see `enteredBackground`).
+    private var backgroundTask = UIBackgroundTaskIdentifier.invalid
     private var launched = false
     /// The account reset is tried once per process, as on Android: a second
     /// rejection means something else is wrong, and a loop would hide it.
@@ -108,9 +112,35 @@ final class AppModel: ObservableObject {
         restartCore()
     }
 
+    /// Left for the background with the core running: asks iOS for the
+    /// standard background grace (about 30 s), so the core keeps receiving
+    /// for that long and a message that arrives just after the user switched
+    /// away still becomes a notification. After it iOS suspends the app, and
+    /// the in-process core with it; receiving while suspended is the
+    /// packet-tunnel extension's (Lane D), where the core outlives the app.
+    /// G3 found the app suspended 5 s after the home gesture without this.
+    func enteredBackground() {
+        guard backgroundTask == .invalid, coreState == .running else { return }
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Skywire core") { [weak self] in
+            self?.lifecycleLog.notice("background grace expired")
+            self?.endBackgroundGrace()
+        }
+        let remaining = UIApplication.shared.backgroundTimeRemaining
+        lifecycleLog.notice("background grace began (\(remaining < 1e6 ? String(format: "%.0f s", remaining) : "unbounded", privacy: .public))")
+    }
+
+    /// Ends the grace: back in the foreground, or iOS called time.
+    func endBackgroundGrace() {
+        guard backgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTask)
+        backgroundTask = .invalid
+        lifecycleLog.notice("background grace ended")
+    }
+
     /// Back in the foreground: the footprint on screen is minutes old, and a
     /// Simulator app that was suspended may have missed a state change.
     func becameActive() {
+        endBackgroundGrace()
         refreshFootprint()
         if coreState == .running, !apiUp {
             Task { await waitForAPI() }

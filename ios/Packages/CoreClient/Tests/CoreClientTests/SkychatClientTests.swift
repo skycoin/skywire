@@ -102,4 +102,16 @@ final class SkychatClientTests: XCTestCase {
         let count = await client.unread()
         XCTAssertNil(count)
     }
+
+    /// Leaving the foreground clears the page's "on screen" report, the way
+    /// the page itself would (the body skychat's notifyFocusHandler reads).
+    func testClearFocusPostsAnEmptyFocus() async throws {
+        let client = try await client(routes: [:])
+        await client.clearFocus()
+        let request = try XCTUnwrap(server?.requests.first)
+        XCTAssertEqual(request.method, "POST")
+        XCTAssertEqual(request.path, "/notify-focus")
+        XCTAssertEqual(request.jsonObject?["key"] as? String, "")
+        XCTAssertEqual(request.jsonObject?["focused"] as? Bool, false)
+    }
 }

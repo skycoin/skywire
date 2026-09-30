@@ -33,6 +33,9 @@ final class NotificationBridge: NSObject, ObservableObject {
     static let unreadInterval: Duration = .seconds(10)
 
     private let center = UNUserNotificationCenter.current()
+    /// skychat's own API while the core is connected (the unread count, and
+    /// the focus the app clears when it leaves the foreground).
+    private var skychat: SkychatClient?
     private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "skywire", category: "notify")
 
     private override init() {
@@ -70,8 +73,7 @@ final class NotificationBridge: NSObject, ObservableObject {
         while !Task.isCancelled {
             do {
                 let events = try await app.client.notifications()
-                let allowed = await center.notificationSettings().authorizationStatus
-                log.notice("notification stream open (permission: \(allowed.rawValue, privacy: .public))")
+                logOpened()
                 for try await event in events {
                     post(event)
                 }
@@ -90,14 +92,39 @@ final class NotificationBridge: NSObject, ObservableObject {
         }
     }
 
+    /// The permission alongside "open", for reading a run's log back. Its
+    /// own task: the settings call can wait until the system's permission
+    /// prompt has been shown (minutes on a fresh Simulator, G3), and the
+    /// stream must be read from the moment it opens.
+    private func logOpened() {
+        Task { [center, log] in
+            let allowed = await center.notificationSettings().authorizationStatus
+            log.notice("notification stream open (permission: \(allowed.rawValue, privacy: .public))")
+        }
+    }
+
+    /// The app left the foreground: nothing is on screen any more, which the
+    /// chat page, frozen with the app, cannot tell skychat itself. Runs in the
+    /// app's background grace (AppModel.enteredBackground).
+    func appLeft() {
+        guard let skychat else { return }
+        Task { [log] in
+            await skychat.clearFocus()
+            log.notice("told skychat nothing is on screen")
+        }
+    }
+
     private func pollUnread(_ app: AppModel) async {
-        var skychat: SkychatClient?
+        defer { skychat = nil }
         while !Task.isCancelled {
-            if skychat == nil,
-               let state = try? await app.client.app(SkychatProfile.app),
-               let secret = try? SecretStore.app().password(.skychatPassword) {
+            if skychat == nil, let state = try? await app.client.app(SkychatProfile.app) {
                 let origin = SkychatProfile.origin(port: SkychatProfile.listenPort(state.args))
-                skychat = SkychatClient(transport: LoopbackTransport(origin: origin)) { secret }
+                // The secret read per request, not kept: a rotated one
+                // (ChatModel rewrites the gate's file) must not leave this
+                // asking with the old.
+                skychat = SkychatClient(transport: LoopbackTransport(origin: origin)) {
+                    try SecretStore.app().password(.skychatPassword)
+                }
             }
             if let skychat {
                 setUnread(await skychat.unread())

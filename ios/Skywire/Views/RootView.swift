@@ -47,6 +47,8 @@ struct RootView: View {
             switch phase {
             case .background:
                 lock.didEnterBackground()
+                app.enteredBackground()
+                notifications.appLeft()
             case .active:
                 app.becameActive()
             default:
