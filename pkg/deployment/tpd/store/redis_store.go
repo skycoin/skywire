@@ -88,6 +88,8 @@ type redisStore struct {
 	beats transportBeatMemo
 	// today keeps today's per-transport metrics current (today_metrics.go).
 	today todayMetrics
+	// live is the in-memory transport set, on in the writing process (live_set.go).
+	live liveSet
 }
 
 func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl time.Duration, logger *logging.Logger) (*redisStore, error) {

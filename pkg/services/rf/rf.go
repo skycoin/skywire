@@ -106,6 +106,9 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 
 	enableMetrics := cfg.MetricsAddr != ""
 	rfAPI := api.New(transportStore, logger, enableMetrics, dmsgAddr)
+	// A TPD run in the same process (svc run) holds the transport set in
+	// memory; the graph is built from it rather than reread from redis.
+	rfAPI.ShareTransportsFrom(storeConfig.URL)
 	// Warm the shared route graph in the background (bound to the server context)
 	// so route requests reuse it instead of each building a per-source graph.
 	rfAPI.StartGraphCache(ctx)

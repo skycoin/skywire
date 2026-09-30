@@ -86,6 +86,11 @@ func (a *API) log(r *http.Request) logrus.FieldLogger {
 	return httputil.GetLogger(r)
 }
 
+// ShareTransportsFrom builds the route graph from the live transport set of a
+// TPD in this process writing to the redis at url, when there is one (see
+// GraphCache.ShareFrom). Call before StartGraphCache.
+func (a *API) ShareTransportsFrom(url string) { a.graphCache.ShareFrom(url) }
+
 // StartGraphCache keeps one shared full-network graph warm in the background so
 // route requests no longer each build a per-source graph by walking the store.
 // Bound to ctx (the server lifecycle); until the first build lands, requests fall

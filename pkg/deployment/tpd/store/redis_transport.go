@@ -102,6 +102,7 @@ func (s *redisStore) RegisterTransport(ctx context.Context, _ cipher.PubKey, sEn
 	// Invalidate the per-edge entry cache so mirrorEdges (called by the
 	// API layer right after this returns) re-fetches the post-write list.
 	s.edgeCache.Invalidate(entry.Edges[0], entry.Edges[1])
+	s.live.put([]*transport.Entry{entry}, now)
 
 	return nil
 }
@@ -185,6 +186,13 @@ func (s *redisStore) RegisterTransportsBatch(ctx context.Context, _ cipher.PubKe
 		}
 		s.edgeCache.Invalidate(sEntry.Entry.Edges[0], sEntry.Entry.Edges[1])
 	}
+	live := make([]*transport.Entry, 0, len(entries))
+	for _, sEntry := range entries {
+		if sEntry != nil && sEntry.Entry != nil {
+			live = append(live, sEntry.Entry)
+		}
+	}
+	s.live.put(live, now)
 	return nil
 }
 
@@ -213,6 +221,7 @@ func (s *redisStore) DeregisterTransport(ctx context.Context, id uuid.UUID) erro
 	if _, err := pipe.Exec(ctx); err != nil {
 		return err
 	}
+	s.live.del(id)
 
 	s.edgeCache.Invalidate(entry.Edges[0], entry.Edges[1])
 	return nil
@@ -470,6 +479,9 @@ func (s *redisStore) GetTransportSummary(ctx context.Context, selfTransports boo
 }
 
 func (s *redisStore) GetAllTransports(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
+	if entries, ok := s.live.snapshot(selfTransports, false, time.Now()); ok {
+		return entries, nil
+	}
 	if entries, ok := s.allTpsCache.Get(selfTransports, false); ok {
 		return entries, nil
 	}
@@ -503,6 +515,9 @@ func (s *redisStore) GetAllTransportsWithLatency(ctx context.Context, selfTransp
 }
 
 func (s *redisStore) getAllTransportsWithQoS(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
+	if entries, ok := s.live.snapshot(selfTransports, true, time.Now()); ok {
+		return entries, nil
+	}
 	if entries, ok := s.allTpsCache.Get(selfTransports, true); ok {
 		return entries, nil
 	}

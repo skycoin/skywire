@@ -41,6 +41,9 @@ func (s *redisStore) TouchTransports(ctx context.Context, reporter cipher.PubKey
 	}
 	pipe.Expire(ctx, s.edgeKey(reporter), s.ttl)
 	_, err := pipe.Exec(ctx)
+	if err == nil {
+		s.live.touch(ids, time.Now())
+	}
 	return err
 }
 
@@ -60,7 +63,7 @@ func (s *redisStore) DeregisterTransports(ctx context.Context, ids []uuid.UUID) 
 	}
 	removed := make([]*transport.Entry, 0, len(ids))
 	pipe := s.client.Pipeline()
-	for i, v := range vals {
+	for _, v := range vals {
 		raw, ok := v.(string)
 		if !ok || raw == "" {
 			continue // already gone
@@ -73,8 +76,8 @@ func (s *redisStore) DeregisterTransports(ctx context.Context, ids []uuid.UUID) 
 		if err != nil {
 			continue
 		}
-		idStr := ids[i].String()
-		pipe.Del(ctx, keys[i])
+		idStr := entry.ID.String()
+		pipe.Del(ctx, s.transportKey(entry.ID))
 		pipe.SRem(ctx, s.allTpsIndexKey(), idStr)
 		pipe.SRem(ctx, s.edgeKey(entry.Edges[0]), idStr)
 		if entry.Edges[0] != entry.Edges[1] {
@@ -90,6 +93,7 @@ func (s *redisStore) DeregisterTransports(ctx context.Context, ids []uuid.UUID) 
 	}
 	for _, e := range removed {
 		s.edgeCache.Invalidate(e.Edges[0], e.Edges[1])
+		s.live.del(e.ID)
 	}
 	return removed, nil
 }
