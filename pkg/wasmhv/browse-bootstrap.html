@@ -405,6 +405,29 @@
         });
       } catch (e) { /* the page still loads without it */ }
     }
+    // WebRTC and WebTransport go straight to the network: a service worker
+    // sees neither, and the exit relays TCP only, so a page using them would
+    // reach the internet from the reader's own address (a STUN query reveals
+    // it in a second). Remove them before the page runs — here and in any
+    // same-origin frame it builds. Sites fall back to WebSocket and fetch,
+    // which travel the visor.
+    var LEAKY = ['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCDataChannel',
+      'RTCIceCandidate', 'RTCSessionDescription', 'WebTransport'];
+    var scrub = function (w) {
+      LEAKY.forEach(function (k) {
+        try { Object.defineProperty(w, k, { value: undefined, configurable: false, writable: false }); } catch (e) { /* already gone */ }
+      });
+    };
+    scrub(window);
+    try {
+      var cw = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+      if (cw && cw.get) {
+        Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+          configurable: true,
+          get: function () { var w = cw.get.call(this); try { if (w) { scrub(w); } } catch (e) { /* cross-origin */ } return w; }
+        });
+      }
+    } catch (e) { /* the page still loads without it */ }
     document.open();
     document.write(html);
     document.close();

@@ -488,28 +488,31 @@ func (v *Visor) proxyClearnetFetch(req BrowseClearnetRequest) (*visorapi.SkynetH
 	if err != nil {
 		return nil, err
 	}
-	// One transport per request, so a kept-alive connection could never be
-	// reused, only left open: each one held its proxy stream, and in a browser
-	// tab the skysocks-client stopped answering after the first page.
-	tr := &http.Transport{
-		TLSHandshakeTimeout: 20 * time.Second,
-		TLSClientConfig:     &tls.Config{RootCAs: browseRootCAs(), MinVersion: tls.VersionTLS12},
-		DisableKeepAlives:   true,
-	}
-	switch pu.Scheme {
-	case "socks5", "socks5h":
-		// A proxy that does not answer (an unroutable address) must fail in
-		// seconds, not after the OS connect timeout: the browser is waiting.
-		sd, err := proxy.SOCKS5("tcp", pu.Host, nil, browseProxyDialer{})
-		if err != nil {
-			return nil, err
+	// One transport per proxy, shared and bounded (api_browse_client.go).
+	tr, err := browseTransport(pu.String(), func() (*http.Transport, error) {
+		tr := &http.Transport{
+			TLSHandshakeTimeout: 20 * time.Second,
+			TLSClientConfig:     &tls.Config{RootCAs: browseRootCAs(), MinVersion: tls.VersionTLS12},
 		}
-		tr.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) { return sd.Dial(network, addr) }
-	default:
-		tr.Proxy = http.ProxyURL(pu)
-		tr.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) {
-			return vnet.DialTimeout(network, addr, browseProxyDialTimeout)
+		switch pu.Scheme {
+		case "socks5", "socks5h":
+			// A proxy that does not answer (an unroutable address) must fail in
+			// seconds, not after the OS connect timeout: the browser is waiting.
+			sd, err := proxy.SOCKS5("tcp", pu.Host, nil, browseProxyDialer{})
+			if err != nil {
+				return nil, err
+			}
+			tr.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) { return sd.Dial(network, addr) }
+		default:
+			tr.Proxy = http.ProxyURL(pu)
+			tr.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) {
+				return vnet.DialTimeout(network, addr, browseProxyDialTimeout)
+			}
 		}
+		return tr, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), browseFetchTimeout)
 	defer cancel()
@@ -526,7 +529,7 @@ func (v *Visor) proxyClearnetFetch(req BrowseClearnetRequest) (*visorapi.SkynetH
 		return nil, err
 	}
 	applyBrowseHeaders(httpReq, req.Header)
-	resp, err := (&http.Client{Transport: tr, Timeout: browseFetchTimeout}).Do(httpReq)
+	resp, err := (&http.Client{Transport: tr, Jar: browseJar(), Timeout: browseFetchTimeout}).Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("fetch via proxy %s: %w", pu.Redacted(), err)
 	}
