@@ -29,10 +29,9 @@ const (
 	// defaultReconcileRefreshGap is used until SetEntryTimeout is called.
 	// A third of the default 5 min entry TTL.
 	defaultReconcileRefreshGap = 100 * time.Second
-	// reconcileHeartbeatGap dedupes the two edges' reports of one transport.
-	// The legacy uptime count expects a heartbeat every ~90 s (960/day, see
-	// store.expectedHeartbeatsPerDay); 30 s keeps every 45 s report of at
-	// least one edge, so a transport still lands ≥1920/day and reads 100%.
+	// reconcileHeartbeatGap dedupes the two edges' reports of one transport
+	// before they reach the store, which in turn writes at most one heartbeat
+	// per 5-minute timeline slot (store/transport_beat_memo.go).
 	reconcileHeartbeatGap = 30 * time.Second
 )
 
