@@ -362,6 +362,13 @@
     var path = location.pathname + location.search;
     return helperFetch({ url: location.href, method: 'GET', headers: {}, body: null, path: path });
   }).then(function (res) {
+    // A streamed body (a ReadableStream) is read whole here: this is the
+    // document itself, written with document.write below.
+    if (res && res.body && typeof ReadableStream !== 'undefined' && res.body instanceof ReadableStream) {
+      return new Response(res.body).arrayBuffer().then(function (ab) { res.body = ab; return res; });
+    }
+    return res;
+  }).then(function (res) {
     window.__mb.step = 'top-returned';
     window.__mb.topStatus = res && res.status;
     window.__mb.topLen = (res && res.body) ? res.body.byteLength : 0;
