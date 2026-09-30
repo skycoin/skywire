@@ -130,7 +130,7 @@ require (
 	github.com/0magnet/cosmos-go v0.0.0-20260915170035-328675079868
 	github.com/0magnet/sh/v3 v3.13.2-0.20260928172341-4c52a7abff02
 	github.com/0magnet/websh v0.0.0-20260928172614-900c2c6df638
-	github.com/0magnet/xterm-go v0.0.0-20260923132223-00c1a8e687cc
+	github.com/0magnet/xterm-go v0.0.0-20260930222402-0c2fc5d977f0
 	github.com/benhoyt/goawk v1.32.0 // indirect
 )
 

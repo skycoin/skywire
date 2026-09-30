@@ -915,6 +915,13 @@ func (t *Terminal) Fit() {
 		return
 	}
 	rect := parent.Call("getBoundingClientRect")
+	// A hidden terminal (display:none, as a background tab is) or a detached
+	// one measures 0x0. Fitting it to that shrinks the grid to its minimum,
+	// which rewraps every line to a few columns and pushes the history out of
+	// the scrollback; keep the size it had until it is visible again.
+	if rect.Get("width").Float() == 0 || rect.Get("height").Float() == 0 {
+		return
+	}
 	scrollbarW := 16.0
 	cols := int((rect.Get("width").Float() - scrollbarW) / t.cellW)
 	rows := int(rect.Get("height").Float() / t.cellH)
