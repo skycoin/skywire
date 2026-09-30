@@ -204,6 +204,23 @@
         'font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}</style>' +
         '<pre>' + escd + '</pre>';
     }
+    // A page here is always framed (window.top is the app), and some sites
+    // refuse to run embedded unless their own site sent them — windy.com
+    // throws "Unlegal embed" when document.referrer is not on windy.com.
+    // When the embedder names the real address this page was fetched from,
+    // report it as the referrer, as a navigation within the site would. It
+    // is visible only to this page, on its own isolated origin.
+    var realURL = res.headers && (res.headers['x-realorigin-url'] || res.headers['X-Realorigin-Url']);
+    if (realURL) {
+      // Set on this window's Document.prototype, which document.open() keeps;
+      // injecting a script instead would land it ahead of the doctype.
+      try {
+        Object.defineProperty(Document.prototype, 'referrer', {
+          configurable: true,
+          get: function () { return String(realURL); }
+        });
+      } catch (e) { /* the page still loads without it */ }
+    }
     document.open();
     document.write(html);
     document.close();

@@ -62,7 +62,8 @@
   function fetchFor(descriptor, req) {
     var t = globalThis.__netscrapeFetch;
     if (typeof t !== 'function') { return Promise.reject(new Error('no mesh transport on this page')); }
-    return Promise.resolve(t(urlFor(descriptor, req), {
+    var target = urlFor(descriptor, req);
+    return Promise.resolve(t(target, {
       method: req.method || 'GET',
       headers: req.headers || {},
       // bottle's httpExchange wants a Uint8Array (it sets Content-Length from
@@ -70,7 +71,12 @@
       body: req.body ? new Uint8Array(req.body) : null,
     })).then(function (res) {
       return res.arrayBuffer().then(function (buf) {
-        return { status: res.status, headers: headersOf(res), body: new Uint8Array(buf) };
+        // x-realorigin-url names the real address, so the frame can report it
+        // as its referrer: some sites refuse to run framed unless their own
+        // site sent them (realorigin bootstrap.html).
+        var h = headersOf(res);
+        h['x-realorigin-url'] = target;
+        return { status: res.status, headers: h, body: new Uint8Array(buf) };
       });
     });
   }
