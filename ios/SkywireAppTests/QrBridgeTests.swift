@@ -23,6 +23,16 @@ final class QrBridgeTests: XCTestCase {
         XCTAssertEqual(QrDecoder.decode(dataURL: try qrDataURL(address, scale: 3, jpeg: true)), address)
     }
 
+    /// The fallback on its own: where Vision cannot run (CI's Simulator in a
+    /// VM finds nothing, without an error) Core Image alone must read the
+    /// code, and `decode` must reach it.
+    func testCoreImageReadsTheCodeOnItsOwn() throws {
+        let url = try qrDataURL(address)
+        let data = try XCTUnwrap(Data(base64Encoded: String(url.split(separator: ",")[1])))
+        let image = try XCTUnwrap(CIImage(data: data))
+        XCTAssertEqual(QrDecoder.decodeWithCoreImage(image), address)
+    }
+
     /// No code, no image, no payload: "", which the page reads as "nothing in
     /// this frame yet".
     func testDecoderAnswersEmptyWithoutACode() throws {

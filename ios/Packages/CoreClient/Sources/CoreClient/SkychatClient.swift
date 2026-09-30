@@ -57,6 +57,25 @@ public struct SkychatClient: Sendable {
         return count.unread
     }
 
+    /// Tells skychat no conversation is on screen (POST /notify-focus). The
+    /// page reports the conversation it shows, and skychat holds back
+    /// notifications for it while that report is under 15 s old
+    /// (`notifyFocusTTL`); a page frozen by the app leaving the foreground
+    /// cannot withdraw it, so a message arriving in those 15 s was held back
+    /// as "on screen" while nobody was looking (G3). The app says it instead.
+    /// Best-effort, like the page's own report.
+    public func clearFocus() async {
+        guard let secret = try? password() else { return }
+        let request = HTTPRequest(
+            method: .post,
+            path: "/notify-focus",
+            headers: ["Authorization": Self.authorization(password: secret), "Content-Type": "application/json"],
+            body: Data(#"{"key":"","focused":false}"#.utf8),
+            timeout: Self.timeout
+        )
+        _ = try? await transport.send(request)
+    }
+
     /// Loopback and a server that either answers at once or is not up yet: a
     /// short limit keeps a readiness poll on its own schedule.
     private static let timeout: TimeInterval = 5

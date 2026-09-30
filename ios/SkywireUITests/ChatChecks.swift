@@ -179,11 +179,18 @@ final class ChatChecks: XCTestCase {
         }
         page.buttons["Send"].firstMatch.tap()
 
-        // The peer learns this visor's key from its own history.
+        // The peer learns this visor's key from its own history. skychat
+        // holds a new conversation's messages until its link to the peer is
+        // up, and that link was dialled over Skynet when the conversation
+        // opened (choosing DMSG while it runs changes nothing). Where no
+        // Skynet route comes up it fails after 45 s and the page offers
+        // Retry, which dials over the network now chosen, DMSG.
+        let retry = page.buttons["Retry"].firstMatch
         let me = try await poll("the peer never received \(mine)") { () async throws -> String? in
             for pk in try await self.peerHistoryPeers(chat) where try await self.peerHistory(chat, pk).contains(mine) {
                 return pk
             }
+            if retry.exists { retry.tap() }
             return nil
         }
         let theirs = "peer-" + UUID().uuidString.prefix(8).lowercased()
@@ -193,8 +200,14 @@ final class ChatChecks: XCTestCase {
         snap("peer-two-way")
 
         // Away from the app: the conversation is no longer on screen, so
-        // skychat notifies, and the banner comes from the app's bridge.
+        // skychat notifies, and the banner comes from the app's bridge. Sent
+        // at once, inside the app's background grace (about 30 s; after it
+        // iOS suspends the app and its core, which is Lane D's to cover).
         XCUIDevice.shared.press(.home)
+        // A moment away first, as a person would be: the app tells skychat
+        // nothing is on screen as it leaves (the frozen page cannot), and a
+        // message racing that by milliseconds is still "on screen" to skychat.
+        try await Task.sleep(for: .seconds(3))
         let away = "away-" + UUID().uuidString.prefix(8).lowercased()
         try await peerSend(chat, to: me, away)
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
