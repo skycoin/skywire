@@ -85,7 +85,7 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Select Xcode 27
+      - name: Select Xcode
         run: ios/scripts/ci-xcode.sh select
 
       # Start, stop and start again in one process, three times.
