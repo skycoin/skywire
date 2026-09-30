@@ -203,7 +203,7 @@ public struct AppState: Decodable, Sendable, Equatable {
 }
 
 /// One service-discovery entry, proxied verbatim from SD by /api/svc-fetch.
-public struct ServiceEntry: Decodable, Sendable, Equatable {
+public struct ServiceEntry: Codable, Sendable, Equatable {
     /// `<public key>:<port>`.
     public var address: String
     public var type: String
@@ -214,6 +214,14 @@ public struct ServiceEntry: Decodable, Sendable, Equatable {
 
     enum CodingKeys: String, CodingKey { case address, type, geo, version }
 
+    /// Encodable too, so the phone can keep the last list it was given.
+    public init(address: String, type: String = "", geo: GeoInfo? = nil, version: String = "") {
+        self.address = address
+        self.type = type
+        self.geo = geo
+        self.version = version
+    }
+
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         address = c.lenient(.address, "")
@@ -223,11 +231,16 @@ public struct ServiceEntry: Decodable, Sendable, Equatable {
     }
 }
 
-public struct GeoInfo: Decodable, Sendable, Equatable {
+public struct GeoInfo: Codable, Sendable, Equatable {
     public var country: String
     public var region: String
 
     enum CodingKeys: String, CodingKey { case country, region }
+
+    public init(country: String = "", region: String = "") {
+        self.country = country
+        self.region = region
+    }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)

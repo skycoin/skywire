@@ -27,7 +27,7 @@ public struct SkychatClient: Sendable {
     /// answered with, and what a download started outside the page carries.
     /// skychat checks the password alone; the user name is the profile's.
     public static func authorization(password: String) -> String {
-        "Basic " + Data("\(SkychatProfile.user):\(password)".utf8).base64EncodedString()
+        BasicAuth.header(user: SkychatProfile.user, password: password)
     }
 
     /// The status of a GET on the page, or nil when nothing answered, the
@@ -69,5 +69,13 @@ public struct SkychatClient: Sendable {
             timeout: Self.timeout
         )
         return try? await transport.send(request)
+    }
+}
+
+/// RFC 7617's `Authorization` value, for the gated app surfaces (skychat,
+/// skydex-client), which check the password and not the name.
+public enum BasicAuth {
+    public static func header(user: String, password: String) -> String {
+        "Basic " + Data("\(user):\(password)".utf8).base64EncodedString()
     }
 }

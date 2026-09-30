@@ -250,7 +250,7 @@ final class ChatPage: NSObject, ObservableObject {
     /// all three (WKWebView honours the limit unless `ignoresViewportScaleLimits`
     /// is set). Added here rather than in the page, which desktop browsers
     /// share.
-    private static let noZoomScript = """
+    static let noZoomScript = """
     (function () {
       var meta = document.querySelector('meta[name="viewport"]');
       if (!meta) {

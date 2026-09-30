@@ -56,6 +56,25 @@ final class ScreenTour: XCTestCase {
         XCTAssertTrue(page.buttons.firstMatch.waitForExistence(timeout: 30), "the chat page drew nothing")
         snap("\(language)-3-chat")
 
+        // The apps hub and its screens (M4).
+        app.tabBars.buttons.element(boundBy: Tab.apps.rawValue).tap()
+        XCTAssertTrue(app.buttons["hub-socks"].waitForExistence(timeout: 10))
+        snap("\(language)-3a-apps")
+        app.buttons["hub-socks"].tap()
+        XCTAssertTrue(app.staticTexts["socks-state"].waitForExistence(timeout: 10))
+        // The proxy list rides dmsg; a row or the list's own message, then the shot.
+        _ = app.buttons.matching(identifier: "socks-server-row").firstMatch.waitForExistence(timeout: 60)
+        snap("\(language)-3b-socks")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["hub-dex"].tap()
+        XCTAssertTrue(app.textFields["dex-market-field"].waitForExistence(timeout: 10))
+        snap("\(language)-3c-dex")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["hub-fleet"].tap()
+        XCTAssertTrue(app.switches["fleet-screen-toggle"].waitForExistence(timeout: 10))
+        snap("\(language)-3d-fleet")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
         app.tabBars.buttons.element(boundBy: Tab.settings.rawValue).tap()
         snap("\(language)-4-settings")
         app.buttons["transport-link"].tap()

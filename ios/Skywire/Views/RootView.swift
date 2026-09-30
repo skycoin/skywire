@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// The tabs, under the app lock. The apps hub and Wallet join Home, Chat and
-/// Settings in later milestones (Android's bar: Home, Chat, hub, Wallet,
-/// Settings).
+/// The tabs, under the app lock: Android's bar (Home, Chat, the apps hub,
+/// Wallet, Settings), Wallet joining in M5.
 struct RootView: View {
     @EnvironmentObject private var app: AppModel
     @EnvironmentObject private var lock: AppLock
@@ -25,6 +24,9 @@ struct RootView: View {
                 .tabItem { Label("tab_chat", systemImage: "bubble.left.and.bubble.right") }
                 .badge(notifications.unread ?? 0)
                 .tag(AppTab.chat)
+            HubView(openChat: { tab = .chat })
+                .tabItem { Label("tab_hub_description", systemImage: "square.grid.2x2") }
+                .tag(AppTab.apps)
             SettingsView()
                 .tabItem { Label("tab_settings", systemImage: "gearshape") }
                 .tag(AppTab.settings)
@@ -59,5 +61,5 @@ struct RootView: View {
 
 /// The tab bar's tabs, in order.
 enum AppTab: Hashable {
-    case home, chat, settings
+    case home, chat, apps, settings
 }
