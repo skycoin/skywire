@@ -342,6 +342,18 @@ type aggregatorSink struct {
 	api *api.API
 }
 
+// ApplyTelemetry forwards a telemetry batch to the store (store.TelemetryBatchStore),
+// which the embedded store.Store interface does not expose.
+func (s *aggregatorSink) ApplyTelemetry(ctx context.Context, updates []store.TelemetryUpdate) error {
+	return s.Store.(store.TelemetryBatchStore).ApplyTelemetry(ctx, updates)
+}
+
+// RecordTransportHeartbeats forwards a heartbeat batch to the store
+// (store.BatchStore).
+func (s *aggregatorSink) RecordTransportHeartbeats(ctx context.Context, entries []*transport.Entry, at time.Time) error {
+	return s.Store.(store.BatchStore).RecordTransportHeartbeats(ctx, entries, at)
+}
+
 func (s *aggregatorSink) RegisterTransportFromCXO(ctx context.Context, entry *transport.Entry, reporter cipher.PubKey, version string) error {
 	return s.api.RegisterTransportFromCXO(ctx, entry, reporter, version)
 }
