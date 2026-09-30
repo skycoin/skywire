@@ -105,6 +105,11 @@ type MetricsCXOPublisher struct {
 	// loop touches it.
 	parts map[string]int
 
+	// unsaved holds the last body published for each day still open; it is
+	// saved to the store once the day settles. Only the publish loop touches
+	// it.
+	unsaved map[string][][]byte
+
 	mu        sync.Mutex
 	lastError error
 }
@@ -141,6 +146,8 @@ func StartMetricsCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client,
 		cancel: cancel,
 		done:   make(chan struct{}),
 		parts:  make(map[string]int),
+
+		unsaved: make(map[string][][]byte),
 	}
 	if logger != nil {
 		logger.WithField("feed_pk", pub.Feed()).WithField("dmsg_port", skyenv.DmsgTPDMetricsCXOPort).
@@ -206,17 +213,19 @@ const maxPublishBody = 12 * 1024 * 1024
 func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
 	now := time.Now().UTC()
 	window := store.MetricsWindowDates(now, metricsWindowDays)
-	days := store.OpenMetricsDays(now)
+	open := store.OpenMetricsDays(now)
+	days := open
+	saved := map[string][][]byte{}
 	if full {
-		days = metricsWindowDays
+		// Settled days an earlier run saved need no recompute; only when one
+		// is missing is the whole window read.
+		saved = m.loadSettled(ctx, window[open:])
+		if len(saved) < len(window)-open {
+			days = metricsWindowDays
+			saved = map[string][][]byte{}
+		}
 	}
-	metrics, err := m.api.store.GetAllTransportMetrics(ctx, store.MetricsQuery{
-		Days:      days,
-		Live:      "all",
-		Edges:     true,
-		Bandwidth: true,
-		Latency:   true,
-	})
+	metrics, err := m.fetch(ctx, days)
 	if err != nil {
 		// WARN, not DEBUG. A cycle that fails every tick makes the whole feed
 		// unusable, and at DEBUG that is invisible on a production deployment —
@@ -239,6 +248,9 @@ func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
 		}
 		bodies[date] = parts
 	}
+	for date, parts := range saved {
+		bodies[date] = parts
+	}
 
 	// The whole window, so settled days are kept (planDayOps leaves a date
 	// with no body untouched) and days that left it are retired.
@@ -249,6 +261,7 @@ func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
 		return
 	}
 	m.parts = next
+	m.settle(ctx, bodies, window[:open])
 }
 
 // planDayOps turns one cycle's gzipped bodies into the PutBatch that
@@ -466,3 +479,72 @@ func gzipRecords(metrics []store.TransportMetric) ([]byte, error) {
 
 // Publisher returns the underlying feed publisher, for introspection.
 func (x *MetricsCXOPublisher) Publisher() *treestore.Publisher { return x.pub }
+
+// todayStore is the store's delta read of today's metrics
+// (store.GetTodayTransportMetrics): only the transports whose figures moved
+// are re-read. A store without it is read whole.
+type todayStore interface {
+	GetTodayTransportMetrics(ctx context.Context) ([]store.TransportMetric, error)
+}
+
+// leafStore keeps settled days' leaves across restarts
+// (store.SaveMetricsLeaf / LoadMetricsLeaves).
+type leafStore interface {
+	SaveMetricsLeaf(ctx context.Context, date string, parts [][]byte) error
+	LoadMetricsLeaves(ctx context.Context, dates []string) (map[string][][]byte, error)
+}
+
+// fetch reads the given number of most recent days.
+func (m *MetricsCXOPublisher) fetch(ctx context.Context, days int) ([]store.TransportMetric, error) {
+	if days == 1 {
+		if ts, ok := m.api.store.(todayStore); ok {
+			return ts.GetTodayTransportMetrics(ctx)
+		}
+	}
+	return m.api.store.GetAllTransportMetrics(ctx, store.MetricsQuery{
+		Days:      days,
+		Live:      "all",
+		Edges:     true,
+		Bandwidth: true,
+		Latency:   true,
+	})
+}
+
+// loadSettled returns the saved leaves of the given settled dates.
+func (m *MetricsCXOPublisher) loadSettled(ctx context.Context, dates []string) map[string][][]byte {
+	ls, ok := m.api.store.(leafStore)
+	if !ok || len(dates) == 0 {
+		return map[string][][]byte{}
+	}
+	got, err := ls.LoadMetricsLeaves(ctx, dates)
+	if err != nil {
+		m.log.WithError(err).Debug("could not load saved metrics leaves; rebuilding the window")
+		return map[string][][]byte{}
+	}
+	return got
+}
+
+// settle remembers the bodies of days still open and saves every day that
+// has settled since it was last published. open is the dates still open now.
+func (m *MetricsCXOPublisher) settle(ctx context.Context, bodies map[string][][]byte, open []string) {
+	isOpen := make(map[string]bool, len(open))
+	for _, d := range open {
+		isOpen[d] = true
+	}
+	for date, parts := range bodies {
+		m.unsaved[date] = parts
+	}
+	ls, ok := m.api.store.(leafStore)
+	for date, parts := range m.unsaved {
+		if isOpen[date] {
+			continue
+		}
+		if ok {
+			if err := ls.SaveMetricsLeaf(ctx, date, parts); err != nil {
+				m.log.WithError(err).WithField("date", date).Debug("could not save settled metrics leaf")
+				continue // try again next tick
+			}
+		}
+		delete(m.unsaved, date)
+	}
+}
