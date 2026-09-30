@@ -1,0 +1,44 @@
+# The app lock's "not before 30 s" after the G2 review — author, 2026-09-30,
+# iPhone 18 Pro (iOS 27.0), Xcode 27.0 27A266a. App code unchanged from 27e6f90d6.
+#
+# 1) The review's own artifacts (../g2-shots beside the review clone, not in git).
+#    Both "clean" failing runs of ReviewerWalkthrough.testGLockRoundTrip10sAnd40s
+#    stopped at line 146,
+#      XCTAssertTrue(state(app).waitForExistence(timeout: 10), "the app's own UI did not come back")
+#    not at line 145 ("locked after only 10 s away"). core-state is a Home-tab
+#    element; the test had left the app on Settings. The failure-time hierarchies
+#    (g3: 65A65D08…, E997D32C…; g4: A9DDC1C7… at 11:02:03, 2E42164F… at 11:02:13)
+#    hold app-lock-toggle and diagnostics-link and no unlock-button, and the last
+#    frame of each screen recording (g3 10:25, g4 11:02) is the unlocked Settings
+#    screen with the lock switch on. The Face ID sheet over a blank cover seen
+#    earlier in both videos is the turn-on check, before the Home press.
+#
+# 2) Three runs of a temporary instrumented build (NSLog in AppLock and RootView,
+#    reverted, never committed): FlowChecks' round trip with the new 10 s leg once,
+#    the reviewer's test twice (with the one-match-per-request matcher it was
+#    written for). Every return inside the grace: UIKit's background notification,
+#    SwiftUI's .background 8-11 ms later, then willEnterForeground ~9.5 s after it,
+#    no lock. The reviewer's test failed at line 146 both times, as it did for them.
+11:51:26.248 pid 81211  UIKit didEnterBackgroundNotification
+11:51:26.256 pid 81211  scenePhase -> background (AppLock.didEnterBackground, leftAt was nil)
+11:51:35.769 pid 81211  willEnterForeground (UIKit) away=9.513079      -> stays unlocked
+11:51:41.908 pid 81211  UIKit didEnterBackgroundNotification
+11:51:41.918 pid 81211  scenePhase -> background
+11:52:16.507 pid 81211  willEnterForeground (UIKit) away=34.588776     -> locks (the 35 s leg)
+11:55:23.617 pid 84727  UIKit didEnterBackgroundNotification            (reviewer's test, run 1)
+11:55:23.625 pid 84727  scenePhase -> background (leftAt was nil)
+11:55:33.226 pid 84727  willEnterForeground (UIKit) away=9.600568      -> stays unlocked
+12:06:29.578 pid 96292  UIKit didEnterBackgroundNotification            (reviewer's test, run 2)
+12:06:29.589 pid 96292  scenePhase -> background (leftAt was nil)
+12:06:39.122 pid 96292  willEnterForeground (UIKit) away=9.532649      -> stays unlocked
+#
+# 3) FlowChecks.testAppLockRoundTrip with the 10 s leg, the switch retry and the
+#    matcher that answers for a whole step; the app as reviewed:
+#      ios/scripts/faceid-matcher.sh & xcodebuild -project ios/Skywire.xcodeproj -scheme SkywireTour \
+#        -destination 'platform=iOS Simulator,name=iPhone 18 Pro' -derivedDataPath ios/DerivedData \
+#        test -only-testing:SkywireUITests/FlowChecks/testAppLockRoundTrip; kill %1
+  SkywireUITests.FlowChecks testAppLockRoundTrip passed (97.237 seconds).
+  SkywireUITests.FlowChecks testAppLockRoundTrip passed (94.165 seconds).
+#    In both, the turn-off tap made right after the unlock sheet (t=85.2 s, t=82.1 s)
+#    raised no prompt and the retry 8 s later did. The same gap between two sheets
+#    as the review's note 6, where it was the match that got lost.

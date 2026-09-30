@@ -10,6 +10,7 @@ Collected by the author on 2026-09-30 on the dev Mac (Xcode 27.0 27A266a, iOS
 | `coreclient-tests.log` | `swift test` in `ios/Packages/CoreClient`: 63 tests, and the 32 recorded exchanges the client was run against, one line each (the "stub-server test log listing every route") |
 | `simulator-tests.log` | the Skywire scheme on the Simulator: CoreBridgeTests (a real core, three start/stop cycles), StringCatalogTests, SecretStoreTests (the app-hosted Keychain tests) |
 | `flow-checks.log` | the SkywireTour scheme's FlowChecks: restart from Home, the Fleet switch both ways with the config read in between, the app lock round trip |
+| `lock-grace.log` | after the review: the app lock inside and past its grace, from the review's own artifacts, three instrumented runs and the round trip with its new 10 s leg |
 | `screens/` | the screen tour (`SkywireUITests/ScreenTour`) in English, Simplified Chinese and Spanish: Home disconnected and connected, Settings, the transport choice, Diagnostics, the core log. PNGs are gitignored: they go on the PR |
 
 ## What each item was checked with
@@ -42,7 +43,8 @@ Collected by the author on 2026-09-30 on the dev Mac (Xcode 27.0 27A266a, iOS
   runtime and app lines (CoreClient tests).
 - **2.7 App lock.** FlowChecks.testAppLockRoundTrip with Face ID enrolled on
   the Simulator and answered by `ios/scripts/faceid-matcher.sh`: turned on
-  past a check, locked after 35 s away, unlocked by a match, turned off.
+  past a check, unlocked after 10 s away (added after the review), locked
+  after 35 s away, unlocked by a match, turned off.
 - **2.8 Strings.** StringCatalogTests; the tour in three languages.
 - **2.9 Privacy manifest.** `PrivacyInfo.xcprivacy` at the app bundle's
   root; the reasons read from the c-archive's `nm -u` (see the file's
@@ -70,6 +72,32 @@ Collected by the author on 2026-09-30 on the dev Mac (Xcode 27.0 27A266a, iOS
    the first App Store upload.
 7. On this Mac a colima (docker) forward holds 127.0.0.1:8001, which the
    Simulator app's skychat needs from M3 on.
+
+## After the review (G2 FAIL, 2026-09-30)
+
+The review failed two criteria; the re-review covers them plus a smoke of
+the rest (§4).
+
+- **"Locks again after 30 s away and not before."** The lock did not engage
+  early. The review's test stopped at its line 146, which looks for
+  `core-state`, a Home-tab element, while the app was on Settings; its line
+  145, the one that checks for the lock, passed. The review's own snapshots
+  and videos show the unlocked Settings screen at the 10 s return, and three
+  instrumented runs here show the lifecycle in order with no lock
+  (`lock-grace.log`). No app change. The author's round trip now has the
+  10 s leg and checks the screen it left.
+  The review's other finding here is real and fixed: a tap or a Face ID
+  match that lands between two sheets comes to nothing. The matcher now
+  answers for as long as a test step asks, not once per request, and the
+  test taps the switch again if it has not moved.
+- **The two workflows.** At the reviewed SHA, no hosted image had Xcode 27;
+  `ee738ee9e` (already on the branch) falls back to Xcode 26.6, whose
+  compiler (Swift 6.3.3) then crashed in IRGen on `DiagnosticsView.swift`:
+  the thunk for `choose`, a method passed as a `Binding` setter
+  (`$sSSScA_pSgIeAghgg_SSIeAghn_TR`, `@isolated(any) (String, Actor?) ->
+  ()` to `(String) -> ()`). It was the app's only method passed that way;
+  it is a closure now. Xcode 27 builds either form. The run on the PR is
+  the check (no Xcode 26 on the dev Mac).
 
 ## Reproduce
 

@@ -13,6 +13,12 @@ final class FlowChecks: XCTestCase {
         continueAfterFailure = false
     }
 
+    override func tearDown() {
+        // A failed assertion ends the test inside answeringFaceID, past its
+        // own cleanup; a flag left behind would answer the next test's prompts.
+        try? FileManager.default.removeItem(atPath: Self.faceIDFlag)
+    }
+
     /// Restart from Home: the core goes down and comes back, and the visor
     /// card fills again, which needs a new session (the old one died with the
     /// core), with nothing asked of the user.
@@ -91,10 +97,11 @@ final class FlowChecks: XCTestCase {
         wait(for: state(app), anyOf: ["connected"], timeout: 180)
     }
 
-    /// The app lock, round trip: turned on (behind a Face ID check), locked
-    /// again after more than the 30 s grace away, unlocked, turned off. Needs
-    /// Face ID enrolled on the Simulator, and the Mac to answer a prompt with
-    /// a match each time this test asks (it drops a flag file in its tmp dir):
+    /// The app lock, round trip: turned on (behind a Face ID check), still
+    /// unlocked after less than the 30 s grace away, locked again after more,
+    /// unlocked, turned off. Needs Face ID enrolled on the Simulator, and the
+    /// Mac to answer prompts with a match while this test asks (it keeps a
+    /// flag file in its tmp dir):
     ///
     ///   xcrun simctl spawn booted notifyutil -s com.apple.BiometricKit.enrollmentChanged 1
     ///   xcrun simctl spawn booted notifyutil -p com.apple.BiometricKit.enrollmentChanged
@@ -105,21 +112,25 @@ final class FlowChecks: XCTestCase {
         // Left on by an earlier run: a cold start is locked.
         let unlock = app.buttons["unlock-button"]
         if unlock.waitForExistence(timeout: 5) {
-            matchNextFaceID()
-            waitGone(unlock)
+            answeringFaceID { waitGone(unlock) }
         }
         openTab(1, in: app)
         let toggle = app.switches["app-lock-toggle"]
         scroll(to: toggle, in: app)
         XCTAssertTrue(toggle.isEnabled, "no Face ID or passcode on this Simulator")
         if toggle.value as? String == "1" {
-            matchNextFaceID()
-            toggle.switches.firstMatch.tap()
-            waitFor(toggle, value: "0", timeout: 20)
+            setLockSwitch(toggle, to: "0")
         }
-        matchNextFaceID()
-        toggle.switches.firstMatch.tap()
-        waitFor(toggle, value: "1", timeout: 20)
+        setLockSwitch(toggle, to: "1")
+
+        // Away for less than the grace, leaving straight after the check's
+        // sheet closed (the leg G2 asked for): back unlocked, on the screen
+        // it left.
+        XCUIDevice.shared.press(.home)
+        sleep(10)
+        app.activate()
+        XCTAssertFalse(unlock.waitForExistence(timeout: 5), "locked after only 10 s away")
+        XCTAssertTrue(toggle.isHittable, "the app's own screen did not come back")
 
         XCUIDevice.shared.press(.home)
         sleep(35)
@@ -128,13 +139,25 @@ final class FlowChecks: XCTestCase {
         XCTAssertTrue(unlock.waitForExistence(timeout: 10), "not locked after 35 s away")
         sleep(3)
         XCTAssertTrue(unlock.exists, "unlocked with no Face ID match")
-        matchNextFaceID()
-        waitGone(unlock)
+        answeringFaceID { waitGone(unlock) }
 
         scroll(to: toggle, in: app)
-        matchNextFaceID()
-        toggle.switches.firstMatch.tap()
-        waitFor(toggle, value: "0", timeout: 20)
+        setLockSwitch(toggle, to: "0")
+    }
+
+    /// Turns the lock switch to `value` past its Face ID check. A tap made
+    /// while the last prompt's sheet is still leaving can come to nothing (no
+    /// prompt comes up), so it taps again when the switch has not moved in
+    /// the time the matcher takes to answer a prompt that did come up.
+    private func setLockSwitch(_ toggle: XCUIElement, to value: String) {
+        answeringFaceID {
+            for _ in 0..<3 where toggle.value as? String != value {
+                toggle.switches.firstMatch.tap()
+                let moved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", value), object: toggle)
+                _ = XCTWaiter().wait(for: [moved], timeout: 8)
+            }
+            XCTAssertEqual(toggle.value as? String, value, "the app lock switch did not move to \(value)")
+        }
     }
 
     private func waitGone(_ element: XCUIElement) {
@@ -142,15 +165,18 @@ final class FlowChecks: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 30), .completed, "still locked after a match")
     }
 
-    /// Asks faceid-matcher.sh (on the Mac) to answer the next prompt.
-    private func matchNextFaceID() {
-        FileManager.default.createFile(atPath: NSTemporaryDirectory() + "faceid-match", contents: nil)
+    /// Has faceid-matcher.sh (on the Mac) answer every Face ID prompt with a
+    /// match while `step` runs; a prompt raised after it returns waits. The
+    /// flag file stays for the whole step because a match sent while no
+    /// prompt is up is dropped: asking for one match per prompt lost it in
+    /// the gap between one sheet closing and the next opening.
+    private func answeringFaceID(_ step: () -> Void) {
+        FileManager.default.createFile(atPath: Self.faceIDFlag, contents: nil)
+        defer { try? FileManager.default.removeItem(atPath: Self.faceIDFlag) }
+        step()
     }
 
-    private func waitFor(_ element: XCUIElement, value: String, timeout: TimeInterval) {
-        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", value), object: element)
-        XCTAssertEqual(XCTWaiter().wait(for: [expectation], timeout: timeout), .completed, "\(element) not \(value)")
-    }
+    private static let faceIDFlag = NSTemporaryDirectory() + "faceid-match"
 
     private func connectedApp() -> XCUIApplication {
         let app = XCUIApplication()
