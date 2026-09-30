@@ -701,6 +701,16 @@ func (s *shellSession) run() {
 		if err != nil && !strings.HasPrefix(err.Error(), "exit status") {
 			s.term.WriteString("websh: " + strings.ReplaceAll(err.Error(), "\n", "\r\n") + "\r\n")
 		}
+		// bash announces the background jobs that have ended before it draws
+		// a prompt, and nothing in the interpreter reports one unasked, so
+		// without this a job that finished is never mentioned. It is also
+		// what reaps them: a job the shell has reported leaves the table, so
+		// a long-lived tab does not accumulate every job it ever ran. Not
+		// between the lines of an unfinished statement, where bash is also
+		// quiet, and not under the line's own context, just canceled.
+		if !s.sh.Pending() {
+			s.sh.ReportJobs(context.Background())
+		}
 		s.writePrompt()
 	}
 }
