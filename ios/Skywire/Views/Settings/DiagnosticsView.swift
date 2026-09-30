@@ -41,7 +41,10 @@ struct DiagnosticsView: View {
             }
 
             Section {
-                Picker(selection: Binding(get: { app.settings.logLevel }, set: choose)) {
+                // A closure, not `set: choose`: Xcode 26's compiler (Swift
+                // 6.3.3) crashes in IRGen on the thunk it makes for a method
+                // passed as the setter.
+                Picker(selection: Binding(get: { app.settings.logLevel }, set: { choose($0) })) {
                     ForEach(CoreLogLevel.levels, id: \.self) { Text(verbatim: $0).tag($0) }
                 } label: {
                     Text("diag_level")
