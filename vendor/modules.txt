@@ -94,7 +94,7 @@ github.com/0magnet/osnotify
 # github.com/0magnet/plot-go v0.0.0-20260924101040-e98ed611390a
 ## explicit; go 1.25
 github.com/0magnet/plot-go
-# github.com/0magnet/realorigin v0.2.3-0.20260930221610-f72aa1d9ba6a
+# github.com/0magnet/realorigin v0.2.3-0.20260930224655-088c88759728
 ## explicit; go 1.26.0
 github.com/0magnet/realorigin
 # github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076

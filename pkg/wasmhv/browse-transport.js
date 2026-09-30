@@ -70,14 +70,17 @@
       // .length); realorigin hands over an ArrayBuffer.
       body: req.body ? new Uint8Array(req.body) : null,
     })).then(function (res) {
-      return res.arrayBuffer().then(function (buf) {
-        // x-realorigin-url names the real address, so the frame can report it
-        // as its referrer: some sites refuse to run framed unless their own
-        // site sent them (realorigin bootstrap.html).
-        var h = headersOf(res);
-        h['x-realorigin-url'] = target;
-        return { status: res.status, headers: h, body: new Uint8Array(buf) };
-      });
+      // x-realorigin-url names the real address — after redirects, when the
+      // transport says where it landed — so the frame can report it as its
+      // referrer: some sites refuse to run framed unless their own site sent
+      // them (realorigin bootstrap.html).
+      var h = headersOf(res);
+      h['x-realorigin-url'] = h['x-browse-final-url'] || target;
+      delete h['x-browse-final-url'];
+      // The body stays a stream: the responder transfers it to the frame and
+      // the service worker answers with it, so a large download is never
+      // held whole.
+      return { status: res.status, headers: h, body: res.body || null };
     });
   }
 

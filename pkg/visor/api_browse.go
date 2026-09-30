@@ -484,6 +484,19 @@ func (browseProxyDialer) Dial(network, addr string) (net.Conn, error) {
 }
 
 func (v *Visor) proxyClearnetFetch(req BrowseClearnetRequest) (*visorapi.SkynetHTTPResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), browseFetchTimeout)
+	defer cancel()
+	resp, err := v.proxyClearnetDo(ctx, req, browseFetchTimeout)
+	if err != nil {
+		return nil, err
+	}
+	return readBrowseResp(resp)
+}
+
+// proxyClearnetDo sends req through req.Proxy and returns the response with
+// its body unread. timeout bounds the whole exchange, body included; zero
+// leaves that to ctx (a stream the reader may take long over).
+func (v *Visor) proxyClearnetDo(ctx context.Context, req BrowseClearnetRequest, timeout time.Duration) (*http.Response, error) {
 	pu, err := parseBrowseProxy(req.Proxy)
 	if err != nil {
 		return nil, err
@@ -514,8 +527,6 @@ func (v *Visor) proxyClearnetFetch(req BrowseClearnetRequest) (*visorapi.SkynetH
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), browseFetchTimeout)
-	defer cancel()
 	method := req.Method
 	if method == "" {
 		method = "GET"
@@ -529,11 +540,11 @@ func (v *Visor) proxyClearnetFetch(req BrowseClearnetRequest) (*visorapi.SkynetH
 		return nil, err
 	}
 	applyBrowseHeaders(httpReq, req.Header)
-	resp, err := (&http.Client{Transport: tr, Jar: browseJar(), Timeout: browseFetchTimeout}).Do(httpReq)
+	resp, err := (&http.Client{Transport: tr, Jar: browseJar(), Timeout: timeout}).Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("fetch via proxy %s: %w", pu.Redacted(), err)
 	}
-	return readBrowseResp(resp)
+	return resp, nil
 }
 
 // applyBrowseHeaders copies the caller's request headers onto an outgoing
@@ -550,7 +561,11 @@ func applyBrowseHeaders(httpReq *http.Request, h map[string]string) {
 	for k, v := range h {
 		switch strings.ToLower(k) {
 		case "host", "connection", "keep-alive", "proxy-connection",
-			"transfer-encoding", "upgrade", "te", "trailer", "content-length":
+			"transfer-encoding", "upgrade", "te", "trailer", "content-length",
+			// Go negotiates compression itself and hands back decoded bytes;
+			// a page-set encoding would return compressed bytes no browser
+			// decodes on a response a service worker built.
+			"accept-encoding":
 			continue
 		}
 		httpReq.Header.Set(k, v)

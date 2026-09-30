@@ -112,6 +112,13 @@ func meshOriginFor(host string) (network, resolverHost string, ok bool) {
 		return "", "", false
 	}
 	switch {
+	case strings.HasSuffix(h, ".skysocks"):
+		// The visor's own status pages, answered in-process by its resolving
+		// proxy. A real origin gives them what the sandboxed transcoder could
+		// not: their scripts' fetches and live WebSocket reach the page's
+		// server. "local", not "skysocks": that descriptor net means clearnet
+		// to browse-transport.js.
+		return "local", h, true
 	case strings.HasSuffix(h, ".skynet"):
 		network = "skynet"
 	case strings.HasSuffix(h, ".dmsg"), isHexPK(h):
