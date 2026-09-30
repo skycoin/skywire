@@ -1,4 +1,4 @@
-//go:build js && wasm
+//go:build js && wasm && !tinygo
 
 // Package dmsg pkg/dmsg/dmsg/serve_unified_quic_wt_js.go c1-net-dmsg
 //
