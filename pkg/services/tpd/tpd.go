@@ -135,9 +135,11 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	// TPD writes every transport, so it holds the whole set in memory and
 	// serves the whole-set reads from it — its own publishers, and a route
 	// finder in the same process (store.SharedLiveStore).
+	live := false
 	if ls, ok := st.(interface {
 		EnableLiveSet(ctx context.Context, url string) error
 	}); ok {
+		live = true
 		if err := ls.EnableLiveSet(ctx, storeCfg.URL); err != nil {
 			closeAll()
 			return nil, fmt.Errorf("transport-discovery: load live transport set: %w", err)
@@ -168,6 +170,11 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	}
 	tpdAPI := api.New(logger, st, nonceStore, enableMetrics, m, dmsgAddr, storeDataPath)
 	tpdAPI.SetEntryTimeout(cfg.EntryTimeout.Std())
+	if live {
+		if err := tpdAPI.SeedReconcile(ctx); err != nil {
+			logger.WithError(err).Warn("could not seed the reconcile from the live set; the first reports re-register")
+		}
+	}
 	if uptimeRec != nil {
 		tpdAPI.SetUptimeRecorder(uptimeRec)
 	}

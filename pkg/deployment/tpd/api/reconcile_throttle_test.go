@@ -214,3 +214,27 @@ func TestReconcileRefreshTouchesInsteadOfRewriting(t *testing.T) {
 	require.EqualValues(t, 2, cs.registered.Load(), "nothing rewritten")
 	require.EqualValues(t, 2, cs.touched.Load(), "both touched")
 }
+
+// After a restart, a transport the store already holds is touched on its
+// first report, not rewritten; a changed or unknown one is still written.
+func TestReconcileThrottle_Seed(t *testing.T) {
+	a, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	held := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "stcpr"}
+	retyped := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "stcpr"}
+	unknown := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "sudph"}
+
+	th := newReconcileThrottle(100*time.Second, 30*time.Second)
+	now := time.Now()
+	th.seed(now, []*transport.Entry{held, retyped})
+
+	reported := *retyped
+	reported.Type = "sudph"
+	register, touch, _ := th.plan(now, []*transport.Entry{held, &reported, unknown})
+	require.ElementsMatch(t, []*transport.Entry{&reported, unknown}, register)
+	require.Equal(t, []*transport.Entry{held}, touch)
+
+	register, touch, _ = th.plan(now.Add(time.Second), []*transport.Entry{held})
+	require.Empty(t, register)
+	require.Empty(t, touch, "touched once per refresh gap")
+}

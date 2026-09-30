@@ -565,3 +565,16 @@ func (api *API) SetEntryTimeout(ttl time.Duration) {
 	}
 	api.reconcile.setRefreshGap(ttl / 3)
 }
+
+// SeedReconcile tells the CXO reconcile which transports the store already
+// holds, so it touches rather than rewrites them after a restart. Call after
+// SetEntryTimeout, and only when the store answers GetAllTransports from
+// memory (its live set): otherwise the read is the whole redis index.
+func (api *API) SeedReconcile(ctx context.Context) error {
+	entries, err := api.store.GetAllTransports(ctx, true)
+	if err != nil && !errors.Is(err, store.ErrTransportNotFound) {
+		return err
+	}
+	api.reconcile.seed(time.Now(), entries)
+	return nil
+}

@@ -145,3 +145,21 @@ func (t *reconcileThrottle) sweepLocked(now time.Time) {
 		}
 	}
 }
+
+// seed marks entries already in the store as registered one refreshGap ago,
+// so after a restart their first report extends their lifetime (a touch)
+// rather than rewriting them. Without it every restart re-registered the
+// whole mesh, nine redis writes per transport (~86k transports on prod01).
+func (t *reconcileThrottle) seed(now time.Time, entries []*transport.Entry) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	at := now.Add(-t.refreshGap)
+	for _, e := range entries {
+		if e == nil {
+			continue
+		}
+		if _, ok := t.marks[e.ID]; !ok {
+			t.marks[e.ID] = &reconcileMark{fp: entryFingerprint(e), registeredAt: at}
+		}
+	}
+}
