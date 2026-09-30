@@ -113,13 +113,14 @@ func (c *Common) SurveyKeys() []cipher.PubKey {
 	return deployment.Prod.SurveyWhitelist
 }
 
-// RedisURL is Redis with its scheme, or the local default.
+// RedisURL is Redis with its scheme, or the local default. A unix:// URL (a
+// socket path, for a redis on the same host) is kept as it is.
 func (c *Common) RedisURL() string {
 	u := c.Redis
 	if u == "" {
 		return "redis://localhost:6379"
 	}
-	if !strings.HasPrefix(u, "redis://") && !strings.HasPrefix(u, "rediss://") {
+	if !strings.HasPrefix(u, "redis://") && !strings.HasPrefix(u, "rediss://") && !strings.HasPrefix(u, "unix://") {
 		u = "redis://" + u
 	}
 	return u
