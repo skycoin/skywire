@@ -16,6 +16,11 @@ protocol CoreHost: Sendable {
     /// Stops the core and starts it again, re-reading the config.
     func restart() async throws
 
+    /// Deletes the local API's account store, with the core stopped, so the
+    /// next start's login creates the account again with the Keychain's
+    /// password: the way out when that password no longer opens users.db.
+    func resetAccount() async throws
+
     /// The core's state: the current value first, then each change.
     var state: AsyncStream<CoreState> { get }
 }

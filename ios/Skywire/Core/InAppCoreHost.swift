@@ -1,23 +1,6 @@
 import CoreBridge
+import CoreClient
 import Foundation
-
-/// The files the core lives in.
-struct CorePaths: Sendable {
-    /// The core's working directory; everything it writes is under it.
-    let dataDir: URL
-
-    var configFile: URL { dataDir.appendingPathComponent("skywire-config.json") }
-    var localDir: URL { dataDir.appendingPathComponent("local") }
-    var binDir: URL { dataDir.appendingPathComponent("bin") }
-    var usersDB: URL { dataDir.appendingPathComponent("users.db") }
-
-    /// `Library/Application Support/skywire/` in the app's container. The
-    /// directory is created by the first start.
-    static func appSupport() -> CorePaths {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return CorePaths(dataDir: base.appendingPathComponent("skywire", isDirectory: true))
-    }
-}
 
 /// Runs the core inside the app process. This is the Simulator's host (the
 /// packet-tunnel extension does not run there) and, later, a debug option on
@@ -28,24 +11,19 @@ actor InAppCoreHost: CoreHost {
     static let stopTimeout: TimeInterval = 30
 
     private let paths: CorePaths
+    private let secrets: SecretStore
+    private let settings: @MainActor @Sendable () -> ProfileSettings
     private let core = CoreBridge.shared
 
-    init(paths: CorePaths) {
+    /// - Parameter settings: the user's choices, read at every start.
+    init(paths: CorePaths, secrets: SecretStore, settings: @escaping @MainActor @Sendable () -> ProfileSettings) {
         self.paths = paths
+        self.secrets = secrets
+        self.settings = settings
     }
 
     func start() async throws {
-        try FileManager.default.createDirectory(at: paths.dataDir, withIntermediateDirectories: true)
-        // Generated once, like Android's ConfigManager.ensureConfig: a new
-        // config is a new identity. The profile is re-applied on every start
-        // so its pins survive the visor rewriting the file at runtime.
-        if !FileManager.default.fileExists(atPath: paths.configFile.path) {
-            try await core.configGen(
-                outPath: paths.configFile.path,
-                options: GenOptions(hypervisorAddr: ConfigProfile.apiAddress, binPath: paths.binDir.path)
-            )
-        }
-        try ConfigProfile.apply(to: paths)
+        try await ConfigProfile.prepare(paths: paths, settings: await settings(), secrets: secrets)
         try await core.start(configPath: paths.configFile.path, dataDir: paths.dataDir.path)
     }
 
@@ -56,6 +34,14 @@ actor InAppCoreHost: CoreHost {
     func restart() async throws {
         try await stop()
         try await start()
+    }
+
+    /// Deletes the local API's account store; call with the core stopped.
+    /// The next start's login creates the account again with the Keychain's
+    /// password (Android: ConfigManager.deleteUsersDb).
+    func resetAccount() throws {
+        guard FileManager.default.fileExists(atPath: paths.usersDB.path) else { return }
+        try FileManager.default.removeItem(at: paths.usersDB)
     }
 
     /// Polls the core: its state also changes on its own (the visor's

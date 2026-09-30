@@ -5,9 +5,18 @@
   INFOPLIST_KEY_* build settings); only what those cannot express is here.
   The one ATS exception: plain HTTP to local addresses, for the core's local
   API on 127.0.0.1:8000 and the apps' UIs beside it. Nothing else.
+  SkywireKeychainGroup: the Keychain access group SecretStore writes in, so
+  the packet-tunnel extension (Lane D) reads the same items; from the
+  xcconfig, with the team prefix once signing exists.
+  NSFaceIDUsageDescription: the app lock (Settings); translated in
+  InfoPlist.xcstrings.
 -->
 <plist version="1.0">
 <dict>
+	<key>SkywireKeychainGroup</key>
+	<string>$(AppIdentifierPrefix)$(SKYWIRE_KEYCHAIN_GROUP)</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Skywire uses Face ID to unlock the app when the app lock is on.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

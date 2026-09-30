@@ -2,21 +2,30 @@ import CoreBridge
 import Foundation
 import os
 
-/// The core's log on the app side: the last lines for the screen, and every
-/// line in the unified log (subsystem = the bundle ID, category "core"), so
-/// `xcrun simctl spawn booted log stream` and Console.app see it. On iOS the
-/// process's stderr goes nowhere the app can read; this is the equivalent of
-/// the process log Android captures, and it keeps working while the visor's
-/// API is down.
+/// The core's log on the app side: the last lines for the log viewer, and
+/// every line in the unified log (subsystem = the bundle ID, category "core"),
+/// so `xcrun simctl spawn booted log stream` and Console.app see it. On iOS
+/// the process's stderr goes nowhere the app can read; this is the
+/// equivalent of the process log Android captures, and it keeps working
+/// while the visor's API is down (or never came up).
 final class CoreLog: Sendable {
-    /// Lines kept for the screen.
-    static let capacity = 200
+    /// Lines kept, as many as the viewer shows.
+    static let capacity = 2_000
 
     private struct Ring {
         var lines: [String] = []
         var next = 0
-        /// Bumped on every append, so a reader can skip an unchanged tail.
-        var generation: UInt64 = 0
+        /// Lines ever appended; line n (1-based) is `sequence` n.
+        var appended = 0
+    }
+
+    /// A page of lines after a cursor.
+    struct Page {
+        let lines: [String]
+        /// The cursor to ask from next time.
+        let cursor: Int
+        /// Lines the ring overwrote before this reader saw them.
+        let dropped: Int
     }
 
     private let ring = OSAllocatedUnfairLock(initialState: Ring())
@@ -42,17 +51,24 @@ final class CoreLog: Sendable {
                 ring.lines[ring.next] = line
             }
             ring.next = (ring.next + 1) % Self.capacity
-            ring.generation &+= 1
+            ring.appended += 1
         }
     }
 
-    /// The kept lines, oldest first, and the generation they are at.
-    func tail() -> (generation: UInt64, lines: [String]) {
+    /// The lines appended after `cursor` (0 for all that are kept).
+    func lines(after cursor: Int) -> Page {
         ring.withLock { ring in
-            let lines = ring.lines.count < Self.capacity
+            let oldest = ring.appended - ring.lines.count
+            let from = max(cursor, oldest)
+            let wanted = ring.appended - from
+            let ordered = ring.lines.count < Self.capacity
                 ? ring.lines
                 : Array(ring.lines[ring.next...] + ring.lines[..<ring.next])
-            return (ring.generation, lines)
+            return Page(
+                lines: Array(ordered.suffix(wanted)),
+                cursor: ring.appended,
+                dropped: cursor > 0 ? max(0, oldest - cursor) : 0
+            )
         }
     }
 }
