@@ -23,7 +23,8 @@ func home() string {
 // origin and can't navigate itself across sites, so it relays intent to the
 // parent (this Go browser) via postMessage: link clicks and form GETs become a
 // {shipyardNav:<absolute url>} message, which the parent loads in the tab. This
-// is the seam a full port grows the fetch relay (lazy images, XHR) onto.
+// is the seam the fetch relay grows on: stylesheets, images and the page's own
+// fetch() GETs travel it (XHR and non-GET requests do not, yet).
 const navShim = `<script>
 (function(){
   function abs(u){ try{ return new URL(u,document.baseURI).href; }catch(e){ return u; } }
@@ -58,6 +59,23 @@ const navShim = `<script>
     });
   }
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",inline); else inline();
+
+  // The page's own fetch() of an http(s) GET goes through the same relay:
+  // from the opaque sandbox it would otherwise go to the network directly,
+  // where a mesh host (status.skysocks, a .dmsg site) does not resolve. Other
+  // requests keep the browser's fetch.
+  var nf=window.fetch;
+  function bytes(b64){ var s=atob(b64||""), u=new Uint8Array(s.length); for(var i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u; }
+  window.fetch=function(input,init){
+    var u=typeof input==="string"?input:(input&&input.url)||String(input);
+    var m=((init&&init.method)||(input&&input.method)||"GET").toUpperCase(), a=abs(u);
+    if(m!=="GET"||!/^https?:/i.test(a)) return nf.apply(this,arguments);
+    return get(a).then(function(r){
+      if(!r||!r.ok) throw new TypeError("netscrape: fetch failed: "+a);
+      var st=r.status||200, empty=st===204||st===205||st===304;
+      return new Response(empty?null:bytes(r.b64),{status:st,headers:{"content-type":r.ct||"application/octet-stream"}});
+    });
+  };
 })();
 </script>`
 
@@ -775,10 +793,12 @@ func (b *browser) closeTab(i int) {
 // behalf and posts the bytes back (base64) to the requesting iframe window.
 func relayResource(source, id js.Value, url string) {
 	g := js.Global()
+	status := 0
 	reply := func(ok bool, ct, b64 string) {
 		res := g.Get("Object").New()
 		res.Set("id", id)
 		res.Set("ok", ok)
+		res.Set("status", status)
 		res.Set("ct", ct)
 		res.Set("b64", b64)
 		msg := g.Get("Object").New()
@@ -805,6 +825,7 @@ func relayResource(source, id js.Value, url string) {
 		return nil
 	})
 	onResp = js.FuncOf(func(_ js.Value, a []js.Value) any {
+		status = a[0].Get("status").Int()
 		if h := a[0].Get("headers").Call("get", "content-type"); h.Truthy() {
 			ct = h.String()
 		}
