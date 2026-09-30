@@ -27,6 +27,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -51,8 +52,9 @@ type liveSet struct {
 	on   bool
 	ttl  time.Duration
 	tps  map[uuid.UUID]*liveTransport
-	lat  map[uuid.UUID]liveValue // latest average, ms
-	tput map[uuid.UUID]liveValue // peak, bytes/s
+	edge map[cipher.PubKey]map[uuid.UUID]struct{} // transports by either edge
+	lat  map[uuid.UUID]liveValue                  // latest average, ms
+	tput map[uuid.UUID]liveValue                  // peak, bytes/s
 }
 
 func (l *liveSet) put(entries []*transport.Entry, now time.Time) {
@@ -67,7 +69,11 @@ func (l *liveSet) put(entries []*transport.Entry, now time.Time) {
 		}
 		c := *e
 		c.Latency, c.ThroughputBps = 0, 0 // carried in lat/tput
+		if old, ok := l.tps[e.ID]; ok && old.entry.Edges != c.Edges {
+			l.unindex(&old.entry)
+		}
 		l.tps[e.ID] = &liveTransport{entry: c, expires: now.Add(l.ttl)}
+		l.index(&c)
 	}
 }
 
@@ -91,7 +97,10 @@ func (l *liveSet) del(ids ...uuid.UUID) {
 		return
 	}
 	for _, id := range ids {
-		delete(l.tps, id)
+		if t, ok := l.tps[id]; ok {
+			l.unindex(&t.entry)
+			delete(l.tps, id)
+		}
 	}
 }
 
@@ -125,7 +134,7 @@ func (l *liveSet) snapshot(selfTransports, withQoS bool, now time.Time) (out []*
 		return nil, false
 	}
 	out = make([]*transport.Entry, 0, len(l.tps))
-	for id, t := range l.tps {
+	for _, t := range l.tps {
 		if now.After(t.expires) {
 			continue
 		}
@@ -134,16 +143,68 @@ func (l *liveSet) snapshot(selfTransports, withQoS bool, now time.Time) (out []*
 		}
 		e := t.entry
 		if withQoS {
-			if v, ok := l.lat[id]; ok && now.Sub(v.at) < latencyTTL {
-				e.Latency = v.v
-			}
-			if v, ok := l.tput[id]; ok && now.Sub(v.at) < throughputTTL {
-				e.ThroughputBps = v.v
-			}
+			l.overlayQoS(&e, now)
 		}
 		out = append(out, &e)
 	}
 	return out, true
+}
+
+// byEdge returns fresh copies of the unexpired transports with pk on either
+// edge, like snapshot; ok is false when the set is off.
+func (l *liveSet) byEdge(pk cipher.PubKey, withQoS bool, now time.Time) (out []*transport.Entry, ok bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	if !l.on {
+		return nil, false
+	}
+	for id := range l.edge[pk] {
+		t, ok := l.tps[id]
+		if !ok || now.After(t.expires) {
+			continue
+		}
+		e := t.entry
+		if withQoS {
+			l.overlayQoS(&e, now)
+		}
+		out = append(out, &e)
+	}
+	return out, true
+}
+
+func (l *liveSet) overlayQoS(e *transport.Entry, now time.Time) {
+	if v, ok := l.lat[e.ID]; ok && now.Sub(v.at) < latencyTTL {
+		e.Latency = v.v
+	}
+	if v, ok := l.tput[e.ID]; ok && now.Sub(v.at) < throughputTTL {
+		e.ThroughputBps = v.v
+	}
+}
+
+// index and unindex keep the edge index in step with tps; callers hold mu.
+func (l *liveSet) index(e *transport.Entry) {
+	if l.edge == nil {
+		l.edge = make(map[cipher.PubKey]map[uuid.UUID]struct{})
+	}
+	for _, pk := range e.Edges {
+		m := l.edge[pk]
+		if m == nil {
+			m = make(map[uuid.UUID]struct{}, 2)
+			l.edge[pk] = m
+		}
+		m[e.ID] = struct{}{}
+	}
+}
+
+func (l *liveSet) unindex(e *transport.Entry) {
+	for _, pk := range e.Edges {
+		if m := l.edge[pk]; m != nil {
+			delete(m, e.ID)
+			if len(m) == 0 {
+				delete(l.edge, pk)
+			}
+		}
+	}
 }
 
 // sweep drops lapsed transports and stale QoS values, returning the dropped
@@ -158,6 +219,7 @@ func (l *liveSet) sweep(now time.Time) []transport.Entry {
 	for id, t := range l.tps {
 		if now.After(t.expires) {
 			gone = append(gone, t.entry)
+			l.unindex(&t.entry)
 			delete(l.tps, id)
 		}
 	}
@@ -206,6 +268,7 @@ func (s *redisStore) EnableLiveSet(ctx context.Context, url string) error {
 		l.ttl = 5 * time.Minute
 	}
 	l.tps = make(map[uuid.UUID]*liveTransport, len(entries))
+	l.edge = make(map[cipher.PubKey]map[uuid.UUID]struct{}, len(entries))
 	l.lat = make(map[uuid.UUID]liveValue, len(entries))
 	l.tput = make(map[uuid.UUID]liveValue, len(entries))
 	l.on = true
@@ -257,4 +320,20 @@ func (s *redisStore) pruneIndexes(ctx context.Context, gone []transport.Entry) {
 	for _, e := range gone {
 		s.edgeCache.Invalidate(e.Edges[0], e.Edges[1])
 	}
+}
+
+// liveByEdge answers a by-edge read from the live set when it is on. The
+// CXO reconcile does one per reporting visor; from redis each was an
+// SMEMBERS, an MGET and a JSON decode per transport (~9% of TPD CPU on
+// prod01, 2026-09-30).
+func (s *redisStore) liveByEdge(pk cipher.PubKey, withQoS bool) ([]*transport.Entry, bool) {
+	return s.live.byEdge(pk, withQoS, time.Now())
+}
+
+// edgeErr is the by-edge reads' empty result: ErrTransportNotFound.
+func (s *redisStore) edgeErr(entries []*transport.Entry) error {
+	if len(entries) == 0 {
+		return ErrTransportNotFound
+	}
+	return nil
 }
