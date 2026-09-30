@@ -706,6 +706,87 @@
 					}
 					return tabBrowseClearnet(target, rqM, rqB, rqH, pp.port);
 				};
+				// A browse frame's WebSocket, opened by this tab's hypervisor through
+				// the same proxy as its fetches (pkg/visor/api_browse_ws.go) — a
+				// page's own WebSocket would go straight out from the reader's
+				// address. o = {url, protocols, origin}; port carries the frame's
+				// side: {t:'send'|'close'} in, {t:'open'|'message'|'close'|'error'} out.
+				globalThis.__netscrapeWebSocket = function (o, port) {
+					var closed = false;
+					function toFrame(m, tr) { try { port.postMessage(m, tr || []); } catch (e) { /* frame gone */ } }
+					function finish(code, reason, clean) {
+						if (closed) return;
+						closed = true;
+						toFrame({ t: 'close', code: code, reason: reason || '', wasClean: !!clean });
+						try { port.close(); } catch (e) { /* already */ }
+					}
+					function fail(msg) { toFrame({ t: 'error', message: msg }); finish(1006, '', false); }
+					var pp = proxyPort(globalThis.__netscrapeProxy || { proxy: globalThis.__netscrapeDefaultProxy });
+					if (pp.err || !pp.port) return fail(pp.err || 'websocket needs a proxy on this tab\'s loopback');
+					var v = globalThis.vnet;
+					if (!(v && v.listening(HV_PORT))) return fail('this tab\'s hypervisor is not running');
+					var u;
+					try { u = new URL(o.url); } catch (e) { return fail('bad websocket url'); }
+					var target = u.href;
+					if (/\.(dmsg|skynet|skysocks)$/i.test(u.hostname) || /^[0-9a-f]{66}$/i.test(u.hostname)) {
+						target = 'ws://' + resolverHost(u.hostname) + (u.port ? ':' + u.port : '') + u.pathname + u.search;
+					}
+					var id = v.dial(HV_PORT, 'browse-ws');
+					if (id < 0) return fail('could not reach this tab\'s hypervisor');
+					var q = '/api/browse-ws/?url=' + encodeURIComponent(target) + '&proxy=' + encodeURIComponent('vnet:' + pp.port) +
+						'&origin=' + encodeURIComponent(o.origin || '') + '&protocols=' + encodeURIComponent((o.protocols || []).join(','));
+					v.send(id, 'a', new TextEncoder().encode('GET ' + q + ' HTTP/1.1\r\nHost: vnet\r\nConnection: Upgrade\r\nUpgrade: skywire-browse-ws\r\n\r\n'));
+					var buf = new Uint8Array(0), upgraded = false;
+					function append(b) { var n = new Uint8Array(buf.length + b.length); n.set(buf); n.set(b, buf.length); buf = n; }
+					function writeFrame(t, payload) {
+						var p = payload || new Uint8Array(0);
+						var h = new Uint8Array(5);
+						h[0] = t; new DataView(h.buffer).setUint32(1, p.length);
+						if (!v.send(id, 'a', h) || (p.length && !v.send(id, 'a', p))) finish(1006, '', false);
+					}
+					function drain() {
+						if (!upgraded) {
+							var s = new TextDecoder().decode(buf), end = s.indexOf('\r\n\r\n');
+							if (end < 0) return;
+							var head = s.slice(0, end);
+							if (!/^HTTP\/1\.1 101/.test(head)) {
+								return fail('websocket relay: ' + (s.slice(end + 4) || head.split('\r\n')[0]).trim().slice(0, 200));
+							}
+							upgraded = true;
+							buf = buf.slice(new TextEncoder().encode(s.slice(0, end + 4)).length);
+						}
+						while (buf.length >= 5) {
+							var n = new DataView(buf.buffer, buf.byteOffset).getUint32(1);
+							if (buf.length < 5 + n) return;
+							var t = buf[0], p = buf.slice(5, 5 + n);
+							buf = buf.slice(5 + n);
+							if (t === 9) toFrame({ t: 'open', protocol: new TextDecoder().decode(p) });
+							else if (t === 1) toFrame({ t: 'message', data: new TextDecoder().decode(p) });
+							else if (t === 2) toFrame({ t: 'message', data: p.buffer }, [p.buffer]);
+							else if (t === 8) { var c = p.length >= 2 ? new DataView(p.buffer).getUint16(0) : 1005; finish(c, '', c === 1000); }
+							else if (t === 10) fail(new TextDecoder().decode(p));
+						}
+					}
+					(function pump() {
+						if (closed) return;
+						var b;
+						while ((b = v.recv(id, 'a'))) append(b);
+						drain();
+						if (v.eof(id, 'a')) { finish(1006, '', false); try { v.close(id, 'a'); } catch (e) { /* gone */ } return; }
+						v.onReadable(id, 'a', pump);
+					})();
+					port.onmessage = function (ev) {
+						var m = ev.data || {};
+						if (m.t === 'send') {
+							if (typeof m.data === 'string') writeFrame(1, new TextEncoder().encode(m.data));
+							else writeFrame(2, new Uint8Array(m.data));
+						} else if (m.t === 'close') {
+							writeFrame(8, new Uint8Array(0));
+							try { v.close(id, 'a'); } catch (e) { /* gone */ }
+							finish(m.code || 1000, m.reason, true);
+						}
+					};
+				};
 				// The desk chrome comes from the library (0magnet/desk), mounted by
 				// the desk host module itself (installDesk); its façade carries the
 				// openConsole/openWindow contract this boot drives. The dashboard ☰

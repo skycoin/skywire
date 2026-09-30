@@ -94,7 +94,7 @@ github.com/0magnet/osnotify
 # github.com/0magnet/plot-go v0.0.0-20260924101040-e98ed611390a
 ## explicit; go 1.25
 github.com/0magnet/plot-go
-# github.com/0magnet/realorigin v0.2.3-0.20260930213059-37a639d80c0b
+# github.com/0magnet/realorigin v0.2.3-0.20260930221610-f72aa1d9ba6a
 ## explicit; go 1.26.0
 github.com/0magnet/realorigin
 # github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
@@ -1567,6 +1567,7 @@ golang.org/x/net/nettest
 golang.org/x/net/proxy
 golang.org/x/net/publicsuffix
 golang.org/x/net/trace
+golang.org/x/net/websocket
 # golang.org/x/sync v0.23.0
 ## explicit; go 1.26.0
 golang.org/x/sync/errgroup

@@ -81,6 +81,30 @@
     });
   }
 
+  // websocketFor hands a frame's WebSocket to the desk's relay. A socket aimed
+  // at B itself (a page building its URL from location) is rebased onto the
+  // real site, as urlFor does for fetches; the Origin sent is the real site's.
+  function websocketFor(descriptor, ws, port) {
+    var t = globalThis.__netscrapeWebSocket;
+    if (typeof t !== 'function') {
+      try {
+        port.postMessage({ t: 'error', message: 'no websocket transport on this page' });
+        port.postMessage({ t: 'close', code: 1006, reason: '', wasClean: false });
+      } catch (e) { /* frame gone */ }
+      return;
+    }
+    var url = ws.url;
+    try {
+      var u = new URL(ws.url);
+      if (isBrowseOrigin(u.origin.replace(/^ws/, 'http'))) {
+        var path = u.pathname + u.search;
+        url = descriptor.net === 'skysocks' ? descriptor.base.replace(/^http/, 'ws') + path : 'ws://' + descriptor.host + path;
+      }
+    } catch (e) { /* the relay reports a bad url */ }
+    var origin = descriptor.net === 'skysocks' ? descriptor.base : 'http://' + descriptor.host;
+    t({ url: url, protocols: ws.protocols || [], origin: origin }, port);
+  }
+
   // The visor's skysocks-lite path calls __skywireProxyLog(winId, line) for every
   // route-setup and exit-selection step — the same trace `skywire cli proxy start
   // --verbose` prints. Wrap it so those lines reach both places that want them:
@@ -102,5 +126,6 @@
   globalThis.realOrigin.configure({
     suffix: cfg.suffix || '.mesh.localhost',
     fetch: fetchFor,
+    websocket: websocketFor,
   });
 })();

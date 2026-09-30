@@ -71,6 +71,10 @@
       opts = opts || {};
       if (opts.suffix) { cfg.suffix = String(opts.suffix); }
       if (opts.fetch) { cfg.fetch = opts.fetch; }
+      // websocket(target, {url, protocols}, port): opens a WebSocket for the
+      // frame and relays it over port — see the WebSocket stand-in in
+      // bootstrap.html. Optional; without it the frame's sockets fail.
+      if (opts.websocket) { cfg.websocket = opts.websocket; }
       return cfg;
     },
     id: idFor,
@@ -133,6 +137,18 @@
 
     mc.port1.onmessage = function (ev) {
       var q = ev.data || {};
+      if (q.ws) {
+        var wp = ev.ports && ev.ports[0];
+        if (!wp) { return; }
+        if (typeof cfg.websocket !== 'function') {
+          try { wp.postMessage({ t: 'error', message: 'no websocket transport configured' }); wp.postMessage({ t: 'close', code: 1006, reason: '', wasClean: false }); } catch (x) {}
+          return;
+        }
+        try { cfg.websocket(target, q.ws, wp); } catch (err) {
+          try { wp.postMessage({ t: 'error', message: String((err && err.message) || err) }); wp.postMessage({ t: 'close', code: 1006, reason: '', wasClean: false }); } catch (x) {}
+        }
+        return;
+      }
       Promise.resolve()
         .then(function () { return cfg.fetch(target, q.req || {}); })
         .then(function (r) {
