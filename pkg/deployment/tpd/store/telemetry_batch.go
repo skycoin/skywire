@@ -148,6 +148,14 @@ func (s *redisStore) applyTelemetry(ctx context.Context, updates []TelemetryUpda
 			s.today.markDirty(updates[i].ID)
 		}
 	}
+	for _, u := range updates {
+		if latencyValid(u.LatMin, u.LatMax, u.LatAvg) {
+			s.live.setLatency(u.ID, u.LatAvg, now)
+		}
+		if u.ThroughputBps > 0 && u.Reporter != (cipher.PubKey{}) {
+			s.live.setThroughput(u.ID, u.ThroughputBps, now)
+		}
+	}
 	return nil
 }
 

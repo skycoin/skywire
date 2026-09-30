@@ -154,6 +154,7 @@ func (s *redisStore) UpdateLatency(ctx context.Context, transportID string, minM
 	if err := s.client.Set(ctx, s.latencyKey(id), string(raw), latencyTTL).Err(); err != nil {
 		return err
 	}
+	s.live.setLatency(id, avgMS, time.Now())
 	s.today.markDirty(id)
 	date := time.Now().UTC().Format(MetricsDateFormat)
 	return latencyScript.Run(ctx, s.client,
@@ -186,7 +187,11 @@ func (s *redisStore) UpdateThroughput(ctx context.Context, transportID string, r
 	if err != nil {
 		return err
 	}
-	return s.client.Set(ctx, s.throughputKey(id), string(raw), throughputTTL).Err()
+	if err := s.client.Set(ctx, s.throughputKey(id), string(raw), throughputTTL).Err(); err != nil {
+		return err
+	}
+	s.live.setThroughput(id, bps, time.Now())
+	return nil
 }
 
 // getThroughputRecord reads the durable peak-goodput snapshot for a
