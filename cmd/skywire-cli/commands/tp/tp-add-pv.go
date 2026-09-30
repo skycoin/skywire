@@ -96,7 +96,7 @@ var addPvCmd = &cobra.Command{
   improving network connectivity and reachability.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		if pvTransportType != "" && !types.Valid(types.Type(pvTransportType)) {
-			logger.Fatal("Invalid transport type (use one of " + knownTypes() + "): ", pvTransportType)
+			logger.Fatal("Invalid transport type (use one of "+knownTypes()+"): ", pvTransportType)
 		}
 
 		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
