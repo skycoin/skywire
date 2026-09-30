@@ -61,6 +61,17 @@
       </div>
     }
 
+    <!-- A cold CXO subscription is a wait, not a fault. -->
+    @if (syncing && byTransport.length === 0 && byVisor.length === 0) {
+      <div class="loading-row">
+        <mat-icon>cloud_sync</mat-icon>
+        <span class="ml-2">
+          The transport metrics feed is still syncing from the network. This
+          takes a moment after the visor starts; it will appear on its own.
+        </span>
+      </div>
+    }
+
     @if (error && byTransport.length === 0 && byVisor.length === 0) {
       <div class="error-row">
         <mat-icon>error_outline</mat-icon>
@@ -84,6 +95,26 @@
           </span>
         }
       </div>
+
+      <!-- The hypervisor caps what it sends: the whole mesh is far more than a
+           table can render. Say so rather than presenting the top slice as if
+           it were everything. -->
+      @if (returnedCount < rawCount) {
+        <div class="summary-line cap-note">
+          <mat-icon>filter_list</mat-icon>
+          <span class="ml-1">
+            Showing the {{ returnedCount }} highest-bandwidth
+            @if (hideOffline) { <span>live</span> }
+            of {{ rawCount }}{{ partial ? '+' : '' }} transports
+            @if (!hideOffline && liveTotal > 0) {
+              <span>({{ liveTotal }} of them live)</span>
+            }.
+            @if (partial) {
+              <span>The metrics feed was cut short upstream, so that total is a floor.</span>
+            }
+          </span>
+        </div>
+      }
 
       <!-- Compact: by-transport rows -->
       @if (viewMode === 'compact') {
