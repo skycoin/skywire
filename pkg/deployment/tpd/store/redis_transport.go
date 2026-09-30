@@ -269,6 +269,9 @@ func (s *redisStore) GetTransportByID(ctx context.Context, id uuid.UUID) (*trans
 // to mirrorEdges, where the DHT consumer doesn't read the latency
 // field at all — that's the hot path the no-latency variant is for.
 func (s *redisStore) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
+	if entries, ok := s.liveByEdge(pk, true); ok {
+		return entries, s.edgeErr(entries)
+	}
 	entries, err := s.getTransportsByEdge(ctx, pk)
 	if err != nil {
 		return nil, err
@@ -293,6 +296,9 @@ func (s *redisStore) GetTransportsByEdgeNoLatency(ctx context.Context, pk cipher
 // hydration or cache write. Shared by both public methods so the
 // fetch logic stays in one place.
 func (s *redisStore) getTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
+	if entries, ok := s.liveByEdge(pk, false); ok {
+		return entries, s.edgeErr(entries)
+	}
 	if entries, ok := s.edgeCache.Get(pk); ok {
 		return entries, nil
 	}
