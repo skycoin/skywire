@@ -75,6 +75,13 @@ func (c *GraphCache) Rebuild(ctx context.Context) (*Graph, error) {
 		return c.cur.Load(), err
 	}
 	g := graphFromEntries(src, entries)
+	if prev := c.cur.Load(); prev != nil {
+		// Hand the landmark tables on (see landmarkMaxAge): the previous
+		// graph's own build, or what it inherited if it never needed one.
+		if g.inherited = prev.built.Load(); g.inherited == nil {
+			g.inherited = prev.inherited
+		}
+	}
 	c.cur.Store(g)
 	if c.log != nil {
 		c.log.Debugf("route-finder graph cache rebuilt: %d nodes from %d transports", len(g.graph), len(entries))
