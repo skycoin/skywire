@@ -80,6 +80,11 @@
       "en": "What iOS counts against this app (phys_footprint), the core included. On a device the core will run in a packet-tunnel extension, whose limit is about 50 MB.",
       "zh-Hans": "iOS 计入本应用的内存用量（phys_footprint），包括核心。在真机上，核心将运行在数据包隧道扩展中，其上限约为 50 MB。",
       "es": "Lo que iOS le cuenta a esta app (phys_footprint), núcleo incluido. En un dispositivo, el núcleo se ejecutará en una extensión de túnel de paquetes, cuyo límite ronda los 50 MB."
+    },
+    "chat_download_failed": {
+      "en": "%1$@ was not saved: %2$@",
+      "zh-Hans": "%1$@ 未能保存：%2$@",
+      "es": "No se guardó %1$@: %2$@"
     }
   },
   "InfoPlist": {
@@ -87,6 +92,21 @@
       "en": "Skywire uses Face ID to unlock the app when the app lock is on.",
       "zh-Hans": "开启应用锁后，Skywire 会使用面容 ID 解锁应用。",
       "es": "Skywire usa Face ID para desbloquear la app cuando el bloqueo de la app está activado."
+    },
+    "NSMicrophoneUsageDescription": {
+      "en": "SkyChat uses the microphone to record voice and video messages.",
+      "zh-Hans": "SkyChat 使用麦克风录制语音和视频消息。",
+      "es": "SkyChat usa el micrófono para grabar mensajes de voz y de vídeo."
+    },
+    "NSCameraUsageDescription": {
+      "en": "SkyChat uses the camera to record video messages and scan QR codes.",
+      "zh-Hans": "SkyChat 使用相机录制视频消息和扫描二维码。",
+      "es": "SkyChat usa la cámara para grabar mensajes de vídeo y escanear códigos QR."
+    },
+    "NSPhotoLibraryAddUsageDescription": {
+      "en": "Skywire saves the pictures and videos you choose to your photo library.",
+      "zh-Hans": "Skywire 会把你选择的图片和视频保存到照片图库。",
+      "es": "Skywire guarda en tu fototeca las imágenes y los vídeos que elijas."
     }
   }
 }

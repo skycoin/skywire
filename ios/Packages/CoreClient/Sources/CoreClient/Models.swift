@@ -436,6 +436,37 @@ public struct AppLogs: Decodable, Sendable, Equatable {
     }
 }
 
+/// One notification from the visor's hub (GET /api/notifications/stream),
+/// the wire shape pkg/visor/hypervisor_handlers_notify.go declares.
+public struct NotifyEvent: Decodable, Sendable, Equatable {
+    /// The publishing app, stamped by the visor: an app cannot forge it.
+    /// "visor" for the visor's own events.
+    public var app: String
+    public var title: String
+    public var body: String
+    /// The publisher's "this again": a new notification with the same app
+    /// and tag replaces the one before it. Empty means "like nothing else".
+    /// skychat uses the conversation (the peer's key, or the group's ID).
+    public var tag: String
+
+    enum CodingKeys: String, CodingKey { case app, title, body, tag }
+
+    public init(app: String, title: String, body: String, tag: String = "") {
+        self.app = app
+        self.title = title
+        self.body = body
+        self.tag = tag
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        app = c.lenient(.app, "")
+        title = c.lenient(.title, "")
+        body = c.lenient(.body, "")
+        tag = c.lenient(.tag, "")
+    }
+}
+
 struct Credentials: Encodable {
     let username: String
     let password: String

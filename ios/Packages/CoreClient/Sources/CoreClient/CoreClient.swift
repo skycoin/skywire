@@ -211,6 +211,64 @@ public actor CoreClient {
         return try Self.decode(DmsgReconnectResult.self, response, path).sessionsClosed
     }
 
+    // MARK: Notifications
+
+    static let notificationsPath = "/api/notifications/stream"
+    /// Three of the hub's 20 s pings: a stream silent for longer has died
+    /// without closing (a core stopped under it), and is dropped so the caller
+    /// can open another.
+    static let notificationsIdleLimit: TimeInterval = 60
+
+    /// The notifications the visor's apps publish, as they are published
+    /// (the hub's host-app sink, pkg/visor/hypervisor_handlers_notify.go).
+    /// Live only: the hub keeps no backlog, so the caller reopens it promptly
+    /// when it ends. Returns once the stream is open; the sequence finishes
+    /// when the visor ends it and throws when the connection fails. Events
+    /// with neither a title nor a body are dropped, as Android drops them.
+    public func notifications() async throws -> AsyncThrowingStream<NotifyEvent, any Error> {
+        try await notifications(idleLimit: Self.notificationsIdleLimit)
+    }
+
+    func notifications(idleLimit: TimeInterval) async throws -> AsyncThrowingStream<NotifyEvent, any Error> {
+        var stream = try await openStream(Self.notificationsPath, idleLimit: idleLimit)
+        if stream.status == 401 {
+            try await ensureSession()
+            stream = try await openStream(Self.notificationsPath, idleLimit: idleLimit)
+        }
+        guard (200..<300).contains(stream.status) else {
+            throw CoreClientError.http(method: "GET", path: Self.notificationsPath, status: stream.status, message: "stream refused")
+        }
+        let body = stream.body
+        return AsyncThrowingStream { continuation in
+            let reader = Task {
+                var events = ServerSentEvents()
+                do {
+                    for try await chunk in body {
+                        for data in events.feed(chunk) {
+                            guard let event = try? JSONDecoder().decode(NotifyEvent.self, from: Data(data.utf8)),
+                                  !(event.title.isEmpty && event.body.isEmpty)
+                            else { continue }
+                            continuation.yield(event)
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in reader.cancel() }
+        }
+    }
+
+    /// A streamed GET with the session cookie attached.
+    private func openStream(_ path: String, idleLimit: TimeInterval) async throws -> HTTPStream {
+        var headers = ["Accept": "text/event-stream"]
+        if let cookie = cookieHeader() {
+            headers["Cookie"] = cookie
+        }
+        return try await transport.stream(HTTPRequest(path: path, headers: headers, timeout: idleLimit))
+    }
+
     // MARK: Apps
 
     public func app(_ name: String) async throws -> AppState {
