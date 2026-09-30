@@ -61,10 +61,21 @@ func TestTelemetryShardAppliedOnceHeartbeatPaced(t *testing.T) {
 		t.Errorf("unchanged-shard heartbeat dated %v, want now (>= %v)", at, before)
 	}
 
-	// Changed content is applied.
+	// Changed content inside the pacing window is held (telemetry_pace.go)...
 	entries[0].SentBytes = 500
 	agg.dispatchTelemetryShard(path, telemetrywire.EncodeShard(shard, entries), a)
+	if sink.bandwidths != 4 {
+		t.Fatalf("changed shard inside the window: bandwidths=%d, want 4 (held)", sink.bandwidths)
+	}
+	// ...and applied once the window has passed.
+	agg.pace.mu.Lock()
+	for _, e := range agg.pace.m {
+		e.applied = e.applied.Add(-telemetryApplyEvery)
+	}
+	agg.pace.mu.Unlock()
+	entries[0].SentBytes = 600
+	agg.dispatchTelemetryShard(path, telemetrywire.EncodeShard(shard, entries), a)
 	if sink.bandwidths != 6 {
-		t.Fatalf("changed shard: bandwidths=%d, want 6", sink.bandwidths)
+		t.Fatalf("changed shard after the window: bandwidths=%d, want 6", sink.bandwidths)
 	}
 }

@@ -307,6 +307,9 @@ type Aggregator struct {
 	// tel skips re-applying telemetry shards a Root re-delivers unchanged and
 	// paces uptime heartbeats (see telemetry_dedup.go).
 	tel telemetryState
+	// pace holds telemetry back to one apply per window (telemetry_pace.go).
+	pace    telemetryPacer
+	runOnce sync.Once
 
 	// roots holds, per reporter, the tree hash of the last Root applied in
 	// full and when, so a Root that repeats it is not re-applied (see
@@ -526,7 +529,10 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggrega
 
 // Run starts the reconcile + cleanup loops. Returns immediately; they
 // run until ctx is canceled or Close is called. Idempotent.
-func (a *Aggregator) Run(ctx context.Context) { a.core.Run(ctx) }
+func (a *Aggregator) Run(ctx context.Context) {
+	a.runOnce.Do(func() { go a.flushPaced(ctx) })
+	a.core.Run(ctx)
+}
 
 // Close stops the loops and tears down the CXO node. Idempotent.
 func (a *Aggregator) Close() error { return a.core.Close() }
@@ -1091,6 +1097,21 @@ func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter c
 // latency (partial-zero-gated), and per-type uptime heartbeat.
 func (a *Aggregator) applyTelemetry(ctx context.Context, id uuid.UUID, reporter cipher.PubKey,
 	sent, recv uint64, throughputBps, latMin, latMax, latAvg float64, tpType string, at time.Time) {
+	// The uptime heartbeat is paced on its own (telemetry_dedup.go).
+	a.heartbeat(ctx, id, tpType, at)
+	k := telKey{id: id, reporter: reporter}
+	s := telSnap{sent: sent, recv: recv, throughput: throughputBps,
+		latMin: latMin, latMax: latMax, latAvg: latAvg, tpType: tpType}
+	if s, ok := a.pace.offer(k, s, time.Now()); ok {
+		a.applySnap(ctx, k, s)
+	}
+}
+
+// applySnap writes one telemetry snapshot to the store.
+func (a *Aggregator) applySnap(ctx context.Context, k telKey, s telSnap) {
+	id, reporter := k.id, k.reporter
+	sent, recv, throughputBps, tpType := s.sent, s.recv, s.throughput, s.tpType
+	latMin, latMax, latAvg := s.latMin, s.latMax, s.latAvg
 	if err := a.sink.UpdateBandwidth(ctx, id.String(), reporter, sent, recv, tpType); err != nil {
 		a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateBandwidth failed")
 	}
@@ -1108,13 +1129,6 @@ func (a *Aggregator) applyTelemetry(ctx context.Context, id uuid.UUID, reporter 
 			a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateLatency failed")
 		}
 	}
-	// Heartbeat into the per-transport uptime tables (tp-uptime:*),
-	// previously written only by the HTTP /transports/ register path.
-	// Type is empty on snapshots from pre-uptime visors / unknown-type
-	// entries — skip those rather than push a heartbeat the store would
-	// drop on the type filter (RecordTransportHeartbeat early-returns on
-	// any non-p2p type, but routing here saves the redis round-trip).
-	a.heartbeat(ctx, id, tpType, at)
 }
 
 // heartbeat records a transport's uptime heartbeat, at most once per
