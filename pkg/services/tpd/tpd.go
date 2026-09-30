@@ -132,6 +132,17 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 		return nil, fmt.Errorf("transport-discovery: create store: %w", err)
 	}
 	closers = append(closers, st.Close)
+	// TPD writes every transport, so it holds the whole set in memory and
+	// serves the whole-set reads from it — its own publishers, and a route
+	// finder in the same process (store.SharedLiveStore).
+	if ls, ok := st.(interface {
+		EnableLiveSet(ctx context.Context, url string) error
+	}); ok {
+		if err := ls.EnableLiveSet(ctx, storeCfg.URL); err != nil {
+			closeAll()
+			return nil, fmt.Errorf("transport-discovery: load live transport set: %w", err)
+		}
+	}
 
 	nonceStoreConfig := cfg.NonceStoreConfig(plainHTTP)
 	s.nonceStore = services.StoreKind(nonceStoreConfig.Type)
