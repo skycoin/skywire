@@ -110,6 +110,8 @@ github.com/0magnet/plot-go v0.0.0-20260924101040-e98ed611390a h1:VqMh+5/vpbGPykj
 github.com/0magnet/plot-go v0.0.0-20260924101040-e98ed611390a/go.mod h1:LihNHWaXQYSptkrXNYKyz7Cg/2YsYehBOFkLA9WVN0c=
 github.com/0magnet/realorigin v0.2.2 h1:mbHLgSuu5hKqXa7fg56mVhG0NRQwwSbrNCtXyUVAAK8=
 github.com/0magnet/realorigin v0.2.2/go.mod h1:JyBJs48D0cN2TlOdp/pjTqxpQyO2mu4ybkFmsQBFRKg=
+github.com/0magnet/realorigin v0.2.3-0.20260930213059-37a639d80c0b h1:jCG8PG68HBqH5FbVOXjM27UnCQqLo3MhV5pfbkjcAgA=
+github.com/0magnet/realorigin v0.2.3-0.20260930213059-37a639d80c0b/go.mod h1:JyBJs48D0cN2TlOdp/pjTqxpQyO2mu4ybkFmsQBFRKg=
 github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076 h1:25bEd9CynC/HmPEo+vqxcm3ne1j4/x2Ee1iIKKXf0Ww=
 github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076/go.mod h1:QaGfTxerTG6grc5YQD3C+0AkkbFmPmZtZF8ZW5D5Tro=
 github.com/0magnet/sh/v3 v3.13.2-0.20260928172341-4c52a7abff02 h1:N3EWOkb1IMPiZqZ0PMDWEPciTB09hZ00njS+N9xswoM=
