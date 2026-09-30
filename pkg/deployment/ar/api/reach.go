@@ -49,11 +49,14 @@ const (
 	// probeTargetGap is the least time between two probes of one address,
 	// whichever peers bind it — the AR must not be usable to hammer a host.
 	probeTargetGap = probeRetry
-	// probeWorkers and probeQueue bound the probing. Probes are rare (one per
-	// binding per probeEvery); a full queue drops, and the next refresh of the
-	// binding asks again.
-	probeWorkers = 8
-	probeQueue   = 1024
+	// probeWorkers and probeQueue bound the probing. A probe is almost all
+	// waiting: most bindings belong to NAT'd visors that never answer, so each
+	// costs the full probeTimeout. The fleet binds ~900 visors for each of three
+	// probed types; 64 workers finish a round in ~3.5 min where 8 took ~28 (and
+	// a restart starts the book over). A full queue drops; the next refresh of
+	// the binding asks again.
+	probeWorkers = 64
+	probeQueue   = 4096
 	// declTTL is how long a declaration counts without being refreshed. The
 	// visor's feed heartbeat refreshes it every 45 s.
 	declTTL = 10 * time.Minute
