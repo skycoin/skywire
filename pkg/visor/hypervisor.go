@@ -1134,6 +1134,16 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			r.Get("/stream", hv.getNotifyStream())
 		})
 
+		// A browse frame's WebSockets, relayed through the browse proxy
+		// (api_browse_ws.go). Out of the /api group for the same reason as the
+		// stream above: its timeout would sever a long-lived connection.
+		r.Route("/api/browse-ws", func(r chi.Router) {
+			if hv.c.EnableAuth {
+				r.Use(hv.users.Authorize)
+			}
+			r.Get("/", hv.visor.serveBrowseWS)
+		})
+
 		// A call's audio, for a visor whose device belongs to the app that
 		// started it (Android) — see hypervisor_handlers_voice_audio.go.
 		//

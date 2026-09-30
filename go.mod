@@ -76,7 +76,7 @@ require (
 	github.com/0magnet/netscrape v0.0.0-20260930210759-680b944d1da2
 	github.com/0magnet/osnotify v0.0.0-20260906144808-7a227da43a0d
 	github.com/0magnet/plot-go v0.0.0-20260924101040-e98ed611390a
-	github.com/0magnet/realorigin v0.2.3-0.20260930213059-37a639d80c0b
+	github.com/0magnet/realorigin v0.2.3-0.20260930221610-f72aa1d9ba6a
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
 	github.com/0magnet/spheregraph v0.0.0-20260906144810-35af719bf2f1
 	github.com/0magnet/sysinfo v1.1.4-0.20260905172033-914ade4a2548
