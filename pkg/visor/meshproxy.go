@@ -753,6 +753,10 @@ func meshStatusHandler(suffix string, status proxystatus.Provider, next http.Han
 				}
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.Header().Set("Cache-Control", "no-store")
+				if r.URL.Path == proxystatus.FragmentPath {
+					_, _ = w.Write(proxystatus.RenderFragment(snap)) //nolint:errcheck,gosec // trusted server-rendered HTML, as below
+					return
+				}
 				// G705: proxystatus.Render emits trusted, server-generated HTML that
 				// HTML-escapes every interpolated value (see pkg/proxystatus/render.go);
 				// it is not tainted request input.

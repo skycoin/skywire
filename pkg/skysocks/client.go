@@ -3390,6 +3390,13 @@ func (c *Client) serveStatusPage(conn, stream net.Conn) {
 		}
 		c.serveStatusWS(conn)
 		return
+	case proxystatus.FragmentPath:
+		// The live region alone, for a page that cannot hold the WebSocket
+		// (one rendered through netscrape, whose frames carry fetches but not
+		// sockets): it polls this instead.
+		stream.Close()                                                                        //nolint:errcheck,gosec
+		_, _ = conn.Write(statusHTTPResponse(proxystatus.RenderFragment(c.statusSnapshot()))) //nolint:errcheck
+		return
 	case "/main.wasm":
 		// The GPU route-graph view's engine: the one skywire command module run
 		// in its "netview" role (it publishes the generic cosmos-go graph API the
