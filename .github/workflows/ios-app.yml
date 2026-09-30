@@ -44,9 +44,10 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      # Explicit, and loud when missing: a runner image a release behind would
-      # otherwise fail later on the project format with a less helpful error.
-      - name: Select Xcode 27
+      # Explicit: the newest Xcode 27, else (hosted images carry a new Xcode
+      # weeks late) the newest Xcode 26 with a notice; loud when neither is
+      # there.
+      - name: Select Xcode
         run: ios/scripts/ci-xcode.sh select
 
       - name: Go core (xcframework, device and Simulator slices)

@@ -183,8 +183,9 @@ Notes:
 ## CI
 
 `.github/workflows/ios-app.yml` runs on pull requests that touch `ios/`,
-`pkg/mobilecore`, `cmd/skywire-mobile-core` or the Makefile: it selects Xcode
-27 (`ios/scripts/ci-xcode.sh`, failing loudly when the runner image lacks it),
+`pkg/mobilecore`, `cmd/skywire-mobile-core` or the Makefile: it selects the
+newest Xcode 27, or while GitHub's images do not carry it yet the newest Xcode
+26 (`ios/scripts/ci-xcode.sh`, failing loudly when neither is there),
 builds the xcframework, runs `swift test` in `CoreClient` and the Skywire
 scheme's tests on a Simulator, and keeps the result bundle when something
 fails. Nothing is signed with an Apple identity.
