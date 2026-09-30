@@ -150,6 +150,8 @@ func (s *service) startCXO(ctx context.Context, dmsgC *dmsg.Client, host service
 		}()
 	}
 	s.cxo.AddPublisher(ctx, logger, "bindings", skyenv.DmsgARBindingsCXOPort, bindPub, err)
+	reachPub, err := b.api.StartReachCXOPublisher(dmsgC, sk)
+	s.cxo.AddPublisher(ctx, logger, "reach", skyenv.DmsgARReachCXOPort, reachPub, err)
 }
 
 // Embed runs address-resolver inside a host process: the API is

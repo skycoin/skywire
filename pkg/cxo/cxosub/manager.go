@@ -86,6 +86,10 @@ const (
 	// (routing/<pk>). What visors route on; a change ships only the
 	// shards it touched.
 	FeedTPDRouting
+	// FeedARReach is the address resolver's reach feed: per peer, whether it
+	// can actually be transported by each type (reach/<h>, 16 leaves). What
+	// autoconnect picks peers from.
+	FeedARReach
 )
 
 // FeedRoute returns the fixed dmsg CXO port and TreeStore path prefix a feed's
@@ -114,6 +118,8 @@ func FeedRoute(f Feed) (port uint16, prefix string, ok bool) {
 		return skyenv.DmsgTPDStatsCXOPort, "stats/", true
 	case FeedTPDRouting:
 		return skyenv.DmsgTPDRoutingCXOPort, "routing/", true
+	case FeedARReach:
+		return skyenv.DmsgARReachCXOPort, "reach/", true
 	}
 	return 0, "", false
 }
@@ -177,7 +183,7 @@ var tabFeedDeps = map[Tab][]Feed{
 	TabNetworkVisualizer: {FeedSDServices, FeedDMSGDClientsByServer, FeedTPDMetrics},
 	TabMetrics:           {FeedTPDMetrics, FeedTPDUptime},
 	TabUptime:            {FeedTPDUptime},
-	TabAutoconnect:       {FeedSDServices, FeedTPDStats},
+	TabAutoconnect:       {FeedSDServices, FeedARReach},
 	TabCLIServices:       {FeedSDServices},
 	TabCLITransports:     {FeedTPDRouting},
 	TabRoutingPolicy:     {FeedSDServices},
@@ -692,6 +698,8 @@ func FeedString(feed Feed) string {
 		return "tpd-stats"
 	case FeedTPDRouting:
 		return "tpd-routing"
+	case FeedARReach:
+		return "ar-reach"
 	}
 	return fmt.Sprintf("feed#%d", feed)
 }
@@ -714,6 +722,8 @@ func FeedFromString(name string) (Feed, bool) {
 		return FeedTPDStats, true
 	case "tpd-routing":
 		return FeedTPDRouting, true
+	case "ar-reach":
+		return FeedARReach, true
 	}
 	return 0, false
 }
