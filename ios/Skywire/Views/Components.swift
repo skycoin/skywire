@@ -68,6 +68,51 @@ enum Format {
         return parts.joined(separator: L10n.text("unit_separator"))
     }
 
+    /// `text` for display with a break opportunity between every character
+    /// (a zero-width space), so a key wraps anywhere without the hyphen
+    /// iOS would otherwise insert, which reads as part of the key. Display
+    /// only: copy the original.
+    static func breakable(_ text: String) -> String {
+        text.map(String.init).joined(separator: "\u{200B}")
+    }
+
+    /// A two-letter country code as its flag; nil for anything else
+    /// (Android: flagEmoji).
+    static func flag(_ country: String) -> String? {
+        let code = country.uppercased()
+        guard code.count == 2, code.allSatisfy({ ("A"..."Z").contains($0) }) else { return nil }
+        let base: UInt32 = 0x1F1E6 // REGIONAL INDICATOR SYMBOL LETTER A
+        return String(String.UnicodeScalarView(code.unicodeScalars.compactMap { Unicode.Scalar(base + $0.value - 65) }))
+    }
+
+    /// Bytes as B, KB, MB, GB or TB with one decimal (Android: formatBytes).
+    static func bytes(_ count: Int64) -> String {
+        guard count >= 1024 else { return "\(count) B" }
+        var value = Double(count) / 1024
+        let units = ["KB", "MB", "GB", "TB"]
+        var unit = 0
+        while value >= 1024, unit < units.count - 1 {
+            value /= 1024
+            unit += 1
+        }
+        return String(format: "%.1f %@", locale: Locale(identifier: "en_US_POSIX"), value, units[unit])
+    }
+
+    /// The visor's words for what an app is doing (`detailed_status`,
+    /// pkg/app/appserver/app_state.go), translated where the catalogue knows
+    /// them, passed through otherwise (Android: appStatusText).
+    static func appStatus(_ detail: String) -> String {
+        switch detail.lowercased() {
+        case AppDetail.starting: L10n.text("app_status_starting")
+        case AppDetail.running: L10n.text("app_status_running")
+        case AppDetail.connecting: L10n.text("app_status_connecting")
+        case AppDetail.reconnecting: L10n.text("app_status_reconnecting")
+        case AppDetail.shuttingDown: L10n.text("app_status_shutting_down")
+        case AppDetail.stopped: L10n.text("app_status_stopped")
+        default: detail
+        }
+    }
+
     /// A service's health word, translated where the catalogue knows it; the
     /// visor's own word otherwise (Android: healthText).
     static func health(_ status: String) -> String {
@@ -79,6 +124,16 @@ enum Format {
         default: status
         }
     }
+}
+
+/// The visor's `detailed_status` words, lowercased.
+enum AppDetail {
+    static let starting = "starting"
+    static let running = "running"
+    static let connecting = "connecting"
+    static let reconnecting = "connection failed, reconnecting"
+    static let shuttingDown = "shutting down"
+    static let stopped = "stopped"
 }
 
 /// The string catalogue from code that is not a view. Its keys are Android's

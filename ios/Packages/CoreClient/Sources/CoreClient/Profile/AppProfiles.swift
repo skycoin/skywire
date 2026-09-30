@@ -76,9 +76,37 @@ public enum SkydexProfile {
 
     private static let address = ["--addr", "-addr"]
     private static let passwordFile = ["--password-file", "-password-file"]
+    private static let market = ["--market-pk", "-market-pk"]
 
     public static func baseURL(port: Int) -> URL {
         URL(string: "http://\(AppArgs.loopbackHost):\(port)/")!
+    }
+
+    /// The same listener as an origin (no path), for `LoopbackTransport`.
+    public static func origin(port: Int) -> URL {
+        URL(string: "http://\(AppArgs.loopbackHost):\(port)")!
+    }
+
+    /// The market the config records (`--market-pk`, which pre-fills the
+    /// page's form and connects nothing by itself); nil when none.
+    public static func marketPK(_ args: [String]) -> String? {
+        AppArgs.value(args, market).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// `args` with `--market-pk` set to `pk`, as the API's one-string `args`.
+    /// The listen address and the password file are the profile's, untouched
+    /// (Android: DexArgs.withMarketPk).
+    public static func args(_ args: [String], withMarketPK pk: String) -> String {
+        var pinned = args
+        AppArgs.pinValue(&pinned, market) { _ in pk }
+        return AppArgs.join(pinned)
+    }
+
+    /// Shaped like a market's key: 33 bytes of hex behind a compressed-point
+    /// prefix, what the client's UnmarshalText accepts, so a typo is caught in
+    /// the field instead of after a dial that was never going to resolve.
+    public static func isMarketPK(_ value: String) -> Bool {
+        value.count == 66 && (value.hasPrefix("02") || value.hasPrefix("03")) && value.allSatisfy(\.isHexDigit)
     }
 
     public static func listenPort(_ args: [String]) -> Int {
@@ -103,10 +131,30 @@ public enum SocksProfile {
 
     private static let address = ["--addr", "-addr"]
     private static let reconnect = ["--reconnect"]
+    private static let server = ["--srv", "-srv"]
 
     public static func listenPort(_ args: [String]) -> Int {
         AppArgs.listenPort(args, defaultPort: defaultPort)
     }
+
+    /// The server the app is pointed at, from `--srv` (which the visor writes
+    /// itself on a PUT carrying `pk`); nil when there is none.
+    public static func serverPK(_ args: [String]) -> String? {
+        AppArgs.value(args, server).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// `args` with the listener moved to `port` on loopback, as the one string
+    /// the API's `args` field takes (quoted as Go's splitArgs reads it). Only
+    /// the address changes: the server key and `--reconnect` stay put
+    /// (Android: SocksArgs.withPort).
+    public static func args(_ args: [String], withPort port: Int) -> String {
+        var pinned = args
+        AppArgs.pinValue(&pinned, address) { _ in "\(AppArgs.loopbackHost):\(port)" }
+        return AppArgs.join(pinned)
+    }
+
+    /// The ports the listener may take: above the privileged range.
+    public static let ports = 1024...65535
 
     /// - `--addr` host forced to loopback: the generated `:1080` is a SOCKS5
     ///   proxy for anything that can reach the device. Only the host is

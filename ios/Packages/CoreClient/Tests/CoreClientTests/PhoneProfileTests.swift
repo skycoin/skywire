@@ -210,6 +210,38 @@ final class PhoneProfileTests: XCTestCase {
         XCTAssertEqual(SocksProfile.listenPort([]), 1080)
     }
 
+    /// The server key the visor wrote, in either spelling; none when empty.
+    func testSocksServerKey() {
+        XCTAssertEqual(SocksProfile.serverPK(["--srv", "02ab", "--addr", "127.0.0.1:1080"]), "02ab")
+        XCTAssertEqual(SocksProfile.serverPK(["--srv=03cd"]), "03cd")
+        XCTAssertNil(SocksProfile.serverPK(["--srv", ""]))
+        XCTAssertNil(SocksProfile.serverPK(["--addr", "127.0.0.1:1080"]))
+    }
+
+    /// A port change rewrites the listener only (on loopback, whatever host
+    /// it had), keeps the server and the pins, and quotes as Go's splitArgs
+    /// reads (checked back through AppArgs.split, the port of it).
+    func testSocksPortChangeKeepsTheRest() {
+        let args = ["--srv", "02ab", "--addr", "127.0.0.1:1080", "--reconnect"]
+        let written = SocksProfile.args(args, withPort: 1090)
+        XCTAssertEqual(written, "--srv 02ab --addr 127.0.0.1:1090 --reconnect")
+        XCTAssertEqual(AppArgs.split(written), ["--srv", "02ab", "--addr", "127.0.0.1:1090", "--reconnect"])
+        XCTAssertEqual(SocksProfile.args(["--addr=:1080"], withPort: 2000), "--addr=127.0.0.1:2000")
+        XCTAssertEqual(SocksProfile.args(["--srv", "02ab"], withPort: 2000), "--srv 02ab --addr 127.0.0.1:2000")
+        XCTAssertEqual(SocksProfile.args(["--note", "two words", "--addr", ":1"], withPort: 1080), #"--note "two words" --addr 127.0.0.1:1080"#)
+    }
+
+    /// The list the phone caches reads back as it was.
+    func testServiceEntriesRoundTrip() throws {
+        let entries = [
+            ServiceEntry(address: "02ab:44", type: "proxy", geo: GeoInfo(country: "DE", region: "Hesse"), version: "v1.3.97"),
+            ServiceEntry(address: "03cd:44"),
+        ]
+        let decoded = try JSONDecoder().decode([ServiceEntry].self, from: JSONEncoder().encode(entries))
+        XCTAssertEqual(decoded, entries)
+        XCTAssertEqual(decoded[0].pk, "02ab")
+    }
+
     func testSkychatDropsPortlessAndKeepsTheRest() {
         let args = SkychatProfile.phoneArgs(
             ["--portless", "--pair-enable", "--persist=false", "--addr", ":8002"], passwordFile: "/p", historyFile: "/h"

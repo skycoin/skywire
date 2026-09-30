@@ -19,6 +19,28 @@ final class ChatChecks: XCTestCase {
         snap("chat-page")
     }
 
+    /// A video message recorded in the page: a tap on the empty composer's
+    /// button switches it from voice to video, a hold records (the page's own
+    /// gesture), and the take lands in the thread. On the Simulator WebKit
+    /// records its mock camera and microphone (a test pattern and a beep);
+    /// the real devices are Lane D's.
+    func testVideoMessageRecords() {
+        let app = connectedApp()
+        openTab(.chat, in: app)
+        let page = chatPage(app)
+        page.staticTexts["Saved Messages"].firstMatch.tap()
+        let voice = page.buttons["Voice message"].firstMatch
+        let video = page.buttons["Video message"].firstMatch
+        XCTAssertTrue(voice.waitForExistence(timeout: 10) || video.exists, "no record button")
+        if voice.exists { voice.tap() }
+        XCTAssertTrue(video.waitForExistence(timeout: 5), "the tap did not switch to video")
+        snap("video-mode")
+        video.press(forDuration: 3.5)
+        sleep(4)
+        snap("video-after-take")
+        keep(page.debugDescription, named: "video-thread-tree")
+    }
+
     /// The page stays at its own scale: focusing the composer (14 px text,
     /// which WebKit zooms into), a pinch and a double tap leave the thread's
     /// header on screen and the composer inside the screen's width. Zoomed, the
