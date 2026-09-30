@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -64,7 +65,7 @@ var (
 
 func init() {
 	addPvCmd.Flags().IntVarP(&pvCount, "count", "n", 5, "number of public visors to add transports to")
-	addPvCmd.Flags().StringVarP(&pvTransportType, "type", "t", "", "transport type (stcpr, sudph, dmsg)")
+	addPvCmd.Flags().StringVarP(&pvTransportType, "type", "t", "", "transport type (stcpr, sudph, squicr, swtr, dmsg; default stcpr, swtr in a browser)")
 	addPvCmd.Flags().DurationVarP(&pvTimeout, "timeout", "o", 0, "operation timeout")
 	addPvCmd.Flags().StringVarP(&pvSDURL, "sdurl", "a", deployment.Prod.ServiceDiscovery, "service discovery url")
 	addPvCmd.Flags().StringVarP(&pvUTURL, "uturl", "w", deployment.Prod.TransportDiscovery, "uptime tracker url (TPD integrated)")
@@ -94,8 +95,10 @@ var addPvCmd = &cobra.Command{
   transports to the top N visors (by transport count). This is useful for
   improving network connectivity and reachability.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		if pvTransportType != "" && pvTransportType != "stcpr" && pvTransportType != "sudph" {
-			logger.Fatal("Invalid transport type for public visors (use stcpr or sudph):", pvTransportType)
+		switch pvTransportType {
+		case "", "stcpr", "sudph", "squicr", "swtr", "dmsg":
+		default:
+			logger.Fatal("Invalid transport type for public visors (use stcpr, sudph, squicr, swtr or dmsg): ", pvTransportType)
 		}
 
 		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
@@ -193,10 +196,13 @@ var addPvCmd = &cobra.Command{
 				remotePKs = append(remotePKs, pk)
 			}
 
-			// Determine transport type (default to stcpr for public visors)
+			// Default to stcpr; a visor in a browser tab can only open WebTransport.
 			tpType := pvTransportType
 			if tpType == "" {
 				tpType = "stcpr"
+				if runtime.GOOS == "js" {
+					tpType = "swtr"
+				}
 			}
 
 			// Check if embedded TPS is running
