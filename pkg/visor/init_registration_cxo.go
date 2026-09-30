@@ -24,10 +24,13 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -61,7 +64,7 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 		return nil
 	}
 
-	dataDir, inMemDB := cxoPubStorage(filepath.Join(v.conf.LocalPath, "cxo-registration"))
+	dataDir, inMemDB := v.hostCXOPubStorage(filepath.Join(v.conf.LocalPath, "cxo-registration"), skyenv.DmsgDMSGDRegistrationCXOPort)
 	// Gate the feed: peer whitelist (hypervisors + dmsgpty whitelist + own
 	// PK) plus the consuming dmsg-discovery. dmsgd MUST be allowed or its
 	// announce-conn subscribe is rejected by the OnSubscribeRemote hook.
@@ -83,6 +86,7 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 		log.WithError(err).Warn("Registration-CXO: publisher init failed; continuing with HTTP registration only")
 		return nil
 	}
+	v.trackCXOPublisher(skyenv.DmsgDMSGDRegistrationCXOPort, pub)
 
 	// Register so the feed's subscriber allowlist is recomputed and
 	// re-applied when the peer whitelist changes at runtime. The initial
@@ -114,16 +118,14 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 	go runRegistrationAnnounceLoop(v.ctx, pub, dmsgdPK, lastAnnounceOK, log)
 
 	// Tell the dmsg client the CXO registration keepalive is healthy while we
-	// have recently reached dmsg-discovery over the feed conn. While healthy,
-	// the client stretches its periodic HTTP keepalive re-PUT (see
-	// EntityCommon.cxoKeepaliveHealthyFn); if the feed conn drops, announces
-	// stop succeeding and this falls back to false within the window, so the
-	// frequent HTTP keepalive resumes. Delegated-server CHANGES are unaffected
+	// have recently reached dmsg-discovery and it is subscribed to the feed
+	// (see cxoKeepaliveHealthy). While healthy on the epoch of its last update,
+	// the client makes no periodic HTTP re-PUT at all (see
+	// EntityCommon.cxoKeepaliveHealthyFn); if the feed conn drops or
+	// dmsg-discovery resubscribes on a new conn, the next tick re-registers
+	// over HTTP. Delegated-server CHANGES are unaffected
 	// (they publish immediately over both HTTP and CXO).
-	v.dmsgC.SetCXOKeepaliveHealthyFunc(func() bool {
-		last := lastAnnounceOK.Load()
-		return last != 0 && time.Since(time.Unix(0, last)) < cxoKeepaliveHealthyWindow
-	})
+	v.dmsgC.SetCXOKeepaliveHealthyFunc(cxoKeepaliveHealthy(pub, dmsgdPK, lastAnnounceOK, log))
 
 	v.pushCloseStack("registration_cxo", func() error {
 		v.dmsgC.SetCXOKeepaliveHealthyFunc(nil)
@@ -148,6 +150,48 @@ const registrationAnnounceInterval = 30 * time.Second
 // fallback, while a genuinely dropped feed conn falls back within a minute or
 // two.
 const cxoKeepaliveHealthyWindow = 95 * time.Second
+
+// cxoKeepaliveHealthy is the predicate every registration client (dmsg entry,
+// SD services, AR binds) consults before a no-change HTTP re-registration.
+// The service keeps this feed's entries alive when it answered an announce
+// within cxoKeepaliveHealthyWindow AND holds a live subscription to the feed,
+// so the publisher's heartbeat Roots reach its ingest, which refreshes the
+// stored entries' TTL. A reachable service that never subscribed is not.
+//
+// The epoch counts the conns that subscription has arrived on. A new one means
+// the service reconnected, possibly after a restart that lost its store, and
+// the clients re-register once over HTTP: that path can create entries the
+// CXO ingest cannot (a type=visor SD entry needs the observed IP).
+func cxoKeepaliveHealthy(pub *treestore.Publisher, peer cipher.PubKey, lastOK *atomic.Int64, log *logging.Logger) func() (bool, uint64) {
+	var (
+		mu    sync.Mutex
+		conn  *node.Conn
+		epoch uint64
+	)
+	return func() (bool, uint64) {
+		mu.Lock()
+		defer mu.Unlock()
+		last := lastOK.Load()
+		if last == 0 || time.Since(time.Unix(0, last)) >= cxoKeepaliveHealthyWindow {
+			return false, epoch
+		}
+		subs := pub.Subscriptions(peer)
+		if len(subs) == 0 {
+			return false, epoch
+		}
+		// Stay on the current conn while it is still subscribed: the peer
+		// can hold two (announce-dialed and self-dialed), listed in no
+		// particular order.
+		if slices.Contains(subs, conn) {
+			return true, epoch
+		}
+		conn = subs[0]
+		epoch++
+		log.WithField("peer", peer).WithField("epoch", epoch).WithField("conns", len(subs)).
+			Debug("CXO keepalive: subscription on a new conn; next registration goes over HTTP")
+		return true, epoch
+	}
+}
 
 // runRegistrationAnnounceLoop dials dmsg-discovery on a ticker (ConnectPK is
 // idempotent — a live conn is a no-op, a dropped one redials) and stamps

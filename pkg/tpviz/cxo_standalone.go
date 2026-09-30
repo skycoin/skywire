@@ -58,7 +58,7 @@ func (s *Server) SetCXOSubMgrFromDmsg(dmsgC *dmsg.Client) {
 		}
 		var pk cipher.PubKey
 		switch f {
-		case cxosub.FeedTPDMetrics, cxosub.FeedTPDUptime, cxosub.FeedTPDAllTransports, cxosub.FeedTPDStats:
+		case cxosub.FeedTPDMetrics, cxosub.FeedTPDUptime, cxosub.FeedTPDAllTransports, cxosub.FeedTPDStats, cxosub.FeedTPDRouting:
 			pk = tpd
 		case cxosub.FeedSDServices:
 			pk = sd
@@ -182,47 +182,35 @@ func (s *Server) tryCXOTransports() ([]byte, bool) {
 	mgr.AcquireForTab(CXOTabCLITransports)
 	defer mgr.ReleaseForTab(CXOTabCLITransports)
 
-	leaves := make(map[string][]byte, 2)
-	mgr.Walk(CXOFeedTPDAllTransports, "transports/all/", func(path string, body []byte) bool {
-		if len(body) > 0 {
-			leaves[path] = append([]byte(nil), body...)
-		}
+	var entries []*transport.Entry
+	mgr.Walk(CXOFeedTPDRouting, "routing/", func(_ string, body []byte) bool {
+		entries = append(entries, routingShardEntries(body)...)
 		return true
 	})
-	if b, ok := leaves["transports/all/without-self"]; ok {
-		return restoreAllTransportsBody(b), true
+	if len(entries) == 0 {
+		return nil, false
 	}
-	for _, b := range leaves { // any leaf beats a fallback HTTP round-trip
-		return restoreAllTransportsBody(b), true
-	}
-	return nil, false
+	out, err := json.Marshal(entries)
+	return out, err == nil
 }
 
-// restoreAllTransportsBody gunzips the published all-transports leaf (a no-op
-// on an already-plain body) and recomputes any derivable t_id the publisher
-// dropped, so the UI sees the same shape GET /all-transports returns. On any
-// decode error the gunzipped bytes are returned as-is.
-func restoreAllTransportsBody(body []byte) []byte {
-	body = cxoutils.Gunzip(body)
-	if len(body) == 0 {
-		return body
+// routingShardEntries decodes one leaf of TPD's routing feed (gzipped JSON,
+// see tpdapi.RoutingCXOPublisher) and recomputes the derivable t_id the
+// publisher drops. A leaf that does not decode yields nothing.
+func routingShardEntries(body []byte) []*transport.Entry {
+	var shard []*transport.Entry
+	if err := json.Unmarshal(cxoutils.Gunzip(body), &shard); err != nil {
+		return nil
 	}
-	var entries []*transport.Entry
-	if err := json.Unmarshal(body, &entries); err != nil {
-		return body
-	}
-	changed := false
-	for _, e := range entries {
-		if e != nil && e.ID == (uuid.UUID{}) {
-			e.ID = transport.MakeTransportID(e.Edges[0], e.Edges[1], e.Type)
-			changed = true
+	out := shard[:0]
+	for _, e := range shard {
+		if e == nil {
+			continue
 		}
+		if e.ID == (uuid.UUID{}) {
+			e.ID = transport.MakeTransportID(e.Edges[0], e.Edges[1], e.Type)
+		}
+		out = append(out, e)
 	}
-	if !changed {
-		return body
-	}
-	if out, err := json.Marshal(entries); err == nil {
-		return out
-	}
-	return body
+	return out
 }

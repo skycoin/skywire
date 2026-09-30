@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/skycoin/skywire/pkg/services"
 	"io"
 	"net"
 	"strconv"
@@ -109,9 +110,11 @@ func TestRun_HTTPModeStartup(t *testing.T) {
 	require.NoError(t, ln.Close())
 
 	cfg := &Config{
-		Addr:  fmt.Sprintf("127.0.0.1:%d", apiPort),
-		Redis: "redis://" + redisAddr,
-		Mode:  "http",
+		Common: services.Common{
+			Addr:  fmt.Sprintf("127.0.0.1:%d", apiPort),
+			Redis: "redis://" + redisAddr,
+			Mode:  "http",
+		},
 		// No SecKey -> no dmsg surfaces; pure HTTP startup path.
 	}
 	svc := New(cfg, testLog())

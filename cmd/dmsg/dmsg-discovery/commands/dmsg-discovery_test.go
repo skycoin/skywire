@@ -26,16 +26,10 @@ import (
 // test starts from a known state and does not leak into later tests.
 func resetGlobals(t *testing.T) {
 	t.Helper()
-	addr, redisURL, whitelistKeys, officialServers = "", "", "", ""
-	dmsgServerType, mode, authPassphrase, pprofMode, pprofAddr = "", "", "", "", ""
-	configPath, keyFile = "", ""
-	entryTimeout, dmsgPort = 0, 0
-	testMode, enableLoadTesting, testEnvironment = false, false, false
-	sk = cipher.SecKey{}
-	t.Cleanup(func() {
-		configPath, keyFile = "", ""
-		sk = cipher.SecKey{}
-	})
+	flags = services.Flags{}
+	whitelistKeys, officialServers, dmsgServerType, authPassphrase = "", "", "", ""
+	enableLoadTesting = false
+	t.Cleanup(func() { flags = services.Flags{} })
 }
 
 // TestCommaSplit covers the comma-list splitter, including trimming and the
@@ -56,20 +50,27 @@ func TestCommaSplit(t *testing.T) {
 func TestMergeFile(t *testing.T) {
 	t.Run("all fields override", func(t *testing.T) {
 		_, srcSK := cipher.GenerateKeyPair()
-		dst := &dmsgdisc.Config{Addr: "flag-addr", Redis: "flag-redis"}
+		dst := &dmsgdisc.Config{
+			Common: services.Common{
+				Addr:  "flag-addr",
+				Redis: "flag-redis",
+			},
+		}
 		src := &dmsgdisc.Config{
-			SecKey:            srcSK,
-			Addr:              "file-addr",
-			Redis:             "file-redis",
-			DmsgPort:          81,
-			EntryTimeout:      services.Duration(time.Minute),
-			Mode:              "dual",
+			Common: services.Common{
+				SecKey:          srcSK,
+				Addr:            "file-addr",
+				Redis:           "file-redis",
+				DmsgPort:        81,
+				EntryTimeout:    services.Duration(time.Minute),
+				Mode:            "dual",
+				TestEnvironment: true,
+				Testing:         true,
+			},
 			AuthPassphrase:    "secret",
 			OfficialServers:   []string{"pk1"},
 			DmsgServerType:    "type",
-			TestMode:          true,
 			EnableLoadTesting: true,
-			TestEnvironment:   true,
 			Whitelist:         []string{"wl1"},
 		}
 
@@ -84,14 +85,20 @@ func TestMergeFile(t *testing.T) {
 		assert.Equal(t, "secret", dst.AuthPassphrase)
 		assert.Equal(t, []string{"pk1"}, dst.OfficialServers)
 		assert.Equal(t, "type", dst.DmsgServerType)
-		assert.True(t, dst.TestMode)
+		assert.True(t, dst.Testing)
 		assert.True(t, dst.EnableLoadTesting)
 		assert.True(t, dst.TestEnvironment)
 		assert.Equal(t, []string{"wl1"}, dst.Whitelist)
 	})
 
 	t.Run("zero src leaves dst untouched", func(t *testing.T) {
-		dst := &dmsgdisc.Config{Addr: "keep", Redis: "keep-redis", DmsgPort: 99}
+		dst := &dmsgdisc.Config{
+			Common: services.Common{
+				Addr:     "keep",
+				Redis:    "keep-redis",
+				DmsgPort: 99,
+			},
+		}
 		mergeFile(dst, &dmsgdisc.Config{})
 		assert.Equal(t, "keep", dst.Addr)
 		assert.Equal(t, "keep-redis", dst.Redis)
@@ -103,14 +110,14 @@ func TestMergeFile(t *testing.T) {
 // resulting config.
 func TestBuildConfigFromFlags(t *testing.T) {
 	resetGlobals(t)
-	addr = ":9090"
-	redisURL = "redis://localhost:6379"
-	dmsgPort = 80
-	entryTimeout = time.Hour
-	mode = "http"
+	flags.Addr = ":9090"
+	flags.Redis = "redis://localhost:6379"
+	flags.DmsgPort = 80
+	flags.EntryTimeout = services.Duration(time.Hour)
+	flags.Mode = "http"
 	officialServers = "pkA, pkB"
 	whitelistKeys = "wl1,wl2"
-	testMode = true
+	flags.Testing = true
 
 	cfg, err := buildConfig()
 	require.NoError(t, err)
@@ -122,7 +129,7 @@ func TestBuildConfigFromFlags(t *testing.T) {
 	assert.Equal(t, "http", cfg.Mode)
 	assert.Equal(t, []string{"pkA", "pkB"}, cfg.OfficialServers)
 	assert.Equal(t, []string{"wl1", "wl2"}, cfg.Whitelist)
-	assert.True(t, cfg.TestMode)
+	assert.True(t, cfg.Testing)
 }
 
 // TestBuildConfigWithSecKey verifies an explicitly set secret key is carried
@@ -130,7 +137,7 @@ func TestBuildConfigFromFlags(t *testing.T) {
 func TestBuildConfigWithSecKey(t *testing.T) {
 	resetGlobals(t)
 	_, secret := cipher.GenerateKeyPair()
-	sk = secret
+	flags.SecKey = secret
 
 	cfg, err := buildConfig()
 	require.NoError(t, err)
@@ -141,12 +148,12 @@ func TestBuildConfigWithSecKey(t *testing.T) {
 // flag-derived values.
 func TestBuildConfigFileWins(t *testing.T) {
 	resetGlobals(t)
-	addr = ":9090"
-	redisURL = "redis://flag:6379"
+	flags.Addr = ":9090"
+	flags.Redis = "redis://flag:6379"
 
 	path := filepath.Join(t.TempDir(), "cfg.json")
 	require.NoError(t, os.WriteFile(path, []byte(`{"addr":":7777","redis":"redis://file:6379","mode":"dual"}`), 0600))
-	configPath = path
+	flags.ConfigPath = path
 
 	cfg, err := buildConfig()
 	require.NoError(t, err)
@@ -160,7 +167,7 @@ func TestBuildConfigFileWins(t *testing.T) {
 func TestBuildConfigFileErrors(t *testing.T) {
 	t.Run("missing file", func(t *testing.T) {
 		resetGlobals(t)
-		configPath = filepath.Join(t.TempDir(), "nope.json")
+		flags.ConfigPath = filepath.Join(t.TempDir(), "nope.json")
 		_, err := buildConfig()
 		assert.Error(t, err)
 	})
@@ -169,7 +176,7 @@ func TestBuildConfigFileErrors(t *testing.T) {
 		resetGlobals(t)
 		path := filepath.Join(t.TempDir(), "bad.json")
 		require.NoError(t, os.WriteFile(path, []byte("{not json"), 0600))
-		configPath = path
+		flags.ConfigPath = path
 		_, err := buildConfig()
 		assert.Error(t, err)
 	})
@@ -179,13 +186,13 @@ func TestBuildConfigFileErrors(t *testing.T) {
 // generates a key, writes it, and carries it into the config.
 func TestBuildConfigGeneratesKey(t *testing.T) {
 	resetGlobals(t)
-	keyFile = filepath.Join(t.TempDir(), "key.txt")
+	flags.KeyFile = filepath.Join(t.TempDir(), "key.txt")
 
 	cfg, err := buildConfig()
 	require.NoError(t, err)
 
 	assert.False(t, cfg.SecKey.Null(), "a key should have been generated")
-	assert.FileExists(t, keyFile, "the generated key should be persisted")
+	assert.FileExists(t, flags.KeyFile, "the generated key should be persisted")
 }
 
 // TestGenerateExamples verifies the help-text generator produces a non-empty

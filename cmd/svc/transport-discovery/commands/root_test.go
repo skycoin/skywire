@@ -55,17 +55,14 @@ func TestCommaSplit(t *gotesting.T) {
 
 func TestBuildConfig_FromFlags(t *gotesting.T) {
 	// Save & restore the package globals this test mutates.
-	defer withGlobals(map[string]any{
-		"addr": addr, "redisURL": redisURL, "tag": tag,
-		"whitelistKeys": whitelistKeys, "configPath": configPath, "keyFile": keyFile,
-	})()
+	defer restoreFlags()()
 
-	addr = ":1234"
-	redisURL = "redis://example:6379"
-	tag = "tpd_test"
+	flags.Addr = ":1234"
+	flags.Redis = "redis://example:6379"
+	flags.Tag = "tpd_test"
 	whitelistKeys = "pk1, pk2"
-	configPath = ""
-	keyFile = ""
+	flags.ConfigPath = ""
+	flags.KeyFile = ""
 
 	cfg, err := buildConfig()
 	require.NoError(t, err)
@@ -76,27 +73,25 @@ func TestBuildConfig_FromFlags(t *gotesting.T) {
 }
 
 func TestBuildConfig_KeyfileGenerates(t *gotesting.T) {
-	defer withGlobals(map[string]any{"keyFile": keyFile, "sk": sk, "configPath": configPath})()
+	defer restoreFlags()()
 
-	keyFile = filepath.Join(t.TempDir(), "tpd.key")
-	sk = cipher.SecKey{}
-	configPath = ""
+	flags.KeyFile = filepath.Join(t.TempDir(), "tpd.key")
+	flags.SecKey = cipher.SecKey{}
+	flags.ConfigPath = ""
 
 	cfg, err := buildConfig()
 	require.NoError(t, err)
 	require.NotEqual(t, cipher.SecKey{}, cfg.SecKey) // key was generated
-	require.FileExists(t, keyFile)
+	require.FileExists(t, flags.KeyFile)
 }
 
 func TestBuildConfig_ConfigFileOverrides(t *gotesting.T) {
-	defer withGlobals(map[string]any{
-		"addr": addr, "tag": tag, "configPath": configPath, "keyFile": keyFile,
-	})()
+	defer restoreFlags()()
 
 	// Base flag values.
-	addr = ":FLAG"
-	tag = "flag_tag"
-	keyFile = ""
+	flags.Addr = ":FLAG"
+	flags.Tag = "flag_tag"
+	flags.KeyFile = ""
 
 	// File overrides addr + tag + mode, leaves others. Written as raw JSON
 	// (omitting key fields) so strict-parse doesn't choke on a zero secret
@@ -104,7 +99,7 @@ func TestBuildConfig_ConfigFileOverrides(t *gotesting.T) {
 	raw := []byte(`{"addr":":FILE","tag":"file_tag","mode":"dmsg"}`)
 	path := filepath.Join(t.TempDir(), "tpd.json")
 	require.NoError(t, os.WriteFile(path, raw, 0o600))
-	configPath = path
+	flags.ConfigPath = path
 
 	cfg, err := buildConfig()
 	require.NoError(t, err)
@@ -114,10 +109,10 @@ func TestBuildConfig_ConfigFileOverrides(t *gotesting.T) {
 }
 
 func TestBuildConfig_BadConfigPath(t *gotesting.T) {
-	defer withGlobals(map[string]any{"configPath": configPath, "keyFile": keyFile})()
+	defer restoreFlags()()
 
-	keyFile = ""
-	configPath = filepath.Join(t.TempDir(), "does-not-exist.json")
+	flags.KeyFile = ""
+	flags.ConfigPath = filepath.Join(t.TempDir(), "does-not-exist.json")
 
 	_, err := buildConfig()
 	require.Error(t, err)
@@ -129,23 +124,25 @@ func TestMergeFile_AllFieldsOverride(t *gotesting.T) {
 	dst := &tpd.Config{}
 	pk, _ := cipher.GenerateKeyPair()
 	src := &tpd.Config{
-		SecKey:          cipher.SecKey{1},
-		Addr:            ":addr",
-		MetricsAddr:     ":metrics",
-		PprofAddr:       ":pprof",
-		Redis:           "redis://x",
-		RedisPoolSize:   5,
-		EntryTimeout:    services.Duration(time.Minute),
-		LogLevel:        "debug",
-		Tag:             "tag",
-		Testing:         true,
-		Mode:            "dual",
-		TestEnvironment: true,
-		Whitelist:       []string{"a"},
-		SurveyWhitelist: []cipher.PubKey{pk},
-		StoreDataPath:   "/data",
-		UptimeDB:        "/uptime.db",
-		DmsgPort:        81,
+		Common: services.Common{
+			SecKey:          cipher.SecKey{1},
+			Addr:            ":addr",
+			MetricsAddr:     ":metrics",
+			PprofAddr:       ":pprof",
+			Redis:           "redis://x",
+			RedisPoolSize:   5,
+			EntryTimeout:    services.Duration(time.Minute),
+			LogLevel:        "debug",
+			Tag:             "tag",
+			Testing:         true,
+			Mode:            "dual",
+			TestEnvironment: true,
+			SurveyWhitelist: []cipher.PubKey{pk},
+			DmsgPort:        81,
+		},
+		Whitelist:     []string{"a"},
+		StoreDataPath: "/data",
+		UptimeDB:      "/uptime.db",
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:     "http://disc",
 			DiscoveryDmsg: "dmsg://disc",
@@ -160,7 +157,12 @@ func TestMergeFile_AllFieldsOverride(t *gotesting.T) {
 
 func TestMergeFile_ZeroSrcLeavesDst(t *gotesting.T) {
 	orig := &tpd.Config{
-		Addr: ":keep", Tag: "keep", RedisPoolSize: 9, DmsgPort: 80,
+		Common: services.Common{
+			Addr:          ":keep",
+			Tag:           "keep",
+			RedisPoolSize: 9,
+			DmsgPort:      80,
+		},
 		Dmsg: cmdutil.DmsgConfig{Discovery: "http://keep"},
 	}
 	dst := *orig // copy
@@ -189,25 +191,9 @@ func TestExecute_Help(t *gotesting.T) {
 
 // withGlobals snapshots the named package globals and returns a restore func.
 // Only the globals listed are saved/restored, by name.
-func withGlobals(saved map[string]any) func() {
-	return func() {
-		for name, v := range saved {
-			switch name {
-			case "addr":
-				addr = v.(string)
-			case "redisURL":
-				redisURL = v.(string)
-			case "tag":
-				tag = v.(string)
-			case "whitelistKeys":
-				whitelistKeys = v.(string)
-			case "configPath":
-				configPath = v.(string)
-			case "keyFile":
-				keyFile = v.(string)
-			case "sk":
-				sk = v.(cipher.SecKey)
-			}
-		}
-	}
+// restoreFlags snapshots the flag globals a test mutates; call the returned
+// func to put them back.
+func restoreFlags() func() {
+	savedFlags, savedWhitelist := flags, whitelistKeys
+	return func() { flags, whitelistKeys = savedFlags, savedWhitelist }
 }

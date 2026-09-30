@@ -436,3 +436,6 @@ func (p *BindingsCXOPublisher) clearError() {
 	defer p.mu.Unlock()
 	p.lastError = nil
 }
+
+// Publisher returns the underlying feed publisher, for introspection.
+func (x *BindingsCXOPublisher) Publisher() *treestore.Publisher { return x.pub }

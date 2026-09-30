@@ -38,6 +38,11 @@ import (
 // Put/Delete are safe; the publisher serializes its publish loop on
 // a single goroutine so encoding always sees a consistent snapshot.
 type Publisher struct {
+	// lastRoot is the Root most recently published; publishHook, when set,
+	// receives every Root published after it (see SetPublishHook).
+	lastRoot    atomic.Pointer[registry.Root]
+	publishHook atomic.Pointer[func(*registry.Root)]
+
 	log *logging.Logger
 
 	cxoNode  *node.Node
@@ -514,6 +519,21 @@ func (p *Publisher) Feed() cipher.PubKey {
 	return p.pk
 }
 
+// Subscriptions returns the conns on which peer holds a live subscription to
+// this feed (each receives every Root this publisher sends, heartbeats
+// included), in no particular order. A peer can hold more than one: the conn
+// this side dialed to announce and the one the peer dialed itself.
+func (p *Publisher) Subscriptions(peer cipher.PubKey) []*node.Conn {
+	want := skycipher.PubKey(peer)
+	var out []*node.Conn
+	for _, c := range p.cxoNode.ConnectionsOfFeed(skycipher.PubKey(p.pk)) {
+		if c.PeerID() == want {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // Node returns the underlying CXO node. Exposed so callers can
 // attach a Subscriber to the same node via NewSubscriberOnNode —
 // the per-pair-feed pattern uses one node per pair side, listening
@@ -681,6 +701,12 @@ func (p *Publisher) AllowsSubscriber(pk cipher.PubKey) bool {
 // (PK = visor PK = the publisher feed). Idempotent: returns nil for
 // an existing live conn, redials if the previous conn has dropped.
 func (p *Publisher) AnnounceTo(ctx context.Context, peerPK cipher.PubKey) error {
+	if peerPK == p.pk {
+		// The consumer runs in this process on this node (a visor that
+		// embeds the service): it takes Roots through SetPublishHook, and
+		// there is nobody to dial.
+		return nil
+	}
 	if p.cxoNode == nil {
 		return errors.New("treestore: publisher has no cxo node")
 	}
@@ -1389,6 +1415,10 @@ func (p *Publisher) publishRoot(root *memNode) ([]freshSub, error) {
 	// back to false the moment the feed recovers.
 	p.clearPublishErr()
 	p.cxoNode.Publish(r)
+	p.lastRoot.Store(r)
+	if h := p.publishHook.Load(); h != nil {
+		(*h)(r)
+	}
 
 	// Nudge the cleanup goroutine. Non-blocking: if cleanup is already
 	// running or pending, we don't need to enqueue another. The cleanup
@@ -1720,4 +1750,20 @@ type PathConflictError struct {
 
 func (e *PathConflictError) Error() string {
 	return "treestore: path " + e.Path + " conflicts with existing " + e.Existing
+}
+
+// SetPublishHook registers fn to receive every Root this publisher
+// publishes, heartbeats included, starting with the current one if any. It
+// is how a consumer in the same process, one that shares this publisher's
+// node, gets the feed a remote consumer would subscribe to. fn runs on the
+// publish path and must not block. nil removes the hook.
+func (p *Publisher) SetPublishHook(fn func(*registry.Root)) {
+	if fn == nil {
+		p.publishHook.Store(nil)
+		return
+	}
+	p.publishHook.Store(&fn)
+	if r := p.lastRoot.Load(); r != nil {
+		fn(r)
+	}
 }

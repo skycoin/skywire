@@ -9,8 +9,10 @@
 // with a full Noise handshake (the secp256k1 ECDH handshakeResponder that
 // dominates AR CPU), onto one warm CXO connection.
 //
-// Purely ADDITIVE dual-write: the AR client keeps doing the HTTP POST /
-// UDP registration exactly as before (the authoritative/fallback path).
+// Once the AR is subscribed and answering, its ingest of the heartbeat Roots
+// refreshes the bindings' TTL and unchanged re-binds skip HTTP. HTTP carries a
+// changed payload, the first bind, and one re-bind after the AR resubscribes
+// on a new conn or stops answering (see cxoKeepaliveHealthy).
 // The publisher is fed by a hook the AR client fires on every successful
 // bind (see addrresolver.BindPublisher), so the CXO leaf always carries
 // the exact LocalAddresses the visor last registered. It is inert until an
@@ -68,7 +70,7 @@ func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
-	dataDir, inMemDB := cxoPubStorage(filepath.Join(v.conf.LocalPath, "cxo-ar-bind"))
+	dataDir, inMemDB := v.hostCXOPubStorage(filepath.Join(v.conf.LocalPath, "cxo-ar-bind"), skyenv.DmsgVisorARBindCXOPort)
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
 		DmsgPort:    skyenv.DmsgVisorARBindCXOPort,
 		BatchWindow: arBindBatchWindow,
@@ -84,6 +86,7 @@ func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 		log.WithError(err).Warn("AR-bind-CXO: publisher init failed; continuing with HTTP/UDP AR registration only")
 		return nil
 	}
+	v.trackCXOPublisher(skyenv.DmsgVisorARBindCXOPort, pub)
 
 	// Mirror every successful AR bind onto the feed, one leaf per transport
 	// type (leaf name == the type's canonical wire string). The hook runs on
@@ -106,7 +109,16 @@ func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 	lastAnnounceOK := new(atomic.Int64)
 	go runARBindAnnounceLoop(v.ctx, pub, arPK, lastAnnounceOK, log)
 
+	// Alongside the bindings, the visor states what only it can know about
+	// reaching it: NAT class, types served, inbound accepts (ar_reach_decl.go).
+	go runReachDeclLoop(v.ctx, v, pub, log)
+
+	// While the AR is subscribed and answering, its ingest of the heartbeat
+	// Roots keeps the bindings alive, so unchanged re-binds skip HTTP.
+	bp.SetCXOKeepaliveHealthyFunc(cxoKeepaliveHealthy(pub, arPK, lastAnnounceOK, log))
+
 	v.pushCloseStack("ar_bind_cxo", func() error {
+		bp.SetCXOKeepaliveHealthyFunc(nil)
 		bp.SetBindPublishHook(nil)
 		return pub.Close()
 	})

@@ -13,14 +13,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -30,49 +28,20 @@ import (
 )
 
 var (
-	configPath      string
-	addr            string
-	metricsAddr     string
-	redisURL        string
-	redisPoolSize   int
-	logLvl          string
-	tag             string
-	testing         bool
-	whitelistKeys   string
-	testEnvironment bool
-	sk              cipher.SecKey
-	keyFile         string
-	dmsgPort        uint16
-	dmsgServerType  string
-	entryTimeout    time.Duration
-	dmsgDisc        = deployment.Prod.DmsgDiscovery
-	pprofAddr       string
-	storeDataPath   string
-	mode            string
-	uptimeDB        string
+	flags          services.Flags
+	whitelistKeys  string
+	dmsgServerType string
+	dmsgDisc       = deployment.Prod.DmsgDiscovery
+	storeDataPath  string
+	uptimeDB       string
 )
 
 func init() {
-	RootCmd.Flags().StringVarP(&configPath, "config", "c", "", "path to JSON config file. When set, fields below come from the config file. Generate one with: skywire cli config gen --tpd -o /etc/skywire/transport-discovery.json\n\r")
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9091", "address to bind to\n\r")
-	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
-	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\n\r")
-	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\n\r")
-	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", tpd.DefaultEntryTimeout, "transport entry TTL (0 to disable)\n\r")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
-	RootCmd.Flags().StringVar(&tag, "tag", "transport_discovery", "logging tag\n\r")
-	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
-	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsgDisc, "url of dmsg-discovery\n\r")
-	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration")
-	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment")
-	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
-	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsg-port", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
-	RootCmd.Flags().SetNormalizeFunc(cmdutil.LegacySvcFlagNormalizer)
+	flags.Bind(RootCmd.Flags(), services.FlagDefaults{Gen: "tpd", Addr: ":9091", Tag: "transport_discovery", EntryTimeout: tpd.DefaultEntryTimeout})
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsgDisc, "url of dmsg-discovery")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
-	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", tpd.DefaultStoreDataPath, "path for bandwidth backup files\n\r")
-	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)")
+	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "network-monitor keys allowed to deregister entries, comma-separated")
+	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", tpd.DefaultStoreDataPath, "path for bandwidth backup files")
 	RootCmd.Flags().StringVar(&uptimeDB, "uptime-db", tpd.DefaultUptimeDB, "path for the service-self uptime bbolt store (empty disables)")
 }
 
@@ -203,7 +172,7 @@ Example:
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}
-		logger := logging.MustGetLogger(tag)
+		logger := logging.MustGetLogger(flags.LogTag("transport_discovery"))
 
 		cfg, err := buildConfig()
 		if err != nil {
@@ -221,35 +190,22 @@ Example:
 // buildConfig collects flag values + the optional --config file
 // into one tpd.Config. File values override flag values where set.
 func buildConfig() (*tpd.Config, error) {
-	if keyFile != "" {
-		if err := cmdutil.LoadOrGenerateKey(keyFile, &sk); err != nil {
-			return nil, err
-		}
+	common, err := flags.Resolve()
+	if err != nil {
+		return nil, err
 	}
 	cfg := &tpd.Config{
-		SecKey:          sk,
-		Addr:            addr,
-		MetricsAddr:     metricsAddr,
-		PprofAddr:       pprofAddr,
-		Redis:           redisURL,
-		RedisPoolSize:   redisPoolSize,
-		EntryTimeout:    services.Duration(entryTimeout),
-		LogLevel:        logLvl,
-		Tag:             tag,
-		Testing:         testing,
-		Mode:            mode,
-		Whitelist:       cmdutil.CommaSplit(whitelistKeys),
-		TestEnvironment: testEnvironment,
-		StoreDataPath:   storeDataPath,
-		UptimeDB:        uptimeDB,
-		DmsgPort:        dmsgPort,
+		Common:        common,
+		Whitelist:     cmdutil.CommaSplit(whitelistKeys),
+		StoreDataPath: storeDataPath,
+		UptimeDB:      uptimeDB,
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  dmsgDisc,
 			ServerType: dmsgServerType,
 		},
 	}
-	if configPath != "" {
-		fileCfg, err := tpd.LoadFile(configPath)
+	if flags.ConfigPath != "" {
+		fileCfg, err := tpd.LoadFile(flags.ConfigPath)
 		if err != nil {
 			return nil, err
 		}
@@ -259,47 +215,9 @@ func buildConfig() (*tpd.Config, error) {
 }
 
 func mergeFile(dst, src *tpd.Config) {
-	if src.SecKey != (cipher.SecKey{}) {
-		dst.SecKey = src.SecKey
-	}
-	if src.Addr != "" {
-		dst.Addr = src.Addr
-	}
-	if src.MetricsAddr != "" {
-		dst.MetricsAddr = src.MetricsAddr
-	}
-	if src.PprofAddr != "" {
-		dst.PprofAddr = src.PprofAddr
-	}
-	if src.Redis != "" {
-		dst.Redis = src.Redis
-	}
-	if src.RedisPoolSize > 0 {
-		dst.RedisPoolSize = src.RedisPoolSize
-	}
-	if src.EntryTimeout != 0 {
-		dst.EntryTimeout = src.EntryTimeout
-	}
-	if src.LogLevel != "" {
-		dst.LogLevel = src.LogLevel
-	}
-	if src.Tag != "" {
-		dst.Tag = src.Tag
-	}
-	if src.Testing {
-		dst.Testing = true
-	}
-	if src.Mode != "" {
-		dst.Mode = src.Mode
-	}
-	if src.TestEnvironment {
-		dst.TestEnvironment = true
-	}
+	services.MergeCommon(&dst.Common, src.Common)
 	if len(src.Whitelist) > 0 {
 		dst.Whitelist = src.Whitelist
-	}
-	if len(src.SurveyWhitelist) > 0 {
-		dst.SurveyWhitelist = src.SurveyWhitelist
 	}
 	if src.StoreDataPath != "" {
 		dst.StoreDataPath = src.StoreDataPath
@@ -307,21 +225,7 @@ func mergeFile(dst, src *tpd.Config) {
 	if src.UptimeDB != "" {
 		dst.UptimeDB = src.UptimeDB
 	}
-	if src.DmsgPort != 0 {
-		dst.DmsgPort = src.DmsgPort
-	}
-	if src.Dmsg.Discovery != "" {
-		dst.Dmsg.Discovery = src.Dmsg.Discovery
-	}
-	if src.Dmsg.DiscoveryDmsg != "" {
-		dst.Dmsg.DiscoveryDmsg = src.Dmsg.DiscoveryDmsg
-	}
-	if src.Dmsg.ServerType != "" {
-		dst.Dmsg.ServerType = src.Dmsg.ServerType
-	}
-	if len(src.Dmsg.Servers) > 0 {
-		dst.Dmsg.Servers = src.Dmsg.Servers
-	}
+	dst.Dmsg.Merge(src.Dmsg)
 }
 
 // Execute executes root CLI command.

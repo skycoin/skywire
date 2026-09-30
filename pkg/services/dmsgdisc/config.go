@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/services"
 )
@@ -31,24 +30,11 @@ import (
 type Config struct {
 	Path string `json:"-"`
 
-	PubKey cipher.PubKey `json:"public_key,omitempty"`
-	SecKey cipher.SecKey `json:"secret_key,omitempty"`
+	// Common: Mode is "http" or "dual" here (dmsg-only is rejected
+	// because dmsg-servers register over plain HTTP); a zero
+	// EntryTimeout disables expiry (stale entries accumulate).
+	services.Common
 
-	// Addr is the HTTP listen address for the discovery API
-	// (`:9090` by default).
-	Addr string `json:"addr,omitempty"`
-	// Redis is the redis connection URL the discovery uses for the
-	// entry store.
-	Redis string `json:"redis,omitempty"`
-	// DmsgPort is the dmsghttp listener port (default 80).
-	DmsgPort uint16 `json:"dmsg_port,omitempty"`
-	// EntryTimeout is how long client discovery entries live in
-	// redis between refreshes. Zero disables expiry (legacy
-	// behavior; stale entries accumulate forever).
-	EntryTimeout services.Duration `json:"entry_timeout,omitempty"`
-	// Mode is the listener mode: "http" or "dual" (dmsg-only is
-	// rejected because dmsg-servers register over plain HTTP).
-	Mode string `json:"mode,omitempty"`
 	// AuthPassphrase, when non-empty, gates official-server
 	// registration with a shared secret.
 	AuthPassphrase string `json:"auth_passphrase,omitempty"`
@@ -57,24 +43,11 @@ type Config struct {
 	OfficialServers []string `json:"official_servers,omitempty"`
 	// DmsgServerType filters dmsg-servers by their declared type.
 	DmsgServerType string `json:"dmsg_server_type,omitempty"`
-	// TestMode disables some runtime checks for use in tests.
-	TestMode bool `json:"test_mode,omitempty"`
 	// EnableLoadTesting allows sending fake load to the discovery.
 	EnableLoadTesting bool `json:"enable_load_testing,omitempty"`
-	// TestEnvironment selects deployment.Test over deployment.Prod
-	// for any embedded-keyring fallback at gen time.
-	TestEnvironment bool `json:"test_environment,omitempty"`
 	// Whitelist is the network-monitor PKs allowed to deregister
 	// stale entries. Hex-encoded PKs.
 	Whitelist []string `json:"whitelist_keys,omitempty"`
-	// LogLevel is the minimum log level (debug/info/warn/error).
-	LogLevel string `json:"log_level,omitempty"`
-	// MetricsAddr is the address to expose Prometheus metrics on
-	// (empty disables metrics).
-	MetricsAddr string `json:"metrics_addr,omitempty"`
-	// PProfMode / PProfAddr — pass-through to dmsgcmdutil.InitPProf.
-	PProfMode string `json:"pprof_mode,omitempty"`
-	PProfAddr string `json:"pprof_addr,omitempty"`
 
 	// DmsgServers is the static dmsg-server transit set the
 	// discovery preloads at startup. Replaces the runtime read of

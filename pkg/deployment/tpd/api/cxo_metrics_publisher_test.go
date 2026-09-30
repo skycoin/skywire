@@ -346,3 +346,19 @@ func TestPlanDayOpsDeletesBeforePutsWhenFormChanges(t *testing.T) {
 func equalStrings(a, b []string) bool {
 	return strings.Join(a, "\n") == strings.Join(b, "\n")
 }
+
+// A routine tick has a body only for the open day but plans against the
+// whole window: settled days are left alone, days that left it retired.
+func TestPlanDayOpsLeavesSettledDaysAlone(t *testing.T) {
+	prev := map[string]int{"2026-09-04": 0, "2026-09-03": 0, "2026-09-02": 2, "2026-08-04": 0}
+	window := []string{"2026-09-04", "2026-09-03", "2026-09-02"}
+	ops, next := planDayOps(map[string][][]byte{"2026-09-04": body(1)}, window, prev, true)
+
+	want := []string{"-metrics/day/2026-08-04", "+metrics/day/2026-09-04"}
+	if got := opPaths(ops); !equalStrings(got, want) {
+		t.Errorf("ops = %v, want %v", got, want)
+	}
+	if next["2026-09-02"] != 2 || len(next) != 3 {
+		t.Errorf("next = %v, want the settled days kept as they were", next)
+	}
+}

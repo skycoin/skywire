@@ -10,13 +10,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
-	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/rf/api"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -30,8 +26,6 @@ import (
 // Type is the registry key used in services.json blocks.
 const Type = "route-finder"
 
-const redisScheme = "redis://"
-
 func init() {
 	services.Register(Type, factory)
 }
@@ -40,23 +34,7 @@ func init() {
 type Config struct {
 	Path string `json:"-"`
 
-	PubKey cipher.PubKey `json:"public_key,omitempty"`
-	SecKey cipher.SecKey `json:"secret_key,omitempty"`
-
-	Addr            string          `json:"addr,omitempty"`
-	MetricsAddr     string          `json:"metrics_addr,omitempty"`
-	PprofAddr       string          `json:"pprof_addr,omitempty"`
-	Redis           string          `json:"redis,omitempty"`
-	RedisPoolSize   int             `json:"redis_pool_size,omitempty"`
-	LogLevel        string          `json:"log_level,omitempty"`
-	Tag             string          `json:"tag,omitempty"`
-	Testing         bool            `json:"testing,omitempty"`
-	Mode            string          `json:"mode,omitempty"`
-	SurveyWhitelist []cipher.PubKey `json:"survey_whitelist,omitempty"`
-	TestEnvironment bool            `json:"test_environment,omitempty"`
-
-	// DmsgPort is the dmsghttp listener port (default 80).
-	DmsgPort uint16 `json:"dmsg_port,omitempty"`
+	services.Common
 
 	// Dmsg is the dmsg-related config block.
 	Dmsg cmdutil.DmsgConfig `json:"dmsg,omitempty"`
@@ -111,32 +89,15 @@ type service struct {
 func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr string) (*api.API, func(), error) {
 	cfg := s.cfg
 
-	redisURL := cfg.Redis
-	if redisURL == "" {
-		redisURL = "redis://localhost:6379"
-	}
-	if !strings.HasPrefix(redisURL, redisScheme) {
-		redisURL = redisScheme + redisURL
-	}
+	storeConfig := cfg.StoreConfig()
 
-	storeConfig := storeconfig.Config{
-		Type:     storeconfig.Redis,
-		URL:      redisURL,
-		Password: storeconfig.RedisPassword(),
-		PoolSize: cfg.RedisPoolSize,
+	// The route finder only reads transport data, so its TTL defaults longer
+	// than TPD's.
+	ttl := cfg.EntryTimeout.Std()
+	if ttl == 0 {
+		ttl = 10 * time.Minute
 	}
-	if storeConfig.PoolSize == 0 {
-		storeConfig.PoolSize = 10
-	}
-	if cfg.Testing {
-		storeConfig.Type = storeconfig.Memory
-	}
-
-	metricsutil.ServePProf(logger, cfg.PprofAddr, "route-finder")
-
-	// Route finder uses a longer TTL since it only reads transport data
-	// and doesn't need the same expiration as TPD.
-	transportStore, err := store.New(ctx, storeConfig, 10*time.Minute, logger)
+	transportStore, err := store.New(ctx, storeConfig, ttl, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("route-finder: init store: %w", err)
 	}
@@ -145,6 +106,9 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 
 	enableMetrics := cfg.MetricsAddr != ""
 	rfAPI := api.New(transportStore, logger, enableMetrics, dmsgAddr)
+	// A TPD run in the same process (svc run) holds the transport set in
+	// memory; the graph is built from it rather than reread from redis.
+	rfAPI.ShareTransportsFrom(storeConfig.URL)
 	// Warm the shared route graph in the background (bound to the server context)
 	// so route requests reuse it instead of each building a per-source graph.
 	rfAPI.StartGraphCache(ctx)
@@ -157,7 +121,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, error) {
 	logger := host.Log
 	if logger == nil {
-		logger = services.NewLogger("route_finder", s.cfg.LogLevel)
+		logger = services.NewLogger(s.cfg.LogTag("route_finder"), s.cfg.LogLevel)
 	}
 	rfAPI, closeStore, err := s.build(ctx, logger, host.DmsgAddr)
 	if err != nil {
@@ -173,12 +137,8 @@ func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, 
 func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 
-	tag := cfg.Tag
-	if tag == "" {
-		tag = "route_finder"
-	}
-	logger := services.NewLogger(tag, cfg.LogLevel)
-	_ = s.log // logger is replaced with a tag-scoped one
+	logger := services.NewLogger(cfg.LogTag("route_finder"), cfg.LogLevel)
+	defer cfg.StartPprof(logger)()
 
 	pk := cfg.PubKey
 	sk := cfg.SecKey
@@ -223,13 +183,7 @@ func (s *service) Run(ctx context.Context) error {
 		dmsgDiscDmsg = dmsg.DiscAddr(false)
 	}
 	embeddedServers := dmsgDiscEntries(cfg.Dmsg.Servers)
-	surveyWL := deployment.Prod.SurveyWhitelist
-	if cfg.TestEnvironment {
-		surveyWL = deployment.Test.SurveyWhitelist
-	}
-	if len(cfg.SurveyWhitelist) > 0 {
-		surveyWL = cfg.SurveyWhitelist
-	}
+	surveyWL := cfg.SurveyKeys()
 
 	addr := cfg.Addr
 	if addr == "" {

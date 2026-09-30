@@ -15,62 +15,32 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
-	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/services/dmsgdisc"
 )
 
 var (
-	sf                cmdutil.ServiceFlags
-	configPath        string
-	addr              string
-	redisURL          string
+	flags             services.Flags
+	syslogAddr        string
+	syslogNet         string
 	whitelistKeys     string
-	entryTimeout      time.Duration
-	testMode          bool
 	enableLoadTesting bool
-	testEnvironment   bool
-	sk                cipher.SecKey
-	keyFile           string
-	dmsgPort          uint16
 	authPassphrase    string
 	officialServers   string
 	dmsgServerType    string
-	pprofMode         string
-	pprofAddr         string
-	mode              string
 )
 
 func init() {
-	sf.Init(RootCmd, "dmsg_disc", "")
-
-	RootCmd.Flags().StringVarP(&configPath, "config", "c", "", "path to JSON config file. When set, every other CLI flag below is ignored — fields come from the config file. Generate one with `skywire cli config gen --dmsgdisc -o /etc/skywire/dmsg-discovery.json`.\n\r")
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9090", "address to bind to\n\r")
-	RootCmd.Flags().StringVar(&pprofMode, "pprofmode", "", "[ cpu | mem | mutex | block | trace | http ]")
-	RootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
+	flags.Bind(RootCmd.Flags(), services.FlagDefaults{Gen: "dmsgdisc", Addr: ":9090", Tag: "dmsg_disc", EntryTimeout: 60 * time.Minute})
+	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
+	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "network-monitor keys allowed to deregister entries, comma-separated")
 	RootCmd.Flags().StringVar(&authPassphrase, "auth", "", "auth passphrase as simple auth for official dmsg servers registration")
 	RootCmd.Flags().StringVar(&officialServers, "official-servers", "", "list of official dmsg servers keys separated by comma")
-	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\n\r")
-	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration")
-	// 60m is 12× the client refresh interval (DefaultUpdateInterval*5 = 5m),
-	// giving ~2-3 missed refreshes of slack before Redis prunes an entry.
-	// Set to 0 to disable expiration (legacy behavior, stale entries
-	// will accumulate forever).
-	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 60*time.Minute, "client discovery entry TTL (0 to disable)\n\r")
-	RootCmd.Flags().BoolVarP(&testMode, "test-mode", "t", false, "in testing mode")
 	RootCmd.Flags().BoolVar(&enableLoadTesting, "enable-load-testing", false, "enable load testing")
-	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment")
-	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
-	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
-	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
-	// dmsg-discovery cannot run in dmsg-only mode because dmsg-servers
-	// themselves register with it over plain HTTP.
-	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dual (dmsg-only is rejected — dmsg-servers reach this service over HTTP)")
+	RootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "address in which to dial to syslog server")
+	RootCmd.Flags().StringVar(&syslogNet, "syslog-net", "udp", "network in which to dial to syslog server")
 }
 
 // RootCmd contains commands for dmsg-discovery
@@ -112,6 +82,10 @@ Example:
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}
+		sf := cmdutil.ServiceFlags{Syslog: syslogAddr, SyslogNet: syslogNet, LogLevel: flags.LogLevel, Tag: flags.LogTag("dmsg_disc")}
+		if err := sf.Check(); err != nil {
+			log.Fatal(err)
+		}
 		logger := sf.Logger()
 
 		cfg, err := buildConfig()
@@ -133,35 +107,21 @@ Example:
 // the file sets; flag-only fields (or zero-valued file fields) keep
 // the flag default.
 func buildConfig() (*dmsgdisc.Config, error) {
+	common, err := flags.Resolve()
+	if err != nil {
+		return nil, err
+	}
 	cfg := &dmsgdisc.Config{
-		Addr:              addr,
-		Redis:             redisURL,
-		DmsgPort:          dmsgPort,
-		EntryTimeout:      services.Duration(entryTimeout),
-		Mode:              mode,
+		Common:            common,
 		AuthPassphrase:    authPassphrase,
 		OfficialServers:   cmdutil.CommaSplit(officialServers),
 		DmsgServerType:    dmsgServerType,
-		TestMode:          testMode,
 		EnableLoadTesting: enableLoadTesting,
-		TestEnvironment:   testEnvironment,
 		Whitelist:         cmdutil.CommaSplit(whitelistKeys),
-		MetricsAddr:       sf.MetricsAddr,
-		PProfMode:         pprofMode,
-		PProfAddr:         pprofAddr,
 	}
 
-	if keyFile != "" {
-		if err := loadOrGenerateKey(keyFile); err != nil {
-			return nil, err
-		}
-	}
-	if !sk.Null() {
-		cfg.SecKey = sk
-	}
-
-	if configPath != "" {
-		fileCfg, err := dmsgdisc.LoadFile(configPath)
+	if flags.ConfigPath != "" {
+		fileCfg, err := dmsgdisc.LoadFile(flags.ConfigPath)
 		if err != nil {
 			return nil, err
 		}
@@ -176,24 +136,7 @@ func buildConfig() (*dmsgdisc.Config, error) {
 // config file can override individual fields without erasing
 // flag-set values for the rest.
 func mergeFile(dst, src *dmsgdisc.Config) {
-	if src.SecKey != (cipher.SecKey{}) {
-		dst.SecKey = src.SecKey
-	}
-	if src.Addr != "" {
-		dst.Addr = src.Addr
-	}
-	if src.Redis != "" {
-		dst.Redis = src.Redis
-	}
-	if src.DmsgPort != 0 {
-		dst.DmsgPort = src.DmsgPort
-	}
-	if src.EntryTimeout != 0 {
-		dst.EntryTimeout = src.EntryTimeout
-	}
-	if src.Mode != "" {
-		dst.Mode = src.Mode
-	}
+	services.MergeCommon(&dst.Common, src.Common)
 	if src.AuthPassphrase != "" {
 		dst.AuthPassphrase = src.AuthPassphrase
 	}
@@ -203,14 +146,8 @@ func mergeFile(dst, src *dmsgdisc.Config) {
 	if src.DmsgServerType != "" {
 		dst.DmsgServerType = src.DmsgServerType
 	}
-	if src.TestMode {
-		dst.TestMode = true
-	}
 	if src.EnableLoadTesting {
 		dst.EnableLoadTesting = true
-	}
-	if src.TestEnvironment {
-		dst.TestEnvironment = true
 	}
 	if len(src.Whitelist) > 0 {
 		dst.Whitelist = src.Whitelist
@@ -218,10 +155,6 @@ func mergeFile(dst, src *dmsgdisc.Config) {
 	if len(src.DmsgServers) > 0 {
 		dst.DmsgServers = src.DmsgServers
 	}
-}
-
-func loadOrGenerateKey(path string) error {
-	return dmsgcmdutil.LoadOrGenerateKey(path, &sk)
 }
 
 // Execute executes root CLI command.

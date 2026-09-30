@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -22,31 +21,15 @@ import (
 type Config struct {
 	Path string `json:"-"`
 
-	PubKey cipher.PubKey `json:"public_key,omitempty"`
-	SecKey cipher.SecKey `json:"secret_key,omitempty"`
+	services.Common
 
-	Addr            string            `json:"addr,omitempty"`
-	MetricsAddr     string            `json:"metrics_addr,omitempty"`
-	PprofAddr       string            `json:"pprof_addr,omitempty"`
-	Redis           string            `json:"redis,omitempty"`
-	RedisPoolSize   int               `json:"redis_pool_size,omitempty"`
-	EntryTimeout    services.Duration `json:"entry_timeout,omitempty"`
-	LogLevel        string            `json:"log_level,omitempty"`
-	Tag             string            `json:"tag,omitempty"`
-	Testing         bool              `json:"testing,omitempty"`
-	Mode            string            `json:"mode,omitempty"`
-	Whitelist       []string          `json:"whitelist_keys,omitempty"`
-	SurveyWhitelist []cipher.PubKey   `json:"survey_whitelist,omitempty"`
-	TestEnvironment bool              `json:"test_environment,omitempty"`
+	Whitelist []string `json:"whitelist_keys,omitempty"`
 
 	// StoreDataPath is the on-disk path for bandwidth backup files.
 	StoreDataPath string `json:"store_data_path,omitempty"`
 	// UptimeDB is the local self-uptime bbolt store path. Empty
 	// disables service-self uptime recording.
 	UptimeDB string `json:"uptime_db,omitempty"`
-
-	// DmsgPort is the dmsghttp listener port (default 80).
-	DmsgPort uint16 `json:"dmsg_port,omitempty"`
 
 	// Dmsg is the dmsg-related config block — same shape across
 	// every deployment service that uses it.

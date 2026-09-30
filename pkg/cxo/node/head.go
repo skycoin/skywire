@@ -61,13 +61,27 @@ func (n *nodeHead) closeByError(err error) { //nolint:unused
 }
 
 // (api)
+//
+// Runs on the nodeFeeds event loop (handleDelConn, handleAddConnFeed and
+// handleDelConnFeed → nodeFeed.delConn), so it has the cycle receivedRoot
+// breaks below: the head loop can be parked in createFiller → broadcastRoot,
+// waiting for this very goroutine to drain brorq. A bare send on delcq then
+// deadlocks the whole node — every later Conn.Feeds, Subscribe and connect
+// queues behind the loop forever (dmsg-discovery 2026-09-29: 30k goroutines,
+// 1.2 GB heap, the process spent 80% of its CPU in GC). Drain brorq while we
+// wait, as receivedRoot does.
 func (n *nodeHead) delConn(c *Conn) {
-
-	select {
-	case n.delcq <- c:
-	case <-n.closeq:
+	fs := n.n.fs
+	for {
+		select {
+		case n.delcq <- c:
+			return
+		case <-n.closeq:
+			return
+		case bcr := <-fs.brorq:
+			fs.handleBroadcastRoot(bcr)
+		}
 	}
-
 }
 
 // (api)

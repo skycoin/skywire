@@ -10,6 +10,7 @@
 package commands
 
 import (
+	"github.com/skycoin/skywire/pkg/services"
 	"os"
 	"path/filepath"
 	gotesting "testing"
@@ -44,17 +45,14 @@ func TestGenerateExamples(t *gotesting.T) {
 // ---- buildConfig -----------------------------------------------------------
 
 func TestBuildConfig_FromFlags(t *gotesting.T) {
-	defer withGlobals(map[string]any{
-		"addr": addr, "redisURL": redisURL, "tag": tag, "logLvl": logLvl,
-		"configPath": configPath, "keyFile": keyFile,
-	})()
+	defer restoreFlags()()
 
-	addr = ":1234"
-	redisURL = "redis://example:6379"
-	tag = "rf_test"
-	logLvl = "debug"
-	configPath = ""
-	keyFile = ""
+	flags.Addr = ":1234"
+	flags.Redis = "redis://example:6379"
+	flags.Tag = "rf_test"
+	flags.LogLevel = "debug"
+	flags.ConfigPath = ""
+	flags.KeyFile = ""
 
 	cfg, err := buildConfig()
 	require.NoError(t, err)
@@ -65,30 +63,30 @@ func TestBuildConfig_FromFlags(t *gotesting.T) {
 }
 
 func TestBuildConfig_KeyfileGenerates(t *gotesting.T) {
-	defer withGlobals(map[string]any{"keyFile": keyFile, "sk": sk, "configPath": configPath})()
+	defer restoreFlags()()
 
-	keyFile = filepath.Join(t.TempDir(), "rf.key")
-	sk = cipher.SecKey{}
-	configPath = ""
+	flags.KeyFile = filepath.Join(t.TempDir(), "rf.key")
+	flags.SecKey = cipher.SecKey{}
+	flags.ConfigPath = ""
 
 	cfg, err := buildConfig()
 	require.NoError(t, err)
 	require.NotEqual(t, cipher.SecKey{}, cfg.SecKey) // key was generated
-	require.FileExists(t, keyFile)
+	require.FileExists(t, flags.KeyFile)
 }
 
 func TestBuildConfig_ConfigFileOverrides(t *gotesting.T) {
-	defer withGlobals(map[string]any{"addr": addr, "tag": tag, "configPath": configPath, "keyFile": keyFile})()
+	defer restoreFlags()()
 
-	addr = ":FLAG"
-	tag = "flag_tag"
-	keyFile = ""
+	flags.Addr = ":FLAG"
+	flags.Tag = "flag_tag"
+	flags.KeyFile = ""
 
 	// Raw JSON (no key fields) so strict-parse doesn't reject a zero secret key.
 	raw := []byte(`{"addr":":FILE","tag":"file_tag","mode":"dmsg","testing":true}`)
 	path := filepath.Join(t.TempDir(), "rf.json")
 	require.NoError(t, os.WriteFile(path, raw, 0o600))
-	configPath = path
+	flags.ConfigPath = path
 
 	cfg, err := buildConfig()
 	require.NoError(t, err)
@@ -99,10 +97,10 @@ func TestBuildConfig_ConfigFileOverrides(t *gotesting.T) {
 }
 
 func TestBuildConfig_BadConfigPath(t *gotesting.T) {
-	defer withGlobals(map[string]any{"configPath": configPath, "keyFile": keyFile})()
+	defer restoreFlags()()
 
-	keyFile = ""
-	configPath = filepath.Join(t.TempDir(), "does-not-exist.json")
+	flags.KeyFile = ""
+	flags.ConfigPath = filepath.Join(t.TempDir(), "does-not-exist.json")
 
 	_, err := buildConfig()
 	require.Error(t, err)
@@ -114,18 +112,20 @@ func TestMergeFile_AllFieldsOverride(t *gotesting.T) {
 	dst := &rf.Config{}
 	pk, _ := cipher.GenerateKeyPair()
 	src := &rf.Config{
-		SecKey:          cipher.SecKey{1},
-		Addr:            ":addr",
-		MetricsAddr:     ":metrics",
-		PprofAddr:       ":pprof",
-		Redis:           "redis://x",
-		RedisPoolSize:   5,
-		LogLevel:        "debug",
-		Tag:             "tag",
-		Testing:         true,
-		Mode:            "dual",
-		SurveyWhitelist: []cipher.PubKey{pk},
-		DmsgPort:        81,
+		Common: services.Common{
+			SecKey:          cipher.SecKey{1},
+			Addr:            ":addr",
+			MetricsAddr:     ":metrics",
+			PprofAddr:       ":pprof",
+			Redis:           "redis://x",
+			RedisPoolSize:   5,
+			LogLevel:        "debug",
+			Tag:             "tag",
+			Testing:         true,
+			Mode:            "dual",
+			SurveyWhitelist: []cipher.PubKey{pk},
+			DmsgPort:        81,
+		},
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  "http://disc",
 			ServerType: "stcpr",
@@ -154,7 +154,12 @@ func TestMergeFile_AllFieldsOverride(t *gotesting.T) {
 
 func TestMergeFile_ZeroSrcLeavesDst(t *gotesting.T) {
 	orig := &rf.Config{
-		Addr: ":keep", Tag: "keep", RedisPoolSize: 9, DmsgPort: 80,
+		Common: services.Common{
+			Addr:          ":keep",
+			Tag:           "keep",
+			RedisPoolSize: 9,
+			DmsgPort:      80,
+		},
 		Dmsg: cmdutil.DmsgConfig{Discovery: "http://keep"},
 	}
 	dst := *orig
@@ -181,26 +186,9 @@ func TestExecute_Help(t *gotesting.T) {
 	require.NotPanics(t, Execute)
 }
 
-// withGlobals snapshots the named package globals and returns a restore func.
-func withGlobals(saved map[string]any) func() {
-	return func() {
-		for name, v := range saved {
-			switch name {
-			case "addr":
-				addr = v.(string)
-			case "redisURL":
-				redisURL = v.(string)
-			case "tag":
-				tag = v.(string)
-			case "logLvl":
-				logLvl = v.(string)
-			case "configPath":
-				configPath = v.(string)
-			case "keyFile":
-				keyFile = v.(string)
-			case "sk":
-				sk = v.(cipher.SecKey)
-			}
-		}
-	}
+// restoreFlags snapshots the flag globals a test mutates; call the returned
+// func to put them back.
+func restoreFlags() func() {
+	savedFlags := flags
+	return func() { flags = savedFlags }
 }

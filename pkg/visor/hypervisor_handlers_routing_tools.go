@@ -285,10 +285,10 @@ func (s *hvCalcStore) GetTransportSummary(context.Context, bool) (*tpdstore.Tran
 func (s *hvCalcStore) GetAllTransports(context.Context, bool) ([]*transport.Entry, error) {
 	return nil, nil
 }
-func (s *hvCalcStore) UpdateBandwidth(context.Context, string, cipher.PubKey, uint64, uint64) error {
+func (s *hvCalcStore) UpdateBandwidth(context.Context, string, cipher.PubKey, uint64, uint64, string) error {
 	return nil
 }
-func (s *hvCalcStore) UpdateLatency(context.Context, string, float64, float64, float64) error {
+func (s *hvCalcStore) UpdateLatency(context.Context, string, float64, float64, float64, string) error {
 	return nil
 }
 

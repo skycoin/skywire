@@ -43,14 +43,8 @@ type API struct {
 	DmsgServers                 []string
 }
 
-// HealthCheckResponse is struct of /health endpoint
-type HealthCheckResponse struct {
-	ServiceName string          `json:"service_name,omitempty"`
-	BuildInfo   *buildinfo.Info `json:"build_info,omitempty"`
-	StartedAt   time.Time       `json:"started_at"`
-	DmsgAddr    string          `json:"dmsg_address,omitempty"`
-	DmsgServers []string        `json:"dmsg_servers,omitempty"`
-}
+// HealthCheckResponse is the /health body every service shares.
+type HealthCheckResponse = httputil.HealthCheckResponse
 
 // New creates a new api
 func New(s store.Store, logger logrus.FieldLogger, enableMetrics bool, dmsgAddr string) *API {
@@ -91,6 +85,11 @@ func New(s store.Store, logger logrus.FieldLogger, enableMetrics bool, dmsgAddr 
 func (a *API) log(r *http.Request) logrus.FieldLogger {
 	return httputil.GetLogger(r)
 }
+
+// ShareTransportsFrom builds the route graph from the live transport set of a
+// TPD in this process writing to the redis at url, when there is one (see
+// GraphCache.ShareFrom). Call before StartGraphCache.
+func (a *API) ShareTransportsFrom(url string) { a.graphCache.ShareFrom(url) }
 
 // StartGraphCache keeps one shared full-network graph warm in the background so
 // route requests no longer each build a per-source graph by walking the store.

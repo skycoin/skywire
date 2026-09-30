@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -60,7 +61,7 @@ func (s *redisStore) visorAllKey() string {
 // transports/<id>/current snapshot. The visor passes its cumulative counters;
 // this method handles the per-reporter delta arithmetic.
 func (s *redisStore) UpdateBandwidth(ctx context.Context, transportID string,
-	reporterPK cipher.PubKey, currentSent, currentRecv uint64) error {
+	reporterPK cipher.PubKey, currentSent, currentRecv uint64, tpType string) error {
 
 	// Never attribute bandwidth to the zero PubKey. A zero reporter would
 	// write "0000…:sent"/"0000…:recv" fields into the per-transport daily hash
@@ -74,67 +75,34 @@ func (s *redisStore) UpdateBandwidth(ctx context.Context, transportID string,
 
 	now := time.Now().UTC()
 	reporterHex := reporterPK.Hex()
+	date := now.Format(MetricsDateFormat)
 
-	// 1. Get previous snapshot (per-reporter) to calculate deltas
-	prevKey := s.bandwidthPrevKey(transportID, reporterHex)
-	prevResult, err := s.client.HGetAll(ctx, prevKey).Result()
-
-	var deltaSent, deltaRecv uint64
-	if err == nil && len(prevResult) > 0 {
-		var prevSent, prevRecv uint64
-		fmt.Sscanf(prevResult["sent"], "%d", &prevSent) //nolint:errcheck,gosec
-		fmt.Sscanf(prevResult["recv"], "%d", &prevRecv) //nolint:errcheck,gosec
-		if currentSent >= prevSent {
-			deltaSent = currentSent - prevSent
-		} else {
-			deltaSent = currentSent // Counter reset
-		}
-		if currentRecv >= prevRecv {
-			deltaRecv = currentRecv - prevRecv
-		} else {
-			deltaRecv = currentRecv // Counter reset
-		}
-	} else {
-		// First time or key expired — use full current values
-		deltaSent = currentSent
-		deltaRecv = currentRecv
+	// One atomic round trip: the delta against the reporter's previous
+	// snapshot (a counter reset counts from zero), the per-transport and
+	// per-visor daily hashes, and the day's network total (see
+	// redis_daily_totals.go). The previous snapshot lives 10 minutes,
+	// which rides out missed report cycles.
+	keys := []string{
+		s.bandwidthPrevKey(transportID, reporterHex),
+		s.bandwidthDailyKey(transportID, now),
+		s.visorAllKey(),
+		s.visorBandwidthDailyKey(reporterHex, now),
+		s.netDailyKey(date),
+		s.netDailySinceKey(),
 	}
-
-	// 2. Store current as previous for next calculation
-	// TTL of 10 minutes allows for missed re-registration cycles (every 90s)
-	pipe := s.client.Pipeline()
-	pipe.HSet(ctx, prevKey, "sent", currentSent, "recv", currentRecv)
-	pipe.Expire(ctx, prevKey, 10*time.Minute)
-
-	// 3. Add deltas to aggregations
-	delta := deltaSent + deltaRecv
-	if delta > 0 {
-		// Per-transport daily aggregation — store per-reporter sent/recv separately
-		dailyKey := s.bandwidthDailyKey(transportID, now)
-		pipe.HIncrBy(ctx, dailyKey, reporterHex+":sent", int64(deltaSent)) //nolint:gosec
-		pipe.HIncrBy(ctx, dailyKey, reporterHex+":recv", int64(deltaRecv)) //nolint:gosec
-		// Keep combined total for backward compatibility
-		pipe.HIncrBy(ctx, dailyKey, "bandwidth", int64(delta)) //nolint:gosec
-		pipe.HSet(ctx, dailyKey, "updated_at", now.Unix())
-		pipe.Expire(ctx, dailyKey, 35*24*time.Hour)
-
-		// Per-visor daily aggregation — only for the reporter
-		pipe.SAdd(ctx, s.visorAllKey(), reporterHex)
-		pipe.Expire(ctx, s.visorAllKey(), 400*24*time.Hour)
-
-		vDaily := s.visorBandwidthDailyKey(reporterHex, now)
-		// Keep sent/recv separate so the per-visor directional split is real
-		// rather than a fabricated bw/2 (this reporter's transports; not
-		// double-counted since only the reporter writes its own visor key).
-		pipe.HIncrBy(ctx, vDaily, "sent", int64(deltaSent))  //nolint:gosec
-		pipe.HIncrBy(ctx, vDaily, "recv", int64(deltaRecv))  //nolint:gosec
-		pipe.HIncrBy(ctx, vDaily, "bandwidth", int64(delta)) //nolint:gosec
-		pipe.HSet(ctx, vDaily, "updated_at", now.Unix())
-		pipe.Expire(ctx, vDaily, 35*24*time.Hour)
+	moved, err := bandwidthScript.Run(ctx, s.client, keys,
+		reporterHex, currentSent, currentRecv, now.Unix(), typeOrUnknown(tpType),
+		int64((10*time.Minute)/time.Second), historyTTLSeconds, int64((400*24*time.Hour)/time.Second), date,
+	).Int()
+	if err != nil {
+		return err
 	}
-
-	_, err = pipe.Exec(ctx)
-	return err
+	if moved == 1 {
+		if id, perr := uuid.Parse(transportID); perr == nil {
+			s.today.markDirty(id)
+		}
+	}
+	return nil
 }
 
 // UpdateLatency stores the most recent latency snapshot for a transport
@@ -150,7 +118,7 @@ func (s *redisStore) UpdateBandwidth(ctx context.Context, transportID string,
 // latency from /metrics until the next CXO push, while bandwidth
 // (stored at bw:daily:*) survived. Co-locating with bandwidth's
 // retention window restores symmetry.
-func (s *redisStore) UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64) error {
+func (s *redisStore) UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64, tpType string) error {
 	// Defense-in-depth alongside the aggregator gate: any non-positive
 	// field means the snapshot is partial, so reject the whole update
 	// rather than persist a zero in a single field.
@@ -183,7 +151,16 @@ func (s *redisStore) UpdateLatency(ctx context.Context, transportID string, minM
 	if err != nil {
 		return err
 	}
-	return s.client.Set(ctx, s.latencyKey(id), string(raw), latencyTTL).Err()
+	if err := s.client.Set(ctx, s.latencyKey(id), string(raw), latencyTTL).Err(); err != nil {
+		return err
+	}
+	s.live.setLatency(id, avgMS, time.Now())
+	s.today.markDirty(id)
+	date := time.Now().UTC().Format(MetricsDateFormat)
+	return latencyScript.Run(ctx, s.client,
+		[]string{s.netLatencyKey(date), s.netDailyKey(date)},
+		transportID, strconv.FormatFloat(avgMS, 'f', -1, 64), typeOrUnknown(tpType), historyTTLSeconds,
+	).Err()
 }
 
 // UpdateThroughput persists a transport's passively-observed PEAK
@@ -210,7 +187,11 @@ func (s *redisStore) UpdateThroughput(ctx context.Context, transportID string, r
 	if err != nil {
 		return err
 	}
-	return s.client.Set(ctx, s.throughputKey(id), string(raw), throughputTTL).Err()
+	if err := s.client.Set(ctx, s.throughputKey(id), string(raw), throughputTTL).Err(); err != nil {
+		return err
+	}
+	s.live.setThroughput(id, bps, time.Now())
+	return nil
 }
 
 // getThroughputRecord reads the durable peak-goodput snapshot for a

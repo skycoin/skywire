@@ -94,6 +94,10 @@ type API struct {
 	// live deployment, drowned the address-resolver log. See dial_assist_log.go.
 	dialAssistFails *dialAssistFailures
 
+	// reach is what is known about whether each peer can actually be
+	// transported, per type, published as the reach feed. See reach.go.
+	reach *reachBook
+
 	// bindPub is the CXO bindings publisher, installed after the dmsg client
 	// exists (see pkg/services/ar). Held atomically because the store writes
 	// that notify it run on HTTP, UDP and CXO-ingest goroutines while the
@@ -120,6 +124,7 @@ type bindNotifyStore struct {
 func (s *bindNotifyStore) Bind(ctx context.Context, netType types.Type, pk cipher.PubKey, visorData addrresolver.VisorData) error {
 	err := s.Store.Bind(ctx, netType, pk, visorData)
 	if err == nil {
+		s.api.reach.noteBind(netType, pk, visorData)
 		s.api.bindPub.Load().MarkDirty(netType, pk)
 	}
 	return err
@@ -128,6 +133,7 @@ func (s *bindNotifyStore) Bind(ctx context.Context, netType types.Type, pk ciphe
 func (s *bindNotifyStore) DelBind(ctx context.Context, netType types.Type, pk cipher.PubKey) error {
 	err := s.Store.DelBind(ctx, netType, pk)
 	if err == nil {
+		s.api.reach.noteDelBind(netType, pk)
 		s.api.bindPub.Load().MarkDirty(netType, pk)
 	}
 	return err
@@ -141,19 +147,8 @@ type dhtMirror interface {
 	Delete(subjectPK cipher.PubKey)
 }
 
-// HealthCheckResponse is struct of /health endpoint
-type HealthCheckResponse struct {
-	ServiceName string          `json:"service_name,omitempty"`
-	BuildInfo   *buildinfo.Info `json:"build_info,omitempty"`
-	StartedAt   time.Time       `json:"started_at"`
-	DmsgAddr    string          `json:"dmsg_address,omitempty"`
-	DmsgServers []string        `json:"dmsg_servers,omitempty"`
-	// UDPAddr is the externally-reachable host:port of this AR's SUDPH
-	// listener. Visors that connect over dmsghttp use this value to
-	// register SUDPH — without it the dmsg-only URL has no IP to dial.
-	// Omitted when the operator did not configure --public-udp-address.
-	UDPAddr string `json:"udp_address,omitempty"`
-}
+// HealthCheckResponse is the /health body every service shares.
+type HealthCheckResponse = httputil.HealthCheckResponse
 
 // ArData has all the visors that have registered with sudph or stcpr transport
 type ArData struct {
@@ -257,6 +252,7 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 		DmsgServers:                 []string{},
 		publicUDPAddr:               publicUDPAddr,
 		dialAssistFails:             newDialAssistFailures(dialAssistSummaryInterval),
+		reach:                       newReachBook(log),
 	}
 	// Every store write goes through the notifier so the CXO bindings feed
 	// (pkg/deployment/ar/api/cxo_publisher.go) learns about it from ONE place
@@ -311,6 +307,7 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 func (a *API) Close() {
 	a.closeOnce.Do(func() {
 		close(a.closeC)
+		a.reach.close()
 	})
 }
 
@@ -804,6 +801,7 @@ func (a *API) setUDPConn(pk cipher.PubKey, conn net.Conn) {
 	defer a.udpConnsMu.Unlock()
 
 	a.udpConns[pk] = conn
+	a.reach.setLive(pk, true)
 }
 
 func (a *API) deleteUDPConn(pk cipher.PubKey) {
@@ -811,6 +809,7 @@ func (a *API) deleteUDPConn(pk cipher.PubKey) {
 	defer a.udpConnsMu.Unlock()
 
 	delete(a.udpConns, pk)
+	a.reach.setLive(pk, false)
 }
 
 func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) {
@@ -1129,6 +1128,7 @@ func (a *API) cleanupUDPConn(pk cipher.PubKey, conn net.Conn) {
 	a.udpConnsMu.Lock()
 	if current, ok := a.udpConns[pk]; ok && current == conn {
 		delete(a.udpConns, pk)
+		a.reach.setLive(pk, false)
 	}
 	a.udpConnsMu.Unlock()
 

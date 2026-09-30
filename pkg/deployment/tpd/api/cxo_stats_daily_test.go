@@ -27,13 +27,12 @@ type dailyOnlyStore struct {
 	resp  *store.NetworkMetricResponse
 	err   error
 	calls int
+	days  []int
 }
 
 func (s *dailyOnlyStore) GetNetworkMetrics(_ context.Context, q store.MetricsQuery) (*store.NetworkMetricResponse, error) {
 	s.calls++
-	if q.Days != statsDailyDays {
-		return nil, errors.New("publisher asked for a window other than statsDailyDays")
-	}
+	s.days = append(s.days, q.Days)
 	return s.resp, s.err
 }
 
@@ -196,5 +195,36 @@ func TestPublishOnceRunsDailyOnItsOwnCadence(t *testing.T) {
 	sp.publishOnce(context.Background())
 	if st.calls != 2 {
 		t.Fatalf("store queried %d times after the interval elapsed, want 2", st.calls)
+	}
+}
+
+// TestDailyStatsReadsSettledDaysOnce: the whole window is read once, then
+// only the open days, and the settled days already read stay published.
+func TestDailyStatsReadsSettledDaysOnce(t *testing.T) {
+	st := &dailyOnlyStore{resp: testDailyResponse()}
+	api := &API{transportsCache: testEntries(20), uptimesCache: testUptimes(), store: st}
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+	sp, _ := newTestStatsPublisher(t, api, now.Add(-time.Hour))
+
+	sp.publishDaily(context.Background(), now)
+	// Only today comes back now; yesterday must still be carried.
+	st.resp = &store.NetworkMetricResponse{Daily: testDailyResponse().Daily[:1]}
+	sp.publishDaily(context.Background(), now.Add(statsDailyInterval))
+
+	if len(st.days) != 2 || st.days[0] != statsDailyDays || st.days[1] != 1 {
+		t.Fatalf("store read windows %v, want [%d 1]", st.days, statsDailyDays)
+	}
+	daily, cum := sp.foldDaily(now, nil)
+	if len(daily) != 2 || daily[0].Date != "2026-09-04" || daily[1].Date != "2026-09-03" {
+		t.Fatalf("daily series %+v, want today then the held yesterday", daily)
+	}
+	if cum.Bandwidth != 13_000_000 || cum.ByType["stcpr"].Bandwidth != 10_000_000 {
+		t.Fatalf("cumulative %+v, want the sum of the held days", cum)
+	}
+
+	// A day that leaves the window is dropped.
+	later := now.AddDate(0, 0, statsDailyDays)
+	if daily, _ := sp.foldDaily(later, nil); len(daily) != 0 {
+		t.Fatalf("days outside the window still published: %+v", daily)
 	}
 }

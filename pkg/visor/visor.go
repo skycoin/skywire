@@ -113,14 +113,20 @@ type Visor struct {
 	startedAt       time.Time
 	startupComplete chan struct{}
 
-	ebc                *appevent.Broadcaster // event broadcaster
-	dmsgC              *dmsg.Client
-	dmsgDC             *dmsg.Client       // dmsg direct client
-	dClient            dmsgdisc.APIClient // dmsg direct api client
-	dmsgHTTP           *http.Client       // dmsghttp client
-	dmsgHTTPMux        *http.ServeMux     // what the dmsg HTTP port serves: the log server at /, embedded services under their prefixes
-	dmsgHTTPReady      chan struct{}      // closed when dmsgHTTP is set
-	awaitSetupListener *dmsg.Listener     // pre-opened DmsgAwaitSetupPort listener; consumed by initRouter
+	ebc         *appevent.Broadcaster // event broadcaster
+	dmsgC       *dmsg.Client
+	dmsgDC      *dmsg.Client       // dmsg direct client
+	dClient     dmsgdisc.APIClient // dmsg direct api client
+	dmsgHTTP    *http.Client       // dmsghttp client
+	dmsgHTTPMux *http.ServeMux     // what the dmsg HTTP port serves: the log server at /, embedded services under their prefixes
+
+	// embedded holds config.embedded_services, built once; cxoPubs are the
+	// visor's CXO publishers by port, lent to them.
+	embedded           embeddedSet
+	cxoPubsMu          sync.Mutex
+	cxoPubs            map[uint16]*treestore.Publisher
+	dmsgHTTPReady      chan struct{}  // closed when dmsgHTTP is set
+	awaitSetupListener *dmsg.Listener // pre-opened DmsgAwaitSetupPort listener; consumed by initRouter
 
 	// dmsgWL is the live, in-memory whitelist shared with the running
 	// pty.Host and (when scp is enabled) dmsgscp.Host. VisorCat's
@@ -450,6 +456,9 @@ type Visor struct {
 	// nil otherwise. Tabs that source CXO data call AcquireFor on
 	// open and ReleaseFor on close.
 	cxoSubMgr *CXOSubscriptionManager
+	// routingPinOnce pins FeedTPDRouting on the first route calculation
+	// (see cxoAwareTPD.getAllTransportsBase).
+	routingPinOnce sync.Once
 }
 
 // pingState manages Skywire transport ping connections. Keyed by

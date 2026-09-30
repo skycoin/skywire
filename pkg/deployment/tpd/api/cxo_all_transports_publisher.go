@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -48,7 +49,6 @@ type allTransportsWireEntry struct {
 	Type          types.Type       `json:"type"`
 	Label         transport.Label  `json:"label"`
 	Latency       float64          `json:"latency_ms,omitempty"`
-	Bandwidth     uint64           `json:"bandwidth,omitempty"`
 	ThroughputBps float64          `json:"throughput_bps,omitempty"`
 }
 
@@ -60,21 +60,22 @@ func toWireEntries(entries []*transport.Entry) []allTransportsWireEntry {
 			continue
 		}
 		out = append(out, allTransportsWireEntry{
-			Edges:         e.Edges,
-			Type:          e.Type,
-			Label:         e.Label,
-			Latency:       e.Latency,
-			Bandwidth:     e.Bandwidth,
-			ThroughputBps: e.ThroughputBps,
+			Edges: e.Edges,
+			Type:  e.Type,
+			Label: e.Label,
 		})
 	}
 	return out
 }
 
-// allTransportsPublishInterval is the recompute cadence. 60s matches
-// the metrics/uptime publishers; the store's allTransportsCache
-// memoizes between ticks so the actual cost is bounded.
-const allTransportsPublishInterval = 60 * time.Second
+// allTransportsPublishInterval is the recompute cadence. The snapshot is
+// the whole network — ~2.6 MB gzipped at ~80k transports — and the
+// transport set churns every minute, so each republish is a full download
+// for every subscriber. Visors now route on the routing feed, which ships
+// only changed shards; this feed serves readers that predate it, and a
+// registration only lapses after the 5-minute entry TTL, so a snapshot per
+// TTL is as fresh as the data it lists.
+const allTransportsPublishInterval = 5 * time.Minute
 
 // Published paths. Exported so visor-side subscribers don't have to
 // duplicate the format strings.
@@ -164,35 +165,47 @@ func (a *AllTransportsCXOPublisher) loop(ctx context.Context) {
 }
 
 func (a *AllTransportsCXOPublisher) publishOnce(ctx context.Context) {
-	for _, v := range []struct {
-		path     string
-		withSelf bool
-	}{
-		{AllTransportsPathWithoutSelf, false},
-		{AllTransportsPathWithSelf, true},
-	} {
-		entries, err := a.api.store.GetAllTransports(ctx, v.withSelf)
-		if err != nil {
-			a.log.WithError(err).WithField("path", v.path).Debug("all-transports fetch failed; will retry next tick")
+	// Topology only, as this feed always was: metrics belong to the routing
+	// feed, where a change ships only its own shard.
+	entries, err := a.api.store.GetAllTransports(ctx, false)
+	if err != nil {
+		a.log.WithError(err).Debug("all-transports fetch failed; will retry next tick")
+		a.recordError(err)
+		return
+	}
+	body, err := json.Marshal(toWireEntries(entries))
+	if err != nil {
+		a.log.WithError(err).Warn("all-transports marshal failed")
+		a.recordError(err)
+		return
+	}
+	// gzip the snapshot before publishing: CXO stores + propagates object
+	// bytes verbatim, so a raw JSON body travels uncompressed. Subscribers
+	// auto-detect + gunzip (cxoutils.Gunzip).
+	//
+	// The same bytes go to both paths. with-self differed only by self-loops,
+	// which are not routes; identical bytes are one CXO object, so a
+	// subscriber fetches the snapshot once instead of twice.
+	gz := cxoutils.Gzip(body)
+	for _, path := range []string{AllTransportsPathWithoutSelf, AllTransportsPathWithSelf} {
+		if err := a.pub.Put(path, gz); err != nil {
+			a.log.WithError(err).WithField("path", path).Warn("publisher Put failed")
 			a.recordError(err)
-			continue
-		}
-		body, err := json.Marshal(toWireEntries(entries))
-		if err != nil {
-			a.log.WithError(err).WithField("path", v.path).Warn("all-transports marshal failed")
-			a.recordError(err)
-			continue
-		}
-		// gzip the snapshot before publishing: CXO stores + propagates object
-		// bytes verbatim, so a raw JSON body travels uncompressed. Subscribers
-		// auto-detect + gunzip (cxoutils.Gunzip). See docs — this keeps the CXO
-		// feed from being a bandwidth regression vs the gzipped HTTP endpoint.
-		if err := a.pub.Put(v.path, cxoutils.Gzip(body)); err != nil {
-			a.log.WithError(err).WithField("path", v.path).Warn("publisher Put failed")
-			a.recordError(err)
-			continue
 		}
 	}
+}
+
+// routingEntries is what routers need: the transports that exist now —
+// registrations refreshed within the entry TTL, withdrawn at once when a
+// visor's published transport list drops one — with the latency and
+// throughput routes are weighed by.
+func routingEntries(ctx context.Context, st store.Store) ([]*transport.Entry, error) {
+	if qs, ok := st.(interface {
+		GetAllTransportsWithLatency(context.Context, bool) ([]*transport.Entry, error)
+	}); ok {
+		return qs.GetAllTransportsWithLatency(ctx, false)
+	}
+	return st.GetAllTransports(ctx, false)
 }
 
 func (a *AllTransportsCXOPublisher) recordError(err error) {
@@ -208,3 +221,6 @@ func (a *AllTransportsCXOPublisher) LastError() error {
 	defer a.mu.Unlock()
 	return a.lastError
 }
+
+// Publisher returns the underlying feed publisher, for introspection.
+func (x *AllTransportsCXOPublisher) Publisher() *treestore.Publisher { return x.pub }

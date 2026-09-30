@@ -36,6 +36,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	skycipher "github.com/skycoin/skycoin/src/cipher"
@@ -105,6 +106,13 @@ type Options struct {
 	InMemoryDB bool
 	DataDir    string
 
+	// Node, when set, is an existing CXO node to attach to instead of
+	// building one: a host that embeds the service already publishes on the
+	// same DMSG port under the same key, and a port has one listener. The
+	// node must be bound to the service key and listening on the port.
+	// Storage options are ignored, and Close leaves the node running.
+	Node *node.Node
+
 	// NodeConfig, when set, is called with the fully prepared node
 	// config immediately before node.NewNode. It is the escape hatch for
 	// per-service node tuning that is not worth a field here (TPD wires
@@ -135,9 +143,16 @@ type Options struct {
 // cleanup loop that prunes Roots and reclaims orphan feeds.
 type Core struct {
 	cxoNode *node.Node
-	opts    Options
-	log     *logging.Logger
-	tag     string
+	// owned is false when the node was lent by the host (Options.Node).
+	owned bool
+	// localRoots counts Roots taken through Ingest.
+	localRoots atomic.Uint64
+	// prev holds the callbacks this Core replaced on a lent node, restored
+	// on Close.
+	prev nodeHooks
+	opts Options
+	log  *logging.Logger
+	tag  string
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
@@ -191,10 +206,6 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, dmsgPort uint16, opts Options) (*
 	if dmsgPort == 0 {
 		return nil, errors.New("cxoaggregate: a non-zero DMSG port is required")
 	}
-	if dmsgC == nil {
-		return nil, errors.New("cxoaggregate: a dmsg client is required")
-	}
-
 	if opts.ReconcileInterval <= 0 {
 		opts.ReconcileInterval = 30 * time.Second
 	}
@@ -211,56 +222,26 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, dmsgPort uint16, opts Options) (*
 		opts.LogTag = "CXO aggregator"
 	}
 
-	cfg := node.NewConfig()
-	// Bind the node identity to the service key. This is the whole point
-	// of the package: without it node.NewNode mints a random keypair and
-	// every gated visor refuses the subscribe.
-	cfg.SecKey = skycipher.SecKey(sk)
-	// DMSG-only — disable the node's default TCP/UDP/RPC listeners.
-	// node.NewConfig defaults TCP.Listen to ":8870" and RPC to ":8871",
-	// hardcoded, so two Nodes in one process collide on bind and the
-	// SECOND NewNode fails with "address already in use" (#4152: TPD's
-	// tp-list aggregator never came up). None of these listeners are
-	// reachable over DMSG anyway, and the publisher path
-	// (treestore.NewWithDMSG) has always zeroed them.
-	cfg.TCP.Listen = ""
-	cfg.UDP.Listen = ""
-	cfg.RPC = ""
-	cfg.MaxFillingTime = opts.MaxFillingTime
-	if opts.MaxTotalFillTime > 0 {
-		cfg.MaxTotalFillTime = opts.MaxTotalFillTime
-	}
-	cfg.Config = skyobject.NewConfig()
-	cfg.Config.InMemoryDB = opts.InMemoryDB || opts.DataDir == ""
-	if opts.DataDir != "" {
-		cfg.Config.DataDir = opts.DataDir
-	}
-	if opts.NodeConfig != nil {
-		opts.NodeConfig(cfg)
-		// Re-assert: the escape hatch must not be able to unbind the
-		// identity, which is the one thing this constructor guarantees.
-		cfg.SecKey = skycipher.SecKey(sk)
-	}
-
-	cxoNode, err := node.NewNode(cfg)
-	if err != nil {
-		return nil, err
-	}
-	// Assert the binding actually took. Cheap, and the failure it guards
-	// is invisible in logs and fatal to the feature.
-	if cipher.PubKey(cxoNode.ID()) != wantPK {
-		_ = cxoNode.Close() //nolint:errcheck
-		return nil, ErrIdentityMismatch
-	}
-
-	factory := cxotransport.NewDMSGFactory(dmsgC, dmsgPort)
-	if err := cxoNode.EnableDMSG(factory); err != nil {
-		_ = cxoNode.Close() //nolint:errcheck
-		return nil, err
+	cxoNode, owned := opts.Node, false
+	if cxoNode != nil {
+		// Attach: the host already runs a node on this port under this key
+		// (a visor that embeds the service publishes on the same port).
+		if cipher.PubKey(cxoNode.ID()) != wantPK {
+			return nil, ErrIdentityMismatch
+		}
+	} else {
+		if dmsgC == nil {
+			return nil, errors.New("cxoaggregate: a dmsg client is required")
+		}
+		if cxoNode, err = newNode(dmsgC, sk, wantPK, dmsgPort, opts); err != nil {
+			return nil, err
+		}
+		owned = true
 	}
 
 	c := &Core{
 		cxoNode:       cxoNode,
+		owned:         owned,
 		opts:          opts,
 		log:           opts.Logger,
 		tag:           opts.LogTag,
@@ -278,21 +259,69 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, dmsgPort uint16, opts Options) (*
 	// it is subscribed and the node idles it out after 90 s, so a subscribe
 	// that waits behind the rest of the fleet lands on a dead conn. The
 	// handshake completes (peerID set) before OnConnect fires.
-	cxoNode.Config().OnConnect = func(conn *node.Conn) error {
+	cfg := cxoNode.Config()
+	c.prev = nodeHooks{cfg.OnConnect, cfg.OnRootReceived, cfg.OnRootFilled, cfg.OnFillingBreaks}
+	prev := c.prev
+	cfg.OnConnect = func(conn *node.Conn) error {
+		if prev.onConnect != nil {
+			if err := prev.onConnect(conn); err != nil {
+				return err
+			}
+		}
 		c.subscribe(conn)
 		return nil
 	}
 	if h := opts.OnRootReceived; h != nil {
-		cxoNode.Config().OnRootReceived = h
+		cfg.OnRootReceived = func(conn *node.Conn, r *registry.Root) error {
+			if prev.onRootReceived != nil {
+				if err := prev.onRootReceived(conn, r); err != nil {
+					return err
+				}
+			}
+			return h(conn, r)
+		}
 	}
 	if h := opts.OnRootFilled; h != nil {
-		cxoNode.Config().OnRootFilled = func(_ *node.Node, r *registry.Root) { c.queueFilled(r, h) }
+		cfg.OnRootFilled = func(n *node.Node, r *registry.Root) {
+			if prev.onRootFilled != nil {
+				prev.onRootFilled(n, r)
+			}
+			c.queueFilled(r, h)
+		}
 	}
 	if h := opts.OnFillingBreaks; h != nil {
-		cxoNode.Config().OnFillingBreaks = func(_ *node.Node, r *registry.Root, reason error) { h(r, reason) }
+		cfg.OnFillingBreaks = func(n *node.Node, r *registry.Root, reason error) {
+			if prev.onFillingBreaks != nil {
+				prev.onFillingBreaks(n, r, reason)
+			}
+			h(r, reason)
+		}
 	}
 	return c, nil
 }
+
+// nodeHooks are the node callbacks an aggregator installs.
+type nodeHooks struct {
+	onConnect       node.OnConnectFunc
+	onRootReceived  node.OnRootReceivedFunc
+	onRootFilled    node.OnRootFilledFunc
+	onFillingBreaks node.OnFillingBreaksFunc
+}
+
+// Ingest hands r to OnRootFilled as if it had been filled from a peer. A host
+// that embeds the service publishes its own feed on the lent node, and a node
+// never receives its own feed from a peer, so the host passes each Root it
+// publishes here.
+func (c *Core) Ingest(r *registry.Root) {
+	c.localRoots.Add(1)
+	if h := c.opts.OnRootFilled; h != nil {
+		c.queueFilled(r, h)
+	}
+}
+
+// Owned reports whether the aggregator built its node (false when the host
+// lent it).
+func (c *Core) Owned() bool { return c.owned }
 
 // Node returns the underlying CXO node, for services that need the
 // container, the DMSG transport or the connection set.
@@ -337,6 +366,14 @@ func (c *Core) Close() error {
 	if cancel != nil {
 		cancel()
 		<-c.done
+	}
+	if !c.owned {
+		// A lent node belongs to the host: put its callbacks back and leave
+		// it running.
+		cfg := c.cxoNode.Config()
+		cfg.OnConnect, cfg.OnRootReceived = c.prev.onConnect, c.prev.onRootReceived
+		cfg.OnRootFilled, cfg.OnFillingBreaks = c.prev.onRootFilled, c.prev.onFillingBreaks
+		return nil
 	}
 	return c.cxoNode.Close()
 }
@@ -435,14 +472,12 @@ func (c *Core) subscribe(conn *node.Conn) bool {
 }
 
 // alreadySubscribed reports whether conn is already subscribed to the
-// given feed. Keeps reconcile idempotent across repeat ticks.
+// given feed. Keeps reconcile idempotent across repeat ticks. Asked for
+// every conn on every pass, so it must not walk the node's feeds: with
+// Conn.Feeds it cost TPD a fifth of its CPU, all on the node's single feeds
+// loop.
 func alreadySubscribed(conn *node.Conn, feed skycipher.PubKey) bool {
-	for _, f := range conn.Feeds() {
-		if f == feed {
-			return true
-		}
-	}
-	return false
+	return conn.HasFeed(feed)
 }
 
 // cleanup prunes superseded Roots (keeping only the latest per feed),
@@ -542,4 +577,84 @@ func (c *Core) queueFilled(r *registry.Root, apply func(*registry.Root)) {
 			apply(next)
 		}
 	}()
+}
+
+// newNode builds and starts the aggregator's own CXO node, bound to sk and
+// listening on dmsgPort.
+func newNode(dmsgC *dmsg.Client, sk cipher.SecKey, wantPK cipher.PubKey, dmsgPort uint16, opts Options) (*node.Node, error) {
+	cfg := node.NewConfig()
+	// Bind the node identity to the service key. This is the whole point
+	// of the package: without it node.NewNode mints a random keypair and
+	// every gated visor refuses the subscribe.
+	cfg.SecKey = skycipher.SecKey(sk)
+	// DMSG-only — disable the node's default TCP/UDP/RPC listeners.
+	// node.NewConfig defaults TCP.Listen to ":8870" and RPC to ":8871",
+	// hardcoded, so two Nodes in one process collide on bind and the
+	// SECOND NewNode fails with "address already in use" (#4152: TPD's
+	// tp-list aggregator never came up). None of these listeners are
+	// reachable over DMSG anyway, and the publisher path
+	// (treestore.NewWithDMSG) has always zeroed them.
+	cfg.TCP.Listen = ""
+	cfg.UDP.Listen = ""
+	cfg.RPC = ""
+	cfg.MaxFillingTime = opts.MaxFillingTime
+	if opts.MaxTotalFillTime > 0 {
+		cfg.MaxTotalFillTime = opts.MaxTotalFillTime
+	}
+	cfg.Config = skyobject.NewConfig()
+	cfg.Config.InMemoryDB = opts.InMemoryDB || opts.DataDir == ""
+	if opts.DataDir != "" {
+		cfg.Config.DataDir = opts.DataDir
+	}
+	if opts.NodeConfig != nil {
+		opts.NodeConfig(cfg)
+		// Re-assert: the escape hatch must not be able to unbind the
+		// identity, which is the one thing this constructor guarantees.
+		cfg.SecKey = skycipher.SecKey(sk)
+	}
+
+	cxoNode, err := node.NewNode(cfg)
+	if err != nil {
+		return nil, err
+	}
+	// Assert the binding actually took. Cheap, and the failure it guards
+	// is invisible in logs and fatal to the feature.
+	if cipher.PubKey(cxoNode.ID()) != wantPK {
+		_ = cxoNode.Close() //nolint:errcheck
+		return nil, ErrIdentityMismatch
+	}
+
+	factory := cxotransport.NewDMSGFactory(dmsgC, dmsgPort)
+	if err := cxoNode.EnableDMSG(factory); err != nil {
+		_ = cxoNode.Close() //nolint:errcheck
+		return nil, err
+	}
+	return cxoNode, nil
+}
+
+// Stats is a point-in-time view of an aggregator, for introspection.
+type Stats struct {
+	// Owned is false when the node was lent by the host.
+	Owned bool
+	// Conns are the node's connections; Subscribed of them carry a
+	// subscription to their peer's feed.
+	Conns      int
+	Subscribed int
+	// Feeds held in the node's store.
+	Feeds int
+	// LocalRoots counts Roots taken through Ingest.
+	LocalRoots uint64
+}
+
+// Stats reports the aggregator's current state.
+func (c *Core) Stats() Stats {
+	s := Stats{Owned: c.owned, LocalRoots: c.localRoots.Load()}
+	for _, conn := range c.cxoNode.Connections() {
+		s.Conns++
+		if pk := conn.PeerID(); pk != (skycipher.PubKey{}) && alreadySubscribed(conn, pk) {
+			s.Subscribed++
+		}
+	}
+	s.Feeds = len(c.cxoNode.Container().Feeds())
+	return s
 }

@@ -28,8 +28,10 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoaggregate"
+	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
+	"github.com/skycoin/skywire/pkg/deployment/ar/arfeed"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -56,10 +58,17 @@ var cxoBindLeaves = []cxoBindLeaf{
 	{"swtr", types.WT},
 }
 
+// reachLeaf is the leaf a visor states its own reachability in (see
+// arfeed.ReachDecl). Not a binding: it carries no address.
+const reachLeaf = "reach"
+
 // Sink ingests bindings replicated from visor AR-bind feeds. The AR API
 // satisfies it via (*api.API).IngestBindFromCXO.
 type Sink interface {
 	IngestBindFromCXO(ctx context.Context, reporter cipher.PubKey, tpType types.Type, la addrresolver.LocalAddresses)
+	// IngestReachFromCXO takes the visor's own reachability declaration, the
+	// "reach" leaf of the same feed.
+	IngestReachFromCXO(reporter cipher.PubKey, d arfeed.ReachDecl)
 }
 
 // Config tunes the aggregator loops. Zero values get sane defaults.
@@ -75,6 +84,9 @@ type Config struct {
 	Logger            *logging.Logger
 	InMemoryDB        bool
 	DataDir           string
+	// Node, when set, is the host's CXO node on this port to attach to
+	// (see cxoaggregate.Options.Node).
+	Node *node.Node
 }
 
 // Aggregator receives visor AR-bind feeds. It is the shared
@@ -106,6 +118,7 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggrega
 		LogTag:            logTag,
 		InMemoryDB:        conf.InMemoryDB,
 		DataDir:           conf.DataDir,
+		Node:              conf.Node,
 		OnRootFilled:      a.handleRootFilled,
 		OnFillingBreaks: func(r *registry.Root, reason error) {
 			a.log.WithError(reason).WithField("visor", cipher.PubKey(r.Pub)).
@@ -168,4 +181,20 @@ func (a *Aggregator) handleRootFilled(r *registry.Root) {
 		a.sink.IngestBindFromCXO(ctx, reporter, bl.t, la)
 		cancel()
 	}
+
+	if leaf, ok := cxoaggregate.LeafByName(pack, &rootNode, reachLeaf); ok && len(leaf) > 0 {
+		var d arfeed.ReachDecl
+		if err := json.Unmarshal(leaf, &d); err != nil {
+			a.log.WithError(err).WithField("visor", reporter).Debug(logTag + ": reach leaf decode failed")
+		} else {
+			a.sink.IngestReachFromCXO(reporter, d)
+		}
+	}
 }
+
+// Ingest applies a Root the host published itself, on the node it lent this
+// aggregator (see cxoaggregate.Core.Ingest).
+func (a *Aggregator) Ingest(r *registry.Root) { a.core.Ingest(r) }
+
+// Stats reports the aggregator's current state.
+func (a *Aggregator) Stats() cxoaggregate.Stats { return a.core.Stats() }

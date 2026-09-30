@@ -15,6 +15,7 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/sd/api"
 	sdmetrics "github.com/skycoin/skywire/pkg/deployment/sd/metrics"
@@ -54,6 +55,17 @@ func New(cfg *Config, log *logging.Logger) services.Service {
 type service struct {
 	cfg *Config
 	log *logging.Logger
+
+	// state, set by build and startCXO, is reported by State.
+	store, nonceStore string
+	cxo               services.CXOSet
+}
+
+// State implements services.Stater.
+func (s *service) State() services.State {
+	st := services.State{Store: s.store, NonceStore: s.nonceStore}
+	s.cxo.State(&st)
+	return st
 }
 
 // build connects redis, creates the store, the nonce store and the API,
@@ -63,44 +75,47 @@ type service struct {
 func (s *service) build(ctx context.Context, log *logging.Logger, dmsgAddr string, plainHTTP bool) (*api.API, error) {
 	cfg := s.cfg
 
-	metricsutil.ServePProf(log, cfg.PprofAddr, "service-discovery")
-
+	storeType := cfg.StoreType()
+	s.store = services.StoreKind(storeType)
 	redisURL := cfg.Redis
 	if redisURL == "" {
 		redisURL = "redis://localhost:6379"
 	}
-	redisPassword := storeconfig.RedisPassword()
-	opt, err := redis.ParseURL(redisURL)
-	if err != nil {
-		return nil, fmt.Errorf("service-discovery: parse redis URL: %w", err)
-	}
-	opt.Password = redisPassword
-
-	redisClient := redis.NewClient(opt)
-	if _, err := redisClient.Ping(ctx).Result(); err != nil {
-		return nil, fmt.Errorf("service-discovery: redis ping failed: %w", err)
-	}
-	log.Printf("Redis connected.")
-
-	db, err := store.NewStore(ctx, redisClient, log, cfg.EntryTimeout.Std())
-	if err != nil {
-		return nil, fmt.Errorf("service-discovery: init store: %w", err)
+	var db store.Store
+	if storeType == storeconfig.Memory {
+		db = store.NewMemoryStore(cfg.EntryTimeout.Std())
+		log.Info("Testing without a redis URL: service entries are kept in memory.")
+	} else {
+		opt, err := redis.ParseURL(redisURL)
+		if err != nil {
+			return nil, fmt.Errorf("service-discovery: parse redis URL: %w", err)
+		}
+		opt.Password = storeconfig.RedisPassword()
+		opt.PoolSize = cfg.PoolSize()
+		redisClient := redis.NewClient(opt)
+		if _, err := redisClient.Ping(ctx).Result(); err != nil {
+			return nil, fmt.Errorf("service-discovery: redis ping failed: %w", err)
+		}
+		log.Printf("Redis connected.")
+		if db, err = store.NewStore(ctx, redisClient, log, cfg.EntryTimeout.Std()); err != nil {
+			return nil, fmt.Errorf("service-discovery: init store: %w", err)
+		}
 	}
 	log.Printf("Service entry timeout: %v", cfg.EntryTimeout)
 
-	// Requests over dmsg are authenticated by the stream's key; only a
-	// plain-HTTP surface checks nonces, so only that needs them durable.
-	var nonceDB httpauth.NonceStore
-	if plainHTTP && !cfg.TestMode {
-		nonceStoreConfig := storeconfig.Config{
-			URL:      redisURL,
-			Type:     storeconfig.Redis,
-			Password: storeconfig.RedisPassword(),
-		}
-		nonceDB, err = httpauth.NewNonceStore(ctx, nonceStoreConfig, redisPrefix)
-		if err != nil {
-			return nil, fmt.Errorf("service-discovery: init nonce store: %w", err)
-		}
+	// Every service keeps a nonce store: without it the API serves no
+	// nonce route, so no client can register, and it skips the check that
+	// an entry's key is the caller's. See services.NonceStoreType.
+	nonceStoreConfig := storeconfig.Config{Type: services.NonceStoreType(storeType, plainHTTP)}
+	if nonceStoreConfig.Type == storeconfig.Redis {
+		nonceStoreConfig.URL = redisURL
+		nonceStoreConfig.Password = storeconfig.RedisPassword()
+		nonceStoreConfig.PoolSize = cfg.PoolSize()
+	}
+	s.nonceStore = services.StoreKind(nonceStoreConfig.Type)
+	nonceDB, err := httpauth.NewNonceStore(ctx, nonceStoreConfig, redisPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("service-discovery: init nonce store: %w", err)
 	}
 
 	metricsutil.ServeHTTPMetrics(log, cfg.MetricsAddr)
@@ -116,6 +131,9 @@ func (s *service) build(ctx context.Context, log *logging.Logger, dmsgAddr strin
 	geoipURL := cfg.GeoIP
 	if geoipURL == "" {
 		geoipURL = deployment.Prod.GeoIP
+		if cfg.TestEnvironment {
+			geoipURL = deployment.Test.GeoIP
+		}
 	}
 	sdAPI := api.New(log, db, nonceDB, enableMetrics, m, dmsgAddr, geoipURL)
 
@@ -130,31 +148,16 @@ func (s *service) build(ctx context.Context, log *logging.Logger, dmsgAddr strin
 	return sdAPI, nil
 }
 
-// startCXO brings up the services publisher and the registration
-// aggregator on dmsgC under sk. Best-effort; the returned close stops
-// the aggregator (the publisher stops with ctx).
-func (s *service) startCXO(ctx context.Context, dmsgC *dmsg.Client, sdAPI *api.API, sk cipher.SecKey, log *logging.Logger) func() {
+// startCXO brings up the services publisher and the SD-registration
+// aggregator (visors publish their live service entries as a CXO feed
+// instead of re-POSTing them over a fresh dmsg stream every 90 s), on dmsgC
+// under sk, until ctx ends. When embedded, host lends the visor's node for
+// the registration port. Each piece is best-effort.
+func (s *service) startCXO(ctx context.Context, dmsgC *dmsg.Client, host services.CXOHost, sdAPI *api.API, sk cipher.SecKey, log *logging.Logger) {
 	s.startServicesCXO(ctx, dmsgC, sdAPI, sk, log)
-
-	// SD-registration-over-CXO aggregator: always-on fan-in path where
-	// visors publish their live service-entry set as a CXO feed instead
-	// of re-POSTing it over a fresh dmsg stream (each a full Noise
-	// handshake) every 90s. Inert until visors subscribe (just a
-	// listener), purely additive to the authoritative HTTP register, so
-	// it needs no gate. The API is the Sink (IngestServiceFromCXO). The
-	// node identity is bound to the SD's service SecKey so gated visors
-	// accept its subscribe (see #4168). Best-effort — HTTP registration
-	// is unaffected if it fails to start.
-	agg, aerr := regcxo.New(dmsgC, sk, sdAPI, regcxo.Config{Logger: log})
-	if aerr != nil {
-		log.WithError(aerr).Error("Failed to start SD-registration-over-CXO aggregator, continuing without it")
-		return func() {}
-	}
-	agg.Run(ctx)
-	log.WithField("feed_pk", agg.FeedPK()).
-		WithField("port", skyenv.DmsgVisorSDRegCXOPort).
-		Info("SD-registration-over-CXO aggregator running")
-	return func() { _ = agg.Close() } //nolint:errcheck
+	s.cxo.StartAggregator(ctx, host, log, "sd-reg", skyenv.DmsgVisorSDRegCXOPort, func(n *node.Node) (services.Aggregator, error) {
+		return regcxo.New(dmsgC, sk, sdAPI, regcxo.Config{Node: n, Logger: log})
+	})
 }
 
 // Embed runs service-discovery inside a host process: the API is
@@ -164,25 +167,22 @@ func (s *service) startCXO(ctx context.Context, dmsgC *dmsg.Client, sdAPI *api.A
 func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, error) {
 	log := host.Log
 	if log == nil {
-		log = s.log
+		log = services.NewLogger(s.cfg.LogTag("service_discovery"), s.cfg.LogLevel)
 	}
 	sdAPI, err := s.build(ctx, log, host.DmsgAddr, false)
 	if err != nil {
 		return nil, err
 	}
 	if host.DmsgClient != nil {
-		closeCXO := s.startCXO(ctx, host.DmsgClient, sdAPI, host.SK, log)
-		go func() {
-			<-ctx.Done()
-			closeCXO()
-		}()
+		s.startCXO(ctx, host.DmsgClient, host.CXO, sdAPI, host.SK, log)
 	}
 	return sdAPI, nil
 }
 
 func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
-	log := s.log
+	log := services.NewLogger(cfg.LogTag("service_discovery"), cfg.LogLevel)
+	defer cfg.StartPprof(log)()
 
 	pk := cfg.PubKey
 	sk := cfg.SecKey
@@ -222,10 +222,7 @@ func (s *service) Run(ctx context.Context) error {
 		dmsgDiscDmsg = dmsg.DiscAddr(false)
 	}
 	embeddedServers := dmsgDiscEntries(cfg.Dmsg.Servers)
-	surveyWL := deployment.Prod.SurveyWhitelist
-	if len(cfg.SurveyWhitelist) > 0 {
-		surveyWL = cfg.SurveyWhitelist
-	}
+	surveyWL := cfg.SurveyKeys()
 
 	addr := cfg.Addr
 	if addr == "" {
@@ -253,8 +250,7 @@ func (s *service) Run(ctx context.Context) error {
 	defer h.Close()
 
 	if h.DmsgClient != nil {
-		closeCXO := s.startCXO(runCtx, h.DmsgClient, sdAPI, sk, log)
-		defer closeCXO()
+		s.startCXO(runCtx, h.DmsgClient, nil, sdAPI, sk, log)
 	}
 
 	select {
@@ -282,8 +278,8 @@ func (s *service) startServicesCXO(
 	log *logging.Logger,
 ) {
 	pub, perr := api.StartServicesCXOPublisher(ctx, dmsgC, sk, log)
+	s.cxo.AddPublisher(ctx, log, "services", skyenv.DmsgSDServicesCXOPort, pub, perr)
 	if perr != nil {
-		log.WithError(perr).Error("Failed to start CXO services publisher, continuing without it")
 		return
 	}
 	sdAPI.SetServicesCXOPublisher(pub)
@@ -309,11 +305,15 @@ func (s *service) startServicesCXO(
 		for {
 			select {
 			case <-ctx.Done():
-				pub.Close() //nolint:errcheck,gosec
 				return
 			case <-t.C:
 				sdAPI.WarmCXOFromStore(ctx)
 			}
 		}
 	}()
+}
+
+// AggregatorPorts implements services.CXOAggregating.
+func (s *service) AggregatorPorts() []uint16 {
+	return []uint16{skyenv.DmsgVisorSDRegCXOPort}
 }

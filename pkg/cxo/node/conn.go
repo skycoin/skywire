@@ -188,7 +188,25 @@ func (c *Conn) run() {
 const (
 	idleWatchdogThreshold = 90 * time.Second
 	idleWatchdogInterval  = 30 * time.Second
+	// idleProbeAfter is the inbound silence after which the reaper probes a
+	// conn instead of waiting for it to talk (see Conn.probe).
+	idleProbeAfter = idleWatchdogInterval
 )
+
+// probe asks the peer for its feed list without waiting for the answer. Every
+// node, old or new, answers a list request (with the list, or an error when
+// it is not public) and ignores an answer nobody is waiting for as a delayed
+// response. So a probe from either end refreshes the idle clock on both ends,
+// and a conn whose transport is dead gets no answer and is still reaped.
+// Never blocks: a full send queue means the conn is already in trouble.
+func (c *Conn) probe() {
+	f := c.encodeMsg(c.nextSeq(), 0, &msg.RqList{})
+	select {
+	case <-c.closeq:
+	case c.sendq <- f:
+	default:
+	}
+}
 
 // The idle-connection watchdog now lives at the Node level as the
 // single shared Node.connReaper goroutine (node.go); the per-Conn
@@ -249,6 +267,14 @@ func (c *Conn) Address() (address string) {
 // share with peer
 func (c *Conn) Feeds() (feeds []cipher.PubKey) {
 	return c.n.fs.feedsOfConnection(c)
+}
+
+// HasFeed reports whether this connection is subscribed to feed. Unlike
+// Feeds, which walks every feed of the node, it is two map lookups on the
+// node's feeds loop, so it is the one to ask per connection on a node
+// holding thousands of feeds.
+func (c *Conn) HasFeed(feed cipher.PubKey) bool {
+	return c.n.fs.hasConnFeed(c, feed)
 }
 
 func connString(isIncoming, isTCP bool, addr string) (s string) {
@@ -374,9 +400,22 @@ func (c *Conn) Subscribe(feed cipher.PubKey) (err error) {
 		return err
 	}
 
+	// Register the conn for the feed BEFORE asking. The publisher answers
+	// Ok and pushes its last Root straight after it (handleSub); that Root
+	// can be read before sendRequest returns, and a Root from a conn not yet
+	// registered is stored but never filled — the subscriber then sat idle
+	// until the publisher's next heartbeat (45 s) or next change.
+	// A refused or failed request takes the registration back, unless the
+	// conn was already subscribed (a re-subscribe must not drop it).
+	had := c.n.fs.hasConnFeed(c, feed)
+	c.n.fs.addConnFeed(c, feed)
+
 	var reply msg.Msg
 
 	if reply, err = c.sendRequest(&msg.Sub{Feed: feed}); err != nil {
+		if !had {
+			c.n.fs.delConnFeed(c, feed)
+		}
 		return err
 	}
 
@@ -394,10 +433,12 @@ func (c *Conn) Subscribe(feed cipher.PubKey) (err error) {
 	}
 
 	if err != nil {
+		if !had {
+			c.n.fs.delConnFeed(c, feed)
+		}
 		return err
 	}
 
-	c.n.fs.addConnFeed(c, feed)
 	c.sendLastRoot(feed)
 	return err
 }

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/http/pprof"
 	"strings"
 	"time"
 
@@ -25,14 +24,7 @@ const DefaultDebugPort = uint16(81)
 // output from an in-memory ring buffer (no disk file, no -s flag).
 func DebugMux(logSource func() []byte) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	for _, p := range []string{"heap", "goroutine", "threadcreate", "block", "mutex", "allocs"} {
-		mux.Handle("/debug/pprof/"+p, pprof.Handler(p))
-	}
+	registerPprof(mux)
 	if logSource != nil {
 		mux.HandleFunc("/debug/log", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
