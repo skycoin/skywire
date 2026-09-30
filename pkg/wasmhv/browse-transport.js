@@ -59,13 +59,29 @@
     return 'http://' + descriptor.host + path;
   }
 
+  // siteHost is the host the frame stands for; sameSite says whether a request
+  // goes to it (or a subdomain, either way round). The page's cookies live on
+  // the frame's one origin, so they travel only to its own site — never to a
+  // third party the page also fetches from.
+  function siteHost(descriptor) {
+    try { return descriptor.net === 'skysocks' ? new URL(descriptor.base).hostname : String(descriptor.host || ''); } catch (e) { return ''; }
+  }
+  function sameSite(descriptor, url) {
+    var a = siteHost(descriptor).toLowerCase().replace(/^www\./, ''), b;
+    try { b = new URL(url).hostname.toLowerCase().replace(/^www\./, ''); } catch (e) { return false; }
+    return !!a && (a === b || b.endsWith('.' + a) || a.endsWith('.' + b));
+  }
+
   function fetchFor(descriptor, req) {
     var t = globalThis.__netscrapeFetch;
     if (typeof t !== 'function') { return Promise.reject(new Error('no mesh transport on this page')); }
     var target = urlFor(descriptor, req);
+    var own = sameSite(descriptor, target);
+    var headers = Object.assign({}, req.headers || {});
+    if (!own) { delete headers['x-realorigin-cookie']; }
     return Promise.resolve(t(target, {
       method: req.method || 'GET',
-      headers: req.headers || {},
+      headers: headers,
       // bottle's httpExchange wants a Uint8Array (it sets Content-Length from
       // .length); realorigin hands over an ArrayBuffer.
       body: req.body ? new Uint8Array(req.body) : null,
@@ -77,6 +93,7 @@
       var h = headersOf(res);
       h['x-realorigin-url'] = h['x-browse-final-url'] || target;
       delete h['x-browse-final-url'];
+      if (!own) { delete h['x-realorigin-set-cookie']; }
       // The body stays a stream: the responder transfers it to the frame and
       // the service worker answers with it, so a large download is never
       // held whole.
