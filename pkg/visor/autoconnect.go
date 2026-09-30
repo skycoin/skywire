@@ -238,15 +238,14 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				countSTCPR += phase1.Count
 				connectedPublicVisors = phase1.Connected
 			} else {
-				// No stcpr locally (a browser visor): pick public visors for the
-				// later phases. Three candidates per slot: the WT/WS phases keep
-				// their budget of maxPublicVisors but spend it on distinct hosts
-				// (visorcore.ConnectToVisors), and public visors are often several
-				// to a machine, so exactly maxPublicVisors picks could not fill it.
+				// No stcpr locally (a browser visor): every public visor it has no
+				// transport to is a candidate for the WT/WS phases, which dial them in
+				// reach-verdict order and explore at most reachExplorePerCycle
+				// untested ones. A random handful used to be picked instead: with
+				// swtr open on ~24 public visors and closed on ~800 (2026-09-30),
+				// most picks could not be reached and the tab held one or two
+				// transports, so losing one took its proxy down.
 				for _, pk := range visorcore.ShufflePubKeys(absent1) {
-					if len(connectedPublicVisors) >= 3*maxPublicVisors {
-						break
-					}
 					if pk != v.conf.PK {
 						connectedPublicVisors = append(connectedPublicVisors, pk)
 					}
@@ -324,7 +323,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				if len(wtwsTargets) > 0 && localSupportsWT {
 					a.log.Debug("Phase 3b: Connecting to direct-unreachable public visors via WT (swtr)")
 					phaseWT, err := a.connectByReach(ctx, v.conf.PK, wtwsTargets, tptypes.WT,
-						existingByPK, reach, selfNAT, maxPublicVisors, countSWTR, 0, false)
+						existingByPK, reach, selfNAT, maxPublicVisors, countSWTR, reachExplorePerCycle, false)
 					if err != nil {
 						return err
 					}
@@ -343,7 +342,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					if len(wsTargets) > 0 {
 						a.log.Debug("Phase 3c: Connecting to direct-unreachable public visors via WS (swsr)")
 						phaseWS, err := a.connectByReach(ctx, v.conf.PK, wsTargets, tptypes.WS,
-							existingByPK, reach, selfNAT, maxPublicVisors, countSWSR, 0, false)
+							existingByPK, reach, selfNAT, maxPublicVisors, countSWSR, reachExplorePerCycle, false)
 						if err != nil {
 							return err
 						}
