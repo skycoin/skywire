@@ -64,14 +64,21 @@ func (t *reconcileThrottle) setRefreshGap(d time.Duration) {
 	t.refreshGap = d
 }
 
-// entryFingerprint covers everything the store persists for a transport.
+// entryFingerprint covers what identifies a transport: its edges and type.
+//
+// Not the label. Each edge labels a transport for itself — the dialer
+// "automatic" (autoconnect) or "user", the acceptor always "user" — so the
+// two edges' snapshots disagree on it for nearly every transport. With the
+// label in the fingerprint every snapshot from one edge looked like a change
+// to the other's, and the transport was re-registered (9 redis commands) on
+// each report instead of once per refreshGap: ~2k registrations a second on
+// prod01 (2026-09-30). Which edge's label the store keeps was already
+// last-writer-wins.
 func entryFingerprint(e *transport.Entry) uint64 {
 	h := fnv.New64a()
-	h.Write(e.Edges[0][:])   //nolint:errcheck,gosec
-	h.Write(e.Edges[1][:])   //nolint:errcheck,gosec
-	h.Write([]byte(e.Type))  //nolint:errcheck,gosec
-	h.Write([]byte{0})       //nolint:errcheck,gosec
-	h.Write([]byte(e.Label)) //nolint:errcheck,gosec
+	h.Write(e.Edges[0][:])  //nolint:errcheck,gosec
+	h.Write(e.Edges[1][:])  //nolint:errcheck,gosec
+	h.Write([]byte(e.Type)) //nolint:errcheck,gosec
 	return h.Sum64()
 }
 
