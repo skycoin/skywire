@@ -25,8 +25,9 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 )
 
-// heartbeatEvery is the uptime heartbeat cadence per transport: the ~90 s
-// store.expectedHeartbeatsPerDay divides by.
+// heartbeatEvery paces the uptime heartbeats one transport's telemetry
+// triggers. Well under the 5-minute timeline slot, so no slot is missed; the
+// store writes one heartbeat per slot whatever the rate.
 const heartbeatEvery = 90 * time.Second
 
 // telemetryStateSweepAfter bounds the memory the dedup state holds: entries
