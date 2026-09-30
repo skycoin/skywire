@@ -90,10 +90,19 @@ func (s *redisStore) UpdateBandwidth(ctx context.Context, transportID string,
 		s.netDailyKey(date),
 		s.netDailySinceKey(),
 	}
-	return bandwidthScript.Run(ctx, s.client, keys,
+	moved, err := bandwidthScript.Run(ctx, s.client, keys,
 		reporterHex, currentSent, currentRecv, now.Unix(), typeOrUnknown(tpType),
 		int64((10*time.Minute)/time.Second), historyTTLSeconds, int64((400*24*time.Hour)/time.Second), date,
-	).Err()
+	).Int()
+	if err != nil {
+		return err
+	}
+	if moved == 1 {
+		if id, perr := uuid.Parse(transportID); perr == nil {
+			s.today.markDirty(id)
+		}
+	}
+	return nil
 }
 
 // UpdateLatency stores the most recent latency snapshot for a transport
@@ -145,6 +154,7 @@ func (s *redisStore) UpdateLatency(ctx context.Context, transportID string, minM
 	if err := s.client.Set(ctx, s.latencyKey(id), string(raw), latencyTTL).Err(); err != nil {
 		return err
 	}
+	s.today.markDirty(id)
 	date := time.Now().UTC().Format(MetricsDateFormat)
 	return latencyScript.Run(ctx, s.client,
 		[]string{s.netLatencyKey(date), s.netDailyKey(date)},
