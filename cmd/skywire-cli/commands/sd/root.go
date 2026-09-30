@@ -20,6 +20,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // isTestEnv checks if test environment is enabled via SKYWIRETEST env var
@@ -141,7 +142,7 @@ Combines data from:
 - Uptime Tracker: online/offline status (color-coded rows)
 
 Shows public keys with their advertised services and transport counts by
-type (stcpr/sudph/dmsg/stcp). Filter with --country, --version, --min
+type (stcpr/squicr/sudph/stcp/webrtc/swsr/swtr/dmsg). Filter with --country, --version, --min
 (minimum transport count); --noton keeps offline/not-in-UT visors. --json
 emits the combined rows as machine-readable output.
 
@@ -290,32 +291,19 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 		var tpEntries []tpEntry
 		json.Unmarshal([]byte(tpdData), &tpEntries) //nolint:errcheck,gosec
 
-		// Count transports per key by type
-		type transportCounts struct {
-			STCPR int
-			SUDPH int
-			DMSG  int
-			STCP  int
-			Total int
-		}
+		// Count transports per key by type. Every known type gets a column
+		// (tptypes.Known), so a new type cannot hide inside the total again.
 		tpCountMap := make(map[string]*transportCounts)
+		other := false
 
 		for _, tp := range tpEntries {
 			for _, edge := range tp.Edges {
 				if tpCountMap[edge] == nil {
 					tpCountMap[edge] = &transportCounts{}
 				}
-				switch tp.Type {
-				case "stcpr":
-					tpCountMap[edge].STCPR++
-				case "sudph":
-					tpCountMap[edge].SUDPH++
-				case "dmsg":
-					tpCountMap[edge].DMSG++
-				case "stcp":
-					tpCountMap[edge].STCP++
+				if !tpCountMap[edge].add(tptypes.Type(tp.Type)) {
+					other = true
 				}
-				tpCountMap[edge].Total++
 			}
 		}
 
@@ -325,11 +313,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			Country  string `json:"country,omitempty"`
 			Version  string `json:"version,omitempty"`
 			Services string `json:"services,omitempty"`
-			STCPR    int    `json:"stcpr"`
-			SUDPH    int    `json:"sudph"`
-			DMSG     int    `json:"dmsg"`
-			STCP     int    `json:"stcp"`
-			Total    int    `json:"total"`
+			transportCounts
 			UTStatus string `json:"ut_status,omitempty"` // "online", "offline", or "" (not in UT)
 		}
 
@@ -360,16 +344,12 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			}
 
 			entries = append(entries, networkEntry{
-				PK:       displayPK,
-				Country:  info.Country,
-				Version:  info.Version,
-				Services: services,
-				STCPR:    counts.STCPR,
-				SUDPH:    counts.SUDPH,
-				DMSG:     counts.DMSG,
-				STCP:     counts.STCP,
-				Total:    counts.Total,
-				UTStatus: utStatus[pk],
+				PK:              displayPK,
+				Country:         info.Country,
+				Version:         info.Version,
+				Services:        services,
+				transportCounts: *counts,
+				UTStatus:        utStatus[pk],
 			})
 		}
 
@@ -390,13 +370,9 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			}
 
 			entries = append(entries, networkEntry{
-				PK:       pk,
-				STCPR:    counts.STCPR,
-				SUDPH:    counts.SUDPH,
-				DMSG:     counts.DMSG,
-				STCP:     counts.STCP,
-				Total:    counts.Total,
-				UTStatus: utStatus[pk],
+				PK:              pk,
+				transportCounts: *counts,
+				UTStatus:        utStatus[pk],
 			})
 		}
 
@@ -422,12 +398,11 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 		w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
 
 		// Write all entries to tabwriter first
-		fmt.Fprintln(w, "pk\tcountry\tversion\tservices\tstcpr\tsudph\tdmsg\tstcp\ttotal") //nolint:errcheck,gosec
+		fmt.Fprintln(w, "pk\tcountry\tversion\tservices\t"+transportColumns(other)+"\ttotal") //nolint:errcheck,gosec
 
 		for _, e := range entries {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%d\t%d\t%d\t%d\n", //nolint:errcheck,gosec
-				e.PK, e.Country, e.Version, e.Services,
-				e.STCPR, e.SUDPH, e.DMSG, e.STCP, e.Total)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%d\n", //nolint:errcheck,gosec
+				e.PK, e.Country, e.Version, e.Services, e.row(other), e.Total)
 		}
 
 		w.Flush() //nolint:errcheck,gosec
@@ -453,12 +428,12 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			}
 
 			e := entries[entryIdx]
-			realTransports := e.STCPR + e.SUDPH // Only count stcpr and sudph, not dmsg
+			realTransports := e.direct() // every direct type; dmsg is a relay
 
 			// Color coding:
 			// - Red text: offline visors
 			// - White text on red background: visors not in UT
-			// - Black text on red background: online but fewer than 2 stcpr+sudph transports
+			// - Black text on red background: online but fewer than 2 direct transports
 			switch {
 			case e.UTStatus == "":
 				// Not in UT: white text on red background
