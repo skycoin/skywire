@@ -91,3 +91,49 @@ func TestLiveSetTouchKeeps(t *testing.T) {
 	require.Empty(t, l.sweep(t0.Add(90*time.Second)))
 	require.Len(t, l.sweep(t0.Add(111*time.Second)), 1)
 }
+
+// The by-edge reads follow the set: either edge finds a transport, and a
+// delete, a changed edge pair or a lapse drops it from the old edges.
+func TestLiveSetByEdge(t *testing.T) {
+	a, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	c, _ := cipher.GenerateKeyPair()
+	now := time.Now()
+	l := &liveSet{on: true, ttl: time.Minute,
+		tps:  map[uuid.UUID]*liveTransport{},
+		edge: map[cipher.PubKey]map[uuid.UUID]struct{}{},
+		lat:  map[uuid.UUID]liveValue{}, tput: map[uuid.UUID]liveValue{}}
+	ab := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "stcpr"}
+	bc := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(b, c), Type: "sudph"}
+	l.put([]*transport.Entry{ab, bc}, now)
+	l.setLatency(ab.ID, 7, now)
+
+	ids := func(pk cipher.PubKey, qos bool) map[uuid.UUID]float64 {
+		es, ok := l.byEdge(pk, qos, now)
+		require.True(t, ok)
+		m := map[uuid.UUID]float64{}
+		for _, e := range es {
+			m[e.ID] = e.Latency
+		}
+		return m
+	}
+	require.Equal(t, map[uuid.UUID]float64{ab.ID: 0, bc.ID: 0}, ids(b, false))
+	require.Equal(t, map[uuid.UUID]float64{ab.ID: 7}, ids(a, true))
+
+	// The same ID re-registered between other edges leaves a.
+	moved := *ab
+	moved.Edges = transport.SortEdges(b, c)
+	l.put([]*transport.Entry{&moved}, now)
+	require.Empty(t, ids(a, false))
+	require.Len(t, ids(c, false), 2)
+
+	l.del(bc.ID)
+	require.Equal(t, map[uuid.UUID]float64{ab.ID: 0}, ids(c, false))
+
+	l.sweep(now.Add(2 * time.Minute))
+	require.Empty(t, ids(b, false))
+	require.Empty(t, l.edge, "the index empties with the set")
+
+	_, ok := (&liveSet{}).byEdge(a, false, now)
+	require.False(t, ok, "off: callers read redis")
+}
