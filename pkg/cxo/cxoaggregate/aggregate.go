@@ -334,6 +334,17 @@ func (c *Core) Container() *skyobject.Container { return c.cxoNode.Container() }
 // construction the service PK derived from the SecKey given to New.
 func (c *Core) FeedPK() cipher.PubKey { return cipher.PubKey(c.cxoNode.ID()) }
 
+// SubscribeConn subscribes to conn's peer feed now, unless it already is.
+// For a caller that has just connected one visor: a full reconcile asks every
+// connection whether it is subscribed, one round trip each through the node's
+// feeds loop, and running one per dial-back cost TPD ~4% of its CPU there.
+// Safe from any goroutine.
+func (c *Core) SubscribeConn(conn *node.Conn) {
+	if conn != nil {
+		c.subscribe(conn)
+	}
+}
+
 // Nudge requests an out-of-band reconcile. Non-blocking and coalescing;
 // safe to call from any goroutine.
 func (c *Core) Nudge() {
