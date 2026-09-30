@@ -73,3 +73,34 @@ func browseJar() http.CookieJar {
 	}
 	return browseShared.jar
 }
+
+// browsePageCookieHeader carries the cookies the page itself holds (set
+// through document.cookie, or mirrored there from an earlier response): the
+// frame's service worker reads them from its cookie store, since a browser
+// never shows a service worker the Cookie header.
+const browsePageCookieHeader = "X-Realorigin-Cookie"
+
+// applyPageCookies turns the page's cookies into the request's Cookie header,
+// leaving out any the jar will add itself, so a cookie is never sent twice.
+func applyPageCookies(req *http.Request, jar http.CookieJar) {
+	raw := req.Header.Get(browsePageCookieHeader)
+	req.Header.Del(browsePageCookieHeader)
+	if raw == "" {
+		return
+	}
+	have := map[string]bool{}
+	if jar != nil {
+		for _, c := range jar.Cookies(req.URL) {
+			have[c.Name] = true
+		}
+	}
+	page, err := http.ParseCookie(raw)
+	if err != nil {
+		return
+	}
+	for _, c := range page {
+		if !have[c.Name] {
+			req.AddCookie(c)
+		}
+	}
+}

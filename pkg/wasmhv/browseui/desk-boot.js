@@ -616,14 +616,18 @@
 								if (end < 0) return readHead();
 								var lines = new TextDecoder().decode(buf.subarray(0, end - 4)).split('\r\n');
 								var status = parseInt((lines[0].split(' ')[1]) || '502', 10) || 502;
-								var h = new Headers(), toEOF = false, length = -1;
+								var h = new Headers(), toEOF = false, length = -1, setCookies = [];
 								lines.slice(1).forEach(function (l) {
 									var c = l.indexOf(':'); if (c < 0) return;
 									var k = l.slice(0, c).trim(), val = l.slice(c + 1).trim(), lk = k.toLowerCase();
 									if (lk === 'connection') { toEOF = /close/i.test(val); return; }
 									if (lk === 'content-length') { length = parseInt(val, 10); }
+									// A Response drops Set-Cookie; carry them for the frame to
+									// mirror into its own cookie store (realorigin sw.js).
+									if (lk === 'set-cookie') { setCookies.push(val); return; }
 									try { h.append(k, val); } catch (e) { /* forbidden name */ }
 								});
+								if (setCookies.length) h.set('x-realorigin-set-cookie', JSON.stringify(setCookies));
 								var first = buf.subarray(end), left = toEOF ? -1 : Math.max(length, 0) - first.length;
 								var body = new ReadableStream({
 									start: function (c) {

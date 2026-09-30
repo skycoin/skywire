@@ -300,6 +300,34 @@
     });
   }
 
+  // --- cookies -------------------------------------------------------------
+  // A browser never shows the service worker the Cookie header and drops
+  // Set-Cookie from a Response it builds; this page is the one place that sees
+  // the frame's cookies (the worker's own store is partitioned apart). So every
+  // request it relays carries document.cookie as x-realorigin-cookie, and an
+  // embedder that returns a response's Set-Cookie values in
+  // x-realorigin-set-cookie (a JSON array) has the non-HttpOnly ones set here,
+  // where the page's scripts see them. HttpOnly cookies stay with the embedder.
+  function withPageCookies(headers) {
+    var h = {};
+    for (var k in (headers || {})) { h[k] = headers[k]; }
+    if (document.cookie) { h['x-realorigin-cookie'] = document.cookie; }
+    return h;
+  }
+  function keepSetCookies(res) {
+    var sc = res && res.headers && res.headers['x-realorigin-set-cookie'];
+    if (!sc) { return; }
+    try { delete res.headers['x-realorigin-set-cookie']; } catch (e) { /* frozen */ }
+    try {
+      JSON.parse(sc).forEach(function (c) {
+        var parts = String(c).split(';').map(function (p) { return p.trim(); });
+        if (parts.some(function (p) { return /^httponly$/i.test(p); })) { return; }
+        var keep = parts.filter(function (p) { return !/^(domain|secure|samesite|partitioned)(=|$)/i.test(p); });
+        document.cookie = keep.join('; ') + '; Secure; SameSite=None; Partitioned';
+      });
+    } catch (e) { /* the response still arrives without them */ }
+  }
+
   // --- SW registration + relay ---------------------------------------------
   // The SW (browse-sw.js) posts {type:'realorigin-fetch'} with a MessageChannel port
   // for each subresource; we relay to the helper and reply on that port.
@@ -311,8 +339,9 @@
       var replyPort = e.ports[0];
       var r = d.req || {};
       var transfer = r.body ? [r.body] : [];
-      helperFetch({ url: r.url, method: r.method, headers: r.headers, body: r.body }, transfer)
+      helperFetch({ url: r.url, method: r.method, headers: withPageCookies(r.headers), body: r.body }, transfer)
         .then(function (res) {
+          keepSetCookies(res);
           var t = res.body ? [res.body] : [];
           replyPort.postMessage(res, t);
         })
@@ -360,7 +389,7 @@
   ]).then(function () {
     window.__mb.step = 'fetching-top';
     var path = location.pathname + location.search;
-    return helperFetch({ url: location.href, method: 'GET', headers: {}, body: null, path: path });
+    return helperFetch({ url: location.href, method: 'GET', headers: withPageCookies({}), body: null, path: path });
   }).then(function (res) {
     // A streamed body (a ReadableStream) is read whole here: this is the
     // document itself, written with document.write below.
@@ -395,6 +424,7 @@
         'font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}</style>' +
         '<pre>' + escd + '</pre>';
     }
+    keepSetCookies(res);
     // A page here is always framed (window.top is the app), and some sites
     // refuse to run embedded unless their own site sent them — windy.com
     // throws "Unlegal embed" when document.referrer is not on windy.com.
