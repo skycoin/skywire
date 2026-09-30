@@ -1,7 +1,9 @@
-//go:build darwin
-// +build darwin
+//go:build darwin && !ios
 
 // Package netutil pkg/netutil/net_darwin.go c0-com-util
+//
+// macOS only: GOOS=ios satisfies the darwin constraint too, and iOS has no
+// shell to run route(8) with (net_ios.go).
 package netutil
 
 import (

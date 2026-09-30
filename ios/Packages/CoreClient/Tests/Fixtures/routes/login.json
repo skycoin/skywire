@@ -1,0 +1,10 @@
+{
+  "body": "true\n",
+  "headers": {
+    "content-type": "application/json",
+    "set-cookie": "swm-session=MTc5MDcxOTY1MnxVUlFKak9vSGt1ekFXZmU5Um10SVhwY0VsWnRJU0Q0YkZ5dC1BZG1qX25vNmhxek1tTDNPLUg1NzdCM3doQVRWSk1fMk9Fd1h8p2nhy8ZDuNMdT6QeTIWtmFlZ4Vd2HIgwU56nh5HG85M=; Path=/; Expires=Wed, 30 Sep 2026 10:07:32 GMT; HttpOnly"
+  },
+  "method": "POST",
+  "path": "/api/login",
+  "status": 200
+}

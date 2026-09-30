@@ -1,0 +1,9 @@
+{
+  "body": "{\"entries\":null,\"latest\":38,\"dropped\":0}\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "GET",
+  "path": "/api/visors/0357910e5680bad3fedb1d9c9a9a8f273f2f4ad080f0179fdd27999667887a74dd/runtime-logs?since=1000038",
+  "status": 200
+}

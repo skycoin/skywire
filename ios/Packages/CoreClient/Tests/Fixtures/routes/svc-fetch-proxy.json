@@ -1,0 +1,9 @@
+{
+  "body": "[{\"address\": \"038323c4ccc351079bccd6c512b58e059a6f7fd0004a45a4db6e0cd2c63e516bb6:3\", \"type\": \"skysocks\", \"geo\": {\"lat\": -6.9202, \"lon\": 107.6084, \"country\": \"ID\", \"region\": \"JB\"}, \"version\": \"v1.3.96\"}, {\"address\": \"03096e8f548ed2d8e9eeed4b4b2b5f34ff005eb9e7c8a80b6cd1b083e3502df9b9:3\", \"type\": \"skysocks\", \"geo\": {\"lat\": -34.9055, \"lon\": -56.1944, \"country\": \"UY\", \"region\": \"MO\"}, \"version\": \"v1.3.97\"}, {\"address\": \"025e44d02d1536b9d06b3a4f5d2e2579061c77ae1e05b18cf2dc743e7267d6def0:3\", \"type\": \"skysocks\", \"geo\": {\"lat\": 37.751, \"lon\": -97.822, \"country\": \"US\"}, \"version\": \"v1.3.97\"}, {\"address\": \"021f9ac4138483aea20e934f2e1f355cc65bdc812e6fe2b526adac2da399503725:3\", \"type\": \"skysocks\", \"geo\": {\"lat\": -33.8069, \"lon\": 150.9845, \"country\": \"AU\", \"region\": \"NSW\"}, \"version\": \"v1.3.97\"}, {\"address\": \"03e2f20ef4bd83537838fcf18f8e36d9cba37f7f18775a3bfb3495fb56c8b9a1b8:3\", \"type\": \"skysocks\", \"geo\": {\"lat\": -6.175, \"lon\": 106.8286, \"country\": \"ID\"}, \"version\": \"v1.3.97\"}]\n",
+  "headers": {
+    "content-type": "application/octet-stream"
+  },
+  "method": "GET",
+  "path": "/api/svc-fetch?service=sd&path=%2Fapi%2Fservices%3Ftype%3Dproxy",
+  "status": 200
+}

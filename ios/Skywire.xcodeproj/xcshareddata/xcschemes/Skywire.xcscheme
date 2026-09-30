@@ -30,7 +30,7 @@
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
       <Testables>
-         <!-- Serial, never parallel: every test starts a core that binds
+         <!-- Serial, never parallel: CoreBridgeTests start a core that binds
               127.0.0.1:8000, and parallel testing would run several test
               processes against the one loopback the Simulators share. -->
          <TestableReference
@@ -41,6 +41,19 @@
                BlueprintIdentifier = "5E1A00000000000000000011"
                BuildableName = "SkywireTests.xctest"
                BlueprintName = "SkywireTests"
+               ReferencedContainer = "container:Skywire.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <!-- Hosted by Skywire.app, for what needs the app's entitlements
+              (the Keychain). The app starts no core under XCTest. -->
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "5E1A00000000000000000042"
+               BuildableName = "SkywireAppTests.xctest"
+               BlueprintName = "SkywireAppTests"
                ReferencedContainer = "container:Skywire.xcodeproj">
             </BuildableReference>
          </TestableReference>

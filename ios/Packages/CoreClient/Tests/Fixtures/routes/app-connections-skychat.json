@@ -1,0 +1,9 @@
+{
+  "body": "[{\"is_alive\":false,\"latency\":0,\"upload_speed\":0,\"download_speed\":0,\"bandwidth_sent\":0,\"bandwidth_received\":0,\"error\":\"\"},{\"is_alive\":false,\"latency\":0,\"upload_speed\":0,\"download_speed\":0,\"bandwidth_sent\":0,\"bandwidth_received\":0,\"error\":\"\"},{\"is_alive\":false,\"latency\":0,\"upload_speed\":0,\"download_speed\":0,\"bandwidth_sent\":0,\"bandwidth_received\":0,\"error\":\"\"},{\"is_alive\":false,\"latency\":0,\"upload_speed\":0,\"download_speed\":0,\"bandwidth_sent\":0,\"bandwidth_received\":0,\"error\":\"\"}]\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "GET",
+  "path": "/api/visors/0357910e5680bad3fedb1d9c9a9a8f273f2f4ad080f0179fdd27999667887a74dd/apps/skychat/connections",
+  "status": 200
+}
