@@ -1062,6 +1062,10 @@ func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter c
 	unchanged := a.tel.unchanged(reporter, shard, sum, now)
 	ctx, cancel := context.WithTimeout(context.Background(), telemetryShardTimeout)
 	defer cancel()
+	var (
+		due   []heldSnap
+		beats []beatItem
+	)
 	for i := range entries {
 		if ctx.Err() != nil {
 			// Every remaining write would fail at once; say so once.
@@ -1075,18 +1079,29 @@ func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter c
 		if telemetrywire.ShardOf(e.ID) != shard {
 			continue
 		}
+		tpType := telemetrywire.CodeToType(e.Type)
+		if a.beatWanted(e.ID, tpType, now) {
+			// A changed row is dated by its sample time; an unchanged one by
+			// now, since the Root only proves the transport is up now.
+			at := now
+			if !unchanged && e.SampledAtUnix > 0 {
+				at = time.Unix(int64(e.SampledAtUnix), 0).UTC()
+			}
+			beats = append(beats, beatItem{id: e.ID, tpType: tpType, at: at})
+		}
 		if unchanged {
-			// Already applied; the Root only proves the transport is up now.
-			a.heartbeat(ctx, e.ID, telemetrywire.CodeToType(e.Type), now)
-			continue
+			continue // already applied; the Root only proves the transport is up now
 		}
-		var at time.Time
-		if e.SampledAtUnix > 0 {
-			at = time.Unix(int64(e.SampledAtUnix), 0).UTC()
+		k := telKey{id: e.ID, reporter: reporter}
+		snap := telSnap{sent: e.SentBytes, recv: e.RecvBytes, throughput: float64(e.ThroughputBps),
+			latMin: float64(e.LatMin), latMax: float64(e.LatMax), latAvg: float64(e.LatAvg), tpType: tpType}
+		if s, ok := a.pace.offer(k, snap, now); ok {
+			due = append(due, heldSnap{k: k, s: s})
 		}
-		a.applyTelemetry(ctx, e.ID, reporter, e.SentBytes, e.RecvBytes, float64(e.ThroughputBps),
-			float64(e.LatMin), float64(e.LatMax), float64(e.LatAvg), telemetrywire.CodeToType(e.Type), at)
 	}
+	// One batch each for the shard's due snapshots and heartbeats.
+	a.applyDue(ctx, due)
+	a.recordBeats(ctx, beats)
 	if !unchanged {
 		a.tel.applied(reporter, shard, sum, now)
 	}
