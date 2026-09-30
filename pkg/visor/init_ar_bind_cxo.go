@@ -109,6 +109,10 @@ func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 	lastAnnounceOK := new(atomic.Int64)
 	go runARBindAnnounceLoop(v.ctx, pub, arPK, lastAnnounceOK, log)
 
+	// Alongside the bindings, the visor states what only it can know about
+	// reaching it: NAT class, types served, inbound accepts (ar_reach_decl.go).
+	go runReachDeclLoop(v.ctx, v, pub, log)
+
 	// While the AR is subscribed and answering, its ingest of the heartbeat
 	// Roots keeps the bindings alive, so unchanged re-binds skip HTTP.
 	bp.SetCXOKeepaliveHealthyFunc(cxoKeepaliveHealthy(pub, arPK, lastAnnounceOK, log))

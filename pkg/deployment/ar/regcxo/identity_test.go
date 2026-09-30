@@ -19,6 +19,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoaggregate"
+	"github.com/skycoin/skywire/pkg/deployment/ar/arfeed"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgtest"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -30,6 +31,8 @@ type nopSink struct{}
 
 func (nopSink) IngestBindFromCXO(_ context.Context, _ cipher.PubKey, _ types.Type, _ addrresolver.LocalAddresses) {
 }
+
+func (nopSink) IngestReachFromCXO(_ cipher.PubKey, _ arfeed.ReachDecl) {}
 
 // TestAggregatorPresentsServiceIdentity: the aggregator's CXO node must
 // advertise the AR's own PK on every handshake.

@@ -137,6 +137,13 @@ const (
 	// collision-free, which ports_test guards.
 	DmsgARBindingsCXOPort uint16 = 74
 
+	// DmsgARReachCXOPort is the dmsg port the Address Resolver's REACH
+	// publisher listens on: per peer, whether it can actually be transported by
+	// each type (see pkg/deployment/ar/arfeed/reach.go). Its own port because
+	// a CXO subscriber downloads the whole feed: autoconnect wants this small
+	// summary, not every binding's addresses.
+	DmsgARReachCXOPort uint16 = 76
+
 	// DmsgDMSGDRegistrationCXOPort is the dmsg port the dmsg-discovery's CXO
 	// client-entry REGISTRATION aggregator binds (and each visor's entry
 	// publisher binds for the reverse subscribe). A visor publishes its own

@@ -88,6 +88,9 @@ type Manager struct {
 	// lastCloses is the last close event per transport id, which — unlike the
 	// ring — open churn cannot evict.
 	lastCloses tpLastCloseMap
+	// lastInbound is when this visor last accepted an inbound transport of
+	// each type — its evidence that others can reach it by that type.
+	lastInbound inboundTimes
 	// arClient is the address-resolver client (addrresolver.APIClient on native
 	// builds). Typed `any` so addrresolver — which pulls net/http — stays out of
 	// the TinyGo graph; recover it via the build-tagged ARClient() getter.
@@ -1224,6 +1227,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 	}
 
 	tm.Logger.Debugf("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), transport.RemotePK(), mTp.Entry.ID, isNew)
+	tm.lastInbound.note(lis.Network(), time.Now())
 
 	// Nudge the re-registration loop to batch-register this transport with TPD soon.
 	// Registration is deferred to avoid per-transport HTTP calls that hit rate limits.
