@@ -578,14 +578,15 @@ func (a *Aggregator) ensureConn(feedPK skycipher.PubKey) {
 		copy(pk[:], feedPK[:])
 		ctx, cancel := context.WithTimeout(context.Background(), ensureConnTimeout)
 		defer cancel()
-		if _, err := a.cxoNode.DMSG().ConnectPK(ctx, pk); err != nil {
+		conn, err := a.cxoNode.DMSG().ConnectPK(ctx, pk)
+		if err != nil {
 			a.log.WithError(err).WithField("visor", cipher.PubKey(feedPK)).
 				Debug("CXO aggregator: dial-back to visor failed; will retry on next Root")
 			return
 		}
-		// Warm conn established/confirmed — nudge a reconcile so we subscribe
-		// on it promptly (the core's reconcile is idempotent).
-		a.core.Nudge()
+		// Warm conn established/confirmed — subscribe on it now rather than
+		// at the next reconcile tick.
+		a.core.SubscribeConn(conn)
 	}()
 }
 
