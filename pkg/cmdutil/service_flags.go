@@ -2,6 +2,7 @@
 package cmdutil
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,7 +10,6 @@ import (
 	"strings"
 	"unicode"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -23,8 +23,6 @@ var (
 	ErrInvalidLogString           = errors.New("failed to convert string to log level")
 	ErrInvalidSyslogNet           = errors.New("network type is unsupported for syslog")
 )
-
-var json = jsoniter.ConfigFastest
 
 const (
 	stdinConfig = "stdin"
