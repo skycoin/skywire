@@ -41,15 +41,23 @@ func TestReconcileThrottle_Plan(t *testing.T) {
 	require.Empty(t, reg)
 	require.Len(t, hb, 2)
 
-	// A changed label registers at once; the unchanged sibling waits.
+	// The other edge labels the transport differently (the acceptor always
+	// says "user"): not a change, nothing to write.
 	e1b := *e1
-	e1b.Label = "renamed"
+	e1b.Label = "user"
 	reg, _ = th.plan(t0.Add(50*time.Second), []*transport.Entry{&e1b, e2})
-	require.Equal(t, []*transport.Entry{&e1b}, reg)
+	require.Empty(t, reg, "edges disagreeing on the label must not re-register")
+
+	// A changed type is a change: registered at once; the sibling waits.
+	e1c := *e1
+	e1c.Type = "squicr"
+	reg, _ = th.plan(t0.Add(60*time.Second), []*transport.Entry{&e1c, e2})
+	require.Equal(t, []*transport.Entry{&e1c}, reg)
 
 	// The refresh gap elapses: the unchanged entry is registered again.
-	reg, _ = th.plan(t0.Add(100*time.Second), []*transport.Entry{&e1b, e2})
+	reg, _ = th.plan(t0.Add(100*time.Second), []*transport.Entry{&e1c, e2})
 	require.Equal(t, []*transport.Entry{e2}, reg)
+	e1b = e1c
 
 	// A failed write is retried on the very next snapshot.
 	th.forget([]*transport.Entry{e2})
