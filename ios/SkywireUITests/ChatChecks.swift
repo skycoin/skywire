@@ -41,6 +41,32 @@ final class ChatChecks: XCTestCase {
         keep(page.debugDescription, named: "video-thread-tree")
     }
 
+    /// Leaving the Chat tab and coming back keeps the page where it was: a
+    /// thread left open is still open (G3 re-review: the page was torn down
+    /// and loaded again on every return, back on the chat list).
+    func testTabSwitchKeepsTheConversation() {
+        let app = connectedApp()
+        openTab(.chat, in: app)
+        let page = chatPage(app)
+        page.staticTexts["Saved Messages"].firstMatch.tap()
+        let back = page.buttons["Back to chats"].firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: 10), "the thread did not open")
+        // The page focuses its composer when a thread opens, and the keyboard
+        // covers the tab bar: put it away as a person would first.
+        let done = app.buttons["Done"].firstMatch
+        if done.waitForExistence(timeout: 3) {
+            done.tap()
+        } else {
+            page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+        }
+        openTab(.home, in: app)
+        openTab(.apps, in: app)
+        openTab(.chat, in: app)
+        XCTAssertTrue(back.waitForExistence(timeout: 5), "the page came back on the list: the thread was dropped")
+        XCTAssertFalse(page.buttons["All"].isHittable, "the chat list is on screen instead of the thread")
+        back.tap()
+    }
+
     /// The page stays at its own scale: focusing the composer (14 px text,
     /// which WebKit zooms into), a pinch and a double tap leave the thread's
     /// header on screen and the composer inside the screen's width. Zoomed, the
@@ -219,6 +245,22 @@ final class ChatChecks: XCTestCase {
         XCTAssertTrue(page.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", away)).firstMatch.waitForExistence(timeout: 30),
                       "the tap did not land in the conversation")
         snap("peer-tapped")
+
+        // The same from another tab (the re-review's repro): the tap switches
+        // to Chat and the page opens the conversation, not the list.
+        openTab(.home, in: app)
+        XCUIDevice.shared.press(.home)
+        try await Task.sleep(for: .seconds(3))
+        let fromHome = "home-" + UUID().uuidString.prefix(8).lowercased()
+        try await peerSend(chat, to: me, fromHome)
+        let second = springboard.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", fromHome)).firstMatch
+        XCTAssertTrue(second.waitForExistence(timeout: 60), "no notification for \(fromHome)")
+        second.tap()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+        XCTAssertTrue(page.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", fromHome)).firstMatch.waitForExistence(timeout: 30),
+                      "the tap from the Home tab did not land in the conversation")
+        XCTAssertTrue(page.buttons["Back to chats"].firstMatch.exists, "the chat list is on screen, not the conversation")
+        snap("peer-tapped-from-home")
     }
 
     // MARK: The peer's skychat (plain HTTP on loopback, no password)

@@ -34,15 +34,33 @@ final class ChatModel: ObservableObject {
     /// is dropped with the connection: a core restart restarts skychat too,
     /// and the page must be loaded again rather than left talking to a
     /// listener that went away.
+    ///
+    /// SwiftUI also restarts this task every time the Chat tab comes back.
+    /// A page that is up for the core session still running is kept then:
+    /// dropping its address tore it down and loaded it again, back on the chat
+    /// list, and a conversation left open, or opened by a tapped notification,
+    /// was gone (G3 re-review). A session that ended while the tab was away
+    /// (the task does not run then) still gets a fresh page.
     func run(_ app: AppModel) async {
-        url = nil
-        starting = false
         guard app.connected else {
+            url = nil
+            starting = false
             error = nil
             return
         }
+        if url != nil, session == app.coreSession {
+            return
+        }
+        url = nil
+        starting = false
         await bringUp(app)
+        if url != nil {
+            session = app.coreSession
+        }
     }
+
+    /// The core session the page's address belongs to.
+    private var session: Int?
 
     func retry() {
         error = nil

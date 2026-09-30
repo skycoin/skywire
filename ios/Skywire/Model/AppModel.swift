@@ -26,6 +26,11 @@ final class AppModel: ObservableObject {
     /// The core runs and its API answers.
     var connected: Bool { coreState == .running && apiUp }
 
+    /// How many times the core's API has come up in this process: a screen
+    /// that keeps state across its own disappearances (the chat page) tells
+    /// "the same core" from "a core that restarted meanwhile" by it.
+    private(set) var coreSession = 0
+
     let settings: AppSettings
     let client: CoreClient
     let log: CoreLog
@@ -122,20 +127,26 @@ final class AppModel: ObservableObject {
     func enteredBackground() {
         guard backgroundTask == .invalid, coreState == .running else { return }
         backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Skywire core") { [weak self] in
-            self?.lifecycleLog.notice("background grace expired")
-            self?.endBackgroundGrace()
+            self?.endBackgroundGrace(expired: true)
         }
-        let remaining = UIApplication.shared.backgroundTimeRemaining
-        lifecycleLog.notice("background grace began (\(remaining < 1e6 ? String(format: "%.0f s", remaining) : "unbounded", privacy: .public))")
+        // The time left is not known yet here (UIKit reports no limit until
+        // the app is fully in the background), so the log says how long the
+        // grace lasted when it ends instead.
+        graceBegan = .now
+        lifecycleLog.notice("background grace began")
     }
 
     /// Ends the grace: back in the foreground, or iOS called time.
-    func endBackgroundGrace() {
+    func endBackgroundGrace(expired: Bool = false) {
         guard backgroundTask != .invalid else { return }
         UIApplication.shared.endBackgroundTask(backgroundTask)
         backgroundTask = .invalid
-        lifecycleLog.notice("background grace ended")
+        let lasted = graceBegan.map { ContinuousClock.now - $0 } ?? .zero
+        let seconds = Double(lasted.components.seconds) + Double(lasted.components.attoseconds) / 1e18
+        lifecycleLog.notice("background grace \(expired ? "expired" : "ended", privacy: .public) after \(seconds, format: .fixed(precision: 1), privacy: .public) s")
     }
+
+    private var graceBegan: ContinuousClock.Instant?
 
     /// Back in the foreground: the footprint on screen is minutes old, and a
     /// Simulator app that was suspended may have missed a state change.
@@ -174,6 +185,7 @@ final class AppModel: ObservableObject {
     private func waitForAPI() async {
         while coreState == .running, !apiUp {
             if await client.ping() {
+                coreSession += 1
                 apiUp = true
                 break
             }
