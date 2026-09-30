@@ -400,9 +400,22 @@ func (c *Conn) Subscribe(feed cipher.PubKey) (err error) {
 		return err
 	}
 
+	// Register the conn for the feed BEFORE asking. The publisher answers
+	// Ok and pushes its last Root straight after it (handleSub); that Root
+	// can be read before sendRequest returns, and a Root from a conn not yet
+	// registered is stored but never filled — the subscriber then sat idle
+	// until the publisher's next heartbeat (45 s) or next change.
+	// A refused or failed request takes the registration back, unless the
+	// conn was already subscribed (a re-subscribe must not drop it).
+	had := c.n.fs.hasConnFeed(c, feed)
+	c.n.fs.addConnFeed(c, feed)
+
 	var reply msg.Msg
 
 	if reply, err = c.sendRequest(&msg.Sub{Feed: feed}); err != nil {
+		if !had {
+			c.n.fs.delConnFeed(c, feed)
+		}
 		return err
 	}
 
@@ -420,10 +433,12 @@ func (c *Conn) Subscribe(feed cipher.PubKey) (err error) {
 	}
 
 	if err != nil {
+		if !had {
+			c.n.fs.delConnFeed(c, feed)
+		}
 		return err
 	}
 
-	c.n.fs.addConnFeed(c, feed)
 	c.sendLastRoot(feed)
 	return err
 }
