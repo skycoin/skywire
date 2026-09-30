@@ -29,8 +29,12 @@ import (
 )
 
 // telemetryApplyEvery is the least time between two applies of one
-// (transport, reporter) snapshot.
-const telemetryApplyEvery = 2 * time.Minute
+// (transport, reporter) snapshot. 2 min still left ~1.9k ingest scripts a
+// second on prod01 — every live transport's counters move — so 5 min. Daily
+// bandwidth, the day's latency mean and the routing feed's latency (itself
+// published every minute, rounded to two significant digits) lose nothing a
+// reader could see.
+const telemetryApplyEvery = 5 * time.Minute
 
 // telemetryFlushEvery is how often held snapshots are checked for flushing.
 const telemetryFlushEvery = 30 * time.Second
