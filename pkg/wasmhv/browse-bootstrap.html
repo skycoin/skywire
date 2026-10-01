@@ -410,6 +410,20 @@
     setStep('route', 'done'); setStep('fetch', 'done');
     var html = '';
     if (res.body) { try { html = new TextDecoder('utf-8').decode(new Uint8Array(res.body)); } catch (e) { html = ''; } }
+    // JSON, plain text and images are shown the way the browser shows them when
+    // it loads one itself — its own JSON viewer with the pretty-print toggle, its
+    // text and image views — by handing the body back to it as a document of its
+    // real type: a blob of this origin, in a frame filling the page. Only types
+    // that run no script: an SVG or PDF document can, and would reach the
+    // network on its own, so those keep the wrapper below.
+    var ctype = String((res.headers && (res.headers['content-type'] || res.headers['Content-Type'])) || '').split(';')[0].trim().toLowerCase();
+    var NATIVE_VIEW = /^(application\/json|application\/[a-z0-9.+-]+\+json|text\/plain|image\/(png|jpeg|gif|webp|avif|bmp|x-icon|vnd\.microsoft\.icon))$/;
+    if (res.body && NATIVE_VIEW.test(ctype)) {
+      var blobURL = URL.createObjectURL(new Blob([res.body], { type: ctype }));
+      html = '<!doctype html><meta charset=utf-8><meta name=color-scheme content=light>' +
+        '<style>html,body{margin:0;height:100%;background:#fff}iframe{display:block;border:0;width:100%;height:100%}</style>' +
+        '<iframe src="' + blobURL + '"></iframe>';
+    }
     // A bare non-HTML payload (raw JSON, plain text) carries no document background
     // of its own; written as-is it renders on the dark interstitial canvas with the
     // browser's default black text — illegible. A normal browser shows raw JSON/text
@@ -442,6 +456,46 @@
         });
       } catch (e) { /* the page still loads without it */ }
     }
+    // Leaving this site. A page here can navigate its frame anywhere — a link,
+    // a form, location.href = … — and a navigation to another origin goes
+    // straight to the network: the service worker never sees navigations. So
+    // the page reached the internet from the reader's own address, and the
+    // browser around it never knew the tab had moved, so it had no history to
+    // go back to. Each such navigation is stopped here and handed to the
+    // browser (the parent) as the real address, which it loads through the
+    // visor in this tab or a new one; and every page that loads tells it where
+    // the tab now is.
+    var toParent = function (msg) {
+      (V_OPEN ? ['*'] : V_ORIGINS).forEach(function (o) { try { window.parent.postMessage(msg, o); } catch (e) { /* gone */ } });
+    };
+    // realAddress maps a URL as the page sees it to the address it stands for:
+    // a path on this origin is a path on the real site; another http(s) origin
+    // is itself. Anything else (mailto:, javascript:, blob:, about:) is not a
+    // page load the browser should take over, and maps to "".
+    var realAddress = function (href) {
+      var u;
+      try { u = new URL(href, location.href); } catch (e) { return ''; }
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') { return ''; }
+      if (u.origin === location.origin) {
+        if (!realURL) { return ''; }
+        try { return new URL(u.pathname + u.search + u.hash, realURL).href; } catch (e) { return ''; }
+      }
+      return u.href;
+    };
+    var leaving = function (href) {
+      try { return new URL(href, location.href).origin !== location.origin && realAddress(href) !== ''; } catch (e) { return false; }
+    };
+    var openOutside = function (href, newTab) {
+      var to = realAddress(href);
+      if (to) { toParent({ type: 'realorigin-open', url: to, newTab: !!newTab }); }
+    };
+    // A new window opens outside the browser altogether; it becomes a new tab.
+    // A blank window (no URL) is left alone: it loads nothing until written to.
+    var nativeOpen = window.open;
+    window.open = function (url) {
+      if (url && realAddress(String(url))) { openOutside(String(url), true); return null; }
+      return nativeOpen.apply(window, arguments);
+    };
     // A browser's WebSocket goes straight to the network — a service worker
     // never sees it — so the page gets this stand-in instead: each socket is
     // handed to the desk over the helper port with a MessagePort of its own,
@@ -548,6 +602,49 @@
     document.open();
     document.write(html);
     document.close();
+    // document.open() erased every listener on the document and window, so
+    // the navigation hooks go on now, after the page is written.
+    //
+    // The Navigation API sees every navigation of this frame — links, forms,
+    // location.href, meta refresh — and can stop one leaving the site.
+    if (window.navigation && typeof window.navigation.addEventListener === 'function') {
+      window.navigation.addEventListener('navigate', function (e) {
+        var to = e.destination && e.destination.url;
+        if (!to || !e.cancelable || e.hashChange || e.downloadRequest || !leaving(to)) { return; }
+        e.preventDefault();
+        openOutside(to, false);
+      });
+    }
+    // Clicks: a link that opens a new tab or window is not a navigation of this
+    // frame, so the Navigation API never sees it; and a browser without that
+    // API needs every link leaving the site caught here.
+    document.addEventListener('click', function (e) {
+      if (e.defaultPrevented || e.button !== 0) { return; }
+      var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (!a) { return; }
+      var tgt = (a.getAttribute('target') || '').toLowerCase();
+      var newTab = (tgt !== '' && tgt !== '_self' && tgt !== '_parent' && tgt !== '_top') || e.ctrlKey || e.metaKey || e.shiftKey;
+      if (!newTab && (window.navigation || !leaving(a.href))) { return; }
+      if (!realAddress(a.href)) { return; }
+      e.preventDefault();
+      openOutside(a.href, newTab);
+    }, true);
+    // Forms, for a browser without the Navigation API: a GET form leaving the
+    // site goes as its URL; a POST body cannot be carried, so it is not sent
+    // from here at all rather than sent from the reader's own address.
+    if (!window.navigation) {
+      document.addEventListener('submit', function (e) {
+        var f = e.target;
+        if (!f || !f.action || !leaving(f.action)) { return; }
+        e.preventDefault();
+        if ((f.method || 'get').toLowerCase() !== 'get') { return; }
+        var u = new URL(f.action);
+        u.search = new URLSearchParams(new FormData(f)).toString();
+        openOutside(u.href, false);
+      }, true);
+    }
+    // Tell the browser where this tab now is, for its address bar and history.
+    if (realURL) { toParent({ type: 'realorigin-location', url: String(realURL) }); }
   }).catch(function (err) { try { window.__mb.err = String(err); window.__mb.step = 'catch'; } catch (e) {} clearTimeout(slowHint); fail('mesh: ' + String(err)); });
 })();
 </script>
