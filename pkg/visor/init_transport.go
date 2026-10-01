@@ -665,7 +665,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 	if lis := factory.DmsgSharedListener(); lis != nil {
 		v.dmsgSharedLis = lis
-		v.dmsgWSFactory = &factory
+		v.dmsgFactory = &factory
 		log.WithField("addr", lis.Addr()).
 			Info("In-process dmsg server will share the visor's transport TCP port")
 	}

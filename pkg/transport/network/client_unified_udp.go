@@ -10,10 +10,14 @@
 package network
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net"
 
+	"github.com/quic-go/quic-go"
+
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skyquic"
 )
 
 // EnableUnifiedUDP binds the master UDP socket on port and prepares the demux.
@@ -48,6 +52,38 @@ func (f *ClientFactory) EnableUnifiedUDP(port int) error {
 	}
 	f.sharedQUIC = newSharedQUICMux(d.Conn(protoQUIC), log)
 	return nil
+}
+
+// dmsgQUICServer is the part of a dmsg server (pkg/dmsg/dmsg.Server) that
+// serves QUIC connections accepted here.
+type dmsgQUICServer interface {
+	QUICTLSConfig() (*tls.Config, error)
+	ServeQUICConn(*quic.Conn)
+}
+
+// SetDmsgQUICServer registers the dmsg ALPN on the shared QUIC socket and hands
+// its connections to srv, so a dmsg server folded into this visor serves
+// dmsg-over-QUIC on the transport port. Without it that port belongs to squicr
+// and WT alone, and a dmsg client's QUIC dial is refused at the handshake. srv
+// is typed `any`, as SetDmsgWSHandler's handler is. Returns the socket's local
+// address, or nil when unified UDP is not enabled.
+func (f *ClientFactory) SetDmsgQUICServer(srv any) (net.Addr, error) {
+	m, ok := f.sharedQUIC.(*sharedQUICMux)
+	if !ok || m == nil {
+		return nil, nil
+	}
+	s, ok := srv.(dmsgQUICServer)
+	if !ok {
+		return nil, fmt.Errorf("dmsg quic: %T does not serve QUIC connections", srv)
+	}
+	tlsConf, err := s.QUICTLSConfig()
+	if err != nil {
+		return nil, err
+	}
+	if err := m.register(skyquic.DmsgNextProto, tlsConf, s.ServeQUICConn); err != nil {
+		return nil, err
+	}
+	return m.localAddr(), nil
 }
 
 // CloseUnifiedUDP closes the shared QUIC mux (its listener + transport), then the
