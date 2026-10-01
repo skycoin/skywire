@@ -39,6 +39,12 @@
   .steps li.done::before{content:"●";color:var(--accent)}
   .btn{display:inline-block;margin-top:18px;padding:8px 20px;border:1px solid var(--accent);border-radius:9px;background:transparent;color:var(--accent);font:inherit;font-size:13px;cursor:pointer}
   .btn:hover{background:var(--accent);color:#0b0d17}
+  /* The checklist only appears if the page is slow to arrive. With the route
+     to the exit already up, a site is a second away, and flashing "Routing
+     this site over skywire" for that second is noise; a page that has not
+     come in 1.2s is worth explaining. */
+  @keyframes ro-reveal{from{opacity:0}to{opacity:1}}
+  #mesh-card{opacity:0;animation:ro-reveal .25s ease 1.2s forwards}
   #mesh-host{display:block;margin-top:14px;font:12px/1.4 ui-monospace,SFMono-Regular,monospace;color:var(--muted);opacity:.75;word-break:break-all}
   .err #mesh-title{color:var(--err)}
   .err .sp{display:none}
@@ -78,6 +84,23 @@
 <script>
 (function () {
   'use strict';
+
+  // Back and Forward. The browser around this frame (netscrape) loads it with
+  // this fragment when the reader is going back or forward rather than
+  // somewhere new. A browser answers those from its cache; so does this page,
+  // from the copy it stored of itself (PAGE_CACHE below), instead of a trip
+  // over the mesh behind the interstitial. The mark is the browser's, not the
+  // page's, so it is taken off the address before the page can see it.
+  var HISTORY_MARK = 'netscrape-history';
+  var fromHistory = false;
+  (function () {
+    var h = location.hash;
+    var re = new RegExp('(^#|;)' + HISTORY_MARK + '$');
+    if (!re.test(h)) { return; }
+    fromHistory = true;
+    var rest = h.replace(re, '');
+    try { history.replaceState(history.state, '', location.pathname + location.search + (rest && rest !== '#' ? rest : '')); } catch (e) { /* kept as is */ }
+  })();
   var V_ORIGIN = "__APP_ORIGIN__";      // visor origin(s) (holds the SharedWorker visor + key)
   // Which app origins this browse origin will be fed content by. It is the
   // only thing deciding who may inject into B, so it is worth stating plainly
@@ -375,29 +398,90 @@
       .catch(function () { return null; }); // fall through; top page still injects
   }
 
-  // --- boot ----------------------------------------------------------------
-  // Register the SW + prime the helper, then fetch THIS path's mesh HTML through
-  // the visor and write it into the real origin.
-  window.__mb = { step: 'start', helperReady: false, topStatus: null, topLen: 0, err: null };
-  Promise.all([
-    registerSW().then(function () { window.__mb.step = 'sw-registered'; }),
-    ensureHelper().then(function () {
-      window.__mb.helperReady = true; window.__mb.step = 'helper-ready';
-      setStep('visor', 'done'); setStep('route', 'active');
-      setStatus('Routing this site over skywire…', 'Connecting through your proxy exit and fetching the page privately. Your mesh route to the exit is reused across sites; each site opens its own connection through it.');
-    })
-  ]).then(function () {
-    window.__mb.step = 'fetching-top';
-    var path = location.pathname + location.search;
-    return helperFetch({ url: location.href, method: 'GET', headers: withPageCookies({}), body: null, path: path });
-  }).then(function (res) {
-    // A streamed body (a ReadableStream) is read whole here: this is the
-    // document itself, written with document.write below.
-    if (res && res.body && typeof ReadableStream !== 'undefined' && res.body instanceof ReadableStream) {
-      return new Response(res.body).arrayBuffer().then(function (ab) { res.body = ab; return res; });
+  // --- the page's copy of itself, for Back and Forward ----------------------
+  // A response stored here is the document as it was fetched, on this site's
+  // own origin, so it is no more visible to anyone than the page itself.
+  // Only a whole, successful response the site allows to be stored is kept,
+  // without its Set-Cookie (a page drawn again from cache sets no cookies), and
+  // only the newest PAGE_CACHE_MAX pages.
+  var PAGE_CACHE = 'netscrape-pages';
+  var PAGE_CACHE_MAX = 20;
+  var cachedPage = function (path) {
+    if (!window.caches) { return Promise.resolve(null); }
+    return caches.open(PAGE_CACHE).then(function (c) { return c.match(path); }).then(function (r) {
+      if (!r) { return null; }
+      var headers = {};
+      r.headers.forEach(function (v, k) { headers[k] = v; });
+      return r.arrayBuffer().then(function (ab) { return { status: r.status, headers: headers, body: ab, fromCache: true }; });
+    }).catch(function () { return null; });
+  };
+  var storePage = function (path, res) {
+    if (!window.caches || !res || (res.status | 0) !== 200 || !res.body) { return; }
+    var cc = String(res.headers['cache-control'] || '').toLowerCase();
+    if (/no-store/.test(cc)) { return; }
+    var h = new Headers();
+    Object.keys(res.headers || {}).forEach(function (k) {
+      if (!/^(set-cookie|x-realorigin-set-cookie)$/i.test(k)) { try { h.set(k, res.headers[k]); } catch (e) { /* not storable */ } }
+    });
+    var body = res.body.slice(0);
+    caches.open(PAGE_CACHE).then(function (c) {
+      return c.put(path, new Response(body, { status: 200, headers: h })).then(function () { return c.keys(); }).then(function (keys) {
+        // keys() is in insertion order, and put() moves a page to the end.
+        for (var i = 0; i < keys.length - PAGE_CACHE_MAX; i++) { c.delete(keys[i]); }
+      });
+    }).catch(function () { /* the page still loads */ });
+  };
+
+  // postForm sends a form the page posts to its own site through the visor,
+  // encoded as the form asks, and draws the answer as the new page. The
+  // answer is not stored for Back: a browser does not replay a post silently,
+  // and here Back fetches the address again.
+  var postForm = function (to, formData, submitter) {
+    var form = submitter ? (submitter.form || (submitter.tagName === 'FORM' ? submitter : null)) : null;
+    var enctype = String((submitter && submitter.getAttribute && submitter.getAttribute('formenctype')) ||
+      (form && form.enctype) || 'application/x-www-form-urlencoded').toLowerCase();
+    var ctype, bodyP;
+    if (enctype === 'multipart/form-data') {
+      var r = new Response(formData); // the browser's own multipart encoding, boundary included
+      ctype = r.headers.get('content-type');
+      bodyP = r.arrayBuffer();
+    } else if (enctype === 'text/plain') {
+      var lines = [];
+      formData.forEach(function (v, k) { lines.push(k + '=' + (typeof v === 'string' ? v : v.name)); });
+      ctype = 'text/plain';
+      bodyP = Promise.resolve(new TextEncoder().encode(lines.join('\r\n')).buffer);
+    } else {
+      var q = new URLSearchParams();
+      formData.forEach(function (v, k) { q.append(k, typeof v === 'string' ? v : v.name); });
+      ctype = 'application/x-www-form-urlencoded';
+      bodyP = Promise.resolve(new TextEncoder().encode(q.toString()).buffer);
     }
-    return res;
-  }).then(function (res) {
+    var u = new URL(to);
+    bodyP.then(function (body) {
+      return helperFetch({ url: to, method: 'POST', headers: withPageCookies({ 'content-type': ctype }), body: body, path: u.pathname + u.search });
+    }).then(function (res) {
+      if (res && res.body && typeof ReadableStream !== 'undefined' && res.body instanceof ReadableStream) {
+        return new Response(res.body).arrayBuffer().then(function (ab) { res.body = ab; return res; });
+      }
+      return res;
+    }).then(function (res) {
+      if (!res || res.error) { fail('mesh: ' + ((res && res.error) || 'no response')); return; }
+      res.posted = true;
+      // This origin's address follows where the site says the answer is
+      // (after a redirect, usually somewhere else), so its relative links and
+      // a later reload resolve as they do on the real site.
+      try {
+        var fin = res.headers['x-realorigin-url'] || to;
+        var fu = new URL(fin);
+        history.replaceState(null, '', fu.pathname + fu.search + fu.hash);
+      } catch (e) { /* stays where it was */ }
+      renderTop(res);
+    }).catch(function (err) { fail('mesh: ' + String(err)); });
+  };
+
+  // renderTop writes a fetched document into this origin and wires the page
+  // up: the boot fetch, and a form the page posts to its own site.
+  var renderTop = function (res) {
     window.__mb.step = 'top-returned';
     window.__mb.topStatus = res && res.status;
     window.__mb.topLen = (res && res.body) ? res.body.byteLength : 0;
@@ -438,7 +522,12 @@
         'font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}</style>' +
         '<pre>' + escd + '</pre>';
     }
-    keepSetCookies(res);
+    if (!res.fromCache && !res.posted) {
+      storePage(location.pathname + location.search, res);
+    }
+    if (!res.fromCache) {
+      keepSetCookies(res);
+    }
     // A page here is always framed (window.top is the app), and some sites
     // refuse to run embedded unless their own site sent them — windy.com
     // throws "Unlegal embed" when document.referrer is not on windy.com.
@@ -610,9 +699,20 @@
     if (window.navigation && typeof window.navigation.addEventListener === 'function') {
       window.navigation.addEventListener('navigate', function (e) {
         var to = e.destination && e.destination.url;
-        if (!to || !e.cancelable || e.hashChange || e.downloadRequest || !leaving(to)) { return; }
-        e.preventDefault();
-        openOutside(to, false);
+        if (!to || !e.cancelable || e.hashChange || e.downloadRequest) { return; }
+        if (leaving(to)) {
+          e.preventDefault();
+          openOutside(to, false);
+          return;
+        }
+        // A form posting to its own site. The navigation would reach the server
+        // that serves this shell, which drops the body and answers with the
+        // shell, so a login or a comment was silently lost. It is posted
+        // through the visor instead, and the answer drawn here like any page.
+        if (e.formData) {
+          e.preventDefault();
+          postForm(to, e.formData, e.sourceElement);
+        }
       });
     }
     // Clicks: a link that opens a new tab or window is not a navigation of this
@@ -629,6 +729,18 @@
       e.preventDefault();
       openOutside(a.href, newTab);
     }, true);
+    // A middle click opens a link in a new tab of the reader's browser, at its
+    // real address, straight from the network — the same escape again. It
+    // opens a new tab here instead.
+    var middle = function (e) {
+      if (e.button !== 1) { return; }
+      var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (!a || !realAddress(a.href)) { return; }
+      e.preventDefault();
+      if (e.type === 'auxclick') { openOutside(a.href, true); }
+    };
+    document.addEventListener('mousedown', middle, true); // stops autoscroll from taking it
+    document.addEventListener('auxclick', middle, true);
     // Forms, for a browser without the Navigation API: a GET form leaving the
     // site goes as its URL; a POST body cannot be carried, so it is not sent
     // from here at all rather than sent from the reader's own address.
@@ -644,7 +756,44 @@
       }, true);
     }
     // Tell the browser where this tab now is, for its address bar and history.
-    if (realURL) { toParent({ type: 'realorigin-location', url: String(realURL) }); }
+    // ...with its title, which the browser cannot read across the origin.
+    var reportLocation = function () {
+      if (realURL) { toParent({ type: 'realorigin-location', url: String(realURL), cached: !!res.fromCache, title: String(document.title || '') }); }
+    };
+    reportLocation();
+    // A page that titles itself after loading (most single-page apps) says so
+    // again once; later changes are not followed.
+    setTimeout(function () { if (document.title) { reportLocation(); } }, 1500);
+  };
+
+  // --- boot ----------------------------------------------------------------
+  // Register the SW + prime the helper, then fetch THIS path's mesh HTML through
+  // the visor and write it into the real origin.
+  window.__mb = { step: 'start', helperReady: false, topStatus: null, topLen: 0, err: null };
+  Promise.all([
+    registerSW().then(function () { window.__mb.step = 'sw-registered'; }),
+    ensureHelper().then(function () {
+      window.__mb.helperReady = true; window.__mb.step = 'helper-ready';
+      setStep('visor', 'done'); setStep('route', 'active');
+      setStatus('Routing this site over skywire…', 'Connecting through your proxy exit and fetching the page privately. Your mesh route to the exit is reused across sites; each site opens its own connection through it.');
+    })
+  ]).then(function () {
+    window.__mb.step = 'fetching-top';
+    var path = location.pathname + location.search;
+    var fetchTop = function () {
+      return helperFetch({ url: location.href, method: 'GET', headers: withPageCookies({}), body: null, path: path });
+    };
+    if (!fromHistory) { return fetchTop(); }
+    return cachedPage(path).then(function (hit) { return hit || fetchTop(); });
+  }).then(function (res) {
+    // A streamed body (a ReadableStream) is read whole here: this is the
+    // document itself, written with document.write below.
+    if (res && res.body && typeof ReadableStream !== 'undefined' && res.body instanceof ReadableStream) {
+      return new Response(res.body).arrayBuffer().then(function (ab) { res.body = ab; return res; });
+    }
+    return res;
+  }).then(function (res) {
+    renderTop(res);
   }).catch(function (err) { try { window.__mb.err = String(err); window.__mb.step = 'catch'; } catch (e) {} clearTimeout(slowHint); fail('mesh: ' + String(err)); });
 })();
 </script>
