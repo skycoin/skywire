@@ -17,6 +17,7 @@
 package deskhost
 
 import (
+	"encoding/json"
 	"syscall/js"
 
 	"github.com/0magnet/desk"
@@ -29,6 +30,15 @@ func installBrowser() {
 	js.Global().Set("skywireBrowser", js.ValueOf(map[string]interface{}{
 		"open":   js.FuncOf(jsOpenBrowser),
 		"newTab": js.FuncOf(jsBrowserNewTab),
+		// state() is netscrape.State as JSON: each window's tabs, history and
+		// load times. Read-only, for tests and harnesses.
+		"state": js.FuncOf(func(js.Value, []js.Value) any {
+			b, err := json.Marshal(netscrape.State())
+			if err != nil {
+				return "[]"
+			}
+			return string(b)
+		}),
 	}))
 }
 
