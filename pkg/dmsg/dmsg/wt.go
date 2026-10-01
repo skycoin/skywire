@@ -207,4 +207,3 @@ func (ce *Client) dialSessionWT(ctx context.Context, entry *disc.Entry) (ClientS
 func (s *Server) ServeWTSession(sess *webtransport.Session) {
 	s.handleWTSession(sess)
 }
-
