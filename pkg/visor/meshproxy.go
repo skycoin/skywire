@@ -723,18 +723,60 @@ func (v *Visor) ServeMeshProxy(ctx context.Context, cfg *visorconfig.BrowseOrigi
 
 // serveMeshSubdomain runs the single Host-routed reverse-proxy origin. The browse
 // iframe targets <scheme>://<vhost>.<base32pk><suffix>[:port]/ against addr.
+//
+// It also answers the loopback suffix (.mesh.localhost) when the configured one
+// differs and no TLS is set. A public suffix (the generated default is the
+// deployment's .haltingstate.net, for its status pages behind a real wildcard
+// cert) resolves to that deployment, never to this machine, so the desk's
+// browse frames could not reach this listener under it; *.mesh.localhost
+// always resolves to loopback and is a secure context over plain HTTP.
 func (v *Visor) serveMeshSubdomain(ctx context.Context, addr string, cfg *visorconfig.BrowseOriginConfig, aliases map[string]cipher.PubKey) error {
 	suffix := normalizeMeshSuffix(cfg.Suffix)
-	rp, err := v.newMeshReverseProxy(subdomainResolver(suffix, aliases))
+	main, err := v.meshSubdomainHandler(suffix, aliases)
 	if err != nil {
 		return err
 	}
+	handler := main
+	if local := desktopBrowseSuffix(cfg); local != suffix {
+		lh, err := v.meshSubdomainHandler(local, aliases)
+		if err != nil {
+			return err
+		}
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasSuffix(strings.ToLower(hostWithoutPort(r.Host)), local) {
+				lh.ServeHTTP(w, r)
+				return
+			}
+			main.ServeHTTP(w, r)
+		})
+	}
 	mux := http.NewServeMux()
+	mux.Handle("/", handler)
+	return serveMeshHTTP(ctx, addr, mux, cfg.TLSCert, cfg.TLSKey)
+}
+
+// desktopBrowseSuffix is the suffix the native desk's browse frames use: the
+// configured one when the listener serves TLS (its cert names it), else the
+// loopback .mesh.localhost (see serveMeshSubdomain).
+func desktopBrowseSuffix(cfg *visorconfig.BrowseOriginConfig) string {
+	if cfg.TLSCert != "" && cfg.TLSKey != "" {
+		return normalizeMeshSuffix(cfg.Suffix)
+	}
+	return defaultMeshProxySuffix
+}
+
+// meshSubdomainHandler is the listener's handler for one suffix: proxy-status
+// hosts, browse-origin hosts and mesh sites.
+func (v *Visor) meshSubdomainHandler(suffix string, aliases map[string]cipher.PubKey) (http.Handler, error) {
+	rp, err := v.newMeshReverseProxy(subdomainResolver(suffix, aliases))
+	if err != nil {
+		return nil, err
+	}
 	// Reserved proxy-status hosts (status-<surface><suffix>) served over THIS
 	// listener so the browse-origin's real (wildcard) TLS cert covers them —
 	// warning-free HTTPS status pages. Any non-status host falls through to the
 	// reverse proxy. See meshStatusHandler.
-	var next http.Handler = meshStatusHandler(suffix, v.proxyStatusProvider(), rp)
+	next := meshStatusHandler(suffix, v.proxyStatusProvider(), rp)
 	// The desk's browser opens every site — clearnet included — on an
 	// isolated browse origin of its own (<id><suffix>, realorigin): this
 	// listener serves those origins' bootstrap and service worker, and the
@@ -749,12 +791,11 @@ func (v *Visor) serveMeshSubdomain(ctx context.Context, addr string, cfg *visorc
 			Shell:     wasmhv.BrowseBootstrapHTML,
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
 		next = browseOriginRouter(suffix, ro, next)
 	}
-	mux.Handle("/", next)
-	return serveMeshHTTP(ctx, addr, mux, cfg.TLSCert, cfg.TLSKey)
+	return next, nil
 }
 
 // meshStatusHandler serves the reserved proxy-status pages over the browse-origin

@@ -200,7 +200,8 @@ func serveJS(w http.ResponseWriter, b []byte) {
 // Empty string when disabled → the transcoder fallback stays in effect.
 func browseOriginInjectJS(v *Visor) string {
 	bo := v.conf.BrowseOrigin
-	if bo == nil || !bo.Enable {
+	// Port mode has no per-site subdomains, which isolated browse origins need.
+	if bo == nil || !bo.Enable || bo.Mode == "port" {
 		return ""
 	}
 	addr := bo.Addr
@@ -215,7 +216,9 @@ func browseOriginInjectJS(v *Visor) string {
 	if bo.TLSCert != "" && bo.TLSKey != "" {
 		scheme = "https"
 	}
-	suffix := normalizeMeshSuffix(bo.Suffix) // guaranteed leading dot
+	// The suffix this machine's browser can reach the listener under — see
+	// desktopBrowseSuffix; the listener answers it as well as the configured one.
+	suffix := desktopBrowseSuffix(bo)
 	return `window.__SKYWIRE_BROWSE_ORIGIN__={suffix:` + strconv.Quote(suffix) +
 		`,scheme:` + strconv.Quote(scheme) + `,port:` + strconv.Quote(port) + `};`
 }
