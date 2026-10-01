@@ -575,6 +575,22 @@
 					for (var i = 0; i < u8.length; i += C) { s += String.fromCharCode.apply(null, u8.subarray(i, i + C)); }
 					return btoa(s);
 				}
+				// withBrowserHeaders fills in what this browser would send and a
+				// page script never sees (User-Agent, Accept, Accept-Language). The
+				// visor's own Go client would otherwise send Go-http-client, which
+				// sites like Wikipedia refuse with a 403. A page's own value wins.
+				function withBrowserHeaders(h) {
+					var out = {}, have = {};
+					for (var k in (h || {})) { out[k] = h[k]; have[k.toLowerCase()] = true; }
+					var nav = globalThis.navigator || {};
+					if (!have['user-agent'] && nav.userAgent) out['User-Agent'] = nav.userAgent;
+					if (!have.accept) out.Accept = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8';
+					if (!have['accept-language']) {
+						var langs = (nav.languages && nav.languages.length) ? nav.languages : [nav.language || 'en-US'];
+						out['Accept-Language'] = langs.map(function (l, i) { return i ? l + ';q=' + Math.max(0.1, 1 - i * 0.1).toFixed(1) : l; }).join(',');
+					}
+					return out;
+				}
 				// tabBrowseStream asks THIS tab's hypervisor to make the request
 				// through the proxy on vnet:egressPort — the page cannot do TLS itself,
 				// so every request goes through the visor, which verifies against its
@@ -587,7 +603,7 @@
 				function tabBrowseStream(url, method, reqBody, reqHeaders, egressPort) {
 					var payload = { method: method || 'GET', url: url, proxy: 'vnet:' + egressPort };
 					if (reqBody && reqBody.length) { payload.body = b64of(reqBody); }
-					for (var hk in (reqHeaders || {})) { payload.header = reqHeaders; break; }
+					payload.header = withBrowserHeaders(reqHeaders);
 					var v = globalThis.vnet;
 					var id = v.dial(HV_PORT, 'browse-stream');
 					if (id < 0) return Promise.resolve(proxyError('could not reach this tab\'s hypervisor'));
@@ -897,7 +913,7 @@
 						var target = mesh ? 'http://' + resolverHost(u.hostname) + (u.port && u.port !== '443' ? ':' + u.port : '') + (u.pathname || '/') + (u.search || '') : u.href;
 						var req = { method: rqM, url: target, proxy: hp.proxy };
 						if (rqB && rqB.length) { req.body = b64of(rqB); }
-						for (var hk in rqH) { req.header = rqH; break; }
+						req.header = withBrowserHeaders(rqH);
 						return fetch('/api/browse-stream/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) })
 							.then(function (res) {
 								// A stream carries X-Browse-Final-Url; anything else is the
