@@ -173,6 +173,9 @@ func (m *sharedQUICMux) Close() error {
 	}
 	m.closed = true
 	var err error
+	if w, ok := m.wt.(interface{ close() }); ok {
+		w.close()
+	}
 	if m.lis != nil {
 		err = m.lis.Close()
 	}

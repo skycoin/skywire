@@ -205,30 +205,51 @@ func (c *wtClient) serve() {
 		c.log.Errorf("Failed to start WT listener on %q: %v", c.listenAddr, err)
 		return
 	}
-	c.advertisedURL = fmt.Sprintf("https://%s%s", lis.Addr().String(), wtPath)
-	c.advertisedCertHash = hex.EncodeToString(lis.certHash[:])
-	c.log.Infof("Serving WT transport at %s (cert %s)", c.advertisedURL, c.advertisedCertHash)
+	c.advertise(lis.Addr(), lis.cert, "")
+	c.acceptTransports(lis)
+}
 
-	// Register the WT endpoint + cert hash with the address resolver so peers can
-	// discover it and pin the self-signed cert (WT has no CA). Like stcpr/quic,
-	// keep the entry alive with a periodic re-register.
+// advertise publishes the WT endpoint at addr with cert's hash, keeps that
+// hash current as the certificate rotates, and registers both with the
+// address resolver so peers can discover the endpoint and pin the
+// self-signed cert (WT has no CA). Like stcpr/quic, the entry is kept alive
+// with a periodic re-register; a rotation re-registers at once, since a peer
+// pinning the old hash cannot connect until it learns the new one.
+func (c *wtClient) advertise(addr net.Addr, cert *skyquic.RotatingWebTransportCert, where string) {
+	url := fmt.Sprintf("https://%s%s", addr.String(), wtPath)
+	rotated := make(chan struct{}, 1)
+	cert.OnRotate(func(h [32]byte) {
+		c.setAdvertised(url, hex.EncodeToString(h[:]))
+		c.log.Infof("WT certificate rotated (cert %s)", hex.EncodeToString(h[:]))
+		select {
+		case rotated <- struct{}{}:
+		default:
+		}
+	})
+	h := cert.Hash()
+	c.setAdvertised(url, hex.EncodeToString(h[:]))
+	c.log.Infof("Serving WT transport at %s%s (cert %s)", url, where, hex.EncodeToString(h[:]))
+
 	if ar, _ := c.ar.(addrresolver.APIClient); ar != nil {
-		if _, port, err := net.SplitHostPort(lis.Addr().String()); err == nil {
-			go c.registerWT(ar, port, c.advertisedCertHash)
+		if _, port, err := net.SplitHostPort(addr.String()); err == nil {
+			go c.registerWT(ar, port, cert, rotated)
 		} else {
 			c.log.WithError(err).Warn("WT: cannot extract port for AR registration")
 		}
 	}
-
-	c.acceptTransports(lis)
 }
 
 // registerWT binds the WT UDP port + cert hash to the address resolver, retrying
-// with backoff, then re-registers periodically to keep the entry alive.
-func (c *wtClient) registerWT(ar addrresolver.APIClient, port, certHash string) {
+// with backoff, then re-registers periodically to keep the entry alive, and
+// whenever the certificate rotates.
+func (c *wtClient) registerWT(ar addrresolver.APIClient, port string, cert *skyquic.RotatingWebTransportCert, rotated <-chan struct{}) {
+	bind := func() error {
+		h := cert.Hash()
+		return ar.BindWT(context.Background(), port, hex.EncodeToString(h[:]))
+	}
 	delay := wtBindRetryDelay
 	for {
-		if err := ar.BindWT(context.Background(), port, certHash); err == nil {
+		if err := bind(); err == nil {
 			c.log.Debugf("Successfully bound WT to AR (port %s)", port)
 			break
 		} else {
@@ -249,9 +270,10 @@ func (c *wtClient) registerWT(ar addrresolver.APIClient, port, certHash string) 
 		case <-c.done:
 			return
 		case <-ticker.C:
-			if err := ar.BindWT(context.Background(), port, certHash); err != nil {
-				c.log.WithError(err).Warn("Failed to re-register WT")
-			}
+		case <-rotated:
+		}
+		if err := bind(); err != nil {
+			c.log.WithError(err).Warn("Failed to re-register WT")
 		}
 	}
 }
@@ -284,27 +306,20 @@ func (c *wtClient) serveShared(m *sharedQUICMux) (net.Listener, error) {
 		lis.push(wtStreamConn{Stream: str, local: sess.LocalAddr(), remote: sess.RemoteAddr()})
 	})
 
-	c.advertisedCertHash = hex.EncodeToString(wt.certHash[:])
-	c.advertisedURL = fmt.Sprintf("https://%s%s", addr.String(), wtPath)
-	c.log.Infof("Serving WT transport at %s on shared transport_port (cert %s)", c.advertisedURL, c.advertisedCertHash)
-
-	if ar, _ := c.ar.(addrresolver.APIClient); ar != nil {
-		if _, port, err := net.SplitHostPort(addr.String()); err == nil {
-			go c.registerWT(ar, port, c.advertisedCertHash)
-		} else {
-			c.log.WithError(err).Warn("WT: cannot extract port for AR registration")
-		}
-	}
+	c.advertise(addr, wt.cert, " on shared transport_port")
 	return lis, nil
 }
 
 // sharedWT is the HTTP/3 WebTransport server on a shared QUIC socket. Each
 // user mounts its own path on mux.
 type sharedWT struct {
-	mux      *http.ServeMux
-	srv      *webtransport.Server
-	certHash [32]byte
+	mux  *http.ServeMux
+	srv  *webtransport.Server
+	cert *skyquic.RotatingWebTransportCert
 }
+
+// close stops the certificate rotation, when the socket closes.
+func (w *sharedWT) close() { w.cert.Close() }
 
 // sharedWebTransport returns m's WebTransport server, building it and
 // registering the "h3" ALPN on first use. The mux's listener performs the TLS
@@ -312,14 +327,14 @@ type sharedWT struct {
 // accepted h3 conn is then served as one WebTransport connection.
 func sharedWebTransport(m *sharedQUICMux) (*sharedWT, error) {
 	m.wtOnce.Do(func() {
-		cert, certHash, err := skyquic.NewWebTransportCertificate()
+		cert, err := skyquic.NewRotatingWebTransportCert()
 		if err != nil {
 			m.wtErr = fmt.Errorf("wt: generate cert: %w", err)
 			return
 		}
 		srvMux := http.NewServeMux()
 		h3 := &http3.Server{
-			TLSConfig:       skyquic.WebTransportTLSConfig(cert),
+			TLSConfig:       cert.TLSConfig(),
 			Handler:         srvMux,
 			EnableDatagrams: true,
 			QUICConfig: &quic.Config{
@@ -343,11 +358,12 @@ func sharedWebTransport(m *sharedQUICMux) (*sharedWT, error) {
 				m.log.Debugf("WT ServeQUICConn ended: %v", err)
 			}
 		}
-		if err := m.register(wtALPN, skyquic.WebTransportTLSConfig(cert), handle); err != nil {
+		if err := m.register(wtALPN, cert.TLSConfig(), handle); err != nil {
+			cert.Close()
 			m.wtErr = fmt.Errorf("wt: register on shared mux: %w", err)
 			return
 		}
-		m.wt = &sharedWT{mux: srvMux, srv: wtSrv, certHash: certHash}
+		m.wt = &sharedWT{mux: srvMux, srv: wtSrv, cert: cert}
 	})
 	if m.wtErr != nil {
 		return nil, m.wtErr
@@ -358,16 +374,15 @@ func sharedWebTransport(m *sharedQUICMux) (*sharedWT, error) {
 // wtListener fronts a WebTransport (HTTP/3) server as a net.Listener: the first
 // bidirectional stream of each accepted WebTransport session is delivered as a
 // net.Conn from Accept(). The server presents a fresh self-signed cert; its
-// SHA-256 (certHash) is what dialing peers pin. Cert rotation (WebTransport certs
-// are browser-capped at <=14 days) is a wiring concern for a longer-lived
-// listener; this listener holds one cert for its lifetime.
+// SHA-256 is what dialing peers pin. The certificate rotates before the
+// browser-enforced 14-day limit; see skyquic.RotatingWebTransportCert.
 type wtListener struct {
-	addr     net.Addr
-	certHash [32]byte
-	conns    chan net.Conn
-	done     chan struct{}
-	wtSrv    *webtransport.Server
-	once     sync.Once
+	addr  net.Addr
+	cert  *skyquic.RotatingWebTransportCert
+	conns chan net.Conn
+	done  chan struct{}
+	wtSrv *webtransport.Server
+	once  sync.Once
 }
 
 func newWTListener(addr string) (*wtListener, error) {
@@ -375,22 +390,22 @@ func newWTListener(addr string) (*wtListener, error) {
 	if err != nil {
 		return nil, err
 	}
-	cert, certHash, err := skyquic.NewWebTransportCertificate()
+	cert, err := skyquic.NewRotatingWebTransportCert()
 	if err != nil {
 		udpConn.Close() //nolint:errcheck,gosec
 		return nil, fmt.Errorf("wt: generate cert: %w", err)
 	}
 
 	l := &wtListener{
-		addr:     udpConn.LocalAddr(),
-		certHash: certHash,
-		conns:    make(chan net.Conn),
-		done:     make(chan struct{}),
+		addr:  udpConn.LocalAddr(),
+		cert:  cert,
+		conns: make(chan net.Conn),
+		done:  make(chan struct{}),
 	}
 
 	mux := http.NewServeMux()
 	h3 := &http3.Server{
-		TLSConfig:       skyquic.WebTransportTLSConfig(cert),
+		TLSConfig:       cert.TLSConfig(),
 		Handler:         mux,
 		EnableDatagrams: true,
 		QUICConfig: &quic.Config{
@@ -449,6 +464,7 @@ func (l *wtListener) Accept() (net.Conn, error) {
 func (l *wtListener) Close() error {
 	l.once.Do(func() {
 		close(l.done)
+		l.cert.Close()
 		_ = l.wtSrv.Close() //nolint:errcheck
 	})
 	return nil
@@ -466,21 +482,22 @@ type dmsgWTServer interface {
 // SetDmsgWTServer serves a folded dmsg server's WebTransport front on the
 // shared QUIC socket, at dmsg.WTPath beside the visor's own WT transport — the
 // way a browser reaches a dmsg server without a TLS certificate from a CA.
-// srv is typed `any`, as SetDmsgQUICServer's is. Returns the socket's local
-// address and the certificate hash a client pins, or a nil address when
-// unified UDP is not enabled.
-func (f *ClientFactory) SetDmsgWTServer(srv any) (net.Addr, [32]byte, error) {
+// srv is typed `any`, as SetDmsgQUICServer's is. advertise is called with the
+// socket's local address and the certificate hash a client pins, now and
+// again whenever the certificate rotates. Reports false when unified UDP is
+// not enabled, so there is nothing to serve on.
+func (f *ClientFactory) SetDmsgWTServer(srv any, advertise func(addr net.Addr, certHash [32]byte)) (bool, error) {
 	m, ok := f.sharedQUIC.(*sharedQUICMux)
 	if !ok || m == nil {
-		return nil, [32]byte{}, nil
+		return false, nil
 	}
 	s, ok := srv.(dmsgWTServer)
 	if !ok {
-		return nil, [32]byte{}, fmt.Errorf("dmsg wt: %T does not serve WebTransport sessions", srv)
+		return false, fmt.Errorf("dmsg wt: %T does not serve WebTransport sessions", srv)
 	}
 	wt, err := sharedWebTransport(m)
 	if err != nil {
-		return nil, [32]byte{}, err
+		return false, err
 	}
 	wt.mux.HandleFunc(dmsg.WTPath, func(w http.ResponseWriter, r *http.Request) {
 		sess, err := wt.srv.Upgrade(w, r)
@@ -490,5 +507,8 @@ func (f *ClientFactory) SetDmsgWTServer(srv any) (net.Addr, [32]byte, error) {
 		}
 		s.ServeWTSession(sess)
 	})
-	return m.localAddr(), wt.certHash, nil
+	addr := m.localAddr()
+	wt.cert.OnRotate(func(h [32]byte) { advertise(addr, h) })
+	advertise(addr, wt.cert.Hash())
+	return true, nil
 }

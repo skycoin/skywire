@@ -63,22 +63,16 @@ func (c wtStreamConn) LocalAddr() net.Addr  { return c.local }
 func (c wtStreamConn) RemoteAddr() net.Addr { return c.remote }
 
 // ServeWebTransport serves dmsg over WebTransport on the given UDP socket and
-// advertises advertisedWTURL + certHash in discovery (Server.AddressWT +
+// advertises advertisedWTURL with cert's hash in discovery (Server.AddressWT +
 // CertHashWT). It runs alongside TCP/QUIC/WS Serve. cert is the short-lived
-// self-signed ECDSA cert (skyquic.NewWebTransportCertificate) and certHash is
-// its SHA-256 — the value a browser pins in its WebTransport
-// serverCertificateHashes constructor. Blocks until the listener errors or the
-// server closes.
-//
-// Cert rotation (WebTransport certs are valid <=14 days, browser-enforced) is
-// the caller's job: generate a fresh cert + hash and re-call ServeWebTransport
-// on a new socket before expiry, so the new hash is re-advertised. Keeping the
-// cert in the caller (rather than generating it here) lets the caller persist
-// and rotate it deterministically.
-func (s *Server) ServeWebTransport(udpConn net.PacketConn, advertisedWTURL string, cert tls.Certificate, certHash [32]byte) error {
+// self-signed certificate a browser pins by its SHA-256 in its WebTransport
+// serverCertificateHashes constructor; it rotates before browsers stop
+// accepting it, and each new hash is advertised as it is made. Blocks until the
+// listener errors or the server closes.
+func (s *Server) ServeWebTransport(udpConn net.PacketConn, advertisedWTURL string, cert *skyquic.RotatingWebTransportCert) error {
 	mux := http.NewServeMux()
 	h3 := &http3.Server{
-		TLSConfig:       skyquic.WebTransportTLSConfig(cert),
+		TLSConfig:       cert.TLSConfig(),
 		Handler:         mux,
 		EnableDatagrams: true, // required: WebTransport runs on HTTP/3 datagrams
 		QUICConfig: &quic.Config{
@@ -110,7 +104,8 @@ func (s *Server) ServeWebTransport(udpConn net.PacketConn, advertisedWTURL strin
 		s.handleWTSession(sess)
 	})
 
-	s.setAdvertisedWT(advertisedWTURL, certHash)
+	cert.OnRotate(func(h [32]byte) { s.setAdvertisedWT(advertisedWTURL, h) })
+	s.setAdvertisedWT(advertisedWTURL, cert.Hash())
 	go func() {
 		<-s.done
 		wtSrv.Close() //nolint:errcheck,gosec

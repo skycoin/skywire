@@ -11,6 +11,7 @@ import (
 	"crypto/x509/pkix"
 	"fmt"
 	"math/big"
+	"sync"
 	"time"
 )
 
@@ -68,4 +69,100 @@ func WebTransportTLSConfig(cert tls.Certificate) *tls.Config {
 		MinVersion:   tls.VersionTLS13,
 		NextProtos:   []string{WebTransportNextProto},
 	}
+}
+
+// webTransportCertRotateEvery is how often a RotatingWebTransportCert makes a
+// new certificate: half its validity, so the one being served is never close
+// to expiring. A server runs for weeks; a single certificate made at start
+// stops being accepted by browsers after webTransportCertValidity.
+var webTransportCertRotateEvery = webTransportCertValidity / 2
+
+// RotatingWebTransportCert is a WebTransport server certificate that replaces
+// itself before it expires. Its TLSConfig presents whichever certificate is
+// current at each handshake, so a rotation reaches new connections at once
+// and leaves established ones alone; OnRotate subscribers re-advertise the
+// new hash, which is what a browser pins.
+type RotatingWebTransportCert struct {
+	mu   sync.RWMutex
+	cert *tls.Certificate
+	hash [32]byte
+	subs []func([32]byte)
+
+	done chan struct{}
+	once sync.Once
+}
+
+// NewRotatingWebTransportCert makes the first certificate and starts rotating.
+// Close stops the rotation.
+func NewRotatingWebTransportCert() (*RotatingWebTransportCert, error) {
+	r := &RotatingWebTransportCert{done: make(chan struct{})}
+	if err := r.Rotate(); err != nil {
+		return nil, err
+	}
+	go r.run()
+	return r, nil
+}
+
+func (r *RotatingWebTransportCert) run() {
+	t := time.NewTicker(webTransportCertRotateEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-r.done:
+			return
+		case <-t.C:
+			// A failed rotation keeps the current certificate; the next tick
+			// tries again, well before it expires.
+			_ = r.Rotate() //nolint:errcheck
+		}
+	}
+}
+
+// Rotate replaces the certificate now and tells every OnRotate subscriber.
+func (r *RotatingWebTransportCert) Rotate() error {
+	cert, hash, err := NewWebTransportCertificate()
+	if err != nil {
+		return err
+	}
+	r.mu.Lock()
+	r.cert, r.hash = &cert, hash
+	subs := append([]func([32]byte){}, r.subs...)
+	r.mu.Unlock()
+	for _, fn := range subs {
+		fn(hash)
+	}
+	return nil
+}
+
+// Hash is the SHA-256 of the current certificate.
+func (r *RotatingWebTransportCert) Hash() [32]byte {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.hash
+}
+
+// OnRotate calls fn with the new hash after every rotation.
+func (r *RotatingWebTransportCert) OnRotate(fn func([32]byte)) {
+	r.mu.Lock()
+	r.subs = append(r.subs, fn)
+	r.mu.Unlock()
+}
+
+// TLSConfig is a server *tls.Config, as WebTransportTLSConfig builds, that
+// presents the current certificate at each handshake.
+func (r *RotatingWebTransportCert) TLSConfig() *tls.Config {
+	return &tls.Config{
+		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+			r.mu.RLock()
+			defer r.mu.RUnlock()
+			return r.cert, nil
+		},
+		MinVersion: tls.VersionTLS13,
+		NextProtos: []string{WebTransportNextProto},
+	}
+}
+
+// Close stops the rotation. The current certificate keeps being served.
+func (r *RotatingWebTransportCert) Close() {
+	r.once.Do(func() { close(r.done) })
 }
