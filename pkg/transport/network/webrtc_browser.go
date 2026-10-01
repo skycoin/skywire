@@ -314,8 +314,29 @@ type webRTCConn struct {
 	closed    bool
 	closeErr  error
 	rDeadline time.Time
+	wDeadline time.Time
 
 	handlers []js.Func
+}
+
+// A DataChannel queues whatever it is handed. Without a bound the queue grew
+// to seconds of delay under load, and a browser closes the channel once it
+// passes its limit, so Write waits above dcHighWater until the queue drains
+// below dcLowWater.
+const (
+	dcHighWater = 1 << 20
+	dcLowWater  = 256 << 10
+)
+
+// sendQueueFull reports whether the channel's queue is above dcHighWater.
+// A real channel reports bufferedAmount; the worker's proxy of the page's
+// channel reports bufferedHigh (exec-worker.js), since the page owns the count.
+func (c *webRTCConn) sendQueueFull() bool {
+	if c.dc.Get("bufferedHigh").Truthy() {
+		return true
+	}
+	n := c.dc.Get("bufferedAmount")
+	return n.Type() == js.TypeNumber && n.Int() > dcHighWater
 }
 
 func newWebRTCConn(dc, pc js.Value, signal io.Closer) *webRTCConn {
@@ -346,11 +367,21 @@ func newWebRTCConn(dc, pc js.Value, signal io.Closer) *webRTCConn {
 		c.openOnce.Do(func() { c.openErr = errors.New("datachannel error before open"); close(c.openCh) })
 		return nil
 	})
-	c.handlers = []js.Func{onOpen, onMsg, onClose, onErr}
+	// Wakes a Write waiting for the send queue to drain. It only signals:
+	// a callback that blocks would stall the whole worker.
+	onLow := js.FuncOf(func(js.Value, []js.Value) interface{} {
+		c.mu.Lock()
+		c.wake()
+		c.mu.Unlock()
+		return nil
+	})
+	c.handlers = []js.Func{onOpen, onMsg, onClose, onErr, onLow}
 	dc.Set("onopen", onOpen)
 	dc.Set("onmessage", onMsg)
 	dc.Set("onclose", onClose)
 	dc.Set("onerror", onErr)
+	dc.Set("bufferedAmountLowThreshold", dcLowWater)
+	dc.Set("onbufferedamountlow", onLow)
 
 	if dc.Get("readyState").String() == "open" {
 		c.openOnce.Do(func() { close(c.openCh) })
@@ -420,16 +451,43 @@ func (c *webRTCConn) Read(p []byte) (int, error) {
 }
 
 func (c *webRTCConn) Write(p []byte) (int, error) {
-	c.mu.Lock()
-	if c.closed {
-		err := c.closeErr
-		c.mu.Unlock()
-		if err == nil {
-			err = net.ErrClosed
+	for {
+		c.mu.Lock()
+		if c.closed {
+			err := c.closeErr
+			c.mu.Unlock()
+			if err == nil {
+				err = net.ErrClosed
+			}
+			return 0, err
 		}
-		return 0, err
+		if !c.sendQueueFull() {
+			c.mu.Unlock()
+			break
+		}
+		notify := c.notify
+		deadline := c.wDeadline
+		c.mu.Unlock()
+
+		var timer *time.Timer
+		var timeout <-chan time.Time
+		if !deadline.IsZero() {
+			d := time.Until(deadline)
+			if d <= 0 {
+				return 0, wrtcTimeout{}
+			}
+			timer = time.NewTimer(d)
+			timeout = timer.C
+		}
+		select {
+		case <-notify:
+		case <-timeout:
+			return 0, wrtcTimeout{}
+		}
+		if timer != nil {
+			timer.Stop()
+		}
 	}
-	c.mu.Unlock()
 	u8 := js.Global().Get("Uint8Array").New(len(p))
 	js.CopyBytesToJS(u8, p)
 	c.dc.Call("send", u8)
@@ -466,8 +524,18 @@ func (c *webRTCConn) SetReadDeadline(t time.Time) error {
 	c.mu.Unlock()
 	return nil
 }
-func (c *webRTCConn) SetWriteDeadline(time.Time) error { return nil }
-func (c *webRTCConn) SetDeadline(t time.Time) error    { return c.SetReadDeadline(t) }
+func (c *webRTCConn) SetWriteDeadline(t time.Time) error {
+	c.mu.Lock()
+	c.wDeadline = t
+	c.wake()
+	c.mu.Unlock()
+	return nil
+}
+
+func (c *webRTCConn) SetDeadline(t time.Time) error {
+	_ = c.SetWriteDeadline(t) //nolint:errcheck // never fails
+	return c.SetReadDeadline(t)
+}
 
 type wrtcTimeout struct{}
 
