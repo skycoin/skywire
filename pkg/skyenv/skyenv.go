@@ -144,6 +144,21 @@ const (
 	// summary, not every binding's addresses.
 	DmsgARReachCXOPort uint16 = 76
 
+	// DmsgTPDVisorBWCXOPort is the dmsg port TPD's per-visor bandwidth
+	// publisher listens on: for each settled day, the bytes each visor sent,
+	// by transport type, with transports between visors on one IP left out
+	// (visorbw/day/<date>). What the reward system pays pool 2 from. Its own
+	// port because the reward host wants these ~50 KB days, not the
+	// per-transport metrics they are reduced from.
+	DmsgTPDVisorBWCXOPort uint16 = 77
+
+	// DmsgRewardIPClassCXOPort is the dmsg port the reward system's IP-class
+	// publisher listens on (ipclass/all): per visor, a keyed hash of the IP its
+	// survey reports, equal for visors on one IP. TPD reads it to leave
+	// same-IP transports out of DmsgTPDVisorBWCXOPort's totals without ever
+	// learning an IP.
+	DmsgRewardIPClassCXOPort uint16 = 78
+
 	// DmsgDMSGDRegistrationCXOPort is the dmsg port the dmsg-discovery's CXO
 	// client-entry REGISTRATION aggregator binds (and each visor's entry
 	// publisher binds for the reverse subscribe). A visor publishes its own

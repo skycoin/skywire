@@ -344,6 +344,8 @@ func (s *service) startCXO(
 	s.cxo.AddPublisher(ctx, logger, "routing", skyenv.DmsgTPDRoutingCXOPort, rp, err)
 	sp, err := api.StartStatsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
 	s.cxo.AddPublisher(ctx, logger, "stats", skyenv.DmsgTPDStatsCXOPort, sp, err)
+	vp, err := api.StartVisorBWCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
+	s.cxo.AddPublisher(ctx, logger, "visorbw", skyenv.DmsgTPDVisorBWCXOPort, vp, err)
 }
 
 // aggregatorSink composes the cxoaggregator.Sink contract from the
