@@ -22,7 +22,8 @@ import (
 // Outside the /api group: its 30 s timeout would cut a long download.
 
 // serveBrowseStream takes a BrowseClearnetRequest as a JSON body (Proxy
-// required) and answers with the upstream response, streamed.
+// defaults to this visor's resolving proxy) and answers with the upstream
+// response, streamed.
 func (v *Visor) serveBrowseStream(w http.ResponseWriter, r *http.Request) {
 	var req BrowseClearnetRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, browseMaxBody)).Decode(&req); err != nil {
@@ -30,8 +31,12 @@ func (v *Visor) serveBrowseStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(req.Proxy) == "" {
-		http.Error(w, "proxy required", http.StatusBadRequest)
-		return
+		p, ok := v.defaultBrowseProxy()
+		if !ok {
+			http.Error(w, "no proxy: name one, or enable dmsg_web (this visor's resolving proxy)", http.StatusBadRequest)
+			return
+		}
+		req.Proxy = p
 	}
 	// Not r.Context(): the stream outlives the handler once hijacked. The
 	// timer bounds the wait for the upstream's headers, not the body.
@@ -82,6 +87,13 @@ func browseStreamHead(resp *http.Response) string {
 		}
 		for _, val := range vs {
 			fmt.Fprintf(&b, "%s: %s\r\n", k, strings.NewReplacer("\r", "", "\n", "").Replace(val))
+		}
+	}
+	// Set-Cookie again as one JSON header: a page reading this with fetch()
+	// never sees Set-Cookie, and the frame mirrors these into document.cookie.
+	if sc := resp.Header.Values("Set-Cookie"); len(sc) > 0 {
+		if j, err := json.Marshal(sc); err == nil {
+			fmt.Fprintf(&b, "X-Realorigin-Set-Cookie: %s\r\n", j)
 		}
 	}
 	if resp.Request != nil && resp.Request.URL != nil {
