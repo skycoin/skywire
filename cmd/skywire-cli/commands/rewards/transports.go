@@ -334,12 +334,23 @@ sender-side aggregation. Designed to be run hourly by the reward service.`,
 			bwLog.Fatal("Failed to fetch bandwidth data: ", err)
 		}
 
+		// An empty answer is never a real day: TPD always has transports
+		// moving bytes. It comes from a source with nothing to serve yet,
+		// such as a CXO cache that has not synced, and written out it
+		// stands as that day's data. Keep whatever file the day already
+		// has and exit cleanly, so the reward run that follows still goes
+		// ahead on it, and a later run can collect again.
+		dailyFile := fmt.Sprintf("%s/%s_bandwidth.json", histPath, targetDate)
+		if len(transports) == 0 {
+			bwLog.Warnf("TPD returned no transports with bandwidth for %s; not writing %s", targetDate, dailyFile)
+			return
+		}
+
 		// Write the v2 bandwidth JSON
 		out := BandwidthData{
 			Version:    BandwidthDataVersion,
 			Transports: transports,
 		}
-		dailyFile := fmt.Sprintf("%s/%s_bandwidth.json", histPath, targetDate)
 		jsonData, err := json.MarshalIndent(out, "", "  ")
 		if err != nil {
 			bwLog.Fatal("Failed to marshal bandwidth data: ", err)
