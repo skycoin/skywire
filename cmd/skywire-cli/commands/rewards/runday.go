@@ -282,9 +282,8 @@ type dayResult struct {
 	MonthReward   float64
 	DayReward     float64
 
-	// Pool 1 (presence) and Pool 2 (legacy second arch pool / unused in BW mode)
+	// Every eligible visor. Pool 2 repeats Pool 1, so there is one list.
 	NodesInfos1 []nodeinfo
-	NodesInfos2 []nodeinfo
 	Ineligible  []nodeinfo
 
 	IPCounts   map[string]int
@@ -292,7 +291,6 @@ type dayResult struct {
 	UUIDCounts map[string]int
 
 	TotalShares1   float64
-	TotalShares2   float64
 	SaturationExp  float64
 	MinBWThreshold uint64
 }
@@ -326,10 +324,12 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 		return nil, fmt.Errorf("parse services JSON (dmsg): %w", err)
 	}
 
-	// Architecture allow-lists. Mirror the defaults from RootCmd's flags so
-	// the new entry point matches behavior of the legacy four-pass script.
-	allowArchMap1 := buildArchMap(rewards.Architectures, []string{"wasm", "amd64", "386"})
-	allowArchMap2 := buildArchMap(rewards.Architectures, []string{"wasm", "arm64", "arm", "ppc64", "riscv64", "loong64", "mips", "mips64", "mips64le", "mipsle", "ppc64le", "s390x"})
+	// Architectures that qualify: the union of RootCmd's --a1 and --a2 defaults,
+	// which never split visors into pools.
+	allowArch := buildArchMap(rewards.Architectures, []string{"wasm", "amd64", "386"})
+	for arch := range buildArchMap(rewards.Architectures, []string{"wasm", "arm64", "arm", "ppc64", "riscv64", "loong64", "mips", "mips64", "mips64le", "mipsle", "ppc64le", "s390x"}) {
+		allowArch[arch] = struct{}{}
+	}
 
 	// GeoIP for regional saturation.
 	var geoDB *geoip2.Reader
@@ -358,7 +358,7 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 		return nil, fmt.Errorf("no keys achieved minimum uptime on %s", opts.Date)
 	}
 
-	var nodesInfos1, nodesInfos2, grrInfos []nodeinfo
+	var nodesInfos1, grrInfos []nodeinfo
 	for _, pk := range res {
 		surveyPath := fmt.Sprintf("%s/%s/node-info.json", opts.HwSurveyPath, pk)
 		survey, parseErr := parseSurvey(surveyPath)
@@ -388,15 +388,13 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 		}
 		uu := survey.UUID
 
-		_, allowed1 := allowArchMap1[arch]
-		_, allowed2 := allowArchMap2[arch]
 		_, _, addrErr := rewardconfig.ValidateRewardAddress(sky)
 
 		// TPD-integrated UT already gated >= 2 transports at heartbeat
 		// time, so every pk we're iterating qualified by definition.
 		meetsTransportReq := true
 
-		archAllowed := allowed1 || allowed2
+		_, archAllowed := allowArch[arch]
 
 		ni := nodeinfo{
 			IPAddr:     ip,
@@ -426,12 +424,7 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 			}
 		}
 
-		if allowed1 {
-			nodesInfos1 = append(nodesInfos1, ni)
-		}
-		if allowed2 {
-			nodesInfos2 = append(nodesInfos2, ni)
-		}
+		nodesInfos1 = append(nodesInfos1, ni)
 	}
 
 	daysThisMonth := time.Date(wDate.Year(), wDate.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()
@@ -439,7 +432,7 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 	monthReward := (float64(opts.YearlyTotal) / float64(daysThisYear)) * float64(daysThisMonth)
 	dayReward := monthReward / float64(daysThisMonth)
 
-	allEligible := append(append([]nodeinfo{}, nodesInfos1...), nodesInfos2...)
+	allEligible := nodesInfos1
 	allIPs := make([]string, 0, len(allEligible))
 	allMACs := make([]string, 0, len(allEligible))
 	allUUIDs := make([]string, 0, len(allEligible))
@@ -460,9 +453,8 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 	defer func() { saturationExponent = prevSat }()
 
 	computePoolShares(nodesInfos1, ipCounts, macCounts)
-	computePoolShares(nodesInfos2, ipCounts, macCounts)
-	totalShares1 := computePoolRewards(nodesInfos1, dayReward)
-	totalShares2 := computePoolRewards(nodesInfos2, dayReward)
+	// Pool 2 repeats Pool 1: one presence pool pays both budgets.
+	totalShares1 := computePoolRewards(nodesInfos1, 2*dayReward)
 
 	return &dayResult{
 		Date:           opts.Date,
@@ -472,13 +464,11 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 		MonthReward:    monthReward,
 		DayReward:      dayReward,
 		NodesInfos1:    nodesInfos1,
-		NodesInfos2:    nodesInfos2,
 		Ineligible:     grrInfos,
 		IPCounts:       ipCounts,
 		MacCounts:      macCounts,
 		UUIDCounts:     uuidCounts,
 		TotalShares1:   totalShares1,
-		TotalShares2:   totalShares2,
 		SaturationExp:  satExp,
 		MinBWThreshold: opts.MinBWThreshold,
 	}, nil
@@ -588,7 +578,7 @@ func writeSharesCSV(w io.Writer, r *dayResult) error {
 	if _, err := fmt.Fprintln(w, "Skycoin Address, Skywire Public Key, Reward Shares, Reward SKY Amount, IP, Architecture, UUID, Interfaces, Country, XPub"); err != nil {
 		return err
 	}
-	combined := append(append([]nodeinfo{}, r.NodesInfos1...), r.NodesInfos2...)
+	combined := r.NodesInfos1
 	for _, ni := range combined {
 		resolved := resolveRewardAddress(ni.SkyAddr)
 		xpub := ""
@@ -607,7 +597,7 @@ func writeSharesCSV(w io.Writer, r *dayResult) error {
 // writeRewardTxnCSV mirrors the legacy `-1 -0` output (suppress stats &
 // shares) — `Skycoin Address, Reward Amount` rows aggregated per address.
 func writeRewardTxnCSV(w io.Writer, r *dayResult) error {
-	combined := append(append([]nodeinfo{}, r.NodesInfos1...), r.NodesInfos2...)
+	combined := r.NodesInfos1
 	sums := make(map[string]float64)
 	for _, ni := range combined {
 		sums[ni.SkyAddr] += ni.Reward
@@ -635,32 +625,26 @@ func writeRewardTxnCSV(w io.Writer, r *dayResult) error {
 // writeStatsTxt mirrors the legacy `-1 -2` output (suppress shares &
 // rewardtxn) — the human-readable per-day stats block.
 func writeStatsTxt(w io.Writer, r *dayResult) error {
-	fmt.Fprintf(w, "date: %s\n", r.Date)                                                            //nolint:errcheck
-	fmt.Fprintf(w, "days this month: %d\n", r.DaysThisMonth)                                        //nolint:errcheck
-	fmt.Fprintf(w, "days in the year: %d\n", r.DaysThisYear)                                        //nolint:errcheck
-	fmt.Fprintf(w, "this month's rewards: %.6f\n", r.MonthReward)                                   //nolint:errcheck
-	fmt.Fprintf(w, "reward total per pool: %.6f\n", r.DayReward)                                    //nolint:errcheck
-	fmt.Fprintf(w, "Visors meeting uptime & other requirements (Pool 1): %d\n", len(r.NodesInfos1)) //nolint:errcheck
-	fmt.Fprintf(w, "Visors meeting uptime & other requirements (Pool 2): %d\n", len(r.NodesInfos2)) //nolint:errcheck
-	fmt.Fprintf(w, "Unique mac addresses for first interface after lo: %d\n", len(r.MacCounts))     //nolint:errcheck
-	fmt.Fprintf(w, "Unique IP Addresses: %d\n", len(r.IPCounts))                                    //nolint:errcheck
-	fmt.Fprintf(w, "Unique UUIDs: %d\n", len(r.UUIDCounts))                                         //nolint:errcheck
+	fmt.Fprintf(w, "date: %s\n", r.Date)                                                                     //nolint:errcheck
+	fmt.Fprintf(w, "days this month: %d\n", r.DaysThisMonth)                                                 //nolint:errcheck
+	fmt.Fprintf(w, "days in the year: %d\n", r.DaysThisYear)                                                 //nolint:errcheck
+	fmt.Fprintf(w, "this month's rewards: %.6f\n", r.MonthReward)                                            //nolint:errcheck
+	fmt.Fprintf(w, "reward total per pool: %.6f\n", r.DayReward)                                             //nolint:errcheck
+	fmt.Fprintf(w, "Visors meeting uptime & other requirements (Pool 1): %d\n", len(r.NodesInfos1))          //nolint:errcheck
+	fmt.Fprintln(w, "reward mode: presence only, Pool 2 repeats Pool 1 (rewards run has no bandwidth pool)") //nolint:errcheck
+	fmt.Fprintf(w, "Unique mac addresses for first interface after lo: %d\n", len(r.MacCounts))              //nolint:errcheck
+	fmt.Fprintf(w, "Unique IP Addresses: %d\n", len(r.IPCounts))                                             //nolint:errcheck
+	fmt.Fprintf(w, "Unique UUIDs: %d\n", len(r.UUIDCounts))                                                  //nolint:errcheck
 	if r.SaturationExp < 1.0 {
 		fmt.Fprintf(w, "Regional saturation exponent: %.2f\n", r.SaturationExp) //nolint:errcheck
 	}
 	fmt.Fprintf(w, "Total valid shares (Pool 1): %.6f\n", r.TotalShares1) //nolint:errcheck
-	fmt.Fprintf(w, "Total valid shares (Pool 2): %.6f\n", r.TotalShares2) //nolint:errcheck
 	if r.TotalShares1 != 0 {
-		fmt.Fprintf(w, "Skycoin Per Share (Pool 1): %.6f\n", r.DayReward/r.TotalShares1) //nolint:errcheck
+		fmt.Fprintf(w, "Skycoin Per Share (Pool 1): %.6f\n", 2*r.DayReward/r.TotalShares1) //nolint:errcheck
 	} else {
 		fmt.Fprintln(w, "Skycoin Per Share (Pool 1): 0") //nolint:errcheck
 	}
-	if r.TotalShares2 != 0 {
-		fmt.Fprintf(w, "Skycoin Per Share (Pool 2): %.6f\n", r.DayReward/r.TotalShares2) //nolint:errcheck
-	} else {
-		fmt.Fprintln(w, "Skycoin Per Share (Pool 2): 0") //nolint:errcheck
-	}
-	combined := append(append([]nodeinfo{}, r.NodesInfos1...), r.NodesInfos2...)
+	combined := r.NodesInfos1
 	total := 0.0
 	for _, ni := range combined {
 		total += ni.Reward
