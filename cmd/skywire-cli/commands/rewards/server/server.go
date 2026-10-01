@@ -1864,6 +1864,8 @@ func serveStandalone(r1 *gin.Engine, bindAddr string) {
 	// sessions (#4538), while a subscriber reads a snapshot it already
 	// holds.
 	setStatsCXOSubMgrFromDmsg(dmsgClient)
+	startIPClassPublisher(ctx, dmsgClient, sk, filepath.Join(wd, "log_backups"))
+	startVisorBWWriter(filepath.Join(wd, "hist"))
 	log.Info("stats pages: TPD aggregates sourced over CXO (HTTP-over-dmsg kept as fallback)")
 
 	// tp-viz reads the deployment over THIS client rather than one of its own.
