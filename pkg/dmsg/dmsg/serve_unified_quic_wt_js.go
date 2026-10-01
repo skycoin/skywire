@@ -10,8 +10,9 @@
 package dmsg
 
 import (
-	"crypto/tls"
 	"net"
+
+	"github.com/skycoin/skywire/pkg/skyquic"
 )
 
 // ServeUnifiedQUIC on js/wasm serves QUIC only; advertisedWTURL is ignored.
@@ -25,7 +26,7 @@ func (s *Server) ServeUnifiedQUIC(udpConn net.PacketConn, advertisedUDPAddr, adv
 // ServeWebTransport is unavailable on js/wasm (no HTTP/3 server in the
 // browser); it exists so callers compile and blocks until the server closes,
 // like a listener that never accepts.
-func (s *Server) ServeWebTransport(_ net.PacketConn, _ string, _ tls.Certificate, _ [32]byte) error {
+func (s *Server) ServeWebTransport(_ net.PacketConn, _ string, _ *skyquic.RotatingWebTransportCert) error {
 	s.log.Warn("dmsg-wt: WebTransport serving is unavailable on js/wasm")
 	<-s.done
 	return nil

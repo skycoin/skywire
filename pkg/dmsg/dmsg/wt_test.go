@@ -43,14 +43,16 @@ func TestWebTransportSession(t *testing.T) {
 	udpConn, err := net.ListenUDP("udp", udpAddr)
 	require.NoError(t, err)
 
-	cert, certHash, err := skyquic.NewWebTransportCertificate()
+	cert, err := skyquic.NewRotatingWebTransportCert()
 	require.NoError(t, err)
+	t.Cleanup(cert.Close)
+	certHash := cert.Hash()
 
 	wtURL := "https://" + udpConn.LocalAddr().String() + wtPath
 
 	// Serve ONLY over WebTransport.
 	chSrv := make(chan error, 1)
-	go func() { chSrv <- srv.ServeWebTransport(udpConn, wtURL, cert, certHash) }()
+	go func() { chSrv <- srv.ServeWebTransport(udpConn, wtURL, cert) }()
 
 	// Manually publish the server's discovery entry advertising only the WT
 	// endpoint + cert hash (empty Address ⇒ no TCP fallback). ServeWebTransport
@@ -135,11 +137,12 @@ func TestWebTransportCertHashMismatch(t *testing.T) {
 	udpConn, err := net.ListenUDP("udp", udpAddr)
 	require.NoError(t, err)
 
-	cert, certHash, err := skyquic.NewWebTransportCertificate()
+	cert, err := skyquic.NewRotatingWebTransportCert()
 	require.NoError(t, err)
+	t.Cleanup(cert.Close)
 	wtURL := "https://" + udpConn.LocalAddr().String() + wtPath
 
-	go func() { _ = srv.ServeWebTransport(udpConn, wtURL, cert, certHash) }() //nolint:errcheck
+	go func() { _ = srv.ServeWebTransport(udpConn, wtURL, cert) }() //nolint:errcheck
 
 	// Advertise a DIFFERENT (wrong) hash than the cert the server actually serves.
 	_, wrongHash, err := skyquic.NewWebTransportCertificate()

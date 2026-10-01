@@ -5,6 +5,7 @@ package visor
 import (
 	"context"
 	crand "crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1189,17 +1190,21 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 			}
 		}
 		// ...and WebTransport, which browsers dial with the certificate hash
-		// pinned, beside the visor's own WT transport on the same socket.
-		wtAddr, wtHash, werr := v.dmsgFactory.SetDmsgWTServer(srv)
-		switch {
-		case werr != nil:
-			log.WithError(werr).Warn("dmsg over WebTransport unavailable on the shared transport port")
-		case wtAddr != nil:
-			if adv := dmsgQUICAdvertisedAddr(srvCfg.PublicAddress, wtAddr); adv != "" {
-				wtURL := "https://" + adv + dmsg.WTPath
-				srv.AdvertiseWT(wtURL, wtHash)
-				log.WithField("addr_wt", wtURL).Info("Serving dmsg over WebTransport on the shared transport port")
+		// pinned, beside the visor's own WT transport on the same socket. The
+		// certificate rotates before browsers stop accepting it, and each new
+		// hash is advertised as it is made.
+		_, werr := v.dmsgFactory.SetDmsgWTServer(srv, func(wtAddr net.Addr, wtHash [32]byte) {
+			adv := dmsgQUICAdvertisedAddr(srvCfg.PublicAddress, wtAddr)
+			if adv == "" {
+				return
 			}
+			wtURL := "https://" + adv + dmsg.WTPath
+			srv.AdvertiseWT(wtURL, wtHash)
+			log.WithField("addr_wt", wtURL).WithField("cert_hash", hex.EncodeToString(wtHash[:])).
+				Info("Serving dmsg over WebTransport on the shared transport port")
+		})
+		if werr != nil {
+			log.WithError(werr).Warn("dmsg over WebTransport unavailable on the shared transport port")
 		}
 	}
 
