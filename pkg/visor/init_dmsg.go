@@ -1171,6 +1171,25 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 		WithField("shared_transport_port", shared).
 		Info("Started in-process dmsg server on the visor key")
 
+	// Serve dmsg-over-QUIC on the transport port's UDP side. The standalone
+	// server bound that port itself; folded into a visor, the port belongs to
+	// the visor's shared QUIC socket, which refused the dmsg ALPN — so every
+	// client's QUIC dial failed at the handshake ("tls: internal error") and
+	// fell back to TCP. Advertised on the public address's host, as the
+	// standalone server does.
+	if shared && v.dmsgFactory != nil {
+		udpAddr, qerr := v.dmsgFactory.SetDmsgQUICServer(srv)
+		switch {
+		case qerr != nil:
+			log.WithError(qerr).Warn("dmsg over QUIC unavailable on the shared transport port")
+		case udpAddr != nil:
+			if adv := dmsgQUICAdvertisedAddr(srvCfg.PublicAddress, udpAddr); adv != "" {
+				srv.AdvertiseQUIC(adv)
+				log.WithField("addr_udp", adv).Info("Serving dmsg over QUIC on the shared transport port")
+			}
+		}
+	}
+
 	// Restore the WebSocket front. A standalone dmsg server served
 	// dmsg-over-WS on its own main port and advertised
 	// wss://<DNSLabel>.<suffix>/dmsg, which is the ONLY way a browser or wasm
@@ -1182,7 +1201,7 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// The port is unchanged by the fold (transport_port is pinned to the port
 	// the server already used), so the DNS record still points at the right
 	// place — but the TLS front did NOT survive it; see below.
-	if shared && v.dmsgWSFactory != nil {
+	if shared && v.dmsgFactory != nil {
 		suffix := strings.TrimPrefix(deployment.Prod.WSSDomainSuffix, ".")
 		// Gate on the deployment knowing this key, exactly as the standalone
 		// service does: a third party running this binary must never advertise
@@ -1190,7 +1209,7 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 		if suffix != "" && deployment.Prod.IsKnownDmsgServer(v.conf.PK) {
 			wssHost := v.conf.PK.DNSLabel() + "." + suffix
 			wssURL := "wss://" + wssHost + "/dmsg"
-			v.dmsgWSFactory.SetDmsgWSHandler(srv.WSHandler(wssURL))
+			v.dmsgFactory.SetDmsgWSHandler(srv.WSHandler(wssURL))
 			log.WithField("ws_url", wssURL).
 				Info("Serving dmsg over WebSocket on the shared transport port")
 
@@ -1597,4 +1616,19 @@ func initDmsgServerFromFile(_ context.Context, v *Visor, log *logging.Logger, pa
 		return nil
 	})
 	return nil
+}
+
+// dmsgQUICAdvertisedAddr is the QUIC endpoint a folded dmsg server advertises:
+// the public address's host on the shared UDP socket's port. Empty when there
+// is no public host to advertise.
+func dmsgQUICAdvertisedAddr(publicAddr string, udpAddr net.Addr) string {
+	host, _, err := net.SplitHostPort(publicAddr)
+	if err != nil || host == "" {
+		return ""
+	}
+	ua, ok := udpAddr.(*net.UDPAddr)
+	if !ok || ua.Port == 0 {
+		return ""
+	}
+	return net.JoinHostPort(host, strconv.Itoa(ua.Port))
 }
