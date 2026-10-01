@@ -36,3 +36,8 @@ func (c *wtClient) Start() error {
 // dialResolvedWT lives in wt_browser_resolve.go (std-Go js: AR-resolved, the
 // same record the native dial path uses) / wt_browser_resolve_tinygo.go
 // (TinyGo: table-only — addrresolver is !tinygo and pulls quic-go).
+
+// SetDmsgWTServer is a no-op in a browser, which serves no dmsg server.
+func (f *ClientFactory) SetDmsgWTServer(any, func(net.Addr, [32]byte, [32]byte)) (bool, error) {
+	return false, nil
+}
