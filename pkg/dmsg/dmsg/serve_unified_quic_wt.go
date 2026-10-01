@@ -109,8 +109,8 @@ func (s *Server) ServeUnifiedQUIC(udpConn net.PacketConn, advertisedUDPAddr, adv
 	if wtSrv != nil {
 		// The certificate rotates before browsers stop accepting it; each new
 		// hash is advertised as it is made.
-		wtCert.OnRotate(func(h [32]byte) { s.setAdvertisedWT(advertisedWTURL, h) })
-		s.setAdvertisedWT(advertisedWTURL, wtCert.Hash())
+		wtCert.OnRotate(func(h, next [32]byte) { s.setAdvertisedWT(advertisedWTURL, h, next) })
+		s.setAdvertisedWT(advertisedWTURL, wtCert.Hash(), wtCert.NextHash())
 		s.log.WithField("addr_wt", advertisedWTURL).Info("Serving dmsg over WebTransport (shared UDP socket).")
 		go func() {
 			<-s.done

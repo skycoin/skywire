@@ -158,6 +158,7 @@ func (v *Visor) ARSelfInfo() (*visorapi.ARSelfRegistration, error) {
 			Port:         d.Port,
 			Addresses:    append([]string(nil), d.Addresses...),
 			CertHash:     d.CertHash, // WT only; empty for the other carriers
+			CertHashNext: d.CertHashNext,
 		})
 	}
 	return out, nil

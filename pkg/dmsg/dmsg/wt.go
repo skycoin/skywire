@@ -27,11 +27,8 @@ package dmsg
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
@@ -104,8 +101,8 @@ func (s *Server) ServeWebTransport(udpConn net.PacketConn, advertisedWTURL strin
 		s.handleWTSession(sess)
 	})
 
-	cert.OnRotate(func(h [32]byte) { s.setAdvertisedWT(advertisedWTURL, h) })
-	s.setAdvertisedWT(advertisedWTURL, cert.Hash())
+	cert.OnRotate(func(h, next [32]byte) { s.setAdvertisedWT(advertisedWTURL, h, next) })
+	s.setAdvertisedWT(advertisedWTURL, cert.Hash(), cert.NextHash())
 	go func() {
 		<-s.done
 		wtSrv.Close() //nolint:errcheck,gosec
@@ -140,15 +137,17 @@ func (s *Server) handleWTSession(sess *webtransport.Session) {
 // dialSessionWT dials a dmsg server's WebTransport endpoint (Server.AddressWT)
 // and builds a yamux+Noise client session over a single bidirectional WT
 // stream — the WebTransport analog of dialSessionWS. The server cert is
-// self-signed with NO CA, so it is verified by pinning Server.CertHashWT (the
-// SHA-256 of the cert DER, lowercase hex) exactly as a browser would via
-// serverCertificateHashes; standard CA verification is disabled. This native
-// path is primarily for tests and non-browser WT clients — the production
-// browser client dials WT directly in JS over the same wire protocol.
+// self-signed with NO CA, so it is verified by pinning Server.CertHashWT and
+// CertHashWTNext (the SHA-256 of the cert DER, lowercase hex; the server's
+// current certificate and the one after its next rotation) exactly as a
+// browser would via serverCertificateHashes; standard CA verification is
+// disabled. This native path is primarily for tests and non-browser WT clients
+// — the production browser client dials WT directly in JS over the same wire
+// protocol.
 func (ce *Client) dialSessionWT(ctx context.Context, entry *disc.Entry) (ClientSession, error) {
-	wantHash, err := hex.DecodeString(entry.Server.CertHashWT)
-	if err != nil || len(wantHash) != sha256.Size {
-		return ClientSession{}, fmt.Errorf("wt: invalid cert hash %q", entry.Server.CertHashWT)
+	pins, err := skyquic.PinnedHashes(entry.Server.CertHashWT, entry.Server.CertHashWTNext)
+	if err != nil {
+		return ClientSession{}, fmt.Errorf("wt: %w", err)
 	}
 	tlsConf := &tls.Config{
 		InsecureSkipVerify: true, //nolint:gosec // pinned by cert-hash below, browser serverCertificateHashes model
@@ -162,8 +161,7 @@ func (ce *Client) dialSessionWT(ctx context.Context, entry *disc.Entry) (ClientS
 			if len(rawCerts) == 0 {
 				return fmt.Errorf("wt: server presented no certificate")
 			}
-			got := sha256.Sum256(rawCerts[0])
-			if !hmac.Equal(got[:], wantHash) {
+			if !skyquic.MatchesPinned(rawCerts[0], pins) {
 				return fmt.Errorf("wt: server cert hash mismatch")
 			}
 			return nil
@@ -214,9 +212,9 @@ func (s *Server) ServeWTSession(sess *webtransport.Session) {
 	s.handleWTSession(sess)
 }
 
-// AdvertiseWT publishes url and the pinned certificate hash as this server's
-// WebTransport endpoint, for a server whose sessions arrive through
-// ServeWTSession.
-func (s *Server) AdvertiseWT(url string, certHash [32]byte) {
-	s.setAdvertisedWT(url, certHash)
+// AdvertiseWT publishes url, the certificate hash a client pins, and the hash
+// of the certificate after the next rotation, as this server's WebTransport
+// endpoint, for a server whose sessions arrive through ServeWTSession.
+func (s *Server) AdvertiseWT(url string, certHash, nextCertHash [32]byte) {
+	s.setAdvertisedWT(url, certHash, nextCertHash)
 }

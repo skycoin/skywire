@@ -38,6 +38,9 @@ const wtPath = "/skywire"
 type WTEntry struct {
 	URL      string
 	CertHash string
+	// CertHashNext is the hash the peer will serve after its next rotation;
+	// pinned alongside CertHash. Empty when the peer does not advertise one.
+	CertHashNext string
 }
 
 // WTTable maps a peer PK to its WebTransport dial target (URL + pinned cert
@@ -150,7 +153,7 @@ func (c *wtClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (T
 	var err error
 	if e, found := c.tableEntry(rPK); found {
 		c.log.Debugf("Dialing WT %v @ %s (table)", rPK, e.URL)
-		conn, err = wtDial(ctx, e.URL, e.CertHash)
+		conn, err = wtDial(ctx, e.URL, e.CertHash, e.CertHashNext)
 	} else {
 		conn, err = c.dialResolvedWT(ctx, rPK)
 	}

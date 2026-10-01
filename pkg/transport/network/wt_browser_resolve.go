@@ -42,7 +42,7 @@ func (c *wtClient) dialResolvedWT(ctx context.Context, rPK cipher.PubKey) (net.C
 	dialAt := func(hostport string) (net.Conn, error) {
 		url := "https://" + hostport + wtPath
 		c.log.Debugf("Dialing WT %v @ %s (AR-resolved, browser)", rPK, url)
-		return wtDial(ctx, url, vd.CertHash)
+		return wtDial(ctx, url, vd.CertHash, vd.CertHashNext)
 	}
 	addrV6 := canonicalAddr(vd.RemoteAddrV6, vd.Port)
 	addrV4 := canonicalAddr(vd.RemoteAddr, vd.Port)
