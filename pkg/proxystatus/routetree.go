@@ -236,8 +236,45 @@ func streamHeaderNode(t Tunnel, nLegs int) *bitree.Node {
 		// auditioning -- held open and measured without carrying anything.
 		parts = append(parts, "held "+compactAge(int64(t.AuditionMS)))
 	}
-	parts = append(parts, fmt.Sprintf("%d %s", nLegs, legWord), mux, fmt.Sprintf("streams=%d", t.OpenStreams))
+	parts = append(parts, fmt.Sprintf("%d %s", nLegs, legWord), mux)
+	if rtt := tunnelRTT(t.Legs); rtt != "" {
+		parts = append(parts, rtt)
+	}
+	parts = append(parts, fmt.Sprintf("streams=%d", t.OpenStreams))
 	return &bitree.Node{Label: strings.Join(parts, " · ")}
+}
+
+// tunnelRTT is the tunnel's round trip as a stream sees it. Packet-level mux
+// delivers in order, so data spread over the legs waits on the slowest one
+// carrying it: the slowest live leg's route RTT is the tunnel's, and the
+// fastest is the floor a stream kept on one leg could see. Standby legs carry
+// nothing and are left out unless no other leg is measured.
+func tunnelRTT(legs []Leg) string {
+	lo, hi := 0.0, 0.0
+	for _, pass := range []bool{false, true} {
+		for _, l := range legs {
+			if !l.Alive || l.RouteLatencyMS <= 0 || (l.Standby && !pass) {
+				continue
+			}
+			if lo == 0 || l.RouteLatencyMS < lo {
+				lo = l.RouteLatencyMS
+			}
+			if l.RouteLatencyMS > hi {
+				hi = l.RouteLatencyMS
+			}
+		}
+		if hi > 0 {
+			break
+		}
+	}
+	switch {
+	case hi <= 0:
+		return ""
+	case hi-lo < 1:
+		return "rtt " + routeRTTCompact(hi)
+	default:
+		return fmt.Sprintf("rtt %s (legs %.0f–%s)", routeRTTCompact(hi), lo, routeRTTCompact(hi))
+	}
 }
 
 // streamTag is the per-stream accent band prefixed onto a leg's left summary
@@ -429,10 +466,10 @@ func routeToNode(l Leg, w sumWidths, aggUp, aggDown float64, streamIdx int) *bit
 		// No recorded path: a single leaf at the remote PK.
 		return &bitree.Node{Label: orDashPK(l.RemotePK), Left: []*bitree.Node{left}}
 	}
+	// l.Source (where a pool-taken leg came from) is not drawn: as a trailing
+	// column it outran every other and made the tree too wide. It stays in the
+	// snapshot for anything that reads it.
 	head := hopToNode(l.Hops[0])
-	if l.Source != "" {
-		head.Cols = append(head.Cols, "from "+l.Source)
-	}
 	head.Left = []*bitree.Node{left}
 	cur := head
 	for _, h := range l.Hops[1:] {
