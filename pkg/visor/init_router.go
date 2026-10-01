@@ -334,12 +334,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		ExcludeSameLANHops: v.conf.Routing.ExcludeSameLanHops == nil || *v.conf.Routing.ExcludeSameLanHops,
 		// SelfPublicIP feeds the same-LAN filter's NAT-hairpin check (a peer
 		// reached at our own public IP). Read live from STUN; nil until resolved.
-		SelfPublicIP: func() net.IP {
-			if v.stun.client != nil && v.stun.client.PublicIP != nil {
-				return net.ParseIP(v.stun.client.PublicIP.IP())
-			}
-			return nil
-		},
+		SelfPublicIP: v.selfPublicIP,
 	})
 	if err != nil {
 		cancel()
@@ -575,4 +570,13 @@ func restoreRouterKnobs(v *Visor, log *logging.Logger) {
 			}
 		}
 	}
+}
+
+// selfPublicIP is this visor's public IP, read live from STUN; nil until it
+// has resolved.
+func (v *Visor) selfPublicIP() net.IP {
+	if v.stun.client != nil && v.stun.client.PublicIP != nil {
+		return net.ParseIP(v.stun.client.PublicIP.IP())
+	}
+	return nil
 }

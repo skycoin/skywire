@@ -160,6 +160,10 @@ func snapshotToEntry(id uuid.UUID, s *LiveSnapshot) telemetrywire.Entry {
 			sampled = uint32(u) //nolint:gosec // unix seconds fit uint32 until 2106
 		}
 	}
+	typeCode := telemetrywire.TypeToCode(s.Type)
+	if s.SameNetwork && typeCode != telemetrywire.TypeUnknown {
+		typeCode |= telemetrywire.TypeFlagSameNetwork
+	}
 	return telemetrywire.Entry{
 		ID:            id,
 		SentBytes:     s.SentBytes,
@@ -169,7 +173,7 @@ func snapshotToEntry(id uuid.UUID, s *LiveSnapshot) telemetrywire.Entry {
 		LatMax:        float32(s.LatencyMaxMS),
 		LatAvg:        float32(s.LatencyAvgMS),
 		SampledAtUnix: sampled,
-		Type:          telemetrywire.TypeToCode(s.Type),
+		Type:          typeCode,
 	}
 }
 

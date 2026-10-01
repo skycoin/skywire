@@ -54,6 +54,9 @@ type LiveSnapshot struct {
 	LatencyAvgMS  float64   `json:"latency_avg_ms,omitempty"`
 	SampledAt     time.Time `json:"sampled_at"`
 	Type          string    `json:"type,omitempty"`
+	// SameNetwork marks a transport to a visor on this one's own network;
+	// its bytes are not paid for. Sent as telemetrywire.TypeFlagSameNetwork.
+	SameNetwork bool `json:"same_network,omitempty"`
 }
 
 // DailyRollup is the sealed per-day view. Bandwidth values are deltas

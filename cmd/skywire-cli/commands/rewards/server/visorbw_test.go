@@ -40,15 +40,15 @@ func TestWriteSettledVisorBW(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 10, 3, 1, 0, 0, 0, time.UTC)
 	good := func(date string) tpdstore.VisorBWDay {
-		return tpdstore.VisorBWDay{Version: tpdstore.VisorBWVersion, Date: date, ClassesAt: now,
+		return tpdstore.VisorBWDay{Version: tpdstore.VisorBWVersion, Date: date,
 			Visors: map[string]map[string]uint64{"a": {"stcpr": 5}}}
 	}
 	feed := fakeVisorBWFeed{leaves: map[string][]byte{
 		tpdstore.VisorBWDayPath("2026-10-02"): leaf(t, good("2026-10-02")),                                                            // yesterday
 		tpdstore.VisorBWDayPath("2026-10-01"): leaf(t, good("2026-10-01")),                                                            // already rewarded
 		tpdstore.VisorBWDayPath("2026-09-30"): leaf(t, good("2026-09-30")),                                                            // not rewarded yet
-		tpdstore.VisorBWDayPath("2026-09-29"): leaf(t, tpdstore.VisorBWDay{Version: 3, Date: "2026-09-29", ClassesAt: now}),           // empty
-		tpdstore.VisorBWDayPath("2026-09-28"): leaf(t, tpdstore.VisorBWDay{Version: 3, Date: "2026-09-28", Visors: good("x").Visors}), // no classes
+		tpdstore.VisorBWDayPath("2026-09-29"): leaf(t, tpdstore.VisorBWDay{Version: 3, Date: "2026-09-29"}),                           // empty
+		tpdstore.VisorBWDayPath("2026-09-28"): leaf(t, tpdstore.VisorBWDay{Version: 2, Date: "2026-09-28", Visors: good("x").Visors}), // wrong version
 	}}
 	// Yesterday and 10-01 were already calculated from bw-collect's files.
 	for _, d := range []string{"2026-10-02", "2026-10-01"} {
@@ -67,6 +67,6 @@ func TestWriteSettledVisorBW(t *testing.T) {
 	require.True(t, haveVisorBW(filepath.Join(dir, "2026-09-30_bandwidth.json")))
 	for _, d := range []string{"2026-09-29", "2026-09-28"} {
 		_, err := os.Stat(filepath.Join(dir, d+"_bandwidth.json"))
-		require.True(t, os.IsNotExist(err), "%s: an empty day, or one computed without IP classes, is never written", d)
+		require.True(t, os.IsNotExist(err), "%s: an empty day, or one of another version, is never written", d)
 	}
 }

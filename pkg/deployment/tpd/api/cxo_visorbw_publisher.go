@@ -7,12 +7,8 @@
 // One leaf per SETTLED day, for the last visorBWWindowDays days. Each is
 // reduced once from the per-transport records the metrics publisher saved
 // when the day settled, so it is final: the bytes of a past day do not change.
-// Transports between visors on one IP are left out, by the IP classes the
-// reward system publishes (store.IPClasses); until those have arrived no day
-// is published, because a day without the exclusion would pay for exactly the
-// traffic it exists to stop.
-//
-// See pkg/deployment/tpd/store/visorbw.go for why the exclusion is done here.
+// Transports a visor marked as reaching a peer on its own network are left
+// out (see pkg/deployment/tpd/store/visorbw.go).
 package api
 
 import (
@@ -25,9 +21,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
@@ -46,18 +40,10 @@ const (
 	visorBWTick = 10 * time.Minute
 )
 
-// classSource is where the reward system's IP classes are read: its CXO feed,
-// or a fixed value in tests.
-type classSource interface {
-	Get(path string) ([]byte, bool)
-	Close() error
-}
-
 // VisorBWCXOPublisher publishes the per-visor bandwidth feed.
 type VisorBWCXOPublisher struct {
-	api     *API
-	pub     *treestore.Publisher
-	classes classSource
+	api *API
+	pub *treestore.Publisher
 	// putBatch writes to the feed: pub.PutBatch, or a capture in tests.
 	putBatch func(ops []treestore.PutOp) error
 	log      *logging.Logger
@@ -74,13 +60,8 @@ type VisorBWCXOPublisher struct {
 }
 
 // StartVisorBWCXOPublisher starts the per-visor bandwidth feed on
-// DmsgTPDVisorBWCXOPort, and its subscription to the reward system's IP
-// classes on DmsgRewardIPClassCXOPort.
+// DmsgTPDVisorBWCXOPort.
 func StartVisorBWCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logrus.FieldLogger) (*VisorBWCXOPublisher, error) {
-	rewardPK := cmdutil.PKFromDmsgURL(deployment.Prod.RewardSystem)
-	if rewardPK == (cipher.PubKey{}) {
-		return nil, fmt.Errorf("no reward system public key in the deployment config")
-	}
 	log := logging.MustGetLogger("tpd-cxo-visorbw-pub")
 	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{
 		Logger:     log,
@@ -91,51 +72,17 @@ func StartVisorBWCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client,
 		return nil, err
 	}
 	pub.SetAllowlist(nil) // per-visor byte counts; the per-transport metrics they come from are public too
-	sub, err := treestore.NewSubscriber(dmsgC, rewardPK, treestore.SubConfig{
-		Logger:     logging.MustGetLogger("tpd-cxo-ipclass-sub"),
-		InMemoryDB: true,
-		DmsgPort:   skyenv.DmsgRewardIPClassCXOPort,
-	})
-	if err != nil {
-		_ = pub.Close() //nolint:errcheck
-		return nil, err
-	}
 	pubCtx, cancel := context.WithCancel(ctx)
 	p := &VisorBWCXOPublisher{
-		api: api, pub: pub, classes: sub, log: log,
-		putBatch: pub.PutBatch,
-		cancel:   cancel, done: make(chan struct{}), published: map[string]bool{},
+		api: api, pub: pub, log: log, putBatch: pub.PutBatch,
+		cancel: cancel, done: make(chan struct{}), published: map[string]bool{},
 	}
 	if logger != nil {
 		logger.WithField("feed_pk", pub.Feed()).WithField("dmsg_port", skyenv.DmsgTPDVisorBWCXOPort).
-			WithField("reward_pk", rewardPK).Info("CXO per-visor bandwidth publisher running")
+			Info("CXO per-visor bandwidth publisher running")
 	}
-	go p.connectClasses(pubCtx, sub, rewardPK)
 	go p.loop(pubCtx)
 	return p, nil
-}
-
-// connectClasses subscribes to the reward system's IP classes, retrying until
-// the first connection holds; after that the subscriber's watchdog reconnects.
-func (p *VisorBWCXOPublisher) connectClasses(ctx context.Context, sub *treestore.Subscriber, rewardPK cipher.PubKey) {
-	delay := 10 * time.Second
-	for {
-		dctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		err := sub.Connect(dctx, rewardPK)
-		cancel()
-		if err == nil {
-			return
-		}
-		p.log.WithError(err).Debug("could not reach the reward system's IP classes; retrying")
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(delay):
-		}
-		if delay < 5*time.Minute {
-			delay *= 2
-		}
-	}
 }
 
 func (p *VisorBWCXOPublisher) loop(ctx context.Context) {
@@ -162,28 +109,21 @@ func settledDates(now time.Time) []string {
 }
 
 func (p *VisorBWCXOPublisher) publishOnce(ctx context.Context, now time.Time) {
-	classes, ok := p.readClasses()
-	if !ok {
-		p.log.Debug("no IP classes from the reward system yet; not publishing")
-		return
-	}
-	dates := settledDates(now)
-	var missing []string
-	for _, d := range dates {
-		if !p.published[d] {
-			missing = append(missing, d)
-		}
-	}
 	ls, isLeafStore := p.api.store.(leafStore)
 	if !isLeafStore {
 		p.recordError(fmt.Errorf("store keeps no settled metrics days"))
 		return
 	}
-	var ops []treestore.PutOp
+	dates := settledDates(now)
 	inWindow := make(map[string]bool, len(dates))
+	var missing []string
 	for _, d := range dates {
 		inWindow[d] = true
+		if !p.published[d] {
+			missing = append(missing, d)
+		}
 	}
+	var ops []treestore.PutOp
 	for d := range p.published {
 		if !inWindow[d] {
 			ops = append(ops, treestore.PutOp{Path: store.VisorBWDayPath(d)})
@@ -206,14 +146,14 @@ func (p *VisorBWCXOPublisher) publishOnce(ctx context.Context, now time.Time) {
 				p.log.WithError(err).WithField("date", d).Warn("settled metrics day does not decode")
 				continue
 			}
-			day := store.ComputeVisorBW(records, d, classes)
+			day := store.ComputeVisorBW(records, d)
 			body, err := json.Marshal(day)
 			if err != nil {
 				continue
 			}
 			ops = append(ops, treestore.PutOp{Path: store.VisorBWDayPath(d), Value: cxoutils.Gzip(body)})
 			p.log.WithField("date", d).WithField("visors", len(day.Visors)).
-				WithField("transports", day.Transports).WithField("same_ip_excluded", day.SameIPExcluded).
+				WithField("transports", day.Transports).WithField("same_network_excluded", day.SameNetworkExcluded).
 				Info("Published a settled day of per-visor bandwidth")
 		}
 	}
@@ -236,19 +176,6 @@ func (p *VisorBWCXOPublisher) publishOnce(ctx context.Context, now time.Time) {
 	}
 }
 
-// readClasses returns the reward system's current IP classes, if any.
-func (p *VisorBWCXOPublisher) readClasses() (*store.IPClasses, bool) {
-	body, ok := p.classes.Get(store.IPClassPath)
-	if !ok || len(body) == 0 {
-		return nil, false
-	}
-	var c store.IPClasses
-	if err := json.Unmarshal(cxoutils.Gunzip(body), &c); err != nil || len(c.Classes) == 0 {
-		return nil, false
-	}
-	return &c, true
-}
-
 // decodeMetricsParts decodes a settled day's saved leaf, gzipped JSON
 // []store.TransportMetric in one or more parts.
 func decodeMetricsParts(parts [][]byte) ([]store.TransportMetric, error) {
@@ -269,11 +196,10 @@ func (p *VisorBWCXOPublisher) FeedPK() cipher.PubKey { return p.pub.Feed() }
 // Publisher returns the underlying treestore publisher.
 func (p *VisorBWCXOPublisher) Publisher() *treestore.Publisher { return p.pub }
 
-// Close stops the publisher and the IP-class subscription.
+// Close stops the publisher.
 func (p *VisorBWCXOPublisher) Close() error {
 	p.cancel()
 	<-p.done
-	_ = p.classes.Close() //nolint:errcheck
 	return p.pub.Close()
 }
 
