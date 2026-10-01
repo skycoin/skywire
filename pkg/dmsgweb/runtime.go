@@ -36,7 +36,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/ioutil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxyfront"
 	"github.com/skycoin/skywire/pkg/proxyinterstitial"
@@ -748,7 +747,7 @@ func serveTCP(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg 
 }
 
 func handleTCPConn(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, conn net.Conn, t DmsgTarget) {
-	defer ioutil.CloseQuietly(conn, log)
+	defer func() { _ = conn.Close() }() //nolint:errcheck // also closed after the copy; a repeat close always fails
 	dp, ok := safecast.To[uint16](uint(t.Port))
 	if !ok {
 		log.WithField("port", t.Port).Warn("port overflow in TCP bridge")
@@ -759,19 +758,25 @@ func handleTCPConn(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client,
 		log.WithError(err).Warn("dmsg dial failed")
 		return
 	}
-	defer ioutil.CloseQuietly(dmsgConn, log)
+	defer func() { _ = dmsgConn.Close() }() //nolint:errcheck
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if _, err := io.Copy(dmsgConn, conn); err != nil {
+		if _, err := io.Copy(dmsgConn, conn); err != nil && !bridgeEnded(err) {
 			log.WithError(err).Debug("copy conn→dmsg ended")
 		}
 	}()
-	if _, err := io.Copy(conn, dmsgConn); err != nil {
+	if _, err := io.Copy(conn, dmsgConn); err != nil && !bridgeEnded(err) {
 		log.WithError(err).Debug("copy dmsg→conn ended")
 	}
 	_ = conn.Close()     //nolint:errcheck
 	_ = dmsgConn.Close() //nolint:errcheck
 	<-done
+}
+
+// bridgeEnded reports a copy error that is only the normal end of a bridged
+// connection: TCPConn.ReadFrom wraps EOF, so io.Copy passes it through.
+func bridgeEnded(err error) bool {
+	return errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed)
 }
