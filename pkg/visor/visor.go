@@ -163,7 +163,7 @@ type Visor struct {
 	dmsgFactory interface {
 		SetDmsgWSHandler(any)
 		SetDmsgQUICServer(any) (net.Addr, error)
-		SetDmsgWTServer(srv any, advertise func(addr net.Addr, certHash [32]byte)) (bool, error)
+		SetDmsgWTServer(srv any, advertise func(addr net.Addr, certHash, nextCertHash [32]byte)) (bool, error)
 	}
 	// dmsgSrvRole records the in-process dmsg server that actually started
 	// (nil = none), so `visor state --select roles` can report the running

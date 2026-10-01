@@ -79,17 +79,17 @@ func (_m *MockAPIClient) BindQUIC(ctx context.Context, port string) error {
 	return r0
 }
 
-// BindWT provides a mock function with given fields: ctx, port, certHash
-func (_m *MockAPIClient) BindWT(ctx context.Context, port string, certHash string) error {
-	ret := _m.Called(ctx, port, certHash)
+// BindWT provides a mock function with given fields: ctx, port, certHash, nextCertHash
+func (_m *MockAPIClient) BindWT(ctx context.Context, port string, certHash string, nextCertHash string) error {
+	ret := _m.Called(ctx, port, certHash, nextCertHash)
 
 	if len(ret) == 0 {
 		panic("no return value specified for BindWT")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
-		r0 = rf(ctx, port, certHash)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) error); ok {
+		r0 = rf(ctx, port, certHash, nextCertHash)
 	} else {
 		r0 = ret.Error(0)
 	}

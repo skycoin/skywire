@@ -84,7 +84,7 @@ type APIClient interface {
 	// BindWT registers this visor's WebTransport UDP port and the SHA-256 hex of
 	// its self-signed cert (the hash dialing peers pin). Mirrors BindQUIC + the
 	// cert hash.
-	BindWT(ctx context.Context, port, certHash string) error
+	BindWT(ctx context.Context, port, certHash, nextCertHash string) error
 	Resolve(ctx context.Context, netType string, pk cipher.PubKey) (VisorData, error)
 	Transports(ctx context.Context) (map[cipher.PubKey][]string, error)
 	TransportsType(ctx context.Context, tpType types.Type) (map[cipher.PubKey][]string, error)
@@ -527,6 +527,10 @@ type LocalAddresses struct {
 	// the WT bind sets it (it rides VisorData via the embedded LocalAddresses, so
 	// /resolve/wt returns it); empty for every other transport type.
 	CertHash string `json:"cert_hash,omitempty"`
+	// CertHashNext is the hash of the certificate the visor will serve after
+	// its next rotation. A peer pins both, so it keeps connecting across the
+	// rotation without looking the visor up again. Empty from older visors.
+	CertHashNext string `json:"cert_hash_next,omitempty"`
 }
 
 func (c *httpClient) Addresses(_ context.Context) string {
@@ -668,7 +672,7 @@ func (c *httpClient) BindQUIC(ctx context.Context, port string) error {
 // WebTransport has no CA, so the dialing peer pins this SHA-256 to trust the
 // server cert. The hash rides VisorData via the embedded LocalAddresses, so
 // /resolve/wt returns it alongside the endpoint.
-func (c *httpClient) BindWT(ctx context.Context, port, certHash string) error {
+func (c *httpClient) BindWT(ctx context.Context, port, certHash, nextCertHash string) error {
 	log := c.log.WithField("func", "httpClient.BindWT")
 	if !c.isReady() {
 		log.Debug("Address resolver is not ready yet, waiting...")
@@ -701,11 +705,12 @@ func (c *httpClient) BindWT(ctx context.Context, port, certHash string) error {
 	}
 
 	localAddresses := LocalAddresses{
-		Addresses:  addresses,
-		Port:       port,
-		PublicIP:   c.LocalPublicIP(),
-		PublicIPv6: c.localPublicIPv6Raw(),
-		CertHash:   certHash,
+		Addresses:    addresses,
+		Port:         port,
+		PublicIP:     c.LocalPublicIP(),
+		PublicIPv6:   c.localPublicIPv6Raw(),
+		CertHash:     certHash,
+		CertHashNext: nextCertHash,
 	}
 	log.Debugf("Address resolver binding WT with: %v port %s cert %s", addresses, port, certHash)
 	if c.cxoKeepsBindAlive("swtr", localAddresses) {

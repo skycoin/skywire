@@ -12,8 +12,6 @@ package network
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
@@ -58,7 +56,7 @@ func (c *wtClient) dialResolvedWT(ctx context.Context, rPK cipher.PubKey) (net.C
 		url := "https://" + hostport + wtPath
 		c.log.Debugf("Dialing WT %v @ %s", rPK, url)
 		c.announceDial(types.WT, hostport)
-		return wtDial(ctx, url, vd.CertHash)
+		return wtDial(ctx, url, vd.CertHash, vd.CertHashNext)
 	}
 
 	// Same-NAT / self / local: try LAN addresses first to avoid NAT hairpinning.
@@ -126,14 +124,15 @@ func (c wtStreamConn) LocalAddr() net.Addr  { return c.local }
 func (c wtStreamConn) RemoteAddr() net.Addr { return c.remote }
 
 // wtDial dials a peer visor's WebTransport endpoint at url, pinning its
-// self-signed server cert by certHashHex (lowercase SHA-256 hex), opens one
+// self-signed server cert to any of certHashHex (lowercase SHA-256 hex: the
+// current hash and the next, so a rotation does not break it), opens one
 // bidirectional stream, and adapts it to a net.Conn. Standard CA verification is
 // disabled; the cert-hash pin is authoritative, exactly as the dmsg WT carrier
 // (and a browser's serverCertificateHashes) does it.
-func wtDial(ctx context.Context, url, certHashHex string) (net.Conn, error) {
-	wantHash, err := hex.DecodeString(certHashHex)
-	if err != nil || len(wantHash) != sha256.Size {
-		return nil, fmt.Errorf("wt: invalid cert hash %q", certHashHex)
+func wtDial(ctx context.Context, url string, certHashHex ...string) (net.Conn, error) {
+	pins, err := skyquic.PinnedHashes(certHashHex...)
+	if err != nil {
+		return nil, fmt.Errorf("wt: %w", err)
 	}
 	tlsConf := &tls.Config{
 		InsecureSkipVerify: true, //nolint:gosec // pinned by cert-hash below, browser serverCertificateHashes model
@@ -146,8 +145,7 @@ func wtDial(ctx context.Context, url, certHashHex string) (net.Conn, error) {
 			if len(rawCerts) == 0 {
 				return fmt.Errorf("wt: server presented no certificate")
 			}
-			got := sha256.Sum256(rawCerts[0])
-			if !hmac.Equal(got[:], wantHash) {
+			if !skyquic.MatchesPinned(rawCerts[0], pins) {
 				return fmt.Errorf("wt: server cert hash mismatch")
 			}
 			return nil
@@ -218,9 +216,9 @@ func (c *wtClient) serve() {
 func (c *wtClient) advertise(addr net.Addr, cert *skyquic.RotatingWebTransportCert, where string) {
 	url := fmt.Sprintf("https://%s%s", addr.String(), wtPath)
 	rotated := make(chan struct{}, 1)
-	cert.OnRotate(func(h [32]byte) {
+	cert.OnRotate(func(h, next [32]byte) {
 		c.setAdvertised(url, hex.EncodeToString(h[:]))
-		c.log.Infof("WT certificate rotated (cert %s)", hex.EncodeToString(h[:]))
+		c.log.Infof("WT certificate rotated (cert %s, next %s)", hex.EncodeToString(h[:]), hex.EncodeToString(next[:]))
 		select {
 		case rotated <- struct{}{}:
 		default:
@@ -244,8 +242,8 @@ func (c *wtClient) advertise(addr net.Addr, cert *skyquic.RotatingWebTransportCe
 // whenever the certificate rotates.
 func (c *wtClient) registerWT(ar addrresolver.APIClient, port string, cert *skyquic.RotatingWebTransportCert, rotated <-chan struct{}) {
 	bind := func() error {
-		h := cert.Hash()
-		return ar.BindWT(context.Background(), port, hex.EncodeToString(h[:]))
+		h, next := cert.Hash(), cert.NextHash()
+		return ar.BindWT(context.Background(), port, hex.EncodeToString(h[:]), hex.EncodeToString(next[:]))
 	}
 	delay := wtBindRetryDelay
 	for {
@@ -483,10 +481,10 @@ type dmsgWTServer interface {
 // shared QUIC socket, at dmsg.WTPath beside the visor's own WT transport — the
 // way a browser reaches a dmsg server without a TLS certificate from a CA.
 // srv is typed `any`, as SetDmsgQUICServer's is. advertise is called with the
-// socket's local address and the certificate hash a client pins, now and
-// again whenever the certificate rotates. Reports false when unified UDP is
-// not enabled, so there is nothing to serve on.
-func (f *ClientFactory) SetDmsgWTServer(srv any, advertise func(addr net.Addr, certHash [32]byte)) (bool, error) {
+// socket's local address and the current and next certificate hashes a
+// client pins, now and again whenever the certificate rotates. Reports false
+// when unified UDP is not enabled, so there is nothing to serve on.
+func (f *ClientFactory) SetDmsgWTServer(srv any, advertise func(addr net.Addr, certHash, nextCertHash [32]byte)) (bool, error) {
 	m, ok := f.sharedQUIC.(*sharedQUICMux)
 	if !ok || m == nil {
 		return false, nil
@@ -508,7 +506,7 @@ func (f *ClientFactory) SetDmsgWTServer(srv any, advertise func(addr net.Addr, c
 		s.ServeWTSession(sess)
 	})
 	addr := m.localAddr()
-	wt.cert.OnRotate(func(h [32]byte) { advertise(addr, h) })
-	advertise(addr, wt.cert.Hash())
+	wt.cert.OnRotate(func(h, next [32]byte) { advertise(addr, h, next) })
+	advertise(addr, wt.cert.Hash(), wt.cert.NextHash())
 	return true, nil
 }

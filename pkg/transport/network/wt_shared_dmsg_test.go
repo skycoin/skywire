@@ -70,7 +70,7 @@ func TestSetDmsgWTServer(t *testing.T) {
 	f := &ClientFactory{sharedQUIC: mux}
 	var addr net.Addr
 	var hash [32]byte
-	ok, err := f.SetDmsgWTServer(echoWTServer{tag: "dmsg"}, func(a net.Addr, h [32]byte) { addr, hash = a, h })
+	ok, err := f.SetDmsgWTServer(echoWTServer{tag: "dmsg"}, func(a net.Addr, h, _ [32]byte) { addr, hash = a, h })
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, sockAddr.String(), addr.String())
@@ -102,18 +102,19 @@ func TestSetDmsgWTServer(t *testing.T) {
 	}
 }
 
-// TestSharedWTCertRotation: when the certificate rotates, the new hash is
-// advertised, new connections get the new certificate (so a client still
-// pinning the old hash is refused), and a connection made before the rotation
-// carries on undisturbed.
+// TestSharedWTCertRotation: when the certificate rotates, the new hashes are
+// advertised, new connections get the new certificate, and a connection made
+// before the rotation carries on undisturbed. A client that pinned the
+// [current, next] pair it learned BEFORE the rotation still connects after it,
+// with no fresh lookup; one that pinned only the old certificate is refused.
 func TestSharedWTCertRotation(t *testing.T) {
 	mux, _ := sharedSocket(t)
 	f := &ClientFactory{sharedQUIC: mux}
 	var mu sync.Mutex
-	var advertised [][32]byte
-	ok, err := f.SetDmsgWTServer(echoBackWTServer{}, func(_ net.Addr, h [32]byte) {
+	var advertised [][2][32]byte
+	ok, err := f.SetDmsgWTServer(echoBackWTServer{}, func(_ net.Addr, h, next [32]byte) {
 		mu.Lock()
-		advertised = append(advertised, h)
+		advertised = append(advertised, [2][32]byte{h, next})
 		mu.Unlock()
 	})
 	require.NoError(t, err)
@@ -121,11 +122,12 @@ func TestSharedWTCertRotation(t *testing.T) {
 	wt, err := sharedWebTransport(mux)
 	require.NoError(t, err)
 	url := fmt.Sprintf("https://%s%s", mux.localAddr(), dmsg.WTPath)
-	oldHash := wt.cert.Hash()
+	oldHash, oldNext := wt.cert.Hash(), wt.cert.NextHash()
+	require.NotEqual(t, oldHash, oldNext)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	before, err := wtDial(ctx, url, hexHash(oldHash))
+	before, err := wtDial(ctx, url, hexHash(oldHash), hexHash(oldNext))
 	require.NoError(t, err)
 	defer before.Close() //nolint:errcheck
 	roundTrip := func(c net.Conn, msg string) {
@@ -139,19 +141,19 @@ func TestSharedWTCertRotation(t *testing.T) {
 	roundTrip(before, "before rotation")
 
 	require.NoError(t, wt.cert.Rotate())
-	newHash := wt.cert.Hash()
-	require.NotEqual(t, oldHash, newHash)
+	newHash, newNext := wt.cert.Hash(), wt.cert.NextHash()
+	require.Equal(t, oldNext, newHash, "the advertised next certificate is the one served after the rotation")
 	mu.Lock()
-	require.Equal(t, [][32]byte{oldHash, newHash}, advertised, "the new hash is advertised")
+	require.Equal(t, [][2][32]byte{{oldHash, oldNext}, {newHash, newNext}}, advertised, "both hashes are advertised")
 	mu.Unlock()
 
-	after, err := wtDial(ctx, url, hexHash(newHash))
-	require.NoError(t, err, "a client pinning the new hash connects")
-	defer after.Close() //nolint:errcheck
-	roundTrip(after, "after rotation")
+	stale, err := wtDial(ctx, url, hexHash(oldHash), hexHash(oldNext))
+	require.NoError(t, err, "a client holding the pair from before the rotation still connects")
+	defer stale.Close() //nolint:errcheck
+	roundTrip(stale, "pinned before rotation")
 
 	_, err = wtDial(ctx, url, hexHash(oldHash))
-	require.Error(t, err, "the old certificate is no longer presented")
+	require.Error(t, err, "a client pinning only the old certificate is refused")
 
 	roundTrip(before, "still up after rotation")
 }

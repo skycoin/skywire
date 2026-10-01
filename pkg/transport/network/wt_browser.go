@@ -23,8 +23,8 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 )
 
-func wtDial(ctx context.Context, url, certHashHex string) (net.Conn, error) {
-	return dmsg.DialWebTransportJS(ctx, url, certHashHex)
+func wtDial(ctx context.Context, url string, certHashHex ...string) (net.Conn, error) {
+	return dmsg.DialWebTransportJS(ctx, url, certHashHex...)
 }
 
 // Start implements Client: a browser tab cannot run the HTTP/3 WebTransport

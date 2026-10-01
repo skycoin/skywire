@@ -4,11 +4,13 @@ package skyquic
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"sync"
@@ -71,33 +73,45 @@ func WebTransportTLSConfig(cert tls.Certificate) *tls.Config {
 	}
 }
 
-// webTransportCertRotateEvery is how often a RotatingWebTransportCert makes a
-// new certificate: half its validity, so the one being served is never close
-// to expiring. A server runs for weeks; a single certificate made at start
-// stops being accepted by browsers after webTransportCertValidity.
+// webTransportCertRotateEvery is how often a RotatingWebTransportCert moves on
+// to its next certificate: half the validity, so the one being served is never
+// close to expiring, and the next one — made a full period before it is served
+// — still has half its validity left when it takes over.
 var webTransportCertRotateEvery = webTransportCertValidity / 2
 
 // RotatingWebTransportCert is a WebTransport server certificate that replaces
-// itself before it expires. Its TLSConfig presents whichever certificate is
-// current at each handshake, so a rotation reaches new connections at once
-// and leaves established ones alone; OnRotate subscribers re-advertise the
-// new hash, which is what a browser pins.
+// itself before it expires, and always has its successor ready.
+//
+// Both hashes are advertised. A browser pins every hash it is given and
+// accepts the server if its certificate matches any of them, so a client that
+// learned [current, next] keeps connecting straight through a rotation, with
+// no fresh lookup — it only has to learn the new pair within one rotation
+// period.
+//
+// TLSConfig presents whichever certificate is current at each handshake, so a
+// rotation reaches new connections at once and leaves established ones alone.
 type RotatingWebTransportCert struct {
-	mu   sync.RWMutex
-	cert *tls.Certificate
-	hash [32]byte
-	subs []func([32]byte)
+	mu       sync.RWMutex
+	cert     *tls.Certificate
+	hash     [32]byte
+	next     *tls.Certificate
+	nextHash [32]byte
+	subs     []func(current, next [32]byte)
 
 	done chan struct{}
 	once sync.Once
 }
 
-// NewRotatingWebTransportCert makes the first certificate and starts rotating.
-// Close stops the rotation.
+// NewRotatingWebTransportCert makes the first certificate and its successor,
+// and starts rotating. Close stops the rotation.
 func NewRotatingWebTransportCert() (*RotatingWebTransportCert, error) {
 	r := &RotatingWebTransportCert{done: make(chan struct{})}
-	if err := r.Rotate(); err != nil {
-		return nil, err
+	// Two rotations: the first fills next, the second promotes it to current
+	// and makes a new next.
+	for i := 0; i < 2; i++ {
+		if err := r.Rotate(); err != nil {
+			return nil, err
+		}
 	}
 	go r.run()
 	return r, nil
@@ -118,18 +132,21 @@ func (r *RotatingWebTransportCert) run() {
 	}
 }
 
-// Rotate replaces the certificate now and tells every OnRotate subscriber.
+// Rotate serves the next certificate from now on, makes a new next one, and
+// tells every OnRotate subscriber both hashes.
 func (r *RotatingWebTransportCert) Rotate() error {
 	cert, hash, err := NewWebTransportCertificate()
 	if err != nil {
 		return err
 	}
 	r.mu.Lock()
-	r.cert, r.hash = &cert, hash
-	subs := append([]func([32]byte){}, r.subs...)
+	r.cert, r.hash = r.next, r.nextHash
+	r.next, r.nextHash = &cert, hash
+	cur, next := r.hash, r.nextHash
+	subs := append([]func([32]byte, [32]byte){}, r.subs...)
 	r.mu.Unlock()
 	for _, fn := range subs {
-		fn(hash)
+		fn(cur, next)
 	}
 	return nil
 }
@@ -141,8 +158,15 @@ func (r *RotatingWebTransportCert) Hash() [32]byte {
 	return r.hash
 }
 
-// OnRotate calls fn with the new hash after every rotation.
-func (r *RotatingWebTransportCert) OnRotate(fn func([32]byte)) {
+// NextHash is the SHA-256 of the certificate the next rotation will serve.
+func (r *RotatingWebTransportCert) NextHash() [32]byte {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.nextHash
+}
+
+// OnRotate calls fn with the current and next hashes after every rotation.
+func (r *RotatingWebTransportCert) OnRotate(fn func(current, next [32]byte)) {
 	r.mu.Lock()
 	r.subs = append(r.subs, fn)
 	r.mu.Unlock()
@@ -165,4 +189,36 @@ func (r *RotatingWebTransportCert) TLSConfig() *tls.Config {
 // Close stops the rotation. The current certificate keeps being served.
 func (r *RotatingWebTransportCert) Close() {
 	r.once.Do(func() { close(r.done) })
+}
+
+// PinnedHashes decodes the advertised hex hashes a client pins, skipping
+// empty ones (an older server advertises no next hash). A server is accepted
+// if its certificate matches any of them.
+func PinnedHashes(hexHashes ...string) ([][]byte, error) {
+	var out [][]byte
+	for _, h := range hexHashes {
+		if h == "" {
+			continue
+		}
+		b, err := hex.DecodeString(h)
+		if err != nil || len(b) != sha256.Size {
+			return nil, fmt.Errorf("skyquic/wt: invalid cert hash %q", h)
+		}
+		out = append(out, b)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("skyquic/wt: no cert hash to pin")
+	}
+	return out, nil
+}
+
+// MatchesPinned reports whether the DER certificate's SHA-256 is one of pins.
+func MatchesPinned(der []byte, pins [][]byte) bool {
+	sum := sha256.Sum256(der)
+	for _, p := range pins {
+		if hmac.Equal(sum[:], p) {
+			return true
+		}
+	}
+	return false
 }
