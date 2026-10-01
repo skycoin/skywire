@@ -1193,13 +1193,13 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 		// pinned, beside the visor's own WT transport on the same socket. The
 		// certificate rotates before browsers stop accepting it, and each new
 		// hash is advertised as it is made.
-		_, werr := v.dmsgFactory.SetDmsgWTServer(srv, func(wtAddr net.Addr, wtHash [32]byte) {
+		_, werr := v.dmsgFactory.SetDmsgWTServer(srv, func(wtAddr net.Addr, wtHash, wtNext [32]byte) {
 			adv := dmsgQUICAdvertisedAddr(srvCfg.PublicAddress, wtAddr)
 			if adv == "" {
 				return
 			}
 			wtURL := "https://" + adv + dmsg.WTPath
-			srv.AdvertiseWT(wtURL, wtHash)
+			srv.AdvertiseWT(wtURL, wtHash, wtNext)
 			log.WithField("addr_wt", wtURL).WithField("cert_hash", hex.EncodeToString(wtHash[:])).
 				Info("Serving dmsg over WebTransport on the shared transport port")
 		})
