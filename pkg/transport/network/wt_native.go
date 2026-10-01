@@ -28,6 +28,7 @@ import (
 	"github.com/quic-go/webtransport-go"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skyquic"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	types "github.com/skycoin/skywire/pkg/transport/types"
@@ -261,36 +262,14 @@ func (c *wtClient) registerWT(ar addrresolver.APIClient, port, certHash string) 
 // port-forward. It returns a chan-backed listener fed by accepted WT streams; the
 // advertised/registered AR endpoint uses the master socket's port (transport_port).
 func (c *wtClient) serveShared(m *sharedQUICMux) (net.Listener, error) {
-	cert, certHash, err := skyquic.NewWebTransportCertificate()
+	wt, err := sharedWebTransport(m)
 	if err != nil {
-		return nil, fmt.Errorf("wt: generate cert: %w", err)
+		return nil, err
 	}
 	addr := m.localAddr()
 	lis := newChanListener(addr)
-
-	srvMux := http.NewServeMux()
-	h3 := &http3.Server{
-		TLSConfig:       skyquic.WebTransportTLSConfig(cert),
-		Handler:         srvMux,
-		EnableDatagrams: true,
-		QUICConfig: &quic.Config{
-			// Receive windows: quic-go's 768 KB default connection window caps ONE
-			// connection at 768 KiB/RTT = 5.1 MB/s at 150 ms; see pkg/skyquic.
-			InitialStreamReceiveWindow:       skyquic.InitialStreamReceiveWindow,
-			MaxStreamReceiveWindow:           skyquic.MaxStreamReceiveWindow,
-			InitialConnectionReceiveWindow:   skyquic.InitialConnectionReceiveWindow,
-			MaxConnectionReceiveWindow:       skyquic.MaxConnectionReceiveWindow,
-			EnableDatagrams:                  true,
-			EnableStreamResetPartialDelivery: true,
-		},
-	}
-	webtransport.ConfigureHTTP3Server(h3)
-	wtSrv := &webtransport.Server{
-		H3:          h3,
-		CheckOrigin: func(*http.Request) bool { return true }, // PK auth is in Noise, not origin
-	}
-	srvMux.HandleFunc(wtPath, func(w http.ResponseWriter, r *http.Request) {
-		sess, err := wtSrv.Upgrade(w, r)
+	wt.mux.HandleFunc(wtPath, func(w http.ResponseWriter, r *http.Request) {
+		sess, err := wt.srv.Upgrade(w, r)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -305,19 +284,7 @@ func (c *wtClient) serveShared(m *sharedQUICMux) (net.Listener, error) {
 		lis.push(wtStreamConn{Stream: str, local: sess.LocalAddr(), remote: sess.RemoteAddr()})
 	})
 
-	// The mux's listener performs the TLS handshake (presenting this cert for the
-	// "h3" ALPN via GetConfigForClient); each accepted h3 conn is then served as a
-	// single WebTransport connection.
-	handle := func(conn *quic.Conn) {
-		if err := wtSrv.ServeQUICConn(conn); err != nil {
-			c.log.Debugf("WT ServeQUICConn ended: %v", err)
-		}
-	}
-	if err := m.register(wtALPN, skyquic.WebTransportTLSConfig(cert), handle); err != nil {
-		return nil, fmt.Errorf("wt: register on shared mux: %w", err)
-	}
-
-	c.advertisedCertHash = hex.EncodeToString(certHash[:])
+	c.advertisedCertHash = hex.EncodeToString(wt.certHash[:])
 	c.advertisedURL = fmt.Sprintf("https://%s%s", addr.String(), wtPath)
 	c.log.Infof("Serving WT transport at %s on shared transport_port (cert %s)", c.advertisedURL, c.advertisedCertHash)
 
@@ -329,6 +296,63 @@ func (c *wtClient) serveShared(m *sharedQUICMux) (net.Listener, error) {
 		}
 	}
 	return lis, nil
+}
+
+// sharedWT is the HTTP/3 WebTransport server on a shared QUIC socket. Each
+// user mounts its own path on mux.
+type sharedWT struct {
+	mux      *http.ServeMux
+	srv      *webtransport.Server
+	certHash [32]byte
+}
+
+// sharedWebTransport returns m's WebTransport server, building it and
+// registering the "h3" ALPN on first use. The mux's listener performs the TLS
+// handshake (presenting this cert for "h3" via GetConfigForClient); each
+// accepted h3 conn is then served as one WebTransport connection.
+func sharedWebTransport(m *sharedQUICMux) (*sharedWT, error) {
+	m.wtOnce.Do(func() {
+		cert, certHash, err := skyquic.NewWebTransportCertificate()
+		if err != nil {
+			m.wtErr = fmt.Errorf("wt: generate cert: %w", err)
+			return
+		}
+		srvMux := http.NewServeMux()
+		h3 := &http3.Server{
+			TLSConfig:       skyquic.WebTransportTLSConfig(cert),
+			Handler:         srvMux,
+			EnableDatagrams: true,
+			QUICConfig: &quic.Config{
+				// Receive windows: quic-go's 768 KB default connection window caps ONE
+				// connection at 768 KiB/RTT = 5.1 MB/s at 150 ms; see pkg/skyquic.
+				InitialStreamReceiveWindow:       skyquic.InitialStreamReceiveWindow,
+				MaxStreamReceiveWindow:           skyquic.MaxStreamReceiveWindow,
+				InitialConnectionReceiveWindow:   skyquic.InitialConnectionReceiveWindow,
+				MaxConnectionReceiveWindow:       skyquic.MaxConnectionReceiveWindow,
+				EnableDatagrams:                  true,
+				EnableStreamResetPartialDelivery: true,
+			},
+		}
+		webtransport.ConfigureHTTP3Server(h3)
+		wtSrv := &webtransport.Server{
+			H3:          h3,
+			CheckOrigin: func(*http.Request) bool { return true }, // PK auth is in Noise, not origin
+		}
+		handle := func(conn *quic.Conn) {
+			if err := wtSrv.ServeQUICConn(conn); err != nil {
+				m.log.Debugf("WT ServeQUICConn ended: %v", err)
+			}
+		}
+		if err := m.register(wtALPN, skyquic.WebTransportTLSConfig(cert), handle); err != nil {
+			m.wtErr = fmt.Errorf("wt: register on shared mux: %w", err)
+			return
+		}
+		m.wt = &sharedWT{mux: srvMux, srv: wtSrv, certHash: certHash}
+	})
+	if m.wtErr != nil {
+		return nil, m.wtErr
+	}
+	return m.wt.(*sharedWT), nil
 }
 
 // wtListener fronts a WebTransport (HTTP/3) server as a net.Listener: the first
@@ -432,3 +456,39 @@ func (l *wtListener) Close() error {
 
 // Addr implements net.Listener.
 func (l *wtListener) Addr() net.Addr { return l.addr }
+
+// dmsgWTServer is the part of a dmsg server (pkg/dmsg/dmsg.Server) that serves
+// WebTransport sessions accepted here.
+type dmsgWTServer interface {
+	ServeWTSession(*webtransport.Session)
+}
+
+// SetDmsgWTServer serves a folded dmsg server's WebTransport front on the
+// shared QUIC socket, at dmsg.WTPath beside the visor's own WT transport — the
+// way a browser reaches a dmsg server without a TLS certificate from a CA.
+// srv is typed `any`, as SetDmsgQUICServer's is. Returns the socket's local
+// address and the certificate hash a client pins, or a nil address when
+// unified UDP is not enabled.
+func (f *ClientFactory) SetDmsgWTServer(srv any) (net.Addr, [32]byte, error) {
+	m, ok := f.sharedQUIC.(*sharedQUICMux)
+	if !ok || m == nil {
+		return nil, [32]byte{}, nil
+	}
+	s, ok := srv.(dmsgWTServer)
+	if !ok {
+		return nil, [32]byte{}, fmt.Errorf("dmsg wt: %T does not serve WebTransport sessions", srv)
+	}
+	wt, err := sharedWebTransport(m)
+	if err != nil {
+		return nil, [32]byte{}, err
+	}
+	wt.mux.HandleFunc(dmsg.WTPath, func(w http.ResponseWriter, r *http.Request) {
+		sess, err := wt.srv.Upgrade(w, r)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		s.ServeWTSession(sess)
+	})
+	return m.localAddr(), wt.certHash, nil
+}
