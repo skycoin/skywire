@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/telemetrywire"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -629,6 +630,9 @@ func transportsProbe(v *Visor) func() []stats.TransportProbe {
 			return nil
 		}
 		var out []stats.TransportProbe
+		// Once per tick, not per transport: both are the same for every one.
+		self := v.selfPublicIP()
+		localIPs, _ := netutil.LocalNetworkInterfaceIPs() //nolint:errcheck // best-effort; nil is handled
 		v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
 			if tp.IsClosed() {
 				return true
@@ -644,6 +648,7 @@ func transportsProbe(v *Visor) func() []stats.TransportProbe {
 				RecvBytes:     bw.RecvBytes,
 				ThroughputBps: tp.GetThroughputBps(),
 				LatencyMS:     stats.LatencyTriple{Min: lat.Min, Max: lat.Max, Avg: lat.Avg},
+				SameNetwork:   tp.SameNetwork(self, localIPs),
 			})
 			return true
 		})

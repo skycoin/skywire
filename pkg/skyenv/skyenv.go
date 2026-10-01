@@ -152,13 +152,6 @@ const (
 	// per-transport metrics they are reduced from.
 	DmsgTPDVisorBWCXOPort uint16 = 77
 
-	// DmsgRewardIPClassCXOPort is the dmsg port the reward system's IP-class
-	// publisher listens on (ipclass/all): per visor, a keyed hash of the IP its
-	// survey reports, equal for visors on one IP. TPD reads it to leave
-	// same-IP transports out of DmsgTPDVisorBWCXOPort's totals without ever
-	// learning an IP.
-	DmsgRewardIPClassCXOPort uint16 = 78
-
 	// DmsgDMSGDRegistrationCXOPort is the dmsg port the dmsg-discovery's CXO
 	// client-entry REGISTRATION aggregator binds (and each visor's entry
 	// publisher binds for the reverse subscribe). A visor publishes its own

@@ -30,6 +30,9 @@ type TelemetryUpdate struct {
 	ThroughputBps          float64
 	LatMin, LatMax, LatAvg float64
 	Type                   string
+	// SameNetwork: the reporter marked the peer as on its own network, so
+	// the transport's bytes that day are not paid for.
+	SameNetwork bool
 }
 
 // TelemetryBatchStore is implemented by stores that apply telemetry in
@@ -107,6 +110,12 @@ func (s *redisStore) applyTelemetry(ctx context.Context, updates []TelemetryUpda
 			bw[i] = bandwidthScript.EvalSha(ctx, pipe, keys,
 				reporterHex, u.Sent, u.Recv, now.Unix(), typeOrUnknown(u.Type),
 				int64((10*time.Minute)/time.Second), historyTTLSeconds, int64((400*24*time.Hour)/time.Second), date)
+			if u.SameNetwork {
+				// Marked on the day's hash itself, beside the counters it
+				// qualifies; it lives exactly as long as they do.
+				pipe.HSet(ctx, keys[1], sameNetworkField, "1")
+				pipe.Expire(ctx, keys[1], bandwidthHistoryTTL)
+			}
 		}
 		if j, ok := tputIdx[i]; ok {
 			bps := u.ThroughputBps

@@ -27,6 +27,7 @@ import (
 	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/rewards"
 )
@@ -889,20 +890,24 @@ Architectures:
 				var v2 BandwidthData
 				var v3 tpdstore.VisorBWDay
 				if err := json.Unmarshal(data, &v3); err == nil && v3.Version == tpdstore.VisorBWVersion {
-					// v3: TPD's settled per-visor day, same-IP transports
-					// already left out. Each visor is paid for what it sent,
-					// over every transport type.
+					// v3: TPD's settled per-visor day, same-network
+					// transports already left out. Each visor is paid for
+					// what it sent over every transport type but dmsg: a dmsg
+					// transport rides a dmsg server's bandwidth, not the
+					// visor's own.
 					for pk, byType := range v3.Visors {
-						for _, n := range byType {
-							bandwidthMap[pk] += n
+						for typ, n := range byType {
+							if typ != string(tptypes.DMSG) {
+								bandwidthMap[pk] += n
+							}
 						}
 					}
 					if len(bandwidthMap) == 0 {
 						log.Warnf("Bandwidth file %s parsed as v3 but contains zero visors: Pool 2 repeats Pool 1.", bwFile)
 						noBWPool, bwSkipReason = true, "bandwidth file has no visors"
 					} else {
-						log.Infof("Loaded v3 bandwidth data for %d visors from %s (%d of %d transports left out as same-IP)",
-							len(bandwidthMap), bwFile, v3.SameIPExcluded, v3.Transports)
+						log.Infof("Loaded v3 bandwidth data for %d visors from %s (%d of %d transports left out as same-network)",
+							len(bandwidthMap), bwFile, v3.SameNetworkExcluded, v3.Transports)
 					}
 				} else if err := json.Unmarshal(data, &v2); err == nil && v2.Version >= BandwidthDataVersion {
 					bwTransports = v2.Transports

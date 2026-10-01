@@ -2,8 +2,9 @@
 //
 // Writes each settled day of TPD's per-visor bandwidth feed to
 // hist/<date>_bandwidth.json, the file the reward calculation pays pool 2
-// from. TPD reduces the day once it has settled, with same-IP transports left
-// out (pkg/deployment/tpd/store/visorbw.go), so the file is final.
+// from. TPD reduces the day once it has settled, with transports between
+// visors on one network left out (pkg/deployment/tpd/store/visorbw.go), so the
+// file is final.
 //
 // A day already rewarded is not rewritten: its numbers must not change after
 // the fact. The one exception is yesterday, which the reward run recalculates
@@ -81,7 +82,7 @@ func writeSettledVisorBW(src visorBWSource, histDir string, now time.Time, log *
 			return true
 		}
 		log.WithField("date", day.Date).WithField("visors", len(day.Visors)).
-			WithField("same_ip_excluded", day.SameIPExcluded).Info("Wrote settled per-visor bandwidth")
+			WithField("same_network_excluded", day.SameNetworkExcluded).Info("Wrote settled per-visor bandwidth")
 		return true
 	})
 }
@@ -101,8 +102,6 @@ func decodeVisorBWDay(path string, body []byte) (*tpdstore.VisorBWDay, error) {
 		return nil, fmt.Errorf("leaf holds day %q", day.Date)
 	case len(day.Visors) == 0:
 		return nil, fmt.Errorf("no visors")
-	case day.ClassesAt.IsZero():
-		return nil, fmt.Errorf("computed without IP classes")
 	}
 	return &day, nil
 }

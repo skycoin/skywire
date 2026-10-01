@@ -51,6 +51,9 @@ type telSnap struct {
 	throughput             float64
 	latMin, latMax, latAvg float64
 	tpType                 string
+	// sameNet: the reporter marked the peer as on its own network
+	// (telemetrywire.TypeFlagSameNetwork).
+	sameNet bool
 }
 
 func (s telSnap) hasLatency() bool { return s.latMin > 0 && s.latMax > 0 && s.latAvg > 0 }
@@ -64,6 +67,8 @@ func (s telSnap) merge(older telSnap) telSnap {
 	if !s.hasLatency() && older.hasLatency() {
 		s.latMin, s.latMax, s.latAvg = older.latMin, older.latMax, older.latAvg
 	}
+	// Once marked same-network within the window, the window is.
+	s.sameNet = s.sameNet || older.sameNet
 	return s
 }
 

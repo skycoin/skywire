@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -39,4 +40,29 @@ func TestApplyTelemetryBatch(t *testing.T) {
 	raw, err := s.client.Get(ctx, s.latencyKey(tp1)).Result()
 	require.NoError(t, err)
 	require.Contains(t, raw, `"avg":10000`)
+}
+
+// A report marking the peer as on the reporter's own network marks that
+// transport's day, alongside its counters and expiring with them; an unmarked
+// transport's day is not marked.
+func TestApplyTelemetrySameNetwork(t *testing.T) {
+	s := newTestRedisStore(t)
+	ctx := context.Background()
+	a, _ := cipher.GenerateKeyPair()
+	lan, wan := uuid.New(), uuid.New()
+
+	require.NoError(t, s.ApplyTelemetry(ctx, []TelemetryUpdate{
+		{ID: lan, Reporter: a, Sent: 100, Recv: 50, Type: "stcpr", SameNetwork: true},
+		{ID: wan, Reporter: a, Sent: 100, Recv: 50, Type: "stcpr"},
+	}))
+	now := time.Now().UTC()
+	marked, err := s.client.HGet(ctx, s.bandwidthDailyKey(lan.String(), now), sameNetworkField).Result()
+	require.NoError(t, err)
+	require.Equal(t, "1", marked)
+	ttl, err := s.client.TTL(ctx, s.bandwidthDailyKey(lan.String(), now)).Result()
+	require.NoError(t, err)
+	require.Greater(t, ttl, time.Duration(0), "the day's hash still expires")
+	n, err := s.client.HExists(ctx, s.bandwidthDailyKey(wan.String(), now), sameNetworkField).Result()
+	require.NoError(t, err)
+	require.False(t, n)
 }

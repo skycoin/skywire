@@ -1113,7 +1113,7 @@ func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter c
 		}
 		k := telKey{id: e.ID, reporter: reporter}
 		snap := telSnap{sent: e.SentBytes, recv: e.RecvBytes, throughput: float64(e.ThroughputBps),
-			latMin: float64(e.LatMin), latMax: float64(e.LatMax), latAvg: float64(e.LatAvg), tpType: tpType}
+			latMin: float64(e.LatMin), latMax: float64(e.LatMax), latAvg: float64(e.LatAvg), tpType: tpType, sameNet: telemetrywire.SameNetwork(e.Type)}
 		if s, ok := a.pace.offer(k, snap, now); ok {
 			due = append(due, heldSnap{k: k, s: s})
 		}

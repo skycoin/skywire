@@ -13,29 +13,14 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
-// fixedClasses serves one IP-class leaf, or none.
-type fixedClasses struct{ body []byte }
-
-func (f fixedClasses) Get(path string) ([]byte, bool) {
-	return f.body, path == store.IPClassPath && f.body != nil
-}
-func (fixedClasses) Close() error { return nil }
-
-func classesLeaf(t *testing.T, c map[string]string) []byte {
-	b, err := json.Marshal(store.IPClasses{Version: 1, GeneratedAt: time.Now(), Classes: c})
-	require.NoError(t, err)
-	return cxoutils.Gzip(b)
-}
-
 func savedDay(t *testing.T, recs []store.TransportMetric) [][]byte {
 	b, err := json.Marshal(recs)
 	require.NoError(t, err)
 	return [][]byte{cxoutils.Gzip(b)}
 }
 
-// A settled day is published once, with same-IP transports left out; nothing
-// is published before the reward system's IP classes have arrived; and a day
-// leaving the window is removed.
+// A settled day is published once, with same-network transports left out,
+// and removed when it leaves the window.
 func TestVisorBWPublisher(t *testing.T) {
 	now := time.Date(2026, 10, 2, 0, 30, 0, 0, time.UTC)
 	const day = "2026-10-01"
@@ -43,7 +28,7 @@ func TestVisorBWPublisher(t *testing.T) {
 	fake := &leafFake{saved: map[string][][]byte{
 		day: savedDay(t, []store.TransportMetric{
 			{Type: "stcpr", Edges: []string{"a", "b"}, Daily: []store.DailyEdgeBandwidth{{Date: day, A: eb(100, 40)}}},
-			{Type: "stcpr", Edges: []string{"a", "c"}, Daily: []store.DailyEdgeBandwidth{{Date: day, A: eb(7, 9)}}},
+			{Type: "stcpr", Edges: []string{"a", "c"}, Daily: []store.DailyEdgeBandwidth{{Date: day, A: eb(7, 9), SameNetwork: true}}},
 		}),
 	}}
 	var batches [][]treestore.PutOp
@@ -52,18 +37,13 @@ func TestVisorBWPublisher(t *testing.T) {
 		putBatch: func(ops []treestore.PutOp) error { batches = append(batches, ops); return nil },
 	}
 
-	p.classes = fixedClasses{}
-	p.publishOnce(t.Context(), now)
-	require.Empty(t, batches, "no day goes out before the IP classes have arrived")
-
-	p.classes = fixedClasses{body: classesLeaf(t, map[string]string{"a": "x", "b": "y", "c": "x"})}
 	p.publishOnce(t.Context(), now)
 	require.Len(t, batches, 1)
-	require.Len(t, batches[0], 1)
+	require.Len(t, batches[0], 1, "only the settled day the store has")
 	require.Equal(t, store.VisorBWDayPath(day), batches[0][0].Path)
 	var got store.VisorBWDay
 	require.NoError(t, json.Unmarshal(cxoutils.Gunzip(batches[0][0].Value), &got))
-	require.Equal(t, 1, got.SameIPExcluded, "a and c share an IP")
+	require.Equal(t, 1, got.SameNetworkExcluded, "a marked a-c as same-network")
 	require.Equal(t, map[string]map[string]uint64{"a": {"stcpr": 100}, "b": {"stcpr": 40}}, got.Visors)
 
 	p.publishOnce(t.Context(), now)
