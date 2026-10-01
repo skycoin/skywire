@@ -219,3 +219,20 @@ func TestCanonicalClearnetTargetAgreesWithRealorigin(t *testing.T) {
 		t.Errorf("clearnet browse host did not round-trip (%q, %v, id %q)", back, ok, id)
 	}
 }
+
+// A native desk points a mesh site at the visor's meshproxy origin.
+func TestMeshProxyOrigin(t *testing.T) {
+	for _, tc := range []struct{ network, host, want string }{
+		{"dmsg", "abc.dmsg", "http://abc.dmsg.mesh.localhost:8461"},
+		{"skynet", "home.skynet", "http://home.skynet.mesh.localhost:8461"},
+		{"local", "status.skysocks", "http://status-skysocks.mesh.localhost:8461"},
+	} {
+		got, ok := meshProxyOrigin("http", ".mesh.localhost", "8461", tc.network, tc.host)
+		if !ok || got != tc.want {
+			t.Errorf("meshProxyOrigin(%q, %q) = (%q,%v), want %q", tc.network, tc.host, got, ok, tc.want)
+		}
+	}
+	if _, ok := meshProxyOrigin("http", ".mesh.localhost", "8461", "local", "other.skysocks"); ok {
+		t.Error("claimed a .skysocks host meshproxy does not serve")
+	}
+}
