@@ -8,6 +8,7 @@ import XCTest
 ///   curl -s --socks5-hostname 127.0.0.1:1080 https://api.ipify.org   # the exit's IP
 ///   curl -s https://api.ipify.org                                    # the Mac's
 ///   -only-testing:SkywireUITests/SocksChecks/testPortMoves           # 1090, then back
+///   -only-testing:SkywireUITests/SocksChecks/testRestartWithTheProxyConnected
 ///   -only-testing:SkywireUITests/SocksChecks/testDisconnects
 @MainActor
 final class SocksChecks: XCTestCase {
@@ -21,21 +22,12 @@ final class SocksChecks: XCTestCase {
     func testConnectsToAProxy() {
         let app = connectedApp()
         openSocks(app)
-        let rows = app.buttons.matching(identifier: "socks-server-row")
-        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 120), "service discovery listed no proxy")
-        let state = app.staticTexts["socks-state"]
-        for index in 0..<min(rows.count, 4) {
-            rows.element(boundBy: index).tap()
-            if wait(for: state, label: "Connected", timeout: 90) {
-                snap("socks-connected")
-                // The app (and the proxy with it) ends with the test: held
-                // here for the Mac's curl through 127.0.0.1:1080.
-                sleep(40)
-                snap("socks-held")
-                return
-            }
-        }
-        XCTFail("no proxy connected; state \(state.label)")
+        connectFromTheList(app)
+        snap("socks-connected")
+        // The app (and the proxy with it) ends with the test: held here for
+        // the Mac's curl through 127.0.0.1:1080.
+        sleep(40)
+        snap("socks-held")
     }
 
     /// The listener moves to 1090 and the app comes back connected there,
@@ -66,6 +58,24 @@ final class SocksChecks: XCTestCase {
         }
     }
 
+    /// A core restart with the proxy connected, the path that crashed the app
+    /// at G4: the transport manager overran its close timeout, the stcpr
+    /// accept loop spun on the shared port closed under it, and its warnings,
+    /// each one a synchronous call into Swift, took the app down. The app
+    /// must live through it and the core come back connected.
+    func testRestartWithTheProxyConnected() {
+        let app = connectedApp()
+        openSocks(app)
+        connectFromTheList(app)
+        openTab(.home, in: app)
+        app.buttons["home-actions"].tap()
+        app.buttons["home-restart"].tap()
+        wait(for: self.state(app), anyOf: ["stopping", "stopped", "starting", "running"], timeout: 30)
+        wait(for: self.state(app), anyOf: ["connected"], timeout: 180)
+        XCTAssertEqual(app.state, .runningForeground, "the app did not live through the restart")
+        snap("socks-restarted")
+    }
+
     func testDisconnects() {
         let app = connectedApp()
         openSocks(app)
@@ -74,6 +84,22 @@ final class SocksChecks: XCTestCase {
             app.buttons["socks-connect"].tap()
         }
         XCTAssertTrue(wait(for: state, label: "Disconnected", timeout: 30))
+    }
+
+    /// Taps proxies from service discovery, first to last (at most four),
+    /// until one connects: a public proxy that answered yesterday may not
+    /// today, so the last one picked is not relied on.
+    private func connectFromTheList(_ app: XCUIApplication) {
+        let rows = app.buttons.matching(identifier: "socks-server-row")
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 120), "service discovery listed no proxy")
+        let state = app.staticTexts["socks-state"]
+        for index in 0..<min(rows.count, 4) {
+            rows.element(boundBy: index).tap()
+            if wait(for: state, label: "Connected", timeout: 90) {
+                return
+            }
+        }
+        XCTFail("no proxy connected; state \(state.label)")
     }
 
     private func openSocks(_ app: XCUIApplication) {

@@ -61,9 +61,10 @@ public enum CoreLogLevel: Int32, Sendable {
     case trace = 6
 }
 
-/// Receives the core's log, one formatted line at a time, on whichever
-/// thread logged (several at once is possible). It must return quickly and
-/// must not call back into the core.
+/// Receives the core's log, one formatted line at a time, in order, from one
+/// core thread (the core queues lines off the threads that log them, and drops
+/// and counts what the app falls behind on). It must return quickly and must
+/// not call back into the core.
 public typealias CoreLogSink = @Sendable (CoreLogLevel, String) -> Void
 
 /// A call into the core failed; `message` is the core's reason.

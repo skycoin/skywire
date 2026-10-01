@@ -168,7 +168,8 @@ func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, err
 	}
 
 	if !isNonceValid {
-		nonce, err := c.Nonce(context.Background(), c.key)
+		// Under the request's own context, so its deadline holds across the retry.
+		nonce, err := c.Nonce(req.Context(), c.key)
 		if err != nil {
 			return nil, err
 		}

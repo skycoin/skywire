@@ -31,8 +31,8 @@ final class CoreLog: Sendable {
     private let ring = OSAllocatedUnfairLock(initialState: Ring())
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "skywire", category: "core")
 
-    /// The sink to hand to CoreBridge. It runs on the core's threads, so it
-    /// only takes a short lock and writes to the unified log.
+    /// The sink to hand to CoreBridge. It runs on a core thread, so it only
+    /// takes a short lock and writes to the unified log.
     var sink: CoreLogSink {
         { [self] level, line in append(level, line) }
     }
