@@ -7,6 +7,8 @@
 package visor
 
 import (
+	"github.com/0magnet/realorigin"
+
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -86,6 +88,14 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			return
 		case "/browse.js":
 			serveJS(w, browseui.BrowseJS)
+			return
+		case "/browse-responder.js":
+			// The desk's half of the real-origin browser (realorigin): it answers
+			// the browse frames meshproxy serves, through browse-transport.js.
+			serveJS(w, realorigin.ResponderJS())
+			return
+		case "/browse-transport.js":
+			serveJS(w, wasmhv.BrowseTransportJS)
 			return
 		case "/vnet-sw.js":
 			// bottle's vnet service worker: pages that run in-page servers
@@ -271,6 +281,7 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 		`;window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;` + browseJS + `</script>` + "\n" +
 		`<script src="/wasm_exec.js"></script>` + "\n" +
 		`<script src="/browse.js"></script>` + "\n" +
+		nativeDeskBrowseScripts(browseJS) +
 		`<script>` + uiAutoReloadJS + `</script>` + "\n" +
 		`<script src="/desk-boot.js"></script>`
 	page := deskShellHTML(scripts, nativeDeskBootOpts(localPK))
@@ -429,4 +440,15 @@ func deskRootHandler(h http.Handler) http.Handler {
 func isDeskRoot(r *http.Request) bool {
 	v, _ := r.Context().Value(deskRootKey{}).(bool)
 	return v
+}
+
+// nativeDeskBrowseScripts loads the real-origin browser's desk half when browse
+// origins are on (browseJS is their config): with it every site, clearnet
+// included, opens on an isolated origin meshproxy serves, as on a wasm desk.
+func nativeDeskBrowseScripts(browseJS string) string {
+	if browseJS == "" {
+		return ""
+	}
+	return `<script src="/browse-responder.js"></script>` + "\n" +
+		`<script src="/browse-transport.js"></script>` + "\n"
 }

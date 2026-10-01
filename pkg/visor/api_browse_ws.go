@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -251,8 +252,17 @@ func readBrowseWSFrame(r io.Reader) (byte, []byte, error) {
 // first, so a failure is an ordinary HTTP error the desk can report, then
 // takes over the connection and relays.
 func (v *Visor) serveBrowseWS(w http.ResponseWriter, r *http.Request) {
-	if !strings.EqualFold(r.Header.Get("Upgrade"), BrowseWSUpgrade) {
-		http.Error(w, "expected Upgrade: "+BrowseWSUpgrade, http.StatusBadRequest)
+	upgrade := r.Header.Get("Upgrade")
+	standard := strings.EqualFold(upgrade, "websocket")
+	if !standard && !strings.EqualFold(upgrade, BrowseWSUpgrade) {
+		http.Error(w, "expected Upgrade: websocket or "+BrowseWSUpgrade, http.StatusBadRequest)
+		return
+	}
+	// A browser's own WebSocket (the desk the native hypervisor serves) is
+	// not held back by CORS, so only this visor's own page may open one: any
+	// site could otherwise use the visor as its proxy.
+	if standard && !sameOriginRequest(r) {
+		http.Error(w, "cross-origin websocket refused", http.StatusForbidden)
 		return
 	}
 	q := r.URL.Query()
@@ -265,11 +275,31 @@ func (v *Visor) serveBrowseWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Not r.Context(): the relay outlives the request.
+	if strings.TrimSpace(req.Proxy) == "" {
+		if p, ok := v.defaultBrowseProxy(); ok {
+			req.Proxy = p
+		}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), browseWSDialTimeout)
 	ws, err := v.BrowseWebSocket(ctx, req)
 	cancel()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	protocol := ""
+	if len(ws.Config().Protocol) > 0 {
+		protocol = ws.Config().Protocol[0]
+	}
+	if standard {
+		websocket.Server{
+			Handshake: func(*websocket.Config, *http.Request) error { return nil }, // origin checked above
+			Handler: func(desk *websocket.Conn) {
+				// The desk listener's read/write timeouts outlive the hijack.
+				_ = desk.SetDeadline(time.Time{}) //nolint:errcheck
+				relayBrowseWSDirect(desk, ws, protocol)
+			},
+		}.ServeHTTP(w, r)
 		return
 	}
 	hj, ok := w.(http.Hijacker)
@@ -292,10 +322,6 @@ func (v *Visor) serveBrowseWS(w http.ResponseWriter, r *http.Request) {
 		_ = desk.Close() //nolint:errcheck
 		return
 	}
-	protocol := ""
-	if len(ws.Config().Protocol) > 0 {
-		protocol = ws.Config().Protocol[0]
-	}
 	go relayBrowseWS(desk, ws, protocol)
 }
 
@@ -306,3 +332,47 @@ type browseWSConn struct {
 }
 
 func (c *browseWSConn) Read(p []byte) (int, error) { return c.r.Read(p) }
+
+// relayBrowseWSDirect relays between the site's WebSocket and a desk that
+// opened a WebSocket of its own to this visor. Its first message is
+// {"open":true,"protocol":…} — the browser API cannot read the negotiated
+// subprotocol any other way — and every later one is the site's, as sent.
+func relayBrowseWSDirect(desk, ws *websocket.Conn, protocol string) {
+	var once sync.Once
+	done := func() {
+		once.Do(func() {
+			_ = ws.Close()   //nolint:errcheck
+			_ = desk.Close() //nolint:errcheck
+		})
+	}
+	defer done()
+	open, err := json.Marshal(map[string]any{"open": true, "protocol": protocol})
+	if err != nil || websocket.Message.Send(desk, string(open)) != nil {
+		return
+	}
+	go func() {
+		defer done()
+		for {
+			var m browseWSMessage
+			if browseWSCodec.Receive(ws, &m) != nil || browseWSCodec.Send(desk, m) != nil {
+				return
+			}
+		}
+	}()
+	for {
+		var m browseWSMessage
+		if browseWSCodec.Receive(desk, &m) != nil {
+			return
+		}
+		_ = ws.SetWriteDeadline(time.Now().Add(browseWSWriteTimeout)) //nolint:errcheck
+		if browseWSCodec.Send(ws, m) != nil {
+			return
+		}
+	}
+}
+
+// sameOriginRequest reports whether r's Origin is this server's own.
+func sameOriginRequest(r *http.Request) bool {
+	o := r.Header.Get("Origin")
+	return o == "http://"+r.Host || o == "https://"+r.Host
+}

@@ -30,6 +30,8 @@
 package visor
 
 import (
+	"github.com/0magnet/realorigin"
+
 	"context"
 	"fmt"
 	"io"
@@ -50,6 +52,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetweb"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/wasmhv"
 )
 
 // defaultMeshProxySuffix marks a browse-frame origin for the native localhost
@@ -731,7 +734,26 @@ func (v *Visor) serveMeshSubdomain(ctx context.Context, addr string, cfg *visorc
 	// listener so the browse-origin's real (wildcard) TLS cert covers them —
 	// warning-free HTTPS status pages. Any non-status host falls through to the
 	// reverse proxy. See meshStatusHandler.
-	mux.Handle("/", meshStatusHandler(suffix, v.proxyStatusProvider(), rp))
+	var next http.Handler = meshStatusHandler(suffix, v.proxyStatusProvider(), rp)
+	// The desk's browser opens every site — clearnet included — on an
+	// isolated browse origin of its own (<id><suffix>, realorigin): this
+	// listener serves those origins' bootstrap and service worker, and the
+	// worker relays each request to the desk, which fetches it through this
+	// visor (/api/browse-stream). The same model `hv serve` runs for a desk
+	// in a browser tab.
+	if origins := v.nativeDeskOrigins(); len(origins) > 0 {
+		ro, err := realorigin.Handler(realorigin.Config{
+			Suffix:    suffix,
+			AppOrigin: strings.Join(origins, ","),
+			SWPath:    "/browse-sw.js",
+			Shell:     wasmhv.BrowseBootstrapHTML,
+		})
+		if err != nil {
+			return err
+		}
+		next = browseOriginRouter(suffix, ro, next)
+	}
+	mux.Handle("/", next)
 	return serveMeshHTTP(ctx, addr, mux, cfg.TLSCert, cfg.TLSKey)
 }
 
@@ -968,4 +990,31 @@ func (v *Visor) serveMeshPortMode(ctx context.Context, addr string, cfg *visorco
 	// 404s (the portal has no content of its own).
 	mux.Handle("/", meshStatusHandler(normalizeMeshSuffix(cfg.Suffix), v.proxyStatusProvider(), http.NotFoundHandler()))
 	return serveMeshHTTP(ctx, addr, mux, cfg.TLSCert, cfg.TLSKey)
+}
+
+// browseOriginRouter sends a browse-origin host (one label of exactly
+// realorigin.IDLen base32 characters under the suffix) to ro and everything
+// else to next. A mesh host always has two labels or more and a status host
+// carries a hyphen, so neither is ever taken for one.
+func browseOriginRouter(suffix string, ro, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isBrowseOriginHost(hostWithoutPort(r.Host), suffix) {
+			ro.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func isBrowseOriginHost(host, suffix string) bool {
+	id, ok := realorigin.IDFromHost(strings.ToLower(host), strings.ToLower(suffix))
+	if !ok || len(id) != realorigin.IDLen {
+		return false
+	}
+	for _, c := range id {
+		if (c < 'a' || c > 'z') && (c < '2' || c > '7') {
+			return false
+		}
+	}
+	return true
 }
