@@ -13,10 +13,14 @@ import (
 
 func TestWithKeyFile(t *testing.T) {
 	pk, sk := cipher.GenerateKeyPair()
-	path := filepath.Join(t.TempDir(), "seckey")
+	// A backslash in the path, as on Windows (C:\Users\...), must reach the
+	// config escaped.
+	path := filepath.Join(t.TempDir(), `x\Users`)
+	quoted, err := json.Marshal(path)
+	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, []byte(sk.Hex()+"\n"), 0o600))
 
-	out, err := withKeyFile(json.RawMessage(`{"type":"route-finder","addr":":9092","keyfile":"` + path + `"}`))
+	out, err := withKeyFile(json.RawMessage(`{"type":"route-finder","addr":":9092","keyfile":` + string(quoted) + `}`))
 	require.NoError(t, err)
 	var got Common
 	require.NoError(t, json.Unmarshal(out, &got))
@@ -26,7 +30,7 @@ func TestWithKeyFile(t *testing.T) {
 
 	// An inline secret_key wins; no keyfile is left alone.
 	_, other := cipher.GenerateKeyPair()
-	inline := json.RawMessage(`{"secret_key":"` + other.Hex() + `","keyfile":"` + path + `"}`)
+	inline := json.RawMessage(`{"secret_key":"` + other.Hex() + `","keyfile":` + string(quoted) + `}`)
 	out, err = withKeyFile(inline)
 	require.NoError(t, err)
 	require.JSONEq(t, string(inline), string(out))
