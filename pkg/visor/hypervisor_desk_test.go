@@ -180,8 +180,11 @@ func TestNativeDeskServing(t *testing.T) {
 			if !strings.Contains(body, "ANGULAR") {
 				t.Error("Angular index not served at the framed root")
 			}
-			if !strings.Contains(body, `src="browse.js"`) || !strings.Contains(body, "__SKYWIRE_LOCAL_PK__") {
-				t.Error("index injection (browse.js + local PK) missing on the framed root")
+			if !strings.Contains(body, "__SKYWIRE_UI_VERSION__") {
+				t.Error("build stamp missing on the framed root")
+			}
+			if strings.Contains(body, `src="browse.js"`) {
+				t.Error("the dashboard carries the desk bundle; it has no desk")
 			}
 		}
 	})

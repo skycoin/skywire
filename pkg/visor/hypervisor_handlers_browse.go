@@ -1,8 +1,9 @@
 //go:build !mobile
 
 // Package visor pkg/visor/hypervisor_handlers_browse.go c3-vis-core
-// browse.js virtual-browser engine in the NATIVE hypervisor UI (the same one the
-// wasm-visor runs), backed by /api/browse/* instead of the wasm JS hooks.
+// The native hypervisor's web surfaces: the Angular dashboard (index.html with
+// its version stamp) and the desk on its own listener, whose browser reaches
+// the mesh and the clearnet through /api/browse* on this visor.
 package visor
 
 import (
@@ -209,9 +210,11 @@ func browseOriginInjectJS(v *Visor) string {
 		`,scheme:` + strconv.Quote(scheme) + `,port:` + strconv.Quote(port) + `};`
 }
 
-// serveInjectedIndex serves index.html with the browse engine + launcher scripts
-// (and window.__SKYWIRE_LOCAL_PK__) injected before </body>. Falls back to the
-// plain file server if index.html can't be read.
+// serveInjectedIndex serves the dashboard's index.html with its build stamp and
+// auto-reloader injected before </body>. The desk bundle (browse.js) is not: the
+// dashboard has no desk — that lives on the desk listener (serveNativeDesk) —
+// and nothing in the Angular bundle reads what browse.js installs. Falls back
+// to the plain file server if index.html can't be read.
 func (hv *Hypervisor) serveInjectedIndex(w http.ResponseWriter, r *http.Request, fallback http.Handler) {
 	if hv.c.UIAssets == nil || hv.visor == nil {
 		fallback.ServeHTTP(w, r)
@@ -233,9 +236,7 @@ func (hv *Hypervisor) serveInjectedIndex(w http.ResponseWriter, r *http.Request,
 	// client, or a rebuilt skywire.wasm), so an open dashboard never sits on a
 	// stale build. Mirrors the wasm visor's autoupdate.js.
 	ver := hv.servedUIVersion()
-	inject := []byte(`<script>window.__SKYWIRE_LOCAL_PK__=` + strconv.Quote(hv.visor.conf.PK.Hex()) +
-		`;window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;` + browseOriginInjectJS(hv.visor) + `</script>` +
-		`<script src="browse.js"></script>` +
+	inject := []byte(`<script>window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;</script>` +
 		`<script>` + uiAutoReloadJS + `</script>`)
 	out := bytes.Replace(b, []byte("</body>"), append(inject, []byte("</body>")...), 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
