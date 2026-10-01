@@ -103,3 +103,17 @@ func TestFirstHopCarrierClass_UnknownAndEmpty(t *testing.T) {
 	require.Equal(t, carrierClassOther, firstHopCarrierClass(rankCandPath(uuid.New(), 2)))
 	require.Equal(t, carrierClassDirect, firstHopCarrierClass(carrierCandPath(tptypes.STCP)))
 }
+
+// swtr and swsr are resolved QUIC and TCP links, classed with stcpr and squicr:
+// a browser visor's webtransport first hop outranks a faster-answering webrtc
+// one, as a native visor's squicr does.
+func TestRankByPathLatency_BrowserCarriersAreDirect(t *testing.T) {
+	for _, typ := range []tptypes.Type{tptypes.WT, tptypes.WS} {
+		direct := carrierCandPath(typ)
+		webrtc := carrierCandPath(tptypes.WEBRTC)
+		lat := map[uuid.UUID]float64{webrtc[0].TpID: 10, direct[0].TpID: 80}
+		ranked := rankByPathLatency([][]routing.Hop{webrtc, direct}, func(id uuid.UUID) float64 { return lat[id] })
+		require.Equal(t, direct[0].TpID, ranked[0][0].TpID, "%s first hop must outrank webrtc", typ)
+		require.Equal(t, carrierClassDirect, firstHopCarrierClass(direct), "%s", typ)
+	}
+}
