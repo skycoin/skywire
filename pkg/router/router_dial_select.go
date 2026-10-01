@@ -599,7 +599,7 @@ func firstHopCarrierClass(path []routing.Hop) int {
 	}
 	h := path[0]
 	switch transport.TypeFromTransportID(h.TpID, h.From, h.To) {
-	case tptypes.STCPR, tptypes.QUIC, tptypes.STCP:
+	case tptypes.STCPR, tptypes.QUIC, tptypes.STCP, tptypes.WT, tptypes.WS:
 		return carrierClassDirect
 	case tptypes.SUDPH:
 		return carrierClassHole

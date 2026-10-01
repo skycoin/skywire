@@ -1276,15 +1276,21 @@ func noDisjointFirstHopErr(dst cipher.PubKey, considered int) error {
 // same kind of link as a resolved TCP or QUIC connection, and latency does not
 // say so.
 //
+// swtr and swsr are direct too: WebTransport is QUIC, and the WebSocket
+// transport TCP, to a resolved public endpoint — the same kind of link as
+// squicr and stcpr, and the direct links a browser visor has. Classed below
+// webrtc, a browser visor took every free webrtc first hop ahead of them as
+// soon as it could make webrtc transports (2026-10-01).
+//
 // This is an ORDERING, not a filter: a sudph or webrtc route is still dialed
 // and still held in the standby pool, and the promoter can still switch one in
 // on measurement. It only stops such a route being taken FIRST while a direct
 // one is free.
 const (
-	carrierClassDirect = 0 // stcpr / squicr / stcp: a resolved TCP or QUIC link this visor dials
+	carrierClassDirect = 0 // stcpr / squicr / stcp / swtr / swsr: a resolved TCP or QUIC link this visor dials
 	carrierClassHole   = 1 // sudph: UDP hole-punched through both NATs
 	carrierClassP2P    = 2 // webrtc: DTLS+SCTP over ICE, browser-reachable
-	carrierClassOther  = 3 // dmsg (relayed), swsr / swtr, and anything unknown
+	carrierClassOther  = 3 // dmsg (relayed), and anything unknown
 )
 
 // baseRouteCandidates mirrors the route-finder's historical default
