@@ -229,6 +229,9 @@ var (
 	PoolMaxHops     = RegisterZeroable("pool.max_hops", KindCount, 0, "ceiling on a pool leg plan's hop count; a longer route is skipped (0 = any)")
 	PoolTpTypes     = RegisterList("pool.tp_types", "transport types a pool leg plan's FIRST HOP must have, e.g. stcpr,sudph (comma-separated; empty = any type)")
 	PoolExcludePKs  = RegisterList("pool.exclude_pks", "public keys a pool leg plan must not touch, as a first hop or an intermediate (comma-separated FULL keys; empty = no exclusion)")
+	// A settled pool makes no dials, and its route count came from the last
+	// dial's query, so transports gained since then were never counted.
+	PoolBoundRefresh = RegisterZeroable("pool.bound_refresh", KindDuration, int64(2*time.Minute), "how often the disjoint routes to a pooled exit are re-counted, so a settled standby pool grows onto transports gained since; 0 = only when a dial asks")
 
 	// FORWARD-direction confinement (route_mux.go selectConfinedForward).
 	ForwardSpill         = RegisterBool("forward.spill", false, "let a FORWARD frame leave its confined leg when that leg is at its send window; off means the writer waits")
