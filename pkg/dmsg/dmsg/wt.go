@@ -45,9 +45,11 @@ import (
 	"github.com/skycoin/skywire/pkg/skyquic"
 )
 
-// wtPath is the HTTP/3 path the WebTransport endpoint is served on. The
+// WTPath is the HTTP/3 path the WebTransport endpoint is served on. The
 // advertised Server.AddressWT URL includes it (e.g. "https://host:port/dmsg").
-const wtPath = "/dmsg"
+const WTPath = "/dmsg"
+
+const wtPath = WTPath
 
 // wtStreamConn adapts a WebTransport bidirectional stream + its session
 // addresses into a net.Conn, so the stream flows through the shared
@@ -208,4 +210,18 @@ func (ce *Client) dialSessionWT(ctx context.Context, entry *disc.Entry) (ClientS
 	}
 	ce.log.Infof("wt stream session initial for %s", dSes.RemotePK().String())
 	return dSes, nil
+}
+
+// ServeWTSession serves a WebTransport session that another HTTP/3 server
+// accepted on this server's behalf — a visor's shared transport socket, which
+// also serves the visor's own WebTransport transport on another path.
+func (s *Server) ServeWTSession(sess *webtransport.Session) {
+	s.handleWTSession(sess)
+}
+
+// AdvertiseWT publishes url and the pinned certificate hash as this server's
+// WebTransport endpoint, for a server whose sessions arrive through
+// ServeWTSession.
+func (s *Server) AdvertiseWT(url string, certHash [32]byte) {
+	s.setAdvertisedWT(url, certHash)
 }

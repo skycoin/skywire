@@ -1188,6 +1188,19 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 				log.WithField("addr_udp", adv).Info("Serving dmsg over QUIC on the shared transport port")
 			}
 		}
+		// ...and WebTransport, which browsers dial with the certificate hash
+		// pinned, beside the visor's own WT transport on the same socket.
+		wtAddr, wtHash, werr := v.dmsgFactory.SetDmsgWTServer(srv)
+		switch {
+		case werr != nil:
+			log.WithError(werr).Warn("dmsg over WebTransport unavailable on the shared transport port")
+		case wtAddr != nil:
+			if adv := dmsgQUICAdvertisedAddr(srvCfg.PublicAddress, wtAddr); adv != "" {
+				wtURL := "https://" + adv + dmsg.WTPath
+				srv.AdvertiseWT(wtURL, wtHash)
+				log.WithField("addr_wt", wtURL).Info("Serving dmsg over WebTransport on the shared transport port")
+			}
+		}
 	}
 
 	// Restore the WebSocket front. A standalone dmsg server served

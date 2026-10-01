@@ -54,6 +54,14 @@ type sharedQUICMux struct {
 	tlsByAL map[string]*tls.Config      // offered ALPN     -> server tls.Config
 	lis     *quic.EarlyListener
 	closed  bool
+
+	// wt is the one HTTP/3 WebTransport server on this socket (a *sharedWT,
+	// built on first use; see wt_native.go). The visor's WT transport and a
+	// folded dmsg server both serve on it, on their own paths, because both
+	// need the "h3" ALPN and the socket has room for one handler per ALPN.
+	wtOnce sync.Once
+	wt     any
+	wtErr  error
 }
 
 // newSharedQUICMux prepares a multiplexer over conn (the udpDemux protoQUIC
