@@ -140,6 +140,9 @@ type tab struct {
 	directSrc string
 	// directNavWired guards the one-time load listener that notices it.
 	directNavWired bool
+	// originLoaded: this browser has just pointed the frame at a real-origin
+	// page, and the page has not yet said where it landed (originMoved).
+	originLoaded bool
 }
 
 // isFront reports whether t is the tab its own window currently has in
@@ -223,10 +226,10 @@ var DirectLoader func(url string) (src string, ok bool)
 // this page's storage or the host's identity key. Two consequences are
 // deliberate rather than missing: this browser cannot read the frame's title,
 // so a claimed tab is named after its URL, and it cannot read the frame's
-// location, so a link the reader clicks INSIDE the page does not reach the
-// tab's history the way watchDirectNav records one for a same-origin page.
-// Recovering those needs the origin to report its own navigations; it is not
-// something the embedder can read out of a cross-origin frame.
+// location. So the page reports its own: a {type: "realorigin-location", url}
+// message after each load puts it in the tab's history and address bar
+// (originMoved), and {type: "realorigin-open", url, newTab} asks this browser
+// to load an address the page would otherwise have navigated to itself.
 var OriginLoader func(url string) (promise js.Value, ok bool)
 
 // DirectAddress is the inverse of DirectLoader, for DISPLAY. A frame the host
@@ -1016,6 +1019,26 @@ func Open(root js.Value) {
 		if fr := data.Get("shipyardFetch"); fr.Truthy() {
 			relayResource(a[0].Get("source"), fr.Get("id"), fr.Get("url").String())
 		}
+		// A page on a real origin reports its own navigations: this window
+		// cannot read a cross-origin frame's location (see OriginLoader).
+		// Only a frame of one of this window's own tabs is listened to.
+		if typ := data.Get("type"); typ.Type() == js.TypeString {
+			switch typ.String() {
+			case "realorigin-location", "realorigin-open":
+				t := b.tabOfSource(a[0].Get("source"))
+				u := data.Get("url")
+				if t == nil || u.Type() != js.TypeString || !webURL(u.String()) {
+					return nil
+				}
+				if typ.String() == "realorigin-location" {
+					originMoved(t, u.String())
+				} else if data.Get("newTab").Truthy() {
+					b.addTab(u.String())
+				} else {
+					navigate(t, u.String())
+				}
+			}
+		}
 		return nil
 	}))
 
@@ -1326,6 +1349,55 @@ func (b *browser) proxyPanel() (button, panel js.Value) {
 // The address bar keeps the address the reader typed, never the minted one:
 // the origin is a content-addressed hash, an implementation detail of how the
 // host serves the page, and nobody can type it or would recognize it.
+// tabOfSource is the tab of b whose frame is source (a message's sender), or
+// nil when it is none of them.
+func (b *browser) tabOfSource(source js.Value) *tab {
+	if !source.Truthy() {
+		return nil
+	}
+	for _, t := range b.tabs {
+		if t.frame.Truthy() && t.frame.Get("contentWindow").Equal(source) {
+			return t
+		}
+	}
+	return nil
+}
+
+// webURL reports whether s is an absolute http(s) URL, the only thing a page
+// may ask this browser to open.
+func webURL(s string) bool {
+	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
+}
+
+// originMoved records that t's real-origin page is now at url, reported by the
+// page itself. The page is already on screen, so nothing is loaded.
+//
+// The first report after this browser loaded the page is the address it
+// actually landed on, after any redirect: it replaces the entry rather than
+// adding one, or Back would lead to an address that only redirects forward
+// again. Later reports are the reader moving within the site, and are history.
+func originMoved(t *tab, url string) {
+	landed := t.originLoaded
+	t.originLoaded = false
+	if t.pos >= 0 && t.pos < len(t.hist) && t.hist[t.pos] == url {
+		return
+	}
+	if landed && t.pos >= 0 && t.pos < len(t.hist) {
+		t.hist[t.pos] = url
+	} else {
+		if t.pos >= 0 && t.pos < len(t.hist)-1 {
+			t.hist = t.hist[:t.pos+1]
+		}
+		t.hist = append(t.hist, url)
+		t.pos = len(t.hist) - 1
+	}
+	setTitle(t, "", url)
+	if t.isFront() {
+		t.br.addr.Set("value", url)
+	}
+	t.br.syncNav()
+}
+
 func loadOrigin(t *tab, url string, p js.Value) {
 	setLoading(t, true)
 	var onOK, onErr js.Func
@@ -1348,6 +1420,7 @@ func loadOrigin(t *tab, url string, p js.Value) {
 		// from the frame being a different ORIGIN, which is stronger than the
 		// sandbox and, unlike it, leaves the platform intact.
 		t.frame.Call("removeAttribute", "sandbox")
+		t.originLoaded = true
 		t.directSrc = src
 		t.frame.Set("src", src)
 		// Named from the URL: the frame's own <title> is unreadable across the
