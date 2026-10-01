@@ -133,10 +133,11 @@ func TestNativeDeskServing(t *testing.T) {
 			t.Fatalf("desk-boot status=%d, want 200", w.Code)
 		}
 		body := w.Body.String()
-		// Over the host bridge netscrape's transport is the hypervisor's browse
-		// API; without a hook it falls back to a same-origin /fetch proxy this
-		// server does not have, and every foreign URL renders a 404 body.
-		for _, want := range []string{"__netscrapeFetch", "/api/browse/fetch", "/api/browse/clearnet"} {
+		// Over the host bridge netscrape's transport is this visor's streaming
+		// browse endpoint and WebSocket relay; without a hook it falls back to a
+		// same-origin /fetch proxy this server does not have, and every foreign
+		// URL renders a 404 body.
+		for _, want := range []string{"__netscrapeFetch", "/api/browse-stream/", "__netscrapeWebSocket", "/api/browse-ws/"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("desk-boot lacks %s", want)
 			}

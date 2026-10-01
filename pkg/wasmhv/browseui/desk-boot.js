@@ -616,18 +616,17 @@
 								if (end < 0) return readHead();
 								var lines = new TextDecoder().decode(buf.subarray(0, end - 4)).split('\r\n');
 								var status = parseInt((lines[0].split(' ')[1]) || '502', 10) || 502;
-								var h = new Headers(), toEOF = false, length = -1, setCookies = [];
+								var h = new Headers(), toEOF = false, length = -1;
 								lines.slice(1).forEach(function (l) {
 									var c = l.indexOf(':'); if (c < 0) return;
 									var k = l.slice(0, c).trim(), val = l.slice(c + 1).trim(), lk = k.toLowerCase();
 									if (lk === 'connection') { toEOF = /close/i.test(val); return; }
 									if (lk === 'content-length') { length = parseInt(val, 10); }
-									// A Response drops Set-Cookie; carry them for the frame to
-									// mirror into its own cookie store (realorigin sw.js).
-									if (lk === 'set-cookie') { setCookies.push(val); return; }
+									// A Response drops Set-Cookie; the visor sends them again as
+									// X-Realorigin-Set-Cookie, which the frame mirrors.
+									if (lk === 'set-cookie') { return; }
 									try { h.append(k, val); } catch (e) { /* forbidden name */ }
 								});
-								if (setCookies.length) h.set('x-realorigin-set-cookie', JSON.stringify(setCookies));
 								var first = buf.subarray(end), left = toEOF ? -1 : Math.max(length, 0) - first.length;
 								var body = new ReadableStream({
 									start: function (c) {
@@ -853,48 +852,33 @@
 				// openConsole/openWindow contract this boot drives. The dashboard ☰
 				// entry reads __DESK_DASHBOARD_URL__ (set above) — the running
 				// visor's hypervisor UI over the vnet service worker.
-				// Over the host bridge the tab runs no visor of its own, so netscrape's
-				// transport is the hypervisor's browse API: mesh hosts (.dmsg /
-				// .skynet / .skysocks, or a bare PK) through /api/browse/fetch — a
-				// skynet route first, dmsg-HTTP as the fallback — and everything else
-				// through /api/browse/clearnet, honoring the browser's proxy setting.
-				// Same-origin pages never get here: the DirectLoader renders them
-				// natively. Without this the browser fell back to a same-origin
-				// /fetch proxy the hypervisor has never had (seen live as a 404 body).
+				// Over the host bridge the tab runs no visor of its own, so the
+				// browser's requests go to the host visor: everything but this
+				// page's own origin and loopback streams through
+				// /api/browse-stream (pkg/visor/api_browse_stream.go), and a frame's
+				// WebSockets through /api/browse-ws — the same visor endpoints the
+				// wasm desk reaches over vnet. The proxy is netscrape's ⚙ field: a
+				// loopback address there is the host's own; empty is the host
+				// visor's resolving proxy, which also reaches every mesh name.
+				// Same-origin pages never get here: the DirectLoader renders them.
 				if (bridged) {
-					var b64Bytes = function (b64) {
-						var s = atob(b64 || '');
-						var out = new Uint8Array(s.length);
-						for (var i = 0; i < s.length; i++) { out[i] = s.charCodeAt(i); }
-						return out;
-					};
-					var browsePost = function (path, req) {
-						return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) })
-							.then(function (res) {
-								return res.json().then(function (j) {
-									if (!res.ok) {
-										return new Response('skywire browse: ' + ((j && j.error) || res.status), { status: 502, headers: { 'content-type': 'text/plain' } });
-									}
-									var h = new Headers();
-									if (j && j.header) { for (var k in j.header) { try { h.set(k, j.header[k]); } catch (e) { /* forbidden name */ } } }
-									return new Response(b64Bytes(j && j.body), { status: (j && j.status_code) || 200, headers: h });
-								});
-							});
+					var isMeshHost = function (h) { return /\.(dmsg|skynet|skysocks)$/i.test(h) || /^[0-9a-f]{66}$/i.test(h); };
+					var hostProxy = function (meshName) {
+						if (meshName) return { proxy: '' };
+						var pp = proxyPort(globalThis.__netscrapeProxy);
+						if (pp.err) return { err: pp.err };
+						return { proxy: pp.port ? '127.0.0.1:' + pp.port : (pp.addr || '') };
 					};
 					globalThis.__netscrapeFetch = function (url, init) {
 						// Same init contract as the wasm desk's transport above: a caller
-						// passing only a URL still gets a GET. Both desks feed the SAME
-						// real-origin browser, so a POST must survive on either one.
+						// passing only a URL still gets a GET.
 						var rqM = (init && init.method) || 'GET';
 						var rqH = (init && init.headers) || {};
 						var rqB = (init && init.body) || null;
 						var u;
 						try { u = new URL(url, location.href); } catch (e) { return fetch(url); }
-						var host = u.hostname || '';
-						// Same-origin URLs — this page's own assets, above all the favicon
-						// of a natively rendered same-origin tab — and the tab's own
-						// loopback (vnet:<port>) are fetched here, not sent to the host to
-						// dial as clearnet: the host would reach for a loopback of its own.
+						// This page's own assets, and the tab's own loopback (vnet:<port>),
+						// are fetched here: the host would reach for a loopback of its own.
 						if (u.origin === location.origin) return fetch(url);
 						var lp = vnetPort(u);
 						if (lp) {
@@ -907,29 +891,63 @@
 							}
 							return Promise.resolve(proxyError('nothing is listening on vnet port ' + lp));
 						}
-						if (/\.(dmsg|skynet|skysocks)$/i.test(host) || /^[0-9a-f]{66}$/i.test(host)) {
-							var mreq = { host: host, port: u.port ? (parseInt(u.port, 10) || 80) : 80, method: rqM, path: (u.pathname || '/') + (u.search || '') };
-							if (rqB && rqB.length) { mreq.body = b64of(rqB); }
-							for (var hk1 in rqH) { mreq.header = rqH; break; }
-							return browsePost('/api/browse/fetch', mreq);
+						var mesh = isMeshHost(u.hostname);
+						var hp = hostProxy(mesh);
+						if (hp.err) return Promise.resolve(proxyError(hp.err));
+						var target = mesh ? 'http://' + resolverHost(u.hostname) + (u.port && u.port !== '443' ? ':' + u.port : '') + (u.pathname || '/') + (u.search || '') : u.href;
+						var req = { method: rqM, url: target, proxy: hp.proxy };
+						if (rqB && rqB.length) { req.body = b64of(rqB); }
+						for (var hk in rqH) { req.header = rqH; break; }
+						return fetch('/api/browse-stream/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) })
+							.then(function (res) {
+								// A stream carries X-Browse-Final-Url; anything else is the
+								// host visor's own error, before any upstream answered.
+								if (res.headers.has('x-browse-final-url')) return res;
+								return res.text().then(function (t) { return proxyError('skywire browse: ' + t.replace(/</g, '&lt;')); });
+							});
+					};
+					globalThis.__netscrapeWebSocket = function (o, port) {
+						var closed = false, opened = false;
+						function toFrame(m, tr) { try { port.postMessage(m, tr || []); } catch (e) { /* frame gone */ } }
+						function finish(code, reason, clean) {
+							if (closed) return;
+							closed = true;
+							toFrame({ t: 'close', code: code, reason: reason || '', wasClean: !!clean });
+							try { port.close(); } catch (e) { /* already */ }
 						}
-							// The proxy field: a loopback address is this tab's own visor's
-							// SOCKS on the virtual loopback (http only — the page cannot do
-							// TLS through it); anything else the host visor dials.
-							var pp = proxyPort(globalThis.__netscrapeProxy);
-							if (pp.err) return Promise.resolve(proxyError(pp.err));
-							if (pp.port && u.protocol !== 'https:' && globalThis.vnet && globalThis.vnet.listening(pp.port)) {
-								return Promise.resolve(globalThis.vnet.socksHttpFetch(pp.port, host + ':' + (u.port || 80), rqM, (u.pathname || '/') + (u.search || ''), rqB, rqH)).then(function (r) {
-									var h = new Headers();
-									if (r && r.headers) { try { for (var k in r.headers) h.set(k, r.headers[k]); } catch (e) { /* ignore */ } }
-									return new Response((r && r.body) || new Uint8Array(0), { status: (r && r.status) || 200, headers: h });
-								});
+						var u;
+						try { u = new URL(o.url); } catch (e) { toFrame({ t: 'error', message: 'bad websocket url' }); return finish(1006, '', false); }
+						var mesh = isMeshHost(u.hostname);
+						var hp = hostProxy(mesh);
+						if (hp.err) { toFrame({ t: 'error', message: hp.err }); return finish(1006, '', false); }
+						var target = mesh ? 'ws://' + resolverHost(u.hostname) + (u.port ? ':' + u.port : '') + u.pathname + u.search : u.href;
+						var q = '/api/browse-ws/?url=' + encodeURIComponent(target) + '&proxy=' + encodeURIComponent(hp.proxy) +
+							'&origin=' + encodeURIComponent(o.origin || '') + '&protocols=' + encodeURIComponent((o.protocols || []).join(','));
+						var ws;
+						try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + q); } catch (e) { toFrame({ t: 'error', message: String(e) }); return finish(1006, '', false); }
+						ws.binaryType = 'arraybuffer';
+						ws.onmessage = function (e) {
+							// The relay's first message names the negotiated subprotocol.
+							if (!opened) {
+								var c = {};
+								try { c = JSON.parse(e.data); } catch (x) { /* not the control frame */ }
+								opened = true;
+								return toFrame({ t: 'open', protocol: c.protocol || '' });
 							}
-							var req = { method: rqM, url: u.href };
-							if (rqB && rqB.length) { req.body = b64of(rqB); }
-							for (var hk2 in rqH) { req.header = rqH; break; }
-							if (pp.addr && !pp.port) { req.proxy = pp.addr; }
-							return browsePost('/api/browse/clearnet', req);
+							if (typeof e.data === 'string') toFrame({ t: 'message', data: e.data });
+							else toFrame({ t: 'message', data: e.data }, [e.data]);
+						};
+						ws.onerror = function () { toFrame({ t: 'error', message: 'websocket relay failed' }); };
+						ws.onclose = function (e) { finish(opened ? (e.code || 1006) : 1006, e.reason, opened && e.wasClean); };
+						port.onmessage = function (ev) {
+							var m = ev.data || {};
+							if (m.t === 'send') {
+								if (ws.readyState === 1) ws.send(m.data);
+							} else if (m.t === 'close') {
+								try { ws.close(); } catch (e) { /* gone */ }
+								finish(m.code || 1000, m.reason, true);
+							}
+						};
 					};
 				}
 				var panel = globalThis.__skywireDesk;
