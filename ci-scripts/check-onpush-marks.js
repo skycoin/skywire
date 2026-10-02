@@ -52,7 +52,8 @@ function findTypescript(fromDir) {
 function walk(dir, acc = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) walk(p, acc);
+    // The skycoin-web wallet is copied in from the skycoin module and checked there.
+    if (e.isDirectory()) { if (e.name !== 'skycoin-wallet') walk(p, acc); }
     else if (e.name.endsWith('.ts') && !e.name.endsWith('.spec.ts')) acc.push(p);
   }
   return acc;

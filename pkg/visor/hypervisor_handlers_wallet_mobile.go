@@ -25,3 +25,11 @@ func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 		http.Error(w, "wallet UI not embedded in this build", http.StatusNotFound)
 	}
 }
+
+// walletCipherHandler answers 404 for the dashboard wallet's cipher on the
+// mobile build, which has no browser wallet.
+func (hv *Hypervisor) walletCipherHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "wallet cipher not embedded in this build", http.StatusNotFound)
+	}
+}

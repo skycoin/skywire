@@ -16,6 +16,7 @@ import { BandwidthComponent } from './components/pages/node/bandwidth/bandwidth.
 import { UptimeComponent } from './components/pages/node/uptime/uptime.component';
 import { TerminalComponent } from './components/pages/node/terminal/terminal.component';
 import { FullAppHostComponent } from './components/pages/full-app-host/full-app-host.component';
+import { walletRoute } from './wallet/wallet.route';
 import { WalletComponent } from './components/pages/node/wallet/wallet.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
 import { SkysocksTabComponent } from './components/pages/node/skysocks-tab/skysocks.component';
@@ -281,6 +282,12 @@ const routes: Routes = [
     path: 'vpn',
     canActivate: [VpnAuthGuardService],
     loadChildren: () => import('./components/vpn/vpn.module').then(m => m.VpnModule),
+  },
+  walletRoute,
+  {
+    // The wallet has its own page now; this was its full-page view.
+    path: 'app/wallet/:key',
+    redirectTo: 'wallet',
   },
   {
     // Unified full-page app host: every app's "open full UI" navigates here

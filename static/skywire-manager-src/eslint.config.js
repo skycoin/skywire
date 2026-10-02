@@ -6,6 +6,8 @@ const jsdoc = require("eslint-plugin-jsdoc");
 const preferArrow = require("eslint-plugin-prefer-arrow");
 
 module.exports = tseslint.config(
+  // The skycoin-web wallet, copied in from the skycoin module, is linted there.
+  { ignores: ["src/skycoin-wallet/**"] },
   {
     files: ["**/*.ts"],
     extends: [

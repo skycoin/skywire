@@ -1,6 +1,7 @@
 @use 'sass:color';
-// Modal windows.
-.mat-mdc-dialog-surface {
+// Modal windows. The skycoin wallet's panes (src/app/wallet) keep the look its own
+// styles give them; :where() keeps the exclusion from adding specificity.
+:where(.cdk-overlay-pane:not(.skycoin-wallet)) .mat-mdc-dialog-surface {
   border-radius: $mat-dialog-radius !important;
   background-image: url('/assets/img/modal-background-pattern.png') !important;
   box-shadow: inset 0 0 100px 0 rgba(255, 255, 255, 0.5), 5px 5px 15px 0 rgba(0, 0, 0, 1) !important;
@@ -9,7 +10,7 @@
   padding: $mat-dialog-padding !important;
 }
 
-.mat-mdc-dialog-content {
+:where(.cdk-overlay-pane:not(.skycoin-wallet)) .mat-mdc-dialog-content {
   font-family: $skywire-font-family !important;
   margin: (0px) (-$mat-dialog-padding) (-$mat-dialog-padding) (-$mat-dialog-padding) !important;
   padding: $mat-dialog-padding !important;

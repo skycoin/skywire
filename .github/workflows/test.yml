@@ -399,6 +399,13 @@ jobs:
           cache: npm
           cache-dependency-path: static/skywire-manager-src/package-lock.json
 
+      # The dashboard compiles the skycoin wallet from the skycoin module go.mod
+      # requires (scripts/sync-skycoin-wallet.sh), so building it needs Go.
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          cache: false
+
       - uses: browser-actions/setup-chrome@v2
         id: setup-chrome
 

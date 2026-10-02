@@ -1,10 +1,10 @@
 @if (node) {
-  <!-- The wallet is a hypervisor FEATURE: the HV serves the static wallet
-       at /wallet/ and proxies the node API over dmsg. It is ALWAYS available
-       — no skycoin-web process, no port. The optional skycoin-web *server*
-       (own-port, server-side wallets) is demoted into the backend panel's
-       "Remote wallet service" mode as "run one locally" — it is NOT the
-       wallet's on/off switch, so it no longer sits at the top as "Stopped". -->
+  <!-- The wallet is the dashboard's #/wallet page: skycoin-web compiled into
+       the dashboard, its node queries proxied by the hypervisor over dmsg. It
+       is ALWAYS available, with no skycoin-web process and no port. This tab
+       opens it and sets its coin node. The optional skycoin-web *server*
+       (own-port, server-side wallets) sits in the Node panel as "run one
+       locally"; it is NOT the wallet's on/off switch. -->
   <div class="rounded-elevated-box mt-3 wallet-box">
     <div class="box-internal-container wallet-shell">
 
@@ -26,14 +26,7 @@
 
       @if (state === 'running') {
         <div class="wallet-controls">
-          <span class="web-status status-running"
-                matTooltip="Served by the hypervisor at /wallet/ — always available, no process or port needed.">
-            served
-          </span>
-          <span class="dim small">
-            {{ 'wallet.help' | translate }}
-            <span class="mono small">/wallet/</span>
-          </span>
+          <span class="dim small">{{ 'wallet.help' | translate }}</span>
           <span class="spacer"></span>
           <button mat-stroked-button (click)="toggleBackend()"
                   [class.settings-toggle-open]="backendOpen"
@@ -41,19 +34,19 @@
             <mat-icon [inline]="true">{{ backendOpen ? 'expand_less' : 'dns' }}</mat-icon>
             Node
           </button>
-          <button mat-stroked-button class="wallet-fullscreen" (click)="openFullWindow()">
-            <mat-icon [inline]="true">open_in_full</mat-icon>
-            {{ 'common.open-full-page' | translate }}
+          <button mat-raised-button color="primary" class="wallet-fullscreen" (click)="openWallet()">
+            <mat-icon [inline]="true">account_balance_wallet</mat-icon>
+            {{ 'wallet.open' | translate }}
           </button>
         </div>
 
         @if (backendOpen) {
           <!-- The wallet backend config (storage mode, coin nodes, BTC electrum
-               server, skysocks exit) is ONE page served at /wallet/config and
-               embedded here in an <iframe> — the SAME page the ☰ wallet window
+               server, skysocks exit) is ONE page served at wallet/config and
+               embedded here in an <iframe>, the SAME page the ☰ wallet window
                uses, so there is a single config implementation. Same origin as
-               /wallet/, so it reads+writes the localStorage keys the /wallet/
-               shim reads; on Apply it postMessages us to reload the wallet. -->
+               the dashboard, so the wallet reads the localStorage keys it
+               writes. -->
           <div class="wallet-backend">
             <iframe class="wallet-config-frame" [src]="configUrl"></iframe>
 
@@ -61,7 +54,7 @@
               <!-- Native-only: manage the OPTIONAL local skycoin-web *server*
                    process (own port, server-side wallets). The static config
                    page can't drive a visor app, so this stays in the Angular
-                   tab. The /wallet/ feature works whether it's running or not. -->
+                   tab. The wallet works whether it is running or not. -->
               <div class="wallet-localserver">
                 <span class="dim small wallet-node-idx mono">local</span>
                 <span class="dim small">local skycoin-web server</span>
@@ -101,10 +94,6 @@
               }
             }
           </div>
-        }
-
-        @if (iframeUrl) {
-          <iframe class="wallet-frame" [src]="iframeUrl" allowfullscreen></iframe>
         }
       }
 

@@ -527,7 +527,9 @@
     "stop-error": "Failed to stop app"
   },
   "wallet": {
-    "help": "Client-side Skycoin wallet — keys stay in your browser; the hypervisor serves it over the mesh at",
+    "title": "Wallet",
+    "open": "Open wallet",
+    "help": "Client-side Skycoin wallet: keys stay in your browser, and only its node queries go through this hypervisor, over the mesh.",
     "open-fullscreen": "Open in new window",
     "not-configured": "Skycoin wallet app not configured",
     "not-configured-help": "Add the `skycoin-web` app entry on this visor (Apps tab → add) and start it to access the wallet here. Default-off in fresh configs because the app accesses the operator's wallet directory and shouldn't run unless you've reviewed where it's pointed.",
