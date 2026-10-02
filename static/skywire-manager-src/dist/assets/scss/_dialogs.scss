@@ -1,3 +1,4 @@
+@use 'sass:color';
 // Modal windows.
 .mat-mdc-dialog-surface {
   border-radius: $mat-dialog-radius !important;
@@ -91,7 +92,7 @@ app-dialog {
   cursor: pointer;
 
   &:hover {
-    background-color: darken(#d9deeb, 3%);
+    background-color: color.adjust(#d9deeb, $lightness: -3%);
   }
 
   .top-dialog-button-content {

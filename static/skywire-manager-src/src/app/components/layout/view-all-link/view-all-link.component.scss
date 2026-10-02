@@ -1,14 +1,15 @@
-@import 'variables';
-@import "bootstrap_overrides";
+@use "sass:map";
+@use 'variables';
+@use "bootstrap_overrides";
 
 .main-container {
   padding-top: 20px;
   margin-bottom: 4px;
   text-align: right;
-  font-size: $font-size-sm;
+  font-size: variables.$font-size-sm;
 
   // This is due to how the tables work.
-  @media (max-width: (map-get($grid-breakpoints, md) - 1)) , (min-width: map-get($grid-breakpoints, lg)) and (max-width: (map-get($grid-breakpoints, xl) - 1)) {
+  @media (max-width: (map.get(bootstrap_overrides.$grid-breakpoints, md) - 1)) , (min-width: map.get(bootstrap_overrides.$grid-breakpoints, lg)) and (max-width: (map.get(bootstrap_overrides.$grid-breakpoints, xl) - 1)) {
     & {
       margin: 0;
       padding: 16px;
@@ -16,7 +17,7 @@
   }
 
   a {
-    color: $white;
+    color: variables.$white;
     text-decoration: none;
 
     mat-icon {

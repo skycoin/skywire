@@ -1,3 +1,4 @@
+@use 'sass:color';
 // Main app background.
 .app-background {
   width: 100%;
@@ -38,7 +39,7 @@ body.wasm-visor-ui .app-background {
   .box-internal-container {
     border-radius: $mat-dialog-radius;
     padding: $containers-padding - $internal-blue-box-margin;
-    border: scale-color($box-border, $alpha: -65%) solid 1px;
+    border: color.scale($box-border, $alpha: -65%) solid 1px;
     overflow: hidden;
   }
 }

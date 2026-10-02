@@ -1,4 +1,4 @@
-@import "variables";
+@use "variables";
 
 .checking-container {
   font-size: 10px;
@@ -11,5 +11,5 @@
 
 .show-link {
   cursor: pointer;
-  font-size: $font-size-smaller;
+  font-size: variables.$font-size-smaller;
 }

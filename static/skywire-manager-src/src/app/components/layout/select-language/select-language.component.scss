@@ -1,6 +1,7 @@
-@import "bootstrap_overrides";
-@import 'variables';
-@import 'text';
+@use "sass:map";
+@use "bootstrap_overrides";
+@use 'variables';
+@use 'text';
 
 $label-background: rgba(255, 255, 255, 0.25);
 
@@ -14,7 +15,7 @@ $label-background: rgba(255, 255, 255, 0.25);
     width: 118px;
     height: auto !important;
     margin: 20px;
-    font-size: $font-size-mini;
+    font-size: variables.$font-size-mini;
     line-height: unset;
     padding: 0 !important;
     color: unset;
@@ -23,10 +24,10 @@ $label-background: rgba(255, 255, 255, 0.25);
       width: 100%;
     }
 
-    @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
+    @media (max-width: (map.get(bootstrap_overrides.$grid-breakpoints, md) - 1)) {
       & {
         width: 90px;
-        font-size: $font-size-mini-plus;
+        font-size: variables.$font-size-mini-plus;
         margin: 6px;
       }
     }
@@ -36,7 +37,7 @@ $label-background: rgba(255, 255, 255, 0.25);
       height: 64px;
       margin: 10px 0px;
 
-      @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
+      @media (max-width: (map.get(bootstrap_overrides.$grid-breakpoints, md) - 1)) {
         & {
           width: 48px;
           height: 48px;
@@ -46,12 +47,12 @@ $label-background: rgba(255, 255, 255, 0.25);
     }
 
     .label {
-      color: $black !important;
+      color: variables.$black !important;
       background-color: $label-background;
       padding: 4px 10px;
       @extend .single-line;
 
-      @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
+      @media (max-width: (map.get(bootstrap_overrides.$grid-breakpoints, md) - 1)) {
         & {
           padding: 4px 5px;
         }

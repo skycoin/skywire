@@ -1,5 +1,5 @@
-@import "bootstrap_overrides";
-@import "variables";
+@use "bootstrap_overrides";
+@use "variables";
 
 .overflow {
   display: block;
@@ -28,7 +28,7 @@
 
 .persistent-icon {
   font-size: 14px !important;
-  color: $yellow;
+  color: variables.$yellow;
 }
 
 .offline {

@@ -417,6 +417,9 @@ jobs:
       - name: Check OnPush change detection marks
         run: make check-onpush
 
+      - name: Check only styles.scss uses Sass @import
+        run: make check-scss-imports
+
       - name: Test UI
         run: make test-ui
         env:

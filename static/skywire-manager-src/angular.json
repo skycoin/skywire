@@ -35,7 +35,12 @@
             "stylePreprocessorOptions": {
               "includePaths": [
                 "src/assets/scss"
-              ]
+              ],
+              "sass": {
+                "silenceDeprecations": [
+                  "import"
+                ]
+              }
             },
             "scripts": [
               "src/assets/scripts/terminal.js"

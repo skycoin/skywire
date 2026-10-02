@@ -1,3 +1,4 @@
+@use 'sass:color';
 //
 // Colors
 //
@@ -29,7 +30,7 @@ $dark-background: rgba(0, 0, 0, 0.7);
 $clear-background: #3d67a226;
 
 $modal-background: #e0e5ec;
-$modal-separator: scale-color($blue-medium, $alpha: -80%);
+$modal-separator: color.scale($blue-medium, $alpha: -80%);
 
 $box-border: rgba(156, 197, 255, 0.33);
 $separator: rgba(255, 255, 255, 0.15);

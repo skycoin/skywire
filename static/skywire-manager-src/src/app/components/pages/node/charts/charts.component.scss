@@ -1,4 +1,4 @@
-@import 'variables';
+@use 'variables';
 
 .chart {
   position: relative;
@@ -20,22 +20,22 @@
     width: 100%;
 
     span {
-      color: $white;
+      color: variables.$white;
 
       &.text {
-        font-size: $font-size-smaller;
+        font-size: variables.$font-size-smaller;
         text-transform: uppercase;
-        font-weight: $font-weight-bold;
+        font-weight: variables.$font-weight-bold;
       }
 
       &.rate {
         .value {
-          font-size: $font-size-lg;
-          font-weight: $font-weight-bold;
+          font-size: variables.$font-size-lg;
+          font-weight: variables.$font-weight-bold;
         }
 
         .unit {
-          font-size: $font-size-smaller;
+          font-size: variables.$font-size-smaller;
           padding-left: 5px;
         }
       }

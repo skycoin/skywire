@@ -1,10 +1,11 @@
-@import "variables";
-@import "bootstrap_overrides";
+@use "sass:map";
+@use "variables";
+@use "bootstrap_overrides";
 
 .not-found-label {
   align-items: center;
   justify-content: center;
-  font-size: $font-size-base;
+  font-size: variables.$font-size-base;
   position: relative;
 
   mat-icon {
@@ -23,7 +24,7 @@
 .main-area {
   width: 100%;
 
-  @media (min-width: map-get($grid-breakpoints, lg)) {
+  @media (min-width: map.get(bootstrap_overrides.$grid-breakpoints, lg)) {
     width: 73%;
     padding-right: 20px;
     float: left;
@@ -35,7 +36,7 @@
   float: right;
   display: none;
 
-  @media (min-width: map-get($grid-breakpoints, lg)) {
+  @media (min-width: map.get(bootstrap_overrides.$grid-breakpoints, lg)) {
     display: block;
     width: 27%;
     float: right;
