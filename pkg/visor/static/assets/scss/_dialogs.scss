@@ -3,7 +3,7 @@
 // styles give them; :where() keeps the exclusion from adding specificity.
 :where(.cdk-overlay-pane:not(.skycoin-wallet)) .mat-mdc-dialog-surface {
   border-radius: $mat-dialog-radius !important;
-  background-image: url('/assets/img/modal-background-pattern.png') !important;
+  background-image: url('../img/modal-background-pattern.png') !important;
   box-shadow: inset 0 0 100px 0 rgba(255, 255, 255, 0.5), 5px 5px 15px 0 rgba(0, 0, 0, 1) !important;
   background-color: $modal-background !important;
   overflow: hidden;

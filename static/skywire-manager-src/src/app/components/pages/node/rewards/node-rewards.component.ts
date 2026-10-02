@@ -91,7 +91,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.errorMsg = '';
     this.dataSub = this.http.get<any>(
-      `/api/rewards/skycoin-rewards/visor/${this.pk}?days=${this.days}`
+      `api/rewards/skycoin-rewards/visor/${this.pk}?days=${this.days}`
     ).pipe(
       catchError(err => {
         this.errorMsg = 'Failed to load reward data';
