@@ -227,6 +227,13 @@ func (ns *Noise) pqHandlePeerPayload(payload []byte) {
 // wasn't negotiated. After this, EncryptUnsafe/DecryptUnsafe transparently use
 // the hybrid key via the new CipherState (skywire's external nonce is unchanged).
 func (ns *Noise) applyHybrid() error {
+	// The initiator's ML-KEM key is ephemeral. Once the handshake is done it
+	// has no further use, and kept for the life of the session it held memory
+	// and let anyone reading that memory recompute the PQ secret from a
+	// captured ciphertext. Dropped on return, after the downgrade check below.
+	if ns.enc != nil && ns.dec != nil {
+		defer func() { ns.pqInit = nil }()
+	}
 	if ns.pqSecret == nil || ns.enc == nil || ns.dec == nil {
 		// Downgrade observability: if we (the initiator) OFFERED an ML-KEM
 		// public key but the handshake completed (enc+dec set) with no shared
