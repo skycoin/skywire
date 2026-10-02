@@ -115,21 +115,10 @@ func (d *routerSkynetDialer) discoverRelayCandidates(ctx context.Context, remote
 
 	// Prefer relays the transport graph CONFIRMS reach the destination.
 	if dc := d.tpM.Conf.DiscoveryClient; dc != nil {
-		qctx, cancel := context.WithTimeout(ctx, relayDiscoveryTimeout)
-		entries, err := dc.GetTransportsByEdge(qctx, remote)
-		cancel()
+		remotePeers, err := relayGraph.peers(ctx, dc, d.localPK, remote)
 		if err != nil {
 			d.log.WithField("remote", remote.String()).WithError(err).Debug("Skynet relay: transport-graph query failed")
 		} else {
-			remotePeers := make(map[cipher.PubKey]struct{}, len(entries))
-			for _, e := range entries {
-				if e.Type == "dmsg" {
-					continue
-				}
-				if peer := e.RemoteEdge(remote); peer != remote && peer != d.localPK {
-					remotePeers[peer] = struct{}{}
-				}
-			}
 			// Order candidates: transport-graph-CONFIRMED relays first, then our
 			// other direct peers as blind fallbacks. dialViaRelay dials the whole
 			// set in parallel (first success wins), so if the confirmed relays

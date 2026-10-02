@@ -113,12 +113,15 @@ type Visor struct {
 	startedAt       time.Time
 	startupComplete chan struct{}
 
-	ebc         *appevent.Broadcaster // event broadcaster
-	dmsgC       *dmsg.Client
-	dmsgDC      *dmsg.Client       // dmsg direct client
-	dClient     dmsgdisc.APIClient // dmsg direct api client
-	dmsgHTTP    *http.Client       // dmsghttp client
-	dmsgHTTPMux *http.ServeMux     // what the dmsg HTTP port serves: the log server at /, embedded services under their prefixes
+	ebc   *appevent.Broadcaster // event broadcaster
+	dmsgC *dmsg.Client
+	// dmsgHTTPTr is DmsgHTTP's shared keep-alive transport (dmsg_over_skynet.go).
+	dmsgHTTPOnce sync.Once
+	dmsgHTTPTr   *http.Transport
+	dmsgDC       *dmsg.Client       // dmsg direct client
+	dClient      dmsgdisc.APIClient // dmsg direct api client
+	dmsgHTTP     *http.Client       // dmsghttp client
+	dmsgHTTPMux  *http.ServeMux     // what the dmsg HTTP port serves: the log server at /, embedded services under their prefixes
 
 	// embedded holds config.embedded_services, built once; cxoPubs are the
 	// visor's CXO publishers by port, lent to them.

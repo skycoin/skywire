@@ -3,7 +3,6 @@
 package visor
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -12,7 +11,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -827,26 +825,13 @@ func (v *Visor) dmsgHTTPCtx(ctx context.Context, req visorapi.DmsgHTTPRequest) (
 		return nil, fmt.Errorf("DMSG client not ready: %w", err)
 	}
 
-	// dmsg over skynet transports: reach the peer over the VStreamMux relay
-	// (no route, no dmsg-server) when possible; dmsg-servers are the fallback.
-	//
-	// Not for the deployment services. They are dmsg-only clients with no
-	// skynet transport to reach, so the detour can only fail — and failing
-	// takes it up to twelve seconds (a TPD query, then every candidate relay
-	// waiting out its handshake), spent before the dmsg-server path this
-	// ends on has even been tried. On a phone that alone put the server
-	// lists past the API's write deadline.
-	if !v.isDmsgServicePK(req.URL) {
-		if resp, ok := v.dmsgOverSkynet(req); ok {
-			return resp, nil
-		}
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
+	// The shared transport reuses an open connection to the peer when it has
+	// one, and dials a new one over skynet or dmsg (dialDmsgHTTP) when not.
 	httpClient := &http.Client{
-		Transport: &dmsgHTTPTransport{ctx: ctx, dmsgC: v.dmsgC},
+		Transport: v.dmsgHTTPTransport(),
 		Timeout:   15 * time.Second,
 	}
 
@@ -859,6 +844,11 @@ func (v *Visor) dmsgHTTPCtx(ctx context.Context, req visorapi.DmsgHTTPRequest) (
 	httpReq, err := http.NewRequestWithContext(ctx, req.Method, req.URL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	// A dmsg:// address is plain HTTP to <pk>:<port>; the transport knows
+	// only http, and its dialer resolves the host as a dmsg address.
+	if httpReq.URL.Scheme == "dmsg" {
+		httpReq.URL.Scheme = "http"
 	}
 
 	// Set headers. A "Host" header is special: Go sends req.Host (not a header)
@@ -903,90 +893,15 @@ func (v *Visor) dmsgHTTPCtx(ctx context.Context, req visorapi.DmsgHTTPRequest) (
 	return response, nil
 }
 
-// isDmsgServicePK reports whether rawURL names one of the deployment services
-// this visor is configured with (TPD, SD, AR, RF, UT, dmsg discovery).
-func (v *Visor) isDmsgServicePK(rawURL string) bool {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return false
-	}
-	var pk cipher.PubKey
-	if err := pk.Set(u.Hostname()); err != nil {
-		return false
-	}
+// isDmsgServiceKey reports whether pk is one of the deployment services this
+// visor is configured with.
+func (v *Visor) isDmsgServiceKey(pk cipher.PubKey) bool {
 	for _, svc := range v.dmsgServicePKs() {
 		if svc == pk {
 			return true
 		}
 	}
 	return false
-}
-
-// dmsgHTTPTransport implements http.RoundTripper using the visor's dmsg client
-type dmsgHTTPTransport struct {
-	ctx   context.Context
-	dmsgC *dmsg.Client
-}
-
-func (t *dmsgHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Dial from the URL host (the dmsg pk:port), NOT req.Host — a caller may set
-	// req.Host to a vhost name (Caddy/nginx routing) that isn't a dmsg address.
-	var hostAddr dmsg.Addr
-	if err := hostAddr.Set(req.URL.Host); err != nil {
-		return nil, fmt.Errorf("invalid host address: %w", err)
-	}
-	if hostAddr.Port == 0 {
-		hostAddr.Port = 80
-	}
-
-	// Dial the service. DialStream does discovery lookup → connected
-	// server fallback. For deployment services (which have server entries,
-	// not client entries), the discovery lookup fails and the fallback
-	// kicks in. The fallback tries all connected DMSG servers as forwarders.
-	// This is the correct path — the service IS connected to one of our
-	// servers, and the server forwards the stream.
-	//
-	// We use a shorter timeout here since the CLI is waiting interactively.
-	dialCtx, dialCancel := context.WithTimeout(req.Context(), 10*time.Second)
-	defer dialCancel()
-
-	stream, err := t.dmsgC.DialStream(dialCtx, hostAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	if err = req.Write(stream); err != nil {
-		_ = stream.Close() //nolint:errcheck
-		return nil, err
-	}
-
-	resp, err := http.ReadResponse(bufio.NewReader(stream), req)
-	if err != nil {
-		_ = stream.Close() //nolint:errcheck
-		return nil, err
-	}
-
-	// Wrap response body to close stream when done
-	resp.Body = &dmsgStreamBody{
-		ReadCloser: resp.Body,
-		stream:     stream,
-	}
-
-	return resp, nil
-}
-
-type dmsgStreamBody struct {
-	io.ReadCloser
-	stream *dmsg.Stream
-}
-
-func (b *dmsgStreamBody) Close() error {
-	err1 := b.ReadCloser.Close()
-	err2 := b.stream.Close()
-	if err1 != nil {
-		return err1
-	}
-	return err2
 }
 
 func sortedPKs(pks []cipher.PubKey) []cipher.PubKey {
