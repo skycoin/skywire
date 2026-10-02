@@ -1,4 +1,4 @@
-@import 'variables';
+@use 'variables';
 
 .text-container {
   word-break: break-word;
@@ -7,7 +7,7 @@
 .list-container {
   font-size: 14px;
   margin: 10px;
-  color: $blue-medium;
+  color: variables.$blue-medium;
   word-break: break-word;
 }
 

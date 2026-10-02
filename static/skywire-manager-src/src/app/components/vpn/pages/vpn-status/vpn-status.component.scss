@@ -1,5 +1,5 @@
-@import "variables";
-@import "text";
+@use "variables";
+@use "text";
 
 .general-container {
   display: flex;
@@ -22,14 +22,14 @@
 
 .left-area-connected {
   .time-container {
-    background: $dark-background;
+    background: variables.$dark-background;
     border-radius: 100px;
-    font-size: $font-size-smaller;
+    font-size: variables.$font-size-smaller;
     padding: 8px 15px;
     display: inline-block;
 
     .time-content {
-      color: $grey;
+      color: variables.$grey;
 
       mat-icon {
         margin-right: 10px;
@@ -42,8 +42,8 @@
   }
 
   .state-title {
-    font-size: $font-size-base;
-    color: $grey;
+    font-size: variables.$font-size-base;
+    color: variables.$grey;
   }
 
   .state-text {
@@ -58,25 +58,25 @@
   }
 
   .green-line {
-    background-color: $green;
+    background-color: variables.$green;
   }
   
   .yellow-line {
-    background-color: $yellow;
+    background-color: variables.$yellow;
   }
   
   .red-line {
-    background-color: $red;
+    background-color: variables.$red;
   }
 
   .state-explanation {
-    font-size: $font-size-mini;
+    font-size: variables.$font-size-mini;
   }
 
   .last-connected-error {
     margin-top: 15px;
-    font-size: $font-size-smaller;
-    color: $red-clear;
+    font-size: variables.$font-size-smaller;
+    color: variables.$red-clear;
 
     mat-icon {
       position: relative;
@@ -106,8 +106,8 @@
     .chart-container {
       height: 0px;
       position: relative;
-      top: -$internal-blue-box-margin;
-      left: -$internal-blue-box-margin;
+      top: -(variables.$internal-blue-box-margin);
+      left: -(variables.$internal-blue-box-margin);
     }
 
     .chart-label {
@@ -116,13 +116,13 @@
 
       .label-container {
         position: relative;
-        top: -$internal-blue-box-margin;
-        left: -$internal-blue-box-margin;
+        top: -(variables.$internal-blue-box-margin);
+        left: -(variables.$internal-blue-box-margin);
         display: flex;
-        margin-right: -($internal-blue-box-margin * 2);
+        margin-right: -(variables.$internal-blue-box-margin * 2);
 
         .label{
-          font-size: $font-size-mini-plus;
+          font-size: variables.$font-size-mini-plus;
           margin-left: 5px;
           opacity: 0.2;
         }
@@ -149,7 +149,7 @@
       .label-bottom {
         align-items: flex-end;
         position: relative;
-        top: -($internal-blue-box-margin * 2);
+        top: -(variables.$internal-blue-box-margin * 2);
       }
     }
   }
@@ -172,8 +172,8 @@
       justify-content: center;
       padding-bottom: 20px;
       position: relative;
-      top: -$internal-blue-box-margin;
-      left: -$internal-blue-box-margin;
+      top: -(variables.$internal-blue-box-margin);
+      left: -(variables.$internal-blue-box-margin);
 
       mat-icon {
         font-size: 25px;
@@ -191,12 +191,12 @@
       }
 
       .speed {
-        font-size: $font-size-sm;
+        font-size: variables.$font-size-sm;
       }
 
       .total {
-        font-size: $font-size-smaller;
-        color: $grey;
+        font-size: variables.$font-size-smaller;
+        color: variables.$grey;
       }
     }
 
@@ -219,7 +219,7 @@
       display: inline-flex;
       align-items: center;
       height: 100%;
-      font-size: $font-size-sm;
+      font-size: variables.$font-size-sm;
       position: relative;
 
       mat-icon {
@@ -274,7 +274,7 @@
         align-self: center;
   
         ::ng-deep circle {
-          stroke: $white;
+          stroke: variables.$white;
         }
       }
 
@@ -289,7 +289,7 @@
 
 .left-area {
   .title {
-    font-size: $font-size-lg;
+    font-size: variables.$font-size-lg;
     font-weight: bold;
     text-align: center;
     text-transform: uppercase;
@@ -371,7 +371,7 @@
       opacity: 0.5;
 
       ::ng-deep circle {
-        stroke: $white;
+        stroke: variables.$white;
       }
     }
   }
@@ -380,14 +380,14 @@
 
   .current-server {
     display: inline-flex;
-    background: $dark-background;
+    background: variables.$dark-background;
     border-radius: 10px;
     padding: 10px 15px;
     max-width: $max-server-box-size;
     text-align: left;
 
     .none {
-      font-size: $font-size-sm;
+      font-size: variables.$font-size-sm;
       @extend .single-line;
     }
 
@@ -411,13 +411,13 @@
       overflow: hidden;
 
       .top-line {
-        font-size: $font-size-sm;
+        font-size: variables.$font-size-sm;
         @extend .single-line;
       }
 
       .bottom-line {
-        font-size: $font-size-mini;
-        color: $grey;
+        font-size: variables.$font-size-mini;
+        color: variables.$grey;
         @extend .single-line;
       }
     }
@@ -429,7 +429,7 @@
       div {
         width: 1px;
         height: 30px;
-        background: $separator;
+        background: variables.$separator;
         margin-left: 12px;
       }
     }
@@ -461,31 +461,31 @@
   }
 
   .current-server-note {
-    font-size: $font-size-smaller;
-    color: $grey;
+    font-size: variables.$font-size-smaller;
+    color: variables.$grey;
   }
 
   .last-error {
-    font-size: $font-size-smaller;
-    color: $red-clear;
+    font-size: variables.$font-size-smaller;
+    color: variables.$red-clear;
   }
 }
 
 .right-area {
   .content-area {
-    background: $clear-background;
+    background: variables.$clear-background;
     padding: 30px;
     text-align: left;
     max-width: 420px;
     opacity: 0.95;
 
     .title {
-      font-size: $font-size-smaller;
-      color: $grey;
+      font-size: variables.$font-size-smaller;
+      color: variables.$grey;
     }
 
     .big-text {
-      font-size: $font-size-lg;
+      font-size: variables.$font-size-lg;
       overflow-wrap: break-word;
 
       mat-spinner {
@@ -496,20 +496,20 @@
         top: 2px;
         
         ::ng-deep circle {
-          stroke: $white;
+          stroke: variables.$white;
         }
       }
 
       .small-icon {
-        color: $yellow;
+        color: variables.$yellow;
         opacity: 0.7;
-        font-size: $font-size-lg * 0.7;
+        font-size: variables.$font-size-lg * 0.7;
         cursor: default;
         margin-left: 5px;
       }
 
       .big-icon {
-        font-size: $font-size-lg * 0.9;
+        font-size: variables.$font-size-lg * 0.9;
         margin-left: 5px;
         position: relative;
         top: 2px;
@@ -518,7 +518,7 @@
     }
 
     .small-text {
-      font-size: $font-size-mini;
+      font-size: variables.$font-size-mini;
       margin-top: 1px;
       overflow-wrap: break-word;
     }
@@ -534,7 +534,7 @@
     .separator {
       height: 1px;
       width: 100%;
-      background: $separator;
+      background: variables.$separator;
     }
   }
 }

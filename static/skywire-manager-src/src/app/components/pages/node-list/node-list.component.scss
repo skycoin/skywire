@@ -1,4 +1,4 @@
-@import "variables";
+@use "variables";
 
 // Local hypervisor PK label shown in the main node list title bar.
 // Renders as small monospace text with a star icon. The full PK is
@@ -173,7 +173,7 @@
   position: relative;
   top: 2px;
   margin-left: 2px;
-  color: $yellow;
+  color: variables.$yellow;
 }
 
 .small-column {

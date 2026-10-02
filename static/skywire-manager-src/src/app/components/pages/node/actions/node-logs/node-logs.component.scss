@@ -1,17 +1,17 @@
-@import "variables";
+@use "variables";
 
 .top-dialog-button {
-  color: $light-gray !important;
+  color: variables.$light-gray !important;
 
   .top-dialog-button-content {
     text-align: center;
 
     .actual-value {
-      color: $black;
+      color: variables.$black;
     }
 
     .small {
-      font-size: $font-size-mini-plus;
+      font-size: variables.$font-size-mini-plus;
     }
   }
 }
@@ -21,7 +21,7 @@
   word-break: break-word;
 
   .transparent {
-    color: $lighter-gray;
+    color: variables.$lighter-gray;
   }
 }
 
@@ -30,7 +30,7 @@
 }
 
 .log-entry:last-of-type {
-  margin-bottom: $mat-dialog-padding;
+  margin-bottom: variables.$mat-dialog-padding;
 }
 
 .log-empty-msg {
@@ -38,7 +38,7 @@
 }
 
 .view-raw-link {
-  color: $blue-medium;
+  color: variables.$blue-medium;
 }
 
 .update-button {
@@ -54,8 +54,8 @@
 
   .update-time {
     text-align: center;
-    font-size: $font-size-mini;
-    color: $black;
+    font-size: variables.$font-size-mini;
+    color: variables.$black;
     margin: 0 5px;
   }
 }

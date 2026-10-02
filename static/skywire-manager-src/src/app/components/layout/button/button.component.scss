@@ -1,13 +1,13 @@
-@import 'variables';
-@import 'text';
+@use 'variables';
+@use 'text';
 
 button {
-  color: $white;
-  border-radius: $mat-dialog-radius;
+  color: variables.$white;
+  border-radius: variables.$mat-dialog-radius;
   @extend .single-line;
 
   mat-spinner ::ng-deep circle {
-    stroke: $white;
+    stroke: variables.$white;
   }
 }
 

@@ -1,5 +1,5 @@
 @use '@angular/material' as mat;
-@import "assets/scss/variables";
+@use "assets/scss/variables" as *;
 
 // Skywire UI theme typographies.
 $custom-body-1-level-typography: mat.m2-define-typography-level(

@@ -1,7 +1,7 @@
-@import "variables";
+@use "variables";
 
 .mat-mdc-dialog-content {
-  font-size: $font-size-sm;
+  font-size: variables.$font-size-sm;
 }
 
 .app-log-message {
@@ -9,7 +9,7 @@
   word-break: break-word;
 
   .transparent {
-    color: $lighter-gray;
+    color: variables.$lighter-gray;
   }
 }
 
@@ -18,17 +18,17 @@
 }
 
 .app-log-message:last-of-type {
-  margin-bottom: $mat-dialog-padding;
+  margin-bottom: variables.$mat-dialog-padding;
 }
 
 .top-dialog-button {
-  color: $light-gray !important;
+  color: variables.$light-gray !important;
 
   .top-dialog-button-content {
     text-align: center;
 
     .actual-value {
-      color: $black;
+      color: variables.$black;
     }
   }
 }

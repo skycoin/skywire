@@ -1,5 +1,5 @@
-@import "variables";
-@import "utilities/utilities";
+@use "variables";
+@use "utilities/utilities";
 
 app-lang-button {
   position: fixed;
@@ -24,7 +24,7 @@ app-lang-button {
   height: 35px;
   width: 300px;
   overflow: hidden;
-  border-radius: $mat-dialog-radius;
+  border-radius: variables.$mat-dialog-radius;
   box-shadow: 0 3px 8px 0 rgba(0, 0, 0, 0.10), 0 6px 20px 0 rgba(0, 0, 0, 0.10);
   display: flex;
 
@@ -32,7 +32,7 @@ app-lang-button {
     background: #fff;
     width: calc(100% - 35px);
     height: 100%;
-    font-size: $font-size-sm;
+    font-size: variables.$font-size-sm;
     border: none;
     padding-left: 10px;
     padding-right: 10px;
@@ -44,7 +44,7 @@ app-lang-button {
 
   button {
     background: #fff;
-    color: $black;
+    color: variables.$black;
     width: 35px;
     height: 35px;
     line-height: 35px;
@@ -54,14 +54,14 @@ app-lang-button {
     align-items: center;
 
     &:disabled {
-      color: $light-gray;
+      color: variables.$light-gray;
     }
   }
 }
 
 .config-link {
-  color: $white;
-  font-size: $font-size-mini;
+  color: variables.$white;
+  font-size: variables.$font-size-mini;
   margin-top: 20px;
   @extend .cursor-pointer;
 }
