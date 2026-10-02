@@ -12,6 +12,6 @@ import (
 	"net"
 )
 
-func wtDial(_ context.Context, _, _ string) (net.Conn, error) {
+func wtDial(_ context.Context, _ string, _ ...string) (net.Conn, error) {
 	return nil, errWTDial
 }

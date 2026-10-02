@@ -271,3 +271,37 @@ func TestRouteBoundCountsDistinctFirstHops(t *testing.T) {
 	c.now = func() time.Time { return time.Now().Add(24 * time.Hour) }
 	require.Equal(t, 2, c.routeBound(dst), "the count is kept after the set expires")
 }
+
+func TestRefreshDue_OncePerInterval(t *testing.T) {
+	c := newOraclePlanCache()
+	src, _ := cipher.GenerateKeyPair()
+	dst, _ := cipher.GenerateKeyPair()
+	require.False(t, c.refreshDue(dst, time.Minute), "never counted, so no dial has asked about it")
+
+	base := time.Now()
+	c.now = func() time.Time { return base }
+	_, err := c.legsFor(context.Background(), src, dst, func(context.Context) ([]twoHopLeg, error) {
+		return []twoHopLeg{{Forward: []routing.Hop{{TpID: uuid.New()}}}}, nil
+	})
+	require.NoError(t, err)
+	require.False(t, c.refreshDue(dst, time.Minute), "just counted")
+	require.False(t, c.refreshDue(dst, 0), "0 turns the refresh off")
+
+	c.now = func() time.Time { return base.Add(2 * time.Minute) }
+	require.True(t, c.refreshDue(dst, time.Minute))
+	require.False(t, c.refreshDue(dst, time.Minute), "a refresh already started")
+}
+
+func TestRouteBound_PrefersTheUnexcludedCount(t *testing.T) {
+	c := newOraclePlanCache()
+	src, _ := cipher.GenerateKeyPair()
+	dst, _ := cipher.GenerateKeyPair()
+	// A dial's fetch leaves out the routes its siblings hold, so its set is
+	// smaller than the topology; the count taken before exclusions wins.
+	c.noteRouteBound(dst, 11)
+	_, err := c.legsFor(context.Background(), src, dst, func(context.Context) ([]twoHopLeg, error) {
+		return []twoHopLeg{{Forward: []routing.Hop{{TpID: uuid.New()}}}}, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, 11, c.routeBound(dst))
+}

@@ -225,6 +225,12 @@ type Server struct {
 	// re-advertises this hash. Empty unless AddressWT is set.
 	CertHashWT string `json:"cert_hash_wt,omitempty"`
 
+	// CertHashWTNext is the hash of the certificate the server will serve
+	// after its next rotation. A browser pins both, so it keeps connecting
+	// across the rotation without looking the server up again. Empty from
+	// older servers and when AddressWT is unset.
+	CertHashWTNext string `json:"cert_hash_wt_next,omitempty"`
+
 	// AvailableSessions is the number of available sessions that the server can currently accept.
 	AvailableSessions int `json:"availableSessions"`
 

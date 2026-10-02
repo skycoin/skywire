@@ -24,8 +24,10 @@ import (
 	tgbot "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/tgbot"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/rewards"
 )
@@ -54,6 +56,7 @@ var (
 	transportHistPath     string
 	requireBandwidth      bool
 	noBWPool              bool
+	bwSkipReason          string // why pool 2 repeats pool 1, for stats.txt
 	minBWThreshold        uint64
 	saturationExponent    float64
 	bwSaturationExponent  float64
@@ -692,7 +695,7 @@ func init() {
 			}
 		}
 		return res
-	}(rewards.Architectures, []string{"wasm", "amd64", "386"}), "pool 1 allowed arch, comma separated")
+	}(rewards.Architectures, []string{"wasm", "amd64", "386"}), "allowed arch, comma separated (with --a2, the architectures that qualify)")
 
 	RootCmd.Flags().StringSliceVarP(&allowArchitectures2, "a2", "x", func(all []string, dis []string) (res []string) {
 		for _, v := range all {
@@ -708,7 +711,7 @@ func init() {
 			}
 		}
 		return res
-	}(rewards.Architectures, []string{"wasm", "arm64", "arm", "ppc64", "riscv64", "loong64", "mips", "mips64", "mips64le", "mipsle", "ppc64le", "s390x"}), "pool 2 allowed arch, comma separated")
+	}(rewards.Architectures, []string{"wasm", "arm64", "arm", "ppc64", "riscv64", "loong64", "mips", "mips64", "mips64le", "mipsle", "ppc64le", "s390x"}), "more allowed arch, comma separated (with --a1, the architectures that qualify)")
 	RootCmd.Flags().IntVarP(&yearlyTotal, "year", "y", yearlyTotalRewardsPerPool, "yearly total rewards per pool")
 	RootCmd.Flags().StringVarP(&utfile, "utfile", "u", "ut.txt", "uptime tracker data file")
 	RootCmd.Flags().StringVarP(&hwSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
@@ -719,8 +722,8 @@ func init() {
 	RootCmd.Flags().BoolVarP(&processRewards, "process", "r", false, "run complete reward processing workflow")
 	RootCmd.Flags().BoolVarP(&requireTransports, "require-tp", "t", false, "require minimum transports from hist/YYYY-MM-DD_transports.txt (deprecated — TPD-integrated UT data now gates >= 2 transports inherently; this flag is kept only for historical re-runs of dates before the migration)")
 	RootCmd.Flags().StringVarP(&transportHistPath, "tp-hist", "T", "hist", "path to transport history directory")
-	RootCmd.Flags().BoolVarP(&requireBandwidth, "require-bw", "b", false, "require minimum bandwidth (proportional reward based on bandwidth)")
-	RootCmd.Flags().BoolVar(&noBWPool, "no-bw-pool", false, "recovery mode: skip the bandwidth pool and fold its budget into a doubled presence pool (requires -b)")
+	RootCmd.Flags().BoolVarP(&requireBandwidth, "require-bw", "b", false, "pay pool 2 by bandwidth from the day's bandwidth file; without it pool 2 repeats pool 1")
+	RootCmd.Flags().BoolVar(&noBWPool, "no-bw-pool", false, "recovery mode: skip the bandwidth pool and fold its budget into a doubled presence pool, so pool 2 repeats pool 1")
 	RootCmd.Flags().Uint64VarP(&minBWThreshold, "min-bw", "B", defaultMinBandwidth, "minimum bandwidth in bytes to qualify (used with --require-bw)")
 	RootCmd.Flags().Float64VarP(&saturationExponent, "sat-exp", "S", 0.5, "regional saturation exponent (1.0=no derating, 0.5=sqrt, 0=all countries equal)")
 	RootCmd.Flags().Float64Var(&bwSaturationExponent, "bw-sat-exp", 0.5, "bandwidth saturation exponent applied to pool 2 (1.0=strict bytes-proportional, 0.5=sqrt, 0=all senders equal)")
@@ -803,55 +806,33 @@ Architectures:
 			log.Fatal("uptime tracker data file not found\n", err, "\nfetch the uptime tracker data with:\n$ skywire-cli ut > ut.txt")
 		}
 
-		// Build architecture lookup maps
+		// Build the architecture allow-list. There is one reward model,
+		// presence plus bandwidth, so --a1 and --a2 together name the
+		// architectures that qualify; they never split visors into pools.
 		disallowedMap := make(map[string]struct{})
 		for _, arch := range disallowArchitectures {
 			disallowedMap[arch] = struct{}{}
 		}
-
-		allowArchMap1 := make(map[string]struct{})
-		allowArchMap2 := make(map[string]struct{})
 		supportedArchitecturesMap := make(map[string]struct{})
 		for _, arch := range rewards.Architectures {
 			supportedArchitecturesMap[arch] = struct{}{}
 		}
-		for _, arch := range allowArchitectures1 {
-			if _, isDisallowed := disallowedMap[arch]; !isDisallowed {
-				allowArchMap1[arch] = struct{}{}
-			}
-		}
-		for _, arch := range allowArchitectures2 {
-			if _, isDisallowed := disallowedMap[arch]; !isDisallowed {
-				allowArchMap2[arch] = struct{}{}
-			}
-		}
-
-		if !requireBandwidth {
-			for arch := range allowArchMap1 {
-				if _, exists := allowArchMap2[arch]; exists {
-					log.Fatal("Error: Architecture cannot be specified in both pools: " + arch)
-				}
-			}
-		}
-		for arch := range allowArchMap1 {
-			if _, isValid := supportedArchitecturesMap[arch]; !isValid {
-				log.Fatal("Error: Architecture is not valid: ", arch)
-			}
-		}
-		for arch := range allowArchMap2 {
-			if _, isValid := supportedArchitecturesMap[arch]; !isValid {
-				log.Fatal("Error: Architecture is not valid: ", arch)
-			}
-		}
-
 		allowArchMapAll := make(map[string]struct{})
-		if requireBandwidth {
-			for arch := range allowArchMap1 {
+		for _, arch := range append(append([]string{}, allowArchitectures1...), allowArchitectures2...) {
+			if _, isValid := supportedArchitecturesMap[arch]; !isValid {
+				log.Fatal("Error: Architecture is not valid: ", arch)
+			}
+			if _, isDisallowed := disallowedMap[arch]; !isDisallowed {
 				allowArchMapAll[arch] = struct{}{}
 			}
-			for arch := range allowArchMap2 {
-				allowArchMapAll[arch] = struct{}{}
-			}
+		}
+
+		// Without bandwidth data Pool 2 repeats Pool 1: the presence pool
+		// gets both budgets. That holds whether -b was left off or the day's
+		// bandwidth file turns out to be missing or empty below.
+		if !requireBandwidth {
+			log.Warn("No -b: the bandwidth pool is skipped and Pool 2 repeats Pool 1")
+			noBWPool, bwSkipReason = true, "no -b"
 		}
 
 		// Load transport requirement data
@@ -898,39 +879,60 @@ Architectures:
 		// pre-v2 behavior so historical rerun stays bit-exact.
 		bandwidthMap := make(map[string]uint64)
 		var bwTransports []TransportBW // populated only for v2
-		if requireBandwidth && !noBWPool {
+		if !noBWPool {
 			bwFile := fmt.Sprintf("%s/%s_bandwidth.json", transportHistPath, wdate)
 			data, readErr := os.ReadFile(bwFile) //nolint:gosec
 			switch {
 			case readErr != nil:
-				log.Warnf("Bandwidth file not found: %s (bandwidth pool will be skipped)", bwFile)
-				requireBandwidth = false
+				log.Warnf("Bandwidth file not found: %s (Pool 2 repeats Pool 1)", bwFile)
+				noBWPool, bwSkipReason = true, "bandwidth file not found"
 			default:
 				var v2 BandwidthData
-				if err := json.Unmarshal(data, &v2); err == nil && v2.Version >= BandwidthDataVersion {
+				var v3 tpdstore.VisorBWDay
+				if err := json.Unmarshal(data, &v3); err == nil && v3.Version == tpdstore.VisorBWVersion {
+					// v3: TPD's settled per-visor day, same-network
+					// transports already left out. Each visor is paid for
+					// what it sent over every transport type but dmsg: a dmsg
+					// transport rides a dmsg server's bandwidth, not the
+					// visor's own.
+					for pk, byType := range v3.Visors {
+						for typ, n := range byType {
+							if typ != string(tptypes.DMSG) {
+								bandwidthMap[pk] += n
+							}
+						}
+					}
+					if len(bandwidthMap) == 0 {
+						log.Warnf("Bandwidth file %s parsed as v3 but contains zero visors: Pool 2 repeats Pool 1.", bwFile)
+						noBWPool, bwSkipReason = true, "bandwidth file has no visors"
+					} else {
+						log.Infof("Loaded v3 bandwidth data for %d visors from %s (%d of %d transports left out as same-network)",
+							len(bandwidthMap), bwFile, v3.SameNetworkExcluded, v3.Transports)
+					}
+				} else if err := json.Unmarshal(data, &v2); err == nil && v2.Version >= BandwidthDataVersion {
 					bwTransports = v2.Transports
 					if len(bwTransports) == 0 {
 						// Same defensive logic as transports.txt: empty but
 						// present means upstream data unavailability, not
 						// "no transport had bandwidth". Skip pool 2 + warn.
 						log.Warnf("Bandwidth file %s parsed as v2 but contains zero transports. "+
-							"Treating as upstream data unavailability and skipping the bandwidth pool. "+
+							"Treating as upstream data unavailability: Pool 2 repeats Pool 1. "+
 							"Verify bw-collect succeeded and the TPD /metrics endpoint is healthy.", bwFile)
-						requireBandwidth = false
+						noBWPool, bwSkipReason = true, "bandwidth file has no transports"
 					} else {
 						log.Infof("Loaded v2 bandwidth data: %d transports from %s", len(bwTransports), bwFile)
 					}
 				} else if err := json.Unmarshal(data, &bandwidthMap); err == nil {
 					if len(bandwidthMap) == 0 {
 						log.Warnf("Bandwidth file %s parsed as v1 but contains zero visors. "+
-							"Treating as upstream data unavailability and skipping the bandwidth pool.", bwFile)
-						requireBandwidth = false
+							"Treating as upstream data unavailability: Pool 2 repeats Pool 1.", bwFile)
+						noBWPool, bwSkipReason = true, "bandwidth file has no visors"
 					} else {
 						log.Infof("Loaded v1 bandwidth data for %d visors from %s (legacy aggregated format — no counterparty eligibility filter)", len(bandwidthMap), bwFile)
 					}
 				} else {
-					log.Warnf("Failed to parse bandwidth file %s: %v", bwFile, err)
-					requireBandwidth = false
+					log.Warnf("Failed to parse bandwidth file %s: %v (Pool 2 repeats Pool 1)", bwFile, err)
+					noBWPool, bwSkipReason = true, "bandwidth file unreadable"
 				}
 			}
 		}
@@ -952,8 +954,7 @@ Architectures:
 		}
 
 		// Collect eligible nodes by parsing surveys
-		var nodesInfos1 []nodeinfo // pool 1 (presence in bandwidth mode, or arch pool 1 in legacy)
-		var nodesInfos2 []nodeinfo // pool 2 (unused in bandwidth mode, or arch pool 2 in legacy)
+		var nodesInfos1 []nodeinfo // every eligible visor: presence, and bandwidth when there is data
 		var grrInfos []nodeinfo    // ineligible nodes (for error reporting)
 
 		for _, pk := range res {
@@ -981,20 +982,13 @@ Architectures:
 			}
 			uu := survey.UUID
 
-			_, allowed1 := allowArchMap1[arch]
-			_, allowed2 := allowArchMap2[arch]
 			_, _, addrErr := rewardconfig.ValidateRewardAddress(sky)
 
 			_, hasTransports := transportMap[pk]
 			meetsTransportReq := !requireTransports || hasTransports
 			visorBW := bandwidthMap[pk]
 
-			var archAllowed bool
-			if requireBandwidth {
-				_, archAllowed = allowArchMapAll[arch]
-			} else {
-				archAllowed = allowed1 || allowed2
-			}
+			_, archAllowed := allowArchMapAll[arch]
 
 			ni := nodeinfo{
 				IPAddr:     ip,
@@ -1049,16 +1043,7 @@ Architectures:
 				}
 			}
 
-			if requireBandwidth {
-				nodesInfos1 = append(nodesInfos1, ni)
-			} else {
-				if allowed1 {
-					nodesInfos1 = append(nodesInfos1, ni)
-				}
-				if allowed2 {
-					nodesInfos2 = append(nodesInfos2, ni)
-				}
-			}
+			nodesInfos1 = append(nodesInfos1, ni)
 		}
 
 		if grr {
@@ -1079,7 +1064,7 @@ Architectures:
 		// empty during the eligibility loop in this path, so initial
 		// ni.Bandwidth=0 for everyone — we re-assign from the filtered
 		// aggregation here.
-		if requireBandwidth && bwTransports != nil {
+		if bwTransports != nil {
 			eligibleSet := make(map[string]struct{}, len(nodesInfos1))
 			for _, ni := range nodesInfos1 {
 				eligibleSet[ni.PK] = struct{}{}
@@ -1110,7 +1095,7 @@ Architectures:
 		wdate = strings.ReplaceAll(wdate, " ", "0")
 
 		// Build dedup counts from all eligible visors
-		allEligible := append(nodesInfos1, nodesInfos2...)
+		allEligible := nodesInfos1
 		allIPs := make([]string, 0, len(allEligible))
 		allMACs := make([]string, 0, len(allEligible))
 		allUUIDs := make([]string, 0, len(allEligible))
@@ -1123,247 +1108,187 @@ Architectures:
 		macCounts := countFrequency(allMACs)
 		uuidCounts := countFrequency(allUUIDs)
 
-		if requireBandwidth {
-			// ==================== TWO-POOL MODEL ====================
-			// Pool 1: Presence — equal shares with IP/MAC dedup + regional saturation
-			// Pool 2: Bandwidth — proportional to bandwidth bytes
-			//
-			// With --no-bw-pool, pool 2 is skipped and its budget folds
-			// into pool 1: presence is computed once against 2×dayReward.
-			// This is the recovery lever for days where bw-collect data
-			// is missing or corrupt — IP/MAC dedup and regional
-			// saturation still apply to the full 2-pool budget.
+		// ==================== TWO-POOL MODEL ====================
+		// Pool 1: Presence — equal shares with IP/MAC dedup + regional saturation
+		// Pool 2: Bandwidth — proportional to bandwidth bytes
+		//
+		// With --no-bw-pool, pool 2 is skipped and its budget folds
+		// into pool 1: presence is computed once against 2×dayReward.
+		// This is the recovery lever for days where bw-collect data
+		// is missing or corrupt — IP/MAC dedup and regional
+		// saturation still apply to the full 2-pool budget.
 
-			presenceBudget := dayReward
+		presenceBudget := dayReward
+		if noBWPool {
+			presenceBudget = 2 * dayReward
+		}
+
+		computePoolShares(nodesInfos1, ipCounts, macCounts)
+		totalPresenceShares := computePoolRewards(nodesInfos1, presenceBudget)
+		// Snapshot pool 1 reward per visor BEFORE pool 2 is added.
+		// Lets the per-pool CSVs + stats lines (and any future caller
+		// that needs the split) recover the breakdown without
+		// recomputation.
+		for i := range nodesInfos1 {
+			nodesInfos1[i].PresenceReward = nodesInfos1[i].Reward
+		}
+
+		// Bandwidth pool: add proportional bandwidth reward on top,
+		// dampened by --bw-sat-exp under per-IP saturation. A
+		// visor's effective weight is bytes × ip.total^(exp-1):
+		//
+		//   exp = 1.0 → bytes (strict bytes-proportional)
+		//   exp = 0.5 → bytes / sqrt(ip.total) (default; per-IP sqrt)
+		//   exp = 0.0 → bytes / ip.total (each IP contributes equal
+		//               total weight, divided proportionally by
+		//               byte share)
+		//
+		// The per-IP grouping closes the splitting bonus that the
+		// previous sum-of-sqrt-per-visor formula opened: under the
+		// old form an operator could 5× their pool 2 share by
+		// re-pointing one fat visor's traffic onto 37 PKs at the
+		// same IP, since sqrt is concave. With per-IP saturation
+		// the IP contributes ip.total^exp regardless of partition,
+		// so PK multiplication at one IP no longer pays. The same
+		// invariant holds across skycoin addresses — the per-IP
+		// total is address-agnostic.
+		ipBytes := bytesPerIP(nodesInfos1, minBWThreshold)
+		var totalBWShares float64
+		var bwPoolCount int
+		if !noBWPool {
+			for _, ni := range nodesInfos1 {
+				if ni.Bandwidth >= minBWThreshold {
+					totalBWShares += pool2Weight(ni.Bandwidth, ipBytes[ni.IPAddr], bwSaturationExponent)
+					bwPoolCount++
+				}
+			}
+			if totalBWShares > 0 {
+				for i := range nodesInfos1 {
+					if nodesInfos1[i].Bandwidth >= minBWThreshold {
+						weight := pool2Weight(nodesInfos1[i].Bandwidth, ipBytes[nodesInfos1[i].IPAddr], bwSaturationExponent)
+						bw := weight * dayReward / totalBWShares
+						nodesInfos1[i].BandwidthReward = bw
+						nodesInfos1[i].Reward += bw
+					}
+				}
+			}
+		}
+
+		// Sum the two pools for the stats block. By construction
+		// pool1Sum ≈ presenceBudget and pool2Sum ≈ dayReward (or 0
+		// when noBWPool), but reporting the actual sums catches any
+		// future drift in the share-aggregation math.
+		var pool1Sum, pool2Sum float64
+		for _, ni := range nodesInfos1 {
+			pool1Sum += ni.PresenceReward
+			pool2Sum += ni.BandwidthReward
+		}
+
+		// Output stats
+		if !h0 {
+			fmt.Printf("date: %s\n", wdate)
+			fmt.Printf("days this month: %d\n", daysThisMonth)
+			fmt.Printf("days in the year: %d\n", daysThisYear)
+			fmt.Printf("this month's rewards: %.6f\n", monthReward)
+			fmt.Printf("reward per pool: %.6f\n", dayReward)
 			if noBWPool {
-				presenceBudget = 2 * dayReward
+				reason := bwSkipReason
+				if reason == "" {
+					reason = "--no-bw-pool"
+				}
+				fmt.Printf("reward mode: presence only, Pool 2 repeats Pool 1 (%s)\n", reason)
+			} else {
+				fmt.Printf("reward mode: presence + bandwidth\n")
 			}
-
-			computePoolShares(nodesInfos1, ipCounts, macCounts)
-			totalPresenceShares := computePoolRewards(nodesInfos1, presenceBudget)
-			// Snapshot pool 1 reward per visor BEFORE pool 2 is added.
-			// Lets the per-pool CSVs + stats lines (and any future caller
-			// that needs the split) recover the breakdown without
-			// recomputation.
-			for i := range nodesInfos1 {
-				nodesInfos1[i].PresenceReward = nodesInfos1[i].Reward
+			fmt.Printf("\n--- Presence Pool (equal shares, IP/MAC dedup) ---\n")
+			fmt.Printf("presence pool budget: %.6f\n", presenceBudget)
+			fmt.Printf("Pool 1 Total: %.6f\n", pool1Sum)
+			fmt.Printf("qualifying visors: %d\n", len(nodesInfos1))
+			fmt.Printf("total presence shares: %.6f\n", totalPresenceShares)
+			if totalPresenceShares > 0 {
+				fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", presenceBudget/totalPresenceShares)
 			}
-
-			// Bandwidth pool: add proportional bandwidth reward on top,
-			// dampened by --bw-sat-exp under per-IP saturation. A
-			// visor's effective weight is bytes × ip.total^(exp-1):
-			//
-			//   exp = 1.0 → bytes (strict bytes-proportional)
-			//   exp = 0.5 → bytes / sqrt(ip.total) (default; per-IP sqrt)
-			//   exp = 0.0 → bytes / ip.total (each IP contributes equal
-			//               total weight, divided proportionally by
-			//               byte share)
-			//
-			// The per-IP grouping closes the splitting bonus that the
-			// previous sum-of-sqrt-per-visor formula opened: under the
-			// old form an operator could 5× their pool 2 share by
-			// re-pointing one fat visor's traffic onto 37 PKs at the
-			// same IP, since sqrt is concave. With per-IP saturation
-			// the IP contributes ip.total^exp regardless of partition,
-			// so PK multiplication at one IP no longer pays. The same
-			// invariant holds across skycoin addresses — the per-IP
-			// total is address-agnostic.
-			ipBytes := bytesPerIP(nodesInfos1, minBWThreshold)
-			var totalBWShares float64
-			var bwPoolCount int
-			if !noBWPool {
+			if noBWPool {
+				fmt.Printf("\n--- Bandwidth Pool: DISABLED (budget folded into presence) ---\n")
+			} else {
+				fmt.Printf("\n--- Bandwidth Pool (sender-pays, per-IP weighted bytes^%.2f) ---\n", bwSaturationExponent)
+				fmt.Printf("bandwidth pool budget: %.6f\n", dayReward)
+				fmt.Printf("Pool 2 Total: %.6f\n", pool2Sum)
+				fmt.Printf("minimum bandwidth threshold: %d bytes\n", minBWThreshold)
+				fmt.Printf("qualifying visors: %d\n", bwPoolCount)
+				var totalBW uint64
 				for _, ni := range nodesInfos1 {
 					if ni.Bandwidth >= minBWThreshold {
-						totalBWShares += pool2Weight(ni.Bandwidth, ipBytes[ni.IPAddr], bwSaturationExponent)
-						bwPoolCount++
+						totalBW += ni.Bandwidth
 					}
 				}
+				fmt.Printf("total network bandwidth: %s\n", formatBytes(totalBW))
+				fmt.Printf("contributing IPs: %d\n", len(ipBytes))
+				fmt.Printf("bandwidth saturation exponent: %.2f\n", bwSaturationExponent)
 				if totalBWShares > 0 {
-					for i := range nodesInfos1 {
-						if nodesInfos1[i].Bandwidth >= minBWThreshold {
-							weight := pool2Weight(nodesInfos1[i].Bandwidth, ipBytes[nodesInfos1[i].IPAddr], bwSaturationExponent)
-							bw := weight * dayReward / totalBWShares
-							nodesInfos1[i].BandwidthReward = bw
-							nodesInfos1[i].Reward += bw
-						}
+					// Pool 2 rate is SKY per unit of effective
+					// pool-2 weight, where weight = bytes ×
+					// ip.total^(exp-1). At exp=1.0 this collapses
+					// to the per-byte rate (and Skycoin Per GB is
+					// emitted explicitly below). At exp=0.5 each
+					// visor's weight is bytes/sqrt(ip.total) — a
+					// visor's reward is its share of its IP's
+					// sqrt-weighted slice of the pool. Print the
+					// rate unconditionally so operators can
+					// reproduce any visor's reward as Weight×rate.
+					fmt.Printf("Skycoin Per Pool 2 Weight Unit: %.12f\n", dayReward/totalBWShares)
+					if bwSaturationExponent == 1.0 {
+						fmt.Printf("Skycoin Per GB (Pool 2): %.6f\n", dayReward/totalBWShares*1024*1024*1024)
 					}
 				}
 			}
+			fmt.Printf("\nUnique mac addresses: %d\n", len(macCounts))
+			fmt.Printf("Unique IP Addresses: %d\n", len(ipCounts))
+			fmt.Printf("Unique UUIDs: %d\n", len(uuidCounts))
+			printSaturationStats(nodesInfos1, presenceBudget, totalPresenceShares)
+		}
 
-			// Sum the two pools for the stats block. By construction
-			// pool1Sum ≈ presenceBudget and pool2Sum ≈ dayReward (or 0
-			// when noBWPool), but reporting the actual sums catches any
-			// future drift in the share-aggregation math.
-			var pool1Sum, pool2Sum float64
+		if !h1 {
+			fmt.Println("Skycoin Address, Skywire Public Key, Presence Share, Bandwidth (bytes), Total Reward SKY, IP, Architecture, UUID, Interfaces, Country, XPub")
 			for _, ni := range nodesInfos1 {
-				pool1Sum += ni.PresenceReward
-				pool2Sum += ni.BandwidthReward
+				resolved := resolveRewardAddress(ni.SkyAddr)
+				xpub := ""
+				if strings.HasPrefix(ni.SkyAddr, "xpub") {
+					xpub = ni.SkyAddr
+				}
+				fmt.Printf("%s, %s, %.6f, %d, %.6f, %s, %s, %s, %s, %s, %s \n", resolved, ni.PK, ni.Share, ni.Bandwidth, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces, ni.Country, xpub)
 			}
+		}
 
-			// Output stats
-			if !h0 {
-				fmt.Printf("date: %s\n", wdate)
-				fmt.Printf("days this month: %d\n", daysThisMonth)
-				fmt.Printf("days in the year: %d\n", daysThisYear)
-				fmt.Printf("this month's rewards: %.6f\n", monthReward)
-				fmt.Printf("reward per pool: %.6f\n", dayReward)
-				if noBWPool {
-					fmt.Printf("reward mode: presence only (bandwidth pool disabled, 2× presence)\n")
-				} else {
-					fmt.Printf("reward mode: presence + bandwidth\n")
-				}
-				fmt.Printf("\n--- Presence Pool (equal shares, IP/MAC dedup) ---\n")
-				fmt.Printf("presence pool budget: %.6f\n", presenceBudget)
-				fmt.Printf("Pool 1 Total: %.6f\n", pool1Sum)
-				fmt.Printf("qualifying visors: %d\n", len(nodesInfos1))
-				fmt.Printf("total presence shares: %.6f\n", totalPresenceShares)
-				if totalPresenceShares > 0 {
-					fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", presenceBudget/totalPresenceShares)
-				}
-				if noBWPool {
-					fmt.Printf("\n--- Bandwidth Pool: DISABLED (budget folded into presence) ---\n")
-				} else {
-					fmt.Printf("\n--- Bandwidth Pool (sender-pays, per-IP weighted bytes^%.2f) ---\n", bwSaturationExponent)
-					fmt.Printf("bandwidth pool budget: %.6f\n", dayReward)
-					fmt.Printf("Pool 2 Total: %.6f\n", pool2Sum)
-					fmt.Printf("minimum bandwidth threshold: %d bytes\n", minBWThreshold)
-					fmt.Printf("qualifying visors: %d\n", bwPoolCount)
-					var totalBW uint64
-					for _, ni := range nodesInfos1 {
-						if ni.Bandwidth >= minBWThreshold {
-							totalBW += ni.Bandwidth
-						}
-					}
-					fmt.Printf("total network bandwidth: %s\n", formatBytes(totalBW))
-					fmt.Printf("contributing IPs: %d\n", len(ipBytes))
-					fmt.Printf("bandwidth saturation exponent: %.2f\n", bwSaturationExponent)
-					if totalBWShares > 0 {
-						// Pool 2 rate is SKY per unit of effective
-						// pool-2 weight, where weight = bytes ×
-						// ip.total^(exp-1). At exp=1.0 this collapses
-						// to the per-byte rate (and Skycoin Per GB is
-						// emitted explicitly below). At exp=0.5 each
-						// visor's weight is bytes/sqrt(ip.total) — a
-						// visor's reward is its share of its IP's
-						// sqrt-weighted slice of the pool. Print the
-						// rate unconditionally so operators can
-						// reproduce any visor's reward as Weight×rate.
-						fmt.Printf("Skycoin Per Pool 2 Weight Unit: %.12f\n", dayReward/totalBWShares)
-						if bwSaturationExponent == 1.0 {
-							fmt.Printf("Skycoin Per GB (Pool 2): %.6f\n", dayReward/totalBWShares*1024*1024*1024)
-						}
-					}
-				}
-				fmt.Printf("\nUnique mac addresses: %d\n", len(macCounts))
-				fmt.Printf("Unique IP Addresses: %d\n", len(ipCounts))
-				fmt.Printf("Unique UUIDs: %d\n", len(uuidCounts))
-				printSaturationStats(nodesInfos1, presenceBudget, totalPresenceShares)
+		sortedAddrs := sumRewardsByAddress(nodesInfos1)
+		if !h0 {
+			total := 0.0
+			for _, a := range sortedAddrs {
+				total += a.Reward
 			}
+			fmt.Printf("\nTotal Reward Amount (both pools): %.6f\n", total)
+		}
+		if !h2 {
+			fmt.Println("Skycoin Address, Reward Amount")
+			for _, a := range sortedAddrs {
+				fmt.Printf("%s, %.6f\n", resolveRewardAddress(a.SkyAddr), a.Reward)
+			}
+		}
 
-			if !h1 {
-				fmt.Println("Skycoin Address, Skywire Public Key, Presence Share, Bandwidth (bytes), Total Reward SKY, IP, Architecture, UUID, Interfaces, Country, XPub")
-				for _, ni := range nodesInfos1 {
-					resolved := resolveRewardAddress(ni.SkyAddr)
-					xpub := ""
-					if strings.HasPrefix(ni.SkyAddr, "xpub") {
-						xpub = ni.SkyAddr
-					}
-					fmt.Printf("%s, %s, %.6f, %d, %.6f, %s, %s, %s, %s, %s, %s \n", resolved, ni.PK, ni.Share, ni.Bandwidth, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces, ni.Country, xpub)
-				}
-			}
-
-			sortedAddrs := sumRewardsByAddress(nodesInfos1)
-			if !h0 {
-				total := 0.0
-				for _, a := range sortedAddrs {
-					total += a.Reward
-				}
-				fmt.Printf("\nTotal Reward Amount (both pools): %.6f\n", total)
-			}
-			if !h2 {
-				fmt.Println("Skycoin Address, Reward Amount")
-				for _, a := range sortedAddrs {
-					fmt.Printf("%s, %.6f\n", resolveRewardAddress(a.SkyAddr), a.Reward)
-				}
-			}
-
-			// Per-pool detail outputs. These are side-channel files
-			// (not stdout) so they land regardless of which -h flag
-			// the caller passed — every one of the 4 invocations in
-			// the embedded reward.sh wrapper produces an up-to-date
-			// pair of pool1_*/pool2_* files, and re-runs are
-			// idempotent (same input → same files). Skipped when -k
-			// <pubkey> is set since that mode is per-visor inspection,
-			// not a full-network distribution. The combined
-			// _shares.csv and _rewardtxn0.csv are unchanged so the
-			// broadcast pipeline (which reads _rewardtxn0.csv) is
-			// unaffected.
-			if pubkey == "" {
-				if err := writePerPoolFiles(transportHistPath, wdate, nodesInfos1, bwSaturationExponent, minBWThreshold); err != nil {
-					log.Warnf("Failed to write per-pool detail files: %v", err)
-				}
-			}
-		} else {
-			// ==================== LEGACY TWO-ARCH-POOL MODEL ====================
-			computePoolShares(nodesInfos1, ipCounts, macCounts)
-			computePoolShares(nodesInfos2, ipCounts, macCounts)
-			totalShares1 := computePoolRewards(nodesInfos1, dayReward)
-			totalShares2 := computePoolRewards(nodesInfos2, dayReward)
-
-			if !h0 {
-				fmt.Printf("date: %s\n", wdate)
-				fmt.Printf("days this month: %d\n", daysThisMonth)
-				fmt.Printf("days in the year: %d\n", daysThisYear)
-				fmt.Printf("this month's rewards: %.6f\n", monthReward)
-				fmt.Printf("reward total per pool: %.6f\n", dayReward)
-				fmt.Printf("Visors meeting uptime & other requirements (Pool 1): %d\n", len(nodesInfos1))
-				fmt.Printf("Visors meeting uptime & other requirements (Pool 2): %d\n", len(nodesInfos2))
-				fmt.Printf("Unique mac addresses for first interface after lo: %d\n", len(macCounts))
-				fmt.Printf("Unique IP Addresses: %d\n", len(ipCounts))
-				fmt.Printf("Unique UUIDs: %d\n", len(uuidCounts))
-				if saturationExponent < 1.0 {
-					fmt.Printf("Regional saturation exponent: %.2f\n", saturationExponent)
-				}
-				fmt.Printf("Total valid shares (Pool 1): %.6f\n", totalShares1)
-				fmt.Printf("Total valid shares (Pool 2): %.6f\n", totalShares2)
-				if totalShares1 != 0 {
-					fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", dayReward/totalShares1)
-				} else {
-					fmt.Printf("Skycoin Per Share (Pool 1): 0\n")
-				}
-				if totalShares2 != 0 {
-					fmt.Printf("Skycoin Per Share (Pool 2): %.6f\n", dayReward/totalShares2)
-				} else {
-					fmt.Printf("Skycoin Per Share (Pool 2): 0\n")
-				}
-			}
-
-			combinedNodes := append(nodesInfos1, nodesInfos2...)
-			if !h1 {
-				fmt.Println("Skycoin Address, Skywire Public Key, Reward Shares, Reward SKY Amount, IP, Architecture, UUID, Interfaces, Country, XPub")
-				for _, ni := range combinedNodes {
-					resolved := resolveRewardAddress(ni.SkyAddr)
-					xpub := ""
-					if strings.HasPrefix(ni.SkyAddr, "xpub") {
-						xpub = ni.SkyAddr
-					}
-					fmt.Printf("%s, %s, %.6f, %.6f, %s, %s, %s, %s, %s, %s \n", resolved, ni.PK, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces, ni.Country, xpub)
-				}
-			}
-
-			sortedAddrs := sumRewardsByAddress(combinedNodes)
-			if !h0 {
-				total := 0.0
-				for _, a := range sortedAddrs {
-					total += a.Reward
-				}
-				fmt.Printf("Total Reward Amount: %.6f\n", total)
-			}
-			if !h2 {
-				fmt.Println("Skycoin Address, Reward Amount")
-				for _, a := range sortedAddrs {
-					fmt.Printf("%s, %.6f\n", resolveRewardAddress(a.SkyAddr), a.Reward)
-				}
+		// Per-pool detail outputs. These are side-channel files
+		// (not stdout) so they land regardless of which -h flag
+		// the caller passed — every one of the 4 invocations in
+		// the embedded reward.sh wrapper produces an up-to-date
+		// pair of pool1_*/pool2_* files, and re-runs are
+		// idempotent (same input → same files). Skipped when -k
+		// <pubkey> is set since that mode is per-visor inspection,
+		// not a full-network distribution. The combined
+		// _shares.csv and _rewardtxn0.csv are unchanged so the
+		// broadcast pipeline (which reads _rewardtxn0.csv) is
+		// unaffected.
+		if pubkey == "" {
+			if err := writePerPoolFiles(transportHistPath, wdate, nodesInfos1, bwSaturationExponent, minBWThreshold); err != nil {
+				log.Warnf("Failed to write per-pool detail files: %v", err)
 			}
 		}
 

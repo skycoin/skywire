@@ -1176,6 +1176,9 @@ type ARSelfEntry struct {
 	// "not said", and only a visor that knows about WT can distinguish that
 	// from "not registered".
 	CertHash string `json:"cert_hash,omitempty"`
+	// CertHashNext is the hash of the certificate served after the next
+	// rotation, pinned alongside CertHash. WT only; empty when not advertised.
+	CertHashNext string `json:"cert_hash_next,omitempty"`
 }
 
 // ARSelfRegistration is the visor's own AR record across transport types.

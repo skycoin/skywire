@@ -34,6 +34,16 @@ var (
 	// 5s is generous — anything longer means the destination is unreachable.
 	HandshakeTimeout = 5 * time.Second
 
+	// quicMaxIncomingStreams is how many streams a dmsg QUIC or WebTransport
+	// peer may hold open at once. quic-go's default is 100, far below what a
+	// busy visor holds over yamux.
+	quicMaxIncomingStreams int64 = 1 << 14
+
+	// quicStreamOpenTimeout bounds the wait for a peer to allow one more QUIC
+	// stream. Unbounded, a server relaying to a peer at its limit kept one
+	// goroutine per request forever (80k on a folded server).
+	quicStreamOpenTimeout = DialTimeout
+
 	// StreamIdleTimeout defines how long a stream can be idle (no reads)
 	// before it is considered stale and closed. This prevents streams stuck
 	// in waitRead from holding ephemeral ports indefinitely.

@@ -255,6 +255,82 @@
 		};
 		remoteExec.inWorker = true;
 
+		// ---- WebRTC host -------------------------------------------------
+		// The real peer connections behind the worker's __skywireRTC proxies
+		// (exec-worker.js): one per pcId, created, called and closed on the
+		// worker's say, with every event and data-channel message posted back.
+		var rtcPCs = {};      // pcId -> { pc, dcs: { dcId -> RTCDataChannel } }
+		var rtcRemoteDc = 1;  // ids for channels the peer opens
+		function rtcWireDC(pcId, dcId, dc) {
+			var rec = rtcPCs[pcId];
+			if (!rec) return;
+			try { dc.binaryType = 'arraybuffer'; } catch (e) { /* older engine */ }
+			rec.dcs[dcId] = dc;
+			dc.onopen = function () { post({ t: 'rtc', op: 'dcOpen', pcId: pcId, dcId: dcId }); };
+			dc.onmessage = function (ev) {
+				var d = ev.data;
+				post({ t: 'rtc', op: 'dcMessage', pcId: pcId, dcId: dcId, data: d }, (d instanceof ArrayBuffer) ? [d] : []);
+			};
+			dc.onclose = function () { post({ t: 'rtc', op: 'dcClose', pcId: pcId, dcId: dcId }); };
+			dc.onerror = function () { post({ t: 'rtc', op: 'dcError', pcId: pcId, dcId: dcId }); };
+			if (dc.readyState === 'open') post({ t: 'rtc', op: 'dcOpen', pcId: pcId, dcId: dcId });
+		}
+		function rtcCall(pc, m) {
+			switch (m.method) {
+			case 'createOffer': return pc.createOffer().then(function (o) { return { type: o.type, sdp: o.sdp }; });
+			case 'createAnswer': return pc.createAnswer().then(function (o) { return { type: o.type, sdp: o.sdp }; });
+			case 'setLocalDescription': return pc.setLocalDescription(m.arg).then(function () { return null; });
+			case 'setRemoteDescription': return pc.setRemoteDescription(m.arg).then(function () { return null; });
+			case 'addIceCandidate': return pc.addIceCandidate(m.arg).then(function () { return null; });
+			default: return Promise.reject(new Error('unknown rtc method ' + m.method));
+			}
+		}
+		function rtcHost(m) {
+			var rec = rtcPCs[m.pcId], dc;
+			switch (m.op) {
+			case 'newPC': {
+				var cfg = {}, pc;
+				if (m.iceServers && m.iceServers.length) cfg.iceServers = m.iceServers;
+				try { pc = new RTCPeerConnection(cfg); } catch (e) { post({ t: 'rtc', op: 'pcGone', pcId: m.pcId }); return; }
+				rtcPCs[m.pcId] = { pc: pc, dcs: {} };
+				pc.onicecandidate = function (ev) {
+					var c = (ev && ev.candidate) ? { candidate: ev.candidate.candidate, sdpMid: ev.candidate.sdpMid, sdpMLineIndex: ev.candidate.sdpMLineIndex } : null;
+					post({ t: 'rtc', op: 'icecandidate', pcId: m.pcId, candidate: c });
+				};
+				pc.ondatachannel = function (ev) {
+					var id = 'r' + (rtcRemoteDc++);
+					rtcWireDC(m.pcId, id, ev.channel);
+					post({ t: 'rtc', op: 'datachannel', pcId: m.pcId, dcId: id });
+				};
+				return;
+			}
+			case 'createDC':
+				if (!rec) return;
+				try { dc = rec.pc.createDataChannel(m.label, m.opts || {}); } catch (e) { return; }
+				rtcWireDC(m.pcId, m.dcId, dc);
+				return;
+			case 'pcCall':
+				if (!rec) { post({ t: 'rtc', op: 'ret', callId: m.callId, ok: false, msg: 'no such peer connection' }); return; }
+				rtcCall(rec.pc, m).then(function (val) {
+					post({ t: 'rtc', op: 'ret', callId: m.callId, ok: true, val: val });
+				}, function (err) {
+					post({ t: 'rtc', op: 'ret', callId: m.callId, ok: false, msg: String((err && err.message) || err) });
+				});
+				return;
+			// A send the channel refuses (queue full, closing) would drop bytes from a
+			// reliable ordered stream; close it so the transport fails and redials.
+			case 'dcSend': dc = rec && rec.dcs[m.dcId]; if (dc) { try { dc.send(m.data); } catch (e) { try { dc.close(); } catch (e2) { /* gone */ } } } return;
+			case 'dcClose': dc = rec && rec.dcs[m.dcId]; if (dc) { try { dc.close(); } catch (e) { /* gone */ } } return;
+			case 'pcClose':
+				if (rec) { try { rec.pc.close(); } catch (e) { /* gone */ } delete rtcPCs[m.pcId]; post({ t: 'rtc', op: 'pcGone', pcId: m.pcId }); }
+				return;
+			}
+		}
+		function rtcCloseAll() {
+			for (var id in rtcPCs) { try { rtcPCs[id].pc.close(); } catch (e) { /* gone */ } }
+			rtcPCs = {};
+		}
+
 		// ---- message pump ----------------------------------------------
 		var readyRes = null;
 		var settled = false;
@@ -282,6 +358,7 @@
 			}
 			case 'exit': finish(m.id, m.code, null); return;
 			case 'fail': finish(m.id, 1, m.msg || 'exec failed'); return;
+			case 'rtc': rtcHost(m); return;
 			case 'vlisten': claim(m.port); return;
 			case 'vunlisten': release(m.port); return;
 			case 'vdata': {
@@ -331,7 +408,7 @@
 		return ready.then(function (r) {
 			if (!r) {
 				console.warn('[exec-worker] worker did not come up — commands stay on the page main thread');
-				try { w.terminate(); } catch (e) { /* ignore */ }
+				rtcCloseAll(); try { w.terminate(); } catch (e) { /* ignore */ }
 				return null;
 			}
 			remoteExec.wasmURL = abs(opts.wasmURL || globalThis.skywireExec.wasmURL);
@@ -346,12 +423,12 @@
 			// A page going away should not leave a worker holding a dmsg
 			// session and a registered identity for the browser to reap
 			// whenever it feels like it.
-			addEventListener('pagehide', function () { try { w.terminate(); } catch (e) { /* ignore */ } });
+			addEventListener('pagehide', function () { rtcCloseAll(); try { w.terminate(); } catch (e) { /* ignore */ } });
 			return {
 				restored: r.restored,
 				worker: w,
 				ports: function () { return Object.keys(claimed).map(Number); },
-				close: function () { releaseAll(); try { w.terminate(); } catch (e) { /* ignore */ } },
+				close: function () { releaseAll(); rtcCloseAll(); try { w.terminate(); } catch (e) { /* ignore */ } },
 			};
 		});
 	}

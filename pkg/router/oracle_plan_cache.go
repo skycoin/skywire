@@ -63,6 +63,11 @@ type oraclePlanCache struct {
 	// each destination. Unlike sets it does not expire: it is a count reported
 	// to the app (routeBound), and a stale count is far better than none.
 	firstHops map[cipher.PubKey]int
+	// countedAt is when each destination's count was last fetched or a refresh
+	// of it was started, so one refresh runs per pool.bound_refresh.
+	countedAt map[cipher.PubKey]time.Time
+	// fullBound is the count before any dial's exclusions (noteRouteBound).
+	fullBound map[cipher.PubKey]int
 	inflight  map[batchKey]chan struct{}
 	now       func() time.Time
 
@@ -78,6 +83,8 @@ func newOraclePlanCache() *oraclePlanCache {
 	return &oraclePlanCache{
 		sets:      make(map[batchKey]*oraclePlanSet),
 		firstHops: make(map[cipher.PubKey]int),
+		countedAt: make(map[cipher.PubKey]time.Time),
+		fullBound: make(map[cipher.PubKey]int),
 		inflight:  make(map[batchKey]chan struct{}),
 		now:       time.Now,
 	}
@@ -139,6 +146,7 @@ func (c *oraclePlanCache) legsFor(ctx context.Context, src, dst cipher.PubKey, f
 				claims: make(map[uuid.UUID]time.Time, len(legs)),
 			}
 			c.firstHops[key.dst] = distinctFirstHops(legs)
+			c.countedAt[key.dst] = c.now()
 		}
 		c.mu.Unlock()
 		close(done)
@@ -238,7 +246,22 @@ func (c *oraclePlanCache) routeBound(dst cipher.PubKey) int {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if n, ok := c.fullBound[dst]; ok {
+		return n
+	}
 	return c.firstHops[dst]
+}
+
+// noteRouteBound records dst's route count taken before any dial's exclusions.
+// routeBound prefers it: a set fetched for a dial leaves out the routes that
+// dial's siblings hold, and a pool sized from that would retire tunnels.
+func (c *oraclePlanCache) noteRouteBound(dst cipher.PubKey, n int) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.fullBound[dst] = n
+	c.mu.Unlock()
 }
 
 // distinctFirstHops counts the first-hop transports among legs.
@@ -252,6 +275,43 @@ func distinctFirstHops(legs []twoHopLeg) int {
 	return len(seen)
 }
 
+// refreshDue reports whether dst's count is older than every, and if so marks
+// a refresh as started so concurrent readers do not start another.
+func (c *oraclePlanCache) refreshDue(dst cipher.PubKey, every time.Duration) bool {
+	if c == nil || every <= 0 {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	at, counted := c.countedAt[dst]
+	if !counted || c.now().Sub(at) < every {
+		return false
+	}
+	c.countedAt[dst] = c.now()
+	return true
+}
+
+// refreshRouteBound re-counts dst's disjoint routes in the background once the
+// count is pool.bound_refresh old. Only a dial used to count them, and a pool
+// that has settled makes no dials, so a transport gained after it settled was
+// never offered to it. A higher count re-arms the pool's fill.
+func (r *router) refreshRouteBound(dst cipher.PubKey) {
+	oracle := r.dstTransportOracle()
+	if oracle == nil || r.tm == nil || !r.oraclePlans.refreshDue(dst, PoolBoundRefresh()) {
+		return
+	}
+	src := r.conf.PubKey
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*oracleQueryTimeout)
+		defer cancel()
+		if _, err := r.oraclePlans.legsFor(ctx, src, dst, func(fctx context.Context) ([]twoHopLeg, error) {
+			return r.fetchOraclePlan(fctx, oracle, src, dst, nil)
+		}); err != nil {
+			r.logger.WithError(err).Debugf("Route count refresh for %s failed; keeping the last count.", dst)
+		}
+	}()
+}
+
 // disjointRouteBound is how many routes from this visor to dst share no
 // intermediate and no first hop: the one-intermediate routes the oracle last
 // found, plus every live direct transport to dst. 0 until the oracle has been
@@ -262,6 +322,7 @@ func (r *router) disjointRouteBound(dst cipher.PubKey) int {
 	if n == 0 || r.tm == nil {
 		return n
 	}
+	r.refreshRouteBound(dst)
 	self := r.conf.PubKey
 	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		if tp != nil && !tp.IsClosed() && tp.Entry.Label != transport.LabelSetup && tp.Entry.RemoteEdge(self) == dst {

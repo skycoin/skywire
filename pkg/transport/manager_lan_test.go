@@ -200,3 +200,31 @@ func TestManagerTpIDFromPK(t *testing.T) {
 		MakeTransportID(tm.Conf.PubKey, remote, types.STCPR),
 		tm.tpIDFromPK(remote, types.STCPR))
 }
+
+// SameNetwork, the reward-side test: a private endpoint, our own public IP, or
+// one of our interface addresses — but not a neighbor in the same /24, which
+// routing's SameLANPeers does count.
+func TestManagedTransportSameNetwork(t *testing.T) {
+	at := func(ip string, typ types.Type) *ManagedTransport {
+		mt := NewManagedTransportForTest(&memTransport{nw: typ, remoteIP: net.ParseIP(ip)})
+		mt.Entry = MakeEntry(mustPK(t), mustPK(t), typ, LabelUser)
+		return mt
+	}
+	self := net.ParseIP("1.2.3.4")
+	local := []net.IP{net.ParseIP("5.6.7.8")}
+	for _, c := range []struct {
+		ip   string
+		typ  types.Type
+		want bool
+	}{
+		{"192.168.1.20", types.STCPR, true}, // private: only reachable over the LAN
+		{"1.2.3.4", types.SUDPH, true},      // our own public IP: NAT hairpin
+		{"5.6.7.8", types.STCPR, true},      // one of our interface addresses
+		{"1.2.3.9", types.STCPR, false},     // same /24, another host
+		{"9.9.9.9", types.STCPR, false},     // elsewhere
+		{"192.168.1.20", types.DMSG, false}, // a dmsg peer's address is unknown by design
+	} {
+		require.Equal(t, c.want, at(c.ip, c.typ).SameNetwork(self, local), "%s over %s", c.ip, c.typ)
+	}
+	require.True(t, at("10.0.0.2", types.STCPR).SameNetwork(nil, nil), "a private endpoint needs no public IP to judge")
+}
