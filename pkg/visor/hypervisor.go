@@ -1263,6 +1263,10 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		// catch-all so /wallet/* is claimed here. See
 		// docs/design/gui-app-serving-modes.md.
 		r.Handle("/wallet/*", hv.walletHandler())
+		// The dashboard wallet's cipher, at the paths its route loads relative to
+		// the page.
+		r.Get("/assets/scripts/wasm_exec.js", hv.walletCipherHandler())
+		r.Get("/assets/scripts/skycoin-lite.wasm", hv.walletCipherHandler())
 
 		// Serve the dashboard UI, with the skynet/clearnet browse engine + native
 		// launcher injected into index.html (and the browse.js / launcher assets).

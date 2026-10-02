@@ -36,7 +36,7 @@ require (
 	github.com/pterm/pterm v0.12.83
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.10.2
-	github.com/skycoin/skycoin v0.28.6
+	github.com/skycoin/skycoin v0.28.7-0.20261002192921-110a5ec99d9e
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10

@@ -26,11 +26,21 @@
             "assets": [
               "src/assets",
               "src/favicon.ico",
-              "src/assets/img"
+              "src/assets/img",
+              {
+                "glob": "**/*",
+                "input": "src/skycoin-wallet/assets/skycoin-wallet",
+                "output": "assets/skycoin-wallet"
+              }
             ],
             "styles": [
               "src/styles.scss",
-              "src/theme.scss"
+              "src/theme.scss",
+              {
+                "input": "src/skycoin-wallet/wallet-styles.scss",
+                "bundleName": "skycoin-wallet",
+                "inject": false
+              }
             ],
             "stylePreprocessorOptions": {
               "includePaths": [
@@ -43,11 +53,20 @@
               }
             },
             "scripts": [
-              "src/assets/scripts/terminal.js"
+              "src/assets/scripts/terminal.js",
+              {
+                "input": "src/skycoin-wallet/assets/scripts/qrcode.min.js",
+                "bundleName": "skycoin-wallet-qrcode",
+                "inject": false
+              }
             ],
             "allowedCommonJsDependencies": [
               "bignumber.js",
-              "chart.js"
+              "chart.js",
+              "bip39",
+              "buffer",
+              "base64-js",
+              "ieee754"
             ],
             "extractLicenses": false,
             "sourceMap": true,
