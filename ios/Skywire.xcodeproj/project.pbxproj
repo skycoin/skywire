@@ -11,6 +11,8 @@
 		5E1A00000000000000000019 /* CoreBridge in Frameworks */ = {isa = PBXBuildFile; productRef = 5E1A0000000000000000001C /* CoreBridge */; };
 		5E1A0000000000000000003A /* CoreClient in Frameworks */ = {isa = PBXBuildFile; productRef = 5E1A0000000000000000003D /* CoreClient */; };
 		5E1A0000000000000000003B /* CoreClient in Frameworks */ = {isa = PBXBuildFile; productRef = 5E1A0000000000000000003E /* CoreClient */; };
+		5E1A00000000000000000060 /* WalletCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5E1A00000000000000000062 /* WalletCore */; };
+		5E1A00000000000000000063 /* WalletCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5E1A00000000000000000064 /* WalletCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -65,6 +67,7 @@
 			files = (
 				5E1A00000000000000000018 /* CoreBridge in Frameworks */,
 				5E1A0000000000000000003A /* CoreClient in Frameworks */,
+				5E1A00000000000000000060 /* WalletCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -88,6 +91,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5E1A00000000000000000063 /* WalletCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -147,6 +151,7 @@
 			packageProductDependencies = (
 				5E1A0000000000000000001B /* CoreBridge */,
 				5E1A0000000000000000003D /* CoreClient */,
+				5E1A00000000000000000062 /* WalletCore */,
 			);
 			productName = Skywire;
 			productReference = 5E1A00000000000000000006 /* Skywire.app */;
@@ -214,6 +219,9 @@
 				5E1A00000000000000000051 /* SkywireUITests */,
 			);
 			name = SkywireUITests;
+			packageProductDependencies = (
+				5E1A00000000000000000064 /* WalletCore */,
+			);
 			productName = SkywireUITests;
 			productReference = 5E1A00000000000000000050 /* SkywireUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -258,6 +266,7 @@
 			packageReferences = (
 				5E1A0000000000000000001A /* XCLocalSwiftPackageReference "Packages/CoreBridge" */,
 				5E1A0000000000000000003C /* XCLocalSwiftPackageReference "Packages/CoreClient" */,
+				5E1A00000000000000000061 /* XCLocalSwiftPackageReference "Packages/WalletCore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5E1A00000000000000000003 /* Products */;
@@ -692,6 +701,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/CoreClient;
 		};
+		5E1A00000000000000000061 /* XCLocalSwiftPackageReference "Packages/WalletCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/WalletCore;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -714,6 +727,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 5E1A0000000000000000003C /* XCLocalSwiftPackageReference "Packages/CoreClient" */;
 			productName = CoreClient;
+		};
+		5E1A00000000000000000062 /* WalletCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5E1A00000000000000000061 /* XCLocalSwiftPackageReference "Packages/WalletCore" */;
+			productName = WalletCore;
+		};
+		5E1A00000000000000000064 /* WalletCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5E1A00000000000000000061 /* XCLocalSwiftPackageReference "Packages/WalletCore" */;
+			productName = WalletCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

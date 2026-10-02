@@ -7,7 +7,8 @@ and Spanish from android/app/src/main/res/values{,-zh-rCN,-es}/strings.xml,
 so the two apps say the same thing in the same words; a key only iOS has comes
 from ios/scripts/strings-ios.json, as do the Info.plist strings
 (InfoPlist.xcstrings). Android's placeholders become iOS's: %1$s -> %1$@,
-%1$d -> %1$lld.
+%1$d -> %1$lld. An Android <plurals> becomes a plural-varied entry with the
+same quantity forms (Spanish has "many"); L10n.format picks the form.
 
 The keys are found the way StringCatalogTests (SkywireTests) finds them: a
 lower-case, underscore-style literal on a line that calls Text, Label,
@@ -86,16 +87,28 @@ def ios_placeholders(text):
 
 def android_catalogue(folder):
     tree = ET.parse(os.path.join(ANDROID_RES, folder, "strings.xml"))
-    return {e.get("name"): e for e in tree.getroot() if e.tag == "string"}
+    return {e.get("name"): e for e in tree.getroot() if e.tag in ("string", "plurals")}
+
+
+def android_value(element):
+    """A <string>'s text, or a <plurals>' forms by quantity (one, few, many,
+    other: CLDR's categories, which iOS's plural variations use as well)."""
+    if element.tag == "plurals":
+        return {item.get("quantity"): ios_placeholders(android_text(item)) for item in element if item.tag == "item"}
+    return ios_placeholders(android_text(element))
+
+
+def localization(value):
+    unit = lambda text: {"stringUnit": {"state": "translated", "value": text}}
+    if isinstance(value, dict):
+        return {"variations": {"plural": {quantity: unit(text) for quantity, text in sorted(value.items())}}}
+    return unit(value)
 
 
 def entry(values):
     return {
         "extractionState": "manual",
-        "localizations": {
-            language: {"stringUnit": {"state": "translated", "value": value}}
-            for language, value in sorted(values.items())
-        },
+        "localizations": {language: localization(value) for language, value in sorted(values.items())},
     }
 
 
@@ -125,7 +138,7 @@ def main():
                 if element is None:
                     missing.append(f"{key} ({language})")
                     continue
-                values[language] = ios_placeholders(android_text(element))
+                values[language] = android_value(element)
             strings[key] = entry(values)
         else:
             missing.append(key)

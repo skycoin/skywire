@@ -20,7 +20,25 @@ final class StringCatalogTests: XCTestCase {
                     let value: String
                 }
 
-                let stringUnit: Unit
+                struct Variant: Decodable {
+                    let stringUnit: Unit
+                }
+
+                struct Variations: Decodable {
+                    let plural: [String: Variant]?
+                }
+
+                /// A plain string…
+                let stringUnit: Unit?
+                /// …or a plural's forms by quantity (an Android <plurals>).
+                let variations: Variations?
+
+                /// The text the checks read: the string, or the plural's
+                /// "other" form, which every language has.
+                var primary: Unit? { stringUnit ?? variations?.plural?["other"]?.stringUnit }
+
+                /// Every text in it: the string, or each plural form.
+                var units: [Unit] { stringUnit.map { [$0] } ?? variations?.plural?.values.map(\.stringUnit) ?? [] }
             }
 
             let localizations: [String: Localization]?
@@ -42,17 +60,19 @@ final class StringCatalogTests: XCTestCase {
             XCTAssertFalse(catalogue.strings.isEmpty, name)
             for (key, entry) in catalogue.strings {
                 let localizations = entry.localizations ?? [:]
-                let english = localizations["en"]?.stringUnit.value ?? ""
+                let english = localizations["en"]?.primary?.value ?? ""
                 for language in Self.languages {
-                    guard let unit = localizations[language]?.stringUnit else {
+                    guard let localization = localizations[language], localization.primary != nil else {
                         XCTFail("\(name): \(key) has no \(language)")
                         continue
                     }
-                    XCTAssertEqual(unit.state, "translated", "\(name): \(key) \(language)")
-                    // Only a separator may be empty, where a language needs
-                    // none (Chinese joins "1天2小时" with nothing).
-                    if !english.trimmingCharacters(in: .whitespaces).isEmpty {
-                        XCTAssertFalse(unit.value.isEmpty, "\(name): \(key) \(language) is empty")
+                    for unit in localization.units {
+                        XCTAssertEqual(unit.state, "translated", "\(name): \(key) \(language)")
+                        // Only a separator may be empty, where a language needs
+                        // none (Chinese joins "1天2小时" with nothing).
+                        if !english.trimmingCharacters(in: .whitespaces).isEmpty {
+                            XCTAssertFalse(unit.value.isEmpty, "\(name): \(key) \(language) is empty")
+                        }
                     }
                 }
             }
@@ -63,10 +83,18 @@ final class StringCatalogTests: XCTestCase {
         let catalogue = try Self.catalogue("Localizable")
         for (key, entry) in catalogue.strings {
             let localizations = entry.localizations ?? [:]
-            let english = Self.placeholders(localizations["en"]?.stringUnit.value ?? "")
+            let english = Self.placeholders(localizations["en"]?.primary?.value ?? "")
             for language in Self.languages.dropFirst() {
-                let translated = Self.placeholders(localizations[language]?.stringUnit.value ?? "")
+                let translated = Self.placeholders(localizations[language]?.primary?.value ?? "")
                 XCTAssertEqual(translated, english, "\(key) \(language)")
+            }
+            // A plural's other forms may leave the count out ("one wallet"),
+            // never bring in something "other" does not have.
+            for (language, localization) in localizations {
+                let other = Set(Self.placeholders(localization.primary?.value ?? ""))
+                for unit in localization.units {
+                    XCTAssertTrue(Set(Self.placeholders(unit.value)).isSubset(of: other), "\(key) \(language): \(unit.value)")
+                }
             }
             // Android's %s and %d never reach iOS unconverted.
             XCTAssertFalse(english.contains { $0.hasSuffix("s") || $0.hasSuffix("$d") || $0 == "%d" }, "\(key): \(english)")

@@ -1,0 +1,44 @@
+# The Simulator tests of M5 — 2026-10-02, Xcode 27.0 (27A266a), iOS 27.0 Simulator "iPhone 18 Pro"
+
+## Skywire scheme: app-hosted and catalogue tests (-only-testing SkywireAppTests, SkywireTests/StringCatalogTests)
+passed  QrBridgeTests.testCoreImageReadsTheCodeOnItsOwn
+passed  QrBridgeTests.testDecoderAnswersEmptyWithoutACode
+passed  QrBridgeTests.testDecoderReadsAGeneratedCode
+passed  QrBridgeTests.testDecoderReadsASmallCodeAsJPEG
+passed  QrBridgeTests.testOtherOriginsAreRefused
+passed  QrBridgeTests.testThePageAwaitsTheBridge
+passed  SecretStoreTests.testAGroupTheAppIsNotEntitledToIsRefused
+passed  SecretStoreTests.testAPasswordIsGeneratedOnceAndKept
+passed  SecretStoreTests.testConcurrentFirstCallsAgree
+passed  SecretStoreTests.testDeleteRotates
+passed  SecretStoreTests.testEachSecretIsItsOwn
+passed  SecretStoreTests.testTheAppHasItsKeychainGroup
+passed  StringCatalogTests.testEveryKeyHasTheThreeLanguages
+passed  StringCatalogTests.testPlaceholdersMatchInEveryLanguage
+passed  StringCatalogTests.testTheCatalogueHasExactlyTheKeysTheSourcesUse
+passed  WalletStoreTests.testAmountInputTakesTheLocalDecimalSeparator
+passed  WalletStoreTests.testAnEthereumWalletIsEveryTokensWallet
+passed  WalletStoreTests.testAnInvalidPhraseIsRefused
+passed  WalletStoreTests.testAPhraseIsSealedForThisDeviceOnly
+passed  WalletStoreTests.testCoinRemovalRules
+passed  WalletStoreTests.testCreateDerivesTheFirstAddressAndPersists
+passed  WalletStoreTests.testFiberCoinsDoNotShareWallets
+passed  WalletStoreTests.testMergeSnapshotKeepsTheLastHistoryWhenTheFetchMissed
+passed  WalletStoreTests.testNodeOverride
+passed  WalletStoreTests.testRemoveWalletErasesItsPhrase
+passed  WalletStoreTests.testSettledAddressesOnlyGrow
+passed  WalletStoreTests.testTheReceiveQRReadsBackAsTheAddress
+passed  WalletStoreTests.testTheWalletDirectoryIsKeptOutOfBackups
+passed  WalletStoreTests.testTheWalletHasItsOwnKeychainGroup
+Executed 26 tests, with 0 failures (0 unexpected) in 3.616 (3.625) seconds
+
+## SkywireTour scheme: WalletChecks and WalletTour (live nodes; Face ID enrolled, ios/scripts/faceid-matcher.sh running)
+passed  WalletChecks.testBitcoinAndEthereumRestore  (105.058 s)
+passed  WalletChecks.testSkycoinCreateBackupRestoreReceive  (100.188 s)
+passed  WalletTour.testWalletTourEnglish  (66.203 s)
+passed  WalletTour.testWalletTourSimplifiedChinese  (59.719 s)
+passed  WalletTour.testWalletTourSpanish  (59.293 s)
+passed  WalletTour.testWalletTourZRemove  (81.936 s)
+
+## Seed words in the logs
+Runs of 10 or more consecutive BIP 39 words (a leaked phrase is 12): 0 in the app's unified log over every run of the day (the last 3 hours, 1,036,744 lines, log show --predicate 'process == "Skywire"'), 0 in the core's log file (Library/Application Support/skywire/local/log/skywire.log).

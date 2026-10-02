@@ -10,6 +10,9 @@ SKYWIRE_BUNDLE_ID = com.skycoin.skywire
 SKYWIRE_APP_GROUP = group.com.skycoin.skywire
 // Keychain access group (the team ID prefix is added once signing exists).
 SKYWIRE_KEYCHAIN_GROUP = com.skycoin.skywire.shared
+// The wallet's own Keychain access group: recovery phrases, readable by the
+// app alone (the packet-tunnel extension gets only the shared group above).
+SKYWIRE_WALLET_KEYCHAIN_GROUP = com.skycoin.skywire.wallet
 // Deep-link scheme: Android's (core/DeepLinks.kt). An app-level name, not
 // something Apple registers.
 SKYWIRE_URL_SCHEME = skychat

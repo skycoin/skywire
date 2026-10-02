@@ -7,19 +7,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "SkyChat uses the camera to record video messages and scan QR codes."
+            "value" : "Skywire uses the camera to record video messages and scan QR codes in SkyChat and the wallet."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "SkyChat usa la cámara para grabar mensajes de vídeo y escanear códigos QR."
+            "value" : "Skywire usa la cámara para grabar mensajes de vídeo y escanear códigos QR en SkyChat y en la billetera."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "SkyChat 使用相机录制视频消息和扫描二维码。"
+            "value" : "Skywire 使用相机录制视频消息，并在 SkyChat 和钱包中扫描二维码。"
           }
         }
       }
@@ -30,19 +30,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skywire uses Face ID to unlock the app when the app lock is on."
+            "value" : "Skywire uses Face ID to unlock the app when the app lock is on, and to confirm wallet sends and the showing of a recovery phrase."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skywire usa Face ID para desbloquear la app cuando el bloqueo de la app está activado."
+            "value" : "Skywire usa Face ID para desbloquear la app cuando el bloqueo de la app está activado, y para confirmar los envíos de la billetera y antes de mostrar una frase de recuperación."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "开启应用锁后，Skywire 会使用面容 ID 解锁应用。"
+            "value" : "开启应用锁后，Skywire 会使用面容 ID 解锁应用；钱包发送转账和显示助记词之前，也会用它确认身份。"
           }
         }
       }
