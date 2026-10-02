@@ -16,6 +16,15 @@ import (
 //go:embed blob
 var blobFS embed.FS
 
+// blobName is the staged module inside blobFS.
+const blobName = "blob/skywire.wasm.gz"
+
+// revisionName is written beside the module by `make embed-exec-wasm`: the
+// vcs.revision the module was built from, lifted at build time because the
+// module is never inflated in memory and scanning 176 MB for it at startup
+// would defeat that.
+const revisionName = "blob/revision.txt"
+
 // embeddedOpen opens the staged module for reading. The bytes live in the
 // binary's read-only data, which the kernel maps from the executable file:
 // shared between processes and evictable under pressure. Reading through this

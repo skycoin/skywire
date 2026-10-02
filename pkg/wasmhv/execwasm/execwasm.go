@@ -31,8 +31,6 @@ import (
 	"sync"
 )
 
-const blobName = "blob/skywire.wasm.gz"
-
 var (
 	once  sync.Once
 	size  int64
@@ -136,12 +134,6 @@ func trailerStamp(n int64) string {
 	}
 	return fmt.Sprintf("%08x%08x", binary.LittleEndian.Uint32(t[:4]), binary.LittleEndian.Uint32(t[4:]))
 }
-
-// revisionName is written beside the module by `make embed-exec-wasm`: the
-// vcs.revision the module was built from, lifted at build time because the
-// module is never inflated in memory and scanning 176 MB for it at startup
-// would defeat that.
-const revisionName = "blob/revision.txt"
 
 // Revision is the commit the embedded module was built from, or "" when that
 // is not recorded (a source build with no staged module, or one staged before

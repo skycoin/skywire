@@ -44,14 +44,8 @@ import (
 //   - "browser": netscrape only, with the same-origin DirectLoader, for a page
 //     that already has a desk of its own.
 //   - "netview": the tpviz WebGL view (globalThis.tpvizGL).
-//   - "cipher": the skycoin wallet cipher (globalThis.SkycoinCipher +
-//     SkycoinCipherExtras, cipher_js.go) and nothing else — what the wallet
-//     iframe's loader runs.
 //   - "auto" / "": shell+browser+desk when the realm has a document; nothing
 //     in a worker.
-//
-// The desk roles (shell/desk/auto) publish the cipher too, so a page hosting
-// the desk always has the wallet's globals.
 //
 // Returning would end the program: under wasm_exec the instance's exit
 // invalidates every js.FuncOf it published, so the desk would vanish with it.
@@ -62,7 +56,6 @@ func Run(role string) {
 		installBrowser()
 		installDesk()
 		installOriginLoader()
-		installCipher()
 		fmt.Println("deskhost: shell role — call skywireShell.open(el) / skywireBrowser.open(el)")
 	case "browser":
 		installBrowser()
@@ -72,17 +65,13 @@ func Run(role string) {
 	case "netview":
 		installNetView()
 		fmt.Println("deskhost: netview role — call tpvizGL.init(elId, onEvent)")
-	case "cipher":
-		installCipher()
-		fmt.Println("deskhost: cipher role — SkycoinCipher / SkycoinCipherExtras installed")
 	default:
 		if hasDOM() {
 			installShell()
 			installBrowser()
 			installDesk()
 			installOriginLoader()
-			installCipher()
-			fmt.Println("deskhost: ready — skywireShell / skywireBrowser / __skywireDesk / SkycoinCipher installed")
+			fmt.Println("deskhost: ready — skywireShell / skywireBrowser / __skywireDesk installed")
 		} else {
 			fmt.Println("deskhost: no document in this realm — nothing to install")
 		}

@@ -717,7 +717,6 @@ func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 				TLSCert:          ws.TLSCert,
 				TLSKey:           ws.TLSKey,
 				Harness:          ws.Harness,
-				Wallet:           !ws.NoWallet,
 				Password:         ws.Password,
 				ExecWasmPath:     ws.ExecWasm,
 				DeskHelpTerminal: ws.DeskHelpTerminal,
