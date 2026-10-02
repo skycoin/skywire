@@ -258,7 +258,7 @@
     }
 
     .disconnect-button-container {
-      background-image: url(/assets/img/background-pattern.png);
+      background-image: url('../../../../../assets/img/background-pattern.png');
       padding: 12px;
 
       mat-icon {
@@ -327,7 +327,7 @@
 
       .start-button-img {
         display: inline-block;
-        background-image: url('/assets/img/start-button.png');
+        background-image: url('../../../../../assets/img/start-button.png');
         background-size: contain;
         width: $button-size;
         height: $button-size;
@@ -392,7 +392,7 @@
     }
 
     .flag {
-      background-image: url('/assets/img/big-flags/unknown.png');
+      background-image: url('../../../../../assets/img/big-flags/unknown.png');
       width: 20px;
       height: 15px;
       background-size: contain;
