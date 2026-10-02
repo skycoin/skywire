@@ -59,6 +59,7 @@ func (s *Server) ServeUnifiedQUIC(udpConn net.PacketConn, advertisedUDPAddr, adv
 		InitialConnectionReceiveWindow: skyquic.InitialConnectionReceiveWindow,
 		MaxConnectionReceiveWindow:     skyquic.MaxConnectionReceiveWindow,
 		EnableDatagrams:                true,
+		MaxIncomingStreams:             quicMaxIncomingStreams,
 		MaxIdleTimeout:                 60 * time.Second,
 		KeepAlivePeriod:                25 * time.Second,
 	}
@@ -153,6 +154,7 @@ func (s *Server) buildWTServer() (*webtransport.Server, *skyquic.RotatingWebTran
 		EnableDatagrams: true,
 		QUICConfig: &quic.Config{
 			EnableDatagrams:                  true,
+			MaxIncomingStreams:               quicMaxIncomingStreams,
 			EnableStreamResetPartialDelivery: true,
 			// Receive windows: quic-go's 768 KB default connection window caps ONE
 			// connection at 768 KiB/RTT = 5.1 MB/s at 150 ms; see pkg/skyquic.

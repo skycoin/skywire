@@ -150,6 +150,7 @@ func (ce *Client) dialSessionQUIC(ctx context.Context, entry *disc.Entry) (Clien
 		InitialConnectionReceiveWindow: skyquic.InitialConnectionReceiveWindow,
 		MaxConnectionReceiveWindow:     skyquic.MaxConnectionReceiveWindow,
 		EnableDatagrams:                true,
+		MaxIncomingStreams:             quicMaxIncomingStreams,
 		KeepAlivePeriod:                25 * time.Second,
 		MaxIdleTimeout:                 60 * time.Second,
 	})
@@ -183,6 +184,7 @@ func (s *Server) ServeQUIC(udpConn net.PacketConn, advertisedUDPAddr string) err
 		InitialConnectionReceiveWindow: skyquic.InitialConnectionReceiveWindow,
 		MaxConnectionReceiveWindow:     skyquic.MaxConnectionReceiveWindow,
 		EnableDatagrams:                true,
+		MaxIncomingStreams:             quicMaxIncomingStreams,
 		MaxIdleTimeout:                 60 * time.Second,
 		KeepAlivePeriod:                25 * time.Second,
 	})
