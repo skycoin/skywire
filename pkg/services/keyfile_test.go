@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,8 +15,13 @@ import (
 func TestWithKeyFile(t *testing.T) {
 	pk, sk := cipher.GenerateKeyPair()
 	// A backslash in the path, as on Windows (C:\Users\...), must reach the
-	// config escaped.
-	path := filepath.Join(t.TempDir(), `x\Users`)
+	// config escaped. Windows paths have them already; elsewhere the file name
+	// carries one, since a backslash there is not a separator.
+	name := "seckey"
+	if runtime.GOOS != "windows" {
+		name = `x\Users`
+	}
+	path := filepath.Join(t.TempDir(), name)
 	quoted, err := json.Marshal(path)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, []byte(sk.Hex()+"\n"), 0o600))
