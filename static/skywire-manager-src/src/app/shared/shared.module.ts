@@ -60,7 +60,7 @@ import { ViewAllLinkComponent } from '../components/layout/view-all-link/view-al
  * shared components and the common modules (CommonModule, forms, Material,
  * translation) transitively.
  *
- * Root-only modules (BrowserModule, BrowserAnimationsModule, AppRoutingModule)
+ * Root-only modules (BrowserModule, AppRoutingModule)
  * intentionally stay in AppModule and are NOT re-exported here.
  */
 const SHARED_ANGULAR_MODULES = [
