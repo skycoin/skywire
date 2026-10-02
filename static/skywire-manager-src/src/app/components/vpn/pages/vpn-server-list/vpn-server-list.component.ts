@@ -558,7 +558,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
       countriesFilteringLabels.push({
         label: this.getCountryName(v),
         value: v,
-        image: '/assets/img/big-flags/' + v.toLowerCase() + '.png',
+        image: 'assets/img/big-flags/' + v.toLowerCase() + '.png',
       });
     });
 
@@ -576,7 +576,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
       type: FilterFieldTypes.Select,
       printableLabelsForValues: countriesFilteringLabels,
       printableLabelGeneralSettings: {
-        defaultImage: '/assets/img/big-flags/unknown.png',
+        defaultImage: 'assets/img/big-flags/unknown.png',
         imageWidth: 20,
         imageHeight: 15,
       }

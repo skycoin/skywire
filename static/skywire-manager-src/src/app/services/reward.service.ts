@@ -34,7 +34,7 @@ export interface VisorRewardData {
 export class RewardService {
   // Reward API is proxied through the hypervisor to enable DMSG-first access.
   // The hypervisor routes: /api/rewards/* -> reward system (DMSG then HTTP fallback).
-  private readonly rewardSystemUrl = '/api/rewards';
+  private readonly rewardSystemUrl = 'api/rewards';
 
   /** Cache of fetched reward data, keyed by visor PK */
   private rewardDataCache: Map<string, VisorRewardData> = new Map();
