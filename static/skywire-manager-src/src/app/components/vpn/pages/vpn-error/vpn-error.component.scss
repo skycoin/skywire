@@ -1,4 +1,4 @@
-@import "variables";
+@use "variables";
 
 .main-container {
   height: 100%;
@@ -12,14 +12,14 @@
     .inner-container {
       max-width: 550px;
       display: inline-block;
-      font-size: $font-size-lg;
+      font-size: variables.$font-size-lg;
 
       .error-icon {
         font-size: 80px;
       }
 
       .more-info {
-        font-size: $font-size-smaller;
+        font-size: variables.$font-size-smaller;
         opacity: 0.75;
         margin-top: 10px;
       }

@@ -1,9 +1,9 @@
-@import "variables";
+@use "variables";
 
 .lang-button {
-  height: $header-buttons-height;
-  border-radius: $mat-dialog-radius;
-  background-color: $white;
+  height: variables.$header-buttons-height;
+  border-radius: variables.$mat-dialog-radius;
+  background-color: variables.$white;
   border-radius: 100%;
   padding: 0;
   line-height: 1;

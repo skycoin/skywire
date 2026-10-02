@@ -1,5 +1,5 @@
-@import 'variables';
-@import 'utilities/utilities';
+@use 'variables';
+@use 'utilities/utilities';
 
 .wrapper {
   display: inline;
@@ -11,7 +11,7 @@
   }
 
   mat-icon {
-    font-size: $font-size-mini-plus;
+    font-size: variables.$font-size-mini-plus;
     user-select: none;
     flex-shrink: 0;
     display: inline !important;

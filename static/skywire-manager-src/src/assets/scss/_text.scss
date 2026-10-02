@@ -1,15 +1,16 @@
+@use 'variables';
 span {
   overflow-wrap: break-word;
 }
 
 .font-sm {
-  font-size: $font-size-sm !important;
-  font-weight: $font-weight-light !important;
+  font-size: variables.$font-size-sm !important;
+  font-weight: variables.$font-weight-light !important;
 }
 
 .font-smaller {
-  font-size: $font-size-smaller !important;
-  font-weight: $font-weight-light !important;
+  font-size: variables.$font-size-smaller !important;
+  font-weight: variables.$font-weight-light !important;
 }
 
 .uppercase {
@@ -23,29 +24,29 @@ span {
 }
 
 .green-text {
-  color: $green;
+  color: variables.$green;
 }
 
 .green-clear-text {
-  color: $green-clear;
+  color: variables.$green-clear;
 }
 
 .yellow-text {
-  color: $yellow;
+  color: variables.$yellow;
 }
 
 .yellow-clear-text {
-  color: $yellow-clear;
+  color: variables.$yellow-clear;
 }
 
 .red-text {
-  color: $red;
+  color: variables.$red;
 }
 
 .red-clear-text {
-  color: $red-clear;
+  color: variables.$red-clear;
 }
 
 .grey-text {
-  color: $light-gray !important;
+  color: variables.$light-gray !important;
 }

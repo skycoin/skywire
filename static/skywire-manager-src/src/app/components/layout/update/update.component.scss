@@ -1,4 +1,4 @@
-@import 'variables';
+@use 'variables';
 
 .text-container {
   word-break: break-word;
@@ -7,7 +7,7 @@
 .list-container {
   font-size: 14px;
   margin: 10px;
-  color: $blue-medium;
+  color: variables.$blue-medium;
   word-break: break-word;
 
   .list-element {
@@ -24,21 +24,21 @@
 
       a {
         text-decoration: none;
-        color: $blue-medium;
-        font-size: $font-size-mini;
+        color: variables.$blue-medium;
+        font-size: variables.$font-size-mini;
         line-height: 1;
         display: block;
       }
 
       .channel {
-        font-size: $font-size-mini;
+        font-size: variables.$font-size-mini;
         line-height: 1;
       }
     }
   }
 
   .details {
-    color: $light-gray;
+    color: variables.$light-gray;
   }
 }
 
@@ -55,19 +55,19 @@
   margin: 10px 0;
 
   .name {
-    font-size: $font-size-mini;
-    color: $blue-medium;
+    font-size: variables.$font-size-mini;
+    color: variables.$blue-medium;
   }
 
   .details {
-    font-size: $font-size-mini;
+    font-size: variables.$font-size-mini;
     text-align: right;
-    color: $light-gray;
+    color: variables.$light-gray;
   }
 }
 
 .closed-indication {
-  color: $yellow;
+  color: variables.$yellow;
 }
 
 .loading-indicator {

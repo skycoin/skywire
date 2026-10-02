@@ -1,3 +1,4 @@
+@use 'sass:color';
 mat-form-field {
   display: block !important;
 }
@@ -11,7 +12,7 @@ mat-form-field {
   }
 
   .mdc-line-ripple::before {
-    border-bottom-color: scale-color($white, $alpha: -50%) !important;
+    border-bottom-color: color.scale($white, $alpha: -50%) !important;
   }
 
   input {
@@ -32,7 +33,7 @@ mat-form-field {
 
 .white-form-help-icon-container {
   @extend .form-help-icon-container;
-  color: scale-color($white, $alpha: -20%);
+  color: color.scale($white, $alpha: -20%);
 }
 
 // Used for showing a form field disabled.
