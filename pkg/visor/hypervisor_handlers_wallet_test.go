@@ -15,7 +15,6 @@ import (
 	wasmtinygo "github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo"
 
 	"github.com/skycoin/skywire/pkg/wallet/coins"
-	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
 
 // walletReq builds a request whose chi "*" URL param is set to rest, as the
@@ -76,37 +75,24 @@ func TestWalletHandlerRouting(t *testing.T) {
 			t.Errorf("config page not served: status=%d", w.Code)
 		}
 	})
-}
 
-// TestWalletCipherRoutes checks the native hypervisor's /wallet/* serves the
-// cipher assets the vendored bundle instantiates — the dist carries neither, so
-// before this the native (and the desk's tab) wallet got "Go is not defined".
-func TestWalletCipherRoutes(t *testing.T) {
-	hv := &Hypervisor{}
-	h := hv.walletHandler()
-
-	w := httptest.NewRecorder()
-	h(w, walletReq("assets/scripts/wasm_exec.js"))
-	if w.Code != http.StatusOK || !strings.Contains(w.Header().Get("Content-Type"), "javascript") {
-		t.Fatalf("wasm_exec.js: status=%d ct=%q", w.Code, w.Header().Get("Content-Type"))
-	}
-	if !strings.Contains(w.Body.String(), "'--role','cipher'") {
-		t.Error("wasm_exec.js is not pinned to the cipher role")
-	}
-
-	w = httptest.NewRecorder()
-	h(w, walletReq("assets/scripts/skycoin-lite.wasm"))
-	switch {
-	case execwasm.Present():
-		if w.Code != http.StatusOK || w.Header().Get("ETag") != `"`+execwasm.Stamp()+`"` {
-			t.Fatalf("skycoin-lite.wasm: status=%d etag=%q, want 200 under the execwasm stamp", w.Code, w.Header().Get("ETag"))
+	t.Run("the old wallet page sends a browser to the dashboard's", func(t *testing.T) {
+		for _, rest := range []string{"", "index.html"} {
+			w := httptest.NewRecorder()
+			h(w, walletReq(rest))
+			if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "../#/wallet" {
+				t.Errorf("%q: status=%d location=%q, want 303 to ../#/wallet", rest, w.Code, w.Header().Get("Location"))
+			}
 		}
-	default:
-		if w.Code != http.StatusFound || w.Header().Get("Location") != execwasm.OriginPath {
-			t.Fatalf("skycoin-lite.wasm: status=%d location=%q, want 302 → %s", w.Code, w.Header().Get("Location"), execwasm.OriginPath)
+	})
+
+	t.Run("bundle assets are gone", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h(w, walletReq("assets/scripts/skycoin-lite.wasm"))
+		if w.Code != http.StatusNotFound {
+			t.Errorf("status=%d, want 404", w.Code)
 		}
-		t.Log("no module embedded in this build: the wasm route redirects to /skywire.wasm")
-	}
+	})
 }
 
 // TestDashboardWalletCipher checks the cipher the dashboard's wallet route

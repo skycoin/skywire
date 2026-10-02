@@ -42,8 +42,7 @@ skywire cli hv serve
       --tls                    serve over HTTPS with a self-signed localhost cert (a real https origin for local testing — wss works, ws:// is mixed-content-blocked exactly as in prod). Accept the browser cert warning once; the cert is persisted across restarts
       --tls-cert string        PEM cert to serve TLS with instead of the self-signed localhost cert — e.g. a locally-trusted *.mesh.localhost cert (mkcert) so real-origin browse iframes load without a per-host accept. Requires --tls-key
       --tls-key string         PEM key paired with --tls-cert
-      --v-origin string        the PUBLIC origin of the visor app V that B's bootstrap postMessages to, e.g. https://theskywirenetwork.net. Only needed with --browse-origin behind a proxy; empty = derive from --addr (local)
-      --wallet                 serve the bundled skycoin-web wallet at /wallet/ (custody stays browser-side — the host never sees keys). --wallet=false serves a wallet-less PWA (default true)
+      --v-origin string        the PUBLIC origin(s) of the visor app V that B's bootstrap postMessages to, e.g. https://theskywirenetwork.net. Comma-separated for several apps sharing one browse domain, or "*" to accept any parent. Only needed with --browse-origin behind a proxy; empty = derive from --addr (local)
 ```
 
 ## Global Flags
