@@ -120,3 +120,64 @@ func TestQUICSession(t *testing.T) {
 	require.NoError(t, clientB.Close())
 	require.NoError(t, srv.Close())
 }
+
+// TestQUICSession_ManyOpenStreams holds more streams open to one QUIC client
+// than quic-go allows by default (100). With that default the server's relay
+// to the client waited forever for a free stream, and a folded server collected
+// one goroutine per request (80k live on prod01).
+func TestQUICSession_ManyOpenStreams(t *testing.T) {
+	dc := disc.NewMock(0)
+	pkSrv, skSrv := GenKeyPair(t, "server")
+	srv := NewServer(pkSrv, skSrv, dc, &ServerConfig{MaxSessions: 10, UpdateInterval: 0}, nil)
+	srv.SetLogger(logging.MustGetLogger("quic_server"))
+	udpConn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	require.NoError(t, err)
+	udpAddr := udpConn.LocalAddr().String()
+	go func() { _ = srv.ServeQUIC(udpConn, udpAddr) }() //nolint:errcheck
+	srvEntry := disc.NewServerEntry(pkSrv, 0, "", 10)
+	srvEntry.Server.Address = ""
+	srvEntry.Server.AddressUDP = udpAddr
+	srvEntry.Protocol = "quic"
+	require.NoError(t, srvEntry.Sign(skSrv))
+	require.NoError(t, dc.PostEntry(context.Background(), srvEntry))
+
+	newClient := func(name string) (*Client, cipher.PubKey) {
+		pk, sk := GenKeyPair(t, name)
+		c := DefaultConfig()
+		c.Protocol = "quic"
+		cl := NewClient(pk, sk, dc, c)
+		cl.SetLogger(logging.MustGetLogger(name))
+		go cl.Serve(context.Background())
+		return cl, pk
+	}
+	clientA, _ := newClient("client A")
+	clientB, pkB := newClient("client B")
+	defer func() {
+		_ = clientA.Close() //nolint:errcheck
+		_ = clientB.Close() //nolint:errcheck
+		_ = srv.Close()     //nolint:errcheck
+	}()
+	require.Eventually(t, func() bool {
+		return clientA.SessionCount() > 0 && clientB.SessionCount() > 0
+	}, 10*time.Second, 200*time.Millisecond)
+
+	lis, err := clientB.Listen(8080)
+	require.NoError(t, err)
+	defer lis.Close() //nolint:errcheck
+	go func() {
+		for {
+			if _, err := lis.Accept(); err != nil {
+				return
+			}
+		}
+	}()
+
+	const n = 150
+	for i := 0; i < n; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*quicStreamOpenTimeout)
+		conn, err := clientA.DialStream(ctx, Addr{PK: pkB, Port: 8080})
+		cancel()
+		require.NoError(t, err, "stream %d of %d", i+1, n)
+		defer conn.Close() //nolint:errcheck
+	}
+}

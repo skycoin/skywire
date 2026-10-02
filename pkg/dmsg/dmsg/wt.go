@@ -76,6 +76,7 @@ func (s *Server) ServeWebTransport(udpConn net.PacketConn, advertisedWTURL strin
 			InitialConnectionReceiveWindow:   skyquic.InitialConnectionReceiveWindow,
 			MaxConnectionReceiveWindow:       skyquic.MaxConnectionReceiveWindow,
 			EnableDatagrams:                  true,
+			MaxIncomingStreams:               quicMaxIncomingStreams,
 			EnableStreamResetPartialDelivery: true, // required by webtransport-go
 		},
 	}
@@ -173,6 +174,7 @@ func (ce *Client) dialSessionWT(ctx context.Context, entry *disc.Entry) (ClientS
 			InitialConnectionReceiveWindow:   skyquic.InitialConnectionReceiveWindow,
 			MaxConnectionReceiveWindow:       skyquic.MaxConnectionReceiveWindow,
 			EnableDatagrams:                  true,
+			MaxIncomingStreams:               quicMaxIncomingStreams,
 			EnableStreamResetPartialDelivery: true, // required by webtransport-go
 		},
 	}
