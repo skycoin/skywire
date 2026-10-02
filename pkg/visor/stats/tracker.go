@@ -95,6 +95,9 @@ type TransportProbe struct {
 	RecvBytes     uint64
 	ThroughputBps float64
 	LatencyMS     LatencyTriple
+	// SameNetwork marks a transport to a visor on this one's own network
+	// (transport.ManagedTransport.SameNetwork).
+	SameNetwork bool
 }
 
 // LatencyTriple carries the live min/max/avg snapshot. Tracker
@@ -464,6 +467,7 @@ func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.T
 		LatencyAvgMS:  tp.LatencyMS.Avg,
 		SampledAt:     now,
 		Type:          rec.Type,
+		SameNetwork:   tp.SameNetwork,
 	}
 
 	t.mu.Lock()

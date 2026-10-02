@@ -63,8 +63,9 @@ func TestUnifiedQUICWTSessions(t *testing.T) {
 		e, eerr := dc.Entry(context.Background(), pkSrv)
 		return eerr == nil && e.Server != nil &&
 			e.Protocol == "quic" && e.Server.AddressUDP != "" &&
-			e.Server.AddressWT != "" && e.Server.CertHashWT != ""
-	}, 10*time.Second, 50*time.Millisecond, "server entry never advertised quic+wt")
+			e.Server.AddressWT != "" && e.Server.CertHashWT != "" &&
+			e.Server.CertHashWTNext != "" && e.Server.CertHashWTNext != e.Server.CertHashWT
+	}, 10*time.Second, 50*time.Millisecond, "server entry never advertised quic+wt with both certificate hashes")
 
 	// One client forced onto each carrier of the shared socket.
 	newClient := func(name, carrier string) *Client {

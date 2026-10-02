@@ -1695,6 +1695,47 @@ func (tm *Manager) SameLANPeers(self net.IP) []cipher.PubKey {
 	return out
 }
 
+// SameNetwork reports whether tp's peer is on this visor's own network: the
+// transport reaches it at a private address, or at this visor's own public IP
+// (self, nil when not yet known) or one of its interface addresses. Bytes on
+// such a transport move between two visors on one IP, which the reward system
+// does not pay for. dmsg transports never qualify: a dmsg peer's address is
+// deliberately unknown.
+//
+// Stricter than SameLANPeers, which also counts a shared /24 because for
+// routing a neighboring host is the same failure domain. Two visors in one
+// /24 can belong to different operators, so for rewards only the same IP
+// counts.
+func (tp *ManagedTransport) SameNetwork(self net.IP, localIPs []net.IP) bool {
+	if tp.Entry.Type == types.DMSG {
+		return false
+	}
+	netTp := tp.getTransport()
+	if netTp == nil {
+		return false
+	}
+	host := netTp.RemoteRawAddr().String()
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	peer := net.ParseIP(host)
+	if peer == nil {
+		return false
+	}
+	if !netutil.IsPublicIP(peer) {
+		return true
+	}
+	if self != nil && peer.Equal(self) {
+		return true
+	}
+	for _, l := range localIPs {
+		if peer.Equal(l) {
+			return true
+		}
+	}
+	return false
+}
+
 // isSameLANEndpoint reports whether peer is on the local network relative to the
 // visor's own public IP (self, may be nil) and its local interface IPs.
 func isSameLANEndpoint(peer, self net.IP, localIPs []net.IP) bool {

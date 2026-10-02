@@ -73,7 +73,7 @@ require (
 	github.com/0magnet/gotop/v4 v4.2.1-0.20260914190639-4f45ea554d47
 	github.com/0magnet/lolcat-go v0.0.0-20260915170035-9435f1eb43a8
 	github.com/0magnet/metrics v1.44.1-0.20260905010813-7e01f8bb5a1c
-	github.com/0magnet/netscrape v0.0.0-20260930210759-680b944d1da2
+	github.com/0magnet/netscrape v0.0.0-20261001192040-bd1d1ef079b7
 	github.com/0magnet/osnotify v0.0.0-20260906144808-7a227da43a0d
 	github.com/0magnet/plot-go v0.0.0-20260924101040-e98ed611390a
 	github.com/0magnet/realorigin v0.2.3-0.20260930230111-051e97b884b3

@@ -59,6 +59,7 @@ type memTransport struct {
 	closed   bool
 	lpk, rpk cipher.PubKey
 	nw       types.Type
+	remoteIP net.IP // RemoteRawAddr's IP; nil means 1.2.3.4
 }
 
 func newMemTransport() *memTransport {
@@ -87,6 +88,9 @@ func (t *memTransport) LocalPort() uint16                { return 0 }
 func (t *memTransport) RemotePort() uint16               { return 0 }
 func (t *memTransport) LocalRawAddr() net.Addr           { return &net.TCPAddr{} }
 func (t *memTransport) RemoteRawAddr() net.Addr {
+	if t.remoteIP != nil {
+		return &net.TCPAddr{IP: t.remoteIP, Port: 5000}
+	}
 	return &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5000}
 }
 func (t *memTransport) Network() types.Type { return t.nw }

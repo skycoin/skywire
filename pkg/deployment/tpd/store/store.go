@@ -76,7 +76,14 @@ type DailyEdgeBandwidth struct {
 	Date string         `json:"date"`
 	A    *EdgeBandwidth `json:"a,omitempty"`
 	B    *EdgeBandwidth `json:"b,omitempty"`
+	// SameNetwork: an edge reported that day that the other is on its own
+	// network (one IP). The bytes are real, but the reward system does not
+	// pay for them.
+	SameNetwork bool `json:"same_network,omitempty"`
 }
+
+// sameNetworkField is the bw:daily hash field marking a same-network day.
+const sameNetworkField = "same_net"
 
 // TransportMetric contains per-transport metrics with latency at transport level
 // and daily bandwidth breakdowns per edge.

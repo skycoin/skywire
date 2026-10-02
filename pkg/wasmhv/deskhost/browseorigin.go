@@ -173,3 +173,28 @@ func clearnetOriginFor(scheme, host, origin string) (base string, ok bool) {
 // canonicalClearnetTarget is the string a clearnet browse origin is the hash
 // of: "skysocks|<origin>", the retired engine's key.
 func canonicalClearnetTarget(base string) string { return "skysocks|" + base }
+
+// meshProxyOrigin is where a native visor serves a mesh site from its own
+// origin: its meshproxy listener answers <resolver-host><suffix>[:port] and
+// reverse-proxies the site server-side, so the browser loads it natively —
+// subresources, redirects, cookies, WebSockets — with no service worker or
+// relay in between. That is the desk the native hypervisor serves (no
+// realOrigin on the page); a wasm desk registers its origins with realorigin
+// instead.
+//
+// The visor's own status page is the single label status-skysocks; meshproxy
+// serves no other .skysocks host, so those are not claimed.
+func meshProxyOrigin(scheme, suffix, port, network, resolverHost string) (string, bool) {
+	host := resolverHost
+	if network == "local" {
+		if !strings.EqualFold(resolverHost, "status.skysocks") {
+			return "", false
+		}
+		host = "status-skysocks"
+	}
+	origin := scheme + "://" + host + suffix
+	if port != "" {
+		origin += ":" + port
+	}
+	return origin, true
+}

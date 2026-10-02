@@ -36,7 +36,7 @@ import (
 // via the browser WebTransport API and builds a yamux+Noise client session over
 // one bidirectional stream — the TinyGo-browser analog of wt.go's dialSessionWT.
 func (ce *Client) dialSessionWT(ctx context.Context, entry *disc.Entry) (ClientSession, error) {
-	conn, err := dialWebTransportJS(ctx, entry.Server.AddressWT, entry.Server.CertHashWT)
+	conn, err := dialWebTransportJS(ctx, entry.Server.AddressWT, entry.Server.CertHashWT, entry.Server.CertHashWTNext)
 	if err != nil {
 		return ClientSession{}, fmt.Errorf("wt(js): dial %q: %w", entry.Server.AddressWT, err)
 	}
@@ -89,26 +89,36 @@ func awaitJS(p js.Value) (js.Value, error) {
 	return res, rejErr
 }
 
-// dialWebTransportJS opens a browser WebTransport to url (pinning certHashHex),
-// awaits ready, opens one bidirectional stream, and returns it as a net.Conn.
-func dialWebTransportJS(ctx context.Context, url, certHashHex string) (*wtConnJS, error) {
+// dialWebTransportJS opens a browser WebTransport to url, pinning every hash in
+// certHashHex (the server's current certificate and the one after its next
+// rotation; the browser accepts either), awaits ready, opens one bidirectional
+// stream, and returns it as a net.Conn.
+func dialWebTransportJS(ctx context.Context, url string, certHashHex ...string) (*wtConnJS, error) {
 	ctor := js.Global().Get("WebTransport")
 	if !ctor.Truthy() {
 		return nil, errors.New("no WebTransport constructor in this JS environment")
 	}
-	wantHash, err := hex.DecodeString(certHashHex)
-	if err != nil || len(wantHash) != 32 {
-		return nil, fmt.Errorf("invalid cert hash %q", certHashHex)
-	}
 
-	// serverCertificateHashes: [{ algorithm: "sha-256", value: Uint8Array }]
-	hashU8 := js.Global().Get("Uint8Array").New(len(wantHash))
-	js.CopyBytesToJS(hashU8, wantHash)
-	hashEntry := js.Global().Get("Object").New()
-	hashEntry.Set("algorithm", "sha-256")
-	hashEntry.Set("value", hashU8)
+	// serverCertificateHashes: [{ algorithm: "sha-256", value: Uint8Array }, ...]
 	hashes := js.Global().Get("Array").New()
-	hashes.Call("push", hashEntry)
+	for _, h := range certHashHex {
+		if h == "" {
+			continue // an older server advertises no next hash
+		}
+		wantHash, err := hex.DecodeString(h)
+		if err != nil || len(wantHash) != 32 {
+			return nil, fmt.Errorf("invalid cert hash %q", h)
+		}
+		hashU8 := js.Global().Get("Uint8Array").New(len(wantHash))
+		js.CopyBytesToJS(hashU8, wantHash)
+		hashEntry := js.Global().Get("Object").New()
+		hashEntry.Set("algorithm", "sha-256")
+		hashEntry.Set("value", hashU8)
+		hashes.Call("push", hashEntry)
+	}
+	if hashes.Length() == 0 {
+		return nil, errors.New("no cert hash to pin")
+	}
 	opts := js.Global().Get("Object").New()
 	opts.Set("serverCertificateHashes", hashes)
 
@@ -301,11 +311,11 @@ func (c *wtConnJS) SetWriteDeadline(time.Time) error { return nil }
 func (c *wtConnJS) SetDeadline(t time.Time) error    { return c.SetReadDeadline(t) }
 
 // DialWebTransportJS dials a browser-native WebTransport to url, pinning the
-// server cert by certHashHex (lowercase SHA-256 hex), and returns one
+// server cert to any of certHashHex (lowercase SHA-256 hex), and returns one
 // bidirectional stream as a net.Conn. It is the TinyGo/js WebTransport dialer,
 // exported so the WT transport carrier (pkg/transport/network) can reuse the same
 // tested cert-pinned net.Conn adapter a browser visor uses to reach a dmsg
 // server — here to reach a peer visor's WT transport endpoint.
-func DialWebTransportJS(ctx context.Context, url, certHashHex string) (net.Conn, error) {
-	return dialWebTransportJS(ctx, url, certHashHex)
+func DialWebTransportJS(ctx context.Context, url string, certHashHex ...string) (net.Conn, error) {
+	return dialWebTransportJS(ctx, url, certHashHex...)
 }

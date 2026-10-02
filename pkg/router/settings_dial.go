@@ -230,6 +230,10 @@ func SetDeadRouteYoungAge(d time.Duration) bool {
 // pool.
 func WarmPlanTTL() time.Duration { return routersettings.WarmPlanTTL.Duration() }
 
+// PoolBoundRefresh is how often a pooled exit's disjoint routes are re-counted;
+// 0 leaves the count to the dials.
+func PoolBoundRefresh() time.Duration { return routersettings.PoolBoundRefresh.Duration() }
+
 // SetWarmPlanTTL installs that TTL. Non-positive is refused.
 func SetWarmPlanTTL(d time.Duration) bool { return setInt(routersettings.WarmPlanTTL, int64(d)) }
 

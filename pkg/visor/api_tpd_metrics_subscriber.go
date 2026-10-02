@@ -86,16 +86,16 @@ func (v *Visor) FetchTransportMetricsCXO(days int) ([]byte, time.Time, error) {
 	mgr.AcquireFor(TabMetrics)
 	defer mgr.ReleaseFor(TabMetrics)
 
-	body, ts, err := readTransportMetricsCXO(mgr, days)
-	if err == nil {
-		return body, ts, nil
-	}
-
 	// Cold cache: the first fill is in flight. Wait a bounded time for it —
 	// the caller gets "still syncing" rather than a hang if it needs longer,
 	// and because the feed is pinned that progress is not thrown away.
+	//
+	// Nothing is read before that fill completes. A part-filled snapshot
+	// already lists day leaves whose records have not arrived, and reading
+	// it answered an empty window as a hit — which the reward system took
+	// as a day on which no visor moved a byte (2026-09-22).
 	if !mgr.WaitForFirstSync(context.Background(), FeedTPDMetrics, cxosub.FeedFirstSyncTimeout(FeedTPDMetrics)) {
-		return nil, time.Time{}, err
+		return nil, time.Time{}, ErrTPDMetricsNotReady
 	}
 
 	return readTransportMetricsCXO(mgr, days)

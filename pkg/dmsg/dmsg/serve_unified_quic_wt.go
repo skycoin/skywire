@@ -59,6 +59,7 @@ func (s *Server) ServeUnifiedQUIC(udpConn net.PacketConn, advertisedUDPAddr, adv
 		InitialConnectionReceiveWindow: skyquic.InitialConnectionReceiveWindow,
 		MaxConnectionReceiveWindow:     skyquic.MaxConnectionReceiveWindow,
 		EnableDatagrams:                true,
+		MaxIncomingStreams:             quicMaxIncomingStreams,
 		MaxIdleTimeout:                 60 * time.Second,
 		KeepAlivePeriod:                25 * time.Second,
 	}
@@ -69,13 +70,14 @@ func (s *Server) ServeUnifiedQUIC(udpConn net.PacketConn, advertisedUDPAddr, adv
 	// WT cert ("h3") per handshake. Best-effort: on WT setup failure, serve QUIC only.
 	tlsConf := identTLS
 	var wtSrv *webtransport.Server
-	var wtHash [32]byte
+	var wtCert *skyquic.RotatingWebTransportCert
 	if advertisedWTURL != "" {
-		srv, wtTLS, hash, werr := s.buildWTServer()
+		srv, cert, werr := s.buildWTServer()
 		if werr != nil {
 			s.log.WithError(werr).Warn("dmsg-wt: setup failed; serving QUIC only")
 		} else {
-			wtSrv, wtHash = srv, hash
+			wtSrv, wtCert = srv, cert
+			wtTLS := cert.TLSConfig()
 			tlsConf = &tls.Config{ //nolint:gosec // per-ALPN sub-configs set their own MinVersion/verification
 				// Union of ALPNs so the listener accepts both; GetConfigForClient
 				// supplies the actual per-handshake cert + verification.
@@ -106,10 +108,14 @@ func (s *Server) ServeUnifiedQUIC(udpConn net.PacketConn, advertisedUDPAddr, adv
 	s.setAdvertisedUDPAddr(advertisedUDPAddr)
 	s.log.WithField("addr_udp", advertisedUDPAddr).Info("Serving dmsg over QUIC.")
 	if wtSrv != nil {
-		s.setAdvertisedWT(advertisedWTURL, wtHash)
+		// The certificate rotates before browsers stop accepting it; each new
+		// hash is advertised as it is made.
+		wtCert.OnRotate(func(h, next [32]byte) { s.setAdvertisedWT(advertisedWTURL, h, next) })
+		s.setAdvertisedWT(advertisedWTURL, wtCert.Hash(), wtCert.NextHash())
 		s.log.WithField("addr_wt", advertisedWTURL).Info("Serving dmsg over WebTransport (shared UDP socket).")
 		go func() {
 			<-s.done
+			wtCert.Close()
 			_ = wtSrv.Close() //nolint:errcheck
 		}()
 	}
@@ -131,16 +137,16 @@ func (s *Server) ServeUnifiedQUIC(udpConn net.PacketConn, advertisedUDPAddr, adv
 	}
 }
 
-// buildWTServer constructs the WebTransport (HTTP/3) server, its TLS config and
-// the serverCertificateHashes hash used to advertise it. It does NOT listen — the
+// buildWTServer constructs the WebTransport (HTTP/3) server and the rotating
+// certificate whose hash (serverCertificateHashes) is advertised for it. It does NOT listen — the
 // caller feeds it "h3"-ALPN connections demuxed off the shared QUIC listener via
 // ServeQUICConn. Returns an error only on cert generation failure.
-func (s *Server) buildWTServer() (*webtransport.Server, *tls.Config, [32]byte, error) {
-	wtCert, wtHash, err := skyquic.NewWebTransportCertificate()
+func (s *Server) buildWTServer() (*webtransport.Server, *skyquic.RotatingWebTransportCert, error) {
+	wtCert, err := skyquic.NewRotatingWebTransportCert()
 	if err != nil {
-		return nil, nil, [32]byte{}, fmt.Errorf("wt cert: %w", err)
+		return nil, nil, fmt.Errorf("wt cert: %w", err)
 	}
-	wtTLS := skyquic.WebTransportTLSConfig(wtCert)
+	wtTLS := wtCert.TLSConfig()
 	mux := http.NewServeMux()
 	h3 := &http3.Server{
 		TLSConfig:       wtTLS,
@@ -148,6 +154,7 @@ func (s *Server) buildWTServer() (*webtransport.Server, *tls.Config, [32]byte, e
 		EnableDatagrams: true,
 		QUICConfig: &quic.Config{
 			EnableDatagrams:                  true,
+			MaxIncomingStreams:               quicMaxIncomingStreams,
 			EnableStreamResetPartialDelivery: true,
 			// Receive windows: quic-go's 768 KB default connection window caps ONE
 			// connection at 768 KiB/RTT = 5.1 MB/s at 150 ms; see pkg/skyquic.
@@ -171,5 +178,5 @@ func (s *Server) buildWTServer() (*webtransport.Server, *tls.Config, [32]byte, e
 		}
 		s.handleWTSession(sess)
 	})
-	return wtSrv, wtTLS, wtHash, nil
+	return wtSrv, wtCert, nil
 }

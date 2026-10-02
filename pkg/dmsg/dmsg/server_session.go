@@ -607,7 +607,10 @@ func (ss *ServerSession) forwardRequest(req StreamRequest) (mStr io.ReadWriteClo
 		// forwarding to a QUIC destination was never exercised (no QUIC roundtrip
 		// test). The quicStream satisfies io.ReadWriteCloser.
 		var qStr quicStream
-		if qStr, err = ss.sm.quic.OpenStreamSync(context.Background()); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), quicStreamOpenTimeout)
+		qStr, err = ss.sm.quic.OpenStreamSync(ctx)
+		cancel()
+		if err != nil {
 			return nil, nil, err
 		}
 		mStr = qStr

@@ -35,7 +35,7 @@ func TestWTCarrier_RoundTrip(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	url := "https://" + lis.Addr().String() + wtPath
-	cli, err := wtDial(ctx, url, hex.EncodeToString(lis.certHash[:]))
+	cli, err := wtDial(ctx, url, hexHash(lis.cert.Hash()))
 	if err != nil {
 		t.Fatalf("wtDial: %v", err)
 	}

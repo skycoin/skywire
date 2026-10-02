@@ -91,6 +91,17 @@ const (
 	TypeSWSR    uint8 = 8 // tptypes.WS, wire name "swsr"
 )
 
+// TypeFlagSameNetwork is set on an entry's Type when the transport's peer is
+// on the reporting visor's own network: reached over a private address, or at
+// the visor's own public IP. Such a transport moves bytes between two visors
+// on one IP, which the reward system does not pay for; the flag rides the
+// type byte so the wire size is unchanged, and older readers see an unknown
+// type rather than a misread one.
+const TypeFlagSameNetwork uint8 = 0x80
+
+// SameNetwork reports whether code carries TypeFlagSameNetwork.
+func SameNetwork(code uint8) bool { return code&TypeFlagSameNetwork != 0 }
+
 // Entry is one transport's telemetry row — the decoded form of a 53-byte
 // wire record. Both sides operate on Entry; only this package knows the
 // byte layout.
@@ -158,7 +169,7 @@ func TypeToCode(s string) uint8 {
 // string. TypeUnknown (0) and any unrecognized code yield "" — the same
 // value the legacy empty-type path used to signal "skip uptime".
 func CodeToType(c uint8) string {
-	switch c {
+	switch c &^ TypeFlagSameNetwork {
 	case TypeSTCPR:
 		return string(tptypes.STCPR)
 	case TypeSUDPH:

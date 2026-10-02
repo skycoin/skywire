@@ -27,11 +27,8 @@ package dmsg
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
@@ -45,9 +42,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyquic"
 )
 
-// wtPath is the HTTP/3 path the WebTransport endpoint is served on. The
-// advertised Server.AddressWT URL includes it (e.g. "https://host:port/dmsg").
-const wtPath = "/dmsg"
+const wtPath = WTPath
 
 // wtStreamConn adapts a WebTransport bidirectional stream + its session
 // addresses into a net.Conn, so the stream flows through the shared
@@ -61,22 +56,16 @@ func (c wtStreamConn) LocalAddr() net.Addr  { return c.local }
 func (c wtStreamConn) RemoteAddr() net.Addr { return c.remote }
 
 // ServeWebTransport serves dmsg over WebTransport on the given UDP socket and
-// advertises advertisedWTURL + certHash in discovery (Server.AddressWT +
+// advertises advertisedWTURL with cert's hash in discovery (Server.AddressWT +
 // CertHashWT). It runs alongside TCP/QUIC/WS Serve. cert is the short-lived
-// self-signed ECDSA cert (skyquic.NewWebTransportCertificate) and certHash is
-// its SHA-256 — the value a browser pins in its WebTransport
-// serverCertificateHashes constructor. Blocks until the listener errors or the
-// server closes.
-//
-// Cert rotation (WebTransport certs are valid <=14 days, browser-enforced) is
-// the caller's job: generate a fresh cert + hash and re-call ServeWebTransport
-// on a new socket before expiry, so the new hash is re-advertised. Keeping the
-// cert in the caller (rather than generating it here) lets the caller persist
-// and rotate it deterministically.
-func (s *Server) ServeWebTransport(udpConn net.PacketConn, advertisedWTURL string, cert tls.Certificate, certHash [32]byte) error {
+// self-signed certificate a browser pins by its SHA-256 in its WebTransport
+// serverCertificateHashes constructor; it rotates before browsers stop
+// accepting it, and each new hash is advertised as it is made. Blocks until the
+// listener errors or the server closes.
+func (s *Server) ServeWebTransport(udpConn net.PacketConn, advertisedWTURL string, cert *skyquic.RotatingWebTransportCert) error {
 	mux := http.NewServeMux()
 	h3 := &http3.Server{
-		TLSConfig:       skyquic.WebTransportTLSConfig(cert),
+		TLSConfig:       cert.TLSConfig(),
 		Handler:         mux,
 		EnableDatagrams: true, // required: WebTransport runs on HTTP/3 datagrams
 		QUICConfig: &quic.Config{
@@ -87,6 +76,7 @@ func (s *Server) ServeWebTransport(udpConn net.PacketConn, advertisedWTURL strin
 			InitialConnectionReceiveWindow:   skyquic.InitialConnectionReceiveWindow,
 			MaxConnectionReceiveWindow:       skyquic.MaxConnectionReceiveWindow,
 			EnableDatagrams:                  true,
+			MaxIncomingStreams:               quicMaxIncomingStreams,
 			EnableStreamResetPartialDelivery: true, // required by webtransport-go
 		},
 	}
@@ -108,7 +98,8 @@ func (s *Server) ServeWebTransport(udpConn net.PacketConn, advertisedWTURL strin
 		s.handleWTSession(sess)
 	})
 
-	s.setAdvertisedWT(advertisedWTURL, certHash)
+	cert.OnRotate(func(h, next [32]byte) { s.setAdvertisedWT(advertisedWTURL, h, next) })
+	s.setAdvertisedWT(advertisedWTURL, cert.Hash(), cert.NextHash())
 	go func() {
 		<-s.done
 		wtSrv.Close() //nolint:errcheck,gosec
@@ -143,15 +134,17 @@ func (s *Server) handleWTSession(sess *webtransport.Session) {
 // dialSessionWT dials a dmsg server's WebTransport endpoint (Server.AddressWT)
 // and builds a yamux+Noise client session over a single bidirectional WT
 // stream — the WebTransport analog of dialSessionWS. The server cert is
-// self-signed with NO CA, so it is verified by pinning Server.CertHashWT (the
-// SHA-256 of the cert DER, lowercase hex) exactly as a browser would via
-// serverCertificateHashes; standard CA verification is disabled. This native
-// path is primarily for tests and non-browser WT clients — the production
-// browser client dials WT directly in JS over the same wire protocol.
+// self-signed with NO CA, so it is verified by pinning Server.CertHashWT and
+// CertHashWTNext (the SHA-256 of the cert DER, lowercase hex; the server's
+// current certificate and the one after its next rotation) exactly as a
+// browser would via serverCertificateHashes; standard CA verification is
+// disabled. This native path is primarily for tests and non-browser WT clients
+// — the production browser client dials WT directly in JS over the same wire
+// protocol.
 func (ce *Client) dialSessionWT(ctx context.Context, entry *disc.Entry) (ClientSession, error) {
-	wantHash, err := hex.DecodeString(entry.Server.CertHashWT)
-	if err != nil || len(wantHash) != sha256.Size {
-		return ClientSession{}, fmt.Errorf("wt: invalid cert hash %q", entry.Server.CertHashWT)
+	pins, err := skyquic.PinnedHashes(entry.Server.CertHashWT, entry.Server.CertHashWTNext)
+	if err != nil {
+		return ClientSession{}, fmt.Errorf("wt: %w", err)
 	}
 	tlsConf := &tls.Config{
 		InsecureSkipVerify: true, //nolint:gosec // pinned by cert-hash below, browser serverCertificateHashes model
@@ -165,8 +158,7 @@ func (ce *Client) dialSessionWT(ctx context.Context, entry *disc.Entry) (ClientS
 			if len(rawCerts) == 0 {
 				return fmt.Errorf("wt: server presented no certificate")
 			}
-			got := sha256.Sum256(rawCerts[0])
-			if !hmac.Equal(got[:], wantHash) {
+			if !skyquic.MatchesPinned(rawCerts[0], pins) {
 				return fmt.Errorf("wt: server cert hash mismatch")
 			}
 			return nil
@@ -182,6 +174,7 @@ func (ce *Client) dialSessionWT(ctx context.Context, entry *disc.Entry) (ClientS
 			InitialConnectionReceiveWindow:   skyquic.InitialConnectionReceiveWindow,
 			MaxConnectionReceiveWindow:       skyquic.MaxConnectionReceiveWindow,
 			EnableDatagrams:                  true,
+			MaxIncomingStreams:               quicMaxIncomingStreams,
 			EnableStreamResetPartialDelivery: true, // required by webtransport-go
 		},
 	}
@@ -208,4 +201,11 @@ func (ce *Client) dialSessionWT(ctx context.Context, entry *disc.Entry) (ClientS
 	}
 	ce.log.Infof("wt stream session initial for %s", dSes.RemotePK().String())
 	return dSes, nil
+}
+
+// ServeWTSession serves a WebTransport session that another HTTP/3 server
+// accepted on this server's behalf — a visor's shared transport socket, which
+// also serves the visor's own WebTransport transport on another path.
+func (s *Server) ServeWTSession(sess *webtransport.Session) {
+	s.handleWTSession(sess)
 }

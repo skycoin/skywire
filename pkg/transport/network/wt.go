@@ -38,6 +38,9 @@ const wtPath = "/skywire"
 type WTEntry struct {
 	URL      string
 	CertHash string
+	// CertHashNext is the hash the peer will serve after its next rotation;
+	// pinned alongside CertHash. Empty when the peer does not advertise one.
+	CertHashNext string
 }
 
 // WTTable maps a peer PK to its WebTransport dial target (URL + pinned cert
@@ -92,8 +95,9 @@ type wtClient struct {
 
 	// advertised holds the WT listener's public dial info once Start has run
 	// (native only); a browser/TinyGo client never serves, so these stay empty.
+	advMu              sync.RWMutex
 	advertisedURL      string
-	advertisedCertHash string
+	advertisedCertHash string // replaced when the certificate rotates
 
 	// sharedQUIC, when set, is the *sharedQUICMux the WT server registers its "h3"
 	// ALPN handler on, so WT serves over the unified transport_port socket instead
@@ -106,7 +110,15 @@ type wtClient struct {
 // Start has run, for advertising to peers (table/discovery). Both are empty
 // before Start or on non-serving (browser/TinyGo) builds.
 func (c *wtClient) AdvertisedWT() (url, certHash string) {
+	c.advMu.RLock()
+	defer c.advMu.RUnlock()
 	return c.advertisedURL, c.advertisedCertHash
+}
+
+func (c *wtClient) setAdvertised(url, certHash string) {
+	c.advMu.Lock()
+	c.advertisedURL, c.advertisedCertHash = url, certHash
+	c.advMu.Unlock()
 }
 
 func newWT(generic *genericClient, table WTTable) Client {
@@ -141,7 +153,7 @@ func (c *wtClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (T
 	var err error
 	if e, found := c.tableEntry(rPK); found {
 		c.log.Debugf("Dialing WT %v @ %s (table)", rPK, e.URL)
-		conn, err = wtDial(ctx, e.URL, e.CertHash)
+		conn, err = wtDial(ctx, e.URL, e.CertHash, e.CertHashNext)
 	} else {
 		conn, err = c.dialResolvedWT(ctx, rPK)
 	}

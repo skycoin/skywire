@@ -84,10 +84,11 @@ func TestBindWT(t *testing.T) {
 	c := newReadyClient(t, srv)
 	// A declared public IP is injected into the advertised address set.
 	c.SetPublicIP("9.9.9.9:1", "")
-	require.NoError(t, c.BindWT(context.Background(), "30301", "deadbeefcert"))
+	require.NoError(t, c.BindWT(context.Background(), "30301", "deadbeefcert", "cafef00dnext"))
 	<-gotCh
 	assert.Equal(t, "30301", got.Port)
 	assert.Equal(t, "deadbeefcert", got.CertHash)
+	assert.Equal(t, "cafef00dnext", got.CertHashNext, "the next hash is bound too")
 	assert.Contains(t, got.Addresses, "9.9.9.9")
 }
 

@@ -657,11 +657,13 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		}
 
 		dateStr := dateStrs[bk.dayIdx]
+		_, sameNet := result[sameNetworkField]
 		if hasPerEdge && (aSent+aRecv+bSent+bRecv) > 0 {
 			dailyMetric := DailyEdgeBandwidth{
-				Date: dateStr,
-				A:    &EdgeBandwidth{Sent: aSent, Recv: aRecv},
-				B:    &EdgeBandwidth{Sent: bSent, Recv: bRecv},
+				Date:        dateStr,
+				A:           &EdgeBandwidth{Sent: aSent, Recv: aRecv},
+				B:           &EdgeBandwidth{Sent: bSent, Recv: bRecv},
+				SameNetwork: sameNet,
 			}
 			bwByEntry[bk.idx] = append(bwByEntry[bk.idx], dailyMetric)
 		} else {

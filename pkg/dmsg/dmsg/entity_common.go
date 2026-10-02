@@ -110,6 +110,7 @@ type EntityCommon struct {
 	// serverCertificateHashes. Empty for clients and non-WT servers.
 	advertisedWTAddr     string
 	advertisedWTCertHash [32]byte
+	advertisedWTNextHash [32]byte // the certificate after the next rotation
 
 	// noListenerHits records inbound stream requests to ports this client has
 	// no listener on (dmsg error 306). Bounded; surfaced via NoListenerHits.
@@ -725,22 +726,23 @@ func (c *EntityCommon) setAdvertisedWSAddr(url string) {
 	c.advertisedMx.Unlock()
 }
 
-// setAdvertisedWT records the WebTransport endpoint URL and its cert hash to
-// advertise. Safe to call from the ServeWebTransport goroutine while the
-// entry-update loop reads them.
-func (c *EntityCommon) setAdvertisedWT(url string, certHash [32]byte) {
+// setAdvertisedWT records the WebTransport endpoint URL, its cert hash and the
+// hash of the certificate after its next rotation, to advertise. Safe to call
+// from the ServeWebTransport goroutine while the entry-update loop reads them.
+func (c *EntityCommon) setAdvertisedWT(url string, certHash, nextHash [32]byte) {
 	c.advertisedMx.Lock()
 	c.advertisedWTAddr = url
 	c.advertisedWTCertHash = certHash
+	c.advertisedWTNextHash = nextHash
 	c.advertisedMx.Unlock()
 }
 
 // advertisedEndpoints returns a consistent snapshot of the advertised optional
 // endpoints for the entry-update loop.
-func (c *EntityCommon) advertisedEndpoints() (udp, ws, wt string, wtCertHash [32]byte) {
+func (c *EntityCommon) advertisedEndpoints() (udp, ws, wt string, wtCertHash, wtNextHash [32]byte) {
 	c.advertisedMx.RLock()
 	defer c.advertisedMx.RUnlock()
-	return c.advertisedUDPAddr, c.advertisedWSAddr, c.advertisedWTAddr, c.advertisedWTCertHash
+	return c.advertisedUDPAddr, c.advertisedWSAddr, c.advertisedWTAddr, c.advertisedWTCertHash, c.advertisedWTNextHash
 }
 
 // updateServerEntryOnEndpoint runs the read-modify-write registration
@@ -779,18 +781,22 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 		entry.Server.ServerType = authPassphrase
 	}
 
-	advUDPAddr, advWSAddr, advWTAddr, advWTCertHash := c.advertisedEndpoints()
+	advUDPAddr, advWSAddr, advWTAddr, advWTCertHash, advWTNextHash := c.advertisedEndpoints()
 
 	sessionsDelta := entry.Server.AvailableSessions != availableSessions
 	addrDelta := entry.Server.Address != addr
 	addrV6Delta := entry.Server.AddressV6 != addrV6
 	udpDelta := entry.Server.AddressUDP != advUDPAddr
 	wsDelta := entry.Server.AddressWS != advWSAddr
-	wtCertHashHex := ""
+	wtCertHashHex, wtNextHashHex := "", ""
 	if advWTAddr != "" {
 		wtCertHashHex = hex.EncodeToString(advWTCertHash[:])
+		if advWTNextHash != ([32]byte{}) {
+			wtNextHashHex = hex.EncodeToString(advWTNextHash[:])
+		}
 	}
-	wtDelta := entry.Server.AddressWT != advWTAddr || entry.Server.CertHashWT != wtCertHashHex
+	wtDelta := entry.Server.AddressWT != advWTAddr || entry.Server.CertHashWT != wtCertHashHex ||
+		entry.Server.CertHashWTNext != wtNextHashHex
 	versionDelta := c.serverVersion != "" && entry.Version != c.serverVersion
 
 	// No update needed if entry has no delta AND update is not due.
@@ -835,6 +841,7 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 	if advWTAddr != "" {
 		entry.Server.AddressWT = advWTAddr
 		entry.Server.CertHashWT = wtCertHashHex
+		entry.Server.CertHashWTNext = wtNextHashHex
 		log = log.WithField("addr_wt", entry.Server.AddressWT)
 	}
 	if versionDelta {

@@ -138,7 +138,10 @@ func wireLocalCandidates(pc js.Value, sc *signalConn) {
 		if v := cand.Get("sdpMLineIndex"); v.Truthy() {
 			line = v.Int()
 		}
-		_ = sc.send(signalMsg{Type: "candidate", Candidate: cand.Get("candidate").String(), SDPMid: mid, SDPMLine: line}) //nolint:errcheck
+		msg := signalMsg{Type: "candidate", Candidate: cand.Get("candidate").String(), SDPMid: mid, SDPMLine: line}
+		// A JS callback that blocks freezes the whole worker until it returns,
+		// and this write can wait on the network, so it runs on its own goroutine.
+		go sc.send(msg) //nolint:errcheck
 		return nil
 	})
 	pc.Set("onicecandidate", onCand)

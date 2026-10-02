@@ -13,6 +13,7 @@ package dmsg
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -149,6 +150,7 @@ func (ce *Client) dialSessionQUIC(ctx context.Context, entry *disc.Entry) (Clien
 		InitialConnectionReceiveWindow: skyquic.InitialConnectionReceiveWindow,
 		MaxConnectionReceiveWindow:     skyquic.MaxConnectionReceiveWindow,
 		EnableDatagrams:                true,
+		MaxIncomingStreams:             quicMaxIncomingStreams,
 		KeepAlivePeriod:                25 * time.Second,
 		MaxIdleTimeout:                 60 * time.Second,
 	})
@@ -182,6 +184,7 @@ func (s *Server) ServeQUIC(udpConn net.PacketConn, advertisedUDPAddr string) err
 		InitialConnectionReceiveWindow: skyquic.InitialConnectionReceiveWindow,
 		MaxConnectionReceiveWindow:     skyquic.MaxConnectionReceiveWindow,
 		EnableDatagrams:                true,
+		MaxIncomingStreams:             quicMaxIncomingStreams,
 		MaxIdleTimeout:                 60 * time.Second,
 		KeepAlivePeriod:                25 * time.Second,
 	})
@@ -200,6 +203,40 @@ func (s *Server) ServeQUIC(udpConn net.PacketConn, advertisedUDPAddr string) err
 		}
 		go s.handleQUICConn(qc)
 	}
+}
+
+// QUICTLSConfig is the server tls.Config for dmsg-over-QUIC connections that
+// another listener accepts on this server's behalf — a visor's shared QUIC
+// socket, which owns the transport port and dispatches by ALPN. Only the dmsg
+// ALPN: the transport ALPN older clients also offer belongs to squicr there.
+func (s *Server) QUICTLSConfig() (*tls.Config, error) {
+	cert, err := skyquic.NewCertificate(s.pk, s.sk)
+	if err != nil {
+		return nil, fmt.Errorf("dmsg-quic: identity cert: %w", err)
+	}
+	return skyquic.TLSConfigALPN(cert, nil, nil, skyquic.DmsgNextProto), nil
+}
+
+// ServeQUICConn serves one QUIC connection accepted by another listener (see
+// QUICTLSConfig) as a dmsg session. That listener may hand the connection over
+// before the handshake completes, and the peer's PK comes from its client
+// certificate, so wait for it first.
+func (s *Server) ServeQUICConn(qc *quic.Conn) {
+	select {
+	case <-qc.HandshakeComplete():
+	case <-qc.Context().Done():
+		return
+	case <-s.done:
+		qc.CloseWithError(0, "server closed") //nolint:errcheck,gosec
+		return
+	}
+	s.handleQUICConn(qc)
+}
+
+// AdvertiseQUIC publishes addr as this server's dmsg-over-QUIC endpoint, for a
+// server whose QUIC connections arrive through ServeQUICConn.
+func (s *Server) AdvertiseQUIC(addr string) {
+	s.setAdvertisedUDPAddr(addr)
 }
 
 // quicPeerPK returns the skywire PK the connecting client authenticated with via

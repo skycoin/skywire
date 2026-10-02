@@ -90,6 +90,10 @@ const (
 	// can actually be transported by each type (reach/<h>, 16 leaves). What
 	// autoconnect picks peers from.
 	FeedARReach
+	// FeedTPDVisorBW is TPD's per-visor bandwidth publisher: one leaf per
+	// settled day (visorbw/day/<YYYY-MM-DD>) of the bytes each visor sent, with
+	// same-IP transports left out. What the reward system pays pool 2 from.
+	FeedTPDVisorBW
 )
 
 // FeedRoute returns the fixed dmsg CXO port and TreeStore path prefix a feed's
@@ -120,6 +124,8 @@ func FeedRoute(f Feed) (port uint16, prefix string, ok bool) {
 		return skyenv.DmsgTPDRoutingCXOPort, "routing/", true
 	case FeedARReach:
 		return skyenv.DmsgARReachCXOPort, "reach/", true
+	case FeedTPDVisorBW:
+		return skyenv.DmsgTPDVisorBWCXOPort, "visorbw/", true
 	}
 	return 0, "", false
 }
@@ -700,6 +706,8 @@ func FeedString(feed Feed) string {
 		return "tpd-routing"
 	case FeedARReach:
 		return "ar-reach"
+	case FeedTPDVisorBW:
+		return "tpd-visorbw"
 	}
 	return fmt.Sprintf("feed#%d", feed)
 }
@@ -724,6 +732,8 @@ func FeedFromString(name string) (Feed, bool) {
 		return FeedTPDRouting, true
 	case "ar-reach":
 		return FeedARReach, true
+	case "tpd-visorbw":
+		return FeedTPDVisorBW, true
 	}
 	return 0, false
 }

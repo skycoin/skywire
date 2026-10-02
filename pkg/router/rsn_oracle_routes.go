@@ -394,55 +394,7 @@ func (r *router) oracle2HopRoutes(ctx context.Context, log *logging.Logger, src,
 	// they filter and re-rank the cached set rather than changing what is
 	// fetched.
 	legs, err := r.oraclePlans.legsFor(ctx, src, dst, func(fctx context.Context) ([]twoHopLeg, error) {
-		// Bound the oracle query. It is a couple of dmsg round-trips (dial a
-		// setup node for the RSN signature, then deliver the query dmsg-direct
-		// to the destination), so a few seconds is ample for a real answer.
-		// Capping it short is what makes RSN-oracle safe as an ON-by-default: a
-		// destination that cannot answer — a peer on an older build without the
-		// transport-query listener, or one that is simply unreachable — fails
-		// FAST here and the dial falls through to the TPD-backed route-finder,
-		// instead of stalling on the dial's full (~90s) deadline. Inherit an
-		// even shorter caller deadline if one is already tighter.
-		qctx, cancel := context.WithTimeout(fctx, oracleQueryTimeout)
-		defer cancel()
-		dstEntries, qErr := oracle.DstTransports(qctx, src, dst)
-		if qErr != nil {
-			return nil, qErr
-		}
-
-		var localTps []oracleLocalTp
-		r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
-			if tp == nil || tp.IsClosed() {
-				return true
-			}
-			if tp.Entry.Label == transport.LabelSetup {
-				return true
-			}
-			localTps = append(localTps, oracleLocalTp{
-				id:       tp.Entry.ID,
-				remotePK: tp.Entry.RemoteEdge(src),
-				tpType:   tp.Entry.Type,
-				// Same field the leg snapshot reports as latency_ms, so the
-				// ranking and the bench read one number.
-				latencyMs: tp.GetLatency(),
-				remoteIP:  tp.RemoteIP(),
-			})
-			return true
-		})
-
-		// Ask for EVERY leg, not just the first: the oracle is the candidate
-		// selection that actually wins a diversify dial's race on this rig, so
-		// it has to rank all of its free first hops rather than return whichever
-		// one the intermediate ordering happened to put first.
-		// computeDisjoint2HopRoutes returns them best-first. The cache keeps the
-		// whole set — with 274 shared intermediates on the rig, one query is
-		// enough to plan an entire pool.
-		//
-		// The exclusions handed in here are the FIRST caller's. They are a
-		// superset-safe input: everything they remove is something no dial to
-		// this exit may use at all (a dead route, a same-LAN peer), while the
-		// per-dial sibling exclusions are re-applied on the cached set below.
-		return computeDisjoint2HopRoutes(src, dst, localTps, dstEntries, opts, 0)
+		return r.fetchOraclePlan(fctx, oracle, src, dst, opts)
 	})
 	if err != nil {
 		return nil, nil, err
@@ -545,4 +497,64 @@ func fetchDstTransportsViaOracle(
 		return nil, err
 	}
 	return reconstructDstEntries(dst, resp), nil
+}
+
+// fetchOraclePlan is one oracle query: the destination's own transports, this
+// visor's live ones, and every disjoint 2-hop leg between them, best first.
+// A dial runs it through the plan cache, and so does the route-bound refresh.
+func (r *router) fetchOraclePlan(fctx context.Context, oracle DstTransportOracle, src, dst cipher.PubKey, opts *DialOptions) ([]twoHopLeg, error) {
+	// Bound the oracle query. It is a couple of dmsg round-trips (dial a
+	// setup node for the RSN signature, then deliver the query dmsg-direct
+	// to the destination), so a few seconds is ample for a real answer.
+	// Capping it short is what makes RSN-oracle safe as an ON-by-default: a
+	// destination that cannot answer — a peer on an older build without the
+	// transport-query listener, or one that is simply unreachable — fails
+	// FAST here and the dial falls through to the TPD-backed route-finder,
+	// instead of stalling on the dial's full (~90s) deadline. Inherit an
+	// even shorter caller deadline if one is already tighter.
+	qctx, cancel := context.WithTimeout(fctx, oracleQueryTimeout)
+	defer cancel()
+	dstEntries, qErr := oracle.DstTransports(qctx, src, dst)
+	if qErr != nil {
+		return nil, qErr
+	}
+
+	var localTps []oracleLocalTp
+	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if tp == nil || tp.IsClosed() {
+			return true
+		}
+		if tp.Entry.Label == transport.LabelSetup {
+			return true
+		}
+		localTps = append(localTps, oracleLocalTp{
+			id:       tp.Entry.ID,
+			remotePK: tp.Entry.RemoteEdge(src),
+			tpType:   tp.Entry.Type,
+			// Same field the leg snapshot reports as latency_ms, so the
+			// ranking and the bench read one number.
+			latencyMs: tp.GetLatency(),
+			remoteIP:  tp.RemoteIP(),
+		})
+		return true
+	})
+
+	// Ask for EVERY leg, not just the first: the oracle is the candidate
+	// selection that actually wins a diversify dial's race on this rig, so
+	// it has to rank all of its free first hops rather than return whichever
+	// one the intermediate ordering happened to put first.
+	// computeDisjoint2HopRoutes returns them best-first. The cache keeps the
+	// whole set — with 274 shared intermediates on the rig, one query is
+	// enough to plan an entire pool.
+	//
+	// The exclusions handed in here are the FIRST caller's. They are a
+	// superset-safe input: everything they remove is something no dial to
+	// this exit may use at all (a dead route, a same-LAN peer), while the
+	// per-dial sibling exclusions are re-applied on the cached set below.
+	// The pool sizes itself from this set's count, so it is counted before the
+	// caller's exclusions: those leave out the routes its own tunnels hold.
+	if all, err := computeDisjoint2HopRoutes(src, dst, localTps, dstEntries, nil, 0); err == nil {
+		r.oraclePlans.noteRouteBound(dst, distinctFirstHops(all))
+	}
+	return computeDisjoint2HopRoutes(src, dst, localTps, dstEntries, opts, 0)
 }

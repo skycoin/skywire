@@ -107,7 +107,7 @@ func setStatsCXOSubMgrFromDmsg(dmsgC *dmsg.Client) {
 			return cipher.PubKey{}, 0, "", fmt.Errorf("unknown feed %d", f)
 		}
 		switch f {
-		case cxosub.FeedTPDStats, cxosub.FeedTPDMetrics, cxosub.FeedTPDUptime:
+		case cxosub.FeedTPDStats, cxosub.FeedTPDMetrics, cxosub.FeedTPDUptime, cxosub.FeedTPDVisorBW:
 			if (tpd == cipher.PubKey{}) {
 				return cipher.PubKey{}, 0, "", fmt.Errorf("no TPD publisher PK (dmsg service URL unset)")
 			}

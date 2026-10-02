@@ -2,12 +2,17 @@
 package visor
 
 import (
+	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/net/publicsuffix"
+
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // The browse fetches a proxied page makes share one transport per proxy and
@@ -103,4 +108,46 @@ func applyPageCookies(req *http.Request, jar http.CookieJar) {
 			req.AddCookie(c)
 		}
 	}
+}
+
+// defaultBrowseProxy is the proxy a browse request uses when the page names
+// none: this visor's own resolving proxy (dmsg_web), which reaches .dmsg,
+// .skynet and .skysocks names over the mesh and the rest through
+// skysocks-client — what a browser beside a native visor is pointed at.
+func (v *Visor) defaultBrowseProxy() (string, bool) {
+	dw := v.conf.DmsgWeb
+	if dw == nil || !dw.Enable {
+		return "", false
+	}
+	port := dw.ProxyPort
+	if port == 0 {
+		port = visorconfig.DefaultDmsgWebProxyPort
+	}
+	host := dw.ProxyAddr
+	switch host {
+	case "", "0.0.0.0", "::", "[::]", "*":
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(strings.Trim(host, "[]"), strconv.FormatUint(uint64(port), 10)), true
+}
+
+// nativeDeskOrigins are the origins the native desk is opened at, the only
+// pages a browse frame served by this visor may take orders from: its
+// loopback spellings, and the configured host when it names one.
+func (v *Visor) nativeDeskOrigins() []string {
+	hc := v.conf.Hypervisor
+	if hc == nil {
+		return nil
+	}
+	host, port, err := net.SplitHostPort(hc.EffectiveDeskAddr())
+	if err != nil || port == "" {
+		return nil
+	}
+	out := []string{"http://127.0.0.1:" + port, "http://localhost:" + port, "http://[::1]:" + port}
+	switch host {
+	case "", "0.0.0.0", "::", "127.0.0.1", "localhost", "::1":
+	default:
+		out = append(out, "http://"+net.JoinHostPort(host, port))
+	}
+	return out
 }

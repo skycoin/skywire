@@ -73,7 +73,9 @@ func newInitiatingStream(cSes *ClientSession) (*Stream, error) {
 		}
 		return &Stream{ses: cSes, sStr: sStr}, nil
 	case cSes.sm.quic != nil:
-		qStr, err := cSes.sm.quic.OpenStreamSync(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), quicStreamOpenTimeout)
+		qStr, err := cSes.sm.quic.OpenStreamSync(ctx)
+		cancel()
 		if err != nil {
 			return nil, err
 		}

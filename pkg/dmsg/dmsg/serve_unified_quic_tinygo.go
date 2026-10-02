@@ -9,9 +9,10 @@
 package dmsg
 
 import (
-	"crypto/tls"
 	"errors"
 	"net"
+
+	"github.com/skycoin/skywire/pkg/skyquic"
 )
 
 // errNoQUICServer is returned by the QUIC and WebTransport entry points in a
@@ -24,6 +25,6 @@ func (s *Server) ServeUnifiedQUIC(_ net.PacketConn, _, _ string) error {
 }
 
 // ServeWebTransport is unavailable in a TinyGo build.
-func (s *Server) ServeWebTransport(_ net.PacketConn, _ string, _ tls.Certificate, _ [32]byte) error {
+func (s *Server) ServeWebTransport(_ net.PacketConn, _ string, _ *skyquic.RotatingWebTransportCert) error {
 	return errNoQUICServer
 }

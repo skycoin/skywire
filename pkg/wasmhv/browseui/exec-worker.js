@@ -217,6 +217,92 @@
 		});
 	}
 
+	// ---- WebRTC through the page -------------------------------------------
+	// A Web Worker has no RTCPeerConnection, so the visor here could not make
+	// a webrtc transport at all ("unknown network type"). __skywireRTC.newPC
+	// returns a proxy peer connection whose methods and events travel to a real
+	// one on the page (exec-remote.js); the Go carrier
+	// (pkg/transport/network/webrtc_browser.go) uses it as it would the real
+	// thing. Installed before any command runs, so the transport layer's
+	// capability probe sees it.
+	var rtcPcSeq = 1, rtcDcSeq = 1, rtcCallSeq = 1;
+	var rtcPCs = {};   // pcId -> { obj, dcs: { dcId -> proxy channel } }
+	var rtcCalls = {}; // callId -> { resolve, reject }
+	function rtcPcCall(pcId, method, arg) {
+		return new Promise(function (resolve, reject) {
+			var callId = rtcCallSeq++;
+			rtcCalls[callId] = { resolve: resolve, reject: reject };
+			post({ t: 'rtc', op: 'pcCall', pcId: pcId, callId: callId, method: method, arg: arg });
+		});
+	}
+	function rtcMakeDC(pcId, dcId) {
+		return {
+			binaryType: 'arraybuffer', readyState: 'connecting',
+			onopen: null, onmessage: null, onclose: null, onerror: null,
+			send: function (data) {
+				var buf = data;
+				if (ArrayBuffer.isView(data)) { buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength); }
+				post({ t: 'rtc', op: 'dcSend', pcId: pcId, dcId: dcId, data: buf }, (buf instanceof ArrayBuffer) ? [buf] : []);
+			},
+			close: function () { post({ t: 'rtc', op: 'dcClose', pcId: pcId, dcId: dcId }); }
+		};
+	}
+	self.__skywireRTC = {
+		newPC: function (iceServers) {
+			var pcId = rtcPcSeq++;
+			var rec = { dcs: {} };
+			var pc = {
+				onicecandidate: null, ondatachannel: null,
+				createDataChannel: function (label, opts) {
+					var dcId = rtcDcSeq++;
+					var dc = rtcMakeDC(pcId, dcId);
+					rec.dcs[dcId] = dc;
+					post({ t: 'rtc', op: 'createDC', pcId: pcId, dcId: dcId, label: label, opts: opts });
+					return dc;
+				},
+				createOffer: function () { return rtcPcCall(pcId, 'createOffer', null); },
+				createAnswer: function () { return rtcPcCall(pcId, 'createAnswer', null); },
+				setLocalDescription: function (d) { return rtcPcCall(pcId, 'setLocalDescription', d); },
+				setRemoteDescription: function (d) { return rtcPcCall(pcId, 'setRemoteDescription', d); },
+				addIceCandidate: function (c) { return rtcPcCall(pcId, 'addIceCandidate', c); },
+				close: function () { post({ t: 'rtc', op: 'pcClose', pcId: pcId }); }
+			};
+			rec.obj = pc;
+			rtcPCs[pcId] = rec;
+			var ice = [];
+			try { for (var i = 0; iceServers && i < iceServers.length; i++) { ice.push({ urls: iceServers[i].urls }); } } catch (e) { /* none */ }
+			post({ t: 'rtc', op: 'newPC', pcId: pcId, iceServers: ice });
+			return pc;
+		}
+	};
+	// rtcEvent applies an event from the page's real peer connection to its
+	// proxy, calling the handler Go set on it.
+	function rtcEvent(m) {
+		var rec = rtcPCs[m.pcId], dc;
+		switch (m.op) {
+		case 'ret': {
+			var c = rtcCalls[m.callId];
+			if (c) { delete rtcCalls[m.callId]; if (m.ok) { c.resolve(m.val); } else { c.reject(new Error(m.msg || 'rtc failed')); } }
+			return;
+		}
+		case 'icecandidate':
+			if (rec && typeof rec.obj.onicecandidate === 'function') { rec.obj.onicecandidate({ candidate: m.candidate }); }
+			return;
+		case 'datachannel':
+			if (rec) {
+				dc = rtcMakeDC(m.pcId, m.dcId);
+				rec.dcs[m.dcId] = dc;
+				if (typeof rec.obj.ondatachannel === 'function') { rec.obj.ondatachannel({ channel: dc }); }
+			}
+			return;
+		case 'dcOpen': dc = rec && rec.dcs[m.dcId]; if (dc) { dc.readyState = 'open'; if (typeof dc.onopen === 'function') { dc.onopen({}); } } return;
+		case 'dcMessage': dc = rec && rec.dcs[m.dcId]; if (dc && typeof dc.onmessage === 'function') { dc.onmessage({ data: m.data }); } return;
+		case 'dcClose': dc = rec && rec.dcs[m.dcId]; if (dc) { dc.readyState = 'closed'; if (typeof dc.onclose === 'function') { dc.onclose({}); } } return;
+		case 'dcError': dc = rec && rec.dcs[m.dcId]; if (dc && typeof dc.onerror === 'function') { dc.onerror({}); } return;
+		case 'pcGone': delete rtcPCs[m.pcId]; return;
+		}
+	}
+
 	self.onmessage = function (ev) {
 		var m = ev.data || {};
 		switch (m.t) {
@@ -225,6 +311,7 @@
 		case 'kill':
 			if (!interrupt(m.id)) pendingKill[m.id] = true;
 			return;
+		case 'rtc': rtcEvent(m); return;
 		case 'vopen': openConn(m.cid, m.port); return;
 		case 'vdata': {
 			var idv = conns[m.cid];

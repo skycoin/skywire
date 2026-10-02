@@ -25,24 +25,26 @@ import (
 // installOriginLoader wires netscrape.OriginLoader to realorigin. Both roles
 // that mount the browser call it; it is idempotent.
 //
-// It claims nothing unless the page carries BOTH halves: the
-// __SKYWIRE_BROWSE_ORIGIN__ config (which says where browse origins live) and
-// a realOrigin with a register (the responder). A desk served without them —
-// any build older than this one — keeps the transcoder, which is the whole
-// fallback story: nothing here can make browsing worse than it already was.
+// It claims nothing without the __SKYWIRE_BROWSE_ORIGIN__ config (which says
+// where browse origins live). With it, a page that also carries realOrigin (a
+// wasm desk: `hv serve`) registers each site an origin; a page without it (the
+// native hypervisor's desk) points mesh sites at the visor's meshproxy
+// instead. Anything unclaimed keeps the transcoder.
 func installOriginLoader() {
 	netscrape.OriginLoader = func(u string) (js.Value, bool) {
 		cfg := js.Global().Get("__SKYWIRE_BROWSE_ORIGIN__")
 		if !cfg.Truthy() {
 			return js.Undefined(), false
 		}
-		ro := js.Global().Get("realOrigin")
-		if !ro.Truthy() || ro.Get("register").Type() != js.TypeFunction {
-			return js.Undefined(), false
-		}
 		parsed, ok := parseURL(u)
 		if !ok {
 			return js.Undefined(), false
+		}
+		ro := js.Global().Get("realOrigin")
+		if !ro.Truthy() || ro.Get("register").Type() != js.TypeFunction {
+			// The native hypervisor's desk: no realorigin, but the visor's
+			// meshproxy serves each mesh site from an origin of its own.
+			return nativeMeshOrigin(cfg, parsed)
 		}
 		// The descriptor is what the responder binds to the frame's private
 		// port, and what browse-transport.js fetches against. The frame never
@@ -106,4 +108,24 @@ func stringOr(v js.Value, fallback string) string {
 		return v.String()
 	}
 	return fallback
+}
+
+// nativeMeshOrigin claims a mesh URL for the native visor's meshproxy (see
+// meshProxyOrigin); clearnet stays with the transcoder, which meshproxy does
+// not serve.
+func nativeMeshOrigin(cfg, parsed js.Value) (js.Value, bool) {
+	network, host, mesh := meshOriginFor(parsed.Get("hostname").String())
+	if !mesh {
+		return js.Undefined(), false
+	}
+	origin, ok := meshProxyOrigin(stringOr(cfg.Get("scheme"), "http"), stringOr(cfg.Get("suffix"), ".mesh.localhost"),
+		stringOr(cfg.Get("port"), ""), network, host)
+	if !ok {
+		return js.Undefined(), false
+	}
+	path := parsed.Get("pathname").String() + parsed.Get("search").String()
+	if path == "" {
+		path = "/"
+	}
+	return js.Global().Get("Promise").Call("resolve", origin+path), true
 }

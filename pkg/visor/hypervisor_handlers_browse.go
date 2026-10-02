@@ -1,11 +1,14 @@
 //go:build !mobile
 
 // Package visor pkg/visor/hypervisor_handlers_browse.go c3-vis-core
-// browse.js virtual-browser engine in the NATIVE hypervisor UI (the same one the
-// wasm-visor runs), backed by /api/browse/* instead of the wasm JS hooks.
+// The native hypervisor's web surfaces: the Angular dashboard (index.html with
+// its version stamp) and the desk on its own listener, whose browser reaches
+// the mesh and the clearnet through /api/browse* on this visor.
 package visor
 
 import (
+	"github.com/0magnet/realorigin"
+
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -85,6 +88,14 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			return
 		case "/browse.js":
 			serveJS(w, browseui.BrowseJS)
+			return
+		case "/browse-responder.js":
+			// The desk's half of the real-origin browser (realorigin): it answers
+			// the browse frames meshproxy serves, through browse-transport.js.
+			serveJS(w, realorigin.ResponderJS())
+			return
+		case "/browse-transport.js":
+			serveJS(w, wasmhv.BrowseTransportJS)
 			return
 		case "/vnet-sw.js":
 			// bottle's vnet service worker: pages that run in-page servers
@@ -189,7 +200,8 @@ func serveJS(w http.ResponseWriter, b []byte) {
 // Empty string when disabled → the transcoder fallback stays in effect.
 func browseOriginInjectJS(v *Visor) string {
 	bo := v.conf.BrowseOrigin
-	if bo == nil || !bo.Enable {
+	// Port mode has no per-site subdomains, which isolated browse origins need.
+	if bo == nil || !bo.Enable || bo.Mode == "port" {
 		return ""
 	}
 	addr := bo.Addr
@@ -204,14 +216,18 @@ func browseOriginInjectJS(v *Visor) string {
 	if bo.TLSCert != "" && bo.TLSKey != "" {
 		scheme = "https"
 	}
-	suffix := normalizeMeshSuffix(bo.Suffix) // guaranteed leading dot
+	// The suffix this machine's browser can reach the listener under — see
+	// desktopBrowseSuffix; the listener answers it as well as the configured one.
+	suffix := desktopBrowseSuffix(bo)
 	return `window.__SKYWIRE_BROWSE_ORIGIN__={suffix:` + strconv.Quote(suffix) +
 		`,scheme:` + strconv.Quote(scheme) + `,port:` + strconv.Quote(port) + `};`
 }
 
-// serveInjectedIndex serves index.html with the browse engine + launcher scripts
-// (and window.__SKYWIRE_LOCAL_PK__) injected before </body>. Falls back to the
-// plain file server if index.html can't be read.
+// serveInjectedIndex serves the dashboard's index.html with its build stamp and
+// auto-reloader injected before </body>. The desk bundle (browse.js) is not: the
+// dashboard has no desk — that lives on the desk listener (serveNativeDesk) —
+// and nothing in the Angular bundle reads what browse.js installs. Falls back
+// to the plain file server if index.html can't be read.
 func (hv *Hypervisor) serveInjectedIndex(w http.ResponseWriter, r *http.Request, fallback http.Handler) {
 	if hv.c.UIAssets == nil || hv.visor == nil {
 		fallback.ServeHTTP(w, r)
@@ -233,9 +249,7 @@ func (hv *Hypervisor) serveInjectedIndex(w http.ResponseWriter, r *http.Request,
 	// client, or a rebuilt skywire.wasm), so an open dashboard never sits on a
 	// stale build. Mirrors the wasm visor's autoupdate.js.
 	ver := hv.servedUIVersion()
-	inject := []byte(`<script>window.__SKYWIRE_LOCAL_PK__=` + strconv.Quote(hv.visor.conf.PK.Hex()) +
-		`;window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;` + browseOriginInjectJS(hv.visor) + `</script>` +
-		`<script src="browse.js"></script>` +
+	inject := []byte(`<script>window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;</script>` +
 		`<script>` + uiAutoReloadJS + `</script>`)
 	out := bytes.Replace(b, []byte("</body>"), append(inject, []byte("</body>")...), 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -270,6 +284,7 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 		`;window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;` + browseJS + `</script>` + "\n" +
 		`<script src="/wasm_exec.js"></script>` + "\n" +
 		`<script src="/browse.js"></script>` + "\n" +
+		nativeDeskBrowseScripts(browseJS) +
 		`<script>` + uiAutoReloadJS + `</script>` + "\n" +
 		`<script src="/desk-boot.js"></script>`
 	page := deskShellHTML(scripts, nativeDeskBootOpts(localPK))
@@ -428,4 +443,15 @@ func deskRootHandler(h http.Handler) http.Handler {
 func isDeskRoot(r *http.Request) bool {
 	v, _ := r.Context().Value(deskRootKey{}).(bool)
 	return v
+}
+
+// nativeDeskBrowseScripts loads the real-origin browser's desk half when browse
+// origins are on (browseJS is their config): with it every site, clearnet
+// included, opens on an isolated origin meshproxy serves, as on a wasm desk.
+func nativeDeskBrowseScripts(browseJS string) string {
+	if browseJS == "" {
+		return ""
+	}
+	return `<script src="/browse-responder.js"></script>` + "\n" +
+		`<script src="/browse-transport.js"></script>` + "\n"
 }

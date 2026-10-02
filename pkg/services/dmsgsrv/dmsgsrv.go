@@ -440,7 +440,7 @@ func (s *service) Run(ctx context.Context) error {
 		wtConn, werr := net.ListenPacket("udp", cfg.WTAddress)
 		if werr != nil {
 			log.WithError(werr).Warnf("dmsg-wt: failed to bind UDP listener on %s; serving without WebTransport", cfg.WTAddress)
-		} else if cert, certHash, cerr := skyquic.NewWebTransportCertificate(); cerr != nil {
+		} else if cert, cerr := skyquic.NewRotatingWebTransportCert(); cerr != nil {
 			wtConn.Close() //nolint:errcheck,gosec
 			log.WithError(cerr).Warn("dmsg-wt: failed to generate WebTransport certificate; serving without WebTransport")
 		} else {
@@ -452,10 +452,11 @@ func (s *service) Run(ctx context.Context) error {
 				// cancel() here would cancel runCtx and stop the WHOLE dmsg-server
 				// on any WT-listener error, dropping every visor's dmsg session
 				// (visor healthchecks then fail). Just log and let WT go dark.
-				if err := srv.ServeWebTransport(wtConn, cfg.PublicAddressWT, cert, certHash); err != nil {
+				if err := srv.ServeWebTransport(wtConn, cfg.PublicAddressWT, cert); err != nil {
 					log.WithError(err).Warn("dmsg-wt: WebTransport serving stopped; continuing without it (TCP/QUIC/WS unaffected)")
 				}
 				wtConn.Close() //nolint:errcheck,gosec
+				cert.Close()
 			}()
 		}
 	} else if cfg.WTAddress != "" {
