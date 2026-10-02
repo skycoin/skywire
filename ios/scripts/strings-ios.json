@@ -85,13 +85,43 @@
       "en": "%1$@ was not saved: %2$@",
       "zh-Hans": "%1$@ 未能保存：%2$@",
       "es": "No se guardó %1$@: %2$@"
+    },
+    "wallet_seed_secure_ios": {
+      "en": "Covered while the screen is recorded or mirrored, and in the app switcher. iOS does not let an app block screenshots. There is no copy button.",
+      "zh-Hans": "屏幕被录制或镜像时，以及在应用切换器中，这些单词会被遮住。iOS 不允许应用禁止截屏。本页面没有复制按钮。",
+      "es": "Se tapa mientras la pantalla se graba o se duplica, y en el selector de apps. iOS no permite que una app bloquee las capturas de pantalla. No hay botón de copiar."
+    },
+    "wallet_screenshot_title": {
+      "en": "Screenshot saved",
+      "zh-Hans": "截屏已保存",
+      "es": "Captura guardada"
+    },
+    "wallet_screenshot_body": {
+      "en": "It shows your recovery phrase and is now in Photos, where it can sync to your other devices. Delete it: anyone who sees those words can spend your coins.",
+      "zh-Hans": "截屏中有你的助记词，现在已存入“照片”，并可能同步到你的其他设备。请删除它：任何看到这些单词的人都能花掉你的币。",
+      "es": "Muestra tu frase de recuperación y ahora está en Fotos, desde donde puede sincronizarse con tus otros dispositivos. Bórrala: quien vea esas palabras puede gastar tus monedas."
+    },
+    "wallet_scan_photo": {
+      "en": "Scan a QR code from a photo",
+      "zh-Hans": "从照片中扫描二维码",
+      "es": "Escanear un código QR de una foto"
+    },
+    "wallet_scan_none": {
+      "en": "No QR code found in that picture.",
+      "zh-Hans": "该图片中未找到二维码。",
+      "es": "No se encontró ningún código QR en esa imagen."
+    },
+    "wallet_sheet_done": {
+      "en": "Done",
+      "zh-Hans": "完成",
+      "es": "Listo"
     }
   },
   "InfoPlist": {
     "NSFaceIDUsageDescription": {
-      "en": "Skywire uses Face ID to unlock the app when the app lock is on.",
-      "zh-Hans": "开启应用锁后，Skywire 会使用面容 ID 解锁应用。",
-      "es": "Skywire usa Face ID para desbloquear la app cuando el bloqueo de la app está activado."
+      "en": "Skywire uses Face ID to unlock the app when the app lock is on, and to confirm wallet sends and the showing of a recovery phrase.",
+      "zh-Hans": "开启应用锁后，Skywire 会使用面容 ID 解锁应用；钱包发送转账和显示助记词之前，也会用它确认身份。",
+      "es": "Skywire usa Face ID para desbloquear la app cuando el bloqueo de la app está activado, y para confirmar los envíos de la billetera y antes de mostrar una frase de recuperación."
     },
     "NSMicrophoneUsageDescription": {
       "en": "SkyChat uses the microphone to record voice and video messages.",
@@ -99,9 +129,9 @@
       "es": "SkyChat usa el micrófono para grabar mensajes de voz y de vídeo."
     },
     "NSCameraUsageDescription": {
-      "en": "SkyChat uses the camera to record video messages and scan QR codes.",
-      "zh-Hans": "SkyChat 使用相机录制视频消息和扫描二维码。",
-      "es": "SkyChat usa la cámara para grabar mensajes de vídeo y escanear códigos QR."
+      "en": "Skywire uses the camera to record video messages and scan QR codes in SkyChat and the wallet.",
+      "zh-Hans": "Skywire 使用相机录制视频消息，并在 SkyChat 和钱包中扫描二维码。",
+      "es": "Skywire usa la cámara para grabar mensajes de vídeo y escanear códigos QR en SkyChat y en la billetera."
     },
     "NSPhotoLibraryAddUsageDescription": {
       "en": "Skywire saves the pictures and videos you choose to your photo library.",
