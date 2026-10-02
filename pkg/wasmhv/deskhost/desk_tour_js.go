@@ -50,115 +50,20 @@ type tourStep struct {
 	args []string
 }
 
-// The copy narrates rather than instructs — it describes what a thing is, not
-// what the reader should do with it. This tour carries the claim the dashboard
-// tour deliberately does not make: a visor running in a browser tab, with a
-// desktop around it, is an unusual thing. The Angular dashboard next door is an
-// ordinary admin console and says so.
+// tourSteps joins the words in desk-tour.md to the app each step opens
+// (tourApps). The file is embedded and checked by
+// TestDeskTourTextMatchesWiring, so a parse error here means a build that
+// skipped its tests; the tour then shows the error as its only step.
 func tourSteps() []tourStep {
-	return []tourStep{
-		{
-			title: "A visor, running in a browser tab",
-			body: "Not a page describing Skywire, and not a remote session: the " +
-				"<b>wasm binary serving this page is a full visor</b>, routing on the mesh " +
-				"from inside this tab. Around it is a <b>desk</b> — a real window manager " +
-				"whose windows move, resize, dock and stack. Nothing was installed. " +
-				"Nothing is running on a server on the reader's behalf. Everything in " +
-				"the following windows executes here.",
-		},
-		{
-			title: "The launcher",
-			body: "Every app opens from the <b>launcher</b> in the taskbar, this tour " +
-				"included, so it can be closed and reopened. From here each step " +
-				"<b>opens the app it describes</b>, beside this window. Windows that get " +
-				"moved or resized are left alone afterwards; untouched ones are tidied up.",
-		},
-		{
-			title: "browser — two networks at once",
-			body: "<b>netscrape</b> resolves two kinds of address. A " +
-				"<code>&lt;pk&gt;.dmsg</code> address fetches a site directly from another " +
-				"visor over dmsg: no DNS, no certificate authority, the <b>public key is " +
-				"the address and the authentication at once</b>. A clearnet address is " +
-				"fetched by an <b>exit visor</b> instead — selected automatically unless one " +
-				"is pinned — so the site sees the exit's address. Names like " +
-				"<code>skywire.dmsg</code> are a local convenience, not a namespace anyone " +
-				"can squat.",
-			app: "browser",
-		},
-		{
-			title: "The dashboard is a tab in it",
-			body: "The <b>hypervisor dashboard</b> — visor list, transports, routing, the " +
-				"mesh-wide views — is not a window here. It is an Angular app this visor " +
-				"serves on its virtual loopback, opened as a native tab at " +
-				"<code>vnet:8001</code>. That is the seam. It is ordinary admin software, " +
-				"which is why it gets a separate, plainer tour, behind the <b>?</b> button " +
-				"in its bottom-right corner.",
-		},
-		{
-			title: "console — a shell with no server",
-			body: "The console is <b>websh</b>, running in the same wasm runtime as the " +
-				"visor. There is no host on the other end of it. Pipes, globbing, control " +
-				"flow, job control, <code>jq</code> and <code>awk</code> all work, and the " +
-				"visor's own commands emit JSON into the pipeline — the same scripting " +
-				"surface <code>skywire cli</code> gives a native visor.",
-			app: "console",
-		},
-		{
-			title: "files — one filesystem, two views",
-			body: "The file browser and the shell share a single in-memory filesystem. " +
-				"<code>echo hi &gt; /notes.txt</code> in the console appears here; an edit " +
-				"here is visible to <code>cat</code>. Nothing touches the host disk, and " +
-				"like the tab itself it is ephemeral unless exported.",
-			app: "files",
-		},
-		{
-			title: "mail — addressed by key",
-			body: "A mailbox whose address is a <b>public key</b>, delivered across the " +
-				"mesh rather than through a provider. There is no account to register and " +
-				"no server holding the messages; a whitelist decides who can deliver.",
-			app: "mail",
-		},
-		{
-			title: "identity — the key is the visor",
-			body: "This tab's visor <i>is</i> a keypair, and this is where it lives. " +
-				"<b>Export</b> backs it up or moves the visor to another device; importing " +
-				"one and reloading restarts the visor under that key. The secret half " +
-				"leaves the tab only as copied text. There is nobody to recover it from.",
-			app: "identity",
-		},
-		{
-			title: "pair — driving the host visor",
-			body: "Pairing asks the visor serving this page to accept <b>this tab</b> as its " +
-				"hypervisor. The operator approves a fingerprint shown by <code>skywire cli " +
-				"visor hv pair</code>, or hands over a one-time code. After that the " +
-				"dashboard tab is managing a real visor on the host.",
-			app: "pair",
-		},
-		{
-			title: "settings — what each reload builds",
-			body: "This tab's <code>skywire.conf</code>: the services it points at and the " +
-				"options every reload generates the visor's config from. A browser visor is " +
-				"rebuilt from this file on each start, so changes have to land here to " +
-				"survive one.",
-			app: "settings",
-		},
-		{
-			title: "install — surviving the address",
-			body: "Installed as an app, the desk opens on its own from the browser's " +
-				"storage and keeps working when the address that served it is unreachable. " +
-				"For a tool whose job is browsing a mesh, not needing the network in order " +
-				"to start is most of the point.",
-			app: installAppName,
-		},
-		{
-			title: "Ephemeral by default",
-			body: "No install, no account, no server: a visor, a desktop, a shell, a " +
-				"browser and a mailbox in one tab, and all of it gone when the tab closes " +
-				"unless the key was exported or the desk installed.<br><br>" +
-				"This tour reopens from the launcher. The <b>dashboard</b> has its own, " +
-				"behind the <b>?</b> button in its corner.",
-		},
+	texts, err := parseDeskTour(deskTourMD)
+	if err != nil {
+		return []tourStep{{title: "tour", body: err.Error()}}
 	}
+	steps := make([]tourStep, 0, len(texts))
+	for _, t := range texts {
+		steps = append(steps, tourStep{title: t.title, body: t.body, app: tourApps[t.id]})
+	}
+	return steps
 }
 
 // tourPane renders one step at a time and owns whatever window the current step
