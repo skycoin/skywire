@@ -1,6 +1,5 @@
 import { BrowserModule} from '@angular/platform-browser';
 import { ErrorHandler, NgModule } from '@angular/core';
-import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { HttpBackend, provideHttpClient, withInterceptorsFromDi, withXhr } from '@angular/common/http';
 import { SkywireHttpBackend } from './services/skywire-http-backend';
 import { AppComponent } from './app.component';
@@ -136,7 +135,6 @@ const globalRippleConfig: RippleGlobalOptions = {
         NodeLogsComponent,
     ],
     bootstrap: [AppComponent], imports: [BrowserModule,
-        BrowserAnimationsModule,
         AppRoutingModule,
         // Root translation setup (TranslateModule.forRoot: loader + service).
         AppTranslationModule,
