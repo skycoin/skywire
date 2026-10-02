@@ -118,8 +118,6 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 		}
 	}
 
-	metricsutil.ServePProf(logger, cfg.PprofAddr, "transport-discovery")
-
 	for _, k := range cfg.Whitelist {
 		k = strings.TrimSpace(k)
 		if k != "" {
@@ -134,6 +132,19 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 		return nil, fmt.Errorf("transport-discovery: create store: %w", err)
 	}
 	closers = append(closers, st.Close)
+	// TPD writes every transport, so it holds the whole set in memory and
+	// serves the whole-set reads from it — its own publishers, and a route
+	// finder in the same process (store.SharedLiveStore).
+	live := false
+	if ls, ok := st.(interface {
+		EnableLiveSet(ctx context.Context, url string) error
+	}); ok {
+		live = true
+		if err := ls.EnableLiveSet(ctx, storeCfg.URL); err != nil {
+			closeAll()
+			return nil, fmt.Errorf("transport-discovery: load live transport set: %w", err)
+		}
+	}
 
 	nonceStoreConfig := cfg.NonceStoreConfig(plainHTTP)
 	s.nonceStore = services.StoreKind(nonceStoreConfig.Type)
@@ -159,6 +170,11 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	}
 	tpdAPI := api.New(logger, st, nonceStore, enableMetrics, m, dmsgAddr, storeDataPath)
 	tpdAPI.SetEntryTimeout(cfg.EntryTimeout.Std())
+	if live {
+		if err := tpdAPI.SeedReconcile(ctx); err != nil {
+			logger.WithError(err).Warn("could not seed the reconcile from the live set; the first reports re-register")
+		}
+	}
 	if uptimeRec != nil {
 		tpdAPI.SetUptimeRecorder(uptimeRec)
 	}
@@ -201,6 +217,7 @@ func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 
 	logger := services.NewLogger(cfg.LogTag("transport_discovery"), cfg.LogLevel)
+	defer cfg.StartPprof(logger)()
 
 	pk := cfg.PubKey
 	sk := cfg.SecKey
@@ -323,6 +340,8 @@ func (s *service) startCXO(
 	s.cxo.AddPublisher(ctx, logger, "uptime", skyenv.DmsgTPDUptimeCXOPort, up, err)
 	ap, err := api.StartAllTransportsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
 	s.cxo.AddPublisher(ctx, logger, "all-transports", skyenv.DmsgTPDAllTransportsCXOPort, ap, err)
+	rp, err := api.StartRoutingCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
+	s.cxo.AddPublisher(ctx, logger, "routing", skyenv.DmsgTPDRoutingCXOPort, rp, err)
 	sp, err := api.StartStatsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
 	s.cxo.AddPublisher(ctx, logger, "stats", skyenv.DmsgTPDStatsCXOPort, sp, err)
 }
@@ -339,6 +358,18 @@ func (s *service) startCXO(
 type aggregatorSink struct {
 	store.Store
 	api *api.API
+}
+
+// ApplyTelemetry forwards a telemetry batch to the store (store.TelemetryBatchStore),
+// which the embedded store.Store interface does not expose.
+func (s *aggregatorSink) ApplyTelemetry(ctx context.Context, updates []store.TelemetryUpdate) error {
+	return s.Store.(store.TelemetryBatchStore).ApplyTelemetry(ctx, updates)
+}
+
+// RecordTransportHeartbeats forwards a heartbeat batch to the store
+// (store.BatchStore).
+func (s *aggregatorSink) RecordTransportHeartbeats(ctx context.Context, entries []*transport.Entry, at time.Time) error {
+	return s.Store.(store.BatchStore).RecordTransportHeartbeats(ctx, entries, at)
 }
 
 func (s *aggregatorSink) RegisterTransportFromCXO(ctx context.Context, entry *transport.Entry, reporter cipher.PubKey, version string) error {

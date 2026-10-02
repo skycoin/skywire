@@ -29,7 +29,7 @@ import (
 const (
 	CXOTabNetworkVisualizer = 0
 	CXOTabUptime            = 2 // TPD uptime feed
-	CXOTabCLITransports     = 5 // TPD all-transports feed
+	CXOTabCLITransports     = 5 // TPD routing feed
 )
 
 // Feed identifiers used in calls to CXOSubMgr.Walk. Values match
@@ -41,6 +41,7 @@ const (
 	CXOFeedDMSGDClientsByServer = 3 // clients-by-server/<server> (batched; legacy .../<client>/entry)
 	CXOFeedTPDAllTransports     = 4 // transports/all/{with-self,without-self}
 	CXOFeedTPDStats             = 5 // stats/{network,versions} — network aggregates
+	CXOFeedTPDRouting           = 6 // routing/<pk> — the routing feed, one leaf per visor
 )
 
 // CXOSubMgr is the minimal slice of pkg/visor.CXOSubscriptionManager

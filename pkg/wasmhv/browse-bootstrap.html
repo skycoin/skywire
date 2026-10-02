@@ -300,6 +300,34 @@
     });
   }
 
+  // --- cookies -------------------------------------------------------------
+  // A browser never shows the service worker the Cookie header and drops
+  // Set-Cookie from a Response it builds; this page is the one place that sees
+  // the frame's cookies (the worker's own store is partitioned apart). So every
+  // request it relays carries document.cookie as x-realorigin-cookie, and an
+  // embedder that returns a response's Set-Cookie values in
+  // x-realorigin-set-cookie (a JSON array) has the non-HttpOnly ones set here,
+  // where the page's scripts see them. HttpOnly cookies stay with the embedder.
+  function withPageCookies(headers) {
+    var h = {};
+    for (var k in (headers || {})) { h[k] = headers[k]; }
+    if (document.cookie) { h['x-realorigin-cookie'] = document.cookie; }
+    return h;
+  }
+  function keepSetCookies(res) {
+    var sc = res && res.headers && res.headers['x-realorigin-set-cookie'];
+    if (!sc) { return; }
+    try { delete res.headers['x-realorigin-set-cookie']; } catch (e) { /* frozen */ }
+    try {
+      JSON.parse(sc).forEach(function (c) {
+        var parts = String(c).split(';').map(function (p) { return p.trim(); });
+        if (parts.some(function (p) { return /^httponly$/i.test(p); })) { return; }
+        var keep = parts.filter(function (p) { return !/^(domain|secure|samesite|partitioned)(=|$)/i.test(p); });
+        document.cookie = keep.join('; ') + '; Secure; SameSite=None; Partitioned';
+      });
+    } catch (e) { /* the response still arrives without them */ }
+  }
+
   // --- SW registration + relay ---------------------------------------------
   // The SW (browse-sw.js) posts {type:'realorigin-fetch'} with a MessageChannel port
   // for each subresource; we relay to the helper and reply on that port.
@@ -311,8 +339,9 @@
       var replyPort = e.ports[0];
       var r = d.req || {};
       var transfer = r.body ? [r.body] : [];
-      helperFetch({ url: r.url, method: r.method, headers: r.headers, body: r.body }, transfer)
+      helperFetch({ url: r.url, method: r.method, headers: withPageCookies(r.headers), body: r.body }, transfer)
         .then(function (res) {
+          keepSetCookies(res);
           var t = res.body ? [res.body] : [];
           replyPort.postMessage(res, t);
         })
@@ -360,7 +389,14 @@
   ]).then(function () {
     window.__mb.step = 'fetching-top';
     var path = location.pathname + location.search;
-    return helperFetch({ url: location.href, method: 'GET', headers: {}, body: null, path: path });
+    return helperFetch({ url: location.href, method: 'GET', headers: withPageCookies({}), body: null, path: path });
+  }).then(function (res) {
+    // A streamed body (a ReadableStream) is read whole here: this is the
+    // document itself, written with document.write below.
+    if (res && res.body && typeof ReadableStream !== 'undefined' && res.body instanceof ReadableStream) {
+      return new Response(res.body).arrayBuffer().then(function (ab) { res.body = ab; return res; });
+    }
+    return res;
   }).then(function (res) {
     window.__mb.step = 'top-returned';
     window.__mb.topStatus = res && res.status;
@@ -388,6 +424,127 @@
         'font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}</style>' +
         '<pre>' + escd + '</pre>';
     }
+    keepSetCookies(res);
+    // A page here is always framed (window.top is the app), and some sites
+    // refuse to run embedded unless their own site sent them — windy.com
+    // throws "Unlegal embed" when document.referrer is not on windy.com.
+    // When the embedder names the real address this page was fetched from,
+    // report it as the referrer, as a navigation within the site would. It
+    // is visible only to this page, on its own isolated origin.
+    var realURL = res.headers && (res.headers['x-realorigin-url'] || res.headers['X-Realorigin-Url']);
+    if (realURL) {
+      // Set on this window's Document.prototype, which document.open() keeps;
+      // injecting a script instead would land it ahead of the doctype.
+      try {
+        Object.defineProperty(Document.prototype, 'referrer', {
+          configurable: true,
+          get: function () { return String(realURL); }
+        });
+      } catch (e) { /* the page still loads without it */ }
+    }
+    // A browser's WebSocket goes straight to the network — a service worker
+    // never sees it — so the page gets this stand-in instead: each socket is
+    // handed to the desk over the helper port with a MessagePort of its own,
+    // and the desk opens the real one through the visor (the responder's
+    // websocket hook). Same API: readyState, binaryType, send/close, the on*
+    // handlers and addEventListener.
+    class RelayWebSocket extends EventTarget {
+      constructor(url, protocols) {
+        super();
+        var abs;
+        try { abs = new URL(url, location.href); } catch (e) { throw new DOMException("Failed to construct 'WebSocket': The URL '" + url + "' is invalid.", 'SyntaxError'); }
+        if (abs.protocol === 'http:') { abs.protocol = 'ws:'; } else if (abs.protocol === 'https:') { abs.protocol = 'wss:'; }
+        if (abs.protocol !== 'ws:' && abs.protocol !== 'wss:') { throw new DOMException("Failed to construct 'WebSocket': The URL's scheme must be either 'ws' or 'wss'.", 'SyntaxError'); }
+        this._url = abs.href; this._ready = 0; this._protocol = ''; this._binaryType = 'blob'; this._buffered = 0;
+        this.onopen = null; this.onmessage = null; this.onerror = null; this.onclose = null;
+        var self = this, mc = new MessageChannel();
+        this._port = mc.port1;
+        mc.port1.onmessage = function (ev) { self._recv(ev.data || {}); };
+        var ps = protocols == null ? [] : (Array.isArray(protocols) ? protocols : [protocols]).map(String);
+        ensureHelper().then(function (hp) { hp.postMessage({ id: 0, ws: { url: self._url, protocols: ps } }, [mc.port2]); })
+          .catch(function (e) { self._recv({ t: 'error', message: String(e) }); self._recv({ t: 'close', code: 1006 }); });
+      }
+      get url() { return this._url; }
+      get readyState() { return this._ready; }
+      get protocol() { return this._protocol; }
+      get extensions() { return ''; }
+      get bufferedAmount() { return this._buffered; }
+      get binaryType() { return this._binaryType; }
+      set binaryType(v) { if (v === 'blob' || v === 'arraybuffer') { this._binaryType = v; } }
+      _emit(type, ev) {
+        this.dispatchEvent(ev);
+        var h = this['on' + type];
+        if (typeof h === 'function') { try { h.call(this, ev); } catch (e) { setTimeout(function () { throw e; }); } }
+      }
+      _recv(m) {
+        if (m.t === 'open') {
+          if (this._ready !== 0) { return; }
+          this._ready = 1; this._protocol = m.protocol || '';
+          this._emit('open', new Event('open'));
+        } else if (m.t === 'message') {
+          if (this._ready !== 1) { return; }
+          var d = m.data;
+          if (typeof d !== 'string' && this._binaryType === 'blob') { d = new Blob([d]); }
+          this._emit('message', new MessageEvent('message', { data: d, origin: new URL(this._url).origin }));
+        } else if (m.t === 'error') {
+          this._emit('error', new Event('error'));
+        } else if (m.t === 'close') {
+          if (this._ready === 3) { return; }
+          this._ready = 3;
+          try { this._port.close(); } catch (e) { /* already */ }
+          this._emit('close', new CloseEvent('close', { code: m.code || 1006, reason: m.reason || '', wasClean: !!m.wasClean }));
+        }
+      }
+      send(data) {
+        if (this._ready === 0) { throw new DOMException("Failed to execute 'send' on 'WebSocket': Still in CONNECTING state.", 'InvalidStateError'); }
+        if (this._ready !== 1) { return; }
+        var self = this, port = this._port;
+        if (typeof data === 'string') { port.postMessage({ t: 'send', data: data }); return; }
+        if (data instanceof Blob) {
+          this._buffered += data.size;
+          data.arrayBuffer().then(function (ab) { self._buffered -= data.size; port.postMessage({ t: 'send', data: ab }, [ab]); });
+          return;
+        }
+        var ab = ArrayBuffer.isView(data) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
+          : (data instanceof ArrayBuffer ? data.slice(0) : null);
+        if (!ab) { port.postMessage({ t: 'send', data: String(data) }); return; }
+        port.postMessage({ t: 'send', data: ab }, [ab]);
+      }
+      close(code, reason) {
+        if (this._ready === 2 || this._ready === 3) { return; }
+        this._ready = 2;
+        try { this._port.postMessage({ t: 'close', code: code || 1000, reason: reason || '' }); } catch (e) { /* gone */ }
+      }
+    }
+    ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'].forEach(function (k, i) {
+      Object.defineProperty(RelayWebSocket, k, { value: i });
+      Object.defineProperty(RelayWebSocket.prototype, k, { value: i });
+    });
+
+    // WebRTC and WebTransport go straight to the network: a service worker
+    // sees neither, and the exit relays TCP only, so a page using them would
+    // reach the internet from the reader's own address (a STUN query reveals
+    // it in a second). Remove them before the page runs — here and in any
+    // same-origin frame it builds. Sites fall back to WebSocket and fetch,
+    // which travel the visor.
+    var LEAKY = ['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCDataChannel',
+      'RTCIceCandidate', 'RTCSessionDescription', 'WebTransport'];
+    var scrub = function (w) {
+      try { w.WebSocket = RelayWebSocket; } catch (e) { /* cross-origin */ }
+      LEAKY.forEach(function (k) {
+        try { Object.defineProperty(w, k, { value: undefined, configurable: false, writable: false }); } catch (e) { /* already gone */ }
+      });
+    };
+    scrub(window);
+    try {
+      var cw = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+      if (cw && cw.get) {
+        Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+          configurable: true,
+          get: function () { var w = cw.get.call(this); try { if (w) { scrub(w); } } catch (e) { /* cross-origin */ } return w; }
+        });
+      }
+    } catch (e) { /* the page still loads without it */ }
     document.open();
     document.write(html);
     document.close();

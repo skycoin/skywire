@@ -52,35 +52,51 @@ type cxoAwareTPD struct {
 func (c *cxoAwareTPD) getAllTransportsBase(ctx context.Context) ([]*transport.Entry, error) {
 	if c.v != nil {
 		if mgr := c.v.CXOSubMgr(); mgr != nil {
+			// Keep the routing subscription up from the first route calculation
+			// on: letting the ~10s-grace teardown drop it between dials forces a
+			// fresh subscription — a new dmsg dial and handshake — on the next
+			// one. It is pinned here, on first use, not when the manager is built:
+			// autoconnect and dmsg lookups build the manager on every visor, and
+			// pinning there made every visor hold the whole transport graph
+			// whether it ever routed or not.
+			c.v.routingPinOnce.Do(func() { mgr.Pin(FeedTPDRouting) })
 			mgr.AcquireFor(TabCLITransports)
 			defer mgr.ReleaseFor(TabCLITransports)
-			body, _, ok := mgr.Get(FeedTPDAllTransports, tpdpaths.AllTransportsPathWithoutSelf)
-			if ok && len(body) > 0 {
-				body = cxoutils.Gunzip(body) // publisher gzips; raw bodies pass through
-				var entries []*transport.Entry
-				if err := json.Unmarshal(body, &entries); err == nil {
-					// The current publisher drops the derivable t_id (see
-					// allTransportsWireEntry in the TPD publisher); recompute any
-					// zero ID from (edges, type). A non-zero ID (older publisher)
-					// is left as-is.
-					for _, e := range entries {
-						if e != nil && e.ID == (uuid.UUID{}) {
-							e.ID = transport.MakeTransportID(e.Edges[0], e.Edges[1], e.Type)
-						}
-					}
-					return entries, nil
-				}
-				// Unmarshal failure: most likely a schema drift between
-				// publisher and subscriber binaries — let HTTP serve so
-				// the caller still gets a usable answer.
+			if entries, ok := routingTransports(mgr); ok {
+				return entries, nil
 			}
 		}
 	}
 	return c.DiscoveryClient.GetAllTransports(ctx)
 }
 
-// AllTransportsSyncedAt reports when the CXO tpd-all-transports snapshot
-// last advanced, so the router's route-calc cache can invalidate on the
+// routingTransports assembles TPD's routing feed (one gzipped leaf per
+// visor, see RoutingCXOPublisher in pkg/deployment/tpd/api) into the network's transport list:
+// the transports that exist now, with the latency and throughput routes are
+// weighed by. The publisher drops the derivable t_id; it is recomputed from
+// (edges, type). ok is false until the feed has synced.
+func routingTransports(mgr *CXOSubscriptionManager) ([]*transport.Entry, bool) {
+	var entries []*transport.Entry
+	mgr.Walk(FeedTPDRouting, tpdpaths.RoutingPathPrefix, func(_ string, body []byte) bool {
+		var shard []*transport.Entry
+		if err := json.Unmarshal(cxoutils.Gunzip(body), &shard); err != nil {
+			return true
+		}
+		for _, e := range shard {
+			if e == nil {
+				continue
+			}
+			if e.ID == (uuid.UUID{}) {
+				e.ID = transport.MakeTransportID(e.Edges[0], e.Edges[1], e.Type)
+			}
+			entries = append(entries, e)
+		}
+		return true
+	})
+	return entries, len(entries) > 0
+}
+
+// AllTransportsSyncedAt reports when the CXO routing feed last advanced, so the router's route-calc cache can invalidate on the
 // CXO sync cadence instead of an independent wall-clock TTL. ok=false
 // (feed not yet primed / CXO unavailable) tells the caller to keep its
 // TTL fallback. Copies no body — a cheap version probe.
@@ -92,7 +108,8 @@ func (c *cxoAwareTPD) allTransportsSyncedAtCXO() (time.Time, bool) {
 	if mgr == nil {
 		return time.Time{}, false
 	}
-	return mgr.SyncedAt(FeedTPDAllTransports, tpdpaths.AllTransportsPathWithoutSelf)
+	t := mgr.LastSync(FeedTPDRouting)
+	return t, !t.IsZero()
 }
 
 // wrapDiscoveryClientWithCXO returns a CXO-aware wrapper around dc.

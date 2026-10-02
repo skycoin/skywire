@@ -227,3 +227,20 @@ func MergeDailyMetrics(days [][]TransportMetric) []TransportMetric {
 func sortMetricsByID(m []TransportMetric) {
 	sort.Slice(m, func(i, j int) bool { return m[i].ID < m[j].ID })
 }
+
+// MetricsLateWindow is how long after UTC midnight yesterday stays open:
+// bandwidth reports for it keep arriving for a few minutes after the
+// rollover.
+const MetricsLateWindow = 15 * time.Minute
+
+// OpenMetricsDays is how many of the newest days can still change at now:
+// today, plus yesterday inside MetricsLateWindow. Every older day is
+// settled — its figures are final, so a publisher computes it once and
+// never reads it from the store again.
+func OpenMetricsDays(now time.Time) int {
+	now = now.UTC()
+	if now.Sub(now.Truncate(24*time.Hour)) < MetricsLateWindow {
+		return 2
+	}
+	return 1
+}

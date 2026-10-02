@@ -181,13 +181,15 @@ func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUI
 		at = time.Now()
 	}
 	at = at.UTC()
+	if s.beats.recorded(tpID, at) {
+		return nil // this slot is already written (transport_beat_memo.go)
+	}
 	date := at.Format("2006-01-02")
 	idStr := tpID.String()
 	key := tpUptimeKey(idStr, date)
 
 	pipe := s.client.Pipeline()
 
-	pipe.HIncrBy(ctx, key, "count", 1)
 	pipe.HSet(ctx, key, "type", tpType)
 	pipe.HSet(ctx, key, "last_seen", at.Unix())
 	pipe.Expire(ctx, key, 8*24*time.Hour)
@@ -205,6 +207,7 @@ func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUI
 		s.log.WithError(err).Warn("RecordTransportHeartbeat: failed to persist transport heartbeat (uptime data lost for this tick)")
 		return err
 	}
+	s.beats.note(tpID, at)
 	return nil
 }
 
@@ -337,22 +340,21 @@ func (s *redisStore) GetTransportUptimeByVisor(ctx context.Context, pk cipher.Pu
 }
 
 func (s *redisStore) getTransportDailyUptime(ctx context.Context, tpID string, now time.Time) map[string]string {
-	daily := make(map[string]string)
+	pipe := s.client.Pipeline()
+	cmds := make([]*redis.IntCmd, uptimeHistoryDays)
+	dates := make([]string, uptimeHistoryDays)
 	for i := 0; i < uptimeHistoryDays; i++ {
-		date := now.AddDate(0, 0, -i).Format("2006-01-02")
-		countStr, err := s.client.HGet(ctx, tpUptimeKey(tpID, date), "count").Result()
-		if err != nil {
+		dates[i] = now.AddDate(0, 0, -i).Format("2006-01-02")
+		cmds[i] = pipe.BitCount(ctx, tpUptimeTimelineKey(tpID, dates[i]), nil)
+	}
+	_, _ = pipe.Exec(ctx) //nolint:errcheck // per-command results below
+	daily := make(map[string]string)
+	for i, c := range cmds {
+		set, err := c.Result()
+		if err != nil || set == 0 {
 			continue
 		}
-		count, err := strconv.ParseFloat(countStr, 64)
-		if err != nil {
-			continue
-		}
-		pct := (count / expectedHeartbeatsPerDay) * 100
-		if pct > 100 {
-			pct = 100
-		}
-		daily[date] = fmt.Sprintf("%.2f", pct)
+		daily[dates[i]] = fmt.Sprintf("%.2f", float64(set)/timelineSlots*100)
 	}
 	return daily
 }

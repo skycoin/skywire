@@ -288,13 +288,13 @@ type recordingSink struct {
 	reconciles  []recordedReconcile
 }
 
-func (s *recordingSink) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubKey, _, _ uint64) error {
+func (s *recordingSink) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubKey, _, _ uint64, _ string) error {
 	s.mu.Lock()
 	s.bandwidths++
 	s.mu.Unlock()
 	return nil
 }
-func (s *recordingSink) UpdateLatency(_ context.Context, _ string, minMS, maxMS, avgMS float64) error {
+func (s *recordingSink) UpdateLatency(_ context.Context, _ string, minMS, maxMS, avgMS float64, _ string) error {
 	s.mu.Lock()
 	s.latencies = append(s.latencies, struct{ min, max, avg float64 }{minMS, maxMS, avgMS})
 	s.mu.Unlock()

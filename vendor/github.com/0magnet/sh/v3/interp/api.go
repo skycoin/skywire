@@ -151,12 +151,25 @@ type Runner struct {
 	lastExpandExit exitStatus // used to surface exit statuses while expanding fields
 
 	// bgProcs holds all background shells spawned by this runner.
-	// Their PIDs are 1-indexed, from 1 to len(bgProcs), with a "g" prefix
-	// to distinguish them from real PIDs on the host operating system.
+	// Their PIDs are fake — a counter with a "g" prefix, to distinguish them
+	// from real PIDs on the host operating system; see [bgProc.id].
 	//
 	// Note that each shell only tracks its direct children;
 	// subshells do not share nor inherit the background PIDs they can wait for.
-	bgProcs []bgProc
+	//
+	// Finished jobs are dropped from here once jobs or wait has reported
+	// them, as bash reaps them; see [Runner.reapBgProc]. Pointers rather than
+	// values so that removing one does not move the others.
+	bgProcs []*bgProc
+
+	// lastBg is the most recent entry appended to bgProcs, kept so that $!
+	// still expands after the job it named has been reaped.
+	lastBg *bgProc
+
+	// bgProcSeq numbers the fake PIDs in [bgProc.id]. It counts every
+	// background shell ever started by this runner, rather than the length of
+	// bgProcs, so that reaping cannot hand out an id twice.
+	bgProcSeq int
 
 	opts runnerOpts
 
@@ -292,9 +305,84 @@ type bgProc struct {
 	// wait, as after bash's disown.
 	disowned bool
 
-	// notified records that this job's completion has already been reported
-	// by `jobs -n`.
-	notified bool
+	// id is what $! expands to: a fake PID such as "g1", prefixed to
+	// distinguish it from a real PID on the host operating system.
+	id string
+
+	// substitution marks the shells behind process substitutions, which bash
+	// does not list as jobs either. They have no job number, cannot be named
+	// by a job spec, and a bare wait does not wait for them.
+	//
+	// A separate field rather than testing cmd == "", which is what this used
+	// to do: reaping a job clears its command, and a reaped job must not turn
+	// into a process substitution.
+	substitution bool
+
+	// num is the job number that the builtins print and accept, such as the 2
+	// in `[2]+`. It is assigned when the job starts and never changes, since
+	// bash leaves the numbers of the other jobs alone when one is reaped.
+	num int
+
+	// reaped marks a finished job that jobs or wait has already reported. It
+	// is hidden from every builtin from then on, and the next background job
+	// drops it from the table; see [Runner.reapBgProc].
+	reaped bool
+}
+
+// newBgProc returns a background job with the next fake PID and job number.
+//
+// It also drops any jobs already reaped, which is the only place the table
+// shrinks; doing it here keeps it bounded by the jobs still worth reporting,
+// which matters for a long-lived interactive shell.
+func (r *Runner) newBgProc() *bgProc {
+	r.bgProcs = slices.DeleteFunc(r.bgProcs, func(bg *bgProc) bool {
+		return bg.reaped
+	})
+	// bash gives a new job the number after the highest one in the table, and
+	// starts again from one once the table is empty. Note that this is not
+	// the lowest free number: with job 1 reaped and job 2 still running, the
+	// next job is 3 and not 1.
+	num := 0
+	for _, bg := range r.bgProcs {
+		if !bg.substitution && bg.num > num {
+			num = bg.num
+		}
+	}
+	r.bgProcSeq++
+	return &bgProc{
+		done: make(chan struct{}),
+		exit: new(exitStatus),
+		id:   "g" + strconv.Itoa(r.bgProcSeq),
+		num:  num + 1,
+	}
+}
+
+// reapBgProc drops a finished job from the table, as bash does once jobs or
+// wait has reported it. The entry is only marked here and removed by the next
+// [Runner.newBgProc], so that a job the caller still holds stays valid.
+//
+// The caller must have seen the job finish — waited on done, or read running
+// as false and reported it as finished in the same breath. Re-reading it here
+// would reap a job that had just been listed as Running.
+func (r *Runner) reapBgProc(bg *bgProc) {
+	bg.reaped = true
+	// Nothing can name this job again, so let go of what it held.
+	bg.cancel, bg.cmd = nil, ""
+}
+
+// lookupBgProc finds a background job by a string that $! expanded to.
+func (r *Runner) lookupBgProc(arg string) (*bgProc, bool) {
+	for _, bg := range slices.Backward(r.bgProcs) {
+		if !bg.reaped && bg.id == arg {
+			return bg, true
+		}
+	}
+	// A reaped job is gone from the table, but bash still answers for the one
+	// $! names, so that `p=$!; jobs; wait $p` works.
+	if r.lastBg != nil && r.lastBg.id == arg {
+		return r.lastBg, true
+	}
+	return nil, false
 }
 
 type alias struct {

@@ -73,10 +73,10 @@ require (
 	github.com/0magnet/gotop/v4 v4.2.1-0.20260914190639-4f45ea554d47
 	github.com/0magnet/lolcat-go v0.0.0-20260915170035-9435f1eb43a8
 	github.com/0magnet/metrics v1.44.1-0.20260905010813-7e01f8bb5a1c
-	github.com/0magnet/netscrape v0.0.0-20260927204526-ecee4d68db30
+	github.com/0magnet/netscrape v0.0.0-20260930210759-680b944d1da2
 	github.com/0magnet/osnotify v0.0.0-20260906144808-7a227da43a0d
 	github.com/0magnet/plot-go v0.0.0-20260924101040-e98ed611390a
-	github.com/0magnet/realorigin v0.2.2
+	github.com/0magnet/realorigin v0.2.3-0.20260930230111-051e97b884b3
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
 	github.com/0magnet/spheregraph v0.0.0-20260906144810-35af719bf2f1
 	github.com/0magnet/sysinfo v1.1.4-0.20260905172033-914ade4a2548
@@ -128,9 +128,9 @@ require (
 require (
 	github.com/0magnet/afero v1.15.1-0.20260816202415-9f9d46a34dcd
 	github.com/0magnet/cosmos-go v0.0.0-20260915170035-328675079868
-	github.com/0magnet/sh/v3 v3.13.2-0.20260818190530-13d0024da85c
-	github.com/0magnet/websh v0.0.0-20260924101532-76422c7ff9c3
-	github.com/0magnet/xterm-go v0.0.0-20260923132223-00c1a8e687cc
+	github.com/0magnet/sh/v3 v3.13.2-0.20260928172341-4c52a7abff02
+	github.com/0magnet/websh v0.0.0-20260928172614-900c2c6df638
+	github.com/0magnet/xterm-go v0.0.0-20260930222402-0c2fc5d977f0
 	github.com/benhoyt/goawk v1.32.0 // indirect
 )
 
@@ -193,7 +193,7 @@ require (
 	github.com/prometheus/common v0.71.0 // indirect
 	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/rogpeppe/go-internal v1.15.0 // indirect
+	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/wlynxg/anet v0.0.5

@@ -7,6 +7,8 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
+	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // Common is the configuration every discovery-type service shares
@@ -38,10 +40,13 @@ type Common struct {
 	// LogLevel is the minimum log level; Tag names the service's logger.
 	LogLevel string `json:"log_level,omitempty"`
 	Tag      string `json:"tag,omitempty"`
-	// MetricsAddr exposes Prometheus metrics; PprofAddr serves pprof.
-	// Empty disables either.
+	// MetricsAddr exposes Prometheus metrics; empty disables it.
 	MetricsAddr string `json:"metrics_addr,omitempty"`
-	PprofAddr   string `json:"pprof_addr,omitempty"`
+	// PprofMode is cpu, mem, mutex, block, trace or http (see StartPprof);
+	// PprofAddr is the address the http mode serves on. An address with
+	// no mode means http; neither disables profiling.
+	PprofMode string `json:"pprof_mode,omitempty"`
+	PprofAddr string `json:"pprof_addr,omitempty"`
 
 	// Testing runs the service for a test network: the store is in memory
 	// unless Redis is set, and checks that only make sense on the public
@@ -108,13 +113,14 @@ func (c *Common) SurveyKeys() []cipher.PubKey {
 	return deployment.Prod.SurveyWhitelist
 }
 
-// RedisURL is Redis with its scheme, or the local default.
+// RedisURL is Redis with its scheme, or the local default. A unix:// URL (a
+// socket path, for a redis on the same host) is kept as it is.
 func (c *Common) RedisURL() string {
 	u := c.Redis
 	if u == "" {
 		return "redis://localhost:6379"
 	}
-	if !strings.HasPrefix(u, "redis://") && !strings.HasPrefix(u, "rediss://") {
+	if !strings.HasPrefix(u, "redis://") && !strings.HasPrefix(u, "rediss://") && !strings.HasPrefix(u, "unix://") {
 		u = "redis://" + u
 	}
 	return u
@@ -135,4 +141,78 @@ func (c *Common) NonceStoreConfig(plainHTTP bool) storeconfig.Config {
 	sc := c.StoreConfig()
 	sc.Type = NonceStoreType(sc.Type, plainHTTP)
 	return sc
+}
+
+// DefaultPprofAddr is where http profiling serves when no address is set.
+const DefaultPprofAddr = "localhost:6060"
+
+// StartPprof starts profiling as PprofMode and PprofAddr select, the same
+// way in every service and in the visor. The returned func finalizes a
+// file profile (cpu, mem, ...) on shutdown.
+func (c *Common) StartPprof(log *logging.Logger) (stop func()) {
+	mode, addr := c.PprofMode, c.PprofAddr
+	if mode == "" && addr == "" {
+		return func() {}
+	}
+	if mode == "" {
+		mode = "http"
+	}
+	if addr == "" {
+		addr = DefaultPprofAddr
+	}
+	return dmsgcmdutil.InitPProf(log, mode, addr)
+}
+
+// MergeCommon overlays every field src sets onto dst. A service's config
+// file overlays its command-line flags with it, so a key means the same
+// thing in every service's file.
+func MergeCommon(dst *Common, src Common) {
+	if !src.PubKey.Null() {
+		dst.PubKey = src.PubKey
+	}
+	if !src.SecKey.Null() {
+		dst.SecKey = src.SecKey
+	}
+	if src.Addr != "" {
+		dst.Addr = src.Addr
+	}
+	if src.Mode != "" {
+		dst.Mode = src.Mode
+	}
+	if src.DmsgPort != 0 {
+		dst.DmsgPort = src.DmsgPort
+	}
+	if src.Redis != "" {
+		dst.Redis = src.Redis
+	}
+	if src.RedisPoolSize > 0 {
+		dst.RedisPoolSize = src.RedisPoolSize
+	}
+	if src.EntryTimeout != 0 {
+		dst.EntryTimeout = src.EntryTimeout
+	}
+	if src.LogLevel != "" {
+		dst.LogLevel = src.LogLevel
+	}
+	if src.Tag != "" {
+		dst.Tag = src.Tag
+	}
+	if src.MetricsAddr != "" {
+		dst.MetricsAddr = src.MetricsAddr
+	}
+	if src.PprofMode != "" {
+		dst.PprofMode = src.PprofMode
+	}
+	if src.PprofAddr != "" {
+		dst.PprofAddr = src.PprofAddr
+	}
+	if src.Testing {
+		dst.Testing = true
+	}
+	if len(src.SurveyWhitelist) > 0 {
+		dst.SurveyWhitelist = src.SurveyWhitelist
+	}
+	if src.TestEnvironment {
+		dst.TestEnvironment = true
+	}
 }

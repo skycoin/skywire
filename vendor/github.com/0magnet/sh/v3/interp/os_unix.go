@@ -10,10 +10,11 @@ import (
 	"errors"
 	"os/user"
 	"strconv"
+	"strings"
 	"syscall"
 
-	"golang.org/x/sys/unix"
 	"github.com/0magnet/sh/v3/syntax"
+	"golang.org/x/sys/unix"
 )
 
 func mkfifo(path string, mode uint32) error {
@@ -50,3 +51,52 @@ type waitStatus = syscall.WaitStatus
 // isENOEXEC reports whether the kernel refused to execute a file
 // with ENOEXEC, e.g. a script without a shebang line.
 func isENOEXEC(err error) bool { return errors.Is(err, syscall.ENOEXEC) }
+
+// isETXTBSY reports whether the kernel refused to execute a file
+// with ETXTBSY, i.e. a process holds it open for writing.
+func isETXTBSY(err error) bool { return errors.Is(err, syscall.ETXTBSY) }
+
+// killProcess sends a signal to a process that is not one of this runner's
+// jobs, for the kill builtin given a PID it does not know.
+//
+// Non-positive PIDs are refused: kill(2) reads 0 as the caller's process group
+// and -1 as every process the user may signal. Neither is this runner's to
+// signal, and in an embedded interpreter both are the host application's.
+func killProcess(pid, signum int) error {
+	if pid <= 0 {
+		return errors.New("no such process")
+	}
+	return unix.Kill(pid, unix.Signal(signum))
+}
+
+// signalName and signalNum resolve signal names through the running platform
+// rather than a table compiled into the shell.
+//
+// The numbers are not portable and the differences are not obscure: SIGUSR1 is
+// 10 on Linux and 30 on darwin, where 10 is SIGBUS. A hardcoded Linux table
+// meant `kill -USR1 <pid>` on macOS reached a real process with SIGBUS, which
+// is a fault, not a user signal. Asking the platform is the only way to be
+// right on more than one of them, and x/sys/unix already has the tables.
+//
+// SIG is not part of the name here: the builtin accepts and prints USR1, and
+// x/sys/unix wants SIGUSR1, so the prefix is added and stripped at this
+// boundary and nowhere else.
+func signalName(num int) string {
+	return strings.TrimPrefix(unix.SignalName(syscall.Signal(num)), "SIG")
+}
+
+func signalNum(name string) int {
+	return int(unix.SignalNum("SIG" + name))
+}
+
+// maxSignal bounds the search `kill -l` walks to list every signal the
+// platform knows. Signal numbers are small and dense everywhere this builds;
+// 64 covers Linux's realtime range, which is the widest of them.
+//
+// Note that the listing stops short of bash's on Linux all the same:
+// [unix.SignalName] has no name for the realtime signals, so 32 through 64
+// are walked and skipped, where bash prints SIGRTMIN through SIGRTMAX. Naming
+// them means hardcoding where glibc puts SIGRTMIN, which is the kind of table
+// signalName exists to avoid, and they cannot be delivered to a job here in
+// any case.
+const maxSignal = 64

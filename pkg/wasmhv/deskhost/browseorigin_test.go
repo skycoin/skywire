@@ -65,6 +65,7 @@ func TestMeshOriginForClaims(t *testing.T) {
 			{"home.dmsg", "dmsg", "home.dmsg"},
 			{hexPK + ".skynet", "skynet", b32PK + ".skynet"},
 			{hexPK, "dmsg", b32PK + ".dmsg"},
+			{"status.skysocks", "local", "status.skysocks"},
 		} {
 			net, res, ok := meshOriginFor(tc.host)
 			if !ok || net != tc.network || res != tc.resolver {

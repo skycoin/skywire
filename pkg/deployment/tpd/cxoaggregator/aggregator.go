@@ -40,8 +40,10 @@ package cxoaggregator
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"hash/fnv"
 	"os"
 	"strings"
 	"sync"
@@ -75,8 +77,8 @@ import (
 // in cmd/svc/transport-discovery/commands/root.go composes a sink
 // adapter that delegates each method to the appropriate place.
 type Sink interface {
-	UpdateBandwidth(ctx context.Context, transportID string, reporterPK cipher.PubKey, sent, recv uint64) error
-	UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64) error
+	UpdateBandwidth(ctx context.Context, transportID string, reporterPK cipher.PubKey, sent, recv uint64, tpType string) error
+	UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64, tpType string) error
 	// UpdateThroughput records a transport's passively-observed PEAK
 	// goodput estimate (bytes/sec), carried on the sharded telemetry feed
 	// alongside the cumulative sent/recv counters. It is a real capacity
@@ -302,6 +304,19 @@ type Aggregator struct {
 	// ingest bounds how many store writes run at once across all feeds (see
 	// maxConcurrentIngest). Nil means unbounded (tests build bare Aggregators).
 	ingest chan struct{}
+
+	// tel skips re-applying telemetry shards a Root re-delivers unchanged and
+	// paces uptime heartbeats (see telemetry_dedup.go).
+	tel telemetryState
+	// pace holds telemetry back to one apply per window (telemetry_pace.go).
+	pace    telemetryPacer
+	runOnce sync.Once
+
+	// roots holds, per reporter, the tree hash of the last Root applied in
+	// full and when, so a Root that repeats it is not re-applied (see
+	// rootIsRepeat). Guarded by rootsMu; zero value usable.
+	rootsMu sync.Mutex
+	roots   map[cipher.PubKey]appliedRoot
 }
 
 // maxConcurrentIngest caps concurrent leaf dispatches and list reconciles.
@@ -335,6 +350,9 @@ func (a *Aggregator) acquireIngest() func() {
 type cachedList struct {
 	entries []*transport.Entry
 	version string
+	// sum hashes the leaf bytes it was decoded from: a Root whose leaf is
+	// unchanged (a visor republishes every heartbeat) reuses entries.
+	sum uint64
 }
 
 // ensureConnTimeout bounds each dial-back to a visor's CXO node so an
@@ -501,6 +519,7 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggrega
 		OnFeedReclaimed: func(feed skycipher.PubKey) {
 			a.mu.Lock()
 			delete(a.lastList, feed)
+			a.forgetRoot(cipher.PubKey(feed))
 			a.mu.Unlock()
 		},
 	})
@@ -514,7 +533,10 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggrega
 
 // Run starts the reconcile + cleanup loops. Returns immediately; they
 // run until ctx is canceled or Close is called. Idempotent.
-func (a *Aggregator) Run(ctx context.Context) { a.core.Run(ctx) }
+func (a *Aggregator) Run(ctx context.Context) {
+	a.runOnce.Do(func() { go a.flushPaced(ctx) })
+	a.core.Run(ctx)
+}
 
 // Close stops the loops and tears down the CXO node. Idempotent.
 func (a *Aggregator) Close() error { return a.core.Close() }
@@ -560,14 +582,15 @@ func (a *Aggregator) ensureConn(feedPK skycipher.PubKey) {
 		copy(pk[:], feedPK[:])
 		ctx, cancel := context.WithTimeout(context.Background(), ensureConnTimeout)
 		defer cancel()
-		if _, err := a.cxoNode.DMSG().ConnectPK(ctx, pk); err != nil {
+		conn, err := a.cxoNode.DMSG().ConnectPK(ctx, pk)
+		if err != nil {
 			a.log.WithError(err).WithField("visor", cipher.PubKey(feedPK)).
 				Debug("CXO aggregator: dial-back to visor failed; will retry on next Root")
 			return
 		}
-		// Warm conn established/confirmed — nudge a reconcile so we subscribe
-		// on it promptly (the core's reconcile is idempotent).
-		a.core.Nudge()
+		// Warm conn established/confirmed — subscribe on it now rather than
+		// at the next reconcile tick.
+		a.core.SubscribeConn(conn)
 	}()
 }
 
@@ -577,6 +600,9 @@ func (a *Aggregator) ensureConn(feedPK skycipher.PubKey) {
 // reporter PK for any bandwidth dispatches.
 func (a *Aggregator) handleRootFilled(r *registry.Root) {
 	if r == nil || len(r.Refs) == 0 {
+		return
+	}
+	if rep := cipher.PubKey(r.Pub); rep != (cipher.PubKey{}) && a.rootIsRepeat(rep, r, time.Now()) {
 		return
 	}
 	// One slot per Root, held across decode and dispatch: taking it per leaf
@@ -741,11 +767,8 @@ func (a *Aggregator) reconcileTargeted(conn *node.Conn, r *registry.Root) {
 
 		entries, version, ok := a.fetchDiscoveryLeaf(conn, r)
 		if ok {
-			// Fresh full snapshot: cache it (so a later failed fetch can
-			// re-apply it) and reconcile.
-			a.mu.Lock()
-			a.lastList[r.Pub] = cachedList{entries: entries, version: version}
-			a.mu.Unlock()
+			// Fresh snapshot (cached by the fetch, so a later failed fetch
+			// can re-apply it): reconcile.
 			a.applyReconcile(entries, reporter, version)
 			return
 		}
@@ -791,6 +814,17 @@ func (a *Aggregator) fetchDiscoveryLeafWithGetter(g skyobject.Getter, r *registr
 	if !found || leaf == nil {
 		return nil, "", false
 	}
+	// Most Roots republish an unchanged list: skip the JSON decode, which was
+	// ~5% of TPD CPU on prod01 (2026-09-30).
+	h := fnv.New64a()
+	h.Write(leaf) //nolint:errcheck,gosec
+	sum := h.Sum64()
+	a.mu.Lock()
+	prev, had := a.lastList[r.Pub]
+	a.mu.Unlock()
+	if had && prev.sum == sum {
+		return prev.entries, prev.version, true
+	}
 	leaf = cxoutils.Gunzip(leaf) // publisher may gzip; raw bodies pass through
 	var list transportListLeaf
 	if err := json.Unmarshal(leaf, &list); err != nil {
@@ -800,7 +834,13 @@ func (a *Aggregator) fetchDiscoveryLeafWithGetter(g skyobject.Getter, r *registr
 	}
 	a.log.WithField("visor", reporter).WithField("path", path).
 		Debug("CXO aggregator: targeted discovery-leaf fetch landed transport list")
-	return list.entries(reporter), list.Version, true
+	entries = list.entries(reporter)
+	a.mu.Lock()
+	if a.lastList != nil {
+		a.lastList[r.Pub] = cachedList{entries: entries, version: list.Version, sum: sum}
+	}
+	a.mu.Unlock()
+	return entries, list.Version, true
 }
 
 // applyReconcile hands a reporter's full transport set to the sink. Shared by
@@ -1036,8 +1076,15 @@ func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter c
 		a.log.WithError(err).WithField("path", path).Debug("CXO aggregator: telemetry shard decode failed")
 		return
 	}
+	now := time.Now().UTC()
+	sum := sha256.Sum256(leaf)
+	unchanged := a.tel.unchanged(reporter, shard, sum, now)
 	ctx, cancel := context.WithTimeout(context.Background(), telemetryShardTimeout)
 	defer cancel()
+	var (
+		due   []heldSnap
+		beats []beatItem
+	)
 	for i := range entries {
 		if ctx.Err() != nil {
 			// Every remaining write would fail at once; say so once.
@@ -1051,12 +1098,31 @@ func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter c
 		if telemetrywire.ShardOf(e.ID) != shard {
 			continue
 		}
-		var at time.Time
-		if e.SampledAtUnix > 0 {
-			at = time.Unix(int64(e.SampledAtUnix), 0).UTC()
+		tpType := telemetrywire.CodeToType(e.Type)
+		if a.beatWanted(e.ID, tpType, now) {
+			// A changed row is dated by its sample time; an unchanged one by
+			// now, since the Root only proves the transport is up now.
+			at := now
+			if !unchanged && e.SampledAtUnix > 0 {
+				at = time.Unix(int64(e.SampledAtUnix), 0).UTC()
+			}
+			beats = append(beats, beatItem{id: e.ID, tpType: tpType, at: at})
 		}
-		a.applyTelemetry(ctx, e.ID, reporter, e.SentBytes, e.RecvBytes, float64(e.ThroughputBps),
-			float64(e.LatMin), float64(e.LatMax), float64(e.LatAvg), telemetrywire.CodeToType(e.Type), at)
+		if unchanged {
+			continue // already applied; the Root only proves the transport is up now
+		}
+		k := telKey{id: e.ID, reporter: reporter}
+		snap := telSnap{sent: e.SentBytes, recv: e.RecvBytes, throughput: float64(e.ThroughputBps),
+			latMin: float64(e.LatMin), latMax: float64(e.LatMax), latAvg: float64(e.LatAvg), tpType: tpType}
+		if s, ok := a.pace.offer(k, snap, now); ok {
+			due = append(due, heldSnap{k: k, s: s})
+		}
+	}
+	// One batch each for the shard's due snapshots and heartbeats.
+	a.applyDue(ctx, due)
+	a.recordBeats(ctx, beats)
+	if !unchanged {
+		a.tel.applied(reporter, shard, sum, now)
 	}
 }
 
@@ -1065,7 +1131,22 @@ func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter c
 // latency (partial-zero-gated), and per-type uptime heartbeat.
 func (a *Aggregator) applyTelemetry(ctx context.Context, id uuid.UUID, reporter cipher.PubKey,
 	sent, recv uint64, throughputBps, latMin, latMax, latAvg float64, tpType string, at time.Time) {
-	if err := a.sink.UpdateBandwidth(ctx, id.String(), reporter, sent, recv); err != nil {
+	// The uptime heartbeat is paced on its own (telemetry_dedup.go).
+	a.heartbeat(ctx, id, tpType, at)
+	k := telKey{id: id, reporter: reporter}
+	s := telSnap{sent: sent, recv: recv, throughput: throughputBps,
+		latMin: latMin, latMax: latMax, latAvg: latAvg, tpType: tpType}
+	if s, ok := a.pace.offer(k, s, time.Now()); ok {
+		a.applySnap(ctx, k, s)
+	}
+}
+
+// applySnap writes one telemetry snapshot to the store.
+func (a *Aggregator) applySnap(ctx context.Context, k telKey, s telSnap) {
+	id, reporter := k.id, k.reporter
+	sent, recv, throughputBps, tpType := s.sent, s.recv, s.throughput, s.tpType
+	latMin, latMax, latAvg := s.latMin, s.latMax, s.latAvg
+	if err := a.sink.UpdateBandwidth(ctx, id.String(), reporter, sent, recv, tpType); err != nil {
 		a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateBandwidth failed")
 	}
 	if throughputBps > 0 {
@@ -1078,20 +1159,28 @@ func (a *Aggregator) applyTelemetry(ctx context.Context, id uuid.UUID, reporter 
 	// a partial-zero snapshot from an edge whose probe never completed
 	// can't clobber a good record written by the other edge.
 	if latMin > 0 && latMax > 0 && latAvg > 0 {
-		if err := a.sink.UpdateLatency(ctx, id.String(), latMin, latMax, latAvg); err != nil {
+		if err := a.sink.UpdateLatency(ctx, id.String(), latMin, latMax, latAvg, tpType); err != nil {
 			a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateLatency failed")
 		}
 	}
-	// Heartbeat into the per-transport uptime tables (tp-uptime:*),
-	// previously written only by the HTTP /transports/ register path.
-	// Type is empty on snapshots from pre-uptime visors / unknown-type
-	// entries — skip those rather than push a heartbeat the store would
-	// drop on the type filter (RecordTransportHeartbeat early-returns on
-	// any non-p2p type, but routing here saves the redis round-trip).
-	if tpType != "" {
-		if err := a.sink.RecordTransportHeartbeat(ctx, id, tpType, at); err != nil {
-			a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: RecordTransportHeartbeat failed")
-		}
+}
+
+// heartbeat records a transport's uptime heartbeat, at most once per
+// heartbeatEvery whichever edge reports it (see telemetry_dedup.go). at is
+// when the transport was seen up; zero means now.
+func (a *Aggregator) heartbeat(ctx context.Context, id uuid.UUID, tpType string, at time.Time) {
+	if tpType == "" {
+		return
+	}
+	now := time.Now().UTC()
+	if at.IsZero() {
+		at = now
+	}
+	if !a.tel.beatDue(id, now) {
+		return
+	}
+	if err := a.sink.RecordTransportHeartbeat(ctx, id, tpType, at); err != nil {
+		a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: RecordTransportHeartbeat failed")
 	}
 }
 
@@ -1204,3 +1293,45 @@ func (a *Aggregator) Ingest(r *registry.Root) { a.core.Ingest(r) }
 
 // Stats reports the aggregator's current state.
 func (a *Aggregator) Stats() cxoaggregate.Stats { return a.core.Stats() }
+
+// noChangeFullEvery is how often a feed whose Roots stop changing is still
+// applied in full: inside both the 5-minute registration TTL its transport
+// list refreshes and the 90 s uptime heartbeat cadence (telemetry_dedup.go).
+const noChangeFullEvery = 90 * time.Second
+
+// appliedRoot is the tree hash of a reporter's last Root applied in full.
+type appliedRoot struct {
+	tree skycipher.SHA256
+	at   time.Time
+}
+
+// rootIsRepeat reports whether r carries the same tree as the reporter's
+// last Root applied in full, applied less than noChangeFullEvery ago.
+//
+// A visor republishes its Root every 45 s even when nothing changed; the
+// objects are content-addressed, so on the wire that heartbeat is only the
+// small signed Root — a "no change". TPD applied every such Root as if it
+// were new: every telemetry shard and the whole transport list, for every
+// visor, every 45 s. A repeat is skipped; the periodic full apply keeps
+// registrations and uptime alive.
+func (a *Aggregator) rootIsRepeat(reporter cipher.PubKey, r *registry.Root, now time.Time) bool {
+	tree := r.Refs[0].Hash
+	a.rootsMu.Lock()
+	defer a.rootsMu.Unlock()
+	if a.roots == nil {
+		a.roots = make(map[cipher.PubKey]appliedRoot)
+	}
+	if last, ok := a.roots[reporter]; ok && last.tree == tree && now.Sub(last.at) < noChangeFullEvery {
+		return true
+	}
+	a.roots[reporter] = appliedRoot{tree: tree, at: now}
+	return false
+}
+
+// forgetRoot drops a reporter's applied-Root record, when its feed is
+// reclaimed.
+func (a *Aggregator) forgetRoot(reporter cipher.PubKey) {
+	a.rootsMu.Lock()
+	delete(a.roots, reporter)
+	a.rootsMu.Unlock()
+}

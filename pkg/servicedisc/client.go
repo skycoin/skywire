@@ -77,6 +77,17 @@ type EntrySink interface {
 	DelEntry(entry Service)
 }
 
+// KeepaliveSink is an EntrySink that can also keep the registered entries
+// alive by itself (the visor's SD-registration-over-CXO feed, whose Roots
+// refresh the SD's stored entries). While KeepaliveHealthy reports healthy on
+// the epoch of the last HTTP registration, an unchanged heartbeat skips HTTP.
+// A new epoch (the SD resubscribed, possibly after losing its store) makes the
+// next heartbeat register over HTTP once.
+type KeepaliveSink interface {
+	EntrySink
+	KeepaliveHealthy() (healthy bool, epoch uint64)
+}
+
 // HTTPClient is responsible for interacting with the service-discovery
 type HTTPClient struct {
 	log            logrus.FieldLogger
@@ -86,6 +97,11 @@ type HTTPClient struct {
 	entryMx        sync.Mutex // only used if RegisterEntry && DeleteEntry functions are used.
 	client         *http.Client
 	clientPublicIP string
+	// posted is the entry as the next unchanged heartbeat would send it,
+	// and postedEpoch the CXO keepalive epoch when it was last accepted over
+	// HTTP. Guarded by entryMx.
+	posted      []byte
+	postedEpoch uint64
 }
 
 // NewClient creates a new HTTPClient.
@@ -281,13 +297,37 @@ func (c *HTTPClient) registerEntry(ctx context.Context) (Service, error) {
 		}
 	}
 
+	if c.cxoKeepsAlive() {
+		c.log.Debug("Entry unchanged and kept alive over CXO; skipping HTTP re-registration")
+		return c.entry, nil
+	}
+
 	entry, err := c.postEntry(ctx)
 	if err != nil {
 		return Service{}, err
 	}
 	c.entry = entry
+	c.posted, _ = json.Marshal(&c.entry) //nolint:errcheck // a nil memo only forces the next POST
+	if ks, ok := c.conf.Sink.(KeepaliveSink); ok {
+		_, c.postedEpoch = ks.KeepaliveHealthy()
+	}
 	c.log.WithField("entry", c.entry.String()).Debug("Entry registered successfully")
 	return c.entry, nil
+}
+
+// cxoKeepsAlive reports whether this heartbeat can skip the HTTP POST: the
+// entry is byte-identical to the one last accepted, and the sink is keeping it
+// alive over CXO on the epoch of that registration. Caller holds entryMx.
+func (c *HTTPClient) cxoKeepsAlive() bool {
+	ks, ok := c.conf.Sink.(KeepaliveSink)
+	if !ok || c.posted == nil {
+		return false
+	}
+	if healthy, epoch := ks.KeepaliveHealthy(); !healthy || epoch != c.postedEpoch {
+		return false
+	}
+	raw, err := json.Marshal(&c.entry)
+	return err == nil && bytes.Equal(raw, c.posted)
 }
 
 // postEntry calls 'POST /api/services' and sends current service entry
@@ -366,6 +406,8 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) error {
 func (c *HTTPClient) deleteEntry(ctx context.Context) (removed Service, err error) {
 	c.entryMx.Lock()
 	defer c.entryMx.Unlock()
+	// The next register must reach the SD over HTTP.
+	c.posted = nil
 
 	auth, err := c.Auth(ctx)
 	if err != nil {

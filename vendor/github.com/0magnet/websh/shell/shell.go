@@ -50,6 +50,8 @@ type Shell struct {
 
 	parser  *syntax.Parser
 	pending strings.Builder // continuation lines of an incomplete input
+	// reportJobs is reportJobsSrc parsed once; see ReportJobs.
+	reportJobs *syntax.File
 	// exited records what Run found before it reset the runner. See Exited.
 	exited bool
 }
@@ -202,6 +204,36 @@ func (s *Shell) Run(ctx context.Context, line string) (needMore bool, err error)
 		s.Runner.Reset()
 	}
 	return false, err
+}
+
+// reportJobsSrc is what [Shell.ReportJobs] runs. `jobs -n` lists the jobs that
+// finished since the last report, which is what bash prints before a prompt.
+//
+// $? is saved and restored around it because the report is the shell's doing
+// and not the user's: running it must not change the status of the command
+// they last ran, and every builtin sets one. The status is parked in a
+// variable that stays set afterwards, which is the price of driving this from
+// outside the interpreter rather than from its own prompt loop.
+const reportJobsSrc = "__websh_exit_status=$?; jobs -n; (exit $__websh_exit_status)"
+
+// ReportJobs announces the background jobs that have finished since the last
+// call, the way bash does before drawing a prompt. Without it a job that ended
+// is never mentioned at all: nothing in the interpreter reports a job unasked.
+//
+// It is also what keeps the job table bounded, since the interpreter drops a
+// finished job once something has reported it. A session that never called
+// this would accumulate every job it ever backgrounded.
+func (s *Shell) ReportJobs(ctx context.Context) {
+	if s.reportJobs == nil {
+		file, err := s.parser.Parse(strings.NewReader(reportJobsSrc), "websh")
+		if err != nil {
+			return
+		}
+		s.reportJobs = file
+	}
+	// The report is advisory: a failure to list jobs is not the user's
+	// problem and must not interrupt the prompt.
+	_ = s.Runner.Run(ctx, s.reportJobs) //nolint:errcheck
 }
 
 // Exited reports whether the line just run exited the shell — the

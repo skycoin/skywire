@@ -25,10 +25,14 @@ import (
 // a few milliseconds, and rebuilding every tick keeps per-edge latency fresh for
 // latency-weighted routing. DefaultCacheRefresh bounds staleness.
 type GraphCache struct {
-	store   store.Store
-	refresh time.Duration
-	log     logrus.FieldLogger
-	cur     atomic.Pointer[Graph]
+	store store.Store
+	// sharedURL names the redis whose live transport set, held by a TPD in
+	// this process, the graph is built from instead of redis
+	// (store.SharedLiveStore). Empty: always read store.
+	sharedURL string
+	refresh   time.Duration
+	log       logrus.FieldLogger
+	cur       atomic.Pointer[Graph]
 }
 
 // DefaultCacheRefresh is the graph-cache rebuild cadence when none is given.
@@ -47,14 +51,37 @@ func NewGraphCache(s store.Store, refresh time.Duration, log logrus.FieldLogger)
 // Get returns the current cached full graph, or nil before the first build.
 func (c *GraphCache) Get() *Graph { return c.cur.Load() }
 
+// ShareFrom makes the cache build from the live transport set of a TPD in
+// this process that writes to the redis at url, when there is one — no
+// redis read per rebuild. Call before Run.
+func (c *GraphCache) ShareFrom(url string) { c.sharedURL = url }
+
+// source is the store a rebuild reads: a co-hosted TPD's, else its own.
+func (c *GraphCache) source() store.Store {
+	if c.sharedURL != "" {
+		if s, ok := store.SharedLiveStore(c.sharedURL); ok {
+			return s
+		}
+	}
+	return c.store
+}
+
 // Rebuild reads the transport set once and swaps in a freshly built full graph.
 // On a read error the previous graph is kept and the error returned.
 func (c *GraphCache) Rebuild(ctx context.Context) (*Graph, error) {
-	entries, err := allTransportsForGraph(ctx, c.store)
+	src := c.source()
+	entries, err := allTransportsForGraph(ctx, src)
 	if err != nil {
 		return c.cur.Load(), err
 	}
-	g := graphFromEntries(c.store, entries)
+	g := graphFromEntries(src, entries)
+	if prev := c.cur.Load(); prev != nil {
+		// Hand the landmark tables on (see landmarkMaxAge): the previous
+		// graph's own build, or what it inherited if it never needed one.
+		if g.inherited = prev.built.Load(); g.inherited == nil {
+			g.inherited = prev.inherited
+		}
+	}
 	c.cur.Store(g)
 	if c.log != nil {
 		c.log.Debugf("route-finder graph cache rebuilt: %d nodes from %d transports", len(g.graph), len(entries))

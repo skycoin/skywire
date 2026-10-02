@@ -484,35 +484,49 @@ func (browseProxyDialer) Dial(network, addr string) (net.Conn, error) {
 }
 
 func (v *Visor) proxyClearnetFetch(req BrowseClearnetRequest) (*visorapi.SkynetHTTPResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), browseFetchTimeout)
+	defer cancel()
+	resp, err := v.proxyClearnetDo(ctx, req, browseFetchTimeout)
+	if err != nil {
+		return nil, err
+	}
+	return readBrowseResp(resp)
+}
+
+// proxyClearnetDo sends req through req.Proxy and returns the response with
+// its body unread. timeout bounds the whole exchange, body included; zero
+// leaves that to ctx (a stream the reader may take long over).
+func (v *Visor) proxyClearnetDo(ctx context.Context, req BrowseClearnetRequest, timeout time.Duration) (*http.Response, error) {
 	pu, err := parseBrowseProxy(req.Proxy)
 	if err != nil {
 		return nil, err
 	}
-	// One transport per request, so a kept-alive connection could never be
-	// reused, only left open: each one held its proxy stream, and in a browser
-	// tab the skysocks-client stopped answering after the first page.
-	tr := &http.Transport{
-		TLSHandshakeTimeout: 20 * time.Second,
-		TLSClientConfig:     &tls.Config{RootCAs: browseRootCAs(), MinVersion: tls.VersionTLS12},
-		DisableKeepAlives:   true,
-	}
-	switch pu.Scheme {
-	case "socks5", "socks5h":
-		// A proxy that does not answer (an unroutable address) must fail in
-		// seconds, not after the OS connect timeout: the browser is waiting.
-		sd, err := proxy.SOCKS5("tcp", pu.Host, nil, browseProxyDialer{})
-		if err != nil {
-			return nil, err
+	// One transport per proxy, shared and bounded (api_browse_client.go).
+	tr, err := browseTransport(pu.String(), func() (*http.Transport, error) {
+		tr := &http.Transport{
+			TLSHandshakeTimeout: 20 * time.Second,
+			TLSClientConfig:     &tls.Config{RootCAs: browseRootCAs(), MinVersion: tls.VersionTLS12},
 		}
-		tr.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) { return sd.Dial(network, addr) }
-	default:
-		tr.Proxy = http.ProxyURL(pu)
-		tr.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) {
-			return vnet.DialTimeout(network, addr, browseProxyDialTimeout)
+		switch pu.Scheme {
+		case "socks5", "socks5h":
+			// A proxy that does not answer (an unroutable address) must fail in
+			// seconds, not after the OS connect timeout: the browser is waiting.
+			sd, err := proxy.SOCKS5("tcp", pu.Host, nil, browseProxyDialer{})
+			if err != nil {
+				return nil, err
+			}
+			tr.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) { return sd.Dial(network, addr) }
+		default:
+			tr.Proxy = http.ProxyURL(pu)
+			tr.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) {
+				return vnet.DialTimeout(network, addr, browseProxyDialTimeout)
+			}
 		}
+		return tr, nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), browseFetchTimeout)
-	defer cancel()
 	method := req.Method
 	if method == "" {
 		method = "GET"
@@ -526,11 +540,29 @@ func (v *Visor) proxyClearnetFetch(req BrowseClearnetRequest) (*visorapi.SkynetH
 		return nil, err
 	}
 	applyBrowseHeaders(httpReq, req.Header)
-	resp, err := (&http.Client{Transport: tr, Timeout: browseFetchTimeout}).Do(httpReq)
+	applyPageCookies(httpReq, browseJar())
+	// The client follows redirects itself, so a Set-Cookie on a redirect (a
+	// login's 302 is the usual place) would reach the jar but never the page.
+	// Carry each hop's onto the final response.
+	var hopCookies []string
+	client := &http.Client{Transport: tr, Jar: browseJar(), Timeout: timeout,
+		CheckRedirect: func(next *http.Request, via []*http.Request) error {
+			if next.Response != nil {
+				hopCookies = append(hopCookies, next.Response.Header.Values("Set-Cookie")...)
+			}
+			if len(via) >= 10 {
+				return errors.New("stopped after 10 redirects")
+			}
+			return nil
+		}}
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("fetch via proxy %s: %w", pu.Redacted(), err)
 	}
-	return readBrowseResp(resp)
+	if len(hopCookies) > 0 {
+		resp.Header["Set-Cookie"] = append(hopCookies, resp.Header.Values("Set-Cookie")...)
+	}
+	return resp, nil
 }
 
 // applyBrowseHeaders copies the caller's request headers onto an outgoing
@@ -547,7 +579,11 @@ func applyBrowseHeaders(httpReq *http.Request, h map[string]string) {
 	for k, v := range h {
 		switch strings.ToLower(k) {
 		case "host", "connection", "keep-alive", "proxy-connection",
-			"transfer-encoding", "upgrade", "te", "trailer", "content-length":
+			"transfer-encoding", "upgrade", "te", "trailer", "content-length",
+			// Go negotiates compression itself and hands back decoded bytes;
+			// a page-set encoding would return compressed bytes no browser
+			// decodes on a response a service worker built.
+			"accept-encoding":
 			continue
 		}
 		httpReq.Header.Set(k, v)

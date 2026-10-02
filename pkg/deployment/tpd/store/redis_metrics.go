@@ -157,14 +157,21 @@ func (s *redisStore) GetNetworkMetrics(ctx context.Context, query MetricsQuery) 
 		Cumulative: &CumulativeAggregate{ByType: make(map[string]*TypeMetricAggregate)},
 	}
 
-	// Get all transports to aggregate (with QoS data for latency)
-	entries, err := s.getAllTransportsWithQoS(ctx, true)
-	if err != nil && !errors.Is(err, ErrTransportNotFound) {
+	// The running totals answer every day they are complete for (see
+	// redis_daily_totals.go); only the rest is scanned transport by
+	// transport.
+	dates := MetricsWindowDates(now, days)
+	totals, err := s.dailyTotals(ctx, dates, query)
+	if err != nil {
 		return nil, err
 	}
 
-	if len(entries) == 0 {
-		return response, nil
+	var entries []*transport.Entry
+	if len(totals) < days {
+		entries, err = s.getAllTransportsWithQoS(ctx, true)
+		if err != nil && !errors.Is(err, ErrTransportNotFound) {
+			return nil, err
+		}
 	}
 
 	// Build all bandwidth keys and fetch via pipeline
@@ -182,6 +189,9 @@ func (s *redisStore) GetNetworkMetrics(ctx context.Context, query MetricsQuery) 
 	for d := 0; d < days; d++ {
 		t := now.AddDate(0, 0, -d)
 		dateStr := t.Format("2006-01-02")
+		if _, done := totals[dateStr]; done {
+			continue
+		}
 		for i, entry := range entries {
 			if !ix.mayHave(entry.ID, t, d) {
 				continue
@@ -260,6 +270,13 @@ func (s *redisStore) GetNetworkMetrics(ctx context.Context, query MetricsQuery) 
 
 	// Compute averages and build response
 	for d := 0; d < days; d++ {
+		if agg, done := totals[dates[d]]; done {
+			if agg != nil {
+				response.Daily = append(response.Daily, *agg)
+				addCumulative(response.Cumulative, agg)
+			}
+			continue
+		}
 		dd, ok := dayMap[d]
 		if !ok {
 			continue
@@ -546,9 +563,9 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		idStrs[i] = filtered[i].entry.ID.String()
 	}
 
-	// Fetch latency data via pipeline. Reads the durable lat:<id> key
-	// (35-day TTL) rather than the tp:<id> registration blob — survives
-	// the 5-minute registration churn that bandwidth has always survived.
+	// Fetch latency data via pipeline. Reads the lat:<id> key rather than
+	// the tp:<id> registration blob, which a missed re-registration drops;
+	// it lives for latencyTTL after the transport's last report.
 	var latencyResults []*redis.StringCmd
 	if query.Latency {
 		pipe := s.client.Pipeline()
