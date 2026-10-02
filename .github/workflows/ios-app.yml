@@ -55,9 +55,20 @@ jobs:
 
       # Plain Foundation, so on the Mac: the API client against the recorded
       # core answers, the phone profile against the Android app's output,
-      # the log parser. WalletCore joins at M5.
+      # the log parser.
       - name: CoreClient tests
         run: cd ios/Packages/CoreClient && swift test
+
+      # The wallet's one third-party crypto library is vendored: prove the
+      # copy is bitcoin-core/secp256k1's tag, byte for byte, before testing
+      # anything built on it.
+      - name: WalletCore's libsecp256k1 is upstream's
+        run: ios/scripts/import-secp256k1.sh --verify
+
+      # The Kotlin wallet-core's vectors and fixtures replayed against the
+      # Swift port (the live suites skip without SKYWIRE_NET_TESTS=1).
+      - name: WalletCore tests
+        run: cd ios/Packages/WalletCore && swift test
 
       # SkywireTests (unhosted: the core starts and stops in the test process,
       # and it dials the real dmsg network) and SkywireAppTests (hosted by the
