@@ -11,8 +11,8 @@ import { LogsComponent } from '../node/logs/logs.component';
  *  - `component`: a native Angular component rendered via ngComponentOutlet with
  *    its `embeddedNodeKey` input set to the visor PK (skychat, logs, …).
  *  - `iframe`: apps that are their own router sub-tree or a separately-served SPA
- *    are hosted in an iframe (vpn → the /#/vpn/<pk>/status route; wallet → the
- *    served skycoin-web app). The shared shell (top bar + hamburger) wraps either.
+ *    are hosted in an iframe (vpn → the /#/vpn/<pk>/status route). The shared
+ *    shell (top bar + hamburger) wraps either.
  */
 interface AppMount {
   title: string;
@@ -24,7 +24,6 @@ const APP_MOUNTS: Record<string, AppMount> = {
   skychat: { title: 'Skychat', component: SkychatComponent },
   logs: { title: 'Logs', component: LogsComponent },
   vpn: { title: 'VPN', iframe: (pk) => '/#/vpn/' + pk + '/status' },
-  wallet: { title: 'Wallet', iframe: () => '/wallet/' },
 };
 
 /**

@@ -9,7 +9,14 @@
     "test": "ng test",
     "test-headless": "ng test --watch=false --browsers=ChromeHeadlessNoSandbox",
     "lint": "ng lint",
-    "lint-fix": "ng lint --fix"
+    "lint-fix": "ng lint --fix",
+    "sync-wallet": "sh ../../scripts/sync-skycoin-wallet.sh",
+    "prebuild": "npm run sync-wallet",
+    "prestart": "npm run sync-wallet",
+    "prestart-no-ssl": "npm run sync-wallet",
+    "pretest": "npm run sync-wallet",
+    "pretest-headless": "npm run sync-wallet",
+    "prelint": "npm run sync-wallet"
   },
   "private": true,
   "dependencies": {
@@ -23,7 +30,9 @@
     "@angular/router": "^22.2.1",
     "@ngx-translate/core": "^18.0.0",
     "@ngx-translate/http-loader": "^17.0.0",
-    "bignumber.js": "^10.0.2",
+    "bignumber.js": "^11.1.5",
+    "bip39": "^3.1.0",
+    "buffer": "^6.0.3",
     "chart.js": "^4.5.1",
     "rxjs": "^7.8.2",
     "tslib": "^2.0.0",

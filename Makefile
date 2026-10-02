@@ -723,7 +723,7 @@ check-onpush:  ## Fail if an OnPush component has an unmarked asynchronous callb
 	node ci-scripts/check-onpush-marks.js $(MANAGER_UI_DIR)/src
 
 check-scss-imports:  ## Fail if a stylesheet other than styles.scss uses @import (the build silences that deprecation for Bootstrap 5 there)
-	@bad=$$(grep -rnE '^[[:space:]]*@import' $(MANAGER_UI_DIR)/src --include='*.scss' | grep -vE '\.css["'\'']|url\(' | grep -v '^$(MANAGER_UI_DIR)/src/styles.scss:'); \
+	@bad=$$(grep -rnE '^[[:space:]]*@import' $(MANAGER_UI_DIR)/src --include='*.scss' --exclude-dir=skycoin-wallet | grep -vE '\.css["'\'']|url\(' | grep -v '^$(MANAGER_UI_DIR)/src/styles.scss:'); \
 	if [ -n "$$bad" ]; then echo "Sass @import outside styles.scss (use @use):"; echo "$$bad"; exit 1; fi; echo "only styles.scss uses Sass @import."
 
 check-ui: build-ui  ## Fail if the committed manager UI bundle is stale vs a fresh build

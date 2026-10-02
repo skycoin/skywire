@@ -1,0 +1,18 @@
+<div class="full-app-shell">
+  <div class="full-app-bar">
+    <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="menu">
+      <mat-icon>menu</mat-icon>
+    </button>
+    <mat-menu #menu="matMenu">
+      <button mat-menu-item (click)="goHome()">
+        <mat-icon>home</mat-icon>
+        <span>{{ 'nodes.title' | translate }}</span>
+      </button>
+    </mat-menu>
+    <span class="full-app-title">{{ 'wallet.title' | translate }}</span>
+  </div>
+
+  <div class="full-app-body">
+    <router-outlet></router-outlet>
+  </div>
+</div>

@@ -26,6 +26,7 @@ import (
 	"sync"
 
 	"github.com/go-chi/chi/v5"
+	wasmtinygo "github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo"
 	skycoinwebgui "github.com/skycoin/skycoin/src/skycoin-web/src/gui"
 
 	"github.com/skycoin/skywire/pkg/btcgateway"
@@ -426,4 +427,34 @@ func isHexStr(s string) bool {
 		}
 	}
 	return s != ""
+}
+
+// walletCipherHandler answers the cipher the dashboard's wallet route loads:
+// assets/scripts/wasm_exec.js, which it adds to the page, and
+// assets/scripts/skycoin-lite.wasm, which the wallet's CipherProvider fetches
+// relative to the page. Both are skycoin's TinyGo build of skycoin-lite, from
+// the same module version as the wallet source the dashboard compiles. The
+// wasm is embedded gzipped and goes out that way.
+func (hv *Hypervisor) walletCipherHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		if strings.HasSuffix(r.URL.Path, "/wasm_exec.js") {
+			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+			_, _ = w.Write(wasmtinygo.WasmExecJS) //nolint:errcheck
+			return
+		}
+		w.Header().Set("Content-Type", "application/wasm")
+		w.Header().Add("Vary", "Accept-Encoding")
+		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			w.Header().Set("Content-Encoding", "gzip")
+			_, _ = w.Write(wasmtinygo.WasmFileGz) //nolint:errcheck
+			return
+		}
+		b, err := wasmtinygo.WasmFile()
+		if err != nil {
+			http.Error(w, "wallet cipher: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write(b) //nolint:errcheck
+	}
 }
