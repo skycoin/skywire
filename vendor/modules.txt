@@ -85,7 +85,7 @@ github.com/0magnet/lolcat-go/lol
 # github.com/0magnet/metrics v1.44.1-0.20260905010813-7e01f8bb5a1c
 ## explicit; go 1.25.0
 github.com/0magnet/metrics
-# github.com/0magnet/netscrape v0.0.0-20260927204526-ecee4d68db30
+# github.com/0magnet/netscrape v0.0.0-20260930210759-680b944d1da2
 ## explicit; go 1.24
 github.com/0magnet/netscrape
 # github.com/0magnet/osnotify v0.0.0-20260906144808-7a227da43a0d
@@ -94,7 +94,7 @@ github.com/0magnet/osnotify
 # github.com/0magnet/plot-go v0.0.0-20260924101040-e98ed611390a
 ## explicit; go 1.25
 github.com/0magnet/plot-go
-# github.com/0magnet/realorigin v0.2.2
+# github.com/0magnet/realorigin v0.2.3-0.20260930230111-051e97b884b3
 ## explicit; go 1.26.0
 github.com/0magnet/realorigin
 # github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
@@ -102,8 +102,8 @@ github.com/0magnet/realorigin
 github.com/0magnet/router7/pkg/dhcp4d
 github.com/0magnet/router7/pkg/dns
 github.com/0magnet/router7/pkg/teelogger
-# github.com/0magnet/sh/v3 v3.13.2-0.20260818190530-13d0024da85c
-## explicit; go 1.25.0
+# github.com/0magnet/sh/v3 v3.13.2-0.20260928172341-4c52a7abff02
+## explicit; go 1.26.0
 github.com/0magnet/sh/v3/expand
 github.com/0magnet/sh/v3/fileutil
 github.com/0magnet/sh/v3/internal
@@ -126,7 +126,7 @@ github.com/0magnet/termanim/matrix/backdrop/cobrarain
 # github.com/0magnet/u-root v0.16.1-0.20260907161518-7972ea755b47
 ## explicit; go 1.26.0
 github.com/0magnet/u-root/pkg/ls
-# github.com/0magnet/websh v0.0.0-20260924101532-76422c7ff9c3
+# github.com/0magnet/websh v0.0.0-20260928172614-900c2c6df638
 ## explicit; go 1.26.0
 github.com/0magnet/websh/shell
 github.com/0magnet/websh/shell/browser
@@ -136,7 +136,7 @@ github.com/0magnet/wfdrive/bidi
 # github.com/0magnet/winbox-go v0.0.0-20260915183431-ca6572e4c323
 ## explicit; go 1.24
 github.com/0magnet/winbox-go
-# github.com/0magnet/xterm-go v0.0.0-20260923132223-00c1a8e687cc
+# github.com/0magnet/xterm-go v0.0.0-20260930222402-0c2fc5d977f0
 ## explicit; go 1.24
 github.com/0magnet/xterm-go
 github.com/0magnet/xterm-go/vt
@@ -1115,7 +1115,7 @@ github.com/rivo/uniseg
 # github.com/robert-nix/ansihtml v1.0.1
 ## explicit; go 1.15
 github.com/robert-nix/ansihtml
-# github.com/rogpeppe/go-internal v1.15.0
+# github.com/rogpeppe/go-internal v1.16.0
 ## explicit; go 1.25
 github.com/rogpeppe/go-internal/fmtsort
 # github.com/rs/cors v1.11.1
@@ -1565,7 +1565,9 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
+golang.org/x/net/publicsuffix
 golang.org/x/net/trace
+golang.org/x/net/websocket
 # golang.org/x/sync v0.23.0
 ## explicit; go 1.26.0
 golang.org/x/sync/errgroup

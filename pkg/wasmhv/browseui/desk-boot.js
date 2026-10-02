@@ -575,25 +575,86 @@
 					for (var i = 0; i < u8.length; i += C) { s += String.fromCharCode.apply(null, u8.subarray(i, i + C)); }
 					return btoa(s);
 				}
-				// tabBrowseClearnet asks THIS tab's hypervisor to make the request
-				// through the proxy on vnet:egressPort. The page cannot do TLS itself,
+				// tabBrowseStream asks THIS tab's hypervisor to make the request
+				// through the proxy on vnet:egressPort — the page cannot do TLS itself,
 				// so every request goes through the visor, which verifies against its
-				// own roots. It used to hardcode a bodyless GET, which made every form
-				// POST on an https site silently arrive as a GET.
-				function tabBrowseClearnet(url, method, reqBody, reqHeaders, egressPort) {
+				// own roots — and reads the answer as a stream
+				// (pkg/visor/api_browse_stream.go): the hypervisor replies with
+				// the upstream's own status and headers, then the body as it arrives,
+				// read here into a ReadableStream. No size cap, and a large body is
+				// never held whole — /api/browse/clearnet's JSON reply was both capped
+				// at 16 MiB and base64'd into memory.
+				function tabBrowseStream(url, method, reqBody, reqHeaders, egressPort) {
 					var payload = { method: method || 'GET', url: url, proxy: 'vnet:' + egressPort };
 					if (reqBody && reqBody.length) { payload.body = b64of(reqBody); }
 					for (var hk in (reqHeaders || {})) { payload.header = reqHeaders; break; }
-					var body = new TextEncoder().encode(JSON.stringify(payload));
-					return Promise.resolve(globalThis.vnet.httpFetch(HV_PORT, 'POST', '/api/browse/clearnet', body, { 'Content-Type': 'application/json' })).then(function (r) {
-						var j = {};
-						try { j = JSON.parse(new TextDecoder().decode((r && r.body) || new Uint8Array(0))); } catch (e) { /* not JSON */ }
-						if (!r || r.status >= 300 || j.error) return proxyError('skywire browse: ' + String(j.error || (r && r.status)).replace(/</g, '&lt;'));
-						var s = atob(j.body || ''), b = new Uint8Array(s.length);
-						for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
-						var h = new Headers();
-						if (j.header) { for (var k in j.header) { try { h.set(k, j.header[k]); } catch (e) { /* forbidden name */ } } }
-						return new Response(b, { status: j.status_code || 200, headers: h });
+					var v = globalThis.vnet;
+					var id = v.dial(HV_PORT, 'browse-stream');
+					if (id < 0) return Promise.resolve(proxyError('could not reach this tab\'s hypervisor'));
+					var te = new TextEncoder(), jb = te.encode(JSON.stringify(payload));
+					v.send(id, 'a', te.encode('POST /api/browse-stream/ HTTP/1.1\r\nHost: vnet\r\nContent-Type: application/json\r\nContent-Length: ' + jb.length + '\r\n\r\n'));
+					v.send(id, 'a', jb);
+					function closeConn() { try { v.close(id, 'a'); } catch (e) { /* gone */ } }
+					// next calls back with the bytes received so far (or null at EOF).
+					function next(cb) {
+						(function step() {
+							var got = [], b, n = 0;
+							while ((b = v.recv(id, 'a'))) { got.push(b); n += b.length; }
+							if (n) { var all = new Uint8Array(n), o = 0; got.forEach(function (x) { all.set(x, o); o += x.length; }); return cb(all); }
+							if (v.eof(id, 'a')) return cb(null);
+							v.onReadable(id, 'a', step);
+						})();
+					}
+					return new Promise(function (resolve) {
+						var buf = new Uint8Array(0);
+						(function readHead() {
+							next(function (b) {
+								if (!b) { closeConn(); return resolve(proxyError('skywire browse: the hypervisor closed the stream')); }
+								var n = new Uint8Array(buf.length + b.length); n.set(buf); n.set(b, buf.length); buf = n;
+								var end = -1;
+								for (var i = 3; i < buf.length; i++) { if (buf[i - 3] === 13 && buf[i - 2] === 10 && buf[i - 1] === 13 && buf[i] === 10) { end = i + 1; break; } }
+								if (end < 0) return readHead();
+								var lines = new TextDecoder().decode(buf.subarray(0, end - 4)).split('\r\n');
+								var status = parseInt((lines[0].split(' ')[1]) || '502', 10) || 502;
+								var h = new Headers(), toEOF = false, length = -1, setCookies = [];
+								lines.slice(1).forEach(function (l) {
+									var c = l.indexOf(':'); if (c < 0) return;
+									var k = l.slice(0, c).trim(), val = l.slice(c + 1).trim(), lk = k.toLowerCase();
+									if (lk === 'connection') { toEOF = /close/i.test(val); return; }
+									if (lk === 'content-length') { length = parseInt(val, 10); }
+									// A Response drops Set-Cookie; carry them for the frame to
+									// mirror into its own cookie store (realorigin sw.js).
+									if (lk === 'set-cookie') { setCookies.push(val); return; }
+									try { h.append(k, val); } catch (e) { /* forbidden name */ }
+								});
+								if (setCookies.length) h.set('x-realorigin-set-cookie', JSON.stringify(setCookies));
+								var first = buf.subarray(end), left = toEOF ? -1 : Math.max(length, 0) - first.length;
+								var body = new ReadableStream({
+									start: function (c) {
+										if (first.length) c.enqueue(first);
+										if (!toEOF && left <= 0) { c.close(); closeConn(); }
+									},
+									pull: function (c) {
+										return new Promise(function (res) {
+											next(function (b) {
+												if (!b) { c.close(); closeConn(); return res(); }
+												c.enqueue(b);
+												if (!toEOF) { left -= b.length; if (left <= 0) { c.close(); closeConn(); } }
+												res();
+											});
+										});
+									},
+									cancel: closeConn,
+								});
+								if (!toEOF && status >= 300) {
+									// The hypervisor's own error, before any upstream answered.
+									return new Response(body).text().then(function (t) { resolve(proxyError('skywire browse: ' + t.replace(/</g, '&lt;'))); });
+								}
+								var empty = status === 204 || status === 205 || status === 304;
+								if (empty) { try { body.cancel(); } catch (e) { /* done */ } }
+								resolve(new Response(empty ? null : body, { status: status < 200 || status > 599 ? 502 : status, headers: h }));
+							});
+						})();
 					});
 				}
 				function resolverHost(pkHost) {
@@ -704,7 +765,88 @@
 					if (/\.(dmsg|skynet|skysocks)$/i.test(u.hostname) || /^[0-9a-f]{66}$/i.test(u.hostname)) {
 						target = 'http://' + resolverHost(u.hostname) + (u.port && u.port !== '443' ? ':' + u.port : '') + path;
 					}
-					return tabBrowseClearnet(target, rqM, rqB, rqH, pp.port);
+					return tabBrowseStream(target, rqM, rqB, rqH, pp.port);
+				};
+				// A browse frame's WebSocket, opened by this tab's hypervisor through
+				// the same proxy as its fetches (pkg/visor/api_browse_ws.go) — a
+				// page's own WebSocket would go straight out from the reader's
+				// address. o = {url, protocols, origin}; port carries the frame's
+				// side: {t:'send'|'close'} in, {t:'open'|'message'|'close'|'error'} out.
+				globalThis.__netscrapeWebSocket = function (o, port) {
+					var closed = false;
+					function toFrame(m, tr) { try { port.postMessage(m, tr || []); } catch (e) { /* frame gone */ } }
+					function finish(code, reason, clean) {
+						if (closed) return;
+						closed = true;
+						toFrame({ t: 'close', code: code, reason: reason || '', wasClean: !!clean });
+						try { port.close(); } catch (e) { /* already */ }
+					}
+					function fail(msg) { toFrame({ t: 'error', message: msg }); finish(1006, '', false); }
+					var pp = proxyPort(globalThis.__netscrapeProxy || { proxy: globalThis.__netscrapeDefaultProxy });
+					if (pp.err || !pp.port) return fail(pp.err || 'websocket needs a proxy on this tab\'s loopback');
+					var v = globalThis.vnet;
+					if (!(v && v.listening(HV_PORT))) return fail('this tab\'s hypervisor is not running');
+					var u;
+					try { u = new URL(o.url); } catch (e) { return fail('bad websocket url'); }
+					var target = u.href;
+					if (/\.(dmsg|skynet|skysocks)$/i.test(u.hostname) || /^[0-9a-f]{66}$/i.test(u.hostname)) {
+						target = 'ws://' + resolverHost(u.hostname) + (u.port ? ':' + u.port : '') + u.pathname + u.search;
+					}
+					var id = v.dial(HV_PORT, 'browse-ws');
+					if (id < 0) return fail('could not reach this tab\'s hypervisor');
+					var q = '/api/browse-ws/?url=' + encodeURIComponent(target) + '&proxy=' + encodeURIComponent('vnet:' + pp.port) +
+						'&origin=' + encodeURIComponent(o.origin || '') + '&protocols=' + encodeURIComponent((o.protocols || []).join(','));
+					v.send(id, 'a', new TextEncoder().encode('GET ' + q + ' HTTP/1.1\r\nHost: vnet\r\nConnection: Upgrade\r\nUpgrade: skywire-browse-ws\r\n\r\n'));
+					var buf = new Uint8Array(0), upgraded = false;
+					function append(b) { var n = new Uint8Array(buf.length + b.length); n.set(buf); n.set(b, buf.length); buf = n; }
+					function writeFrame(t, payload) {
+						var p = payload || new Uint8Array(0);
+						var h = new Uint8Array(5);
+						h[0] = t; new DataView(h.buffer).setUint32(1, p.length);
+						if (!v.send(id, 'a', h) || (p.length && !v.send(id, 'a', p))) finish(1006, '', false);
+					}
+					function drain() {
+						if (!upgraded) {
+							var s = new TextDecoder().decode(buf), end = s.indexOf('\r\n\r\n');
+							if (end < 0) return;
+							var head = s.slice(0, end);
+							if (!/^HTTP\/1\.1 101/.test(head)) {
+								return fail('websocket relay: ' + (s.slice(end + 4) || head.split('\r\n')[0]).trim().slice(0, 200));
+							}
+							upgraded = true;
+							buf = buf.slice(new TextEncoder().encode(s.slice(0, end + 4)).length);
+						}
+						while (buf.length >= 5) {
+							var n = new DataView(buf.buffer, buf.byteOffset).getUint32(1);
+							if (buf.length < 5 + n) return;
+							var t = buf[0], p = buf.slice(5, 5 + n);
+							buf = buf.slice(5 + n);
+							if (t === 9) toFrame({ t: 'open', protocol: new TextDecoder().decode(p) });
+							else if (t === 1) toFrame({ t: 'message', data: new TextDecoder().decode(p) });
+							else if (t === 2) toFrame({ t: 'message', data: p.buffer }, [p.buffer]);
+							else if (t === 8) { var c = p.length >= 2 ? new DataView(p.buffer).getUint16(0) : 1005; finish(c, '', c === 1000); }
+							else if (t === 10) fail(new TextDecoder().decode(p));
+						}
+					}
+					(function pump() {
+						if (closed) return;
+						var b;
+						while ((b = v.recv(id, 'a'))) append(b);
+						drain();
+						if (v.eof(id, 'a')) { finish(1006, '', false); try { v.close(id, 'a'); } catch (e) { /* gone */ } return; }
+						v.onReadable(id, 'a', pump);
+					})();
+					port.onmessage = function (ev) {
+						var m = ev.data || {};
+						if (m.t === 'send') {
+							if (typeof m.data === 'string') writeFrame(1, new TextEncoder().encode(m.data));
+							else writeFrame(2, new Uint8Array(m.data));
+						} else if (m.t === 'close') {
+							writeFrame(8, new Uint8Array(0));
+							try { v.close(id, 'a'); } catch (e) { /* gone */ }
+							finish(m.code || 1000, m.reason, true);
+						}
+					};
 				};
 				// The desk chrome comes from the library (0magnet/desk), mounted by
 				// the desk host module itself (installDesk); its façade carries the

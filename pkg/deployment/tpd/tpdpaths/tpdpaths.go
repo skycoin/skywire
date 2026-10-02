@@ -14,6 +14,11 @@ const (
 	AllTransportsPathWithoutSelf = "transports/all/without-self"
 )
 
+// Routing feed: one shard per visor, at RoutingPathPrefix + <pk hex>, the
+// transport list route calculation reads (see RoutingCXOPublisher in
+// pkg/deployment/tpd/api).
+const RoutingPathPrefix = "routing/"
+
 // Stats feed.
 const (
 	// StatsPathNetwork carries the network-wide transport aggregate

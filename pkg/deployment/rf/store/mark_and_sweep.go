@@ -4,6 +4,7 @@ package store
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
@@ -72,6 +73,10 @@ type Graph struct {
 	// invalidation is needed. nil until first use / when the feature is off.
 	landmarks    *landmarkTables
 	landmarkOnce sync.Once
+	// built is landmarks once landmarkOnce has run; inherited is the
+	// previous graph's tables, reused while fresh (see ensureLandmarks).
+	built     atomic.Pointer[landmarkTables]
+	inherited *landmarkTables
 }
 
 // NewGraph creates a new Graph accessing given transport store, such Graph is created by exploring

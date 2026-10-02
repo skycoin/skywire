@@ -27,6 +27,7 @@ import (
 	"context"
 	"os"
 	"sort"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -68,6 +69,7 @@ type landmarkTables struct {
 	hubs    []cipher.PubKey
 	toHub   map[cipher.PubKey]map[cipher.PubKey][]routing.Route // node -> hub  -> routes
 	fromHub map[cipher.PubKey]map[cipher.PubKey][]routing.Route // hub  -> node -> routes
+	builtAt time.Time
 }
 
 // cipherLess is a deterministic total order on pubkeys (byte order), used for
@@ -168,6 +170,7 @@ func buildLandmarks(g *Graph) *landmarkTables {
 	hubs := selectHubs(g, defaultLandmarkHubs)
 	lt := &landmarkTables{
 		hubs:    hubs,
+		builtAt: time.Now(),
 		toHub:   make(map[cipher.PubKey]map[cipher.PubKey][]routing.Route),
 		fromHub: make(map[cipher.PubKey]map[cipher.PubKey][]routing.Route),
 	}
@@ -188,11 +191,25 @@ func buildLandmarks(g *Graph) *landmarkTables {
 	return lt
 }
 
-// ensureLandmarks builds the tables once per Graph (graphs are immutable and
-// swapped each 15s GraphCache refresh, so the tables live exactly as long as the
-// graph — same lifetime discipline as #4385's routeMemo).
+// landmarkMaxAge is how long a graph reuses the landmark tables of the graph
+// before it. Graphs are swapped every 15s but the mesh's hubs and its routes
+// to them change slowly, and a build costs ~1.3 CPU-s on prod01 (~9% of a
+// core when redone every 15s). A reused route whose transport has since gone
+// is dropped at compose time (routeIsLive), and hop latencies are read from
+// the current graph.
+const landmarkMaxAge = 2 * time.Minute
+
+// ensureLandmarks sets the tables once per Graph: the inherited ones while
+// fresh, else a new build.
 func (g *Graph) ensureLandmarks() *landmarkTables {
-	g.landmarkOnce.Do(func() { g.landmarks = buildLandmarks(g) })
+	g.landmarkOnce.Do(func() {
+		if lt := g.inherited; lt != nil && time.Since(lt.builtAt) < landmarkMaxAge {
+			g.landmarks = lt
+		} else {
+			g.landmarks = buildLandmarks(g)
+		}
+		g.built.Store(g.landmarks)
+	})
 	return g.landmarks
 }
 
@@ -252,8 +269,10 @@ func (g *Graph) composeLandmark(lt *landmarkTables, src, dst cipher.PubKey, numb
 		return nil
 	}
 	var cands []routing.Route
+	// Tables can be inherited from an earlier graph: a route over a transport
+	// that has since gone is dropped here, before the cut to number.
 	inBounds := func(r routing.Route) bool {
-		return len(r.Hops) >= minLen && len(r.Hops) <= maxLen
+		return len(r.Hops) >= minLen && len(r.Hops) <= maxLen && g.routeIsLive(r)
 	}
 	// Degenerate: src or dst IS a hub — the tables already hold the direct
 	// node<->hub routes, no composition needed.
@@ -301,7 +320,7 @@ func (g *Graph) composeLandmark(lt *landmarkTables, src, dst cipher.PubKey, numb
 			continue
 		}
 		seen[key] = struct{}{}
-		out = append(out, r)
+		out = append(out, g.withCurrentLatency(r))
 		if len(out) >= number {
 			break
 		}
@@ -379,16 +398,7 @@ func (g *Graph) routesLandmarkHybrid(ctx context.Context, src, dst cipher.PubKey
 		return pool[:number], true
 	}
 	lt := g.ensureLandmarks()
-	composed := g.composeLandmark(lt, src, dst, number, minLen, maxLen)
-	if len(composed) > 0 {
-		live := composed[:0]
-		for _, r := range composed {
-			if g.routeIsLive(r) {
-				live = append(live, r)
-			}
-		}
-		composed = live
-	}
+	composed := g.composeLandmark(lt, src, dst, number, minLen, maxLen) // live routes only
 	if len(pool) == 0 && len(composed) == 0 {
 		return nil, false // let the exhaustive BFS fallback try
 	}
@@ -410,4 +420,19 @@ func (g *Graph) routesLandmarkHybrid(ctx context.Context, src, dst cipher.PubKey
 		merged = merged[:number]
 	}
 	return merged, true
+}
+
+// withCurrentLatency returns a copy of r with each hop's latency read from g,
+// for a route taken from tables built on an earlier graph.
+func (g *Graph) withCurrentLatency(r routing.Route) routing.Route {
+	out := routing.Route{Hops: make([]routing.Hop, len(r.Hops))}
+	copy(out.Hops, r.Hops)
+	for i := range out.Hops {
+		if v, ok := g.graph[out.Hops[i].From]; ok {
+			if conn, ok := v.connections[out.Hops[i].To]; ok {
+				out.Hops[i].Latency = conn.Latency
+			}
+		}
+	}
+	return out
 }

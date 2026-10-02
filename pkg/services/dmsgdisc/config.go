@@ -48,8 +48,6 @@ type Config struct {
 	// Whitelist is the network-monitor PKs allowed to deregister
 	// stale entries. Hex-encoded PKs.
 	Whitelist []string `json:"whitelist_keys,omitempty"`
-	// PProfMode is passed to dmsgcmdutil.InitPProf with PprofAddr.
-	PProfMode string `json:"pprof_mode,omitempty"`
 
 	// DmsgServers is the static dmsg-server transit set the
 	// discovery preloads at startup. Replaces the runtime read of

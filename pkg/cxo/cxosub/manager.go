@@ -42,6 +42,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -80,6 +81,15 @@ const (
 	// republished on a timer — the feed a chart reads instead of
 	// downloading a bulk snapshot to reduce it locally.
 	FeedTPDStats
+	// FeedTPDRouting is TPD's routing feed: the transports that exist
+	// now with their latency and throughput, one leaf per visor
+	// (routing/<pk>). What visors route on; a change ships only the
+	// shards it touched.
+	FeedTPDRouting
+	// FeedARReach is the address resolver's reach feed: per peer, whether it
+	// can actually be transported by each type (reach/<h>, 16 leaves). What
+	// autoconnect picks peers from.
+	FeedARReach
 )
 
 // FeedRoute returns the fixed dmsg CXO port and TreeStore path prefix a feed's
@@ -106,6 +116,10 @@ func FeedRoute(f Feed) (port uint16, prefix string, ok bool) {
 		return skyenv.DmsgTPDAllTransportsCXOPort, "transports/all/", true
 	case FeedTPDStats:
 		return skyenv.DmsgTPDStatsCXOPort, "stats/", true
+	case FeedTPDRouting:
+		return skyenv.DmsgTPDRoutingCXOPort, "routing/", true
+	case FeedARReach:
+		return skyenv.DmsgARReachCXOPort, "reach/", true
 	}
 	return 0, "", false
 }
@@ -169,9 +183,9 @@ var tabFeedDeps = map[Tab][]Feed{
 	TabNetworkVisualizer: {FeedSDServices, FeedDMSGDClientsByServer, FeedTPDMetrics},
 	TabMetrics:           {FeedTPDMetrics, FeedTPDUptime},
 	TabUptime:            {FeedTPDUptime},
-	TabAutoconnect:       {FeedSDServices},
+	TabAutoconnect:       {FeedSDServices, FeedARReach},
 	TabCLIServices:       {FeedSDServices},
-	TabCLITransports:     {FeedTPDAllTransports},
+	TabCLITransports:     {FeedTPDRouting},
 	TabRoutingPolicy:     {FeedSDServices},
 	TabDmsgEntryLookup:   {FeedDMSGDClientsByServer},
 	TabNetworkStats:      {FeedTPDStats},
@@ -273,7 +287,7 @@ const largeFeedFirstSyncTimeout = 45 * time.Second
 // fast feeds.
 func FeedFirstSyncTimeout(f Feed) time.Duration {
 	switch f {
-	case FeedTPDAllTransports, FeedSDServices, FeedTPDMetrics:
+	case FeedTPDAllTransports, FeedTPDRouting, FeedSDServices, FeedTPDMetrics:
 		return largeFeedFirstSyncTimeout
 	}
 	return FirstSyncTimeout
@@ -682,6 +696,10 @@ func FeedString(feed Feed) string {
 		return "tpd-all-transports"
 	case FeedTPDStats:
 		return "tpd-stats"
+	case FeedTPDRouting:
+		return "tpd-routing"
+	case FeedARReach:
+		return "ar-reach"
 	}
 	return fmt.Sprintf("feed#%d", feed)
 }
@@ -702,6 +720,10 @@ func FeedFromString(name string) (Feed, bool) {
 		return FeedTPDAllTransports, true
 	case "tpd-stats":
 		return FeedTPDStats, true
+	case "tpd-routing":
+		return FeedTPDRouting, true
+	case "ar-reach":
+		return FeedARReach, true
 	}
 	return 0, false
 }
@@ -979,17 +1001,31 @@ func (m *Manager) liveServe(ctx context.Context, fk Feed, f *managedFeed) error 
 		return fmt.Errorf("dial publisher: %w", err)
 	}
 
+	// The CXO node bounds a first fill itself — one that stalls for
+	// node.MaxFillingTime breaks, and none runs past node.MaxTotalFillTime —
+	// so wait for it. Tearing the subscriber down after syncTimeout threw away
+	// everything fetched and started over from nothing: a feed whose first
+	// fill needs longer (a large tree, a slow link) never synced at all, which
+	// is how the routing and metrics feeds sat at "syncing". Past syncTimeout
+	// the status says so.
 	syncTimeout := FeedFirstSyncTimeout(fk)
-	first := time.NewTimer(syncTimeout)
-	defer first.Stop()
-	select {
-	case <-updateCh:
-		first.Stop()
-		m.walkIntoSnapshot(sub, prefix, f)
-	case <-first.C:
-		return fmt.Errorf("timeout waiting for Root after %s", syncTimeout)
-	case <-ctx.Done():
-		return nil
+	slow := time.NewTimer(syncTimeout)
+	defer slow.Stop()
+	giveUp := time.NewTimer(node.MaxTotalFillTime + syncTimeout)
+	defer giveUp.Stop()
+firstRoot:
+	for {
+		select {
+		case <-updateCh:
+			m.walkIntoSnapshot(sub, prefix, f)
+			break firstRoot
+		case <-slow.C:
+			f.recordErr(fmt.Errorf("still waiting for the first Root after %s", syncTimeout))
+		case <-giveUp.C:
+			return fmt.Errorf("no Root after %s", node.MaxTotalFillTime+syncTimeout)
+		case <-ctx.Done():
+			return nil
+		}
 	}
 
 	for {

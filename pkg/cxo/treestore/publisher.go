@@ -519,6 +519,21 @@ func (p *Publisher) Feed() cipher.PubKey {
 	return p.pk
 }
 
+// Subscriptions returns the conns on which peer holds a live subscription to
+// this feed (each receives every Root this publisher sends, heartbeats
+// included), in no particular order. A peer can hold more than one: the conn
+// this side dialed to announce and the one the peer dialed itself.
+func (p *Publisher) Subscriptions(peer cipher.PubKey) []*node.Conn {
+	want := skycipher.PubKey(peer)
+	var out []*node.Conn
+	for _, c := range p.cxoNode.ConnectionsOfFeed(skycipher.PubKey(p.pk)) {
+		if c.PeerID() == want {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // Node returns the underlying CXO node. Exposed so callers can
 // attach a Subscriber to the same node via NewSubscriberOnNode —
 // the per-pair-feed pattern uses one node per pair side, listening

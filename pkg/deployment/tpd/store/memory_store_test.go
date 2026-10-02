@@ -167,8 +167,8 @@ func TestMemoryStore_NoopAndEmptyMethods(t *testing.T) {
 	pk := mustGenPK(t)
 	id := uuid.New()
 
-	require.NoError(t, s.UpdateBandwidth(ctx, "tp", pk, 1, 2))
-	require.NoError(t, s.UpdateLatency(ctx, "tp", 1, 2, 3))
+	require.NoError(t, s.UpdateBandwidth(ctx, "tp", pk, 1, 2, "stcpr"))
+	require.NoError(t, s.UpdateLatency(ctx, "tp", 1, 2, 3, "stcpr"))
 	require.NoError(t, s.RecordHeartbeat(ctx, pk, "v1"))
 	require.NoError(t, s.RecordTransportHeartbeat(ctx, id, "stcpr", time.Now()))
 	require.NoError(t, s.IngestTransportTimeline(ctx, id, "stcpr", nil))

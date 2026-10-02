@@ -81,8 +81,6 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 
 	storeConfig := cfg.StoreConfig()
 
-	metricsutil.ServePProf(logger, cfg.PprofAddr, "address-resolver")
-
 	s.store = services.StoreKind(storeConfig.Type)
 	transportStore, err := store.New(ctx, storeConfig, cfg.EntryTimeout.Std(), logger)
 	if err != nil {
@@ -152,6 +150,8 @@ func (s *service) startCXO(ctx context.Context, dmsgC *dmsg.Client, host service
 		}()
 	}
 	s.cxo.AddPublisher(ctx, logger, "bindings", skyenv.DmsgARBindingsCXOPort, bindPub, err)
+	reachPub, err := b.api.StartReachCXOPublisher(dmsgC, sk)
+	s.cxo.AddPublisher(ctx, logger, "reach", skyenv.DmsgARReachCXOPort, reachPub, err)
 }
 
 // Embed runs address-resolver inside a host process: the API is
@@ -182,6 +182,7 @@ func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 
 	logger := services.NewLogger(cfg.LogTag("address_resolver"), cfg.LogLevel)
+	defer cfg.StartPprof(logger)()
 
 	pk := cfg.PubKey
 	sk := cfg.SecKey

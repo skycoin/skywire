@@ -60,7 +60,7 @@ func TestLiveScriptReconnectsForeverWithCappedBackoff(t *testing.T) {
 	}
 	// The reconnect must be re-armed from onclose, forever — not from a bounded
 	// attempt counter.
-	if !strings.Contains(s, `ws.onclose=function(){ws=null;if(!down){down=Date.now();}stat("reconnecting","warn");sched();};`) {
+	if !strings.Contains(s, `ws.onclose=function(){ws=null;if(!down){down=Date.now();}if(!polling){stat("reconnecting","warn");}startPoll();sched();};`) {
 		t.Error("onclose must re-arm the reconnect unconditionally")
 	}
 }

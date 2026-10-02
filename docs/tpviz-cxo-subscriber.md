@@ -23,7 +23,8 @@ PR #3388 patched it via HTTP-over-dmsg; this doc is the proper CXO version.
   | `FeedTPDUptime` | TPD | `DmsgTPDUptimeCXOPort` (52) | `uptimes/days/` | `[]VisorSummary` |
   | `FeedSDServices` | SD | `DmsgSDServicesCXOPort` (53) | `services/` | services entries |
   | `FeedDMSGDClientsByServer` | DMSG-D | `DmsgDMSGDClientsByServerCXOPort` | `clients-by-server/` | client entries |
-  | `FeedTPDAllTransports` | TPD | `DmsgTPDAllTransportsCXOPort` | `transports/all/` | all-transports snapshot |
+  | `FeedTPDAllTransports` | TPD | `DmsgTPDAllTransportsCXOPort` (55) | `transports/all/` | whole-network snapshot, kept for readers that predate `FeedTPDRouting` |
+  | `FeedTPDRouting` | TPD | `DmsgTPDRoutingCXOPort` (75) | `routing/` | current transports with latency + throughput, one leaf per visor; what visors route on |
   | `FeedTPDStats` | TPD | `DmsgTPDStatsCXOPort` (73) | `stats/` | network aggregates (`stats/network`, `stats/versions`) |
 - `pkg/visor/cxo_subscription_manager.go` (800 lines) implements the intermittent
   subscriber: `syncOnce` (subscribe/snapshot/unsubscribe), `AcquireForTab` /

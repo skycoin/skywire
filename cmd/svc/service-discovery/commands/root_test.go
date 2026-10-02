@@ -51,17 +51,14 @@ func TestCommaSplit(t *testing.T) {
 // ---- buildConfig -----------------------------------------------------------
 
 func TestBuildConfig_FromFlags(t *testing.T) {
-	defer withGlobals(map[string]any{
-		"addr": addr, "redisURL": redisURL, "geoipURL": geoipURL,
-		"whitelistKeys": whitelistKeys, "configPath": configPath, "keyFile": keyFile,
-	})()
+	defer restoreFlags()()
 
-	addr = ":1234"
-	redisURL = "redis://example:6379"
+	flags.Addr = ":1234"
+	flags.Redis = "redis://example:6379"
 	geoipURL = "http://geo.example"
 	whitelistKeys = "pk1, pk2"
-	configPath = ""
-	keyFile = ""
+	flags.ConfigPath = ""
+	flags.KeyFile = ""
 
 	cfg, err := buildConfig()
 	require.NoError(t, err)
@@ -72,29 +69,29 @@ func TestBuildConfig_FromFlags(t *testing.T) {
 }
 
 func TestBuildConfig_KeyfileGenerates(t *testing.T) {
-	defer withGlobals(map[string]any{"keyFile": keyFile, "sk": sk, "configPath": configPath})()
+	defer restoreFlags()()
 
-	keyFile = filepath.Join(t.TempDir(), "sd.key")
-	sk = cipher.SecKey{}
-	configPath = ""
+	flags.KeyFile = filepath.Join(t.TempDir(), "sd.key")
+	flags.SecKey = cipher.SecKey{}
+	flags.ConfigPath = ""
 
 	cfg, err := buildConfig()
 	require.NoError(t, err)
 	require.NotEqual(t, cipher.SecKey{}, cfg.SecKey) // key was generated
-	require.FileExists(t, keyFile)
+	require.FileExists(t, flags.KeyFile)
 }
 
 func TestBuildConfig_ConfigFileOverrides(t *testing.T) {
-	defer withGlobals(map[string]any{"addr": addr, "configPath": configPath, "keyFile": keyFile})()
+	defer restoreFlags()()
 
-	addr = ":FLAG"
-	keyFile = ""
+	flags.Addr = ":FLAG"
+	flags.KeyFile = ""
 
 	// Raw JSON (no key fields) so strict-parse doesn't reject a zero secret key.
 	raw := []byte(`{"addr":":FILE","mode":"dmsg","testing":true}`)
 	path := filepath.Join(t.TempDir(), "sd.json")
 	require.NoError(t, os.WriteFile(path, raw, 0o600))
-	configPath = path
+	flags.ConfigPath = path
 
 	cfg, err := buildConfig()
 	require.NoError(t, err)
@@ -104,10 +101,10 @@ func TestBuildConfig_ConfigFileOverrides(t *testing.T) {
 }
 
 func TestBuildConfig_BadConfigPath(t *testing.T) {
-	defer withGlobals(map[string]any{"configPath": configPath, "keyFile": keyFile})()
+	defer restoreFlags()()
 
-	keyFile = ""
-	configPath = filepath.Join(t.TempDir(), "does-not-exist.json")
+	flags.KeyFile = ""
+	flags.ConfigPath = filepath.Join(t.TempDir(), "does-not-exist.json")
 
 	_, err := buildConfig()
 	require.Error(t, err)
@@ -178,26 +175,9 @@ func TestExecute_Help(t *testing.T) {
 	require.NotPanics(t, Execute)
 }
 
-// withGlobals snapshots the named package globals and returns a restore func.
-func withGlobals(saved map[string]any) func() {
-	return func() {
-		for name, v := range saved {
-			switch name {
-			case "addr":
-				addr = v.(string)
-			case "redisURL":
-				redisURL = v.(string)
-			case "geoipURL":
-				geoipURL = v.(string)
-			case "whitelistKeys":
-				whitelistKeys = v.(string)
-			case "configPath":
-				configPath = v.(string)
-			case "keyFile":
-				keyFile = v.(string)
-			case "sk":
-				sk = v.(cipher.SecKey)
-			}
-		}
-	}
+// restoreFlags snapshots the flag globals a test mutates; call the returned
+// func to put them back.
+func restoreFlags() func() {
+	savedFlags, savedWhitelistKeys, savedGeoIPURL := flags, whitelistKeys, geoipURL
+	return func() { flags, whitelistKeys, geoipURL = savedFlags, savedWhitelistKeys, savedGeoIPURL }
 }

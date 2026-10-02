@@ -260,10 +260,13 @@ func TestNode_Publish(t *testing.T) {
 
 	assertNil(t, c.Subscribe(pk))
 	assertIDs(t, ln.ConnectionsOfFeed(pk), sn1.ID(), sn2.ID())
+	assertTrue(t, c.HasFeed(pk), "sn2 conn should have the feed it subscribed")
+	assertTrue(t, !c.HasFeed(cipher.PubKey{1}), "sn2 conn should not have an unrelated feed")
 
 	// un1
 	c, err = un1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
+	assertTrue(t, !c.HasFeed(pk), "un1 conn never subscribed")
 	assertTrue(t, c.PeerID() == ln.ID(), "wrong id")
 	waitForCondition(t, "ln sees un1 connected", func() bool {
 		return len(ln.Connections()) >= 3

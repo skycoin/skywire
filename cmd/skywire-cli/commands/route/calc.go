@@ -747,10 +747,10 @@ func (s *memoryStore) GetTransportSummary(context.Context, bool) (*store.Transpo
 func (s *memoryStore) GetAllTransports(context.Context, bool) ([]*transport.Entry, error) {
 	return s.entries, nil
 }
-func (s *memoryStore) UpdateBandwidth(context.Context, string, cipher.PubKey, uint64, uint64) error {
+func (s *memoryStore) UpdateBandwidth(context.Context, string, cipher.PubKey, uint64, uint64, string) error {
 	return nil
 }
-func (s *memoryStore) UpdateLatency(context.Context, string, float64, float64, float64) error {
+func (s *memoryStore) UpdateLatency(context.Context, string, float64, float64, float64, string) error {
 	return nil
 }
 

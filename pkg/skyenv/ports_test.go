@@ -39,6 +39,7 @@ func TestVisorPortsAreUnique(t *testing.T) {
 		"DmsgTPDAllTransportsCXOPort":     DmsgTPDAllTransportsCXOPort,
 		"DmsgTPDStatsCXOPort":             DmsgTPDStatsCXOPort,
 		"DmsgARBindingsCXOPort":           DmsgARBindingsCXOPort,
+		"DmsgARReachCXOPort":              DmsgARReachCXOPort,
 		"DmsgDMSGDRegistrationCXOPort":    DmsgDMSGDRegistrationCXOPort,
 		"DmsgVisorARBindCXOPort":          DmsgVisorARBindCXOPort,
 		"DmsgVisorSDRegCXOPort":           DmsgVisorSDRegCXOPort,

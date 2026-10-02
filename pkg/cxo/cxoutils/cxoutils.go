@@ -38,40 +38,29 @@ func RemoveRootObjects(c *skyobject.Container, keepLast int) error {
 		}
 
 		for _, nonce := range heads {
-			seq, err := c.LastRootSeq(pk, nonce)
+			// Delete every stored Root older than the newest keepLast,
+			// whatever gaps lie between them. This used to walk every
+			// seq from the last one down to zero and DelRoot each —
+			// gap-safe, but a feed republishing every 45 s gains ~1900
+			// seqs a day, so on an aggregator holding thousands of
+			// feeds each tick spent a third of TPD's CPU on DelRoot
+			// calls that found nothing. Listing the stored seqs keeps
+			// the gap safety (a hole never ends the sweep) at a cost
+			// proportional to what is actually stored.
+			seqs, err := c.RootSeqs(pk, nonce)
 			if err != nil {
-				continue // empty head — not a real error
+				continue // head gone since Heads — not a real error
 			}
-
-			if seq < uint64(keepLast) { //nolint:gosec
+			if keepLast < 0 {
+				keepLast = 0
+			}
+			if len(seqs) <= keepLast {
 				continue
 			}
-
-			goDown := seq - uint64(keepLast) //nolint:gosec // positive
-
-			// Walk every seq from goDown down to (and including) 0.
-			// ErrNotFound on an intermediate seq is expected (prior
-			// cleanups already deleted it) — keep going. Previously
-			// the loop did `continue HeadLoop` here, which abandoned
-			// every still-undeleted older seq AND the seq=0 sweep
-			// the instant we hit a gap. A partially-failed prior
-			// DelRoot (idx entry removed but rc-decrement walk
-			// aborted on a missing hash) leaves orphaned objects
-			// with rc>0 forever, since the next cleanup short-
-			// circuits before retrying. Two production-observed
-			// symptoms trace to that: TPD's CXDS bytes climbing to
-			// ~1 GB over days despite RemoveRootObjects firing on
-			// every publish, and the GC-saturation cascade that
-			// starves Node.mu and chokes every dmsg handshake.
-			for ; goDown > 0; goDown-- {
-				if err := c.DelRoot(pk, nonce, goDown); err != nil && err != data.ErrNotFound {
+			for _, seq := range seqs[:len(seqs)-keepLast] {
+				if err := c.DelRoot(pk, nonce, seq); err != nil && err != data.ErrNotFound {
 					return err // a real failure (CXDS not found error?)
 				}
-			}
-
-			// seq = 0 (goDown == 0)
-			if err := c.DelRoot(pk, nonce, 0); err != nil && err != data.ErrNotFound {
-				return err
 			}
 
 		} // head loop

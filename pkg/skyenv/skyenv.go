@@ -108,6 +108,13 @@ const (
 	// subscribe to one TPD feed without dragging in the others.
 	DmsgTPDAllTransportsCXOPort uint16 = 55
 
+	// DmsgTPDRoutingCXOPort is the DMSG port of the TPD's routing feed: the
+	// transports that exist now, with the latency and throughput routes are
+	// weighed by, one leaf per visor (routing/<pk>) so a change ships only
+	// the shards it touched. Visors route on it; the all-transports feed
+	// stays for readers that predate it.
+	DmsgTPDRoutingCXOPort uint16 = 75
+
 	// DmsgTPDStatsCXOPort is the DMSG port the TPD's CXO network-aggregate
 	// stats publisher listens on. It carries the sub-kilobyte reductions the
 	// bulk feeds are otherwise downloaded to compute — the /all-transports/stats
@@ -129,6 +136,13 @@ const (
 	// Numbered 74 (50-55 and 56-73 are all taken); the value only needs to be
 	// collision-free, which ports_test guards.
 	DmsgARBindingsCXOPort uint16 = 74
+
+	// DmsgARReachCXOPort is the dmsg port the Address Resolver's REACH
+	// publisher listens on: per peer, whether it can actually be transported by
+	// each type (see pkg/deployment/ar/arfeed/reach.go). Its own port because
+	// a CXO subscriber downloads the whole feed: autoconnect wants this small
+	// summary, not every binding's addresses.
+	DmsgARReachCXOPort uint16 = 76
 
 	// DmsgDMSGDRegistrationCXOPort is the dmsg port the dmsg-discovery's CXO
 	// client-entry REGISTRATION aggregator binds (and each visor's entry

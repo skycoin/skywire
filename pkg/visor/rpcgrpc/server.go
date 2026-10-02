@@ -995,10 +995,10 @@ func (s *calcMemStore) GetTransportSummary(context.Context, bool) (*tpdstore.Tra
 func (s *calcMemStore) GetAllTransports(context.Context, bool) ([]*transport.Entry, error) {
 	return nil, nil
 }
-func (s *calcMemStore) UpdateBandwidth(context.Context, string, cipher.PubKey, uint64, uint64) error {
+func (s *calcMemStore) UpdateBandwidth(context.Context, string, cipher.PubKey, uint64, uint64, string) error {
 	return nil
 }
-func (s *calcMemStore) UpdateLatency(context.Context, string, float64, float64, float64) error {
+func (s *calcMemStore) UpdateLatency(context.Context, string, float64, float64, float64, string) error {
 	return nil
 }
 

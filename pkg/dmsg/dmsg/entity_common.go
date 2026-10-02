@@ -137,14 +137,16 @@ type EntityCommon struct {
 	// cxoKeepaliveHealthyFn, when set and returning true, means this CLIENT's
 	// discovery entry is being kept alive over a healthy registration-over-CXO
 	// feed (installed by the visor; see pkg/visor/init_registration_cxo.go).
-	// While true, the periodic NO-CHANGE HTTP keepalive re-registration is
-	// stretched to cxoHealthyUpdateInterval, so the expensive Noise+PQ
-	// handshake fires far less often; that stretched interval stays well under
-	// the dmsg-discovery client-entry TTL, so the HTTP path alone keeps the
-	// entry alive even if CXO ingest silently stalls (fallback), and
-	// delegated-server CHANGES still publish immediately via the nudge path.
+	// While it reports healthy with the same epoch as the last HTTP update, the
+	// periodic NO-CHANGE HTTP re-registration is skipped entirely: the feed's
+	// heartbeat Roots refresh the entry's TTL at dmsg-discovery. A new epoch
+	// (the subscription arrived on a new conn, e.g. dmsg-discovery restarted)
+	// or an unhealthy feed makes the next tick re-register over HTTP.
+	// Delegated-server CHANGES still publish immediately via the nudge path.
 	// Nil on servers and on clients not publishing over CXO.
-	cxoKeepaliveHealthyFn atomic.Pointer[func() bool]
+	cxoKeepaliveHealthyFn atomic.Pointer[CXOKeepaliveFunc]
+	// lastUpdateEpoch is the keepalive epoch when lastUpdate was stamped.
+	lastUpdateEpoch atomic.Uint64
 
 	// peerSessionsFunc returns peer server sessions for mesh forwarding.
 	// Only set on Server entities; nil for clients.
@@ -1353,7 +1355,7 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 			// retry since #3829 put this check in front of #3168's backoff —
 			// a client whose publish lost the dmsg-HTTP cold-start race sat
 			// in discovery with an EMPTY delegated-server set, unreachable by
-			// lookup, until the whole (CXO-stretched: 30 m) interval elapsed,
+			// lookup, until the whole interval elapsed,
 			// and this branch logs nothing to say so.
 			//
 			// The bypass is capped rather than open-ended: past
@@ -1365,13 +1367,10 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 			// which still republishes — just once per updateInterval.
 			if consecutiveFailures == 0 || consecutiveFailures > entryUpdateMaxFastRetries {
 				if _, due := c.updateIsDue(); !due {
-					// Re-evaluate every base updateInterval rather than
-					// sleeping the full (possibly CXO-stretched) remaining
-					// time: this bounds how long a keepalive stays stretched
-					// after the CXO feed drops (effectiveUpdateInterval falls
-					// back to the base interval the moment
-					// cxoKeepaliveHealthyFn goes false), and avoids a negative
-					// Reset when the effective interval exceeds the base one.
+					// Re-evaluate every base updateInterval: while CXO keeps
+					// the entry alive nothing is ever due, and the moment the
+					// feed turns unhealthy or changes epoch the next tick
+					// re-registers over HTTP.
 					t.Reset(c.updateInterval)
 					continue
 				}
@@ -1477,34 +1476,33 @@ func getClientEntry(ctx context.Context, dc disc.APIClient, clientPK cipher.PubK
 
 func (c *EntityCommon) updateIsDue() (lastUpdate time.Time, isDue bool) {
 	lastUpdate = time.Unix(0, c.lastUpdate.Load())
-	isDue = time.Since(lastUpdate) >= c.effectiveUpdateInterval()
-	return lastUpdate, isDue
+	if c.cxoKeepsEntryAlive() {
+		return lastUpdate, false
+	}
+	return lastUpdate, time.Since(lastUpdate) >= c.updateInterval
 }
 
-// cxoHealthyUpdateInterval is the stretched spacing between no-change client
-// discovery re-registrations while a registration-over-CXO keepalive is
-// healthy. Chosen well under the dmsg-discovery client-entry TTL (60m) so the
-// HTTP re-PUT alone keeps the entry alive even if CXO ingest silently stalls,
-// while cutting the periodic Noise+PQ handshake rate by an order of magnitude.
-const cxoHealthyUpdateInterval = 30 * time.Minute
+// CXOKeepaliveFunc reports whether a registration-over-CXO feed is keeping
+// this client's entry alive, and the epoch of the subscription doing it. The
+// epoch changes whenever the subscription arrives on a new conn.
+type CXOKeepaliveFunc func() (healthy bool, epoch uint64)
 
-// effectiveUpdateInterval is c.updateInterval, stretched to
-// cxoHealthyUpdateInterval when a registration-over-CXO keepalive reports
-// healthy. Servers and non-CXO clients (nil fn) always get c.updateInterval.
-func (c *EntityCommon) effectiveUpdateInterval() time.Duration {
-	if fn := c.cxoKeepaliveHealthyFn.Load(); fn != nil && (*fn)() {
-		if cxoHealthyUpdateInterval > c.updateInterval {
-			return cxoHealthyUpdateInterval
-		}
+// cxoKeepsEntryAlive reports whether the periodic no-change re-registration
+// can be skipped: the feed is healthy and on the epoch of the last update.
+func (c *EntityCommon) cxoKeepsEntryAlive() bool {
+	fn := c.cxoKeepaliveHealthyFn.Load()
+	if fn == nil || c.lastUpdate.Load() == 0 {
+		return false
 	}
-	return c.updateInterval
+	healthy, epoch := (*fn)()
+	return healthy && epoch == c.lastUpdateEpoch.Load()
 }
 
 // SetCXOKeepaliveHealthyFunc installs (or, with nil, clears) the predicate
 // that reports whether this client's registration-over-CXO keepalive is
 // healthy. See cxoKeepaliveHealthyFn. Safe to call concurrently with the
 // entry-update loop.
-func (c *EntityCommon) SetCXOKeepaliveHealthyFunc(fn func() bool) {
+func (c *EntityCommon) SetCXOKeepaliveHealthyFunc(fn CXOKeepaliveFunc) {
 	if fn == nil {
 		c.cxoKeepaliveHealthyFn.Store(nil)
 		return
@@ -1529,6 +1527,10 @@ func (c *EntityCommon) nudgeEntryUpdate() {
 }
 
 func (c *EntityCommon) recordUpdate() {
+	if fn := c.cxoKeepaliveHealthyFn.Load(); fn != nil {
+		_, epoch := (*fn)()
+		c.lastUpdateEpoch.Store(epoch)
+	}
 	c.lastUpdate.Store(time.Now().UnixNano())
 }
 

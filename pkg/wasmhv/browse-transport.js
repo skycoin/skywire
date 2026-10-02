@@ -59,20 +59,70 @@
     return 'http://' + descriptor.host + path;
   }
 
+  // siteHost is the host the frame stands for; sameSite says whether a request
+  // goes to it (or a subdomain, either way round). The page's cookies live on
+  // the frame's one origin, so they travel only to its own site — never to a
+  // third party the page also fetches from.
+  function siteHost(descriptor) {
+    try { return descriptor.net === 'skysocks' ? new URL(descriptor.base).hostname : String(descriptor.host || ''); } catch (e) { return ''; }
+  }
+  function sameSite(descriptor, url) {
+    var a = siteHost(descriptor).toLowerCase().replace(/^www\./, ''), b;
+    try { b = new URL(url).hostname.toLowerCase().replace(/^www\./, ''); } catch (e) { return false; }
+    return !!a && (a === b || b.endsWith('.' + a) || a.endsWith('.' + b));
+  }
+
   function fetchFor(descriptor, req) {
     var t = globalThis.__netscrapeFetch;
     if (typeof t !== 'function') { return Promise.reject(new Error('no mesh transport on this page')); }
-    return Promise.resolve(t(urlFor(descriptor, req), {
+    var target = urlFor(descriptor, req);
+    var own = sameSite(descriptor, target);
+    var headers = Object.assign({}, req.headers || {});
+    if (!own) { delete headers['x-realorigin-cookie']; }
+    return Promise.resolve(t(target, {
       method: req.method || 'GET',
-      headers: req.headers || {},
+      headers: headers,
       // bottle's httpExchange wants a Uint8Array (it sets Content-Length from
       // .length); realorigin hands over an ArrayBuffer.
       body: req.body ? new Uint8Array(req.body) : null,
     })).then(function (res) {
-      return res.arrayBuffer().then(function (buf) {
-        return { status: res.status, headers: headersOf(res), body: new Uint8Array(buf) };
-      });
+      // x-realorigin-url names the real address — after redirects, when the
+      // transport says where it landed — so the frame can report it as its
+      // referrer: some sites refuse to run framed unless their own site sent
+      // them (realorigin bootstrap.html).
+      var h = headersOf(res);
+      h['x-realorigin-url'] = h['x-browse-final-url'] || target;
+      delete h['x-browse-final-url'];
+      if (!own) { delete h['x-realorigin-set-cookie']; }
+      // The body stays a stream: the responder transfers it to the frame and
+      // the service worker answers with it, so a large download is never
+      // held whole.
+      return { status: res.status, headers: h, body: res.body || null };
     });
+  }
+
+  // websocketFor hands a frame's WebSocket to the desk's relay. A socket aimed
+  // at B itself (a page building its URL from location) is rebased onto the
+  // real site, as urlFor does for fetches; the Origin sent is the real site's.
+  function websocketFor(descriptor, ws, port) {
+    var t = globalThis.__netscrapeWebSocket;
+    if (typeof t !== 'function') {
+      try {
+        port.postMessage({ t: 'error', message: 'no websocket transport on this page' });
+        port.postMessage({ t: 'close', code: 1006, reason: '', wasClean: false });
+      } catch (e) { /* frame gone */ }
+      return;
+    }
+    var url = ws.url;
+    try {
+      var u = new URL(ws.url);
+      if (isBrowseOrigin(u.origin.replace(/^ws/, 'http'))) {
+        var path = u.pathname + u.search;
+        url = descriptor.net === 'skysocks' ? descriptor.base.replace(/^http/, 'ws') + path : 'ws://' + descriptor.host + path;
+      }
+    } catch (e) { /* the relay reports a bad url */ }
+    var origin = descriptor.net === 'skysocks' ? descriptor.base : 'http://' + descriptor.host;
+    t({ url: url, protocols: ws.protocols || [], origin: origin }, port);
   }
 
   // The visor's skysocks-lite path calls __skywireProxyLog(winId, line) for every
@@ -96,5 +146,6 @@
   globalThis.realOrigin.configure({
     suffix: cfg.suffix || '.mesh.localhost',
     fetch: fetchFor,
+    websocket: websocketFor,
   });
 })();

@@ -109,11 +109,10 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 			stdout := r.origStdout
 			// TODO: note that `man bash` mentions that `wait` only waits for the last
 			// process substitution as long as it is $!; the logic here would mean we wait for all of them.
-			bg := bgProc{
-				done: make(chan struct{}),
-				exit: new(exitStatus),
-			}
+			bg := r.newBgProc()
+			bg.substitution = true
 			r.bgProcs = append(r.bgProcs, bg)
+			r.lastBg = bg
 			go func() {
 				defer func() {
 					*bg.exit = r2.exit
@@ -325,14 +324,12 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 		// background ones running. What ends a job here is kill, the shell
 		// exiting, or [Runner.StopJobs].
 		bgCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-		bg := bgProc{
-			done:     make(chan struct{}),
-			exit:     new(exitStatus),
-			cmd:      jobText(&st2),
-			cancel:   cancel,
-			disowned: st.Disown,
-		}
+		bg := r.newBgProc()
+		bg.cmd = jobText(&st2)
+		bg.cancel = cancel
+		bg.disowned = st.Disown
 		r.bgProcs = append(r.bgProcs, bg)
+		r.lastBg = bg
 		go func() {
 			defer cancel()
 			r2.Run(bgCtx, &st2)

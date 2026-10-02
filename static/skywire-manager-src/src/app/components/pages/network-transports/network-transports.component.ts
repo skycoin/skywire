@@ -15,18 +15,32 @@ interface TransportLatency {
   avg: number;
 }
 
-/** Mirrors pkg/deployment/tpd/store.EdgeBandwidth. */
-interface EdgeBandwidth { sent: number; recv: number; }
-interface DailyEdgeBandwidth { date: string; a?: EdgeBandwidth; b?: EdgeBandwidth; }
-
-/** Mirrors pkg/deployment/tpd/store.TransportMetric. */
+/**
+ * Mirrors compactTransportRow in pkg/visor/hypervisor_handlers_tpd_reduce.go.
+ *
+ * The daily bandwidth array is folded to sent/recv by the hypervisor now. It
+ * used to arrive raw: on the production mesh that is ~180k records and 60MB+
+ * of JSON, which the upstream truncated, the write deadline killed, and this
+ * table then tried to render in one pass.
+ */
 interface TransportMetric {
   id: string;
   type: string;
   live: boolean;
   edges?: string[];
   latency?: TransportLatency;
-  daily: DailyEdgeBandwidth[];
+  sent: number;
+  recv: number;
+}
+
+/** Mirrors compactTransportMetrics in the same file. */
+interface NetworkTransportsResponse {
+  metrics: TransportMetric[];
+  total: number;
+  returned: number;
+  live: number;
+  network_bandwidth: number;
+  partial: boolean;
 }
 
 /** Compact "by transport" row: one per TPD transport. */
@@ -96,6 +110,15 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
   hideOffline = false;
 
   rawCount = 0;
+  // Rows the hypervisor kept after the cap, and whether the upstream body was
+  // cut off before it finished. Both are shown, because a table that silently
+  // displays 2000 of 180000 transports is worse than one that says so.
+  returnedCount = 0;
+  liveTotal = 0;
+  // The metrics feed is a CXO subscription; on a cold start it needs a moment
+  // to fill. That is a wait, not an error.
+  syncing = false;
+  partial = false;
   networkBandwidth = 0;
   byTransport: ByTransportRow[] = [];
   byVisor: VisorNode[] = [];
@@ -146,7 +169,15 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
   }
 
   setHideOffline(hide: boolean) {
+    if (hide === this.hideOffline) {
+      return;
+    }
     this.hideOffline = hide;
+    // Refetch rather than filtering what we already have. The hypervisor caps
+    // the response, and dead transports carry most of the historical bandwidth
+    // on a real mesh, so filtering the capped rows locally would leave almost
+    // nothing. Asking the server for live-only gets the top N that are live.
+    this.fetch().subscribe();
   }
 
   /** Compact-view rows after applying the offline filter. */
@@ -179,9 +210,17 @@ return {
   private fetch() {
     this.loading = this.byTransport.length === 0 && this.byVisor.length === 0;
 
-    return this.api.get(`network/transports?days=${this.days}`).pipe(
+    return this.api.get(
+      `network/transports?days=${this.days}` + (this.hideOffline ? '&live=true' : '')
+    ).pipe(
       catchError((err) => {
-        this.error = err?.message || 'Failed to fetch transports';
+        // 503 means the CXO metrics feed is still syncing — not a failure, and
+        // it clears on its own. Saying "failed" there sends people looking for
+        // a fault that isn't present.
+        this.syncing = err?.status === 503;
+        this.error = this.syncing
+          ? null
+          : err?.message || 'Failed to fetch transports';
         this.loading = false;
         this.cdr.markForCheck();
 
@@ -189,31 +228,41 @@ return {
       }),
       switchMap((rows) => {
         if (rows === null) {
- return of(null); 
+ return of(null);
 }
-        this.consume(Array.isArray(rows) ? rows : []);
+        this.consume(rows as NetworkTransportsResponse);
 
         return of(rows);
       }),
     );
   }
 
-  private consume(metrics: TransportMetric[]) {
-    this.rawCount = metrics.length;
-    let networkBw = 0;
+  private consume(resp: NetworkTransportsResponse) {
+    // Defensive: an older hypervisor still returns a bare array.
+    const metrics: TransportMetric[] = Array.isArray(resp)
+      ? (resp as TransportMetric[])
+      : Array.isArray(resp?.metrics) ? resp.metrics : [];
+
+    this.rawCount = Array.isArray(resp) ? metrics.length : (resp?.total ?? metrics.length);
+    this.returnedCount = Array.isArray(resp) ? metrics.length : (resp?.returned ?? metrics.length);
+    this.liveTotal = Array.isArray(resp) ? 0 : (resp?.live ?? 0);
+    this.partial = Array.isArray(resp) ? false : !!resp?.partial;
+
+    let networkBw = Array.isArray(resp) ? 0 : (resp?.network_bandwidth ?? 0);
     const byTp: ByTransportRow[] = [];
     const byVisorMap = new Map<string, VisorNode>();
 
     for (const m of metrics) {
       if (!m.edges || m.edges.length < 2) {
- continue; 
+ continue;
 }
-      const [aToB, bToA] = this.verifiedBandwidth(m);
+      const aToB = m.sent || 0;
+      const bToA = m.recv || 0;
       const bw = aToB + bToA;
-      networkBw += bw;
-      if (bw === 0 && !m.latency) {
- continue; 
-}
+      if (Array.isArray(resp)) {
+        // Legacy bare-array response: no server-side total to take.
+        networkBw += bw;
+      }
 
       byTp.push({
         id: m.id,
@@ -267,6 +316,7 @@ return {
     this.networkBandwidth = networkBw;
     this.loading = false;
     this.error = null;
+    this.syncing = false;
     this.lastUpdated = new Date();
     this.cdr.markForCheck();
   }
@@ -275,26 +325,6 @@ return {
     return { pk: pk, sent: 0, recv: 0, bandwidth: 0, transports: [], liveCount: 0, offlineCount: 0, expanded: false };
   }
 
-  /** Mirrors verifiedBandwidth() in cmd/skywire-cli/commands/tp/tp-metrics.go. */
-  private verifiedBandwidth(m: TransportMetric): [number, number] {
-    let aToB = 0, bToA = 0;
-    for (const d of m.daily || []) {
-      const aRep = !!d.a && ((d.a.sent || 0) > 0 || (d.a.recv || 0) > 0);
-      const bRep = !!d.b && ((d.b.sent || 0) > 0 || (d.b.recv || 0) > 0);
-      if (aRep && bRep) {
-        aToB += Math.min(d.a!.sent || 0, d.b!.recv || 0);
-        bToA += Math.min(d.a!.recv || 0, d.b!.sent || 0);
-      } else if (aRep) {
-        aToB += d.a!.sent || 0;
-        bToA += d.a!.recv || 0;
-      } else if (bRep) {
-        aToB += d.b!.recv || 0;
-        bToA += d.b!.sent || 0;
-      }
-    }
-
-    return [aToB, bToA];
-  }
 
   /** Bytes → human readable (KiB/MiB/GiB). */
   fmtBytes(b: number): string {

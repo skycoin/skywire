@@ -4,9 +4,13 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // pkOf builds a distinct deterministic pubkey for index i (non-zero map key).
@@ -198,4 +202,56 @@ func BenchmarkRouteFarPair_Landmark(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = g.computeRouteWeighted(context.Background(), src, dst, 0, 8, 3, true) //nolint:errcheck // bench loop measures serve cost only
 	}
+}
+
+// A rebuilt graph reuses the previous graph's landmark tables while fresh:
+// composed routes skip a transport that has since gone and carry the
+// current latencies; stale tables are rebuilt.
+func TestLandmarkTablesCarryOver(t *testing.T) {
+	g0, _, leaves := buildHubGraph(t, 6, 40, 2)
+	m := g0.store.(*mockStore)
+	c := NewGraphCache(m, time.Hour, nil)
+	ctx := context.Background()
+
+	g1, err := c.Rebuild(ctx)
+	require.NoError(t, err)
+	lt := g1.ensureLandmarks()
+	require.NotNil(t, lt)
+
+	// Drop one of the first leaf's hub links and change the other's latency.
+	src, dst := leaves[0], leaves[len(leaves)-1]
+	gone, kept := m.transports[src][0], m.transports[src][1]
+	for _, pk := range gone.Edges {
+		m.transports[pk] = removeEntry(m.transports[pk], gone)
+	}
+	kept.Latency = 42
+
+	g2, err := c.Rebuild(ctx)
+	require.NoError(t, err)
+	require.Same(t, lt, g2.ensureLandmarks(), "fresh tables are reused")
+	routes := g2.composeLandmark(lt, src, dst, 10, 0, 6)
+	require.NotEmpty(t, routes)
+	for _, r := range routes {
+		validateRoute(t, g2, r, src, dst, 6)
+		for _, h := range r.Hops {
+			require.NotEqual(t, gone.ID, h.TpID, "a gone transport is never composed")
+			if h.TpID == kept.ID {
+				require.EqualValues(t, 42, h.Latency, "hop latency from the current graph")
+			}
+		}
+	}
+
+	lt.builtAt = time.Now().Add(-landmarkMaxAge - time.Second)
+	g3, err := c.Rebuild(ctx)
+	require.NoError(t, err)
+	require.NotSame(t, lt, g3.ensureLandmarks(), "stale tables are rebuilt")
+}
+func removeEntry(es []*transport.Entry, e *transport.Entry) []*transport.Entry {
+	out := es[:0]
+	for _, x := range es {
+		if x != e {
+			out = append(out, x)
+		}
+	}
+	return out
 }

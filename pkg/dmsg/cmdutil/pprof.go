@@ -4,7 +4,6 @@ package cmdutil
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/pprof"
 	"os"
 	"runtime"
 	rpprof "runtime/pprof"
@@ -183,19 +182,10 @@ func startPProfHTTP(log *logging.Logger, addr string, traceOnly bool) {
 		runtime.LockOSThread()
 
 		mux := http.NewServeMux()
+		registerPprofHandlers(mux, traceOnly)
 		if traceOnly {
-			mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 			log.Infof("Serving trace endpoint on http://%s/debug/pprof/trace (dedicated thread)", addr)
 		} else {
-			mux.HandleFunc("/debug/pprof/", pprof.Index)
-			mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-			mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-			mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-			mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-
-			for _, profile := range []string{"heap", "goroutine", "threadcreate", "block", "mutex", "allocs"} {
-				mux.Handle("/debug/pprof/"+profile, pprof.Handler(profile))
-			}
 			mux.HandleFunc("/debug/cache", cacheStatsHandler)
 			log.Infof("Serving pprof on http://%s (dedicated thread); cipher+DH cache stats at /debug/cache", addr)
 		}

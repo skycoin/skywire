@@ -63,6 +63,26 @@ func (v *Visor) FetchTransportMetricsCXO(days int) ([]byte, time.Time, error) {
 	if mgr == nil {
 		return nil, time.Time{}, ErrTPDMetricsNotReady
 	}
+	// Pinned, not acquired for the duration of the call.
+	//
+	// AcquireFor holds the feed only while this function runs. On the
+	// production mesh the first sync of this feed does not finish inside one
+	// call — it is ~180k records across many day leaves — so the wait below
+	// timed out, the reference dropped, the 10s grace tore the subscriber
+	// down, and the next request began the whole sync again from nothing. The
+	// feed could never become readable no matter how often the page retried;
+	// measured 2026-09-28, fifteen minutes of polling never produced a hit.
+	//
+	// Pin keeps the subscription up between requests, so a sync that needs
+	// longer than one call simply finishes, and thereafter live Root pushes
+	// keep it fresh. It is idempotent, and pinning happens here rather than in
+	// CXOSubMgr so that only a visor actually serving this page pays for the
+	// feed — the same reason FeedTPDAllTransports is pinned where it is used.
+	mgr.Pin(FeedTPDMetrics)
+
+	// Still acquired for the tab as well: TabMetrics also depends on
+	// FeedTPDUptime, and dropping that here would quietly change what the
+	// uptime tab finds cached.
 	mgr.AcquireFor(TabMetrics)
 	defer mgr.ReleaseFor(TabMetrics)
 
@@ -71,19 +91,13 @@ func (v *Visor) FetchTransportMetricsCXO(days int) ([]byte, time.Time, error) {
 		return body, ts, nil
 	}
 
-	// Cold cache: the first fill may still be in flight. Returning the miss
-	// here would also release the reference, and the grace-period teardown
-	// then closes the subscriber mid-fill — so a feed whose first sync takes
-	// longer than one call never becomes readable, however often it is
-	// retried. This feed is tens of megabytes across many leaves and takes
-	// tens of seconds to fill; measured on production it delivers 7.1 MB
-	// (20,493 records) once the reference is simply held open.
-	//
-	// The AcquireFor above stays held across the wait, which is what keeps
-	// the cycle alive long enough to finish.
+	// Cold cache: the first fill is in flight. Wait a bounded time for it —
+	// the caller gets "still syncing" rather than a hang if it needs longer,
+	// and because the feed is pinned that progress is not thrown away.
 	if !mgr.WaitForFirstSync(context.Background(), FeedTPDMetrics, cxosub.FeedFirstSyncTimeout(FeedTPDMetrics)) {
 		return nil, time.Time{}, err
 	}
+
 	return readTransportMetricsCXO(mgr, days)
 }
 

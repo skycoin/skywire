@@ -73,7 +73,8 @@ function bridgeFetch(req, clientId) {
           resolve(new Response('real-origin: ' + r.error, { status: 502 }));
           return;
         }
-        // r.headers is a plain object; r.body is a transferred ArrayBuffer.
+        // r.headers is a plain object; r.body is a transferred ArrayBuffer or
+        // ReadableStream (a streamed response), either of which Response takes.
         var h = new Headers();
         if (r.headers) {
           Object.keys(r.headers).forEach(function (k) {

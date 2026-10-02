@@ -31,6 +31,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
+	"github.com/skycoin/skywire/pkg/deployment/ar/arfeed"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -57,10 +58,17 @@ var cxoBindLeaves = []cxoBindLeaf{
 	{"swtr", types.WT},
 }
 
+// reachLeaf is the leaf a visor states its own reachability in (see
+// arfeed.ReachDecl). Not a binding: it carries no address.
+const reachLeaf = "reach"
+
 // Sink ingests bindings replicated from visor AR-bind feeds. The AR API
 // satisfies it via (*api.API).IngestBindFromCXO.
 type Sink interface {
 	IngestBindFromCXO(ctx context.Context, reporter cipher.PubKey, tpType types.Type, la addrresolver.LocalAddresses)
+	// IngestReachFromCXO takes the visor's own reachability declaration, the
+	// "reach" leaf of the same feed.
+	IngestReachFromCXO(reporter cipher.PubKey, d arfeed.ReachDecl)
 }
 
 // Config tunes the aggregator loops. Zero values get sane defaults.
@@ -172,6 +180,15 @@ func (a *Aggregator) handleRootFilled(r *registry.Root) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		a.sink.IngestBindFromCXO(ctx, reporter, bl.t, la)
 		cancel()
+	}
+
+	if leaf, ok := cxoaggregate.LeafByName(pack, &rootNode, reachLeaf); ok && len(leaf) > 0 {
+		var d arfeed.ReachDecl
+		if err := json.Unmarshal(leaf, &d); err != nil {
+			a.log.WithError(err).WithField("visor", reporter).Debug(logTag + ": reach leaf decode failed")
+		} else {
+			a.sink.IngestReachFromCXO(reporter, d)
+		}
 	}
 }
 

@@ -38,6 +38,13 @@ const (
 	wsReloadAfterMs = 60000
 )
 
+// FragmentPath serves the live region alone. A page whose WebSocket never
+// opens — one rendered through netscrape, whose frames carry fetches but not
+// sockets — polls it every pollMs instead, so it still updates.
+const FragmentPath = "/fragment"
+
+const pollMs = 2000
+
 // Render returns the full, self-contained HTML status page for snap. All
 // interpolated values are HTML-escaped; the page loads no external resource
 // (matching the proxies' strict no-network serving context).
@@ -186,6 +193,7 @@ func RenderFragment(snap Snapshot) []byte {
 var liveScript = `<script>(function(){var ws=null,pend=null,last=null,pv=null,` +
 	fmt.Sprintf(`bo=%d,down=0,probing=false,armed=false,BASE=%d,MAX=%d,RELOAD=%d;`,
 		wsBackoffBaseMs, wsBackoffBaseMs, wsBackoffMaxMs, wsReloadAfterMs) +
+	fmt.Sprintf(`opened=false,polling=false,POLL=%d,FRAG="%s";`, pollMs, FragmentPath) +
 	`function stat(s,c){var el=document.getElementById("wsstat");if(el){el.textContent=s;el.className="wsstat "+c;el.insertAdjacentHTML("afterbegin",'<i class="dot"></i>');}}` +
 	// probeReload is the LAST resort, and it never navigates blind: it fetches this
 	// page's own URL in the background and reloads only if that came back ok. A
@@ -224,11 +232,18 @@ var liveScript = `<script>(function(){var ws=null,pend=null,last=null,pv=null,` 
 	`var tr2=el.querySelector(".tree");if(tr2){tr2.scrollLeft=trl;}meters(el);window.scrollTo(sx,sy);}` +
 	`function push(h){if(selecting()){pend=h;return;}apply(h);}` +
 	`document.addEventListener("selectionchange",function(){if(pend!==null&&!selecting()){var h=pend;pend=null;apply(h);}});` +
-	`function connect(){armed=false;if(ws){return;}stat("connecting","wait");` +
-	`try{ws=new WebSocket(url());}catch(e){ws=null;if(!down){down=Date.now();}sched();return;}` +
-	`ws.onopen=function(){stat("live","ok");};` +
+	// poll is the fallback for a socket that never opened: fetch the live region
+	// every POLL ms and apply it as a push would; it stops once a socket opens.
+	`function poll(){if(opened){polling=false;return;}` +
+	`fetch(FRAG,{cache:"no-store",credentials:"same-origin"}).then(function(r){return r.ok?r.text():Promise.reject(r);})` +
+	`.then(function(h){down=0;bo=BASE;stat("live (polling)","ok");push(h);},function(){stat("reconnecting","warn");})` +
+	`.then(function(){setTimeout(poll,POLL);});}` +
+	`function startPoll(){if(!opened&&!polling){polling=true;poll();}}` +
+	`function connect(){armed=false;if(ws){return;}if(!polling){stat("connecting","wait");}` +
+	`try{ws=new WebSocket(url());}catch(e){ws=null;if(!down){down=Date.now();}startPoll();sched();return;}` +
+	`ws.onopen=function(){opened=true;stat("live","ok");};` +
 	`ws.onmessage=function(e){bo=BASE;down=0;stat("live","ok");push(e.data);};` +
-	`ws.onclose=function(){ws=null;if(!down){down=Date.now();}stat("reconnecting","warn");sched();};` +
+	`ws.onclose=function(){ws=null;if(!down){down=Date.now();}if(!polling){stat("reconnecting","warn");}startPoll();sched();};` +
 	`ws.onerror=function(){try{ws.close();}catch(e){}};}` +
 	// A browser that just regained connectivity, or a tab the user just came back
 	// to, retries immediately rather than sitting out the remaining backoff.

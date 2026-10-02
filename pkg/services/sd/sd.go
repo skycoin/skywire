@@ -75,8 +75,6 @@ func (s *service) State() services.State {
 func (s *service) build(ctx context.Context, log *logging.Logger, dmsgAddr string, plainHTTP bool) (*api.API, error) {
 	cfg := s.cfg
 
-	metricsutil.ServePProf(log, cfg.PprofAddr, "service-discovery")
-
 	storeType := cfg.StoreType()
 	s.store = services.StoreKind(storeType)
 	redisURL := cfg.Redis
@@ -184,6 +182,7 @@ func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, 
 func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 	log := services.NewLogger(cfg.LogTag("service_discovery"), cfg.LogLevel)
+	defer cfg.StartPprof(log)()
 
 	pk := cfg.PubKey
 	sk := cfg.SecKey
