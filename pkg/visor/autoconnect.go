@@ -30,6 +30,12 @@ const PublicServiceDelay = skyenv.PublicAutoconnectInterval
 // visor reaches the mesh in seconds rather than 5 minutes.
 const initialAutoconnectDelay = 3 * time.Second
 
+// browserAutoconnectRetry is the next pass's delay for a visor that cannot make
+// stcpr (a browser) while it holds fewer swtr transports than its cap. swtr is
+// the best carrier such a visor has, and waiting PublicServiceDelay left the
+// tab on webrtc first hops for its first five minutes.
+const browserAutoconnectRetry = 30 * time.Second
+
 // ConnectFn provides a way to connect to remote service
 type ConnectFn func(context.Context, cipher.PubKey) error
 
@@ -179,6 +185,12 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 
 			const maxPublicVisors = 5 // Connect to up to 5 public visors
 			const maxWEBRTC = 20      // Max WebRTC transports to other (webrtc-capable) visors
+			// A visor without stcpr (a browser) has swtr as its best carrier, so it
+			// holds as many of those as webrtc rather than the native handful.
+			maxSWTR := maxPublicVisors
+			if !localSupportsSTCPR {
+				maxSWTR = maxWEBRTC
+			}
 
 			// Count existing automatic transports by type and remote PK
 			countSTCPR := 0
@@ -323,7 +335,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				if len(wtwsTargets) > 0 && localSupportsWT {
 					a.log.Debug("Phase 3b: Connecting to direct-unreachable public visors via WT (swtr)")
 					phaseWT, err := a.connectByReach(ctx, v.conf.PK, wtwsTargets, tptypes.WT,
-						existingByPK, reach, selfNAT, maxPublicVisors, countSWTR, reachExplorePerCycle, false)
+						existingByPK, reach, selfNAT, maxSWTR, countSWTR, reachExplorePerCycle, false)
 					if err != nil {
 						return err
 					}
@@ -400,6 +412,9 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				WithField("swtr", countSWTR).WithField("swsr", countSWSR).
 				WithField("public_visors", len(connectedPublicVisors)).
 				Debug("Public autoconnect cycle completed")
+			if !localSupportsSTCPR && localSupportsWT && countSWTR < maxSWTR {
+				publicServiceTimer.Reset(browserAutoconnectRetry)
+			}
 		}
 	}
 }
