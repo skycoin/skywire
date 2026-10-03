@@ -189,6 +189,9 @@ func (s *Shell) Run(ctx context.Context, line string) (needMore bool, err error)
 		s.pending.Reset()
 		return false, err
 	}
+	if openHeredoc(file) {
+		return true, nil
+	}
 	s.pending.Reset()
 	err = s.Runner.Run(ctx, file)
 	// Remembered before the reset, because the reset is what erases it.
@@ -345,4 +348,18 @@ func (s *Shell) execHandler(next interp.ExecHandlerFunc) interp.ExecHandlerFunc 
 		fprintf(interp.HandlerCtx(ctx).Stderr, "websh: %s: command not found\n", args[0])
 		return interp.ExitStatus(127)
 	}
+}
+
+// openHeredoc reports a heredoc whose closing word has not been typed yet.
+// The parser now ends such a heredoc at EOF instead of reporting the input
+// as incomplete, so the missing ClosePos is what says more lines are coming.
+func openHeredoc(f *syntax.File) bool {
+	open := false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if r, ok := n.(*syntax.Redirect); ok && (r.Op == syntax.Hdoc || r.Op == syntax.DashHdoc) && !r.ClosePos.IsValid() {
+			open = true
+		}
+		return !open
+	})
+	return open
 }

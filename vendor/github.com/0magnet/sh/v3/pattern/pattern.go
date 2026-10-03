@@ -6,9 +6,13 @@
 //
 // For reference, see
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_13.
+//
+// For one-call matching and globbing with Bash semantics,
+// see [mvdan.cc/sh/v3/shell.Match] and [mvdan.cc/sh/v3/shell.Glob].
 package pattern
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
@@ -50,6 +54,7 @@ func (e *NegExtGlobError) Error() string {
 // TODO(v4): flip NoGlobStar to be opt-in via GlobStar, matching bash
 // TODO(v4): flip EntireString to be opt-out via PartialMatch, as EntireString causes subtle bugs when forgotten
 // TODO(v4): rename NoGlobCase to CaseInsensitive for readability
+// TODO(v4): make Mode a uint32, and drop it from HasMeta and QuoteMeta
 
 const (
 	Shortest          Mode = 1 << iota // prefer the shortest match.
@@ -63,7 +68,7 @@ const (
 
 // Regexp turns a shell pattern into a regular expression that can be used with
 // [regexp.Compile]. It will return an error if the input pattern was incorrect.
-// Otherwise, the returned expression can be passed to [regexp.MustCompile].
+// Compiling the returned expression may still fail, such as when it is too large.
 //
 // For example, Regexp(`foo*bar?`, true) returns `foo.*bar.`.
 //
@@ -107,8 +112,12 @@ func Regexp(pat string, mode Mode) (string, error) {
 	sl := stringLexer{s: pat}
 	var negGroups []NegExtGlobGroup
 	for {
+		start := sl.i
 		if err := regexpNext(&sb, &sl, mode); err == io.EOF {
 			break
+		} else if err == errUnclosed {
+			// The group is now marked as unclosed; reparse it as literal text.
+			sl.i = start
 		} else if err != nil {
 			negErr, ok := err.(*NegExtGlobError)
 			if !ok {
@@ -126,11 +135,36 @@ func Regexp(pat string, mode Mode) (string, error) {
 	return sb.String(), nil
 }
 
+// maxGroupNesting is how deeply extended operator groups may be nested,
+// so that a long pattern cannot overflow the Go stack.
+// [regexp] fails to compile such deeply nested expressions anyway.
+const maxGroupNesting = 1000
+
 // stringLexer helps us tokenize a pattern string.
 // Note that we can use the null byte '\x00' to signal "no character" as shell strings cannot contain null bytes.
 type stringLexer struct {
 	s string
 	i int
+
+	depth int // nested extended operator groups
+
+	// unclosed holds the positions of extended operator groups and bracket
+	// expressions which reach the end of the pattern, so that reparsing
+	// them as literal text does not scan the rest of the pattern again
+	// for each one.
+	unclosed map[int]bool
+}
+
+// errUnclosed is returned by an extended operator group which reaches the end
+// of the pattern, so that the groups enclosing it know that they will as well,
+// as reparsing it as literal text would scan the same tokens to the end.
+var errUnclosed = errors.New("unclosed group")
+
+func (sl *stringLexer) markUnclosed(i int) {
+	if sl.unclosed == nil {
+		sl.unclosed = make(map[int]bool)
+	}
+	sl.unclosed[i] = true
 }
 
 func (sl *stringLexer) next() rune {
@@ -174,25 +208,44 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 			if sl.peekNext() != '(' {
 				break
 			}
-			start := sl.i - 1       // position of the operator
-			sb.WriteRune(sl.next()) // (
+			start := sl.i - 1 // position of the operator
+			if sl.unclosed[start] {
+				break
+			}
+			if sl.depth >= maxGroupNesting {
+				return &SyntaxError{msg: fmt.Sprintf("extended pattern nesting is deeper than %d levels", maxGroupNesting)}
+			}
+			sl.depth++
+			// Build the group separately; like Bash, an unclosed group
+			// is not an extended operator, so it is reparsed as literal text.
+			var gsb strings.Builder
+			gsb.WriteRune(sl.next()) // (
 		nestedLoop:
 			for {
+				var err error
 				switch sl.peekNext() {
 				case ')':
 					break nestedLoop
 				case '|':
 					// extended operators support a list of "or" separated expressions
-					sb.WriteRune(sl.next())
+					gsb.WriteRune(sl.next())
 					continue
+				case '\x00':
+					err = errUnclosed
+				default:
+					err = regexpNext(&gsb, sl, mode)
 				}
-				if err := regexpNext(sb, sl, mode); err == io.EOF {
-					break
-				} else if err != nil {
+				if err != nil {
+					sl.depth--
+					if err == errUnclosed {
+						sl.markUnclosed(start)
+					}
 					return err
 				}
 			}
-			sb.WriteRune(sl.next()) // )
+			sl.depth--
+			gsb.WriteRune(sl.next()) // )
+			sb.WriteString(gsb.String())
 			if op == '!' {
 				return &NegExtGlobError{Groups: []NegExtGlobGroup{{Start: start, End: sl.i}}}
 			}
@@ -208,8 +261,7 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 		return io.EOF
 	case '*':
 		if mode&Filenames == 0 {
-			// * - matches anything when not in filename mode
-			sb.WriteString(`.*`)
+			writeAnyRun(sb, sl, c, mode)
 			break
 		}
 		// "**" only acts as globstar if it is alone as a path element.
@@ -247,10 +299,10 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 			sb.WriteString(`[^/]*`)
 		}
 	case '?':
-		if mode&Filenames != 0 {
-			sb.WriteString(`[^/]`)
+		if mode&Filenames == 0 {
+			writeAnyRun(sb, sl, c, mode)
 		} else {
-			sb.WriteByte('.')
+			sb.WriteString(`[^/]`)
 		}
 	case '\\':
 		c = sl.next()
@@ -260,6 +312,13 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 		sb.WriteString(regexp.QuoteMeta(string(c)))
 	case '[':
 		lit := sl.i // to reparse from, if the bracket turns out to be literal
+		if sl.unclosed[lit-1] {
+			sb.WriteString(`\[`)
+			return nil
+		}
+		// Any bracket expression starting at a "[" within this one would
+		// scan the same tokens, so it reaches the end of the pattern too.
+		var nested []int
 		filenames := mode&Filenames != 0
 		// Build the bracket expression separately; in Filenames mode, one
 		// which could match a slash must be emitted literally instead.
@@ -301,6 +360,9 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 				if classErr != nil {
 					return classErr
 				}
+				for _, i := range nested {
+					sl.markUnclosed(i)
+				}
 				return literalBracket()
 			case '\\':
 				// An escaped character matches itself; quote it so that
@@ -318,6 +380,9 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 				default:
 					if filenames && c == '/' {
 						hasSlash = true
+					}
+					if c == '[' {
+						nested = append(nested, sl.i-1)
 					}
 					bsb.WriteString(regexp.QuoteMeta(string(c)))
 				}
@@ -360,6 +425,8 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 					}
 					bsb.WriteString(rest[:n])
 					sl.i += n
+				} else {
+					nested = append(nested, sl.i-1)
 				}
 			default:
 				if filenames && c == '/' {
@@ -377,6 +444,34 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 		}
 	}
 	return nil
+}
+
+// writeAnyRun writes a run of "*" and "?" characters starting with c
+// outside of filename mode, which matches any string with at least
+// as many characters as there are "?". Translating a long run like
+// "*?*?*?" one character at a time would be slow to match.
+func writeAnyRun(sb *strings.Builder, sl *stringLexer, c rune, mode Mode) {
+	minChars, anyStar := 0, false
+	for {
+		if c == '?' {
+			minChars++
+		} else {
+			anyStar = true
+		}
+		if next := sl.peekNext(); next != '*' && next != '?' {
+			break
+		}
+		if mode&ExtendedOperators != 0 && strings.HasPrefix(sl.peekRest()[1:], "(") {
+			break // an extended operator like "*(" or "?("
+		}
+		c = sl.next()
+	}
+	for range minChars {
+		sb.WriteByte('.')
+	}
+	if anyStar {
+		sb.WriteString(`.*`)
+	}
 }
 
 // charClass returns the length in bytes of the bracket expression element

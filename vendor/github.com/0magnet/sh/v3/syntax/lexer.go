@@ -68,6 +68,8 @@ func (p *Parser) rune() rune {
 		p.line++
 		p.col = 0
 	}
+	// TODO: an escaped "\r\n" has a width of 2,
+	// so the line following it starts at column 2.
 	p.col += int64(p.w)
 	bquotes := 0
 retry:
@@ -280,8 +282,11 @@ skipSpace:
 		}
 	}
 	if p.stopAt != nil && (p.spaced || p.tok == illegalTok || p.stopToken()) {
-		w := utf8.RuneLen(r)
-		if bytes.HasPrefix(p.bs[p.bsp-uint(w):], p.stopAt) {
+		// Note that the buffer may have been refilled since we read r,
+		// such as when peeking at the byte which follows a backslash,
+		// in which case r's bytes are gone and we cannot match on them.
+		w := uint(utf8.RuneLen(r))
+		if p.bsp >= w && bytes.HasPrefix(p.bs[p.bsp-w:], p.stopAt) {
 			p.r = runeEOF
 			p.w = 1
 			p.tok = _EOF
@@ -374,6 +379,11 @@ skipSpace:
 		default:
 			p.advanceLitNone(r)
 		}
+	case p.quote == paramExpArithm && r == '#':
+		// '#' is mksh's unsigned prefix, which only [ArithmExp] and [ArithmCmd]
+		// can represent, so in a subscript it starts a literal instead;
+		// it can be part of an associative array key, like in ${args[cmd,#]}.
+		p.advanceLitOther(r)
 	case p.quote&allArithmExpr != 0 && arithmOps(r):
 		p.tok = p.arithmToken(r)
 	case p.quote&allParamExp != 0 && paramOps(r):
@@ -1019,6 +1029,12 @@ func paramNameRune[T rune | byte](r T) bool {
 	return asciiLetter(r) || asciiDigit(r) || r == '_'
 }
 
+// paramNameStartRune reports whether a parameter name can begin with r,
+// be it a single-rune name like $@ or a regular name like $foo.
+func paramNameStartRune[T rune | byte](r T) bool {
+	return singleRuneParam(r) || paramNameRune(r)
+}
+
 func (p *Parser) advanceLitOther(r rune) {
 	tok := _LitWord
 loop:
@@ -1183,9 +1199,15 @@ func (p *Parser) advanceLitHdoc(r rune) {
 	for p.quote == hdocBodyTabs && r == '\t' {
 		r = p.rune()
 	}
-	lStart := len(p.litBs) - 1
+	lStart := len(p.litBs) - p.w
+	atLineStart := true
+	var lPos Pos
 	stop := p.hdocStops[len(p.hdocStops)-1]
 	for ; ; r = p.rune() {
+		if atLineStart {
+			lPos = p.nextPos() // the first rune in the line
+			atLineStart = false
+		}
 		switch r {
 		case escNewl, '$':
 			p.val = p.endLit()
@@ -1199,16 +1221,12 @@ func (p *Parser) advanceLitHdoc(r rune) {
 			}
 			fallthrough
 		case '\n', runeEOF:
-			if p.parsingDoc {
-				if r == runeEOF {
-					p.tok = _LitWord
-					p.val = p.endLit()
-					return
-				}
-			} else if lStart == 0 && lastTok == _Lit {
+			if lStart == 0 && lastTok == _Lit {
 				// This line starts right after an escaped
 				// newline, so it should never end the heredoc.
 			} else if lStart >= 0 {
+				// TODO: lStart is also 0 when this literal follows an
+				// expansion mid-line, so "${x}EOF" wrongly ends the heredoc.
 				// Compare the current line with the stop word.
 				line := p.litBs[lStart:]
 				if r != runeEOF && len(line) > 0 {
@@ -1220,17 +1238,28 @@ func (p *Parser) advanceLitHdoc(r rune) {
 					if p.val == "" {
 						p.tok = _Newl
 					}
+					if stop != nil {
+						// Not the newline lexed right after the closing word,
+						// which matches as an empty line with a nil stop word.
+						p.hdocClosePos = lPos
+					}
 					p.hdocStops[len(p.hdocStops)-1] = nil
 					return
 				}
 			}
 			if r != '\n' {
-				return // hit an unexpected EOF or closing backquote
+				// Like other shells, end an unclosed heredoc
+				// at EOF or at a closing backquote.
+				if p.val = p.endLit(); p.val == "" {
+					p.next()
+				}
+				return
 			}
 			for p.quote == hdocBodyTabs && p.peek() == '\t' {
 				p.rune()
 			}
 			lStart = len(p.litBs)
+			atLineStart = true
 		}
 	}
 }
@@ -1240,14 +1269,12 @@ func (p *Parser) quotedHdocWord() *Word {
 	p.newLit(r)
 	pos := p.nextPos()
 	stop := p.hdocStops[len(p.hdocStops)-1]
-	for ; ; r = p.rune() {
-		if r == runeEOF {
-			return nil
-		}
+	for ; r != runeEOF; r = p.rune() {
 		for p.quote == hdocBodyTabs && r == '\t' {
 			r = p.rune()
 		}
-		lStart := len(p.litBs) - 1
+		lStart := len(p.litBs) - p.w
+		lPos := p.nextPos()
 	runeLoop:
 		for {
 			switch r {
@@ -1272,6 +1299,7 @@ func (p *Parser) quotedHdocWord() *Word {
 			line = line[:len(line)-1] // minus \n
 		}
 		if bytes.Equal(line, stop) {
+			p.hdocClosePos = lPos
 			p.hdocStops[len(p.hdocStops)-1] = nil
 			val := p.endLit()[:lStart]
 			if val == "" {
@@ -1279,7 +1307,16 @@ func (p *Parser) quotedHdocWord() *Word {
 			}
 			return p.wordOne(p.lit(pos, val))
 		}
+		if r == '`' {
+			break // closing backquote
+		}
 	}
+	// Like other shells, end an unclosed heredoc
+	// at EOF or at a closing backquote.
+	if val := p.endLit(); val != "" {
+		return p.wordOne(p.lit(pos, val))
+	}
+	return nil
 }
 
 func (p *Parser) advanceLitRe(r rune) {

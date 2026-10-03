@@ -1,6 +1,6 @@
 module github.com/skycoin/skywire
 
-go 1.26.4
+go 1.26.6
 
 require (
 	fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4
@@ -59,31 +59,31 @@ require (
 )
 
 require (
-	github.com/0magnet/ansifilter-go v0.0.0-20260915170035-94ca0622007f
-	github.com/0magnet/audioprism-go v0.0.0-20261001114447-501d45cac9f4
-	github.com/0magnet/bbolt v1.5.1-0.20260905171939-18be1d6cb1b4
-	github.com/0magnet/bitree v0.0.0-20260906144807-e66de0b4c738
-	github.com/0magnet/bottle v0.0.0-20261003133518-dd276dca016b
-	github.com/0magnet/calvin v0.0.0-20260915170035-09af7075474e
-	github.com/0magnet/desk v0.0.0-20260927163817-533c8cb313fe
-	github.com/0magnet/desk/panes v0.0.0-20260927163817-533c8cb313fe
-	github.com/0magnet/gobrpc v0.0.0-20260906144809-5215ec59d553
-	github.com/0magnet/golang-ipc v1.2.5-0.20260905172007-25d9c1a262d0
-	github.com/0magnet/got v0.0.0-20260927223336-eaa93e36502d
-	github.com/0magnet/gotop/v4 v4.2.1-0.20260914190639-4f45ea554d47
-	github.com/0magnet/lolcat-go v0.0.0-20260915170035-9435f1eb43a8
-	github.com/0magnet/metrics v1.44.1-0.20260905010813-7e01f8bb5a1c
-	github.com/0magnet/netscrape v0.0.0-20261001192040-bd1d1ef079b7
-	github.com/0magnet/osnotify v0.0.0-20260906144808-7a227da43a0d
-	github.com/0magnet/plot-go v0.0.0-20261001114201-0f27289f4bf4
-	github.com/0magnet/realorigin v0.2.3-0.20260930230111-051e97b884b3
+	github.com/0magnet/ansifilter-go v0.0.0
+	github.com/0magnet/audioprism-go v0.0.0
+	github.com/0magnet/bbolt v1.5.1-0.20261003212416-9085c3a4875a
+	github.com/0magnet/bitree v0.0.0
+	github.com/0magnet/bottle v0.0.0
+	github.com/0magnet/calvin v0.0.0
+	github.com/0magnet/desk v0.0.0
+	github.com/0magnet/desk/panes v0.0.0
+	github.com/0magnet/gobrpc v0.0.0
+	github.com/0magnet/golang-ipc v1.2.5-0.20260915170035-de9342a68204
+	github.com/0magnet/got v0.0.0
+	github.com/0magnet/gotop/v4 v4.2.1-0.20261003212111-e3a1e753dbac
+	github.com/0magnet/lolcat-go v0.0.0
+	github.com/0magnet/metrics v1.44.1-0.20261003211931-057a69362832
+	github.com/0magnet/netscrape v0.0.0
+	github.com/0magnet/osnotify v0.0.0
+	github.com/0magnet/plot-go v0.0.0
+	github.com/0magnet/realorigin v0.2.3
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
-	github.com/0magnet/spheregraph v0.0.0-20260906144810-35af719bf2f1
-	github.com/0magnet/sysinfo v1.1.4-0.20260905172033-914ade4a2548
-	github.com/0magnet/termanim v0.0.0-20260916100333-d501f348ee17
-	github.com/0magnet/wfdrive v0.3.1
-	github.com/0magnet/winbox-go v0.0.0-20260915183431-ca6572e4c323
-	github.com/0magnet/yamux v0.1.3-0.20260905172050-450c4058f851
+	github.com/0magnet/spheregraph v0.0.0
+	github.com/0magnet/sysinfo v1.1.4-0.20261003211934-59c35da8ce3f
+	github.com/0magnet/termanim v0.0.0
+	github.com/0magnet/wfdrive v0.3.2
+	github.com/0magnet/winbox-go v0.0.0
+	github.com/0magnet/yamux v0.1.3-0.20261003212645-80597a0ac6e1
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0
 	github.com/ccding/go-stun v0.1.6
@@ -126,17 +126,17 @@ require (
 )
 
 require (
-	github.com/0magnet/afero v1.15.1-0.20260816202415-9f9d46a34dcd
-	github.com/0magnet/cosmos-go v0.0.0-20260915170035-328675079868
-	github.com/0magnet/sh/v3 v3.13.2-0.20260928172341-4c52a7abff02
-	github.com/0magnet/websh v0.0.0-20261001114753-0401a7704ac9
-	github.com/0magnet/xterm-go v0.0.0-20260930222525-d3033e9b370a
+	github.com/0magnet/afero v1.15.1-0.20261003211811-482680d00992
+	github.com/0magnet/cosmos-go v0.0.0
+	github.com/0magnet/sh/v3 v3.13.2-0.20261003215414-58d567267b7a
+	github.com/0magnet/websh v0.0.0
+	github.com/0magnet/xterm-go v0.0.0
 	github.com/benhoyt/goawk v1.32.0 // indirect
 )
 
 require (
-	github.com/0magnet/go-dsp v0.0.0-20260915170035-5d82286bf5d1 // indirect
-	github.com/0magnet/u-root v0.16.1-0.20260907161518-7972ea755b47 // indirect
+	github.com/0magnet/go-dsp v0.0.0 // indirect
+	github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 // indirect
 	github.com/gdamore/tcell/v3 v3.5.0 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
@@ -152,7 +152,7 @@ require (
 )
 
 require (
-	github.com/0magnet/coloredcobra v1.0.3
+	github.com/0magnet/coloredcobra v1.0.4-0.20260908180055-b9d8b508df51
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect

@@ -76,7 +76,11 @@ format: tidy ## Format the code. Needs goimports (make install-linters)
 		grep -E '^(replace|exclude)' go.mod; \
 		exit 1; \
 	fi
-	${OPTS} goimports -w -local ${PROJECT_BASE} $(shell go list -f '{{.Dir}}' ./... 2>/dev/null | grep -v /vendor/)
+	@# Files, not directories. goimports -w on a DIRECTORY walks it recursively,
+	@# and the module root is one of the directories `go list` returns — so the
+	@# /vendor/ filter that used to be here filtered a path that was never passed,
+	@# and a repo with a vendor tree had every vendored file rewritten too.
+	${OPTS} goimports -w -local ${PROJECT_BASE} $(shell find . -name "*.go" -not -path "*/vendor/*" -not -path "*/.git/*")
 
 lint: ## Run golangci-lint. Needs it installed (make install-linters)
 	command -v golangci-lint || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest

@@ -15,10 +15,14 @@ import (
 	"github.com/0magnet/sh/v3/fileutil"
 )
 
+// TODO(v4): replace the functional options with an options struct.
+
 // PrinterOption is a function which can be passed to NewPrinter
 // to alter its behavior. To apply option to existing Printer
 // call it directly, for example KeepPadding(true)(printer).
 type PrinterOption func(*Printer)
+
+// TODO(v4): take an int rather than a uint.
 
 // Indent sets the number of spaces used for indentation. If set to 0,
 // tabs will be used instead.
@@ -27,8 +31,9 @@ func Indent(spaces uint) PrinterOption {
 }
 
 // BinaryNextLine will make binary operators appear on the next line
-// when a binary command, such as a pipe, spans multiple lines. A
-// backslash will be used.
+// when a binary command, such as a pipe, or a binary test or arithmetic
+// expression spans multiple lines. A backslash is used where newlines
+// need escaping.
 func BinaryNextLine(enabled bool) PrinterOption {
 	return func(p *Printer) { p.binNextLine = enabled }
 }
@@ -95,8 +100,29 @@ func SingleLine(enabled bool) PrinterOption {
 }
 
 // FunctionNextLine will place a function's opening braces on the next line.
+//
+// Deprecated: use [BlockNextLine] instead, which also applies to other opening
+// tokens such as "then" and "do", and which leaves single-line statements alone.
+// The next major version, v4, will remove this option.
+// Note that FunctionNextLine and BlockNextLine cannot be used at the same time.
 func FunctionNextLine(enabled bool) PrinterOption {
 	return func(p *Printer) { p.funcNextLine = enabled }
+}
+
+// BlockNextLine will place the opening token of any statement which spans
+// multiple lines on the next line: the brace opening a function's body,
+// as well as "then" and "do". For example:
+//
+//	f()
+//	{
+//		foo
+//		bar
+//	}
+//
+// Statements printed on a single line, such as "f() { foo; }" or
+// "if true; then foo; fi", are not affected.
+func BlockNextLine(enabled bool) PrinterOption {
+	return func(p *Printer) { p.blockNextLine = enabled }
 }
 
 // NewPrinter allocates a new Printer and applies any number of options.
@@ -122,6 +148,9 @@ func (p *Printer) Print(w io.Writer, node Node) error {
 
 	if p.minify && p.singleLine {
 		return fmt.Errorf("Minify and SingleLine together are not supported yet; please file an issue describing your use case: https://github.com/mvdan/sh/issues")
+	}
+	if p.funcNextLine && p.blockNextLine {
+		return fmt.Errorf("FunctionNextLine and BlockNextLine cannot be used at the same time; note that FunctionNextLine is deprecated")
 	}
 
 	// TODO: consider adding a raw mode to skip the tab writer, much like in
@@ -205,6 +234,13 @@ func (c *colCounter) WriteByte(b byte) error {
 	return c.Writer.WriteByte(b)
 }
 
+func (c *colCounter) Write(b []byte) (int, error) {
+	for _, x := range b {
+		c.addByte(x)
+	}
+	return c.Writer.Write(b)
+}
+
 func (c *colCounter) WriteString(s string) (int, error) {
 	for _, b := range []byte(s) {
 		c.addByte(b)
@@ -233,6 +269,7 @@ type Printer struct {
 	minify         bool
 	singleLine     bool
 	funcNextLine   bool
+	blockNextLine  bool
 
 	wantSpace wantSpaceState // whether space is required or has been written
 
@@ -376,10 +413,9 @@ func (p *Printer) semiOrNewl(s string, pos Pos) {
 }
 
 func (p *Printer) writeLit(s string) {
-	// If p.tabWriter is nil, this is the nested printer being used to print
-	// <<- heredoc bodies, so the parent printer will add the escape bytes
-	// later.
-	if p.tabWriter != nil && strings.Contains(s, "\t") {
+	// When writing to an extraIndenter, it escapes any tabs itself while
+	// reindenting '<<-' heredoc body lines.
+	if _, ok := p.w.(*extraIndenter); !ok && strings.Contains(s, "\t") {
 		p.w.WriteByte(tabwriter.Escape)
 		defer p.w.WriteByte(tabwriter.Escape)
 	}
@@ -486,16 +522,30 @@ func (p *Printer) flushHeredocs() {
 					keepPadding:    p.keepPadding,
 					minify:         p.minify,
 					funcNextLine:   p.funcNextLine,
+					blockNextLine:  p.blockNextLine,
 
 					line: r.Hdoc.Pos().Line(),
 				}
-				p.tabsPrinter.wordParts(r.Hdoc.Parts, true)
+				p.tabsPrinter.hdocBody(r)
 			}
 			p.indent()
-		} else if r.Hdoc != nil {
-			p.wordParts(r.Hdoc.Parts, true)
+			p.unquotedWord(r.Word)
+		} else {
+			w := p.w
+			if e, ok := p.w.(*extraIndenter); ok {
+				// We are a nested printer inside a '<<-' heredoc
+				// body, and this heredoc has no dashes: its body and
+				// delimiter must not gain any indentation, so print
+				// them directly to the writer behind the indenters,
+				// just like a top-level heredoc without dashes.
+				p.w = e.sink()
+			}
+			if r.Hdoc != nil {
+				p.hdocBody(r)
+			}
+			p.unquotedWord(r.Word)
+			p.w = w
 		}
-		p.unquotedWord(r.Word)
 		if r.Hdoc != nil {
 			// Overwrite p.line, since printing r.Word again can set
 			// p.line to the beginning of the heredoc again.
@@ -506,6 +556,47 @@ func (p *Printer) flushHeredocs() {
 	p.level = newLevel
 	p.pendingComments = coms
 	p.mustNewline = true
+}
+
+// hasUnclosedHdoc reports whether s has a heredoc without its closing word.
+func hasUnclosedHdoc(s *Stmt) bool {
+	found := false
+	Walk(s, func(node Node) bool {
+		if r, ok := node.(*Redirect); ok && (r.Op == Hdoc || r.Op == DashHdoc) && !r.ClosePos.IsValid() {
+			found = true
+		}
+		return !found
+	})
+	return found
+}
+
+// hdocBody prints a heredoc's body, ending it with a newline if it lacks one,
+// as the parser ends a heredoc at EOF or a closing backquote.
+func (p *Printer) hdocBody(r *Redirect) {
+	parts := r.Hdoc.Parts
+	lit, isLit := parts[0].(*Lit)
+	if _, quoted := unquotedWordBytes(r.Word); quoted && isLit && len(parts) == 1 {
+		// Backslashes are literal here, so print the body as-is,
+		// as [Printer.wordPart] would escape a trailing backslash.
+		p.writeLit(lit.Value)
+	} else {
+		p.wordParts(parts, true)
+	}
+	if hdocNeedsNewline(r) {
+		p.w.WriteByte('\n')
+		p.line++
+	}
+}
+
+// hdocNeedsNewline reports whether a heredoc's body was cut short
+// in the middle of a line, by EOF or by a closing backquote.
+// Keep in sync with the copy in the interp package.
+func hdocNeedsNewline(r *Redirect) bool {
+	if r.Hdoc == nil || r.ClosePos.IsValid() {
+		return false
+	}
+	lit, ok := r.Hdoc.Parts[len(r.Hdoc.Parts)-1].(*Lit)
+	return !ok || !strings.HasSuffix(lit.Value, "\n")
 }
 
 // newline prints between zero and two newlines.
@@ -863,6 +954,16 @@ func (p *Printer) cmdSubst(cs *CmdSubst) {
 		} else {
 			p.wantSpace = spaceNotRequired
 		}
+		// TODO: with a closing backquote right after a heredoc's closing word,
+		// as in "`cat <<EOF\nfoo\nEOF`", we print "$(cat <<EOF" on one line,
+		// but formatting that result again puts "cat" on a new line.
+		if cs.Backquotes && len(cs.Stmts) > 0 && hasUnclosedHdoc(cs.Stmts[len(cs.Stmts)-1]) {
+			// Force a newline if the closing backquote ended a heredoc,
+			// as the heredoc's closing line will be printed before it:
+			//     `cat <<EOF
+			//     body`
+			p.wantNewline = true
+		}
 		p.nestedStmts(cs.Stmts, cs.Last, cs.Right)
 		p.closingParen(cs.Stmts, cs.Last, cs.Left, cs.Right)
 	}
@@ -908,12 +1009,24 @@ func (p *Printer) arithmExprRecurse(expr ArithmExpr, compact, spacePlusMinus boo
 			p.arithmExprRecurse(expr.Y, compact, false)
 		} else {
 			p.arithmExprRecurse(expr.X, compact, spacePlusMinus)
-			if expr.Op != Comma {
+			// Escaped newlines, as some contexts require them,
+			// such as C-style loops.
+			nextLine := p.binNextLine && expr.Op != Comma &&
+				p.wantsNewline(expr.Y.Pos(), true)
+			switch {
+			case nextLine:
+				p.incLevel()
+				p.bslashNewl()
+				p.advanceLine(expr.Y.Pos().Line())
+			case expr.Op != Comma:
 				p.space()
 			}
 			p.w.WriteString(expr.Op.String())
 			p.space()
 			p.arithmExprRecurse(expr.Y, compact, false)
+			if nextLine {
+				p.decLevel()
+			}
 		}
 	case *UnaryArithm:
 		if expr.Post {
@@ -966,13 +1079,20 @@ func (p *Printer) testExprSameLine(expr TestExpr) {
 		p.word(expr)
 	case *BinaryTest:
 		p.testExprSameLine(expr.X)
-		p.space()
-		p.w.WriteString(expr.Op.String())
 		switch expr.Op {
 		case AndTest, OrTest:
+			if p.binNextLine && p.wantsNewline(expr.Y.Pos(), false) {
+				// No need to escape the newlines here.
+				p.newlines(expr.Y.Pos())
+			} else {
+				p.space()
+			}
+			p.w.WriteString(expr.Op.String())
 			p.wantSpace = spaceRequired
 			p.testExpr(expr.Y)
 		default:
+			p.space()
+			p.w.WriteString(expr.Op.String())
 			p.space()
 			p.testExprSameLine(expr.Y)
 		}
@@ -1121,6 +1241,9 @@ func (p *Printer) stmt(s *Stmt) {
 		} else {
 			p.wantSpace = spaceRequired
 		}
+		// TODO: a heredoc is flushed at the next newline, even one within
+		// a later redirect's word, as in `cat <<EOF <$(\n\techo\n)`,
+		// placing the heredoc's body inside the command substitution.
 		p.word(r.Word)
 		if r.Op == Hdoc || r.Op == DashHdoc {
 			p.pendingHdocs = append(p.pendingHdocs, r)
@@ -1229,7 +1352,11 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 		} else {
 			p.spacedString("while", cmd.Pos())
 		}
+		condLine := p.line
 		p.nestedStmts(cmd.Cond, cmd.CondLast, Pos{})
+		if p.blockNewline(cmd.Do, cmd.DoLast, cmd.DonePos) || p.keepBlockNewline(condLine, cmd.DoPos) {
+			p.wantNewline = true
+		}
 		p.semiOrNewl("do", cmd.DoPos)
 		p.nestedStmts(cmd.Do, cmd.DoLast, cmd.DonePos)
 		p.semiRsrv("done", cmd.DonePos)
@@ -1239,7 +1366,11 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 		} else {
 			p.w.WriteString("for ")
 		}
+		loopLine := p.line
 		p.loop(cmd.Loop)
+		if p.blockNewline(cmd.Do, cmd.DoLast, cmd.DonePos) || p.keepBlockNewline(loopLine, cmd.DoPos) {
+			p.wantNewline = true
+		}
 		p.semiOrNewl("do", cmd.DoPos)
 		p.nestedStmts(cmd.Do, cmd.DoLast, cmd.DonePos)
 		p.semiRsrv("done", cmd.DonePos)
@@ -1298,9 +1429,18 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 			p.w.WriteString("()")
 			p.wantSpace = spaceNotRequired
 		}
-		if p.funcNextLine {
+		// Only place an opening brace on its own line;
+		// other body commands like subshells are left alone.
+		block, _ := cmd.Body.Cmd.(*Block)
+		braceNextLine := block != nil && p.blockNewline(block.Stmts, block.Last, block.Rbrace)
+		if p.funcNextLine || braceNextLine {
 			p.newline(Pos{})
 			p.indent()
+			if braceNextLine {
+				// Forbid "foo()\n{ bar; }"; the Block case
+				// below only does so for funcNextLine.
+				p.wantNewline = true
+			}
 		} else if !cmd.Parens || !p.minify {
 			p.space()
 		}
@@ -1415,13 +1555,17 @@ func (p *Printer) ifClause(ic *IfClause, elif bool) {
 	if !elif {
 		p.spacedString("if", ic.Pos())
 	}
+	condLine := p.line
 	p.nestedStmts(ic.Cond, ic.CondLast, Pos{})
-	p.semiOrNewl("then", ic.ThenPos)
 	thenEnd := ic.FiPos
 	el := ic.Else
 	if el != nil {
 		thenEnd = el.Position
 	}
+	if p.blockNewline(ic.Then, ic.ThenLast, thenEnd) || p.keepBlockNewline(condLine, ic.ThenPos) {
+		p.wantNewline = true
+	}
+	p.semiOrNewl("then", ic.ThenPos)
 	p.nestedStmts(ic.Then, ic.ThenLast, thenEnd)
 
 	if el != nil && el.ThenPos.IsValid() {
@@ -1477,6 +1621,15 @@ func (p *Printer) stmtList(stmts []*Stmt, last []Comment) {
 			// statement.
 			p.comments(c)
 		}
+		if i > 0 && p.staysOnSameLine(s, pos) {
+			// Write the semicolon ourselves, as no newline will
+			// separate the two statements below.
+			p.wantNewline = false
+			if !p.wroteSemi {
+				p.w.WriteByte(';')
+				p.wantSpace = spaceRequired
+			}
+		}
 		if p.mustNewline || !p.minify || p.wantSpace == spaceRequired {
 			p.newlines(pos)
 		}
@@ -1492,23 +1645,77 @@ func (p *Printer) stmtList(stmts []*Stmt, last []Comment) {
 	p.comments(last...)
 }
 
-func (p *Printer) nestedStmts(stmts []*Stmt, last []Comment, closing Pos) {
-	p.incLevel()
+// staysOnSameLine reports whether a statement which followed another on the
+// same line should stay there. We allow this for a few control-flow commands,
+// as splitting pairs like `foo; exit $?` or `arg=$1; shift` into two lines
+// would break exit guards or lose intent; see issues #564 and #679.
+// Note that singleLine mode joins statements earlier in [Printer.stmtList].
+func (p *Printer) staysOnSameLine(s *Stmt, pos Pos) bool {
+	if p.minify || p.singleLine || p.mustNewline || pos.Line() != p.line {
+		return false
+	}
+	call, ok := s.Cmd.(*CallExpr)
+	if !ok || len(call.Args) == 0 || len(call.Args[0].Parts) != 1 {
+		return false
+	}
+	lit, ok := call.Args[0].Parts[0].(*Lit)
+	if !ok {
+		return false
+	}
+	switch lit.Value {
+	case "exit", "return", "shift", "break", "continue":
+		return true
+	}
+	return false
+}
+
+// stmtsForceNewline reports whether a list of statements followed by a
+// closing token must begin on a new line.
+func (p *Printer) stmtsForceNewline(stmts []*Stmt, last []Comment, closing Pos) bool {
 	switch {
 	case len(stmts) > 1:
 		// Force a newline if we find:
 		//     { stmt; stmt; }
-		p.wantNewline = true
+		return true
 	case closing.Line() > p.line && len(stmts) > 0 &&
 		stmtsEnd(stmts, last).Line() < closing.Line():
 		// Force a newline if we find:
 		//     { stmt
 		//     }
-		p.wantNewline = true
+		return true
 	case len(p.pendingComments) > 0 && len(stmts) > 0:
 		// Force a newline if we find:
 		//     for i in a b # stmt
 		//     do foo; done
+		return true
+	}
+	return false
+}
+
+// blockNewline reports whether [BlockNextLine] should place the token opening
+// a block, such as "{" or "do", on its own line, which is the case when the
+// block's statements are about to be printed across multiple lines.
+func (p *Printer) blockNewline(stmts []*Stmt, last []Comment, closing Pos) bool {
+	if !p.blockNextLine || p.minify || p.singleLine || len(stmts) == 0 {
+		return false
+	}
+	return p.stmtsForceNewline(stmts, last, closing) ||
+		p.wantNewline || stmts[0].Pos().Line() > p.line
+}
+
+// keepBlockNewline reports whether a "then" or "do" token on its own line
+// should stay there, which we allow when the condition or loop before it
+// spans multiple lines, having started at startLine.
+func (p *Printer) keepBlockNewline(startLine uint, pos Pos) bool {
+	if p.minify || p.singleLine {
+		return false
+	}
+	return p.line > startLine && pos.Line() > p.line
+}
+
+func (p *Printer) nestedStmts(stmts []*Stmt, last []Comment, closing Pos) {
+	p.incLevel()
+	if p.stmtsForceNewline(stmts, last, closing) {
 		p.wantNewline = true
 	}
 	p.stmtList(stmts, last)
@@ -1597,7 +1804,7 @@ func (e *extraIndenter) WriteByte(b byte) error {
 	} else if lineIndent < e.firstIndent {
 		// This line did not have enough indentation; simply indent it
 		// like the first line.
-		lineIndent = e.firstIndent
+		lineIndent = e.baseIndent
 	} else {
 		// This line had plenty of indentation. Add the extra
 		// indentation that the first line had, for consistency.
@@ -1608,9 +1815,41 @@ func (e *extraIndenter) WriteByte(b byte) error {
 		e.bufWriter.WriteByte('\t')
 	}
 	e.bufWriter.WriteByte(tabwriter.Escape)
-	e.bufWriter.Write(trimmed)
+	e.writeEscapingTabs(trimmed)
 	e.curLine = e.curLine[:0]
 	return nil
+}
+
+// writeEscapingTabs writes a line, wrapping any tab outside an existing
+// escape sequence in [tabwriter.Escape] so that the tabwriter treats it as
+// literal content rather than a column separator turned into spaces.
+func (e *extraIndenter) writeEscapingTabs(line []byte) {
+	escaped := false
+	for _, b := range line {
+		switch b {
+		case tabwriter.Escape:
+			escaped = !escaped
+		case '\t':
+			if !escaped {
+				e.bufWriter.WriteByte(tabwriter.Escape)
+				e.bufWriter.WriteByte('\t')
+				e.bufWriter.WriteByte(tabwriter.Escape)
+				continue
+			}
+		}
+		e.bufWriter.WriteByte(b)
+	}
+}
+
+// sink returns the writer that this indenter, and any enclosing indenters
+// from outer '<<-' heredocs, ultimately write to. Note that all of them
+// only ever write entire lines to it, so as long as the current output ends
+// with a newline, writing to the sink directly cannot reorder any bytes.
+func (e *extraIndenter) sink() bufWriter {
+	if outer, ok := e.bufWriter.(*extraIndenter); ok {
+		return outer.sink()
+	}
+	return e.bufWriter
 }
 
 func (e *extraIndenter) WriteString(s string) (int, error) {
@@ -1618,6 +1857,13 @@ func (e *extraIndenter) WriteString(s string) (int, error) {
 		e.WriteByte(s[i])
 	}
 	return len(s), nil
+}
+
+func (e *extraIndenter) Write(b []byte) (int, error) {
+	for _, c := range b {
+		e.WriteByte(c)
+	}
+	return len(b), nil
 }
 
 func startsWithLparen(node Node) bool {
