@@ -78,10 +78,9 @@ func MakeConnector(conf servicedisc.Config, maxConns int, tm *transport.Manager,
 	connector.dmsgC = dmsgC
 	connector.clientPublicIP = publicIP
 	connector.conn = &visorcore.Connector{
-		Tm:             tm,
-		DmsgC:          dmsgC,
-		ClientPublicIP: publicIP,
-		Log:            log,
+		Tm:    tm,
+		DmsgC: dmsgC,
+		Log:   log,
 	}
 	return connector
 }
@@ -318,20 +317,35 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// is then skipped by the WebRTC fallback's own hasDirect filter.
 			if localSupportsWT || localSupportsWS {
 				hasDirectTP := map[cipher.PubKey]bool{}
-				for _, tp := range a.tm.GetTransportsByLabel(transport.LabelAutomatic) {
+				hasWebRTC := map[cipher.PubKey]bool{}
+				for _, tp := range a.tm.GetTransportsByLabels(transport.LabelAutomatic, transport.LabelUser, transport.LabelSkycoin) {
 					switch tp.Type() {
-					case tptypes.WEBRTC, tptypes.DMSG:
-						// webrtc is the tier below; dmsg is the relay baseline
+					case tptypes.WEBRTC:
+						// the tier below, but a peer it reaches is a peer to move up
+						hasWebRTC[tp.Remote()] = true
+					case tptypes.DMSG:
+						// the relay baseline
 					default:
-						hasDirectTP[tp.Remote()] = true
+						if tp.Entry.Label == transport.LabelAutomatic {
+							hasDirectTP[tp.Remote()] = true
+						}
 					}
 				}
-				var wtwsTargets []cipher.PubKey
+				// Peers already reached over webrtc go first, so a link the visor
+				// has moves up to swtr before slots go to peers it has never
+				// reached. That includes a browser visor's own host, which the
+				// list of about a thousand public visors would rarely surface.
+				var wtwsTargets, later []cipher.PubKey
 				for _, pk := range connectedPublicVisors {
-					if !hasDirectTP[pk] {
+					switch {
+					case hasDirectTP[pk]:
+					case hasWebRTC[pk]:
 						wtwsTargets = append(wtwsTargets, pk)
+					default:
+						later = append(later, pk)
 					}
 				}
+				wtwsTargets = append(wtwsTargets, later...)
 				if len(wtwsTargets) > 0 && localSupportsWT {
 					a.log.Debug("Phase 3b: Connecting to direct-unreachable public visors via WT (swtr)")
 					phaseWT, err := a.connectByReach(ctx, v.conf.PK, wtwsTargets, tptypes.WT,
