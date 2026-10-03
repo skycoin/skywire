@@ -1,11 +1,17 @@
 package visor
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -19,7 +25,7 @@ func postBootReport(h http.HandlerFunc, body, client string) int {
 }
 
 func TestBootReportHandler(t *testing.T) {
-	h := bootReportHandler(logging.MustGetLogger("boot-report-test"))
+	h := bootReportHandler(logging.MustGetLogger("boot-report-test"), "")
 
 	if code := postBootReport(h, `{"kind":"stalled","stage":"loading…","ms":120000,"console":["error: x"]}`, "a"); code != http.StatusNoContent {
 		t.Fatalf("a report: status %d, want 204", code)
@@ -72,5 +78,44 @@ func TestDeskPageReportsBootFirst(t *testing.T) {
 	}
 	if !strings.Contains(page, "__skywireBootReport('failed'") {
 		t.Error("a rejected boot is not reported")
+	}
+}
+
+func TestBootReportFileKeepsReports(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "reports.jsonl")
+	h := bootReportHandler(logging.MustGetLogger("boot-report-test"), file)
+	if code := postBootReport(h, `{"kind":"failed","error":"WebAssembly compilation aborted","ignored":"x"}`, "a"); code != http.StatusNoContent {
+		t.Fatalf("status %d, want 204", code)
+	}
+	b, err := os.ReadFile(file) //nolint:gosec
+	if err != nil {
+		t.Fatal(err)
+	}
+	var line map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(b), &line); err != nil {
+		t.Fatalf("not one JSON line: %q", b)
+	}
+	if line["kind"] != "failed" || line["error"] != "WebAssembly compilation aborted" || line["time"] == nil {
+		t.Errorf("line = %v", line)
+	}
+	if _, ok := line["ignored"]; ok {
+		t.Error("kept a field the handler does not know")
+	}
+}
+
+func TestBootReportFileRotates(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "reports.jsonl")
+	if err := os.WriteFile(file, bytes.Repeat([]byte("x"), bootReportFileMax), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f := &bootReportFile{path: file}
+	if err := f.add(logrus.Fields{"kind": "error"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := os.Stat(file + ".1"); err != nil || st.Size() != bootReportFileMax {
+		t.Fatalf("old file not moved aside: %v", err)
+	}
+	if b, _ := os.ReadFile(file); !bytes.Contains(b, []byte(`"kind":"error"`)) || bytes.Count(b, []byte("\n")) != 1 { //nolint:errcheck,gosec
+		t.Errorf("new file = %q", b)
 	}
 }

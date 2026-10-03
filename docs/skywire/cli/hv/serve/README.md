@@ -32,6 +32,7 @@ skywire cli hv serve
 
 ```
   -a, --addr string            HTTP listen address (default ":7999")
+      --boot-reports string    keep the reports of desks that did not start in this file as JSON lines, moved to <file>.1 at 1 MiB (they are also logged). The default is under $STATE_DIRECTORY when systemd sets one (StateDirectory=), else the temp dir. Empty = log only (default "/tmp/skywire-desk-boot-reports.jsonl")
       --browse-origin string   ALSO serve the browse-origin SW bootstrap on this second addr (e.g. 127.0.0.1:7998), for the hosted real-origin browser's B origins. Caddy routes *.<browse-suffix> here; this same process serves V on --addr and B here. Empty = off (V host-routes B on --addr, local mode)
       --browse-suffix string   browse-origin domain suffix for the real-origin browser (leading dot). Empty = .mesh.localhost (local); when --browse-origin is set (hosted mode) and this is empty it defaults to the deployment's browse_origin_suffix (".haltingstate.net" from services-config.json)
       --desk-docs-port int     run 'skywire doc serve' on this desk vnet port (0 = off) — same cost as above
