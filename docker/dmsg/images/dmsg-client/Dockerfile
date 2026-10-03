@@ -1,5 +1,5 @@
 # Builder
-ARG base_image=golang:1.26.4-alpine
+ARG base_image=golang:1.26.8-alpine
 FROM ${base_image} AS builder
 
 ARG CGO_ENABLED=0
