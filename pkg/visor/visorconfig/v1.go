@@ -1162,3 +1162,16 @@ func (v1 *V1) UpdateAppSettings(vals map[string]map[string]int64, text map[strin
 
 	return v1.flush(v1)
 }
+
+// UpdatePtyWhitelist persists the dmsgpty whitelist. Same lock+flush shape as
+// UpdateHypervisors.
+func (v1 *V1) UpdatePtyWhitelist(pks []cipher.PubKey) error {
+	v1.mu.Lock()
+	if v1.Pty == nil {
+		v1.Pty = &Pty{}
+	}
+	v1.Pty.Whitelist = pks
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
+}

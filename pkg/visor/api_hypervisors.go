@@ -4,14 +4,11 @@ package visor
 import (
 	"context"
 	"fmt"
-	"os"
-	"strings"
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/skywireconfig/skyenvfile"
 )
 
 // AddHypervisor adds a remote hypervisor PK and connects to it at runtime.
@@ -130,26 +127,7 @@ func (v *Visor) persistHypervisors(want []cipher.PubKey) {
 	if err := v.conf.UpdateHypervisors(want); err != nil {
 		v.log.WithError(err).Warn("failed to persist hypervisors to config")
 	}
-	if v.conf.Path() != skyenv.SkywireConfig() {
-		return
-	}
-	skyenvPath := skyenvfile.DefaultPath()
-	if _, err := os.Stat(skyenvPath); err != nil {
-		return // not an autoconfig-managed host
-	}
-	pks := make([]string, 0, len(want))
-	for _, pk := range want {
-		pks = append(pks, pk.String())
-	}
-	edit := skyenvfile.Edit{
-		Key:   "HYPERVISORPKS",
-		Value: skyenvfile.FormatBashArray(strings.Join(pks, ",")),
-		Raw:   strings.Join(pks, ","),
-	}
-	if err := skyenvfile.Update(skyenvPath, []skyenvfile.Edit{edit}); err != nil {
-		v.log.WithError(err).WithField("path", skyenvPath).
-			Warn("failed to mirror hypervisors into skywire.conf; the next autoconfig run will drop them")
-	}
+	v.mirrorToSkyenv([][2]string{{"hvpks", joinPKs(want)}})
 }
 
 // RemoveHypervisor tears down a runtime-added hypervisor connection by

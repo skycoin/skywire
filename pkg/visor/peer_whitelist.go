@@ -64,3 +64,41 @@ func (r *RPC) AddPtyWhitelist(in *visorapi.AddPtyWhitelistIn, _ *struct{}) (err 
 
 	return r.visor.AddPtyWhitelist(in.PKs)
 }
+
+// setPtyWhitelistLive replaces the configured pty whitelist with want. Added
+// keys are admitted at once; removed keys lose trust unless they are this
+// visor or a configured hypervisor.
+func (v *Visor) setPtyWhitelistLive(want []cipher.PubKey) error {
+	var had []cipher.PubKey
+	if v.conf.Pty != nil {
+		had = append(had, v.conf.Pty.Whitelist...)
+	}
+	if err := v.conf.UpdatePtyWhitelist(want); err != nil {
+		return err
+	}
+	if v.peerWhitelist == nil {
+		return nil
+	}
+	if len(want) > 0 {
+		if err := v.peerWhitelist.Add(want...); err != nil {
+			return err
+		}
+	}
+	for _, pk := range had {
+		if pkIn(want, pk) || pkIn(v.configuredHypervisors(), pk) {
+			continue
+		}
+		v.dropPeerTrust(pk)
+	}
+	v.refreshGatedCXOAllowlists()
+	return nil
+}
+
+func pkIn(set []cipher.PubKey, pk cipher.PubKey) bool {
+	for _, p := range set {
+		if p == pk {
+			return true
+		}
+	}
+	return false
+}
