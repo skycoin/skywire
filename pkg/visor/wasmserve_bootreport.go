@@ -87,7 +87,7 @@ func bootReportHandler(log *logging.Logger) http.HandlerFunc {
 			return
 		}
 		entry := log.WithField("kind", bootReportField(rep, "kind", 40))
-		for _, k := range []string{"stage", "version", "ua", "error", "src", "url"} {
+		for _, k := range []string{"stage", "version", "ua", "error", "src", "tag", "url"} {
 			if v := bootReportField(rep, k, bootReportFieldMax); v != "" {
 				entry = entry.WithField(k, v)
 			}
@@ -185,7 +185,13 @@ const bootReportJS = `(function () {
   });
   addEventListener('error', function (e) {
     var t = e.target;
-    if (t && t !== window && (t.src || t.href)) { report('load-error', {src: t.src || t.href}); return; }
+    if (t && t !== window && t.getAttribute) {
+      // An element with no src or href resolves it to the page itself and
+      // "fails" to load that; it is not a resource that broke the boot.
+      var ref = t.getAttribute('src') || t.getAttribute('href');
+      if (ref) report('load-error', {src: t.src || t.href, tag: String(t.tagName).toLowerCase()});
+      return;
+    }
     report('error', {
       error: String(e.message || e),
       src: e.filename ? e.filename + ':' + e.lineno + ':' + e.colno : '',
