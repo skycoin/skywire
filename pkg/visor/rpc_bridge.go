@@ -141,6 +141,15 @@ func handleBridgeConn(ctx context.Context, log *logging.Logger, tcpConn net.Conn
 	var err error
 	switch scheme {
 	case bridgeSchemeDmsg:
+		// A peer the visor has a skynet transport to (or a relay that does)
+		// is reached over it, as DmsgHTTP does: the pty host, sftp and scp
+		// listen on skynet at the same port. dmsg servers are the fallback.
+		if !v.isDmsgServiceKey(targetPK) {
+			if conn, serr := v.dialDmsgOverSkynet(ctx, targetPK, targetPort); serr == nil {
+				stream = conn
+				break
+			}
+		}
 		stream, err = openDmsgStream(ctx, v.dmsgC, targetPK, targetPort)
 	case bridgeSchemeSkynet:
 		stream, err = openSkynetStream(v, targetPK)

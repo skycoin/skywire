@@ -113,6 +113,19 @@ func (g *LocalPtyGateway) Exec(req *CommandExecReq, resp *CommandExecResult) err
 	defer cancel()
 
 	start := time.Now()
+	{
+		var stdoutBuf, stderrBuf capBuffer
+		stdoutBuf.cap = execMaxOutputBytes
+		stderrBuf.cap = execMaxOutputBytes
+		if code, ok := execBuiltin(ctx, req, &stdoutBuf, &stderrBuf); ok {
+			resp.Stdout, resp.Stderr = stdoutBuf.bytes(), stderrBuf.bytes()
+			resp.StdoutTruncated, resp.StderrTruncated = stdoutBuf.truncated, stderrBuf.truncated
+			resp.DurationMS = time.Since(start).Milliseconds()
+			resp.TimedOut = ctx.Err() == context.DeadlineExceeded
+			resp.ExitCode = code
+			return nil
+		}
+	}
 	cmd := exec.CommandContext(ctx, req.Name, req.Arg...) //nolint:gosec // intentional remote exec; gated by dmsgpty whitelist
 	cmd.Env = mergeEnv(envSnapshotForExec(), req.Env)
 	// Setsid so a hung child doesn't take the parent visor with it
@@ -154,6 +167,9 @@ func (g *LocalPtyGateway) Exec(req *CommandExecReq, resp *CommandExecResult) err
 		resp.ExitCode = ee.ExitCode()
 		return nil
 	}
+	// The command never ran (not found, or no processes on this platform).
+	// Say so, or the caller sees an empty result and no reason.
+	resp.Stderr = append(resp.Stderr, fmt.Sprintf("dmsgpty: exec %s: %v\n", req.Name, err)...)
 	resp.ExitCode = -1
 	return nil
 }
