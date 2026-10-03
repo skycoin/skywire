@@ -452,6 +452,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 	c.setAppStatus(appserver.AppDetailedStatusRunning)
 	c.resetConnDuration()
 	t := time.NewTicker(time.Second)
+	defer t.Stop()
 
 	defer func() {
 		if !c.cfg.Killswitch {
