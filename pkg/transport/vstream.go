@@ -823,3 +823,14 @@ func nonNegativeCount(n int64) uint64 {
 	}
 	return uint64(n)
 }
+
+// Direct reports whether the stream arrived over a transport to its own remote
+// peer. A relayed stream arrives over the relay's transport, which splices its
+// bytes between two legs, so nothing after the signed SYN is end to end.
+func (s *VStream) Direct() bool {
+	if s.mux == nil || s.mux.tm == nil {
+		return false
+	}
+	tp := s.mux.tm.Transport(s.tpID)
+	return tp != nil && tp.Remote() == s.remotePK
+}

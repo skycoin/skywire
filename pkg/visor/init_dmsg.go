@@ -1563,6 +1563,9 @@ func buildPtyAppFunc(v *Visor, host *pty.Host, dmsgPort uint16, sshAddr string) 
 					_ = closer() //nolint:errcheck
 				}()
 			}
+			if v.services != nil {
+				servePtyOverForwarding(listenerCtx, v, host, dmsgPort)
+			}
 		}
 
 		// Direct-TCP entry point — operator opt-in via
