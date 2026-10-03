@@ -109,6 +109,9 @@ func initEmbeddedResolvers(ctx context.Context, v *Visor, log *logging.Logger) e
 			rt := newEmbeddedDmsgWeb(ctx, resolverC, v.dmsgDC, resolverPK,
 				v.services.SelfDial, v.services.SelfDialAs, aliases, dmsgSet, cfg, rlog)
 			rt.statusProvider = v.proxyStatusProvider()
+			if resolverC == v.dmsgC {
+				rt.skynetDial = v.dmsgWebSkynetDial
+			}
 			er.dmsg = rt
 		}
 

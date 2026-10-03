@@ -12,10 +12,13 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // The connections DmsgHTTP keeps open, per visor. A connection costs a dial
@@ -76,7 +79,9 @@ func (v *Visor) dialDmsgHTTP(ctx context.Context, _, addr string) (net.Conn, err
 // because a visor mirrors :80 over both dmsg and its skynet forwarding server.
 func (v *Visor) dialDmsgOverSkynet(ctx context.Context, pk cipher.PubKey, port uint16) (net.Conn, error) {
 	if v.router == nil || v.tpM == nil || v.skynetFwdMux == nil {
-		return nil, errNoRelay
+		err := fmt.Errorf("skynet not up: %w", errNoRelay)
+		v.dmsgSkynet.note(pk, err)
+		return nil, err
 	}
 	dialer := &routerSkynetDialer{
 		router:       v.router,
@@ -88,10 +93,53 @@ func (v *Visor) dialDmsgOverSkynet(ctx context.Context, pk cipher.PubKey, port u
 	dctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	conn, err := dialer.dialDirectOrRelay(dctx, pk, port)
+	v.dmsgSkynet.note(pk, err)
 	if err != nil {
 		return nil, err
 	}
 	v.log.WithField("remote", pk.String()).WithField("port", port).
 		Debug("dmsg-over-skynet: connected over a skynet transport (no route, no dmsg-server)")
 	return conn, nil
+}
+
+// dmsgWebSkynetDial is the resolving proxy's way onto the skynet transports
+// for a .dmsg peer: the same dial DmsgHTTP uses, without the dmsg fallback,
+// which the proxy makes itself. Deployment services have no skynet transports
+// to reach, so they are refused at once rather than after a relay search.
+func (v *Visor) dmsgWebSkynetDial(ctx context.Context, pk cipher.PubKey, port uint16) (net.Conn, error) {
+	if v.isDmsgServiceKey(pk) {
+		return nil, errNoRelay
+	}
+	return v.dialDmsgOverSkynet(ctx, pk, port)
+}
+
+// dmsgSkynetStats counts how the visor's dials to .dmsg peers went, for
+// `visor state --select diag`: carried over skynet, or fallen back to dmsg.
+type dmsgSkynetStats struct {
+	skynet, fallback atomic.Uint64
+	mu               sync.Mutex
+	lastErr          string
+	lastPK           string
+}
+
+func (s *dmsgSkynetStats) note(pk cipher.PubKey, err error) {
+	if err == nil {
+		s.skynet.Add(1)
+		return
+	}
+	s.fallback.Add(1)
+	s.mu.Lock()
+	s.lastErr, s.lastPK = err.Error(), pk.String()
+	s.mu.Unlock()
+}
+
+func (s *dmsgSkynetStats) snapshot() *visorapi.DiagDmsgOverSkynet {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return &visorapi.DiagDmsgOverSkynet{
+		Skynet:    s.skynet.Load(),
+		Fallback:  s.fallback.Load(),
+		LastError: s.lastErr,
+		LastPK:    s.lastPK,
+	}
 }
