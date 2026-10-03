@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !tinygo && !(js && wasm)
 
 // Package network ws_transport_test.go: transport-level end-to-end tests for the
 // WS (swsr) skywire transport. Unlike ws_native_test.go (which exercises only the

@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !tinygo && !(js && wasm)
 
 // Package network webrtc_transport_test.go: transport-level end-to-end test for
 // the WEBRTC (webrtc) skywire transport. Unlike webrtc_native_test.go (which
