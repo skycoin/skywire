@@ -63,7 +63,7 @@ func (hv *Hypervisor) postBrowseClearnet() http.HandlerFunc {
 // wasm-visor has.
 func (hv *Hypervisor) uiHandler() http.Handler {
 	fileServer := uiCacheControl(http.FileServer(http.FS(hv.c.UIAssets)))
-	bootReport := bootReportHandler(hv.logger)
+	bootReport := bootReportHandler(hv.logger, "")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		// PWA: the desk installs as an app. The manifest and icons are the ones
