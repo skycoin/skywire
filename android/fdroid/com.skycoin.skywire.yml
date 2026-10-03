@@ -87,7 +87,7 @@ Builds:
       - yes
     # Go itself, and TinyGo 0.42.0 for the routing-policy presets built below.
     srclibs:
-      - go@go1.26.4
+      - go@go1.26.8
       - tinygo@bdc4a21af007d8f059b5cefe5644b7ee7bda5b2d
     # The routing-policy presets the mobile binary embeds with go:embed. The
     # committed copy is removed and built again from source in `build`.
