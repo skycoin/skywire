@@ -129,6 +129,8 @@ func (disk *DiskWidget) update() {
 		ioCounters, err := psDisk.IOCounters(partition.Device)
 		if err != nil {
 			log.Print(tr.Value("error.recovfetch", "partition-"+partition.Device+"-rw", err.Error()))
+			partition.BytesReadRecently = ""
+			partition.BytesWrittenRecently = ""
 			continue
 		}
 		ioCounter := ioCounters[strings.Replace(partition.Device, "/dev/", "", -1)]

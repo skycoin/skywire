@@ -91,10 +91,8 @@ const (
 	colBitMask = colMax
 )
 
-// TODO(v4): consider using uint32 for Offset/Line/Col to better represent bit sizes.
-// Or go with int64, which more closely resembles portable "sizes" elsewhere.
-// The latter is probably nicest, as then we can change the number of internal
-// bits later, and we can also do overflow checks for the user in NewPos.
+// TODO(v4): use int64 for Offset/Line/Col, so that we can change the number
+// of internal bits later, and do overflow checks for the user in NewPos.
 
 // NewPos creates a position with the given offset, line, and column.
 //
@@ -188,9 +186,18 @@ func posAddCol(p Pos, n int) Pos {
 	if !p.IsValid() {
 		return p
 	}
-	// TODO: guard against overflows
-	p.lineCol += uint32(n)
-	p.offs += uint32(n)
+	// Clamp the offset, and drop columns which no longer fit,
+	// just like [NewPos] does. Note that a column of zero is already unknown,
+	// so adding to it would only make up a number.
+	offs := min(max(int64(p.offs)+int64(n), 0), offsetMax)
+	col := int64(p.Col())
+	if col > 0 {
+		if col += int64(n); col < 1 || col > colMax {
+			col = 0 // protect against overflows; rendered as "?"
+		}
+	}
+	p.offs = uint32(offs)
+	p.lineCol = (p.lineCol &^ colBitMask) | uint32(col)
 	return p
 }
 
@@ -324,11 +331,12 @@ func (a *Assign) End() Pos {
 
 // Redirect represents an input/output redirection.
 type Redirect struct {
-	OpPos Pos
-	Op    RedirOperator
-	N     *Lit  // fd>, or {varname}> with [LangBash] or [LangZsh]
-	Word  *Word // >word
-	Hdoc  *Word // here-document body
+	OpPos    Pos
+	ClosePos Pos // closing word of a here-document; unset if it ended at EOF or a backquote
+	Op       RedirOperator
+	N        *Lit  // fd>, or {varname}> with [LangBash] or [LangZsh]
+	Word     *Word // >word
+	Hdoc     *Word // here-document body
 }
 
 func (r *Redirect) Pos() Pos {
@@ -337,6 +345,8 @@ func (r *Redirect) Pos() Pos {
 	}
 	return r.OpPos
 }
+
+// TODO(v4): End should include a here-document's closing word, if any.
 
 func (r *Redirect) End() Pos {
 	if r.Hdoc != nil {
@@ -626,8 +636,6 @@ const (
 type ParamExp struct {
 	Dollar, Rbrace Pos
 
-	// TODO(v4): replace Short for !Rbrace.IsValid()
-
 	Short bool // $a instead of ${a}
 
 	Flags *Lit // ${(flags)a} with [LangZsh]
@@ -650,8 +658,6 @@ type ParamExp struct {
 
 	// Only one of these is set at a time,
 	// or neither with [LangZsh] when the name is omitted.
-	// TODO(v4): consider joining Param and NestedParam into a single field,
-	// even if that would be mildly annoying to non-Zsh users.
 	Param *Lit
 	// A nested parameter expression in the form of [*ParamExp] or [*CmdSubst],
 	// or either of those in a [*DblQuoted]. Only possible with [LangZsh].

@@ -27,13 +27,17 @@ func ExtendedPatternMatcher(pat string, mode pattern.Mode) (func(string) bool, e
 	if err != nil {
 		// Handle !(pattern-list) negation: when Regexp returns NegExtglobError,
 		// match the inner pattern and negate the result.
-		var negErr *pattern.NegExtGlobError
-		if !errors.As(err, &negErr) {
+		negErr, ok := errors.AsType[*pattern.NegExtGlobError](err)
+		if !ok {
 			return nil, err
 		}
 		return extNegatedMatcher(pat, negErr.Groups)
 	}
-	rx := regexp.MustCompile(expr)
+	// Compiling can still fail, such as when nesting too deeply.
+	rx, err := regexp.Compile(expr)
+	if err != nil {
+		return nil, err
+	}
 	return rx.MatchString, nil
 }
 
@@ -57,7 +61,10 @@ func extNegatedMatcher(pat string, groups []pattern.NegExtGlobGroup) (func(strin
 	if err != nil {
 		return nil, err
 	}
-	rx := regexp.MustCompile(expr)
+	rx, err := regexp.Compile(expr)
+	if err != nil {
+		return nil, err
+	}
 
 	return func(name string) bool {
 		if !strings.HasPrefix(name, prefix) {
