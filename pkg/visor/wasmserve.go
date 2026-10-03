@@ -76,7 +76,10 @@ type WasmServeConfig struct {
 	// DeskDocsPort runs `skywire doc serve` on this virtual-loopback port.
 	// 0 (default) = off, for the same reason.
 	DeskDocsPort int
-	Log          *logging.Logger // nil → package default
+	// BootReportFile keeps the boot reports desks post (wasmserve_bootreport.go)
+	// as JSON lines, moved to <file>.1 at 1 MiB. Empty keeps them only in the log.
+	BootReportFile string
+	Log            *logging.Logger // nil → package default
 }
 
 // ServeWasm builds the standalone wasm-visor handler and serves it on
@@ -240,7 +243,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	})
 	// Where a page whose desk failed to start reports what it saw
 	// (wasmserve_bootreport.go).
-	mux.HandleFunc("/boot-report", bootReportHandler(log))
+	mux.HandleFunc("/boot-report", bootReportHandler(log, cfg.BootReportFile))
 	serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
 	serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
 	serveBytes("/icon-192.png", "image/png", wasmhv.PWAIcon192)

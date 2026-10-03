@@ -7,9 +7,12 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -63,9 +66,12 @@ func bootReportClient(r *http.Request) string {
 	return host
 }
 
-// bootReportHandler logs a boot report posted by the desk page.
-func bootReportHandler(log *logging.Logger) http.HandlerFunc {
+// bootReportHandler logs a boot report posted by the desk page and, when file
+// is set, appends it to that file as one JSON line. A busy host's journal can
+// rotate a report away within the hour; the file keeps the last ones.
+func bootReportHandler(log *logging.Logger, file string) http.HandlerFunc {
 	lim := &bootReportLimiter{perKey: make(map[string]int)}
+	store := &bootReportFile{path: file}
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
@@ -86,26 +92,69 @@ func bootReportHandler(log *logging.Logger) http.HandlerFunc {
 			http.Error(w, "not a JSON object", http.StatusBadRequest)
 			return
 		}
-		entry := log.WithField("kind", bootReportField(rep, "kind", 40))
-		for _, k := range []string{"stage", "version", "ua", "error", "src", "tag", "url"} {
+		fields := logrus.Fields{"kind": bootReportField(rep, "kind", 40)}
+		for _, k := range []string{"stage", "version", "ua", "error", "src", "tag", "url", "visible"} {
 			if v := bootReportField(rep, k, bootReportFieldMax); v != "" {
-				entry = entry.WithField(k, v)
+				fields[k] = v
 			}
 		}
 		for _, k := range []string{"ms", "memory_gb", "cores", "cross_origin_isolated", "shared_array_buffer", "webassembly", "standalone", "service_worker"} {
 			if v, ok := rep[k]; ok {
-				entry = entry.WithField(k, v)
+				fields[k] = v
 			}
 		}
-		if v := bootReportField(rep, "stack", bootReportStackMax); v != "" {
-			entry = entry.WithField("stack", v)
+		for _, k := range []string{"stack", "console"} {
+			if v := bootReportField(rep, k, bootReportStackMax); v != "" {
+				fields[k] = v
+			}
 		}
-		if v := bootReportField(rep, "console", bootReportStackMax); v != "" {
-			entry = entry.WithField("console", v)
+		log.WithFields(fields).Warn("a browser reported a desk that did not start")
+		if err := store.add(fields, time.Now()); err != nil {
+			log.WithError(err).Warn("could not keep the boot report")
 		}
-		entry.Warn("a browser reported a desk that did not start")
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// bootReportFileMax is how large the report file grows before it is moved to
+// <file>.1, so the two together hold the last couple of thousand reports.
+const bootReportFileMax = 1 << 20
+
+// bootReportFile appends reports to a file. An empty path keeps nothing.
+type bootReportFile struct {
+	mu   sync.Mutex
+	path string
+}
+
+func (f *bootReportFile) add(fields logrus.Fields, now time.Time) error {
+	if f.path == "" {
+		return nil
+	}
+	line := make(map[string]any, len(fields)+1)
+	for k, v := range fields {
+		line[k] = v
+	}
+	line["time"] = now.UTC().Format(time.RFC3339)
+	b, err := json.Marshal(line)
+	if err != nil {
+		return err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if st, err := os.Stat(f.path); err == nil && st.Size()+int64(len(b)) >= bootReportFileMax {
+		if err := os.Rename(f.path, f.path+".1"); err != nil {
+			return err
+		}
+	}
+	out, err := os.OpenFile(f.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := out.Write(append(b, '\n')); err != nil {
+		out.Close() //nolint:errcheck,gosec
+		return err
+	}
+	return out.Close()
 }
 
 // bootReportField returns rep[k] as a string of at most max bytes.

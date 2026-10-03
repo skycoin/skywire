@@ -101,6 +101,7 @@ The page is built at process start, so restart the serve service after skywire u
 
 ## Notes
 
+- A browser whose desk fails to start posts what it saw to `boot-report`. `hv serve` logs it and keeps it in `skywire-desk-boot-reports.jsonl`. Give the unit `StateDirectory=skywire-wasm-visor-serve` so that file lands in `/var/lib/skywire-wasm-visor-serve/`, since `ProtectSystem=strict` leaves `/tmp` read-only.
 - Force a manual refresh of the served build: `sudo systemctl restart skywire-wasm-visor-serve.service`.
 - Future: ship `skywire-wasm-visor-serve.service` with the skywire package so this is a
   one-liner enable.
