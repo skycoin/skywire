@@ -24,6 +24,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"syscall/js"
 	"time"
 
@@ -177,6 +178,7 @@ type wtConnJS struct {
 	closed    bool
 	closeErr  error
 	rDeadline time.Time
+	wDeadline time.Time
 }
 
 // readPump loops reader.read() and appends inbound bytes until done/error/close.
@@ -270,15 +272,49 @@ func (c *wtConnJS) Write(p []byte) (int, error) {
 		}
 		return 0, err
 	}
+	deadline := c.wDeadline
 	c.mu.Unlock()
+
+	stop, timedOut, err := c.armWriteDeadline(deadline)
+	if err != nil {
+		return 0, err
+	}
+	defer stop()
 
 	u8 := js.Global().Get("Uint8Array").New(len(p))
 	js.CopyBytesToJS(u8, p)
 	if _, err := awaitJS(c.writer.Call("write", u8)); err != nil {
+		if timedOut() {
+			err = wsTimeoutError{}
+		}
 		c.fail(err)
 		return 0, err
 	}
 	return len(p), nil
+}
+
+// armWriteDeadline aborts the writer once deadline passes, which rejects a write
+// still waiting on the peer, as WebTransport has no per-write cancel.
+func (c *wtConnJS) armWriteDeadline(deadline time.Time) (stop func(), timedOut func() bool, err error) {
+	if deadline.IsZero() {
+		return func() {}, func() bool { return false }, nil
+	}
+	d := time.Until(deadline)
+	if d <= 0 {
+		return nil, nil, wsTimeoutError{}
+	}
+	var fired atomic.Bool
+	t := time.NewTimer(d)
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-t.C:
+			fired.Store(true)
+			c.writer.Call("abort")
+		case <-done:
+		}
+	}()
+	return func() { t.Stop(); close(done) }, fired.Load, nil
 }
 
 func (c *wtConnJS) Close() error {
@@ -307,8 +343,18 @@ func (c *wtConnJS) SetReadDeadline(t time.Time) error {
 	c.mu.Unlock()
 	return nil
 }
-func (c *wtConnJS) SetWriteDeadline(time.Time) error { return nil }
-func (c *wtConnJS) SetDeadline(t time.Time) error    { return c.SetReadDeadline(t) }
+func (c *wtConnJS) SetWriteDeadline(t time.Time) error {
+	c.mu.Lock()
+	c.wDeadline = t
+	c.mu.Unlock()
+	return nil
+}
+func (c *wtConnJS) SetDeadline(t time.Time) error {
+	if err := c.SetWriteDeadline(t); err != nil {
+		return err
+	}
+	return c.SetReadDeadline(t)
+}
 
 // DialWebTransportJS dials a browser-native WebTransport to url, pinning the
 // server cert to any of certHashHex (lowercase SHA-256 hex), and returns one

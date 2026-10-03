@@ -152,19 +152,6 @@ func tuiXAxis(labels []string, plotWidth, leftPad int) string {
 	return aDim + pad + string(ticks) + aReset + "\n" + aDim + pad + string(row) + aReset + "\n"
 }
 
-func tuiBytes(n uint64) string {
-	const unit = 1024
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-	div, exp := uint64(unit), 0
-	for m := n / unit; m >= unit; m /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
-}
-
 // tuiBar renders a proportional bar. A column of numbers is data; a column of
 // bars is a shape readable at a glance, which is the point of the aesthetic.
 func tuiBar(frac float64, width int, color string) string {
@@ -406,7 +393,7 @@ func RenderStatsANSI(d statsTUIData) string {
 			}
 			bwCol := ""
 			if v, ok := latest[t]; ok {
-				bwCol = fmt.Sprintf("  %s%9s/day%s", aDim, tuiBytes(v), aReset)
+				bwCol = fmt.Sprintf("  %s%9s/day%s", aDim, formatBytesChart(v), aReset)
 			}
 			b.WriteString(fmt.Sprintf("  %s%-7s%s %s%6d%s %s %s%5.1f%%%s%s\n",
 				col, t, aReset, aBold, n, aReset, tuiBar(frac, 28, col), aDim, 100*frac, aReset, bwCol))
