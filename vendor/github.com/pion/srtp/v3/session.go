@@ -116,6 +116,7 @@ func (s *session) close() error {
 	return nil
 }
 
+//nolint:cyclop
 func (s *session) start(
 	localMasterKey, localMasterSalt, remoteMasterKey, remoteMasterSalt []byte,
 	profile ProtectionProfile,
