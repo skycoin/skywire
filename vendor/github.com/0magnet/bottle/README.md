@@ -71,6 +71,11 @@ jsfs.mkdirp('/opt/myapp');
 jsfs.writeFile('/etc/myapp.conf', 'KEY=value\n');
 ```
 
+Hand a subtree to another filesystem, such as a remote one, with
+`jsfs.mount(prefix, provider)`. The provider answers the fs calls under the
+prefix with node-style callbacks, whenever it is ready; `jsfs.js` documents
+them where the mount layer is defined. `jsfs.unmount(prefix)` detaches it.
+
 And in the program, listen/dial loopback through the adapter:
 
 ```go
