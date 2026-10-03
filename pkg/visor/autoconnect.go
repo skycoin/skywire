@@ -256,8 +256,16 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				// swtr open on ~24 public visors and closed on ~800 (2026-09-30),
 				// most picks could not be reached and the tab held one or two
 				// transports, so losing one took its proxy down.
-				for _, pk := range visorcore.ShufflePubKeys(absent1) {
-					if pk != v.conf.PK {
+				// A peer it reaches only over webrtc or dmsg stays a candidate:
+				// those are the carriers swtr should replace.
+				direct := map[cipher.PubKey]bool{}
+				for _, tp := range autoTPs {
+					if t := tp.Type(); t != tptypes.WEBRTC && t != tptypes.DMSG {
+						direct[tp.Remote()] = true
+					}
+				}
+				for _, pk := range visorcore.ShufflePubKeys(addrs) {
+					if pk != v.conf.PK && !direct[pk] {
 						connectedPublicVisors = append(connectedPublicVisors, pk)
 					}
 				}
