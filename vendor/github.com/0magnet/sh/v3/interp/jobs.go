@@ -41,7 +41,6 @@ import (
 	"github.com/0magnet/sh/v3/syntax"
 )
 
-
 // StopJobs cancels every background job this runner started, disowned ones
 // included, and returns once they have all finished.
 //
@@ -72,6 +71,7 @@ func (bg *bgProc) await(ctx context.Context) bool {
 		return false
 	}
 }
+
 // jobText renders a backgrounded statement the way jobs prints it.
 func jobText(st *syntax.Stmt) string {
 	var b strings.Builder
@@ -165,7 +165,7 @@ func (r *Runner) jobMark(bg *bgProc) string {
 func (r *Runner) jobLine(bg *bgProc, running, long bool) string {
 	prefix := fmt.Sprintf("[%d]%s  ", bg.num, r.jobMark(bg))
 	if long {
-		prefix = fmt.Sprintf("[%d]%s %-6s", bg.num, r.jobMark(bg), bg.id)
+		prefix = fmt.Sprintf("[%d]%s %-6s", bg.num, r.jobMark(bg), bg.bgProcID())
 	}
 	cmd := bg.cmd
 	if running {
@@ -193,7 +193,7 @@ func (r *Runner) jobSpec(spec string) (*bgProc, error) {
 		// job is still found — bash's kill also still reaches a disowned
 		// job's process by PID.
 		for _, bg := range slices.Backward(r.bgProcs) {
-			if !bg.substitution && !bg.reaped && bg.id == spec {
+			if !bg.substitution && !bg.reaped && bg.bgProcID() == spec {
 				return bg, nil
 			}
 		}
@@ -304,7 +304,7 @@ func (r *Runner) runJobs(args []string) exitStatus {
 			continue
 		}
 		if pidsOnly {
-			r.outf("%s\n", bg.id)
+			r.outf("%s\n", bg.bgProcID())
 		} else {
 			r.outf("%s\n", r.jobLine(bg, running, long))
 		}

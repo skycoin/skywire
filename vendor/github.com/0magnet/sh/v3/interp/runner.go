@@ -12,11 +12,9 @@ import (
 	"io"
 	"io/fs"
 	"iter"
+	"maps"
 	"math"
-	mathrand "math/rand/v2"
 	"os"
-	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -38,8 +36,6 @@ const (
 	// shellReplyVar, or REPLY, is a special variable in Bash that is used to store the result of
 	// the select command or of the read command, when no variable name is specified
 	shellReplyVar = "REPLY"
-
-	fifoNamePrefix = "sh-interp-"
 )
 
 func (r *Runner) fillExpandConfig(ctx context.Context) {
@@ -47,6 +43,14 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 	r.ecfg = &expand.Config{
 		Env: expandEnv{r},
 		CmdSubst: func(w io.Writer, cs *syntax.CmdSubst) error {
+			r.reportBgStart(0) // runs arbitrary shell code
+			if nw, ok := w.(internal.NestingWriter); ok {
+				// The expansion's nesting is on the Go stack too,
+				// including for the expansion of a $(<file) path.
+				nesting := nw.Nesting()
+				r.stmtDepth += nesting
+				defer func() { r.stmtDepth -= nesting }()
+			}
 			switch len(cs.Stmts) {
 			case 0: // nothing to do
 				return nil
@@ -67,7 +71,7 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 			r2 := r.subshell(false)
 			r2.stdout = w
 			r2.stmts(ctx, cs.Stmts)
-			r2.exit.exiting = false // subshells don't exit the parent shell
+			r2.exitSubshell()
 			r.lastExpandExit = r2.exit
 			if r2.exit.fatalExit {
 				return r2.exit.err // surface fatal errors immediately
@@ -78,34 +82,25 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 			if ps.Op == syntax.CmdInTemp { // zsh's =(...)
 				return "", fmt.Errorf("unsupported")
 			}
-			if runtime.GOOS == "windows" {
-				return "", fmt.Errorf("TODO: support process substitution on Windows")
-			}
 			if len(ps.Stmts) == 0 { // nothing to do
 				return os.DevNull, nil
 			}
 
-			// We can't atomically create a random unused temporary FIFO.
-			// Similar to [os.CreateTemp],
-			// keep trying new random paths until one does not exist.
-			// We use a uint64 because a uint32 easily runs into retries.
-			var path string
-			try := 0
-			for {
-				path = filepath.Join(r.tempDir, fifoNamePrefix+strconv.FormatUint(mathrand.Uint64(), 16))
-				err := mkfifo(path, 0o666)
-				if err == nil {
-					break
-				}
-				if !os.IsExist(err) {
-					return "", fmt.Errorf("cannot create fifo: %v", err)
-				}
-				if try++; try > 100 {
-					return "", fmt.Errorf("giving up at creating fifo: %v", err)
-				}
+			psf, err := r.procSubstHandler(r.handlerCtx(ctx, handlerKindProcSubst, ps.OpPos), ps.Op)
+			if err != nil {
+				return "", err
 			}
+			r.procSubsts.add(psf)
 
 			r2 := r.subshell(true)
+			r2.holdProcSubsts()
+			// Nothing may ever open the process substitution,
+			// so it is only waited on while it may still be used.
+			openCtx, cancel := context.WithCancel(ctx)
+			users := new(sync.WaitGroup)
+			users.Add(1) // done once the statement is done
+			go func() { users.Wait(); cancel() }()
+			r.procSubstUses = append(r.procSubstUses, users)
 			stdout := r.origStdout
 			// TODO: note that `man bash` mentions that `wait` only waits for the last
 			// process substitution as long as it is $!; the logic here would mean we wait for all of them.
@@ -118,41 +113,45 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 					*bg.exit = r2.exit
 					close(bg.done)
 				}()
+				defer r2.releaseProcSubsts(0)
+				defer func() {
+					r.procSubsts.remove(psf)
+					if psf.Cleanup == nil {
+						return
+					}
+					if err := psf.Cleanup(); err != nil {
+						r.errf("cleaning up process substitution: %v\n", err)
+					}
+				}()
+				f, err := psf.OpenSubshell(openCtx)
+				if err != nil {
+					r.errf("cannot open process substitution: %v\n", err)
+					return
+				}
+				defer func() {
+					if err := f.Close(); err != nil {
+						r.errf("closing process substitution: %v\n", err)
+					}
+				}()
 				switch ps.Op {
 				case syntax.CmdIn:
-					f, err := os.OpenFile(path, os.O_WRONLY, 0)
-					if err != nil {
-						r.errf("cannot open fifo for stdout: %v\n", err)
-						return
-					}
 					r2.stdout = f
-					defer func() {
-						if err := f.Close(); err != nil {
-							r.errf("closing stdout fifo: %v\n", err)
-						}
-						os.Remove(path)
-					}()
 				case syntax.CmdOut:
-					f, err := os.OpenFile(path, os.O_RDONLY, 0)
+					stdin, err := newStdinFile(f)
 					if err != nil {
-						r.errf("cannot open fifo for stdin: %v\n", err)
+						r.errf("cannot use process substitution as stdin: %v\n", err)
 						return
 					}
-					r2.stdin = f
+					r2.stdin = stdin
 					r2.stdout = stdout
-
-					defer func() {
-						f.Close()
-						os.Remove(path)
-					}()
 				default:
 					// Should only happen if we forgot a case above.
 					panic(fmt.Sprintf("unexpected process substitution operator: %q", ps.Op))
 				}
 				r2.stmts(ctx, ps.Stmts)
-				r2.exit.exiting = false // subshells don't exit the parent shell
+				r2.exitSubshell()
 			}()
-			return path, nil
+			return psf.Path, nil
 		},
 	}
 	r.updateExpandOpts()
@@ -196,16 +195,18 @@ func (r *Runner) expandErr(err error) {
 	}
 	errMsg := err.Error()
 	fmt.Fprintln(r.stderr, errMsg)
+	_, unsetParam := errors.AsType[expand.UnsetParameterError](err)
 	switch {
-	case errors.As(err, &expand.UnsetParameterError{}):
-	case errMsg == "invalid indirect expansion":
+	case unsetParam, errMsg == "invalid indirect expansion":
 		// TODO: These errors are treated as fatal by bash.
 		// Make the error type reflect that.
-	default:
-		return // other cases do not exit
+		r.exit.code = 1
+		r.exit.exiting = true
+	case errors.Is(err, errReadOnly):
+		// Like in bash, assigning to a read-only variable fails
+		// the command at hand without exiting the shell.
+		r.exit.code = 1
 	}
-	r.exit.code = 1
-	r.exit.exiting = true
 }
 
 func (r *Runner) arithm(expr syntax.ArithmExpr) int {
@@ -250,8 +251,7 @@ func (e expandEnv) Get(name string) expand.Variable {
 }
 
 func (e expandEnv) Set(name string, vr expand.Variable) error {
-	e.r.setVar(name, vr)
-	return nil // TODO: return any errors
+	return e.r.setVarErr(name, vr)
 }
 
 func (e expandEnv) Each(fn func(name string, vr expand.Variable) bool) {
@@ -304,10 +304,22 @@ func (r *Runner) stop(ctx context.Context) bool {
 	return false
 }
 
+// maxStmtDepth is the maximum number of nested statements.
+// Each nested call counted by [maxCallDepth] may itself nest many statements,
+// such as a recursive function with a deeply nested body.
+const maxStmtDepth = 10_000
+
 func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 	if r.stop(ctx) {
 		return
 	}
+	if r.stmtDepth >= maxStmtDepth {
+		r.exit.fatal(fmt.Errorf("statement nesting is deeper than %d levels", maxStmtDepth))
+		return
+	}
+	r.stmtDepth++
+	defer func() { r.stmtDepth-- }()
+	defer r.releaseProcSubsts(len(r.procSubstUses))
 	r.exit = exitStatus{}
 	if st.Background || st.Disown {
 		r2 := r.subshell(true)
@@ -328,12 +340,25 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 		bg.cmd = jobText(&st2)
 		bg.cancel = cancel
 		bg.disowned = st.Disown
+		// A plain command call may amount to starting exactly one external
+		// program, in which case $! expands to its real PID like in other
+		// shells, which fork background statements as child processes.
+		// Only the default exec handler reports a started program; custom
+		// call or exec handlers may run commands in arbitrary ways.
+		if ce, ok := st.Cmd.(*syntax.CallExpr); ok && len(ce.Args) > 0 &&
+			r.execHandlerIsDefault && r.callHandler == nil {
+			bg.started = make(chan int, 1)
+			r2.bgStarted = bg.started
+		}
 		r.bgProcs = append(r.bgProcs, bg)
 		r.lastBg = bg
+		r2.holdProcSubsts()
 		go func() {
 			defer cancel()
 			r2.Run(bgCtx, &st2)
-			r2.exit.exiting = false // subshells don't exit the parent shell
+			r2.reportBgStart(0) // in case we didn't get to start a program
+			r2.exitSubshell()
+			r2.releaseProcSubsts(0)
 			*bg.exit = r2.exit
 			close(bg.done)
 		}()
@@ -343,12 +368,58 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 	r.lastExit = r.exit
 }
 
+// releaseProcSubsts releases the process substitutions
+// expanded since there were n of them, as their statement is done.
+func (r *Runner) releaseProcSubsts(n int) {
+	for _, users := range r.procSubstUses[n:] {
+		users.Done()
+	}
+	r.procSubstUses = slices.Delete(r.procSubstUses, n, len(r.procSubstUses))
+}
+
+// holdProcSubsts is called on a background subshell before it starts,
+// holding on to the process substitutions it inherits until it is done
+// and calls [Runner.releaseProcSubsts] with zero.
+func (r *Runner) holdProcSubsts() {
+	// Stop sharing the list with the parent, which releases its own
+	// process substitutions while the subshell may still be running.
+	r.procSubstUses = slices.Clone(r.procSubstUses)
+	for _, users := range r.procSubstUses {
+		users.Add(1)
+	}
+}
+
+// reportBgStart is called by a background subshell once we first know whether
+// its statement amounts to starting exactly one external program, with its
+// process ID, or with zero when that is not the case. No-op for any other
+// runner, or when called again. See [Runner.bgStarted].
+//
+// The parent shell blocks on this report when expanding $!, and we must never
+// delay it noticeably nor deadlock with it, so a zero report must happen
+// before any operation which could block indefinitely or run arbitrary user
+// code, as the call sites explain: expanding a command substitution, calling
+// a custom handler, or opening a redirection file, given that e.g. a FIFO
+// opened for writing blocks until a reader opens the other end.
+func (r *Runner) reportBgStart(pid int) {
+	if r.bgStarted != nil {
+		r.bgStarted <- pid
+		r.bgStarted = nil
+	}
+}
+
 func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	oldIn, oldOut, oldErr := r.stdin, r.stdout, r.stderr
 	var closers []io.Closer
+	if len(st.Redirs) > 0 {
+		r.reportBgStart(0) // opening a file may block
+	}
 	for _, rd := range st.Redirs {
 		cls, err := r.redir(ctx, rd)
 		if err != nil {
+			if !r.exit.fatalExit {
+				// A fatal error from a handler is reported by [Runner.Run].
+				r.errf("%v\n", err)
+			}
 			r.exit.code = 1
 			break
 		}
@@ -381,12 +452,27 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 		// The exec builtin made this statement's redirections apply to the
 		// shell itself, so don't undo them and keep their files open.
 		r.keepRedirs = false
+		r.keptFiles = append(r.keptFiles, closers...)
 	} else if len(st.Redirs) > 0 {
 		r.stdin, r.stdout, r.stderr = oldIn, oldOut, oldErr
 		for _, cls := range closers {
 			cls.Close()
 		}
 	}
+}
+
+// exitSubshell cleans up once a subshell is done, without exiting its parent.
+func (r *Runner) exitSubshell() {
+	r.exit.exiting = false
+	r.closeKeptFiles()
+}
+
+// closeKeptFiles closes the files kept open by "exec", as the shell exits.
+func (r *Runner) closeKeptFiles() {
+	for _, cls := range r.keptFiles {
+		cls.Close()
+	}
+	r.keptFiles = nil
 }
 
 func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
@@ -403,7 +489,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 	case *syntax.Subshell:
 		r2 := r.subshell(false)
 		r2.stmts(ctx, cm.Stmts)
-		r2.exit.exiting = false // subshells don't exit the parent shell
+		r2.exitSubshell()
 		r.exit = r2.exit
 	case *syntax.CallExpr:
 		// Build new slices, to not modify the caller's AST
@@ -445,15 +531,12 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 
 				// Strangely enough, it seems like Bash prints original
 				// source for arrays, but the expanded value otherwise.
-				// TODO: add test cases for x[i]=y and x+=y.
+				// Note that, unlike bash, we print neither the subscript
+				// in `x[i]=y` nor just the appended value in `x+=y`.
 				if as.Array != nil {
 					trace.expr(as)
 				} else if as.Value != nil {
-					val, err := syntax.Quote(vr.String(), syntax.LangBash)
-					if err != nil { // should never happen
-						panic(err)
-					}
-					trace.stringf("%s=%s", name, val)
+					trace.stringf("%s=%s", name, quoteBash(vr.String()))
 				}
 				trace.newLineFlush()
 			}
@@ -507,7 +590,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				r.stmt(ctx, cm.Y)
 			}
 		case syntax.Pipe, syntax.PipeAll:
-			pr, pw, err := newOSPipe()
+			pr, pw, err := newPipe()
 			if err != nil {
 				r.exit.fatal(err) // not being able to create a pipe is rare but critical
 				return
@@ -524,7 +607,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			var wg sync.WaitGroup
 			wg.Go(func() {
 				r2.stmt(ctx, cm.X)
-				r2.exit.exiting = false // subshells don't exit the parent shell
+				r2.exitSubshell()
 				pw.Close()
 			})
 			r.stmt(ctx, cm.Y)
@@ -539,25 +622,33 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 		}
 	case *syntax.IfClause:
-		oldNoErrExit := r.noErrExit
-		r.noErrExit = true
-		r.stmts(ctx, cm.Cond)
-		r.noErrExit = oldNoErrExit
+		// Iterate over the elif and else clauses rather than recursing,
+		// as a long chain of them could otherwise overflow the stack.
+		for {
+			oldNoErrExit := r.noErrExit
+			r.noErrExit = true
+			r.stmts(ctx, cm.Cond)
+			r.noErrExit = oldNoErrExit
 
-		if r.exit.ok() {
-			r.stmts(ctx, cm.Then)
-			break
-		}
-		r.exit.clear()
-		if cm.Else != nil {
-			r.cmd(ctx, cm.Else)
+			if r.exit.ok() {
+				r.stmts(ctx, cm.Then)
+				break
+			}
+			r.exit.clear()
+			if cm = cm.Else; cm == nil || r.stop(ctx) {
+				break
+			}
 		}
 	case *syntax.WhileClause:
 		for !r.stop(ctx) {
 			oldNoErrExit := r.noErrExit
 			r.noErrExit = true
-			r.stmts(ctx, cm.Cond)
+			// Like in Bash, the condition is part of the loop.
+			broken := r.loopStmtsBroken(ctx, cm.Cond)
 			r.noErrExit = oldNoErrExit
+			if broken {
+				break
+			}
 
 			stop := r.exit.ok() == cm.Until
 			r.exit.clear()
@@ -656,29 +747,17 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 	case *syntax.ArithmCmd:
 		r.exit.oneIf(r.arithm(cm.X) == 0)
 	case *syntax.LetClause:
+		if tracingEnabled {
+			trace.string("let")
+			for _, expr := range cm.Exprs {
+				trace.stringf(" %s", r.letArgString(trace.printer, expr))
+			}
+			trace.newLineFlush()
+		}
 		var val int
 		for _, expr := range cm.Exprs {
 			val = r.arithm(expr)
-
-			if !tracingEnabled {
-				continue
-			}
-
-			switch expr := expr.(type) {
-			case *syntax.Word:
-				qs, err := syntax.Quote(r.literal(expr), syntax.LangBash)
-				if err != nil {
-					return
-				}
-				trace.stringf("let %v", qs)
-			case *syntax.BinaryArithm, *syntax.UnaryArithm:
-				trace.expr(cm)
-			case *syntax.ParenArithm:
-				// TODO
-			}
 		}
-
-		trace.newLineFlush()
 		r.exit.oneIf(val == 0)
 	case *syntax.CaseClause:
 		trace.string("case ")
@@ -686,13 +765,21 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		trace.string(" in")
 		trace.newLineFlush()
 		str := r.literal(cm.Word)
+		runNext := false // whether the previous item ended with ";&"
 		for _, ci := range cm.Items {
-			for _, word := range ci.Patterns {
-				pattern := r.pattern(word)
-				if match(pattern, str) {
-					r.stmts(ctx, ci.Stmts)
-					return
-				}
+			if !runNext && !slices.ContainsFunc(ci.Patterns, func(word *syntax.Word) bool {
+				return r.match(r.pattern(word), str)
+			}) {
+				continue
+			}
+			r.stmts(ctx, ci.Stmts)
+			switch ci.Op {
+			case syntax.Fallthrough: // ";&" runs the next item unconditionally
+				runNext = true
+			case syntax.Resume, syntax.ResumeKorn: // ";;&" and ";|" resume matching
+				runNext = false
+			default: // ";;" or the last item stop
+				return
 			}
 		}
 	case *syntax.TestClause:
@@ -702,6 +789,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		}
 	case *syntax.DeclClause:
 		local, global := false, false
+		named := false
 		var modes []string
 		valType := ""
 		declQuery := "" // "-f" or "-p" for query mode
@@ -744,6 +832,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				}
 				continue assignLoop
 			}
+			named = true
 			name := as.Name.Value
 			if !syntax.ValidName(name) {
 				r.errf("declare: invalid name %q\n", name)
@@ -772,45 +861,28 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					r.exit.code = 1
 					continue
 				}
-				flags := vr.Flags()
-				if flags == "" {
-					flags = "-"
-				}
-				switch vr.Kind {
-				case expand.Indexed:
-					r.outf("declare -%s %s=(", flags, name)
-					for i, v := range vr.List {
-						if i > 0 {
-							r.out(" ")
-						}
-						idx := i
-						if vr.Indexes != nil {
-							idx = vr.Indexes[i]
-						}
-						r.outf("[%d]=%q", idx, v)
-					}
-					r.out(")\n")
-				case expand.Associative:
-					r.outf("declare -%s %s=(", flags, name)
-					first := true
-					for k, v := range vr.Map {
-						if !first {
-							r.out(" ")
-						}
-						r.outf("[%s]=%q", k, v)
-						first = false
-					}
-					r.out(")\n")
-				default:
-					r.outf("declare -%s %s=%q\n", flags, name, vr.Str)
-				}
+				r.printDeclare(name, vr)
 				continue
 			}
 			vr := r.lookupVar(name)
 			if as.Naked {
-				if valType == "-A" {
+				// Like Bash, a new local variable starts without a value,
+				// inheriting only the export attribute.
+				newLocal := local && !global && !r.writeEnv.(*overlayEnviron).localInFunc(name)
+				if newLocal {
+					vr = expand.Variable{Exported: vr.Exported}
+				}
+				switch {
+				case valType == "-A":
 					vr.Kind = expand.Associative
-				} else {
+				case valType == "-a" && (vr.Kind == expand.Unknown || vr.Kind == expand.String):
+					// Like Bash, a string value becomes the first element.
+					vr.List, vr.Indexes = indexedElems(vr)
+					vr.Kind, vr.Str = expand.Indexed, ""
+				case newLocal || !vr.Declared():
+					// Like Bash, declare a string variable without a value.
+					vr.Kind = expand.String
+				default:
 					vr.Kind = expand.KeepValue
 				}
 			} else {
@@ -830,6 +902,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				}
 			}
 			r.setVar(name, vr)
+		}
+		if !named {
+			r.listDecls(cm.Variant.Value == "local", modes, valType, declQuery)
 		}
 	case *syntax.TimeClause:
 		start := time.Now()
@@ -852,6 +927,112 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		r.errf("unhandled command node: %T\n", cm)
 		r.exit.code = 1
 	}
+}
+
+// printDeclare prints a declare command which recreates a variable,
+// like Bash's `declare -p`.
+// Values may be quoted differently than in Bash.
+//
+// TODO: quote values as valid shell input, as %q does not escape "$" or "`"
+// and uses Go escapes for non-printable characters.
+func (r *Runner) printDeclare(name string, vr expand.Variable) {
+	flags := vr.Flags()
+	if flags == "" {
+		flags = "-"
+	}
+	r.outf("declare -%s %s", flags, name)
+	if !vr.IsSet() {
+		r.out("\n")
+		return
+	}
+	switch vr.Kind {
+	case expand.Indexed:
+		r.out("=(")
+		for i, v := range vr.List {
+			if i > 0 {
+				r.out(" ")
+			}
+			idx := i
+			if vr.Indexes != nil {
+				idx = vr.Indexes[i]
+			}
+			r.outf("[%d]=%q", idx, v)
+		}
+		r.out(")\n")
+	case expand.Associative:
+		r.out("=(")
+		sep := ""
+		for k, v := range vr.Map {
+			r.outf("%s[%s]=%q", sep, k, v)
+			sep = " "
+		}
+		r.out(")\n")
+	default:
+		r.outf("=%q\n", vr.Str)
+	}
+}
+
+// listDecls lists variables like Bash's declaration builtins when given no names.
+// The local builtin lists the local variables of the current function.
+func (r *Runner) listDecls(local bool, modes []string, valType, declQuery string) {
+	switch {
+	case declQuery == "-f":
+		// TODO: list all functions, and support -F.
+		return
+	case !local && len(modes) == 0 && valType == "" && declQuery == "":
+		// TODO: list variables and functions like Bash's `set` builtin.
+		return
+	}
+	oenv := r.writeEnv.(*overlayEnviron)
+	names := make(map[string]string) // normalized to original names
+	for name := range oenv.Each {
+		if syntax.ValidName(name) {
+			names[oenv.normalize(name)] = name
+		}
+	}
+	for _, name := range slices.Sorted(maps.Values(names)) {
+		if local && !oenv.localInFunc(name) {
+			continue
+		}
+		vr := r.lookupVar(name)
+		if !vr.Declared() {
+			continue
+		}
+		if !local && !declMatches(vr, modes, valType) {
+			continue
+		}
+		r.printDeclare(name, vr)
+	}
+}
+
+// declMatches reports whether a declaration builtin with no names lists a variable.
+// Like Bash, -a and -A require an array type, and the other attributes
+// match any variable which has any of them.
+func declMatches(vr expand.Variable, modes []string, valType string) bool {
+	switch valType {
+	case "-a":
+		if vr.Kind != expand.Indexed {
+			return false
+		}
+	case "-A":
+		if vr.Kind != expand.Associative {
+			return false
+		}
+	case "-n":
+		modes = append(slices.Clip(modes), valType)
+	}
+	if len(modes) == 0 {
+		return true
+	}
+	for _, mode := range modes {
+		switch {
+		case mode == "-x" && vr.Exported,
+			mode == "-r" && vr.ReadOnly,
+			mode == "-n" && vr.Kind == expand.NameRef:
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Runner) trapCallback(ctx context.Context, callback, name string) {
@@ -909,10 +1090,38 @@ func (r *Runner) flattenAssigns(args []*syntax.Assign) iter.Seq[*syntax.Assign] 
 	}
 }
 
-func match(pat, name string) bool {
+// letArgString reproduces one expression of a let clause as bash would print it
+// when tracing, that is, as the single quoted word that bash's let receives.
+func (r *Runner) letArgString(printer *syntax.Printer, expr syntax.ArithmExpr) string {
+	if word, ok := expr.(*syntax.Word); ok {
+		return quoteBash(r.literal(word))
+	}
+	// The printer only prints an arithmetic expression as part of a parent node,
+	// so print a let clause holding just this expression and drop the keyword.
+	// The keyword borrows the expression's position to stay on the same line.
+	// TODO: drop this workaround if [syntax.Printer.Print] learns to print
+	// an arithmetic expression on its own.
+	var sb strings.Builder
+	if err := printer.Print(&sb, &syntax.LetClause{
+		Let:   expr.Pos(),
+		Exprs: []syntax.ArithmExpr{expr},
+	}); err != nil { // should never happen
+		panic(err)
+	}
+	return strings.TrimPrefix(sb.String(), "let ")
+}
+
+func (r *Runner) match(pat, name string) bool {
 	matcher, err := internal.ExtendedPatternMatcher(pat, pattern.EntireString|pattern.ExtendedOperators)
-	_ = err // TODO: report these errors
-	return matcher != nil && matcher(name)
+	if err != nil {
+		// A malformed pattern simply does not match, like in bash.
+		// Any other error, such as an unsupported extended pattern, is reported.
+		if _, ok := errors.AsType[*pattern.SyntaxError](err); !ok {
+			r.expandErr(err)
+		}
+		return false
+	}
+	return matcher(name)
 }
 
 func elapsedString(d time.Duration, posix bool) string {
@@ -931,29 +1140,70 @@ func (r *Runner) stmts(ctx context.Context, stmts []*syntax.Stmt) {
 }
 
 func (r *Runner) hdocReader(rd *syntax.Redirect) (stdinFile, error) {
-	pr, pw, err := newOSPipe()
+	pr, pw, err := newPipe()
 	if err != nil {
 		return nil, err
+	}
+	hdoc := r.hdocString(rd)
+	if hdocNeedsNewline(rd) {
+		// Like Bash, end a body cut short by EOF or a backquote with a newline.
+		hdoc += "\n"
 	}
 	// We write to the pipe in a new goroutine,
 	// as pipe writes may block once the buffer gets full.
 	// We still construct and buffer the entire heredoc first,
 	// as doing it concurrently would lead to different semantics and be racy.
-	if rd.Op != syntax.DashHdoc {
-		hdoc := r.document(rd.Hdoc)
-		go func() {
-			pw.WriteString(hdoc)
-			pw.Close()
-		}()
-		return pr, nil
+	go func() {
+		io.WriteString(pw, hdoc)
+		pw.Close()
+	}()
+	return pr, nil
+}
+
+// hdocQuotedDelim reports whether a here-document delimiter word is quoted,
+// as in "<<'EOF'" or "<<\EOF", which makes its body literal.
+func hdocQuotedDelim(word *syntax.Word) bool {
+	for _, wp := range word.Parts {
+		switch wp := wp.(type) {
+		case *syntax.Lit:
+			if strings.Contains(wp.Value, "\\") {
+				return true
+			}
+		case *syntax.SglQuoted, *syntax.DblQuoted:
+			return true
+		}
 	}
-	var buf bytes.Buffer
+	return false
+}
+
+// hdocWord returns a here-document body, or one of its lines, as a string.
+// A quoted delimiter, as in "<<'EOF'", makes the body literal,
+// in which case the parser only gives us literal parts.
+// Note that a partly quoted delimiter, such as "<<'A'B",
+// is not spotted by the parser either, so we still expand its body.
+func (r *Runner) hdocWord(word *syntax.Word, quoted bool) string {
+	if quoted {
+		if lit := word.Lit(); lit != "" {
+			return lit
+		}
+	}
+	return r.document(word)
+}
+
+// hdocString returns the body of a here-document as a string.
+func (r *Runner) hdocString(rd *syntax.Redirect) string {
+	if rd.Hdoc == nil {
+		return "" // an empty here-document
+	}
+	quoted := hdocQuotedDelim(rd.Word)
+	if rd.Op != syntax.DashHdoc {
+		return r.hdocWord(rd.Hdoc, quoted)
+	}
+	// Strip the leading tabs from each line.
+	var buf strings.Builder
 	var cur []syntax.WordPart
 	flushLine := func() {
-		if buf.Len() > 0 {
-			buf.WriteByte('\n')
-		}
-		buf.WriteString(r.document(&syntax.Word{Parts: cur}))
+		buf.WriteString(r.hdocWord(&syntax.Word{Parts: cur}, quoted))
 		cur = cur[:0]
 	}
 	for _, wp := range rd.Hdoc.Parts {
@@ -966,23 +1216,33 @@ func (r *Runner) hdocReader(rd *syntax.Redirect) (stdinFile, error) {
 		for part := range strings.SplitSeq(lit.Value, "\n") {
 			if !first {
 				flushLine()
-				cur = cur[:0]
+				buf.WriteByte('\n')
 			}
 			first = false
-			part = strings.TrimLeft(part, "\t")
+			if len(cur) == 0 { // not after an expansion or escaped newline
+				part = strings.TrimLeft(part, "\t")
+			}
 			cur = append(cur, &syntax.Lit{Value: part})
 		}
 	}
 	flushLine()
-	go func() {
-		pw.Write(buf.Bytes())
-		pw.Close()
-	}()
-	return pr, nil
+	return buf.String()
+}
+
+// hdocNeedsNewline reports whether a here-document body was cut short
+// in the middle of a line, by EOF or by a closing backquote.
+// Keep in sync with the copy in the syntax package's printer.
+func hdocNeedsNewline(rd *syntax.Redirect) bool {
+	if rd.Hdoc == nil || rd.ClosePos.IsValid() {
+		return false
+	}
+	lit, ok := rd.Hdoc.Parts[len(rd.Hdoc.Parts)-1].(*syntax.Lit)
+	return !ok || !strings.HasSuffix(lit.Value, "\n")
 }
 
 func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, error) {
-	if rd.Hdoc != nil {
+	// Note that Hdoc is nil for an empty here-document.
+	if rd.Op == syntax.Hdoc || rd.Op == syntax.DashHdoc {
 		pr, err := r.hdocReader(rd)
 		if err != nil {
 			return nil, err
@@ -1008,7 +1268,7 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 	arg := r.literal(rd.Word)
 	switch rd.Op {
 	case syntax.WordHdoc:
-		pr, pw, err := newOSPipe()
+		pr, pw, err := newPipe()
 		if err != nil {
 			return nil, err
 		}
@@ -1016,8 +1276,8 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 		// We write to the pipe in a new goroutine,
 		// as pipe writes may block once the buffer gets full.
 		go func() {
-			pw.WriteString(arg)
-			pw.WriteString("\n")
+			io.WriteString(pw, arg)
+			io.WriteString(pw, "\n")
 			pw.Close()
 		}()
 		return pr, nil
@@ -1056,7 +1316,7 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 	}
 	// As in bash, a redirection creates files with 0666 masked by the shell's
 	// umask. The default 022 gives 0644, which is what this used to hardcode.
-	f, err := r.open(ctx, arg, mode, 0o666&^os.FileMode(r.umask), true)
+	f, err := r.open(ctx, arg, mode, 0o666&^os.FileMode(r.umask), false)
 	if err != nil {
 		return nil, err
 	}
@@ -1111,6 +1371,10 @@ func (r *Runner) call(ctx context.Context, pos syntax.Pos, args []string) {
 	}
 	name := args[0]
 	if body := r.Funcs[name]; body != nil {
+		r.reportBgStart(0) // not one external program
+		if !r.enterCall(name, &r.callDepth) {
+			return
+		}
 		// stack them to support nested func calls
 		oldParams := r.Params
 		r.Params = args[1:]
@@ -1128,14 +1392,31 @@ func (r *Runner) call(ctx context.Context, pos syntax.Pos, args []string) {
 
 		r.Params = oldParams
 		r.inFunc = oldInFunc
+		r.callDepth--
 		r.exit.returning = false
 		return
 	}
 	if IsBuiltin(name) && !r.builtinDisabled(name) {
+		r.reportBgStart(0) // not one external program
 		r.exit = r.builtin(ctx, pos, name, args[1:])
 		return
 	}
 	r.exec(ctx, pos, args)
+}
+
+// maxCallDepth is the maximum number of nested function calls and sourced files,
+// similar to FUNCNEST in Bash and Zsh. Nested eval calls are limited separately.
+const maxCallDepth = 1000
+
+// enterCall increments depth, or reports false along with
+// a fatal error if [maxCallDepth] is reached.
+func (r *Runner) enterCall(name string, depth *int) bool {
+	if *depth >= maxCallDepth {
+		r.exit.fatal(fmt.Errorf("%s: maximum nesting level exceeded (%d)", name, maxCallDepth))
+		return false
+	}
+	*depth++
+	return true
 }
 
 func (r *Runner) exec(ctx context.Context, pos syntax.Pos, args []string) {
@@ -1143,17 +1424,11 @@ func (r *Runner) exec(ctx context.Context, pos syntax.Pos, args []string) {
 }
 
 func (r *Runner) open(ctx context.Context, path string, flags int, mode os.FileMode, print bool) (io.ReadWriteCloser, error) {
-	// If we are opening a FIFO temporary file created by the interpreter itself,
-	// don't pass this along to the open handler as it will not work at all
-	// unless [os.OpenFile] is used directly with it.
-	// Matching by directory and basename prefix isn't perfect, but works.
-	//
-	// If we want FIFOs to use a handler in the future, they probably
-	// need their own separate handler API matching Unix-like semantics.
-	dir, name := filepath.Split(path)
-	dir = strings.TrimSuffix(dir, "/")
-	if dir == r.tempDir && strings.HasPrefix(name, fifoNamePrefix) {
-		return os.OpenFile(path, flags, mode)
+	// The path of an active process substitution is opened by its own
+	// handler; for example, the named pipes created by the default handler
+	// can only be opened directly via [os.OpenFile].
+	if open := r.procSubsts.lookup(path); open != nil {
+		return open(ctx, flags)
 	}
 
 	f, err := r.openHandler(r.handlerCtx(ctx, handlerKindOpen, todoPos), path, flags, mode)
