@@ -238,6 +238,9 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		w.Header().Set("Location", "./")
 		w.WriteHeader(http.StatusMovedPermanently)
 	})
+	// Where a page whose desk failed to start reports what it saw
+	// (wasmserve_bootreport.go).
+	mux.HandleFunc("/boot-report", bootReportHandler(log))
 	serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
 	serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
 	serveBytes("/icon-192.png", "image/png", wasmhv.PWAIcon192)
@@ -764,6 +767,7 @@ skywireDeskBoot(Object.assign({
 }).catch(function (e) {
   var el = document.getElementById('boot-msg');
   if (el) el.textContent = 'boot failed: ' + ((e && e.message) || e);
+  if (window.__skywireBootReport) window.__skywireBootReport('failed', {error: String((e && e.message) || e), stack: e && e.stack ? String(e.stack) : ''});
 });
 </script>
 </body>
@@ -773,6 +777,8 @@ skywireDeskBoot(Object.assign({
 // deskShellHTML renders the shared desk skeleton for one serving context.
 func deskShellHTML(scriptsHTML, deskOptsJS string) []byte {
 	out := strings.ReplaceAll(deskShellTemplate, "__DESK_SCRIPTS__", scriptsHTML)
+	// The boot reporter goes first, so it sees whatever fails after it.
+	out = strings.Replace(out, `<meta charset="utf-8">`, `<meta charset="utf-8">`+"\n<script>"+bootReportJS+"</script>", 1)
 	return []byte(strings.ReplaceAll(out, "__DESK_OPTS__", deskOptsJS))
 }
 
