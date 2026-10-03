@@ -326,8 +326,15 @@
 			};
 			dc.onclose = function () { post({ t: 'rtc', op: 'dcClose', pcId: pcId, dcId: dcId }); };
 			dc.onerror = function () { post({ t: 'rtc', op: 'dcError', pcId: pcId, dcId: dcId }); };
+			// The worker cannot read bufferedAmount, so the page says when the queue
+			// passes RTC_HIGH_WATER and when it drains (webrtc_browser.go waits on it).
+			try { dc.bufferedAmountLowThreshold = RTC_LOW_WATER; } catch (e) { /* older engine */ }
+			dc.onbufferedamountlow = function () {
+				if (dc.__high) { dc.__high = false; post({ t: 'rtc', op: 'dcLow', pcId: pcId, dcId: dcId }); }
+			};
 			if (dc.readyState === 'open') post({ t: 'rtc', op: 'dcOpen', pcId: pcId, dcId: dcId });
 		}
+		var RTC_HIGH_WATER = 1 << 20, RTC_LOW_WATER = 256 << 10;
 		function rtcCall(pc, m) {
 			switch (m.method) {
 			case 'createOffer': return pc.createOffer().then(function (o) { return { type: o.type, sdp: o.sdp }; });
@@ -372,7 +379,12 @@
 				return;
 			// A send the channel refuses (queue full, closing) would drop bytes from a
 			// reliable ordered stream; close it so the transport fails and redials.
-			case 'dcSend': dc = rec && rec.dcs[m.dcId]; if (dc) { try { dc.send(m.data); } catch (e) { try { dc.close(); } catch (e2) { /* gone */ } } } return;
+			case 'dcSend':
+				dc = rec && rec.dcs[m.dcId];
+				if (!dc) return;
+				try { dc.send(m.data); } catch (e) { try { dc.close(); } catch (e2) { /* gone */ } return; }
+				if (!dc.__high && dc.bufferedAmount > RTC_HIGH_WATER) { dc.__high = true; post({ t: 'rtc', op: 'dcHigh', pcId: m.pcId, dcId: m.dcId }); }
+				return;
 			case 'dcClose': dc = rec && rec.dcs[m.dcId]; if (dc) { try { dc.close(); } catch (e) { /* gone */ } } return;
 			case 'pcClose':
 				if (rec) { try { rec.pc.close(); } catch (e) { /* gone */ } delete rtcPCs[m.pcId]; post({ t: 'rtc', op: 'pcGone', pcId: m.pcId }); }

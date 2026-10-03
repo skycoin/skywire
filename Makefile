@@ -394,6 +394,27 @@ build-wasm: ## Compile-check the js/wasm module (GOOS=js GOARCH=wasm), no run �
 	@GOOS=js GOARCH=wasm go build -mod=vendor -tags "$(EXEC_WASM_TAGS)" -o /dev/null . || exit 1
 	@echo "the js/wasm module compiles."
 
+# Most packages' tests want a socket or a filesystem that js/wasm has not got,
+# so the list is explicit rather than ./... .
+#
+# pkg/dmsg/dmsg is not here yet even though it holds the WebTransport deadline
+# tests. 38 of its 50 test files carry no build tag, and its shared helpers sit
+# in test files whose tags differ (GenKeyPair is in stream_test.go), so tagging
+# the socket-bound ones one at a time does not converge. Covering it means
+# tagging them all or moving the helpers, which is its own change.
+WASM_TEST_PKGS ?= ./pkg/transport/network/...
+
+.PHONY: test-wasm
+test-wasm: ## Run the js/wasm tests under Node (GOOS=js GOARCH=wasm) — the browser carriers' deadline and backpressure behaviour
+	@command -v node >/dev/null 2>&1 || { echo "node not installed — needed to run the js/wasm tests"; exit 1; }
+	@# Go ships the Node shim. It moved from misc/wasm to lib/wasm in go1.24.
+	@wasmexec="$$(go env GOROOT)/lib/wasm/go_js_wasm_exec"; \
+	 [ -x "$$wasmexec" ] || wasmexec="$$(go env GOROOT)/misc/wasm/go_js_wasm_exec"; \
+	 [ -x "$$wasmexec" ] || { echo "no go_js_wasm_exec under $$(go env GOROOT)"; exit 1; }; \
+	 echo "  GOOS=js GOARCH=wasm go test $(WASM_TEST_PKGS)"; \
+	 GOOS=js GOARCH=wasm go test -mod=vendor -count=1 -exec "$$wasmexec" $(WASM_TEST_PKGS) || exit 1
+	@echo "the js/wasm tests pass."
+
 build-wasm-tinygo: ## Compile-check the TinyGo wasm binaries (-o /dev/null, no run) — mirrors the CI wasm-tinygo lane
 	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.41+)"; exit 1; }
 	@# TinyGo trails Go by weeks after each Go minor, and refuses to run at all
