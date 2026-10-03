@@ -154,6 +154,9 @@ func (g *LocalPtyGateway) Exec(req *CommandExecReq, resp *CommandExecResult) err
 		resp.ExitCode = ee.ExitCode()
 		return nil
 	}
+	// The command never ran (not found, or no processes on this platform).
+	// Say so, or the caller sees an empty result and no reason.
+	resp.Stderr = append(resp.Stderr, fmt.Sprintf("dmsgpty: exec %s: %v\n", req.Name, err)...)
 	resp.ExitCode = -1
 	return nil
 }
