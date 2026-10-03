@@ -55,6 +55,11 @@ self.addEventListener('fetch', (event) => {
   // (return without respondWith() → the browser does its normal network fetch).
   if (url.pathname === '/wasm-version') { return; }
 
+  // API calls are live data: never cached, and never answered with the shell,
+  // which the dashboard read as JSON ("Unexpected token '<'") when the
+  // hypervisor was not there. Under a desk prefix the path is /vnet/<port>/api/.
+  if (/(^|\/)api\//.test(url.pathname)) { return; }
+
   if (IMMUTABLE.test(url.pathname)) {
     // cache-first: hashed bundles can't change under a fixed URL.
     event.respondWith(
@@ -67,7 +72,12 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(req)
       .then((res) => putInCache(event, req, res))
-      .catch(() => caches.match(req).then((hit) => hit || caches.match('./')))
+      .catch((err) => caches.match(req).then((hit) => {
+        if (hit) return hit;
+        // Only a page load falls back to the shell; anything else fails.
+        if (req.mode === 'navigate') return caches.match('./').then((shell) => shell || Promise.reject(err));
+        return Promise.reject(err);
+      }))
   );
 });
 
