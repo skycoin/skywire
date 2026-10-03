@@ -1,0 +1,142 @@
+{
+  "_comment": "Strings only the iOS app has, in the three languages. seed-strings.py merges them with the Android catalogues into ios/Skywire/Localizable.xcstrings. Placeholders are iOS's (%1$@, %1$lld). Terms follow the Android glossary (android/README.md, Languages): visor = 节点 / nodo, core = 核心 / núcleo, Fleet = 集群 / Flota, informal tú in Spanish; Apple's own names for Face ID, Touch ID and the Settings app.",
+  "Localizable": {
+    "ok": {
+      "en": "OK",
+      "zh-Hans": "好",
+      "es": "Aceptar"
+    },
+    "home_actions": {
+      "en": "Actions",
+      "zh-Hans": "操作",
+      "es": "Acciones"
+    },
+    "home_reconnect_dmsg": {
+      "en": "Reconnect DMSG",
+      "zh-Hans": "重新连接 DMSG",
+      "es": "Reconectar DMSG"
+    },
+    "home_restart_core": {
+      "en": "Restart core",
+      "zh-Hans": "重启核心",
+      "es": "Reiniciar el núcleo"
+    },
+    "home_dmsg_reconnected": {
+      "en": "DMSG sessions closed: %1$lld. The visor is dialing again.",
+      "zh-Hans": "已关闭的 DMSG 会话：%1$lld。节点正在重新连接。",
+      "es": "Sesiones DMSG cerradas: %1$lld. El nodo está volviendo a conectar."
+    },
+    "visor_copy_hint": {
+      "en": "Copies the full key",
+      "zh-Hans": "复制完整公钥",
+      "es": "Copia la clave completa"
+    },
+    "logs_source": {
+      "en": "Source",
+      "zh-Hans": "来源",
+      "es": "Origen"
+    },
+    "logs_source_apps": {
+      "en": "Apps",
+      "zh-Hans": "应用",
+      "es": "Apps"
+    },
+    "settings_copy_pk": {
+      "en": "Copy public key",
+      "zh-Hans": "复制公钥",
+      "es": "Copiar la clave pública"
+    },
+    "settings_pk_qr": {
+      "en": "Public key as a QR code",
+      "zh-Hans": "公钥二维码",
+      "es": "Clave pública en código QR"
+    },
+    "settings_fleet_restart": {
+      "en": "Turning it on or off restarts the core if it is running.",
+      "zh-Hans": "开启或关闭时，如果核心正在运行，会将其重启。",
+      "es": "Al activarla o desactivarla se reinicia el núcleo si está en marcha."
+    },
+    "settings_app_lock_hint_ios": {
+      "en": "Asks for Face ID, Touch ID or your passcode when Skywire opens and when you come back to it after about half a minute away. Also covers the app in the app switcher and while the screen is being recorded or mirrored. iOS does not let an app block screenshots.",
+      "zh-Hans": "打开 Skywire 时，以及离开约半分钟后再回到应用时，都会要求面容 ID、触控 ID 或设备密码。同时会在应用切换器中，以及屏幕被录制或镜像时遮住应用内容。iOS 不允许应用禁止截屏。",
+      "es": "Pide Face ID, Touch ID o tu código cuando abres Skywire y cuando vuelves a ella tras medio minuto fuera. También tapa la app en el selector de apps y mientras la pantalla se graba o se duplica. iOS no permite que una app bloquee las capturas de pantalla."
+    },
+    "settings_language_hint_ios": {
+      "en": "Change it in the iOS Settings app, under Skywire › Language. Logs and whatever the visor itself reports stay in English — they are read next to a desktop’s, and a translated log line is one nobody can search for.",
+      "zh-Hans": "请在 iOS 的“设置”应用中前往“Skywire › 语言”更改。日志和节点自身报告的内容仍为英文——它们要与桌面端的日志放在一起看，翻译过的日志行没有人能搜到。",
+      "es": "Se cambia en la app Ajustes de iOS, en Skywire › Idioma. Los registros y todo lo que informa el propio nodo se quedan en inglés: se leen junto a los de un escritorio, y una línea de registro traducida es una línea que nadie puede buscar."
+    },
+    "diag_level_confirm_action": {
+      "en": "Restart",
+      "zh-Hans": "重启",
+      "es": "Reiniciar"
+    },
+    "diag_footprint": {
+      "en": "Memory in use",
+      "zh-Hans": "占用内存",
+      "es": "Memoria en uso"
+    },
+    "diag_footprint_hint": {
+      "en": "What iOS counts against this app (phys_footprint), the core included. On a device the core will run in a packet-tunnel extension, whose limit is about 50 MB.",
+      "zh-Hans": "iOS 计入本应用的内存用量（phys_footprint），包括核心。在真机上，核心将运行在数据包隧道扩展中，其上限约为 50 MB。",
+      "es": "Lo que iOS le cuenta a esta app (phys_footprint), núcleo incluido. En un dispositivo, el núcleo se ejecutará en una extensión de túnel de paquetes, cuyo límite ronda los 50 MB."
+    },
+    "chat_download_failed": {
+      "en": "%1$@ was not saved: %2$@",
+      "zh-Hans": "%1$@ 未能保存：%2$@",
+      "es": "No se guardó %1$@: %2$@"
+    },
+    "wallet_seed_secure_ios": {
+      "en": "Covered while the screen is recorded or mirrored, and in the app switcher. iOS does not let an app block screenshots. There is no copy button.",
+      "zh-Hans": "屏幕被录制或镜像时，以及在应用切换器中，这些单词会被遮住。iOS 不允许应用禁止截屏。本页面没有复制按钮。",
+      "es": "Se tapa mientras la pantalla se graba o se duplica, y en el selector de apps. iOS no permite que una app bloquee las capturas de pantalla. No hay botón de copiar."
+    },
+    "wallet_screenshot_title": {
+      "en": "Screenshot saved",
+      "zh-Hans": "截屏已保存",
+      "es": "Captura guardada"
+    },
+    "wallet_screenshot_body": {
+      "en": "It shows your recovery phrase and is now in Photos, where it can sync to your other devices. Delete it: anyone who sees those words can spend your coins.",
+      "zh-Hans": "截屏中有你的助记词，现在已存入“照片”，并可能同步到你的其他设备。请删除它：任何看到这些单词的人都能花掉你的币。",
+      "es": "Muestra tu frase de recuperación y ahora está en Fotos, desde donde puede sincronizarse con tus otros dispositivos. Bórrala: quien vea esas palabras puede gastar tus monedas."
+    },
+    "wallet_scan_photo": {
+      "en": "Scan a QR code from a photo",
+      "zh-Hans": "从照片中扫描二维码",
+      "es": "Escanear un código QR de una foto"
+    },
+    "wallet_scan_none": {
+      "en": "No QR code found in that picture.",
+      "zh-Hans": "该图片中未找到二维码。",
+      "es": "No se encontró ningún código QR en esa imagen."
+    },
+    "wallet_sheet_done": {
+      "en": "Done",
+      "zh-Hans": "完成",
+      "es": "Listo"
+    }
+  },
+  "InfoPlist": {
+    "NSFaceIDUsageDescription": {
+      "en": "Skywire uses Face ID to unlock the app when the app lock is on, and to confirm wallet sends and the showing of a recovery phrase.",
+      "zh-Hans": "开启应用锁后，Skywire 会使用面容 ID 解锁应用；钱包发送转账和显示助记词之前，也会用它确认身份。",
+      "es": "Skywire usa Face ID para desbloquear la app cuando el bloqueo de la app está activado, y para confirmar los envíos de la billetera y antes de mostrar una frase de recuperación."
+    },
+    "NSMicrophoneUsageDescription": {
+      "en": "SkyChat uses the microphone to record voice and video messages.",
+      "zh-Hans": "SkyChat 使用麦克风录制语音和视频消息。",
+      "es": "SkyChat usa el micrófono para grabar mensajes de voz y de vídeo."
+    },
+    "NSCameraUsageDescription": {
+      "en": "Skywire uses the camera to record video messages and scan QR codes in SkyChat and the wallet.",
+      "zh-Hans": "Skywire 使用相机录制视频消息，并在 SkyChat 和钱包中扫描二维码。",
+      "es": "Skywire usa la cámara para grabar mensajes de vídeo y escanear códigos QR en SkyChat y en la billetera."
+    },
+    "NSPhotoLibraryAddUsageDescription": {
+      "en": "Skywire saves the pictures and videos you choose to your photo library.",
+      "zh-Hans": "Skywire 会把你选择的图片和视频保存到照片图库。",
+      "es": "Skywire guarda en tu fototeca las imágenes y los vídeos que elijas."
+    }
+  }
+}

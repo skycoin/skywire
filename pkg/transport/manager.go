@@ -227,10 +227,13 @@ func (tm *Manager) InitDmsgClient(ctx context.Context, dmsgC *dmsg.Client) {
 // from all those clients
 // Additionally, it runs cleanup and persistent reconnection routines
 func (tm *Manager) Serve(ctx context.Context) {
-	// for cleanup, reconnect, re-registration, deferred deletion, and
-	// transport-maintenance goroutines (the latter replaces what used
-	// to be 2 goroutines per ManagedTransport)
-	tm.wg.Add(7)
+	// for cleanup, reconnect, re-registration, deferred deletion,
+	// transport-maintenance (which replaces what used to be 2 goroutines per
+	// ManagedTransport) and lock-watchdog goroutines. The count must match the
+	// goroutines started below: one too many and Close waits forever on
+	// tm.wg while holding tm.mx, wedging every transport reader behind it
+	// (TestManagerCloseAfterServe).
+	tm.wg.Add(6)
 	go tm.cleanupTransports(ctx)
 	go tm.runReconnectPersistent(ctx)
 	go tm.runReRegisterTransports(ctx)
@@ -985,7 +988,10 @@ func (tm *Manager) runClient(ctx context.Context, netType types.Type) {
 			tm.Logger.WithError(err).Debugf("network %s is dial-only on this build (cannot listen)", client.Type())
 			return
 		}
-		tm.Logger.WithError(err).Fatalf("failed to listen on network '%s' of port '%d'",
+		// Logged, not fatal: the other networks keep serving (as they do when
+		// Start fails above), and a visor hosted inside an app (the iOS core,
+		// pkg/mobilecore) must not end the app's process over one network.
+		tm.Logger.WithError(err).Errorf("failed to listen on network '%s' of port '%d'",
 			client.Type(), skyenv.TransportPort)
 		return
 	}
@@ -1902,6 +1908,18 @@ func (tm *Manager) Close() {
 	default:
 	}
 	close(tm.done)
+	tm.closeLocked()
+	// Wait for the Serve and accept goroutines outside tm.mx: they exit on
+	// tm.done or once their listener closed (above), but one may be about to
+	// take the lock first — cleanupTransports on its tick, an accept saving a
+	// transport — and waiting for it while holding the lock deadlocks.
+	tm.wg.Wait()
+	close(tm.readCh)
+}
+
+// closeLocked deregisters and closes every transport and network client, under
+// tm.mx.
+func (tm *Manager) closeLocked() {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
 
@@ -1914,27 +1932,8 @@ func (tm *Manager) Close() {
 		}
 	}
 
-	// Deregister all transports from TPD on shutdown. CXO-authoritative: publish an
-	// empty transport-list snapshot so TPD reconciles every one of our transports
-	// away (absence = deletion) — no HTTP DeleteTransports, which an old TPD
-	// rate-limits (429) on shutdown. tpdLeafPublisher() uses its own mutex, so this
-	// is safe under tm.mx. The publish is best-effort at process exit; anything that
-	// doesn't propagate is aged out by TPD's heartbeat timeout (same as a crash).
-	// Falls back to the HTTP batch delete only when there is no CXO publisher.
 	if len(tpIDs) > 0 {
-		if tm.tpdLeafPublisher() != nil {
-			tm.publishTPDList(nil)
-			tm.Logger.Debugf("Deregistered %d transports via empty CXO transport-list snapshot on close", len(tpIDs))
-		} else {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			deleted, err := tm.Conf.DiscoveryClient.DeleteTransports(ctx, tpIDs)
-			cancel()
-			if err != nil {
-				tm.Logger.WithError(err).Warnf("Batch deregister completed with error: %d/%d deleted", deleted, len(tpIDs))
-			} else {
-				tm.Logger.Debugf("Batch deregistered %d/%d transports from TPD", deleted, len(tpIDs))
-			}
-		}
+		tm.deregisterOnClose(tpIDs)
 	}
 
 	// Close underlying transports (skip TPD deregistration since we already did it)
@@ -1951,8 +1950,55 @@ func (tm *Manager) Close() {
 	if err := tm.closeARClient(); err != nil {
 		tm.Logger.WithError(err).Warnf("Failed to close arClient")
 	}
-	tm.wg.Wait()
-	close(tm.readCh)
+}
+
+// closeDeregisterTimeout bounds Close's TPD deregistration. The visor gives the
+// whole of Close moduleShutdownTimeout (4 s) and then moves on, closing the
+// shared TCP port and dmsg under a manager still running; this leaves Close
+// the rest of that time to close the transports and network clients.
+const closeDeregisterTimeout = 2 * time.Second
+
+// deregisterOnClose deregisters all transports from TPD on shutdown, waiting at
+// most closeDeregisterTimeout.
+//
+// CXO-authoritative: publish an empty transport-list snapshot so TPD reconciles
+// every one of our transports away (absence = deletion) — no HTTP
+// DeleteTransports, which an old TPD rate-limits (429) on shutdown.
+// tpdLeafPublisher() uses its own mutex, so this is safe under tm.mx. Falls back
+// to the HTTP batch delete only when there is no CXO publisher. Either is
+// best-effort at process exit; anything that doesn't land in time is aged out by
+// TPD's heartbeat timeout (same as a crash).
+//
+// The budget was 30 s, inside a 4 s module timeout. Over dmsg one TPD round trip
+// can take longer than 4 s: with SkySOCKS connected a phone spent 7.4 s here, the
+// visor timed the module out and closed the shared TCP port under the stcpr
+// accept loop, which spun on the closed listener until the app crashed (G4). The
+// request carries the deadline, but the TPD client serializes its requests and
+// may first wait behind one already in flight, so the wait is bounded here too. A
+// request left running then fails when dmsg closes, later in the same shutdown.
+func (tm *Manager) deregisterOnClose(tpIDs []uuid.UUID) {
+	ctx, cancel := context.WithTimeout(context.Background(), closeDeregisterTimeout)
+	defer cancel()
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		if tm.tpdLeafPublisher() != nil {
+			tm.publishTPDList(nil)
+			tm.Logger.Debugf("Deregistered %d transports via empty CXO transport-list snapshot on close", len(tpIDs))
+			return
+		}
+		deleted, err := tm.Conf.DiscoveryClient.DeleteTransports(ctx, tpIDs)
+		if err != nil {
+			tm.Logger.WithError(err).Warnf("Batch deregister completed with error: %d/%d deleted", deleted, len(tpIDs))
+		} else {
+			tm.Logger.Debugf("Batch deregistered %d/%d transports from TPD", deleted, len(tpIDs))
+		}
+	}()
+	select {
+	case <-finished:
+	case <-ctx.Done():
+		tm.Logger.Warnf("Deregistering %d transports from TPD took over %v; closing without it, TPD ages them out", len(tpIDs), closeDeregisterTimeout)
+	}
 }
 
 func (tm *Manager) isClosing() bool {

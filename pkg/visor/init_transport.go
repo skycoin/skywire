@@ -1130,14 +1130,26 @@ func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger
 	// At scale (3000+ visors), more frequent intervals create too much TPD load
 	const tickDuration = 5 * time.Minute
 	ticker := time.NewTicker(tickDuration)
+	// Stopping a ticker does not close its channel, so ranging over it never
+	// ended: every visor close left this goroutine parked for good (a leak per
+	// restart in a process that restarts its visor, as the phone core does).
+	stop := make(chan struct{})
 	go func() {
-		for range ticker.C {
-			reconcileTPDWithRetry(ctx, v, log)
+		for {
+			select {
+			case <-ticker.C:
+				reconcileTPDWithRetry(ctx, v, log)
+			case <-stop:
+				return
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 
 	v.pushCloseStack("tpd_concurrency", func() error {
 		ticker.Stop()
+		close(stop)
 		return nil
 	})
 	return nil

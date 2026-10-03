@@ -12115,11 +12115,13 @@
               const srcW = source.videoWidth || source.width || 0;
               const srcH = source.videoHeight || source.height || 0;
               if (!srcW || !srcH) return [];
-              // Downscaled first. The bridge call is synchronous — it blocks
-              // this thread until zxing answers — and it runs several times a
-              // second while the camera is open, so a full 1080p frame would
-              // be felt as stutter in the page behind the viewfinder. A code
-              // large enough for a camera to see is still legible at 640.
+              // Downscaled first. On Android the bridge call is synchronous —
+              // it blocks this thread until zxing answers — and it runs
+              // several times a second while the camera is open, so a full
+              // 1080p frame would be felt as stutter in the page behind the
+              // viewfinder; on iOS the frame crosses the bridge as a message
+              // either way. A code large enough for a camera to see is still
+              // legible at 640.
               const scale = Math.min(1, cap / Math.max(srcW, srcH));
               const width = Math.max(1, Math.round(srcW * scale));
               const height = Math.max(1, Math.round(srcH * scale));
@@ -12136,7 +12138,10 @@
               // distinguishing from "never looked", and the size it examined
               // is the difference between a bad photo and a bad decode.
               this._qrLastFrame = width + '×' + height + ', ' + Math.round(url.length / 1024) + 'KB';
-              const text = window.SkywireQr.decode(url);
+              // Awaited: the iOS app's bridge answers with a promise (a
+              // WKWebView message cannot reply synchronously); Android's
+              // plain string comes through an await unchanged.
+              const text = await window.SkywireQr.decode(url);
               return text ? [{ rawValue: text }] : [];
             },
           };

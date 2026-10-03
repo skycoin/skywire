@@ -562,13 +562,25 @@ func (v *Visor) DeleteRewardAddress() error {
 	return nil
 }
 
-// Reload implements API.
+// Reload implements API. A visor hosted in-process (StartInProcess) asks its
+// host to restart it instead: re-entering run() would hook the process-global
+// logger again and block the caller for the life of the new visor.
 func (v *Visor) Reload() error {
+	if h := v.opts.inProcess; h != nil {
+		go h.Restart()
+		return nil
+	}
 	return reload(v)
 }
 
-// Shutdown implements API.
+// Shutdown implements API. On desktop it ends the process. A visor hosted
+// in-process (StartInProcess) asks its host to stop it instead: os.Exit there
+// would kill the app it lives in.
 func (v *Visor) Shutdown() error {
+	if h := v.opts.inProcess; h != nil {
+		go h.Stop()
+		return nil
+	}
 	defer os.Exit(0)
 	return v.Close()
 }

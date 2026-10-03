@@ -17,7 +17,6 @@ import (
 
 	"github.com/google/uuid"
 
-	clirewardsserver "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/server"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -160,18 +159,15 @@ func (v *Visor) refreshWebsiteHandler(log *logging.Logger) {
 		return // logserver not yet constructed
 	}
 
-	// Rewards UI wins when configured — it's a global on/off switch.
+	// Rewards UI wins when configured — it's a global on/off switch. A build
+	// without it (mobile) falls through to the other modes.
 	if rw := v.conf.Rewards; rw != nil && rw.Enable {
-		log.Info("Mounting reward system UI on port 80")
-		lsAPI.SetWebsiteHandler(clirewardsserver.ConfigureAndBuild(clirewardsserver.RewardConfig{
-			WorkDir:         rw.WorkDir,
-			WhitelistPKs:    rw.Whitelist,
-			CanonicalDomain: rw.CanonicalDomain,
-			SkycoinNode:     rw.SkycoinNode,
-			LoginNode:       rw.LoginNode,
-			DisableTpVizAPI: true,
-		}))
-		return
+		if h := rewardsWebsiteHandler(rw); h != nil {
+			log.Info("Mounting reward system UI on port 80")
+			lsAPI.SetWebsiteHandler(h)
+			return
+		}
+		log.Warn("rewards.enable is set but this build has no reward system UI")
 	}
 
 	// Reverse-proxy mode: a forwarded port for 80 with proxy_addr (or

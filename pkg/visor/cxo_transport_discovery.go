@@ -23,7 +23,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
-	tpdapi "github.com/skycoin/skywire/pkg/deployment/tpd/api"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/tpdpaths"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -71,13 +71,13 @@ func (c *cxoAwareTPD) getAllTransportsBase(ctx context.Context) ([]*transport.En
 }
 
 // routingTransports assembles TPD's routing feed (one gzipped leaf per
-// visor, see tpdapi.RoutingCXOPublisher) into the network's transport list:
+// visor, see RoutingCXOPublisher in pkg/deployment/tpd/api) into the network's transport list:
 // the transports that exist now, with the latency and throughput routes are
 // weighed by. The publisher drops the derivable t_id; it is recomputed from
 // (edges, type). ok is false until the feed has synced.
 func routingTransports(mgr *CXOSubscriptionManager) ([]*transport.Entry, bool) {
 	var entries []*transport.Entry
-	mgr.Walk(FeedTPDRouting, tpdapi.RoutingPathPrefix, func(_ string, body []byte) bool {
+	mgr.Walk(FeedTPDRouting, tpdpaths.RoutingPathPrefix, func(_ string, body []byte) bool {
 		var shard []*transport.Entry
 		if err := json.Unmarshal(cxoutils.Gunzip(body), &shard); err != nil {
 			return true

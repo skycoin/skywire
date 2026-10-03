@@ -1,0 +1,9 @@
+{
+  "body": "true\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "POST",
+  "path": "/api/create-account",
+  "status": 200
+}

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -278,18 +279,41 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 	// this width the listener stays responsive under any inbound rate a visor
 	// realistically sees.
 	sem := make(chan struct{}, maxConcurrentHandshakes)
+	var pause time.Duration
 	for {
 		conn, err := c.acceptConn()
 		if err != nil {
-			if c.isClosed() && (errors.Is(err, io.ErrClosedPipe) || errors.Is(err, net.ErrClosed)) {
-				c.log.Debug("Cleanly stopped serving.")
+			// A closed listener never accepts again, whether or not this client
+			// was closed first. On a visor shutdown whose transport manager
+			// overran its close timeout, the shared port (cmux) is closed while
+			// this client is still open; this loop used to keep calling Accept
+			// on it, failing at once every time: 388,251 warnings in 3.5 s on a
+			// desktop, and on a phone, where the core runs inside the app and
+			// every line goes on to the system log, enough to crash the app
+			// (G4). The goroutine also outlived the core on a phone, whose
+			// core stops and starts again inside one process. On a shared port
+			// that is also the normal order: closing any one of cmux's virtual
+			// listeners closes the master, so the first client the manager
+			// closes stops the others' listeners before their own Close.
+			if listenerGone(err) {
+				c.log.WithError(err).Debug("Listener closed; stopped serving.")
 				return
 			}
 			// A failed Accept is about the LISTENER, not any one peer: there is
 			// no connection to hand off and nothing to retry per-connection.
-			c.log.Warnf("failed to accept incoming connection: %v", err)
+			// What is left may pass (a full file table), so it is retried after
+			// a growing pause, as net/http's Server does: a lasting error costs
+			// a line a second, not a spinning core.
+			pause = acceptRetryPause(pause)
+			c.log.Warnf("failed to accept incoming connection: %v (retrying in %v)", err, pause)
+			select {
+			case <-time.After(pause):
+			case <-c.done:
+				return
+			}
 			continue
 		}
+		pause = 0
 
 		sem <- struct{}{}
 		go func() {
@@ -297,6 +321,18 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 			c.serveConn(conn)
 		}()
 	}
+}
+
+// acceptRetryPause is the wait before Accept is tried again after an error
+// that may pass: 5 ms, doubling, at most a second.
+func acceptRetryPause(last time.Duration) time.Duration {
+	if last == 0 {
+		return 5 * time.Millisecond
+	}
+	if last *= 2; last > time.Second {
+		return time.Second
+	}
+	return last
 }
 
 // maxConcurrentHandshakes caps the handshakes running off the accept loop at

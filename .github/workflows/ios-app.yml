@@ -1,0 +1,95 @@
+# iOS app lane: the Go core built for iOS from source, the Swift packages'
+# tests, and the app built and tested on a Simulator. The iOS counterpart of
+# android-app.yml.
+#
+# Gated on the paths that can break it: the iOS tree, the Go packages that are
+# only iOS's (pkg/mobilecore, cmd/skywire-mobile-core) and the Makefile that
+# builds them. A Go change elsewhere is caught first by test.yml's `android`
+# job, whose ios-deps-check guards the iOS import graph on every PR.
+#
+# Nothing here is signed with an Apple identity: the Simulator build is signed
+# to run locally (identity "-"), which needs no account and no secret, and is
+# what lets the app use the Keychain on the Simulator (SecretStore).
+name: iOS app
+
+on:
+  pull_request:
+    paths:
+      - 'ios/**'
+      - 'pkg/mobilecore/**'
+      - 'cmd/skywire-mobile-core/**'
+      - 'Makefile'
+      - '.github/workflows/ios-app.yml'
+
+# A new push to the same PR makes the previous run irrelevant.
+concurrency:
+  group: ios-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      # Tags: the core's version is `git describe --match 'v[0-9]*'`, and the
+      # visor refuses to start on a config whose version is not semver.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          cache: true
+          cache-dependency-path: go.sum
+
+      # Explicit: the newest Xcode 27, else (hosted images carry a new Xcode
+      # weeks late) the newest Xcode 26 with a notice; loud when neither is
+      # there.
+      - name: Select Xcode
+        run: ios/scripts/ci-xcode.sh select
+
+      - name: Go core (xcframework, device and Simulator slices)
+        run: make ios-core
+
+      # Plain Foundation, so on the Mac: the API client against the recorded
+      # core answers, the phone profile against the Android app's output,
+      # the log parser.
+      - name: CoreClient tests
+        run: cd ios/Packages/CoreClient && swift test
+
+      # The wallet's one third-party crypto library is vendored: prove the
+      # copy is bitcoin-core/secp256k1's tag, byte for byte, before testing
+      # anything built on it.
+      - name: WalletCore's libsecp256k1 is upstream's
+        run: ios/scripts/import-secp256k1.sh --verify
+
+      # The Kotlin wallet-core's vectors and fixtures replayed against the
+      # Swift port (the live suites skip without SKYWIRE_NET_TESTS=1).
+      - name: WalletCore tests
+        run: cd ios/Packages/WalletCore && swift test
+
+      # SkywireTests (unhosted: the core starts and stops in the test process,
+      # and it dials the real dmsg network) and SkywireAppTests (hosted by the
+      # app, for the Keychain), serially: the core binds 127.0.0.1:8000.
+      - name: App build and tests on the Simulator
+        run: |
+          destination=$(ios/scripts/ci-xcode.sh destination)
+          echo "Simulator: $destination"
+          xcodebuild -project ios/Skywire.xcodeproj -scheme Skywire \
+            -destination "$destination" \
+            -derivedDataPath ios/DerivedData \
+            -resultBundlePath ios/build/SkywireTests.xcresult \
+            test
+
+      # Kept for triage: the result bundle has every test's log and the
+      # Simulator's diagnostics.
+      - name: Upload the test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-results
+          path: ios/build/SkywireTests.xcresult
+          retention-days: 14
+          if-no-files-found: ignore

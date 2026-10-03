@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
-	tpdapi "github.com/skycoin/skywire/pkg/deployment/tpd/api"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/tpdpaths"
 )
 
 // ErrTPDStatsNotReady is returned when the CXO subscriber has nothing
@@ -51,11 +51,11 @@ const (
 func statsPathForKind(kind string) (string, bool) {
 	switch kind {
 	case StatsKindNetwork:
-		return tpdapi.StatsPathNetwork, true
+		return tpdpaths.StatsPathNetwork, true
 	case StatsKindVersions:
-		return tpdapi.StatsPathVersions, true
+		return tpdpaths.StatsPathVersions, true
 	case StatsKindDaily:
-		return tpdapi.StatsPathDaily, true
+		return tpdpaths.StatsPathDaily, true
 	}
 	return "", false
 }

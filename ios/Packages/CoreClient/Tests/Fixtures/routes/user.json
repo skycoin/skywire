@@ -1,0 +1,9 @@
+{
+  "body": "{\"username\":\"admin\",\"current_session\":{\"sid\":\"0be3e560-b964-4393-b185-2b1619f83c02\",\"username\":\"admin\",\"expiry\":\"2026-09-30T18:07:32.118532+08:00\"},\"other_sessions\":null}\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "GET",
+  "path": "/api/user",
+  "status": 200
+}
