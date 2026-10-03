@@ -109,7 +109,7 @@ func (c *wsClient) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ws transport listener not running", http.StatusServiceUnavailable)
 		return
 	}
-	lis.handle(w, r)
+	lis.accept(w, r, true)
 }
 
 // wsListener fronts a WebSocket HTTP server as a net.Listener: each upgraded
@@ -166,7 +166,11 @@ func newWSListenerOver(tcpLis net.Listener, dmsgWS *atomic.Value) *wsListener {
 	return l
 }
 
-func (l *wsListener) handle(w http.ResponseWriter, r *http.Request) {
+func (l *wsListener) handle(w http.ResponseWriter, r *http.Request) { l.accept(w, r, false) }
+
+// accept upgrades r to a WebSocket and delivers it from Accept. attached marks
+// a conn that came through a hypervisor's /tp/ws.
+func (l *wsListener) accept(w http.ResponseWriter, r *http.Request, attached bool) {
 	// InsecureSkipVerify disables coder/websocket's same-origin (CSRF) check.
 	// A browser (wasm) visor ALWAYS sends an Origin header (its page origin),
 	// which never matches this visor's Host, so the default check 403s every
@@ -180,6 +184,9 @@ func (l *wsListener) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	conn := websocket.NetConn(context.Background(), ws, websocket.MessageBinary)
+	if attached {
+		conn = attachedConn{conn}
+	}
 	select {
 	case l.conns <- conn:
 	case <-l.done:
