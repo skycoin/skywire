@@ -63,6 +63,10 @@ const sctpReceiveBufferBytes = 16 * 1024 * 1024
 func newWebRTCAPI() *webrtc.API {
 	se := webrtc.SettingEngine{}
 	se.DetachDataChannels()
+	// A write waits until SCTP takes the previous one, as a TCP write waits on
+	// a full socket buffer. Without it writes never block, the queue grew to
+	// seconds of delay under load, and the write deadline had nothing to stop.
+	se.EnableDataChannelBlockWrite(true)
 	// Raise the SCTP receive window off its 1 MiB default so a high-BDP mesh path
 	// isn't flow-control throttled/stalled — see sctpReceiveBufferBytes.
 	se.SetSCTPMaxReceiveBufferSize(sctpReceiveBufferBytes)

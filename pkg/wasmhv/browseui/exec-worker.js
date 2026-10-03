@@ -237,7 +237,7 @@
 	}
 	function rtcMakeDC(pcId, dcId) {
 		return {
-			binaryType: 'arraybuffer', readyState: 'connecting',
+			binaryType: 'arraybuffer', readyState: 'connecting', bufferedHigh: false, onbufferedamountlow: null,
 			onopen: null, onmessage: null, onclose: null, onerror: null,
 			send: function (data) {
 				var buf = data;
@@ -299,6 +299,10 @@
 		case 'dcMessage': dc = rec && rec.dcs[m.dcId]; if (dc && typeof dc.onmessage === 'function') { dc.onmessage({ data: m.data }); } return;
 		case 'dcClose': dc = rec && rec.dcs[m.dcId]; if (dc) { dc.readyState = 'closed'; if (typeof dc.onclose === 'function') { dc.onclose({}); } } return;
 		case 'dcError': dc = rec && rec.dcs[m.dcId]; if (dc && typeof dc.onerror === 'function') { dc.onerror({}); } return;
+		// The page's channel queue passed its high-water mark, or drained below the
+		// low one; Write waits in between (webrtc_browser.go).
+		case 'dcHigh': dc = rec && rec.dcs[m.dcId]; if (dc) { dc.bufferedHigh = true; } return;
+		case 'dcLow': dc = rec && rec.dcs[m.dcId]; if (dc) { dc.bufferedHigh = false; if (typeof dc.onbufferedamountlow === 'function') { dc.onbufferedamountlow({}); } } return;
 		case 'pcGone': delete rtcPCs[m.pcId]; return;
 		}
 	}
