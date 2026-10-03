@@ -248,7 +248,7 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	// skynetweb (dep rt — the same module launch waits on, so they start
 	// concurrently) reliably lost: skynet_web.enable=true bound nothing and
 	// `app ls` had no skynetweb row.
-	m.launch = maker("launcher", initLauncher, &m.ebc, &m.disc, &m.dmsgC, &m.tr, &m.rt, &m.embDmsgWeb, &m.embSkynetWeb, &m.embResolvers)
+	m.launch = maker("launcher", initLauncher, &m.ebc, &m.disc, &m.dmsgC, &m.tr, &m.rt, &m.embDmsgWeb, &m.embSkynetWeb, &m.embResolvers, &m.skymail)
 	// cli depends on tr so v.tpM is set when initCLI wires up the
 	// shared VStreamMux for transport-RPC (registered as the manager's
 	// VisorRPCPacket handler). Without this dep, initCLI could run
