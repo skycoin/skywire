@@ -454,14 +454,30 @@
 			// replaces the global with its remote shim: the desk host draws, so
 			// it runs where the document is, never in the worker.
 			var localExec = globalThis.skywireExec;
+			// A spawn that is rejected never ran: the module failed to download
+			// or compile. The usual cause is the server restarting mid-download —
+			// which an update does, at the very moment autoupdate reloads every
+			// open desk — so try again rather than leave the page stalled.
+			// bottle forgets a failed compile, so each attempt refetches.
+			var DESK_HOST_RETRIES = [2000, 4000, 8000, 16000, 30000];
 			function startDeskHost() {
 				if (!localExec || typeof localExec.spawn !== 'function') {
 					return Promise.reject(new Error('no process layer to spawn the desk host on'));
 				}
-				var p = localExec.spawn(['desk-host'], {});
-				p.exited.then(function (code) {
-					console.error('desk host exited (' + code + ') — the desk surfaces are gone; reload the page');
-				}, function (e) { console.error('desk host:', e); });
+				(function spawnDeskHost(attempt) {
+					var p = localExec.spawn(['desk-host'], {});
+					p.exited.then(function (code) {
+						console.error('desk host exited (' + code + ') — the desk surfaces are gone; reload the page');
+					}, function (e) {
+						if (attempt >= DESK_HOST_RETRIES.length) {
+							console.error('desk host:', e);
+							return;
+						}
+						console.warn('desk host: ' + ((e && e.message) || e) + ' — retrying (' + (attempt + 1) + '/' + DESK_HOST_RETRIES.length + ')');
+						status('downloading the desk again…');
+						setTimeout(function () { spawnDeskHost(attempt + 1); }, DESK_HOST_RETRIES[attempt]);
+					});
+				})(0);
 				return Promise.resolve();
 			}
 
