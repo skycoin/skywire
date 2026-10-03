@@ -329,9 +329,12 @@ func (hv *Hypervisor) startUI() error {
 			// clearnet SD frontend. Without this the SD CXO feed is the only
 			// source, and when it's empty the network view loses all country
 			// grouping. Mirrors `cli tp viz` / the reward server.
+			// The transport context outlives the hypervisor, so the timeout is
+			// what bounds a fetch to a dmsg peer that accepts and then stalls.
 			if hv.visor != nil && hv.visor.dmsgC != nil {
 				hv.tpvizServer.SetDmsgHTTPClient(&http.Client{
 					Transport: dmsghttp.MakeHTTPTransport(context.Background(), hv.visor.dmsgC),
+					Timeout:   30 * time.Second,
 				})
 			}
 			go hv.tpvizServer.Start()
