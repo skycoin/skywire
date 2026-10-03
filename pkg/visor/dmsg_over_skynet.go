@@ -95,3 +95,14 @@ func (v *Visor) dialDmsgOverSkynet(ctx context.Context, pk cipher.PubKey, port u
 		Debug("dmsg-over-skynet: connected over a skynet transport (no route, no dmsg-server)")
 	return conn, nil
 }
+
+// dmsgWebSkynetDial is the resolving proxy's way onto the skynet transports
+// for a .dmsg peer: the same dial DmsgHTTP uses, without the dmsg fallback,
+// which the proxy makes itself. Deployment services have no skynet transports
+// to reach, so they are refused at once rather than after a relay search.
+func (v *Visor) dmsgWebSkynetDial(ctx context.Context, pk cipher.PubKey, port uint16) (net.Conn, error) {
+	if v.isDmsgServiceKey(pk) {
+		return nil, errNoRelay
+	}
+	return v.dialDmsgOverSkynet(ctx, pk, port)
+}

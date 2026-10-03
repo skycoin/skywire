@@ -78,7 +78,11 @@ type EmbeddedDmsgWeb struct {
 	// directServerPKs is dialed through directClient by self-rendezvous instead
 	// of the discovery dial. directClient is the visor's direct dmsg client
 	// (v.dmsgDC); nil disables the path.
-	directClient    *dmsg.Client
+	directClient *dmsg.Client
+	// skynetDial reaches a .dmsg peer over the visor's skynet transports
+	// before the dmsg dial is tried; set only when the resolver runs under
+	// the visor's own key (Visor.dmsgWebSkynetDial).
+	skynetDial      func(ctx context.Context, pk cipher.PubKey, port uint16) (net.Conn, error)
 	directServerPKs map[cipher.PubKey]struct{}
 
 	// statusProvider serves the reserved in-process status hosts through this
@@ -288,6 +292,7 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 	// Direct-client path for non-discovery dmsg servers.
 	cfg.DirectClient = e.directClient
 	cfg.DirectServerPKs = e.directServerPKs
+	cfg.SkynetDial = e.skynetDial
 	// Reserved in-process status host owned by this layer: only status.dmsg is
 	// answered here; status.skynet / status.skysocks fall through up the chain.
 	cfg.StatusProvider = e.statusProvider
@@ -521,6 +526,9 @@ func initEmbeddedDmsgWeb(ctx context.Context, v *Visor, log *logging.Logger) err
 	aliases, dmsgSet := resolverAliasesAndDmsgServers(v)
 	runtime := newEmbeddedDmsgWeb(ctx, resolverC, v.dmsgDC, resolverPK, v.services.SelfDial, v.services.SelfDialAs, aliases, dmsgSet, cfg, log)
 	runtime.statusProvider = v.proxyStatusProvider()
+	if resolverC == v.dmsgC {
+		runtime.skynetDial = v.dmsgWebSkynetDial
+	}
 	v.initLock.Lock()
 	v.embeddedDmsgWeb = runtime
 	v.initLock.Unlock()
