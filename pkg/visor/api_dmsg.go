@@ -811,13 +811,8 @@ func (v *Visor) DmsgHTTP(req visorapi.DmsgHTTPRequest) (*visorapi.DmsgHTTPRespon
 // the wait for dmsg, the dial and the read, instead of each running out its
 // own budget for nobody.
 func (v *Visor) dmsgHTTPCtx(ctx context.Context, req visorapi.DmsgHTTPRequest) (*visorapi.DmsgHTTPResponse, error) {
-	// Use the visor's main DMSG client (v.dmsgC) for HTTP-over-DMSG.
-	// Deployment services are registered in the DMSG discovery, so
-	// DialStream resolves them via normal lookup + delegated-server phases.
-	//
-	// Note: v.dmsgHTTP uses a SEPARATE dmsg.Client (dmsgDC) sharing the
-	// same PK, which causes session conflicts on DMSG servers. v.dmsgC
-	// is the authoritative client with stable sessions.
+	// HTTP over the visor's one dmsg client (v.dmsgC), or over its skynet
+	// transports when a peer is reachable that way (dialDmsgHTTP).
 	if v.dmsgC == nil {
 		return nil, fmt.Errorf("DMSG client not ready: %w", ErrDmsgNotReady)
 	}

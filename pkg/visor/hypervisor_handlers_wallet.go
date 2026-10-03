@@ -227,10 +227,8 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 	// Mesh coin node: resolve the host with the SAME resolver the iframe browser
 	// uses (bare "<pk>[:port]", the readable "<name>.<pk>.dmsg[:port]" alias,
 	// "alias.dmsg", …) via resolveBrowseHost, then dmsg-HTTP over the
-	// AUTHORITATIVE dmsg client. We reuse the resolver but NOT BrowseFetch's
-	// fetch step: BrowseFetch dials over the secondary dmsg client (v.dmsgHTTP /
-	// dmsgDC), which has session conflicts on the coin node (see Visor.DmsgHTTP);
-	// v.dmsgC (DmsgHTTP) has stable sessions.
+	// visor's dmsg client or its skynet transports (Visor.DmsgHTTP), which
+	// keeps its connections to the node open between requests.
 	pk, port, vhost, rerr := hv.visor.resolveBrowseHost(walletBackendStrip(backend), 0)
 	if rerr != nil {
 		http.Error(w, "coin node resolve failed: "+rerr.Error(), http.StatusBadGateway)

@@ -91,6 +91,7 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 			log := logging.MustGetLogger("embedded_dmsgweb")
 			aliases, dmsgSet := resolverAliasesAndDmsgServers(v)
 			runtime = newEmbeddedDmsgWeb(v.ctx, v.dmsgC, v.dmsgDC, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, aliases, dmsgSet, cfg, log)
+			runtime.skynetDial = v.dmsgWebSkynetDial
 			v.embeddedDmsgWeb = runtime
 		}
 		v.initLock.Unlock()

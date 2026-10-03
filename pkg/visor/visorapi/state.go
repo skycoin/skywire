@@ -482,6 +482,18 @@ type DiagDmsg struct {
 	RelayingFor   []DiagRelayClient `json:"relaying_for,omitempty"`
 	RelayBackoff  []DiagRelayTimer  `json:"relay_backoff,omitempty"`
 	RelayDialSkip []DiagRelayTimer  `json:"relay_dial_skip,omitempty"`
+	// OverSkynet counts the dials to .dmsg peers (DmsgHTTP and the resolving
+	// proxy) the visor carried over its skynet transports, and those that
+	// fell back to dmsg, with the last reason one fell back.
+	OverSkynet *DiagDmsgOverSkynet `json:"over_skynet,omitempty"`
+}
+
+// DiagDmsgOverSkynet is how the visor's dials to .dmsg peers went.
+type DiagDmsgOverSkynet struct {
+	Skynet    uint64 `json:"skynet"`
+	Fallback  uint64 `json:"fallback"`
+	LastError string `json:"last_error,omitempty"`
+	LastPK    string `json:"last_pk,omitempty"`
 }
 
 // DiagDmsgSession is one dmsg session's liveness.

@@ -158,6 +158,12 @@ type Config struct {
 	DirectClient *dmsg.Client
 	// DirectServerPKs is the set of destination PKs to dial via DirectClient.
 	DirectServerPKs map[cipher.PubKey]struct{}
+	// SkynetDial, when set, is tried before the dmsg dial for an ordinary
+	// .dmsg destination: it reaches the peer over the visor's skynet
+	// transports (direct, else through a peer that has one), and returns an
+	// error to fall back to dmsg. The visor sets it only when this resolver
+	// runs under the visor's own key, whose transports those are.
+	SkynetDial func(ctx context.Context, pk cipher.PubKey, port uint16) (net.Conn, error)
 
 	// StatusProvider, when non-nil, enables the reserved in-process status hosts
 	// served through this proxy — a read-only diagnostic page (logs +
@@ -545,6 +551,13 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 					}
 					stream = str
 				default:
+					if cfg.SkynetDial != nil {
+						if c, serr := cfg.SkynetDial(ctx, dest, dialPort); serr == nil {
+							log.WithField("port", port).Debug("SOCKS5 → DMSG over skynet")
+							stream = c
+							break
+						}
+					}
 					log.WithField("port", port).Debug("SOCKS5 → DMSG direct")
 					c, derr := dmsgC.Dial(ctx, dstAddr)
 					if derr != nil {
