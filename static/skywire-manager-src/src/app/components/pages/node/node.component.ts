@@ -283,6 +283,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/rewards') ||
       this.lastUrl.includes('/skynet') ||
       this.lastUrl.includes('/chat') ||
+      this.lastUrl.includes('/mail') ||
       this.lastUrl.includes('/web-proxy') ||
       this.lastUrl.includes('/vpn') ||
       this.lastUrl.includes('/resources') ||
@@ -348,6 +349,12 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           icon: 'forum',
           label: 'node.tabs.chat',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'chat'] : null,
+        },
+        {
+          // The visor's mailbox, the same one the desk's mail window shows.
+          icon: 'mail',
+          label: 'node.tabs.mail',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'mail'] : null,
         },
         {
           icon: 'monetization_on',
@@ -432,7 +439,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       // /reachability redirect to /info so they fall through to the default.
       let matchedSeg = 'info';
       const routeOrder = ['routing', 'transports', 'bandwidth', 'uptime', 'apps',
-        'chat', 'rewards', 'skynet', 'web-proxy', 'vpn', 'resources', 'terminal', 'wallet', 'logs'];
+        'chat', 'mail', 'rewards', 'skynet', 'web-proxy', 'vpn', 'resources', 'terminal', 'wallet', 'logs'];
       for (const seg of routeOrder) {
         if (seg === 'apps') {
           if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
