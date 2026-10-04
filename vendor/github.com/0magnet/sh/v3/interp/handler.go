@@ -10,16 +10,21 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	mathrand "math/rand/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/0magnet/sh/v3/expand"
 	"github.com/0magnet/sh/v3/syntax"
 )
+
+// TODO(v4): pass [HandlerContext] to handlers as a parameter.
 
 // HandlerCtx returns the [HandlerContext] value stored in ctx,
 // which is used when calling handler functions.
@@ -37,13 +42,14 @@ type handlerCtxKey struct{}
 type handlerKind int
 
 const (
-	_                  handlerKind = iota
-	handlerKindExec                // [ExecHandlerFunc]
-	handlerKindCall                // [CallHandlerFunc]
-	handlerKindOpen                // [OpenHandlerFunc]
-	handlerKindReadDir             // [ReadDirHandlerFunc2]
-	handlerKindStat                // [StatHandlerFunc]
-	handlerKindAccess              // [AccessHandlerFunc]
+	_                    handlerKind = iota
+	handlerKindExec                  // [ExecHandlerFunc]
+	handlerKindCall                  // [CallHandlerFunc]
+	handlerKindOpen                  // [OpenHandlerFunc]
+	handlerKindReadDir               // [ReadDirHandlerFunc2]
+	handlerKindStat                  // [StatHandlerFunc]
+	handlerKindAccess                // [AccessHandlerFunc]
+	handlerKindProcSubst             // [ProcSubstHandlerFunc]
 )
 
 // HandlerContext is the data passed to all the handler functions via [context.WithValue].
@@ -70,7 +76,8 @@ type HandlerContext struct {
 	// TODO(v4): use an os.File for stdin below directly.
 
 	// Stdin is the interpreter's current standard input reader.
-	// It is always an [*os.File], but the type here remains an [io.Reader]
+	// It is always an [*os.File], except on js/wasm, where it may be
+	// any reader; the type here remains an [io.Reader]
 	// due to backwards compatibility.
 	Stdin io.Reader
 	// Stdout is the interpreter's current standard output writer.
@@ -105,9 +112,8 @@ type HandlerContext struct {
 // Returning a non-nil error will halt the [Runner] and will be returned via the API.
 type CallHandlerFunc func(ctx context.Context, args []string) ([]string, error)
 
-// TODO: consistently treat handler errors as non-fatal by default,
-// but have an interface or API to specify fatal errors which should make
-// the shell exit with a particular status code.
+// TODO(v4): consistently treat handler errors as non-fatal by default,
+// now that [Fatal] exists to exit the shell with a particular status code.
 
 // ExecHandlerFunc is a handler which executes simple commands.
 // It is called for all [syntax.CallExpr] nodes
@@ -116,8 +122,10 @@ type CallHandlerFunc func(ctx context.Context, args []string) ([]string, error)
 // The context includes a [HandlerContext] value.
 //
 // Returning a nil error means a zero exit status.
-// Other exit statuses can be set by returning or wrapping a [NewExitStatus] error,
+// Other exit statuses can be set by returning or wrapping an [ExitStatus] error,
 // and such an error is returned via the API if it is the last statement executed.
+// To exit the entire shell rather than just the command, return an error
+// created via [Exit] or [Fatal].
 // Any other error will halt the [Runner] and will be returned via the API.
 type ExecHandlerFunc func(ctx context.Context, args []string) error
 
@@ -135,8 +143,10 @@ type ExecHandlerFunc func(ctx context.Context, args []string) error
 // without a shebang line, is run as a shell script with a new [Runner]
 // using default options and handlers, like other shells do.
 //
-// TODO: perhaps intercept ENOEXEC scripts as well as shell shebangs
-// such as "#!/bin/sh" so that they reuse the runner's configured handlers.
+// TODO: perhaps intercept shell shebangs such as "#!/bin/sh" as well.
+//
+// TODO(v4): remove in favor of calling "next", with the kill timeout as an
+// option. ENOEXEC scripts should then reuse the runner's handlers.
 func DefaultExecHandler(killTimeout time.Duration) ExecHandlerFunc {
 	return func(ctx context.Context, args []string) error {
 		hc := HandlerCtx(ctx)
@@ -145,29 +155,44 @@ func DefaultExecHandler(killTimeout time.Duration) ExecHandlerFunc {
 			fmt.Fprintln(hc.Stderr, err)
 			return ExitStatus(127)
 		}
-		cmd := exec.CommandContext(ctx, path)
-		cmd.Args = args
-		cmd.Env = execEnv(hc.Env)
-		cmd.Dir = hc.Dir
-		cmd.Stdin = hc.Stdin
-		cmd.Stdout = hc.Stdout
-		cmd.Stderr = hc.Stderr
-		if killTimeout > 0 && runtime.GOOS != "windows" {
-			// On cancellation, send an interrupt signal first, and let
-			// WaitDelay escalate to a kill signal if the process does not
-			// exit in time. Otherwise, keep the default of killing right away.
-			cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
-			cmd.WaitDelay = killTimeout
+		newCmd := func() *exec.Cmd {
+			cmd := exec.CommandContext(ctx, path)
+			cmd.Args = args
+			cmd.Env = execEnv(hc.Env)
+			cmd.Dir = hc.Dir
+			cmd.Stdin = hc.Stdin
+			cmd.Stdout = hc.Stdout
+			cmd.Stderr = hc.Stderr
+			if killTimeout > 0 && runtime.GOOS != "windows" {
+				// On cancellation, send an interrupt signal first, and let
+				// WaitDelay escalate to a kill signal if the process does not
+				// exit in time. Otherwise, keep the default of killing right away.
+				cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
+				cmd.WaitDelay = killTimeout
+			}
+			return cmd
 		}
-
+		cmd := newCmd()
 		err = cmd.Start()
+		// On Unix, a concurrently forked process may briefly hold a write
+		// file descriptor for the file inherited before its exec, making
+		// our exec fail with ETXTBSY; see https://go.dev/issue/22315.
+		// The window is short-lived, so retry with backoff. A failed Start
+		// closes the command's pipes, so build a fresh one for each attempt.
+		for delay := time.Millisecond; isETXTBSY(err) && delay < 300*time.Millisecond; delay *= 2 {
+			time.Sleep(delay)
+			cmd = newCmd()
+			err = cmd.Start()
+		}
 		if isENOEXEC(err) {
 			// Like other shells, run a file which the kernel refuses to
 			// execute with ENOEXEC, such as a script without a shebang line,
 			// as a shell script with a new copy of the shell.
+			hc.runner.reportBgStart(0) // the nested shell isn't one program
 			return runScriptENOEXEC(ctx, hc, killTimeout, path, args)
 		}
 		if err == nil {
+			hc.runner.reportBgStart(cmd.Process.Pid)
 			err = cmd.Wait()
 		}
 
@@ -283,6 +308,9 @@ func findFile(dir, file string, _ []string) (string, error) {
 	return checkStat(dir, file, false)
 }
 
+// TODO(v4): replace LookPath with LookPathDir, which should use the
+// interpreter's FileSystem rather than os.Stat.
+
 // LookPath is deprecated; see [LookPathDir].
 func LookPath(env expand.Environ, file string) (string, error) {
 	return LookPathDir(env.Get("PWD").String(), env, file)
@@ -362,7 +390,8 @@ func pathExts(env expand.Environ) []string {
 
 // OpenHandlerFunc is a handler which opens files.
 // It is called for all files that are opened directly by the shell,
-// such as in redirects, except for named pipes created by process substitutions.
+// such as in redirects, except for the paths of active process substitutions,
+// which are opened via [ProcSubstFile.OpenConsumer].
 // The context includes a [HandlerContext] value.
 // Files opened by executed programs are not included.
 //
@@ -377,7 +406,7 @@ func pathExts(env expand.Environ) []string {
 // extra files and goroutines for input redirections; see [StdIO].
 type OpenHandlerFunc func(ctx context.Context, path string, flag int, perm os.FileMode) (io.ReadWriteCloser, error)
 
-// TODO: paths passed to [OpenHandlerFunc] should be cleaned.
+// TODO(v4): paths passed to [OpenHandlerFunc] should be cleaned.
 
 // DefaultOpenHandler returns the [OpenHandlerFunc] used by default.
 // It uses [os.OpenFile] to open files.
@@ -466,7 +495,8 @@ const (
 	AccessExec  AccessMode = 0b001
 )
 
-// TODO(v4): fold AccessHandlerFunc into StatHandlerFunc.
+// TODO(v4): join the open, stat, read directory, and access handlers
+// into a single FileSystem interface; see doc/plan-v4.md.
 
 // AccessHandlerFunc is a handler which checks whether the current user can
 // access a file. It is called by the unary test operators -r, -w, and -x,
@@ -481,4 +511,152 @@ type AccessHandlerFunc func(ctx context.Context, path string, mode AccessMode) e
 // approximates the check via the stat handler and the file's permission bits.
 func DefaultAccessHandler() AccessHandlerFunc {
 	return defaultAccess
+}
+
+// ProcSubstHandlerFunc is a handler which sets up process substitutions,
+// that is, `<(cmd)` with [syntax.CmdIn] and `>(cmd)` with [syntax.CmdOut];
+// op is always one of those two operators.
+// The context includes a [HandlerContext] value.
+//
+// The default handler creates real named pipes via [DefaultProcSubstHandler];
+// a custom handler can implement process substitutions entirely in memory,
+// for example via [io.Pipe]. Note that [ProcSubstFile.Path] can also be
+// opened directly by executed programs, so in-memory implementations are
+// only useful when programs run via a custom [ExecHandlerFunc] as well.
+type ProcSubstHandlerFunc func(ctx context.Context, op syntax.ProcOperator) (*ProcSubstFile, error)
+
+// ProcSubstFile describes one process substitution
+// set up by a [ProcSubstHandlerFunc].
+type ProcSubstFile struct {
+	// Path substitutes the process substitution word in the command line.
+	// It must not equal the path of another active process substitution.
+	Path string
+
+	// OpenSubshell is called exactly once, from the background subshell
+	// running the process substitution's statements, to obtain the file
+	// used as the subshell's standard output for [syntax.CmdIn],
+	// or its standard input for [syntax.CmdOut];
+	// the opposite direction is never used.
+	// It may block until the other end of Path is opened,
+	// just like [os.OpenFile] on a named pipe,
+	// but it must stop blocking once ctx is done, which happens as soon as
+	// the statement which expanded the process substitution has finished.
+	//
+	// Note that returning a file which is not an [os.File] causes an
+	// extra file and goroutine for [syntax.CmdOut]; see [StdIO].
+	OpenSubshell func(ctx context.Context) (io.ReadWriteCloser, error)
+
+	// OpenConsumer is called in place of [OpenHandlerFunc] whenever the
+	// shell itself opens Path while the process substitution is active,
+	// such as in a redirection. If nil, [OpenHandlerFunc] is used.
+	OpenConsumer func(ctx context.Context, flag int) (io.ReadWriteCloser, error)
+
+	// Cleanup, if not nil, is called once the subshell has finished
+	// and its file has been closed.
+	// A non-nil error is printed to the shell's standard error.
+	Cleanup func() error
+}
+
+const fifoNamePrefix = "sh-interp-"
+
+// DefaultProcSubstHandler returns the [ProcSubstHandlerFunc] used by default.
+// It creates a named pipe (FIFO) inside the runner's temporary directory
+// via mkfifo(3), to be opened with [os.OpenFile] and removed by cleanup.
+// It is not supported on Windows.
+func DefaultProcSubstHandler() ProcSubstHandlerFunc {
+	return func(ctx context.Context, op syntax.ProcOperator) (*ProcSubstFile, error) {
+		if runtime.GOOS == "windows" {
+			return nil, fmt.Errorf("TODO: support process substitution on Windows")
+		}
+		var flag int
+		switch op {
+		case syntax.CmdIn: // the subshell writes to the fifo
+			flag = os.O_WRONLY
+		case syntax.CmdOut: // the subshell reads from the fifo
+			flag = os.O_RDONLY
+		default:
+			return nil, fmt.Errorf("unexpected process substitution operator: %v", op)
+		}
+		r := HandlerCtx(ctx).runner
+
+		// We can't atomically create a random unused temporary FIFO.
+		// Similar to [os.CreateTemp],
+		// keep trying new random paths until one does not exist.
+		// We use a uint64 because a uint32 easily runs into retries.
+		var path string
+		try := 0
+		for {
+			path = filepath.Join(r.tempDir, fifoNamePrefix+strconv.FormatUint(mathrand.Uint64(), 16))
+			err := mkfifo(path, 0o666)
+			if err == nil {
+				break
+			}
+			if !os.IsExist(err) {
+				return nil, fmt.Errorf("cannot create fifo: %v", err)
+			}
+			if try++; try > 100 {
+				return nil, fmt.Errorf("giving up at creating fifo: %v", err)
+			}
+		}
+		return &ProcSubstFile{
+			Path: path,
+			OpenSubshell: func(ctx context.Context) (io.ReadWriteCloser, error) {
+				// Blocks until the consumer opens the other end.
+				// If it never does, unblock ourselves once ctx is done by
+				// briefly opening both ends, which does not block.
+				opened := make(chan struct{})
+				stop := context.AfterFunc(ctx, func() {
+					if f, err := os.OpenFile(path, os.O_RDWR, 0); err == nil {
+						<-opened
+						f.Close()
+					}
+				})
+				f, err := os.OpenFile(path, flag, 0)
+				close(opened)
+				stop()
+				return f, err
+			},
+			OpenConsumer: func(ctx context.Context, flag int) (io.ReadWriteCloser, error) {
+				// A named pipe can only be opened via [os.OpenFile];
+				// a custom [OpenHandlerFunc] would not work with it.
+				return os.OpenFile(path, flag, 0)
+			},
+			Cleanup: func() error { return os.Remove(path) },
+		}, nil
+	}
+}
+
+// procSubstRegistry tracks active process substitutions so that [Runner.open]
+// can route the opening of their paths to [ProcSubstFile.OpenConsumer].
+// It is shared by a runner and all of its subshells.
+type procSubstRegistry struct {
+	mu    sync.Mutex
+	files map[string]*ProcSubstFile
+}
+
+func (reg *procSubstRegistry) add(psf *ProcSubstFile) {
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	if reg.files == nil {
+		reg.files = make(map[string]*ProcSubstFile)
+	}
+	reg.files[psf.Path] = psf
+}
+
+// remove unregisters a process substitution.
+func (reg *procSubstRegistry) remove(psf *ProcSubstFile) {
+	reg.mu.Lock()
+	delete(reg.files, psf.Path)
+	reg.mu.Unlock()
+}
+
+// lookup returns the consumer open function for an active process
+// substitution path, if there is one.
+func (reg *procSubstRegistry) lookup(path string) func(ctx context.Context, flag int) (io.ReadWriteCloser, error) {
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	if psf := reg.files[path]; psf != nil {
+		return psf.OpenConsumer
+	}
+	return nil
 }

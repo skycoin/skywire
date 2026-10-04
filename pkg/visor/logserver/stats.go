@@ -18,7 +18,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/visor/stats"
@@ -78,25 +77,23 @@ type statsTransportHistory struct {
 // running on that day at all).
 type statsBitmapView map[string]string
 
-// registerStatsRoutes attaches the /stats/* group to the given
-// auth-gated router. Called from New() after authRoute is built.
-func (api *API) registerStatsRoutes(authRoute *gin.RouterGroup) {
-	g := authRoute.Group("/stats")
-	g.GET("/transports", api.handleStatsTransports)
-	g.GET("/transports/history", api.handleStatsTransportsHistory)
-	g.GET("/uptime", api.handleStatsUptime)
-	g.GET("/services", api.handleStatsServices)
+// registerStatsRoutes mounts /stats/* through route, which adds the auth check.
+func (api *API) registerStatsRoutes(route func(string, http.HandlerFunc)) {
+	route("GET /stats/transports", api.handleStatsTransports)
+	route("GET /stats/transports/history", api.handleStatsTransportsHistory)
+	route("GET /stats/uptime", api.handleStatsUptime)
+	route("GET /stats/services", api.handleStatsServices)
 }
 
-func (api *API) handleStatsTransports(c *gin.Context) {
+func (api *API) handleStatsTransports(w http.ResponseWriter, _ *http.Request) {
 	if api.statsReader == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "stats store not available"})
+		writeJSON(w, http.StatusServiceUnavailable, jsonObj{"error": "stats store not available"})
 		return
 	}
 	records, err := api.statsReader.AllTransportRecords()
 	if err != nil {
 		api.logger.WithError(err).Warn("Stats: enumerate transports failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, jsonObj{"error": err.Error()})
 		return
 	}
 	out := make([]statsTransportSnapshot, 0, len(records))
@@ -111,43 +108,43 @@ func (api *API) handleStatsTransports(c *gin.Context) {
 			Current:   rec.Current,
 		})
 	}
-	c.JSON(http.StatusOK, out)
+	writeJSON(w, http.StatusOK, out)
 }
 
-func (api *API) handleStatsTransportsHistory(c *gin.Context) {
+func (api *API) handleStatsTransportsHistory(w http.ResponseWriter, req *http.Request) {
 	if api.statsReader == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "stats store not available"})
+		writeJSON(w, http.StatusServiceUnavailable, jsonObj{"error": "stats store not available"})
 		return
 	}
-	since, until, err := parseTimeRange(c, defaultHistoryWindow)
+	since, until, err := parseTimeRange(req, defaultHistoryWindow)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, jsonObj{"error": err.Error()})
 		return
 	}
 
 	// Optional id= filter: if set, only return that transport's row.
-	if idParam := c.Query("id"); idParam != "" {
+	if idParam := req.URL.Query().Get("id"); idParam != "" {
 		id, err := uuid.Parse(idParam)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id (must be UUID)"})
+			writeJSON(w, http.StatusBadRequest, jsonObj{"error": "invalid id (must be UUID)"})
 			return
 		}
 		rec, err := api.statsReader.GetTransportRecord(id)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			writeJSON(w, http.StatusInternalServerError, jsonObj{"error": err.Error()})
 			return
 		}
 		if rec == nil {
-			c.JSON(http.StatusOK, []statsTransportHistory{})
+			writeJSON(w, http.StatusOK, []statsTransportHistory{})
 			return
 		}
-		c.JSON(http.StatusOK, []statsTransportHistory{historyFromRecord(rec, since, until)})
+		writeJSON(w, http.StatusOK, []statsTransportHistory{historyFromRecord(rec, since, until)})
 		return
 	}
 
 	records, err := api.statsReader.AllTransportRecords()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, jsonObj{"error": err.Error()})
 		return
 	}
 	out := make([]statsTransportHistory, 0, len(records))
@@ -158,23 +155,23 @@ func (api *API) handleStatsTransportsHistory(c *gin.Context) {
 		}
 		out = append(out, h)
 	}
-	c.JSON(http.StatusOK, out)
+	writeJSON(w, http.StatusOK, out)
 }
 
-func (api *API) handleStatsUptime(c *gin.Context) {
+func (api *API) handleStatsUptime(w http.ResponseWriter, req *http.Request) {
 	if api.statsReader == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "stats store not available"})
+		writeJSON(w, http.StatusServiceUnavailable, jsonObj{"error": "stats store not available"})
 		return
 	}
-	api.handleBitmapEndpoint(c, api.statsReader.TierNames, api.statsReader.TierDates, api.statsReader.TierBitmap)
+	api.handleBitmapEndpoint(w, req, api.statsReader.TierNames, api.statsReader.TierDates, api.statsReader.TierBitmap)
 }
 
-func (api *API) handleStatsServices(c *gin.Context) {
+func (api *API) handleStatsServices(w http.ResponseWriter, req *http.Request) {
 	if api.statsReader == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "stats store not available"})
+		writeJSON(w, http.StatusServiceUnavailable, jsonObj{"error": "stats store not available"})
 		return
 	}
-	api.handleBitmapEndpoint(c, api.statsReader.ServiceNames, api.statsReader.ServiceDates, api.statsReader.ServiceBitmap)
+	api.handleBitmapEndpoint(w, req, api.statsReader.ServiceNames, api.statsReader.ServiceDates, api.statsReader.ServiceBitmap)
 }
 
 // handleBitmapEndpoint is the shared body of /stats/uptime and
@@ -182,24 +179,24 @@ func (api *API) handleStatsServices(c *gin.Context) {
 // scan. Returns a {name: {date: 288-ascii}} map filtered to the
 // requested time window.
 func (api *API) handleBitmapEndpoint(
-	c *gin.Context,
+	w http.ResponseWriter, req *http.Request,
 	listNames func() ([]string, error),
 	listDates func(string) ([]string, error),
 	getBitmap func(string, time.Time) ([]byte, error),
 ) {
 	if api.statsReader == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "stats store not available"})
+		writeJSON(w, http.StatusServiceUnavailable, jsonObj{"error": "stats store not available"})
 		return
 	}
-	since, until, err := parseTimeRange(c, defaultHistoryWindow)
+	since, until, err := parseTimeRange(req, defaultHistoryWindow)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, jsonObj{"error": err.Error()})
 		return
 	}
 
 	names, err := listNames()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, jsonObj{"error": err.Error()})
 		return
 	}
 
@@ -232,7 +229,7 @@ func (api *API) handleBitmapEndpoint(
 			out[name] = view
 		}
 	}
-	c.JSON(http.StatusOK, out)
+	writeJSON(w, http.StatusOK, out)
 }
 
 // defaultHistoryWindow is the implicit `since` when the caller does
@@ -243,19 +240,19 @@ const defaultHistoryWindow = 7 * 24 * time.Hour
 // parseTimeRange reads `since` and `until` query params (RFC3339).
 // Missing `since` defaults to now-window; missing `until` defaults
 // to now. Validates ordering.
-func parseTimeRange(c *gin.Context, defaultWindow time.Duration) (time.Time, time.Time, error) {
+func parseTimeRange(req *http.Request, defaultWindow time.Duration) (time.Time, time.Time, error) {
 	now := time.Now().UTC()
 	since := now.Add(-defaultWindow)
 	until := now
 
-	if s := c.Query("since"); s != "" {
+	if s := req.URL.Query().Get("since"); s != "" {
 		t, err := time.Parse(time.RFC3339, s)
 		if err != nil {
 			return time.Time{}, time.Time{}, errBadTime("since", err)
 		}
 		since = t.UTC()
 	}
-	if u := c.Query("until"); u != "" {
+	if u := req.URL.Query().Get("until"); u != "" {
 		t, err := time.Parse(time.RFC3339, u)
 		if err != nil {
 			return time.Time{}, time.Time{}, errBadTime("until", err)

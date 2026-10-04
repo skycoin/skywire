@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0magnet/bottle/vnet"
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -54,6 +55,7 @@ import (
 //     symptom isn't a silently broken WS connection.
 func buildReverseProxy(log *logging.Logger, target *url.URL, preserveHost bool) *httputil.ReverseProxy {
 	proxy := &httputil.ReverseProxy{
+		Transport: localTransport,
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(target)
 			// SetURL clears Out.Host (see net/http/httputil docs);
@@ -160,14 +162,13 @@ func (v *Visor) refreshWebsiteHandler(log *logging.Logger) {
 	}
 
 	// Rewards UI wins when configured — it's a global on/off switch. A build
-	// without it (mobile) falls through to the other modes.
+	// without it (mobile, a browser) falls through to the other modes.
 	if rw := v.conf.Rewards; rw != nil && rw.Enable {
-		if h := rewardsWebsiteHandler(rw); h != nil {
+		if h := rewardsUIHandler(log, rw); h != nil {
 			log.Info("Mounting reward system UI on port 80")
 			lsAPI.SetWebsiteHandler(h)
 			return
 		}
-		log.Warn("rewards.enable is set but this build has no reward system UI")
 	}
 
 	// Reverse-proxy mode: a forwarded port for 80 with proxy_addr (or
@@ -671,7 +672,7 @@ func (v *Visor) startDmsgForwarder(port, localPort int) {
 					v.servePKInjectedForward(conn, target, transport, pk, pkOK, fp.PreserveHost)
 					return
 				}
-				local, err := net.Dial("tcp", target)
+				local, err := dialLocal(context.Background(), "tcp", target)
 				if err != nil {
 					log.WithError(err).Debug("Failed to dial local port")
 					return
@@ -720,3 +721,19 @@ func (v *Visor) stopDmsgForwarder(port int) {
 		delete(v.dmsgFwdListeners, port)
 	}
 }
+
+// localDialTimeout bounds a dial to a forwarded local service.
+const localDialTimeout = 10 * time.Second
+
+// dialLocal reaches the local service behind a forwarded port: the real
+// loopback natively and the page's vnet loopback in a browser visor.
+func dialLocal(_ context.Context, network, addr string) (net.Conn, error) {
+	return vnet.DialTimeout(network, addr, localDialTimeout)
+}
+
+// localTransport is the reverse proxies' transport, dialing through dialLocal.
+var localTransport = func() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.DialContext = dialLocal
+	return t
+}()

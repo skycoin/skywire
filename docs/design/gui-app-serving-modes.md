@@ -9,10 +9,10 @@ cross-product but collapses to one primary axis plus a couple of knobs.
 
 The single most clarifying distinction: **the wallet is a built-in hypervisor
 UI feature** — like the browser, the terminal, the network view — reached via
-the ☰ menu and the per-node wallet tab. It's a *UI* (client-side Angular +
-`skycoin-lite.wasm`, wallets in browser storage) that just needs to be *served*
-(the HV serves `/wallet/` same-origin) and a *node* to reach (over dmsg by
-default). It is **not a process**, so it does NOT appear in the Apps list and
+the ☰ menu and the per-node wallet tab. It's a *UI* (skycoin-web's Angular
+module, compiled into the dashboard as its `#/wallet` page, plus skycoin's
+TinyGo `skycoin-lite.wasm`; wallets in browser storage) that just needs a
+*node* to reach (over dmsg by default). It is **not a process**, so it does NOT appear in the Apps list and
 has no running/stopped status — it's always available.
 
 A **backend wallet service IS an app**: `skycoin-daemon` (the node), or the
@@ -46,9 +46,12 @@ listener is the opt-in — `--portless` for skychat.
 surface* — **not** "no process runs." Two sub-flavors, invisible to the user
 but worth naming because they decide how multi-coin works:
 
-- **No process** (wallet, web-only): skycoin-web doesn't run at all. The HV
-  serves the static `/wallet/` bundle; wallet crypto is client-side; the
-  node API is proxied by the visor over dmsg. Possible only because in
+- **No process** (wallet, web-only): skycoin-web doesn't run at all. The
+  dashboard compiles the wallet's source, copied from the skycoin module
+  go.mod requires (`scripts/sync-skycoin-wallet.sh`), so a skycoin bump is
+  the wallet update. Wallet crypto is client-side, in the TinyGo cipher the
+  HV serves; the node API (`wallet/coins`, `wallet/coin/N/…`) is proxied by
+  the visor over dmsg. Possible only because in
   web-only mode skycoin-web's server does nothing essential.
 - **In-process logic** (skychat always; wallet if you want its server for
   `/coin/N` multi-coin discovery): the app's logic runs in the visor process
@@ -98,8 +101,8 @@ so there's no control surface to use.
 Both apps are reachable through the control surface out of the box, so native
 == wasm without configuration:
 
-- **wallet** → **no-process serverless**: HV serves `/wallet/`, proxies the
-  node over dmsg, wallets in the browser. Zero config, zero skycoin change.
+- **wallet** → **no-process serverless**: the dashboard's `#/wallet` page, its
+  node proxied by the HV over dmsg, wallets in the browser. Zero config, zero skycoin change.
 - **skychat** → **in-process, control-surface + own port**: runs in the visor
   and publishes its mux to the HV, *and* binds `--chataddr` (default
   `127.0.0.1:8001`). The HV path is what the chat tab uses; the port is what

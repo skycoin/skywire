@@ -275,6 +275,11 @@ func (s *Services) BackfillClearnetFromDmsg() {
 	}
 }
 
+// ServicesCXOPath is the leaf of the conf service's CXO feed (on
+// skyenv.DmsgConfCXOPort) that holds the deployment's current Services,
+// gzipped JSON. The conf service publishes it; visors subscribe to it.
+const ServicesCXOPath = "services/current"
+
 // Conf is the configuration URL for the deployment which may be fetched on `skywire cli config gen`
 type Conf struct {
 	Conf string `json:"conf,omitempty"`

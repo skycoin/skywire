@@ -63,6 +63,7 @@ func (hv *Hypervisor) postBrowseClearnet() http.HandlerFunc {
 // wasm-visor has.
 func (hv *Hypervisor) uiHandler() http.Handler {
 	fileServer := uiCacheControl(http.FileServer(http.FS(hv.c.UIAssets)))
+	bootReport := bootReportHandler(hv.logger, "")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		// PWA: the desk installs as an app. The manifest and icons are the ones
@@ -125,6 +126,10 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 		case "/skywire-worker.js":
 			// The worker every skywire command runs on when the page hosts one.
 			serveJS(w, wasmhv.ExecWorkerJS())
+			return
+		case "/boot-report":
+			// The desk page says here when it failed to start (wasmserve_bootreport.go).
+			bootReport(w, r)
 			return
 		case "/desk-boot.js":
 			// The shared desk boot (skywireDeskBoot) — same asset `hv serve`

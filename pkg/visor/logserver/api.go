@@ -2,10 +2,12 @@
 package logserver
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -15,10 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
-
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/flightrec"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
@@ -157,57 +158,52 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		logger:    log,
 		startedAt: time.Now(),
 	}
-	// disable gin's debug logging on startup
-	gin.SetMode(gin.ReleaseMode)
-	// Gin router without default logging
-	r := gin.New()
-	// use Gin's recovery logging middleware to recover from panic
-	r.Use(gin.Recovery())
-	if printLog {
-		// use custom logging middleware
-		r.Use(loggingMiddleware())
-	}
+	r := http.NewServeMux()
 
 	// whitelist-based authentication for survey collection if there are keys whitelisted for that
 	// no survey-whitelisted keys means the file is publicly accessible
-	authRoute := r.Group("/")
-	if len(whitelistedPKs) > 0 {
-		authRoute.Use(whitelistAuth(whitelistedPKs))
+	authRoute := func(pattern string, h http.HandlerFunc) {
+		if len(whitelistedPKs) > 0 {
+			r.Handle(pattern, whitelistAuth(whitelistedPKs, h))
+			return
+		}
+		r.Handle(pattern, h)
 	}
 
 	// serve the file with the reward address - only exists if the reward address is set
-	authRoute.StaticFile("/"+skyenv.RewardFile, filepath.Join(localPath, skyenv.RewardFile)) // "/reward.txt"
+	rewardFile := filepath.Join(localPath, skyenv.RewardFile)
+	authRoute("GET /"+skyenv.RewardFile, func(w http.ResponseWriter, req *http.Request) {
+		http.ServeFile(w, req, rewardFile)
+	})
 
 	// This survey endpoint generates the survey as a response
-	authRoute.GET("/node-info", func(c *gin.Context) {
-		c.JSON(http.StatusOK, *survey)
+	authRoute("GET /node-info", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, *survey)
 	})
 
 	// Checksum endpoint for survey — allows collectors to skip re-downloading unchanged surveys
-	authRoute.GET("/node-info/checksum", func(c *gin.Context) {
+	authRoute("GET /node-info/checksum", func(w http.ResponseWriter, _ *http.Request) {
 		data, err := json.Marshal(*survey)
 		if err != nil {
-			c.Writer.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		sum := sha256.Sum256(data)
-		c.JSON(http.StatusOK, gin.H{"sha256": hex.EncodeToString(sum[:])})
+		writeJSON(w, http.StatusOK, jsonObj{"sha256": hex.EncodeToString(sum[:])})
 	})
 
-	r.GET("/health", func(c *gin.Context) {
-		api.health(c)
-	})
+	r.HandleFunc("GET /health", api.health)
 
 	// Service catalog — lists ports available for .skynet / skynet
 	// forwarding. Public services are visible; hidden services are
 	// omitted. Browsers visiting http://pk.dmsg/services see what
 	// the visor exposes.
-	r.GET("/services", func(c *gin.Context) {
+	r.HandleFunc("GET /services", func(w http.ResponseWriter, _ *http.Request) {
 		if api.serviceLister == nil {
-			c.JSON(http.StatusOK, []ServiceEntry{})
+			writeJSON(w, http.StatusOK, []ServiceEntry{})
 			return
 		}
-		c.JSON(http.StatusOK, api.serviceLister.ListPublic())
+		writeJSON(w, http.StatusOK, api.serviceLister.ListPublic())
 	})
 
 	// CXO feed catalog — lists every feed (system + user-registered)
@@ -215,17 +211,17 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	// to discover names + ports, then connect their CXO subscriber to
 	// (this visor's PK, dmsg_port) and apply prefix filtering. Pure
 	// metadata, no auth required.
-	r.GET("/feeds", func(c *gin.Context) {
+	r.HandleFunc("GET /feeds", func(w http.ResponseWriter, _ *http.Request) {
 		if api.cxoFeedsLister == nil {
-			c.JSON(http.StatusOK, []CXOFeedEntry{})
+			writeJSON(w, http.StatusOK, []CXOFeedEntry{})
 			return
 		}
-		c.JSON(http.StatusOK, api.cxoFeedsLister.ListCXOFeeds())
+		writeJSON(w, http.StatusOK, api.cxoFeedsLister.ListCXOFeeds())
 	})
 
 	// Serve visor log file (auth'd) — written when visor runs with -s/--save-log
 	//
-	// With no query params: behaves like a static file dump (c.File).
+	// With no query params: behaves like a static file dump (http.ServeFile).
 	//
 	// Query params (any set → switches to streaming filtered mode):
 	//   ?min-level=<lvl>    keep only lines >= <lvl> (trace<debug<info<warn<error<fatal<panic)
@@ -247,56 +243,58 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	//   default            → terminal-styled HTML (colored per log level),
 	//                        STREAMED: renders the backlog then tails the file
 	//                        live (chunked) until the client disconnects
-	//   ?raw=1 (or Accept   → verbatim plain text (c.File) for log-scraping
+	//   ?raw=1 (or Accept   → verbatim plain text (http.ServeFile) for log-scraping
 	//     text/plain)         (one-shot — completes for scrapers)
 	//   any filter param   → plain-text streaming filtered mode
 	//
 	// Served at /skywire.log (matching the on-disk filename written by
 	// visor.go's lumberjackrus hook) with /visor.log kept as an alias so
 	// older links and tooling keep working — both routes share this handler.
-	serveVisorLog := func(c *gin.Context) {
+	serveVisorLog := func(w http.ResponseWriter, req *http.Request) {
 		// The visor writes its rotating log to LocalPath/log/skywire.log
 		// (visor.go, via lumberjackrus). The endpoint previously looked at
 		// LocalPath/visor.log — wrong subdir AND filename — so it always 404'd
 		// even with file logging enabled.
 		logFile := filepath.Join(localPath, "log", "skywire.log")
 		if _, err := os.Stat(logFile); err != nil {
-			c.String(http.StatusNotFound, "%s not found (is file logging enabled?)", logFile)
+			writeString(w, http.StatusNotFound, "%s not found (is file logging enabled?)", logFile)
 			return
 		}
-		q := c.Request.URL.Query()
+		q := req.URL.Query()
 		// Server-side filtering (always plain text — keeps grep/scrape simple).
 		if q.Get("min-level") != "" || q.Get("module") != "" || q.Get("grep") != "" ||
 			q.Get("since-line") != "" || q.Get("limit") != "" || q.Get("follow") != "" {
-			streamFilteredVisorLog(c, logFile, q)
+			streamFilteredVisorLog(w, req, logFile, q)
 			return
 		}
 		// Plain-text escape hatch for log-scraping tooling: ?raw=1 or an
 		// explicit Accept: text/plain (and no text/html preference).
 		raw := q.Get("raw") == "1" || strings.EqualFold(q.Get("raw"), "true")
 		if !raw {
-			accept := c.GetHeader("Accept")
+			accept := req.Header.Get("Accept")
 			if strings.Contains(accept, "text/plain") && !strings.Contains(accept, "text/html") {
 				raw = true
 			}
 		}
 		if raw {
-			c.File(logFile)
+			http.ServeFile(w, req, logFile)
 			return
 		}
 		// Default: terminal-styled, level-colored HTML.
-		renderVisorLogHTML(c, logFile)
+		renderVisorLogHTML(w, req, logFile)
 	}
-	authRoute.GET("/skywire.log", serveVisorLog)
-	authRoute.GET("/visor.log", serveVisorLog) // backwards-compatible alias
+	authRoute("GET /skywire.log", serveVisorLog)
+	authRoute("GET /visor.log", serveVisorLog) // backwards-compatible alias
 
 	// pprof endpoints (auth'd) — runtime profiling
-	authRoute.GET("/debug/pprof/", gin.WrapF(pprof.Index))
-	authRoute.GET("/debug/pprof/cmdline", gin.WrapF(pprof.Cmdline))
-	authRoute.GET("/debug/pprof/profile", gin.WrapF(pprof.Profile))
-	authRoute.GET("/debug/pprof/symbol", gin.WrapF(pprof.Symbol))
-	authRoute.GET("/debug/pprof/trace", gin.WrapF(pprof.Trace))
-	authRoute.GET("/debug/pprof/:name", gin.WrapH(http.HandlerFunc(pprof.Index)))
+	// The subtree pattern also serves the named profiles, such as /debug/pprof/heap.
+	authRoute("GET /debug/pprof/", pprof.Index)
+	authRoute("GET /debug/pprof/cmdline", pprof.Cmdline)
+	authRoute("GET /debug/pprof/profile", pprof.Profile)
+	authRoute("GET /debug/pprof/symbol", pprof.Symbol)
+	authRoute("GET /debug/pprof/trace", pprof.Trace)
+	// The last seconds of execution trace, when the flight recorder runs.
+	authRoute("GET /debug/pprof/flightrecorder", flightrec.Handler().ServeHTTP)
 
 	// /stats/* (auth'd) — visor-local telemetry store. Handlers
 	// degrade to 503 when SetStatsReader hasn't been called.
@@ -312,33 +310,33 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	// doesn't accidentally expose a shell. The dmsgpty UI handler
 	// terminates websocket-upgrade requests for the live session
 	// and serves the static term page on plain GETs.
-	ptyAuth := func(c *gin.Context) {
+	ptyAuth := func(w http.ResponseWriter, req *http.Request) {
 		if api.ptyHandler == nil {
-			c.AbortWithStatus(http.StatusNotFound)
+			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 		// Nil whitelist means "no PK allowed" — pty is high-power,
 		// fail closed.
-		remoteHost, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+		remoteHost, _, err := net.SplitHostPort(req.RemoteAddr)
 		if err != nil {
-			remoteHost = c.Request.RemoteAddr
+			remoteHost = req.RemoteAddr
 		}
 		if !ptyPKAllowed(api.ptyWhitelist, remoteHost) {
-			c.AbortWithStatus(http.StatusForbidden)
+			w.WriteHeader(http.StatusForbidden)
 			return
 		}
-		api.ptyHandler.ServeHTTP(c.Writer, c.Request)
+		api.ptyHandler.ServeHTTP(w, req)
 	}
-	r.GET("/pty", ptyAuth)
-	r.GET("/pty/*path", ptyAuth)
+	r.HandleFunc("GET /pty", ptyAuth)
+	r.HandleFunc("GET /pty/", ptyAuth)
 
 	// isWhitelisted checks if the current request is from a whitelisted PK
 	// without blocking. Used by the landing page to show/hide auth'd links.
-	isWhitelisted := func(c *gin.Context) bool {
+	isWhitelisted := func(req *http.Request) bool {
 		if len(whitelistedPKs) == 0 {
 			return true
 		}
-		remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+		remotePK, _, err := net.SplitHostPort(req.RemoteAddr)
 		if err != nil {
 			return false
 		}
@@ -354,13 +352,13 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	// websiteHandler is set (port 80 reverse-proxy or rewards UI), it
 	// serves the root path too — replacing the default landing page
 	// rather than only catching unmatched routes.
-	r.GET("/", func(c *gin.Context) {
+	r.HandleFunc("GET /{$}", func(w http.ResponseWriter, req *http.Request) {
 		if api.websiteHandler != nil {
-			api.websiteHandler.ServeHTTP(c.Writer, c.Request)
+			api.websiteHandler.ServeHTTP(w, req)
 			return
 		}
-		wl := isWhitelisted(c)
-		c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+		wl := isWhitelisted(req)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		var links []string
 		links = append(links, `<a href="/health">/health</a> - visor health status`)
 		if wl {
@@ -380,7 +378,7 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 			// Dmsgpty.Whitelist entries the survey list doesn't), so
 			// we re-check rather than reuse `wl`.
 			if api.ptyHandler != nil && api.ptyWhitelist != nil {
-				remoteHost, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+				remoteHost, _, err := net.SplitHostPort(req.RemoteAddr)
 				if err == nil && ptyPKAllowed(api.ptyWhitelist, remoteHost) {
 					links = append(links, `<a href="/pty">/pty</a> - web terminal (dmsgpty)`)
 				}
@@ -413,7 +411,7 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		// Use the request Host to construct proper URLs that work
 		// in the browser (e.g. http://pk.skynet:8000/).
 		if api.forwardedPortLister != nil {
-			host := c.Request.Host
+			host := req.Host
 			// Strip existing port from host if present
 			if h, _, err := net.SplitHostPort(host); err == nil {
 				host = h
@@ -435,7 +433,7 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 				if fp.Description != "" {
 					desc = " - " + fp.Description
 				}
-				url := fmt.Sprintf("http://%s:%d/", host, fp.Port)
+				url := html.EscapeString(fmt.Sprintf("http://%s:%d/", host, fp.Port))
 				links = append(links, fmt.Sprintf(`<a href="%s">%s</a>%s`, url, label, desc))
 			}
 		}
@@ -444,8 +442,8 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		// wasm-visor's (cmd/wasm-visor) are the same frame — PK identity header
 		// included. The links differ (this visor exposes more, gated on the
 		// whitelist above); the styling/structure is shared.
-		c.Writer.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(c.Writer, landingpage.Render(api.publicKey, links)) //nolint:errcheck
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, landingpage.Render(api.publicKey, links)) //nolint:errcheck,gosec // the request Host is escaped above
 	})
 
 	// Catch-all: if a custom website handler is set, serve unmatched
@@ -456,14 +454,14 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	//   /health, /ping, /services — open to everyone
 	//   /node-info, /visor.log, /debug/pprof — survey whitelist
 	//   everything else (website) — forwarded port whitelist (if set)
-	r.NoRoute(func(c *gin.Context) {
+	r.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		if api.websiteHandler != nil {
 			// Enforce the forwarded port's PK whitelist on the website.
 			if api.forwardedPortLister != nil {
 				if wl := api.forwardedPortLister.PortWhitelist(80); len(wl) > 0 {
-					remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+					remotePK, _, err := net.SplitHostPort(req.RemoteAddr)
 					if err != nil {
-						c.AbortWithStatus(http.StatusForbidden)
+						w.WriteHeader(http.StatusForbidden)
 						return
 					}
 					allowed := false
@@ -474,18 +472,22 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 						}
 					}
 					if !allowed {
-						c.AbortWithStatus(http.StatusForbidden)
+						w.WriteHeader(http.StatusForbidden)
 						return
 					}
 				}
 			}
-			api.websiteHandler.ServeHTTP(c.Writer, c.Request)
+			api.websiteHandler.ServeHTTP(w, req)
 			return
 		}
-		c.String(http.StatusNotFound, "404 not found")
+		writeString(w, http.StatusNotFound, "404 not found")
 	})
 
-	api.Handler = r
+	var h http.Handler = r
+	if printLog {
+		h = loggingMiddleware(h)
+	}
+	api.Handler = recoverPanics(log, h)
 	return api
 }
 
@@ -496,12 +498,12 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 // Use cases:
 // - Static file server: http.FileServer(http.Dir("/path/to/site"))
 // - Reverse proxy to a local web app: httputil.ReverseProxy
-// - The reward system UI gin handler
+// - The reward system UI handler
 func (api *API) SetWebsiteHandler(h http.Handler) {
 	api.websiteHandler = h
 }
 
-func (api *API) health(c *gin.Context) {
+func (api *API) health(w http.ResponseWriter, req *http.Request) {
 	// /health carries the dmsg_address only — the public_key is redundant
 	// (it's the host part of dmsg_address) and is shown on the landing page
 	// instead. PublicKey is left unset; it's omitempty so it drops from the
@@ -523,18 +525,17 @@ func (api *API) health(c *gin.Context) {
 
 	jsonObject, err := json.Marshal(resp)
 	if err != nil {
-		httputil.GetLogger(c.Request).WithError(err).Errorf("failed to encode json response")
-		c.Writer.WriteHeader(http.StatusInternalServerError)
-		c.AbortWithStatus(http.StatusInternalServerError)
+		httputil.GetLogger(req).WithError(err).Errorf("failed to encode json response")
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	c.Header("Content-Type", "application/json")
-	c.Writer.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 
-	_, err = c.Writer.Write(jsonObject)
+	_, err = w.Write(jsonObject)
 	if err != nil {
-		httputil.GetLogger(c.Request).WithError(err).Errorf("failed to write json response")
+		httputil.GetLogger(req).WithError(err).Errorf("failed to write json response")
 	}
 }
 
@@ -590,54 +591,112 @@ func (api *API) SetRelatedNodesProvider(p RelatedNodesProvider) {
 	api.relatedNodesProvider = p
 }
 
-func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
-	return func(c *gin.Context) {
+func whitelistAuth(whitelistedPKs []cipher.PubKey, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Get the remote PK.
-		remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+		remotePK, _, err := net.SplitHostPort(req.RemoteAddr)
 		if err != nil {
-			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.AbortWithStatus(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		// Check if the remote PK is whitelisted.
-		whitelisted := false
-		if len(whitelistedPKs) == 0 {
-			whitelisted = true
-		} else {
-			for _, whitelistedPK := range whitelistedPKs {
-				if remotePK == whitelistedPK.String() {
-					whitelisted = true
-					break
-				}
+		whitelisted := len(whitelistedPKs) == 0
+		for _, whitelistedPK := range whitelistedPKs {
+			if remotePK == whitelistedPK.String() {
+				whitelisted = true
+				break
 			}
 		}
-		if whitelisted {
-			c.Next()
-		} else {
-			// Otherwise, return a 401 Unauthorized error.
-			c.Writer.WriteHeader(http.StatusUnauthorized)
-			c.AbortWithStatus(http.StatusUnauthorized)
+		if !whitelisted {
+			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-	}
+		next.ServeHTTP(w, req)
+	})
 }
 
-func loggingMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
+// jsonObj is a small JSON object body, such as {"error": "..."}.
+type jsonObj map[string]string
+
+func writeJSON(w http.ResponseWriter, code int, v any) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(code)
+	_, _ = w.Write(data) //nolint:errcheck
+}
+
+func writeString(w http.ResponseWriter, code int, format string, args ...any) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(code)
+	_, _ = fmt.Fprintf(w, format, args...) //nolint:errcheck
+}
+
+func flush(w http.ResponseWriter) {
+	_ = http.NewResponseController(w).Flush() //nolint:errcheck
+}
+
+// recoverPanics answers 500 when a handler panics, as the gin router did.
+func recoverPanics(log *logging.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		defer func() {
+			if v := recover(); v != nil {
+				if v == http.ErrAbortHandler { //nolint:errorlint
+					panic(v)
+				}
+				log.Errorf("panic serving %s: %v", req.URL.Path, v)
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, req)
+	})
+}
+
+// statusWriter records the response status for the request log. Unwrap lets
+// http.ResponseController reach Flush and Hijack on the real writer.
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusWriter) WriteHeader(code int) {
+	if s.status == 0 {
+		s.status = code
+	}
+	s.ResponseWriter.WriteHeader(code)
+}
+
+func (s *statusWriter) Flush() { flush(s.ResponseWriter) }
+
+func (s *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return http.NewResponseController(s.ResponseWriter).Hijack()
+}
+
+func (s *statusWriter) Unwrap() http.ResponseWriter { return s.ResponseWriter }
+
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		start := time.Now()
-		c.Next()
+		sw := &statusWriter{ResponseWriter: w}
+		next.ServeHTTP(sw, req)
 		latency := time.Since(start)
 		if latency > time.Minute {
 			latency = latency.Truncate(time.Second)
 		}
-		statusCode := c.Writer.Status()
-		method := c.Request.Method
-		path := c.Request.URL.Path
+		statusCode := sw.status
+		if statusCode == 0 {
+			statusCode = http.StatusOK
+		}
+		method := req.Method
+		path := req.URL.Path
 		// Get the background color based on the status code
 		statusCodeBackgroundColor := getBackgroundColor(statusCode)
 		// Get the method color
 		methodColor := getMethodColor(method)
-		// Print the logging in a custom format which includes the publickeyfrom c.Request.RemoteAddr ex.:
+		// Print the logging in a custom format which includes the publickeyfrom req.RemoteAddr ex.:
 		// [DMSGHTTP] 2023/05/18 - 19:43:15 | 200 |    10.80885ms |                 | 02b5ee5333aa6b7f5fc623b7d5f35f505cb7f974e98a70751cf41962f84c8c4637:49153 | GET      /node-info.json
 		fmt.Printf("[DMSGHTTP] %s |%s %3d %s| %13v | %15s | %72s |%s %-7s %s %s\n",
 			time.Now().Format("2006/01/02 - 15:04:05"),
@@ -645,15 +704,26 @@ func loggingMiddleware() gin.HandlerFunc {
 			statusCode,
 			resetColor(),
 			latency,
-			c.ClientIP(),
-			c.Request.RemoteAddr,
+			clientIP(req),
+			req.RemoteAddr,
 			methodColor,
 			method,
 			resetColor(),
 			path,
 		)
-	}
+	})
 }
+
+// clientIP is the request's remote IP, empty for a dmsg or skynet peer whose
+// address is a public key.
+func clientIP(req *http.Request) string {
+	host, _, err := net.SplitHostPort(req.RemoteAddr)
+	if err != nil || net.ParseIP(host) == nil {
+		return ""
+	}
+	return host
+}
+
 func getBackgroundColor(statusCode int) string {
 	switch {
 	case statusCode >= http.StatusOK && statusCode < http.StatusMultipleChoices:

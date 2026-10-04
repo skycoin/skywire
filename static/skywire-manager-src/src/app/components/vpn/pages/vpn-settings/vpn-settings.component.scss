@@ -1,5 +1,5 @@
-@import "variables";
-@import "text";
+@use "variables";
+@use "text";
 
 table {
   width: 100%;
@@ -7,7 +7,7 @@ table {
   td {
     padding-top: 7px !important;
     padding-bottom: 7px !important;
-    font-size: $font-size-vpn-list !important;
+    font-size: variables.$font-size-vpn-list !important;
     font-weight: normal !important;
   }
 }
@@ -36,6 +36,6 @@ mat-spinner {
   top: 2px;
   
   ::ng-deep circle {
-    stroke: $white;
+    stroke: variables.$white;
   }
 }

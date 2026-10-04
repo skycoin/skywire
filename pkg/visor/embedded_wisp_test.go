@@ -12,9 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0magnet/wisp"
+
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
-	"github.com/skycoin/skywire/pkg/wisp"
 )
 
 // freePort returns a port nothing is listening on. On a native visor

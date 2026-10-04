@@ -110,7 +110,10 @@ func (r *RoutingCXOPublisher) publishOnce(ctx context.Context) {
 		r.recordError(err)
 		return
 	}
-	ops := make([]treestore.PutOp, 0, len(shards)+len(r.shards))
+	// Sized for the puts; the few shards that went away since the last
+	// publish grow it. (A sum of the two lengths here is what CodeQL's
+	// allocation-size-overflow check flags.)
+	ops := make([]treestore.PutOp, 0, len(shards))
 	for path := range r.shards {
 		if _, still := shards[path]; !still {
 			ops = append(ops, treestore.PutOp{Path: path})

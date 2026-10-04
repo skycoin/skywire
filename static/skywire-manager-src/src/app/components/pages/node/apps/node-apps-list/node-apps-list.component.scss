@@ -1,5 +1,5 @@
-@import "bootstrap_overrides";
-@import 'variables';
+@use "bootstrap_overrides";
+@use 'variables';
 
 .actions {
   text-align: right;
@@ -23,7 +23,7 @@
 }
 
 .skychat-link {
-  color: $white;
+  color: variables.$white;
   text-decoration: none;
 
   .big-action-button {

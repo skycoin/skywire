@@ -237,7 +237,7 @@
 	}
 	function rtcMakeDC(pcId, dcId) {
 		return {
-			binaryType: 'arraybuffer', readyState: 'connecting',
+			binaryType: 'arraybuffer', readyState: 'connecting', bufferedHigh: false, onbufferedamountlow: null,
 			onopen: null, onmessage: null, onclose: null, onerror: null,
 			send: function (data) {
 				var buf = data;
@@ -299,14 +299,53 @@
 		case 'dcMessage': dc = rec && rec.dcs[m.dcId]; if (dc && typeof dc.onmessage === 'function') { dc.onmessage({ data: m.data }); } return;
 		case 'dcClose': dc = rec && rec.dcs[m.dcId]; if (dc) { dc.readyState = 'closed'; if (typeof dc.onclose === 'function') { dc.onclose({}); } } return;
 		case 'dcError': dc = rec && rec.dcs[m.dcId]; if (dc && typeof dc.onerror === 'function') { dc.onerror({}); } return;
+		// The page's channel queue passed its high-water mark, or drained below the
+		// low one; Write waits in between (webrtc_browser.go).
+		case 'dcHigh': dc = rec && rec.dcs[m.dcId]; if (dc) { dc.bufferedHigh = true; } return;
+		case 'dcLow': dc = rec && rec.dcs[m.dcId]; if (dc) { dc.bufferedHigh = false; if (typeof dc.onbufferedamountlow === 'function') { dc.onbufferedamountlow({}); } } return;
 		case 'pcGone': delete rtcPCs[m.pcId]; return;
 		}
+	}
+
+	// fsCall runs one call of the page's mount of this thread's tree
+	// (exec-remote.js, mountWorkerTree) on this thread's jsfs and answers it.
+	// read and write move bytes rather than a caller's buffer, and a stat
+	// result loses its is*() methods, which the page's jsfs puts back.
+	function fsCall(m) {
+		function reply(err, res) {
+			if (err) {
+				post({ t: 'fsr', id: m.id, err: { code: err.code || 'EIO', message: String(err.message || err) } });
+				return;
+			}
+			if (res instanceof Uint8Array) { post({ t: 'fsr', id: m.id, res: res }, [res.buffer]); return; }
+			if (res && typeof res === 'object' && !Array.isArray(res)) {
+				var plain = {};
+				for (var k in res) if (typeof res[k] !== 'function') plain[k] = res[k];
+				res = plain;
+			}
+			post({ t: 'fsr', id: m.id, res: res });
+		}
+		var fs = globalThis.fs, a = m.args || [];
+		try {
+			if (m.op === 'read') {
+				var buf = new Uint8Array(a[1]);
+				fs.read(a[0], buf, 0, a[1], a[2], function (err, n) { reply(err, err ? null : buf.slice(0, n)); });
+				return;
+			}
+			if (m.op === 'write') {
+				fs.write(a[0], a[1], 0, a[1].length, a[2], reply);
+				return;
+			}
+			if (typeof fs[m.op] !== 'function') { reply({ code: 'ENOSYS', message: m.op }); return; }
+			fs[m.op].apply(fs, a.concat([reply]));
+		} catch (e) { reply(e); }
 	}
 
 	self.onmessage = function (ev) {
 		var m = ev.data || {};
 		switch (m.t) {
 		case 'init': init(m); return;
+		case 'fs': fsCall(m); return;
 		case 'spawn': spawn(m); return;
 		case 'kill':
 			if (!interrupt(m.id)) pendingKill[m.id] = true;

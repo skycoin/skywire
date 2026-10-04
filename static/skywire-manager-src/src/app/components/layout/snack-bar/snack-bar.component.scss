@@ -1,5 +1,5 @@
-@import "variables";
-@import "utilities/utilities";
+@use "variables";
+@use "utilities/utilities";
 
 .main-container {
   width: 100%;
@@ -30,11 +30,11 @@
 .text-container {
   flex-grow: 1;
   margin-right: 10px;
-  font-size: $font-size-base;
+  font-size: variables.$font-size-base;
   word-break: break-word;
 
   .second-line {
-    font-size: $font-size-smaller;
+    font-size: variables.$font-size-smaller;
     opacity: 0.9;
   }
 }

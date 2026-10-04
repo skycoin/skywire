@@ -1,6 +1,8 @@
-@import 'variables';
-@import "bootstrap_overrides";
-@import "bootstrap/scss/functions";
+@use "sass:color";
+@use "sass:map";
+@use 'variables';
+@use "bootstrap_overrides";
+@use "bootstrap/scss/functions";
 
 .main-container {
   text-align: right;
@@ -14,18 +16,18 @@
 
   a {
     padding: $elements-padding;
-    border-right: $separator solid 1px;
-    border-left: $separator solid 1px;
+    border-right: variables.$separator solid 1px;
+    border-left: variables.$separator solid 1px;
     min-width: 40px;
     text-align: center;
-    color: scale-color($white, $alpha: -50%);
+    color: color.scale(variables.$white, $alpha: -50%);
     text-decoration: none;
     display: flex;
     align-items: center;
     justify-content: center;
 
     &:hover {
-      background: map-get($theme-colors,translucid-hover);
+      background: map.get(variables.$theme-colors,translucid-hover);
     }
 
     mat-icon {
@@ -34,23 +36,23 @@
     }
 
     .label {
-      font-size: $font-size-mini;
+      font-size: variables.$font-size-mini;
     }
   }
 
   .selected {
-    color: $white;
-    background: scale-color(map-get($theme-colors,translucid-hover), $alpha: 20%);
+    color: variables.$white;
+    background: color.scale(map.get(variables.$theme-colors,translucid-hover), $alpha: 20%);
     padding: $elements-padding ($elements-padding * 2);
     cursor: pointer;
 
     &:hover {
-      background: scale-color(map-get($theme-colors,translucid-hover), $alpha: 50%);
+      background: color.scale(map.get(variables.$theme-colors,translucid-hover), $alpha: 50%);
     }
   }
 
   .total-pages {
-    font-size: $font-size-mini-plus;
+    font-size: variables.$font-size-mini-plus;
     margin-top: -3px;
     margin-right: 4px;
   }

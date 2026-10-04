@@ -18,7 +18,8 @@
  *   wasm   — the identical Angular build served by an in-tab wasm visor core;
  *            WSS/WebTransport carriers, no host to measure, Rewards and
  *            Resources hidden (see home-tabs.ts isWasmHvCore).
- * A step’s copy may be a string, {wasm, native, both}, or fn(mode).
+ * The words are in hv-tour.md beside this file (see parseTour); a field may
+ * differ between the two with "Title (wasm):" / "Body (native):" and so on.
  */
 (function () {
   "use strict";
@@ -45,250 +46,162 @@
 
   // ------------------------------------------------------------------- steps
 
-  // The copy is written as NARRATION, not instruction: it describes the screen
-  // rather than addressing a reader ("Each row is a visor", never "you can see
-  // your visors here"). Two reasons. The dashboard is a familiar kind of thing —
-  // an admin console — and talking someone through it as if it were strange is
-  // condescending; and the same text is read by two quite different arrivals,
-  // one who installed a daemon and one who clicked a link, so second person
-  // ends up addressing the wrong person half the time.
-  function buildSteps(mode, nodePath, visorList, localVisor) {
-    return [
-      // --- the front page: the visor list, read left to right ---------------
-      //
-      // NOT "this is not a normal web page". This IS a normal web page: an
-      // Angular admin console, and an unremarkable one by design. What is
-      // unprecedented is the visor — and in the browser build, the desk around
-      // it, which is what the desk tour opens on. Overselling the dashboard
-      // spends the reader's credulity on the wrong screen.
-      {
-        route: visorList,
-        title: {
-          wasm: "A hypervisor dashboard, served from a tab",
-          native: "The hypervisor dashboard"
-        },
-        body: {
-          wasm: "A <b>hypervisor</b> manages visors: it lists them, opens them and configures them. This one is ordinary web software with one oddity — the visor it manages is the <b>wasm core in this tab</b>, and the tab is also serving the page. Nothing was installed and nothing persists: closing the tab ends the visor unless its key was exported. The list below reads left to right.",
-          native: "A <b>hypervisor</b> manages visors: it lists them, opens them and configures them. It is itself a visor that serves this page and holds the keys of the visors it manages. The list below reads left to right."
-        },
-        disc: {
-          summary: "Open-source, no warranty — keys are held locally",
-          details: "Skywire and the Skycoin wallet are experimental, open-source software, provided as-is and without warranty. Visors hold their own keys and coins; nobody else can access or recover them. Understand the risks before relying on it or storing value."
-        }
-      },
+  // The words live in hv-tour.md beside this script, so they can be edited
+  // without touching code. What stays here is the wiring: the page each step
+  // opens and the element it lights up, keyed by the markdown's "## <id>".
+  // The markdown also decides the order of the steps.
+  var TEXT_URL = (function () {
+    var s = document.currentScript;
+    return s && s.src ? new URL("hv-tour.md", s.src).href : "assets/tour/hv-tour.md";
+  })();
 
-      {
-        route: visorList, sel: "td.key-cell",
-        title: "A visor is a public key",
-        body: {
-          wasm: "Each visor is named by a <b>public key</b> — 66 hex characters. There are no usernames and no accounts: the key is both identity and address. The secret half sits in <b>this browser</b> and never leaves it; every link the visor makes is encrypted to it.",
-          native: "Each visor is named by a <b>public key</b> — 66 hex characters. There are no usernames and no accounts: the key is both identity and address. The secret half sits <b>on this machine</b> and never leaves it; every link is encrypted to it."
-        },
-        more: {
-          summary: "Why a key instead of a name or an address",
-          panel: "On the clearnet an address locates a host and a certificate authority vouches that a name belongs to it — two mechanisms, two trust assumptions. A public key collapses both: it is what peers route to and what they encrypt to. There is no name to spoof and no authority to trust. Whoever holds the matching secret key <i>is</i> that visor."
-        }
-      },
-
-      // Anchored to the live count cell first, falling back to the always-present
-      // column header: a browser visor's dmsg sessions can flap to zero, and the
-      // cell then renders "-" with no .dmsg-counts, which would skip the step.
-      {
-        route: visorList, sel: ".dmsg-counts, th.dmsg-column",
-        title: "dmsg — the relay layer",
-        body: {
-          wasm: "Connected <b>dmsg servers</b>, counted by carrier. dmsg is an encrypted relay network: two visors reach each other through a server instead of directly. A browser cannot open a raw socket, so it joins over <b>WSS</b> and <b>WebTransport</b>.",
-          native: "Connected <b>dmsg servers</b>, counted by carrier. dmsg is an encrypted relay network: two visors reach each other through a server instead of directly. A native visor joins over <b>TCP</b>, or QUIC where a server offers it."
-        },
-        more: {
-          summary: "The four carriers",
-          panel: "dmsg carries the control plane, and a data path when no direct one exists. The <b>carrier</b> is how a visor reaches a server:" +
-            '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">' +
-            '<li style="margin:.3em 0"><b>tcp</b> — a raw socket; native only.</li>' +
-            '<li style="margin:.3em 0"><b>ws</b> / <b>wss</b> — WebSocket; the only option in a browser. An https page requires <code>wss</code>.</li>' +
-            '<li style="margin:.3em 0"><b>webtransport</b> — HTTP/3; dialable from a browser.</li>' +
-            '<li style="margin:.3em 0"><b>quic</b> — QUIC over UDP; native. The only carrier that also passes unreliable <b>datagrams</b>.</li>' +
-            "</ul>" +
-            "The next column counts <b>direct transports</b>, which use the same four protocols peer-to-peer. dmsg is the relayed form of the same wire."
-        }
-      },
-
-      {
-        route: visorList, sel: ".tp-counts, th.transports-column",
-        title: "Transports — the direct links",
-        body: "Live <b>transports</b>, by type. A transport is point-to-point where dmsg relays. The count climbs as a visor settles in and finds peers; more direct links mean less relaying and lower latency.",
-        more: {
-          summary: "Transport types",
-          panel: "Four mirror the dmsg carriers exactly — same protocol, dialed to a peer instead of a server:" +
-            '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">' +
-            '<li style="margin:.3em 0"><b>stcpr</b> — TCP, with the peer located through the address resolver.</li>' +
-            '<li style="margin:.3em 0"><b>ws</b> — WebSocket.</li>' +
-            '<li style="margin:.3em 0"><b>webtransport</b> — HTTP/3.</li>' +
-            '<li style="margin:.3em 0"><b>quic</b> — QUIC over UDP; carries end-to-end datagrams.</li>' +
-            "</ul>" +
-            "Two exist only peer-to-peer, since a dmsg server is a fixed public endpoint with nothing to hole-punch to:" +
-            '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">' +
-            '<li style="margin:.3em 0"><b>sudph</b> — UDP through a NAT hole-punch, made reliable by KCP.</li>' +
-            '<li style="margin:.3em 0"><b>webrtc</b> — browser-to-browser DataChannel, traversed by ICE; dmsg carries only the signaling.</li>' +
-            "</ul>" +
-            "dmsg is itself a transport — the relayed one."
-        }
-      },
-
-      {
-        route: visorList, sel: "td.label-cell",
-        title: "Label and location",
-        body: "A <b>label</b> for recognizing a visor at a glance, and its detected IP and country. Both are cosmetic; the public key is the identity. That is the whole row — which visor, how it connects, and where it is."
-      },
-
-      // --- inside this visor ------------------------------------------------
+  // sel is a comma list in priority order (see pickTarget); has narrows it to
+  // an element whose text contains that string. nativeOnly steps are skipped on
+  // a browser visor, which hides those pages.
+  function wiring(nodePath, visorList, localVisor) {
+    function tab(name) { return function () { return nodePath(name); }; }
+    return {
+      "visor-list": { route: visorList },
+      "key": { route: visorList, sel: "td.key-cell" },
+      // The live count cell first, then the always-present header: a browser
+      // visor's dmsg sessions can flap to zero, and the cell then renders "-"
+      // with no .dmsg-counts, which would skip the step.
+      "dmsg": { route: visorList, sel: ".dmsg-counts, th.dmsg-column" },
+      "transport-counts": { route: visorList, sel: ".tp-counts, th.transports-column" },
+      "label": { route: visorList, sel: "td.label-cell" },
       // Entered through #/nodes/local rather than a PK, so that on a hypervisor
       // managing several visors the tour opens the local one. The redirect
       // leaves that PK in the hash and every step after this reads it there.
-      {
-        route: localVisor,
-        sel: "app-node-info-content .info-line", has: "DMSG servers",
-        title: "Info",
-        body: {
-          wasm: "Opening a visor lands on <b>Info</b>: version, uptime, identity, and the <b>DMSG servers</b> line the list summarized — here reached over WSS and WebTransport from the tab.",
-          native: "Opening a visor lands on <b>Info</b>: version, uptime, identity, and the <b>DMSG servers</b> line the list summarized — the relay layer up close."
-        }
-      },
+      "info": { route: localVisor, sel: "app-node-info-content .info-line", has: "DMSG servers" },
+      "transports": { route: tab("transports"), sel: "app-transport-list" },
+      "routing": { route: tab("routing"), sel: "app-route-list" },
+      "bandwidth": { route: tab("bandwidth"), sel: "app-bandwidth" },
+      "apps": { route: tab("apps"), sel: "app-node-app-list" },
+      "uptime": { route: tab("uptime"), sel: "app-uptime" },
+      "logs": { route: tab("logs"), sel: "app-node-logs, app-logs" },
+      "visor-settings": { route: tab("settings"), sel: "app-node-settings" },
+      "cluster": { route: visorList, sel: "app-node-list" },
+      "mesh-transports": { route: "#/nodes/transports" },
+      "mesh-visors": { route: "#/nodes/network", sel: "app-network-view" },
+      "visualizer": { route: "#/nodes/visualizer", sel: "app-network-visualizer" },
+      "services": { route: "#/nodes/services-health", sel: "app-services-health" },
+      "mesh-uptime": { route: "#/nodes/uptime", sel: "app-multi-visor-uptime" },
+      "rewards": { nativeOnly: true, route: "#/nodes/rewards", sel: "app-node-list" },
+      "resources": { nativeOnly: true, route: "#/nodes/resources", sel: "app-multi-visor-resources" },
+      "hv-settings": { route: "#/settings", sel: "app-settings" },
+      "close": {}
+    };
+  }
 
-      {
-        route: function () { return nodePath("transports"); }, sel: "app-transport-list",
-        title: "Transports",
-        body: {
-          wasm: "One row per direct link. From a browser these are mostly WebTransport and WebRTC; a native visor also builds stcpr, sudph and quic.",
-          native: "One row per direct link — stcpr, sudph, dmsg, quic — hole-punched through NATs where necessary, so traffic takes the shortest path rather than always relaying."
-        }
-      },
+  // mdInline renders `code`, **bold** and *italic*. Code spans are escaped and
+  // set aside first so their contents are left alone; everything else may also
+  // carry plain HTML.
+  function mdInline(s) {
+    var codes = [];
+    s = s.replace(/`([^`]+)`/g, function (_, c) {
+      codes.push("<code>" + c.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</code>");
+      return "\u0000" + (codes.length - 1) + "\u0000";
+    });
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\*([^*]+)\*/g, "<i>$1</i>");
+    return s.replace(/\u0000(\d+)\u0000/g, function (_, n) { return codes[+n]; });
+  }
 
-      {
-        route: function () { return nodePath("routing"); }, sel: "app-route-list",
-        title: "Routing",
-        body: "The paths traffic takes across those transports. A route is <b>DIRECT</b> (one hop), <b>MULTIHOP</b> (several visors, so no single hop sees both ends), or <b>MULTIPLEXED</b> (parallel paths at once). The route-finder builds them on demand.",
-        more: {
-          summary: "Hops, and what they cost",
-          panel: "A route is an ordered path of transports. One hop is fastest. More hops mean no single intermediary knows both source and destination, paid for in latency. A multiplexed route splits one stream over several paths: a dead leg does not end the stream, and the aggregate beats any single leg."
-        }
-      },
-
-      {
-        route: function () { return nodePath("bandwidth"); }, sel: "app-bandwidth",
-        title: "Bandwidth",
-        body: "What those routes actually carried, sent and received over time — the quickest way to tell a working transport from a merely connected one."
-      },
-
-      {
-        route: function () { return nodePath("apps"); }, sel: "app-node-app-list",
-        title: "Apps",
-        body: {
-          wasm: "The apps this visor can run. In a tab the relevant one is <b>skysocks-client-lite</b>, which routes clearnet fetches out through an <b>exit</b> visor. It serves no local port — it exists only inside this tab, and only this tab's own traffic goes through it.",
-          native: "Apps start, stop and configure here: the <b>skysocks</b> proxy client and server, the <b>VPN</b> client and server, and <b>skychat</b>. On a native visor these bind real local ports and can serve other machines on the network."
-        },
-        more: {
-          summary: "skysocks-client and skysocks-client-lite",
-          panel: "<b>skysocks-client</b> runs as a process and serves a local <b>SOCKS5 port</b> that other programs point at. <b>skysocks-client-lite</b> has neither: it lives in the tab and proxies only what that tab fetches. Both dial an <b>exit</b> visor which performs the clearnet request, so the site sees the exit's address."
-        }
-      },
-
-      {
-        route: function () { return nodePath("uptime"); }, sel: "app-uptime",
-        title: "Uptime",
-        body: "This visor's record of staying online and reachable, day by day. The reward system pays against that record."
-      },
-
-      {
-        route: function () { return nodePath("logs"); }, sel: "app-node-logs, app-logs",
-        title: "Logs",
-        body: {
-          wasm: "A live tail of the visor's runtime — dmsg, transports, routing, apps — from the wasm core in this tab.",
-          native: "A live tail of the visor's runtime — dmsg, transports, routing, apps — read from the visor process."
-        }
-      },
-
-      {
-        route: function () { return nodePath("settings"); }, sel: "app-node-settings",
-        title: "Visor settings",
-        body: "One visor's label, reward address and mesh behavior. Hypervisor-wide settings are a separate page, at the end of this tour."
-      },
-
-      // --- back out: this hypervisor's cluster ------------------------------
-      {
-        route: visorList, sel: "app-node-list",
-        title: "The cluster",
-        body: {
-          wasm: "Back at the top level. Every visor attached to this hypervisor appears here — at the moment one, in this tab. A remote visor joins the list when its public key is added; this visor becomes managed elsewhere when a remote hypervisor's key is set in its config.",
-          native: "Every visor attached to this hypervisor appears here. A remote visor joins the list when its public key is added; this visor becomes managed elsewhere when a remote hypervisor's key is set in its config. Each one is fully controllable over the mesh."
-        },
-        more: {
-          summary: "Which is the hypervisor",
-          panel: "A hypervisor is a visor that also serves this UI and holds the keys of the visors it manages. The relationship is one config entry, in one direction or the other. Management travels the same encrypted mesh as everything else, so a hypervisor in a browser tab can drive a native visor on the other side of the world, and the reverse."
-        }
-      },
-
-      // --- the whole mesh ---------------------------------------------------
-      {
-        route: "#/nodes/transports",
-        title: "Every transport on the mesh",
-        body: "The live edge list the route-finder draws on: every direct link across the whole mesh, with per-type bandwidth. Assembled <b>peer-to-peer over dmsg</b>, not fetched from a web server. On a large deployment this page is heavy and takes a while to settle."
-      },
-
-      {
-        route: "#/nodes/network", sel: "app-network-view",
-        title: "Every visor on the mesh",
-        body: "A searchable directory of the whole mesh, with the running count top left. Filters by country, version and transport type; each entry carries its transport mix and uptime. The next page draws the same set as a graph."
-      },
-
-      {
-        route: "#/nodes/visualizer", sel: "app-network-visualizer",
-        title: "The same graph, drawn",
-        body: "An interactive geographic render of that directory, in flat, globe and WebGL views."
-      },
-
-      {
-        route: "#/nodes/services-health", sel: "app-services-health",
-        title: "Shared services",
-        body: {
-          wasm: "Health of the services the mesh depends on: config, dmsg discovery, transport discovery, the route-finder, the address resolver, service discovery. <b>This tab probes each one directly over dmsg</b> — status, version, latency — with the same reach a native visor has.",
-          native: "Health of the services the mesh depends on: config, dmsg discovery, transport discovery, the route-finder, the address resolver, service discovery. Each is probed over dmsg, visor to visor."
-        }
-      },
-
-      {
-        route: "#/nodes/uptime", sel: "app-multi-visor-uptime",
-        title: "Mesh uptime",
-        body: "How consistently every visor has stayed online, over 1, 7 and 30 days — the mesh-wide form of a single visor's uptime tab, and the basis for rewards."
-      },
-
-      {
-        nativeOnly: true, route: "#/nodes/rewards", sel: "app-node-list",
-        title: "Rewards",
-        body: "Skycoin paid out to visors that stay online and reachable; a visor appears once it qualifies. The page is hidden on a browser visor, which cannot hold up an uptime record across a closed tab."
-      },
-
-      {
-        nativeOnly: true, route: "#/nodes/resources", sel: "app-multi-visor-resources",
-        title: "Host resources",
-        body: "CPU, memory and disk of the machines hosting the managed visors. Also hidden on a browser visor, which has no host to measure."
-      },
-
-      {
-        route: "#/settings", sel: "app-settings",
-        title: "Hypervisor settings",
-        body: "The services this deployment points at, the update channel, and how the UI behaves — applying to every visor this hypervisor manages."
-      },
-
-      // --- close ------------------------------------------------------------
-      {
-        title: { wasm: "Run by nobody", native: "Run by nobody" },
-        body: {
-          wasm: "No account, no server, no address handed down — a global peer-to-peer mesh reachable from a browser tab, and gone when the tab closes unless the key was exported.<br><br>That was the <b>dashboard</b>. The desktop around it — the mesh browser, the shell, files, identity, pairing, mail — is the genuinely unusual part, and it has <b>its own tour</b> in the launcher. This one reopens from the <b>?</b> button.",
-          native: "No account, no central server, no address handed down — cryptographic keys and a global peer-to-peer mesh.<br><br>That was the <b>dashboard</b>: the visor list, one visor up close, and the mesh-wide views. It reopens from the <b>?</b> button."
-        }
+  // mdBlock renders a field: blank lines separate paragraphs, and a run of
+  // lines starting with "- " is a list. Lines inside a paragraph join with a space.
+  var UL = '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">';
+  var LI = '<li style="margin:.3em 0">';
+  function mdBlock(text) {
+    var out = "", para = [], items = [], prev = "";
+    function flush() {
+      if (para.length) {
+        if (prev === "p") { out += "<br><br>"; }
+        out += mdInline(para.join(" "));
+        para = []; prev = "p";
       }
-    ];
+      if (items.length) {
+        out += UL + items.map(function (i) { return LI + mdInline(i) + "</li>"; }).join("") + "</ul>";
+        items = []; prev = "ul";
+      }
+    }
+    text.split("\n").forEach(function (line) {
+      var t = line.trim();
+      if (!t) { flush(); return; }
+      if (t.indexOf("- ") === 0) {
+        if (para.length) { flush(); }
+        items.push(t.slice(2));
+        return;
+      }
+      if (items.length) { flush(); }
+      para.push(t);
+    });
+    flush();
+    return out;
+  }
+
+  // parseTour reads hv-tour.md into steps of the shape the engine renders:
+  // title and body as {wasm, native, both}, more as {summary, panel}, disc as
+  // {summary, details}. Anything before the first "## " is the file's own notes.
+  function parseTour(md) {
+    var steps = [], step = null, field = null;
+    var fieldRE = /^(Title|Body)(?: \((wasm|native)\))?:\s*(.*)$/;
+    var panelRE = /^(More|Notice):\s*(.+)$/;
+    function close() {
+      if (!field) { return; }
+      var text = field.lines.join("\n");
+      if (field.kind === "Title") { step.title[field.mode] = mdInline(text.trim()); }
+      if (field.kind === "Body") { step.body[field.mode] = mdBlock(text); }
+      if (field.kind === "More") { step.more = { summary: mdInline(field.label), panel: mdBlock(text) }; }
+      if (field.kind === "Notice") { step.disc = { summary: mdInline(field.label), details: mdBlock(text) }; }
+      field = null;
+    }
+    md.split("\n").forEach(function (line) {
+      var h = line.match(/^## (\S+)\s*$/);
+      if (h) {
+        close();
+        step = { id: h[1], title: {}, body: {} };
+        steps.push(step);
+        return;
+      }
+      if (!step) { return; }
+      var m = line.match(fieldRE);
+      if (m) {
+        close();
+        field = { kind: m[1], mode: m[2] || "both", lines: m[3] ? [m[3]] : [] };
+        return;
+      }
+      var p = line.match(panelRE);
+      if (p) {
+        close();
+        field = { kind: p[1] === "More" ? "More" : "Notice", label: p[2], lines: [] };
+        return;
+      }
+      if (field) { field.lines.push(line); }
+    });
+    close();
+    return steps;
+  }
+
+  // buildSteps joins the text to its wiring. A step id with no wiring is an
+  // error in one file or the other, and is reported rather than shown unlit.
+  function buildSteps(text, nodePath, visorList, localVisor) {
+    var wire = wiring(nodePath, visorList, localVisor);
+    var out = [];
+    parseTour(text).forEach(function (s) {
+      var w = wire[s.id];
+      if (!w) { console.error("hv-tour: step '" + s.id + "' in hv-tour.md has no wiring in hv-tour.js"); return; }
+      Object.keys(w).forEach(function (k) { s[k] = w[k]; });
+      out.push(s);
+    });
+    return out;
+  }
+
+  var tourText = null;
+  function loadText() {
+    if (tourText !== null) { return Promise.resolve(tourText); }
+    return fetch(TEXT_URL).then(function (r) {
+      if (!r.ok) { throw new Error("HTTP " + r.status); }
+      return r.text();
+    }).then(function (t) { tourText = t; return t; });
   }
 
   // ------------------------------------------------------------------ engine
@@ -297,7 +210,13 @@
     doc = doc || document;
     if (running || doc.getElementById(HL_ID)) { return; }
     running = true;
+    loadText().then(function (text) { runTour(doc, text); }, function (err) {
+      running = false;
+      console.error("hv-tour: could not load " + TEXT_URL + ": " + err.message);
+    });
+  }
 
+  function runTour(doc, text) {
     var win = doc.defaultView || window;
     var mode = detectMode();
 
@@ -349,7 +268,7 @@
       return pk ? "#/nodes/" + pk + "/" + tab : localVisor;
     }
 
-    var steps = buildSteps(mode, nodePath, visorList, localVisor).filter(function (s) {
+    var steps = buildSteps(text, nodePath, visorList, localVisor).filter(function (s) {
       return !(s.nativeOnly && mode !== "native") && !(s.wasmOnly && mode !== "wasm");
     });
 

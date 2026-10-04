@@ -8,13 +8,12 @@
 //
 // The reason is what the assembly drags in. cmd/skycoin-wallet/commands imports
 // cmd/skycoin-web/wasmassets, which is where skycoin's binaries pick up the
-// skycoin-lite cipher wasm (src/skycoin-lite/wasm-go, ~1.8 MB gzipped). That
-// wasm is redundant here: skywire embeds the wasm visor, whose
-// skycoin-lite/wasmcipher.Register() publishes the identical Cipher and
-// CipherExtras API, so importing skycoin's assembly means carrying the cipher
-// twice with no way to decline the second copy. Assembling the tree here means
-// never importing wasmassets, and cipherwasm.go registers the visor's blob for
-// `web` instead.
+// standard-Go build of the skycoin-lite cipher wasm (src/skycoin-lite/wasm-go,
+// ~1.8 MB gzipped). skywire already carries the TinyGo build, which the
+// hypervisor serves to the dashboard's wallet, so importing skycoin's assembly
+// means carrying the cipher twice with no way to decline the second copy.
+// Assembling the tree here means never importing wasmassets, and cipherwasm.go
+// registers the TinyGo build for `web` instead.
 //
 // The `web` subcommand itself is still skycoin's — only where its cipher comes
 // from differs. The other four command packages do not pull skycoin-lite at
@@ -22,9 +21,9 @@
 // explorer/commands each have neither skycoin-web nor skycoin-lite in their
 // dependency graphs.
 //
-// The wallet BUNDLE is a separate matter and is not affected: it stays vendored
-// via pkg/visor's import of skycoin-web/src/gui (visor.WalletUIFS), so a skycoin
-// vendor bump is still the wallet update, with one copy in the tree.
+// The wallet SOURCE is a separate matter and is not affected: the dashboard
+// compiles it from the skycoin module go.mod requires
+// (scripts/sync-skycoin-wallet.sh), so a skycoin bump is still the wallet update.
 //
 // This changes nothing about skycoin's own binaries. They keep their assembly
 // and their own cipher; this is a second assembly of the same parts.

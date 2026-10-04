@@ -72,12 +72,16 @@ import (
 
 // retiredKeys are JSON keys, given as dot-separated paths from the root
 // of the config, that a load-time migration deliberately consumes and
-// renames away. They read as "unknown" to the walk below but must NOT
-// be preserved: doing so would defeat the migration.
+// renames away, or that switched a behavior which is now unconditional.
+// They read as "unknown" to the walk below but must NOT be preserved:
+// doing so would defeat the migration, or keep a switch that no longer
+// switches anything.
 var retiredKeys = map[string]struct{}{
 	// config_compat.go's V1.UnmarshalJSON reads the legacy "dmsgpty"
 	// block into V1.Pty; marshaling always emits the canonical "pty".
 	"dmsgpty": {},
+	// The RSN-oracle 2-hop route path is always on.
+	"routing.enable_rsn_oracle_routes": {},
 }
 
 var (

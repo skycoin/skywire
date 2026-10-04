@@ -16,6 +16,7 @@ import { NodeActionsHelper } from './actions/node-actions-helper';
 import { SingleNodeBackendData, SingleNodeDataService, TrafficData } from 'src/app/services/single-node-data.service';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { AppComponent } from 'src/app/app.component';
+import { ptyUrl } from 'src/app/utils/pty-url';
 
 /**
  * Main page used for showing the details of a node. It is in charge of loading
@@ -572,9 +573,9 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     if (this.boundTerminalPk === this.node.localPk) {
  return; 
 }
-    const url = '/pty/' + this.node.localPk;
+    const url = ptyUrl(this.node.localPk);
     this.terminalIframeUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
-    this.terminalFullWindowUrl = window.location.origin + url;
+    this.terminalFullWindowUrl = url;
     this.boundTerminalPk = this.node.localPk;
   }
 

@@ -64,3 +64,17 @@ func is66Hex(s string) bool {
 	}
 	return true
 }
+
+// stcpTransport makes sure A has an STCP transport to B at B's skywire-tcp
+// listener. It needs no address resolver, which refuses a runner's private IPs.
+func stcpTransport(t *testing.T, pkB string) {
+	t.Helper()
+	out, err := cli("tp", "add", "--rpc", rpcA, pkB, "--type", "stcp", "--addr", stcpAddrB)
+	if err != nil && !strings.Contains(out, "already") {
+		t.Fatalf("tp add A->B stcp failed: %v: %s", err, out)
+	}
+	ls, _ := cli("tp", "ls", "--rpc", rpcA)
+	if !strings.Contains(ls, "stcp") {
+		t.Fatalf("no stcp transport from A to B: %s", ls)
+	}
+}

@@ -126,6 +126,7 @@ func (v *Visor) DiagSnapshot() *visorapi.DiagSnapshot {
 		sort.Slice(dd.RelayingFor, func(i, j int) bool { return dd.RelayingFor[i].PK.String() < dd.RelayingFor[j].PK.String() })
 		dd.RelayBackoff = relayTimers(v.dmsgC.RelayBackoffs())
 		dd.RelayDialSkip = relayTimers(v.dmsgC.RelayDialSkips())
+		dd.OverSkynet = v.dmsgSkynet.snapshot()
 		d.Dmsg = dd
 	}
 	return d

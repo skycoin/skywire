@@ -3,7 +3,7 @@
 Two derivations, mirroring the AUR `skywire` and `skywire-bin`
 packages:
 
-- **`skywire.nix`** — source build. Uses `pkgsStatic.buildGoModule`
+- **`skywire.nix`** — source build. Uses `pkgsStatic.buildGoLatestModule`
   (musl-based stdenv), with the same `-linkmode external -extldflags
   "-static" -buildid=` ldflags as the upstream `make build-static`
   recipe. Produces a fully-static binary identical in shape to the

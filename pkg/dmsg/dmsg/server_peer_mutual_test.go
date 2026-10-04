@@ -3,6 +3,7 @@ package dmsg
 
 import (
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,14 +18,39 @@ import (
 
 // announceFailHook counts "Failed to announce as peer." warnings — the
 // symptom of the mutual-peer flap.
-type announceFailHook struct{ n atomic.Int64 }
+// It also records, per server, the two writes that set its peer session: its
+// own dial connecting, and the other side's announcement being accepted.
+type announceFailHook struct {
+	n       atomic.Int64
+	mu      sync.Mutex
+	settled map[string]map[string]bool // _module -> message seen
+}
 
 func (h *announceFailHook) Levels() []logrus.Level { return logrus.AllLevels }
 func (h *announceFailHook) Fire(e *logrus.Entry) error {
-	if e.Message == "Failed to announce as peer." {
+	switch e.Message {
+	case "Failed to announce as peer.":
 		h.n.Add(1)
+	case "Connected to peer server.", "Accepted inbound peer announcement; session is now forwardable.":
+		mod, _ := e.Data["_module"].(string) //nolint:errcheck
+		h.mu.Lock()
+		if h.settled == nil {
+			h.settled = map[string]map[string]bool{}
+		}
+		if h.settled[mod] == nil {
+			h.settled[mod] = map[string]bool{}
+		}
+		h.settled[mod][e.Message] = true
+		h.mu.Unlock()
 	}
 	return nil
+}
+
+// bothWrites reports whether server mod has done both writes to its session.
+func (h *announceFailHook) bothWrites(mod string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.settled[mod]) == 2
 }
 
 // Two servers that each list the other as a peer must end up with a live,
@@ -78,6 +104,11 @@ func TestPeerServers_MutualConfigAnnounceAccepted(t *testing.T) {
 	}
 	require.Eventually(t, func() bool { return hasPeer(srvA, b.pk) && hasPeer(srvB, a.pk) },
 		15*time.Second, 100*time.Millisecond, "both sides must hold a peer session")
+	// Each side sets its entry twice, once for its own dial and once for the
+	// other's announcement, and the later write wins. Take the snapshot after
+	// both, so that only a real close-and-redial can change it.
+	require.Eventually(t, func() bool { return hook.bothWrites("peer-a") && hook.bothWrites("peer-b") },
+		15*time.Second, 50*time.Millisecond, "each side must both dial and accept the other")
 
 	// Stability: the sessions must still be the same objects a few seconds on
 	// (no close-and-redial churn), and no announcement may have been refused.

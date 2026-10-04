@@ -3,30 +3,29 @@
 // Package visor pkg/visor/hypervisor_handlers_wallet.go c3-vis-core
 // wallet ("wallet HV-served" mode, docs/design/gui-app-serving-modes.md).
 //
-// The native hypervisor serves the embedded skycoin-web static bundle at
-// /wallet/ and proxies its node API (/api/v1|v2, /csrf) to the configured
-// skycoin node over the visor's dmsg client — NO skycoin-web process, NO
-// listening port. This is the native equivalent of the wasm visor's /wallet/:
-// the wallet UI is static + client-side crypto, wallets live in browser
-// storage, and only the node connection crosses the mesh — here proxied
-// server-side by the HV instead of by the browser's fetchDmsg shim.
+// The wallet is the dashboard's #/wallet page: skycoin-web's wallet module
+// compiled into the dashboard, its crypto client-side in skycoin's TinyGo
+// cipher, its wallets in browser storage. The hypervisor serves that cipher and
+// proxies the wallet's node API (wallet/coins, wallet/coin/<index>/…) to the
+// configured backend over the visor's dmsg client: NO skycoin-web process, NO
+// listening port. The same handlers run in the tab's wasm hypervisor, so
+// native == wasm.
 //
 // Running the actual skycoin-web app (internal/external, own port, disk
 // wallets, server-side multi-coin) stays the opt-in "power" mode; this is the
-// zero-config default so native == wasm.
+// zero-config default.
 package visor
 
 import (
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/go-chi/chi/v5"
-	skycoinwebgui "github.com/skycoin/skycoin/src/skycoin-web/src/gui"
+	wasmtinygo "github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo"
 
 	"github.com/skycoin/skywire/pkg/btcgateway"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -48,8 +47,9 @@ var (
 // routes the electrum connection through that visor's skysocks-server for IP
 // privacy (the native twin of the wasm wallet's required skysocks exit). The
 // per-request electrum URL comes from X-Skywire-Btc-Backend; the exit from
-// X-Skywire-Btc-Proxy — both set by the wallet shim from localStorage
-// (skywire-btc-backend / skywire-btc-proxy, written by the config page).
+// X-Skywire-Btc-Proxy — both set by the dashboard wallet's interceptor from
+// localStorage (skywire-btc-backend / skywire-btc-proxy, written by the config
+// page).
 //
 // Gateways are cached per exit so the electrum backends (and their long-lived
 // per-server connections) are reused across chain queries.
@@ -87,147 +87,41 @@ func walletNodeDefault() string {
 	return "https://node.skycoin.com.aong2hr4en7v6bnxr3az5hzruad7qsbv27xr5ajioyicfaor3n2mc.dmsg"
 }
 
-// walletNodeShim is injected into the HV-served wallet index (right after
-// <base>). The skycoin-web GUI fetches the node API at absolute /api/v1|v2
-// paths; under <base href="/wallet/"> those still resolve to the origin root,
-// which would miss this handler. The shim overrides fetch to (a) rewrite
-// /api/... → same-origin /wallet/api/... (this handler), and (b) tag the
-// operator-selected node (localStorage['skywire-coin-node'], "<pk>:<port>") as
-// X-Skywire-Coin-Node so walletNodeProxy dials it over dmsg. Empty selection →
-// the deployment default. This is the native twin of the wasm fetchDmsg shim;
-// same localStorage key, so node config is unified across both visors.
-// It ALSO intercepts the wallet's BTC API (/v1/btc/*) and tags the operator-
-// selected electrum backend (localStorage['skywire-btc-backend'], "ssl://host:
-// port") as X-Skywire-Btc-Backend, so the HV's in-process BTC gateway
-// (pkg/btcgateway) reaches it — keys + signing stay in the browser, only chain
-// queries cross. Same localStorage keys as the wasm shim + the config panel.
-const walletNodeShim = `<script>(function(){` +
-	`function ls(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}` +
-	`function pathOf(u){try{return new URL(u,location.href).pathname;}catch(e){return String(u);}}` +
-	`function searchOf(u){try{return new URL(u,location.href).search;}catch(e){return "";}}` +
-	`function hostOf(u){try{var x=new URL(u,location.href);return (x.host&&x.host!==location.host)?(x.protocol+"//"+x.host):"";}catch(e){return "";}}` +
-	// rw computes the rewritten same-origin target + backend-selection headers for a
-	// wallet node-API URL, or returns null to pass the request through unchanged. It
-	// is shared by the fetch AND XMLHttpRequest overrides below: skycoin-web's
-	// Angular HttpClient issues every call (coins list, node health, balances) over
-	// XHR, so a fetch-only shim would 404 the SPA's absolute /api/... paths (they
-	// resolve to the origin root, missing this /wallet/ handler) — which left the
-	// native HV-served wallet with no coins, no coin/type selectors, and empty
-	// settings pages. Covering XHR is what actually makes the native wallet work.
-	`function rw(url){var p=pathOf(url);` +
-	// Coin list: coin.service fetches /api/v1/coins raw → the visor registry.
-	`if(/\/api\/v1\/coins$/.test(p)){return {t:location.origin+"/wallet/coins",h:{}};}` +
-	// Per-coin API (nodeUrl prefix "/coin/<index>") → the mounted proxy; a bare
-	// /api/v[12]/ with no /coin/ prefix (fallback coin) → coin 0.
-	`var mc=/\/coin\/(\d+)\//.exec(p);var ml=!mc&&/^\/(wallet\/)?api\/v[12]\//.test(p);` +
-	`if(!mc&&!ml){return null;}var target;` +
-	`if(mc){var tail=p.slice(p.indexOf("/coin/"));target=location.origin+"/wallet"+tail+searchOf(url);}` +
-	`else{var bare=p.replace(/^\/(wallet\/)?/,"");target=location.origin+"/wallet/coin/0/"+bare+searchOf(url);}` +
-	// Tag the backend selection by path: BTC carries electrum backend + skysocks
-	// exit; a skycoin-style node carries the chosen node host. The electrum server
-	// is now sourced from the wallet's OWN Settings -> Nodes (customNodeUrls, which
-	// skycoin-web persists to localStorage["nodeUrls"] keyed by coin id; the
-	// Bitcoin coin's id is -2), so BTC is configured exactly like every other coin
-	// and the visor side only owns the skysocks exit. Falls back to the legacy
-	// skywire-btc-backend key, then a public default, so it works out of the box.
-	`var h={};` +
-	`if(/\/v1\/btc\//.test(p)){var b="";try{var _nu=JSON.parse(ls("nodeUrls")||"{}");b=(_nu&&_nu["-2"])||"";}catch(e){}if(!b){b=ls("skywire-btc-backend")||"";}if(!b){b="ssl://electrum.blockstream.info:50002";}h["X-Skywire-Btc-Backend"]=b;var xp=ls("skywire-btc-proxy");if(xp){h["X-Skywire-Btc-Proxy"]=xp;}}` +
-	`else{var nn=hostOf(url)||ls("skywire-coin-node");if(nn){h["X-Skywire-Coin-Node"]=nn;}}` +
-	`return {t:target,h:h};}` +
-	// fetch override.
-	`var rf=window.fetch?window.fetch.bind(window):null;` +
-	`if(rf){window.fetch=function(input,init){` +
-	`var url=(typeof input==="string")?input:(input&&input.url)||"";var r=rw(url);if(!r){return rf(input,init);}` +
-	`init=init||{};var hd=new Headers((init&&init.headers)||(typeof input!=="string"&&input&&input.headers)||undefined);` +
-	`for(var k in r.h){hd.set(k,r.h[k]);}init.headers=hd;return rf(r.t,init);};}` +
-	// XMLHttpRequest override (Angular HttpClient): rewrite the URL in open(), then
-	// apply the backend headers in send() (setRequestHeader must run after open()).
-	`var XO=XMLHttpRequest.prototype.open,XS=XMLHttpRequest.prototype.send;` +
-	`XMLHttpRequest.prototype.open=function(m,url){try{var r=rw(url);if(r){this.__sky=r;arguments[1]=r.t;}}catch(e){}return XO.apply(this,arguments);};` +
-	`XMLHttpRequest.prototype.send=function(b){if(this.__sky){var h=this.__sky.h;for(var k in h){try{this.setRequestHeader(k,h[k]);}catch(e){}}}return XS.apply(this,arguments);};` +
-	`})();</script>`
-
-// WalletUIFS returns the skycoin-web wallet bundle embedded in the VENDORED
-// skycoin module (skycoin-web/src/gui.DistFS), rooted at the bundle top
-// (index.html at "index.html"). Serving straight from the module means a
-// skycoin vendor bump IS the wallet update — no copied static/wallet tree in
-// this repo, no `make embed-wallet` sync step to forget (the old copy could go
-// stale against vendor/ silently).
-func WalletUIFS() (fs.FS, error) {
-	return fs.Sub(skycoinwebgui.DistFS, "dist")
-}
-
-// walletHandler serves /wallet/* : node API calls are proxied to the skycoin
-// node over dmsg; everything else is the wallet bundle embedded in the vendored
-// skycoin module (the index's <base href> rewritten to /wallet/ so relative
-// asset + /api paths resolve under the mount and land back on this handler).
+// walletHandler serves /wallet/*: the wallet-config page the dashboard's
+// wallet tab frames, the coin registry, and each coin's node API. The wallet
+// page itself is the dashboard's #/wallet, so a browser opening the address it
+// used to have here is sent there.
 func (hv *Hypervisor) walletHandler() http.HandlerFunc {
-	walletFS, fsErr := WalletUIFS()
-	var fileServer http.Handler
-	if fsErr == nil {
-		fileServer = http.FileServer(http.FS(walletFS))
-	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		rest := chi.URLParam(r, "*")
-		// The wallet is an IFRAME surface for the HV UI's ☰ wallet / Angular wallet
-		// tab, not a first-class page. A TOP-LEVEL navigation to a wallet HTML page
-		// (Sec-Fetch-Dest: document) is out of context — bounce it into the HV UI.
-		// Framed loads (Sec-Fetch-Dest: iframe / empty) and asset+API requests fall
-		// through and serve normally.
-		if (rest == "" || rest == "index.html" || rest == "config") && r.Header.Get("Sec-Fetch-Dest") == "document" {
-			http.Redirect(w, r, "/", http.StatusSeeOther)
-			return
-		}
-		// The ONE wallet config page (mode / coin nodes / BTC / skysocks exit),
-		// embedded via iframe by the ☰ wallet window AND the Angular wallet tab.
-		if rest == "config" {
+		switch {
+		case rest == "" || rest == "index.html":
+			toDashboardWallet(w)
+		case rest == "config":
+			// The ONE wallet config page (mode / coin nodes / BTC / skysocks exit),
+			// framed by the dashboard's wallet tab. Opened on its own it is out of
+			// context, so it goes to the wallet as well.
+			if r.Header.Get("Sec-Fetch-Dest") == "document" {
+				toDashboardWallet(w)
+				return
+			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-cache")
 			_, _ = w.Write([]byte(browseui.WalletConfigHTML)) //nolint:errcheck
-			return
-		}
-		// Coin registry (/wallet/coins) → the list skycoin-web's coin.service
-		// fetches from /api/v1/coins. Each coin's nodeUrl is a /coin/<index>
-		// prefix this handler proxies below.
-		if rest == "coins" {
+		case rest == "coins":
+			// Coin registry → the list skycoin-web's coin.service fetches as
+			// /api/v1/coins. Each coin's nodeUrl is a /coin/<index> prefix proxied
+			// below.
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Cache-Control", "no-cache")
 			_, _ = w.Write(coins.JSON()) //nolint:errcheck
-			return
-		}
-		// Per-coin API (/wallet/coin/<index>/*) → route to that coin's backend:
-		// a skycoin-style node over dmsg, or the in-visor BTC electrum gateway.
-		if strings.HasPrefix(rest, "coin/") {
+		case strings.HasPrefix(rest, "coin/"):
+			// Per-coin API → that coin's backend: a skycoin-style node over dmsg,
+			// or the in-visor BTC electrum gateway.
 			hv.walletCoinProxy(w, r, strings.TrimPrefix(rest, "coin/"))
-			return
+		default:
+			http.NotFound(w, r)
 		}
-		// Legacy: a bare node-API call (/wallet/api/v1|v2/*) with no /coin/ prefix
-		// → the default coin (skycoin, index 0), so an un-migrated wallet build
-		// still reaches the node. The wallet's crypto is client-side; only these
-		// calls cross the mesh.
-		if strings.HasPrefix(rest, "api/v1/") || strings.HasPrefix(rest, "api/v2/") {
-			hv.walletNodeProxy(w, r, rest)
-			return
-		}
-		// The cipher the bundle instantiates (assets/scripts/skycoin-lite.wasm +
-		// wasm_exec.js) — the vendored dist carries neither; they come from the
-		// one skywire command module (wallet_cipher.go).
-		if serveWalletCipherAsset(w, r, rest) {
-			return
-		}
-		if fsErr != nil {
-			http.Error(w, "wallet UI not embedded in this build", http.StatusNotFound)
-			return
-		}
-		// index.html: rewrite <base href="/"> → "/wallet/" so the SPA's
-		// relative asset + API URLs resolve under the mount.
-		if rest == "" || rest == "index.html" {
-			hv.serveWalletIndex(w, r, walletFS)
-			return
-		}
-		// Static asset: serve <rest> from the vendored wallet FS (dist-rooted).
-		r.URL.Path = "/" + rest
-		fileServer.ServeHTTP(w, r)
 	}
 }
 
@@ -257,7 +151,7 @@ func (hv *Hypervisor) walletCoinProxy(w http.ResponseWriter, r *http.Request, re
 		// wallet addresses it as coin/<index>/api/v1/btc/…). The backend electrum
 		// server (X-Skywire-Btc-Backend) is reached on the clearnet by default, or
 		// via a skysocks exit (X-Skywire-Btc-Proxy) for IP privacy — headers set
-		// by the shim from localStorage.
+		// by the dashboard wallet's interceptor from localStorage.
 		if i := strings.Index(path, "v1/btc/"); i >= 0 {
 			r.URL.Path = "/" + path[i:]
 		} else {
@@ -269,20 +163,6 @@ func (hv *Hypervisor) walletCoinProxy(w http.ResponseWriter, r *http.Request, re
 	// Skycoin-style node: proxy the remaining api/v1|v2 path to the coin's node
 	// over dmsg (X-Skywire-Coin-Node selects it; empty = deployment default).
 	hv.walletNodeProxy(w, r, path)
-}
-
-// serveWalletIndex serves the vendored wallet index.html with its <base href>
-// rewritten from the bundle root ("/") to the mount ("/wallet/").
-func (hv *Hypervisor) serveWalletIndex(w http.ResponseWriter, _ *http.Request, walletFS fs.FS) {
-	b, err := fs.ReadFile(walletFS, "index.html")
-	if err != nil {
-		http.Error(w, "wallet UI not embedded in this build", http.StatusNotFound)
-		return
-	}
-	b = []byte(strings.Replace(string(b), `<base href="/">`, `<base href="/wallet/">`+walletNodeShim, 1))
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	_, _ = w.Write(b) //nolint:errcheck
 }
 
 // walletNodeProxy forwards a wallet node-API call to the configured coin
@@ -304,10 +184,9 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 	if r.URL.RawQuery != "" {
 		path += "?" + r.URL.RawQuery
 	}
-	// Server-side request log — the native parity of the wasm shim's [wallet]
-	// skywireLog lines and of the standalone `skywire skycoin web` proxy logs.
-	// Lets a native-HV operator see what wallet traffic is crossing the mesh
-	// (visible at -sl debug) even before a wallet is unlocked.
+	// Server-side request log, the parity of the standalone `skywire skycoin web`
+	// proxy logs. Lets a native-HV operator see what wallet traffic is crossing
+	// the mesh (visible at -sl debug) even before a wallet is unlocked.
 	hv.logger.WithField("backend", backend).Debugf("[wallet] node %s %s", r.Method, path)
 	var body []byte
 	if r.Body != nil {
@@ -348,10 +227,8 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 	// Mesh coin node: resolve the host with the SAME resolver the iframe browser
 	// uses (bare "<pk>[:port]", the readable "<name>.<pk>.dmsg[:port]" alias,
 	// "alias.dmsg", …) via resolveBrowseHost, then dmsg-HTTP over the
-	// AUTHORITATIVE dmsg client. We reuse the resolver but NOT BrowseFetch's
-	// fetch step: BrowseFetch dials over the secondary dmsg client (v.dmsgHTTP /
-	// dmsgDC), which has session conflicts on the coin node (see Visor.DmsgHTTP);
-	// v.dmsgC (DmsgHTTP) has stable sessions.
+	// visor's dmsg client or its skynet transports (Visor.DmsgHTTP), which
+	// keeps its connections to the node open between requests.
 	pk, port, vhost, rerr := hv.visor.resolveBrowseHost(walletBackendStrip(backend), 0)
 	if rerr != nil {
 		http.Error(w, "coin node resolve failed: "+rerr.Error(), http.StatusBadGateway)
@@ -426,4 +303,42 @@ func isHexStr(s string) bool {
 		}
 	}
 	return s != ""
+}
+
+// walletCipherHandler answers the cipher the dashboard's wallet route loads:
+// assets/scripts/wasm_exec.js, which it adds to the page, and
+// assets/scripts/skycoin-lite.wasm, which the wallet's CipherProvider fetches
+// relative to the page. Both are skycoin's TinyGo build of skycoin-lite, from
+// the same module version as the wallet source the dashboard compiles. The
+// wasm is embedded gzipped and goes out that way.
+func (hv *Hypervisor) walletCipherHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		if strings.HasSuffix(r.URL.Path, "/wasm_exec.js") {
+			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+			_, _ = w.Write(wasmtinygo.WasmExecJS) //nolint:errcheck
+			return
+		}
+		w.Header().Set("Content-Type", "application/wasm")
+		w.Header().Add("Vary", "Accept-Encoding")
+		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			w.Header().Set("Content-Encoding", "gzip")
+			_, _ = w.Write(wasmtinygo.WasmFileGz) //nolint:errcheck
+			return
+		}
+		b, err := wasmtinygo.WasmFile()
+		if err != nil {
+			http.Error(w, "wallet cipher: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write(b) //nolint:errcheck
+	}
+}
+
+// toDashboardWallet sends a browser to the dashboard's #/wallet page. The
+// Location stays relative: http.Redirect would make it absolute from the path
+// this handler sees, which in the desk lacks the page's /vnet/<port>/ prefix.
+func toDashboardWallet(w http.ResponseWriter) {
+	w.Header().Set("Location", "../#/wallet")
+	w.WriteHeader(http.StatusSeeOther)
 }

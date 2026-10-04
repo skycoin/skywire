@@ -83,7 +83,8 @@ let
     "skynet-client"
   ];
 in
-pkgsStatic.buildGoModule {
+# buildGoLatestModule: the newest Go in nixpkgs, as the go line needs (go.mod).
+pkgsStatic.buildGoLatestModule {
   pname = "skywire";
   inherit version;
   src = selfSrc;

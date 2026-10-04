@@ -251,14 +251,15 @@ func (v *Visor) notePendingHypervisor(pk cipher.PubKey, via string) {
 	}
 }
 
-// scanPendingPairs notices peers holding a same-origin (swsr, tptypes.WS) transport to
-// this visor that are not yet trusted — a desk tab this hypervisor serves.
+// scanPendingPairs notices peers that opened a transport through this
+// hypervisor's /tp/ws and are not yet trusted: a desk tab it serves. A browser
+// visor reaching the public WS listener through autoconnect is not one.
 func (v *Visor) scanPendingPairs() {
 	if v.tpM == nil {
 		return
 	}
 	v.tpM.WalkTransports(func(mt *transport.ManagedTransport) bool {
-		if mt.Type() == tptypes.WS && !mt.IsClosed() {
+		if mt.Type() == tptypes.WS && mt.Attached() && !mt.IsClosed() {
 			v.notePendingHypervisor(mt.Remote(), "transport")
 		}
 		return true

@@ -20,7 +20,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -162,36 +166,49 @@ func skymailEffective(conf *visorconfig.V1) (bool, skymail.Limits, error) {
 	return enabled, l, err
 }
 
+// skymailApp is the mailbox's name in the launcher: `cli visor app ls`, start,
+// stop and autostart treat it like any other app. It runs in the visor process,
+// as pty and the resolving proxies do, so it works the same in a browser tab.
+const skymailApp = "skymail"
+
 func initSkymail(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.mail.mu.Lock()
 	v.mail.ctx, v.mail.log = ctx, log
+	v.mail.reason = "not started"
 	v.mail.mu.Unlock()
 	if v.conf == nil {
 		return nil
 	}
-	enabled, _, err := skymailEffective(v.conf)
-	if err != nil {
+	if _, _, err := skymailEffective(v.conf); err != nil {
 		log.WithError(err).Warn("mailbox: unreadable " + skymailSettingsFile + "; using the config")
 	}
-	if !enabled {
-		v.mail.mu.Lock()
-		v.mail.reason = "disabled"
-		v.mail.mu.Unlock()
-		log.Debug("mailbox off")
+	launcher.RegisterApp(skymailApp, v.skymailAppFunc())
+	return nil
+}
+
+// skymailAppFunc runs the mailbox for as long as the app runs.
+func (v *Visor) skymailAppFunc() appcommon.AppFunc {
+	return func(ctx context.Context, _ []string) error {
+		appCl := app.NewClient(nil)
+		defer appCl.Close()
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusStarting)
+		if v.dmsgC != nil {
+			select {
+			case <-v.dmsgC.Ready():
+			case <-ctx.Done():
+				return nil
+			}
+		}
+		if err := v.startSkymail(); err != nil {
+			appCl.SetErrorOrLog(err)
+			return err
+		}
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
+		<-ctx.Done()
+		v.stopSkymail("stopped")
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 		return nil
 	}
-	if v.dmsgC != nil {
-		select {
-		case <-v.dmsgC.Ready():
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	if err := v.startSkymail(); err != nil {
-		// A mailbox that cannot start must not take the visor with it.
-		log.WithError(err).Warn("mailbox not started")
-	}
-	return nil
 }
 
 // startSkymail brings the mailbox up; it is a no-op when it runs.
@@ -371,11 +388,22 @@ func (v *Visor) MailSetSettings(u visorapi.MailSettingsUpdate) error {
 	enable, limits, _ := skymailEffective(v.conf) //nolint:errcheck // just written
 	v.initLock.Unlock()
 	if !enable {
-		v.stopSkymail("disabled")
+		if v.appL == nil || v.StopApp(skymailApp) != nil {
+			v.stopSkymail("disabled")
+		}
+		v.mail.mu.Lock()
+		v.mail.reason = "disabled"
+		v.mail.mu.Unlock()
 		return nil
 	}
-	if err := v.startSkymail(); err != nil {
-		return err
+	if _, err := v.mailbox(); err != nil {
+		start := v.startSkymail // no launcher: run it directly
+		if v.appL != nil {
+			start = func() error { return v.StartApp(skymailApp) }
+		}
+		if err := start(); err != nil {
+			return err
+		}
 	}
 	if rt, err := v.mailbox(); err == nil {
 		rt.mb.SetLimits(limits)

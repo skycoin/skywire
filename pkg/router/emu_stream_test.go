@@ -29,6 +29,7 @@ package router_test
 
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -36,7 +37,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"sort"
 	"strconv"
@@ -46,7 +46,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/loadtest"
+	"github.com/armon/go-socks5"
+
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/skysocks"
 	"github.com/skycoin/skywire/pkg/skysocks/skysettings"
@@ -187,7 +188,8 @@ type tunnel struct {
 func newTunnel(t *testing.T, name string, legs []router.EmuLegSpec) *tunnel {
 	t.Helper()
 	rig := router.NewEmuRig(t, router.EmuOpts{Legs: legs})
-	srv, err := skysocks.NewServer(nil, nil)
+	srv, err := skysocks.NewServer(nil, nil, skysocks.WithDial(benchNet.Dial),
+		func(c *socks5.Config) { c.Resolver = literalResolver{} })
 	if err != nil {
 		t.Fatalf("%s: new exit: %v", name, err)
 	}
@@ -242,6 +244,9 @@ type proxy struct {
 	standby []*tunnel
 }
 
+// proxyN numbers the proxies a run makes, for their listener addresses.
+var proxyN int
+
 // newProxy wires `active` tunnels into a client, holds `standby` in the pool,
 // and returns the SOCKS address it listens on.
 func newProxy(t *testing.T, cfg benchCfg, active, standby []*tunnel, sinkPort int) *proxy {
@@ -271,20 +276,10 @@ func newProxy(t *testing.T, cfg benchCfg, active, standby []*tunnel, sinkPort in
 	client.SetRangeSplitPort(sinkPort)
 	t.Cleanup(func() { _ = client.Close() }) //nolint:errcheck
 
-	probe, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("probe listen: %v", err)
-	}
-	addr := probe.Addr().String()
-	_ = probe.Close()                               //nolint:errcheck
-	go func() { _ = client.ListenAndServe(addr) }() //nolint:errcheck
-	for i := 0; i < 400; i++ {
-		if cc, err := net.Dial("tcp", addr); err == nil {
-			_ = cc.Close() //nolint:errcheck
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	proxyN++
+	l := benchNet.Listen(fmt.Sprintf("proxy-%d:1080", proxyN))
+	addr := l.Addr().String()
+	go func() { _ = client.Serve(l) }() //nolint:errcheck // the client's Close ends it
 	return &proxy{addr: addr, client: client, active: active, standby: standby}
 }
 
@@ -301,7 +296,7 @@ func socksConnect(proxyAddr, target string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := net.Dial("tcp", proxyAddr)
+	c, err := benchNet.Dial(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -340,6 +335,20 @@ type readClock struct {
 	widest  time.Duration
 	anyByte bool
 	n       atomic.Int64
+
+	// at and fire: fire runs once, from the reader, the moment the bytes read
+	// reach at. A watcher polling the count misses that moment when the rest of
+	// the object is already buffered and arrives at once.
+	at    int64
+	fire  func()
+	fired bool
+}
+
+// onByte arranges for fire to run when the bytes read reach at.
+func (p *readClock) onByte(at int64, fire func()) {
+	p.mu.Lock()
+	p.at, p.fire = at, fire
+	p.mu.Unlock()
 }
 
 func (p *readClock) note(n int) {
@@ -356,7 +365,14 @@ func (p *readClock) note(n int) {
 		}
 	}
 	p.last = now
+	var fire func()
+	if p.fire != nil && !p.fired && p.n.Load() >= p.at {
+		p.fired, fire = true, p.fire
+	}
 	p.mu.Unlock()
+	if fire != nil {
+		fire()
+	}
 }
 
 func (p *readClock) mark() {
@@ -388,7 +404,7 @@ type xfer struct {
 
 // download pulls `n` bytes of the sink's certified object through the proxy and
 // checks the body against the X-Sha256 the sink named.
-func download(t *testing.T, p *proxy, sinkAddr string, n int64, cfg benchCfg, clk *readClock) xfer {
+func download(t *testing.T, p *proxy, n int64, cfg benchCfg, clk *readClock) xfer {
 	t.Helper()
 	if clk == nil {
 		clk = new(readClock)
@@ -442,7 +458,7 @@ func download(t *testing.T, p *proxy, sinkAddr string, n int64, cfg benchCfg, cl
 
 // upload POSTs a deterministic blob to the sink's /upload and checks the hash
 // the sink computed over what it received.
-func upload(t *testing.T, p *proxy, sinkAddr string, n int64, cfg benchCfg) xfer {
+func upload(t *testing.T, p *proxy, n int64, cfg benchCfg) xfer {
 	t.Helper()
 	blob := make([]byte, n)
 	for i := range blob {
@@ -595,18 +611,6 @@ func TestStreamBench(t *testing.T) {
 	cfg := loadBenchCfg()
 	t.Cleanup(func() { skysettings.Reset() })
 
-	sink := httptest.NewServer(loadtest.Handler())
-	t.Cleanup(sink.Close)
-	sinkAddr := sink.Listener.Addr().String()
-	_, portStr, err := net.SplitHostPort(sinkAddr)
-	if err != nil {
-		t.Fatalf("sink addr: %v", err)
-	}
-	sinkPort, err := strconv.Atoi(portStr)
-	if err != nil {
-		t.Fatalf("sink port: %v", err)
-	}
-
 	base := baseKnobs(cfg)
 	var rows []row
 	var refDown, refUp float64
@@ -684,18 +688,18 @@ func TestStreamBench(t *testing.T) {
 	}
 
 	// 1. ref — one tunnel, one direct leg. Every ratio below is against this.
-	t.Run("ref", func(t *testing.T) {
+	benchCell(t, "ref", func(t *testing.T) {
 		if !skysettings.Apply(base) && skysettings.Version() == 0 {
 			t.Log("knobs unchanged")
 		}
 		active, _, p := build(t, 1, 1, 0, true)
-		r := record(t, &rows, "ref", "down", download(t, p, sinkAddr, cfg.down, cfg, nil), active, "")
+		r := record(t, &rows, "ref", "down", download(t, p, cfg.down, cfg, nil), active, "")
 		refDown = r.bps
 		rows[len(rows)-1].ratio = 1
 		assertLegDiscipline(t, 1, active, nil)
 
 		activeUp, _, pUp := build(t, 1, 1, 0, true)
-		ru := record(t, &rows, "ref", "up", upload(t, pUp, sinkAddr, cfg.up, cfg), activeUp, "")
+		ru := record(t, &rows, "ref", "up", upload(t, pUp, cfg.up, cfg), activeUp, "")
 		refUp = ru.bps
 		rows[len(rows)-1].ratio = 1
 		assertLegDiscipline(t, 1, activeUp, nil)
@@ -718,9 +722,9 @@ func TestStreamBench(t *testing.T) {
 			active, pool, p := build(t, n, legsPer, 0, false)
 			var x xfer
 			if dir == "down" {
-				x = download(t, p, sinkAddr, cfg.down, cfg, nil)
+				x = download(t, p, cfg.down, cfg, nil)
 			} else {
-				x = upload(t, p, sinkAddr, cfg.up, cfg)
+				x = upload(t, p, cfg.up, cfg)
 			}
 			record(t, &rows, name, dir, x, active, "")
 			ratio(&rows[len(rows)-1])
@@ -729,17 +733,17 @@ func TestStreamBench(t *testing.T) {
 	}
 
 	// 2. tunnels-2 — two tunnels of one leg each.
-	t.Run("tunnels-2", func(t *testing.T) { cell(t, "tunnels-2", 2, 1, "down", "up") })
+	benchCell(t, "tunnels-2", func(t *testing.T) { cell(t, "tunnels-2", 2, 1, "down", "up") })
 
 	// 3. legs-2 — one tunnel of two legs (the mux's own aggregation).
-	t.Run("legs-2", func(t *testing.T) { cell(t, "legs-2", 1, 2, "down", "up") })
+	benchCell(t, "legs-2", func(t *testing.T) { cell(t, "legs-2", 1, 2, "down", "up") })
 
 	// 4. compose-2x2 — two tunnels of two legs: the planner over the scheduler.
-	t.Run("compose-2x2", func(t *testing.T) { cell(t, "compose-2x2", 2, 2, "down", "up") })
+	benchCell(t, "compose-2x2", func(t *testing.T) { cell(t, "compose-2x2", 2, 2, "down", "up") })
 
 	// 5. spread-3 — criterion 10: no route over 40 % of the object, at least
 	// three routes carrying. This one is a HARD assert, both directions.
-	t.Run("spread-3", func(t *testing.T) {
+	benchCell(t, "spread-3", func(t *testing.T) {
 		skysettings.Apply(withKnobs(base, map[string]int64{ //nolint:errcheck
 			skysettings.SpreadMaxShare:  mustRatio(t, "0.4"),
 			skysettings.SpreadMinRoutes: 3,
@@ -749,10 +753,10 @@ func TestStreamBench(t *testing.T) {
 			var x xfer
 			size := cfg.down
 			if dir == "down" {
-				x = download(t, p, sinkAddr, cfg.down, cfg, nil)
+				x = download(t, p, cfg.down, cfg, nil)
 			} else {
 				size = cfg.up
-				x = upload(t, p, sinkAddr, cfg.up, cfg)
+				x = upload(t, p, cfg.up, cfg)
 			}
 			_, sh := shares(active, dir == "down")
 			carried, top := 0, 0.0
@@ -789,7 +793,7 @@ func TestStreamBench(t *testing.T) {
 	// Two routes cannot both stay under 0.4, so the cap holds only if the
 	// planner refills min_routes from the pool mid-object. The black hole also
 	// times the snub's abort: the object must not wait out rsProbeTimeout.
-	t.Run("spread-cut", func(t *testing.T) {
+	benchCell(t, "spread-cut", func(t *testing.T) {
 		skysettings.Apply(withKnobs(base, map[string]int64{ //nolint:errcheck
 			skysettings.SpreadMaxShare:  mustRatio(t, "0.4"),
 			skysettings.SpreadMinRoutes: 3,
@@ -826,20 +830,10 @@ func TestStreamBench(t *testing.T) {
 
 		clk := new(readClock)
 		cutAt := int64(1) // the first byte: every chunk after it is still to place
-		cutDone := make(chan struct{})
-		go func() {
-			defer close(cutDone)
-			deadline := time.Now().Add(cfg.timeout)
-			for time.Now().Before(deadline) {
-				if clk.got() >= cutAt {
-					active[2].rig.Leg(0).Cut()
-					return
-				}
-				time.Sleep(5 * time.Millisecond)
-			}
-		}()
-		x := download(t, p, sinkAddr, cfg.down, cfg, clk)
-		<-cutDone
+		clk.onByte(cutAt, func() {
+			active[2].rig.Leg(0).Cut()
+		})
+		x := download(t, p, cfg.down, cfg, clk)
 
 		_, sh := shares(all, true)
 		carried, top := 0, 0.0
@@ -872,7 +866,7 @@ func TestStreamBench(t *testing.T) {
 	// 6. standby-cut — 2 active + 4 standby; one active tunnel's legs are
 	// black-holed a quarter of the way into the download. The object must still
 	// arrive intact and the next byte must land inside two seconds.
-	t.Run("standby-cut", func(t *testing.T) {
+	benchCell(t, "standby-cut", func(t *testing.T) {
 		// The cut is `skywire cli tp rm` on every leg of one active tunnel:
 		// the legs are black-holed AND their transports are taken away, so the
 		// route group closes and the tunnel dies the way a visor-side teardown
@@ -892,23 +886,13 @@ func TestStreamBench(t *testing.T) {
 
 		clk := new(readClock)
 		cutAt := int64(float64(cfg.down) * cfg.cutAtPercent / 100)
-		cutDone := make(chan struct{})
-		go func() {
-			defer close(cutDone)
-			deadline := time.Now().Add(cfg.timeout)
-			for time.Now().Before(deadline) {
-				if clk.got() >= cutAt {
-					clk.mark()
-					for i := 0; i < active[0].rig.Legs(); i++ {
-						active[0].rig.Leg(i).RemoveTransport()
-					}
-					return
-				}
-				time.Sleep(5 * time.Millisecond)
+		clk.onByte(cutAt, func() {
+			clk.mark()
+			for i := 0; i < active[0].rig.Legs(); i++ {
+				active[0].rig.Leg(i).RemoveTransport()
 			}
-		}()
-		x := download(t, p, sinkAddr, cfg.down, cfg, clk)
-		<-cutDone
+		})
+		x := download(t, p, cfg.down, cfg, clk)
 
 		gap := clk.gap()
 		held, standby, _, _, _ := p.client.StandbyPoolState()
@@ -940,28 +924,18 @@ func TestStreamBench(t *testing.T) {
 	// sack.leg_silence the receiver's SACKs all rode the dead leg, tun0 froze,
 	// and the object waited ~28 s for the snub (the 2026-09-23 rig's 100 MB
 	// row stalled at 2 MiB the same way).
-	t.Run("leg-cut", func(t *testing.T) {
+	benchCell(t, "leg-cut", func(t *testing.T) {
 		skysettings.Apply(base) //nolint:errcheck
 		active, pool, p := build(t, 2, 2, 2, false)
 		p.client.SetStandbyPool(len(active) + len(pool))
 		all := append(append([]*tunnel{}, active...), pool...)
 		clk := new(readClock)
 		cutAt := cfg.down / 4
-		cutDone := make(chan struct{})
-		go func() {
-			defer close(cutDone)
-			deadline := time.Now().Add(cfg.timeout)
-			for time.Now().Before(deadline) {
-				if clk.got() >= cutAt {
-					clk.mark()
-					active[0].rig.Leg(0).Cut()
-					return
-				}
-				time.Sleep(5 * time.Millisecond)
-			}
-		}()
-		x := download(t, p, sinkAddr, cfg.down, cfg, clk)
-		<-cutDone
+		clk.onByte(cutAt, func() {
+			clk.mark()
+			active[0].rig.Leg(0).Cut()
+		})
+		x := download(t, p, cfg.down, cfg, clk)
 		gap := clk.gap()
 		record(t, &rows, "leg-cut", "down", x, all,
 			fmt.Sprintf("tun0's primary leg black-holed both ways at %d bytes; widest byte-free gap after the cut %v", cutAt, gap))
@@ -975,7 +949,7 @@ func TestStreamBench(t *testing.T) {
 	})
 
 	// 7. up2 — two concurrent uploads on tunnels-2; the row is their sum.
-	t.Run("up2", func(t *testing.T) {
+	benchCell(t, "up2", func(t *testing.T) {
 		skysettings.Apply(base) //nolint:errcheck
 		active, _, p := build(t, 2, 1, 0, false)
 		var wg sync.WaitGroup
@@ -985,7 +959,7 @@ func TestStreamBench(t *testing.T) {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
-				out[i] = upload(t, p, sinkAddr, cfg.up, cfg)
+				out[i] = upload(t, p, cfg.up, cfg)
 			}(i)
 		}
 		wg.Wait()

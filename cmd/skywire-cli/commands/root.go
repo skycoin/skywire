@@ -26,7 +26,6 @@ import (
 	clipv "github.com/skycoin/skywire/cmd/skywire-cli/commands/pv"
 	cliresolver "github.com/skycoin/skywire/cmd/skywire-cli/commands/resolver"
 	clireward "github.com/skycoin/skywire/cmd/skywire-cli/commands/reward"
-	clirewards "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards"
 	clirg "github.com/skycoin/skywire/cmd/skywire-cli/commands/rg"
 	cliroute "github.com/skycoin/skywire/cmd/skywire-cli/commands/route"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -105,7 +104,6 @@ func init() {
 	clisvc.RootCmd.GroupID = groupDiscovery
 
 	clireward.RootCmd.GroupID = groupRewards
-	clirewards.RootCmd.GroupID = groupRewards
 	clilog.RootCmd.GroupID = groupRewards
 	clisurvey.RootCmd.GroupID = groupRewards
 
@@ -129,7 +127,6 @@ func init() {
 		cliut.RootCmd,
 		cliskynet.RootCmd,
 		clireward.RootCmd,
-		clirewards.RootCmd,
 		clisurvey.RootCmd,
 		cliroute.RootCmd,
 		clirg.RootCmd,

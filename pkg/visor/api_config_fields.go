@@ -112,6 +112,16 @@ var liveConfigFieldTable = []liveConfigField{
 			return v.setHypervisorsLive(want)
 		},
 	}, {
+		Path: "pty.whitelist",
+		Desc: "PKs allowed to use this visor's pty, sftp and RPC besides its hypervisors",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			want, ok := nv.Interface().([]cipher.PubKey)
+			if !ok {
+				return errors.New("pty.whitelist must be a list of public keys")
+			}
+			return v.setPtyWhitelistLive(want)
+		},
+	}, {
 		Path: "persistent_transports",
 		Desc: "transports the visor re-dials until they exist",
 		apply: func(v *Visor, _ string, nv reflect.Value) error {
@@ -407,6 +417,14 @@ func (v *Visor) SetConfigFields(fields map[string]json.RawMessage) ([]visorapi.C
 		}
 		out = append(out, p.change)
 	}
+	var mirror [][2]string
+	for _, p := range plan {
+		if flagFor, ok := autoconfigFlagFor[p.target.tmpl]; ok {
+			flag, val := flagFor(p.newVal)
+			mirror = append(mirror, [2]string{flag, val})
+		}
+	}
+	v.mirrorToSkyenv(mirror)
 	return out, nil
 }
 

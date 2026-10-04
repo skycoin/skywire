@@ -33,7 +33,7 @@ func DefaultCLIAddr() string {
 // uiWinSize returns the initial pty window size and environment for a web
 // terminal (mirrors the platform variants; no host terminal to measure).
 func (ui *UI) uiWinSize() (*WinSize, []string, error) {
-	return &WinSize{Rows: 30, Cols: 100}, []string{"TERM=xterm-256color"}, nil
+	return &WinSize{Rows: wsRows, Cols: wsCols}, []string{"TERM=xterm-256color"}, nil
 }
 
 // Pty is the local pseudo-terminal host. Unavailable on js/wasm.

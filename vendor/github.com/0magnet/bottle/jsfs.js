@@ -486,6 +486,168 @@
 		fsync: wrap((fd) => { fdEntry(fd); return undefined; }),
 	};
 
+
+	// ---- mounts -----------------------------------------------------------
+	// A mount hands every path under a prefix, and every fd opened there, to a
+	// provider: an object with node-style callback methods named like the fs
+	// ones (open close read write stat lstat fstat readdir mkdir rmdir unlink
+	// rename truncate ftruncate chmod fchmod chown fchown lchown utimes
+	// readlink symlink link fsync). Paths reach it relative to the mount, "/"
+	// being its root, and fds as the handles its open returned. read is
+	// read(h, length, position, cb(err, bytes)) and write is
+	// write(h, bytes, position, cb(err, n)); position is null for the
+	// handle's own offset. A missing method answers ENOSYS.
+	//
+	// A provider may answer at any later time, and is usually another wasm
+	// instance (a remote filesystem). Its answer reaches the caller on a
+	// microtask, so the provider is never on the stack when the caller
+	// resumes, and must never block in a method.
+	const mounts = []; // { prefix, provider }, longest prefix first
+	const mountFds = new Map(); // fd -> { m, h }
+
+	function mountOf(path) {
+		const p = normalize(path);
+		if (p === null) return null;
+		for (const m of mounts) {
+			if (p === m.prefix) return { m, rel: '/' };
+			if (p.startsWith(m.prefix + '/')) return { m, rel: p.slice(m.prefix.length) };
+		}
+		return null;
+	}
+
+	function withModeTests(st) {
+		const t = (st.mode & 0o170000) >>> 0;
+		st.isBlockDevice = () => false;
+		st.isCharacterDevice = () => t === S_IFCHR;
+		st.isDirectory = () => t === S_IFDIR;
+		st.isFIFO = () => false;
+		st.isFile = () => t === S_IFREG;
+		st.isSocket = () => false;
+		st.isSymbolicLink = () => t === S_IFLNK;
+		return st;
+	}
+
+	function callMount(m, name, args, cb) {
+		if (m.dead) { queueMicrotask(() => cb(mkerr('EIO', 'unmounted'))); return; }
+		const fn = m.provider[name];
+		if (typeof fn !== 'function') { queueMicrotask(() => cb(enosys(name))); return; }
+		let answered = false;
+		const reply = (err, res) => {
+			if (answered) return;
+			answered = true;
+			if (err && !(err instanceof Error)) err = mkerr(err.code || 'EIO', err.message || String(err.code || err));
+			queueMicrotask(() => cb(err || null, res));
+		};
+		try { fn.apply(m.provider, args.concat([reply])); } catch (e) { reply(e); }
+	}
+
+	for (const name of ['stat', 'lstat']) {
+		const orig = fsImpl[name];
+		fsImpl[name] = function (path, cb) {
+			const r = mountOf(path);
+			if (!r) return orig.call(this, path, cb);
+			callMount(r.m, name, [r.rel], (err, st) => cb(err, err ? undefined : withModeTests(st)));
+		};
+	}
+	for (const name of ['readdir', 'mkdir', 'rmdir', 'unlink', 'truncate', 'chmod',
+		'chown', 'lchown', 'utimes', 'readlink']) {
+		const orig = fsImpl[name];
+		fsImpl[name] = function (path, ...rest) {
+			const r = mountOf(path);
+			if (!r) return orig.call(this, path, ...rest);
+			const cb = rest.pop();
+			callMount(r.m, name, [r.rel, ...rest], cb);
+		};
+	}
+	for (const name of ['rename', 'link']) {
+		const orig = fsImpl[name];
+		fsImpl[name] = function (from, to, cb) {
+			const a = mountOf(from), b = mountOf(to);
+			if (!a && !b) return orig.call(this, from, to, cb);
+			if (!a || !b || a.m !== b.m) { queueMicrotask(() => cb(mkerr('EXDEV', from + ' -> ' + to))); return; }
+			callMount(a.m, name, [a.rel, b.rel], cb);
+		};
+	}
+	{
+		const orig = fsImpl.symlink;
+		fsImpl.symlink = function (target, path, cb) {
+			const r = mountOf(path);
+			if (!r) return orig.call(this, target, path, cb);
+			callMount(r.m, 'symlink', [target, r.rel], cb);
+		};
+	}
+	{
+		const orig = fsImpl.open;
+		fsImpl.open = function (path, flags, mode, cb) {
+			const r = mountOf(path);
+			if (!r) return orig.call(this, path, flags, mode, cb);
+			callMount(r.m, 'open', [r.rel, flags, mode], (err, h) => {
+				if (err) { cb(err); return; }
+				const fd = nextFd++;
+				mountFds.set(fd, { m: r.m, h });
+				cb(null, fd);
+			});
+		};
+	}
+	{
+		const origRead = fsImpl.read, origWrite = fsImpl.write, origWriteSync = fsImpl.writeSync;
+		fsImpl.read = function (fd, buf, offset, length, position, cb) {
+			const e = mountFds.get(fd);
+			if (!e) return origRead.call(this, fd, buf, offset, length, position, cb);
+			callMount(e.m, 'read', [e.h, length, position === undefined ? null : position], (err, bytes) => {
+				if (err) { cb(err); return; }
+				const n = bytes ? Math.min(bytes.length, length) : 0;
+				if (n) buf.set(bytes.subarray(0, n), offset);
+				cb(null, n);
+			});
+		};
+		fsImpl.write = function (fd, buf, offset, length, position, cb) {
+			const e = mountFds.get(fd);
+			if (!e) return origWrite.call(this, fd, buf, offset, length, position, cb);
+			callMount(e.m, 'write', [e.h, buf.slice(offset, offset + length), position === undefined ? null : position], cb);
+		};
+		fsImpl.writeSync = function (fd, buf) {
+			if (mountFds.has(fd)) throw mkerr('EAGAIN', 'writeSync on a mounted file');
+			return origWriteSync.call(this, fd, buf);
+		};
+	}
+	for (const name of ['fstat', 'close', 'ftruncate', 'fchmod', 'fchown', 'fsync']) {
+		const orig = fsImpl[name];
+		fsImpl[name] = function (fd, ...rest) {
+			const e = mountFds.get(fd);
+			if (!e) return orig.call(this, fd, ...rest);
+			const cb = rest.pop();
+			if (name === 'close') mountFds.delete(fd);
+			callMount(e.m, name, [e.h, ...rest], name === 'fstat'
+				? (err, st) => cb(err, err ? undefined : withModeTests(st))
+				: cb);
+		};
+	}
+
+	// mount attaches provider at prefix, which becomes a directory in the tree
+	// so its parent lists it. unmount detaches it; fds still open there answer
+	// EIO from then on.
+	function mount(prefix, provider) {
+		const p = normalize(prefix);
+		if (p === null || p === '/') throw mkerr('EINVAL', 'mount at ' + prefix);
+		if (!provider || typeof provider !== 'object') throw mkerr('EINVAL', 'no provider');
+		if (mounts.some((m) => m.prefix === p)) throw mkerr('EBUSY', p);
+		mkdirp(p, 0o755);
+		mounts.push({ prefix: p, provider });
+		mounts.sort((a, b) => b.prefix.length - a.prefix.length);
+	}
+
+	function unmount(prefix) {
+		const p = normalize(prefix);
+		const i = mounts.findIndex((m) => m.prefix === p);
+		if (i < 0) throw mkerr('EINVAL', 'not mounted: ' + prefix);
+		const m = mounts[i];
+		mounts.splice(i, 1);
+		m.dead = true;
+		if (typeof m.provider.unmounted === 'function') {
+			try { m.provider.unmounted(); } catch (e) { /* the provider's own affair */ }
+		}
+	}
 	function resized(data, length) {
 		if (length === data.length) return data;
 		const nd = new Uint8Array(length);
@@ -652,6 +814,7 @@
 		function pathOfFd(fd) { const e = fds.get(fd); return e ? e.path : null; }
 
 		function isExcluded(p) {
+			if (p && mountOf(p)) return true;
 			if (!p || !excludeFn) return false;
 			try { return !!excludeFn(p); } catch (e) { return false; }
 		}
@@ -758,5 +921,8 @@
 		isPipe(fd) { return isPipe(fd); },
 		getCwd() { return cwd; },
 		persist,         // IndexedDB snapshots: enable(db) → Promise<{restored}>
+		mount,           // mount(prefix, provider): hand a subtree to a provider
+		unmount,         // unmount(prefix)
+		mounts() { return mounts.map((m) => m.prefix); },
 	};
 })();

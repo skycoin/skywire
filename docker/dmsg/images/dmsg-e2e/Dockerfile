@@ -22,7 +22,7 @@
 # the COPY below vendors the whole module and `-mod=vendor` builds
 # offline against the checked-in vendor/ tree.
 
-ARG base_image=golang:1.26.4-alpine
+ARG base_image=golang:1.27.1-alpine
 FROM ${base_image} AS builder
 
 ARG CGO_ENABLED=0

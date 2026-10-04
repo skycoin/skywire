@@ -103,7 +103,9 @@ func (p spreadPolicy) capped() bool { return p.maxShare > 0 && p.maxShare < 1 }
 //  2. A tunnel whose share of the bytes so far is at or above max_share is
 //     SKIPPED, but only while another tunnel is under its cap: a cap must
 //     never be a reason to stall an object. Neither may the probe bound: with
-//     nothing else eligible, every tunnel is.
+//     nothing else eligible, every tunnel is. The share is of every byte the
+//     object has placed, elsewhere included, so a route that left the
+//     candidates does not make the ones still offered all look capped.
 //  3. Among what is left, the tunnel furthest BELOW its weight — smallest
 //     carried/weight — takes the chunk; ties go to the tunnel with the most
 //     MEASURED capacity, and only then to the lowest index. The first chunk of
@@ -116,7 +118,7 @@ func (p spreadPolicy) capped() bool { return p.maxShare > 0 && p.maxShare < 1 }
 // Rule 3 alone is the fix for "the slow tunnel drags the pair below itself":
 // at 8 and 3 MB/s the ratio settles at 8:3, so the slow tunnel gets fewer
 // chunks rather than an equal number of them.
-func spreadChoose(capsBps, priorBps []float64, carried []int64, p spreadPolicy) int {
+func spreadChoose(capsBps, priorBps []float64, carried []int64, elsewhere int64, p spreadPolicy) int {
 	if len(capsBps) == 0 || len(capsBps) != len(carried) {
 		return -1
 	}
@@ -151,7 +153,7 @@ func spreadChoose(capsBps, priorBps []float64, carried []int64, p spreadPolicy) 
 		least = 1 // nothing is known about anything: one weight fits all
 	}
 	// 2. the cap and the probe bound, applied against the bytes placed so far.
-	var total int64
+	total := elsewhere
 	for _, l := range lanes {
 		total += l.carried
 	}
@@ -252,7 +254,9 @@ func (p *spreadPlanner) pick(size int64) *yamux.Session {
 		return nil
 	}
 	sessions, caps, priors := p.c.spreadCandidates(p.dir)
-	if p.refillRoutes(len(sessions)) {
+	// A short set is re-read even when this pick promoted nothing: a
+	// concurrent pick may have promoted the standby this one saw (#5383).
+	if p.refillRoutes(len(sessions)) || len(sessions) < p.pol.minRoutes {
 		sessions, caps, priors = p.c.spreadCandidates(p.dir)
 	}
 	if len(sessions) < 2 {
@@ -261,10 +265,15 @@ func (p *spreadPlanner) pick(size int64) *yamux.Session {
 	carried := make([]int64, len(sessions))
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	var elsewhere int64
+	for _, n := range p.bytes {
+		elsewhere += n
+	}
 	for i, s := range sessions {
 		carried[i] = p.bytes[s]
+		elsewhere -= p.bytes[s]
 	}
-	i := spreadChoose(caps, priors, carried, p.pol)
+	i := spreadChoose(caps, priors, carried, elsewhere, p.pol)
 	if i < 0 {
 		return nil
 	}

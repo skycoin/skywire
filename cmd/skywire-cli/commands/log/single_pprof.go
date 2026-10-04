@@ -23,17 +23,19 @@ import (
 // (pkg/visor/logserver/api.go:193-199). Friendly "cpu" maps to
 // "profile" for the same reason `go tool pprof` accepts both.
 var pprofProfiles = map[string]string{
-	"cpu":          "profile",
-	"profile":      "profile",
-	"heap":         "heap",
-	"goroutine":    "goroutine",
-	"threadcreate": "threadcreate",
-	"block":        "block",
-	"mutex":        "mutex",
-	"allocs":       "allocs",
-	"trace":        "trace",
-	"cmdline":      "cmdline",
-	"symbol":       "symbol",
+	"cpu":            "profile",
+	"profile":        "profile",
+	"heap":           "heap",
+	"goroutine":      "goroutine",
+	"goroutineleak":  "goroutineleak",
+	"flightrecorder": "flightrecorder",
+	"threadcreate":   "threadcreate",
+	"block":          "block",
+	"mutex":          "mutex",
+	"allocs":         "allocs",
+	"trace":          "trace",
+	"cmdline":        "cmdline",
+	"symbol":         "symbol",
 }
 
 // pprofProfileNames is the sorted list used in the usage hint. Kept
@@ -61,7 +63,12 @@ profile bytes stream to stdout — redirect to a file and feed to
   go tool pprof heap.pprof
 
 Available profiles: cpu (alias for profile), profile, heap, goroutine,
-threadcreate, block, mutex, allocs, trace, cmdline, symbol.
+goroutineleak, threadcreate, block, mutex, allocs, trace, cmdline, symbol,
+flightrecorder.
+
+goroutineleak lists goroutines blocked on something nothing can ever release
+(Go 1.27). flightrecorder is the last few seconds of execution trace the visor
+keeps in memory; read it with go tool trace.
 
 For sampling profiles (cpu / profile / trace), --seconds controls
 the sample duration; the visor caps this at its pprof default (30s).

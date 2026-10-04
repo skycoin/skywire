@@ -13,6 +13,8 @@ import (
 	"unicode/utf8"
 )
 
+// TODO(v4): replace the functional options with an options struct.
+
 // ParserOption is a function which can be passed to NewParser
 // to alter its behavior. To apply option to existing Parser
 // call it directly, for example KeepComments(true)(parser).
@@ -30,7 +32,10 @@ func KeepComments(enabled bool) ParserOption {
 // This type implements [flag.Value] so that it can be used as a CLI flag.
 type LangVariant int
 
-// TODO(v4): the zero value should be left as an unset and invalid value.
+// TODO(v4): rename LangVariant to Dialect.
+// TODO(v4): the zero value should be left as an unset value,
+// which selects the default in parser options and is invalid elsewhere.
+// TODO(v4): remove LangAuto, which is not a language variant; see doc/plan-v4.md.
 // TODO(v4): the type should be uint32 now that we use this as a bitset;
 // an unsigned integer is clearer, and being agnostic to uint size avoids issues.
 
@@ -76,12 +81,16 @@ const (
 	// Its string representation is "zsh".
 	LangZsh
 
+	// langResolvedVariantsCount is the number of variants declared above,
+	// that is, langResolvedVariants.count() as a constant.
+	langResolvedVariantsCount = iota
+
 	// LangAuto corresponds to automatic language detection,
 	// commonly used by end-user applications like shfmt,
 	// which can guess a file's language variant given its filename or shebang.
 	//
 	// At this time, [Variant] does not support LangAuto.
-	LangAuto
+	LangAuto LangVariant = 1 << langResolvedVariantsCount
 
 	// langBashLegacy is what [LangBash] used to be, when it was zero.
 	// We still support it for the sake of backwards compatibility.
@@ -90,11 +99,6 @@ const (
 	// langResolvedVariants contains all known variants except [LangAuto],
 	// which is meant to resolve to another variant.
 	langResolvedVariants = LangBash | LangPOSIX | LangMirBSDKorn | LangBats | LangZsh
-
-	// langResolvedVariantsCount is langResolvedVariants.count() as a constant.
-	// TODO: Can we compute this as a constant expression somehow?
-	// For example, if we had log2, we could do log2(LangAuto).
-	langResolvedVariantsCount = 5
 
 	// langBashLike contains Bash plus all variants which are extensions of it.
 	langBashLike = LangBash | LangBats
@@ -455,8 +459,8 @@ func (p *Parser) Document(r io.Reader) (*Word, error) {
 	p.src = r
 	p.rune()
 	p.quote = hdocBody
-	p.hdocStops = [][]byte{[]byte("MVDAN_CC_SH_SYNTAX_EOF")}
-	p.parsingDoc = true
+	// No line can match this stop word, as lines never contain newlines.
+	p.hdocStops = [][]byte{[]byte("\n")}
 	p.next()
 	w := p.getWord()
 	return w, p.err
@@ -519,11 +523,13 @@ type Parser struct {
 
 	hdocStops [][]byte // stack of end words for open heredocs
 
-	parsingDoc bool // true if using [Parser.Document]
+	hdocClosePos Pos // position of the last closing heredoc word
 
-	// openNodes tracks how many entire statements or words we're currently parsing.
+	// openNodes tracks how many entire statements, words, or expressions
+	// we're currently parsing.
 	// A non-zero number means that we require certain tokens or words before
 	// reaching EOF, used for [Parser.Incomplete].
+	// It is also the nesting depth, limited by [maxNesting].
 	openNodes int
 	// openBquotes is how many levels of backquotes are open at the moment.
 	openBquotes int
@@ -561,6 +567,23 @@ func (p *Parser) Incomplete() bool {
 
 const bufSize = 1 << 10
 
+// maxNesting is how deeply statements, words, and expressions may be nested,
+// so that a small input cannot overflow the Go stack when recursively parsing
+// or walking the syntax tree. Bash fails at a few thousand nested subshells.
+const maxNesting = 10_000
+
+// enterNode increments [Parser.openNodes], failing if [maxNesting] is exceeded.
+// It must be paired with a call to [Parser.leaveNode],
+// or with restoring [Parser.openNodes] to its previous value.
+func (p *Parser) enterNode() {
+	p.openNodes++
+	if p.openNodes > maxNesting {
+		p.curErr("nesting is deeper than %d levels", maxNesting)
+	}
+}
+
+func (p *Parser) leaveNode() { p.openNodes-- }
+
 func (p *Parser) reset() {
 	p.tok, p.val = illegalTok, ""
 	p.eqlOffs = 0
@@ -573,7 +596,6 @@ func (p *Parser) reset() {
 	p.recoveredErrors = 0
 	p.heredocs, p.buriedHdocs = p.heredocs[:0], 0
 	p.hdocStops = nil
-	p.parsingDoc = false
 	p.openBquotes = 0
 	p.openBquoteDbls = 0
 	p.accComs = nil
@@ -678,7 +700,11 @@ const (
 	testExpr
 	testExprRegexp
 	switchCase
+	// paramExpArithm is a subscript like ${a[i]}, which can be a string key
+	// rather than an arithmetic expression when the array is associative.
 	paramExpArithm
+	// paramExpSlice is a slice like ${a:i:j}, which is always arithmetic.
+	paramExpSlice
 	paramExpRepl
 	paramExpExp
 	arrayElems
@@ -687,8 +713,9 @@ const (
 		hdocBodyTabs | paramExpRepl | paramExpExp
 	allRegTokens = noState | unquotedWordCont | subCmd | subCmdBckquo | subCmdBraces |
 		hdocWord | switchCase | arrayElems | testExpr
-	allArithmExpr = arithmExpr | arithmExprLet | arithmExprCmd | paramExpArithm
-	allParamExp   = paramExpArithm | paramExpRepl | paramExpExp
+	allArithmExpr = arithmExpr | arithmExprLet | arithmExprCmd |
+		paramExpArithm | paramExpSlice
+	allParamExp = paramExpArithm | paramExpSlice | paramExpRepl | paramExpExp
 )
 
 type saveState struct {
@@ -706,16 +733,18 @@ func (p *Parser) postNested(s saveState) {
 	p.quote, p.buriedHdocs = s.quote, s.buriedHdocs
 }
 
-func (p *Parser) unquotedWordBytes(w *Word) ([]byte, bool) {
+func unquotedWordBytes(w *Word) ([]byte, bool) {
 	buf := make([]byte, 0, 4)
 	didUnquote := false
 	for _, wp := range w.Parts {
-		buf, didUnquote = p.unquotedWordPart(buf, wp, false)
+		// TODO: a partly quoted word such as 'A'B is quoted,
+		// but this only reports whether its last part is.
+		buf, didUnquote = unquotedWordPart(buf, wp, false)
 	}
 	return buf, didUnquote
 }
 
-func (p *Parser) unquotedWordPart(buf []byte, wp WordPart, quotes bool) (_ []byte, quoted bool) {
+func unquotedWordPart(buf []byte, wp WordPart, quotes bool) (_ []byte, quoted bool) {
 	switch wp := wp.(type) {
 	case *Lit:
 		for i := 0; i < len(wp.Value); i++ {
@@ -733,7 +762,7 @@ func (p *Parser) unquotedWordPart(buf []byte, wp WordPart, quotes bool) (_ []byt
 		quoted = true
 	case *DblQuoted:
 		for _, wp2 := range wp.Parts {
-			buf, _ = p.unquotedWordPart(buf, wp2, true)
+			buf, _ = unquotedWordPart(buf, wp2, true)
 		}
 		quoted = true
 	}
@@ -757,7 +786,7 @@ func (p *Parser) doHeredocs() {
 		if r.Op == DashHdoc {
 			p.quote = hdocBodyTabs
 		}
-		stop, quoted := p.unquotedWordBytes(r.Word)
+		stop, quoted := unquotedWordBytes(r.Word)
 		p.hdocStops = append(p.hdocStops, stop)
 		if i > 0 && p.r == '\n' {
 			p.rune()
@@ -768,12 +797,24 @@ func (p *Parser) doHeredocs() {
 			p.next()
 			r.Hdoc = p.getWord()
 		}
-		if stop := p.hdocStops[len(p.hdocStops)-1]; stop != nil {
-			p.posErr(r.Pos(), "unclosed here-document %#q", stop)
+		if p.hdocStops[len(p.hdocStops)-1] == nil {
+			r.ClosePos = p.hdocClosePos
+		} else {
+			p.unclosedHdoc(r)
 		}
 		p.hdocStops = p.hdocStops[:len(p.hdocStops)-1]
 	}
 	p.quote = old
+}
+
+// unclosedHdoc handles a heredoc which ended without its closing word.
+func (p *Parser) unclosedHdoc(r *Redirect) {
+	// Like mksh, reject an unclosed heredoc;
+	// other shells end it at EOF or a closing backquote.
+	if p.lang.in(LangMirBSDKorn) {
+		stop, _ := unquotedWordBytes(r.Word)
+		p.posErr(r.Pos(), "unclosed here-document %#q", stop)
+	}
 }
 
 func (p *Parser) got(tok token) bool {
@@ -922,6 +963,8 @@ func (p *Parser) errPass(err error) {
 	}
 }
 
+// TODO(v4): remove in favor of [errors.Is] with [io.ErrUnexpectedEOF].
+
 // IsIncomplete reports whether a Parser error could have been avoided with
 // extra input bytes. For example, if an [io.EOF] was encountered while there was
 // an unclosed quote or parenthesis.
@@ -930,7 +973,7 @@ func IsIncomplete(err error) bool {
 	return ok && perr.Incomplete
 }
 
-// TODO: probably redo with a [LangVariant] argument.
+// TODO(v4): redo with a [LangVariant] argument.
 // Perhaps offer an iterator version as well.
 
 // IsKeyword returns true if the given word is a language keyword
@@ -976,6 +1019,8 @@ type ParseError struct {
 	Incomplete bool
 }
 
+// TODO(v4): return error types as pointers, with pointer receivers.
+
 func (e ParseError) Error() string {
 	if e.Filename == "" {
 		return fmt.Sprintf("%s: %s", e.Pos, e.Text)
@@ -990,7 +1035,8 @@ type LangError struct {
 	Filename string
 	Pos      Pos
 
-	// TODO: consider replacing the Langs slice with a bitset.
+	// TODO(v4): replace the Langs slice with a single LangVariant bitset,
+	// which is what the parser uses internally already.
 
 	// Feature briefly describes which language feature caused the error.
 	Feature string
@@ -1096,9 +1142,7 @@ loop:
 		if p.tok == _EOF {
 			break
 		}
-		p.openNodes++
 		s := p.getStmt(true, false, false)
-		p.openNodes--
 		if s == nil {
 			p.invalidStmtStart()
 			break
@@ -1177,9 +1221,9 @@ func (p *Parser) wordParts(wps []WordPart) []WordPart {
 		defer func() { p.quote = noState }()
 	}
 	for {
-		p.openNodes++
+		p.enterNode()
 		n := p.wordPart()
-		p.openNodes--
+		p.leaveNode()
 		if n == nil {
 			if len(wps) == 0 {
 				return nil // normalize empty lists into nil
@@ -1339,6 +1383,12 @@ func (p *Parser) wordPart() WordPart {
 			p.tok = _EOF
 			p.quoteErr(cs.Pos(), bckQuote)
 		}
+		// Like other shells, end heredocs whose bodies did not start
+		// before the closing backquote, unlike with "$(".
+		for _, r := range p.heredocs[p.buriedHdocs:] {
+			p.unclosedHdoc(r)
+		}
+		p.heredocs = p.heredocs[:p.buriedHdocs]
 		p.postNested(old)
 		p.openBquotes--
 		if old.quote == dblQuotes {
@@ -1499,7 +1549,7 @@ zshPrefixLoop:
 		// For the short form, only treat as a prefix if followed by something
 		// that could start a parameter name or another zsh prefix.
 		if pe.Short && check != '=' && check != '~' && check != '^' &&
-			!singleRuneParam(check) && !paramNameRune(check) && check != '"' {
+			!paramNameStartRune(check) {
 			break zshPrefixLoop
 		}
 		if state == OptOff {
@@ -1510,25 +1560,25 @@ zshPrefixLoop:
 	}
 	if !pe.Short || p.lang.in(LangZsh) {
 		// Prefixes, like ${#name} to get the length of a variable.
-		// Note that in Zsh, the short form like $#name is allowed too.
+		// Note that zsh allows the short forms $#name and $+name too,
+		// but not $%name nor $!name.
 		switch p.r {
 		case '#':
-			if p.paramNameStart() {
+			if p.paramNameStart(pe) {
 				pe.Length = true
 			}
 		case '%':
-			if p.paramNameStart() {
+			if !pe.Short && p.paramNameStart(pe) {
 				p.checkLang(pe.Pos(), LangMirBSDKorn, "`${%%foo}`")
 				pe.Width = true
 			}
 		case '!':
-			// Unlike the others, zsh has no $!foo prefix.
-			if !pe.Short && p.paramNameStart() {
+			if !pe.Short && p.paramNameStart(pe) {
 				p.checkLang(pe.Pos(), langBashLike|LangMirBSDKorn, "`${!foo}`")
 				pe.Excl = true
 			}
 		case '+':
-			if p.paramNameStart() {
+			if p.paramNameStart(pe) {
 				p.checkLang(pe.Pos(), LangZsh, "`${+foo}`")
 				pe.IsSet = true
 			}
@@ -1615,7 +1665,7 @@ zshPrefixLoop:
 		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "slicing")
 		pe.Slice = &Slice{}
 		colonPos := p.pos
-		p.quote = paramExpArithm
+		p.quote = paramExpSlice
 		if p.next(); p.tok != colon {
 			pe.Slice.Offset = p.followArithm(colon, colonPos)
 		}
@@ -1669,9 +1719,13 @@ zshPrefixLoop:
 	return pe
 }
 
-func (p *Parser) paramNameStart() bool {
+// paramNameStart reports whether a parameter name can begin after a prefix rune
+// such as the '#' in ${#foo}, consuming the prefix rune if so.
+// Only the long form allows a quoted nested expansion like ${#"$(foo)"} or EOF;
+// in the short form the prefix rune is the parameter itself, as in "$#" or $#"$foo".
+func (p *Parser) paramNameStart(pe *ParamExp) bool {
 	r := p.peek()
-	if r == utf8.RuneSelf || singleRuneParam(r) || paramNameRune(r) || r == '"' {
+	if paramNameStartRune(r) || (!pe.Short && (r == '"' || r == utf8.RuneSelf)) {
 		p.rune()
 		return true
 	}
@@ -1717,7 +1771,9 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
 		switch p.tok = left; p.tok {
 		case dollBrace: // ${#${nested parameter}}
 			p.tok = dollBrace
+			p.enterNode()
 			wp = p.paramExp()
+			p.leaveNode()
 		case dollParen: // ${#$(nested command)}
 			wp = p.cmdSubst()
 		default: // dollar
@@ -2099,6 +2155,8 @@ func (p *Parser) doRedirect(s *Stmt) {
 }
 
 func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
+	defer func(n int) { p.openNodes = n }(p.openNodes)
+	p.enterNode()
 	pos, ok := p.gotRsrv("!")
 	s := &Stmt{Position: pos}
 	if ok {
@@ -2120,6 +2178,8 @@ func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
 			// right recursion should only read a single element
 			return s
 		}
+		// Each operator in a chain nests the syntax tree one level deeper.
+		p.enterNode()
 		b := &BinaryCmd{
 			OpPos: p.pos,
 			Op:    BinCmdOperator(p.tok),
@@ -2323,6 +2383,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 		p.doRedirect(s)
 	}
 	// instead of using recursion, iterate manually
+	defer func(n int) { p.openNodes = n }(p.openNodes)
 	for p.tok == or || p.tok == orAnd {
 		if binCmd {
 			// left associativity: in a list of BinaryCmds, the
@@ -2334,6 +2395,8 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 			// we parse |& as two tokens.
 			break
 		}
+		// Each operator in a chain nests the syntax tree one level deeper.
+		p.enterNode()
 		b := &BinaryCmd{OpPos: p.pos, Op: BinCmdOperator(p.tok), X: s}
 		p.next()
 		p.got(_Newl)
@@ -2399,7 +2462,10 @@ func (p *Parser) ifClause(s *Stmt) {
 	rootIf.ThenPos = p.followRsrv(rootIf.Position, "if <cond>", "then")
 	rootIf.Then, rootIf.ThenLast = p.followStmts("then", rootIf.ThenPos, "fi", "elif", "else")
 	curIf := rootIf
+	defer func(n int) { p.openNodes = n }(p.openNodes)
 	for p.tok == _LitWord && p.val == "elif" {
+		// Each elif nests the syntax tree one level deeper.
+		p.enterNode()
 		elf := &IfClause{Position: p.pos}
 		curIf.Last = p.accComs
 		p.accComs = nil
@@ -2630,6 +2696,10 @@ func (p *Parser) testClause(s *Stmt) {
 
 func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {
 	p.got(_Newl)
+	if !pastAndOr {
+		p.enterNode()
+		defer p.leaveNode()
+	}
 	var left TestExpr
 	if pastAndOr {
 		left = p.testExprUnary()
@@ -2788,12 +2858,16 @@ func (p *Parser) timeClause(s *Stmt) {
 	if _, ok := p.gotRsrv("-p"); ok {
 		tc.PosixFormat = true
 	}
+	p.enterNode()
 	tc.Stmt = p.gotStmtPipe(&Stmt{Position: p.pos}, false)
+	p.leaveNode()
 	s.Cmd = tc
 }
 
 func (p *Parser) coprocClause(s *Stmt) {
 	cc := &CoprocClause{Coproc: p.pos}
+	p.enterNode()
+	defer p.leaveNode()
 	if p.next(); isBashCompoundCommand(p.tok, p.val) {
 		// has no name
 		cc.Stmt = p.gotStmtPipe(&Stmt{Position: p.pos}, false)

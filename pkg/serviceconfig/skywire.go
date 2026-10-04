@@ -11,8 +11,6 @@ import (
 const (
 	// PublicDmsgDiscovery is global dmsg-discovery service
 	PublicDmsgDiscovery string = "https://dmsg.discovery.skywire.skycoin.com"
-	// PublicDmsgServer is global dmsg-server service
-	PublicDmsgServer string = "https://dmsg.discovery.skywire.skycoin.com"
 	// PublicTransportDiscovery is  global transport-discovery service
 	PublicTransportDiscovery string = "https://transport.discovery.skywire.skycoin.com"
 	// PublicRouteFinder is global route finder service
@@ -136,7 +134,7 @@ func EmptyDmsgServerConfig() msg.Config {
 		PubKey:        pk,
 		SecKey:        sk,
 		Discovery:     PublicDmsgDiscovery,
-		PublicAddress: PublicDmsgServer,
+		PublicAddress: "",
 		LocalAddress:  "",
 		LogLevel:      "info",
 	}

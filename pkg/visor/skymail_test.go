@@ -49,6 +49,8 @@ func mailVisor(t *testing.T, ctx context.Context, c *dmsg.Client) *Visor {
 		initLock:       new(sync.RWMutex),
 	}
 	require.NoError(t, initSkymail(ctx, v, logging.MustGetLogger("skymail")))
+	// The launcher starts the app on a real visor; this one has none.
+	require.NoError(t, v.startSkymail())
 	return v
 }
 
@@ -116,6 +118,7 @@ func TestMailboxYieldsForwardedPort25(t *testing.T) {
 	}
 	require.NoError(t, v.forwardedPorts.Register(visorapi.ForwardedPort{Port: 25, Label: "postfix"}))
 	require.NoError(t, initSkymail(context.Background(), v, logging.MustGetLogger("skymail")))
+	require.Error(t, v.startSkymail(), "port 25 belongs to the forwarded MTA")
 	st, err := v.MailStatus()
 	require.NoError(t, err)
 	require.False(t, st.Running, "Postfix keeps port 25")

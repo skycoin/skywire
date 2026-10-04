@@ -195,12 +195,17 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) config(w http.ResponseWriter, r *http.Request) {
-	a.servicesMu.RLock()
-	// Snapshot under the lock so the JSON encoder doesn't see a torn
-	// state if refreshDmsgServers swaps the slice mid-encode.
-	resp := *a.services
-	a.servicesMu.RUnlock()
+	resp := a.Services()
 	a.writeJSON(w, r, http.StatusOK, &resp)
+}
+
+// Services returns a snapshot of the services config this API serves at
+// GET /. It is taken under the lock so a caller encoding it doesn't see a
+// torn state if refreshDmsgServers swaps the slice mid-encode.
+func (a *API) Services() deployment.Services {
+	a.servicesMu.RLock()
+	defer a.servicesMu.RUnlock()
+	return *a.services
 }
 
 func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) { //nolint

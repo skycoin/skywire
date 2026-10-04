@@ -212,17 +212,6 @@ type Config struct {
 	// for them). See effectiveDialHook / controlPlanePorts.
 	PolicyOnControlPorts bool
 
-	// EnableRSNOracleRoutes opts INTO the RSN-oracle 2-hop route path: for a
-	// single-intermediate route S->I->D the source computes the route LOCALLY
-	// from its OWN transports intersected with the destination's OWN transports
-	// (fetched authoritatively from D via an RSN-signed transport-query), making
-	// the common route type independent of the transport-discovery service
-	// (TPD). OFF by default — existing behavior (route finder / TPD-backed local
-	// calc) is unchanged. Even when true the path is inert until a transport-
-	// query deliverer is configured (SetTransportQueryDeliverer); see
-	// rsn_oracle_routes.go. TPD is still used for routes with >=2 intermediates.
-	EnableRSNOracleRoutes bool
-
 	// MuxFEC advertises CapFEC on mux route groups so repair frames are
 	// striped alongside data (off by default; see visorconfig Routing.MuxFEC).
 	MuxFEC bool
@@ -497,16 +486,6 @@ type DialOptions struct {
 	// Populated by the policy layer (DialAdjustment) from
 	// RouteSpec.RotationIntervalSeconds; zero = no rotation.
 	RotationIntervalSeconds int
-
-	// UseRSNOracle2Hop is the per-dial opt-in for the RSN-oracle 2-hop route
-	// path (rsn_oracle_routes.go). When set — and the router has a transport-
-	// query deliverer configured — fetchBestRoutes computes a single-
-	// intermediate route from the source's own transports intersected with the
-	// destination's own transports (fetched from the destination via an
-	// RSN-signed query) instead of querying TPD/the route finder. OR-ed with the
-	// router-wide Config.EnableRSNOracleRoutes gate. Default false = existing
-	// behavior.
-	UseRSNOracle2Hop bool
 }
 
 // DefaultDialOptions returns default dial options.
@@ -651,7 +630,7 @@ type Router interface {
 	SetForceLocalRoutes(bool)
 	// SetDstTransportOracle wires the RSN-oracle 2-hop route path's
 	// destination-transport oracle (see rsn_oracle_routes.go). nil leaves the
-	// path inert even when Config.EnableRSNOracleRoutes is set.
+	// path inert.
 	SetDstTransportOracle(DstTransportOracle)
 	SetMuxMode(WeightMode)
 	// SetMuxFEC / GetMuxFEC mirror Config.MuxFEC at runtime; the setting is
@@ -819,8 +798,7 @@ type router struct {
 	// dstTpOracle fetches a destination visor's OWN transport list
 	// authoritatively from the destination (via an RSN-signed transport-query),
 	// for the RSN-oracle 2-hop route path (rsn_oracle_routes.go). nil by default
-	// → the oracle path is inert even when Config.EnableRSNOracleRoutes is set.
-	// Set via SetDstTransportOracle.
+	// → the oracle path is inert. Set via SetDstTransportOracle.
 	dstTpOracle   DstTransportOracle
 	dstTpOracleMu sync.Mutex
 }
@@ -838,10 +816,9 @@ type DstTransportOracle interface {
 }
 
 // SetDstTransportOracle installs the oracle that fetches a destination's own
-// transport list, enabling the RSN-oracle 2-hop route path when
-// Config.EnableRSNOracleRoutes (or DialOptions.UseRSNOracle2Hop) is also set.
-// Until this is called the path stays inert (fetchBestRoutes falls through to
-// its existing route-finder / TPD behavior). The visor implements the oracle by
+// transport list, enabling the RSN-oracle 2-hop route path. Until this is
+// called the path stays inert (fetchBestRoutes falls through to its existing
+// route-finder / TPD behavior). The visor implements the oracle by
 // asking the RSN to sign a transport-query and delivering it to the destination
 // (fetchDstTransportsViaOracle is the reference building block).
 func (r *router) SetDstTransportOracle(o DstTransportOracle) {

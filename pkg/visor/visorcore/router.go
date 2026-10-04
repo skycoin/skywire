@@ -55,10 +55,6 @@ type RouterDeps struct {
 	// from Routing.PolicyOnControlPorts. See router.Config.PolicyOnControlPorts.
 	PolicyOnControlPorts bool
 
-	// EnableRSNOracleRoutes opts into the RSN-oracle 2-hop route path (default
-	// OFF). Seeded from Routing.EnableRSNOracleRoutes; inert until the visor also
-	// calls router.SetDstTransportOracle.
-	EnableRSNOracleRoutes bool
 	// MuxFEC advertises CapFEC on mux route groups (repair frames striped
 	// alongside data). Seeded from Routing.MuxFEC; off by default.
 	MuxFEC bool
@@ -97,7 +93,6 @@ func BuildRouter(serveCtx context.Context, deps RouterDeps) (router.Router, erro
 		DialHook:              deps.DialHook,
 		PolicyOnControlPorts:  deps.PolicyOnControlPorts,
 		RulesGCInterval:       deps.RulesGCInterval,
-		EnableRSNOracleRoutes: deps.EnableRSNOracleRoutes,
 		MuxFEC:                deps.MuxFEC,
 		ExcludeSameLANHops:    deps.ExcludeSameLANHops,
 		SelfPublicIP:          deps.SelfPublicIP,

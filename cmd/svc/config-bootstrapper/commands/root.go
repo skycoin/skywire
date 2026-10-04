@@ -177,6 +177,17 @@ HTTP Endpoints:
 		}
 		defer h.Close()
 
+		// Publish the services config as a CXO feed signed by this service's
+		// key, so visors follow deployment key changes without a release.
+		if h.DmsgClient != nil {
+			sp, err := api.StartServicesCXOPublisher(ctx, conAPI, h.DmsgClient, sk, logger)
+			if err != nil {
+				logger.WithError(err).Warn("CXO services publisher not started")
+			} else {
+				defer sp.Close() //nolint:errcheck
+			}
+		}
+
 		select {
 		case <-ctx.Done():
 		case err := <-h.Errors():

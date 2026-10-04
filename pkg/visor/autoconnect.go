@@ -78,10 +78,9 @@ func MakeConnector(conf servicedisc.Config, maxConns int, tm *transport.Manager,
 	connector.dmsgC = dmsgC
 	connector.clientPublicIP = publicIP
 	connector.conn = &visorcore.Connector{
-		Tm:             tm,
-		DmsgC:          dmsgC,
-		ClientPublicIP: publicIP,
-		Log:            log,
+		Tm:    tm,
+		DmsgC: dmsgC,
+		Log:   log,
 	}
 	return connector
 }
@@ -257,8 +256,16 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				// swtr open on ~24 public visors and closed on ~800 (2026-09-30),
 				// most picks could not be reached and the tab held one or two
 				// transports, so losing one took its proxy down.
-				for _, pk := range visorcore.ShufflePubKeys(absent1) {
-					if pk != v.conf.PK {
+				// A peer it reaches only over webrtc or dmsg stays a candidate:
+				// those are the carriers swtr should replace.
+				direct := map[cipher.PubKey]bool{}
+				for _, tp := range autoTPs {
+					if t := tp.Type(); t != tptypes.WEBRTC && t != tptypes.DMSG {
+						direct[tp.Remote()] = true
+					}
+				}
+				for _, pk := range visorcore.ShufflePubKeys(addrs) {
+					if pk != v.conf.PK && !direct[pk] {
 						connectedPublicVisors = append(connectedPublicVisors, pk)
 					}
 				}
@@ -318,30 +325,56 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// is then skipped by the WebRTC fallback's own hasDirect filter.
 			if localSupportsWT || localSupportsWS {
 				hasDirectTP := map[cipher.PubKey]bool{}
-				for _, tp := range a.tm.GetTransportsByLabel(transport.LabelAutomatic) {
+				hasLink := map[cipher.PubKey]bool{}
+				for _, tp := range a.tm.GetTransportsByLabels(transport.LabelAutomatic, transport.LabelUser, transport.LabelSkycoin) {
 					switch tp.Type() {
 					case tptypes.WEBRTC, tptypes.DMSG:
-						// webrtc is the tier below; dmsg is the relay baseline
+						// below swtr, but a peer the visor already reaches is one
+						// to move up
+						hasLink[tp.Remote()] = true
 					default:
-						hasDirectTP[tp.Remote()] = true
+						if tp.Entry.Label == transport.LabelAutomatic {
+							hasDirectTP[tp.Remote()] = true
+						}
 					}
 				}
-				var wtwsTargets []cipher.PubKey
+				// Peers the visor already reaches over webrtc or dmsg are dialed
+				// in a pass of their own, before slots go to peers it has never
+				// reached: the reach verdicts reorder one pass, and a browser
+				// visor's own host would rarely surface among about a thousand
+				// public visors.
+				var known, wtwsTargets []cipher.PubKey
 				for _, pk := range connectedPublicVisors {
-					if !hasDirectTP[pk] {
+					switch {
+					case hasDirectTP[pk]:
+					case hasLink[pk]:
+						known = append(known, pk)
+						wtwsTargets = append(wtwsTargets, pk)
+					default:
 						wtwsTargets = append(wtwsTargets, pk)
 					}
 				}
 				if len(wtwsTargets) > 0 && localSupportsWT {
 					a.log.Debug("Phase 3b: Connecting to direct-unreachable public visors via WT (swtr)")
-					phaseWT, err := a.connectByReach(ctx, v.conf.PK, wtwsTargets, tptypes.WT,
-						existingByPK, reach, selfNAT, maxSWTR, countSWTR, reachExplorePerCycle, false)
-					if err != nil {
-						return err
-					}
-					countSWTR += phaseWT.Count
-					for _, pk := range phaseWT.Connected {
-						hasDirectTP[pk] = true
+					for _, targets := range [][]cipher.PubKey{known, wtwsTargets} {
+						var pending []cipher.PubKey
+						for _, pk := range targets {
+							if !hasDirectTP[pk] {
+								pending = append(pending, pk)
+							}
+						}
+						if len(pending) == 0 {
+							continue
+						}
+						phaseWT, err := a.connectByReach(ctx, v.conf.PK, pending, tptypes.WT,
+							existingByPK, reach, selfNAT, maxSWTR, countSWTR, reachExplorePerCycle, false)
+						if err != nil {
+							return err
+						}
+						countSWTR += phaseWT.Count
+						for _, pk := range phaseWT.Connected {
+							hasDirectTP[pk] = true
+						}
 					}
 				}
 				if localSupportsWS {

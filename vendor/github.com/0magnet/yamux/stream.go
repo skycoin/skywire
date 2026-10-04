@@ -1,3 +1,6 @@
+// Copyright IBM Corp. 2014, 2026
+// SPDX-License-Identifier: MPL-2.0
+
 package yamux
 
 import (
@@ -22,8 +25,10 @@ const (
 	streamReset
 )
 
-// Stream is used to represent a logical stream
-// within a session.
+// Stream is used to represent a logical stream within a session. Methods on
+// Stream are safe to call concurrently with one another, but all Read calls
+// must be on the same goroutine and all Write calls must be on the same
+// goroutine.
 type Stream struct {
 	recvWindow uint32
 	sendWindow uint32
@@ -91,7 +96,11 @@ func (s *Stream) StreamID() uint32 {
 	return s.id
 }
 
-// Read is used to read from the stream
+// Read is used to read from the stream. It is safe to call Write, Read, and/or
+// Close concurrently with each other, but calls to Read are not reentrant and
+// should not be called from multiple goroutines. Multiple Read goroutines would
+// receive different chunks of data from the Stream and be unable to reassemble
+// them in order or along message boundaries, and may encounter deadlocks.
 func (s *Stream) Read(b []byte) (n int, err error) {
 	defer asyncNotify(s.recvNotifyCh)
 START:
@@ -179,7 +188,9 @@ WAIT:
 	goto START
 }
 
-// Write is used to write to the stream
+// Write is used to write to the stream. It is safe to call Write, Read, and/or
+// Close concurrently with each other, but calls to Write are not reentrant and
+// should not be called from multiple goroutines.
 func (s *Stream) Write(b []byte) (n int, err error) {
 	s.sendLock.Lock()
 	defer s.sendLock.Unlock()
@@ -355,7 +366,7 @@ func (s *Stream) sendClose() error {
 	return nil
 }
 
-// Close is used to close the stream
+// Close is used to close the stream. It is safe to call Close concurrently.
 func (s *Stream) Close() error {
 	closeStream := false
 	s.stateLock.Lock()
@@ -405,7 +416,7 @@ SEND_CLOSE:
 	}
 
 	s.stateLock.Unlock()
-	s.sendClose()
+	_ = s.sendClose()
 	s.notifyWaiting()
 	if closeStream {
 		s.session.closeStream(s.id)
@@ -521,32 +532,34 @@ func (s *Stream) readData(hdr header, flags uint16, conn io.Reader) error {
 		return nil
 	}
 
-	// Wrap in a limited reader
-	conn = &io.LimitedReader{R: conn, N: int64(length)}
-
-	// Copy into buffer
+	// Only this goroutine shrinks the window, so it cannot close up again
+	// between this check and the append below.
 	s.recvLock.Lock()
-
-	if length > s.recvWindow {
-		s.session.logger.Printf("[ERR] yamux: receive window exceeded (stream: %d, remain: %d, recv: %d)", s.id, s.recvWindow, length)
-		s.recvLock.Unlock()
+	window := s.recvWindow
+	s.recvLock.Unlock()
+	if length > window {
+		s.session.logger.Printf("[ERR] yamux: receive window exceeded (stream: %d, remain: %d, recv: %d)", s.id, window, length)
 		return ErrRecvWindowExceeded
 	}
 
-	if s.recvBuf == nil {
-		// Allocate the receive buffer just-in-time to fit the full data frame.
-		// This way we can read in the whole packet without further allocations.
-		s.recvBuf = bytes.NewBuffer(make([]byte, 0, length))
+	// Read the body before taking recvLock. Holding it across a slow body
+	// left Read stuck on the mutex, deaf to its deadline and to shutdown.
+	if uint32(cap(s.session.recvScratch)) < length {
+		s.session.recvScratch = make([]byte, length)
 	}
-	copiedLength, err := io.Copy(s.recvBuf, conn)
-	if err != nil {
+	body := s.session.recvScratch[:length]
+	if _, err := io.ReadFull(conn, body); err != nil {
 		s.session.logger.Printf("[ERR] yamux: Failed to read stream data: %v", err)
-		s.recvLock.Unlock()
 		return err
 	}
 
-	// Decrement the receive window
-	s.recvWindow -= uint32(copiedLength)
+	s.recvLock.Lock()
+	if s.recvBuf == nil {
+		// Allocate the receive buffer just-in-time to fit the full data frame.
+		s.recvBuf = bytes.NewBuffer(make([]byte, 0, length))
+	}
+	s.recvBuf.Write(body)
+	s.recvWindow -= length
 	s.recvLock.Unlock()
 
 	// Unblock any readers

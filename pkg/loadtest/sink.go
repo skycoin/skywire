@@ -94,6 +94,7 @@ const chunkBytes = 256 * 1024
 type sumEntry struct {
 	ready chan struct{}
 	sum   string
+	done  bool // set with sum under sumMu, so a later hit never touches ready
 }
 
 // sumCacheMax bounds the cache. The bench uses a handful of sizes; past
@@ -115,6 +116,10 @@ var (
 func objectSum(n uint64) string {
 	sumMu.Lock()
 	e, hit := sums[n]
+	if hit && e.done {
+		sumMu.Unlock()
+		return e.sum
+	}
 	if hit {
 		sumMu.Unlock()
 		<-e.ready
@@ -137,9 +142,12 @@ func objectSum(n uint64) string {
 		pattern(buf[:m], n, off)
 		h.Write(buf[:m]) //nolint:errcheck,gosec // hash.Hash never errors
 	}
-	e.sum = hex.EncodeToString(h.Sum(nil))
+	sum := hex.EncodeToString(h.Sum(nil))
+	sumMu.Lock()
+	e.sum, e.done = sum, true
+	sumMu.Unlock()
 	close(e.ready)
-	return e.sum
+	return sum
 }
 
 // serveFixed serves exactly n bytes of the pattern with the whole object's

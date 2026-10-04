@@ -1,9 +1,7 @@
-package yamux
+// Copyright IBM Corp. 2014, 2025
+// SPDX-License-Identifier: MPL-2.0
 
-import (
-	"sync"
-	"time"
-)
+package yamux
 
 // Logger is a abstract of *log.Logger
 type Logger interface {
@@ -11,16 +9,6 @@ type Logger interface {
 	Printf(format string, v ...interface{})
 	Println(v ...interface{})
 }
-
-var (
-	timerPool = &sync.Pool{
-		New: func() interface{} {
-			timer := time.NewTimer(time.Hour * 1e6)
-			timer.Stop()
-			return timer
-		},
-	}
-)
 
 // asyncSendErr is used to try an async send of an error
 func asyncSendErr(ch chan error, err error) {

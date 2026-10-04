@@ -13,18 +13,17 @@ import { SnackbarService } from 'src/app/services/snackbar.service';
 const SKYCOIN_DAEMON_PREFIX = 'skycoin-daemon';
 
 /**
- * Per-visor Wallet tab. Iframes the hypervisor-served wallet at the
- * same-origin path `/wallet/` — the HV serves the static skycoin-web
- * bundle and proxies its node API over the visor's dmsg client
- * (pkg/visor/hypervisor_handlers_wallet.go), so the wallet is ALWAYS
- * available with no skycoin-web process, no port, and works for remote
- * hypervisors (same-origin, not a cross-host `:8002`). Identical URL on
- * the native and wasm visors — see docs/design/gui-app-serving-modes.md.
+ * Per-visor Wallet tab. The wallet itself is the dashboard's #/wallet page
+ * (src/app/wallet): skycoin-web compiled into the dashboard, its node queries
+ * proxied by the hypervisor over the visor's dmsg client
+ * (pkg/visor/hypervisor_handlers_wallet.go). Its wallets live in this
+ * browser, so it is the same wallet whichever visor is selected; this tab
+ * opens it, sets the coin node its queries go to, and manages the visor's
+ * skycoin-daemon instances.
  *
  * The skycoin-web *app* (own port, disk wallets, server-side multi-coin)
  * remains an opt-in "power" mode: when it's configured on the visor the
- * header exposes start/stop + settings, but it no longer gates the
- * inline wallet.
+ * header exposes start/stop + settings, but it does not gate the wallet.
  */
 @Component({
   selector: 'app-wallet',
@@ -37,35 +36,25 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   node!: Node;
   // Possible UI states. The template branches on these.
   state: 'unknown' | 'not-configured' | 'not-running' | 'running' = 'unknown';
-  // The URL the iframe / "open in new tab" button points at when
-  // state === 'running'. Built from whatever --host/--port the
-  // skycoin-web app is configured with, falling back to the upstream
-  // defaults when those flags aren't passed.
-  iframeUrl: SafeResourceUrl | null = null;
-  fullWindowUrl = '';
 
   // ---- coin-backend config ----
   // The config UI + its localStorage keys (skywire-wallet-mode, -coin-nodes,
-  // -coin-node, -wallet-service, -btc-backend, -btc-proxy) now live in the
-  // shared /wallet/config page (pkg/wasmhv/browseui/walletconfig.go), embedded
-  // below. The keys are read by the /wallet/ shim + BTC gateway on both the
-  // native and wasm visors. See docs/design/gui-app-serving-modes.md.
+  // -coin-node, -wallet-service, -btc-backend, -btc-proxy) live in the shared
+  // wallet/config page (pkg/wasmhv/browseui/walletconfig.go), embedded below.
+  // The wallet's backend interceptor (src/app/wallet) reads them per request
+  // on both the native and wasm visors, so a change applies to its next query.
   backendOpen = false;
-  // The shared wallet-config page (/wallet/config), embedded as an iframe when
-  // the Node panel is open. It is the SAME page + localStorage keys the ☰
-  // wallet window uses, so there is one config implementation. On Apply it
-  // postMessages {type:'skywire-wallet-config'} and we reload the wallet iframe.
+  // The shared wallet-config page, embedded as an iframe when the Node panel
+  // is open. It is the SAME page + localStorage keys the ☰ wallet window uses,
+  // so there is one config implementation. Built once the node is known: on a
+  // wasm visor the browser can't egress to clearnet itself, so the page is
+  // told (?wasm=1) to require the BTC skysocks exit. Relative, so it stays
+  // under the desk's /vnet/<port>/ prefix.
   configUrl: SafeResourceUrl | null = null;
-  // Last node PK we built the iframe URL for. NodeComponent.currentNode
-  // emits on every polling refresh; rebuilding the SafeResourceUrl on
-  // every tick reloads the iframe and tears down whatever the wallet
-  // had open (mirrors the bug we fixed on the terminal tab earlier).
-  private boundPk = '';
 
   // The skycoin-web app entry from this.node.apps, when present.
-  // Drives both the wallet header (start/stop/settings) and the
-  // iframe state above. Null when the app isn't configured on the
-  // visor at all (a "not-configured" template state results).
+  // Drives the optional local-server controls (start/stop/settings).
+  // Null when the app isn't configured on the visor at all.
   webApp: Application | null = null;
   webAppBusy = false;
   webAppSettingsOpen = false;
@@ -92,27 +81,7 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
  super();
 }
 
-  // Reload the wallet iframe when its config page posts a change. Declared here
-  // (a method-like arrow field) after the data fields to satisfy member-ordering.
-  private onConfigMessage = (ev: MessageEvent) => {
-    if (ev?.data && ev.data.type === 'skywire-wallet-config') {
-      this.reloadWallet();
-    }
-  };
-
   override ngOnInit() {
-    // The config UI lives in the embedded /wallet/config page (same origin, so
-    // it reads+writes the same localStorage the /wallet/ shim reads). It's the
-    // SAME page the ☰ wallet window uses — one config implementation. Point the
-    // iframe at it and listen for its Apply postMessage to reload the wallet.
-    // When this same bundle is served BY a wasm visor (`hv serve`), the browser
-    // can't egress to clearnet itself, so the BTC skysocks exit is required —
-    // signal the config page with ?wasm=1 (detected like browse.js does).
-    const isWasm = !!(window as unknown as { skywireVisor?: unknown }).skywireVisor;
-    this.configUrl = this.sanitizer.bypassSecurityTrustResourceUrl(
-      '/wallet/config' + (isWasm ? '?wasm=1' : ''));
-    window.addEventListener('message', this.onConfigMessage);
-
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
       this.recompute();
@@ -124,21 +93,10 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
 
   ngOnDestroy(): void {
     this.nodeSub?.unsubscribe();
-    window.removeEventListener('message', this.onConfigMessage);
   }
 
   toggleBackend() {
     this.backendOpen = !this.backendOpen;
-  }
-
-  /** Recreates the iframe so it re-fetches against the new coin node. */
-  private reloadWallet() {
-    this.iframeUrl = null;
-    // Re-assign on the next tick so Angular tears down + rebuilds the iframe.
-    setTimeout(() => {
-      this.iframeUrl = this.sanitizer.bypassSecurityTrustResourceUrl('/wallet/?_=' + Date.now());
-      this.changeDetectorRef.markForCheck();
-    }, 0);
   }
 
   /** Re-evaluates the UI state from the latest node snapshot. Cheap;
@@ -159,25 +117,16 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     // gates the wallet.
     this.webApp = apps.find((a) => a.name === 'skycoin-web') || null;
 
-    // Always iframe the same-origin, hypervisor-served wallet. Same URL on
-    // the native and wasm visors → symmetric, and remote-safe (no
-    // cross-host :8002). The HV serves /wallet/ (static bundle + node API
-    // proxied over dmsg); no skycoin-web port is required.
-    const url = '/wallet/';
-    if (this.boundPk !== this.node.localPk || !this.iframeUrl) {
-      this.iframeUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
-      this.boundPk = this.node.localPk;
+    // Built once: NodeComponent.currentNode emits on every polling refresh,
+    // and a new SafeResourceUrl would reload the config page each time.
+    if (!this.configUrl) {
+      this.configUrl = this.sanitizer.bypassSecurityTrustResourceUrl('wallet/config' + (this.isWasm ? '?wasm=1' : ''));
     }
-    this.fullWindowUrl = url;
     this.state = 'running';
   }
 
-  openFullWindow() {
-    // Navigate IN-SPA to the unified full-page app host (not the separately-served
-    // /wallet/ URL, and not a new window).
-    if (this.node && this.node.localPk) {
-      this.router.navigate(['/app', 'wallet', this.node.localPk]);
-    }
+  openWallet() {
+    this.router.navigate(['/wallet']);
   }
 
   // ---- skycoin-web app controls (start/stop + settings) ----
@@ -236,7 +185,7 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
 
   /** A browser/wasm visor can't run skycoin-daemon or skycoin-web host
    *  processes, so the daemon-instance controls are hidden there — the
-   *  /wallet/ feature (client-side wallets, node proxied over dmsg) is all
+   *  wallet (client-side wallets, node proxied over dmsg) is all
    *  that applies. Mirrors node.component's wasm gating. */
   get isWasm(): boolean {
     return !!this.node && (this.node as any).arch === 'wasm';

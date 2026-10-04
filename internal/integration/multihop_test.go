@@ -15,6 +15,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/skyenv"
 	types "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // TestMultiHopRoute exercises multi-hop routing end to end. skysocks traffic
@@ -108,21 +109,23 @@ func testMultiHopRouteViaB(t *testing.T, env *TestEnv) {
 			cbTP = tp.ID.String()
 			continue
 		}
-		if tp.Remote.String() == serverPK {
-			out, rmErr := env.VisorTpRm(visorC, tp.ID)
-			// Best-effort: a transport that is already gone (or races
-			// autoconnect re-adding one) must not fail the test — min_hops=2
-			// remains the guard for anything that reappears.
-			if rmErr != nil {
-				t.Logf("could not remove direct c→a %s transport %s: %v (out: %s)",
-					tp.Type, tp.ID, rmErr, out)
-				continue
-			}
-			t.Logf("removed direct c→a %s transport %s", tp.Type, tp.ID)
+		// Any other c↔b transport goes too: route setup may pick it for the
+		// first leg, and a SUDPH one carries nothing here.
+		if tp.Remote.String() == serverPK || tp.Remote.String() == bridgePK {
+			removeTransport(t, env, visorC, tp)
 		}
 	}
 	require.NotEmpty(t, cbTP, "visor-c → visor-b STCPR transport not found")
 	t.Logf("c↔b transport: %s", cbTP)
+
+	// The same for the second leg: keep only b↔a STCPR.
+	btps, err := env.VisorTpLs(visorB)
+	require.NoError(t, err, "Failed to list transports on visor-b")
+	for _, tp := range btps {
+		if tp.Remote.String() == serverPK && tp.Type != types.STCPR {
+			removeTransport(t, env, visorB, tp)
+		}
+	}
 
 	// Start skysocks-client restricted to existing transports (--existing-tp),
 	// so with no direct c↔a transport the only route the proxy can use is the
@@ -183,4 +186,16 @@ func testMultiHopRouteViaB(t *testing.T, env *TestEnv) {
 		env.waitForNonZeroBandwidth(visorB, serverPK, 10*time.Second),
 		"b→a leg carried no bandwidth (traffic did not transit visor-b)",
 	)
+}
+
+// removeTransport deletes tp from visor, best effort: a transport already gone,
+// or one autoconnect re-adds, must not fail the test. min_hops=2 still guards
+// against a direct c→a route.
+func removeTransport(t *testing.T, env *TestEnv, visor string, tp *visorapi.TransportSummary) {
+	out, err := env.VisorTpRm(visor, tp.ID)
+	if err != nil {
+		t.Logf("could not remove %s %s transport %s to %s: %v (out: %s)", visor, tp.Type, tp.ID, tp.Remote, err, out)
+		return
+	}
+	t.Logf("removed %s %s transport %s to %s", visor, tp.Type, tp.ID, tp.Remote)
 }

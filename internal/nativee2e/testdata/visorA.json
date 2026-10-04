@@ -96,7 +96,7 @@
   "memory_limit": "auto",
   "hypervisor": {
     "enable": true,
-    "db_path": "/Users/mohammed/Projects/Skycoin/mohammed/skywire/users.db",
+    "db_path": "./localA/users.db",
     "enable_auth": false,
     "enable_pk_endpoint": false,
     "cookies": {

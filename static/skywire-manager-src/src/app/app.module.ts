@@ -1,6 +1,5 @@
 import { BrowserModule} from '@angular/platform-browser';
 import { ErrorHandler, NgModule } from '@angular/core';
-import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { HttpBackend, provideHttpClient, withInterceptorsFromDi, withXhr } from '@angular/common/http';
 import { SkywireHttpBackend } from './services/skywire-http-backend';
 import { AppComponent } from './app.component';
@@ -52,6 +51,7 @@ import { BandwidthComponent } from './components/pages/node/bandwidth/bandwidth.
 import { UptimeComponent } from './components/pages/node/uptime/uptime.component';
 import { TerminalComponent } from './components/pages/node/terminal/terminal.component';
 import { WalletComponent } from './components/pages/node/wallet/wallet.component';
+import { WalletPageComponent } from './wallet/wallet-page.component';
 import { FullAppHostComponent } from './components/pages/full-app-host/full-app-host.component';
 import { AppSettingsComponent } from './components/pages/node/apps/app-settings/app-settings.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
@@ -116,6 +116,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         TerminalComponent,
         FullAppHostComponent,
         WalletComponent,
+        WalletPageComponent,
         AppSettingsComponent,
         WebProxyComponent,
         VpnComponent,
@@ -136,7 +137,6 @@ const globalRippleConfig: RippleGlobalOptions = {
         NodeLogsComponent,
     ],
     bootstrap: [AppComponent], imports: [BrowserModule,
-        BrowserAnimationsModule,
         AppRoutingModule,
         // Root translation setup (TranslateModule.forRoot: loader + service).
         AppTranslationModule,

@@ -1,5 +1,5 @@
-@import 'variables';
-@import 'utilities/utilities';
+@use 'variables';
+@use 'utilities/utilities';
 
 .wrapper {
   display: inline;
@@ -7,12 +7,12 @@
   @extend .reactivate-mouse;
 
   mat-icon {
-    font-size: $font-size-smaller;
+    font-size: variables.$font-size-smaller;
     user-select: none;
   }
 }
 
 .label {
   opacity: 0.7;
-  font-size: $font-size-smaller;
+  font-size: variables.$font-size-smaller;
 }

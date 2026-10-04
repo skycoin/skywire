@@ -54,6 +54,7 @@ func newTestConfig(t *testing.T) (*visorconfig.V1, string) {
 		// A nil section resolves as "not set; set the whole block first", which
 		// is what TestLiveConfigFieldsResolve is here to catch for REAL typos —
 		// so the fixture has to carry every section the table names.
+		Pty:         &visorconfig.Pty{},
 		DmsgWeb:     &visorconfig.DmsgWebConfig{},
 		SkynetWeb:   &visorconfig.SkynetWebConfig{},
 		Hypervisor:  &visorconfig.HypervisorConfig{},

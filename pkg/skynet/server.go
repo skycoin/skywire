@@ -8,7 +8,9 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
+	"github.com/0magnet/bottle/vnet"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -175,8 +177,12 @@ func (s *Server) sendError(conn net.Conn, sendErr error) {
 	}
 }
 
+// localDialTimeout bounds the dial to the local service being forwarded.
+const localDialTimeout = 10 * time.Second
+
 func (s *Server) forwardRawTCP(remoteConn net.Conn, localAddr string) {
-	localConn, err := net.Dial("tcp", localAddr)
+	// In a browser visor the local service lives on the page's vnet loopback.
+	localConn, err := vnet.DialTimeout("tcp", localAddr, localDialTimeout)
 	if err != nil {
 		s.log.WithError(err).Error("Failed to dial local server")
 		return

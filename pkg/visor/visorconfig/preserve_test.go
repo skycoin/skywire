@@ -321,3 +321,32 @@ func TestFlushPreservesUnknownKeysAfterCommonSwap(t *testing.T) {
 		t.Errorf("nested unknown key lost after Common swap: %v", ws["exec_wasm"])
 	}
 }
+
+// TestFlushDropsRetiredRSNOracleSwitch: the RSN-oracle 2-hop route path is
+// always on, so an older config's routing.enable_rsn_oracle_routes switches
+// nothing and is not written back, while the rest of the block is.
+func TestFlushDropsRetiredRSNOracleSwitch(t *testing.T) {
+	path := writeConf(t, `{
+	"version": "v1.3.29",
+	"routing": {"min_hops": 1, "enable_rsn_oracle_routes": true}
+}`)
+
+	conf, err := ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if err := conf.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+
+	routing, ok := loadJSON(t, path)["routing"].(map[string]any)
+	if !ok {
+		t.Fatal("routing block missing after flush")
+	}
+	if _, ok := routing["enable_rsn_oracle_routes"]; ok {
+		t.Error("retired switch enable_rsn_oracle_routes was written back")
+	}
+	if _, ok := routing["min_hops"]; !ok {
+		t.Error("min_hops missing after flush")
+	}
+}

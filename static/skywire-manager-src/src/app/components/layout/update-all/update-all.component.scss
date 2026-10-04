@@ -1,5 +1,6 @@
-@import 'variables';
-@import "bootstrap_overrides";
+@use "sass:map";
+@use 'variables';
+@use "bootstrap_overrides";
 
 .text-container {
   word-break: break-word;
@@ -8,7 +9,7 @@
 .list-container {
   font-size: 14px;
   margin: 10px;
-  color: $blue-medium;
+  color: variables.$blue-medium;
   word-break: break-word;
   line-height: 1.2;
 
@@ -29,16 +30,16 @@
         overflow: hidden;
         text-overflow: ellipsis;
 
-        @media (max-width: (map-get($grid-breakpoints, sm) - 1)) {
+        @media (max-width: (map.get(bootstrap_overrides.$grid-breakpoints, sm) - 1)) {
           & {
-            font-size: $font-size-mini;
+            font-size: variables.$font-size-mini;
           }
         }
       }
 
       .version {
-        font-size: $font-size-mini;
-        color: $light-gray;
+        font-size: variables.$font-size-mini;
+        color: variables.$light-gray;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -52,6 +53,6 @@
   }
 
   .details {
-    color: $light-gray;
+    color: variables.$light-gray;
   }
 }

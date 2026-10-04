@@ -17,13 +17,16 @@ package cliptyfs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -164,11 +167,8 @@ their own supervision).`,
 				return err
 			}
 			myPK, mySK := resolvePTYFSIdentity(ptyfsSK, useVisorKey)
-			rwc, err := pty.DialSftpTCP(ctx, addr, myPK, mySK, rPK)
-			if err != nil {
-				return err
-			}
-			return runMount(ctx, rwc, rPK, mountpoint, fmt.Sprintf("%s@%s (tcp)", rPK, addr))
+			dial := func() (io.ReadWriteCloser, error) { return pty.DialSftpTCP(ctx, addr, myPK, mySK, rPK) }
+			return runMount(ctx, dial, rPK, mountpoint, fmt.Sprintf("%s@%s (tcp)", rPK, addr))
 
 		default:
 			// via-visor (auto/dmsg) or dmsg-standalone (--standalone).
@@ -186,11 +186,8 @@ their own supervision).`,
 					return err
 				}
 				defer stop()
-				rwc, err := pty.DialSftpDmsg(ctx, dmsgC, rPK, skyenv.DmsgPtyPort)
-				if err != nil {
-					return err
-				}
-				return runMount(ctx, rwc, rPK, mountpoint, fmt.Sprintf("%s (dmsg-standalone)", rPK))
+				dial := func() (io.ReadWriteCloser, error) { return pty.DialSftpDmsg(ctx, dmsgC, rPK, skyenv.DmsgPtyPort) }
+				return runMount(ctx, dial, rPK, mountpoint, fmt.Sprintf("%s (dmsg-standalone)", rPK))
 			}
 
 			// via-visor: bridge through the LOCAL visor's authorized dmsg
@@ -201,16 +198,19 @@ their own supervision).`,
 			if err != nil {
 				return err
 			}
-			conn, err := clirpc.BridgeConn(0 /* dmsg */, rPK, skyenv.DmsgPtyPort)
-			if err != nil {
-				return fmt.Errorf("ptyfs: via-visor bridge (is the local visor running? add --standalone for a visorless dmsg dial): %w", err)
+			dial := func() (io.ReadWriteCloser, error) {
+				conn, err := clirpc.BridgeConn(0 /* dmsg */, rPK, skyenv.DmsgPtyPort)
+				if err != nil {
+					return nil, fmt.Errorf("ptyfs: via-visor bridge (is the local visor running? add --standalone for a visorless dmsg dial): %w", err)
+				}
+				rwc, err := pty.OpenSftpConn(conn)
+				if err != nil {
+					_ = conn.Close() //nolint:errcheck,gosec
+					return nil, err
+				}
+				return rwc, nil
 			}
-			rwc, err := pty.OpenSftpConn(conn)
-			if err != nil {
-				_ = conn.Close() //nolint:errcheck,gosec
-				return err
-			}
-			return runMount(ctx, rwc, rPK, mountpoint, fmt.Sprintf("%s (via-visor)", rPK))
+			return runMount(ctx, dial, rPK, mountpoint, fmt.Sprintf("%s (via-visor)", rPK))
 		}
 	},
 }
@@ -250,23 +250,18 @@ var umountCmd = &cobra.Command{
 // cleanly via Server.Unmount() before returning.
 func runMount(
 	ctx context.Context,
-	rwc io.ReadWriteCloser,
+	dial func() (io.ReadWriteCloser, error),
 	rPK cipher.PubKey,
 	mountpoint string,
 	display string,
 ) error {
-	// sftp.NewClientPipe takes the read + write halves separately. Our
-	// stream is a single io.ReadWriteCloser; reuse it for both halves.
-	sftpC, err := sftp.NewClientPipe(rwc, rwc)
-	if err != nil {
-		_ = rwc.Close() //nolint:errcheck,gosec
+	sr := &sftpRoot{dial: dial, remoteRoot: path.Clean(mountpoint_remote_default(mountRemoteRoot))}
+	if _, _, err := sr.session(); err != nil {
 		return fmt.Errorf("ptyfs: sftp handshake: %w", err)
 	}
-	defer sftpC.Close() //nolint:errcheck
+	defer sr.close()
 
-	root := &sftpNode{
-		root: &sftpRoot{cli: sftpC, remoteRoot: path.Clean(mountpoint_remote_default(mountRemoteRoot))},
-	}
+	root := &sftpNode{root: sr}
 
 	opts := &fs.Options{
 		AttrTimeout:  &mountAttrTTL,
@@ -350,12 +345,113 @@ func startPTYFSDmsgClient(ctx context.Context, pk cipher.PubKey, sk cipher.SecKe
 	return bootstrap.Client, bootstrap.Close, nil
 }
 
-// sftpRoot is the per-mount state shared by every sftpNode in the
-// tree: the live sftp.Client + the remote root that node paths are
+// sftpRoot is the per-mount state shared by every sftpNode in the tree: the
+// sftp session, redialed when it drops, and the remote root node paths are
 // rooted at.
 type sftpRoot struct {
-	cli        *sftp.Client
+	dial       func() (io.ReadWriteCloser, error)
 	remoteRoot string
+
+	mu  sync.Mutex
+	cli *sftp.Client
+	gen int // bumped per session
+}
+
+// session returns the live sftp client, dialing a new one if the last was lost.
+func (r *sftpRoot) session() (*sftp.Client, int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.cli != nil {
+		return r.cli, r.gen, nil
+	}
+	rwc, err := r.dial()
+	if err != nil {
+		return nil, r.gen, err
+	}
+	c, err := sftp.NewClientPipe(rwc, rwc)
+	if err != nil {
+		_ = rwc.Close() //nolint:errcheck,gosec
+		return nil, r.gen, err
+	}
+	r.cli = c
+	r.gen++
+	if r.gen > 1 {
+		fmt.Fprintln(os.Stderr, "ptyfs: reconnected to the peer") //nolint:errcheck
+	}
+	return c, r.gen, nil
+}
+
+// lost drops session gen, so the next call dials a new one.
+func (r *sftpRoot) lost(gen int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.gen == gen && r.cli != nil {
+		_ = r.cli.Close() //nolint:errcheck,gosec
+		r.cli = nil
+	}
+}
+
+func (r *sftpRoot) close() {
+	r.lost(r.gen)
+}
+
+// sessionGone reports an error that means the connection failed, not the
+// request.
+func sessionGone(err error) bool {
+	return errors.Is(err, sftp.ErrSSHFxConnectionLost) || errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed)
+}
+
+// do runs fn on the session, redialing once if the session was lost.
+func (r *sftpRoot) do(fn func(c *sftp.Client) error) error {
+	return r.doGen(func(c *sftp.Client, _ int) error { return fn(c) })
+}
+
+// doGen is do, also telling fn which session it runs on.
+func (r *sftpRoot) doGen(fn func(c *sftp.Client, gen int) error) error {
+	for attempt := 0; ; attempt++ {
+		c, gen, err := r.session()
+		if err != nil {
+			return err
+		}
+		err = fn(c, gen)
+		if err != nil && sessionGone(err) && attempt == 0 {
+			r.lost(gen)
+			continue
+		}
+		return err
+	}
+}
+
+func (r *sftpRoot) lstat(p string) (fi os.FileInfo, err error) {
+	err = r.do(func(c *sftp.Client) error { fi, err = c.Lstat(p); return err })
+	return fi, err
+}
+
+func (r *sftpRoot) readDir(p string) (fis []os.FileInfo, err error) {
+	err = r.do(func(c *sftp.Client) error { fis, err = c.ReadDir(p); return err })
+	return fis, err
+}
+
+func (r *sftpRoot) readLink(p string) (s string, err error) {
+	err = r.do(func(c *sftp.Client) error { s, err = c.ReadLink(p); return err })
+	return s, err
+}
+
+func (r *sftpRoot) openFile(p string, flags int) (*sftpHandle, error) {
+	h := &sftpHandle{root: r, path: p, flags: flags}
+	err := r.doGen(func(c *sftp.Client, gen int) error {
+		f, err := c.OpenFile(p, flags)
+		if err != nil {
+			return err
+		}
+		h.f, h.gen = f, gen
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return h, nil
 }
 
 // sftpNode is one inode in the FUSE tree. relPath is the path
@@ -423,7 +519,7 @@ var (
 func (n *sftpNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	rel := n.childRelPath(name)
 	abs := path.Join(n.root.remoteRoot, rel)
-	fi, err := n.root.cli.Lstat(abs)
+	fi, err := n.root.lstat(abs)
 	if err != nil {
 		return nil, sftpToErrno(err)
 	}
@@ -434,7 +530,7 @@ func (n *sftpNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 }
 
 func (n *sftpNode) Getattr(_ context.Context, _ fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
-	fi, err := n.root.cli.Lstat(n.remotePath())
+	fi, err := n.root.lstat(n.remotePath())
 	if err != nil {
 		return sftpToErrno(err)
 	}
@@ -443,7 +539,7 @@ func (n *sftpNode) Getattr(_ context.Context, _ fs.FileHandle, out *fuse.AttrOut
 }
 
 func (n *sftpNode) Readdir(_ context.Context) (fs.DirStream, syscall.Errno) {
-	entries, err := n.root.cli.ReadDir(n.remotePath())
+	entries, err := n.root.readDir(n.remotePath())
 	if err != nil {
 		return nil, sftpToErrno(err)
 	}
@@ -467,11 +563,11 @@ func (n *sftpNode) Readdir(_ context.Context) (fs.DirStream, syscall.Errno) {
 }
 
 func (n *sftpNode) Open(_ context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
-	f, err := n.root.cli.OpenFile(n.remotePath(), int(flags))
+	h, err := n.root.openFile(n.remotePath(), int(flags))
 	if err != nil {
 		return nil, 0, sftpToErrno(err)
 	}
-	return &sftpHandle{f: f}, 0, 0
+	return h, 0, 0
 }
 
 func (n *sftpNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (*fs.Inode, fs.FileHandle, uint32, syscall.Errno) {
@@ -483,34 +579,34 @@ func (n *sftpNode) Create(ctx context.Context, name string, flags uint32, mode u
 	// O_WRONLY would OR access-mode bits 1|2=3, which is undefined.
 	// pkg/sftp's OpenFile takes no mode arg — Chmod afterwards applies
 	// the requested perms.
-	f, err := n.root.cli.OpenFile(abs, int(flags)|os.O_CREATE)
+	h, err := n.root.openFile(abs, int(flags)|os.O_CREATE)
 	if err != nil {
 		return nil, nil, 0, sftpToErrno(err)
 	}
 	if mode != 0 {
-		_ = n.root.cli.Chmod(abs, os.FileMode(mode&0o7777)) //nolint:errcheck,gosec
+		_ = n.root.do(func(c *sftp.Client) error { return c.Chmod(abs, os.FileMode(mode&0o7777)) }) //nolint:errcheck,gosec
 	}
-	fi, err := n.root.cli.Lstat(abs)
+	fi, err := n.root.lstat(abs)
 	if err != nil {
-		_ = f.Close() //nolint:errcheck,gosec
+		_ = h.Release(context.Background()) //nolint:errcheck
 		return nil, nil, 0, sftpToErrno(err)
 	}
 	fillAttrFromFileInfo(fi, &out.Attr)
 	child := &sftpNode{root: n.root, relPath: rel}
 	stable := fs.StableAttr{Mode: out.Attr.Mode & syscall.S_IFMT}
-	return n.NewInode(ctx, child, stable), &sftpHandle{f: f}, 0, 0
+	return n.NewInode(ctx, child, stable), h, 0, 0
 }
 
 func (n *sftpNode) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	rel := n.childRelPath(name)
 	abs := path.Join(n.root.remoteRoot, rel)
-	if err := n.root.cli.Mkdir(abs); err != nil {
+	if err := n.root.do(func(c *sftp.Client) error { return c.Mkdir(abs) }); err != nil {
 		return nil, sftpToErrno(err)
 	}
 	if mode != 0 {
-		_ = n.root.cli.Chmod(abs, os.FileMode(mode&0o7777)) //nolint:errcheck,gosec
+		_ = n.root.do(func(c *sftp.Client) error { return c.Chmod(abs, os.FileMode(mode&0o7777)) }) //nolint:errcheck,gosec
 	}
-	fi, err := n.root.cli.Lstat(abs)
+	fi, err := n.root.lstat(abs)
 	if err != nil {
 		return nil, sftpToErrno(err)
 	}
@@ -521,14 +617,14 @@ func (n *sftpNode) Mkdir(ctx context.Context, name string, mode uint32, out *fus
 }
 
 func (n *sftpNode) Unlink(_ context.Context, name string) syscall.Errno {
-	if err := n.root.cli.Remove(path.Join(n.remotePath(), name)); err != nil {
+	if err := n.root.do(func(c *sftp.Client) error { return c.Remove(path.Join(n.remotePath(), name)) }); err != nil {
 		return sftpToErrno(err)
 	}
 	return 0
 }
 
 func (n *sftpNode) Rmdir(_ context.Context, name string) syscall.Errno {
-	if err := n.root.cli.RemoveDirectory(path.Join(n.remotePath(), name)); err != nil {
+	if err := n.root.do(func(c *sftp.Client) error { return c.RemoveDirectory(path.Join(n.remotePath(), name)) }); err != nil {
 		return sftpToErrno(err)
 	}
 	return 0
@@ -541,14 +637,14 @@ func (n *sftpNode) Rename(_ context.Context, name string, newParent fs.InodeEmbe
 	}
 	oldAbs := path.Join(n.remotePath(), name)
 	newAbs := path.Join(np.remotePath(), newName)
-	if err := n.root.cli.Rename(oldAbs, newAbs); err != nil {
+	if err := n.root.do(func(c *sftp.Client) error { return c.Rename(oldAbs, newAbs) }); err != nil {
 		return sftpToErrno(err)
 	}
 	return 0
 }
 
 func (n *sftpNode) Readlink(_ context.Context) ([]byte, syscall.Errno) {
-	target, err := n.root.cli.ReadLink(n.remotePath())
+	target, err := n.root.readLink(n.remotePath())
 	if err != nil {
 		return nil, sftpToErrno(err)
 	}
@@ -558,12 +654,12 @@ func (n *sftpNode) Readlink(_ context.Context) ([]byte, syscall.Errno) {
 func (n *sftpNode) Setattr(_ context.Context, _ fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
 	abs := n.remotePath()
 	if mode, ok := in.GetMode(); ok {
-		if err := n.root.cli.Chmod(abs, os.FileMode(mode&0o7777)); err != nil {
+		if err := n.root.do(func(c *sftp.Client) error { return c.Chmod(abs, os.FileMode(mode&0o7777)) }); err != nil {
 			return sftpToErrno(err)
 		}
 	}
 	if size, ok := in.GetSize(); ok {
-		if err := n.root.cli.Truncate(abs, int64(size)); err != nil { //nolint:gosec // FUSE size is uint64; sftp.Truncate takes int64. File sizes above 2^63 don't occur in practice
+		if err := n.root.do(func(c *sftp.Client) error { return c.Truncate(abs, int64(size)) }); err != nil { //nolint:gosec // FUSE size is uint64; sftp.Truncate takes int64. File sizes above 2^63 don't occur in practice
 			return sftpToErrno(err)
 		}
 	}
@@ -577,11 +673,11 @@ func (n *sftpNode) Setattr(_ context.Context, _ fs.FileHandle, in *fuse.SetAttrI
 		if !atimeOK {
 			atime = time.Now()
 		}
-		if err := n.root.cli.Chtimes(abs, atime, mtime); err != nil {
+		if err := n.root.do(func(c *sftp.Client) error { return c.Chtimes(abs, atime, mtime) }); err != nil {
 			return sftpToErrno(err)
 		}
 	}
-	fi, err := n.root.cli.Lstat(abs)
+	fi, err := n.root.lstat(abs)
 	if err != nil {
 		return sftpToErrno(err)
 	}
@@ -589,11 +685,17 @@ func (n *sftpNode) Setattr(_ context.Context, _ fs.FileHandle, in *fuse.SetAttrI
 	return 0
 }
 
-// sftpHandle is the FileHandle backing one Open/Create. The
-// underlying sftp.File is goroutine-safe for its own use; we add no
-// extra locking.
+// sftpHandle is the FileHandle backing one Open/Create. When the session it
+// was opened on is lost, it reopens the file on the new one: FUSE reads and
+// writes carry their own offsets, so nothing else needs restoring.
 type sftpHandle struct {
-	f *sftp.File
+	root  *sftpRoot
+	path  string
+	flags int
+
+	mu  sync.Mutex
+	f   *sftp.File
+	gen int
 }
 
 var (
@@ -603,16 +705,51 @@ var (
 	_ fs.FileFlusher  = (*sftpHandle)(nil)
 )
 
+// with runs fn on the file, reopening it on a new session if needed.
+func (h *sftpHandle) with(fn func(f *sftp.File) error) error {
+	return h.root.doGen(func(c *sftp.Client, gen int) error {
+		h.mu.Lock()
+		if h.gen != gen {
+			// Already created and maybe written: reopen it as it is.
+			f, err := c.OpenFile(h.path, h.flags&^(os.O_CREATE|os.O_EXCL|os.O_TRUNC))
+			if err != nil {
+				h.mu.Unlock()
+				return err
+			}
+			if h.f != nil {
+				_ = h.f.Close() //nolint:errcheck,gosec
+			}
+			h.f, h.gen = f, gen
+		}
+		f := h.f
+		h.mu.Unlock()
+		return fn(f)
+	})
+}
+
 func (h *sftpHandle) Read(_ context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
-	n, err := h.f.ReadAt(dest, off)
-	if err != nil && err != io.EOF {
+	var n int
+	err := h.with(func(f *sftp.File) error {
+		var err error
+		n, err = f.ReadAt(dest, off)
+		if err == io.EOF {
+			return nil
+		}
+		return err
+	})
+	if err != nil {
 		return nil, sftpToErrno(err)
 	}
 	return fuse.ReadResultData(dest[:n]), 0
 }
 
 func (h *sftpHandle) Write(_ context.Context, data []byte, off int64) (uint32, syscall.Errno) {
-	n, err := h.f.WriteAt(data, off)
+	var n int
+	err := h.with(func(f *sftp.File) error {
+		var err error
+		n, err = f.WriteAt(data, off)
+		return err
+	})
 	if err != nil {
 		return uint32(n), sftpToErrno(err) //nolint:gosec // WriteAt returns int <= len(data), FUSE limits per-write to max_write (typically <= 128 KiB)
 	}
@@ -620,7 +757,14 @@ func (h *sftpHandle) Write(_ context.Context, data []byte, off int64) (uint32, s
 }
 
 func (h *sftpHandle) Release(_ context.Context) syscall.Errno {
-	if err := h.f.Close(); err != nil {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.f == nil {
+		return 0
+	}
+	err := h.f.Close()
+	h.f = nil
+	if err != nil && !sessionGone(err) {
 		return sftpToErrno(err)
 	}
 	return 0

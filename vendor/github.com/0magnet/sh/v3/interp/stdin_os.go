@@ -1,5 +1,5 @@
-// Copyright (c) 2026, 0magnet fork authors.
-// See LICENSE for licensing information.
+// Copyright (c) 2017, Daniel Martí <mvdan@mvdan.cc>
+// See LICENSE for licensing information
 
 //go:build !js
 
@@ -8,16 +8,19 @@ package interp
 import (
 	"io"
 	"os"
+
+	"golang.org/x/term"
 )
 
-// newOSPipe returns an OS pipe; both ends are [*os.File] so they can
+// stdinFile is the runner's standard input. Outside of js/wasm it is
+// always an [*os.File]: the only type that subprocesses can inherit,
+// and one supporting cancellable reads via [os.File.SetReadDeadline].
+type stdinFile = *os.File
+
+// newPipe returns an OS pipe; both ends are [*os.File] so they can
 // be inherited by subprocesses.
-func newOSPipe() (stdinFile, pipeWriter, error) {
-	pr, pw, err := os.Pipe()
-	if err != nil {
-		return nil, nil, err
-	}
-	return pr, pw, nil
+func newPipe() (stdinFile, *os.File, error) {
+	return os.Pipe()
 }
 
 // newStdinFile converts a reader into the runner's stdin. Readers
@@ -40,4 +43,21 @@ func newStdinFile(r io.Reader) (stdinFile, error) {
 		}()
 		return pr, nil
 	}
+}
+
+// stdinTerminal returns the file descriptor of the shell's stdin
+// if it is a terminal.
+// Note that we only call [os.File.Fd] on character devices,
+// as it stops [os.File.SetReadDeadline] from working,
+// which [Runner.readLine] needs to cancel blocking reads.
+func stdinTerminal(stdin stdinFile) (int, bool) {
+	if stdin == nil {
+		return -1, false
+	}
+	fi, err := stdin.Stat()
+	if err != nil || fi.Mode()&os.ModeCharDevice == 0 {
+		return -1, false
+	}
+	fd := int(stdin.Fd())
+	return fd, term.IsTerminal(fd)
 }

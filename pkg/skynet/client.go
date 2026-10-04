@@ -9,6 +9,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/0magnet/bottle/vnet"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -116,7 +117,9 @@ func (c *Client) Connect(remoteConn net.Conn) error {
 // non-recoverably.
 func (c *Client) Serve() error {
 	addr := fmt.Sprintf("127.0.0.1:%d", c.localPort)
-	lis, err := net.Listen("tcp", addr)
+	// vnet.Listen is net.Listen natively and the page's virtual loopback in a
+	// browser visor, so a forwarded port is reachable from the tab.
+	lis, err := vnet.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", addr, err)
 	}

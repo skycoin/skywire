@@ -1,3 +1,5 @@
+//go:build !tinygo && !(js && wasm)
+
 // Package dmsg pkg/dmsg/dmsg/wt_test.go
 package dmsg
 

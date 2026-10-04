@@ -56,7 +56,7 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.dmsgTrackers = maker("dmsg_trackers", initDmsgTrackers, &m.dmsgC)
 	m.routerListener = maker("router_listener", initRouterListener, &m.dmsgC)
 	m.rt = maker("router", initRouter, &m.tr, &m.dmsgC, &m.dmsgHTTP, &m.embRouteSetup, &m.routerListener)
-	m.launch = maker("launcher", initLauncher, &m.ebc, &m.disc, &m.dmsgC, &m.tr, &m.rt, &m.embDmsgWeb, &m.embSkynetWeb, &m.embResolvers)
+	m.launch = maker("launcher", initLauncher, &m.ebc, &m.disc, &m.dmsgC, &m.tr, &m.rt, &m.embDmsgWeb, &m.embSkynetWeb, &m.embResolvers, &m.skymail)
 	// cli carries remote management (dmsg visor-RPC) as well as the local
 	// RPC listener, which the phone profile switches off (cli_addr "").
 	m.cli = maker("cli", initCLI, &m.tr)

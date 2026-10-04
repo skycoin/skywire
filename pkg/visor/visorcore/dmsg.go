@@ -32,6 +32,7 @@ func DmsgServicePKs(svc Services) cipher.PubKeys {
 		svc.ServiceDiscoveryDmsg,
 		svc.ConfDmsg,
 		svc.UptimeTrackerDmsg,
+		svc.RewardSystemDmsg,
 	}
 	var pks cipher.PubKeys
 	for _, rawURL := range dmsgURLs {

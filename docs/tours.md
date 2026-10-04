@@ -6,11 +6,27 @@ stopped being the same thing some time ago.
 | | hypervisor-UI tour | desk tour |
 |---|---|---|
 | covers | the Angular dashboard | the desktop around it |
-| lives in | `static/skywire-manager-src/src/assets/tour/hv-tour.js` | `pkg/wasmhv/deskhost/desk_tour_js.go` |
+| words in | `static/skywire-manager-src/src/assets/tour/hv-tour.md` | `pkg/wasmhv/deskhost/desk-tour.md` |
+| wiring in | `static/skywire-manager-src/src/assets/tour/hv-tour.js` | `pkg/wasmhv/deskhost/desk_tour_text.go` (`tourApps`) |
 | written in | dependency-free JS, no Angular code | Go, as a desk app |
 | opened from | the **?** button, bottom-right | the launcher, app `tour` |
 | shows itself | once, on first run (`localStorage`) | never; you ask for it |
 | mechanism | dims the page, spotlights one element | opens the app each step describes |
+
+## Editing the words
+
+Each tour's text is a Markdown file, and the head of each file explains the
+format: a `## <id>` per step, then `Title:` and `Body:` fields, with `(wasm)` /
+`(native)` variants and `More:` / `Notice:` panels on the dashboard tour. The
+file's order is the tour's order. The code keeps only the wiring (the page or
+element a dashboard step shows, the app a desk step opens), matched by id;
+`TestHVTourTextMatchesWiring` and `TestDeskTourTextMatchesWiring` fail when the
+two disagree.
+
+The dashboard tour fetches `hv-tour.md` beside its script, so an edit needs
+`make build-ui` to reach `pkg/visor/static`. The desk tour embeds
+`desk-tour.md` into the binary, so an edit reaches a browser visor with the
+next wasm build.
 
 ## Why two
 

@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/0magnet/yamux"
@@ -37,7 +38,7 @@ func runPlan(capsBps []float64, chunks int, p spreadPolicy) []int64 {
 func runPlanWithPriors(capsBps, priorBps []float64, chunks int, p spreadPolicy) []int64 {
 	carried := make([]int64, len(capsBps))
 	for i := 0; i < chunks; i++ {
-		idx := spreadChoose(capsBps, priorBps, carried, p)
+		idx := spreadChoose(capsBps, priorBps, carried, 0, p)
 		if idx < 0 {
 			break
 		}
@@ -126,7 +127,7 @@ func TestSpreadChooseWeighsAnUnmeasuredRouteByItsPrior(t *testing.T) {
 // has only ever been described.
 func TestSpreadChooseBreaksTiesTowardTheMeasuredRoute(t *testing.T) {
 	require.Equal(t, 0, spreadChoose(
-		[]float64{4 << 20, 0}, []float64{0, 4 << 20}, []int64{0, 0},
+		[]float64{4 << 20, 0}, []float64{0, 4 << 20}, []int64{0, 0}, 0,
 		spreadPolicy{maxShare: 1}), "same weight, but only one of them is evidence")
 }
 
@@ -150,12 +151,12 @@ func TestSpreadChooseHoldsTheCap(t *testing.T) {
 // its share the cap is ignored and the chunk is still placed.
 func TestSpreadChooseNeverStallsOnTheCap(t *testing.T) {
 	// One tunnel cannot be under a 0.4 cap of itself, ever.
-	require.Equal(t, 0, spreadChoose([]float64{1 << 20}, []float64{0}, []int64{1 << 30}, spreadPolicy{maxShare: 0.4}))
-	require.Equal(t, -1, spreadChoose(nil, nil, nil, spreadPolicy{maxShare: 0.4}), "nothing to place it on")
+	require.Equal(t, 0, spreadChoose([]float64{1 << 20}, []float64{0}, []int64{1 << 30}, 0, spreadPolicy{maxShare: 0.4}))
+	require.Equal(t, -1, spreadChoose(nil, nil, nil, 0, spreadPolicy{maxShare: 0.4}), "nothing to place it on")
 	// ...and neither may the probe bound. A lone tunnel nothing is known
 	// about has spent its one probe chunk and is still the only place the
 	// next chunk can go.
-	require.Equal(t, 0, spreadChoose([]float64{0}, []float64{0}, []int64{planChunk}, spreadPolicy{maxShare: 1, minRoutes: 2}),
+	require.Equal(t, 0, spreadChoose([]float64{0}, []float64{0}, []int64{planChunk}, 0, spreadPolicy{maxShare: 1, minRoutes: 2}),
 		"a spent probe must not stall an object either")
 }
 
@@ -196,6 +197,10 @@ func TestSpreadDuplicatesOnlyTheTail(t *testing.T) {
 // first answer wins and the loser's bytes are dropped — the reassembled object
 // is unchanged.
 func TestSpreadEndgameDuplicatesTheTailChunksOnly(t *testing.T) {
+	synctest.Test(t, spreadEndgameDuplicatesTheTailChunksOnly)
+}
+
+func spreadEndgameDuplicatesTheTailChunksOnly(t *testing.T) {
 	t.Cleanup(func() { skysettings.Reset() })
 	var sessions []*yamux.Session
 	stamps := map[*yamux.Session]*tunnelMeter{}
@@ -215,13 +220,30 @@ func TestSpreadEndgameDuplicatesTheTailChunksOnly(t *testing.T) {
 	var mu sync.Mutex
 	attempts := map[int64]int{}
 	pinned := map[int64]int{}
+	isTail := func(start int64) bool { return total-start < int64(len(sessions))*chunkSize }
+	// The duplicate is armed just after its chunk's first attempt starts. An
+	// instant first attempt can finish, and the writer with it, before the
+	// duplicate runs, so a tail chunk's first attempt waits for it, as a slow
+	// tail would.
+	dupStarted := map[int64]chan struct{}{}
+	for start := int64(0); start < total; start += chunkSize {
+		dupStarted[start] = make(chan struct{})
+	}
 	f := c.startChunkFetchesPlanned(0, total, chunkSize, pl, func(start, end int64, _ rsProgress, p chunkPlacement) ([]byte, error) {
 		mu.Lock()
 		attempts[start]++
 		if p.pin != nil {
-			pinned[start]++
+			if pinned[start]++; pinned[start] == 1 {
+				close(dupStarted[start])
+			}
 		}
 		mu.Unlock()
+		if p.pin == nil && isTail(start) {
+			select {
+			case <-dupStarted[start]:
+			case <-time.After(5 * time.Second):
+			}
+		}
 		return bytes.Repeat([]byte{'x'}, int(end-start+1)), nil
 	})
 
@@ -239,7 +261,7 @@ func TestSpreadEndgameDuplicatesTheTailChunksOnly(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	for start := int64(0); start < total; start += chunkSize {
-		tail := total-start < int64(len(sessions))*chunkSize
+		tail := isTail(start)
 		require.LessOrEqual(t, attempts[start], 2, "at most one duplicate per chunk")
 		if tail {
 			require.LessOrEqual(t, pinned[start], 1, "chunk %d: at most one duplicate", start)
@@ -808,4 +830,17 @@ func mustParse(t *testing.T, knob, raw string) int64 {
 	v, err := skysettings.Parse(knob, raw)
 	require.NoError(t, err)
 	return v
+}
+
+// A route that leaves mid-object takes its candidacy with it but not its
+// bytes. Counting only the routes still offered, both fast tunnels below
+// look over a 0.4 cap and the never-stall rule hands the faster one the
+// chunk, which is how spread-cut finished at 50 % (#5383).
+func TestSpreadChooseCountsBytesOnRoutesThatLeft(t *testing.T) {
+	const mb = 1 << 20
+	caps := []float64{2444672, 1849184}
+	require.Equal(t, 1, spreadChoose(caps, []float64{0, 0}, []int64{7 * mb, 6 * mb}, 3*mb, spreadPolicy{maxShare: 0.4}),
+		"7 of 16 MB is over the cap; 6 of 16 is not")
+	require.Equal(t, 0, spreadChoose(caps, []float64{0, 0}, []int64{7 * mb, 6 * mb}, 0, spreadPolicy{maxShare: 0.4}),
+		"without the 3 MB elsewhere both look capped and the faster one is chosen")
 }

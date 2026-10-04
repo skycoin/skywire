@@ -1,3 +1,9 @@
+@use 'sass:map';
+// Only this file uses Sass @import, and it has to: Bootstrap 5 is customized by
+// defining variables before importing its own, which needs @import's global
+// scope (modules arrive with Bootstrap 6). angular.json silences the import
+// deprecation for that reason, and `make check-scss-imports` fails if @import
+// appears in any other stylesheet.
 // Bootstrap required
 @import "bootstrap/scss/functions";
 
@@ -44,7 +50,7 @@ html, body {
   min-height: 100%;
   font-family: $skywire-font-family;
   margin:0;
-  color: map-get($theme-colors, white) !important;
+  color: map.get($theme-colors, white) !important;
   font-size: $font-size-base;
   backface-visibility: hidden
 }
@@ -248,7 +254,7 @@ button:focus {
   height: 11px;
   display: inline-block;
   margin-right: 5px;
-  background-image: url('/assets/img/flags/unknown.png');
+  background-image: url('assets/img/flags/unknown.png');
 
   div {
     width: 16px;
