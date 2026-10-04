@@ -819,16 +819,6 @@ type Routing struct {
 	// leaves it off its own list. Values use the same names as TransportPreference.
 	RouteExcludeTransportTypes []string `json:"route_exclude_transport_types,omitempty"`
 
-	// EnableRSNOracleRoutes opts INTO the RSN-oracle 2-hop route path: for a
-	// single-intermediate route S->I->D the source computes the route LOCALLY
-	// from its OWN transports intersected with the destination's OWN transports
-	// (fetched authoritatively from D via an RSN-signed transport-query), making
-	// the common route type independent of the transport-discovery service
-	// (TPD). OFF by default; even when true the path is inert until the visor
-	// wires a destination-transport oracle (router.SetDstTransportOracle). TPD is
-	// still used for routes with >=2 intermediates.
-	EnableRSNOracleRoutes bool `json:"enable_rsn_oracle_routes,omitempty"`
-
 	// MuxFEC opts INTO forward error correction on mux route groups: repair
 	// frames (K=8, R=2) are striped alongside data so a lost frame can be
 	// rebuilt without a retransmit. OFF by default: the legs ride reliable

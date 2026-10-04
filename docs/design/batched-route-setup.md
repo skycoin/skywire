@@ -7,7 +7,7 @@ its own setup-node request.
 
 ## What the data already says
 
-`routing.enable_rsn_oracle_routes` is on by default, so the source already asks
+The RSN-oracle 2-hop path is always on, so the source already asks
 the destination for its live transports and intersects them with its own
 (`pkg/router/rsn_oracle_routes.go`). Measured on the campaign rig 2026-09-18: the
 local visor `0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c`

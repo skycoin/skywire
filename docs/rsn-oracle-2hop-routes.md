@@ -1,8 +1,8 @@
-# RSN-oracle 2-hop route calculation (phase-1)
+gated on a wired oracle and a| Visor wiring | `pkg/visor/init_router.go` (oracle + listener wiring) || Dial-path plug-in |# RSN-oracle 2-hop route calculation (phase-1)
 
 ## Summary
 
-A route-calculation path, **on by default** in a generated config, for **single-intermediate
+A route-calculation path, **always on**, for **single-intermediate
 (2-hop) multiplexed routes** `S → I → D` that gets the destination's transports
 **directly from the destination**, authorized by the transport/route setup-node
 (RSN) acting as a **signing oracle**, instead of relying on the
@@ -102,20 +102,18 @@ verbatim (`TransportQuery.Sign/Verify` mirror `CascadeSetup.Sign/Verify`).
 | S-side fetch-D's-transports-via-oracle | `pkg/router/rsn_oracle_routes.go` (`fetchDstTransportsViaOracle`) |
 | **Local 2-hop disjoint route computation (tested crux)** | `pkg/router/rsn_oracle_routes.go` (`computeDisjoint2HopRoutes`) |
 | Router-facing oracle seam | `pkg/router/router.go` (`DstTransportOracle`, `Router.SetDstTransportOracle`), `pkg/router/rsn_oracle_routes.go` (`router.oracle2HopRoutes`) |
-| Dial-path plug-in (gated, on by default) | `pkg/router/router_dial.go` — top of `fetchBestRoutes` |
-| Config flag (`RouteOption`) | `pkg/router/router.go` (`Config.EnableRSNOracleRoutes`, `DialOptions.UseRSNOracle2Hop`) |
-| Config surface + plumbing | `pkg/visor/visorconfig/v1.go` (`Routing.EnableRSNOracleRoutes`), `pkg/visor/visorcore/router.go`, `pkg/visor/init_router.go` (oracle + listener wiring) |
+| Dial-path plug-in | `pkg/router/router_dial_select.go` — top of `fetchBestRoutes` |
+| Visor wiring | `pkg/visor/init_router.go` (oracle + listener wiring) |
 | Unit tests | `pkg/router/transport_query_test.go`, `pkg/router/rsn_oracle_routes_test.go`, `pkg/router/transport_query_dmsg_test.go` |
 
 ### End-to-end wiring (dmsg-direct, phase-1)
 
-`pkg/visor/init_router.go` (in `setupRouting`, after the route-checker setup):
-when `Routing.EnableRSNOracleRoutes` is true it (a) calls
-`r.SetDstTransportOracle(router.NewDmsgRSNOracle(v.dmsgC, EffectiveRouteSetupNodes(), log))`
-so the **source** side is live, and (b) starts
-`router.ServeTransportQueryListener(serveCtx, v.dmsgC, gw, log)` in a goroutine so
-the **destination** side answers queries. Both are skipped entirely when the flag
-is off — no extra dmsg listener, no dial-path change.
+`pkg/visor/init_router.go` (in `setupRouting`, after the route-checker setup)
+(a) starts `router.ServeTransportQueryListener(serveCtx, v.dmsgC, gw, log)` in a
+goroutine so the **destination** side answers queries, and (b) calls
+`r.SetDstTransportOracle(...)` with `router.NewDmsgRSNOracle(v.dmsgC,
+EffectiveRouteSetupNodes(), log)` (plus the visor-RPC fallback) so the
+**source** side is live. Every visor does both.
 
 - **Delivery transport:** the deliverer dials the destination at
   `dmsg.Addr{PK: D, Port: skyenv.DmsgTransportQueryPort(=68)}` and issues the
@@ -125,26 +123,24 @@ is off — no extra dmsg listener, no dial-path change.
   codec or port-multiplexing is introduced.
 - **Listener/port:** a **dedicated** dmsg port `68` (`DmsgTransportQueryPort`),
   registered in `pkg/skyenv/skyenv.go` and guarded by `ports_test.go`. It is a
-  control-plane listener, bound **only** when the flag is on. It does **not**
+  control-plane listener every visor binds. It does **not**
   require any new capability — it reuses the visor's existing dmsg client and PK
   identity.
 
 ### Where it plugs into route setup (exact seams)
 
-- **`fetchBestRoutes`** (`pkg/router/router_dial.go:811`) is the single funnel
+- **`fetchBestRoutes`** (`pkg/router/router_dial_select.go`) is the single funnel
   the whole dial path (primary route + every mux leg via `establishMuxRoutes` /
   `addOneAuxForwardLeg` / `GrowMuxRoute`) uses to obtain forward/reverse hops.
   The RSN-oracle fast path is inserted at the **top** of `fetchBestRoutes`, after
-  the `forceLocal` check: gated on
-  `(Config.EnableRSNOracleRoutes || opts.UseRSNOracle2Hop)`, a wired oracle, and
-  a **2-hop-satisfiable** min-hops constraint (`≤ 2`; a `min_hops ≥ 3` request
+  the `forceLocal` check: gated on a wired oracle, a non-direct dial, and a
+  **2-hop-satisfiable** min-hops constraint (`≤ 2`; a `min_hops ≥ 3` request
   falls through). Because each `establishMuxRoutes` iteration adds the used
   intermediate to `opts.ExcludeIntermediatePKs`, successive calls return
   **disjoint** intermediates automatically — the same discipline the existing
   disjoint-mux code uses.
 - **On any miss** (no oracle wired, no shared intermediate, delivery error) it
-  falls through to the existing route-finder / TPD-backed path. **Zero behavior
-  change when disabled.**
+  falls through to the existing route-finder / TPD-backed path.
 
 ### The local computation (the tested standalone function)
 
@@ -167,26 +163,23 @@ sets:
 
 ## What is deferred (phase-2 / optional follow-ups)
 
-Phase-1 is now **end-to-end functional** behind the default-OFF flag: protocol,
+Phase-1 is now **end-to-end functional** and always on: protocol,
 RSN signing endpoint, D-side response builder + dmsg listener, S→D dmsg-direct
 delivery, the composed oracle, the local 2-hop computation, and the dial-path
 plug-in are all implemented, wired, and tested. Remaining items are optional:
 
 1. **Phase-2 delivery over transports via intermediates** — reuse the cascade
    `RelayTpID` + nested `Payload` carry so the query needs no dmsg at all.
-2. **Config → `DialOptions.UseRSNOracle2Hop`** per-dial mapping if a per-app /
-   per-policy opt-in (rather than the visor-wide `Config.EnableRSNOracleRoutes`)
-   is wanted; the field already exists and is honored by `fetchBestRoutes`.
-3. **Response caching** per `(src,dst)` with a short TTL so a mux build doesn't
+2. **Response caching** per `(src,dst)` with a short TTL so a mux build doesn't
    re-fetch D's list once per leg (functionally correct today; an optimization).
-4. **`SetupClient` reuse** — `dmsgRSNOracle.DstTransports` opens a fresh
+3. **`SetupClient` reuse** — `dmsgRSNOracle.DstTransports` opens a fresh
    setup-node connection per call (matching the cascade path's per-request model
    in `wrappers.go`); a pooled/relay path could be added later.
 
 ## Safety / invariants
 
-- **On by default** in a generated config (`EnableRSNOracleRoutes`), and inert
-  until an oracle is explicitly wired — no existing dial path changes.
+- **Always on**; inert only when no oracle could be wired, in which case dials
+  take the route-finder / TPD path as before.
 - Reuses the cascade trust model verbatim: **RSN signs, D checks its trusted-RSN
   allow-list** — no new trust surface.
 - Never uses DMSG or `LabelSetup` transports as data hops.
