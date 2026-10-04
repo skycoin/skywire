@@ -200,7 +200,7 @@ network. Footnotes apply to both.
   between themselves, without a relay carrying the traffic.
 - **Multi-hop** — traffic can be forwarded through other peers, so two
   nodes with no direct link still connect.
-- **Multipath** — one connection's traffic travels over several paths
+- **Multi-path** — one connection's traffic travels over several paths
   at the same time.
 - **IP** (carries IP) — arbitrary IP traffic, as a VPN or virtual interface.
 - **Exit** (internet exit) — a node can carry other nodes' traffic out to the
@@ -416,30 +416,23 @@ Further docs: [skywire wiki](https://github.com/skycoin/skywire/wiki).
 
 ## Resource usage
 
-Approximate memory footprint, measured from live deployment nodes via pprof
-(`HeapInuse`) cross-referenced with process RSS. Both figures scale roughly
-linearly, so the per-unit cost is derived from the slope between two nodes with
-very different counts (which cancels out the fixed base).
+Approximate memory footprint, read from live fleet nodes over dmsg with pprof
+(in-use heap) and, for the dmsg server, the process's peak RSS.
 
-**Data date: measured 2026-06-10 on live v1.3.66 and v1.3.67 nodes. It has not
-been re-measured since, and the current release is newer. Treat the numbers as
-approximate.** Re-measuring needs pprof and RSS readings from two live nodes
-with very different transport or client counts.
+Measured 2026-10-04 on fleet visors running v1.3.97 and v1.3.98, and on a
+dmsg server running v1.3.98-103-g960cf0872.
 
-- **Visor:** ~110 MB base (Go runtime + bundled apps + CXO cache) plus
-  **~90 KB of live heap per transport**. The transport mesh is a *minor*
-  contributor — a visor with 190 transports uses ~125 MB of heap, one with
-  ~860 transports ~185 MB. (Per-transport RSS, including the two goroutine
-  stacks and the socket / KCP buffers, is higher — on the order of ~300 KB —
-  but the heap slope is the reliable cross-host figure since a memory-pressured
-  node's RSS is distorted by swap.) The base, not the mesh, dominates a visor's
-  footprint.
-- **dmsg server:** **~0.5 MB of RSS per connected client** (the per-client
-  noise session + yamux mux + relay stream buffers). A server relaying ~850
-  clients uses ~430 MB. This scales directly with client count, so a busy relay
-  must be sized for its peak client load — a 1 GB host saturates and swaps at
-  roughly ~1k clients when it also runs a visor. Cap a relay's `max_sessions`
-  to bound its footprint and shed excess load to other servers.
+- **Visor:** about **215 to 240 MB of live heap**, and nearly flat in the
+  number of transports: three healthy visors with 28, 29 and 232 transports
+  held 232, 237 and 216 MB. The base dominates. Its two largest fixed parts
+  are the embedded GeoIP database behind the hypervisor's transport map
+  (~59 MB) and the gzipped wasm visor the hypervisor serves (~38 MB). In June
+  2026 (v1.3.66) a visor was ~110 MB plus ~90 KB per transport.
+- **dmsg server:** about **0.5 MB of RSS per connected client** (the
+  per-client noise session, yamux mux and relay stream buffers). A server with
+  1213 clients peaked at 650 MB RSS, about 0.54 MB per client including its
+  base. A busy relay must be sized for its peak client load. Cap a relay's
+  `max_sessions` to bound its footprint and shed excess load to other servers.
 
 ## Dependencies
 
