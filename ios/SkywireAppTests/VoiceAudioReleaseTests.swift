@@ -70,7 +70,10 @@ final class VoiceAudioReleaseTests: XCTestCase {
         let opened = await waitFor(.seconds(15)) { engine.writersAndFrames.frames > 0 }
         XCTAssertTrue(opened, "the engine never opened the microphone — check the Simulator has an input device and the permission is granted")
         XCTAssertTrue(engine.capturing, "frames arrived but capturing reads false")
-        XCTAssertTrue(engine.writersAndFrames.writers > 0, "no upload writer is inside the stream")
+        // The tap starts before the upload, which first asks the visor for its
+        // key and a CSRF token, so the writer can trail the first frames.
+        let streaming = await waitFor(.seconds(15)) { engine.writersAndFrames.writers > 0 }
+        XCTAssertTrue(streaming, "no upload writer is inside the stream")
 
         // Long enough that the writer is well inside the stream — and, when
         // the fake visor is not reading, long enough for the buffers to fill
