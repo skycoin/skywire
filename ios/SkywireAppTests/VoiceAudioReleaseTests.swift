@@ -2,6 +2,7 @@ import AVFoundation
 import CoreClient
 @testable import Skywire
 import Network
+import os
 import XCTest
 
 /// `VoiceAudioEngine.stop` must hand the microphone back (Android:
@@ -124,9 +125,17 @@ final class FakeVisor: @unchecked Sendable {
         parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: 8000)
         let listener = try NWListener(using: parameters)
         let ready = DispatchSemaphore(value: 0)
+        let failure = OSAllocatedUnfairLock<NWError?>(initialState: nil)
         listener.stateUpdateHandler = { state in
-            if case .ready = state { ready.signal() }
-            if case .failed = state { ready.signal() }
+            switch state {
+            case .ready:
+                ready.signal()
+            case let .failed(error), let .waiting(error):
+                failure.withLock { $0 = error }
+                ready.signal()
+            default:
+                break
+            }
         }
         listener.newConnectionHandler = { [weak self] connection in
             self?.accept(connection)
@@ -134,15 +143,28 @@ final class FakeVisor: @unchecked Sendable {
         listener.start(queue: queue)
         self.listener = listener
         _ = ready.wait(timeout: .now() + 5)
+        if let error = failure.withLock({ $0 }) {
+            listener.cancel()
+            throw error
+        }
     }
 
+    /// Returns once the listener is gone: its cancel completes later on the
+    /// queue, and a bind before then fails with EADDRINUSE (seen on CI).
     func close() {
-        queue.sync {
+        let cancelled = DispatchSemaphore(value: 0)
+        let listener = queue.sync { () -> NWListener? in
             running = false
+            let listener = self.listener
+            self.listener = nil
+            listener?.stateUpdateHandler = { if case .cancelled = $0 { cancelled.signal() } }
             listener?.cancel()
-            listener = nil
             connections.forEach { $0.cancel() }
             connections.removeAll()
+            return listener
+        }
+        if listener != nil {
+            _ = cancelled.wait(timeout: .now() + 5)
         }
     }
 
