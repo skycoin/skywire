@@ -177,6 +177,10 @@ type Client struct {
 	// Written once before ListenAndServe and read by every connection, so an
 	// atomic keeps that honest under -race.
 	resolvers atomic.Pointer[LocalResolvers]
+	// resolverRefresh re-reads the published resolvers while there are none, and
+	// resolverRefreshedAt bounds how often (see pullLocalResolvers).
+	resolverRefresh     atomic.Pointer[resolverRefresher]
+	resolverRefreshedAt time.Time
 
 	// rsActive/rsSplits/rsChunks/rsBytes are the range-split observability
 	// counters the status page surfaces (proxystatus.RangeSplit) so "is
@@ -2762,6 +2766,9 @@ func (c *Client) sessionKeepAliveLoop() {
 			// that can say what it might carry is the visor's per-hop
 			// transport throughput.
 			c.pullCapacityPriors(time.Now())
+			// ...and the published-resolver lookup, which only runs while this
+			// client has none (see pullLocalResolvers).
+			c.pullLocalResolvers(time.Now())
 			// Refresh every live tunnel's RTT, at most one probe outstanding per
 			// tunnel: a ping wedged behind a reorder gap must not pile up.
 			for _, s := range c.snapshotSessions() {

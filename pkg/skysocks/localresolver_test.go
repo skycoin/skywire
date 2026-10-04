@@ -168,3 +168,38 @@ func TestLocalResolversOpenSurfacesADialFailure(t *testing.T) {
 	_, err := r.Open(routing.Port(4446), []byte{0x05}, []byte{0x05})
 	require.ErrorIs(t, err, io.ErrClosedPipe)
 }
+
+// A client that starts before any resolver published picks one up on the
+// keepalive tick, instead of waiting for the next reconnect cycle.
+func TestPullLocalResolversPicksUpALateResolver(t *testing.T) {
+	c := &Client{}
+	require.Nil(t, c.localResolvers())
+
+	var calls int
+	published := false
+	c.SetLocalResolverRefresh(func() *LocalResolvers {
+		calls++
+		if !published {
+			return nil
+		}
+		return resolverSet(t, func(routing.Port) (net.Conn, error) { return nil, nil })
+	})
+
+	now := time.Now()
+	c.pullLocalResolvers(now)
+	require.Equal(t, 1, calls)
+	require.Nil(t, c.localResolvers(), "nothing published yet")
+
+	// Re-asking is rate-limited while still empty.
+	c.pullLocalResolvers(now.Add(time.Second))
+	require.Equal(t, 1, calls)
+
+	published = true
+	c.pullLocalResolvers(now.Add(localResolverRefreshInterval))
+	require.Equal(t, 2, calls)
+	require.NotNil(t, c.localResolvers())
+
+	// With a set in hand it stops asking: a change lands on the next cycle.
+	c.pullLocalResolvers(now.Add(10 * localResolverRefreshInterval))
+	require.Equal(t, 2, calls)
+}

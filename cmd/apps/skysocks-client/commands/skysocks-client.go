@@ -419,6 +419,12 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// this app's own connection to the visor, not to the exit, which cannot
 		// reach them. nil = the visor published no resolver.
 		client.SetLocalResolvers(resolvers)
+		// The resolvers and this app are launcher apps in no fixed order, so an
+		// empty answer above may just be "not published yet": re-ask on the
+		// keepalive tick until there is something to use.
+		client.SetLocalResolverRefresh(func() *skysocks.LocalResolvers {
+			return localResolvers(appCl, log)
+		})
 		// Transparent HTTP range-splitting (default-on; see rangesplit.go). One
 		// range-capable :80 GET is fetched as concurrent byte ranges over separate
 		// tunnels, so a single download aggregates across the mesh.

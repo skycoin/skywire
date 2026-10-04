@@ -176,3 +176,48 @@ func Splice(browser, resolver net.Conn) {
 	<-done
 	<-done
 }
+
+// localResolverRefreshInterval is how often a client holding NO resolvers
+// re-asks the visor for them.
+const localResolverRefreshInterval = time.Minute
+
+// resolverRefresher boxes the lookup so it can be swapped atomically: the app
+// installs it after NewClient has already started the keepalive goroutine that
+// reads it.
+type resolverRefresher struct{ fn func() *LocalResolvers }
+
+// SetLocalResolverRefresh installs the lookup that re-reads the visor's
+// published resolving proxies, consulted on the keepalive tick while this client
+// has none.
+//
+// It exists because this app and the resolvers are all launcher apps started in
+// no fixed order: an empty answer at connect time often just means the resolver
+// had not published itself yet, and waiting for the next reconnect cycle to find
+// out would be hours of mesh names going to an exit that cannot reach them.
+func (c *Client) SetLocalResolverRefresh(refresh func() *LocalResolvers) {
+	if refresh == nil {
+		c.resolverRefresh.Store(nil)
+		return
+	}
+	c.resolverRefresh.Store(&resolverRefresher{fn: refresh})
+}
+
+// pullLocalResolvers re-reads the published resolvers while there are none, at
+// most once per localResolverRefreshInterval. Once a set is in hand nothing is
+// re-read: a change lands on the next connect cycle, which re-asks anyway.
+//
+// Called only from the keepalive goroutine, which is what lets refreshedAt be a
+// plain field.
+func (c *Client) pullLocalResolvers(now time.Time) {
+	refresh := c.resolverRefresh.Load()
+	if refresh == nil || refresh.fn == nil || c.localResolvers() != nil {
+		return
+	}
+	if !c.resolverRefreshedAt.IsZero() && now.Sub(c.resolverRefreshedAt) < localResolverRefreshInterval {
+		return
+	}
+	c.resolverRefreshedAt = now
+	if r := refresh.fn(); r != nil {
+		c.SetLocalResolvers(r)
+	}
+}
