@@ -1,3 +1,5 @@
+//go:build !mobile
+
 // Package visor pkg/visor/hypervisor_handlers_mail.go c3-vis-core
 package visor
 
@@ -18,6 +20,20 @@ import (
 // The hypervisor's view of a visor's mailbox, for the dashboard's mail tab.
 // Every route calls the visor's mail API, the same one `skywire cli mail` and
 // the desk's mail window use, so it works for remote visors too.
+
+// mailRoutes registers the mail routes. The mobile build has no dashboard and
+// stubs it out (hypervisor_handlers_mail_mobile.go).
+func (hv *Hypervisor) mailRoutes(r chi.Router) {
+	r.Get("/visors/{pk}/mail", hv.getMailStatus())
+	r.Post("/visors/{pk}/mail/send", hv.postMailSend())
+	r.Put("/visors/{pk}/mail/whitelist", hv.putMailWhitelist())
+	r.Put("/visors/{pk}/mail/settings", hv.putMailSettings())
+	r.Get("/visors/{pk}/mail/{folder}", hv.getMailList())
+	r.Get("/visors/{pk}/mail/{folder}/{id}", hv.getMailMessage())
+	r.Delete("/visors/{pk}/mail/{folder}/{id}", hv.deleteMailMessage())
+	r.Get("/visors/{pk}/mail/{folder}/{id}/raw", hv.getMailRaw())
+	r.Get("/visors/{pk}/mail/{folder}/{id}/attachments/{n}", hv.getMailAttachment())
+}
 
 func (hv *Hypervisor) getMailStatus() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
