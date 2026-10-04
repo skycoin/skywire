@@ -70,8 +70,8 @@ github.com/0magnet/ansifilter-go v0.0.0 h1:xIwmHz63n5S3ADg92YT6ievd1itLqZsrmyEhD
 github.com/0magnet/ansifilter-go v0.0.0/go.mod h1:QnLLIHo9iYnvlZ03gSH5tSrpfbIep2fJU2iTX+GA1f8=
 github.com/0magnet/audioprism-go v0.0.0 h1:5xY71QfEIoWs4rSLaojOoL1l1NhTIPAQX/u7c4aJu8A=
 github.com/0magnet/audioprism-go v0.0.0/go.mod h1:tymR05CQVqL1cNBgN68sYWI2pj2SrPE1aFwAR918/HM=
-github.com/0magnet/bbolt v1.5.1-0.20261003212416-9085c3a4875a h1:XMLlyRkbKsh5hs58ousWiSAcVAnkOmrWL5ODUCBbLxY=
-github.com/0magnet/bbolt v1.5.1-0.20261003212416-9085c3a4875a/go.mod h1:CpOPhNXerCJIq3QRpKIhrkJdweQF45+mDJuSpWaGwSc=
+github.com/0magnet/bbolt v1.5.1-0.20261004153154-cdf1c512cdb1 h1:+ZvV6Qq0gC/Ghk7dd0kw35WSoviqAeG75qiao9ZzYk8=
+github.com/0magnet/bbolt v1.5.1-0.20261004153154-cdf1c512cdb1/go.mod h1:CpOPhNXerCJIq3QRpKIhrkJdweQF45+mDJuSpWaGwSc=
 github.com/0magnet/bitree v0.0.0 h1:CPr6TFH8E7Ps2OiFlBv8Q9LwWH9O90QkhRD2kI9hTFY=
 github.com/0magnet/bitree v0.0.0/go.mod h1:fXaS+dltJcAnMAHKz1LR5X4/hE+S3QoxlMgni9wlVhw=
 github.com/0magnet/bottle v0.0.0 h1:J/pWMnXt1mAjXPM+C533+ygomFNKvnUH84VbExVFcfc=

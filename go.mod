@@ -7,7 +7,7 @@ require (
 	github.com/0magnet/afero v1.15.1-0.20261003211811-482680d00992
 	github.com/0magnet/ansifilter-go v0.0.0
 	github.com/0magnet/audioprism-go v0.0.0
-	github.com/0magnet/bbolt v1.5.1-0.20261003212416-9085c3a4875a
+	github.com/0magnet/bbolt v1.5.1-0.20261004153154-cdf1c512cdb1
 	github.com/0magnet/bitree v0.0.0
 	github.com/0magnet/bottle v0.0.0
 	github.com/0magnet/calvin v0.0.0
