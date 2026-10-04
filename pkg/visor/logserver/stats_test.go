@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -89,16 +88,15 @@ func (f *fakeStatsReader) ServiceDates(svc string) ([]string, error) {
 // so tests can hit /stats/* directly without assembling the rest of
 // the log server. Whitelist is empty (open access) so we don't fight
 // the auth middleware in tests — auth coverage belongs elsewhere.
-func newTestAPI(t *testing.T, sr StatsReader) *gin.Engine {
+func newTestAPI(t *testing.T, sr StatsReader) *http.ServeMux {
 	t.Helper()
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
+	r := http.NewServeMux()
 	api := &API{
 		logger:      logging.MustGetLogger("logserver-test"),
 		startedAt:   time.Now(),
 		statsReader: sr,
 	}
-	api.registerStatsRoutes(r.Group("/"))
+	api.registerStatsRoutes(func(p string, h http.HandlerFunc) { r.Handle(p, h) })
 	return r
 }
 

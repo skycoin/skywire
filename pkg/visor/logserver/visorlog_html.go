@@ -34,8 +34,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/gin-gonic/gin"
 )
 
 // htmlLogPreamble is the <head> + opening <body> for the colorized log view.
@@ -122,28 +120,28 @@ var fieldRE = regexp.MustCompile(`([A-Za-z0-9_.\-]+)=("[^"]*"|\S*)`)
 // into memory. Log rotation/truncation is detected and the tail re-opens the
 // new file. The plaintext one-shot (?raw=1) and filtered follow (?follow=1)
 // modes are unaffected.
-func renderVisorLogHTML(c *gin.Context, logFile string) {
+func renderVisorLogHTML(w http.ResponseWriter, req *http.Request, logFile string) {
 	f, err := os.Open(logFile) //nolint:gosec // path comes from localPath config, not request
 	if err != nil {
-		c.String(http.StatusInternalServerError, "open skywire.log: %v", err)
+		writeString(w, http.StatusInternalServerError, "open skywire.log: %v", err)
 		return
 	}
 	defer func() { _ = f.Close() }() //nolint:errcheck // f is reassigned on rotation; close the final fd
 
-	c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-	c.Writer.Header().Set("Cache-Control", "no-cache")
-	c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
-	c.Writer.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
 
 	// Page head + terminal styling. <pre> preserves the log's own spacing;
 	// per-line <span>s carry the level color.
-	if _, werr := io.WriteString(c.Writer, htmlLogPreamble); werr != nil {
+	if _, werr := io.WriteString(w, htmlLogPreamble); werr != nil {
 		return
 	}
-	c.Writer.Flush()
+	flush(w)
 
 	r := bufio.NewReaderSize(f, 64*1024)
-	ctx := c.Request.Context()
+	ctx := req.Context()
 	var offset int64 // bytes consumed — used to detect rotation/truncation
 	caughtUp := false
 	batch := 0
@@ -156,17 +154,17 @@ func renderVisorLogHTML(c *gin.Context, logFile string) {
 		line, rerr := r.ReadString('\n')
 		if len(line) > 0 {
 			offset += int64(len(line))
-			if _, werr := io.WriteString(c.Writer, colorizeLine(line)); werr != nil {
+			if _, werr := io.WriteString(w, colorizeLine(line)); werr != nil {
 				return // client gone
 			}
 			if caughtUp {
 				// Live phase: flush every line for minimal latency.
-				c.Writer.Flush()
+				flush(w)
 			} else {
 				// Backlog phase: flush in batches to avoid a chunk per line.
 				batch++
 				if batch%256 == 0 {
-					c.Writer.Flush()
+					flush(w)
 				}
 			}
 			continue
@@ -177,7 +175,7 @@ func renderVisorLogHTML(c *gin.Context, logFile string) {
 		// EOF — caught up to the end of the file.
 		if !caughtUp {
 			caughtUp = true
-			c.Writer.Flush() // push the remaining backlog now
+			flush(w) // push the remaining backlog now
 		}
 		// Rotation/truncation: the path now resolves to a file smaller than
 		// where we are reading — reopen from the start of the new file.
@@ -187,8 +185,8 @@ func renderVisorLogHTML(c *gin.Context, logFile string) {
 				f = nf
 				r.Reset(f)
 				offset = 0
-				_, _ = io.WriteString(c.Writer, logRotatedNotice) //nolint:errcheck
-				c.Writer.Flush()
+				_, _ = io.WriteString(w, logRotatedNotice) //nolint:errcheck
+				flush(w)
 				continue
 			}
 		}
