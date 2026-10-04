@@ -21,6 +21,7 @@
 package nativee2e
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"embed"
@@ -470,4 +471,27 @@ func has66Hex(s string) bool {
 		}
 	}
 	return false
+}
+
+// dumpMatching prints up to max lines of a process log that contain needle,
+// scanning the whole file. dumpLog shows only the two ends, and a failing app
+// often logs its reason in the middle.
+func dumpMatching(name, needle string, max int) {
+	f, err := os.Open(filepath.Join(env.work, name+".log"))
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	var hits []string
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64<<10), 1<<20)
+	for sc.Scan() {
+		if l := sc.Text(); strings.Contains(strings.ToLower(l), needle) {
+			hits = append(hits, l)
+			if len(hits) > max {
+				hits = hits[1:]
+			}
+		}
+	}
+	fmt.Fprintf(os.Stderr, "\n===== %s.log lines with %q (last %d) =====\n%s\n", name, needle, max, strings.Join(hits, "\n"))
 }

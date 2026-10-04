@@ -70,6 +70,8 @@ func TestVPNClient(t *testing.T) {
 		// visorB. Dump both so a failing CI run is diagnosable.
 		dumpLog("visorA")
 		dumpLog("visorB")
+		dumpMatching("visorA", "vpn", 80)
+		dumpMatching("visorB", "vpn", 80)
 	}
 	require.Truef(t, ok, "vpn-client never reached Running (TUN creation / route setup): %s", lastErr)
 	t.Logf("vpn-client reached Running — TUN device created on %s", runtime.GOOS)

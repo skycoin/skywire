@@ -6,8 +6,8 @@ package nativee2e
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
