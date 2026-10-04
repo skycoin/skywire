@@ -30,15 +30,20 @@ const voiceAudioBridge = "bridge"
 
 // voiceAudioMode resolves the audio backend to use.
 //
-// Android defaults to the bridge because nothing else there can work: GOOS=
-// android satisfies the `linux` build tag, so the default path opens the
-// PulseAudio backend, finds no server, and silently degrades to a mute call.
-// The host app owns the only real device on the platform. An explicit
-// SKYWIRE_VOICE_AUDIO still wins — including on Android, where "off" is a
-// legitimate way to run a visor that never touches the microphone.
+// Android and iOS default to the bridge because nothing else there can work:
+// GOOS=android satisfies the `linux` build tag, so the default path opens the
+// PulseAudio backend, finds no server, and silently degrades to a mute call,
+// and iOS has no backend at all. The host app owns the only real device on
+// both. An explicit SKYWIRE_VOICE_AUDIO still wins — including on a phone,
+// where "off" is a legitimate way to run a visor that never touches the
+// microphone.
 func voiceAudioMode() string {
-	mode := strings.ToLower(strings.TrimSpace(os.Getenv("SKYWIRE_VOICE_AUDIO")))
-	if mode == "" && runtime.GOOS == "android" {
+	return resolveVoiceAudioMode(runtime.GOOS, os.Getenv("SKYWIRE_VOICE_AUDIO"))
+}
+
+func resolveVoiceAudioMode(goos, env string) string {
+	mode := strings.ToLower(strings.TrimSpace(env))
+	if mode == "" && (goos == "android" || goos == "ios") {
 		return voiceAudioBridge
 	}
 	return mode

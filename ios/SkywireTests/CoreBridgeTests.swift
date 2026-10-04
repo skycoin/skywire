@@ -1,4 +1,5 @@
 import CoreBridge
+import CoreClient
 import Darwin
 import XCTest
 
@@ -85,6 +86,44 @@ final class CoreBridgeTests: XCTestCase {
         XCTAssertEqual(pong, "\"PONG!\"")
     }
 
+    /// The iOS core lends its calls the app's microphone and speaker: both
+    /// audio streams are served, not refused with 503 (G6).
+    func testVoiceAudioStreamsAreBridged() async throws {
+        try await core.start(configPath: configPath, dataDir: dataDir.path)
+        let client = CoreClient(transport: LoopbackTransport(origin: URL(string: "http://127.0.0.1:\(Self.apiPort)")!)) {
+            "CoreBridge-test-1"
+        }
+
+        // The voice module comes up with the rest of the visor, so give it a
+        // moment; a core without the bridge answers 503 for good.
+        var speaker = try await client.voiceSpeakerStream()
+        var refusal = ""
+        let deadline = ContinuousClock.now + .seconds(60)
+        while speaker.status == 503, ContinuousClock.now < deadline {
+            refusal = try await Self.text(of: speaker)
+            try await Task.sleep(for: .seconds(1))
+            speaker = try await client.voiceSpeakerStream()
+        }
+        XCTAssertEqual(speaker.status, 200, "speaker stream: \(refusal)")
+        // Silence is streamed too, two 20 ms frames of 48 kHz int16 per chunk.
+        var received = 0
+        for try await chunk in speaker.body {
+            received += chunk.count
+            if received >= 4 * 3840 { break }
+        }
+        XCTAssertGreaterThanOrEqual(received, 4 * 3840)
+
+        let pcm = Data(count: 9600)
+        let mic = try await client.voiceMicStream { output in
+            pcm.withUnsafeBytes { raw in
+                _ = output.write(raw.baseAddress!.assumingMemoryBound(to: UInt8.self), maxLength: raw.count)
+            }
+        }
+        let answer = try await Self.text(of: mic)
+        XCTAssertEqual(mic.status, 200, "mic stream: \(answer)")
+        XCTAssertTrue(answer.contains("\"ok\":true"), "mic stream: \(answer)")
+    }
+
     /// A failing call throws with the core's reason, and skywire_last_error
     /// (copied and freed by CoreBridge) says the same.
     func testStartFailureCarriesTheReason() async throws {
@@ -134,6 +173,14 @@ final class CoreBridgeTests: XCTestCase {
             config["hypervisor"] = hypervisor
         }
         try JSONSerialization.data(withJSONObject: config, options: .prettyPrinted).write(to: url)
+    }
+
+    private static func text(of stream: HTTPStream) async throws -> String {
+        var text = ""
+        for try await chunk in stream.body {
+            text += String(decoding: chunk, as: UTF8.self)
+        }
+        return text
     }
 
     /// GET /api/ping on a fresh connection.
