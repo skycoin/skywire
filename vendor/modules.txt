@@ -127,10 +127,11 @@ github.com/0magnet/termanim/matrix/backdrop/cobrarain
 # github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754
 ## explicit; go 1.26.6
 github.com/0magnet/u-root/pkg/ls
-# github.com/0magnet/websh v0.0.0
+# github.com/0magnet/websh v0.0.1-0.20261004171029-50c3c3028c3a
 ## explicit; go 1.26.6
 github.com/0magnet/websh/shell
 github.com/0magnet/websh/shell/browser
+github.com/0magnet/websh/shell/sed
 # github.com/0magnet/wfdrive v0.3.2
 ## explicit; go 1.26.0
 github.com/0magnet/wfdrive/bidi
@@ -140,7 +141,7 @@ github.com/0magnet/winbox-go
 # github.com/0magnet/wisp v0.0.0-20261004183505-1f6045fd0359
 ## explicit; go 1.26.4
 github.com/0magnet/wisp
-# github.com/0magnet/xterm-go v0.0.0
+# github.com/0magnet/xterm-go v0.0.1-0.20261004020305-36b45f096b30
 ## explicit; go 1.24
 github.com/0magnet/xterm-go
 github.com/0magnet/xterm-go/vt
