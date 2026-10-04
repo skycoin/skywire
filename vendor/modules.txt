@@ -34,7 +34,7 @@ github.com/0magnet/bbolt/internal/freelist
 # github.com/0magnet/bitree v0.0.0
 ## explicit; go 1.25.0
 github.com/0magnet/bitree
-# github.com/0magnet/bottle v0.0.0
+# github.com/0magnet/bottle v0.0.1-0.20261004182110-0f3bfb283975
 ## explicit; go 1.24
 github.com/0magnet/bottle
 github.com/0magnet/bottle/vnet
@@ -69,7 +69,7 @@ github.com/0magnet/golang-ipc
 # github.com/0magnet/got v0.0.0
 ## explicit; go 1.26.0
 github.com/0magnet/got
-# github.com/0magnet/gotop/v4 v4.2.1-0.20261003212111-e3a1e753dbac
+# github.com/0magnet/gotop/v4 v4.2.1-0.20261004195426-3f6a467d1e1a
 ## explicit; go 1.26.4
 github.com/0magnet/gotop/v4
 github.com/0magnet/gotop/v4/colorschemes
@@ -82,8 +82,8 @@ github.com/0magnet/gotop/v4/widgets
 # github.com/0magnet/lolcat-go v0.0.0
 ## explicit; go 1.25.0
 github.com/0magnet/lolcat-go/lol
-# github.com/0magnet/metrics v1.44.1-0.20261003211931-057a69362832
-## explicit; go 1.25.0
+# github.com/0magnet/metrics v1.44.1-0.20261004194541-261721063b63
+## explicit; go 1.24.0
 github.com/0magnet/metrics
 # github.com/0magnet/netscrape v0.0.0
 ## explicit; go 1.24
@@ -102,7 +102,7 @@ github.com/0magnet/realorigin
 github.com/0magnet/router7/pkg/dhcp4d
 github.com/0magnet/router7/pkg/dns
 github.com/0magnet/router7/pkg/teelogger
-# github.com/0magnet/sh/v3 v3.13.2-0.20261003215414-58d567267b7a
+# github.com/0magnet/sh/v3 v3.13.2-0.20261004194540-aa2d6e4a31a5
 ## explicit; go 1.26.0
 github.com/0magnet/sh/v3/expand
 github.com/0magnet/sh/v3/fileutil
@@ -138,7 +138,7 @@ github.com/0magnet/wfdrive/bidi
 # github.com/0magnet/winbox-go v0.0.0
 ## explicit; go 1.24
 github.com/0magnet/winbox-go
-# github.com/0magnet/wisp v0.0.0-20261004020451-d16b9de8e6f4
+# github.com/0magnet/wisp v0.0.0-20261004183505-1f6045fd0359
 ## explicit; go 1.26.4
 github.com/0magnet/wisp
 # github.com/0magnet/xterm-go v0.0.1-0.20261004020305-36b45f096b30

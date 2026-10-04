@@ -9,7 +9,7 @@ require (
 	github.com/0magnet/audioprism-go v0.0.0
 	github.com/0magnet/bbolt v1.5.1-0.20261004153154-cdf1c512cdb1
 	github.com/0magnet/bitree v0.0.0
-	github.com/0magnet/bottle v0.0.0
+	github.com/0magnet/bottle v0.0.1-0.20261004182110-0f3bfb283975
 	github.com/0magnet/calvin v0.0.0
 	github.com/0magnet/coloredcobra v1.0.4-0.20260908180055-b9d8b508df51
 	github.com/0magnet/cosmos-go v0.0.0
@@ -18,22 +18,22 @@ require (
 	github.com/0magnet/gobrpc v0.0.0
 	github.com/0magnet/golang-ipc v1.2.5-0.20260915170035-de9342a68204
 	github.com/0magnet/got v0.0.0
-	github.com/0magnet/gotop/v4 v4.2.1-0.20261003212111-e3a1e753dbac
+	github.com/0magnet/gotop/v4 v4.2.1-0.20261004195426-3f6a467d1e1a
 	github.com/0magnet/lolcat-go v0.0.0
-	github.com/0magnet/metrics v1.44.1-0.20261003211931-057a69362832
+	github.com/0magnet/metrics v1.44.1-0.20261004194541-261721063b63
 	github.com/0magnet/netscrape v0.0.0
 	github.com/0magnet/osnotify v0.0.0
 	github.com/0magnet/plot-go v0.0.0
 	github.com/0magnet/realorigin v0.2.3
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
-	github.com/0magnet/sh/v3 v3.13.2-0.20261003215414-58d567267b7a
+	github.com/0magnet/sh/v3 v3.13.2-0.20261004194540-aa2d6e4a31a5
 	github.com/0magnet/spheregraph v0.0.0
 	github.com/0magnet/sysinfo v1.1.4-0.20261003211934-59c35da8ce3f
 	github.com/0magnet/termanim v0.0.0
 	github.com/0magnet/websh v0.0.1-0.20261004171029-50c3c3028c3a
 	github.com/0magnet/wfdrive v0.3.2
 	github.com/0magnet/winbox-go v0.0.0
-	github.com/0magnet/wisp v0.0.0-20261004020451-d16b9de8e6f4
+	github.com/0magnet/wisp v0.0.0-20261004183505-1f6045fd0359
 	github.com/0magnet/xterm-go v0.0.1-0.20261004020305-36b45f096b30
 	github.com/0magnet/yamux v0.1.3-0.20261004024245-10ef81fe8447
 	github.com/ActiveState/termtest/conpty v0.5.0

@@ -34,7 +34,7 @@ import (
 // dial succeeded and the caller is handing :1080 to the live Client, or the proc is
 // shutting down) or lis fails; lis is closed on return so the port is released for
 // the live listener. The caller owns lis.
-func ServeDisconnected(ctx context.Context, lis net.Listener, appCl *app.Client) {
+func ServeDisconnected(ctx context.Context, lis net.Listener, appCl *app.Client, resolvers *LocalResolvers) {
 	go func() {
 		<-ctx.Done()
 		_ = lis.Close() //nolint:errcheck,gosec
@@ -44,7 +44,7 @@ func ServeDisconnected(ctx context.Context, lis net.Listener, appCl *app.Client)
 		if err != nil {
 			return
 		}
-		go disconnectedConn(conn, appCl)
+		go disconnectedConn(conn, appCl, resolvers)
 	}
 }
 
@@ -68,12 +68,12 @@ func ServeDisconnected(ctx context.Context, lis net.Listener, appCl *app.Client)
 // The port is released on return, so the next cycle's listener (and ultimately
 // the live Client's) rebinds cleanly; a bind failure degrades to a plain wait
 // rather than skipping the delay, so it can never turn into a dial hot loop.
-func ServeDisconnectedWait(ctx context.Context, addr string, appCl *app.Client, d time.Duration) {
+func ServeDisconnectedWait(ctx context.Context, addr string, appCl *app.Client, d time.Duration, resolvers *LocalResolvers) {
 	wctx, cancel := context.WithTimeout(ctx, d)
 	defer cancel()
 	lis, err := ReuseListen(addr)
 	if err == nil {
-		ServeDisconnected(wctx, lis, appCl)
+		ServeDisconnected(wctx, lis, appCl, resolvers)
 	}
 	<-wctx.Done()
 }
@@ -85,7 +85,13 @@ func ServeDisconnectedWait(ctx context.Context, addr string, appCl *app.Client, 
 // other target falls through to the branded interstitial (plaintext HTTP) or is
 // declined. exitReachable is nil — there is no session, so a real HTTP target gets
 // the waiting interstitial rather than a fall-through reload.
-func disconnectedConn(conn net.Conn, appCl *app.Client) {
+//
+// A mesh name is the exception that is NOT declined: the visor's resolving proxy
+// needs no exit, so with resolvers published a `<pk>.skynet` request is served
+// here exactly as the live client serves it. Without that, pointing a browser at
+// this one port would make mesh names fail for the whole reconnect window, which
+// is a regression against the separate resolver listeners.
+func disconnectedConn(conn net.Conn, appCl *app.Client, resolvers *LocalResolvers) {
 	defer conn.Close() //nolint:errcheck,gosec
 	override := func(host string) []byte {
 		if surface, ok := proxystatus.Match(host); ok && surface == proxystatus.SurfaceSkysocks {
@@ -93,7 +99,32 @@ func disconnectedConn(conn net.Conn, appCl *app.Client) {
 		}
 		return nil
 	}
-	_ = proxyinterstitial.ServeSOCKS5(conn, "not connected to the exit yet", "skysocks", override, nil) //nolint:errcheck
+
+	if resolvers == nil {
+		_ = proxyinterstitial.ServeSOCKS5(conn, "not connected to the exit yet", "skysocks", override, nil) //nolint:errcheck
+		return
+	}
+
+	// forceNoAuth: there is no exit to defer an auth negotiation to, which is
+	// what ServeSOCKS5 assumes on this path too.
+	br, ok := readBrowserRequest(conn, true)
+	if !ok {
+		return
+	}
+	if port, found := resolvers.PortFor(br.host); found {
+		rc, err := resolvers.Open(port, br.greeting, br.req)
+		if err == nil {
+			defer rc.Close() //nolint:errcheck,gosec
+			clearDeadlines(conn, rc)
+			Splice(conn, rc)
+			return
+		}
+		if appCl != nil {
+			appCl.Log().Debugf("local resolver on port %d did not answer for %s: %v", port, br.host, err)
+		}
+	}
+	_ = proxyinterstitial.ServeSOCKS5Parsed(conn, br.host, br.port, //nolint:errcheck
+		"not connected to the exit yet", "skysocks", override, nil)
 }
 
 // disconnectedSnapshot is the status.skysocks snapshot for the sessionless state:

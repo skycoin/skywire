@@ -79,7 +79,7 @@ func (w *wsFrames) WriteFrame(ctx context.Context, b []byte) error {
 }
 
 // Close implements Frames.
-func (w *wsFrames) Close() error { return w.conn.CloseNow() }
+func (w *wsFrames) Close() error { return closeWebsocket(w.conn) }
 
 // streamFrames carries a session over a byte stream by length-prefixing each
 // frame, so a net.Conn — a vnet loopback conn, a TCP conn, a skywire stream —

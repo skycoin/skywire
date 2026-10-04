@@ -39,7 +39,7 @@ func (s *Set) WritePrometheus(w io.Writer) {
 	lessFunc := func(i, j int) bool {
 		// the sorting must be stable.
 		// see edge cases why we can't simply do `s.a[i].name < s.a[j].name` here:
-		// https://github.com/0magnet/metrics/pull/99#issuecomment-3277072175
+		// https://github.com/VictoriaMetrics/metrics/pull/99#issuecomment-3277072175
 
 		// sort by metric family name first, to group the same metric family in one place.
 		fName1, fName2 := getMetricFamily(s.a[i].name), getMetricFamily(s.a[j].name)
@@ -96,7 +96,7 @@ func (s *Set) WritePrometheus(w io.Writer) {
 		}
 		bb.Write(metricsWithMetadataBuf.Bytes())
 	}
-	_, _ = w.Write(bb.Bytes()) //nolint:errcheck
+	w.Write(bb.Bytes())
 
 	for _, writeMetrics := range metricsWriters {
 		writeMetrics(w)
@@ -574,9 +574,9 @@ func (s *Set) registerMetric(name string, m metric) {
 //
 // Panics if the given name was already registered before.
 func (s *Set) mustRegisterLocked(name string, m metric, isAux bool) {
-	_, ok := s.m[name]
+	nm, ok := s.m[name]
 	if !ok {
-		nm := &namedMetric{
+		nm = &namedMetric{
 			name:   name,
 			metric: m,
 			isAux:  isAux,
@@ -606,11 +606,10 @@ func (s *Set) UnregisterMetric(name string) bool {
 		// Such metrics must be deleted via parent metric name, e.g. summary_metric .
 		return false
 	}
-	s.unregisterMetricLocked(nm)
-	return true
+	return s.unregisterMetricLocked(nm)
 }
 
-func (s *Set) unregisterMetricLocked(nm *namedMetric) {
+func (s *Set) unregisterMetricLocked(nm *namedMetric) bool {
 	name := nm.name
 	delete(s.m, name)
 
@@ -630,7 +629,7 @@ func (s *Set) unregisterMetricLocked(nm *namedMetric) {
 	sm, ok := nm.metric.(*Summary)
 	if !ok {
 		// There is no need in cleaning up non-summary metrics.
-		return
+		return true
 	}
 
 	// cleanup registry from per-quantile metrics
@@ -653,6 +652,7 @@ func (s *Set) unregisterMetricLocked(nm *namedMetric) {
 		panic(fmt.Errorf("BUG: cannot find summary %q in the list of registered summaries", name))
 	}
 	unregisterSummary(sm)
+	return true
 }
 
 // UnregisterAllMetrics de-registers all metrics registered in s.
