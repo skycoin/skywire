@@ -146,7 +146,7 @@ final class CallCenter {
             } else {
                 log.notice("answer request for a call that never arrived")
             }
-            VoiceCalls.shared.answerHandled()
+            VoiceCalls.shared.answerHandled(callId)
         }
     }
 

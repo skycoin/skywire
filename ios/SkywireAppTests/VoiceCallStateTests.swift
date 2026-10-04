@@ -107,7 +107,7 @@ final class VoiceCallStateTests: XCTestCase {
         VoiceCalls.shared.requestAnswer("abc")
         let first = await withTimeout(.milliseconds(300)) { await VoiceCalls.shared.nextAnswer() }
         XCTAssertEqual(first, "abc")
-        VoiceCalls.shared.answerHandled()
+        VoiceCalls.shared.answerHandled("abc")
         // Nothing pending: the wait must not produce the dead id again…
         let seen = OSAllocatedUnfairLock<String?>(initialState: nil)
         let waiter = Task {
@@ -121,6 +121,18 @@ final class VoiceCallStateTests: XCTestCase {
         _ = waiter
         try? await Task.sleep(for: .milliseconds(200))
         XCTAssertEqual(seen.withLock { $0 }, "next")
+    }
+
+    /// A second Answer that lands while the first is still being handled is
+    /// not lost when the first is retired (G6 note 4).
+    func testARequestArrivingWhileAnotherIsHandledIsKept() async {
+        VoiceCalls.shared.requestAnswer("first")
+        let first = await withTimeout(.milliseconds(300)) { await VoiceCalls.shared.nextAnswer() }
+        XCTAssertEqual(first, "first")
+        VoiceCalls.shared.requestAnswer("second")
+        VoiceCalls.shared.answerHandled("first")
+        let next = await withTimeout(.milliseconds(300)) { await VoiceCalls.shared.nextAnswer() }
+        XCTAssertEqual(next, "second")
     }
 }
 

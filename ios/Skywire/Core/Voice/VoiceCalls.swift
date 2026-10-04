@@ -122,10 +122,13 @@ final class VoiceCalls: ObservableObject {
         }
     }
 
-    /// The request has been acted on; a later screen must not answer it
-    /// again.
-    func answerHandled() {
-        pendingAnswer = nil
+    /// The request for `callId` has been acted on; a later screen must not
+    /// answer it again. One that arrived meanwhile stays, as Android's
+    /// buffered flow keeps it.
+    func answerHandled(_ callId: String) {
+        if pendingAnswer == callId {
+            pendingAnswer = nil
+        }
     }
 
     /// Wait until `callId` is one of the ringing calls, or give up. The tap
