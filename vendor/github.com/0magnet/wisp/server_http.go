@@ -1,7 +1,5 @@
 //go:build !js
 
-// Package wisp pkg/wisp/server_http.go c4-app-proxy
-//
 // Serving Wisp over a WebSocket, which is the transport the protocol is
 // defined on and the one every browser Wisp client speaks.
 //
@@ -9,6 +7,7 @@
 // build wraps the browser's own WebSocket object, which can dial but cannot
 // listen. A visor in a tab therefore serves Wisp with Server.ServeConn over a
 // virtual-loopback conn instead — see frames.go.
+
 package wisp
 
 import (
@@ -29,7 +28,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		InsecureSkipVerify: true, // a guest NIC dials from whatever origin the page has
 	})
 	if err != nil {
-		s.cfg.Log.WithError(err).Debug("websocket upgrade failed")
+		dlog{s.cfg.Log}.WithError(err).Debug("websocket upgrade failed")
 		return
 	}
 	c.SetReadLimit(s.cfg.ReadLimit)

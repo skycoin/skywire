@@ -1,7 +1,5 @@
 //go:build js
 
-// Package wisp pkg/wisp/client_ws_js.go c4-app-proxy
-//
 // Dialing a Wisp endpoint by URL from inside a browser.
 //
 // coder/websocket's js/wasm build wraps the page's own WebSocket object, whose
@@ -16,6 +14,7 @@
 // to avoid. The refusal names DialConn, which is how that is actually done in
 // a tab: dial the conn yourself, over whatever you like, and run the session
 // on it.
+
 package wisp
 
 import (

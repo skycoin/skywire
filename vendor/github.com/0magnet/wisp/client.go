@@ -1,5 +1,3 @@
-// Package wisp pkg/wisp/client.go c4-app-proxy
-//
 // The other end of server.go: a Wisp client, which opens a session against
 // someone else's Wisp endpoint and multiplexes TCP and UDP streams over it —
 // by URL with Dial, or over a conn you already have with DialConn. It is what
@@ -18,6 +16,7 @@
 // from the first Read or Write rather than from the dial. That is how every
 // Wisp implementation behaves; it is a property of the protocol, not a
 // shortcut taken here.
+
 package wisp
 
 import (
@@ -25,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -32,8 +32,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // clientChunk is how much of one Write becomes a single DATA frame. It
@@ -69,13 +67,13 @@ type ClientConfig struct {
 	ReadLimit int64
 	// Log receives per-session and per-stream events. Zero means a logger
 	// named "wisp-client".
-	Log *logging.Logger
+	Log *slog.Logger
 }
 
 // Client is a Wisp client session: one transport carrying many streams.
 type Client struct {
 	url string
-	log *logging.Logger
+	log dlog
 
 	frames Frames
 
@@ -144,7 +142,7 @@ func (cfg ClientConfig) withDefaults() ClientConfig {
 		cfg.ReadLimit = DefaultReadLimit
 	}
 	if cfg.Log == nil {
-		cfg.Log = logging.MustGetLogger("wisp-client")
+		cfg.Log = defaultLogger("wisp-client")
 	}
 	return cfg
 }
@@ -153,7 +151,7 @@ func (cfg ClientConfig) withDefaults() ClientConfig {
 func newClient(ctx context.Context, cfg ClientConfig, name string, frames Frames) (*Client, error) {
 	c := &Client{
 		url:     name,
-		log:     cfg.Log,
+		log:     dlog{cfg.Log},
 		frames:  frames,
 		writes:  make(chan []byte, writeQueueDepth),
 		done:    make(chan struct{}),

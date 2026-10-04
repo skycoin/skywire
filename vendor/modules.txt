@@ -137,6 +137,9 @@ github.com/0magnet/wfdrive/bidi
 # github.com/0magnet/winbox-go v0.0.0
 ## explicit; go 1.24
 github.com/0magnet/winbox-go
+# github.com/0magnet/wisp v0.0.0-20261004020451-d16b9de8e6f4
+## explicit; go 1.26.4
+github.com/0magnet/wisp
 # github.com/0magnet/xterm-go v0.0.0
 ## explicit; go 1.24
 github.com/0magnet/xterm-go

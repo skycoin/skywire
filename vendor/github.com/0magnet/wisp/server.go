@@ -1,5 +1,3 @@
-// Package wisp pkg/wisp/server.go c4-app-proxy
-//
 // A Wisp server, speaking v1 and v2 over any transport (frames.go). On a
 // WebSocket the version is the client's choice: v2 opens with a
 // Sec-WebSocket-Protocol header and expects an INFO exchange first, v1 sends no
@@ -12,16 +10,16 @@
 // write queue gives us. Adding a gate to the server -> client side stalls
 // every transfer larger than one buffer and shows up as a truncated download
 // at exactly the buffer boundary, so this end does not have one.
+
 package wisp
 
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"sync"
 	"time"
-
-	"github.com/skycoin/skywire/pkg/logging"
 )
 
 const (
@@ -49,7 +47,7 @@ type Config struct {
 	ReadLimit int64
 	// Log receives per-session and per-stream events. Zero means a logger
 	// named "wisp".
-	Log *logging.Logger
+	Log *slog.Logger
 }
 
 // Server serves the Wisp protocol. Off the browser it implements http.Handler,
@@ -75,7 +73,7 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg.ReadLimit = DefaultReadLimit
 	}
 	if cfg.Log == nil {
-		cfg.Log = logging.MustGetLogger("wisp")
+		cfg.Log = defaultLogger("wisp")
 	}
 	return &Server{cfg: cfg}, nil
 }
@@ -119,7 +117,7 @@ func (s *Server) ServeFrames(ctx context.Context, frames Frames, v2 bool) {
 		v2:      v2,
 		streams: make(map[uint32]*stream),
 		writes:  make(chan []byte, writeQueueDepth),
-		log:     s.cfg.Log,
+		log:     dlog{s.cfg.Log},
 	}
 	sess.run(ctx)
 }
@@ -129,7 +127,7 @@ type session struct {
 	srv    *Server
 	frames Frames
 	v2     bool
-	log    *logging.Logger
+	log    dlog
 
 	mu      sync.Mutex
 	streams map[uint32]*stream

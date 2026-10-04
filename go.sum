@@ -126,6 +126,8 @@ github.com/0magnet/wfdrive v0.3.2 h1:THKZK/o2fSlkO+bYWjE3JrA9FSYMrx3SfXHU/1t/vSA
 github.com/0magnet/wfdrive v0.3.2/go.mod h1:wrSIWlsnv4K7lD5q0Q6DBWWWvhw6wRvej6zB3In8IKs=
 github.com/0magnet/winbox-go v0.0.0 h1:OTu+XbGvpTUWUD5pMS5kHqFwj+MVDcKiEYECOV7X7CQ=
 github.com/0magnet/winbox-go v0.0.0/go.mod h1:19+/rRQWd/tc9/8CFcUr6C+3AipeZmHyyda2tVombe4=
+github.com/0magnet/wisp v0.0.0-20261004020451-d16b9de8e6f4 h1:8XXDpFd+phM+vs31suSSPr4anY7hcALDyrFUj9lk1VU=
+github.com/0magnet/wisp v0.0.0-20261004020451-d16b9de8e6f4/go.mod h1:VlWT38whxJzsl6go+KXdj3lCa4uMAhaul40wHUnYg/Y=
 github.com/0magnet/xterm-go v0.0.0 h1:VVjmRT/uhf9C5ADnuH4t2c40tedJ3AjOCx84YjDagDg=
 github.com/0magnet/xterm-go v0.0.0/go.mod h1:W6c6ofSTsxXuQEr1rSZ3qmfOj5a3LGB3uLQBL0/TiKc=
 github.com/0magnet/yamux v0.1.3-0.20261004024245-10ef81fe8447 h1:FjY0cMr7nFPo/6F+QHyZ6uunNu1t2urI+nzbq6lQJFc=
