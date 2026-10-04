@@ -30,11 +30,11 @@ require (
 	github.com/0magnet/spheregraph v0.0.0
 	github.com/0magnet/sysinfo v1.1.4-0.20261003211934-59c35da8ce3f
 	github.com/0magnet/termanim v0.0.0
-	github.com/0magnet/websh v0.0.0
+	github.com/0magnet/websh v0.0.1-0.20261004171029-50c3c3028c3a
 	github.com/0magnet/wfdrive v0.3.2
 	github.com/0magnet/winbox-go v0.0.0
 	github.com/0magnet/wisp v0.0.0-20261004020451-d16b9de8e6f4
-	github.com/0magnet/xterm-go v0.0.0
+	github.com/0magnet/xterm-go v0.0.1-0.20261004020305-36b45f096b30
 	github.com/0magnet/yamux v0.1.3-0.20261004024245-10ef81fe8447
 	github.com/ActiveState/termtest/conpty v0.5.0
 	github.com/AudriusButkevicius/pfilter v0.0.11

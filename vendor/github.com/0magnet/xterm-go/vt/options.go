@@ -99,6 +99,14 @@ type Theme struct {
 	BrightMagenta       string
 	BrightCyan          string
 	BrightWhite         string
+
+	// Generate256 derives palette entries 16-255 from the theme instead of
+	// using the fixed xterm cube and grey ramp: the 6x6x6 cube is interpolated
+	// in CIELAB between the background, red, green, yellow, blue, magenta, cyan
+	// and the foreground, and the greys run from background to foreground, so
+	// 256-color output follows the theme. Not an xterm.js option; default off.
+	// See https://gist.github.com/jake-stewart/0a8ea46159a7da2c808e5be2177e1783
+	Generate256 bool
 }
 
 // WindowOptions gates the CSI t window manipulation commands (port of
