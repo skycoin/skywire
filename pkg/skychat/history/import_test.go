@@ -66,6 +66,11 @@ func TestImport_IsNotRateLimited(t *testing.T) {
 
 		// The live path must still be limited — Import bypassing it is not
 		// a license for a peer to flood the disk.
+		// The limit counts per calendar minute, so keep the burst inside one;
+		// straddling a boundary would legitimately admit up to twice the cap.
+		if d := time.Until(time.Now().Truncate(time.Minute).Add(time.Minute)); d < 5*time.Second {
+			time.Sleep(d + 100*time.Millisecond)
+		}
 		accepted := 0
 		for i := 0; i < 20; i++ {
 			if err := s.Append(Message{
