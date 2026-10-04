@@ -74,6 +74,14 @@ func TestVPNClient(t *testing.T) {
 		dumpMatching("visorB", "vpn", 80)
 	}
 	require.Truef(t, ok, "vpn-client never reached Running (TUN creation / route setup): %s", lastErr)
+	// Running is reported before traffic flows. A client that dies on the first
+	// packet back (the windows TUN short write) must fail here, not pass.
+	time.Sleep(10 * time.Second)
+	st, _ := cli("vpn", "status", "--rpc", rpcA)
+	if !strings.Contains(strings.ToLower(st), "running") {
+		dumpMatching("visorA", "vpn", 80)
+		t.Fatalf("vpn-client stopped within 10s of reaching Running: %s", st)
+	}
 	t.Logf("vpn-client reached Running — TUN device created on %s", runtime.GOOS)
 }
 
