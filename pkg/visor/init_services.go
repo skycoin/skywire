@@ -715,7 +715,7 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 // Connections that don't implement CloseWrite fall back to the
 // prior immediate-close behavior (no worse than before).
 func forwardRawTCP(log *logging.Logger, remoteConn net.Conn, lHost string) {
-	localConn, err := net.Dial("tcp", lHost)
+	localConn, err := dialLocal(context.Background(), "tcp", lHost)
 	if err != nil {
 		log.WithError(err).Error("Failed to dial local server")
 		closeConn(log, remoteConn)
