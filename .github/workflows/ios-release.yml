@@ -104,6 +104,11 @@ jobs:
           BUILD: ${{ steps.version.outputs.build }}
         run: |
           destination=$(ios/scripts/ci-xcode.sh destination)
+          # The microphone, as in ios-app.yml: VoiceAudioReleaseTests needs it.
+          device=${destination##*,id=}
+          xcrun simctl boot "$device" 2>/dev/null || true
+          xcrun simctl privacy "$device" grant microphone com.skycoin.skywire
+          xcrun simctl shutdown "$device"
           xcodebuild -project ios/Skywire.xcodeproj -scheme Skywire \
             -destination "$destination" \
             -derivedDataPath ios/DerivedData \
