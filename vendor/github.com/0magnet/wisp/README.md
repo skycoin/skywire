@@ -5,9 +5,10 @@ the protocol browser-side networking stacks use to carry TCP and UDP streams
 over one WebSocket: server and client, versions 1 and 2, including version 2's
 UDP extension.
 
-Extracted from [skywire](https://github.com/skycoin/skywire), where it lived as
-`pkg/wisp` and backs `skywire cli wisp serve`, the Wisp backend that
-[LinuxOnTab](https://linuxontab.com) can run its guest's network through.
+Extracted from [skywire](https://github.com/skycoin/skywire)'s `pkg/wisp`;
+skywire now imports this module for `skywire cli wisp serve`, the Wisp backend
+that [LinuxOnTab](https://linuxontab.com) can run its guest's network through,
+and for the visor's embedded wisp server.
 
 ## Serving
 

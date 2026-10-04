@@ -60,7 +60,7 @@ func (fc *FloatCounter) Set(n float64) {
 // marshalTo marshals fc with the given prefix to w.
 func (fc *FloatCounter) marshalTo(prefix string, w io.Writer) {
 	v := fc.Get()
-	_, _ = fmt.Fprintf(w, "%s %g\n", prefix, v) //nolint:errcheck
+	fmt.Fprintf(w, "%s %g\n", prefix, v)
 }
 
 func (fc *FloatCounter) metricType() string {

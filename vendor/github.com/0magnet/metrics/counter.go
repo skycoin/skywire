@@ -39,12 +39,12 @@ func (c *Counter) Dec() {
 
 // Add adds n to c.
 func (c *Counter) Add(n int) {
-	atomic.AddUint64(&c.n, uint64(n)) //nolint:gosec // upstream code; safe under documented invariants
+	atomic.AddUint64(&c.n, uint64(n))
 }
 
 // AddInt64 adds n to c.
 func (c *Counter) AddInt64(n int64) {
-	atomic.AddUint64(&c.n, uint64(n)) //nolint:gosec // upstream code; safe under documented invariants
+	atomic.AddUint64(&c.n, uint64(n))
 }
 
 // Get returns the current value for c.
@@ -60,7 +60,7 @@ func (c *Counter) Set(n uint64) {
 // marshalTo marshals c with the given prefix to w.
 func (c *Counter) marshalTo(prefix string, w io.Writer) {
 	v := c.Get()
-	_, _ = fmt.Fprintf(w, "%s %d\n", prefix, v) //nolint:errcheck
+	fmt.Fprintf(w, "%s %d\n", prefix, v)
 }
 
 func (c *Counter) metricType() string {

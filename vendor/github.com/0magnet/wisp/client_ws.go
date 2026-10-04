@@ -29,3 +29,6 @@ func dialWebsocket(ctx context.Context, cfg ClientConfig) (Frames, error) {
 	conn.SetReadLimit(cfg.ReadLimit)
 	return NewWebsocketFrames(conn), nil
 }
+
+// closeWebsocket drops the conn without waiting for a close handshake.
+func closeWebsocket(conn *websocket.Conn) error { return conn.CloseNow() }

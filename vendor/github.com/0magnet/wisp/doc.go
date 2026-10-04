@@ -17,6 +17,6 @@
 // any net.Conn, such as a virtual loopback in a browser tab, where nothing can
 // listen for a WebSocket.
 //
-// Extracted from skywire (https://github.com/skycoin/skywire), where it was
-// pkg/wisp and backs `skywire cli wisp serve`.
+// Extracted from skywire (https://github.com/skycoin/skywire)'s pkg/wisp;
+// skywire now imports this module for `skywire cli wisp serve`.
 package wisp

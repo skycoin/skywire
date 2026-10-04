@@ -1,5 +1,5 @@
-// Copyright (c) 2026, 0magnet fork authors.
-// See LICENSE for licensing information.
+// Copyright (c) 2017, Daniel Martí <mvdan@mvdan.cc>
+// See LICENSE for licensing information
 
 package interp
 
@@ -42,33 +42,27 @@ import (
 )
 
 // StopJobs cancels every background job this runner started, disowned ones
-// included, and returns once they have all finished.
-//
-// A background job outlives the command line that started it, so an embedder
-// that runs each line under its own context — an interactive shell, typically
-// — should call this when the shell itself goes away. It is the closest thing
-// here to the SIGHUP bash sends its jobs on exit.
-func (r *Runner) StopJobs() {
+// included, and waits for them to finish, giving up early if ctx is done
+// first. An interactive runner's jobs outlive the command line that started
+// them, so an embedder should call this when the shell itself goes away — the
+// closest thing here to the SIGHUP bash sends its jobs on exit. The shells
+// behind process substitutions are not jobs and cannot be cancelled here:
+// they follow the context of the [Runner.Run] call that started them.
+func (r *Runner) StopJobs(ctx context.Context) {
 	for _, bg := range r.bgProcs {
 		if bg.cancel != nil {
 			bg.cancel()
 		}
 	}
 	for _, bg := range r.bgProcs {
-		<-bg.done
-	}
-}
-
-// await blocks until the job finishes, reporting false if the caller's context
-// was canceled first. A job's own context is detached from the caller's, so
-// waiting for one must watch the caller's separately or an interrupted shell
-// would block until the job chose to end.
-func (bg *bgProc) await(ctx context.Context) bool {
-	select {
-	case <-bg.done:
-		return true
-	case <-ctx.Done():
-		return false
+		if bg.cancel == nil {
+			continue
+		}
+		select {
+		case <-bg.done:
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
@@ -92,6 +86,19 @@ func (bg bgProc) running() bool {
 	}
 }
 
+// await blocks until the job finishes, reporting false if the caller's
+// context was cancelled first. An interactive runner's jobs are detached from
+// the caller's context, so waiting for one must watch the caller's separately
+// or an interrupted shell would block on a job that will not stop.
+func (bg bgProc) await(ctx context.Context) bool {
+	select {
+	case <-bg.done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 // status is the second column of the jobs listing, following bash: Done for a
 // job that succeeded, "Exit N" for one that failed, Terminated for one kill
 // cancelled.
@@ -110,6 +117,18 @@ func (bg bgProc) status(running bool) string {
 		return fmt.Sprintf("Exit %d", bg.exit.code)
 	}
 	return "Done"
+}
+
+// finalExit is the status wait and fg report for a finished job. bash gives a
+// job its signal killed 128 plus the signal number, and jobs already says
+// Terminated for the same reason, so the two agree.
+func (bg bgProc) finalExit() exitStatus {
+	if bg.signal != "" {
+		return exitStatus{code: uint8(128 + signalNum(bg.signal))}
+	}
+	exit := *bg.exit
+	exit.exiting = false
+	return exit
 }
 
 // jobList returns the jobs the builtins act on, oldest first. Disowned jobs,
@@ -165,7 +184,7 @@ func (r *Runner) jobMark(bg *bgProc) string {
 func (r *Runner) jobLine(bg *bgProc, running, long bool) string {
 	prefix := fmt.Sprintf("[%d]%s  ", bg.num, r.jobMark(bg))
 	if long {
-		prefix = fmt.Sprintf("[%d]%s %-6s", bg.num, r.jobMark(bg), bg.bgProcID())
+		prefix = fmt.Sprintf("[%d]%s %-6s", bg.num, r.jobMark(bg), r.bgProcID(bg))
 	}
 	cmd := bg.cmd
 	if running {
@@ -193,7 +212,7 @@ func (r *Runner) jobSpec(spec string) (*bgProc, error) {
 		// job is still found — bash's kill also still reaches a disowned
 		// job's process by PID.
 		for _, bg := range slices.Backward(r.bgProcs) {
-			if !bg.substitution && !bg.reaped && bg.bgProcID() == spec {
+			if !bg.substitution && !bg.reaped && r.bgProcID(bg) == spec {
 				return bg, nil
 			}
 		}
@@ -304,7 +323,7 @@ func (r *Runner) runJobs(args []string) exitStatus {
 			continue
 		}
 		if pidsOnly {
-			r.outf("%s\n", bg.bgProcID())
+			r.outf("%s\n", r.bgProcID(bg))
 		} else {
 			r.outf("%s\n", r.jobLine(bg, running, long))
 		}
@@ -420,17 +439,13 @@ func (r *Runner) runKill(args []string) exitStatus {
 	for _, spec := range rest {
 		bg, err := r.jobSpec(spec)
 		if err != nil {
-			// A PID that is not one of our jobs still names a process, so
-			// signal it where the platform lets us. This does not reach
-			// ExecHandler, so killProcess refuses the non-positive PIDs that
-			// kill(2) reads as process groups rather than processes.
-			if pid, aerr := strconv.Atoi(spec); aerr == nil {
-				if kerr := killProcess(pid, signum); kerr != nil {
-					r.errf("kill: (%d) - %v\n", pid, kerr)
-					exit.code = 1
-				}
-				continue
-			}
+			// Only this runner's own jobs can be signalled. A PID naming
+			// anything else belongs to the host, and an embedded interpreter
+			// has no business killing the application it runs inside or any
+			// other process on the machine.
+			//
+			// TODO: signalling a process this runner did not start could be
+			// allowed behind an opt-in option, along with the rest of #171.
 			r.errJobSpec("kill", spec, err)
 			exit.code = 1
 			continue
@@ -445,10 +460,9 @@ func (r *Runner) runKill(args []string) exitStatus {
 			// table. Testing running() here instead made `true & kill -0 $!`
 			// a race on whether the job had finished yet.
 		case signalUnsupported:
-			// Only for a job. A bare PID naming a real process took the
-			// killProcess path above and really was stopped or continued —
-			// the asymmetry is deliberate: a job here is a goroutine with no
-			// terminal behind it, so there is nothing to stop.
+			// A job is a goroutine with no terminal behind it, so there is
+			// nothing to stop or continue. Faking it would be worse than
+			// refusing it.
 			r.errf("kill: %s: no job control\n", spec)
 			exit.code = 1
 		default:
@@ -574,13 +588,17 @@ func (r *Runner) runFg(ctx context.Context, args []string) exitStatus {
 		return exitStatus{code: 1}
 	}
 	r.outf("%s\n", bg.cmd)
-	// Through await, so that an interrupted shell stops waiting: this fork
-	// detaches a job's context from the caller's, and wait does the same.
-	if !bg.await(ctx) {
-		return exitStatus{code: 130}
+	select {
+	case <-ctx.Done():
+		// The rest of interp surfaces a cancelled context as a fatal error
+		// rather than as a status, so that a caller can tell it apart from a
+		// command that merely exited 130.
+		var exit exitStatus
+		exit.fatal(ctx.Err())
+		return exit
+	case <-bg.done:
 	}
-	exit := *bg.exit
-	exit.exiting = false
+	exit := bg.finalExit()
 	// Waiting for a job is reaping it, as it is for wait.
 	r.reapBgProc(bg)
 	return exit
