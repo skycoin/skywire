@@ -47,16 +47,15 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 		return localFwd, localRev, localErr
 	}
 
-	// RSN-oracle 2-hop fast path (opt-in, default OFF). For a single-
-	// intermediate route the source computes the route locally from its own
-	// transports intersected with the destination's own transports (fetched
-	// authoritatively from the destination via an RSN-signed query) — no TPD /
-	// route-finder round-trip. Only attempted when the path is enabled AND an
-	// oracle is wired AND the min-hops constraint is 2-hop-satisfiable (a 2-hop
-	// route is exactly one intermediate; a min_hops>=3 request cannot be served
-	// this way and falls through). On any miss (no oracle, no shared
-	// intermediate, delivery error) it falls through to the existing behavior —
-	// zero change when disabled.
+	// RSN-oracle 2-hop fast path. For a single-intermediate route the source
+	// computes the route locally from its own transports intersected with the
+	// destination's own transports (fetched authoritatively from the
+	// destination via an RSN-signed query) — no TPD / route-finder round-trip.
+	// Only attempted when an oracle is wired AND the min-hops constraint is
+	// 2-hop-satisfiable (a 2-hop route is exactly one intermediate; a
+	// min_hops>=3 request cannot be served this way and falls through). On any
+	// miss (no oracle, no shared intermediate, delivery error) it falls through
+	// to the route finder / TPD-backed path.
 	// A direct dial (--direct: EnsureDirectTransport, or UseExistingTpOnly) means
 	// "use the 1-hop direct transport, don't route around it". The RSN-oracle is
 	// a SEPARATE 2-hop path from the route-finder that --direct already bypasses,
@@ -65,7 +64,7 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 	// US->AU->US at 2.3s instead of over its 3ms direct transport). Skip the
 	// oracle for a direct dial.
 	directDial := opts != nil && (opts.EnsureDirectTransport || opts.UseExistingTpOnly)
-	if r.conf != nil && (r.conf.EnableRSNOracleRoutes || opts.UseRSNOracle2Hop) && src != dst && !directDial {
+	if src != dst && !directDial {
 		hi := baseMinHops
 		if e := opts.EffectiveMinHops(true); uint16(e) > hi { //nolint:gosec
 			hi = uint16(e) //nolint:gosec
