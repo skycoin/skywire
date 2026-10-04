@@ -337,7 +337,9 @@
 		// bridge is live, false when service workers are unavailable (no
 		// secure context, file://, browser policy) — callers fall back to
 		// whatever they did before.
-		enableSW(swPath, prefix) {
+		// timeoutMs, when set, is how long the worker waits for this page to answer
+		// one request; it must exceed the slowest endpoint the page serves.
+		enableSW(swPath, prefix, timeoutMs) {
 			// Default the scope to a vnet/ directory BESIDE the page, so the
 			// bridge works for pages deployed under a subdirectory (GitHub
 			// Pages) exactly as at a server root.
@@ -365,7 +367,8 @@
 			// Passed at register time because a service worker cannot see its
 			// client's isolation.
 			const url = (swPath || 'vnet-sw.js') + '?prefix=' + encodeURIComponent(prefix)
-				+ (globalThis.crossOriginIsolated ? '&coi=1' : '');
+				+ (globalThis.crossOriginIsolated ? '&coi=1' : '')
+				+ (timeoutMs > 0 ? '&timeout=' + Math.round(timeoutMs) : '');
 			return navigator.serviceWorker.register(url, { scope: prefix })
 				.then((reg) => new Promise((resolve) => {
 					// Wait on THIS registration's worker reaching 'activated'.

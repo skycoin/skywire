@@ -110,6 +110,15 @@ hypervisor UI from `http://127.0.0.1:8001` — all inside one tab.
   [tuiwasm](https://github.com/0magnet/tuiwasm) load the layer on their
   pages, so every wasm instance there shares one filesystem and localhost.
 
+## Related projects
+
+Other operating-system layers for WebAssembly in the browser:
+
+- [Wanix](https://wanix.dev/) — WebAssembly-native Unix with Plan 9-style namespaces and 9P
+- [Kandelo](https://kandelo.dev/20260819-demo/) — a POSIX-compatible multi-process WebAssembly kernel for the browser
+- [linux-wasm](https://github.com/joelseverin/linux-wasm) — the Linux kernel ported to a WebAssembly architecture, one web worker per task
+- [exaequOS](https://www.exaequos.com/blog_wasm_wasi_compilers_in_exaequos.html) — a WebAssembly microkernel OS with WASI compilers in the browser
+
 ## Dependency Graph
 
 Made with [goda](https://github.com/loov/goda):
