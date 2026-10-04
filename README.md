@@ -80,11 +80,17 @@ in the Android app. They share the network but not every capability.
 | Rewards | ✓ | ✗ | ✗ |
 
 ¹ WebSocket, WebTransport, WebRTC and dmsg; a browser cannot open raw TCP or UDP.
+
 ² Carrier NAT blocks most inbound links, and public autoconnect is off by default to save battery and data.
+
 ³ A network stack inside the tab, for the tab's own pages.
+
 ⁴ The resolving proxy is in the core but not yet turned on or wired into the VPN.
+
 ⁵ On the tab's virtual loopback rather than the computer's.
+
 ⁶ The mailbox runs in the core but the app has no mail screen yet.
+
 ⁷ The tab hosts a websh shell and its own files rather than the computer's.
 
 ## Features
