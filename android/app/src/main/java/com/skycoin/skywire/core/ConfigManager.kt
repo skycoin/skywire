@@ -137,6 +137,9 @@ class ConfigManager(
         "--disableapps", "skysocks,vpn-server,vpn-router,skydex-market,skycoin-web",
         "--binpath", paths.binDir.absolutePath,
         "--nofetch",
+        // The resolving proxies for .dmsg and .skynet names, on 127.0.0.1:4445
+        // (4446 chained behind it). The VPN points the phone's HTTP proxy here.
+        "--dmsgweb", "--skynetweb",
     )
 
     private suspend fun runGen(): CommandResult = runCommand(genArgs(), timeoutSeconds = 90)
