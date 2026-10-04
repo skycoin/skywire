@@ -124,6 +124,13 @@ const routes: Routes = [
         children: [],
       },
       {
+        // The same, landing on one tab, so a link can open the local visor's
+        // mail or terminal without knowing its PK.
+        path: 'local/:tab',
+        canActivate: [localVisorGuard],
+        children: [],
+      },
+      {
         path: ':key',
         component: NodeComponent,
         children: [
