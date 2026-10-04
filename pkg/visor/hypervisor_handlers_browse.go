@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/wasmhv"
@@ -65,6 +66,11 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 	fileServer := uiCacheControl(http.FileServer(http.FS(hv.c.UIAssets)))
 	bootReport := bootReportHandler(hv.logger, "")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// See wasmhv.ServeVNetFallback: a /vnet/ request here bypassed the worker.
+		if strings.HasPrefix(r.URL.Path, "/vnet/") {
+			wasmhv.ServeVNetFallback(w, r)
+			return
+		}
 		switch r.URL.Path {
 		// PWA: the desk installs as an app. The manifest and icons are the ones
 		// `hv serve` uses; the service worker precaches THIS context's shell and
