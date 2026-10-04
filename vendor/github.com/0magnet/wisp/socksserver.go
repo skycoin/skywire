@@ -1,5 +1,3 @@
-// Package wisp pkg/wisp/socksserver.go c4-app-proxy
-//
 // A SOCKS5 front end for a Wisp session: CONNECT becomes a Wisp TCP stream,
 // UDP ASSOCIATE becomes one Wisp UDP stream per destination.
 //
@@ -14,6 +12,7 @@
 // Names are never resolved here. The host from the request is passed to the
 // backend as written, which is both what keeps the query off this machine and
 // what makes the answer come from the network the traffic will actually use.
+
 package wisp
 
 import (
@@ -22,11 +21,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"sync"
 	"time"
-
-	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // SOCKS5 commands.
@@ -67,7 +65,7 @@ type SocksServer struct {
 	Session func(ctx context.Context) (*Client, error)
 	// Log receives per-connection events. Zero means a logger named
 	// "wisp-socks".
-	Log *logging.Logger
+	Log *slog.Logger
 }
 
 // Serve accepts connections until l fails.
@@ -76,7 +74,7 @@ func (s *SocksServer) Serve(l net.Listener) error {
 		return errors.New("wisp: SocksServer has no Session")
 	}
 	if s.Log == nil {
-		s.Log = logging.MustGetLogger("wisp-socks")
+		s.Log = defaultLogger("wisp-socks")
 	}
 	for {
 		c, err := l.Accept()
@@ -95,12 +93,12 @@ func (s *SocksServer) serve(c net.Conn) {
 		return
 	}
 	if err := socksGreeting(c); err != nil {
-		s.Log.WithError(err).Debug("socks greeting failed")
+		s.lg().WithError(err).Debug("socks greeting failed")
 		return
 	}
 	cmd, host, port, err := socksRequest(c)
 	if err != nil {
-		s.Log.WithError(err).Debug("socks request failed")
+		s.lg().WithError(err).Debug("socks request failed")
 		return
 	}
 
@@ -212,14 +210,14 @@ func (s *SocksServer) connect(c net.Conn, host string, port uint16) {
 	client, err := s.Session(ctx)
 	cancel()
 	if err != nil {
-		s.Log.WithError(err).Debugf("connect %s:%d: no session", host, port)
+		s.lg().WithError(err).Debugf("connect %s:%d: no session", host, port)
 		writeSocksReply(c, replyGeneralFailure, nil) //nolint:errcheck,gosec // closing anyway
 		return
 	}
 
 	stream, err := client.DialTCP(context.Background(), host, port)
 	if err != nil {
-		s.Log.WithError(err).Debugf("connect %s:%d failed", host, port)
+		s.lg().WithError(err).Debugf("connect %s:%d failed", host, port)
 		writeSocksReply(c, replyHostUnreachable, nil) //nolint:errcheck,gosec // closing anyway
 		return
 	}
@@ -262,12 +260,12 @@ func (s *SocksServer) associate(c net.Conn) {
 	client, err := s.Session(ctx)
 	cancel()
 	if err != nil {
-		s.Log.WithError(err).Debug("associate: no session")
+		s.lg().WithError(err).Debug("associate: no session")
 		writeSocksReply(c, replyGeneralFailure, nil) //nolint:errcheck,gosec // closing anyway
 		return
 	}
 	if !client.UDPSupported() && client.Version() == 2 {
-		s.Log.Debug("associate: the backend did not advertise UDP")
+		s.lg().Debug("associate: the backend did not advertise UDP")
 		writeSocksReply(c, replyCmdNotSupported, nil) //nolint:errcheck,gosec // closing anyway
 		return
 	}
@@ -280,7 +278,7 @@ func (s *SocksServer) associate(c net.Conn) {
 	}
 	pc, err := net.ListenUDP("udp", &net.UDPAddr{IP: bindIP, Port: 0})
 	if err != nil {
-		s.Log.WithError(err).Debug("associate: could not bind a relay socket")
+		s.lg().WithError(err).Debug("associate: could not bind a relay socket")
 		writeSocksReply(c, replyGeneralFailure, nil) //nolint:errcheck,gosec // closing anyway
 		return
 	}
@@ -293,7 +291,7 @@ func (s *SocksServer) associate(c net.Conn) {
 	if err := c.SetDeadline(time.Time{}); err != nil {
 		return
 	}
-	s.Log.Debugf("association open, relaying from %s", bound)
+	s.lg().Debugf("association open, relaying from %s", bound)
 
 	a := &association{
 		srv:     s,
@@ -312,7 +310,7 @@ func (s *SocksServer) associate(c net.Conn) {
 	go a.sweep()
 
 	a.run()
-	s.Log.Debug("association closed")
+	s.lg().Debug("association closed")
 }
 
 // association is one UDP ASSOCIATE: a relay socket facing the application and
@@ -394,7 +392,7 @@ func (a *association) run() {
 
 		host, port, body, frag, err := parseSocksUDP(buf[:n])
 		if err != nil {
-			a.srv.Log.WithError(err).Debug("dropped a malformed datagram")
+			a.srv.lg().WithError(err).Debug("dropped a malformed datagram")
 			continue
 		}
 		if frag != 0 {
@@ -405,11 +403,11 @@ func (a *association) run() {
 
 		dest, err := a.dest(host, port)
 		if err != nil {
-			a.srv.Log.WithError(err).Debugf("no stream for %s:%d", host, port)
+			a.srv.lg().WithError(err).Debugf("no stream for %s:%d", host, port)
 			continue
 		}
 		if err := dest.stream.WriteDatagram(body); err != nil {
-			a.srv.Log.WithError(err).Debugf("send to %s:%d failed", host, port)
+			a.srv.lg().WithError(err).Debugf("send to %s:%d failed", host, port)
 			a.drop(host, port)
 		}
 	}
@@ -507,7 +505,7 @@ func (a *association) sweep() {
 		}
 		a.mu.Unlock()
 		for _, d := range stale {
-			a.srv.Log.Debugf("association: %s:%d idle, closing its stream", d.host, d.port)
+			a.srv.lg().Debugf("association: %s:%d idle, closing its stream", d.host, d.port)
 			d.stream.Close() //nolint:errcheck,gosec // reaping
 		}
 	}
@@ -591,3 +589,6 @@ func encodeSocksUDP(host string, port uint16, payload []byte) []byte {
 	out = append(out, pb[:]...)
 	return append(out, payload...)
 }
+
+// lg is the server's logger as the package logs through it.
+func (s *SocksServer) lg() dlog { return dlog{s.Log} }

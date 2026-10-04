@@ -1,17 +1,17 @@
-// Package wisp pkg/wisp/egress.go c4-app-proxy
-//
 // Where a Wisp stream actually goes. CONNECT names its destination before a
 // byte flows, so the choice is made per connection rather than per packet:
-// the default is the local skysocks-client, which carries the stream over a
-// route to an exit visor, and --direct dials the host's own network instead.
+// DirectEgress dials the host's own network, and SocksEgress hands the
+// stream to a SOCKS5 proxy (skywire's skysocks-client, which carries it over
+// a route to an exit, is the one this was written for).
 //
-// UDP goes through SOCKS5 UDP ASSOCIATE (socksudp.go), which skysocks now
-// relays over the route to the exit, so a guest datagram reaches the same
-// place its TCP does. A proxy without an association — an older exit, or some
-// other CONNECT-only SOCKS5 — leaves port 53 working through a DNS-over-TCP
+// UDP goes through SOCKS5 UDP ASSOCIATE (socksudp.go), where the proxy relays
+// datagrams, so a guest datagram reaches the same place its TCP does. A
+// proxy without an association — an older exit, or some other CONNECT-only
+// SOCKS5 — leaves port 53 working through a DNS-over-TCP
 // translation, which spares each guest from running its own unbound with
 // forward-tcp-upstream; every other port is refused rather than silently
 // leaked to the clearnet.
+
 package wisp
 
 import (
@@ -74,7 +74,7 @@ func (e *DirectEgress) DialUDP(ctx context.Context, host string, port uint16) (D
 }
 
 // Describe implements Egress.
-func (e *DirectEgress) Describe() string { return "direct (clearnet, not over skywire)" }
+func (e *DirectEgress) Describe() string { return "direct (the host's own network)" }
 
 // udpStream carries datagrams over a connected UDP socket.
 type udpStream struct {
@@ -178,7 +178,7 @@ func (e *SocksEgress) DialUDP(ctx context.Context, host string, port uint16) (Da
 
 // Describe implements Egress.
 func (e *SocksEgress) Describe() string {
-	return "socks5 " + e.Addr + " (skywire exit; UDP via ASSOCIATE, or DNS-over-TCP where the proxy has none)"
+	return "socks5 " + e.Addr + " (UDP via ASSOCIATE, or DNS-over-TCP where the proxy has none)"
 }
 
 // dnsOverTCP presents a TCP DNS connection as a datagram stream. Per RFC 1035

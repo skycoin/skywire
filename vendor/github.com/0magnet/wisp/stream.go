@@ -1,7 +1,6 @@
-// Package wisp pkg/wisp/stream.go c4-app-proxy
-//
 // One Wisp stream: the socket at the far end, the two pumps that move bytes
 // across it, and the credit accounting that paces the client.
+
 package wisp
 
 import (
