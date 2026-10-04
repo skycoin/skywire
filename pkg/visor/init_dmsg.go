@@ -393,7 +393,10 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	// dmsg-HTTP transport (httpC, set above). The one client both registers
 	// itself over dmsg and resolves seeded static entries direct-first.
 
-	// Start periodic config refresh for dynamic key sets
+	// Follow the deployment's services config: the conf service's CXO feed
+	// delivers a change as it happens, the hourly dmsg-HTTP refresh is the
+	// fallback.
+	go v.startConfCXOSubscriber(ctx)
 	go v.startConfigRefresh(ctx) //nolint:errcheck,gosec
 
 	// Refresh the on-disk dmsg-servers cache from dmsg-discovery so the next
