@@ -1,5 +1,3 @@
-// Package wisp pkg/wisp/socksudp.go c4-app-proxy
-//
 // The client half of SOCKS5 UDP ASSOCIATE (RFC 1928 §7), which is what lets a
 // guest's UDP stream cross a skywire exit now that skysocks relays datagrams.
 //
@@ -9,6 +7,7 @@
 // where it is going. The TCP control connection is held open for the life of
 // the association, because closing it is how RFC 1928 says an association ends
 // — and how skysocks tears down the exit socket behind it.
+
 package wisp
 
 import (

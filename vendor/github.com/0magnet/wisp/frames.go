@@ -1,5 +1,3 @@
-// Package wisp pkg/wisp/frames.go c4-app-proxy
-//
 // The transport a Wisp session runs on.
 //
 // Wisp is defined over a WebSocket, but nothing in a session needs one: it
@@ -20,6 +18,7 @@
 // Wisp itself. The one big-endian length in this package is the DNS-over-TCP
 // framing in egress.go, which is network order per RFC 1035 and is called out
 // there for exactly this reason.
+
 package wisp
 
 import (

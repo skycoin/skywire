@@ -33,6 +33,7 @@ require (
 	github.com/0magnet/websh v0.0.0
 	github.com/0magnet/wfdrive v0.3.2
 	github.com/0magnet/winbox-go v0.0.0
+	github.com/0magnet/wisp v0.0.0-20261004020451-d16b9de8e6f4
 	github.com/0magnet/xterm-go v0.0.0
 	github.com/0magnet/yamux v0.1.3-0.20261004024245-10ef81fe8447
 	github.com/ActiveState/termtest/conpty v0.5.0

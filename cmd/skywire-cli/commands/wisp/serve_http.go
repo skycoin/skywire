@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0magnet/wisp"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
-	"github.com/skycoin/skywire/pkg/wisp"
 )
 
 // serveWisp mounts the server on an HTTP listener and blocks.

@@ -36,12 +36,12 @@ import (
 	"time"
 
 	"github.com/0magnet/bottle/vnet"
+	"github.com/0magnet/wisp"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
-	"github.com/skycoin/skywire/pkg/wisp"
 )
 
 // vnetForward reaches a virtual-loopback address. It is bottle's vnet behind
@@ -122,7 +122,7 @@ func (w *EmbeddedWisp) Start() error {
 	srv, err := wisp.NewServer(wisp.Config{
 		Egress: egress,
 		Buffer: w.cfg.Buffer,
-		Log:    w.log,
+		Log:    w.log.Slog(),
 	})
 	if err != nil {
 		return fmt.Errorf("wisp server: %w", err)

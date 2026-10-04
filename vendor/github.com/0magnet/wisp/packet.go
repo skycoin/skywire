@@ -1,5 +1,3 @@
-// Package wisp pkg/wisp/packet.go c4-app-proxy
-//
 // Wire format for the Wisp protocol (MercuryWorkshop), which multiplexes many
 // TCP and UDP sockets over a single WebSocket. Browser-side Linux emulators
 // use it as the egress path for a guest NIC: the page terminates the guest's
@@ -15,6 +13,7 @@
 // Stream ID 0 is reserved for the handshake. All multi-byte fields in Wisp are
 // little-endian; note that the DNS length prefix in egress.go is NOT, since
 // that one is network order per RFC 1035.
+
 package wisp
 
 import (
