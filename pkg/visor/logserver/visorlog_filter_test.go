@@ -8,8 +8,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-
-	"github.com/gin-gonic/gin"
 )
 
 // TestPassesFilters covers the per-line predicate independently of the
@@ -111,7 +109,7 @@ func TestPassesFilters(t *testing.T) {
 	}
 }
 
-// TestStreamFilteredVisorLog drives the gin handler end-to-end with a
+// TestStreamFilteredVisorLog drives the handler end-to-end with a
 // tempfile log + query params, then asserts what comes back over the
 // response body matches the expected filtered subset. Covers the
 // common operator-facing combos.
@@ -175,13 +173,10 @@ func TestStreamFilteredVisorLog(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gin.SetMode(gin.TestMode)
 			rec := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(rec)
 			req := httptest.NewRequest("GET", "/visor.log?"+tc.query.Encode(), nil)
-			c.Request = req
 
-			streamFilteredVisorLog(c, logFile, tc.query)
+			streamFilteredVisorLog(rec, req, logFile, tc.query)
 
 			got := rec.Body.String()
 			for _, want := range tc.wantContain {

@@ -1,6 +1,5 @@
-// Package commands — dmsghttp_test.go: unit tests for the gin-layer
-// helpers (whitelist auth middleware, logging middleware, the GinHandler
-// adapter) and the pure color/format helpers. The server() run loop is
+// Package commands — dmsghttp_test.go: unit tests for the http
+// helpers (whitelist auth middleware, logging middleware, the file server) and the pure color/format helpers. The server() run loop is
 // dmsg-networking and is not unit-tested here.
 package commands
 
@@ -8,28 +7,22 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 )
 
-func TestMain(m *testing.M) {
-	gin.SetMode(gin.TestMode)
-	os.Exit(m.Run())
-}
-
 // --- whitelistAuth ---------------------------------------------------
 
-func newAuthEngine(pks []cipher.PubKey) *gin.Engine {
-	r := gin.New()
-	r.Use(whitelistAuth(pks))
-	r.GET("/", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
-	return r
+func newAuthEngine(pks []cipher.PubKey) http.Handler {
+	return whitelistAuth(pks, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok")) //nolint:errcheck
+	}))
 }
 
 func TestWhitelistAuth(t *testing.T) {
@@ -71,14 +64,12 @@ func TestWhitelistAuth(t *testing.T) {
 	})
 }
 
-// --- GinHandler + loggingMiddleware ----------------------------------
+// --- loggingMiddleware and the file server ---------------------------
 
-func TestGinHandlerAndLoggingMiddleware(t *testing.T) {
-	r := gin.New()
-	r.Use(loggingMiddleware())
-	r.GET("/x", func(c *gin.Context) { c.String(http.StatusOK, "hi") })
-
-	h := &GinHandler{Router: r}
+func TestLoggingMiddleware(t *testing.T) {
+	h := loggingMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("hi")) //nolint:errcheck
+	}))
 
 	// Redirect stdout so the middleware's log line doesn't pollute output.
 	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
@@ -163,4 +154,21 @@ func TestServerEarlyExitOnDmsgError(t *testing.T) {
 	}
 
 	require.Len(t, wlkeys, 1, "only the valid whitelist key should be parsed")
+}
+
+func TestFileServerHidesDirectoryListing(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "sub"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "secret.txt"), []byte("s"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello"), 0o600))
+	h := http.FileServer(noDirListing{http.Dir(dir)})
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/a.txt", nil))
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "hello", w.Body.String())
+
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sub/", nil))
+	require.NotContains(t, w.Body.String(), "secret.txt")
 }

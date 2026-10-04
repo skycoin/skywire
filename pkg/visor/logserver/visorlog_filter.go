@@ -5,7 +5,7 @@
 // often the slowest hop, so filtering at the source — even at the cost of a
 // regex per line — typically beats shipping the whole file to a client that's
 // only going to grep it. The endpoint stays compatible when no query params
-// are set (caller still receives the raw file via c.File).
+// are set (caller still receives the raw file via http.ServeFile).
 package logserver
 
 import (
@@ -17,8 +17,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/gin-gonic/gin"
 )
 
 // logLevelRE captures `LEVEL` and `[module]` from a line shaped like
@@ -43,10 +41,10 @@ var levelOrder = map[string]int{
 }
 
 // streamFilteredVisorLog walks logFile line-by-line, applies the filters
-// declared in q, and writes matching lines to the gin response writer.
+// declared in q, and writes matching lines to w.
 // Returns when the writer is closed, the limit is hit, the file ends
 // (unless ?follow=1), or the context fires.
-func streamFilteredVisorLog(c *gin.Context, logFile string, q map[string][]string) {
+func streamFilteredVisorLog(w http.ResponseWriter, req *http.Request, logFile string, q map[string][]string) {
 	getOne := func(k string) string {
 		v := q[k]
 		if len(v) == 0 {
@@ -58,7 +56,7 @@ func streamFilteredVisorLog(c *gin.Context, logFile string, q map[string][]strin
 	minLevel := strings.ToUpper(strings.TrimSpace(getOne("min-level")))
 	minRank, hasMinLevel := levelOrder[minLevel]
 	if minLevel != "" && !hasMinLevel {
-		c.String(http.StatusBadRequest,
+		writeString(w, http.StatusBadRequest,
 			"invalid min-level %q; expected one of trace, debug, info, warn, error, fatal, panic",
 			minLevel)
 		return
@@ -68,7 +66,7 @@ func streamFilteredVisorLog(c *gin.Context, logFile string, q map[string][]strin
 	if s := getOne("module"); s != "" {
 		re, err := regexp.Compile(s)
 		if err != nil {
-			c.String(http.StatusBadRequest, "invalid module regex: %v", err)
+			writeString(w, http.StatusBadRequest, "invalid module regex: %v", err)
 			return
 		}
 		modRE = re
@@ -76,7 +74,7 @@ func streamFilteredVisorLog(c *gin.Context, logFile string, q map[string][]strin
 	if s := getOne("grep"); s != "" {
 		re, err := regexp.Compile(s)
 		if err != nil {
-			c.String(http.StatusBadRequest, "invalid grep regex: %v", err)
+			writeString(w, http.StatusBadRequest, "invalid grep regex: %v", err)
 			return
 		}
 		grepRE = re
@@ -91,17 +89,17 @@ func streamFilteredVisorLog(c *gin.Context, logFile string, q map[string][]strin
 
 	f, err := os.Open(logFile) //nolint:gosec // path comes from localPath config, not request
 	if err != nil {
-		c.String(http.StatusInternalServerError, "open visor.log: %v", err)
+		writeString(w, http.StatusInternalServerError, "open visor.log: %v", err)
 		return
 	}
 	defer f.Close() //nolint:errcheck
 
-	c.Writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	c.Writer.WriteHeader(http.StatusOK)
-	c.Writer.Flush()
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	flush(w)
 
 	r := bufio.NewReaderSize(f, 64*1024)
-	ctx := c.Request.Context()
+	ctx := req.Context()
 	var lineNum, written int
 	strictLevelMode := hasMinLevel // when set, lines that don't parse get dropped, not passed through
 
@@ -115,10 +113,10 @@ func streamFilteredVisorLog(c *gin.Context, logFile string, q map[string][]strin
 		if len(line) > 0 {
 			lineNum++
 			if lineNum > sinceLine && passesFilters(line, minRank, hasMinLevel, modRE, grepRE, strictLevelMode) {
-				if _, werr := io.WriteString(c.Writer, line); werr != nil {
+				if _, werr := io.WriteString(w, line); werr != nil {
 					return
 				}
-				c.Writer.Flush()
+				flush(w)
 				written++
 				if limit > 0 && written >= limit {
 					return

@@ -29,7 +29,6 @@ import (
 	visor "github.com/skycoin/skywire/cmd/skywire-visor/commands"
 	"github.com/skycoin/skywire/cmd/skywire/commands/doc"
 	"github.com/skycoin/skywire/cmd/skywire/tui"
-	services "github.com/skycoin/skywire/cmd/svc/skywire-services/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/flags"
@@ -66,8 +65,8 @@ func init() {
 	//
 	// The flag-aware `help` that used to be installed here command by
 	// command now comes from InstallHelpTree in Execute, which covers the
-	// whole tree rather than these five roots.
-	for _, sub := range []*cobra.Command{scli.RootCmd, services.RootCmd, dmsg.RootCmd, visor.RootCmd, cxo.RootCmd} {
+	// whole tree rather than these roots.
+	for _, sub := range []*cobra.Command{scli.RootCmd, dmsg.RootCmd, visor.RootCmd, cxo.RootCmd} {
 		flags.InitStyle(sub)
 	}
 
@@ -78,7 +77,6 @@ func init() {
 	RootCmd.AddCommand(
 		visor.RootCmd,
 		scli.RootCmd,
-		services.RootCmd,
 		dmsg.RootCmd,
 		cxo.RootCmd,
 		appsCmd,
@@ -107,7 +105,6 @@ func init() {
 	// here is `skywire cli dmsg probe` (which adds visor-RPC + skynet modes).
 	// The standalone dmsg binary still advertises it.
 	dmsgprobe.RootCmd.Hidden = true
-	services.RootCmd.Use = "svc"
 
 	scli.RootCmd.Use = "cli"
 	visor.RootCmd.Use = "visor"
