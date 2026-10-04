@@ -42,80 +42,32 @@ else follows.
   not a feature, it is a property of the network. Both TCP services
   and UDP datagrams carry end-to-end on the encrypted overlay.
 
-  **For comparison — stream encryption at roughly this level:**
-  - **cjdns / Yggdrasil** — encrypted IPv6 mesh, pubkey-derived
-    address, no CA. Closest in design philosophy.
-  - **Tor / I2P / Lokinet** — encrypted overlays focused on
-    anonymity rather than general-purpose private transport.
-  - **WireGuard / Nebula / Tailscale** — pubkey identity, AEAD
-    over UDP, but per-pair configured rather than address-as-key.
-  - **QUIC / HTTPS** — mandatory transport encryption, but identity
-    is still bolted on via X.509 because IP addresses are not
-    identities.
-
 * **The public key is the address.** A 33-byte pubkey is what a peer
   dials; the Noise handshake proves the remote side holds the
   matching private key. Authentication is implicit because the name
   *is* the key — there is no external naming authority to consult,
-  and no certificate to validate.
-
-  **For comparison — address-as-cryptographic-identity:**
-  - **Tor onion services** — `.onion` is the base32 pubkey hash.
-  - **cjdns / Yggdrasil** — IPv6 derived from the pubkey hash.
-  - **I2P destinations** — base32 IDs from the destination key.
-  - **Hyperswarm / Hypercore** — pubkey is the discovery key.
-  - **WireGuard / Tailscale** — pubkey identifies the peer, but the
-    routable address is still an IP assigned by the coordinator.
-
-  *What sets Skywire apart:* the property holds for every operation
-  — transports, routes, app dial-out, CLI, hypervisor — not just
-  for hidden services or routing alone.
+  and no certificate to validate. The property holds for every
+  operation — transports, routes, app dial-out, CLI, hypervisor —
+  not just for hidden services or routing alone.
 
 * **DMSG: the anonymous relay layer.** Clients connect *out* to a
   DMSG server; neither side needs a public-facing port, and neither
   client learns the other's IP. The server passes the encrypted
-  stream between them without being able to read it.
-
-  **For comparison — identity-keyed relay between two clients:**
-  - **Tor rendezvous / introduction points** — closest match;
-    clients meet at a relay neither controls, no public port either
-    side, IPs hidden from each other.
-  - **Signal / WhatsApp servers** — server-mediated messaging;
-    clients don't see each other's IPs. Same relay-without-read
-    property, narrower scope (messaging only).
-  - **libp2p Circuit Relay v2** — pubkey-keyed relay for
-    NAT-traversed libp2p connections.
-  - **TURN (WebRTC)** — relay when direct P2P fails, but not
-    identity-keyed and operator can in principle MITM.
-
-  *What sets Skywire apart:* DMSG is general-purpose encrypted
-  stream relay used as the always-on baseline that lets any pubkey
-  reach any other, *and* as the substrate Skywire's other
-  discovery / control-plane services sit on.
+  stream between them without being able to read it. DMSG is the
+  always-on baseline that lets any pubkey reach any other, and the
+  substrate Skywire's discovery and control-plane services sit on.
 
 * **Skynet: peer-to-peer, multi-hop, and multiplexed routing.**
   Routes carry Noise-encrypted packets end-to-end across one or
   more direct transports; intermediate visors see only their
   immediate neighbors, never the route's source or destination.
-  Paths come from the route finder service or from local
-  computation against the transport discovery graph. Multi-route
-  mux is an opt-in capability that aggregates parallel routes for
-  higher bandwidth.
-
-  **For comparison — multi-hop pubkey-routed overlays:**
-  - **Tor** — fixed 3-hop circuits, client-source-routed from the
-    directory consensus.
-  - **I2P** — garlic-routed tunables; tunnels selected locally
-    from netDB.
-  - **Lokinet** — Tor-style onion routing on Lokinet pubkeys.
-  - **cjdns / Yggdrasil** — paths emerge from a self-organizing
-    mesh (DHT labels / tree).
-  - **Nym** — mixnet routing with cover traffic; anonymity-first.
-
-  *What sets Skywire apart:* path construction is pluggable —
-  consult a centralized route finder *or* compute locally from the
-  transport discovery graph. Not fixed at three hops (Tor), not
-  mesh-emergent (cjdns / Yggdrasil), not pooled (mixnets).
+  Paths come from the route finder service, from local computation
+  against the transport discovery graph, or — for two-hop routes —
+  from the destination's own transport list, which it hands over to
+  a query signed by a route setup node. Multi-route mux is an opt-in
+  capability that runs several whole routes at once, reorders and
+  retransmits across them, and schedules each packet onto the route
+  predicted to deliver it soonest.
 
 * **Skynet & DMSG port forwarding and reverse proxy.** Expose a
   local TCP service on a visor's pubkey, or forward a remote
@@ -124,40 +76,11 @@ else follows.
   whitelisting for access control and multiple named instances per
   visor.
 
-  **For comparison — pubkey- / identity-keyed TCP tunneling:**
-  - **ssh -L / ssh -R** — classic forwarding; identity is the SSH
-    key, address is an IP.
-  - **Tailscale Serve** — expose a local service on the tailnet;
-    closest peer model.
-  - **ngrok / Cloudflare Tunnel / Tailscale Funnel** — expose a
-    local service to the clearnet via a provider's edge.
-  - **WireGuard + iptables** — manual TCP forwarding inside a
-    WireGuard mesh.
-
-  *What sets Skywire apart:* forwarding works over either the
-  direct-route plane *or* the anonymous DMSG relay, addressed
-  purely by pubkey — no provider, no public IP, no DNS.
-
 * **Resolving SOCKS5 proxy and mail bridge.** Bridges from legacy
   ecosystems into the overlay: the embedded `skynetweb` /
   `dmsgweb` SOCKS5 resolvers translate `<pk>.skynet` / `<pk>.dmsg`
   URLs for a browser, and `skymail-bridge` lets a standard SMTP
   sender deliver mail to a skywire mailbox.
-
-  **For comparison — bridges from a legacy protocol into an
-  overlay:**
-  - **I2P HTTP / SOCKS proxy** — direct inspiration for the
-    Skynet resolver; translates `.i2p` eepsite URLs.
-  - **Tor SOCKS proxy** — resolves `.onion`.
-  - **IPFS HTTP gateway** — bridges HTTPS clients to IPFS content.
-  - **Matrix bridges (irc, slack, signal)** — relay between legacy
-    chat protocols and Matrix federation.
-
-  *What sets Skywire apart:* the bridges are first-class
-  subsystems of the visor, sharing its pubkey identity and overlay
-  encryption — the same identity model whether the visor is
-  talking to another visor or fronting a legacy protocol on its
-  behalf.
 
 * **Remote monitoring and remote management over the overlay.**
   All over the same pubkey-authenticated transport:
@@ -171,49 +94,12 @@ else follows.
 
   No public IP, no SSH key sprawl, no jump host.
 
-  **For comparison — remote access without a public IP or jump
-  host:**
-  - **Tailscale SSH** — pubkey-keyed SSH within a pubkey overlay.
-    Closest peer for the shell side, no equivalent for the
-    activity monitor or cluster UI.
-  - **Headscale + SSH** — self-hosted Tailscale control + plain
-    SSH on top.
-  - **Cloudflare Tunnel + cloudflared** — provider-mediated
-    tunnel.
-  - **Teleport** — identity-aware access proxy; enterprise,
-    closest match for cluster management.
-  - **SSH + bastion host + htop/btop** — the legacy default;
-    needs a public IP somewhere and stitches shell + monitor +
-    cluster-mgmt together by hand.
-
-  *What sets Skywire apart:* shell, activity monitor, and
-  cluster UI are all first-class subcommands of the same CLI,
-  reaching any visor by pubkey over the same overlay. No
-  separate SSH key infrastructure, no separate tunneling agent,
-  no provider account.
-
 * **Native applications, managed by the visor.** VPN client and
   server, SOCKS5 proxy client and server (skysocks /
   skysocks-client), and skychat — a messenger with persistent
   history (CXO + bbolt) and group support. The visor starts,
   stops, lifecycle-manages, and registers them in service
   discovery.
-
-  **For comparison — overlay networks that ship a managed app
-  ecosystem:**
-  - **I2P** — i2psnark (BitTorrent), I2P-Bote (email), Susimail,
-    bundled and using the I2P identity. Closest peer.
-  - **Tor Project apps** — Tor Browser, Tails, OnionShare — each
-    a separate project rather than visor-managed.
-  - **Lokinet + Session** — Session messenger uses the Loki
-    identity but is a sibling project.
-  - **Tailscale / WireGuard / Yggdrasil / cjdns** — pure
-    transport; apps are external.
-
-  *What sets Skywire apart:* apps are launched, supervised, and
-  lifecycle-managed by the visor itself (`skywire cli visor app
-  …`) — service discovery, transport, identity, and lifecycle
-  all in one process.
 
 * **Custom, private, and multi-deployment networks.** The whole
   service stack (transport discovery, route finder, service
@@ -224,22 +110,63 @@ else follows.
   or additional deployments can layer on top of the public one for
   segmented or air-gapped environments. A hypervisor-embedded DMSG
   server keeps a private network running with no public deployment
-  dependency after bootstrap.
+  dependency after bootstrap. Visors follow their deployment's
+  service keys from its config service's signed feed, so a
+  deployment can change them without a release.
 
-  **For comparison — overlays with a self-hostable coordination
-  plane:**
-  - **Headscale** — self-hostable Tailscale control plane.
-    Closest analogue.
-  - **Nebula lighthouses** — coordination is just nodes the
-    operator runs.
-  - **Matrix homeservers** — fully self-hostable, federation by
-    default.
-  - **WireGuard alone** — no coordinator at all; manual peer
-    config, often paired with Headscale / Netmaker.
+## How Skywire compares
 
-  *What sets Skywire apart:* deployments compose — additional
-  service stacks layer **on top of** the public Skywire deployment
-  for segmented use, rather than replacing it.
+### Overlay networks
+
+| Project | What a peer dials | When a direct link fails | Paths | Multipath | Discovery / coordination | Focus |
+|---|---|---|---|---|---|---|
+| **Skywire** | 33-byte public key | DMSG relay; no open port on either side | Multi-hop, source-routed; route finder, local graph, or the destination's own transports | Several whole routes at once, reordered, latency-scheduled (opt-in) | Self-hostable deployment services; deployments can layer | General-purpose private overlay with managed apps |
+| [Tor](https://www.torproject.org/) | Onion address (from key), for onion services | Always relayed; a rendezvous point for onion services | Fixed 3-hop circuits | Conflux: one stream over two circuits to an exit | Fixed directory authorities | Anonymity |
+| [I2P](https://geti2p.net/) | Base32 destination (from key) | Always tunneled | Garlic-routed tunnels of configurable length | Pools of inbound and outbound tunnels | Distributed netDB (floodfill routers) | Anonymity |
+| [Lokinet](https://lokinet.org/) | `.loki` address (from key) | Always onion-routed | Onion paths through service nodes | — | Staked service nodes | Anonymity |
+| [Nym](https://nym.com/) | Nym address (from key) | Always mixed | 3-layer mixnet with cover traffic | — | Staked mix nodes | Anonymity against a global observer |
+| [cjdns](https://github.com/cjdelisle/cjdns) | IPv6 derived from key | Forwarded by mesh peers | Multi-hop mesh, DHT-routed | — | None; peering by config | Encrypted mesh IPv6 |
+| [Yggdrasil](https://yggdrasil-network.github.io/) | IPv6 derived from key | Forwarded by mesh peers | Multi-hop mesh, tree-routed | — | None; peering by config, multicast on a LAN | Encrypted mesh IPv6 |
+| [Reticulum](https://reticulum.network/) | Destination hash (from keys) | Forwarded by transport nodes | Multi-hop via transport nodes, over LoRa, packet radio, or IP | — | Announces; no central service | Mesh over mixed media; packets carry no source address |
+| [iroh](https://www.iroh.computer/) ([go-iroh](https://github.com/tmc/go-iroh)) | Ed25519 public key | Relay server (n0's or self-hosted) | Direct, or through one relay | QUIC multipath: one primary path, others on standby | Signed records via DNS (pkarr), Mainline DHT, mDNS | P2P connection library |
+| [libp2p](https://libp2p.io/) | Peer ID (key hash) plus multiaddrs | Circuit Relay v2 | Direct, or through one relay | — | Kademlia DHT, mDNS | Modular P2P library |
+| [Tailscale](https://tailscale.com/) / [Headscale](https://github.com/juanfont/headscale) | WireGuard key; IP assigned by the coordinator | DERP relay | Direct, or through one relay | — | Coordination server (Headscale is the self-hosted one) | Private network / VPN |
+| [Nebula](https://github.com/slackhq/nebula) | IP in a CA-signed certificate | Relay node (opt-in) | Direct, or through one relay | — | Lighthouses run by the operator | Private network / VPN |
+| [ZeroTier](https://www.zerotier.com/) | 40-bit address derived from key | Root servers | Direct, or through a root | Bonding across a node's interfaces | Roots plus a network controller | Virtual LAN |
+| [WireGuard](https://www.wireguard.com/) | Key plus a configured endpoint | — | One hop | — | Manual config | Point-to-point tunnel |
+| [Nylon](https://github.com/encodeous/nylon) | WireGuard key; assigned IP | Forwarded by mesh nodes | Multi-hop, Babel-routed (lowest latency) | One best path | None; routes exchanged over the tunnels | Self-healing WireGuard mesh |
+| [Pollen](https://github.com/sambigeara/pollen) | Public key (mTLS) | Relay through a node both peers reach | Direct, or through one relay | — | Gossiped CRDT; no coordinator | WASM compute mesh |
+
+The closest designs are the key-addressed meshes (cjdns, Yggdrasil,
+Reticulum) and iroh. Skywire differs from them in three ways:
+
+- **A relay and multi-hop routes, both.** The meshes forward through
+  other peers, but only along the peering links that exist; iroh,
+  libp2p and the VPNs relay, but never route through other peers.
+  Skywire has both: DMSG reaches any key with no peering path, and
+  Skynet routes multi-hop over real transports on top of it.
+- **Multipath across whole routes.** The mux sends one stream over
+  several disjoint multi-hop routes at once, with reordering,
+  selective acknowledgment, and per-route loss recovery. By contrast,
+  ZeroTier bonds a node's interfaces, iroh keeps standby paths behind
+  one active path, and Tor's Conflux splits a stream over two circuits
+  to one exit.
+- **Path construction is pluggable.** Routes come from a route
+  finder, from the transport graph computed locally, or from the
+  destination's own transport list. They are not fixed at three hops
+  (Tor), not emergent from the mesh (cjdns, Yggdrasil), and not
+  pooled (mixnets).
+
+### Beyond the transport
+
+| Skywire feature | Closest equivalents | What differs |
+|---|---|---|
+| DMSG relay between clients | Tor rendezvous points, libp2p Circuit Relay v2, TURN, Signal's servers | A general-purpose stream relay keyed by public key, and the substrate for Skywire's own control plane |
+| Port forwarding and reverse proxy | `ssh -L` / `ssh -R`, Tailscale Serve and Funnel, ngrok, Cloudflare Tunnel | Addressed by public key over Skynet routes or DMSG; no provider, public IP, or DNS |
+| SOCKS5 resolvers and mail bridge | I2P's HTTP proxy (the inspiration), Tor's SOCKS proxy, IPFS gateways, Matrix bridges | Subsystems of the visor, sharing its identity and encryption |
+| Remote shell, activity monitor, cluster UI | Tailscale SSH, Teleport, SSH through a bastion with htop | Subcommands of one CLI, reaching any visor by key; no SSH key infrastructure, tunneling agent, or provider account |
+| Managed apps (VPN, SOCKS5, skychat) | I2P's bundled apps (the closest), Tor Browser and OnionShare, Session on Lokinet | The visor launches, supervises, and registers the apps; the others ship them as separate projects |
+| Private and layered deployments | Headscale, Nebula lighthouses, Matrix homeservers | Deployments compose: one can layer on top of the public network instead of replacing it |
 
 ## Skywire Control and Data Planes
 
