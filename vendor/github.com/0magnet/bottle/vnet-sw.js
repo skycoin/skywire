@@ -91,9 +91,42 @@ function askClient(client, req) {
 function rewriteBase(html, port, path) {
 	const p = String(path || '/').split('?')[0];
 	const href = PREFIX + port + p.slice(0, p.lastIndexOf('/') + 1);
-	if (/<base\b[^>]*>/i.test(html)) return html.replace(/<base\b[^>]*>/i, '<base href="' + href + '">');
-	if (/<head\b[^>]*>/i.test(html)) return html.replace(/(<head\b[^>]*>)/i, '$1<base href="' + href + '">');
-	return '<base href="' + href + '">' + html;
+	const tag = '<base href="' + href + '">' + wsShimTag();
+	if (/<base\b[^>]*>/i.test(html)) return html.replace(/<base\b[^>]*>/i, () => tag);
+	if (/<head\b[^>]*>/i.test(html)) return html.replace(/(<head\b[^>]*>)/i, (h) => h + tag);
+	return tag + html;
+}
+
+// wsShimTag is a script that routes the page's WebSockets to a virtual port
+// through the page that runs vnet (vnet.webSocket), because a service worker
+// cannot carry a WebSocket. Other WebSockets are left alone. It runs before
+// the page's own scripts, right after the <base>.
+function wsShimTag() {
+	return '<script>(' + wsShim.toString() + ')(' + JSON.stringify(PREFIX) + ');</' + 'script>';
+}
+
+function wsShim(P) {
+	try {
+		var N = window.WebSocket, h = null, w = window;
+		for (var i = 0; i < 8 && w; i++) {
+			try { if (w.vnet && typeof w.vnet.webSocket === 'function') { h = w.vnet; break; } } catch (e) { /* cross-origin */ }
+			if (w === w.parent) break;
+			w = w.parent;
+		}
+		if (!h) { try { if (window.opener && window.opener.vnet && window.opener.vnet.webSocket) h = window.opener.vnet; } catch (e) { /* cross-origin */ } }
+		if (!h || !N) return;
+		var W = function (u, p) {
+			var x = new URL(u, location.href);
+			if (x.host === location.host && x.pathname.indexOf(P) === 0) {
+				var r = x.pathname.slice(P.length).match(/^(\d+)(\/.*)?$/);
+				if (r) return h.webSocket(+r[1], (r[2] || '/') + x.search, p, x.href, window);
+			}
+			return p === undefined ? new N(u) : new N(u, p);
+		};
+		W.CONNECTING = 0; W.OPEN = 1; W.CLOSING = 2; W.CLOSED = 3;
+		W.prototype = N.prototype;
+		window.WebSocket = W;
+	} catch (e) { /* leave the native WebSocket */ }
 }
 
 self.addEventListener('fetch', (event) => {

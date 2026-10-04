@@ -283,6 +283,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/rewards') ||
       this.lastUrl.includes('/skynet') ||
       this.lastUrl.includes('/chat') ||
+      this.lastUrl.includes('/mail') ||
       this.lastUrl.includes('/web-proxy') ||
       this.lastUrl.includes('/vpn') ||
       this.lastUrl.includes('/resources') ||
@@ -350,6 +351,12 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'chat'] : null,
         },
         {
+          // The visor's mailbox, the same one the desk's mail window shows.
+          icon: 'mail',
+          label: 'node.tabs.mail',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'mail'] : null,
+        },
+        {
           icon: 'monetization_on',
           label: 'node.tabs.rewards',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'rewards'] : null,
@@ -406,18 +413,19 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       // what actually works in the tab runtime):
       //   bandwidth / uptime / rewards / web-proxy — no host data source (404).
       //   resources — host CPU/mem/disk/net; a tab has none (renders all-zeros).
-      //   terminal  — dmsgpty needs a native shell; a tab can't run one.
+      // The terminal tab stays: the tab's visor hosts a websh session, and the
+      // page's WebSocket reaches it through vnet.webSocket.
       //   settings  — the desk's own settings window edits the tab's conf, and
       //               knows which variables the desk sets on every load.
       // The wallet tab IS shown on wasm: the browser-tab visor serves /wallet/
       // (client-side wallets, node/backend proxied over dmsg) just like the
       // native HV-served wallet — the daemon-instance controls simply hide there.
-      // The host-only features (VPN, real skysocks, port forwarding, terminal)
+      // The host-only features (VPN, real skysocks, port forwarding)
       // are the invitation to INSTALL the visor on the host. selectedTabIndex is
       // computed by route below, so a shorter array stays correct.
       if (this.node && (this.node as any).arch === 'wasm') {
         const wasmHiddenTabs = new Set(['bandwidth', 'uptime', 'rewards', 'web-proxy',
-          'vpn', 'resources', 'terminal', 'settings']);
+          'vpn', 'resources', 'settings']);
         this.tabsData = this.tabsData.filter(t => {
           const seg = t.linkParts ? t.linkParts[t.linkParts.length - 1] : '';
 
@@ -432,7 +440,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       // /reachability redirect to /info so they fall through to the default.
       let matchedSeg = 'info';
       const routeOrder = ['routing', 'transports', 'bandwidth', 'uptime', 'apps',
-        'chat', 'rewards', 'skynet', 'web-proxy', 'vpn', 'resources', 'terminal', 'wallet', 'logs'];
+        'chat', 'mail', 'rewards', 'skynet', 'web-proxy', 'vpn', 'resources', 'terminal', 'wallet', 'logs'];
       for (const seg of routeOrder) {
         if (seg === 'apps') {
           if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {

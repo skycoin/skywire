@@ -14,7 +14,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/coder/websocket"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/httputil"
@@ -135,16 +134,16 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 		log.Debug("Serving terminal websocket...")
 		defer func() { log.Debugf("Terminal closed: %d terminals left open.", atomic.AddInt32(&sc, -1)+1) }()
 
-		// open websocket
-		ws, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			log.WithError(err).Warn("Failed to upgrade to websocket.")
-			return
-		}
-		defer func() { log.WithError(ws.Close(websocket.StatusNormalClosure, "closed")).Debug("Closed ws.") }()
+		acceptUISocket(w, r, log, func(ws *uiSocket) { ui.serveTerminal(r, log, ws, sID, customCommands) })
+	}
+}
 
-		// Use binary mode for PTY data - text mode fails on non-UTF-8 bytes
-		wsConn := websocket.NetConn(r.Context(), ws, websocket.MessageBinary)
+// serveTerminal runs one terminal over an accepted websocket.
+func (ui *UI) serveTerminal(r *http.Request, log logrus.FieldLogger, ws *uiSocket, sID int32, customCommands map[string][]string) {
+	{
+		var err error
+		// Binary mode for PTY data; text mode fails on non-UTF-8 bytes.
+		wsConn := ws.Conn()
 
 		// open pty. ?scheme=dmsg / ?scheme=skynet lets an operator force a
 		// transport when the default (skynet-first) is wedged to this peer;
@@ -223,7 +222,7 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 					err := ws.Ping(pctx)
 					cancel()
 					if err != nil {
-						_ = ws.Close(websocket.StatusGoingAway, "keepalive ping failed") //nolint:errcheck
+						_ = ws.Close("keepalive ping failed") //nolint:errcheck
 						return
 					}
 				}
@@ -376,12 +375,12 @@ type sessionCtrlMsg struct {
 // sendSessionID delivers the persistent session id to the browser over a TEXT
 // frame. Best-effort: a failure here only costs reconnect continuity, not the
 // session itself.
-func sendSessionID(ctx context.Context, ws *websocket.Conn, sid string) {
+func sendSessionID(ctx context.Context, ws *uiSocket, sid string) {
 	b, err := stdjson.Marshal(sessionCtrlMsg{Type: "session", ID: sid})
 	if err != nil {
 		return
 	}
-	_ = ws.Write(ctx, websocket.MessageText, b) //nolint:errcheck
+	_ = ws.WriteText(ctx, b) //nolint:errcheck
 }
 
 // ErrorJSON displays errors in JSON format.
@@ -454,7 +453,7 @@ type resizeMsg struct {
 // Resize messages are JSON objects with type="resize", cols, and rows fields.
 // All other data is passed through to the PTY.
 type wsReader struct {
-	ws     *websocket.Conn
+	ws     *uiSocket
 	ptyC   *PtyClient
 	log    logrus.FieldLogger
 	ctx    *http.Request
@@ -463,7 +462,7 @@ type wsReader struct {
 	buf    []byte // buffered remainder from previous read
 }
 
-func newWSReader(ws *websocket.Conn, ptyC *PtyClient, log logrus.FieldLogger, r *http.Request) *wsReader {
+func newWSReader(ws *uiSocket, ptyC *PtyClient, log logrus.FieldLogger, r *http.Request) *wsReader {
 	return &wsReader{
 		ws:   ws,
 		ptyC: ptyC,
@@ -491,13 +490,13 @@ func (wr *wsReader) Read(p []byte) (int, error) {
 		}
 		wr.mu.Unlock()
 
-		msgType, data, err := wr.ws.Read(wr.ctx.Context())
+		text, data, err := wr.ws.Read(wr.ctx.Context())
 		if err != nil {
 			return 0, err
 		}
 
 		// Try to parse as resize message
-		if msgType == websocket.MessageText && len(data) > 0 && data[0] == '{' {
+		if text && len(data) > 0 && data[0] == '{' {
 			var msg resizeMsg
 			if err := stdjson.Unmarshal(data, &msg); err == nil && msg.Type == "resize" {
 				// Handle resize (with bounds checking for uint16)

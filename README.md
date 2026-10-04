@@ -21,6 +21,7 @@ to eligible participants.
 
 Contents:
 [Quick start](#quick-start) ·
+[Which Skywire](#which-skywire-to-run) ·
 [Features](#features) ·
 [Why Skywire](#why-skywire) ·
 [Comparison](#how-skywire-compares) ·
@@ -54,6 +55,43 @@ skywire cli visor state
 
 Next steps are [visor.md](docs/guides/visor.md) and
 [configuration.md](docs/guides/configuration.md).
+
+## Which Skywire to run
+
+The same visor runs three ways: as a native program, in a browser tab, and
+in the Android app. They share the network but not every capability.
+
+| | Native | Browser tab | Android |
+|---|:-:|:-:|:-:|
+| Dial out over every transport | ✓ | partial ¹ | ✓ |
+| Accept inbound links (public visor) | ✓ | WebRTC only | partial ² |
+| Exit for others (VPN, SOCKS5) | ✓ | ✗ | ✗ |
+| VPN client | system wide | tab only ³ | system wide |
+| SOCKS5 proxy client | ✓ | ✓ | ✓ |
+| Multi-hop and multi-path routes | ✓ | ✓ | ✓ |
+| Browse `.dmsg` and `.skynet` sites | ✓ | ✓ | ✗ ⁴ |
+| Host a site, forward a port | ✓ | ✓ ⁵ | ✗ |
+| Chat, voice calls, mail | ✓ | ✓ | chat and voice ⁶ |
+| Remote shell and file mount (pty) | ✓ | ✓ ⁷ | ✗ |
+| Dashboard | ✓ | ✓ | native screens |
+| Desk (browser desktop) | ✓ | ✓ | ✗ |
+| Skycoin wallet | ✓ | ✓ | ✓ |
+| Runs in the background | ✓ | while the tab is open | ✓ |
+| Rewards | ✓ | ✗ | ✗ |
+
+¹ WebSocket, WebTransport, WebRTC and dmsg; a browser cannot open raw TCP or UDP.
+
+² Carrier NAT blocks most inbound links, and public autoconnect is off by default to save battery and data.
+
+³ A network stack inside the tab, for the tab's own pages.
+
+⁴ The resolving proxy is in the core but not yet turned on or wired into the VPN.
+
+⁵ On the tab's virtual loopback rather than the computer's.
+
+⁶ The mailbox runs in the core but the app has no mail screen yet.
+
+⁷ The tab hosts a websh shell and its own files rather than the computer's.
 
 ## Features
 

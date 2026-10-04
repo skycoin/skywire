@@ -18,6 +18,7 @@ import { TerminalComponent } from './components/pages/node/terminal/terminal.com
 import { FullAppHostComponent } from './components/pages/full-app-host/full-app-host.component';
 import { walletRoute } from './wallet/wallet.route';
 import { WalletComponent } from './components/pages/node/wallet/wallet.component';
+import { MailComponent } from './components/pages/node/mail/mail.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
 import { SkysocksTabComponent } from './components/pages/node/skysocks-tab/skysocks.component';
 import { LogsComponent } from './components/pages/node/logs/logs.component';
@@ -153,6 +154,10 @@ const routes: Routes = [
           {
             path: 'chat',
             component: SkychatComponent
+          },
+          {
+            path: 'mail',
+            component: MailComponent
           },
           {
             path: 'bandwidth',

@@ -1,0 +1,98 @@
+.dim { color: rgba(255, 255, 255, 0.7); }
+.small { font-size: 0.85em; }
+.mono { font-family: monospace; word-break: break-all; }
+.nowrap { white-space: nowrap; }
+.ok { color: #4caf50; margin-left: 4px; }
+
+.mail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mail-state {
+  font-size: 0.8em;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+
+  &.on { background: rgba(76, 175, 80, 0.35); }
+}
+
+.mail-error { color: #ff8a80; }
+
+.mail-addrs {
+  margin: 8px 0;
+
+  .addr { cursor: pointer; margin-left: 6px; }
+}
+
+.mail-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+
+  .spacer { flex: 1; }
+
+  // The theme's outlined buttons are faint on this dark card.
+  .mat-mdc-outlined-button:not(:disabled):not(.mat-warn) {
+    --mdc-outlined-button-label-text-color: rgba(255, 255, 255, 0.92);
+    --mat-outlined-button-label-text-color: rgba(255, 255, 255, 0.92);
+    --mdc-outlined-button-outline-color: rgba(255, 255, 255, 0.35);
+    --mat-outlined-button-outline-color: rgba(255, 255, 255, 0.35);
+    color: rgba(255, 255, 255, 0.92);
+  }
+
+  .sel { background: rgba(255, 255, 255, 0.15); }
+}
+
+.loading-row { padding: 12px 0; }
+
+.mail-list {
+  .mail-row { cursor: pointer; }
+  .mail-row.unread td { font-weight: bold; }
+  .who { max-width: 280px; }
+}
+
+.mail-msg {
+  .dim { margin-right: 6px; }
+
+  h3 { margin: 4px 0 8px; }
+
+  .mail-body {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: inherit;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 12px;
+    border-radius: 4px;
+    margin: 12px 0;
+  }
+}
+
+.attach {
+  display: inline-block;
+  margin: 4px 8px 4px 0;
+  color: inherit;
+}
+
+.mail-compose,
+.mail-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  label { display: flex; flex-direction: column; gap: 2px; }
+
+  input,
+  textarea {
+    background: rgba(0, 0, 0, 0.25);
+    color: inherit;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font: inherit;
+  }
+}
