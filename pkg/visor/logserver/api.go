@@ -19,6 +19,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/flightrec"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
@@ -292,6 +293,8 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	authRoute("GET /debug/pprof/profile", pprof.Profile)
 	authRoute("GET /debug/pprof/symbol", pprof.Symbol)
 	authRoute("GET /debug/pprof/trace", pprof.Trace)
+	// The last seconds of execution trace, when the flight recorder runs.
+	authRoute("GET /debug/pprof/flightrecorder", flightrec.Handler().ServeHTTP)
 
 	// /stats/* (auth'd) — visor-local telemetry store. Handlers
 	// degrade to 503 when SetStatsReader hasn't been called.

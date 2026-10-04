@@ -32,6 +32,7 @@ import (
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/flightrec"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/rfclient"
@@ -920,6 +921,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, opts Options, logBcast 
 		storeLog(conf, opts.LogJSON)
 	}
 	log := v.MasterLogger().PackageLogger("visor:startup")
+	v.startFlightRecorder()
 	log.WithField("public_key", conf.PK).
 		Info("Begin startup.")
 	ctx = context.WithValue(ctx, visorKey, v)
@@ -1098,6 +1100,7 @@ func (v *Visor) Close() error {
 
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
+	defer flightrec.Stop()
 
 	if v.cxoSubMgr != nil {
 		v.cxoSubMgr.Close()

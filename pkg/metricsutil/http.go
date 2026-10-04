@@ -61,7 +61,7 @@ func ServePProf(log logrus.FieldLogger, addr, serviceName string) {
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
-	for _, profile := range []string{"heap", "goroutine", "threadcreate", "block", "mutex", "allocs"} {
+	for _, profile := range []string{"heap", "goroutine", "goroutineleak", "threadcreate", "block", "mutex", "allocs"} {
 		mux.Handle("/debug/pprof/"+profile, pprof.Handler(profile))
 	}
 
