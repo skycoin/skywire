@@ -369,7 +369,7 @@ services:
   # here if e2e network monitoring is wanted again.
 
   e2e-test:
-    image: golang:1.26.8-alpine
+    image: golang:1.27.1-alpine
     container_name: e2e-test
     networks:
       - visors
