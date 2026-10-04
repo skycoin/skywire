@@ -24,7 +24,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"html"
-	"io/fs"
 	"math/big"
 	"net"
 	"net/http"
@@ -38,9 +37,7 @@ import (
 	"github.com/0magnet/realorigin"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/wallet/coins"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 	"github.com/skycoin/skywire/pkg/wasmhv/ctlbridge"
 	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
@@ -53,7 +50,6 @@ type WasmServeConfig struct {
 	TLSCert  string // optional cert file (PEM) — a locally-trusted *.mesh.localhost cert (mkcert) so B-origin iframes load without a per-host accept; empty = built-in self-signed
 	TLSKey   string // optional key file (PEM), paired with TLSCert
 	Harness  bool   // mount the /ctl/* operator control bridge (DEV ONLY)
-	Wallet   bool   // serve the bundled skycoin-web wallet at /wallet/
 	Password string // optional access-password gate
 	// BrowseSuffix is the browse-origin domain suffix (leading dot), e.g.
 	// ".mesh.localhost" (local) or ".haltingstate.net" (hosted). Empty →
@@ -80,7 +76,10 @@ type WasmServeConfig struct {
 	// DeskDocsPort runs `skywire doc serve` on this virtual-loopback port.
 	// 0 (default) = off, for the same reason.
 	DeskDocsPort int
-	Log          *logging.Logger // nil → package default
+	// BootReportFile keeps the boot reports desks post (wasmserve_bootreport.go)
+	// as JSON lines, moved to <file>.1 at 1 MiB. Empty keeps them only in the log.
+	BootReportFile string
+	Log            *logging.Logger // nil → package default
 }
 
 // ServeWasm builds the standalone wasm-visor handler and serves it on
@@ -242,6 +241,9 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		w.Header().Set("Location", "./")
 		w.WriteHeader(http.StatusMovedPermanently)
 	})
+	// Where a page whose desk failed to start reports what it saw
+	// (wasmserve_bootreport.go).
+	mux.HandleFunc("/boot-report", bootReportHandler(log, cfg.BootReportFile))
 	serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
 	serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
 	serveBytes("/icon-192.png", "image/png", wasmhv.PWAIcon192)
@@ -301,56 +303,6 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	}
 
 	fileServer := http.FileServer(http.FS(uiFS))
-
-	// Bundled skycoin-web wallet under /wallet/ (custody stays browser-side).
-	walletFS, wfsErr := WalletUIFS()
-	var walletIndex []byte
-	var werr error
-	if wfsErr == nil {
-		walletIndex, werr = fs.ReadFile(walletFS, "index.html")
-	} else {
-		werr = wfsErr
-	}
-	if werr == nil && cfg.Wallet {
-		walletFiles := http.StripPrefix("/wallet/", http.FileServer(http.FS(walletFS)))
-		walletIndex = bytes.Replace(walletIndex,
-			[]byte(`<base href="/">`),
-			[]byte(`<base href="/wallet/">`+walletDmsgFetchShim()), 1)
-		// The cipher assets the bundle instantiates come from the one skywire
-		// command module: serveWalletCipherAsset (wallet_cipher.go).
-		mux.HandleFunc("/wallet/", func(w http.ResponseWriter, r *http.Request) {
-			// The wallet is an IFRAME surface for the HV UI's ☰ wallet, not a
-			// first-class page: its node API is routed through
-			// window.parent.skywireVisor, which only exists when it's framed by the
-			// booted HV. A TOP-LEVEL navigation to a wallet HTML page
-			// (fetchDest "document") is out of context — bounce it into the HV
-			// UI. Framed loads (iframe, or empty on older browsers)
-			// and asset fetches (script/style/fetch/…) fall through and serve
-			// normally. The standalone top-level wallet is the separate
-			// `skywire skycoin web` path, not this one.
-			isWalletDoc := r.URL.Path == "/wallet/" || r.URL.Path == "/wallet/index.html" || r.URL.Path == "/wallet/config"
-			if isWalletDoc && fetchDest(r) == "document" {
-				http.Redirect(w, r, "/", http.StatusSeeOther)
-				return
-			}
-			if r.URL.Path == "/wallet/" || r.URL.Path == "/wallet/index.html" {
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.Header().Set("Cache-Control", "no-cache")
-				_, _ = w.Write(walletIndex) //nolint:errcheck
-				return
-			}
-			if r.URL.Path == "/wallet/config" {
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.Header().Set("Cache-Control", "no-cache")
-				_, _ = w.Write([]byte(wasmhv.WalletConfigHTML)) //nolint:errcheck
-				return
-			}
-			if serveWalletCipherAsset(w, r, strings.TrimPrefix(r.URL.Path, "/wallet/")) {
-				return
-			}
-			walletFiles.ServeHTTP(w, r)
-		})
-	}
 
 	// NOTHING mesh-facing is mounted here, and that is deliberate: this process
 	// serves a page, and the visor that page talks about runs IN THE TAB with
@@ -549,66 +501,6 @@ func ServeBrowseOrigin(ctx context.Context, cfg BrowseOriginConfig) error {
 		return fmt.Errorf("serve: %w", err)
 	}
 	return nil
-}
-
-// coinNodeDefault is the deployment skycoin node the bundled wallet talks
-// to by default, sourced from the embedded services-config.json.
-func coinNodeDefault() string {
-	if n := strings.TrimSpace(dmsg.Prod.SkycoinNode); n != "" {
-		return n
-	}
-	return "https://node.skycoin.com.aong2hr4en7v6bnxr3az5hzruad7qsbv27xr5ajioyicfaor3n2mc.dmsg"
-}
-
-// walletDmsgFetchShim is injected into the bundled wallet's index to route
-// its node API over dmsg via the parent PWA's visor. See the CLI serve
-// command's original comment for the full rationale.
-func walletDmsgFetchShim() string {
-	return `<script>(function(){` +
-		`var rf=window.fetch?window.fetch.bind(window):null;` +
-		`var COINS=` + string(coins.JSON()) + `;` +
-		`function p(u){try{return new URL(u,location.href).pathname;}catch(e){return String(u);}}` +
-		`function q(u){try{return new URL(u,location.href).search;}catch(e){return "";}}` +
-		`function coinMatch(pth){return /^\/coin\/(\d+)(\/[^?]*)?/.exec(pth);}` +
-		`function isBtc(pth){return /\/v1\/btc\//.test(pth);}` +
-		`function ls(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}` +
-		`function ctOf(input,init){try{var h;if(init&&init.headers)h=new Headers(init.headers);else if(input&&input.headers&&input.headers.get)h=input.headers;if(h&&h.get){var c=h.get("content-type");if(c)return c;}}catch(e){}return "";}` +
-		`function jr(s,o){return new Response(JSON.stringify(o),{status:s,headers:{"Content-Type":"application/json"}});}` +
-		`function mkResp(r){var b=(r&&typeof r.body==="string")?r.body:(r&&r.body?new TextDecoder().decode(r.body):"");return new Response(b,{status:(r&&r.status)||502,headers:{"Content-Type":"application/json"}});}` +
-		`window.fetch=function(input,init){` +
-		`var url=(typeof input==="string")?input:(input&&input.url);` +
-		`var pn=p(url);` +
-		`if(/\/api\/v1\/coins$/.test(pn)){return Promise.resolve(new Response(JSON.stringify(COINS),{status:200,headers:{"Content-Type":"application/json"}}));}` +
-		`var mc=coinMatch(pn);` +
-		`var coin=!!mc||/^\/api\/v[12]\//.test(pn);` +
-		`if(!coin)return rf?rf(input,init):Promise.reject(new Error("no fetch"));` +
-		`var rel=mc?(mc[2]||"/"):pn;var btc=isBtc(pn);` +
-		`init=init||{};` +
-		`var v=window.parent&&window.parent.skywireVisor;` +
-		`if(!v||!v.fetchDmsg)return Promise.resolve(jr(503,{error:"skywire visor not ready"}));` +
-		`var m=init.method||"GET",pth=rel+q(url),t0=Date.now();` +
-		`function wlog(s){try{var L=window.parent&&window.parent.skywireLog;if(L&&L.emit)L.emit("info",["[wallet] "+s]);}catch(e){}}` +
-		`function done(tag){return function(r){wlog(tag+" → "+((r&&r.status)||"?")+" ("+(Date.now()-t0)+"ms)");return mkResp(r);};}` +
-		`function fail(tag){return function(e){wlog(tag+" ✗ "+String((e&&e.message)||e));return jr(502,{error:String(e)});};}` +
-		`if(btc){` +
-		`if(!v.btcFetch)return Promise.resolve(jr(503,{error:"BTC gateway not available"}));` +
-		`var back="";try{var _nu=JSON.parse(ls("nodeUrls")||"{}");back=(_nu&&_nu["-2"])||"";}catch(e){}if(!back)back=ls("skywire-btc-backend")||"";if(!back)back="ssl://electrum.blockstream.info:50002";` +
-		`var btag="btc "+m+" "+pth;wlog(btag);` +
-		`return Promise.resolve(v.btcFetch(back,m,pth,init.body||null,ls("skywire-btc-proxy")||ls("skywire-upstream-proxy"))).then(done(btag)).catch(fail(btag));` +
-		`}` +
-		`var _u;try{_u=new URL(url,location.href);}catch(e){_u=null;}` +
-		`var node=(_u&&_u.host&&_u.host!==location.host)?(_u.protocol+"//"+_u.host):(ls("skywire-coin-node")||"` + coinNodeDefault() + `");` +
-		`var ct=ctOf(input,init),hdrs=ct?{"Content-Type":ct}:null;` +
-		`if(/^https?:\/\//i.test(node)&&!/\.dmsg\b/i.test(node)){` +
-		`if(!v.fetchClearnet)return Promise.resolve(jr(503,{error:"skysocks clearnet gateway not available"}));` +
-		`var up=ls("skywire-upstream-proxy")||"";` +
-		`var full=node.replace(/\/+$/,"")+pth,ctag="node "+m+" "+full+" via skysocks "+(up?up.slice(0,8):"auto");wlog(ctag);` +
-		`return Promise.resolve(v.fetchClearnet(up,m,full,init.body||null,"wallet",hdrs)).then(done(ctag)).catch(fail(ctag));` +
-		`}` +
-		`var host=node.replace(/^\w+:\/\//,""),dtag="node "+m+" dmsg://"+host+pth;wlog(dtag);` +
-		`return Promise.resolve(v.fetchDmsg(host,m,pth,init.body||null,hdrs)).then(done(dtag)).catch(fail(dtag));` +
-		`};` +
-		`})();</script>`
 }
 
 // isMeshBrowseHost reports whether an HTTP Host header targets an isolated
@@ -878,6 +770,7 @@ skywireDeskBoot(Object.assign({
 }).catch(function (e) {
   var el = document.getElementById('boot-msg');
   if (el) el.textContent = 'boot failed: ' + ((e && e.message) || e);
+  if (window.__skywireBootReport) window.__skywireBootReport('failed', {error: String((e && e.message) || e), stack: e && e.stack ? String(e.stack) : ''});
 });
 </script>
 </body>
@@ -887,6 +780,8 @@ skywireDeskBoot(Object.assign({
 // deskShellHTML renders the shared desk skeleton for one serving context.
 func deskShellHTML(scriptsHTML, deskOptsJS string) []byte {
 	out := strings.ReplaceAll(deskShellTemplate, "__DESK_SCRIPTS__", scriptsHTML)
+	// The boot reporter goes first, so it sees whatever fails after it.
+	out = strings.Replace(out, `<meta charset="utf-8">`, `<meta charset="utf-8">`+"\n<script>"+bootReportJS+"</script>", 1)
 	return []byte(strings.ReplaceAll(out, "__DESK_OPTS__", deskOptsJS))
 }
 

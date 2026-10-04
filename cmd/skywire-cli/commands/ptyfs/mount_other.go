@@ -1,4 +1,4 @@
-//go:build !linux
+//go:build !linux && !(js && wasm)
 
 // Package cliptyfs cmd/skywire-cli/commands/ptyfs/mount_other.go c4-vis-cli
 // non-Linux stub. The ptyfs subsystem itself is cross-platform

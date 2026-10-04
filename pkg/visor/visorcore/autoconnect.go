@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"math/big"
-	"net"
 	"sync"
 	"time"
 
@@ -28,10 +27,9 @@ import (
 // (public-visor sourcing, transport-discovery caching, the periodic loop) stay in
 // the calling shell.
 type Connector struct {
-	Tm             *transport.Manager
-	DmsgC          *dmsg.Client // for reachability probes
-	ClientPublicIP string
-	Log            *logging.Logger
+	Tm    *transport.Manager
+	DmsgC *dmsg.Client // for reachability probes
+	Log   *logging.Logger
 
 	// failed remembers (target, type) pairs whose last dial failed and when
 	// they may be tried again — see autoconnect_backoff.go.
@@ -156,14 +154,6 @@ func (c *Connector) ConnectToVisors(
 				}
 			}()
 
-			// Skip visors behind the same NAT
-			if myIP := c.publicIP(); myIP != "" {
-				if sameLAN := c.isSameLAN(ctx, pk, tpType, myIP); sameLAN {
-					c.Log.WithField("pk", pk).Debugln("Skipping same-LAN visor")
-					return
-				}
-			}
-
 			logger := c.Log.WithField("pk", pk).WithField("type", string(tpType))
 
 			logger.Debugln("Trying to add transport")
@@ -264,45 +254,6 @@ func (c *Connector) tryEstablishTransport(ctx context.Context, pk cipher.PubKey,
 
 	logger.Debugln("Added transport to visor")
 	return nil
-}
-
-// isSameLAN checks if the remote visor is behind the same NAT as us by comparing
-// public IPs via the address resolver. Returns false on any error (fail-open).
-// publicIP is the visor's public IP as best known now: the boot-time snapshot
-// when one was taken, else what the address resolver has learned since (empty
-// until it has). The snapshot is empty whenever the service discovery URL is
-// not dmsg://, which left the same-LAN guard off for the whole run on most
-// deployments.
-func (c *Connector) publicIP() string {
-	if c.ClientPublicIP != "" {
-		return c.ClientPublicIP
-	}
-	if c.Tm == nil {
-		return ""
-	}
-	if ar := c.Tm.ARClient(); ar != nil {
-		return ar.LocalPublicIP()
-	}
-	return ""
-}
-
-func (c *Connector) isSameLAN(ctx context.Context, pk cipher.PubKey, netType tptypes.Type, myIP string) bool {
-	arClient := c.Tm.ARClient()
-	if arClient == nil {
-		return false
-	}
-
-	visorData, err := arClient.Resolve(ctx, string(netType), pk)
-	if err != nil {
-		return false
-	}
-
-	remoteIP := visorData.RemoteAddr
-	if host, _, err := net.SplitHostPort(remoteIP); err == nil {
-		remoteIP = host
-	}
-
-	return remoteIP != "" && remoteIP == myIP
 }
 
 // isContextError returns true if the error is a context cancellation/deadline.

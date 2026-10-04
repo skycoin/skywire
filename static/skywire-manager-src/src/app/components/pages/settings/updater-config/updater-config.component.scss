@@ -1,5 +1,6 @@
-@import "variables";
-@import "bootstrap_overrides";
+@use "sass:map";
+@use "variables";
+@use "bootstrap_overrides";
 
 .help-icon {
   display: inline;
@@ -12,7 +13,7 @@ mat-form-field {
 .buttons-area {
   display: flex;
 
-  @media (max-width: (map-get($grid-breakpoints, md) -  1)) {
+  @media (max-width: (map.get(bootstrap_overrides.$grid-breakpoints, md) -  1)) {
     & {
       flex-direction: column;
       align-items: flex-end;
@@ -23,7 +24,7 @@ mat-form-field {
     margin-right: auto;
     flex-grow: 1;
 
-    @media (max-width: (map-get($grid-breakpoints, md) -  1)) {
+    @media (max-width: (map.get(bootstrap_overrides.$grid-breakpoints, md) -  1)) {
       & {
         margin-right: 32px !important;
       }
@@ -40,7 +41,7 @@ mat-form-field {
     margin-right: 32px;
     flex-grow: 0;
 
-    @media (max-width: (map-get($grid-breakpoints, md) -  1)) {
+    @media (max-width: (map.get(bootstrap_overrides.$grid-breakpoints, md) -  1)) {
       & {
         margin-top: 10px;
       }
@@ -50,7 +51,7 @@ mat-form-field {
   .left-button {
     margin-right: 5px !important;
 
-    @media (max-width: (map-get($grid-breakpoints, md) -  1)) {
+    @media (max-width: (map.get(bootstrap_overrides.$grid-breakpoints, md) -  1)) {
       & {
         margin-right: 32px !important;
       }

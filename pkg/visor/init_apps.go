@@ -146,6 +146,17 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 			RestartPolicy: string(appcommon.RestartOnFailure),
 		})
 	}
+	// The mailbox, on by default. Its enable lives in the mailbox's own
+	// settings.json, so a live `cli mail` change survives a restart.
+	if _, ok := launcher.GetApp(skymailApp); ok && !appsContains(apps, skymailApp) {
+		enabled, _, _ := skymailEffective(v.conf) //nolint:errcheck // reported by initSkymail
+		apps = append(apps, appserver.AppConfig{
+			Name:          skymailApp,
+			AutoStart:     enabled,
+			LauncherMode:  string(appcommon.RunModeInternal),
+			RestartPolicy: string(appcommon.RestartOnFailure),
+		})
+	}
 	// Additional resolvers from the `resolvers` config list, one row each,
 	// named "resolver-<name>". initEmbeddedResolvers registered their RunFuncs
 	// and already dropped any entry that lost a port conflict, so every

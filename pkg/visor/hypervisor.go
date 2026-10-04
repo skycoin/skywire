@@ -329,9 +329,12 @@ func (hv *Hypervisor) startUI() error {
 			// clearnet SD frontend. Without this the SD CXO feed is the only
 			// source, and when it's empty the network view loses all country
 			// grouping. Mirrors `cli tp viz` / the reward server.
+			// The transport context outlives the hypervisor, so the timeout is
+			// what bounds a fetch to a dmsg peer that accepts and then stalls.
 			if hv.visor != nil && hv.visor.dmsgC != nil {
 				hv.tpvizServer.SetDmsgHTTPClient(&http.Client{
 					Transport: dmsghttp.MakeHTTPTransport(context.Background(), hv.visor.dmsgC),
+					Timeout:   30 * time.Second,
 				})
 			}
 			go hv.tpvizServer.Start()
@@ -1263,6 +1266,10 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		// catch-all so /wallet/* is claimed here. See
 		// docs/design/gui-app-serving-modes.md.
 		r.Handle("/wallet/*", hv.walletHandler())
+		// The dashboard wallet's cipher, at the paths its route loads relative to
+		// the page.
+		r.Get("/assets/scripts/wasm_exec.js", hv.walletCipherHandler())
+		r.Get("/assets/scripts/skycoin-lite.wasm", hv.walletCipherHandler())
 
 		// Serve the dashboard UI, with the skynet/clearnet browse engine + native
 		// launcher injected into index.html (and the browse.js / launcher assets).

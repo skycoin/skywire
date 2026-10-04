@@ -1,27 +1,24 @@
 // Package browseui pkg/wasmhv/browseui/walletconfig.go c3-vis-wasm
 // pkg/wasmhv/browseui/walletconfig.go — the ONE wallet config panel.
 //
-// The wallet's TRANSPORT/backend config (storage mode, BTC electrum server,
-// skysocks exit) is a set of localStorage keys read by the /wallet/ fetch shim
-// (native: hypervisor_handlers_wallet.go; wasm: serve.go) and the in-tab BTC
-// gateway. Per-coin NODE selection now lives in skycoin-web's own Settings →
-// Nodes (customNodeUrls); the shim honors it, so this panel no longer duplicates
-// it (see the node-config convergence). It used to be reimplemented twice — once
-// in browse.js (the ☰ wallet window) and once in the Angular wallet tab. This is
-// the single implementation:
-// a self-contained page served at /wallet/config that BOTH surfaces embed in an
-// <iframe>. Same origin as /wallet/, so it reads+writes the same localStorage,
-// and on Apply it posts {type:"skywire-wallet-config"} to its parent so the
-// embedder can reload the wallet view.
+// The wallet's TRANSPORT/backend config (storage mode, skysocks exit) is a set
+// of localStorage keys read by the dashboard wallet's backend interceptor
+// (static/skywire-manager-src/src/app/wallet) and the hypervisor's BTC gateway.
+// Per-coin NODE selection lives in skycoin-web's own Settings → Nodes
+// (customNodeUrls), which the interceptor honors, so this panel does not
+// duplicate it. It is a self-contained page served at wallet/config, framed by
+// the dashboard's wallet tab and same-origin with it, so it reads and writes the
+// localStorage the wallet uses. On Apply it posts {type:"skywire-wallet-config"}
+// to its parent; the wallet reads the keys per request, so nothing needs reloading.
 package browseui
 
-// WalletConfigHTML is the standalone wallet-config page (served at /wallet/config
-// by both the native HV and the wasm `hv serve`). Keys, all read by the shims +
-// the BTC gateway:
+// WalletConfigHTML is the standalone wallet-config page, served at
+// wallet/config by the hypervisor (native, and the tab's). Keys, read by the
+// wallet's interceptor + the BTC gateway:
 //
 //	skywire-wallet-mode     browser | disk | service   (custody: browser | disk | remote)
 //	skywire-coin-nodes      JSON array of coin-node addresses (first = default)
-//	skywire-coin-node       the effective node the shim reads (mirrors nodes[0]
+//	skywire-coin-node       the effective node the wallet uses (mirrors nodes[0]
 //	                        or the service address)
 //	skywire-wallet-service  remote skycoin-web server (service mode)
 //	skywire-wallet-dir      disk-custody seed-wallet store path (disk mode).
@@ -35,9 +32,9 @@ package browseui
 //
 // The BTC electrum server is NOT set here anymore — it is the Bitcoin coin's
 // node URL in skycoin-web's own Settings → Nodes (localStorage["nodeUrls"], coin
-// id -2), exactly like every other coin. Both shims read it from there (falling
-// back to the legacy skywire-btc-backend key, then a public default), so this
-// panel only owns the skysocks exit the visor routes that egress through.
+// id -2), exactly like every other coin. The interceptor reads it from there
+// (falling back to the legacy skywire-btc-backend key, then a public default),
+// so this panel only owns the skysocks exit the visor routes that egress through.
 const WalletConfigHTML = `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>

@@ -2,6 +2,7 @@ import { Component, Inject, ChangeDetectionStrategy } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 
 import { AppConfig } from 'src/app/app.config';
+import { ptyUrl } from 'src/app/utils/pty-url';
 
 /**
  * Data about a node.
@@ -50,8 +51,6 @@ export class UpdateAllComponent {
   }
 
   openTerminal(key: string) {
-    const protocol = window.location.protocol;
-    const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8000');
-    window.open(protocol + '//' + hostname + '/pty/' + key + '?commands=update', '_blank', 'noopener noreferrer');
+    window.open(ptyUrl(key, '?commands=update'), '_blank', 'noopener noreferrer');
   }
 }

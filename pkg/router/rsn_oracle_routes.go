@@ -2,7 +2,7 @@
 
 // Package router pkg/router/rsn_oracle_routes.go c2-net-routing
 //
-// RSN-oracle 2-hop route computation (phase-1, opt-in).
+// RSN-oracle 2-hop route computation (phase-1).
 //
 // Given the source's OWN transports and the destination's OWN transports
 // (fetched authoritatively from the destination via the RSN-signed

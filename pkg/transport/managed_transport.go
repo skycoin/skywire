@@ -1633,3 +1633,10 @@ func (mt *ManagedTransport) Handlers() []string {
 // MalformedFrames counts received frames whose type byte is outside the known
 // range — the peer's framing is off. For `visor state`.
 func (mt *ManagedTransport) MalformedFrames() int64 { return mt.malformedFrames.Load() }
+
+// Attached reports whether a desk served by this visor's hypervisor opened the
+// transport through /tp/ws, as against a peer dialing the transport port.
+func (mt *ManagedTransport) Attached() bool {
+	a, ok := mt.getTransport().(interface{ Attached() bool })
+	return ok && a.Attached()
+}

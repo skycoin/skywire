@@ -39,31 +39,19 @@ func TestVPNClient(t *testing.T) {
 	}
 	pkB := visorPK(t, rpcB)
 
-	// Ensure a transport A -> B exists (idempotent; the skysocks test may have
-	// created it already).
-	if out, err := cli("tp", "add", "--rpc", rpcA, pkB, "--type", "dmsg"); err != nil {
-		t.Logf("tp add A->B (non-fatal, may already exist): %v (%s)", err, out)
-	}
+	stcpTransport(t, pkB)
 
 	t.Cleanup(func() { _, _ = cli("vpn", "stop", "--rpc", rpcA) })
 
-	// Start vpn-client -> B. `vpn start --timeout` polls until Running, which only
-	// succeeds if the OS-specific TUN device came up. Retry the start cycle: like
-	// the proxy route, the route group flaps on a cold single-server loopback
-	// deployment until the network settles (each attempt sets up a fresh route).
-	// Each attempt gets a generous poll window: on Windows the WinTUN adapter
-	// creation + route/NAT setup can take well over a minute on a busy runner (the
-	// earlier all-80s "Starting…→Stopped" flaps were the client giving up before
-	// the tunnel came up, not a fast circuit-breaker reject). Re-assert the
-	// transport each round so the route always has an edge to build on, and pace
-	// attempts apart so an open destination circuit breaker has time to close.
-	const vpnAttempts = 4
+	// Start vpn-client -> B. `vpn start --timeout` polls until Running, which
+	// needs the OS TUN device. One retry covers a route that drops while it is
+	// first set up. WinTUN adapter creation can take a while on a busy runner.
+	const vpnAttempts = 2
 	var out, lastErr string
 	ok := false
 	for attempt := 1; attempt <= vpnAttempts && !ok; attempt++ {
-		_, _ = cli("tp", "add", "--rpc", rpcA, pkB, "--type", "dmsg")
 		var err error
-		out, err = cliT(200*time.Second, "vpn", "start", "--rpc", rpcA, "--pk", pkB, "--timeout", "170")
+		out, err = cliT(150*time.Second, "vpn", "start", "--rpc", rpcA, "--pk", pkB, "--timeout", "120")
 		if err == nil && strings.Contains(strings.ToLower(out), "running") {
 			ok = true
 			break
@@ -72,7 +60,7 @@ func TestVPNClient(t *testing.T) {
 		t.Logf("vpn start (attempt %d/%d) not Running: %v %.120q", attempt, vpnAttempts, err, out)
 		_, _ = cli("vpn", "stop", "--rpc", rpcA)
 		if attempt < vpnAttempts {
-			time.Sleep(45 * time.Second)
+			time.Sleep(10 * time.Second)
 		}
 	}
 	if !ok {
@@ -82,8 +70,18 @@ func TestVPNClient(t *testing.T) {
 		// visorB. Dump both so a failing CI run is diagnosable.
 		dumpLog("visorA")
 		dumpLog("visorB")
+		dumpMatching("visorA", "vpn", 80)
+		dumpMatching("visorB", "vpn", 80)
 	}
 	require.Truef(t, ok, "vpn-client never reached Running (TUN creation / route setup): %s", lastErr)
+	// Running is reported before traffic flows. A client that dies on the first
+	// packet back (the windows TUN short write) must fail here, not pass.
+	time.Sleep(10 * time.Second)
+	st, _ := cli("vpn", "status", "--rpc", rpcA)
+	if !strings.Contains(strings.ToLower(st), "running") {
+		dumpMatching("visorA", "vpn", 80)
+		t.Fatalf("vpn-client stopped within 10s of reaching Running: %s", st)
+	}
 	t.Logf("vpn-client reached Running — TUN device created on %s", runtime.GOOS)
 }
 

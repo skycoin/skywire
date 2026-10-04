@@ -7,8 +7,6 @@ package logserver
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
-
 	"github.com/skycoin/skywire/pkg/serviceuptime"
 )
 
@@ -20,37 +18,35 @@ func (api *API) SetUptimeRecorder(r *serviceuptime.Recorder) {
 	api.uptimeRecorder = r
 }
 
-// registerUptimeRoutes mounts /uptime/* on authRoute. Each handler
-// degrades to 503 when api.uptimeRecorder is nil so the path stays
-// available for monitoring scrapes that don't want to special-case
-// pre-recorder visors.
-func (api *API) registerUptimeRoutes(authRoute *gin.RouterGroup) {
-	authRoute.GET("/uptime/now", func(c *gin.Context) {
+// registerUptimeRoutes mounts /uptime/* through route, which adds the
+// auth check. Each handler answers 503 while api.uptimeRecorder is nil.
+func (api *API) registerUptimeRoutes(route func(string, http.HandlerFunc)) {
+	route("GET /uptime/now", func(w http.ResponseWriter, req *http.Request) {
 		if api.uptimeRecorder == nil {
-			c.AbortWithStatus(http.StatusServiceUnavailable)
+			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
-		serviceuptime.CurrentSessionHandler(api.uptimeRecorder).ServeHTTP(c.Writer, c.Request)
+		serviceuptime.CurrentSessionHandler(api.uptimeRecorder).ServeHTTP(w, req)
 	})
-	authRoute.GET("/uptime/sessions", func(c *gin.Context) {
+	route("GET /uptime/sessions", func(w http.ResponseWriter, req *http.Request) {
 		if api.uptimeRecorder == nil {
-			c.AbortWithStatus(http.StatusServiceUnavailable)
+			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
-		serviceuptime.SessionsHandler(api.uptimeRecorder.Store()).ServeHTTP(c.Writer, c.Request)
+		serviceuptime.SessionsHandler(api.uptimeRecorder.Store()).ServeHTTP(w, req)
 	})
-	authRoute.GET("/uptime/timeline", func(c *gin.Context) {
+	route("GET /uptime/timeline", func(w http.ResponseWriter, req *http.Request) {
 		if api.uptimeRecorder == nil {
-			c.AbortWithStatus(http.StatusServiceUnavailable)
+			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
-		serviceuptime.TimelineHandler(api.uptimeRecorder.Store()).ServeHTTP(c.Writer, c.Request)
+		serviceuptime.TimelineHandler(api.uptimeRecorder.Store()).ServeHTTP(w, req)
 	})
-	authRoute.GET("/uptime/dates", func(c *gin.Context) {
+	route("GET /uptime/dates", func(w http.ResponseWriter, req *http.Request) {
 		if api.uptimeRecorder == nil {
-			c.AbortWithStatus(http.StatusServiceUnavailable)
+			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
-		serviceuptime.DatesHandler(api.uptimeRecorder.Store()).ServeHTTP(c.Writer, c.Request)
+		serviceuptime.DatesHandler(api.uptimeRecorder.Store()).ServeHTTP(w, req)
 	})
 }

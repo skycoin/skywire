@@ -49,14 +49,16 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) { return; } // never touch cross-origin
   if (req.method !== 'GET') { return; }
-  // Note: the bundled wallet's node API (/api/v1|v2) is NOT routed here — it's
-  // intercepted inside the wallet iframe by the dmsg fetch shim (serve.go's
-  // /wallet/ handler), so it works without a Service Worker (--harness, file://).
 
   // The auto-updater's build-version poll MUST always reach the real server — a
   // cached value would mask a new build forever. Don't intercept it at all
   // (return without respondWith() → the browser does its normal network fetch).
   if (url.pathname === '/wasm-version') { return; }
+
+  // API calls are live data: never cached, and never answered with the shell,
+  // which the dashboard read as JSON ("Unexpected token '<'") when the
+  // hypervisor was not there. Under a desk prefix the path is /vnet/<port>/api/.
+  if (/(^|\/)api\//.test(url.pathname)) { return; }
 
   if (IMMUTABLE.test(url.pathname)) {
     // cache-first: hashed bundles can't change under a fixed URL.
@@ -70,7 +72,12 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(req)
       .then((res) => putInCache(event, req, res))
-      .catch(() => caches.match(req).then((hit) => hit || caches.match('./')))
+      .catch((err) => caches.match(req).then((hit) => {
+        if (hit) return hit;
+        // Only a page load falls back to the shell; anything else fails.
+        if (req.mode === 'navigate') return caches.match('./').then((shell) => shell || Promise.reject(err));
+        return Promise.reject(err);
+      }))
   );
 });
 

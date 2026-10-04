@@ -32,6 +32,7 @@ import (
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/flightrec"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/rfclient"
@@ -113,8 +114,13 @@ type Visor struct {
 	startedAt       time.Time
 	startupComplete chan struct{}
 
-	ebc         *appevent.Broadcaster // event broadcaster
-	dmsgC       *dmsg.Client
+	ebc   *appevent.Broadcaster // event broadcaster
+	dmsgC *dmsg.Client
+	// dmsgHTTPTr is DmsgHTTP's shared keep-alive transport (dmsg_over_skynet.go).
+	dmsgHTTPOnce sync.Once
+	dmsgHTTPTr   *http.Transport
+	// dmsgSkynet counts how dials to .dmsg peers went (dmsg_over_skynet.go).
+	dmsgSkynet  dmsgSkynetStats
 	dmsgDC      *dmsg.Client       // dmsg direct client
 	dClient     dmsgdisc.APIClient // dmsg direct api client
 	dmsgHTTP    *http.Client       // dmsghttp client
@@ -241,6 +247,15 @@ type Visor struct {
 	// bootstrap direct client uses the addresses last learned from
 	// dmsg-discovery, not the (potentially stale) addresses in skywire.json.
 	dmsgServersCache *DmsgServersCache
+
+	// deploySvcMu serializes applying the deployment's services config: the
+	// conf service's CXO feed and the hourly dmsg-HTTP refresh can both
+	// deliver one (see applyDeploymentServices).
+	deploySvcMu sync.Mutex
+	// deploySvcLast is the services config last applied, kept in memory as
+	// well as on disk so a host that cannot write files (the browser) still
+	// tells deployment values from operator ones. Guarded by deploySvcMu.
+	deploySvcLast *visorconfig.Services
 
 	// DMSG listeners for forwarded ports (dmsg=true). Each entry is a
 	// cancel function that stops the listener goroutine.
@@ -732,7 +747,6 @@ func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 				TLSCert:          ws.TLSCert,
 				TLSKey:           ws.TLSKey,
 				Harness:          ws.Harness,
-				Wallet:           !ws.NoWallet,
 				Password:         ws.Password,
 				ExecWasmPath:     ws.ExecWasm,
 				DeskHelpTerminal: ws.DeskHelpTerminal,
@@ -922,6 +936,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, opts Options, logBcast 
 		storeLog(conf, opts.LogJSON)
 	}
 	log := v.MasterLogger().PackageLogger("visor:startup")
+	v.startFlightRecorder()
 	log.WithField("public_key", conf.PK).
 		Info("Begin startup.")
 	ctx = context.WithValue(ctx, visorKey, v)
@@ -1100,6 +1115,7 @@ func (v *Visor) Close() error {
 
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
+	defer flightrec.Stop()
 
 	if v.cxoSubMgr != nil {
 		v.cxoSubMgr.Close()

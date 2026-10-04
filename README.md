@@ -12,10 +12,128 @@
 # Skywire
 
 Skywire is a fully open-source, privacy-focused suite of networking
-tools developed by Skycoin. The public Skywire Network enables this
-software to be developed and tested in real-world conditions, with
+tools developed by Skycoin. Every peer is addressed by its public key,
+and all traffic between visors is end-to-end encrypted. The public
+Skywire Network lets this software be developed and tested in
+real-world conditions, with
 [daily rewards in Skycoin](rewards/mainnet_rules.md) ($SKY) distributed
 to eligible participants.
+
+Contents:
+[Quick start](#quick-start) ·
+[Features](#features) ·
+[Why Skywire](#why-skywire) ·
+[Comparison](#how-skywire-compares) ·
+[Borrowed ideas](#ideas-borrowed-and-adapted) ·
+[Architecture](#architecture) ·
+[Rewards](#skywire-rewards) ·
+[Documentation](#documentation) ·
+[Resource usage](#resource-usage) ·
+[Dependencies](#dependencies)
+
+## Quick start
+
+Install as a package, release binary, Docker image, Nix flake or from
+source. See [docs/guides/install.md](docs/guides/install.md), or the
+[install command generator](docs/guides/install-generator.md).
+
+With go installed, a visor runs straight from source. The bundled apps
+(vpn, skysocks, skychat and others) run inside the visor process.
+
+```
+go run github.com/skycoin/skywire@develop cli config gen -r
+go run github.com/skycoin/skywire@develop visor
+```
+
+Set a reward address and read the state of the running visor:
+
+```
+skywire cli reward <skycoin-address>
+skywire cli visor state
+```
+
+Next steps are [visor.md](docs/guides/visor.md) and
+[configuration.md](docs/guides/configuration.md).
+
+## Features
+
+* **Skywire is encrypted UDP & TCP.** Every byte between visors is
+  wrapped in the Noise Protocol (ChaCha20-Poly1305). There is no
+  plaintext mode, no opt-in TLS layer, no CA system; encryption is
+  not a feature, it is a property of the network. Both TCP services
+  and UDP datagrams carry end-to-end on the encrypted overlay.
+
+* **The public key is the address.** A 33-byte pubkey is what a peer
+  dials; the Noise handshake proves the remote side holds the
+  matching private key. Authentication is implicit because the name
+  *is* the key — there is no external naming authority to consult,
+  and no certificate to validate. The property holds for every
+  operation — transports, routes, app dial-out, CLI, hypervisor —
+  not just for hidden services or routing alone.
+
+* **DMSG: the anonymous relay layer.** Clients connect *out* to a
+  DMSG server; neither side needs a public-facing port, and neither
+  client learns the other's IP. The server passes the encrypted
+  stream between them without being able to read it. DMSG is the
+  always-on baseline that lets any pubkey reach any other, and the
+  substrate Skywire's discovery and control-plane services sit on.
+
+* **Skynet: peer-to-peer, multi-hop, and multiplexed routing.**
+  Routes carry Noise-encrypted packets end-to-end across one or
+  more direct transports; intermediate visors see only their
+  immediate neighbors, never the route's source or destination.
+  Paths come from the route finder service, from local computation
+  against the transport discovery graph, or — for two-hop routes —
+  from the destination's own transport list, which it hands over to
+  a query signed by a route setup node. Multi-route mux is an opt-in
+  capability that runs several whole routes at once, reorders and
+  retransmits across them, and schedules each packet onto the route
+  predicted to deliver it soonest.
+
+* **Skynet & DMSG port forwarding and reverse proxy.** Expose a
+  local TCP service on a visor's pubkey, or forward a remote
+  `pubkey:port` to a local port. Both directions work over Skynet
+  routes (direct / multi-hop) or a DMSG relay, with per-pubkey
+  whitelisting for access control and multiple named instances per
+  visor.
+
+* **Resolving SOCKS5 proxy and mail bridge.** Bridges from legacy
+  ecosystems into the overlay: the embedded `skynetweb` /
+  `dmsgweb` SOCKS5 resolvers translate `<pk>.skynet` / `<pk>.dmsg`
+  URLs for a browser, and `skymail-bridge` lets a standard SMTP
+  sender deliver mail to a skywire mailbox.
+
+* **Remote monitoring and remote management over the overlay.**
+  All over the same pubkey-authenticated transport:
+  - `skywire cli pty` — SSH-equivalent interactive shell
+    (`shell`, `start`) and one-shot commands (`exec`) on a remote visor.
+  - `skywire cli gotop --remote <pk>` — terminal activity monitor
+    pulling CPU / memory / temperature from a remote visor over
+    DMSG.
+  - Hypervisor browser UI and `skywire cli visor` (with `--via dmsg://<pk>`) — manage
+    clusters of visors from the browser or the terminal.
+
+  No public IP, no SSH key sprawl, no jump host.
+
+* **Native applications, managed by the visor.** VPN client and
+  server, SOCKS5 proxy client and server (skysocks /
+  skysocks-client), and skychat — a messenger with persistent
+  history (CXO + bbolt) and group support. The visor starts,
+  stops, lifecycle-manages, and registers them in service
+  discovery.
+
+* **Custom, private, and multi-deployment networks.** The whole
+  service stack (transport discovery, route finder, service
+  discovery, address resolver, DMSG discovery) is reproducible by a
+  third party via
+  [skywire-deployment](https://github.com/skycoin/skywire-deployment).
+  Private Skywire networks can run on independent infrastructure,
+  or additional deployments can layer on top of the public one for
+  segmented or air-gapped environments. A hypervisor-embedded DMSG
+  server keeps a private network running with no public deployment
+  dependency after bootstrap. Visors follow their deployment's
+  service keys from its config service's signed feed, so a
+  deployment can change them without a release.
 
 ## Why Skywire
 
@@ -33,215 +151,206 @@ load to keep the illusion together.
 Skywire starts from a different premise: **the address is the
 cryptographic identity.** From that one decision almost everything
 else follows.
+## How Skywire compares
 
-## Major features
+Each column is defined in the legend under the tables. The first table
+is about reaching peers and the second is about what you do with the
+network. Footnotes apply to both.
 
-* **Skywire is encrypted UDP & TCP.** Every byte between visors is
-  wrapped in the Noise Protocol (ChaCha20-Poly1305). There is no
-  plaintext mode, no opt-in TLS layer, no CA system; encryption is
-  not a feature, it is a property of the network. Both TCP services
-  and UDP datagrams carry end-to-end on the encrypted overlay.
+### Reach
 
-  **For comparison — stream encryption at roughly this level:**
-  - **cjdns / Yggdrasil** — encrypted IPv6 mesh, pubkey-derived
-    address, no CA. Closest in design philosophy.
-  - **Tor / I2P / Lokinet** — encrypted overlays focused on
-    anonymity rather than general-purpose private transport.
-  - **WireGuard / Nebula / Tailscale** — pubkey identity, AEAD
-    over UDP, but per-pair configured rather than address-as-key.
-  - **QUIC / HTTPS** — mandatory transport encryption, but identity
-    is still bolted on via X.509 because IP addresses are not
-    identities.
+| | Key | No port | Hole punch | Multi-hop | Multi-path | IP |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| **Skywire** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| [Tor](https://www.torproject.org/) | ✓ | ✓ | ✗ | ✓ | ✓ ² | ✗ |
+| [I2P](https://geti2p.net/) | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| [Lokinet](https://lokinet.org/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ |
+| [cjdns](https://github.com/cjdelisle/cjdns) | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ |
+| [Yggdrasil](https://yggdrasil-network.github.io/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ |
+| [Reticulum](https://reticulum.network/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
+| [iroh](https://www.iroh.computer/) | ✓ | ✓ | ✓ | ✗ | ✗ ³ | ✗ |
+| [libp2p](https://libp2p.io/) | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| [Tailscale](https://tailscale.com/) | ✗ | ✓ | ✓ | ✗ | ✗ | ✓ |
+| [ZeroTier](https://www.zerotier.com/) | ✗ | ✓ | ✓ | ✗ | ✓ ⁶ | ✓ |
+| [Nebula](https://github.com/slackhq/nebula) | ✗ | ✓ | ✓ | ✗ | ✗ | ✓ |
+| [WireGuard](https://www.wireguard.com/) | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
 
-* **The public key is the address.** A 33-byte pubkey is what a peer
-  dials; the Noise handshake proves the remote side holds the
-  matching private key. Authentication is implicit because the name
-  *is* the key — there is no external naming authority to consult,
-  and no certificate to validate.
+### Use
 
-  **For comparison — address-as-cryptographic-identity:**
-  - **Tor onion services** — `.onion` is the base32 pubkey hash.
-  - **cjdns / Yggdrasil** — IPv6 derived from the pubkey hash.
-  - **I2P destinations** — base32 IDs from the destination key.
-  - **Hyperswarm / Hypercore** — pubkey is the discovery key.
-  - **WireGuard / Tailscale** — pubkey identifies the peer, but the
-    routable address is still an IP assigned by the coordinator.
+| | Exit | Serve | Browser | Private | No central | Rewards |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| **Skywire** | ✓ | ✓ | ✓ | ✓ | ✗ ¹ | ✓ |
+| [Tor](https://www.torproject.org/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [I2P](https://geti2p.net/) | ✓ | ✓ | ✗ | ✗ | ✓ | ✗ |
+| [Lokinet](https://lokinet.org/) | ✓ | ✓ | ✗ | ✗ | ✓ | ✓ |
+| [cjdns](https://github.com/cjdelisle/cjdns) | ✗ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| [Yggdrasil](https://yggdrasil-network.github.io/) | ✗ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| [Reticulum](https://reticulum.network/) | ✗ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| [iroh](https://www.iroh.computer/) | ✗ | ✓ | ✓ ⁴ | ✓ | ✓ | ✗ |
+| [libp2p](https://libp2p.io/) | ✗ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| [Tailscale](https://tailscale.com/) | ✓ | ✗ | ✓ | ✓ ⁵ | ✗ | ✗ |
+| [ZeroTier](https://www.zerotier.com/) | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| [Nebula](https://github.com/slackhq/nebula) | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| [WireGuard](https://www.wireguard.com/) | ✗ | ✗ | ✗ | ✓ | ✓ | ✗ |
 
-  *What sets Skywire apart:* the property holds for every operation
-  — transports, routes, app dial-out, CLI, hypervisor — not just
-  for hidden services or routing alone.
+- **Key** (dial by key) — a peer is reached by its public key (or an address
+  derived from it), not by an IP an operator assigned.
+- **No port** (no open port) — a node behind NAT with no inbound port is still
+  reachable.
+- **Hole punch** (hole punching) — two nodes behind NAT can open a direct link
+  between themselves, without a relay carrying the traffic.
+- **Multi-hop** — traffic can be forwarded through other peers, so two
+  nodes with no direct link still connect.
+- **Multi-path** — one connection's traffic travels over several paths
+  at the same time.
+- **IP** (carries IP) — arbitrary IP traffic, as a VPN or virtual interface.
+- **Exit** (internet exit) — a node can carry other nodes' traffic out to the
+  internet as a built-in feature, not by hand-configured routing.
+- **Serve** (serve by key) — a local service can be published at the node's key.
+- **Browser** (in browser) — a node or client runs inside a web browser.
+- **Private** (private network) — a fully separate network can run on your own
+  infrastructure.
+- **No central** (no central service) — runs with no operator-run discovery or
+  coordination server.
+- **Rewards** (node rewards) — people running nodes are paid for it.
 
-* **DMSG: the anonymous relay layer.** Clients connect *out* to a
-  DMSG server; neither side needs a public-facing port, and neither
-  client learns the other's IP. The server passes the encrypted
-  stream between them without being able to read it.
+¹ Each deployment runs discovery, route-finding and relay services,
+but anyone can run a deployment.
 
-  **For comparison — identity-keyed relay between two clients:**
-  - **Tor rendezvous / introduction points** — closest match;
-    clients meet at a relay neither controls, no public port either
-    side, IPs hidden from each other.
-  - **Signal / WhatsApp servers** — server-mediated messaging;
-    clients don't see each other's IPs. Same relay-without-read
-    property, narrower scope (messaging only).
-  - **libp2p Circuit Relay v2** — pubkey-keyed relay for
-    NAT-traversed libp2p connections.
-  - **TURN (WebRTC)** — relay when direct P2P fails, but not
-    identity-keyed and operator can in principle MITM.
+² Conflux splits one stream over two circuits to the same exit.
 
-  *What sets Skywire apart:* DMSG is general-purpose encrypted
-  stream relay used as the always-on baseline that lets any pubkey
-  reach any other, *and* as the substrate Skywire's other
-  discovery / control-plane services sit on.
+³ iroh keeps standby paths behind a single active one.
 
-* **Skynet: peer-to-peer, multi-hop, and multiplexed routing.**
-  Routes carry Noise-encrypted packets end-to-end across one or
-  more direct transports; intermediate visors see only their
-  immediate neighbors, never the route's source or destination.
-  Paths come from the route finder service or from local
-  computation against the transport discovery graph. Multi-route
-  mux is an opt-in capability that aggregates parallel routes for
-  higher bandwidth.
+⁴ Through a relay only; browsers cannot send raw UDP.
 
-  **For comparison — multi-hop pubkey-routed overlays:**
-  - **Tor** — fixed 3-hop circuits, client-source-routed from the
-    directory consensus.
-  - **I2P** — garlic-routed tunables; tunnels selected locally
-    from netDB.
-  - **Lokinet** — Tor-style onion routing on Lokinet pubkeys.
-  - **cjdns / Yggdrasil** — paths emerge from a self-organizing
-    mesh (DHT labels / tree).
-  - **Nym** — mixnet routing with cover traffic; anonymity-first.
+⁵ With Headscale, a third-party coordination server.
 
-  *What sets Skywire apart:* path construction is pluggable —
-  consult a centralized route finder *or* compute locally from the
-  transport discovery graph. Not fixed at three hops (Tor), not
-  mesh-emergent (cjdns / Yggdrasil), not pooled (mixnets).
+⁶ Bonding across a node's own network interfaces.
 
-* **Skynet & DMSG port forwarding and reverse proxy.** Expose a
-  local TCP service on a visor's pubkey, or forward a remote
-  `pubkey:port` to a local port. Both directions work over Skynet
-  routes (direct / multi-hop) or a DMSG relay, with per-pubkey
-  whitelisting for access control and multiple named instances per
-  visor.
+### Carriers
 
-  **For comparison — pubkey- / identity-keyed TCP tunneling:**
-  - **ssh -L / ssh -R** — classic forwarding; identity is the SSH
-    key, address is an IP.
-  - **Tailscale Serve** — expose a local service on the tailnet;
-    closest peer model.
-  - **ngrok / Cloudflare Tunnel / Tailscale Funnel** — expose a
-    local service to the clearnet via a provider's edge.
-  - **WireGuard + iptables** — manual TCP forwarding inside a
-    WireGuard mesh.
+What each one's links run over, counting relayed links (iroh's
+relays, Tailscale's DERP, ZeroTier's TCP fallback) and Tor's bridge
+transports. **UDP** means a protocol of its own over UDP; **QUIC** is
+listed separately. The second table covers non-IP media.
 
-  *What sets Skywire apart:* forwarding works over either the
-  direct-route plane *or* the anonymous DMSG relay, addressed
-  purely by pubkey — no provider, no public IP, no DNS.
+| | TCP | UDP | QUIC | WebSocket | WebTransport | WebRTC |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| **Skywire** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| [Tor](https://www.torproject.org/) | ✓ | ✗ | ✗ | ✓ | ✗ | ✓ |
+| [I2P](https://geti2p.net/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [Lokinet](https://lokinet.org/) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [cjdns](https://github.com/cjdelisle/cjdns) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [Yggdrasil](https://yggdrasil-network.github.io/) | ✓ | ✗ | ✓ | ✓ | ✗ | ✗ |
+| [Reticulum](https://reticulum.network/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [iroh](https://www.iroh.computer/) | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
+| [libp2p](https://libp2p.io/) | ✓ | ✗ | ✓ | ✓ | ✓ | ✓ |
+| [Tailscale](https://tailscale.com/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
+| [ZeroTier](https://www.zerotier.com/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [Nebula](https://github.com/slackhq/nebula) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [WireGuard](https://www.wireguard.com/) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ |
 
-* **Resolving SOCKS5 proxy and mail bridge.** Bridges from legacy
-  ecosystems into the overlay: the embedded `skynetweb` /
-  `dmsgweb` SOCKS5 resolvers translate `<pk>.skynet` / `<pk>.dmsg`
-  URLs for a browser, and `skymail-bridge` lets a standard SMTP
-  sender deliver mail to a skywire mailbox.
+| | Raw Ethernet | Serial | Packet radio / LoRa |
+|---|:-:|:-:|:-:|
+| **Skywire** | ✗ | ✗ | ✗ |
+| [Tor](https://www.torproject.org/) | ✗ | ✗ | ✗ |
+| [I2P](https://geti2p.net/) | ✗ | ✗ | ✗ |
+| [Lokinet](https://lokinet.org/) | ✗ | ✗ | ✗ |
+| [cjdns](https://github.com/cjdelisle/cjdns) | ✓ | ✗ | ✗ |
+| [Yggdrasil](https://yggdrasil-network.github.io/) | ✗ | ✗ | ✗ |
+| [Reticulum](https://reticulum.network/) | ✗ | ✓ | ✓ |
+| [iroh](https://www.iroh.computer/) | ✗ | ✗ | ✗ |
+| [libp2p](https://libp2p.io/) | ✗ | ✗ | ✗ |
+| [Tailscale](https://tailscale.com/) | ✗ | ✗ | ✗ |
+| [ZeroTier](https://www.zerotier.com/) | ✗ | ✗ | ✗ |
+| [Nebula](https://github.com/slackhq/nebula) | ✗ | ✗ | ✗ |
+| [WireGuard](https://www.wireguard.com/) | ✗ | ✗ | ✗ |
 
-  **For comparison — bridges from a legacy protocol into an
-  overlay:**
-  - **I2P HTTP / SOCKS proxy** — direct inspiration for the
-    Skynet resolver; translates `.i2p` eepsite URLs.
-  - **Tor SOCKS proxy** — resolves `.onion`.
-  - **IPFS HTTP gateway** — bridges HTTPS clients to IPFS content.
-  - **Matrix bridges (irc, slack, signal)** — relay between legacy
-    chat protocols and Matrix federation.
+## Ideas borrowed and adapted
 
-  *What sets Skywire apart:* the bridges are first-class
-  subsystems of the visor, sharing its pubkey identity and overlay
-  encryption — the same identity model whether the visor is
-  talking to another visor or fronting a legacy protocol on its
-  behalf.
+Much of Skywire's route multiplexing reuses ideas that proved themselves
+elsewhere. Each one below is named as the source in the code or design docs,
+and each had to change to fit Skywire, where a "path" is a multi-hop route
+through other visors rather than a network interface. Read the linked files
+for the detail.
 
-* **Remote monitoring and remote management over the overlay.**
-  All over the same pubkey-authenticated transport:
-  - `skywire cli dmsgpty` — SSH-equivalent interactive shell
-    (`start`) and one-shot commands (`exec`) on a remote visor.
-  - `skywire cli gotop --remote <pk>` — terminal activity monitor
-    pulling CPU / memory / temperature from a remote visor over
-    DMSG.
-  - Hypervisor browser UI and `skywire cli visor tui` — manage
-    clusters of visors from the browser or the terminal.
+### Multiplexing one download or upload over several tunnels (skysocks)
 
-  No public IP, no SSH key sprawl, no jump host.
+These come from BitTorrent, where a client fetches pieces of one file from
+many peers ([route-spread-policy.md](docs/design/route-spread-policy.md)).
 
-  **For comparison — remote access without a public IP or jump
-  host:**
-  - **Tailscale SSH** — pubkey-keyed SSH within a pubkey overlay.
-    Closest peer for the shell side, no equivalent for the
-    activity monitor or cluster UI.
-  - **Headscale + SSH** — self-hosted Tailscale control + plain
-    SSH on top.
-  - **Cloudflare Tunnel + cloudflared** — provider-mediated
-    tunnel.
-  - **Teleport** — identity-aware access proxy; enterprise,
-    closest match for cluster management.
-  - **SSH + bastion host + htop/btop** — the legacy default;
-    needs a public IP somewhere and stitches shell + monitor +
-    cluster-mgmt together by hand.
+- **Endgame mode.** The last chunks of an object are duplicated onto an idle
+  tunnel, so one slow route does not decide when the object finishes. Skywire
+  duplicates only when fewer chunks remain than tunnels, and only onto the
+  fastest idle tunnel. Off by default (`spread.endgame`).
+  [spread.go](pkg/skysocks/spread.go)
+- **Snubbing and optimistic unchoke.** A tunnel that stops delivering is
+  benched and its chunks are fetched elsewhere, then it is retried with a
+  single chunk. Skywire snubs whole tunnels rather than requests, counts any
+  byte or ack as progress, and waits at least twice the tunnel's smoothed RTT
+  so a far route is not mistaken for a dead one.
+  [tunnel_snub.go](pkg/skysocks/tunnel_snub.go)
+- **Request pipelining.** Each tunnel keeps as many chunks in flight as its own
+  measured rate times RTT can hold, one on a near tunnel and several on a far
+  one. Off by default (`chunk.depth_dynamic`, `upload.depth_dynamic`).
+  [tunnel_depth.go](pkg/skysocks/tunnel_depth.go)
+- **Per-peer limits.** BitTorrent's per-peer caps became `spread.max_share`
+  (no route carries more than a set share of an object) and
+  `spread.min_routes`. The privacy reason for them, an even split so no single
+  route sees most of the traffic, is Skywire's own and has no BitTorrent
+  equivalent.
+- **HTTP range requests** (RFC 7233). One download is split into parallel
+  ranged requests over separate routes and reassembled by offset, so no
+  reorder buffer is needed. [rangesplit.go](pkg/skysocks/rangesplit.go)
 
-  *What sets Skywire apart:* shell, activity monitor, and
-  cluster UI are all first-class subcommands of the same CLI,
-  reaching any visor by pubkey over the same overlay. No
-  separate SSH key infrastructure, no separate tunneling agent,
-  no provider account.
+### Striping one stream over several route legs (router)
 
-* **Native applications, managed by the visor.** VPN client and
-  server, SOCKS5 proxy client and server (skysocks /
-  skysocks-client), and skychat — a messenger with persistent
-  history (CXO + bbolt) and group support. The visor starts,
-  stops, lifecycle-manages, and registers them in service
-  discovery.
+These come from multipath TCP, QUIC and TCP congestion control research
+([mux_aggregation_rfc.md](docs/mux_aggregation_rfc.md)).
 
-  **For comparison — overlay networks that ship a managed app
-  ecosystem:**
-  - **I2P** — i2psnark (BitTorrent), I2P-Bote (email), Susimail,
-    bundled and using the I2P identity. Closest peer.
-  - **Tor Project apps** — Tor Browser, Tails, OnionShare — each
-    a separate project rather than visor-managed.
-  - **Lokinet + Session** — Session messenger uses the Loki
-    identity but is a sibling project.
-  - **Tailscale / WireGuard / Yggdrasil / cjdns** — pure
-    transport; apps are external.
+- **ECF scheduling** (Lim et al., CoNEXT 2017), the default leg scheduler.
+  It sends on the fastest leg unless waiting would cost more than using a
+  slower one. Skywire has no congestion window, so each leg's capacity is its
+  measured rate times RTT plus an in-flight estimate.
+  [transport_selector.go](pkg/router/transport_selector.go)
+- **OTIAS** (Yang et al.), an alternative scheduler built on the same per-leg
+  estimates. [mux_scheduler.go](pkg/router/mux_scheduler.go)
+- **RACK-TLP loss detection** (RFC 8985). The retransmit threshold follows
+  the slowest active leg's ack delay, and a tail-loss probe resends the end
+  of a burst after about twice the slowest leg's RTT.
+  [rack_tlp.go](pkg/router/rack_tlp.go), [sack.go](pkg/router/sack.go)
+- **Karn's rule.** Retransmitted packets never feed the RTT estimate.
+- **Shared-bottleneck detection** (RFC 8382). Legs whose one-way delays move
+  together share an uplink further out, so they are not counted as separate
+  capacity. [bottleneck.go](pkg/router/bottleneck.go)
+- **BBR's minimum RTT and application-limited rule.** A sliding minimum RTT
+  per leg, and a goodput check so queueing delay is not read as a bad leg.
+  [leg_rtt_window.go](pkg/router/leg_rtt_window.go)
+- **MPTCP's receive-buffer rule** (twice the sum of bandwidths times the
+  largest RTT) sizes the reorder window. [route_mux.go](pkg/router/route_mux.go)
+- **Forward error correction.** Reed-Solomon repair symbols sent across legs
+  let the receiver rebuild a frame stuck on a slow leg instead of waiting for
+  it. [fec.go](pkg/router/fec.go)
+- **Coupled congestion control and LEDBAT.** The `coupled` routing-policy
+  preset is modeled on MPTCP's LIA and OLIA, and `ledbat` on RFC 6817. They
+  run as policy scripts that grow or shrink the number of legs.
+  [preset.go](pkg/router/policy/preset/preset.go)
 
-  *What sets Skywire apart:* apps are launched, supervised, and
-  lifecycle-managed by the visor itself (`skywire cli visor app
-  …`) — service discovery, transport, identity, and lifecycle
-  all in one process.
+### Elsewhere
 
-* **Custom, private, and multi-deployment networks.** The whole
-  service stack (transport discovery, route finder, service
-  discovery, address resolver, DMSG discovery) is reproducible by a
-  third party via
-  [skywire-deployment](https://github.com/skycoin/skywire-deployment).
-  Private Skywire networks can run on independent infrastructure,
-  or additional deployments can layer on top of the public one for
-  segmented or air-gapped environments. A hypervisor-embedded DMSG
-  server keeps a private network running with no public deployment
-  dependency after bootstrap.
+- **libp2p circuit relays.** dmsg servers cap relayed sessions per peer as
+  well as globally, and count refusals by reason.
+  [entity_common.go](pkg/dmsg/dmsg/entity_common.go)
+- **WireGuard.** Datagram routes use ChaCha20-Poly1305 with an RFC 6479
+  anti-replay window and WireGuard's two-minute rekey.
+  [datagram_crypto.go](pkg/router/datagram_crypto.go)
+- **Noise with ML-KEM.** The dmsg handshake is Noise KK combined with
+  post-quantum ML-KEM-768. [pq-hybrid-noise-handshake.md](docs/design/pq-hybrid-noise-handshake.md)
+- **Happy Eyeballs** (RFC 8305) for racing dial attempts to a dmsg server.
 
-  **For comparison — overlays with a self-hostable coordination
-  plane:**
-  - **Headscale** — self-hostable Tailscale control plane.
-    Closest analogue.
-  - **Nebula lighthouses** — coordination is just nodes the
-    operator runs.
-  - **Matrix homeservers** — fully self-hostable, federation by
-    default.
-  - **WireGuard alone** — no coordinator at all; manual peer
-    config, often paired with Headscale / Netmaker.
+## Architecture
 
-  *What sets Skywire apart:* deployments compose — additional
-  service stacks layer **on top of** the public Skywire deployment
-  for segmented use, rather than replacing it.
-
-## Skywire Control and Data Planes
+### Skywire Control and Data Planes
 
 [dmsg](https://github.com/skycoin/dmsg) (read "D-message") is the
 **control plane** — the always-on relay layer over which visors
@@ -251,7 +360,7 @@ services, or a self-hosted equivalent. Skynet is the **data
 plane** — direct peer-to-peer transports between visors and the
 routes built across them.
 
-## Skywire Network and Transports
+### Skywire Network and Transports
 
 Direct transports between visors come in two types: **STCPR**
 (Skywire TCP Relay) and **SUDPH** (Skywire UDP Hole-punching).
@@ -264,7 +373,7 @@ routing. Routes are set up by trusted route-setup nodes that
 consult the route finder service over
 [transports registered in the transport discovery](https://tpd.skywire.skycoin.com/all-transports).
 
-## Skywire Routing
+### Skywire Routing
 
 A route is a chain of one or more transports between visors and
 may not transit the same public key twice, preventing data loops.
@@ -275,7 +384,7 @@ limit the routing model already imposes. Route multiplexing
 between the same endpoints is similar in concept to BitTorrent's
 piece-level parallelism.
 
-## Skywire Visor
+### Skywire Visor
 
 The name 'visor' was chosen as a less ambiguous term than 'node' to
 refer to the running Skywire process. The term 'node' is typically
@@ -291,31 +400,7 @@ For running and configuring a visor see
 [docs/guides/visor.md](docs/guides/visor.md) and
 [docs/guides/configuration.md](docs/guides/configuration.md).
 
-## Resource usage
-
-Approximate memory footprint, measured from live deployment nodes via pprof
-(`HeapInuse`) cross-referenced with process RSS. Both figures scale roughly
-linearly, so the per-unit cost is derived from the slope between two nodes with
-very different counts (which cancels out the fixed base).
-
-- **Visor:** ~110 MB base (Go runtime + bundled apps + CXO cache) plus
-  **~90 KB of live heap per transport**. The transport mesh is a *minor*
-  contributor — a visor with 190 transports uses ~125 MB of heap, one with
-  ~860 transports ~185 MB. (Per-transport RSS, including the two goroutine
-  stacks and the socket / KCP buffers, is higher — on the order of ~300 KB —
-  but the heap slope is the reliable cross-host figure since a memory-pressured
-  node's RSS is distorted by swap.) The base, not the mesh, dominates a visor's
-  footprint.
-- **dmsg server:** **~0.5 MB of RSS per connected client** (the per-client
-  noise session + yamux mux + relay stream buffers). A server relaying ~850
-  clients uses ~430 MB. This scales directly with client count, so a busy relay
-  must be sized for its peak client load — a 1 GB host saturates and swaps at
-  roughly ~1k clients when it also runs a visor. Cap a relay's `max_sessions`
-  to bound its footprint and shed excess load to other servers.
-
-Measured 2026-06-10 across v1.3.66 / v1.3.67 nodes; numbers are approximate.
-
-## Skywire Cli (command line interface)
+### Skywire Cli (command line interface)
 
 `skywire cli` is the primary interface to a running Skywire visor.
 Skywire cli provides an interface to generate a JSON config file for
@@ -324,17 +409,17 @@ data from different Skywire services.
 
 Full reference: [docs/skywire/cli/](docs/skywire/cli/README.md).
 
-## Skywire Apps
+### Skywire Apps
 
 Server-side apps auto-register in the
 [proxy server](https://sd.skycoin.com/api/services?type=proxy) /
-[VPN server](https://sd.skycoin.com/api/services?type=proxy)
+[VPN server](https://sd.skycoin.com/api/services?type=vpn)
 service discovery on startup; clients dial them by pubkey over a
 direct or multi-hop route.
 
 Operator guides: [vpn](docs/guides/vpn.md), [socks5](docs/guides/socks5.md), [skynet](docs/guides/skynet.md).
 
-## DmsgWeb – Anonymous port forwarding over DMSG
+### DmsgWeb – Anonymous port forwarding over DMSG
 
 `skywire dmsg web` (client) and `skywire dmsg web srv` (server)
 forward TCP ports over DMSG; the resolving SOCKS5 side was
@@ -342,7 +427,7 @@ inspired by I2P. Chaining a browser through a Skywire SOCKS5
 proxy on top composes DMSG's relay anonymity with Skynet's
 multi-hop routing.
 
-## SkyNet – P2P port forwarding over Skywire
+### SkyNet – P2P port forwarding over Skywire
 
 SkyNet is the counterpart to DmsgWeb — port forwarding over
 Skynet routes (direct + multi-hop) rather than over a DMSG relay.
@@ -399,7 +484,7 @@ Operator how-to guides:
 
 Visor native applications:
 
-* [API](docs/skywire_app_api.md)
+* [overview](docs/apps-overview.md), [implementation guide](docs/app_implement_guidance.md)
 * [skychat](cmd/apps/skychat/README.md)
 * [skysocks](cmd/apps/skysocks/README.md) / [skysocks-client](cmd/apps/skysocks-client/README.md)
 * [vpn-client](cmd/apps/vpn-client/README.md) / [vpn-server](cmd/apps/vpn-server/README.md)
@@ -412,17 +497,37 @@ Example custom applications:
 
 Further docs: [skywire wiki](https://github.com/skycoin/skywire/wiki).
 
+## Resource usage
+
+Approximate memory footprint, read from live fleet nodes over dmsg with pprof
+(in-use heap) and, for the dmsg server, the process's peak RSS.
+
+Measured 2026-10-04 on fleet visors running v1.3.97 and v1.3.98, and on a
+dmsg server running v1.3.98-103-g960cf0872.
+
+- **Visor:** about **215 to 240 MB of live heap**, and nearly flat in the
+  number of transports: three healthy visors with 28, 29 and 232 transports
+  held 232, 237 and 216 MB. The base dominates. Its two largest fixed parts
+  are the embedded GeoIP database behind the hypervisor's transport map
+  (~59 MB) and the gzipped wasm visor the hypervisor serves (~38 MB). In June
+  2026 (v1.3.66) a visor was ~110 MB plus ~90 KB per transport.
+- **dmsg server:** about **0.5 MB of RSS per connected client** (the
+  per-client noise session, yamux mux and relay stream buffers). A server with
+  1213 clients peaked at 650 MB RSS, about 0.54 MB per client including its
+  base. A busy relay must be sized for its peak client load. Cap a relay's
+  `max_sessions` to bound its footprint and shed excess load to other servers.
+
 ## Dependencies
 
 ### Build Deps
 
-* `golang` — install with your system package manager on most linux
+* `golang` (go 1.27 or newer, see `go.mod`) — install with your system package manager on most linux
   distributions, or follow [go.dev/doc/install](https://go.dev/doc/install).
   Basic setup of the `go` environment is further described
   [here](https://github.com/skycoin/skycoin/blob/develop/INSTALLATION.md#setup-your-gopath).
 * `git` (optional)
 * `musl` and `kernel-headers-musl` or equivalent — for static
-  compilation; see [docs/static-builds.md](docs/static-builds.md).
+  compilation; see [docs/guides/install.md](docs/guides/install.md).
 
 ### Visor Runtime Deps
 
@@ -436,6 +541,8 @@ Further docs: [skywire wiki](https://github.com/skycoin/skywire/wiki).
 
 ## Dependency Graph
 
+Reflects skywire v1.3.98-103-g960cf0872 (commit `960cf0872`), generated 2026-10-04.
+
 Made with [goda](https://github.com/loov/goda):
 
 ```
@@ -445,6 +552,8 @@ go run github.com/loov/goda@latest graph github.com/skycoin/skywire/... | dot -T
 ![Dependency Graph](docs/skywire-goda-graph.svg "github.com/skycoin/skywire Dependency Graph")
 
 ## Lines of Code
+
+Reflects skywire v1.3.98-103-g960cf0872 (commit `960cf0872`), generated 2026-10-04.
 
 Made with [gocloc](https://github.com/hhatto/gocloc) (excludes `vendor/`, `node_modules/`, `.git/`):
 
@@ -456,31 +565,30 @@ gocloc --not-match-d='(vendor|node_modules|\.git)' .
 -------------------------------------------------------------------------------
 Language                     files          blank        comment           code
 -------------------------------------------------------------------------------
-Go                            2037          52181          76968         303827
-Markdown                       677          13403             41          42309
-JSON                          1534            483              0          40115
-TypeScript                     164           4218           6846          25306
-HTML                           103           1269           1247          15693
-JavaScript                      45            604           1734          10497
-Sass                            90           1290            401           6903
-Plain Text                       8            481              0           1845
-BASH                            42            376            740           1744
-TOML                            10            215             37           1656
-YAML                             8             40            156           1101
-Makefile                         5            168             59            646
-Protocol Buffers                 1             66            385            349
-Starlark                        23             59            424            271
-Nix                              3             38            159            245
+Go                            3151          72929         143399         471893
+JSON                           764             96              0         433006
+Markdown                       827          14860             42          54059
+TypeScript                     184           4549           7732          28000
+HTML                           104           2084           3897          25356
+Kotlin                         160           2560           6930          24703
+JavaScript                      36            954           6338          13099
+Sass                            91           1350            458           7486
+Bourne Shell                    37            281           2650           5166
+Plain Text                      21            152              0           2781
+XML                             21            239            452           2431
+BASH                            48            448           1032           2261
+YAML                            10             39            292           1196
+Makefile                         4            187            167            850
+Protocol Buffers                 1             76            506            402
+Starlark                        28             73            546            376
+Nix                              3             38            160            245
+Batch                            3             32              0            181
 WiX                              2             36             49            156
-Batch                            2             14              0            117
 PowerShell                       1             11              0             91
-XML                              2              0              0             51
-C                                1             14             24             46
-Bourne Shell                     5             14              0             43
-CSS                              4              4             16             34
-Assembly                         3              9             13             20
+TOML                             1              2             15             52
+CSS                              4              4              4             31
 -------------------------------------------------------------------------------
-TOTAL                         4770          74993          89299         453065
+TOTAL                         5501         101000         174669        1073821
 -------------------------------------------------------------------------------
 ```
 

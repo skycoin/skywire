@@ -6,3 +6,7 @@ $grid-breakpoints: (
   lg: 992px,
   xl: 1300px
 ) !default;
+
+// White text on Bootstrap's own primary (#0d6efd) is about 4.2:1 with this theme's
+// off-white, so the default 4.5 threshold warns on every build and still picks white.
+$min-contrast-ratio: 4 !default;

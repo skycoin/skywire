@@ -114,6 +114,59 @@
 			try { w.postMessage(m, transfer || []); } catch (e) { /* worker gone */ }
 		}
 
+		// ---- the worker's tree on the page --------------------------------
+		// Every skywire command, the visor included, runs on the worker's
+		// jsfs, so the page's own tree went stale wherever the visor writes,
+		// and a `pty fs mount` landed where the desk shell could not see it.
+		// The page mounts those subtrees of the worker's tree over this
+		// channel: a jsfs provider may answer whenever it is ready, so no
+		// SharedArrayBuffer is needed.
+		var WORKER_TREES = ['/mnt', '/opt/skywire'];
+		var fsWait = {};
+		var fsSeq = 0;
+		function fsAsk(op, args, cb, transfer) {
+			var id = ++fsSeq;
+			fsWait[id] = cb;
+			post({ t: 'fs', id: id, op: op, args: args }, transfer);
+		}
+		function fsAnswer(m) {
+			var cb = fsWait[m.id];
+			if (!cb) return;
+			delete fsWait[m.id];
+			cb(m.err || null, m.res);
+		}
+		function workerTree(prefix) {
+			var abs = function (rel) { return rel === '/' ? prefix : prefix + rel; };
+			var p = {};
+			// Which arguments are paths inside the mount, per call.
+			var PATHS = {
+				stat: [0], lstat: [0], readdir: [0], mkdir: [0], rmdir: [0], unlink: [0],
+				truncate: [0], chmod: [0], chown: [0], lchown: [0], utimes: [0], readlink: [0],
+				open: [0], rename: [0, 1], link: [0, 1], symlink: [1],
+				close: [], fstat: [], ftruncate: [], fchmod: [], fchown: [], fsync: [],
+			};
+			Object.keys(PATHS).forEach(function (op) {
+				p[op] = function () {
+					var args = Array.prototype.slice.call(arguments);
+					var cb = args.pop();
+					PATHS[op].forEach(function (i) { args[i] = abs(args[i]); });
+					fsAsk(op, args, cb);
+				};
+			});
+			p.read = function (fd, length, position, cb) { fsAsk('read', [fd, length, position], cb); };
+			p.write = function (fd, bytes, position, cb) { fsAsk('write', [fd, bytes, position], cb, [bytes.buffer]); };
+			return p;
+		}
+		function mountWorkerTrees() {
+			var jsfs = globalThis.jsfs;
+			if (!jsfs || typeof jsfs.mount !== 'function') return;
+			WORKER_TREES.forEach(function (prefix) {
+				try { jsfs.mount(prefix, workerTree(prefix)); } catch (e) {
+					console.warn('[exec-worker] could not mount the worker\'s ' + prefix + ':', e && e.message);
+				}
+			});
+		}
+
 		// sendable decides whether a chunk's buffer can be handed over rather
 		// than copied. Only when the view owns the whole buffer — a subarray
 		// would take its siblings with it.
@@ -273,8 +326,15 @@
 			};
 			dc.onclose = function () { post({ t: 'rtc', op: 'dcClose', pcId: pcId, dcId: dcId }); };
 			dc.onerror = function () { post({ t: 'rtc', op: 'dcError', pcId: pcId, dcId: dcId }); };
+			// The worker cannot read bufferedAmount, so the page says when the queue
+			// passes RTC_HIGH_WATER and when it drains (webrtc_browser.go waits on it).
+			try { dc.bufferedAmountLowThreshold = RTC_LOW_WATER; } catch (e) { /* older engine */ }
+			dc.onbufferedamountlow = function () {
+				if (dc.__high) { dc.__high = false; post({ t: 'rtc', op: 'dcLow', pcId: pcId, dcId: dcId }); }
+			};
 			if (dc.readyState === 'open') post({ t: 'rtc', op: 'dcOpen', pcId: pcId, dcId: dcId });
 		}
+		var RTC_HIGH_WATER = 1 << 20, RTC_LOW_WATER = 256 << 10;
 		function rtcCall(pc, m) {
 			switch (m.method) {
 			case 'createOffer': return pc.createOffer().then(function (o) { return { type: o.type, sdp: o.sdp }; });
@@ -319,7 +379,12 @@
 				return;
 			// A send the channel refuses (queue full, closing) would drop bytes from a
 			// reliable ordered stream; close it so the transport fails and redials.
-			case 'dcSend': dc = rec && rec.dcs[m.dcId]; if (dc) { try { dc.send(m.data); } catch (e) { try { dc.close(); } catch (e2) { /* gone */ } } } return;
+			case 'dcSend':
+				dc = rec && rec.dcs[m.dcId];
+				if (!dc) return;
+				try { dc.send(m.data); } catch (e) { try { dc.close(); } catch (e2) { /* gone */ } return; }
+				if (!dc.__high && dc.bufferedAmount > RTC_HIGH_WATER) { dc.__high = true; post({ t: 'rtc', op: 'dcHigh', pcId: m.pcId, dcId: m.dcId }); }
+				return;
 			case 'dcClose': dc = rec && rec.dcs[m.dcId]; if (dc) { try { dc.close(); } catch (e) { /* gone */ } } return;
 			case 'pcClose':
 				if (rec) { try { rec.pc.close(); } catch (e) { /* gone */ } delete rtcPCs[m.pcId]; post({ t: 'rtc', op: 'pcGone', pcId: m.pcId }); }
@@ -359,6 +424,7 @@
 			case 'exit': finish(m.id, m.code, null); return;
 			case 'fail': finish(m.id, 1, m.msg || 'exec failed'); return;
 			case 'rtc': rtcHost(m); return;
+			case 'fsr': fsAnswer(m); return;
 			case 'vlisten': claim(m.port); return;
 			case 'vunlisten': release(m.port); return;
 			case 'vdata': {
@@ -414,6 +480,7 @@
 			remoteExec.wasmURL = abs(opts.wasmURL || globalThis.skywireExec.wasmURL);
 			remoteExec.wasmExecURL = abs(opts.wasmExecURL || globalThis.skywireExec.wasmExecURL);
 			globalThis.skywireExec = remoteExec;
+			mountWorkerTrees();
 			// The registries under the names skywire's page code already uses.
 			// __skywireSignals is deliberately NOT re-aliased: the interrupt
 			// registry that matters is the worker's (that is where

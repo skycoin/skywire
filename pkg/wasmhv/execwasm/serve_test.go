@@ -89,11 +89,11 @@ func TestServe(t *testing.T) {
 
 func TestLoaderJS(t *testing.T) {
 	exec := []byte("globalThis.Go = class { constructor() { this.argv = ['js']; } };\n")
-	out := string(LoaderJS(exec, "cipher"))
+	out := string(LoaderJS(exec, "netview"))
 	if !strings.HasPrefix(out, string(exec)) {
 		t.Fatal("loader must start with the loader it wraps")
 	}
-	for _, want := range []string{"class extends _Go", "super();", "this.argv=['skywire','desk-host','--role','cipher']", "HOME:'/home/user'", "USER:'user'"} {
+	for _, want := range []string{"class extends _Go", "super();", "this.argv=['skywire','desk-host','--role','netview']", "HOME:'/home/user'", "USER:'user'"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("prelude missing %q", want)
 		}

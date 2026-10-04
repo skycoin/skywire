@@ -1,3 +1,4 @@
+@use 'sass:color';
 // Main app background.
 .app-background {
   width: 100%;
@@ -23,7 +24,7 @@ body.wasm-visor-ui .app-background {
 }
 
 .elevated-box {
-  background-image: url('/assets/img/background-pattern.png');
+  background-image: url('../img/background-pattern.png');
   box-shadow: inset 0 0 55px 0 rgba(53, 87, 134, 0.4), 5px 5px 7px 0 rgba(0, 0, 0, 0.35);
   border: $box-border solid 1px;
 }
@@ -38,7 +39,7 @@ body.wasm-visor-ui .app-background {
   .box-internal-container {
     border-radius: $mat-dialog-radius;
     padding: $containers-padding - $internal-blue-box-margin;
-    border: scale-color($box-border, $alpha: -65%) solid 1px;
+    border: color.scale($box-border, $alpha: -65%) solid 1px;
     overflow: hidden;
   }
 }

@@ -164,6 +164,7 @@ func TestPQHybridHandshake(t *testing.T) {
 	require.True(t, nR.HandshakeFinished())
 	require.True(t, nI.PQActive(), "initiator must negotiate PQ with a PQ-aware peer")
 	require.True(t, nR.PQActive(), "responder must negotiate PQ with a PQ-aware peer")
+	require.Nil(t, nI.pqInit, "the initiator drops its ephemeral ML-KEM key once the handshake is done")
 
 	ct := nI.EncryptUnsafe([]byte("post-quantum"))
 	pt, err := nR.DecryptUnsafe(ct)
@@ -202,6 +203,7 @@ func TestPQHandshakeFallbackToClassical(t *testing.T) {
 	// Initiator sees an empty payload → classical fallback, no PQ.
 	require.NoError(t, nI.ProcessHandshakeMessage(msg2))
 	require.False(t, nI.PQActive(), "initiator must fall back to classical with an old peer")
+	require.Nil(t, nI.pqInit, "the ephemeral ML-KEM key is dropped on a classical fallback too")
 
 	// Classical transport still works in both directions.
 	ct := nI.EncryptUnsafe([]byte("compat"))

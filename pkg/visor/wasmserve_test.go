@@ -6,11 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/require"
-
-	"github.com/skycoin/skywire/pkg/wasmhv"
-	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
 
 func TestIsMeshBrowseHost(t *testing.T) {
@@ -167,42 +162,4 @@ func TestWasmPasswordGate(t *testing.T) {
 			t.Error("secure=true did not set the Secure cookie attribute")
 		}
 	})
-}
-
-// TestWalletCipherAssets covers the two loader assets the vendored wallet
-// instantiates (serveWalletCipherAsset, shared by `hv serve`'s /wallet/ and
-// the native hypervisor's): the loader is Go's wasm_exec.js pinned to the
-// module's cipher role, and the wasm is the one skywire command module — served
-// under the execwasm stamp when embedded, else redirected to the page origin's
-// /skywire.wasm.
-func TestWalletCipherAssets(t *testing.T) {
-	rec := httptest.NewRecorder()
-	if !serveWalletCipherAsset(rec, httptest.NewRequest(http.MethodGet, "/wallet/assets/scripts/wasm_exec.js", nil), "assets/scripts/wasm_exec.js") {
-		t.Fatal("wasm_exec.js not claimed")
-	}
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.Contains(t, rec.Header().Get("Content-Type"), "javascript")
-	body := rec.Body.String()
-	require.True(t, strings.HasPrefix(body, string(wasmhv.WasmExecJS)), "loader must be Go's wasm_exec.js")
-	require.Contains(t, body, "this.argv=['skywire','desk-host','--role','cipher']")
-
-	rec = httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/wallet/assets/scripts/skycoin-lite.wasm", nil)
-	req.Header.Set("Accept-Encoding", "gzip")
-	if !serveWalletCipherAsset(rec, req, "assets/scripts/skycoin-lite.wasm") {
-		t.Fatal("skycoin-lite.wasm not claimed")
-	}
-	if execwasm.Present() {
-		require.Equal(t, http.StatusOK, rec.Code)
-		require.Equal(t, "application/wasm", rec.Header().Get("Content-Type"))
-		require.Equal(t, "gzip", rec.Header().Get("Content-Encoding"))
-		require.Equal(t, `"`+execwasm.Stamp()+`"`, rec.Header().Get("ETag"))
-	} else {
-		require.Equal(t, http.StatusFound, rec.Code)
-		require.Equal(t, execwasm.OriginPath, rec.Header().Get("Location"))
-		t.Log("no module embedded in this build: the wasm route redirects to /skywire.wasm")
-	}
-
-	rec = httptest.NewRecorder()
-	require.False(t, serveWalletCipherAsset(rec, httptest.NewRequest(http.MethodGet, "/wallet/assets/scripts/qrcode.min.js", nil), "assets/scripts/qrcode.min.js"))
 }

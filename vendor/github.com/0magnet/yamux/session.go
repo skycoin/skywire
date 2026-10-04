@@ -1,3 +1,6 @@
+// Copyright IBM Corp. 2014, 2026
+// SPDX-License-Identifier: MPL-2.0
+
 package yamux
 
 import (
@@ -6,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math"
 	"net"
@@ -42,6 +44,10 @@ type Session struct {
 
 	// bufRead is a buffered reader
 	bufRead *bufio.Reader
+
+	// recvScratch holds a data frame's body while recvLoop reads it, so no
+	// stream lock is held across network I/O. Only recvLoop touches it.
+	recvScratch []byte
 
 	// pings is used to track inflight pings
 	pings    map[uint32]chan struct{}
@@ -223,7 +229,7 @@ func (s *Session) setOpenTimeout(stream *Stream) {
 		// Timeout reached while waiting for ACK.
 		// Close the session to force connection re-establishment.
 		s.logger.Printf("[ERR] yamux: aborted stream open (destination=%s): %v", s.RemoteAddr().String(), ErrTimeout.err)
-		s.Close()
+		_ = s.Close()
 	}
 }
 
@@ -286,7 +292,7 @@ func (s *Session) Close() error {
 
 	close(s.shutdownCh)
 
-	s.conn.Close()
+	_ = s.conn.Close()
 	<-s.recvDoneCh
 
 	s.streamLock.Lock()
@@ -306,7 +312,7 @@ func (s *Session) exitErr(err error) {
 		s.shutdownErr = err
 	}
 	s.shutdownErrLock.Unlock()
-	s.Close()
+	_ = s.Close()
 }
 
 // GoAway can be used to prevent accepting further
@@ -389,17 +395,8 @@ func (s *Session) waitForSend(hdr header, body []byte) error {
 // potential shutdown. Since there's the expectation that sends can happen
 // in a timely manner, we enforce the connection write timeout here.
 func (s *Session) waitForSendErr(hdr header, body []byte, errCh chan error) error {
-	t := timerPool.Get()
-	timer := t.(*time.Timer)
-	timer.Reset(s.config.ConnectionWriteTimeout)
-	defer func() {
-		timer.Stop()
-		select {
-		case <-timer.C:
-		default:
-		}
-		timerPool.Put(t)
-	}()
+	timer := time.NewTimer(s.config.ConnectionWriteTimeout)
+	defer timer.Stop()
 
 	ready := &sendReady{Hdr: hdr, Body: body, Err: errCh}
 	select {
@@ -446,17 +443,8 @@ func (s *Session) waitForSendErr(hdr header, body []byte, errCh chan error) erro
 // the send happens right here, we enforce the connection write timeout if we
 // can't queue the header to be sent.
 func (s *Session) sendNoWait(hdr header) error {
-	t := timerPool.Get()
-	timer := t.(*time.Timer)
-	timer.Reset(s.config.ConnectionWriteTimeout)
-	defer func() {
-		timer.Stop()
-		select {
-		case <-timer.C:
-		default:
-		}
-		timerPool.Put(t)
-	}()
+	timer := time.NewTimer(s.config.ConnectionWriteTimeout)
+	defer timer.Stop()
 
 	select {
 	case s.sendCh <- &sendReady{Hdr: hdr}:
@@ -595,7 +583,7 @@ func (s *Session) handleStreamMessage(hdr header) error {
 		// Drain any data on the wire
 		if hdr.MsgType() == typeData && hdr.Length() > 0 {
 			s.logger.Printf("[WARN] yamux: Discarding data for stream: %d", id)
-			if _, err := io.CopyN(ioutil.Discard, s.bufRead, int64(hdr.Length())); err != nil {
+			if _, err := io.CopyN(io.Discard, s.bufRead, int64(hdr.Length())); err != nil {
 				s.logger.Printf("[ERR] yamux: Failed to discard data: %v", err)
 				return nil
 			}

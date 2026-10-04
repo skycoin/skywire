@@ -32,6 +32,7 @@ skywire cli hv serve
 
 ```
   -a, --addr string            HTTP listen address (default ":7999")
+      --boot-reports string    keep the reports of desks that did not start in this file as JSON lines, moved to <file>.1 at 1 MiB (they are also logged). The default is under $STATE_DIRECTORY when systemd sets one (StateDirectory=), else the temp dir. Empty = log only (default "/tmp/skywire-desk-boot-reports.jsonl")
       --browse-origin string   ALSO serve the browse-origin SW bootstrap on this second addr (e.g. 127.0.0.1:7998), for the hosted real-origin browser's B origins. Caddy routes *.<browse-suffix> here; this same process serves V on --addr and B here. Empty = off (V host-routes B on --addr, local mode)
       --browse-suffix string   browse-origin domain suffix for the real-origin browser (leading dot). Empty = .mesh.localhost (local); when --browse-origin is set (hosted mode) and this is empty it defaults to the deployment's browse_origin_suffix (".haltingstate.net" from services-config.json)
       --desk-docs-port int     run 'skywire doc serve' on this desk vnet port (0 = off) — same cost as above
@@ -42,8 +43,7 @@ skywire cli hv serve
       --tls                    serve over HTTPS with a self-signed localhost cert (a real https origin for local testing — wss works, ws:// is mixed-content-blocked exactly as in prod). Accept the browser cert warning once; the cert is persisted across restarts
       --tls-cert string        PEM cert to serve TLS with instead of the self-signed localhost cert — e.g. a locally-trusted *.mesh.localhost cert (mkcert) so real-origin browse iframes load without a per-host accept. Requires --tls-key
       --tls-key string         PEM key paired with --tls-cert
-      --v-origin string        the PUBLIC origin of the visor app V that B's bootstrap postMessages to, e.g. https://theskywirenetwork.net. Only needed with --browse-origin behind a proxy; empty = derive from --addr (local)
-      --wallet                 serve the bundled skycoin-web wallet at /wallet/ (custody stays browser-side — the host never sees keys). --wallet=false serves a wallet-less PWA (default true)
+      --v-origin string        the PUBLIC origin(s) of the visor app V that B's bootstrap postMessages to, e.g. https://theskywirenetwork.net. Comma-separated for several apps sharing one browse domain, or "*" to accept any parent. Only needed with --browse-origin behind a proxy; empty = derive from --addr (local)
 ```
 
 ## Global Flags

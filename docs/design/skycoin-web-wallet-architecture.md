@@ -110,7 +110,8 @@ use the same wallet lib, so this one change fixes both.
 - Custody axis browser|disk|remote, capability-gated; **default browser**.
 - Wallet-dir lives in the GUI Storage section, revealed only in disk mode; it is a
   **seed-wallet store** (one dir, N seed files), never per-coin.
-- Frontend serve is a CLI/config knob (`--wallet`), not a GUI self-toggle.
+- The wallet is a page of the dashboard (`#/wallet`), always served; the
+  `--wallet` serve knob went with the separately served `/wallet/` page.
 - `disk` selection requires an explicit "start the wallet server" confirmation
   (it flips the trust model).
 - `hv serve` MAY offer disk (it has a FS) but defaults to browser to keep the

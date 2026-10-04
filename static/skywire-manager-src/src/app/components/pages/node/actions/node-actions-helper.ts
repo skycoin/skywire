@@ -15,6 +15,7 @@ import { SelectableOption, SelectOptionComponent } from 'src/app/components/layo
 import { MenuOptionData } from 'src/app/components/layout/top-bar/top-bar.component';
 import { StorageService } from 'src/app/services/storage.service';
 import { NodeLogsComponent } from './node-logs/node-logs.component';
+import { ptyUrl } from 'src/app/utils/pty-url';
 
 /**
  * Helper object for managing the options shown in the menu while in the node details page.
@@ -169,9 +170,7 @@ export class NodeActionsHelper {
     const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'actions.update.confirmation');
 
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      const protocol = window.location.protocol;
-      const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8000');
-      window.open(protocol + '//' + hostname + '/pty/' + this.currentNodeKey + '?commands=update', '_blank', 'noopener noreferrer');
+      window.open(ptyUrl(this.currentNodeKey, '?commands=update'), '_blank', 'noopener noreferrer');
 
       confirmationDialog.close();
     });
@@ -208,9 +207,7 @@ export class NodeActionsHelper {
     */
 
     // Open the complete terminal in a new tab.
-    const protocol = window.location.protocol;
-    const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8000');
-    window.open(protocol + '//' + hostname + '/pty/' + this.currentNodeKey, '_blank', 'noopener noreferrer');
+    window.open(ptyUrl(this.currentNodeKey), '_blank', 'noopener noreferrer');
   }
 
   /**
