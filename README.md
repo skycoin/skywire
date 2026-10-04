@@ -116,57 +116,44 @@ else follows.
 
 ## How Skywire compares
 
-### Overlay networks
+| | Dial by key | No open port | Multi-hop | Multipath | Carries IP | Serve by key | No central service |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| **Skywire** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ ¹ |
+| [Tor](https://www.torproject.org/) | ✓ | ✓ | ✓ | ✓ ² | ✗ | ✓ | ✗ |
+| [I2P](https://geti2p.net/) | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ |
+| [Lokinet](https://lokinet.org/) | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
+| [cjdns](https://github.com/cjdelisle/cjdns) | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
+| [Yggdrasil](https://yggdrasil-network.github.io/) | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
+| [Reticulum](https://reticulum.network/) | ✓ | ✓ | ✓ | ✗ | ✗ | ✓ | ✓ |
+| [iroh](https://www.iroh.computer/) | ✓ | ✓ | ✗ | ✗ ³ | ✗ | ✓ | ✓ |
+| [libp2p](https://libp2p.io/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✓ | ✓ |
+| [Tailscale](https://tailscale.com/) | ✗ | ✓ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| [ZeroTier](https://www.zerotier.com/) | ✗ | ✓ | ✗ | ✓ ⁴ | ✓ | ✗ | ✗ |
+| [Nebula](https://github.com/slackhq/nebula) | ✗ | ✓ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| [Nylon](https://github.com/encodeous/nylon) | ✗ | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ |
+| [WireGuard](https://www.wireguard.com/) | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ |
 
-| Project | What a peer dials | When a direct link fails | Paths | Multipath | Discovery / coordination | Focus |
-|---|---|---|---|---|---|---|
-| **Skywire** | 33-byte public key | DMSG relay; no open port on either side | Multi-hop, source-routed; route finder, local graph, or the destination's own transports | Several whole routes at once, reordered, latency-scheduled (opt-in) | Self-hostable deployment services; deployments can layer | General-purpose private overlay with managed apps |
-| [Tor](https://www.torproject.org/) | Onion address (from key), for onion services | Always relayed; a rendezvous point for onion services | Fixed 3-hop circuits | Conflux: one stream over two circuits to an exit | Fixed directory authorities | Anonymity |
-| [I2P](https://geti2p.net/) | Base32 destination (from key) | Always tunneled | Garlic-routed tunnels of configurable length | Pools of inbound and outbound tunnels | Distributed netDB (floodfill routers) | Anonymity |
-| [Lokinet](https://lokinet.org/) | `.loki` address (from key) | Always onion-routed | Onion paths through service nodes | — | Staked service nodes | Anonymity |
-| [Nym](https://nym.com/) | Nym address (from key) | Always mixed | 3-layer mixnet with cover traffic | — | Staked mix nodes | Anonymity against a global observer |
-| [cjdns](https://github.com/cjdelisle/cjdns) | IPv6 derived from key | Forwarded by mesh peers | Multi-hop mesh, DHT-routed | — | None; peering by config | Encrypted mesh IPv6 |
-| [Yggdrasil](https://yggdrasil-network.github.io/) | IPv6 derived from key | Forwarded by mesh peers | Multi-hop mesh, tree-routed | — | None; peering by config, multicast on a LAN | Encrypted mesh IPv6 |
-| [Reticulum](https://reticulum.network/) | Destination hash (from keys) | Forwarded by transport nodes | Multi-hop via transport nodes, over LoRa, packet radio, or IP | — | Announces; no central service | Mesh over mixed media; packets carry no source address |
-| [iroh](https://www.iroh.computer/) ([go-iroh](https://github.com/tmc/go-iroh)) | Ed25519 public key | Relay server (n0's or self-hosted) | Direct, or through one relay | QUIC multipath: one primary path, others on standby | Signed records via DNS (pkarr), Mainline DHT, mDNS | P2P connection library |
-| [libp2p](https://libp2p.io/) | Peer ID (key hash) plus multiaddrs | Circuit Relay v2 | Direct, or through one relay | — | Kademlia DHT, mDNS | Modular P2P library |
-| [Tailscale](https://tailscale.com/) / [Headscale](https://github.com/juanfont/headscale) | WireGuard key; IP assigned by the coordinator | DERP relay | Direct, or through one relay | — | Coordination server (Headscale is the self-hosted one) | Private network / VPN |
-| [Nebula](https://github.com/slackhq/nebula) | IP in a CA-signed certificate | Relay node (opt-in) | Direct, or through one relay | — | Lighthouses run by the operator | Private network / VPN |
-| [ZeroTier](https://www.zerotier.com/) | 40-bit address derived from key | Root servers | Direct, or through a root | Bonding across a node's interfaces | Roots plus a network controller | Virtual LAN |
-| [WireGuard](https://www.wireguard.com/) | Key plus a configured endpoint | — | One hop | — | Manual config | Point-to-point tunnel |
-| [Nylon](https://github.com/encodeous/nylon) | WireGuard key; assigned IP | Forwarded by mesh nodes | Multi-hop, Babel-routed (lowest latency) | One best path | None; routes exchanged over the tunnels | Self-healing WireGuard mesh |
-| [Pollen](https://github.com/sambigeara/pollen) | Public key (mTLS) | Relay through a node both peers reach | Direct, or through one relay | — | Gossiped CRDT; no coordinator | WASM compute mesh |
+- **Dial by key** — a peer is reached by its public key (or an address
+  derived from it), not by an IP an operator assigned.
+- **No open port** — a node behind NAT with no inbound port is still
+  reachable.
+- **Multi-hop** — traffic can be forwarded through other peers, so two
+  nodes with no direct link still connect.
+- **Multipath** — one connection's traffic travels over several paths
+  at the same time.
+- **Carries IP** — arbitrary IP traffic, as a VPN or virtual interface.
+- **Serve by key** — a local service can be published at the node's key.
+- **No central service** — runs with no operator-run discovery or
+  coordination server.
 
-The closest designs are the key-addressed meshes (cjdns, Yggdrasil,
-Reticulum) and iroh. Skywire differs from them in three ways:
+¹ Each deployment runs discovery, route-finding and relay services,
+but anyone can run a deployment.
 
-- **A relay and multi-hop routes, both.** The meshes forward through
-  other peers, but only along the peering links that exist; iroh,
-  libp2p and the VPNs relay, but never route through other peers.
-  Skywire has both: DMSG reaches any key with no peering path, and
-  Skynet routes multi-hop over real transports on top of it.
-- **Multipath across whole routes.** The mux sends one stream over
-  several disjoint multi-hop routes at once, with reordering,
-  selective acknowledgment, and per-route loss recovery. By contrast,
-  ZeroTier bonds a node's interfaces, iroh keeps standby paths behind
-  one active path, and Tor's Conflux splits a stream over two circuits
-  to one exit.
-- **Path construction is pluggable.** Routes come from a route
-  finder, from the transport graph computed locally, or from the
-  destination's own transport list. They are not fixed at three hops
-  (Tor), not emergent from the mesh (cjdns, Yggdrasil), and not
-  pooled (mixnets).
+² Conflux splits one stream over two circuits to the same exit.
 
-### Beyond the transport
+³ iroh keeps standby paths behind a single active one.
 
-| Skywire feature | Closest equivalents | What differs |
-|---|---|---|
-| DMSG relay between clients | Tor rendezvous points, libp2p Circuit Relay v2, TURN, Signal's servers | A general-purpose stream relay keyed by public key, and the substrate for Skywire's own control plane |
-| Port forwarding and reverse proxy | `ssh -L` / `ssh -R`, Tailscale Serve and Funnel, ngrok, Cloudflare Tunnel | Addressed by public key over Skynet routes or DMSG; no provider, public IP, or DNS |
-| SOCKS5 resolvers and mail bridge | I2P's HTTP proxy (the inspiration), Tor's SOCKS proxy, IPFS gateways, Matrix bridges | Subsystems of the visor, sharing its identity and encryption |
-| Remote shell, activity monitor, cluster UI | Tailscale SSH, Teleport, SSH through a bastion with htop | Subcommands of one CLI, reaching any visor by key; no SSH key infrastructure, tunneling agent, or provider account |
-| Managed apps (VPN, SOCKS5, skychat) | I2P's bundled apps (the closest), Tor Browser and OnionShare, Session on Lokinet | The visor launches, supervises, and registers the apps; the others ship them as separate projects |
-| Private and layered deployments | Headscale, Nebula lighthouses, Matrix homeservers | Deployments compose: one can layer on top of the public network instead of replacing it |
+⁴ Bonding across a node's own network interfaces.
 
 ## Skywire Control and Data Planes
 
