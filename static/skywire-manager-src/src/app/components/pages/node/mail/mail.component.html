@@ -1,0 +1,146 @@
+@if (node) {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container overflow">
+      <div class="mail-head">
+        <span class="section-title">{{ 'mail.title' | translate }}</span>
+        @if (status) {
+          <span class="mail-state" [class.on]="status.running">
+            {{ (status.running ? 'mail.running' : (status.enabled ? 'mail.not-running' : 'mail.off')) | translate }}
+          </span>
+        }
+      </div>
+
+      @if (statusError) {
+        <p class="mail-error">{{ statusError }}</p>
+      }
+      @if (status) {
+        @if (status.reason) {
+          <p class="dim small">{{ status.reason }}</p>
+        }
+        <div class="mail-addrs small">
+          @if (status.address) {
+            <div><span class="dim">{{ 'mail.address' | translate }}</span>
+              <span class="mono addr" (click)="copy(status.address)" [title]="'mail.copy' | translate">{{ status.address }}</span></div>
+          }
+          @if (status.address_dmsg) {
+            <div><span class="dim">{{ 'mail.address-dmsg' | translate }}</span>
+              <span class="mono addr" (click)="copy(status.address_dmsg)" [title]="'mail.copy' | translate">{{ status.address_dmsg }}</span></div>
+          }
+        </div>
+      }
+
+      <div class="mail-bar">
+        <button mat-stroked-button [class.sel]="view === 'list' && folder === 'INBOX'" (click)="showFolder('INBOX')">
+          {{ 'mail.inbox' | translate }}@if (status?.unread) { ({{ status.unread }}) }
+        </button>
+        <button mat-stroked-button [class.sel]="view === 'list' && folder === 'Sent'" (click)="showFolder('Sent')">{{ 'mail.sent' | translate }}</button>
+        <button mat-stroked-button [class.sel]="view === 'compose'" (click)="compose()">{{ 'mail.compose' | translate }}</button>
+        <span class="spacer"></span>
+        <button mat-stroked-button [class.sel]="view === 'settings'" (click)="view = 'settings'">{{ 'mail.settings' | translate }}</button>
+      </div>
+
+      @if (view === 'list') {
+        @if (loadingList && !list.length) {
+          <div class="loading-row"><mat-spinner [diameter]="16"></mat-spinner></div>
+        } @else if (!list.length) {
+          <p class="dim">{{ (folder === 'Sent' ? 'mail.empty-sent' : 'mail.empty-inbox') | translate }}</p>
+        } @else {
+          <table class="responsive-table-translucid mail-list">
+            <tr>
+              <th>{{ (folder === 'Sent' ? 'mail.to' : 'mail.from') | translate }}</th>
+              <th>{{ 'mail.subject' | translate }}</th>
+              <th>{{ 'mail.date' | translate }}</th>
+            </tr>
+            @for (m of list; track m.id) {
+              <tr class="mail-row" [class.unread]="!m.seen && folder === 'INBOX'" (click)="open(m)">
+                <td class="mono small who">
+                  {{ folder === 'Sent' ? m.to : m.from }}
+                  @if (m.from_verified && folder === 'INBOX') { <span class="ok" [title]="'mail.verified' | translate">✓</span> }
+                </td>
+                <td>{{ m.subject || ('mail.no-subject' | translate) }}</td>
+                <td class="small nowrap">{{ m.date | date: 'short' }}</td>
+              </tr>
+            }
+          </table>
+        }
+      }
+
+      @if (view === 'message') {
+        @if (!message) {
+          <div class="loading-row"><mat-spinner [diameter]="16"></mat-spinner></div>
+        } @else {
+          <div class="mail-msg">
+            <h3>{{ message.subject || ('mail.no-subject' | translate) }}</h3>
+            <div class="small"><span class="dim">{{ 'mail.from' | translate }}</span> <span class="mono">{{ message.from }}</span>
+              @if (message.from_verified) { <span class="ok">✓ {{ 'mail.verified' | translate }}</span> }
+            </div>
+            <div class="small"><span class="dim">{{ 'mail.to' | translate }}</span> <span class="mono">{{ message.to }}</span></div>
+            @if (message.cc) {
+              <div class="small"><span class="dim">Cc</span> <span class="mono">{{ message.cc }}</span></div>
+            }
+            <div class="small dim">{{ message.date }}</div>
+            @if (message.from_html) {
+              <p class="small dim">{{ 'mail.from-html' | translate }}</p>
+            }
+            <pre class="mail-body">{{ message.text }}</pre>
+            @if (message.attachments?.length) {
+              <div class="small">
+                <span class="dim">{{ 'mail.attachments' | translate }}</span>
+                @for (a of message.attachments; track $index) {
+                  <a class="attach" [href]="attachmentHref($index)" download>{{ a.name }} ({{ size(a.size) }})</a>
+                }
+              </div>
+            }
+            <div class="mail-bar">
+              <button mat-stroked-button (click)="reply()">{{ 'mail.reply' | translate }}</button>
+              <a mat-stroked-button [href]="rawHref()" download>{{ 'mail.raw' | translate }}</a>
+              <span class="spacer"></span>
+              <button mat-stroked-button color="warn" (click)="remove()">{{ 'mail.delete' | translate }}</button>
+            </div>
+          </div>
+        }
+      }
+
+      @if (view === 'compose') {
+        <div class="mail-compose">
+          <label>{{ 'mail.to' | translate }}
+            <input class="mono" [(ngModel)]="draft.to" placeholder="anyone@<pk>.skynet" /></label>
+          <label>Cc <input class="mono" [(ngModel)]="draft.cc" /></label>
+          <label>{{ 'mail.subject' | translate }} <input [(ngModel)]="draft.subject" /></label>
+          <textarea rows="12" [(ngModel)]="draft.body"></textarea>
+          <div class="small">
+            <input type="file" multiple (change)="pickFiles($event)" />
+            @for (f of draft.files; track $index) {
+              <span class="attach">{{ f.name }} ({{ size(f.size) }}) <a href="javascript:void(0)" (click)="dropFile($index)">×</a></span>
+            }
+          </div>
+          @for (r of sendReport; track r.rcpt) {
+            <div class="small" [class.mail-error]="r.error">{{ r.rcpt }}: {{ r.error || ('mail.delivered-via' | translate) + ' ' + r.via }}</div>
+          }
+          <div class="mail-bar">
+            <button mat-flat-button color="primary" [disabled]="sending" (click)="send()">
+              {{ (sending ? 'mail.sending' : 'mail.send') | translate }}
+            </button>
+          </div>
+        </div>
+      }
+
+      @if (view === 'settings' && status) {
+        <div class="mail-settings">
+          <div class="mail-bar">
+            <button mat-stroked-button (click)="toggleEnabled()">
+              {{ (status.enabled ? 'mail.turn-off' : 'mail.turn-on') | translate }}
+            </button>
+            <span class="small dim">{{ 'mail.usage' | translate }} {{ size(status.usage || 0) }}
+              @if (status.limits?.max_total_size > 0) { / {{ size(status.limits.max_total_size) }} }
+            </span>
+          </div>
+          <label class="small">{{ 'mail.whitelist' | translate }}</label>
+          <textarea class="mono" rows="5" [(ngModel)]="whitelistText"></textarea>
+          <p class="small dim">{{ 'mail.whitelist-help' | translate }}</p>
+          <button mat-stroked-button (click)="saveWhitelist()">{{ 'mail.save' | translate }}</button>
+        </div>
+      }
+    </div>
+  </div>
+}
