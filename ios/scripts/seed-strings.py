@@ -14,7 +14,8 @@ The keys are found the way StringCatalogTests (SkywireTests) finds them: a
 lower-case, underscore-style literal on a line that calls Text, Label,
 Button, Toggle, Section, Picker, TextField, LocalizedStringKey, L10n.text,
 L10n.format or L10n.key, outside comments, and not a systemImage/systemName
-or a case label.
+or a case label. A literal anywhere else that names a known string is an
+error: write it through L10n.key or L10n.text so the scan sees it.
 
 Run it after adding or removing a string in the app, then review the diff:
   ios/scripts/seed-strings.py
@@ -37,17 +38,33 @@ TRIGGER = re.compile(
     r"|L10n\.(?:text|format|key)|navigationTitle)\("
 )
 LITERAL = re.compile(r'(?<!systemImage: )(?<!systemName: )"([a-z][a-z0-9_]*)"(?!\s*:)')
+# The first branch of `L10n.key(flag ? "a" : "b")`, which LITERAL takes for a
+# label. A bare Text(flag ? "a" : "b") is a verbatim String, not a key.
+TERNARY = re.compile(r'L10n\.(?:text|format|key)\([^"]*\? "([a-z][a-z0-9_]*)"\s*:')
+ANY_LITERAL = re.compile(r'"([a-z][a-z0-9_]*)"')
+
+
+def source_lines():
+    for path in sorted(glob.glob(os.path.join(APP, "**", "*.swift"), recursive=True)):
+        with open(path, encoding="utf-8") as source:
+            for number, line in enumerate(source, 1):
+                if not line.lstrip().startswith("//"):
+                    yield f"{os.path.relpath(path, ROOT)}:{number}", line
 
 
 def used_keys():
     keys = set()
-    for path in glob.glob(os.path.join(APP, "**", "*.swift"), recursive=True):
-        with open(path, encoding="utf-8") as source:
-            for line in source:
-                if line.lstrip().startswith("//") or not TRIGGER.search(line):
-                    continue
-                keys.update(LITERAL.findall(line))
+    for _, line in source_lines():
+        if TRIGGER.search(line):
+            keys.update(LITERAL.findall(line))
+            keys.update(TERNARY.findall(line))
     return keys
+
+
+def unseen_keys(known, used):
+    """Literals that name a known string but that the scan does not see."""
+    return [f"{where}: {key}" for where, line in source_lines()
+            for key in ANY_LITERAL.findall(line) if key in known and key not in used]
 
 
 def android_text(element):
@@ -123,8 +140,14 @@ def main():
     with open(SUPPLEMENT, encoding="utf-8") as f:
         supplement = json.load(f)
     android = {language: android_catalogue(folder) for language, folder in LANGUAGES.items()}
+    used = used_keys()
+    unseen = unseen_keys(set(supplement["Localizable"]) | set(android["en"]), used)
+    if unseen:
+        print("keys the scan does not see: " + ", ".join(unseen), file=sys.stderr)
+        print("write them through L10n.key or L10n.text", file=sys.stderr)
+        sys.exit(1)
     strings, missing = {}, []
-    for key in sorted(used_keys()):
+    for key in sorted(used):
         if key in supplement["Localizable"]:
             strings[key] = entry(supplement["Localizable"][key])
         elif key in android["en"]:
