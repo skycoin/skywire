@@ -16,6 +16,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -262,6 +263,10 @@ func (hv *Hypervisor) serveInjectedIndex(w http.ResponseWriter, r *http.Request,
 	ver := hv.servedUIVersion()
 	inject := []byte(`<script>window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;</script>` +
 		`<script>` + uiAutoReloadJS + `</script>`)
+	// A wasm core serving its own dashboard says so, for the copy in hv-tour.js.
+	if runtime.GOOS == "js" {
+		inject = append(inject, []byte(`<script>window.SKYWIRE_HV_MODE="wasm";</script>`)...)
+	}
 	out := bytes.Replace(b, []byte("</body>"), append(inject, []byte("</body>")...), 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")

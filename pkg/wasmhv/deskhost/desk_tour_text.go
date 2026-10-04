@@ -15,23 +15,32 @@ import (
 //go:embed desk-tour.md
 var deskTourMD string
 
-// tourApps is the wiring: the desk app each step opens, by the step's id in
-// desk-tour.md. Every step is listed, "" where the step opens nothing, so a
-// mistyped id in either file is caught by TestDeskTourTextMatchesWiring.
-var tourApps = map[string]string{
-	"intro":     "",
-	"launcher":  "",
-	"browser":   "browser",
-	"dashboard": "",
-	"console":   "console",
-	"files":     "files",
-	"mail":      "mail",
-	"identity":  "identity",
-	"pair":      "pair",
-	"settings":  "settings",
-	"install":   "install", // installAppName, which is only defined under js
-	"close":     "",
+// tourApps is the wiring: the desk app each step opens and its arguments, by
+// the step's id in desk-tour.md. Every step is listed, nil where the step opens
+// nothing, so a mistyped id in either file is caught by
+// TestDeskTourTextMatchesWiring. The launcher step opens the taskbar menu
+// instead, in desk_tour_js.go.
+var tourApps = map[string][]string{
+	"intro":     nil,
+	"launcher":  nil,
+	"browser":   {"browser", "https://ip.skycoin.com/"},
+	"dashboard": {"browser", dashboardURL},
+	"console":   {"console"},
+	"files":     {"files"},
+	"mail":      {"browser", mailURL},
+	"identity":  {"identity"},
+	"pair":      {"pair"},
+	"settings":  {"settings"},
+	"install":   nil, // its app is the browser's install prompt, which Next must not fire
+	"close":     nil,
 }
+
+// The dashboard's addresses on the virtual loopback. embed=1 in the query tells
+// the hypervisor the page is framed, and in the hash it drops the tab chrome.
+const (
+	dashboardURL = "http://vnet:8001/?embed=1#/?embed=1"
+	mailURL      = "http://vnet:8001/?embed=1#/nodes/local/mail?embed=1"
+)
 
 // tourText is one step's words, rendered to the small HTML vocabulary the desk
 // panes use.
