@@ -44,9 +44,13 @@ func (t *tunDevice) Read(buf []byte) (int, error) {
 	return sizes[0], nil
 }
 
+// Write writes one packet. tun.Device.Write returns a count of packets, not
+// bytes, and io.Copy took that 1 for a short write and stopped the client.
 func (t *tunDevice) Write(buf []byte) (int, error) {
-	packets := [][]byte{buf}
-	return t.tun.Write(packets, 0) // omit sizes
+	if _, err := t.tun.Write([][]byte{buf}, 0); err != nil {
+		return 0, err
+	}
+	return len(buf), nil
 }
 
 func (t *tunDevice) Close() error {

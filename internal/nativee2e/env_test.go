@@ -21,6 +21,7 @@
 package nativee2e
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"embed"
@@ -45,6 +46,7 @@ const (
 	hypervisorA = "http://127.0.0.1:8000"
 	dmsgDiscURL = "http://127.0.0.1:9090"
 	socksAddr   = "127.0.0.1:1080" // skysocks-client SOCKS5 listener (default)
+	stcpAddrB   = "127.0.0.1:7778" // visor-B skywire-tcp listening_address
 	// egressTarget is an in-network HTTP service reachable from the SERVER visor's
 	// egress (localhost) — the transport-discovery health endpoint. A proxied GET
 	// that returns this proves traffic crossed the skywire route and egressed at B.
@@ -136,44 +138,6 @@ func setup() error {
 		dumpLog("visorB")
 		dumpLog("svc")
 		return err
-	}
-	// Warm-up: the dmsg backbone + route-finder/setup-node need a little time to
-	// settle on a freshly-started single-server loopback deployment before route
-	// setup (skysocks/vpn) is reliable — same cold-start the docker e2e absorbs
-	// with staged healthchecks. A fixed pause here keeps the route-dependent tests
-	// from racing the still-churning network.
-	fmt.Println("nativee2e: visors ready; warming up the network (90s)...")
-	time.Sleep(90 * time.Second)
-
-	// Post-warmup liveness: a cold-start visor can pass waitVisor and then die
-	// during the warmup (a transport module failing late on a degraded host,
-	// seen on the Windows runner as visor-B's RPC going refused right at test
-	// time). Re-verify both are still up and relaunch any that aren't, with a
-	// short re-warm — the backstop that keeps a mid-warmup death from failing
-	// the whole suite.
-	for round := 0; round < 2; round++ {
-		restarted := false
-		for _, v := range []struct{ name, cfg, rpc string }{
-			{"visorA", "visorA.json", rpcA},
-			{"visorB", "visorB.json", rpcB},
-		} {
-			if visorAlive(v.rpc) {
-				continue
-			}
-			fmt.Printf("nativee2e: %s went down after warmup — relaunching\n", v.name)
-			killProc(v.name)
-			if err := launchVisor(v.name, v.cfg, v.rpc); err != nil {
-				dumpLog(v.name)
-				dumpLog("svc")
-				return err
-			}
-			restarted = true
-		}
-		if !restarted {
-			break
-		}
-		fmt.Println("nativee2e: re-warming after a visor relaunch (30s)...")
-		time.Sleep(30 * time.Second)
 	}
 	fmt.Println("nativee2e: deployment + 2 visors ready")
 	return nil
@@ -289,7 +253,7 @@ func teardown() {
 			_ = p.Process.Kill()
 		}
 	}
-	if env.work != "" {
+	if env.work != "" && os.Getenv("SKYWIRE_NATIVEE2E_KEEP") == "" {
 		_ = os.RemoveAll(env.work)
 	}
 }
@@ -418,12 +382,6 @@ func waitDmsgDisc(timeout time.Duration) error {
 	return fmt.Errorf("dmsg-discovery not reachable on %s", dmsgDiscURL)
 }
 
-// visorAlive is a quick liveness probe: the visor's RPC answers with a PK.
-func visorAlive(rpc string) bool {
-	out, err := cli("visor", "--rpc", rpc, "pk")
-	return err == nil && has66Hex(out)
-}
-
 // waitVisor polls the visor RPC for its PK, then for at least one dmsg session,
 // then for the app launcher to be initialized. The launcher check matters: a
 // visor that aborts boot on a launcher.proc_manager module timeout (the
@@ -513,4 +471,27 @@ func has66Hex(s string) bool {
 		}
 	}
 	return false
+}
+
+// dumpMatching prints up to max lines of a process log that contain needle,
+// scanning the whole file. dumpLog shows only the two ends, and a failing app
+// often logs its reason in the middle.
+func dumpMatching(name, needle string, max int) {
+	f, err := os.Open(filepath.Join(env.work, name+".log"))
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	var hits []string
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64<<10), 1<<20)
+	for sc.Scan() {
+		if l := sc.Text(); strings.Contains(strings.ToLower(l), needle) {
+			hits = append(hits, l)
+			if len(hits) > max {
+				hits = hits[1:]
+			}
+		}
+	}
+	fmt.Fprintf(os.Stderr, "\n===== %s.log lines with %q (last %d) =====\n%s\n", name, needle, max, strings.Join(hits, "\n"))
 }

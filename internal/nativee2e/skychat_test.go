@@ -38,17 +38,10 @@ const (
 // dmsg is used (not skynet) so the DM needs no pre-added route/transport
 // — the dmsg session between the two visors carries it directly.
 func TestSkychatSendReceive(t *testing.T) {
-	// Skipped on Windows: the GitHub Windows runner's networking degrades the
-	// visor's transport layer — the address resolver rejects the runner's
-	// virtual-adapter IPs ("swtr: Invalid IP address in request: [10.x 172.x]"),
-	// which collapses a late-started app's app<->visor connection ~160ms after
-	// it comes up. The chat-app itself starts cleanly and binds its HTTP surface
-	// (verified from its logs); it's the runner's network the visor can't hold a
-	// connection over. dmsg on Windows is otherwise fine (skysocks/vpn pass), and
-	// the full send->receive path is covered by the darwin native-e2e + docker
-	// e2e lanes, so this is a runner-environment skip, not a skychat gap.
+	// On the windows runner visor B's skychat app starts but never serves its
+	// HTTP surface (#5391 CI). darwin and linux cover the send and receive path.
 	if runtime.GOOS == "windows" {
-		t.Skip("skychat native e2e: Windows runner transport degradation collapses the app<->visor connection; covered by darwin native-e2e + docker e2e")
+		t.Skip("skychat on the windows runner never serves on its --addr; covered by darwin and linux")
 	}
 	// skychat is auto_start:false in the configs (like skysocks-client /
 	// vpn-client) so it stays off the visor's fragile cold-start dmsg
