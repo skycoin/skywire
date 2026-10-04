@@ -4,12 +4,15 @@ package visor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -18,14 +21,15 @@ import (
 
 const configRefreshInterval = 1 * time.Hour
 
-// startConfigRefresh periodically refreshes dynamic key sets from the conf service.
-// This allows route_setup_nodes, transport_setup, and survey_whitelist to be
-// updated without restarting the visor or regenerating the config.
-//
-// Only the deployment-managed fields are touched. User-added keys live in
-// the separate user_route_setup_nodes / user_transport_setup / user_survey_whitelist
-// fields and are merged at use time via the Effective* accessors. This preserves
-// any manually added keys across refreshes.
+// deploymentServicesFile is where, under local_path, the visor keeps the
+// services config it last applied. It is how a later refresh tells a value
+// the deployment set (still equal to it) from one the operator set.
+const deploymentServicesFile = "deployment_services.json"
+
+// startConfigRefresh periodically fetches the deployment's services config
+// from the conf service over dmsg-HTTP and applies it. It is the fallback
+// for the conf service's CXO feed (conf_cxo.go), which delivers the same
+// document as soon as it changes; the two share applyDeploymentServices.
 func (v *Visor) startConfigRefresh(ctx context.Context) {
 	log := v.MasterLogger().PackageLogger("config_refresh")
 
@@ -44,132 +48,146 @@ func (v *Visor) startConfigRefresh(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			v.refreshKeySets(ctx, log)
+			if services := v.fetchServicesConfig(ctx, log); services != nil {
+				v.applyDeploymentServices(services, "conf service (dmsg-http)", log)
+			}
 		}
 	}
 }
 
-func (v *Visor) refreshKeySets(ctx context.Context, log *logging.Logger) {
-	services := v.fetchServicesConfig(ctx, log)
-	if services == nil {
+// applyDeploymentServices applies next, the deployment's current services
+// config, to the visor config (see visorconfig.ApplyDeploymentServices),
+// writes the config file when anything changed, and records next as the
+// config last applied. The deployment's dmsg servers go into the dmsg-server
+// cache, which bootstrap merges over the configured list.
+//
+// The key sets take effect at once; their readers go through the Effective*
+// accessors on every use. A changed service address is saved but its client
+// was built at startup, so it takes effect when the visor restarts.
+func (v *Visor) applyDeploymentServices(next *visorconfig.Services, source string, log *logging.Logger) {
+	v.deploySvcMu.Lock()
+	defer v.deploySvcMu.Unlock()
+
+	next.BackfillClearnetFromDmsg()
+	path := filepath.Join(v.conf.LocalPath, deploymentServicesFile)
+	prev := v.deploySvcLast
+	if prev == nil {
+		prev = loadDeploymentServices(path, log)
+	}
+
+	if changed := v.conf.ApplyDeploymentServices(next, prev); len(changed) > 0 {
+		log.WithField("source", source).WithField("fields", strings.Join(changed, ",")).
+			Info("Deployment services config updated; changed service addresses take effect after restart")
+		if err := v.conf.Flush(); err != nil && !errors.Is(err, visorconfig.ErrNoConfigPath) {
+			log.WithError(err).Warn("Failed to write the updated config")
+		}
+	}
+
+	if v.dmsgServersCache != nil {
+		for _, e := range deployment.DmsgServerEntriesToDisc(next.DmsgServers) {
+			if e.Server == nil || e.Server.Address == "" {
+				continue
+			}
+			if err := v.dmsgServersCache.Set(e); err != nil {
+				log.WithError(err).Debug("Failed to cache a deployment dmsg server")
+			}
+		}
+	}
+
+	if prev == nil || !servicesEqual(prev, next) {
+		saveDeploymentServices(path, next, log)
+	}
+	v.deploySvcLast = next
+}
+
+// loadDeploymentServices reads the services config last applied, or returns
+// nil when none has been.
+func loadDeploymentServices(path string, log *logging.Logger) *visorconfig.Services {
+	data, err := os.ReadFile(path) //nolint:gosec
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			log.WithError(err).Debug("Failed to read the last applied services config")
+		}
+		return nil
+	}
+	var s visorconfig.Services
+	if err := json.Unmarshal(data, &s); err != nil {
+		log.WithError(err).Debug("Failed to parse the last applied services config")
+		return nil
+	}
+	return &s
+}
+
+func saveDeploymentServices(path string, s *visorconfig.Services, log *logging.Logger) {
+	data, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
 		return
 	}
-
-	updated := false
-
-	// Update route setup nodes
-	if len(services.RouteSetupNodes) > 0 && !pubKeysEqual(v.conf.Routing.RouteSetupNodes, services.RouteSetupNodes) {
-		log.Infof("Updating route_setup_nodes: %d keys", len(services.RouteSetupNodes))
-		v.conf.Routing.RouteSetupNodes = services.RouteSetupNodes
-		updated = true
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		log.WithError(err).Debug("Failed to save the applied services config")
+		return
 	}
-
-	// Update transport setup PKs
-	if len(services.TransportSetupPKs) > 0 && !pubKeysEqual(v.conf.Transport.TransportSetupPKs, services.TransportSetupPKs) {
-		log.Infof("Updating transport_setup: %d keys", len(services.TransportSetupPKs))
-		v.conf.Transport.TransportSetupPKs = services.TransportSetupPKs
-		updated = true
-	}
-
-	// Update survey whitelist. Skipped entirely on builds that do not take the
-	// deployment's keys (the phone) — otherwise this hourly refresh would put
-	// back what generation deliberately left empty. user_survey_whitelist is a
-	// separate field and is preserved either way.
-	if visorconfig.UseDeploymentSurveyWhitelist() &&
-		len(services.SurveyWhitelist) > 0 && !pubKeysEqual(v.conf.SurveyWhitelist, services.SurveyWhitelist) {
-		log.Infof("Updating survey_whitelist: %d keys", len(services.SurveyWhitelist))
-		v.conf.SurveyWhitelist = services.SurveyWhitelist
-		updated = true
-	}
-
-	// Update GeoIP URL
-	if services.GeoIP != "" && services.GeoIP != v.conf.GeoIP {
-		log.Infof("Updating geoip: %s", services.GeoIP)
-		v.conf.GeoIP = services.GeoIP
-		updated = true
-	}
-
-	if updated {
-		log.Info("Dynamic key sets refreshed from conf service")
+	if err := os.Rename(tmp, path); err != nil {
+		log.WithError(err).Debug("Failed to save the applied services config")
 	}
 }
 
+func servicesEqual(a, b *visorconfig.Services) bool {
+	ja, errA := json.Marshal(a)
+	jb, errB := json.Marshal(b)
+	return errA == nil && errB == nil && string(ja) == string(jb)
+}
+
+// fetchServicesConfig fetches the services config from the conf service
+// over dmsg-HTTP. Deployment services are dmsg-only; there is no clearnet
+// fallback.
 func (v *Visor) fetchServicesConfig(ctx context.Context, log *logging.Logger) *visorconfig.Services {
-	// Prefer URLs from visor config; fall back to embedded deployment defaults.
-	// confDmsg goes through the shared resolver (same pick); confHTTP keeps its
-	// own deployment.ProdConf.Conf fallback (a separate clearnet-config var not in
-	// the resolver).
 	confDmsg := visorcore.ResolveServices(v.conf).ConfDmsg
-	confHTTP := v.conf.ConfService
-	if confHTTP == "" {
-		confHTTP = deployment.ProdConf.Conf
+	if confDmsg == "" || v.dmsgC == nil {
+		return nil
 	}
 
-	// Try DMSG first
-	if confDmsg != "" && v.dmsgC != nil {
-		fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
+	fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 
-		transport := dmsghttp.MakeHTTPTransport(fetchCtx, v.dmsgC)
-		client := &http.Client{Transport: transport, Timeout: 25 * time.Second}
+	transport := dmsghttp.MakeHTTPTransport(fetchCtx, v.dmsgC)
+	client := &http.Client{Transport: transport, Timeout: 25 * time.Second}
 
-		resp, err := client.Get(confDmsg)
-		if err == nil {
-			defer resp.Body.Close() //nolint:errcheck
-			return parseServicesResponse(resp.Body, log)
-		}
-		log.WithError(err).Debug("Config refresh via DMSG failed, trying HTTP")
+	resp, err := client.Get(confDmsg)
+	if err != nil {
+		log.WithError(err).Debug("Config refresh via DMSG failed")
+		return nil
 	}
-
-	// HTTP fallback
-	if confHTTP != "" {
-		client := &http.Client{Timeout: 15 * time.Second}
-		resp, err := client.Get(confHTTP) //nolint:gosec
-		if err == nil {
-			defer resp.Body.Close() //nolint:errcheck
-			return parseServicesResponse(resp.Body, log)
-		}
-		log.WithError(err).Debug("Config refresh via HTTP also failed")
-	}
-
-	return nil
-}
-
-func parseServicesResponse(body io.Reader, log *logging.Logger) *visorconfig.Services {
-	data, err := io.ReadAll(body)
+	defer resp.Body.Close() //nolint:errcheck
+	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.WithError(err).Warn("Failed to read conf service response")
 		return nil
 	}
-
-	// The conf service returns {prod: {...}, test: {...}}
-	var envServices visorconfig.EnvServices
-	if err := json.Unmarshal(data, &envServices); err != nil {
+	services, err := parseServicesConfig(data)
+	if err != nil {
 		log.WithError(err).Warn("Failed to parse conf service response")
 		return nil
 	}
-
-	var services visorconfig.Services
-	if err := json.Unmarshal(envServices.Prod, &services); err != nil {
-		log.WithError(err).Warn("Failed to parse prod services config")
-		return nil
-	}
-
-	return &services
+	return services
 }
 
-func pubKeysEqual(a, b []cipher.PubKey) bool {
-	if len(a) != len(b) {
-		return false
+// parseServicesConfig parses a services config document. The conf service
+// serves a flat Services object; the {"prod": …, "test": …} envelope of
+// older conf services is accepted too, and its prod half is used.
+func parseServicesConfig(data []byte) (*visorconfig.Services, error) {
+	var env visorconfig.EnvServices
+	if err := json.Unmarshal(data, &env); err == nil && len(env.Prod) > 0 {
+		data = env.Prod
 	}
-	set := make(map[cipher.PubKey]struct{}, len(a))
-	for _, k := range a {
-		set[k] = struct{}{}
+	var services visorconfig.Services
+	if err := json.Unmarshal(data, &services); err != nil {
+		return nil, err
 	}
-	for _, k := range b {
-		if _, ok := set[k]; !ok {
-			return false
-		}
+	if services.ConfDmsg == "" && services.DmsgDiscoveryDmsg == "" && services.DmsgDiscovery == "" &&
+		len(services.DmsgServers) == 0 {
+		return nil, errors.New("no deployment services in the document")
 	}
-	return true
+	return &services, nil
 }
