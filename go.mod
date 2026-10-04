@@ -13,7 +13,7 @@ require (
 	github.com/0magnet/calvin v0.0.0
 	github.com/0magnet/coloredcobra v1.0.4-0.20260908180055-b9d8b508df51
 	github.com/0magnet/cosmos-go v0.0.0
-	github.com/0magnet/desk v0.0.0
+	github.com/0magnet/desk v0.0.2
 	github.com/0magnet/desk/panes v0.0.0
 	github.com/0magnet/gobrpc v0.0.0
 	github.com/0magnet/golang-ipc v1.2.5-0.20260915170035-de9342a68204
