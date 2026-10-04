@@ -251,13 +251,6 @@ func (s *statusWriter) WriteHeader(code int) {
 	s.ResponseWriter.WriteHeader(code)
 }
 
-func (s *statusWriter) Write(b []byte) (int, error) {
-	if s.status == 0 {
-		s.status = http.StatusOK
-	}
-	return s.ResponseWriter.Write(b)
-}
-
 func (s *statusWriter) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
 func loggingMiddleware(next http.Handler) http.Handler {

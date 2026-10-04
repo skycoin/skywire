@@ -666,13 +666,6 @@ func (s *statusWriter) WriteHeader(code int) {
 	s.ResponseWriter.WriteHeader(code)
 }
 
-func (s *statusWriter) Write(b []byte) (int, error) {
-	if s.status == 0 {
-		s.status = http.StatusOK
-	}
-	return s.ResponseWriter.Write(b)
-}
-
 func (s *statusWriter) Flush() { flush(s.ResponseWriter) }
 
 func (s *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
