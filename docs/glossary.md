@@ -46,6 +46,11 @@ codebase evolved; this is the reference for "what we mean when we say X."
 - **resolving proxy** — the embedded SOCKS5 proxy (`dmsgweb` :4445 /
   `skynetweb` :4446) that resolves `<name>.dmsg` / `.skynet` hostnames and
   dials them over the mesh. → `pkg/dmsgweb`, `pkg/skynetweb`
+- **local service** — an in-process handler an app on this visor reaches by
+  dialing its own visor's PK, served over a pipe with no port and no mesh hop.
+  Each resolving proxy is published as one, so skysocks-client's :1080 answers
+  mesh names itself instead of needing the resolvers chained in front of it.
+  → `pkg/app/appnet/local_service.go`
 - **coin backend / dmsg backend** — any service reached over dmsg by
   `<pk>:<port>` (a coin node, a wallet service, an Electrum server…). The
   wallet's node config is really a *backend* config.

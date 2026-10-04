@@ -61,17 +61,44 @@ func (s *splitListener) run(serveHTTP func(net.Conn)) {
 	}
 }
 
-func (s *splitListener) route(c net.Conn, serveHTTP func(net.Conn)) {
+// ServeConn applies the same protocol split to one already-accepted connection,
+// for a caller with no listener to wrap: the resolvers' in-process local-service
+// path, where a conn arrives over net.Pipe rather than from Accept. The conn is
+// handed to serveSOCKS5 or serveHTTP, and closed here only when its first byte
+// never arrives.
+func ServeConn(c net.Conn, serveSOCKS5, serveHTTP func(net.Conn)) {
+	pc, socks, ok := sniff(c)
+	if !ok {
+		return
+	}
+	if socks {
+		serveSOCKS5(pc)
+		return
+	}
+	serveHTTP(pc)
+}
+
+// sniff peeks the first byte to tell a SOCKS5 greeting from an HTTP request,
+// returning the conn with that byte pushed back. ok is false when the peek
+// failed, in which case the conn is already closed.
+func sniff(c net.Conn) (pc net.Conn, socks, ok bool) {
 	_ = c.SetReadDeadline(time.Now().Add(sniffTimeout)) //nolint:errcheck // unsupported on some conns
 	br := bufio.NewReader(c)
 	first, err := br.Peek(1)
 	_ = c.SetReadDeadline(time.Time{}) //nolint:errcheck
 	if err != nil {
 		_ = c.Close() //nolint:errcheck
+		return nil, false, false
+	}
+	return &peekedConn{Conn: c, r: br}, first[0] == socks5Version, true
+}
+
+func (s *splitListener) route(c net.Conn, serveHTTP func(net.Conn)) {
+	pc, socks, ok := sniff(c)
+	if !ok {
 		return
 	}
-	pc := &peekedConn{Conn: c, r: br}
-	if first[0] != socks5Version {
+	if !socks {
 		serveHTTP(pc)
 		return
 	}

@@ -31,6 +31,10 @@ type RPCIngressClient interface {
 	// An empty snapshot (no error) means the visor has no data; the caller
 	// then renders its own local view.
 	ProxyStatus() (proxystatus.Snapshot, error)
+	// LocalServices lists the in-process services on this app's own visor that
+	// it can dial over this same data plane — the resolving proxies, each with
+	// the hostname suffixes it answers for.
+	LocalServices() ([]appnet.LocalService, error)
 	Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error)
 	// DialWithOptions asks the server to dial req.Addr with the per-call
 	// options req carries — mux route counts, min-hops (symmetric and
@@ -108,6 +112,16 @@ func (c *rpcIngressClient) SetError(appErr string) error {
 // SetAppPort sets port of an app.
 func (c *rpcIngressClient) SetAppPort(port routing.Port) error {
 	return c.rpc.Call(c.formatMethod("SetAppPort"), &port, nil)
+}
+
+// LocalServices asks the visor which in-process services this app can reach
+// on its own PK, with the hostname suffixes each answers for.
+func (c *rpcIngressClient) LocalServices() ([]appnet.LocalService, error) {
+	var resp []appnet.LocalService
+	if err := c.rpc.Call(c.formatMethod("LocalServices"), &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 // ProxyStatus sends `ProxyStatus` command to the server.
