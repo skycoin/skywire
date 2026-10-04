@@ -12,7 +12,7 @@ xterm.js is the front-end terminal component used by VS Code, Hyper and Theia �
 
 - **Terminal apps just work**: the full escape-sequence machinery of xterm.js is ported — cursor addressing, scroll regions, the alternate screen buffer, insert/delete, SGR text styling (16/256/truecolor, underline styles), charsets, device reports (DA/DSR/DECRQM/DECRQSS) and mouse tracking (X10/VT200/DRAG/ANY with SGR encoding) for curses apps.
 - **Headless-capable core**: the `vt` subpackage (parser, buffers, input handler) is pure Go with zero dependencies — it builds natively, so terminal semantics are tested with plain `go test`, no browser needed. Use it standalone to interpret pty output server-side.
-- **Rich Unicode support**: CJK wide characters, combining characters, wcwidth tables ported from the UnicodeV6 provider.
+- **Rich Unicode support**: CJK wide characters, combining characters, wcwidth tables ported from the UnicodeV6 provider, and opt-in grapheme clustering (mode 2027, UAX #29 on Unicode 17 tables) for ZWJ emoji, flags and conjuncts.
 - **Scrollback**: ring-buffer scrollback with reflow on resize, native scrollbar viewport in the browser layer.
 - **Self-contained**: no JS dependencies; styles are injected automatically.
 - **GPU-accelerated**: an optional WebGL2 renderer (the `addon-webgl` equivalent) draws the grid as instanced quads sampling a glyph texture atlas, with pixel-perfect procedural box drawing, block, shade and powerline glyphs. Enable with `term.EnableWebGL()`; it falls back to the DOM renderer when WebGL2 is unavailable.
@@ -68,7 +68,7 @@ tinygo build -target wasm -no-debug -o main.wasm .
 
 ### Options
 
-`xterm.New` takes `*vt.Options` (pass `nil` for defaults): dimensions, scrollback length, fonts, cursor style/blink, a `Theme` with the standard 16 colors, and more — mirroring the xterm.js options relevant to the port.
+`xterm.New` takes `*vt.Options` (pass `nil` for defaults): dimensions, scrollback length, fonts, cursor style/blink, a `Theme` with the standard 16 colors (set `Theme.Generate256` to derive colors 16–255 from them in CIELAB), and more — mirroring the xterm.js options relevant to the port.
 
 ```go
 opts := vt.NewOptions()
@@ -133,6 +133,15 @@ Copyright (c) 2017-2022, The xterm.js authors (MIT License)<br>
 Copyright (c) 2014-2016, SourceLair Private Company (MIT License)<br>
 Copyright (c) 2012-2013, Christopher Jeffrey (MIT License)<br>
 Go port copyright (c) 2026 (MIT License)
+
+## Related projects
+
+Other browser terminal emulators and terminal emulation libraries:
+
+- [ghostty-web](https://github.com/coder/ghostty-web) — Ghostty's terminal emulation compiled to WebAssembly behind an xterm.js-compatible API (MIT)
+- [wterm](https://wterm.dev/) — a DOM-rendered web terminal with a Zig/WebAssembly or Ghostty core
+- [go-te](https://github.com/rcarmo/go-te) — a VT100–VT520 terminal emulation library in Go, with pyte and esctest conformance (MIT)
+
 ## Dependency Graph
 
 Made with [goda](https://github.com/loov/goda):

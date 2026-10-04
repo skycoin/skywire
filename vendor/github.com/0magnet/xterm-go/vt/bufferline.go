@@ -1,5 +1,7 @@
 package vt
 
+import "maps"
+
 // buffer memory layout per cell (3 uint32 slots):
 //
 //	| content: wcwidth(2) comb(1) codepoint(21) | FG | BG |
@@ -13,7 +15,10 @@ const (
 
 // BufferLine is the typed-array based buffer line implementation.
 type BufferLine struct {
-	data          []uint32
+	data []uint32
+	// combined and extendedAttrs stay nil until a cell needs them. Most lines
+	// never do, and an empty map costs a few hundred bytes, which across a
+	// full scrollback is a third of the memory a terminal holds.
 	combined      map[int]string
 	extendedAttrs map[int]*ExtendedAttrs
 	Length        int
@@ -24,11 +29,9 @@ type BufferLine struct {
 // (nil = null cells).
 func NewBufferLine(cols int, fillCellData *CellData, isWrapped bool) *BufferLine {
 	line := &BufferLine{
-		data:          make([]uint32, cols*cellSize),
-		combined:      map[int]string{},
-		extendedAttrs: map[int]*ExtendedAttrs{},
-		Length:        cols,
-		IsWrapped:     isWrapped,
+		data:      make([]uint32, cols*cellSize),
+		Length:    cols,
+		IsWrapped: isWrapped,
 	}
 	cell := fillCellData
 	if cell == nil {
@@ -111,10 +114,10 @@ func (l *BufferLine) LoadCell(index int, cell *CellData) *CellData {
 // SetCell stores cell data at index.
 func (l *BufferLine) SetCell(index int, cell *CellData) {
 	if cell.Content&ContentIsCombinedMask != 0 {
-		l.combined[index] = cell.CombinedData
+		l.setCombined(index, cell.CombinedData)
 	}
 	if cell.Bg&BgHasExtended != 0 {
-		l.extendedAttrs[index] = cell.Extended
+		l.setExtended(index, cell.Extended)
 	}
 	l.data[index*cellSize+cellContent] = cell.Content
 	l.data[index*cellSize+cellFG] = cell.Fg
@@ -124,7 +127,7 @@ func (l *BufferLine) SetCell(index int, cell *CellData) {
 // SetCellFromCodepoint sets cell data from the input handler fast path.
 func (l *BufferLine) SetCellFromCodepoint(index int, codePoint uint32, width int, attrs *AttributeData) {
 	if attrs.Bg&BgHasExtended != 0 {
-		l.extendedAttrs[index] = attrs.Extended
+		l.setExtended(index, attrs.Extended)
 	}
 	l.data[index*cellSize+cellContent] = codePoint | uint32(width)<<ContentWidthShift // #nosec G115 -- cell width is 0-2 and codepoints are at most 0x10FFFF
 	l.data[index*cellSize+cellFG] = attrs.Fg
@@ -136,11 +139,11 @@ func (l *BufferLine) AddCodepointToCell(index int, codePoint uint32, width int) 
 	content := l.data[index*cellSize+cellContent]
 	if content&ContentIsCombinedMask != 0 {
 		// we already have a combined string, simply add
-		l.combined[index] += string(rune(codePoint)) // #nosec G115 -- cell width is 0-2 and codepoints are at most 0x10FFFF
+		l.setCombined(index, l.combined[index]+string(rune(codePoint))) // #nosec G115 -- cell width is 0-2 and codepoints are at most 0x10FFFF
 	} else {
 		if content&ContentCodepointMask != 0 {
 			// move current leading char + new one into combined string
-			l.combined[index] = string(rune(content&ContentCodepointMask)) + string(rune(codePoint)) // #nosec G115 -- cell width is 0-2 and codepoints are at most 0x10FFFF
+			l.setCombined(index, string(rune(content&ContentCodepointMask))+string(rune(codePoint))) // #nosec G115 -- cell width is 0-2 and codepoints are at most 0x10FFFF
 			content &= ^ContentCodepointMask
 			content |= ContentIsCombinedMask
 		} else {
@@ -285,8 +288,8 @@ func (l *BufferLine) Fill(fillCellData *CellData, respectProtect bool) {
 		}
 		return
 	}
-	l.combined = map[int]string{}
-	l.extendedAttrs = map[int]*ExtendedAttrs{}
+	l.combined = nil
+	l.extendedAttrs = nil
 	for i := 0; i < l.Length; i++ {
 		l.SetCell(i, fillCellData)
 	}
@@ -299,14 +302,8 @@ func (l *BufferLine) CopyFrom(line *BufferLine) {
 	}
 	copy(l.data, line.data)
 	l.Length = line.Length
-	l.combined = map[int]string{}
-	for k, v := range line.combined {
-		l.combined[k] = v
-	}
-	l.extendedAttrs = map[int]*ExtendedAttrs{}
-	for k, v := range line.extendedAttrs {
-		l.extendedAttrs[k] = v
-	}
+	l.combined = cloneMap(line.combined)
+	l.extendedAttrs = cloneMap(line.extendedAttrs)
 	l.IsWrapped = line.IsWrapped
 }
 
@@ -314,18 +311,12 @@ func (l *BufferLine) CopyFrom(line *BufferLine) {
 func (l *BufferLine) Clone() *BufferLine {
 	newLine := &BufferLine{
 		data:          make([]uint32, len(l.data)),
-		combined:      map[int]string{},
-		extendedAttrs: map[int]*ExtendedAttrs{},
+		combined:      cloneMap(l.combined),
+		extendedAttrs: cloneMap(l.extendedAttrs),
 		Length:        l.Length,
 		IsWrapped:     l.IsWrapped,
 	}
 	copy(newLine.data, l.data)
-	for k, v := range l.combined {
-		newLine.combined[k] = v
-	}
-	for k, v := range l.extendedAttrs {
-		newLine.extendedAttrs[k] = v
-	}
 	return newLine
 }
 
@@ -361,7 +352,7 @@ func (l *BufferLine) CopyCellsFrom(src *BufferLine, srcCol, destCol, length int,
 				l.data[(destCol+cell)*cellSize+i] = srcData[(srcCol+cell)*cellSize+i]
 			}
 			if srcData[(srcCol+cell)*cellSize+cellBG]&BgHasExtended != 0 {
-				l.extendedAttrs[destCol+cell] = src.extendedAttrs[srcCol+cell]
+				l.setExtended(destCol+cell, src.extendedAttrs[srcCol+cell])
 			}
 		}
 	} else {
@@ -370,7 +361,7 @@ func (l *BufferLine) CopyCellsFrom(src *BufferLine, srcCol, destCol, length int,
 				l.data[(destCol+cell)*cellSize+i] = srcData[(srcCol+cell)*cellSize+i]
 			}
 			if srcData[(srcCol+cell)*cellSize+cellBG]&BgHasExtended != 0 {
-				l.extendedAttrs[destCol+cell] = src.extendedAttrs[srcCol+cell]
+				l.setExtended(destCol+cell, src.extendedAttrs[srcCol+cell])
 			}
 		}
 	}
@@ -378,7 +369,7 @@ func (l *BufferLine) CopyCellsFrom(src *BufferLine, srcCol, destCol, length int,
 	// move any combined data over as needed
 	for key, value := range src.combined {
 		if key >= srcCol {
-			l.combined[key-srcCol+destCol] = value
+			l.setCombined(key-srcCol+destCol, value)
 		}
 	}
 }
@@ -413,4 +404,26 @@ func (l *BufferLine) TranslateToString(trimRight bool, startCol, endCol int) str
 		startCol += advance
 	}
 	return result
+}
+
+func (l *BufferLine) setCombined(index int, s string) {
+	if l.combined == nil {
+		l.combined = map[int]string{}
+	}
+	l.combined[index] = s
+}
+
+func (l *BufferLine) setExtended(index int, e *ExtendedAttrs) {
+	if l.extendedAttrs == nil {
+		l.extendedAttrs = map[int]*ExtendedAttrs{}
+	}
+	l.extendedAttrs[index] = e
+}
+
+// cloneMap copies a map, keeping an empty one nil.
+func cloneMap[V any](m map[int]V) map[int]V {
+	if len(m) == 0 {
+		return nil
+	}
+	return maps.Clone(m)
 }

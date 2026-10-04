@@ -16,7 +16,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -28,7 +27,7 @@ func init() {
 	applets["find"] = applet{"walk directories (-name pattern, -type f|d)", runFind}
 	applets["cut"] = applet{"select fields (-d delim -f list) or chars (-c list)", runCut}
 	applets["tr"] = applet{"translate characters (tr a-z A-Z; -d set deletes)", runTr}
-	applets["sed"] = applet{"stream edit: sed s/regex/replacement/[gi]", runSed}
+	applets["sed"] = applet{"stream editor (-n -e -E -i -s; s p d q n = y a i c { } ...)", runSed}
 	applets["xargs"] = applet{"build command lines from stdin", runXargs}
 	applets["tac"] = applet{"reverse lines", runTac}
 	applets["nl"] = applet{"number lines", runNl}
@@ -266,55 +265,6 @@ func runTr(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 		}
 	}
 	fprint(hc.Stdout, b.String())
-	return 0
-}
-
-func runSed(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
-	flags, rest := parseFlags(args)
-	_ = flags
-	if len(rest) == 0 {
-		fprintln(hc.Stderr, "usage: sed s/regex/replacement/[gi] [file...]")
-		return 1
-	}
-	script := rest[0]
-	if len(script) < 4 || script[0] != 's' {
-		fprintln(hc.Stderr, "sed: only s/// scripts are supported")
-		return 1
-	}
-	delim := string(script[1])
-	parts := strings.Split(script[2:], delim)
-	if len(parts) < 2 {
-		fprintln(hc.Stderr, "sed: malformed s command")
-		return 1
-	}
-	pattern, replacement := parts[0], parts[1]
-	mods := ""
-	if len(parts) > 2 {
-		mods = parts[2]
-	}
-	if strings.Contains(mods, "i") {
-		pattern = "(?i)" + pattern
-	}
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return fail(hc, "sed", err)
-	}
-	global := strings.Contains(mods, "g")
-	// sed uses \1 for group references; Go uses $1
-	replacement = regexp.MustCompile(`\\(\d)`).ReplaceAllString(replacement, "$$$1")
-
-	lines, err := readLines(s, hc, rest[1:])
-	if err != nil {
-		return fail(hc, "sed", err)
-	}
-	for _, l := range lines {
-		if global {
-			l = re.ReplaceAllString(l, replacement)
-		} else if loc := re.FindStringIndex(l); loc != nil {
-			l = l[:loc[0]] + re.ReplaceAllString(l[loc[0]:loc[1]], replacement) + l[loc[1]:]
-		}
-		fprintln(hc.Stdout, l)
-	}
 	return 0
 }
 

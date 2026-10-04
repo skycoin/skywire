@@ -22,6 +22,9 @@ type DecPrivateModes struct {
 	ReverseWraparound  bool
 	SendFocus          bool
 	SynchronizedOutput bool
+	// GraphemeClustering is mode 2027: UAX #29 grapheme clusters share a
+	// cell. Not an xterm.js mode; off unless an application sets it.
+	GraphemeClustering bool
 	Wraparound         bool // defaults: xterm - true, vt100 - false
 }
 

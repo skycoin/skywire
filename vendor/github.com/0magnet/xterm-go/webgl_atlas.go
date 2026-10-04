@@ -373,7 +373,9 @@ func (a *textureAtlas) drawToCache(chars string, code uint32, bg, fg, ext uint32
 
 	enableClearThresholdCheck := !powerlineGlyph
 
-	chWidth := vt.GetStringCellWidth(chars)
+	// A cell is at most two wide; under mode 2027 one can hold a whole ZWJ
+	// sequence, whose code points the UnicodeV6 count would add up.
+	chWidth := min(vt.GetStringCellWidth(chars), 2)
 
 	// underline
 	if underline {

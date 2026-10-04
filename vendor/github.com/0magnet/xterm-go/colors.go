@@ -55,6 +55,16 @@ func BuildPalette(theme vt.Theme) [256]string {
 		c := 8 + i*10
 		p[232+i] = fmt.Sprintf("#%02x%02x%02x", c, c, c)
 	}
+	if theme.Generate256 {
+		bg, fg := theme.Background, theme.Foreground
+		if bg == "" {
+			bg = "#000000"
+		}
+		if fg == "" {
+			fg = "#ffffff"
+		}
+		generate256(&p, bg, fg)
+	}
 	return p
 }
 
