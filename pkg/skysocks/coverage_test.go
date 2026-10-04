@@ -256,18 +256,31 @@ func TestClient_ListenAndServe_SessionOpenError(t *testing.T) {
 	// Drive one browser REQUEST into the listener once it is up. A request is
 	// needed, not just a connection: the target is read before any tunnel is
 	// touched, so a conn that never asks for anything never reaches the exit.
+	// The conn stays open until the end: on windows a reset from a closed client
+	// discards the request the proxy has not read yet.
+	var conn net.Conn
+	defer func() {
+		if conn != nil {
+			_ = conn.Close() //nolint:errcheck
+		}
+	}()
 	require.Eventually(t, func() bool {
-		conn, derr := net.Dial("tcp", addr)
+		var derr error
+		conn, derr = net.Dial("tcp", addr)
 		if derr != nil {
 			return false
 		}
-		defer conn.Close() //nolint:errcheck
 		// Greeting (offers no-auth), then CONNECT example.com:80 — a clearnet
 		// target, so it wants the exit, whose session is dead.
 		req := []byte{0x05, 0x01, 0x00, 0x05, 0x01, 0x00, 0x03, byte(len("example.com"))}
 		req = append(req, "example.com"...)
 		req = append(req, 0x00, 0x50)
 		_, werr := conn.Write(req)
+		// Half-close: a FIN, unlike a reset, delivers the request, and the
+		// proxy sees the end of input instead of waiting for an HTTP request.
+		if tc, ok := conn.(*net.TCPConn); ok && werr == nil {
+			werr = tc.CloseWrite()
+		}
 		return werr == nil
 	}, 3*time.Second, 20*time.Millisecond)
 
