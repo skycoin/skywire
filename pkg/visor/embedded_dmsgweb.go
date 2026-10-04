@@ -28,6 +28,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -39,6 +40,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxyroute"
 	"github.com/skycoin/skywire/pkg/proxystatus"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -92,8 +94,8 @@ type EmbeddedDmsgWeb struct {
 	// publishLocal / unpublishLocal publish this resolver as an in-process local
 	// service for this visor's own apps. Set by wireLocalResolverPublish; nil
 	// means the resolver is reachable only through its listener.
-	publishLocal   func(port uint16, label string, serve func(net.Conn))
-	unpublishLocal func(port uint16)
+	publishLocal   func(svc appnet.LocalService, serve func(net.Conn))
+	unpublishLocal func(port routing.Port)
 
 	mu        sync.Mutex
 	running   bool
@@ -332,7 +334,7 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 	e.mu.Lock()
 	publish, unpublish := e.publishLocal, e.unpublishLocal
 	e.mu.Unlock()
-	onPublish, cleanup := localPublishHooks(publish, unpublish, cfg.ProxyPort, "dmsg_web")
+	onPublish, cleanup := localPublishHooks(publish, unpublish, cfg.ProxyPort, "dmsg_web", cfg.DomainSuffix)
 	cfg.Publish = onPublish
 	defer cleanup()
 

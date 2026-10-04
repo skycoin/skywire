@@ -169,6 +169,15 @@ type Client struct {
 	// with no client cooperation. Default-on; the app can retune or disable it.
 	rs rangeSplitConfig
 
+	// resolvers are the visor's in-process resolving proxies: a CONNECT to a
+	// hostname one of them answers for is served by dialing it over the app's own
+	// data plane, with no exit and no second localhost proxy (localresolver.go).
+	// Wired FROM the app (SetLocalResolvers) for the same reason redial is: the
+	// dial belongs to the app's visor connection. Nil answers for nothing.
+	// Written once before ListenAndServe and read by every connection, so an
+	// atomic keeps that honest under -race.
+	resolvers atomic.Pointer[LocalResolvers]
+
 	// rsActive/rsSplits/rsChunks/rsBytes are the range-split observability
 	// counters the status page surfaces (proxystatus.RangeSplit) so "is
 	// range-split firing" is a live field, not just a Debugf. All atomic — the
@@ -1199,6 +1208,27 @@ func (c *Client) SetRangeSplitPort(port int) {
 // identity minted ONCE at app startup — independent of any dial — and the same
 // minter is injected into every reconnect's client, so the operator can import the
 // cert before traffic ever flows and it never changes underfoot.
+// SetLocalResolvers installs the visor's in-process resolving proxies, so a
+// CONNECT to a name one of them answers for (<pk>.skynet, <pk>.dmsg) is served
+// by the resolver over this app's own data plane instead of being sent to the
+// exit, which cannot reach it. One browser proxy setting then covers the mesh
+// and the clearnet, and a mesh name works with no exit at all.
+//
+// Call before ListenAndServe. A nil set (no resolvers published, or an app with
+// no visor) leaves every request going to the exit, as before.
+func (c *Client) SetLocalResolvers(r *LocalResolvers) {
+	c.resolvers.Store(r)
+	if c.appCl != nil && r != nil {
+		c.appCl.Log().Infof("Resolving %v through the visor's own proxies", r.Suffixes())
+	}
+}
+
+// localResolvers is the read side of SetLocalResolvers; a nil set answers for
+// nothing, so callers need no guard.
+func (c *Client) localResolvers() *LocalResolvers {
+	return c.resolvers.Load()
+}
+
 func (c *Client) SetHTTPSRangeSplitMinter(cert *x509.Certificate, minter skynetca.LeafMinter) {
 	if cert == nil || minter == nil {
 		return
@@ -2437,104 +2467,160 @@ func (c *Client) ListenAndServe(addr string) error {
 		}
 		c.accept.accepted.Add(1)
 
-		// Stripe onto the least-loaded live tunnel. pickSession returns nil only
-		// when every tunnel is closed; in that (route-down) case there is no live
-		// session to Open() a real error from, so a sentinel drives the same
-		// interstitial + reconnect path a single closed session took before.
-		//
-		// picking is a cheap in-memory choice and stays on this loop, because
-		// "no tunnel at all" is the signal that decides whether to tear down.
-		// Open() does NOT: it writes to a mesh route and can take as long as
-		// that route does, and running it here made every other pending
-		// connection wait behind it — one slow open serialized the whole
-		// listener. It now runs in the connection's own goroutine (openAndServe),
-		// so N concurrent browser connections open N streams concurrently.
-		sess := c.pickSession()
-		if sess != nil {
-			go c.openAndServe(conn, sess)
-			continue
-		}
-		c.accept.pickNil.Add(1)
-		err = errAllTunnelsDown
-		{
-			// The mesh route/session to the exit is down (exit restart, all
-			// mux legs dropped). Before tearing down for reconnect, serve the
-			// waiting browser a branded "building a route over skywire…"
-			// interstitial for a plaintext-HTTP request so it retries once the
-			// route is back, instead of a bare connection failure. Best-effort
-			// and deadline-bounded (see ServeSOCKS5); declined for HTTPS/other
-			// ports. Runs in a goroutine that owns conn so the reconnect below
-			// isn't delayed by a slow browser. The status.skysocks override
-			// keeps the in-process status page reachable even now (exit down)
-			// instead of being shadowed by the interstitial — status.skysocks
-			// needs no exit stream, and this is exactly when the user wants it.
-			// A single Open failing does NOT always mean all tunnels are dead: if
-			// ANY tunnel is still up, the failure was transient (or just this
-			// tunnel died) and the exit is still reachable. In that case
-			// ServeSOCKS5 serves a fall-through reload (exitReachable=true)
-			// instead of pinning the browser on the waiting interstitial, and we
-			// keep listening rather than tearing down — the browser's reload gets
-			// a working stream on the next-picked tunnel. Only when EVERY tunnel
-			// is closed do we serve the waiting interstitial and trigger
-			// reconnect. With a single tunnel (N==1) this is exactly the prior
-			// behavior.
-			reachable := c.anySessionLive()
-			go func(bc net.Conn) {
-				if serr := proxyinterstitial.ServeSOCKS5(bc, proxyinterstitial.StatusLine(err), "skysocks", c.statusOverride, c.exitReachable); serr != nil && c.appCl != nil {
-					c.appCl.Log().Debugf("route-down interstitial not served: %v", serr)
-				}
-				bc.Close() //nolint:errcheck,gosec
-			}(conn)
-			if reachable {
-				if c.appCl != nil {
-					c.appCl.Log().Debugf("yamux stream open failed but a tunnel is up; keeping listener: %v", err)
-				}
-				continue
-			}
-			c.close()
-
-			return fmt.Errorf("error opening yamux stream: %w", err)
-		}
+		// Serve the connection in its own goroutine, starting with the SOCKS5
+		// handshake and the CONNECT target. NOTHING about the exit is decided
+		// here: the target says whether an exit is wanted at all (a mesh name
+		// and the reserved status host are answered in-process), so picking a
+		// tunnel belongs after the target is known, in serveBrowserConn. That
+		// also keeps a slow or failing stream open off this loop, so N browser
+		// connections are served concurrently.
+		go c.serveBrowserConn(conn)
 	}
 }
 
-// openAndServe opens one stream on sess for an accepted connection and serves
-// it. It runs in the connection's OWN goroutine, off the accept loop, so a slow
-// or failing open holds up nothing but its own connection.
+// serveBrowserConn owns one accepted browser connection for its whole life.
 //
-// The failure handling mirrors what the accept loop used to do inline: serve
-// the branded interstitial so a plaintext-HTTP browser retries, and tear the
-// client down for reconnect only when EVERY tunnel is closed. A single Open
-// failing does not mean the exit is gone — with another tunnel up the browser's
-// reload gets a stream on the next-picked one, and the listener keeps running.
-func (c *Client) openAndServe(conn net.Conn, sess *yamux.Session) {
+// The SOCKS5 handshake and the CONNECT target are read FIRST, answered locally
+// (no-auth), with nothing dialed: the target decides who serves it. The reserved
+// status host and a mesh name (<pk>.skynet, <pk>.dmsg) are served without an
+// exit at all — the status page in-process, a mesh name by the visor's own
+// resolving proxy over this app's data plane. Only a target that really needs
+// the exit picks a tunnel and opens a stream.
+//
+// That ordering is the point: before it, every connection consumed an exit
+// stream before anyone looked at where it was going, so a mesh name could not be
+// served while the exit was down, and the browser needed a second proxy in front
+// of this one to reach one at all.
+func (c *Client) serveBrowserConn(conn net.Conn) {
+	br, ok := readBrowserRequest(conn, false)
+	if !ok {
+		conn.Close() //nolint:errcheck,gosec
+		return
+	}
+
+	// A request whose target this client cannot act on goes straight to the exit:
+	// a handshake the exit must drive, an address type not parsed here, and UDP
+	// ASSOCIATE, whose address is where the application will send datagrams FROM
+	// and so names no destination to match.
+	if br.needsExit() {
+		c.serveViaExit(conn, br)
+		return
+	}
+
+	// Reserved status host: in-process, no exit stream, no resolver.
+	if br.isStatusSurface() {
+		c.serveStatusPage(conn, nil)
+		conn.Close() //nolint:errcheck,gosec
+		return
+	}
+
+	// A mesh name belongs to the visor's resolving proxy, which is reachable
+	// whether or not this client has a tunnel.
+	if port, found := c.localResolvers().PortFor(br.host); found {
+		c.serveViaLocalResolver(conn, br, port)
+		return
+	}
+
+	c.serveViaExit(conn, br)
+}
+
+// serveViaExit completes the request against the exit: pick a tunnel, open a
+// stream, replay the handshake the browser already sent, then splice.
+//
+// The failure handling is what the accept loop and openAndServe did between
+// them: serve the branded interstitial so a plaintext-HTTP browser retries, and
+// tear the client down for reconnect only when EVERY tunnel is closed. A single
+// Open failing does not mean the exit is gone — with another tunnel up the
+// browser's reload gets a stream on the next-picked one, and the listener keeps
+// running.
+func (c *Client) serveViaExit(conn net.Conn, br browserRequest) {
+	// Stripe onto the least-loaded live tunnel. pickSession returns nil only when
+	// every tunnel is closed; in that (route-down) case there is no live session
+	// to Open() a real error from, so a sentinel drives the same path a failed
+	// open takes.
+	sess := c.pickSession()
+	if sess == nil {
+		c.accept.pickNil.Add(1)
+		c.serveRouteDown(conn, br, errAllTunnelsDown)
+		return
+	}
+
 	start := time.Now()
 	stream, err := sess.Open()
 	c.accept.observeOpen(time.Since(start), err)
 	if err != nil {
-		reachable := c.anySessionLive()
-		if serr := proxyinterstitial.ServeSOCKS5(conn, proxyinterstitial.StatusLine(err), "skysocks", c.statusOverride, c.exitReachable); serr != nil && c.appCl != nil {
-			c.appCl.Log().Debugf("route-down interstitial not served: %v", serr)
-		}
-		conn.Close() //nolint:errcheck,gosec
-		if reachable {
-			if c.appCl != nil {
-				c.appCl.Log().Debugf("yamux stream open failed but a tunnel is up; keeping listener: %v", err)
-			}
-			return
-		}
-		// Every tunnel is closed. Closing the client signals closeC, which
-		// closes the listener, so the accept loop returns and the app's
-		// reconnect cycle restarts — the same outcome the inline path reached
-		// by returning an error from ListenAndServe.
-		c.close()
+		c.serveRouteDown(conn, br, err)
 		return
 	}
 
 	if c.appCl != nil {
 		c.appCl.Log().Debug("Opened session skysocks client")
 	}
-	c.handleStream(conn, stream)
+	c.handleStream(conn, stream, br)
+}
+
+// serveRouteDown answers a browser whose request needs the exit when no stream
+// could be had: a branded "building a route over skywire…" interstitial for a
+// plaintext-HTTP request, so it retries once the route is back instead of
+// showing a bare connection failure. Declined for HTTPS and other ports, where
+// the browser then sees a normal failure.
+//
+// The interstitial is served from the request already read, because the
+// handshake it would otherwise perform has happened (ServeSOCKS5Parsed). The
+// status.skysocks override keeps the status page reachable even now — it needs
+// no exit, and this is exactly when it is wanted.
+//
+// Whether to tear the client down turns on whether ANY tunnel is still up. If
+// one is, this failure was transient (or just this tunnel died) and the browser's
+// reload gets a working stream on the next-picked tunnel, so the listener keeps
+// running. Only when every tunnel is closed does the client close, which signals
+// closeC, closes the listener and lets the app's reconnect cycle restart.
+func (c *Client) serveRouteDown(conn net.Conn, br browserRequest, cause error) {
+	// The interstitial is a short fixed exchange; bound it so a stalled browser
+	// cannot pin this goroutine. The conn is closed below either way.
+	_ = conn.SetDeadline(time.Now().Add(interstitialWriteWindow)) //nolint:errcheck
+	reachable := c.anySessionLive()
+	if serr := proxyinterstitial.ServeSOCKS5Parsed(conn, br.host, br.port,
+		proxyinterstitial.StatusLine(cause), "skysocks", c.statusOverride, c.exitReachable); serr != nil && c.appCl != nil {
+		c.appCl.Log().Debugf("route-down interstitial not served: %v", serr)
+	}
+	conn.Close() //nolint:errcheck,gosec
+	if reachable {
+		if c.appCl != nil {
+			c.appCl.Log().Debugf("no exit stream for this connection but a tunnel is up; keeping listener: %v", cause)
+		}
+		return
+	}
+	c.close()
+}
+
+// serveViaLocalResolver hands a mesh name to the visor's resolving proxy and
+// splices the browser onto it. The resolver answers the CONNECT itself, so the
+// reply the browser gets is the resolver's own — including its failures, which
+// are the ones a browser pointed straight at the resolver would have seen.
+//
+// A dial failure falls back to the interstitial rather than the exit: the exit
+// cannot reach a .skynet name, so forwarding there would turn "the resolver is
+// not running" into a confusing clearnet DNS failure.
+func (c *Client) serveViaLocalResolver(conn net.Conn, br browserRequest, port routing.Port) {
+	rc, err := c.localResolvers().Open(port, br.greeting, br.req)
+	if err != nil {
+		if c.appCl != nil {
+			c.appCl.Log().Debugf("local resolver on port %d did not answer for %s: %v", port, br.host, err)
+		}
+		_ = conn.SetDeadline(time.Now().Add(interstitialWriteWindow)) //nolint:errcheck
+		if serr := proxyinterstitial.ServeSOCKS5Parsed(conn, br.host, br.port,
+			proxyinterstitial.StatusLine(err), "skysocks", c.statusOverride, nil); serr != nil && c.appCl != nil {
+			c.appCl.Log().Debugf("resolver-down interstitial not served: %v", serr)
+		}
+		conn.Close() //nolint:errcheck,gosec
+		return
+	}
+	if c.appCl != nil {
+		c.appCl.Log().Debugf("Serving %s through the visor's resolving proxy on port %d", br.host, port)
+	}
+	clearDeadlines(conn, rc)
+	c.splicePrefixed(conn, rc, nil)
 }
 
 // Liveness-probe tuning for sessionKeepAliveLoop. A route group can be
@@ -2835,13 +2921,13 @@ func (c *Client) sessionAlive(timeout time.Duration) bool {
 	return false
 }
 
-func (c *Client) handleStream(conn, stream net.Conn) {
-	// Transparently sniff the SOCKS5 CONNECT target so a request for the reserved
-	// status.skysocks host is answered in-process instead of tunneled to the
-	// exit. For every non-status request the greeting/method negotiation and the
-	// CONNECT request are forwarded to the exit byte-for-byte, so the exit sees an
-	// identical stream — only status.skysocks diverges.
-	proceed, target := c.sniffSOCKS5Status(conn, stream)
+// handleStream serves a request that needs the exit, on a freshly opened stream,
+// from the point the browser's SOCKS5 handshake has already been read
+// (readBrowserRequest). The greeting and CONNECT request are replayed to the
+// exit byte-for-byte, so the exit sees an identical stream and non-status
+// traffic is a plain tunnel.
+func (c *Client) handleStream(conn, stream net.Conn, br browserRequest) {
+	proceed, target := c.openExitFor(conn, stream, br)
 	if !proceed {
 		conn.Close()   //nolint:errcheck,gosec
 		stream.Close() //nolint:errcheck,gosec
@@ -2885,147 +2971,186 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 	}
 }
 
-// statusSniffTimeout bounds the SOCKS5 handshake sniff so a wedged or
-// non-SOCKS5 client can't pin a handleStream goroutine. The greeting and CONNECT
+// interstitialWriteWindow bounds the short fixed exchange that serves a
+// route-down or resolver-down interstitial to the browser.
+const interstitialWriteWindow = 5 * time.Second
+
+// statusSniffTimeout bounds the SOCKS5 handshake read so a wedged or non-SOCKS5
+// client can't pin a serveBrowserConn goroutine. The greeting and CONNECT
 // request are sent right after connect, so this window is generous; it is
 // cleared before the bidirectional data splice, which stays deadline-free.
 const statusSniffTimeout = 15 * time.Second
 
-// sniffSOCKS5Status inspects the SOCKS5 CONNECT target to intercept the reserved
-// status.skysocks host, and CRUCIALLY does so WITHOUT any round-trip to the exit:
-// the method-selection reply is answered LOCALLY (no-auth) so the CONNECT target
-// can be read and a status.skysocks request served in-process even when the exit
-// is dead or unreachable — which is exactly when the status page matters most. The
-// exit is contacted only AFTER a non-status target is confirmed; at that point the
-// greeting and CONNECT request are replayed to the exit byte-for-byte, so the exit
-// sees an identical stream and non-status traffic is a plain tunnel.
+// browserRequest is one SOCKS5 request as read from the browser, with NOTHING
+// dialed: the method-selection reply is answered LOCALLY (no-auth), so the
+// CONNECT target is known before this client decides who serves it — the
+// in-process status page, the visor's resolving proxy, or the exit.
 //
-// A browser that offers no no-auth method (exotic for a loopback SOCKS client) can
-// not be answered locally; that case falls back to the transparent forward-to-exit
-// handshake, where the exit drives the (auth) negotiation and everything rides
-// through. Such a client is never the browser hitting status.skysocks.
+// greeting and req are buffered verbatim so whoever ends up serving the request
+// is handed the same bytes in the same order the browser sent them.
+type browserRequest struct {
+	greeting []byte
+	req      []byte
+	host     string
+	port     int
+	// authForward marks a browser that offered no no-auth method (exotic for a
+	// loopback SOCKS client): the negotiation could not be answered locally, so
+	// no target is known and only the exit can drive the handshake. Such a client
+	// is never the browser hitting status.skysocks.
+	authForward bool
+	// unknownATYP marks an address type this client does not parse. The target is
+	// unknown, so the exit gets what was read and deals with the rest.
+	unknownATYP bool
+	// udpAssociate marks CMD=UDP ASSOCIATE, where the address parsed is where the
+	// application will send datagrams FROM, not a destination. Neither the status
+	// host nor a mesh name applies; the association is answered on an exit stream
+	// (udp.go).
+	udpAssociate bool
+}
+
+// target is the "host:port" the request names, for the status page's per-stream
+// detail. Empty when no target could be parsed.
+func (br browserRequest) target() string {
+	if br.host == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s:%d", br.host, br.port)
+}
+
+// needsExit reports a request whose target this client cannot act on itself.
+func (br browserRequest) needsExit() bool {
+	return br.authForward || br.unknownATYP || br.udpAssociate
+}
+
+// isStatusSurface reports the reserved status.skysocks host, which this client
+// answers in-process.
+func (br browserRequest) isStatusSurface() bool {
+	surface, ok := proxystatus.Match(br.host)
+	return ok && surface == proxystatus.SurfaceSkysocks
+}
+
+// readBrowserRequest reads the SOCKS5 handshake and CONNECT request from the
+// browser, answering method selection itself so the target is known with NO
+// round trip to anything: that is what lets the reserved status host and a mesh
+// name be served when the exit is dead or absent — exactly when they matter.
 //
-// Returns proceed=true when the caller should continue with the normal
-// bidirectional splice (conn and stream are positioned just past the handshake);
-// target is then the CONNECT "host:port" the stream carries (or "" when it could
-// not be parsed), for the status page's per-stream detail. Returns false when the
-// request was served in-process or the connection is unusable; the caller then
-// closes both sides.
-func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool, target string) {
-	// Only the browser side gets a read deadline up front: the exit must not be
-	// touched (nor block us) until a non-status target is confirmed, so the reserved
-	// status host stays reachable regardless of exit reachability.
+// forceNoAuth answers no-auth even for a browser that did not offer it, for a
+// caller with no exit to defer the negotiation to (the disconnected listener,
+// whose interstitial path has always answered no-auth regardless).
+//
+// Returns false when the connection is unusable; the caller then closes it.
+func readBrowserRequest(conn net.Conn, forceNoAuth bool) (browserRequest, bool) {
+	// Only the browser side gets a read deadline: nothing else has been touched
+	// yet, which is the whole point of reading the target first.
 	_ = conn.SetReadDeadline(time.Now().Add(statusSniffTimeout)) //nolint:errcheck
 
-	// Greeting: VER, NMETHODS, METHODS[NMETHODS]. Buffered so a non-status target's
-	// greeting can be replayed to the exit byte-for-byte.
+	// Greeting: VER, NMETHODS, METHODS[NMETHODS]. Buffered so it can be replayed
+	// byte-for-byte to whoever serves the request.
 	hdr := make([]byte, 2)
 	if _, err := io.ReadFull(conn, hdr); err != nil || hdr[0] != 0x05 {
-		return false, ""
+		return browserRequest{}, false
 	}
-	greeting := make([]byte, 2+int(hdr[1]))
-	greeting[0], greeting[1] = hdr[0], hdr[1]
-	if _, err := io.ReadFull(conn, greeting[2:]); err != nil {
-		return false, ""
+	br := browserRequest{greeting: make([]byte, 2+int(hdr[1]))}
+	br.greeting[0], br.greeting[1] = hdr[0], hdr[1]
+	if _, err := io.ReadFull(conn, br.greeting[2:]); err != nil {
+		return browserRequest{}, false
 	}
 
-	// If the browser did not offer no-auth we can't answer locally; fall back to
-	// forwarding the handshake to the exit and letting it drive the negotiation.
-	// (A status.skysocks browser always offers no-auth, so this never shadows it.)
-	if !offersNoAuth(greeting) {
-		return c.forwardExitHandshake(conn, stream, greeting)
+	// If the browser did not offer no-auth we can't answer locally; the exit
+	// drives the negotiation and everything rides through.
+	if !forceNoAuth && !offersNoAuth(br.greeting) {
+		br.authForward = true
+		return br, true
 	}
 	// Answer method-selection to the browser ourselves (no-auth) so the CONNECT
-	// target can be read WITHOUT contacting the exit.
+	// target can be read WITHOUT contacting anything.
 	if _, err := conn.Write([]byte{0x05, 0x00}); err != nil {
-		return false, ""
+		return browserRequest{}, false
 	}
 
-	// CONNECT request: VER, CMD, RSV, ATYP, ADDR, PORT. Buffered so a non-status
-	// target is replayed to the exit byte-for-byte.
+	// CONNECT request: VER, CMD, RSV, ATYP, ADDR, PORT. Buffered for the same
+	// replay as the greeting.
 	rhdr := make([]byte, 4)
 	if _, err := io.ReadFull(conn, rhdr); err != nil || rhdr[0] != 0x05 {
-		return false, ""
+		return browserRequest{}, false
 	}
-	req := append([]byte{}, rhdr...)
-	var host string
+	br.req = append([]byte{}, rhdr...)
 	switch rhdr[3] {
 	case 0x01: // IPv4
 		b := make([]byte, 4)
 		if _, err := io.ReadFull(conn, b); err != nil {
-			return false, ""
+			return browserRequest{}, false
 		}
-		host = net.IP(b).String()
-		req = append(req, b...)
+		br.host = net.IP(b).String()
+		br.req = append(br.req, b...)
 	case 0x03: // domain
 		l := make([]byte, 1)
 		if _, err := io.ReadFull(conn, l); err != nil {
-			return false, ""
+			return browserRequest{}, false
 		}
 		b := make([]byte, int(l[0]))
 		if _, err := io.ReadFull(conn, b); err != nil {
-			return false, ""
+			return browserRequest{}, false
 		}
-		host = string(b)
-		req = append(req, l[0])
-		req = append(req, b...)
+		br.host = string(b)
+		br.req = append(br.req, l[0])
+		br.req = append(br.req, b...)
 	case 0x04: // IPv6
 		b := make([]byte, 16)
 		if _, err := io.ReadFull(conn, b); err != nil {
-			return false, ""
+			return browserRequest{}, false
 		}
-		host = net.IP(b).String()
-		req = append(req, b...)
+		br.host = net.IP(b).String()
+		br.req = append(br.req, b...)
 	default:
-		// Unknown ATYP: not a status host — open the exit handshake, forward what
-		// we have, and let the exit deal with the rest via the splice.
-		if err := c.openExit(stream, greeting); err != nil {
+		// The port is deliberately left unread: the exit receives what was read
+		// and consumes the rest off the splice.
+		br.unknownATYP = true
+		return br, true
+	}
+
+	portB := make([]byte, 2)
+	if _, err := io.ReadFull(conn, portB); err != nil {
+		return browserRequest{}, false
+	}
+	br.req = append(br.req, portB...)
+	br.port = int(portB[0])<<8 | int(portB[1])
+	br.udpAssociate = rhdr[1] == cmdUDPAssociate
+
+	return br, true
+}
+
+// openExitFor completes br against the exit on stream, and reports whether the
+// caller should go on to splice. target is the CONNECT "host:port" the stream
+// carries (or "" when none was parsed), for the status page's per-stream detail.
+func (c *Client) openExitFor(conn, stream net.Conn, br browserRequest) (proceed bool, target string) {
+	switch {
+	case br.authForward:
+		return c.forwardExitHandshake(conn, stream, br.greeting)
+	case br.unknownATYP:
+		if err := c.openExit(stream, br.greeting); err != nil {
 			return false, ""
 		}
-		if _, err := stream.Write(req); err != nil {
+		if _, err := stream.Write(br.req); err != nil {
 			return false, ""
 		}
 		clearDeadlines(conn, stream)
 		return true, ""
-	}
-	portB := make([]byte, 2)
-	if _, err := io.ReadFull(conn, portB); err != nil {
-		return false, ""
-	}
-	req = append(req, portB...)
-	port := int(portB[0])<<8 | int(portB[1])
-
-	// UDP ASSOCIATE: the address just parsed is where the application says
-	// it will send datagrams FROM, not a destination, so neither the status
-	// host nor the exit's CONNECT path applies. The association is answered
-	// here and its datagrams ride this stream (udp.go). The CONNECT path
-	// below is untouched — this is the only command that diverges.
-	if rhdr[1] == cmdUDPAssociate {
+	case br.udpAssociate:
 		clearDeadlines(conn, stream)
 		c.serveUDPAssociate(conn, stream)
 		return false, ""
 	}
 
-	// Reserved status host: serve the in-process page over HTTP. This is reached
-	// with NO exit involvement, so status.skysocks stays reachable when the exit is
-	// down. HTTP only — the resolver CA forbids a .skysocks TLS leaf, so
-	// status.skysocks is HTTP-only by design. serveStatusPage routes "/" (page) and
-	// "/ws" (live WebSocket) on the browser's request.
-	if surface, ok := proxystatus.Match(host); ok && surface == proxystatus.SurfaceSkysocks {
-		clearDeadlines(conn, stream)
-		c.serveStatusPage(conn, stream)
-		return false, ""
-	}
-
-	// Non-status: open the exit's SOCKS session now, with the buffered CONNECT
-	// request pipelined behind the greeting — exactly what a chunk fetch does —
-	// and then splice. The exit sees the same bytes in the same order; it just no
-	// longer costs a round trip to hand them over.
-	if err := c.openExitPipelined(stream, greeting, req); err != nil {
+	// Open the exit's SOCKS session with the buffered CONNECT request pipelined
+	// behind the greeting — exactly what a chunk fetch does. The exit sees the
+	// same bytes in the same order; it just no longer costs a round trip to hand
+	// them over.
+	if err := c.openExitPipelined(stream, br.greeting, br.req); err != nil {
 		return false, ""
 	}
 	clearDeadlines(conn, stream)
-	return true, fmt.Sprintf("%s:%d", host, port)
+	return true, br.target()
 }
 
 // offersNoAuth reports whether a buffered SOCKS5 greeting (VER, NMETHODS, METHODS…)
@@ -3366,6 +3491,13 @@ func (c *Client) statusOverride(host string) []byte {
 // rendered status.skysocks page. Best-effort: any write failure just drops the
 // conn.
 func (c *Client) serveStatusPage(conn, stream net.Conn) {
+	// stream is nil when the status host was recognized before any exit stream was
+	// opened, which is the normal case: the page needs no exit.
+	closeStream := func() {
+		if stream != nil {
+			stream.Close() //nolint:errcheck,gosec
+		}
+	}
 	// CONNECT success with a dummy BND.ADDR/PORT so the browser proceeds to send
 	// its HTTP request.
 	if _, err := conn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0}); err != nil {
@@ -3384,7 +3516,7 @@ func (c *Client) serveStatusPage(conn, stream net.Conn) {
 	case "/ws":
 		// status is served entirely in-process, so the exit-side yamux stream is
 		// unused — close it now so the long-lived WS loop doesn't pin one open.
-		stream.Close() //nolint:errcheck,gosec
+		closeStream()
 		if !wsHandshake(conn, buf[:n]) {
 			return
 		}
@@ -3394,7 +3526,7 @@ func (c *Client) serveStatusPage(conn, stream net.Conn) {
 		// The live region alone, for a page that cannot hold the WebSocket
 		// (one rendered through netscrape, whose frames carry fetches but not
 		// sockets): it polls this instead.
-		stream.Close()                                                                        //nolint:errcheck,gosec
+		closeStream()
 		_, _ = conn.Write(statusHTTPResponse(proxystatus.RenderFragment(c.statusSnapshot()))) //nolint:errcheck
 		return
 	case "/main.wasm":
@@ -3404,11 +3536,11 @@ func (c *Client) serveStatusPage(conn, stream net.Conn) {
 		// context can instantiate it. Same module pkg/tpviz serves at
 		// /tpviz-gl.wasm; served here straight from the copy the native binary
 		// embeds (pkg/wasmhv/execwasm). In-process, no exit round-trip.
-		stream.Close() //nolint:errcheck,gosec
+		closeStream()
 		writeStatusWasmResponse(conn)
 		return
 	case "/wasm_exec.js":
-		stream.Close()                              //nolint:errcheck,gosec
+		closeStream()
 		_, _ = conn.Write(statusWasmExecResponse()) //nolint:errcheck
 		return
 	}

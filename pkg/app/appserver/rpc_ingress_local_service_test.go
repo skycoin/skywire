@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -24,7 +25,7 @@ func TestRPCIngressGatewayDialLocalService(t *testing.T) {
 
 	pk, _ := cipher.GenerateKeyPair()
 	addr := appnet.Addr{Net: appnet.TypeSkynet, PubKey: pk, Port: routing.Port(4446)}
-	appnet.RegisterLocalService(pk, addr.Port, "skynet_web", func(conn net.Conn) {
+	appnet.RegisterLocalService(pk, appnet.LocalService{Port: addr.Port, Label: "skynet_web"}, func(conn net.Conn) {
 		defer conn.Close()         //nolint:errcheck
 		_, _ = io.Copy(conn, conn) //nolint:errcheck
 	})
@@ -54,7 +55,7 @@ func TestRPCIngressGatewayDialSkipsLocalServiceForOtherAddrs(t *testing.T) {
 	rpc := NewRPCGateway(logging.MustGetLogger("rpc_gateway_local"), &Proc{})
 
 	pk, _ := cipher.GenerateKeyPair()
-	appnet.RegisterLocalService(pk, routing.Port(4446), "skynet_web", func(conn net.Conn) {
+	appnet.RegisterLocalService(pk, appnet.LocalService{Port: routing.Port(4446), Label: "skynet_web"}, func(conn net.Conn) {
 		_ = conn.Close() //nolint:errcheck
 	})
 
@@ -63,4 +64,25 @@ func TestRPCIngressGatewayDialSkipsLocalServiceForOtherAddrs(t *testing.T) {
 	var resp DialResp
 	err := rpc.Dial(&appnet.Addr{Net: appnet.Type("no-such-network"), PubKey: pk, Port: routing.Port(4445)}, &resp)
 	require.ErrorIs(t, err, appnet.ErrNoSuchNetworker)
+}
+
+// LocalServices answers with what the calling app's OWN visor published, and
+// nothing another visor did.
+func TestRPCIngressGatewayLocalServices(t *testing.T) {
+	t.Cleanup(appnet.ClearLocalServices)
+
+	pk, _ := cipher.GenerateKeyPair()
+	other, _ := cipher.GenerateKeyPair()
+	rpc := NewRPCGateway(logging.MustGetLogger("rpc_gateway_local"), &Proc{
+		conf: appcommon.ProcConfig{VisorPK: pk},
+	})
+
+	mine := appnet.LocalService{Port: routing.Port(4446), Label: "skynet_web", Suffixes: []string{".skynet"}}
+	appnet.RegisterLocalService(pk, mine, func(conn net.Conn) { _ = conn.Close() })                    //nolint:errcheck
+	appnet.RegisterLocalService(other, appnet.LocalService{Port: routing.Port(4445), Label: "theirs"}, //nolint:errcheck
+		func(conn net.Conn) { _ = conn.Close() }) //nolint:errcheck
+
+	var resp []appnet.LocalService
+	require.NoError(t, rpc.LocalServices(&struct{}{}, &resp))
+	require.Equal(t, []appnet.LocalService{mine}, resp)
 }

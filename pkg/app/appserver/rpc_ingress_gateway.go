@@ -178,6 +178,22 @@ func (r *RPCIngressGateway) ProxyStatus(_ *struct{}, resp *proxystatus.Snapshot)
 	return nil
 }
 
+// LocalServices lists the in-process services the calling app can reach on its
+// own visor — the resolving proxies, each with the hostname suffixes it answers
+// for. An app matches a CONNECT target against those suffixes and dials the
+// port, instead of being told a port number twice (once in the visor's config,
+// once in its own args). Read-only; an empty list means there is nothing to
+// reach, which is not an error.
+func (r *RPCIngressGateway) LocalServices(_ *struct{}, resp *[]appnet.LocalService) (err error) {
+	defer rpcutil.LogCall(r.log, "LocalServices", nil)(resp, &err)
+	// r.proc is nil in unit tests that construct a bare gateway.
+	if r.proc == nil {
+		return nil
+	}
+	*resp = appnet.LocalServices(r.proc.conf.VisorPK)
+	return nil
+}
+
 // AppSettings answers the calling app POLLING for its live tuning knobs — the
 // one visor->app value channel there is. The gateway is INGRESS only (the app
 // is the RPC client), so nothing can be pushed into a running app; the app asks

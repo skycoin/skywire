@@ -253,14 +253,22 @@ func TestClient_ListenAndServe_SessionOpenError(t *testing.T) {
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- c.ListenAndServe(addr) }()
 
-	// Drive one browser connection into the accept loop once it is listening.
+	// Drive one browser REQUEST into the listener once it is up. A request is
+	// needed, not just a connection: the target is read before any tunnel is
+	// touched, so a conn that never asks for anything never reaches the exit.
 	require.Eventually(t, func() bool {
 		conn, derr := net.Dial("tcp", addr)
 		if derr != nil {
 			return false
 		}
-		_ = conn.Close() //nolint:errcheck
-		return true
+		defer conn.Close() //nolint:errcheck
+		// Greeting (offers no-auth), then CONNECT example.com:80 — a clearnet
+		// target, so it wants the exit, whose session is dead.
+		req := []byte{0x05, 0x01, 0x00, 0x05, 0x01, 0x00, 0x03, byte(len("example.com"))}
+		req = append(req, "example.com"...)
+		req = append(req, 0x00, 0x50)
+		_, werr := conn.Write(req)
+		return werr == nil
 	}, 3*time.Second, 20*time.Millisecond)
 
 	select {

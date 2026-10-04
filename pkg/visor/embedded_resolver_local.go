@@ -29,7 +29,7 @@ import (
 // localResolverPublisher is implemented by both embedded resolving proxies, so
 // one call wires either kind.
 type localResolverPublisher interface {
-	setLocalPublish(publish func(port uint16, label string, serve func(net.Conn)), unpublish func(port uint16))
+	setLocalPublish(publish func(svc appnet.LocalService, serve func(net.Conn)), unpublish func(port routing.Port))
 }
 
 // wireLocalResolverPublish lets rt publish itself as a local service under this
@@ -45,55 +45,58 @@ func (v *Visor) wireLocalResolverPublish(rt localResolverPublisher) {
 	rt.setLocalPublish(v.publishLocalResolver, v.unpublishLocalResolver)
 }
 
-func (v *Visor) publishLocalResolver(port uint16, label string, serve func(net.Conn)) {
+func (v *Visor) publishLocalResolver(svc appnet.LocalService, serve func(net.Conn)) {
 	if v.conf == nil || serve == nil {
 		return
 	}
-	appnet.RegisterLocalService(v.conf.PK, routing.Port(port), label, serve)
+	appnet.RegisterLocalService(v.conf.PK, svc, serve)
 	// A visor assembled without a logger reaches this from a test that drives a
 	// real resolver runtime, so the log line cannot assume one.
 	if v.log != nil {
-		v.log.WithField("port", port).WithField("service", label).
+		v.log.WithField("port", svc.Port).WithField("service", svc.Label).WithField("suffixes", svc.Suffixes).
 			Debug("Published resolving proxy as a local service for this visor's apps")
 	}
 }
 
-func (v *Visor) unpublishLocalResolver(port uint16) {
+func (v *Visor) unpublishLocalResolver(port routing.Port) {
 	if v.conf == nil {
 		return
 	}
-	appnet.UnregisterLocalService(v.conf.PK, routing.Port(port))
+	appnet.UnregisterLocalService(v.conf.PK, port)
 }
 
 // setLocalPublish implements localResolverPublisher.
-func (e *EmbeddedSkynetWeb) setLocalPublish(publish func(uint16, string, func(net.Conn)), unpublish func(uint16)) {
+func (e *EmbeddedSkynetWeb) setLocalPublish(publish func(appnet.LocalService, func(net.Conn)), unpublish func(routing.Port)) {
 	e.mu.Lock()
 	e.publishLocal, e.unpublishLocal = publish, unpublish
 	e.mu.Unlock()
 }
 
 // setLocalPublish implements localResolverPublisher.
-func (e *EmbeddedDmsgWeb) setLocalPublish(publish func(uint16, string, func(net.Conn)), unpublish func(uint16)) {
+func (e *EmbeddedDmsgWeb) setLocalPublish(publish func(appnet.LocalService, func(net.Conn)), unpublish func(routing.Port)) {
 	e.mu.Lock()
 	e.publishLocal, e.unpublishLocal = publish, unpublish
 	e.mu.Unlock()
 }
 
 // localPublishHooks returns the Publish callback to hand the runtime and the
-// cleanup to run when it stops, for a resolver serving on port under label.
-// Both are nil-safe: an unwired resolver (standalone tests, a visor built
-// without the hooks) simply gets no local service, and so does one whose
+// cleanup to run when it stops, for a resolver serving suffix on port under
+// label. Both are nil-safe: an unwired resolver (standalone tests, a visor
+// built without the hooks) simply gets no local service, and so does one whose
 // configured port is not a port.
-func localPublishHooks(publish func(uint16, string, func(net.Conn)), unpublish func(uint16), port uint, label string) (onPublish func(func(net.Conn)), cleanup func()) {
+func localPublishHooks(publish func(appnet.LocalService, func(net.Conn)), unpublish func(routing.Port), port uint, label, suffix string) (onPublish func(func(net.Conn)), cleanup func()) {
 	if publish == nil || port == 0 || port > math.MaxUint16 {
 		return nil, func() {}
 	}
-	p := uint16(port)
+	svc := appnet.LocalService{Port: routing.Port(port), Label: label} //nolint:gosec // bounded above
+	if suffix != "" {
+		svc.Suffixes = []string{suffix}
+	}
 	return func(serve func(net.Conn)) {
-			publish(p, label, serve)
+			publish(svc, serve)
 		}, func() {
 			if unpublish != nil {
-				unpublish(p)
+				unpublish(svc.Port)
 			}
 		}
 }

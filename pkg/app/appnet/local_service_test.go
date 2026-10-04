@@ -35,12 +35,13 @@ func TestLocalServiceRoundTrip(t *testing.T) {
 	addr := Addr{Net: TypeSkynet, PubKey: pk, Port: routing.Port(4446)}
 
 	seen := make(chan net.Addr, 1)
-	RegisterLocalService(pk, addr.Port, "skynet_web", echoService(t, seen))
+	RegisterLocalService(pk, LocalService{Port: addr.Port, Label: "skynet_web", Suffixes: []string{".skynet"}}, echoService(t, seen))
 
 	require.True(t, HasLocalService(addr))
-	label, ok := LocalServiceLabel(addr)
+	svc, ok := LocalServiceFor(addr)
 	require.True(t, ok)
-	require.Equal(t, "skynet_web", label)
+	require.Equal(t, "skynet_web", svc.Label)
+	require.Equal(t, []string{".skynet"}, svc.Suffixes)
 
 	conn, err := DialLocalService(addr)
 	require.NoError(t, err)
@@ -75,7 +76,7 @@ func TestLocalServiceRoundTrip(t *testing.T) {
 func TestLocalServiceAddressFamilyIgnored(t *testing.T) {
 	t.Cleanup(ClearLocalServices)
 	pk, _ := cipher.GenerateKeyPair()
-	RegisterLocalService(pk, routing.Port(4445), "dmsg_web", func(conn net.Conn) {
+	RegisterLocalService(pk, LocalService{Port: routing.Port(4445), Label: "dmsg_web"}, func(conn net.Conn) {
 		_ = conn.Close() //nolint:errcheck
 	})
 
@@ -90,7 +91,7 @@ func TestLocalServiceMisses(t *testing.T) {
 	t.Cleanup(ClearLocalServices)
 	pk, _ := cipher.GenerateKeyPair()
 	other, _ := cipher.GenerateKeyPair()
-	RegisterLocalService(pk, routing.Port(4445), "dmsg_web", func(conn net.Conn) {
+	RegisterLocalService(pk, LocalService{Port: routing.Port(4445), Label: "dmsg_web"}, func(conn net.Conn) {
 		_ = conn.Close() //nolint:errcheck
 	})
 
@@ -114,15 +115,15 @@ func TestLocalServiceLastWriterWins(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	port := routing.Port(4446)
 
-	RegisterLocalService(pk, port, "first", func(conn net.Conn) { _ = conn.Close() }) //nolint:errcheck
+	RegisterLocalService(pk, LocalService{Port: port, Label: "first"}, func(conn net.Conn) { _ = conn.Close() }) //nolint:errcheck
 	second := make(chan struct{}, 1)
-	RegisterLocalService(pk, port, "second", func(conn net.Conn) {
+	RegisterLocalService(pk, LocalService{Port: port, Label: "second"}, func(conn net.Conn) {
 		second <- struct{}{}
 		_ = conn.Close() //nolint:errcheck
 	})
 
-	label, _ := LocalServiceLabel(Addr{PubKey: pk, Port: port})
-	require.Equal(t, "second", label)
+	svc, _ := LocalServiceFor(Addr{PubKey: pk, Port: port})
+	require.Equal(t, "second", svc.Label)
 
 	conn, err := DialLocalService(Addr{Net: TypeSkynet, PubKey: pk, Port: port})
 	require.NoError(t, err)

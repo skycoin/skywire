@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -37,6 +38,22 @@ type LocalHandler func(conn net.Conn)
 // handler registered on it.
 var ErrNoLocalService = errors.New("no local service registered on that address")
 
+// LocalService describes one in-process service that apps on this visor may
+// dial. It is what an app asking the visor what it can reach gets back, so an
+// app matches on what a service answers for instead of hard-coding a port.
+type LocalService struct {
+	// Port is the routing port an app dials on its own visor's PK. The
+	// resolving proxies use their own SOCKS5 port number, which
+	// ValidateResolvers already keeps unique across resolvers.
+	Port routing.Port
+	// Label names the service in logs ("skynet_web", "dmsg_web").
+	Label string
+	// Suffixes are the hostname suffixes this service answers for, where it
+	// answers for names at all: ".skynet", ".dmsg". Empty means the app has to
+	// know what the service is for by its label.
+	Suffixes []string
+}
+
 // localKey identifies a local service. The address family is deliberately not
 // part of the key: an app reaches its own visor the same way whichever of
 // skynet / dmsg it happens to address it by, and a local service is served
@@ -47,7 +64,7 @@ type localKey struct {
 }
 
 type localService struct {
-	label   string
+	svc     LocalService
 	handler LocalHandler
 }
 
@@ -58,14 +75,12 @@ var (
 )
 
 // RegisterLocalService makes handler reachable to apps on this visor that dial
-// pk:port, where pk is this visor's own public key. Overwrites any handler on
-// the same address — matching AddNetworker's last-writer-wins semantics, which
-// a restarted resolver relies on.
-//
-// label names the service in logs and errors.
-func RegisterLocalService(pk cipher.PubKey, port routing.Port, label string, handler LocalHandler) {
+// pk:svc.Port, where pk is this visor's own public key. Overwrites any handler
+// on the same address — matching AddNetworker's last-writer-wins semantics,
+// which a restarted resolver relies on.
+func RegisterLocalService(pk cipher.PubKey, svc LocalService, handler LocalHandler) {
 	localServicesMx.Lock()
-	localServices[localKey{pk: pk, port: port}] = localService{label: label, handler: handler}
+	localServices[localKey{pk: pk, port: svc.Port}] = localService{svc: svc, handler: handler}
 	localServicesMx.Unlock()
 }
 
@@ -84,19 +99,34 @@ func ClearLocalServices() {
 	localServicesMx.Unlock()
 }
 
-// LocalServiceLabel returns the label registered on addr, and whether addr
-// names a local service at all.
-func LocalServiceLabel(addr Addr) (string, bool) {
+// LocalServiceFor returns the service registered on addr, and whether addr
+// names one at all.
+func LocalServiceFor(addr Addr) (LocalService, bool) {
 	localServicesMx.RLock()
 	svc, ok := localServices[localKey{pk: addr.PubKey, port: addr.Port}]
 	localServicesMx.RUnlock()
-	return svc.label, ok
+	return svc.svc, ok
 }
 
 // HasLocalService reports whether addr names a registered local service.
 func HasLocalService(addr Addr) bool {
-	_, ok := LocalServiceLabel(addr)
+	_, ok := LocalServiceFor(addr)
 	return ok
+}
+
+// LocalServices lists what an app on the visor owning pk can reach in-process,
+// ordered by port so the answer is stable.
+func LocalServices(pk cipher.PubKey) []LocalService {
+	localServicesMx.RLock()
+	out := make([]LocalService, 0, len(localServices))
+	for key, svc := range localServices {
+		if key.pk == pk {
+			out = append(out, svc.svc)
+		}
+	}
+	localServicesMx.RUnlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].Port < out[j].Port })
+	return out
 }
 
 // DialLocalService serves addr in-process over net.Pipe: the handler runs on

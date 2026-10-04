@@ -25,6 +25,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -65,8 +66,8 @@ type EmbeddedSkynetWeb struct {
 	// publishLocal / unpublishLocal publish this resolver as an in-process local
 	// service for this visor's own apps. Set by wireLocalResolverPublish; nil
 	// means the resolver is reachable only through its listener.
-	publishLocal   func(port uint16, label string, serve func(net.Conn))
-	unpublishLocal func(port uint16)
+	publishLocal   func(svc appnet.LocalService, serve func(net.Conn))
+	unpublishLocal func(port routing.Port)
 
 	mu        sync.Mutex
 	running   bool
@@ -286,7 +287,7 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 	e.mu.Lock()
 	publish, unpublish := e.publishLocal, e.unpublishLocal
 	e.mu.Unlock()
-	onPublish, cleanup := localPublishHooks(publish, unpublish, cfg.ProxyPort, "skynet_web")
+	onPublish, cleanup := localPublishHooks(publish, unpublish, cfg.ProxyPort, "skynet_web", cfg.DomainSuffix)
 	cfg.Publish = onPublish
 	defer cleanup()
 
