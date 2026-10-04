@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/0magnet/calvin"
-	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
 
@@ -147,21 +146,16 @@ func server() {
 		}
 	}()
 
-	r1 := gin.New()
-	// Disable Gin's default logger middleware
-	r1.Use(gin.Recovery())
-	r1.Use(loggingMiddleware())
-	// only whitelisted public keys can access authRoute(s)
-	authRoute := r1.Group("/")
+	// Directories are served without a listing, as gin's Static did.
+	h := http.FileServer(noDirListing{http.Dir(serveDir)})
+	// only whitelisted public keys can access the files
 	if len(wlkeys) > 0 {
-		authRoute.Use(whitelistAuth(wlkeys))
+		h = whitelistAuth(wlkeys, h)
 	}
+	h = recoverPanics(loggingMiddleware(h))
 
-	r1.Static("/", serveDir)
-
-	// Start the server using the custom Gin handler
 	serve := &http.Server{
-		Handler:           &GinHandler{Router: r1},
+		Handler:           h,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
@@ -189,60 +183,98 @@ func server() {
 	wg.Wait()
 }
 
-func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
-	return func(c *gin.Context) {
+func whitelistAuth(whitelistedPKs []cipher.PubKey, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Get the remote PK.
-		remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+		remotePK, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
-			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte("500 Internal Server Error")) //nolint errcheck
-			c.AbortWithStatus(http.StatusInternalServerError)
+			http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
 			return
 		}
 		// Check if the remote PK is whitelisted.
-		whitelisted := false
-		if len(whitelistedPKs) == 0 {
-			whitelisted = true
-		} else {
-			for _, whitelistedPK := range whitelistedPKs {
-				if remotePK == whitelistedPK.String() {
-					whitelisted = true
-					break
-				}
+		whitelisted := len(whitelistedPKs) == 0
+		for _, whitelistedPK := range whitelistedPKs {
+			if remotePK == whitelistedPK.String() {
+				whitelisted = true
+				break
 			}
 		}
-		if whitelisted {
-			c.Next()
-		} else {
-			// Otherwise, return a 401 Unauthorized error.
-			c.Writer.WriteHeader(http.StatusUnauthorized)
-			c.Writer.Write([]byte("401 Unauthorized")) //nolint errcheck
-			c.AbortWithStatus(http.StatusUnauthorized)
+		if !whitelisted {
+			http.Error(w, "401 Unauthorized", http.StatusUnauthorized)
 			return
 		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// noDirListing serves files but hides directory contents.
+type noDirListing struct{ http.FileSystem }
+
+func (fs noDirListing) Open(name string) (http.File, error) {
+	f, err := fs.FileSystem.Open(name)
+	if err != nil {
+		return nil, err
 	}
+	return noReaddir{f}, nil
 }
 
-// GinHandler is handler for gin on dmsg http sever
-type GinHandler struct {
-	Router *gin.Engine
+type noReaddir struct{ http.File }
+
+func (noReaddir) Readdir(int) ([]os.FileInfo, error) { return nil, nil }
+
+// recoverPanics answers 500 when a handler panics, as gin.Recovery did.
+func recoverPanics(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if v := recover(); v != nil {
+				if v == http.ErrAbortHandler { //nolint:errorlint
+					panic(v)
+				}
+				dlog.Errorf("panic serving %s: %v", r.URL.Path, v)
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
-func (h *GinHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	h.Router.ServeHTTP(w, r)
+// statusWriter records the response status for the request log.
+type statusWriter struct {
+	http.ResponseWriter
+	status int
 }
 
-func loggingMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
+func (s *statusWriter) WriteHeader(code int) {
+	if s.status == 0 {
+		s.status = code
+	}
+	s.ResponseWriter.WriteHeader(code)
+}
+
+func (s *statusWriter) Write(b []byte) (int, error) {
+	if s.status == 0 {
+		s.status = http.StatusOK
+	}
+	return s.ResponseWriter.Write(b)
+}
+
+func (s *statusWriter) Unwrap() http.ResponseWriter { return s.ResponseWriter }
+
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		c.Next()
+		sw := &statusWriter{ResponseWriter: w}
+		next.ServeHTTP(sw, r)
 		latency := time.Since(start)
 		if latency > time.Minute {
 			latency = latency.Truncate(time.Second)
 		}
-		statusCode := c.Writer.Status()
-		method := c.Request.Method
-		path := c.Request.URL.Path
+		statusCode := sw.status
+		if statusCode == 0 {
+			statusCode = http.StatusOK
+		}
+		method := r.Method
+		path := r.URL.Path
 
 		// Get the background color based on the status code
 		statusCodeBackgroundColor := getBackgroundColor(statusCode)
@@ -250,21 +282,26 @@ func loggingMiddleware() gin.HandlerFunc {
 		// Get the method color
 		methodColor := getMethodColor(method)
 
+		clientIP, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil || net.ParseIP(clientIP) == nil {
+			clientIP = ""
+		}
 		fmt.Printf("[EXAMPLE] %s |%s %3d %s| %13v | %15s | %72s |%s %-7s %s %s\n",
 			time.Now().Format("2006/01/02 - 15:04:05"),
 			statusCodeBackgroundColor,
 			statusCode,
 			resetColor(),
 			latency,
-			c.ClientIP(),
-			c.Request.RemoteAddr,
+			clientIP,
+			r.RemoteAddr,
 			methodColor,
 			method,
 			resetColor(),
 			path,
 		)
-	}
+	})
 }
+
 func getBackgroundColor(statusCode int) string {
 	switch {
 	case statusCode >= http.StatusOK && statusCode < http.StatusMultipleChoices:
