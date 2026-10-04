@@ -7,7 +7,7 @@ require (
 	github.com/0magnet/afero v1.15.1-0.20261003211811-482680d00992
 	github.com/0magnet/ansifilter-go v0.0.0
 	github.com/0magnet/audioprism-go v0.0.0
-	github.com/0magnet/bbolt v1.5.1-0.20261003212416-9085c3a4875a
+	github.com/0magnet/bbolt v1.5.1-0.20261004153154-cdf1c512cdb1
 	github.com/0magnet/bitree v0.0.0
 	github.com/0magnet/bottle v0.0.0
 	github.com/0magnet/calvin v0.0.0
@@ -33,8 +33,9 @@ require (
 	github.com/0magnet/websh v0.0.0
 	github.com/0magnet/wfdrive v0.3.2
 	github.com/0magnet/winbox-go v0.0.0
+	github.com/0magnet/wisp v0.0.0-20261004020451-d16b9de8e6f4
 	github.com/0magnet/xterm-go v0.0.0
-	github.com/0magnet/yamux v0.1.3-0.20261003212645-80597a0ac6e1
+	github.com/0magnet/yamux v0.1.3-0.20261004024245-10ef81fe8447
 	github.com/ActiveState/termtest/conpty v0.5.0
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/DATA-DOG/go-sqlmock v1.5.2

@@ -20,12 +20,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0magnet/wisp"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/wisp"
 )
 
 var (
@@ -91,7 +91,7 @@ Examples:
 			cfg: wisp.ClientConfig{
 				URL:        wispClientURL,
 				HTTPClient: httpClient,
-				Log:        log,
+				Log:        log.Slog(),
 			},
 			log: log,
 		}
@@ -113,7 +113,7 @@ Examples:
 
 		srv := &wisp.SocksServer{
 			Session: sess.get,
-			Log:     log,
+			Log:     log.Slog(),
 		}
 
 		var b strings.Builder

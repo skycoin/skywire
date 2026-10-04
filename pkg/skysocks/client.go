@@ -2443,7 +2443,12 @@ func (c *Client) ListenAndServe(addr string) error {
 	if c.appCl != nil {
 		c.appCl.Log().Infof("Listening skysocks client on %s", addr)
 	}
+	return c.Serve(l)
+}
 
+// Serve proxies the connections l accepts until the client closes, as
+// ListenAndServe does on a listener it makes itself.
+func (c *Client) Serve(l net.Listener) error {
 	c.listener = l
 	go func() {
 		<-c.closeC
@@ -2453,6 +2458,13 @@ func (c *Client) ListenAndServe(addr string) error {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
+			select {
+			case <-c.closeC:
+				// Close ended the listener and is still tearing the tunnels
+				// down. Calling it again would only wait for that.
+				return fmt.Errorf("accept: %w", err)
+			default:
+			}
 			if c.appCl != nil {
 				c.appCl.Log().Errorf("Error accepting: %v", err)
 			}
@@ -4039,6 +4051,13 @@ func clearDeadlines(conns ...net.Conn) {
 }
 
 func (c *Client) close() {
+	// A Close already under way would only make this goroutine wait on the
+	// Once while every tunnel is torn down.
+	select {
+	case <-c.closeC:
+		return
+	default:
+	}
 	if c.appCl != nil {
 		c.appCl.Log().Debug("Session failed, closing skysocks client")
 	}

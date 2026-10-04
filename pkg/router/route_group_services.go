@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/skycoin/skywire/pkg/flightrec"
 	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -392,6 +393,9 @@ func (rg *RouteGroup) reorderStallServiceFn(_ time.Duration) {
 				// to the leg churn instead of it living only in this visor's log
 				// ring (which holds minutes).
 				rg.reorderWedgeStartNano.Store(time.Now().UnixNano())
+				// Keep the seconds that led here, which are gone by the time
+				// anyone reads this warning.
+				flightrec.Snapshot("reorder-wedge")
 				atomic.StoreUint32(&rg.reorderWedgeSeq, seq)
 				rg.noteMuxEvent(MuxEvent{
 					Event:    MuxEventReorderWedge,

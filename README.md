@@ -12,29 +12,50 @@
 # Skywire
 
 Skywire is a fully open-source, privacy-focused suite of networking
-tools developed by Skycoin. The public Skywire Network enables this
-software to be developed and tested in real-world conditions, with
+tools developed by Skycoin. Every peer is addressed by its public key,
+and all traffic between visors is end-to-end encrypted. The public
+Skywire Network lets this software be developed and tested in
+real-world conditions, with
 [daily rewards in Skycoin](rewards/mainnet_rules.md) ($SKY) distributed
 to eligible participants.
 
-## Why Skywire
+Contents:
+[Quick start](#quick-start) ·
+[Features](#features) ·
+[Why Skywire](#why-skywire) ·
+[Comparison](#how-skywire-compares) ·
+[Borrowed ideas](#ideas-borrowed-and-adapted) ·
+[Architecture](#architecture) ·
+[Rewards](#skywire-rewards) ·
+[Documentation](#documentation) ·
+[Resource usage](#resource-usage) ·
+[Dependencies](#dependencies)
 
-The Internet's security stack is a thirty-year pile of patches over a
-network that was designed without any. TCP/IP assumed a trusted
-backbone. SMTP, DNS, and HTTP shipped plaintext. Every fix since —
-TLS, X.509, Certificate Authorities, DNSSEC, DKIM, SPF, DMARC, HSTS,
-CT logs — bolts confidentiality, identity, or authenticity onto a
-layer that lacks it, via yet another layer that barely knows about the
-ones above and below. CAs get compromised. DNS hijacks break TLS. BGP
-hijacks break DNS. The address, the identity, and the name live in
-three separate systems, and the browser juggles them on every page
-load to keep the illusion together.
+## Quick start
 
-Skywire starts from a different premise: **the address is the
-cryptographic identity.** From that one decision almost everything
-else follows.
+Install as a package, release binary, Docker image, Nix flake or from
+source. See [docs/guides/install.md](docs/guides/install.md), or the
+[install command generator](docs/guides/install-generator.md).
 
-## Major features
+With go installed, a visor runs straight from source. The bundled apps
+(vpn, skysocks, skychat and others) run inside the visor process.
+
+```
+go run github.com/skycoin/skywire@develop cli config gen -r
+go run github.com/skycoin/skywire@develop visor
+```
+
+Set a reward address and read the state of the running visor:
+
+```
+skywire cli reward <skycoin-address>
+skywire cli visor state
+```
+
+Next steps are [visor.md](docs/guides/visor.md) and
+[configuration.md](docs/guides/configuration.md).
+
+## Features
 
 * **Skywire is encrypted UDP & TCP.** Every byte between visors is
   wrapped in the Noise Protocol (ChaCha20-Poly1305). There is no
@@ -84,12 +105,12 @@ else follows.
 
 * **Remote monitoring and remote management over the overlay.**
   All over the same pubkey-authenticated transport:
-  - `skywire cli dmsgpty` — SSH-equivalent interactive shell
-    (`start`) and one-shot commands (`exec`) on a remote visor.
+  - `skywire cli pty` — SSH-equivalent interactive shell
+    (`shell`, `start`) and one-shot commands (`exec`) on a remote visor.
   - `skywire cli gotop --remote <pk>` — terminal activity monitor
     pulling CPU / memory / temperature from a remote visor over
     DMSG.
-  - Hypervisor browser UI and `skywire cli visor tui` — manage
+  - Hypervisor browser UI and `skywire cli visor` (with `--via dmsg://<pk>`) — manage
     clusters of visors from the browser or the terminal.
 
   No public IP, no SSH key sprawl, no jump host.
@@ -114,46 +135,84 @@ else follows.
   service keys from its config service's signed feed, so a
   deployment can change them without a release.
 
+## Why Skywire
+
+The Internet's security stack is a thirty-year pile of patches over a
+network that was designed without any. TCP/IP assumed a trusted
+backbone. SMTP, DNS, and HTTP shipped plaintext. Every fix since —
+TLS, X.509, Certificate Authorities, DNSSEC, DKIM, SPF, DMARC, HSTS,
+CT logs — bolts confidentiality, identity, or authenticity onto a
+layer that lacks it, via yet another layer that barely knows about the
+ones above and below. CAs get compromised. DNS hijacks break TLS. BGP
+hijacks break DNS. The address, the identity, and the name live in
+three separate systems, and the browser juggles them on every page
+load to keep the illusion together.
+
+Skywire starts from a different premise: **the address is the
+cryptographic identity.** From that one decision almost everything
+else follows.
 ## How Skywire compares
 
-### Capabilities
+Each column is defined in the legend under the tables. The first table
+is about reaching peers and the second is about what you do with the
+network. Footnotes apply to both.
 
-| | Dial by key | No open port | Hole punching | Multi-hop | Multipath | Carries IP | Internet exit | Serve by key | In browser | Private network | No central service | Node rewards |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| **Skywire** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ ¹ | ✓ |
-| [Tor](https://www.torproject.org/) | ✓ | ✓ | ✗ | ✓ | ✓ ² | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
-| [I2P](https://geti2p.net/) | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ | ✗ | ✗ | ✓ | ✗ |
-| [Lokinet](https://lokinet.org/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✓ | ✓ |
-| [cjdns](https://github.com/cjdelisle/cjdns) | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✓ | ✓ | ✗ |
-| [Yggdrasil](https://yggdrasil-network.github.io/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✓ | ✓ | ✗ |
-| [Reticulum](https://reticulum.network/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ | ✓ | ✗ |
-| [iroh](https://www.iroh.computer/) | ✓ | ✓ | ✓ | ✗ | ✗ ³ | ✗ | ✗ | ✓ | ✓ ⁴ | ✓ | ✓ | ✗ |
-| [libp2p](https://libp2p.io/) | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ | ✗ |
-| [Tailscale](https://tailscale.com/) | ✗ | ✓ | ✓ | ✗ | ✗ | ✓ | ✓ | ✗ | ✓ | ✓ ⁵ | ✗ | ✗ |
-| [ZeroTier](https://www.zerotier.com/) | ✗ | ✓ | ✓ | ✗ | ✓ ⁶ | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
-| [Nebula](https://github.com/slackhq/nebula) | ✗ | ✓ | ✓ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
-| [WireGuard](https://www.wireguard.com/) | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ | ✓ | ✗ |
+### Reach
 
-- **Dial by key** — a peer is reached by its public key (or an address
+| | Key | No port | Hole punch | Multi-hop | Multi-path | IP |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| **Skywire** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| [Tor](https://www.torproject.org/) | ✓ | ✓ | ✗ | ✓ | ✓ ² | ✗ |
+| [I2P](https://geti2p.net/) | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| [Lokinet](https://lokinet.org/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ |
+| [cjdns](https://github.com/cjdelisle/cjdns) | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ |
+| [Yggdrasil](https://yggdrasil-network.github.io/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ |
+| [Reticulum](https://reticulum.network/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
+| [iroh](https://www.iroh.computer/) | ✓ | ✓ | ✓ | ✗ | ✗ ³ | ✗ |
+| [libp2p](https://libp2p.io/) | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| [Tailscale](https://tailscale.com/) | ✗ | ✓ | ✓ | ✗ | ✗ | ✓ |
+| [ZeroTier](https://www.zerotier.com/) | ✗ | ✓ | ✓ | ✗ | ✓ ⁶ | ✓ |
+| [Nebula](https://github.com/slackhq/nebula) | ✗ | ✓ | ✓ | ✗ | ✗ | ✓ |
+| [WireGuard](https://www.wireguard.com/) | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+
+### Use
+
+| | Exit | Serve | Browser | Private | No central | Rewards |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| **Skywire** | ✓ | ✓ | ✓ | ✓ | ✗ ¹ | ✓ |
+| [Tor](https://www.torproject.org/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [I2P](https://geti2p.net/) | ✓ | ✓ | ✗ | ✗ | ✓ | ✗ |
+| [Lokinet](https://lokinet.org/) | ✓ | ✓ | ✗ | ✗ | ✓ | ✓ |
+| [cjdns](https://github.com/cjdelisle/cjdns) | ✗ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| [Yggdrasil](https://yggdrasil-network.github.io/) | ✗ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| [Reticulum](https://reticulum.network/) | ✗ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| [iroh](https://www.iroh.computer/) | ✗ | ✓ | ✓ ⁴ | ✓ | ✓ | ✗ |
+| [libp2p](https://libp2p.io/) | ✗ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| [Tailscale](https://tailscale.com/) | ✓ | ✗ | ✓ | ✓ ⁵ | ✗ | ✗ |
+| [ZeroTier](https://www.zerotier.com/) | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| [Nebula](https://github.com/slackhq/nebula) | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| [WireGuard](https://www.wireguard.com/) | ✗ | ✗ | ✗ | ✓ | ✓ | ✗ |
+
+- **Key** (dial by key) — a peer is reached by its public key (or an address
   derived from it), not by an IP an operator assigned.
-- **No open port** — a node behind NAT with no inbound port is still
+- **No port** (no open port) — a node behind NAT with no inbound port is still
   reachable.
-- **Hole punching** — two nodes behind NAT can open a direct link
+- **Hole punch** (hole punching) — two nodes behind NAT can open a direct link
   between themselves, without a relay carrying the traffic.
 - **Multi-hop** — traffic can be forwarded through other peers, so two
   nodes with no direct link still connect.
-- **Multipath** — one connection's traffic travels over several paths
+- **Multi-path** — one connection's traffic travels over several paths
   at the same time.
-- **Carries IP** — arbitrary IP traffic, as a VPN or virtual interface.
-- **Internet exit** — a node can carry other nodes' traffic out to the
+- **IP** (carries IP) — arbitrary IP traffic, as a VPN or virtual interface.
+- **Exit** (internet exit) — a node can carry other nodes' traffic out to the
   internet as a built-in feature, not by hand-configured routing.
-- **Serve by key** — a local service can be published at the node's key.
-- **In browser** — a node or client runs inside a web browser.
-- **Private network** — a fully separate network can run on your own
+- **Serve** (serve by key) — a local service can be published at the node's key.
+- **Browser** (in browser) — a node or client runs inside a web browser.
+- **Private** (private network) — a fully separate network can run on your own
   infrastructure.
-- **No central service** — runs with no operator-run discovery or
+- **No central** (no central service) — runs with no operator-run discovery or
   coordination server.
-- **Node rewards** — people running nodes are paid for it.
+- **Rewards** (node rewards) — people running nodes are paid for it.
 
 ¹ Each deployment runs discovery, route-finding and relay services,
 but anyone can run a deployment.
@@ -173,25 +232,125 @@ but anyone can run a deployment.
 What each one's links run over, counting relayed links (iroh's
 relays, Tailscale's DERP, ZeroTier's TCP fallback) and Tor's bridge
 transports. **UDP** means a protocol of its own over UDP; **QUIC** is
-listed separately.
+listed separately. The second table covers non-IP media.
 
-| | TCP | UDP | QUIC | WebSocket | WebTransport | WebRTC | Raw Ethernet | Serial | Packet radio / LoRa |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| **Skywire** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
-| [Tor](https://www.torproject.org/) | ✓ | ✗ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ |
-| [I2P](https://geti2p.net/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| [Lokinet](https://lokinet.org/) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| [cjdns](https://github.com/cjdelisle/cjdns) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
-| [Yggdrasil](https://yggdrasil-network.github.io/) | ✓ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| [Reticulum](https://reticulum.network/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ |
-| [iroh](https://www.iroh.computer/) | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| [libp2p](https://libp2p.io/) | ✓ | ✗ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
-| [Tailscale](https://tailscale.com/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| [ZeroTier](https://www.zerotier.com/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| [Nebula](https://github.com/slackhq/nebula) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| [WireGuard](https://www.wireguard.com/) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| | TCP | UDP | QUIC | WebSocket | WebTransport | WebRTC |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| **Skywire** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| [Tor](https://www.torproject.org/) | ✓ | ✗ | ✗ | ✓ | ✗ | ✓ |
+| [I2P](https://geti2p.net/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [Lokinet](https://lokinet.org/) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [cjdns](https://github.com/cjdelisle/cjdns) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [Yggdrasil](https://yggdrasil-network.github.io/) | ✓ | ✗ | ✓ | ✓ | ✗ | ✗ |
+| [Reticulum](https://reticulum.network/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [iroh](https://www.iroh.computer/) | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
+| [libp2p](https://libp2p.io/) | ✓ | ✗ | ✓ | ✓ | ✓ | ✓ |
+| [Tailscale](https://tailscale.com/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
+| [ZeroTier](https://www.zerotier.com/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [Nebula](https://github.com/slackhq/nebula) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [WireGuard](https://www.wireguard.com/) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ |
 
-## Skywire Control and Data Planes
+| | Raw Ethernet | Serial | Packet radio / LoRa |
+|---|:-:|:-:|:-:|
+| **Skywire** | ✗ | ✗ | ✗ |
+| [Tor](https://www.torproject.org/) | ✗ | ✗ | ✗ |
+| [I2P](https://geti2p.net/) | ✗ | ✗ | ✗ |
+| [Lokinet](https://lokinet.org/) | ✗ | ✗ | ✗ |
+| [cjdns](https://github.com/cjdelisle/cjdns) | ✓ | ✗ | ✗ |
+| [Yggdrasil](https://yggdrasil-network.github.io/) | ✗ | ✗ | ✗ |
+| [Reticulum](https://reticulum.network/) | ✗ | ✓ | ✓ |
+| [iroh](https://www.iroh.computer/) | ✗ | ✗ | ✗ |
+| [libp2p](https://libp2p.io/) | ✗ | ✗ | ✗ |
+| [Tailscale](https://tailscale.com/) | ✗ | ✗ | ✗ |
+| [ZeroTier](https://www.zerotier.com/) | ✗ | ✗ | ✗ |
+| [Nebula](https://github.com/slackhq/nebula) | ✗ | ✗ | ✗ |
+| [WireGuard](https://www.wireguard.com/) | ✗ | ✗ | ✗ |
+
+## Ideas borrowed and adapted
+
+Much of Skywire's route multiplexing reuses ideas that proved themselves
+elsewhere. Each one below is named as the source in the code or design docs,
+and each had to change to fit Skywire, where a "path" is a multi-hop route
+through other visors rather than a network interface. Read the linked files
+for the detail.
+
+### Multiplexing one download or upload over several tunnels (skysocks)
+
+These come from BitTorrent, where a client fetches pieces of one file from
+many peers ([route-spread-policy.md](docs/design/route-spread-policy.md)).
+
+- **Endgame mode.** The last chunks of an object are duplicated onto an idle
+  tunnel, so one slow route does not decide when the object finishes. Skywire
+  duplicates only when fewer chunks remain than tunnels, and only onto the
+  fastest idle tunnel. Off by default (`spread.endgame`).
+  [spread.go](pkg/skysocks/spread.go)
+- **Snubbing and optimistic unchoke.** A tunnel that stops delivering is
+  benched and its chunks are fetched elsewhere, then it is retried with a
+  single chunk. Skywire snubs whole tunnels rather than requests, counts any
+  byte or ack as progress, and waits at least twice the tunnel's smoothed RTT
+  so a far route is not mistaken for a dead one.
+  [tunnel_snub.go](pkg/skysocks/tunnel_snub.go)
+- **Request pipelining.** Each tunnel keeps as many chunks in flight as its own
+  measured rate times RTT can hold, one on a near tunnel and several on a far
+  one. Off by default (`chunk.depth_dynamic`, `upload.depth_dynamic`).
+  [tunnel_depth.go](pkg/skysocks/tunnel_depth.go)
+- **Per-peer limits.** BitTorrent's per-peer caps became `spread.max_share`
+  (no route carries more than a set share of an object) and
+  `spread.min_routes`. The privacy reason for them, an even split so no single
+  route sees most of the traffic, is Skywire's own and has no BitTorrent
+  equivalent.
+- **HTTP range requests** (RFC 7233). One download is split into parallel
+  ranged requests over separate routes and reassembled by offset, so no
+  reorder buffer is needed. [rangesplit.go](pkg/skysocks/rangesplit.go)
+
+### Striping one stream over several route legs (router)
+
+These come from multipath TCP, QUIC and TCP congestion control research
+([mux_aggregation_rfc.md](docs/mux_aggregation_rfc.md)).
+
+- **ECF scheduling** (Lim et al., CoNEXT 2017), the default leg scheduler.
+  It sends on the fastest leg unless waiting would cost more than using a
+  slower one. Skywire has no congestion window, so each leg's capacity is its
+  measured rate times RTT plus an in-flight estimate.
+  [transport_selector.go](pkg/router/transport_selector.go)
+- **OTIAS** (Yang et al.), an alternative scheduler built on the same per-leg
+  estimates. [mux_scheduler.go](pkg/router/mux_scheduler.go)
+- **RACK-TLP loss detection** (RFC 8985). The retransmit threshold follows
+  the slowest active leg's ack delay, and a tail-loss probe resends the end
+  of a burst after about twice the slowest leg's RTT.
+  [rack_tlp.go](pkg/router/rack_tlp.go), [sack.go](pkg/router/sack.go)
+- **Karn's rule.** Retransmitted packets never feed the RTT estimate.
+- **Shared-bottleneck detection** (RFC 8382). Legs whose one-way delays move
+  together share an uplink further out, so they are not counted as separate
+  capacity. [bottleneck.go](pkg/router/bottleneck.go)
+- **BBR's minimum RTT and application-limited rule.** A sliding minimum RTT
+  per leg, and a goodput check so queueing delay is not read as a bad leg.
+  [leg_rtt_window.go](pkg/router/leg_rtt_window.go)
+- **MPTCP's receive-buffer rule** (twice the sum of bandwidths times the
+  largest RTT) sizes the reorder window. [route_mux.go](pkg/router/route_mux.go)
+- **Forward error correction.** Reed-Solomon repair symbols sent across legs
+  let the receiver rebuild a frame stuck on a slow leg instead of waiting for
+  it. [fec.go](pkg/router/fec.go)
+- **Coupled congestion control and LEDBAT.** The `coupled` routing-policy
+  preset is modeled on MPTCP's LIA and OLIA, and `ledbat` on RFC 6817. They
+  run as policy scripts that grow or shrink the number of legs.
+  [preset.go](pkg/router/policy/preset/preset.go)
+
+### Elsewhere
+
+- **libp2p circuit relays.** dmsg servers cap relayed sessions per peer as
+  well as globally, and count refusals by reason.
+  [entity_common.go](pkg/dmsg/dmsg/entity_common.go)
+- **WireGuard.** Datagram routes use ChaCha20-Poly1305 with an RFC 6479
+  anti-replay window and WireGuard's two-minute rekey.
+  [datagram_crypto.go](pkg/router/datagram_crypto.go)
+- **Noise with ML-KEM.** The dmsg handshake is Noise KK combined with
+  post-quantum ML-KEM-768. [pq-hybrid-noise-handshake.md](docs/design/pq-hybrid-noise-handshake.md)
+- **Happy Eyeballs** (RFC 8305) for racing dial attempts to a dmsg server.
+
+## Architecture
+
+### Skywire Control and Data Planes
 
 [dmsg](https://github.com/skycoin/dmsg) (read "D-message") is the
 **control plane** — the always-on relay layer over which visors
@@ -201,7 +360,7 @@ services, or a self-hosted equivalent. Skynet is the **data
 plane** — direct peer-to-peer transports between visors and the
 routes built across them.
 
-## Skywire Network and Transports
+### Skywire Network and Transports
 
 Direct transports between visors come in two types: **STCPR**
 (Skywire TCP Relay) and **SUDPH** (Skywire UDP Hole-punching).
@@ -214,7 +373,7 @@ routing. Routes are set up by trusted route-setup nodes that
 consult the route finder service over
 [transports registered in the transport discovery](https://tpd.skywire.skycoin.com/all-transports).
 
-## Skywire Routing
+### Skywire Routing
 
 A route is a chain of one or more transports between visors and
 may not transit the same public key twice, preventing data loops.
@@ -225,7 +384,7 @@ limit the routing model already imposes. Route multiplexing
 between the same endpoints is similar in concept to BitTorrent's
 piece-level parallelism.
 
-## Skywire Visor
+### Skywire Visor
 
 The name 'visor' was chosen as a less ambiguous term than 'node' to
 refer to the running Skywire process. The term 'node' is typically
@@ -241,31 +400,7 @@ For running and configuring a visor see
 [docs/guides/visor.md](docs/guides/visor.md) and
 [docs/guides/configuration.md](docs/guides/configuration.md).
 
-## Resource usage
-
-Approximate memory footprint, measured from live deployment nodes via pprof
-(`HeapInuse`) cross-referenced with process RSS. Both figures scale roughly
-linearly, so the per-unit cost is derived from the slope between two nodes with
-very different counts (which cancels out the fixed base).
-
-- **Visor:** ~110 MB base (Go runtime + bundled apps + CXO cache) plus
-  **~90 KB of live heap per transport**. The transport mesh is a *minor*
-  contributor — a visor with 190 transports uses ~125 MB of heap, one with
-  ~860 transports ~185 MB. (Per-transport RSS, including the two goroutine
-  stacks and the socket / KCP buffers, is higher — on the order of ~300 KB —
-  but the heap slope is the reliable cross-host figure since a memory-pressured
-  node's RSS is distorted by swap.) The base, not the mesh, dominates a visor's
-  footprint.
-- **dmsg server:** **~0.5 MB of RSS per connected client** (the per-client
-  noise session + yamux mux + relay stream buffers). A server relaying ~850
-  clients uses ~430 MB. This scales directly with client count, so a busy relay
-  must be sized for its peak client load — a 1 GB host saturates and swaps at
-  roughly ~1k clients when it also runs a visor. Cap a relay's `max_sessions`
-  to bound its footprint and shed excess load to other servers.
-
-Measured 2026-06-10 across v1.3.66 / v1.3.67 nodes; numbers are approximate.
-
-## Skywire Cli (command line interface)
+### Skywire Cli (command line interface)
 
 `skywire cli` is the primary interface to a running Skywire visor.
 Skywire cli provides an interface to generate a JSON config file for
@@ -274,17 +409,17 @@ data from different Skywire services.
 
 Full reference: [docs/skywire/cli/](docs/skywire/cli/README.md).
 
-## Skywire Apps
+### Skywire Apps
 
 Server-side apps auto-register in the
 [proxy server](https://sd.skycoin.com/api/services?type=proxy) /
-[VPN server](https://sd.skycoin.com/api/services?type=proxy)
+[VPN server](https://sd.skycoin.com/api/services?type=vpn)
 service discovery on startup; clients dial them by pubkey over a
 direct or multi-hop route.
 
 Operator guides: [vpn](docs/guides/vpn.md), [socks5](docs/guides/socks5.md), [skynet](docs/guides/skynet.md).
 
-## DmsgWeb – Anonymous port forwarding over DMSG
+### DmsgWeb – Anonymous port forwarding over DMSG
 
 `skywire dmsg web` (client) and `skywire dmsg web srv` (server)
 forward TCP ports over DMSG; the resolving SOCKS5 side was
@@ -292,7 +427,7 @@ inspired by I2P. Chaining a browser through a Skywire SOCKS5
 proxy on top composes DMSG's relay anonymity with Skynet's
 multi-hop routing.
 
-## SkyNet – P2P port forwarding over Skywire
+### SkyNet – P2P port forwarding over Skywire
 
 SkyNet is the counterpart to DmsgWeb — port forwarding over
 Skynet routes (direct + multi-hop) rather than over a DMSG relay.
@@ -349,7 +484,7 @@ Operator how-to guides:
 
 Visor native applications:
 
-* [API](docs/skywire_app_api.md)
+* [overview](docs/apps-overview.md), [implementation guide](docs/app_implement_guidance.md)
 * [skychat](cmd/apps/skychat/README.md)
 * [skysocks](cmd/apps/skysocks/README.md) / [skysocks-client](cmd/apps/skysocks-client/README.md)
 * [vpn-client](cmd/apps/vpn-client/README.md) / [vpn-server](cmd/apps/vpn-server/README.md)
@@ -362,17 +497,37 @@ Example custom applications:
 
 Further docs: [skywire wiki](https://github.com/skycoin/skywire/wiki).
 
+## Resource usage
+
+Approximate memory footprint, read from live fleet nodes over dmsg with pprof
+(in-use heap) and, for the dmsg server, the process's peak RSS.
+
+Measured 2026-10-04 on fleet visors running v1.3.97 and v1.3.98, and on a
+dmsg server running v1.3.98-103-g960cf0872.
+
+- **Visor:** about **215 to 240 MB of live heap**, and nearly flat in the
+  number of transports: three healthy visors with 28, 29 and 232 transports
+  held 232, 237 and 216 MB. The base dominates. Its two largest fixed parts
+  are the embedded GeoIP database behind the hypervisor's transport map
+  (~59 MB) and the gzipped wasm visor the hypervisor serves (~38 MB). In June
+  2026 (v1.3.66) a visor was ~110 MB plus ~90 KB per transport.
+- **dmsg server:** about **0.5 MB of RSS per connected client** (the
+  per-client noise session, yamux mux and relay stream buffers). A server with
+  1213 clients peaked at 650 MB RSS, about 0.54 MB per client including its
+  base. A busy relay must be sized for its peak client load. Cap a relay's
+  `max_sessions` to bound its footprint and shed excess load to other servers.
+
 ## Dependencies
 
 ### Build Deps
 
-* `golang` — install with your system package manager on most linux
+* `golang` (go 1.27 or newer, see `go.mod`) — install with your system package manager on most linux
   distributions, or follow [go.dev/doc/install](https://go.dev/doc/install).
   Basic setup of the `go` environment is further described
   [here](https://github.com/skycoin/skycoin/blob/develop/INSTALLATION.md#setup-your-gopath).
 * `git` (optional)
 * `musl` and `kernel-headers-musl` or equivalent — for static
-  compilation; see [docs/static-builds.md](docs/static-builds.md).
+  compilation; see [docs/guides/install.md](docs/guides/install.md).
 
 ### Visor Runtime Deps
 
@@ -386,6 +541,8 @@ Further docs: [skywire wiki](https://github.com/skycoin/skywire/wiki).
 
 ## Dependency Graph
 
+Reflects skywire v1.3.98-103-g960cf0872 (commit `960cf0872`), generated 2026-10-04.
+
 Made with [goda](https://github.com/loov/goda):
 
 ```
@@ -395,6 +552,8 @@ go run github.com/loov/goda@latest graph github.com/skycoin/skywire/... | dot -T
 ![Dependency Graph](docs/skywire-goda-graph.svg "github.com/skycoin/skywire Dependency Graph")
 
 ## Lines of Code
+
+Reflects skywire v1.3.98-103-g960cf0872 (commit `960cf0872`), generated 2026-10-04.
 
 Made with [gocloc](https://github.com/hhatto/gocloc) (excludes `vendor/`, `node_modules/`, `.git/`):
 
@@ -406,31 +565,30 @@ gocloc --not-match-d='(vendor|node_modules|\.git)' .
 -------------------------------------------------------------------------------
 Language                     files          blank        comment           code
 -------------------------------------------------------------------------------
-Go                            2037          52181          76968         303827
-Markdown                       677          13403             41          42309
-JSON                          1534            483              0          40115
-TypeScript                     164           4218           6846          25306
-HTML                           103           1269           1247          15693
-JavaScript                      45            604           1734          10497
-Sass                            90           1290            401           6903
-Plain Text                       8            481              0           1845
-BASH                            42            376            740           1744
-TOML                            10            215             37           1656
-YAML                             8             40            156           1101
-Makefile                         5            168             59            646
-Protocol Buffers                 1             66            385            349
-Starlark                        23             59            424            271
-Nix                              3             38            159            245
+Go                            3151          72929         143399         471893
+JSON                           764             96              0         433006
+Markdown                       827          14860             42          54059
+TypeScript                     184           4549           7732          28000
+HTML                           104           2084           3897          25356
+Kotlin                         160           2560           6930          24703
+JavaScript                      36            954           6338          13099
+Sass                            91           1350            458           7486
+Bourne Shell                    37            281           2650           5166
+Plain Text                      21            152              0           2781
+XML                             21            239            452           2431
+BASH                            48            448           1032           2261
+YAML                            10             39            292           1196
+Makefile                         4            187            167            850
+Protocol Buffers                 1             76            506            402
+Starlark                        28             73            546            376
+Nix                              3             38            160            245
+Batch                            3             32              0            181
 WiX                              2             36             49            156
-Batch                            2             14              0            117
 PowerShell                       1             11              0             91
-XML                              2              0              0             51
-C                                1             14             24             46
-Bourne Shell                     5             14              0             43
-CSS                              4              4             16             34
-Assembly                         3              9             13             20
+TOML                             1              2             15             52
+CSS                              4              4              4             31
 -------------------------------------------------------------------------------
-TOTAL                         4770          74993          89299         453065
+TOTAL                         5501         101000         174669        1073821
 -------------------------------------------------------------------------------
 ```
 

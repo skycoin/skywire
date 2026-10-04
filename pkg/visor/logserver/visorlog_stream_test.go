@@ -11,8 +11,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/gin-gonic/gin"
 )
 
 // TestRenderVisorLogHTMLStreams verifies the colorized log view tails the file:
@@ -21,8 +19,6 @@ import (
 // read only after the handler goroutine has returned, so there's no concurrent
 // access to the recorder buffer.
 func TestRenderVisorLogHTMLStreams(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
 	dir := t.TempDir()
 	logFile := filepath.Join(dir, "skywire.log")
 	if err := os.WriteFile(logFile, []byte("[2026-06-18T10:00:00-05:00] INFO [test]: backlog line\n"), 0o600); err != nil {
@@ -30,14 +26,13 @@ func TestRenderVisorLogHTMLStreams(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(rec)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c.Request = httptest.NewRequest("GET", "/skywire.log", nil).WithContext(ctx)
+	req := httptest.NewRequest("GET", "/skywire.log", nil).WithContext(ctx)
 
 	done := make(chan struct{})
 	go func() {
-		renderVisorLogHTML(c, logFile)
+		renderVisorLogHTML(rec, req, logFile)
 		close(done)
 	}()
 
@@ -86,17 +81,15 @@ func TestRenderVisorLogHTMLStreams(t *testing.T) {
 // response has no Content-Length (so Go chunks it) and that a line appended
 // AFTER the response started reaches the client before the request ends.
 func TestRenderVisorLogHTMLStreamsOverHTTP(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
 	dir := t.TempDir()
 	logFile := filepath.Join(dir, "skywire.log")
 	if err := os.WriteFile(logFile, []byte("[2026-06-18T10:00:00-05:00] INFO [test]: backlog over http\n"), 0o600); err != nil {
 		t.Fatalf("seed log: %v", err)
 	}
 
-	r := gin.New()
-	r.GET("/skywire.log", func(c *gin.Context) { renderVisorLogHTML(c, logFile) })
-	srv := httptest.NewServer(r)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		renderVisorLogHTML(w, req, logFile)
+	}))
 	defer srv.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
