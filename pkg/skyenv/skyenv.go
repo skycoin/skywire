@@ -218,8 +218,8 @@ const (
 	// RSN-oracle transport-list queries (see pkg/router/transport_query.go). A
 	// source visor building a 2-hop route dials the destination here, delivers an
 	// RSN-signed TransportQuery, and receives the destination's own transport
-	// list. Control-plane only; served solely when Routing.EnableRSNOracleRoutes
-	// is set (default OFF), so it adds no listener on the default configuration.
+	// list. Control-plane only; every visor serves it, and a query is answered
+	// only when signed by one of the visor's route setup nodes.
 	DmsgTransportQueryPort uint16 = 68
 
 	// DmsgRelayPort is the dmsg port a visor's dmsg RELAY listens on over

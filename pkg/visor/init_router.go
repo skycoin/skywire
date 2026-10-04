@@ -327,7 +327,6 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		PolicyOnControlPorts:  v.conf.Routing.PolicyOnControlPorts,
 		RulesGCInterval:       0, // 0 = DefaultRulesGCInterval (10s)
 		SetupHooks:            routeSetupHooks,
-		EnableRSNOracleRoutes: v.conf.Routing.EnableRSNOracleRoutes,
 		MuxFEC:                v.conf.Routing.MuxFEC,
 		// Default ON: a nil field (older configs) or explicit true excludes
 		// same-LAN peers as routing intermediates. See Routing.ExcludeSameLanHops.
@@ -383,11 +382,11 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}()
 	}
 
-	// SOURCE-side oracle (opt-in via Routing.EnableRSNOracleRoutes): compute
-	// 2-hop routes from the destination's own transports (fetched via the
-	// listener above) instead of TPD. Additive + fail-safe — on any miss the
-	// dial falls through to the TPD-backed route-finder unchanged.
-	if v.conf.Routing.EnableRSNOracleRoutes {
+	// SOURCE-side oracle: compute 2-hop routes from the destination's own
+	// transports (fetched via the listener above) instead of TPD. Additive +
+	// fail-safe — on any miss the dial falls through to the TPD-backed
+	// route-finder unchanged.
+	{
 		setupNodes := v.conf.EffectiveRouteSetupNodes()
 		// Composite destination-transport oracle:
 		//   1) RSN-signed query to the destination's always-on transport-query
@@ -408,9 +407,9 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		)
 		if oracle != nil {
 			r.SetDstTransportOracle(oracle)
-			logger.Info("RSN-oracle 2-hop route path enabled (RSN-signed primary + visor-RPC bonus fallback)")
+			logger.Info("RSN-oracle 2-hop route path wired (RSN-signed primary + visor-RPC bonus fallback)")
 		} else {
-			logger.Warn("RSN-oracle 2-hop route path enabled but no oracle could be wired; inert")
+			logger.Warn("RSN-oracle 2-hop route path: no oracle could be wired; inert")
 		}
 	}
 

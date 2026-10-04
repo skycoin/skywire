@@ -12,8 +12,7 @@
 //
 // Both halves are served over gob RPC to match the existing setup-node path
 // (net/rpc server, gobrpc client — wire-compatible), so no new codec is
-// introduced. Everything here is inert unless the visor wires it (only started
-// when Routing.EnableRSNOracleRoutes is set — default OFF).
+// introduced. The visor wires both halves at startup (init_router.go).
 package router
 
 import (

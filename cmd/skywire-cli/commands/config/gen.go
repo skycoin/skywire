@@ -1399,17 +1399,6 @@ func configureRouting() {
 		// former "multihop data-plane bug" was #3085). Default ON under js: see the
 		// browser-defaults block above.
 		EnableCascadeRouteSetup: cascadeRouteSetup,
-		// RSN-oracle 2-hop routing ON by default. It computes single-intermediate
-		// routes from the DESTINATION's own transports (fetched via an RSN-signed
-		// query, served by the always-on transport-query listener) instead of TPD.
-		// This is the fix for the TPD fill gap starving the adaptive mux of disjoint
-		// legs (a busy exit's transports never fully land in TPD's CXO —
-		// project_tpd_fill_gap_blocks_mux_diversity): the client asks the exit
-		// directly. Additive + fail-safe — on any miss (peer on an old build that
-		// doesn't serve queries, no shared intermediate) the dial falls through to
-		// the TPD-backed route-finder unchanged, so it degrades gracefully as the
-		// fleet updates.
-		EnableRSNOracleRoutes: true,
 	}
 
 	if policyPerDial != "" {
