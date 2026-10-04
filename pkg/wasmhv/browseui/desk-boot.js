@@ -486,8 +486,12 @@
 			// nested browser can use real /vnet/<port>/ URLs — native rendering
 			// for the hypervisor UI. Resolves false where SWs are unavailable;
 			// the browser falls back to its transcoder, as before.
+			// The worker waits this long for the page to answer one request. The
+			// hypervisor's tree summary can take ~15 s behind a nested hypervisor,
+			// well past the worker's 8 s default, and the page side stops at 30 s.
+			var vnetSWTimeoutMs = 35000;
 			var swReady = (globalThis.vnet && globalThis.vnet.enableSW)
-				? globalThis.vnet.enableSW(opts.vnetSWURL || 'vnet-sw.js').catch(function () { return false; })
+				? globalThis.vnet.enableSW(opts.vnetSWURL || 'vnet-sw.js', undefined, vnetSWTimeoutMs).catch(function () { return false; })
 				: Promise.resolve(false);
 
 			status('restoring filesystem…');

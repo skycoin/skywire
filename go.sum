@@ -74,8 +74,8 @@ github.com/0magnet/bbolt v1.5.1-0.20261004153154-cdf1c512cdb1 h1:+ZvV6Qq0gC/Ghk7
 github.com/0magnet/bbolt v1.5.1-0.20261004153154-cdf1c512cdb1/go.mod h1:CpOPhNXerCJIq3QRpKIhrkJdweQF45+mDJuSpWaGwSc=
 github.com/0magnet/bitree v0.0.0 h1:CPr6TFH8E7Ps2OiFlBv8Q9LwWH9O90QkhRD2kI9hTFY=
 github.com/0magnet/bitree v0.0.0/go.mod h1:fXaS+dltJcAnMAHKz1LR5X4/hE+S3QoxlMgni9wlVhw=
-github.com/0magnet/bottle v0.0.0 h1:J/pWMnXt1mAjXPM+C533+ygomFNKvnUH84VbExVFcfc=
-github.com/0magnet/bottle v0.0.0/go.mod h1:02z8sWzqF3QH4SjMxnx5bnysFUqsw9CdUTtIj+CIxkw=
+github.com/0magnet/bottle v0.0.1-0.20261004182110-0f3bfb283975 h1:7h+DFZwlyNHaI+I+o32igfJuBHYOCRJ8CdaXGRTlzjY=
+github.com/0magnet/bottle v0.0.1-0.20261004182110-0f3bfb283975/go.mod h1:02z8sWzqF3QH4SjMxnx5bnysFUqsw9CdUTtIj+CIxkw=
 github.com/0magnet/calvin v0.0.0 h1:gUPh78127uuHtpm3GGWo5N+2gqz/qAi3yVTh4BdvuaU=
 github.com/0magnet/calvin v0.0.0/go.mod h1:lSY+7FAzjDu2AlOiyR6pXXzJGhI1U7d4ZNHpzWyAYIg=
 github.com/0magnet/coloredcobra v1.0.4-0.20260908180055-b9d8b508df51 h1:lZFYbwsNArM50QJI/apWJgDMTF0YmTwUeC+Sp6g+HCA=
