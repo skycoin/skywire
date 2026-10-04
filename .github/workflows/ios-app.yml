@@ -80,7 +80,7 @@ jobs:
         run: |
           destination=$(ios/scripts/ci-xcode.sh destination)
           echo "Simulator: $destination"
-          device=$(printf '%s' "$destination" | sed -n 's/.*name=\([^,]*\).*/\1/p')
+          device=${destination##*,id=}
           xcrun simctl boot "$device" 2>/dev/null || true
           xcrun simctl privacy "$device" grant microphone com.skycoin.skywire
           xcrun simctl shutdown "$device"
