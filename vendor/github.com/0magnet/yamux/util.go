@@ -3,27 +3,12 @@
 
 package yamux
 
-import (
-	"sync"
-	"time"
-)
-
 // Logger is a abstract of *log.Logger
 type Logger interface {
 	Print(v ...interface{})
 	Printf(format string, v ...interface{})
 	Println(v ...interface{})
 }
-
-var (
-	timerPool = &sync.Pool{
-		New: func() interface{} {
-			timer := time.NewTimer(time.Hour * 1e6)
-			timer.Stop()
-			return timer
-		},
-	}
-)
 
 // asyncSendErr is used to try an async send of an error
 func asyncSendErr(ch chan error, err error) {

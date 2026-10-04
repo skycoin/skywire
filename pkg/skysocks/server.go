@@ -2,6 +2,7 @@
 package skysocks
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -33,15 +34,28 @@ type Server struct {
 	useWL     bool
 }
 
+// ServerOption configures a Server at construction.
+type ServerOption func(*socks5.Config)
+
+// WithDial makes the exit reach its targets through dial instead of the
+// network, for a test that runs everything in memory.
+func WithDial(dial func(ctx context.Context, network, addr string) (net.Conn, error)) ServerOption {
+	return func(c *socks5.Config) { c.Dial = dial }
+}
+
 // NewServer constructs a new Server.
-func NewServer(whitelist []cipher.PubKey, appCl *app.Client) (*Server, error) {
+func NewServer(whitelist []cipher.PubKey, appCl *app.Client, opts ...ServerOption) (*Server, error) {
 	// Give go-socks5 an explicit logrus-backed logger so it does not fall back
 	// to its default log.New(os.Stdout, …) and leak lines to stdout. Cap at
 	// Debug: a SOCKS proxy failing a *client-requested* dial is a routine,
 	// client-driven condition, not a proxy error.
-	s, err := socks5.New(&socks5.Config{
+	cfg := &socks5.Config{
 		Logger: logging.NewStdLoggerLevel(logging.MustGetLogger("skysocks"), logrus.DebugLevel),
-	})
+	}
+	for _, o := range opts {
+		o(cfg)
+	}
+	s, err := socks5.New(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("socks5: %w", err)
 	}
