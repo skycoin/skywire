@@ -38,7 +38,7 @@ func runPlan(capsBps []float64, chunks int, p spreadPolicy) []int64 {
 func runPlanWithPriors(capsBps, priorBps []float64, chunks int, p spreadPolicy) []int64 {
 	carried := make([]int64, len(capsBps))
 	for i := 0; i < chunks; i++ {
-		idx := spreadChoose(capsBps, priorBps, carried, p)
+		idx := spreadChoose(capsBps, priorBps, carried, 0, p)
 		if idx < 0 {
 			break
 		}
@@ -127,7 +127,7 @@ func TestSpreadChooseWeighsAnUnmeasuredRouteByItsPrior(t *testing.T) {
 // has only ever been described.
 func TestSpreadChooseBreaksTiesTowardTheMeasuredRoute(t *testing.T) {
 	require.Equal(t, 0, spreadChoose(
-		[]float64{4 << 20, 0}, []float64{0, 4 << 20}, []int64{0, 0},
+		[]float64{4 << 20, 0}, []float64{0, 4 << 20}, []int64{0, 0}, 0,
 		spreadPolicy{maxShare: 1}), "same weight, but only one of them is evidence")
 }
 
@@ -151,12 +151,12 @@ func TestSpreadChooseHoldsTheCap(t *testing.T) {
 // its share the cap is ignored and the chunk is still placed.
 func TestSpreadChooseNeverStallsOnTheCap(t *testing.T) {
 	// One tunnel cannot be under a 0.4 cap of itself, ever.
-	require.Equal(t, 0, spreadChoose([]float64{1 << 20}, []float64{0}, []int64{1 << 30}, spreadPolicy{maxShare: 0.4}))
-	require.Equal(t, -1, spreadChoose(nil, nil, nil, spreadPolicy{maxShare: 0.4}), "nothing to place it on")
+	require.Equal(t, 0, spreadChoose([]float64{1 << 20}, []float64{0}, []int64{1 << 30}, 0, spreadPolicy{maxShare: 0.4}))
+	require.Equal(t, -1, spreadChoose(nil, nil, nil, 0, spreadPolicy{maxShare: 0.4}), "nothing to place it on")
 	// ...and neither may the probe bound. A lone tunnel nothing is known
 	// about has spent its one probe chunk and is still the only place the
 	// next chunk can go.
-	require.Equal(t, 0, spreadChoose([]float64{0}, []float64{0}, []int64{planChunk}, spreadPolicy{maxShare: 1, minRoutes: 2}),
+	require.Equal(t, 0, spreadChoose([]float64{0}, []float64{0}, []int64{planChunk}, 0, spreadPolicy{maxShare: 1, minRoutes: 2}),
 		"a spent probe must not stall an object either")
 }
 
@@ -830,4 +830,17 @@ func mustParse(t *testing.T, knob, raw string) int64 {
 	v, err := skysettings.Parse(knob, raw)
 	require.NoError(t, err)
 	return v
+}
+
+// A route that leaves mid-object takes its candidacy with it but not its
+// bytes. Counting only the routes still offered, both fast tunnels below
+// look over a 0.4 cap and the never-stall rule hands the faster one the
+// chunk, which is how spread-cut finished at 50 % (#5383).
+func TestSpreadChooseCountsBytesOnRoutesThatLeft(t *testing.T) {
+	const mb = 1 << 20
+	caps := []float64{2444672, 1849184}
+	require.Equal(t, 1, spreadChoose(caps, []float64{0, 0}, []int64{7 * mb, 6 * mb}, 3*mb, spreadPolicy{maxShare: 0.4}),
+		"7 of 16 MB is over the cap; 6 of 16 is not")
+	require.Equal(t, 0, spreadChoose(caps, []float64{0, 0}, []int64{7 * mb, 6 * mb}, 0, spreadPolicy{maxShare: 0.4}),
+		"without the 3 MB elsewhere both look capped and the faster one is chosen")
 }
