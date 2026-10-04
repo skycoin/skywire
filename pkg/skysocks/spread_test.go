@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/0magnet/yamux"
@@ -196,6 +197,10 @@ func TestSpreadDuplicatesOnlyTheTail(t *testing.T) {
 // first answer wins and the loser's bytes are dropped — the reassembled object
 // is unchanged.
 func TestSpreadEndgameDuplicatesTheTailChunksOnly(t *testing.T) {
+	synctest.Test(t, spreadEndgameDuplicatesTheTailChunksOnly)
+}
+
+func spreadEndgameDuplicatesTheTailChunksOnly(t *testing.T) {
 	t.Cleanup(func() { skysettings.Reset() })
 	var sessions []*yamux.Session
 	stamps := map[*yamux.Session]*tunnelMeter{}
