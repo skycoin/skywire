@@ -40,6 +40,7 @@ fmt:
 .PHONY: lint
 lint:
 	golangci-lint run ./...
+	GOOS=js GOARCH=wasm golangci-lint run ./...
 
 .PHONY: test
 test:
@@ -101,17 +102,13 @@ test-benchmark-compare:
 	@git fetch
 	./scripts/compare_benchmarks.sh $(REF)
 
-test-wasm: ## Compile-gate the js/wasm-tagged half
+test-wasm: ## Build and test the js/wasm port under Node
 	@# Self-contained: this Makefile does not carry the shared template's
 	@# PKGS/JSPKGS variables. A host build cannot see //go:build js && wasm
 	@# files at all, so without this a wasm-only break stays invisible.
-	@#
-	@# A BUILD, not a test run: a package can support js/wasm while its tests
-	@# do not — bbolt's unix_test.go needs unix.Rlimit, which does not exist
-	@# there. Compiling is what catches the error this target exists for.
-	@if ! grep -rlq '^//go:build js' --include='*.go' --exclude-dir=vendor . 2>/dev/null; then \
-		echo 'no js/wasm-tagged files; nothing to gate'; \
-	else \
-		echo '--- building in the js/wasm build context'; \
-		CGO_ENABLED=0 GOOS=js GOARCH=wasm go build ./...; \
-	fi
+	@# -short skips the multi-GB tests; tests/ is linux-only or
+	@# needs gofail enabled.
+	CGO_ENABLED=0 GOOS=js GOARCH=wasm go build ./...
+	CGO_ENABLED=0 GOOS=js GOARCH=wasm go test -short -timeout 20m \
+		-exec="$$(go env GOROOT)/lib/wasm/go_js_wasm_exec" \
+		$$(go list ./... | grep -v /bbolt/tests/)

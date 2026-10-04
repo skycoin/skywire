@@ -94,6 +94,9 @@ func New(vfs afero.Fs, stdin io.Reader, stdout, stderr io.Writer, extraEnv ...st
 		interp.StatHandler(s.statHandler),
 		interp.ReadDirHandler2(s.readDirHandler),
 		interp.AccessHandler(s.accessHandler),
+		// Interactive keeps a job started with & alive after its line's
+		// context is canceled, as the web session does after every line.
+		interp.Interactive(true),
 	)
 	if err != nil {
 		return nil, err

@@ -70,8 +70,8 @@ github.com/0magnet/ansifilter-go v0.0.0 h1:xIwmHz63n5S3ADg92YT6ievd1itLqZsrmyEhD
 github.com/0magnet/ansifilter-go v0.0.0/go.mod h1:QnLLIHo9iYnvlZ03gSH5tSrpfbIep2fJU2iTX+GA1f8=
 github.com/0magnet/audioprism-go v0.0.0 h1:5xY71QfEIoWs4rSLaojOoL1l1NhTIPAQX/u7c4aJu8A=
 github.com/0magnet/audioprism-go v0.0.0/go.mod h1:tymR05CQVqL1cNBgN68sYWI2pj2SrPE1aFwAR918/HM=
-github.com/0magnet/bbolt v1.5.1-0.20261004153154-cdf1c512cdb1 h1:+ZvV6Qq0gC/Ghk7dd0kw35WSoviqAeG75qiao9ZzYk8=
-github.com/0magnet/bbolt v1.5.1-0.20261004153154-cdf1c512cdb1/go.mod h1:CpOPhNXerCJIq3QRpKIhrkJdweQF45+mDJuSpWaGwSc=
+github.com/0magnet/bbolt v1.5.1-0.20261004201233-f6a048c19b9a h1:xCNydYD8p9zv9DSoYq9BaTopvFDwh7bd098vtdV0oUs=
+github.com/0magnet/bbolt v1.5.1-0.20261004201233-f6a048c19b9a/go.mod h1:CpOPhNXerCJIq3QRpKIhrkJdweQF45+mDJuSpWaGwSc=
 github.com/0magnet/bitree v0.0.0 h1:CPr6TFH8E7Ps2OiFlBv8Q9LwWH9O90QkhRD2kI9hTFY=
 github.com/0magnet/bitree v0.0.0/go.mod h1:fXaS+dltJcAnMAHKz1LR5X4/hE+S3QoxlMgni9wlVhw=
 github.com/0magnet/bottle v0.0.1-0.20261004223459-03c5fc804891 h1:3Ik4c9JcxYqGUF7c0w7WKtym+LFljAFqyVqeUxzEYE4=
@@ -120,8 +120,8 @@ github.com/0magnet/termanim v0.0.0 h1:7roJVqAVy8LGtAArzaEB8AjFxtcoBI5cnu6X1ru5pr
 github.com/0magnet/termanim v0.0.0/go.mod h1:8WbbqYAyKsmheTz8lz+8traAN0JBnobGOXkUIgVb1p8=
 github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 h1:wK2MncQOnEea7yqiOHvv3oD89sc+YC1dAw4zw1o48mQ=
 github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754/go.mod h1:9N1kqBjNdAUT/pfrWKyty4zS5ZQgG1OvsTmhdcpAWB0=
-github.com/0magnet/websh v0.0.1-0.20261004171029-50c3c3028c3a h1:ukKFP1Rj/vc7hjial3l284SqRw1/FKOyWB6Z/wD+rwQ=
-github.com/0magnet/websh v0.0.1-0.20261004171029-50c3c3028c3a/go.mod h1:jcU1sxbZIM2D9oG0Eon9tFNApGCHrIJCvNt+7furazI=
+github.com/0magnet/websh v0.0.1-0.20261004205330-1203fa7da370 h1:FeL4p0F1J/A7GHwt0Cx4X5d7uEG84pg5hzGozPJFQ3Q=
+github.com/0magnet/websh v0.0.1-0.20261004205330-1203fa7da370/go.mod h1:Lxb1+umLOrTAuRdabkyuJAbw8mwEUutK0CR6VWTDDUo=
 github.com/0magnet/wfdrive v0.3.2 h1:THKZK/o2fSlkO+bYWjE3JrA9FSYMrx3SfXHU/1t/vSA=
 github.com/0magnet/wfdrive v0.3.2/go.mod h1:wrSIWlsnv4K7lD5q0Q6DBWWWvhw6wRvej6zB3In8IKs=
 github.com/0magnet/winbox-go v0.0.0 h1:OTu+XbGvpTUWUD5pMS5kHqFwj+MVDcKiEYECOV7X7CQ=

@@ -7,7 +7,7 @@ require (
 	github.com/0magnet/afero v1.15.1-0.20261003211811-482680d00992
 	github.com/0magnet/ansifilter-go v0.0.0
 	github.com/0magnet/audioprism-go v0.0.0
-	github.com/0magnet/bbolt v1.5.1-0.20261004153154-cdf1c512cdb1
+	github.com/0magnet/bbolt v1.5.1-0.20261004201233-f6a048c19b9a
 	github.com/0magnet/bitree v0.0.0
 	github.com/0magnet/bottle v0.0.1-0.20261004223459-03c5fc804891
 	github.com/0magnet/calvin v0.0.0
@@ -30,7 +30,7 @@ require (
 	github.com/0magnet/spheregraph v0.0.0
 	github.com/0magnet/sysinfo v1.1.4-0.20261003211934-59c35da8ce3f
 	github.com/0magnet/termanim v0.0.0
-	github.com/0magnet/websh v0.0.1-0.20261004171029-50c3c3028c3a
+	github.com/0magnet/websh v0.0.1-0.20261004205330-1203fa7da370
 	github.com/0magnet/wfdrive v0.3.2
 	github.com/0magnet/winbox-go v0.0.0
 	github.com/0magnet/wisp v0.0.0-20261004183505-1f6045fd0359
