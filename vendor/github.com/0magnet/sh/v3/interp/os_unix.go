@@ -56,29 +56,15 @@ func isENOEXEC(err error) bool { return errors.Is(err, syscall.ENOEXEC) }
 // with ETXTBSY, i.e. a process holds it open for writing.
 func isETXTBSY(err error) bool { return errors.Is(err, syscall.ETXTBSY) }
 
-// killProcess sends a signal to a process that is not one of this runner's
-// jobs, for the kill builtin given a PID it does not know.
-//
-// Non-positive PIDs are refused: kill(2) reads 0 as the caller's process group
-// and -1 as every process the user may signal. Neither is this runner's to
-// signal, and in an embedded interpreter both are the host application's.
-func killProcess(pid, signum int) error {
-	if pid <= 0 {
-		return errors.New("no such process")
-	}
-	return unix.Kill(pid, unix.Signal(signum))
-}
-
 // signalName and signalNum resolve signal names through the running platform
 // rather than a table compiled into the shell.
 //
-// The numbers are not portable and the differences are not obscure: SIGUSR1 is
-// 10 on Linux and 30 on darwin, where 10 is SIGBUS. A hardcoded Linux table
-// meant `kill -USR1 <pid>` on macOS reached a real process with SIGBUS, which
-// is a fault, not a user signal. Asking the platform is the only way to be
-// right on more than one of them, and x/sys/unix already has the tables.
+// The numbers are not portable and the differences are not obscure. SIGUSR1 is
+// 10 on Linux and 30 on darwin, where 10 is SIGBUS. No number reaches a kernel
+// from here, so this decides what `kill -l` prints and what `kill -10 %1`
+// means, and both should agree with the host shell rather than with Linux.
 //
-// SIG is not part of the name here: the builtin accepts and prints USR1, and
+// SIG is not part of the name here. The builtin accepts and prints USR1 while
 // x/sys/unix wants SIGUSR1, so the prefix is added and stripped at this
 // boundary and nowhere else.
 func signalName(num int) string {
