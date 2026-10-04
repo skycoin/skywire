@@ -15,7 +15,7 @@ func registerPprof(mux *http.ServeMux) {
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	for _, p := range []string{"heap", "goroutine", "threadcreate", "block", "mutex", "allocs"} {
+	for _, p := range []string{"heap", "goroutine", "goroutineleak", "threadcreate", "block", "mutex", "allocs"} {
 		mux.Handle("/debug/pprof/"+p, pprof.Handler(p))
 	}
 }
