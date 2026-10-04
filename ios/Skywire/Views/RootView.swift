@@ -8,6 +8,7 @@ struct RootView: View {
     @EnvironmentObject private var router: ChatRouter
     @EnvironmentObject private var notifications: NotificationBridge
     @ObservedObject private var settings: AppSettings
+    @ObservedObject private var calls = VoiceCalls.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var tab = AppTab.home
 
@@ -35,6 +36,14 @@ struct RootView: View {
                 .tag(AppTab.settings)
         }
         .tint(.skywire)
+        // The call, full screen, over every tab: a call is what the phone
+        // is doing, not something to notice inside a conversation list.
+        // The state behind it is the visor's own list, so the screen cannot
+        // disagree with it, and its dismissal is the buttons' business
+        // (Decline, Hang up) — never a swipe or a tap outside.
+        .fullScreenCover(isPresented: Binding(get: { calls.state.busy }, set: { _ in })) {
+            CallScreen()
+        }
         .modifier(LockCover(lock: lock, enabled: settings.appLockEnabled))
         .onAppear {
             app.launch()
@@ -43,6 +52,9 @@ struct RootView: View {
         }
         // Whichever screen is up: the hub is read while the core is connected.
         .task(id: app.connected) { await notifications.run(app) }
+        // The calls are polled for as long as the core is connected, ringing
+        // and connecting whether or not any screen is looking.
+        .task(id: app.connected) { await CallCenter.shared.run(app) }
         .onChange(of: router.pending) { request in
             if request != nil { tab = .chat }
         }

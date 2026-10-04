@@ -115,6 +115,11 @@
       "en": "Done",
       "zh-Hans": "完成",
       "es": "Listo"
+    },
+    "call_suspended_note": {
+      "en": "Calls ring only while Skywire is running. Nothing rings a phone the app has been suspended on.",
+      "zh-Hans": "只有在 Skywire 运行时来电才会响铃。应用被暂停的手机不会收到任何响铃。",
+      "es": "Las llamadas suenan solo mientras Skywire está en ejecución. Un teléfono con la app suspendida no suena."
     }
   },
   "InfoPlist": {

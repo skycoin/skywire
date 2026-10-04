@@ -516,3 +516,79 @@ struct DmsgReconnectResult: Decodable {
 struct APIError: Decodable {
     let error: String
 }
+
+// MARK: Voice calls (the port of Android's api/VisorModels.kt, voice part)
+
+/// How a call this phone is placing is going. The first three are progress;
+/// the rest are why it ended unanswered, which the visor keeps listing for a
+/// few seconds so the call screen can say so instead of just closing.
+public enum DialState: String, Sendable, Equatable, CaseIterable {
+    case connecting, calling, ringing
+    case offline, declined, busy, noAnswer = "no_answer", failed
+
+    public var ended: Bool { self >= .offline }
+
+    /// The visor's wire strings; "calling", and a visor that sends no state
+    /// at all, reads as `.calling`.
+    public static func parse(_ value: String) -> DialState {
+        DialState(rawValue: value) ?? .calling
+    }
+}
+
+extension DialState: Comparable {
+    /// The declared order is progress before outcomes, as Android's ordinals
+    /// are; `ended` reads it.
+    public static func < (lhs: DialState, rhs: DialState) -> Bool {
+        let order: [DialState] = DialState.allCases
+        return order.firstIndex(of: lhs)! < order.firstIndex(of: rhs)!
+    }
+}
+
+/// A call this phone is placing, from `…/skychat/voice/dialing`. `ringback`
+/// is true once the other side's own ringback tone has arrived and can be
+/// played (`…/skychat/voice/ringback`).
+public struct OutgoingCall: Decodable, Sendable, Equatable {
+    public var callId: String
+    public var peerPk: String
+    public var state: DialState
+    public var ringback: Bool
+
+    enum CodingKeys: String, CodingKey { case callId = "call_id", peerPk = "peer", state, ringback }
+
+    public init(callId: String, peerPk: String, state: DialState = .calling, ringback: Bool = false) {
+        self.callId = callId
+        self.peerPk = peerPk
+        self.state = state
+        self.ringback = ringback
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        callId = c.lenient(.callId, "")
+        peerPk = c.lenient(.peerPk, "")
+        state = DialState.parse(c.lenient(.state, ""))
+        ringback = c.lenient(.ringback, false)
+    }
+}
+
+/// A ringing inbound call. The visor formats these as `"<call-id> from <pk>"`
+/// — one string, because the surface it was built for is a CLI listing — so
+/// the shape is parsed here rather than deserialized.
+public struct VoiceInvite: Sendable, Equatable {
+    public var callId: String
+    public var fromPk: String
+
+    public init(callId: String, fromPk: String) {
+        self.callId = callId
+        self.fromPk = fromPk
+    }
+
+    /// nil when the line isn't the expected shape, so a poll can skip it.
+    public static func parse(_ line: String) -> VoiceInvite? {
+        guard let at = line.range(of: " from ") else { return nil }
+        let id = String(line[..<at.lowerBound]).trimmingCharacters(in: .whitespaces)
+        let pk = String(line[at.upperBound...]).trimmingCharacters(in: .whitespaces)
+        guard !id.isEmpty, !pk.isEmpty else { return nil }
+        return VoiceInvite(callId: id, fromPk: pk)
+    }
+}
