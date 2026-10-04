@@ -24,6 +24,7 @@ Contents:
 [Features](#features) ·
 [Why Skywire](#why-skywire) ·
 [Comparison](#how-skywire-compares) ·
+[Borrowed ideas](#ideas-borrowed-and-adapted) ·
 [Architecture](#architecture) ·
 [Rewards](#skywire-rewards) ·
 [Documentation](#documentation) ·
@@ -264,6 +265,88 @@ listed separately. The second table covers non-IP media.
 | [ZeroTier](https://www.zerotier.com/) | ✗ | ✗ | ✗ |
 | [Nebula](https://github.com/slackhq/nebula) | ✗ | ✗ | ✗ |
 | [WireGuard](https://www.wireguard.com/) | ✗ | ✗ | ✗ |
+
+## Ideas borrowed and adapted
+
+Much of Skywire's route multiplexing reuses ideas that proved themselves
+elsewhere. Each one below is named as the source in the code or design docs,
+and each had to change to fit Skywire, where a "path" is a multi-hop route
+through other visors rather than a network interface. Read the linked files
+for the detail.
+
+### Multiplexing one download or upload over several tunnels (skysocks)
+
+These come from BitTorrent, where a client fetches pieces of one file from
+many peers ([route-spread-policy.md](docs/design/route-spread-policy.md)).
+
+- **Endgame mode.** The last chunks of an object are duplicated onto an idle
+  tunnel, so one slow route does not decide when the object finishes. Skywire
+  duplicates only when fewer chunks remain than tunnels, and only onto the
+  fastest idle tunnel. Off by default (`spread.endgame`).
+  [spread.go](pkg/skysocks/spread.go)
+- **Snubbing and optimistic unchoke.** A tunnel that stops delivering is
+  benched and its chunks are fetched elsewhere, then it is retried with a
+  single chunk. Skywire snubs whole tunnels rather than requests, counts any
+  byte or ack as progress, and waits at least twice the tunnel's smoothed RTT
+  so a far route is not mistaken for a dead one.
+  [tunnel_snub.go](pkg/skysocks/tunnel_snub.go)
+- **Request pipelining.** Each tunnel keeps as many chunks in flight as its own
+  measured rate times RTT can hold, one on a near tunnel and several on a far
+  one. Off by default (`chunk.depth_dynamic`, `upload.depth_dynamic`).
+  [tunnel_depth.go](pkg/skysocks/tunnel_depth.go)
+- **Per-peer limits.** BitTorrent's per-peer caps became `spread.max_share`
+  (no route carries more than a set share of an object) and
+  `spread.min_routes`. The privacy reason for them, an even split so no single
+  route sees most of the traffic, is Skywire's own and has no BitTorrent
+  equivalent.
+- **HTTP range requests** (RFC 7233). One download is split into parallel
+  ranged requests over separate routes and reassembled by offset, so no
+  reorder buffer is needed. [rangesplit.go](pkg/skysocks/rangesplit.go)
+
+### Striping one stream over several route legs (router)
+
+These come from multipath TCP, QUIC and TCP congestion control research
+([mux_aggregation_rfc.md](docs/mux_aggregation_rfc.md)).
+
+- **ECF scheduling** (Lim et al., CoNEXT 2017), the default leg scheduler.
+  It sends on the fastest leg unless waiting would cost more than using a
+  slower one. Skywire has no congestion window, so each leg's capacity is its
+  measured rate times RTT plus an in-flight estimate.
+  [transport_selector.go](pkg/router/transport_selector.go)
+- **OTIAS** (Yang et al.), an alternative scheduler built on the same per-leg
+  estimates. [mux_scheduler.go](pkg/router/mux_scheduler.go)
+- **RACK-TLP loss detection** (RFC 8985). The retransmit threshold follows
+  the slowest active leg's ack delay, and a tail-loss probe resends the end
+  of a burst after about twice the slowest leg's RTT.
+  [rack_tlp.go](pkg/router/rack_tlp.go), [sack.go](pkg/router/sack.go)
+- **Karn's rule.** Retransmitted packets never feed the RTT estimate.
+- **Shared-bottleneck detection** (RFC 8382). Legs whose one-way delays move
+  together share an uplink further out, so they are not counted as separate
+  capacity. [bottleneck.go](pkg/router/bottleneck.go)
+- **BBR's minimum RTT and application-limited rule.** A sliding minimum RTT
+  per leg, and a goodput check so queueing delay is not read as a bad leg.
+  [leg_rtt_window.go](pkg/router/leg_rtt_window.go)
+- **MPTCP's receive-buffer rule** (twice the sum of bandwidths times the
+  largest RTT) sizes the reorder window. [route_mux.go](pkg/router/route_mux.go)
+- **Forward error correction.** Reed-Solomon repair symbols sent across legs
+  let the receiver rebuild a frame stuck on a slow leg instead of waiting for
+  it. [fec.go](pkg/router/fec.go)
+- **Coupled congestion control and LEDBAT.** The `coupled` routing-policy
+  preset is modeled on MPTCP's LIA and OLIA, and `ledbat` on RFC 6817. They
+  run as policy scripts that grow or shrink the number of legs.
+  [preset.go](pkg/router/policy/preset/preset.go)
+
+### Elsewhere
+
+- **libp2p circuit relays.** dmsg servers cap relayed sessions per peer as
+  well as globally, and count refusals by reason.
+  [entity_common.go](pkg/dmsg/dmsg/entity_common.go)
+- **WireGuard.** Datagram routes use ChaCha20-Poly1305 with an RFC 6479
+  anti-replay window and WireGuard's two-minute rekey.
+  [datagram_crypto.go](pkg/router/datagram_crypto.go)
+- **Noise with ML-KEM.** The dmsg handshake is Noise KK combined with
+  post-quantum ML-KEM-768. [pq-hybrid-noise-handshake.md](docs/design/pq-hybrid-noise-handshake.md)
+- **Happy Eyeballs** (RFC 8305) for racing dial attempts to a dmsg server.
 
 ## Architecture
 
