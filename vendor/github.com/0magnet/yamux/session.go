@@ -45,6 +45,10 @@ type Session struct {
 	// bufRead is a buffered reader
 	bufRead *bufio.Reader
 
+	// recvScratch holds a data frame's body while recvLoop reads it, so no
+	// stream lock is held across network I/O. Only recvLoop touches it.
+	recvScratch []byte
+
 	// pings is used to track inflight pings
 	pings    map[uint32]chan struct{}
 	pingID   uint32
@@ -391,17 +395,8 @@ func (s *Session) waitForSend(hdr header, body []byte) error {
 // potential shutdown. Since there's the expectation that sends can happen
 // in a timely manner, we enforce the connection write timeout here.
 func (s *Session) waitForSendErr(hdr header, body []byte, errCh chan error) error {
-	t := timerPool.Get()
-	timer := t.(*time.Timer)
-	timer.Reset(s.config.ConnectionWriteTimeout)
-	defer func() {
-		timer.Stop()
-		select {
-		case <-timer.C:
-		default:
-		}
-		timerPool.Put(t)
-	}()
+	timer := time.NewTimer(s.config.ConnectionWriteTimeout)
+	defer timer.Stop()
 
 	ready := &sendReady{Hdr: hdr, Body: body, Err: errCh}
 	select {
@@ -448,17 +443,8 @@ func (s *Session) waitForSendErr(hdr header, body []byte, errCh chan error) erro
 // the send happens right here, we enforce the connection write timeout if we
 // can't queue the header to be sent.
 func (s *Session) sendNoWait(hdr header) error {
-	t := timerPool.Get()
-	timer := t.(*time.Timer)
-	timer.Reset(s.config.ConnectionWriteTimeout)
-	defer func() {
-		timer.Stop()
-		select {
-		case <-timer.C:
-		default:
-		}
-		timerPool.Put(t)
-	}()
+	timer := time.NewTimer(s.config.ConnectionWriteTimeout)
+	defer timer.Stop()
 
 	select {
 	case s.sendCh <- &sendReady{Hdr: hdr}:

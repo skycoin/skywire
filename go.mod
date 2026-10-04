@@ -34,7 +34,7 @@ require (
 	github.com/0magnet/wfdrive v0.3.2
 	github.com/0magnet/winbox-go v0.0.0
 	github.com/0magnet/xterm-go v0.0.0
-	github.com/0magnet/yamux v0.1.3-0.20261003212645-80597a0ac6e1
+	github.com/0magnet/yamux v0.1.3-0.20261004024245-10ef81fe8447
 	github.com/ActiveState/termtest/conpty v0.5.0
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/DATA-DOG/go-sqlmock v1.5.2
