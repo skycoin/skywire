@@ -79,17 +79,25 @@ func TestSniff_IPv6Forwarded(t *testing.T) {
 	}
 }
 
-// runSniff drives c.sniffSOCKS5Status against two in-memory pipe pairs and hands
-// the test the browser and exit ends so it can feed a scripted negotiation and
-// assert the proceed result. This unit-tests the sniff's branch logic directly,
-// without the yamux/ListenAndServe machinery.
+// runSniff drives the two steps the live path takes — readBrowserRequest then
+// openExitFor — against two in-memory pipe pairs, and hands the test the browser
+// and exit ends so it can feed a scripted negotiation and assert the proceed
+// result. This unit-tests the branch logic directly, without the
+// yamux/ListenAndServe machinery.
 func runSniff(t *testing.T, c *Client) (browser, exit net.Conn, result <-chan bool) {
 	t.Helper()
 	connSniff, browserEnd := net.Pipe()
 	streamSniff, exitEnd := net.Pipe()
 	res := make(chan bool, 1)
 	go func() {
-		proceed, _ := c.sniffSOCKS5Status(connSniff, streamSniff)
+		br, ok := readBrowserRequest(connSniff, false)
+		if !ok {
+			res <- false
+			_ = connSniff.Close()   //nolint:errcheck
+			_ = streamSniff.Close() //nolint:errcheck
+			return
+		}
+		proceed, _ := c.openExitFor(connSniff, streamSniff, br)
 		res <- proceed
 		_ = connSniff.Close()   //nolint:errcheck
 		_ = streamSniff.Close() //nolint:errcheck
