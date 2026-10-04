@@ -215,13 +215,30 @@ func TestSpreadEndgameDuplicatesTheTailChunksOnly(t *testing.T) {
 	var mu sync.Mutex
 	attempts := map[int64]int{}
 	pinned := map[int64]int{}
+	isTail := func(start int64) bool { return total-start < int64(len(sessions))*chunkSize }
+	// The duplicate is armed just after its chunk's first attempt starts. An
+	// instant first attempt can finish, and the writer with it, before the
+	// duplicate runs, so a tail chunk's first attempt waits for it, as a slow
+	// tail would.
+	dupStarted := map[int64]chan struct{}{}
+	for start := int64(0); start < total; start += chunkSize {
+		dupStarted[start] = make(chan struct{})
+	}
 	f := c.startChunkFetchesPlanned(0, total, chunkSize, pl, func(start, end int64, _ rsProgress, p chunkPlacement) ([]byte, error) {
 		mu.Lock()
 		attempts[start]++
 		if p.pin != nil {
-			pinned[start]++
+			if pinned[start]++; pinned[start] == 1 {
+				close(dupStarted[start])
+			}
 		}
 		mu.Unlock()
+		if p.pin == nil && isTail(start) {
+			select {
+			case <-dupStarted[start]:
+			case <-time.After(5 * time.Second):
+			}
+		}
 		return bytes.Repeat([]byte{'x'}, int(end-start+1)), nil
 	})
 
@@ -239,7 +256,7 @@ func TestSpreadEndgameDuplicatesTheTailChunksOnly(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	for start := int64(0); start < total; start += chunkSize {
-		tail := total-start < int64(len(sessions))*chunkSize
+		tail := isTail(start)
 		require.LessOrEqual(t, attempts[start], 2, "at most one duplicate per chunk")
 		if tail {
 			require.LessOrEqual(t, pinned[start], 1, "chunk %d: at most one duplicate", start)
