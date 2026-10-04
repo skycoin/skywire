@@ -98,6 +98,7 @@ export class MailComponent extends PageBaseComponent implements OnInit, OnDestro
         this.loadStatus();
         this.loadList(true);
       }
+      this.cdr.markForCheck();
     }, 15000);
 
     return super.ngOnInit();
@@ -294,7 +295,10 @@ return {
   }
 
   copy(text: string) {
-    navigator.clipboard?.writeText(text).then(() => this.snackbar.showDone('Copied.'));
+    navigator.clipboard?.writeText(text).then(() => {
+      this.snackbar.showDone('Copied.');
+      this.cdr.markForCheck();
+    });
   }
 
   size(n: number): string {
