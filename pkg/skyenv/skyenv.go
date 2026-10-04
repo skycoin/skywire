@@ -152,6 +152,14 @@ const (
 	// per-transport metrics they are reduced from.
 	DmsgTPDVisorBWCXOPort uint16 = 77
 
+	// DmsgConfCXOPort is the dmsg port the config-bootstrapper's services
+	// publisher listens on: the deployment's current services config (the same
+	// document GET / serves) at services/current, signed by the conf service's
+	// key. Visors hold one subscription to it so a change to the deployment's
+	// service keys reaches them without a release; the publisher's heartbeat
+	// keeps that connection warm. The visor's subscriber binds it too.
+	DmsgConfCXOPort uint16 = 78
+
 	// DmsgDMSGDRegistrationCXOPort is the dmsg port the dmsg-discovery's CXO
 	// client-entry REGISTRATION aggregator binds (and each visor's entry
 	// publisher binds for the reverse subscribe). A visor publishes its own

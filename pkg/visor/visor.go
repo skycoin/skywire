@@ -247,6 +247,15 @@ type Visor struct {
 	// dmsg-discovery, not the (potentially stale) addresses in skywire.json.
 	dmsgServersCache *DmsgServersCache
 
+	// deploySvcMu serializes applying the deployment's services config: the
+	// conf service's CXO feed and the hourly dmsg-HTTP refresh can both
+	// deliver one (see applyDeploymentServices).
+	deploySvcMu sync.Mutex
+	// deploySvcLast is the services config last applied, kept in memory as
+	// well as on disk so a host that cannot write files (the browser) still
+	// tells deployment values from operator ones. Guarded by deploySvcMu.
+	deploySvcLast *visorconfig.Services
+
 	// DMSG listeners for forwarded ports (dmsg=true). Each entry is a
 	// cancel function that stops the listener goroutine.
 	dmsgFwdMu        sync.Mutex
