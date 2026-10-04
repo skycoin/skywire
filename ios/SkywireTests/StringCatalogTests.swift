@@ -110,6 +110,26 @@ final class StringCatalogTests: XCTestCase {
         XCTAssertEqual(catalogue.subtracting(used).sorted(), [], "in the catalogue but unused: run ios/scripts/seed-strings.py")
     }
 
+    /// A literal that names a known string is one the scan sees. A key
+    /// reaching a LocalizedStringKey any other way (a parameter, a switch's
+    /// result) shows as the raw key on screen (G6).
+    func testEveryKeyLiteralIsSeenByTheScan() throws {
+        let known = try Self.knownKeys()
+        let used = try Self.usedKeys()
+        let anyLiteral = try NSRegularExpression(pattern: "\"([a-z][a-z0-9_]*)\"")
+        var unseen: [String] = []
+        for (file, number, line) in try Self.sourceLines() {
+            let range = NSRange(line.startIndex..., in: line)
+            for match in anyLiteral.matches(in: line, range: range) {
+                let key = (line as NSString).substring(with: match.range(at: 1))
+                if known.contains(key), !used.contains(key) {
+                    unseen.append("\(file):\(number): \(key)")
+                }
+            }
+        }
+        XCTAssertEqual(unseen, [], "write these through L10n.key or L10n.text")
+    }
+
     /// The placeholders of `text`, sorted: `%1$@`, `%lld`, …
     static func placeholders(_ text: String) -> [String] {
         let pattern = try! NSRegularExpression(pattern: "%(?:\\d+\\$)?(?:@|lld|ld|d|s|%)")
@@ -125,21 +145,49 @@ final class StringCatalogTests: XCTestCase {
             pattern: "\\b(?:Text|Label|Button|Toggle|Section|Picker|TextField|LocalizedStringKey|L10n\\.(?:text|format|key)|navigationTitle)\\("
         )
         let literal = try NSRegularExpression(pattern: "(?<!systemImage: )(?<!systemName: )\"([a-z][a-z0-9_]*)\"(?!\\s*:)")
+        // The first branch of `L10n.key(flag ? "a" : "b")`, which `literal`
+        // takes for a label.
+        let ternary = try NSRegularExpression(pattern: "L10n\\.(?:text|format|key)\\([^\"]*\\? \"([a-z][a-z0-9_]*)\"\\s*:")
         var keys = Set<String>()
+        for (_, _, line) in try sourceLines() {
+            let range = NSRange(line.startIndex..., in: line)
+            guard trigger.firstMatch(in: line, range: range) != nil else { continue }
+            for match in literal.matches(in: line, range: range) + ternary.matches(in: line, range: range) {
+                keys.insert((line as NSString).substring(with: match.range(at: 1)))
+            }
+        }
+        return keys
+    }
+
+    /// Every non-comment line of the app's sources, with its file and number.
+    static func sourceLines() throws -> [(file: String, number: Int, line: String)] {
         let sources = iosDir.appendingPathComponent("Skywire")
         let files = FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil)?
             .compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" } ?? []
         XCTAssertFalse(files.isEmpty, "no sources under \(sources.path)")
+        var lines: [(file: String, number: Int, line: String)] = []
         for file in files {
-            for line in try String(contentsOf: file, encoding: .utf8).components(separatedBy: "\n") {
-                let range = NSRange(line.startIndex..., in: line)
-                guard !line.trimmingCharacters(in: .whitespaces).hasPrefix("//"),
-                      trigger.firstMatch(in: line, range: range) != nil
-                else { continue }
-                for match in literal.matches(in: line, range: range) {
-                    keys.insert((line as NSString).substring(with: match.range(at: 1)))
-                }
+            for (index, line) in try String(contentsOf: file, encoding: .utf8).components(separatedBy: "\n").enumerated()
+            where !line.trimmingCharacters(in: .whitespaces).hasPrefix("//") {
+                lines.append((file.lastPathComponent, index + 1, line))
             }
+        }
+        return lines
+    }
+
+    /// Every string the catalogue can be seeded with: Android's names and
+    /// the iOS-only ones (seed-strings.py's two sources).
+    static func knownKeys() throws -> Set<String> {
+        let strings = iosDir.appendingPathComponent("../android/app/src/main/res/values/strings.xml")
+        let xml = try String(contentsOf: strings, encoding: .utf8)
+        let name = try NSRegularExpression(pattern: "<(?:string|plurals) name=\"([^\"]+)\"")
+        var keys = Set(name.matches(in: xml, range: NSRange(xml.startIndex..., in: xml))
+            .map { (xml as NSString).substring(with: $0.range(at: 1)) })
+        let supplement = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: iosDir.appendingPathComponent("scripts/strings-ios.json"))
+        ) as? [String: Any]
+        if let iosOnly = supplement?["Localizable"] as? [String: Any] {
+            keys.formUnion(iosOnly.keys)
         }
         return keys
     }

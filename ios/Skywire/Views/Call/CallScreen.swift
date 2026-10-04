@@ -84,20 +84,20 @@ struct CallScreen: View {
             HStack(spacing: 44) {
                 CallButton(
                     systemImage: ui.micMuted ? "mic.slash.fill" : "mic.fill",
-                    label: ui.micMuted ? "call_unmute" : "call_mute",
+                    label: L10n.key(ui.micMuted ? "call_unmute" : "call_mute"),
                     tint: ui.micMuted ? .skywire : Color(.secondarySystemFill),
                     ink: ui.micMuted ? .white : .primary
                 ) { model.toggleMic() }
                 CallButton(
                     systemImage: "phone.down.fill",
-                    label: "call_hang_up",
+                    label: L10n.key("call_hang_up"),
                     tint: .decline,
                     ink: .white
                 ) { model.hangUp() }
                 .accessibilityIdentifier("call-hang-up")
                 CallButton(
                     systemImage: ui.speakerphone ? "speaker.wave.3.fill" : "speaker.wave.1.fill",
-                    label: "call_speaker",
+                    label: L10n.key("call_speaker"),
                     tint: ui.speakerphone ? .skywire : Color(.secondarySystemFill),
                     ink: ui.speakerphone ? .white : .primary
                 ) { model.toggleSpeakerphone() }
@@ -109,7 +109,7 @@ struct CallScreen: View {
             HStack(spacing: 44) {
                 CallButton(
                     systemImage: "xmark",
-                    label: "call_close",
+                    label: L10n.key("call_close"),
                     tint: Color(.secondarySystemFill),
                     ink: .primary
                 ) { model.dismiss() }
@@ -117,7 +117,7 @@ struct CallScreen: View {
                 if ui.dialState != .declined {
                     CallButton(
                         systemImage: "phone.fill",
-                        label: "call_again",
+                        label: L10n.key("call_again"),
                         tint: .answer,
                         ink: .white
                     ) { model.callAgain() }
@@ -128,7 +128,7 @@ struct CallScreen: View {
             // which cancels the invite rather than closing a session.
             CallButton(
                 systemImage: "phone.down.fill",
-                label: "call_hang_up",
+                label: L10n.key("call_hang_up"),
                 tint: .decline,
                 ink: .white
             ) { model.hangUp() }
@@ -136,14 +136,14 @@ struct CallScreen: View {
             HStack(spacing: 44) {
                 CallButton(
                     systemImage: "phone.down.fill",
-                    label: "call_decline",
+                    label: L10n.key("call_decline"),
                     tint: .decline,
                     ink: .white
                 ) { model.decline() }
                 .accessibilityIdentifier("call-decline")
                 CallButton(
                     systemImage: "phone.fill",
-                    label: "call_answer",
+                    label: L10n.key("call_answer"),
                     tint: .answer,
                     ink: .white
                 ) { model.answer() }
@@ -155,14 +155,14 @@ struct CallScreen: View {
     /// The line under the name while calling, in Android's words.
     private static func dialStatus(_ state: DialState) -> LocalizedStringKey {
         switch state {
-        case .connecting: "call_connecting"
-        case .calling: "call_dialing"
-        case .ringing: "call_ringing"
-        case .offline: "call_offline"
-        case .declined: "call_declined"
-        case .busy: "call_busy"
-        case .noAnswer: "call_no_answer"
-        case .failed: "call_failed"
+        case .connecting: L10n.key("call_connecting")
+        case .calling: L10n.key("call_dialing")
+        case .ringing: L10n.key("call_ringing")
+        case .offline: L10n.key("call_offline")
+        case .declined: L10n.key("call_declined")
+        case .busy: L10n.key("call_busy")
+        case .noAnswer: L10n.key("call_no_answer")
+        case .failed: L10n.key("call_failed")
         }
     }
 }
