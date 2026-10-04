@@ -116,35 +116,44 @@ else follows.
 
 ## How Skywire compares
 
-| | Dial by key | No open port | Multi-hop | Multipath | Carries IP | Serve by key | No central service |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| **Skywire** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ ¹ |
-| [Tor](https://www.torproject.org/) | ✓ | ✓ | ✓ | ✓ ² | ✗ | ✓ | ✗ |
-| [I2P](https://geti2p.net/) | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ |
-| [Lokinet](https://lokinet.org/) | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
-| [cjdns](https://github.com/cjdelisle/cjdns) | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
-| [Yggdrasil](https://yggdrasil-network.github.io/) | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
-| [Reticulum](https://reticulum.network/) | ✓ | ✓ | ✓ | ✗ | ✗ | ✓ | ✓ |
-| [iroh](https://www.iroh.computer/) | ✓ | ✓ | ✗ | ✗ ³ | ✗ | ✓ | ✓ |
-| [libp2p](https://libp2p.io/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✓ | ✓ |
-| [Tailscale](https://tailscale.com/) | ✗ | ✓ | ✗ | ✗ | ✓ | ✗ | ✗ |
-| [ZeroTier](https://www.zerotier.com/) | ✗ | ✓ | ✗ | ✓ ⁴ | ✓ | ✗ | ✗ |
-| [Nebula](https://github.com/slackhq/nebula) | ✗ | ✓ | ✗ | ✗ | ✓ | ✗ | ✗ |
-| [Nylon](https://github.com/encodeous/nylon) | ✗ | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ |
-| [WireGuard](https://www.wireguard.com/) | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ |
+### Capabilities
+
+| | Dial by key | No open port | Hole punching | Multi-hop | Multipath | Carries IP | Internet exit | Serve by key | In browser | Private network | No central service | Node rewards |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| **Skywire** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ ¹ | ✓ |
+| [Tor](https://www.torproject.org/) | ✓ | ✓ | ✗ | ✓ | ✓ ² | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [I2P](https://geti2p.net/) | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ | ✗ | ✗ | ✓ | ✗ |
+| [Lokinet](https://lokinet.org/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✓ | ✓ |
+| [cjdns](https://github.com/cjdelisle/cjdns) | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| [Yggdrasil](https://yggdrasil-network.github.io/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| [Reticulum](https://reticulum.network/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| [iroh](https://www.iroh.computer/) | ✓ | ✓ | ✓ | ✗ | ✗ ³ | ✗ | ✗ | ✓ | ✓ ⁴ | ✓ | ✓ | ✗ |
+| [libp2p](https://libp2p.io/) | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| [Tailscale](https://tailscale.com/) | ✗ | ✓ | ✓ | ✗ | ✗ | ✓ | ✓ | ✗ | ✓ | ✓ ⁵ | ✗ | ✗ |
+| [ZeroTier](https://www.zerotier.com/) | ✗ | ✓ | ✓ | ✗ | ✓ ⁶ | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| [Nebula](https://github.com/slackhq/nebula) | ✗ | ✓ | ✓ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| [WireGuard](https://www.wireguard.com/) | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ | ✓ | ✗ |
 
 - **Dial by key** — a peer is reached by its public key (or an address
   derived from it), not by an IP an operator assigned.
 - **No open port** — a node behind NAT with no inbound port is still
   reachable.
+- **Hole punching** — two nodes behind NAT can open a direct link
+  between themselves, without a relay carrying the traffic.
 - **Multi-hop** — traffic can be forwarded through other peers, so two
   nodes with no direct link still connect.
 - **Multipath** — one connection's traffic travels over several paths
   at the same time.
 - **Carries IP** — arbitrary IP traffic, as a VPN or virtual interface.
+- **Internet exit** — a node can carry other nodes' traffic out to the
+  internet as a built-in feature, not by hand-configured routing.
 - **Serve by key** — a local service can be published at the node's key.
+- **In browser** — a node or client runs inside a web browser.
+- **Private network** — a fully separate network can run on your own
+  infrastructure.
 - **No central service** — runs with no operator-run discovery or
   coordination server.
+- **Node rewards** — people running nodes are paid for it.
 
 ¹ Each deployment runs discovery, route-finding and relay services,
 but anyone can run a deployment.
@@ -153,7 +162,34 @@ but anyone can run a deployment.
 
 ³ iroh keeps standby paths behind a single active one.
 
-⁴ Bonding across a node's own network interfaces.
+⁴ Through a relay only; browsers cannot send raw UDP.
+
+⁵ With Headscale, a third-party coordination server.
+
+⁶ Bonding across a node's own network interfaces.
+
+### Carriers
+
+What each one's links run over, counting relayed links (iroh's
+relays, Tailscale's DERP, ZeroTier's TCP fallback) and Tor's bridge
+transports. **UDP** means a protocol of its own over UDP; **QUIC** is
+listed separately.
+
+| | TCP | UDP | QUIC | WebSocket | WebTransport | WebRTC | Raw Ethernet | Serial | Packet radio / LoRa |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| **Skywire** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| [Tor](https://www.torproject.org/) | ✓ | ✗ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ |
+| [I2P](https://geti2p.net/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| [Lokinet](https://lokinet.org/) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| [cjdns](https://github.com/cjdelisle/cjdns) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| [Yggdrasil](https://yggdrasil-network.github.io/) | ✓ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| [Reticulum](https://reticulum.network/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ |
+| [iroh](https://www.iroh.computer/) | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| [libp2p](https://libp2p.io/) | ✓ | ✗ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| [Tailscale](https://tailscale.com/) | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| [ZeroTier](https://www.zerotier.com/) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| [Nebula](https://github.com/slackhq/nebula) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| [WireGuard](https://www.wireguard.com/) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 
 ## Skywire Control and Data Planes
 
