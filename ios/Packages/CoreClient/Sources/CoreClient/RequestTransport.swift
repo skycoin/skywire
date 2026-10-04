@@ -24,6 +24,24 @@ public protocol RequestTransport: Sendable {
     /// after its head (the visor's SSE routes write nothing until their first
     /// ping).
     func stream(_ request: HTTPRequest) async throws -> HTTPStream
+
+    /// One request whose body is produced while the request runs: the call's
+    /// microphone upload. The transport hands `producing` the output stream to
+    /// write into — a blocking write is the backpressure — and the request
+    /// ends when `producing` returns. Returns with the response head, which a
+    /// server that holds the upload open for the call's whole length sends
+    /// only then. Cancelling the call that awaits this closes the request,
+    /// which is the only way out of a producer that never returns.
+    func upload(_ request: HTTPRequest, producing: @escaping @Sendable (OutputStream) -> Void) async throws -> HTTPStream
+}
+
+extension RequestTransport {
+    /// A transport that cannot stream an upload (M7's provider-message route
+    /// decides how it carries one). The default keeps every implementation
+    /// source-compatible.
+    public func upload(_ request: HTTPRequest, producing: @escaping @Sendable (OutputStream) -> Void) async throws -> HTTPStream {
+        throw URLError(.unsupportedURL)
+    }
 }
 
 public enum HTTPMethod: String, Sendable {

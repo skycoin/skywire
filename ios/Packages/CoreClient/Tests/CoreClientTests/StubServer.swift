@@ -176,6 +176,8 @@ final class StubServer: Sendable {
     }
 
     /// A complete request in `buffer`, or nil while it is still arriving.
+    /// Both body framings the app sends: a Content-Length one, and the
+    /// chunked one a streaming upload (the microphone) arrives in.
     private static func parse(_ buffer: Data) -> Request? {
         guard let end = buffer.range(of: Data("\r\n\r\n".utf8)) else { return nil }
         let lines = String(decoding: buffer[..<end.lowerBound], as: UTF8.self).components(separatedBy: "\r\n")
@@ -186,14 +188,42 @@ final class StubServer: Sendable {
             guard let colon = line.firstIndex(of: ":") else { continue }
             headers[line[..<colon].lowercased()] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
         }
+        let rest = buffer[end.upperBound...]
+        if (headers["transfer-encoding"] ?? "").contains("chunked") {
+            guard let (body, complete) = dechunk(rest), complete else { return nil }
+            return Request(
+                method: String(requestLine[0]),
+                target: String(requestLine[1]),
+                headers: headers,
+                body: body
+            )
+        }
         let length = Int(headers["content-length"] ?? "0") ?? 0
-        let body = buffer[end.upperBound...]
-        guard body.count >= length else { return nil }
+        guard rest.count >= length else { return nil }
         return Request(
             method: String(requestLine[0]),
             target: String(requestLine[1]),
             headers: headers,
-            body: Data(body.prefix(length))
+            body: Data(rest.prefix(length))
         )
+    }
+
+    /// The chunks of a chunked body, and whether the terminator arrived. The
+    /// extensions and trailers the format allows are not sent by URLSession
+    /// and are not read.
+    private static func dechunk(_ data: Data) -> (Data, Bool)? {
+        var body = Data()
+        var pending = Data(data)
+        while true {
+            guard let lineEnd = pending.range(of: Data("\r\n".utf8)) else { return (body, false) }
+            let sizeText = String(decoding: pending[..<lineEnd.lowerBound], as: UTF8.self)
+            let size = Int(sizeText.split(separator: ";").first ?? "", radix: 16) ?? -1
+            guard size >= 0 else { return nil }
+            pending = Data(pending[lineEnd.upperBound...])
+            if size == 0 { return (body, true) }
+            guard pending.count >= size + 2 else { return (body, false) }
+            body.append(pending.prefix(size))
+            pending = Data(pending.dropFirst(size + 2))
+        }
     }
 }

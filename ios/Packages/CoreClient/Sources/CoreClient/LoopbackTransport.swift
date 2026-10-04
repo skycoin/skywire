@@ -44,6 +44,19 @@ public final class LoopbackTransport: RequestTransport {
         }
     }
 
+    public func upload(_ request: HTTPRequest, producing: @escaping @Sendable (OutputStream) -> Void) async throws -> HTTPStream {
+        var urlRequest = try makeURLRequest(request)
+        // The streamed upload carries no length: URLSession frames the body
+        // as chunked, which is what a body written frame by frame is.
+        urlRequest.httpBody = nil
+        let relay = UploadRelay(request: urlRequest, writer: producing, session: streamSession)
+        return try await withTaskCancellationHandler {
+            try await relay.start()
+        } onCancel: {
+            relay.cancel()
+        }
+    }
+
     private func exchange(_ request: URLRequest) async throws -> HTTPResponse {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
@@ -137,6 +150,132 @@ private final class StreamRelay: NSObject, URLSessionDataDelegate, @unchecked Se
             // the connection, or a server that keeps it open never lets go.
             if case .cancelled = termination {
                 task.cancel()
+            }
+        }
+        let head = state.withLock { state in
+            state.body = continuation
+            defer { state.head = nil }
+            return state.head
+        }
+        completionHandler(.allow)
+        head?.resume(returning: HTTPStream(
+            status: http.statusCode,
+            headers: LoopbackTransport.headers(of: http),
+            body: body
+        ))
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        _ = state.withLock { $0.body }?.yield(data)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
+        let (head, body) = state.withLock { state in
+            defer {
+                state.head = nil
+                state.body = nil
+            }
+            return (state.head, state.body)
+        }
+        head?.resume(throwing: error ?? URLError(.badServerResponse))
+        if let error {
+            body?.finish(throwing: error)
+        } else {
+            body?.finish()
+        }
+    }
+}
+
+/// A value crossing into a thread of its own; see `UploadRelay`.
+private struct Unchecked<Wrapped>: @unchecked Sendable {
+    let value: Wrapped
+}
+
+/// Carries one streaming upload: the request body is a bound stream pair the
+/// writer fills while URLSession drains the other half, and the response is
+/// relayed exactly as `StreamRelay` relays one (the same delegate methods; a
+/// class of its own only because the body side differs).
+///
+/// The writer runs on a plain thread of its own, not the cooperative pool: it
+/// parks in `OutputStream.write` for exactly as long as the visor stops
+/// reading, which is what hanging up looks like, and a parked cooperative
+/// thread starves the pool.
+private final class UploadRelay: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private struct State: Sendable {
+        var head: CheckedContinuation<HTTPStream, any Error>?
+        var body: AsyncThrowingStream<Data, any Error>.Continuation?
+        var task: URLSessionTask?
+    }
+
+    // @unchecked Sendable: the URLRequest is never mutated after init, and
+    // the rest is behind this lock.
+    private let state = OSAllocatedUnfairLock(initialState: State())
+    private let request: URLRequest
+    private let writer: @Sendable (OutputStream) -> Void
+    private let session: URLSession
+
+    init(request: URLRequest, writer: @escaping @Sendable (OutputStream) -> Void, session: URLSession) {
+        self.request = request
+        self.writer = writer
+        self.session = session
+    }
+
+    func start() async throws -> HTTPStream {
+        let task = session.uploadTask(withStreamedRequest: request)
+        state.withLock { $0.task = task }
+        task.delegate = self
+        return try await withCheckedThrowingContinuation { continuation in
+            state.withLock { $0.head = continuation }
+            task.resume()
+        }
+    }
+
+    func cancel() {
+        // Closing the request is also what ends a writer parked mid-write:
+        // the stream pair breaks and its next write fails.
+        state.withLock { $0.task }?.cancel()
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        needNewBodyStream completionHandler: @escaping (InputStream?) -> Void
+    ) {
+        var input: InputStream?
+        var output: OutputStream?
+        Stream.getBoundStreams(withBufferSize: 1 << 16, inputStream: &input, outputStream: &output)
+        guard let input, let output else {
+            completionHandler(nil)
+            return
+        }
+        // The stream is confined to the thread below from here; the box is
+        // the crossing, and OutputStream is not Sendable only because
+        // NSStream never promised thread-safety, not because it is shared.
+        let box = Unchecked(value: output)
+        Thread.detachNewThread { [writer] in
+            let output = box.value
+            output.open()
+            writer(output)
+            output.close()
+        }
+        completionHandler(input)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void
+    ) {
+        guard let http = response as? HTTPURLResponse else {
+            completionHandler(.cancel)
+            return
+        }
+        let (body, continuation) = AsyncThrowingStream<Data, any Error>.makeStream()
+        let task = state.withLock { $0.task }
+        continuation.onTermination = { termination in
+            if case .cancelled = termination {
+                task?.cancel()
             }
         }
         let head = state.withLock { state in

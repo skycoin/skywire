@@ -260,9 +260,11 @@ public actor CoreClient {
         }
     }
 
-    /// A streamed GET with the session cookie attached.
-    private func openStream(_ path: String, idleLimit: TimeInterval) async throws -> HTTPStream {
-        var headers = ["Accept": "text/event-stream"]
+    /// A streamed GET with the session cookie attached. `idleLimit` is the
+    /// request's timeout: nil when only the reader's cancelling should end it
+    /// (the speaker stream).
+    private func openStream(_ path: String, idleLimit: TimeInterval?, accept: String = "text/event-stream") async throws -> HTTPStream {
+        var headers = ["Accept": accept]
         if let cookie = cookieHeader() {
             headers["Cookie"] = cookie
         }
@@ -390,6 +392,155 @@ public actor CoreClient {
         let response = try await authed(.put, path, body: try JSONEncoder().encode(write))
         try Self.check(response, "PUT", path)
         return try Self.decode(RouterSettings.self, response, path)
+    }
+
+    // MARK: Voice calls
+
+    /// Calls ringing right now, awaiting an answer, as the visor lists them
+    /// (`"<call-id> from <pk>"` per line).
+    public func voiceIncoming() async throws -> [VoiceInvite] {
+        try await voiceList("incoming").compactMap(VoiceInvite.parse)
+    }
+
+    /// Ids of calls that are connected.
+    public func voiceActive() async throws -> [String] {
+        try await voiceList("active")
+    }
+
+    /// Calls this phone is PLACING and that have not been answered yet — the
+    /// caller's half of the picture. A call being dialed is in neither the
+    /// ringing list (that is the callee's) nor the active list (that starts
+    /// at "answered"), so without this there is nothing to show for the whole
+    /// ring. A visor that predates the feature answers 404; that is no calls,
+    /// not a failure.
+    public func voiceDialing() async throws -> [OutgoingCall] {
+        let path = "/api/visors/\(try await localPK())/skychat/voice/dialing"
+        let response = try await authed(.get, path)
+        guard response.isSuccess else {
+            if response.status == 503 || response.status == 404 { return [] }
+            throw Self.httpError(response, "GET", path)
+        }
+        return try Self.decodeList(response, path)
+    }
+
+    /// The other side's ringback tone for an outbound call, or nil while it
+    /// has not arrived — and for a peer that plays none.
+    public func voiceRingback(callId: String) async throws -> Data? {
+        let path = "/api/visors/\(try await localPK())/skychat/voice/ringback?call=\(Self.queryEncode(callId))"
+        let response = try await authed(.get, path)
+        guard response.isSuccess else { return nil }
+        return response.body.isEmpty ? nil : response.body
+    }
+
+    /// Place a call to `peer`; its id at once, before it is answered.
+    public func voiceCall(peer: String) async throws -> String {
+        struct CallId: Decodable {
+            var callId: String
+            enum CodingKeys: String, CodingKey { case callId = "call_id" }
+            init(from decoder: any Decoder) throws {
+                callId = try decoder.container(keyedBy: CodingKeys.self).lenient(.callId, "")
+            }
+        }
+        let path = "/api/visors/\(try await localPK())/skychat/voice/call"
+        let body = try JSONSerialization.data(withJSONObject: ["peer": peer])
+        let response = try await authed(.post, path, body: body)
+        try Self.check(response, "POST", path)
+        return try Self.decode(CallId.self, response, path).callId
+    }
+
+    public func voiceAnswer(callId: String) async throws {
+        try await voiceAction("answer", callId)
+    }
+
+    public func voiceDecline(callId: String) async throws {
+        try await voiceAction("decline", callId)
+    }
+
+    public func voiceHangup(callId: String) async throws {
+        try await voiceAction("hangup", callId)
+    }
+
+    /// `mic` silences what the peer hears from us; `speaker` what we hear.
+    public func voiceMute(callId: String, mic: Bool, speaker: Bool) async throws {
+        let path = "/api/visors/\(try await localPK())/skychat/voice/mute"
+        let body = try JSONSerialization.data(withJSONObject: ["call_id": callId, "mic": mic, "speaker": speaker])
+        let response = try await authed(.post, path, body: body)
+        try Self.check(response, "POST", path)
+    }
+
+    /// Opens the microphone stream: the visor reads captured PCM from the
+    /// request body until `producing` stops writing. Returns with the
+    /// response head, which the visor sends only when the body ends — so the
+    /// caller's loop lives inside this call. Cancelling the awaiting task
+    /// closes the request, which is what ends a producer parked mid-write.
+    /// The body factory is called once per attempt (a 401 re-login retries
+    /// with a fresh one).
+    public func voiceMicStream(
+        producing: @escaping @Sendable (OutputStream) -> Void
+    ) async throws -> HTTPStream {
+        let path = "/api/voice-audio/\(try await localPK())/mic"
+        let first = try await uploadWithCookie(path, producing)
+        if first.status != 401 { return first }
+        try await drain(first)
+        try await ensureSession()
+        return try await uploadWithCookie(path, producing)
+    }
+
+    /// Opens the playback stream: the response body is PCM to play, for as
+    /// long as it is read. Returns with the head; the sequence finishes when
+    /// the visor ends it.
+    public func voiceSpeakerStream() async throws -> HTTPStream {
+        let path = "/api/voice-audio/\(try await localPK())/speaker"
+        var stream = try await openStream(path, idleLimit: nil, accept: "application/octet-stream")
+        if stream.status == 401 {
+            try await ensureSession()
+            stream = try await openStream(path, idleLimit: nil, accept: "application/octet-stream")
+        }
+        return stream
+    }
+
+    private func uploadWithCookie(
+        _ path: String,
+        _ producing: @escaping @Sendable (OutputStream) -> Void
+    ) async throws -> HTTPStream {
+        // As every mutation: the CSRF token is fetched per attempt and lives
+        // 30 seconds, and the re-login retry below gets its own.
+        var headers = [
+            "Content-Type": "application/octet-stream",
+            "X-CSRF-Token": try await csrfToken(),
+        ]
+        if let cookie = cookieHeader() {
+            headers["Cookie"] = cookie
+        }
+        return try await transport.upload(HTTPRequest(method: .post, path: path, headers: headers, timeout: nil), producing: producing)
+    }
+
+    /// A streaming upload's response is never read; this closes its body.
+    /// The body of a refused attempt (401) is short, and a failure to drain
+    /// it costs nothing but the connection.
+    private func drain(_ stream: HTTPStream) async {
+        _ = try? await checkDrained(stream)
+    }
+
+    private func checkDrained(_ stream: HTTPStream) async throws {
+        for try await _ in stream.body { }
+    }
+
+    private func voiceList(_ name: String) async throws -> [String] {
+        let path = "/api/visors/\(try await localPK())/skychat/voice/\(name)"
+        let response = try await authed(.get, path)
+        guard response.isSuccess else {
+            if response.status == 503 { return [] }
+            throw Self.httpError(response, "GET", path)
+        }
+        return try Self.decodeList(response, path)
+    }
+
+    private func voiceAction(_ name: String, _ callId: String) async throws {
+        let path = "/api/visors/\(try await localPK())/skychat/voice/\(name)"
+        let body = try JSONSerialization.data(withJSONObject: ["call_id": callId])
+        let response = try await authed(.post, path, body: body)
+        try Self.check(response, "POST", path)
     }
 
     // MARK: Plumbing
