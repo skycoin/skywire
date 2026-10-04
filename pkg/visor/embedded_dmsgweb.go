@@ -89,6 +89,11 @@ type EmbeddedDmsgWeb struct {
 	// proxy (http://status.dmsg/ etc.). Set by initEmbeddedDmsgWeb; nil disables
 	// the status hosts.
 	statusProvider proxystatus.Provider
+	// publishLocal / unpublishLocal publish this resolver as an in-process local
+	// service for this visor's own apps. Set by wireLocalResolverPublish; nil
+	// means the resolver is reachable only through its listener.
+	publishLocal   func(port uint16, label string, serve func(net.Conn))
+	unpublishLocal func(port uint16)
 
 	mu        sync.Mutex
 	running   bool
@@ -322,6 +327,15 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 		WithField("domain", cfg.DomainSuffix).
 		WithField("tls_mitm", cfg.TLSMITM).
 		Info("Serving dmsgweb resolver")
+	// Publish as a local service so this visor's own apps reach the resolver
+	// over the data plane they already hold (see embedded_resolver_local.go).
+	e.mu.Lock()
+	publish, unpublish := e.publishLocal, e.unpublishLocal
+	e.mu.Unlock()
+	onPublish, cleanup := localPublishHooks(publish, unpublish, cfg.ProxyPort, "dmsg_web")
+	cfg.Publish = onPublish
+	defer cleanup()
+
 	if err := dmsgweb.Run(ctx, e.log, e.dmsgC, cfg); err != nil && err != context.Canceled {
 		e.log.WithError(err).Warn("dmsgweb runtime stopped")
 	}
@@ -525,6 +539,7 @@ func initEmbeddedDmsgWeb(ctx context.Context, v *Visor, log *logging.Logger) err
 
 	aliases, dmsgSet := resolverAliasesAndDmsgServers(v)
 	runtime := newEmbeddedDmsgWeb(ctx, resolverC, v.dmsgDC, resolverPK, v.services.SelfDial, v.services.SelfDialAs, aliases, dmsgSet, cfg, log)
+	v.wireLocalResolverPublish(runtime)
 	runtime.statusProvider = v.proxyStatusProvider()
 	if resolverC == v.dmsgC {
 		runtime.skynetDial = v.dmsgWebSkynetDial

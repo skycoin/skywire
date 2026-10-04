@@ -587,6 +587,21 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, req *DialOptionsReq
 		return err
 	}
 
+	// A dial to a local service on this visor's OWN PK is served in-process
+	// over net.Pipe — no transport, no route, no listener port, and nothing a
+	// remote peer can name. The resolving proxies register that way so an app
+	// can hand them a .skynet / .dmsg name over the data plane it already
+	// holds instead of through a second SOCKS hop on localhost. See
+	// pkg/app/appnet/local_service.go.
+	if appnet.HasLocalService(remote) {
+		conn, lErr := appnet.DialLocalService(remote)
+		if lErr != nil {
+			free()
+			return lErr
+		}
+		return r.finishLocalDial(conn, *reservedConnID, free, resp)
+	}
+
 	// Thread the calling app's name on the dial context so router-side
 	// log entries pick up app_name=<n> for 'cli proxy start --verbose'.
 	// r.proc may be nil in unit tests that exercise the gateway in
@@ -644,6 +659,35 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, req *DialOptionsReq
 	// This app now owns that port, which is what lets it report tunnel events
 	// on the route group behind it (NoteMuxEvent).
 	r.noteDialedPort(localAddr.Port)
+
+	return nil
+}
+
+// finishLocalDial hands an in-process local-service conn to the calling app: it
+// is the tail of dialInternal minus everything that only makes sense for a
+// dialed route group. There is no first-hop transport to judge and no local
+// routing port to record, because no route group was built — LocalPort stays 0,
+// and the app has no mux events to report on a pipe.
+func (r *RPCIngressGateway) finishLocalDial(conn net.Conn, connID uint16, free func() bool, resp *DialResp) error {
+	wrappedConn, err := appnet.WrapConn(conn)
+	if err != nil {
+		if cErr := conn.Close(); cErr != nil {
+			r.log.WithError(cErr).Debug("Error closing an unwrappable local-service conn.")
+		}
+		free()
+		return err
+	}
+
+	if err := r.cm.Set(connID, wrappedConn); err != nil {
+		if cErr := wrappedConn.Close(); cErr != nil {
+			r.log.WithError(cErr).Error("Error closing local-service conn.")
+		}
+		free()
+		return err
+	}
+
+	resp.ConnID = connID
+	resp.LocalPort = 0
 
 	return nil
 }
