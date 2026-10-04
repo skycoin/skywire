@@ -77,6 +77,8 @@
       "routing": { route: tab("routing"), sel: "app-route-list" },
       "bandwidth": { route: tab("bandwidth"), sel: "app-bandwidth" },
       "apps": { route: tab("apps"), sel: "app-node-app-list" },
+      "mail": { route: tab("mail"), sel: "app-mail" },
+      "terminal": { route: tab("terminal"), sel: "app-terminal" },
       "uptime": { route: tab("uptime"), sel: "app-uptime" },
       "logs": { route: tab("logs"), sel: "app-node-logs, app-logs" },
       "visor-settings": { route: tab("settings"), sel: "app-node-settings" },
@@ -527,9 +529,12 @@
     syncLauncher(document);
     watchRoute(function () { syncLauncher(document); });
 
+    // ?tour=1 starts the tour even when it was seen. The desk tour hands off
+    // to this one that way.
+    var asked = /[?&]tour=1(&|$)/.test(location.search);
     var seen = true;
     try { seen = !!localStorage.getItem(SEEN_KEY); } catch (e) { /* private mode: do not nag */ }
-    if (seen) { return; }
+    if (seen && !asked) { return; }
 
     // Offered once, and only once we are past the login guard and Angular has
     // had time to draw the list the first step points at. On the login page we

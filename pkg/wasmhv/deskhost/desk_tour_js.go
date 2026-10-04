@@ -21,12 +21,20 @@ package deskhost
 import (
 	"strconv"
 	"syscall/js"
+	"time"
 
 	"github.com/0magnet/desk"
 	winbox "github.com/0magnet/winbox-go"
 )
 
 const tourAppName = "tour"
+
+// dashboardTourURL opens the dashboard with its own tour running, which is
+// where this one hands off.
+const dashboardTourURL = "http://vnet:8001/?embed=1&tour=1#/?embed=1"
+
+// deskPanel is the taskbar, so the launcher step can open its menu.
+var deskPanel *desk.Panel
 
 func registerTourApp() {
 	desk.Register(desk.App{
@@ -41,6 +49,7 @@ func registerTourApp() {
 // tourStep is one screen of the walk. body is a small HTML fragment — the same
 // vocabulary the other panes use, so <b>, <i> and <code> are all it needs.
 type tourStep struct {
+	id    string
 	title string
 	body  string
 
@@ -61,7 +70,11 @@ func tourSteps() []tourStep {
 	}
 	steps := make([]tourStep, 0, len(texts))
 	for _, t := range texts {
-		steps = append(steps, tourStep{title: t.title, body: t.body, app: tourApps[t.id]})
+		s := tourStep{id: t.id, title: t.title, body: t.body}
+		if w := tourApps[t.id]; len(w) > 0 {
+			s.app, s.args = w[0], w[1:]
+		}
+		steps = append(steps, s)
 	}
 	return steps
 }
@@ -114,7 +127,28 @@ func (p *tourPane) Mount(el js.Value) error {
 	return nil
 }
 
+// showMenu opens or closes the taskbar's app menu. The tour only ever closes a
+// menu it opened itself.
+func (p *tourPane) showMenu(open bool) {
+	if deskPanel == nil {
+		return
+	}
+	if open {
+		// After the click that got here has finished, or the desk's
+		// click-outside handler closes the menu straight away.
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			if p.steps[p.i].id == "launcher" {
+				deskPanel.OpenMenu()
+			}
+		}()
+	} else if p.steps[p.i].id == "launcher" {
+		deskPanel.CloseMenu()
+	}
+}
+
 func (p *tourPane) Close() {
+	p.showMenu(false)
 	p.closeOpened()
 	for _, f := range p.funcs {
 		f.Release()
@@ -140,6 +174,7 @@ func (p *tourPane) go2(n int) {
 		return
 	}
 	p.closeOpened()
+	p.showMenu(p.steps[n].id == "launcher")
 	p.i = n
 	if app := p.steps[n].app; app != "" {
 		// A step whose app is not registered is not a failure. Not every desk
@@ -177,6 +212,13 @@ func (p *tourPane) render() {
 	if p.i < len(p.steps)-1 {
 		row.Call("appendChild", p.button("Next", func() { p.go2(p.i + 1) }))
 	} else {
+		// The hand-off. Its window is the reader's, not the step's, so closing
+		// the tour leaves it open.
+		row.Call("appendChild", p.button("Dashboard tour", func() {
+			if _, err := desk.Launch("browser", dashboardTourURL); err != nil {
+				js.Global().Get("console").Call("warn", "tour: "+err.Error())
+			}
+		}))
 		// No "Done" button: this is a window, and the way to be done with a
 		// window is its own close control. Saying so beats growing a second one.
 		row.Call("appendChild", paneEl(p.doc,

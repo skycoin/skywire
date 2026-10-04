@@ -35,10 +35,10 @@ reader's behalf. Everything in the following windows executes here.
 Title: The launcher
 
 Body:
-Every app opens from the **launcher** in the taskbar, this tour included, so it
-can be closed and reopened. From here each step **opens the app it describes**,
-beside this window. Windows that get moved or resized are left alone
-afterwards; untouched ones are tidied up.
+Every app opens from the **launcher**, the button at the corner of the taskbar,
+this tour included, so it can be closed and reopened. From here each step
+**opens the app it describes**, beside this window. Windows that get moved or
+resized are left alone afterwards; untouched ones are tidied up.
 
 ## browser
 
@@ -49,8 +49,9 @@ Body:
 site directly from another visor over dmsg: no DNS, no certificate authority,
 the **public key is the address and the authentication at once**. A clearnet
 address is fetched by an **exit visor** instead — selected automatically unless
-one is pinned — so the site sees the exit's address. Names like `skywire.dmsg`
-are a local convenience, not a namespace anyone can squat.
+one is pinned — so the site sees the exit's address. The page open now,
+`ip.skycoin.com`, shows which address that is. Names like `skywire.dmsg` are a
+local convenience, not a namespace anyone can squat.
 
 ## dashboard
 
@@ -58,10 +59,11 @@ Title: The dashboard is a tab in it
 
 Body:
 The **hypervisor dashboard** — visor list, transports, routing, the mesh-wide
-views — is not a window here. It is an Angular app this visor serves on its
-virtual loopback, opened as a native tab at `vnet:8001`. That is the seam. It
-is ordinary admin software, which is why it gets a separate, plainer tour,
-behind the **?** button in its bottom-right corner.
+views — is not a desk window of its own. It is an Angular app this visor serves
+on its virtual loopback, opened here as a browser tab at `vnet:8001`, the same
+page a native visor serves. That is the seam. It is ordinary admin software,
+which is why it gets a separate, plainer tour, behind the **?** button in its
+corner.
 
 ## console
 
@@ -90,7 +92,8 @@ Title: mail — addressed by key
 Body:
 A mailbox whose address is a **public key**, delivered across the mesh rather
 than through a provider. There is no account to register and no server holding
-the messages; a whitelist decides who can deliver.
+the messages; a whitelist decides who can deliver. Mail is a visor app, so it
+opens as the dashboard's Mail tab, as it does on a native visor.
 
 ## identity
 
@@ -129,7 +132,8 @@ Body:
 Installed as an app, the desk opens on its own from the browser's storage and
 keeps working when the address that served it is unreachable. For a tool whose
 job is browsing a mesh, not needing the network in order to start is most of
-the point.
+the point. **Install Skywire** in the launcher offers it, where the browser
+allows.
 
 ## close
 
@@ -140,5 +144,6 @@ No install, no account, no server: a visor, a desktop, a shell, a browser and a
 mailbox in one tab, and all of it gone when the tab closes unless the key was
 exported or the desk installed.
 
-This tour reopens from the launcher. The **dashboard** has its own, behind the
-**?** button in its corner.
+This tour reopens from the launcher. **Dashboard tour** below opens the
+dashboard with its own tour running.
+
