@@ -28,26 +28,20 @@ import (
 func TestSkysocksClient(t *testing.T) {
 	pkB := visorPK(t, rpcB)
 
-	// dmsg transport A -> B (loopback: dmsg needs no address-resolver/STUN).
-	out, err := cli("tp", "add", "--rpc", rpcA, pkB, "--type", "dmsg")
-	require.NoErrorf(t, err, "tp add A->B failed: %s", out)
-	require.Contains(t, out, "dmsg", "expected a dmsg transport in: %s", out)
-	t.Logf("transport A->B created")
+	stcpTransport(t, pkB)
+	t.Logf("stcp transport A->B up")
+	var out string
+	var err error
 
 	t.Cleanup(func() { _, _ = cli("proxy", "stop", "--rpc", rpcA) })
 	client := socks5HTTPClient(t)
 
-	// Retry the full start+proxy cycle: on a freshly-started single-server
-	// loopback deployment the route group can flap ("Starting…→Stopped") before
-	// the network settles. Each attempt restarts skysocks-client (which sets up a
-	// fresh route) and, if it reaches Running, drives a proxied GET; the network
-	// warms between attempts.
-	// The cold single-server loopback route-finder/setup-node can take a few
-	// minutes to settle; a generous attempt budget covers slower CI runners.
+	// One retry covers a route that drops while it is first set up. Over the
+	// direct stcp link the first attempt normally succeeds within seconds.
 	var body, lastErr string
 	ok := false
-	for attempt := 1; attempt <= 6 && !ok; attempt++ {
-		out, err = cliT(120*time.Second, "proxy", "start", "--rpc", rpcA, "--pk", pkB, "--internal", "--timeout", "80")
+	for attempt := 1; attempt <= 2 && !ok; attempt++ {
+		out, err = cliT(60*time.Second, "proxy", "start", "--rpc", rpcA, "--pk", pkB, "--internal", "--timeout", "45")
 		if err != nil || !strings.Contains(out, "Running") {
 			lastErr = fmt.Sprintf("proxy start (attempt %d) not Running: %v %.80q", attempt, err, out)
 			t.Log(lastErr)
