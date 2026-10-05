@@ -79,10 +79,11 @@ func runSkywireWasm(ctx context.Context, s *shell.Shell, hc *interp.HandlerConte
 	catchF = js.FuncOf(func(_ js.Value, cbArgs []js.Value) interface{} {
 		msg := "unknown error"
 		if len(cbArgs) > 0 {
-			if m := cbArgs[0].Get("message"); m.Type() == js.TypeString {
-				msg = m.String()
-			} else {
-				msg = cbArgs[0].String()
+			msg = js.Global().Call("String", cbArgs[0]).String()
+			if cbArgs[0].Type() == js.TypeObject {
+				if m := cbArgs[0].Get("message"); m.Type() == js.TypeString {
+					msg = m.String()
+				}
 			}
 		}
 		fmt.Fprintln(hc.Stderr, "skywire:", msg) //nolint:errcheck
