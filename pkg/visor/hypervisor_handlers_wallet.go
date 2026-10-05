@@ -11,9 +11,9 @@
 // listening port. The same handlers run in the tab's wasm hypervisor, so
 // native == wasm.
 //
-// Running the actual skycoin-web app (internal/external, own port, disk
-// wallets, server-side multi-coin) stays the opt-in "power" mode; this is the
-// zero-config default.
+// When the skycoin-web app runs in this process, wallet/coins and
+// wallet/coin/<index>/… go to it instead, so the same page uses its node
+// settings and its server-side wallet files.
 package visor
 
 import (
@@ -27,9 +27,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	wasmtinygo "github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo"
 
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/btcgateway"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/wallet/coins"
 	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
@@ -94,6 +96,18 @@ func walletNodeDefault() string {
 func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		rest := chi.URLParam(r, "*")
+		// A running skycoin-web app answers the coin list and every coin's API
+		// itself, including its server-side wallets, so the page uses those.
+		if app := launcher.GetHTTPHandler(skyenv.SkycoinWebName); app != nil {
+			switch {
+			case rest == "coins":
+				serveAt(app, w, r, "/api/v1/coins")
+				return
+			case strings.HasPrefix(rest, "coin/"):
+				serveAt(app, w, r, "/"+rest)
+				return
+			}
+		}
 		switch {
 		case rest == "" || rest == "index.html":
 			toDashboardWallet(w)
@@ -123,6 +137,13 @@ func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 			http.NotFound(w, r)
 		}
 	}
+}
+
+// serveAt hands r to h with its path replaced.
+func serveAt(h http.Handler, w http.ResponseWriter, r *http.Request, path string) {
+	r2 := r.Clone(r.Context())
+	r2.URL.Path, r2.URL.RawPath, r2.RequestURI = path, "", ""
+	h.ServeHTTP(w, r2)
 }
 
 // walletCoinProxy routes a per-coin API call (/wallet/coin/<index>/<path>) to

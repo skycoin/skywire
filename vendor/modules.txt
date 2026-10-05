@@ -1158,7 +1158,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.23
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/skycoin v0.28.7-0.20261002202814-e33ee3c33725
+# github.com/skycoin/skycoin v0.28.7-0.20261005011259-835c93d42b11
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
@@ -1438,12 +1438,6 @@ github.com/zeebo/xxh3
 # github.com/zyedidia/micro v1.4.1
 ## explicit
 github.com/zyedidia/micro/cmd/micro/highlight
-# go.etcd.io/bbolt v1.5.0
-## explicit; go 1.25.0
-go.etcd.io/bbolt
-go.etcd.io/bbolt/errors
-go.etcd.io/bbolt/internal/common
-go.etcd.io/bbolt/internal/freelist
 # go.mongodb.org/mongo-driver/v2 v2.9.1
 ## explicit; go 1.25.0
 go.mongodb.org/mongo-driver/v2/bson

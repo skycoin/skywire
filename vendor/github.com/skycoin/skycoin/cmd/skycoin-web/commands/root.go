@@ -7,7 +7,9 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,6 +38,7 @@ var (
 	walletDirs    []string
 	enableSeedAPI bool
 	socks5Proxy   string
+	noListen      bool
 
 	guiDir string // custom GUI directory, overrides embedded GUI
 
@@ -62,6 +65,42 @@ type proxyCacheEntry struct {
 }
 
 var queryCache = &proxyCache{entries: make(map[string]proxyCacheEntry)}
+
+// Mount is set by a program embedding this command. It receives the wallet's
+// http.Handler once it is built and nil once it stops. With --no-listen that
+// is the only way the wallet is served.
+var Mount func(http.Handler)
+
+// nodeTransport carries every request to a coin node. --socks5-proxy sets a
+// proxy here rather than in the environment, which an embedder shares.
+var nodeTransport = http.DefaultTransport
+
+// NodeDial is set by an embedder to open the connection to the --socks5-proxy.
+// A program whose loopback is not the host's, such as one in a browser tab,
+// sets it to reach its own proxy.
+var NodeDial func(ctx context.Context, network, addr string) (net.Conn, error)
+
+func proxyTransport(proxy string) (http.RoundTripper, error) {
+	if proxy == "" {
+		return http.DefaultTransport, nil
+	}
+	if !strings.Contains(proxy, "://") {
+		proxy = "socks5://" + proxy
+	}
+	u, err := url.Parse(proxy)
+	if err != nil {
+		return nil, fmt.Errorf("--socks5-proxy: %w", err)
+	}
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.Proxy = http.ProxyURL(u)
+	// Always an explicit dialer: under js a transport without one uses fetch(),
+	// which ignores Proxy. Natively it is the dialer the default transport uses.
+	t.DialContext = (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext
+	if NodeDial != nil {
+		t.DialContext = NodeDial
+	}
+	return t, nil
+}
 
 func (pc *proxyCache) get(key string, maxAge time.Duration) (proxyCacheEntry, bool) {
 	pc.mu.RLock()
@@ -91,6 +130,8 @@ type discoveredCoin struct {
 	CoinExplorer      string `json:"coinExplorer"`
 	CoinType          string `json:"coinType"`
 	ServerWallets     bool   `json:"serverWallets"`
+	// placeholder marks a node whose health check failed; it is retried.
+	placeholder bool
 	// internal: the actual remote node URL (not exposed to frontend)
 	remoteNodeURL string
 }
@@ -119,24 +160,17 @@ var RootCmd = &cobra.Command{
 			"The proxy does remote DNS, so the .dmsg/.skynet hostname resolves through it."
 		return ret
 	}(),
-	Run: func(cmd *cobra.Command, _ []string) {
-		if socks5Proxy != "" {
-			p := socks5Proxy
-			if !strings.Contains(p, "://") {
-				p = "socks5://" + p
-			}
-			if err := os.Setenv("HTTP_PROXY", p); err != nil {
-				log.Printf("[WARN] Failed to set HTTP_PROXY: %v", err)
-			}
-			if err := os.Setenv("HTTPS_PROXY", p); err != nil {
-				log.Printf("[WARN] Failed to set HTTPS_PROXY: %v", err)
-			}
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		t, err := proxyTransport(socks5Proxy)
+		if err != nil {
+			return err
 		}
+		nodeTransport = t
 		// cmd.Context() is background for the standalone CLI (blocks until
 		// Ctrl+C); an embedder using ExecuteContext(ctx) can cancel to stop.
-		if err := serve(cmd.Context()); err != nil {
-			log.Fatalf("Server failed: %v", err)
-		}
+		// An error is returned, never fatal, so it cannot take down an embedder.
+		return serve(cmd.Context())
 	},
 }
 
@@ -160,6 +194,7 @@ func init() {
 	RootCmd.Flags().BoolVar(&enableSeedAPI, "enable-seed-api", false, "Enable the wallet seed API (requires --wallet-dir)")
 	RootCmd.Flags().StringVar(&socks5Proxy, "socks5-proxy", "", "SOCKS5 proxy for node connections (e.g. socks5://127.0.0.1:4443)")
 	RootCmd.Flags().StringVarP(&guiDir, "gui-dir", "g", "", "Custom GUI directory (overrides embedded GUI)")
+	RootCmd.Flags().BoolVar(&noListen, "no-listen", false, "Open no port; serve only through an embedding program's Mount")
 
 	// Profiling flags
 	RootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "[ cpu | mem | mutex | block | trace | http ]")
@@ -183,7 +218,7 @@ func Execute() {
 func discoverCoin(index int, nodeURL string) (*discoveredCoin, error) {
 	nodeURL = strings.TrimRight(nodeURL, "/")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Second, Transport: nodeTransport}
 	resp, err := client.Get(nodeURL + "/api/v1/health")
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to node %s: %v", nodeURL, err)
@@ -262,6 +297,7 @@ func discoverCoins() []*discoveredCoin {
 				CoinSymbol:    fmt.Sprintf("N%d", i),
 				HoursName:     "Coin Hours",
 				CoinType:      "skycoin",
+				placeholder:   true,
 				remoteNodeURL: nodeURL,
 			}
 		}
@@ -271,8 +307,53 @@ func discoverCoins() []*discoveredCoin {
 	return coins
 }
 
+// coinsMu guards the display fields rediscoverCoins fills in.
+var coinsMu sync.RWMutex
+
+// rediscoverRetry is how often a node that was unreachable at startup is asked
+// for its health again.
+const rediscoverRetry = 15 * time.Second
+
+// rediscoverCoins retries the health check of every placeholder node until it
+// answers. A node reached through a proxy that is still starting, as in a visor
+// that starts the wallet with it, would otherwise keep its placeholder name.
+func rediscoverCoins(ctx context.Context, coins []*discoveredCoin) {
+	t := time.NewTicker(rediscoverRetry)
+	defer t.Stop()
+	for {
+		pending := false
+		for _, c := range coins {
+			coinsMu.RLock()
+			placeholder := c.placeholder
+			coinsMu.RUnlock()
+			if !placeholder {
+				continue
+			}
+			found, err := discoverCoin(c.ID, c.remoteNodeURL)
+			if err != nil {
+				pending = true
+				continue
+			}
+			coinsMu.Lock()
+			c.CoinName, c.CoinSymbol, c.HoursName = found.CoinName, found.CoinSymbol, found.HoursName
+			c.PriceTickerID, c.PriceTickerSource, c.CoinExplorer = found.PriceTickerID, found.PriceTickerSource, found.CoinExplorer
+			c.placeholder = false
+			coinsMu.Unlock()
+			log.Printf("[COIN] Discovered %s (%s) at %s after startup", found.CoinName, found.CoinSymbol, c.remoteNodeURL)
+		}
+		if !pending {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
 // initWalletServices initializes Skycoin wallet services for each configured wallet directory.
-func initWalletServices() []*wallet.Service {
+func initWalletServices() ([]*wallet.Service, error) {
 	var wltServices []*wallet.Service
 	for _, dir := range walletDirs {
 		if dir == "" {
@@ -289,12 +370,12 @@ func initWalletServices() []*wallet.Service {
 
 		svc, err := wallet.NewService(cfg)
 		if err != nil {
-			log.Fatalf("Failed to initialize wallet service for %s: %v", dir, err)
+			return nil, fmt.Errorf("wallet service for %s: %w", dir, err)
 		}
 		wltServices = append(wltServices, svc)
 		log.Printf("[WALLET] Wallet service initialized: %s", dir)
 	}
-	return wltServices
+	return wltServices, nil
 }
 
 // initBitcoinBackend initializes the Bitcoin backend and wallet services if configured.
@@ -458,7 +539,10 @@ func serve(ctx context.Context) error {
 	mux := http.NewServeMux()
 
 	coins := discoverCoins()
-	wltServices := initWalletServices()
+	wltServices, err := initWalletServices()
+	if err != nil {
+		return err
+	}
 	btcBackend, btcWltServices, coins := initBitcoinBackend(coins)
 	coinWltServices, btcHandlers := mapWalletsToCoin(coins, wltServices, btcBackend, btcWltServices)
 	guiFS := initGUIFS()
@@ -603,7 +687,9 @@ func serve(ctx context.Context) error {
 
 		// Coins discovery endpoint
 		if apiPath == "/v1/coins" && c.Request.Method == http.MethodGet {
+			coinsMu.RLock()
 			c.JSON(http.StatusOK, coins)
+			coinsMu.RUnlock()
 			return
 		}
 
@@ -649,7 +735,11 @@ func serve(ctx context.Context) error {
 
 	addr := fmt.Sprintf("%s:%d", host, port)
 	fmt.Printf("Skycoin Web Wallet starting...\n")
-	fmt.Printf("Server listening on http://%s\n", addr)
+	if noListen {
+		fmt.Printf("Served by the embedding program, no port opened\n")
+	} else {
+		fmt.Printf("Server listening on http://%s\n", addr)
+	}
 	if len(coins) > 0 {
 		fmt.Printf("Configured coins:\n")
 		for _, coin := range coins {
@@ -673,9 +763,19 @@ func serve(ctx context.Context) error {
 	// host cancels ctx to stop it. Returns errors instead of os.Exit-ing so
 	// it can't take down an embedding process. Uses the net/http mux (so the
 	// web wallet also builds under TinyGo) wrapped in the recovery middleware.
+	go rediscoverCoins(ctx, coins)
+	handler := recoverMiddleware(mux)
+	if Mount != nil {
+		Mount(handler)
+		defer Mount(nil)
+	}
+	if noListen {
+		<-ctx.Done()
+		return nil
+	}
 	srv := &http.Server{ //nolint:gosec
 		Addr:              addr,
-		Handler:           recoverMiddleware(mux),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	//nolint:gosec // G118 false positive: the shutdown ctx MUST be a fresh, non-canceled context precisely because the parent ctx is already Done at this point.
@@ -866,7 +966,7 @@ func handleReadOnlyPost(c *webCtx, trimmedPath string, nodeURL string) bool {
 		req.Header.Set("X-CSRF-Token", csrfToken)
 	}
 
-	client := &http.Client{}
+	client := &http.Client{Transport: nodeTransport}
 	resp, err := client.Do(req) //nolint:gosec // G704: request targets an operator-configured node URL
 	if err != nil {
 		errInternal(c, fmt.Sprintf("failed to query node: %v", err))
@@ -901,7 +1001,7 @@ func handleReadOnlyPost(c *webCtx, trimmedPath string, nodeURL string) bool {
 
 // fetchCSRFToken fetches a CSRF token from the remote node
 func fetchCSRFToken(nodeURL string) (string, error) {
-	resp, err := http.Get(nodeURL + "/api/v1/csrf") //nolint:gosec
+	resp, err := (&http.Client{Transport: nodeTransport}).Get(nodeURL + "/api/v1/csrf") //nolint:gosec
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch CSRF token: %v", err)
 	}
@@ -964,7 +1064,7 @@ func proxyToNodeWithBase(c *webCtx, remoteNodeURL string, targetPath string) {
 		}
 	}
 
-	client := &http.Client{}
+	client := &http.Client{Transport: nodeTransport}
 	resp, err := client.Do(proxyReq) //nolint:gosec // G704: proxies to an operator-configured node URL
 	if err != nil {
 		log.Printf("[PROXY] Request failed: %v", err)
