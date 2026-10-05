@@ -130,7 +130,7 @@ func streamSSE(ctx context.Context, addr string, out chan<- chatMsg, errs chan<-
 		errs <- err
 		return
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := chatClient.Do(req)
 	if err != nil {
 		errs <- err
 		return

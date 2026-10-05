@@ -157,6 +157,9 @@ type Chat interface {
 	SetSkychatPassword(oldPassword, newPassword string) error
 	ClearSkychatPassword(oldPassword string) error
 	SkychatLocalAddr() (string, error)
+	// SkychatHTTP sends one HTTP request to the local skychat app, including a
+	// portless in-process one. The response is buffered, so not for its streams.
+	SkychatHTTP(in SkychatHTTPIn) (SkychatHTTPOut, error)
 	// Chat-pair feeds — per-partner CXO feeds with read-side
 	// allowlists. See pkg/visor/pairing.go.
 	PairAdd(peerPK cipher.PubKey) error

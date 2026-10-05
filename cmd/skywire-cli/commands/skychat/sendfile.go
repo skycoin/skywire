@@ -67,7 +67,7 @@ Examples:
 		}
 
 		endpoint := fmt.Sprintf("http://%s/send-file", httpAddr)
-		hc := &http.Client{Timeout: 35 * time.Minute}
+		hc := &http.Client{Transport: chatTransport, Timeout: 35 * time.Minute}
 		resp, err := hc.PostForm(endpoint, form)
 		if err != nil {
 			cliutil.PrintFatalError(cmd.Flags(), fmt.Errorf("POST %s: %w", endpoint, err))

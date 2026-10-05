@@ -325,7 +325,7 @@ Returns an error if the chat-app has persistence disabled.`,
 		if historyPeer != "" {
 			url += "&peer=" + historyPeer
 		}
-		resp, err := http.Get(url) //nolint:gosec
+		resp, err := chatClient.Get(url) //nolint:gosec
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("history fetch: %w", err))
 		}
@@ -403,7 +403,7 @@ Default output is human-readable lines; --json emits the raw status
 object suitable for scripts.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		url := fmt.Sprintf("http://%s/status", httpAddr)
-		resp, err := http.Get(url) //nolint:gosec
+		resp, err := chatClient.Get(url) //nolint:gosec
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("chat app unreachable at %s: %w", httpAddr, err))
 		}
@@ -523,7 +523,7 @@ func postMessage(addr, recipientPK, msg, network string, wait time.Duration) (*A
 	// default no-timeout would let a server-side hang block the CLI
 	// indefinitely; with it, the CLI deadline is always at least
 	// `wait` + 5s so the server's own clamp/timeout fires first.
-	hc := &http.Client{Timeout: wait + 5*time.Second}
+	hc := &http.Client{Transport: chatTransport, Timeout: wait + 5*time.Second}
 	if wait <= 0 {
 		hc.Timeout = 30 * time.Second
 	}
@@ -780,7 +780,7 @@ func streamSSEOnce(ctx context.Context, out io.Writer, url, netFilter, fromFilte
 	if err != nil {
 		return fmt.Errorf("build SSE request: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := chatClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}

@@ -111,7 +111,7 @@ func streamEventsOnce(ctx context.Context, out io.Writer, jsonMode bool, channel
 	if err != nil {
 		return err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := chatClient.Do(req)
 	if err != nil {
 		return err
 	}

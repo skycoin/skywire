@@ -53,6 +53,7 @@
 
 	// readDeepLink: what the page URL asks the desk to open, or null.
 	//   ?skydm=<pk>                  a skychat conversation with <pk>
+	//   ?skygroup=<invite>           the skychat join panel, filled in
 	//   ?skynet=<site>[&kiosk=1]     a mesh site, e.g. rewards.dmsg (?dmsg= too)
 	// The same keys are read from a #k=v fragment.
 	function readDeepLink() {
@@ -61,6 +62,8 @@
 		function get(k) { return q.get(k) || h.get(k) || ''; }
 		var pk = get('skydm');
 		if (/^[0-9a-fA-F]{66}$/.test(pk)) return { t: 'dm', pk: pk.toLowerCase() };
+		var invite = get('skygroup');
+		if (invite && invite.length <= 4096) return { t: 'group', invite: invite };
 		var site = get('skynet') || get('dmsg');
 		site = site.replace(/^https?:\/\//i, '');
 		if (site && /^[A-Za-z0-9.-]+(:[0-9]{1,5})?(\/\S*)?$/.test(site)) {
@@ -467,8 +470,8 @@
 		if (pendingDL) {
 			try {
 				var cleaned = new URL(location.href);
-				['skydm', 'skynet', 'dmsg', 'kiosk'].forEach(function (k) { cleaned.searchParams.delete(k); });
-				if (/(^#|&)(skydm|skynet|dmsg)=/.test(cleaned.hash)) cleaned.hash = '';
+				['skydm', 'skygroup', 'skynet', 'dmsg', 'kiosk'].forEach(function (k) { cleaned.searchParams.delete(k); });
+				if (/(^#|&)(skydm|skygroup|skynet|dmsg)=/.test(cleaned.hash)) cleaned.hash = '';
 				history.replaceState(history.state, '', cleaned.pathname + cleaned.search + cleaned.hash);
 			} catch (e) { /* keep the address */ }
 		}
@@ -480,6 +483,10 @@
 					var u = new URL(opts.dashboardURL || ('http://vnet:' + hvPort + '/?embed=1'), location.href);
 					u.hash = '#/nodes/local/chat?embed=1&peer=' + dl.pk;
 					deepWin.openTab(u.host, u.pathname + u.search + u.hash, u.protocol.replace(':', ''), false);
+				} else if (dl.t === 'group') {
+					var g = new URL(opts.dashboardURL || ('http://vnet:' + hvPort + '/?embed=1'), location.href);
+					g.hash = '#/nodes/local/chat?embed=1&join=' + encodeURIComponent(dl.invite);
+					deepWin.openTab(g.host, g.pathname + g.search + g.hash, g.protocol.replace(':', ''), false);
 				} else if (dl.t === 'site') {
 					var m = /^([^/]+)(\/.*)?$/.exec(dl.target);
 					if (!m) return;

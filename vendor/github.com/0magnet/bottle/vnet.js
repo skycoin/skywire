@@ -34,6 +34,93 @@
 	// Service-worker bridge state (see enableSW below).
 	let swPrefix = null;
 
+	// writeRequest sends one HTTP/1.0 request with Connection: close down side
+	// 'a' of conn id.
+	function writeRequest(v, id, hostLabel, method, path, body, headers) {
+		const te = new TextEncoder();
+		let req = (method || 'GET') + ' ' + (path || '/') + ' HTTP/1.0\r\nHost: ' + hostLabel + '\r\n';
+		const h = headers || {};
+		for (const k in h) { if (Object.prototype.hasOwnProperty.call(h, k)) req += k + ': ' + h[k] + '\r\n'; }
+		let bodyBytes = null;
+		if (body != null) {
+			bodyBytes = (body instanceof Uint8Array) ? body : te.encode(String(body));
+			req += 'Content-Length: ' + bodyBytes.length + '\r\n';
+		}
+		req += 'Connection: close\r\n\r\n';
+		v.send(id, 'a', te.encode(req));
+		if (bodyBytes && bodyBytes.length) v.send(id, 'a', bodyBytes);
+	}
+
+	// parseHead reads a response head from the start of all, or returns null
+	// until the blank line that ends it has arrived.
+	function parseHead(all) {
+		let sep = -1; // header/body split at CRLFCRLF
+		for (let i = 0; i + 3 < all.length; i++) {
+			if (all[i] === 13 && all[i + 1] === 10 && all[i + 2] === 13 && all[i + 3] === 10) { sep = i; break; }
+		}
+		if (sep < 0) return null;
+		const head = new TextDecoder().decode(all.subarray(0, sep));
+		const lines = head.split('\r\n');
+		const status = parseInt(lines[0].split(' ')[1] || '0', 10) || 0;
+		const hs = {};
+		for (let i = 1; i < lines.length; i++) {
+			const ci = lines[i].indexOf(':');
+			if (ci > 0) hs[lines[i].slice(0, ci).trim().toLowerCase()] = lines[i].slice(ci + 1).trim();
+		}
+		const cl = /^\d+$/.test(hs['content-length'] || '') ? parseInt(hs['content-length'], 10) : -1;
+		return { status: status, headers: hs, bodyStart: sep + 4, contentLength: cl };
+	}
+
+	// httpStream is httpExchange for a body that may never end, such as an
+	// event stream. onHead(status, headers) fires once the head is in, then
+	// onChunk(bytes) per piece of body, then onEnd(err) once. The timeout covers
+	// only the wait for the head. Returns a function that stops it early.
+	function httpStream(v, id, hostLabel, method, path, body, headers, onHead, onChunk, onEnd, timeoutMs) {
+		let done = false;
+		let head = null;
+		let pending = new Uint8Array(0);
+		let remaining = -1;
+		const end = (err) => {
+			if (done) return;
+			done = true;
+			clearTimeout(timer);
+			v.close(id, 'a');
+			onEnd(err || null);
+		};
+		const timer = setTimeout(() => { if (!head) end(new Error('timeout: ' + hostLabel)); }, timeoutMs || 30000);
+		const deliver = (b) => {
+			if (remaining >= 0 && b.length > remaining) b = b.subarray(0, remaining);
+			if (remaining >= 0) remaining -= b.length;
+			if (b.length) onChunk(b);
+			if (remaining === 0) end();
+		};
+		writeRequest(v, id, hostLabel, method, path, body, headers);
+		const pump = () => {
+			while (!done) {
+				const b = v.recv(id, 'a');
+				if (b) {
+					if (head) { deliver(b); continue; }
+					const all = new Uint8Array(pending.length + b.length);
+					all.set(pending, 0);
+					all.set(b, pending.length);
+					head = parseHead(all);
+					if (!head) { pending = all; continue; }
+					pending = null;
+					clearTimeout(timer);
+					remaining = head.contentLength;
+					onHead(head.status, head.headers);
+					deliver(all.subarray(head.bodyStart));
+					continue;
+				}
+				if (v.eof(id, 'a')) { end(head ? null : new Error('malformed HTTP response from ' + hostLabel)); return; }
+				v.onReadable(id, 'a', pump);
+				return;
+			}
+		};
+		pump();
+		return () => end();
+	}
+
 	// httpExchange runs ONE HTTP/1.0 request/response over an already-open
 	// pipe (side 'a' of conn `id`) and settles the given resolve/reject with
 	// {status, body:Uint8Array, headers:{lowercased:value}}. Shared by
@@ -49,18 +136,7 @@
 			v.close(id, 'a');
 			reject(new Error('timeout: ' + hostLabel));
 		}, timeoutMs || 30000);
-		const te = new TextEncoder();
-		let req = (method || 'GET') + ' ' + (path || '/') + ' HTTP/1.0\r\nHost: ' + hostLabel + '\r\n';
-		const h = headers || {};
-		for (const k in h) { if (Object.prototype.hasOwnProperty.call(h, k)) req += k + ': ' + h[k] + '\r\n'; }
-		let bodyBytes = null;
-		if (body != null) {
-			bodyBytes = (body instanceof Uint8Array) ? body : te.encode(String(body));
-			req += 'Content-Length: ' + bodyBytes.length + '\r\n';
-		}
-		req += 'Connection: close\r\n\r\n';
-		v.send(id, 'a', te.encode(req));
-		if (bodyBytes && bodyBytes.length) v.send(id, 'a', bodyBytes);
+		writeRequest(v, id, hostLabel, method, path, body, headers);
 		const chunks = [];
 		let total = 0;
 		// preBytes: response bytes a caller's prelude reader (the SOCKS
@@ -73,23 +149,7 @@
 			for (const c of chunks) { all.set(c, off); off += c.length; }
 			return all;
 		};
-		const tryParseHead = (all) => {
-			let sep = -1; // header/body split at CRLFCRLF
-			for (let i = 0; i + 3 < all.length; i++) {
-				if (all[i] === 13 && all[i + 1] === 10 && all[i + 2] === 13 && all[i + 3] === 10) { sep = i; break; }
-			}
-			if (sep < 0) return null;
-			const head = new TextDecoder().decode(all.subarray(0, sep));
-			const lines = head.split('\r\n');
-			const status = parseInt(lines[0].split(' ')[1] || '0', 10) || 0;
-			const hs = {};
-			for (let i = 1; i < lines.length; i++) {
-				const ci = lines[i].indexOf(':');
-				if (ci > 0) hs[lines[i].slice(0, ci).trim().toLowerCase()] = lines[i].slice(ci + 1).trim();
-			}
-			const cl = /^\d+$/.test(hs['content-length'] || '') ? parseInt(hs['content-length'], 10) : -1;
-			return { status: status, headers: hs, bodyStart: sep + 4, contentLength: cl };
-		};
+		const tryParseHead = parseHead;
 		const finish = (all) => {
 			if (done) return;
 			done = true;
@@ -353,6 +413,26 @@
 				if (m.type !== 'vnet-fetch' || !ev.ports || !ev.ports[0]) return;
 				const reply = ev.ports[0];
 				if (!this.listening(m.port)) { reply.postMessage({ refused: true }); return; }
+				if (m.stream) {
+					// A worker that streams gets the head, then each piece of the
+					// body, then the end, so an event stream reaches the page live.
+					const id = this.dial(m.port);
+					if (id < 0) { reply.postMessage({ refused: true }); return; }
+					let headSent = false;
+					const stop = httpStream(this, id, '127.0.0.1:' + m.port, m.method, m.path, m.body, m.headers,
+						(status, headers) => { headSent = true; reply.postMessage({ head: true, status: status, headers: headers }); },
+						(b) => { const c = b.slice(); reply.postMessage({ chunk: c }, [c.buffer]); },
+						(err) => {
+							if (!headSent) {
+								reply.postMessage({ head: true, status: 502, headers: { 'content-type': 'text/plain' } });
+								reply.postMessage({ chunk: new TextEncoder().encode('vnet: fetch failed') });
+							}
+							reply.postMessage({ end: true, error: err ? String(err.message || err) : '' });
+							reply.close();
+						});
+					reply.onmessage = (e) => { if (e.data && e.data.cancel) { stop(); reply.close(); } };
+					return;
+				}
 				this.httpFetch(m.port, m.method, m.path, m.body, m.headers)
 					.then((r) => {
 						// Uint8Array bodies structured-clone fine; pass headers as

@@ -1177,6 +1177,13 @@ func (rc *rpcClient) SkychatPasswordIsSet() (bool, error) {
 	return out, nil
 }
 
+// SkychatHTTP calls SkychatHTTP.
+func (rc *rpcClient) SkychatHTTP(in SkychatHTTPIn) (SkychatHTTPOut, error) {
+	var out SkychatHTTPOut
+	err := rc.Call("SkychatHTTP", &in, &out)
+	return out, err
+}
+
 // SetSkychatPassword calls SetSkychatPassword.
 func (rc *rpcClient) SetSkychatPassword(oldPassword, newPassword string) error {
 	return rc.Call("SetSkychatPassword", &SkychatPasswordChangeIn{

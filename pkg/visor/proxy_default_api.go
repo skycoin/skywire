@@ -176,6 +176,10 @@ func (proxyDefaultAPI) SetSkychatPassword(_ string, _ string) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) SkychatHTTP(_ visorapi.SkychatHTTPIn) (visorapi.SkychatHTTPOut, error) {
+	return visorapi.SkychatHTTPOut{}, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) ClearSkychatPassword(_ string) error {
 	return ErrProxyNotSupported
 }

@@ -12,6 +12,7 @@
 package visor
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -28,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 const (
@@ -386,4 +388,14 @@ func checkSkychatPassword(p string) error {
 		return fmt.Errorf("skychat password length must be %d-%d chars", skychatMinPasswordLen, skychatMaxPasswordLen)
 	}
 	return nil
+}
+
+// SkychatHTTP is SkychatProxy for callers over RPC, such as the CLI when
+// skychat runs portless.
+func (v *Visor) SkychatHTTP(in visorapi.SkychatHTTPIn) (visorapi.SkychatHTTPOut, error) {
+	status, hdr, body, err := v.SkychatProxy(in.Method, in.Path, in.Query, http.Header(in.Headers), bytes.NewReader(in.Body))
+	if err != nil {
+		return visorapi.SkychatHTTPOut{}, err
+	}
+	return visorapi.SkychatHTTPOut{Status: status, Headers: hdr, Body: body}, nil
 }

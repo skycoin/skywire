@@ -64,21 +64,40 @@ const ASK_TIMEOUT_MS = (() => {
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => { e.waitUntil(self.clients.claim()); });
 
+// askClient offers a request to one window client and resolves with its first
+// reply, or null when it refuses or does not answer in time. A page that
+// streams replies with a head first and keeps the channel open for the body;
+// later messages are buffered until the caller reads them with onMore.
 function askClient(client, req) {
 	return new Promise((resolve) => {
 		const ch = new MessageChannel();
-		let done = false;
-		const timer = setTimeout(() => { if (!done) { done = true; resolve(null); } }, ASK_TIMEOUT_MS);
+		let answer = null;
+		const queue = [];
+		let sink = null;
+		const timer = setTimeout(() => { if (!answer) { answer = 'timeout'; resolve(null); } }, ASK_TIMEOUT_MS);
 		ch.port1.onmessage = (ev) => {
-			if (done) return;
-			done = true;
-			clearTimeout(timer);
 			const m = ev.data || {};
-			resolve(m.refused ? null : m);
+			if (answer && answer !== 'timeout') {
+				if (sink) sink(m); else queue.push(m);
+				return;
+			}
+			if (answer === 'timeout') { if (m.head) ch.port1.postMessage({ cancel: true }); return; }
+			clearTimeout(timer);
+			if (m.refused) { answer = 'refused'; resolve(null); return; }
+			answer = {
+				first: m,
+				port: ch.port1,
+				onMore(fn) { sink = fn; while (queue.length) fn(queue.shift()); },
+				cancel() { try { ch.port1.postMessage({ cancel: true }); } catch (e) { /* closed */ } },
+			};
+			resolve(answer);
 		};
-		client.postMessage({ type: 'vnet-fetch', port: req.port, method: req.method, path: req.path, headers: req.headers, body: req.body }, [ch.port2]);
+		client.postMessage({ type: 'vnet-fetch', stream: true, port: req.port, method: req.method, path: req.path, headers: req.headers, body: req.body }, [ch.port2]);
 	});
 }
+
+// noBodyStatus is a status a Response may not carry a body with.
+function noBodyStatus(s) { return s === 101 || s === 204 || s === 205 || s === 304; }
 
 // rewriteBase points a document's <base> at the DIRECTORY the request came
 // from, not at the port root.
@@ -181,11 +200,16 @@ self.addEventListener('fetch', (event) => {
 		// Asking in parallel makes the latency the FASTEST answering client
 		// rather than the sum of the silent ones, which is what the multi-tab
 		// note at the top of this file already describes as the contract.
-		const m = await firstAnswer(clis.map((c) => askClient(c, req)));
+		const asks = clis.map((c) => askClient(c, req));
+		const a = await firstAnswer(asks);
+		// A second tab answering the same port would hold its stream open for
+		// nothing; tell every answer but the one used to stop.
+		for (const p of asks) p.then((x) => { if (x && x !== a) x.cancel(); });
 		{
-			if (!m) {
+			if (!a) {
 				return new Response('vnet: no page answered for port ' + port, { status: 504, headers: { 'content-type': 'text/plain' } });
 			}
+			const m = a.first;
 			const respHeaders = new Headers();
 			const hs = m.headers || {};
 			for (const k in hs) { if (Object.prototype.hasOwnProperty.call(hs, k)) { try { respHeaders.set(k, hs[k]); } catch (e) { /* forbidden name */ } } }
@@ -195,9 +219,47 @@ self.addEventListener('fetch', (event) => {
 				respHeaders.set('Cross-Origin-Opener-Policy', 'same-origin');
 				respHeaders.set('Cross-Origin-Resource-Policy', 'same-origin');
 			}
-			let bodyBytes = m.body instanceof Uint8Array ? m.body : new Uint8Array(0);
 			const ct = (hs['content-type'] || '').toLowerCase();
-			if (event.request.mode === 'navigate' && ct.indexOf('text/html') >= 0) {
+			const rewrite = event.request.mode === 'navigate' && ct.indexOf('text/html') >= 0;
+			if (m.head) {
+				respHeaders.delete('transfer-encoding');
+				respHeaders.delete('connection');
+				if (noBodyStatus(m.status)) {
+					a.cancel();
+					return new Response(null, { status: m.status, headers: respHeaders });
+				}
+				if (!rewrite) {
+					const body = new ReadableStream({
+						start(ctrl) {
+							a.onMore((x) => {
+								try {
+									if (x.chunk) ctrl.enqueue(new Uint8Array(x.chunk));
+									if (x.end) ctrl.close();
+								} catch (e) { /* reader gone */ }
+							});
+						},
+						cancel() { a.cancel(); },
+					});
+					return new Response(body, { status: m.status || 200, headers: respHeaders });
+				}
+				// A page to rewrite has to be whole first.
+				m.body = await new Promise((resolve) => {
+					const parts = [];
+					let n = 0;
+					a.onMore((x) => {
+						if (x.chunk) { const c = new Uint8Array(x.chunk); parts.push(c); n += c.length; }
+						if (x.end) {
+							const all = new Uint8Array(n);
+							let off = 0;
+							for (const c of parts) { all.set(c, off); off += c.length; }
+							resolve(all);
+						}
+					});
+				});
+			}
+			let bodyBytes = m.body instanceof Uint8Array ? m.body : new Uint8Array(0);
+			if (noBodyStatus(m.status)) return new Response(null, { status: m.status, headers: respHeaders });
+			if (rewrite) {
 				const html = rewriteBase(new TextDecoder().decode(bodyBytes), port, path);
 				bodyBytes = new TextEncoder().encode(html);
 				respHeaders.delete('content-length');
