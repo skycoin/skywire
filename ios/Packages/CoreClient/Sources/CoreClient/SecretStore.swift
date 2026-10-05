@@ -28,6 +28,8 @@ public final class SecretStore: Sendable {
         case skychatPassword = "skychat_password"
         /// Gates skydex-client's trading UI (SkydexProfile).
         case skydexPassword = "skydex_password"
+        /// What the config is sealed under while the core is stopped (the app's ConfigVault).
+        case configSealKey = "config_seal_key"
     }
 
     public struct KeychainError: Error, LocalizedError, Equatable {

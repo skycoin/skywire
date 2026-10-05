@@ -35,6 +35,7 @@ final class AppModel: ObservableObject {
     let client: CoreClient
     let log: CoreLog
     let paths: CorePaths
+    let vault: ConfigVault
     private let host: any CoreHost
     private let footprintLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "skywire", category: "footprint")
     private let lifecycleLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "skywire", category: "lifecycle")
@@ -45,12 +46,13 @@ final class AppModel: ObservableObject {
     /// rejection means something else is wrong, and a loop would hide it.
     private var accountResetTried = false
 
-    init(host: any CoreHost, client: CoreClient, settings: AppSettings, log: CoreLog, paths: CorePaths) {
+    init(host: any CoreHost, client: CoreClient, settings: AppSettings, log: CoreLog, paths: CorePaths, vault: ConfigVault) {
         self.host = host
         self.client = client
         self.settings = settings
         self.log = log
         self.paths = paths
+        self.vault = vault
     }
 
     /// The app's model: the core in this process, under Application Support,
@@ -66,7 +68,8 @@ final class AppModel: ObservableObject {
             try secrets.password(.apiPassword)
         }
         let host = InAppCoreHost(paths: paths, secrets: secrets) { settings.profileSettings }
-        return AppModel(host: host, client: client, settings: settings, log: log, paths: paths)
+        return AppModel(host: host, client: client, settings: settings, log: log, paths: paths,
+                        vault: ConfigVault(paths: paths, secrets: secrets))
     }
 
     /// Starts the model's loops once, and connects if the user left the core
@@ -91,6 +94,9 @@ final class AppModel: ObservableObject {
         }
         if settings.wantsConnected {
             connect()
+        } else {
+            // A plaintext left by a core that never stopped cleanly (the app died under it).
+            sealIfAsked()
         }
     }
 
@@ -102,7 +108,44 @@ final class AppModel: ObservableObject {
     func disconnect() {
         settings.wantsConnected = false
         perform { [host] in try await host.stop() }
+        sealAfterStop = true
     }
+
+    /// Runs an identity change with the core stopped, then starts it again if it ran (Android:
+    /// SettingsViewModel.identityAction). The error is the caller's to show.
+    func changeIdentity(_ change: @escaping @Sendable () async throws -> Void) async throws {
+        let wasRunning = coreState != .stopped && coreState != .failed
+        busy = true
+        defer { busy = false }
+        if wasRunning { try await host.stop() }
+        do {
+            try await change()
+        } catch {
+            if wasRunning { try? await host.start() }
+            throw error
+        }
+        // The client's cached key belongs to a visor that no longer exists.
+        await client.forgetIdentity()
+        publicKey = readPublicKey()
+        if wasRunning {
+            try await host.start()
+        } else {
+            try vault.seal(enabled: settings.configEncrypted)
+        }
+    }
+
+    /// Seals the config when the user asked for it and the core is down.
+    private func sealIfAsked() {
+        guard settings.configEncrypted, coreState == .stopped || coreState == .failed else { return }
+        do {
+            try vault.seal(enabled: true)
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    /// Set by Disconnect, so the config is sealed once that stop has finished.
+    private var sealAfterStop = false
 
     /// Stops the core and starts it again. The start re-applies the profile,
     /// so this is also how a pinned setting (log level, Fleet) takes effect.
@@ -232,6 +275,10 @@ final class AppModel: ObservableObject {
             }
             publicKey = readPublicKey()
             busy = false
+            if sealAfterStop {
+                sealAfterStop = false
+                sealIfAsked()
+            }
         }
     }
 
@@ -246,10 +293,10 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// `pk` from the config file, or nil before the first start.
+    /// `pk` from the config, sealed or not, or nil before the first start.
     private func readPublicKey() -> String? {
-        guard let data = try? Data(contentsOf: paths.configFile),
-              let config = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard let text = try? vault.readText(),
+              let config = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
               let pk = config["pk"] as? String, !pk.isEmpty
         else { return nil }
         return pk
