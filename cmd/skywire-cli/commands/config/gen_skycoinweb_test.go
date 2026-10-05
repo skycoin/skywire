@@ -20,7 +20,7 @@ func TestSkycoinWebFlags(t *testing.T) {
 	enableDmsgWeb, enableSkynetWeb = true, true
 
 	internal := strings.Join(skycoinWebFlags(false), " ")
-	for _, want := range []string{"--no-listen", "--wallet-dir /opt/skywire/wallets", "--socks5-proxy socks5://127.0.0.1:4445", ".dmsg:6420"} {
+	for _, want := range []string{"--no-listen", "--wallet-dir /opt/skywire/wallets", "--socks5-proxy socks5://127.0.0.1:4445", ".dmsg:6420", "--btc-electrum-url default"} {
 		if !strings.Contains(internal, want) {
 			t.Errorf("internal flags %q lack %q", internal, want)
 		}
