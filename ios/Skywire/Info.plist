@@ -24,6 +24,8 @@
   CFBundleURLTypes: skychat: links (the xcconfig's SKYWIRE_URL_SCHEME), which
   the chat page shows in its Add-by-address dialog (ChatRouter). Only skychat:
   is claimed; skycoin: belongs to the Skycoin wallet.
+  UIAppFonts and UILaunchScreen: Android's two typefaces and its splash
+  (the logo on white, #0A101C at night), M6.5.
 -->
 <plist version="1.0">
 <dict>
@@ -58,6 +60,20 @@
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
+	</dict>
+	<key>UIAppFonts</key>
+	<array>
+		<string>quicksand_variable.ttf</string>
+		<string>nunito_variable.ttf</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+		<key>UIImageName</key>
+		<string>launch-logo</string>
+		<key>UIImageRespectsSafeAreaInsets</key>
+		<false/>
 	</dict>
 </dict>
 </plist>
