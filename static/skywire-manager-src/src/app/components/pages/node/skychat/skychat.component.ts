@@ -160,6 +160,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   newGroupName = '';
   newGroupMode: 'public' | 'private' = 'public';
   joinInvite = '';
+  private openGroupsOnLoad = false; // a ?join= link: show rooms once the node is known
   // Group-detail state.
   addMemberPk = '';
   inviteLink = '';
@@ -248,6 +249,14 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     if (/^[0-9a-fA-F]{66}$/.test(peerParam)) {
       this.toPK = peerParam;
     }
+    // ?join=<invite> (the desk's ?skygroup= link) opens the join panel filled in;
+    // joining stays one click, so a link alone never adds anyone to a room.
+    const joinParam = new URLSearchParams(hashQuery).get('join') || '';
+    if (joinParam) {
+      this.openGroupsOnLoad = true;
+      this.joinInvite = joinParam;
+      this.showJoin = true;
+    }
 
     if (this.embeddedNodeKey) {
       // Portal-mounted (no NodeComponent parent): synthesize the node from the
@@ -267,6 +276,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       this.tryLoadPeers();
       this.refreshPasswordState();
       this.startVoicePoll();
+      this.openGroupsIfLinked();
     } else {
       this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
         const wasUnset = !this.node;
@@ -276,6 +286,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
           this.tryLoadPeers();
           this.refreshPasswordState();
           this.startVoicePoll();
+          this.openGroupsIfLinked();
         }
         this.cdr.markForCheck();
       });
@@ -758,6 +769,13 @@ return {
   /** Extract a human message from an ApiService error. */
   private groupErrMsg(e: any): string {
     return e?.originalError?.error?.error || e?.error?.error || e?.message || String(e);
+  }
+
+  private openGroupsIfLinked() {
+    if (this.openGroupsOnLoad) {
+      this.openGroupsOnLoad = false;
+      this.switchMode('groups');
+    }
   }
 
   switchMode(mode: 'dm' | 'groups') {
