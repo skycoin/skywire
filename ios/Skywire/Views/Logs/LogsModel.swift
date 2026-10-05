@@ -10,6 +10,8 @@ enum LogSource: Hashable, Sendable {
     case process
     /// One app's log, over the local API.
     case app(String)
+    /// A Fleet visor's runtime log, fetched over dmsg through the local API.
+    case visor(String)
 
     /// The apps the viewer offers.
     static let apps = [SkychatProfile.app, SocksProfile.app, "vpn-client", SkydexProfile.app]
@@ -92,12 +94,13 @@ final class LogsModel: ObservableObject {
             let page = app.log.lines(after: sinkCursor)
             sinkCursor = page.cursor
             append(page.lines.map(LogParser.parseTextLine), dropped: page.dropped)
-        case .core:
+        case .core, .visor:
             // No session probe here: the client logs in again on a 401 by
             // itself, and probing /api/user each poll would fill the very
             // buffer this shows.
             let first = runtimeSince == 0
-            let delta = try await app.client.runtimeLogs(since: runtimeSince)
+            let remote: String? = if case let .visor(pk) = source { pk } else { nil }
+            let delta = try await app.client.runtimeLogs(since: runtimeSince, pk: remote)
             if delta.latest < runtimeSince {
                 // The visor restarted and its counter began again: start over,
                 // so the new run's first lines are not skipped.

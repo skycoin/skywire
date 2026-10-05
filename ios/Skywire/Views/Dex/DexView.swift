@@ -1,110 +1,167 @@
 import CoreClient
 import SwiftUI
+import UIKit
 import WebKit
 
-/// SkyDEX (Android: DexScreen): the market is chosen natively, the trading
-/// UI is the page the desktop serves. Before a market is connected the
-/// screen is the market form; once one is, a one-line header over the page.
+/// SkyDEX (Android: DexScreen): the market chosen natively, the trading UI the page the
+/// desktop serves, behind a one-line header once a market is connected.
 struct DexView: View {
     @EnvironmentObject private var app: AppModel
+    @EnvironmentObject private var navigator: Navigator
+    @EnvironmentObject private var dialogs: SkyDialogs
     @StateObject private var model = DexModel()
     @StateObject private var page = DexPage()
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Group {
+        VStack(spacing: 0) {
+            // Back steps the page, then disconnects (back to the form), then leaves (Android).
+            SkyTopBar(title: Text("app_skydex"), onBack: {
+                if page.goBack() { return }
+                if model.connected { model.disconnect(app) } else { navigator.back() }
+            }, help: .dex)
             if model.connected, let url = model.uiURL, let password = model.password {
-                VStack(spacing: 0) {
-                    header
-                    Divider()
-                    DexWebView(page: page, url: url, password: password)
+                header
+                if let error = page.error {
+                    VStack(spacing: 0) {
+                        Text(verbatim: error).skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+                            .multilineTextAlignment(.center)
+                        Button { page.retry() } label: { Text("socks_retry") }.buttonStyle(.tonal).padding(.top, 8)
+                    }
+                    .padding(32)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    DexWebView(page: page, url: url, password: password, dark: colorScheme == .dark)
                 }
             } else {
-                form
+                ScrollView {
+                    form.padding(.horizontal, 20).padding(.vertical, 16)
+                }
             }
         }
-        .navigationTitle(Text("app_skydex"))
-        .navigationBarTitleDisplayMode(.inline)
+        .background(Color.skyBackground)
         .task(id: app.connected) { await model.run(app) }
     }
 
-    /// The market in use and its Disconnect, above the trading UI.
+    /// The market in use, tap to copy its key, and Disconnect.
     private var header: some View {
-        HStack(spacing: 8) {
-            StatusDot(color: .success)
-            Text(SavedMarket(pk: model.market?.marketPK ?? "", name: model.market?.marketName ?? "").label)
-                .font(.footnote.monospaced())
-                .lineLimit(1)
-                .accessibilityIdentifier("dex-market")
-            Spacer()
-            if model.busy {
-                ProgressView().controlSize(.small)
+        let pk = model.market?.marketPK ?? ""
+        let name = model.market?.marketName ?? ""
+        return HStack(spacing: 0) {
+            StatusDot(color: .skySuccess)
+            Button {
+                UIPasteboard.general.string = pk
+                dialogs.toast(Text("copied_to_clipboard"))
+            } label: {
+                VStack(alignment: .leading, spacing: 0) {
+                    (name.isEmpty ? Text("dex_market_title") : Text(verbatim: name))
+                        .skyText(.titleSmall).lineLimit(1)
+                    Text(verbatim: Self.short(pk)).skyText(.bodySmall, mono: true).foregroundStyle(Color.skyOnSurfaceVariant)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            Button("disconnect") { model.disconnect(app) }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+            .buttonStyle(PressStyle())
+            .padding(.leading, 10)
+            .accessibilityIdentifier("dex-market")
+            Button { model.disconnect(app) } label: { Text("disconnect") }
+                .buttonStyle(.tonal)
                 .disabled(model.busy)
                 .accessibilityIdentifier("dex-disconnect")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 8))
     }
 
+    /// The market picker: a Card, not a SectionCard (16 pt corners, no border).
     private var form: some View {
-        Form {
-            Section {
-                // One line: wrapped, the key was hyphenated where it broke,
-                // and a hyphen read as part of a key is a wrong key.
-                TextField(L10n.text("dex_market_label"), text: $model.entry)
-                    .font(.body.monospaced())
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .accessibilityIdentifier("dex-market-field")
-                if !model.entry.isEmpty, !model.entryValid {
-                    Text("dex_market_invalid").font(.footnote).foregroundStyle(.red)
-                }
-                if !model.recents.isEmpty {
-                    Menu {
-                        ForEach(model.recents, id: \.self) { recent in
-                            Button(recent.label) { model.pick(recent) }
-                        }
-                    } label: {
-                        Label("dex_recents", systemImage: "clock.arrow.circlepath")
-                    }
-                }
-            } header: {
-                Text("dex_market_title")
-            } footer: {
-                Text("dex_market_hint")
+        VStack(alignment: .leading, spacing: 0) {
+            Text("dex_market_title").skyText(.labelMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+            MarketField(model: model, notch: .skySurfaceVariant).padding(.top, 10)
+            if !model.entry.isEmpty, !model.entryValid {
+                Text("dex_market_invalid").skyText(.bodySmall).foregroundStyle(Color.skyError).padding(.top, 6)
             }
-            Section {
+            if let error = model.error {
+                Text(verbatim: error).skyText(.bodySmall).foregroundStyle(Color.skyError).padding(.top, 8)
+                    .accessibilityIdentifier("dex-error")
+            }
+            VStack(alignment: .leading, spacing: 0) {
                 if !app.connected {
                     Text(app.coreState == .stopped ? L10n.key("dex_core_offline") : L10n.key("dex_core_starting"))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
                 } else {
-                    Button {
-                        model.connect(app)
-                    } label: {
-                        HStack {
-                            if model.busy {
-                                ProgressView()
-                                Text("dex_connecting")
-                            } else {
-                                Text("connect")
-                            }
+                    Button { model.connect(app) } label: { Text("connect").frame(maxWidth: .infinity) }
+                        .buttonStyle(.filled)
+                        .disabled(model.busy || !model.entryValid)
+                        .accessibilityIdentifier("dex-connect")
+                    if model.busy {
+                        HStack(spacing: 10) {
+                            MaterialSpinner(size: 16, stroke: 2)
+                            Text("dex_connecting").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
                         }
-                        .frame(maxWidth: .infinity)
+                        .padding(.top, 8)
+                    } else {
+                        Text("dex_market_hint").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 8)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(model.busy || !model.entryValid)
-                    .accessibilityIdentifier("dex-connect")
-                }
-                if let error = model.error {
-                    Text(error).font(.footnote).foregroundStyle(.red)
-                        .accessibilityIdentifier("dex-error")
                 }
             }
+            .padding(.top, 16)
         }
+        .padding(20)
+        .foregroundStyle(Color.skyOnSurface)
+        .background(Color.skySurfaceVariant, in: .sky(SkyRadius.medium))
+    }
+
+    /// 8…6, the trading UI's own shortening.
+    static func short(_ pk: String) -> String {
+        pk.count <= 20 ? pk : "\(pk.prefix(8))…\(pk.suffix(6))"
+    }
+}
+
+/// The key field with its recent-markets dropdown (Android's DropdownMenu).
+private struct MarketField: View {
+    @ObservedObject var model: DexModel
+    let notch: Color
+    @State private var open = false
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            SkyOutlinedTextField(label: L10n.key("dex_market_label"), text: $model.entry,
+                                 isError: !model.entry.isEmpty && !model.entryValid, mono: true,
+                                 notch: notch, identifier: "dex-market-field")
+                .disabled(model.busy)
+            if !model.recents.isEmpty {
+                Button { open.toggle() } label: {
+                    MaterialIcon(MI.filledArrowDropDown).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 48, height: 48)
+                }
+                .buttonStyle(PressStyle())
+                .disabled(model.busy)
+                .accessibilityLabel(Text("dex_recents"))
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            if open {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(model.recents, id: \.self) { recent in
+                        Button {
+                            model.pick(recent)
+                            open = false
+                        } label: {
+                            Text(verbatim: recent.label).skyText(.bodyMedium).lineLimit(1)
+                                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                                .padding(.horizontal, 12)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PressStyle(layer: .skyOnSurface))
+                    }
+                }
+                .padding(.vertical, 8)
+                .frame(minWidth: 112, maxWidth: 280)
+                .background(Color.skyContainer, in: .sky(SkyRadius.extraSmall))
+                .skyElevation(3)
+                .offset(y: 60)
+            }
+        }
+        .zIndex(1)
     }
 }
 
@@ -113,13 +170,14 @@ private struct DexWebView: UIViewRepresentable {
     let page: DexPage
     let url: URL
     let password: String
+    let dark: Bool
 
     func makeCoordinator() -> DexPage { page }
 
     func makeUIView(context: Context) -> WKWebView { page.makeWebView() }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        page.show(url, password: password)
+        page.show(url, password: password, dark: dark)
     }
 
     static func dismantleUIView(_ webView: WKWebView, coordinator page: DexPage) {
@@ -137,14 +195,15 @@ final class DexPage: NSObject, ObservableObject {
     private(set) var webView: WKWebView?
     private var loadedURL: URL?
     private var password: String?
+    private var dark = false
+    /// The page failed: the WebView's own words, or the gate's refusal.
+    @Published private(set) var error: String?
 
     func makeWebView() -> WKWebView {
         if let webView { return webView }
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
-        configuration.userContentController.addUserScript(
-            WKUserScript(source: ChatPage.noZoomScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
-        )
+        // Pinch zoom stays on, as on Android; the phone stylesheet fits the page first.
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = self
         view.uiDelegate = self
@@ -158,11 +217,32 @@ final class DexPage: NSObject, ObservableObject {
         return view
     }
 
-    func show(_ url: URL, password: String) {
+    func show(_ url: URL, password: String, dark: Bool) {
         self.password = password
-        guard let webView, url != loadedURL else { return }
+        guard let webView else { return }
+        if dark != self.dark {
+            self.dark = dark
+            webView.evaluateJavaScript(DexInjections.theme(dark: dark))
+        }
+        guard url != loadedURL else { return }
         loadedURL = url
+        error = nil
         webView.load(URLRequest(url: url))
+    }
+
+    /// One step back in the page; false when there is none.
+    func goBack() -> Bool {
+        guard let webView, webView.canGoBack else { return false }
+        webView.goBack()
+        return true
+    }
+
+    /// PageError's Retry: load the page again.
+    func retry() {
+        error = nil
+        let url = loadedURL
+        loadedURL = nil
+        if let url, let password { show(url, password: password, dark: dark) }
     }
 
     func release() {
@@ -194,6 +274,7 @@ extension DexPage: WKNavigationDelegate {
             return
         }
         guard challenge.previousFailureCount == 0, let password else {
+            error = L10n.text("dex_error_password")
             completionHandler(.cancelAuthenticationChallenge, nil)
             return
         }
@@ -219,6 +300,30 @@ extension DexPage: WKNavigationDelegate {
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         webView.reload()
+    }
+
+    // Android's injections: the theme when the page commits and again at finish, then the phone layout.
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        webView.evaluateJavaScript(DexInjections.theme(dark: dark))
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        webView.evaluateJavaScript(DexInjections.theme(dark: dark))
+        webView.evaluateJavaScript(DexInjections.phone)
+        webView.evaluateJavaScript(DexInjections.tableCards)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
+        failed(error)
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
+        failed(error)
+    }
+
+    private func failed(_ error: any Error) {
+        if (error as NSError).code == NSURLErrorCancelled { return }
+        self.error = error.localizedDescription
     }
 }
 

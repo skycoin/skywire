@@ -42,6 +42,7 @@ struct RootView: View {
             if calls.state.busy {
                 CallScreen()
             }
+            SkySheetLayer(dialogs: dialogs)
             SkyDialogLayer(dialogs: dialogs)
         }
         .environmentObject(navigator)
@@ -199,9 +200,9 @@ private struct TabStack: View {
 
     @ViewBuilder private func destination(_ route: Route) -> some View {
         switch route {
-        case .socks: PendingRestyle { SocksView(settings: app.settings) }
-        case .dex: PendingRestyle { DexView() }
-        case .fleet: PendingRestyle { FleetView(settings: app.settings) }
+        case .socks: SocksView(settings: app.settings)
+        case .dex: DexView()
+        case .fleet: FleetView(settings: app.settings)
         case .vpn: VpnView()
         case .logs(let source): PendingRestyle { LogsView(source: source) }
         }
