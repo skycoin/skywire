@@ -50,14 +50,14 @@ final class ScreenTour: XCTestCase {
         snap("\(language)-2-home-connected")
 
         // The chat page, once skychat answered and the page drew its list.
-        app.tabBars.buttons.element(boundBy: Tab.chat.rawValue).tap()
+        openTab(.chat, in: app)
         let page = app.webViews["chat-webview"]
         XCTAssertTrue(page.waitForExistence(timeout: 60), "the chat page never came up")
         XCTAssertTrue(page.buttons.firstMatch.waitForExistence(timeout: 30), "the chat page drew nothing")
         snap("\(language)-3-chat")
 
         // The apps hub and its screens (M4).
-        app.tabBars.buttons.element(boundBy: Tab.apps.rawValue).tap()
+        openTab(.apps, in: app)
         XCTAssertTrue(app.buttons["hub-socks"].waitForExistence(timeout: 10))
         snap("\(language)-3a-apps")
         app.buttons["hub-socks"].tap()
@@ -75,7 +75,7 @@ final class ScreenTour: XCTestCase {
         snap("\(language)-3d-fleet")
         app.navigationBars.buttons.element(boundBy: 0).tap()
 
-        app.tabBars.buttons.element(boundBy: Tab.settings.rawValue).tap()
+        openTab(.settings, in: app)
         snap("\(language)-4-settings")
         app.buttons["transport-link"].tap()
         snap("\(language)-5-transport")

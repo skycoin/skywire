@@ -25,13 +25,14 @@ extension XCTestCase {
         }
     }
 
-    /// Selects a tab and waits until it is the selected one.
+    /// Taps a bar slot and waits until it is the selected one (the cloud has no selected state).
     func openTab(_ which: Tab, in app: XCUIApplication) {
-        let tab = app.tabBars.buttons.element(boundBy: which.rawValue)
+        let tab = app.buttons[which.rawValue]
         XCTAssertTrue(tab.waitForExistence(timeout: 10))
         // A tap can land while a system sheet (Face ID) is still leaving.
-        for _ in 0..<3 where !tab.isSelected {
+        for _ in 0..<3 where which == .apps || !tab.isSelected {
             tab.tap()
+            if which == .apps { return }
             let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isSelected == true"), object: tab)
             _ = XCTWaiter().wait(for: [selected], timeout: 3)
         }

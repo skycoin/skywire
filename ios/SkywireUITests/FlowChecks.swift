@@ -19,18 +19,6 @@ final class FlowChecks: XCTestCase {
         try? FileManager.default.removeItem(atPath: Self.faceIDFlag)
     }
 
-    /// Restart from Home: the core goes down and comes back, and the visor
-    /// card fills again, which needs a new session (the old one died with the
-    /// core), with nothing asked of the user.
-    func testRestartFromHomeComesBackLoggedIn() {
-        let app = connectedApp()
-        app.buttons["home-actions"].tap()
-        app.buttons["home-restart"].tap()
-        wait(for: state(app), anyOf: ["stopping", "stopped", "starting", "running"], timeout: 30)
-        wait(for: state(app), anyOf: ["connected"], timeout: 180)
-        XCTAssertTrue(app.descendants(matching: .any)["visor-card"].waitForExistence(timeout: 60))
-    }
-
     /// The core log level: debug asks, restarts the core, and the Process
     /// source then shows DEBUG lines (the Core source, the visor's runtime
     /// ring, stops at info by design: logstore.DefaultHookLevel); set back to

@@ -10,8 +10,6 @@ final class HomeModel: ObservableObject {
     @Published private(set) var health: [ServiceHealthEntry] = []
     /// A poll that failed; cleared by the next one that works.
     @Published private(set) var error: String?
-    /// The outcome of the last action (dmsg reconnect), shown once.
-    @Published var notice: String?
 
     static let refreshInterval: Duration = .seconds(4)
 
@@ -40,20 +38,6 @@ final class HomeModel: ObservableObject {
                 self.error = error.localizedDescription
             }
             try? await Task.sleep(for: Self.refreshInterval)
-        }
-    }
-
-    /// Drops the visor's dmsg sessions so it re-dials now.
-    func reconnectDmsg(_ app: AppModel) {
-        Task {
-            do {
-                let closed = try await app.client.dmsgReconnect()
-                notice = L10n.format("home_dmsg_reconnected", closed)
-            } catch {
-                if !app.handle(error) {
-                    notice = error.localizedDescription
-                }
-            }
         }
     }
 }

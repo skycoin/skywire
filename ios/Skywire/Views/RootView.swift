@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// The tabs, under the app lock: Android's bar (Home, Chat, the apps hub,
-/// Wallet, Settings).
+/// The app under the lock: Android's shell (SkywireApp.kt), the screen over the floating bar.
 struct RootView: View {
     @EnvironmentObject private var app: AppModel
     @EnvironmentObject private var lock: AppLock
@@ -10,53 +9,51 @@ struct RootView: View {
     @ObservedObject private var settings: AppSettings
     @ObservedObject private var calls = VoiceCalls.shared
     @Environment(\.scenePhase) private var scenePhase
-    @State private var tab = AppTab.home
+    @StateObject private var navigator = Navigator()
+    @StateObject private var dialogs = SkyDialogs()
 
     init(settings: AppSettings) {
         self.settings = settings
     }
 
     var body: some View {
-        TabView(selection: $tab) {
-            HomeView()
-                .tabItem { Label("tab_home", systemImage: "house") }
-                .tag(AppTab.home)
-            ChatView()
-                .tabItem { Label("tab_chat", systemImage: "bubble.left.and.bubble.right") }
-                .badge(notifications.unread ?? 0)
-                .tag(AppTab.chat)
-            HubView(openChat: { tab = .chat })
-                .tabItem { Label("tab_hub_description", systemImage: "square.grid.2x2") }
-                .tag(AppTab.apps)
-            WalletTab()
-                .tabItem { Label("tab_wallet", systemImage: "wallet.pass") }
-                .tag(AppTab.wallet)
-            SettingsView()
-                .tabItem { Label("tab_settings", systemImage: "gearshape") }
-                .tag(AppTab.settings)
+        ZStack {
+            VStack(spacing: 0) {
+                ZStack {
+                    ForEach(AppTab.allCases, id: \.self) { tab in
+                        if navigator.visited.contains(tab) {
+                            let shown = navigator.tab == tab
+                            TabStack(tab: tab, navigator: navigator)
+                                .opacity(shown ? 1 : 0)
+                                .allowsHitTesting(shown)
+                                .accessibilityHidden(!shown)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                SkyBottomBar(navigator: navigator)
+            }
+            .background(Color.skyBackground.ignoresSafeArea())
+            // A call owns the display, bar and all (Android swaps the UI for CallScreen).
+            if calls.state.busy {
+                CallScreen()
+            }
+            SkyDialogLayer(dialogs: dialogs)
         }
-        .tint(.skywire)
-        // The call, full screen, over every tab: a call is what the phone
-        // is doing, not something to notice inside a conversation list.
-        // The state behind it is the visor's own list, so the screen cannot
-        // disagree with it, and its dismissal is the buttons' business
-        // (Decline, Hang up) — never a swipe or a tap outside.
-        .fullScreenCover(isPresented: Binding(get: { calls.state.busy }, set: { _ in })) {
-            CallScreen()
-        }
+        .environmentObject(navigator)
+        .environmentObject(dialogs)
         .modifier(LockCover(lock: lock, enabled: settings.appLockEnabled))
         .onAppear {
             app.launch()
             // A link or a tap that launched the app.
-            if router.pending != nil { tab = .chat }
+            if router.pending != nil { navigator.select(.chat) }
         }
         // Whichever screen is up: the hub is read while the core is connected.
         .task(id: app.connected) { await notifications.run(app) }
-        // The calls are polled for as long as the core is connected, ringing
-        // and connecting whether or not any screen is looking.
+        // Calls are polled while the core is connected, whether or not a screen looks.
         .task(id: app.connected) { await CallCenter.shared.run(app) }
         .onChange(of: router.pending) { request in
-            if request != nil { tab = .chat }
+            if request != nil { navigator.select(.chat) }
         }
         .onChange(of: scenePhase) { phase in
             switch phase {
@@ -76,7 +73,146 @@ struct RootView: View {
     }
 }
 
-/// The tab bar's tabs, in order.
-enum AppTab: Hashable {
-    case home, chat, apps, wallet, settings
+/// The bar's destinations (Android Routes: home, chat, hub, wallet, settings).
+enum AppTab: CaseIterable, Hashable {
+    case home, chat, hub, wallet, settings
+}
+
+/// Screens pushed over a tab (Android's non-tab routes).
+enum Route: Hashable {
+    case socks, dex, fleet, vpn
+    case logs(LogSource)
+}
+
+/// Android's NavHost semantics (Routes.kt, SkywireApp.kt) over one stack per tab.
+@MainActor
+final class Navigator: ObservableObject {
+    @Published private(set) var tab: AppTab = .home
+    @Published private(set) var visited: Set<AppTab> = [.home]
+    @Published private var stacks: [AppTab: [Route]] = [:]
+    /// Where a tab root's back goes when it was opened from the hub.
+    private var parent: [AppTab: AppTab] = [:]
+
+    /// NavHost's default: a 700 ms cross-fade, FastOutSlowIn.
+    static let fade = Animation.timingCurve(0.4, 0, 0.2, 1, duration: 0.7)
+
+    func stack(_ tab: AppTab) -> [Route] {
+        stacks[tab] ?? []
+    }
+
+    /// The highlighted bar slot: none on the hub, its app screens or a log viewer.
+    var selectedSlot: AppTab? {
+        if tab == .hub { return nil }
+        if case .logs = stack(tab).last { return nil }
+        return tab
+    }
+
+    /// A bar slot: that tab with its saved stack.
+    func select(_ tab: AppTab) {
+        parent[tab] = nil
+        go(tab)
+    }
+
+    /// The cloud: always the hub's list, never an app screen left open under it.
+    func openHub() {
+        parent[.hub] = nil
+        withAnimation(Self.fade) { stacks[.hub] = [] }
+        go(.hub)
+    }
+
+    /// Hub ▸ SkyChat or Wallet: that tab's root, with back returning to the hub.
+    func openFromHub(_ tab: AppTab) {
+        withAnimation(Self.fade) { stacks[tab] = [] }
+        parent[tab] = .hub
+        go(tab)
+    }
+
+    func push(_ route: Route) {
+        if stack(tab).last == route { return }
+        withAnimation(Self.fade) { stacks[tab, default: []].append(route) }
+    }
+
+    /// Back: pop, or leave a tab root for the hub (if it came from there) or Home.
+    func back() {
+        if var stack = stacks[tab], !stack.isEmpty {
+            stack.removeLast()
+            withAnimation(Self.fade) { stacks[tab] = stack }
+            return
+        }
+        guard tab != .home else { return }
+        let target = parent[tab] ?? .home
+        parent[tab] = nil
+        go(target)
+    }
+
+    private func go(_ tab: AppTab) {
+        withAnimation(Self.fade) {
+            visited.insert(tab)
+            self.tab = tab
+        }
+    }
+}
+
+/// One tab: its root and the screens pushed over it, the top one shown.
+private struct TabStack: View {
+    let tab: AppTab
+    @ObservedObject var navigator: Navigator
+    @EnvironmentObject private var app: AppModel
+
+    var body: some View {
+        let stack = navigator.stack(tab)
+        ZStack {
+            layer(root, shown: stack.isEmpty)
+            ForEach(Array(stack.enumerated()), id: \.offset) { index, route in
+                layer(destination(route), shown: index == stack.count - 1)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    private func layer(_ view: some View, shown: Bool) -> some View {
+        view
+            .opacity(shown ? 1 : 0)
+            .allowsHitTesting(shown)
+            .accessibilityHidden(!shown)
+    }
+
+    @ViewBuilder private var root: some View {
+        switch tab {
+        case .home: HomeView()
+        case .chat: ChatView()
+        case .hub: HubView()
+        case .wallet: WalletTab()
+        case .settings: SettingsView()
+        }
+    }
+
+    @ViewBuilder private func destination(_ route: Route) -> some View {
+        switch route {
+        case .socks: PendingRestyle { SocksView(settings: app.settings) }
+        case .dex: PendingRestyle { DexView() }
+        case .fleet: PendingRestyle { FleetView(settings: app.settings) }
+        case .vpn: VpnView()
+        case .logs(let source): PendingRestyle { LogsView(source: source) }
+        }
+    }
+}
+
+/// A screen not yet rebuilt in Android's design: its own navigation bar, with back.
+private struct PendingRestyle<Content: View>: View {
+    @ViewBuilder let content: Content
+    @EnvironmentObject private var navigator: Navigator
+
+    var body: some View {
+        NavigationStack {
+            content
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button { navigator.back() } label: { Image(systemName: "chevron.backward") }
+                            .accessibilityLabel(Text("back"))
+                    }
+                }
+        }
+    }
 }
