@@ -305,7 +305,9 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   private proxyUrl(path: string): string {
     const apiPrefix = !environment.production && location.protocol.indexOf('http:') !== -1 ? 'http-api' : 'api';
 
-    return `/${apiPrefix}/visors/${this.node.localPk}/skychat/proxy/${path.replace(/^\/+/, '')}`;
+    // Against document.baseURI, as api.service.ts does: in the desk this UI is
+    // served under /vnet/<port>/, where a root-absolute '/api/' misses the visor.
+    return new URL(`${apiPrefix}/visors/${this.node.localPk}/skychat/proxy/${path.replace(/^\/+/, '')}`, document.baseURI).href;
   }
 
   private connectSSE() {
