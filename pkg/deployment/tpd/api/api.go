@@ -109,6 +109,10 @@ type API struct {
 // HealthCheckResponse is the /health body every service shares.
 type HealthCheckResponse = httputil.HealthCheckResponse
 
+// maxBodyBytes caps a request body. The largest is a transport registration,
+// 1653 transports from the busiest visor (2026-10-05) at ~805 bytes each, 1.3 MiB.
+const maxBodyBytes = 8 << 20
+
 // New constructs a new API instance.
 func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	enableMetrics bool, m tpdiscmetrics.Metrics, dmsgAddr string, backupPath string) *API {
@@ -136,6 +140,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(log))
 	r.Use(middleware.Recoverer)
+	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip JSON responses on the wire — this router is also served over
 	// dmsg, where every byte is relayed. Matches rf/ut/sd.
 	// gzip only bodies over CompressMinBytes: single entries and health lines are
@@ -459,6 +464,8 @@ func (api *API) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	if status == 0 {
 		if _, ok := err.(*json.SyntaxError); ok {
 			status = http.StatusBadRequest
+		} else if httputil.BodyTooLarge(err) {
+			status = http.StatusRequestEntityTooLarge
 		}
 	}
 

@@ -8,6 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/httputil"
 )
 
 var apiErrors = map[error]func() (int, string){
@@ -38,6 +39,9 @@ func (a *API) handleError(w http.ResponseWriter, r *http.Request, e error) {
 	if _, ok := e.(disc.EntryValidationError); ok {
 		code = http.StatusUnprocessableEntity
 		msg = e.Error()
+	} else if httputil.BodyTooLarge(e) {
+		code = http.StatusRequestEntityTooLarge
+		msg = http.StatusText(code)
 	} else {
 		f := func() (int, string) { return http.StatusInternalServerError, disc.ErrUnexpected.Error() }
 		for target, handler := range apiErrors {
