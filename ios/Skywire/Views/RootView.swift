@@ -203,7 +203,7 @@ private struct TabStack: View {
         case .socks: SocksView(settings: app.settings)
         case .dex: DexView()
         case .fleet: FleetView(settings: app.settings)
-        case .vpn: VpnView()
+        case .vpn: VpnView(settings: app.settings)
         case .logs(let source): PendingRestyle { LogsView(source: source) }
         }
     }
