@@ -1266,7 +1266,13 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		// equivalent of the wasm visor's /wallet/. Mounted before the UI
 		// catch-all so /wallet/* is claimed here. See
 		// docs/design/gui-app-serving-modes.md.
-		r.Handle("/wallet/*", hv.walletHandler())
+		// The node proxy fetches any URL the caller names, so it needs a session.
+		r.Group(func(r chi.Router) {
+			if hv.c.EnableAuth {
+				r.Use(hv.users.Authorize)
+			}
+			r.Handle("/wallet/*", hv.walletHandler())
+		})
 		// The dashboard wallet's cipher, at the paths its route loads relative to
 		// the page.
 		r.Get("/assets/scripts/wasm_exec.js", hv.walletCipherHandler())

@@ -8,12 +8,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	wasmtinygo "github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo"
+	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/wallet/coins"
 )
 
@@ -122,5 +125,29 @@ func TestDashboardWalletCipher(t *testing.T) {
 	}
 	if ct := w.Header().Get("Content-Type"); ct != "application/wasm" {
 		t.Errorf("content type %q, want application/wasm (instantiateStreaming requires it)", ct)
+	}
+}
+
+// TestWalletRequiresSession checks that the wallet proxy needs a login when
+// auth is on, while the static cipher stays public.
+func TestWalletRequiresSession(t *testing.T) {
+	config := visorconfig.MakeConfig(false)
+	config.EnableAuth = true
+	config.FillDefaults(false)
+	config.DBPath = filepath.Join(t.TempDir(), "users_wallet.db")
+
+	addr, client, closeFn := makeStartNode(t, config)
+	defer closeFn()
+
+	for path, want := range map[string]int{
+		"/wallet/coins":                     http.StatusUnauthorized,
+		"/wallet/coin/0/api/v1/health":      http.StatusUnauthorized,
+		"/assets/scripts/wasm_exec.js":      http.StatusOK,
+		"/assets/scripts/skycoin-lite.wasm": http.StatusOK,
+	} {
+		resp, err := client.Get("https://" + addr + path)
+		require.NoError(t, err)
+		_ = resp.Body.Close() //nolint:errcheck
+		require.Equal(t, want, resp.StatusCode, path)
 	}
 }
