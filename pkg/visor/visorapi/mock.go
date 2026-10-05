@@ -977,6 +977,11 @@ func (mc *mockRPCClient) NetworkView() (*NetworkViewResponse, error) {
 // SkychatPasswordIsSet implements API.
 func (mc *mockRPCClient) SkychatPasswordIsSet() (bool, error) { return false, nil }
 
+// SkychatHTTP implements API.
+func (mc *mockRPCClient) SkychatHTTP(SkychatHTTPIn) (SkychatHTTPOut, error) {
+	return SkychatHTTPOut{}, nil
+}
+
 // SetSkychatPassword implements API.
 func (mc *mockRPCClient) SetSkychatPassword(string, string) error { return nil }
 
