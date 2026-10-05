@@ -6,226 +6,196 @@ import WalletCore
 /// the 30-second refresh for as long as the tab is on screen.
 struct WalletTab: View {
     @StateObject private var model = WalletModel(store: .app())
+    @EnvironmentObject private var dialogs: SkyDialogs
 
     var body: some View {
-        NavigationStack(path: $model.path) {
-            WalletHome()
-                .navigationDestination(for: WalletRoute.self) { route in
-                    switch route {
-                    case .create: WalletSeedView()
-                    case .verify: WalletVerifyView()
-                    case .restore: WalletRestoreView()
-                    case .receive: WalletReceiveView()
-                    case .send: WalletSendView()
-                    case .result: WalletResultView()
-                    case .history: WalletHistoryView()
-                    case .tx(let txid): WalletTxView(txid: txid)
-                    case .wallets: WalletManageView()
-                    case .reveal(let id): WalletRevealView(walletId: id)
-                    case .addCoin: WalletAddCoinView()
-                    case .node: WalletNodeView()
-                    }
-                }
+        // The wallet's own stack, cross-faded as Android's NavHost does.
+        ZStack {
+            layer(WalletHome(), shown: model.path.isEmpty)
+            ForEach(Array(model.path.enumerated()), id: \.offset) { index, route in
+                layer(destination(route), shown: index == model.path.count - 1)
+                    .transition(.opacity)
+            }
         }
-        .overlay(alignment: .top) { WalletToast() }
+        .animation(Navigator.fade, value: model.path)
         .task { await model.run() }
-        // Outermost, so the toast overlay sees the model as well as the stack.
+        .onChange(of: model.message) { message in
+            guard let message else { return }
+            dialogs.snackbar(Text(verbatim: message))
+            model.messageShown()
+        }
         .environmentObject(model)
     }
-}
 
-/// The outcome of the last action, shown for a moment (Android's snackbar).
-private struct WalletToast: View {
-    @EnvironmentObject private var model: WalletModel
+    private func layer(_ view: some View, shown: Bool) -> some View {
+        view.stackLayer(shown: shown)
+    }
 
-    var body: some View {
-        if let message = model.message {
-            Text(message)
-                .font(.footnote.weight(.semibold))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 14).padding(.vertical, 8)
-                .background(Capsule().fill(.thinMaterial))
-                .padding(.horizontal, 20)
-                .padding(.top, 4)
-                .accessibilityIdentifier("wallet-message")
-                .task(id: message) {
-                    try? await Task.sleep(for: .seconds(3))
-                    model.messageShown()
-                }
+    @ViewBuilder private func destination(_ route: WalletRoute) -> some View {
+        switch route {
+        case .create: WalletSeedView()
+        case .verify: WalletVerifyView()
+        case .restore: WalletRestoreView()
+        case .receive: WalletReceiveView()
+        case .send: WalletSendView()
+        case .result: WalletResultView()
+        case .history: WalletHistoryView()
+        case .tx(let txid): WalletTxView(txid: txid)
+        case .wallets: WalletManageView()
+        case .reveal(let id): WalletRevealView(walletId: id)
+        case .addCoin: WalletAddCoinView()
+        case .node: WalletNodeView()
         }
     }
 }
 
-/// The tab's root. With no wallet for the selected coin it opens into setup;
-/// with one it is the balance screen. Either way the coin chip sits on top.
+/// The tab's root (Android: WalletScreen): the coin chip, then setup or the balance.
 struct WalletHome: View {
     @EnvironmentObject private var model: WalletModel
-    @State private var coinSheet = false
+    @EnvironmentObject private var dialogs: SkyDialogs
 
     var body: some View {
-        List {
-            Section {
-                Button { coinSheet = true } label: { CoinChip(coin: model.coin) }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("wallet-coin-chip")
-            }
-            .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 0, trailing: 0))
-
+        WalletScreen(title: Text("tab_wallet"), help: .wallet) {
             if !model.ready {
-                ProgressView()
-            } else if model.active == nil {
-                intro
+                MaterialSpinner(size: 20, stroke: 2)
             } else {
-                balanceSection
-                recentSection
-                Section {
-                    NavigationLink(value: WalletRoute.wallets) {
-                        HStack {
-                            Label("wallet_wallets_row", systemImage: "wallet.pass")
-                            Spacer()
-                            Text("\(model.coinWallets.count)").foregroundStyle(.secondary)
-                        }
-                    }
-                    .accessibilityIdentifier("wallet-wallets-row")
-                    // Which node the coin is on, shown rather than hidden: the
-                    // answer to "why will this not sync" is often here.
-                    if model.coin.nodeUrlEditable {
-                        NavigationLink(value: WalletRoute.node) {
-                            HStack {
-                                Label("wallet_node_row", systemImage: "server.rack")
-                                Spacer()
-                                Text(model.coin.nodeUrl.components(separatedBy: "://").last ?? model.coin.nodeUrl)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        Button { openCoins() } label: { CoinChip(coin: model.coin) }
+                            .buttonStyle(PressStyle())
+                            .accessibilityIdentifier("wallet-coin-chip")
+                        if model.active == nil {
+                            intro
+                        } else {
+                            balance
+                            recent
+                            WalletNavRow(icon: MI.outlinedAccountBalanceWallet, title: L10n.key("wallet_wallets_row"),
+                                         value: "\(model.coinWallets.count)") { model.path.append(.wallets) }
+                                .padding(.top, 14)
+                                .accessibilityIdentifier("wallet-wallets-row")
+                            // Which node the coin is on, shown: "why will this not sync" is often here.
+                            if model.coin.nodeUrlEditable {
+                                WalletNavRow(icon: MI.outlinedDns, title: L10n.key("wallet_node_row"),
+                                             value: model.coin.nodeUrl.components(separatedBy: "://").last ?? model.coin.nodeUrl,
+                                             valueMaxWidth: 150) { model.path.append(.node) }
+                                    .padding(.top, 10)
+                                    .accessibilityIdentifier("wallet-node-row")
                             }
                         }
-                        .accessibilityIdentifier("wallet-node-row")
                     }
+                    .padding(EdgeInsets(top: 8, leading: 20, bottom: 16, trailing: 20))
                 }
             }
         }
-        .navigationTitle(Text("tab_wallet"))
-        .refreshable { model.refreshNow() }
-        .sheet(isPresented: $coinSheet) {
-            // Handed over explicitly: on iOS 16 a sheet does not always
-            // inherit its presenter's environment objects.
-            CoinSheet(onAddCoin: {
-                coinSheet = false
-                model.path.append(.addCoin)
-            })
-            .environmentObject(model)
+    }
+
+    private func openCoins() {
+        dialogs.presentSheet {
+            CoinSheet { model.path.append(.addCoin) }.environmentObject(model)
         }
     }
 
     private var intro: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(L10n.format("wallet_intro_title", model.coin.name)).font(.title2.weight(.bold))
-                Text("wallet_intro_body").foregroundStyle(.secondary)
-            }
-            .padding(.vertical, 6)
-            Button {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(verbatim: L10n.format("wallet_intro_title", model.coin.name)).skyText(.headlineMedium)
+            Text("wallet_intro_body").skyText(.bodyLarge).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 12)
+            IntroCard(icon: MI.outlinedAdd, title: L10n.key("wallet_intro_create"), subtitle: L10n.key("wallet_intro_create_sub")) {
                 model.startCreate()
                 model.path.append(.create)
-            } label: {
-                IntroRow(systemImage: "plus", title: L10n.key("wallet_intro_create"), subtitle: L10n.key("wallet_intro_create_sub"))
             }
-            // Plain: a list button would tint the whole row's text.
-            .buttonStyle(.plain)
+            .padding(.top, 32)
             .accessibilityIdentifier("wallet-create")
-            Button {
+            IntroCard(icon: MI.outlinedArrowDownward, title: L10n.key("wallet_intro_restore"), subtitle: L10n.key("wallet_intro_restore_sub")) {
                 model.startRestore()
                 model.path.append(.restore)
-            } label: {
-                IntroRow(systemImage: "arrow.down", title: L10n.key("wallet_intro_restore"), subtitle: L10n.key("wallet_intro_restore_sub"))
             }
-            // Plain: a list button would tint the whole row's text.
-            .buttonStyle(.plain)
+            .padding(.top, 12)
             .accessibilityIdentifier("wallet-restore")
         }
+        .padding(.top, 38)
     }
 
     @ViewBuilder
-    private var balanceSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(model.coin.amountText(model.snapshot?.confirmed ?? 0))
-                        .font(.largeTitle.weight(.bold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                        .accessibilityIdentifier("wallet-balance")
-                    Text(model.coin.ticker).font(.title3).foregroundStyle(.secondary)
-                    if model.refreshing { ProgressView().controlSize(.small) }
-                }
-                Text(subLine).font(.subheadline).foregroundStyle(.secondary)
+    private var balance: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(verbatim: model.coin.amountText(model.snapshot?.confirmed ?? 0))
+                    .skyText(.displaySmall).lineLimit(1).minimumScaleFactor(0.5)
+                    .accessibilityIdentifier("wallet-balance")
+                Text(verbatim: model.coin.ticker).skyText(.titleMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+                if model.refreshing { MaterialSpinner(size: 14, stroke: 2) }
             }
-            .padding(.vertical, 4)
-            if model.stale { WalletBanner(text: staleText) }
-            // A wallet whose addresses were never confirmed against the chain
-            // shows the balance of the addresses it happens to hold, which
-            // after a restore on a bad connection can be one of several: a
-            // wrong number, said plainly. Not while a refresh is in flight —
-            // that refresh is what settles it.
-            if model.active?.addressScanPending == true && !model.refreshing {
-                WalletBanner(text: L10n.text("wallet_scan_pending"))
-            }
+            Text(verbatim: subLine).skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 9)
         }
-        Section {
-            HStack(spacing: 12) {
-                Button { model.path.append(.receive) } label: {
-                    ActionLabel(systemImage: "arrow.down", title: L10n.key("wallet_receive"))
-                }
-                .buttonStyle(.bordered)
+        .padding(.top, 22)
+        if model.stale {
+            WalletBanner(text: staleText).padding(.top, 18)
+        }
+        // Addresses never confirmed against the chain: possibly a wrong number, said plainly.
+        if model.active?.addressScanPending == true && !model.refreshing {
+            WalletBanner(text: L10n.text("wallet_scan_pending")).padding(.top, 18)
+        }
+        HStack(spacing: 12) {
+            Button { model.path.append(.receive) } label: { actionLabel(MI.outlinedArrowDownward, L10n.key("wallet_receive")) }
+                .buttonStyle(.tonal)
                 .accessibilityIdentifier("wallet-receive")
-                Button { model.path.append(.send) } label: {
-                    ActionLabel(systemImage: "arrow.up", title: L10n.key("wallet_send"))
-                }
-                .buttonStyle(.borderedProminent)
+            Button { model.path.append(.send) } label: { actionLabel(MI.outlinedArrowUpward, L10n.key("wallet_send")) }
+                .buttonStyle(.filled)
                 .disabled(model.stale)
                 .accessibilityIdentifier("wallet-send")
-            }
-            .tint(.skywire)
-            .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets())
-            if model.stale {
-                Text("wallet_stale_send_note").font(.footnote).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .multilineTextAlignment(.center)
-                    .listRowBackground(Color.clear)
-            }
+        }
+        .padding(.top, 22)
+        if model.stale {
+            Text("wallet_stale_send_note").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                .multilineTextAlignment(.center).frame(maxWidth: .infinity).padding(.top, 10)
         }
     }
 
-    private var recentSection: some View {
-        Section {
-            let recent = Array((model.snapshot?.txs ?? []).prefix(3))
-            if recent.isEmpty {
-                VStack(spacing: 6) {
-                    Text("wallet_no_activity_title").font(.body.weight(.semibold))
-                    Text("wallet_no_activity_body").font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+    /// Receive and Send: an arrow and the word, on a 50 pt pill.
+    private func actionLabel(_ icon: String, _ title: LocalizedStringKey) -> some View {
+        HStack(spacing: 8) {
+            MaterialIcon(icon, size: 17)
+            Text(title).skyText(.labelLarge)
+        }
+        .frame(maxWidth: .infinity, minHeight: 42)
+    }
+
+    @ViewBuilder
+    private var recent: some View {
+        HStack {
+            Text(L10n.text("wallet_recent").uppercased()).skyText(.labelSmall).foregroundStyle(Color.skyOnSurfaceVariant)
+            Spacer()
+            Button { model.path.append(.history) } label: {
+                Text("wallet_see_all").skyText(.labelLarge).foregroundStyle(Color.skyPrimary)
+            }
+            .buttonStyle(PressStyle())
+            .accessibilityIdentifier("wallet-see-all")
+        }
+        .padding(.top, 32)
+        .padding(.bottom, 12)
+        let txs = Array((model.snapshot?.txs ?? []).prefix(3))
+        VStack(spacing: 0) {
+            if txs.isEmpty {
+                VStack(spacing: 0) {
+                    Text("wallet_no_activity_title").skyText(.bodyLarge, bold: true)
+                    Text("wallet_no_activity_body").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                        .multilineTextAlignment(.center).padding(.top, 6)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 18)
+                .padding(.vertical, 34)
+                .padding(.horizontal, 20)
             } else {
-                ForEach(recent) { tx in
-                    NavigationLink(value: WalletRoute.tx(tx.txid)) {
-                        TxRow(coin: model.coin, tx: tx, showStatus: false)
+                ForEach(Array(txs.enumerated()), id: \.element.id) { index, tx in
+                    Button { model.path.append(.tx(tx.txid)) } label: {
+                        TxRow(coin: model.coin, tx: tx, showStatus: false, topDivider: index > 0)
                     }
+                    .buttonStyle(PressStyle(layer: .skyOnSurface))
                 }
             }
-        } header: {
-            HStack {
-                Text("wallet_recent")
-                Spacer()
-                Button("wallet_see_all") { model.path.append(.history) }
-                    .font(.footnote.weight(.semibold))
-                    .textCase(nil)
-                    .accessibilityIdentifier("wallet-see-all")
-            }
         }
+        .foregroundStyle(Color.skyOnSurface)
+        .background(Color.skySurfaceVariant, in: .sky(SkyRadius.medium))
+        .clipShape(.sky(SkyRadius.medium))
     }
 
     private var subLine: String {
@@ -245,129 +215,116 @@ struct WalletHome: View {
         let age = minutes >= 60
             ? L10n.format("wallet_stale_age_hours", minutes / 60, minutes % 60)
             : L10n.format("wallet_stale_age_minutes", minutes)
-        return L10n.format("wallet_stale_banner", at.formatted(date: .omitted, time: .shortened), age)
+        return L10n.format("wallet_stale_banner", wallFormat("HH:mm", at), age)
     }
 }
 
-/// A Receive / Send button's face: its arrow and its word, centred.
-private struct ActionLabel: View {
-    let systemImage: String
-    let title: LocalizedStringKey
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: systemImage).font(.body.weight(.semibold))
-            Text(title).font(.body.weight(.semibold))
-        }
-        .frame(maxWidth: .infinity, minHeight: 34)
-    }
-}
-
-/// The coin's badge, name and a chevron: the switch between coins.
+/// The coin chip: badge, name, a chevron; 22 pt corners on surfaceVariant.
 private struct CoinChip: View {
     let coin: CoinSpec
 
     var body: some View {
         HStack(spacing: 10) {
             CoinBadge(coin: coin, size: 30)
-            Text(coin.name).font(.body.weight(.semibold))
-            Image(systemName: "chevron.down").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+            Text(verbatim: coin.name).skyText(.bodyLarge, bold: true)
+            MaterialIcon(MI.outlinedKeyboardArrowDown, size: 16).foregroundStyle(Color.skyOnSurfaceVariant)
         }
-        .padding(.vertical, 7)
-        .padding(.leading, 7)
-        .padding(.trailing, 12)
-        .background(Capsule().fill(Color(.secondarySystemGroupedBackground)))
+        .foregroundStyle(Color.skyOnSurface)
+        .padding(EdgeInsets(top: 7, leading: 7, bottom: 7, trailing: 12))
+        .background(Color.skySurfaceVariant, in: .sky(SkyRadius.large))
         .accessibilityElement(children: .combine)
         .accessibilityHint(Text("wallet_coin_chip_description"))
     }
 }
 
-private struct IntroRow: View {
-    let systemImage: String
+/// IntroCard: a 44 pt disc with the icon, bold title, subtitle, chevron.
+struct IntroCard: View {
+    let icon: String
     let title: LocalizedStringKey
     let subtitle: LocalizedStringKey
+    let action: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(Color.skywire)
-                .frame(width: 40, height: 40)
-                .background(Circle().fill(Color.skywire.opacity(0.15)))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.body.weight(.semibold)).foregroundStyle(.primary)
-                Text(subtitle).font(.footnote).foregroundStyle(.secondary)
+        Button(action: action) {
+            HStack(spacing: 14) {
+                MaterialIcon(icon, size: 20).foregroundStyle(Color.skyPrimary)
+                    .frame(width: 44, height: 44).background(Color.skySecondaryContainer, in: Circle())
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(title).skyText(.bodyLarge, bold: true)
+                    Text(subtitle).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 3)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                MaterialIcon(MI.outlinedKeyboardArrowRight, size: 16).foregroundStyle(Color.skyOnSurfaceVariant)
             }
-            Spacer()
-            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+            .foregroundStyle(Color.skyOnSurface)
+            .padding(20)
+            .background(Color.skySurfaceVariant, in: .sky(SkyRadius.medium))
+            .contentShape(RoundedRectangle(cornerRadius: SkyRadius.medium))
         }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
+        .buttonStyle(PressStyle(layer: .skyOnSurface, shape: AnyShape(RoundedRectangle(cornerRadius: SkyRadius.medium))))
     }
 }
 
-/// Every coin, searchable; pick one, remove one the user added, or add one.
+/// Every coin, searchable; pick one, remove one the user added, or add one (a bottom sheet).
 private struct CoinSheet: View {
-    @EnvironmentObject private var model: WalletModel
-    @Environment(\.dismiss) private var dismiss
-    @State private var query = ""
-    /// The coin the user is being asked about.
-    @State private var removing: CoinSpec?
     let onAddCoin: () -> Void
+    @EnvironmentObject private var model: WalletModel
+    @EnvironmentObject private var dialogs: SkyDialogs
+    @State private var query = ""
 
     var body: some View {
-        NavigationStack {
-            List {
-                ForEach(filtered) { coin in
-                    HStack(spacing: 13) {
-                        Button {
-                            model.selectCoin(coin.id)
-                            dismiss()
-                        } label: {
-                            row(coin)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("wallet-coin-\(coin.id)")
-                        // Only what the user added can go, and the control is
-                        // visible rather than a swipe a user would have to know.
-                        if !coin.builtIn {
-                            Button {
-                                removing = coin
-                            } label: {
-                                Image(systemName: "xmark.circle").foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel(Text("wallet_coin_remove"))
-                        }
+        VStack(alignment: .leading, spacing: 0) {
+            Text("wallet_coins_title").skyText(.titleMedium).padding(.horizontal, 20).padding(.vertical, 4)
+            SkyOutlinedTextField(placeholder: LocalizedStringKey(stringLiteral: L10n.format("wallet_coins_search", model.coins.count)),
+                                 text: $query, notch: .skyContainerLow, leadingIcon: MI.outlinedSearch, radius: SkyRadius.small)
+                .padding(.horizontal, 20).padding(.vertical, 12)
+            ForEach(filtered) { coin in
+                HStack(spacing: 13) {
+                    CoinBadge(coin: coin, size: 36)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(verbatim: coin.name).skyText(.bodyLarge, bold: true)
+                        Text(verbatim: kindLine(coin)).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 2)
                     }
-                    .listRowBackground(coin.id == model.coin.id ? Color(.tertiarySystemFill) : nil)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(verbatim: countText(coin)).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                    if !coin.builtIn {
+                        Button { remove(coin) } label: {
+                            MaterialIcon(MI.outlinedClose, size: 16).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(PressStyle())
+                        .accessibilityLabel(Text("wallet_coin_remove"))
+                    }
                 }
-                Button(action: onAddCoin) {
-                    Label("wallet_coins_add", systemImage: "plus.circle.fill").font(.body.weight(.semibold))
+                .padding(.horizontal, 20)
+                .padding(.vertical, 13)
+                .background(coin.id == model.coin.id ? Color.skySurfaceVariant : .clear)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    model.selectCoin(coin.id)
+                    dialogs.dismissSheet()
                 }
-                .accessibilityIdentifier("wallet-add-coin")
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier("wallet-coin-\(coin.id)")
             }
-            .searchable(text: $query, prompt: Text(L10n.format("wallet_coins_search", model.coins.count)))
-            .navigationTitle(Text("wallet_coins_title"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("cancel") { dismiss() }
+            Button {
+                dialogs.dismissSheet()
+                onAddCoin()
+            } label: {
+                HStack(spacing: 13) {
+                    MaterialIcon(MI.outlinedAdd, size: 18).foregroundStyle(Color.skyPrimary)
+                        .frame(width: 36, height: 36).background(Color.skyContainerHighest, in: Circle())
+                    Text("wallet_coins_add").skyText(.bodyLarge, bold: true).foregroundStyle(Color.skyPrimary)
+                    Spacer()
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 15)
+                .contentShape(Rectangle())
             }
-            // Two different conversations: with wallets on the coin there is
-            // nothing to confirm, only a reason and what to do about it.
-            .alert(removalTitle, isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }), presenting: removing) { coin in
-                if blocked(coin) {
-                    Button("wallet_coin_remove_ack") {}
-                } else {
-                    Button("wallet_coin_remove_confirm", role: .destructive) { model.removeCoin(coin.id) }
-                    Button("cancel", role: .cancel) {}
-                }
-            } message: { coin in
-                Text(blocked(coin) ? L10n.key("wallet_coin_remove_blocked") : L10n.key("wallet_coin_remove_body"))
-            }
+            .buttonStyle(PressStyle(layer: .skyOnSurface))
+            .accessibilityIdentifier("wallet-add-coin")
         }
+        .padding(.bottom, 28)
     }
 
     private var filtered: [CoinSpec] {
@@ -375,29 +332,23 @@ private struct CoinSheet: View {
         return model.coins.filter { q.isEmpty || $0.name.lowercased().contains(q) || $0.ticker.lowercased().contains(q) }
     }
 
-    private func blocked(_ coin: CoinSpec) -> Bool {
-        model.allWallets.contains { $0.coinId == coin.id }
-    }
-
-    private var removalTitle: Text {
-        guard let coin = removing else { return Text(verbatim: "") }
-        return Text(blocked(coin) ? L10n.format("wallet_coin_remove_blocked_title", coin.name) : L10n.format("wallet_coin_remove_title", coin.name))
-    }
-
-    private func row(_ coin: CoinSpec) -> some View {
+    private func countText(_ coin: CoinSpec) -> String {
         let count = model.allWallets.filter { $0.coinId == coin.id }.count
-        return HStack(spacing: 13) {
-            CoinBadge(coin: coin, size: 36)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(coin.name).font(.body.weight(.semibold))
-                Text(kindLine(coin)).font(.footnote).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Text(count == 0 ? "—" : count == 1 ? L10n.text("wallet_count_one") : L10n.format("wallet_count_many", count))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+        return count == 0 ? "—" : count == 1 ? L10n.text("wallet_count_one") : L10n.format("wallet_count_many", count)
+    }
+
+    /// With wallets on the coin there is nothing to confirm: only a reason and what to do.
+    private func remove(_ coin: CoinSpec) {
+        if model.allWallets.contains(where: { $0.coinId == coin.id }) {
+            dialogs.show(SkyDialog(title: Text(verbatim: L10n.format("wallet_coin_remove_blocked_title", coin.name)),
+                                   message: Text("wallet_coin_remove_blocked"),
+                                   actions: [SkyDialog.Action(label: Text("wallet_coin_remove_ack"))]))
+        } else {
+            dialogs.show(SkyDialog(title: Text(verbatim: L10n.format("wallet_coin_remove_title", coin.name)),
+                                   message: Text("wallet_coin_remove_body"),
+                                   actions: [SkyDialog.Action(label: Text("cancel")),
+                                             SkyDialog.Action(label: Text("wallet_coin_remove_confirm")) { model.removeCoin(coin.id) }]))
         }
-        .contentShape(Rectangle())
     }
 
     private func kindLine(_ coin: CoinSpec) -> String {

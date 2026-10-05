@@ -1,108 +1,112 @@
 import PhotosUI
 import SwiftUI
 
-/// The selected coin's wallets (Android: ui/wallet/WalletManage.kt): switch,
-/// rename, reveal, remove, add.
+/// The selected coin's wallets (Android: ui/wallet/WalletManage.kt): switch, rename, reveal,
+/// remove, add.
 struct WalletManageView: View {
     @EnvironmentObject private var model: WalletModel
-    @State private var actionWallet: WalletMeta?
-    @State private var renameTarget: WalletMeta?
-    @State private var renameText = ""
-    @State private var removeTarget: WalletMeta?
+    @EnvironmentObject private var dialogs: SkyDialogs
 
     var body: some View {
-        List {
-            Section {
-                ForEach(model.coinWallets) { wallet in
-                    Button { actionWallet = wallet } label: { row(wallet) }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("wallet-row-\(wallet.receiveAddresses.first ?? wallet.id)")
+        WalletScreen(title: Text("wallet_wallets_title")) {
+            ScrollView {
+                VStack(spacing: 10) {
+                    ForEach(model.coinWallets) { wallet in
+                        Button { openActions(wallet) } label: { row(wallet) }
+                            .buttonStyle(PressStyle(layer: .skyOnSurface, shape: AnyShape(RoundedRectangle(cornerRadius: SkyRadius.large))))
+                            .accessibilityIdentifier("wallet-row-\(wallet.receiveAddresses.first ?? wallet.id)")
+                    }
+                    HStack(spacing: 12) {
+                        Button {
+                            model.startCreate()
+                            model.path.append(.create)
+                        } label: { Text("wallet_manage_create").lineLimit(1).frame(maxWidth: .infinity) }
+                        .buttonStyle(TonalButtonStyle(height: 48))
+                        .accessibilityIdentifier("wallet-manage-create")
+                        Button {
+                            model.startRestore()
+                            model.path.append(.restore)
+                        } label: { Text("wallet_intro_restore").lineLimit(1).frame(maxWidth: .infinity) }
+                        .buttonStyle(TonalButtonStyle(height: 48))
+                        .accessibilityIdentifier("wallet-manage-restore")
+                    }
+                    .padding(.top, 6)
+                    Spacer().frame(height: 14)
                 }
+                .padding(.horizontal, 20)
             }
-            Section {
-                Button("wallet_manage_create") {
-                    model.startCreate()
-                    model.path.append(.create)
-                }
-                .accessibilityIdentifier("wallet-manage-create")
-                Button("wallet_intro_restore") {
-                    model.startRestore()
-                    model.path.append(.restore)
-                }
-                .accessibilityIdentifier("wallet-manage-restore")
-            }
-        }
-        .navigationTitle(Text("wallet_wallets_title"))
-        .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog(
-            actionWallet?.name ?? "",
-            isPresented: Binding(get: { actionWallet != nil }, set: { if !$0 { actionWallet = nil } }),
-            titleVisibility: .visible,
-            presenting: actionWallet
-        ) { wallet in
-            if wallet.id != model.active?.id {
-                Button("wallet_use") { model.useWallet(wallet.id) }
-            }
-            Button("wallet_rename") {
-                renameText = wallet.name
-                renameTarget = wallet
-            }
-            // The reveal screen asks for Face ID / the passcode itself, once it
-            // is on screen, and reads the phrase only after that passes.
-            Button("wallet_reveal_action") { model.path.append(.reveal(wallet.id)) }
-            Button("wallet_remove_action", role: .destructive) { removeTarget = wallet }
-            Button("cancel", role: .cancel) {}
-        } message: { wallet in
-            Text(L10n.format("wallet_created_on", addressCount(wallet),
-                             Date(timeIntervalSince1970: TimeInterval(wallet.createdAtMs) / 1000).formatted(date: .long, time: .omitted)))
-        }
-        .alert(Text("wallet_rename_title"), isPresented: Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })) {
-            TextField(L10n.text("wallet_rename_title"), text: $renameText)
-            Button("cancel", role: .cancel) {}
-            Button("save") {
-                if let wallet = renameTarget, !renameText.trimmingCharacters(in: .whitespaces).isEmpty {
-                    model.renameWallet(wallet.id, name: renameText)
-                }
-            }
-        }
-        .alert(
-            Text(L10n.format("wallet_remove_title", removeTarget?.name ?? "")),
-            isPresented: Binding(get: { removeTarget != nil }, set: { if !$0 { removeTarget = nil } }),
-            presenting: removeTarget
-        ) { wallet in
-            Button("wallet_remove_confirm", role: .destructive) { model.removeWallet(wallet.id) }
-            Button("wallet_remove_keep", role: .cancel) {}
-        } message: { _ in
-            Text("wallet_remove_body")
         }
     }
 
     private func row(_ wallet: WalletMeta) -> some View {
         HStack(spacing: 13) {
-            Text(String(wallet.name.prefix(2)).uppercased())
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.skywire)
+            Text(verbatim: String(wallet.name.prefix(2)).uppercased())
+                .skyText(.labelMedium)
+                .foregroundStyle(Color.skyPrimary)
                 .frame(width: 38, height: 38)
-                .background(Circle().fill(Color.skywire.opacity(0.15)))
-            VStack(alignment: .leading, spacing: 3) {
+                .background(Color.skySecondaryContainer, in: Circle())
+            VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
-                    Text(wallet.name).font(.body.weight(.semibold))
+                    Text(verbatim: wallet.name).skyText(.bodyLarge, bold: true).foregroundStyle(Color.skyOnSurface)
                     if wallet.id == model.active?.id {
                         Text("wallet_active_badge")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(Color.skywire)
-                            .padding(.horizontal, 7).padding(.vertical, 2)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(Color.skywire.opacity(0.15)))
+                            .skyText(.labelSmall)
+                            .foregroundStyle(Color.skyPrimary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(Color.skySecondaryContainer, in: .sky(SkyRadius.extraSmall))
                     }
                 }
-                Text("\(shortAddress(wallet.receiveAddresses.first ?? "", head: 6, tail: 3)) · \(addressCount(wallet))")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                Text(verbatim: "\(shortAddress(wallet.receiveAddresses.first ?? "", head: 6, tail: 3)) · \(addressCount(wallet))")
+                    .skyText(.bodySmall)
+                    .foregroundStyle(Color.skyOnSurfaceVariant)
+                    .padding(.top, 3)
             }
-            Spacer()
-            Image(systemName: "ellipsis").foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            MaterialIcon(MI.outlinedMoreVert, size: 17).foregroundStyle(Color.skyOnSurfaceVariant)
         }
-        .contentShape(Rectangle())
+        .padding(16)
+        .background(Color.skySurfaceVariant, in: .sky(SkyRadius.large))
+        .contentShape(RoundedRectangle(cornerRadius: SkyRadius.large))
+    }
+
+    private func openActions(_ wallet: WalletMeta) {
+        let created = Date(timeIntervalSince1970: TimeInterval(wallet.createdAtMs) / 1000)
+        dialogs.presentSheet {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(verbatim: wallet.name).skyText(.titleMedium).padding(.horizontal, 20)
+                Text(verbatim: L10n.format("wallet_created_on", addressCount(wallet), wallFormat("d MMMM yyyy", created)))
+                    .skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                    .padding(.horizontal, 20).padding(.vertical, 5)
+                Spacer().frame(height: 10)
+                if wallet.id != model.active?.id {
+                    SheetAction(icon: MI.outlinedCheckCircle, title: L10n.key("wallet_use")) {
+                        dialogs.dismissSheet()
+                        model.useWallet(wallet.id)
+                    }
+                }
+                SheetAction(icon: MI.outlinedEdit, title: L10n.key("wallet_rename")) {
+                    dialogs.dismissSheet()
+                    dialogs.showCustom { WalletRenameDialog(current: wallet.name) { model.renameWallet(wallet.id, name: $0) } }
+                }
+                // The reveal screen asks for Face ID or the passcode itself, then reads the phrase.
+                SheetAction(icon: MI.outlinedVisibility, title: L10n.key("wallet_reveal_action"), subtitle: L10n.key("wallet_reveal_action_sub_ios")) {
+                    dialogs.dismissSheet()
+                    model.path.append(.reveal(wallet.id))
+                }
+                SheetAction(icon: MI.outlinedDeleteOutline, title: L10n.key("wallet_remove_action"), subtitle: L10n.key("wallet_remove_action_sub"),
+                            destructive: true) {
+                    dialogs.dismissSheet()
+                    dialogs.show(SkyDialog(title: Text(verbatim: L10n.format("wallet_remove_title", wallet.name)),
+                                           message: Text("wallet_remove_body"),
+                                           actions: [SkyDialog.Action(label: Text("wallet_remove_keep")),
+                                                     SkyDialog.Action(label: Text("wallet_remove_confirm"), destructive: true) {
+                                                         model.removeWallet(wallet.id)
+                                                     }]))
+                }
+            }
+            .padding(.bottom, 20)
+        }
     }
 
     private func addressCount(_ wallet: WalletMeta) -> String {
@@ -111,9 +115,53 @@ struct WalletManageView: View {
     }
 }
 
-/// The phrase in the clear: read from the Keychain only once the device-owner
-/// check has passed (back to the list if it does not), covered whenever it
-/// could be captured, gone after two minutes.
+/// A sheet's action row: a 19 pt icon, a bold title, an optional line under it.
+private struct SheetAction: View {
+    let icon: String
+    let title: LocalizedStringKey
+    var subtitle: LocalizedStringKey? = nil
+    var destructive = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 14) {
+                MaterialIcon(icon, size: 19).foregroundStyle(destructive ? Color.skyError : Color.skyOnSurfaceVariant)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(title).skyText(.bodyLarge, bold: true).foregroundStyle(destructive ? Color.skyError : Color.skyOnSurface)
+                    if let subtitle {
+                        Text(subtitle).skyText(.bodySmall)
+                            .foregroundStyle(destructive ? Color.skyError.opacity(0.8) : Color.skyOnSurfaceVariant)
+                            .padding(.top, 3)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressStyle(layer: .skyOnSurface))
+    }
+}
+
+/// Rename: one field, Save while it holds a name.
+private struct WalletRenameDialog: View {
+    let current: String
+    let save: (String) -> Void
+    @State private var text = ""
+
+    var body: some View {
+        DialogFrame(title: Text("wallet_rename_title"), confirm: L10n.key("save"),
+                    enabled: !text.trimmingCharacters(in: .whitespaces).isEmpty, onConfirm: { save(text) }) {
+            SkyOutlinedTextField(text: $text, notch: .skyContainerHigh)
+        }
+        .onAppear { text = current }
+    }
+}
+
+/// The phrase in the clear: read from the Keychain only once the device-owner check has passed
+/// (back to the list if it does not), covered whenever it could be captured, gone after two minutes.
 struct WalletRevealView: View {
     @EnvironmentObject private var model: WalletModel
     let walletId: String
@@ -122,38 +170,42 @@ struct WalletRevealView: View {
     @State private var secondsLeft = 120
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                    Text(L10n.format("wallet_reveal_warning", model.allWallets.first { $0.id == walletId }?.name ?? ""))
-                        .font(.footnote)
+        WalletScreen(title: Text("wallet_seed_title")) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(alignment: .top, spacing: 10) {
+                        MaterialIcon(MI.outlinedErrorOutline, size: 17)
+                        Text(verbatim: L10n.format("wallet_reveal_warning", model.allWallets.first { $0.id == walletId }?.name ?? ""))
+                            .skyText(.bodySmall)
+                    }
+                    .foregroundStyle(Color.skyOnErrorContainer)
+                    .padding(.horizontal, 15)
+                    .padding(.vertical, 14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.skyErrorContainer, in: .sky(14))
+                    // iOS's own word on what protects the words here (Android says screenshots are off).
+                    SeedPrivacyNote().padding(.top, 12)
+                    Spacer().frame(height: 20)
+                    if unavailable {
+                        Text("wallet_seed_unavailable").skyText(.bodyLarge).foregroundStyle(Color.skyError)
+                    } else if let seed {
+                        SeedGrid(words: seed.split(separator: " ").map(String.init))
+                        Text(verbatim: L10n.format("wallet_reveal_autohide_ios", String(format: "%d:%02d", secondsLeft / 60, secondsLeft % 60)))
+                            .skyText(.bodySmall)
+                            .foregroundStyle(Color.skyOnSurfaceVariant)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 16)
+                    }
+                    Button { close() } label: { Text("wallet_reveal_hide").frame(maxWidth: .infinity) }
+                        .buttonStyle(TonalButtonStyle(height: 52))
+                        .padding(.top, 22)
+                        .padding(.bottom, 24)
+                        .accessibilityIdentifier("wallet-reveal-hide")
                 }
-                .foregroundStyle(.red)
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 14).fill(Color.red.opacity(0.1)))
-                SeedPrivacyNote()
-                if unavailable {
-                    Text("wallet_seed_unavailable").foregroundStyle(.red)
-                } else if let seed {
-                    SeedGrid(words: seed.split(separator: " ").map(String.init))
-                    Text(L10n.format("wallet_reveal_autohide", String(format: "%d:%02d", secondsLeft / 60, secondsLeft % 60)))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                }
-                Button { close() } label: {
-                    Text("wallet_reveal_hide").font(.body.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 36)
-                }
-                .buttonStyle(.bordered)
-                .tint(.skywire)
-                .accessibilityIdentifier("wallet-reveal-hide")
+                .padding(.horizontal, 20)
             }
-            .padding(20)
         }
-        .navigationTitle(Text("wallet_seed_title"))
-        .navigationBarTitleDisplayMode(.inline)
         .modifier(SeedPrivacy())
         .task {
             let name = model.allWallets.first { $0.id == walletId }?.name ?? ""
@@ -182,8 +234,8 @@ struct WalletRevealView: View {
 /// What the add screen can add: a fiber chain, or an ERC-20 on Ethereum.
 private enum AddCoinKind: Hashable { case fiber, erc20 }
 
-/// Add a Fibercoin (name, ticker, node URL) or an ERC-20 token (name,
-/// ticker, contract, decimals), with an optional badge picked from Photos.
+/// Add a Fibercoin (name, ticker, node URL) or an ERC-20 token (name, ticker, contract,
+/// decimals), with an optional badge picked from Photos.
 struct WalletAddCoinView: View {
     @EnvironmentObject private var model: WalletModel
     @State private var kind = AddCoinKind.fiber
@@ -194,95 +246,52 @@ struct WalletAddCoinView: View {
     @State private var contract = ""
     @State private var decimals = "18"
     @State private var photo: PhotosPickerItem?
+    @State private var picking = false
 
     var body: some View {
-        Form {
-            Section {
-                Picker(selection: $kind) {
-                    Text("wallet_add_kind_fiber").tag(AddCoinKind.fiber)
-                    Text("wallet_add_kind_erc20").tag(AddCoinKind.erc20)
-                } label: {
-                    EmptyView()
-                }
-                .pickerStyle(.segmented)
-                Text(kind == .fiber ? L10n.key("wallet_add_coin_body") : L10n.key("wallet_add_token_body"))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                TextField(L10n.text("wallet_add_coin_name_hint"), text: $name)
-                    .accessibilityIdentifier("wallet-add-name")
-            } header: {
-                Text("wallet_add_coin_name")
-            }
-            Section {
-                TextField(L10n.text("wallet_add_coin_ticker_hint"), text: $ticker)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                    .accessibilityIdentifier("wallet-add-ticker")
-            } header: {
-                Text("wallet_add_coin_ticker")
-            }
-            Section {
-                HStack(spacing: 12) {
-                    iconPreview
-                    PhotosPicker(selection: $photo, matching: .images) {
-                        Text("wallet_add_coin_icon_pick")
+        WalletScreen(title: Text("wallet_add_coin_title")) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 8) {
+                        kindChip(L10n.key("wallet_add_kind_fiber"), .fiber)
+                        kindChip(L10n.key("wallet_add_kind_erc20"), .erc20)
                     }
-                    .buttonStyle(.bordered)
-                    if icon != nil {
-                        Button("wallet_add_coin_icon_clear") { icon = nil }
-                            .buttonStyle(.borderless)
-                    }
-                }
-            } header: {
-                Text("wallet_add_coin_icon")
-            }
-            if kind == .fiber {
-                Section {
-                    TextField(L10n.text("wallet_add_coin_node_hint"), text: $node)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .accessibilityIdentifier("wallet-add-node")
-                } header: {
-                    Text("wallet_add_coin_node")
-                }
-            } else {
-                Section {
-                    TextField(L10n.text("wallet_add_token_contract_hint"), text: $contract)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .font(.body.monospaced())
-                        .accessibilityIdentifier("wallet-add-contract")
-                } header: {
-                    Text("wallet_add_token_contract")
-                }
-                Section {
-                    TextField(L10n.text("wallet_add_token_decimals_hint"), text: $decimals)
-                        .keyboardType(.numberPad)
-                        .accessibilityIdentifier("wallet-add-decimals")
-                } header: {
-                    Text("wallet_add_token_decimals")
-                }
-            }
-            Section {
-                Button {
-                    let done = { model.path.removeAll() }
+                    Text(kind == .fiber ? L10n.key("wallet_add_coin_body") : L10n.key("wallet_add_token_body"))
+                        .skyText(.bodyLarge).foregroundStyle(Color.skyOnSurfaceVariant)
+                        .padding(.top, 18)
+                        .padding(.bottom, 24)
+                    LabeledField(label: L10n.key("wallet_add_coin_name"), hint: L10n.key("wallet_add_coin_name_hint"),
+                                 text: $name, identifier: "wallet-add-name")
+                    LabeledField(label: L10n.key("wallet_add_coin_ticker"), hint: L10n.key("wallet_add_coin_ticker_hint"),
+                                 text: $ticker, identifier: "wallet-add-ticker")
+                    iconRow
                     if kind == .fiber {
-                        model.addFiberCoin(name: name, ticker: ticker, nodeUrl: node, icon: icon, onDone: done)
+                        LabeledField(label: L10n.key("wallet_add_coin_node"), hint: L10n.key("wallet_add_coin_node_hint"),
+                                     text: $node, keyboard: .URL, identifier: "wallet-add-node")
                     } else {
-                        model.addErc20Token(name: name, ticker: ticker, contract: contract, decimals: decimals, icon: icon, onDone: done)
+                        LabeledField(label: L10n.key("wallet_add_token_contract"), hint: L10n.key("wallet_add_token_contract_hint"),
+                                     text: $contract, identifier: "wallet-add-contract")
+                        LabeledField(label: L10n.key("wallet_add_token_decimals"), hint: L10n.key("wallet_add_token_decimals_hint"),
+                                     text: $decimals, keyboard: .numberPad, identifier: "wallet-add-decimals")
                     }
-                } label: {
-                    Text("wallet_add_coin_save").font(.body.weight(.semibold)).frame(maxWidth: .infinity)
+                    Button {
+                        let done = { model.path.removeAll() }
+                        if kind == .fiber {
+                            model.addFiberCoin(name: name, ticker: ticker, nodeUrl: node, icon: icon, onDone: done)
+                        } else {
+                            model.addErc20Token(name: name, ticker: ticker, contract: contract, decimals: decimals, icon: icon, onDone: done)
+                        }
+                    } label: { Text("wallet_add_coin_save").frame(maxWidth: .infinity) }
+                    .buttonStyle(FilledButtonStyle(height: 52))
+                    .disabled(!complete)
+                    .padding(.top, 12)
+                    .padding(.bottom, 24)
+                    .accessibilityIdentifier("wallet-add-save")
                 }
-                .disabled(!complete)
-                .accessibilityIdentifier("wallet-add-save")
+                .padding(.horizontal, 20)
             }
         }
-        .navigationTitle(Text("wallet_add_coin_title"))
-        .navigationBarTitleDisplayMode(.inline)
+        .photosPicker(isPresented: $picking, selection: $photo, matching: .images)
         .onChange(of: photo) { item in
             guard let item else { return }
             Task {
@@ -300,79 +309,126 @@ struct WalletAddCoinView: View {
         return kind == .fiber ? filled(node) : filled(contract) && filled(decimals)
     }
 
-    /// The badge the new coin will wear: the picked image, or the ticker's
-    /// letters while there is none.
+    private func kindChip(_ label: LocalizedStringKey, _ value: AddCoinKind) -> some View {
+        let selected = kind == value
+        return Button { kind = value } label: {
+            Text(label).skyText(.labelLarge)
+                .foregroundStyle(selected ? Color.skyPrimary : Color.skyOnSurfaceVariant)
+                .padding(.horizontal, 15)
+                .padding(.vertical, 9)
+                .background(selected ? Color.skySecondaryContainer : Color.skyContainerHighest, in: .sky(10))
+        }
+        .buttonStyle(PressStyle(layer: .skyOnSurface, shape: AnyShape(RoundedRectangle(cornerRadius: 10))))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// The badge the new coin will wear: the picked image, or the ticker's letters while there is none.
+    private var iconRow: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("wallet_add_coin_icon").skyText(.labelLarge).foregroundStyle(Color.skyOnSurfaceVariant).padding(.bottom, 7)
+            HStack(spacing: 12) {
+                Button { picking = true } label: { iconPreview }.buttonStyle(PressStyle())
+                Button { picking = true } label: { Text("wallet_add_coin_icon_pick") }.buttonStyle(.tonal)
+                if icon != nil {
+                    Button { icon = nil } label: { Text("wallet_add_coin_icon_clear") }.buttonStyle(.skyText)
+                }
+            }
+        }
+        .padding(.bottom, 16)
+    }
+
     private var iconPreview: some View {
         Group {
             if let icon, let image = CoinIcons.image(icon, in: model.store) {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
                 let letters = String(ticker.trimmingCharacters(in: .whitespaces).uppercased().prefix(3))
-                Text(letters.isEmpty ? "ABC" : letters)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.skywire)
+                Text(verbatim: letters.isEmpty ? "ABC" : letters)
+                    .skyText(.labelSmall)
+                    .foregroundStyle(Color.skyPrimary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(.tertiarySystemFill))
+                    .background(Color.skyContainerHighest)
             }
         }
         .frame(width: 46, height: 46)
         .clipShape(Circle())
+        .overlay(Circle().strokeBorder(Color.skyOutlineVariant, lineWidth: 1))
     }
 }
 
-/// Which node this coin's wallet talks to (Android: ui/wallet/WalletNode.kt).
-/// Every balance, transaction list and broadcast of a fiber coin goes to one
-/// daemon; the escape from a blocked or throttled one is to say where else to
-/// look. Nothing secret is handed to whoever is named here — keys never leave
-/// the phone and signing is local — but it does see which addresses are
-/// asked about together, which is why the transport is spelled out.
+/// A field under its own label (labelLarge), Android's LabeledField: 12 pt corners, a placeholder.
+private struct LabeledField: View {
+    let label: LocalizedStringKey
+    let hint: LocalizedStringKey
+    @Binding var text: String
+    var keyboard: UIKeyboardType = .default
+    let identifier: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(label).skyText(.labelLarge).foregroundStyle(Color.skyOnSurfaceVariant).padding(.bottom, 7)
+            SkyOutlinedTextField(placeholder: hint, text: $text, keyboard: keyboard, identifier: identifier, radius: SkyRadius.small)
+        }
+        .padding(.bottom, 16)
+    }
+}
+
+/// Which node this coin's wallet talks to (Android: ui/wallet/WalletNode.kt). Keys never leave the
+/// phone, but the node sees which addresses are asked about together: hence the transport note.
 struct WalletNodeView: View {
     @EnvironmentObject private var model: WalletModel
     @State private var url = ""
 
     var body: some View {
-        Form {
-            Section {
-                Text(L10n.format("wallet_node_body", model.coin.name)).font(.subheadline).foregroundStyle(.secondary)
-            }
-            Section {
-                TextField(model.defaultNodeUrl, text: $url)
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .accessibilityIdentifier("wallet-node-url")
-                // Said where the choice is made: an address typed here decides
-                // whether the address book travels in the clear.
-                let cleartext = url.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("http://")
-                Label(cleartext ? L10n.key("wallet_node_cleartext") : L10n.key("wallet_node_encrypted"),
-                      systemImage: cleartext ? "lock.open" : "lock")
-                    .font(.footnote)
-                    .foregroundStyle(cleartext ? Color.warning : .secondary)
-            } header: {
-                Text("wallet_node_field")
-            }
-            Section {
-                Button {
-                    model.setNodeUrl(url) { popNode() }
-                } label: {
-                    Text("wallet_node_save").font(.body.weight(.semibold)).frame(maxWidth: .infinity)
-                }
-                .disabled(url.trimmingCharacters(in: .whitespaces).isEmpty || url.trimmingCharacters(in: .whitespaces) == model.coin.nodeUrl)
-                .accessibilityIdentifier("wallet-node-save")
-                if model.coin.nodeUrl != model.defaultNodeUrl || url.trimmingCharacters(in: .whitespaces) != model.defaultNodeUrl {
+        WalletScreen(title: Text("wallet_node_title")) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(verbatim: L10n.format("wallet_node_body", model.coin.name))
+                        .skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+                        .padding(.top, 6)
+                        .padding(.bottom, 18)
+                    Text("wallet_node_field").skyText(.labelLarge).foregroundStyle(Color.skyOnSurfaceVariant).padding(.bottom, 7)
+                    SkyOutlinedTextField(placeholder: LocalizedStringKey(model.defaultNodeUrl), text: $url, keyboard: .URL,
+                                         identifier: "wallet-node-url", radius: SkyRadius.small)
+                    // Said where the choice is made: an address typed here decides whether the
+                    // address book travels in the clear.
+                    transportNote
                     Button {
-                        model.setNodeUrl("") { popNode() }
-                    } label: {
-                        Text(L10n.format("wallet_node_default", model.defaultNodeUrl)).frame(maxWidth: .infinity)
+                        model.setNodeUrl(url) { popNode() }
+                    } label: { Text("wallet_node_save").frame(maxWidth: .infinity) }
+                    .buttonStyle(FilledButtonStyle(height: 50))
+                    .disabled(url.trimmingCharacters(in: .whitespaces).isEmpty || url.trimmingCharacters(in: .whitespaces) == model.coin.nodeUrl)
+                    .padding(.top, 20)
+                    .accessibilityIdentifier("wallet-node-save")
+                    if model.coin.nodeUrl != model.defaultNodeUrl || url.trimmingCharacters(in: .whitespaces) != model.defaultNodeUrl {
+                        Button {
+                            model.setNodeUrl("") { popNode() }
+                        } label: {
+                            Text(verbatim: L10n.format("wallet_node_default", model.defaultNodeUrl)).frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.skyText)
+                        .padding(.top, 4)
                     }
                 }
+                .padding(.horizontal, 20)
             }
         }
-        .navigationTitle(Text("wallet_node_title"))
-        .navigationBarTitleDisplayMode(.inline)
-        // Seeded from the address in force, so the field opens on what is
-        // actually used rather than on an empty box.
+        // Seeded from the address in force, so the field opens on what is actually used.
         .onAppear { url = model.coin.nodeUrl }
+    }
+
+    private var transportNote: some View {
+        let cleartext = url.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("http://")
+        return HStack(alignment: .top, spacing: 9) {
+            MaterialIcon(cleartext ? MI.outlinedLockOpen : MI.outlinedLock, size: 16)
+            Text(cleartext ? L10n.key("wallet_node_cleartext") : L10n.key("wallet_node_encrypted")).skyText(.bodySmall)
+        }
+        .foregroundStyle(cleartext ? Color.skyWarning : Color.skyOnSurfaceVariant)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cleartext ? Color.skyWarning.opacity(0.12) : Color.skySurfaceVariant, in: .sky(SkyRadius.small))
+        .padding(.top, 14)
     }
 
     private func popNode() {

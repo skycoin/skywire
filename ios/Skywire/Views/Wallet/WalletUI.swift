@@ -28,22 +28,30 @@ func feeText(_ coin: CoinSpec, _ fee: UInt64?) -> String {
 
 /// The status colour every transaction row and pill uses.
 func txColor(_ tx: CachedTx) -> Color {
-    if !tx.confirmed { return .warning }
-    return tx.incoming ? .success : .primary
+    if !tx.confirmed { return .skyWarning }
+    return tx.incoming ? .skySuccess : .skyOnSurface
 }
 
-/// "Today", "Yesterday", or the day and month in the phone's language.
+/// "Today", "Yesterday", or "5 October" (Android's `d MMMM`, the phone's month names).
 func dayLabel(_ timestamp: Int64) -> String {
     let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
     let calendar = Calendar.current
     if calendar.isDateInToday(date) { return L10n.text("wallet_day_today") }
     if calendar.isDateInYesterday(date) { return L10n.text("wallet_day_yesterday") }
-    return date.formatted(.dateTime.day().month(.wide))
+    return wallFormat("d MMMM", date)
 }
 
-/// The time of day, as the phone's 12/24-hour setting writes it.
+/// The time of day as Android writes it: 24-hour `HH:mm`.
 func timeLabel(_ timestamp: Int64) -> String {
-    Date(timeIntervalSince1970: TimeInterval(timestamp)).formatted(date: .omitted, time: .shortened)
+    wallFormat("HH:mm", Date(timeIntervalSince1970: TimeInterval(timestamp)))
+}
+
+/// A date in a fixed Android pattern, with the phone's language for the month names.
+func wallFormat(_ pattern: String, _ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = .current
+    formatter.dateFormat = pattern
+    return formatter.string(from: date)
 }
 
 // MARK: Coin badges
@@ -116,11 +124,11 @@ struct CoinBadge: View {
             if let logo = CoinIcons.builtInLogo(coin.id) ?? coin.icon.flatMap({ CoinIcons.image($0, in: wallet.store) }) {
                 Image(uiImage: logo).resizable().scaledToFill()
             } else {
-                Text(String(coin.ticker.prefix(4)))
-                    .font(.system(size: size * 0.3, weight: .bold))
-                    .foregroundStyle(Color.skywire)
+                Text(verbatim: String(coin.ticker.prefix(4)))
+                    .skyText(.labelSmall)
+                    .foregroundStyle(Color.skyPrimary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.skywire.opacity(0.15))
+                    .background(Color.skySecondaryContainer)
             }
         }
         .frame(width: size, height: size)
@@ -131,43 +139,47 @@ struct CoinBadge: View {
 
 // MARK: Transactions
 
-/// One transaction row — recent activity and full history share it.
+/// One transaction row: the recent card and the full history share it (Android: TxRow).
 struct TxRow: View {
     let coin: CoinSpec
     let tx: CachedTx
     let showStatus: Bool
+    var topDivider = false
 
     var body: some View {
-        HStack(spacing: 13) {
-            Image(systemName: tx.incoming ? "arrow.down" : "arrow.up")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 34, height: 34)
-                .background(Circle().fill(Color(.tertiarySystemFill)))
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 7) {
-                    Text(tx.incoming ? L10n.key("wallet_received_verb") : L10n.key("wallet_sent_verb")).font(.body.weight(.semibold))
-                    if showStatus {
-                        Circle().fill(txColor(tx)).frame(width: 6, height: 6)
-                        Text(tx.confirmed ? L10n.key("wallet_tx_confirmed") : L10n.key("wallet_filter_pending"))
-                            .font(.caption)
-                            .foregroundStyle(txColor(tx))
+        VStack(spacing: 0) {
+            if topDivider {
+                SkyDivider(color: .skyContainerHighest).padding(.horizontal, 16)
+            }
+            HStack(spacing: 13) {
+                MaterialIcon(MI.outlinedArrowDownward, size: 16)
+                    .foregroundStyle(Color.skyOnSurfaceVariant)
+                    .rotationEffect(.degrees(tx.incoming ? 0 : 180))
+                    .frame(width: 36, height: 36)
+                    .background(Color.skyContainerHighest, in: Circle())
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 7) {
+                        Text(tx.incoming ? L10n.key("wallet_received_verb") : L10n.key("wallet_sent_verb")).skyText(.bodyLarge, bold: true)
+                        if showStatus {
+                            Circle().fill(txColor(tx)).frame(width: 6, height: 6)
+                            Text(tx.confirmed ? L10n.key("wallet_tx_confirmed") : L10n.key("wallet_filter_pending"))
+                                .skyText(.labelSmall).foregroundStyle(txColor(tx))
+                        }
                     }
+                    Text(verbatim: partyLine).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).lineLimit(1)
                 }
-                Text(partyLine)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text(verbatim: (tx.incoming ? "+" : "\u{2212}") + coin.amountText(tx.amount))
+                        .skyText(.bodyLarge, bold: true).foregroundStyle(txColor(tx))
+                    Text(verbatim: timeLabel(tx.timestamp)).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                }
             }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text((tx.incoming ? "+" : "−") + coin.amountText(tx.amount))
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(txColor(tx))
-                Text(timeLabel(tx.timestamp)).font(.footnote).foregroundStyle(.secondary)
-            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, 2)
+        .foregroundStyle(Color.skyOnSurface)
         .accessibilityElement(children: .combine)
     }
 
@@ -269,45 +281,97 @@ struct SeedPrivacy: ViewModifier {
     }
 }
 
-/// The two-column numbered word grid — backup and reveal share it. No copy:
-/// the words are not selectable and there is no button.
+/// SeedGrid: the words in numbered pairs, left to right then down. Not selectable.
 struct SeedGrid: View {
     let words: [String]
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-            ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+        VStack(spacing: 10) {
+            ForEach(Array(stride(from: 0, to: words.count, by: 2)), id: \.self) { index in
                 HStack(spacing: 10) {
-                    Text("\(index + 1)")
-                        .font(.footnote.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .frame(width: 20, alignment: .trailing)
-                    Text(word).font(.body.weight(.semibold))
-                        .accessibilityIdentifier("seed-word-\(index + 1)")
-                    Spacer(minLength: 0)
+                    cell(index)
+                    if index + 1 < words.count { cell(index + 1) } else { Color.clear.frame(maxWidth: .infinity) }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 11)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
             }
         }
     }
+
+    private func cell(_ index: Int) -> some View {
+        HStack(spacing: 10) {
+            Text(verbatim: "\(index + 1)").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 16, alignment: .leading)
+            Text(verbatim: words[index]).skyText(.bodyLarge, bold: true)
+                .accessibilityIdentifier("seed-word-\(index + 1)")
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
+        .frame(maxWidth: .infinity)
+        .background(Color.skySurfaceVariant, in: .sky(SkyRadius.small))
+    }
 }
 
-/// An amber note above the balance: the numbers on screen are old, or
-/// incomplete.
+/// The amber banner: the numbers on screen are old, or incomplete.
 struct WalletBanner: View {
     let text: String
 
     var body: some View {
         HStack(alignment: .top, spacing: 9) {
-            Image(systemName: "clock").font(.footnote)
-            Text(text).font(.footnote)
+            MaterialIcon(MI.outlinedSchedule, size: 16)
+            Text(verbatim: text).skyText(.bodySmall)
         }
-        .foregroundStyle(Color.warning)
+        .foregroundStyle(Color.skyWarning)
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.vertical, 13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.warning.opacity(0.12)))
+        .background(Color.skyWarning.opacity(0.12), in: .sky(SkyRadius.small))
+    }
+}
+
+/// A wallet row: icon, bold title, value, chevron, on surfaceVariant (Wallets, Node).
+struct WalletNavRow: View {
+    let icon: String
+    let title: LocalizedStringKey
+    var value: String? = nil
+    var valueMaxWidth: CGFloat? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                MaterialIcon(icon, size: 18).foregroundStyle(Color.skyOnSurfaceVariant)
+                Text(title).skyText(.bodyLarge, bold: true).frame(maxWidth: .infinity, alignment: .leading)
+                if let value {
+                    Text(verbatim: value).skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant).lineLimit(1)
+                        .frame(maxWidth: valueMaxWidth, alignment: .trailing)
+                }
+                MaterialIcon(MI.outlinedKeyboardArrowRight, size: 18).foregroundStyle(Color.skyOnSurfaceVariant)
+            }
+            .foregroundStyle(Color.skyOnSurface)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 15)
+            .background(Color.skySurfaceVariant, in: .sky(SkyRadius.medium))
+            .contentShape(RoundedRectangle(cornerRadius: SkyRadius.medium))
+        }
+        .buttonStyle(PressStyle(layer: .skyOnSurface, shape: AnyShape(RoundedRectangle(cornerRadius: SkyRadius.medium))))
+    }
+}
+
+/// A wallet screen's frame: SkyTopBar over the content, the screen background behind.
+struct WalletScreen<Content: View>: View {
+    let title: Text
+    var help: HelpTopic? = nil
+    @ViewBuilder let content: Content
+    @EnvironmentObject private var model: WalletModel
+    @EnvironmentObject private var navigator: Navigator
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // A wallet screen pops the wallet's own stack; its root leaves the tab.
+            SkyTopBar(title: title, onBack: {
+                if model.path.isEmpty { navigator.back() } else { model.path.removeLast() }
+            }, help: help)
+            content.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(Color.skyBackground)
     }
 }
