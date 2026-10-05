@@ -113,6 +113,13 @@ final class ChatPage: NSObject, ObservableObject {
         ready = false
     }
 
+    /// One step back in the page (a conversation over the list); false when there is none.
+    func goBack() -> Bool {
+        guard let webView, webView.canGoBack else { return false }
+        webView.goBack()
+        return true
+    }
+
     /// The error state's Retry: the next surface starts clean.
     func clearError() {
         error = nil

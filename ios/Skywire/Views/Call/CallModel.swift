@@ -75,6 +75,8 @@ final class CallModel: ObservableObject {
         let connected = active != nil
         if connected, connectedAt == nil {
             connectedAt = .now
+            // Not the last call's final time until the first tick.
+            ui.elapsed = "0:00"
         }
         if !connected {
             connectedAt = nil

@@ -11,6 +11,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var navigator = Navigator()
     @StateObject private var dialogs = SkyDialogs()
+    @State private var keyboardShown = false
 
     init(settings: AppSettings) {
         self.settings = settings
@@ -18,7 +19,7 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
-            VStack(spacing: 0) {
+            ZStack(alignment: .bottom) {
                 ZStack {
                     ForEach(AppTab.allCases, id: \.self) { tab in
                         if navigator.visited.contains(tab) {
@@ -31,7 +32,10 @@ struct RootView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // The keyboard takes the bar's place, as Android's imePadding does.
+                .padding(.bottom, keyboardShown ? 0 : SkyBottomBar.height)
                 SkyBottomBar(navigator: navigator)
+                    .ignoresSafeArea(.keyboard, edges: .bottom)
             }
             .background(Color.skyBackground.ignoresSafeArea())
             // A call owns the display, bar and all (Android swaps the UI for CallScreen).
@@ -69,6 +73,12 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             lock.willEnterForeground()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardShown = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardShown = false
         }
     }
 }

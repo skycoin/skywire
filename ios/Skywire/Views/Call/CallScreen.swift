@@ -1,153 +1,121 @@
 import CoreClient
 import SwiftUI
 
-/// The call, full screen — in either direction, over every tab (Android:
-/// ui/call/CallScreen.kt).
-///
-/// Placing one, being rung, and being in one are the same screen because
-/// they are the same event seen at three moments; the controls are what
-/// changes. It covers the Chat tab too: the embedded page has its own banner
-/// and panel, but a call is not something to notice inside a conversation
-/// list, it is what the phone is doing.
+/// The call, over the whole window (Android: ui/call/CallScreen.kt): placing one, being rung
+/// and being in one are the same screen; the buttons are what changes.
 struct CallScreen: View {
     @EnvironmentObject private var model: CallModel
 
     var body: some View {
         let ui = model.ui
-        Group {
+        ZStack {
+            Color.skyBackground.ignoresSafeArea()
             if let peer = ui.peer {
                 VStack(spacing: 0) {
-                    VStack(spacing: 8) {
-                        Spacer(minLength: 32)
-                        Image(systemName: "person.crop.circle.fill")
-                            .font(.system(size: 96))
-                            .foregroundStyle(.tertiary)
-                            .accessibilityHidden(true)
-                        Text(peer)
-                            .font(.title2.weight(.semibold))
-                            .monospaced()
+                    VStack(spacing: 0) {
+                        Color.clear.frame(height: 24)
+                        MaterialIcon(MI.filledPerson, size: 56)
+                            .foregroundStyle(Color.skyOnSurfaceVariant)
+                            .frame(width: 112, height: 112)
+                            .background(Color.skySurfaceVariant, in: Circle())
+                        Text(verbatim: peer)
+                            .font(.system(size: 22, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.skyOnSurface)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 20)
                             .accessibilityIdentifier("call-peer")
-                        statusLine(ui)
+                        statusLine(ui).padding(.top, 8)
                     }
-                    Spacer()
+                    Spacer(minLength: 24)
                     controls(ui)
-                        .padding(.bottom, 24)
-                    // The stated limit (playbook 6.5): nothing rings a
-                    // suspended phone without push, and this screen is not
-                    // the place to hide that.
+                    // The stated limit (playbook 6.5): nothing rings a suspended phone without push.
                     if ui.dialState == nil && !ui.connected && !ui.dialing {
                         Text("call_suspended_note")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .padding(.bottom, 16)
+                            .skyText(.bodySmall)
+                            .foregroundStyle(Color.skyOnSurfaceVariant)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 16)
                     }
                 }
                 .padding(.horizontal, 32)
+                .padding(.vertical, 48)
+                .ignoresSafeArea()
             } else {
-                ProgressView()
+                MaterialSpinner()
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemBackground).ignoresSafeArea())
+        .foregroundStyle(Color.skyOnSurface)
     }
 
-    /// The line under the name: how the call is going, or why it ended.
+    /// Elapsed time, how the call being placed is going, why it ended, or "Incoming call".
     @ViewBuilder
     private func statusLine(_ ui: CallUiState) -> some View {
-        let dialState = ui.dialState
-        let outcome = dialState?.ended == true
-        Group {
-            if ui.connected {
-                Text(ui.elapsed)
-                    .font(.title3.monospacedDigit())
-                    .accessibilityIdentifier("call-elapsed")
-            } else if let dialState {
-                Text(Self.dialStatus(dialState))
-                    .font(outcome ? .title3.weight(.semibold) : .title3)
-                    .foregroundStyle(outcome ? Color.decline : Color.secondary)
-            } else if ui.dialing {
-                Text("call_dialing")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+        if ui.connected {
+            Text(verbatim: ui.elapsed)
+                .skyText(.bodyLarge)
+                .foregroundStyle(Color.skyOnSurfaceVariant)
+                .accessibilityIdentifier("call-elapsed")
+        } else if let dialState = ui.dialState {
+            if dialState.ended {
+                Text(Self.dialStatus(dialState)).skyText(.titleMedium).foregroundStyle(Color.callRed)
             } else {
-                Text("call_incoming_title")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("call-incoming")
+                Text(Self.dialStatus(dialState)).skyText(.bodyLarge).foregroundStyle(Color.skyOnSurfaceVariant)
             }
+        } else if ui.dialing {
+            Text("call_dialing").skyText(.bodyLarge).foregroundStyle(Color.skyOnSurfaceVariant)
+        } else {
+            Text("call_incoming_title")
+                .skyText(.bodyLarge)
+                .foregroundStyle(Color.skyOnSurfaceVariant)
+                .accessibilityIdentifier("call-incoming")
         }
     }
 
     @ViewBuilder
     private func controls(_ ui: CallUiState) -> some View {
         if ui.connected {
-            HStack(spacing: 44) {
-                CallButton(
-                    systemImage: ui.micMuted ? "mic.slash.fill" : "mic.fill",
-                    label: L10n.key(ui.micMuted ? "call_unmute" : "call_mute"),
-                    tint: ui.micMuted ? .skywire : Color(.secondarySystemFill),
-                    ink: ui.micMuted ? .white : .primary
-                ) { model.toggleMic() }
-                CallButton(
-                    systemImage: "phone.down.fill",
-                    label: L10n.key("call_hang_up"),
-                    tint: .decline,
-                    ink: .white
-                ) { model.hangUp() }
-                .accessibilityIdentifier("call-hang-up")
-                CallButton(
-                    systemImage: ui.speakerphone ? "speaker.wave.3.fill" : "speaker.wave.1.fill",
-                    label: L10n.key("call_speaker"),
-                    tint: ui.speakerphone ? .skywire : Color(.secondarySystemFill),
-                    ink: ui.speakerphone ? .white : .primary
-                ) { model.toggleSpeakerphone() }
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                CallButton(icon: ui.micMuted ? MI.filledMicOff : MI.filledMic,
+                           label: L10n.key(ui.micMuted ? "call_unmute" : "call_mute"),
+                           fill: ui.micMuted ? .skyPrimary : .skySurfaceVariant,
+                           ink: ui.micMuted ? .skyOnPrimary : .skyOnSurface) { model.toggleMic() }
+                Spacer(minLength: 0)
+                CallButton(icon: MI.filledCallEnd, label: L10n.key("call_hang_up"), fill: .callRed) { model.hangUp() }
+                    .accessibilityIdentifier("call-hang-up")
+                Spacer(minLength: 0)
+                CallButton(icon: ui.speakerphone ? MI.filledVolumeUp : MI.filledVolumeDown,
+                           label: L10n.key("call_speaker"),
+                           fill: ui.speakerphone ? .skyPrimary : .skySurfaceVariant,
+                           ink: ui.speakerphone ? .skyOnPrimary : .skyOnSurface) { model.toggleSpeakerphone() }
+                Spacer(minLength: 0)
             }
         } else if ui.dialState?.ended == true {
-            // It ended unanswered: say so, and offer to try again — except
-            // after a decline, where calling straight back is not what the
-            // other side asked for.
-            HStack(spacing: 44) {
-                CallButton(
-                    systemImage: "xmark",
-                    label: L10n.key("call_close"),
-                    tint: Color(.secondarySystemFill),
-                    ink: .primary
-                ) { model.dismiss() }
-                .accessibilityIdentifier("call-close")
+            // No Call again after a decline: calling straight back is not what the other side asked for.
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                CallButton(icon: MI.filledClose, label: L10n.key("call_close"), fill: .skySurfaceVariant, ink: .skyOnSurface) { model.dismiss() }
+                    .accessibilityIdentifier("call-close")
                 if ui.dialState != .declined {
-                    CallButton(
-                        systemImage: "phone.fill",
-                        label: L10n.key("call_again"),
-                        tint: .answer,
-                        ink: .white
-                    ) { model.callAgain() }
+                    Spacer(minLength: 0)
+                    CallButton(icon: MI.filledCall, label: L10n.key("call_again"), fill: .skySuccess) { model.callAgain() }
+                        .accessibilityIdentifier("call-again")
                 }
+                Spacer(minLength: 0)
             }
         } else if ui.dialing {
-            // Placing a call: the only thing to offer is giving up on it,
-            // which cancels the invite rather than closing a session.
-            CallButton(
-                systemImage: "phone.down.fill",
-                label: L10n.key("call_hang_up"),
-                tint: .decline,
-                ink: .white
-            ) { model.hangUp() }
+            // Hang up while it rings cancels the invite.
+            CallButton(icon: MI.filledCallEnd, label: L10n.key("call_hang_up"), fill: .callRed) { model.hangUp() }
+                .accessibilityIdentifier("call-hang-up")
         } else {
-            HStack(spacing: 44) {
-                CallButton(
-                    systemImage: "phone.down.fill",
-                    label: L10n.key("call_decline"),
-                    tint: .decline,
-                    ink: .white
-                ) { model.decline() }
-                .accessibilityIdentifier("call-decline")
-                CallButton(
-                    systemImage: "phone.fill",
-                    label: L10n.key("call_answer"),
-                    tint: .answer,
-                    ink: .white
-                ) { model.answer() }
-                .accessibilityIdentifier("call-answer")
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                CallButton(icon: MI.filledCallEnd, label: L10n.key("call_decline"), fill: .callRed) { model.decline() }
+                    .accessibilityIdentifier("call-decline")
+                Spacer(minLength: 0)
+                CallButton(icon: MI.filledCall, label: L10n.key("call_answer"), fill: .skySuccess) { model.answer() }
+                    .accessibilityIdentifier("call-answer")
+                Spacer(minLength: 0)
             }
         }
     }
@@ -167,37 +135,30 @@ struct CallScreen: View {
     }
 }
 
-/// One round control (Android: CallButton). `ink` is the glyph's colour on
-/// it: only the filled buttons — Answer green, Hang up red — are dark
-/// enough for white; the neutral ones sit on a fill near the background.
+/// CallButton: a 72 pt disc with a 32 pt glyph, and its caption under it.
 private struct CallButton: View {
-    let systemImage: String
+    let icon: String
     let label: LocalizedStringKey
-    let tint: Color
-    let ink: Color
+    let fill: Color
+    var ink: Color = .white
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 8) {
-                Image(systemName: systemImage)
-                    .font(.title2)
-                    .frame(width: 68, height: 68)
-                    .background(Circle().fill(tint))
+                MaterialIcon(icon, size: 32)
                     .foregroundStyle(ink)
-                Text(label).font(.footnote)
+                    .frame(width: 72, height: 72)
+                    .background(fill, in: Circle())
+                Text(label).skyText(.labelMedium).foregroundStyle(Color.skyOnSurface)
             }
         }
-        .buttonStyle(.plain)
-        // The whole column is the button's label, matched by its shape.
+        .buttonStyle(PressStyle())
         .accessibilityLabel(Text(label))
     }
 }
 
-// Answer/decline keep their conventional colours in both themes: on a call
-// screen these two are read by colour before they are read at all, and the
-// palette's error role shifts between themes.
 private extension Color {
-    static let answer = Color(uiColor: .systemGreen)
-    static let decline = Color(red: 0.851, green: 0.231, blue: 0.204)
+    /// Android's decline and hang-up red, the same in both themes.
+    static let callRed = Color(hex: 0xD93B34)
 }
