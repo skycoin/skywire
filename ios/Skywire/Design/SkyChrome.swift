@@ -47,6 +47,7 @@ struct SkyTopBar<Actions: View>: View {
             if let onBack {
                 SquareBarButton(icon: MI.roundedArrowBack, action: onBack)
                     .accessibilityLabel(Text("back"))
+                    .accessibilityIdentifier("top-back")
             }
             VStack(alignment: .leading, spacing: 0) {
                 title.skyText(.titleLarge).foregroundStyle(Color.skyOnBackground).lineLimit(1)

@@ -44,12 +44,12 @@ final class SocksChecks: XCTestCase {
         }
         for port in ["1090", "1080"] {
             app.buttons["socks-change-port"].tap()
-            // The system alert's field: an identifier set in SwiftUI does not
-            // reach it. It opens focused, the cursor after the current port.
-            let field = app.alerts.textFields.firstMatch
+            // The port sheet's field, filled with the current port.
+            let field = app.textFields["socks-port-field"]
             XCTAssertTrue(field.waitForExistence(timeout: 5), "no port field")
+            field.tap()
             field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 6) + port)
-            app.alerts.buttons["Save"].tap()
+            tapWhenUp("Save", in: app)
             let address = app.buttons["socks-address"]
             let moved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "127.0.0.1:\(port)"), object: address)
             XCTAssertEqual(XCTWaiter().wait(for: [moved], timeout: 30), .completed, "the address never showed \(port)")
@@ -90,7 +90,8 @@ final class SocksChecks: XCTestCase {
     /// until one connects: a public proxy that answered yesterday may not
     /// today, so the last one picked is not relied on.
     private func connectFromTheList(_ app: XCUIApplication) {
-        let rows = app.buttons.matching(identifier: "socks-server-row")
+        // A row holds the server and its star, so it is a container, not a button.
+        let rows = app.descendants(matching: .any).matching(identifier: "socks-server-row")
         XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 120), "service discovery listed no proxy")
         let state = app.staticTexts["socks-state"]
         for index in 0..<min(rows.count, 4) {

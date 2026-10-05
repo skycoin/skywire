@@ -64,7 +64,7 @@ final class WalletChecks: XCTestCase {
         // Reveal: nothing until Face ID passes, then the same twelve words.
         openWallets(app)
         app.buttons["wallet-row-\(expected)"].tap()
-        app.buttons["Reveal recovery phrase"].tap()
+        tapWhenUp("wallet-action-reveal", in: app)
         // Not longer: the Simulator's Face ID prompt gives up on its own when
         // left unanswered, and the reveal then (rightly) never happens. With
         // nothing to ask with, the words would be up at once.
@@ -217,17 +217,14 @@ final class WalletChecks: XCTestCase {
         let row = app.buttons["wallet-row-\(firstAddress)"]
         XCTAssertTrue(row.waitForExistence(timeout: 10))
         row.tap()
-        app.buttons["Remove from this device"].tap()
-        let confirm = app.alerts.buttons["Remove"]
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        confirm.tap()
+        tapWhenUp("wallet-action-remove", in: app)
+        tapWhenUp("Remove", in: app)
         XCTAssertTrue(waitGone(row, timeout: 10), "the wallet stayed in the list")
         back(app)
     }
 
     private func back(_ app: XCUIApplication) {
-        let button = app.navigationBars.buttons.element(boundBy: 0)
-        if button.waitForExistence(timeout: 5) { button.tap() }
+        goBack(app)
     }
 
     private func waitEnabled(_ element: XCUIElement, timeout: TimeInterval) -> Bool {

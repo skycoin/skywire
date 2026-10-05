@@ -31,10 +31,11 @@ final class FlowChecks: XCTestCase {
         scroll(to: diagnostics, in: app)
         diagnostics.tap()
         app.buttons["logs-source-process"].tap()
-        let debugLine = app.staticTexts["DEBUG"].firstMatch
+        // A line's level is its letter, as on Android.
+        let debugLine = app.staticTexts["D"].firstMatch
         XCTAssertTrue(debugLine.waitForExistence(timeout: 30), "no DEBUG line in the process log")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        goBack(app)
+        goBack(app)
         openTab(.home, in: app)
         setLogLevel("info", app)
     }
@@ -46,17 +47,16 @@ final class FlowChecks: XCTestCase {
         let diagnostics = app.buttons["diagnostics-link"]
         scroll(to: diagnostics, in: app)
         diagnostics.tap()
-        let picker = app.buttons["log-level-picker"]
-        scroll(to: picker, in: app)
-        picker.tap()
-        app.buttons[level].firstMatch.tap()
+        let chip = app.buttons["log-level-\(level)"]
+        scroll(to: chip, in: app)
+        chip.tap()
         // A change asks before it restarts the core (FlowChecks runs in
         // English). No question means the level was already this one (an
         // earlier run): nothing restarts.
-        let confirm = app.buttons["Restart"].firstMatch
+        let confirm = app.buttons["Restart core"].firstMatch
         let changed = confirm.waitForExistence(timeout: 5)
         if changed { confirm.tap() }
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        goBack(app)
         openTab(.home, in: app)
         if changed {
             wait(for: state(app), anyOf: ["stopping", "stopped", "starting", "running"], timeout: 30)
@@ -69,17 +69,20 @@ final class FlowChecks: XCTestCase {
     func testFleetOff() { toggleFleet(to: false) }
 
     /// Fleet is pinned in the config and read once at start, so the switch
-    /// restarts a running core.
+    /// (on the Fleet screen, as on Android) asks, then restarts a running core.
     private func toggleFleet(to on: Bool) {
         let app = connectedApp()
-        openTab(.settings, in: app)
-        let toggle = app.switches["fleet-toggle"]
-        scroll(to: toggle, in: app)
+        openTab(.apps, in: app)
+        app.buttons["hub-fleet"].tap()
+        let toggle = app.switches["fleet-screen-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
         let isOn = (toggle.value as? String) == "1"
         guard isOn != on else { return }
-        toggle.switches.firstMatch.tap()
+        toggle.tap()
+        tapWhenUp("Restart core", in: app)
         XCTAssertEqual(toggle.value as? String, on ? "1" : "0")
         // The core's state is on Home.
+        goBack(app)
         openTab(.home, in: app)
         wait(for: state(app), anyOf: ["stopping", "stopped", "starting", "running"], timeout: 30)
         wait(for: state(app), anyOf: ["connected"], timeout: 180)
@@ -140,7 +143,7 @@ final class FlowChecks: XCTestCase {
     private func setLockSwitch(_ toggle: XCUIElement, to value: String) {
         answeringFaceID {
             for _ in 0..<3 where toggle.value as? String != value {
-                toggle.switches.firstMatch.tap()
+                toggle.tap()
                 let moved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", value), object: toggle)
                 _ = XCTWaiter().wait(for: [moved], timeout: 8)
             }
