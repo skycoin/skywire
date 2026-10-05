@@ -50,6 +50,12 @@ final class AppSettings: ObservableObject {
         set { set(newValue, Keys.appLockEnabled) }
     }
 
+    /// Seal the config while the core is stopped (Android: ConfigVault.PREF_KEY).
+    var configEncrypted: Bool {
+        get { defaults.bool(forKey: Keys.configEncrypted) }
+        set { set(newValue, Keys.configEncrypted) }
+    }
+
     /// Whether the user left the core connected, so a relaunch (after a
     /// force-quit, or iOS ending the suspended app) connects again, as
     /// Android's sticky core service comes back after its process dies.
@@ -87,6 +93,7 @@ final class AppSettings: ObservableObject {
         static let logLevel = "core_log_level"
         static let remoteManagementPK = "remote_management_pk"
         static let appLockEnabled = "app_lock_enabled"
+        static let configEncrypted = "config_encrypted"
         /// M1's key, kept so a phone that had the spike connects again.
         static let wantsConnected = "core.wantsConnected"
     }

@@ -990,6 +990,75 @@
         }
       }
     },
+    "core_seal_readback_failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The sealed config could not be read back, so the unencrypted one is left in place."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo volver a leer la configuración sellada, así que se deja en su sitio la que no está cifrada."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已加密的配置无法读回，因此保留了未加密的配置。"
+          }
+        }
+      }
+    },
+    "core_sealed_key_gone_ios" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The sealed config cannot be opened: the key it was sealed under is no longer in this iPhone’s Keychain (the iPhone was erased, or Skywire’s data came back from a backup). The identity in it is unrecoverable; a new one can be generated."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se puede abrir la configuración sellada: la clave con la que se selló ya no está en el llavero de este iPhone (el iPhone se borró, o los datos de Skywire volvieron de una copia de seguridad). La identidad que contiene no se puede recuperar; se puede generar una nueva."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法打开已加密的配置：加密它的密钥已不在这台 iPhone 的钥匙串中（iPhone 已被抹掉，或 Skywire 的数据是从备份恢复的）。其中的身份无法恢复；可以生成一个新的身份。"
+          }
+        }
+      }
+    },
+    "core_sealed_unreadable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The sealed config cannot be opened."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La configuración sellada no se puede abrir."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法打开已加密的配置。"
+          }
+        }
+      }
+    },
     "dex_connecting" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5244,6 +5313,75 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已撤销访问。核心下次启动时生效。"
+          }
+        }
+      }
+    },
+    "settings_sk_invalid" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not a secret key — expected %1$lld hex characters."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No es una clave secreta: se esperaban %1$lld caracteres hexadecimales."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这不是私钥——应为 %1$lld 位十六进制字符。"
+          }
+        }
+      }
+    },
+    "settings_sk_mismatch_ios" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The core wrote a different public key than this secret key gives, so the previous config was put back."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El núcleo escribió una clave pública distinta de la que da esta clave secreta, así que se restauró la configuración anterior."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "核心写入的公钥与该私钥推导出的公钥不同，因此已恢复之前的配置。"
+          }
+        }
+      }
+    },
+    "settings_sk_not_a_key_ios" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not a secret key: those 64 characters are not a valid secp256k1 key."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No es una clave secreta: esos 64 caracteres no son una clave secp256k1 válida."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不是私钥：这 64 个字符不是有效的 secp256k1 密钥。"
           }
         }
       }

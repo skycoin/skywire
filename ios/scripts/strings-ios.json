@@ -135,6 +135,21 @@
       "en": "This screen closes on its own in %1$@.",
       "zh-Hans": "本页面将在 %1$@ 后自动关闭。",
       "es": "Esta pantalla se cierra sola en %1$@."
+    },
+    "core_sealed_key_gone_ios": {
+      "en": "The sealed config cannot be opened: the key it was sealed under is no longer in this iPhone’s Keychain (the iPhone was erased, or Skywire’s data came back from a backup). The identity in it is unrecoverable; a new one can be generated.",
+      "zh-Hans": "无法打开已加密的配置：加密它的密钥已不在这台 iPhone 的钥匙串中（iPhone 已被抹掉，或 Skywire 的数据是从备份恢复的）。其中的身份无法恢复；可以生成一个新的身份。",
+      "es": "No se puede abrir la configuración sellada: la clave con la que se selló ya no está en el llavero de este iPhone (el iPhone se borró, o los datos de Skywire volvieron de una copia de seguridad). La identidad que contiene no se puede recuperar; se puede generar una nueva."
+    },
+    "settings_sk_not_a_key_ios": {
+      "en": "Not a secret key: those 64 characters are not a valid secp256k1 key.",
+      "zh-Hans": "不是私钥：这 64 个字符不是有效的 secp256k1 密钥。",
+      "es": "No es una clave secreta: esos 64 caracteres no son una clave secp256k1 válida."
+    },
+    "settings_sk_mismatch_ios": {
+      "en": "The core wrote a different public key than this secret key gives, so the previous config was put back.",
+      "zh-Hans": "核心写入的公钥与该私钥推导出的公钥不同，因此已恢复之前的配置。",
+      "es": "El núcleo escribió una clave pública distinta de la que da esta clave secreta, así que se restauró la configuración anterior."
     }
   },
   "InfoPlist": {

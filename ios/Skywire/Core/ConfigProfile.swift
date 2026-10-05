@@ -34,14 +34,19 @@ enum ConfigProfile {
     /// so its pins survive the visor rewriting the file.
     static func prepare(paths: CorePaths, settings: ProfileSettings, secrets: SecretStore) async throws {
         try paths.createDirectories()
+        // A sealed config must open before anything checks for one: missing, it reads as a
+        // first run, and the generator would make a new identity over the sealed one.
+        try ConfigVault(paths: paths, secrets: secrets).unseal()
         if !FileManager.default.fileExists(atPath: paths.configFile.path) {
-            try await CoreBridge.shared.configGen(
-                outPath: paths.configFile.path,
-                options: GenOptions(hypervisorAddr: apiAddress, binPath: paths.binDir.path)
-            )
+            try await CoreBridge.shared.configGen(outPath: paths.configFile.path, options: genOptions(paths: paths))
         }
         try PasswordFile.ensure(at: paths.skychatPasswordFile, password: secrets.password(.skychatPassword))
         try PasswordFile.ensure(at: paths.skydexPasswordFile, password: secrets.password(.skydexPassword))
         try PhoneProfile.apply(to: paths, settings: settings)
+    }
+
+    /// The generator's options: the first run's, or with `regen` the same around the file's key.
+    static func genOptions(paths: CorePaths, regen: Bool? = nil) -> GenOptions {
+        GenOptions(regen: regen, hypervisorAddr: apiAddress, binPath: paths.binDir.path)
     }
 }
