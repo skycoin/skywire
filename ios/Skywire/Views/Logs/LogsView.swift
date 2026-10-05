@@ -1,167 +1,155 @@
 import CoreClient
 import SwiftUI
 
-/// One viewer for every log (Android: LogViewerScreen): the visor's runtime
-/// log, each app's log, and the core's own output. Log text is never
-/// translated: it is read next to a desktop's `skywire cli`, and a translated
-/// line is one nobody can search for.
+/// One viewer for every log (Android: ui/logs/LogViewerScreen.kt), the source chosen before
+/// it opens. Log text is never translated: it is read next to a desktop's `skywire cli`, and a
+/// translated line is one nobody can search for.
 struct LogsView: View {
     @EnvironmentObject private var app: AppModel
+    @EnvironmentObject private var navigator: Navigator
+    @EnvironmentObject private var dialogs: SkyDialogs
     @StateObject private var model = LogsModel()
-    @State private var source: LogSource
-
-    init(source: LogSource) {
-        _source = State(initialValue: source)
-    }
+    let source: LogSource
 
     var body: some View {
         VStack(spacing: 0) {
-            controls
-            Divider()
+            SkyTopBar(title: Text(verbatim: title), onBack: { navigator.back() }) {
+                Button { model.following.toggle() } label: {
+                    MaterialIcon(model.following ? MI.filledPause : MI.filledPlayArrow).frame(width: 48, height: 48)
+                }
+                .buttonStyle(PressStyle(layer: .skyOnSurface, shape: AnyShape(Circle())))
+                .accessibilityLabel(model.following ? Text("logs_pause") : Text("logs_follow"))
+                ShareLink(item: model.shareText) {
+                    MaterialIcon(MI.filledShare).frame(width: 48, height: 48)
+                }
+                .accessibilityLabel(Text("logs_share"))
+            }
+            .foregroundStyle(Color.skyOnBackground)
+            filterBar
+            if model.dropped > 0 {
+                Text(verbatim: L10n.format("logs_dropped", model.dropped)).skyText(.labelSmall)
+                    .foregroundStyle(Color.skyOnSurfaceVariant)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16).padding(.vertical, 4)
+            }
+            if let error = model.error {
+                Text(verbatim: error).skyText(.labelSmall).foregroundStyle(Color.skyError)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16).padding(.vertical, 4)
+            }
             lines
         }
-        .navigationTitle(Text("logs_title"))
-        .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $model.query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: Text("logs_search_hint"))
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    model.following.toggle()
-                } label: {
-                    Label(model.following ? L10n.key("logs_pause") : L10n.key("logs_follow"), systemImage: model.following ? "pause.circle" : "play.circle")
-                }
-                ShareLink(item: model.shareText) {
-                    Label("logs_share", systemImage: "square.and.arrow.up")
-                }
-                .disabled(model.visible.isEmpty)
-            }
-        }
+        .background(Color.skyBackground)
         .task(id: source) { await model.run(source, app: app) }
     }
 
-    private var controls: some View {
-        VStack(spacing: 8) {
-            Picker(selection: kind) {
-                Text("logs_source_core").tag(0)
-                Text("logs_source_process").tag(1)
-                Text("logs_source_apps").tag(2)
-            } label: {
-                Text("logs_source")
-            }
-            .pickerStyle(.segmented)
-            if case let .app(name) = source {
-                Picker(selection: Binding(get: { name }, set: { source = .app($0) })) {
-                    ForEach(LogSource.apps, id: \.self) { Text(verbatim: $0).tag($0) }
-                } label: {
-                    Text("logs_source_apps")
-                }
-                .pickerStyle(.menu)
-            }
+    /// Android's titles: the source's name, an app's product name, a Fleet visor's given name.
+    private var title: String {
+        switch source {
+        case .core: L10n.text("logs_source_core")
+        case .process: L10n.text("logs_source_process")
+        case let .app(name): LogSource.productName(name) ?? name
+        case let .visor(pk): FleetModel().label(pk)
+        }
+    }
+
+    private var filterBar: some View {
+        VStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach([LogLevel.error, .warn, .info, .debug, .trace], id: \.self) { level in
-                        Toggle(isOn: Binding(
-                            get: { model.levels.contains(level) },
-                            set: { on in
-                                if on { model.levels.insert(level) } else { model.levels.remove(level) }
-                            }
-                        )) {
-                            Text(verbatim: level.name).font(.caption.monospaced())
+                        SkyFilterChip(label: Text(verbatim: level.name), selected: model.levels.contains(level), style: .labelSmall) {
+                            if model.levels.contains(level) { model.levels.remove(level) } else { model.levels.insert(level) }
                         }
-                        .toggleStyle(.button)
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
                     }
                 }
+                .frame(minWidth: UIScreen.main.bounds.width - 24)
             }
+            ZStack(alignment: .leading) {
+                if model.query.isEmpty {
+                    Text("logs_search_hint").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+                        .accessibilityHidden(true)
+                }
+                TextField(text: $model.query, prompt: Text(verbatim: "")) { Text("logs_search_hint") }
+                    .font(Font(SkyTextStyle.bodyMedium.uiFont()))
+                    .foregroundStyle(Color.skyOnSurface)
+                    .tint(.skyPrimary)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .accessibilityLabel(Text("logs_search_hint"))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.skySurfaceVariant, in: .sky(SkyRadius.small))
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
     }
 
-    /// The segment for `source`: Core, Process, or an app.
-    private var kind: Binding<Int> {
-        Binding(
-            get: {
-                switch source {
-                case .core, .visor: 0
-                case .process: 1
-                case .app: 2
-                }
-            },
-            set: { index in
-                switch index {
-                case 0: source = .core
-                case 1: source = .process
-                default: if case .app = source {} else { source = .app(LogSource.apps[0]) }
-                }
-            }
-        )
-    }
-
+    @ViewBuilder
     private var lines: some View {
         let visible = model.visible
-        return ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    if model.dropped > 0 {
-                        Text(L10n.format("logs_dropped", model.dropped))
-                            .font(.caption).foregroundStyle(.orange)
-                    }
-                    if let error = model.error {
-                        Text(error).font(.caption).foregroundStyle(.red)
-                        if source != .process {
-                            Text("logs_api_down").font(.caption).foregroundStyle(.secondary)
+        if visible.isEmpty {
+            VStack(spacing: 12) {
+                if model.loading {
+                    MaterialSpinner(size: 24, stroke: 2)
+                    Text("logs_loading").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+                } else {
+                    Text("logs_empty").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(visible) { entry in
+                            Button {
+                                UIPasteboard.general.string = entry.raw
+                                dialogs.toast(Text("copied_to_clipboard"))
+                            } label: { LogLine(entry: entry) }
+                            .buttonStyle(PressStyle(layer: .skyOnSurface))
+                            .id(entry.id)
                         }
                     }
-                    if visible.isEmpty {
-                        Text(model.loading ? L10n.key("logs_loading") : L10n.key("logs_empty"))
-                            .font(.footnote).foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.top, 40)
-                    }
-                    ForEach(visible) { entry in
-                        LogLine(entry: entry).id(entry.id)
-                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .textSelection(.enabled)
-            }
-            .onChange(of: visible.last?.id) { last in
-                guard model.following, let last else { return }
-                proxy.scrollTo(last, anchor: .bottom)
+                .onChange(of: visible.last?.id) { last in
+                    guard model.following, let last else { return }
+                    withAnimation { proxy.scrollTo(last, anchor: .bottom) }
+                }
+                .onAppear { if let last = visible.last?.id { proxy.scrollTo(last, anchor: .bottom) } }
             }
         }
     }
 }
 
+/// One line: the level's letter, then time and module over the message.
 private struct LogLine: View {
     let entry: LogEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: 6) {
-                if entry.level != .unknown {
-                    Text(verbatim: entry.level.name).foregroundStyle(entry.level.color).fontWeight(.semibold)
+        HStack(alignment: .top, spacing: 0) {
+            Text(verbatim: String((entry.level == .unknown ? "U" : entry.level.name).prefix(1)))
+                .skyText(.labelSmall)
+                .foregroundStyle(entry.level.color)
+                .padding(.trailing, 8)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 0) {
+                let meta = [String(entry.timestamp.suffix(12)), entry.module].filter { !$0.isEmpty }.joined(separator: " · ")
+                if !meta.isEmpty {
+                    Text(verbatim: meta).skyText(.labelSmall).foregroundStyle(Color.skyOnSurfaceVariant).lineLimit(1)
                 }
-                // The time of day is enough on a phone; the date is in the raw
-                // line, which is what copy and share carry.
-                Text(verbatim: timeOfDay).foregroundStyle(.secondary)
-                if !entry.module.isEmpty {
-                    Text(verbatim: entry.module).foregroundStyle(.secondary).lineLimit(1)
-                }
+                Text(verbatim: entry.message)
+                    .skyText(.bodySmall, mono: true)
+                    .foregroundStyle(entry.level == .error || entry.level == .fatal ? Color.skyError : Color.skyOnSurface)
+                    .multilineTextAlignment(.leading)
             }
-            Text(verbatim: entry.message)
-                .foregroundStyle(entry.level >= .error && entry.level != .unknown ? Color.red : Color.primary)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .font(.caption2.monospaced())
-    }
-
-    /// "06:07:11.0882" out of "2026-09-30T06:07:11.0882+08:00".
-    private var timeOfDay: String {
-        guard let t = entry.timestamp.firstIndex(of: "T") else { return entry.timestamp }
-        return String(entry.timestamp[entry.timestamp.index(after: t)...].prefix { $0.isNumber || $0 == ":" || $0 == "." })
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
     }
 }
 
@@ -178,12 +166,13 @@ extension LogLevel {
         }
     }
 
+    /// Android's fixed level colours, the same in both themes.
     var color: Color {
         switch self {
-        case .error, .fatal: .red
-        case .warn: .orange
-        case .info: .skywire
-        default: .secondary
+        case .error, .fatal: Color(hex: 0xDC2626)
+        case .warn: Color(hex: 0xF59E0B)
+        case .info: Color(hex: 0x0F7BF4)
+        default: Color(hex: 0x9CA3AF)
         }
     }
 }

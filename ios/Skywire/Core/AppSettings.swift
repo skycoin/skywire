@@ -56,6 +56,22 @@ final class AppSettings: ObservableObject {
         set { set(newValue, Keys.configEncrypted) }
     }
 
+    /// Settings ▸ Theme (Android: ThemeMode.PREF_KEY).
+    var themeMode: ThemeMode {
+        get { defaults.string(forKey: Keys.themeMode).flatMap(ThemeMode.init(rawValue:)) ?? .system }
+        set { set(newValue.rawValue, Keys.themeMode) }
+    }
+
+    /// Settings ▸ Language. Read from AppleLanguages, which iOS's own page for the app also writes.
+    var language: AppLanguage {
+        get { AppLanguage.current(in: defaults) }
+        set {
+            objectWillChange.send()
+            newValue.persist(in: defaults)
+            L10n.bundle = newValue.bundle
+        }
+    }
+
     /// Whether the user left the core connected, so a relaunch (after a
     /// force-quit, or iOS ending the suspended app) connects again, as
     /// Android's sticky core service comes back after its process dies.
@@ -94,6 +110,7 @@ final class AppSettings: ObservableObject {
         static let remoteManagementPK = "remote_management_pk"
         static let appLockEnabled = "app_lock_enabled"
         static let configEncrypted = "config_encrypted"
+        static let themeMode = "theme_mode"
         /// M1's key, kept so a phone that had the spike connects again.
         static let wantsConnected = "core.wantsConnected"
     }

@@ -84,15 +84,22 @@ extension View {
     }
 }
 
-/// Settings ▸ Theme (Android ThemeMode).
+/// The user's theme override (Android: core/ThemeMode.kt, the same stored names).
 enum ThemeMode: String, CaseIterable {
-    case system, light, dark
+    case system = "SYSTEM", light = "LIGHT", dark = "DARK"
 
-    var colorScheme: ColorScheme? {
-        switch self {
-        case .system: nil
+    /// Applied to every window, so sheets, alerts and the keyboard follow it as well.
+    @MainActor
+    func apply() {
+        let style: UIUserInterfaceStyle = switch self {
+        case .system: .unspecified
         case .light: .light
         case .dark: .dark
+        }
+        for scene in UIApplication.shared.connectedScenes {
+            for window in (scene as? UIWindowScene)?.windows ?? [] {
+                window.overrideUserInterfaceStyle = style
+            }
         }
     }
 }

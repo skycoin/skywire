@@ -141,6 +141,11 @@
       "zh-Hans": "无法打开已加密的配置：加密它的密钥已不在这台 iPhone 的钥匙串中（iPhone 已被抹掉，或 Skywire 的数据是从备份恢复的）。其中的身份无法恢复；可以生成一个新的身份。",
       "es": "No se puede abrir la configuración sellada: la clave con la que se selló ya no está en el llavero de este iPhone (el iPhone se borró, o los datos de Skywire volvieron de una copia de seguridad). La identidad que contiene no se puede recuperar; se puede generar una nueva."
     },
+    "settings_encrypt_warning_ios": {
+      "en": "If this iPhone is erased, or Skywire’s data is restored from a backup, the sealing key is gone and the identity in the config cannot be recovered. Export the config first if it matters.",
+      "zh-Hans": "如果这台 iPhone 被抹掉，或 Skywire 的数据从备份恢复，加密密钥就会丢失，配置中的身份将无法恢复。如果它很重要，请先导出配置。",
+      "es": "Si este iPhone se borra, o los datos de Skywire se restauran desde una copia de seguridad, la clave de sellado desaparece y la identidad de la configuración no se puede recuperar. Exporta la configuración antes si te importa."
+    },
     "settings_sk_not_a_key_ios": {
       "en": "Not a secret key: those 64 characters are not a valid secp256k1 key.",
       "zh-Hans": "不是私钥：这 64 个字符不是有效的 secp256k1 密钥。",
@@ -150,6 +155,16 @@
       "en": "The core wrote a different public key than this secret key gives, so the previous config was put back.",
       "zh-Hans": "核心写入的公钥与该私钥推导出的公钥不同，因此已恢复之前的配置。",
       "es": "El núcleo escribió una clave pública distinta de la que da esta clave secreta, así que se restauró la configuración anterior."
+    },
+    "settings_update_ios": {
+      "en": "Updates for this build come from TestFlight or the App Store.",
+      "zh-Hans": "此版本的更新来自 TestFlight 或 App Store。",
+      "es": "Las actualizaciones de esta versión llegan por TestFlight o la App Store."
+    },
+    "settings_app_lock_unavailable_ios": {
+      "en": "This iPhone has no passcode, so there is nothing to check against. One is set in the Settings app, under Face ID & Passcode.",
+      "zh-Hans": "这台 iPhone 没有设置密码，因此无从验证。可在“设置”App 的“面容 ID 与密码”中设置。",
+      "es": "Este iPhone no tiene código, así que no hay nada con qué comprobar. Se pone en la app Ajustes, en Face ID y código."
     }
   },
   "InfoPlist": {

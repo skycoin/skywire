@@ -44,8 +44,13 @@ struct RootView: View {
         }
         .environmentObject(navigator)
         .environmentObject(dialogs)
+        .environmentObject(settings)
         .modifier(LockCover(lock: lock, enabled: settings.appLockEnabled))
+        // Settings ▸ Language, at once: the views' strings follow the locale, L10n its bundle.
+        .environment(\.locale, settings.language.locale)
+        .onChange(of: settings.themeMode) { $0.apply() }
         .onAppear {
+            settings.themeMode.apply()
             app.launch()
             // A link or a tap that launched the app.
             if router.pending != nil { navigator.select(.chat) }
@@ -88,7 +93,7 @@ enum AppTab: CaseIterable, Hashable {
 
 /// Screens pushed over a tab (Android's non-tab routes).
 enum Route: Hashable {
-    case socks, dex, fleet, vpn
+    case socks, dex, fleet, vpn, diagnostics
     case logs(LogSource)
 }
 
@@ -198,26 +203,8 @@ private struct TabStack: View {
         case .dex: DexView()
         case .fleet: FleetView(settings: app.settings)
         case .vpn: VpnView(settings: app.settings)
-        case .logs(let source): PendingRestyle { LogsView(source: source) }
-        }
-    }
-}
-
-/// A screen not yet rebuilt in Android's design: its own navigation bar, with back.
-private struct PendingRestyle<Content: View>: View {
-    @ViewBuilder let content: Content
-    @EnvironmentObject private var navigator: Navigator
-
-    var body: some View {
-        NavigationStack {
-            content
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button { navigator.back() } label: { Image(systemName: "chevron.backward") }
-                            .accessibilityLabel(Text("back"))
-                    }
-                }
+        case .diagnostics: DiagnosticsView()
+        case .logs(let source): LogsView(source: source)
         }
     }
 }

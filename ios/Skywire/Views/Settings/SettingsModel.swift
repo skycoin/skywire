@@ -12,6 +12,8 @@ final class SettingsModel: ObservableObject {
     @Published private(set) var coreVersion: String?
     /// One line to show after a change (or its failure).
     @Published var notice: String?
+    /// An identity change is running: the core restarts around it.
+    @Published private(set) var identityBusy = false
 
     /// The route lengths offered (Android: MinHopsCard's presets).
     static let hopChoices = [1, 2, 3]
@@ -87,5 +89,52 @@ final class SettingsModel: ObservableObject {
     func revokeRemoteManagement(_ app: AppModel) {
         app.settings.remoteManagementPK = nil
         notice = L10n.text("settings_remote_revoked")
+    }
+
+    // MARK: Identity and the config (Android: SettingsViewModel)
+
+    /// Installs `secretKey` as this visor's identity, the core stopped around it.
+    func replaceSecretKey(_ secretKey: String, _ app: AppModel) {
+        let paths = app.paths, vault = app.vault
+        changeIdentity(app, done: L10n.text("settings_sk_replaced")) {
+            _ = try await Identity.replace(secretKey: secretKey, paths: paths, vault: vault)
+        }
+    }
+
+    /// Throws the identity away; the next start generates one.
+    func newIdentity(_ app: AppModel) {
+        let paths = app.paths, vault = app.vault
+        changeIdentity(app, done: L10n.text("settings_identity_reset")) {
+            try Identity.reset(paths: paths, vault: vault)
+        }
+    }
+
+    private func changeIdentity(_ app: AppModel, done: String, _ change: @escaping @Sendable () async throws -> Void) {
+        identityBusy = true
+        Task {
+            defer { identityBusy = false }
+            do {
+                try await app.changeIdentity(change)
+                notice = done
+            } catch {
+                notice = error.localizedDescription
+            }
+        }
+    }
+
+    /// On seals now, or once a running core stops; off unseals now.
+    func setConfigEncrypted(_ enabled: Bool, _ app: AppModel) {
+        let running = app.coreState != .stopped && app.coreState != .failed
+        do {
+            try app.vault.apply(enabled: enabled, coreRunning: running)
+            app.settings.configEncrypted = enabled
+            if !enabled {
+                notice = L10n.text("settings_encrypt_off_done")
+            } else {
+                notice = running ? L10n.text("settings_encrypt_on_pending") : L10n.text("settings_encrypt_on_done")
+            }
+        } catch {
+            notice = error.localizedDescription
+        }
     }
 }
