@@ -200,6 +200,7 @@ struct SkyDialogLayer: View {
                         .onTapGesture { dialogs.dismiss() }
                     DialogCard(dialog: dialog, dialogs: dialogs, maxHeight: geometry.size.height * 0.8)
                         .frame(width: min(320, geometry.size.width - 48))
+                        .accessibilityAddTraits(.isModal)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -214,9 +215,7 @@ struct SkyDialogLayer: View {
 
         var body: some View {
             if let custom = dialog.custom {
-                custom
-                    .padding(24)
-                    .frame(maxHeight: maxHeight)
+                CappedHeight(max: maxHeight) { custom.padding(24) }
                     .background(Color.skyContainerHigh, in: .sky(SkyRadius.extraLarge))
             } else {
                 standard
@@ -253,9 +252,31 @@ struct SkyDialogLayer: View {
                 .padding(.top, 24)
             }
             .padding(24)
-            .frame(maxHeight: maxHeight)
+            .modifier(CapHeight(max: maxHeight))
             .background(Color.skyContainerHigh, in: .sky(SkyRadius.extraLarge))
         }
+    }
+}
+
+/// Offers its content at most `max` and takes the content's own height (a frame would fill).
+private struct CappedHeight: Layout {
+    let max: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let height = Swift.min(proposal.height ?? max, max)
+        return subviews.first?.sizeThatFits(ProposedViewSize(width: proposal.width, height: height)) ?? .zero
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+    }
+}
+
+private struct CapHeight: ViewModifier {
+    let max: CGFloat
+
+    func body(content: Content) -> some View {
+        CappedHeight(max: max) { content }
     }
 }
 

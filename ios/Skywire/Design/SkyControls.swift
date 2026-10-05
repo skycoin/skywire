@@ -63,6 +63,7 @@ private struct PillLabel<Label: View>: View {
     let fill: Color
     let ink: Color
     let horizontal: CGFloat
+    var height: CGFloat = 40
     @Environment(\.isEnabled) private var enabled
 
     var body: some View {
@@ -71,28 +72,32 @@ private struct PillLabel<Label: View>: View {
             .lineLimit(1)
             .foregroundStyle(enabled ? ink : Color.skyOnSurface.opacity(0.38))
             .padding(.horizontal, horizontal)
-            .frame(minWidth: 58, minHeight: 40)
+            .frame(minWidth: 58, minHeight: height)
             .background(enabled ? fill : (fill == .clear ? .clear : Color.skyOnSurface.opacity(0.12)), in: Capsule())
             .overlay(Capsule().fill(ink.opacity(pressed ? 0.10 : 0)))
             .contentShape(Capsule())
-            // Material reserves 48 pt of height for the 40 pt pill.
-            .padding(.vertical, 4)
+            // Material reserves 48 pt for the 40 pt pill; a fixed height (50, 52) takes exactly that.
+            .padding(.vertical, height == 40 ? 4 : 0)
     }
 }
 
 /// FilledTonalButton: the app's standalone action.
 struct TonalButtonStyle: ButtonStyle {
+    var height: CGFloat = 40
+
     func makeBody(configuration: Configuration) -> some View {
         PillLabel(label: configuration.label, pressed: configuration.isPressed,
-                  fill: .skySecondaryContainer, ink: .skyOnSecondaryContainer, horizontal: 24)
+                  fill: .skySecondaryContainer, ink: .skyOnSecondaryContainer, horizontal: 24, height: height)
     }
 }
 
 /// Button: filled primary.
 struct FilledButtonStyle: ButtonStyle {
+    var height: CGFloat = 40
+
     func makeBody(configuration: Configuration) -> some View {
         PillLabel(label: configuration.label, pressed: configuration.isPressed,
-                  fill: .skyPrimary, ink: .skyOnPrimary, horizontal: 24)
+                  fill: .skyPrimary, ink: .skyOnPrimary, horizontal: 24, height: height)
     }
 }
 
@@ -257,5 +262,93 @@ struct PulseRing: View {
         .frame(width: size, height: size)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// Slider (Material 3 1.4): a 16 pt track, a 4 x 44 handle in 6 pt gaps, a stop dot at the end.
+struct SkySlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    @GestureState private var pressed = false
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let span = range.upperBound - range.lowerBound
+            let fraction = span > 0 ? min(max((value - range.lowerBound) / span, 0), 1) : 0
+            // The handle's centre travels between its own half-widths.
+            let x = 2 + (width - 4) * fraction
+            ZStack(alignment: .leading) {
+                if x - 6 > 0 {
+                    UnevenTrack(leading: 8, trailing: 2).fill(Color.skyPrimary)
+                        .frame(width: x - 6, height: 16)
+                }
+                UnevenTrack(leading: 2, trailing: 8).fill(Color.skySecondaryContainer)
+                    .frame(width: max(0, width - x - 6), height: 16)
+                    .offset(x: x + 6)
+                Circle().fill(Color.skyPrimary).frame(width: 4, height: 4).offset(x: width - 8)
+                Capsule().fill(Color.skyPrimary)
+                    .frame(width: pressed ? 2 : 4, height: 44)
+                    .offset(x: x - (pressed ? 1 : 2))
+            }
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0)
+                .updating($pressed) { _, state, _ in state = true }
+                .onChanged { drag in
+                    let f = min(max((drag.location.x - 2) / max(1, width - 4), 0), 1)
+                    value = range.lowerBound + f * span
+                })
+        }
+        .frame(height: 44)
+        .accessibilityRepresentation { Slider(value: $value, in: range) }
+    }
+}
+
+/// A track piece: fully round at one end, nearly square at the end facing the handle.
+private struct UnevenTrack: Shape {
+    let leading: CGFloat
+    let trailing: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let l = min(leading, rect.height / 2, rect.width / 2)
+        let t = min(trailing, rect.height / 2, rect.width / 2)
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + l, y: rect.minY))
+        path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.minY), tangent2End: CGPoint(x: rect.maxX, y: rect.maxY), radius: t)
+        path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.maxY), tangent2End: CGPoint(x: rect.minX, y: rect.maxY), radius: t)
+        path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.maxY), tangent2End: CGPoint(x: rect.minX, y: rect.minY), radius: l)
+        path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.minY), tangent2End: CGPoint(x: rect.maxX, y: rect.minY), radius: l)
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// A row sharing its width by weight, as Compose's `Modifier.weight` does.
+struct WeightedRow: Layout {
+    let weights: [CGFloat]
+    var spacing: CGFloat = 0
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let widths = share(proposal.width ?? 0, subviews.count)
+        let height = subviews.indices.map { subviews[$0].sizeThatFits(ProposedViewSize(width: widths[$0], height: proposal.height)).height }.max() ?? 0
+        return CGSize(width: proposal.width ?? 0, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let widths = share(bounds.width, subviews.count)
+        var x = bounds.minX
+        for index in subviews.indices {
+            subviews[index].place(at: CGPoint(x: x, y: bounds.midY), anchor: .leading,
+                                  proposal: ProposedViewSize(width: widths[index], height: bounds.height))
+            x += widths[index] + spacing
+        }
+    }
+
+    private func share(_ width: CGFloat, _ count: Int) -> [CGFloat] {
+        let w = (0..<count).map { $0 < weights.count ? weights[$0] : 1 }
+        let free = max(0, width - spacing * CGFloat(max(0, count - 1)))
+        let total = w.reduce(0, +)
+        return w.map { total > 0 ? free * $0 / total : 0 }
     }
 }

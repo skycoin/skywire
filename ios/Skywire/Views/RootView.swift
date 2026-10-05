@@ -24,10 +24,7 @@ struct RootView: View {
                     ForEach(AppTab.allCases, id: \.self) { tab in
                         if navigator.visited.contains(tab) {
                             let shown = navigator.tab == tab
-                            TabStack(tab: tab, navigator: navigator)
-                                .opacity(shown ? 1 : 0)
-                                .allowsHitTesting(shown)
-                                .accessibilityHidden(!shown)
+                            TabStack(tab: tab, navigator: navigator).stackLayer(shown: shown)
                         }
                     }
                 }
@@ -40,7 +37,7 @@ struct RootView: View {
             .background(Color.skyBackground.ignoresSafeArea())
             // A call owns the display, bar and all (Android swaps the UI for CallScreen).
             if calls.state.busy {
-                CallScreen()
+                CallScreen().accessibilityAddTraits(.isModal)
             }
             SkySheetLayer(dialogs: dialogs)
             SkyDialogLayer(dialogs: dialogs)
@@ -182,10 +179,7 @@ private struct TabStack: View {
     }
 
     private func layer(_ view: some View, shown: Bool) -> some View {
-        view
-            .opacity(shown ? 1 : 0)
-            .allowsHitTesting(shown)
-            .accessibilityHidden(!shown)
+        view.stackLayer(shown: shown)
     }
 
     @ViewBuilder private var root: some View {
@@ -225,5 +219,41 @@ private struct PendingRestyle<Content: View>: View {
                     }
                 }
         }
+    }
+}
+
+extension View {
+    /// A screen kept alive under the one on top: invisible, untouchable and out of accessibility.
+    func stackLayer(shown: Bool) -> some View {
+        modifier(StackLayer(shown: shown))
+    }
+}
+
+private struct LayerVisibleKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+private struct StackLayer: ViewModifier {
+    let shown: Bool
+    // A layer inside a hidden one (a tab's screen while another tab is up) is hidden too.
+    @Environment(\.layerVisible) private var outer
+
+    func body(content: Content) -> some View {
+        let visible = shown && outer
+        content
+            .environment(\.layerVisible, visible)
+            .opacity(shown ? 1 : 0)
+            .allowsHitTesting(shown)
+            // Hiding alone leaves scroll views' contents to VoiceOver; collapsing the layer first
+            // takes them out, and hiding then drops the empty element left.
+            .accessibilityElement(children: visible ? .contain : .ignore)
+            .accessibilityHidden(!visible)
+    }
+}
+
+extension EnvironmentValues {
+    fileprivate var layerVisible: Bool {
+        get { self[LayerVisibleKey.self] }
+        set { self[LayerVisibleKey.self] = newValue }
     }
 }
