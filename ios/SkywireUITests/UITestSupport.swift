@@ -39,6 +39,26 @@ extension XCTestCase {
         XCTAssertTrue(tab.isSelected, "tab \(which) not selected")
     }
 
+    /// The top bar's back arrow on the screen in front (a screen kept under it has one too).
+    func goBack(_ app: XCUIApplication) {
+        let backs = app.buttons.matching(identifier: "top-back")
+        XCTAssertTrue(backs.firstMatch.waitForExistence(timeout: 5), "no back arrow")
+        for index in 0..<backs.count where backs.element(boundBy: index).isHittable {
+            backs.element(boundBy: index).tap()
+            return
+        }
+        XCTFail("no back arrow in front")
+    }
+
+    /// Taps a dialog's or sheet's button once it is up: they animate in, and a tap made while
+    /// one slides lands where the button is not yet.
+    func tapWhenUp(_ label: String, in app: XCUIApplication, timeout: TimeInterval = 5) {
+        let button = app.buttons[label].firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: timeout), "no \(label) button")
+        usleep(400_000)
+        button.tap()
+    }
+
     /// Swipes up until `element` can be tapped, a few times at most.
     func scroll(to element: XCUIElement, in app: XCUIApplication) {
         for _ in 0..<6 where !element.isHittable {

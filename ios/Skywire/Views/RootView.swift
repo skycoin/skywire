@@ -29,6 +29,9 @@ struct RootView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // A new language rebuilds the screens, as Android recreates its activity: text
+                // made in a body (L10n.text) is not redrawn by the locale alone. The stacks are kept.
+                .id(settings.language)
                 // The keyboard takes the bar's place, as Android's imePadding does.
                 .padding(.bottom, keyboardShown ? 0 : SkyBottomBar.height)
                 SkyBottomBar(navigator: navigator)

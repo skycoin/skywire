@@ -247,7 +247,8 @@ private struct PortSheet: View {
             Text("socks_port_title").skyText(.titleMedium)
             Text("socks_port_hint").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 8)
             SkyOutlinedTextField(label: L10n.key("socks_port_label"), text: $text,
-                                 isError: !text.isEmpty && !valid, keyboard: .numberPad, notch: .skyContainerLow)
+                                 isError: !text.isEmpty && !valid, keyboard: .numberPad, notch: .skyContainerLow,
+                                 identifier: "socks-port-field")
                 .padding(.top, 16)
                 .onChange(of: text) { value in
                     let digits = String(value.filter(\.isNumber).prefix(5))

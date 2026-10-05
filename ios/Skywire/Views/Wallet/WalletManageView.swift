@@ -80,22 +80,23 @@ struct WalletManageView: View {
                     .padding(.horizontal, 20).padding(.vertical, 5)
                 Spacer().frame(height: 10)
                 if wallet.id != model.active?.id {
-                    SheetAction(icon: MI.outlinedCheckCircle, title: L10n.key("wallet_use")) {
+                    SheetAction(icon: MI.outlinedCheckCircle, title: L10n.key("wallet_use"), identifier: "wallet-action-use") {
                         dialogs.dismissSheet()
                         model.useWallet(wallet.id)
                     }
                 }
-                SheetAction(icon: MI.outlinedEdit, title: L10n.key("wallet_rename")) {
+                SheetAction(icon: MI.outlinedEdit, title: L10n.key("wallet_rename"), identifier: "wallet-action-rename") {
                     dialogs.dismissSheet()
                     dialogs.showCustom { WalletRenameDialog(current: wallet.name) { model.renameWallet(wallet.id, name: $0) } }
                 }
                 // The reveal screen asks for Face ID or the passcode itself, then reads the phrase.
-                SheetAction(icon: MI.outlinedVisibility, title: L10n.key("wallet_reveal_action"), subtitle: L10n.key("wallet_reveal_action_sub_ios")) {
+                SheetAction(icon: MI.outlinedVisibility, title: L10n.key("wallet_reveal_action"), subtitle: L10n.key("wallet_reveal_action_sub_ios"),
+                            identifier: "wallet-action-reveal") {
                     dialogs.dismissSheet()
                     model.path.append(.reveal(wallet.id))
                 }
                 SheetAction(icon: MI.outlinedDeleteOutline, title: L10n.key("wallet_remove_action"), subtitle: L10n.key("wallet_remove_action_sub"),
-                            destructive: true) {
+                            destructive: true, identifier: "wallet-action-remove") {
                     dialogs.dismissSheet()
                     dialogs.show(SkyDialog(title: Text(verbatim: L10n.format("wallet_remove_title", wallet.name)),
                                            message: Text("wallet_remove_body"),
@@ -121,6 +122,7 @@ private struct SheetAction: View {
     let title: LocalizedStringKey
     var subtitle: LocalizedStringKey? = nil
     var destructive = false
+    var identifier: String = ""
     let action: () -> Void
 
     var body: some View {
@@ -142,6 +144,7 @@ private struct SheetAction: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle(layer: .skyOnSurface))
+        .accessibilityIdentifier(identifier)
     }
 }
 

@@ -43,11 +43,8 @@ final class WalletTour: XCTestCase {
         for _ in 0..<20 where rows.firstMatch.waitForExistence(timeout: 3) {
             let row = app.buttons[rows.firstMatch.identifier]
             row.tap()
-            app.buttons["Remove from this device"].tap()
-            // The alert animates in; a tap made before it is up is lost.
-            let confirm = app.alerts.buttons["Remove"]
-            XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-            confirm.tap()
+            tapWhenUp("wallet-action-remove", in: app)
+            tapWhenUp("Remove", in: app)
             let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: row)
             XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 10), .completed, "a wallet stayed in the list")
         }
@@ -116,7 +113,7 @@ final class WalletTour: XCTestCase {
 
         app.swipeDown()
         app.buttons["wallet-coin-chip"].tap()
-        app.buttons["wallet-add-coin"].tap()
+        tapWhenUp("wallet-add-coin", in: app)
         XCTAssertTrue(app.textFields["wallet-add-name"].waitForExistence(timeout: 5))
         snap("\(language)-w10-add-coin")
         back(app)
@@ -133,8 +130,7 @@ final class WalletTour: XCTestCase {
     }
 
     private func back(_ app: XCUIApplication) {
-        let button = app.navigationBars.buttons.element(boundBy: 0)
-        if button.waitForExistence(timeout: 5) { button.tap() }
+        goBack(app)
     }
 
     private func snap(_ name: String) {
