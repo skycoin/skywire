@@ -2140,6 +2140,9 @@ func skycoinWebFlags(external bool) (flags []string) {
 		// A flag, not HTTP_PROXY: an internal app's env is set for the whole
 		// visor process.
 		flags = append(flags, "--socks5-proxy", proxy)
+		// Bitcoin too, through the same proxy and so the exit: skycoin-web's
+		// built-in electrum servers, tried in order.
+		flags = append(flags, "--btc-electrum-url", "default")
 	}
 	return flags
 }
