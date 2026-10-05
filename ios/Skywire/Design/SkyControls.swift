@@ -84,10 +84,11 @@ private struct PillLabel<Label: View>: View {
 /// FilledTonalButton: the app's standalone action.
 struct TonalButtonStyle: ButtonStyle {
     var height: CGFloat = 40
+    var horizontal: CGFloat = 24
 
     func makeBody(configuration: Configuration) -> some View {
         PillLabel(label: configuration.label, pressed: configuration.isPressed,
-                  fill: .skySecondaryContainer, ink: .skyOnSecondaryContainer, horizontal: 24, height: height)
+                  fill: .skySecondaryContainer, ink: .skyOnSecondaryContainer, horizontal: horizontal, height: height)
     }
 }
 
@@ -350,5 +351,35 @@ struct WeightedRow: Layout {
         let free = max(0, width - spacing * CGFloat(max(0, count - 1)))
         let total = w.reduce(0, +)
         return w.map { total > 0 ? free * $0 / total : 0 }
+    }
+}
+
+/// A row whose children share its width in proportion to their own widths (Android's Identity
+/// buttons, weighted by their labels' measured widths).
+struct ProportionalRow: Layout {
+    var spacing: CGFloat = 12
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let widths = share(proposal.width, subviews)
+        let height = subviews.indices.map { subviews[$0].sizeThatFits(ProposedViewSize(width: widths[$0], height: nil)).height }.max() ?? 0
+        return CGSize(width: proposal.width ?? widths.reduce(0, +) + spacing * CGFloat(max(0, subviews.count - 1)), height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let widths = share(bounds.width, subviews)
+        var x = bounds.minX
+        for index in subviews.indices {
+            subviews[index].place(at: CGPoint(x: x, y: bounds.midY), anchor: .leading,
+                                  proposal: ProposedViewSize(width: widths[index], height: bounds.height))
+            x += widths[index] + spacing
+        }
+    }
+
+    private func share(_ width: CGFloat?, _ subviews: Subviews) -> [CGFloat] {
+        let ideal = subviews.map { $0.sizeThatFits(.unspecified).width }
+        guard let width else { return ideal }
+        let free = max(0, width - spacing * CGFloat(max(0, subviews.count - 1)))
+        let total = ideal.reduce(0, +)
+        return ideal.map { total > 0 ? free * $0 / total : 0 }
     }
 }

@@ -15,6 +15,17 @@ enum LogSource: Hashable, Sendable {
 
     /// The apps the viewer offers.
     static let apps = [SkychatProfile.app, SocksProfile.app, "vpn-client", SkydexProfile.app]
+
+    /// An app's product name ("SkyChat"), or nil for one the app does not know.
+    static func productName(_ app: String) -> String? {
+        switch app {
+        case SkychatProfile.app: L10n.text("app_skychat")
+        case SocksProfile.app: L10n.text("app_skysocks")
+        case "vpn-client": L10n.text("app_skyvpn")
+        case SkydexProfile.app: L10n.text("app_skydex")
+        default: nil
+        }
+    }
 }
 
 /// Tails one source (Android: LogViewModel). Polling stops while paused and

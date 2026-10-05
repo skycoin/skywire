@@ -1335,48 +1335,117 @@
         }
       }
     },
-    "diag_footprint" : {
+    "diag_export" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Memory in use"
+            "value" : "Export all"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Memoria en uso"
+            "value" : "Exportar todo"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "占用内存"
+            "value" : "全部导出"
           }
         }
       }
     },
-    "diag_footprint_hint" : {
+    "diag_export_action" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "What iOS counts against this app (phys_footprint), the core included. On a device the core will run in a packet-tunnel extension, whose limit is about 50 MB."
+            "value" : "Export all logs"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lo que iOS le cuenta a esta app (phys_footprint), núcleo incluido. En un dispositivo, el núcleo se ejecutará en una extensión de túnel de paquetes, cuyo límite ronda los 50 MB."
+            "value" : "Exportar todos los registros"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "iOS 计入本应用的内存用量（phys_footprint），包括核心。在真机上，核心将运行在数据包隧道扩展中，其上限约为 50 MB。"
+            "value" : "导出全部日志"
+          }
+        }
+      }
+    },
+    "diag_export_done" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diagnostics exported."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diagnóstico exportado."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "诊断信息已导出。"
+          }
+        }
+      }
+    },
+    "diag_export_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every source above in one zip, with the device details and the config — without its secret key."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todas las fuentes de arriba en un solo zip, con los detalles del dispositivo y la configuración, sin su clave secreta."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把以上所有来源打包成一个 zip，附带设备信息和配置——不含私钥。"
+          }
+        }
+      }
+    },
+    "diag_exporting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collecting logs…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recopilando los registros…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在收集日志…"
           }
         }
       }
@@ -1400,29 +1469,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "核心日志级别"
-          }
-        }
-      }
-    },
-    "diag_level_confirm_action" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Restart"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reiniciar"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重启"
           }
         }
       }
@@ -4006,29 +4052,6 @@
         }
       }
     },
-    "logs_api_down" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Core API unreachable — showing nothing new. The Process source works even when the visor won’t start."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No se alcanza la API del núcleo: no se muestra nada nuevo. La fuente Proceso funciona incluso cuando el nodo no arranca."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "核心 API 无法访问，无法显示新内容。即使节点无法启动，“进程”来源仍然可用。"
-          }
-        }
-      }
-    },
     "logs_dropped" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4186,52 +4209,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "分享"
-          }
-        }
-      }
-    },
-    "logs_source" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Source"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Origen"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "来源"
-          }
-        }
-      }
-    },
-    "logs_source_apps" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apps"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apps"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "应用"
           }
         }
       }
@@ -4650,25 +4627,25 @@
         }
       }
     },
-    "settings_app_lock_unavailable" : {
+    "settings_app_lock_unavailable_ios" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This phone has no screen lock or enrolled biometric, so there is nothing to check against."
+            "value" : "This iPhone has no passcode, so there is nothing to check against. One is set in the Settings app, under Face ID & Passcode."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Este teléfono no tiene bloqueo de pantalla ni datos biométricos registrados, así que no hay nada con lo que comprobarlo."
+            "value" : "Este iPhone no tiene código, así que no hay nada con qué comprobar. Se pone en la app Ajustes, en Face ID y código."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这部手机既没有设置锁屏密码，也没有录入生物识别，因此无从校验。"
+            "value" : "这台 iPhone 没有设置密码，因此无从验证。可在“设置”App 的“面容 ID 与密码”中设置。"
           }
         }
       }
@@ -4765,25 +4742,71 @@
         }
       }
     },
-    "settings_copy_pk" : {
+    "settings_config" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Copy public key"
+            "value" : "Config"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Copiar la clave pública"
+            "value" : "Configuración"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制公钥"
+            "value" : "配置"
+          }
+        }
+      }
+    },
+    "settings_config_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The complete visor configuration, as a file you keep. It is the only way to move this identity to another device or bring it back."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La configuración completa del nodo, como un archivo que te quedas. Es la única forma de llevar esta identidad a otro dispositivo o de recuperarla."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完整的节点配置，导出为一个由你自己保管的文件。这是把该身份迁移到其他设备或日后找回的唯一途径。"
+          }
+        }
+      }
+    },
+    "settings_continue" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continuar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续"
           }
         }
       }
@@ -4857,25 +4880,278 @@
         }
       }
     },
-    "settings_fleet_restart" : {
+    "settings_encrypt" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Turning it on or off restarts the core if it is running."
+            "value" : "Encrypt the config at rest"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Al activarla o desactivarla se reinicia el núcleo si está en marcha."
+            "value" : "Cifrar la configuración en reposo"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "开启或关闭时，如果核心正在运行，会将其重启。"
+            "value" : "加密存储配置"
+          }
+        }
+      }
+    },
+    "settings_encrypt_disable_prompt" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirm to store the config unencrypted"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirma para guardar la configuración sin cifrar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "确认以明文存储配置"
+          }
+        }
+      }
+    },
+    "settings_encrypt_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seals the config file whenever Skywire is disconnected, under a key this phone will not hand out. Protects the secret key if the device is examined; it makes no difference while you are connected."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sella el archivo de configuración siempre que Skywire esté desconectada, bajo una clave que este teléfono no entregará. Protege la clave secreta si examinan el dispositivo; no cambia nada mientras estás conectado."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每当 Skywire 断开连接时，用一把本机不会交出的密钥封存配置文件。设备被检查时可以保护私钥；连接期间则没有区别。"
+          }
+        }
+      }
+    },
+    "settings_encrypt_off_done" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Config is no longer encrypted."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La configuración ya no está cifrada."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置已不再加密。"
+          }
+        }
+      }
+    },
+    "settings_encrypt_on_done" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Config encrypted."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configuración cifrada."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置已加密。"
+          }
+        }
+      }
+    },
+    "settings_encrypt_on_pending" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The config will be encrypted when you disconnect."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La configuración se cifrará cuando te desconectes."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "断开连接后将对配置加密。"
+          }
+        }
+      }
+    },
+    "settings_encrypt_warning_ios" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If this iPhone is erased, or Skywire’s data is restored from a backup, the sealing key is gone and the identity in the config cannot be recovered. Export the config first if it matters."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si este iPhone se borra, o los datos de Skywire se restauran desde una copia de seguridad, la clave de sellado desaparece y la identidad de la configuración no se puede recuperar. Exporta la configuración antes si te importa."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果这台 iPhone 被抹掉，或 Skywire 的数据从备份恢复，加密密钥就会丢失，配置中的身份将无法恢复。如果它很重要，请先导出配置。"
+          }
+        }
+      }
+    },
+    "settings_export" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export config"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportar la configuración"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出配置"
+          }
+        }
+      }
+    },
+    "settings_export_done" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Config exported."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configuración exportada."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置已导出。"
+          }
+        }
+      }
+    },
+    "settings_export_prompt" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export the Skywire config"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportar la configuración de Skywire"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出 Skywire 配置"
+          }
+        }
+      }
+    },
+    "settings_export_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export the config?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Exportar la configuración?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要导出配置吗？"
+          }
+        }
+      }
+    },
+    "settings_export_warning" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file contains this visor’s secret key in plain text. Anyone who reads it can run as this visor. Save it somewhere only you can reach — not a shared drive, not a chat."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El archivo contiene la clave secreta de este nodo en texto plano. Cualquiera que lo lea puede hacerse pasar por este nodo. Guárdalo donde solo tú puedas llegar: ni en una unidad compartida, ni en un chat."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件中以明文包含本节点的私钥。任何人读到它，都能以本节点的身份运行。请存放在只有你能访问的地方——不要放共享网盘，也不要发到聊天里。"
           }
         }
       }
@@ -4903,6 +5179,52 @@
         }
       }
     },
+    "settings_identity_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This phone is a Skywire visor, and its key is what everything else addresses. Both actions below end that identity."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este teléfono es un nodo Skywire, y su clave es la dirección con la que todo lo demás lo alcanza. Las dos acciones de abajo acaban con esa identidad."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这部手机本身就是一个 Skywire 节点，其他一切都通过它的密钥来寻址。下面两项操作都会终结这个身份。"
+          }
+        }
+      }
+    },
+    "settings_identity_loss" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You will lose everything this phone holds as %1$@: its chat history and contacts, its groups, and the address other visors know it by. Nothing here is recoverable afterwards, and nothing moves to the new key."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perderás todo lo que este teléfono guarda como %1$@: su historial de chat y sus contactos, sus grupos y la dirección por la que lo conocen otros nodos. Nada de esto se puede recuperar después, y nada pasa a la clave nueva."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这部手机以 %1$@ 身份保存的一切都会丢失：聊天记录和联系人、群组，以及其他节点认识它的那个地址。这些事后都无法恢复，也不会转移到新密钥上。"
+          }
+        }
+      }
+    },
     "settings_identity_none" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4922,6 +5244,52 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "尚无身份。在首页连接一次，就会生成一个。"
+          }
+        }
+      }
+    },
+    "settings_identity_reset" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New identity generated. The core is starting with it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nueva identidad generada. El núcleo está arrancando con ella."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已生成新身份。核心正在以它启动。"
+          }
+        }
+      }
+    },
+    "settings_identity_working" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restarting the Skywire core with the new identity…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reiniciando el núcleo de Skywire con la nueva identidad…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在以新身份重启 Skywire 核心…"
           }
         }
       }
@@ -4949,25 +5317,140 @@
         }
       }
     },
-    "settings_language_hint_ios" : {
+    "settings_language_en" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Change it in the iOS Settings app, under Skywire › Language. Logs and whatever the visor itself reports stay in English — they are read next to a desktop’s, and a translated log line is one nobody can search for."
+            "value" : "English"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Se cambia en la app Ajustes de iOS, en Skywire › Idioma. Los registros y todo lo que informa el propio nodo se quedan en inglés: se leen junto a los de un escritorio, y una línea de registro traducida es una línea que nadie puede buscar."
+            "value" : "English"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请在 iOS 的“设置”应用中前往“Skywire › 语言”更改。日志和节点自身报告的内容仍为英文——它们要与桌面端的日志放在一起看，翻译过的日志行没有人能搜到。"
+            "value" : "English"
+          }
+        }
+      }
+    },
+    "settings_language_es" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Español"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Español"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Español"
+          }
+        }
+      }
+    },
+    "settings_language_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What this app is written in. Logs and whatever the visor itself reports stay in English — they are read next to a desktop’s, and a translated log line is one nobody can search for."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El idioma en el que está escrita esta app. Los registros y todo lo que informa el propio nodo se quedan en inglés: se leen junto a los de un escritorio, y una línea de registro traducida es una línea que nadie puede buscar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用界面所用的语言。日志和节点自身报告的内容仍为英文——它们要与桌面端的日志放在一起看，翻译过的日志行没有人能搜到。"
+          }
+        }
+      }
+    },
+    "settings_language_system" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sistema"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随系统"
+          }
+        }
+      }
+    },
+    "settings_language_zh_cn" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "简体中文"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "简体中文"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "简体中文"
+          }
+        }
+      }
+    },
+    "settings_license" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "License"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Licencia"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "许可证"
           }
         }
       }
@@ -5018,25 +5501,140 @@
         }
       }
     },
-    "settings_pk_qr" : {
+    "settings_new_action" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Public key as a QR code"
+            "value" : "Generate new identity"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Clave pública en código QR"
+            "value" : "Generar una identidad nueva"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "公钥二维码"
+            "value" : "生成新身份"
+          }
+        }
+      }
+    },
+    "settings_new_config" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New identity"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nueva identidad"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建身份"
+          }
+        }
+      }
+    },
+    "settings_new_extra" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The new key is generated on this phone. Nobody has it yet, so nobody can reach you at it until you share it again."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La nueva clave se genera en este teléfono. Todavía no la tiene nadie, así que nadie podrá alcanzarte en ella hasta que la compartas de nuevo."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新密钥在这部手机上生成。目前还没有人拥有它，在你再次分享之前，没有人能通过它找到你。"
+          }
+        }
+      }
+    },
+    "settings_new_final_body" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The current key is destroyed, not archived. If you have not exported the config, this identity is gone for good — along with everything addressed to it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La clave actual se destruye, no se archiva. Si no has exportado la configuración, esta identidad se pierde para siempre, junto con todo lo que estuviera dirigido a ella."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前密钥会被销毁，而不是存档。如果你没有导出配置，这个身份就永远消失了——发往它的一切也一并消失。"
+          }
+        }
+      }
+    },
+    "settings_new_final_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This cannot be undone"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esto no se puede deshacer"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此操作无法撤销"
+          }
+        }
+      }
+    },
+    "settings_new_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generate a new identity?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Generar una identidad nueva?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要生成新身份吗？"
           }
         }
       }
@@ -5317,6 +5915,167 @@
         }
       }
     },
+    "settings_replace_action" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replace identity"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reemplazar la identidad"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更换身份"
+          }
+        }
+      }
+    },
+    "settings_replace_final_body" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Everything above is erased and this phone becomes the visor %1$@. Make sure you still hold the current secret key somewhere if you ever want it back — export the config first if you do not."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo lo de arriba se borra y este teléfono pasa a ser el nodo %1$@. Asegúrate de conservar la clave secreta actual en algún sitio por si alguna vez la quieres de vuelta: si no, exporta primero la configuración."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以上内容会全部抹除，这部手机将变成节点 %1$@。如果日后还想换回来，请确认你在别处保有当前私钥；如果没有，请先导出配置。"
+          }
+        }
+      }
+    },
+    "settings_replace_final_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This cannot be undone"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esto no se puede deshacer"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此操作无法撤销"
+          }
+        }
+      }
+    },
+    "settings_replace_new_pk" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The new public key will be %1$@."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La nueva clave pública será %1$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新的公钥将是 %1$@。"
+          }
+        }
+      }
+    },
+    "settings_replace_sk" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replace secret key"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reemplazar clave"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更换私钥"
+          }
+        }
+      }
+    },
+    "settings_replace_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replace this visor’s identity?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Reemplazar la identidad de este nodo?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要更换本节点的身份吗？"
+          }
+        }
+      }
+    },
+    "settings_sk_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste the 64-character secret key you want this phone to run as. It is checked by the Skywire core before anything changes."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pega la clave secreta de 64 caracteres con la que quieres que funcione este teléfono. El núcleo de Skywire la comprueba antes de cambiar nada."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴你想让这部手机使用的 64 字符私钥。Skywire 核心会先校验，之后才会改动任何内容。"
+          }
+        }
+      }
+    },
     "settings_sk_invalid" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5336,6 +6095,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这不是私钥——应为 %1$lld 位十六进制字符。"
+          }
+        }
+      }
+    },
+    "settings_sk_label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Secret key"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clave secreta"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "私钥"
           }
         }
       }
@@ -5382,6 +6164,236 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "不是私钥：这 64 个字符不是有效的 secp256k1 密钥。"
+          }
+        }
+      }
+    },
+    "settings_sk_replaced" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Identity replaced. The core is starting with the new key."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Identidad reemplazada. El núcleo está arrancando con la nueva clave."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "身份已更换。核心正在以新密钥启动。"
+          }
+        }
+      }
+    },
+    "settings_sk_unchanged" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That is already this visor’s key — nothing to change."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esa ya es la clave de este nodo: no hay nada que cambiar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这已经是本节点的密钥，无需更改。"
+          }
+        }
+      }
+    },
+    "settings_source_code" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Source code"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Código fuente"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "源代码"
+          }
+        }
+      }
+    },
+    "settings_theme" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Theme"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tema"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主题"
+          }
+        }
+      }
+    },
+    "settings_theme_dark" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dark"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oscuro"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深色"
+          }
+        }
+      }
+    },
+    "settings_theme_light" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Light"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claro"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浅色"
+          }
+        }
+      }
+    },
+    "settings_theme_system" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sistema"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随系统"
+          }
+        }
+      }
+    },
+    "settings_update_installed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installed"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Instalada"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安装"
+          }
+        }
+      }
+    },
+    "settings_update_ios" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updates for this build come from TestFlight or the App Store."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las actualizaciones de esta versión llegan por TestFlight o la App Store."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本的更新来自 TestFlight 或 App Store。"
+          }
+        }
+      }
+    },
+    "settings_updates" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updates"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualizaciones"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新"
           }
         }
       }

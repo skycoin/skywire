@@ -150,13 +150,16 @@ enum L10n {
         LocalizedStringKey(key)
     }
 
+    /// The strings of the language chosen in Settings (AppLanguage), switched without a relaunch.
+    nonisolated(unsafe) static var bundle: Bundle = AppLanguage.current().bundle
+
     static func text(_ key: String) -> String {
-        NSLocalizedString(key, comment: "")
+        bundle.localizedString(forKey: key, value: nil, table: nil)
     }
 
     /// The key's text with `arguments` in its placeholders (`%1$@`, `%1$lld`:
     /// Android's `%1$s` and `%1$d`, converted when seeded).
     static func format(_ key: String, _ arguments: any CVarArg...) -> String {
-        String(format: NSLocalizedString(key, comment: ""), locale: .current, arguments: arguments)
+        String(format: text(key), locale: .current, arguments: arguments)
     }
 }
