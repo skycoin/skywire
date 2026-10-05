@@ -100,18 +100,23 @@ struct SkyDialog: Identifiable {
     }
 
     let id = UUID()
-    let title: Text
+    var title: Text = Text(verbatim: "")
     var message: Text? = nil
     var scrollable = false
-    var actions: [Action]
+    var actions: [Action] = []
+    /// Content that draws its own title and buttons (a dialog with a field).
+    var custom: AnyView? = nil
 }
 
 /// Dialogs drawn over the whole window, the bottom bar included (Android's dialog window).
 @MainActor
 final class SkyDialogs: ObservableObject {
     @Published var current: SkyDialog?
+    @Published var sheet: SkySheet?
     @Published private(set) var toastText: Text?
+    @Published private(set) var snackText: Text?
     private var toastTask: Task<Void, Never>?
+    private var snackTask: Task<Void, Never>?
 
     func show(_ dialog: SkyDialog) {
         withAnimation(.easeOut(duration: 0.15)) { current = dialog }
@@ -130,6 +135,21 @@ final class SkyDialogs: ObservableObject {
             guard !Task.isCancelled else { return }
             withAnimation(.easeIn(duration: 0.2)) { toastText = nil }
         }
+    }
+
+    /// A Snackbar: above the bar, four seconds.
+    func snackbar(_ text: Text) {
+        snackTask?.cancel()
+        withAnimation(.easeOut(duration: 0.15)) { snackText = text }
+        snackTask = Task {
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeIn(duration: 0.2)) { snackText = nil }
+        }
+    }
+
+    func showCustom<Content: View>(@ViewBuilder _ content: () -> Content) {
+        show(SkyDialog(custom: AnyView(content())))
     }
 
     func showHelp(_ topic: HelpTopic) {
@@ -151,6 +171,19 @@ struct SkyDialogLayer: View {
                     .background(Color.skyInverseSurface, in: .sky(20))
                     .frame(maxHeight: .infinity, alignment: .bottom)
                     .padding(.bottom, 128)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+            if let snack = dialogs.snackText {
+                snack.skyText(.bodyMedium)
+                    .foregroundStyle(Color.skyInverseOnSurface)
+                    .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .background(Color.skyInverseSurface, in: .sky(SkyRadius.extraSmall))
+                    .skyElevation(6)
+                    .padding(12)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, SkyBottomBar.height)
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
@@ -180,6 +213,17 @@ struct SkyDialogLayer: View {
         let maxHeight: CGFloat
 
         var body: some View {
+            if let custom = dialog.custom {
+                custom
+                    .padding(24)
+                    .frame(maxHeight: maxHeight)
+                    .background(Color.skyContainerHigh, in: .sky(SkyRadius.extraLarge))
+            } else {
+                standard
+            }
+        }
+
+        private var standard: some View {
             VStack(alignment: .leading, spacing: 0) {
                 dialog.title.skyText(.headlineSmall).foregroundStyle(Color.skyOnSurface)
                 if let message = dialog.message {
@@ -281,6 +325,35 @@ private struct CloudButton: View {
             .buttonStyle(PressStyle(layer: .white, shape: AnyShape(Circle())))
             .accessibilityLabel(Text("tab_hub_description"))
             .accessibilityIdentifier("tab-hub")
+        }
+    }
+}
+
+/// A custom dialog's title and its end-aligned text buttons (AlertDialog's own layout).
+struct DialogFrame<Body: View>: View {
+    let title: Text
+    var confirm: LocalizedStringKey
+    var destructive = false
+    var enabled = true
+    let onConfirm: () -> Void
+    @ViewBuilder let content: Body
+    @EnvironmentObject private var dialogs: SkyDialogs
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            title.skyText(.headlineSmall).foregroundStyle(Color.skyOnSurface)
+            content.padding(.top, 16)
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                Button { dialogs.dismiss() } label: { Text("cancel") }.buttonStyle(.skyText)
+                Button {
+                    dialogs.dismiss()
+                    onConfirm()
+                } label: { Text(confirm) }
+                .buttonStyle(SkyTextButtonStyle(color: destructive ? .skyError : .skyPrimary))
+                .disabled(!enabled)
+            }
+            .padding(.top, 24)
         }
     }
 }

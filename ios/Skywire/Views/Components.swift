@@ -52,6 +52,22 @@ enum Format {
         return parts.joined(separator: L10n.text("unit_separator"))
     }
 
+    /// "1h 04m 12s", "4m 05s", "9s": zero-padded after the leading unit (Android: formatDuration).
+    static func duration(_ seconds: Double) -> String {
+        let total = max(0, Int(seconds))
+        let h = total / 3_600, m = total % 3_600 / 60, s = total % 60
+        let pad = { (n: Int) in String(format: "%02d", n) }
+        var parts: [String] = []
+        if h > 0 {
+            parts = [L10n.format("unit_hours", String(h)), L10n.format("unit_minutes", pad(m)), L10n.format("unit_seconds", pad(s))]
+        } else if m > 0 {
+            parts = [L10n.format("unit_minutes", String(m)), L10n.format("unit_seconds", pad(s))]
+        } else {
+            parts = [L10n.format("unit_seconds", String(s))]
+        }
+        return parts.joined(separator: L10n.text("unit_separator"))
+    }
+
     /// `text` for display with a break opportunity between every character
     /// (a zero-width space), so a key wraps anywhere without the hyphen
     /// iOS would otherwise insert, which reads as part of the key. Display

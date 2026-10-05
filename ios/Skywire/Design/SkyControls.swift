@@ -178,8 +178,8 @@ struct SkySwitchStyle: ToggleStyle {
         var body: some View {
             let on = configuration.isOn
             let thumb: CGFloat = pressed ? 28 : (on ? 24 : 16)
+            // Only the switch: every caller lays out its own title; the label is for accessibility.
             HStack(spacing: 0) {
-                configuration.label
                 ZStack {
                     Capsule().fill(trackColor(on))
                     Capsule().strokeBorder(on ? .clear : borderColor, lineWidth: 2)

@@ -84,7 +84,7 @@ struct LogsView: View {
         Binding(
             get: {
                 switch source {
-                case .core: 0
+                case .core, .visor: 0
                 case .process: 1
                 case .app: 2
                 }
