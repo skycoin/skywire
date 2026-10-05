@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/0magnet/bottle/vnet"
@@ -41,7 +40,6 @@ func init() {
 	// Mount the vendored skycoin-web command as the `web` subcommand.
 	skycoinweb.RootCmd.Use = "web"
 	RootCmd.AddCommand(skycoinweb.RootCmd)
-	skycoinweb.Mount = publish
 	// The resolving proxy listens on the visor's loopback, which in a browser
 	// tab is the page's virtual one.
 	skycoinweb.NodeDial = func(_ context.Context, network, addr string) (net.Conn, error) {
@@ -49,29 +47,26 @@ func init() {
 	}
 }
 
-var (
-	publishMu sync.Mutex
-	published *mounted
-)
-
 // mounted gives the handler an identity. The wallet's handler is a func, which
 // ClearHTTPHandler's comparison cannot take.
 type mounted struct{ http.Handler }
 
-// publish puts the running wallet's handler in the launcher registry, and takes
-// out only that handler when it stops, so a restart cannot remove its successor.
-func publish(h http.Handler) {
-	publishMu.Lock()
-	defer publishMu.Unlock()
-	if h == nil {
-		if published != nil {
-			launcher.ClearHTTPHandler(skyenv.SkycoinWebName, published)
-			published = nil
+// publisher returns a Mount for one run. It puts that run's handler in the
+// launcher registry and takes out only that one, so the old run of a restart,
+// stopping after the new one has started, cannot remove its successor.
+// skycoin-web defers Mount(nil) by value, so each run keeps its own.
+func publisher() func(http.Handler) {
+	var mine *mounted
+	return func(h http.Handler) {
+		if h == nil {
+			if mine != nil {
+				launcher.ClearHTTPHandler(skyenv.SkycoinWebName, mine)
+			}
+			return
 		}
-		return
+		mine = &mounted{h}
+		launcher.RegisterHTTPHandler(skyenv.SkycoinWebName, mine)
 	}
-	published = &mounted{h}
-	launcher.RegisterHTTPHandler(skyenv.SkycoinWebName, published)
 }
 
 // RunSkycoinWeb runs the vendored skycoin-web thin-client wallet server
@@ -102,31 +97,44 @@ func runWallet(ctx context.Context, args []string) error {
 	// RunE directly, not Execute: cobra executes from the root of the tree this
 	// command is mounted in, with os.Args, which re-ran the visor's own command.
 	cmd := skycoinweb.RootCmd
-	resetFlags(cmd.Flags())
-	if err := cmd.ParseFlags(args[i:]); err != nil {
+	if err := parseFresh(cmd.Flags(), args[i:]); err != nil {
 		return err
 	}
 	if err := cmd.ValidateFlagGroups(); err != nil {
 		return err
 	}
 	cmd.SetContext(ctx)
+	skycoinweb.Mount = publisher()
 	return cmd.RunE(cmd, cmd.Flags().Args())
 }
 
-// resetFlags returns every flag to its default. The command is a package
-// global, so a restart would otherwise keep the last run's values, and repeated
-// flags such as --wallet-dir would add to them.
-func resetFlags(fs *pflag.FlagSet) {
+// parseFresh parses args as if fs had never been parsed. The command is a
+// package global, so a restart would otherwise keep the last run's values.
+// A slice flag that was set once appends to whatever it holds, default
+// included, so slices start empty and get their default back only if args
+// leave them unset.
+func parseFresh(fs *pflag.FlagSet, args []string) error {
 	fs.VisitAll(func(f *pflag.Flag) {
 		if s, ok := f.Value.(pflag.SliceValue); ok {
-			var def []string
-			if d := strings.Trim(f.DefValue, "[]"); d != "" {
-				def = strings.Split(d, ",")
-			}
-			_ = s.Replace(def) //nolint:errcheck
+			_ = s.Replace(nil) //nolint:errcheck
 		} else {
 			_ = f.Value.Set(f.DefValue) //nolint:errcheck
 		}
 		f.Changed = false
 	})
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	fs.VisitAll(func(f *pflag.Flag) {
+		s, ok := f.Value.(pflag.SliceValue)
+		if !ok || f.Changed {
+			return
+		}
+		var def []string
+		if d := strings.Trim(f.DefValue, "[]"); d != "" {
+			def = strings.Split(d, ",")
+		}
+		_ = s.Replace(def) //nolint:errcheck
+	})
+	return nil
 }

@@ -265,12 +265,7 @@ func (p *Proc) startInProcess() error {
 				p.log.Errorf("App %s panicked: %v", p.conf.AppName, r)
 			}
 
-			for _, env := range envs {
-				parts := strings.SplitN(env, "=", 2)
-				if len(parts) == 2 {
-					_ = os.Unsetenv(parts[0]) //nolint:errcheck
-				}
-			}
+			appcommon.UnsetInternalAppEnv(envs)
 
 			// An in-process app exiting on its own (RunFunc returned or
 			// panicked) is the equivalent of an external app's process
