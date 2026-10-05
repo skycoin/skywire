@@ -3,8 +3,6 @@
 // Package visorconfig pkg/visor/visorconfig/walletconfig_wasm.go c3-app-wallet
 package visorconfig
 
-// walletCustodyDiskCapable: a browser build has no backend process and no
-// filesystem to hold wallet files, so disk custody cannot be realized here.
-// A config carrying custody:"disk" (written by a native visor) clamps to
-// browser rather than offering a mode that would fail at use time.
-const walletCustodyDiskCapable = false
+// walletCustodyDiskCapable: a browser visor runs the skycoin-web app in-process
+// with its wallet files in the tab's persistent filesystem (/opt/skywire).
+const walletCustodyDiskCapable = true
