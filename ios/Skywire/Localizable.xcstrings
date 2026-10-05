@@ -9884,6 +9884,29 @@
         }
       }
     },
+    "wallet_remove_action_sub" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deletes the keys here. Without the phrase the coins are gone for good."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Borra las claves de aquí. Sin la frase, las monedas se pierden para siempre."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除本机保存的密钥。没有助记词，币将永远无法找回。"
+          }
+        }
+      }
+    },
     "wallet_remove_body" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10367,25 +10390,48 @@
         }
       }
     },
-    "wallet_reveal_autohide" : {
+    "wallet_reveal_action_sub_ios" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Screenshots are disabled. This screen closes on its own in %1$@."
+            "value" : "Shows all twelve words in the clear. Asks for Face ID, Touch ID or your passcode first."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Las capturas de pantalla están desactivadas. Esta pantalla se cierra sola en %1$@."
+            "value" : "Muestra las doce palabras a la vista. Pide Face ID, Touch ID o tu código antes."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已禁用截屏。本页面将在 %1$@ 后自动关闭。"
+            "value" : "以明文显示全部十二个助记词。需要先验证面容 ID、触控 ID 或设备密码。"
+          }
+        }
+      }
+    },
+    "wallet_reveal_autohide_ios" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This screen closes on its own in %1$@."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta pantalla se cierra sola en %1$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本页面将在 %1$@ 后自动关闭。"
           }
         }
       }
@@ -11260,29 +11306,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "分享"
-          }
-        }
-      }
-    },
-    "wallet_sheet_done" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Done"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Listo"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "完成"
           }
         }
       }
