@@ -20,10 +20,13 @@ func TestSkycoinWebFlags(t *testing.T) {
 	enableDmsgWeb, enableSkynetWeb = true, true
 
 	internal := strings.Join(skycoinWebFlags(false), " ")
-	for _, want := range []string{"--no-listen", "--wallet-dir /opt/skywire/wallets", "--socks5-proxy socks5://127.0.0.1:4445", ".dmsg:6420", "--btc-electrum-url default"} {
+	for _, want := range []string{"--no-listen", "--wallet-dir /opt/skywire/wallets", "--socks5-proxy socks5://127.0.0.1:4445", ".dmsg:6420"} {
 		if !strings.Contains(internal, want) {
 			t.Errorf("internal flags %q lack %q", internal, want)
 		}
+	}
+	if strings.Contains(internal, "--btc-electrum-url") {
+		t.Errorf("skycoin-web has its own electrum default, got %q", internal)
 	}
 	if external := strings.Join(skycoinWebFlags(true), " "); !strings.Contains(external, "--host 127.0.0.1 --port 8002") || strings.Contains(external, "--no-listen") {
 		t.Errorf("an external process needs a port, got %q", external)
@@ -32,5 +35,20 @@ func TestSkycoinWebFlags(t *testing.T) {
 	skycoinWebAddr = "127.0.0.1:9000"
 	if got := strings.Join(skycoinWebFlags(false), " "); !strings.Contains(got, "--host 127.0.0.1 --port 9000") {
 		t.Errorf("a configured address should open that port, got %q", got)
+	}
+}
+
+func TestSetFlag(t *testing.T) {
+	for _, tc := range []struct {
+		in   []string
+		want string
+	}{
+		{[]string{"--no-listen"}, "--no-listen --btc-electrum-url none"},
+		{[]string{"--btc-electrum-url", "default", "--no-listen"}, "--btc-electrum-url none --no-listen"},
+		{[]string{"--btc-electrum-url=default"}, "--btc-electrum-url=none"},
+	} {
+		if got := strings.Join(setFlag(tc.in, "--btc-electrum-url", "none"), " "); got != tc.want {
+			t.Errorf("setFlag(%q) = %q, want %q", tc.in, got, tc.want)
+		}
 	}
 }

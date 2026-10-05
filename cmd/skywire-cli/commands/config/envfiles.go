@@ -395,6 +395,12 @@ const envfileLinux = `#
 #	/opt/skywire/wallets, which the tab keeps across reloads.
 #SKYCOINWEBWALLET=''
 
+#--	Electrum servers for Bitcoin, comma separated and tried in
+#	order. Empty = skycoin-web's built-in list. none = no Bitcoin.
+#	A value here also replaces the one in an existing config on
+#	the next regeneration.
+#SKYCOINWEBELECTRUM=''
+
 #--	Drop skycoin-web to this user (POSIX setuid before exec).
 #	Empty = run as the visor's own UID. Required when the visor
 #	runs as _skywire and the wallet should access the operator's

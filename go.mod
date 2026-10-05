@@ -105,7 +105,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/sirupsen/logrus v1.10.2
-	github.com/skycoin/skycoin v0.28.7-0.20261005022356-34fa47229caa
+	github.com/skycoin/skycoin v0.28.7-0.20261005182116-4936597b9020
 	github.com/soheilhy/cmux v0.1.5
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
