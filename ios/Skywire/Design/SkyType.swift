@@ -33,11 +33,13 @@ enum SkyTextStyle {
     }
 
     /// The style's font at the current text size (Android's sp follow the system font scale).
-    func uiFont(mono: Bool = false) -> UIFont {
+    func uiFont(mono: Bool = false, bold: Bool = false) -> UIFont {
         let spec = spec
+        // Android's `.copy(fontWeight = Bold)` on a Nunito style: the family's Bold instance.
+        let name = bold && spec.font.hasPrefix("Nunito") ? "Nunito-Bold" : spec.font
         let base = mono
-            ? UIFont.monospacedSystemFont(ofSize: spec.size, weight: .semibold)
-            : UIFont(name: spec.font, size: spec.size) ?? .systemFont(ofSize: spec.size)
+            ? UIFont.monospacedSystemFont(ofSize: spec.size, weight: bold ? .bold : .semibold)
+            : UIFont(name: name, size: spec.size) ?? .systemFont(ofSize: spec.size)
         return UIFontMetrics(forTextStyle: .body).scaledFont(for: base)
     }
 }
@@ -45,12 +47,13 @@ enum SkyTextStyle {
 private struct SkyTextModifier: ViewModifier {
     let style: SkyTextStyle
     let mono: Bool
+    var bold = false
     var tracking: CGFloat?
     // Read so a text-size change redraws with the new metrics.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     func body(content: Content) -> some View {
-        let font = style.uiFont(mono: mono)
+        let font = style.uiFont(mono: mono, bold: bold)
         let line = UIFontMetrics(forTextStyle: .body).scaledValue(for: style.spec.line)
         // Material centres glyphs in a fixed line box: pad to it.
         let extra = max(0, line - font.lineHeight)
@@ -63,7 +66,7 @@ private struct SkyTextModifier: ViewModifier {
 }
 
 extension View {
-    func skyText(_ style: SkyTextStyle, mono: Bool = false, tracking: CGFloat? = nil) -> some View {
-        modifier(SkyTextModifier(style: style, mono: mono, tracking: tracking))
+    func skyText(_ style: SkyTextStyle, mono: Bool = false, bold: Bool = false, tracking: CGFloat? = nil) -> some View {
+        modifier(SkyTextModifier(style: style, mono: mono, bold: bold, tracking: tracking))
     }
 }

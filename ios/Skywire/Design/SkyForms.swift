@@ -38,6 +38,7 @@ struct SkySheetLayer: View {
                 .frame(maxWidth: .infinity)
                 .foregroundStyle(Color.skyOnSurface)
                 .background(TopRounded(radius: SkyRadius.extraLarge).fill(Color.skyContainerLow).ignoresSafeArea(edges: .bottom))
+                .accessibilityAddTraits(.isModal)
                 .offset(y: max(0, drag))
                 .gesture(DragGesture()
                     .updating($drag) { value, state, _ in state = value.translation.height }
@@ -70,13 +71,17 @@ struct SkyOutlinedTextField: View {
     /// The colour behind the field, for the label's notch in the border.
     var notch: Color = .skyBackground
     var identifier: String? = nil
+    var leadingIcon: String? = nil
+    var radius: CGFloat = SkyRadius.extraSmall
     @FocusState private var focused: Bool
 
     var body: some View {
         let floating = focused || !text.isEmpty
+        let inset: CGFloat = leadingIcon == nil ? 16 : 40
         ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: SkyRadius.extraSmall)
-                .strokeBorder(borderColor, lineWidth: focused || isError ? 2 : 1)
+            if let leadingIcon {
+                MaterialIcon(leadingIcon, size: 16).foregroundStyle(Color.skyOnSurfaceVariant).padding(.leading, 14)
+            }
             if let label {
                 Text(label)
                     .skyText(floating ? .bodySmall : .bodyLarge)
@@ -84,12 +89,15 @@ struct SkyOutlinedTextField: View {
                     .padding(.horizontal, floating ? 4 : 0)
                     .background(floating ? notch : .clear)
                     .offset(y: floating ? -28 : 0)
-                    .padding(.leading, floating ? 12 : 16)
+                    .padding(.leading, floating ? 12 : inset)
                     .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
             if let placeholder, text.isEmpty, label == nil || focused {
-                Text(placeholder).skyText(.bodyLarge).foregroundStyle(Color.skyOnSurfaceVariant)
-                    .padding(.leading, 16).allowsHitTesting(false)
+                // The tint keeps a URL-shaped hint from drawing as a link.
+                Text(placeholder).skyText(.bodyLarge).foregroundStyle(Color.skyOnSurfaceVariant).tint(.skyOnSurfaceVariant)
+                    .padding(.leading, inset).allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
             // An empty prompt: the label and placeholder above are the field's own drawing.
             TextField(text: $text, prompt: Text(verbatim: "")) { label.map { Text($0) } ?? placeholder.map { Text($0) } ?? Text(verbatim: "") }
@@ -100,10 +108,15 @@ struct SkyOutlinedTextField: View {
                 .keyboardType(keyboard)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
-                .padding(.horizontal, 16)
+                .padding(.leading, inset)
+                .padding(.trailing, 16)
+                // The drawn label and hint are decoration; the field itself carries them.
+                .accessibilityLabel(label.map { Text($0) } ?? placeholder.map { Text($0) } ?? Text(verbatim: ""))
                 .accessibilityIdentifier(identifier ?? "")
         }
-        .frame(minHeight: 56)
+        // The border is an overlay so the field keeps its 56 pt in a dialog that offers more.
+        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+        .overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(borderColor, lineWidth: focused || isError ? 2 : 1))
         .contentShape(Rectangle())
         .onTapGesture { focused = true }
     }
