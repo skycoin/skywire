@@ -419,6 +419,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebnodes")
 	skyenvStringVar(genConfigCmd.Flags(), &skycoinWebWalletDir, "skycoinwebwallet", "${SKYCOINWEBWALLET:-"+swWallet+"}", "skycoin web wallet dir override")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebwallet")
+	skyenvStringVar(genConfigCmd.Flags(), &skycoinWebElectrum, "skycoinwebelectrum", "${SKYCOINWEBELECTRUM}", "skycoin web electrum servers (comma separated), default, or none")
+	gHiddenFlags = append(gHiddenFlags, "skycoinwebelectrum")
 	skyenvStringVar(genConfigCmd.Flags(), &skycoinWebUser, "skycoinwebuser", "${SKYCOINWEBUSER}", "skycoin web UID (empty inherits visor UID)")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebuser")
 
@@ -1151,6 +1153,11 @@ func mergeExistingApps(log *logging.Logger) {
 		conf.Launcher.Apps[i].AutoStart = prev.AutoStart
 		if len(prev.Args) > 0 {
 			conf.Launcher.Apps[i].Args = prev.Args
+			// A value set in skywire.conf wins over the kept args, or it could never
+			// reach a config that already has them.
+			if name == skyenv.SkycoinWebName && skycoinWebElectrum != "" {
+				conf.Launcher.Apps[i].Args = setFlag(prev.Args, "--btc-electrum-url", skycoinWebElectrum)
+			}
 		}
 		// Env belongs with the args it was written for: an old skycoin-web entry
 		// reaches its .dmsg node through HTTP_PROXY, which its args do not carry.
@@ -2140,9 +2147,9 @@ func skycoinWebFlags(external bool) (flags []string) {
 		// A flag, not HTTP_PROXY: an internal app's env is set for the whole
 		// visor process.
 		flags = append(flags, "--socks5-proxy", proxy)
-		// Bitcoin too, through the same proxy and so the exit: skycoin-web's
-		// built-in electrum servers, tried in order.
-		flags = append(flags, "--btc-electrum-url", "default")
+	}
+	if skycoinWebElectrum != "" {
+		flags = append(flags, "--btc-electrum-url", skycoinWebElectrum)
 	}
 	return flags
 }
@@ -2955,4 +2962,21 @@ func flagDigits(cmd *cobra.Command, name string) string {
 		return f.Value.String()
 	}
 	return "0"
+}
+
+// setFlag returns args with flag set to val, replacing "flag val" or
+// "flag=val" where present and appending otherwise.
+func setFlag(args []string, flag, val string) []string {
+	out := append([]string(nil), args...)
+	for i, a := range out {
+		switch {
+		case a == flag && i+1 < len(out):
+			out[i+1] = val
+			return out
+		case strings.HasPrefix(a, flag+"="):
+			out[i] = flag + "=" + val
+			return out
+		}
+	}
+	return append(out, flag, val)
 }
