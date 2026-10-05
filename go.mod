@@ -105,7 +105,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/sirupsen/logrus v1.10.2
-	github.com/skycoin/skycoin v0.28.7-0.20261002202814-e33ee3c33725
+	github.com/skycoin/skycoin v0.28.7-0.20261005011259-835c93d42b11
 	github.com/soheilhy/cmux v0.1.5
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
@@ -294,7 +294,6 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	github.com/zyedidia/micro v1.4.1 // indirect
-	go.etcd.io/bbolt v1.5.0 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.9.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0 // indirect
