@@ -111,6 +111,8 @@ func WithAuth(store NonceStore, original http.Handler, shouldVerifyAuth bool) ht
 				status := http.StatusUnauthorized
 				if errors.Is(err, errNonceStore) {
 					status = http.StatusInternalServerError
+				} else if httputil.BodyTooLarge(err) {
+					status = http.StatusRequestEntityTooLarge
 				}
 				httputil.WriteJSON(w, r, status,
 					NewHTTPErrorResponse(status,

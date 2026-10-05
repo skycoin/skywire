@@ -46,6 +46,10 @@ type API struct {
 // HealthCheckResponse is the /health body every service shares.
 type HealthCheckResponse = httputil.HealthCheckResponse
 
+// maxBodyBytes caps a request body. A route request is a few edge pairs and
+// options, well under 1 KiB.
+const maxBodyBytes = 1 << 20
+
 // New creates a new api
 func New(s store.Store, logger logrus.FieldLogger, enableMetrics bool, dmsgAddr string) *API {
 	api := &API{
@@ -62,6 +66,7 @@ func New(s store.Store, logger logrus.FieldLogger, enableMetrics bool, dmsgAddr 
 	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(logger))
 	r.Use(middleware.Recoverer)
+	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip route-finder JSON responses on the wire (skips small bodies,
 	// honors Vary; net/http clients get transparent gzip).
 	// gzip only bodies over CompressMinBytes: single entries and health lines are
