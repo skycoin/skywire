@@ -34,7 +34,7 @@ github.com/0magnet/bbolt/internal/freelist
 # github.com/0magnet/bitree v0.0.0
 ## explicit; go 1.25.0
 github.com/0magnet/bitree
-# github.com/0magnet/bottle v0.0.1-0.20261004223459-03c5fc804891
+# github.com/0magnet/bottle v0.0.1-0.20261005183936-5541d98ce7e9
 ## explicit; go 1.24
 github.com/0magnet/bottle
 github.com/0magnet/bottle/vnet

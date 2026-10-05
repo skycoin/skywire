@@ -373,6 +373,10 @@
 					}
 					go._scheduledTimeouts.clear();
 				}
+				// JS callbacks the program registered can outlive it and keep go
+				// reachable, and go.mem alone pins the whole wasm memory.
+				go.mem = null;
+				delete go._inst;
 			}
 			return exitCode;
 		})().catch((e) => {
