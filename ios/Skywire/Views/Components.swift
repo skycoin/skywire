@@ -2,26 +2,10 @@ import SwiftUI
 import UIKit
 
 extension Color {
-    /// The brand blue (Android's SkywireBlue), lighter in dark mode as the
-    /// Android theme's dark primary is.
-    static let skywire = Color(UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0x4A / 255, green: 0xA3 / 255, blue: 1, alpha: 1)
-            : UIColor(red: 0, green: 0x72 / 255, blue: 1, alpha: 1)
-    })
-
-    /// Connected / healthy, and in-progress (Android's SkyAccents).
-    static let success = Color.green
-    static let warning = Color.orange
-}
-
-/// A small filled circle in a state's colour.
-struct StatusDot: View {
-    let color: Color
-
-    var body: some View {
-        Circle().fill(color).frame(width: 10, height: 10)
-    }
+    /// The brand blue: Android's primary in both themes.
+    static let skywire = Color.skyPrimary
+    static let success = Color.skySuccess
+    static let warning = Color.skyWarning
 }
 
 /// A label on the left, a value on the right.

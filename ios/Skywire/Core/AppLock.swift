@@ -116,20 +116,22 @@ private struct LockScreen: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
+        // Android's lock overlay (BiometricGate.kt): the logo, the title, Unlock.
         ZStack {
-            Rectangle().fill(.regularMaterial).ignoresSafeArea()
-            VStack(spacing: 20) {
-                Image(systemName: "lock.fill").font(.system(size: 44)).foregroundStyle(Color.skywire)
-                Text("lock_title").font(.title3.weight(.semibold))
+            Color.skyBackground.ignoresSafeArea()
+            VStack(spacing: 0) {
+                Image("skywire-logo").resizable().scaledToFit().frame(width: 96, height: 96)
+                Text("lock_title").skyText(.titleMedium).foregroundStyle(Color.skyOnBackground).padding(.top, 28)
                 Button {
                     Task { await lock.unlock() }
                 } label: {
-                    Text("lock_unlock").frame(minWidth: 160)
+                    Text("lock_unlock")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.skywire)
+                .buttonStyle(.filled)
+                .padding(.top, 24)
                 .accessibilityIdentifier("unlock-button")
             }
+            .padding(32)
         }
         .task(id: scenePhase) {
             // Only once the app is frontmost: a prompt raised any earlier fails.

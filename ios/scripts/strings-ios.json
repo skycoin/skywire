@@ -120,6 +120,11 @@
       "en": "Calls ring only while Skywire is running. Nothing rings a phone the app has been suspended on.",
       "zh-Hans": "只有在 Skywire 运行时来电才会响铃。应用被暂停的手机不会收到任何响铃。",
       "es": "Las llamadas suenan solo mientras Skywire está en ejecución. Un teléfono con la app suspendida no suena."
+    },
+    "vpn_ios_pending": {
+      "en": "SkyVPN arrives with the build of Skywire that runs on an iPhone. Until then the tunnel stays off.",
+      "zh-Hans": "SkyVPN 将随可在 iPhone 上运行的 Skywire 版本一起推出。在此之前，隧道保持关闭。",
+      "es": "SkyVPN llega con la versión de Skywire que funciona en un iPhone. Hasta entonces, el túnel sigue apagado."
     }
   },
   "InfoPlist": {

@@ -93,6 +93,29 @@
         }
       }
     },
+    "app_skymeet" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyMeet"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyMeet"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyMeet"
+          }
+        }
+      }
+    },
     "app_skysocks" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -112,6 +135,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "SkySOCKS"
+          }
+        }
+      }
+    },
+    "app_skyvpn" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyVPN"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyVPN"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyVPN"
           }
         }
       }
@@ -250,6 +296,52 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已停止"
+          }
+        }
+      }
+    },
+    "app_wallet" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wallet"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Billetera"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "钱包"
+          }
+        }
+      }
+    },
+    "back" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atrás"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返回"
           }
         }
       }
@@ -825,6 +917,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在启动 SkyChat…"
+          }
+        }
+      }
+    },
+    "coming_soon" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coming soon"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muy pronto"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "敬请期待"
           }
         }
       }
@@ -2347,48 +2462,416 @@
         }
       }
     },
-    "home_actions" : {
+    "help_chat_body" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Actions"
+            "value" : "Messages, calls, groups and channels that travel over Skywire rather than a company’s servers. Your identity here is this visor’s public key — hand it out with the QR button and anyone holding it can reach you.\n\nThis is the same chat the desktop runs, laid out for a phone. It keeps its own history on this device; there is no account and nothing syncs on its own, so moving to another phone means exporting from Settings inside the chat and importing there.\n\nLogs for SkyChat live in Settings ▸ Diagnostics, together with every other log this app keeps."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Acciones"
+            "value" : "Mensajes, llamadas, grupos y canales que viajan por Skywire en vez de por los servidores de una empresa. Tu identidad aquí es la clave pública de este nodo: repártela con el botón QR y cualquiera que la tenga podrá alcanzarte.\n\nEste es el mismo chat que corre en el escritorio, dispuesto para un teléfono. Guarda su propio historial en este dispositivo; no hay cuenta y nada se sincroniza solo, así que pasar a otro teléfono significa exportar desde los ajustes dentro del chat e importar allí.\n\nLos registros de SkyChat están en Ajustes ▸ Diagnóstico, junto con todos los demás registros que guarda esta app."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "操作"
+            "value" : "消息、通话、群组和频道都经由 Skywire 传输，而不是某家公司的服务器。你在这里的身份就是本节点的公钥——用 QR 码按钮把它发出去，拿到它的人就能联系到你。\n\n这与桌面端是同一个聊天，只是为手机重新排版。历史记录只保存在本机；没有账号，也不会自行同步，所以换到另一部手机时，要先在聊天内的设置里导出，再到新手机上导入。\n\nSkyChat 的日志在“设置 ▸ 诊断”里，与本应用保存的其他日志放在一起。"
           }
         }
       }
     },
-    "home_dmsg_reconnected" : {
+    "help_chat_title" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "DMSG sessions closed: %1$lld. The visor is dialing again."
+            "value" : "About SkyChat"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sesiones DMSG cerradas: %1$lld. El nodo está volviendo a conectar."
+            "value" : "Sobre SkyChat"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已关闭的 DMSG 会话：%1$lld。节点正在重新连接。"
+            "value" : "关于 SkyChat"
+          }
+        }
+      }
+    },
+    "help_close" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Got it"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entendido"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "知道了"
+          }
+        }
+      }
+    },
+    "help_dex_body" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trading against a market maker reached over Skywire rather than over the open internet. The screen is the exchange’s own, running against the market you are connected to.\n\nOrders and balances belong to that market, not to the wallet on the Wallet tab — the two are separate.\n\nLogs for SkyDEX live in Settings ▸ Diagnostics."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Operar contra un creador de mercado al que se llega por Skywire en vez de por la internet abierta. La pantalla es la del propio mercado, funcionando contra aquel al que estás conectado.\n\nLas órdenes y los saldos pertenecen a ese mercado, no a la billetera de la pestaña Billetera: son cosas separadas.\n\nLos registros de SkyDEX están en Ajustes ▸ Diagnóstico."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "与做市商交易，连接经由 Skywire，而不是公开互联网。这个页面是交易所自己的界面，运行在你当前连接的市场上。\n\n订单和余额属于那个市场，不属于“钱包”标签页里的钱包——两者互相独立。\n\nSkyDEX 的日志在“设置 ▸ 诊断”里。"
+          }
+        }
+      }
+    },
+    "help_dex_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About SkyDEX"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sobre SkyDEX"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于 SkyDEX"
+          }
+        }
+      }
+    },
+    "help_fleet_body" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The visors you run on other machines — a desktop, a server, a Skyminer — seen from this phone. It is a window onto them, not a remote control: what arrives is status, and the one action is a restart.\n\nOff by default. Turning it on restarts this phone’s core, because the setting is read once while the visor builds itself.\n\nA visor’s own log is on its card here, since that feed travels from the remote machine; this app’s logs are in Settings ▸ Diagnostics. Names you give a visor are kept on this phone and do not travel with it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los nodos que ejecutas en otras máquinas —un escritorio, un servidor, un Skyminer— vistos desde este teléfono. Es una ventana hacia ellos, no un mando a distancia: lo que llega es estado, y la única acción es reiniciar.\n\nDesactivado por defecto. Activarlo reinicia el núcleo de este teléfono, porque el ajuste se lee una sola vez mientras el nodo se construye.\n\nEl registro propio de cada nodo está en su tarjeta aquí, porque esa fuente viaja desde la máquina remota; los registros de esta app están en Ajustes ▸ Diagnóstico. Los nombres que le pongas a un nodo se quedan en este teléfono y no viajan con él."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你在其他机器上运行的节点——台式机、服务器、Skyminer——从这部手机看过去的样子。它是一扇窗，不是遥控器：传回来的是状态，唯一能做的操作是重启。\n\n默认关闭。开启会重启这部手机的核心，因为这项设置只在节点自我构建时读取一次。\n\n节点自己的日志在这里的卡片上，因为那条日志来自远程机器；本应用的日志在“设置 ▸ 诊断”里。你给节点起的名字保存在本机，不会跟着它走。"
+          }
+        }
+      }
+    },
+    "help_fleet_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About Fleet"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sobre Flota"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于集群"
+          }
+        }
+      }
+    },
+    "help_hub_body" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Everything your visor can run, in one place. A tile opens the app’s own screen; the visor itself keeps running underneath whichever one you are looking at.\n\nSkySOCKS and SkyVPN send other traffic through the network, SkyDEX trades, SkyChat messages and Fleet watches the visors you run elsewhere. A greyed tile is not built yet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo lo que tu nodo puede ejecutar, en un solo sitio. Cada icono abre la pantalla de su app; el nodo sigue funcionando por debajo de la que estés mirando.\n\nSkySOCKS y SkyVPN mandan el tráfico de otras apps por la red, SkyDEX opera, SkyChat envía mensajes y Flota vigila los nodos que ejecutas en otro sitio. Un icono en gris es algo que todavía no está construido."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的节点能运行的一切都集中在这里。点开一张卡片进入该应用自己的页面；无论你在看哪一个，节点本身都在底下持续运行。\n\nSkySOCKS 和 SkyVPN 把其他流量送进网络，SkyDEX 用于交易，SkyChat 用于聊天，集群用于查看你在别处运行的节点。变灰的卡片表示尚未实现。"
+          }
+        }
+      }
+    },
+    "help_hub_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About Apps"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sobre Apps"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于应用"
+          }
+        }
+      }
+    },
+    "help_open" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About this screen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sobre esta pantalla"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于本页面"
+          }
+        }
+      }
+    },
+    "help_settings_body" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Who this phone is on the network, and how the app behaves. The identity is a keypair in a file — back it up before you need it, because losing it loses your address, your chat history’s other half and any rewards tied to the key.\n\nDiagnostics is where every log lives: the visor core, the app process, and each app that runs under it. That is the place to look when something will not connect."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quién es este teléfono en la red y cómo se comporta la app. La identidad es un par de claves en un archivo: haz una copia antes de necesitarla, porque perderla es perder tu dirección, la otra mitad de tu historial de chat y cualquier recompensa ligada a la clave.\n\nDiagnóstico es donde vive cada registro: el núcleo del nodo, el proceso de la app y cada app que corre bajo él. Ahí es donde hay que mirar cuando algo no conecta."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这部手机在网络上的身份，以及本应用的行为方式。身份是保存在文件里的一对密钥——请在需要之前就备份好，因为弄丢它就等于弄丢了你的地址、聊天记录的另一半，以及与这把密钥绑定的所有奖励。\n\n所有日志都在“诊断”里：节点核心、应用进程，以及在其之下运行的每个应用。连不上的时候就到那里看。"
+          }
+        }
+      }
+    },
+    "help_settings_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About Settings"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sobre los Ajustes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于设置"
+          }
+        }
+      }
+    },
+    "help_socks_body" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A SOCKS5 proxy that comes out somewhere else. Pick a server and this phone offers a local proxy port; anything you point at that port leaves the network from the server you chose rather than from here.\n\nIt proxies only what you configure to use it — it does not capture the whole phone. SkyVPN is the one that does that.\n\nLogs for SkySOCKS live in Settings ▸ Diagnostics."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un proxy SOCKS5 que sale por otro sitio. Elige un servidor y este teléfono ofrecerá un puerto proxy local; todo lo que apuntes a ese puerto saldrá de la red desde el servidor que elegiste y no desde aquí.\n\nSolo hace de proxy para lo que configures para usarlo: no captura el teléfono entero. SkyVPN es el que hace eso.\n\nLos registros de SkySOCKS están en Ajustes ▸ Diagnóstico."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个从别处出网的 SOCKS5 代理。选好服务器后，这部手机会开放一个本地代理端口；凡是指向该端口的流量，都会从你选择的服务器离开网络，而不是从这里。\n\n它只代理你配置为走它的流量，不会接管整部手机。接管整部手机的是 SkyVPN。\n\nSkySOCKS 的日志在“设置 ▸ 诊断”里。"
+          }
+        }
+      }
+    },
+    "help_socks_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About SkySOCKS"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sobre SkySOCKS"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于 SkySOCKS"
+          }
+        }
+      }
+    },
+    "help_vpn_body" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The whole phone’s traffic, through a server you choose. Android will ask to add a VPN configuration the first time; while it is on, every app’s traffic leaves from the exit server instead of from here.\n\nThe key stays on this device and the exit server sees the traffic it forwards, exactly as any VPN exit does. Turning it off restores normal routing immediately.\n\nLogs for SkyVPN live in Settings ▸ Diagnostics."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El tráfico del teléfono entero, a través de un servidor que elijas. Android pedirá añadir una configuración de VPN la primera vez; mientras esté activa, el tráfico de todas las apps saldrá por el servidor de salida en vez de desde aquí.\n\nLa clave se queda en este dispositivo y el servidor de salida ve el tráfico que reenvía, exactamente como cualquier salida de VPN. Desactivarla restablece el enrutamiento normal al instante.\n\nLos registros de SkyVPN están en Ajustes ▸ Diagnóstico."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整部手机的流量，都经过你选择的服务器。首次启用时 Android 会请求添加 VPN 配置；开启期间，每个应用的流量都从出口服务器离开，而不是从这里。\n\n密钥始终留在本机，出口服务器能看到它转发的流量——任何 VPN 出口都是如此。关闭后会立即恢复正常路由。\n\nSkyVPN 的日志在“设置 ▸ 诊断”里。"
+          }
+        }
+      }
+    },
+    "help_vpn_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About SkyVPN"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sobre SkyVPN"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于 SkyVPN"
+          }
+        }
+      }
+    },
+    "help_wallet_body" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skycoin, the Fibercoins that share its node software, and Bitcoin — all held by keys that are generated on this phone and never leave it. Skywire never sees them and they are never sent to the network.\n\nThe twelve recovery words are the wallet. Anyone who reads them can spend the coins from any device without your phone, and if you lose them nobody can recover the wallet for you — not us, not anyone.\n\nBalances and history come from the node each coin is pointed at, so a coin whose node is unreachable shows its last known balance and will not send."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skycoin, las Fibercoins que comparten su software de nodo y Bitcoin, todas en manos de claves que se generan en este teléfono y nunca salen de él. Skywire nunca las ve y nunca se envían a la red.\n\nLas doce palabras de recuperación son la billetera. Cualquiera que las lea puede gastar las monedas desde cualquier dispositivo sin tu teléfono, y si las pierdes nadie puede recuperarte la billetera: ni nosotros, ni nadie.\n\nLos saldos y el historial vienen del nodo al que apunta cada moneda, así que una moneda cuyo nodo no se alcanza muestra su último saldo conocido y no permite enviar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skycoin、与它共用节点软件的各种 Fibercoin，还有比特币——全部由本机生成、从不离开本机的密钥持有。Skywire 看不到这些密钥，它们也绝不会被发送到网络上。\n\n十二个助记词就是钱包本身。任何人只要看到它们，不需要你的手机也能在任意设备上花掉这些币；而你一旦弄丢，没有人能帮你找回钱包——我们不能，任何人都不能。\n\n余额和交易记录来自每个币种所指向的节点服务器，因此当某个币种的节点服务器无法连接时，只会显示最后一次已知的余额，并且无法转账。"
+          }
+        }
+      }
+    },
+    "help_wallet_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About Wallet"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sobre la Billetera"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于钱包"
           }
         }
       }
@@ -2458,52 +2941,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在加入 Skywire 网络。首次连接可能需要几分钟。"
-          }
-        }
-      }
-    },
-    "home_reconnect_dmsg" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reconnect DMSG"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reconectar DMSG"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重新连接 DMSG"
-          }
-        }
-      }
-    },
-    "home_restart_core" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Restart core"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reiniciar el núcleo"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重启核心"
           }
         }
       }
@@ -2738,6 +3175,157 @@
         }
       }
     },
+    "hub_filter_all" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todas"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部"
+          }
+        }
+      }
+    },
+    "hub_filter_finance" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finance"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finanzas"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金融"
+          }
+        }
+      }
+    },
+    "hub_filter_network" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Red"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网络"
+          }
+        }
+      }
+    },
+    "hub_filter_social" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Social"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Social"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "社交"
+          }
+        }
+      }
+    },
+    "hub_fleet_connected" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld visor connected"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld visors connected"
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "many" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld de nodos conectados"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld nodo conectado"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld nodos conectados"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "已连接 %lld 个节点"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "hub_fleet_sub" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2757,6 +3345,157 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你在别处运行的节点"
+          }
+        }
+      }
+    },
+    "hub_hero_no_exit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No exit chosen yet"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aún no has elegido salida"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未选择出口"
+          }
+        }
+      }
+    },
+    "hub_hops" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld hop"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld hops"
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "many" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld de saltos"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld salto"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld saltos"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld 跳"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "hub_hops_unknown" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hops —"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saltos —"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳数 —"
+          }
+        }
+      }
+    },
+    "hub_killswitch_off" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Killswitch off"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kill switch desactivado"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "断网保护已关闭"
+          }
+        }
+      }
+    },
+    "hub_meet_sub" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Encrypted calls"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Llamadas cifradas"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加密通话"
           }
         }
       }
@@ -2803,6 +3542,167 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "SOCKS5 代理"
+          }
+        }
+      }
+    },
+    "hub_stat_data" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Data"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Datos"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "流量"
+          }
+        }
+      }
+    },
+    "hub_stat_down" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Down"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bajada"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下行"
+          }
+        }
+      }
+    },
+    "hub_stat_up" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Up"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subida"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上行"
+          }
+        }
+      }
+    },
+    "hub_subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld installed · %2$lld running"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld instaladas · %2$lld en marcha"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安装 %1$lld 个 · 运行中 %2$lld 个"
+          }
+        }
+      }
+    },
+    "hub_vpn_toggle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyVPN on/off"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activar o desactivar SkyVPN"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyVPN 开关"
+          }
+        }
+      }
+    },
+    "hub_wallet_balance" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ SKY"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ SKY"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ SKY"
+          }
+        }
+      }
+    },
+    "hub_wallet_sub" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SKY · Fibercoin · BTC · ETH"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SKY · Fibercoin · BTC · ETH"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SKY · Fibercoin · BTC · ETH"
           }
         }
       }
@@ -5356,6 +6256,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "版本"
+          }
+        }
+      }
+    },
+    "vpn_ios_pending" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyVPN arrives with the build of Skywire that runs on an iPhone. Until then the tunnel stays off."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyVPN llega con la versión de Skywire que funciona en un iPhone. Hasta entonces, el túnel sigue apagado."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyVPN 将随可在 iPhone 上运行的 Skywire 版本一起推出。在此之前，隧道保持关闭。"
           }
         }
       }

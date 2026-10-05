@@ -3,65 +3,28 @@ import CoreClient
 import SwiftUI
 import UIKit
 
-/// Connect, the core's state, and the visor card (Android: HomeScreen).
+/// Connect, the core's state, and the visor card (Android: HomeScreen). No top bar.
 struct HomeView: View {
     @EnvironmentObject private var app: AppModel
     @StateObject private var model = HomeModel()
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 28) {
-                    StatusLine()
-                    ConnectButton()
-                    StatusCaption()
-                    if app.connected, let summary = model.summary {
-                        VisorCard(summary: summary, health: model.health)
-                    } else if app.connected, let error = model.error {
-                        Text(error).font(.footnote).foregroundStyle(.red).multilineTextAlignment(.center)
-                    }
+        ScrollView {
+            VStack(spacing: 0) {
+                Color.clear.frame(height: 24)
+                StatusLine()
+                ConnectButton().padding(.top, 20)
+                StatusCaption(pollError: model.error).padding(.top, 16)
+                if app.connected, let summary = model.summary {
+                    VisorCard(summary: summary, health: model.health).padding(.top, 24)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 24)
-                .frame(maxWidth: .infinity)
+                Color.clear.frame(height: 24)
             }
-            .navigationTitle(Text("app_name"))
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button {
-                            model.reconnectDmsg(app)
-                        } label: {
-                            Label("home_reconnect_dmsg", systemImage: "arrow.triangle.2.circlepath")
-                        }
-                        .disabled(!app.connected)
-                        .accessibilityIdentifier("home-reconnect-dmsg")
-                        Button {
-                            app.restartCore()
-                        } label: {
-                            Label("home_restart_core", systemImage: "restart")
-                        }
-                        .disabled(app.coreState != .running || app.busy)
-                        .accessibilityIdentifier("home-restart")
-                        NavigationLink(value: LogSource.core) {
-                            Label("view_logs", systemImage: "doc.text.magnifyingglass")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .accessibilityLabel(Text("home_actions"))
-                    }
-                    .accessibilityIdentifier("home-actions")
-                }
-            }
-            .navigationDestination(for: LogSource.self) { LogsView(source: $0) }
-            .task(id: app.connected) { await model.poll(app) }
-            .alert(
-                Text(model.notice ?? ""),
-                isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } })
-            ) {
-                Button("ok", role: .cancel) {}
-            }
+            .padding(24)
+            .frame(maxWidth: .infinity)
         }
+        .background(Color.skyBackground)
+        .task(id: app.connected) { await model.poll(app) }
     }
 }
 
@@ -71,15 +34,15 @@ private struct StatusLine: View {
 
     var body: some View {
         let (label, color): (LocalizedStringKey, Color) = switch app.coreState {
-        case .running where app.apiUp: (L10n.key("state_connected"), .success)
-        case .starting, .running: (L10n.key("state_starting"), .warning)
-        case .stopping: (L10n.key("state_stopping"), .secondary)
-        case .failed: (L10n.key("home_error_start"), .red)
-        case .stopped: (L10n.key("state_disconnected"), .secondary)
+        case .running where app.apiUp: (L10n.key("state_connected"), .skySuccess)
+        case .starting, .running: (L10n.key("state_starting"), .skyWarning)
+        case .stopping: (L10n.key("state_stopping"), .skyOnSurfaceVariant)
+        case .failed: (L10n.key("home_error_start"), .skyError)
+        case .stopped: (L10n.key("state_disconnected"), .skyOnSurfaceVariant)
         }
         HStack(spacing: 8) {
             StatusDot(color: color)
-            Text(label).font(.headline)
+            Text(label).skyText(.titleMedium).foregroundStyle(Color.skyOnBackground)
         }
         .accessibilityElement(children: .combine)
         // For UI tests: the state in words no translation changes.
@@ -88,198 +51,207 @@ private struct StatusLine: View {
     }
 }
 
-/// The big round button. Idle it asks to be pressed (the brand gradient);
-/// running it is a quiet disc, so stopping never looks like the loud action.
-/// While the core starts it offers Disconnect: a start can take a minute on a
-/// slow network, and stopping aborts it.
+/// The 180 pt disc: the gradient asks to connect; a quiet tonal disc offers Disconnect.
 private struct ConnectButton: View {
     @EnvironmentObject private var app: AppModel
     @EnvironmentObject private var notifications: NotificationBridge
 
     var body: some View {
-        let stopping = app.coreState == .stopping
-        let showDisconnect = app.coreState == .running || app.coreState == .starting
-        Button {
-            if showDisconnect {
-                app.disconnect()
-            } else {
-                app.connect()
-                // Asked here, as Android asks at Connect; once per install.
-                notifications.requestAuthorization()
+        let state = app.coreState
+        // A start can take a minute on a slow network: Disconnect aborts it (Android's Running-not-up).
+        let tonal = state == .starting || state == .running
+        let busy = state == .stopping
+        ZStack {
+            if app.connected {
+                PulseRing(size: 180)
             }
-        } label: {
-            ZStack {
-                Circle()
-                    .fill(showDisconnect
-                        ? AnyShapeStyle(Color(UIColor.secondarySystemFill))
-                        : AnyShapeStyle(LinearGradient(colors: [.skywire, Color(red: 0, green: 0.55, blue: 1)], startPoint: .top, endPoint: .bottom)))
-                    .shadow(color: showDisconnect ? .clear : .skywire.opacity(0.35), radius: 12, y: 6)
-                if stopping {
-                    ProgressView().controlSize(.large)
-                } else if showDisconnect && !app.connected {
-                    VStack(spacing: 10) {
-                        ProgressView()
-                        Text("disconnect").font(.headline)
-                    }
-                    .foregroundStyle(.primary)
+            Button {
+                if tonal {
+                    app.disconnect()
                 } else {
-                    Text(showDisconnect ? L10n.key("disconnect") : L10n.key("connect"))
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(showDisconnect ? Color.primary : Color.white)
+                    app.connect()
+                    // Asked here, as Android asks at Connect; once per install.
+                    notifications.requestAuthorization()
                 }
-            }
-            .frame(width: 180, height: 180)
-            .overlay {
-                if app.connected {
-                    Circle().stroke(Color.skywire.opacity(0.35), lineWidth: 6).frame(width: 196, height: 196)
+            } label: {
+                ZStack {
+                    if tonal {
+                        Circle().fill(Color.skySecondaryContainer)
+                    } else {
+                        Circle().fill(SkyGradient.button).skyElevation(10)
+                    }
+                    if busy {
+                        MaterialSpinner(size: 44, stroke: 4, color: .white)
+                    } else if tonal && !app.connected {
+                        VStack(spacing: 10) {
+                            MaterialSpinner(size: 28, stroke: 3)
+                            Text("disconnect").skyText(.titleMedium).foregroundStyle(Color.skyOnSecondaryContainer)
+                        }
+                    } else {
+                        Text(tonal ? L10n.key("disconnect") : L10n.key("connect"))
+                            .skyText(.titleLarge)
+                            .foregroundStyle(tonal ? Color.skyOnSecondaryContainer : .white)
+                    }
                 }
+                .frame(width: 180, height: 180)
+                .contentShape(Circle())
             }
+            .buttonStyle(PressStyle(layer: tonal ? .skyOnSecondaryContainer : .white, shape: AnyShape(Circle())))
+            .disabled(busy)
+            .accessibilityIdentifier("connect-button")
         }
-        .buttonStyle(.plain)
-        .disabled(stopping)
-        .accessibilityIdentifier("connect-button")
     }
 }
 
 /// What to expect, or what went wrong, under the button.
 private struct StatusCaption: View {
+    let pollError: String?
     @EnvironmentObject private var app: AppModel
+    @EnvironmentObject private var navigator: Navigator
 
     var body: some View {
-        VStack(spacing: 12) {
-            if let error = app.lastError {
-                Text(error).font(.footnote).foregroundStyle(.red).multilineTextAlignment(.center)
-                NavigationLink(value: LogSource.process) { Text("view_logs") }.buttonStyle(.bordered)
+        VStack(spacing: 0) {
+            if let error = app.lastError ?? (app.coreState == .failed ? "" : nil) {
+                if !error.isEmpty {
+                    Text(verbatim: error).skyText(.bodySmall).foregroundStyle(Color.skyError)
+                }
+                viewLogs
             } else {
                 switch app.coreState {
                 case .stopped:
-                    Text("home_hint_disconnected").foregroundStyle(.secondary)
-                case .failed:
-                    NavigationLink(value: LogSource.process) { Text("view_logs") }.buttonStyle(.bordered)
+                    Text("home_hint_disconnected").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
                 case .starting:
                     startingHint
                 case .running where !app.apiUp:
                     startingHint
+                case .running:
+                    if let pollError {
+                        Text(verbatim: pollError).skyText(.bodySmall).foregroundStyle(Color.skyError)
+                    }
                 default:
                     EmptyView()
                 }
             }
         }
         .multilineTextAlignment(.center)
-        .font(.subheadline)
     }
 
-    /// A first start can take minutes (dmsg discovery retries): something to
-    /// watch beats a bare spinner.
+    /// A first start can take minutes (dmsg discovery retries): something to watch.
     @ViewBuilder private var startingHint: some View {
-        Text("home_hint_starting").foregroundStyle(.secondary)
-        NavigationLink(value: LogSource.process) { Text("view_logs") }.buttonStyle(.bordered)
+        Text("home_hint_starting").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+        viewLogs
+    }
+
+    private var viewLogs: some View {
+        Button { navigator.push(.logs(.process)) } label: { Text("view_logs") }
+            .buttonStyle(.tonal)
     }
 }
 
-/// Who this visor is, on what build, for how long; the diagnostics (its
-/// transports, dmsg servers, service health) one tap away.
+/// Who this visor is, on what build, for how long; its diagnostics one tap away.
 private struct VisorCard: View {
     let summary: VisorSummary
     let health: [ServiceHealthEntry]
     @State private var expanded = false
-    @State private var copied = false
+    @EnvironmentObject private var navigator: Navigator
+    @EnvironmentObject private var dialogs: SkyDialogs
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("visor_info_title").font(.headline)
+                Text("visor_info_title").skyText(.titleMedium)
                 Spacer()
-                NavigationLink(value: LogSource.core) { Text("view_logs") }.buttonStyle(.bordered).controlSize(.small)
+                Button { navigator.push(.logs(.core)) } label: { Text("view_logs") }
+                    .buttonStyle(.tonal)
             }
+            Color.clear.frame(height: 4)
             let pk = summary.overview.localPK
             Button {
                 UIPasteboard.general.string = pk
-                copied = true
+                dialogs.toast(Text("copied_to_clipboard"))
             } label: {
-                InfoRow(label: Text("visor_public_key"), value: Format.shortPK(pk), monospaced: true)
+                SkyInfoRow(label: Text("visor_public_key"), value: Format.shortPK(pk), mono: true)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle(layer: .skyOnSurface))
             .accessibilityHint(Text("visor_copy_hint"))
-            InfoRow(
+            SkyInfoRow(
                 label: Text("visor_version"),
                 value: [summary.overview.buildInfo?.version, summary.buildTag]
                     .compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ").nonEmpty ?? "—"
             )
-            InfoRow(label: Text("visor_uptime"), value: Format.uptime(summary.uptime))
+            SkyInfoRow(label: Text("visor_uptime"), value: Format.uptime(summary.uptime))
             if expanded {
                 diagnostics
             }
             Button {
-                withAnimation { expanded.toggle() }
+                expanded.toggle()
             } label: {
-                Label(expanded ? L10n.key("visor_show_less") : L10n.key("visor_show_more"), systemImage: expanded ? "chevron.up" : "chevron.down")
-                    .frame(maxWidth: .infinity)
+                HStack(spacing: 0) {
+                    Text(expanded ? L10n.key("visor_show_less") : L10n.key("visor_show_more"))
+                    MaterialIcon(expanded ? MI.filledExpandLess : MI.filledExpandMore)
+                }
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.skyText)
+            .frame(maxWidth: .infinity)
             .padding(.top, 4)
             .accessibilityIdentifier("visor-expand")
         }
         .padding(20)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(UIColor.secondarySystemBackground)))
+        .foregroundStyle(Color.skyOnSurface)
+        .background(Color.skySurfaceVariant, in: .sky(SkyRadius.medium))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("visor-card")
-        .overlay(alignment: .top) {
-            if copied {
-                Text("copied_to_clipboard")
-                    .font(.footnote.weight(.semibold))
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(Capsule().fill(.thinMaterial))
-                    .offset(y: -14)
-                    .task {
-                        try? await Task.sleep(for: .seconds(1.5))
-                        copied = false
-                    }
-            }
-        }
+    }
+
+    private var divider: some View {
+        SkyDivider(color: .skyContainerHighest).padding(.vertical, 10)
+    }
+
+    private func section(_ title: LocalizedStringKey) -> some View {
+        Text(title).skyText(.labelMedium).foregroundStyle(Color.skyOnSurfaceVariant).padding(.bottom, 4)
+    }
+
+    private var dash: some View {
+        Text(verbatim: "—").skyText(.bodyMedium)
     }
 
     @ViewBuilder private var diagnostics: some View {
-        Divider()
-        Text("visor_transports").font(.subheadline).foregroundStyle(.secondary)
+        divider
+        section(L10n.key("visor_transports"))
         let transports = summary.overview.transports
         if transports.isEmpty {
-            Text("—")
+            dash
         } else {
-            // By carrier: on a phone the question is which carriers came up
-            // (dmsg always, stcpr and sudph rarely behind carrier NAT).
             ForEach(Dictionary(grouping: transports) { $0.type.isEmpty ? "?" : $0.type }.sorted { $0.key < $1.key }, id: \.key) { type, entries in
-                InfoRow(label: Text(verbatim: type), value: "\(entries.count)")
+                SkyInfoRow(label: Text(verbatim: type), value: "\(entries.count)")
             }
-            InfoRow(label: Text("visor_transports_total"), value: "\(transports.count)")
+            SkyInfoRow(label: Text("visor_transports_total"), value: "\(transports.count)")
         }
-        Divider()
-        Text("visor_dmsg_servers").font(.subheadline).foregroundStyle(.secondary)
+        divider
+        section(L10n.key("visor_dmsg_servers"))
         if summary.dmsgServers.isEmpty {
-            Text("—")
+            dash
         } else {
-            ForEach(Array(summary.dmsgServers.prefix(6).enumerated()), id: \.offset) { _, server in
-                // The latency comes from an hourly self-ping, so a server that
-                // joined since has none; a bare "0 ms" would be false.
+            ForEach(Array(summary.dmsgServers.prefix(4).enumerated()), id: \.offset) { _, server in
+                // The latency comes from an hourly self-ping: a server that joined since has none.
                 let parts = [
                     server.protocol.isEmpty ? server.carrier : server.protocol,
                     server.latencyNS > 0 ? "\(server.latencyNS / 1_000_000) ms" : "",
                 ].filter { !$0.isEmpty }
-                InfoRow(label: Text(verbatim: Format.shortPK(server.pk)), value: parts.joined(separator: " · ").nonEmpty ?? "—", monospaced: true)
+                SkyInfoRow(label: Text(verbatim: Format.shortPK(server.pk)), value: parts.joined(separator: " · ").nonEmpty ?? "—", mono: true)
             }
         }
-        Divider()
-        Text("visor_service_health").font(.subheadline).foregroundStyle(.secondary)
+        divider
+        section(L10n.key("visor_service_health"))
         if health.isEmpty {
-            Text("—")
+            dash
         } else {
             ForEach(Array(health.enumerated()), id: \.offset) { _, entry in
-                // The status is the visor's word, translated where known; an
-                // error is the service's own text and stays as it arrived.
-                InfoRow(
+                SkyInfoRow(
                     label: Text(verbatim: entry.name),
                     value: !entry.status.isEmpty ? Format.health(entry.status) : (entry.error.isEmpty ? "?" : entry.error),
-                    valueColor: entry.status.lowercased() == "healthy" ? .success : .secondary
+                    valueColor: entry.status.lowercased() == "healthy" ? .skySuccess : .skyOnSurfaceVariant
                 )
             }
         }
