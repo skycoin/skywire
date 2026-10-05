@@ -9,28 +9,23 @@ struct ChatView: View {
     @EnvironmentObject private var router: ChatRouter
     @StateObject private var model = ChatModel()
     @StateObject private var page = ChatPage()
+    @EnvironmentObject private var navigator: Navigator
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            // Back is the page's own step while it has one, then the tab is left (Android).
+            SkyTopBar(title: Text("app_skychat"), onBack: {
+                if !page.goBack() { navigator.back() }
+            }, help: .chat)
             content
-                .navigationTitle(Text("app_skychat"))
-                .navigationBarTitleDisplayMode(.inline)
-                // The page brings its own header (back, the conversation, its
-                // menu), so the bar is only the status screen's: two stacked
-                // headers would mean two backs and two menus. Back inside the
-                // page is its own button or the edge swipe. Android dropped
-                // its bar's menu the same way; skychat's log is under
-                // Settings > Logs & diagnostics with the other apps'.
-                .toolbar(showsPage ? .hidden : .visible, for: .navigationBar)
         }
+        .background(Color.skyBackground)
         .task(id: ChatModel.RunKey(connected: app.connected, attempt: model.attempt)) {
             await model.run(app)
         }
-        // A link or a tapped notification waits here for as long as it has
-        // to (the core connecting, skychat starting, the page loading), and
-        // is dropped once the page has it, taken or declined: retrying one
-        // the page refused would only loop.
+        // A link or a tapped notification waits until the page can take it, and is dropped
+        // once it has: retrying one the page refused would only loop.
         .task(id: DriveKey(request: router.pending, ready: page.ready)) {
             guard let request = router.pending, page.ready else { return }
             _ = await page.perform(request.target)
@@ -112,25 +107,24 @@ private struct ChatStatus: View {
     }
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 0) {
             if connecting {
-                ProgressView()
+                MaterialSpinner().padding(.bottom, 20)
             }
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            Text(verbatim: message)
+                .skyText(.bodyMedium)
+                .foregroundStyle(Color.skyOnSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .accessibilityIdentifier("chat-status")
             if error != nil, app.connected {
-                // A closure literal, not `action: retry`: Xcode 26's compiler
-                // (CI) crashed on a function passed as SwiftUI's isolated
-                // closure at G2 (playbook, M2 as built).
+                // A closure literal, not `action: retry`: Xcode 26 crashed on a function passed here (M2).
                 Button {
                     retry()
                 } label: {
                     Text("socks_retry")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.tonal)
+                .padding(.top, 8)
                 .accessibilityIdentifier("chat-retry")
             }
         }

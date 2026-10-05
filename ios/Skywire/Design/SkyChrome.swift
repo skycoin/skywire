@@ -220,6 +220,8 @@ struct SkyDialogLayer: View {
 /// SkyNavBar (ui/SkywireApp.kt): a floating 64 pt shell, four icons, the raised cloud.
 struct SkyBottomBar: View {
     @ObservedObject var navigator: Navigator
+    /// 21 pt of cloud above the 64 pt shell, and 8 pt under it (plus the safe area).
+    static let height: CGFloat = 93
 
     var body: some View {
         ZStack(alignment: .top) {
