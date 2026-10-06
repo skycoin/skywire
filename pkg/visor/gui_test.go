@@ -1,4 +1,4 @@
-//go:build !withoutsystray
+//go:build !withoutsystray && !tinygo
 // +build !withoutsystray
 
 // Package visor pkg/visor/gui_test.go

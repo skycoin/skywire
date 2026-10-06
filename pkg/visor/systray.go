@@ -1,4 +1,4 @@
-//go:build !withoutsystray
+//go:build !withoutsystray && !tinygo
 // +build !withoutsystray
 
 // Package visor pkg/visor/systray.go c3-vis-core

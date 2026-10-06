@@ -1,4 +1,4 @@
-//go:build windows && !withoutsystray
+//go:build windows && !withoutsystray && !tinygo
 // +build windows,!withoutsystray
 
 // Package visor pkg/visor/gui_windows.go c3-vis-core

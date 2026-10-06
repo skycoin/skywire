@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package clirewards cmd/skywire-cli/commands/rewards/server.go c4-vis-cli
 package clirewards
 

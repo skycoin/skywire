@@ -1,4 +1,4 @@
-//go:build linux && !withoutsystray
+//go:build linux && !withoutsystray && !tinygo
 // +build linux,!withoutsystray
 
 // Package visor pkg/visor/gui_linux.go c3-vis-core
