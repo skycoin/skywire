@@ -27,10 +27,11 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/rpc"
 	"strings"
 	"sync"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
