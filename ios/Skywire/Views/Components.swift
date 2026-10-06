@@ -153,6 +153,10 @@ enum L10n {
     /// The strings of the language chosen in Settings (AppLanguage), switched without a relaunch.
     nonisolated(unsafe) static var bundle: Bundle = AppLanguage.current().bundle
 
+    /// That language's locale: it picks a plural's form, which the phone's own locale would get
+    /// wrong for another language ("1 hops" in English on a Chinese phone).
+    nonisolated(unsafe) static var locale: Locale = AppLanguage.current().locale
+
     static func text(_ key: String) -> String {
         bundle.localizedString(forKey: key, value: nil, table: nil)
     }
@@ -160,6 +164,6 @@ enum L10n {
     /// The key's text with `arguments` in its placeholders (`%1$@`, `%1$lld`:
     /// Android's `%1$s` and `%1$d`, converted when seeded).
     static func format(_ key: String, _ arguments: any CVarArg...) -> String {
-        String(format: text(key), locale: .current, arguments: arguments)
+        String(format: text(key), locale: locale, arguments: arguments)
     }
 }
