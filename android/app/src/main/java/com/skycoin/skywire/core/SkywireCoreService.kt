@@ -123,6 +123,9 @@ class SkywireCoreService : Service() {
                     autoconnect,
                     logLevel,
                     remotePk,
+                    skyDnsStandalone = prefs.boolean(SkyDns.PREF_STANDALONE, SkyDns.DEFAULT_STANDALONE).first(),
+                    skyDnsInVpn = prefs.boolean(SkyDns.PREF_IN_VPN, SkyDns.DEFAULT_IN_VPN).first(),
+                    dnsServer = DnsServer.sanitize(prefs.string(DnsServer.PREF_KEY).first()),
                 ).getOrElse { err ->
                     log.line("=== config generation failed ===")
                     log.line(err.message ?: "unknown error")
@@ -154,6 +157,11 @@ class SkywireCoreService : Service() {
                     CoreServiceState.mutableState.value =
                         CoreState.Running(System.currentTimeMillis(), attempt)
                     notify(getString(R.string.core_notification_running))
+                    // The skydns app autostarts with the visor and dials the
+                    // VPN service for its tunnel, so the service must listen.
+                    if (prefs.boolean(SkyDns.PREF_STANDALONE, SkyDns.DEFAULT_STANDALONE).first()) {
+                        SkyVpnService.startDns(this@SkywireCoreService)
+                    }
                     // Calls are watched for as long as this visor runs, and
                     // the watcher is rebuilt with it: its poll targets the
                     // API of the process that just started.

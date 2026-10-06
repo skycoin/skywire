@@ -13,7 +13,10 @@ import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.Fleet
+import com.skycoin.skywire.core.SkyDns
 import com.skycoin.skywire.core.SkyVpnService
+import com.skycoin.skywire.core.VpnTunnel
+import com.skycoin.skywire.core.VpnTunnelState
 import com.skycoin.skywire.core.SkychatProfile
 import com.skycoin.skywire.ui.components.RateSampler
 import com.skycoin.skywire.ui.components.SavedServer
@@ -74,6 +77,10 @@ data class HubUiState(
     val fleetEnabled: Boolean = false,
     /** Remote visors currently connected in; null until the first count. */
     val fleetOnline: Int? = null,
+    /** The SkyDNS switch: SkyDNS on its own while SkyVPN is off. See [SkyDns]. */
+    val skyDnsOn: Boolean = SkyDns.DEFAULT_STANDALONE,
+    val skyDnsBusy: Boolean = false,
+    val tunnel: VpnTunnelState = VpnTunnelState(),
 ) {
     val coreReady: Boolean get() = coreState is CoreState.Running && apiUp
 
@@ -94,7 +101,18 @@ data class HubUiState(
      */
     val vpnOn: Boolean
         get() = vpnPending ?: (vpn?.let { it.running || it.status == AppState.STATUS_STARTING } == true)
+
+    /** What SkyDNS on its own is doing. SkyVPN's tunnel takes its place while it is up. */
+    val skyDnsStatus: SkyDnsStatus
+        get() = when {
+            !skyDnsOn -> SkyDnsStatus.OFF
+            tunnel.established -> SkyDnsStatus.PAUSED
+            tunnel.skyDns -> SkyDnsStatus.ON
+            else -> SkyDnsStatus.STARTING
+        }
 }
+
+enum class SkyDnsStatus { OFF, STARTING, ON, PAUSED }
 
 /**
  * Feeds the apps hub: one local-summary poll for every app's status (the
@@ -126,6 +144,14 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
             prefs.boolean(VpnArgs.PREF_KILLSWITCH).collect { on ->
                 mutable.update { it.copy(killswitch = on) }
             }
+        }
+        viewModelScope.launch {
+            prefs.boolean(SkyDns.PREF_STANDALONE, SkyDns.DEFAULT_STANDALONE).collect { on ->
+                mutable.update { it.copy(skyDnsOn = on) }
+            }
+        }
+        viewModelScope.launch {
+            VpnTunnel.state.collect { tunnel -> mutable.update { it.copy(tunnel = tunnel) } }
         }
         viewModelScope.launch {
             prefs.boolean(Fleet.PREF_KEY, Fleet.DEFAULT).collect { on ->
@@ -204,6 +230,28 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
             mutable.update { it.copy(vpnBusy = false, vpnPending = if (ok) true else null) }
         }
         return true
+    }
+
+    /**
+     * The SkyDNS switch. Stored first, so the next core start follows it too; the
+     * caller has the VPN consent before turning it on.
+     */
+    fun setSkyDns(on: Boolean) {
+        viewModelScope.launch {
+            mutable.update { it.copy(skyDnsBusy = true) }
+            prefs.putBoolean(SkyDns.PREF_STANDALONE, on)
+            val app = getApplication<Application>()
+            // The service listens before the app dials it, and goes after the
+            // app has dropped its tunnel.
+            if (on) SkyVpnService.startDns(app)
+            if (mutable.value.coreReady) {
+                // Autostart too, so a crash-restart of the visor follows the switch.
+                val status = if (on) VisorApi.APP_START else VisorApi.APP_STOP
+                runCatching { api.updateApp(SkyDns.APP, autostart = on, status = status) }
+            }
+            if (!on) SkyVpnService.stopDns(app)
+            mutable.update { it.copy(skyDnsBusy = false) }
+        }
     }
 
     /**

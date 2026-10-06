@@ -54,6 +54,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -61,6 +62,7 @@ import com.skycoin.skywire.BuildConfig
 import com.skycoin.skywire.R
 import com.skycoin.skywire.core.AppUpdates
 import com.skycoin.skywire.core.AppLanguage
+import com.skycoin.skywire.core.DnsServer
 import com.skycoin.skywire.core.ThemeMode
 import com.skycoin.skywire.ui.components.Biometrics
 import com.skycoin.skywire.ui.components.InfoRow
@@ -190,6 +192,7 @@ fun SettingsScreen(
                     onToggle = viewModel::setPublicAutoconnect,
                 )
             }
+            item { DnsCard(state, viewModel::setDnsServer) }
             item {
                 RemoteManagementCard(
                     state = state,
@@ -213,12 +216,18 @@ fun SettingsScreen(
                     },
                 )
             }
+            // A card of its own: two in one item are stacked with no spacing
+            // between them. Below API 34 there is no item at all, not an empty one.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                item {
+                    CallScreenCard(
+                        state = state,
+                        onGrant = viewModel::requestFullScreenCalls,
+                        onDismiss = viewModel::dismissFullScreenCallsPrompt,
+                    )
+                }
+            }
             item {
-                CallScreenCard(
-                    state = state,
-                    onGrant = viewModel::requestFullScreenCalls,
-                    onDismiss = viewModel::dismissFullScreenCallsPrompt,
-                )
                 BatteryCard(
                     state = state,
                     onGrant = viewModel::requestBatteryExemption,
@@ -542,6 +551,50 @@ private fun PublicAutoconnectCard(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/** The resolver SkyVPN and SkyDNS ask for ordinary names — see [DnsServer]. */
+@Composable
+private fun DnsCard(state: SettingsUiState, onSave: (String) -> Unit) {
+    var address by remember(state.dnsServer) { mutableStateOf(state.dnsServer) }
+    val typed = address.trim()
+    val valid = typed.isEmpty() || DnsServer.isValid(typed)
+    SectionCard {
+        Text(stringResource(R.string.settings_dns), style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            stringResource(R.string.settings_dns_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(
+            value = address,
+            onValueChange = { address = it },
+            placeholder = { Text(stringResource(R.string.settings_dns_placeholder)) },
+            singleLine = true,
+            isError = !valid,
+            supportingText = if (valid) null else {
+                { Text(stringResource(R.string.settings_dns_invalid)) }
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            FilledTonalButton(
+                onClick = { onSave(typed) },
+                enabled = valid && DnsServer.sanitize(typed) != state.dnsServer,
+            ) {
+                Text(stringResource(R.string.settings_dns_save))
+            }
+            if (state.dnsServer.isNotEmpty()) {
+                TextButton(onClick = { onSave("") }) {
+                    Text(stringResource(R.string.settings_dns_default))
+                }
+            }
+        }
     }
 }
 

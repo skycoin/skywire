@@ -30,12 +30,6 @@ import (
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
-
-	// The embeddable services register their factories at init.
-	_ "github.com/skycoin/skywire/pkg/services/ar"
-	_ "github.com/skycoin/skywire/pkg/services/rf"
-	_ "github.com/skycoin/skywire/pkg/services/sd"
-	_ "github.com/skycoin/skywire/pkg/services/tpd"
 )
 
 func initEmbeddedServices(ctx context.Context, v *Visor, log *logging.Logger) error {

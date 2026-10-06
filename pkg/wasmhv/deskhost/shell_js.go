@@ -40,6 +40,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall/js"
+	"time"
 
 	"github.com/0magnet/afero"
 	"github.com/0magnet/sh/v3/interp"
@@ -540,6 +541,13 @@ func openShell(el js.Value) *shellSession {
 		term.WriteString("failed to start the shell: " + err.Error() + "\r\n")
 		return s
 	}
+	// A console is an interactive shell: only then do `cmd &` jobs outlive
+	// the line that started them. Applied before the first Run, so a reset
+	// after `exit` keeps it.
+	if err := interp.Interactive(true)(sh.Runner); err != nil {
+		term.WriteString("failed to start the shell: " + err.Error() + "\r\n")
+		return s
+	}
 	s.sh = sh
 	sh.RawMode = func(on bool) { s.rawInput = on }
 	sh.Size = func() (int, int) { return term.Core.Cols(), term.Core.Rows() }
@@ -725,8 +733,11 @@ func (s *shellSession) close() {
 	}
 	if s.sh != nil {
 		// Background jobs outlive the line that started them, so closing the
-		// window is what ends them.
-		s.sh.Runner.StopJobs()
+		// window is what ends them. Bounded, since this runs on the JS
+		// event loop and a job that ignores cancellation must not hang it.
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		s.sh.Runner.StopJobs(ctx)
+		cancel()
 	}
 	if s.stdinW != nil {
 		_ = s.stdinW.Close() //nolint:errcheck

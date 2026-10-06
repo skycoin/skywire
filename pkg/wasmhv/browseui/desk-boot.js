@@ -41,6 +41,103 @@
 
 	var SESSION_KEY = 'skywire-desk-session';
 
+	// One live desk per origin. Every tab runs its visor in its own worker from
+	// the same stored key, so a second tab used to start a second visor with the
+	// same identity. The tab holding this lock is the desk; any other tab loads
+	// nothing, shows a notice, and passes its deep link to the live tab over
+	// deskChannel. The browser releases the lock when the holding page goes away.
+	var DESK_LOCK = 'skywire-desk';
+	var deskChannel = null;
+	try { deskChannel = new BroadcastChannel('skywire-desk'); } catch (e) { /* no cross-tab channel */ }
+	var yielding = false; // this tab is handing the desk to another one
+
+	// readDeepLink: what the page URL asks the desk to open, or null.
+	//   ?skydm=<pk>                  a skychat conversation with <pk>
+	//   ?skygroup=<invite>           the skychat join panel, filled in
+	//   ?skynet=<site>[&kiosk=1]     a mesh site, e.g. rewards.dmsg (?dmsg= too)
+	// The same keys are read from a #k=v fragment.
+	function readDeepLink() {
+		var q = new URLSearchParams(location.search);
+		var h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+		function get(k) { return q.get(k) || h.get(k) || ''; }
+		var pk = get('skydm');
+		if (/^[0-9a-fA-F]{66}$/.test(pk)) return { t: 'dm', pk: pk.toLowerCase() };
+		var invite = get('skygroup');
+		if (invite && invite.length <= 4096) return { t: 'group', invite: invite };
+		var site = get('skynet') || get('dmsg');
+		site = site.replace(/^https?:\/\//i, '');
+		if (site && /^[A-Za-z0-9.-]+(:[0-9]{1,5})?(\/\S*)?$/.test(site)) {
+			var k = get('kiosk');
+			return { t: 'site', target: site, kiosk: k === '1' || k === 'true' };
+		}
+		return null;
+	}
+
+	// oneLiveTab resolves once this tab holds the desk lock. A tab that cannot
+	// take it at once becomes the notice and resolves only after "Use here".
+	// Pages that start no visor share freely.
+	function oneLiveTab(cfg) {
+		if (!cfg.autostartVisor || !globalThis.navigator || !navigator.locks) return Promise.resolve();
+		return new Promise(function (resolve) {
+			function hold() {
+				if (inertTab.box) {
+					inertTab.box.remove();
+					inertTab.box = null;
+					document.title = inertTab.title;
+					var boot = document.getElementById('boot');
+					if (boot) boot.className = inertTab.bootClass;
+				}
+				resolve();
+				return new Promise(function () {}); // held until the page goes away
+			}
+			navigator.locks.request(DESK_LOCK, { ifAvailable: true }, function (lock) {
+				if (lock) return hold();
+				// Queue for the lock now: closing the live tab hands it here, and
+				// "Use here" only has to ask that tab to let go.
+				inertTab();
+				navigator.locks.request(DESK_LOCK, hold);
+				return null;
+			});
+		});
+	}
+
+	// inertTab replaces the page with the notice. "Use here" asks the live tab
+	// to stand down; the queued lock request in oneLiveTab does the rest.
+	function inertTab() {
+		var dl = readDeepLink();
+		if (dl && deskChannel) deskChannel.postMessage({ t: 'open', dl: dl });
+		var box = document.createElement('div');
+		box.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;' +
+			'background:#0b0f14;color:#e6edf3;font:15px/1.5 system-ui,sans-serif;text-align:center';
+		var card = document.createElement('div');
+		card.style.cssText = 'max-width:30em;padding:2em';
+		var title = document.createElement('div');
+		title.style.cssText = 'font-size:1.3em;margin-bottom:.6em';
+		title.textContent = 'Skywire is open in another tab';
+		var text = document.createElement('div');
+		text.style.cssText = 'opacity:.8;margin-bottom:1.4em';
+		text.textContent = dl ? 'The link was opened there. Switch to that tab, or use Skywire here instead.'
+			: 'Only one tab runs your visor. Switch to that tab, or use Skywire here instead.';
+		var btn = document.createElement('button');
+		btn.textContent = 'Use here';
+		btn.style.cssText = 'font:inherit;padding:.5em 1.4em;border-radius:6px;border:1px solid #3b82f6;background:#1d4ed8;color:#fff;cursor:pointer';
+		btn.onclick = function () {
+			btn.disabled = true;
+			text.textContent = 'Waiting for the other tab to stop its visor…';
+			if (deskChannel) deskChannel.postMessage({ t: 'yield' });
+		};
+		card.appendChild(title); card.appendChild(text); card.appendChild(btn);
+		box.appendChild(card);
+		document.body.appendChild(box);
+		var boot = document.getElementById('boot');
+		inertTab.bootClass = boot ? boot.className : '';
+		if (boot) boot.className = 'gone';
+		inertTab.title = document.title;
+		document.title = 'Skywire (open in another tab)';
+		// Removed once this tab holds the lock and boots.
+		inertTab.box = box;
+	}
+
 	function waitFor(fn, what, tries) {
 		return new Promise(function (res, rej) {
 			var n = 0;
@@ -279,6 +376,7 @@
 		}, 180);
 	}
 	function saveSession() {
+		if (yielding) return; // handing over: the next tab must start the visor
 		try {
 			var up = !!(globalThis.vnet && globalThis.vnet.listening(3435));
 			if (up) { visorSawUp = true; }
@@ -320,6 +418,11 @@
 	}
 
 	globalThis.skywireDeskBoot = function (opts) {
+		opts = opts || {};
+		return oneLiveTab(opts).then(function () { return deskBoot(opts); });
+	};
+
+	function deskBoot(opts) {
 		// Drop the pre-vault plaintext key an older build left behind. It does
 		// not derive this visor's public key and nothing reads it — a dead
 		// 32-byte secret sitting in storage only ever benefits whoever takes
@@ -359,6 +462,66 @@
 		// nothing ever listens on hvPort, and a docs tab gated on that would
 		// never appear.
 		var deskWin = null;
+
+		// Deep links: this page's own, and any another tab forwards. They open as
+		// tabs in the dashboard's browser window once it exists. The link is
+		// taken out of the address so a reload does not open it again.
+		var pendingDL = readDeepLink();
+		if (pendingDL) {
+			try {
+				var cleaned = new URL(location.href);
+				['skydm', 'skygroup', 'skynet', 'dmsg', 'kiosk'].forEach(function (k) { cleaned.searchParams.delete(k); });
+				if (/(^#|&)(skydm|skygroup|skynet|dmsg)=/.test(cleaned.hash)) cleaned.hash = '';
+				history.replaceState(history.state, '', cleaned.pathname + cleaned.search + cleaned.hash);
+			} catch (e) { /* keep the address */ }
+		}
+		var deepWin = null;
+		function openDeepLink(dl) {
+			if (!deepWin || !deepWin.openTab) { pendingDL = dl; return; }
+			try {
+				if (dl.t === 'dm') {
+					var u = new URL(opts.dashboardURL || ('http://vnet:' + hvPort + '/?embed=1'), location.href);
+					u.hash = '#/nodes/local/chat?embed=1&peer=' + dl.pk;
+					deepWin.openTab(u.host, u.pathname + u.search + u.hash, u.protocol.replace(':', ''), false);
+				} else if (dl.t === 'group') {
+					var g = new URL(opts.dashboardURL || ('http://vnet:' + hvPort + '/?embed=1'), location.href);
+					g.hash = '#/nodes/local/chat?embed=1&join=' + encodeURIComponent(dl.invite);
+					deepWin.openTab(g.host, g.pathname + g.search + g.hash, g.protocol.replace(':', ''), false);
+				} else if (dl.t === 'site') {
+					var m = /^([^/]+)(\/.*)?$/.exec(dl.target);
+					if (!m) return;
+					deepWin.openTab(m[1], m[2] || '/', 'http', false);
+					if (dl.kiosk && deepWin.wb && deepWin.wb.maximize) deepWin.wb.maximize();
+				}
+			} catch (e) { console.warn('skywire desk: deep link:', e); }
+		}
+
+		// yieldDesk hands the desk to the tab that asked: stop the visor cleanly,
+		// record it as running so that tab starts it, then reload into the notice.
+		// The reload releases the lock to the waiting tab.
+		function yieldDesk() {
+			if (yielding) return;
+			var running = !!(globalThis.vnet && globalThis.vnet.listening(3435));
+			try {
+				if (running) localStorage.setItem(SESSION_KEY, JSON.stringify({ visorRunning: true, at: Date.now() }));
+			} catch (e) { /* storage denied */ }
+			yielding = true;
+			var d = globalThis.__skywireDesk;
+			var halted = (running && d && typeof d.exec === 'function')
+				? Promise.resolve(d.exec('skywire cli visor halt', { timeoutMs: 10000 })).catch(function () {})
+				: Promise.resolve();
+			halted.then(function () {
+				return waitFor(function () { return !(globalThis.vnet && globalThis.vnet.listening(3435)); }, 'the visor to stop', 200)
+					.catch(function () {});
+			}).then(function () { location.reload(); });
+		}
+		if (deskChannel) {
+			deskChannel.onmessage = function (ev) {
+				var msg = ev.data || {};
+				if (msg.t === 'open' && msg.dl) openDeepLink(msg.dl);
+				else if (msg.t === 'yield') yieldDesk();
+			};
+		}
 
 		// hostBridge: the capability probe behind the whole host/in-tab choice.
 		// A page served by a NATIVE hypervisor answers a plain GET /ws with 426
@@ -486,8 +649,12 @@
 			// nested browser can use real /vnet/<port>/ URLs — native rendering
 			// for the hypervisor UI. Resolves false where SWs are unavailable;
 			// the browser falls back to its transcoder, as before.
+			// The worker waits this long for the page to answer one request. The
+			// hypervisor's tree summary can take ~15 s behind a nested hypervisor,
+			// well past the worker's 8 s default, and the page side stops at 30 s.
+			var vnetSWTimeoutMs = 35000;
 			var swReady = (globalThis.vnet && globalThis.vnet.enableSW)
-				? globalThis.vnet.enableSW(opts.vnetSWURL || 'vnet-sw.js').catch(function () { return false; })
+				? globalThis.vnet.enableSW(opts.vnetSWURL || 'vnet-sw.js', undefined, vnetSWTimeoutMs).catch(function () { return false; })
 				: Promise.resolve(false);
 
 			status('restoring filesystem…');
@@ -1211,6 +1378,8 @@
 										// resolve or dial, so it renders with no proxy, no route
 										// and no transport.
 										try { win.openTab('home.dmsg', '/', 'http', true); } catch (e2) {}
+										deepWin = win;
+										if (pendingDL) { var dl0 = pendingDL; pendingDL = null; openDeepLink(dl0); }
 										// status.skysocks only when something serves it. It is a
 										// real page from a running skysocks-client, not a
 										// synthetic one — and this desk does not start a proxy.
@@ -1318,5 +1487,5 @@
 		// decides where the panels' traffic goes and whether a visor of the
 		// tab's own is offered at all.
 		return Promise.all([hostBridge(), hostAttachable()]).then(function (r) { return bootWasm(r[0], r[1]); });
-	};
+	}
 })();

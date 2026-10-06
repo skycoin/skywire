@@ -340,6 +340,14 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 	// only on a clean ctx-done stop; any other return is a
 	// (re-)connect trigger when --reconnect is set.
 	runCycle := func() error {
+		// The visor's resolving proxies, re-read each cycle so one started (or
+		// stopped) since the last connect is picked up without restarting this app.
+		// With them wired, THIS listener answers <pk>.skynet and <pk>.dmsg by
+		// handing the name to the resolver over the app's own connection to the
+		// visor — one browser proxy setting for the mesh and the clearnet both, and
+		// no chain of localhost proxies in front of this one.
+		resolvers := localResolvers(appCl, log)
+
 		// Bind :1080 up front and serve status.skysocks (and the branded
 		// interstitial for real traffic) in-process WHILE we dial the exit, so the
 		// reserved diagnostic page is reachable during the "still connecting" window
@@ -352,7 +360,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		if lis, lerr := skysocks.ReuseListen(cfg.addr); lerr == nil {
 			go func() {
 				defer close(ddone)
-				skysocks.ServeDisconnected(dctx, lis, appCl)
+				skysocks.ServeDisconnected(dctx, lis, appCl, resolvers)
 			}()
 		} else {
 			log.WithError(lerr).Debug("disconnected status listener not bound")
@@ -407,6 +415,16 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// alive; if EVERY tunnel dies, ListenAndServe returns and the runCycle
 		// re-dials the whole client.
 		client.SetTunnelTarget(int(cfg.tunnels))
+		// Mesh names (<pk>.skynet, <pk>.dmsg) go to the visor's resolving proxy over
+		// this app's own connection to the visor, not to the exit, which cannot
+		// reach them. nil = the visor published no resolver.
+		client.SetLocalResolvers(resolvers)
+		// The resolvers and this app are launcher apps in no fixed order, so an
+		// empty answer above may just be "not published yet": re-ask on the
+		// keepalive tick until there is something to use.
+		client.SetLocalResolverRefresh(func() *skysocks.LocalResolvers {
+			return localResolvers(appCl, log)
+		})
 		// Transparent HTTP range-splitting (default-on; see rangesplit.go). One
 		// range-capable :80 GET is fetched as concurrent byte ranges over separate
 		// tunnels, so a single download aggregates across the mesh.
@@ -529,7 +547,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// cycles too. Sleeping here left the port unbound for up to 30 s on every
 		// restart or exit flap, and a browser that hit that window got the proxy's
 		// connection refused — a dead end with no retry of its own.
-		skysocks.ServeDisconnectedWait(cycleCtx, cfg.addr, appCl, delay)
+		skysocks.ServeDisconnectedWait(cycleCtx, cfg.addr, appCl, delay, localResolvers(appCl, log))
 		if cycleCtx.Err() != nil {
 			return nil
 		}
@@ -747,4 +765,27 @@ func setAppPort(appCl *app.Client, log logrus.FieldLogger, port routing.Port) {
 	if err := appCl.SetAppPort(port); err != nil {
 		log.WithError(err).WithField("port", port).Warn("Failed to set port")
 	}
+}
+
+// localResolvers asks the visor which resolving proxies this app can reach
+// in-process and wraps them with the dial that reaches one: an ordinary app dial
+// to the visor's OWN PK on the service's port, which the visor answers over a
+// pipe rather than a route (pkg/app/appnet/local_service.go).
+//
+// Failures are neither fatal nor loud. A visor with no resolver running has
+// nothing to publish, and either way the proxy behaves as it did before: every
+// target goes to the exit.
+func localResolvers(appCl *app.Client, log logrus.FieldLogger) *skysocks.LocalResolvers {
+	if appCl == nil {
+		return nil
+	}
+	svcs, err := appCl.LocalServices()
+	if err != nil {
+		log.WithError(err).Debug("Visor did not list its local services; mesh names will go to the exit")
+		return nil
+	}
+	visorPK := appCl.Config().VisorPK
+	return skysocks.NewLocalResolvers(svcs, func(port routing.Port) (net.Conn, error) {
+		return appCl.Dial(appnet.Addr{Net: netType, PubKey: visorPK, Port: port})
+	})
 }

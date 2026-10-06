@@ -166,6 +166,14 @@ type Config struct {
 	// standalone runtimes and tests need no wiring. Ignored when StatusProvider is
 	// nil.
 	StatusSurface proxystatus.Surface
+
+	// Publish, when non-nil, is called once with a handler that serves ONE
+	// already-established connection exactly as the listener would, protocol
+	// sniff included. The visor registers it as an in-process local service so
+	// an app on this visor reaches this resolver over the data plane it already
+	// holds, with no second SOCKS hop on localhost. The handler stays valid
+	// until Run returns.
+	Publish func(serve func(net.Conn))
 }
 
 // ownsStatusSurface reports whether this layer should answer for a matched
@@ -528,7 +536,20 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 	// through the same resolver and dial path, for clients that only speak
 	// HTTP proxy — Android's VpnService.Builder.setHttpProxy among them.
 	httpDial := proxyfront.SOCKSDial(conf.Resolver, conf.Dial)
-	lis = proxyfront.Split(lis, func(c net.Conn) { proxyfront.ServeHTTP(ctx, c, httpDial) })
+	serveHTTP := func(c net.Conn) { proxyfront.ServeHTTP(ctx, c, httpDial) }
+	lis = proxyfront.Split(lis, serveHTTP)
+
+	// Same two protocols, same dial path, for a conn that arrives without a
+	// listener — see Config.Publish.
+	if cfg.Publish != nil {
+		cfg.Publish(func(c net.Conn) {
+			proxyfront.ServeConn(c, func(sc net.Conn) {
+				if err := srv.ServeConn(sc); err != nil {
+					log.WithError(err).Debug("Local-service SOCKS5 conn ended")
+				}
+			}, serveHTTP)
+		})
+	}
 	go func() {
 		<-ctx.Done()
 		_ = lis.Close() //nolint:errcheck

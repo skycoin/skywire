@@ -95,7 +95,7 @@ func (c *statusCounters) delta(prev *statusCounters) string {
 // command's own timing.
 func fetchStatusCounters(addr string) (*statusCounters, error) {
 	url := fmt.Sprintf("http://%s/status", addr)
-	hc := &http.Client{Timeout: 2 * time.Second}
+	hc := &http.Client{Transport: chatTransport, Timeout: 2 * time.Second}
 	resp, err := hc.Get(url) //nolint:gosec
 	if err != nil {
 		return nil, fmt.Errorf("status fetch: %w", err)

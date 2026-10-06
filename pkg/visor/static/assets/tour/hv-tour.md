@@ -199,6 +199,29 @@ other programs point at. **skysocks-client-lite** has neither: it lives in the
 tab and proxies only what that tab fetches. Both dial an **exit** visor which
 performs the clearnet request, so the site sees the exit's address.
 
+## mail
+
+Title: Mail
+
+Body:
+Skymail, the visor's own mailbox. Mail is addressed to a visor's public key and
+delivered straight to that visor over dmsg or skynet, so there is no account and
+no mail server.
+An empty whitelist accepts mail from any visor. Once it lists keys, only those
+keys can deliver.
+
+## terminal
+
+Title: Terminal
+
+Body (wasm):
+A shell into this visor. In a tab it is websh, a shell running inside the wasm
+core, with the `skywire` command built in.
+
+Body (native):
+A shell on the machine running this visor, over the visor's own pty. The same
+terminal opens on any visor this hypervisor manages.
+
 ## uptime
 
 Title: Uptime

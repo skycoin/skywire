@@ -397,12 +397,18 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "skycoindflags")
 	skyenvArrayVar(genConfigCmd.Flags(), &coinNodes, "coin-nodes", "${COIN_NODES[@]}", "fibercoin nodes to forward over dmsg + advertise (type=coin); CSV of local_addr[@dmsg_port]")
 	gHiddenFlags = append(gHiddenFlags, "coin-nodes")
-	skyenvBoolVar(genConfigCmd.Flags(), &isSkycoinWebEnable, "skycoinweb", "${SKYCOINWEB:-false}", "autostart skycoin web wallet (thin client)")
+	// A browser visor runs the wallet by default, with its files in the tab's
+	// persistent filesystem and no port: the dashboard is its only page.
+	swOn, swAddr, swWallet := "false", "127.0.0.1:8002", ""
+	if skyenv.OS == "js" {
+		swOn, swAddr, swWallet = "true", skycoinWebNoPort, skyenv.SkywirePath+"/wallets"
+	}
+	skyenvBoolVar(genConfigCmd.Flags(), &isSkycoinWebEnable, "skycoinweb", "${SKYCOINWEB:-"+swOn+"}", "autostart skycoin web wallet (thin client)")
 	// 8002 to avoid colliding with skychat's default at 127.0.0.1:8001.
 	// Both apps' upstream defaults happen to be 8001; skychat got there
 	// first in skywire so skycoin-web shifts up by one. Operator can
 	// override via SKYCOINWEBADDR or the universal settings panel.
-	skyenvStringVar(genConfigCmd.Flags(), &skycoinWebAddr, "skycoinwebaddr", "${SKYCOINWEBADDR:-127.0.0.1:8002}", "skycoin web bind address (host:port)")
+	skyenvStringVar(genConfigCmd.Flags(), &skycoinWebAddr, "skycoinwebaddr", "${SKYCOINWEBADDR:-"+swAddr+"}", "skycoin web bind address (host:port), or "+skycoinWebNoPort+" for no port")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebaddr")
 	// SKYCOINWEBNODES is a bash array (multiple node URLs supported
 	// — one per fibercoin the wallet is meant to multi-coin-browse).
@@ -411,8 +417,10 @@ func init() {
 	// --node-url flags as skycoin-web's StringArrayVar expects.
 	skyenvArrayVar(genConfigCmd.Flags(), &skycoinWebNodeURLs, "skycoinwebnodes", "${SKYCOINWEBNODES[@]}", "node URLs the skycoin web wallet talks to (comma separated)")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebnodes")
-	skyenvStringVar(genConfigCmd.Flags(), &skycoinWebWalletDir, "skycoinwebwallet", "${SKYCOINWEBWALLET}", "skycoin web wallet dir override")
+	skyenvStringVar(genConfigCmd.Flags(), &skycoinWebWalletDir, "skycoinwebwallet", "${SKYCOINWEBWALLET:-"+swWallet+"}", "skycoin web wallet dir override")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebwallet")
+	skyenvStringVar(genConfigCmd.Flags(), &skycoinWebElectrum, "skycoinwebelectrum", "${SKYCOINWEBELECTRUM}", "skycoin web electrum servers (comma separated), default, or none")
+	gHiddenFlags = append(gHiddenFlags, "skycoinwebelectrum")
 	skyenvStringVar(genConfigCmd.Flags(), &skycoinWebUser, "skycoinwebuser", "${SKYCOINWEBUSER}", "skycoin web UID (empty inherits visor UID)")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebuser")
 
@@ -1145,6 +1153,16 @@ func mergeExistingApps(log *logging.Logger) {
 		conf.Launcher.Apps[i].AutoStart = prev.AutoStart
 		if len(prev.Args) > 0 {
 			conf.Launcher.Apps[i].Args = prev.Args
+			// A value set in skywire.conf wins over the kept args, or it could never
+			// reach a config that already has them.
+			if name == skyenv.SkycoinWebName && skycoinWebElectrum != "" {
+				conf.Launcher.Apps[i].Args = setFlag(prev.Args, "--btc-electrum-url", skycoinWebElectrum)
+			}
+		}
+		// Env belongs with the args it was written for: an old skycoin-web entry
+		// reaches its .dmsg node through HTTP_PROXY, which its args do not carry.
+		if len(prev.Env) > 0 {
+			conf.Launcher.Apps[i].Env = prev.Env
 		}
 		if prev.LauncherMode != "" {
 			conf.Launcher.Apps[i].LauncherMode = prev.LauncherMode
@@ -2081,15 +2099,25 @@ func skychatInternalArgs(addr string, pair, portless bool) []string {
 	return args
 }
 
-// skycoinWebFlagsEnv builds the bare skycoin-web flags (--host/--port/
-// --node-url/--wallet-dir) and the resolving-proxy env shared by both the
-// external-launch form (`skywire skycoin web <flags>`) and the internal
-// launcher app (RunSkycoinWeb, handed the flags directly). Keeping one
-// source for both is what lets skycoin-web launch identically on the
-// host-native and (via the same internal path) the wasm visor.
-func skycoinWebFlagsEnv() (flags, env []string) {
-	if skycoinWebAddr != "" {
-		if h, p, err := net.SplitHostPort(offsetAddr(skycoinWebAddr)); err == nil {
+// skycoinWebNoPort as SKYCOINWEBADDR opens no port. The internal app is then
+// served only by the hypervisor, under /wallet/.
+const skycoinWebNoPort = "none"
+
+// skycoinWebFlags builds the skycoin-web flags shared by the external-launch
+// form (`skywire app skycoin web <flags>`) and the internal launcher app
+// (RunSkycoinWeb, handed the flags directly), so it launches the same way on a
+// native visor and in a browser tab. An external process cannot be served by
+// the hypervisor, so it keeps a port even when SKYCOINWEBADDR says none.
+func skycoinWebFlags(external bool) (flags []string) {
+	addr := skycoinWebAddr
+	if addr == skycoinWebNoPort && external {
+		addr = "127.0.0.1:8002"
+	}
+	switch {
+	case addr == skycoinWebNoPort:
+		flags = append(flags, "--no-listen")
+	case addr != "":
+		if h, p, err := net.SplitHostPort(offsetAddr(addr)); err == nil {
 			flags = append(flags, "--host", h, "--port", p)
 		}
 	}
@@ -2116,9 +2144,14 @@ func skycoinWebFlagsEnv() (flags, env []string) {
 		if !enableDmsgWeb && enableSkynetWeb {
 			proxy = "socks5://127.0.0.1:4446"
 		}
-		env = []string{"HTTP_PROXY=" + proxy, "HTTPS_PROXY=" + proxy}
+		// A flag, not HTTP_PROXY: an internal app's env is set for the whole
+		// visor process.
+		flags = append(flags, "--socks5-proxy", proxy)
 	}
-	return flags, env
+	if skycoinWebElectrum != "" {
+		flags = append(flags, "--btc-electrum-url", skycoinWebElectrum)
+	}
+	return flags
 }
 
 // configureApps sets up launcher app configurations (internal or external),
@@ -2235,7 +2268,7 @@ func configureApps(log *logging.Logger) {
 		// External-launch form: `skywire app skycoin web <flags>` (Binary=skywire),
 		// under the same `skywire app <name>` namespace as the other apps.
 		// Opt-in — the default is the internal launcher app in the else branch.
-		webFlags, webEnv := skycoinWebFlagsEnv()
+		webFlags := skycoinWebFlags(true)
 		webArgs := append([]string{"app", "skycoin", "web"}, webFlags...)
 		apps = append(apps, appserver.AppConfig{
 			Name:      skyenv.SkycoinWebName,
@@ -2243,14 +2276,13 @@ func configureApps(log *logging.Logger) {
 			AutoStart: isSkycoinWebEnable,
 			Port:      routing.Port(skyenv.SkycoinWebPort),
 			Args:      webArgs,
-			Env:       webEnv,
 			User:      skycoinWebUser,
 		})
 
 		conf.Launcher.Apps = apps
 	} else {
 		// Internal apps configuration (default - apps run within visor process)
-		swFlags, swEnv := skycoinWebFlagsEnv()
+		swFlags := skycoinWebFlags(false)
 		conf.Launcher.Apps = []appserver.AppConfig{
 			{
 				Name:      skyenv.VPNClientName,
@@ -2332,7 +2364,6 @@ func configureApps(log *logging.Logger) {
 				AutoStart: isSkycoinWebEnable,
 				Port:      routing.Port(skyenv.SkycoinWebPort),
 				Args:      swFlags,
-				Env:       swEnv,
 				User:      skycoinWebUser,
 			},
 		}
@@ -2931,4 +2962,21 @@ func flagDigits(cmd *cobra.Command, name string) string {
 		return f.Value.String()
 	}
 	return "0"
+}
+
+// setFlag returns args with flag set to val, replacing "flag val" or
+// "flag=val" where present and appending otherwise.
+func setFlag(args []string, flag, val string) []string {
+	out := append([]string(nil), args...)
+	for i, a := range out {
+		switch {
+		case a == flag && i+1 < len(out):
+			out[i+1] = val
+			return out
+		case strings.HasPrefix(a, flag+"="):
+			out[i] = flag + "=" + val
+			return out
+		}
+	}
+	return append(out, flag, val)
 }

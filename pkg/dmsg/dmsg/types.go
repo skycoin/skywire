@@ -44,6 +44,10 @@ var (
 	// goroutine per request forever (80k on a folded server).
 	quicStreamOpenTimeout = DialTimeout
 
+	// quicStreamDrainTimeout bounds how long a closed QUIC stream waits for the
+	// peer's FIN before it stops reading.
+	quicStreamDrainTimeout = DialTimeout
+
 	// StreamIdleTimeout defines how long a stream can be idle (no reads)
 	// before it is considered stale and closed. This prevents streams stuck
 	// in waitRead from holding ephemeral ports indefinitely.

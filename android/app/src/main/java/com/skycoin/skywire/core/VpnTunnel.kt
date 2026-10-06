@@ -14,6 +14,8 @@ data class VpnTunnelState(
      * the whole point of the setting.
      */
     val established: Boolean = false,
+    /** SkyDNS's own tunnel is up, carrying only its range. Never with [established]. */
+    val skyDns: Boolean = false,
     /** Address the core asked for, e.g. `192.168.255.6/29`. */
     val address: String = "",
     /** Last failure putting an interface up; cleared by the next success. */

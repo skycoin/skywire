@@ -69,7 +69,7 @@ func getOpenFileCount() (float64, error) {
 	if dir, err := os.Open("/dev/fd"); err != nil {
 		return 0.0, err
 	} else {
-		defer func() { _ = dir.Close() }() //nolint:errcheck // close ignored: read-only fd inspection
+		defer dir.Close()
 
 		// Avoid ReadDir(), as it calls stat(2) on each descriptor.  Not only is
 		// that info not used, but KQUEUE descriptors fail stat(2), which causes
@@ -93,19 +93,18 @@ func getSoftLimit(which int) (uint64, error) {
 	return rlimit.Cur, nil
 }
 
-//nolint:unused // upstream code; kept for parity
 func getProcessStartTime() (float64, error) {
 	// Call sysctl to get kinfo_proc for current process
-	mib := []int32{1 /* CTL_KERN */, 14 /* KERN_PROC */, 1 /* KERN_PROC_PID */, int32(os.Getpid())} //nolint:gosec // upstream code; safe under documented invariants
+	mib := []int32{1 /* CTL_KERN */, 14 /* KERN_PROC */, 1 /* KERN_PROC_PID */, int32(os.Getpid())}
 
 	// First call to get the size
 	n := uintptr(0)
-	_, _, errno := syscall.Syscall6( //nolint:gosec // upstream code; safe under documented invariants
+	_, _, errno := syscall.Syscall6(
 		syscall.SYS___SYSCTL,
-		uintptr(unsafe.Pointer(&mib[0])), //nolint:gosec // unsafe ptr to fixed-size mib array
+		uintptr(unsafe.Pointer(&mib[0])),
 		uintptr(len(mib)),
 		0,
-		uintptr(unsafe.Pointer(&n)), //nolint:gosec // unsafe ptr to stack-allocated uintptr
+		uintptr(unsafe.Pointer(&n)),
 		0,
 		0,
 	)
@@ -118,12 +117,12 @@ func getProcessStartTime() (float64, error) {
 
 	// Second call to get the actual data
 	buf := make([]byte, n)
-	_, _, errno = syscall.Syscall6( //nolint:gosec // upstream code; safe under documented invariants
+	_, _, errno = syscall.Syscall6(
 		syscall.SYS___SYSCTL,
-		uintptr(unsafe.Pointer(&mib[0])), //nolint:gosec // unsafe ptr to fixed-size mib array
+		uintptr(unsafe.Pointer(&mib[0])),
 		uintptr(len(mib)),
-		uintptr(unsafe.Pointer(&buf[0])), //nolint:gosec // unsafe ptr to caller-sized buffer
-		uintptr(unsafe.Pointer(&n)),      //nolint:gosec // unsafe ptr to stack-allocated uintptr
+		uintptr(unsafe.Pointer(&buf[0])),
+		uintptr(unsafe.Pointer(&n)),
 		0,
 		0,
 	)
@@ -141,8 +140,8 @@ func getProcessStartTime() (float64, error) {
 	}
 
 	// Read tv_sec (8 bytes) and tv_usec (4 bytes)
-	tvSec := int64(binary.LittleEndian.Uint64(buf[startTimeOffset:]))    //nolint:gosec // upstream code; safe under documented invariants
-	tvUsec := int32(binary.LittleEndian.Uint32(buf[startTimeOffset+8:])) //nolint:gosec // upstream code; safe under documented invariants
+	tvSec := int64(binary.LittleEndian.Uint64(buf[startTimeOffset:]))
+	tvUsec := int32(binary.LittleEndian.Uint32(buf[startTimeOffset+8:]))
 
 	startTime := float64(tvSec) + float64(tvUsec)/1e6
 	return startTime, nil

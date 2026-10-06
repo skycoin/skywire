@@ -1,5 +1,3 @@
-//go:build !(js && wasm)
-
 // Package main skywire_skycoinweb.go
 package main
 

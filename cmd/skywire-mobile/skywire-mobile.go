@@ -1,7 +1,7 @@
 // Package main cmd/skywire-mobile/skywire-mobile.go c4-vis-cli
 /*
 skywire-mobile is the lite multicall core for the mobile app: the visor, the
-CLI's `config` subtree and the four client apps in ONE binary, shipped to
+CLI's `config` subtree and the client apps in ONE binary, shipped to
 Android as libskywire-mobile.so. It is a build VARIANT of this repo — build it
 with `-tags mobile,withoutsystray,nomsgpack` (make build-mobile /
 android-mobile), which strips the embedded desktop assets (geoip db, manager
@@ -10,7 +10,7 @@ UI, browser wallet, tpviz) and selects the lite module set
 local API intact. iOS links the same core as a C library instead
 (cmd/skywire-mobile-core, pkg/mobilecore).
 
-Apps run in-process by default: importing the four app command packages below
+Apps run in-process by default: importing the app command packages below
 registers their launcher entries (launcher.RegisterApp) at import time, so a
 config entry with `binary: ""` resolves to the in-proc RunFunc. The `app`
 subcommand is the per-app exec fallback — a config entry with a non-empty
@@ -26,6 +26,7 @@ import (
 
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
 	xc "github.com/skycoin/skywire/cmd/apps/skydex-client/commands"
+	sdns "github.com/skycoin/skywire/cmd/apps/skydns/commands"
 	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
 	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
@@ -58,7 +59,7 @@ var appsCmd = &cobra.Command{
 }
 
 func init() {
-	appsCmd.AddCommand(sc.RootCmd, ssc.RootCmd, vpnc.RootCmd, xc.RootCmd)
+	appsCmd.AddCommand(sc.RootCmd, sdns.RootCmd, ssc.RootCmd, vpnc.RootCmd, xc.RootCmd)
 	RootCmd.AddCommand(visor.RootCmd, cliconfig.RootCmd, appsCmd)
 	// visor.RootCmd computes its Use from os.Args[0]; pin the mounted name —
 	// the same post-mount rename cmd/skywire/commands does.

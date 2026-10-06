@@ -47,23 +47,17 @@ func (r *Runner) unTestOwnOrGrp(ctx context.Context, op syntax.UnTestOperator, x
 	return false
 }
 
-// waitStatus is a no-op on plan9 and windows.
+// waitStatus is a no-op where there are no signals: plan9, windows and js.
 type waitStatus struct{}
 
-// isENOEXEC is a no-op on plan9 and windows.
+// isENOEXEC is a no-op where there are no signals: plan9, windows and js.
 func isENOEXEC(err error) bool { return false }
 
-// isETXTBSY is a no-op on plan9 and windows.
+// isETXTBSY is a no-op where there are no signals: plan9, windows and js.
 func isETXTBSY(err error) bool { return false }
 
 func (waitStatus) Signaled() bool { return false }
 func (waitStatus) Signal() int    { return 0 }
-
-// killProcess is a no-op on plan9, windows and js/wasm, which have no
-// signals to send.
-func killProcess(pid, signum int) error {
-	return fmt.Errorf("cannot signal processes on this platform")
-}
 
 // signalNames is the fallback signal table for platforms with no signals to
 // ask about. It is Linux's numbering, which is as good a choice as any: these

@@ -4,11 +4,15 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
 import android.net.LocalServerSocket
 import android.net.LocalSocket
+import android.net.NetworkCapabilities
 import android.net.VpnService
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.Process
+import android.system.OsConstants
 import com.skycoin.skywire.MainActivity
 import com.skycoin.skywire.R
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +31,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.IOException
+import java.net.InetAddress
 import java.util.Collections
 
 /**
@@ -57,6 +62,9 @@ import java.util.Collections
  *
  * It also runs the VPN hotspot ([HotspotShare]), which shares the tunnel with
  * devices on the phone's hotspot and so cannot outlive it either.
+ *
+ * SkyDNS without SkyVPN asks for a tunnel of its own ([SkyDns]). It carries only
+ * SkyDNS's range, and SkyVPN's full tunnel takes its place whenever SkyVPN is on.
  *
  * Not a foreground service, deliberately: it shares a process with
  * [SkywireCoreService], which is one and runs whenever the VPN could — the
@@ -101,16 +109,42 @@ class SkyVpnService : VpnService() {
 
     @Volatile private var killswitch = false
 
+    /** Who wants this service. It stops when neither SkyVPN nor SkyDNS does. */
+    @Volatile private var vpnWanted = false
+    @Volatile private var dnsWanted = false
+
+    /** [tun] is SkyDNS's own tunnel, which a full one replaces. */
+    @Volatile private var tunIsDns = false
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
-                shutdown()
-                stopSelf()
-                return START_NOT_STICKY
+                vpnWanted = false
+                if (!dnsWanted) {
+                    shutdown()
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                // SkyDNS keeps the service, so only SkyVPN's part of it goes.
+                stopHotspot()
+                scope.launch { mutex.withLock { if (!tunIsDns) closeTun() } }
+            }
+            ACTION_START_DNS -> {
+                dnsWanted = true
+                listen()
+                watchCore()
+            }
+            ACTION_STOP_DNS -> {
+                dnsWanted = false
+                if (!vpnWanted) {
+                    shutdown()
+                    stopSelf()
+                }
             }
             ACTION_KILLSWITCH ->
                 killswitch = intent.getBooleanExtra(EXTRA_KILLSWITCH, killswitch)
             else -> {
+                vpnWanted = true
                 killswitch = intent?.getBooleanExtra(EXTRA_KILLSWITCH, killswitch) ?: killswitch
                 listen()
                 watchCore()
@@ -242,9 +276,16 @@ class SkyVpnService : VpnService() {
         when (request?.op) {
             OP_ESTABLISH -> establish(client, request)
             OP_DOWN -> {
-                closeTun()
+                // Each kind of tunnel goes down only at its own kind's word, so
+                // SkyDNS waiting for its turn cannot drop SkyVPN's tunnel.
+                if ((request.mode == MODE_DNS) == tunIsDns) closeTun()
                 reply(client, ok = true)
             }
+            OP_HOLDS -> reply(
+                client,
+                ok = tun != null && controller === client,
+                dns = if (tunIsDns) networkDns() else emptyList(),
+            )
             else -> reply(client, ok = false, error = "unknown request")
         }
     }
@@ -258,6 +299,12 @@ class SkyVpnService : VpnService() {
      * would open a window with no VPN and leak traffic straight out.
      */
     private suspend fun establish(client: LocalSocket, request: TunRequest) {
+        val dnsMode = request.mode == MODE_DNS
+        if (dnsMode && tun != null && !tunIsDns) {
+            // SkyVPN's tunnel runs SkyDNS itself when its switch is on.
+            reply(client, ok = false, error = "SkyVPN holds the tunnel")
+            return
+        }
         val address = request.addr.substringBefore('/')
         val prefix = request.addr.substringAfter('/', "").toIntOrNull()
         if (address.isEmpty() || prefix == null) {
@@ -271,11 +318,8 @@ class SkyVpnService : VpnService() {
 
         val established = try {
             val builder = Builder()
-                .setSession(getString(R.string.app_skyvpn))
+                .setSession(getString(if (dnsMode) R.string.app_skydns else R.string.app_skyvpn))
                 .addAddress(address, prefix)
-                // Everything. The client's own routing declares this as the
-                // two half-spaces; a default route is the same statement.
-                .addRoute("0.0.0.0", 0)
                 .setMtu(request.mtu.takeIf { it > 0 } ?: DEFAULT_MTU)
                 // A full tunnel with no resolver of its own would leave the
                 // phone pointed at whatever DNS its Wi-Fi handed out — often
@@ -286,7 +330,16 @@ class SkyVpnService : VpnService() {
                 // park in the kernel with no way to interrupt them.
                 .setBlocking(false)
                 .setConfigureIntent(configureIntent())
-            if (!applyAppRules(builder, routing)) {
+            if (dnsMode) {
+                if (!routeSkyDns(builder, request.route)) {
+                    reply(client, ok = false, error = "malformed route ${request.route}")
+                    return
+                }
+            } else if (applyAppRules(builder, routing)) {
+                // Everything. The client's own routing declares this as the
+                // two half-spaces; a default route is the same statement.
+                builder.addRoute("0.0.0.0", 0)
+            } else {
                 val error = getString(R.string.vpn_error_no_apps)
                 reply(client, ok = false, error = error)
                 VpnTunnel.mutableState.value = VpnTunnel.mutableState.value.copy(
@@ -310,6 +363,7 @@ class SkyVpnService : VpnService() {
         if (established == null) {
             // Consent was never granted, or was revoked while we ran.
             reply(client, ok = false, error = getString(R.string.vpn_error_no_consent))
+            if (dnsMode) return
             VpnTunnel.mutableState.value = VpnTunnel.mutableState.value.copy(
                 established = false,
                 error = getString(R.string.vpn_error_no_consent),
@@ -320,7 +374,7 @@ class SkyVpnService : VpnService() {
         // The fd rides along with the reply as SCM_RIGHTS; the receiver gets
         // its own dup, which is why ours stays open and holds the interface.
         client.setFileDescriptorsForSend(arrayOf(established.fileDescriptor))
-        val sent = reply(client, ok = true)
+        val sent = reply(client, ok = true, dns = if (dnsMode) networkDns() else emptyList())
         client.setFileDescriptorsForSend(null)
         if (!sent) {
             runCatching { established.close() }
@@ -329,12 +383,30 @@ class SkyVpnService : VpnService() {
 
         runCatching { tun?.close() }
         tun = established
+        tunIsDns = dnsMode
         controller = client
         VpnTunnel.mutableState.value = VpnTunnelState(
             serviceUp = true,
-            established = true,
-            address = request.addr,
+            established = !dnsMode,
+            skyDns = dnsMode,
+            address = if (dnsMode) "" else request.addr,
         )
+    }
+
+    /**
+     * SkyDNS's tunnel carries only [route]; IPv6 and this app, which forwards the
+     * other lookups, go around it. Unmetered, so the network underneath decides.
+     */
+    private fun routeSkyDns(builder: Builder, route: String): Boolean {
+        val bits = route.substringAfter('/', "").toIntOrNull() ?: return false
+        builder.addRoute(route.substringBefore('/'), bits)
+        builder.addDisallowedApplication(packageName)
+        builder.allowFamily(OsConstants.AF_INET6)
+        // Android updates a tunnel in place, keeping its name and metering, only
+        // when bypass matches. Differing makes SkyVPN's tunnel a new network.
+        builder.allowBypass()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) builder.setMetered(false)
+        return true
     }
 
     /**
@@ -378,9 +450,11 @@ class SkyVpnService : VpnService() {
     private fun closeTun() {
         val current = tun ?: return
         tun = null
+        tunIsDns = false
         runCatching { current.close() }
         VpnTunnel.mutableState.value = VpnTunnel.mutableState.value.copy(
             established = false,
+            skyDns = false,
             address = "",
         )
     }
@@ -392,7 +466,7 @@ class SkyVpnService : VpnService() {
      * the user disconnects to lift it.
      */
     private fun onCoreGone() {
-        if (killswitch) return
+        if (killswitch && !tunIsDns) return
         scope.launch { mutex.withLock { closeTun() } }
     }
 
@@ -419,10 +493,16 @@ class SkyVpnService : VpnService() {
         }
     }
 
-    private fun shutdown() {
+    private fun stopHotspot() {
         hotspotSwitch?.cancel()
         hotspotSwitch = null
         hotspot.stop()
+    }
+
+    private fun shutdown() {
+        stopHotspot()
+        vpnWanted = false
+        dnsWanted = false
         acceptor?.cancel()
         acceptor = null
         coreWatcher?.cancel()
@@ -434,6 +514,7 @@ class SkyVpnService : VpnService() {
         clients.clear()
         runCatching { tun?.close() }
         tun = null
+        tunIsDns = false
         VpnTunnel.mutableState.value = VpnTunnelState()
     }
 
@@ -445,10 +526,37 @@ class SkyVpnService : VpnService() {
         PendingIntent.FLAG_IMMUTABLE,
     )
 
+    /**
+     * The resolvers of the network the phone is on, for SkyDNS on its own when
+     * no `--dns` is set. This app is outside every tunnel, so its default
+     * network is the real one; a VPN, or SkyDNS's own address, would loop.
+     */
+    private fun networkDns(): List<String> {
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return emptyList()
+        val network = cm.activeNetwork ?: return emptyList()
+        if (cm.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true) {
+            return emptyList()
+        }
+        return cm.getLinkProperties(network)?.dnsServers.orEmpty()
+            .filterNot { it.isLinkLocalAddress || inSkyDnsRange(it) }
+            .mapNotNull { it.hostAddress }
+    }
+
+    /** 198.18.0.0/15, where SkyDNS answers and hands out mesh addresses (pkg/skydns). */
+    private fun inSkyDnsRange(address: InetAddress): Boolean {
+        val bytes = address.address
+        return bytes.size == 4 && bytes[0] == 198.toByte() && (bytes[1].toInt() and 0xfe) == 18
+    }
+
     /** True when the reply reached the peer. */
-    private fun reply(client: LocalSocket, ok: Boolean, error: String? = null): Boolean =
+    private fun reply(
+        client: LocalSocket,
+        ok: Boolean,
+        error: String? = null,
+        dns: List<String> = emptyList(),
+    ): Boolean =
         runCatching {
-            val body = json.encodeToString(TunReply.serializer(), TunReply(ok, error.orEmpty()))
+            val body = json.encodeToString(TunReply.serializer(), TunReply(ok, error.orEmpty(), dns))
             client.outputStream.apply {
                 write((body + "\n").toByteArray())
                 flush()
@@ -478,10 +586,16 @@ class SkyVpnService : VpnService() {
         private const val ACTION_START = "com.skycoin.skywire.vpn.START"
         private const val ACTION_STOP = "com.skycoin.skywire.vpn.STOP"
         private const val ACTION_KILLSWITCH = "com.skycoin.skywire.vpn.KILLSWITCH"
+        private const val ACTION_START_DNS = "com.skycoin.skywire.vpn.START_DNS"
+        private const val ACTION_STOP_DNS = "com.skycoin.skywire.vpn.STOP_DNS"
         private const val EXTRA_KILLSWITCH = "killswitch"
 
         private const val OP_ESTABLISH = "establish"
         private const val OP_DOWN = "down"
+        private const val OP_HOLDS = "holds"
+
+        /** SkyDNS's own tunnel. See pkg/vpn/tun_device_android.go. */
+        private const val MODE_DNS = "dns"
 
         /** Matches pkg/vpn's TUNMTU; the core sends its own value anyway. */
         private const val DEFAULT_MTU = 1500
@@ -500,6 +614,19 @@ class SkyVpnService : VpnService() {
         fun stop(context: Context) {
             context.startService(
                 Intent(context, SkyVpnService::class.java).setAction(ACTION_STOP),
+            )
+        }
+
+        /** Keeps the service up for SkyDNS's own tunnel, SkyVPN or not. */
+        fun startDns(context: Context) {
+            context.startService(
+                Intent(context, SkyVpnService::class.java).setAction(ACTION_START_DNS),
+            )
+        }
+
+        fun stopDns(context: Context) {
+            context.startService(
+                Intent(context, SkyVpnService::class.java).setAction(ACTION_STOP_DNS),
             )
         }
 
@@ -522,10 +649,14 @@ private data class TunRequest(
     @SerialName("gateway") val gateway: String = "",
     @SerialName("mtu") val mtu: Int = 0,
     @SerialName("dns") val dns: String = "",
+    @SerialName("mode") val mode: String = "",
+    @SerialName("route") val route: String = "",
 )
 
 @Serializable
 private data class TunReply(
     @SerialName("ok") val ok: Boolean,
     @SerialName("error") val error: String = "",
+    /** The phone network's resolvers; only SkyDNS's own tunnel is sent them. */
+    @SerialName("dns") val dns: List<String> = emptyList(),
 )

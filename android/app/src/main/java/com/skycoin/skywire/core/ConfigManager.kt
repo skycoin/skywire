@@ -60,6 +60,9 @@ class ConfigManager(
         publicAutoconnect: Boolean,
         logLevel: String,
         remoteManagementPk: String?,
+        skyDnsStandalone: Boolean,
+        skyDnsInVpn: Boolean,
+        dnsServer: String,
     ): Result<File> = withContext(Dispatchers.IO) {
         paths.ensureDirs()
         // Before the existence check below, which is what decides whether to
@@ -95,6 +98,9 @@ class ConfigManager(
                 publicAutoconnect,
                 logLevel,
                 remoteManagementPk,
+                skyDnsStandalone,
+                skyDnsInVpn,
+                dnsServer,
                 skychatPasswordFile = ensureGatePassword(
                     SkychatProfile.passwordFile(paths),
                     secrets.skychatPassword(),
@@ -157,6 +163,8 @@ class ConfigManager(
      *    visor happens to get;
      *  - `launcher.bin_path` pinned to an app-private writable dir, and the
      *    per-app flags the phone owns (see [pinAppArgs]);
+     *  - the `skydns` app and vpn-client's SkyDNS flag, from the app's two
+     *    SkyDNS switches (see [SkyDns]);
      *  - drop `skywire-tcp` — skips the `:7777` STCP listener;
      *  - `dmsgscp.disabled` — on by default when absent, writes scp-root;
      *  - `tp_viz.enable=false` — cosmetic (field is never read) but keeps
@@ -185,6 +193,9 @@ class ConfigManager(
         publicAutoconnect: Boolean,
         logLevel: String,
         remoteManagementPk: String?,
+        skyDnsStandalone: Boolean,
+        skyDnsInVpn: Boolean,
+        dnsServer: String,
         skychatPasswordFile: File,
         skydexPasswordFile: File,
     ) {
@@ -236,8 +247,11 @@ class ConfigManager(
                         value.jsonObject.edit {
                             put("bin_path", JsonPrimitive(paths.binDir.absolutePath))
                             this["apps"]?.let { apps ->
-                                this["apps"] =
-                                    pinAppArgs(apps, skychatPasswordFile, skydexPasswordFile)
+                                this["apps"] = withSkyDnsApp(
+                                    pinAppArgs(apps, skychatPasswordFile, skydexPasswordFile, skyDnsInVpn, dnsServer),
+                                    skyDnsStandalone,
+                                    dnsServer,
+                                )
                             }
                         },
                     )
@@ -277,6 +291,8 @@ class ConfigManager(
         apps: JsonElement,
         skychatPasswordFile: File,
         skydexPasswordFile: File,
+        skyDnsInVpn: Boolean,
+        dnsServer: String,
     ): JsonElement {
         val list = apps as? JsonArray ?: return apps
         return JsonArray(
@@ -288,6 +304,7 @@ class ConfigManager(
                 val name = (app["name"] as? JsonPrimitive)?.content
                 val pinned = when (name) {
                     SOCKS_APP -> phoneSocksArgs(args)
+                    VPN_APP -> DnsServer.args(SkyDns.vpnArgs(args, skyDnsInVpn), dnsServer)
                     SkydexProfile.APP -> SkydexProfile.phoneArgs(args, skydexPasswordFile)
                     SkychatProfile.APP -> SkychatProfile.phoneArgs(
                         args,
@@ -307,6 +324,32 @@ class ConfigManager(
                     if (name == SkychatProfile.APP) {
                         this["auto_start"] = JsonPrimitive(true)
                     }
+                }
+            },
+        )
+    }
+
+    /**
+     * The `skydns` app, added to a config made before it existed, autostarting
+     * as the switch says and asking [dnsServer] for other names.
+     */
+    private fun withSkyDnsApp(apps: JsonElement, autoStart: Boolean, dnsServer: String): JsonElement {
+        val list = apps as? JsonArray ?: return apps
+        fun isSkyDns(entry: JsonElement) =
+            ((entry as? JsonObject)?.get("name") as? JsonPrimitive)?.content == SkyDns.APP
+        val entries = if (list.any(::isSkyDns)) list else list + buildJsonObject {
+            put("name", JsonPrimitive(SkyDns.APP))
+            put("port", JsonPrimitive(SkyDns.APP_PORT))
+        }
+        return JsonArray(
+            entries.map { entry ->
+                if (!isSkyDns(entry)) return@map entry
+                val app = entry as JsonObject
+                val args = (app["args"] as? JsonPrimitive)?.content.orEmpty().split(" ")
+                    .filter { it.isNotEmpty() }
+                app.edit {
+                    this["auto_start"] = JsonPrimitive(autoStart)
+                    this["args"] = JsonPrimitive(DnsServer.args(args, dnsServer).joinToString(" "))
                 }
             },
         )
@@ -570,6 +613,7 @@ class ConfigManager(
     private companion object {
         const val MAX_CAPTURE = 256 * 1024
         const val SOCKS_APP = "skysocks-client"
+        const val VPN_APP = "vpn-client"
         const val DEFAULT_SOCKS_PORT = 1080
 
         /**

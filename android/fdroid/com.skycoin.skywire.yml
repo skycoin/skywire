@@ -98,12 +98,17 @@ Builds:
     # hypervisor, the compiled wasm routing-policy examples are docs (their
     # sources stay: the presets are built from one of them), and the two
     # package.json files are npm metadata that vendored Go modules carry.
+    # The desktop's browse cookie jar (public suffix tables) and wallet page
+    # (skycoin-lite wasm) are vendored too, and the mobile build has neither.
     scandelete:
       - pkg/geoip/GeoLite2-City.mmdb.gz
       - pkg/wasmhv/execwasm/blob
       - docs/examples/routing-policies/wasm/*/*.wasm
       - vendor/github.com/blang/semver/package.json
       - vendor/github.com/go-redis/redis/v8/package.json
+      - vendor/golang.org/x/net/publicsuffix/data/nodes
+      - vendor/golang.org/x/net/publicsuffix/data/children
+      - vendor/github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo/skycoin-lite.wasm.gz
     # A generated file the mobile binary embeds with go:embed, so it has to
     # stay: the pty web terminal page, gzipped HTML.
     scanignore:

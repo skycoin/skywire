@@ -128,7 +128,7 @@ var pairListCmd = &cobra.Command{
 	Short: "List known pairs",
 	Run: func(cmd *cobra.Command, _ []string) {
 		url := fmt.Sprintf("http://%s/pair", httpAddr)
-		hc := &http.Client{Timeout: 5 * time.Second}
+		hc := &http.Client{Transport: chatTransport, Timeout: 5 * time.Second}
 		resp, err := hc.Get(url) //nolint:gosec
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("pair list: %w", err))
@@ -249,7 +249,7 @@ var pairPollCmd = &cobra.Command{
 		if pairPollSince != "" {
 			url += "&since=" + pairPollSince
 		}
-		hc := &http.Client{Timeout: 5 * time.Second}
+		hc := &http.Client{Transport: chatTransport, Timeout: 5 * time.Second}
 		resp, err := hc.Get(url) //nolint:gosec
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("pair poll: %w", err))
@@ -334,7 +334,7 @@ var pairRemoveCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		hc := &http.Client{Timeout: 5 * time.Second}
+		hc := &http.Client{Transport: chatTransport, Timeout: 5 * time.Second}
 		resp, err := hc.Do(req)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("pair remove: %w", err))
@@ -360,7 +360,7 @@ type pairStateSnap struct {
 // isn't in it — distinct from network/decode errors.
 func fetchPairState(addr, peerPK string) (*pairStateSnap, error) {
 	url := fmt.Sprintf("http://%s/pair", addr)
-	hc := &http.Client{Timeout: 2 * time.Second}
+	hc := &http.Client{Transport: chatTransport, Timeout: 2 * time.Second}
 	resp, err := hc.Get(url) //nolint:gosec
 	if err != nil {
 		return nil, fmt.Errorf("pair fetch: %w", err)
@@ -397,7 +397,7 @@ func httpPost(url string, body []byte, timeout time.Duration) (*http.Response, e
 	if body != nil {
 		rdr = bytes.NewReader(body)
 	}
-	hc := &http.Client{Timeout: timeout}
+	hc := &http.Client{Transport: chatTransport, Timeout: timeout}
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, rdr)
 	if err != nil {
 		return nil, err
@@ -431,7 +431,7 @@ func checkOK(resp *http.Response) error {
 // so the user message doesn't fail just because the lookup did.
 func getLocalPK(addr string) string {
 	url := fmt.Sprintf("http://%s/status", addr)
-	hc := &http.Client{Timeout: 2 * time.Second}
+	hc := &http.Client{Transport: chatTransport, Timeout: 2 * time.Second}
 	resp, err := hc.Get(url) //nolint:gosec
 	if err != nil {
 		return "<local>"

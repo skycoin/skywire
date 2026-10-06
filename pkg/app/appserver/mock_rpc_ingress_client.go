@@ -208,6 +208,34 @@ func (_m *MockRPCIngressClient) Notify(n NotifyReq) error {
 	return r0
 }
 
+// LocalServices provides a mock function with no fields
+func (_m *MockRPCIngressClient) LocalServices() ([]appnet.LocalService, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for LocalServices")
+	}
+
+	var r0 []appnet.LocalService
+	var r1 error
+	if rf, ok := ret.Get(0).(func() ([]appnet.LocalService, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() []appnet.LocalService); ok {
+		r0 = rf()
+	} else if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]appnet.LocalService)
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // ProxyStatus provides a mock function with no fields
 func (_m *MockRPCIngressClient) ProxyStatus() (proxystatus.Snapshot, error) {
 	ret := _m.Called()

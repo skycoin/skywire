@@ -62,6 +62,12 @@ const (
 
 	androidTUNOpEstablish = "establish"
 	androidTUNOpDown      = "down"
+	// androidTUNOpHolds asks whether the interface up is still the asker's.
+	androidTUNOpHolds = "holds"
+
+	// androidTUNModeDNS is SkyDNS's own tunnel: it routes only Route, and a
+	// full tunnel takes its place.
+	androidTUNModeDNS = "dns"
 )
 
 var (
@@ -82,12 +88,26 @@ type androidTUNRequest struct {
 	// default then, because a full-tunnel VPN that declares no resolver can
 	// strand the phone on a LAN one it can no longer reach.
 	DNS string `json:"dns,omitempty"`
+	// Mode is empty for SkyVPN's full tunnel, androidTUNModeDNS for SkyDNS's.
+	Mode string `json:"mode,omitempty"`
+	// Route is the one CIDR a SkyDNS tunnel carries. A full tunnel carries all.
+	Route string `json:"route,omitempty"`
+}
+
+// errAndroidTUNRefused is the app saying no, over a channel that works.
+type errAndroidTUNRefused struct{ op, reason string }
+
+func (e errAndroidTUNRefused) Error() string {
+	return fmt.Sprintf("the VPN service refused %s: %s", e.op, e.reason)
 }
 
 // androidTUNReply is the app's answer to one request.
 type androidTUNReply struct {
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`
+	// DNS lists the resolvers of the network the phone is on, outside every
+	// tunnel. The app sends it to SkyDNS's own tunnel, which follows it.
+	DNS []string `json:"dns,omitempty"`
 }
 
 // androidTUN is a TUNDevice whose descriptor comes from the Android app.
@@ -103,6 +123,8 @@ type androidTUN struct {
 	// is satisfied by the interface already up.
 	params androidTUNRequest
 	closed bool
+	// netDNS is what the app last reported as the phone network's resolvers.
+	netDNS []string
 }
 
 func newTUNDevice() (TUNDevice, error) {
@@ -157,19 +179,21 @@ func (t *androidTUN) Close() error {
 // establish asks the app for an interface carrying these parameters and takes
 // over the descriptor it sends back. This is what SetupTUN does on Android.
 func (t *androidTUN) establish(addrCIDR, gateway string, mtu int, dns string) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	if t.closed {
-		return os.ErrClosed
-	}
-
-	req := androidTUNRequest{
+	return t.establishReq(androidTUNRequest{
 		Op:      androidTUNOpEstablish,
 		Addr:    addrCIDR,
 		Gateway: gateway,
 		MTU:     mtu,
 		DNS:     dns,
+	})
+}
+
+func (t *androidTUN) establishReq(req androidTUNRequest) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.closed {
+		return os.ErrClosed
 	}
 
 	// Reconnecting to the same server lands the same address, and then the
@@ -208,15 +232,43 @@ func (t *androidTUN) down() error {
 
 	// Ours first, so a Read still blocked on the old interface unblocks
 	// rather than waiting for a packet that will never come.
+	mode := t.params.Mode
 	_ = t.file.Close()
 	t.file, t.params = nil, androidTUNRequest{}
 
 	if t.ctl == nil {
 		return nil
 	}
-	_, err := t.roundTrip(androidTUNRequest{Op: androidTUNOpDown})
+	// The mode says which kind of tunnel to drop, so SkyDNS cannot drop SkyVPN's.
+	_, err := t.roundTrip(androidTUNRequest{Op: androidTUNOpDown, Mode: mode})
 
 	return err
+}
+
+// holds reports whether the interface up is still this one. A full tunnel
+// replaces SkyDNS's, and the old descriptor does not always error after that.
+func (t *androidTUN) holds() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.closed || t.file == nil {
+		return false
+	}
+	_, err := t.roundTrip(androidTUNRequest{Op: androidTUNOpHolds})
+
+	return err == nil
+}
+
+// forget drops a descriptor whose interface someone else has replaced,
+// without telling the app: the interface up now is not this one to drop.
+func (t *androidTUN) forget() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.file != nil {
+		_ = t.file.Close()
+		t.file, t.params = nil, androidTUNRequest{}
+	}
 }
 
 // established returns the live descriptor, or says why there isn't one.
@@ -243,18 +295,32 @@ func (t *androidTUN) roundTrip(req androidTUNRequest) (*os.File, error) {
 		return nil, err
 	}
 
-	file, err := requestTUN(conn, req)
+	file, dns, err := requestTUN(conn, req)
+	var refused errAndroidTUNRefused
+	if err != nil && !errors.As(err, &refused) {
+		t.dropCtl()
+		conn, dialErr := t.dial()
+		if dialErr != nil {
+			return nil, fmt.Errorf("%w (redial: %v)", err, dialErr)
+		}
+		file, dns, err = requestTUN(conn, req)
+	}
 	if err == nil {
-		return file, nil
+		t.netDNS = dns
 	}
 
-	t.dropCtl()
-	conn, dialErr := t.dial()
-	if dialErr != nil {
-		return nil, fmt.Errorf("%w (redial: %v)", err, dialErr)
-	}
+	return file, err
+}
 
-	return requestTUN(conn, req)
+// networkDNS is the first resolver the app last reported for the phone's
+// network, or "" when it reported none.
+func (t *androidTUN) networkDNS() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if len(t.netDNS) == 0 {
+		return ""
+	}
+	return t.netDNS[0]
 }
 
 // dial returns the control channel, opening it on first use. Call with mu held.
@@ -289,40 +355,41 @@ func (t *androidTUN) dropCtl() {
 
 // requestTUN writes one control line and reads the reply, which for an
 // establish carries the interface's descriptor as ancillary data.
-func requestTUN(conn *net.UnixConn, req androidTUNRequest) (*os.File, error) {
+func requestTUN(conn *net.UnixConn, req androidTUNRequest) (*os.File, []string, error) {
 	line, err := json.Marshal(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := conn.SetDeadline(time.Now().Add(androidTUNHandshakeTimeout)); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer func() { _ = conn.SetDeadline(time.Time{}) }()
 
 	if _, err := conn.Write(append(line, '\n')); err != nil {
-		return nil, fmt.Errorf("error sending %s to the VPN service: %w", req.Op, err)
+		return nil, nil, fmt.Errorf("error sending %s to the VPN service: %w", req.Op, err)
 	}
 
 	buf := make([]byte, 4096)
 	oob := make([]byte, unix.CmsgSpace(4))
 	n, oobn, _, _, err := conn.ReadMsgUnix(buf, oob)
 	if err != nil {
-		return nil, fmt.Errorf("error reading the VPN service's %s reply: %w", req.Op, err)
+		return nil, nil, fmt.Errorf("error reading the VPN service's %s reply: %w", req.Op, err)
 	}
 
 	var reply androidTUNReply
 	if err := json.Unmarshal(bytes.TrimSpace(buf[:n]), &reply); err != nil {
-		return nil, fmt.Errorf("malformed %s reply from the VPN service: %w", req.Op, err)
+		return nil, nil, fmt.Errorf("malformed %s reply from the VPN service: %w", req.Op, err)
 	}
 	if !reply.OK {
-		return nil, fmt.Errorf("the VPN service refused %s: %s", req.Op, reply.Error)
+		return nil, nil, errAndroidTUNRefused{op: req.Op, reason: reply.Error}
 	}
 	if req.Op != androidTUNOpEstablish {
-		return nil, nil
+		return nil, reply.DNS, nil
 	}
 
-	return parseTUNFd(oob[:oobn])
+	file, err := parseTUNFd(oob[:oobn])
+	return file, reply.DNS, err
 }
 
 // parseTUNFd picks the handed-over descriptor out of the ancillary data.

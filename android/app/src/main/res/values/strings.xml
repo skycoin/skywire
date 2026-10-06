@@ -10,6 +10,7 @@
 
     <string name="app_skysocks">SkySOCKS</string>
     <string name="app_skyvpn">SkyVPN</string>
+    <string name="app_skydns">SkyDNS</string>
     <string name="app_skydex">SkyDEX</string>
     <string name="app_skychat">SkyChat</string>
     <string name="app_wallet">Wallet</string>
@@ -36,6 +37,11 @@
     <string name="hub_stat_up">Up</string>
     <string name="hub_stat_data">Data</string>
     <string name="hub_vpn_toggle">SkyVPN on/off</string>
+    <string name="hub_skydns_toggle">SkyDNS on/off</string>
+    <string name="hub_skydns_off">.dmsg and .skynet names in every app</string>
+    <string name="hub_skydns_starting">Starting…</string>
+    <string name="hub_skydns_on">Answering .dmsg and .skynet names</string>
+    <string name="hub_skydns_paused">Paused while SkyVPN is on</string>
     <plurals name="hub_hops">
         <item quantity="one">%1$d hop</item>
         <item quantity="other">%1$d hops</item>
@@ -253,6 +259,7 @@
     <string name="vpn_killswitch_hint">Keeps the network interface in place while the tunnel is down, so nothing leaks out around it. Other apps have no connection until it comes back.</string>
     <string name="vpn_killswitch_always_on">Always-on VPN settings</string>
     <string name="vpn_killswitch_always_on_hint">For the strongest guarantee — blocking even before the app starts — turn on “Always-on VPN” and “Block connections without VPN” for Skywire in Android’s settings.</string>
+    <string name="vpn_skydns_hint">Opens .dmsg and .skynet names in every app while SkyVPN is on. Address a site by its key\'s DNS label, since a hex key is too long for DNS.</string>
     <string name="vpn_hotspot_title">VPN hotspot</string>
     <string name="vpn_hotspot_hint">Share SkyVPN with devices on this phone’s hotspot. They use it through a proxy on this phone.</string>
     <string name="vpn_hotspot_error">Could not open port %1$d: %2$s</string>
@@ -550,6 +557,14 @@
     <string name="settings_autoconnect">Connect to public visors</string>
     <string name="settings_autoconnect_hint">Keeps open transports to public visors so the network can route through this phone, and so this phone can route through them. Costs battery and mobile data, which is why it is off. Route lengths above one hop need it.</string>
     <string name="settings_autoconnect_restart">Applies when the core next starts.</string>
+    <string name="settings_dns">DNS server</string>
+    <string name="settings_dns_hint">SkyVPN and SkyDNS ask this server for every name that is not .dmsg or .skynet, over DNS-over-TLS when the server offers it, as Cloudflare, Google and Quad9 do. Left empty, SkyVPN uses 1.1.1.1 (Cloudflare), because a VPN server has no resolver to share, and SkyDNS on its own uses this phone\'s DNS.</string>
+    <string name="settings_dns_invalid">Enter an IPv4 address, such as 9.9.9.9.</string>
+    <string name="settings_dns_save">Use this server</string>
+    <string name="settings_dns_default">Use the defaults</string>
+    <string name="settings_dns_saved">DNS server: %1$s.</string>
+    <string name="settings_dns_placeholder">Default</string>
+    <string name="settings_dns_cleared">Using the default DNS servers.</string>
 
     <string name="settings_remote">Remote management</string>
     <string name="settings_remote_hint">Lets one other visor — yours, on a desk — drive this one over the network: start and stop apps, change routing, read the logs. Nothing is reachable until a key is granted, and the granted key has full control, so it should be a machine you own. No shell or file access either way.</string>
@@ -610,6 +625,13 @@
     <string name="wallet_node_default">Go back to %1$s</string>
     <string name="wallet_node_encrypted">Encrypted in transit. A node still sees which addresses you ask about together, but nobody else on the way does.</string>
     <string name="wallet_node_cleartext">Not encrypted. Everyone between this phone and that address sees your whole address list and its balances. Your coins stay safe — keys never leave the device — but the addresses are linked to each other for anyone watching.</string>
+    <string name="wallet_node_body_indexer">Balances, fees and broadcasts for %1$s go to the node, and its transaction history is read from the indexer. Change them if the ones shipped with the app cannot be reached from where you are, or if you run your own.</string>
+    <string name="wallet_node_hint_btc">An Esplora API, such as mempool.space, blockstream.info or your own electrs.</string>
+    <string name="wallet_node_hint_eth">An Ethereum JSON-RPC endpoint.</string>
+    <string name="wallet_indexer_field">Indexer address</string>
+    <string name="wallet_indexer_hint">A Blockscout instance, or another etherscan-style API that needs no key.</string>
+    <string name="wallet_node_save_all">Use these addresses</string>
+    <string name="wallet_node_default_all">Go back to the shipped addresses</string>
     <string name="wallet_scan_pending">This wallet\'s other addresses have not been confirmed with the node yet, so the balance may be incomplete. It is retried on every refresh.</string>
     <string name="wallet_stale_never">Node unreachable. This wallet has not synced yet — balances show once the node answers.</string>
     <string name="wallet_stale_send_note">Send is disabled: no route to the node</string>

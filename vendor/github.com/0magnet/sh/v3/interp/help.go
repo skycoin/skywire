@@ -1,11 +1,12 @@
-// Copyright (c) 2026, 0magnet fork authors.
-// See LICENSE for licensing information.
+// Copyright (c) 2017, Daniel Martí <mvdan@mvdan.cc>
+// See LICENSE for licensing information
 
 package interp
 
 import (
+	"maps"
 	"path"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -31,11 +32,10 @@ var helpNotes = map[string]string{
 	"bg":      "background jobs already run in the background here, so this reports on the job rather than resuming it",
 	"fg":      "there is no controlling terminal here, so this waits for the job and returns its exit status",
 	"jobs":    "nothing is ever stopped without a controlling terminal, so -s lists nothing",
-	"kill":    "a job is a goroutine, not a process: terminating signals cancel it, and stop/continue are rejected",
+	"kill":    "a job is a goroutine rather than a process, so a terminating signal cancels it, and stop or continue is refused. Only this shell's own jobs can be signalled.",
+	"times":   "there is no per-process CPU accounting on every target this shell runs on, so the times are zero",
 	"history": "the list belongs to the line editor above this interpreter, which must supply it with interp.History",
 	"logout":  "this shell is never a login shell, so logout always says to use exit",
-	"times":   "there is no per-process CPU accounting on every target this shell runs on, so the times are zero",
-	"umask":   "bookkeeping only: files are created through the interpreter's open handler, which owns permissions",
 }
 
 // helpTable is keyed by builtin name. Synopses follow bash 5's wording so the
@@ -119,16 +119,6 @@ var helpUnsupported = map[string]bool{
 	"fc": true, "newgrp": true, "suspend": true, "ulimit": true,
 }
 
-// helpNames returns every documented builtin name, sorted.
-func helpNames() []string {
-	names := make([]string, 0, len(helpTable))
-	for name := range helpTable {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
 // helpMatch returns the documented names matching a bash-style pattern. An
 // exact name wins; otherwise the pattern is matched as a glob, and as a
 // prefix, like bash's `help ex*` and `help ex`.
@@ -137,7 +127,7 @@ func helpMatch(pattern string) []string {
 		return []string{pattern}
 	}
 	var out []string
-	for _, name := range helpNames() {
+	for _, name := range slices.Sorted(maps.Keys(helpTable)) {
 		if ok, err := path.Match(pattern, name); err == nil && ok {
 			out = append(out, name)
 			continue
@@ -184,12 +174,12 @@ func (r *Runner) runHelp(args []string) exitStatus {
 patterns:
 
 	if len(rest) == 0 {
-		r.out("A shell built on mvdan.cc/sh. These shell commands are defined internally.\n")
+		r.out("A shell built on mvdan.cc/sh/v3. These shell commands are defined internally.\n")
 		r.out("Type `help' to see this list.\n")
 		r.out("Type `help name' to find out more about the function `name'.\n\n")
 		r.out("A star (*) next to a name means that the command is not implemented.\n\n")
 
-		names := helpNames()
+		names := slices.Sorted(maps.Keys(helpTable))
 		// two columns, like bash: first half down the left, second half right
 		half := (len(names) + 1) / 2
 		for i := 0; i < half; i++ {
@@ -234,25 +224,4 @@ patterns:
 		}
 	}
 	return exit
-}
-
-// umaskSymbolic renders a mask the way `umask -S` does: the permissions that
-// remain, not the ones masked off.
-func umaskSymbolic(mask uint32) string {
-	var b strings.Builder
-	for i, who := range []string{"u", "g", "o"} {
-		if i > 0 {
-			b.WriteByte(',')
-		}
-		b.WriteString(who)
-		b.WriteByte('=')
-		shift := uint(6 - 3*i)
-		bits := (mask >> shift) & 7
-		for j, perm := range []string{"r", "w", "x"} {
-			if bits&(4>>uint(j)) == 0 {
-				b.WriteString(perm)
-			}
-		}
-	}
-	return b.String()
 }

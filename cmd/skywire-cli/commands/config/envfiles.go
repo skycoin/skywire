@@ -369,12 +369,15 @@ const envfileLinux = `#
 #--	Extra flags passed verbatim to each skycoin daemon invocation.
 #SKYCOIND_FLAGS='-launch-browser=false'
 
-#--	Autostart skycoin-web thin-client wallet
+#--	Autostart skycoin-web thin-client wallet. On by default in a
+#	browser visor, where the dashboard's Wallet tab is its page.
 #SKYCOINWEB=true
 
 #--	skycoin-web bind address (default 127.0.0.1:8002 — bumped
 #	one up from skycoin's upstream default of 8001 because
 #	skychat is already pinned at 127.0.0.1:8001 in skywire).
+#	none opens no port; the dashboard's Wallet tab still serves
+#	it. none is the default in a browser visor.
 #SKYCOINWEBADDR='127.0.0.1:8002'
 
 #--	Node URLs the wallet talks to. Bash array — set one per
@@ -388,8 +391,15 @@ const envfileLinux = `#
 
 #--	Wallet directory override. Empty = upstream default at
 #	$HOME/.skycoin/wallets of whichever user the app runs as
-#	(see SKYCOINWEBUSER below).
+#	(see SKYCOINWEBUSER below). A browser visor defaults to
+#	/opt/skywire/wallets, which the tab keeps across reloads.
 #SKYCOINWEBWALLET=''
+
+#--	Electrum servers for Bitcoin, comma separated and tried in
+#	order. Empty = skycoin-web's built-in list. none = no Bitcoin.
+#	A value here also replaces the one in an existing config on
+#	the next regeneration.
+#SKYCOINWEBELECTRUM=''
 
 #--	Drop skycoin-web to this user (POSIX setuid before exec).
 #	Empty = run as the visor's own UID. Required when the visor

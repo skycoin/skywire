@@ -6,6 +6,7 @@ package shell
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"path/filepath"
 	"strings"
@@ -73,3 +74,15 @@ func Print(w io.Writer, a ...any) { fprint(w, a...) }
 
 // Write writes raw bytes, discarding any write error.
 func Write(w io.Writer, b []byte) { write(w, b) }
+
+// WispURL is the Wisp endpoint for an applet that reaches the network through
+// one (ssh, mosh): the --wisp flag's value when given, else $WISP_URL.
+func WispURL(flag string, env func(string) string) (string, error) {
+	if flag != "" {
+		return flag, nil
+	}
+	if u := env("WISP_URL"); u != "" {
+		return u, nil
+	}
+	return "", errors.New("no Wisp server: give --wisp ws://HOST/PATH or set WISP_URL")
+}

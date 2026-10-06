@@ -7,34 +7,34 @@ require (
 	github.com/0magnet/afero v1.15.1-0.20261003211811-482680d00992
 	github.com/0magnet/ansifilter-go v0.0.0
 	github.com/0magnet/audioprism-go v0.0.0
-	github.com/0magnet/bbolt v1.5.1-0.20261004153154-cdf1c512cdb1
+	github.com/0magnet/bbolt v1.5.1-0.20261004201233-f6a048c19b9a
 	github.com/0magnet/bitree v0.0.0
-	github.com/0magnet/bottle v0.0.0
+	github.com/0magnet/bottle v0.0.1-0.20261005224524-8f37c8756dab
 	github.com/0magnet/calvin v0.0.0
 	github.com/0magnet/coloredcobra v1.0.4-0.20260908180055-b9d8b508df51
 	github.com/0magnet/cosmos-go v0.0.0
-	github.com/0magnet/desk v0.0.0
+	github.com/0magnet/desk v0.0.2
 	github.com/0magnet/desk/panes v0.0.0
 	github.com/0magnet/gobrpc v0.0.0
 	github.com/0magnet/golang-ipc v1.2.5-0.20260915170035-de9342a68204
 	github.com/0magnet/got v0.0.0
-	github.com/0magnet/gotop/v4 v4.2.1-0.20261003212111-e3a1e753dbac
+	github.com/0magnet/gotop/v4 v4.2.1-0.20261004195426-3f6a467d1e1a
 	github.com/0magnet/lolcat-go v0.0.0
-	github.com/0magnet/metrics v1.44.1-0.20261003211931-057a69362832
+	github.com/0magnet/metrics v1.44.1-0.20261004194541-261721063b63
 	github.com/0magnet/netscrape v0.0.0
 	github.com/0magnet/osnotify v0.0.0
 	github.com/0magnet/plot-go v0.0.0
 	github.com/0magnet/realorigin v0.2.3
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
-	github.com/0magnet/sh/v3 v3.13.2-0.20261003215414-58d567267b7a
+	github.com/0magnet/sh/v3 v3.13.2-0.20261004194540-aa2d6e4a31a5
 	github.com/0magnet/spheregraph v0.0.0
 	github.com/0magnet/sysinfo v1.1.4-0.20261003211934-59c35da8ce3f
 	github.com/0magnet/termanim v0.0.0
-	github.com/0magnet/websh v0.0.0
+	github.com/0magnet/websh v0.0.1-0.20261004205330-1203fa7da370
 	github.com/0magnet/wfdrive v0.3.2
 	github.com/0magnet/winbox-go v0.0.0
-	github.com/0magnet/wisp v0.0.0-20261004020451-d16b9de8e6f4
-	github.com/0magnet/xterm-go v0.0.0
+	github.com/0magnet/wisp v0.0.0-20261004183505-1f6045fd0359
+	github.com/0magnet/xterm-go v0.0.1-0.20261004020305-36b45f096b30
 	github.com/0magnet/yamux v0.1.3-0.20261004024245-10ef81fe8447
 	github.com/ActiveState/termtest/conpty v0.5.0
 	github.com/AudriusButkevicius/pfilter v0.0.11
@@ -105,7 +105,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/sirupsen/logrus v1.10.2
-	github.com/skycoin/skycoin v0.28.7-0.20261002202814-e33ee3c33725
+	github.com/skycoin/skycoin v0.28.7-0.20261005182116-4936597b9020
 	github.com/soheilhy/cmux v0.1.5
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
@@ -294,7 +294,6 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	github.com/zyedidia/micro v1.4.1 // indirect
-	go.etcd.io/bbolt v1.5.0 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.9.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0 // indirect

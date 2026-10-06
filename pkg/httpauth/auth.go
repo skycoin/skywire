@@ -85,16 +85,12 @@ func verifyAuth(store NonceStore, r *http.Request, auth *Auth) error {
 	}
 
 	if auth.Nonce != cur {
-		fmt.Printf("SW-Nonce mismatch, want %q, got %q, key=%q, sig=%q\n",
-			cur.String(), auth.Nonce.String(), auth.Key.String(), auth.Sig.String())
+		logger.WithField("key", auth.Key.String()).Debugf("SW-Nonce mismatch, want %s, got %s", cur, auth.Nonce)
 
 		return errors.New("SW-Nonce does not match")
 	}
 
-	var buf bytes.Buffer
-	body := io.TeeReader(r.Body, &buf)
-
-	payload, err := io.ReadAll(body)
+	payload, err := io.ReadAll(r.Body)
 	if err != nil {
 		return err
 	}
@@ -104,7 +100,7 @@ func verifyAuth(store NonceStore, r *http.Request, auth *Auth) error {
 		return err
 	}
 
-	r.Body = io.NopCloser(&buf)
+	r.Body = io.NopCloser(bytes.NewReader(payload))
 
 	// NOTE: verifyAuth now runs ONLY for plain-HTTP requests. DMSG requests are
 	// authenticated earlier (WithAuth) from the noise-authenticated RemoteAddr PK
