@@ -62,6 +62,7 @@ func TestPage(t *testing.T) {
 	p.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/graph", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.True(t, strings.Contains(rec.Body.String(), "2 visors, 1 visor pairs, 1 transports"))
+	require.Contains(t, rec.Body.String(), "<time data-t=")
 }
 
 func TestPageMarks(t *testing.T) {
