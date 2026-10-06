@@ -29,6 +29,7 @@ import (
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/deployment/tpd/metrics"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
@@ -310,6 +311,7 @@ func (s *service) Run(ctx context.Context) error {
 
 	if h.DmsgClient != nil {
 		s.startCXO(runCtx, h.DmsgClient, nil, b.st, tpdAPI, sk, logger)
+		tpdAPI.SetDmsgDiscovery(&http.Client{Transport: dmsghttp.MakeHTTPTransport(runCtx, h.DmsgClient)}, dmsgDiscDmsg)
 	}
 
 	select {

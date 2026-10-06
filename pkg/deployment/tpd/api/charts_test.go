@@ -5,7 +5,9 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -94,11 +96,13 @@ func TestVisorBWTable(t *testing.T) {
 		"aa": {"stcpr": 1 << 20},
 		"bb": {"stcpr": 1 << 30, "sudph": 1 << 20},
 	}}
-	tb := visorBWTable(day)
+	tb := visorBWTable(day, map[string]string{"bb": roleRegistered})
 	require.Contains(t, tb.Title, "2026-10-05")
 	require.Contains(t, tb.Note, "1 transports between visors on the same network")
-	require.Equal(t, []string{"bb", "1 GiB", "stcpr 1 GiB, sudph 1 MiB"}, tb.Rows[0])
-	require.Equal(t, "aa", tb.Rows[1][0])
+	require.Equal(t, []string{"bb", "registered dmsg server", "1 GiB", "stcpr 1 GiB, sudph 1 MiB"}, tb.Rows[0])
+	require.Equal(t, "#4e79a7", tb.Marks[0])
+	require.Equal(t, []string{"aa", ""}, tb.Rows[1][:2])
+	require.Empty(t, tb.Marks[1])
 }
 
 func TestGraphPage(t *testing.T) {
@@ -142,4 +146,32 @@ func TestGraphEngineRoutes(t *testing.T) {
 	r.Header.Set("Accept-Encoding", "gzip")
 	api.ServeHTTP(w, r)
 	require.Contains(t, []int{http.StatusOK, http.StatusFound}, w.Code, "served when embedded, redirected when not")
+}
+
+func TestServerRoles(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		switch r.URL.Path {
+		case "/dmsg-discovery/all_servers":
+			_, _ = w.Write([]byte(`[{"static":"reg"}]`)) //nolint:errcheck
+		case "/dmsg-discovery/servers/clients":
+			_, _ = w.Write([]byte(`{"reg":["c1"],"lan":["c2"]}`)) //nolint:errcheck
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	api := &API{}
+	require.Nil(t, api.serverRoles(context.Background()), "no roles without dmsg discovery")
+
+	api.SetDmsgDiscovery(srv.Client(), "dmsg://"+strings.TrimPrefix(srv.URL, "http://"))
+	roles := api.serverRoles(context.Background())
+	require.Equal(t, map[string]string{"reg": roleRegistered, "lan": roleLAN}, roles)
+	api.serverRoles(context.Background())
+	require.Equal(t, 2, calls, "a second read within the refresh time is cached")
+
+	srv.Close()
+	api.dmsgRoles.Load().at = time.Time{}
+	require.Equal(t, roles, api.serverRoles(context.Background()), "a failed refresh keeps the last answer")
 }
