@@ -64,6 +64,25 @@ final class FlowChecks: XCTestCase {
         wait(for: state(app), anyOf: ["connected"], timeout: 180)
     }
 
+    /// A language change rebuilds every screen. Settings comes back where it was, as Android's
+    /// does when its activity is recreated, not at the top (the chips sit far below it).
+    func testLanguageChangeKeepsTheSettingsPlace() {
+        let app = XCUIApplication()
+        app.launch()
+        openTab(.settings, in: app)
+        let spanish = app.buttons["language-spanish"]
+        scroll(to: spanish, in: app)
+        let before = spanish.frame.minY
+        spanish.tap()
+        let english = app.buttons["language-english"]
+        XCTAssertTrue(english.waitForExistence(timeout: 5))
+        XCTAssertTrue(english.isHittable, "Settings went back to the top")
+        XCTAssertEqual(app.buttons["language-spanish"].frame.minY, before, accuracy: 60)
+        english.tap()
+        XCTAssertTrue(app.buttons["language-spanish"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["language-spanish"].isHittable, "Settings went back to the top")
+    }
+
     func testFleetOn() { toggleFleet(to: true) }
 
     func testFleetOff() { toggleFleet(to: false) }

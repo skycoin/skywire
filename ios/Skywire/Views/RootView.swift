@@ -30,7 +30,8 @@ struct RootView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // A new language rebuilds the screens, as Android recreates its activity: text
-                // made in a body (L10n.text) is not redrawn by the locale alone. The stacks are kept.
+                // made in a body (L10n.text) is not redrawn by the locale alone. The stacks are
+                // kept, and Settings its scroll place (ScrollPlaces).
                 .id(settings.language)
                 // The keyboard takes the bar's place, as Android's imePadding does.
                 .padding(.bottom, keyboardShown ? 0 : SkyBottomBar.height)
@@ -108,6 +109,8 @@ final class Navigator: ObservableObject {
     @Published private var stacks: [AppTab: [Route]] = [:]
     /// Where a tab root's back goes when it was opened from the hub.
     private var parent: [AppTab: AppTab] = [:]
+    /// Scroll places a language change's rebuild puts back.
+    let scrollPlaces = ScrollPlaces()
 
     /// NavHost's default: a 700 ms cross-fade, FastOutSlowIn.
     static let fade = Animation.timingCurve(0.4, 0, 0.2, 1, duration: 0.7)

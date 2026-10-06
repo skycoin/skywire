@@ -18,20 +18,23 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             SkyTopBar(title: Text("tab_settings"), onBack: { navigator.back() }, help: .settings)
             ScrollView {
-                LazyVStack(spacing: 16) {
-                    IdentityCard(model: model)
-                    ConfigCard(model: model) { askExport() }
-                    AutoconnectCard()
-                    RemoteCard(model: model)
-                    AppLockCard()
-                    ThemeCard()
-                    LanguageCard()
-                    DiagnosticsRow { navigator.push(.diagnostics) }
-                    UpdatesCard()
-                    AboutCard(model: model)
+                // Not lazy: a language change rebuilds the screen, and its place is found
+                // again by the cards' frames (keepsScrollPlace).
+                VStack(spacing: 16) {
+                    IdentityCard(model: model).scrollPlaceItem(0)
+                    ConfigCard(model: model) { askExport() }.scrollPlaceItem(1)
+                    AutoconnectCard().scrollPlaceItem(2)
+                    RemoteCard(model: model).scrollPlaceItem(3)
+                    AppLockCard().scrollPlaceItem(4)
+                    ThemeCard().scrollPlaceItem(5)
+                    LanguageCard().scrollPlaceItem(6)
+                    DiagnosticsRow { navigator.push(.diagnostics) }.scrollPlaceItem(7)
+                    UpdatesCard().scrollPlaceItem(8)
+                    AboutCard(model: model).scrollPlaceItem(9)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
+                .keepsScrollPlace("settings", in: navigator.scrollPlaces)
             }
         }
         .background(Color.skyBackground)
@@ -424,6 +427,7 @@ private struct ThemeCard: View {
 private struct LanguageCard: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var app: AppModel
+    @EnvironmentObject private var navigator: Navigator
 
     var body: some View {
         SectionCard {
@@ -439,7 +443,12 @@ private struct LanguageCard: View {
     }
 
     private func chip(_ label: LocalizedStringKey, _ language: AppLanguage) -> some View {
-        SkyFilterChip(label: Text(label), selected: settings.language == language) { settings.language = language }
+        SkyFilterChip(label: Text(label), selected: settings.language == language) {
+            guard settings.language != language else { return }
+            // The change rebuilds every screen; this one comes back where it was, as on Android.
+            navigator.scrollPlaces.capture()
+            settings.language = language
+        }
             .accessibilityIdentifier("language-\(language.rawValue.lowercased())")
     }
 }
