@@ -195,6 +195,9 @@ func (c *Chart) SVG(id string) string {
 	top := math.Ceil(vmax/step) * step
 	yOf := func(v float64) float64 { return padT + plotH - v/top*plotH }
 
+	if c.Kind == Stacked {
+		sb.WriteString("<div class='body'>")
+	}
 	fmt.Fprintf(&sb, "<div class='plot'><svg viewBox='0 0 %d %d' role='img' aria-label='%s'>", svgW, svgH, html.EscapeString(c.Title))
 	for v := 0.0; v <= top*1.0001; v += step {
 		y := yOf(v)
@@ -250,6 +253,9 @@ func (c *Chart) SVG(id string) string {
 	}
 	fmt.Fprintf(&sb, "<line class='cursor' x1='0' x2='0' y1='%d' y2='%d'/>", padT, padT+plotH)
 	sb.WriteString("</svg><div class='tip' hidden></div></div>")
+	if c.Kind == Stacked {
+		sb.WriteString("<div class='pie'></div></div>")
+	}
 	c.legend(&sb)
 	c.data(&sb)
 	sb.WriteString("</figure>")
@@ -370,6 +376,8 @@ func (c *Chart) data(sb *strings.Builder) {
 		N string   `json:"n"`
 		C string   `json:"c"`
 		V []string `json:"v"`
+		// R is the raw value, for the pie beside a stacked chart.
+		R []*float64 `json:"r,omitempty"`
 	}
 	d := struct {
 		X  []float64 `json:"x"`
@@ -401,7 +409,17 @@ func (c *Chart) data(sb *strings.Builder) {
 				vs[i] = c.format(s.Vals[i])
 			}
 		}
-		d.S = append(d.S, ser{N: s.Name, C: c.color(s.Name), V: vs})
+		sr := ser{N: s.Name, C: c.color(s.Name), V: vs}
+		if c.Kind == Stacked {
+			sr.R = make([]*float64, len(c.Times))
+			for i := range c.Times {
+				if i < len(s.Vals) && !math.IsNaN(s.Vals[i]) {
+					v := s.Vals[i]
+					sr.R[i] = &v
+				}
+			}
+		}
+		d.S = append(d.S, sr)
 	}
 	if c.Kind == Stacked {
 		tot := make([]string, len(c.Times))

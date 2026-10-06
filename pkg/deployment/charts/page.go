@@ -99,7 +99,7 @@ func (p *Page) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("Cache-Control", "public, max-age=60")
-	h.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:")
+	h.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src data:")
 	h.Set("X-Content-Type-Options", "nosniff")
 	_, _ = w.Write(body) //nolint:errcheck
 }
@@ -161,7 +161,7 @@ func (p *Page) write(b *bytes.Buffer, rg Range, now time.Time, c Content) {
 		}
 		b.WriteString("</tbody></table></div></section>")
 	}
-	fmt.Fprintf(b, "</main><footer>Sampled every %s. Times are UTC. Rendered %s.</footer><script>%s</script></body></html>",
+	fmt.Fprintf(b, "</main><footer>Sampled every %s and refreshed every minute while open. Times are UTC. Rendered %s.</footer><script>%s</script></body></html>",
 		strings.TrimSuffix(Interval.String(), "0s"), now.Format("2006-01-02 15:04"), pageJS)
 }
 
@@ -175,7 +175,12 @@ nav a{color:var(--muted);text-decoration:none;padding:5px 12px;border-radius:7px
 main{max-width:1100px;margin:0 auto;padding:8px 16px;display:grid;gap:16px}
 .chart,.table{margin:0;background:var(--card);border-radius:14px;padding:16px 18px 12px;box-shadow:0 1px 3px #0000000f}
 h2{font-size:15px;margin:0;font-weight:620}figcaption p,.note{margin:2px 0 0;color:var(--muted);font-size:12.5px}
-.plot{position:relative;margin-top:10px}svg{display:block;width:100%;height:auto;overflow:visible}
+.plot{position:relative;margin-top:10px}
+.body{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:18px;align-items:center;margin-top:10px}.body .plot{margin-top:0}
+@media (max-width:720px){.body{grid-template-columns:1fr}.pie{max-width:260px;width:100%;margin:0 auto}}
+.pie svg{width:100%;height:auto}.pie .pt{text-anchor:middle;font-size:19px;font-weight:650;fill:var(--fg)}.pie .pl{text-anchor:middle;font-size:11px;fill:var(--muted)}
+.pie ul{list-style:none;padding:0;margin:8px 0 0;font-size:12px}.pie li{display:flex;align-items:center;gap:6px;padding:1px 0}.pie li b{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600}.pie i{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.pin{font-size:11px;color:var(--muted);margin:6px 0 0}figure.pinned .cursor{stroke:var(--accent);stroke-dasharray:none;stroke-width:1.5}.plot svg{cursor:crosshair}svg{display:block;width:100%;height:auto;overflow:visible}
 .grid,.xgrid{stroke:var(--grid);stroke-width:1}.axis{stroke:var(--axis)}
 .ytick,.xtick{fill:var(--muted);font-size:11px}.ytick{text-anchor:end}.xtick{text-anchor:middle}
 .area{fill-opacity:.55;stroke:none}.line{fill:none;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
@@ -192,17 +197,47 @@ td:first-child{font-family:ui-monospace,monospace;font-size:11.5px}
 .legend-t td:nth-child(2),.mono{font-family:ui-monospace,monospace;font-size:11.5px}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 footer{max-width:1100px;margin:0 auto;padding:12px 16px 32px;color:var(--muted);font-size:12px}`
 
-const pageJS = `document.querySelectorAll('figure.chart').forEach(function(f){
-var s=f.querySelector('script'),svg=f.querySelector('svg'),tip=f.querySelector('.tip'),cur=f.querySelector('.cursor');
-if(!s||!svg)return;var d=JSON.parse(s.textContent);
-function hide(){tip.hidden=true;cur.style.visibility='hidden'}
-svg.addEventListener('mouseleave',hide);
-svg.addEventListener('mousemove',function(e){var r=svg.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*d.w,b=0,bd=1e9;
-for(var i=0;i<d.x.length;i++){var k=Math.abs(d.x[i]-x);if(k<bd){bd=k;b=i}}
-if(!d.x.length)return;var h='<div class=t>'+d.l[b]+'</div>',n=0;
-d.s.forEach(function(q){if(!q.v[b])return;n++;h+='<div><span>'+(q.c?'<i style="background:'+q.c+'"></i>':'')+q.n.replace(/[<&]/g,'')+'</span><b>'+q.v[b]+'</b></div>'});
-if(!n)return hide();tip.innerHTML=h;tip.hidden=false;cur.setAttribute('x1',d.x[b]);cur.setAttribute('x2',d.x[b]);cur.style.visibility='visible';
-var px=d.x[b]/d.w*r.width,tw=tip.offsetWidth;tip.style.left=(px+12+tw>r.width?px-12-tw:px+12)+'px'})});`
+const pageJS = `(function(){
+var hovering=0;
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return '&#'+c.charCodeAt(0)+';'})}
+function last(d){for(var i=d.x.length-1;i>=0;i--){if(d.s.some(function(q){return q.v[i]}))return i}return -1}
+function arc(R,r,a,b){var C=Math.cos,S=Math.sin,l=b-a>Math.PI?1:0,p=function(x){return (100+x).toFixed(2)};
+return 'M'+p(R*C(a))+' '+p(R*S(a))+'A'+R+' '+R+' 0 '+l+' 1 '+p(R*C(b))+' '+p(R*S(b))+'L'+p(r*C(b))+' '+p(r*S(b))+'A'+r+' '+r+' 0 '+l+' 0 '+p(r*C(a))+' '+p(r*S(a))+'Z'}
+function pie(el,d,i,pinned){
+if(!el)return;var items=[],tot=0;
+d.s.forEach(function(q){if(!q.r)return;var v=q.r[i];if(v==null||v<=0)return;items.push({q:q,v:v});tot+=v});
+if(!tot){el.innerHTML='';return}
+var h='<svg viewBox="0 0 200 200" role="img">',a=-Math.PI/2;
+items.forEach(function(it){var f=it.v/tot,b=Math.min(a+f*2*Math.PI,a+2*Math.PI-0.0001);
+h+='<path d="'+arc(92,60,a,b)+'" fill="'+it.q.c+'"><title>'+esc(it.q.n)+' '+esc(it.q.v[i])+' ('+(f*100).toFixed(1)+'%)</title></path>';a+=f*2*Math.PI});
+h+='<text x="100" y="98" class="pt">'+esc(d.s[0].n==='total'?d.s[0].v[i]:'')+'</text><text x="100" y="118" class="pl">'+esc(d.l[i])+'</text></svg><ul>';
+items.sort(function(x,y){return y.v-x.v}).slice(0,6).forEach(function(it){var f=it.v/tot;
+h+='<li><i style="background:'+it.q.c+'"></i>'+esc(it.q.n)+'<b>'+(f*100).toFixed(f<0.1?1:0)+'%</b></li>'});
+el.innerHTML=h+'</ul>'+(pinned?'<p class="pin">Pinned. Click the same point to release.</p>':'')}
+function init(){document.querySelectorAll('figure.chart').forEach(function(f){
+var s=f.querySelector('script'),svg=f.querySelector('.plot svg'),tip=f.querySelector('.tip'),cur=f.querySelector('.cursor'),pe=f.querySelector('.pie');
+if(!s||!svg)return;var d=JSON.parse(s.textContent),pin=null,end=last(d);
+function near(e){var r=svg.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*d.w,b=0,bd=1e9;
+for(var i=0;i<d.x.length;i++){var k=Math.abs(d.x[i]-x);if(k<bd){bd=k;b=i}}return b}
+function mark(i){if(i<0){cur.style.visibility='hidden';return}cur.setAttribute('x1',d.x[i]);cur.setAttribute('x2',d.x[i]);cur.style.visibility='visible'}
+function readout(b){var r=svg.getBoundingClientRect(),h='<div class=t>'+esc(d.l[b])+'</div>',n=0;
+d.s.forEach(function(q){if(!q.v[b])return;n++;h+='<div><span>'+(q.c?'<i style="background:'+q.c+'"></i>':'')+esc(q.n)+'</span><b>'+esc(q.v[b])+'</b></div>'});
+if(!n){tip.hidden=true;return}tip.innerHTML=h;tip.hidden=false;
+var px=d.x[b]/d.w*r.width,tw=tip.offsetWidth;tip.style.left=(px+12+tw>r.width?px-12-tw:px+12)+'px'}
+if(end>=0)pie(pe,d,end,false);
+svg.addEventListener('mouseenter',function(){hovering++});
+svg.addEventListener('mouseleave',function(){hovering=Math.max(0,hovering-1);tip.hidden=true;
+if(pin==null){mark(-1);if(end>=0)pie(pe,d,end,false)}else{mark(pin);pie(pe,d,pin,true)}});
+svg.addEventListener('mousemove',function(e){if(!d.x.length)return;var b=near(e);readout(b);mark(b);if(pin==null)pie(pe,d,b,false)});
+svg.addEventListener('click',function(e){if(!d.x.length)return;var b=near(e);pin=pin===b?null:b;
+f.classList.toggle('pinned',pin!=null);pie(pe,d,b,pin!=null)})})}
+init();
+setInterval(function(){if(document.hidden||hovering>0||document.querySelector('figure.pinned'))return;
+fetch(location.href,{cache:'no-store'}).then(function(r){return r.ok?r.text():null}).then(function(t){if(!t)return;
+var n=new DOMParser().parseFromString(t,'text/html'),m=n.querySelector('main'),ft=n.querySelector('footer');if(!m)return;
+document.querySelector('main').replaceWith(m);if(ft)document.querySelector('footer').replaceWith(ft);init()}).catch(function(){})},60000);
+})();
+`
 
 // Serve answers plain HTTP on addr with the page at / and 404 for every
 // other path, until ctx ends.
