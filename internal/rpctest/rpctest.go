@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	rpc "github.com/0magnet/gobrpc"
 )
@@ -46,7 +47,9 @@ func exportedOrBuiltin(t reflect.Type) bool {
 	return t.PkgPath() == "" || (t.Name() != "" && strings.ToUpper(t.Name()[:1]) == t.Name()[:1])
 }
 
-func serve(t testing.TB, register RegisterFunc) *rpc.Client {
+// Serve registers a receiver under the name "Svc" on a new server and returns a
+// client connected to it over net.Pipe.
+func Serve(t testing.TB, register RegisterFunc) *rpc.Client {
 	t.Helper()
 	srv := rpc.NewServer()
 	if err := register(srv, "Svc"); err != nil {
@@ -80,12 +83,12 @@ func CheckHandlers(t testing.TB, rcvr any, register RegisterFunc) {
 			args = 1
 		}
 		var reply int
-		err := serve(t, register).Call("Svc."+name, args, &reply)
+		err := Serve(t, register).Call("Svc."+name, args, &reply)
 		if err == nil || strings.Contains(err.Error(), "can't find") || !strings.Contains(err.Error(), "gob: ") {
 			t.Errorf("%T.%s: want a gob decode error from a served method, got %v", rcvr, name, err)
 		}
 	}
-	err := serve(t, register).Call("Svc.RPCTestNoSuchMethod", 1, new(int))
+	err := Serve(t, register).Call("Svc.RPCTestNoSuchMethod", 1, new(int))
 	if err == nil || !strings.Contains(err.Error(), "can't find") {
 		t.Errorf("unknown method: want a lookup error, got %v", err)
 	}
@@ -100,7 +103,7 @@ func CompareCall(t testing.TB, rcvr any, register RegisterFunc, method string, a
 	call := func(reg RegisterFunc) (any, string) {
 		reply := newReply()
 		errStr := ""
-		if err := serve(t, reg).Call("Svc."+method, args, reply); err != nil {
+		if err := Serve(t, reg).Call("Svc."+method, args, reply); err != nil {
 			errStr = err.Error()
 		}
 		return reply, errStr
@@ -114,4 +117,29 @@ func CompareCall(t testing.TB, rcvr any, register RegisterFunc, method string, a
 		t.Errorf("%s: reply %+v, reflection path gave %+v", method, reflect.Indirect(reflect.ValueOf(gotReply)), reflect.Indirect(reflect.ValueOf(wantReply)))
 	}
 	return gotReply
+}
+
+// CheckNotBlocked starts blocked, a call that does not return until unblock
+// does its work, then runs unblock on the same connection. It fails t if
+// unblock does not finish within timeout, which is what serial dispatch causes.
+func CheckNotBlocked(t testing.TB, c *rpc.Client, blocked *rpc.Call, unblock func() error, timeout time.Duration) {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- unblock() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("call behind a blocked call: %v", err)
+		}
+	case <-time.After(timeout):
+		t.Fatalf("a blocked %s call held up the connection for %v", blocked.ServiceMethod, timeout)
+	}
+	select {
+	case <-blocked.Done:
+		if blocked.Error != nil {
+			t.Fatalf("%s: %v", blocked.ServiceMethod, blocked.Error)
+		}
+	case <-time.After(timeout):
+		t.Fatalf("%s did not return after it was unblocked", blocked.ServiceMethod)
+	}
 }
