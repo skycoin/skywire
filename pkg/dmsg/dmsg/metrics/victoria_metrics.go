@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !(tinygo && js)
 
 // Package metrics pkg/dmsg/dmsg/metrics/victoria_metrics.go c1-net-dmsg
 //

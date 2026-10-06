@@ -1,4 +1,4 @@
-//go:build tinygo
+//go:build tinygo && js
 
 // Package dmsg pkg/dmsg/dmsg/serve_unified_quic_tinygo.go c1-net-dmsg
 //

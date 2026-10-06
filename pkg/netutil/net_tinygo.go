@@ -1,4 +1,4 @@
-//go:build tinygo
+//go:build tinygo && js
 
 // Package netutil pkg/netutil/net_tinygo.go c0-com-util
 //

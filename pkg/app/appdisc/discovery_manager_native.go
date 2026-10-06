@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !(tinygo && js)
 
 // Package appdisc pkg/app/appdisc/discovery_manager_native.go c2-vis-appsvc
 //

@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !(tinygo && js)
 
 // Package dmsg pkg/dmsg/dmsg/quic_native.go c1-net-dmsg
 //

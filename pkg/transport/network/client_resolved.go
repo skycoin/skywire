@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !(tinygo && js)
 
 // Package network pkg/transport/network/client_resolved.go c2-net-transport
 //
@@ -171,20 +171,6 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 // reachable v6 route a fair chance before falling back to v4. A
 // black-holed v6 route still bounds the extra latency to this much.
 const v6HeadStart = time.Second
-
-// canonicalAddr returns "" when raw is empty (lets the caller branch
-// on "v6 unavailable"), otherwise appends port when raw is bare-host.
-// Mirrors the inline check the pre-#1525 dialer did so the v4/v6
-// branches stay symmetric.
-func canonicalAddr(raw, port string) string {
-	if raw == "" {
-		return ""
-	}
-	if _, _, err := net.SplitHostPort(raw); err != nil {
-		return net.JoinHostPort(raw, port)
-	}
-	return raw
-}
 
 // happyEyeballsDial tries v6 first with a v6HeadStart-bounded sub-ctx,
 // falls back to v4 on any v6 failure. Sequential by design: one

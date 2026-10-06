@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !(tinygo && js)
 
 // Package network pkg/transport/network/quic.go c2-net-transport
 // transport. Mirrors the sudph/stcpr structure (AR-resolved, UDP-based)

@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !(tinygo && js)
 
 // Package dmsg pkg/dmsg/dmsg/serve_unified.go c1-net-dmsg
 // WebSocket on ONE listener / advertised ip:port.

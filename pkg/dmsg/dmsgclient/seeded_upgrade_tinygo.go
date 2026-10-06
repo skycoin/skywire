@@ -1,4 +1,4 @@
-//go:build tinygo
+//go:build tinygo && js
 
 // Package dmsgclient pkg/dmsg/dmsgclient/seeded_upgrade_tinygo.go c1-net-dmsg
 package dmsgclient

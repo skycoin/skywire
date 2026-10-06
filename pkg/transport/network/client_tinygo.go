@@ -1,4 +1,4 @@
-//go:build tinygo
+//go:build tinygo && js
 
 // Package network pkg/transport/network/client_tinygo.go c2-net-transport
 //

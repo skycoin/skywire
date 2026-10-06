@@ -1,4 +1,4 @@
-//go:build tinygo
+//go:build tinygo && js
 
 // Package transport pkg/transport/disc_notfound_tinygo.go c2-net-transport
 package transport

@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !(tinygo && js)
 
 // Package visorconfig pkg/visor/visorconfig/preserve.go c3-vis-core
 //

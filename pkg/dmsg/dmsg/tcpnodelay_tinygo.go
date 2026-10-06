@@ -1,4 +1,4 @@
-//go:build tinygo
+//go:build tinygo && js
 
 // Package dmsg pkg/dmsg/dmsg/tcpnodelay_tinygo.go c1-net-dmsg
 package dmsg

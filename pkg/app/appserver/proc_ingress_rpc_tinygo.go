@@ -1,4 +1,4 @@
-//go:build tinygo
+//go:build tinygo && js
 
 // Package appserver pkg/app/appserver/proc_ingress_rpc_tinygo.go c2-vis-appsvc
 package appserver

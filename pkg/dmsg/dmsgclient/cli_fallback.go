@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !(tinygo && js)
 
 // Package dmsgclient pkg/dmsg/dmsgclient/cli_fallback.go c1-net-dmsg
 //
