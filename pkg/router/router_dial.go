@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/router_dial.go c2-net-routing
 // router_dial.go contains route dialing and route finding logic.
 package router

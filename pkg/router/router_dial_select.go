@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/router_dial_select.go c2-net-routing
 package router
 

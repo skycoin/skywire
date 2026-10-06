@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package disc pkg/dmsg/disc/client.go c1-net-dmsg
 //
 // HTTP-based APIClient. Build-tag-gated to keep net/http out of the

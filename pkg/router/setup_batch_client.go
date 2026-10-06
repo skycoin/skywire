@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/setup_batch_client.go c2-net-routing
 //
 // The INITIATOR side of batched route setup: collect the sibling dials a

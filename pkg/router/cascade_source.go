@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/cascade_source.go c2-net-routing
 //
 // Source-driven cascade orchestration.

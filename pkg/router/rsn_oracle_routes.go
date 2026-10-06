@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/rsn_oracle_routes.go c2-net-routing
 //
 // RSN-oracle 2-hop route computation (phase-1).

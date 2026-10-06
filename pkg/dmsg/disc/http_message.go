@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package disc pkg/dmsg/disc/http_message.go c1-net-dmsg
 //
 // HTTP-response message types used by the discovery service's HTTP
