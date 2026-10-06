@@ -60,6 +60,8 @@ final class WalletModel: ObservableObject {
     /// The node address the coin would use with nothing set — what the Node
     /// screen offers to go back to.
     @Published private(set) var defaultNodeUrl = ""
+    /// The same for the Ethereum family's history indexer; nil for coins without one.
+    @Published private(set) var defaultIndexerUrl: String?
     /// A one-line outcome or refusal, shown briefly over the screen.
     @Published var message: String?
 
@@ -94,7 +96,9 @@ final class WalletModel: ObservableObject {
 
         self.coins = coins
         self.coin = coin
-        defaultNodeUrl = store.defaultNodeUrls[coin.id] ?? coin.nodeUrl
+        let shipped = store.defaultCoins[coin.id]
+        defaultNodeUrl = shipped?.nodeUrl ?? coin.nodeUrl
+        defaultIndexerUrl = shipped?.indexerUrl ?? coin.indexerUrl
         allWallets = wallets
         self.coinWallets = coinWallets
         self.active = active
@@ -193,10 +197,11 @@ final class WalletModel: ObservableObject {
     }
 
     /// Point the selected coin at a different node, or hand it back to the
-    /// shipped one with a blank `url`; the next refresh uses it.
-    func setNodeUrl(_ url: String, onDone: @escaping () -> Void) {
+    /// shipped one with a blank `url`; `indexerUrl` likewise, for coins that
+    /// have one. The next refresh uses them.
+    func setNodeUrl(_ url: String, indexerUrl: String?, onDone: @escaping () -> Void) {
         action { [self] in
-            try store.setNodeUrl(coinId: coin.id, url: url)
+            try store.setNodeUrl(coinId: coin.id, url: url, indexerUrl: indexerUrl)
             stale = false
             onDone()
             refreshNow()

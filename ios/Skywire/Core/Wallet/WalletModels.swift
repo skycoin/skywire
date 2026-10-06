@@ -103,20 +103,19 @@ struct CoinSpec: Codable, Equatable, Identifiable, Sendable {
         }
     }
 
-    /// Whether this coin's node address is one the user may set: Skycoin and
-    /// every fiber chain, where one daemon answers balances, history and
-    /// broadcast alike. The Ethereum family reads balances from an RPC and
-    /// history from a separate indexer, so one field there would move half of
-    /// it and quietly leave the rest.
-    var nodeUrlEditable: Bool { kind == .skyFiber }
-
-    /// This coin as it is actually reached, once the user's own node address
-    /// is applied.
-    func withNodeOverride(_ overrides: [String: String]) -> CoinSpec {
-        guard let url = overrides[id]?.trimmingCharacters(in: .whitespacesAndNewlines), !url.isEmpty, url != nodeUrl
-        else { return self }
+    /// This coin as it is actually reached, once the user's own addresses are
+    /// applied. Every coin's node can be moved. The Ethereum family also reads
+    /// its history from a separate indexer, which moves on its own, so a node
+    /// alone never leaves half of it behind unannounced. A blank entry means
+    /// the shipped one.
+    func withNodeOverride(_ overrides: [String: String], indexerOverrides: [String: String] = [:]) -> CoinSpec {
+        func override(_ map: [String: String]) -> String? {
+            guard let url = map[id]?.trimmingCharacters(in: .whitespacesAndNewlines), !url.isEmpty else { return nil }
+            return url
+        }
         var copy = self
-        copy.nodeUrl = url
+        copy.nodeUrl = override(overrides) ?? nodeUrl
+        copy.indexerUrl = indexerUrl.map { override(indexerOverrides) ?? $0 }
         return copy
     }
 

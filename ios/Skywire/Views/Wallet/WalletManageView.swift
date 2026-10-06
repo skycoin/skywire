@@ -378,49 +378,100 @@ private struct LabeledField: View {
 
 /// Which node this coin's wallet talks to (Android: ui/wallet/WalletNode.kt). Keys never leave the
 /// phone, but the node sees which addresses are asked about together: hence the transport note.
+/// The Ethereum family reads history from an indexer apart from its node, so there the screen holds
+/// both, saved and reset together.
 struct WalletNodeView: View {
     @EnvironmentObject private var model: WalletModel
     @State private var url = ""
+    @State private var indexer = ""
 
     var body: some View {
+        let coin = model.coin
+        let shippedIndexer = model.defaultIndexerUrl
+        let hasIndexer = shippedIndexer != nil
+        let changed = Self.typed(url) != coin.nodeUrl || (hasIndexer && Self.typed(indexer) != coin.indexerUrl)
+        let shipped = coin.nodeUrl == model.defaultNodeUrl && Self.typed(url) == model.defaultNodeUrl
+            && (!hasIndexer || (coin.indexerUrl == shippedIndexer && Self.typed(indexer) == shippedIndexer))
         WalletScreen(title: Text("wallet_node_title")) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(verbatim: L10n.format("wallet_node_body", model.coin.name))
+                    Text(verbatim: L10n.format(hasIndexer ? "wallet_node_body_indexer" : "wallet_node_body", coin.name))
                         .skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
                         .padding(.top, 6)
                         .padding(.bottom, 18)
-                    Text("wallet_node_field").skyText(.labelLarge).foregroundStyle(Color.skyOnSurfaceVariant).padding(.bottom, 7)
-                    SkyOutlinedTextField(placeholder: LocalizedStringKey(model.defaultNodeUrl), text: $url, keyboard: .URL,
-                                         identifier: "wallet-node-url", radius: SkyRadius.small)
                     // Said where the choice is made: an address typed here decides whether the
                     // address book travels in the clear.
-                    transportNote
+                    urlField(label: L10n.key("wallet_node_field"), hint: nodeHint(coin.kind), text: $url,
+                             placeholder: model.defaultNodeUrl, identifier: "wallet-node-url")
+                    if let shippedIndexer {
+                        urlField(label: L10n.key("wallet_indexer_field"), hint: L10n.key("wallet_indexer_hint"), text: $indexer,
+                                 placeholder: shippedIndexer, identifier: "wallet-indexer-url")
+                            .padding(.top, 20)
+                    }
                     Button {
-                        model.setNodeUrl(url) { popNode() }
-                    } label: { Text("wallet_node_save").frame(maxWidth: .infinity) }
+                        model.setNodeUrl(url, indexerUrl: hasIndexer ? indexer : nil) { popNode() }
+                    } label: { Text(hasIndexer ? L10n.key("wallet_node_save_all") : L10n.key("wallet_node_save")).frame(maxWidth: .infinity) }
                     .buttonStyle(FilledButtonStyle(height: 50))
-                    .disabled(url.trimmingCharacters(in: .whitespaces).isEmpty || url.trimmingCharacters(in: .whitespaces) == model.coin.nodeUrl)
+                    .disabled(Self.blank(url) || (hasIndexer && Self.blank(indexer)) || !changed)
                     .padding(.top, 20)
                     .accessibilityIdentifier("wallet-node-save")
-                    if model.coin.nodeUrl != model.defaultNodeUrl || url.trimmingCharacters(in: .whitespaces) != model.defaultNodeUrl {
+                    if !shipped {
                         Button {
-                            model.setNodeUrl("") { popNode() }
+                            model.setNodeUrl("", indexerUrl: hasIndexer ? "" : nil) { popNode() }
                         } label: {
-                            Text(verbatim: L10n.format("wallet_node_default", model.defaultNodeUrl)).frame(maxWidth: .infinity)
+                            Text(verbatim: hasIndexer ? L10n.text("wallet_node_default_all") : L10n.format("wallet_node_default", model.defaultNodeUrl))
+                                .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.skyText)
                         .padding(.top, 4)
+                        .accessibilityIdentifier("wallet-node-default")
                     }
                 }
                 .padding(.horizontal, 20)
             }
         }
-        // Seeded from the address in force, so the field opens on what is actually used.
-        .onAppear { url = model.coin.nodeUrl }
+        // Seeded from the addresses in force, so the fields open on what is actually used.
+        .onAppear {
+            url = model.coin.nodeUrl
+            indexer = model.coin.indexerUrl ?? ""
+        }
     }
 
-    private var transportNote: some View {
+    /// As the store keeps it, so a trailing slash is not a change.
+    private static func typed(_ value: String) -> String {
+        var trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasSuffix("/") { trimmed.removeLast() }
+        return trimmed
+    }
+
+    private static func blank(_ value: String) -> Bool {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// What kind of server the node field takes; Skycoin and fiber chains say it in the body.
+    private func nodeHint(_ kind: CoinKind) -> LocalizedStringKey? {
+        switch kind {
+        case .btc: L10n.key("wallet_node_hint_btc")
+        case .eth, .erc20: L10n.key("wallet_node_hint_eth")
+        case .skyFiber: nil
+        }
+    }
+
+    /// One address field: its label, what kind of server it takes, and whether it is encrypted.
+    private func urlField(label: LocalizedStringKey, hint: LocalizedStringKey?, text: Binding<String>,
+                          placeholder: String, identifier: String) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(label).skyText(.labelLarge).foregroundStyle(Color.skyOnSurfaceVariant).padding(.bottom, 7)
+            SkyOutlinedTextField(placeholder: LocalizedStringKey(placeholder), text: text, keyboard: .URL,
+                                 identifier: identifier, radius: SkyRadius.small)
+            if let hint {
+                Text(hint).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 6)
+            }
+            transportNote(text.wrappedValue)
+        }
+    }
+
+    private func transportNote(_ url: String) -> some View {
         let cleartext = url.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("http://")
         return HStack(alignment: .top, spacing: 9) {
             MaterialIcon(cleartext ? MI.outlinedLockOpen : MI.outlinedLock, size: 16)

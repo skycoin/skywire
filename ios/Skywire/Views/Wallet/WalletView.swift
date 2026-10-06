@@ -74,13 +74,11 @@ struct WalletHome: View {
                                 .padding(.top, 14)
                                 .accessibilityIdentifier("wallet-wallets-row")
                             // Which node the coin is on, shown: "why will this not sync" is often here.
-                            if model.coin.nodeUrlEditable {
-                                WalletNavRow(icon: MI.outlinedDns, title: L10n.key("wallet_node_row"),
-                                             value: model.coin.nodeUrl.components(separatedBy: "://").last ?? model.coin.nodeUrl,
-                                             valueMaxWidth: 150) { model.path.append(.node) }
-                                    .padding(.top, 10)
-                                    .accessibilityIdentifier("wallet-node-row")
-                            }
+                            WalletNavRow(icon: MI.outlinedDns, title: L10n.key("wallet_node_row"),
+                                         value: model.coin.nodeUrl.components(separatedBy: "://").last ?? model.coin.nodeUrl,
+                                         valueMaxWidth: 150) { model.path.append(.node) }
+                                .padding(.top, 10)
+                                .accessibilityIdentifier("wallet-node-row")
                         }
                     }
                     .padding(EdgeInsets(top: 8, leading: 20, bottom: 16, trailing: 20))

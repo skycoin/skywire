@@ -143,7 +143,86 @@ final class WalletChecks: XCTestCase {
         selectCoin("SKY", app)
     }
 
+    /// Every coin's node can be moved, and the Ethereum family's history indexer beside it,
+    /// saved and reset together (Android: WalletNode.kt). A fresh phrase on Bitcoin, then Ethereum.
+    func testEveryCoinsNodeCanBeMoved() throws {
+        let words = Bip39.newMnemonic().split(separator: " ").map(String.init)
+        let phrase = words.joined(separator: " ")
+        let app = XCUIApplication()
+        app.launch()
+        openTab(.wallet, in: app)
+
+        selectCoin("BTC", app)
+        startRestore(app)
+        typePhrase(words, app)
+        app.buttons["wallet-restore-action"].tap()
+        openShippedNode(app)
+        XCTAssertFalse(app.textFields["wallet-indexer-url"].exists, "Bitcoin has no indexer")
+        attachScreenshot(app, "wallet-7-btc-node")
+        replaceText("wallet-node-url", with: "https://blockstream.info/api", app)
+        app.buttons["wallet-node-save"].tap()
+        XCTAssertTrue(nodeRow(app).label.contains("blockstream.info/api"), nodeRow(app).label)
+        openNode(app)
+        tapWhenUp("wallet-node-default", in: app)
+        XCTAssertTrue(nodeRow(app).label.contains("mempool.space"), nodeRow(app).label)
+        removeWallet(Bip84.address(pubKey: try Bip84.key(Bip84.accountKey(mnemonic: phrase), change: 0, index: 0).pubKey()), app)
+
+        selectCoin("ETH", app)
+        startRestore(app)
+        typePhrase(words, app)
+        app.buttons["wallet-restore-action"].tap()
+        openShippedNode(app)
+        let indexer = app.textFields["wallet-indexer-url"]
+        XCTAssertTrue(indexer.exists, "Ethereum reads history from an indexer")
+        XCTAssertEqual(indexer.value as? String, "https://eth.blockscout.com")
+        attachScreenshot(app, "wallet-8-eth-node")
+        replaceText("wallet-indexer-url", with: "https://scout.example", app)
+        app.buttons["wallet-node-save"].tap()
+        // The row names the node; the indexer moved alone.
+        XCTAssertTrue(nodeRow(app).label.contains("ethereum-rpc.publicnode.com"), nodeRow(app).label)
+        openNode(app)
+        XCTAssertEqual(indexer.value as? String, "https://scout.example")
+        tapWhenUp("wallet-node-default", in: app)
+        openNode(app)
+        XCTAssertEqual(indexer.value as? String, "https://eth.blockscout.com")
+        XCTAssertFalse(app.buttons["wallet-node-default"].exists, "the shipped addresses offer no way back to themselves")
+        back(app)
+        let eth = try EthCrypto.address(pubCompressed: EthCrypto.key(EthCrypto.accountKey(mnemonic: phrase), index: 0).pubKey())
+        removeWallet(eth, app)
+        selectCoin("SKY", app)
+    }
+
     // MARK: Steps
+
+    private func nodeRow(_ app: XCUIApplication) -> XCUIElement {
+        let row = app.buttons["wallet-node-row"]
+        XCTAssertTrue(row.waitForExistence(timeout: 180), "no Node row on the balance screen")
+        return row
+    }
+
+    private func openNode(_ app: XCUIApplication) {
+        let row = nodeRow(app)
+        scroll(to: row, in: app)
+        row.tap()
+        XCTAssertTrue(app.textFields["wallet-node-url"].waitForExistence(timeout: 5))
+    }
+
+    /// The node screen on the shipped addresses, whatever an earlier run left.
+    private func openShippedNode(_ app: XCUIApplication) {
+        openNode(app)
+        if app.buttons["wallet-node-default"].exists {
+            tapWhenUp("wallet-node-default", in: app)
+            openNode(app)
+        }
+    }
+
+    private func replaceText(_ identifier: String, with text: String, _ app: XCUIApplication) {
+        let field = app.textFields[identifier]
+        // At the end of the text, so the deletes take all of it.
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
+        let current = field.value as? String ?? ""
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count) + text)
+    }
 
     private func selectCoin(_ id: String, _ app: XCUIApplication) {
         let chip = app.buttons["wallet-coin-chip"]
