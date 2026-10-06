@@ -213,12 +213,18 @@ fun SettingsScreen(
                     },
                 )
             }
+            // A card of its own: two in one item are stacked with no spacing
+            // between them. Below API 34 there is no item at all, not an empty one.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                item {
+                    CallScreenCard(
+                        state = state,
+                        onGrant = viewModel::requestFullScreenCalls,
+                        onDismiss = viewModel::dismissFullScreenCallsPrompt,
+                    )
+                }
+            }
             item {
-                CallScreenCard(
-                    state = state,
-                    onGrant = viewModel::requestFullScreenCalls,
-                    onDismiss = viewModel::dismissFullScreenCallsPrompt,
-                )
                 BatteryCard(
                     state = state,
                     onGrant = viewModel::requestBatteryExemption,
