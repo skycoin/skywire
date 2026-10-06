@@ -56,6 +56,11 @@
       "zh-Hans": "SkyVPN 将随可在 iPhone 上运行的 Skywire 版本一起推出。在此之前，隧道保持关闭。",
       "es": "SkyVPN llega con la versión de Skywire que funciona en un iPhone. Hasta entonces, el túnel sigue apagado."
     },
+    "skydns_ios_pending": {
+      "en": "SkyDNS arrives with the build of Skywire that runs on an iPhone. Until then it stays off.",
+      "zh-Hans": "SkyDNS 将随可在 iPhone 上运行的 Skywire 版本一起推出。在此之前，它保持关闭。",
+      "es": "SkyDNS llega con la versión de Skywire que funciona en un iPhone. Hasta entonces, sigue apagado."
+    },
     "wallet_reveal_action_sub_ios": {
       "en": "Shows all twelve words in the clear. Asks for Face ID, Touch ID or your passcode first.",
       "zh-Hans": "以明文显示全部十二个助记词。需要先验证面容 ID、触控 ID 或设备密码。",

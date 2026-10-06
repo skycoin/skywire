@@ -24,6 +24,7 @@ struct VpnView: View {
                     statusCard
                     networkCard
                     killswitchCard
+                    skyDnsCard
                     TransportPreferenceCard(current: settings.transportPrimary, enabled: true) {
                         dialogs.presentSheet {
                             TransportPreferenceSheet(current: settings.transportPrimary) { settingsModel.setTransportPrimary($0, app) }
@@ -43,6 +44,11 @@ struct VpnView: View {
         .task(id: app.connected) {
             await settingsModel.load(app)
             await model.run(app)
+        }
+        .onChange(of: model.notice) { notice in
+            guard let notice else { return }
+            dialogs.snackbar(Text(verbatim: notice))
+            model.notice = nil
         }
     }
 
@@ -98,6 +104,21 @@ struct VpnView: View {
                     .allowsHitTesting(false)
             }
             Text("vpn_killswitch_hint").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 4)
+        }
+    }
+
+    /// SkyDNS inside the tunnel. A stored choice, pinned into vpn-client's argv at every start and
+    /// at once in a running core, so the tunnel the extension brings (Lane D) starts with it.
+    private var skyDnsCard: some View {
+        SectionCard {
+            HStack {
+                Text("app_skydns").skyText(.titleMedium).frame(maxWidth: .infinity, alignment: .leading)
+                Toggle(isOn: Binding(get: { settings.skyDnsInVpn }, set: { model.setSkyDns($0, app) })) { Text("app_skydns") }
+                    .toggleStyle(.skySwitch)
+                    .disabled(model.skyDnsBusy)
+                    .accessibilityIdentifier("vpn-skydns")
+            }
+            Text("vpn_skydns_hint").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 4)
         }
     }
 
@@ -248,6 +269,9 @@ final class VpnModel: ObservableObject {
     @Published private(set) var error: String?
     @Published private(set) var overview: Overview?
     @Published var query = ""
+    @Published private(set) var skyDnsBusy = false
+    /// A change that failed, shown briefly.
+    @Published var notice: String?
 
     static let serviceType = "vpn"
     private let store = ServerStore(type: VpnModel.serviceType)
@@ -267,6 +291,22 @@ final class VpnModel: ObservableObject {
     func toggleFavorite(_ server: SavedServer) {
         store.toggleFavorite(server)
         favorites = store.favorites
+    }
+
+    /// Stored first, so the next start follows it; a running core gets it in vpn-client's argv
+    /// now (Android: VpnViewModel.setSkyDns, which re-dials a running tunnel).
+    func setSkyDns(_ on: Bool, _ app: AppModel) {
+        app.settings.skyDnsInVpn = on
+        guard app.connected else { return }
+        skyDnsBusy = true
+        Task {
+            defer { skyDnsBusy = false }
+            do {
+                try await app.rewriteVpnArgs { SkyDNS.vpnArgs($0, on: on) }
+            } catch {
+                if !app.handle(error) { notice = error.localizedDescription }
+            }
+        }
     }
 
     func run(_ app: AppModel) async {

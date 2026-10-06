@@ -44,6 +44,19 @@ final class AppSettings: ObservableObject {
         set { set(RemoteManagement.sanitize(newValue), Keys.remoteManagementPK) }
     }
 
+    /// SkyDNS inside SkyVPN's tunnel, on unless turned off (Android: SkyDns.PREF_IN_VPN).
+    var skyDnsInVpn: Bool {
+        get { defaults.object(forKey: Keys.skyDnsInVpn) as? Bool ?? SkyDNS.defaultInVpn }
+        set { set(newValue, Keys.skyDnsInVpn) }
+    }
+
+    /// The resolver SkyVPN and SkyDNS ask for ordinary names, blank for their defaults
+    /// (Android: DnsServer.PREF_KEY).
+    var dnsServer: String {
+        get { DnsServer.sanitize(defaults.string(forKey: Keys.dnsServer)) }
+        set { set(DnsServer.sanitize(newValue), Keys.dnsServer) }
+    }
+
     /// The biometric lock on launch and on return (Android: AppLock).
     var appLockEnabled: Bool {
         get { defaults.bool(forKey: Keys.appLockEnabled) }
@@ -88,7 +101,9 @@ final class AppSettings: ObservableObject {
             publicAutoconnect: publicAutoconnect,
             logLevel: logLevel,
             remoteManagementPK: remoteManagementPK,
-            memoryLimit: ConfigProfile.launchMemoryLimit
+            memoryLimit: ConfigProfile.launchMemoryLimit,
+            skyDnsInVpn: skyDnsInVpn,
+            dnsServer: dnsServer
         )
     }
 
@@ -108,6 +123,8 @@ final class AppSettings: ObservableObject {
         static let publicAutoconnect = "public_autoconnect"
         static let logLevel = "core_log_level"
         static let remoteManagementPK = "remote_management_pk"
+        static let skyDnsInVpn = SkyDNS.prefInVpn
+        static let dnsServer = DnsServer.prefKey
         static let appLockEnabled = "app_lock_enabled"
         static let configEncrypted = "config_encrypted"
         static let themeMode = "theme_mode"

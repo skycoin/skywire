@@ -96,6 +96,10 @@ public struct ProfileSettings: Sendable, Equatable {
     public var remoteManagementPK: String?
     /// The Go memory limit (`memory_limit`), iOS only; nil writes no limit.
     public var memoryLimit: String?
+    /// SkyDNS inside SkyVPN's tunnel (`SkyDNS.prefInVpn`).
+    public var skyDnsInVpn: Bool
+    /// The resolver for ordinary names, blank for each app's default (`DnsServer`).
+    public var dnsServer: String
 
     /// The Go memory limit the iOS core runs under (playbook item 1.7): the
     /// packet-tunnel extension's budget is about 50 MB of phys_footprint, and
@@ -109,7 +113,9 @@ public struct ProfileSettings: Sendable, Equatable {
         publicAutoconnect: Bool = false,
         logLevel: String = CoreLogLevel.defaultLevel,
         remoteManagementPK: String? = nil,
-        memoryLimit: String? = ProfileSettings.iosMemoryLimit
+        memoryLimit: String? = ProfileSettings.iosMemoryLimit,
+        skyDnsInVpn: Bool = SkyDNS.defaultInVpn,
+        dnsServer: String = ""
     ) {
         self.transportPrimary = transportPrimary
         self.fleetEnabled = fleetEnabled
@@ -117,5 +123,7 @@ public struct ProfileSettings: Sendable, Equatable {
         self.logLevel = logLevel
         self.remoteManagementPK = remoteManagementPK
         self.memoryLimit = memoryLimit
+        self.skyDnsInVpn = skyDnsInVpn
+        self.dnsServer = dnsServer
     }
 }

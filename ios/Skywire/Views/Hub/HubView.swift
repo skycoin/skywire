@@ -23,6 +23,7 @@ struct HubView: View {
                     chips
                     if filter == .all || filter == .network {
                         VpnHeroCard(minHops: model.minHops) { navigator.push(.vpn) }
+                        SkyDnsCard()
                     }
                     Text("hub_section_apps").skyText(.titleSmall).foregroundStyle(Color.skyOnBackground)
                         .padding(.leading, 2).padding(.top, 8)
@@ -256,6 +257,34 @@ private struct WideAppCard: View {
     }
 }
 
+/// SkyDNS on its own (Android: SkyDnsCard). It needs a tunnel of its own, which comes with the
+/// packet-tunnel extension (Lane D): until then the switch rests off and a tap says why.
+private struct SkyDnsCard: View {
+    @EnvironmentObject private var dialogs: SkyDialogs
+
+    var body: some View {
+        // Android's Row spaces the icon from the text only: the switch sits right after it.
+        HStack(spacing: 0) {
+            IconTile(icon: MI.roundedDns)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("app_skydns").skyText(.titleMedium).foregroundStyle(Color.skyOnSurface).lineLimit(1)
+                Text("hub_skydns_off").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).lineLimit(1).padding(.top, 2)
+            }
+            .padding(.leading, 13)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Toggle(isOn: Binding(get: { false }, set: { _ in dialogs.snackbar(Text("skydns_ios_pending")) })) {
+                Text("hub_skydns_toggle")
+            }
+            .toggleStyle(.skySwitch)
+            .labelsHidden()
+            .accessibilityIdentifier("hub-skydns")
+        }
+        .padding(14)
+        .background(Color.skySurfaceVariant, in: .sky(SkyRadius.large))
+        .overlay(RoundedRectangle(cornerRadius: SkyRadius.large).strokeBorder(Color.skyOutlineVariant, lineWidth: 1))
+    }
+}
+
 /// SkyMeet: dashed, not clickable, a COMING SOON badge.
 private struct ComingSoonCard: View {
     var body: some View {
@@ -390,8 +419,8 @@ final class HubModel: ObservableObject {
     @Published private(set) var skyBalance: String?
     @Published private(set) var fleetOnline: Int?
 
-    /// Android's "installed" count: the five tiles that run, and SkyVPN.
-    static let installed = 6
+    /// Android's "installed" count: the five tiles that run, SkyVPN and SkyDNS.
+    static let installed = 7
     static let apps = [SocksProfile.app, SkychatProfile.app, SkydexProfile.app]
     static let pollInterval: Duration = .seconds(5)
 
