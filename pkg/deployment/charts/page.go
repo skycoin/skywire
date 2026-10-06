@@ -50,6 +50,7 @@ func (r Range) Frame(ctx context.Context, st Store, now time.Time) (*Frame, time
 // Table is a plain table shown after the charts.
 type Table struct {
 	Title string
+	Note  string
 	Head  []string
 	Rows  [][]string
 }
@@ -142,7 +143,11 @@ func (p *Page) write(b *bytes.Buffer, rg Range, now time.Time, c Content) {
 		b.WriteString(c.Charts[i].SVG(fmt.Sprintf("c%d", i)))
 	}
 	for _, t := range c.Tables {
-		fmt.Fprintf(b, "<section class='table'><h2>%s</h2><div class='scroll'><table><thead><tr>", html.EscapeString(t.Title))
+		fmt.Fprintf(b, "<section class='table'><h2>%s</h2>", html.EscapeString(t.Title))
+		if t.Note != "" {
+			fmt.Fprintf(b, "<p class='note'>%s</p>", html.EscapeString(t.Note))
+		}
+		b.WriteString("<div class='scroll'><table><thead><tr>")
 		for _, h := range t.Head {
 			fmt.Fprintf(b, "<th>%s</th>", html.EscapeString(h))
 		}
@@ -169,7 +174,7 @@ nav{display:flex;gap:4px;background:var(--card);padding:4px;border-radius:10px;b
 nav a{color:var(--muted);text-decoration:none;padding:5px 12px;border-radius:7px;font-weight:550}nav a.on{background:var(--accent);color:#fff}
 main{max-width:1100px;margin:0 auto;padding:8px 16px;display:grid;gap:16px}
 .chart,.table{margin:0;background:var(--card);border-radius:14px;padding:16px 18px 12px;box-shadow:0 1px 3px #0000000f}
-h2{font-size:15px;margin:0;font-weight:620}figcaption p{margin:2px 0 0;color:var(--muted);font-size:12.5px}
+h2{font-size:15px;margin:0;font-weight:620}figcaption p,.note{margin:2px 0 0;color:var(--muted);font-size:12.5px}
 .plot{position:relative;margin-top:10px}svg{display:block;width:100%;height:auto;overflow:visible}
 .grid,.xgrid{stroke:var(--grid);stroke-width:1}.axis{stroke:var(--axis)}
 .ytick,.xtick{fill:var(--muted);font-size:11px}.ytick{text-anchor:end}.xtick{text-anchor:middle}

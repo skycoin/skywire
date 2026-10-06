@@ -4,8 +4,11 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +26,7 @@ const (
 	chartVersionPrefix   = "ver."
 	chartVisorsLinked    = "visors.tp"
 	chartVisorsOnline    = "visors.online"
+	chartPerVisorPrefix  = "pv."
 )
 
 const dailyChartTTL = 10 * time.Minute
@@ -34,6 +38,7 @@ type tpdCharts struct {
 	mu      sync.Mutex
 	daily   []store.DailyAggregate
 	dailyAt time.Time
+	visorBW *store.VisorBWDay
 }
 
 // StartCharts samples TPD's counts into st until ctx ends and serves them
@@ -77,14 +82,20 @@ func (api *API) collectCharts(ctx context.Context) (map[string]float64, error) {
 		}
 		v[chartVisorsLinked] = float64(sum.UniqueVisors)
 	} else {
-		visors := make(map[cipher.PubKey]struct{})
+		visors := make(map[cipher.PubKey]int)
 		for _, e := range entries {
 			v[chartTransportPrefix+string(e.Type)]++
 			for _, edge := range e.Edges {
-				visors[edge] = struct{}{}
+				visors[edge]++
 			}
 		}
 		v[chartVisorsLinked] = float64(len(visors))
+		for _, b := range perVisorBuckets {
+			v[chartPerVisorPrefix+b.label] = 0
+		}
+		for _, n := range visors {
+			v[chartPerVisorPrefix+perVisorBucket(n)]++
+		}
 	}
 	if uptimes := api.getUptimesFromCache(); uptimes != nil {
 		online := 0
@@ -118,11 +129,15 @@ func (api *API) buildCharts(ctx context.Context, c *tpdCharts, r charts.Range, n
 			Kind: charts.Stacked, From: from, To: now, Times: f.Times, Series: f.Group(chartTransportPrefix, 0)},
 		{Title: "Visors", Note: "Visors reporting online, and visors that are an edge of at least one transport.",
 			Kind: charts.Lines, From: from, To: now, Times: f.Times, Series: visors},
+		perVisorChart(f, from, now),
 		{Title: "Visor versions", Note: "Online visors by the version they report.",
 			Kind: charts.Stacked, From: from, To: now, Times: f.Times, Series: f.Group(chartVersionPrefix, 8)},
 	}}
 	if daily := c.dailyAggregate(ctx, api.store); len(daily) > 0 {
-		out.Charts = append(out.Charts, dailyBandwidthChart(daily))
+		out.Charts = append(out.Charts, dailyBandwidthChart(daily), dailyLatencyChart(daily))
+	}
+	if t, ok := api.visorBandwidthTable(ctx, c, now); ok {
+		out.Tables = append(out.Tables, t)
 	}
 	return out, nil
 }
@@ -134,7 +149,7 @@ func (c *tpdCharts) dailyAggregate(ctx context.Context, st store.Store) []store.
 	if time.Since(c.dailyAt) < dailyChartTTL {
 		return c.daily
 	}
-	resp, err := st.GetNetworkMetrics(ctx, store.MetricsQuery{Days: statsDailyDays, Live: "all", Bandwidth: true})
+	resp, err := st.GetNetworkMetrics(ctx, store.MetricsQuery{Days: statsDailyDays, Live: "all", Bandwidth: true, Latency: true})
 	if err != nil || resp == nil {
 		return c.daily
 	}
@@ -143,14 +158,8 @@ func (c *tpdCharts) dailyAggregate(ctx context.Context, st store.Store) []store.
 }
 
 func dailyBandwidthChart(daily []store.DailyAggregate) charts.Chart {
-	var days []store.DailyAggregate
+	days := sortedDays(daily)
 	var times []time.Time
-	for _, d := range daily {
-		if _, err := time.Parse("2006-01-02", d.Date); err == nil {
-			days = append(days, d)
-		}
-	}
-	sort.Slice(days, func(i, j int) bool { return days[i].Date < days[j].Date })
 	byType := map[string][]float64{}
 	for i, d := range days {
 		t, _ := time.Parse("2006-01-02", d.Date) //nolint:errcheck
@@ -177,4 +186,159 @@ func dailyBandwidthChart(daily []store.DailyAggregate) charts.Chart {
 		c.From, c.To = times[0], times[len(times)-1]
 	}
 	return c
+}
+
+// perVisorBuckets are the reward site's buckets: one transport is no
+// redundancy, two is some, and past five the count stops mattering.
+var perVisorBuckets = []struct {
+	label  string
+	lo, hi int
+}{{"1", 1, 1}, {"2", 2, 2}, {"3", 3, 3}, {"4", 4, 4}, {"5-9", 5, 9}, {"10+", 10, 0}}
+
+func perVisorBucket(n int) string {
+	for _, b := range perVisorBuckets {
+		if n >= b.lo && (b.hi == 0 || n <= b.hi) {
+			return b.label
+		}
+	}
+	return perVisorBuckets[0].label
+}
+
+func perVisorChart(f *charts.Frame, from, to time.Time) charts.Chart {
+	var series []charts.Series
+	for _, b := range perVisorBuckets {
+		name := b.label + " transports"
+		if b.label == "1" {
+			name = "1 transport"
+		}
+		series = append(series, charts.Series{Name: name, Vals: f.Values(chartPerVisorPrefix+b.label, false)})
+	}
+	return charts.Chart{Title: "Visors by transport count",
+		Note: "How many transports each visor has, stacked. Visors with one transport have no redundancy.",
+		Kind: charts.Stacked, From: from, To: to, Times: f.Times, Series: series}
+}
+
+func dailyLatencyChart(daily []store.DailyAggregate) charts.Chart {
+	days := sortedDays(daily)
+	all := make([]float64, len(days))
+	byType := map[string][]float64{}
+	var times []time.Time
+	for i, d := range days {
+		t, _ := time.Parse("2006-01-02", d.Date) //nolint:errcheck
+		times = append(times, t)
+		all[i] = msOrGap(d.Latency)
+		for typ, agg := range d.ByType {
+			if byType[typ] == nil {
+				byType[typ] = make([]float64, len(days))
+				for j := range byType[typ] {
+					byType[typ][j] = math.NaN()
+				}
+			}
+			byType[typ][i] = msOrGap(agg.Latency)
+		}
+	}
+	series := []charts.Series{{Name: "all", Vals: all}}
+	types := make([]string, 0, len(byType))
+	for t := range byType {
+		types = append(types, t)
+	}
+	sort.Strings(types)
+	for _, t := range types {
+		series = append(series, charts.Series{Name: t, Vals: byType[t]})
+	}
+	c := charts.Chart{Title: "Daily latency by type", Note: "Mean of each transport's average latency per UTC day, over the last 30 days.",
+		Kind: charts.Lines, Times: times, Series: series, Dates: true,
+		Format: func(v float64) string { return strconv.FormatFloat(v, 'f', 0, 64) + " ms" }}
+	if len(times) > 0 {
+		c.From, c.To = times[0], times[len(times)-1]
+	}
+	return c
+}
+
+// msOrGap keeps a day with no latency report as a gap rather than 0 ms.
+func msOrGap(v float64) float64 {
+	if v <= 0 {
+		return math.NaN()
+	}
+	return v
+}
+
+func sortedDays(daily []store.DailyAggregate) []store.DailyAggregate {
+	var days []store.DailyAggregate
+	for _, d := range daily {
+		if _, err := time.Parse("2006-01-02", d.Date); err == nil {
+			days = append(days, d)
+		}
+	}
+	sort.Slice(days, func(i, j int) bool { return days[i].Date < days[j].Date })
+	return days
+}
+
+const topVisorsByBandwidth = 25
+
+// visorBandwidthTable lists the visors that sent the most on the last
+// settled day, from the same per-visor totals rewards pool 2 pays from.
+func (api *API) visorBandwidthTable(ctx context.Context, c *tpdCharts, now time.Time) (charts.Table, bool) {
+	date := now.AddDate(0, 0, -1).Format("2006-01-02")
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.visorBW == nil || c.visorBW.Date != date {
+		ls, ok := api.store.(leafStore)
+		if !ok {
+			return charts.Table{}, false
+		}
+		leaves, err := ls.LoadMetricsLeaves(ctx, []string{date})
+		if err != nil || leaves[date] == nil {
+			return charts.Table{}, false
+		}
+		records, err := decodeMetricsParts(leaves[date])
+		if err != nil {
+			return charts.Table{}, false
+		}
+		day := store.ComputeVisorBW(records, date)
+		c.visorBW = &day
+	}
+	return visorBWTable(c.visorBW), true
+}
+
+func visorBWTable(day *store.VisorBWDay) charts.Table {
+	type row struct {
+		pk     string
+		total  uint64
+		byType map[string]uint64
+	}
+	rows := make([]row, 0, len(day.Visors))
+	for pk, types := range day.Visors {
+		r := row{pk: pk, byType: types}
+		for _, n := range types {
+			r.total += n
+		}
+		rows = append(rows, r)
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].total != rows[j].total {
+			return rows[i].total > rows[j].total
+		}
+		return rows[i].pk < rows[j].pk
+	})
+	t := charts.Table{Title: "Top visors by bytes sent, " + day.Date,
+		Note: fmt.Sprintf("%d visors sent bytes over %d transports. %d transports between visors on the same network are left out, as in rewards pool 2.",
+			len(day.Visors), day.Transports, day.SameNetworkExcluded),
+		Head: []string{"Public key", "Sent", "By type"}}
+	for i, r := range rows {
+		if i == topVisorsByBandwidth {
+			break
+		}
+		types := make([]string, 0, len(r.byType))
+		for typ := range r.byType {
+			types = append(types, typ)
+		}
+		sort.Slice(types, func(a, b int) bool { return r.byType[types[a]] > r.byType[types[b]] })
+		parts := make([]string, 0, len(types))
+		for _, typ := range types {
+			parts = append(parts, typ+" "+charts.Bytes(float64(r.byType[typ])))
+		}
+		t.Rows = append(t.Rows, []string{r.pk, charts.Bytes(float64(r.total)), strings.Join(parts, ", ")})
+	}
+	return t
 }
