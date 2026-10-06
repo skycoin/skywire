@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -63,6 +64,9 @@ type API struct {
 	dmsgAddr                    string
 	DmsgServers                 []string
 	backupPath                  string
+
+	// charts is set once StartCharts runs; until then / answers 404.
+	chartState atomic.Pointer[tpdCharts]
 
 	transportsCache         []*transport.Entry
 	transportsCacheFiltered []*transport.Entry // excludes self-transports
@@ -215,6 +219,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 
 	// Infrastructure endpoints (no rate limiting, no auth)
 	r.Get("/health", api.health)
+	r.Get("/", api.ChartsPage)
 	r.Post("/statuses", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusGone)
 	})
