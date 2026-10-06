@@ -10,7 +10,6 @@
 package commands
 
 import (
-	"github.com/skycoin/skywire/pkg/services"
 	"os"
 	"path/filepath"
 	gotesting "testing"
@@ -20,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/services/rf"
 )
 

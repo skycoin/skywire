@@ -73,6 +73,7 @@ skywire svc rf
 
 ```
   -a, --addr string               plain-HTTP listen address (default ":9092")
+      --charts-addr string        serve only the charts page over plain HTTP on this address
   -c, --config string             path to a JSON config file; keys it sets override these flags
                                   (generate one with: skywire cli config gen --rf)
       --dmsg-disc string          url of dmsg-discovery (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
