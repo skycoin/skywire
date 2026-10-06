@@ -18,6 +18,7 @@ func TestCollectCharts(t *testing.T) {
 
 	srvA, _ := cipher.GenerateKeyPair()
 	srvB, _ := cipher.GenerateKeyPair()
+	lanSrv, _ := cipher.GenerateKeyPair()
 	require.NoError(t, db.SetEntry(ctx, &disc.Entry{Static: srvA, Server: &disc.Server{Address: "1.1.1.1:8081", AvailableSessions: 10}}, 0))
 	require.NoError(t, db.SetEntry(ctx, &disc.Entry{Static: srvB, Server: &disc.Server{Address: "2.2.2.2:8081"}}, 0))
 	for i, typ := range []string{"visor", "visor", ""} {
@@ -25,6 +26,9 @@ func TestCollectCharts(t *testing.T) {
 		delegated := []cipher.PubKey{srvA}
 		if i == 0 {
 			delegated = append(delegated, srvB)
+		}
+		if i == 2 {
+			delegated = append(delegated, lanSrv)
 		}
 		require.NoError(t, db.SetEntry(ctx, &disc.Entry{Static: pk, ClientType: typ, Client: &disc.Client{DelegatedServers: delegated}}, 0))
 	}
@@ -37,4 +41,11 @@ func TestCollectCharts(t *testing.T) {
 	require.Equal(t, 2.0, v[chartVisorClients])
 	require.Equal(t, 3.0, v[chartServerClients+srvA.Hex()])
 	require.Equal(t, 1.0, v[chartServerClients+srvB.Hex()])
+	require.Equal(t, 1.0, v[chartServerClients+lanSrv.Hex()])
+	require.Equal(t, 10.0, v[chartServerFree+srvA.Hex()])
+	require.Equal(t, 0.0, v[chartServerFree+srvB.Hex()])
+	require.Equal(t, 1.0, v[chartLANServers])
+	require.Equal(t, 1.0, v[chartLANClients])
+	_, hasLANFree := v[chartServerFree+lanSrv.Hex()]
+	require.False(t, hasLANFree)
 }
