@@ -483,16 +483,20 @@ func (v *Visor) refreshDmsgServersCacheLoop(ctx context.Context, discURL string,
 	cacheLog := v.MasterLogger().PackageLogger("dmsg_servers_cache")
 	dc := dmsgdisc.NewHTTP(discURL, httpC, cacheLog)
 	refresh := func() {
-		entries, err := dc.AllServers(ctx)
-		if err != nil {
-			cacheLog.WithError(err).Debug("Skipping cache refresh (dmsgd error)")
-			return
+		entries, source := v.dmsgServersFromCXO(), "cxo"
+		if len(entries) == 0 {
+			var err error
+			if entries, err = dc.AllServers(ctx); err != nil {
+				cacheLog.WithError(err).Debug("Skipping cache refresh (dmsgd error)")
+				return
+			}
+			source = "http"
 		}
 		if err := v.dmsgServersCache.Replace(entries); err != nil {
 			cacheLog.WithError(err).Warn("Failed to write dmsg-servers cache file")
 			return
 		}
-		cacheLog.WithField("count", len(entries)).Debug("dmsg-servers cache refreshed")
+		cacheLog.WithField("count", len(entries)).WithField("source", source).Debug("dmsg-servers cache refreshed")
 	}
 	refresh()
 	t := time.NewTicker(dmsgServersCacheRefreshInterval)

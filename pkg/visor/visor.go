@@ -250,6 +250,8 @@ type Visor struct {
 	// bootstrap direct client uses the addresses last learned from
 	// dmsg-discovery, not the (potentially stale) addresses in skywire.json.
 	dmsgServersCache *DmsgServersCache
+	// serversFeedOnce holds the dmsg discovery feed once for the server cache.
+	serversFeedOnce sync.Once
 
 	// deploySvcMu serializes applying the deployment's services config: the
 	// conf service's CXO feed and the hourly dmsg-HTTP refresh can both
