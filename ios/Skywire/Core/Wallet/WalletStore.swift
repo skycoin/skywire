@@ -11,19 +11,22 @@ struct WalletRegistry: Codable, Equatable, Sendable {
     var userCoins: [CoinSpec] = []
     /// Coin id → the node address the user set.
     var nodeUrls: [String: String] = [:]
+    /// Coin id → the history indexer the user set (the Ethereum family).
+    var indexerUrls: [String: String] = [:]
     var selectedCoin: String?
     /// Coin id → the wallet in use for it.
     var activeWallets: [String: String] = [:]
 
     init() {}
 
-    enum CodingKeys: String, CodingKey { case wallets, userCoins, nodeUrls, selectedCoin, activeWallets }
+    enum CodingKeys: String, CodingKey { case wallets, userCoins, nodeUrls, indexerUrls, selectedCoin, activeWallets }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         wallets = try c.decodeIfPresent([WalletMeta].self, forKey: .wallets) ?? []
         userCoins = try c.decodeIfPresent([CoinSpec].self, forKey: .userCoins) ?? []
         nodeUrls = try c.decodeIfPresent([String: String].self, forKey: .nodeUrls) ?? [:]
+        indexerUrls = try c.decodeIfPresent([String: String].self, forKey: .indexerUrls) ?? [:]
         selectedCoin = try c.decodeIfPresent(String.self, forKey: .selectedCoin)
         activeWallets = try c.decodeIfPresent([String: String].self, forKey: .activeWallets) ?? [:]
     }
@@ -95,13 +98,12 @@ final class WalletStore: ObservableObject {
     /// user fiber coins in the order added, then the other built-ins, then
     /// user tokens in the order added.
     var coins: [CoinSpec] {
-        shippedCoins.map { $0.withNodeOverride(registry.nodeUrls) }
+        shippedCoins.map { $0.withNodeOverride(registry.nodeUrls, indexerOverrides: registry.indexerUrls) }
     }
 
-    /// The coin list before any node override — what "use the default"
-    /// restores.
-    var defaultNodeUrls: [String: String] {
-        Dictionary(uniqueKeysWithValues: shippedCoins.map { ($0.id, $0.nodeUrl) })
+    /// Each coin before any override, by id: what "use the default" restores.
+    var defaultCoins: [String: CoinSpec] {
+        Dictionary(uniqueKeysWithValues: shippedCoins.map { ($0.id, $0) })
     }
 
     private var shippedCoins: [CoinSpec] {
@@ -112,17 +114,31 @@ final class WalletStore: ObservableObject {
     func coin(_ id: String) -> CoinSpec? { coins.first { $0.id == id } }
 
     /// Point a coin at a different node, or hand it back to the shipped one
-    /// with a blank `url`. Any address scan waiting on a back-off is
-    /// released: the whole point of changing the node is that the old one
-    /// was not answering.
-    func setNodeUrl(coinId: String, url: String) throws {
-        var trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.hasSuffix("/") { trimmed.removeLast() }
-        guard trimmed.isEmpty || Self.isHTTPURL(trimmed) else { throw WalletStoreError(L10n.text("wallet_add_coin_node_invalid")) }
+    /// with a blank `url`; `indexerUrl` does the same for the Ethereum
+    /// family's history indexer, and nil leaves it as it is. Any address scan
+    /// waiting on a back-off is released: the whole point of changing the node
+    /// is that the old one was not answering.
+    func setNodeUrl(coinId: String, url: String, indexerUrl: String? = nil) throws {
+        let node = try Self.checkedUrl(url)
+        let indexer = try indexerUrl.map(Self.checkedUrl)
+        // The shipped address is stored as nothing, so a later release that
+        // ships another one is not held to this one.
+        let shipped = defaultCoins[coinId]
         mutate { reg in
-            if trimmed.isEmpty { reg.nodeUrls[coinId] = nil } else { reg.nodeUrls[coinId] = trimmed }
+            reg.nodeUrls[coinId] = node == shipped?.nodeUrl || node.isEmpty ? nil : node
+            if let indexer {
+                reg.indexerUrls[coinId] = indexer == shipped?.indexerUrl || indexer.isEmpty ? nil : indexer
+            }
         }
         for w in registry.wallets where w.coinId == coinId { scanRetryAfter[w.id] = nil }
+    }
+
+    /// `url` trimmed for storage; blank stays blank, which means the shipped one.
+    private static func checkedUrl(_ url: String) throws -> String {
+        var trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasSuffix("/") { trimmed.removeLast() }
+        guard trimmed.isEmpty || isHTTPURL(trimmed) else { throw WalletStoreError(L10n.text("wallet_add_coin_node_invalid")) }
+        return trimmed
     }
 
     func addFiberCoin(name: String, ticker: String, nodeUrl: String, icon: String?) throws -> CoinSpec {

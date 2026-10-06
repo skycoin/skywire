@@ -10620,6 +10620,52 @@
         }
       }
     },
+    "wallet_indexer_field" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Indexer address"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dirección del indexador"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "索引服务地址"
+          }
+        }
+      }
+    },
+    "wallet_indexer_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Blockscout instance, or another etherscan-style API that needs no key."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una instancia de Blockscout, u otra API al estilo de etherscan que no pida clave."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blockscout 实例，或其他无需密钥的 etherscan 风格接口。"
+          }
+        }
+      }
+    },
     "wallet_intro_body" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10965,6 +11011,29 @@
         }
       }
     },
+    "wallet_node_body_indexer" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Balances, fees and broadcasts for %1$@ go to the node, and its transaction history is read from the indexer. Change them if the ones shipped with the app cannot be reached from where you are, or if you run your own."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los saldos, las comisiones y los envíos de %1$@ van al nodo, y su historial de transacciones se lee del indexador. Cámbialos si los que vienen con la app no se pueden alcanzar desde donde estás, o si tienes los tuyos."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 的余额、手续费和广播都通过节点收发，交易记录则从索引服务读取。如果应用自带的地址在你所在的网络无法访问，或你有自建服务，可在此更改。"
+          }
+        }
+      }
+    },
     "wallet_node_cleartext" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11007,6 +11076,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "恢复为 %1$@"
+          }
+        }
+      }
+    },
+    "wallet_node_default_all" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Go back to the shipped addresses"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volver a las direcciones de la app"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复为应用自带的地址"
           }
         }
       }
@@ -11057,6 +11149,52 @@
         }
       }
     },
+    "wallet_node_hint_btc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An Esplora API, such as mempool.space, blockstream.info or your own electrs."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una API Esplora, como mempool.space, blockstream.info o tu propio electrs."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esplora 接口，例如 mempool.space、blockstream.info 或你自建的 electrs。"
+          }
+        }
+      }
+    },
+    "wallet_node_hint_eth" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An Ethereum JSON-RPC endpoint."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un punto de acceso JSON-RPC de Ethereum."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以太坊 JSON-RPC 接口。"
+          }
+        }
+      }
+    },
     "wallet_node_row" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11099,6 +11237,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用该节点"
+          }
+        }
+      }
+    },
+    "wallet_node_save_all" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use these addresses"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar estas direcciones"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用这些地址"
           }
         }
       }
