@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	armetrics "github.com/skycoin/skywire/pkg/deployment/ar/metrics"
 	"github.com/skycoin/skywire/pkg/deployment/ar/store"
+	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/deployment/monitor/nmpk"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
@@ -98,6 +99,9 @@ type API struct {
 	// transported, per type, published as the reach feed. See reach.go.
 	reach *reachBook
 
+	counters   arCounters
+	chartsPage atomic.Pointer[charts.Page]
+
 	// bindPub is the CXO bindings publisher, installed after the dmsg client
 	// exists (see pkg/services/ar). Held atomically because the store writes
 	// that notify it run on HTTP, UDP and CXO-ingest goroutines while the
@@ -124,6 +128,7 @@ type bindNotifyStore struct {
 func (s *bindNotifyStore) Bind(ctx context.Context, netType types.Type, pk cipher.PubKey, visorData addrresolver.VisorData) error {
 	err := s.Store.Bind(ctx, netType, pk, visorData)
 	if err == nil {
+		s.api.countBind(netType)
 		s.api.reach.noteBind(netType, pk, visorData)
 		s.api.bindPub.Load().MarkDirty(netType, pk)
 	}
@@ -295,6 +300,7 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 	})
 
 	r.Get("/health", api.health)
+	r.Get("/", api.ChartsPage)
 	r.With(middleware.Compress(5)).Get("/transports", api.transports)
 	r.Delete("/deregister/{network}", api.deregister)
 
@@ -588,6 +594,7 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 	// reports ErrNoEntry. Both mean "nothing to resolve here" and must be 404,
 	// not a 500 server-fault (the AR-500 regression this endpoint has hit before).
 	if errors.Is(err, store.ErrNoEntry) || errors.Is(err, store.ErrUnknownTransportType) {
+		a.countResolve(tpType, resolveNotFound)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -605,6 +612,7 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 		a.logger(r).Debugf("Visors have different remote addresses: %v, %v", receiverVisorData.RemoteAddr, remoteAddr)
 	}
 
+	a.countResolve(tpType, resolveFound)
 	// Sender gets the receiver's data and dails to it.
 	a.writeJSON(w, r, http.StatusOK, receiverVisorData)
 	a.logger(r).Debugf("Resolved %v to %v (%v)", receiverPK, receiverVisorData, tpType)

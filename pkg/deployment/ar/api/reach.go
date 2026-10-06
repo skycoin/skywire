@@ -631,3 +631,36 @@ func probeQUIC(ctx context.Context, target string) bool {
 func isVersionNegotiation(b []byte) bool {
 	return len(b) >= 7 && b[0]&0x80 != 0 && binary.BigEndian.Uint32(b[1:5]) == 0
 }
+
+// reachCounts summarizes the book for the charts page: per type, how many
+// peers are bound and how many answered or failed the probe.
+type reachCounts struct {
+	peers, live         int
+	bound, open, closed map[string]int
+}
+
+func (b *reachBook) counts() reachCounts {
+	c := reachCounts{bound: map[string]int{}, open: map[string]int{}, closed: map[string]int{}}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, p := range b.peers {
+		c.peers++
+		if p.live {
+			c.live++
+		}
+		for t := range p.bound {
+			c.bound[t]++
+		}
+		for t, ps := range p.probes {
+			if !ps.settled {
+				continue
+			}
+			if ps.open {
+				c.open[t]++
+			} else {
+				c.closed[t]++
+			}
+		}
+	}
+	return c
+}
