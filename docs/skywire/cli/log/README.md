@@ -16,6 +16,7 @@ skywire cli log
 
 - [file](file/README.md) — Stream a single visor's /visor.log to stdout
 - [info](info/README.md) — Fetch a single visor's /node-info survey
+- [level](level/README.md) — Read or temporarily set a remote visor's log level
 - [pprof](pprof/README.md) — Fetch a runtime pprof profile from a remote visor
 - [reward](reward/README.md) — Fetch /reward.txt from a remote visor
 - [st](st/README.md) — Render collected surveys as a color tree

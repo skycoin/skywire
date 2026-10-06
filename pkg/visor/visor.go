@@ -86,6 +86,9 @@ var mLog = initLogger()
 type Visor struct {
 	closeStack []closer
 
+	// tempLog is the log level set for a while from /debug/loglevel.
+	tempLog tempLogLevel
+
 	// svcFetch is the short-lived cache in front of FetchServiceData for the
 	// service-discovery lists, with one fetch in flight per key. See
 	// svcFetchCached.
@@ -698,8 +701,9 @@ func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 		_, err := logging.LevelFromString(opts.LogLevel)
 		if err != nil {
 			mLog.WithError(err).Error("Invalid log level specified: ", opts.LogLevel)
+			opts.LogLevel = ""
 		} else {
-			conf.LogLevel = opts.LogLevel
+			// Applied in NewVisor; never copied into conf (see there).
 			mLog.Info("setting log level to: ", opts.LogLevel)
 		}
 	}
@@ -885,7 +889,14 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, opts Options, logBcast 
 	// heap's peak is never returned to the host. The wasm config writer
 	// (pkg/skywireconfig/genvisor/marshal_js.go) writes LogLevel verbatim with
 	// no default of its own, which is one way to arrive here empty.
+	//
+	// The --loglvl flag (opts.LogLevel, validated in run) wins over the
+	// config but is never stored in it: a later Flush would write it to disk,
+	// and the config would keep it after the flag was gone.
 	logLevel := conf.LogLevel
+	if opts.LogLevel != "" {
+		logLevel = opts.LogLevel
+	}
 	if logLevel == "" {
 		logLevel = skyenv.LogLevel
 	}
