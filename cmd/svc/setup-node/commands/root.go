@@ -8,11 +8,12 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/rpc"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
