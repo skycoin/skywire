@@ -2,10 +2,9 @@ package com.skycoin.skywire
 
 import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.skywire.wallet.CoinSpec
-import com.skycoin.skywire.wallet.nodeUrlEditable
 import com.skycoin.skywire.wallet.withNodeOverride
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -66,16 +65,43 @@ class WalletNodeUrlTest {
     }
 
     @Test
-    fun onlyCoinsWhoseNodeIsTheWholeStoryOfferTheSetting() {
-        // A fiber daemon answers balances, history and broadcast alike, so one
-        // address moves all of it. The Ethereum family reads history from a
-        // separate indexer, so one field there would move half and silently
-        // leave the rest — worse than not offering it.
-        assertTrue(CoinSpec.SKY.nodeUrlEditable)
-        assertTrue(fiber.nodeUrlEditable)
-        assertFalse(CoinSpec.ETH.nodeUrlEditable)
-        assertFalse(CoinSpec.USDT.nodeUrlEditable)
-        assertFalse(CoinSpec.BTC.nodeUrlEditable)
+    fun bitcoinsNodeMovesLikeAnyOther() {
+        val moved = CoinSpec.BTC.withNodeOverride(mapOf("BTC" to "https://blockstream.info"))
+        assertEquals("https://blockstream.info", moved.nodeUrl)
+        assertNull(moved.indexerUrl)
+    }
+
+    @Test
+    fun theEthereumIndexerMovesOnItsOwn() {
+        // Balances come from the node and history from the indexer, so each
+        // has to land where it was asked to, and nowhere else.
+        val node = CoinSpec.ETH.withNodeOverride(mapOf("ETH" to "https://rpc.example"))
+        assertEquals("https://rpc.example", node.nodeUrl)
+        assertEquals(CoinSpec.ETH_INDEXER, node.indexerUrl)
+
+        val indexer = CoinSpec.ETH.withNodeOverride(emptyMap(), mapOf("ETH" to "https://scout.example"))
+        assertEquals(CoinSpec.ETH_NODE, indexer.nodeUrl)
+        assertEquals("https://scout.example", indexer.indexerUrl)
+    }
+
+    @Test
+    fun aTokenIsMovedByItsOwnId() {
+        // USDT shares ETH's endpoints when shipped, but a choice made on the
+        // ETH screen is not one made for USDT.
+        val ethOnly = mapOf("ETH" to "https://rpc.example")
+        assertSame(CoinSpec.USDT, CoinSpec.USDT.withNodeOverride(ethOnly, ethOnly))
+        val usdt = CoinSpec.USDT.withNodeOverride(emptyMap(), mapOf("USDT" to "https://scout.example"))
+        assertEquals("https://scout.example", usdt.indexerUrl)
+    }
+
+    @Test
+    fun aCoinWithoutAnIndexerNeverGainsOne() {
+        assertSame(fiber, fiber.withNodeOverride(emptyMap(), mapOf("fiber-1" to "https://scout.example")))
+    }
+
+    @Test
+    fun aBlankIndexerMeansTheShippedOne() {
+        assertSame(CoinSpec.ETH, CoinSpec.ETH.withNodeOverride(emptyMap(), mapOf("ETH" to "  ")))
     }
 
     @Test
