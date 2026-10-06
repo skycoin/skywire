@@ -63,8 +63,9 @@
 	</dict>
 	<key>UIAppFonts</key>
 	<array>
-		<string>quicksand_variable.ttf</string>
-		<string>nunito_variable.ttf</string>
+		<string>quicksand_bold.ttf</string>
+		<string>nunito_semibold.ttf</string>
+		<string>nunito_bold.ttf</string>
 	</array>
 	<key>UILaunchScreen</key>
 	<dict>
