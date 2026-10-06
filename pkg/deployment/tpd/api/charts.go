@@ -17,6 +17,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
+	"github.com/skycoin/skywire/pkg/deployment/netgraph"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 )
 
@@ -32,8 +33,9 @@ const (
 const dailyChartTTL = 10 * time.Minute
 
 type tpdCharts struct {
-	st   charts.Store
-	page *charts.Page
+	st    charts.Store
+	page  *charts.Page
+	graph *netgraph.Page
 
 	mu      sync.Mutex
 	daily   []store.DailyAggregate
@@ -48,10 +50,12 @@ func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Fie
 	c.page = &charts.Page{
 		Title: "Skywire transport discovery",
 		About: strings.Split(api.dmsgAddr, ":")[0],
+		Links: []charts.Link{{Name: "Network graph", Href: "graph"}},
 		Build: func(ctx context.Context, r charts.Range, now time.Time) (charts.Content, error) {
 			return api.buildCharts(ctx, c, r, now)
 		},
 	}
+	c.graph = &netgraph.Page{Title: "Skywire transport graph", Back: "./", Source: api.graphLinks}
 	api.chartState.Store(c)
 	go charts.Run(ctx, st, api.collectCharts, log)
 }
@@ -64,6 +68,29 @@ func (api *API) ChartsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.page.ServeHTTP(w, r)
+}
+
+// GraphPage serves the transport graph, or 404 when charts are not running.
+func (api *API) GraphPage(w http.ResponseWriter, r *http.Request) {
+	c := api.chartState.Load()
+	if c == nil {
+		http.NotFound(w, r)
+		return
+	}
+	c.graph.ServeHTTP(w, r)
+}
+
+// graphLinks is every transport in the cache, for the transport graph.
+func (api *API) graphLinks(context.Context) ([]netgraph.Link, error) {
+	entries := api.getTransportsFromCache(true)
+	if entries == nil {
+		return nil, errors.New("transport cache is not warm yet")
+	}
+	links := make([]netgraph.Link, 0, len(entries))
+	for _, e := range entries {
+		links = append(links, netgraph.Link{A: e.Edges[0].Hex(), B: e.Edges[1].Hex(), Type: string(e.Type)})
+	}
+	return links, nil
 }
 
 func (api *API) collectCharts(ctx context.Context) (map[string]float64, error) {

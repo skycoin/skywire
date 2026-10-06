@@ -114,3 +114,16 @@ func TestAllZeroDrawsAFlatLine(t *testing.T) {
 	require.Contains(t, svg, "class='line'")
 	require.NotContains(t, svg, "No samples")
 }
+
+func TestServeExtraPaths(t *testing.T) {
+	page := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("page")) })   //nolint:errcheck
+	graph := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("graph")) }) //nolint:errcheck
+	srv := httptest.NewServer(rootOnly(page, Extra{Path: "/graph", Handler: graph}))
+	defer srv.Close()
+	for path, want := range map[string]int{"/": 200, "/graph": 200, "/graph/x": 404, "/health": 404} {
+		resp, err := http.Get(srv.URL + path)
+		require.NoError(t, err)
+		_ = resp.Body.Close() //nolint:errcheck
+		require.Equal(t, want, resp.StatusCode, path)
+	}
+}

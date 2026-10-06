@@ -220,6 +220,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	// Infrastructure endpoints (no rate limiting, no auth)
 	r.Get("/health", api.health)
 	r.Get("/", api.ChartsPage)
+	r.Get("/graph", api.GraphPage)
 	r.Post("/statuses", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusGone)
 	})
