@@ -66,7 +66,7 @@ func init() {
 	RootCmd.Flags().IntVar(&muxRoutes, "mux", 0, "dial the server over this many parallel (multiplexed) routes")
 	RootCmd.Flags().IntVar(&minHops, "min-hops", 0, "force the route through at least this many intermediate visors")
 	RootCmd.Flags().BoolVar(&dmsgFallback, "dmsg-fallback", false, "if the skynet (route) dial to the server fails, fall back to a direct dmsg stream (opt-in: dmsg relays via a dmsg server — higher latency + the server sees both endpoint PKs)")
-	RootCmd.Flags().BoolVar(&meshGateway, "mesh-gateway", false, "mesh gateway: resolve *.dmsg / *.skynet on this host and proxy them over the mesh (opt-in; Linux only)")
+	RootCmd.Flags().BoolVar(&meshGateway, "mesh-gateway", false, "mesh gateway: resolve *.dmsg / *.skynet on this host and proxy them over the mesh (opt-in; Linux, and SkyDNS on Android)")
 	RootCmd.Flags().StringVar(&meshGWCIDR, "mesh-gateway-cidr", "", "mesh-gateway synthetic-IP pool (empty = 100.64.0.0/16)")
 	RootCmd.Flags().BoolVar(&meshTLS, "mesh-gateway-tls", false, "mesh gateway: TLS-MITM HTTPS to *.dmsg/*.skynet with a self-generated CA (host must trust it)")
 	RootCmd.Flags().StringVar(&meshCACert, "mesh-gateway-ca", "", "mesh-gateway CA cert path (empty = <local>/mesh-gateway-ca/ca.pem; generated if absent)")
