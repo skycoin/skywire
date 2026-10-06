@@ -10,6 +10,7 @@
 
     <string name="app_skysocks">SkySOCKS</string>
     <string name="app_skyvpn">SkyVPN</string>
+    <string name="app_skydns">SkyDNS</string>
     <string name="app_skydex">SkyDEX</string>
     <string name="app_skychat">SkyChat</string>
     <string name="app_wallet">Wallet</string>
@@ -36,6 +37,11 @@
     <string name="hub_stat_up">Up</string>
     <string name="hub_stat_data">Data</string>
     <string name="hub_vpn_toggle">SkyVPN on/off</string>
+    <string name="hub_skydns_toggle">SkyDNS on/off</string>
+    <string name="hub_skydns_off">.dmsg and .skynet names in every app</string>
+    <string name="hub_skydns_starting">Starting…</string>
+    <string name="hub_skydns_on">Answering .dmsg and .skynet names</string>
+    <string name="hub_skydns_paused">Paused while SkyVPN is on</string>
     <plurals name="hub_hops">
         <item quantity="one">%1$d hop</item>
         <item quantity="other">%1$d hops</item>
@@ -253,6 +259,7 @@
     <string name="vpn_killswitch_hint">Keeps the network interface in place while the tunnel is down, so nothing leaks out around it. Other apps have no connection until it comes back.</string>
     <string name="vpn_killswitch_always_on">Always-on VPN settings</string>
     <string name="vpn_killswitch_always_on_hint">For the strongest guarantee — blocking even before the app starts — turn on “Always-on VPN” and “Block connections without VPN” for Skywire in Android’s settings.</string>
+    <string name="vpn_skydns_hint">Opens .dmsg and .skynet names in every app while SkyVPN is on. Address a site by its key\'s DNS label, since a hex key is too long for DNS.</string>
     <string name="vpn_hotspot_title">VPN hotspot</string>
     <string name="vpn_hotspot_hint">Share SkyVPN with devices on this phone’s hotspot. They use it through a proxy on this phone.</string>
     <string name="vpn_hotspot_error">Could not open port %1$d: %2$s</string>
