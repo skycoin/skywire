@@ -25,8 +25,7 @@ final class ScreenTour: XCTestCase {
 
     private func tour(language: String, locale: String) throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", locale]
-        app.launch()
+        launch(app, language: language, locale: locale)
 
         // Disconnect first if the app came back connected, so every language
         // shows both states and exercises both directions of the button.

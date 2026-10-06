@@ -42,10 +42,12 @@ enum AppLanguage: String, CaseIterable {
         }
     }
 
-    /// What iOS has for this app now: a choice made in its Settings page shows here as well.
+    /// What iOS has for this app now: a choice made in its Settings page shows here as well. A
+    /// launch's `-AppleLanguages` (Xcode's App Language option, the UI tours) wins for that launch.
     static func current(in defaults: UserDefaults = .standard) -> AppLanguage {
-        guard let first = (defaults.persistentDomain(forName: Bundle.main.bundleIdentifier ?? "")?["AppleLanguages"] as? [String])?.first
-        else { return .system }
+        let launch = defaults.volatileDomain(forName: UserDefaults.argumentDomain)["AppleLanguages"]
+        let stored = defaults.persistentDomain(forName: Bundle.main.bundleIdentifier ?? "")?["AppleLanguages"]
+        guard let first = ((launch ?? stored) as? [String])?.first else { return .system }
         let language = Locale(identifier: first).language.languageCode?.identifier
         return allCases.first { $0.tag.map { Locale(identifier: $0).language.languageCode?.identifier == language } ?? false } ?? .system
     }

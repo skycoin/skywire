@@ -67,6 +67,17 @@ extension XCTestCase {
         XCTAssertTrue(element.isHittable, "\(element) not reachable by scrolling")
     }
 
+    /// Launches the app in `language` (Xcode's App Language option) and checks it took: the bar's
+    /// Home reads in that language. A language chosen in Settings must not outrank it.
+    func launch(_ app: XCUIApplication, language: String, locale: String) {
+        app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", locale]
+        app.launch()
+        let home = ["en": "Home", "zh-Hans": "首页", "es": "Inicio"][language]
+        let tab = app.buttons["tab-home"]
+        XCTAssertTrue(tab.waitForExistence(timeout: 15))
+        XCTAssertEqual(tab.label, home, "the app is not drawn in \(language)")
+    }
+
     func state(_ app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)["core-state"]
     }
