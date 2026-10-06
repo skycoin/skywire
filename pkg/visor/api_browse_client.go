@@ -4,13 +4,10 @@ package visor
 import (
 	"net"
 	"net/http"
-	"net/http/cookiejar"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/net/publicsuffix"
 
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -37,9 +34,8 @@ const (
 )
 
 var browseShared struct {
-	mu  sync.Mutex
-	tr  map[string]*http.Transport
-	jar http.CookieJar
+	mu sync.Mutex
+	tr map[string]*http.Transport
 }
 
 // browseTransport returns the shared transport for the proxy named key,
@@ -63,20 +59,6 @@ func browseTransport(key string, mk func() (*http.Transport, error)) (*http.Tran
 	tr.ForceAttemptHTTP2 = true
 	browseShared.tr[key] = tr
 	return tr, nil
-}
-
-// browseJar returns the cookie jar the browse fetches share.
-func browseJar() http.CookieJar {
-	browseShared.mu.Lock()
-	defer browseShared.mu.Unlock()
-	if browseShared.jar == nil {
-		jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
-		if err != nil {
-			return nil
-		}
-		browseShared.jar = jar
-	}
-	return browseShared.jar
 }
 
 // browsePageCookieHeader carries the cookies the page itself holds (set
