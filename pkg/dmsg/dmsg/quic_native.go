@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package dmsg pkg/dmsg/dmsg/quic_native.go c1-net-dmsg
 //
 // All quic-go-dependent code for dmsg-over-QUIC (#2607) lives here, behind the

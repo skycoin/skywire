@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package router pkg/router/router_setup_rpc_native.go c2-net-routing
 package router
 

@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package appdisc pkg/app/appdisc/factory_native.go c2-vis-appsvc
 //
 // The Factory's updater constructors. They build servicedisc.HTTPClient

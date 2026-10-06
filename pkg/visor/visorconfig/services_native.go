@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package visorconfig pkg/visor/visorconfig/services_native.go c3-vis-core
 //
 // Native (non-WASM) home of the EnvServices alias. Lives here (rather

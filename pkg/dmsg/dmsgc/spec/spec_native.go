@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package spec pkg/dmsg/dmsgc/spec/spec_native.go c1-net-dmsg
 //
 // DmsgConfig's MarshalJSON / UnmarshalJSON — tagged off the WASM

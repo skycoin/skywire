@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package dmsg pkg/dmsg/dmsg/ws_server.go c1-net-dmsg
 //
 // Split out of ws.go behind //go:build !tinygo: ServeWS runs an http.Server

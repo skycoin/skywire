@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package disc pkg/dmsg/disc/testing.go c1-net-dmsg
 //
 // Mock APIClient for tests. Build-tag-gated because it imports

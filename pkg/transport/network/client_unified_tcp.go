@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package network pkg/transport/network/client_unified_tcp.go c2-net-transport
 //
 // The unified transport port (TCP side): bind ONE master TCP listener and route

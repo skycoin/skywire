@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package dmsgclient pkg/dmsg/dmsgclient/cli_fallback.go c1-net-dmsg
 //
 // net/http-using dmsg bootstrap helpers — excluded from TinyGo builds (net/http

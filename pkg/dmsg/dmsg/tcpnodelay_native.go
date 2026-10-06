@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package dmsg pkg/dmsg/dmsg/tcpnodelay_native.go c1-net-dmsg
 package dmsg
 

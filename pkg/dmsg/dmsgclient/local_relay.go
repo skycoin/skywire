@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package dmsgclient pkg/dmsg/dmsgclient/local_relay.go c1-net-dmsg
 //
 // Bootstrap for a standalone dmsg client that ATTACHES to a visor on the same

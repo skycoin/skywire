@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package appdisc pkg/app/appdisc/discovery_manager_native.go c2-vis-appsvc
 //
 // The service-discovery-backed updaters. servicedisc.HTTPClient pulls net/http,

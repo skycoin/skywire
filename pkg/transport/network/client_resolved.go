@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package network pkg/transport/network/client_resolved.go c2-net-transport
 //
 // The address-resolver-backed carrier machinery (stcpr/sudph/quic), split out of

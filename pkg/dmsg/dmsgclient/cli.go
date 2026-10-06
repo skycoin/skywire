@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package dmsgclient pkg/dmsg/dmsgclient/cli.go c1-net-dmsg
 package dmsgclient
 

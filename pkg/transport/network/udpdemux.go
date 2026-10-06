@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package network pkg/transport/network/udpdemux.go c2-net-transport
 //
 // udpDemux multiplexes ONE UDP socket across the UDP-based transport protocols

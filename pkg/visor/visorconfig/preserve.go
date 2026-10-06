@@ -1,5 +1,3 @@
-//go:build !(tinygo && js)
-
 // Package visorconfig pkg/visor/visorconfig/preserve.go c3-vis-core
 //
 // Unknown-key preservation for the config read-modify-write cycle.

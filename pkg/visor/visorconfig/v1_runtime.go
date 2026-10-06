@@ -13,8 +13,6 @@
 // apt-repo install page). The visor binary builds native and
 // includes both files; the WASM build sees only v1.go.
 
-//go:build !(tinygo && js)
-
 package visorconfig
 
 import (
