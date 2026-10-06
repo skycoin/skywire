@@ -55,7 +55,8 @@ func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Fie
 			return api.buildCharts(ctx, c, r, now)
 		},
 	}
-	c.graph = &netgraph.Page{Title: "Skywire transport graph", Back: "./", Source: api.graphLinks}
+	c.graph = &netgraph.Page{Title: "Skywire transport graph", Back: "./", Source: api.graphLinks, Marks: api.roleColors,
+		Legend: []netgraph.Mark{{Name: roleName[roleRegistered], Color: roleColor[roleRegistered]}, {Name: roleName[roleLAN], Color: roleColor[roleLAN]}}}
 	api.chartState.Store(c)
 	go charts.Run(ctx, st, api.collectCharts, log)
 }
@@ -325,10 +326,10 @@ func (api *API) visorBandwidthTable(ctx context.Context, c *tpdCharts, now time.
 		day := store.ComputeVisorBW(records, date)
 		c.visorBW = &day
 	}
-	return visorBWTable(c.visorBW), true
+	return visorBWTable(c.visorBW, api.serverRoles(ctx)), true
 }
 
-func visorBWTable(day *store.VisorBWDay) charts.Table {
+func visorBWTable(day *store.VisorBWDay, roles map[string]string) charts.Table {
 	type row struct {
 		pk     string
 		total  uint64
@@ -349,9 +350,9 @@ func visorBWTable(day *store.VisorBWDay) charts.Table {
 		return rows[i].pk < rows[j].pk
 	})
 	t := charts.Table{Title: "Top visors by bytes sent, " + day.Date,
-		Note: fmt.Sprintf("%d visors sent bytes over %d transports. %d transports between visors on the same network are left out, as in rewards pool 2.",
+		Note: fmt.Sprintf("%d visors sent bytes over %d transports. %d transports between visors on the same network are left out, as in rewards pool 2. Visors that run a dmsg server are tinted, blue when it is registered in dmsg discovery and green when it serves a hypervisor's LAN.",
 			len(day.Visors), day.Transports, day.SameNetworkExcluded),
-		Head: []string{"Public key", "Sent", "By type"}}
+		Head: []string{"Public key", "Role", "Sent", "By type"}}
 	for i, r := range rows {
 		if i == topVisorsByBandwidth {
 			break
@@ -365,7 +366,25 @@ func visorBWTable(day *store.VisorBWDay) charts.Table {
 		for _, typ := range types {
 			parts = append(parts, typ+" "+charts.Bytes(float64(r.byType[typ])))
 		}
-		t.Rows = append(t.Rows, []string{r.pk, charts.Bytes(float64(r.total)), strings.Join(parts, ", ")})
+		t.Rows = append(t.Rows, []string{r.pk, roleName[roles[r.pk]], charts.Bytes(float64(r.total)), strings.Join(parts, ", ")})
+		t.Marks = append(t.Marks, roleColor[roles[r.pk]])
 	}
 	return t
+}
+
+// roleName and roleColor describe a dmsg server visor in tables and on the
+// transport graph.
+var (
+	roleName  = map[string]string{roleRegistered: "registered dmsg server", roleLAN: "LAN dmsg server"}
+	roleColor = map[string]string{roleRegistered: "#4e79a7", roleLAN: "#59a14f"}
+)
+
+// roleColors colors each dmsg server visor by its role, for the graph.
+func (api *API) roleColors(ctx context.Context) map[string]string {
+	roles := api.serverRoles(ctx)
+	out := make(map[string]string, len(roles))
+	for pk, r := range roles {
+		out[pk] = roleColor[r]
+	}
+	return out
 }

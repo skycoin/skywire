@@ -55,6 +55,8 @@ type Table struct {
 	Note  string
 	Head  []string
 	Rows  [][]string
+	// Marks, when set, gives a row a color to stand out in. Empty leaves it plain.
+	Marks []string
 }
 
 // Content is what a page shows for one range.
@@ -159,8 +161,12 @@ func (p *Page) write(b *bytes.Buffer, rg Range, now time.Time, c Content) {
 			fmt.Fprintf(b, "<th>%s</th>", html.EscapeString(h))
 		}
 		b.WriteString("</tr></thead><tbody>")
-		for _, row := range t.Rows {
-			b.WriteString("<tr>")
+		for ri, row := range t.Rows {
+			if ri < len(t.Marks) && t.Marks[ri] != "" {
+				fmt.Fprintf(b, "<tr class='mark' style='--mark:%s'>", html.EscapeString(t.Marks[ri]))
+			} else {
+				b.WriteString("<tr>")
+			}
 			for _, cell := range row {
 				fmt.Fprintf(b, "<td>%s</td>", html.EscapeString(cell))
 			}
@@ -200,6 +206,7 @@ h2{font-size:15px;margin:0;font-weight:620}figcaption p,.note{margin:2px 0 0;col
 .scroll{overflow-x:auto;margin-top:10px}table{border-collapse:collapse;width:100%;font-size:12.5px}
 th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--grid);white-space:nowrap}th{color:var(--muted);font-weight:550}
 td:first-child{font-family:ui-monospace,monospace;font-size:11.5px}
+tr.mark td{background:color-mix(in srgb,var(--mark) 13%,transparent)}tr.mark td:first-child{box-shadow:inset 3px 0 0 var(--mark)}
 .legend-t i{display:block;width:10px;height:10px;border-radius:3px}.legend-t td:first-child{width:14px;padding-right:0}
 .legend-t td:nth-child(2),.mono{font-family:ui-monospace,monospace;font-size:11.5px}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 footer{max-width:1100px;margin:0 auto;padding:12px 16px 32px;color:var(--muted);font-size:12px}`

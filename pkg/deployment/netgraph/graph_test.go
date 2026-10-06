@@ -63,3 +63,15 @@ func TestPage(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.True(t, strings.Contains(rec.Body.String(), "2 visors, 1 visor pairs, 1 transports"))
 }
+
+func TestPageMarks(t *testing.T) {
+	p := &Page{Title: "T",
+		Source: func(context.Context) ([]Link, error) { return []Link{{A: "a", B: "b", Type: "stcpr"}}, nil },
+		Marks:  func(context.Context) map[string]string { return map[string]string{"b": "#4e79a7"} },
+		Legend: []Mark{{Name: "registered dmsg server", Color: "#4e79a7"}}}
+	rec := httptest.NewRecorder()
+	p.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/graph", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"c":["","#4e79a7"]`)
+	require.Contains(t, rec.Body.String(), "registered dmsg server")
+}
