@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/deployment/monitor/nmpk"
 	sdmetrics "github.com/skycoin/skywire/pkg/deployment/sd/metrics"
 	"github.com/skycoin/skywire/pkg/deployment/sd/store"
@@ -99,6 +101,9 @@ type API struct {
 	// null-check via pub == nil so the HTTP path always works
 	// regardless.
 	cxoPublisher *ServicesCXOPublisher
+
+	// chartsPage is set once StartCharts runs; until then / answers 404.
+	chartsPage atomic.Pointer[charts.Page]
 }
 
 // SetDHTMirror sets a mirror that publishes per-visor service lists to
@@ -282,6 +287,7 @@ func (a *API) newRouter() chi.Router {
 	r.Get("/uptimes", a.getUptimes)
 	r.Post("/uptimes", a.postUptimes)
 	r.Get("/health", a.health)
+	r.Get("/", a.ChartsPage)
 
 	if a.nonceDB != nil {
 		handler := &httpauth.NonceHandler{Store: a.nonceDB}

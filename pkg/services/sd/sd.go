@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
+	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/deployment/sd/api"
 	sdmetrics "github.com/skycoin/skywire/pkg/deployment/sd/metrics"
 	"github.com/skycoin/skywire/pkg/deployment/sd/regcxo"
@@ -145,6 +146,7 @@ func (s *service) build(ctx context.Context, log *logging.Logger, dmsgAddr strin
 	}
 
 	go sdAPI.RunBackgroundTasks(ctx, log)
+	sdAPI.StartCharts(ctx, s.chartStore(storeType, redisURL, log), log)
 	return sdAPI, nil
 }
 
@@ -249,6 +251,15 @@ func (s *service) Run(ctx context.Context) error {
 	}
 	defer h.Close()
 
+	if cfg.ChartsAddr != "" {
+		log.Infof("Serving the charts page on %s", cfg.ChartsAddr)
+		go func() {
+			if err := charts.Serve(runCtx, cfg.ChartsAddr, http.HandlerFunc(sdAPI.ChartsPage)); err != nil {
+				log.WithError(err).Error("charts listener failed")
+			}
+		}()
+	}
+
 	if h.DmsgClient != nil {
 		s.startCXO(runCtx, h.DmsgClient, nil, sdAPI, sk, log)
 	}
@@ -316,4 +327,17 @@ func (s *service) startServicesCXO(
 // AggregatorPorts implements services.CXOAggregating.
 func (s *service) AggregatorPorts() []uint16 {
 	return []uint16{skyenv.DmsgVisorSDRegCXOPort}
+}
+
+// chartStore keeps the chart samples next to the service entries.
+func (s *service) chartStore(t storeconfig.Type, redisURL string, log *logging.Logger) charts.Store {
+	if t != storeconfig.Redis {
+		return charts.NewMemoryStore()
+	}
+	st, err := charts.NewRedisStore(redisURL, storeconfig.RedisPassword(), redisPrefix)
+	if err != nil {
+		log.WithError(err).Warn("charts: redis unavailable, keeping samples in memory")
+		return charts.NewMemoryStore()
+	}
+	return st
 }
