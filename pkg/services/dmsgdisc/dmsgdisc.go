@@ -285,6 +285,7 @@ func (s *service) runDMSG(
 		// subscriber connecting in the post-restart gap times out at
 		// firstSyncTimeout (10s).
 		a.WarmCXOFromStore(ctx, log)
+		go a.RunServersCXO(ctx, log)
 		go func() {
 			<-ctx.Done()
 			pub.Close() //nolint:errcheck,gosec
