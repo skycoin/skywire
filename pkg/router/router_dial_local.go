@@ -27,9 +27,10 @@ import (
 //
 //  1. Local transport manager — `tm.Transport(id)` for any transport
 //     this visor holds. Constant-time map read.
-//  2. TPD `GetTransport(tpID)` — entries the local visor doesn't own
-//     (intermediate-to-intermediate hops). One round-trip per unique
-//     ID.
+//  2. The hop itself, when the route-finder described it (Type set) —
+//     no round-trip at all.
+//  3. A TPD transport snapshot — hops from an older route-finder that
+//     the local visor doesn't own (intermediate-to-intermediate).
 //
 // Both lookups share a single GetTransportByID per ID so callers
 // that need both (the dial path: pickDisjointPath's latency rank
@@ -41,10 +42,18 @@ import (
 // treats unknown as "not DMSG" (can't prove it's bad).
 func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) (latencyFor func(uuid.UUID) float64, typeFor func(uuid.UUID) string, throughputFor func(uuid.UUID) float64) {
 	unique := make(map[uuid.UUID]struct{})
+	// Hops the route-finder described (Type set): it already read latency,
+	// type and throughput from TPD, so they need no snapshot. Fetching one
+	// for them pinned TPD's routing feed — the whole transport graph,
+	// re-sent every minute — on every visor that dialed a multi-hop route.
+	described := make(map[uuid.UUID]routing.Hop)
 	for _, paths := range [][][]routing.Hop{fwd, rev} {
 		for _, p := range paths {
 			for _, h := range p {
 				unique[h.TpID] = struct{}{}
+				if h.Type != "" {
+					described[h.TpID] = h
+				}
 			}
 		}
 	}
@@ -78,6 +87,21 @@ func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) 
 					continue
 				}
 			}
+		}
+		if h, ok := described[id]; ok {
+			// Fill only what the local pass could not, as the snapshot does
+			// below. An edge the route-finder has no latency for is unmeasured
+			// in TPD too, so the snapshot would not know it either.
+			if _, known := latencyCache[id]; !known && h.Latency > 0 {
+				latencyCache[id] = h.Latency
+			}
+			if typeCache[id] == "" {
+				typeCache[id] = h.Type
+			}
+			if _, known := throughputCache[id]; !known && h.ThroughputBps > 0 {
+				throughputCache[id] = h.ThroughputBps
+			}
+			continue
 		}
 		misses = append(misses, id)
 	}
