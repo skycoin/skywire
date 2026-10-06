@@ -137,9 +137,6 @@ class ConfigManager(
         "--disableapps", "skysocks,vpn-server,vpn-router,skydex-market,skycoin-web",
         "--binpath", paths.binDir.absolutePath,
         "--nofetch",
-        // The resolving proxies for .dmsg and .skynet names, on 127.0.0.1:4445
-        // (4446 chained behind it). The VPN points the phone's HTTP proxy here.
-        "--dmsgweb", "--skynetweb",
     )
 
     private suspend fun runGen(): CommandResult = runCommand(genArgs(), timeoutSeconds = 90)
@@ -196,6 +193,7 @@ class ConfigManager(
             for ((key, value) in root) {
                 when (key) {
                     "pty", "skywire-tcp" -> Unit // dropped
+                    in MeshProxy.CONFIG_KEYS -> Unit // pinned below
                     "cli_addr" -> put(key, JsonPrimitive(""))
                     "hypervisors" -> put(
                         key,
@@ -266,6 +264,13 @@ class ConfigManager(
                 }
             }
             putObject("dmsgscp") { put("disabled", JsonPrimitive(true)) }
+            // The proxies SkyVPN points browsers at, pinned so a config made
+            // before they existed gets them too.
+            for (key in MeshProxy.CONFIG_KEYS) {
+                put(key, ((root[key] as? JsonObject) ?: JsonObject(emptyMap())).edit {
+                    this["enable"] = JsonPrimitive(true)
+                })
+            }
         }
         paths.configFile.writeText(json.encodeToString(JsonObject.serializer(), edited))
     }

@@ -288,12 +288,11 @@ class SkyVpnService : VpnService() {
                 // park in the kernel with no way to interrupt them.
                 .setBlocking(false)
                 .setConfigureIntent(configureIntent())
-            // Proxy-aware apps (browsers) send their HTTP through the core's
-            // resolving proxy, so .dmsg and .skynet names load under the VPN.
-            // Plain DNS cannot resolve them. Android 10 and later only.
+            // Proxy-aware apps (browsers) reach .dmsg and .skynet names through
+            // the core's resolving proxy. Android 10 and later only.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 builder.setHttpProxy(
-                    ProxyInfo.buildDirectProxy(MESH_PROXY_HOST, MESH_PROXY_PORT, listOf("localhost", "127.0.0.1")),
+                    ProxyInfo.buildDirectProxy(MeshProxy.HOST, MeshProxy.PORT, MeshProxy.exclusions),
                 )
             }
             if (!applyAppRules(builder, routing)) {
@@ -473,11 +472,6 @@ class SkyVpnService : VpnService() {
          * the Go side learns the name.
          */
         const val SOCKET_NAME = "com.skycoin.skywire.vpn"
-
-        // The core's .dmsg resolving proxy (`config gen --dmsgweb`), which also
-        // answers HTTP proxy requests and chains .skynet names to 4446.
-        private const val MESH_PROXY_HOST = "127.0.0.1"
-        private const val MESH_PROXY_PORT = 4445
 
         /**
          * The one bound listener in this process, whichever service instance
