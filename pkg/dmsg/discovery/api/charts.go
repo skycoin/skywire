@@ -11,6 +11,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 )
@@ -22,6 +23,9 @@ const (
 	chartServers       = "servers"
 	chartServersAvail  = "servers.avail"
 	chartServerClients = "srv."
+	chartServerFree    = "free."
+	chartLANServers    = "lan.servers"
+	chartLANClients    = "lan.clients"
 )
 
 // StartCharts samples the discovery's counts into st until ctx ends and
@@ -48,6 +52,8 @@ func (a *API) ChartsPage(w http.ResponseWriter, r *http.Request) {
 	p.ServeHTTP(w, r)
 }
 
+// collectCharts counts clients per dmsg server. Servers clients delegate to
+// without a discovery entry are the ones hypervisors run for their LAN.
 func (a *API) collectCharts(ctx context.Context) (map[string]float64, error) {
 	servers, err := a.db.AllServers(ctx)
 	if err != nil {
@@ -57,12 +63,18 @@ func (a *API) collectCharts(ctx context.Context) (map[string]float64, error) {
 	if err != nil {
 		return nil, err
 	}
-	v := map[string]float64{chartServers: float64(len(servers))}
+	registered := make(map[cipher.PubKey]bool, len(servers))
+	v := map[string]float64{chartServers: float64(len(servers)), chartLANServers: 0, chartLANClients: 0}
 	for _, s := range servers {
-		if s.Server != nil && s.Server.AvailableSessions > 0 {
+		if s.Server == nil {
+			continue
+		}
+		registered[s.Static] = true
+		if s.Server.AvailableSessions > 0 {
 			v[chartServersAvail]++
 		}
 		v[chartServerClients+s.Static.Hex()] = 0
+		v[chartServerFree+s.Static.Hex()] = float64(s.Server.AvailableSessions)
 	}
 	for _, c := range clients {
 		if c == nil || c.Client == nil {
@@ -72,8 +84,19 @@ func (a *API) collectCharts(ctx context.Context) (map[string]float64, error) {
 		if c.ClientType == "visor" {
 			v[chartVisorClients]++
 		}
+		lan := false
 		for _, s := range c.Client.DelegatedServers {
-			v[chartServerClients+s.Hex()]++
+			k := chartServerClients + s.Hex()
+			if !registered[s] {
+				lan = true
+				if v[k] == 0 {
+					v[chartLANServers]++
+				}
+			}
+			v[k]++
+		}
+		if lan {
+			v[chartLANClients]++
 		}
 	}
 	return v, nil
@@ -88,58 +111,67 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, r charts.Range, 
 	if err != nil {
 		servers = nil
 	}
-	addr := map[string]*disc.Entry{}
+	reg := map[string]*disc.Server{}
 	for _, s := range servers {
-		addr[s.Static.Hex()] = s
+		if s.Server != nil {
+			reg[s.Static.Hex()] = s.Server
+		}
 	}
-	var perServer []charts.Series
+
+	var perServer, free []charts.Series
+	type lanServer struct {
+		pk      string
+		clients float64
+	}
+	var lan []lanServer
 	for _, k := range f.Keys(chartServerClients) {
 		pk := strings.TrimPrefix(k, chartServerClients)
-		name := pk
-		if e := addr[pk]; e != nil && e.Server != nil && e.Server.Address != "" {
-			name = e.Server.Address
+		srv := reg[pk]
+		if srv == nil {
+			if n, ok := f.Latest(k); ok && n > 0 {
+				lan = append(lan, lanServer{pk, n})
+			}
+			continue
 		}
-		perServer = append(perServer, charts.Series{Name: name, Title: pk, Vals: f.Values(k, false)})
+		official := ""
+		if a.OfficialServers[pk] {
+			official = "yes"
+		}
+		perServer = append(perServer, charts.Series{Name: pk, Vals: f.Values(k, false),
+			Cells: []string{srv.Address, srv.ServerType, official, strconv.Itoa(srv.AvailableSessions)}})
+		free = append(free, charts.Series{Name: pk, Vals: f.Values(chartServerFree+pk, false), Cells: []string{srv.Address}})
 	}
+
 	out := charts.Content{Charts: []charts.Chart{
 		{Title: "dmsg clients", Note: "Live client entries, and those registered by visors.", Kind: charts.Lines,
 			From: from, To: now, Times: f.Times, Series: []charts.Series{
 				{Name: "clients", Vals: f.Values(chartClients, false)},
 				{Name: "visors", Vals: f.Values(chartVisorClients, false)},
 			}},
-		{Title: "dmsg servers", Note: "Registered dmsg servers, and those with free sessions.", Kind: charts.Lines,
+		{Title: "Registered dmsg servers", Note: "Servers with a discovery entry, and those with free sessions.", Kind: charts.Lines,
 			From: from, To: now, Times: f.Times, Series: []charts.Series{
 				{Name: "registered", Vals: f.Values(chartServers, false)},
 				{Name: "with free sessions", Vals: f.Values(chartServersAvail, false)},
 			}},
-		{Title: "Clients per dmsg server", Note: "A client delegates to several servers, so these add up to more than the client count.",
-			Kind: charts.Lines, From: from, To: now, Times: f.Times, Series: perServer},
+		{Title: "Clients per registered dmsg server",
+			Note: "A client delegates to several servers, so these add up to more than the client count.",
+			Kind: charts.Lines, From: from, To: now, Times: f.Times, Series: perServer,
+			Legend: []string{"Public key", "Address", "Type", "Official", "Free sessions", "Clients"}},
+		{Title: "Free sessions per registered dmsg server", Note: "Spare capacity each server advertises in its entry.",
+			Kind: charts.Lines, From: from, To: now, Times: f.Times, Series: free,
+			Legend: []string{"Public key", "Address", "Free sessions"}},
+		{Title: "Hypervisor LAN dmsg servers",
+			Note: "Servers that hypervisors run for the visors on their LAN. They have no discovery entry, by design.",
+			Kind: charts.Lines, From: from, To: now, Times: f.Times, Series: []charts.Series{
+				{Name: "servers", Vals: f.Values(chartLANServers, false)},
+				{Name: "clients using them", Vals: f.Values(chartLANClients, false)},
+			}},
 	}}
-	out.Tables = append(out.Tables, a.serverTable(f, servers))
-	return out, nil
-}
-
-func (a *API) serverTable(f *charts.Frame, servers []*disc.Entry) charts.Table {
-	t := charts.Table{Title: "dmsg servers now", Head: []string{"Public key", "Address", "Clients", "Free sessions", "Type", "Official"}}
-	sort.Slice(servers, func(i, j int) bool {
-		ci, _ := f.Latest(chartServerClients + servers[i].Static.Hex())
-		cj, _ := f.Latest(chartServerClients + servers[j].Static.Hex())
-		return ci > cj
-	})
-	for _, s := range servers {
-		if s.Server == nil {
-			continue
-		}
-		pk := s.Static.Hex()
-		clients := "-"
-		if n, ok := f.Latest(chartServerClients + pk); ok {
-			clients = strconv.FormatFloat(n, 'f', 0, 64)
-		}
-		official := ""
-		if a.OfficialServers[pk] {
-			official = "yes"
-		}
-		t.Rows = append(t.Rows, []string{pk, s.Server.Address, clients, strconv.Itoa(s.Server.AvailableSessions), s.Server.ServerType, official})
+	sort.SliceStable(lan, func(i, j int) bool { return lan[i].clients > lan[j].clients })
+	t := charts.Table{Title: "Hypervisor LAN dmsg servers now", Head: []string{"Public key", "Clients"}}
+	for _, l := range lan {
+		t.Rows = append(t.Rows, []string{l.pk, strconv.FormatFloat(l.clients, 'f', 0, 64)})
 	}
-	return t
+	out.Tables = append(out.Tables, t)
+	return out, nil
 }

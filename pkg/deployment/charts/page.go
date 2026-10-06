@@ -183,6 +183,8 @@ h2{font-size:15px;margin:0;font-weight:620}figcaption p{margin:2px 0 0;color:var
 .scroll{overflow-x:auto;margin-top:10px}table{border-collapse:collapse;width:100%;font-size:12.5px}
 th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--grid);white-space:nowrap}th{color:var(--muted);font-weight:550}
 td:first-child{font-family:ui-monospace,monospace;font-size:11.5px}
+.legend-t i{display:block;width:10px;height:10px;border-radius:3px}.legend-t td:first-child{width:14px;padding-right:0}
+.legend-t td:nth-child(2),.mono{font-family:ui-monospace,monospace;font-size:11.5px}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 footer{max-width:1100px;margin:0 auto;padding:12px 16px 32px;color:var(--muted);font-size:12px}`
 
 const pageJS = `document.querySelectorAll('figure.chart').forEach(function(f){
