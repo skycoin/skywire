@@ -53,8 +53,7 @@ final class WalletTour: XCTestCase {
 
     private func tour(language: String, locale: String) throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", locale]
-        app.launch()
+        launch(app, language: language, locale: locale)
         openTab(.wallet, in: app)
 
         // A coin with no wallet opens on setup; the coin list over it.

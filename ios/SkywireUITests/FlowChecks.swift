@@ -65,22 +65,23 @@ final class FlowChecks: XCTestCase {
     }
 
     /// A language change rebuilds every screen. Settings comes back where it was, as Android's
-    /// does when its activity is recreated, not at the top (the chips sit far below it).
+    /// does when its activity is recreated, not at the top (the chips sit far below it). Ends on
+    /// the language it found, so the tours after it are not drawn in a leftover choice.
     func testLanguageChangeKeepsTheSettingsPlace() {
         let app = XCUIApplication()
         app.launch()
         openTab(.settings, in: app)
-        let spanish = app.buttons["language-spanish"]
-        scroll(to: spanish, in: app)
-        let before = spanish.frame.minY
-        spanish.tap()
-        let english = app.buttons["language-english"]
-        XCTAssertTrue(english.waitForExistence(timeout: 5))
-        XCTAssertTrue(english.isHittable, "Settings went back to the top")
-        XCTAssertEqual(app.buttons["language-spanish"].frame.minY, before, accuracy: 60)
-        english.tap()
-        XCTAssertTrue(app.buttons["language-spanish"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["language-spanish"].isHittable, "Settings went back to the top")
+        let chips = ["system", "english", "chinese_simplified", "spanish"].map { app.buttons["language-\($0)"] }
+        scroll(to: chips[3], in: app)
+        let start = chips.first { $0.isSelected } ?? chips[0]
+        let other = start == chips[3] ? chips[1] : chips[3]
+        for chip in [other, start] {
+            let before = chip.frame.minY
+            chip.tap()
+            XCTAssertTrue(chip.waitForExistence(timeout: 5))
+            XCTAssertTrue(chip.isHittable, "Settings went back to the top")
+            XCTAssertEqual(chip.frame.minY, before, accuracy: 60)
+        }
     }
 
     func testFleetOn() { toggleFleet(to: true) }
