@@ -21,6 +21,8 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/cxo/node"
+	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
+	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/api"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/cxoaggregator"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/deployment/tpd/metrics"
@@ -181,6 +183,11 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	logger.Infof("Transport entry timeout: %v", cfg.EntryTimeout)
 
 	go tpdAPI.RunBackgroundTasks(ctx, logger)
+	if cs, err := s.chartStore(storeCfg); err != nil {
+		logger.WithError(err).Warn("charts unavailable")
+	} else {
+		tpdAPI.StartCharts(ctx, cs, logger)
+	}
 
 	return &built{api: tpdAPI, st: st, logger: logger, close: closeAll}, nil
 }
@@ -287,6 +294,15 @@ func (s *service) Run(ctx context.Context) error {
 		return fmt.Errorf("transport-discovery: start listeners: %w", err)
 	}
 	defer h.Close()
+
+	if cfg.ChartsAddr != "" {
+		logger.Infof("Serving the charts page on %s", cfg.ChartsAddr)
+		go func() {
+			if err := charts.Serve(runCtx, cfg.ChartsAddr, http.HandlerFunc(tpdAPI.ChartsPage)); err != nil {
+				logger.WithError(err).Error("charts listener failed")
+			}
+		}()
+	}
 
 	if h.DmsgClient != nil {
 		s.startCXO(runCtx, h.DmsgClient, nil, b.st, tpdAPI, sk, logger)
@@ -405,4 +421,12 @@ var (
 // AggregatorPorts implements services.CXOAggregating.
 func (s *service) AggregatorPorts() []uint16 {
 	return []uint16{skyenv.DmsgCXOPort, skyenv.DmsgVisorTPListCXOPort}
+}
+
+// chartStore keeps the chart samples next to the transports.
+func (s *service) chartStore(sc storeconfig.Config) (charts.Store, error) {
+	if sc.Type != storeconfig.Redis {
+		return charts.NewMemoryStore(), nil
+	}
+	return charts.NewRedisStore(sc.URL, sc.Password, redisPrefix)
 }
