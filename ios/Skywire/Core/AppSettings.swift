@@ -82,6 +82,7 @@ final class AppSettings: ObservableObject {
             objectWillChange.send()
             newValue.persist(in: defaults)
             L10n.bundle = newValue.bundle
+            L10n.locale = newValue.locale
         }
     }
 
