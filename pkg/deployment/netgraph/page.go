@@ -119,8 +119,8 @@ func (p *Page) write(g *Graph, at time.Time, marks map[string]string) []byte {
 	var b bytes.Buffer
 	title := html.EscapeString(p.Title)
 	fmt.Fprintf(&b, "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>%s</title><style>%s</style></head><body>", title, graphCSS)
-	fmt.Fprintf(&b, "<header><div><h1>%s</h1><p class='sub'>%d visors, %d visor pairs, %d transports. Laid out %s UTC.</p>",
-		title, len(g.Nodes), len(g.Edges), g.Transports, at.UTC().Format("2006-01-02 15:04"))
+	fmt.Fprintf(&b, "<header><div><h1>%s</h1><p class='sub'>%d visors, %d visor pairs, %d transports. Laid out <time data-t='%d'>%s UTC</time>.</p>",
+		title, len(g.Nodes), len(g.Edges), g.Transports, at.UnixMilli(), at.UTC().Format("2006-01-02 15:04"))
 	if p.Back != "" {
 		fmt.Fprintf(&b, "<p class='sub'><a href='%s'>Charts</a></p>", html.EscapeString(p.Back))
 	}
@@ -152,6 +152,7 @@ main{max-width:1400px;margin:0 auto;padding:8px 16px 32px}
 #tip .k{font:11.5px ui-monospace,monospace;overflow-wrap:anywhere}#tip div{display:flex;justify-content:space-between;gap:16px}#tip b{font-variant-numeric:tabular-nums}`
 
 const graphJS = `(function(){
+document.querySelectorAll('time[data-t]').forEach(function(e){e.textContent=new Date(+e.getAttribute('data-t')).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'short'})});
 var G=JSON.parse(document.getElementById('g').textContent),n=G.k.length;
 var raw=atob(G.e),m=raw.length/5,A=new Uint32Array(m),B=new Uint32Array(m),M=new Uint8Array(m);
 for(var i=0;i<m;i++){var o=i*5;A[i]=raw.charCodeAt(o)|raw.charCodeAt(o+1)<<8;B[i]=raw.charCodeAt(o+2)|raw.charCodeAt(o+3)<<8;M[i]=raw.charCodeAt(o+4)}

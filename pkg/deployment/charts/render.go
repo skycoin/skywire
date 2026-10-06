@@ -379,13 +379,22 @@ func (c *Chart) data(sb *strings.Builder) {
 		// R is the raw value, for the pie beside a stacked chart.
 		R []*float64 `json:"r,omitempty"`
 	}
+	// T, F and To are unix milliseconds and the geometry fields place the x
+	// axis, so the page can label time in the viewer's own zone. A chart of
+	// UTC days (Dt) keeps its server labels.
 	d := struct {
 		X  []float64 `json:"x"`
 		L  []string  `json:"l"`
+		T  []int64   `json:"t"`
 		W  int       `json:"w"`
 		S  []ser     `json:"s"`
 		St bool      `json:"st"`
-	}{W: svgW, St: c.Kind == Stacked}
+		Dt bool      `json:"dt"`
+		F  int64     `json:"f"`
+		To int64     `json:"to"`
+		G  [5]int    `json:"g"`
+	}{W: svgW, St: c.Kind == Stacked, Dt: c.Dates, F: c.From.UnixMilli(), To: c.To.UnixMilli(),
+		G: [5]int{padL, plotW, padT, plotH, svgH}}
 	layout := dateTimeFmt
 	if c.Dates {
 		layout = dateFmt
@@ -393,6 +402,7 @@ func (c *Chart) data(sb *strings.Builder) {
 	for _, t := range c.Times {
 		d.X = append(d.X, math.Round(c.xOf(t)*10)/10)
 		d.L = append(d.L, t.UTC().Format(layout))
+		d.T = append(d.T, t.UnixMilli())
 	}
 	order := make([]int, len(c.Series))
 	for i := range order {
