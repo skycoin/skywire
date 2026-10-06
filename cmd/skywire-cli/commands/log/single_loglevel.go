@@ -8,12 +8,14 @@ package clilog
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
@@ -76,21 +78,29 @@ Gated by the remote visor's survey_whitelist.`,
 		}
 		defer cleanup()
 
-		var st logserver.LogLevelStatus
+		var st logLevelOutput
 		if err := doSurveyJSON(ctx, hc, method, pk, path, &st); err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(formatLogLevelStatus(st))
+		if err := cliout.Print(cmd, st); err != nil {
+			log.Fatal(err)
+		}
 	},
 }
 
-// formatLogLevelStatus renders a status as one line, naming the level the
-// visor goes back to and when.
-func formatLogLevelStatus(st logserver.LogLevelStatus) string {
+// logLevelOutput is the visor's reply, printed as-is under --json and as one
+// line otherwise.
+type logLevelOutput logserver.LogLevelStatus
+
+// Human implements cliout.Output: the level, and while a temporary one is in
+// force, when it ends and what the visor goes back to.
+func (st logLevelOutput) Human(w io.Writer) error {
 	if st.Until == nil {
-		return st.Level
+		_, err := fmt.Fprintln(w, st.Level)
+		return err
 	}
-	return fmt.Sprintf("%s until %s (%s left), then %s",
+	_, err := fmt.Fprintf(w, "%s until %s (%s left), then %s\n",
 		st.Level, st.Until.Local().Format(time.RFC3339),
 		time.Until(*st.Until).Round(time.Second), st.Base)
+	return err
 }
