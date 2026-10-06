@@ -31,7 +31,7 @@ require (
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
 	github.com/0magnet/sh/v3 v3.13.2-0.20261004194540-aa2d6e4a31a5
 	github.com/0magnet/spheregraph v0.0.0
-	github.com/0magnet/sysinfo v1.1.4-0.20261003211934-59c35da8ce3f
+	github.com/0magnet/sysinfo v1.1.4-0.20261006160455-a3ceeeb4eaed
 	github.com/0magnet/termanim v0.0.0
 	github.com/0magnet/webrtc/v4 v4.2.24
 	github.com/0magnet/websh v0.0.1-0.20261010162512-55aa0b32e017
