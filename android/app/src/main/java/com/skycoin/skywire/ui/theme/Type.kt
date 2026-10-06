@@ -7,27 +7,22 @@ import androidx.compose.ui.text.font.FontWeight
 import com.skycoin.skywire.R
 
 /**
- * Two families, both variable-weight single files (minSdk 26, so the wght
- * axis is always honoured and each [Font] entry below is a real instance,
- * not a faux weight):
+ * Static instances cut from the Quicksand and Nunito variable fonts with fontTools
+ * (varLib.instancer). Compose did not apply a variable font's weight, so every
+ * weight drew at the file's thin default (Quicksand 300, Nunito 200).
  *
  *  - **Quicksand** carries every display/headline/title role — the rounded
- *    geometric voice of the redesign. Titles are Bold throughout; the family
- *    has no meaningful hierarchy below 600 at title sizes.
+ *    geometric voice of the redesign. Titles are Bold throughout.
  *  - **Nunito** carries body and label text: the same roundness, but drawn
  *    for small sizes and long lines, which Quicksand is not.
  */
 val QuicksandFamily = FontFamily(
-    Font(R.font.quicksand_variable, FontWeight.Medium),
-    Font(R.font.quicksand_variable, FontWeight.SemiBold),
-    Font(R.font.quicksand_variable, FontWeight.Bold),
+    Font(R.font.quicksand_bold, FontWeight.Bold),
 )
 
 val NunitoFamily = FontFamily(
-    Font(R.font.nunito_variable, FontWeight.Normal),
-    Font(R.font.nunito_variable, FontWeight.Medium),
-    Font(R.font.nunito_variable, FontWeight.SemiBold),
-    Font(R.font.nunito_variable, FontWeight.Bold),
+    Font(R.font.nunito_semibold, FontWeight.SemiBold),
+    Font(R.font.nunito_bold, FontWeight.Bold),
 )
 
 private val Base = Typography()

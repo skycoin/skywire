@@ -167,6 +167,9 @@ fun VpnScreen(
                 )
             }
             item {
+                SkyDnsCard(on = state.skyDns, enabled = !state.busy, onChange = viewModel::setSkyDns)
+            }
+            item {
                 AppRoutingCard(
                     routing = state.appRouting,
                     // A phone preference, like the killswitch: changeable with
@@ -638,6 +641,26 @@ private fun KillswitchCard(on: Boolean, enabled: Boolean, onChange: (Boolean) ->
         ) {
             Text(stringResource(R.string.vpn_killswitch_always_on))
         }
+    }
+}
+
+@Composable
+private fun SkyDnsCard(on: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                stringResource(R.string.app_skydns),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(checked = on, onCheckedChange = onChange, enabled = enabled)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            stringResource(R.string.vpn_skydns_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

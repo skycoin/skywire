@@ -198,6 +198,17 @@ func (g *Gateway) handleConn(ctx context.Context, conn net.Conn) {
 		g.log.WithError(err).Debug("mesh gateway: no SO_ORIGINAL_DST")
 		return
 	}
+	g.bridge(ctx, conn, origIP, origPort)
+}
+
+// Bridge carries conn to the mesh target leased for origIP, dialing origPort on
+// it. For hosts that see the original destination directly, as a netstack does.
+func (g *Gateway) Bridge(ctx context.Context, conn net.Conn, origIP net.IP, origPort uint16) {
+	defer conn.Close() //nolint:errcheck // best-effort
+	g.bridge(ctx, conn, origIP, origPort)
+}
+
+func (g *Gateway) bridge(ctx context.Context, conn net.Conn, origIP net.IP, origPort uint16) {
 	t, ok := g.lookup(origIP)
 	if !ok {
 		g.log.WithField("ip", origIP.String()).Debug("mesh gateway: unknown synthetic IP")

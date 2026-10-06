@@ -62,6 +62,12 @@ const (
 
 	androidTUNOpEstablish = "establish"
 	androidTUNOpDown      = "down"
+	// androidTUNOpHolds asks whether the interface up is still the asker's.
+	androidTUNOpHolds = "holds"
+
+	// androidTUNModeDNS is SkyDNS's own tunnel: it routes only Route, and a
+	// full tunnel takes its place.
+	androidTUNModeDNS = "dns"
 )
 
 var (
@@ -82,6 +88,17 @@ type androidTUNRequest struct {
 	// default then, because a full-tunnel VPN that declares no resolver can
 	// strand the phone on a LAN one it can no longer reach.
 	DNS string `json:"dns,omitempty"`
+	// Mode is empty for SkyVPN's full tunnel, androidTUNModeDNS for SkyDNS's.
+	Mode string `json:"mode,omitempty"`
+	// Route is the one CIDR a SkyDNS tunnel carries. A full tunnel carries all.
+	Route string `json:"route,omitempty"`
+}
+
+// errAndroidTUNRefused is the app saying no, over a channel that works.
+type errAndroidTUNRefused struct{ op, reason string }
+
+func (e errAndroidTUNRefused) Error() string {
+	return fmt.Sprintf("the VPN service refused %s: %s", e.op, e.reason)
 }
 
 // androidTUNReply is the app's answer to one request.
@@ -157,19 +174,21 @@ func (t *androidTUN) Close() error {
 // establish asks the app for an interface carrying these parameters and takes
 // over the descriptor it sends back. This is what SetupTUN does on Android.
 func (t *androidTUN) establish(addrCIDR, gateway string, mtu int, dns string) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	if t.closed {
-		return os.ErrClosed
-	}
-
-	req := androidTUNRequest{
+	return t.establishReq(androidTUNRequest{
 		Op:      androidTUNOpEstablish,
 		Addr:    addrCIDR,
 		Gateway: gateway,
 		MTU:     mtu,
 		DNS:     dns,
+	})
+}
+
+func (t *androidTUN) establishReq(req androidTUNRequest) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.closed {
+		return os.ErrClosed
 	}
 
 	// Reconnecting to the same server lands the same address, and then the
@@ -208,15 +227,43 @@ func (t *androidTUN) down() error {
 
 	// Ours first, so a Read still blocked on the old interface unblocks
 	// rather than waiting for a packet that will never come.
+	mode := t.params.Mode
 	_ = t.file.Close()
 	t.file, t.params = nil, androidTUNRequest{}
 
 	if t.ctl == nil {
 		return nil
 	}
-	_, err := t.roundTrip(androidTUNRequest{Op: androidTUNOpDown})
+	// The mode says which kind of tunnel to drop, so SkyDNS cannot drop SkyVPN's.
+	_, err := t.roundTrip(androidTUNRequest{Op: androidTUNOpDown, Mode: mode})
 
 	return err
+}
+
+// holds reports whether the interface up is still this one. A full tunnel
+// replaces SkyDNS's, and the old descriptor does not always error after that.
+func (t *androidTUN) holds() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.closed || t.file == nil {
+		return false
+	}
+	_, err := t.roundTrip(androidTUNRequest{Op: androidTUNOpHolds})
+
+	return err == nil
+}
+
+// forget drops a descriptor whose interface someone else has replaced,
+// without telling the app: the interface up now is not this one to drop.
+func (t *androidTUN) forget() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.file != nil {
+		_ = t.file.Close()
+		t.file, t.params = nil, androidTUNRequest{}
+	}
 }
 
 // established returns the live descriptor, or says why there isn't one.
@@ -244,8 +291,9 @@ func (t *androidTUN) roundTrip(req androidTUNRequest) (*os.File, error) {
 	}
 
 	file, err := requestTUN(conn, req)
-	if err == nil {
-		return file, nil
+	var refused errAndroidTUNRefused
+	if err == nil || errors.As(err, &refused) {
+		return file, err
 	}
 
 	t.dropCtl()
@@ -316,7 +364,7 @@ func requestTUN(conn *net.UnixConn, req androidTUNRequest) (*os.File, error) {
 		return nil, fmt.Errorf("malformed %s reply from the VPN service: %w", req.Op, err)
 	}
 	if !reply.OK {
-		return nil, fmt.Errorf("the VPN service refused %s: %s", req.Op, reply.Error)
+		return nil, errAndroidTUNRefused{op: req.Op, reason: reply.Error}
 	}
 	if req.Op != androidTUNOpEstablish {
 		return nil, nil
