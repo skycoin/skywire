@@ -24,7 +24,7 @@ import (
 var upstream string
 
 func init() {
-	RootCmd.Flags().StringVar(&upstream, "dns", "", "resolver for names that are not mesh names (empty means 1.1.1.1)")
+	RootCmd.Flags().StringVar(&upstream, "dns", "", "resolver for names that are not mesh names (empty means the phone's own DNS)")
 	launcher.RegisterApp(skyenv.SkyDNSName, RunSkyDNS)
 }
 

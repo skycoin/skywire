@@ -30,16 +30,20 @@ func RunSkyDNS(ctx context.Context, cfg SkyDNSConfig) error {
 	if log == nil {
 		log = logrus.StandardLogger()
 	}
+	// With no --dns, other names go to the phone's own resolvers, which the app
+	// reports with each reply; shareDefaultDNS only until the first one.
 	server := cfg.Upstream
-	if server == "" {
+	follow := server == ""
+	if follow {
 		server = shareDefaultDNS
 	}
 	// This process is outside every tunnel, so lookups leave by the phone's own
 	// network. TLS when the resolver offers it, as Android's Private DNS does.
 	var d net.Dialer
+	up := skydns.NewUpstream(server, d.DialContext, false)
 	sky, err := skydns.New(skydns.Config{
 		Dial:     cfg.Dial,
-		Upstream: skydns.NewUpstream(server, d.DialContext, false),
+		Upstream: up,
 		MTU:      TUNMTU,
 		Log:      log,
 	})
@@ -82,7 +86,12 @@ func RunSkyDNS(ctx context.Context, cfg SkyDNSConfig) error {
 			continue
 		}
 		log.Info("skydns: answering .dmsg and .skynet names")
-		if serveSkyDNSTUN(ctx, tun, sky) {
+		checked := func() {}
+		if follow {
+			checked = func() { followNetworkDNS(tun, up, log) }
+		}
+		checked()
+		if serveSkyDNSTUN(ctx, tun, sky, checked) {
 			return nil
 		}
 		log.Info("skydns: SkyVPN took the tunnel, waiting for it to end")
@@ -91,7 +100,7 @@ func RunSkyDNS(ctx context.Context, cfg SkyDNSConfig) error {
 
 // serveSkyDNSTUN feeds the engine from the tunnel until ctx ends, which drops
 // the tunnel and reports true, or until another tunnel takes its place.
-func serveSkyDNSTUN(ctx context.Context, tun *androidTUN, sky *skydns.Engine) (stopped bool) {
+func serveSkyDNSTUN(ctx context.Context, tun *androidTUN, sky *skydns.Engine, checked func()) (stopped bool) {
 	readerDone := make(chan struct{})
 	go func() {
 		defer close(readerDone)
@@ -124,6 +133,18 @@ func serveSkyDNSTUN(ctx context.Context, tun *androidTUN, sky *skydns.Engine) (s
 				<-readerDone
 				return false
 			}
+			checked()
 		}
 	}
+}
+
+// followNetworkDNS points up at the resolver the app last reported for the
+// phone's network, so a move between networks moves it too.
+func followNetworkDNS(tun *androidTUN, up *skydns.Upstream, log logrus.FieldLogger) {
+	server := tun.networkDNS()
+	if net.ParseIP(server) == nil || server == up.Server() {
+		return
+	}
+	up.SetServer(server)
+	log.Infof("skydns: asking %s for other names", server)
 }
