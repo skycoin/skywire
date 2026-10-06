@@ -4,12 +4,15 @@ Skywire is a decentralized network run by its users. This app runs a full Skywir
 <li><b>SkyChat</b>: end-to-end encrypted messages, groups, voice calls and file sharing, carried peer to peer over Skywire with no central chat server.</li>
 <li><b>SkyVPN</b>: route the whole phone's traffic through a Skywire VPN server, with an optional killswitch.</li>
 <li><b>SkySOCKS</b>: a local SOCKS5 proxy through a public Skywire proxy server, for apps that support one.</li>
-<li><b>Wallet</b>: a Skycoin (SKY) wallet whose keys never leave the phone, with QR send and receive.</li>
+<li><b>SkyDNS</b>: open .dmsg and .skynet sites in any app on the phone.</li>
+<li><b>Wallet</b>: a multi-coin wallet for Skycoin (SKY), Bitcoin (BTC), Ethereum (ETH) and Tether (USDT), and for other Fiber coins and ERC-20 tokens you add. Keys never leave the phone, with QR send and receive.</li>
 <li><b>SkyDEX</b>: trade on the Skywire decentralized exchange.</li>
 </ul>
 
 Your node has its own cryptographic identity. You can export or replace it, lock the app behind the phone's screen lock or fingerprint, and grant a desktop Skywire hypervisor remote management of the phone.
 
 The node runs as a foreground service so connections survive in the background. Skywire uses Skycoin's public discovery servers to find other nodes; their software is open source in the same repository.
+
+The wallet reads balances and history from public services, and each coin's Node screen can point it at another, including your own: node.skycoin.com for Skycoin, mempool.space for Bitcoin, and ethereum-rpc.publicnode.com with the eth.blockscout.com indexer for Ethereum and its tokens. SkyVPN looks up ordinary names with Cloudflare's 1.1.1.1 unless you set another DNS server in Settings. SkyDNS on its own uses the phone's own DNS.
 
 Skywire is free software under the GNU AGPL v3.0. A commercial license is available for uses that cannot comply with the AGPL.
