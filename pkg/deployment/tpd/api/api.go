@@ -68,6 +68,8 @@ type API struct {
 
 	// charts is set once StartCharts runs; until then / answers 404.
 	chartState atomic.Pointer[tpdCharts]
+	// dmsgRoles is set when TPD can reach dmsg discovery over dmsg.
+	dmsgRoles atomic.Pointer[dmsgRoles]
 
 	transportsCache         []*transport.Entry
 	transportsCacheFiltered []*transport.Entry // excludes self-transports

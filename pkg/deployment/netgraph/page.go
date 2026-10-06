@@ -24,6 +24,9 @@ type Page struct {
 	Title  string
 	Back   string
 	Source func(ctx context.Context) ([]Link, error)
+	// Marks, when set, colors some visors by key, and Legend names the colors.
+	Marks  func(ctx context.Context) map[string]string
+	Legend []Mark
 
 	mu    sync.Mutex
 	at    time.Time
@@ -68,7 +71,11 @@ func (p *Page) render(ctx context.Context) ([]byte, error) {
 	}
 	g := Build(links, prev)
 	p.graph, p.at = g, time.Now()
-	p.body = p.write(g, p.at)
+	var marks map[string]string
+	if p.Marks != nil {
+		marks = p.Marks(ctx)
+	}
+	p.body = p.write(g, p.at, marks)
 	return p.body, nil
 }
 
@@ -84,16 +91,23 @@ func packEdges(edges []Edge) string {
 	return base64.StdEncoding.EncodeToString(b)
 }
 
-func (p *Page) write(g *Graph, at time.Time) []byte {
+func (p *Page) write(g *Graph, at time.Time, marks map[string]string) []byte {
 	type data struct {
 		Types []string  `json:"t"`
 		Nodes []string  `json:"k"`
 		X     []float32 `json:"x"`
 		Y     []float32 `json:"y"`
 		Deg   []int     `json:"d"`
+		Color []string  `json:"c,omitempty"`
 		Edges string    `json:"e"`
 	}
 	d := data{Types: g.Types, Nodes: g.Nodes, Deg: g.Degree, Edges: packEdges(g.Edges)}
+	if len(marks) > 0 {
+		d.Color = make([]string, len(g.Nodes))
+		for i, k := range g.Nodes {
+			d.Color[i] = marks[k]
+		}
+	}
 	for i := range g.Nodes {
 		d.X = append(d.X, float32(math.Round(g.X[i]*1e4)/1e4))
 		d.Y = append(d.Y, float32(math.Round(g.Y[i]*1e4)/1e4))
@@ -111,7 +125,11 @@ func (p *Page) write(g *Graph, at time.Time) []byte {
 		fmt.Fprintf(&b, "<p class='sub'><a href='%s'>Charts</a></p>", html.EscapeString(p.Back))
 	}
 	b.WriteString("</div><input id='find' placeholder='Find a visor by public key' spellcheck='false' autocomplete='off'></header>")
-	b.WriteString("<main><div id='types'></div><div class='bar'><label><input type='checkbox' id='physics'> Let the layout move</label><button id='fit'>Fit</button><span id='status'></span></div><div id='gl'></div><div id='tip' hidden></div>")
+	var legend strings.Builder
+	for _, m := range p.Legend {
+		fmt.Fprintf(&legend, "<span class='mk'><i style='background:%s'></i>%s</span>", html.EscapeString(m.Color), html.EscapeString(m.Name))
+	}
+	b.WriteString("<main><div id='types'></div><div class='bar'><label><input type='checkbox' id='physics'> Let the layout move</label><button id='fit'>Fit</button>" + legend.String() + "<span id='status'></span></div><div id='gl'></div><div id='tip' hidden></div>")
 	b.WriteString("<p class='sub'>Drawn on the GPU by cosmos-go. Drag to pan, scroll to zoom, click a visor to keep its transports highlighted. Each line is a pair of visors joined by at least one transport of a checked type.</p></main>")
 	fmt.Fprintf(&b, "<script type='application/json' id='g'>%s</script><script>%s</script></body></html>",
 		strings.ReplaceAll(string(js), "</", "<\\/"), graphJS)
@@ -129,7 +147,7 @@ main{max-width:1400px;margin:0 auto;padding:8px 16px 32px}
 #types i{width:12px;height:3px;border-radius:2px}#types b{color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums}
 #gl{position:relative;height:min(78vh,900px);border-radius:14px;overflow:hidden;background:#0b1020;box-shadow:0 1px 3px #0000000f}
 .bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin:0 0 10px;font-size:13px}.bar label{display:flex;gap:6px;align-items:center;cursor:pointer}
-.bar button{padding:4px 12px;border-radius:7px;border:1px solid var(--grid);background:var(--card);color:var(--fg);cursor:pointer}#status{color:var(--muted)}
+.bar button{padding:4px 12px;border-radius:7px;border:1px solid var(--grid);background:var(--card);color:var(--fg);cursor:pointer}#status{color:var(--muted)}.mk{display:flex;align-items:center;gap:6px;color:var(--muted)}.mk i{width:9px;height:9px;border-radius:50%}
 #tip{position:fixed;z-index:10;max-width:min(560px,calc(100% - 20px));background:var(--card);border:1px solid var(--grid);border-radius:9px;padding:9px 11px;font-size:12px;box-shadow:0 4px 14px #0002;pointer-events:none}
 #tip .k{font:11.5px ui-monospace,monospace;overflow-wrap:anywhere}#tip div{display:flex;justify-content:space-between;gap:16px}#tip b{font-variant-numeric:tabular-nums}`
 
@@ -147,7 +165,7 @@ function first(mk){for(var t=0;t<G.t.length;t++)if(on[t]&&mk>>t&1)return t;retur
 var x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(i=0;i<n;i++){x0=Math.min(x0,G.x[i]);x1=Math.max(x1,G.x[i]);y0=Math.min(y0,G.y[i]);y1=Math.max(y1,G.y[i])}
 var SPACE=8192,pad=SPACE*0.1,sc=(SPACE-2*pad)/Math.max(x1-x0,y1-y0,1e-9);
 var pos=new Float32Array(n*2),size=new Float32Array(n),pcol=new Array(n);
-for(i=0;i<n;i++){pos[2*i]=pad+(G.x[i]-x0)*sc;pos[2*i+1]=pad+(G.y[i]-y0)*sc;size[i]=Math.min(7,2+Math.sqrt(G.d[i])/6);pcol[i]='#dfe5ef'}
+for(i=0;i<n;i++){pos[2*i]=pad+(G.x[i]-x0)*sc;pos[2*i+1]=pad+(G.y[i]-y0)*sc;size[i]=Math.min(7,2+Math.sqrt(G.d[i])/6);if(G.c&&G.c[i])size[i]=Math.max(size[i],5.5);pcol[i]=(G.c&&G.c[i])||'#dfe5ef'}
 function payload(){var idx=[],lc=[];for(var e=0;e<m;e++){var t=first(M[e]);if(t<0)continue;idx.push(A[e],B[e]);lc.push(col[t])}
 var w=new Float32Array(lc.length);w.fill(0.6);return {positions:pos,pointColors:pcol,pointSizes:size,links:new Float32Array(idx),linkColors:lc,linkWidths:w,grouped:!physics.checked,boundaries:[]}}
 var gl=null,physics=document.getElementById('physics');
@@ -175,3 +193,9 @@ WebAssembly.instantiateStreaming(fetch('graph/engine.wasm'),go.importObject).the
 show();say('');return}if(++tries>200){say('The WebGL engine did not start.');return}setTimeout(wait,25)})()}).catch(function(err){say('The WebGL engine failed: '+err)})};
 document.head.appendChild(s)})();
 `
+
+// Mark names a color some visors are drawn in.
+type Mark struct {
+	Name  string
+	Color string
+}
