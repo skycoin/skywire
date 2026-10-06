@@ -125,3 +125,21 @@ func TestGraphPage(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), "2 visors, 1 visor pairs, 1 transports")
 }
+
+func TestGraphEngineRoutes(t *testing.T) {
+	ctx := context.Background()
+	nonces, err := httpauth.NewNonceStore(ctx, storeconfig.Config{Type: storeconfig.Memory}, "")
+	require.NoError(t, err)
+	api := New(nil, newTestStore(t), nonces, false, tpdiscmetrics.NewEmpty(), "", "")
+
+	w := httptest.NewRecorder()
+	api.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/graph/engine.js", nil))
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "'netview'", "the loader runs the module as the netview role")
+
+	w = httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/graph/engine.wasm", nil)
+	r.Header.Set("Accept-Encoding", "gzip")
+	api.ServeHTTP(w, r)
+	require.Contains(t, []int{http.StatusOK, http.StatusFound}, w.Code, "served when embedded, redirected when not")
+}
