@@ -3,10 +3,11 @@ package pty
 
 import (
 	"context"
-	"net/rpc"
 	"net/url"
 	"testing"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 )
 
 // TestHostLog_NilDmsgClient covers the direct-TCP host, which is built as

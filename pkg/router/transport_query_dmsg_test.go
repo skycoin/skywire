@@ -3,7 +3,6 @@ package router
 import (
 	"context"
 	"net"
-	"net/rpc"
 	"testing"
 	"time"
 
@@ -21,7 +20,7 @@ import (
 func servePipe(t *testing.T, rcvr interface{}) *gobrpc.Client {
 	t.Helper()
 	srvConn, cliConn := net.Pipe()
-	rpcS := rpc.NewServer()
+	rpcS := gobrpc.NewServer()
 	if err := rpcS.RegisterName(transportQueryRPCName, rcvr); err != nil {
 		t.Fatalf("register: %v", err)
 	}

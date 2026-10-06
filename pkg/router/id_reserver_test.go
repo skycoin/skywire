@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package setup pkg/setup/id_reserver_test.go
 package router
 
@@ -7,11 +9,12 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/rpc"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
