@@ -139,7 +139,11 @@ func (api *API) reconcileFromCXO(ctx context.Context, entries []*transport.Entry
 	// handled moments ago by this or the other edge's snapshot (see
 	// reconcileThrottle). Each is one pipeline for the whole snapshot.
 	bs, batched := api.store.(store.BatchStore)
-	toRegister, toTouch, toHeartbeat := api.reconcile.plan(time.Now(), accepted)
+	now := time.Now()
+	toRegister, toTouch, toHeartbeat := api.reconcile.plan(now, accepted)
+	if deregisterAbsent { // a known-old list says nothing about what its reporter lists now
+		api.reconcile.listed(now, reporter, accepted)
+	}
 	if !batched {
 		// A store without batch writes refreshes by rewriting.
 		toRegister = append(toRegister, toTouch...)
@@ -197,6 +201,8 @@ func (api *API) reconcileFromCXO(ctx context.Context, entries []*transport.Entry
 	// Deregister any of the reporter's existing transports absent from the snapshot.
 	// A transport the reporter no longer lists is a deregister signal for that edge —
 	// exactly what a tombstone was in the delta model.
+	// Unless the other edge still lists it: then the two lists only disagree
+	// for now, and it goes once neither does (reconcileThrottle.listedByOther).
 	existing, err := api.store.GetTransportsByEdgeNoLatency(ctx, reporter)
 	if err != nil {
 		// A reporter with no prior transports in the store (first snapshot, or all
@@ -213,7 +219,7 @@ func (api *API) reconcileFromCXO(ctx context.Context, entries []*transport.Entry
 	}
 	var absent []*transport.Entry
 	for _, e := range existing {
-		if _, ok := keep[e.ID]; !ok {
+		if _, ok := keep[e.ID]; !ok && !api.reconcile.listedByOther(now, reporter, e) {
 			absent = append(absent, e)
 		}
 	}
