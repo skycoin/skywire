@@ -617,6 +617,13 @@
     <string name="wallet_node_default">Go back to %1$s</string>
     <string name="wallet_node_encrypted">Encrypted in transit. A node still sees which addresses you ask about together, but nobody else on the way does.</string>
     <string name="wallet_node_cleartext">Not encrypted. Everyone between this phone and that address sees your whole address list and its balances. Your coins stay safe — keys never leave the device — but the addresses are linked to each other for anyone watching.</string>
+    <string name="wallet_node_body_indexer">Balances, fees and broadcasts for %1$s go to the node, and its transaction history is read from the indexer. Change them if the ones shipped with the app cannot be reached from where you are, or if you run your own.</string>
+    <string name="wallet_node_hint_btc">An Esplora API, such as mempool.space, blockstream.info or your own electrs.</string>
+    <string name="wallet_node_hint_eth">An Ethereum JSON-RPC endpoint.</string>
+    <string name="wallet_indexer_field">Indexer address</string>
+    <string name="wallet_indexer_hint">A Blockscout instance, or another etherscan-style API that needs no key.</string>
+    <string name="wallet_node_save_all">Use these addresses</string>
+    <string name="wallet_node_default_all">Go back to the shipped addresses</string>
     <string name="wallet_scan_pending">This wallet\'s other addresses have not been confirmed with the node yet, so the balance may be incomplete. It is retried on every refresh.</string>
     <string name="wallet_stale_never">Node unreachable. This wallet has not synced yet — balances show once the node answers.</string>
     <string name="wallet_stale_send_note">Send is disabled: no route to the node</string>
