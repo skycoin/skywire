@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/httputil"
 )
 
 // Range is one of the windows a page can show.
@@ -66,6 +68,8 @@ type Page struct {
 	Title string
 	// About is a line under the title, such as the service's public key.
 	About string
+	// Links are other pages of the service, shown under the title.
+	Links []Link
 	Build func(ctx context.Context, r Range, now time.Time) (Content, error)
 
 	mu    sync.Mutex
@@ -130,6 +134,9 @@ func (p *Page) write(b *bytes.Buffer, rg Range, now time.Time, c Content) {
 	if p.About != "" {
 		fmt.Fprintf(b, "<p class='about'>%s</p>", html.EscapeString(p.About))
 	}
+	for _, l := range p.Links {
+		fmt.Fprintf(b, "<p class='links'><a href='%s'>%s</a></p>", html.EscapeString(l.Href), html.EscapeString(l.Name))
+	}
 	b.WriteString("</div><nav>")
 	for _, x := range Ranges {
 		cls := ""
@@ -169,7 +176,7 @@ const pageCSS = `:root{--bg:#f6f7f9;--card:#fff;--fg:#1d2330;--muted:#677084;--g
 @media (prefers-color-scheme:dark){:root{--bg:#0f1218;--card:#171b23;--fg:#e4e7ee;--muted:#8d95a6;--grid:#262c37;--axis:#3a4250;--accent:#7aa6d6;color-scheme:dark}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
 header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;max-width:1100px;margin:0 auto;padding:28px 16px 8px}
-h1{font-size:22px;margin:0;font-weight:650}.about{margin:4px 0 0;color:var(--muted);font:12px ui-monospace,monospace;overflow-wrap:anywhere}
+h1{font-size:22px;margin:0;font-weight:650}.about{margin:4px 0 0;color:var(--muted);font:12px ui-monospace,monospace;overflow-wrap:anywhere}.links{margin:6px 0 0;font-size:13px}.links a{color:var(--accent);font-weight:600;text-decoration:none}
 nav{display:flex;gap:4px;background:var(--card);padding:4px;border-radius:10px;box-shadow:0 1px 2px #0001}
 nav a{color:var(--muted);text-decoration:none;padding:5px 12px;border-radius:7px;font-weight:550}nav a.on{background:var(--accent);color:#fff}
 main{max-width:1100px;margin:0 auto;padding:8px 16px;display:grid;gap:16px}
@@ -239,12 +246,24 @@ document.querySelector('main').replaceWith(m);if(ft)document.querySelector('foot
 })();
 `
 
-// Serve answers plain HTTP on addr with the page at / and 404 for every
-// other path, until ctx ends.
-func Serve(ctx context.Context, addr string, page http.Handler) error {
+// Link points to another page of the service.
+type Link struct {
+	Name string
+	Href string
+}
+
+// Extra is another page a service serves next to its charts.
+type Extra struct {
+	Path    string
+	Handler http.Handler
+}
+
+// Serve answers plain HTTP on addr with the page at /, any extra pages at
+// their paths, and 404 for every other path, until ctx ends.
+func Serve(ctx context.Context, addr string, page http.Handler, extra ...Extra) error {
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           rootOnly(page),
+		Handler:           httputil.CompressMin(httputil.CompressMinBytes, 5)(rootOnly(page, extra...)),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -260,8 +279,11 @@ func Serve(ctx context.Context, addr string, page http.Handler) error {
 	return nil
 }
 
-func rootOnly(page http.Handler) http.Handler {
+func rootOnly(page http.Handler, extra ...Extra) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/{$}", page)
+	for _, e := range extra {
+		mux.Handle(e.Path, e.Handler)
+	}
 	return mux
 }
