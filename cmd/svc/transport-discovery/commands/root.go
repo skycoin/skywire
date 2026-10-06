@@ -34,6 +34,7 @@ var (
 	dmsgDisc       = deployment.Prod.DmsgDiscovery
 	storeDataPath  string
 	uptimeDB       string
+	chartsAddr     string
 )
 
 func init() {
@@ -43,6 +44,7 @@ func init() {
 	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "network-monitor keys allowed to deregister entries, comma-separated")
 	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", tpd.DefaultStoreDataPath, "path for bandwidth backup files")
 	RootCmd.Flags().StringVar(&uptimeDB, "uptime-db", tpd.DefaultUptimeDB, "path for the service-self uptime bbolt store (empty disables)")
+	RootCmd.Flags().StringVar(&chartsAddr, "charts-addr", "", "serve only the charts page over plain HTTP on this address")
 }
 
 // generateExamples creates example responses from actual struct types
@@ -199,6 +201,7 @@ func buildConfig() (*tpd.Config, error) {
 		Whitelist:     cmdutil.CommaSplit(whitelistKeys),
 		StoreDataPath: storeDataPath,
 		UptimeDB:      uptimeDB,
+		ChartsAddr:    chartsAddr,
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  dmsgDisc,
 			ServerType: dmsgServerType,
@@ -224,6 +227,9 @@ func mergeFile(dst, src *tpd.Config) {
 	}
 	if src.UptimeDB != "" {
 		dst.UptimeDB = src.UptimeDB
+	}
+	if src.ChartsAddr != "" {
+		dst.ChartsAddr = src.ChartsAddr
 	}
 	dst.Dmsg.Merge(src.Dmsg)
 }
