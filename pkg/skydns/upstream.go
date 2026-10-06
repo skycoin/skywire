@@ -19,6 +19,9 @@ const (
 	// before TLS is tried again.
 	plainBackoff = 5 * time.Minute
 	idleConns    = 4
+	// probeTimeout bounds opening TLS when plain DNS is the fallback, so a
+	// resolver that drops port 853 leaves the query time to be asked plainly.
+	probeTimeout = 1500 * time.Millisecond
 )
 
 // DialFunc opens a connection, inside a tunnel or past it.
@@ -79,6 +82,33 @@ func (u *Upstream) Exchange(ctx context.Context, m *dns.Msg) (*dns.Msg, error) {
 	return resp, err
 }
 
+// SetServer moves u to another resolver, an IP. Pooled connections to the old
+// one are closed, and TLS is tried again from the start.
+func (u *Upstream) SetServer(server string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if server == u.server {
+		return
+	}
+	u.server = server
+	u.plainUntil = time.Time{}
+	for {
+		select {
+		case co := <-u.idle:
+			_ = co.Close() //nolint:errcheck
+		default:
+			return
+		}
+	}
+}
+
+// Server is the resolver u asks now.
+func (u *Upstream) Server() string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.server
+}
+
 func (u *Upstream) plainNow() bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -116,12 +146,18 @@ func (u *Upstream) conn(ctx context.Context) (co *dns.Conn, reused bool, err err
 		return co, true, nil
 	default:
 	}
-	raw, err := u.dial(ctx, "tcp", net.JoinHostPort(u.server, "853"))
+	server := u.Server()
+	if !u.strict {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, probeTimeout)
+		defer cancel()
+	}
+	raw, err := u.dial(ctx, "tcp", net.JoinHostPort(server, "853"))
 	if err != nil {
 		return nil, false, errNoTLS{err}
 	}
 	// An IP as ServerName is checked against the certificate's IP SANs.
-	tc := tls.Client(raw, &tls.Config{ServerName: u.server, RootCAs: u.roots, MinVersion: tls.VersionTLS12})
+	tc := tls.Client(raw, &tls.Config{ServerName: server, RootCAs: u.roots, MinVersion: tls.VersionTLS12})
 	if err := tc.HandshakeContext(ctx); err != nil {
 		_ = raw.Close() //nolint:errcheck
 		return nil, false, errNoTLS{err}
@@ -130,7 +166,7 @@ func (u *Upstream) conn(ctx context.Context) (co *dns.Conn, reused bool, err err
 }
 
 func (u *Upstream) exchangePlain(ctx context.Context, network string, m *dns.Msg) (*dns.Msg, error) {
-	raw, err := u.dial(ctx, network, net.JoinHostPort(u.server, "53"))
+	raw, err := u.dial(ctx, network, net.JoinHostPort(u.Server(), "53"))
 	if err != nil {
 		return nil, fmt.Errorf("skydns: plain DNS: %w", err)
 	}

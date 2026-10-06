@@ -4,8 +4,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
 import android.net.LocalServerSocket
 import android.net.LocalSocket
+import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -29,6 +31,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.IOException
+import java.net.InetAddress
 import java.util.Collections
 
 /**
@@ -278,7 +281,11 @@ class SkyVpnService : VpnService() {
                 if ((request.mode == MODE_DNS) == tunIsDns) closeTun()
                 reply(client, ok = true)
             }
-            OP_HOLDS -> reply(client, ok = tun != null && controller === client)
+            OP_HOLDS -> reply(
+                client,
+                ok = tun != null && controller === client,
+                dns = if (tunIsDns) networkDns() else emptyList(),
+            )
             else -> reply(client, ok = false, error = "unknown request")
         }
     }
@@ -367,7 +374,7 @@ class SkyVpnService : VpnService() {
         // The fd rides along with the reply as SCM_RIGHTS; the receiver gets
         // its own dup, which is why ours stays open and holds the interface.
         client.setFileDescriptorsForSend(arrayOf(established.fileDescriptor))
-        val sent = reply(client, ok = true)
+        val sent = reply(client, ok = true, dns = if (dnsMode) networkDns() else emptyList())
         client.setFileDescriptorsForSend(null)
         if (!sent) {
             runCatching { established.close() }
@@ -519,10 +526,37 @@ class SkyVpnService : VpnService() {
         PendingIntent.FLAG_IMMUTABLE,
     )
 
+    /**
+     * The resolvers of the network the phone is on, for SkyDNS on its own when
+     * no `--dns` is set. This app is outside every tunnel, so its default
+     * network is the real one; a VPN, or SkyDNS's own address, would loop.
+     */
+    private fun networkDns(): List<String> {
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return emptyList()
+        val network = cm.activeNetwork ?: return emptyList()
+        if (cm.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true) {
+            return emptyList()
+        }
+        return cm.getLinkProperties(network)?.dnsServers.orEmpty()
+            .filterNot { it.isLinkLocalAddress || inSkyDnsRange(it) }
+            .mapNotNull { it.hostAddress }
+    }
+
+    /** 198.18.0.0/15, where SkyDNS answers and hands out mesh addresses (pkg/skydns). */
+    private fun inSkyDnsRange(address: InetAddress): Boolean {
+        val bytes = address.address
+        return bytes.size == 4 && bytes[0] == 198.toByte() && (bytes[1].toInt() and 0xfe) == 18
+    }
+
     /** True when the reply reached the peer. */
-    private fun reply(client: LocalSocket, ok: Boolean, error: String? = null): Boolean =
+    private fun reply(
+        client: LocalSocket,
+        ok: Boolean,
+        error: String? = null,
+        dns: List<String> = emptyList(),
+    ): Boolean =
         runCatching {
-            val body = json.encodeToString(TunReply.serializer(), TunReply(ok, error.orEmpty()))
+            val body = json.encodeToString(TunReply.serializer(), TunReply(ok, error.orEmpty(), dns))
             client.outputStream.apply {
                 write((body + "\n").toByteArray())
                 flush()
@@ -623,4 +657,6 @@ private data class TunRequest(
 private data class TunReply(
     @SerialName("ok") val ok: Boolean,
     @SerialName("error") val error: String = "",
+    /** The phone network's resolvers; only SkyDNS's own tunnel is sent them. */
+    @SerialName("dns") val dns: List<String> = emptyList(),
 )

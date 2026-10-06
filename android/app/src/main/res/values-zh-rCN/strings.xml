@@ -539,6 +539,14 @@
     <string name="settings_autoconnect">连接公共节点</string>
     <string name="settings_autoconnect_hint">保持与公共节点之间的传输通道，让网络可以经这部手机路由，也让这部手机可以经它们路由。会消耗电量和移动数据，因此默认关闭。路由长度超过 1 跳时必须开启。</string>
     <string name="settings_autoconnect_restart">核心下次启动时生效。</string>
+    <string name="settings_dns">DNS 服务器</string>
+    <string name="settings_dns_hint">SkyVPN 和 SkyDNS 会向此服务器查询所有不以 .dmsg 或 .skynet 结尾的域名；服务器支持时使用 DNS over TLS，Cloudflare、Google 和 Quad9 都支持。留空时，SkyVPN 使用 1.1.1.1（Cloudflare），因为 VPN 服务器没有可共享的解析服务；单独运行的 SkyDNS 则使用本机的 DNS。</string>
+    <string name="settings_dns_invalid">请输入 IPv4 地址，例如 9.9.9.9。</string>
+    <string name="settings_dns_save">使用此服务器</string>
+    <string name="settings_dns_default">恢复默认</string>
+    <string name="settings_dns_saved">DNS 服务器：%1$s。</string>
+    <string name="settings_dns_placeholder">默认</string>
+    <string name="settings_dns_cleared">已恢复默认 DNS 服务器。</string>
 
     <!-- 远程管理 -->
     <string name="settings_remote">远程管理</string>
@@ -585,6 +593,13 @@
     <string name="wallet_node_default">恢复为 %1$s</string>
     <string name="wallet_node_encrypted">传输已加密。节点仍能看到你一并查询了哪些地址，但链路上的其他人看不到。</string>
     <string name="wallet_node_cleartext">未加密。本机与该地址之间的任何人都能看到你的全部地址列表及余额。你的币是安全的——密钥从不离开本机——但在旁观者眼中，这些地址会被关联到一起。</string>
+    <string name="wallet_node_body_indexer">%1$s 的余额、手续费和广播都通过节点收发，交易记录则从索引服务读取。如果应用自带的地址在你所在的网络无法访问，或你有自建服务，可在此更改。</string>
+    <string name="wallet_node_hint_btc">Esplora 接口，例如 mempool.space、blockstream.info 或你自建的 electrs。</string>
+    <string name="wallet_node_hint_eth">以太坊 JSON-RPC 接口。</string>
+    <string name="wallet_indexer_field">索引服务地址</string>
+    <string name="wallet_indexer_hint">Blockscout 实例，或其他无需密钥的 etherscan 风格接口。</string>
+    <string name="wallet_node_save_all">使用这些地址</string>
+    <string name="wallet_node_default_all">恢复为应用自带的地址</string>
     <string name="wallet_scan_pending">尚未向节点确认本钱包的其余地址，因此余额可能不完整。每次刷新都会重试。</string>
     <string name="wallet_stale_never">无法连接节点服务器。该钱包尚未同步——节点服务器恢复响应后才会显示余额。</string>
     <string name="wallet_stale_send_note">发送已停用：没有到节点服务器的路由</string>

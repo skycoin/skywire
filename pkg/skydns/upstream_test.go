@@ -10,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"math/big"
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -183,5 +184,55 @@ func TestUpstreamStrictRejectsAnUntrustedCertificate(t *testing.T) {
 func TestHasTLS(t *testing.T) {
 	if !HasTLS("1.1.1.1") || HasTLS("192.168.1.1") {
 		t.Fatal("HasTLS")
+	}
+}
+
+func TestUpstreamSetServerMovesTheNextQuery(t *testing.T) {
+	f := newResolverFixture(t, false, 0)
+	var mu sync.Mutex
+	var dialed []string
+	dial := func(ctx context.Context, network, address string) (net.Conn, error) {
+		mu.Lock()
+		dialed = append(dialed, address)
+		mu.Unlock()
+		return f.dial(ctx, network, address)
+	}
+	u := NewUpstream("192.0.2.1", dial, false)
+	if _, err := ask(t, u); err != nil {
+		t.Fatal(err)
+	}
+
+	mu.Lock()
+	dialed = nil
+	mu.Unlock()
+	u.SetServer("192.0.2.2")
+	if _, err := ask(t, u); err != nil {
+		t.Fatal(err)
+	}
+	// TLS is tried again on the new resolver before plain DNS, as on a new one.
+	want := []string{"192.0.2.2:853", "192.0.2.2:53"}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(dialed) != len(want) || dialed[0] != want[0] || dialed[1] != want[1] {
+		t.Fatalf("dialed %v, want %v", dialed, want)
+	}
+	if u.Server() != "192.0.2.2" {
+		t.Fatalf("Server() = %q", u.Server())
+	}
+}
+
+func TestUpstreamAsksPlainlyWhenPort853IsDropped(t *testing.T) {
+	f := newResolverFixture(t, false, 0)
+	// A resolver that drops 853 rather than refusing it, as some networks do.
+	dial := func(ctx context.Context, network, address string) (net.Conn, error) {
+		if _, port, _ := net.SplitHostPort(address); port == "853" { //nolint:errcheck
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		return f.dial(ctx, network, address)
+	}
+	resp, err := ask(t, NewUpstream("192.0.2.1", dial, false))
+	if err != nil || len(resp.Answer) != 1 {
+		t.Fatalf("first query after a dropped 853: %v %v", resp, err)
 	}
 }

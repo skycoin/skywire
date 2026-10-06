@@ -125,6 +125,7 @@ class SkywireCoreService : Service() {
                     remotePk,
                     skyDnsStandalone = prefs.boolean(SkyDns.PREF_STANDALONE, SkyDns.DEFAULT_STANDALONE).first(),
                     skyDnsInVpn = prefs.boolean(SkyDns.PREF_IN_VPN, SkyDns.DEFAULT_IN_VPN).first(),
+                    dnsServer = DnsServer.sanitize(prefs.string(DnsServer.PREF_KEY).first()),
                 ).getOrElse { err ->
                     log.line("=== config generation failed ===")
                     log.line(err.message ?: "unknown error")
