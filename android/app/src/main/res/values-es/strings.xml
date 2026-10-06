@@ -53,6 +53,7 @@
 
     <string name="app_skysocks">SkySOCKS</string>
     <string name="app_skyvpn">SkyVPN</string>
+    <string name="app_skydns">SkyDNS</string>
     <string name="app_skydex">SkyDEX</string>
     <string name="app_skychat">SkyChat</string>
     <string name="app_wallet">Billetera</string>
@@ -79,6 +80,11 @@
     <string name="hub_stat_up">Subida</string>
     <string name="hub_stat_data">Datos</string>
     <string name="hub_vpn_toggle">Activar o desactivar SkyVPN</string>
+    <string name="hub_skydns_toggle">Activar o desactivar SkyDNS</string>
+    <string name="hub_skydns_off">Nombres .dmsg y .skynet en cada app</string>
+    <string name="hub_skydns_starting">Iniciando…</string>
+    <string name="hub_skydns_on">Resolviendo .dmsg y .skynet</string>
+    <string name="hub_skydns_paused">En pausa con SkyVPN activado</string>
     <plurals name="hub_hops">
         <item quantity="one">%1$d salto</item>
         <item quantity="many">%1$d de saltos</item>
@@ -299,6 +305,7 @@
     <string name="vpn_killswitch_hint">Mantiene la interfaz de red en pie mientras el túnel está caído, para que nada se escape por fuera. Las demás apps se quedan sin conexión hasta que vuelva.</string>
     <string name="vpn_killswitch_always_on">Ajustes de VPN siempre activa</string>
     <string name="vpn_killswitch_always_on_hint">Para la garantía más fuerte —bloquear incluso antes de que la app arranque— activa «VPN siempre activa» y «Bloquear conexiones sin VPN» para Skywire en los ajustes de Android.</string>
+    <string name="vpn_skydns_hint">Abre nombres .dmsg y .skynet en todas las apps mientras SkyVPN está activado. Escribe la dirección de un sitio con la etiqueta DNS de su clave: una clave en hexadecimal es demasiado larga para DNS.</string>
     <string name="vpn_hotspot_title">Zona Wi-Fi con VPN</string>
     <string name="vpn_hotspot_hint">Comparte SkyVPN con los dispositivos conectados a la zona Wi-Fi de este teléfono. La usan a través de un proxy en este teléfono.</string>
     <string name="vpn_hotspot_error">No se pudo abrir el puerto %1$d: %2$s</string>

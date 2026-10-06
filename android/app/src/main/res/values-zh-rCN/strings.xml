@@ -21,6 +21,7 @@
 
     <string name="app_skysocks">SkySOCKS</string>
     <string name="app_skyvpn">SkyVPN</string>
+    <string name="app_skydns">SkyDNS</string>
     <string name="app_skydex">SkyDEX</string>
     <string name="app_skychat">SkyChat</string>
     <string name="app_wallet">钱包</string>
@@ -47,6 +48,11 @@
     <string name="hub_stat_up">上行</string>
     <string name="hub_stat_data">流量</string>
     <string name="hub_vpn_toggle">SkyVPN 开关</string>
+    <string name="hub_skydns_toggle">SkyDNS 开关</string>
+    <string name="hub_skydns_off">在所有应用中打开 .dmsg 和 .skynet 域名</string>
+    <string name="hub_skydns_starting">正在启动…</string>
+    <string name="hub_skydns_on">正在解析 .dmsg 和 .skynet 域名</string>
+    <string name="hub_skydns_paused">SkyVPN 开启时暂停</string>
     <plurals name="hub_hops">
         <item quantity="other">%1$d 跳</item>
     </plurals>
@@ -256,6 +262,7 @@
     <string name="vpn_killswitch_hint">隧道断开时保留网络接口，使流量不会绕过它泄漏出去。在隧道恢复之前，其他应用将无法联网。</string>
     <string name="vpn_killswitch_always_on">“始终开启的 VPN”设置</string>
     <string name="vpn_killswitch_always_on_hint">若要获得最强的保障——在应用启动前就开始拦截——请在 Android 设置中为 Skywire 打开“始终开启的 VPN”和“阻止不使用 VPN 的连接”。</string>
+    <string name="vpn_skydns_hint">SkyVPN 开启时，所有应用都能打开 .dmsg 和 .skynet 域名。请用公钥的 DNS 标签作为站点地址，十六进制公钥对 DNS 来说太长。</string>
     <string name="vpn_hotspot_title">VPN 热点</string>
     <string name="vpn_hotspot_hint">与连接到这部手机热点的设备共享 SkyVPN。它们通过这部手机上的代理来使用。</string>
     <string name="vpn_hotspot_error">无法打开端口 %1$d：%2$s</string>
