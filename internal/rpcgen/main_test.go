@@ -20,6 +20,8 @@ func TestMethodRules(t *testing.T) {
 		`rpcName+".ValArg"`, "var rpcArg []string", "rpcReply := new(map[string]int)",
 		`rpcName+".Grouped"`, "rpcArg := new(struct{})",
 		"func registerS(rpcSrv *rpc.Server, rpcName string, rpcRcvr *S) error",
+		`rpcSrv.HandleCall(rpcName+".PtrArg", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {`,
+		"return func() (any, error) {",
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("tinygo file lacks %q", want)

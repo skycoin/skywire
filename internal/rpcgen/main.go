@@ -9,8 +9,9 @@
 // linux/amd64 and on js/wasm, finds every method of *T that net/rpc would
 // register, and writes two files. The tinygo file holds
 // func registerT(s *rpc.Server, name string, r *T) error, which calls
-// s.HandleFunc(name+".Method", ...) for each method. The native file holds the
-// same function calling s.RegisterName.
+// s.HandleCall(name+".Method", ...) for each method. The native file holds the
+// same function calling s.RegisterName. The argument is decoded on the read
+// loop and the method runs in its own goroutine, as with net/rpc.
 package main
 
 import (
@@ -212,15 +213,16 @@ func generate(cfg config) (tiny, native []byte, err error) {
 		fmt.Fprintf(&b, "func %s(rpcSrv *rpc.Server, rpcName string, rpcRcvr *%s) error {\n", sp.fn, sp.typ)
 		for _, n := range names {
 			m := methods[sp.typ][n]
-			fmt.Fprintf(&b, "\trpcSrv.HandleFunc(rpcName+%q, func(rpcDec *gob.Decoder) (interface{}, error) {\n", "."+m.name)
+			fmt.Fprintf(&b, "\trpcSrv.HandleCall(rpcName+%q, func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {\n", "."+m.name)
 			if m.argPtr {
 				fmt.Fprintf(&b, "\t\trpcArg := new(%s)\n\t\tif err := rpcDec.Decode(rpcArg); err != nil {\n", m.arg)
 			} else {
 				fmt.Fprintf(&b, "\t\tvar rpcArg %s\n\t\tif err := rpcDec.Decode(&rpcArg); err != nil {\n", m.arg)
 			}
 			b.WriteString("\t\t\treturn nil, err\n\t\t}\n")
-			fmt.Fprintf(&b, "\t\trpcReply := new(%s)\n", m.reply)
-			fmt.Fprintf(&b, "\t\treturn rpcReply, rpcRcvr.%s(rpcArg, rpcReply)\n\t})\n", m.name)
+			b.WriteString("\t\treturn func() (any, error) {\n")
+			fmt.Fprintf(&b, "\t\t\trpcReply := new(%s)\n", m.reply)
+			fmt.Fprintf(&b, "\t\t\treturn rpcReply, rpcRcvr.%s(rpcArg, rpcReply)\n\t\t}, nil\n\t})\n", m.name)
 		}
 		b.WriteString("\treturn nil\n}\n")
 	}

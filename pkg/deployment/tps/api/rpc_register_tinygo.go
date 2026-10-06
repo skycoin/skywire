@@ -12,37 +12,45 @@ import (
 
 // registerSetupRPCGateway registers each net/rpc method of *SetupRPCGateway as a reflection-free handler.
 func registerSetupRPCGateway(rpcSrv *rpc.Server, rpcName string, rpcRcvr *SetupRPCGateway) error {
-	rpcSrv.HandleFunc(rpcName+".AddTransport", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".AddTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(TransportSetupRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(TransportSetupResponse)
-		return rpcReply, rpcRcvr.AddTransport(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(TransportSetupResponse)
+			return rpcReply, rpcRcvr.AddTransport(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetTransports", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetTransports", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(GetTransportsRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(GetTransportsResponse)
-		return rpcReply, rpcRcvr.GetTransports(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(GetTransportsResponse)
+			return rpcReply, rpcRcvr.GetTransports(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HealthCheck", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HealthCheck", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(HealthCheckArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(HealthCheckReply)
-		return rpcReply, rpcRcvr.HealthCheck(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(HealthCheckReply)
+			return rpcReply, rpcRcvr.HealthCheck(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RemoveTransport", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RemoveTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(RemoveTransportRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.RemoveTransport(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.RemoveTransport(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }

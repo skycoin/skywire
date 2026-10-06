@@ -16,181 +16,225 @@ import (
 
 // registerIngressRPC registers each net/rpc method of *RPCIngressGateway as a reflection-free handler.
 func registerIngressRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPCIngressGateway) error {
-	rpcSrv.HandleFunc(rpcName+".Accept", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Accept", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(uint16)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(AcceptResp)
-		return rpcReply, rpcRcvr.Accept(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(AcceptResp)
+			return rpcReply, rpcRcvr.Accept(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".AppSettings", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".AppSettings", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(AppSettingsReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(AppSettingsResp)
-		return rpcReply, rpcRcvr.AppSettings(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(AppSettingsResp)
+			return rpcReply, rpcRcvr.AppSettings(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".CloseConn", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".CloseConn", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(uint16)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.CloseConn(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.CloseConn(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".CloseListener", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".CloseListener", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(uint16)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.CloseListener(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.CloseListener(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Dial", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Dial", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(appnet.Addr)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(DialResp)
-		return rpcReply, rpcRcvr.Dial(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(DialResp)
+			return rpcReply, rpcRcvr.Dial(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DialWithOptions", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DialWithOptions", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(DialOptionsReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(DialResp)
-		return rpcReply, rpcRcvr.DialWithOptions(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(DialResp)
+			return rpcReply, rpcRcvr.DialWithOptions(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GrowMux", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GrowMux", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(GrowMuxReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(int)
-		return rpcReply, rpcRcvr.GrowMux(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(int)
+			return rpcReply, rpcRcvr.GrowMux(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Listen", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Listen", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(appnet.Addr)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(uint16)
-		return rpcReply, rpcRcvr.Listen(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(uint16)
+			return rpcReply, rpcRcvr.Listen(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".LocalServices", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".LocalServices", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]appnet.LocalService)
-		return rpcReply, rpcRcvr.LocalServices(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]appnet.LocalService)
+			return rpcReply, rpcRcvr.LocalServices(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".NoteMuxEvent", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".NoteMuxEvent", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(NoteMuxEventReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.NoteMuxEvent(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.NoteMuxEvent(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Notify", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Notify", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(NotifyReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Notify(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Notify(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ProxyStatus", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ProxyStatus", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(proxystatus.Snapshot)
-		return rpcReply, rpcRcvr.ProxyStatus(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(proxystatus.Snapshot)
+			return rpcReply, rpcRcvr.ProxyStatus(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Read", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Read", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(ReadReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(ReadResp)
-		return rpcReply, rpcRcvr.Read(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(ReadResp)
+			return rpcReply, rpcRcvr.Read(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppPort", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppPort", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg routing.Port
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAppPort(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAppPort(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetConnectionDuration", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetConnectionDuration", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg int64
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetConnectionDuration(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetConnectionDuration(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetDeadline", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetDeadline", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(DeadlineReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetDeadline(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetDeadline(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetDetailedStatus", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetDetailedStatus", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetDetailedStatus(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetDetailedStatus(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetError", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetError", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetError(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetError(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetOTP", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetOTP", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetOTP(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetOTP(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetReadDeadline", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetReadDeadline", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(DeadlineReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetReadDeadline(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetReadDeadline(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetWriteDeadline", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetWriteDeadline", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(DeadlineReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetWriteDeadline(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetWriteDeadline(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Write", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Write", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(WriteReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(WriteResp)
-		return rpcReply, rpcRcvr.Write(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(WriteResp)
+			return rpcReply, rpcRcvr.Write(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }

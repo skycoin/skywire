@@ -14,228 +14,280 @@ import (
 
 // registerWhitelistGateway registers each net/rpc method of *WhitelistGateway as a reflection-free handler.
 func registerWhitelistGateway(rpcSrv *rpc.Server, rpcName string, rpcRcvr *WhitelistGateway) error {
-	rpcSrv.HandleFunc(rpcName+".Whitelist", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Whitelist", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]cipher.PubKey)
-		return rpcReply, rpcRcvr.Whitelist(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]cipher.PubKey)
+			return rpcReply, rpcRcvr.Whitelist(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".WhitelistAdd", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".WhitelistAdd", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new([]cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.WhitelistAdd(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.WhitelistAdd(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".WhitelistRemove", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".WhitelistRemove", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new([]cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.WhitelistRemove(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.WhitelistRemove(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }
 
 // registerLocalPtyGateway registers each net/rpc method of *LocalPtyGateway as a reflection-free handler.
 func registerLocalPtyGateway(rpcSrv *rpc.Server, rpcName string, rpcRcvr *LocalPtyGateway) error {
-	rpcSrv.HandleFunc(rpcName+".Exec", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Exec", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(CommandExecReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(CommandExecResult)
-		return rpcReply, rpcRcvr.Exec(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(CommandExecResult)
+			return rpcReply, rpcRcvr.Exec(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Ping", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Ping", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Ping(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Ping(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Read", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Read", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(int)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]byte)
-		return rpcReply, rpcRcvr.Read(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]byte)
+			return rpcReply, rpcRcvr.Read(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetPtySize", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetPtySize", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(WinSize)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetPtySize(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetPtySize(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Start", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Start", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(CommandReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Start(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Start(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Stop", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Stop", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Stop(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Stop(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Write", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Write", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new([]byte)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(int)
-		return rpcReply, rpcRcvr.Write(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(int)
+			return rpcReply, rpcRcvr.Write(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }
 
 // registerProxiedPtyGateway registers each net/rpc method of *ProxiedPtyGateway as a reflection-free handler.
 func registerProxiedPtyGateway(rpcSrv *rpc.Server, rpcName string, rpcRcvr *ProxiedPtyGateway) error {
-	rpcSrv.HandleFunc(rpcName+".Exec", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Exec", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(CommandExecReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(CommandExecResult)
-		return rpcReply, rpcRcvr.Exec(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(CommandExecResult)
+			return rpcReply, rpcRcvr.Exec(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Ping", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Ping", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Ping(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Ping(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Read", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Read", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(int)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]byte)
-		return rpcReply, rpcRcvr.Read(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]byte)
+			return rpcReply, rpcRcvr.Read(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetPtySize", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetPtySize", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(WinSize)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetPtySize(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetPtySize(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Start", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Start", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(CommandReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Start(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Start(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Stop", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Stop", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Stop(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Stop(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Write", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Write", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new([]byte)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(int)
-		return rpcReply, rpcRcvr.Write(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(int)
+			return rpcReply, rpcRcvr.Write(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }
 
 // registerSessionPtyGateway registers each net/rpc method of *sessionPtyGateway as a reflection-free handler.
 func registerSessionPtyGateway(rpcSrv *rpc.Server, rpcName string, rpcRcvr *sessionPtyGateway) error {
-	rpcSrv.HandleFunc(rpcName+".Attach", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Attach", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Attach(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Attach(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Exec", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Exec", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(CommandExecReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(CommandExecResult)
-		return rpcReply, rpcRcvr.Exec(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(CommandExecResult)
+			return rpcReply, rpcRcvr.Exec(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Ping", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Ping", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Ping(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Ping(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Read", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Read", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(int)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]byte)
-		return rpcReply, rpcRcvr.Read(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]byte)
+			return rpcReply, rpcRcvr.Read(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetPtySize", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetPtySize", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(WinSize)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetPtySize(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetPtySize(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Start", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Start", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(CommandReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Start(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Start(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StartSession", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StartSession", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(CommandReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.StartSession(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.StartSession(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Stop", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Stop", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Stop(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Stop(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Write", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Write", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new([]byte)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(int)
-		return rpcReply, rpcRcvr.Write(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(int)
+			return rpcReply, rpcRcvr.Write(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }

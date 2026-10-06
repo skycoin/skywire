@@ -15,241 +15,295 @@ import (
 
 // registerNodeRPC registers each net/rpc method of *RPC as a reflection-free handler.
 func registerNodeRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
-	rpcSrv.HandleFunc(rpcName+".Config", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Config", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg struct{}
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(Config)
-		return rpcReply, rpcRcvr.Config(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(Config)
+			return rpcReply, rpcRcvr.Config(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Connections", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Connections", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg struct{}
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]string)
-		return rpcReply, rpcRcvr.Connections(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]string)
+			return rpcReply, rpcRcvr.Connections(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ConnectionsOfFeed", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ConnectionsOfFeed", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg cipher.PubKey
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]string)
-		return rpcReply, rpcRcvr.ConnectionsOfFeed(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]string)
+			return rpcReply, rpcRcvr.ConnectionsOfFeed(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DontShare", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DontShare", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg cipher.PubKey
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.DontShare(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DontShare(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Feeds", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Feeds", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg struct{}
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]cipher.PubKey)
-		return rpcReply, rpcRcvr.Feeds(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]cipher.PubKey)
+			return rpcReply, rpcRcvr.Feeds(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".IsSharing", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".IsSharing", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg cipher.PubKey
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.IsSharing(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.IsSharing(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Share", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Share", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg cipher.PubKey
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Share(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Share(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Shutdown", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Shutdown", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg struct{}
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Shutdown(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Shutdown(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Stat", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Stat", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg struct{}
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(Stat)
-		return rpcReply, rpcRcvr.Stat(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(Stat)
+			return rpcReply, rpcRcvr.Stat(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }
 
 // registerTCPRPC registers each net/rpc method of *TCPRPC as a reflection-free handler.
 func registerTCPRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *TCPRPC) error {
-	rpcSrv.HandleFunc(rpcName+".Address", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Address", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg struct{}
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.Address(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.Address(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Connect", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Connect", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg string
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Connect(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Connect(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Disconnect", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Disconnect", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg string
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Disconnect(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Disconnect(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RemoteFeeds", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RemoteFeeds", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg string
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]cipher.PubKey)
-		return rpcReply, rpcRcvr.RemoteFeeds(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]cipher.PubKey)
+			return rpcReply, rpcRcvr.RemoteFeeds(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Subscribe", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Subscribe", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg ConnFeed
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Subscribe(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Subscribe(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Unsubscribe", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Unsubscribe", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg ConnFeed
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Unsubscribe(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Unsubscribe(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }
 
 // registerUDPRPC registers each net/rpc method of *UDPRPC as a reflection-free handler.
 func registerUDPRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *UDPRPC) error {
-	rpcSrv.HandleFunc(rpcName+".Address", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Address", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg struct{}
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.Address(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.Address(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Connect", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Connect", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg string
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Connect(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Connect(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Disconnect", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Disconnect", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg string
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Disconnect(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Disconnect(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RemoteFeeds", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RemoteFeeds", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg string
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]cipher.PubKey)
-		return rpcReply, rpcRcvr.RemoteFeeds(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]cipher.PubKey)
+			return rpcReply, rpcRcvr.RemoteFeeds(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Subscribe", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Subscribe", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg ConnFeed
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Subscribe(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Subscribe(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Unsubscribe", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Unsubscribe", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg ConnFeed
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Unsubscribe(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Unsubscribe(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }
 
 // registerRootRPC registers each net/rpc method of *RootRPC as a reflection-free handler.
 func registerRootRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RootRPC) error {
-	rpcSrv.HandleFunc(rpcName+".Last", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Last", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg cipher.PubKey
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(registry.Root)
-		return rpcReply, rpcRcvr.Last(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(registry.Root)
+			return rpcReply, rpcRcvr.Last(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Show", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Show", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg RootSelector
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(registry.Root)
-		return rpcReply, rpcRcvr.Show(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(registry.Root)
+			return rpcReply, rpcRcvr.Show(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Tree", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Tree", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg RootSelector
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.Tree(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.Tree(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }
 
 // registerDMSGRPC registers each net/rpc method of *DMSGRPC as a reflection-free handler.
 func registerDMSGRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *DMSGRPC) error {
-	rpcSrv.HandleFunc(rpcName+".Connect", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Connect", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg cipher.PubKey
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Connect(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Connect(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Connections", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Connections", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg struct{}
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]cipher.PubKey)
-		return rpcReply, rpcRcvr.Connections(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]cipher.PubKey)
+			return rpcReply, rpcRcvr.Connections(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Subscribe", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Subscribe", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg DMSGConnFeed
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Subscribe(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Subscribe(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }

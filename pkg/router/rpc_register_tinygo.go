@@ -14,119 +14,145 @@ import (
 
 // registerRPCGateway registers each net/rpc method of *RPCGateway as a reflection-free handler.
 func registerRPCGateway(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPCGateway) error {
-	rpcSrv.HandleFunc(rpcName+".AddEdgeRules", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".AddEdgeRules", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg routing.EdgeRules
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.AddEdgeRules(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.AddEdgeRules(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".AddIntermediaryRules", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".AddIntermediaryRules", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg []routing.Rule
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.AddIntermediaryRules(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.AddIntermediaryRules(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DelRules", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DelRules", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg []routing.RouteID
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.DelRules(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.DelRules(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ReserveIDs", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ReserveIDs", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg uint8
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]routing.RouteID)
-		return rpcReply, rpcRcvr.ReserveIDs(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]routing.RouteID)
+			return rpcReply, rpcRcvr.ReserveIDs(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }
 
 // RegisterSetupRPCGateway registers each net/rpc method of *SetupRPCGateway as a reflection-free handler.
 func RegisterSetupRPCGateway(rpcSrv *rpc.Server, rpcName string, rpcRcvr *SetupRPCGateway) error {
-	rpcSrv.HandleFunc(rpcName+".Capabilities", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Capabilities", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(CapabilitiesArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(CapabilitiesReply)
-		return rpcReply, rpcRcvr.Capabilities(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(CapabilitiesReply)
+			return rpcReply, rpcRcvr.Capabilities(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".CascadeSignInstall", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".CascadeSignInstall", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(CascadeSignInstallArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(CascadeSignInstallReply)
-		return rpcReply, rpcRcvr.CascadeSignInstall(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(CascadeSignInstallReply)
+			return rpcReply, rpcRcvr.CascadeSignInstall(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".CascadeSignReserve", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".CascadeSignReserve", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(CascadeSignReserveArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(CascadeSignReserveReply)
-		return rpcReply, rpcRcvr.CascadeSignReserve(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(CascadeSignReserveReply)
+			return rpcReply, rpcRcvr.CascadeSignReserve(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DialRouteGroup", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DialRouteGroup", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg routing.BidirectionalRoute
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(routing.EdgeRules)
-		return rpcReply, rpcRcvr.DialRouteGroup(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(routing.EdgeRules)
+			return rpcReply, rpcRcvr.DialRouteGroup(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DialRouteGroupBatch", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DialRouteGroupBatch", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(routing.BidirectionalRouteBatch)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(routing.BidirectionalRouteBatchReply)
-		return rpcReply, rpcRcvr.DialRouteGroupBatch(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(routing.BidirectionalRouteBatchReply)
+			return rpcReply, rpcRcvr.DialRouteGroupBatch(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HealthCheck", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HealthCheck", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(HealthCheckArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(HealthCheckReply)
-		return rpcReply, rpcRcvr.HealthCheck(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(HealthCheckReply)
+			return rpcReply, rpcRcvr.HealthCheck(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RelayPeers", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RelayPeers", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(RelayPeersArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(RelayPeersReply)
-		return rpcReply, rpcRcvr.RelayPeers(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(RelayPeersReply)
+			return rpcReply, rpcRcvr.RelayPeers(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SignTransportQuery", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SignTransportQuery", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(SignTransportQueryArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(SignTransportQueryReply)
-		return rpcReply, rpcRcvr.SignTransportQuery(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(SignTransportQueryReply)
+			return rpcReply, rpcRcvr.SignTransportQuery(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }
 
 // registerTransportQueryRPCGateway registers each net/rpc method of *TransportQueryRPCGateway as a reflection-free handler.
 func registerTransportQueryRPCGateway(rpcSrv *rpc.Server, rpcName string, rpcRcvr *TransportQueryRPCGateway) error {
-	rpcSrv.HandleFunc(rpcName+".Query", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Query", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(TransportQuery)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(TransportQueryResponse)
-		return rpcReply, rpcRcvr.Query(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(TransportQueryResponse)
+			return rpcReply, rpcRcvr.Query(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }

@@ -12,13 +12,15 @@ import (
 
 // registerRPCGateway registers each net/rpc method of *RPCGateway as a reflection-free handler.
 func registerRPCGateway(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPCGateway) error {
-	rpcSrv.HandleFunc(rpcName+".Notify", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Notify", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(Event)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Notify(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Notify(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }

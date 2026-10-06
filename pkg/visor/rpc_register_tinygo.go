@@ -31,2682 +31,3350 @@ import (
 
 // registerVisorRPC registers each net/rpc method of *RPC as a reflection-free handler.
 func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
-	rpcSrv.HandleFunc(rpcName+".ARSelfInfo", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ARSelfInfo", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.ARSelfRegistration)
-		return rpcReply, rpcRcvr.ARSelfInfo(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.ARSelfRegistration)
+			return rpcReply, rpcRcvr.ARSelfInfo(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ActiveRoutes", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ActiveRoutes", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.AppRouteStatus)
-		return rpcReply, rpcRcvr.ActiveRoutes(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.AppRouteStatus)
+			return rpcReply, rpcRcvr.ActiveRoutes(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".AddApp", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".AddApp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppAddIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.AddApp(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.AddApp(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".AddHypervisor", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".AddHypervisor", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.AddHypervisor(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.AddHypervisor(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".AddMuxRoute", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".AddMuxRoute", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.MuxRouteInput)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.AddMuxRoute(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.AddMuxRoute(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".AddMuxRouteForward", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".AddMuxRouteForward", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.MuxRouteInput)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.AddMuxRouteForward(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.AddMuxRouteForward(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".AddPtyWhitelist", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".AddPtyWhitelist", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.AddPtyWhitelistIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.AddPtyWhitelist(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.AddPtyWhitelist(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".AddTransport", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".AddTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.AddTransportIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.TransportSummary)
-		return rpcReply, rpcRcvr.AddTransport(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.TransportSummary)
+			return rpcReply, rpcRcvr.AddTransport(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".App", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".App", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(appserver.AppState)
-		return rpcReply, rpcRcvr.App(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(appserver.AppState)
+			return rpcReply, rpcRcvr.App(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".AppDirectStreams", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".AppDirectStreams", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]transport.VStreamInfo)
-		return rpcReply, rpcRcvr.AppDirectStreams(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]transport.VStreamInfo)
+			return rpcReply, rpcRcvr.AppDirectStreams(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".AppHelp", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".AppHelp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.AppNameIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.AppHelp(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.AppHelp(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ApproveHypervisor", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ApproveHypervisor", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(cipher.PubKey)
-		return rpcReply, rpcRcvr.ApproveHypervisor(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(cipher.PubKey)
+			return rpcReply, rpcRcvr.ApproveHypervisor(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Apps", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Apps", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]*appserver.AppState)
-		return rpcReply, rpcRcvr.Apps(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]*appserver.AppState)
+			return rpcReply, rpcRcvr.Apps(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".BandwidthTest", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".BandwidthTest", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg visorapi.BandwidthTestConfig
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.BandwidthResult)
-		return rpcReply, rpcRcvr.BandwidthTest(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.BandwidthResult)
+			return rpcReply, rpcRcvr.BandwidthTest(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".CXORefreshFeed", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".CXORefreshFeed", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.CXORefreshArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.FeedStatus)
-		return rpcReply, rpcRcvr.CXORefreshFeed(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.FeedStatus)
+			return rpcReply, rpcRcvr.CXORefreshFeed(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".CXOStatus", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".CXOStatus", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.FeedStatus)
-		return rpcReply, rpcRcvr.CXOStatus(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.FeedStatus)
+			return rpcReply, rpcRcvr.CXOStatus(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".CheckAREntry", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".CheckAREntry", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]string)
-		return rpcReply, rpcRcvr.CheckAREntry(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]string)
+			return rpcReply, rpcRcvr.CheckAREntry(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ClearMuxWeights", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ClearMuxWeights", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.MuxWeightsInput)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(router.MuxWeightsView)
-		return rpcReply, rpcRcvr.ClearMuxWeights(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(router.MuxWeightsView)
+			return rpcReply, rpcRcvr.ClearMuxWeights(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ClearSkychatPassword", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ClearSkychatPassword", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.ClearSkychatPassword(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.ClearSkychatPassword(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ConnectRawTCP", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ConnectRawTCP", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.ConnectIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(uuid.UUID)
-		return rpcReply, rpcRcvr.ConnectRawTCP(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(uuid.UUID)
+			return rpcReply, rpcRcvr.ConnectRawTCP(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".CutAppTunnel", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".CutAppTunnel", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.CutAppTunnelIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(uint64)
-		return rpcReply, rpcRcvr.CutAppTunnel(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(uint64)
+			return rpcReply, rpcRcvr.CutAppTunnel(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DMSGServers", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DMSGServers", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.DMSGServerInfo)
-		return rpcReply, rpcRcvr.DMSGServers(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.DMSGServerInfo)
+			return rpcReply, rpcRcvr.DMSGServers(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DeleteApp", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DeleteApp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.AppNameIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.DeleteApp(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DeleteApp(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DeleteRewardAddress", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DeleteRewardAddress", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.DeleteRewardAddress(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DeleteRewardAddress(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DeregisterApp", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DeregisterApp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(appcommon.ProcKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.DeregisterApp(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DeregisterApp(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DeregisterService", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DeregisterService", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.DeregisterServiceIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.DeregisterService(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DeregisterService(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DeregisterTCPPort", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DeregisterTCPPort", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(int)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.DeregisterTCPPort(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DeregisterTCPPort(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DialDmsgPing", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DialDmsgPing", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.DialDmsgPing(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DialDmsgPing(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DialDmsgPingViaServer", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DialDmsgPingViaServer", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.DialDmsgPingViaServerIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.DialDmsgPingViaServer(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DialDmsgPingViaServer(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DialPing", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DialPing", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg visorapi.PingConfig
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.DialPing(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DialPing(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DialUDPForward", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DialUDPForward", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.UDPForwardIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.DialUDPForward(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DialUDPForward(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DisableHypervisor", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DisableHypervisor", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(bool)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.DisableHypervisor(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DisableHypervisor(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DisableHypervisorUI", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DisableHypervisorUI", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(bool)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.DisableHypervisorUI(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DisableHypervisorUI(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DisconnectRawTCP", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DisconnectRawTCP", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(uuid.UUID)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.DisconnectRawTCP(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DisconnectRawTCP(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DiscoverTransportByID", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DiscoverTransportByID", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(uuid.UUID)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(transport.Entry)
-		return rpcReply, rpcRcvr.DiscoverTransportByID(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(transport.Entry)
+			return rpcReply, rpcRcvr.DiscoverTransportByID(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DiscoverTransportsByPK", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DiscoverTransportsByPK", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]*transport.Entry)
-		return rpcReply, rpcRcvr.DiscoverTransportsByPK(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]*transport.Entry)
+			return rpcReply, rpcRcvr.DiscoverTransportsByPK(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgBandwidthTest", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgBandwidthTest", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg visorapi.BandwidthTestConfig
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.BandwidthResult)
-		return rpcReply, rpcRcvr.DmsgBandwidthTest(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.BandwidthResult)
+			return rpcReply, rpcRcvr.DmsgBandwidthTest(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgConnectAll", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgConnectAll", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.DmsgConnectAllResult)
-		return rpcReply, rpcRcvr.DmsgConnectAll(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgConnectAllResult)
+			return rpcReply, rpcRcvr.DmsgConnectAll(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgConverge", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgConverge", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new([]string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.DmsgConvergeResult)
-		return rpcReply, rpcRcvr.DmsgConverge(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgConvergeResult)
+			return rpcReply, rpcRcvr.DmsgConverge(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgHTTP", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgHTTP", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.DmsgHTTPRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.DmsgHTTPResponse)
-		return rpcReply, rpcRcvr.DmsgHTTP(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgHTTPResponse)
+			return rpcReply, rpcRcvr.DmsgHTTP(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgPing", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgPing", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg visorapi.PingConfig
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]time.Duration)
-		return rpcReply, rpcRcvr.DmsgPing(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]time.Duration)
+			return rpcReply, rpcRcvr.DmsgPing(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgPingOnce", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgPingOnce", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg visorapi.PingConfig
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(time.Duration)
-		return rpcReply, rpcRcvr.DmsgPingOnce(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(time.Duration)
+			return rpcReply, rpcRcvr.DmsgPingOnce(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgPortHits", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgPortHits", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]dmsg.PortHit)
-		return rpcReply, rpcRcvr.DmsgPortHits(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]dmsg.PortHit)
+			return rpcReply, rpcRcvr.DmsgPortHits(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgPorterDiag", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgPorterDiag", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(netutil.EphemeralDiagResult)
-		return rpcReply, rpcRcvr.DmsgPorterDiag(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(netutil.EphemeralDiagResult)
+			return rpcReply, rpcRcvr.DmsgPorterDiag(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgPorterReset", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgPorterReset", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.DmsgPorterStatus)
-		return rpcReply, rpcRcvr.DmsgPorterReset(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgPorterStatus)
+			return rpcReply, rpcRcvr.DmsgPorterReset(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgPorterStats", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgPorterStats", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.DmsgPorterStatus)
-		return rpcReply, rpcRcvr.DmsgPorterStats(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgPorterStatus)
+			return rpcReply, rpcRcvr.DmsgPorterStats(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgProbe", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgProbe", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.DmsgProbeRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.DmsgProbe(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.DmsgProbe(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgProbeReason", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgProbeReason", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.DmsgProbeRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.DmsgProbeReasonResponse)
-		return rpcReply, rpcRcvr.DmsgProbeReason(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgProbeReasonResponse)
+			return rpcReply, rpcRcvr.DmsgProbeReason(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgProbeViaServer", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgProbeViaServer", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.DmsgProbeViaServerRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.DmsgProbeViaServer(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.DmsgProbeViaServer(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgPtyExec", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgPtyExec", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.DmsgPtyExecArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(pty.CommandExecResult)
-		return rpcReply, rpcRcvr.DmsgPtyExec(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(pty.CommandExecResult)
+			return rpcReply, rpcRcvr.DmsgPtyExec(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgReconnect", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgReconnect", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(int)
-		return rpcReply, rpcRcvr.DmsgReconnect(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(int)
+			return rpcReply, rpcRcvr.DmsgReconnect(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgSessions", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgSessions", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.DmsgClientSessions)
-		return rpcReply, rpcRcvr.DmsgSessions(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgClientSessions)
+			return rpcReply, rpcRcvr.DmsgSessions(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DmsgSetMinSessions", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DmsgSetMinSessions", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(int)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.DmsgSetMinSessions(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DmsgSetMinSessions(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".DoCustomSetting", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".DoCustomSetting", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppMapIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.DoCustomSetting(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DoCustomSetting(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".EmbeddedProxies", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".EmbeddedProxies", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.EmbeddedProxiesStatus)
-		return rpcReply, rpcRcvr.EmbeddedProxies(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.EmbeddedProxiesStatus)
+			return rpcReply, rpcRcvr.EmbeddedProxies(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".EnableHypervisor", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".EnableHypervisor", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(bool)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.EnableHypervisor(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.EnableHypervisor(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".EnableHypervisorUI", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".EnableHypervisorUI", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(bool)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.EnableHypervisorUI(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.EnableHypervisorUI(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".FetchCXO", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".FetchCXO", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.FetchCXOArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.FetchCXOResult)
-		return rpcReply, rpcRcvr.FetchCXO(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.FetchCXOResult)
+			return rpcReply, rpcRcvr.FetchCXO(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".FetchServiceData", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".FetchServiceData", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.FetchServiceDataIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]byte)
-		return rpcReply, rpcRcvr.FetchServiceData(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]byte)
+			return rpcReply, rpcRcvr.FetchServiceData(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetAppConnectionsSummary", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetAppConnectionsSummary", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]appserver.ConnectionSummary)
-		return rpcReply, rpcRcvr.GetAppConnectionsSummary(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]appserver.ConnectionSummary)
+			return rpcReply, rpcRcvr.GetAppConnectionsSummary(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetAppError", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetAppError", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.GetAppError(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.GetAppError(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetAppSettings", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetAppSettings", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.AppSettings)
-		return rpcReply, rpcRcvr.GetAppSettings(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.AppSettings)
+			return rpcReply, rpcRcvr.GetAppSettings(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetAppStats", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetAppStats", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(appserver.AppStats)
-		return rpcReply, rpcRcvr.GetAppStats(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(appserver.AppStats)
+			return rpcReply, rpcRcvr.GetAppStats(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetCalculateRoutes", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetCalculateRoutes", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.GetCalculateRoutes(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.GetCalculateRoutes(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetConfigPath", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetConfigPath", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.GetConfigPath(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.GetConfigPath(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetDmsgPingServerPK", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetDmsgPingServerPK", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(cipher.PubKey)
-		return rpcReply, rpcRcvr.GetDmsgPingServerPK(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(cipher.PubKey)
+			return rpcReply, rpcRcvr.GetDmsgPingServerPK(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetIsPublic", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetIsPublic", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.GetIsPublic(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.GetIsPublic(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetMinHops", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetMinHops", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(uint16)
-		return rpcReply, rpcRcvr.GetMinHops(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(uint16)
+			return rpcReply, rpcRcvr.GetMinHops(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetPersistentTransports", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetPersistentTransports", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]transport.PersistentTransports)
-		return rpcReply, rpcRcvr.GetPersistentTransports(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]transport.PersistentTransports)
+			return rpcReply, rpcRcvr.GetPersistentTransports(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetPreferredDmsgServer", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetPreferredDmsgServer", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(cipher.PubKey)
-		return rpcReply, rpcRcvr.GetPreferredDmsgServer(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(cipher.PubKey)
+			return rpcReply, rpcRcvr.GetPreferredDmsgServer(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetRSNHealth", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetRSNHealth", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.NodeHealth)
-		return rpcReply, rpcRcvr.GetRSNHealth(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.NodeHealth)
+			return rpcReply, rpcRcvr.GetRSNHealth(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetRemoteDmsgServers", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetRemoteDmsgServers", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]cipher.PubKey)
-		return rpcReply, rpcRcvr.GetRemoteDmsgServers(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]cipher.PubKey)
+			return rpcReply, rpcRcvr.GetRemoteDmsgServers(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetRewardAddress", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetRewardAddress", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.GetRewardAddress(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.GetRewardAddress(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetRouteSetupNodesSorted", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetRouteSetupNodesSorted", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]cipher.PubKey)
-		return rpcReply, rpcRcvr.GetRouteSetupNodesSorted(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]cipher.PubKey)
+			return rpcReply, rpcRcvr.GetRouteSetupNodesSorted(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetRouterDialSettings", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetRouterDialSettings", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.RouterDialSettings)
-		return rpcReply, rpcRcvr.GetRouterDialSettings(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.RouterDialSettings)
+			return rpcReply, rpcRcvr.GetRouterDialSettings(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetRouterSettings", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetRouterSettings", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.RouterSettings)
-		return rpcReply, rpcRcvr.GetRouterSettings(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.RouterSettings)
+			return rpcReply, rpcRcvr.GetRouterSettings(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetRuntimeConfig", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetRuntimeConfig", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]byte)
-		return rpcReply, rpcRcvr.GetRuntimeConfig(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]byte)
+			return rpcReply, rpcRcvr.GetRuntimeConfig(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetTPSHealth", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetTPSHealth", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.NodeHealth)
-		return rpcReply, rpcRcvr.GetTPSHealth(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.NodeHealth)
+			return rpcReply, rpcRcvr.GetTPSHealth(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetTransportLogs", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetTransportLogs", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(int)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.TransportLogEntry)
-		return rpcReply, rpcRcvr.GetTransportLogs(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.TransportLogEntry)
+			return rpcReply, rpcRcvr.GetTransportLogs(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetTransportSetupNodes", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetTransportSetupNodes", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]cipher.PubKey)
-		return rpcReply, rpcRcvr.GetTransportSetupNodes(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]cipher.PubKey)
+			return rpcReply, rpcRcvr.GetTransportSetupNodes(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetTransportSetupNodesSorted", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetTransportSetupNodesSorted", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]cipher.PubKey)
-		return rpcReply, rpcRcvr.GetTransportSetupNodesSorted(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]cipher.PubKey)
+			return rpcReply, rpcRcvr.GetTransportSetupNodesSorted(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GoroutineDump", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GoroutineDump", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.GoroutineDump(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.GoroutineDump(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupAddMember", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupAddMember", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupAddMemberRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupAddMember(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupAddMember(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupApproveJoin", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupApproveJoin", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupPeerRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupApproveJoin(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupApproveJoin(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupAskAgain", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupAskAgain", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupAskAgain(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupAskAgain(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupBanMember", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupBanMember", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupPeerRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupBanMember(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupBanMember(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupCatalog", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupCatalog", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupCatalogResponse)
-		return rpcReply, rpcRcvr.GroupCatalog(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupCatalogResponse)
+			return rpcReply, rpcRcvr.GroupCatalog(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupCreate", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupCreate", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupCreateArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupCreateResponse)
-		return rpcReply, rpcRcvr.GroupCreate(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupCreateResponse)
+			return rpcReply, rpcRcvr.GroupCreate(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupDelete", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupDelete", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.GroupDelete(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.GroupDelete(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupDemoteAdmin", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupDemoteAdmin", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupPromoteAdminRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupDemoteAdmin(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupDemoteAdmin(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupDenyJoin", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupDenyJoin", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupPeerRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.GroupDenyJoin(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.GroupDenyJoin(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupFileKey", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupFileKey", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupFileKeyArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupFileKeyResult)
-		return rpcReply, rpcRcvr.GroupFileKey(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupFileKeyResult)
+			return rpcReply, rpcRcvr.GroupFileKey(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupGet", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupGet", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupGet(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupGet(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupHistory", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupHistory", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupHistoryRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.GroupMessage)
-		return rpcReply, rpcRcvr.GroupHistory(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.GroupMessage)
+			return rpcReply, rpcRcvr.GroupHistory(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupHistoryGroups", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupHistoryGroups", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]string)
-		return rpcReply, rpcRcvr.GroupHistoryGroups(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]string)
+			return rpcReply, rpcRcvr.GroupHistoryGroups(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupHistoryPage", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupHistoryPage", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupHistoryPageArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.GroupMessage)
-		return rpcReply, rpcRcvr.GroupHistoryPage(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.GroupMessage)
+			return rpcReply, rpcRcvr.GroupHistoryPage(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupInvite", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupInvite", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.GroupInvite(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.GroupInvite(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupJoin", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupJoin", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupJoinArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupJoin(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupJoin(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupJoinRequests", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupJoinRequests", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.GroupJoinRequest)
-		return rpcReply, rpcRcvr.GroupJoinRequests(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.GroupJoinRequest)
+			return rpcReply, rpcRcvr.GroupJoinRequests(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupLeave", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupLeave", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.GroupLeave(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.GroupLeave(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupList", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupList", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupList(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupList(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupMuteMember", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupMuteMember", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupPeerRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupMuteMember(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupMuteMember(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupPoll", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupPoll", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupPollRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.GroupMessage)
-		return rpcReply, rpcRcvr.GroupPoll(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.GroupMessage)
+			return rpcReply, rpcRcvr.GroupPoll(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupPromoteAdmin", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupPromoteAdmin", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupPromoteAdminRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupPromoteAdmin(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupPromoteAdmin(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupRefreshMeta", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupRefreshMeta", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupRefreshMeta(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupRefreshMeta(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupRemoveMember", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupRemoveMember", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupPeerRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupRemoveMember(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupRemoveMember(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupResolve", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupResolve", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupResolveArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupResolveResult)
-		return rpcReply, rpcRcvr.GroupResolve(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupResolveResult)
+			return rpcReply, rpcRcvr.GroupResolve(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupRotateKey", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupRotateKey", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupRotateKey(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupRotateKey(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupSend", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupSend", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupSendArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.GroupSend(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.GroupSend(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupSetJoinPoW", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupSetJoinPoW", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupJoinPoWRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupSetJoinPoW(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupSetJoinPoW(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupSetListed", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupSetListed", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupSetListedRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupSetListed(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupSetListed(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupSetMeta", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupSetMeta", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupSetMetaArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupSetMeta(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupSetMeta(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupSetPeerBackfill", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupSetPeerBackfill", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupPeerBackfillRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupSetPeerBackfill(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupSetPeerBackfill(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupSetReadOnly", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupSetReadOnly", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupReadOnlyRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupSetReadOnly(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupSetReadOnly(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupUnbanMember", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupUnbanMember", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupPeerRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupUnbanMember(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupUnbanMember(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupUnmuteMember", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupUnmuteMember", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupPeerRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.GroupInfo)
-		return rpcReply, rpcRcvr.GroupUnmuteMember(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.GroupInfo)
+			return rpcReply, rpcRcvr.GroupUnmuteMember(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GroupUnsend", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GroupUnsend", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.GroupUnsendArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.GroupUnsend(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.GroupUnsend(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GrowMuxFromPool", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GrowMuxFromPool", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.MuxRouteInput)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(int)
-		return rpcReply, rpcRcvr.GrowMuxFromPool(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(int)
+			return rpcReply, rpcRcvr.GrowMuxFromPool(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GrowMuxRoute", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GrowMuxRoute", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.MuxRouteInput)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(int)
-		return rpcReply, rpcRcvr.GrowMuxRoute(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(int)
+			return rpcReply, rpcRcvr.GrowMuxRoute(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVAddTransport", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVAddTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVAddTransportArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.TransportSummary)
-		return rpcReply, rpcRcvr.HVAddTransport(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.TransportSummary)
+			return rpcReply, rpcRcvr.HVAddTransport(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVDeregisterTCPPort", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVDeregisterTCPPort", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVTCPPortArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVDeregisterTCPPort(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVDeregisterTCPPort(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVDmsgConnectAll", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVDmsgConnectAll", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.DmsgConnectAllResult)
-		return rpcReply, rpcRcvr.HVDmsgConnectAll(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgConnectAllResult)
+			return rpcReply, rpcRcvr.HVDmsgConnectAll(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVDmsgSessions", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVDmsgSessions", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.DmsgClientSessions)
-		return rpcReply, rpcRcvr.HVDmsgSessions(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgClientSessions)
+			return rpcReply, rpcRcvr.HVDmsgSessions(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVEmbeddedProxies", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVEmbeddedProxies", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.EmbeddedProxiesStatus)
-		return rpcReply, rpcRcvr.HVEmbeddedProxies(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.EmbeddedProxiesStatus)
+			return rpcReply, rpcRcvr.HVEmbeddedProxies(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVListDirectVisors", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVListDirectVisors", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.HVVisorEntry)
-		return rpcReply, rpcRcvr.HVListDirectVisors(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.HVVisorEntry)
+			return rpcReply, rpcRcvr.HVListDirectVisors(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVListForwardedPorts", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVListForwardedPorts", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.ForwardedPort)
-		return rpcReply, rpcRcvr.HVListForwardedPorts(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.ForwardedPort)
+			return rpcReply, rpcRcvr.HVListForwardedPorts(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVListTCPPorts", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVListTCPPorts", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]int)
-		return rpcReply, rpcRcvr.HVListTCPPorts(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]int)
+			return rpcReply, rpcRcvr.HVListTCPPorts(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVListVisors", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVListVisors", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.HVVisorEntry)
-		return rpcReply, rpcRcvr.HVListVisors(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.HVVisorEntry)
+			return rpcReply, rpcRcvr.HVListVisors(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVListVisorsTree", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVListVisorsTree", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.HVVisorTree)
-		return rpcReply, rpcRcvr.HVListVisorsTree(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.HVVisorTree)
+			return rpcReply, rpcRcvr.HVListVisorsTree(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVLogsSince", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVLogsSince", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVLogsArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]string)
-		return rpcReply, rpcRcvr.HVLogsSince(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]string)
+			return rpcReply, rpcRcvr.HVLogsSince(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVRegisterForwardedPort", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVRegisterForwardedPort", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVForwardedPortArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVRegisterForwardedPort(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVRegisterForwardedPort(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVRegisterTCPPort", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVRegisterTCPPort", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVTCPPortArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVRegisterTCPPort(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVRegisterTCPPort(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVReload", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVReload", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVReload(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVReload(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVRemoveRoutingRule", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVRemoveRoutingRule", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVRoutingRuleArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVRemoveRoutingRule(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVRemoveRoutingRule(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVRemoveTransport", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVRemoveTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVTransportArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVRemoveTransport(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVRemoveTransport(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVServiceHealth", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVServiceHealth", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.ServiceHealthEntry)
-		return rpcReply, rpcRcvr.HVServiceHealth(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.ServiceHealthEntry)
+			return rpcReply, rpcRcvr.HVServiceHealth(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVSetAutoStart", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVSetAutoStart", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVAutostartArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVSetAutoStart(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVSetAutoStart(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVSetCalculateRoutes", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVSetCalculateRoutes", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVCalcRoutesArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVSetCalculateRoutes(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVSetCalculateRoutes(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVSetDmsgSessionsCount", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVSetDmsgSessionsCount", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVDmsgSessionsArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.DmsgConnectAllResult)
-		return rpcReply, rpcRcvr.HVSetDmsgSessionsCount(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgConnectAllResult)
+			return rpcReply, rpcRcvr.HVSetDmsgSessionsCount(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVSetEmbeddedProxyEnabled", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVSetEmbeddedProxyEnabled", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVProxyArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVSetEmbeddedProxyEnabled(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVSetEmbeddedProxyEnabled(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVSetEmbeddedProxyUpstream", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVSetEmbeddedProxyUpstream", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVProxyArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVSetEmbeddedProxyUpstream(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVSetEmbeddedProxyUpstream(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVSetMinHops", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVSetMinHops", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVMinHopsArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVSetMinHops(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVSetMinHops(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVSetPublicAutoconnect", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVSetPublicAutoconnect", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVAutoconnectArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVSetPublicAutoconnect(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVSetPublicAutoconnect(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVSetRewardAddress", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVSetRewardAddress", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVRewardArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.HVSetRewardAddress(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.HVSetRewardAddress(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVShutdown", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVShutdown", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVShutdown(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVShutdown(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVStartApp", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVStartApp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVAppArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVStartApp(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVStartApp(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVStopApp", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVStopApp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVAppArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVStopApp(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVStopApp(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVUpdateForwardedPort", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVUpdateForwardedPort", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVForwardedPortArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.HVUpdateForwardedPort(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVUpdateForwardedPort(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HVVisorSummary", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HVVisorSummary", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.Summary)
-		return rpcReply, rpcRcvr.HVVisorSummary(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.Summary)
+			return rpcReply, rpcRcvr.HVVisorSummary(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Health", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Health", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.HealthInfo)
-		return rpcReply, rpcRcvr.Health(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.HealthInfo)
+			return rpcReply, rpcRcvr.Health(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HostStats", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HostStats", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.HostStatsInfo)
-		return rpcReply, rpcRcvr.HostStats(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.HostStatsInfo)
+			return rpcReply, rpcRcvr.HostStats(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".IsDMSGClientReady", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".IsDMSGClientReady", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.IsDMSGClientReady(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.IsDMSGClientReady(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".IsHypervisorAuthEnabled", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".IsHypervisorAuthEnabled", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.IsHypervisorAuthEnabled(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.IsHypervisorAuthEnabled(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".IsHypervisorEnabled", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".IsHypervisorEnabled", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.IsHypervisorEnabled(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.IsHypervisorEnabled(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".IsHypervisorUIServing", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".IsHypervisorUIServing", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.IsHypervisorUIServing(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.IsHypervisorUIServing(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".IsStartupComplete", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".IsStartupComplete", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.IsStartupComplete(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.IsStartupComplete(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".IsSuspended", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".IsSuspended", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.IsSuspended(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.IsSuspended(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".KillApp", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".KillApp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.KillApp(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.KillApp(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ListCXOFeeds", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ListCXOFeeds", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]logserver.CXOFeedEntry)
-		return rpcReply, rpcRcvr.ListCXOFeeds(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]logserver.CXOFeedEntry)
+			return rpcReply, rpcRcvr.ListCXOFeeds(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ListForwardedPorts", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ListForwardedPorts", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.ForwardedPort)
-		return rpcReply, rpcRcvr.ListForwardedPorts(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.ForwardedPort)
+			return rpcReply, rpcRcvr.ListForwardedPorts(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ListRawTCP", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ListRawTCP", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(map[uuid.UUID]*appnet.RawTCPForwardConn)
-		return rpcReply, rpcRcvr.ListRawTCP(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(map[uuid.UUID]*appnet.RawTCPForwardConn)
+			return rpcReply, rpcRcvr.ListRawTCP(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ListTCPPorts", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ListTCPPorts", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]int)
-		return rpcReply, rpcRcvr.ListTCPPorts(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]int)
+			return rpcReply, rpcRcvr.ListTCPPorts(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ListUDPForwards", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ListUDPForwards", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]int)
-		return rpcReply, rpcRcvr.ListUDPForwards(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]int)
+			return rpcReply, rpcRcvr.ListUDPForwards(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".LocalTransportStats", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".LocalTransportStats", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.LocalTransportStatsResponse)
-		return rpcReply, rpcRcvr.LocalTransportStats(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.LocalTransportStatsResponse)
+			return rpcReply, rpcRcvr.LocalTransportStats(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".LocalUptimeStats", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".LocalUptimeStats", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.LocalUptimeArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.LocalUptimeResponse)
-		return rpcReply, rpcRcvr.LocalUptimeStats(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.LocalUptimeResponse)
+			return rpcReply, rpcRcvr.LocalUptimeStats(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".LogsSince", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".LogsSince", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.AppLogsRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]string)
-		return rpcReply, rpcRcvr.LogsSince(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]string)
+			return rpcReply, rpcRcvr.LogsSince(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".MailAttachment", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".MailAttachment", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.MailAttachmentRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(skymail.AttachmentData)
-		return rpcReply, rpcRcvr.MailAttachment(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(skymail.AttachmentData)
+			return rpcReply, rpcRcvr.MailAttachment(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".MailDelete", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".MailDelete", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.MailMessageRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.MailDelete(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.MailDelete(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".MailList", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".MailList", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]skymail.Summary)
-		return rpcReply, rpcRcvr.MailList(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]skymail.Summary)
+			return rpcReply, rpcRcvr.MailList(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".MailRaw", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".MailRaw", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.MailMessageRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]byte)
-		return rpcReply, rpcRcvr.MailRaw(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]byte)
+			return rpcReply, rpcRcvr.MailRaw(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".MailRead", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".MailRead", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.MailMessageRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(skymail.Rendered)
-		return rpcReply, rpcRcvr.MailRead(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(skymail.Rendered)
+			return rpcReply, rpcRcvr.MailRead(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".MailSend", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".MailSend", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(skymail.Outgoing)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(skymail.SendResult)
-		return rpcReply, rpcRcvr.MailSend(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(skymail.SendResult)
+			return rpcReply, rpcRcvr.MailSend(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".MailSetSettings", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".MailSetSettings", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.MailSettingsWire)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.MailSetSettings(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.MailSetSettings(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".MailSetWhitelist", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".MailSetWhitelist", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new([]cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.MailSetWhitelist(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.MailSetWhitelist(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".MailStatus", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".MailStatus", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.MailStatus)
-		return rpcReply, rpcRcvr.MailStatus(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.MailStatus)
+			return rpcReply, rpcRcvr.MailStatus(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".MuxWeights", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".MuxWeights", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.MuxWeightsInput)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(router.MuxWeightsView)
-		return rpcReply, rpcRcvr.MuxWeights(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(router.MuxWeightsView)
+			return rpcReply, rpcRcvr.MuxWeights(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".NetworkView", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".NetworkView", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.NetworkViewResponse)
-		return rpcReply, rpcRcvr.NetworkView(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.NetworkViewResponse)
+			return rpcReply, rpcRcvr.NetworkView(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".NewPairCode", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".NewPairCode", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(time.Duration)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.PairCode)
-		return rpcReply, rpcRcvr.NewPairCode(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.PairCode)
+			return rpcReply, rpcRcvr.NewPairCode(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Overview", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Overview", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.Overview)
-		return rpcReply, rpcRcvr.Overview(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.Overview)
+			return rpcReply, rpcRcvr.Overview(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".PairAdd", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".PairAdd", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.PairAddRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.PairAdd(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.PairAdd(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".PairDelete", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".PairDelete", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.PairDeleteRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.PairDelete(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.PairDelete(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".PairList", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".PairList", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.PairInfo)
-		return rpcReply, rpcRcvr.PairList(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.PairInfo)
+			return rpcReply, rpcRcvr.PairList(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".PairMarkActive", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".PairMarkActive", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.PairMarkActive(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.PairMarkActive(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".PairPoll", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".PairPoll", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.PairPollRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.PairMessage)
-		return rpcReply, rpcRcvr.PairPoll(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.PairMessage)
+			return rpcReply, rpcRcvr.PairPoll(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".PairRemove", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".PairRemove", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.PairRemove(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.PairRemove(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".PairSend", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".PairSend", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.PairSendRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.PairSend(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.PairSend(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".PendingHypervisors", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".PendingHypervisors", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.PendingHypervisor)
-		return rpcReply, rpcRcvr.PendingHypervisors(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.PendingHypervisor)
+			return rpcReply, rpcRcvr.PendingHypervisors(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Ping", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Ping", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg visorapi.PingConfig
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]time.Duration)
-		return rpcReply, rpcRcvr.Ping(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]time.Duration)
+			return rpcReply, rpcRcvr.Ping(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".PingOnce", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".PingOnce", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg visorapi.PingConfig
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(time.Duration)
-		return rpcReply, rpcRcvr.PingOnce(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(time.Duration)
+			return rpcReply, rpcRcvr.PingOnce(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Ports", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Ports", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(map[string]visorapi.PortDetail)
-		return rpcReply, rpcRcvr.Ports(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(map[string]visorapi.PortDetail)
+			return rpcReply, rpcRcvr.Ports(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ProfileFetch", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ProfileFetch", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.Profile)
-		return rpcReply, rpcRcvr.ProfileFetch(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.Profile)
+			return rpcReply, rpcRcvr.ProfileFetch(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ProfileGet", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ProfileGet", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.Profile)
-		return rpcReply, rpcRcvr.ProfileGet(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.Profile)
+			return rpcReply, rpcRcvr.ProfileGet(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ProfileSet", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ProfileSet", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.ProfileSetArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.Profile)
-		return rpcReply, rpcRcvr.ProfileSet(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.Profile)
+			return rpcReply, rpcRcvr.ProfileSet(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ProxyServers", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ProxyServers", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.FilterServersIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]servicedisc.Service)
-		return rpcReply, rpcRcvr.ProxyServers(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]servicedisc.Service)
+			return rpcReply, rpcRcvr.ProxyServers(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".PublicAutoconnectStatus", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".PublicAutoconnectStatus", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.PublicAutoconnectStatus(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.PublicAutoconnectStatus(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RecentAppLog", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RecentAppLog", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.RecentAppLogRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]string)
-		return rpcReply, rpcRcvr.RecentAppLog(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]string)
+			return rpcReply, rpcRcvr.RecentAppLog(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RegisterApp", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RegisterApp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(appcommon.ProcConfig)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(appcommon.ProcKey)
-		return rpcReply, rpcRcvr.RegisterApp(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(appcommon.ProcKey)
+			return rpcReply, rpcRcvr.RegisterApp(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RegisterCXOFeed", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RegisterCXOFeed", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.RegisterCXOFeedRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.RegisterCXOFeed(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.RegisterCXOFeed(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RegisterForwardedPort", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RegisterForwardedPort", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.ForwardedPort)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.RegisterForwardedPort(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.RegisterForwardedPort(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RegisterTCPPort", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RegisterTCPPort", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(int)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.RegisterTCPPort(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.RegisterTCPPort(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RehomeTunnelLeg", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RehomeTunnelLeg", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.MuxRehomeInput)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.RehomeTunnelLeg(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.RehomeTunnelLeg(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ReinitiateModule", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ReinitiateModule", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg string
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.ReinitiateModule(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.ReinitiateModule(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Reload", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Reload", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Reload(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Reload(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RemoteVisors", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RemoteVisors", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]string)
-		return rpcReply, rpcRcvr.RemoteVisors(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]string)
+			return rpcReply, rpcRcvr.RemoteVisors(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RemoveAllHypervisors", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RemoveAllHypervisors", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(int)
-		return rpcReply, rpcRcvr.RemoveAllHypervisors(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(int)
+			return rpcReply, rpcRcvr.RemoveAllHypervisors(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RemoveAllTransports", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RemoveAllTransports", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.RemoveAllTransports(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.RemoveAllTransports(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RemoveHypervisor", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RemoveHypervisor", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.RemoveHypervisor(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.RemoveHypervisor(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RemoveMuxRoute", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RemoveMuxRoute", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.MuxRouteInput)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.RemoveMuxRoute(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.RemoveMuxRoute(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RemoveRoutingRule", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RemoveRoutingRule", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(routing.RouteID)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.RemoveRoutingRule(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.RemoveRoutingRule(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RemoveTransport", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RemoveTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(uuid.UUID)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.RemoveTransport(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.RemoveTransport(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ResetRouteSetupStats", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ResetRouteSetupStats", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.ResetRouteSetupStats(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.ResetRouteSetupStats(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RestartApp", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RestartApp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.RestartApp(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.RestartApp(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Resume", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Resume", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Resume(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Resume(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RouteGroupMuxInfo", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RouteGroupMuxInfo", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.MuxRouteGroupInfo)
-		return rpcReply, rpcRcvr.RouteGroupMuxInfo(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.MuxRouteGroupInfo)
+			return rpcReply, rpcRcvr.RouteGroupMuxInfo(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RouteGroupMuxNegotiated", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RouteGroupMuxNegotiated", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]router.MuxNegotiated)
-		return rpcReply, rpcRcvr.RouteGroupMuxNegotiated(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]router.MuxNegotiated)
+			return rpcReply, rpcRcvr.RouteGroupMuxNegotiated(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RouteGroups", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RouteGroups", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.RouteGroupInfo)
-		return rpcReply, rpcRcvr.RouteGroups(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.RouteGroupInfo)
+			return rpcReply, rpcRcvr.RouteGroups(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RouteSetupStats", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RouteSetupStats", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(setupmetrics.StatsSnapshot)
-		return rpcReply, rpcRcvr.RouteSetupStats(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(setupmetrics.StatsSnapshot)
+			return rpcReply, rpcRcvr.RouteSetupStats(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RoutingPolicies", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RoutingPolicies", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.RoutingPoliciesSummary)
-		return rpcReply, rpcRcvr.RoutingPolicies(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.RoutingPoliciesSummary)
+			return rpcReply, rpcRcvr.RoutingPolicies(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RoutingRule", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RoutingRule", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(routing.RouteID)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(routing.Rule)
-		return rpcReply, rpcRcvr.RoutingRule(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(routing.Rule)
+			return rpcReply, rpcRcvr.RoutingRule(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RoutingRules", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RoutingRules", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]routing.Rule)
-		return rpcReply, rpcRcvr.RoutingRules(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]routing.Rule)
+			return rpcReply, rpcRcvr.RoutingRules(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RoutingStats", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RoutingStats", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(routing.RoutingTableStats)
-		return rpcReply, rpcRcvr.RoutingStats(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(routing.RoutingTableStats)
+			return rpcReply, rpcRcvr.RoutingStats(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RuntimeLogs", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RuntimeLogs", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.RuntimeLogs(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.RuntimeLogs(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RuntimeLogsSince", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RuntimeLogsSince", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(int64)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.RuntimeLogsDelta)
-		return rpcReply, rpcRcvr.RuntimeLogsSince(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.RuntimeLogsDelta)
+			return rpcReply, rpcRcvr.RuntimeLogsSince(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RuntimeStats", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RuntimeStats", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.RuntimeStatsInfo)
-		return rpcReply, rpcRcvr.RuntimeStats(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.RuntimeStatsInfo)
+			return rpcReply, rpcRcvr.RuntimeStats(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SaveRoutingRule", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SaveRoutingRule", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(routing.Rule)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SaveRoutingRule(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SaveRoutingRule(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".ServiceHealth", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".ServiceHealth", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.ServiceHealthEntry)
-		return rpcReply, rpcRcvr.ServiceHealth(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.ServiceHealthEntry)
+			return rpcReply, rpcRcvr.ServiceHealth(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppAddress", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppAddress", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppStringIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAppAddress(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAppAddress(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppArgs", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppArgs", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppArgsIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAppArgs(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAppArgs(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppDetailedStatus", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppDetailedStatus", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppStatusIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAppDetailedStatus(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAppDetailedStatus(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppEnv", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppEnv", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppEnvIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAppEnv(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAppEnv(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppEnvBatch", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppEnvBatch", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppEnvBatchIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAppEnvBatch(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAppEnvBatch(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppEnvFull", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppEnvFull", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppEnvFullIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAppEnvFull(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAppEnvFull(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppError", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppError", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppErrorIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAppError(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAppError(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppKillswitch", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppKillswitch", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppBoolIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAppKillswitch(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAppKillswitch(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppLauncherMode", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppLauncherMode", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppLauncherModeIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAppLauncherMode(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAppLauncherMode(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppNetworkInterface", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppNetworkInterface", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppNetworkInterfaceIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAppNetworkInterface(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAppNetworkInterface(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppPK", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppPK", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppPKIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAppPK(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAppPK(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppRoutingPolicy", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppRoutingPolicy", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppRoutingPolicyIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAppRoutingPolicy(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAppRoutingPolicy(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppSecure", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppSecure", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppBoolIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAppSecure(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAppSecure(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppSettings", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppSettings", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppSettingsIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.AppSettings)
-		return rpcReply, rpcRcvr.SetAppSettings(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.AppSettings)
+			return rpcReply, rpcRcvr.SetAppSettings(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAppWhitelist", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAppWhitelist", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAppWhitelistIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAppWhitelist(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAppWhitelist(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetAutoStart", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetAutoStart", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetAutoStartIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetAutoStart(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetAutoStart(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetCalculateRoutes", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetCalculateRoutes", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(bool)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetCalculateRoutes(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetCalculateRoutes(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetConfigFields", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetConfigFields", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(map[string]json.RawMessage)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.ConfigFieldChange)
-		return rpcReply, rpcRcvr.SetConfigFields(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.ConfigFieldChange)
+			return rpcReply, rpcRcvr.SetConfigFields(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetDmsgSessionsCount", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetDmsgSessionsCount", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(int)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.DmsgConnectAllResult)
-		return rpcReply, rpcRcvr.SetDmsgSessionsCount(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgConnectAllResult)
+			return rpcReply, rpcRcvr.SetDmsgSessionsCount(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetEmbeddedProxyBind", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetEmbeddedProxyBind", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetEmbeddedProxyBindRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetEmbeddedProxyBind(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetEmbeddedProxyBind(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetEmbeddedProxyEnabled", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetEmbeddedProxyEnabled", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetEmbeddedProxyEnabledRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetEmbeddedProxyEnabled(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetEmbeddedProxyEnabled(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetEmbeddedProxyUpstream", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetEmbeddedProxyUpstream", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetEmbeddedProxyUpstreamRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetEmbeddedProxyUpstream(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetEmbeddedProxyUpstream(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetExistingTPOnly", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetExistingTPOnly", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(bool)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetExistingTPOnly(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetExistingTPOnly(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetForceLocalRoutes", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetForceLocalRoutes", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(bool)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetForceLocalRoutes(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetForceLocalRoutes(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetHypervisorAuth", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetHypervisorAuth", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetHypervisorAuthIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetHypervisorAuth(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetHypervisorAuth(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetHypervisorPassword", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetHypervisorPassword", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HypervisorPasswordChangeIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetHypervisorPassword(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetHypervisorPassword(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetHypervisorPasswordForce", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetHypervisorPasswordForce", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HypervisorPasswordChangeIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetHypervisorPasswordForce(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetHypervisorPasswordForce(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetIsPublic", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetIsPublic", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(bool)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetIsPublic(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetIsPublic(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetLANDmsgServer", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetLANDmsgServer", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg visorapi.LANDmsgServerInfo
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.SetLANDmsgServer(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.SetLANDmsgServer(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetMinHops", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetMinHops", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(uint16)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetMinHops(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetMinHops(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetMuxCap", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetMuxCap", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(int)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetMuxCap(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetMuxCap(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetMuxDirection", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetMuxDirection", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.MuxDirectionInput)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetMuxDirection(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetMuxDirection(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetMuxMode", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetMuxMode", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetMuxMode(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetMuxMode(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetMuxStandby", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetMuxStandby", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(int)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetMuxStandby(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetMuxStandby(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetMuxWeights", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetMuxWeights", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.MuxWeightsInput)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(router.MuxWeightsView)
-		return rpcReply, rpcRcvr.SetMuxWeights(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(router.MuxWeightsView)
+			return rpcReply, rpcRcvr.SetMuxWeights(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetMuxWidth", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetMuxWidth", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(int)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetMuxWidth(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetMuxWidth(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetPersistentTransports", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetPersistentTransports", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new([]transport.PersistentTransports)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetPersistentTransports(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetPersistentTransports(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetPublicAutoconnect", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetPublicAutoconnect", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(bool)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetPublicAutoconnect(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetPublicAutoconnect(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetRewardAddress", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetRewardAddress", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg string
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.SetRewardAddress(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.SetRewardAddress(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetRouterDialSettings", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetRouterDialSettings", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.RouterDialSettings)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetRouterDialSettings(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetRouterDialSettings(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetRouterSettings", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetRouterSettings", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.RouterSettings)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetRouterSettings(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetRouterSettings(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetRuntimeConfig", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetRuntimeConfig", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new([]byte)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetRuntimeConfig(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetRuntimeConfig(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetSTCPAddr", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetSTCPAddr", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SetSTCPAddrIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetSTCPAddr(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetSTCPAddr(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetSkychatPassword", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetSkychatPassword", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SkychatPasswordChangeIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.SetSkychatPassword(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.SetSkychatPassword(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SetSkyenv", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SetSkyenv", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SkyenvEdits)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.SkyenvState)
-		return rpcReply, rpcRcvr.SetSkyenv(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.SkyenvState)
+			return rpcReply, rpcRcvr.SetSkyenv(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Shutdown", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Shutdown", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Shutdown(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Shutdown(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SkychatHTTP", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SkychatHTTP", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SkychatHTTPIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.SkychatHTTPOut)
-		return rpcReply, rpcRcvr.SkychatHTTP(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.SkychatHTTPOut)
+			return rpcReply, rpcRcvr.SkychatHTTP(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SkychatLocalAddr", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SkychatLocalAddr", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.SkychatLocalAddr(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.SkychatLocalAddr(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SkychatPasswordIsSet", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SkychatPasswordIsSet", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.SkychatPasswordIsSet(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.SkychatPasswordIsSet(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Skyenv", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Skyenv", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.SkyenvState)
-		return rpcReply, rpcRcvr.Skyenv(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.SkyenvState)
+			return rpcReply, rpcRcvr.Skyenv(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SkynetHTTP", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SkynetHTTP", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SkynetHTTPRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.SkynetHTTPResponse)
-		return rpcReply, rpcRcvr.SkynetHTTP(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.SkynetHTTPResponse)
+			return rpcReply, rpcRcvr.SkynetHTTP(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".SkynetProbe", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".SkynetProbe", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.DmsgProbeRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.SkynetProbe(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.SkynetProbe(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StartApp", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StartApp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.StartAppIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.StartApp(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.StartApp(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StartPublicAutoconnect", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StartPublicAutoconnect", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.StartPublicAutoconnect(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.StartPublicAutoconnect(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StartSkysocksClient", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StartSkysocksClient", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg string
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.StartSkysocksClient(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.StartSkysocksClient(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StartUIServer", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StartUIServer", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.StartUIServer(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.StartUIServer(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StartVPNClient", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StartVPNClient", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.StartVPNClientIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.StartVPNClient(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.StartVPNClient(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StateSnapshot", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StateSnapshot", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.StateSnapshot)
-		return rpcReply, rpcRcvr.StateSnapshot(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.StateSnapshot)
+			return rpcReply, rpcRcvr.StateSnapshot(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StateSnapshotProjected", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StateSnapshotProjected", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.StateSnapshotReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.StateSnapshot)
-		return rpcReply, rpcRcvr.StateSnapshotProjected(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.StateSnapshot)
+			return rpcReply, rpcRcvr.StateSnapshotProjected(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StopAllPings", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StopAllPings", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.StopAllPingsOut)
-		return rpcReply, rpcRcvr.StopAllPings(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.StopAllPingsOut)
+			return rpcReply, rpcRcvr.StopAllPings(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StopApp", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StopApp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.StopApp(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.StopApp(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StopDmsgPing", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StopDmsgPing", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.StopDmsgPing(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.StopDmsgPing(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StopPing", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StopPing", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.StopPing(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.StopPing(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StopPublicAutoconnect", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StopPublicAutoconnect", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.StopPublicAutoconnect(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.StopPublicAutoconnect(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StopSkysocksClients", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StopSkysocksClients", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.StopSkysocksClients(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.StopSkysocksClients(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StopUDPForward", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StopUDPForward", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(int)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.StopUDPForward(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.StopUDPForward(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StopUIServer", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StopUIServer", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.StopUIServer(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.StopUIServer(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".StopVPNClient", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".StopVPNClient", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.StopVPNClient(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.StopVPNClient(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Summary", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Summary", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.Summary)
-		return rpcReply, rpcRcvr.Summary(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.Summary)
+			return rpcReply, rpcRcvr.Summary(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Suspend", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Suspend", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.Suspend(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.Suspend(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".TPSAddTransport", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".TPSAddTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.TPSAddTransportIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.TPSTransportResponse)
-		return rpcReply, rpcRcvr.TPSAddTransport(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.TPSTransportResponse)
+			return rpcReply, rpcRcvr.TPSAddTransport(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".TPSExternalAddTransport", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".TPSExternalAddTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.TPSExternalAddTransportIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.TPSTransportResponse)
-		return rpcReply, rpcRcvr.TPSExternalAddTransport(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.TPSTransportResponse)
+			return rpcReply, rpcRcvr.TPSExternalAddTransport(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".TPSExternalGetTransports", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".TPSExternalGetTransports", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.TPSExternalGetTransportsIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.TPSTransportResponse)
-		return rpcReply, rpcRcvr.TPSExternalGetTransports(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.TPSTransportResponse)
+			return rpcReply, rpcRcvr.TPSExternalGetTransports(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".TPSExternalHealthCheck", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".TPSExternalHealthCheck", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.TPSExternalHealthCheck(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.TPSExternalHealthCheck(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".TPSGetTransports", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".TPSGetTransports", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.TPSTransportResponse)
-		return rpcReply, rpcRcvr.TPSGetTransports(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.TPSTransportResponse)
+			return rpcReply, rpcRcvr.TPSGetTransports(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".TPSRemoveTransport", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".TPSRemoveTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.TPSRemoveTransportIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.TPSRemoveTransport(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.TPSRemoveTransport(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".TPSStatus", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".TPSStatus", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.TPSStatus)
-		return rpcReply, rpcRcvr.TPSStatus(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.TPSStatus)
+			return rpcReply, rpcRcvr.TPSStatus(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".TestProxy", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".TestProxy", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg visorapi.ProxyTestConfig
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.ProxyTestResult)
-		return rpcReply, rpcRcvr.TestProxy(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.ProxyTestResult)
+			return rpcReply, rpcRcvr.TestProxy(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".TestVisor", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".TestVisor", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg visorapi.PingConfig
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.TestResult)
-		return rpcReply, rpcRcvr.TestVisor(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.TestResult)
+			return rpcReply, rpcRcvr.TestVisor(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Transport", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Transport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(uuid.UUID)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.TransportSummary)
-		return rpcReply, rpcRcvr.Transport(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.TransportSummary)
+			return rpcReply, rpcRcvr.Transport(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".TransportRPCCall", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".TransportRPCCall", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.TransportRPCCallRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(json.RawMessage)
-		return rpcReply, rpcRcvr.TransportRPCCall(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(json.RawMessage)
+			return rpcReply, rpcRcvr.TransportRPCCall(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".TransportTypes", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".TransportTypes", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]string)
-		return rpcReply, rpcRcvr.TransportTypes(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]string)
+			return rpcReply, rpcRcvr.TransportTypes(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Transports", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Transports", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.TransportsIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]*visorapi.TransportSummary)
-		return rpcReply, rpcRcvr.Transports(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]*visorapi.TransportSummary)
+			return rpcReply, rpcRcvr.Transports(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".UIServerStatus", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".UIServerStatus", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.UIServerStatus)
-		return rpcReply, rpcRcvr.UIServerStatus(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.UIServerStatus)
+			return rpcReply, rpcRcvr.UIServerStatus(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".UnregisterCXOFeed", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".UnregisterCXOFeed", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.UnregisterCXOFeed(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.UnregisterCXOFeed(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".UpdateForwardedPort", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".UpdateForwardedPort", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.ForwardedPort)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.UpdateForwardedPort(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.UpdateForwardedPort(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".Uptime", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".Uptime", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(float64)
-		return rpcReply, rpcRcvr.Uptime(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(float64)
+			return rpcReply, rpcRcvr.Uptime(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".UptimeHistory", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".UptimeHistory", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.UptimeHistoryArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.UptimeHistoryResponse)
-		return rpcReply, rpcRcvr.UptimeHistory(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.UptimeHistoryResponse)
+			return rpcReply, rpcRcvr.UptimeHistory(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VPNServers", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VPNServers", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.FilterServersIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]servicedisc.Service)
-		return rpcReply, rpcRcvr.VPNServers(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]servicedisc.Service)
+			return rpcReply, rpcRcvr.VPNServers(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VisorCat", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VisorCat", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.VisorCatRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.VisorCatResponse)
-		return rpcReply, rpcRcvr.VisorCat(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.VisorCatResponse)
+			return rpcReply, rpcRcvr.VisorCat(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VisorSCP", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VisorSCP", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.VisorSCPRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(bool)
-		return rpcReply, rpcRcvr.VisorSCP(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.VisorSCP(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VoiceActive", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VoiceActive", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]string)
-		return rpcReply, rpcRcvr.VoiceActive(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]string)
+			return rpcReply, rpcRcvr.VoiceActive(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VoiceAnswer", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VoiceAnswer", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.VoiceAnswer(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.VoiceAnswer(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VoiceCall", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VoiceCall", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.VoiceCall(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.VoiceCall(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VoiceCallAudio", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VoiceCallAudio", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.VoiceAudioSnapshot)
-		return rpcReply, rpcRcvr.VoiceCallAudio(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.VoiceAudioSnapshot)
+			return rpcReply, rpcRcvr.VoiceCallAudio(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VoiceDecline", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VoiceDecline", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.VoiceDecline(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.VoiceDecline(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VoiceDial", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VoiceDial", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(string)
-		return rpcReply, rpcRcvr.VoiceDial(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.VoiceDial(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VoiceDialRingback", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VoiceDialRingback", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.VoiceRingback)
-		return rpcReply, rpcRcvr.VoiceDialRingback(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.VoiceRingback)
+			return rpcReply, rpcRcvr.VoiceDialRingback(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VoiceDialing", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VoiceDialing", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]visorapi.VoiceDialingInfo)
-		return rpcReply, rpcRcvr.VoiceDialing(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]visorapi.VoiceDialingInfo)
+			return rpcReply, rpcRcvr.VoiceDialing(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VoiceHangup", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VoiceHangup", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.VoiceHangup(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.VoiceHangup(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VoiceIncoming", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VoiceIncoming", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]string)
-		return rpcReply, rpcRcvr.VoiceIncoming(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]string)
+			return rpcReply, rpcRcvr.VoiceIncoming(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VoiceMute", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VoiceMute", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.VoiceMuteReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.VoiceMute(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.VoiceMute(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VoiceRingback", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VoiceRingback", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(visorapi.VoiceRingback)
-		return rpcReply, rpcRcvr.VoiceRingback(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(visorapi.VoiceRingback)
+			return rpcReply, rpcRcvr.VoiceRingback(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".VoiceSetRingback", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".VoiceSetRingback", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.VoiceRingback)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.VoiceSetRingback(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.VoiceSetRingback(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }
 
 // registerTPSRPCGateway registers each net/rpc method of *TPSRPCGateway as a reflection-free handler.
 func registerTPSRPCGateway(rpcSrv *rpc.Server, rpcName string, rpcRcvr *TPSRPCGateway) error {
-	rpcSrv.HandleFunc(rpcName+".AddTransport", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".AddTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(TPSSetupRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(TPSSetupResponse)
-		return rpcReply, rpcRcvr.AddTransport(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(TPSSetupResponse)
+			return rpcReply, rpcRcvr.AddTransport(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetTransports", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetTransports", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(TPSGetTransportsRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(TPSGetTransportsResponse)
-		return rpcReply, rpcRcvr.GetTransports(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(TPSGetTransportsResponse)
+			return rpcReply, rpcRcvr.GetTransports(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".HealthCheck", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".HealthCheck", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(TPSHealthCheckArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(TPSHealthCheckReply)
-		return rpcReply, rpcRcvr.HealthCheck(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(TPSHealthCheckReply)
+			return rpcReply, rpcRcvr.HealthCheck(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RemoveTransport", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RemoveTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(TPSRemoveTransportRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(struct{})
-		return rpcReply, rpcRcvr.RemoveTransport(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.RemoveTransport(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }

@@ -12,29 +12,35 @@ import (
 
 // registerTransportGateway registers each net/rpc method of *TransportGateway as a reflection-free handler.
 func registerTransportGateway(rpcSrv *rpc.Server, rpcName string, rpcRcvr *TransportGateway) error {
-	rpcSrv.HandleFunc(rpcName+".AddTransport", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".AddTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg TransportRequest
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(TransportResponse)
-		return rpcReply, rpcRcvr.AddTransport(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(TransportResponse)
+			return rpcReply, rpcRcvr.AddTransport(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".GetTransports", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".GetTransports", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg struct{}
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new([]TransportResponse)
-		return rpcReply, rpcRcvr.GetTransports(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new([]TransportResponse)
+			return rpcReply, rpcRcvr.GetTransports(rpcArg, rpcReply)
+		}, nil
 	})
-	rpcSrv.HandleFunc(rpcName+".RemoveTransport", func(rpcDec *gob.Decoder) (interface{}, error) {
+	rpcSrv.HandleCall(rpcName+".RemoveTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg UUIDRequest
 		if err := rpcDec.Decode(&rpcArg); err != nil {
 			return nil, err
 		}
-		rpcReply := new(BoolResponse)
-		return rpcReply, rpcRcvr.RemoveTransport(rpcArg, rpcReply)
+		return func() (any, error) {
+			rpcReply := new(BoolResponse)
+			return rpcReply, rpcRcvr.RemoveTransport(rpcArg, rpcReply)
+		}, nil
 	})
 	return nil
 }
