@@ -36,6 +36,9 @@ func RouteAddViaGateway(string, string) error { return errUnsupported }
 // RouteDelViaGateway is unsupported off Linux.
 func RouteDelViaGateway(string, string) error { return errUnsupported }
 
+// RouteReplaceDev is unsupported off Linux.
+func RouteReplaceDev(string, string) error { return errUnsupported }
+
 // ReplaceDefaultRouteDev is unsupported off Linux.
 func ReplaceDefaultRouteDev(string, int) error { return errUnsupported }
 
