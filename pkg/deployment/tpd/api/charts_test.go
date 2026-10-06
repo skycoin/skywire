@@ -100,3 +100,28 @@ func TestVisorBWTable(t *testing.T) {
 	require.Equal(t, []string{"bb", "1 GiB", "stcpr 1 GiB, sudph 1 MiB"}, tb.Rows[0])
 	require.Equal(t, "aa", tb.Rows[1][0])
 }
+
+func TestGraphPage(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	nonces, err := httpauth.NewNonceStore(ctx, storeconfig.Config{Type: storeconfig.Memory}, "")
+	require.NoError(t, err)
+	mock := newTestStore(t)
+	api := New(nil, mock, nonces, false, tpdiscmetrics.NewEmpty(), "", "")
+	api.StartCharts(ctx, charts.NewMemoryStore(), logging.MustGetLogger("test"))
+
+	get := func() *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		api.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/graph", nil))
+		return w
+	}
+	require.Equal(t, http.StatusServiceUnavailable, get().Code, "no graph before the transport cache is warm")
+
+	a, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	require.NoError(t, mock.RegisterTransport(ctx, cipher.PubKey{}, &transport.SignedEntry{Entry: &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "stcpr"}}))
+	api.refreshTransportsCache(ctx, logging.MustGetLogger("test"))
+	w := get()
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "2 visors, 1 visor pairs, 1 transports")
+}

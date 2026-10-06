@@ -298,7 +298,8 @@ func (s *service) Run(ctx context.Context) error {
 	if cfg.ChartsAddr != "" {
 		logger.Infof("Serving the charts page on %s", cfg.ChartsAddr)
 		go func() {
-			if err := charts.Serve(runCtx, cfg.ChartsAddr, http.HandlerFunc(tpdAPI.ChartsPage)); err != nil {
+			if err := charts.Serve(runCtx, cfg.ChartsAddr, http.HandlerFunc(tpdAPI.ChartsPage),
+				charts.Extra{Path: "/graph", Handler: http.HandlerFunc(tpdAPI.GraphPage)}); err != nil {
 				logger.WithError(err).Error("charts listener failed")
 			}
 		}()
