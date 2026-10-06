@@ -786,11 +786,9 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		return nil
 	})
 
-	// Also serve on localhost so the skynet forwarding server can
-	// reach /health and other endpoints. When LogServer.LocalAddr
-	// is configured, use that; otherwise auto-bind on :0 (OS-
-	// assigned port) so every visor gets a localhost listener for
-	// skynet forwarding without manual config.
+	// Also serve on localhost, without a whitelist, for local tools.
+	// When LogServer.LocalAddr is configured, use that; otherwise
+	// auto-bind on :0 (OS-assigned port).
 	localAddr := ""
 	if v.conf.LogServer != nil && v.conf.LogServer.LocalAddr != "" {
 		localAddr = v.conf.LogServer.LocalAddr
@@ -819,16 +817,11 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 			boundAddr := localLis.Addr().String()
 			logger.WithField("bound_addr", boundAddr).Info("Localhost log server bound")
 
-			// Register the port for skynet forwarding so
-			// .skynet URLs can reach /health, /ping, etc.
-			if _, portStr, splitErr := net.SplitHostPort(boundAddr); splitErr == nil {
-				if port, convErr := strconv.Atoi(portStr); convErr == nil && port > 0 {
-					v.allowed.mu.Lock()
-					v.allowed.ports[port] = true
-					v.allowed.mu.Unlock()
-					logger.WithField("port", port).Info("Log server port registered for skynet forwarding")
-				}
-			}
+			// Not registered for skynet forwarding. This API has no
+			// whitelist, so forwarding its port handed /skywire.log,
+			// /node-info and /debug/pprof to any peer that found it.
+			// .skynet URLs reach the log server on port 80 through the
+			// service registry, behind the whitelist.
 
 			localSrv := &http.Server{
 				ReadTimeout:       5 * time.Second,
