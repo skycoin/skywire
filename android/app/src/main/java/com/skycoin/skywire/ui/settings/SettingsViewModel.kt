@@ -19,13 +19,16 @@ import com.skycoin.skywire.core.ConfigManager
 import com.skycoin.skywire.core.ConfigVault
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
+import com.skycoin.skywire.core.DnsServer
 import com.skycoin.skywire.core.PublicAutoconnect
 import com.skycoin.skywire.core.RemoteManagement
 import com.skycoin.skywire.core.SecretStore
+import com.skycoin.skywire.core.SkyDns
 import com.skycoin.skywire.core.SkywireCoreService
 import com.skycoin.skywire.core.SkywirePaths
 import com.skycoin.skywire.core.ThemeMode
 import com.skycoin.skywire.core.UpdateInstallReceiver
+import com.skycoin.skywire.ui.vpn.VpnArgs
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -79,6 +82,8 @@ data class SettingsUiState(
     val appLockEnabled: Boolean = AppLock.DEFAULT,
     /** Automatic transports to public visors — see [PublicAutoconnect]. */
     val publicAutoconnect: Boolean = PublicAutoconnect.DEFAULT,
+    /** The resolver for ordinary names, blank for [DnsServer.DEFAULT]. */
+    val dnsServer: String = "",
     /** The remote-management grant — empty means nothing granted. */
     val remoteManagementPk: String = "",
     /** False when the phone has no screen lock and no enrolled biometric. */
@@ -159,6 +164,11 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 .collectLatest { enabled ->
                     mutable.update { it.copy(publicAutoconnect = enabled) }
                 }
+        }
+        viewModelScope.launch {
+            prefs.string(DnsServer.PREF_KEY).collectLatest { stored ->
+                mutable.update { it.copy(dnsServer = DnsServer.sanitize(stored)) }
+            }
         }
         viewModelScope.launch {
             prefs.string(RemoteManagement.PREF_KEY).collectLatest { stored ->
@@ -543,6 +553,30 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun setPublicAutoconnect(enabled: Boolean) {
         viewModelScope.launch { prefs.putBoolean(PublicAutoconnect.PREF_KEY, enabled) }
+    }
+
+    /**
+     * Use [address] as the resolver for ordinary names, or each app's default
+     * when it is blank. A running core gets it at once: rewriting an app's
+     * argv restarts it if it runs, so SkyVPN and SkyDNS reconnect with it.
+     */
+    fun setDnsServer(address: String) = action {
+        val app = getApplication<Application>()
+        val wanted = address.trim()
+        require(wanted.isEmpty() || DnsServer.isValid(wanted)) { app.getString(R.string.settings_dns_invalid) }
+        val server = DnsServer.sanitize(wanted)
+        prefs.putString(DnsServer.PREF_KEY, server)
+        if (CoreServiceState.state.value is CoreState.Running) {
+            for (name in listOf(VpnArgs.APP, SkyDns.APP)) {
+                val current = api.app(name).args
+                val next = DnsServer.args(current, server)
+                if (next != current) api.updateApp(name, args = next.joinToString(" "))
+            }
+        }
+        report(
+            if (server.isEmpty()) app.getString(R.string.settings_dns_cleared)
+            else app.getString(R.string.settings_dns_saved, server),
+        )
     }
 
     /**

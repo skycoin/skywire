@@ -601,6 +601,14 @@
     <string name="settings_autoconnect">Conectar con nodos públicos</string>
     <string name="settings_autoconnect_hint">Mantiene transportes abiertos hacia nodos públicos para que la red pueda enrutar a través de este teléfono, y para que este teléfono pueda enrutar a través de ellos. Cuesta batería y datos móviles, y por eso está desactivado. Las rutas de más de un salto lo necesitan.</string>
     <string name="settings_autoconnect_restart">Se aplica la próxima vez que arranque el núcleo.</string>
+    <string name="settings_dns">Servidor DNS</string>
+    <string name="settings_dns_hint">SkyVPN y SkyDNS le preguntan a este servidor por cada nombre que no sea .dmsg ni .skynet, con DNS sobre TLS cuando el servidor lo ofrece, como hacen Cloudflare, Google y Quad9. Si lo dejas vacío, SkyVPN usa 1.1.1.1 (Cloudflare), porque un servidor VPN no tiene un resolvedor que compartir, y SkyDNS por sí solo usa el DNS de este teléfono.</string>
+    <string name="settings_dns_invalid">Escribe una dirección IPv4, como 9.9.9.9.</string>
+    <string name="settings_dns_save">Usar este servidor</string>
+    <string name="settings_dns_default">Usar los predeterminados</string>
+    <string name="settings_dns_saved">Servidor DNS: %1$s.</string>
+    <string name="settings_dns_placeholder">Predeterminado</string>
+    <string name="settings_dns_cleared">Se usan los servidores DNS predeterminados.</string>
 
     <string name="settings_remote">Gestión remota</string>
     <string name="settings_remote_hint">Permite que otro nodo —el tuyo, en un escritorio— gobierne este por la red: iniciar y detener apps, cambiar el enrutamiento, leer los registros. Nada es alcanzable hasta que concedas una clave, y la clave concedida tiene control total, así que debería ser una máquina tuya. En ningún sentido hay acceso a la shell ni a los archivos.</string>
