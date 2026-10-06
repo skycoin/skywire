@@ -15,6 +15,7 @@ import (
 	scw "github.com/skycoin/skywire/cmd/apps/skycoin-web/commands" // registers skycoin-web as an internal launcher app + `skywire app skycoin web`
 	xc "github.com/skycoin/skywire/cmd/apps/skydex-client/commands"
 	xm "github.com/skycoin/skywire/cmd/apps/skydex-market/commands"
+	sdns "github.com/skycoin/skywire/cmd/apps/skydns/commands"
 	snc "github.com/skycoin/skywire/cmd/apps/skynet-client/commands"
 	sn "github.com/skycoin/skywire/cmd/apps/skynet/commands"
 	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
@@ -44,6 +45,7 @@ func init() {
 		vpns.RootCmd,
 		vpnc.RootCmd,
 		vpnr.RootCmd,
+		sdns.RootCmd,
 		ssc.RootCmd,
 		ss.RootCmd,
 		sc.RootCmd,

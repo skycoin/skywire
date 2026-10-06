@@ -31,7 +31,7 @@ func init() {
 // RootCmd is the root command for skydns
 var RootCmd = &cobra.Command{
 	Use:                   "skydns",
-	Short:                 "open .dmsg and .skynet names in every app on an Android phone",
+	Short:                 "open .dmsg and .skynet names in every app on this device",
 	Long:                  calvin.AsciiFont("skydns"),
 	SilenceErrors:         true,
 	SilenceUsage:          true,

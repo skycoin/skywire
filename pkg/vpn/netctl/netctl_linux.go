@@ -190,6 +190,24 @@ func RouteDelViaGateway(dst, gateway string) error {
 	return nil
 }
 
+// RouteReplaceDev installs a route to dst out ifName with no gateway, as for a
+// point to point tun (≡ `ip route replace <dst> dev <if>`).
+func RouteReplaceDev(dst, ifName string) error {
+	ipn, err := dstNet(dst)
+	if err != nil {
+		return err
+	}
+	l, err := linkByName(ifName)
+	if err != nil {
+		return err
+	}
+	route := &netlink.Route{LinkIndex: l.Attrs().Index, Dst: ipn, Scope: netlink.SCOPE_LINK}
+	if err := netlink.RouteReplace(route); err != nil {
+		return fmt.Errorf("netctl: route replace %s dev %s: %w", dst, ifName, err)
+	}
+	return nil
+}
+
 // ReplaceDefaultRouteDev installs a default route out ifName (no gateway — a
 // point-to-point tun) in the given routing table
 // (≡ `ip route replace default dev <if> table <t>`).

@@ -2231,6 +2231,15 @@ func configureApps(log *logging.Logger) {
 				Args:      vpnRouterArgs([]string{"app", "vpn-router"}),
 			},
 			{
+				// .dmsg and .skynet names for every program on this host. Off by
+				// default, since it takes a tun and a share of the host DNS.
+				Name:      skyenv.SkyDNSName,
+				Binary:    "skywire",
+				AutoStart: false,
+				Port:      routing.Port(skyenv.SkyDNSPort),
+				Args:      []string{"app", "skydns"},
+			},
+			{
 				Name:      skyenv.SkydexMarketName,
 				Binary:    "skywire",
 				AutoStart: false,
@@ -2327,6 +2336,12 @@ func configureApps(log *logging.Logger) {
 				AutoStart: isVpnRouterEnable,
 				Args:      vpnRouterArgs(nil),
 				Port:      routing.Port(skyenv.VPNRouterPort),
+			},
+			{
+				Name:      skyenv.SkyDNSName,
+				AutoStart: false,
+				Args:      []string{},
+				Port:      routing.Port(skyenv.SkyDNSPort),
 			},
 			{
 				Name:      skyenv.SkydexMarketName,
