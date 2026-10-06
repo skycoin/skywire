@@ -655,6 +655,9 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 
 	// Set visor as health stats provider for /health endpoint
 	lsAPI.SetHealthStatsProvider(v)
+	// /debug/loglevel: whitelisted keys can turn on debug logging for a
+	// while. Only on this whitelisted surface, never on the localhost one.
+	lsAPI.SetLogLevelController(v)
 	// Self-identify on /health and the landing page: PK + dmsg listen
 	// address (the log server's own dmsg port, where this surface is served).
 	dmsgAddr := fmt.Sprintf("%s:%d", v.conf.PK.Hex(), visorconfig.DmsgHTTPPort)
