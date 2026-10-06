@@ -40,30 +40,6 @@ final class FlowChecks: XCTestCase {
         setLogLevel("info", app)
     }
 
-    /// Settings > Logs & diagnostics > Core log level, confirmed, and back on
-    /// Home until the restarted core is connected again.
-    private func setLogLevel(_ level: String, _ app: XCUIApplication) {
-        openTab(.settings, in: app)
-        let diagnostics = app.buttons["diagnostics-link"]
-        scroll(to: diagnostics, in: app)
-        diagnostics.tap()
-        let chip = app.buttons["log-level-\(level)"]
-        scroll(to: chip, in: app)
-        chip.tap()
-        // A change asks before it restarts the core (FlowChecks runs in
-        // English). No question means the level was already this one (an
-        // earlier run): nothing restarts.
-        let confirm = app.buttons["Restart core"].firstMatch
-        let changed = confirm.waitForExistence(timeout: 5)
-        if changed { confirm.tap() }
-        goBack(app)
-        openTab(.home, in: app)
-        if changed {
-            wait(for: state(app), anyOf: ["stopping", "stopped", "starting", "running"], timeout: 30)
-        }
-        wait(for: state(app), anyOf: ["connected"], timeout: 180)
-    }
-
     /// A language change rebuilds every screen. Settings comes back where it was, as Android's
     /// does when its activity is recreated, not at the top (the chips sit far below it). Ends on
     /// the language it found, so the tours after it are not drawn in a leftover choice.

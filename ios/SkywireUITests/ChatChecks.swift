@@ -158,7 +158,9 @@ final class ChatChecks: XCTestCase {
     /// A conversation with a second visor over the real network, both ways,
     /// and a notification from it tapped into the chat (items 3.3-3.5). The
     /// peer is a desktop core on the Mac (playbook §5, peers) whose skychat
-    /// answers without a password on loopback; the runner is told about it
+    /// answers without a password on loopback and keeps its history
+    /// (`--persist`: the test reads it to see what arrived, and without it
+    /// /history answers "persistence not enabled"); the runner is told about it
     /// through its environment, so this is skipped anywhere else (CI):
     ///
     ///   TEST_RUNNER_SKYWIRE_PEER_PK=<pk> \
