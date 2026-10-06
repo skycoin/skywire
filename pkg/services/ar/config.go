@@ -26,6 +26,9 @@ type Config struct {
 	// Dmsg is the dmsg-related config block — same shape across
 	// every deployment service that uses it.
 	Dmsg cmdutil.DmsgConfig `json:"dmsg,omitempty"`
+
+	// ChartsAddr serves only the charts page over plain HTTP. Empty disables it.
+	ChartsAddr string `json:"charts_addr,omitempty"`
 }
 
 // LoadFile reads and strict-parses a Config from path.
