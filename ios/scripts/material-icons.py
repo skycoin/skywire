@@ -30,7 +30,7 @@ Outlined.LockOpen Outlined.MoreVert Outlined.OpenInNew Outlined.QrCodeScanner
 Outlined.Schedule Outlined.ScreenshotMonitor Outlined.Search Outlined.Settings
 Outlined.StarBorder Outlined.Visibility
 Rounded.AccountBalanceWallet Rounded.AltRoute Rounded.ArrowBack
-Rounded.CandlestickChart Rounded.Chat Rounded.ChevronRight Rounded.Forum
+Rounded.CandlestickChart Rounded.Chat Rounded.ChevronRight Rounded.Dns Rounded.Forum
 Rounded.HelpOutline Rounded.Home Rounded.Hub Rounded.Route Rounded.Settings
 Rounded.Videocam Rounded.VpnLock
 """.split()

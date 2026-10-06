@@ -93,6 +93,29 @@
         }
       }
     },
+    "app_skydns" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyDNS"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyDNS"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyDNS"
+          }
+        }
+      }
+    },
     "app_skymeet" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3799,6 +3822,52 @@
         }
       }
     },
+    "hub_skydns_off" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ".dmsg and .skynet names in every app"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nombres .dmsg y .skynet en cada app"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在所有应用中打开 .dmsg 和 .skynet 域名"
+          }
+        }
+      }
+    },
+    "hub_skydns_toggle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyDNS on/off"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activar o desactivar SkyDNS"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyDNS 开关"
+          }
+        }
+      }
+    },
     "hub_socks_sub" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4876,6 +4945,190 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "查看各个日志来源、一次性导出全部日志，并设置核心的记录量。"
+          }
+        }
+      }
+    },
+    "settings_dns" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DNS server"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Servidor DNS"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DNS 服务器"
+          }
+        }
+      }
+    },
+    "settings_dns_cleared" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Using the default DNS servers."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se usan los servidores DNS predeterminados."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已恢复默认 DNS 服务器。"
+          }
+        }
+      }
+    },
+    "settings_dns_default" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the defaults"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar los predeterminados"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复默认"
+          }
+        }
+      }
+    },
+    "settings_dns_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyVPN and SkyDNS ask this server for every name that is not .dmsg or .skynet, over DNS-over-TLS when the server offers it, as Cloudflare, Google and Quad9 do. Left empty, SkyVPN uses 1.1.1.1 (Cloudflare), because a VPN server has no resolver to share, and SkyDNS on its own uses this phone's DNS."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyVPN y SkyDNS le preguntan a este servidor por cada nombre que no sea .dmsg ni .skynet, con DNS sobre TLS cuando el servidor lo ofrece, como hacen Cloudflare, Google y Quad9. Si lo dejas vacío, SkyVPN usa 1.1.1.1 (Cloudflare), porque un servidor VPN no tiene un resolvedor que compartir, y SkyDNS por sí solo usa el DNS de este teléfono."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyVPN 和 SkyDNS 会向此服务器查询所有不以 .dmsg 或 .skynet 结尾的域名；服务器支持时使用 DNS over TLS，Cloudflare、Google 和 Quad9 都支持。留空时，SkyVPN 使用 1.1.1.1（Cloudflare），因为 VPN 服务器没有可共享的解析服务；单独运行的 SkyDNS 则使用本机的 DNS。"
+          }
+        }
+      }
+    },
+    "settings_dns_invalid" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter an IPv4 address, such as 9.9.9.9."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribe una dirección IPv4, como 9.9.9.9."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入 IPv4 地址，例如 9.9.9.9。"
+          }
+        }
+      }
+    },
+    "settings_dns_placeholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Predeterminado"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认"
+          }
+        }
+      }
+    },
+    "settings_dns_save" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use this server"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar este servidor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用此服务器"
+          }
+        }
+      }
+    },
+    "settings_dns_saved" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DNS server: %1$@."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Servidor DNS: %1$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DNS 服务器：%1$@。"
           }
         }
       }
@@ -6394,6 +6647,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "更新"
+          }
+        }
+      }
+    },
+    "skydns_ios_pending" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyDNS arrives with the build of Skywire that runs on an iPhone. Until then it stays off."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyDNS llega con la versión de Skywire que funciona en un iPhone. Hasta entonces, sigue apagado."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyDNS 将随可在 iPhone 上运行的 Skywire 版本一起推出。在此之前，它保持关闭。"
           }
         }
       }
@@ -7981,6 +8257,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "服务发现未返回任何 VPN 服务器。"
+          }
+        }
+      }
+    },
+    "vpn_skydns_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens .dmsg and .skynet names in every app while SkyVPN is on. Address a site by its key's DNS label, since a hex key is too long for DNS."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre nombres .dmsg y .skynet en todas las apps mientras SkyVPN está activado. Escribe la dirección de un sitio con la etiqueta DNS de su clave: una clave en hexadecimal es demasiado larga para DNS."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyVPN 开启时，所有应用都能打开 .dmsg 和 .skynet 域名。请用公钥的 DNS 标签作为站点地址，十六进制公钥对 DNS 来说太长。"
           }
         }
       }

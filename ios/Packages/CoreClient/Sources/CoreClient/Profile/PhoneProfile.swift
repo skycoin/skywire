@@ -18,9 +18,10 @@ import Foundation
 ///  - absolute `local_path`, `transport.log_store.location` and
 ///    `hypervisor.db_path`, so nothing depends on the working directory;
 ///  - `launcher.bin_path` inside the container, and the per-app flags the
-///    phone owns (`SocksProfile`, `SkydexProfile`, `SkychatProfile`), with
-///    skychat autostarted: a chat app that only runs while its screen is open
-///    receives nothing;
+///    phone owns (`SocksProfile`, `SkydexProfile`, `SkychatProfile`,
+///    `VpnProfile`), with skychat autostarted: a chat app that only runs while
+///    its screen is open receives nothing. Android also adds a `skydns` app,
+///    which the iOS core cannot run (see `SkyDNS`);
 ///  - `dmsgscp.disabled`: on when absent, it would serve an scp root;
 ///  - `hypervisor.tp_viz.enable = false`;
 ///  - `routing.transport_preference` from the user's primary, and
@@ -98,7 +99,7 @@ public enum PhoneProfile {
                 var launcher = try object(value, key)
                 launcher["bin_path"] = paths.binDir.path
                 if let apps = launcher["apps"] {
-                    launcher["apps"] = pinAppArgs(apps, paths: paths)
+                    launcher["apps"] = pinAppArgs(apps, paths: paths, settings: settings)
                 }
                 out[key] = launcher
             case "routing":
@@ -127,7 +128,7 @@ public enum PhoneProfile {
     /// argv (the server key the SkySOCKS screen writes, above all) passes
     /// through, so this never undoes a user's choice. An argv the visor could
     /// not parse either (an unclosed quote) is left for the visor to report.
-    static func pinAppArgs(_ apps: Any, paths: CorePaths) -> Any {
+    static func pinAppArgs(_ apps: Any, paths: CorePaths, settings: ProfileSettings) -> Any {
         guard let list = apps as? [Any] else { return apps }
         return list.map { entry -> Any in
             guard var app = entry as? [String: Any], let name = app["name"] as? String else { return entry }
@@ -151,6 +152,10 @@ public enum PhoneProfile {
             case SkychatProfile.app:
                 pinned = SkychatProfile.phoneArgs(
                     tokens, passwordFile: paths.skychatPasswordFile.path, historyFile: paths.skychatHistoryFile.path
+                )
+            case VpnProfile.app:
+                pinned = VpnProfile.phoneArgs(
+                    tokens, skyDnsInVpn: settings.skyDnsInVpn, dnsServer: DnsServer.sanitize(settings.dnsServer)
                 )
             default:
                 return entry

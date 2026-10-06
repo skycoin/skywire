@@ -160,6 +160,16 @@ final class AppModel: ObservableObject {
         restartCore()
     }
 
+    /// vpn-client's argv through `change`, written only when it differs: an args PUT restarts
+    /// the app when it runs. The profile pins the same at the next start.
+    func rewriteVpnArgs(_ change: ([String]) -> [String]) async throws {
+        let current = try await client.app(VpnProfile.app).args
+        let next = change(current)
+        if next != current {
+            _ = try await client.updateApp(VpnProfile.app, args: AppArgs.join(next))
+        }
+    }
+
     /// Left for the background with the core running: asks iOS for the
     /// standard background grace (about 30 s), so the core keeps receiving
     /// for that long and a message that arrives just after the user switched

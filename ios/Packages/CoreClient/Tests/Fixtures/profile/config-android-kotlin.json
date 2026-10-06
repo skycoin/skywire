@@ -122,6 +122,13 @@
     "log_server": {
         "local_addr": ""
     },
+    "dmsg_web": {
+        "enable": true,
+        "upstream_socks": "127.0.0.1:4446"
+    },
+    "skynet_web": {
+        "enable": true
+    },
     "browse_origin": {
         "enable": true,
         "suffix": ".haltingstate.net"
@@ -169,7 +176,6 @@
             "swsr",
             "swtr"
         ],
-        "enable_rsn_oracle_routes": true,
         "policy_per_dial": "none",
         "mux_routes": 2
     },
@@ -178,7 +184,7 @@
         "apps": [
             {
                 "name": "vpn-client",
-                "args": "--dns 1.1.1.1 --srv 02b50c46fcb75fafae690927110e31ee0be8e038128a513daa988acc2e3fff92b7",
+                "args": "--srv 02b50c46fcb75fafae690927110e31ee0be8e038128a513daa988acc2e3fff92b7 --mesh-gateway",
                 "auto_start": false,
                 "port": 43
             },
@@ -199,6 +205,12 @@
                 "args": "--addr 127.0.0.1:8051 --market-port 8050 --password-file /data/user/0/com.skycoin.skywire/files/skywire/local/skydex-password",
                 "auto_start": false,
                 "port": 8051
+            },
+            {
+                "name": "skydns",
+                "auto_start": false,
+                "port": 42,
+                "args": ""
             }
         ],
         "server_addr": "localhost:5505",

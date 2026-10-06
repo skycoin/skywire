@@ -24,13 +24,14 @@ struct SettingsView: View {
                     IdentityCard(model: model).scrollPlaceItem(0)
                     ConfigCard(model: model) { askExport() }.scrollPlaceItem(1)
                     AutoconnectCard().scrollPlaceItem(2)
-                    RemoteCard(model: model).scrollPlaceItem(3)
-                    AppLockCard().scrollPlaceItem(4)
-                    ThemeCard().scrollPlaceItem(5)
-                    LanguageCard().scrollPlaceItem(6)
-                    DiagnosticsRow { navigator.push(.diagnostics) }.scrollPlaceItem(7)
-                    UpdatesCard().scrollPlaceItem(8)
-                    AboutCard(model: model).scrollPlaceItem(9)
+                    DnsCard(model: model).scrollPlaceItem(3)
+                    RemoteCard(model: model).scrollPlaceItem(4)
+                    AppLockCard().scrollPlaceItem(5)
+                    ThemeCard().scrollPlaceItem(6)
+                    LanguageCard().scrollPlaceItem(7)
+                    DiagnosticsRow { navigator.push(.diagnostics) }.scrollPlaceItem(8)
+                    UpdatesCard().scrollPlaceItem(9)
+                    AboutCard(model: model).scrollPlaceItem(10)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
@@ -312,6 +313,44 @@ private struct AutoconnectCard: View {
                       identifier: "settings-autoconnect")
             Note(text: L10n.key("settings_autoconnect_restart")).padding(.top, 10)
         }
+    }
+}
+
+/// The resolver SkyVPN and SkyDNS ask for ordinary names (Android: DnsCard, see DnsServer).
+private struct DnsCard: View {
+    @EnvironmentObject private var settings: AppSettings
+    @EnvironmentObject private var app: AppModel
+    @ObservedObject var model: SettingsModel
+    @State private var address = ""
+
+    var body: some View {
+        let typed = address.trimmingCharacters(in: .whitespaces)
+        let valid = typed.isEmpty || DnsServer.isValid(typed)
+        SectionCard {
+            CardHeader(title: L10n.key("settings_dns"), hint: L10n.key("settings_dns_hint"))
+            SkyOutlinedTextField(placeholder: L10n.key("settings_dns_placeholder"), text: $address, isError: !valid,
+                                 keyboard: .numbersAndPunctuation, identifier: "settings-dns")
+                .padding(.top, 12)
+            if !valid {
+                Text("settings_dns_invalid").skyText(.bodySmall).foregroundStyle(Color.skyError)
+                    .padding(.leading, 16).padding(.top, 4)
+            }
+            HStack(spacing: 12) {
+                Button { model.setDnsServer(typed, app) } label: { Text("settings_dns_save") }
+                    .buttonStyle(.tonal)
+                    .disabled(!valid || DnsServer.sanitize(typed) == settings.dnsServer)
+                    .accessibilityIdentifier("settings-dns-save")
+                if !settings.dnsServer.isEmpty {
+                    Button { model.setDnsServer("", app) } label: { Text("settings_dns_default") }
+                        .buttonStyle(.skyText)
+                        .accessibilityIdentifier("settings-dns-default")
+                }
+            }
+            .padding(.top, 12)
+        }
+        // Seeded from what is stored, and again whenever that changes, as Android's remember(key).
+        .onAppear { address = settings.dnsServer }
+        .onChange(of: settings.dnsServer) { address = $0 }
     }
 }
 

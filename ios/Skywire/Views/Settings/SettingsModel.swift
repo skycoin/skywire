@@ -75,6 +75,31 @@ final class SettingsModel: ObservableObject {
         app.applyPinnedSettingNow()
     }
 
+    /// The resolver for ordinary names, or each app's default when `address` is blank: pinned for
+    /// every start and, while the core runs, written into vpn-client's argv at once (Android:
+    /// SettingsViewModel.setDnsServer, which also rewrites skydns, an app the iOS core lacks).
+    func setDnsServer(_ address: String, _ app: AppModel) {
+        let server = DnsServer.sanitize(address)
+        guard server.isEmpty == address.trimmingCharacters(in: .whitespaces).isEmpty else {
+            notice = L10n.text("settings_dns_invalid")
+            return
+        }
+        app.settings.dnsServer = server
+        let done = server.isEmpty ? L10n.text("settings_dns_cleared") : L10n.format("settings_dns_saved", server)
+        guard app.connected else {
+            notice = done
+            return
+        }
+        Task {
+            do {
+                try await app.rewriteVpnArgs { DnsServer.args($0, server: server) }
+                notice = done
+            } catch {
+                if !app.handle(error) { notice = error.localizedDescription }
+            }
+        }
+    }
+
     /// Grants remote management to `raw`, if it is a visor key. Applies at the
     /// next start, as on Android: the grant admits another machine, and
     /// restarting under the user's feet for it would be the wrong surprise.

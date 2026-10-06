@@ -52,6 +52,7 @@ enum MI {
     static let roundedCandlestickChart = "mi-rounded-candlestick-chart"
     static let roundedChat = "mi-rounded-chat"
     static let roundedChevronRight = "mi-rounded-chevron-right"
+    static let roundedDns = "mi-rounded-dns"
     static let roundedForum = "mi-rounded-forum"
     static let roundedHelpOutline = "mi-rounded-help-outline"
     static let roundedHome = "mi-rounded-home"

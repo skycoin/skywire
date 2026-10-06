@@ -26,12 +26,16 @@ final class PhoneProfileTests: XCTestCase {
         let routing = config["routing"] as? [String: Any]
         let hypervisor = config["hypervisor"] as? [String: Any]
         let transport = config["transport"] as? [String: Any]
+        let vpn = AppArgs.split((((config["launcher"] as? [String: Any])?["apps"] as? [[String: Any]])?
+            .first { $0["name"] as? String == VpnProfile.app }?["args"] as? String) ?? "") ?? []
         return ProfileSettings(
             transportPrimary: (routing?["transport_preference"] as? [String])?.first ?? "",
             fleetEnabled: hypervisor?["dmsg_ingest"] as? Bool ?? false,
             publicAutoconnect: transport?["public_autoconnect"] as? Bool ?? false,
             logLevel: config["log_level"] as? String ?? "",
-            remoteManagementPK: (config["hypervisors"] as? [String])?.first
+            remoteManagementPK: (config["hypervisors"] as? [String])?.first,
+            skyDnsInVpn: SkyDNS.inVpnArgs(vpn),
+            dnsServer: DnsServer.current(vpn) ?? ""
         )
     }
 
@@ -65,15 +69,16 @@ final class PhoneProfileTests: XCTestCase {
 
         // The apps: Kotlin's argv minus what the user added since (the server
         // keys the SOCKS and VPN screens wrote) is Swift's.
-        for name in ["skychat", "skydex-client", "skysocks-client"] {
+        for name in ["skychat", "skydex-client", "skysocks-client", "vpn-client"] {
             let kotlinApp = try XCTUnwrap(app(kotlin, name))
             let swiftApp = try XCTUnwrap(app(swift, name))
             let kotlinArgs = withoutServerKey(try XCTUnwrap(AppArgs.split(kotlinApp["args"] as? String ?? "")))
             XCTAssertEqual(AppArgs.split(swiftApp["args"] as? String ?? ""), kotlinArgs, name)
             XCTAssertEqual(swiftApp["auto_start"] as? Bool, kotlinApp["auto_start"] as? Bool, name)
         }
-        // vpn-client is not the profile's: untouched.
-        XCTAssertEqual(differences(app(generated, "vpn-client"), app(swift, "vpn-client")), [])
+        // Kotlin adds skydns; the iOS core cannot run it (SkyDNS).
+        XCTAssertNotNil(app(kotlin, SkyDNS.app))
+        XCTAssertNil(app(swift, SkyDNS.app))
 
         // And nothing the profile does not own changed.
         let untouched = differences(generated, swift).filter { path in
@@ -240,6 +245,81 @@ final class PhoneProfileTests: XCTestCase {
         let decoded = try JSONDecoder().decode([ServiceEntry].self, from: JSONEncoder().encode(entries))
         XCTAssertEqual(decoded, entries)
         XCTAssertEqual(decoded[0].pk, "02ab")
+    }
+
+    /// The two SkyDNS-era settings land on vpn-client's argv, the generator's
+    /// `--dns 1.1.1.1` replaced or dropped, as Kotlin's ConfigManager does.
+    func testSkyDnsAndTheDnsServerLandOnVpnClient() throws {
+        let generated = try Self.fixture("config-gen-mac")
+        func vpnArgs(_ settings: ProfileSettings) throws -> [String]? {
+            let config = try PhoneProfile.edit(generated, settings: settings, paths: Self.iosPaths)
+            return AppArgs.split(app(config, VpnProfile.app)?["args"] as? String ?? "")
+        }
+        XCTAssertEqual(try vpnArgs(ProfileSettings()), ["--mesh-gateway"])
+        XCTAssertEqual(try vpnArgs(ProfileSettings(skyDnsInVpn: false, dnsServer: " 9.9.9.9 ")), ["--dns", "9.9.9.9"])
+        XCTAssertEqual(try vpnArgs(ProfileSettings(skyDnsInVpn: false, dnsServer: "dns.google")), [])
+    }
+
+    // Android's SkyDnsTest, case for case.
+
+    func testSkyDnsTurningOnAddsTheFlagOnce() {
+        let base = ["--dns", "1.1.1.1", "--srv", "02aa", "--killswitch"]
+        let on = SkyDNS.vpnArgs(base, on: true)
+        XCTAssertEqual(on, base + ["--mesh-gateway"])
+        XCTAssertEqual(SkyDNS.vpnArgs(on, on: true), on)
+        XCTAssertTrue(SkyDNS.inVpnArgs(on))
+    }
+
+    func testSkyDnsTurningOffKeepsEverythingElse() {
+        let base = ["--dns", "1.1.1.1", "--srv", "02aa", "--killswitch"]
+        let off = SkyDNS.vpnArgs(["--mesh-gateway"] + base + ["--mesh-gateway=true"], on: false)
+        XCTAssertEqual(off, base)
+        XCTAssertFalse(SkyDNS.inVpnArgs(off))
+    }
+
+    func testSkyDnsAnExplicitFalseIsOff() {
+        let base = ["--dns", "1.1.1.1", "--srv", "02aa", "--killswitch"]
+        XCTAssertFalse(SkyDNS.inVpnArgs(base + ["--mesh-gateway=false"]))
+        XCTAssertEqual(SkyDNS.vpnArgs(base + ["--mesh-gateway=false"], on: true), base + ["--mesh-gateway"])
+    }
+
+    // Android's DnsServerTest, case for case.
+
+    private let dnsBase = ["--srv", "02aa", "--killswitch", "--mesh-gateway"]
+
+    func testDnsSettingAddsTheFlagOnce() {
+        let set = DnsServer.args(dnsBase, server: "9.9.9.9")
+        XCTAssertEqual(set, dnsBase + ["--dns", "9.9.9.9"])
+        XCTAssertEqual(DnsServer.args(set, server: "9.9.9.9"), set)
+        XCTAssertEqual(DnsServer.current(set), "9.9.9.9")
+    }
+
+    func testDnsChangingReplacesEitherSpelling() {
+        XCTAssertEqual(DnsServer.args(["--dns", "1.1.1.1"] + dnsBase, server: "8.8.8.8"), dnsBase + ["--dns", "8.8.8.8"])
+        XCTAssertEqual(DnsServer.args(dnsBase + ["--dns=1.1.1.1"], server: "8.8.8.8"), dnsBase + ["--dns", "8.8.8.8"])
+    }
+
+    func testDnsBlankRemovesItSoTheAppUsesItsDefault() {
+        XCTAssertEqual(DnsServer.args(dnsBase + ["--dns", "9.9.9.9"], server: ""), dnsBase)
+        XCTAssertNil(DnsServer.current(dnsBase))
+    }
+
+    func testDnsOnlyIPv4AddressesAreAccepted() {
+        XCTAssertTrue(DnsServer.isValid("9.9.9.9"))
+        XCTAssertTrue(DnsServer.isValid(" 192.168.1.1 "))
+        XCTAssertFalse(DnsServer.isValid("256.1.1.1"))
+        XCTAssertFalse(DnsServer.isValid("1.1.1"))
+        XCTAssertFalse(DnsServer.isValid("dns.google"))
+        XCTAssertFalse(DnsServer.isValid("2606:4700:4700::1111"))
+        XCTAssertFalse(DnsServer.isValid(""))
+    }
+
+    func testDnsAnythingInvalidIsStoredAsBlank() {
+        XCTAssertEqual(DnsServer.sanitize(nil), "")
+        XCTAssertEqual(DnsServer.sanitize("not an address"), "")
+        XCTAssertEqual(DnsServer.sanitize(" 9.9.9.9 "), "9.9.9.9")
+        // Blank means the phone's own DNS to SkyDNS, so 1.1.1.1 is a real choice.
+        XCTAssertEqual(DnsServer.sanitize("1.1.1.1"), "1.1.1.1")
     }
 
     func testSkychatDropsPortlessAndKeepsTheRest() {
