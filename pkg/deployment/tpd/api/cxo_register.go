@@ -88,6 +88,7 @@ func (api *API) DeregisterTransportFromCXO(ctx context.Context, id uuid.UUID, re
 	if err := api.store.DeregisterTransport(ctx, id); err != nil {
 		return fmt.Errorf("deregister: %w", err)
 	}
+	api.reconcile.forgetID(id)
 
 	touchedEdges := map[cipher.PubKey]struct{}{
 		existing.Edges[0]: {},
@@ -159,8 +160,17 @@ func (api *API) reconcileFromCXO(ctx context.Context, entries []*transport.Entry
 		for i, e := range toTouch {
 			ids[i] = e.ID
 		}
-		if err := bs.TouchTransports(ctx, reporter, ids); err != nil {
+		missing, err := bs.TouchTransports(ctx, reporter, ids)
+		if err != nil {
 			api.reconcile.forget(toTouch) // rewritten in full next snapshot
+		}
+		// A listed transport whose key is gone (expired, or deleted by a path
+		// that never cleared its mark) is registered again now. Touching it
+		// alone succeeds and changes nothing, and since the touch also renews
+		// its mark, it stayed missing until TPD restarted — most of a dmsg
+		// server's sudph transports on prod (2026-10-06).
+		if len(missing) > 0 {
+			api.registerAgain(ctx, reporter, version, toTouch, missing)
 		}
 	}
 	if batched {
@@ -239,4 +249,25 @@ func (api *API) reconcileFromCXO(ctx context.Context, entries []*transport.Entry
 		_ = err //nolint:errcheck // visor-level heartbeat is auxiliary
 	}
 	return nil
+}
+
+// registerAgain writes in full the entries of touched whose ids are missing
+// from the store. If that fails their marks are cleared, so the next
+// snapshot writes them instead of touching them again.
+func (api *API) registerAgain(ctx context.Context, reporter cipher.PubKey, version string, touched []*transport.Entry, missing []uuid.UUID) {
+	gone := make(map[uuid.UUID]struct{}, len(missing))
+	for _, id := range missing {
+		gone[id] = struct{}{}
+	}
+	again := make([]*transport.Entry, 0, len(missing))
+	signed := make([]*transport.SignedEntry, 0, len(missing))
+	for _, e := range touched {
+		if _, ok := gone[e.ID]; ok {
+			again = append(again, e)
+			signed = append(signed, &transport.SignedEntry{Entry: e, Version: version})
+		}
+	}
+	if err := api.store.RegisterTransportsBatch(ctx, reporter, signed); err != nil {
+		api.reconcile.forget(again)
+	}
 }

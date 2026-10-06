@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -21,8 +22,9 @@ import (
 type BatchStore interface {
 	// TouchTransports extends the lifetime of registered transports that are
 	// still listed: the entry keys, and the reporter's edge index. Nothing is
-	// rewritten.
-	TouchTransports(ctx context.Context, reporter cipher.PubKey, ids []uuid.UUID) error
+	// rewritten. It returns the ids that are no longer stored, which a touch
+	// cannot extend: they have to be registered again.
+	TouchTransports(ctx context.Context, reporter cipher.PubKey, ids []uuid.UUID) (missing []uuid.UUID, err error)
 	// DeregisterTransports removes transports and returns the ones that
 	// existed.
 	DeregisterTransports(ctx context.Context, ids []uuid.UUID) ([]*transport.Entry, error)
@@ -31,20 +33,34 @@ type BatchStore interface {
 }
 
 // TouchTransports implements BatchStore.
-func (s *redisStore) TouchTransports(ctx context.Context, reporter cipher.PubKey, ids []uuid.UUID) error {
+func (s *redisStore) TouchTransports(ctx context.Context, reporter cipher.PubKey, ids []uuid.UUID) ([]uuid.UUID, error) {
 	if len(ids) == 0 || s.ttl <= 0 {
-		return nil
+		return nil, nil
 	}
 	pipe := s.client.Pipeline()
-	for _, id := range ids {
-		pipe.Expire(ctx, s.transportKey(id), s.ttl)
+	expires := make([]*redis.BoolCmd, len(ids))
+	for i, id := range ids {
+		expires[i] = pipe.Expire(ctx, s.transportKey(id), s.ttl)
 	}
 	pipe.Expire(ctx, s.edgeKey(reporter), s.ttl)
-	_, err := pipe.Exec(ctx)
-	if err == nil {
-		s.live.touch(ids, time.Now())
+	if _, err := pipe.Exec(ctx); err != nil {
+		return nil, err
 	}
-	return err
+	// EXPIRE on a key that is gone succeeds and reports false. Those entries
+	// were removed since they were written — expired, or deleted by a path
+	// the reconcile throttle never hears of — and a touch does not bring
+	// them back, so say which they are.
+	var missing []uuid.UUID
+	present := ids[:0:0]
+	for i, id := range ids {
+		if expires[i].Val() {
+			present = append(present, id)
+		} else {
+			missing = append(missing, id)
+		}
+	}
+	s.live.touch(present, time.Now())
+	return missing, nil
 }
 
 // DeregisterTransports implements BatchStore: one MGET for the entries (their
@@ -147,7 +163,9 @@ func (s *redisStore) RecordTransportHeartbeats(ctx context.Context, entries []*t
 }
 
 // TouchTransports implements BatchStore; the memory store has no TTL.
-func (s *memoryStore) TouchTransports(context.Context, cipher.PubKey, []uuid.UUID) error { return nil }
+func (s *memoryStore) TouchTransports(context.Context, cipher.PubKey, []uuid.UUID) ([]uuid.UUID, error) {
+	return nil, nil
+}
 
 // DeregisterTransports implements BatchStore.
 func (s *memoryStore) DeregisterTransports(ctx context.Context, ids []uuid.UUID) ([]*transport.Entry, error) {

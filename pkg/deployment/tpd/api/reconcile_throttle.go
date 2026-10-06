@@ -127,6 +127,18 @@ func (t *reconcileThrottle) forget(entries []*transport.Entry) {
 	}
 }
 
+// forgetID clears the registration mark of a transport deleted outside the
+// reconcile (an HTTP delete, a CXO tombstone). The mark is shared by both
+// edges; left set, the other edge's next snapshots would only touch an entry
+// that no longer exists.
+func (t *reconcileThrottle) forgetID(id uuid.UUID) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if m := t.marks[id]; m != nil {
+		m.registeredAt = time.Time{}
+	}
+}
+
 // sweepLocked drops marks of transports not seen for a few refresh gaps,
 // so the map tracks live transports rather than every one ever reported.
 func (t *reconcileThrottle) sweepLocked(now time.Time) {
