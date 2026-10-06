@@ -26,6 +26,8 @@ type Series struct {
 	Name string
 	// Title is shown on hover over the legend entry, such as a full key.
 	Title string
+	// Cells fill the columns named by the chart's Legend.
+	Cells []string
 	Vals  []float64
 }
 
@@ -44,6 +46,11 @@ type Chart struct {
 	Dates bool
 	// Binary rounds the y axis to powers of 1024, for byte counts.
 	Binary bool
+	// Legend, when set, draws the legend as a table with these column headers.
+	// The first column is the series name and the last is its latest value.
+	Legend []string
+
+	colors map[string]string
 }
 
 const (
@@ -218,7 +225,7 @@ func (c *Chart) SVG(id string) string {
 					}
 					fmt.Fprintf(&d, "L%.1f %.1f", c.xOf(c.Times[i]), yOf(lo))
 				}
-				fmt.Fprintf(&sb, "<path class='area' d='%sZ' fill='%s'/>", d.String(), Color(c.Series[si].Name))
+				fmt.Fprintf(&sb, "<path class='area' d='%sZ' fill='%s'/>", d.String(), c.color(c.Series[si].Name))
 			}
 		}
 	}
@@ -234,11 +241,11 @@ func (c *Chart) SVG(id string) string {
 			}
 			if seg[1]-seg[0] == 1 {
 				fmt.Fprintf(&sb, "<circle cx='%.1f' cy='%.1f' r='2.5' fill='%s'/>",
-					c.xOf(c.Times[seg[0]]), yOf(tops[si][seg[0]]), Color(c.Series[si].Name))
+					c.xOf(c.Times[seg[0]]), yOf(tops[si][seg[0]]), c.color(c.Series[si].Name))
 			}
 		}
 		if d.Len() > 0 {
-			fmt.Fprintf(&sb, "<path class='line' d='%s' stroke='%s'/>", d.String(), Color(c.Series[si].Name))
+			fmt.Fprintf(&sb, "<path class='line' d='%s' stroke='%s'/>", d.String(), c.color(c.Series[si].Name))
 		}
 	}
 	fmt.Fprintf(&sb, "<line class='cursor' x1='0' x2='0' y1='%d' y2='%d'/>", padT, padT+plotH)
@@ -329,6 +336,10 @@ func (c *Chart) monthTicks(sb *strings.Builder) {
 }
 
 func (c *Chart) legend(sb *strings.Builder) {
+	if len(c.Legend) > 0 {
+		c.legendTable(sb)
+		return
+	}
 	sb.WriteString("<ul class='legend'>")
 	for i := range c.Series {
 		s := c.Series[i]
@@ -347,7 +358,7 @@ func (c *Chart) legend(sb *strings.Builder) {
 			title = " title='" + html.EscapeString(s.Title) + "'"
 		}
 		fmt.Fprintf(sb, "<li%s><i style='background:%s'></i>%s <b>%s</b></li>",
-			title, Color(s.Name), html.EscapeString(s.Name), html.EscapeString(latest))
+			title, c.color(s.Name), html.EscapeString(s.Name), html.EscapeString(latest))
 	}
 	sb.WriteString("</ul>")
 }
@@ -390,7 +401,7 @@ func (c *Chart) data(sb *strings.Builder) {
 				vs[i] = c.format(s.Vals[i])
 			}
 		}
-		d.S = append(d.S, ser{N: s.Name, C: Color(s.Name), V: vs})
+		d.S = append(d.S, ser{N: s.Name, C: c.color(s.Name), V: vs})
 	}
 	if c.Kind == Stacked {
 		tot := make([]string, len(c.Times))
@@ -413,4 +424,70 @@ func (c *Chart) data(sb *strings.Builder) {
 		return
 	}
 	fmt.Fprintf(sb, "<script type='application/json'>%s</script>", strings.ReplaceAll(string(b), "</", "<\\/"))
+}
+
+func (c *Chart) latest(s Series) string {
+	for j := len(s.Vals) - 1; j >= 0; j-- {
+		if !math.IsNaN(s.Vals[j]) {
+			return c.format(s.Vals[j])
+		}
+	}
+	return ""
+}
+
+func (c *Chart) legendTable(sb *strings.Builder) {
+	sb.WriteString("<div class='scroll'><table class='legend-t'><thead><tr><th></th>")
+	for i, h := range c.Legend {
+		cls := ""
+		if i == len(c.Legend)-1 {
+			cls = " class='num'"
+		}
+		fmt.Fprintf(sb, "<th%s>%s</th>", cls, html.EscapeString(h))
+	}
+	sb.WriteString("</tr></thead><tbody>")
+	for i := range c.Series {
+		s := c.Series[i]
+		if c.Kind == Stacked {
+			s = c.Series[len(c.Series)-1-i]
+		}
+		fmt.Fprintf(sb, "<tr><td><i style='background:%s'></i></td><td>%s</td>", c.color(s.Name), html.EscapeString(s.Name))
+		for _, cell := range s.Cells {
+			fmt.Fprintf(sb, "<td>%s</td>", html.EscapeString(cell))
+		}
+		fmt.Fprintf(sb, "<td class='num'>%s</td></tr>", html.EscapeString(c.latest(s)))
+	}
+	sb.WriteString("</tbody></table></div>")
+}
+
+// color gives each series a distinct color: its fixed one when it has one,
+// otherwise the next unused palette color in series order.
+func (c *Chart) color(name string) string {
+	if c.colors == nil {
+		c.colors = map[string]string{}
+		used := map[string]bool{}
+		for _, s := range c.Series {
+			if col, ok := fixedColors[s.Name]; ok {
+				c.colors[s.Name] = col
+				used[col] = true
+			}
+		}
+		next := 0
+		for _, s := range c.Series {
+			if _, ok := c.colors[s.Name]; ok {
+				continue
+			}
+			col := palette[next%len(palette)]
+			for tries := 0; used[col] && tries < len(palette); tries++ {
+				next++
+				col = palette[next%len(palette)]
+			}
+			c.colors[s.Name] = col
+			used[col] = true
+			next++
+		}
+	}
+	if col, ok := c.colors[name]; ok {
+		return col
+	}
+	return Color(name)
 }
