@@ -247,6 +247,7 @@ type Server struct {
 	mu         sync.Mutex
 	serviceMap map[string]*service
 	handlers   map[string]HandlerFunc
+	calls      map[string]DecodeFunc
 }
 
 // NewServer returns a new Server, mirroring net/rpc.NewServer.
@@ -271,6 +272,33 @@ func (server *Server) HandleFunc(serviceMethod string, h HandlerFunc) {
 	}
 	server.handlers[serviceMethod] = h
 	server.mu.Unlock()
+}
+
+// CallFunc runs one decoded call and returns its reply. ServeConn runs it in its
+// own goroutine, as net/rpc does for a method, so a call that blocks does not
+// hold up the rest of the connection.
+type CallFunc func() (reply any, err error)
+
+// DecodeFunc decodes exactly one argument value from dec and returns the call
+// to run with it. Decoding stays on the read loop so the stream stays in order.
+type DecodeFunc func(dec *gob.Decoder) (CallFunc, error)
+
+// HandleCall registers a reflection-free handler for serviceMethod whose
+// call runs concurrently with the connection's other calls.
+func (server *Server) HandleCall(serviceMethod string, h DecodeFunc) {
+	server.mu.Lock()
+	if server.calls == nil {
+		server.calls = make(map[string]DecodeFunc)
+	}
+	server.calls[serviceMethod] = h
+	server.mu.Unlock()
+}
+
+func (server *Server) callHandler(serviceMethod string) DecodeFunc {
+	server.mu.Lock()
+	h := server.calls[serviceMethod]
+	server.mu.Unlock()
+	return h
 }
 
 func (server *Server) handler(serviceMethod string) HandlerFunc {
@@ -385,6 +413,25 @@ func (server *Server) ServeConn(conn io.ReadWriteCloser) {
 		var req Request
 		if err := dec.Decode(&req); err != nil {
 			break
+		}
+
+		if h := server.callHandler(req.ServiceMethod); h != nil {
+			call, derr := h(dec)
+			if derr != nil {
+				server.sendResponse(sending, enc, &req, invalidReply{}, derr.Error())
+				continue
+			}
+			wg.Add(1)
+			go func(req Request) {
+				defer wg.Done()
+				reply, err := call()
+				errmsg := ""
+				if err != nil {
+					errmsg = err.Error()
+				}
+				server.sendResponse(sending, enc, &req, reply, errmsg)
+			}(req)
+			continue
 		}
 
 		// Reflection-free path (TinyGo-safe): if a HandleFunc is registered for
