@@ -17,6 +17,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/monitor/nmpk"
+	"github.com/skycoin/skywire/pkg/deployment/netgraph"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/deployment/tpd/metrics"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/httpauth"
@@ -221,6 +222,8 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Get("/health", api.health)
 	r.Get("/", api.ChartsPage)
 	r.Get("/graph", api.GraphPage)
+	r.Get("/graph/engine.wasm", netgraph.EngineWasm)
+	r.Get("/graph/engine.js", netgraph.EngineLoader)
 	r.Post("/statuses", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusGone)
 	})
