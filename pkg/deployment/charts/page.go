@@ -174,8 +174,8 @@ func (p *Page) write(b *bytes.Buffer, rg Range, now time.Time, c Content) {
 		}
 		b.WriteString("</tbody></table></div></section>")
 	}
-	fmt.Fprintf(b, "</main><footer>Sampled every %s and refreshed every minute while open. Times are UTC. Rendered %s.</footer><script>%s</script></body></html>",
-		strings.TrimSuffix(Interval.String(), "0s"), now.Format("2006-01-02 15:04"), pageJS)
+	fmt.Fprintf(b, "</main><footer>Sampled every %s and refreshed every minute while open. <span class='tz'>Times are UTC.</span> Rendered <time data-t='%d'>%s UTC</time>.</footer><script>%s</script></body></html>",
+		strings.TrimSuffix(Interval.String(), "0s"), now.UnixMilli(), now.Format("2006-01-02 15:04"), pageJS)
 }
 
 const pageCSS = `:root{--bg:#f6f7f9;--card:#fff;--fg:#1d2330;--muted:#677084;--grid:#e3e6ec;--axis:#b9bfcb;--accent:#4e79a7;color-scheme:light}
@@ -212,6 +212,26 @@ tr.mark td{background:color-mix(in srgb,var(--mark) 13%,transparent)}tr.mark td:
 footer{max-width:1100px;margin:0 auto;padding:12px 16px 32px;color:var(--muted);font-size:12px}`
 
 const pageJS = `(function(){
+var fT=new Intl.DateTimeFormat(undefined,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),fD=new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric'}),
+fDT=new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),fM=new Intl.DateTimeFormat(undefined,{month:'short'}),fMY=new Intl.DateTimeFormat(undefined,{month:'short',year:'numeric'});
+function lab(d,i){return d.dt||!d.t?d.l[i]:fDT.format(d.t[i])}
+function axis(svg,d){if(d.dt||!d.f||d.to<=d.f)return;var ax=svg.querySelector('.axis');if(!ax)return;
+svg.querySelectorAll('.xtick,.xgrid').forEach(function(e){e.remove()});
+var g=d.g,span=d.to-d.f,H=36e5,steps=[1,2,3,6,12,24,48,168,336,672,1344],step=steps[steps.length-1]*H,k,t,ticks=[];
+for(k=0;k<steps.length;k++)if(span/(steps[k]*H)<=8){step=steps[k]*H;break}
+t=new Date(d.f);
+if(step>=672*H){var every=Math.ceil((Math.floor(span/(720*H))+1)/8);t=new Date(t.getFullYear(),t.getMonth(),1);
+while(t.getTime()<=d.to){if(t.getTime()>=d.f)ticks.push([t.getTime(),t.getMonth()===0?fMY.format(t):fM.format(t)]);t=new Date(t.getFullYear(),t.getMonth()+every,1)}}
+else if(step>=24*H){var days=step/(24*H);t=new Date(t.getFullYear(),t.getMonth(),t.getDate());
+while(t.getTime()<=d.to){if(t.getTime()>=d.f)ticks.push([t.getTime(),fD.format(t)]);t=new Date(t.getFullYear(),t.getMonth(),t.getDate()+days)}}
+else{var hs=step/H;t.setMinutes(0,0,0);while(t.getHours()%hs)t=new Date(t.getTime()+H);
+while(t.getTime()<=d.to){if(t.getTime()>=d.f)ticks.push([t.getTime(),t.getHours()===0?fD.format(t):fT.format(t)]);t=new Date(t.getTime()+step)}}
+ticks.forEach(function(k){var x=(g[0]+(k[0]-d.f)/span*g[1]).toFixed(1),ns='http://www.w3.org/2000/svg',l=document.createElementNS(ns,'line'),tx=document.createElementNS(ns,'text');
+l.setAttribute('class','xgrid');l.setAttribute('x1',x);l.setAttribute('x2',x);l.setAttribute('y1',g[2]);l.setAttribute('y2',g[2]+g[3]);
+tx.setAttribute('class','xtick');tx.setAttribute('x',x);tx.setAttribute('y',g[4]-8);tx.textContent=k[1];svg.insertBefore(l,ax);svg.insertBefore(tx,ax)})}
+function zone(){var z=Intl.DateTimeFormat().resolvedOptions().timeZone||'local';document.querySelectorAll('.tz').forEach(function(e){e.textContent='Times are in your time zone, '+z+'.'});
+document.querySelectorAll('time[data-t]').forEach(function(e){e.textContent=fDT.format(+e.getAttribute('data-t'))})}
+
 var hovering=0;
 function esc(s){return String(s).replace(/[&<>"']/g,function(c){return '&#'+c.charCodeAt(0)+';'})}
 function last(d){for(var i=d.x.length-1;i>=0;i--){if(d.s.some(function(q){return q.v[i]}))return i}return -1}
@@ -224,17 +244,17 @@ if(!tot){el.innerHTML='';return}
 var h='<svg viewBox="0 0 200 200" role="img">',a=-Math.PI/2;
 items.forEach(function(it){var f=it.v/tot,b=Math.min(a+f*2*Math.PI,a+2*Math.PI-0.0001);
 h+='<path d="'+arc(92,60,a,b)+'" fill="'+it.q.c+'"><title>'+esc(it.q.n)+' '+esc(it.q.v[i])+' ('+(f*100).toFixed(1)+'%)</title></path>';a+=f*2*Math.PI});
-h+='<text x="100" y="98" class="pt">'+esc(d.s[0].n==='total'?d.s[0].v[i]:'')+'</text><text x="100" y="118" class="pl">'+esc(d.l[i])+'</text></svg><ul>';
+h+='<text x="100" y="98" class="pt">'+esc(d.s[0].n==='total'?d.s[0].v[i]:'')+'</text><text x="100" y="118" class="pl">'+esc(lab(d,i))+'</text></svg><ul>';
 items.sort(function(x,y){return y.v-x.v}).slice(0,6).forEach(function(it){var f=it.v/tot;
 h+='<li><i style="background:'+it.q.c+'"></i>'+esc(it.q.n)+'<b>'+(f*100).toFixed(f<0.1?1:0)+'%</b></li>'});
 el.innerHTML=h+'</ul>'+(pinned?'<p class="pin">Pinned. Click the same point to release.</p>':'')}
 function init(){document.querySelectorAll('figure.chart').forEach(function(f){
 var s=f.querySelector('script'),svg=f.querySelector('.plot svg'),tip=f.querySelector('.tip'),cur=f.querySelector('.cursor'),pe=f.querySelector('.pie');
-if(!s||!svg)return;var d=JSON.parse(s.textContent),pin=null,end=last(d);
+if(!s||!svg)return;var d=JSON.parse(s.textContent),pin=null,end=last(d);axis(svg,d);
 function near(e){var r=svg.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*d.w,b=0,bd=1e9;
 for(var i=0;i<d.x.length;i++){var k=Math.abs(d.x[i]-x);if(k<bd){bd=k;b=i}}return b}
 function mark(i){if(i<0){cur.style.visibility='hidden';return}cur.setAttribute('x1',d.x[i]);cur.setAttribute('x2',d.x[i]);cur.style.visibility='visible'}
-function readout(b){var r=svg.getBoundingClientRect(),h='<div class=t>'+esc(d.l[b])+'</div>',n=0;
+function readout(b){var r=svg.getBoundingClientRect(),h='<div class=t>'+esc(lab(d,b))+'</div>',n=0;
 d.s.forEach(function(q){if(!q.v[b])return;n++;h+='<div><span>'+(q.c?'<i style="background:'+q.c+'"></i>':'')+esc(q.n)+'</span><b>'+esc(q.v[b])+'</b></div>'});
 if(!n){tip.hidden=true;return}tip.innerHTML=h;tip.hidden=false;
 var px=d.x[b]/d.w*r.width,tw=tip.offsetWidth;tip.style.left=(px+12+tw>r.width?px-12-tw:px+12)+'px'}
@@ -245,11 +265,11 @@ if(pin==null){mark(-1);if(end>=0)pie(pe,d,end,false)}else{mark(pin);pie(pe,d,pin
 svg.addEventListener('mousemove',function(e){if(!d.x.length)return;var b=near(e);readout(b);mark(b);if(pin==null)pie(pe,d,b,false)});
 svg.addEventListener('click',function(e){if(!d.x.length)return;var b=near(e);pin=pin===b?null:b;
 f.classList.toggle('pinned',pin!=null);pie(pe,d,b,pin!=null)})})}
-init();
+zone();init();
 setInterval(function(){if(document.hidden||hovering>0||document.querySelector('figure.pinned'))return;
 fetch(location.href,{cache:'no-store'}).then(function(r){return r.ok?r.text():null}).then(function(t){if(!t)return;
 var n=new DOMParser().parseFromString(t,'text/html'),m=n.querySelector('main'),ft=n.querySelector('footer');if(!m)return;
-document.querySelector('main').replaceWith(m);if(ft)document.querySelector('footer').replaceWith(ft);init()}).catch(function(){})},60000);
+document.querySelector('main').replaceWith(m);if(ft)document.querySelector('footer').replaceWith(ft);zone();init()}).catch(function(){})},60000);
 })();
 `
 
