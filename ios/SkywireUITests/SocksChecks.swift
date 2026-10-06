@@ -62,18 +62,17 @@ final class SocksChecks: XCTestCase {
     /// at G4: the transport manager overran its close timeout, the stcpr
     /// accept loop spun on the shared port closed under it, and its warnings,
     /// each one a synchronous call into Swift, took the app down. The app
-    /// must live through it and the core come back connected.
+    /// must live through it and the core come back connected. The restart is
+    /// the one a log level change asks for: Home's own Restart went with its
+    /// menu in M6.5, as Android has none.
     func testRestartWithTheProxyConnected() {
         let app = connectedApp()
         openSocks(app)
         connectFromTheList(app)
-        openTab(.home, in: app)
-        app.buttons["home-actions"].tap()
-        app.buttons["home-restart"].tap()
-        wait(for: self.state(app), anyOf: ["stopping", "stopped", "starting", "running"], timeout: 30)
-        wait(for: self.state(app), anyOf: ["connected"], timeout: 180)
+        setLogLevel("debug", app)
         XCTAssertEqual(app.state, .runningForeground, "the app did not live through the restart")
         snap("socks-restarted")
+        setLogLevel("info", app)
     }
 
     func testDisconnects() {
