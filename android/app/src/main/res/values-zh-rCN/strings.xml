@@ -539,6 +539,14 @@
     <string name="settings_autoconnect">连接公共节点</string>
     <string name="settings_autoconnect_hint">保持与公共节点之间的传输通道，让网络可以经这部手机路由，也让这部手机可以经它们路由。会消耗电量和移动数据，因此默认关闭。路由长度超过 1 跳时必须开启。</string>
     <string name="settings_autoconnect_restart">核心下次启动时生效。</string>
+    <string name="settings_dns">DNS 服务器</string>
+    <string name="settings_dns_hint">SkyVPN 和 SkyDNS 会向此服务器查询所有不以 .dmsg 或 .skynet 结尾的域名；服务器支持时使用 DNS over TLS，Cloudflare、Google 和 Quad9 都支持。留空时，SkyVPN 使用 1.1.1.1（Cloudflare），因为 VPN 服务器没有可共享的解析服务；单独运行的 SkyDNS 则使用本机的 DNS。</string>
+    <string name="settings_dns_invalid">请输入 IPv4 地址，例如 9.9.9.9。</string>
+    <string name="settings_dns_save">使用此服务器</string>
+    <string name="settings_dns_default">恢复默认</string>
+    <string name="settings_dns_saved">DNS 服务器：%1$s。</string>
+    <string name="settings_dns_placeholder">默认</string>
+    <string name="settings_dns_cleared">已恢复默认 DNS 服务器。</string>
 
     <!-- 远程管理 -->
     <string name="settings_remote">远程管理</string>
