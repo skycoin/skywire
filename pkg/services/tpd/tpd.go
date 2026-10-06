@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
+	"github.com/skycoin/skywire/pkg/deployment/netgraph"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/api"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/cxoaggregator"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/deployment/tpd/metrics"
@@ -299,7 +300,9 @@ func (s *service) Run(ctx context.Context) error {
 		logger.Infof("Serving the charts page on %s", cfg.ChartsAddr)
 		go func() {
 			if err := charts.Serve(runCtx, cfg.ChartsAddr, http.HandlerFunc(tpdAPI.ChartsPage),
-				charts.Extra{Path: "/graph", Handler: http.HandlerFunc(tpdAPI.GraphPage)}); err != nil {
+				charts.Extra{Path: "/graph", Handler: http.HandlerFunc(tpdAPI.GraphPage)},
+				charts.Extra{Path: "/graph/engine.wasm", Handler: http.HandlerFunc(netgraph.EngineWasm)},
+				charts.Extra{Path: "/graph/engine.js", Handler: http.HandlerFunc(netgraph.EngineLoader)}); err != nil {
 				logger.WithError(err).Error("charts listener failed")
 			}
 		}()
