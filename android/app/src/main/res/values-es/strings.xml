@@ -81,10 +81,10 @@
     <string name="hub_stat_data">Datos</string>
     <string name="hub_vpn_toggle">Activar o desactivar SkyVPN</string>
     <string name="hub_skydns_toggle">Activar o desactivar SkyDNS</string>
-    <string name="hub_skydns_off">Nombres .dmsg y .skynet en todas las apps</string>
+    <string name="hub_skydns_off">Nombres .dmsg y .skynet en cada app</string>
     <string name="hub_skydns_starting">Iniciando…</string>
-    <string name="hub_skydns_on">Respondiendo nombres .dmsg y .skynet</string>
-    <string name="hub_skydns_paused">En pausa mientras SkyVPN está activado</string>
+    <string name="hub_skydns_on">Resolviendo .dmsg y .skynet</string>
+    <string name="hub_skydns_paused">En pausa con SkyVPN activado</string>
     <plurals name="hub_hops">
         <item quantity="one">%1$d salto</item>
         <item quantity="many">%1$d de saltos</item>
