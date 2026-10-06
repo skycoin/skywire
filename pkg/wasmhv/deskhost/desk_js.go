@@ -270,7 +270,8 @@ func installDesk() {
 		return "http://vnet:" + port + "/" + path, true
 	}
 
-	desk.NewPanel()
+	deskPanel = desk.NewPanel()
+	deskPanel.SetStartIcon("favicon.ico")
 	js.Global().Set("__skywireDesk", js.ValueOf(map[string]interface{}{
 		"library": "0magnet/desk",
 		"launch": js.FuncOf(func(_ js.Value, a []js.Value) any {

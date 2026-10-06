@@ -2,17 +2,19 @@ package metrics
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	"compress/gzip"
 )
 
 // PushOptions is the list of options, which may be applied to InitPushWithOptions().
@@ -418,12 +420,12 @@ func (pc *pushContext) pushMetrics(ctx context.Context, writeMetrics func(w io.W
 		return fmt.Errorf("cannot push metrics to %q: %s", pc.pushURLRedacted, err)
 	}
 	if resp.StatusCode/100 != 2 {
-		body, _ := io.ReadAll(resp.Body) //nolint:errcheck
-		_ = resp.Body.Close()            //nolint:errcheck
+		body, _ := ioutil.ReadAll(resp.Body)
+		_ = resp.Body.Close()
 		pc.pushErrors.Inc()
 		return fmt.Errorf("unexpected status code in response from %q: %d; expecting 2xx; response body: %q", pc.pushURLRedacted, resp.StatusCode, body)
 	}
-	_ = resp.Body.Close() //nolint:errcheck
+	_ = resp.Body.Close()
 	return nil
 }
 

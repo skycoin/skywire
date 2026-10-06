@@ -1,5 +1,5 @@
-//go:build linux
-// +build linux
+//go:build linux && !android
+// +build linux,!android
 
 // Package vpn pkg/vpn/mesh_client_linux.go c4-app-vpn
 package vpn
@@ -14,6 +14,7 @@ import (
 	miekgdns "github.com/miekg/dns"
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/pkg/skydns"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 )
@@ -43,6 +44,13 @@ type meshClientGateway struct {
 // resolver's own upstream queries would be redirected back into it — an infinite
 // loop. Kept in sync with dns.NewServer's defaults.
 var meshResolverUpstreams = []string{"8.8.8.8", "8.8.4.4"}
+
+func (c *Client) startMeshGateway() (*meshClientGateway, error) {
+	return startMeshClientGateway(context.Background(), c.cfg, logrus.StandardLogger())
+}
+
+// engine is nil here: this gateway works beside the tunnel, through iptables.
+func (m *meshClientGateway) engine() *skydns.Engine { return nil }
 
 // startMeshClientGateway stands up the loopback resolver + transparent proxy and
 // installs the OUTPUT nat rules. Runs until ctx is canceled; call stop() to tear

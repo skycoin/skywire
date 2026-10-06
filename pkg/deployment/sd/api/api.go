@@ -231,6 +231,10 @@ func New(log logrus.FieldLogger, db store.Store, nonceDB httpauth.NonceStore,
 	return api
 }
 
+// maxBodyBytes caps a request body. Every legitimate body here is under
+// 100 KiB, the largest a key list of all ~1150 visors (2026-10-05).
+const maxBodyBytes = 1 << 20
+
 // newRouter builds the service-discovery router. Called once from New,
 // after every field it closes over is set. Everything it reads
 // (log, enableMetrics, nonceDB, reqsInFlightCountMiddleware) is
@@ -240,6 +244,7 @@ func (a *API) newRouter() chi.Router {
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(a.log))
+	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip service-discovery JSON responses on the wire (skips small bodies,
 	// honors Vary; net/http clients get transparent gzip).
 	// gzip only bodies over CompressMinBytes: single entries and health lines are

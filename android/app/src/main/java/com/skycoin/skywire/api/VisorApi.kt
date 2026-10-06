@@ -317,6 +317,7 @@ class VisorApi(context: Context) {
      *    server-side),
      *  - [killswitch] adds or removes vpn-client's `--killswitch` flag (the
      *    visor rejects it for any other app),
+     *  - [autostart] whether the visor starts the app with itself,
      *  - [status] 1 starts, 0 stops.
      *
      * [pk], [args] and [killswitch] all restart a *running* app server-side;
@@ -328,12 +329,14 @@ class VisorApi(context: Context) {
         pk: String? = null,
         args: String? = null,
         killswitch: Boolean? = null,
+        autostart: Boolean? = null,
         status: Int? = null,
     ): AppState = withContext(Dispatchers.IO) {
         val body = buildJsonObject {
             pk?.let { put("pk", JsonPrimitive(it)) }
             args?.let { put("args", JsonPrimitive(it)) }
             killswitch?.let { put("killswitch", JsonPrimitive(it)) }
+            autostart?.let { put("autostart", JsonPrimitive(it)) }
             status?.let { put("status", JsonPrimitive(it)) }
         }
         putWithRelogin("/api/visors/${localPk()}/apps/$name", body.toString()).use { resp ->

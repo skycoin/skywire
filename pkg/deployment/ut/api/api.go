@@ -90,6 +90,10 @@ type HealthCheckResponse struct {
 	DmsgServers []string        `json:"dmsg_servers,omitempty"`
 }
 
+// maxBodyBytes caps a request body. No route here takes one, but the auth
+// middleware reads whatever is sent before checking the signature.
+const maxBodyBytes = 1 << 20
+
 // New constructs a new API instance.
 func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore, locDetails geo.LocationDetails,
 	enableLoadTesting, enableMetrics bool, m utmetrics.Metrics, storeDataCutoff int, storeDataPath, dmsgAddr string) *API {
@@ -114,6 +118,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore, 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(middleware.Recoverer)
+	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip responses on the wire — /uptimes is a fleet-wide JSON body polled
 	// constantly by the reward system + CLIs; it compresses ~80-90%. Clients
 	// using net/http get transparent gzip (Accept-Encoding auto-added +

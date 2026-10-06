@@ -385,6 +385,21 @@ func readLines(s *Shell, hc *interp.HandlerContext, args []string) ([]string, er
 	return lines, nil
 }
 
+// countArgs rewrites the count forms parseFlags cannot read — head -3 and
+// head -n3 — as -n 3.
+func countArgs(args []string) []string {
+	out := make([]string, 0, len(args)+1)
+	for _, a := range args {
+		num := strings.TrimPrefix(strings.TrimPrefix(a, "-"), "n")
+		if len(a) > 1 && a[0] == '-' && num != "" && strings.Trim(num, "0123456789") == "" {
+			out = append(out, "-n", num)
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
 func headTailCount(flags map[byte]bool, rest []string) (int, []string) {
 	n := 10
 	// support "-n 5" (parseFlags treats -n as flag; the count is the
@@ -399,7 +414,7 @@ func headTailCount(flags map[byte]bool, rest []string) (int, []string) {
 }
 
 func runHead(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
-	flags, rest := parseFlags(args)
+	flags, rest := parseFlags(countArgs(args))
 	n, rest := headTailCount(flags, rest)
 	lines, err := readLines(s, hc, rest)
 	if err != nil {
@@ -415,7 +430,7 @@ func runHead(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 }
 
 func runTail(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
-	flags, rest := parseFlags(args)
+	flags, rest := parseFlags(countArgs(args))
 	n, rest := headTailCount(flags, rest)
 	lines, err := readLines(s, hc, rest)
 	if err != nil {

@@ -34,6 +34,93 @@
 	// Service-worker bridge state (see enableSW below).
 	let swPrefix = null;
 
+	// writeRequest sends one HTTP/1.0 request with Connection: close down side
+	// 'a' of conn id.
+	function writeRequest(v, id, hostLabel, method, path, body, headers) {
+		const te = new TextEncoder();
+		let req = (method || 'GET') + ' ' + (path || '/') + ' HTTP/1.0\r\nHost: ' + hostLabel + '\r\n';
+		const h = headers || {};
+		for (const k in h) { if (Object.prototype.hasOwnProperty.call(h, k)) req += k + ': ' + h[k] + '\r\n'; }
+		let bodyBytes = null;
+		if (body != null) {
+			bodyBytes = (body instanceof Uint8Array) ? body : te.encode(String(body));
+			req += 'Content-Length: ' + bodyBytes.length + '\r\n';
+		}
+		req += 'Connection: close\r\n\r\n';
+		v.send(id, 'a', te.encode(req));
+		if (bodyBytes && bodyBytes.length) v.send(id, 'a', bodyBytes);
+	}
+
+	// parseHead reads a response head from the start of all, or returns null
+	// until the blank line that ends it has arrived.
+	function parseHead(all) {
+		let sep = -1; // header/body split at CRLFCRLF
+		for (let i = 0; i + 3 < all.length; i++) {
+			if (all[i] === 13 && all[i + 1] === 10 && all[i + 2] === 13 && all[i + 3] === 10) { sep = i; break; }
+		}
+		if (sep < 0) return null;
+		const head = new TextDecoder().decode(all.subarray(0, sep));
+		const lines = head.split('\r\n');
+		const status = parseInt(lines[0].split(' ')[1] || '0', 10) || 0;
+		const hs = {};
+		for (let i = 1; i < lines.length; i++) {
+			const ci = lines[i].indexOf(':');
+			if (ci > 0) hs[lines[i].slice(0, ci).trim().toLowerCase()] = lines[i].slice(ci + 1).trim();
+		}
+		const cl = /^\d+$/.test(hs['content-length'] || '') ? parseInt(hs['content-length'], 10) : -1;
+		return { status: status, headers: hs, bodyStart: sep + 4, contentLength: cl };
+	}
+
+	// httpStream is httpExchange for a body that may never end, such as an
+	// event stream. onHead(status, headers) fires once the head is in, then
+	// onChunk(bytes) per piece of body, then onEnd(err) once. The timeout covers
+	// only the wait for the head. Returns a function that stops it early.
+	function httpStream(v, id, hostLabel, method, path, body, headers, onHead, onChunk, onEnd, timeoutMs) {
+		let done = false;
+		let head = null;
+		let pending = new Uint8Array(0);
+		let remaining = -1;
+		const end = (err) => {
+			if (done) return;
+			done = true;
+			clearTimeout(timer);
+			v.close(id, 'a');
+			onEnd(err || null);
+		};
+		const timer = setTimeout(() => { if (!head) end(new Error('timeout: ' + hostLabel)); }, timeoutMs || 30000);
+		const deliver = (b) => {
+			if (remaining >= 0 && b.length > remaining) b = b.subarray(0, remaining);
+			if (remaining >= 0) remaining -= b.length;
+			if (b.length) onChunk(b);
+			if (remaining === 0) end();
+		};
+		writeRequest(v, id, hostLabel, method, path, body, headers);
+		const pump = () => {
+			while (!done) {
+				const b = v.recv(id, 'a');
+				if (b) {
+					if (head) { deliver(b); continue; }
+					const all = new Uint8Array(pending.length + b.length);
+					all.set(pending, 0);
+					all.set(b, pending.length);
+					head = parseHead(all);
+					if (!head) { pending = all; continue; }
+					pending = null;
+					clearTimeout(timer);
+					remaining = head.contentLength;
+					onHead(head.status, head.headers);
+					deliver(all.subarray(head.bodyStart));
+					continue;
+				}
+				if (v.eof(id, 'a')) { end(head ? null : new Error('malformed HTTP response from ' + hostLabel)); return; }
+				v.onReadable(id, 'a', pump);
+				return;
+			}
+		};
+		pump();
+		return () => end();
+	}
+
 	// httpExchange runs ONE HTTP/1.0 request/response over an already-open
 	// pipe (side 'a' of conn `id`) and settles the given resolve/reject with
 	// {status, body:Uint8Array, headers:{lowercased:value}}. Shared by
@@ -49,18 +136,7 @@
 			v.close(id, 'a');
 			reject(new Error('timeout: ' + hostLabel));
 		}, timeoutMs || 30000);
-		const te = new TextEncoder();
-		let req = (method || 'GET') + ' ' + (path || '/') + ' HTTP/1.0\r\nHost: ' + hostLabel + '\r\n';
-		const h = headers || {};
-		for (const k in h) { if (Object.prototype.hasOwnProperty.call(h, k)) req += k + ': ' + h[k] + '\r\n'; }
-		let bodyBytes = null;
-		if (body != null) {
-			bodyBytes = (body instanceof Uint8Array) ? body : te.encode(String(body));
-			req += 'Content-Length: ' + bodyBytes.length + '\r\n';
-		}
-		req += 'Connection: close\r\n\r\n';
-		v.send(id, 'a', te.encode(req));
-		if (bodyBytes && bodyBytes.length) v.send(id, 'a', bodyBytes);
+		writeRequest(v, id, hostLabel, method, path, body, headers);
 		const chunks = [];
 		let total = 0;
 		// preBytes: response bytes a caller's prelude reader (the SOCKS
@@ -73,23 +149,7 @@
 			for (const c of chunks) { all.set(c, off); off += c.length; }
 			return all;
 		};
-		const tryParseHead = (all) => {
-			let sep = -1; // header/body split at CRLFCRLF
-			for (let i = 0; i + 3 < all.length; i++) {
-				if (all[i] === 13 && all[i + 1] === 10 && all[i + 2] === 13 && all[i + 3] === 10) { sep = i; break; }
-			}
-			if (sep < 0) return null;
-			const head = new TextDecoder().decode(all.subarray(0, sep));
-			const lines = head.split('\r\n');
-			const status = parseInt(lines[0].split(' ')[1] || '0', 10) || 0;
-			const hs = {};
-			for (let i = 1; i < lines.length; i++) {
-				const ci = lines[i].indexOf(':');
-				if (ci > 0) hs[lines[i].slice(0, ci).trim().toLowerCase()] = lines[i].slice(ci + 1).trim();
-			}
-			const cl = /^\d+$/.test(hs['content-length'] || '') ? parseInt(hs['content-length'], 10) : -1;
-			return { status: status, headers: hs, bodyStart: sep + 4, contentLength: cl };
-		};
+		const tryParseHead = parseHead;
 		const finish = (all) => {
 			if (done) return;
 			done = true;
@@ -337,7 +397,9 @@
 		// bridge is live, false when service workers are unavailable (no
 		// secure context, file://, browser policy) — callers fall back to
 		// whatever they did before.
-		enableSW(swPath, prefix) {
+		// timeoutMs, when set, is how long the worker waits for this page to answer
+		// one request; it must exceed the slowest endpoint the page serves.
+		enableSW(swPath, prefix, timeoutMs) {
 			// Default the scope to a vnet/ directory BESIDE the page, so the
 			// bridge works for pages deployed under a subdirectory (GitHub
 			// Pages) exactly as at a server root.
@@ -351,6 +413,26 @@
 				if (m.type !== 'vnet-fetch' || !ev.ports || !ev.ports[0]) return;
 				const reply = ev.ports[0];
 				if (!this.listening(m.port)) { reply.postMessage({ refused: true }); return; }
+				if (m.stream) {
+					// A worker that streams gets the head, then each piece of the
+					// body, then the end, so an event stream reaches the page live.
+					const id = this.dial(m.port);
+					if (id < 0) { reply.postMessage({ refused: true }); return; }
+					let headSent = false;
+					const stop = httpStream(this, id, '127.0.0.1:' + m.port, m.method, m.path, m.body, m.headers,
+						(status, headers) => { headSent = true; reply.postMessage({ head: true, status: status, headers: headers }); },
+						(b) => { const c = b.slice(); reply.postMessage({ chunk: c }, [c.buffer]); },
+						(err) => {
+							if (!headSent) {
+								reply.postMessage({ head: true, status: 502, headers: { 'content-type': 'text/plain' } });
+								reply.postMessage({ chunk: new TextEncoder().encode('vnet: fetch failed') });
+							}
+							reply.postMessage({ end: true, error: err ? String(err.message || err) : '' });
+							reply.close();
+						});
+					reply.onmessage = (e) => { if (e.data && e.data.cancel) { stop(); reply.close(); } };
+					return;
+				}
 				this.httpFetch(m.port, m.method, m.path, m.body, m.headers)
 					.then((r) => {
 						// Uint8Array bodies structured-clone fine; pass headers as
@@ -365,8 +447,12 @@
 			// Passed at register time because a service worker cannot see its
 			// client's isolation.
 			const url = (swPath || 'vnet-sw.js') + '?prefix=' + encodeURIComponent(prefix)
-				+ (globalThis.crossOriginIsolated ? '&coi=1' : '');
+				+ (globalThis.crossOriginIsolated ? '&coi=1' : '')
+				+ (timeoutMs > 0 ? '&timeout=' + Math.round(timeoutMs) : '');
 			return navigator.serviceWorker.register(url, { scope: prefix })
+				// Registering an unchanged URL does not check for a new worker, so a
+				// deployed vnet-sw.js would wait for the browser's own schedule.
+				.then((reg) => { reg.update().catch(() => {}); return reg; })
 				.then((reg) => new Promise((resolve) => {
 					// Wait on THIS registration's worker reaching 'activated'.
 					// (navigator.serviceWorker.ready is the wrong wait here: it
@@ -385,6 +471,155 @@
 				}))
 				.then((ok) => { if (ok) swPrefix = prefix; return ok; })
 				.catch(() => false);
+		},
+
+		// webSocket opens a WebSocket to a server listening on a virtual port,
+		// RFC 6455 over a vnet conn, and returns an object with the browser
+		// WebSocket's interface. A service worker cannot carry WebSockets, so
+		// pages served under the vnet scope reach their server through this
+		// (vnet-sw.js injects a WebSocket shim that calls it).
+		webSocket(port, path, protocols, url, realm) {
+			const v = this;
+			// Events and message data are made in the caller's realm (its window),
+			// so an iframe's `data instanceof ArrayBuffer` holds.
+			const R = realm || globalThis;
+			const te = new TextEncoder(), td = new TextDecoder();
+			const ws = new R.EventTarget();
+			const origin = typeof location !== 'undefined' ? location.origin : 'null';
+			ws.url = url || ('ws://127.0.0.1:' + port + (path || '/'));
+			ws.readyState = 0;
+			ws.protocol = '';
+			ws.extensions = '';
+			ws.bufferedAmount = 0;
+			ws.binaryType = 'blob';
+			ws.CONNECTING = 0; ws.OPEN = 1; ws.CLOSING = 2; ws.CLOSED = 3;
+			ws.onopen = null; ws.onmessage = null; ws.onerror = null; ws.onclose = null;
+			const fire = (type, init) => {
+				let ev;
+				if (type === 'message') ev = new R.MessageEvent('message', init);
+				else if (type === 'close') ev = new R.CloseEvent('close', init);
+				else ev = new R.Event(type);
+				const h = ws['on' + type];
+				if (typeof h === 'function') { try { h.call(ws, ev); } catch (e) { setTimeout(() => { throw e; }); } }
+				ws.dispatchEvent(ev);
+			};
+			const id = v.dial(port);
+			let closedSent = false, finished = false, closeTimer = null;
+			const finish = (code, reason, clean) => {
+				if (finished) return;
+				finished = true;
+				if (closeTimer) clearTimeout(closeTimer);
+				ws.readyState = 3;
+				v.close(id, 'a');
+				fire('close', { code: code, reason: reason || '', wasClean: !!clean });
+			};
+			if (id < 0) {
+				queueMicrotask(() => { fire('error'); finish(1006, '', false); });
+				return ws;
+			}
+			// Client frames are masked (RFC 6455 §5.3).
+			const frame = (op, payload) => {
+				const p = payload || new Uint8Array(0);
+				const n = p.length;
+				const head = n < 126 ? 2 : (n < 65536 ? 4 : 10);
+				const out = new Uint8Array(head + 4 + n);
+				out[0] = 0x80 | op;
+				if (n < 126) { out[1] = 0x80 | n; }
+				else if (n < 65536) { out[1] = 0x80 | 126; out[2] = n >> 8; out[3] = n & 255; }
+				else { out[1] = 0x80 | 127; new DataView(out.buffer).setUint32(6, n); }
+				const mask = crypto.getRandomValues(new Uint8Array(4));
+				out.set(mask, head);
+				for (let i = 0; i < n; i++) out[head + 4 + i] = p[i] ^ mask[i & 3];
+				return v.send(id, 'a', out);
+			};
+			ws.send = (data) => {
+				if (ws.readyState === 0) throw new DOMException('WebSocket is still connecting', 'InvalidStateError');
+				if (ws.readyState !== 1) return;
+				if (typeof data === 'string') { frame(1, te.encode(data)); return; }
+				if (data instanceof Blob) { data.arrayBuffer().then((b) => frame(2, new Uint8Array(b))); return; }
+				if (ArrayBuffer.isView(data)) { frame(2, new Uint8Array(data.buffer, data.byteOffset, data.byteLength)); return; }
+				frame(2, new Uint8Array(data));
+			};
+			ws.close = (code, reason) => {
+				if (ws.readyState >= 2) return;
+				ws.readyState = 2;
+				const r = te.encode(reason || '');
+				const p = new Uint8Array(2 + r.length);
+				p[0] = (code || 1000) >> 8; p[1] = (code || 1000) & 255; p.set(r, 2);
+				closedSent = true;
+				frame(8, p);
+				closeTimer = setTimeout(() => finish(code || 1000, reason, true), 3000);
+			};
+			const key = btoa(String.fromCharCode.apply(null, crypto.getRandomValues(new Uint8Array(16))));
+			let req = 'GET ' + (path || '/') + ' HTTP/1.1\r\nHost: 127.0.0.1:' + port +
+				'\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: ' + key +
+				'\r\nSec-WebSocket-Version: 13\r\nOrigin: ' + origin + '\r\n';
+			const protos = protocols == null ? [] : (Array.isArray(protocols) ? protocols : [protocols]);
+			if (protos.length) req += 'Sec-WebSocket-Protocol: ' + protos.join(', ') + '\r\n';
+			v.send(id, 'a', te.encode(req + '\r\n'));
+			let buf = new Uint8Array(0), parts = [], partOp = 0;
+			const append = (b) => { const n = new Uint8Array(buf.length + b.length); n.set(buf); n.set(b, buf.length); buf = n; };
+			const deliver = (op, payload) => {
+				if (op === 1) { fire('message', { data: td.decode(payload), origin: origin }); return; }
+				const u = new R.Uint8Array(payload.length);
+				u.set(payload);
+				fire('message', { data: ws.binaryType === 'arraybuffer' ? u.buffer : new R.Blob([u]), origin: origin });
+			};
+			const drain = () => {
+				if (ws.readyState === 0) {
+					let sep = -1;
+					for (let i = 0; i + 3 < buf.length; i++) {
+						if (buf[i] === 13 && buf[i + 1] === 10 && buf[i + 2] === 13 && buf[i + 3] === 10) { sep = i; break; }
+					}
+					if (sep < 0) return;
+					const head = td.decode(buf.subarray(0, sep));
+					buf = buf.slice(sep + 4);
+					if (!/^HTTP\/1\.[01] 101/.test(head)) { fire('error'); finish(1006, '', false); return; }
+					const pm = head.match(/\r\nsec-websocket-protocol:\s*([^\r\n]+)/i);
+					ws.protocol = pm ? pm[1].trim() : '';
+					ws.readyState = 1;
+					fire('open');
+				}
+				while (buf.length >= 2 && !finished) {
+					const fin = (buf[0] & 0x80) !== 0, op = buf[0] & 15;
+					let n = buf[1] & 127, off = 2;
+					if (n === 126) { if (buf.length < 4) return; n = (buf[2] << 8) | buf[3]; off = 4; }
+					else if (n === 127) { if (buf.length < 10) return; n = new DataView(buf.buffer, buf.byteOffset).getUint32(6); off = 10; }
+					const masked = (buf[1] & 0x80) !== 0;
+					const mk = masked ? buf.slice(off, off + 4) : null;
+					if (masked) off += 4;
+					if (buf.length < off + n) return;
+					const payload = buf.slice(off, off + n);
+					if (mk) for (let i = 0; i < n; i++) payload[i] ^= mk[i & 3];
+					buf = buf.slice(off + n);
+					if (op === 8) {
+						const code = n >= 2 ? (payload[0] << 8) | payload[1] : 1005;
+						if (!closedSent) { closedSent = true; frame(8, payload.slice(0, 2)); }
+						finish(code, td.decode(payload.subarray(2)), true);
+						return;
+					}
+					if (op === 9) { frame(10, payload); continue; }
+					if (op === 10) continue;
+					if (op === 0) { parts.push(payload); if (!fin) continue; }
+					else if (!fin) { partOp = op; parts = [payload]; continue; }
+					else { deliver(op, payload); continue; }
+					let len = 0; for (const p of parts) len += p.length;
+					const all = new Uint8Array(len); let o = 0;
+					for (const p of parts) { all.set(p, o); o += p.length; }
+					parts = [];
+					deliver(partOp, all);
+				}
+			};
+			const pump = () => {
+				let b;
+				while ((b = v.recv(id, 'a')) !== null) append(b);
+				drain();
+				if (finished) return;
+				if (v.eof(id, 'a')) { finish(1006, '', false); return; }
+				v.onReadable(id, 'a', pump);
+			};
+			v.onReadable(id, 'a', pump);
+			return ws;
 		},
 
 		// swURL returns the real same-origin URL prefix for a virtual port

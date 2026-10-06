@@ -92,6 +92,7 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 			aliases, dmsgSet := resolverAliasesAndDmsgServers(v)
 			runtime = newEmbeddedDmsgWeb(v.ctx, v.dmsgC, v.dmsgDC, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, aliases, dmsgSet, cfg, log)
 			runtime.skynetDial = v.dmsgWebSkynetDial
+			v.wireLocalResolverPublish(runtime)
 			v.embeddedDmsgWeb = runtime
 		}
 		v.initLock.Unlock()
@@ -123,6 +124,7 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 			cfg := &visorconfig.SkynetWebConfig{Enable: true}
 			log := logging.MustGetLogger("embedded_skynetweb")
 			runtime = newEmbeddedSkynetWeb(v.ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, cfg, log)
+			v.wireLocalResolverPublish(runtime)
 			v.embeddedSkynetWeb = runtime
 		}
 		v.initLock.Unlock()
@@ -325,6 +327,7 @@ func (v *Visor) autoStartSkynetWeb() {
 		cfg := &visorconfig.SkynetWebConfig{Enable: true}
 		log := logging.MustGetLogger("embedded_skynetweb")
 		runtime = newEmbeddedSkynetWeb(v.ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, cfg, log)
+		v.wireLocalResolverPublish(runtime)
 		v.embeddedSkynetWeb = runtime
 	}
 	v.initLock.Unlock()

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	ipc "github.com/0magnet/golang-ipc"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -71,6 +70,10 @@ type Client struct {
 	// the live session as that proxy sees it; nil between sessions.
 	sharing bool
 	share   atomic.Pointer[shareSession]
+
+	// mesh is the running mesh gateway, nil when it is off. Set before the
+	// first session.
+	mesh *meshClientGateway
 }
 
 // NewClient creates VPN client instance.
@@ -171,13 +174,14 @@ func (c *Client) Serve() error {
 	}
 
 	// Optional mesh gateway: let the host resolve *.dmsg / *.skynet by name and
-	// proxy those over the mesh (bypassing the tunnel). Opt-in; Linux-only.
+	// proxy those over the mesh (bypassing the tunnel). Opt-in; Linux and Android.
 	if c.cfg.MeshGateway {
-		meshGW, err := startMeshClientGateway(context.Background(), c.cfg, logrus.StandardLogger())
+		meshGW, err := c.startMeshGateway()
 		if err != nil {
 			// Non-fatal: the VPN still works, just without mesh-name resolution.
 			fmt.Printf("mesh gateway disabled: %v\n", err)
 		} else {
+			c.mesh = meshGW
 			defer meshGW.stop()
 		}
 	}
@@ -465,8 +469,10 @@ func (c *Client) serveConn(conn net.Conn) error {
 
 	// With sharing on, the conn has a second writer — the shared netstack —
 	// and the server's replies to it are picked out on the way in.
+	// SkyDNS's own lookups ride the share session too.
 	inbound, outbound := io.Writer(tun), io.Writer(conn)
-	if c.sharing {
+	sky := c.mesh.engine()
+	if c.sharing || sky != nil {
 		lw := &lockedWriter{w: conn}
 		sess := newShareSession(tunIP, lw.Write)
 		c.share.Store(sess)
@@ -475,6 +481,9 @@ func (c *Client) serveConn(conn net.Conn) error {
 			sess.close()
 		}()
 		inbound, outbound = shareDemux{tun: tun, sess: sess}, lw
+	}
+	if sky != nil {
+		outbound = skyDNSSplit{sky: sky, next: outbound}
 	}
 
 	connToTunDoneCh := make(chan struct{})

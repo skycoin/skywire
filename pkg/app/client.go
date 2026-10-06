@@ -170,6 +170,23 @@ func (c *Client) ProxyStatus() (proxystatus.Snapshot, error) {
 	return c.rpcC.ProxyStatus()
 }
 
+// LocalServices lists the in-process services this app can reach on its own
+// visor, each with the hostname suffixes it answers for — the resolving
+// proxies. Dialing one is an ordinary Dial to the visor's own PK on the
+// service's port, which the visor serves over a pipe instead of a route, so an
+// app hands a .skynet or .dmsg name to the resolver without a second SOCKS hop
+// on localhost.
+//
+// A nil receiver (an app running standalone, with no visor) reports nothing
+// rather than failing, so a caller can treat "no visor" and "no resolvers" the
+// same way.
+func (c *Client) LocalServices() ([]appnet.LocalService, error) {
+	if c == nil || c.rpcC == nil {
+		return nil, nil
+	}
+	return c.rpcC.LocalServices()
+}
+
 // SetStatusOrLog sets the detailed status and logs the error if any.
 // Status transitions are best-effort — the app keeps running even if
 // the visor can't be notified, so callers don't have to handle the

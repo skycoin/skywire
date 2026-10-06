@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -48,7 +50,7 @@ type procStat struct {
 
 func writeProcessMetrics(w io.Writer) {
 	statFilepath := "/proc/self/stat"
-	data, err := os.ReadFile(statFilepath)
+	data, err := ioutil.ReadFile(statFilepath)
 	if err != nil {
 		log.Printf("ERROR: metrics: cannot open %s: %s", statFilepath, err)
 		return
@@ -88,10 +90,10 @@ func writeProcessMetrics(w io.Writer) {
 	WriteCounterFloat64(w, "process_cpu_seconds_user_total", utime)
 	WriteCounterUint64(w, "process_major_pagefaults_total", uint64(p.Majflt))
 	WriteCounterUint64(w, "process_minor_pagefaults_total", uint64(p.Minflt))
-	WriteGaugeUint64(w, "process_num_threads", uint64(p.NumThreads))                  //nolint:gosec // upstream code; safe under documented invariants
-	WriteGaugeUint64(w, "process_resident_memory_bytes", uint64(p.Rss)*pageSizeBytes) //nolint:gosec // upstream code; safe under documented invariants
-	WriteGaugeUint64(w, "process_start_time_seconds", uint64(startTimeSeconds))       //nolint:gosec // upstream code; safe under documented invariants
-	WriteGaugeUint64(w, "process_virtual_memory_bytes", uint64(p.Vsize))              //nolint:gosec // upstream code; safe under documented invariants
+	WriteGaugeUint64(w, "process_num_threads", uint64(p.NumThreads))
+	WriteGaugeUint64(w, "process_resident_memory_bytes", uint64(p.Rss)*pageSizeBytes)
+	WriteGaugeUint64(w, "process_start_time_seconds", uint64(startTimeSeconds))
+	WriteGaugeUint64(w, "process_virtual_memory_bytes", uint64(p.Vsize))
 	writeProcessMemMetrics(w)
 	writeIOMetrics(w)
 	writePSIMetrics(w)
@@ -101,13 +103,13 @@ var procSelfIOErrLogged uint32
 
 func writeIOMetrics(w io.Writer) {
 	ioFilepath := "/proc/self/io"
-	data, err := os.ReadFile(ioFilepath)
+	data, err := ioutil.ReadFile(ioFilepath)
 	if err != nil {
 		// Do not spam the logs with errors - this error cannot be fixed without process restart.
-		// See https://github.com/0magnet/metrics/issues/42
+		// See https://github.com/VictoriaMetrics/metrics/issues/42
 		if atomic.CompareAndSwapUint32(&procSelfIOErrLogged, 0, 1) {
 			log.Printf("ERROR: metrics: cannot read process_io_* metrics from %q, so these metrics won't be updated until the error is fixed; "+
-				"see https://github.com/0magnet/metrics/issues/42 ; The error: %s", ioFilepath, err)
+				"see https://github.com/VictoriaMetrics/metrics/issues/42 ; The error: %s", ioFilepath, err)
 		}
 	}
 
@@ -170,11 +172,11 @@ func writeFDMetrics(w io.Writer) {
 }
 
 func getOpenFDsCount(path string) (uint64, error) {
-	f, err := os.Open(path) //nolint:gosec // upstream code; safe under documented invariants
+	f, err := os.Open(path)
 	if err != nil {
 		return 0, err
 	}
-	defer func() { _ = f.Close() }() //nolint:errcheck // close ignored: read-only fd inspection
+	defer f.Close()
 	var totalOpenFDs uint64
 	for {
 		names, err := f.Readdirnames(512)
@@ -190,7 +192,7 @@ func getOpenFDsCount(path string) (uint64, error) {
 }
 
 func getMaxFilesLimit(path string) (uint64, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // upstream code; safe under documented invariants
+	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return 0, err
 	}
@@ -242,7 +244,7 @@ func writeProcessMemMetrics(w io.Writer) {
 }
 
 func getMemStats(path string) (*memStats, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // upstream code; safe under documented invariants
+	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -319,12 +321,9 @@ func psiTotalSecs(microsecs uint64) float64 {
 var psiMetricsStart = func() *psiMetrics {
 	m, err := getPSIMetrics()
 	if err != nil {
-		// Skywire patch (issue #2800): PSI metrics rely on /proc/pressure/*
-		// which is unavailable on kernels < 4.20, in unprivileged containers,
-		// and on most non-server Linux distros. Upstream logged this
-		// unconditionally on init, producing one INFO line on every CLI
-		// invocation. Gated behind an env var so it stays available for
-		// debugging without polluting normal output.
+		// Skywire patch (skycoin/skywire#2800): /proc/pressure is missing on
+		// kernels < 4.20 and in unprivileged containers, so upstream logged
+		// this on every CLI invocation. Set VICTORIA_METRICS_PSI_LOG=1 to see it.
 		if os.Getenv("VICTORIA_METRICS_PSI_LOG") == "1" {
 			log.Printf("INFO: metrics: disable exposing PSI metrics because of failed init: %s", err)
 		}
@@ -377,7 +376,7 @@ func getPSIMetrics() (*psiMetrics, error) {
 
 func readPSITotals(cgroupPath, statsName string) (uint64, uint64, error) {
 	filePath := cgroupPath + "/" + statsName
-	data, err := os.ReadFile(filePath) //nolint:gosec // upstream code; safe under documented invariants
+	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -411,16 +410,113 @@ func readPSITotals(cgroupPath, statsName string) (uint64, uint64, error) {
 }
 
 func getCgroupV2Path() string {
-	data, err := os.ReadFile("/proc/self/cgroup")
+	cgroupData, err := os.ReadFile("/proc/self/cgroup")
 	if err != nil {
 		return ""
 	}
-	tmp := strings.SplitN(string(data), "::", 2)
-	if len(tmp) != 2 {
+	// Read /proc/self/mountinfo with a timeout. Generating the mountinfo contents
+	// can block in the kernel when a backing filesystem (e.g. a hung NFS or FUSE
+	// mount) is unresponsive. Since this runs at program init via psiMetricsStart,
+	// a blocking read would hang startup, so fall back to disabling PSI metrics instead.
+	mountinfoData, _ := readFileWithTimeout("/proc/self/mountinfo", time.Second)
+	return getCgroupV2PathInternal(string(cgroupData), mountinfoData)
+}
+
+// readFileWithTimeout reads the file at path, returning ("", false) if the read
+// doesn't complete within timeout.
+//
+// A timed-out read leaks the reading goroutine until the read eventually unblocks
+// (if ever). This is an acceptable safeguard against a read of a pseudo-file such
+// as /proc/self/mountinfo hanging on an unresponsive mount.
+func readFileWithTimeout(path string, timeout time.Duration) (string, bool) {
+	type result struct {
+		data []byte
+		err  error
+	}
+	// The channel is buffered so the goroutine can always send and exit,
+	// even after this function has returned on timeout.
+	ch := make(chan result, 1)
+	go func() {
+		data, err := os.ReadFile(path)
+		ch <- result{data: data, err: err}
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case r := <-ch:
+		if r.err != nil {
+			return "", false
+		}
+		return string(r.data), true
+	case <-timer.C:
+		return "", false
+	}
+}
+
+func getCgroupV2PathInternal(cgroupData, mountinfoData string) string {
+	rel := getCgroupV2RelativePath(cgroupData)
+	if rel == "" {
+		// The process doesn't run under cgroup v2.
 		return ""
 	}
-	path := "/sys/fs/cgroup" + strings.TrimSpace(tmp[1])
 
-	// Drop trailing slash if it exsits. This prevents from '//' in the constructed paths by the caller.
-	return strings.TrimSuffix(path, "/")
+	// Determine the actual cgroup v2 mountpoint instead of assuming /sys/fs/cgroup.
+	// On systems with a hybrid cgroup hierarchy the unified cgroup v2 is mounted
+	// at a different location such as /sys/fs/cgroup/unified.
+	// See https://github.com/VictoriaMetrics/metrics/issues/127
+	mountpoint := getCgroupV2Mountpoint(mountinfoData)
+	if mountpoint == "" {
+		// fallback to assumed path
+		mountpoint = "/sys/fs/cgroup"
+	}
+	cgroupPath := path.Join(mountpoint, rel)
+	// Drop trailing slash if it exists. This prevents from '//' in the constructed paths by the caller.
+	return strings.TrimSuffix(cgroupPath, "/")
+}
+
+// getCgroupV2RelativePath returns the cgroup v2 path of the process relative to
+// the cgroup v2 mountpoint, or an empty string if the process doesn't run under cgroup v2.
+//
+// The cgroup v2 entry in /proc/self/cgroup has an empty controllers field, e.g. "0::/the/path".
+// See https://man7.org/linux/man-pages/man7/cgroups.7.html
+func getCgroupV2RelativePath(cgroupData string) string {
+	for _, line := range strings.Split(cgroupData, "\n") {
+		// Each line has the form "hierarchy-ID:controller-list:cgroup-path".
+		// The cgroup v2 line has an empty hierarchy-ID and controller-list, i.e. it starts with "0::".
+		tmp := strings.SplitN(line, "::", 2)
+		if len(tmp) == 2 && strings.HasPrefix(line, "0::") {
+			return strings.TrimSpace(tmp[1])
+		}
+	}
+	return ""
+}
+
+// getCgroupV2Mountpoint returns the mountpoint of the cgroup v2 (unified) hierarchy
+// parsed from the contents of /proc/self/mountinfo, or an empty string if cgroup v2 isn't mounted.
+func getCgroupV2Mountpoint(mountinfoData string) string {
+	for _, line := range strings.Split(mountinfoData, "\n") {
+		if !strings.Contains(line, "cgroup2") {
+			// fast path
+			continue
+		}
+		// mountinfo lines have the form:
+		//   36 35 98:0 / /sys/fs/cgroup/unified rw,... - cgroup2 cgroup2 rw,...
+		// The optional fields preceding the filesystem type are terminated by " - ".
+		// See https://man7.org/linux/man-pages/man5/proc_pid_mountinfo.5.html
+		tmp := strings.SplitN(line, " - ", 2)
+		if len(tmp) != 2 {
+			continue
+		}
+		after := strings.Fields(tmp[1])
+		if len(after) < 1 || after[0] != "cgroup2" {
+			continue
+		}
+		before := strings.Fields(tmp[0])
+		if len(before) < 5 {
+			continue
+		}
+		// before[4] is the mount point.
+		return before[4]
+	}
+	return ""
 }

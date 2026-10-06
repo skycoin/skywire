@@ -186,9 +186,12 @@ dispatch:
 		// is not: the user wants exit.
 		return failf(1, "logout: not login shell: use `exit'\n")
 	case "times":
-		// No per-process CPU accounting on the targets this fork serves
-		// (js/wasm has none at all), so report zeros in bash's format
-		// rather than fail: shell user/sys, then children user/sys.
+		// js/wasm has no per-process CPU accounting at all, so report zeros
+		// in bash's format — shell user/sys, then children user/sys — rather
+		// than fail.
+		// TODO: report real times on platforms that can, via os/exec's
+		// ProcessState or syscall.Getrusage. Not urgent; nothing depends on
+		// the values being non-zero.
 		r.out("0m0.000s 0m0.000s\n0m0.000s 0m0.000s\n")
 	case "umask":
 		symbolic := false
@@ -420,7 +423,7 @@ dispatch:
 				// bash's wait takes a job specification as well as a PID.
 				//
 				// It answers 127 here, as it does for a PID that names no
-				// child; the PID path below answers 1 instead, which is a
+				// child; the PID path above answers 1 instead, which is a
 				// divergence that predates job control and has a test of its
 				// own, so it is left alone rather than changed in passing.
 				found, err := r.jobSpec(arg)
@@ -439,7 +442,7 @@ dispatch:
 			if !bg.await(ctx) {
 				return exitStatus{code: 130}
 			}
-			exit = *bg.exit
+			exit = bg.finalExit()
 			// Waiting for a job reaps it, as in bash.
 			r.reapBgProc(bg)
 		}
@@ -1376,4 +1379,25 @@ func (r *Runner) optStatusText(status bool) string {
 		return "on"
 	}
 	return "off"
+}
+
+// umaskSymbolic renders a mask the way `umask -S` does: the permissions that
+// remain, not the ones masked off.
+func umaskSymbolic(mask uint32) string {
+	var b strings.Builder
+	for i, who := range []string{"u", "g", "o"} {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(who)
+		b.WriteByte('=')
+		shift := uint(6 - 3*i)
+		bits := (mask >> shift) & 7
+		for j, perm := range []string{"r", "w", "x"} {
+			if bits&(4>>uint(j)) == 0 {
+				b.WriteString(perm)
+			}
+		}
+	}
+	return b.String()
 }

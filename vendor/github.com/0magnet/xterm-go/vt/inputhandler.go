@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Port of src/common/InputHandler.ts — the terminal's implementation
@@ -191,7 +192,6 @@ type InputHandler struct {
 
 	activeBuffer *Buffer
 
-	parseBuffer   []uint32
 	stringDecoder StringToUtf32
 	utf8Decoder   Utf8ToUtf32
 
@@ -232,7 +232,6 @@ func NewInputHandler(bufferService *BufferService, charsetService *CharsetServic
 		mouseService:          mouseService,
 		oscLinkService:        oscLinkService,
 		options:               options,
-		parseBuffer:           make([]uint32, 4096),
 		curAttrData:           NewAttributeData(),
 		eraseAttrDataInternal: NewAttributeData(),
 	}
@@ -379,8 +378,8 @@ func (h *InputHandler) getCurrentLinkID() int {
 
 // Parse decodes and parses a chunk of UTF-8 pty output.
 func (h *InputHandler) Parse(data []byte) {
-	h.parseWith(len(data), func(start, end int) int {
-		return h.utf8Decoder.Decode(data[start:end], h.parseBuffer)
+	h.parseWith(len(data), func(buf []uint32, start, end int) int {
+		return h.utf8Decoder.Decode(data[start:end], buf)
 	})
 }
 
@@ -389,19 +388,26 @@ func (h *InputHandler) Parse(data []byte) {
 // surrogates).
 func (h *InputHandler) ParseString(data string) {
 	units := utf16Units(data)
-	h.parseWith(len(units), func(start, end int) int {
-		return h.stringDecoder.Decode(units[start:end], h.parseBuffer)
+	h.parseWith(len(units), func(buf []uint32, start, end int) int {
+		return h.stringDecoder.Decode(units[start:end], buf)
 	})
 }
 
-func (h *InputHandler) parseWith(length int, decode func(start, end int) int) {
+// parseBuffers holds the decode buffers, shared by every terminal in the
+// process. A buffer is only needed for the length of one write, and one kept
+// per terminal stays as large as the largest write it ever had: up to 512 KiB.
+var parseBuffers = sync.Pool{New: func() any { return new([]uint32) }}
+
+func (h *InputHandler) parseWith(length int, decode func(buf []uint32, start, end int) int) {
 	cursorStartX := h.activeBuffer.X
 	cursorStartY := h.activeBuffer.Y
 
-	// resize input buffer if needed
-	if len(h.parseBuffer) < length && len(h.parseBuffer) < maxParseBufferLength {
-		h.parseBuffer = make([]uint32, min(length, maxParseBufferLength))
+	bufp := parseBuffers.Get().(*[]uint32)
+	defer parseBuffers.Put(bufp)
+	if need := min(length, maxParseBufferLength); len(*bufp) < need {
+		*bufp = make([]uint32, need)
 	}
+	buf := *bufp
 
 	// Clear the dirty row tracker so we know which lines changed
 	h.dirtyTracker.clearRange()
@@ -409,8 +415,8 @@ func (h *InputHandler) parseWith(length int, decode func(start, end int) int) {
 	// process big data in smaller chunks
 	for i := 0; i < length; i += maxParseBufferLength {
 		end := min(i+maxParseBufferLength, length)
-		n := decode(i, end)
-		h.parser.Parse(h.parseBuffer, n)
+		n := decode(buf, i, end)
+		h.parser.Parse(buf, n)
 	}
 
 	if h.activeBuffer.X != cursorStartX || h.activeBuffer.Y != cursorStartY {
@@ -451,6 +457,10 @@ func (h *InputHandler) Print(data []uint32, start, end int) {
 	}
 
 	precedingJoinState := uint32(h.parser.PrecedingJoinState) // #nosec G115 -- Unicode codepoints and the parser's join state
+	charProperties := CharProperties
+	if h.coreService.DecPrivateModes.GraphemeClustering {
+		charProperties = GraphemeCharProperties
+	}
 	for pos := start; pos < end; pos++ {
 		code := data[pos]
 
@@ -461,7 +471,7 @@ func (h *InputHandler) Print(data []uint32, start, end int) {
 			}
 		}
 
-		currentInfo := CharProperties(code, precedingJoinState)
+		currentInfo := charProperties(code, precedingJoinState)
 		chWidth := ExtractWidth(currentInfo)
 		shouldJoin := ExtractShouldJoin(currentInfo)
 		oldWidth := 0
@@ -1278,6 +1288,9 @@ func (h *InputHandler) SetModePrivate(params *Params) bool {
 			h.coreService.DecPrivateModes.BracketedPasteMode = true
 		case 2026: // synchronized output
 			h.coreService.DecPrivateModes.SynchronizedOutput = true
+		case 2027: // grapheme cluster mode
+			h.coreService.DecPrivateModes.GraphemeClustering = true
+			h.parser.PrecedingJoinState = 0
 		}
 	}
 	return true
@@ -1356,6 +1369,9 @@ func (h *InputHandler) ResetModePrivate(params *Params) bool {
 			if h.OnRequestRefreshRows != nil {
 				h.OnRequestRefreshRows(-1, -1)
 			}
+		case 2027:
+			h.coreService.DecPrivateModes.GraphemeClustering = false
+			h.parser.PrecedingJoinState = 0
 		}
 	}
 	return true
@@ -1462,6 +1478,8 @@ func (h *InputHandler) RequestMode(params *Params, ansi bool) bool {
 		return f(p, b2v(dm.BracketedPasteMode))
 	case 2026:
 		return f(p, b2v(dm.SynchronizedOutput))
+	case 2027:
+		return f(p, b2v(dm.GraphemeClustering))
 	}
 	return f(p, modeNotRecognized)
 }

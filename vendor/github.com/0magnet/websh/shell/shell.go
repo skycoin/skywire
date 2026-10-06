@@ -29,6 +29,10 @@ type Shell struct {
 	RawMode func(on bool)
 	// Size, when set, reports the terminal dimensions.
 	Size func() (cols, rows int)
+	// WakeStdin, when set, makes a Read blocked on the terminal's stdin return
+	// with no data. An applet that reads keys on its own goroutine (ssh) calls
+	// it when its session ends on its own, rather than waiting for a key.
+	WakeStdin func()
 
 	// Exec, when set, is offered any command that is not a built-in applet,
 	// before the filesystem is searched. It runs IN THIS PROCESS on the
@@ -90,6 +94,9 @@ func New(vfs afero.Fs, stdin io.Reader, stdout, stderr io.Writer, extraEnv ...st
 		interp.StatHandler(s.statHandler),
 		interp.ReadDirHandler2(s.readDirHandler),
 		interp.AccessHandler(s.accessHandler),
+		// Interactive keeps a job started with & alive after its line's
+		// context is canceled, as the web session does after every line.
+		interp.Interactive(true),
 	)
 	if err != nil {
 		return nil, err

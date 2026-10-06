@@ -26,7 +26,7 @@ func serveDisconnected(t *testing.T) (addr string, stop func()) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ServeDisconnected(ctx, lis, nil)
+		ServeDisconnected(ctx, lis, nil, nil)
 	}()
 	waitDial(t, addr)
 	return addr, func() {
@@ -151,7 +151,7 @@ func TestServeDisconnectedWaitCoversReconnectGap(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ServeDisconnectedWait(context.Background(), addr, nil, 2*time.Second)
+		ServeDisconnectedWait(context.Background(), addr, nil, 2*time.Second, nil)
 	}()
 	waitDial(t, addr)
 
@@ -188,7 +188,7 @@ func TestServeDisconnectedWaitHonorsCancel(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ServeDisconnectedWait(ctx, addr, nil, time.Minute)
+		ServeDisconnectedWait(ctx, addr, nil, time.Minute, nil)
 	}()
 	waitDial(t, addr)
 	cancel()

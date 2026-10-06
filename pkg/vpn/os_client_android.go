@@ -7,6 +7,8 @@ package vpn
 import (
 	"errors"
 	"net"
+
+	"github.com/skycoin/skywire/pkg/skydns"
 )
 
 /*
@@ -70,7 +72,13 @@ func (c *Client) SetupTUN(_, ipCIDR, gateway string, mtu int) error {
 		return errors.New("SetupTUN: the TUN did not come from the Android VPN service")
 	}
 
-	return tun.establish(ipCIDR, gateway, mtu, c.cfg.DNSAddr)
+	dns := c.cfg.DNSAddr
+	if c.mesh != nil {
+		// SkyDNS answers inside the tunnel and asks c.cfg.DNSAddr for the rest.
+		dns = skydns.ResolverAddr
+	}
+
+	return tun.establish(ipCIDR, gateway, mtu, dns)
 }
 
 // ChangeRoute is declared by VpnService.Builder at establish time.

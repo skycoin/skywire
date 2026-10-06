@@ -1,5 +1,9 @@
 package com.skycoin.skywire.ui.hub
 
+import android.app.Activity
+import android.net.VpnService
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -25,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.AltRoute
 import androidx.compose.material.icons.rounded.CandlestickChart
+import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.Hub
@@ -46,6 +51,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -111,6 +117,16 @@ fun HubScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     var filter by rememberSaveable { mutableStateOf<HubCategory?>(null) }
+
+    // SkyDNS on its own builds a tunnel too, so it needs the system's VPN consent.
+    val context = LocalContext.current
+    val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) viewModel.setSkyDns(true)
+    }
+    val setSkyDns: (Boolean) -> Unit = { on ->
+        val ask = if (on) VpnService.prepare(context) else null
+        if (ask == null) viewModel.setSkyDns(on) else consent.launch(ask)
+    }
 
     // SkyVPN is not in this list: it is the hero card, on or off.
     val tiles = buildList {
@@ -183,8 +199,8 @@ fun HubScreen(
             ),
         )
     }
-    // +1: SkyVPN, which lives in the hero card rather than the grid.
-    val installed = tiles.count { !it.comingSoon } + 1
+    // +2: SkyVPN and SkyDNS, which have cards of their own rather than tiles.
+    val installed = tiles.count { !it.comingSoon } + 2
     val shown = tiles.filter { filter == null || it.category == filter }
 
     Scaffold(
@@ -219,6 +235,9 @@ fun HubScreen(
                         onTurnOn = { if (!viewModel.startVpn()) onOpenRoute(Routes.VPN) },
                         onTurnOff = viewModel::stopVpn,
                     )
+                }
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    SkyDnsCard(state, onToggle = setSkyDns)
                 }
             }
             item(span = { GridItemSpan(maxLineSpan) }) {
@@ -604,6 +623,41 @@ private fun AppCard(tile: HubTile, status: AppState?) {
                 )
                 CardSubtitle(tile.subtitle)
             }
+        }
+    }
+}
+
+@Composable
+private fun SkyDnsCard(state: HubUiState, onToggle: (Boolean) -> Unit) {
+    val toggleLabel = stringResource(R.string.hub_skydns_toggle)
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(14.dp)) {
+            IconTile(Icons.Rounded.Dns)
+            Spacer(Modifier.width(13.dp))
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.app_skydns), style = MaterialTheme.typography.titleMedium)
+                CardSubtitle(
+                    stringResource(
+                        when (state.skyDnsStatus) {
+                            SkyDnsStatus.OFF -> R.string.hub_skydns_off
+                            SkyDnsStatus.STARTING -> R.string.hub_skydns_starting
+                            SkyDnsStatus.ON -> R.string.hub_skydns_on
+                            SkyDnsStatus.PAUSED -> R.string.hub_skydns_paused
+                        },
+                    ),
+                )
+            }
+            Switch(
+                checked = state.skyDnsOn,
+                onCheckedChange = onToggle,
+                enabled = !state.skyDnsBusy,
+                modifier = Modifier.semantics { contentDescription = toggleLabel },
+            )
         }
     }
 }

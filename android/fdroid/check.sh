@@ -169,7 +169,11 @@ rm -rf fdroiddata .gitconfig
 # checks its own build against it. This build is what that APK gets signed
 # from, so on a new release there is nothing there yet: sign.sh runs the same
 # check (fdroidserver's verify_apks) once it has signed this build.
-sed -i '/^Binaries:/d' "metadata/$APPID.yml"
+# checkupdates has rewritten the file by now, and fdroid's writer puts the long
+# URL on an indented line of its own, which would otherwise join Repo.
+sed -i '/^Binaries:/,/^[^ ]/{/^Binaries:/d;/^ /d}' "metadata/$APPID.yml"
+grep -qx "Repo: $repo" "metadata/$APPID.yml" \
+  || fail "removing Binaries changed Repo: $(grep '^Repo:' "metadata/$APPID.yml")"
 
 step "fdroid build $APPID:$code (the build server, scanner included)"
 # fdroiddata's CI unsets CI for the build too.

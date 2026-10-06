@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.dp
 import com.skycoin.skywire.R
 import com.skycoin.skywire.ui.components.PENDING_AMBER
 import com.skycoin.skywire.ui.components.SkyTopBar
-import com.skycoin.skywire.wallet.nodeUrlEditable
+import com.skycoin.skywire.wallet.CoinKind
 
 /**
  * Which node this coin's wallet talks to.
@@ -61,6 +61,9 @@ import com.skycoin.skywire.wallet.nodeUrlEditable
  * lie about a balance, but cannot spend anything. What it does see is which
  * addresses are asked about together, which is why the shipped address is
  * https and why saying so on this screen is worth the line.
+ *
+ * The Ethereum family reads history from an indexer apart from its node, so
+ * there the screen holds both, saved and reset together.
  */
 @Composable
 fun WalletNodeScreen(
@@ -74,6 +77,14 @@ fun WalletNodeScreen(
     // actually being used rather than on an empty box the user has to guess
     // the shape of.
     var url by remember(coin.id, coin.nodeUrl) { mutableStateOf(coin.nodeUrl) }
+    val shippedIndexer = state.defaultIndexerUrl
+    var indexer by remember(coin.id, coin.indexerUrl) { mutableStateOf(coin.indexerUrl.orEmpty()) }
+    val hasIndexer = shippedIndexer != null
+    // As the repository stores them, so a trailing slash is not a change.
+    fun typed(value: String) = value.trim().removeSuffix("/")
+    val changed = typed(url) != coin.nodeUrl || (hasIndexer && typed(indexer) != coin.indexerUrl)
+    val shipped = coin.nodeUrl == state.defaultNodeUrl && typed(url) == state.defaultNodeUrl &&
+        (!hasIndexer || (coin.indexerUrl == shippedIndexer && typed(indexer) == shippedIndexer))
 
     LaunchedEffect(state.message) {
         state.message?.let { snackbar.showSnackbar(it); viewModel.messageShown() }
@@ -90,51 +101,99 @@ fun WalletNodeScreen(
                 .padding(horizontal = 20.dp),
         ) {
             Text(
-                stringResource(R.string.wallet_node_body, coin.name),
+                stringResource(
+                    if (hasIndexer) R.string.wallet_node_body_indexer else R.string.wallet_node_body,
+                    coin.name,
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 6.dp, bottom = 18.dp),
             )
 
-            Text(
-                stringResource(R.string.wallet_node_field),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 7.dp),
-            )
-            OutlinedTextField(
-                value = url,
-                onValueChange = { url = it },
-                placeholder = { Text(state.defaultNodeUrl) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-            )
-
             // Said where the choice is made, not in a settings page nobody
             // opens: an address typed here decides whether the address book
             // travels in the clear, and that is not recoverable afterwards.
-            TransportNote(url)
+            UrlField(
+                label = stringResource(R.string.wallet_node_field),
+                hint = when (coin.kind) {
+                    CoinKind.BTC -> stringResource(R.string.wallet_node_hint_btc)
+                    CoinKind.ETH, CoinKind.ERC20 -> stringResource(R.string.wallet_node_hint_eth)
+                    CoinKind.SKY_FIBER -> null
+                },
+                value = url,
+                placeholder = state.defaultNodeUrl,
+                onChange = { url = it },
+            )
+            if (shippedIndexer != null) {
+                Spacer(Modifier.height(20.dp))
+                UrlField(
+                    label = stringResource(R.string.wallet_indexer_field),
+                    hint = stringResource(R.string.wallet_indexer_hint),
+                    value = indexer,
+                    placeholder = shippedIndexer,
+                    onChange = { indexer = it },
+                )
+            }
 
             Spacer(Modifier.height(20.dp))
             Button(
-                onClick = { viewModel.setNodeUrl(url, onBack) },
-                enabled = url.isNotBlank() && url.trim() != coin.nodeUrl,
+                onClick = { viewModel.setNodeUrl(url, indexer.takeIf { hasIndexer }, onBack) },
+                enabled = url.isNotBlank() && (!hasIndexer || indexer.isNotBlank()) && changed,
                 modifier = Modifier.fillMaxWidth().height(50.dp),
             ) {
-                Text(stringResource(R.string.wallet_node_save), fontWeight = FontWeight.Bold)
+                Text(
+                    stringResource(if (hasIndexer) R.string.wallet_node_save_all else R.string.wallet_node_save),
+                    fontWeight = FontWeight.Bold,
+                )
             }
-            if (coin.nodeUrl != state.defaultNodeUrl || url.trim() != state.defaultNodeUrl) {
+            if (!shipped) {
                 TextButton(
-                    onClick = { viewModel.setNodeUrl("", onBack) },
+                    onClick = { viewModel.setNodeUrl("", "".takeIf { hasIndexer }, onBack) },
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 ) {
-                    Text(stringResource(R.string.wallet_node_default, state.defaultNodeUrl))
+                    Text(
+                        if (hasIndexer) stringResource(R.string.wallet_node_default_all)
+                        else stringResource(R.string.wallet_node_default, state.defaultNodeUrl),
+                    )
                 }
             }
         }
     }
+}
+
+/** One address field: its label, what kind of server it takes, and whether it is encrypted. */
+@Composable
+private fun UrlField(
+    label: String,
+    hint: String?,
+    value: String,
+    placeholder: String,
+    onChange: (String) -> Unit,
+) {
+    Text(
+        label,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(bottom = 7.dp),
+    )
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        placeholder = { Text(placeholder) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+    )
+    if (hint != null) {
+        Text(
+            hint,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+    }
+    TransportNote(value)
 }
 
 /** Whether what is typed will be encrypted on the wire, said plainly. */
@@ -169,6 +228,3 @@ private fun TransportNote(url: String) {
         )
     }
 }
-
-/** Only the coins whose node address is the whole story — see [nodeUrlEditable]. */
-internal fun canEditNode(state: WalletUiState): Boolean = state.coin.nodeUrlEditable

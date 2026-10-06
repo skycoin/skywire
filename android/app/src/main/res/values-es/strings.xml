@@ -53,6 +53,7 @@
 
     <string name="app_skysocks">SkySOCKS</string>
     <string name="app_skyvpn">SkyVPN</string>
+    <string name="app_skydns">SkyDNS</string>
     <string name="app_skydex">SkyDEX</string>
     <string name="app_skychat">SkyChat</string>
     <string name="app_wallet">Billetera</string>
@@ -79,6 +80,11 @@
     <string name="hub_stat_up">Subida</string>
     <string name="hub_stat_data">Datos</string>
     <string name="hub_vpn_toggle">Activar o desactivar SkyVPN</string>
+    <string name="hub_skydns_toggle">Activar o desactivar SkyDNS</string>
+    <string name="hub_skydns_off">Nombres .dmsg y .skynet en cada app</string>
+    <string name="hub_skydns_starting">Iniciando…</string>
+    <string name="hub_skydns_on">Resolviendo .dmsg y .skynet</string>
+    <string name="hub_skydns_paused">En pausa con SkyVPN activado</string>
     <plurals name="hub_hops">
         <item quantity="one">%1$d salto</item>
         <item quantity="many">%1$d de saltos</item>
@@ -299,6 +305,7 @@
     <string name="vpn_killswitch_hint">Mantiene la interfaz de red en pie mientras el túnel está caído, para que nada se escape por fuera. Las demás apps se quedan sin conexión hasta que vuelva.</string>
     <string name="vpn_killswitch_always_on">Ajustes de VPN siempre activa</string>
     <string name="vpn_killswitch_always_on_hint">Para la garantía más fuerte —bloquear incluso antes de que la app arranque— activa «VPN siempre activa» y «Bloquear conexiones sin VPN» para Skywire en los ajustes de Android.</string>
+    <string name="vpn_skydns_hint">Abre nombres .dmsg y .skynet en todas las apps mientras SkyVPN está activado. Escribe la dirección de un sitio con la etiqueta DNS de su clave: una clave en hexadecimal es demasiado larga para DNS.</string>
     <string name="vpn_hotspot_title">Zona Wi-Fi con VPN</string>
     <string name="vpn_hotspot_hint">Comparte SkyVPN con los dispositivos conectados a la zona Wi-Fi de este teléfono. La usan a través de un proxy en este teléfono.</string>
     <string name="vpn_hotspot_error">No se pudo abrir el puerto %1$d: %2$s</string>
@@ -594,6 +601,14 @@
     <string name="settings_autoconnect">Conectar con nodos públicos</string>
     <string name="settings_autoconnect_hint">Mantiene transportes abiertos hacia nodos públicos para que la red pueda enrutar a través de este teléfono, y para que este teléfono pueda enrutar a través de ellos. Cuesta batería y datos móviles, y por eso está desactivado. Las rutas de más de un salto lo necesitan.</string>
     <string name="settings_autoconnect_restart">Se aplica la próxima vez que arranque el núcleo.</string>
+    <string name="settings_dns">Servidor DNS</string>
+    <string name="settings_dns_hint">SkyVPN y SkyDNS le preguntan a este servidor por cada nombre que no sea .dmsg ni .skynet, con DNS sobre TLS cuando el servidor lo ofrece, como hacen Cloudflare, Google y Quad9. Si lo dejas vacío, SkyVPN usa 1.1.1.1 (Cloudflare), porque un servidor VPN no tiene un resolvedor que compartir, y SkyDNS por sí solo usa el DNS de este teléfono.</string>
+    <string name="settings_dns_invalid">Escribe una dirección IPv4, como 9.9.9.9.</string>
+    <string name="settings_dns_save">Usar este servidor</string>
+    <string name="settings_dns_default">Usar los predeterminados</string>
+    <string name="settings_dns_saved">Servidor DNS: %1$s.</string>
+    <string name="settings_dns_placeholder">Predeterminado</string>
+    <string name="settings_dns_cleared">Se usan los servidores DNS predeterminados.</string>
 
     <string name="settings_remote">Gestión remota</string>
     <string name="settings_remote_hint">Permite que otro nodo —el tuyo, en un escritorio— gobierne este por la red: iniciar y detener apps, cambiar el enrutamiento, leer los registros. Nada es alcanzable hasta que concedas una clave, y la clave concedida tiene control total, así que debería ser una máquina tuya. En ningún sentido hay acceso a la shell ni a los archivos.</string>
@@ -656,6 +671,13 @@
     <string name="wallet_node_default">Volver a %1$s</string>
     <string name="wallet_node_encrypted">Cifrado en tránsito. El nodo sigue viendo qué direcciones consultas juntas, pero nadie más por el camino.</string>
     <string name="wallet_node_cleartext">Sin cifrar. Todo el mundo entre este teléfono y esa dirección ve tu lista de direcciones entera y sus saldos. Tus monedas siguen a salvo —las claves nunca salen del dispositivo—, pero las direcciones quedan ligadas entre sí para cualquiera que esté mirando.</string>
+    <string name="wallet_node_body_indexer">Los saldos, las comisiones y los envíos de %1$s van al nodo, y su historial de transacciones se lee del indexador. Cámbialos si los que vienen con la app no se pueden alcanzar desde donde estás, o si tienes los tuyos.</string>
+    <string name="wallet_node_hint_btc">Una API Esplora, como mempool.space, blockstream.info o tu propio electrs.</string>
+    <string name="wallet_node_hint_eth">Un punto de acceso JSON-RPC de Ethereum.</string>
+    <string name="wallet_indexer_field">Dirección del indexador</string>
+    <string name="wallet_indexer_hint">Una instancia de Blockscout, u otra API al estilo de etherscan que no pida clave.</string>
+    <string name="wallet_node_save_all">Usar estas direcciones</string>
+    <string name="wallet_node_default_all">Volver a las direcciones de la app</string>
     <string name="wallet_scan_pending">Las demás direcciones de esta billetera todavía no se han confirmado con el nodo, así que el saldo puede estar incompleto. Se reintenta en cada actualización.</string>
     <string name="wallet_stale_never">No se alcanza el nodo. Esta billetera aún no se ha sincronizado: los saldos aparecerán cuando el nodo responda.</string>
     <string name="wallet_stale_send_note">Envío desactivado: no hay ruta hasta el nodo</string>

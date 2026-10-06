@@ -87,7 +87,13 @@ func TestFirstStream_RejectedConnectStillReachesTheBrowser(t *testing.T) {
 	streamSniff, exit := net.Pipe()
 	defer browser.Close() //nolint:errcheck
 	defer exit.Close()    //nolint:errcheck
-	go c.handleStream(connSniff, streamSniff)
+	go func() {
+		br, ok := readBrowserRequest(connSniff, false)
+		if !ok {
+			return
+		}
+		c.handleStream(connSniff, streamSniff, br)
+	}()
 
 	// Drain the exit side continuously: whether the client writes the greeting and
 	// the CONNECT together or one after the other, the bytes are simply consumed.

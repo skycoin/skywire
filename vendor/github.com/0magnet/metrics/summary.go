@@ -111,11 +111,11 @@ func (sm *Summary) marshalTo(prefix string, w io.Writer) {
 		name, filters := splitMetricName(prefix)
 		if float64(int64(sum)) == sum {
 			// Marshal integer sum without scientific notation
-			_, _ = fmt.Fprintf(w, "%s_sum%s %d\n", name, filters, int64(sum)) //nolint:errcheck
+			fmt.Fprintf(w, "%s_sum%s %d\n", name, filters, int64(sum))
 		} else {
-			_, _ = fmt.Fprintf(w, "%s_sum%s %g\n", name, filters, sum) //nolint:errcheck
+			fmt.Fprintf(w, "%s_sum%s %g\n", name, filters, sum)
 		}
-		_, _ = fmt.Fprintf(w, "%s_count%s %d\n", name, filters, count) //nolint:errcheck
+		fmt.Fprintf(w, "%s_count%s %d\n", name, filters, count)
 	}
 }
 
@@ -196,7 +196,7 @@ func (qv *quantileValue) marshalTo(prefix string, w io.Writer) {
 	v := qv.sm.quantileValues[qv.idx]
 	qv.sm.mu.Unlock()
 	if !math.IsNaN(v) {
-		_, _ = fmt.Fprintf(w, "%s %g\n", prefix, v) //nolint:errcheck
+		fmt.Fprintf(w, "%s %g\n", prefix, v)
 	}
 }
 

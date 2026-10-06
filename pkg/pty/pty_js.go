@@ -2,11 +2,8 @@
 
 // Package pty pkg/pty/pty_js.go c2-app-pty
 //
-// js/wasm stand-ins: a browser cannot allocate a pseudo-terminal or exec a
-// process, so hosting a pty is impossible there. These keep the package — and
-// the pty command tree with its real help text — compiling in the wasm build
-// of the full skywire binary. The CLIENT side (dialing a remote visor's pty)
-// is platform-independent and untouched; only local pty allocation errors.
+// js/wasm helpers. A browser has no pseudo-terminal or processes, so the pty
+// host runs a websh session instead (pty_websh_js.go).
 package pty
 
 import (
@@ -16,8 +13,6 @@ import (
 	"path/filepath"
 	"syscall"
 )
-
-var errNoPtyOnJS = errors.New("pty: no pseudo-terminal on js/wasm — cannot host a pty in a browser")
 
 // Errors mirrored from the platform pty hosts.
 var (
@@ -35,26 +30,6 @@ func DefaultCLIAddr() string {
 func (ui *UI) uiWinSize() (*WinSize, []string, error) {
 	return &WinSize{Rows: wsRows, Cols: wsCols}, []string{"TERM=xterm-256color"}, nil
 }
-
-// Pty is the local pseudo-terminal host. Unavailable on js/wasm.
-type Pty struct{}
-
-// NewPty constructs the (non-functional) js Pty host.
-func NewPty() *Pty { return &Pty{} }
-
-// Stop is a no-op.
-func (s *Pty) Stop() error { return nil }
-
-func (s *Pty) Read(_ []byte) (int, error)  { return 0, errNoPtyOnJS }
-func (s *Pty) Write(_ []byte) (int, error) { return 0, errNoPtyOnJS }
-
-// Start always fails: no exec, no pty device.
-func (s *Pty) Start(_ string, _ []string, _ *WinSize, _ []string) error {
-	return errNoPtyOnJS
-}
-
-// SetPtySize always fails on js/wasm.
-func (s *Pty) SetPtySize(_ *WinSize) error { return errNoPtyOnJS }
 
 // mergeEnv mirrors the native helper: override wins per KEY=VALUE key.
 func mergeEnv(base, override []string) []string {

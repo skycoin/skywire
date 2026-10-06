@@ -250,22 +250,22 @@ func (h *PrometheusHistogram) marshalTo(prefix string, w io.Writer) {
 		tag := fmt.Sprintf(`le="%v"`, ub)
 		metricName := addTag(prefix, tag)
 		name, labels := splitMetricName(metricName)
-		_, _ = fmt.Fprintf(w, "%s_bucket%s %d\n", name, labels, cumulativeSum) //nolint:errcheck
+		fmt.Fprintf(w, "%s_bucket%s %d\n", name, labels, cumulativeSum)
 	}
 	h.mu.Unlock()
 
 	tag := fmt.Sprintf("le=%q", "+Inf")
 	metricName := addTag(prefix, tag)
 	name, labels := splitMetricName(metricName)
-	_, _ = fmt.Fprintf(w, "%s_bucket%s %d\n", name, labels, count) //nolint:errcheck
+	fmt.Fprintf(w, "%s_bucket%s %d\n", name, labels, count)
 
 	name, labels = splitMetricName(prefix)
 	if float64(int64(sum)) == sum {
-		_, _ = fmt.Fprintf(w, "%s_sum%s %d\n", name, labels, int64(sum)) //nolint:errcheck
+		fmt.Fprintf(w, "%s_sum%s %d\n", name, labels, int64(sum))
 	} else {
-		_, _ = fmt.Fprintf(w, "%s_sum%s %g\n", name, labels, sum) //nolint:errcheck
+		fmt.Fprintf(w, "%s_sum%s %g\n", name, labels, sum)
 	}
-	_, _ = fmt.Fprintf(w, "%s_count%s %d\n", name, labels, count) //nolint:errcheck
+	fmt.Fprintf(w, "%s_count%s %d\n", name, labels, count)
 }
 
 func (h *PrometheusHistogram) metricType() string {

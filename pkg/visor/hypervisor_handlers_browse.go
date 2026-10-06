@@ -16,7 +16,9 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"runtime"
 	"strconv"
+	"strings"
 
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/wasmhv"
@@ -65,6 +67,11 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 	fileServer := uiCacheControl(http.FileServer(http.FS(hv.c.UIAssets)))
 	bootReport := bootReportHandler(hv.logger, "")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// See wasmhv.ServeVNetFallback: a /vnet/ request here bypassed the worker.
+		if strings.HasPrefix(r.URL.Path, "/vnet/") {
+			wasmhv.ServeVNetFallback(w, r)
+			return
+		}
 		switch r.URL.Path {
 		// PWA: the desk installs as an app. The manifest and icons are the ones
 		// `hv serve` uses; the service worker precaches THIS context's shell and
@@ -256,6 +263,10 @@ func (hv *Hypervisor) serveInjectedIndex(w http.ResponseWriter, r *http.Request,
 	ver := hv.servedUIVersion()
 	inject := []byte(`<script>window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;</script>` +
 		`<script>` + uiAutoReloadJS + `</script>`)
+	// A wasm core serving its own dashboard says so, for the copy in hv-tour.js.
+	if runtime.GOOS == "js" {
+		inject = append(inject, []byte(`<script>window.SKYWIRE_HV_MODE="wasm";</script>`)...)
+	}
 	out := bytes.Replace(b, []byte("</body>"), append(inject, []byte("</body>")...), 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")

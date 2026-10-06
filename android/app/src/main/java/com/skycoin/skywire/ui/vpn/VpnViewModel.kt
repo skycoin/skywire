@@ -21,6 +21,7 @@ import com.skycoin.skywire.core.VpnAppRouting
 import com.skycoin.skywire.core.VpnAppRoutingStore
 import com.skycoin.skywire.core.ServerListCache
 import com.skycoin.skywire.core.PublicAutoconnect
+import com.skycoin.skywire.core.SkyDns
 import com.skycoin.skywire.core.SkyVpnService
 import com.skycoin.skywire.core.TransportPreference
 import com.skycoin.skywire.core.VpnTunnel
@@ -69,6 +70,8 @@ data class VpnUiState(
      */
     val minHops: Int = 0,
     val killswitch: Boolean = false,
+    /** SkyDNS inside the tunnel: .dmsg and .skynet names in every app. See [SkyDns]. */
+    val skyDns: Boolean = SkyDns.DEFAULT_IN_VPN,
     /** Which apps the tunnel takes — see [VpnAppRouting]. */
     val appRouting: VpnAppRouting = VpnAppRouting(),
     /** The apps that can be chosen for it; null until first asked for. */
@@ -229,6 +232,11 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
             VpnTunnel.state.collect { tunnel -> mutable.update { it.copy(tunnel = tunnel) } }
         }
         viewModelScope.launch {
+            prefs.boolean(SkyDns.PREF_IN_VPN, SkyDns.DEFAULT_IN_VPN).collect { on ->
+                mutable.update { it.copy(skyDns = on) }
+            }
+        }
+        viewModelScope.launch {
             prefs.boolean(VpnHotspot.PREF_KEY).collect { on -> mutable.update { it.copy(hotspot = on) } }
         }
         viewModelScope.launch {
@@ -351,6 +359,31 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Turn SkyDNS inside the tunnel on or off. Stored on the phone and pinned at
+     * every core start; a running tunnel is re-dialed to apply it, as [setKillswitch].
+     */
+    fun setSkyDns(on: Boolean) = action {
+        prefs.putBoolean(SkyDns.PREF_IN_VPN, on)
+        if (!mutable.value.coreReady) return@action
+
+        val state = mutable.value
+        if (!state.running && !state.starting) {
+            pinSkyDns(on)
+            return@action
+        }
+        val pk = state.selectedPk ?: return@action
+        startWith(state.lastServer?.takeIf { it.pk == pk } ?: SavedServer(pk))
+    }
+
+    /** Sets vpn-client's SkyDNS flag. Only while it is stopped: an args change restarts it. */
+    private suspend fun pinSkyDns(on: Boolean) {
+        val current = api.app(VpnArgs.APP)
+        if (SkyDns.inVpnArgs(current.args) != on) {
+            api.updateApp(VpnArgs.APP, args = SkyDns.vpnArgs(current.args, on).joinToString(" "))
+        }
+    }
+
+    /**
      * Choose which apps the tunnel takes: all, only the chosen ones, or all
      * but the chosen ones.
      *
@@ -470,6 +503,7 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
         SkyVpnService.start(getApplication(), killswitch)
         runCatching { api.updateApp(VpnArgs.APP, status = VisorApi.APP_STOP) }
         awaitStopped()
+        runCatching { pinSkyDns(mutable.value.skyDns) }
         val updated = api.updateApp(
             VpnArgs.APP,
             pk = server.pk,

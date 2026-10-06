@@ -89,7 +89,7 @@ type Runner struct {
 	// it is applied by the kernel rather than by [DefaultOpenHandler]. They
 	// are the same value in bash, where the shell's umask is the process's;
 	// here they are separate, and this one is what a custom open handler —
-	// backed by an in-memory filesystem, say — has to honour itself.
+	// backed by an in-memory filesystem, say — has to honor itself.
 	umask uint32
 
 	// Params are the current shell parameters, e.g. from running a shell
@@ -207,8 +207,8 @@ type Runner struct {
 	lastExpandExit exitStatus // used to surface exit statuses while expanding fields
 
 	// bgProcs holds all background shells spawned by this runner.
-	// Their PIDs are fake — a counter with a "g" prefix, to distinguish them
-	// from real PIDs on the host operating system; see [bgProc.id].
+	// As they run as goroutines rather than forked processes, they have
+	// fake PIDs; see [bgProc.id].
 	//
 	// Note that each shell only tracks its direct children;
 	// subshells do not share nor inherit the background PIDs they can wait for.
@@ -227,12 +227,29 @@ type Runner struct {
 	// bgProcs, so that reaping cannot hand out an id twice.
 	bgProcSeq int
 
+	// jobsBase is the context every background job started by this shell
+	// descends from. A job must not die because the statement which started
+	// it is done, and in particular a job nested inside another job outlives
+	// the one that started it, as in bash. A non-interactive shell's Run call
+	// bounds it, so an embedder which cancels that still reaps every job, and
+	// an interactive one keeps its jobs across lines.
+	jobsBase context.Context
+
+	// inSubshell marks a runner made by [Runner.subshell], which takes
+	// jobsBase from its parent rather than from the Run it is given.
+	inSubshell bool
+
 	// bgStarted is non-nil when this runner is a background subshell
 	// whose statement may amount to starting one external program;
 	// the runner reports through it once via [Runner.reportBgStart].
 	bgStarted chan int
 
 	opts runnerOpts
+
+	// interactive records the [Interactive] option: whether the runner
+	// behaves like an interactive shell. Among other things, it decides
+	// whether background jobs are detached from the statement's context.
+	interactive bool
 
 	origDir    string
 	origParams []string
@@ -253,6 +270,11 @@ type Runner struct {
 	// It is consumed by the enclosing statement once it finishes.
 	keepRedirs bool
 
+	// keptFiles holds the files opened by redirections which were kept
+	// by "exec", to be closed when the shell or subshell exits.
+	// TODO: close a file once "exec" replaces it, like other shells do.
+	keptFiles []io.Closer
+
 	// disabledBuiltins holds the names turned off by `enable -n`, which are
 	// then looked up as external commands like bash does.
 	disabledBuiltins map[string]bool
@@ -262,10 +284,6 @@ type Runner struct {
 	// not read input lines itself, so only a line editor above it knows them.
 	historyList  func() []string
 	historyClear func()
-	// keptFiles holds the files opened by redirections which were kept
-	// by "exec", to be closed when the shell or subshell exits.
-	// TODO: close a file once "exec" replaces it, like other shells do.
-	keptFiles []io.Closer
 
 	// Fake signal callbacks
 	callbackErr  string
@@ -353,10 +371,29 @@ type bgProc struct {
 
 	exit *exitStatus
 
+	// id is what $! expands to: a fake PID such as "g1", 1-indexed and
+	// prefixed to distinguish it from real PIDs on the host operating
+	// system, or the real process ID once started delivers a non-zero one.
+	// Read it via [Runner.bgProcID].
+	id string
+
+	// started, when non-nil, delivers the report from [Runner.reportBgStart]:
+	// the process ID when the background statement started exactly one
+	// external program, and zero otherwise.
+	started chan int
+
 	// cmd is the source text of the backgrounded statement, as the jobs
-	// builtin prints it. It is empty for the shells behind process
-	// substitutions, which bash does not list as jobs either.
+	// builtin prints it.
 	cmd string
+
+	// substitution marks the shells behind process substitutions, which bash
+	// does not list as jobs either. They have no job number, cannot be named
+	// by a job spec, and a bare wait does not wait for them.
+	//
+	// A separate field rather than testing cmd == "": an empty command string
+	// is a plausible thing to have for other reasons, and every place that
+	// asked "is this a real job" was really asking this.
+	substitution bool
 
 	// cancel stops the background shell. A job here is a goroutine rather
 	// than an operating system process, so the kill builtin cancels its
@@ -370,26 +407,6 @@ type bgProc struct {
 	// disowned jobs are hidden from jobs and are not waited for by a bare
 	// wait, as after bash's disown.
 	disowned bool
-
-	// id is what $! expands to: a fake PID such as "g1", prefixed to
-	// distinguish it from a real PID on the host operating system, or the
-	// real process ID once started delivers a non-zero one.
-	// Read it via [bgProc.bgProcID].
-	id string
-
-	// started, when non-nil, delivers the report from [Runner.reportBgStart]:
-	// the process ID when the background statement started exactly one
-	// external program, and zero otherwise.
-	started chan int
-
-	// substitution marks the shells behind process substitutions, which bash
-	// does not list as jobs either. They have no job number, cannot be named
-	// by a job spec, and a bare wait does not wait for them.
-	//
-	// A separate field rather than testing cmd == "", which is what this used
-	// to do: reaping a job clears its command, and a reaped job must not turn
-	// into a process substitution.
-	substitution bool
 
 	// num is the job number that the builtins print and accept, such as the 2
 	// in `[2]+`. It is assigned when the job starts and never changes, since
@@ -443,9 +460,10 @@ func (r *Runner) reapBgProc(bg *bgProc) {
 	bg.cancel, bg.cmd = nil, ""
 }
 
-// bgProcID returns what $! expands to for this job, waiting for the job's
-// report first when one is pending; see [Runner.reportBgStart].
-func (bg *bgProc) bgProcID() string {
+// bgProcID returns what $! expands to for a background job,
+// waiting for the job's report first when one is pending;
+// see [Runner.reportBgStart].
+func (r *Runner) bgProcID(bg *bgProc) string {
 	if bg.started != nil {
 		if pid := <-bg.started; pid != 0 {
 			bg.id = strconv.Itoa(pid)
@@ -460,13 +478,13 @@ func (r *Runner) lookupBgProc(arg string) (*bgProc, bool) {
 	// Iterate backwards so that, if the OS reused a PID,
 	// we find the most recent background job.
 	for _, bg := range slices.Backward(r.bgProcs) {
-		if !bg.reaped && bg.bgProcID() == arg {
+		if r.bgProcID(bg) == arg {
 			return bg, true
 		}
 	}
 	// A reaped job is gone from the table, but bash still answers for the one
 	// $! names, so that `p=$!; jobs; wait $p` works.
-	if r.lastBg != nil && r.lastBg.bgProcID() == arg {
+	if r.lastBg != nil && r.bgProcID(r.lastBg) == arg {
 		return r.lastBg, true
 	}
 	return nil, false
@@ -596,11 +614,14 @@ func History(list func() []string, clear func()) RunnerOption {
 }
 
 // Interactive configures the interpreter to behave like an interactive shell,
-// akin to Bash. Currently, this only enables the expansion of aliases,
-// but later on it should also change other behavior.
+// akin to Bash. It enables the expansion of aliases, and detaches background
+// jobs from the context of the statement that started them, so that a job
+// outlives its command line the way it would in an interactive shell; see
+// [Runner.StopJobs] for how such jobs end.
 func Interactive(enabled bool) RunnerOption {
 	return func(r *Runner) error {
 		r.opts[optExpandAliases] = enabled
+		r.interactive = enabled
 		return nil
 	}
 }
@@ -1129,6 +1150,10 @@ func (r *Runner) Reset() {
 		// Clean it as we will later do a string prefix match.
 		r.tempDir = filepath.Clean(r.tempDir)
 	}
+	// A detached background job would survive the reset with its cancel func
+	// dropped, leaving it running with no way to reach it, so end them all
+	// first; a fresh shell has no jobs.
+	r.StopJobs(context.Background())
 	// reset the internal state
 	*r = Runner{
 		umask:                0o022,
@@ -1168,6 +1193,8 @@ func (r *Runner) Reset() {
 
 		dirStack: r.dirStack[:0],
 		usedNew:  r.usedNew,
+
+		interactive: r.interactive,
 	}
 	// Ensure we stop referencing any pointers before we reuse bgProcs.
 	clear(r.bgProcs)
@@ -1320,6 +1347,22 @@ func (r *Runner) Run(ctx context.Context, node syntax.Node) error {
 	if !r.didReset {
 		r.Reset()
 	}
+	if !r.inSubshell {
+		// Jobs belong to the shell rather than to one statement, and this Run
+		// call is the shell for as long as it lasts.
+		//
+		// An interactive shell runs each command line under its own context,
+		// and a job outlives the line that started it. In bash the interrupt
+		// which ends a foreground command leaves the background jobs alone. So
+		// an interactive runner keeps its jobs across Run calls, and they end
+		// via kill, [Runner.StopJobs], or the shell going away. Anywhere else
+		// jobs still die with the caller's context, so that an embedder
+		// bounding a script with a timeout does not leak them.
+		r.jobsBase = ctx
+		if r.interactive {
+			r.jobsBase = context.WithoutCancel(ctx)
+		}
+	}
 	r.fillExpandConfig(ctx)
 	r.exit = exitStatus{}
 	r.filename = ""
@@ -1412,8 +1455,6 @@ func (r *Runner) subshell(background bool) *Runner {
 		accessHandler:        r.accessHandler,
 		procSubstHandler:     r.procSubstHandler,
 		procSubsts:           r.procSubsts,
-		historyList:          r.historyList,
-		historyClear:         r.historyClear,
 		stdin:                r.stdin,
 		stdout:               r.stdout,
 		stderr:               r.stderr,
@@ -1426,6 +1467,10 @@ func (r *Runner) subshell(background bool) *Runner {
 		evalDepth:            r.evalDepth,
 		stmtDepth:            r.stmtDepth,
 		procSubstUses:        slices.Clip(r.procSubstUses),
+		jobsBase:             r.jobsBase,
+		inSubshell:           true,
+		historyList:          r.historyList,
+		historyClear:         r.historyClear,
 
 		origStdout: r.origStdout, // used for process substitutions
 	}

@@ -34,7 +34,7 @@ import (
 // error) so a fresh visor with no persistence doesn't surface noise.
 func fetchHistoryPeers(addr string) ([]string, error) {
 	url := fmt.Sprintf("http://%s/history/peers", addr)
-	hc := &http.Client{Timeout: 5 * time.Second}
+	hc := &http.Client{Transport: chatTransport, Timeout: 5 * time.Second}
 	resp, err := hc.Get(url) //nolint:gosec
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func fetchHistoryPeers(addr string) ([]string, error) {
 // as a sanity filter, not load-bearing.
 func localVisorPKFromStatus(addr string) string {
 	url := fmt.Sprintf("http://%s/status", addr)
-	hc := &http.Client{Timeout: 1 * time.Second}
+	hc := &http.Client{Transport: chatTransport, Timeout: 1 * time.Second}
 	resp, err := hc.Get(url) //nolint:gosec
 	if err != nil {
 		return ""

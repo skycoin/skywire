@@ -699,3 +699,20 @@ type HVForwardedPortArgs struct {
 	PK   cipher.PubKey
 	Port ForwardedPort
 }
+
+// SkychatHTTPIn is one request to the local skychat app. Path is the part
+// after the app's root, such as "history".
+type SkychatHTTPIn struct {
+	Method  string
+	Path    string
+	Query   string
+	Headers map[string][]string
+	Body    []byte
+}
+
+// SkychatHTTPOut is skychat's buffered response.
+type SkychatHTTPOut struct {
+	Status  int
+	Headers map[string][]string
+	Body    []byte
+}

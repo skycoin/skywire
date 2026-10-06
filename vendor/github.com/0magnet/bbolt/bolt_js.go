@@ -6,8 +6,8 @@ package bbolt
 // mmap: file locks are no-ops — a wasm instance is single-process by
 // construction — and "mmap" reads the mapped region through the runtime's
 // file API (globalThis.fs under Go's wasm_exec.js) into an ordinary byte
-// slice. Reads through db.data observe the state at map time, which matches
-// bbolt's remap-on-grow usage. Whether opening a database works at runtime
+// slice, which fdatasync re-reads after each commit (so NoSync is ignored
+// on js). Whether opening a database works at runtime
 // depends on the filesystem the host environment provides (Node passes
 // through to the real filesystem; a browser page must install its own
 // globalThis.fs implementation).
@@ -23,14 +23,16 @@ import (
 // flock acquires an advisory lock on a file descriptor. No-op on js.
 func flock(_ *DB, _ bool, _ time.Duration) error { return nil }
 
+// The lock never waits on js, so the retry interval is unused here.
+var _ = flockRetryTimeout
+
 // funlock releases an advisory lock on a file descriptor. No-op on js.
 func funlock(_ *DB) error { return nil }
 
-// fdatasync flushes written data to a file descriptor.
-// fdatasync flushes written data and REFRESHES the emulated mapping: a real
-// mmap observes committed pages the moment they hit the file, but our mapping
-// is a copy taken at map time. Re-reading here — the commit flush point —
-// keeps page reads coherent with what the transaction just wrote.
+// fdatasync flushes written data to a file descriptor and refreshes the
+// emulated mapping: a real mmap observes committed pages as soon as they
+// reach the file, but this mapping is a copy taken at map time. Re-reading
+// at the commit flush point keeps page reads coherent with the write.
 func fdatasync(db *DB) error {
 	if err := db.file.Sync(); err != nil {
 		return err

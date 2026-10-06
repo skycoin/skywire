@@ -270,12 +270,13 @@ type Values struct {
 	SkycoindFlags     string // SKYCOIND_FLAGS
 
 	// --- Skycoin web wallet ---
-	Skycoinweb       bool
-	NoSkycoinweb     bool
-	SkycoinwebAddr   string // SKYCOINWEBADDR
-	SkycoinwebNodes  string // SKYCOINWEBNODES (comma-separated)
-	SkycoinwebWallet string // SKYCOINWEBWALLET
-	SkycoinwebUser   string // SKYCOINWEBUSER
+	Skycoinweb         bool
+	NoSkycoinweb       bool
+	SkycoinwebAddr     string // SKYCOINWEBADDR
+	SkycoinwebNodes    string // SKYCOINWEBNODES (comma-separated)
+	SkycoinwebWallet   string // SKYCOINWEBWALLET
+	SkycoinwebElectrum string // SKYCOINWEBELECTRUM
+	SkycoinwebUser     string // SKYCOINWEBUSER
 
 	// --- Visor runtime ---
 	BinPath         string // BINPATH
@@ -450,6 +451,7 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().StringVar(&v.SkycoinwebAddr, "skycoinwebaddr", "", "skycoin web bind address (host:port) — writes SKYCOINWEBADDR in skywire.conf")
 	cmd.Flags().StringVar(&v.SkycoinwebNodes, "skycoinwebnodes", "", "node URLs the skycoin web wallet talks to, comma-separated — writes SKYCOINWEBNODES in skywire.conf")
 	cmd.Flags().StringVar(&v.SkycoinwebWallet, "skycoinwebwallet", "", "skycoin web wallet dir override — writes SKYCOINWEBWALLET in skywire.conf")
+	cmd.Flags().StringVar(&v.SkycoinwebElectrum, "skycoinwebelectrum", "", "skycoin web electrum servers, default, or none — writes SKYCOINWEBELECTRUM in skywire.conf")
 	cmd.Flags().StringVar(&v.SkycoinwebUser, "skycoinwebuser", "", "skycoin web UID (empty inherits visor UID) — writes SKYCOINWEBUSER in skywire.conf")
 
 	// --- Visor runtime ---
@@ -633,12 +635,13 @@ var envMap = map[string]EnvMapping{
 	"skycoindflags":     {Key: "SKYCOIND_FLAGS", Format: EnvFormatString},
 
 	// Skycoin web wallet
-	"skycoinweb":       {Key: "SKYCOINWEB", Format: EnvFormatBool},
-	"no-skycoinweb":    {Key: "SKYCOINWEB", Format: EnvFormatBool, Negate: true},
-	"skycoinwebaddr":   {Key: "SKYCOINWEBADDR", Format: EnvFormatString, Default: "127.0.0.1:8002"},
-	"skycoinwebnodes":  {Key: "SKYCOINWEBNODES", Format: EnvFormatBashArray},
-	"skycoinwebwallet": {Key: "SKYCOINWEBWALLET", Format: EnvFormatString},
-	"skycoinwebuser":   {Key: "SKYCOINWEBUSER", Format: EnvFormatString},
+	"skycoinweb":         {Key: "SKYCOINWEB", Format: EnvFormatBool},
+	"no-skycoinweb":      {Key: "SKYCOINWEB", Format: EnvFormatBool, Negate: true},
+	"skycoinwebaddr":     {Key: "SKYCOINWEBADDR", Format: EnvFormatString, Default: "127.0.0.1:8002"},
+	"skycoinwebnodes":    {Key: "SKYCOINWEBNODES", Format: EnvFormatBashArray},
+	"skycoinwebwallet":   {Key: "SKYCOINWEBWALLET", Format: EnvFormatString},
+	"skycoinwebelectrum": {Key: "SKYCOINWEBELECTRUM", Format: EnvFormatString},
+	"skycoinwebuser":     {Key: "SKYCOINWEBUSER", Format: EnvFormatString},
 
 	// Visor runtime
 	"binpath":    {Key: "BINPATH", Format: EnvFormatString, Default: skyenv.AppBinPath},

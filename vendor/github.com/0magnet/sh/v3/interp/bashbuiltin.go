@@ -1,5 +1,5 @@
-// Copyright (c) 2026, 0magnet fork authors.
-// See LICENSE for licensing information.
+// Copyright (c) 2017, Daniel Martí <mvdan@mvdan.cc>
+// See LICENSE for licensing information
 
 package interp
 
@@ -8,7 +8,9 @@ package interp
 
 import (
 	"context"
+	"maps"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -63,7 +65,7 @@ func (r *Runner) runEnable(args []string) exitStatus {
 	}
 
 	if len(rest) == 0 {
-		names := helpNames()
+		names := slices.Sorted(maps.Keys(helpTable))
 		if specialOnly {
 			names = posixSpecialBuiltins
 		}
@@ -268,7 +270,7 @@ func (r *Runner) compgenWords(ctx context.Context, action compgenAction, word st
 			out = append(out, name)
 		}
 	case "builtin":
-		out = append(out, helpNames()...)
+		out = append(out, slices.Sorted(maps.Keys(helpTable))...)
 	case "keyword":
 		for _, kw := range shellKeywords {
 			out = append(out, kw)
@@ -300,16 +302,17 @@ func (r *Runner) compgenWords(ctx context.Context, action compgenAction, word st
 		for _, bg := range r.jobList() {
 			out = append(out, bg.cmd)
 		}
-	case "group", "service", "user", "hostname", "setopt", "shopt", "signal":
-		if action == "signal" {
-			// Walked rather than ranged over a table, so the names are the
-			// platform's own; see signalName in os_unix.go.
-			for num := 1; num <= maxSignal; num++ {
-				if name := signalName(num); name != "" {
-					out = append(out, "SIG"+name)
-				}
+	case "signal":
+		// Walked rather than ranged over a table, so the names are the
+		// platform's own; see signalName in os_unix.go.
+		for num := 1; num <= maxSignal; num++ {
+			if name := signalName(num); name != "" {
+				out = append(out, "SIG"+name)
 			}
 		}
+	case "group", "service", "user", "hostname", "setopt", "shopt":
+		// Nothing this shell has a notion of; yield nothing rather than an
+		// error, as bash does on a machine with none of them.
 	}
 	sort.Strings(out)
 	return out

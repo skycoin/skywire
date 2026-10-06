@@ -459,6 +459,20 @@ func ServeSOCKS5(conn net.Conn, detail, mechanism string, statusOverride func(ho
 		return err
 	}
 	port := int(portB[0])<<8 | int(portB[1])
+	return ServeSOCKS5Parsed(conn, host, port, detail, mechanism, statusOverride, exitReachable)
+}
+
+// ServeSOCKS5Parsed is ServeSOCKS5 for a caller that has already read the
+// browser's greeting and CONNECT request and answered method selection itself,
+// with host and port the target that request named.
+//
+// skysocks-client needs this: it reads the target BEFORE deciding whether an
+// exit is involved at all, so by the time a route-down interstitial is called
+// for, the handshake ServeSOCKS5 would do has already happened and re-reading
+// it would consume the browser's HTTP request instead.
+//
+// The deadline is the caller's to set here, since the caller is mid-exchange.
+func ServeSOCKS5Parsed(conn net.Conn, host string, port int, detail, mechanism string, statusOverride func(host string) []byte, exitReachable func() bool) error {
 	// Resolve the reserved-host override FIRST (it is a pure render of the status
 	// page for a reserved host, e.g. status.skysocks; nil for anything else). A
 	// reserved host is served regardless of port and BEFORE the interstitial's

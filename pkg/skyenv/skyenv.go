@@ -424,6 +424,12 @@ const (
 	// VPNClientPort over dmsg
 	VPNClientPort uint16 = 43
 
+	// SkyDNSName is the name of the app answering mesh names on a phone
+	SkyDNSName = "skydns"
+
+	// SkyDNSPort is the skydns app's routing port. It only dials.
+	SkyDNSPort uint16 = 42
+
 	// VPNRouterName is the name of the vpn router (gateway / WiFi-AP) app. It is a
 	// LOCAL companion to vpn-client with no dmsg port of its own: it aggregates
 	// downstream LAN/WiFi clients and NATs them into the tunnel vpn-client owns.
@@ -640,6 +646,8 @@ func AppDisplayName(app string) string {
 		return "Skysocks"
 	case VPNClientName:
 		return "SkyVPN"
+	case SkyDNSName:
+		return "SkyDNS"
 	case SkydexClientName:
 		return "SkyDEX"
 	case "":

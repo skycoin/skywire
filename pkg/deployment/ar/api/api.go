@@ -235,6 +235,10 @@ func (a *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
 		Info("DHT backfill complete")
 }
 
+// maxBodyBytes caps a request body. Every legitimate body here is under
+// 100 KiB, the largest a key list of all ~1150 visors (2026-10-05).
+const maxBodyBytes = 1 << 20
+
 // New creates a new api. publicUDPAddr is the externally-reachable
 // host:port of the AR's SUDPH UDP listener (e.g. "ar.example.com:30178");
 // pass empty when not configured — clients that reach the AR over
@@ -267,6 +271,7 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(log))
 	r.Use(middleware.Recoverer)
+	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip JSON responses on the wire — this router is also served over
 	// dmsg, where every byte is relayed. Matches rf/ut/sd.
 	// No blanket response compression: the per-visor resolve and bind answers

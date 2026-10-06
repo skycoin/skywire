@@ -76,9 +76,11 @@ func execBuiltin(ctx context.Context, req *CommandExecReq, stdout, stderr io.Wri
 	catchF := js.FuncOf(func(_ js.Value, a []js.Value) interface{} {
 		msg := "unknown error"
 		if len(a) > 0 {
-			msg = a[0].String()
-			if m := a[0].Get("message"); m.Type() == js.TypeString {
-				msg = m.String()
+			msg = js.Global().Call("String", a[0]).String()
+			if a[0].Type() == js.TypeObject {
+				if m := a[0].Get("message"); m.Type() == js.TypeString {
+					msg = m.String()
+				}
 			}
 		}
 		fmt.Fprintln(stderr, "dmsgpty: exec skywire:", msg) //nolint:errcheck

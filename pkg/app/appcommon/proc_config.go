@@ -353,3 +353,16 @@ func signalConfigRead(key ProcKey) {
 		}
 	}
 }
+
+// UnsetInternalAppEnv removes an exiting internal app's env vars under the
+// start lock. Unlocked, a restart's new instance could lose its PROC_CONFIG
+// between being given it and reading it, and NewClient then exits the visor.
+func UnsetInternalAppEnv(envs []string) {
+	internalAppStartMu.Lock()
+	defer internalAppStartMu.Unlock()
+	for _, env := range envs {
+		if k, _, ok := strings.Cut(env, "="); ok {
+			_ = os.Unsetenv(k) //nolint:errcheck
+		}
+	}
+}

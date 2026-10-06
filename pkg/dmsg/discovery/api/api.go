@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -35,6 +36,10 @@ var json = jsoniter.ConfigFastest
 var WhitelistPKs = nmpk.GetWhitelistPKs()
 
 const maxGetAvailableServersResult = 512
+
+// maxBatchEntriesKeys caps one batchEntries request, which costs a store lookup
+// per key. No client in the tree uses the endpoint, so this is generous.
+const maxBatchEntriesKeys = 1000
 
 // API represents the api of the dmsg-discovery service`
 type API struct {
@@ -109,6 +114,10 @@ type singleflight struct {
 // poll rate of the cache, not the request rate of the API.
 const allClientsCacheTTL = 15 * time.Second
 
+// maxBodyBytes caps a request body. Every legitimate body here is under
+// 100 KiB, the largest a key list of all ~1150 visors (2026-10-05).
+const maxBodyBytes = 1 << 20
+
 // New returns a new API object, which can be started as a server.
 // clientEntryTTL is the Redis expiration applied to client entries;
 // 0 disables expiration (legacy behavior).
@@ -149,6 +158,7 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(log))
 	r.Use(middleware.Recoverer)
+	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip JSON responses on the wire — this router is also served over
 	// dmsg, where every byte is relayed. Matches rf/ut/sd.
 	// gzip only bodies over CompressMinBytes: single entries and health lines are
@@ -351,11 +361,15 @@ func (a *API) batchEntries() func(w http.ResponseWriter, r *http.Request) {
 		var pks []string
 		body, readErr := io.ReadAll(r.Body)
 		if readErr != nil {
-			a.handleError(w, r, disc.ErrBadInput)
+			a.handleError(w, r, fmt.Errorf("%w: %w", disc.ErrBadInput, readErr))
 			return
 		}
 		if err := json.Unmarshal(body, &pks); err != nil {
 			a.handleError(w, r, disc.ErrBadInput)
+			return
+		}
+		if len(pks) > maxBatchEntriesKeys {
+			a.handleError(w, r, fmt.Errorf("%w: more than %d keys", disc.ErrBadInput, maxBatchEntriesKeys))
 			return
 		}
 
@@ -490,7 +504,7 @@ func (a *API) setEntry() func(w http.ResponseWriter, r *http.Request) {
 		}
 		entry := new(disc.Entry)
 		if err := json.NewDecoder(r.Body).Decode(entry); err != nil {
-			a.handleError(w, r, disc.ErrUnexpected)
+			a.handleError(w, r, fmt.Errorf("%w: %w", disc.ErrUnexpected, err))
 			return
 		}
 
@@ -642,7 +656,7 @@ func (a *API) delEntry() func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close() //nolint:errcheck
 		entry := new(disc.Entry)
 		if err := json.NewDecoder(r.Body).Decode(entry); err != nil {
-			a.handleError(w, r, disc.ErrUnexpected)
+			a.handleError(w, r, fmt.Errorf("%w: %w", disc.ErrUnexpected, err))
 			return
 		}
 

@@ -25,6 +25,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -62,6 +63,11 @@ type EmbeddedSkynetWeb struct {
 	// proxy (http://status.skynet/ etc.). Set by initEmbeddedSkynetWeb; nil
 	// disables the status hosts.
 	statusProvider proxystatus.Provider
+	// publishLocal / unpublishLocal publish this resolver as an in-process local
+	// service for this visor's own apps. Set by wireLocalResolverPublish; nil
+	// means the resolver is reachable only through its listener.
+	publishLocal   func(svc appnet.LocalService, serve func(net.Conn))
+	unpublishLocal func(port routing.Port)
 
 	mu        sync.Mutex
 	running   bool
@@ -276,6 +282,15 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		<-ctx.Done()
 		_ = dialer.pool.Close() //nolint:errcheck
 	}()
+	// Publish as a local service so this visor's own apps reach the resolver
+	// over the data plane they already hold (see embedded_resolver_local.go).
+	e.mu.Lock()
+	publish, unpublish := e.publishLocal, e.unpublishLocal
+	e.mu.Unlock()
+	onPublish, cleanup := localPublishHooks(publish, unpublish, cfg.ProxyPort, "skynet_web", cfg.DomainSuffix)
+	cfg.Publish = onPublish
+	defer cleanup()
+
 	if err := skynetweb.Run(ctx, e.log, dialer, cfg); err != nil && err != context.Canceled {
 		e.log.WithError(err).Warn("skynetweb runtime stopped")
 	}
@@ -598,6 +613,7 @@ func initEmbeddedSkynetWeb(ctx context.Context, v *Visor, log *logging.Logger) e
 		}
 	}
 	runtime := newEmbeddedSkynetWeb(ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, cfg, log)
+	v.wireLocalResolverPublish(runtime)
 	runtime.statusProvider = v.proxyStatusProvider()
 	v.initLock.Lock()
 	v.embeddedSkynetWeb = runtime

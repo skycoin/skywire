@@ -441,6 +441,13 @@ func (r *RPC) SkychatPasswordIsSet(_ *struct{}, out *bool) (err error) {
 	return err
 }
 
+// SkychatHTTP serves one request to the local skychat app.
+func (r *RPC) SkychatHTTP(in *visorapi.SkychatHTTPIn, out *visorapi.SkychatHTTPOut) (err error) {
+	defer rpcutil.LogCall(r.log, "SkychatHTTP", nil)(nil, &err)
+	*out, err = r.visor.SkychatHTTP(*in)
+	return err
+}
+
 // SetSkychatPassword sets / changes the skychat password.
 func (r *RPC) SetSkychatPassword(in *visorapi.SkychatPasswordChangeIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetSkychatPassword", nil)(nil, &err)

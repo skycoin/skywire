@@ -1,6 +1,7 @@
 package com.skycoin.skywire.wallet
 
 import android.content.Context
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -79,20 +80,21 @@ class WalletRepository private constructor(private val context: Context) {
      * value the network calls use.
      */
     fun coins(): Flow<List<CoinSpec>> = seeds.store.data.map { prefs ->
-        val overrides = nodeUrlsOf(prefs)
-        shippedCoins(prefs).map { it.withNodeOverride(overrides) }
+        val nodes = urlsOf(prefs, KEY_NODE_URLS)
+        val indexers = urlsOf(prefs, KEY_INDEXER_URLS)
+        shippedCoins(prefs).map { it.withNodeOverride(nodes, indexers) }
     }
 
-    /** The coin list before any node override — what "use the default" restores. */
-    fun defaultNodeUrls(): Flow<Map<String, String>> = seeds.store.data.map { prefs ->
-        shippedCoins(prefs).associate { it.id to it.nodeUrl }
+    /** Each coin before any override, by id — what "use the default" restores. */
+    fun defaultCoins(): Flow<Map<String, CoinSpec>> = seeds.store.data.map { prefs ->
+        shippedCoins(prefs).associateBy { it.id }
     }
 
     /** The node addresses the user has set, by coin id. */
-    fun nodeUrls(): Flow<Map<String, String>> = seeds.store.data.map { nodeUrlsOf(it) }
+    fun nodeUrls(): Flow<Map<String, String>> = seeds.store.data.map { urlsOf(it, KEY_NODE_URLS) }
 
-    private fun nodeUrlsOf(prefs: Preferences): Map<String, String> =
-        prefs[KEY_NODE_URLS]?.let {
+    private fun urlsOf(prefs: Preferences, key: Preferences.Key<String>): Map<String, String> =
+        prefs[key]?.let {
             runCatching {
                 json.decodeFromString(MapSerializer(String.serializer(), String.serializer()), it)
             }.getOrNull()
@@ -114,7 +116,8 @@ class WalletRepository private constructor(private val context: Context) {
 
     /**
      * Point a coin at a different node, or hand it back to the shipped one
-     * with a blank [url].
+     * with a blank [url]. [indexerUrl] does the same for the Ethereum family's
+     * history indexer; null leaves it as it is.
      *
      * This is the way out of a node that cannot be reached from where the
      * user is — a blocked host, a throttled one, or simply a preference for
@@ -127,19 +130,34 @@ class WalletRepository private constructor(private val context: Context) {
      * someone wait out a timer set against it would be answering the wrong
      * question.
      */
-    suspend fun setNodeUrl(coinId: String, url: String) {
+    suspend fun setNodeUrl(coinId: String, url: String, indexerUrl: String? = null) {
+        val node = checkedUrl(url)
+        val indexer = indexerUrl?.let(::checkedUrl)
+        seeds.store.edit { prefs ->
+            // The shipped address is stored as nothing, so a later release that
+            // ships another one is not held to this one.
+            val shipped = shippedCoins(prefs).firstOrNull { it.id == coinId }
+            putUrl(prefs, KEY_NODE_URLS, coinId, node.takeUnless { it == shipped?.nodeUrl }.orEmpty())
+            if (indexer != null) {
+                putUrl(prefs, KEY_INDEXER_URLS, coinId, indexer.takeUnless { it == shipped?.indexerUrl }.orEmpty())
+            }
+        }
+        wallets().first().filter { it.coinId == coinId }.forEach { scanRetryAfter.remove(it.id) }
+    }
+
+    /** [url] trimmed for storage; blank stays blank, which means the shipped one. */
+    private fun checkedUrl(url: String): String {
         val trimmed = url.trim().removeSuffix("/")
         require(trimmed.isEmpty() || trimmed.toHttpUrlOrNull() != null) {
             context.getString(R.string.wallet_add_coin_node_invalid)
         }
-        seeds.store.edit { prefs ->
-            val next = nodeUrlsOf(prefs).toMutableMap()
-            if (trimmed.isEmpty()) next.remove(coinId) else next[coinId] = trimmed
-            prefs[KEY_NODE_URLS] = json.encodeToString(
-                MapSerializer(String.serializer(), String.serializer()), next,
-            )
-        }
-        wallets().first().filter { it.coinId == coinId }.forEach { scanRetryAfter.remove(it.id) }
+        return trimmed
+    }
+
+    private fun putUrl(prefs: MutablePreferences, key: Preferences.Key<String>, coinId: String, url: String) {
+        val next = urlsOf(prefs, key).toMutableMap()
+        if (url.isEmpty()) next.remove(coinId) else next[coinId] = url
+        prefs[key] = json.encodeToString(MapSerializer(String.serializer(), String.serializer()), next)
     }
 
     suspend fun coin(coinId: String): CoinSpec? = coins().first().firstOrNull { it.id == coinId }
@@ -659,6 +677,7 @@ class WalletRepository private constructor(private val context: Context) {
 
         private val KEY_WALLETS = stringPreferencesKey("wallets")
         private val KEY_NODE_URLS = stringPreferencesKey("node_urls")
+        private val KEY_INDEXER_URLS = stringPreferencesKey("indexer_urls")
         private val KEY_FIBER_COINS = stringPreferencesKey("fiber_coins")
         private val KEY_SELECTED_COIN = stringPreferencesKey("selected_coin")
 

@@ -188,6 +188,7 @@ var (
 	skycoinWebAddr      string
 	skycoinWebNodeURLs  string // comma-separated; rendered as repeated --node-url flags
 	skycoinWebWalletDir string
+	skycoinWebElectrum  string // --btc-electrum-url; empty leaves skycoin-web on its built-in list
 	skycoinWebUser      string
 	// coinNodes advertises already-running fibercoin nodes over dmsg +
 	// service-discovery (servicedisc.ServiceTypeCoin). CSV of

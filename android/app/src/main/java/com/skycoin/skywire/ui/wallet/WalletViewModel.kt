@@ -80,6 +80,8 @@ data class WalletUiState(
      * whether the address on screen is the user's or the shipped one.
      */
     val defaultNodeUrl: String = "",
+    /** The same for the Ethereum family's history indexer; null for coins without one. */
+    val defaultIndexerUrl: String? = null,
     val message: String? = null,
 )
 
@@ -100,7 +102,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                 repo.coins(),
                 repo.selectedCoinId(),
                 repo.wallets(),
-                repo.defaultNodeUrls(),
+                repo.defaultCoins(),
             ) { coins, selectedId, wallets, defaults ->
                 Quad(coins, selectedId, wallets, defaults)
             }.collectLatest { (coins, selectedId, wallets, defaults) ->
@@ -115,7 +117,8 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                         ready = true,
                         coins = coins,
                         coin = coin,
-                        defaultNodeUrl = defaults[coin.id] ?: coin.nodeUrl,
+                        defaultNodeUrl = defaults[coin.id]?.nodeUrl ?: coin.nodeUrl,
+                        defaultIndexerUrl = defaults[coin.id]?.indexerUrl ?: coin.indexerUrl,
                         allWallets = wallets,
                         coinWallets = coinWallets,
                         active = active,
@@ -192,11 +195,12 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Point the selected coin at a different node, or hand it back to the
-     * shipped one with a blank [url]. The wallet re-reads immediately: the
-     * coin flow carries the new address, which rebuilds the client under it.
+     * shipped one with a blank [url]; [indexerUrl] likewise, for coins that
+     * have one. The wallet re-reads immediately: the coin flow carries the
+     * new addresses, which rebuilds the client under them.
      */
-    fun setNodeUrl(url: String, onDone: () -> Unit) = action {
-        repo.setNodeUrl(mutable.value.coin.id, url)
+    fun setNodeUrl(url: String, indexerUrl: String?, onDone: () -> Unit) = action {
+        repo.setNodeUrl(mutable.value.coin.id, url, indexerUrl)
         mutable.update { it.copy(stale = false) }
         onDone()
         refreshNow()

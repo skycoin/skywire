@@ -64,6 +64,22 @@ type quicStreamWrap struct{ *quic.Stream }
 
 func (s quicStreamWrap) quicStreamID() uint32 { return uint32(s.Stream.StreamID()) } //nolint:gosec // id for logging only
 
+// Close ends both directions. quic.Stream.Close ends only the send side, and a
+// stream frees its slot under the peer's stream limit only once both are done.
+func (s quicStreamWrap) Close() error {
+	err := s.Stream.Close()
+	go s.drain()
+	return err
+}
+
+// drain reads to the peer's FIN so the stream ends cleanly, and gives up after
+// quicStreamDrainTimeout so a peer that never closes still frees the slot.
+func (s quicStreamWrap) drain() {
+	_ = s.Stream.SetReadDeadline(time.Now().Add(quicStreamDrainTimeout)) //nolint:errcheck
+	_, _ = io.Copy(io.Discard, s.Stream)                                 //nolint:errcheck
+	s.Stream.CancelRead(0)
+}
+
 // quicAddrConn adapts a *quic.Conn to net.Conn for the addr-only accessors
 // (LocalTCPAddr/RemoteTCPAddr/SrcConn) on a QUIC session. The session never
 // reads/writes it directly — QUIC data flows over QUIC streams — so Read/Write

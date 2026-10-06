@@ -178,6 +178,22 @@ func (r *RPCIngressGateway) ProxyStatus(_ *struct{}, resp *proxystatus.Snapshot)
 	return nil
 }
 
+// LocalServices lists the in-process services the calling app can reach on its
+// own visor — the resolving proxies, each with the hostname suffixes it answers
+// for. An app matches a CONNECT target against those suffixes and dials the
+// port, instead of being told a port number twice (once in the visor's config,
+// once in its own args). Read-only; an empty list means there is nothing to
+// reach, which is not an error.
+func (r *RPCIngressGateway) LocalServices(_ *struct{}, resp *[]appnet.LocalService) (err error) {
+	defer rpcutil.LogCall(r.log, "LocalServices", nil)(resp, &err)
+	// r.proc is nil in unit tests that construct a bare gateway.
+	if r.proc == nil {
+		return nil
+	}
+	*resp = appnet.LocalServices(r.proc.conf.VisorPK)
+	return nil
+}
+
 // AppSettings answers the calling app POLLING for its live tuning knobs — the
 // one visor->app value channel there is. The gateway is INGRESS only (the app
 // is the RPC client), so nothing can be pushed into a running app; the app asks
@@ -587,6 +603,21 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, req *DialOptionsReq
 		return err
 	}
 
+	// A dial to a local service on this visor's OWN PK is served in-process
+	// over net.Pipe — no transport, no route, no listener port, and nothing a
+	// remote peer can name. The resolving proxies register that way so an app
+	// can hand them a .skynet / .dmsg name over the data plane it already
+	// holds instead of through a second SOCKS hop on localhost. See
+	// pkg/app/appnet/local_service.go.
+	if appnet.HasLocalService(remote) {
+		conn, lErr := appnet.DialLocalService(remote)
+		if lErr != nil {
+			free()
+			return lErr
+		}
+		return r.finishLocalDial(conn, *reservedConnID, free, resp)
+	}
+
 	// Thread the calling app's name on the dial context so router-side
 	// log entries pick up app_name=<n> for 'cli proxy start --verbose'.
 	// r.proc may be nil in unit tests that exercise the gateway in
@@ -644,6 +675,35 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, req *DialOptionsReq
 	// This app now owns that port, which is what lets it report tunnel events
 	// on the route group behind it (NoteMuxEvent).
 	r.noteDialedPort(localAddr.Port)
+
+	return nil
+}
+
+// finishLocalDial hands an in-process local-service conn to the calling app: it
+// is the tail of dialInternal minus everything that only makes sense for a
+// dialed route group. There is no first-hop transport to judge and no local
+// routing port to record, because no route group was built — LocalPort stays 0,
+// and the app has no mux events to report on a pipe.
+func (r *RPCIngressGateway) finishLocalDial(conn net.Conn, connID uint16, free func() bool, resp *DialResp) error {
+	wrappedConn, err := appnet.WrapConn(conn)
+	if err != nil {
+		if cErr := conn.Close(); cErr != nil {
+			r.log.WithError(cErr).Debug("Error closing an unwrappable local-service conn.")
+		}
+		free()
+		return err
+	}
+
+	if err := r.cm.Set(connID, wrappedConn); err != nil {
+		if cErr := wrappedConn.Close(); cErr != nil {
+			r.log.WithError(cErr).Error("Error closing local-service conn.")
+		}
+		free()
+		return err
+	}
+
+	resp.ConnID = connID
+	resp.LocalPort = 0
 
 	return nil
 }

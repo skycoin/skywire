@@ -18,6 +18,7 @@ const panelCSS = `
 .dk-start { display:flex; align-items:center; gap:7px; padding:0 12px; cursor:pointer;
             color:#e6e9ee; font-weight:600; }
 .dk-start:hover, .dk-start.open { background:#232936; }
+.dk-start-icon { width:20px; height:20px; display:block; }
 .dk-start-dot { width:9px; height:9px; border-radius:50%;
                 background:linear-gradient(135deg,#8fc6f0,#ad7fa8); }
 .dk-tasks { flex:1 1 auto; display:flex; align-items:center; gap:5px; overflow:hidden; }
@@ -54,8 +55,8 @@ const panelCSS = `
 // a window you buried — workspaces, applets and the rest are refinements on top
 // of those two, and are left out.
 type Panel struct {
-	root, tasks, menu, search, list, clock js.Value
-	fns                                    dom.Funcs
+	root, start, tasks, menu, search, list, clock js.Value
+	fns                                           dom.Funcs
 
 	items    []*task
 	selected int
@@ -95,7 +96,7 @@ func NewPanel() *Panel {
 	p.tasks = dom.El("div", dom.Class("dk-tasks"))
 	p.clock = dom.El("div", dom.Class("dk-clock"))
 
-	start := dom.El("div", dom.Class("dk-start"),
+	p.start = dom.El("div", dom.Class("dk-start"),
 		dom.Child(dom.El("span", dom.Class("dk-start-dot"))),
 		dom.Child(dom.El("span", dom.Text("Applications"))),
 		p.fns.On("click", func(ev js.Value) {
@@ -120,7 +121,7 @@ func NewPanel() *Panel {
 	}))
 
 	p.root = dom.El("div", dom.Class("dk-panel"),
-		dom.Child(start), dom.Child(p.tasks), dom.Child(p.clock))
+		dom.Child(p.start), dom.Child(p.tasks), dom.Child(p.clock))
 
 	host := rootElement()
 	host.Call("appendChild", p.menu)
@@ -383,3 +384,24 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
+
+// SetStartIcon shows the image at url as the start button, in place of the
+// dot and the "Applications" label. The label stays as its tooltip.
+func (p *Panel) SetStartIcon(url string) {
+	p.start.Set("innerHTML", "")
+	p.start.Call("setAttribute", "title", "Applications")
+	p.start.Call("appendChild", dom.El("img", dom.Class("dk-start-icon"),
+		dom.Attr("src", url), dom.Attr("alt", "Applications")))
+}
+
+// OpenMenu shows the application menu for a guide to point at. Unlike a click
+// on the start button it raises no click shield and takes no focus, so the
+// window the guide runs in stays usable. Any click on the desk closes it.
+func (p *Panel) OpenMenu() {
+	p.setOpen(true)
+	p.hideMenuShield()
+	p.search.Call("blur")
+}
+
+// CloseMenu closes the application menu.
+func (p *Panel) CloseMenu() { p.setOpen(false) }

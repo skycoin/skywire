@@ -67,12 +67,12 @@ What each side owns:
 **Desk** (`pkg/wasmhv/deskhost` + `0magnet/desk` + `websh` + `netscrape` + vnet)
 — the window manager and taskbar; `browser` (mesh and clearnet, real-origin
 rendering); `console` and `terminal` (websh, and a host pty where a host serves
-the desk); `files` (the shared jsfs the shell sees); `mail`; `identity`;
+the desk); `files` (the shared jsfs the shell sees); `mail` (the dashboard's Mail tab); `identity`;
 `pair`; `settings`; `install`.
 
 **Angular hypervisor UI** (`static/skywire-manager-src`) — the visor list;
-a visor's own tabs (info, transports, routing, bandwidth, apps, uptime, logs,
-settings, and the rest); the mesh-wide tabs (transports, network, visualizer,
+a visor's own tabs (info, transports, routing, bandwidth, apps, mail, terminal,
+uptime, logs, settings, and the rest); the mesh-wide tabs (transports, network, visualizer,
 services health, uptime, and — native only — rewards and resources); the
 hypervisor-wide settings page.
 

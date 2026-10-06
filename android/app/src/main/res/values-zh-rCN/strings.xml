@@ -21,6 +21,7 @@
 
     <string name="app_skysocks">SkySOCKS</string>
     <string name="app_skyvpn">SkyVPN</string>
+    <string name="app_skydns">SkyDNS</string>
     <string name="app_skydex">SkyDEX</string>
     <string name="app_skychat">SkyChat</string>
     <string name="app_wallet">钱包</string>
@@ -47,6 +48,11 @@
     <string name="hub_stat_up">上行</string>
     <string name="hub_stat_data">流量</string>
     <string name="hub_vpn_toggle">SkyVPN 开关</string>
+    <string name="hub_skydns_toggle">SkyDNS 开关</string>
+    <string name="hub_skydns_off">在所有应用中打开 .dmsg 和 .skynet 域名</string>
+    <string name="hub_skydns_starting">正在启动…</string>
+    <string name="hub_skydns_on">正在解析 .dmsg 和 .skynet 域名</string>
+    <string name="hub_skydns_paused">SkyVPN 开启时暂停</string>
     <plurals name="hub_hops">
         <item quantity="other">%1$d 跳</item>
     </plurals>
@@ -256,6 +262,7 @@
     <string name="vpn_killswitch_hint">隧道断开时保留网络接口，使流量不会绕过它泄漏出去。在隧道恢复之前，其他应用将无法联网。</string>
     <string name="vpn_killswitch_always_on">“始终开启的 VPN”设置</string>
     <string name="vpn_killswitch_always_on_hint">若要获得最强的保障——在应用启动前就开始拦截——请在 Android 设置中为 Skywire 打开“始终开启的 VPN”和“阻止不使用 VPN 的连接”。</string>
+    <string name="vpn_skydns_hint">SkyVPN 开启时，所有应用都能打开 .dmsg 和 .skynet 域名。请用公钥的 DNS 标签作为站点地址，十六进制公钥对 DNS 来说太长。</string>
     <string name="vpn_hotspot_title">VPN 热点</string>
     <string name="vpn_hotspot_hint">与连接到这部手机热点的设备共享 SkyVPN。它们通过这部手机上的代理来使用。</string>
     <string name="vpn_hotspot_error">无法打开端口 %1$d：%2$s</string>
@@ -532,6 +539,14 @@
     <string name="settings_autoconnect">连接公共节点</string>
     <string name="settings_autoconnect_hint">保持与公共节点之间的传输通道，让网络可以经这部手机路由，也让这部手机可以经它们路由。会消耗电量和移动数据，因此默认关闭。路由长度超过 1 跳时必须开启。</string>
     <string name="settings_autoconnect_restart">核心下次启动时生效。</string>
+    <string name="settings_dns">DNS 服务器</string>
+    <string name="settings_dns_hint">SkyVPN 和 SkyDNS 会向此服务器查询所有不以 .dmsg 或 .skynet 结尾的域名；服务器支持时使用 DNS over TLS，Cloudflare、Google 和 Quad9 都支持。留空时，SkyVPN 使用 1.1.1.1（Cloudflare），因为 VPN 服务器没有可共享的解析服务；单独运行的 SkyDNS 则使用本机的 DNS。</string>
+    <string name="settings_dns_invalid">请输入 IPv4 地址，例如 9.9.9.9。</string>
+    <string name="settings_dns_save">使用此服务器</string>
+    <string name="settings_dns_default">恢复默认</string>
+    <string name="settings_dns_saved">DNS 服务器：%1$s。</string>
+    <string name="settings_dns_placeholder">默认</string>
+    <string name="settings_dns_cleared">已恢复默认 DNS 服务器。</string>
 
     <!-- 远程管理 -->
     <string name="settings_remote">远程管理</string>
@@ -578,6 +593,13 @@
     <string name="wallet_node_default">恢复为 %1$s</string>
     <string name="wallet_node_encrypted">传输已加密。节点仍能看到你一并查询了哪些地址，但链路上的其他人看不到。</string>
     <string name="wallet_node_cleartext">未加密。本机与该地址之间的任何人都能看到你的全部地址列表及余额。你的币是安全的——密钥从不离开本机——但在旁观者眼中，这些地址会被关联到一起。</string>
+    <string name="wallet_node_body_indexer">%1$s 的余额、手续费和广播都通过节点收发，交易记录则从索引服务读取。如果应用自带的地址在你所在的网络无法访问，或你有自建服务，可在此更改。</string>
+    <string name="wallet_node_hint_btc">Esplora 接口，例如 mempool.space、blockstream.info 或你自建的 electrs。</string>
+    <string name="wallet_node_hint_eth">以太坊 JSON-RPC 接口。</string>
+    <string name="wallet_indexer_field">索引服务地址</string>
+    <string name="wallet_indexer_hint">Blockscout 实例，或其他无需密钥的 etherscan 风格接口。</string>
+    <string name="wallet_node_save_all">使用这些地址</string>
+    <string name="wallet_node_default_all">恢复为应用自带的地址</string>
     <string name="wallet_scan_pending">尚未向节点确认本钱包的其余地址，因此余额可能不完整。每次刷新都会重试。</string>
     <string name="wallet_stale_never">无法连接节点服务器。该钱包尚未同步——节点服务器恢复响应后才会显示余额。</string>
     <string name="wallet_stale_send_note">发送已停用：没有到节点服务器的路由</string>

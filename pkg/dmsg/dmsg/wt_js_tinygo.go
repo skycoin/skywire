@@ -73,11 +73,7 @@ func awaitJS(p js.Value) (js.Value, error) {
 	onErr := js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
 		msg := "promise rejected"
 		if len(args) > 0 {
-			if m := args[0].Get("message"); m.Type() == js.TypeString {
-				msg = m.String()
-			} else {
-				msg = args[0].Call("toString").String()
-			}
+			msg = jsReason(args[0])
 		}
 		rejErr = errors.New(msg)
 		close(ch)
@@ -364,4 +360,15 @@ func (c *wtConnJS) SetDeadline(t time.Time) error {
 // server — here to reach a peer visor's WT transport endpoint.
 func DialWebTransportJS(ctx context.Context, url string, certHashHex ...string) (net.Conn, error) {
 	return dialWebTransportJS(ctx, url, certHashHex...)
+}
+
+// jsReason is the text of a promise rejection reason. A reason can be any
+// value, undefined included, and Get on undefined panics.
+func jsReason(v js.Value) string {
+	if v.Type() == js.TypeObject {
+		if m := v.Get("message"); m.Type() == js.TypeString {
+			return m.String()
+		}
+	}
+	return js.Global().Call("String", v).String()
 }

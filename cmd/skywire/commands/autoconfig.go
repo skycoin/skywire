@@ -243,6 +243,7 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	addString("SKYCOINWEBADDR", "skycoinwebaddr", autoconfigVals.SkycoinwebAddr)
 	addArray("SKYCOINWEBNODES", "skycoinwebnodes", autoconfigVals.SkycoinwebNodes)
 	addString("SKYCOINWEBWALLET", "skycoinwebwallet", autoconfigVals.SkycoinwebWallet)
+	addString("SKYCOINWEBELECTRUM", "skycoinwebelectrum", autoconfigVals.SkycoinwebElectrum)
 	addString("SKYCOINWEBUSER", "skycoinwebuser", autoconfigVals.SkycoinwebUser)
 
 	// Visor runtime
