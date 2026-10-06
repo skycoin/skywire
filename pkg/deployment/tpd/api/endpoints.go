@@ -506,6 +506,7 @@ func (api *API) deleteTransport(w http.ResponseWriter, r *http.Request) {
 		api.writeError(w, r, err)
 		return
 	}
+	api.reconcile.forgetID(id)
 
 	api.mirrorEdges(r.Context(), touchedEdges)
 
@@ -562,6 +563,7 @@ func (api *API) deleteTransportsBatch(w http.ResponseWriter, r *http.Request) {
 			skipped++
 			continue
 		}
+		api.reconcile.forgetID(id)
 		for _, edgePK := range entry.Edges {
 			touchedEdges[edgePK] = struct{}{}
 		}
@@ -634,6 +636,7 @@ func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 			api.writeError(w, r, err)
 			continue
 		}
+		api.reconcile.forgetID(id)
 	}
 	api.mirrorEdges(r.Context(), touchedEdges)
 
