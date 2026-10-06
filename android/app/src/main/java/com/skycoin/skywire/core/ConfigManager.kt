@@ -60,6 +60,8 @@ class ConfigManager(
         publicAutoconnect: Boolean,
         logLevel: String,
         remoteManagementPk: String?,
+        skyDnsStandalone: Boolean,
+        skyDnsInVpn: Boolean,
     ): Result<File> = withContext(Dispatchers.IO) {
         paths.ensureDirs()
         // Before the existence check below, which is what decides whether to
@@ -95,6 +97,8 @@ class ConfigManager(
                 publicAutoconnect,
                 logLevel,
                 remoteManagementPk,
+                skyDnsStandalone,
+                skyDnsInVpn,
                 skychatPasswordFile = ensureGatePassword(
                     SkychatProfile.passwordFile(paths),
                     secrets.skychatPassword(),
@@ -157,6 +161,8 @@ class ConfigManager(
      *    visor happens to get;
      *  - `launcher.bin_path` pinned to an app-private writable dir, and the
      *    per-app flags the phone owns (see [pinAppArgs]);
+     *  - the `skydns` app and vpn-client's SkyDNS flag, from the app's two
+     *    SkyDNS switches (see [SkyDns]);
      *  - drop `skywire-tcp` — skips the `:7777` STCP listener;
      *  - `dmsgscp.disabled` — on by default when absent, writes scp-root;
      *  - `tp_viz.enable=false` — cosmetic (field is never read) but keeps
@@ -185,6 +191,8 @@ class ConfigManager(
         publicAutoconnect: Boolean,
         logLevel: String,
         remoteManagementPk: String?,
+        skyDnsStandalone: Boolean,
+        skyDnsInVpn: Boolean,
         skychatPasswordFile: File,
         skydexPasswordFile: File,
     ) {
@@ -236,8 +244,10 @@ class ConfigManager(
                         value.jsonObject.edit {
                             put("bin_path", JsonPrimitive(paths.binDir.absolutePath))
                             this["apps"]?.let { apps ->
-                                this["apps"] =
-                                    pinAppArgs(apps, skychatPasswordFile, skydexPasswordFile)
+                                this["apps"] = withSkyDnsApp(
+                                    pinAppArgs(apps, skychatPasswordFile, skydexPasswordFile, skyDnsInVpn),
+                                    skyDnsStandalone,
+                                )
                             }
                         },
                     )
@@ -277,6 +287,7 @@ class ConfigManager(
         apps: JsonElement,
         skychatPasswordFile: File,
         skydexPasswordFile: File,
+        skyDnsInVpn: Boolean,
     ): JsonElement {
         val list = apps as? JsonArray ?: return apps
         return JsonArray(
@@ -288,6 +299,7 @@ class ConfigManager(
                 val name = (app["name"] as? JsonPrimitive)?.content
                 val pinned = when (name) {
                     SOCKS_APP -> phoneSocksArgs(args)
+                    VPN_APP -> SkyDns.vpnArgs(args, skyDnsInVpn)
                     SkydexProfile.APP -> SkydexProfile.phoneArgs(args, skydexPasswordFile)
                     SkychatProfile.APP -> SkychatProfile.phoneArgs(
                         args,
@@ -308,6 +320,23 @@ class ConfigManager(
                         this["auto_start"] = JsonPrimitive(true)
                     }
                 }
+            },
+        )
+    }
+
+    /** The `skydns` app, added to a config made before it existed, autostarting as the switch says. */
+    private fun withSkyDnsApp(apps: JsonElement, autoStart: Boolean): JsonElement {
+        val list = apps as? JsonArray ?: return apps
+        fun isSkyDns(entry: JsonElement) =
+            ((entry as? JsonObject)?.get("name") as? JsonPrimitive)?.content == SkyDns.APP
+        val entries = if (list.any(::isSkyDns)) list else list + buildJsonObject {
+            put("name", JsonPrimitive(SkyDns.APP))
+            put("port", JsonPrimitive(SkyDns.APP_PORT))
+        }
+        return JsonArray(
+            entries.map { entry ->
+                if (!isSkyDns(entry)) return@map entry
+                (entry as JsonObject).edit { this["auto_start"] = JsonPrimitive(autoStart) }
             },
         )
     }
@@ -570,6 +599,7 @@ class ConfigManager(
     private companion object {
         const val MAX_CAPTURE = 256 * 1024
         const val SOCKS_APP = "skysocks-client"
+        const val VPN_APP = "vpn-client"
         const val DEFAULT_SOCKS_PORT = 1080
 
         /**
