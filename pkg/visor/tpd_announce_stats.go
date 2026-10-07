@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
@@ -57,4 +58,32 @@ func (s *tpdAnnounceStats) state() *visorapi.TPDAnnounceState {
 		To: s.to.Hex(), OK: s.ok, Failed: s.failed,
 		SecsSinceOK: secsSince(s.lastOK), LastError: s.lastErr, SecsSinceLastFail: secsSince(s.lastFail),
 	}
+}
+
+// answeredWithin reports whether TPD answered an announce of this feed within d.
+func (s *tpdAnnounceStats) answeredWithin(d time.Duration) bool {
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return !s.lastOK.IsZero() && time.Since(s.lastOK) < d
+}
+
+// tpdFeedHealthy reports whether TPD is subscribed to the feed carrying this
+// visor's transport list and answered an announce of it recently. TPD records
+// the visor's uptime on every full apply of that feed, at least every 90 s,
+// so while this holds the HTTP uptime heartbeat records nothing new.
+func (v *Visor) tpdFeedHealthy() bool {
+	p := v.tpdFeed.Load()
+	if p == nil {
+		return false
+	}
+	return v.tpdAnnounce.answeredWithin(cxoKeepaliveHealthyWindow) && len(p.pub.Subscriptions(p.tpd)) > 0
+}
+
+// tpdFeedRef is the feed tpdFeedHealthy watches.
+type tpdFeedRef struct {
+	pub *treestore.Publisher
+	tpd cipher.PubKey
 }

@@ -136,6 +136,15 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 		// warns exactly as before, and keeps warning.
 		var consecutiveFails atomic.Int64
 		sendHeartbeats := func() {
+			// TPD records this visor's uptime from its transport-list feed
+			// while it is subscribed and answering, so the HTTP heartbeat is
+			// only for when that feed is not reaching TPD.
+			if v.tpdFeedHealthy() {
+				consecutiveFails.Store(0)
+				v.isServicesHealthy.set()
+				v.isUptimeTrackerHealthy.set()
+				return
+			}
 			c, cancel := context.WithTimeout(context.Background(), heartbeatSendTimeout)
 			defer cancel()
 			if tpdUT != nil {

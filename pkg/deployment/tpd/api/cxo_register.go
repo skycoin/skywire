@@ -119,6 +119,12 @@ func (api *API) RefreshTransportsFromCXO(ctx context.Context, entries []*transpo
 }
 
 func (api *API) reconcileFromCXO(ctx context.Context, entries []*transport.Entry, reporter cipher.PubKey, version string, deregisterAbsent bool) error {
+	// A reconcile means the visor published a signed Root, so it is present
+	// whatever its transports are. Recorded first, so an early return (no
+	// transports yet, a failed store write) does not lose its uptime.
+	if err := api.store.RecordHeartbeat(ctx, reporter, version); err != nil {
+		_ = err //nolint:errcheck // visor-level heartbeat is auxiliary
+	}
 	// Accept only entries the reporter is actually an edge of (auth parity with the
 	// per-entry path); build the authoritative keep-set.
 	keep := make(map[uuid.UUID]struct{}, len(entries))
@@ -193,9 +199,6 @@ func (api *API) reconcileFromCXO(ctx context.Context, entries []*transport.Entry
 	}
 	if !deregisterAbsent {
 		api.mirrorEdges(ctx, touchedEdges)
-		if err := api.store.RecordHeartbeat(ctx, reporter, version); err != nil {
-			_ = err //nolint:errcheck // visor-level heartbeat is auxiliary
-		}
 		return nil
 	}
 	// Deregister any of the reporter's existing transports absent from the snapshot.
@@ -251,9 +254,6 @@ func (api *API) reconcileFromCXO(ctx context.Context, entries []*transport.Entry
 	api.reconcile.forget(removed)
 
 	api.mirrorEdges(ctx, touchedEdges)
-	if err := api.store.RecordHeartbeat(ctx, reporter, version); err != nil {
-		_ = err //nolint:errcheck // visor-level heartbeat is auxiliary
-	}
 	return nil
 }
 
