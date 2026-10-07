@@ -6,7 +6,7 @@ import (
 	"net"
 	"sync/atomic"
 
-	"github.com/xtaci/kcp-go"
+	kcp "github.com/0magnet/kcp-go/v5"
 
 	"github.com/skycoin/skywire/pkg/logging"
 )

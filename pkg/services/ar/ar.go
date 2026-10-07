@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/xtaci/kcp-go"
+	kcp "github.com/0magnet/kcp-go/v5"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/node"
