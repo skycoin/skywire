@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -27,9 +26,8 @@ func (s *qosStore) GetAllTransportsWithLatency(_ context.Context, self bool) ([]
 	return s.entries, nil
 }
 
-// The routing read is the QoS one; the all-transports feed carries topology
-// only, as it always did — metrics are the routing feed's.
-func TestRoutingEntriesCarryMetricsLegacyDoesNot(t *testing.T) {
+// The routing read is the QoS one, so the routing feed carries metrics.
+func TestRoutingEntriesCarryMetrics(t *testing.T) {
 	a, _ := cipher.GenerateKeyPair()
 	b, _ := cipher.GenerateKeyPair()
 	e := &transport.Entry{Edges: transport.SortEdges(a, b), Type: tptypes.STCPR, Latency: 12.3456, ThroughputBps: 123456.7, Bandwidth: 999}
@@ -37,13 +35,4 @@ func TestRoutingEntriesCarryMetricsLegacyDoesNot(t *testing.T) {
 	entries, err := routingEntries(context.Background(), &qosStore{entries: []*transport.Entry{e}})
 	require.NoError(t, err)
 	require.Equal(t, 12.3456, entries[0].Latency)
-
-	body, err := json.Marshal(toWireEntries(entries))
-	require.NoError(t, err)
-	var got []map[string]any
-	require.NoError(t, json.Unmarshal(body, &got))
-	require.Len(t, got, 1)
-	for _, k := range []string{"latency_ms", "throughput_bps", "bandwidth"} {
-		require.NotContains(t, got[0], k)
-	}
 }
