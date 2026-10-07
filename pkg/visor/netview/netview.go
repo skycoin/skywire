@@ -1,7 +1,9 @@
 // Package netview pkg/visor/netview/netview.go c3-vis-core
-// all-transports + UT uptimes aggregated per-PK), shared by the native visor
+//
+// The network-view table (SD services + TPD per-key transport counts + UT
+// uptimes aggregated per-PK), shared by the native visor
 // (pkg/visor) and the wasm-visor (cmd/wasm-visor). It is a near-leaf — only the
-// stdlib (encoding/json + strings + time) plus the wasm-safe tptypes leaf (the
+// stdlib (encoding/json + sort + strings + time) plus the wasm-safe tptypes leaf (the
 // canonical transport-type list) — so the wasm-visor can import it; pkg/visor
 // itself does NOT compile for js/wasm. Keeping the aggregation here means the
 // native and browser visors can't drift on how the table is built.
@@ -9,6 +11,7 @@ package netview
 
 import (
 	"encoding/json"
+	"sort"
 	"strings"
 	"time"
 
@@ -117,43 +120,44 @@ func Compute(fetch func(service, path string) ([]byte, error)) *Response {
 		}
 	}
 
-	// TPD — all-transports → count by type per edge. Every canonical transport
-	// type (tptypes.Known()) gets its own counter; NormalizeType folds legacy
-	// wire names (quic/squic→squicr, ws→swsr, wt→swtr) into the canonical bucket
-	// so the breakdown never silently drops a type as new ones are added.
+	// TPD — per-key-stats: each key's transports counted by type, plus
+	// "total", already reduced by TPD (the visor serves it from the per-key
+	// CXO feed). The type names are as registered, so NormalizeType folds
+	// legacy wire names (quic/squic→squicr, ws→swsr, wt→swtr) into the
+	// canonical bucket. Total is TPD's own, so a type without a column here
+	// still counts toward it.
 	type tpCount struct{ STCPR, SUDPH, DMSG, STCP, SQUICR, WEBRTC, SWSR, SWTR, Total int }
 	tpMap := make(map[string]*tpCount)
-	if body, err := fetch("tpd", "/all-transports"); err == nil {
-		var tps []struct {
-			Edges []string `json:"edges"`
-			Type  string   `json:"type"`
-		}
-		if json.Unmarshal(body, &tps) == nil {
-			for _, tp := range tps {
-				for _, edge := range tp.Edges {
-					if tpMap[edge] == nil {
-						tpMap[edge] = &tpCount{}
+	if body, err := fetch("tpd", "/all-transports/per-key-stats"); err == nil {
+		var perKey map[string]map[string]int
+		if json.Unmarshal(body, &perKey) == nil {
+			for pk, counts := range perKey {
+				c := &tpCount{}
+				for typ, n := range counts {
+					if typ == "total" {
+						c.Total = n
+						continue
 					}
-					switch tptypes.NormalizeType(tptypes.Type(tp.Type)) {
+					switch tptypes.NormalizeType(tptypes.Type(typ)) {
 					case tptypes.STCPR:
-						tpMap[edge].STCPR++
+						c.STCPR += n
 					case tptypes.SUDPH:
-						tpMap[edge].SUDPH++
+						c.SUDPH += n
 					case tptypes.DMSG:
-						tpMap[edge].DMSG++
+						c.DMSG += n
 					case tptypes.STCP:
-						tpMap[edge].STCP++
+						c.STCP += n
 					case tptypes.QUIC:
-						tpMap[edge].SQUICR++
+						c.SQUICR += n
 					case tptypes.WEBRTC:
-						tpMap[edge].WEBRTC++
+						c.WEBRTC += n
 					case tptypes.WS:
-						tpMap[edge].SWSR++
+						c.SWSR += n
 					case tptypes.WT:
-						tpMap[edge].SWTR++
+						c.SWTR += n
 					}
-					tpMap[edge].Total++
 				}
+				tpMap[pk] = c
 			}
 		}
 	}
@@ -188,11 +192,8 @@ func Compute(fetch func(service, path string) ([]byte, error)) *Response {
 	}
 
 	// Sort: most transports first, PK tiebreak (stable across refetches).
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && lessEntry(out[j], out[j-1]); j-- {
-			out[j], out[j-1] = out[j-1], out[j]
-		}
-	}
+	// There is a row per key on the network, so not an insertion sort.
+	sort.Slice(out, func(i, j int) bool { return lessEntry(out[i], out[j]) })
 	return &Response{Entries: out, FetchedAt: time.Now()}
 }
 

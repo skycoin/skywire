@@ -29,9 +29,10 @@
 //
 // The per-key rollup (GET /all-transports/per-key-stats, ~38 KB gzipped)
 // is deliberately NOT here. It is two orders of magnitude larger than
-// these bodies and belongs on its own slower tier; putting it on this
-// feed would drag the whole feed onto the large-feed first-sync budget
-// and defeat the point of a feed a dashboard can hold continuously.
+// these bodies and has its own slower feed (cxo_perkey_publisher.go);
+// putting it on this one would drag the whole feed onto the large-feed
+// first-sync budget and defeat the point of a feed a dashboard can hold
+// continuously.
 //
 // PARTIAL-AGGREGATE HAZARD (skycoin/skywire#4513). TPD's transport
 // aggregate is READABLE WHILE IT REFILLS after a restart: the count
