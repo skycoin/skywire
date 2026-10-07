@@ -263,6 +263,7 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 	// fleet-wide, 2026-09-10). The announce is idempotent: (re)register, ack.
 	if ss.entity.acceptPeerAnnouncements {
 		if ann, aErr := obj.ObtainPeerAnnounce(); aErr == nil && ann.Verify(ss.rPK) == nil {
+			ss.settleFiling(notFiled)
 			accepted := ss.isPeer || ss.entity.peerAnnounceAllowed(ss.rPK)
 			if accepted {
 				ss.entity.promoteToPeer(ss.rPK, ss.SessionCommon)
@@ -298,6 +299,11 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 	// impersonate anyone; what it spends is this server's relay capacity,
 	// charged in bridgeStream.
 	relayed := req.SrcAddr.PK != ss.rPK
+	if relayed {
+		ss.settleFiling(filedAsBefore)
+	} else {
+		ss.settleFiling(filedClient)
+	}
 	if relayed && !ss.isPeer && !ss.entity.acceptRelayedRequests {
 		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
 		return ErrReqInvalidSrcPK

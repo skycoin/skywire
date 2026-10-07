@@ -305,8 +305,9 @@ func (s *Server) handleQUICConn(qc *quic.Conn) {
 	}()
 	log.Infof("quic stream session initial for %s", pk.String())
 
-	s.setSession(ctx, dSes.SessionCommon)
+	s.fileSession(ctx, dSes.SessionCommon)
 	dSes.Serve()
+	dSes.settleFiling(notFiled)
 
 	if dSes.isPeer {
 		s.peerSessionsMx.Lock()
