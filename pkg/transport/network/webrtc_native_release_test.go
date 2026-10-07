@@ -4,6 +4,8 @@ package network
 
 import (
 	"errors"
+	"io"
+	"sync"
 	"testing"
 
 	"github.com/pion/webrtc/v4"
@@ -19,7 +21,27 @@ func newTestDCConn(t *testing.T) (*dcConn, *webrtc.PeerConnection) {
 		t.Fatalf("NewPeerConnection: %v", err)
 	}
 	t.Cleanup(func() { _ = pc.Close() }) //nolint:errcheck
-	return newDCConn(nopRWC{}, pc, nil), pc
+	return newDCConn(newIdleRWC(), pc, nil), pc
+}
+
+// idleRWC is a data channel with nothing to read. Its Read blocks until Close,
+// so the read pump cannot fail the conn before the test does.
+type idleRWC struct {
+	nopRWC
+	once sync.Once
+	done chan struct{}
+}
+
+func newIdleRWC() *idleRWC { return &idleRWC{done: make(chan struct{})} }
+
+func (r *idleRWC) Read([]byte) (int, error) {
+	<-r.done
+	return 0, io.EOF
+}
+
+func (r *idleRWC) Close() error {
+	r.once.Do(func() { close(r.done) })
+	return nil
 }
 
 // TestDCConnFailThenCloseReleasesPeerConnection is the regression guard for a
