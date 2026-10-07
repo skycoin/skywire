@@ -57,6 +57,8 @@ type Table struct {
 	Rows  [][]string
 	// Marks, when set, gives a row a color to stand out in. Empty leaves it plain.
 	Marks []string
+	// Tall keeps a long table to a scrolling box with its header in view.
+	Tall bool
 }
 
 // Content is what a page shows for one range.
@@ -72,9 +74,7 @@ type Page struct {
 	About string
 	// Links are other pages of the service, shown under the title.
 	Links []Link
-	// NoRanges hides the time ranges, for a page that shows only the present.
-	NoRanges bool
-	Build    func(ctx context.Context, r Range, now time.Time) (Content, error)
+	Build func(ctx context.Context, r Range, now time.Time) (Content, error)
 	// Stats, when set, adds the service's process and traffic charts after
 	// Build's, read from Store.
 	Stats *ServiceStats
@@ -152,9 +152,6 @@ func (p *Page) write(b *bytes.Buffer, rg Range, now time.Time, c Content) {
 	}
 	b.WriteString("</div><nav>")
 	for _, x := range Ranges {
-		if p.NoRanges {
-			break
-		}
 		cls := ""
 		if x.Name == rg.Name {
 			cls = " class='on' aria-current='page'"
@@ -170,7 +167,11 @@ func (p *Page) write(b *bytes.Buffer, rg Range, now time.Time, c Content) {
 		if t.Note != "" {
 			fmt.Fprintf(b, "<p class='note'>%s</p>", html.EscapeString(t.Note))
 		}
-		b.WriteString("<div class='scroll'><table><thead><tr>")
+		if t.Tall {
+			b.WriteString("<div class='scroll tall'><table><thead><tr>")
+		} else {
+			b.WriteString("<div class='scroll'><table><thead><tr>")
+		}
 		for _, h := range t.Head {
 			fmt.Fprintf(b, "<th>%s</th>", html.EscapeString(h))
 		}
@@ -217,7 +218,7 @@ h2{font-size:15px;margin:0;font-weight:620}figcaption p,.note{margin:2px 0 0;col
 .tip{position:absolute;top:8px;pointer-events:none;background:var(--card);border:1px solid var(--grid);border-radius:8px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px #0002;min-width:150px;z-index:2}
 .tip div{display:flex;justify-content:space-between;gap:14px}.tip div span{display:flex;align-items:center;gap:6px}.tip i{width:8px;height:8px;border-radius:2px}
 .tip .t{color:var(--muted);margin-bottom:4px}.tip b{font-variant-numeric:tabular-nums;font-weight:600}
-.scroll{overflow-x:auto;margin-top:10px}table{border-collapse:collapse;width:100%;font-size:12.5px}
+.scroll{overflow-x:auto;margin-top:10px}.scroll.tall{max-height:28rem;overflow-y:auto}.scroll.tall thead th{position:sticky;top:0;background:var(--card)}table{border-collapse:collapse;width:100%;font-size:12.5px}
 th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--grid);white-space:nowrap}th{color:var(--muted);font-weight:550}
 td:first-child{font-family:ui-monospace,monospace;font-size:11.5px}
 tr.mark td{background:color-mix(in srgb,var(--mark) 13%,transparent)}tr.mark td:first-child{box-shadow:inset 3px 0 0 var(--mark)}

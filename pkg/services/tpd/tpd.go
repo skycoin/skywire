@@ -310,7 +310,6 @@ func (s *service) Run(ctx context.Context) error {
 		go func() {
 			if err := charts.Serve(runCtx, cfg.ChartsAddr, http.HandlerFunc(tpdAPI.ChartsPage),
 				charts.Extra{Path: "/graph", Handler: http.HandlerFunc(tpdAPI.GraphPage)},
-				charts.Extra{Path: "/visors", Handler: http.HandlerFunc(tpdAPI.VisorsPage)},
 				charts.Extra{Path: "/graph/engine.wasm", Handler: http.HandlerFunc(netgraph.EngineWasm)},
 				charts.Extra{Path: "/graph/engine.js", Handler: http.HandlerFunc(netgraph.EngineLoader)}); err != nil {
 				logger.WithError(err).Error("charts listener failed")

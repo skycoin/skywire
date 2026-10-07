@@ -33,10 +33,9 @@ const (
 const dailyChartTTL = 10 * time.Minute
 
 type tpdCharts struct {
-	st     charts.Store
-	page   *charts.Page
-	graph  *netgraph.Page
-	visors *charts.Page
+	st    charts.Store
+	page  *charts.Page
+	graph *netgraph.Page
 
 	mu      sync.Mutex
 	daily   []store.DailyAggregate
@@ -51,7 +50,7 @@ func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Fie
 	c.page = &charts.Page{
 		Title: "Skywire transport discovery",
 		About: strings.Split(api.dmsgAddr, ":")[0],
-		Links: []charts.Link{{Name: "Network graph", Href: "graph"}, {Name: "Transports by visor", Href: "visors"}},
+		Links: []charts.Link{{Name: "Network graph", Href: "graph"}},
 		Stats: api.Stats,
 		Store: st,
 		Build: func(ctx context.Context, r charts.Range, now time.Time) (charts.Content, error) {
@@ -60,7 +59,6 @@ func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Fie
 	}
 	c.graph = &netgraph.Page{Title: "Skywire transport graph", Back: "./", Source: api.graphLinks, Marks: api.roleColors,
 		Legend: []netgraph.Mark{{Name: roleName[roleRegistered], Color: roleColor[roleRegistered]}, {Name: roleName[roleLAN], Color: roleColor[roleLAN]}}}
-	c.visors = api.visorsPage(c.page.About)
 	api.chartState.Store(c)
 	go charts.Run(ctx, st, api.Stats.Wrap(api.collectCharts), log)
 }
@@ -168,6 +166,7 @@ func (api *API) buildCharts(ctx context.Context, c *tpdCharts, r charts.Range, n
 	if daily := c.dailyAggregate(ctx, api.store); len(daily) > 0 {
 		out.Charts = append(out.Charts, dailyBandwidthChart(daily), dailyLatencyChart(daily))
 	}
+	out.Tables = append(out.Tables, api.visorTable(ctx))
 	if t, ok := api.visorBandwidthTable(ctx, c, now); ok {
 		out.Tables = append(out.Tables, t)
 	}
