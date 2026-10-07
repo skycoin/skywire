@@ -72,7 +72,9 @@ type Page struct {
 	About string
 	// Links are other pages of the service, shown under the title.
 	Links []Link
-	Build func(ctx context.Context, r Range, now time.Time) (Content, error)
+	// NoRanges hides the time ranges, for a page that shows only the present.
+	NoRanges bool
+	Build    func(ctx context.Context, r Range, now time.Time) (Content, error)
 	// Stats, when set, adds the service's process and traffic charts after
 	// Build's, read from Store.
 	Stats *ServiceStats
@@ -150,6 +152,9 @@ func (p *Page) write(b *bytes.Buffer, rg Range, now time.Time, c Content) {
 	}
 	b.WriteString("</div><nav>")
 	for _, x := range Ranges {
+		if p.NoRanges {
+			break
+		}
 		cls := ""
 		if x.Name == rg.Name {
 			cls = " class='on' aria-current='page'"
