@@ -26,6 +26,8 @@ const (
 	chartNoRoute     = "rf.noroute"
 	chartFailed      = "rf.failed"
 	chartMeanMs      = "rf.ms"
+	chartP50Ms       = "rf.p50"
+	chartP95Ms       = "rf.p95"
 	chartHopsPrefix  = "rf.hops."
 	chartFoundPrefix = "rf.found."
 	chartGraphVisors = "graph.visors"
@@ -97,6 +99,10 @@ func (a *API) collectCharts(ctx context.Context, c *rfCharts) (map[string]float6
 	v[chartFailed] = float64(cur.failed - prev.failed)
 	if req > 0 {
 		v[chartMeanMs] = float64((cur.elapsed-prev.elapsed)/time.Millisecond) / float64(req)
+	}
+	if t := a.stats.takeTimes(); len(t) > 0 {
+		v[chartP50Ms] = t[len(t)/2]
+		v[chartP95Ms] = t[len(t)*95/100]
 	}
 	for h := 1; h <= maxCountedHops; h++ {
 		v[chartHopsPrefix+strconv.Itoa(h)] = float64(cur.hops[h] - prev.hops[h])
@@ -239,8 +245,12 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, c *rfCharts, r c
 			{Name: "transports", Vals: f.Values(chartGraphTps, false)},
 		}),
 	}}
-	mean := chart("Time to answer", "Mean time to answer a route request.", charts.Lines,
-		[]charts.Series{{Name: "mean", Vals: f.Values(chartMeanMs, false)}})
+	mean := chart("Route search time", "Time from a route request's arrival to its answer: the median, the 95th percentile and the mean per 5 minutes.", charts.Lines,
+		[]charts.Series{
+			{Name: "median", Vals: f.Values(chartP50Ms, false)},
+			{Name: "95th percentile", Vals: f.Values(chartP95Ms, false)},
+			{Name: "mean", Vals: f.Values(chartMeanMs, false)},
+		})
 	mean.Format = ms
 	out.Charts = append(out.Charts, mean)
 
