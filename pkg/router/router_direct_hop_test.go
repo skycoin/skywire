@@ -103,3 +103,19 @@ func TestDirectHopPrefersTheBetterTransport(t *testing.T) {
 		}
 	}
 }
+
+// A dial that allows one hop, --direct or not, takes the transport this visor
+// already holds without asking the route finder, which this router lacks.
+func TestFetchBestRoutesTakesTheDirectHop(t *testing.T) {
+	r := newLegTestRouter(t)
+	remote, _ := cipher.GenerateKeyPair()
+	id := injectHopTp(t, r, remote, transport.LabelUser)
+
+	fwd, rev, err := r.fetchBestRoutes(t.Context(), r.logger, r.conf.PubKey, remote, DefaultDialOptions(), 1)
+	if err != nil {
+		t.Fatalf("fetchBestRoutes: %v", err)
+	}
+	if len(fwd) != 1 || fwd[0].TpID != id || len(rev) != 1 || rev[0].TpID != id {
+		t.Fatalf("got forward %v reverse %v, want one hop over %v each way", fwd, rev, id)
+	}
+}
