@@ -3,6 +3,7 @@ package visor
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -80,15 +81,6 @@ func TestAttachedEntriesFromSummaries(t *testing.T) {
 	}
 }
 
-type fakeAllTransports struct {
-	transport.DiscoveryClient
-	entries []*transport.Entry
-}
-
-func (f fakeAllTransports) GetAllTransports(context.Context) ([]*transport.Entry, error) {
-	return f.entries, nil
-}
-
 func TestCXOAwareTPD_MergesLocalGraph(t *testing.T) {
 	a, _ := cipher.GenerateKeyPair()
 	b, _ := cipher.GenerateKeyPair()
@@ -98,25 +90,31 @@ func TestCXOAwareTPD_MergesLocalGraph(t *testing.T) {
 	localOnly := transport.MakeEntry(b, c, tptypes.SUDPH, transport.LabelUser)
 	localDup := transport.MakeEntry(a, b, tptypes.STCPR, transport.LabelUser) // same ID as shared
 
+	merged := mergeTransportEntries([]*transport.Entry{&shared}, []*transport.Entry{&localDup, &localOnly})
+	if len(merged) != 2 {
+		t.Fatalf("want 2 (shared + local-only), got %d", len(merged))
+	}
+	if merged[0].ID != shared.ID || merged[0].Latency != 7 {
+		t.Fatalf("network view must win on a duplicate: %+v", merged[0])
+	}
+	if merged[1].ID != localOnly.ID {
+		t.Fatalf("local-only entry missing: %+v", merged[1])
+	}
+
 	v := &Visor{initLock: new(sync.RWMutex)}
 	at := time.Now()
 	v.SetLocalGraphSource(func() ([]*transport.Entry, time.Time) {
 		return []*transport.Entry{&localDup, &localOnly}, at
 	})
-	dc := &cxoAwareTPD{DiscoveryClient: fakeAllTransports{entries: []*transport.Entry{&shared}}, v: v}
+	dc := &cxoAwareTPD{v: v}
 
+	// No routing feed: the attached visors' graph is served on its own.
 	got, err := dc.GetAllTransports(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 2 {
-		t.Fatalf("want 2 (shared + local-only), got %d", len(got))
-	}
-	if got[0].ID != shared.ID || got[0].Latency != 7 {
-		t.Fatalf("network view must win on a duplicate: %+v", got[0])
-	}
-	if got[1].ID != localOnly.ID {
-		t.Fatalf("local-only entry missing: %+v", got[1])
+		t.Fatalf("want the 2 local-graph entries, got %d", len(got))
 	}
 	if !v.localGraphHasPeer(c) || v.localGraphHasPeer(cipher.PubKey{}) {
 		t.Fatal("localGraphHasPeer wrong")
@@ -125,13 +123,11 @@ func TestCXOAwareTPD_MergesLocalGraph(t *testing.T) {
 	if _, ok := dc.AllTransportsSyncedAt(); ok {
 		t.Fatal("version must stay unreported without a primed CXO feed")
 	}
+
+	// Neither source: a miss, and no HTTP fetch of the full list.
 	v.SetLocalGraphSource(nil)
-	got, err = dc.GetAllTransports(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 {
-		t.Fatalf("source removed but %d entries", len(got))
+	if _, err := dc.GetAllTransports(context.Background()); !errors.Is(err, ErrTPDAllTransportsNotReady) {
+		t.Fatalf("want ErrTPDAllTransportsNotReady, got %v", err)
 	}
 	_ = uuid.Nil
 }
