@@ -167,13 +167,16 @@ func tpUptimeOnlineKey(date string) string {
 	return fmt.Sprintf("%s:tp-uptime:online:%s", serviceName, date)
 }
 
+// tracksUptime reports whether a transport type gets an uptime timeline:
+// every type but dmsg, as for a visor's online count.
+func tracksUptime(tpType string) bool { return tpType != "" && tpType != "dmsg" }
+
 func tpUptimeTimelineKey(tpID string, date string) string {
 	return fmt.Sprintf("%s:tp-uptime:%s:%s:timeline", serviceName, tpID, date)
 }
 
 func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string, at time.Time) error {
-	// Only track p2p transport types.
-	if tpType != "stcpr" && tpType != "sudph" {
+	if !tracksUptime(tpType) {
 		return nil
 	}
 
@@ -331,7 +334,7 @@ func (s *redisStore) GetTransportUptimeByVisor(ctx context.Context, pk cipher.Pu
 
 	ids := make([]uuid.UUID, 0, len(entries))
 	for _, e := range entries {
-		if e.Type == "stcpr" || e.Type == "sudph" {
+		if tracksUptime(string(e.Type)) {
 			ids = append(ids, e.ID)
 		}
 	}

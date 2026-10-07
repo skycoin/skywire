@@ -131,8 +131,7 @@ func (s *redisStore) RecordTransportHeartbeats(ctx context.Context, entries []*t
 		if e == nil {
 			continue
 		}
-		tpType := string(e.Type)
-		if tpType != "stcpr" && tpType != "sudph" {
+		if !tracksUptime(string(e.Type)) {
 			continue
 		}
 		if s.beats.recorded(e.ID, at) {
@@ -140,7 +139,7 @@ func (s *redisStore) RecordTransportHeartbeats(ctx context.Context, entries []*t
 		}
 		idStr := e.ID.String()
 		key := tpUptimeKey(idStr, date)
-		pipe.HSet(ctx, key, "type", tpType, "last_seen", at.Unix())
+		pipe.HSet(ctx, key, "type", string(e.Type), "last_seen", at.Unix())
 		pipe.Expire(ctx, key, 8*24*time.Hour)
 		pipe.SAdd(ctx, onlineKey, idStr)
 		tlKey := tpUptimeTimelineKey(idStr, date)
