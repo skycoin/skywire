@@ -372,7 +372,7 @@ func (r *router) establishMuxRoutes(
 		wg.Add(1)
 		go func(p muxAuxPlan) {
 			defer wg.Done()
-			muxRules, _, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, p.req)
+			muxRules, _, err := r.dialRouteGroup(ctx, log, p.req)
 			if err != nil {
 				log.Debugf("Mux route %d/%d: parallel setup failed: %v", p.slot, maxCount, err)
 				return
@@ -609,7 +609,7 @@ func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *D
 		Forward:   muxFwd,
 		Reverse:   muxRev,
 	}
-	muxRules, _, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, req)
+	muxRules, _, err := r.dialRouteGroup(ctx, log, req)
 	if err != nil {
 		return fmt.Errorf("rotation add-leg: setup-node dial: %w", err)
 	}

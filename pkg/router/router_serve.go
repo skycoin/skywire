@@ -225,6 +225,10 @@ func (r *router) serveSetup() {
 		}
 
 		remotePK := conn.RawRemoteAddr().PK
+		if !r.SetupIsTrusted(remotePK) && r.directSetupPeer(remotePK) {
+			go r.serveDirectSetup(conn, remotePK)
+			continue
+		}
 		if !r.SetupIsTrusted(remotePK) {
 			closeErr := conn.Close()
 			r.logger.WithField("remote_pk", remotePK).
