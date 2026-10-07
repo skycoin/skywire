@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/0magnet/yamux"
@@ -41,7 +42,7 @@ type Stream struct {
 	// traffic, when set, counts this accepted stream's bytes for its port.
 	traffic *portTraffic
 	// census records this stream for StreamCensus.
-	census *censusEntry
+	census atomic.Pointer[censusEntry]
 }
 
 // muxStreamConn is the minimal interface the dmsg stream protocol needs from
@@ -121,7 +122,7 @@ func (s *Stream) Close() error {
 	if s == nil {
 		return nil
 	}
-	s.census.set(0, "closed")
+	s.census.Load().set(0, "closed")
 	s.closeMu.Lock()
 	closeFn := s.close
 	s.closeMu.Unlock()
@@ -271,7 +272,7 @@ func (s *Stream) writeResponse(reqHash cipher.SHA256) error {
 		return err
 	}
 
-	s.census.set(0, "queued")
+	s.census.Load().set(0, "queued")
 	// Push stream to listener.
 	return lis.introduceStream(s)
 }
@@ -332,9 +333,9 @@ func (s *Stream) prepareFields(init bool, lAddr, rAddr Addr) error {
 	s.nsConn = noise.NewReadWriter(s.muxStream(), s.ns)
 	censusTrack(s, init)
 	if init {
-		s.census.set(rAddr.Port, "handshake")
+		s.census.Load().set(rAddr.Port, "handshake")
 	} else {
-		s.census.set(lAddr.Port, "handshake")
+		s.census.Load().set(lAddr.Port, "handshake")
 	}
 	s.log = s.ses.log.WithField("stream", s.lAddr.String()+"->"+s.rAddr.String())
 	return nil

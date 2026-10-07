@@ -29,7 +29,7 @@ func censusTrack(s *Stream, initiator bool) {
 		return
 	}
 	e := &censusEntry{initiator: initiator, state: "open", created: time.Now()}
-	s.census = e
+	s.census.Store(e)
 	streamCensus.mu.Lock()
 	streamCensus.m[e] = weak.Make(s)
 	streamCensus.mu.Unlock()
