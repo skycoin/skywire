@@ -4,25 +4,12 @@ package api
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"sort"
 	"strconv"
-	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
 )
-
-// VisorsPage serves every visor's transports by type, as of the last refresh
-// of TPD's transport list.
-func (api *API) VisorsPage(w http.ResponseWriter, r *http.Request) {
-	c := api.chartState.Load()
-	if c == nil || c.visors == nil {
-		http.NotFound(w, r)
-		return
-	}
-	c.visors.ServeHTTP(w, r)
-}
 
 // visorTable counts each visor's live transports by type. Online visors
 // without any transport are listed too, at the end.
@@ -83,6 +70,7 @@ func (api *API) visorTable(ctx context.Context) charts.Table {
 		Note: fmt.Sprintf("%d visors with %d transports, %d of them online. A transport counts for both its visors. Visors that run a dmsg server are tinted, blue when it is registered and green when it serves a hypervisor's LAN.",
 			len(list), tps, len(online)),
 		Head: append([]string{"Public key", "Role", "Online", "Total"}, types...),
+		Tall: true,
 	}
 	for _, r := range list {
 		pk := r.pk.Hex()
@@ -102,17 +90,4 @@ func (api *API) visorTable(ctx context.Context) charts.Table {
 		t.Marks = append(t.Marks, roleColor[roles[pk]])
 	}
 	return t
-}
-
-// visorsPage is the page visorTable is served on.
-func (api *API) visorsPage(about string) *charts.Page {
-	return &charts.Page{
-		Title:    "Skywire transports by visor",
-		About:    about,
-		Links:    []charts.Link{{Name: "Status", Href: "./"}, {Name: "Network graph", Href: "graph"}},
-		NoRanges: true,
-		Build: func(ctx context.Context, _ charts.Range, _ time.Time) (charts.Content, error) {
-			return charts.Content{Tables: []charts.Table{api.visorTable(ctx)}}, nil
-		},
-	}
 }
