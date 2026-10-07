@@ -51,6 +51,8 @@ func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Fie
 		Title: "Skywire transport discovery",
 		About: strings.Split(api.dmsgAddr, ":")[0],
 		Links: []charts.Link{{Name: "Network graph", Href: "graph"}},
+		Stats: api.Stats,
+		Store: st,
 		Build: func(ctx context.Context, r charts.Range, now time.Time) (charts.Content, error) {
 			return api.buildCharts(ctx, c, r, now)
 		},
@@ -58,7 +60,7 @@ func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Fie
 	c.graph = &netgraph.Page{Title: "Skywire transport graph", Back: "./", Source: api.graphLinks, Marks: api.roleColors,
 		Legend: []netgraph.Mark{{Name: roleName[roleRegistered], Color: roleColor[roleRegistered]}, {Name: roleName[roleLAN], Color: roleColor[roleLAN]}}}
 	api.chartState.Store(c)
-	go charts.Run(ctx, st, api.collectCharts, log)
+	go charts.Run(ctx, st, api.Stats.Wrap(api.collectCharts), log)
 }
 
 // ChartsPage serves the charts page, or 404 when charts are not running.

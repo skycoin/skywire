@@ -33,12 +33,14 @@ func (a *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Field
 	page := &charts.Page{
 		Title: "Skywire service discovery",
 		About: strings.Split(a.dmsgAddr, ":")[0],
+		Stats: a.Stats,
+		Store: st,
 		Build: func(ctx context.Context, r charts.Range, now time.Time) (charts.Content, error) {
 			return buildCharts(ctx, st, r, now)
 		},
 	}
 	a.chartsPage.Store(page)
-	go charts.Run(ctx, st, a.collectCharts, log)
+	go charts.Run(ctx, st, a.Stats.Wrap(a.collectCharts), log)
 }
 
 // ChartsPage serves the charts page, or 404 when charts are not running.

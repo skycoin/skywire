@@ -73,6 +73,10 @@ type Page struct {
 	// Links are other pages of the service, shown under the title.
 	Links []Link
 	Build func(ctx context.Context, r Range, now time.Time) (Content, error)
+	// Stats, when set, adds the service's process and traffic charts after
+	// Build's, read from Store.
+	Stats *ServiceStats
+	Store Store
 
 	mu    sync.Mutex
 	cache map[string]cached
@@ -120,6 +124,11 @@ func (p *Page) render(ctx context.Context, rg Range) ([]byte, error) {
 	content, err := p.Build(ctx, rg, now)
 	if err != nil {
 		return nil, err
+	}
+	if p.Stats != nil && p.Store != nil {
+		if f, from, err := rg.Frame(ctx, p.Store, now); err == nil {
+			content.Charts = append(content.Charts, p.Stats.Charts(f, from, now)...)
+		}
 	}
 	var b bytes.Buffer
 	p.write(&b, rg, now, content)

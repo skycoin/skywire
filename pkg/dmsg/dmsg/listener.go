@@ -30,6 +30,9 @@ type Listener struct {
 	// server is still forwarding inbound streams to us — see
 	// EntityCommon.markInbound. Called with l.mx held, so it must not block.
 	onInbound func()
+
+	// traffic is the owning client's per-port counters (traffic.go).
+	traffic *trafficRegistry
 }
 
 func newListener(porter *netutil.Porter, addr Addr, onInbound func()) *Listener {
@@ -58,6 +61,11 @@ func (l *Listener) introduceStream(tp *Stream) error {
 	if l.isClosed() {
 		_ = tp.Close() //nolint:errcheck
 		return ErrEntityClosed
+	}
+
+	if pt := l.traffic.port(l.addr.Port); pt != nil {
+		pt.streams.Add(1)
+		tp.traffic = pt
 	}
 
 	select {

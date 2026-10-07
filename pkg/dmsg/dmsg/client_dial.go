@@ -17,6 +17,7 @@ import (
 // Listen listens on a given dmsg port.
 func (ce *Client) Listen(port uint16) (*Listener, error) {
 	lis := newListener(ce.porter, Addr{PK: ce.pk, Port: port}, ce.markInbound)
+	lis.traffic = &ce.traffic
 	ok, doneFn := ce.porter.Reserve(port, lis)
 	if !ok {
 		lis.close()

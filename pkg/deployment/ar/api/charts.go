@@ -73,13 +73,15 @@ func (a *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Field
 	page := &charts.Page{
 		Title: "Skywire address resolver",
 		About: strings.Split(a.dmsgAddr, ":")[0],
+		Stats: a.Stats,
+		Store: st,
 		Build: func(ctx context.Context, r charts.Range, now time.Time) (charts.Content, error) {
 			return buildCharts(ctx, st, r, now)
 		},
 	}
 	a.chartsPage.Store(page)
 	var prev map[string]uint64
-	go charts.Run(ctx, st, func(context.Context) (map[string]float64, error) {
+	go charts.Run(ctx, st, a.Stats.Wrap(func(context.Context) (map[string]float64, error) {
 		v := a.reachSample()
 		cur := a.counters.snapshot()
 		for k, n := range cur {
@@ -87,7 +89,7 @@ func (a *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Field
 		}
 		prev = cur
 		return v, nil
-	}, log)
+	}), log)
 }
 
 func (a *API) reachSample() map[string]float64 {
