@@ -79,7 +79,7 @@ github.com/0magnet/gotop/v4/termui
 github.com/0magnet/gotop/v4/termui/drawille-go
 github.com/0magnet/gotop/v4/utils
 github.com/0magnet/gotop/v4/widgets
-# github.com/0magnet/kcp-go/v5 v5.6.76
+# github.com/0magnet/kcp-go/v5 v5.6.77
 ## explicit; go 1.24.0
 github.com/0magnet/kcp-go/v5
 # github.com/0magnet/lolcat-go v0.0.0
@@ -94,6 +94,9 @@ github.com/0magnet/netscrape
 # github.com/0magnet/osnotify v0.0.0
 ## explicit; go 1.25.0
 github.com/0magnet/osnotify
+# github.com/0magnet/pfilter v0.0.12
+## explicit; go 1.26.0
+github.com/0magnet/pfilter
 # github.com/0magnet/plot-go v0.0.0
 ## explicit; go 1.25
 github.com/0magnet/plot-go
@@ -154,9 +157,6 @@ github.com/0magnet/yamux
 # github.com/ActiveState/termtest/conpty v0.5.0
 ## explicit; go 1.12
 github.com/ActiveState/termtest/conpty
-# github.com/AudriusButkevicius/pfilter v0.0.11
-## explicit; go 1.20
-github.com/AudriusButkevicius/pfilter
 # github.com/Azure/go-ansiterm v0.0.0-20260917205352-e937bb47801a
 ## explicit; go 1.16
 github.com/Azure/go-ansiterm
