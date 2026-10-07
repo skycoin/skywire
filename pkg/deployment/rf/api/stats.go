@@ -9,6 +9,9 @@ import (
 // maxCountedHops is the last hop bucket; longer routes count there.
 const maxCountedHops = 6
 
+// maxCountedRoutes is the last bucket of routes found per pair.
+const maxCountedRoutes = 6
+
 // requestStats counts route requests since the finder started.
 type requestStats struct {
 	mu       sync.Mutex
@@ -17,7 +20,9 @@ type requestStats struct {
 	noRoute  uint64
 	failed   uint64
 	hops     [maxCountedHops + 1]uint64
-	elapsed  time.Duration
+	// perPair counts pairs by how many routes were found for them.
+	perPair [maxCountedRoutes + 1]uint64
+	elapsed time.Duration
 }
 
 func (s *requestStats) request(pairs int, elapsed time.Duration) {
@@ -53,5 +58,23 @@ func (s *requestStats) add(n *uint64) {
 func (s *requestStats) snapshot() requestStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return requestStats{requests: s.requests, pairs: s.pairs, noRoute: s.noRoute, failed: s.failed, hops: s.hops, elapsed: s.elapsed}
+	return requestStats{requests: s.requests, pairs: s.pairs, noRoute: s.noRoute, failed: s.failed, hops: s.hops, perPair: s.perPair, elapsed: s.elapsed}
+}
+
+// found counts the routes returned for one pair: how many, and the hops of
+// each.
+func (s *requestStats) found(hops []int) {
+	if len(hops) == 0 {
+		return
+	}
+	n := len(hops)
+	if n > maxCountedRoutes {
+		n = maxCountedRoutes
+	}
+	s.mu.Lock()
+	s.perPair[n]++
+	s.mu.Unlock()
+	for _, h := range hops {
+		s.route(h)
+	}
 }
