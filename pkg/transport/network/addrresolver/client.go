@@ -132,7 +132,9 @@ type httpClient struct {
 	// fastResolve, when set, answers lookups other than sudph before HTTP.
 	fastResolve atomic.Pointer[FastResolve]
 	// notFound remembers recent "no entry" answers (see notFoundFor).
-	notFound       notFoundCache
+	notFound notFoundCache
+	// udpRes tracks sudph lookups sent on the control connection.
+	udpRes         udpResolver
 	log            *logging.Logger
 	mLog           *logging.MasterLogger
 	httpClient     *httpauthclient.Client
@@ -959,6 +961,17 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 	if c.notFound.recent(nfKey, time.Now()) {
 		return VisorData{}, ErrNoEntry
 	}
+	if types.NormalizeType(types.Type(tType)) == types.SUDPH {
+		if data, err, ok := c.resolveUDP(ctx, pk); ok {
+			if errors.Is(err, ErrNoEntry) {
+				c.notFound.note(nfKey, time.Now())
+			}
+			if err == nil {
+				data.IsLocal = sameHost(data.RemoteAddr, c.localPublicIPRaw())
+			}
+			return data, err
+		}
+	}
 
 	path := fmt.Sprintf("/resolve/%s/%s", tType, pk.String())
 
@@ -1196,6 +1209,11 @@ func (c *httpClient) readSUDPHIntoChan(arConn net.Conn, out chan<- RemoteVisor) 
 		// successful read above already reset the deadline). Not a
 		// RemoteVisor payload, so skip before unmarshalling.
 		if string(buf[:n]) == UDPKeepHeartbeatMessage {
+			continue
+		}
+
+		if reply, ok := parseUDPResolveReply(buf[:n]); ok {
+			c.deliverUDPReply(arConn, reply)
 			continue
 		}
 
