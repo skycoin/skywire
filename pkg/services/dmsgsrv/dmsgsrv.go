@@ -33,8 +33,10 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxosub"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/discovery/serverfeed"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
@@ -253,7 +255,13 @@ func (s *service) Run(ctx context.Context) error {
 	dmsgC, dClient, closeDmsg := s.buildTransitDmsg(ctx, deployments, discPKs)
 	defer closeDmsg()
 
-	srv := dmsg.NewServer(cfg.PubKey, cfg.SecKey, newDmsgOnly(dmsgC, discPKs[0], log), &srvConf, m)
+	// Peer discovery reads the servers from dmsg discovery's feed, held on the
+	// transit client, and asks over dmsg HTTP only while the feed has none.
+	serversFeed := dmsgdServersFeed(dmsgC, discPKs[0], log)
+	defer serversFeed.Close()
+	discClient := disc.NewCXOServersClient(newDmsgOnly(dmsgC, discPKs[0], log),
+		func(context.Context) ([]*disc.Entry, bool) { return serverfeed.Servers(serversFeed) })
+	srv := dmsg.NewServer(cfg.PubKey, cfg.SecKey, discClient, &srvConf, m)
 	srv.SetLogger(log)
 
 	// The embedded geoip DB opens on the first lookup (geoip.Shared): ~60 MB of
@@ -691,4 +699,21 @@ func (s *service) buildTransitDmsg(ctx context.Context, deployments []dmsgserver
 		}
 	}
 	return dmsgC, dClient, closeFn
+}
+
+// dmsgdServersFeed holds dmsg discovery's clients-by-server feed, whose
+// server leaves are the registered servers, over the transit client.
+func dmsgdServersFeed(dmsgC *dmsg.Client, discPK cipher.PubKey, log *logging.Logger) *cxosub.Manager {
+	mgr := cxosub.NewManager(cxosub.Deps{
+		Dmsg: func() *dmsg.Client { return dmsgC },
+		FeedSpec: func(f cxosub.Feed) (cipher.PubKey, uint16, string, error) {
+			if f != cxosub.FeedDMSGDClientsByServer {
+				return cipher.PubKey{}, 0, "", fmt.Errorf("feed %s is not held here", cxosub.FeedString(f))
+			}
+			return discPK, skyenv.DmsgDMSGDClientsByServerCXOPort, serverfeed.Prefix, nil
+		},
+		Log: log,
+	}, 0)
+	mgr.Pin(cxosub.FeedDMSGDClientsByServer)
+	return mgr
 }

@@ -9,6 +9,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cxo/cxosub"
+	"github.com/skycoin/skywire/pkg/dmsg/discovery/serverfeed"
 )
 
 // Roles a visor can have as a dmsg server, for marking it on the charts page
@@ -29,6 +32,9 @@ const (
 type dmsgRoles struct {
 	client *http.Client
 	base   string
+	// feed, when set, is a subscription to dmsg discovery's clients-by-server
+	// feed, read before asking over HTTP.
+	feed *cxosub.Manager
 
 	mu    sync.Mutex
 	at    time.Time
@@ -50,6 +56,9 @@ func (api *API) serverRoles(ctx context.Context) map[string]string {
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if roles, ok := d.rolesFromFeed(); ok {
+		return roles
+	}
 	if d.roles != nil && time.Since(d.at) < dmsgRolesEvery {
 		return d.roles
 	}
@@ -90,4 +99,35 @@ func (d *dmsgRoles) get(ctx context.Context, path string, out interface{}) error
 		return fmt.Errorf("%s: %s", path, resp.Status)
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+// SetDmsgDiscoveryFeed has the role lookup read the servers from mgr's
+// subscription to dmsg discovery's clients-by-server feed, falling back to
+// HTTP while that has no servers. Call after SetDmsgDiscovery.
+func (api *API) SetDmsgDiscoveryFeed(mgr *cxosub.Manager) {
+	if d := api.dmsgRoles.Load(); d != nil {
+		d.mu.Lock()
+		d.feed = mgr
+		d.mu.Unlock()
+	}
+}
+
+// rolesFromFeed builds the roles from the feed, or reports false when it has
+// no servers yet.
+func (d *dmsgRoles) rolesFromFeed() (map[string]string, bool) {
+	if d.feed == nil {
+		return nil, false
+	}
+	servers, ok := serverfeed.Servers(d.feed)
+	if !ok {
+		return nil, false
+	}
+	roles := map[string]string{}
+	for pk := range serverfeed.Delegated(d.feed) {
+		roles[pk] = roleLAN
+	}
+	for _, s := range servers {
+		roles[s.Static.Hex()] = roleRegistered
+	}
+	return roles, true
 }

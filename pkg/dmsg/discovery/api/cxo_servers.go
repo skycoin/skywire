@@ -24,20 +24,13 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/discovery/serverfeed"
 )
 
-const (
-	serverLeafPrefix  = "clients-by-server/servers/"
-	serverLeafVersion = 1
-	serversCXOEvery   = time.Minute
-)
+const serversCXOEvery = time.Minute
 
-// ServerLeafPrefix is where server leaves live, for subscribers.
-const ServerLeafPrefix = serverLeafPrefix
-
-func serverLeafPath(pk cipher.PubKey) string { return serverLeafPrefix + pk.Hex() }
+func serverLeafPath(pk cipher.PubKey) string { return serverfeed.LeafPath(pk) }
 
 // serverKey is what a leaf is rewritten for: the entry without its signature,
 // sequence, timestamp and free session count.
@@ -73,7 +66,7 @@ func (p *ClientsByServerCXOPublisher) PublishServers(servers []*disc.Entry) {
 		if e == nil || e.Server == nil {
 			continue
 		}
-		body, err := json.Marshal(e)
+		body, err := serverfeed.Encode(e)
 		if err != nil {
 			continue
 		}
@@ -86,7 +79,7 @@ func (p *ClientsByServerCXOPublisher) PublishServers(servers []*disc.Entry) {
 			if p.servers[l.pk] == l.key {
 				continue
 			}
-			if err := p.pub.Put(serverLeafPath(l.pk), cxoutils.FrameGzip(serverLeafVersion, l.body)); err != nil {
+			if err := p.pub.Put(serverLeafPath(l.pk), l.body); err != nil {
 				p.recordError(err)
 				continue
 			}
@@ -101,20 +94,6 @@ func (p *ClientsByServerCXOPublisher) PublishServers(servers []*disc.Entry) {
 			}
 		}
 	})
-}
-
-// DecodeServerLeaf decodes a server leaf body, or returns nil when it is not
-// one this build understands.
-func DecodeServerLeaf(body []byte) *disc.Entry {
-	v, payload, ok := cxoutils.UnframeGzip(body)
-	if !ok || v != serverLeafVersion {
-		return nil
-	}
-	e := new(disc.Entry)
-	if err := json.Unmarshal(payload, e); err != nil || e.Server == nil {
-		return nil
-	}
-	return e
 }
 
 // RunServersCXO publishes the registered servers to the feed every minute

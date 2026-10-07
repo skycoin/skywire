@@ -8,18 +8,8 @@
 package visor
 
 import (
-	"encoding/json"
-	"strings"
-
-	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
-)
-
-// serverLeafPrefix and serverLeafVersion match dmsg discovery's publisher
-// (pkg/dmsg/discovery/api/cxo_servers.go).
-const (
-	serverLeafPrefix  = clientsByServerPrefix + "servers/"
-	serverLeafVersion = 1
+	"github.com/skycoin/skywire/pkg/dmsg/discovery/serverfeed"
 )
 
 // dmsgServersFromCXO returns the servers in the current snapshot, or nil
@@ -30,30 +20,6 @@ func (v *Visor) dmsgServersFromCXO() []*dmsgdisc.Entry {
 		return nil
 	}
 	v.serversFeedOnce.Do(func() { mgr.AcquireFor(TabDmsgEntryLookup) })
-	if mgr.LastSync(FeedDMSGDClientsByServer).IsZero() {
-		return nil
-	}
-	var out []*dmsgdisc.Entry
-	mgr.Walk(FeedDMSGDClientsByServer, serverLeafPrefix, func(path string, body []byte) bool {
-		if strings.Contains(strings.TrimPrefix(path, serverLeafPrefix), "/") {
-			return true
-		}
-		if e := decodeServerLeaf(body); e != nil {
-			out = append(out, e)
-		}
-		return true
-	})
-	return out
-}
-
-func decodeServerLeaf(body []byte) *dmsgdisc.Entry {
-	version, payload, ok := cxoutils.UnframeGzip(body)
-	if !ok || version != serverLeafVersion {
-		return nil
-	}
-	e := new(dmsgdisc.Entry)
-	if err := json.Unmarshal(payload, e); err != nil || e.Server == nil {
-		return nil
-	}
-	return e
+	servers, _ := serverfeed.Servers(mgr)
+	return servers
 }

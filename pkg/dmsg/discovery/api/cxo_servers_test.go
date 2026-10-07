@@ -10,6 +10,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/discovery/serverfeed"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -48,7 +49,7 @@ func leaf(t *testing.T, p *ClientsByServerCXOPublisher, pk cipher.PubKey) *disc.
 	if !ok {
 		return nil
 	}
-	e := DecodeServerLeaf(body)
+	e := serverfeed.Decode(body)
 	require.NotNil(t, e)
 	return e
 }
@@ -81,7 +82,7 @@ func TestServerLeafIsIgnoredByBatchReaders(t *testing.T) {
 	path := serverLeafPath(pk)
 	require.Equal(t, clientsByServerPrefix(), path[:len("clients-by-server/")])
 	require.NotContains(t, path, "/entry")
-	require.Nil(t, DecodeServerLeaf(encodeClientsBatch(nil)), "a batch leaf does not decode as a server")
+	require.Nil(t, serverfeed.Decode(encodeClientsBatch(nil)), "a batch leaf does not decode as a server")
 }
 
 func clientsByServerPrefix() string { return "clients-by-server/" }

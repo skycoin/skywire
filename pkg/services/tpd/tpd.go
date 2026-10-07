@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/cxo/cxosub"
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
@@ -28,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/deployment/tpd/cxoaggregator"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/deployment/tpd/metrics"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
+	"github.com/skycoin/skywire/pkg/dmsg/discovery/serverfeed"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/httpauth"
@@ -312,6 +314,10 @@ func (s *service) Run(ctx context.Context) error {
 	if h.DmsgClient != nil {
 		s.startCXO(runCtx, h.DmsgClient, nil, b.st, tpdAPI, sk, logger)
 		tpdAPI.SetDmsgDiscovery(&http.Client{Transport: dmsghttp.MakeHTTPTransport(runCtx, h.DmsgClient)}, dmsgDiscDmsg)
+		if mgr := dmsgdFeed(h.DmsgClient, dmsgDiscDmsg, logger); mgr != nil {
+			tpdAPI.SetDmsgDiscoveryFeed(mgr)
+			defer mgr.Close()
+		}
 	}
 
 	select {
@@ -435,4 +441,25 @@ func (s *service) chartStore(sc storeconfig.Config) (charts.Store, error) {
 		return charts.NewMemoryStore(), nil
 	}
 	return charts.NewRedisStore(sc.URL, sc.Password, redisPrefix)
+}
+
+// dmsgdFeed holds dmsg discovery's clients-by-server feed for the marking of
+// dmsg server visors, or returns nil when dmsg discovery has no dmsg key.
+func dmsgdFeed(dmsgC *dmsg.Client, discURL string, log *logging.Logger) *cxosub.Manager {
+	pk := cmdutil.PKFromDmsgURL(discURL)
+	if pk.Null() {
+		return nil
+	}
+	mgr := cxosub.NewManager(cxosub.Deps{
+		Dmsg: func() *dmsg.Client { return dmsgC },
+		FeedSpec: func(f cxosub.Feed) (cipher.PubKey, uint16, string, error) {
+			if f != cxosub.FeedDMSGDClientsByServer {
+				return cipher.PubKey{}, 0, "", fmt.Errorf("feed %s is not held here", cxosub.FeedString(f))
+			}
+			return pk, skyenv.DmsgDMSGDClientsByServerCXOPort, serverfeed.Prefix, nil
+		},
+		Log: log,
+	}, 0)
+	mgr.Pin(cxosub.FeedDMSGDClientsByServer)
+	return mgr
 }
