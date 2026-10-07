@@ -26,6 +26,8 @@ type DmsgPorterStatus struct {
 	RSNPorts  int `json:"rsn_ports,omitempty"`
 	MainFreed int `json:"main_freed,omitempty"`
 	RSNFreed  int `json:"rsn_freed,omitempty"`
+	// StreamCensus groups the dmsg streams still in memory by port and state.
+	StreamCensus []dmsg.StreamCensusRow `json:"stream_census,omitempty"`
 }
 
 // DmsgProbeReasonResponse carries a probe result together with why it failed.

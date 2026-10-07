@@ -106,6 +106,7 @@ func (l *Listener) AcceptStream() (*Stream, error) {
 		if ok, closeFn := l.porter.ReserveChild(tp.lAddr.Port, tp.rAddr.Port, tp); ok {
 			tp.close = closeFn
 		}
+		tp.census.set(0, "accepted")
 
 		return tp, nil
 
