@@ -102,6 +102,16 @@ var liveConfigFieldTable = []liveConfigField{
 			return v.conf.Flush()
 		},
 	}, {
+		Path: "flight_recorder",
+		Desc: "keep the last seconds of execution trace for stall diagnosis (allocates heavily)",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			if err := v.runFlightRecorder(nv.Bool()); err != nil {
+				return err
+			}
+			v.conf.FlightRecorder = nv.Bool()
+			return v.conf.Flush()
+		},
+	}, {
 		Path: "hypervisors",
 		Desc: "configured hypervisor PKs (connects/disconnects the difference)",
 		apply: func(v *Visor, _ string, nv reflect.Value) error {
