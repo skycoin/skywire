@@ -15,6 +15,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // transportDailyBandwidth returns a transport's true daily throughput in
@@ -63,11 +64,23 @@ func transportDailyBandwidth(result map[string]string) uint64 {
 	return bw
 }
 
-// getP2PTransportCounts returns a map of visor PK hex → count of p2p transports
-// (stcpr, sudph). A visor is considered online when it has 2+ p2p transports,
-// indicating genuine peer-to-peer network participation (not just dmsg
-// infrastructure connectivity).
+// getP2PTransportCounts returns a map of visor PK hex → count of its
+// transports of every type but dmsg. A visor is considered online when it has
+// 2+ of them, peer-to-peer participation rather than dmsg infrastructure
+// connectivity alone. Counted from the live set when this store keeps one,
+// which is what every other transport read answers from.
 func (s *redisStore) getP2PTransportCounts(ctx context.Context) (map[string]int, error) {
+	if entries, ok := s.live.snapshot(false, false, time.Now()); ok {
+		counts := make(map[string]int)
+		for _, e := range entries {
+			if e.Type == tptypes.DMSG {
+				continue
+			}
+			counts[e.Edges[0].Hex()]++
+			counts[e.Edges[1].Hex()]++
+		}
+		return counts, nil
+	}
 	keys, ids, err := s.allTransportKeysFromIndex(ctx)
 	if err != nil {
 		return nil, err
@@ -102,8 +115,7 @@ func (s *redisStore) getP2PTransportCounts(ctx context.Context) (map[string]int,
 			if err := json.Unmarshal([]byte(raw), &data); err != nil {
 				continue
 			}
-			// Only count p2p transport types (stcpr, sudph), not dmsg.
-			if data.Type == "stcpr" || data.Type == "sudph" {
+			if data.Type != string(tptypes.DMSG) {
 				counts[data.EdgeA]++
 				if data.EdgeA != data.EdgeB {
 					counts[data.EdgeB]++

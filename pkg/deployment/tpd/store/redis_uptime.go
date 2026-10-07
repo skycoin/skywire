@@ -80,7 +80,7 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool, timeline
 			continue
 		}
 
-		// Online = has 2+ p2p transports (stcpr/sudph).
+		// Online = has 2+ transports of any type but dmsg.
 		// This indicates genuine peer-to-peer network participation,
 		// not just dmsg infrastructure connectivity.
 		online := p2pCounts[pkHex] >= minP2PTransportsOnline
