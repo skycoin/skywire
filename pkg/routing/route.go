@@ -167,6 +167,13 @@ type Hop struct {
 	// display routes by predicted latency without re-querying, and is NOT used
 	// in route-rule setup. Older route-finders simply omit it.
 	Latency float64 `json:"Latency,omitempty"`
+	// Type and ThroughputBps are the edge's transport type and passively
+	// observed throughput, from the same TPD data. With Latency they are
+	// everything the dialer ranks and filters hops on, so a route-finder
+	// route needs no TPD snapshot of its own. A route-finder that sets Type
+	// always sets it, so an empty Type means an older route-finder.
+	Type          string  `json:"Type,omitempty"`
+	ThroughputBps float64 `json:"ThroughputBps,omitempty"`
 }
 
 // String implements fmt.Stringer

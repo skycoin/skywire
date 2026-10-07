@@ -27,7 +27,7 @@ import (
 func TestCXOFeedStringRoundTrip(t *testing.T) {
 	feeds := []CXOFeed{
 		FeedTPDMetrics, FeedTPDUptime, FeedSDServices,
-		FeedDMSGDClientsByServer, FeedTPDAllTransports, FeedTPDStats,
+		FeedDMSGDClientsByServer, FeedTPDAllTransports, FeedTPDStats, FeedTPDPerKey,
 	}
 	for _, f := range feeds {
 		name := CXOFeedString(f)

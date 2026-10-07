@@ -30,6 +30,7 @@ var (
 	authPassphrase    string
 	officialServers   string
 	dmsgServerType    string
+	chartsAddr        string
 )
 
 func init() {
@@ -39,6 +40,7 @@ func init() {
 	RootCmd.Flags().StringVar(&authPassphrase, "auth", "", "auth passphrase as simple auth for official dmsg servers registration")
 	RootCmd.Flags().StringVar(&officialServers, "official-servers", "", "list of official dmsg servers keys separated by comma")
 	RootCmd.Flags().BoolVar(&enableLoadTesting, "enable-load-testing", false, "enable load testing")
+	RootCmd.Flags().StringVar(&chartsAddr, "charts-addr", "", "serve only the charts page over plain HTTP on this address")
 	RootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "address in which to dial to syslog server")
 	RootCmd.Flags().StringVar(&syslogNet, "syslog-net", "udp", "network in which to dial to syslog server")
 }
@@ -118,6 +120,7 @@ func buildConfig() (*dmsgdisc.Config, error) {
 		DmsgServerType:    dmsgServerType,
 		EnableLoadTesting: enableLoadTesting,
 		Whitelist:         cmdutil.CommaSplit(whitelistKeys),
+		ChartsAddr:        chartsAddr,
 	}
 
 	if flags.ConfigPath != "" {
@@ -154,6 +157,9 @@ func mergeFile(dst, src *dmsgdisc.Config) {
 	}
 	if len(src.DmsgServers) > 0 {
 		dst.DmsgServers = src.DmsgServers
+	}
+	if src.ChartsAddr != "" {
+		dst.ChartsAddr = src.ChartsAddr
 	}
 }
 

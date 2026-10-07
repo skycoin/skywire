@@ -111,9 +111,11 @@ skywire cli tp tpd-stats --top 5
 skywire cli tp tpd-stats --type stcpr --min 100
 ```
 
-**Data source:** `/all-transports/per-key-stats`
+**Data source:** `/all-transports/per-key-stats`, served from TPD's per-key CXO feed (`tpd-perkey`, dmsg port 79, republished every minute) when the local visor has it, else over HTTP:
 - [http://tpd.skywire.skycoin.com/all-transports/per-key-stats](http://tpd.skywire.skycoin.com/all-transports/per-key-stats)
 - `dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/all-transports/per-key-stats`
+
+The hypervisor's network view reads the same counts.
 
 ### `skywire cli tp metrics`
 

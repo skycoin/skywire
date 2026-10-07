@@ -222,6 +222,7 @@ skywire dmsg disc
 ```
   -a, --addr string               plain-HTTP listen address (default ":9090")
       --auth string               auth passphrase as simple auth for official dmsg servers registration
+      --charts-addr string        serve only the charts page over plain HTTP on this address
   -c, --config string             path to a JSON config file; keys it sets override these flags
                                   (generate one with: skywire cli config gen --dmsgdisc)
       --dmsg-port uint16          dmsghttp listener port (default 80)

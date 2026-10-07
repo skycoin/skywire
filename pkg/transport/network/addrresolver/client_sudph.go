@@ -17,8 +17,8 @@ import (
 	"net"
 	"time"
 
+	kcp "github.com/0magnet/kcp-go/v5"
 	"github.com/AudriusButkevicius/pfilter"
-	"github.com/xtaci/kcp-go"
 
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport/network/packetfilter"
@@ -104,7 +104,9 @@ func (c *httpClient) connectSUDPH(filter *pfilter.PacketFilter, hs Handshake) (n
 		return nil, LocalAddresses{}, err
 	}
 
-	kcpConn, err := kcp.NewConn(c.remoteUDPAddr, nil, 0, 0, c.sudphConn)
+	// kcp-go v5.6 batches IO on any conn with ReadMsgUDP, then needs a net.Conn,
+	// which a pfilter conn is not. Hiding the extra methods keeps plain IO.
+	kcpConn, err := kcp.NewConn(c.remoteUDPAddr, nil, 0, 0, struct{ net.PacketConn }{c.sudphConn})
 	if err != nil {
 		return nil, LocalAddresses{}, err
 	}

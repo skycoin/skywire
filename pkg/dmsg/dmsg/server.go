@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/0magnet/yamux"
-	"github.com/xtaci/smux"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -796,32 +795,18 @@ func (s *Server) handleSession(conn net.Conn) {
 		hook(s)
 	}
 
-	// detect visor protocol for dmsg
-	protocol := s.entryProtocol(ctx, dSes.RemotePK())
-
-	// based on protocol, create smux or yamux stream session
+	// The stream mux is yamux: a client takes smux only when its server's
+	// entry advertises it (client_sessions.go), and this server never does.
 	dSes.sm.mutx.Lock()
-	if protocol == "smux" {
-		dSes.sm.smux, err = smux.Server(conn, SmuxConfig())
-		if err != nil {
-			dSes.sm.mutx.Unlock()
-			conn.Close() //nolint:errcheck,gosec
-			cancel()
-			return
-		}
-		dSes.sm.addr = dSes.sm.smux.RemoteAddr()
-		log.Debugf("smux stream session initial for %s", dSes.RemotePK().String())
-	} else {
-		dSes.sm.yamux, err = yamux.Server(conn, YamuxConfig())
-		if err != nil {
-			dSes.sm.mutx.Unlock()
-			conn.Close() //nolint:errcheck,gosec
-			cancel()
-			return
-		}
-		dSes.sm.addr = dSes.sm.yamux.RemoteAddr()
-		log.Debugf("yamux stream session initial for %s", dSes.RemotePK().String())
+	dSes.sm.yamux, err = yamux.Server(conn, YamuxConfig())
+	if err != nil {
+		dSes.sm.mutx.Unlock()
+		conn.Close() //nolint:errcheck,gosec
+		cancel()
+		return
 	}
+	dSes.sm.addr = dSes.sm.yamux.RemoteAddr()
+	log.Debugf("yamux stream session initial for %s", dSes.RemotePK().String())
 	dSes.sm.mutx.Unlock()
 
 	// Newest-session-wins: setSession always installs this session

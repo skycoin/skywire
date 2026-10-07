@@ -16,11 +16,12 @@
 package visor
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"net"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -297,8 +298,9 @@ func (v *Visor) hubRelayNominees(seen map[cipher.PubKey]struct{}) []cipher.PubKe
 	return out
 }
 
+// sortPubKeys orders keys by their bytes, which matches their hex order.
 func sortPubKeys(pks []cipher.PubKey) {
-	sort.Slice(pks, func(i, j int) bool { return pks[i].Hex() < pks[j].Hex() })
+	slices.SortFunc(pks, func(a, b cipher.PubKey) int { return bytes.Compare(a[:], b[:]) })
 }
 
 // hasTransportTo reports whether this visor holds a live transport to pk.

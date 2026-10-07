@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/monitor/nmpk"
+	"github.com/skycoin/skywire/pkg/deployment/netgraph"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/deployment/tpd/metrics"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/httpauth"
@@ -63,6 +65,11 @@ type API struct {
 	dmsgAddr                    string
 	DmsgServers                 []string
 	backupPath                  string
+
+	// charts is set once StartCharts runs; until then / answers 404.
+	chartState atomic.Pointer[tpdCharts]
+	// dmsgRoles is set when TPD can reach dmsg discovery over dmsg.
+	dmsgRoles atomic.Pointer[dmsgRoles]
 
 	transportsCache         []*transport.Entry
 	transportsCacheFiltered []*transport.Entry // excludes self-transports
@@ -215,6 +222,10 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 
 	// Infrastructure endpoints (no rate limiting, no auth)
 	r.Get("/health", api.health)
+	r.Get("/", api.ChartsPage)
+	r.Get("/graph", api.GraphPage)
+	r.Get("/graph/engine.wasm", netgraph.EngineWasm)
+	r.Get("/graph/engine.js", netgraph.EngineLoader)
 	r.Post("/statuses", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusGone)
 	})

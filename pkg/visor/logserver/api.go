@@ -124,6 +124,7 @@ type API struct {
 	relatedNodesProvider RelatedNodesProvider
 	statsReader          StatsReader             // visor-local telemetry store, set via SetStatsReader
 	uptimeRecorder       *serviceuptime.Recorder // service-self uptime, set via SetUptimeRecorder
+	logLevelController   LogLevelController      // temporary log level, set via SetLogLevelController
 	websiteHandler       http.Handler            // optional: serves unmatched routes (custom website)
 	// ptyHandler serves /pty (web terminal) when set by the visor.
 	// Gated by ptyWhitelist — typically the dmsgpty whitelist (configured
@@ -304,6 +305,10 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	// degrade to 503 when SetUptimeRecorder hasn't been called.
 	api.registerUptimeRoutes(authRoute)
 
+	// /debug/loglevel (auth'd) — a log level raised for a bounded time.
+	// Handlers degrade to 503 when SetLogLevelController hasn't been called.
+	api.registerLogLevelRoutes(authRoute)
+
 	// /pty (web terminal) — gated by ptyWhitelist (set via
 	// SetPtyHandler). Until the visor calls SetPtyHandler, the
 	// route is wired but returns 404 so a misconfigured deployment
@@ -366,6 +371,9 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 			links = append(links, `<a href="/node-info/checksum">/node-info/checksum</a> - survey checksum`)
 			links = append(links, `<a href="/skywire.log">/skywire.log</a> - visor debug log`)
 			links = append(links, `<a href="/debug/pprof/">/debug/pprof/</a> - runtime profiling`)
+			if api.logLevelController != nil {
+				links = append(links, `<a href="/debug/loglevel">/debug/loglevel</a> - log level (POST ?level=debug&ttl=15m raises it for a while)`)
+			}
 			if api.statsReader != nil {
 				links = append(links, `<a href="/stats/transports">/stats/transports</a> - live transport snapshot`)
 				links = append(links, `<a href="/stats/transports/history">/stats/transports/history</a> - daily transport rollups (?since=&until=&id=)`)

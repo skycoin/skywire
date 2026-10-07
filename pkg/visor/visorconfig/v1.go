@@ -109,6 +109,9 @@ type V1 struct {
 	RewardSystem     string `json:"reward_system,omitempty"`
 	RewardSystemDmsg string `json:"reward_system_dmsg,omitempty"`
 	MemoryLimit      string `json:"memory_limit,omitempty"` // Go memory limit (e.g., "256MiB", "auto" for 60% of available RAM)
+	// FlightRecorder keeps the last seconds of execution trace in memory for
+	// stall diagnosis. Off by default because it allocates heavily.
+	FlightRecorder bool `json:"flight_recorder,omitempty"`
 
 	// AppSettings holds the live tuning knobs an operator set per app
 	// (`skywire cli proxy settings`), so they survive a visor restart the way

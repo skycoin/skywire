@@ -156,6 +156,9 @@ type ClientsByServerCXOPublisher struct {
 	// server's batched leaf reads only from here.
 	state map[cipher.PubKey]map[cipher.PubKey][]byte
 
+	// servers is the content key each server leaf was last written for. Worker-only.
+	servers map[cipher.PubKey]string
+
 	// pendingDirty is the set of servers whose leaf needs re-encoding, drained
 	// on the flush ticker (clientsByServerFlushWindow) instead of per-mutation so
 	// bursty churn re-gzips each server at most once per window. Worker-only.
@@ -192,6 +195,7 @@ func StartClientsByServerCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey, logg
 		events:       make(chan func(), publishQueueDepth),
 		done:         make(chan struct{}),
 		state:        make(map[cipher.PubKey]map[cipher.PubKey][]byte),
+		servers:      make(map[cipher.PubKey]string),
 		pendingDirty: make(map[cipher.PubKey]struct{}),
 	}
 	p.wg.Add(1)

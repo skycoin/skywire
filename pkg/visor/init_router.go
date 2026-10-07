@@ -48,11 +48,6 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				}
 			}
 
-			allTransports, err := v.arClient.Transports(ctx)
-			if err != nil {
-				log.WithError(err).Warn("failed to fetch AR transport")
-			}
-
 			// After (or instead of) the AR/STUN-gated STCPR/SUDPH attempts below,
 			// try the REMAINING creatable direct types (QUIC, STCP, WEBRTC, WS, WT)
 			// in preference order before falling back to the DMSG relay —
@@ -65,24 +60,32 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			directFallback := func() error {
 				return tm.EnsureBestTransport(ctx, rPK, types.STCPR, types.SUDPH)
 			}
-			// check visor's AR transport
-			if allTransports == nil && !v.conf.Transport.PublicAutoconnect {
-				// skips if there's no AR transports
-				log.Warn("empty AR transports")
+			// What the peer advertises to the address resolver, from the
+			// bindings feed; fetching every peer's list over HTTP only until
+			// the feed has synced. dmsg needs no advertisement — every visor is
+			// reachable over it.
+			advertised, fromFeed := v.arAdvertised(rPK)
+			if !fromFeed {
+				allTransports, err := v.arClient.Transports(ctx)
+				if err != nil {
+					log.WithError(err).Warn("failed to fetch AR transport")
+				}
+				if allTransports == nil && !v.conf.Transport.PublicAutoconnect {
+					log.Warn("empty AR transports")
+					return directFallback()
+				}
+				transports, ok := allTransports[rPK]
+				if !ok {
+					log.WithField("pk", rPK.String()).Warn("pk not found in the transports")
+					return directFallback()
+				}
+				advertised = make(map[types.Type]bool, len(transports))
+				for _, trans := range transports {
+					advertised[types.Type(trans)] = true
+				}
+			} else if len(advertised) == 0 {
+				log.WithField("pk", rPK.String()).Debug("peer has no address resolver binding")
 				return directFallback()
-			}
-			transports, ok := allTransports[rPK]
-			if !ok {
-				log.WithField("pk", rPK.String()).Warn("pk not found in the transports")
-				// check if automatic transport is available, if it does,
-				// continue with route creation
-				return directFallback()
-			}
-			// What the peer advertises to the address resolver. dmsg needs no
-			// advertisement — every visor is reachable over it.
-			advertised := make(map[types.Type]bool, len(transports))
-			for _, trans := range transports {
-				advertised[types.Type(trans)] = true
 			}
 
 			// SUDPH additionally needs a ready STUN client and a NAT type that
@@ -154,12 +157,21 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 						continue
 					}
 				}
+				if v.autoTpCooldown.blocked(rPK, nType, time.Now()) {
+					log.Debugf("Skipping automatic %s transport: it failed to this peer recently.", nType)
+					lastErr = fmt.Errorf("automatic %s transport to %s failed recently", nType, rPK)
+					continue
+				}
 				err := retrier.Do(ctx, func() error {
 					_, err := tm.SaveTransport(ctx, rPK, nType, transport.LabelAutomatic)
 					return err
 				})
 				if err == nil {
+					v.autoTpCooldown.succeeded(rPK, nType)
 					return nil
+				}
+				if ctx.Err() == nil {
+					v.autoTpCooldown.failed(rPK, nType, time.Now())
 				}
 				log.Debugf("Establishing automatic %s transport failed.", nType)
 				lastErr = err

@@ -223,3 +223,11 @@ func (g *Graph) Sweep() []cipher.PubKey {
 
 	return nonReachable
 }
+
+// Size is how many visors the graph holds and how many transports join them.
+func (g *Graph) Size() (visors, transports int) {
+	for _, v := range g.graph {
+		transports += len(v.connections)
+	}
+	return len(g.graph), transports / 2
+}

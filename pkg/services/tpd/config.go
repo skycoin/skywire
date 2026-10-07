@@ -31,6 +31,9 @@ type Config struct {
 	// disables service-self uptime recording.
 	UptimeDB string `json:"uptime_db,omitempty"`
 
+	// ChartsAddr serves only the charts page over plain HTTP. Empty disables it.
+	ChartsAddr string `json:"charts_addr,omitempty"`
+
 	// Dmsg is the dmsg-related config block — same shape across
 	// every deployment service that uses it.
 	Dmsg cmdutil.DmsgConfig `json:"dmsg,omitempty"`

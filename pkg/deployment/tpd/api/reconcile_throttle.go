@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -40,6 +41,9 @@ type reconcileMark struct {
 	fp           uint64
 	registeredAt time.Time
 	heartbeatAt  time.Time
+	// listedAt is when each edge (by EdgeIndex) last listed the transport
+	// in a snapshot; zero once that edge's snapshot omits it.
+	listedAt [2]time.Time
 }
 
 type reconcileThrottle struct {
@@ -116,6 +120,42 @@ func (t *reconcileThrottle) plan(now time.Time, entries []*transport.Entry) (reg
 	return register, touch, heartbeat
 }
 
+// listed records that reporter's snapshot lists entries (after plan, which
+// made their marks).
+func (t *reconcileThrottle) listed(now time.Time, reporter cipher.PubKey, entries []*transport.Entry) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for _, e := range entries {
+		if m, i := t.marks[e.ID], e.EdgeIndex(reporter); m != nil && i >= 0 {
+			m.listedAt[i] = now
+		}
+	}
+}
+
+// listedByOther reports whether the edge of e that is not reporter listed it
+// within the refresh gap — more than two of its 45 s republishes — and
+// records that reporter no longer does. A transport one edge omits while
+// the other still lists it is kept: the two edges' lists are published
+// apart, so one lags the other (a just-dialed transport, a just-closed
+// one), and deleting on that lag only had the other edge's next snapshot
+// put the transport straight back, a flap every downstream feed paid for.
+// Once neither edge lists it, it is deleted.
+func (t *reconcileThrottle) listedByOther(now time.Time, reporter cipher.PubKey, e *transport.Entry) bool {
+	i := e.EdgeIndex(reporter)
+	if i < 0 {
+		return false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	m := t.marks[e.ID]
+	if m == nil {
+		return false
+	}
+	m.listedAt[i] = time.Time{}
+	other := m.listedAt[1-i]
+	return !other.IsZero() && now.Sub(other) < t.refreshGap
+}
+
 // forget clears the registration mark of entries whose write failed.
 func (t *reconcileThrottle) forget(entries []*transport.Entry) {
 	t.mu.Lock()
@@ -124,6 +164,18 @@ func (t *reconcileThrottle) forget(entries []*transport.Entry) {
 		if m := t.marks[e.ID]; m != nil {
 			m.registeredAt = time.Time{}
 		}
+	}
+}
+
+// forgetID clears the registration mark of a transport deleted outside the
+// reconcile (an HTTP delete, a CXO tombstone). The mark is shared by both
+// edges; left set, the other edge's next snapshots would only touch an entry
+// that no longer exists.
+func (t *reconcileThrottle) forgetID(id uuid.UUID) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if m := t.marks[id]; m != nil {
+		m.registeredAt = time.Time{}
 	}
 }
 

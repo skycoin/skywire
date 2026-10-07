@@ -83,6 +83,7 @@ type v1JSON struct {
 	RewardSystem     string `json:"reward_system,omitempty"`
 	RewardSystemDmsg string `json:"reward_system_dmsg,omitempty"`
 	MemoryLimit      string `json:"memory_limit,omitempty"`
+	FlightRecorder   bool   `json:"flight_recorder,omitempty"`
 
 	AppSettings map[string]AppSettingsEntry `json:"app_settings,omitempty"`
 
@@ -148,6 +149,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.RewardSystem = mirror.RewardSystem
 	v.RewardSystemDmsg = mirror.RewardSystemDmsg
 	v.MemoryLimit = mirror.MemoryLimit
+	v.FlightRecorder = mirror.FlightRecorder
 	v.AppSettings = mirror.AppSettings
 	v.Hypervisor = mirror.Hypervisor
 

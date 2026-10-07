@@ -57,6 +57,7 @@ func supportedCXOBindType(tpType types.Type) bool {
 //
 // See the package doc for the dual-write / no-clobber semantics.
 func (a *API) IngestBindFromCXO(ctx context.Context, reporter cipher.PubKey, tpType types.Type, la addrresolver.LocalAddresses) {
+	a.counters.add(chartBindCXO + typeName(string(tpType)))
 	if reporter == (cipher.PubKey{}) {
 		return
 	}

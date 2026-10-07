@@ -4,7 +4,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"github.com/skycoin/skywire/pkg/services"
 	"log"
 	"os"
 	"path/filepath"
@@ -19,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/services/rf"
 )
 
@@ -26,6 +26,7 @@ var (
 	flags          services.Flags
 	dmsgDisc       string
 	dmsgServerType string
+	chartsAddr     string
 )
 
 func generateExamples() string {
@@ -64,6 +65,7 @@ func init() {
 	flags.Bind(RootCmd.Flags(), services.FlagDefaults{Gen: "rf", Addr: ":9092", Tag: "route_finder", EntryTimeout: 10 * time.Minute})
 	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(false), "url of dmsg-discovery")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
+	RootCmd.Flags().StringVar(&chartsAddr, "charts-addr", "", "serve only the charts page over plain HTTP on this address")
 }
 
 // RootCmd contains the root command
@@ -119,7 +121,8 @@ func buildConfig() (*rf.Config, error) {
 		return nil, err
 	}
 	cfg := &rf.Config{
-		Common: common,
+		Common:     common,
+		ChartsAddr: chartsAddr,
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  dmsgDisc,
 			ServerType: dmsgServerType,
@@ -138,6 +141,9 @@ func buildConfig() (*rf.Config, error) {
 func mergeFile(dst, src *rf.Config) {
 	services.MergeCommon(&dst.Common, src.Common)
 	dst.Dmsg.Merge(src.Dmsg)
+	if src.ChartsAddr != "" {
+		dst.ChartsAddr = src.ChartsAddr
+	}
 }
 
 // Execute executes root CLI command.

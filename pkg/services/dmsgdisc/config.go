@@ -41,6 +41,8 @@ type Config struct {
 	// OfficialServers is a list of PKs treated as "official" — they
 	// can register without the auth passphrase. Hex-encoded PKs.
 	OfficialServers []string `json:"official_servers,omitempty"`
+	// ChartsAddr serves only the charts page over plain HTTP. Empty disables it.
+	ChartsAddr string `json:"charts_addr,omitempty"`
 	// DmsgServerType filters dmsg-servers by their declared type.
 	DmsgServerType string `json:"dmsg_server_type,omitempty"`
 	// EnableLoadTesting allows sending fake load to the discovery.

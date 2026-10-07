@@ -673,16 +673,15 @@ func (s *VStream) sendFlag(flag byte, data []byte) error {
 		return fmt.Errorf("vstream write: frame of %d bytes exceeds %d", len(data), vstreamMaxData)
 	}
 	localPK := s.mux.localPK()
-	payload := make([]byte, VStreamHeaderSize+len(data))
+	n := VStreamHeaderSize + len(data)
+	pkt := make(routing.Packet, routing.PacketHeaderSize+n)
+	pkt[routing.PacketTypeOffset] = byte(s.mux.packetType)
+	binary.BigEndian.PutUint16(pkt[routing.PacketPayloadSizeOffset:], uint16(n)) //nolint:gosec
+	payload := pkt[routing.PacketPayloadOffset:]
 	binary.BigEndian.PutUint64(payload[:8], s.id)
 	copy(payload[8:41], localPK[:])
 	payload[41] = flag
 	copy(payload[VStreamHeaderSize:], data)
-
-	pkt := make(routing.Packet, routing.PacketHeaderSize+len(payload))
-	pkt[routing.PacketTypeOffset] = byte(s.mux.packetType)
-	binary.BigEndian.PutUint16(pkt[routing.PacketPayloadSizeOffset:], uint16(len(payload))) //nolint:gosec
-	copy(pkt[routing.PacketPayloadOffset:], payload)
 
 	return tp.WriteRawPacket(pkt)
 }

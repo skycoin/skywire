@@ -297,7 +297,7 @@ func decodeSchema(b []byte) (s Schema, err error) {
 	case ReferenceTypeSingle, ReferenceTypeSlice, ReferenceTypeDynamic:
 		// kind, typ, elem
 		rs := referenceSchema{}
-		rs.kind = reflect.Kind(x.Kind)
+		rs.kind = kindFromWire(x.Kind)
 		rs.typ = ReferenceType(x.ReferenceType)
 		if rs.typ != ReferenceTypeDynamic {
 			if rs.elem, err = decodeSchema(x.Elem); err != nil {
@@ -313,11 +313,11 @@ func decodeSchema(b []byte) (s Schema, err error) {
 	}
 
 	sc := schema{
-		kind: reflect.Kind(x.Kind),
+		kind: kindFromWire(x.Kind),
 		name: x.Name,
 	}
 
-	switch k := reflect.Kind(x.Kind); k {
+	switch k := kindFromWire(x.Kind); k {
 	case reflect.Slice:
 		ss := sliceSchema{}
 		ss.schema = sc

@@ -199,6 +199,11 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 				pubStats = &v.tpdAnnounce
 			}
 			go runAnnounceLoop(v.ctx, pub, tpdPK, log, pubStats)
+			listPub := pub
+			if tplistPub != nil {
+				listPub = tplistPub
+			}
+			v.tpdFeed.Store(&tpdFeedRef{pub: listPub, tpd: tpdPK})
 			// Announce the dedicated tp-list feed to TPD too, on its own
 			// port (DmsgVisorTPListCXOPort) — this is the conn TPD's second
 			// aggregator accepts and fills the tiny discovery Root over.

@@ -158,7 +158,7 @@ func reverseRoute(r routing.Route) routing.Route {
 	n := len(r.Hops)
 	out := routing.Route{Hops: make([]routing.Hop, n)}
 	for i, h := range r.Hops {
-		out.Hops[n-1-i] = routing.Hop{From: h.To, To: h.From, TpID: h.TpID, Latency: h.Latency}
+		out.Hops[n-1-i] = routing.Hop{From: h.To, To: h.From, TpID: h.TpID, Latency: h.Latency, Type: h.Type, ThroughputBps: h.ThroughputBps}
 	}
 	return out
 }
@@ -422,8 +422,9 @@ func (g *Graph) routesLandmarkHybrid(ctx context.Context, src, dst cipher.PubKey
 	return merged, true
 }
 
-// withCurrentLatency returns a copy of r with each hop's latency read from g,
-// for a route taken from tables built on an earlier graph.
+// withCurrentLatency returns a copy of r with each hop's latency, type and
+// throughput read from g, for a route taken from tables built on an earlier
+// graph.
 func (g *Graph) withCurrentLatency(r routing.Route) routing.Route {
 	out := routing.Route{Hops: make([]routing.Hop, len(r.Hops))}
 	copy(out.Hops, r.Hops)
@@ -431,6 +432,8 @@ func (g *Graph) withCurrentLatency(r routing.Route) routing.Route {
 		if v, ok := g.graph[out.Hops[i].From]; ok {
 			if conn, ok := v.connections[out.Hops[i].To]; ok {
 				out.Hops[i].Latency = conn.Latency
+				out.Hops[i].Type = string(conn.Type)
+				out.Hops[i].ThroughputBps = conn.ThroughputBps
 			}
 		}
 	}

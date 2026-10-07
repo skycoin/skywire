@@ -29,6 +29,7 @@ var (
 	whitelistKeys  string
 	dmsgServerType string
 	geoipURL       string
+	chartsAddr     string
 )
 
 // generateExamples creates example responses from actual struct types
@@ -88,6 +89,7 @@ func init() {
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "network-monitor keys allowed to deregister entries, comma-separated")
 	RootCmd.Flags().StringVar(&geoipURL, "geoip", deployment.Prod.GeoIP, "url of geoip service")
+	RootCmd.Flags().StringVar(&chartsAddr, "charts-addr", "", "serve only the charts page over plain HTTP on this address")
 }
 
 // RootCmd contains the root service-discovery command
@@ -143,9 +145,10 @@ func buildConfig() (*sd.Config, error) {
 		return nil, err
 	}
 	cfg := &sd.Config{
-		Common:    common,
-		Whitelist: cmdutil.CommaSplit(whitelistKeys),
-		GeoIP:     geoipURL,
+		Common:     common,
+		Whitelist:  cmdutil.CommaSplit(whitelistKeys),
+		GeoIP:      geoipURL,
+		ChartsAddr: chartsAddr,
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  dmsgDisc,
 			ServerType: dmsgServerType,
@@ -168,6 +171,9 @@ func mergeFile(dst, src *sd.Config) {
 	}
 	if src.GeoIP != "" {
 		dst.GeoIP = src.GeoIP
+	}
+	if src.ChartsAddr != "" {
+		dst.ChartsAddr = src.ChartsAddr
 	}
 	dst.Dmsg.Merge(src.Dmsg)
 }

@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"sync"
 	"time"
 
@@ -479,16 +478,20 @@ func (v *Visor) refreshDmsgServersCacheLoop(ctx context.Context, discURL string,
 	cacheLog := v.MasterLogger().PackageLogger("dmsg_servers_cache")
 	dc := dmsgdisc.NewHTTP(discURL, httpC, cacheLog)
 	refresh := func() {
-		entries, err := dc.AllServers(ctx)
-		if err != nil {
-			cacheLog.WithError(err).Debug("Skipping cache refresh (dmsgd error)")
-			return
+		entries, source := v.dmsgServersFromCXO(), "cxo"
+		if len(entries) == 0 {
+			var err error
+			if entries, err = dc.AllServers(ctx); err != nil {
+				cacheLog.WithError(err).Debug("Skipping cache refresh (dmsgd error)")
+				return
+			}
+			source = "http"
 		}
 		if err := v.dmsgServersCache.Replace(entries); err != nil {
 			cacheLog.WithError(err).Warn("Failed to write dmsg-servers cache file")
 			return
 		}
-		cacheLog.WithField("count", len(entries)).Debug("dmsg-servers cache refreshed")
+		cacheLog.WithField("count", len(entries)).WithField("source", source).Debug("dmsg-servers cache refreshed")
 	}
 	refresh()
 	t := time.NewTicker(dmsgServersCacheRefreshInterval)
@@ -651,6 +654,9 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 
 	// Set visor as health stats provider for /health endpoint
 	lsAPI.SetHealthStatsProvider(v)
+	// /debug/loglevel: whitelisted keys can turn on debug logging for a
+	// while. Only on this whitelisted surface, never on the localhost one.
+	lsAPI.SetLogLevelController(v)
 	// Self-identify on /health and the landing page: PK + dmsg listen
 	// address (the log server's own dmsg port, where this surface is served).
 	dmsgAddr := fmt.Sprintf("%s:%d", v.conf.PK.Hex(), visorconfig.DmsgHTTPPort)
@@ -779,11 +785,9 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		return nil
 	})
 
-	// Also serve on localhost so the skynet forwarding server can
-	// reach /health and other endpoints. When LogServer.LocalAddr
-	// is configured, use that; otherwise auto-bind on :0 (OS-
-	// assigned port) so every visor gets a localhost listener for
-	// skynet forwarding without manual config.
+	// Also serve on localhost, without a whitelist, for local tools.
+	// When LogServer.LocalAddr is configured, use that; otherwise
+	// auto-bind on :0 (OS-assigned port).
 	localAddr := ""
 	if v.conf.LogServer != nil && v.conf.LogServer.LocalAddr != "" {
 		localAddr = v.conf.LogServer.LocalAddr
@@ -812,16 +816,11 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 			boundAddr := localLis.Addr().String()
 			logger.WithField("bound_addr", boundAddr).Info("Localhost log server bound")
 
-			// Register the port for skynet forwarding so
-			// .skynet URLs can reach /health, /ping, etc.
-			if _, portStr, splitErr := net.SplitHostPort(boundAddr); splitErr == nil {
-				if port, convErr := strconv.Atoi(portStr); convErr == nil && port > 0 {
-					v.allowed.mu.Lock()
-					v.allowed.ports[port] = true
-					v.allowed.mu.Unlock()
-					logger.WithField("port", port).Info("Log server port registered for skynet forwarding")
-				}
-			}
+			// Not registered for skynet forwarding. This API has no
+			// whitelist, so forwarding its port handed /skywire.log,
+			// /node-info and /debug/pprof to any peer that found it.
+			// .skynet URLs reach the log server on port 80 through the
+			// service registry, behind the whitelist.
 
 			localSrv := &http.Server{
 				ReadTimeout:       5 * time.Second,

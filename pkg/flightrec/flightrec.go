@@ -199,7 +199,7 @@ func Handler() http.Handler {
 		var buf bytes.Buffer
 		ok, err := writeWindow(&buf)
 		if !ok {
-			http.Error(w, "the flight recorder is not running", http.StatusNotFound)
+			http.Error(w, "the flight recorder is off, start it with: skywire cli config set flight_recorder=true", http.StatusNotFound)
 			return
 		}
 		if err != nil {

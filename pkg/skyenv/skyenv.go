@@ -160,6 +160,15 @@ const (
 	// keeps that connection warm. The visor's subscriber binds it too.
 	DmsgConfCXOPort uint16 = 78
 
+	// DmsgTPDPerKeyCXOPort is the dmsg port TPD's per-key publisher listens
+	// on: transport counts by type for every visor, the GET
+	// /all-transports/per-key-stats body (perkey/stats, ~38 KB gzipped). What
+	// the network view and `cli tp tpd-stats` read instead of downloading the
+	// whole transport list to count it. Its own port because it is two orders
+	// of magnitude larger than the stats feed's bodies and two smaller than
+	// the all-transports snapshot.
+	DmsgTPDPerKeyCXOPort uint16 = 79
+
 	// DmsgDMSGDRegistrationCXOPort is the dmsg port the dmsg-discovery's CXO
 	// client-entry REGISTRATION aggregator binds (and each visor's entry
 	// publisher binds for the reverse subscribe). A visor publishes its own

@@ -4,7 +4,7 @@
 // survey-whitelist endpoints. Pre-fix, every subcommand that
 // reached out over dmsghttp had to re-implement the SK resolution,
 // dmsg bootstrap, and transport-pool wiring inline. This file
-// centralizes that boilerplate so `cli log info|file|pprof|stats|
+// centralizes that boilerplate so `cli log info|file|level|pprof|stats|
 // uptime|reward` share one resolution policy + one dmsg client.
 //
 // Endpoints reached this way are all gated by the remote visor's
@@ -21,6 +21,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/skycoin/skywire/deployment"
@@ -144,8 +145,16 @@ func fetchSurveyEndpoint(ctx context.Context, hc *http.Client, pk cipher.PubKey,
 // endpoints that return JSON. Decodes into v; v should be a pointer
 // to a struct or map. Same error surface as the byte-stream helper.
 func fetchSurveyJSON(ctx context.Context, hc *http.Client, pk cipher.PubKey, path string, v any) error {
+	return doSurveyJSON(ctx, hc, http.MethodGet, pk, path, v)
+}
+
+// doSurveyJSON is fetchSurveyJSON with the request method chosen by the
+// caller, for endpoints that change state (POST/DELETE /debug/loglevel). A
+// non-200 error carries the start of the response body, where the visor
+// says what it rejected.
+func doSurveyJSON(ctx context.Context, hc *http.Client, method string, pk cipher.PubKey, path string, v any) error {
 	target := fmt.Sprintf("dmsg://%s:80%s", pk, path)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	req, err := http.NewRequestWithContext(ctx, method, target, nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
@@ -155,7 +164,8 @@ func fetchSurveyJSON(ctx context.Context, hc *http.Client, pk cipher.PubKey, pat
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("dmsg://%s%s returned status %d", pk, path, resp.StatusCode)
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512)) //nolint:errcheck
+		return fmt.Errorf("%s dmsg://%s%s returned status %d: %s", method, pk, path, resp.StatusCode, strings.TrimSpace(string(msg)))
 	}
 	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
 		return fmt.Errorf("decode JSON: %w", err)
