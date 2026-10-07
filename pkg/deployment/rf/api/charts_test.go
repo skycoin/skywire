@@ -118,6 +118,7 @@ func TestRouteRequestsAreCountedAndCharted(t *testing.T) {
 	require.Equal(t, uint64(2), got.pairs)
 	require.Equal(t, uint64(1), got.noRoute)
 	require.Equal(t, uint64(1), got.hops[1])
+	require.Equal(t, uint64(1), got.perPair[1], "one route found for the pair")
 
 	require.Equal(t, http.StatusNotFound, do(t, api, http.MethodGet, "/", nil).Code)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -126,4 +127,17 @@ func TestRouteRequestsAreCountedAndCharted(t *testing.T) {
 	rec := do(t, api, http.MethodGet, "/", nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), "Route requests")
+}
+
+func TestFoundCountsEveryRoute(t *testing.T) {
+	var s requestStats
+	s.found([]int{2, 3, 3})
+	s.found([]int{1, 1, 1, 1, 1, 1, 1, 1})
+	s.found(nil)
+	got := s.snapshot()
+	require.Equal(t, uint64(1), got.perPair[3])
+	require.Equal(t, uint64(1), got.perPair[maxCountedRoutes], "eight routes count in the last bucket")
+	require.Equal(t, uint64(8), got.hops[1])
+	require.Equal(t, uint64(2), got.hops[3])
+	require.Equal(t, uint64(1), got.hops[2])
 }

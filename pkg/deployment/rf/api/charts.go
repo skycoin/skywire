@@ -27,6 +27,7 @@ const (
 	chartFailed      = "rf.failed"
 	chartMeanMs      = "rf.ms"
 	chartHopsPrefix  = "rf.hops."
+	chartFoundPrefix = "rf.found."
 	chartGraphVisors = "graph.visors"
 	chartGraphTps    = "graph.transports"
 	chartSNPrefix    = "sn."
@@ -97,6 +98,9 @@ func (a *API) collectCharts(ctx context.Context, c *rfCharts) (map[string]float6
 	}
 	for h := 1; h <= maxCountedHops; h++ {
 		v[chartHopsPrefix+strconv.Itoa(h)] = float64(cur.hops[h] - prev.hops[h])
+	}
+	for n := 1; n <= maxCountedRoutes; n++ {
+		v[chartFoundPrefix+strconv.Itoa(n)] = float64(cur.perPair[n] - prev.perPair[n])
 	}
 	if a.graphCache != nil {
 		if g := a.graphCache.Get(); g != nil {
@@ -226,7 +230,8 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, c *rfCharts, r c
 				{Name: "no route", Vals: f.Values(chartNoRoute, false)},
 				{Name: "errors", Vals: f.Values(chartFailed, false)},
 			}),
-		chart("Length of routes found", "Hops in the best route found for each pair, per 5 minutes.", charts.Stacked, hopSeries(f, chartHopsPrefix)),
+		chart("Routes found per pair", "How many routes each pair asked for got back, per 5 minutes. Mux dials ask for several.", charts.Stacked, foundSeries(f)),
+		chart("Length of routes found", "Hops in every route returned, per 5 minutes.", charts.Stacked, hopSeries(f, chartHopsPrefix)),
 		chart("Route graph", "Visors and transports in the graph routes are found in.", charts.Lines, []charts.Series{
 			{Name: "visors", Vals: f.Values(chartGraphVisors, false)},
 			{Name: "transports", Vals: f.Values(chartGraphTps, false)},
@@ -272,4 +277,19 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, c *rfCharts, r c
 		chart("Route setup failures by reason", "Failed setups per 5 minutes, across all setup nodes.", charts.Stacked, failures),
 		chart("Length of routes set up", "Hops in each successful setup, across all setup nodes.", charts.Stacked, hopSeries(f, chartSNHops)))
 	return out, nil
+}
+
+func foundSeries(f *charts.Frame) []charts.Series {
+	var out []charts.Series
+	for n := 1; n <= maxCountedRoutes; n++ {
+		name := strconv.Itoa(n) + " routes"
+		switch n {
+		case 1:
+			name = "1 route"
+		case maxCountedRoutes:
+			name = strconv.Itoa(n) + "+ routes"
+		}
+		out = append(out, charts.Series{Name: name, Vals: f.Values(chartFoundPrefix+strconv.Itoa(n), true)})
+	}
+	return out
 }

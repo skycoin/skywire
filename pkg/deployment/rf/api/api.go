@@ -216,9 +216,11 @@ func (a *API) getPairedRoutes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if len(forwardRoutes) > 0 {
-			a.stats.route(len(forwardRoutes[0].Hops))
+		hops := make([]int, len(forwardRoutes))
+		for i, route := range forwardRoutes {
+			hops[i] = len(route.Hops)
 		}
+		a.stats.found(hops)
 		forwardPaths := make([][]routing.Hop, 0, len(forwardRoutes))
 		for _, route := range forwardRoutes {
 			forwardPaths = append(forwardPaths, route.Hops)
