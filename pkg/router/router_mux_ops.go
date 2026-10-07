@@ -350,7 +350,7 @@ func (r *router) addMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []rout
 		Reverse:   rev,
 	}
 
-	rules, _, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, req)
+	rules, _, err := r.dialRouteGroup(ctx, log, req)
 	if err != nil {
 		nrg.rg.noteLegEvent(MuxEventLegAddFailed, "route setup failed: "+err.Error(), MuxByLocal, -1,
 			nrg.rg.legCount(), tp, fwd)

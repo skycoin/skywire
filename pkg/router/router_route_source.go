@@ -19,19 +19,29 @@ type RouteSourceStats struct {
 	// LocalFallback is routes built locally after the route finder missed or
 	// ran out of retries.
 	LocalFallback int64 `json:"local_fallback"`
+	// DirectSetups is one-hop routes set up with the peer, without a setup node.
+	DirectSetups int64 `json:"direct_setups"`
+	// DirectSetupFallbacks is one-hop routes the peer could not set up
+	// directly, sent to a setup node instead.
+	DirectSetupFallbacks int64 `json:"direct_setup_fallbacks"`
 }
 
 type routeSourceCounters struct {
 	localAttached atomic.Int64
 	rfQueries     atomic.Int64
 	localFallback atomic.Int64
+
+	directSetups         atomic.Int64
+	directSetupFallbacks atomic.Int64
 }
 
 // RouteSourceStats returns the counters.
 func (r *router) RouteSourceStats() RouteSourceStats {
 	return RouteSourceStats{
-		LocalAttached:      r.routeSource.localAttached.Load(),
-		RouteFinderQueries: r.routeSource.rfQueries.Load(),
-		LocalFallback:      r.routeSource.localFallback.Load(),
+		LocalAttached:        r.routeSource.localAttached.Load(),
+		RouteFinderQueries:   r.routeSource.rfQueries.Load(),
+		LocalFallback:        r.routeSource.localFallback.Load(),
+		DirectSetups:         r.routeSource.directSetups.Load(),
+		DirectSetupFallbacks: r.routeSource.directSetupFallbacks.Load(),
 	}
 }
