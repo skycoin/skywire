@@ -53,3 +53,25 @@ func TestVisorBWPublisher(t *testing.T) {
 	require.Len(t, batches, 2)
 	require.Equal(t, []treestore.PutOp{{Path: store.VisorBWDayPath(day)}}, batches[1], "a day leaving the window is removed")
 }
+
+// A day whose leaf holds no transports is not published, and is published
+// once its leaf is rebuilt.
+func TestVisorBWPublisherWaitsForAnEmptyDay(t *testing.T) {
+	now := time.Date(2026, 10, 2, 0, 30, 0, 0, time.UTC)
+	const day = "2026-10-01"
+	fake := &leafFake{saved: map[string][][]byte{day: savedDay(t, []store.TransportMetric{})}}
+	var batches [][]treestore.PutOp
+	p := &VisorBWCXOPublisher{
+		api: &API{store: fake}, log: logging.MustGetLogger("t"), published: map[string]bool{},
+		putBatch: func(ops []treestore.PutOp) error { batches = append(batches, ops); return nil },
+	}
+
+	p.publishOnce(t.Context(), now)
+	require.Empty(t, batches)
+
+	fake.saved[day] = savedDay(t, []store.TransportMetric{{Type: "stcpr", Edges: []string{"a", "b"},
+		Daily: []store.DailyEdgeBandwidth{{Date: day, A: &store.EdgeBandwidth{Sent: 5}}}}})
+	p.publishOnce(t.Context(), now)
+	require.Len(t, batches, 1)
+	require.Equal(t, store.VisorBWDayPath(day), batches[0][0].Path)
+}

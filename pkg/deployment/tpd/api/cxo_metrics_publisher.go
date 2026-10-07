@@ -523,7 +523,21 @@ func (m *MetricsCXOPublisher) loadSettled(ctx context.Context, dates []string) m
 		m.log.WithError(err).Debug("could not load saved metrics leaves; rebuilding the window")
 		return map[string][][]byte{}
 	}
+	for date, parts := range got {
+		if emptyLeaf(parts) {
+			m.log.WithField("date", date).Warn("saved metrics day holds no transports; rebuilding it")
+			delete(got, date)
+		}
+	}
 	return got
+}
+
+// emptyLeaf reports whether a day's parts hold no transport, or do not decode.
+// The network never has a day without traffic, so such a leaf was built from a
+// read that missed the day's rows.
+func emptyLeaf(parts [][]byte) bool {
+	records, err := decodeMetricsParts(parts)
+	return err != nil || len(records) == 0
 }
 
 // settle remembers the bodies of days still open and saves every day that
@@ -539,6 +553,12 @@ func (m *MetricsCXOPublisher) settle(ctx context.Context, bodies map[string][][]
 	ls, ok := m.api.store.(leafStore)
 	for date, parts := range m.unsaved {
 		if isOpen[date] {
+			continue
+		}
+		if emptyLeaf(parts) {
+			// Not saved, so the next start rebuilds the day from its rows.
+			m.log.WithField("date", date).Warn("settled metrics day holds no transports; not saving it")
+			delete(m.unsaved, date)
 			continue
 		}
 		if ok {
