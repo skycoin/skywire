@@ -19,6 +19,8 @@ type filteredConn struct {
 
 	recvBuffer chan messageWithError
 
+	receiver atomic.Pointer[func([]byte, net.Addr, error)]
+
 	filter Filter
 
 	closed chan struct{}
@@ -217,4 +219,12 @@ func (r *filteredConn) SyscallConn() (syscall.RawConn, error) {
 		return scon.SyscallConn()
 	}
 	return nil, errNotSupported
+}
+
+// SetPacketReceiver makes the filter hand every packet claimed by this
+// connection to fn on its read goroutine, instead of queueing it for
+// ReadFrom. fn must not keep b after it returns. A read error on the
+// underlying connection reaches fn as err, after which no more calls follow.
+func (r *filteredConn) SetPacketReceiver(fn func(b []byte, addr net.Addr, err error)) {
+	r.receiver.Store(&fn)
 }

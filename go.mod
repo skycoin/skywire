@@ -19,11 +19,12 @@ require (
 	github.com/0magnet/golang-ipc v1.2.5-0.20260915170035-de9342a68204
 	github.com/0magnet/got v0.0.0
 	github.com/0magnet/gotop/v4 v4.2.1-0.20261004195426-3f6a467d1e1a
-	github.com/0magnet/kcp-go/v5 v5.6.76
+	github.com/0magnet/kcp-go/v5 v5.6.77
 	github.com/0magnet/lolcat-go v0.0.0
 	github.com/0magnet/metrics v1.44.1-0.20261004194541-261721063b63
 	github.com/0magnet/netscrape v0.0.0
 	github.com/0magnet/osnotify v0.0.0
+	github.com/0magnet/pfilter v0.0.12
 	github.com/0magnet/plot-go v0.0.0
 	github.com/0magnet/realorigin v0.2.3
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
@@ -38,7 +39,6 @@ require (
 	github.com/0magnet/xterm-go v0.0.1-0.20261004020305-36b45f096b30
 	github.com/0magnet/yamux v0.1.3-0.20261004024245-10ef81fe8447
 	github.com/ActiveState/termtest/conpty v0.5.0
-	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0
 	github.com/MichaelMure/go-term-markdown v0.1.4

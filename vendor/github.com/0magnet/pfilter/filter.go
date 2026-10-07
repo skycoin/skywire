@@ -109,6 +109,10 @@ type PacketFilter struct {
 	batchSize  int
 	bufPool    sync.Pool
 
+	// Reused by readBatch, which only the loop goroutine calls.
+	batch  []ipv4.Message
+	result []messageWithError
+
 	conns []*filteredConn
 	mut   sync.Mutex
 }
@@ -196,12 +200,17 @@ func (d *PacketFilter) readFrom() []messageWithError {
 }
 
 func (d *PacketFilter) readBatch() []messageWithError {
-	batch := make([]ipv4.Message, d.batchSize)
+	if d.batch == nil {
+		d.batch = make([]ipv4.Message, d.batchSize)
+		d.result = make([]messageWithError, d.batchSize)
+	}
+	batch := d.batch
 	for i := range batch {
-		buf := d.bufPool.Get().([]byte)
-		oobBuf := d.bufPool.Get().([]byte)
-		batch[i].Buffers = [][]byte{buf}
-		batch[i].OOB = oobBuf
+		// Buffers is new each time because a queued message keeps it.
+		batch[i] = ipv4.Message{
+			Buffers: [][]byte{d.bufPool.Get().([]byte)},
+			OOB:     d.bufPool.Get().([]byte),
+		}
 	}
 
 	n, err := d.ipv4Conn.ReadBatch(batch, 0)
@@ -217,7 +226,7 @@ func (d *PacketFilter) readBatch() []messageWithError {
 		n = 1
 	}
 
-	result := make([]messageWithError, n)
+	result := d.result[:n]
 
 	for i := 0; i < n; i++ {
 		result[i].Err = err
@@ -275,8 +284,13 @@ func (d *PacketFilter) loop(msgReader func() []messageWithError) {
 				if nerr, ok := msg.Err.(net.Error); ok && nerr.Temporary() {
 					continue
 				}
+				var receivers []func([]byte, net.Addr, error)
 				d.mut.Lock()
 				for _, conn := range d.conns {
+					if fn := conn.receiver.Load(); fn != nil {
+						receivers = append(receivers, *fn)
+						continue
+					}
 					select {
 					case conn.recvBuffer <- msg.Copy(&d.bufPool):
 					default:
@@ -285,16 +299,33 @@ func (d *PacketFilter) loop(msgReader func() []messageWithError) {
 				}
 				d.mut.Unlock()
 				d.returnBuffers(msg.Message)
+				for _, fn := range receivers {
+					fn(nil, msg.Addr, msg.Err)
+				}
 				return
 			}
 
 			d.mut.Lock()
-			sent := d.sendMessageLocked(msg)
-			d.mut.Unlock()
-			if !sent {
+			conn := d.claimLocked(msg)
+			if conn == nil {
+				d.mut.Unlock()
 				atomic.AddUint64(&d.dropped, 1)
 				d.returnBuffers(msg.Message)
+				continue
 			}
+			if fn := conn.receiver.Load(); fn != nil {
+				d.mut.Unlock()
+				(*fn)(msg.Buffers[0][:msg.N], msg.Addr, nil)
+				d.returnBuffers(msg.Message)
+				continue
+			}
+			select {
+			case conn.recvBuffer <- msg:
+			default:
+				atomic.AddUint64(&d.overflow, 1)
+				d.returnBuffers(msg.Message)
+			}
+			d.mut.Unlock()
 		}
 	}
 }
@@ -308,16 +339,12 @@ func (d *PacketFilter) returnBuffers(msg ipv4.Message) {
 	}
 }
 
-func (d *PacketFilter) sendMessageLocked(msg messageWithError) bool {
+// claimLocked returns the connection that takes msg, or nil if none does.
+func (d *PacketFilter) claimLocked(msg messageWithError) *filteredConn {
 	for _, conn := range d.conns {
 		if conn.filter == nil || conn.filter.ClaimIncoming(msg.Buffers[0], msg.Addr) {
-			select {
-			case conn.recvBuffer <- msg:
-			default:
-				atomic.AddUint64(&d.overflow, 1)
-			}
-			return true
+			return conn
 		}
 	}
-	return false
+	return nil
 }
