@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
@@ -35,7 +36,9 @@ func TestServiceStatsCountsByRoute(t *testing.T) {
 	require.Contains(t, v, keyGoroutines)
 	require.Contains(t, v, keyHeap)
 
-	// The next interval starts from zero.
+	// The next interval starts from zero. CPU is a rate, and a coarse clock
+	// (Windows) reads back to back samples as no time apart.
+	time.Sleep(50 * time.Millisecond)
 	v = map[string]float64{}
 	s.Collect(v)
 	require.NotContains(t, v, prefixReq+"GET /missing")
