@@ -471,7 +471,7 @@ func (s *service) Run(ctx context.Context) error {
 		log.Warn("dmsg-wt: wt_address set without public_address_wt; WebTransport disabled (no URL to advertise)")
 	}
 
-	go s.serveDmsgSurfaces(runCtx, cancel, dmsgC, dClient)
+	go s.serveDmsgSurfaces(runCtx, cancel, dmsgC, dClient, srv)
 
 	<-runCtx.Done()
 	return nil
@@ -486,6 +486,7 @@ func (s *service) serveDmsgSurfaces(
 	cancel context.CancelFunc,
 	dmsgC *dmsg.Client,
 	dClient disc.APIClient,
+	srv *dmsg.Server,
 ) {
 	cfg := &s.cfg.Config
 	log := s.log
@@ -506,6 +507,10 @@ func (s *service) serveDmsgSurfaces(
 			DmsgAddr:      dmsgAddr,
 			DmsgDiscovery: cfg.Discovery,
 			PeerServers:   peerPKs,
+		}
+		if srv != nil {
+			st := srv.Stats()
+			resp.DmsgServer = httputil.DmsgServerHealthOf(st.ClientSessions, st.PeerSessions, st.ActiveStreams, st.StreamsRelayed, st.BytesUp, st.BytesDown)
 		}
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
 	})

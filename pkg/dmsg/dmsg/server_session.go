@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/0magnet/yamux"
@@ -453,8 +454,11 @@ func (ss *ServerSession) bridge(log logrus.FieldLogger, yStr io.ReadWriteCloser,
 	// Wrap both streams with idle-timeout deadlines. Ownership of the
 	// underlying yamux streams passes to CopyReadWriteCloser, which
 	// closes both sides when either direction errors out.
-	yStr = &idleTimeoutConn{rwc: yStr, timeout: streamIdleTimeout}
-	yStr2 = &idleTimeoutConn{rwc: yStr2, timeout: streamIdleTimeout}
+	yStr = &idleTimeoutConn{rwc: yStr, timeout: streamIdleTimeout, read: &ss.entity.relay.up}
+	yStr2 = &idleTimeoutConn{rwc: yStr2, timeout: streamIdleTimeout, read: &ss.entity.relay.down}
+	ss.entity.relay.streams.Add(1)
+	ss.entity.relay.active.Add(1)
+	defer ss.entity.relay.active.Add(-1)
 
 	if logging.TraceEnabled() {
 		logging.Trace(log, "Serving stream.")
@@ -471,13 +475,19 @@ func (ss *ServerSession) bridge(log logrus.FieldLogger, yStr io.ReadWriteCloser,
 type idleTimeoutConn struct {
 	rwc     io.ReadWriteCloser
 	timeout time.Duration
+	// read, when set, counts the bytes read from rwc.
+	read *atomic.Uint64
 }
 
 func (c *idleTimeoutConn) Read(p []byte) (int, error) {
 	if conn, ok := c.rwc.(net.Conn); ok {
 		conn.SetReadDeadline(time.Now().Add(c.timeout)) //nolint:errcheck,gosec
 	}
-	return c.rwc.Read(p)
+	n, err := c.rwc.Read(p)
+	if n > 0 && c.read != nil {
+		c.read.Add(uint64(n))
+	}
+	return n, err
 }
 
 func (c *idleTimeoutConn) Write(p []byte) (int, error) {
