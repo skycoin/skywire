@@ -94,6 +94,10 @@ const (
 	// settled day (visorbw/day/<YYYY-MM-DD>) of the bytes each visor sent, with
 	// same-IP transports left out. What the reward system pays pool 2 from.
 	FeedTPDVisorBW
+	// FeedARBindings is the address resolver's bindings feed: every peer's
+	// transport addresses in 256 buckets (<h>/<h>). What a visor resolves a
+	// peer's stcpr, squicr and swtr address from.
+	FeedARBindings
 )
 
 // FeedRoute returns the fixed dmsg CXO port and TreeStore path prefix a feed's
@@ -126,6 +130,8 @@ func FeedRoute(f Feed) (port uint16, prefix string, ok bool) {
 		return skyenv.DmsgARReachCXOPort, "reach/", true
 	case FeedTPDVisorBW:
 		return skyenv.DmsgTPDVisorBWCXOPort, "visorbw/", true
+	case FeedARBindings:
+		return skyenv.DmsgARBindingsCXOPort, "", true
 	}
 	return 0, "", false
 }
@@ -180,6 +186,9 @@ const (
 	// also carries FeedTPDUptime, and a consumer that never reads an
 	// uptime leaf should not hold that subscription open.
 	TabTransportMetrics
+	// TabARResolve is the visor's address lookup over CXO: peers' bindings
+	// resolve from the resident bindings feed, HTTP on a miss.
+	TabARResolve
 )
 
 // tabFeedDeps maps each tab to the set of feeds it depends on.
@@ -196,6 +205,7 @@ var tabFeedDeps = map[Tab][]Feed{
 	TabDmsgEntryLookup:   {FeedDMSGDClientsByServer},
 	TabNetworkStats:      {FeedTPDStats},
 	TabTransportMetrics:  {FeedTPDMetrics},
+	TabARResolve:         {FeedARBindings},
 }
 
 // Deps are the host-injected dependencies the manager needs. They
@@ -708,6 +718,8 @@ func FeedString(feed Feed) string {
 		return "ar-reach"
 	case FeedTPDVisorBW:
 		return "tpd-visorbw"
+	case FeedARBindings:
+		return "ar-bindings"
 	}
 	return fmt.Sprintf("feed#%d", feed)
 }
@@ -734,6 +746,8 @@ func FeedFromString(name string) (Feed, bool) {
 		return FeedARReach, true
 	case "tpd-visorbw":
 		return FeedTPDVisorBW, true
+	case "ar-bindings":
+		return FeedARBindings, true
 	}
 	return 0, false
 }
