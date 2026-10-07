@@ -82,3 +82,10 @@ func (d *PipeDeadline) Closed() bool {
 		return false
 	}
 }
+
+// Unset reports whether no deadline is set, so a wait on it cannot end.
+func (d *PipeDeadline) Unset() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.timer == nil && !d.Closed()
+}
