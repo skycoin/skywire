@@ -116,3 +116,28 @@ func (idx *arBindingsIndex) mayServe(key string, now time.Time) bool {
 	idx.served[key] = now
 	return true
 }
+
+// arAdvertised reports which transport types pk has a binding for, from the
+// bindings feed, so automatic transports need not fetch every peer's list
+// from the address resolver. ok is false until the feed has synced.
+func (v *Visor) arAdvertised(pk cipher.PubKey) (map[types.Type]bool, bool) {
+	mgr := v.CXOSubMgr()
+	if mgr == nil {
+		return nil, false
+	}
+	idx := &v.arBindings
+	idx.acquire.Do(func() { mgr.AcquireFor(TabARResolve) })
+	last := mgr.LastSync(FeedARBindings)
+	if last.IsZero() {
+		return nil, false
+	}
+	out := map[types.Type]bool{}
+	if b := idx.lookup(mgr, last, pk.Hex()); b != nil {
+		for _, t := range []types.Type{types.STCPR, types.SUDPH, types.QUIC, types.WT} {
+			if b.Get(t) != nil {
+				out[t] = true
+			}
+		}
+	}
+	return out, true
+}
