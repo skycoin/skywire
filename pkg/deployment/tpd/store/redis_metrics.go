@@ -185,7 +185,7 @@ func (s *redisStore) GetNetworkMetrics(ctx context.Context, query MetricsQuery) 
 	var bwResults []*redis.StringStringMapCmd
 
 	ix := s.bwIndex.peek()
-	pipe := s.client.Pipeline()
+	pipe := s.batchedPipe(ctx)
 	for d := 0; d < days; d++ {
 		t := now.AddDate(0, 0, -d)
 		dateStr := t.Format("2006-01-02")
@@ -203,10 +203,12 @@ func (s *redisStore) GetNetworkMetrics(ctx context.Context, query MetricsQuery) 
 				tpType:   string(entry.Type),
 				dateStr:  dateStr,
 			})
-			bwResults = append(bwResults, pipe.HGetAll(ctx, key))
+			bwResults = append(bwResults, pipe.next().HGetAll(ctx, key))
 		}
 	}
-	_, _ = pipe.Exec(ctx) //nolint:errcheck
+	if err := pipe.exec(); err != nil {
+		return nil, err
+	}
 
 	// Process results: aggregate by day
 	type dayData struct {
@@ -571,12 +573,14 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 	// it lives for latencyTTL after the transport's last report.
 	var latencyResults []*redis.StringCmd
 	if query.Latency {
-		pipe := s.client.Pipeline()
+		pipe := s.batchedPipe(ctx)
 		latencyResults = make([]*redis.StringCmd, len(filtered))
 		for i, f := range filtered {
-			latencyResults[i] = pipe.Get(ctx, s.latencyKey(f.entry.ID))
+			latencyResults[i] = pipe.next().Get(ctx, s.latencyKey(f.entry.ID))
 		}
-		_, _ = pipe.Exec(ctx) //nolint:errcheck // Errors handled per-command via Result()
+		if err := pipe.exec(); err != nil {
+			return nil, err
+		}
 	}
 
 	// Fetch bandwidth data via pipeline
@@ -602,7 +606,7 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		}
 		bwKeys = make([]bwKey, 0, n)
 		bwResults = make([]*redis.StringStringMapCmd, 0, n)
-		pipe := s.client.Pipeline()
+		pipe := s.batchedPipe(ctx)
 		for i := range filtered {
 			idStr := idStrs[i]
 			for _, d := range ix.fetchDays(filtered[i].entry.ID, now, days) {
@@ -611,10 +615,12 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 				// id + date precomputed above rather than re-formatting per day.
 				key := serviceName + ":bw:daily:" + idStr + ":" + dateStrs[d]
 				bwKeys = append(bwKeys, bwKey{idx: i, dayIdx: d})
-				bwResults = append(bwResults, pipe.HGetAll(ctx, key))
+				bwResults = append(bwResults, pipe.next().HGetAll(ctx, key))
 			}
 		}
-		_, _ = pipe.Exec(ctx) //nolint:errcheck // Errors handled per-command via Result()
+		if err := pipe.exec(); err != nil {
+			return nil, err
+		}
 	}
 
 	// Build bandwidth lookup map: entryIdx -> []DailyEdgeBandwidth
