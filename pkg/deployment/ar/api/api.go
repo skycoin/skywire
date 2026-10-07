@@ -778,12 +778,17 @@ func (a *API) getTransports(r *http.Request, netType types.Type) []string {
 }
 
 func (a *API) askToDialUDP(dialerPK, dialeePK cipher.PubKey, r *http.Request, dialeeVisorData addrresolver.VisorData) error {
+	a.logger(r).Debugf("Sending %v@%v to %v", dialeePK, dialeeVisorData.RemoteAddr, dialerPK)
+	return a.sendDialRequest(dialerPK, dialeePK, dialeeVisorData)
+}
+
+// sendDialRequest asks dialerPK, over its control connection, to dial
+// dialeePK, which is the simultaneous open a sudph transport needs.
+func (a *API) sendDialRequest(dialerPK, dialeePK cipher.PubKey, dialeeVisorData addrresolver.VisorData) error {
 	conn, ok := a.udpConn(dialerPK)
 	if !ok {
 		return ErrNotConnected
 	}
-
-	a.logger(r).Debugf("Sending %v@%v to %v", dialeePK, dialeeVisorData.RemoteAddr, dialerPK)
 
 	remote := addrresolver.RemoteVisor{
 		PK:   dialeePK,
@@ -1084,6 +1089,13 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 				}
 				a.log.Debugf("Deleted bind %v from %v (SUDPH)", pk, remoteAddr)
 				return
+			}
+			if req, ok := addrresolver.ParseUDPResolveRequest(data); ok {
+				if err := a.resolveOverUDP(conn, pk, req); err != nil {
+					a.log.Debugf("Failed to answer a UDP lookup from %v: %v", pk, err)
+					return
+				}
+				continue
 			}
 			// Handle re-registration: try to unmarshal as LocalAddresses
 			var localAddresses addrresolver.LocalAddresses

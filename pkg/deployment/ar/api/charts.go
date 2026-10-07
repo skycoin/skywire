@@ -31,6 +31,7 @@ const (
 	chartBindCXO      = "src.cxo."
 	chartBindUDP      = "src.udp"
 	chartListRequests = "req.transports"
+	chartLookupUDP    = "req.udplookup"
 	resolveFound      = "found"
 	resolveNotFound   = "notfound"
 )
@@ -159,6 +160,7 @@ func buildCharts(ctx context.Context, st charts.Store, r charts.Range, now time.
 				{Name: "lookups", Vals: sumSeries(append(append([]charts.Series{}, found...), notFound...), len(f.Times))},
 				{Name: "binds over HTTP", Vals: sumSeries(f.Group(chartBindHTTP, 0), len(f.Times))},
 				{Name: "sudph binds over UDP", Vals: f.Values(chartBindUDP, true)},
+				{Name: "sudph lookups over UDP", Vals: f.Values(chartLookupUDP, true)},
 				{Name: "full lists", Vals: f.Values(chartListRequests, true)},
 			}),
 		chart("Lookups", "Address lookups per 5 minutes, and how many found a binding.", charts.Lines, lookups),
