@@ -94,7 +94,7 @@ github.com/0magnet/netscrape
 # github.com/0magnet/osnotify v0.0.0
 ## explicit; go 1.25.0
 github.com/0magnet/osnotify
-# github.com/0magnet/pfilter v0.0.12
+# github.com/0magnet/pfilter v0.0.13
 ## explicit; go 1.26.0
 github.com/0magnet/pfilter
 # github.com/0magnet/plot-go v0.0.0
