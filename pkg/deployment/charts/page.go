@@ -191,9 +191,9 @@ h2{font-size:15px;margin:0;font-weight:620}figcaption p,.note{margin:2px 0 0;col
 .plot{position:relative;margin-top:10px}
 .body{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:18px;align-items:center;margin-top:10px}.body .plot{margin-top:0}
 @media (max-width:720px){.body{grid-template-columns:1fr}.pie{max-width:260px;width:100%;margin:0 auto}}
-.pie svg{width:100%;height:auto}.pie .pt{text-anchor:middle;font-size:19px;font-weight:650;fill:var(--fg)}.pie .pl{text-anchor:middle;font-size:11px;fill:var(--muted)}
-.pie ul{list-style:none;padding:0;margin:8px 0 0;font-size:12px}.pie li{display:flex;align-items:center;gap:6px;padding:1px 0}.pie li b{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600}.pie i{width:8px;height:8px;border-radius:2px;flex-shrink:0}
-.pin{font-size:11px;color:var(--muted);margin:6px 0 0}figure.pinned .cursor{stroke:var(--accent);stroke-dasharray:none;stroke-width:1.5}.plot svg{cursor:crosshair}svg{display:block;width:100%;height:auto;overflow:visible}
+.pie svg{width:100%;max-width:150px;height:auto;margin:0 auto}.pie .pt{text-anchor:middle;font-size:24px;font-weight:650;fill:var(--fg)}.pie .pl{text-anchor:middle;font-size:14px;fill:var(--muted)}
+.pie ul{list-style:none;padding:0;margin:8px 0 0;font-size:12px;height:114px;overflow:hidden}.pie li{display:flex;align-items:center;gap:6px;height:19px;white-space:nowrap}.pie li span{overflow:hidden;text-overflow:ellipsis;min-width:0}.pie li b{margin-left:auto;flex-shrink:0;font-variant-numeric:tabular-nums;font-weight:600}.pie i{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.pin{font-size:11px;color:var(--muted);margin:6px 0 0;visibility:hidden}figure.pinned .pin{visibility:visible}figure.pinned .cursor{stroke:var(--accent);stroke-dasharray:none;stroke-width:1.5}.plot svg{cursor:crosshair}svg{display:block;width:100%;height:auto;overflow:visible}
 .grid,.xgrid{stroke:var(--grid);stroke-width:1}.axis{stroke:var(--axis)}
 .ytick,.xtick{fill:var(--muted);font-size:11px}.ytick{text-anchor:end}.xtick{text-anchor:middle}
 .area{fill-opacity:.55;stroke:none}.line{fill:none;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
@@ -238,16 +238,16 @@ function last(d){for(var i=d.x.length-1;i>=0;i--){if(d.s.some(function(q){return
 function arc(R,r,a,b){var C=Math.cos,S=Math.sin,l=b-a>Math.PI?1:0,p=function(x){return (100+x).toFixed(2)};
 return 'M'+p(R*C(a))+' '+p(R*S(a))+'A'+R+' '+R+' 0 '+l+' 1 '+p(R*C(b))+' '+p(R*S(b))+'L'+p(r*C(b))+' '+p(r*S(b))+'A'+r+' '+r+' 0 '+l+' 0 '+p(r*C(a))+' '+p(r*S(a))+'Z'}
 function pie(el,d,i,pinned){
-if(!el)return;var items=[],tot=0;
+if(!el)return;var items=[],tot=0,h0='';
 d.s.forEach(function(q){if(!q.r)return;var v=q.r[i];if(v==null||v<=0)return;items.push({q:q,v:v});tot+=v});
-if(!tot){el.innerHTML='';return}
-var h='<svg viewBox="0 0 200 200" role="img">',a=-Math.PI/2;
+if(!tot)h0='<circle cx="100" cy="100" r="76" fill="none" stroke="var(--grid)" stroke-width="32"/>';
+var h='<svg viewBox="0 0 200 200" role="img">'+h0,a=-Math.PI/2;
 items.forEach(function(it){var f=it.v/tot,b=Math.min(a+f*2*Math.PI,a+2*Math.PI-0.0001);
 h+='<path d="'+arc(92,60,a,b)+'" fill="'+it.q.c+'"><title>'+esc(it.q.n)+' '+esc(it.q.v[i])+' ('+(f*100).toFixed(1)+'%)</title></path>';a+=f*2*Math.PI});
-h+='<text x="100" y="98" class="pt">'+esc(d.s[0].n==='total'?d.s[0].v[i]:'')+'</text><text x="100" y="118" class="pl">'+esc(lab(d,i))+'</text></svg><ul>';
+h+='<text x="100" y="98" class="pt">'+esc(d.s[0].n==='total'?d.s[0].v[i]:'')+'</text><text x="100" y="122" class="pl">'+esc(lab(d,i))+'</text></svg><ul>';
 items.sort(function(x,y){return y.v-x.v}).slice(0,6).forEach(function(it){var f=it.v/tot;
-h+='<li><i style="background:'+it.q.c+'"></i>'+esc(it.q.n)+'<b>'+(f*100).toFixed(f<0.1?1:0)+'%</b></li>'});
-el.innerHTML=h+'</ul>'+(pinned?'<p class="pin">Pinned. Click the same point to release.</p>':'')}
+h+='<li><i style="background:'+it.q.c+'"></i><span>'+esc(it.q.n)+'</span><b>'+(f*100).toFixed(f<0.1?1:0)+'%</b></li>'});
+el.innerHTML=h+'</ul><p class="pin">Pinned. Click the same point to release.</p>'}
 function init(){document.querySelectorAll('figure.chart').forEach(function(f){
 var s=f.querySelector('script'),svg=f.querySelector('.plot svg'),tip=f.querySelector('.tip'),cur=f.querySelector('.cursor'),pe=f.querySelector('.pie');
 if(!s||!svg)return;var d=JSON.parse(s.textContent),pin=null,end=last(d);axis(svg,d);
