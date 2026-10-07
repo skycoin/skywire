@@ -544,3 +544,10 @@ func (m *routeMux) fecTryAdvance() [][]byte {
 	}
 	return out
 }
+
+// fecRepairsPending reports whether fecDrainRepairs would return frames.
+func (m *routeMux) fecRepairsPending() bool {
+	m.fecRepairMu.Lock()
+	defer m.fecRepairMu.Unlock()
+	return len(m.fecRepairQ) > 0
+}

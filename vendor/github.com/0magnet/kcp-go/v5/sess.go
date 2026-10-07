@@ -161,6 +161,7 @@ type (
 
 		// packets waiting to be sent on wire
 		chPostProcessing chan sendRequest
+		ppRunning        atomic.Bool // a postProcess goroutine is running
 
 		// platform-dependent optimizations
 		platform platform
@@ -237,6 +238,7 @@ func newUDPSession(conv uint32, dataShards, parityShards int, l *Listener, conn 
 			// delivery to post processing (non-blocking to avoid deadlock under lock)
 			select {
 			case sess.chPostProcessing <- sendRequest{bts, false}:
+				sess.kickPostProcess()
 			case <-sess.die:
 				return
 			default:
@@ -250,9 +252,6 @@ func newUDPSession(conv uint32, dataShards, parityShards int, l *Listener, conn 
 	if !sess.SetMtu(IKCP_MTU_DEF) {
 		panic("Overhead too large")
 	}
-
-	// create post-processing goroutine
-	go sess.postProcess()
 
 	if sess.l == nil { // it's a client connection
 		go sess.readLoop()
@@ -694,9 +693,23 @@ func (s *UDPSession) postProcess() {
 
 	ctx := context.Background()
 	bytesToSend := 0
+	idle := time.NewTicker(postProcessIdle)
+	defer idle.Stop()
+	worked := true
 	for {
 		select {
+		case <-idle.C:
+			if worked {
+				worked = false
+				continue
+			}
+			// Hand over to kickPostProcess, unless a packet arrived meanwhile.
+			s.ppRunning.Store(false)
+			if len(s.chPostProcessing) == 0 || !s.ppRunning.CompareAndSwap(false, true) {
+				return
+			}
 		case req := <-s.chPostProcessing: // dequeue from post processing
+			worked = true
 			buf := req.buffer
 			oob := req.oob
 
@@ -934,6 +947,7 @@ func (s *UDPSession) SendOOB(data []byte) error {
 	// Performs OOB framing, encryption, and transmission, bypassing FEC and KCP.
 	select {
 	case s.chPostProcessing <- sendRequest{buf, true}:
+		s.kickPostProcess()
 		return nil
 	case <-s.die:
 		// Session is closing.
@@ -1547,4 +1561,16 @@ func NewConn(raddr string, block BlockCrypt, dataShards, parityShards int, conn 
 		return nil, errors.WithStack(err)
 	}
 	return NewConn2(udpaddr, block, dataShards, parityShards, conn)
+}
+
+// postProcessIdle is how long postProcess waits with nothing to send before
+// it exits. An idle session then holds no goroutine.
+const postProcessIdle = 5 * time.Second
+
+// kickPostProcess starts postProcess unless one is already running. Callers
+// queue their packet first.
+func (s *UDPSession) kickPostProcess() {
+	if s.ppRunning.CompareAndSwap(false, true) {
+		go s.postProcess()
+	}
 }
