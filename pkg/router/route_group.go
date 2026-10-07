@@ -972,38 +972,40 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 	rg.logger.WithField("func", "RouteGroup.write").Tracef("Writing packet of type %s, route ID %d and next ID %d", packet.Type(),
 		rule.KeyRouteID(), rule.NextRouteID())
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	errCh := rg.writePacketAsync(ctx, tp, packet, rule.KeyRouteID())
-	defer cancel()
-
-	select {
-	case <-rg.writeDeadline.Wait():
-		return 0, timeoutError{}
-	case err := <-errCh:
-		if err != nil {
-			return 0, err
+	if rg.writeDeadline.Unset() {
+		// Nothing could end the wait early, so write on this goroutine.
+		err = rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+	} else {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		select {
+		case <-rg.writeDeadline.Wait():
+			return 0, timeoutError{}
+		case err = <-rg.writePacketAsync(ctx, tp, packet, rule.KeyRouteID()):
 		}
-
-		rg.lastSent.Store(time.Now().UnixNano())
-
-		// Per-mux-leg sent counter. The aggregate networkStats is
-		// already updated inside writePacket (and gates on packet
-		// type); this records the same packet against the specific
-		// leg that carried it so 'proxy mux-info' can show
-		// where bandwidth is going across the mux'd routes.
-		if rg.mux != nil && leg >= 0 {
-			rg.mux.recordSent(leg, uint64(packet.Size()))
-		}
-
-		// FEC: if wrapPayload just completed a block, schedule its repair frames
-		// on the fastest live leg (off the data path). Inert unless CapFEC negotiated.
-		if rg.mux != nil && rg.mux.fecEnabled {
-			go rg.flushFECRepairs()
-		}
-
-		return len(data), nil
 	}
+	if err != nil {
+		return 0, err
+	}
+
+	rg.lastSent.Store(time.Now().UnixNano())
+
+	// Per-mux-leg sent counter. The aggregate networkStats is
+	// already updated inside writePacket (and gates on packet
+	// type); this records the same packet against the specific
+	// leg that carried it so 'proxy mux-info' can show
+	// where bandwidth is going across the mux'd routes.
+	if rg.mux != nil && leg >= 0 {
+		rg.mux.recordSent(leg, uint64(packet.Size()))
+	}
+
+	// FEC: if wrapPayload just completed a block, schedule its repair frames
+	// on the fastest live leg (off the data path). Inert unless CapFEC negotiated.
+	if rg.mux != nil && rg.mux.fecEnabled && rg.mux.fecRepairsPending() {
+		go rg.flushFECRepairs()
+	}
+
+	return len(data), nil
 }
 
 // flushFECRepairs drains any queued FEC repair frames and sends each on the

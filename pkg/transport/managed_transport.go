@@ -111,6 +111,13 @@ type ManagedTransport struct {
 	semOnce  sync.Once
 	writeSem chan struct{}
 
+	// writeQ feeds writeLoop the writes whose caller may give up first.
+	// writePending counts callers about to send on it.
+	writeQOnce    sync.Once
+	writeQ        chan writeReq
+	writerRunning atomic.Bool
+	writePending  atomic.Int32
+
 	done chan struct{}
 	wg   sync.WaitGroup
 
@@ -483,8 +490,8 @@ const unarmedSilenceThreshold = 5 * transportPingInterval // 5 min
 
 // Serve serves and manages the transport.
 //
-// Goroutine layout: one readLoop goroutine plus the Serve goroutine
-// itself, which blocks on the done channel until close fires. The
+// Goroutine layout: the Serve goroutine runs readLoop itself, then waits
+// on the done channel until close fires. The
 // previous per-transport logLoop and pingLoop tickers have been
 // centralized into Manager.runTransportMaintenance — on a hub visor
 // with hundreds of automatic transports those two per-transport
@@ -513,8 +520,6 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 		mt.wg.Done()
 	}()
 
-	go mt.readLoop(readCh)
-
 	// On a datagram-capable transport (QUIC), also drain the native datagram
 	// channel into the same readCh so faithful-UDP DatagramPackets the router
 	// dispatches arrive over real unreliable datagrams (no HOL blocking). The
@@ -532,6 +537,8 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 		go mt.datagramReadLoop(ctx, dc, readCh)
 	}
 
+	// readLoop returns once the transport closes, or after closing it itself.
+	mt.readLoop(readCh)
 	<-mt.done
 }
 
@@ -662,6 +669,15 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 				}
 				continue
 			}
+		}
+		// Try without a timer first, since time.After costs an allocation and
+		// a timer heap insert for every packet.
+		select {
+		case <-mt.done:
+			return
+		case readCh <- p:
+			continue
+		default:
 		}
 		select {
 		case <-mt.done:
@@ -1301,8 +1317,8 @@ func (mt *ManagedTransport) getUnderlying() network.Transport {
 // keeping: a routing packet must reach the wire as one frame, not interleaved
 // with another writer's. writeSem keeps exactly that, and nothing else.
 //
-// The write runs in a goroutine so ctx cancellation is respected even when the
-// conn is wedged; tp is passed in so the goroutine never reads the shared
+// A write whose ctx can end runs on writeLoop, so the caller can give up even
+// when the conn is wedged; tp is passed in so writeLoop never reads the shared
 // mt.transport field, which setTransport/close can mutate.
 //
 // Both the QUEUE and the write itself are bounded by ctx now. The deadline
@@ -1313,38 +1329,106 @@ func (mt *ManagedTransport) getUnderlying() network.Transport {
 // router's inbound loop. A caller that says how long it is willing to wait now
 // gets exactly that, and the waiting is where it gives up.
 func (mt *ManagedTransport) writeTo(ctx context.Context, tp network.Transport, packet routing.Packet) (int, error) {
-	type writeResult struct {
-		n   int
-		err error
+	// A context that cannot end leaves the caller nothing to give up on.
+	if ctx.Done() == nil {
+		return mt.writeLocked(ctx, tp, packet)
 	}
-	ch := make(chan writeResult, 1)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				ch <- writeResult{0, fmt.Errorf("panic in transport write: %v", r)}
-			}
-		}()
-		sem := mt.writeSlot()
-		select {
-		case sem <- struct{}{}:
-		case <-ctx.Done():
-			ch <- writeResult{0, ctx.Err()}
-			return
-		}
-		defer func() { <-sem }()
-		if err := tp.SetWriteDeadline(writeDeadline(ctx)); err != nil {
-			mt.log.WithError(err).Debug("Failed to set write deadline")
-		}
-		n, err := tp.Write(packet)
-		ch <- writeResult{n, err}
-	}()
-
+	req := writeReq{ctx: ctx, tp: tp, packet: packet, res: make(chan writeResult, 1)}
+	q := mt.writeQueue()
+	mt.writePending.Add(1)
+	if mt.writerRunning.CompareAndSwap(false, true) {
+		go mt.writeLoop(q)
+	}
+	select {
+	case q <- req:
+		mt.writePending.Add(-1)
+	case <-ctx.Done():
+		mt.writePending.Add(-1)
+		return 0, ctx.Err()
+	case <-mt.done:
+		mt.writePending.Add(-1)
+		return 0, io.ErrClosedPipe
+	}
 	select {
 	case <-ctx.Done():
 		return 0, ctx.Err()
-	case res := <-ch:
+	case res := <-req.res:
 		return res.n, res.err
 	}
+}
+
+type writeResult struct {
+	n   int
+	err error
+}
+
+type writeReq struct {
+	ctx    context.Context
+	tp     network.Transport
+	packet routing.Packet
+	res    chan writeResult
+}
+
+func (mt *ManagedTransport) writeQueue() chan writeReq {
+	mt.writeQOnce.Do(func() { mt.writeQ = make(chan writeReq) })
+	return mt.writeQ
+}
+
+// writerIdle is how long writeLoop waits for work before it exits.
+const writerIdle = 5 * time.Second
+
+// writeLoop runs queued writes so their callers can stop waiting on a wedged
+// conn. One goroutine per write would cost a thread per packet under TinyGo.
+// It exits when the transport closes or after writerIdle with nothing queued.
+func (mt *ManagedTransport) writeLoop(q chan writeReq) {
+	idle := time.NewTicker(writerIdle)
+	defer idle.Stop()
+	worked := true
+	for {
+		select {
+		case req := <-q:
+			worked = true
+			if err := req.ctx.Err(); err != nil {
+				req.res <- writeResult{0, err}
+				continue
+			}
+			n, err := mt.writeLocked(req.ctx, req.tp, req.packet)
+			req.res <- writeResult{n, err}
+		case <-idle.C:
+			if worked {
+				worked = false
+				continue
+			}
+			// Stop, unless a caller is about to hand over a write.
+			mt.writerRunning.Store(false)
+			if mt.writePending.Load() == 0 || !mt.writerRunning.CompareAndSwap(false, true) {
+				return
+			}
+		case <-mt.done:
+			return
+		}
+	}
+}
+
+// writeLocked takes the write slot, then writes packet to tp under the
+// deadline from ctx. A panic in the conn comes back as an error.
+func (mt *ManagedTransport) writeLocked(ctx context.Context, tp network.Transport, packet routing.Packet) (n int, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			n, err = 0, fmt.Errorf("panic in transport write: %v", r)
+		}
+	}()
+	sem := mt.writeSlot()
+	select {
+	case sem <- struct{}{}:
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+	defer func() { <-sem }()
+	if err := tp.SetWriteDeadline(writeDeadline(ctx)); err != nil {
+		mt.log.WithError(err).Debug("Failed to set write deadline")
+	}
+	return tp.Write(packet)
 }
 
 // datagramConnOf returns the transport's native datagram channel (QUIC) and

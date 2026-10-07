@@ -503,6 +503,10 @@ func (r *emuRig) Close() {
 		r.B.rg.setRemoteClosed()
 		_ = r.A.rg.Close() //nolint:errcheck
 		_ = r.B.rg.Close() //nolint:errcheck
+		for i := range r.A.tps {
+			r.A.tps[i].CloseForTest()
+			r.B.tps[i].CloseForTest()
+		}
 	})
 }
 
