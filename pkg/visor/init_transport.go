@@ -80,6 +80,13 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		err = fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
 	}
+	// Resolve stcpr, squicr and swtr peers from the resident bindings feed
+	// (ar_resolve_cxo.go); GET /resolve answers what it cannot.
+	if fp, ok := arClient.(interface {
+		SetResolveFastPath(addrresolver.FastResolve)
+	}); ok {
+		fp.SetResolveFastPath(v.arResolveFast)
+	}
 
 	v.initLock.Lock()
 	v.arClient = arClient

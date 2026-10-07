@@ -97,9 +97,20 @@ func (c *countingStore) RecordTransportHeartbeat(ctx context.Context, id uuid.UU
 
 // The batch forms (store.BatchStore), counted the same way.
 
-func (c *countingStore) TouchTransports(ctx context.Context, r cipher.PubKey, ids []uuid.UUID) error {
+// TouchTransports reports the ids no longer stored, as the redis store does
+// (the memory store has no TTL, so its own touch never finds one missing).
+func (c *countingStore) TouchTransports(ctx context.Context, r cipher.PubKey, ids []uuid.UUID) ([]uuid.UUID, error) {
 	c.touched.Add(int64(len(ids)))
-	return c.Store.(store.BatchStore).TouchTransports(ctx, r, ids)
+	if _, err := c.Store.(store.BatchStore).TouchTransports(ctx, r, ids); err != nil {
+		return nil, err
+	}
+	var missing []uuid.UUID
+	for _, id := range ids {
+		if _, err := c.GetTransportByID(ctx, id); err != nil {
+			missing = append(missing, id)
+		}
+	}
+	return missing, nil
 }
 
 func (c *countingStore) RecordTransportHeartbeats(ctx context.Context, es []*transport.Entry, at time.Time) error {
@@ -137,8 +148,13 @@ func TestReconcileTransportsFromCXO_ThrottlesRepeats(t *testing.T) {
 	require.EqualValues(t, 2, cs.registered.Load())
 	require.EqualValues(t, 2, cs.heartbeats.Load())
 
-	// Edge a drops e2: e2 is deregistered even though nothing was registered.
+	// Edge a drops e2 while b still lists it: kept, the lists only disagree.
 	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, []*transport.Entry{e1}, a, "v"))
+	_, err = base.GetTransportByID(ctx, e2.ID)
+	require.NoError(t, err)
+
+	// b drops it too: deregistered, though nothing was registered.
+	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, []*transport.Entry{e1}, b, "v"))
 	_, err = base.GetTransportByID(ctx, e2.ID)
 	require.ErrorIs(t, err, store.ErrTransportNotFound)
 	got, err := base.GetTransportByID(ctx, e1.ID)
@@ -178,13 +194,20 @@ func TestRefreshKeepsWhatAnOldListLacks(t *testing.T) {
 	_, err := base.GetTransportByID(ctx, fresh.ID)
 	require.NoError(t, err, "a stale list's absence must not delete the tab's transport")
 
-	// A fresh reconcile from the hub that lacks it does delete it...
+	// A fresh reconcile from the hub that lacks it keeps it while the tab
+	// still lists it: the hub's list lags, and deleting on that only had the
+	// tab's next snapshot put it back...
 	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, []*transport.Entry{old}, hub, "v"))
+	_, err = base.GetTransportByID(ctx, fresh.ID)
+	require.NoError(t, err, "one edge's omission must not delete what the other lists")
+
+	// ...once the tab's list drops it too, it is deleted...
+	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, nil, tab, "v"))
 	_, err = base.GetTransportByID(ctx, fresh.ID)
 	require.ErrorIs(t, err, store.ErrTransportNotFound)
 
-	// ...and the tab's next snapshot puts it straight back, not after the
-	// throttle's refresh gap: the removal cleared the shared mark.
+	// ...and when the tab lists it again it is registered at once, not after
+	// the throttle's refresh gap: the removal cleared the shared mark.
 	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, []*transport.Entry{fresh}, tab, "v"))
 	_, err = base.GetTransportByID(ctx, fresh.ID)
 	require.NoError(t, err, "the other edge re-registers at once")
@@ -237,4 +260,66 @@ func TestReconcileThrottle_Seed(t *testing.T) {
 	register, touch, _ = th.plan(now.Add(time.Second), []*transport.Entry{held})
 	require.Empty(t, register)
 	require.Empty(t, touch, "touched once per refresh gap")
+}
+
+// A listed transport whose entry was removed behind the throttle's back
+// (TTL expiry, an HTTP delete) is registered again by the next snapshot
+// that would only have touched it. A touch alone succeeded on the missing
+// key and renewed the mark, so the entry never came back.
+func TestReconcileRegistersAgainWhatATouchFindsMissing(t *testing.T) {
+	ctx := context.Background()
+	api, cs, base := newThrottleTestAPI(t)
+	a, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	e := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "sudph"}
+
+	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, []*transport.Entry{e}, a, "v"))
+	require.NoError(t, base.DeregisterTransport(ctx, e.ID)) // gone, mark untouched
+	// Its refresh comes due: backdate the mark by just over one gap (well
+	// short of the sweep's four).
+	api.reconcile.mu.Lock()
+	api.reconcile.marks[e.ID].registeredAt = time.Now().Add(-api.reconcile.refreshGap - time.Second)
+	api.reconcile.mu.Unlock()
+
+	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, []*transport.Entry{e}, b, "v"))
+	_, err := base.GetTransportByID(ctx, e.ID)
+	require.NoError(t, err, "a touch that finds the entry missing must register it again")
+	require.EqualValues(t, 2, cs.registered.Load())
+}
+
+// An HTTP delete clears the shared mark, so the other edge's next snapshot
+// writes the transport in full instead of touching a missing key.
+func TestReconcileThrottle_ForgetID(t *testing.T) {
+	api, _, _ := newThrottleTestAPI(t)
+	th := api.reconcile
+	a, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	e := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "stcpr"}
+	t0 := time.Date(2026, 10, 6, 19, 0, 0, 0, time.UTC)
+
+	reg, _, _ := th.plan(t0, []*transport.Entry{e})
+	require.Len(t, reg, 1)
+	th.forgetID(e.ID)
+	reg, _, _ = th.plan(t0.Add(time.Second), []*transport.Entry{e})
+	require.Equal(t, []*transport.Entry{e}, reg)
+}
+
+// The other edge's listing protects a transport only while it is recent: an
+// edge that stopped publishing (gone offline) does not keep it forever.
+func TestReconcileAbsentDeletesWhenOtherListingIsOld(t *testing.T) {
+	ctx := context.Background()
+	api, _, base := newThrottleTestAPI(t)
+	a, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	e := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "sudph"}
+
+	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, []*transport.Entry{e}, a, "v"))
+	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, []*transport.Entry{e}, b, "v"))
+	api.reconcile.mu.Lock()
+	api.reconcile.marks[e.ID].listedAt[e.EdgeIndex(b)] = time.Now().Add(-api.reconcile.refreshGap - time.Second)
+	api.reconcile.mu.Unlock()
+
+	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, nil, a, "v"))
+	_, err := base.GetTransportByID(ctx, e.ID)
+	require.ErrorIs(t, err, store.ErrTransportNotFound)
 }

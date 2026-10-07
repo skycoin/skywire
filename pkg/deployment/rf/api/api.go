@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/deployment/charts"
 	routeFinder "github.com/skycoin/skywire/pkg/deployment/rf/store"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/httputil"
@@ -41,6 +43,9 @@ type API struct {
 	startedAt                   time.Time
 	dmsgAddr                    string
 	DmsgServers                 []string
+
+	stats      requestStats
+	chartsPage atomic.Pointer[charts.Page]
 }
 
 // HealthCheckResponse is the /health body every service shares.
@@ -81,6 +86,7 @@ func New(s store.Store, logger logrus.FieldLogger, enableMetrics bool, dmsgAddr 
 	// routes
 	r.Post("/routes", api.getPairedRoutes)
 	r.Get("/health", api.health)
+	r.Get("/", api.ChartsPage)
 
 	api.Handler = r
 
@@ -130,6 +136,8 @@ func (a *API) getPairedRoutes(w http.ResponseWriter, r *http.Request) {
 		a.handleError(w, r, http.StatusBadRequest, err)
 		return
 	}
+	start := time.Now()
+	defer func() { a.stats.request(len(grr.Edges), time.Since(start)) }()
 
 	defer func() {
 		if err := r.Body.Close(); err != nil {
@@ -178,10 +186,12 @@ func (a *API) getPairedRoutes(w http.ResponseWriter, r *http.Request) {
 		graph, err := routeFinder.NewGraphWithDepth(r.Context(), a.store, srcPK, graphDepth)
 		if err != nil {
 			if err == store.ErrTransportNotFound {
+				a.stats.miss()
 				a.handleError(w, r, http.StatusNotFound, err)
 				return
 			}
 			a.log(r).WithError(err).Errorf("Error creating graph for src %s", srcPK)
+			a.stats.error()
 			a.handleError(w, r, http.StatusInternalServerError, err)
 			return
 		}
@@ -201,10 +211,16 @@ func (a *API) getPairedRoutes(w http.ResponseWriter, r *http.Request) {
 		// shortest-hop-but-arbitrary ordering.
 		forwardRoutes, err := graph.GetRouteWeighted(r.Context(), srcPK, dstPK, minHops, maxHops, numRoutes, true)
 		if err != nil {
+			a.stats.miss()
 			a.handleError(w, r, http.StatusNotFound, err)
 			return
 		}
 
+		hops := make([]int, len(forwardRoutes))
+		for i, route := range forwardRoutes {
+			hops[i] = len(route.Hops)
+		}
+		a.stats.found(hops)
 		forwardPaths := make([][]routing.Hop, 0, len(forwardRoutes))
 		for _, route := range forwardRoutes {
 			forwardPaths = append(forwardPaths, route.Hops)

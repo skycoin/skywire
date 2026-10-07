@@ -12,11 +12,16 @@ import (
 	"os"
 	"time"
 
+	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
+	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/deployment/rf/api"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/services"
@@ -38,6 +43,9 @@ type Config struct {
 
 	// Dmsg is the dmsg-related config block.
 	Dmsg cmdutil.DmsgConfig `json:"dmsg,omitempty"`
+
+	// ChartsAddr serves only the charts page over plain HTTP. Empty disables it.
+	ChartsAddr string `json:"charts_addr,omitempty"`
 }
 
 // LoadFile reads and strict-parses a Config from path.
@@ -211,6 +219,21 @@ func (s *service) Run(ctx context.Context) error {
 	}
 	defer h.Close()
 
+	var sn *api.SetupNodes
+	if h.DmsgClient != nil {
+		sn = &api.SetupNodes{PKs: cfg.setupNodes(), Port: dmsg.DefaultDmsgHTTPPort,
+			Client: &http.Client{Transport: dmsghttp.MakeHTTPTransport(runCtx, h.DmsgClient)}}
+	}
+	rfAPI.StartCharts(runCtx, chartStore(cfg, logger), sn, logger)
+	if cfg.ChartsAddr != "" {
+		logger.Infof("Serving the charts page on %s", cfg.ChartsAddr)
+		go func() {
+			if err := charts.Serve(runCtx, cfg.ChartsAddr, http.HandlerFunc(rfAPI.ChartsPage)); err != nil {
+				logger.WithError(err).Error("charts listener failed")
+			}
+		}()
+	}
+
 	select {
 	case <-runCtx.Done():
 		return nil
@@ -231,4 +254,26 @@ func dmsgDiscEntries(configServers []*disc.Entry) []disc.Entry {
 		}
 	}
 	return out
+}
+
+// setupNodes are the deployment's route setup nodes.
+func (c *Config) setupNodes() []cipher.PubKey {
+	if c.TestEnvironment {
+		return deployment.Test.RouteSetupNodes
+	}
+	return deployment.Prod.RouteSetupNodes
+}
+
+// chartStore keeps the chart samples in the finder's redis.
+func chartStore(cfg *Config, log *logging.Logger) charts.Store {
+	sc := cfg.StoreConfig()
+	if sc.Type != storeconfig.Redis {
+		return charts.NewMemoryStore()
+	}
+	st, err := charts.NewRedisStore(sc.URL, sc.Password, "route-finder")
+	if err != nil {
+		log.WithError(err).Warn("charts: redis unavailable, keeping samples in memory")
+		return charts.NewMemoryStore()
+	}
+	return st
 }

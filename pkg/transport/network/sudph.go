@@ -10,8 +10,8 @@ import (
 	"net"
 	"time"
 
+	kcp "github.com/0magnet/kcp-go/v5"
 	"github.com/AudriusButkevicius/pfilter"
-	"github.com/xtaci/kcp-go"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -132,7 +132,7 @@ func (c *sudphClient) listen() (net.Listener, error) {
 	c.log.Debugf("Successfully bound sudph to port %s", localPort)
 
 	go c.acceptAddresses(c.sudphVisorsConn, addrCh)
-	return kcp.ServeConn(nil, 0, 0, c.sudphVisorsConn)
+	return kcp.ServeConn(nil, 0, 0, plainPacketConn(c.sudphVisorsConn))
 }
 
 // make a handshake function that is compatible with address resolver interface
@@ -307,7 +307,7 @@ func (c *sudphClient) dial(remoteAddr string) (net.Conn, error) {
 		return nil, fmt.Errorf("dialConn.WriteTo: %w", err)
 	}
 
-	kcpConn, err := kcp.NewConn(remoteAddr, nil, 0, 0, dialConn)
+	kcpConn, err := kcp.NewConn(remoteAddr, nil, 0, 0, plainPacketConn(dialConn))
 	if err != nil {
 		dialConn.Close() //nolint:errcheck,gosec
 		return nil, err
@@ -340,3 +340,7 @@ func (c *sudphClient) Close() error {
 
 	return err
 }
+
+// plainPacketConn hides everything but net.PacketConn. kcp-go v5.6 batches IO
+// on any conn with ReadMsgUDP and then needs a net.Conn, which pfilter's is not.
+func plainPacketConn(c net.PacketConn) net.PacketConn { return struct{ net.PacketConn }{c} }

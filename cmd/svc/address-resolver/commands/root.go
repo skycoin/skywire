@@ -27,6 +27,7 @@ var (
 	flags          services.Flags
 	udpAddr        string
 	publicUDPAddr  string
+	chartsAddr     string
 	dmsgDisc       string
 	whitelistKeys  string
 	dmsgServerType string
@@ -89,6 +90,7 @@ func init() {
 	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "network-monitor keys allowed to deregister entries, comma-separated")
 	RootCmd.Flags().StringVar(&udpAddr, "udp-addr", ":30178", "UDP address to bind to for SUDPH")
 	RootCmd.Flags().StringVar(&publicUDPAddr, "public-udp-address", "", "externally-reachable host:port advertised in /health for SUDPH\n\rrequired for visors that reach this AR over dmsghttp")
+	RootCmd.Flags().StringVar(&chartsAddr, "charts-addr", "", "serve only the charts page over plain HTTP on this address")
 }
 
 // RootCmd contains the root command
@@ -154,6 +156,7 @@ func buildConfig() (*ar.Config, error) {
 		Common:        common,
 		UDPAddr:       udpAddr,
 		PublicUDPAddr: publicUDPAddr,
+		ChartsAddr:    chartsAddr,
 		Whitelist:     cmdutil.CommaSplit(whitelistKeys),
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  dmsgDisc,
@@ -177,6 +180,9 @@ func mergeFile(dst, src *ar.Config) {
 	}
 	if src.PublicUDPAddr != "" {
 		dst.PublicUDPAddr = src.PublicUDPAddr
+	}
+	if src.ChartsAddr != "" {
+		dst.ChartsAddr = src.ChartsAddr
 	}
 	if len(src.Whitelist) > 0 {
 		dst.Whitelist = src.Whitelist

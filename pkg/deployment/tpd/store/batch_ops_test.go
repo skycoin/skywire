@@ -23,10 +23,19 @@ func TestBatchOpsTouchDeregisterHeartbeat(t *testing.T) {
 
 	// Touch resets the lifetime without rewriting.
 	require.NoError(t, s.client.Expire(ctx, s.transportKey(e1.ID), 5*time.Second).Err())
-	require.NoError(t, s.TouchTransports(ctx, a, []uuid.UUID{e1.ID, e2.ID}))
+	missing, err := s.TouchTransports(ctx, a, []uuid.UUID{e1.ID, e2.ID})
+	require.NoError(t, err)
+	require.Empty(t, missing)
 	ttl, err := s.client.TTL(ctx, s.transportKey(e1.ID)).Result()
 	require.NoError(t, err)
 	require.Greater(t, ttl, 30*time.Second)
+
+	// A key that is gone is reported, not silently "extended".
+	require.NoError(t, s.client.Del(ctx, s.transportKey(e2.ID)).Err())
+	missing, err = s.TouchTransports(ctx, a, []uuid.UUID{e1.ID, e2.ID})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{e2.ID}, missing)
+	require.NoError(t, s.RegisterTransportsBatch(ctx, a, []*transport.SignedEntry{{Entry: e2}}))
 
 	// Heartbeats: one pipeline, once per slot.
 	require.NoError(t, s.RecordTransportHeartbeats(ctx, []*transport.Entry{e1, e2}, time.Time{}))

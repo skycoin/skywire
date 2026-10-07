@@ -94,6 +94,14 @@ const (
 	// settled day (visorbw/day/<YYYY-MM-DD>) of the bytes each visor sent, with
 	// same-IP transports left out. What the reward system pays pool 2 from.
 	FeedTPDVisorBW
+	// FeedARBindings is the address resolver's bindings feed: every peer's
+	// transport addresses in 256 buckets (<h>/<h>). What a visor resolves a
+	// peer's stcpr, squicr and swtr address from.
+	FeedARBindings
+	// FeedTPDPerKey is TPD's per-key feed: every visor's transports counted
+	// by type (perkey/stats), the /all-transports/per-key-stats body. What
+	// the network view reads instead of counting the all-transports list.
+	FeedTPDPerKey
 )
 
 // FeedRoute returns the fixed dmsg CXO port and TreeStore path prefix a feed's
@@ -126,6 +134,10 @@ func FeedRoute(f Feed) (port uint16, prefix string, ok bool) {
 		return skyenv.DmsgARReachCXOPort, "reach/", true
 	case FeedTPDVisorBW:
 		return skyenv.DmsgTPDVisorBWCXOPort, "visorbw/", true
+	case FeedARBindings:
+		return skyenv.DmsgARBindingsCXOPort, "", true
+	case FeedTPDPerKey:
+		return skyenv.DmsgTPDPerKeyCXOPort, "perkey/", true
 	}
 	return 0, "", false
 }
@@ -180,6 +192,14 @@ const (
 	// also carries FeedTPDUptime, and a consumer that never reads an
 	// uptime leaf should not hold that subscription open.
 	TabTransportMetrics
+	// TabARResolve is the visor's address lookup over CXO: peers' bindings
+	// resolve from the resident bindings feed, HTTP on a miss.
+	TabARResolve
+	// TabNetworkView is the consumer of TPD's per-key feed: the network
+	// view's transport counts, `cli tp tpd-stats` and the other
+	// per-key-stats readers. Its own tab so reading ~38 KB of counts does
+	// not hold open a feed carrying anything else.
+	TabNetworkView
 )
 
 // tabFeedDeps maps each tab to the set of feeds it depends on.
@@ -196,6 +216,8 @@ var tabFeedDeps = map[Tab][]Feed{
 	TabDmsgEntryLookup:   {FeedDMSGDClientsByServer},
 	TabNetworkStats:      {FeedTPDStats},
 	TabTransportMetrics:  {FeedTPDMetrics},
+	TabARResolve:         {FeedARBindings},
+	TabNetworkView:       {FeedTPDPerKey},
 }
 
 // Deps are the host-injected dependencies the manager needs. They
@@ -708,6 +730,10 @@ func FeedString(feed Feed) string {
 		return "ar-reach"
 	case FeedTPDVisorBW:
 		return "tpd-visorbw"
+	case FeedARBindings:
+		return "ar-bindings"
+	case FeedTPDPerKey:
+		return "tpd-perkey"
 	}
 	return fmt.Sprintf("feed#%d", feed)
 }
@@ -734,6 +760,10 @@ func FeedFromString(name string) (Feed, bool) {
 		return FeedARReach, true
 	case "tpd-visorbw":
 		return FeedTPDVisorBW, true
+	case "ar-bindings":
+		return FeedARBindings, true
+	case "tpd-perkey":
+		return FeedTPDPerKey, true
 	}
 	return 0, false
 }

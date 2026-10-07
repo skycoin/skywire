@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/deployment/monitor/nmpk"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/disc/metrics"
@@ -54,6 +56,9 @@ type API struct {
 	DmsgServers                 []string
 	authPassphrase              string
 	OfficialServers             map[string]bool
+
+	// chartsPage is set once StartCharts runs; until then / answers 404.
+	chartsPage atomic.Pointer[charts.Page]
 
 	// dhtMirror mirrors entries to the DHT under the visor's PK-derived
 	// target. The mirror signs with its own key but stores under the
@@ -185,6 +190,7 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 	r.Get("/uptimes", api.getUptimes)
 	r.Post("/uptimes", api.postUptimes)
 	r.Get("/health", api.serviceHealth)
+	r.Get("/", api.ChartsPage)
 
 	return api
 }

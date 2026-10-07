@@ -19,6 +19,10 @@ const (
 // pkg/deployment/tpd/api).
 const RoutingPathPrefix = "routing/"
 
+// Per-key feed: every visor's transports counted by type (see
+// PerKeyCXOPublisher in pkg/deployment/tpd/api).
+const PerKeyPath = "perkey/stats"
+
 // Stats feed.
 const (
 	// StatsPathNetwork carries the network-wide transport aggregate
