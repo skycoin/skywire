@@ -63,6 +63,9 @@ var WhitelistPKs = nmpk.GetWhitelistPKs()
 
 // API represents the service-discovery API.
 type API struct {
+	// Stats, when set, adds the process and traffic charts to the status page.
+	Stats *charts.ServiceStats
+
 	// Handler is the chi router, built once in New. Every sibling
 	// service (tpd, ar, dmsg-discovery) does the same; SD used to
 	// rebuild the whole router — middleware stack and all routes —

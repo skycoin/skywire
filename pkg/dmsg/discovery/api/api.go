@@ -45,6 +45,9 @@ const maxBatchEntriesKeys = 1000
 
 // API represents the api of the dmsg-discovery service`
 type API struct {
+	// Stats, when set, adds the process and traffic charts to the status page.
+	Stats *charts.ServiceStats
+
 	http.Handler
 	metrics                     metrics.Metrics
 	db                          store.Storer

@@ -89,6 +89,8 @@ func New(cfg *Config, log *logging.Logger) services.Service {
 type service struct {
 	cfg *Config
 	log *logging.Logger
+	// stats, set by Run, counts the process and its traffic for the status page.
+	stats *charts.ServiceStats
 }
 
 // build creates the transport store and the API and warms the route
@@ -146,6 +148,7 @@ func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 
 	logger := services.NewLogger(cfg.LogTag("route_finder"), cfg.LogLevel)
+	s.stats = charts.NewServiceStats("route finder")
 	defer cfg.StartPprof(logger)()
 
 	pk := cfg.PubKey
@@ -199,6 +202,7 @@ func (s *service) Run(ctx context.Context) error {
 	}
 
 	h, err := svcmode.Start(runCtx, svcmode.Config{
+		Stats:               s.stats,
 		Mode:                resolvedMode,
 		HTTPAddr:            addr,
 		Handler:             rfAPI,
@@ -224,6 +228,7 @@ func (s *service) Run(ctx context.Context) error {
 		sn = &api.SetupNodes{PKs: cfg.setupNodes(), Port: dmsg.DefaultDmsgHTTPPort,
 			Client: &http.Client{Transport: dmsghttp.MakeHTTPTransport(runCtx, h.DmsgClient)}}
 	}
+	rfAPI.Stats = s.stats
 	rfAPI.StartCharts(runCtx, chartStore(cfg, logger), sn, logger)
 	if cfg.ChartsAddr != "" {
 		logger.Infof("Serving the charts page on %s", cfg.ChartsAddr)

@@ -57,6 +57,8 @@ type service struct {
 	// state, set by build and startCXO, is reported by State.
 	store, nonceStore string
 	cxo               services.CXOSet
+	// stats, set by Run, counts the process and its traffic for the status page.
+	stats *charts.ServiceStats
 }
 
 // State implements services.Stater.
@@ -126,6 +128,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	}
 
 	go arAPI.ListenUDP(udpListener)
+	arAPI.Stats = s.stats
 	arAPI.StartCharts(ctx, chartStore(storeConfig, logger), logger)
 	logger.Infof("UDP listener (SUDPH) on %s", udpAddr)
 
@@ -185,6 +188,8 @@ func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 
 	logger := services.NewLogger(cfg.LogTag("address_resolver"), cfg.LogLevel)
+	s.stats = charts.NewServiceStats("address resolver")
+	s.cxo.Stats = s.stats
 	defer cfg.StartPprof(logger)()
 
 	pk := cfg.PubKey
@@ -235,6 +240,7 @@ func (s *service) Run(ctx context.Context) error {
 	}
 
 	h, err := svcmode.Start(runCtx, svcmode.Config{
+		Stats:               s.stats,
 		Mode:                resolvedMode,
 		HTTPAddr:            addr,
 		Handler:             arAPI,

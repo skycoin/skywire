@@ -16,6 +16,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/deployment/monitor/nmpk"
 	"github.com/skycoin/skywire/pkg/deployment/netgraph"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/deployment/tpd/metrics"
@@ -55,6 +56,9 @@ var (
 // API register all the API endpoints.
 // It implements a net/http.Handler.
 type API struct {
+	// Stats, when set, adds the process and traffic charts to the status page.
+	Stats *charts.ServiceStats
+
 	http.Handler
 	metrics                     tpdiscmetrics.Metrics
 	reqsInFlightCountMiddleware *metricsutil.RequestsInFlightCountMiddleware
