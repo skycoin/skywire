@@ -71,6 +71,8 @@ type service struct {
 	// state, set by build and startCXO, is reported by State.
 	store, nonceStore string
 	cxo               services.CXOSet
+	// stats, set by Run, counts the process and its traffic for the status page.
+	stats *charts.ServiceStats
 }
 
 // State implements services.Stater.
@@ -190,6 +192,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	if cs, err := s.chartStore(storeCfg); err != nil {
 		logger.WithError(err).Warn("charts unavailable")
 	} else {
+		tpdAPI.Stats = s.stats
 		tpdAPI.StartCharts(ctx, cs, logger)
 	}
 
@@ -228,6 +231,8 @@ func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 
 	logger := services.NewLogger(cfg.LogTag("transport_discovery"), cfg.LogLevel)
+	s.stats = charts.NewServiceStats("transport discovery")
+	s.cxo.Stats = s.stats
 	defer cfg.StartPprof(logger)()
 
 	pk := cfg.PubKey
@@ -279,6 +284,7 @@ func (s *service) Run(ctx context.Context) error {
 	surveyWL := cfg.SurveyKeys()
 
 	h, err := svcmode.Start(runCtx, svcmode.Config{
+		Stats:               s.stats,
 		Mode:                resolvedMode,
 		HTTPAddr:            addr,
 		Handler:             tpdAPI,

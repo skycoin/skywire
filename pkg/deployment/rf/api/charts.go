@@ -60,12 +60,14 @@ func (a *API) StartCharts(ctx context.Context, st charts.Store, sn *SetupNodes, 
 	page := &charts.Page{
 		Title: "Skywire route finder",
 		About: strings.Split(a.dmsgAddr, ":")[0],
+		Stats: a.Stats,
+		Store: st,
 		Build: func(ctx context.Context, r charts.Range, now time.Time) (charts.Content, error) {
 			return a.buildCharts(ctx, st, c, r, now)
 		},
 	}
 	a.chartsPage.Store(page)
-	go charts.Run(ctx, st, func(ctx context.Context) (map[string]float64, error) { return a.collectCharts(ctx, c) }, log)
+	go charts.Run(ctx, st, a.Stats.Wrap(func(ctx context.Context) (map[string]float64, error) { return a.collectCharts(ctx, c) }), log)
 }
 
 // ChartsPage serves the charts page, or 404 when charts are not running.

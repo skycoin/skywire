@@ -243,6 +243,10 @@ type Client struct {
 	conf   *Config
 	porter *netutil.Porter
 
+	// traffic counts accepted streams per listening port once a service
+	// turns it on (CountTraffic).
+	traffic trafficRegistry
+
 	initBO time.Duration // initial backoff duration (constant)
 	bo     time.Duration // current backoff duration
 	maxBO  time.Duration // maximum backoff duration

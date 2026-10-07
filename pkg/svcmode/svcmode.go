@@ -137,6 +137,10 @@ type Config struct {
 	// it from flag/env/SK.
 	Mode Mode
 
+	// Stats, when set, counts the service's HTTP requests and its dmsg
+	// traffic for its status page (charts.ServiceStats).
+	Stats Stats
+
 	// HTTPAddr is the bind address for the http listener
 	// (e.g. ":9092"). Required when Mode includes http.
 	HTTPAddr string
@@ -243,6 +247,13 @@ func (h *Handle) Close() {
 	}
 }
 
+// Stats is what a service's traffic is reported to.
+type Stats interface {
+	Handler(http.Handler) http.Handler
+	CountDmsg(*dmsg.Client)
+	NamePort(port uint16, name string)
+}
+
 // Start wires up the listeners described by cfg and returns a Handle.
 // The caller is responsible for blocking on ctx.Done() (or on
 // Handle.Errors()) in its main loop, and for calling Handle.Close()
@@ -285,6 +296,9 @@ func Start(ctx context.Context, cfg Config) (*Handle, error) {
 	if cfg.DmsgPort == 0 {
 		cfg.DmsgPort = dmsg.DefaultDmsgHTTPPort
 	}
+	if cfg.Stats != nil {
+		cfg.Handler = cfg.Stats.Handler(cfg.Handler)
+	}
 	if cfg.DmsgServerPollInterval == 0 {
 		cfg.DmsgServerPollInterval = time.Second
 	}
@@ -319,6 +333,10 @@ func Start(ctx context.Context, cfg Config) (*Handle, error) {
 		}
 		h.boot = boot
 		h.DmsgClient = boot.Client
+		if cfg.Stats != nil {
+			cfg.Stats.CountDmsg(boot.Client)
+			cfg.Stats.NamePort(cfg.DmsgPort, "http")
+		}
 
 		if cfg.Mode.IncludesDmsg() {
 			cfg.Log.Infof("svcmode: dmsghttp listener on port %d", cfg.DmsgPort)
