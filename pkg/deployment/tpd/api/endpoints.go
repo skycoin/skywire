@@ -451,10 +451,18 @@ func (api *API) getAllTransportsPerKeyStats(w http.ResponseWriter, r *http.Reque
 	// invariant rather than a race. See transportsSnapshot.
 	setSnapshotHeaders(w, at, len(entries))
 
-	// Build per-key statistics: map[pkHex]map[typeOrTotal]count
-	// Format: {"pk1": {"total": 15, "stcpr": 1, "sudph": 14}, ...}
-	result := make(map[string]map[string]int)
+	httputil.WriteJSON(w, r, http.StatusOK, perKeyCounts(entries))
+}
 
+// perKeyCounts is the per-key-stats reduction: for every edge key, its
+// transports counted by type, plus "total".
+//
+//	{"pk1": {"total": 15, "stcpr": 1, "sudph": 14}, ...}
+//
+// Shared by the HTTP handler and the per-key CXO feed, so both serve one
+// shape computed one way.
+func perKeyCounts(entries []*transport.Entry) map[string]map[string]int {
+	result := make(map[string]map[string]int)
 	for _, entry := range entries {
 		for _, edge := range entry.Edges {
 			pkHex := edge.Hex()
@@ -465,8 +473,7 @@ func (api *API) getAllTransportsPerKeyStats(w http.ResponseWriter, r *http.Reque
 			result[pkHex]["total"]++
 		}
 	}
-
-	httputil.WriteJSON(w, r, http.StatusOK, result)
+	return result
 }
 
 func (api *API) deleteTransport(w http.ResponseWriter, r *http.Request) {

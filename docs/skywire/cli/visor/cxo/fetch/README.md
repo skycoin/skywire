@@ -28,6 +28,10 @@ Paths per feed:
                           stamped with a completeness verdict — see the
                           "complete"/"confidence" fields before charting
                           an absolute count
+  tpd-perkey              keys
+                          every visor's transports counted by type, the
+                          /all-transports/per-key-stats body; republished
+                          every minute
   (dmsgd-clients-by-server has no FetchCXO case — Walk it via your own RPC if needed)
 
 ## Usage

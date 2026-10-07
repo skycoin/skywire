@@ -582,6 +582,18 @@ func cxoFeedForURL(rawURL string) (feed, path string, ok bool) {
 		return "", "", false
 	}
 
+	// TPD /all-transports/per-key-stats → "tpd-perkey" feed, "keys" path:
+	// the same body, from the per-key feed. Like /all-transports/stats the
+	// publisher writes only the default (self-transports included) table,
+	// so an explicit ?selfTransports= falls through to HTTP.
+	if isUnderBase(rawURL, deployment.Prod.TransportDiscovery, "/all-transports/per-key-stats") ||
+		isUnderBase(rawURL, deployment.Prod.TransportDiscoveryDmsg, "/all-transports/per-key-stats") {
+		if queryParam(rawURL, "selfTransports") != "" {
+			return "", "", false
+		}
+		return "tpd-perkey", "keys", true
+	}
+
 	// TPD /all-transports/stats → "tpd-stats" feed, "network" path.
 	// isUnderBase matches base+suffix exactly, so this is a distinct
 	// endpoint from /all-transports below and the order of the two
