@@ -130,7 +130,9 @@ type VisorData struct {
 // supply a v6 client — preserves pre-#1525 v4-only behavior.
 type httpClient struct {
 	// fastResolve, when set, answers lookups other than sudph before HTTP.
-	fastResolve    atomic.Pointer[FastResolve]
+	fastResolve atomic.Pointer[FastResolve]
+	// notFound remembers recent "no entry" answers (see notFoundFor).
+	notFound       notFoundCache
 	log            *logging.Logger
 	mLog           *logging.MasterLogger
 	httpClient     *httpauthclient.Client
@@ -953,6 +955,10 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 	if !c.isReady() {
 		return VisorData{}, ErrNotReady
 	}
+	nfKey := notFoundKey(tType, pk)
+	if c.notFound.recent(nfKey, time.Now()) {
+		return VisorData{}, ErrNoEntry
+	}
 
 	path := fmt.Sprintf("/resolve/%s/%s", tType, pk.String())
 
@@ -990,6 +996,7 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 		}()
 
 		if status == http.StatusNotFound {
+			c.notFound.note(nfKey, time.Now())
 			return VisorData{}, ErrNoEntry
 		}
 

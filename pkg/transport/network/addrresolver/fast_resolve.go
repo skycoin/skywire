@@ -3,8 +3,11 @@ package addrresolver
 import (
 	"context"
 	"net"
+	"sync"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // FastResolve answers a lookup without asking the address resolver, from a
@@ -34,4 +37,42 @@ func sameHost(addr1, addr2 string) bool {
 		return false
 	}
 	return h1 == h2
+}
+
+// notFoundFor is how long a peer with no binding of a type is answered "no
+// entry" without asking again. A dial to such a peer cannot work, and every
+// dial used to ask, so peers without a binding cost a request per attempt. A
+// peer that binds within the window is found when it passes.
+const notFoundFor = 2 * time.Minute
+
+type notFoundCache struct {
+	mu sync.Mutex
+	at map[string]time.Time
+}
+
+func (n *notFoundCache) recent(key string, now time.Time) bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	at, ok := n.at[key]
+	return ok && now.Sub(at) < notFoundFor
+}
+
+func (n *notFoundCache) note(key string, now time.Time) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.at == nil {
+		n.at = make(map[string]time.Time)
+	}
+	if len(n.at) > 4096 {
+		for k, at := range n.at {
+			if now.Sub(at) >= notFoundFor {
+				delete(n.at, k)
+			}
+		}
+	}
+	n.at[key] = now
+}
+
+func notFoundKey(tType string, pk cipher.PubKey) string {
+	return string(types.NormalizeType(types.Type(tType))) + "/" + pk.Hex()
 }

@@ -63,3 +63,27 @@ func TestSameHostMirrorsTheResolver(t *testing.T) {
 	require.False(t, sameHost("1.2.3.4:1", "1.2.3.4"), "a bare IP never matches, as on the resolver")
 	require.False(t, sameHost("1.2.3.4:1", "5.6.7.8:1"))
 }
+
+func TestResolveRemembersNotFound(t *testing.T) {
+	target, _ := cipher.GenerateKeyPair()
+	var calls atomic.Int64
+	mux := chi.NewRouter()
+	mux.Get("/resolve/sudph/{pk}", func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		http.Error(w, "nope", http.StatusNotFound)
+	})
+	srv := httptest.NewServer(arRouter(mux))
+	defer srv.Close()
+	c := newReadyClient(t, srv)
+
+	for i := 0; i < 3; i++ {
+		_, err := c.Resolve(context.Background(), "sudph", target)
+		require.ErrorIs(t, err, ErrNoEntry)
+	}
+	require.Equal(t, int64(1), calls.Load(), "a recent not-found is answered without asking")
+
+	other, _ := cipher.GenerateKeyPair()
+	_, err := c.Resolve(context.Background(), "sudph", other)
+	require.ErrorIs(t, err, ErrNoEntry)
+	require.Equal(t, int64(2), calls.Load(), "another peer is asked")
+}

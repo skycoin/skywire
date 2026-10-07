@@ -438,6 +438,7 @@ type Visor struct {
 	tpdAnnounce           tpdAnnounceStats           // announces of the transport-list feed, for visor state
 	tpdFeed               atomic.Pointer[tpdFeedRef] // the transport-list feed, for tpdFeedHealthy
 	arBindings            arBindingsIndex            // the address resolver's bindings feed, for lookups
+	autoTpCooldown        autoTpCooldown             // automatic transports that failed recently, by peer and type
 	mail                  skymailHost
 	embeddedWisp          *EmbeddedWisp
 	// Shared VStreamMux for skynet forwarding (route ID 0).
