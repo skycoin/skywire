@@ -191,6 +191,11 @@ type ManagedTransport struct {
 	// hundreds of them, driving the scheduler/timer load.
 	lastRecvNanos atomic.Int64
 
+	// Used only by the readLoop goroutine in readPacket.
+	readHdr        [routing.PacketHeaderSize]byte
+	readDeadlineTp network.Transport
+	readDeadlineAt time.Time
+
 	// pingWriteFails counts consecutive transport-ping WRITES that
 	// errored (e.g. i/o timeout to a peer that vanished). Reset to 0 on
 	// any successful write and whenever the underlying transport is
@@ -1531,38 +1536,35 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, tp network.Tran
 		}
 	}
 
-	trace := mt.log.IsLevelEnabled(logrus.TraceLevel)
-	if trace {
-		mt.log.WithField("func", "readPacket").Trace("Awaiting packet...")
-	}
-
 	// Set a read deadline to prevent blocking forever on a half-open TCP connection.
 	// Without this, a dead transport causes the readLoop goroutine to leak permanently.
-	// The deadline is refreshed on each read attempt; successful reads reset it.
+	// Refreshing it costs a timer or poller wakeup, so do that only once a quarter
+	// of it has passed, or when the conn under this transport changed.
 	const readTimeout = 3 * time.Minute
-	if err = tp.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
-		mt.log.WithField("func", "readPacket").WithError(err).Debug("Failed to set read deadline")
+	if now := time.Now(); tp != mt.readDeadlineTp || mt.readDeadlineAt.Sub(now) < readTimeout*3/4 {
+		mt.readDeadlineTp, mt.readDeadlineAt = tp, now.Add(readTimeout)
+		if err = tp.SetReadDeadline(mt.readDeadlineAt); err != nil {
+			mt.log.WithError(err).Debug("Failed to set read deadline")
+		}
 	}
 
-	h := mt.rhdr[:]
+	h := mt.readHdr[:]
 	if _, err = io.ReadFull(tp, h); err != nil {
-		mt.log.WithField("func", "readPacket").WithError(err).Debugf("Failed to read packet header.")
+		mt.log.WithError(err).Debug("Failed to read packet header.")
 		return nil, tp, err
 	}
+	// One allocation per packet: the header and payload share the slice.
 	packet = make(routing.Packet, routing.PacketHeaderSize+int(routing.Packet(h).Size()))
 	copy(packet, h)
 	if _, err = io.ReadFull(tp, packet[routing.PacketHeaderSize:]); err != nil {
-		mt.log.WithField("func", "readPacket").WithError(err).Debugf("Failed to read packet payload.")
+		mt.log.WithError(err).Debug("Failed to read packet payload.")
 		return nil, tp, err
 	}
-
 	if n := len(packet); n > routing.PacketHeaderSize {
 		mt.logRecv(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
 	}
-
-	if trace {
-		mt.log.WithField("func", "readPacket").
-			WithField("type", packet.Type().String()).
+	if mt.log.IsLevelEnabled(logrus.TraceLevel) {
+		mt.log.WithField("type", packet.Type().String()).
 			WithField("rt_id", packet.RouteID()).
 			WithField("size", packet.Size()).
 			Trace("Received packet.")
