@@ -68,24 +68,18 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/tpdpaths"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
-// Published paths. Exported so visor-side subscribers don't have to
-// duplicate the strings.
+// Published paths. Defined in tpdpaths so visor-side subscribers can name
+// them without importing this package; see there for what each carries.
 const (
-	// StatsPathNetwork carries the network-wide transport aggregate
-	// (the GET /all-transports/stats shape plus a completeness stamp).
-	StatsPathNetwork = "stats/network"
-	// StatsPathVersions carries the fleet version histogram (the
-	// GET /version shape plus a completeness stamp).
-	StatsPathVersions = "stats/versions"
-	// StatsPathDaily carries the network-wide daily aggregate (the
-	// GET /metric shape plus a completeness stamp) — per-day
-	// bandwidth, latency and by-type breakdown over statsDailyDays.
-	StatsPathDaily = "stats/daily"
+	StatsPathNetwork  = tpdpaths.StatsPathNetwork
+	StatsPathVersions = tpdpaths.StatsPathVersions
+	StatsPathDaily    = tpdpaths.StatsPathDaily
 )
 
 // statsPublishInterval is the recompute cadence. Both bodies are read

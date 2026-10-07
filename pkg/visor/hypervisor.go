@@ -1157,7 +1157,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		})
 
 		// A call's audio, for a visor whose device belongs to the app that
-		// started it (Android) — see hypervisor_handlers_voice_audio.go.
+		// started it (Android, iOS) — see hypervisor_handlers_voice_audio.go.
 		//
 		// Out here for the same reason the notification stream is, and it cost
 		// a debugging session to find out: inside /api these carry

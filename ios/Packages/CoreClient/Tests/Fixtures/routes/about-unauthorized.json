@@ -1,0 +1,9 @@
+{
+  "body": "{\"error\":\"session cookie is either non-existent, expired, or ill-formatted\"}\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "GET",
+  "path": "/api/about",
+  "status": 401
+}

@@ -1,0 +1,9 @@
+{
+  "body": "{\"csrf_token\":\"eyJOb25jZSI6IlVTMzBNUEpJdVFDcitVZzdBRklFSXRJK0NaN0RUTXc1cXFETTlFbWc2Q01Sa3ZMTTBKekgwWWt0elJKaXZja2FWKzdJbTM2b1l5UGd4bEduUGVwc2h3PT0iLCJFeHBpcmVzQXQiOiIyMDI2LTA5LTMwVDA2OjA4OjAxLjkwMjk3NCswODowMCJ9.SevkGRV4c2zqktc8po1Co8ap9rZG-dEDaHAEIiN9Do0\"}\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "GET",
+  "path": "/api/csrf",
+  "status": 200
+}

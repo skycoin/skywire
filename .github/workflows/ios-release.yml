@@ -1,0 +1,206 @@
+# iOS release: the same `mobile-vX.Y.Z` tag as Android. A tag push runs
+# android-release.yml and this workflow side by side; they are independent,
+# and neither one failing stops the other. This one attaches nothing to the
+# GitHub release (an App Store build cannot be installed from there).
+#
+# Every run, tag or rehearsal:
+#   1. the Go tests of the iOS core (pkg/mobilecore, the lite module set);
+#   2. the xcframework built from source (never a committed .a);
+#   3. the app built and tested on a Simulator, stamped with the version.
+# Then, only when the App Store Connect secrets exist, one step archives,
+# signs through an App Store Connect API key (no certificate or profile is
+# kept anywhere) and hands the build to App Store Connect. mobile-v0.x builds
+# reach TestFlight testers from there; for mobile-v1.x a person submits the
+# build for review in App Store Connect. Nothing in this file submits.
+#
+# Until the account exists the secrets do not, and the run stops after step 3
+# with a notice naming them. Rehearse without a tag: a mobile-v* tag also
+# publishes an Android release. A pull request that changes this file
+# rehearses it, and so does workflow_dispatch (`gh workflow run
+# ios-release.yml -f ref=<branch>`) once the file is on the default branch,
+# which is where GitHub looks for dispatchable workflows. A rehearsal never
+# reaches App Store Connect unless it is a dispatch with `deliver` ticked.
+name: iOS release
+
+on:
+  push:
+    tags:
+      - 'mobile-v*'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag or commit to build'
+        required: true
+        default: 'develop'
+      version:
+        description: 'X.Y.Z to stamp, as the tag would'
+        required: true
+        default: '0.1.0'
+      deliver:
+        description: 'Also send the build to App Store Connect (needs the secrets)'
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - '.github/workflows/ios-release.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      # mobile-v1.2.3 -> 1.2.3, the shape android-release.yml accepts. The
+      # build number is <run_number>.<run_attempt>: it only ever grows, and a
+      # re-run cannot reuse one.
+      - name: Version and build number
+        id: version
+        env:
+          DISPATCHED: ${{ inputs.version }}
+        run: |
+          case "$GITHUB_EVENT_NAME" in
+            workflow_dispatch) raw="$DISPATCHED" ;;
+            push) raw="${GITHUB_REF_NAME#mobile-v}" ;;
+            *) raw="0.1.0" ;;   # a pull request's rehearsal
+          esac
+          if ! printf '%s' "$raw" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::'$raw' is not X.Y.Z (the tag must be mobile-vX.Y.Z)"
+            exit 1
+          fi
+          echo "version=$raw" >> "$GITHUB_OUTPUT"
+          echo "build=${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+          echo "Skywire Mobile $raw, build ${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Select Xcode
+        run: ios/scripts/ci-xcode.sh select
+
+      # Start, stop and start again in one process, three times.
+      - name: Go tests of the iOS core
+        run: make mobile-test
+
+      - name: Go core (xcframework, device and Simulator slices)
+        run: make ios-core
+
+      - name: CoreClient tests
+        run: cd ios/Packages/CoreClient && swift test
+
+      - name: App build and tests on the Simulator
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ steps.version.outputs.build }}
+        run: |
+          destination=$(ios/scripts/ci-xcode.sh destination)
+          # The microphone, as in ios-app.yml: VoiceAudioReleaseTests needs it.
+          device=${destination##*,id=}
+          xcrun simctl boot "$device" 2>/dev/null || true
+          xcrun simctl privacy "$device" grant microphone com.skycoin.skywire
+          xcrun simctl shutdown "$device"
+          xcodebuild -project ios/Skywire.xcodeproj -scheme Skywire \
+            -destination "$destination" \
+            -derivedDataPath ios/DerivedData \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
+            test
+          plist=ios/DerivedData/Build/Products/Debug-iphonesimulator/Skywire.app/Info.plist
+          stamped="$(plutil -extract CFBundleShortVersionString raw "$plist") ($(plutil -extract CFBundleVersion raw "$plist"))"
+          if [ "$stamped" != "$VERSION ($BUILD)" ]; then
+            echo "::error::the app says $stamped, expected $VERSION ($BUILD)"
+            exit 1
+          fi
+          echo "Info.plist: $stamped"
+
+      # Secrets cannot appear in an `if:`, so the decision is an output: a tag
+      # delivers, a dispatch delivers only when asked, a pull request never.
+      - name: App Store Connect secrets
+        id: secrets
+        env:
+          WANT: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deliver) }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          missing=""
+          [ -n "$ASC_KEY_ID" ]      || missing="$missing secret:APP_STORE_CONNECT_KEY_ID"
+          [ -n "$ASC_ISSUER_ID" ]   || missing="$missing secret:APP_STORE_CONNECT_ISSUER_ID"
+          [ -n "$ASC_PRIVATE_KEY" ] || missing="$missing secret:APP_STORE_CONNECT_PRIVATE_KEY"
+          [ -n "$APPLE_TEAM_ID" ]   || missing="$missing variable:APPLE_TEAM_ID"
+          if [ -n "$missing" ]; then
+            echo "::notice title=App Store Connect step skipped::Missing:$missing. The build and tests above passed; add these (ios/README.md, Releasing) to send tagged builds to App Store Connect."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          elif [ "$WANT" != "true" ]; then
+            echo "::notice title=App Store Connect step skipped::A rehearsal ($GITHUB_EVENT_NAME): only a mobile-v* tag, or a dispatch with deliver ticked, reaches App Store Connect."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The only step that talks to Apple. Signing is automatic, through the
+      # API key: Xcode fetches or creates the certificate and profiles for the
+      # team at archive and export time, and nothing is left on the runner.
+      - name: Archive, sign and send to App Store Connect
+        if: steps.secrets.outputs.present == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ steps.version.outputs.build }}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          printf '%s' "$ASC_PRIVATE_KEY" > "$key"
+          trap 'rm -f "$key"' EXIT
+          auth=(-allowProvisioningUpdates
+                -authenticationKeyPath "$key"
+                -authenticationKeyID "$ASC_KEY_ID"
+                -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+          archive="$RUNNER_TEMP/Skywire.xcarchive"
+
+          xcodebuild -project ios/Skywire.xcodeproj -scheme Skywire -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$archive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
+            "${auth[@]}" archive
+
+          # What is about to leave: the identifiers, the versions, the
+          # Keychain group the extension shares, and the Go core inside.
+          app="$archive/Products/Applications/Skywire.app"
+          plutil -extract CFBundleIdentifier raw "$app/Info.plist"
+          test "$(plutil -extract CFBundleShortVersionString raw "$app/Info.plist")" = "$VERSION"
+          test "$(plutil -extract CFBundleVersion raw "$app/Info.plist")" = "$BUILD"
+          codesign -d --entitlements - "$app" | grep -q keychain-access-groups
+          grep -a -q -E 'go1\.[0-9]+' "$app/Skywire" || { echo "::error::no Go runtime in the binary"; exit 1; }
+
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath "$archive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            "${auth[@]}"

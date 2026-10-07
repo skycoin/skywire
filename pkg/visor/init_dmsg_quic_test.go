@@ -1,3 +1,8 @@
+//go:build !mobile
+
+// The folded dmsg server is desktop-only (init_dmsg_server.go), its QUIC
+// address helper with it.
+
 package visor
 
 import (

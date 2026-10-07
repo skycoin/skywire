@@ -28,6 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/tpdpaths"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -36,7 +37,7 @@ import (
 
 // RoutingPathPrefix is the routing feed's sub-tree; shard paths are
 // RoutingPathPrefix + <pk hex>.
-const RoutingPathPrefix = "routing/"
+const RoutingPathPrefix = tpdpaths.RoutingPathPrefix
 
 // routingPublishInterval is how often the routing shards are recomputed.
 const routingPublishInterval = 60 * time.Second

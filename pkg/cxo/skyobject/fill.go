@@ -2,6 +2,7 @@
 package skyobject
 
 import (
+	"fmt"
 	"log"
 	"sync"
 
@@ -64,7 +65,10 @@ func (f *Filler) get(
 	}
 
 	if err != data.ErrNotFound {
-		fatal("DB failure:", err) // fatality
+		// fail this filling (the Splitter hands the error to Fail and
+		// Run rejects the incs); never exit the process, which on iOS
+		// is the app itself
+		return nil, 0, fmt.Errorf("DB failure: %w", err)
 	}
 
 	err = nil // clear if it's data.ErrNotFound

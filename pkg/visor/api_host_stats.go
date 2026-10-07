@@ -1,3 +1,5 @@
+//go:build !mobile
+
 // Package visor pkg/visor/api_host_stats.go c3-vis-core
 //
 // HostStats — psutil-style resource snapshot of the host the visor
@@ -12,13 +14,15 @@
 // previous sample to compare against; that's fine — the second
 // call returns a real value, and 1s polling means the "0 on first
 // reading" only shows up briefly during initial paint.
+//
+// gopsutil is desktop-only: its darwin collectors are cgo against libproc.h
+// and IOKit, which the iOS SDK does not ship. The mobile build answers from
+// api_host_stats_mobile.go instead.
 package visor
 
 import (
-	"fmt"
 	"os"
 	"runtime"
-	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -136,30 +140,4 @@ func (v *Visor) HostStats() (*visorapi.HostStatsInfo, error) {
 	}
 
 	return out, nil
-}
-
-// formatHostStatsErrors keeps a placeholder for future error
-// aggregation. Currently we swallow per-subsystem errors silently
-// because partial data is more useful than a total failure on a
-// quirky system; if something is consistently zero in the UI, that's
-// a flag for the user to investigate the host.
-//
-//nolint:unused
-func formatHostStatsErrors(errs []error) error {
-	if len(errs) == 0 {
-		return nil
-	}
-	return fmt.Errorf("host stats: %d subsystem errors (first: %w)", len(errs), errs[0])
-}
-
-// secondsAgo helps the UI render uptime cleanly when StartTimeMS is
-// available; kept as a small helper rather than embedded so the
-// formatting choice stays on the client.
-//
-//nolint:unused
-func secondsAgo(unixMS int64) int64 {
-	if unixMS <= 0 {
-		return 0
-	}
-	return time.Now().UnixMilli()/1 - unixMS/1
 }

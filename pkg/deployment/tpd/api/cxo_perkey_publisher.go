@@ -28,6 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/tpdpaths"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -35,7 +36,7 @@ import (
 )
 
 // PerKeyPath is the one leaf the per-key feed writes.
-const PerKeyPath = "perkey/stats"
+const PerKeyPath = tpdpaths.PerKeyPath
 
 // perKeyPublishInterval is the republish cadence. Registrations lapse on a
 // 5-minute TTL, so a minute keeps the counts as fresh as the network view's

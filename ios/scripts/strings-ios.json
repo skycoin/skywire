@@ -1,0 +1,127 @@
+{
+  "_comment": "Strings only the iOS app has, in the three languages. seed-strings.py merges them with the Android catalogues into ios/Skywire/Localizable.xcstrings. Placeholders are iOS's (%1$@, %1$lld). Terms follow the Android glossary (android/README.md, Languages): visor = 节点 / nodo, core = 核心 / núcleo, Fleet = 集群 / Flota, informal tú in Spanish; Apple's own names for Face ID, Touch ID and the Settings app.",
+  "Localizable": {
+    "ok": {
+      "en": "OK",
+      "zh-Hans": "好",
+      "es": "Aceptar"
+    },
+    "visor_copy_hint": {
+      "en": "Copies the full key",
+      "zh-Hans": "复制完整公钥",
+      "es": "Copia la clave completa"
+    },
+    "settings_app_lock_hint_ios": {
+      "en": "Asks for Face ID, Touch ID or your passcode when Skywire opens and when you come back to it after about half a minute away. Also covers the app in the app switcher and while the screen is being recorded or mirrored. iOS does not let an app block screenshots.",
+      "zh-Hans": "打开 Skywire 时，以及离开约半分钟后再回到应用时，都会要求面容 ID、触控 ID 或设备密码。同时会在应用切换器中，以及屏幕被录制或镜像时遮住应用内容。iOS 不允许应用禁止截屏。",
+      "es": "Pide Face ID, Touch ID o tu código cuando abres Skywire y cuando vuelves a ella tras medio minuto fuera. También tapa la app en el selector de apps y mientras la pantalla se graba o se duplica. iOS no permite que una app bloquee las capturas de pantalla."
+    },
+    "chat_download_failed": {
+      "en": "%1$@ was not saved: %2$@",
+      "zh-Hans": "%1$@ 未能保存：%2$@",
+      "es": "No se guardó %1$@: %2$@"
+    },
+    "wallet_seed_secure_ios": {
+      "en": "Covered while the screen is recorded or mirrored, and in the app switcher. iOS does not let an app block screenshots. There is no copy button.",
+      "zh-Hans": "屏幕被录制或镜像时，以及在应用切换器中，这些单词会被遮住。iOS 不允许应用禁止截屏。本页面没有复制按钮。",
+      "es": "Se tapa mientras la pantalla se graba o se duplica, y en el selector de apps. iOS no permite que una app bloquee las capturas de pantalla. No hay botón de copiar."
+    },
+    "wallet_screenshot_title": {
+      "en": "Screenshot saved",
+      "zh-Hans": "截屏已保存",
+      "es": "Captura guardada"
+    },
+    "wallet_screenshot_body": {
+      "en": "It shows your recovery phrase and is now in Photos, where it can sync to your other devices. Delete it: anyone who sees those words can spend your coins.",
+      "zh-Hans": "截屏中有你的助记词，现在已存入“照片”，并可能同步到你的其他设备。请删除它：任何看到这些单词的人都能花掉你的币。",
+      "es": "Muestra tu frase de recuperación y ahora está en Fotos, desde donde puede sincronizarse con tus otros dispositivos. Bórrala: quien vea esas palabras puede gastar tus monedas."
+    },
+    "wallet_scan_photo": {
+      "en": "Scan a QR code from a photo",
+      "zh-Hans": "从照片中扫描二维码",
+      "es": "Escanear un código QR de una foto"
+    },
+    "wallet_scan_none": {
+      "en": "No QR code found in that picture.",
+      "zh-Hans": "该图片中未找到二维码。",
+      "es": "No se encontró ningún código QR en esa imagen."
+    },
+    "call_suspended_note": {
+      "en": "Calls ring only while Skywire is running. Nothing rings a phone the app has been suspended on.",
+      "zh-Hans": "只有在 Skywire 运行时来电才会响铃。应用被暂停的手机不会收到任何响铃。",
+      "es": "Las llamadas suenan solo mientras Skywire está en ejecución. Un teléfono con la app suspendida no suena."
+    },
+    "vpn_ios_pending": {
+      "en": "SkyVPN arrives with the build of Skywire that runs on an iPhone. Until then the tunnel stays off.",
+      "zh-Hans": "SkyVPN 将随可在 iPhone 上运行的 Skywire 版本一起推出。在此之前，隧道保持关闭。",
+      "es": "SkyVPN llega con la versión de Skywire que funciona en un iPhone. Hasta entonces, el túnel sigue apagado."
+    },
+    "skydns_ios_pending": {
+      "en": "SkyDNS arrives with the build of Skywire that runs on an iPhone. Until then it stays off.",
+      "zh-Hans": "SkyDNS 将随可在 iPhone 上运行的 Skywire 版本一起推出。在此之前，它保持关闭。",
+      "es": "SkyDNS llega con la versión de Skywire que funciona en un iPhone. Hasta entonces, sigue apagado."
+    },
+    "wallet_reveal_action_sub_ios": {
+      "en": "Shows all twelve words in the clear. Asks for Face ID, Touch ID or your passcode first.",
+      "zh-Hans": "以明文显示全部十二个助记词。需要先验证面容 ID、触控 ID 或设备密码。",
+      "es": "Muestra las doce palabras a la vista. Pide Face ID, Touch ID o tu código antes."
+    },
+    "wallet_reveal_autohide_ios": {
+      "en": "This screen closes on its own in %1$@.",
+      "zh-Hans": "本页面将在 %1$@ 后自动关闭。",
+      "es": "Esta pantalla se cierra sola en %1$@."
+    },
+    "core_sealed_key_gone_ios": {
+      "en": "The sealed config cannot be opened: the key it was sealed under is no longer in this iPhone’s Keychain (the iPhone was erased, or Skywire’s data came back from a backup). The identity in it is unrecoverable; a new one can be generated.",
+      "zh-Hans": "无法打开已加密的配置：加密它的密钥已不在这台 iPhone 的钥匙串中（iPhone 已被抹掉，或 Skywire 的数据是从备份恢复的）。其中的身份无法恢复；可以生成一个新的身份。",
+      "es": "No se puede abrir la configuración sellada: la clave con la que se selló ya no está en el llavero de este iPhone (el iPhone se borró, o los datos de Skywire volvieron de una copia de seguridad). La identidad que contiene no se puede recuperar; se puede generar una nueva."
+    },
+    "settings_encrypt_warning_ios": {
+      "en": "If this iPhone is erased, or Skywire’s data is restored from a backup, the sealing key is gone and the identity in the config cannot be recovered. Export the config first if it matters.",
+      "zh-Hans": "如果这台 iPhone 被抹掉，或 Skywire 的数据从备份恢复，加密密钥就会丢失，配置中的身份将无法恢复。如果它很重要，请先导出配置。",
+      "es": "Si este iPhone se borra, o los datos de Skywire se restauran desde una copia de seguridad, la clave de sellado desaparece y la identidad de la configuración no se puede recuperar. Exporta la configuración antes si te importa."
+    },
+    "settings_sk_not_a_key_ios": {
+      "en": "Not a secret key: those 64 characters are not a valid secp256k1 key.",
+      "zh-Hans": "不是私钥：这 64 个字符不是有效的 secp256k1 密钥。",
+      "es": "No es una clave secreta: esos 64 caracteres no son una clave secp256k1 válida."
+    },
+    "settings_sk_mismatch_ios": {
+      "en": "The core wrote a different public key than this secret key gives, so the previous config was put back.",
+      "zh-Hans": "核心写入的公钥与该私钥推导出的公钥不同，因此已恢复之前的配置。",
+      "es": "El núcleo escribió una clave pública distinta de la que da esta clave secreta, así que se restauró la configuración anterior."
+    },
+    "settings_update_ios": {
+      "en": "Updates for this build come from TestFlight or the App Store.",
+      "zh-Hans": "此版本的更新来自 TestFlight 或 App Store。",
+      "es": "Las actualizaciones de esta versión llegan por TestFlight o la App Store."
+    },
+    "settings_app_lock_unavailable_ios": {
+      "en": "This iPhone has no passcode, so there is nothing to check against. One is set in the Settings app, under Face ID & Passcode.",
+      "zh-Hans": "这台 iPhone 没有设置密码，因此无从验证。可在“设置”App 的“面容 ID 与密码”中设置。",
+      "es": "Este iPhone no tiene código, así que no hay nada con qué comprobar. Se pone en la app Ajustes, en Face ID y código."
+    }
+  },
+  "InfoPlist": {
+    "NSFaceIDUsageDescription": {
+      "en": "Skywire uses Face ID to unlock the app when the app lock is on, and to confirm wallet sends and the showing of a recovery phrase.",
+      "zh-Hans": "开启应用锁后，Skywire 会使用面容 ID 解锁应用；钱包发送转账和显示助记词之前，也会用它确认身份。",
+      "es": "Skywire usa Face ID para desbloquear la app cuando el bloqueo de la app está activado, y para confirmar los envíos de la billetera y antes de mostrar una frase de recuperación."
+    },
+    "NSMicrophoneUsageDescription": {
+      "en": "SkyChat uses the microphone to record voice and video messages.",
+      "zh-Hans": "SkyChat 使用麦克风录制语音和视频消息。",
+      "es": "SkyChat usa el micrófono para grabar mensajes de voz y de vídeo."
+    },
+    "NSCameraUsageDescription": {
+      "en": "Skywire uses the camera to record video messages and scan QR codes in SkyChat and the wallet.",
+      "zh-Hans": "Skywire 使用相机录制视频消息，并在 SkyChat 和钱包中扫描二维码。",
+      "es": "Skywire usa la cámara para grabar mensajes de vídeo y escanear códigos QR en SkyChat y en la billetera."
+    },
+    "NSPhotoLibraryAddUsageDescription": {
+      "en": "Skywire saves the pictures and videos you choose to your photo library.",
+      "zh-Hans": "Skywire 会把你选择的图片和视频保存到照片图库。",
+      "es": "Skywire guarda en tu fototeca las imágenes y los vídeos que elijas."
+    }
+  }
+}
