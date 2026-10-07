@@ -132,7 +132,7 @@ func (c *sudphClient) listen() (net.Listener, error) {
 	c.log.Debugf("Successfully bound sudph to port %s", localPort)
 
 	go c.acceptAddresses(c.sudphVisorsConn, addrCh)
-	return kcp.ServeConn(nil, 0, 0, plainPacketConn(c.sudphVisorsConn))
+	return kcp.ServeConn(nil, 0, 0, pushPacketConn(c.sudphVisorsConn))
 }
 
 // make a handshake function that is compatible with address resolver interface
@@ -346,7 +346,7 @@ func (c *sudphClient) Close() error {
 func plainPacketConn(c net.PacketConn) net.PacketConn { return struct{ net.PacketConn }{c} }
 
 // pushPacketConn is plainPacketConn that keeps pfilter's packet receiver, so a
-// dialed KCP session reads on the filter's goroutine instead of its own.
+// KCP session or listener reads on the filter's goroutine instead of its own.
 func pushPacketConn(c net.PacketConn) net.PacketConn {
 	if p, ok := c.(kcp.PacketPusher); ok {
 		return struct {
