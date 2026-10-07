@@ -20,6 +20,9 @@ var geoSummary struct {
 	once sync.Once
 	mu   sync.Mutex
 	db   *geoip2.Reader // nil when OpenEmbedded failed
+	// byIP caches each lookup, since every Summary poll asks again for
+	// the same transport IPs and a City lookup allocates.
+	byIP map[string]string
 }
 
 // geoCountryForIP returns the ISO country code the embedded geoip db
@@ -41,10 +44,21 @@ func geoCountryForIP(ip string) string {
 		return ""
 	}
 	geoSummary.mu.Lock()
-	res, err := geoip.Lookup(geoSummary.db, ip)
-	geoSummary.mu.Unlock()
-	if err != nil || res == nil {
-		return ""
+	defer geoSummary.mu.Unlock()
+	if cc, ok := geoSummary.byIP[ip]; ok {
+		return cc
 	}
-	return res.CountryCode
+	cc := ""
+	if res, err := geoip.Lookup(geoSummary.db, ip); err == nil && res != nil {
+		cc = res.CountryCode
+	}
+	if geoSummary.byIP == nil || len(geoSummary.byIP) >= geoSummaryCacheMax {
+		geoSummary.byIP = make(map[string]string)
+	}
+	geoSummary.byIP[ip] = cc
+	return cc
 }
+
+// geoSummaryCacheMax bounds the cache. It is reset when full, which only
+// costs a fresh lookup per IP.
+const geoSummaryCacheMax = 4096

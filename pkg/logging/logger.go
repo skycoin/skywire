@@ -122,3 +122,15 @@ func (logger *Logger) Level() logrus.Level {
 	}
 	return GetLevel()
 }
+
+// IsLevelEnabled reports whether entries at level would be written, so a
+// hot path can skip building fields for a disabled level.
+func (logger *Logger) IsLevelEnabled(level logrus.Level) bool {
+	switch l := logger.FieldLogger.(type) {
+	case *logrus.Entry:
+		return l.Logger.IsLevelEnabled(level)
+	case *logrus.Logger:
+		return l.IsLevelEnabled(level)
+	}
+	return true
+}
