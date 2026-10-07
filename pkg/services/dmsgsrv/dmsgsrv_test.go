@@ -234,7 +234,7 @@ func TestServeDmsgSurfaces(t *testing.T) {
 		defer close(done)
 		// serveDmsgSurfaces blocks on <-ctx.Done(); canceling below
 		// makes it return after wiring up the health/debug surfaces.
-		svc.serveDmsgSurfaces(ctx, cancel, dmsgC, dClient)
+		svc.serveDmsgSurfaces(ctx, cancel, dmsgC, dClient, nil)
 	}()
 
 	// Give it a moment to set up the health mux + background listener,

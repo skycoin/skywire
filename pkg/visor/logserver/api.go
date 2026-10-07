@@ -57,6 +57,13 @@ type ForwardedPortLister interface {
 	PortWhitelist(port int) []cipher.PubKey
 }
 
+// dmsgHealthProvider adds the visor's dmsg sessions and the dmsg server it
+// runs, if any, to /health.
+type dmsgHealthProvider interface {
+	DmsgSessionCount() int
+	DmsgServerHealth() *httputil.DmsgServerHealth
+}
+
 // HealthStatsProvider provides transport statistics for the /health endpoint.
 type HealthStatsProvider interface {
 	// IsPublicAutoconnectRunning returns true if the public autoconnect module is running.
@@ -529,6 +536,10 @@ func (api *API) health(w http.ResponseWriter, req *http.Request) {
 		resp.StcprCount, resp.SudphCount = api.healthStatsProvider.GetTransportCounts()
 		resp.TransportCounts = api.healthStatsProvider.GetTransportTypeCounts()
 		resp.NetworkTypes = api.healthStatsProvider.GetNetworkTypes()
+		if d, ok := api.healthStatsProvider.(dmsgHealthProvider); ok {
+			resp.DmsgSessions = d.DmsgSessionCount()
+			resp.DmsgServer = d.DmsgServerHealth()
+		}
 	}
 
 	jsonObject, err := json.Marshal(resp)

@@ -189,6 +189,9 @@ func (s *service) Run(ctx context.Context) error {
 	return nil
 }
 
+// serverHealthFetchTimeout bounds one server's /health read for the status page.
+const serverHealthFetchTimeout = 15 * time.Second
+
 func (s *service) runDMSG(
 	ctx context.Context,
 	cancel context.CancelFunc,
@@ -271,6 +274,7 @@ func (s *service) runDMSG(
 	rb := logging.NewRingBuffer(0)
 	logging.AddHook(logging.NewWriteHook(rb))
 	s.stats.CountDmsg(dmsgDC)
+	a.SetServerHealthClient(&http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC), Timeout: serverHealthFetchTimeout})
 	s.stats.NamePort(dmsg.DefaultDmsgHTTPPort, "http")
 	s.stats.NamePort(skyenv.DmsgDMSGDClientsByServerCXOPort, "cxo clients-by-server")
 	handler := dmsghttp.WithDebug(s.stats.Handler(a), wl, rb.Bytes)

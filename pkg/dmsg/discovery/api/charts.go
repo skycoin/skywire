@@ -101,7 +101,57 @@ func (a *API) collectCharts(ctx context.Context) (map[string]float64, error) {
 			v[chartLANClients]++
 		}
 	}
+	if h := a.srvHealth.Load(); h != nil {
+		pks := make([]cipher.PubKey, 0, len(registered))
+		for pk := range registered {
+			pks = append(pks, pk)
+		}
+		h.collect(ctx, pks, v)
+	}
 	return v, nil
+}
+
+// serverLoadCharts draws the load registered servers report on their /health.
+func (a *API) serverLoadCharts(f *charts.Frame, from, now time.Time, reg map[string]*disc.Server) []charts.Chart {
+	if len(f.Keys(chartSrvOK)) == 0 {
+		return nil
+	}
+	var conns []charts.Series
+	for _, k := range f.Keys(chartSrvConns) {
+		pk := strings.TrimPrefix(k, chartSrvConns)
+		addr := ""
+		if s := reg[pk]; s != nil {
+			addr = s.Address
+		}
+		peers, active := "-", "-"
+		if n, ok := f.Latest(chartSrvPeers + pk); ok {
+			peers = strconv.FormatFloat(n, 'f', 0, 64)
+		}
+		if n, ok := f.Latest(chartSrvActive + pk); ok {
+			active = strconv.FormatFloat(n, 'f', 0, 64)
+		}
+		conns = append(conns, charts.Series{Name: pk, Vals: f.Values(k, false), Cells: []string{addr, peers, active}})
+	}
+	out := []charts.Chart{
+		{Title: "Bytes relayed per dmsg server", Note: "What each registered server carried between its clients and peers per 5 minutes, both ways, as it reports on its /health.",
+			Kind: charts.Stacked, Format: charts.Bytes, From: from, To: now, Times: f.Times, Series: f.Group(chartSrvBytes, 0)},
+		{Title: "Streams relayed per dmsg server", Note: "Streams each registered server opened between two of its sessions per 5 minutes.",
+			Kind: charts.Stacked, From: from, To: now, Times: f.Times, Series: f.Group(chartSrvStreams, 0)},
+		{Title: "Sessions per dmsg server", Note: "Clients connected to each registered server, as the server counts them. Each is one connection, however many streams it carries.",
+			Kind: charts.Lines, From: from, To: now, Times: f.Times, Series: conns,
+			Legend: []string{"Public key", "Address", "Peer servers", "Active streams", "Sessions"}},
+	}
+	var silent []string
+	for _, k := range f.Keys(chartSrvOK) {
+		if n, ok := f.Latest(k); ok && n == 0 {
+			silent = append(silent, strings.TrimPrefix(k, chartSrvOK))
+		}
+	}
+	if len(silent) > 0 {
+		sort.Strings(silent)
+		out[0].Note += " Not reporting yet (older version, or no answer): " + strings.Join(silent, ", ") + "."
+	}
+	return out
 }
 
 func (a *API) buildCharts(ctx context.Context, st charts.Store, r charts.Range, now time.Time) (charts.Content, error) {
@@ -169,6 +219,7 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, r charts.Range, 
 				{Name: "clients using them", Vals: f.Values(chartLANClients, false)},
 			}},
 	}}
+	out.Charts = append(out.Charts, a.serverLoadCharts(f, from, now, reg)...)
 	sort.SliceStable(lan, func(i, j int) bool { return lan[i].clients > lan[j].clients })
 	t := charts.Table{Title: "Hypervisor LAN dmsg servers now", Head: []string{"Public key", "Clients"}}
 	for _, l := range lan {
