@@ -106,8 +106,8 @@ github.com/0magnet/netscrape v0.0.0 h1:TMrxR52Y5CEEM59B67TBzglcROClYbAtkK73X8ugj
 github.com/0magnet/netscrape v0.0.0/go.mod h1:8KUKD6yyp1VhFqWG8MYA+xM9CD+6cdjoNoXrhP/QMOM=
 github.com/0magnet/osnotify v0.0.0 h1:o2rRLTiIR48hH/YkQpV2OiC6mr+9VSb6YCuP/edambk=
 github.com/0magnet/osnotify v0.0.0/go.mod h1:xNKk6t2OtJQfb/pmWNiH8zUi0YCBuhYAr+fYa+rQ46s=
-github.com/0magnet/pfilter v0.0.12 h1:XbMsK7BeocSRVz5i5f2mwxjW9Sae03s7j3JC8sV5RrY=
-github.com/0magnet/pfilter v0.0.12/go.mod h1:Z63sFB3IUeBZ7Gk56B1+hArxgANU9ajdUxcmRtH4OrQ=
+github.com/0magnet/pfilter v0.0.13 h1:qOpNQ3jAj/evrcJ5tMVKBpsK4og+BcShlSal7e+g2e0=
+github.com/0magnet/pfilter v0.0.13/go.mod h1:Z63sFB3IUeBZ7Gk56B1+hArxgANU9ajdUxcmRtH4OrQ=
 github.com/0magnet/plot-go v0.0.0 h1:kyKhHhr3tNpat+x30ZKv0hwSvatFEyZor0P3oZbuD1E=
 github.com/0magnet/plot-go v0.0.0/go.mod h1:jn5Dxpu9h7zoNCRAVOolQKm4i81H1zAFDZ9E4L8zNvM=
 github.com/0magnet/realorigin v0.2.3 h1:kbY8Vam6gkZnu4vBdcqO9geS8yeZbwnUH8wmiyqZ4c4=
