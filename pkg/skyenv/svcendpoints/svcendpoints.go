@@ -83,7 +83,6 @@ var Manifest = map[string][]Endpoint{
 	// transport-discovery — pkg/deployment/tpd/api/api.go
 	"tpd": {
 		{Method: "GET", Path: "/health", Desc: "service health + build info"},
-		{Method: "GET", Path: "/all-transports", Desc: "all registered transports"},
 		{Method: "GET", Path: "/all-transports/stats", Desc: "all-transports bandwidth stats"},
 		{Method: "GET", Path: "/all-transports/per-key-stats", Desc: "per-visor transport stats"},
 		{Method: "GET", Path: "/transports/id:{id}", Desc: "transport by ID"},

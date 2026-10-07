@@ -2,7 +2,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -320,68 +319,12 @@ func (api *API) getTransportStats(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, r, http.StatusOK, stats)
 }
 
+// getAllTransports answers 410. Sending the whole transport list to every
+// caller was most of TPD's egress; routers read the routing feed instead.
 func (api *API) getAllTransports(w http.ResponseWriter, r *http.Request) {
-	selfTransports := true
-	query := r.URL.Query()
-	selfTransportsParam := query.Get("selfTransports")
-	if selfTransportsParam == "hide" {
-		selfTransports = false
-	}
-
-	// /all-transports is the dominant TPD egress + CPU driver. Serve a
-	// memoized, gzipped response body so identical multi-MB requests don't
-	// re-marshal and re-send the full list per call. The rare ?pretty=true
-	// caller bypasses the cache (indented form).
-	pretty, _ := httputil.BoolFromQuery(r, "pretty", false) //nolint:errcheck
-	if pretty {
-		entries, err := api.allTransportsEntries(r.Context(), selfTransports)
-		if err != nil {
-			api.writeError(w, r, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, entries)
-		return
-	}
-
-	raw, gz, err := api.allTpsRespCache.body(selfTransports, func() ([]byte, error) {
-		entries, e := api.allTransportsEntries(r.Context(), selfTransports)
-		if e != nil {
-			return nil, e
-		}
-		return json.Marshal(entries)
+	httputil.WriteJSON(w, r, http.StatusGone, map[string]string{
+		"error": "the full transport list is no longer served; read the tpd-routing CXO feed",
 	})
-	if err != nil {
-		api.writeError(w, r, err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if gz != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-		w.Header().Set("Content-Encoding", "gzip")
-		w.Header().Set("Vary", "Accept-Encoding")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(gz) //nolint:errcheck
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(raw) //nolint:errcheck
-}
-
-// allTransportsEntries returns the all-transports list (data cache then store),
-// preserving the empty-list -> ErrTransportNotFound behavior callers expect.
-func (api *API) allTransportsEntries(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
-	entries := api.getTransportsFromCache(selfTransports)
-	if entries == nil {
-		var err error
-		entries, err = api.store.GetAllTransports(ctx, selfTransports)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if len(entries) == 0 {
-		return nil, store.ErrTransportNotFound
-	}
-	return entries, nil
 }
 
 func (api *API) getAllTransportsStats(w http.ResponseWriter, r *http.Request) {

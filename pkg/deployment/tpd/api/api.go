@@ -84,10 +84,6 @@ type API struct {
 	transportsCacheAt time.Time
 	transportsMu      sync.RWMutex
 
-	// allTpsRespCache memoizes the marshaled (+gzip) /all-transports body so the
-	// dominant-egress endpoint doesn't re-marshal/re-send ~3MB per call.
-	allTpsRespCache *allTransportsRespCache
-
 	// edgeRespCache memoizes the marshaled (+gzip) /transports/edge:<PK> body
 	// per edge so the second-busiest read endpoint collapses identical repeat
 	// polls from the same visor into a single Redis round-trip.
@@ -141,7 +137,6 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},
 		backupPath:                  backupPath,
-		allTpsRespCache:             newAllTransportsRespCache(allTransportsRespCacheTTL),
 		edgeRespCache:               newEdgeRespCache(edgeRespCacheTTL),
 	}
 
