@@ -372,6 +372,8 @@ func (s *service) startCXO(
 	s.cxo.AddPublisher(ctx, logger, "routing", skyenv.DmsgTPDRoutingCXOPort, rp, err)
 	sp, err := api.StartStatsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
 	s.cxo.AddPublisher(ctx, logger, "stats", skyenv.DmsgTPDStatsCXOPort, sp, err)
+	kp, err := api.StartPerKeyCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
+	s.cxo.AddPublisher(ctx, logger, "perkey", skyenv.DmsgTPDPerKeyCXOPort, kp, err)
 	vp, err := api.StartVisorBWCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
 	s.cxo.AddPublisher(ctx, logger, "visorbw", skyenv.DmsgTPDVisorBWCXOPort, vp, err)
 }

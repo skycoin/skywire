@@ -169,7 +169,7 @@ work" check. Useful right after deploy: if 'cxo refresh sd-services'
 shows paths>0 then any subsequent 'tp -m' will serve from the snapshot.
 
 Feed names: tpd-metrics, tpd-uptime, sd-services,
-dmsgd-clients-by-server, tpd-all-transports, tpd-stats.`,
+dmsgd-clients-by-server, tpd-all-transports, tpd-stats, tpd-perkey.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -178,7 +178,7 @@ dmsgd-clients-by-server, tpd-all-transports, tpd-stats.`,
 
 		var feeds []string
 		if cxoRefreshAll {
-			feeds = []string{"tpd-metrics", "tpd-uptime", "sd-services", "dmsgd-clients-by-server", "tpd-all-transports", "tpd-stats"}
+			feeds = []string{"tpd-metrics", "tpd-uptime", "sd-services", "dmsgd-clients-by-server", "tpd-all-transports", "tpd-stats", "tpd-perkey"}
 		} else {
 			if len(args) != 1 {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("usage: visor cxo refresh <feed>  (or --all)"))
@@ -233,6 +233,10 @@ Paths per feed:
                           stamped with a completeness verdict — see the
                           "complete"/"confidence" fields before charting
                           an absolute count
+  tpd-perkey              keys
+                          every visor's transports counted by type, the
+                          /all-transports/per-key-stats body; republished
+                          every minute
   (dmsgd-clients-by-server has no FetchCXO case — Walk it via your own RPC if needed)`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {

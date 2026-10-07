@@ -36,8 +36,10 @@ func TestCXOFeedForURLStats(t *testing.T) {
 		{tpd + "/version?on=true", "", "", false},
 		{tpd + "/version?on=false", "", "", false},
 
-		// The per-key rollup is deliberately not on this feed.
-		{tpd + "/all-transports/per-key-stats", "", "", false},
+		// The per-key rollup has its own feed, default table only.
+		{tpd + "/all-transports/per-key-stats", "tpd-perkey", "keys", true},
+		{tpdDmsg + "/all-transports/per-key-stats", "tpd-perkey", "keys", true},
+		{tpd + "/all-transports/per-key-stats?selfTransports=hide", "", "", false},
 
 		// And the sibling bulk endpoint keeps its own feed.
 		{tpd + "/all-transports", "tpd-all-transports", "without-self", true},

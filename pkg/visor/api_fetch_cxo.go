@@ -138,6 +138,20 @@ func (v *Visor) FetchCXO(args visorapi.FetchCXOArgs) (*visorapi.FetchCXOResult, 
 		}
 		return &visorapi.FetchCXOResult{Hit: true, Body: body, LastRootAt: ts}, nil
 
+	case "tpd-perkey":
+		// Path is "keys": the /all-transports/per-key-stats body.
+		if args.Path != "keys" {
+			return &visorapi.FetchCXOResult{Reason: "invalid path for tpd-perkey: " + args.Path}, nil
+		}
+		body, ts, err := v.FetchTPDPerKeyCXO()
+		if err != nil {
+			if errors.Is(err, ErrTPDPerKeyNotReady) {
+				return &visorapi.FetchCXOResult{Reason: "tpd-perkey: cache miss"}, nil
+			}
+			return &visorapi.FetchCXOResult{Reason: "tpd-perkey: " + err.Error()}, nil
+		}
+		return &visorapi.FetchCXOResult{Hit: true, Body: body, LastRootAt: ts}, nil
+
 	default:
 		return &visorapi.FetchCXOResult{Reason: "unknown feed: " + args.Feed}, nil
 	}
@@ -172,7 +186,7 @@ func (v *Visor) CXORefreshFeed(args visorapi.CXORefreshArgs) (*visorapi.FeedStat
 	}
 	feed, ok := CXOFeedFromString(args.Feed)
 	if !ok {
-		return nil, fmt.Errorf("unknown feed %q (valid: tpd-metrics, tpd-uptime, sd-services, dmsgd-clients-by-server, tpd-all-transports, tpd-stats)", args.Feed)
+		return nil, fmt.Errorf("unknown feed %q (valid: tpd-metrics, tpd-uptime, sd-services, dmsgd-clients-by-server, tpd-all-transports, tpd-stats, tpd-perkey)", args.Feed)
 	}
 	timeout := args.Timeout
 	if timeout <= 0 {

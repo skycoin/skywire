@@ -72,8 +72,8 @@ func (v *Visor) networkView(forceRefresh bool) (*visorapi.NetworkViewResponse, e
 }
 
 // computeNetworkView does the actual aggregation. Mirrors the
-// structure of `cli sd`: fetch SD (3 service types) + TPD all-
-// transports + UT, build a PK-keyed map, count transports by type.
+// structure of `cli sd`: fetch SD (3 service types) + TPD per-key
+// transport counts + UT, build a PK-keyed map.
 //
 // SD is queried via the visor's existing FetchServiceData plumbing
 // (the visor knows its configured discovery URLs); a partial
@@ -81,7 +81,18 @@ func (v *Visor) networkView(forceRefresh bool) (*visorapi.NetworkViewResponse, e
 // the whole call — the missing slice is treated as empty so the
 // table still renders with what we got.
 func (v *Visor) computeNetworkView() *visorapi.NetworkViewResponse {
-	return netview.Compute(v.FetchServiceData)
+	return netview.Compute(v.networkViewFetch)
+}
+
+// networkViewFetch is FetchServiceData with the per-key counts served from
+// TPD's per-key CXO feed (~38 KB) when it has them, and over HTTP otherwise.
+func (v *Visor) networkViewFetch(service, path string) ([]byte, error) {
+	if service == "tpd" && path == "/all-transports/per-key-stats" {
+		if body, _, err := v.FetchTPDPerKeyCXO(); err == nil {
+			return body, nil
+		}
+	}
+	return v.FetchServiceData(service, path)
 }
 
 // formatNetworkViewError is a placeholder for richer error
