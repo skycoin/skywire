@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -79,6 +80,9 @@ type ManagedTransport struct {
 	logMx       sync.Mutex
 	logUpdates  uint32
 	isInitiator bool // we dialed out (outgoing) vs accepted an inbound dial (incoming)
+
+	// rhdr is readPacket's header scratch. There is one reader per transport.
+	rhdr [routing.PacketHeaderSize]byte
 
 	// openedAt and onClose feed the manager's transport event ring; see
 	// transport_events.go.
@@ -839,7 +843,9 @@ func (mt *ManagedTransport) handleTransportPong(p routing.Packet) {
 		return
 	}
 	mt.SetLatency(rttMs)
-	mt.log.WithField("rtt_ms", fmt.Sprintf("%.2f", rttMs)).Trace("Transport ping RTT")
+	if mt.log.IsLevelEnabled(logrus.TraceLevel) {
+		mt.log.WithField("rtt_ms", fmt.Sprintf("%.2f", rttMs)).Trace("Transport ping RTT")
+	}
 }
 
 const (
@@ -1430,8 +1436,6 @@ func (mt *ManagedTransport) WriteRawPacket(packet routing.Packet) error {
 // readPacket also returns the conn the packet was read from (or that failed),
 // so readLoop can tell a swapped-out conn's error from a real failure.
 func (mt *ManagedTransport) readPacket() (packet routing.Packet, tp network.Transport, err error) {
-	log := mt.log.WithField("func", "readPacket")
-
 	for {
 		if tp = mt.getTransport(); tp != nil {
 			break
@@ -1443,38 +1447,42 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, tp network.Tran
 		}
 	}
 
-	log.Trace("Awaiting packet...")
+	trace := mt.log.IsLevelEnabled(logrus.TraceLevel)
+	if trace {
+		mt.log.WithField("func", "readPacket").Trace("Awaiting packet...")
+	}
 
 	// Set a read deadline to prevent blocking forever on a half-open TCP connection.
 	// Without this, a dead transport causes the readLoop goroutine to leak permanently.
 	// The deadline is refreshed on each read attempt; successful reads reset it.
 	const readTimeout = 3 * time.Minute
 	if err = tp.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
-		log.WithError(err).Debug("Failed to set read deadline")
+		mt.log.WithField("func", "readPacket").WithError(err).Debug("Failed to set read deadline")
 	}
 
-	h := make(routing.Packet, routing.PacketHeaderSize)
+	h := mt.rhdr[:]
 	if _, err = io.ReadFull(tp, h); err != nil {
-		log.WithError(err).Debugf("Failed to read packet header.")
+		mt.log.WithField("func", "readPacket").WithError(err).Debugf("Failed to read packet header.")
 		return nil, tp, err
 	}
-	log.WithField("header_len", len(h)).WithField("header_raw", h).Trace("Read packet header.")
-	p := make([]byte, h.Size())
-	if _, err = io.ReadFull(tp, p); err != nil {
-		log.WithError(err).Debugf("Failed to read packet payload.")
+	packet = make(routing.Packet, routing.PacketHeaderSize+int(routing.Packet(h).Size()))
+	copy(packet, h)
+	if _, err = io.ReadFull(tp, packet[routing.PacketHeaderSize:]); err != nil {
+		mt.log.WithField("func", "readPacket").WithError(err).Debugf("Failed to read packet payload.")
 		return nil, tp, err
 	}
-	log.WithField("payload_len", len(p)).Trace("Read packet payload.")
 
-	packet = append(h, p...)
 	if n := len(packet); n > routing.PacketHeaderSize {
 		mt.logRecv(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
 	}
 
-	log.WithField("type", packet.Type().String()).
-		WithField("rt_id", packet.RouteID()).
-		WithField("size", packet.Size()).
-		Trace("Received packet.")
+	if trace {
+		mt.log.WithField("func", "readPacket").
+			WithField("type", packet.Type().String()).
+			WithField("rt_id", packet.RouteID()).
+			WithField("size", packet.Size()).
+			Trace("Received packet.")
+	}
 	return packet, tp, nil
 }
 
@@ -1502,7 +1510,9 @@ func (mt *ManagedTransport) logRecv(b uint64) {
 // and returns true if it was bigger than 0
 func (mt *ManagedTransport) logMod() bool {
 	if ops := atomic.SwapUint32(&mt.logUpdates, 0); ops > 0 {
-		mt.log.WithField("func", "ManagedTransport.logMod").Tracef("entry log: recording %d operations", ops)
+		if mt.log.IsLevelEnabled(logrus.TraceLevel) {
+			mt.log.WithField("func", "ManagedTransport.logMod").Tracef("entry log: recording %d operations", ops)
+		}
 		return true
 	}
 	return false
