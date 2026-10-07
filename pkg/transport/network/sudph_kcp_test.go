@@ -36,12 +36,20 @@ func TestKCPOverPacketFilter(t *testing.T) {
 	_ = l.Close() //nolint:errcheck
 }
 
-// A dialed session gets its packets from the filter's read goroutine.
+// A dialed session and a listener get their packets from the filter's read
+// goroutine.
 func TestKCPDialOverPacketFilterPushes(t *testing.T) {
-	l, err := kcp.ListenWithOptions("127.0.0.1:0", nil, 0, 0)
+	srv, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer srv.Close() //nolint:errcheck
+	srvFilter := pfilter.NewPacketFilter(srv)
+	l, err := kcp.ServeConn(nil, 0, 0, pushPacketConn(srvFilter.NewConn(20, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srvFilter.Start()
 	defer l.Close() //nolint:errcheck
 	go func() {
 		c, err := l.AcceptKCP()
@@ -63,7 +71,7 @@ func TestKCPDialOverPacketFilterPushes(t *testing.T) {
 		t.Fatal("dial conn hides the packet receiver")
 	}
 
-	sess, err := kcp.NewConn(l.Addr().String(), nil, 0, 0, conn)
+	sess, err := kcp.NewConn(srv.LocalAddr().String(), nil, 0, 0, conn)
 	if err != nil {
 		t.Fatal(err)
 	}
