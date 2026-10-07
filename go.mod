@@ -24,7 +24,7 @@ require (
 	github.com/0magnet/metrics v1.44.1-0.20261004194541-261721063b63
 	github.com/0magnet/netscrape v0.0.0
 	github.com/0magnet/osnotify v0.0.0
-	github.com/0magnet/pfilter v0.0.13
+	github.com/0magnet/pfilter v0.0.14
 	github.com/0magnet/plot-go v0.0.0
 	github.com/0magnet/realorigin v0.2.3
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
