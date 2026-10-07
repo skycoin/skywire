@@ -78,11 +78,7 @@ func NewPacketFilterWithConfig(config Config) (*PacketFilter, error) {
 		packetSize: config.BufferSize,
 		backlog:    config.Backlog,
 		batchSize:  config.BatchSize,
-		bufPool: sync.Pool{
-			New: func() interface{} {
-				return make([]byte, config.BufferSize)
-			},
-		},
+		bufPool:    newBufPool(config.BufferSize),
 	}
 	if config.BatchSize > 0 {
 		if _, ok := config.Conn.(*net.UDPConn); ok {
@@ -107,7 +103,7 @@ type PacketFilter struct {
 	packetSize int
 	backlog    int
 	batchSize  int
-	bufPool    sync.Pool
+	bufPool    *bufPool
 
 	conns []*filteredConn
 	mut   sync.Mutex
@@ -180,7 +176,7 @@ func (d *PacketFilter) Start() {
 }
 
 func (d *PacketFilter) readFrom() []messageWithError {
-	buf := d.bufPool.Get().([]byte)
+	buf := d.bufPool.get()
 	n, addr, err := d.conn.ReadFrom(buf)
 
 	return []messageWithError{
@@ -207,8 +203,8 @@ func (d *PacketFilter) readBatch(batch []ipv4.Message, result []messageWithError
 	for i := range batch {
 		// Buffers is new each time because a queued message keeps it.
 		batch[i] = ipv4.Message{
-			Buffers: [][]byte{d.bufPool.Get().([]byte)},
-			OOB:     d.bufPool.Get().([]byte),
+			Buffers: [][]byte{d.bufPool.get()},
+			OOB:     d.bufPool.get(),
 		}
 	}
 
@@ -242,8 +238,8 @@ func (d *PacketFilter) readBatch(batch []ipv4.Message, result []messageWithError
 var errUnexpectedNegativeLength = errors.New("ReadMsgUDP returned a negative number of read bytes")
 
 func (d *PacketFilter) readMsgUdp() []messageWithError {
-	buf := d.bufPool.Get().([]byte)
-	oobBuf := d.bufPool.Get().([]byte)
+	buf := d.bufPool.get()
+	oobBuf := d.bufPool.get()
 	n, oobn, flags, addr, err := d.oobConn.ReadMsgUDP(buf, oobBuf)
 
 	// This is entirely unexpected, but happens in the wild
@@ -291,7 +287,7 @@ func (d *PacketFilter) loop(msgReader func() []messageWithError) {
 						continue
 					}
 					select {
-					case conn.recvBuffer <- msg.Copy(&d.bufPool):
+					case conn.recvBuffer <- msg.Copy(d.bufPool):
 					default:
 						atomic.AddUint64(&d.overflow, 1)
 					}
@@ -331,10 +327,10 @@ func (d *PacketFilter) loop(msgReader func() []messageWithError) {
 
 func (d *PacketFilter) returnBuffers(msg ipv4.Message) {
 	for _, buf := range msg.Buffers {
-		d.bufPool.Put(buf[:d.packetSize])
+		d.bufPool.put(buf[:d.packetSize])
 	}
 	if msg.OOB != nil {
-		d.bufPool.Put(msg.OOB[:d.packetSize])
+		d.bufPool.put(msg.OOB[:d.packetSize])
 	}
 }
 

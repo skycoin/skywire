@@ -2,7 +2,6 @@ package pfilter
 
 import (
 	"net"
-	"sync"
 
 	"golang.org/x/net/ipv4"
 )
@@ -49,9 +48,9 @@ type messageWithError struct {
 	Err error
 }
 
-func (m *messageWithError) Copy(pool *sync.Pool) messageWithError {
-	buf := pool.Get().([]byte)
-	oobBuf := pool.Get().([]byte)
+func (m *messageWithError) Copy(pool *bufPool) messageWithError {
+	buf := pool.get()
+	oobBuf := pool.get()
 
 	copy(buf, m.Buffers[0][:m.N])
 	if m.NN > 0 {
@@ -68,5 +67,32 @@ func (m *messageWithError) Copy(pool *sync.Pool) messageWithError {
 			Flags:   m.Flags,
 		},
 		Err: m.Err,
+	}
+}
+
+// bufPool keeps up to 256 packet buffers. A sync.Pool boxes each []byte it
+// is given, an allocation for every packet.
+type bufPool struct {
+	size int
+	free chan []byte
+}
+
+func newBufPool(size int) *bufPool {
+	return &bufPool{size: size, free: make(chan []byte, 256)}
+}
+
+func (p *bufPool) get() []byte {
+	select {
+	case b := <-p.free:
+		return b
+	default:
+		return make([]byte, p.size)
+	}
+}
+
+func (p *bufPool) put(b []byte) {
+	select {
+	case p.free <- b:
+	default:
 	}
 }
