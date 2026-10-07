@@ -6,8 +6,8 @@ import (
 	"net"
 	"testing"
 
+	kcp "github.com/0magnet/kcp-go/v5"
 	"github.com/AudriusButkevicius/pfilter"
-	"github.com/xtaci/kcp-go/v5"
 )
 
 // kcp-go v5.6 panicked building batch IO on a pfilter conn, which has
