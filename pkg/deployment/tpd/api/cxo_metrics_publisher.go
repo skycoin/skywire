@@ -239,6 +239,13 @@ func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
 
 	fresh := window[:days]
 	byDate := store.PivotDailyMetrics(metrics, fresh)
+	if days > open {
+		perDay := make(map[string]int, len(fresh))
+		for _, d := range fresh {
+			perDay[d] = len(byDate[d])
+		}
+		m.log.WithField("transports", len(metrics)).WithField("per_day", perDay).Info("Rebuilt the metrics window")
+	}
 
 	bodies := make(map[string][][]byte, len(fresh))
 	for _, date := range fresh {
