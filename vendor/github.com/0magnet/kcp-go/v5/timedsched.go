@@ -83,8 +83,8 @@ func (h *timedFuncHeap) pop() timedFunc {
 }
 
 // schedSlack is how early a task may run so that one wakeup serves several
-// tasks. KCP's update tolerates this, since flush works out its own timing.
-const schedSlack = time.Millisecond
+// tasks. It is half of KCP's shortest update interval, 10ms.
+const schedSlack = 5 * time.Millisecond
 
 // TimedSched runs functions at given times on a few shard goroutines.
 //
