@@ -147,6 +147,12 @@ func (p *VisorBWCXOPublisher) publishOnce(ctx context.Context, now time.Time) {
 				continue
 			}
 			day := store.ComputeVisorBW(records, d)
+			if len(day.Visors) == 0 {
+				// The day's leaf missed its rows. Publishing it would hand the
+				// reward system an empty day, so wait for the leaf to be rebuilt.
+				p.log.WithField("date", d).Debug("settled day has no per-visor bandwidth yet")
+				continue
+			}
 			body, err := json.Marshal(day)
 			if err != nil {
 				continue

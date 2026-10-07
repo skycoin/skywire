@@ -3,6 +3,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -145,14 +146,25 @@ func edgesFromDailyHash(h map[string]string) ([2]cipher.PubKey, bool) {
 	return edges, n > 0
 }
 
+// bwIndexScanTimeout bounds one scan, which no longer stops when the request
+// that started it is canceled.
+const bwIndexScanTimeout = 5 * time.Minute
+
 // bandwidthIndex returns the cached index, rebuilding it after bwIndexTTL.
-func (s *redisStore) bandwidthIndex(ctx context.Context) *bwDayIndex {
+// The scan runs to completion even when ctx is canceled, since every reader
+// shares it, and only a complete index is cached or returned.
+func (s *redisStore) bandwidthIndex(ctx context.Context) (*bwDayIndex, error) {
 	if ix, ok := s.bwIndex.get(); ok {
-		return ix
+		return ix, nil
 	}
-	ix := s.scanBandwidthIndex(ctx)
+	scanCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), bwIndexScanTimeout)
+	defer cancel()
+	ix, err := s.scanBandwidthIndex(scanCtx)
+	if err != nil {
+		return nil, err
+	}
 	s.bwIndex.put(ix)
-	return ix
+	return ix, nil
 }
 
 // scanBatch bounds one pipeline in the edge-recovery pass.
@@ -162,7 +174,7 @@ const scanBatch = 1000
 // pair of every transport it finds: from the persisted bw:edges:<id> value
 // (pipelined GETs), falling back to the field names of a daily hash the scan
 // saw for transports registered before that value existed.
-func (s *redisStore) scanBandwidthIndex(ctx context.Context) *bwDayIndex {
+func (s *redisStore) scanBandwidthIndex(ctx context.Context) (*bwDayIndex, error) {
 	started := time.Now()
 	now := started.UTC()
 	ix := &bwDayIndex{
@@ -183,7 +195,8 @@ func (s *redisStore) scanBandwidthIndex(ctx context.Context) *bwDayIndex {
 		}
 	}
 	if err := iter.Err(); err != nil {
-		s.log.WithError(err).Warn("bandwidth index scan failed; index is partial")
+		s.log.WithError(err).Warn("bandwidth index scan failed")
+		return nil, fmt.Errorf("bandwidth index scan: %w", err)
 	}
 
 	ids := make([]uuid.UUID, 0, len(ix.byID))
@@ -239,7 +252,10 @@ func (s *redisStore) scanBandwidthIndex(ctx context.Context) *bwDayIndex {
 	s.log.WithField("transports", len(ix.byID)).WithField("edges", len(ix.edges)).
 		WithField("took", time.Since(started).Round(time.Millisecond)).
 		Debug("Rebuilt bandwidth day index")
-	return ix
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("bandwidth index edges: %w", err)
+	}
+	return ix, nil
 }
 
 // newestBit is the lowest set bit's position: the most recent day with data.
@@ -261,11 +277,14 @@ func newestBit(mask uint64) int {
 // drops offline. The `registered` filter is applied FRESH on every call so a
 // transport that just (re)registered is dropped at once rather than being
 // reported as expired for up to the index TTL.
-func (s *redisStore) expiredTransportEntries(ctx context.Context, registered map[uuid.UUID]bool, days int) ([]*transport.Entry, map[uuid.UUID]bool) {
+func (s *redisStore) expiredTransportEntries(ctx context.Context, registered map[uuid.UUID]bool, days int) ([]*transport.Entry, map[uuid.UUID]bool, error) {
 	if days <= 0 || days > bwIndexMaxDays {
 		days = bwIndexMaxDays
 	}
-	ix := s.bandwidthIndex(ctx)
+	ix, err := s.bandwidthIndex(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	mask := ix.windowMask(time.Now().UTC(), days)
 	expiredIDs := make(map[uuid.UUID]bool)
 	var entries []*transport.Entry
@@ -281,7 +300,7 @@ func (s *redisStore) expiredTransportEntries(ctx context.Context, registered map
 		expiredIDs[id] = true
 	}
 	if len(entries) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
-	return entries, expiredIDs
+	return entries, expiredIDs, nil
 }
