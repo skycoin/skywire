@@ -194,6 +194,7 @@ func (cs *ClientSession) DialStream(ctx context.Context, dst Addr) (dStr *Stream
 		return nil, err
 	}
 
+	dStr.census.set(0, "dialed")
 	return dStr, err
 }
 
