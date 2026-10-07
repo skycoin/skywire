@@ -437,6 +437,7 @@ type Visor struct {
 	embeddedSkymailBridge *EmbeddedSkymailBridge
 	tpdAnnounce           tpdAnnounceStats           // announces of the transport-list feed, for visor state
 	tpdFeed               atomic.Pointer[tpdFeedRef] // the transport-list feed, for tpdFeedHealthy
+	arBindings            arBindingsIndex            // the address resolver's bindings feed, for lookups
 	mail                  skymailHost
 	embeddedWisp          *EmbeddedWisp
 	// Shared VStreamMux for skynet forwarding (route ID 0).

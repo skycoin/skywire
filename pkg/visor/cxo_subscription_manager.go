@@ -48,6 +48,7 @@ const (
 	FeedTPDStats             = cxosub.FeedTPDStats
 	FeedTPDRouting           = cxosub.FeedTPDRouting
 	FeedARReach              = cxosub.FeedARReach
+	FeedARBindings           = cxosub.FeedARBindings
 )
 
 // Re-exported tab constants.
@@ -62,6 +63,7 @@ const (
 	TabDmsgEntryLookup   = cxosub.TabDmsgEntryLookup
 	TabNetworkStats      = cxosub.TabNetworkStats
 	TabTransportMetrics  = cxosub.TabTransportMetrics
+	TabARResolve         = cxosub.TabARResolve
 )
 
 // feedFirstSyncTimeout forwards to cxosub so the RPC fetch/refresh default
@@ -168,6 +170,12 @@ func (v *Visor) cxoFeedSpec(fk cxosub.Feed) (cipher.PubKey, uint16, string, erro
 			return cipher.PubKey{}, 0, "", errors.New("no AR CXO peer (transport.address_resolver is not dmsg://)")
 		}
 		return pk, skyenv.DmsgARReachCXOPort, "reach/", nil
+	case FeedARBindings:
+		pk, ok := arBindCXOPeer(v)
+		if !ok {
+			return cipher.PubKey{}, 0, "", errors.New("no AR CXO peer (transport.address_resolver is not dmsg://)")
+		}
+		return pk, skyenv.DmsgARBindingsCXOPort, "", nil
 	}
 	return cipher.PubKey{}, 0, "", fmt.Errorf("unknown feed: %d", fk)
 }

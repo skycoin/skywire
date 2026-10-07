@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -128,6 +129,8 @@ type VisorData struct {
 // reached via dmsg, when v6 init failed, or when the caller didn't
 // supply a v6 client — preserves pre-#1525 v4-only behavior.
 type httpClient struct {
+	// fastResolve, when set, answers lookups other than sudph before HTTP.
+	fastResolve    atomic.Pointer[FastResolve]
 	log            *logging.Logger
 	mLog           *logging.MasterLogger
 	httpClient     *httpauthclient.Client
@@ -939,6 +942,14 @@ func (c *httpClient) serveSUDPHConn(arConn net.Conn, addrCh chan<- RemoteVisor) 
 }
 
 func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error) {
+	if types.NormalizeType(types.Type(tType)) != types.SUDPH {
+		if f := c.fastResolve.Load(); f != nil {
+			if data, ok := (*f)(ctx, tType, pk); ok {
+				data.IsLocal = sameHost(data.RemoteAddr, c.localPublicIPRaw())
+				return data, nil
+			}
+		}
+	}
 	if !c.isReady() {
 		return VisorData{}, ErrNotReady
 	}
