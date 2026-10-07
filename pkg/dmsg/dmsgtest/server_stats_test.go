@@ -24,6 +24,8 @@ func TestServerStats(t *testing.T) {
 
 	lis, err := dst.Listen(80)
 	require.NoError(t, err)
+	// The destination holds its end open until the active count is read.
+	release := make(chan struct{})
 	go func() {
 		str, err := lis.AcceptStream()
 		if err != nil {
@@ -33,6 +35,7 @@ func TestServerStats(t *testing.T) {
 		if _, err := io.ReadFull(str, buf); err == nil {
 			_, _ = str.Write(make([]byte, 300)) //nolint:errcheck
 		}
+		<-release
 		_ = str.Close() //nolint:errcheck
 	}()
 
@@ -42,6 +45,7 @@ func TestServerStats(t *testing.T) {
 	_, err = io.ReadFull(str, make([]byte, 300))
 	require.NoError(t, err)
 	require.Equal(t, int64(1), srv.Stats().ActiveStreams)
+	close(release)
 	require.NoError(t, str.Close())
 
 	require.Eventually(t, func() bool {
