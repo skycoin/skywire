@@ -19,16 +19,20 @@ import (
 // Series keys the address resolver samples. Lookups and binds are counted
 // per sample interval.
 const (
-	chartPeers      = "peers"
-	chartLive       = "udp.live"
-	chartBound      = "bound."
-	chartOpen       = "open."
-	chartClosed     = "closed."
-	chartFound      = "found."
-	chartNotFound   = "notfound."
-	chartBinds      = "binds."
-	resolveFound    = "found"
-	resolveNotFound = "notfound"
+	chartPeers        = "peers"
+	chartLive         = "udp.live"
+	chartBound        = "bound."
+	chartOpen         = "open."
+	chartClosed       = "closed."
+	chartFound        = "found."
+	chartNotFound     = "notfound."
+	chartBinds        = "binds."
+	chartBindHTTP     = "src.http."
+	chartBindCXO      = "src.cxo."
+	chartBindUDP      = "src.udp"
+	chartListRequests = "req.transports"
+	resolveFound      = "found"
+	resolveNotFound   = "notfound"
 )
 
 // arCounters counts lookups and binds since the resolver started.
@@ -150,9 +154,22 @@ func buildCharts(ctx context.Context, st charts.Store, r charts.Range, now time.
 		chart("Visors with a binding, by type",
 			"Visors that told the resolver where they can be dialed, and those holding a sudph control link.", charts.Lines, bound),
 		reach,
+		chart("Requests", "Requests visors made to the address resolver per 5 minutes: lookups, binds over HTTP and over the sudph control link, and fetches of every peer's advertised types.",
+			charts.Lines, []charts.Series{
+				{Name: "lookups", Vals: sumSeries(append(append([]charts.Series{}, found...), notFound...), len(f.Times))},
+				{Name: "binds over HTTP", Vals: sumSeries(f.Group(chartBindHTTP, 0), len(f.Times))},
+				{Name: "sudph binds over UDP", Vals: f.Values(chartBindUDP, true)},
+				{Name: "full lists", Vals: f.Values(chartListRequests, true)},
+			}),
 		chart("Lookups", "Address lookups per 5 minutes, and how many found a binding.", charts.Lines, lookups),
 		chart("Lookups that found a binding, by type", "Successful lookups per 5 minutes.", charts.Stacked, found),
-		chart("Binds by type", "Bindings registered or refreshed per 5 minutes.", charts.Stacked, f.Group(chartBinds, 0)),
+		chart("Lookups that found nothing, by type", "Lookups of a peer with no binding of that type, per 5 minutes.", charts.Stacked, notFound),
+		chart("Bindings written, by source", "Store writes per 5 minutes: HTTP binds, refreshes from visors' CXO feeds, and sudph binds over UDP.",
+			charts.Stacked, []charts.Series{
+				{Name: "HTTP", Vals: sumSeries(f.Group(chartBindHTTP, 0), len(f.Times))},
+				{Name: "CXO feed", Vals: sumSeries(f.Group(chartBindCXO, 0), len(f.Times))},
+				{Name: "sudph UDP", Vals: f.Values(chartBindUDP, true)},
+			}),
 	}}, nil
 }
 
