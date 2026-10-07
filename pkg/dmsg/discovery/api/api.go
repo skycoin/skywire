@@ -48,6 +48,9 @@ type API struct {
 	// Stats, when set, adds the process and traffic charts to the status page.
 	Stats *charts.ServiceStats
 
+	// srvHealth reads registered servers' load for the status page.
+	srvHealth atomic.Pointer[serverHealth]
+
 	http.Handler
 	metrics                     metrics.Metrics
 	db                          store.Storer

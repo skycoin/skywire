@@ -33,6 +33,7 @@ import (
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/flightrec"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/rfclient"
@@ -1547,6 +1548,24 @@ func (v *Visor) GetTransportTypeCounts() map[string]int {
 func (v *Visor) GetTransportCounts() (stcpr, sudph int) {
 	counts := v.GetTransportTypeCounts()
 	return counts[string(tptypes.STCPR)], counts[string(tptypes.SUDPH)]
+}
+
+// DmsgSessionCount is the visor's sessions with dmsg servers.
+func (v *Visor) DmsgSessionCount() int {
+	if v.dmsgC == nil {
+		return 0
+	}
+	return len(v.dmsgC.AllSessions())
+}
+
+// DmsgServerHealth is the load of the dmsg server this visor runs, or nil.
+func (v *Visor) DmsgServerHealth() *httputil.DmsgServerHealth {
+	srv := v.dmsgSrv.Load()
+	if srv == nil {
+		return nil
+	}
+	st := srv.Stats()
+	return httputil.DmsgServerHealthOf(st.ClientSessions, st.PeerSessions, st.ActiveStreams, st.StreamsRelayed, st.BytesUp, st.BytesDown)
 }
 
 // GetNetworkTypes returns the network types used by the visor.
