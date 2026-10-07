@@ -1409,20 +1409,6 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 	}
 }
 
-func (c *EntityCommon) entryProtocol(ctx context.Context, pk cipher.PubKey) string {
-	endpoints := c.snapshotDiscoveries()
-	for _, ep := range endpoints {
-		entry, err := ep.Client.Entry(ctx, pk)
-		if err != nil {
-			continue
-		}
-		c.log.WithField("entry", entry).Debug("Entry's protocol fetch.")
-		return entry.Protocol
-	}
-	c.log.WithField("pk", pk).Warn("Entry not found in any discovery; returning empty protocol.")
-	return ""
-}
-
 func (c *EntityCommon) delEntry(ctx context.Context) (err error) {
 	endpoints := c.snapshotDiscoveries()
 	if len(endpoints) == 0 {
