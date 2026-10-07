@@ -442,7 +442,10 @@ func (s *redisStore) GetAllTransportMetrics(ctx context.Context, query MetricsQu
 	for _, e := range entries {
 		registered[e.ID] = true
 	}
-	expiredEntries, expiredIDs := s.expiredTransportEntries(ctx, registered, query.Days)
+	expiredEntries, expiredIDs, err := s.expiredTransportEntries(ctx, registered, query.Days)
+	if err != nil {
+		return nil, err
+	}
 	entries = append(entries, expiredEntries...)
 
 	return s.buildTransportMetrics(ctx, entries, expiredIDs, query)

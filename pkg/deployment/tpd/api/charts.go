@@ -324,6 +324,9 @@ func (api *API) visorBandwidthTable(ctx context.Context, c *tpdCharts, now time.
 			return charts.Table{}, false
 		}
 		day := store.ComputeVisorBW(records, date)
+		if len(day.Visors) == 0 {
+			return charts.Table{}, false
+		}
 		c.visorBW = &day
 	}
 	return visorBWTable(c.visorBW, api.serverRoles(ctx)), true
