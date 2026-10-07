@@ -33,6 +33,8 @@ func TestCollectChartsCountsRequestsPerInterval(t *testing.T) {
 	require.Equal(t, 1.0, v[chartNoRoute])
 	require.Equal(t, 1.0, v[chartHopsPrefix+"2"])
 	require.Equal(t, 40.0, v[chartMeanMs])
+	require.Equal(t, 40.0, v[chartP50Ms])
+	require.Equal(t, 40.0, v[chartP95Ms])
 
 	a.stats.request(1, 10*time.Millisecond)
 	a.stats.route(9)
@@ -41,6 +43,7 @@ func TestCollectChartsCountsRequestsPerInterval(t *testing.T) {
 	require.Equal(t, 0.0, v[chartNoRoute])
 	require.Equal(t, 1.0, v[chartHopsPrefix+"6"], "long routes count in the last bucket")
 	require.Equal(t, 10.0, v[chartMeanMs])
+	require.Equal(t, 10.0, v[chartP50Ms], "only the searches since the last sample")
 }
 
 func collect(t *testing.T, a *API, c *rfCharts) map[string]float64 {
