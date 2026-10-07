@@ -55,3 +55,15 @@ func TestLookupsAndBindsAreCounted(t *testing.T) {
 	a.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	require.Equal(t, http.StatusNotFound, rec.Code, "no page before charts start")
 }
+
+func TestRequestSourcesAreCounted(t *testing.T) {
+	a := newTestAPI(t)
+	a.transports(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/transports", nil))
+	pk, _ := cipher.GenerateKeyPair()
+	a.IngestBindFromCXO(t.Context(), pk, types.STCPR, addrresolver.LocalAddresses{Port: "7777"})
+
+	n := a.counters.snapshot()
+	require.Equal(t, uint64(1), n[chartListRequests])
+	require.Equal(t, uint64(1), n[chartBindCXO+"stcpr"])
+	require.Zero(t, n[chartBindHTTP+"stcpr"], "a CXO refresh is not an HTTP request")
+}

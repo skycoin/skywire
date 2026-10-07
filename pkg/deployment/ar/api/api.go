@@ -428,6 +428,7 @@ func (a *API) bindQUIC(w http.ResponseWriter, r *http.Request) {
 // transport type selects the store bucket peers Resolve against; STCPR
 // additionally mirrors to the secondary (v6) AR.
 func (a *API) bindForType(w http.ResponseWriter, r *http.Request, tpType types.Type) {
+	a.counters.add(chartBindHTTP + typeName(string(tpType)))
 	remoteAddr := httpauth.GetRemoteAddr(r)
 	a.logger(r).Debugf("New POST /bind/%s request from %v", tpType, remoteAddr)
 
@@ -666,6 +667,7 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) transports(w http.ResponseWriter, r *http.Request) {
+	a.counters.add(chartListRequests)
 
 	info := &ArData{
 		Sudph: a.getTransports(r, types.SUDPH),
@@ -969,6 +971,7 @@ func (a *API) effectiveSUDPHAddr(observed string, la addrresolver.LocalAddresses
 }
 
 func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
+	a.counters.add(chartBindUDP)
 	a.log.Infof("Binding %v to %v (SUDPH)", strPK, remoteAddr)
 
 	var pk cipher.PubKey
