@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -104,4 +106,40 @@ func TestEmbeddedServiceControl(t *testing.T) {
 
 	require.Error(t, v.EmbeddedServiceControl("svc", "pause"))
 	require.Error(t, v.EmbeddedServiceControl("nope", "stop"))
+}
+
+// A block that cannot be mounted and names no key, such as stun, or keeps its
+// key in its own config file, runs on its own too.
+func TestEmbeddedServiceRunsStandaloneWithoutKey(t *testing.T) {
+	ownKeyRuns.Store(1)
+	filePK, _ := cipher.GenerateKeyPair()
+	path := filepath.Join(t.TempDir(), "svc.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"public_key":"`+filePK.Hex()+`"}`), 0o600))
+
+	var blocks []services.Block
+	for _, raw := range []string{
+		`{"type":"test-own-key","name":"keyless"}`,
+		`{"type":"test-own-key","name":"filekey","config_path":"` + path + `"}`,
+	} {
+		var b services.Block
+		require.NoError(t, json.Unmarshal([]byte(raw), &b))
+		blocks = append(blocks, b)
+	}
+	visorPK, visorSK := cipher.GenerateKeyPair()
+	common := &visorconfig.Common{PK: visorPK, SK: visorSK}
+	common.SetLogger(logging.NewMasterLogger())
+	v := &Visor{conf: &visorconfig.V1{Common: common, EmbeddedServices: blocks}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	require.NoError(t, initOwnKeyServices(ctx, v, logging.MustGetLogger("test")))
+	require.NoError(t, initEmbeddedServices(ctx, v, logging.MustGetLogger("test")))
+
+	require.Eventually(t, func() bool {
+		st := v.embeddedServiceStates()
+		return len(st) == 2 && st[0].Running && st[1].Running
+	}, 5*time.Second, 10*time.Millisecond)
+	st := v.embeddedServiceStates()
+	require.Empty(t, st[0].URL)
+	require.Equal(t, "dmsg://"+filePK.Hex(), st[1].URL)
+	require.NoError(t, v.EmbeddedServiceControl("keyless", "stop"))
 }

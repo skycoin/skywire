@@ -46,7 +46,7 @@ func initEmbeddedServices(ctx context.Context, v *Visor, log *logging.Logger) er
 		if es.err != nil {
 			return fmt.Errorf("embedded services: %w", es.err)
 		}
-		if !es.ownPK.Null() {
+		if es.standalone {
 			continue // started by initOwnKeyServices
 		}
 		if v.dmsgHTTPMux == nil {
@@ -148,7 +148,7 @@ func (v *Visor) runOwnKeyService(ctx context.Context, es *embeddedService) {
 			es.mu.Lock()
 			es.running, es.startErr, es.current, es.cancel = true, nil, svc, cancel
 			es.mu.Unlock()
-			es.log.WithField("addr", "dmsg://"+es.ownPK.Hex()).Info("Embedded service started under its own key")
+			es.log.WithField("pk", es.ownPK).Info("Embedded service started on its own")
 			err = svc.Run(runCtx)
 		}
 		cancel()
@@ -202,7 +202,7 @@ func (v *Visor) EmbeddedServiceControl(name, action string) error {
 	if es == nil {
 		return fmt.Errorf("no embedded service named %q", name)
 	}
-	if es.ownPK.Null() {
+	if !es.standalone {
 		return fmt.Errorf("%s is mounted on the visor and runs with it; give it a key of its own to control it apart", name)
 	}
 	es.mu.Lock()
@@ -236,7 +236,7 @@ func (v *Visor) EmbeddedServiceControl(name, action string) error {
 // as the address resolver client needs an address resolver run here.
 func initOwnKeyServices(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	for _, es := range v.embeddedServices() {
-		if es.ownPK.Null() {
+		if !es.standalone {
 			continue
 		}
 		if es.err != nil {
