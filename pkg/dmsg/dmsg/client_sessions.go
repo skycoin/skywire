@@ -380,11 +380,12 @@ func (ce *Client) ConvergeCarriers() int {
 	type snap struct {
 		pk      cipher.PubKey
 		carrier string
+		streams int
 	}
 	ce.sessionsMx.Lock()
 	sessions := make([]snap, 0, len(ce.sessions))
 	for pk, s := range ce.sessions {
-		sessions = append(sessions, snap{pk, s.carrier})
+		sessions = append(sessions, snap{pk, s.carrier, s.NumStreams()})
 	}
 	ce.sessionsMx.Unlock()
 
@@ -392,6 +393,11 @@ func (ce *Client) ConvergeCarriers() int {
 	for _, s := range sessions {
 		if s.carrier == CarrierSkynet {
 			continue // a relay has one carrier and no discovery entry to converge on
+		}
+		if s.streams != 0 {
+			// Replacing the session would close its open streams, such as a
+			// setup node RPC in the middle of a route setup. Try again later.
+			continue
 		}
 		if ce.carrierBackedOff(s.pk) {
 			continue
@@ -842,6 +848,7 @@ func (ce *Client) finishDialedSession(ctx context.Context, dSes ClientSession, n
 		}()
 		ce.log.WithField("remote_pk", dSes.RemotePK()).Debug("Serving session.")
 		err := dSes.serve()
+		ce.logSessionEnd(dSes, started, err)
 		// Hold sesMx across the done-check AND the errCh send so it is atomic
 		// with Close()'s sesMx-guarded close(ce.errCh): either we send before
 		// errCh is closed, or we observe done closed and skip the send.
@@ -960,4 +967,28 @@ func (ce *Client) quicBackedOff(pk cipher.PubKey) bool {
 	defer ce.convMx.RUnlock()
 	until, ok := ce.quicBadUntil[pk]
 	return ok && time.Now().Before(until)
+}
+
+// logSessionEnd says why a session to a server ended: reaped while idle,
+// replaced by a newer session to the same server, or lost.
+func (ce *Client) logSessionEnd(dSes ClientSession, started time.Time, err error) {
+	if isClosed(ce.done) {
+		return
+	}
+	reason := "lost"
+	if dSes.wasReaped() {
+		reason = "reaped while idle"
+	} else {
+		ce.sessionsMx.Lock()
+		cur, ok := ce.sessions[dSes.RemotePK()]
+		ce.sessionsMx.Unlock()
+		if ok && cur != dSes.SessionCommon {
+			reason = "replaced by a newer session"
+		}
+	}
+	ce.log.WithField("remote_pk", dSes.RemotePK()).
+		WithField("carrier", dSes.carrier).
+		WithField("lived", time.Since(started).Round(time.Second).String()).
+		WithError(err).
+		Info("dmsg session ended: " + reason)
 }
