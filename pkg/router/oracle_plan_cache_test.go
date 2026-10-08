@@ -305,3 +305,30 @@ func TestRouteBound_PrefersTheUnexcludedCount(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 11, c.routeBound(dst))
 }
+
+// When every candidate is claimed, crowded dials rotate through them, oldest
+// claim first, instead of all taking the best one.
+func TestOraclePlanCache_CrowdedRotates(t *testing.T) {
+	c := newOraclePlanCache()
+	clock := time.Unix(1000, 0)
+	c.now = func() time.Time { return clock }
+	src, dst, localTps, dstEntries := rigShapedSets(20, 20, 3)
+	legs, err := computeDisjoint2HopRoutes(src, dst, localTps, dstEntries, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, legs, 3)
+
+	for i := range legs {
+		clock = clock.Add(time.Millisecond)
+		got, ok := c.claim(src, dst, legs, nil)
+		require.True(t, ok)
+		require.Equal(t, legs[i].Forward[0].TpID, got.Forward[0].TpID)
+	}
+	seen := map[uuid.UUID]bool{}
+	for range legs {
+		clock = clock.Add(time.Millisecond)
+		got, ok := c.claim(src, dst, legs, nil)
+		require.False(t, ok)
+		seen[got.Forward[0].TpID] = true
+	}
+	require.Len(t, seen, len(legs), "crowded dials spread over every candidate")
+}
