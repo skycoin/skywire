@@ -38,6 +38,9 @@ type Store interface {
 	// Range returns samples in [from, to), oldest first, from the hourly
 	// series when hourly is set.
 	Range(ctx context.Context, from, to time.Time, hourly bool) ([]Sample, error)
+	// AddStart records a start of the service, and Starts returns those in [from, to).
+	AddStart(ctx context.Context, s Start) error
+	Starts(ctx context.Context, from, to time.Time) ([]Start, error)
 }
 
 // backend is the storage a store needs: two time-ordered sets and a marker.
@@ -47,6 +50,9 @@ type backend interface {
 	trim(ctx context.Context, hourly bool, before time.Time) error
 	rolled(ctx context.Context) (time.Time, error)
 	setRolled(ctx context.Context, hour time.Time) error
+	addStart(ctx context.Context, s Start) error
+	startsOf(ctx context.Context, from, to time.Time) ([]Start, error)
+	trimStarts(ctx context.Context, before time.Time) error
 }
 
 type store struct {
@@ -135,6 +141,7 @@ func Mean(at time.Time, samples []Sample) Sample {
 type memBackend struct {
 	raw, hourly []Sample
 	last        time.Time
+	starts      []Start
 }
 
 func (m *memBackend) set(hourly bool) *[]Sample {

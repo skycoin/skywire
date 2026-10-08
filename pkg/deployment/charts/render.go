@@ -49,6 +49,8 @@ type Chart struct {
 	// Legend, when set, draws the legend as a table with these column headers.
 	// The first column is the series name and the last is its latest value.
 	Legend []string
+	// Starts are the service's starts, drawn as markers where they fall in the chart's window.
+	Starts []Start
 
 	colors map[string]string
 }
@@ -203,6 +205,7 @@ func (c *Chart) SVG(id string) string {
 		fmt.Fprintf(&sb, "<text class='ytick' x='%d' y='%.1f'>%s</text>", padL-8, y+4, html.EscapeString(c.format(v)))
 	}
 	c.xAxis(&sb)
+	c.startMarks(&sb)
 
 	if c.Kind == Stacked {
 		for si := range c.Series {
@@ -359,21 +362,27 @@ func (c *Chart) data(sb *strings.Builder) {
 	// axis, so the page can label time in the viewer's own zone. A chart of
 	// UTC days (Dt) keeps its server labels.
 	d := struct {
-		X  []float64 `json:"x"`
-		L  []string  `json:"l"`
-		T  []int64   `json:"t"`
-		W  int       `json:"w"`
-		S  []ser     `json:"s"`
-		St bool      `json:"st"`
-		Dt bool      `json:"dt"`
-		F  int64     `json:"f"`
-		To int64     `json:"to"`
-		G  [5]int    `json:"g"`
+		X  []float64   `json:"x"`
+		L  []string    `json:"l"`
+		T  []int64     `json:"t"`
+		W  int         `json:"w"`
+		S  []ser       `json:"s"`
+		St bool        `json:"st"`
+		Dt bool        `json:"dt"`
+		F  int64       `json:"f"`
+		To int64       `json:"to"`
+		G  [5]int      `json:"g"`
+		D  []startMark `json:"d,omitempty"`
 	}{W: svgW, St: c.Kind == Stacked, Dt: c.Dates, F: c.From.UnixMilli(), To: c.To.UnixMilli(),
 		G: [5]int{padL, plotW, padT, plotH, svgH}}
 	layout := dateTimeFmt
 	if c.Dates {
 		layout = dateFmt
+	}
+	for _, s := range c.Starts {
+		if !s.At.Before(c.From) && !s.At.After(c.To) {
+			d.D = append(d.D, startMark{X: math.Round(c.xOf(s.At)*10) / 10, T: s.At.UnixMilli(), V: s.Label()})
+		}
 	}
 	for _, t := range c.Times {
 		d.X = append(d.X, math.Round(c.xOf(t)*10)/10)
@@ -491,4 +500,23 @@ func (c *Chart) color(name string) string {
 		return col
 	}
 	return Color(name)
+}
+
+type startMark struct {
+	X float64 `json:"x"`
+	T int64   `json:"t"`
+	V string  `json:"v"`
+}
+
+// startMarks draws a dashed line with a dot at the top for each start in the
+// chart's window.
+func (c *Chart) startMarks(sb *strings.Builder) {
+	for _, s := range c.Starts {
+		if s.At.Before(c.From) || s.At.After(c.To) {
+			continue
+		}
+		x := c.xOf(s.At)
+		fmt.Fprintf(sb, "<g class='start'><line x1='%.1f' x2='%.1f' y1='%d' y2='%d'/><circle cx='%.1f' cy='%d' r='3'/><title>%s started %s UTC</title></g>",
+			x, x, padT, padT+plotH, x, padT, html.EscapeString(s.Label()), s.At.Format(dateTimeFmt))
+	}
 }
