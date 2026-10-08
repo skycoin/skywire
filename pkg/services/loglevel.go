@@ -95,3 +95,11 @@ func sharedLogLevel(log *logging.Logger, file File) (logrus.Level, bool) {
 	}
 	return quietest, found
 }
+
+// SharedProcess tells the services that their process hosts more than them,
+// such as a visor, so a block's log_level stays scoped to that block.
+func SharedProcess() {
+	if hosted.Load() < 2 {
+		hosted.Store(2)
+	}
+}

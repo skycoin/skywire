@@ -11,9 +11,11 @@
 package visor
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	cxoregistry "github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
@@ -31,6 +33,16 @@ type embeddedService struct {
 	log    *logging.Logger
 	svc    services.Embeddable
 	err    error
+	// ownPK is set when the block names a key other than the visor's. Such a
+	// service is rebuilt from ownRaw by factory on every start and runs with
+	// its own dmsg client and identity; it is not mounted.
+	ownPK   cipher.PubKey
+	ownRaw  json.RawMessage
+	factory services.Factory
+	// restarts counts how often an own-key service was started again.
+	restarts int
+	// current is the running own-key service instance, for its state.
+	current services.Service
 	// mu guards running (set once the service is mounted) and startErr,
 	// written during init and read by state queries.
 	mu       sync.Mutex
@@ -50,6 +62,8 @@ type embeddedSet struct {
 // their storage) or the embedding module.
 func (v *Visor) embeddedServices() []*embeddedService {
 	v.embedded.once.Do(func() {
+		// A block's log_level must not set the visor's own.
+		services.SharedProcess()
 		v.embedded.ports = map[uint16]bool{}
 		seen := map[string]string{}
 		for i, b := range v.conf.EmbeddedServices {
@@ -59,6 +73,18 @@ func (v *Visor) embeddedServices() []*embeddedService {
 			if !ok {
 				es.err = fmt.Errorf("block #%d (%s): unknown type %q (registered: %v)",
 					i, es.label, b.Type, services.RegisteredTypes())
+				continue
+			}
+			raw, pk, hasKey, err := services.OwnKey(b.Raw)
+			if err != nil {
+				es.err = fmt.Errorf("block #%d (%s): key: %w", i, es.label, err)
+				continue
+			}
+			if hasKey && pk != v.conf.PK {
+				// Its own key: run as the standalone service would, inside
+				// this process (init_embedded_services.go).
+				es.log = v.MasterLogger().PackageLogger(es.label)
+				es.ownPK, es.ownRaw, es.factory = pk, raw, factory
 				continue
 			}
 			if other, dup := seen[es.prefix]; dup {
@@ -149,17 +175,28 @@ func (v *Visor) embeddedServiceStates() []visorapi.EmbeddedServiceState {
 			URL:       fmt.Sprintf("dmsg://%s:%d%s", v.conf.PK.Hex(), visorconfig.DmsgHTTPPort, es.prefix),
 			PlainHTTP: blockAddr(es.block),
 		}
+		if !es.ownPK.Null() {
+			st.URL = "dmsg://" + es.ownPK.Hex()
+			st.OwnKey = true
+		}
 		es.mu.Lock()
-		running, startErr := es.running, es.startErr
+		running, startErr, restarts := es.running, es.startErr, es.restarts
 		es.mu.Unlock()
 		st.Running = running
+		st.Restarts = restarts
 		switch {
 		case es.err != nil:
 			st.Error = es.err.Error()
 		case startErr != nil:
 			st.Error = startErr.Error()
 		}
-		if s, ok := es.svc.(services.Stater); ok && running {
+		var stater services.Service = es.svc
+		if !es.ownPK.Null() {
+			es.mu.Lock()
+			stater = es.current
+			es.mu.Unlock()
+		}
+		if s, ok := stater.(services.Stater); ok && running {
 			st.State = s.State()
 		}
 		out = append(out, st)
