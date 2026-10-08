@@ -297,3 +297,21 @@ func TestRouteGroupCloseDoesNotHoldMuWhileBroadcasting(t *testing.T) {
 		t.Fatal("Close() did not complete")
 	}
 }
+
+// A group whose peer never sent anything, as after a failed handshake, is
+// closed without waiting for a close reply that cannot come.
+func TestRouteGroupCloseSkipsWaitWhenPeerNeverAnswered(t *testing.T) {
+	rg, _ := createTestRouteGroupWithBlockingTransport(t)
+	require.Zero(t, rg.lastRecv.Load())
+
+	start := time.Now()
+	rg.Close() //nolint:errcheck,gosec
+	// The broadcast to the blocking transport takes closeRoutineTimeout; the
+	// reply wait would add another.
+	require.Less(t, time.Since(start), 2*closeRoutineTimeout-closeRoutineTimeout/4)
+	select {
+	case <-rg.closeDone():
+	default:
+		t.Fatal("close not marked done")
+	}
+}
