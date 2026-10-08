@@ -11,6 +11,7 @@
 package visor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -43,6 +44,12 @@ type embeddedService struct {
 	restarts int
 	// current is the running own-key service instance, for its state.
 	current services.Service
+	// cancel ends the current run; stopped and restartNow are what the
+	// operator asked for; wake ends a wait for a stopped or backing-off service.
+	cancel     context.CancelFunc
+	stopped    bool
+	restartNow bool
+	wake       chan struct{}
 	// mu guards running (set once the service is mounted) and startErr,
 	// written during init and read by state queries.
 	mu       sync.Mutex
@@ -85,6 +92,7 @@ func (v *Visor) embeddedServices() []*embeddedService {
 				// this process (init_embedded_services.go).
 				es.log = v.MasterLogger().PackageLogger(es.label)
 				es.ownPK, es.ownRaw, es.factory = pk, raw, factory
+				es.wake = make(chan struct{}, 1)
 				continue
 			}
 			if other, dup := seen[es.prefix]; dup {
@@ -180,10 +188,11 @@ func (v *Visor) embeddedServiceStates() []visorapi.EmbeddedServiceState {
 			st.OwnKey = true
 		}
 		es.mu.Lock()
-		running, startErr, restarts := es.running, es.startErr, es.restarts
+		running, startErr, restarts, stopped := es.running, es.startErr, es.restarts, es.stopped
 		es.mu.Unlock()
 		st.Running = running
 		st.Restarts = restarts
+		st.Stopped = stopped
 		switch {
 		case es.err != nil:
 			st.Error = es.err.Error()

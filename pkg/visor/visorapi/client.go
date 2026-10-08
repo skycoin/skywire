@@ -2592,3 +2592,8 @@ func (rc *rpcClient) MailSetSettings(u MailSettingsUpdate) error {
 	w := u.Wire()
 	return rc.Call("MailSetSettings", &w, &struct{}{})
 }
+
+// EmbeddedServiceControl stops, starts or restarts an embedded service.
+func (rc *rpcClient) EmbeddedServiceControl(name, action string) error {
+	return rc.Call("EmbeddedServiceControl", &EmbeddedServiceControlArgs{Name: name, Action: action}, &struct{}{})
+}
