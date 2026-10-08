@@ -2,6 +2,7 @@ package transport
 
 import (
 	"bytes"
+	crand "crypto/rand"
 	"math/rand"
 	"net"
 	"runtime"
@@ -128,7 +129,7 @@ func dataPackets(t *testing.T, n int) ([]routing.Packet, []byte) {
 	var stream []byte
 	for i := 0; i < n; i++ {
 		payload := make([]byte, rand.Intn(2000)) //nolint:gosec
-		rand.Read(payload)                       //nolint:errcheck,gosec
+		_, _ = crand.Read(payload)
 		p, err := routing.MakeDataPacket(routing.RouteID(i+1), payload)
 		if err != nil {
 			t.Fatal(err)
