@@ -407,5 +407,5 @@ func (s *redisStore) BackupAndCleanOldBandwidth(ctx context.Context, backupPath 
 		return err
 	}
 
-	return nil
+	return s.archiveLeaves(ctx, now)
 }

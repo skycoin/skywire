@@ -162,21 +162,51 @@ func (s *redisStore) metricsLeafKey(date string) string {
 }
 
 // SaveMetricsLeaf keeps a settled day's leaf parts (gzipped, as published)
-// for the history TTL, so a restart does not have to rebuild them.
+// so a restart does not have to rebuild them: in the archive when there is
+// one, and in redis for leafLiveDays (the history TTL without an archive).
 func (s *redisStore) SaveMetricsLeaf(ctx context.Context, date string, parts [][]byte) error {
+	ttl := time.Duration(historyTTLSeconds) * time.Second
+	if s.leafArchive != "" {
+		if err := s.writeLeafFile(date, parts); err != nil {
+			return fmt.Errorf("archive leaf %s: %w", date, err)
+		}
+		ttl = leafLiveDays * 24 * time.Hour
+	}
 	key := s.metricsLeafKey(date)
 	pipe := s.client.TxPipeline()
 	pipe.Del(ctx, key)
 	for _, p := range parts {
 		pipe.RPush(ctx, key, p)
 	}
-	pipe.Expire(ctx, key, time.Duration(historyTTLSeconds)*time.Second)
+	pipe.Expire(ctx, key, ttl)
 	_, err := pipe.Exec(ctx)
 	return err
 }
 
-// LoadMetricsLeaves returns the saved leaf parts of each date that has them.
+// LoadMetricsLeaves returns the saved leaf parts of each date that has them,
+// from redis or else the archive.
 func (s *redisStore) LoadMetricsLeaves(ctx context.Context, dates []string) (map[string][][]byte, error) {
+	out, err := s.loadLeavesFromRedis(ctx, dates)
+	if err != nil || s.leafArchive == "" {
+		return out, err
+	}
+	for _, d := range dates {
+		if _, ok := out[d]; ok {
+			continue
+		}
+		parts, err := s.readLeafFile(d)
+		if err != nil {
+			s.log.WithError(err).WithField("date", d).Warn("could not read archived metrics leaf")
+			continue
+		}
+		if len(parts) > 0 {
+			out[d] = parts
+		}
+	}
+	return out, nil
+}
+
+func (s *redisStore) loadLeavesFromRedis(ctx context.Context, dates []string) (map[string][][]byte, error) {
 	pipe := s.client.Pipeline()
 	cmds := make(map[string]interface{ Result() ([]string, error) }, len(dates))
 	for _, d := range dates {
