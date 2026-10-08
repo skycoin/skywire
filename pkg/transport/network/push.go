@@ -31,10 +31,15 @@ type pushReader struct {
 // PushReaderOf moves tp's reads to a PushReader if its conn supports one.
 // tp must not be read once it returns true.
 func PushReaderOf(tp Transport) (PushReader, bool) {
-	t, ok := tp.(*transport)
-	if !ok {
-		return nil, false
+	if p, ok := tp.(interface{ PushReader() (PushReader, bool) }); ok {
+		return p.PushReader()
 	}
+	return nil, false
+}
+
+// PushReader moves the transport's reads to a PushReader if its conn supports
+// one, as PushReaderOf.
+func (t *transport) PushReader() (PushReader, bool) {
 	src, ok := t.rawConn.(PushSource)
 	if !ok {
 		return nil, false
