@@ -21,7 +21,7 @@ import (
 	"github.com/pion/datachannel"
 	"github.com/pion/ice/v4"
 	"github.com/pion/interceptor"
-	"github.com/pion/webrtc/v4"
+	"github.com/0magnet/webrtc/v4"
 
 	"github.com/skycoin/skywire/pkg/logging"
 )
