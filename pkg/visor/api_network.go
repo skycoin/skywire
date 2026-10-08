@@ -133,7 +133,7 @@ func (v *Visor) servePKInjectedForward(conn net.Conn, target, transport string, 
 	// Serve HTTP over this single connection. ConnState closes the
 	// one-shot listener once the connection is done so Serve's accept
 	// loop returns instead of leaking a goroutine.
-	lis := &singleConnListener{conn: conn}
+	lis := newSingleConnListener(conn)
 	srv := &http.Server{
 		Handler:           rp,
 		ReadHeaderTimeout: 30 * time.Second,
