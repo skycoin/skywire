@@ -54,6 +54,31 @@ github.com/0magnet/desk/dom
 # github.com/0magnet/desk/panes v0.0.0
 ## explicit; go 1.26.6
 github.com/0magnet/desk/panes/files
+# github.com/0magnet/dtls/v3 v3.1.11
+## explicit; go 1.24.0
+github.com/0magnet/dtls/v3
+github.com/0magnet/dtls/v3/internal/ciphersuite
+github.com/0magnet/dtls/v3/internal/ciphersuite/types
+github.com/0magnet/dtls/v3/internal/closer
+github.com/0magnet/dtls/v3/internal/ctxconn
+github.com/0magnet/dtls/v3/internal/net
+github.com/0magnet/dtls/v3/internal/net/udp
+github.com/0magnet/dtls/v3/internal/util
+github.com/0magnet/dtls/v3/pkg/crypto/ccm
+github.com/0magnet/dtls/v3/pkg/crypto/ciphersuite
+github.com/0magnet/dtls/v3/pkg/crypto/clientcertificate
+github.com/0magnet/dtls/v3/pkg/crypto/elliptic
+github.com/0magnet/dtls/v3/pkg/crypto/fingerprint
+github.com/0magnet/dtls/v3/pkg/crypto/hash
+github.com/0magnet/dtls/v3/pkg/crypto/prf
+github.com/0magnet/dtls/v3/pkg/crypto/signature
+github.com/0magnet/dtls/v3/pkg/crypto/signaturehash
+github.com/0magnet/dtls/v3/pkg/net
+github.com/0magnet/dtls/v3/pkg/protocol
+github.com/0magnet/dtls/v3/pkg/protocol/alert
+github.com/0magnet/dtls/v3/pkg/protocol/extension
+github.com/0magnet/dtls/v3/pkg/protocol/handshake
+github.com/0magnet/dtls/v3/pkg/protocol/recordlayer
 # github.com/0magnet/go-dsp v0.0.0
 ## explicit; go 1.23.0
 github.com/0magnet/go-dsp/dsputils
@@ -133,6 +158,14 @@ github.com/0magnet/termanim/matrix/backdrop/cobrarain
 # github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754
 ## explicit; go 1.26.6
 github.com/0magnet/u-root/pkg/ls
+# github.com/0magnet/webrtc/v4 v4.2.24
+## explicit; go 1.24.0
+github.com/0magnet/webrtc/v4
+github.com/0magnet/webrtc/v4/internal/fmtp
+github.com/0magnet/webrtc/v4/internal/mux
+github.com/0magnet/webrtc/v4/internal/util
+github.com/0magnet/webrtc/v4/pkg/media
+github.com/0magnet/webrtc/v4/pkg/rtcerr
 # github.com/0magnet/websh v0.0.1-0.20261004205330-1203fa7da370
 ## explicit; go 1.26.6
 github.com/0magnet/websh/shell
@@ -954,7 +987,6 @@ github.com/pion/dtls/v3/pkg/crypto/ccm
 github.com/pion/dtls/v3/pkg/crypto/ciphersuite
 github.com/pion/dtls/v3/pkg/crypto/clientcertificate
 github.com/pion/dtls/v3/pkg/crypto/elliptic
-github.com/pion/dtls/v3/pkg/crypto/fingerprint
 github.com/pion/dtls/v3/pkg/crypto/hash
 github.com/pion/dtls/v3/pkg/crypto/prf
 github.com/pion/dtls/v3/pkg/crypto/signature
@@ -965,7 +997,7 @@ github.com/pion/dtls/v3/pkg/protocol/alert
 github.com/pion/dtls/v3/pkg/protocol/extension
 github.com/pion/dtls/v3/pkg/protocol/handshake
 github.com/pion/dtls/v3/pkg/protocol/recordlayer
-# github.com/pion/ice/v4 v4.4.5
+# github.com/pion/ice/v4 v4.4.7
 ## explicit; go 1.24.0
 github.com/pion/ice/v4
 github.com/pion/ice/v4/internal/atomic
@@ -1038,14 +1070,6 @@ github.com/pion/turn/v5/internal/client
 github.com/pion/turn/v5/internal/ipnet
 github.com/pion/turn/v5/internal/proto
 github.com/pion/turn/v5/internal/server
-# github.com/pion/webrtc/v4 v4.2.22
-## explicit; go 1.24.0
-github.com/pion/webrtc/v4
-github.com/pion/webrtc/v4/internal/fmtp
-github.com/pion/webrtc/v4/internal/mux
-github.com/pion/webrtc/v4/internal/util
-github.com/pion/webrtc/v4/pkg/media
-github.com/pion/webrtc/v4/pkg/rtcerr
 # github.com/pires/go-proxyproto v0.15.0
 ## explicit; go 1.25.0
 github.com/pires/go-proxyproto
