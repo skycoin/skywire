@@ -115,6 +115,14 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 				log.WithError(oErr).Debug("RSN-oracle 2-hop path missed; falling through to route finder")
 			}
 		}
+		// One ring further out: the neighbors' own lists give the middle edge.
+		if hi <= 3 && (r.conf.MaxHops == 0 || r.conf.MaxHops >= 3) {
+			if lFwd, lRev, lErr := r.listRoutes3Hop(ctx, log, src, dst, opts); lErr == nil {
+				return lFwd, lRev, nil
+			} else if !errors.Is(lErr, errListRoutesInert) {
+				log.WithError(lErr).Debug("3-hop route from transport lists missed; falling through to route finder")
+			}
+		}
 	}
 
 	retries := opts.Retries

@@ -802,6 +802,11 @@ type router struct {
 	// → the oracle path is inert. Set via SetDstTransportOracle.
 	dstTpOracle   DstTransportOracle
 	dstTpOracleMu sync.Mutex
+
+	// tpListFetcher reads other visors' signed transport lists over transports
+	// for 3-hop routes. Set via SetTransportListFetcher.
+	tpListFetcher TransportListFetcher
+	tpListMu      sync.Mutex
 }
 
 // DstTransportOracle fetches a destination visor's OWN transport list
