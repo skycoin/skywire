@@ -63,3 +63,43 @@ func TestEmbeddedServiceRunsUnderItsOwnKey(t *testing.T) {
 	require.True(t, st.OwnKey)
 	require.Equal(t, "dmsg://"+svcPK.Hex(), st.URL)
 }
+
+// An operator can stop, start and restart an own-key service on its own, and
+// a mounted one is refused.
+func TestEmbeddedServiceControl(t *testing.T) {
+	ownKeyMinBackoff = 10 * time.Millisecond
+	t.Cleanup(func() { ownKeyMinBackoff = 5 * time.Second })
+	ownKeyRuns.Store(1) // every run below blocks until stopped
+
+	visorPK, visorSK := cipher.GenerateKeyPair()
+	_, svcSK := cipher.GenerateKeyPair()
+	raw, err := json.Marshal(map[string]string{"type": "test-own-key", "name": "svc", "secret_key": svcSK.Hex()})
+	require.NoError(t, err)
+	var b services.Block
+	require.NoError(t, json.Unmarshal(raw, &b))
+	common := &visorconfig.Common{PK: visorPK, SK: visorSK}
+	common.SetLogger(logging.NewMasterLogger())
+	v := &Visor{conf: &visorconfig.V1{Common: common, EmbeddedServices: []services.Block{b}}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	require.NoError(t, initEmbeddedServices(ctx, v, logging.MustGetLogger("test")))
+
+	state := func() (bool, bool) {
+		s := v.embeddedServiceStates()[0]
+		return s.Running, s.Stopped
+	}
+	require.Eventually(t, func() bool { r, _ := state(); return r }, 5*time.Second, 10*time.Millisecond)
+
+	require.NoError(t, v.EmbeddedServiceControl("svc", "stop"))
+	require.Eventually(t, func() bool { r, s := state(); return !r && s }, 5*time.Second, 10*time.Millisecond)
+
+	require.NoError(t, v.EmbeddedServiceControl("svc", "start"))
+	require.Eventually(t, func() bool { r, s := state(); return r && !s }, 5*time.Second, 10*time.Millisecond)
+
+	runs := ownKeyRuns.Load()
+	require.NoError(t, v.EmbeddedServiceControl("svc", "restart"))
+	require.Eventually(t, func() bool { r, _ := state(); return r && ownKeyRuns.Load() > runs }, 5*time.Second, 10*time.Millisecond)
+
+	require.Error(t, v.EmbeddedServiceControl("svc", "pause"))
+	require.Error(t, v.EmbeddedServiceControl("nope", "stop"))
+}
