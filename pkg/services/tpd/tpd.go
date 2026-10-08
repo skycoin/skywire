@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -175,6 +176,9 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	storeDataPath := cfg.StoreDataPath
 	if storeDataPath == "" {
 		storeDataPath = "/var/lib/skywire/tpd/bandwidth"
+	}
+	if la, ok := st.(interface{ SetLeafArchive(string) }); ok {
+		la.SetLeafArchive(filepath.Join(storeDataPath, "leaves"))
 	}
 	tpdAPI := api.New(logger, st, nonceStore, enableMetrics, m, dmsgAddr, storeDataPath)
 	tpdAPI.SetEntryTimeout(cfg.EntryTimeout.Std())

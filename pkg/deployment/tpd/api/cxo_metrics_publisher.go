@@ -220,11 +220,11 @@ func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
 	saved := map[string][][]byte{}
 	if full {
 		// Settled days an earlier run saved need no recompute; only when one
-		// is missing is the whole window read.
+		// is missing is the whole window read. The saved days still win over
+		// the reread, whose rows for older days may already be cleaned up.
 		saved = m.loadSettled(ctx, window[open:])
 		if len(saved) < len(window)-open {
 			days = metricsWindowDays
-			saved = map[string][][]byte{}
 		}
 	}
 	metrics, err := m.fetch(ctx, days)
@@ -270,7 +270,15 @@ func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
 		return
 	}
 	m.parts = next
-	m.settle(ctx, bodies, window[:open])
+	// Days loaded from the store are saved already; saving them again would
+	// rewrite every archived day and return old ones to redis on each start.
+	built := make(map[string][][]byte, len(bodies))
+	for date, parts := range bodies {
+		if _, ok := saved[date]; !ok {
+			built[date] = parts
+		}
+	}
+	m.settle(ctx, built, window[:open])
 }
 
 // planDayOps turns one cycle's gzipped bodies into the PutBatch that
