@@ -389,6 +389,9 @@ func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogge
 	defer backupTicker.Stop()
 
 	api.refreshTransportsCache(ctx, logger)
+	// Deploys restart TPD more often than hourly, so the cleanup also runs
+	// soon after start rather than waiting out its first tick.
+	firstBackup := time.After(2 * time.Minute)
 	api.refreshUptimesCache(ctx, logger)
 
 	for {
@@ -399,6 +402,10 @@ func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogge
 			api.refreshTransportsCache(ctx, logger)
 		case <-uptimesTicker.C:
 			api.refreshUptimesCache(ctx, logger)
+		case <-firstBackup:
+			if err := api.store.BackupAndCleanOldBandwidth(ctx, api.backupPath); err != nil {
+				logger.WithError(err).Error("failed to backup old bandwidth data")
+			}
 		case <-backupTicker.C:
 			if err := api.store.BackupAndCleanOldBandwidth(ctx, api.backupPath); err != nil {
 				logger.WithError(err).Error("failed to backup old bandwidth data")
