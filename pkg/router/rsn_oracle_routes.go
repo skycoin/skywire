@@ -354,9 +354,11 @@ func (r *router) oracle2HopRoutes(ctx context.Context, log *logging.Logger, src,
 		return !(opts != nil && opts.DiversifyTransports && r.firstHopExcluded(l.Forward, opts))
 	})
 	if !claimed {
-		leg = legs[0]
+		if len(leg.Forward) == 0 {
+			leg = legs[0]
+		}
 		if opts != nil {
-			opts.note("oracle: every candidate claimed by a sibling dial; taking the best")
+			opts.note("oracle: every candidate claimed by a sibling dial; reusing the oldest claim, %s", leg.Intermediate.String())
 		}
 	} else if opts != nil {
 		opts.note("oracle: claimed intermediate %s of %d candidates", leg.Intermediate.String(), len(legs))
