@@ -81,9 +81,6 @@ type ManagedTransport struct {
 	logUpdates  uint32
 	isInitiator bool // we dialed out (outgoing) vs accepted an inbound dial (incoming)
 
-	// rhdr is readPacket's header scratch. There is one reader per transport.
-	rhdr [routing.PacketHeaderSize]byte
-
 	// openedAt and onClose feed the manager's transport event ring; see
 	// transport_events.go.
 	openedAt time.Time

@@ -124,7 +124,9 @@ type Visor struct {
 	dmsgHTTPOnce sync.Once
 	dmsgHTTPTr   *http.Transport
 	// dmsgSkynet counts how dials to .dmsg peers went (dmsg_over_skynet.go).
-	dmsgSkynet  dmsgSkynetStats
+	dmsgSkynet dmsgSkynetStats
+	// tpList caches the signed list GET /transports serves.
+	tpList      transportListCache
 	dmsgDC      *dmsg.Client       // dmsg direct client
 	dClient     dmsgdisc.APIClient // dmsg direct api client
 	dmsgHTTP    *http.Client       // dmsghttp client
