@@ -138,6 +138,8 @@ type API struct {
 	// PKs + hypervisor PKs + the visor's own PK).
 	ptyHandler   http.Handler
 	ptyWhitelist pty.Whitelist
+	// transportListProvider serves GET /transports to callers over a transport.
+	transportListProvider TransportListProvider
 }
 
 // ptyPKAllowed reports whether the request's remote host (a PK hex
@@ -201,6 +203,7 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	})
 
 	r.HandleFunc("GET /health", api.health)
+	r.HandleFunc("GET /transports", api.transportList)
 
 	// Service catalog — lists ports available for .skynet / skynet
 	// forwarding. Public services are visible; hidden services are
