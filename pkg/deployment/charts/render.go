@@ -195,9 +195,7 @@ func (c *Chart) SVG(id string) string {
 	top := math.Ceil(vmax/step) * step
 	yOf := func(v float64) float64 { return padT + plotH - v/top*plotH }
 
-	if c.Kind == Stacked {
-		sb.WriteString("<div class='body'>")
-	}
+	sb.WriteString("<div class='body'>")
 	fmt.Fprintf(&sb, "<div class='plot'><svg viewBox='0 0 %d %d' role='img' aria-label='%s'>", svgW, svgH, html.EscapeString(c.Title))
 	for v := 0.0; v <= top*1.0001; v += step {
 		y := yOf(v)
@@ -253,9 +251,7 @@ func (c *Chart) SVG(id string) string {
 	}
 	fmt.Fprintf(&sb, "<line class='cursor' x1='0' x2='0' y1='%d' y2='%d'/>", padT, padT+plotH)
 	sb.WriteString("</svg><div class='tip' hidden></div></div>")
-	if c.Kind == Stacked {
-		sb.WriteString("<div class='pie'></div></div>")
-	}
+	sb.WriteString("<div class='pie'></div></div>")
 	c.legend(&sb)
 	c.data(&sb)
 	sb.WriteString("</figure>")
@@ -341,32 +337,12 @@ func (c *Chart) monthTicks(sb *strings.Builder) {
 	fmt.Fprintf(sb, "<line class='axis' x1='%d' x2='%d' y1='%d' y2='%d'/>", padL, padL+plotW, padT+plotH, padT+plotH)
 }
 
+// legend draws a table legend for a chart whose series carry extra columns.
+// Otherwise the legend beside the pie, with each series' value, is the only one.
 func (c *Chart) legend(sb *strings.Builder) {
 	if len(c.Legend) > 0 {
 		c.legendTable(sb)
-		return
 	}
-	sb.WriteString("<ul class='legend'>")
-	for i := range c.Series {
-		s := c.Series[i]
-		if c.Kind == Stacked {
-			s = c.Series[len(c.Series)-1-i]
-		}
-		latest := ""
-		for j := len(s.Vals) - 1; j >= 0; j-- {
-			if !math.IsNaN(s.Vals[j]) {
-				latest = c.format(s.Vals[j])
-				break
-			}
-		}
-		title := ""
-		if s.Title != "" {
-			title = " title='" + html.EscapeString(s.Title) + "'"
-		}
-		fmt.Fprintf(sb, "<li%s><i style='background:%s'></i>%s <b>%s</b></li>",
-			title, c.color(s.Name), html.EscapeString(s.Name), html.EscapeString(latest))
-	}
-	sb.WriteString("</ul>")
 }
 
 // data embeds what the hover readout needs: x positions, labels and the
@@ -376,7 +352,7 @@ func (c *Chart) data(sb *strings.Builder) {
 		N string   `json:"n"`
 		C string   `json:"c"`
 		V []string `json:"v"`
-		// R is the raw value, for the pie beside a stacked chart.
+		// R is the raw value, for the pie and its legend beside the chart.
 		R []*float64 `json:"r,omitempty"`
 	}
 	// T, F and To are unix milliseconds and the geometry fields place the x
@@ -419,14 +395,11 @@ func (c *Chart) data(sb *strings.Builder) {
 				vs[i] = c.format(s.Vals[i])
 			}
 		}
-		sr := ser{N: s.Name, C: c.color(s.Name), V: vs}
-		if c.Kind == Stacked {
-			sr.R = make([]*float64, len(c.Times))
-			for i := range c.Times {
-				if i < len(s.Vals) && !math.IsNaN(s.Vals[i]) {
-					v := s.Vals[i]
-					sr.R[i] = &v
-				}
+		sr := ser{N: s.Name, C: c.color(s.Name), V: vs, R: make([]*float64, len(c.Times))}
+		for i := range c.Times {
+			if i < len(s.Vals) && !math.IsNaN(s.Vals[i]) {
+				v := s.Vals[i]
+				sr.R[i] = &v
 			}
 		}
 		d.S = append(d.S, sr)
