@@ -21,7 +21,7 @@ func TestRedisStore(t *testing.T) {
 	require.NoError(t, err)
 	b := st.(*store).b.(*redisBackend)
 	clean := func() {
-		require.NoError(t, b.c.Del(ctx, b.key(false), b.key(true), b.prefix+":rolled").Err())
+		require.NoError(t, b.c.Del(ctx, b.key(false), b.key(true), b.prefix+":rolled", b.startsKey()).Err())
 	}
 	clean()
 	t.Cleanup(clean)
@@ -43,4 +43,9 @@ func TestRedisStore(t *testing.T) {
 	require.Len(t, hourly, 1)
 	require.Equal(t, base, hourly[0].At)
 	require.InDelta(t, 5.5, hourly[0].V["a"], 1e-9)
+
+	require.NoError(t, st.AddStart(ctx, Start{At: base, Version: "v1", Commit: "c1"}))
+	starts, err := st.Starts(ctx, base, base.Add(time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, []Start{{At: base, Version: "v1", Commit: "c1"}}, starts)
 }

@@ -132,8 +132,15 @@ func (p *Page) render(ctx context.Context, rg Range) ([]byte, error) {
 			content.Charts = append(content.Charts, p.Stats.Charts(f, from, now)...)
 		}
 	}
+	var starts []Start
+	if p.Store != nil {
+		starts, _ = p.Store.Starts(ctx, now.Add(-HourlyRetention), now.Add(time.Second)) //nolint:errcheck
+		for i := range content.Charts {
+			content.Charts[i].Starts = starts
+		}
+	}
 	var b bytes.Buffer
-	p.write(&b, rg, now, content)
+	p.write(&b, rg, now, content, starts)
 	if p.cache == nil {
 		p.cache = map[string]cached{}
 	}
@@ -141,11 +148,15 @@ func (p *Page) render(ctx context.Context, rg Range) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func (p *Page) write(b *bytes.Buffer, rg Range, now time.Time, c Content) {
+func (p *Page) write(b *bytes.Buffer, rg Range, now time.Time, c Content, starts []Start) {
 	title := html.EscapeString(p.Title)
 	fmt.Fprintf(b, "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>%s</title><style>%s</style></head><body><header><div><h1>%s</h1>", title, pageCSS, title)
 	if p.About != "" {
 		fmt.Fprintf(b, "<p class='about'>%s</p>", html.EscapeString(p.About))
+	}
+	if n := len(starts); n > 0 {
+		s := starts[n-1]
+		fmt.Fprintf(b, "<p class='about'>Running %s since <time data-t='%d'>%s UTC</time></p>", html.EscapeString(s.Label()), s.At.UnixMilli(), s.At.Format("2006-01-02 15:04"))
 	}
 	for _, l := range p.Links {
 		fmt.Fprintf(b, "<p class='links'><a href='%s'>%s</a></p>", html.EscapeString(l.Href), html.EscapeString(l.Name))
@@ -212,7 +223,7 @@ h2{font-size:15px;margin:0;font-weight:620}figcaption p,.note{margin:2px 0 0;col
 .grid,.xgrid{stroke:var(--grid);stroke-width:1}.axis{stroke:var(--axis)}
 .ytick,.xtick{fill:var(--muted);font-size:11px}.ytick{text-anchor:end}.xtick{text-anchor:middle}
 .area{fill-opacity:.55;stroke:none}.line{fill:none;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
-.cursor{stroke:var(--muted);stroke-dasharray:3 3;visibility:hidden}.empty{color:var(--muted);padding:40px 0;text-align:center}
+.start line{stroke:#b07aa1;stroke-dasharray:2 3;stroke-width:1.2}.start circle{fill:#b07aa1}.tip .st{color:#b07aa1;font-weight:600}.cursor{stroke:var(--muted);stroke-dasharray:3 3;visibility:hidden}.empty{color:var(--muted);padding:40px 0;text-align:center}
 .legend{list-style:none;display:flex;flex-wrap:wrap;gap:4px 16px;padding:0;margin:10px 0 0;font-size:12.5px}
 .legend li{display:flex;align-items:center;gap:6px}.legend i{width:10px;height:10px;border-radius:3px}.legend b{font-weight:600;font-variant-numeric:tabular-nums}
 .tip{position:absolute;top:8px;pointer-events:none;background:var(--card);border:1px solid var(--grid);border-radius:8px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px #0002;min-width:150px;z-index:2}
@@ -273,6 +284,7 @@ for(var i=0;i<d.x.length;i++){var k=Math.abs(d.x[i]-x);if(k<bd){bd=k;b=i}}return
 function mark(i){if(i<0){cur.style.visibility='hidden';return}cur.setAttribute('x1',d.x[i]);cur.setAttribute('x2',d.x[i]);cur.style.visibility='visible'}
 function readout(b){var r=svg.getBoundingClientRect(),h='<div class=t>'+esc(lab(d,b))+'</div>',n=0;
 d.s.forEach(function(q){if(!q.v[b])return;n++;h+='<div><span>'+(q.c?'<i style="background:'+q.c+'"></i>':'')+esc(q.n)+'</span><b>'+esc(q.v[b])+'</b></div>'});
+var hw=d.x.length>1?Math.abs(d.x[1]-d.x[0])/2:8;(d.d||[]).forEach(function(m){if(Math.abs(m.x-d.x[b])>hw)return;n++;h+='<div class=st>Started '+esc(m.v)+' at '+esc(fDT.format(m.t))+'</div>'});
 if(!n){tip.hidden=true;return}tip.innerHTML=h;tip.hidden=false;
 var px=d.x[b]/d.w*r.width,tw=tip.offsetWidth;tip.style.left=(px+12+tw>r.width?px-12-tw:px+12)+'px'}
 if(end>=0)pie(pe,d,end,false);
