@@ -84,6 +84,8 @@ type Manager struct {
 	Logger *logging.Logger
 	Conf   *ManagerConfig
 	tps    map[uuid.UUID]*ManagedTransport
+	// dials runs one outbound dial per transport ID at a time.
+	dials  dialFlights
 	events tpEventRing
 	// lastCloses is the last close event per transport id, which — unlike the
 	// ring — open churn cannot evict.
@@ -1514,6 +1516,22 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	// tick) must not be handed back as if it were live — the stale-conn trap.
 	// Fall through to create a fresh one.
 
+	f, lead := tm.dials.join(tpID)
+	if !lead {
+		select {
+		case <-f.done:
+			return f.mTp, f.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	mTp, err := tm.dialAndSave(ctx, remote, netType, label, opts, tpID)
+	tm.dials.finish(tpID, f, mTp, err)
+	return mTp, err
+}
+
+// dialAndSave dials a new transport and stores it, unless one appeared meanwhile.
+func (tm *Manager) dialAndSave(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label, opts SaveTransportOptions, tpID uuid.UUID) (*ManagedTransport, error) {
 	tm.mx.RLock()
 	client, ok := tm.netClients[netType]
 	tm.mx.RUnlock()
@@ -1548,7 +1566,7 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
 	errCh := make(chan error)
 	go mTp.DialAsync(ctx, errCh)
-	err = <-errCh
+	err := <-errCh
 	if err != nil {
 		tm.Logger.Debugf("Error dialing transport to %v via %v: %v", mTp.Remote(), mTp.client.Type(), err)
 		// Use closeWithoutDeregister since the transport was never registered with TPD
