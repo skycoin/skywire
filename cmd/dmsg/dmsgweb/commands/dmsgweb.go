@@ -26,6 +26,7 @@ func init() {
 	webPort = cmdutil.SkyenvUintSlice("${WEBPORT[@]:-8080}", dwcfg)
 	proxyPort = cmdutil.SkyenvUint("${PROXYPORT:-4445}", dwcfg)
 	addProxy = cmdutil.SkyenvString("${ADDPROXY}", dwcfg)
+	skynetVia = cmdutil.SkyenvString("${SKYNETVIA}", dwcfg)
 	resolveDmsgAddr = cmdutil.SkyenvStringSlice("${RESOLVEPK[@]}", dwcfg)
 	if os.Getenv("DMSGWEBSK") != "" {
 		sk.Set(os.Getenv("DMSGWEBSK")) //nolint
@@ -46,6 +47,7 @@ func init() {
 	RootCmd.Flags().UintSliceVarP(&webPort, "port", "p", webPort, "port(s) to serve the web application")
 	RootCmd.Flags().StringSliceVarP(&resolveDmsgAddr, "resolve", "t", resolveDmsgAddr, "resolve the specified dmsg address:port on the local port as a raw TCP tunnel & disable proxy")
 	RootCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "connect to DMSG via proxy (i.e. '127.0.0.1:1080')")
+	RootCmd.Flags().StringVar(&skynetVia, "skynet", skynetVia, "reach visors over skynet through a transport to a local visor, as `pk@host:port` (its stcp address)")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 	RootCmd.Flags().BoolVarP(&isEnvs, "envs", "E", false, "show example .conf file")
@@ -181,6 +183,17 @@ dmsgweb conf file detected: ` + dwcfg
 			ProxyPort:     proxyPort,
 			ResolveAddr:   targets,
 			UpstreamSOCKS: addProxy,
+		}
+		if skynetVia != "" {
+			visorPK, addr, err := dmsgweb.ParseSkynetVia(skynetVia)
+			if err != nil {
+				dlog.WithError(err).Fatal("invalid --skynet")
+			}
+			via, err := dmsgweb.StartSkynetVia(ctx, dlog, logging.NewMasterLogger(), pk, sk, visorPK, addr)
+			if err != nil {
+				dlog.WithError(err).Fatal("skynet via the local visor")
+			}
+			cfg.SkynetDial = via.Dial
 		}
 		if err := dmsgweb.Run(ctx, dlog, dmsgC, cfg); err != nil && err != context.Canceled {
 			dlog.WithError(err).Error("dmsgweb runtime stopped")
