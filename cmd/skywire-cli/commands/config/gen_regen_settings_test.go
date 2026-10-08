@@ -2,12 +2,14 @@
 package cliconfig
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/logging"
+	svcs "github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -33,7 +35,8 @@ func TestRegenPreservesVisorPersistedSettings(t *testing.T) {
 		Launcher: &visorconfig.Launcher{
 			Apps: []appserver.AppConfig{{Name: "skysocks-client", AutoStart: true}},
 		},
-		AppSettings: map[string]visorconfig.AppSettingsEntry{"skysocks-client": {}},
+		AppSettings:      map[string]visorconfig.AppSettingsEntry{"skysocks-client": {}},
+		EmbeddedServices: []svcs.Block{{Type: "service-discovery", Raw: json.RawMessage(`{"type":"service-discovery"}`)}},
 	}
 	conf = new(visorconfig.V1)
 
@@ -51,6 +54,7 @@ func TestRegenPreservesVisorPersistedSettings(t *testing.T) {
 		"app_settings must survive a regen")
 	require.True(t, conf.Launcher.Apps[0].AutoStart,
 		"an operator's autostart toggle must survive a regen (pre-existing contract)")
+	require.Len(t, conf.EmbeddedServices, 1, "embedded_services must survive a regen")
 }
 
 // The same call must be a no-op on a fresh (non-regen) generate, so a
