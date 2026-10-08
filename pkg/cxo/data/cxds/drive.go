@@ -667,10 +667,10 @@ func (d *driveCXDS) IterateDel(
 			del bool
 		)
 
-		// Seek instead of the Next, because we allows modifications
-		// and the BoltDB requires Seek after mutating
-
-		for k, v := c.First(); k != nil; k, v = c.Seek(key[:]) {
+		// Next while nothing changes. A Seek per object walked the tree from
+		// the root each time and cost the cleanup half a hub visor's CPU.
+		k, v := c.First()
+		for k != nil {
 
 			copy(key[:], k)
 
@@ -683,15 +683,20 @@ func (d *driveCXDS) IterateDel(
 				return err
 			}
 
-			if del == true { //nolint:staticcheck
-				if err = c.Delete(); err != nil {
-					return err
-				}
-
-				d.del(rc, len(v)-4) // stat
+			if !del {
+				k, v = c.Next()
+				continue
 			}
 
-			incSlice(key[:]) // next
+			vol := len(v) - 4
+			if err = c.Delete(); err != nil {
+				return err
+			}
+			d.del(rc, vol) // stat
+
+			// bbolt needs a Seek after a mutation. The deleted key is gone, so
+			// this lands on the one after it.
+			k, v = c.Seek(key[:])
 		}
 
 		return err
