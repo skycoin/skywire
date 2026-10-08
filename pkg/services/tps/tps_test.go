@@ -118,7 +118,7 @@ func TestRunConfigPathError(t *testing.T) {
 func TestRunLifecycle(t *testing.T) {
 	pk, sk := cipher.GenerateKeyPair()
 	cfg := &Config{
-		Config:   config.Config{PK: pk, SK: sk, Port: 0}, // ephemeral port
+		Config:   config.Config{PK: pk, SK: sk, Port: 0}, // dmsg RPC only
 		Tag:      "ts-run",
 		LogLevel: "info", // exercises the log-level branch
 	}
@@ -128,7 +128,7 @@ func TestRunLifecycle(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() { errCh <- svc.Run(ctx) }()
 
-	// Give the HTTP + dmsg listeners a moment to come up, then cancel.
+	// Give the dmsg listener a moment to come up, then cancel.
 	time.Sleep(300 * time.Millisecond)
 	cancel()
 

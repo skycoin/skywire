@@ -34,12 +34,13 @@ type embeddedService struct {
 	log    *logging.Logger
 	svc    services.Embeddable
 	err    error
-	// ownPK is set when the block names a key other than the visor's. Such a
-	// service is rebuilt from ownRaw by factory on every start and runs with
-	// its own dmsg client and identity; it is not mounted.
-	ownPK   cipher.PubKey
-	ownRaw  json.RawMessage
-	factory services.Factory
+	// standalone is set for a block with a key other than the visor's, or
+	// one that cannot be mounted. It is rebuilt from ownRaw by factory on
+	// every start and runs as its own service; ownPK is its key, if known.
+	standalone bool
+	ownPK      cipher.PubKey
+	ownRaw     json.RawMessage
+	factory    services.Factory
 	// restarts counts how often an own-key service was started again.
 	restarts int
 	// current is the running own-key service instance, for its state.
@@ -89,20 +90,13 @@ func (v *Visor) embeddedServices() []*embeddedService {
 				es.err = fmt.Errorf("block #%d (%s): key: %w", i, es.label, err)
 				continue
 			}
+			es.log = v.MasterLogger().PackageLogger(es.label)
 			if hasKey && pk != v.conf.PK {
 				// Its own key: run as the standalone service would, inside
 				// this process (init_embedded_services.go).
-				es.log = v.MasterLogger().PackageLogger(es.label)
-				es.ownPK, es.ownRaw, es.factory = pk, raw, factory
-				es.wake = make(chan struct{}, 1)
+				es.setStandalone(pk, raw, factory)
 				continue
 			}
-			if other, dup := seen[es.prefix]; dup {
-				es.err = fmt.Errorf("block #%d (%s) and %s both mount at %s", i, es.label, other, es.prefix)
-				continue
-			}
-			seen[es.prefix] = es.label
-			es.log = v.MasterLogger().PackageLogger(es.label)
 			svc, err := factory(b.Raw, es.log)
 			if err != nil {
 				es.err = fmt.Errorf("block #%d (%s): build: %w", i, es.label, err)
@@ -110,9 +104,19 @@ func (v *Visor) embeddedServices() []*embeddedService {
 			}
 			emb, ok := svc.(services.Embeddable)
 			if !ok {
-				es.err = fmt.Errorf("block #%d (%s): type %q cannot run inside the visor", i, es.label, b.Type)
+				if hasKey {
+					es.err = fmt.Errorf("block #%d (%s): type %q cannot be mounted under the visor's key", i, es.label, b.Type)
+					continue
+				}
+				// Keyless, or keyed in its own config file: run it as is.
+				es.setStandalone(services.ConfigPubKey(raw), raw, factory)
 				continue
 			}
+			if other, dup := seen[es.prefix]; dup {
+				es.err = fmt.Errorf("block #%d (%s) and %s both mount at %s", i, es.label, other, es.prefix)
+				continue
+			}
+			seen[es.prefix] = es.label
 			es.svc = emb
 			if agg, ok := svc.(services.CXOAggregating); ok {
 				for _, p := range agg.AggregatorPorts() {
@@ -122,6 +126,11 @@ func (v *Visor) embeddedServices() []*embeddedService {
 		}
 	})
 	return v.embedded.svcs
+}
+
+func (es *embeddedService) setStandalone(pk cipher.PubKey, raw json.RawMessage, factory services.Factory) {
+	es.standalone, es.ownPK, es.ownRaw, es.factory = true, pk, raw, factory
+	es.wake = make(chan struct{}, 1)
 }
 
 // hostCXOPubStorage is cxoPubStorage for a publisher on port: in memory
@@ -185,8 +194,11 @@ func (v *Visor) embeddedServiceStates() []visorapi.EmbeddedServiceState {
 			URL:       fmt.Sprintf("dmsg://%s:%d%s", v.conf.PK.Hex(), visorconfig.DmsgHTTPPort, es.prefix),
 			PlainHTTP: blockAddr(es.block),
 		}
-		if !es.ownPK.Null() {
-			st.URL = "dmsg://" + es.ownPK.Hex()
+		if es.standalone {
+			st.URL = ""
+			if !es.ownPK.Null() {
+				st.URL = "dmsg://" + es.ownPK.Hex()
+			}
 			st.OwnKey = true
 		}
 		es.mu.Lock()
@@ -202,7 +214,7 @@ func (v *Visor) embeddedServiceStates() []visorapi.EmbeddedServiceState {
 			st.Error = startErr.Error()
 		}
 		var stater services.Service = es.svc
-		if !es.ownPK.Null() {
+		if es.standalone {
 			es.mu.Lock()
 			stater = es.current
 			es.mu.Unlock()

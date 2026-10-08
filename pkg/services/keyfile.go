@@ -4,6 +4,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -68,4 +69,25 @@ func OwnKey(raw json.RawMessage) (resolved json.RawMessage, pk cipher.PubKey, ok
 		return nil, pk, false, err
 	}
 	return resolved, pk, true, nil
+}
+
+// ConfigPubKey returns the public key a block names inline or in the file its
+// "config_path" points at, or a null key.
+func ConfigPubKey(raw json.RawMessage) cipher.PubKey {
+	var probe struct {
+		PK         cipher.PubKey `json:"public_key"`
+		ConfigPath string        `json:"config_path"`
+	}
+	if json.Unmarshal(raw, &probe) != nil || !probe.PK.Null() || probe.ConfigPath == "" {
+		return probe.PK
+	}
+	data, err := os.ReadFile(probe.ConfigPath) //nolint:gosec
+	if err != nil {
+		return cipher.PubKey{}
+	}
+	var file struct {
+		PK cipher.PubKey `json:"public_key"`
+	}
+	_ = json.Unmarshal(data, &file) //nolint:errcheck
+	return file.PK
 }
