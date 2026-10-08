@@ -661,6 +661,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	lsAPI.SetHealthStatsProvider(v)
 	// GET /transports: the signed transport list, for callers over a transport.
 	lsAPI.SetTransportListProvider(v)
+	lsAPI.SetReachCardProvider(v)
 	// /debug/loglevel: whitelisted keys can turn on debug logging for a
 	// while. Only on this whitelisted surface, never on the localhost one.
 	lsAPI.SetLogLevelController(v)

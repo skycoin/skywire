@@ -85,7 +85,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	if fp, ok := arClient.(interface {
 		SetResolveFastPath(addrresolver.FastResolve)
 	}); ok {
-		fp.SetResolveFastPath(v.arResolveFast)
+		fp.SetResolveFastPath(v.resolveFast)
 	}
 
 	v.initLock.Lock()
