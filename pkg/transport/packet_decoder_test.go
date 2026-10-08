@@ -14,7 +14,7 @@ func TestPacketDecoderSplitsAnyChunking(t *testing.T) {
 	var stream []byte
 	for i := 0; i < 500; i++ {
 		payload := make([]byte, rng.Intn(3000)) // includes empty payloads
-		rng.Read(payload)                        //nolint:errcheck
+		rng.Read(payload)                       //nolint:errcheck
 		p, err := routing.MakeDataPacket(routing.RouteID(i), payload)
 		if err != nil {
 			t.Fatal(err)

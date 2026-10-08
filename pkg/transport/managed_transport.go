@@ -612,65 +612,8 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 			mt.closeWith("read: " + err.Error())
 			return
 		}
-		// Any received packet (pong, the peer's own ping, or route data) proves
-		// the link is alive — feed the unarmed-silence reaper in tickPing.
-		mt.lastRecvNanos.Store(time.Now().UnixNano())
-		if !p.Type().Known() {
-			mt.malformedFrames.Add(1)
-			head := p
-			if len(head) > 24 {
-				head = head[:24]
-			}
-			log.WithField("type", byte(p.Type())).WithField("size", p.Size()).
-				WithField("head_hex", fmt.Sprintf("%x", []byte(head))).
-				Debug("Malformed frame: unknown packet type (peer framing off)")
-		}
-		// Intercept transport-level ping/pong before forwarding to router.
-		if p.RouteID() == 0 {
-			switch p.Type() {
-			case routing.TransportPingPacket:
-				mt.handleTransportPing(p)
-				continue
-			case routing.TransportPongPacket:
-				mt.handleTransportPong(p)
-				continue
-			case routing.TransportBwProbePacket:
-				mt.handleBwProbe(p)
-				continue
-			case routing.TransportBwAckPacket:
-				mt.handleBwAck(p)
-				continue
-			case routing.CascadeSetupPacket, routing.CascadeAckPacket:
-				if mt.cascadeHandler != nil {
-					mt.cascadeHandler(p, mt)
-				}
-				continue
-			case routing.DHTPacket:
-				if mt.dhtHandler != nil {
-					mt.dhtHandler(p, mt)
-				}
-				continue
-			case routing.SetupRPCPacket:
-				if mt.setupRPCHandler != nil {
-					mt.setupRPCHandler(p, mt)
-				}
-				continue
-			case routing.VisorRPCPacket:
-				if mt.visorRPCHandler != nil {
-					mt.visorRPCHandler(p, mt)
-				}
-				continue
-			case routing.SkynetForwardPacket:
-				if mt.skynetFwdHandler != nil {
-					mt.skynetFwdHandler(p, mt)
-				}
-				continue
-			case routing.AppDirectPacket:
-				if mt.appDirectHandler != nil {
-					mt.appDirectHandler(p, mt)
-				}
-				continue
-			}
+		if !mt.dispatchPacket(p) {
+			continue
 		}
 		// Try without a timer first, since time.After costs an allocation and
 		// a timer heap insert for every packet.
@@ -1732,4 +1675,71 @@ func (mt *ManagedTransport) MalformedFrames() int64 { return mt.malformedFrames.
 func (mt *ManagedTransport) Attached() bool {
 	a, ok := mt.getTransport().(interface{ Attached() bool })
 	return ok && a.Attached()
+}
+
+// dispatchPacket records p as received and handles the transport level
+// packets. It reports whether p is for the router.
+func (mt *ManagedTransport) dispatchPacket(p routing.Packet) bool {
+	log := mt.log
+	// Any received packet (pong, the peer's own ping, or route data) proves
+	// the link is alive — feed the unarmed-silence reaper in tickPing.
+	mt.lastRecvNanos.Store(time.Now().UnixNano())
+	if !p.Type().Known() {
+		mt.malformedFrames.Add(1)
+		head := p
+		if len(head) > 24 {
+			head = head[:24]
+		}
+		log.WithField("type", byte(p.Type())).WithField("size", p.Size()).
+			WithField("head_hex", fmt.Sprintf("%x", []byte(head))).
+			Debug("Malformed frame: unknown packet type (peer framing off)")
+	}
+	// Intercept transport-level ping/pong before forwarding to router.
+	if p.RouteID() == 0 {
+		switch p.Type() {
+		case routing.TransportPingPacket:
+			mt.handleTransportPing(p)
+			return false
+		case routing.TransportPongPacket:
+			mt.handleTransportPong(p)
+			return false
+		case routing.TransportBwProbePacket:
+			mt.handleBwProbe(p)
+			return false
+		case routing.TransportBwAckPacket:
+			mt.handleBwAck(p)
+			return false
+		case routing.CascadeSetupPacket, routing.CascadeAckPacket:
+			if mt.cascadeHandler != nil {
+				mt.cascadeHandler(p, mt)
+			}
+			return false
+		case routing.DHTPacket:
+			if mt.dhtHandler != nil {
+				mt.dhtHandler(p, mt)
+			}
+			return false
+		case routing.SetupRPCPacket:
+			if mt.setupRPCHandler != nil {
+				mt.setupRPCHandler(p, mt)
+			}
+			return false
+		case routing.VisorRPCPacket:
+			if mt.visorRPCHandler != nil {
+				mt.visorRPCHandler(p, mt)
+			}
+			return false
+		case routing.SkynetForwardPacket:
+			if mt.skynetFwdHandler != nil {
+				mt.skynetFwdHandler(p, mt)
+			}
+			return false
+		case routing.AppDirectPacket:
+			if mt.appDirectHandler != nil {
+				mt.appDirectHandler(p, mt)
+			}
+			return false
+		}
+	}
+	return true
 }
