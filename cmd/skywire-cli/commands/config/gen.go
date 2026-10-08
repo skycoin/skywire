@@ -1134,6 +1134,10 @@ func mergeExistingApps(log *logging.Logger) {
 	if len(oldConfCache.EmbeddedServices) > 0 && len(conf.EmbeddedServices) == 0 {
 		conf.EmbeddedServices = oldConfCache.EmbeddedServices
 	}
+	// So is memory_limit: a host sized for the services it runs keeps its limit.
+	if oldConfCache.MemoryLimit != "" {
+		conf.MemoryLimit = oldConfCache.MemoryLimit
+	}
 	if oldConfCache.Launcher == nil {
 		return
 	}
