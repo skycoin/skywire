@@ -199,47 +199,51 @@ func HTTPHandler(h http.Handler) ConnHandler {
 				return logserver.WithOverTransport(ctx)
 			}
 		}
-		// Serve on a single-connection listener that yields conn
-		// exactly once then blocks forever (the server closes when
-		// the connection is done).
-		_ = srv.Serve(&singleConnListener{conn: conn}) //nolint:errcheck,gosec
+		// Serve on a listener that yields conn once; Serve returns when the
+		// connection closes.
+		_ = srv.Serve(newSingleConnListener(conn)) //nolint:errcheck,gosec
 	}
 }
 
-// singleConnListener is a net.Listener that yields exactly one
-// connection then blocks until Close is called. Used to feed a
-// single skynet/route connection into http.Server.Serve.
+// singleConnListener is a net.Listener that yields one connection, then
+// blocks Accept until that connection or the listener is closed. Used to feed
+// a single skynet/route connection into http.Server.Serve, which calls Accept
+// again after the connection ends and would otherwise wait there for good.
 type singleConnListener struct {
-	conn net.Conn
-	once sync.Once
-	done chan struct{}
+	conn     net.Conn
+	once     sync.Once
+	done     chan struct{}
+	doneOnce sync.Once
+}
+
+func newSingleConnListener(conn net.Conn) *singleConnListener {
+	return &singleConnListener{conn: conn, done: make(chan struct{})}
+}
+
+// closeNotifyConn closes its listener when the connection is closed.
+type closeNotifyConn struct {
+	net.Conn
+	l *singleConnListener
+}
+
+func (c closeNotifyConn) Close() error {
+	err := c.Conn.Close()
+	_ = c.l.Close() //nolint:errcheck
+	return err
 }
 
 func (l *singleConnListener) Accept() (net.Conn, error) {
 	var conn net.Conn
-	l.once.Do(func() {
-		conn = l.conn
-		l.done = make(chan struct{})
-	})
+	l.once.Do(func() { conn = l.conn })
 	if conn != nil {
-		return conn, nil
+		return closeNotifyConn{Conn: conn, l: l}, nil
 	}
-	// Block until Close — the http.Server will call Close when the
-	// connection handler returns, which breaks this Accept.
-	if l.done != nil {
-		<-l.done
-	}
+	<-l.done
 	return nil, fmt.Errorf("listener closed")
 }
 
 func (l *singleConnListener) Close() error {
-	if l.done != nil {
-		select {
-		case <-l.done:
-		default:
-			close(l.done)
-		}
-	}
+	l.doneOnce.Do(func() { close(l.done) })
 	return nil
 }
 
