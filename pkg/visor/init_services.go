@@ -629,7 +629,7 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 						log.Errorf("Panic in service handler: %v", r)
 					}
 				}()
-				handler(remoteConn)
+				handler(overTransportConn{remoteConn})
 			}()
 			return
 		}

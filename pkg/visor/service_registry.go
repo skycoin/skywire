@@ -14,6 +14,7 @@
 package visor
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -193,6 +194,11 @@ func HTTPHandler(h http.Handler) ConnHandler {
 	return func(conn net.Conn) {
 		defer conn.Close()             //nolint:errcheck,gosec
 		srv := http.Server{Handler: h} //nolint:gosec
+		if oc, ok := conn.(overTransportConn); ok && oc.Conn != nil {
+			srv.ConnContext = func(ctx context.Context, _ net.Conn) context.Context {
+				return logserver.WithOverTransport(ctx)
+			}
+		}
 		// Serve on a single-connection listener that yields conn
 		// exactly once then blocks forever (the server closes when
 		// the connection is done).
@@ -243,3 +249,7 @@ func (l *singleConnListener) Addr() net.Addr {
 	}
 	return nil
 }
+
+// overTransportConn marks a connection the skynet forwarding server took in
+// over a skywire transport, so an HTTP handler can tell it from a dmsg one.
+type overTransportConn struct{ net.Conn }
