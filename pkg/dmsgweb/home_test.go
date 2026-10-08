@@ -77,7 +77,7 @@ func TestRenderHomePageServiceEndpoints(t *testing.T) {
 	assert.Contains(t, page, "Service API endpoints")
 	// A no-param GET endpoint from the manifest stays a plain link, paired with
 	// the service's resolver alias and tunneled through the same proxy.
-	assert.Contains(t, page, `href="http://tpd.dmsg/all-transports"`)
+	assert.Contains(t, page, `href="http://tpd.dmsg/all-transports/stats"`)
 	assert.Contains(t, page, `href="http://dmsgd.dmsg/dmsg-discovery/available_servers"`)
 	// A service with no configured alias is not rendered.
 	assert.NotContains(t, page, "http://ar.dmsg/resolve")
