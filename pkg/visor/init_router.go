@@ -424,6 +424,12 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 			logger.Warn("RSN-oracle 2-hop route path: no oracle could be wired; inert")
 		}
 	}
+	// 3-hop routes from the neighbors' own signed lists, read over transports.
+	if lf, ok := r.(interface {
+		SetTransportListFetcher(router.TransportListFetcher)
+	}); ok {
+		lf.SetTransportListFetcher(newTransportListFetcher(v))
+	}
 
 	return nil
 }

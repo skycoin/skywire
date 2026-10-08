@@ -24,6 +24,10 @@ type RouteSourceStats struct {
 	// DirectSetupFallbacks is one-hop routes the peer could not set up
 	// directly, sent to a setup node instead.
 	DirectSetupFallbacks int64 `json:"direct_setup_fallbacks"`
+	// ListAttempts is 3-hop calculations from other visors' own transport
+	// lists; ListRoutes is how many found a route.
+	ListAttempts int64 `json:"list_attempts"`
+	ListRoutes   int64 `json:"list_routes"`
 }
 
 type routeSourceCounters struct {
@@ -33,6 +37,9 @@ type routeSourceCounters struct {
 
 	directSetups         atomic.Int64
 	directSetupFallbacks atomic.Int64
+
+	listAttempts atomic.Int64
+	listRoutes   atomic.Int64
 }
 
 // RouteSourceStats returns the counters.
@@ -43,5 +50,7 @@ func (r *router) RouteSourceStats() RouteSourceStats {
 		LocalFallback:        r.routeSource.localFallback.Load(),
 		DirectSetups:         r.routeSource.directSetups.Load(),
 		DirectSetupFallbacks: r.routeSource.directSetupFallbacks.Load(),
+		ListAttempts:         r.routeSource.listAttempts.Load(),
+		ListRoutes:           r.routeSource.listRoutes.Load(),
 	}
 }
