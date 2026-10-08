@@ -414,6 +414,8 @@ type DiagSnapshot struct {
 	VStream []DiagVStreamMux `json:"vstream,omitempty"`
 	// Dmsg is per-session ping health plus the relay nominee/backoff state.
 	Dmsg *DiagDmsg `json:"dmsg,omitempty"`
+	// Reach counts the reach cards this visor serves and fetches (reach_card.go).
+	Reach *DiagReachCards `json:"reach,omitempty"`
 	// Transports is per-transport liveness: missed pongs, last packet age,
 	// and which route-ID-0 handlers are wired (a missing one means that
 	// packet type is dropped by the router — #4725).
@@ -534,4 +536,17 @@ type DiagTransport struct {
 	// range — the peer wrote a packet whose size field did not match it.
 	MalformedFrames int64    `json:"malformed_frames"`
 	Handlers        []string `json:"handlers,omitempty"`
+}
+
+// DiagReachCards is how dials were answered from peers' own reach cards.
+type DiagReachCards struct {
+	// Advertised is whether this visor serves its card (ar_transport_limit >= 0).
+	Advertised bool `json:"advertised"`
+	// Held is how many peers' cards are cached.
+	Held int `json:"held"`
+	// Fetches, Hits and Misses count card fetches, and lookups a card answered
+	// or left to the address resolver.
+	Fetches uint64 `json:"fetches"`
+	Hits    uint64 `json:"hits"`
+	Misses  uint64 `json:"misses"`
 }
