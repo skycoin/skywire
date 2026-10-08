@@ -12,6 +12,8 @@
 // under `visor state --select diag` as route_setup.
 package router
 
+import "sync/atomic"
+
 // SetupPathStats is the visor-side companion to the setup node's
 // requests_by_kind: how this visor's own route setups were issued.
 type SetupPathStats struct {
@@ -46,6 +48,21 @@ type SetupPathStats struct {
 	WarmHits   uint64 `json:"warm_hits"`
 	WarmMisses uint64 `json:"warm_misses"`
 	WarmStored uint64 `json:"warm_stored"`
+
+	// Cascade outcomes, split by whether the request reached the setup node
+	// over dmsg or over a transport. Legacy is a DialRouteGroup, where the
+	// setup node installs the rules on each hop itself.
+	CascadeOKDmsg          uint64 `json:"cascade_ok_dmsg"`
+	CascadeOKTransport     uint64 `json:"cascade_ok_transport"`
+	CascadeFailedDmsg      uint64 `json:"cascade_failed_dmsg"`
+	CascadeFailedTransport uint64 `json:"cascade_failed_transport"`
+	LegacyDmsg             uint64 `json:"legacy_dmsg"`
+	LegacyTransport        uint64 `json:"legacy_transport"`
+}
+
+// cascadeCounters backs the Cascade* and Legacy* fields.
+type cascadeCounters struct {
+	okDmsg, okTransport, failedDmsg, failedTransport, legacyDmsg, legacyTransport atomic.Uint64
 }
 
 // SetupPathStats reports how this visor's route setups were issued. Safe on a
@@ -55,6 +72,10 @@ func (r *router) SetupPathStats() SetupPathStats {
 	if d, ok := r.conf.RouteGroupDialer.(*setupNodeDialer); ok && d != nil {
 		b := d.batcher.stats()
 		s.Batched, s.Singles, s.Fallback = b.Batched, b.Singles, b.Fallback
+		c := &d.cascade
+		s.CascadeOKDmsg, s.CascadeOKTransport = c.okDmsg.Load(), c.okTransport.Load()
+		s.CascadeFailedDmsg, s.CascadeFailedTransport = c.failedDmsg.Load(), c.failedTransport.Load()
+		s.LegacyDmsg, s.LegacyTransport = c.legacyDmsg.Load(), c.legacyTransport.Load()
 	}
 	o := r.oraclePlans.stats()
 	s.OracleQueries, s.OracleShared, s.OracleHits = o.Queries, o.Shared, o.Hits
