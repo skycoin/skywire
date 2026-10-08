@@ -92,6 +92,9 @@ type ManagedTransport struct {
 	client      network.Client
 	transport   network.Transport
 	transportCh chan struct{}
+	// push is set by Start when reads go to the push workers. Guarded by
+	// transportMx.
+	push        *pushState
 	transportMx sync.Mutex
 	// writeSem serializes writers against each other on the underlying conn, so
 	// a packet reaches the wire as one frame. It is deliberately NOT
@@ -612,65 +615,8 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 			mt.closeWith("read: " + err.Error())
 			return
 		}
-		// Any received packet (pong, the peer's own ping, or route data) proves
-		// the link is alive — feed the unarmed-silence reaper in tickPing.
-		mt.lastRecvNanos.Store(time.Now().UnixNano())
-		if !p.Type().Known() {
-			mt.malformedFrames.Add(1)
-			head := p
-			if len(head) > 24 {
-				head = head[:24]
-			}
-			log.WithField("type", byte(p.Type())).WithField("size", p.Size()).
-				WithField("head_hex", fmt.Sprintf("%x", []byte(head))).
-				Debug("Malformed frame: unknown packet type (peer framing off)")
-		}
-		// Intercept transport-level ping/pong before forwarding to router.
-		if p.RouteID() == 0 {
-			switch p.Type() {
-			case routing.TransportPingPacket:
-				mt.handleTransportPing(p)
-				continue
-			case routing.TransportPongPacket:
-				mt.handleTransportPong(p)
-				continue
-			case routing.TransportBwProbePacket:
-				mt.handleBwProbe(p)
-				continue
-			case routing.TransportBwAckPacket:
-				mt.handleBwAck(p)
-				continue
-			case routing.CascadeSetupPacket, routing.CascadeAckPacket:
-				if mt.cascadeHandler != nil {
-					mt.cascadeHandler(p, mt)
-				}
-				continue
-			case routing.DHTPacket:
-				if mt.dhtHandler != nil {
-					mt.dhtHandler(p, mt)
-				}
-				continue
-			case routing.SetupRPCPacket:
-				if mt.setupRPCHandler != nil {
-					mt.setupRPCHandler(p, mt)
-				}
-				continue
-			case routing.VisorRPCPacket:
-				if mt.visorRPCHandler != nil {
-					mt.visorRPCHandler(p, mt)
-				}
-				continue
-			case routing.SkynetForwardPacket:
-				if mt.skynetFwdHandler != nil {
-					mt.skynetFwdHandler(p, mt)
-				}
-				continue
-			case routing.AppDirectPacket:
-				if mt.appDirectHandler != nil {
-					mt.appDirectHandler(p, mt)
-				}
-				continue
-			}
+		if !mt.dispatchPacket(p) {
+			continue
 		}
 		// Try without a timer first, since time.After costs an allocation and
 		// a timer heap insert for every packet.
@@ -1050,7 +996,12 @@ func (mt *ManagedTransport) closeWith(reason string) {
 		}
 		mt.transport = nil
 	}
+	ps := mt.push
 	mt.transportMx.Unlock()
+	if ps != nil {
+		// Not inline: closeWith can run under the manager's lock, which onEnd takes.
+		go ps.finish()
+	}
 	if mt.queueDeletion != nil {
 		mt.queueDeletion(mt.Entry.ID)
 	} else {
@@ -1078,7 +1029,11 @@ func (mt *ManagedTransport) closeWithoutDeregister() {
 		}
 		mt.transport = nil
 	}
+	ps := mt.push
 	mt.transportMx.Unlock()
+	if ps != nil {
+		go ps.finish()
+	}
 }
 
 // Accept accepts a new underlying transport.
@@ -1203,6 +1158,7 @@ func (mt *ManagedTransport) setTransport(newTransport network.Transport) {
 
 	// Set new underlying transport.
 	mt.transport = newTransport
+	mt.attachPush(newTransport)
 	select {
 	case mt.transportCh <- struct{}{}:
 		mt.log.Debug("Sent signal to 'mt.transportCh'.")
@@ -1732,4 +1688,71 @@ func (mt *ManagedTransport) MalformedFrames() int64 { return mt.malformedFrames.
 func (mt *ManagedTransport) Attached() bool {
 	a, ok := mt.getTransport().(interface{ Attached() bool })
 	return ok && a.Attached()
+}
+
+// dispatchPacket records p as received and handles the transport level
+// packets. It reports whether p is for the router.
+func (mt *ManagedTransport) dispatchPacket(p routing.Packet) bool {
+	log := mt.log
+	// Any received packet (pong, the peer's own ping, or route data) proves
+	// the link is alive — feed the unarmed-silence reaper in tickPing.
+	mt.lastRecvNanos.Store(time.Now().UnixNano())
+	if !p.Type().Known() {
+		mt.malformedFrames.Add(1)
+		head := p
+		if len(head) > 24 {
+			head = head[:24]
+		}
+		log.WithField("type", byte(p.Type())).WithField("size", p.Size()).
+			WithField("head_hex", fmt.Sprintf("%x", []byte(head))).
+			Debug("Malformed frame: unknown packet type (peer framing off)")
+	}
+	// Intercept transport-level ping/pong before forwarding to router.
+	if p.RouteID() == 0 {
+		switch p.Type() {
+		case routing.TransportPingPacket:
+			mt.handleTransportPing(p)
+			return false
+		case routing.TransportPongPacket:
+			mt.handleTransportPong(p)
+			return false
+		case routing.TransportBwProbePacket:
+			mt.handleBwProbe(p)
+			return false
+		case routing.TransportBwAckPacket:
+			mt.handleBwAck(p)
+			return false
+		case routing.CascadeSetupPacket, routing.CascadeAckPacket:
+			if mt.cascadeHandler != nil {
+				mt.cascadeHandler(p, mt)
+			}
+			return false
+		case routing.DHTPacket:
+			if mt.dhtHandler != nil {
+				mt.dhtHandler(p, mt)
+			}
+			return false
+		case routing.SetupRPCPacket:
+			if mt.setupRPCHandler != nil {
+				mt.setupRPCHandler(p, mt)
+			}
+			return false
+		case routing.VisorRPCPacket:
+			if mt.visorRPCHandler != nil {
+				mt.visorRPCHandler(p, mt)
+			}
+			return false
+		case routing.SkynetForwardPacket:
+			if mt.skynetFwdHandler != nil {
+				mt.skynetFwdHandler(p, mt)
+			}
+			return false
+		case routing.AppDirectPacket:
+			if mt.appDirectHandler != nil {
+				mt.appDirectHandler(p, mt)
+			}
+			return false
+		}
+	}
+	return true
 }
