@@ -261,6 +261,12 @@ func (d *setupNodeDialer) Dial(
 			d.cascade.okDmsg.Add(1)
 			return rules, connectedNode, nil
 		}
+		if setupConnLost(cascErr) {
+			// The connection to the setup node is gone, so a legacy request on
+			// it cannot succeed. The dial's retry gets a fresh setup client.
+			d.cascade.failedDmsg.Add(1)
+			return routing.EdgeRules{}, cipher.PubKey{}, fmt.Errorf("route setup: %w", cascErr)
+		}
 		if !errors.Is(cascErr, errCascadeSignUnimplemented) {
 			d.cascade.failedDmsg.Add(1)
 			log.WithError(cascErr).Warn("Source-driven cascade failed, falling back to DMSG DialRouteGroup")
@@ -332,4 +338,10 @@ func (d *setupNodeDialer) dialViaTransport(
 		}
 		return rules, nil
 	}
+}
+
+// setupConnLost reports whether err means the RPC connection to the setup node
+// closed, as opposed to the setup node refusing the request.
+func setupConnLost(err error) bool {
+	return errors.Is(err, rpc.ErrShutdown) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
 }
