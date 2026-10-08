@@ -35,9 +35,6 @@ func initEmbeddedServices(ctx context.Context, v *Visor, log *logging.Logger) er
 	if len(svcs) == 0 {
 		return nil
 	}
-	if v.dmsgHTTPMux == nil {
-		return fmt.Errorf("embedded services: dmsg HTTP mux not initialized")
-	}
 	host := services.Host{
 		DmsgClient: v.dmsgC,
 		PK:         v.conf.PK,
@@ -48,6 +45,13 @@ func initEmbeddedServices(ctx context.Context, v *Visor, log *logging.Logger) er
 	for _, es := range svcs {
 		if es.err != nil {
 			return fmt.Errorf("embedded services: %w", es.err)
+		}
+		if !es.ownPK.Null() {
+			go v.runOwnKeyService(ctx, es)
+			continue
+		}
+		if v.dmsgHTTPMux == nil {
+			return fmt.Errorf("embedded services: dmsg HTTP mux not initialized")
 		}
 		host.Log = es.log
 		handler, err := es.svc.Embed(ctx, host)
@@ -109,4 +113,53 @@ func servePlainHTTP(ctx context.Context, addr string, handler http.Handler, log 
 	}()
 	log.WithField("addr", lis.Addr().String()).Info("Embedded service also served on plain HTTP")
 	return nil
+}
+
+// Restart pacing for an own-key service that stopped on its own. Variables
+// so tests can shorten them.
+var (
+	ownKeyMinBackoff = 5 * time.Second
+	ownKeyMaxBackoff = 5 * time.Minute
+	// ownKeySteadyRun resets the backoff: a run this long was not a crash loop.
+	ownKeySteadyRun = 10 * time.Minute
+)
+
+// runOwnKeyService runs a service under its own key, as `svc run` would but
+// inside the visor, until ctx ends. It is built again from its block after
+// every stop, so a failure in one service never takes the visor down.
+func (v *Visor) runOwnKeyService(ctx context.Context, es *embeddedService) {
+	backoff := ownKeyMinBackoff
+	for {
+		start := time.Now()
+		svc, err := es.factory(es.ownRaw, es.log)
+		if err == nil {
+			es.mu.Lock()
+			es.running, es.startErr, es.current = true, nil, svc
+			es.mu.Unlock()
+			es.log.WithField("addr", "dmsg://"+es.ownPK.Hex()).Info("Embedded service started under its own key")
+			err = svc.Run(ctx)
+		}
+		es.mu.Lock()
+		es.running, es.current = false, nil
+		if err != nil {
+			es.startErr = err
+		}
+		es.mu.Unlock()
+		if ctx.Err() != nil {
+			return
+		}
+		if time.Since(start) > ownKeySteadyRun {
+			backoff = ownKeyMinBackoff
+		}
+		es.log.WithError(err).WithField("retry_in", backoff).Warn("Embedded service stopped; starting it again")
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		es.mu.Lock()
+		es.restarts++
+		es.mu.Unlock()
+		backoff = min(backoff*2, ownKeyMaxBackoff)
+	}
 }

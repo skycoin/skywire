@@ -1129,6 +1129,11 @@ func mergeExistingApps(log *logging.Logger) {
 	if len(oldConfCache.AppSettings) > 0 {
 		conf.AppSettings = oldConfCache.AppSettings
 	}
+	// embedded_services is the operator's too: the deployment services a host
+	// visor runs. A regen without it would drop them at the next update.
+	if len(oldConfCache.EmbeddedServices) > 0 && len(conf.EmbeddedServices) == 0 {
+		conf.EmbeddedServices = oldConfCache.EmbeddedServices
+	}
 	if oldConfCache.Launcher == nil {
 		return
 	}

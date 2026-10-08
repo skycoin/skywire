@@ -46,3 +46,26 @@ func withKeyFile(raw json.RawMessage) (json.RawMessage, error) {
 	}
 	return json.Marshal(fields)
 }
+
+// OwnKey resolves a block's "keyfile" the way the services runner does and
+// returns the block with its key filled in, plus the public key it names.
+// ok is false for a block that names no key.
+func OwnKey(raw json.RawMessage) (resolved json.RawMessage, pk cipher.PubKey, ok bool, err error) {
+	resolved, err = withKeyFile(raw)
+	if err != nil {
+		return nil, pk, false, err
+	}
+	var probe struct {
+		SecKey cipher.SecKey `json:"secret_key"`
+	}
+	if err := json.Unmarshal(resolved, &probe); err != nil {
+		return nil, pk, false, err
+	}
+	if probe.SecKey.Null() {
+		return resolved, pk, false, nil
+	}
+	if pk, err = probe.SecKey.PubKey(); err != nil {
+		return nil, pk, false, err
+	}
+	return resolved, pk, true, nil
+}
