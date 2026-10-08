@@ -125,6 +125,8 @@ type Visor struct {
 	dmsgHTTPTr   *http.Transport
 	// dmsgSkynet counts how dials to .dmsg peers went (dmsg_over_skynet.go).
 	dmsgSkynet dmsgSkynetStats
+	// reach holds this visor's reach card and the peers' it fetched (reach_card.go).
+	reach reachCards
 	// tpList caches the signed list GET /transports serves.
 	tpList      transportListCache
 	dmsgDC      *dmsg.Client       // dmsg direct client

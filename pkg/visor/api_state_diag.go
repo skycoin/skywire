@@ -129,6 +129,7 @@ func (v *Visor) DiagSnapshot() *visorapi.DiagSnapshot {
 		dd.OverSkynet = v.dmsgSkynet.snapshot()
 		d.Dmsg = dd
 	}
+	d.Reach = v.reachCardStats()
 	return d
 }
 
