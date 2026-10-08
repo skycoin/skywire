@@ -28,6 +28,7 @@ import (
 	ut "github.com/skycoin/skywire/cmd/svc/uptime-tracker/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	_ "github.com/skycoin/skywire/pkg/services/ar"
+	_ "github.com/skycoin/skywire/pkg/services/confbs"
 	_ "github.com/skycoin/skywire/pkg/services/dmsgdisc"
 	_ "github.com/skycoin/skywire/pkg/services/dmsgsrv"
 	_ "github.com/skycoin/skywire/pkg/services/noop"

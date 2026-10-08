@@ -116,6 +116,13 @@ func (s *service) Run(ctx context.Context) error {
 		}
 	}()
 
+	// Visors and `skywire cli tp --remote` use the dmsg RPC; port 0 leaves
+	// out the old plain-HTTP admin API.
+	if conf.Port == 0 {
+		<-runCtx.Done()
+		return nil
+	}
+
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", conf.Port),
 		ReadHeaderTimeout: 2 * time.Second,
