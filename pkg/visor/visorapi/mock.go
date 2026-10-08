@@ -1905,3 +1905,8 @@ func (mc *mockRPCClient) Skyenv() (SkyenvState, error) { return SkyenvState{}, n
 
 // SetSkyenv implements API.
 func (mc *mockRPCClient) SetSkyenv(_ SkyenvEdits) (SkyenvState, error) { return SkyenvState{}, nil }
+
+// EmbeddedServiceControl implements API.
+func (mc *mockRPCClient) EmbeddedServiceControl(_, _ string) error {
+	return nil
+}

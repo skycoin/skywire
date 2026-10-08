@@ -1373,3 +1373,7 @@ func (proxyDefaultAPI) Skyenv() (visorapi.SkyenvState, error) {
 func (proxyDefaultAPI) SetSkyenv(_ visorapi.SkyenvEdits) (visorapi.SkyenvState, error) {
 	return visorapi.SkyenvState{}, ErrProxyNotSupported
 }
+
+func (proxyDefaultAPI) EmbeddedServiceControl(_, _ string) error {
+	return ErrProxyNotSupported
+}

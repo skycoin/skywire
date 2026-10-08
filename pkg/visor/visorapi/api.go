@@ -98,6 +98,9 @@ type Node interface {
 	UIServerStatus() (*UIServerStatus, error)
 	CheckAREntry(pk string) ([]string, error)
 	ARSelfInfo() (*ARSelfRegistration, error)
+	// EmbeddedServiceControl stops, starts or restarts an embedded service that
+	// runs under its own key.
+	EmbeddedServiceControl(name, action string) error
 	// Close closes the API connection (for RPC clients)
 	Close() error
 }
