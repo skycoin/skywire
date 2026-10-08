@@ -129,7 +129,7 @@ func TestVStreamRelayRejects(t *testing.T) {
 	tmR := newTestManager(t)
 	apk, ask := cipher.GenerateKeyPair()
 	bpk := mustPK(t)
-	mtRA, _ := servingTransport(t, tmR, apk, types.STCPR)
+	mtRA, memRA := servingTransport(t, tmR, apk, types.STCPR)
 	_, memRB := servingTransport(t, tmR, bpk, types.SUDPH)
 	muxR := NewVStreamMux(tmR, routing.SkynetForwardPacket, logging.MustGetLogger("relay-test"))
 
@@ -141,17 +141,22 @@ func TestVStreamRelayRejects(t *testing.T) {
 	muxR.HandlePacket(buildRelaySynWithSig(1, apk, bpk, 1, badSig, false), mtRA)
 	require.Empty(t, memRB.written, "relay must not forward a bad-signature SYN")
 	require.Equal(t, int64(0), muxR.relayCount.Load())
+	require.Empty(t, memRA.written, "an unverified SYN gets no answer")
 
 	// Already-relayed SYN (1-hop guard).
 	memRB.written = nil
+	memRA.written = nil
 	muxR.HandlePacket(buildRelaySyn(t, 2, apk, ask, bpk, 2, true), mtRA)
 	require.Empty(t, memRB.written, "relay must not re-forward an already-relayed SYN")
 	require.Equal(t, int64(0), muxR.relayCount.Load())
+	requireRefused(t, memRA.written, 2)
 
 	// No transport to the destination.
+	memRA.written = nil
 	noTpDst := mustPK(t)
 	muxR.HandlePacket(buildRelaySyn(t, 3, apk, ask, noTpDst, 3, false), mtRA)
 	require.Equal(t, int64(0), muxR.relayCount.Load(), "no dst transport → no relay leg")
+	requireRefused(t, memRA.written, 3)
 }
 
 // TestVStreamRelayTerminatesLocally covers a relay SYN whose destination is
@@ -190,4 +195,13 @@ func TestVStreamDialThroughRelay(t *testing.T) {
 	require.Equal(t, tmA.Conf.PubKey, syn.senderPK)
 	require.Equal(t, bpk, syn.dstPK)
 	require.NoError(t, cipher.VerifyPubKeySignedPayload(tmA.Conf.PubKey, syn.sig, relaySigPayload(syn.originID, tmA.Conf.PubKey, bpk)))
+}
+
+// requireRefused checks that the relay answered the origin's SYN with a FIN on
+// the same stream, so the origin gives up at once instead of timing out.
+func requireRefused(t *testing.T, written []byte, streamID uint64) {
+	t.Helper()
+	fin := parseVStream(t, written)
+	require.Equal(t, streamID, fin.streamID)
+	require.Equal(t, byte(VStreamFlagFin), fin.flags)
 }
