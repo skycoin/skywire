@@ -50,6 +50,8 @@ type embeddedService struct {
 	stopped    bool
 	restartNow bool
 	wake       chan struct{}
+	// started is set once its runner is going, so a resume does not start a second.
+	started bool
 	// mu guards running (set once the service is mounted) and startErr,
 	// written during init and read by state queries.
 	mu       sync.Mutex

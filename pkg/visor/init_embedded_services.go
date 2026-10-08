@@ -47,8 +47,7 @@ func initEmbeddedServices(ctx context.Context, v *Visor, log *logging.Logger) er
 			return fmt.Errorf("embedded services: %w", es.err)
 		}
 		if !es.ownPK.Null() {
-			go v.runOwnKeyService(ctx, es)
-			continue
+			continue // started by initOwnKeyServices
 		}
 		if v.dmsgHTTPMux == nil {
 			return fmt.Errorf("embedded services: dmsg HTTP mux not initialized")
@@ -227,6 +226,29 @@ func (v *Visor) EmbeddedServiceControl(name, action string) error {
 	select {
 	case es.wake <- struct{}{}:
 	default:
+	}
+	return nil
+}
+
+// initOwnKeyServices starts the embedded services that run under their own
+// key. It depends on no other module: such a service has its own dmsg client
+// and identity, and the visor's own modules may need it before they finish,
+// as the address resolver client needs an address resolver run here.
+func initOwnKeyServices(ctx context.Context, v *Visor, _ *logging.Logger) error {
+	for _, es := range v.embeddedServices() {
+		if es.ownPK.Null() {
+			continue
+		}
+		if es.err != nil {
+			return fmt.Errorf("embedded services: %w", es.err)
+		}
+		es.mu.Lock()
+		started := es.started
+		es.started = true
+		es.mu.Unlock()
+		if !started { // a resume runs the modules again
+			go v.runOwnKeyService(ctx, es)
+		}
 	}
 	return nil
 }

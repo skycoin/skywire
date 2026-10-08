@@ -53,7 +53,9 @@ func TestEmbeddedServiceRunsUnderItsOwnKey(t *testing.T) {
 	v := &Visor{conf: &visorconfig.V1{Common: common, EmbeddedServices: []services.Block{b}}}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	require.NoError(t, initOwnKeyServices(ctx, v, logging.MustGetLogger("test")), "it needs no other module")
 	require.NoError(t, initEmbeddedServices(ctx, v, logging.MustGetLogger("test")), "no dmsg HTTP mux is needed")
+	require.NoError(t, initOwnKeyServices(ctx, v, logging.MustGetLogger("test")), "a resume starts no second runner")
 
 	require.Eventually(t, func() bool {
 		st := v.embeddedServiceStates()
@@ -82,7 +84,7 @@ func TestEmbeddedServiceControl(t *testing.T) {
 	v := &Visor{conf: &visorconfig.V1{Common: common, EmbeddedServices: []services.Block{b}}}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	require.NoError(t, initEmbeddedServices(ctx, v, logging.MustGetLogger("test")))
+	require.NoError(t, initOwnKeyServices(ctx, v, logging.MustGetLogger("test")))
 
 	state := func() (bool, bool) {
 		s := v.embeddedServiceStates()[0]
