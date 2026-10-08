@@ -27,11 +27,12 @@ func (s *redisStore) bandwidthDailyKey(tpID string, t time.Time) string {
 	return fmt.Sprintf("%s:bw:daily:%s:%s", serviceName, tpID, t.Format("2006-01-02"))
 }
 
-// bandwidthHistoryTTL matches the daily-bandwidth hash TTL (see
-// UpdateBandwidth). The persisted edge pair must outlive the ~5-min
+// bandwidthHistoryTTL is how long the live per-transport and per-visor
+// history stays in redis: two weeks. Older days live in the settled leaf
+// archive (leaf_archive.go). The persisted edge pair must outlive the ~5-min
 // registration TTL for as long as the bandwidth data it identifies, so an
 // expired transport's counterparty stays recoverable.
-const bandwidthHistoryTTL = 35 * 24 * time.Hour
+const bandwidthHistoryTTL = 14 * 24 * time.Hour
 
 // bandwidthEdgesKey stores a transport's real edge pair ("<edge0hex>,<edge1hex>")
 // so recoverBandwidthEdges can identify BOTH edges of an expired transport even
