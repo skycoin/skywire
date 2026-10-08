@@ -47,7 +47,7 @@ func TestDecoderMatchesRead(t *testing.T) {
 	msgs := make([][]byte, 200)
 	for i := range msgs {
 		msgs[i] = make([]byte, 1+rng.Intn(9000))
-		rng.Read(msgs[i]) //nolint:errcheck
+		_, _ = rng.Read(msgs[i])
 		want = append(want, msgs[i]...)
 	}
 	go func() {

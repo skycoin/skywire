@@ -71,7 +71,7 @@ func TestPushReaderOverKCP(t *testing.T) {
 	msgs := make([][]byte, 2000)
 	for i := range msgs {
 		msgs[i] = make([]byte, 1+rng.Intn(3000))
-		rng.Read(msgs[i]) //nolint:errcheck
+		_, _ = rng.Read(msgs[i])
 		want = append(want, msgs[i]...)
 	}
 
