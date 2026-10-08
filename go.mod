@@ -32,6 +32,7 @@ require (
 	github.com/0magnet/spheregraph v0.0.0
 	github.com/0magnet/sysinfo v1.1.4-0.20261003211934-59c35da8ce3f
 	github.com/0magnet/termanim v0.0.0
+	github.com/0magnet/webrtc/v4 v4.2.24
 	github.com/0magnet/websh v0.0.1-0.20261004205330-1203fa7da370
 	github.com/0magnet/wfdrive v0.3.2
 	github.com/0magnet/winbox-go v0.0.0
@@ -93,10 +94,9 @@ require (
 	github.com/peterh/liner v1.2.2
 	github.com/pgavlin/femto v0.0.0-20201224065653-0c9d20f9cac4
 	github.com/pion/datachannel v1.6.3
-	github.com/pion/ice/v4 v4.4.5
+	github.com/pion/ice/v4 v4.4.7
 	github.com/pion/interceptor v0.1.49
 	github.com/pion/rtp v1.10.5
-	github.com/pion/webrtc/v4 v4.2.22
 	github.com/pires/go-proxyproto v0.15.0
 	github.com/pkg/sftp v1.13.11
 	github.com/pterm/pterm v0.12.83
@@ -142,6 +142,7 @@ require (
 	atomicgo.dev/cursor v0.2.0 // indirect
 	atomicgo.dev/keyboard v0.2.10 // indirect
 	atomicgo.dev/schedule v0.1.0 // indirect
+	github.com/0magnet/dtls/v3 v3.1.11 // indirect
 	github.com/0magnet/go-dsp v0.0.0 // indirect
 	github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20260917205352-e937bb47801a // indirect
