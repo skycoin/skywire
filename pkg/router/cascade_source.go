@@ -25,6 +25,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	rpc "github.com/0magnet/gobrpc"
 	"github.com/sirupsen/logrus"
@@ -69,6 +70,7 @@ func runSourceCascade(
 	}
 
 	log.Debug("Source-driven cascade: requesting RSN reserve signatures")
+	start := time.Now()
 
 	// --- Phase 1: ask RSN to sign reserve cascades ---
 	var reserveReply CascadeSignReserveReply
@@ -79,25 +81,17 @@ func runSourceCascade(
 		}
 		return routing.EdgeRules{}, fmt.Errorf("cascade: sign reserve RPC: %w", err)
 	}
+	signedReserve := time.Now()
 
 	// --- Phase 1 (cont): consume our own (outermost) layer locally, which
 	// reserves our route IDs and relays the inner payload down our own
-	// transport to the first hop, collecting the cascade ACK. ---
-	fwdAck, err := originProc.ProcessLocalOrigin(reserveReply.FwdReserveBytes)
+	// transport to the first hop, collecting the cascade ACK. The forward and
+	// reverse cascades are independent, so they travel at the same time.
+	fwdAck, revAck, err := originBoth(originProc, reserveReply.FwdReserveBytes, reserveReply.RevReserveBytes, "reserve")
 	if err != nil {
-		return routing.EdgeRules{}, fmt.Errorf("cascade: fwd reserve: %w", err)
+		return routing.EdgeRules{}, err
 	}
-	if fwdAck.Error != "" {
-		return routing.EdgeRules{}, fmt.Errorf("cascade: fwd reserve rejected: %s", fwdAck.Error)
-	}
-
-	revAck, err := originProc.ProcessLocalOrigin(reserveReply.RevReserveBytes)
-	if err != nil {
-		return routing.EdgeRules{}, fmt.Errorf("cascade: rev reserve: %w", err)
-	}
-	if revAck.Error != "" {
-		return routing.EdgeRules{}, fmt.Errorf("cascade: rev reserve rejected: %s", revAck.Error)
-	}
+	reserved := time.Now()
 
 	log.WithField("fwd_ids", fmt.Sprintf("%v", fwdAck.RouteIDs)).
 		WithField("rev_ids", fmt.Sprintf("%v", revAck.RouteIDs)).
@@ -117,25 +111,19 @@ func runSourceCascade(
 		}
 		return routing.EdgeRules{}, fmt.Errorf("cascade: sign install RPC: %w", err)
 	}
+	signedInstall := time.Now()
 
-	// --- Phase 2 (cont): consume our own install layer locally and relay. ---
-	fwdInstAck, err := originProc.ProcessLocalOrigin(installReply.FwdInstallBytes)
-	if err != nil {
-		return routing.EdgeRules{}, fmt.Errorf("cascade: fwd install: %w", err)
-	}
-	if fwdInstAck.Error != "" {
-		return routing.EdgeRules{}, fmt.Errorf("cascade: fwd install rejected: %s", fwdInstAck.Error)
+	// --- Phase 2 (cont): consume our own install layers locally and relay. ---
+	if _, _, err := originBoth(originProc, installReply.FwdInstallBytes, installReply.RevInstallBytes, "install"); err != nil {
+		return routing.EdgeRules{}, err
 	}
 
-	revInstAck, err := originProc.ProcessLocalOrigin(installReply.RevInstallBytes)
-	if err != nil {
-		return routing.EdgeRules{}, fmt.Errorf("cascade: rev install: %w", err)
-	}
-	if revInstAck.Error != "" {
-		return routing.EdgeRules{}, fmt.Errorf("cascade: rev install rejected: %s", revInstAck.Error)
-	}
-
-	log.Info("Source-driven cascade route setup succeeded")
+	ms := func(a, b time.Time) int64 { return b.Sub(a).Milliseconds() }
+	log.WithField("sign_reserve_ms", ms(start, signedReserve)).
+		WithField("reserve_ms", ms(signedReserve, reserved)).
+		WithField("sign_install_ms", ms(reserved, signedInstall)).
+		WithField("install_ms", ms(signedInstall, time.Now())).
+		Info("Source-driven cascade route setup succeeded")
 	return installReply.InitEdge, nil
 }
 
@@ -148,4 +136,28 @@ func rpcCall(ctx context.Context, rpcC *rpc.Client, serviceMethod string, args, 
 	case <-call.Done:
 		return call.Error
 	}
+}
+
+// originBoth processes the forward and reverse cascades of one phase at the
+// same time and returns both ACKs, or the first failure.
+func originBoth(p cascadeOriginProcessor, fwd, rev []byte, phase string) (fwdAck, revAck *routing.CascadeAck, err error) {
+	var revErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		revAck, revErr = p.ProcessLocalOrigin(rev)
+	}()
+	fwdAck, err = p.ProcessLocalOrigin(fwd)
+	<-done
+	switch {
+	case err != nil:
+		return nil, nil, fmt.Errorf("cascade: fwd %s: %w", phase, err)
+	case fwdAck.Error != "":
+		return nil, nil, fmt.Errorf("cascade: fwd %s rejected: %s", phase, fwdAck.Error)
+	case revErr != nil:
+		return nil, nil, fmt.Errorf("cascade: rev %s: %w", phase, revErr)
+	case revAck.Error != "":
+		return nil, nil, fmt.Errorf("cascade: rev %s rejected: %s", phase, revAck.Error)
+	}
+	return fwdAck, revAck, nil
 }
