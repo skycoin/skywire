@@ -480,7 +480,9 @@ type idleTimeoutConn struct {
 }
 
 func (c *idleTimeoutConn) Read(p []byte) (int, error) {
-	if conn, ok := c.rwc.(net.Conn); ok {
+	// Asserted on the method, not net.Conn: a QUIC stream has it without
+	// being a net.Conn, and must not keep the 5 s handshake deadline.
+	if conn, ok := c.rwc.(interface{ SetReadDeadline(time.Time) error }); ok {
 		conn.SetReadDeadline(time.Now().Add(c.timeout)) //nolint:errcheck,gosec
 	}
 	n, err := c.rwc.Read(p)
@@ -491,7 +493,7 @@ func (c *idleTimeoutConn) Read(p []byte) (int, error) {
 }
 
 func (c *idleTimeoutConn) Write(p []byte) (int, error) {
-	if conn, ok := c.rwc.(net.Conn); ok {
+	if conn, ok := c.rwc.(interface{ SetWriteDeadline(time.Time) error }); ok {
 		conn.SetWriteDeadline(time.Now().Add(c.timeout)) //nolint:errcheck,gosec
 	}
 	return c.rwc.Write(p)
