@@ -207,7 +207,7 @@ h2{font-size:15px;margin:0;font-weight:620}figcaption p,.note{margin:2px 0 0;col
 .body{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:18px;align-items:center;margin-top:10px}.body .plot{margin-top:0}
 @media (max-width:720px){.body{grid-template-columns:1fr}.pie{max-width:260px;width:100%;margin:0 auto}}
 .pie svg{width:100%;max-width:150px;height:auto;margin:0 auto}.pie .pt{text-anchor:middle;font-size:24px;font-weight:650;fill:var(--fg)}.pie .pl{text-anchor:middle;font-size:14px;fill:var(--muted)}
-.pie ul{list-style:none;padding:0;margin:8px 0 0;font-size:12px;height:114px;overflow:hidden}.pie li{display:flex;align-items:center;gap:6px;height:19px;white-space:nowrap}.pie li span{overflow:hidden;text-overflow:ellipsis;min-width:0}.pie li b{margin-left:auto;flex-shrink:0;font-variant-numeric:tabular-nums;font-weight:600}.pie i{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.pie ul{list-style:none;padding:0;margin:8px 0 0;font-size:12px;height:114px;overflow-y:auto}.pie li{display:flex;align-items:center;gap:6px;height:19px;white-space:nowrap}.pie li span{overflow:hidden;text-overflow:ellipsis;min-width:0}.pie li b{margin-left:auto;flex-shrink:0;font-variant-numeric:tabular-nums;font-weight:600}.pie i{width:8px;height:8px;border-radius:2px;flex-shrink:0}
 .pin{font-size:11px;color:var(--muted);margin:6px 0 0;visibility:hidden}figure.pinned .pin{visibility:visible}figure.pinned .cursor{stroke:var(--accent);stroke-dasharray:none;stroke-width:1.5}.plot svg{cursor:crosshair}svg{display:block;width:100%;height:auto;overflow:visible}
 .grid,.xgrid{stroke:var(--grid);stroke-width:1}.axis{stroke:var(--axis)}
 .ytick,.xtick{fill:var(--muted);font-size:11px}.ytick{text-anchor:end}.xtick{text-anchor:middle}
@@ -259,9 +259,11 @@ if(!tot)h0='<circle cx="100" cy="100" r="76" fill="none" stroke="var(--grid)" st
 var h='<svg viewBox="0 0 200 200" role="img">'+h0,a=-Math.PI/2;
 items.forEach(function(it){var f=it.v/tot,b=Math.min(a+f*2*Math.PI,a+2*Math.PI-0.0001);
 h+='<path d="'+arc(92,60,a,b)+'" fill="'+it.q.c+'"><title>'+esc(it.q.n)+' '+esc(it.q.v[i])+' ('+(f*100).toFixed(1)+'%)</title></path>';a+=f*2*Math.PI});
-h+='<text x="100" y="98" class="pt">'+esc(d.s[0].n==='total'?d.s[0].v[i]:'')+'</text><text x="100" y="122" class="pl">'+esc(lab(d,i))+'</text></svg><ul>';
-items.sort(function(x,y){return y.v-x.v}).slice(0,6).forEach(function(it){var f=it.v/tot;
-h+='<li><i style="background:'+it.q.c+'"></i><span>'+esc(it.q.n)+'</span><b>'+(f*100).toFixed(f<0.1?1:0)+'%</b></li>'});
+var rs=d.s.filter(function(q){return q.r}),c=d.s[0].n==='total'?d.s[0].v[i]:(rs.length===1?rs[0].v[i]:'');
+h+='<text x="100" y="98" class="pt">'+esc(c||'')+'</text><text x="100" y="122" class="pl">'+esc(lab(d,i))+'</text></svg><ul>';
+rs.map(function(q){return {q:q,v:q.r[i]}}).sort(function(x,y){return (y.v||0)-(x.v||0)}).forEach(function(it){
+var t=tot&&it.v>0?' title="'+(it.v/tot*100).toFixed(1)+'%"':'';
+h+='<li'+t+'><i style="background:'+it.q.c+'"></i><span>'+esc(it.q.n)+'</span><b>'+esc(it.q.v[i]||'')+'</b></li>'});
 el.innerHTML=h+'</ul><p class="pin">Pinned. Click the same point to release.</p>'}
 function init(){document.querySelectorAll('figure.chart').forEach(function(f){
 var s=f.querySelector('script'),svg=f.querySelector('.plot svg'),tip=f.querySelector('.tip'),cur=f.querySelector('.cursor'),pe=f.querySelector('.pie');
