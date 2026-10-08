@@ -29,6 +29,7 @@ var (
 	closeDmsg          func()
 	proxyAddr          string
 	skynetVia          string
+	skynetType         string
 	filterDomainSuffix string
 	sk                 cipher.SecKey
 	pk                 cipher.PubKey
