@@ -17,8 +17,15 @@ import (
 //   - "auto": set to 60% of available system RAM
 //   - "256MiB", "512MiB", "1GiB", etc.: explicit limit
 //   - "": no limit (default)
+//
+// A GOMEMLIMIT in the environment wins, so a service unit can size the
+// visor without editing its config.
 func applyMemoryLimit(log *logging.Logger, limit string) {
 	if limit == "" {
+		return
+	}
+	if env := os.Getenv("GOMEMLIMIT"); env != "" {
+		log.Infof("GOMEMLIMIT=%s from the environment, ignoring memory_limit %q", env, limit)
 		return
 	}
 
