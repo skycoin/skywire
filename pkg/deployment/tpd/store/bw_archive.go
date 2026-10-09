@@ -9,8 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
-
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 )
 
@@ -110,17 +108,19 @@ func (s *redisStore) bandwidthDailyTTLFor() int64 {
 	return bandwidthDailyTTLSeconds
 }
 
-// cleanOldBandwidthDaily queues the deletion of every transport's daily hash
-// older than the live window whose day is archived, or, without an archive,
-// older than eight days. It used to delete only the day exactly eight days
-// back, so a day the cleanup missed lived out its full TTL.
-func (s *redisStore) cleanOldBandwidthDaily(ctx context.Context, pipe redis.Pipeliner, now time.Time) {
+// cleanOldBandwidthDaily unlinks every transport's daily hash older than the
+// live window whose day is archived, or, without an archive, older than eight
+// days. It used to delete only the day exactly eight days back, so a day the
+// cleanup missed lived out its full TTL. The first run after an upgrade finds
+// millions, so they go in batches, never one pipeline.
+func (s *redisStore) cleanOldBandwidthDaily(ctx context.Context, now time.Time) error {
 	keep := 8
 	if s.leafArchive != "" {
 		keep = bandwidthDailyLiveDays
 	}
 	cutoff := now.AddDate(0, 0, -keep).Format(MetricsDateFormat)
 	archived := map[string]bool{}
+	var batch []string
 	prefix := serviceName + ":bw:daily:"
 	iter := s.client.Scan(ctx, 0, prefix+"*", 10000).Iterator()
 	for iter.Next(ctx) {
@@ -144,6 +144,22 @@ func (s *redisStore) cleanOldBandwidthDaily(ctx context.Context, pipe redis.Pipe
 				continue
 			}
 		}
-		pipe.Del(ctx, key)
+		batch = append(batch, key)
+		if len(batch) == cleanBatch {
+			if err := s.client.Unlink(ctx, batch...).Err(); err != nil {
+				return err
+			}
+			batch = batch[:0]
+		}
 	}
+	if err := iter.Err(); err != nil {
+		return err
+	}
+	if len(batch) > 0 {
+		return s.client.Unlink(ctx, batch...).Err()
+	}
+	return nil
 }
+
+// cleanBatch is how many keys one UNLINK removes.
+const cleanBatch = 10000

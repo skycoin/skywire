@@ -56,10 +56,7 @@ func TestBandwidthDaysFromArchive(t *testing.T) {
 	for _, k := range []string{archivedOld, unarchivedOld, live} {
 		require.NoError(t, s.client.HSet(ctx, k, "bandwidth", 1).Err())
 	}
-	pipe := s.client.Pipeline()
-	s.cleanOldBandwidthDaily(ctx, pipe, now)
-	_, err = pipe.Exec(ctx)
-	require.NoError(t, err)
+	require.NoError(t, s.cleanOldBandwidthDaily(ctx, now))
 	n, err := s.client.Exists(ctx, archivedOld, unarchivedOld, live).Result()
 	require.NoError(t, err)
 	require.Equal(t, int64(2), n, "only the archived old day is deleted")

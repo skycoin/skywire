@@ -424,7 +424,9 @@ func (s *redisStore) BackupAndCleanOldBandwidth(ctx context.Context, backupPath 
 		delPipe.Del(ctx, s.visorBandwidthDailyKey(pkHex, day8))
 	}
 
-	s.cleanOldBandwidthDaily(ctx, delPipe, now)
+	if err := s.cleanOldBandwidthDaily(ctx, now); err != nil {
+		return err
+	}
 
 	if _, err := delPipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
 		return err
