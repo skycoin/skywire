@@ -622,6 +622,9 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		for i := range filtered {
 			idStr := idStrs[i]
 			for _, d := range ix.fetchDays(filtered[i].entry.ID, now, days) {
+				if !s.liveBandwidthDay(d) {
+					continue // from the archive below
+				}
 				// Same key as bandwidthDailyKey ("<svc>:bw:daily:<id>:<date>")
 				// but built by concat (single alloc, no fmt reflection) with the
 				// id + date precomputed above rather than re-formatting per day.
@@ -701,6 +704,19 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 					B:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
 				}
 				bwByEntry[bk.idx] = append(bwByEntry[bk.idx], dailyMetric)
+			}
+		}
+	}
+
+	// Days past the live window come from the archived leaves, newest first
+	// after the live ones, as the redis rows were.
+	if query.Bandwidth && s.leafArchive != "" {
+		for d := bandwidthDailyLiveDays; d < days; d++ {
+			day := s.archivedDay(ctx, dateStrs[d])
+			for i := range filtered {
+				if row, ok := day[idStrs[i]]; ok {
+					bwByEntry[i] = append(bwByEntry[i], row)
+				}
 			}
 		}
 	}

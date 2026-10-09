@@ -93,7 +93,7 @@ func (s *redisStore) UpdateBandwidth(ctx context.Context, transportID string,
 	}
 	moved, err := bandwidthScript.Run(ctx, s.client, keys,
 		reporterHex, currentSent, currentRecv, now.Unix(), typeOrUnknown(tpType),
-		int64((10*time.Minute)/time.Second), historyTTLSeconds, int64((400*24*time.Hour)/time.Second), date,
+		int64((10*time.Minute)/time.Second), historyTTLSeconds, int64((400*24*time.Hour)/time.Second), date, s.bandwidthDailyTTLFor(),
 	).Int()
 	if err != nil {
 		return err
@@ -241,6 +241,13 @@ func (s *redisStore) GetTransportBandwidth(ctx context.Context, tpID uuid.UUID,
 	case "daily":
 		for i := 0; i < limit; i++ {
 			t := now.AddDate(0, 0, -i)
+			if !s.liveBandwidthDay(i) {
+				date := t.Format(MetricsDateFormat)
+				if row, ok := s.archivedDay(ctx, date)[transportID]; ok {
+					results = append(results, BandwidthAggregation{TransportID: transportID, Period: "daily", PeriodKey: date, Bandwidth: edgeDayTotal(row)})
+				}
+				continue
+			}
 			key := s.bandwidthDailyKey(transportID, t)
 			agg, err := s.getBandwidthFromHash(ctx, key, transportID, "daily", t.Format("2006-01-02"))
 			if err == nil {
@@ -280,6 +287,9 @@ func (s *redisStore) GetVisorBandwidth(ctx context.Context, pk cipher.PubKey,
 	for d := 0; d < limit; d++ {
 		t := now.AddDate(0, 0, -d)
 		dateStr := t.Format("2006-01-02")
+		if !s.liveBandwidthDay(d) {
+			continue // from the archive below
+		}
 		for _, entry := range entries {
 			key := s.bandwidthDailyKey(entry.ID.String(), t)
 			cmds = append(cmds, pipe.HGetAll(ctx, key))
@@ -318,6 +328,23 @@ func (s *redisStore) GetVisorBandwidth(ctx context.Context, pk cipher.PubKey,
 				Bandwidth:   bw,
 				UpdatedAt:   updatedAt,
 			}
+		}
+	}
+
+	for d := bandwidthDailyLiveDays; s.leafArchive != "" && d < limit; d++ {
+		date := now.AddDate(0, 0, -d).Format(MetricsDateFormat)
+		day := s.archivedDay(ctx, date)
+		for _, entry := range entries {
+			row, ok := day[entry.ID.String()]
+			if !ok {
+				continue
+			}
+			agg := aggregatedByPeriod[date]
+			if agg == nil {
+				agg = &BandwidthAggregation{TransportID: pk.Hex(), Period: period, PeriodKey: date}
+				aggregatedByPeriod[date] = agg
+			}
+			agg.Bandwidth += edgeDayTotal(row)
 		}
 	}
 
@@ -397,12 +424,7 @@ func (s *redisStore) BackupAndCleanOldBandwidth(ctx context.Context, backupPath 
 		delPipe.Del(ctx, s.visorBandwidthDailyKey(pkHex, day8))
 	}
 
-	// Clean up per-transport daily bandwidth keys older than 8 days
-	oldPattern := fmt.Sprintf("%s:bw:daily:*:%s", serviceName, day8Str)
-	iter := s.client.Scan(ctx, 0, oldPattern, 10000).Iterator()
-	for iter.Next(ctx) {
-		delPipe.Del(ctx, iter.Val())
-	}
+	s.cleanOldBandwidthDaily(ctx, delPipe, now)
 
 	if _, err := delPipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
 		return err
