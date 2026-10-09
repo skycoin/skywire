@@ -11,6 +11,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // With the archive kept, a transport's daily hash lives only the live window.
@@ -61,4 +62,19 @@ func TestBandwidthDaysFromArchive(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(2), n, "only the archived old day is deleted")
 	require.Zero(t, s.client.Exists(ctx, archivedOld).Val())
+}
+
+// With the archive kept, a transport's edge pair outlives its daily hashes by
+// a day rather than two weeks.
+func TestBandwidthEdgesTTLWithArchive(t *testing.T) {
+	s := newTestRedisStore(t)
+	s.SetLeafArchive(t.TempDir())
+	ctx := context.Background()
+	a, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	e := transport.MakeEntry(a, b, "stcpr", transport.LabelAutomatic)
+	require.NoError(t, s.RegisterTransportsBatch(ctx, a, []*transport.SignedEntry{{Entry: &e}}))
+	ttl, err := s.client.TTL(ctx, s.bandwidthEdgesKey(e.ID.String())).Result()
+	require.NoError(t, err)
+	require.InDelta(t, bandwidthDailyTTL+24*time.Hour, ttl, float64(time.Minute))
 }
