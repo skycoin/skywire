@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/skycoin/skywire/pkg/httputil"
 )
 
@@ -79,6 +81,8 @@ type Page struct {
 	// Build's, read from Store.
 	Stats *ServiceStats
 	Store Store
+	// Log, when set, records why a render failed; the client only sees a 503.
+	Log logrus.FieldLogger
 
 	mu    sync.Mutex
 	cache map[string]cached
@@ -105,6 +109,9 @@ func (p *Page) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	body, err := p.render(r.Context(), rg)
 	if err != nil {
+		if p.Log != nil {
+			p.Log.WithError(err).WithField("range", rg.Name).Warn("charts page render failed")
+		}
 		http.Error(w, "charts unavailable", http.StatusServiceUnavailable)
 		return
 	}
