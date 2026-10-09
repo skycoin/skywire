@@ -102,7 +102,7 @@ func TestMemNodeWalkLeavesSorted(t *testing.T) {
 	walkLeaves(root, "", func(p string, _ []byte) bool {
 		visits = append(visits, p)
 		return true
-	})
+	}, nil)
 	want := []string{"a/x", "a/z", "b/y"}
 	if !sort.StringsAreSorted(visits) {
 		t.Errorf("visits not sorted: %v", visits)
