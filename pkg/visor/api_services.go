@@ -665,8 +665,15 @@ func (v *Visor) DmsgPtyExec(args visorapi.DmsgPtyExecArgs) (*pty.CommandExecResu
 		return v.dmsgPty.ExecRemoteVia(ctx, pty.NewDmsgDialer(v.dmsgC), args.RemotePK, args.RemotePort, &req)
 	case "skynet":
 		return v.dmsgPty.ExecRemoteVia(ctx, skywireDialer{ensureTransport: v.ensureFastTransport}, args.RemotePK, args.RemotePort, &req)
+	case "tcp":
+		// A standalone pty host's own listener, reached as this visor so
+		// its whitelist sees the visor's key. Plain TCP, not a transport.
+		if args.Addr == "" {
+			return nil, fmt.Errorf("dmsgpty: tcp scheme needs addr host:port")
+		}
+		return v.dmsgPty.ExecRemoteVia(ctx, pty.NewTCPDialer(args.Addr, v.conf.PK, v.conf.SK), args.RemotePK, args.RemotePort, &req)
 	default:
-		return nil, fmt.Errorf("dmsgpty: unknown scheme %q (want \"\", \"dmsg\", or \"skynet\")", args.Scheme)
+		return nil, fmt.Errorf("dmsgpty: unknown scheme %q (want \"\", \"dmsg\", \"skynet\" or \"tcp\")", args.Scheme)
 	}
 }
 
