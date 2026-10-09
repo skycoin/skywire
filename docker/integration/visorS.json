@@ -48,8 +48,8 @@
     "listening_address": ":7777"
   },
   "transport": {
-    "discovery": "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/tpd",
-    "address_resolver": "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/ar",
+    "discovery": "dmsg://032edaa87383c6987eb5037fcf7281745e7db142c65a4f537589fe44d6b07c16a8:80",
+    "address_resolver": "dmsg://0283c63541f61e21f3b490feb1f20c9b69e2ecea691268c243339c0dc7d1b553d7:80",
     "public_autoconnect": true,
     "hypervisor_autoconnect": true,
     "transport_setup": [
@@ -67,13 +67,13 @@
     "route_setup_nodes": [
       "02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1"
     ],
-    "route_finder": "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/rf",
+    "route_finder": "dmsg://0206f60cafeb0d1ab58dd8aba5a36daa707497642280c91a1043860141e23f5a66:80",
     "route_finder_timeout": "10s",
     "min_hops": 1,
     "policy_per_dial": "none"
   },
   "launcher": {
-    "service_discovery": "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/sd",
+    "service_discovery": "dmsg://028d2b274019b46e8ac68b1c147cf7ef2cdf799f0271d252efe87a73bdc847b83e:80",
     "apps": [
       {
         "name": "vpn-client",
@@ -191,6 +191,22 @@
       "type": "transport-discovery",
       "name": "tpd",
       "secret_key": "4f86dccdf89cee59129c0d7368bb3a1978f8acaf859ede2be2089b1aee1feebd",
+      "dmsg": {
+        "sessions_count": 1,
+        "discovery_dmsg": "dmsg://02857a87410b3709eddb99bc00508cc7cfeb588d5ed87e3ef9d2aac838ad49470a:80",
+        "servers": [
+          {
+            "version": "",
+            "sequence": 0,
+            "timestamp": 0,
+            "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+            "server": {
+              "address": "174.0.0.17:8080",
+              "availableSessions": 0
+            }
+          }
+        ]
+      },
       "addr": ":9094",
       "redis": "redis://redis:6379/1",
       "entry_timeout": "2m",
@@ -201,6 +217,22 @@
       "type": "route-finder",
       "name": "rf",
       "secret_key": "196763a99ee79263bd5b943f0f52333c999854264243e5acb547f420e1b15af0",
+      "dmsg": {
+        "sessions_count": 1,
+        "discovery_dmsg": "dmsg://02857a87410b3709eddb99bc00508cc7cfeb588d5ed87e3ef9d2aac838ad49470a:80",
+        "servers": [
+          {
+            "version": "",
+            "sequence": 0,
+            "timestamp": 0,
+            "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+            "server": {
+              "address": "174.0.0.17:8080",
+              "availableSessions": 0
+            }
+          }
+        ]
+      },
       "addr": ":9092",
       "redis": "redis://redis:6379/1"
     },
@@ -208,6 +240,22 @@
       "type": "service-discovery",
       "name": "sd",
       "secret_key": "1ef988de45d6056bb47a5dec9aa82fa58a3068a88e5c4a25ea1dc3ef42f88913",
+      "dmsg": {
+        "sessions_count": 1,
+        "discovery_dmsg": "dmsg://02857a87410b3709eddb99bc00508cc7cfeb588d5ed87e3ef9d2aac838ad49470a:80",
+        "servers": [
+          {
+            "version": "",
+            "sequence": 0,
+            "timestamp": 0,
+            "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+            "server": {
+              "address": "174.0.0.17:8080",
+              "availableSessions": 0
+            }
+          }
+        ]
+      },
       "addr": ":9091",
       "redis": "redis://redis:6379/2",
       "entry_timeout": "2m"
@@ -216,6 +264,22 @@
       "type": "address-resolver",
       "name": "ar",
       "secret_key": "9148ff4d4595de30da39e7d9d9469a07189fadb748dfc10456075138fca4f75f",
+      "dmsg": {
+        "sessions_count": 1,
+        "discovery_dmsg": "dmsg://02857a87410b3709eddb99bc00508cc7cfeb588d5ed87e3ef9d2aac838ad49470a:80",
+        "servers": [
+          {
+            "version": "",
+            "sequence": 0,
+            "timestamp": 0,
+            "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+            "server": {
+              "address": "174.0.0.17:8080",
+              "availableSessions": 0
+            }
+          }
+        ]
+      },
       "addr": ":9093",
       "udp_addr": ":9093",
       "public_udp_addr": "174.0.0.17:9093",
