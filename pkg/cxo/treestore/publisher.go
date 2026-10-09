@@ -254,6 +254,7 @@ func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publish
 	allow := newAllowState(conf.SubscriberAllowlist)
 	cfg.OnSubscribeRemote = subscribeHook(allow)
 
+	sweepUnreachable(cfg.Config, conf.Logger)
 	cxoNode, err := node.NewNode(cfg)
 	if err != nil {
 		return nil, err
@@ -315,6 +316,7 @@ func NewWithTCP(listenAddr string, sk cipher.SecKey, conf PubConfig) (*Publisher
 	allow := newAllowState(conf.SubscriberAllowlist)
 	cfg.OnSubscribeRemote = subscribeHook(allow)
 
+	sweepUnreachable(cfg.Config, conf.Logger)
 	cxoNode, err := node.NewNode(cfg)
 	if err != nil {
 		return nil, err
@@ -1765,5 +1767,35 @@ func (p *Publisher) SetPublishHook(fn func(*registry.Root)) {
 	p.publishHook.Store(&fn)
 	if r := p.lastRoot.Load(); r != nil {
 		fn(r)
+	}
+}
+
+// sweepUnreachable opens a disk-backed store before its node starts and
+// deletes the objects no stored Root reaches. Reference counts leak on long
+// runs, and the startup compaction trusts them: one visor's stats store held
+// six million unreachable objects in a 2.4 GB file. Freed pages are given
+// back by the compaction when the store is opened next.
+func sweepUnreachable(conf *skyobject.Config, log *logging.Logger) {
+	if conf.InMemoryDB || conf.DataDir == "" {
+		return
+	}
+	if log == nil {
+		log = logging.MustGetLogger("cxo-treestore")
+	}
+	c, err := skyobject.NewContainer(conf)
+	if err != nil {
+		log.WithError(err).Warn("treestore-pub: could not open the store to sweep it")
+		return
+	}
+	defer c.Close() //nolint:errcheck
+	start := time.Now()
+	removed, volume, err := cxoutils.RemoveUnreachable(c)
+	if err != nil {
+		log.WithError(err).Warn("treestore-pub: store sweep skipped")
+		return
+	}
+	if removed > 0 {
+		log.WithField("objects", removed).WithField("bytes", volume).WithField("took", time.Since(start)).
+			Info("treestore-pub: removed objects no stored Root reaches")
 	}
 }
