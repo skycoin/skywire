@@ -53,6 +53,7 @@ func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Fie
 		Links: []charts.Link{{Name: "Network graph", Href: "graph"}},
 		Stats: api.Stats,
 		Store: st,
+		Log:   log,
 		Build: func(ctx context.Context, r charts.Range, now time.Time) (charts.Content, error) {
 			return api.buildCharts(ctx, c, r, now)
 		},

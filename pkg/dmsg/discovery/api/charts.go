@@ -36,6 +36,7 @@ func (a *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Field
 		About: strings.Split(a.dmsgAddr, ":")[0],
 		Stats: a.Stats,
 		Store: st,
+		Log:   log,
 		Build: func(ctx context.Context, r charts.Range, now time.Time) (charts.Content, error) {
 			return a.buildCharts(ctx, st, r, now)
 		},
