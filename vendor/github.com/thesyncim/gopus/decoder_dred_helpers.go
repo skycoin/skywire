@@ -73,6 +73,10 @@ func (d *Decoder) ensureDREDRecoveryState() *decoderDREDRecoveryState {
 	}
 	if s.decoderDREDRecoveryState == nil {
 		s.decoderDREDRecoveryState = &decoderDREDRecoveryState{}
+		// pcmHistorySynced describes this particular PLC state. A new state
+		// must be primed from retained history before any stale "synced" value
+		// can suppress replay.
+		d.pcmHistorySynced = false
 	}
 	return s.decoderDREDRecoveryState
 }
@@ -196,6 +200,7 @@ func (d *Decoder) dropDREDRecoveryStateIfDormant() {
 	}
 	if (d.dredPayloadState() == nil || !d.dredPayloadState().dredModelLoaded) && !d.dredNeuralModelsLoaded() {
 		d.dred.decoderDREDRecoveryState = nil
+		d.pcmHistorySynced = false
 	}
 	d.maybeDropDREDState()
 }
@@ -243,6 +248,7 @@ func (d *Decoder) maybeDropDREDState() {
 }
 
 func (d *Decoder) resetDREDRuntimeState() {
+	d.clearDREDSILKRawHistory()
 	if s := d.dredState(); s != nil {
 		if p := s.decoderDREDPayloadState; p != nil {
 			p.dredData = nil
@@ -255,12 +261,32 @@ func (d *Decoder) resetDREDRuntimeState() {
 	}
 }
 
+func (d *Decoder) clearDREDSILKRawHistory() {
+	if d == nil {
+		return
+	}
+	clear(d.rawSILKHistory[:])
+	d.rawSILKHistoryPos = 0
+	d.rawSILKHistoryFill = 0
+	d.pcmHistorySynced = false
+	d.directRawCapture = false
+}
+
+func (d *Decoder) discardDREDSILKRawHistory() {
+	if d == nil {
+		return
+	}
+	clear(d.rawSILKHistory[:])
+	d.rawSILKHistoryPos = 0
+	d.rawSILKHistoryFill = 0
+}
+
 func (d *Decoder) dredNeuralConfigEligible() bool {
 	if d == nil || d.channels < 1 || d.channels > 2 {
 		return false
 	}
 	switch d.sampleRate {
-	case 8000, 12000, 16000, 24000, 48000:
+	case 8000, 12000, 16000, 24000, 48000, 96000:
 		return true
 	default:
 		return false
@@ -305,6 +331,12 @@ func (d *Decoder) setDNNBlob(blob *dnnblob.Blob) error {
 	d.pitchDNNLoaded = models.PitchDNN
 	d.plcModelLoaded = models.PLC
 	d.farganModelLoaded = models.FARGAN
+	if !models.PLC {
+		// silk_PLC() retains each good 16 kHz frame through lpcnet_plc_update()
+		// even before model loading. Keep that PCM across model loads, and drop
+		// it when no PLC model can consume the history.
+		d.clearDREDSILKRawHistory()
+	}
 	d.setOSCEModelState(models)
 	// Bind the extra-control OSCE BWE model when its weights are present. The
 	// helper is a no-op outside of `gopus_osce` builds so the
@@ -493,6 +525,11 @@ func (d *Decoder) dredNeuralConcealmentAvailable() bool {
 	return d.pitchDNNLoaded && d.plcModelLoaded && d.farganModelLoaded
 }
 
+func (d *Decoder) dredFECFeaturesQueued() bool {
+	r := d.dredRecoveryState()
+	return r != nil && r.dredPLC.FECFillPos() != 0
+}
+
 func (d *Decoder) ensureDREDNeuralConcealmentRuntime() bool {
 	if !d.dredNeuralConcealmentAvailable() {
 		return false
@@ -637,31 +674,107 @@ func (d *Decoder) hybridDREDLowbandSamples(frameSizeSamples int) (int, bool) {
 	return nativeSamples / sampleRate, true
 }
 
-func (d *Decoder) beginHybridDREDLowbandHook() (cleanup func(), used func() bool) {
+// prepareDREDHistoryForSILKTransition primes a fresh neural PLC state from
+// retained SILK PCM before the recursive transition concealment runs.
+func (d *Decoder) prepareDREDHistoryForSILKTransition() {
 	if !d.ensureDREDNeuralConcealmentRuntime() {
-		return func() {}, func() bool { return false }
+		return
+	}
+	r := d.dredRecoveryState()
+	if r == nil || r.dredPLC.Blend() != 0 || r.dredPLC.FECReadPos() != 0 ||
+		r.dredPLC.FECFillPos() != 0 || r.dredPLC.FECSkip() != 0 {
+		return
+	}
+	d.refreshDREDHistoryFromSILKDecoder()
+}
+
+// prepareDREDHistoryForCELTTransition applies good SILK PCM decoded before a
+// recursive CELT transition PLC frame when the live neural state is dormant.
+func (d *Decoder) prepareDREDHistoryForCELTTransition() {
+	if !d.ensureDREDNeuralConcealmentRuntime() {
+		return
+	}
+	r := d.dredRecoveryState()
+	if r == nil || r.dredPLC.Blend() != 0 || r.dredPLC.FECReadPos() != 0 ||
+		r.dredPLC.FECFillPos() != 0 || r.dredPLC.FECSkip() != 0 {
+		return
+	}
+	d.refreshDREDHistoryFromSILKDecoder()
+}
+
+// clearDREDBlendAfterCELTPacket mirrors celt_decoder.c clearing the retained
+// LPCNet blend flag when a real CELT packet exits concealment.
+func (d *Decoder) clearDREDBlendAfterCELTPacket() {
+	if r := d.dredRecoveryState(); r != nil {
+		r.dredPLC.ClearBlend()
+	}
+}
+
+// beginHybridDREDLowbandHook installs the cached callback that renders
+// neural lowband frames inside the SILK PLC path.
+func (d *Decoder) beginHybridDREDLowbandHook() bool {
+	if d != nil {
+		d.deepPLCHookUsed = false
+	}
+	if !d.ensureDREDNeuralConcealmentRuntime() {
+		return false
 	}
 	r := d.dredRecoveryState()
 	n := d.dredNeuralState()
 	if !d.silkDREDLowbandHookEligible() || r == nil || n == nil {
-		return func() {}, func() bool { return false }
+		return false
 	}
-	directUsed := false
-	d.silkDecoder.SetDeepPLCLossMonoHook(func(concealed []float32) (bool, int) {
-		if len(concealed) < lpcnetplc.FrameSize || len(concealed)%lpcnetplc.FrameSize != 0 {
-			return false, 0
-		}
-		if !d.generateDREDNeuralFrames16k(concealed, len(concealed)) {
-			return false, 0
-		}
-		directUsed = true
-		return true, 0
-	})
-	return func() {
-			d.silkDecoder.SetDeepPLCLossMonoHook(nil)
-		}, func() bool {
-			return directUsed
-		}
+	if d.deepPLCLossHook == nil {
+		d.deepPLCLossHook = d.renderDeepPLCLossMono
+	}
+	d.silkDecoder.SetDeepPLCLossMonoHook(d.deepPLCLossHook)
+	return true
+}
+
+// beginDREDFECLowbandHook follows silk/PLC.c's deep-loss gate for absent
+// LBRR frames: deep PLC runs at complexity 5+, or whenever the DRED PLC state
+// has queued FEC features.
+func (d *Decoder) beginDREDFECLowbandHook() bool {
+	if d == nil {
+		return false
+	}
+	d.deepPLCHookUsed = false
+	deepPLCEnabled := d.complexity >= 5
+	if r := d.dredRecoveryState(); r != nil && r.dredPLC.FECFillPos() != 0 {
+		deepPLCEnabled = true
+	}
+	if !deepPLCEnabled {
+		return false
+	}
+	if !d.ensureDREDNeuralConcealmentRuntime() {
+		return false
+	}
+	if r := d.dredRecoveryState(); r != nil &&
+		r.dredPLC.Blend() == 0 && r.dredPLC.FECReadPos() == 0 &&
+		r.dredPLC.FECFillPos() == 0 && r.dredPLC.FECSkip() == 0 {
+		// A decoder without a DRED sidecar keeps raw SILK history without
+		// advancing the dormant LPCNet state. Prime the same retained window
+		// that the ordinary SILK neural-PLC entry path uses before FEC loss.
+		d.refreshDREDHistoryFromSILKDecoder()
+	}
+	return d.beginHybridDREDLowbandHook()
+}
+
+func (d *Decoder) endHybridDREDLowbandHook() {
+	if d != nil && d.silkDecoder != nil {
+		d.silkDecoder.SetDeepPLCLossMonoHook(nil)
+	}
+}
+
+func (d *Decoder) renderDeepPLCLossMono(concealed []float32) (bool, int) {
+	if d == nil || len(concealed) < lpcnetplc.FrameSize || len(concealed)%lpcnetplc.FrameSize != 0 {
+		return false, 0
+	}
+	if !d.generateDREDNeuralFrames16k(concealed, len(concealed)) {
+		return false, 0
+	}
+	d.deepPLCHookUsed = true
+	return true, 0
 }
 
 func (d *Decoder) markDREDConcealed() {
@@ -685,6 +798,7 @@ func (d *Decoder) updateDREDPCMHistory(frames []float32) {
 	for offset := 0; offset+lpcnetplc.FrameSize <= len(frames); offset += lpcnetplc.FrameSize {
 		r.dredPLC.MarkUpdatedFrameFloat(frames[offset : offset+lpcnetplc.FrameSize])
 	}
+	d.pcmHistorySynced = true
 }
 
 func (d *Decoder) updateDREDPCMHistoryInt16(frames []int16) {
@@ -700,6 +814,7 @@ func (d *Decoder) updateDREDPCMHistoryInt16(frames []int16) {
 		r.dredPLC.MarkUpdatedFrameInt16(frames[offset : offset+lpcnetplc.FrameSize])
 		n.dredRawHistoryUpdated = true
 	}
+	d.pcmHistorySynced = true
 }
 
 func (d *Decoder) primeDREDPCMHistoryInt16(frames []int16) {
@@ -715,36 +830,110 @@ func (d *Decoder) primeDREDPCMHistoryInt16(frames []int16) {
 		r.dredPLC.MarkUpdatedFrameInt16(frames[offset : offset+lpcnetplc.FrameSize])
 		n.dredRawHistoryUpdated = true
 	}
+	d.pcmHistorySynced = true
 }
 
 func (d *Decoder) recordDREDRawMonoGoodFrame(samples []int16) {
 	if d == nil || len(samples) < lpcnetplc.FrameSize {
 		return
 	}
-	d.primeDREDPCMHistoryInt16(samples)
+	d.appendDREDSILKRawHistory(samples)
+	if d.directRawCapture {
+		d.primeDREDPCMHistoryInt16(samples)
+	}
 }
 
-func (d *Decoder) beginDREDRawMonoGoodFrameCapture(mode Mode) func() {
+func (d *Decoder) recordDREDRawMonoLossFrame(samples []int16) {
+	if d == nil || !d.plcModelLoaded {
+		return
+	}
+	d.recordDREDRawMonoGoodFrame(samples)
+}
+
+func (d *Decoder) appendDREDSILKRawHistory(samples []int16) {
+	capacity := len(d.rawSILKHistory)
+	if capacity < lpcnetplc.FrameSize {
+		return
+	}
+	for offset := 0; offset+lpcnetplc.FrameSize <= len(samples); offset += lpcnetplc.FrameSize {
+		copy(d.rawSILKHistory[d.rawSILKHistoryPos:], samples[offset:offset+lpcnetplc.FrameSize])
+		d.rawSILKHistoryPos = (d.rawSILKHistoryPos + lpcnetplc.FrameSize) % capacity
+		if d.rawSILKHistoryFill < capacity {
+			d.rawSILKHistoryFill += lpcnetplc.FrameSize
+		}
+	}
+}
+
+// replayDREDSILKRawHistory applies the retained native SILK frames in the
+// same 10 ms order as silk/PLC.c's lpcnet_plc_update loop. The ring capacity
+// matches LPCNet's PCM history, so replaying its chronological contents
+// reconstructs the same PCM window and analysis/prediction cursors.
+func (d *Decoder) replayDREDSILKRawHistory() bool {
+	if d == nil || d.rawSILKHistoryFill < lpcnetplc.FrameSize || d.pcmHistorySynced {
+		return false
+	}
+	r := d.dredRecoveryState()
+	if r == nil {
+		return false
+	}
+	capacity := len(d.rawSILKHistory)
+	start := (d.rawSILKHistoryPos - d.rawSILKHistoryFill + capacity) % capacity
+	for offset := 0; offset < d.rawSILKHistoryFill; offset += lpcnetplc.FrameSize {
+		frameStart := (start + offset) % capacity
+		r.dredPLC.MarkUpdatedFrameInt16(d.rawSILKHistory[frameStart : frameStart+lpcnetplc.FrameSize])
+	}
+	d.pcmHistorySynced = true
+	if n := d.dredNeuralState(); n != nil {
+		n.dredRawHistoryUpdated = true
+	}
+	return true
+}
+
+// beginDREDRawMonoFrameCapture retains raw 16 kHz SILK frames and advances
+// the live PLC state when the DRED sidecar is active, matching silk/PLC.c's
+// lpcnet_plc_update cadence before and after the PLC model is loaded.
+func (d *Decoder) beginDREDRawMonoFrameCapture(mode Mode) bool {
 	if d == nil || d.silkDecoder == nil || d.channels < 1 || d.channels > 2 {
-		return nil
+		return false
 	}
 	if mode != ModeHybrid && mode != ModeSILK {
-		return nil
+		return false
 	}
-	p := d.dredPayloadState()
-	if d.dredRecoveryState() == nil && (p == nil || !p.dredModelLoaded) {
-		return func() {}
+	d.directRawCapture = d.dredSidecarActive() && d.dredNeuralConcealmentAvailable()
+	if d.directRawCapture {
+		if !d.ensureDREDNeuralConcealmentRuntime() {
+			d.directRawCapture = false
+		} else {
+			d.replayDREDSILKRawHistory()
+			if n := d.dredNeuralState(); n != nil {
+				n.dredRawHistoryUpdated = false
+			}
+		}
 	}
-	if !d.ensureDREDNeuralConcealmentRuntime() {
-		return nil
+	if d.rawSILKFrameHook == nil {
+		d.rawSILKFrameHook = d.recordDREDRawMonoGoodFrame
 	}
-	if n := d.dredNeuralState(); n != nil {
-		n.dredRawHistoryUpdated = false
+	d.silkDecoder.SetRawMonoFrameHook(d.rawSILKFrameHook)
+	if d.plcModelLoaded {
+		if d.rawSILKLossFrameHook == nil {
+			d.rawSILKLossFrameHook = d.recordDREDRawMonoLossFrame
+		}
+		d.silkDecoder.SetRawMonoLossFrameHook(d.rawSILKLossFrameHook)
+	} else {
+		d.silkDecoder.SetRawMonoLossFrameHook(nil)
 	}
-	d.silkDecoder.SetRawMonoFrameHook(d.recordDREDRawMonoGoodFrame)
-	return func() {
+	return true
+}
+
+func (d *Decoder) endDREDRawMonoFrameCapture() {
+	if d == nil {
+		return
+	}
+	if d.silkDecoder != nil {
 		d.silkDecoder.SetRawMonoFrameHook(nil)
+		d.silkDecoder.SetRawMonoLossFrameHook(nil)
 	}
+	d.directRawCapture = false
 }
 
 func (d *Decoder) refreshDREDHistoryFromHybridDecoder(samplesPerChannel int) bool {
@@ -767,15 +956,15 @@ func (d *Decoder) refreshDREDHistoryFromHybridDecoder(samplesPerChannel int) boo
 	}
 	d.updateDREDPCMHistory(n.dredPLCUpdate[:nativeSamples])
 	n.dredRawHistoryUpdated = true
+	d.discardDREDSILKRawHistory()
 	return true
 }
 
 // refreshDREDHistoryFromSILKDecoder seeds the LPCNet/FARGAN entry history from
-// the SILK-only native int16 lowband produced by the most recent SILK decode.
-// Mirrors refreshDREDHistoryFromHybridDecoder but pulls the full native mono
-// output via silk.Decoder.LatestNativeMono() instead of the Hybrid lowband
-// snapshot. The DRED neural concealment runs at 16 kHz, so we require the
-// native rate to be 16 kHz (SILK WB).
+// retained native int16 SILK lowband. It replays the last LPCNet PCM window
+// in 10 ms blocks and falls back to the latest native output when no retained
+// history is available. DRED neural concealment runs at 16 kHz, so the raw
+// callback accepts only SILK WB samples.
 //
 // For stereo decoders, the LPCNet/FARGAN entry history remains mono. libopus
 // passes the single lpcnet_state only to SILK channel 0 (`n == 0 ? lpcnet :
@@ -787,6 +976,12 @@ func (d *Decoder) refreshDREDHistoryFromSILKDecoder() bool {
 	}
 	if d == nil || d.silkDecoder == nil {
 		return false
+	}
+	if d.rawSILKHistoryFill > 0 {
+		if d.pcmHistorySynced {
+			return true
+		}
+		return d.replayDREDSILKRawHistory()
 	}
 	n := d.dredNeuralState()
 	if n == nil {
@@ -836,6 +1031,10 @@ func (d *Decoder) refreshDREDHistoryFromSILKDecoder() bool {
 }
 
 func (d *Decoder) primeDREDCELTEntryHistory(mode Mode, primeAnalysis bool) int {
+	// celt_decode_lost excludes the native 96 kHz mode from neural PLC.
+	if d == nil || d.sampleRate == 96000 {
+		return 0
+	}
 	if !d.ensureDREDNeuralConcealmentRuntime() {
 		return 0
 	}
@@ -859,6 +1058,12 @@ func (d *Decoder) primeDREDCELTEntryHistory(mode Mode, primeAnalysis bool) int {
 	total := 0
 	for offset := 0; offset+lpcnetplc.FrameSize <= samples; offset += lpcnetplc.FrameSize {
 		total += r.dredPLC.MarkUpdatedFrameFloat(neural.dredPLCUpdate[offset : offset+lpcnetplc.FrameSize])
+	}
+	if total > 0 {
+		// CELT history is reconstructed from the current CELT decode buffer;
+		// retained SILK blocks no longer describe this PLC state.
+		d.discardDREDSILKRawHistory()
+		d.pcmHistorySynced = true
 	}
 	if primeAnalysis && total > 0 {
 		neural.dredAnalysis.Reset()

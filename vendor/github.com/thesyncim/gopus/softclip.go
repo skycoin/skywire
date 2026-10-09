@@ -2,11 +2,12 @@ package gopus
 
 import "github.com/thesyncim/gopus/internal/opusmath"
 
-// PCMSoftClip applies soft clipping to interleaved float32 PCM samples in-place.
-//
-// pcm holds N*channels interleaved samples. channels is the number of audio channels.
-// softclipMem is per-channel state of length channels; pass a zero-initialized slice
-// for the first call and reuse it across successive calls on the same stream.
+// PCMSoftClip soft-clips interleaved float32 PCM in place. Samples should be
+// normalized to roughly [-1, 1]. channels is the channel count, and softclipMem
+// must hold at least one state value per channel. Pass zeroed state on the first
+// call and reuse it for successive blocks from the same stream. The function
+// processes complete interleaved frames; an incomplete trailing frame is ignored.
+// Invalid channel counts or a short state slice leave pcm unchanged.
 //
 // This mirrors opus_pcm_soft_clip() / opus_pcm_soft_clip_impl() from src/opus.c and
 // celt/celt.c in libopus 1.6.1.
@@ -44,17 +45,19 @@ func softClipAndFloat32ToInt16(dst []int16, src []float32, n, channels int, decl
 			}
 		}
 		if convertFloat32ToInt16Unit(dst, src, total) {
+			clear(declipMem[:channels])
 			return
 		}
 		_ = src[total-1]
 		_ = dst[total-1]
 		for i := 0; i < total; i++ {
 			v := src[i]
-			if v > 1 || v < -1 {
+			if !(v >= -1 && v <= 1) {
 				goto fallback
 			}
 			dst[i] = float32ToInt16(v)
 		}
+		clear(declipMem[:channels])
 		return
 	}
 

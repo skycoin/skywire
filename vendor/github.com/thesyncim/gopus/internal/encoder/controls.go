@@ -8,19 +8,16 @@ package encoder
 type BitrateMode int
 
 const (
-	// ModeVBR is variable bitrate mode (default).
-	// Packet size varies based on content complexity.
-	// Provides best quality for a given average bitrate.
+	// ModeVBR enables unconstrained variable bitrate encoding.
+	// Packet sizes vary with the encoded content.
 	ModeVBR BitrateMode = iota
 
-	// ModeCVBR is constrained variable bitrate mode.
-	// Packet size varies but stays within +/-15% of target.
-	// Good balance of quality and bandwidth predictability.
+	// ModeCVBR enables constrained variable bitrate encoding.
+	// NewEncoder selects this mode by default.
 	ModeCVBR
 
-	// ModeCBR is constant bitrate mode.
-	// Every packet is exactly the same size (or within 1 byte).
-	// Required for some streaming protocols.
+	// ModeCBR enables constant bitrate encoding.
+	// The packet byte budget depends on the bitrate and frame duration.
 	ModeCBR
 )
 
@@ -31,14 +28,6 @@ const (
 
 	MinBitrate = 500    // libopus OPUS_SET_BITRATE minimum
 	MaxBitrate = 750000 // libopus OPUS_SET_BITRATE per-channel maximum
-
-	// Mode-specific typical ranges
-	SILKMinBitrate   = 6000   // 6 kbps
-	SILKMaxBitrate   = 40000  // 40 kbps (WB)
-	CELTMinBitrate   = 32000  // 32 kbps
-	CELTMaxBitrate   = 510000 // 510 kbps
-	HybridMinBitrate = 12000  // 12 kbps
-	HybridMaxBitrate = 128000 // 128 kbps typical
 
 	// Maximum SILK packet size in bytes (libopus MAX_DATA_BYTES).
 	maxSilkPacketBytes = 1275
@@ -120,15 +109,6 @@ func resolveUserBitrate(userBitrate, sampleRate, channels, frameSize, maxDataByt
 		return maxBitrate
 	}
 	return user
-}
-
-// silkPayloadMaxBits mirrors libopus SILK maxBits budgeting:
-// the Opus TOC byte is not part of the SILK range payload budget.
-func silkPayloadMaxBits(maxPacketBytes int) int {
-	if maxPacketBytes <= 1 {
-		return 0
-	}
-	return (maxPacketBytes - 1) * 8
 }
 
 // padToSize pads packet to exact size without truncating.

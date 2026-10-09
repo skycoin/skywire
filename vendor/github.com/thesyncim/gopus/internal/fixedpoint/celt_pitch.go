@@ -124,9 +124,7 @@ func XcorrKernel(x, y []int16, sum *[4]int32, length int) {
 	j++
 	if j < length {
 		tmp := x[xi]
-		xi++
 		y1 = y[yi]
-		yi++
 		sum[0] = mac16(sum[0], tmp, y2)
 		sum[1] = mac16(sum[1], tmp, y3)
 		sum[2] = mac16(sum[2], tmp, y0)

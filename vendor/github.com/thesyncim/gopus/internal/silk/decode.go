@@ -16,7 +16,7 @@ import (
 //   - rd: Range decoder initialized with the SILK bitstream
 //   - bandwidth: Audio bandwidth (NB/MB/WB)
 //   - duration: Frame duration (10/20/40/60ms)
-//   - vadFlag: Voice Activity Detection flag from header
+//   - vadFlag: ignored; VAD flags are decoded from the SILK bitstream
 //
 // For 40/60ms frames, the frame is decoded as multiple 20ms sub-blocks.
 func (d *Decoder) DecodeFrame(
@@ -70,7 +70,7 @@ func (d *Decoder) DecodeFrame(
 //   - rd: Range decoder initialized with the SILK bitstream
 //   - bandwidth: Audio bandwidth (NB/MB/WB)
 //   - duration: Frame duration (10/20/40/60ms)
-//   - vadFlag: Voice Activity Detection flag from header
+//   - vadFlag: ignored; VAD flags are decoded from the SILK bitstream
 //
 // For 40/60ms frames, the frame is decoded as multiple 20ms sub-blocks.
 func (d *Decoder) DecodeFrameRaw(
@@ -100,6 +100,7 @@ func (d *Decoder) DecodeFrameRaw(
 
 // DecodeFrameRawInt16 decodes a single SILK mono frame at native SILK sample rate as int16.
 // This is an int16-native variant used by hot paths that resample immediately.
+// The vadFlag argument is ignored; VAD flags are decoded from the SILK bitstream.
 func (d *Decoder) DecodeFrameRawInt16(
 	rd *rangecoding.Decoder,
 	bandwidth Bandwidth,
@@ -165,7 +166,10 @@ func (d *Decoder) DecodeStereoFrameToMono(
 	if err != nil {
 		return nil, err
 	}
-	mid := make([]float32, len(midNative))
+	if cap(d.stereoMidFloat) < len(midNative) {
+		d.stereoMidFloat = make([]float32, len(midNative))
+	}
+	mid := d.stereoMidFloat[:len(midNative)]
 	for i, v := range midNative {
 		mid[i] = float32(v) / 32768.0
 	}
@@ -177,7 +181,8 @@ func (d *Decoder) DecodeStereoFrameToMono(
 //
 // Stereo SILK uses mid-side coding with prediction.
 // The mid channel is decoded first, then the side channel,
-// and finally they are unmixed to left and right.
+// and finally they are unmixed to left and right. The vadFlag argument is
+// ignored; VAD flags are decoded from the SILK bitstream.
 func (d *Decoder) DecodeStereoFrame(
 	rd *rangecoding.Decoder,
 	bandwidth Bandwidth,
@@ -334,7 +339,11 @@ func (d *Decoder) decodeStereoMidNative(
 	if err != nil {
 		return nil, 0, err
 	}
-	midNative := make([]int16, framesPerPacket*frameLength)
+	totalLen := framesPerPacket * frameLength
+	if cap(d.stereoMidNative) < totalLen {
+		d.stereoMidNative = make([]int16, totalLen)
+	}
+	midNative := d.stereoMidNative[:totalLen]
 	var predQ13 [2]int32
 	decodeOnlyMiddle := 0
 
@@ -355,7 +364,11 @@ func (d *Decoder) decodeStereoMidNative(
 		d.finalizeDecodedChannelFrame(0, stMid, &ctrlMid, midOut, false)
 
 		if hasSide {
-			sideOut := make([]int16, frameLength)
+			_, sideFrame, ok := d.stereoFrameScratch(frameLength)
+			if !ok {
+				return nil, 0, ErrDecodeFailed
+			}
+			sideOut := sideFrame[2:]
 			sideFrameIndex := int(stSide.nFramesDecoded)
 			ctrlSide := d.decodeFrameCoreInto(stSide, rd, sideOut, sideFrameCondCoding(frameIndex, d.prevDecodeOnlyMiddle), stSide.VADFlags[sideFrameIndex] != 0)
 			d.finalizeDecodedChannelFrame(1, stSide, &ctrlSide, sideOut, false)

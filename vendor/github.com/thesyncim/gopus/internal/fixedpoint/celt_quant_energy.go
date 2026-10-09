@@ -7,9 +7,8 @@ package fixedpoint
 // entropy-coder-independent pieces that convert between band amplitudes and the
 // log2 energy domain used by quant_coarse_energy / quant_fine_energy.
 //
-// The default (non-QEXT) FIXED_POINT build resolves celt_log2_db to
-// SHL32(EXTEND32(celt_log2(x)), DB_SHIFT-10), so these helpers call the existing
-// CeltLog2 kernel; no new math primitive is introduced.
+// FIXED_POINT celt_log2_db has separate non-QEXT and ENABLE_QEXT paths in
+// celt/mathops.h. The build-tagged helpers retain those exact kernels.
 
 // dbShift mirrors celt/arch.h DB_SHIFT: log-energy values are Q(DB_SHIFT)=Q24.
 const dbShift = 24
@@ -40,8 +39,10 @@ func gconst(x int32) int32 {
 //
 //	bandLogE[k] = celt_log2_db(bandE[k]) - SHL32(eMeans[i], DB_SHIFT-4) + GCONST(2.f)
 //
-// where celt_log2_db(x) = celt_log2(x)<<(DB_SHIFT-10). The +GCONST(2.f) term
-// compensates for bandE being Q12 while celt_log2 (CeltLog2) takes a Q14 input.
+// where celt_log2_db is selected by build tag: the ordinary fixed build shifts
+// the Q10 celt_log2 result, while ENABLE_QEXT evaluates its Q24 polynomial.
+// The +GCONST(2.f) term compensates for bandE being Q12 while celt_log2_db
+// interprets the input as Q14.
 //
 // Inputs mirror the libopus CELTMode plumbing:
 //
@@ -55,7 +56,7 @@ func Amp2Log2(bandE []int32, bandLogE []int32, nbEBands, effEnd, end, C int) {
 	for c := 0; c < C; c++ {
 		base := c * nbEBands
 		for i := 0; i < effEnd; i++ {
-			logE := int32(CeltLog2(bandE[base+i])) << (dbShift - 10)
+			logE := celtLog2DB(bandE[base+i])
 			logE -= int32(eMeans[i]) << (dbShift - 4)
 			logE += gconst(2)
 			bandLogE[base+i] = logE

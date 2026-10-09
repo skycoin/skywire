@@ -19,9 +19,6 @@ func silkCNGReset(st *decoderState) {
 		st.cng.smthNLSFQ15[i] = 0
 		st.cng.synthStateQ14[i] = 0
 	}
-	for i := range st.cng.excBufQ14 {
-		st.cng.excBufQ14[i] = 0
-	}
 	st.cng.smthGainQ16 = 0
 	st.cng.randSeed = 3176576
 }

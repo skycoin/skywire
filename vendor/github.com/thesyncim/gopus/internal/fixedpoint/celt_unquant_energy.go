@@ -222,7 +222,9 @@ func UnquantEnergyFinalise(dec *rangecoding.Decoder, oldEBands []int32, start, e
 			for c := 0; c < C; c++ {
 				q2 := int32(dec.DecodeRawBits(1))
 				offset := shr32((q2<<dbShift)-gconst1Half, int(fineQuant[i])+1)
-				oldEBands[i+c*nbEBands] += offset
+				if oldEBands != nil {
+					oldEBands[i+c*nbEBands] += offset
+				}
 				bitsLeft--
 			}
 		}

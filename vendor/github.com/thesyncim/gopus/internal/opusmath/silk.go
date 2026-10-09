@@ -55,6 +55,14 @@ func Pow10F32(x float32) float32 {
 
 // SinF32 mirrors C sin() narrowed to float.
 func SinF32(x float32) float32 {
+	if math.IsInf(float64(x), 0) {
+		// dnn/osce.c passes the float embedding expression to C sin(double).
+		// Its same-platform libm produces the IEEE invalid-operation result for
+		// sin(±Inf); forming that result in double preserves the target NaN bits
+		// before the C-equivalent narrowing to float. math.Sin returns a fixed
+		// canonical NaN instead.
+		return float32(float64(x) - float64(x))
+	}
 	return float32(math.Sin(float64(x)))
 }
 

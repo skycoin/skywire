@@ -5,12 +5,11 @@ const (
 	maxRepacketizerDuration48k = 5760 // 120ms at 48kHz
 )
 
-// Repacketizer accumulates Opus packet frames and emits new packets assembled
-// from any contiguous frame range.
-//
-// It mirrors libopus repacketizer behavior:
-//   - all added packets must share TOC bits 7..2,
-//   - total stored duration must not exceed 120ms.
+// Repacketizer copies frames from Opus packets and assembles packets from
+// contiguous frame ranges. Added packets must have the same TOC configuration
+// and channel flag (bits 7 through 2); their frame-count codes may differ. The
+// accumulator accepts at most 48 frames and 120 ms of audio. Repacketizer is not
+// safe for concurrent use.
 type Repacketizer struct {
 	toc       byte
 	frameSize int
@@ -19,7 +18,7 @@ type Repacketizer struct {
 	padFrames []int
 }
 
-// NewRepacketizer creates a new repacketizer state.
+// NewRepacketizer creates an empty repacketizer.
 func NewRepacketizer() *Repacketizer {
 	r := &Repacketizer{
 		frames:    make([][]byte, 0, maxRepacketizerFrames),
@@ -30,33 +29,49 @@ func NewRepacketizer() *Repacketizer {
 	return r
 }
 
-// Reset clears repacketizer state.
+// Reset discards all accumulated frames so the repacketizer can be reused.
 func (r *Repacketizer) Reset() {
 	r.toc = 0
 	r.frameSize = 0
+	clear(r.frames)
+	clear(r.paddings)
 	r.frames = r.frames[:0]
 	r.paddings = r.paddings[:0]
 	r.padFrames = r.padFrames[:0]
 }
 
-// NumFrames returns the number of frames currently accumulated.
+// NumFrames returns the number of accumulated audio frames, not the number of
+// packets passed to Cat.
 func (r *Repacketizer) NumFrames() int {
 	return len(r.frames)
 }
 
-// Cat adds one Opus packet to the repacketizer state.
+// Cat parses packet and copies its encoded frame data into the accumulator.
+// The caller may reuse packet after Cat returns. It returns an error for an
+// invalid packet, incompatible TOC configuration or channel flag, or an
+// accumulator that would exceed its frame-count or duration limits.
 func (r *Repacketizer) Cat(packet []byte) error {
 	if len(packet) < 1 {
 		return ErrInvalidPacket
 	}
 
-	info, frames, padding, paddingFrameCount, err := parsePacketFramesAndPadding(packet)
+	var frameSizes [maxRepacketizerFrames]int
+	info, err := parsePacketInto(packet, &frameSizes)
 	if err != nil {
 		return err
 	}
-	if len(frames) == 0 {
+	if info.Padding > len(packet) {
 		return ErrInvalidPacket
 	}
+	if info.FrameCount == 0 {
+		return ErrInvalidPacket
+	}
+	paddingBytes := packet[len(packet)-info.Padding:]
+	frameBytes := 0
+	for _, frameSize := range info.FrameSizes {
+		frameBytes += frameSize
+	}
+	frameOffset := len(packet) - info.Padding - frameBytes
 
 	if len(r.frames) == 0 {
 		r.toc = packet[0]
@@ -65,7 +80,7 @@ func (r *Repacketizer) Cat(packet []byte) error {
 		return ErrInvalidPacket
 	}
 
-	totalFrames := len(r.frames) + len(frames)
+	totalFrames := len(r.frames) + info.FrameCount
 	if totalFrames > maxRepacketizerFrames {
 		return ErrInvalidPacket
 	}
@@ -73,92 +88,170 @@ func (r *Repacketizer) Cat(packet []byte) error {
 		return ErrInvalidPacket
 	}
 
-	for i, frame := range frames {
+	paddingFrameCount := 0
+	if info.Padding > 0 {
+		paddingFrameCount = info.FrameCount
+	}
+	for i, frameSize := range info.FrameSizes {
+		frame := packet[frameOffset : frameOffset+frameSize]
 		owned := make([]byte, len(frame))
 		copy(owned, frame)
 		r.frames = append(r.frames, owned)
-		if i == 0 && len(padding) > 0 {
-			ownedPadding := make([]byte, len(padding))
-			copy(ownedPadding, padding)
+		if i == 0 && len(paddingBytes) > 0 {
+			ownedPadding := make([]byte, len(paddingBytes))
+			copy(ownedPadding, paddingBytes)
 			r.paddings = append(r.paddings, ownedPadding)
 			r.padFrames = append(r.padFrames, paddingFrameCount)
 		} else {
 			r.paddings = append(r.paddings, nil)
 			r.padFrames = append(r.padFrames, 0)
 		}
+		frameOffset += frameSize
 	}
 
 	return nil
 }
 
-// OutRange assembles frames [begin, end) into one Opus packet.
+// OutRange assembles the accumulated frame range [begin, end) into one Opus
+// packet. end is exclusive. data must have enough length for the output; the
+// returned count is the number of bytes written. It returns ErrInvalidArgument
+// for an empty or out-of-range range, ErrInternalError for malformed packet
+// extensions, and ErrBufferTooSmall when data is short.
 func (r *Repacketizer) OutRange(begin, end int, data []byte) (int, error) {
 	if begin < 0 || begin >= end || end > len(r.frames) {
 		return 0, ErrInvalidArgument
 	}
 	extensions, err := r.collectExtensions(begin, end)
 	if err != nil {
-		return 0, err
+		return 0, ErrInternalError
 	}
 	return buildRepacketizedPacketWithOptions(r.toc&0xFC, r.frames[begin:end], data, 0, false, extensions)
 }
 
-// Out assembles all accumulated frames into one Opus packet.
+// Out assembles all accumulated frames into one Opus packet. data must have
+// enough length for the output packet; the returned count is the number of bytes
+// written.
 func (r *Repacketizer) Out(data []byte) (int, error) {
 	return r.OutRange(0, len(r.frames), data)
 }
 
-// PacketPad pads a packet in-place to newLen bytes.
-//
-// data must have capacity for at least newLen bytes.
-// length is the current packet length in data.
+// PacketPad pads a packet in place to exactly newLen bytes.
+// length is the current packet length in bytes. data must contain length bytes
+// and have capacity for newLen bytes. If len(data) is shorter, reslice the
+// caller's slice to newLen after success. It returns ErrInternalError when
+// packet extension data cannot be collected.
 func PacketPad(data []byte, length, newLen int) error {
-	if length < 1 || newLen < length {
+	if length < 1 || length > len(data) || newLen < length {
 		return ErrInvalidArgument
 	}
 	if newLen == length {
 		return nil
-	}
-	if length > len(data) {
-		return ErrInvalidArgument
 	}
 	if newLen > cap(data) {
 		return ErrBufferTooSmall
 	}
 	data = data[:newLen]
 
+	var frameSizes [maxRepacketizerFrames]int
+	var frames [maxRepacketizerFrames][]byte
+	_, frameCount, padding, err := parsePacketFramesInto(data[:length], &frameSizes, &frames)
+	if err != nil {
+		return err
+	}
+
+	var paddingBytes []byte
+	if padding > 0 {
+		paddingBytes = data[length-padding : length]
+	}
+	extensionCount, err := countPacketExtensions(paddingBytes, frameCount)
+	if err != nil {
+		return ErrInternalError
+	}
+	if extensionCount == 0 {
+		return packetPadWithoutExtensions(data, length, newLen, data[0]&0xFC, padding, frameSizes[:frameCount], frames[:frameCount])
+	}
+
+	// Extension-bearing packets use a snapshot because the rebuilt header can
+	// overlap the packet's original frame payloads.
 	src := make([]byte, length)
 	copy(src, data[:length])
-
-	_, frames, padding, paddingFrameCount, err := parsePacketFramesAndPadding(src)
-	if err != nil {
-		return err
+	frameBytes := 0
+	for _, size := range frameSizes[:frameCount] {
+		frameBytes += size
+	}
+	srcOffset := length - padding - frameBytes
+	framesWithExtensions := frames[:frameCount]
+	for i, size := range frameSizes[:frameCount] {
+		framesWithExtensions[i] = src[srcOffset : srcOffset+size]
+		srcOffset += size
+	}
+	if padding > 0 {
+		paddingBytes = src[length-padding:]
 	}
 
-	extensions, err := parsePacketExtensionList(padding, paddingFrameCount)
+	extensions := make([]packetExtensionData, extensionCount)
+	extensionCount, err = parsePacketExtensions(paddingBytes, frameCount, extensions)
 	if err != nil {
-		return err
+		return ErrInternalError
 	}
+	extensions = extensions[:extensionCount]
 
-	_, err = buildRepacketizedPacketWithOptions(src[0]&0xFC, frames, data, newLen, true, extensions)
+	_, err = buildRepacketizedPacketWithOptions(src[0]&0xFC, framesWithExtensions, data, newLen, true, extensions)
 	return err
 }
 
-// PacketUnpad removes packet padding in-place and returns the new packet length.
+// packetPadWithoutExtensions relocates the contiguous frame payload with Go's
+// overlap-safe copy before rebuilding the code 3 framing in the same buffer.
+func packetPadWithoutExtensions(data []byte, packetLen, newLen int, tocBase byte, padding int, frameSizes []int, frames [][]byte) error {
+	frameBytes := 0
+	vbr := false
+	for i, size := range frameSizes {
+		frameBytes += size
+		if i > 0 && size != frameSizes[0] {
+			vbr = true
+		}
+	}
+
+	lengthBytes := 0
+	if vbr {
+		for _, size := range frameSizes[:len(frameSizes)-1] {
+			lengthBytes += frameLengthBytes(size)
+		}
+	}
+	baseLen := 2 + lengthBytes + frameBytes
+	if newLen < baseLen {
+		return ErrBufferTooSmall
+	}
+	paddingAmount := newLen - baseLen
+	payloadStart := 2 + lengthBytes + paddingLengthBytes(paddingAmount)
+	sourceStart := packetLen - padding - frameBytes
+	copy(data[payloadStart:payloadStart+frameBytes], data[sourceStart:sourceStart+frameBytes])
+
+	offset := payloadStart
+	for i, size := range frameSizes {
+		frames[i] = data[offset : offset+size]
+		offset += size
+	}
+	_, err := buildRepacketizedPacketWithOptions(tocBase, frames, data, newLen, true, nil)
+	return err
+}
+
+// PacketUnpad removes packet padding in place and returns the new packet length
+// in bytes. length is the current packet length; data must contain that many
+// bytes. Use data[:n] with the returned length n to access the unpadded packet.
 func PacketUnpad(data []byte, length int) (int, error) {
 	if length < 1 || length > len(data) {
 		return 0, ErrInvalidArgument
 	}
 
-	src := make([]byte, length)
-	copy(src, data[:length])
-
-	_, frames, err := parsePacketFrames(src)
+	var frameSizes [maxRepacketizerFrames]int
+	var frames [maxRepacketizerFrames][]byte
+	_, frameCount, _, err := parsePacketFramesInto(data[:length], &frameSizes, &frames)
 	if err != nil {
 		return 0, err
 	}
 
-	return buildRepacketizedPacket(src[0]&0xFC, frames, data[:length])
+	return buildRepacketizedPacket(data[0]&0xFC, frames[:frameCount], data[:length])
 }
 
 func parseSelfDelimitedPacket(data []byte) (tocBase byte, frames [][]byte, consumed int, err error) {
@@ -381,10 +474,29 @@ func parsePacketFrames(data []byte) (PacketInfo, [][]byte, error) {
 	}
 
 	frames := make([][]byte, info.FrameCount)
+	if err := fillPacketFrameSlices(data, info, frames); err != nil {
+		return PacketInfo{}, nil, err
+	}
+	return info, frames, nil
+}
+
+func parsePacketFramesInto(data []byte, frameSizes *[maxRepacketizerFrames]int, frames *[maxRepacketizerFrames][]byte) (toc TOC, frameCount, padding int, err error) {
+	info, err := parsePacketInto(data, frameSizes)
+	if err != nil {
+		return TOC{}, 0, 0, err
+	}
+	toc, frameCount, padding = info.TOC, info.FrameCount, info.Padding
+	if err := fillPacketFrameSlices(data, info, frames[:frameCount]); err != nil {
+		return TOC{}, 0, 0, err
+	}
+	return toc, frameCount, padding, nil
+}
+
+func fillPacketFrameSlices(data []byte, info PacketInfo, frames [][]byte) error {
 	switch info.TOC.FrameCode {
 	case 0:
 		if len(data) < 1+info.FrameSizes[0] {
-			return PacketInfo{}, nil, ErrInvalidPacket
+			return ErrInvalidPacket
 		}
 		frames[0] = data[1 : 1+info.FrameSizes[0]]
 	case 1:
@@ -392,7 +504,7 @@ func parsePacketFrames(data []byte) (PacketInfo, [][]byte, error) {
 		for i := 0; i < info.FrameCount; i++ {
 			frameLen := info.FrameSizes[i]
 			if offset+frameLen > len(data) {
-				return PacketInfo{}, nil, ErrInvalidPacket
+				return ErrInvalidPacket
 			}
 			frames[i] = data[offset : offset+frameLen]
 			offset += frameLen
@@ -400,20 +512,20 @@ func parsePacketFrames(data []byte) (PacketInfo, [][]byte, error) {
 	case 2:
 		frame1Len, bytesRead, err := parseFrameLength(data, 1)
 		if err != nil {
-			return PacketInfo{}, nil, err
+			return err
 		}
 		headerLen := 1 + bytesRead
 		if frame1Len != info.FrameSizes[0] {
-			return PacketInfo{}, nil, ErrInvalidPacket
+			return ErrInvalidPacket
 		}
 		if headerLen+info.FrameSizes[0]+info.FrameSizes[1] > len(data) {
-			return PacketInfo{}, nil, ErrInvalidPacket
+			return ErrInvalidPacket
 		}
 		frames[0] = data[headerLen : headerLen+info.FrameSizes[0]]
 		frames[1] = data[headerLen+info.FrameSizes[0] : headerLen+info.FrameSizes[0]+info.FrameSizes[1]]
 	case 3:
 		if len(data) < 2 {
-			return PacketInfo{}, nil, ErrPacketTooShort
+			return ErrPacketTooShort
 		}
 		frameCountByte := data[1]
 		vbr := (frameCountByte & 0x80) != 0
@@ -424,7 +536,7 @@ func parsePacketFrames(data []byte) (PacketInfo, [][]byte, error) {
 		if hasPadding {
 			for {
 				if offset >= len(data) {
-					return PacketInfo{}, nil, ErrPacketTooShort
+					return ErrPacketTooShort
 				}
 				padByte := int(data[offset])
 				offset++
@@ -443,7 +555,7 @@ func parsePacketFrames(data []byte) (PacketInfo, [][]byte, error) {
 			for i := 0; i < info.FrameCount-1; i++ {
 				_, bytesRead, err := parseFrameLength(data, offset)
 				if err != nil {
-					return PacketInfo{}, nil, err
+					return err
 				}
 				offset += bytesRead
 			}
@@ -454,16 +566,16 @@ func parsePacketFrames(data []byte) (PacketInfo, [][]byte, error) {
 		for i := 0; i < info.FrameCount; i++ {
 			frameLen := info.FrameSizes[i]
 			if frameLen < 0 || frameOffset+frameLen > frameDataEnd {
-				return PacketInfo{}, nil, ErrInvalidPacket
+				return ErrInvalidPacket
 			}
 			frames[i] = data[frameOffset : frameOffset+frameLen]
 			frameOffset += frameLen
 		}
 	default:
-		return PacketInfo{}, nil, ErrInvalidPacket
+		return ErrInvalidPacket
 	}
 
-	return info, frames, nil
+	return nil
 }
 
 func parsePacketFramesAndPadding(data []byte) (PacketInfo, [][]byte, []byte, int, error) {
@@ -530,6 +642,8 @@ func buildCode3Packet(tocBase byte, frames [][]byte, data []byte, targetLen int,
 			return 0, ErrBufferTooSmall
 		}
 		maxLen = targetLen
+	} else if len(data) < baseLen {
+		return 0, ErrBufferTooSmall
 	}
 
 	if len(extensions) > 0 {

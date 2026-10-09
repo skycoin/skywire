@@ -24,7 +24,7 @@ package celt
 // the band-bin scaling base, effEBands the effective-band clamp and preemph the
 // per-rate 2-tap pre-emphasis coefficients. It is idempotent; the per-channel
 // overlap history is grown to overlap and cleared.
-func (e *Encoder) EnableScaledCustomMode(fs, overlap, shortMdctSize, effEBands int, preemph [4]float32) {
+func (e *Encoder) EnableScaledCustomMode(fs, overlap, shortMdctSize, effEBands int, preemph [4]float32, transforms *CustomMDCTTables) {
 	channels := int(e.channels)
 	if channels < 1 {
 		channels = 1
@@ -35,6 +35,7 @@ func (e *Encoder) EnableScaledCustomMode(fs, overlap, shortMdctSize, effEBands i
 	e.hd96kPreemph = preemph
 	e.customScaleBase = shortMdctSize
 	e.customEffBands = effEBands
+	e.scratch.customTransforms = transforms
 
 	if len(e.overlapBuffer) < overlap*channels {
 		e.overlapBuffer = make([]celtSig, overlap*channels)

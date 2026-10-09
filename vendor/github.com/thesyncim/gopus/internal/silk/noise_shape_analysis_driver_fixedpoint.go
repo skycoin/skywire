@@ -4,15 +4,15 @@ package silk
 
 // This file assembles the FIXED_POINT SILK noise-shape-analysis driver from
 // silk/fixed/noise_shape_analysis_FIX.c (silk_noise_shape_analysis_FIX). It
-// orchestrates the already-ported leaf kernels (silk_apply_sine_window,
+// orchestrates the leaf kernels (silk_apply_sine_window,
 // silk_warped_autocorrelation_FIX, silk_schur64, silk_k2a_Q16,
 // silk_bwexpander_32, warped_gain, limit_warped_coefs) plus the tilt /
 // harmonic-shaping-gain / SNR / sparseness computations, and produces the
 // AR_Q13 shaping coefficients, Gains_Q16, Tilt_Q14, and HarmShapeGain_Q14
 // outputs.
 //
-// Note: Lambda_Q10 is NOT computed here; in libopus it is produced downstream
-// by silk_process_gains_FIX (already ported in process_gains_fixedpoint.go).
+// Lambda_Q10 is computed downstream by silk_process_gains_FIX in
+// process_gains_fixedpoint.go, not by this driver.
 
 // Tuning-parameter constants from silk/tuning_parameters.h used by the driver.
 const (

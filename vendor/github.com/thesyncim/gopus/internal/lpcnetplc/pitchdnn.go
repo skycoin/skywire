@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/thesyncim/gopus/internal/dnnblob"
+	"github.com/thesyncim/gopus/internal/dnnmath"
 	"github.com/thesyncim/gopus/internal/opusmath"
 )
 
@@ -184,14 +185,16 @@ var pitchDNNConv2DLayerSpecs = []Conv2DLayerSpec{
 	},
 }
 
-// PitchDNNLinearLayerSpecs returns the libopus-shaped dense/GRU layer specs
-// the pure-Go pitch runtime binds from a validated blob.
+// PitchDNNLinearLayerSpecs returns the shared libopus-shaped dense/GRU layer
+// specs the pure-Go pitch runtime binds from a validated blob. Callers must
+// treat the returned slice as read-only.
 func PitchDNNLinearLayerSpecs() []LinearLayerSpec {
 	return pitchDNNLinearLayerSpecs
 }
 
-// PitchDNNConv2DLayerSpecs returns the libopus-shaped conv layer specs the
-// pure-Go pitch runtime binds from a validated blob.
+// PitchDNNConv2DLayerSpecs returns the shared libopus-shaped convolution layer
+// specs the pure-Go pitch runtime binds from a validated blob. Callers must
+// treat the returned slice as read-only.
 func PitchDNNConv2DLayerSpecs() []Conv2DLayerSpec {
 	return pitchDNNConv2DLayerSpecs
 }
@@ -308,33 +311,36 @@ func (p *PitchDNN) Compute(ifFeatures, xcorrFeatures []float32) float32 {
 	end := minInt(pitchPitchClassCount-1, pos+2)
 	var sum float32
 	var count float32
-	// libopus dnn/pitchdnn.c:compute_pitchdnn accumulates "sum += p*i" and
-	// "count += p" over the [pos-2,pos+2] window. On arm64 the pinned scalar
-	// reference is built with clang -ffp-contract=on; disassembly of
-	// compute_pitchdnn shows the loop unrolled by 4, where the leading groups of
-	// four iterations compute each p*i as a separate rounded FMUL followed by a
-	// plain FADD (the products are NOT fused into the accumulator), while the
-	// scalar remainder iterations fuse "sum = fmadd(p, i, sum)". Go's arm64
-	// backend would otherwise contract "sum += p*float32(i)" into an FMADD, so
-	// force the rounded product with noFMA32Mul for the unrolled groups and use
-	// the explicit fused fma32 only for the remainder.
-	n := end - start + 1
-	unrolled := start + (n/4)*4
-	i := start
-	for ; i < unrolled; i++ {
-		v := opusmath.ExpF32(p.scratch.output[i])
-		sum += noFMA32Mul(v, float32(i))
-		count += v
+	// The selected scalar C build accumulates every term with FMADD. The ARM
+	// SIMD build rounds four products with FMUL, then adds them in ascending
+	// order, and uses FMADD for any remaining terms (dnn/pitchdnn.c).
+	if pitchDNNWindowRoundedProducts {
+		n := end - start + 1
+		unrolled := start + (n/4)*4
+		i := start
+		for ; i < unrolled; i++ {
+			v := opusmath.ExpF32(p.scratch.output[i])
+			sum += noFMA32Mul(v, float32(i))
+			count += v
+		}
+		for ; i <= end; i++ {
+			v := opusmath.ExpF32(p.scratch.output[i])
+			sum = fma32(v, float32(i), sum)
+			count += v
+		}
+	} else {
+		for i := start; i <= end; i++ {
+			v := opusmath.ExpF32(p.scratch.output[i])
+			sum = fma32(v, float32(i), sum)
+			count += v
+		}
 	}
-	for ; i <= end; i++ {
-		v := opusmath.ExpF32(p.scratch.output[i])
-		sum = fma32(v, float32(i), sum)
-		count += v
-	}
-	if count == 0 {
-		return 0
-	}
-	return (float32(1.0)/60)*(sum/count) - 1.5
+	return pitchDNNInterpolate(sum, count)
+}
+
+func pitchDNNInterpolate(sum, count float32) float32 {
+	// The C return expression rounds the product before subtracting 1.5.
+	return noFMA32Mul(float32(1.0)/60, sum/count) - 1.5
 }
 
 func loadConv2DLayer(blob *dnnblob.Blob, spec Conv2DLayerSpec) (Conv2DLayer, error) {
@@ -375,7 +381,11 @@ func computeConv2D(layer *Conv2DLayer, out, mem, in []float32, height, hstride, 
 	copy(inBuf[:memSize], mem[:memSize])
 	copy(inBuf[memSize:memSize+timeStride], in[:timeStride])
 	copy(mem[:memSize], inBuf[timeStride:timeStride+memSize])
-	conv2D3x3Float(out, layer, inBuf, height, hstride)
+	if useX86DNNVectorKernels {
+		dnnmath.Conv2D3x3X86(out, layer.FloatWeights, layer.InChannels, layer.OutChannels, inBuf, height, hstride)
+	} else {
+		conv2D3x3Float(out, layer, inBuf, height, hstride)
+	}
 	if !layer.Bias.Empty() {
 		for i := 0; i < layer.OutChannels; i++ {
 			base := i * hstride

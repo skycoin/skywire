@@ -1,12 +1,14 @@
-//go:build !arm64
+//go:build !arm64 || (!goexperiment.simd && !nosimd && !purego)
 
 package celt
 
-// prefilterDualInnerProdAsm is the portable fallback for the arm64 NEON dual
-// inner-product kernel. It reproduces the 4-lane fused-multiply-add order of
+import "github.com/thesyncim/gopus/internal/opusmath"
+
+// prefilterDualInnerProdAsm is the scalar Go implementation of the arm64 NEON
+// dual inner-product operation order. It reproduces the four-lane fused multiply-add order of
 // prefilterDualInnerProdF32NeonOrder exactly. The arm64 Go path fuses both the
-// fma32 main loop and the scalar-tail multiply-add into FMADDS, so the fallback
-// uses math.FMA throughout to stay bit-identical to the asm.
+// fma32 main loop and the scalar-tail multiply-add into FMADDS, so this path
+// uses math.FMA throughout to stay bit-identical to the matching C reference.
 func prefilterDualInnerProdAsm(x, y1, y2 []float32, length int) (float32, float32) {
 	if length <= 0 {
 		return 0, 0
@@ -21,35 +23,35 @@ func prefilterDualInnerProdAsm(x, y1, y2 []float32, length int) (float32, float3
 	var a10, a11, a12, a13 float32
 	var a20, a21, a22, a23 float32
 	for len(x) >= 8 && len(y1) >= 8 && len(y2) >= 8 {
-		a10 = mdctFMA32(x[0], y1[0], a10)
-		a20 = mdctFMA32(x[0], y2[0], a20)
-		a11 = mdctFMA32(x[1], y1[1], a11)
-		a21 = mdctFMA32(x[1], y2[1], a21)
-		a12 = mdctFMA32(x[2], y1[2], a12)
-		a22 = mdctFMA32(x[2], y2[2], a22)
-		a13 = mdctFMA32(x[3], y1[3], a13)
-		a23 = mdctFMA32(x[3], y2[3], a23)
-		a10 = mdctFMA32(x[4], y1[4], a10)
-		a20 = mdctFMA32(x[4], y2[4], a20)
-		a11 = mdctFMA32(x[5], y1[5], a11)
-		a21 = mdctFMA32(x[5], y2[5], a21)
-		a12 = mdctFMA32(x[6], y1[6], a12)
-		a22 = mdctFMA32(x[6], y2[6], a22)
-		a13 = mdctFMA32(x[7], y1[7], a13)
-		a23 = mdctFMA32(x[7], y2[7], a23)
+		a10 = opusmath.FMA32(x[0], y1[0], a10)
+		a20 = opusmath.FMA32(x[0], y2[0], a20)
+		a11 = opusmath.FMA32(x[1], y1[1], a11)
+		a21 = opusmath.FMA32(x[1], y2[1], a21)
+		a12 = opusmath.FMA32(x[2], y1[2], a12)
+		a22 = opusmath.FMA32(x[2], y2[2], a22)
+		a13 = opusmath.FMA32(x[3], y1[3], a13)
+		a23 = opusmath.FMA32(x[3], y2[3], a23)
+		a10 = opusmath.FMA32(x[4], y1[4], a10)
+		a20 = opusmath.FMA32(x[4], y2[4], a20)
+		a11 = opusmath.FMA32(x[5], y1[5], a11)
+		a21 = opusmath.FMA32(x[5], y2[5], a21)
+		a12 = opusmath.FMA32(x[6], y1[6], a12)
+		a22 = opusmath.FMA32(x[6], y2[6], a22)
+		a13 = opusmath.FMA32(x[7], y1[7], a13)
+		a23 = opusmath.FMA32(x[7], y2[7], a23)
 		x = x[8:]
 		y1 = y1[8:]
 		y2 = y2[8:]
 	}
 	if len(x) >= 4 && len(y1) >= 4 && len(y2) >= 4 {
-		a10 = mdctFMA32(x[0], y1[0], a10)
-		a20 = mdctFMA32(x[0], y2[0], a20)
-		a11 = mdctFMA32(x[1], y1[1], a11)
-		a21 = mdctFMA32(x[1], y2[1], a21)
-		a12 = mdctFMA32(x[2], y1[2], a12)
-		a22 = mdctFMA32(x[2], y2[2], a22)
-		a13 = mdctFMA32(x[3], y1[3], a13)
-		a23 = mdctFMA32(x[3], y2[3], a23)
+		a10 = opusmath.FMA32(x[0], y1[0], a10)
+		a20 = opusmath.FMA32(x[0], y2[0], a20)
+		a11 = opusmath.FMA32(x[1], y1[1], a11)
+		a21 = opusmath.FMA32(x[1], y2[1], a21)
+		a12 = opusmath.FMA32(x[2], y1[2], a12)
+		a22 = opusmath.FMA32(x[2], y2[2], a22)
+		a13 = opusmath.FMA32(x[3], y1[3], a13)
+		a23 = opusmath.FMA32(x[3], y2[3], a23)
 		x = x[4:]
 		y1 = y1[4:]
 		y2 = y2[4:]
@@ -61,8 +63,8 @@ func prefilterDualInnerProdAsm(x, y1, y2 []float32, length int) (float32, float3
 	sum1 := round32(xy10 + xy11)
 	sum2 := round32(xy20 + xy21)
 	for i := 0; i < len(x) && i < len(y1) && i < len(y2); i++ {
-		sum1 = mdctFMA32(x[i], y1[i], sum1)
-		sum2 = mdctFMA32(x[i], y2[i], sum2)
+		sum1 = opusmath.FMA32(x[i], y1[i], sum1)
+		sum2 = opusmath.FMA32(x[i], y2[i], sum2)
 	}
 	return sum1, sum2
 }

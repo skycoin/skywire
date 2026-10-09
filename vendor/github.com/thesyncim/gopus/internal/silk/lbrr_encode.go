@@ -88,8 +88,10 @@ func (e *Encoder) lbrrEncode(
 		return
 	}
 
-	// Deep-copy NSQ state so LBRR quantization cannot alias the primary path.
-	lbrrNSQ := e.nsqState.Clone()
+	// LBRR quantizes from a copy of the primary NSQ state (sNSQ_LBRR in
+	// silk_LBRR_encode_FLP); the scratch buffers are per call and shared.
+	e.lbrrNSQState = *e.nsqState
+	lbrrNSQ := &e.lbrrNSQState
 	signalType := int(e.lbrrIndices[frameIdx].signalType)
 	quantOffset := int(e.lbrrIndices[frameIdx].quantOffsetType)
 	ltpScaleQ14 := int32(0)
@@ -121,184 +123,6 @@ func (e *Encoder) decodeLBRRGains(gainsQ16 []int32, condCoding int, nbSubfr int)
 
 	for i := 0; i < nbSubfr && i < len(gainsQ16); i++ {
 		gainsQ16[i] = gainsArr[i]
-	}
-}
-
-// encodeLBRRData encodes the LBRR flags and data at the start of the packet.
-// This should be called at the beginning of the first frame encoding.
-//
-// Reference: libopus silk/enc_API.c lines 355-405
-func (e *Encoder) encodeLBRRData(re *rangecoding.Encoder, nChannels int, includeHeader bool) {
-	if e.nFramesEncoded != 0 {
-		// LBRR is only encoded at the start of the packet
-		return
-	}
-
-	if includeHeader {
-		// Create space at start of payload for VAD and FEC flags
-		// This is done by encoding a placeholder that will be patched later
-		iCDF := []uint16{
-			uint16(256 - (256 >> ((int(e.nFramesPerPacket) + 1) * nChannels))),
-			0,
-		}
-		re.EncodeICDF16(0, iCDF, 8)
-	}
-
-	// Track LBRR bits: start measuring AFTER the VAD/FEC header reservation,
-	// matching libopus enc_API.c: curr_nBitsUsedLBRR = ec_tell(psRangeEnc);
-	lbrrBitsStart := re.Tell()
-
-	// Encode LBRR flags
-	lbrrSymbol := 0
-	nFrames := int(e.nFramesPerPacket)
-	for i := range nFrames {
-		lbrrSymbol |= int(e.lbrrFlags[i]) << i
-	}
-
-	// Set the overall LBRR flag
-	lbrrFlag := 0
-	if lbrrSymbol > 0 {
-		lbrrFlag = 1
-	}
-	e.lbrrFlag = int8(lbrrFlag)
-
-	// If LBRR is present and there are multiple frames, encode the flags
-	if lbrrFlag != 0 && nFrames > 1 {
-		// Use silk_LBRR_flags_iCDF_ptr
-		re.EncodeICDF(lbrrSymbol-1, silk_LBRR_flags_iCDF_ptr[nFrames-2], 8)
-	}
-
-	// Encode LBRR indices and pulses for each frame
-	lbrrPrevSignalType := 0
-	lbrrPrevLagIndex := 0
-	for i := range nFrames {
-		if e.lbrrFlags[i] == 0 {
-			continue
-		}
-
-		condCoding := codeIndependently
-		if i > 0 && e.lbrrFlags[i-1] != 0 {
-			condCoding = codeConditionally
-		}
-
-		// Encode LBRR indices
-		e.encodeLBRRIndices(re, i, condCoding, &lbrrPrevSignalType, &lbrrPrevLagIndex)
-
-		// Encode LBRR pulses
-		e.encodeLBRRPulses(re, i)
-	}
-
-	// Record the LBRR header bits emitted for this frame. libopus enc_API.c folds
-	// these into the nBitsUsedLBRR exponential moving average inside the per-frame
-	// rate-control loop (lines 406-425), with curr_nBitsUsedLBRR re-zeroed each
-	// frame; only the frame that writes the packet's LBRR header has non-zero bits.
-	// The EMA update + nBits subtraction runs in EncodeFrame so every frame of a
-	// multi-frame packet applies it (frames after the first see curr=0 and reset
-	// the EMA, matching libopus exactly).
-	e.currNBitsUsedLBRR = int32(re.Tell() - lbrrBitsStart)
-
-	// Clear LBRR flags after encoding (they apply to the previous packet)
-	for i := range e.lbrrFlags {
-		e.lbrrFlags[i] = 0
-	}
-}
-
-// EncodeLBRRData encodes LBRR data with optional header placeholder.
-// If includeHeader is false, the caller is responsible for reserving header bits.
-func (e *Encoder) EncodeLBRRData(re *rangecoding.Encoder, nChannels int, includeHeader bool) {
-	e.encodeLBRRData(re, nChannels, includeHeader)
-}
-
-// applyLBRRReservoirUpdate folds this frame's LBRR header bits (currNBitsUsedLBRR)
-// into the nBitsUsedLBRR exponential moving average and consumes the count. This
-// is the per-frame update libopus enc_API.c runs inside the rate-control loop
-// (lines 418-424); the frame that writes the packet's LBRR header carries the raw
-// bits, every later frame in the packet sees curr==0 and resets the EMA to zero.
-// It must run exactly once per frame, before that frame's target-rate is derived.
-func (e *Encoder) applyLBRRReservoirUpdate() {
-	curr := e.currNBitsUsedLBRR
-	if curr < 10 {
-		e.nBitsUsedLBRR = 0
-	} else if e.nBitsUsedLBRR < 10 {
-		e.nBitsUsedLBRR = curr
-	} else {
-		e.nBitsUsedLBRR = (e.nBitsUsedLBRR + curr) / 2
-	}
-	e.currNBitsUsedLBRR = 0
-}
-
-// encodeLBRRFlagSymbol writes per-frame LBRR flags for one channel and returns the flag.
-func encodeLBRRFlagSymbol(re *rangecoding.Encoder, enc *Encoder, nFrames int) int {
-	lbrrSymbol := 0
-	for i := range nFrames {
-		lbrrSymbol |= int(enc.lbrrFlags[i]) << i
-	}
-	lbrrFlag := 0
-	if lbrrSymbol > 0 {
-		lbrrFlag = 1
-	}
-	enc.lbrrFlag = int8(lbrrFlag)
-	if lbrrFlag != 0 && nFrames > 1 {
-		re.EncodeICDF(lbrrSymbol-1, silk_LBRR_flags_iCDF_ptr[nFrames-2], 8)
-	}
-	return lbrrFlag
-}
-
-// encodeStereoLBRRPacket encodes stereo LBRR flags and payloads at packet start.
-// Order matches skipStereoLBRRFrames / libopus enc_API.c.
-func encodeStereoLBRRPacket(
-	re *rangecoding.Encoder,
-	midEnc, sideEnc *Encoder,
-	nFrames int,
-	stereo *stereoEncState,
-) {
-	if re == nil || midEnc == nil || sideEnc == nil || stereo == nil {
-		return
-	}
-
-	lbrrBitsStart := re.Tell()
-	encodeLBRRFlagSymbol(re, midEnc, nFrames)
-	encodeLBRRFlagSymbol(re, sideEnc, nFrames)
-
-	var midPrevSignalType, midPrevLagIndex int
-	var sidePrevSignalType, sidePrevLagIndex int
-	channels := []*Encoder{midEnc, sideEnc}
-	for i := range nFrames {
-		for ch, enc := range channels {
-			if enc.lbrrFlags[i] == 0 {
-				continue
-			}
-			if ch == 0 {
-				EncodeStereoIndices(re, stereo.lbrrStereoIx[i])
-				if sideEnc.lbrrFlags[i] == 0 {
-					EncodeStereoMidOnly(re, int(stereo.lbrrMidOnly[i]))
-				}
-			}
-			condCoding := codeIndependently
-			if i > 0 && enc.lbrrFlags[i-1] != 0 {
-				condCoding = codeConditionally
-			}
-			if ch == 0 {
-				midEnc.encodeLBRRIndices(re, i, condCoding, &midPrevSignalType, &midPrevLagIndex)
-				midEnc.encodeLBRRPulses(re, i)
-			} else {
-				sideEnc.encodeLBRRIndices(re, i, condCoding, &sidePrevSignalType, &sidePrevLagIndex)
-				sideEnc.encodeLBRRPulses(re, i)
-			}
-		}
-	}
-
-	// Record the whole-section LBRR header bits for this packet; the EMA update +
-	// nBits subtraction runs per-frame in the encode body (libopus enc_API.c),
-	// where frames after the first see curr=0 and reset the EMA. The stereo target
-	// rate keys off the mid encoder's nBitsUsedLBRR, so the raw count lives there.
-	midEnc.currNBitsUsedLBRR = int32(re.Tell() - lbrrBitsStart)
-
-	for i := range midEnc.lbrrFlags {
-		midEnc.lbrrFlags[i] = 0
-	}
-	for i := range sideEnc.lbrrFlags {
-		sideEnc.lbrrFlags[i] = 0
 	}
 }
 
@@ -456,21 +280,6 @@ func (e *Encoder) encodeLBRRPulses(re *rangecoding.Encoder, frameIdx int) {
 	e.rangeEncoder = re
 	e.encodePulses(pulses[:frameLength], signalType, quantOffset)
 	e.rangeEncoder = prevRE
-}
-
-// hasLBRRData returns true if there is LBRR data to encode.
-func (e *Encoder) hasLBRRData() bool {
-	for i := 0; i < int(e.nFramesPerPacket); i++ {
-		if e.lbrrFlags[i] != 0 {
-			return true
-		}
-	}
-	return false
-}
-
-// HasLBRRData reports whether there is pending LBRR data to encode.
-func (e *Encoder) HasLBRRData() bool {
-	return e.hasLBRRData()
 }
 
 // Note: silk_LBRR_flags_iCDF_ptr is defined in libopus_tables.go

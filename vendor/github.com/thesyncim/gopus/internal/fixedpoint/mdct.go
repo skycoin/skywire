@@ -240,7 +240,7 @@ func (l *MDCTLookup) MDCTBackward(in, out []int32, window []int16, overlap, shif
 	n4 := n >> 2
 
 	// Headroom analysis over the input magnitudes.
-	var sumval int32 = int32(n2)
+	sumval := int32(n2)
 	var maxval int32
 	for i := 0; i < n2; i++ {
 		v := abs32(in[i*stride])
@@ -279,7 +279,13 @@ func (l *MDCTLookup) MDCTBackward(in, out []int32, window []int16, overlap, shif
 	// In-place N4 complex FFT over the complex view at yBase. The FFT operates
 	// on (re,im) pairs; copy out, transform, and write back so the post-rotate
 	// reads the transformed samples from the same out positions libopus does.
-	cpx := make([]FFTCpx, n4)
+	var local [celtMaxFrameSize / 2]FFTCpx
+	var cpx []FFTCpx
+	if n4 <= len(local) {
+		cpx = local[:n4]
+	} else {
+		cpx = make([]FFTCpx, n4)
+	}
 	for i := range cpx {
 		cpx[i] = FFTCpx{R: out[yBase+2*i], I: out[yBase+2*i+1]}
 	}

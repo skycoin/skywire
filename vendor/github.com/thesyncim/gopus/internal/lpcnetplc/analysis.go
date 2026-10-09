@@ -17,9 +17,6 @@ const (
 	analysisPitchBufSize = PitchMaxPeriod + 2*FrameSize
 )
 
-// libopus DRED reference builds are scalar, with asm/rtcd/intrinsics disabled.
-var useNEONAnalysisKernels = false
-
 type analysisScratch struct {
 	frame       [FrameSize]float32
 	window      [analysisWindowSize]float32
@@ -184,8 +181,14 @@ func (a *Analysis) computeFrameFeatures(in []float32) {
 	a.ifFeatures[0] = clampUnit((1.0 / 64.0) * (10*log10f(1e-15+real(a.scratch.spectrum[0])*real(a.scratch.spectrum[0])) - 6))
 	for i := 1; i < pitchIFMaxFreq; i++ {
 		prod := mulConj(a.scratch.spectrum[i], a.prevIF[i])
-		norm := float32(1.0) / opusmath.SqrtF32(1e-15+real(prod)*real(prod)+imag(prod)*imag(prod))
-		prod *= complex(norm, 0)
+		// lpcnet_enc.c forms the float norm sum in this order, then computes
+		// sqrt and the reciprocal in double before narrowing the scale once.
+		normSum := fma32(real(prod), real(prod), 1e-15)
+		normSum = fma32(imag(prod), imag(prod), normSum)
+		norm := float32(1.0 / opusmath.SqrtCReal(opusmath.CReal(normSum)))
+		// C_MULBYSCALAR scales the two components separately. Complex
+		// multiplication would add a zero cross-term and change signed zero.
+		prod = complex(real(prod)*norm, imag(prod)*norm)
 		a.ifFeatures[3*i-2] = real(prod)
 		a.ifFeatures[3*i-1] = imag(prod)
 		energy := real(a.scratch.spectrum[i])*real(a.scratch.spectrum[i]) + imag(a.scratch.spectrum[i])*imag(a.scratch.spectrum[i])
@@ -340,8 +343,15 @@ func computeBandEnergy(bandE []float32, spectrum []complex64, dredEncoder bool) 
 			im := imag(spectrum[idx])
 			tmp := re * re
 			tmp += im * im
-			// libopus dnn/freq.c:lpcn_compute_band_energy relies on rounded
-			// float products/adds here; avoid Go contracting the weighted add.
+			if !analysisUseRoundedVectorProducts {
+				// The selected scalar dnn/freq.c object fuses each weighted
+				// contribution into its band's running energy.
+				sum[i] = fma32(1-frac, tmp, sum[i])
+				sum[i+1] = fma32(frac, tmp, sum[i+1])
+				continue
+			}
+			// The selected SIMD object rounds vector products before adding
+			// their lanes to the running energy.
 			left := noFMA32Mul(1-frac, tmp)
 			right := noFMA32Mul(frac, tmp)
 			sum[i] = round32(sum[i] + left)
@@ -366,8 +376,15 @@ func computeBandEnergyInverse(bandE []float32, spectrum []complex64) {
 			tmp += im * im
 			// libopus dnn/freq.c:compute_band_energy_inverse has unsuffixed 1e-9.
 			tmp = float32(1.0 / (opusmath.CReal(tmp) + 1e-9))
-			sum[i] += (1 - frac) * tmp
-			sum[i+1] += frac * tmp
+			if analysisUseRoundedVectorProducts {
+				// The selected NEON freq.o rounds each weighted product before
+				// adding its four-bin vector lanes to the band sums.
+				sum[i] = round32(sum[i] + noFMA32Mul(1-frac, tmp))
+				sum[i+1] = round32(sum[i+1] + noFMA32Mul(frac, tmp))
+			} else {
+				sum[i] += (1 - frac) * tmp
+				sum[i+1] += frac * tmp
+			}
 		}
 	}
 	sum[0] *= 2
@@ -486,10 +503,18 @@ func lpcnLPC(lpc, ac []float32, order int) float32 {
 
 func lpcnRR(lpc, ac []float32, i int) float32 {
 	var rr float32
+	if !analysisUseRoundedVectorProducts {
+		// The selected scalar libopus dnn/freq.c:lpcn_lpc object accumulates
+		// each reflection-product in ascending order. The SIMD object rounds
+		// complete groups of four products before adding them in lane order.
+		for j := 0; j < i; j++ {
+			rr = fma32(lpc[j], ac[i-j], rr)
+		}
+		return rr
+	}
 	j := 0
-	// libopus dnn/freq.c:lpcn_lpc is compiled as 16/4-wide vector products on
-	// arm64 clang, with rounded FMUL products reduced in lane order; scalar
-	// leftovers use FMADD.
+	// libopus dnn/freq.c:lpcn_lpc rounds SIMD products in four-wide groups,
+	// adds each lane in order, then uses scalar FMADD for the remainder.
 	for ; j+15 < i; j += 16 {
 		rr += noFMA32Mul(lpc[j+0], ac[i-j-0])
 		rr += noFMA32Mul(lpc[j+1], ac[i-j-1])
@@ -526,7 +551,7 @@ func lpcnRR(lpc, ac []float32, i int) float32 {
 // precision so the surrounding add/sub cannot fuse, matching the scalar
 // reference on every build. It is the cheap barrier — an FMUL+FADD pair rather
 // than the FMUL+FMOV+FMOV+FADD of a Float32bits round-trip — and a no-op on
-// amd64 and the purego oracle, which do not contract FP. Keep this tiny; its
+// amd64 and the nosimd oracle, which do not contract FP. Keep this tiny; its
 // fusion-defeating codegen is guarded by the package parity tests.
 func round32(x float32) float32 {
 	return float32(x)
@@ -565,7 +590,9 @@ func burgAnalysis(dst, x []float32, minInvGain float32, subfrLength, nbSubfr, or
 		}
 	}
 	copy(last, first)
-	caf[0] = c0 + 1e-5*c0 + 1e-9
+	// burg.c stores the conditioning constants as float before promoting the
+	// correlation sum to double.
+	caf[0] = c0 + opusmath.CReal(float32(1e-5))*c0 + opusmath.CReal(float32(1e-9))
 	cab[0] = caf[0]
 	invGain := opusmath.CReal(1.0)
 	reachedMaxGain := false
@@ -576,8 +603,10 @@ func burgAnalysis(dst, x []float32, minInvGain float32, subfrLength, nbSubfr, or
 			tmp1 := opusmath.CReal(xPtr[n])
 			tmp2 := opusmath.CReal(xPtr[subfrLength-n-1])
 			for k := range n {
-				first[k] -= opusmath.CReal(xPtr[n]) * opusmath.CReal(xPtr[n-k-1])
-				last[k] -= opusmath.CReal(xPtr[subfrLength-n-1]) * opusmath.CReal(xPtr[subfrLength-n+k])
+				// burg.c multiplies two float operands for each row update;
+				// the rounded product is then subtracted from the double row.
+				first[k] -= opusmath.CReal(noFMA32Mul(xPtr[n], xPtr[n-k-1]))
+				last[k] -= opusmath.CReal(noFMA32Mul(xPtr[subfrLength-n-1], xPtr[subfrLength-n+k]))
 				atmp := af[k]
 				tmp1 += opusmath.CReal(xPtr[n-k-1]) * atmp
 				tmp2 += opusmath.CReal(xPtr[subfrLength-n+k]) * atmp
@@ -657,7 +686,7 @@ func burgAnalysis(dst, x []float32, minInvGain float32, subfrLength, nbSubfr, or
 			tmp1 += atmp * atmp
 			dst[k] = float32(-atmp)
 		}
-		nrgF -= 1e-5 * c0 * tmp1
+		nrgF -= opusmath.CReal(float32(1e-5)) * c0 * tmp1
 	}
 	if nrgF < 0 {
 		return 0
@@ -694,7 +723,11 @@ func celtFIRFloat(inWithHistory, coeffs, out []float32) {
 			inWithHistory[analysisLPCOrder+i+2],
 			inWithHistory[analysisLPCOrder+i+3],
 		}
-		xcorrKernel4Float32(rnum[:], inWithHistory[i:], &sum, analysisLPCOrder)
+		if useX86SelectedPitchKernels {
+			celt.LPCNetFIRXCorrKernel4Float32(rnum[:], inWithHistory[i:], &sum, analysisLPCOrder)
+		} else {
+			xcorrKernel4Float32(rnum[:], inWithHistory[i:], &sum, analysisLPCOrder)
+		}
 		out[i] = sum[0]
 		out[i+1] = sum[1]
 		out[i+2] = sum[2]
@@ -809,6 +842,10 @@ func biquadInPlace(y, mem []float32) {
 }
 
 func pitchXCorrFloat(dst, x, y []float32, length, maxPitch int) {
+	if useX86SelectedPitchKernels {
+		celt.PitchXCorrFloat32(dst, x, y, length, maxPitch)
+		return
+	}
 	if useNEONAnalysisKernels {
 		pitchXCorrFloatNEON(dst, x, y, length, maxPitch)
 		return
@@ -823,19 +860,18 @@ func pitchXCorrFloat(dst, x, y []float32, length, maxPitch int) {
 }
 
 func innerProdFloat(x, y []float32, length int) float32 {
+	if useX86SelectedPitchKernels {
+		return celt.LPCNetInnerProdFloat32(x, y, length)
+	}
 	if useNEONAnalysisKernels {
 		return innerProdFloatNEON(x, y, length)
 	}
-	// libopus celt/pitch.h:celt_inner_prod_c is MAC16_16 (c + a*b) in the
-	// float build. At -O3 the scalar DRED reference build auto-vectorizes the
-	// FRAME_SIZE reduction into 4-wide NEON: every product is a rounded FMUL,
-	// then the products are reduced into a single accumulator in index order
-	// with plain FADDs (no FMA fusion). Round each product before accumulating
-	// so the Go arm64 backend cannot fuse this into FMADDS and diverge from the
-	// reference by a last bit (this surfaces in features[19] frame_corr).
+	// The selected scalar C build uses celt/pitch.h:celt_inner_prod_c and
+	// accumulates each MAC16_16 in sample order with FMADD. The same kernel
+	// supplies LPCNet pitch normalization and frame correlation.
 	var sum float32
 	for i := range length {
-		sum += noFMA32Mul(x[i], y[i])
+		sum = fma32(x[i], y[i], sum)
 	}
 	return sum
 }
@@ -903,7 +939,12 @@ func clampUnit(x float32) float32 {
 }
 
 func mulConj(a, b complex64) complex64 {
-	return complex(real(a)*real(b)+imag(a)*imag(b), imag(a)*real(b)-real(a)*imag(b))
+	// C_MULC in lpcnet_enc.c rounds the second product before adding the
+	// first with FMADD. The imaginary subtraction rounds its negated product.
+	return complex(
+		fma32(real(a), real(b), noFMA32Mul(imag(a), imag(b))),
+		fma32(imag(a), real(b), -noFMA32Mul(real(a), imag(b))),
+	)
 }
 
 var analysisBandEdges = [...]int{

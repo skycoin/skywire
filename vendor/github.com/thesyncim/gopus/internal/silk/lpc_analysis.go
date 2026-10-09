@@ -71,7 +71,8 @@ func burgLPC(signal []float32, order int) []int16 {
 	return lpcQ12
 }
 
-// energyF32, innerProductF32 are in inner_prod_asm.go (arm64) / inner_prod_default.go (other).
+// energyF32 and innerProductF32 select Go SIMD implementations where available
+// and scalar Go implementations otherwise.
 
 // a2nlsfFLP converts LPC coefficients to NLSF using floating point.
 // This matches libopus silk_A2NLSF_FLP / silk_A2NLSF.
@@ -350,12 +351,9 @@ func silkBwExpander32AQ16(ar []int32, order int, chirpQ16 int32) {
 	ar[order-1] = int32((int64(chirpQ16) * int64(ar[order-1])) >> 16)
 }
 
-// applyBandwidthExpansionFloat applies chirp factor to LPC coefficients.
-// This prevents filter instability by pulling poles toward origin.
-// Per decision D02-03-01: chirp factor 0.96.
-//
-// lpcQ12: LPC coefficients in Q12 format (modified in place)
-// chirp: Expansion factor (0.96 recommended per Phase 2)
+// applyBandwidthExpansionFloat applies a caller-selected chirp to the Q12 LPC
+// coefficient slice in place. Successive coefficients are scaled by
+// chirp, chirp^2, and higher powers. This helper is exercised by tests.
 func applyBandwidthExpansionFloat(lpcQ12 []int16, chirp float32) {
 	factor := chirp
 	for i := range lpcQ12 {
@@ -403,7 +401,7 @@ func (e *Encoder) burgModifiedFLPZeroAllocF32(x []float32, minInvGainVal float32
 	for s := range nbSubfr {
 		xPtr := s * subfrLength
 		for n := 1; n <= order; n++ {
-			CFirstRow[n-1] += innerProductF32Libopus(x[xPtr:], x[xPtr+n:], subfrLength-n)
+			CFirstRow[n-1] += innerProductFLP(x[xPtr:], x[xPtr+n:], subfrLength-n)
 		}
 	}
 	copy(CLastRow[:silkMaxOrderLPC], CFirstRow[:silkMaxOrderLPC])

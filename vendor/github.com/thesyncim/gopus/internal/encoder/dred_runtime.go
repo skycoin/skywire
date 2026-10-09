@@ -50,6 +50,27 @@ type dredEncoderPacketSnapshot struct {
 	lastExtraDREDOffset int32
 }
 
+func (r *dredEncoderRuntime) reset() {
+	if r == nil {
+		return
+	}
+	r.generator.Reset()
+	clear(r.resampleMem[:])
+	clear(r.scaledPCM16k[:])
+	clear(r.latentsBuffer[:])
+	clear(r.stateBuffer[:])
+	r.packetSnapshot = dredEncoderPacketSnapshot{}
+	clear(r.activity[:])
+	clear(r.latestLatents[:])
+	clear(r.latestState[:])
+	r.latentsFill = 0
+	r.dredOffset = 0
+	r.latentOffset = 0
+	r.lastExtraDREDOffset = 0
+	clear(r.payload[:])
+	r.emitted = 0
+}
+
 type dredEncoderExtras struct {
 	duration int32
 	models   dredEncoderModels
@@ -88,7 +109,7 @@ func (e *Encoder) resetDREDControls() {
 		return
 	}
 	e.dred.duration = 0
-	e.dred.runtime = nil
+	e.dred.runtime.reset()
 	e.pruneDREDExtrasIfDormant()
 }
 

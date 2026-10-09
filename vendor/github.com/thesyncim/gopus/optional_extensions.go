@@ -13,7 +13,7 @@ const (
 	// OptionalExtensionDNNBlob identifies supported weights-file model blob loading.
 	OptionalExtensionDNNBlob OptionalExtension = "dnn_blob"
 
-	// OptionalExtensionQEXT identifies the optional extended-precision theta path,
+	// OptionalExtensionQEXT identifies the optional CELT QEXT encoder extension,
 	// which is supported only when built with -tags gopus_qext.
 	OptionalExtensionQEXT OptionalExtension = "qext"
 

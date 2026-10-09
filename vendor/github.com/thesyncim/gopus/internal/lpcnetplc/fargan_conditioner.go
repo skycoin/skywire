@@ -55,6 +55,7 @@ type farganConditionerScratch struct {
 	fdense2  [FARGANCondConv1OutSize]float32
 	convTemp [FARGANCondConv1Inputs]float32
 	quant    [FARGANCondConv1Inputs]int16
+	quantSU  [FARGANCondConv1Inputs]uint8
 }
 
 // FARGANConditioner mirrors the libopus compute_fargan_cond() runtime and
@@ -102,8 +103,9 @@ var farganConditionerLayerSpecs = []LinearLayerSpec{
 	},
 }
 
-// FARGANConditionerLayerSpecs returns the libopus-shaped FARGAN conditioning
-// layer specs the pure-Go loader binds from a validated weights blob.
+// FARGANConditionerLayerSpecs returns the shared libopus-shaped FARGAN
+// conditioning layer specs the pure-Go loader binds from a validated weights
+// blob. Callers must treat the returned slice as read-only.
 func FARGANConditionerLayerSpecs() []LinearLayerSpec {
 	return farganConditionerLayerSpecs
 }
@@ -227,25 +229,7 @@ func computeFARGANConv1D(layer *LinearLayer, output, mem, input []float32, input
 }
 
 func computeFARGANLinear(layer *LinearLayer, out, in []float32, scratch *farganConditionerScratch) {
-	bias := layer.Bias
-	n := layer.NbOutputs
-	m := layer.NbInputs
-
-	if !layer.FloatWeights.Empty() {
-		sgemv(out[:n], layer.FloatWeights, n, m, n, in[:m])
-	} else if !layer.Weights.Empty() {
-		cgemv8x4(out[:n], layer.Weights, layer.Scale, n, m, in[:m], scratch.quant[:m])
-		if useSUBias && !layer.Subias.Empty() {
-			bias = layer.Subias
-		}
-	} else {
-		clear(out[:n])
-	}
-	if !bias.Empty() {
-		for i := range n {
-			out[i] += bias.At(i)
-		}
-	}
+	computeLinearQuant(layer, out, in, scratch.quant[:], scratch.quantSU[:])
 }
 
 func clampInt(v, lo, hi int) int {

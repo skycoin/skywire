@@ -2,13 +2,6 @@
 
 package rangecoding
 
-// SkipToTell advances the decoder's bit accounting so Tell() reports exactly
-// targetBits, without consuming further input. It mirrors the CELT silence
-// fast-path in celt_decode_with_ec: dec->nbits_total += targetBits-ec_tell(dec).
-func (d *Decoder) SkipToTell(targetBits int) {
-	d.nbitsTotal += int32(targetBits - d.Tell())
-}
-
 // SkipToTell pretends the given number of bits have been written, mirroring the
 // libopus silence path (enc->nbits_total += tell - ec_tell(enc)). After the call
 // Tell() returns tell. Used by the CELT encoder's silence branch.

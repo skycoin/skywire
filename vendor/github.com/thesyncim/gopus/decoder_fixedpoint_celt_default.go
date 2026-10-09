@@ -4,6 +4,18 @@ package gopus
 
 import "github.com/thesyncim/gopus/internal/celt"
 
+func (d *Decoder) decodePublicFloat32(data []byte, pcm []float32) (int, error) {
+	return d.decodeFloat32(data, pcm, true)
+}
+
+func (d *Decoder) decodeFECPublicFloat32(data []byte, pcm []float32) (int, error) {
+	return d.decodeWithFECFloat32(data, pcm)
+}
+func (d *Decoder) fixedCaptureSILKOutput(_ []float32) bool { return false }
+func (d *Decoder) fixedAccumulateHybridToSILKFade(_, _ int, _ bool, _ celt.CELTBandwidth) bool {
+	return true
+}
+
 // celtDecodeFixedAPIRate is a no-op in the default (float) build: it never
 // handles the CELT-only decode, so the caller falls through to the float CELT
 // decoder. It exists only to keep the dispatch in
@@ -17,7 +29,8 @@ func (d *Decoder) celtDecodeFixedAPIRate(_ []byte, _ int, _ bool, _ celt.CELTBan
 func (d *Decoder) celtDecodeLostFixedAPIRate(_ int) bool { return false }
 
 // resetFixedCELT is a no-op in the default build.
-func (d *Decoder) resetFixedCELT() {}
+func (d *Decoder) resetFixedCELT()                         {}
+func (d *Decoder) setFixedCELTPhaseInversionDisabled(bool) {}
 
 // prepareFixedHybrid / finishFixedHybrid are no-ops in the default build: the
 // Hybrid int16/int24 wrappers always use the float conversion there.
@@ -28,20 +41,28 @@ func (d *Decoder) finishFixedHybrid() error                                     
 // lost hybrid frames always use the float PLC + conversion there.
 func (d *Decoder) armFixedHybridLost(_ int, _ bool) bool { return false }
 func (d *Decoder) finishFixedHybridLost(_ int) bool      { return false }
+func (d *Decoder) fixedDecodeHybridFEC(_ []float32, _, _ int, _ celt.CELTBandwidth) bool {
+	return false
+}
 
 // The integer Hybrid redundancy / transition helpers are no-ops in the default
 // build; the int16/int24 wrappers there always use the float conversion for
 // redundancy / transition frames.
-func (d *Decoder) fixedDecodeRedundantCELT(_ []byte, _ celt.CELTBandwidth, _ bool) {}
-func (d *Decoder) fixedDecodeTransitionPLC(_ int)                                  {}
-func (d *Decoder) fixedApplyRedundancySilkToCelt(_, _ int)                         {}
-func (d *Decoder) fixedApplyRedundancyCeltToSilk(_, _ int)                         {}
-func (d *Decoder) fixedApplyTransition(_, _, _ int)                                {}
-func (d *Decoder) fixedClearHybridFrame()                                          {}
-func (d *Decoder) fixedSnapshotHandled() bool                                      { return false }
-func (d *Decoder) fixedRestoreHandled(_ bool)                                      {}
-func (d *Decoder) fixedSuppressCELTPLC(_ bool) bool                                { return false }
-func (d *Decoder) fixedCELTPLCHookSuppressed() bool                                { return false }
+func (d *Decoder) fixedDecodeRedundantCELT(_ []byte, _ celt.CELTBandwidth, _ bool, _ int) bool {
+	return false
+}
+func (d *Decoder) fixedDecodeTransitionPLC(_ int)           {}
+func (d *Decoder) fixedCaptureRecursiveTransition(_, _ int) {}
+func (d *Decoder) fixedOutputCursor() int                   { return -1 }
+func (d *Decoder) fixedTransitionAvailable() bool           { return false }
+func (d *Decoder) fixedApplyRedundancySilkToCelt(_, _ int)  {}
+func (d *Decoder) fixedApplyRedundancyCeltToSilk(_, _ int)  {}
+func (d *Decoder) fixedApplyTransition(_, _, _ int)         {}
+func (d *Decoder) fixedClearHybridFrame()                   {}
+func (d *Decoder) fixedSnapshotHandled() bool               { return false }
+func (d *Decoder) fixedRestoreHandled(_ bool)               {}
+func (d *Decoder) fixedSuppressCELTPLC(_ bool) bool         { return false }
+func (d *Decoder) fixedCELTPLCHookSuppressed() bool         { return false }
 
 // The integer-output accumulation helpers are no-ops in the default build; the
 // int16/int24 wrappers there always use the float conversion.

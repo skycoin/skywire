@@ -105,6 +105,7 @@ type farganScratch struct {
 	recur       [3 * farganMaxRNNNeurons]float32
 	act         [farganMaxActivation]float32
 	quant       [farganMaxLinearInputs]int16
+	quantSU     [farganMaxLinearInputs]uint8
 }
 
 // FARGAN is the caller-owned FARGAN vocoder: a bound model plus its recurrent
@@ -284,8 +285,9 @@ var farganModelLayerSpecs = func() []LinearLayerSpec {
 	return specs
 }()
 
-// FARGANModelLayerSpecs returns the libopus-shaped conditioning and signal
-// layer specs the FARGAN runtime binds from a validated blob.
+// FARGANModelLayerSpecs returns the shared libopus-shaped conditioning and
+// signal layer specs the FARGAN runtime binds from a validated blob. Callers
+// must treat the returned slice as read-only.
 func FARGANModelLayerSpecs() []LinearLayerSpec {
 	return farganModelLayerSpecs
 }
@@ -386,9 +388,10 @@ func (f *FARGAN) Reset() {
 }
 
 // PrimeContinuity seeds the FARGAN recurrent buffers from past PCM and the
-// preceding feature vectors, mirroring libopus fargan_cont() (dnn/fargan.c).
-// It returns the number of warm-up samples consumed so synthesis can continue
-// seamlessly from the decoder history.
+// preceding feature vectors, mirroring libopus fargan_cont() (dnn/fargan.c). It
+// requires at least FARGANContSamples PCM samples and at least
+// ContVectors*NumFeatures feature values, and returns FARGANContSamples on
+// success or 0 otherwise.
 func (f *FARGAN) PrimeContinuity(pcm0, features0 []float32) int {
 	if f == nil || f.model == nil || len(pcm0) < FARGANContSamples || len(features0) < ContVectors*NumFeatures {
 		return 0
@@ -423,8 +426,8 @@ func (f *FARGAN) PrimeContinuity(pcm0, features0 []float32) int {
 // Synthesize generates one FARGAN frame (FARGANFrameSize samples) of PCM into
 // pcm from a single LPCNet feature vector, mirroring libopus fargan_synthesize
 // (dnn/fargan.c). It runs the conditioning network once, then the signal
-// network per subframe, and returns the number of samples written (0 if the
-// runtime is not primed via PrimeContinuity).
+// network per subframe. It returns FARGANFrameSize on success or 0 if the model
+// is unbound, the state is unprimed, or either input/output slice is too short.
 func (f *FARGAN) Synthesize(pcm, features []float32) int {
 	if f == nil || f.model == nil || !f.state.contInitialized || len(pcm) < FARGANFrameSize || len(features) < NumFeatures {
 		return 0
@@ -551,10 +554,9 @@ func computeFARGANGRU(inputWeights, recurrentWeights *LinearLayer, state, in []f
 	computeActivation(h, h, n, activationTanh)
 	for i := range n {
 		// libopus compute_generic_gru() (dnn/nnet.c): "h[i] = z[i]*state[i] +
-		// (1-z[i])*h[i]". clang -ffp-contract=on rounds (1-z)*h first, then fuses
-		// the leading product into the add as fma(z, state, (1-z)*h). Matching
-		// that operand order is required for bit-exact arm64 NEON parity.
-		h[i] = fma32(z[i], state[i], (1-z[i])*h[i])
+		// (1-z[i])*h[i]". The selected C build rounds (1-z)*h before fusing
+		// z*state into the add. The explicit product barrier preserves that order.
+		h[i] = fma32(z[i], state[i], noFMA32Mul(1-z[i], h[i]))
 		state[i] = h[i]
 	}
 }
@@ -583,25 +585,7 @@ func computeFARGANSignalConv1D(layer *LinearLayer, output, mem, input []float32,
 }
 
 func computeFARGANSignalLinear(layer *LinearLayer, out, in []float32, scratch *farganScratch) {
-	bias := layer.Bias
-	n := layer.NbOutputs
-	m := layer.NbInputs
-
-	if !layer.FloatWeights.Empty() {
-		sgemv(out[:n], layer.FloatWeights, n, m, n, in[:m])
-	} else if !layer.Weights.Empty() {
-		cgemv8x4(out[:n], layer.Weights, layer.Scale, n, m, in[:m], scratch.quant[:m])
-		if useSUBias && !layer.Subias.Empty() {
-			bias = layer.Subias
-		}
-	} else {
-		clear(out[:n])
-	}
-	if !bias.Empty() {
-		for i := range n {
-			out[i] += bias.At(i)
-		}
-	}
+	computeLinearQuant(layer, out, in, scratch.quant[:], scratch.quantSU[:])
 }
 
 func clampFARGANSample(x float32) float32 {

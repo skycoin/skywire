@@ -29,7 +29,6 @@ const (
 	TraceStageCF1KernelRaw
 	TraceStageCF1GainsRaw
 	TraceStageCF1KernelScaled
-	TraceStageCF1GainsScaled
 )
 
 // NoLACE-only trace stages. Numbered to match the C helper enum values 30..41.
@@ -87,7 +86,7 @@ func (s *LACEState) ProcessTrace(in, out, features []float32, numbits []float32,
 	s.ensureWindow()
 	m := &s.model.LACE
 
-	records := make([]TraceRecord, 0, 31)
+	records := make([]TraceRecord, 0, 27)
 	appendTraceRecord(&records, TraceStageInput, -1, 1, frame20msSize, in[:frame20msSize])
 	appendTraceRecord(&records, TraceStageFeatures, -1, 1, subframesPerFrame*laceNumFeatures, features[:subframesPerFrame*laceNumFeatures])
 	appendTraceRecord(&records, TraceStageNumbits, -1, 1, 2, numbits[:2])
@@ -110,7 +109,6 @@ func (s *LACEState) ProcessTrace(in, out, features []float32, numbits []float32,
 			latent[sf*laceCondDim:sf*laceCondDim+laceCondDim],
 			&m.CF1Kernel, &m.CF1Gain, &m.CF1GlobalGain,
 			laceCF1KernelSize,
-			laceCF1FilterGainA, laceCF1FilterGainB, laceCF1LogGainLimit,
 		)
 		adacombProcessFrame(
 			s.cf1History[:], s.cf1LastKernel[:], &s.cf1LastGlobalGain, &s.cf1LastPitchLag,
@@ -123,6 +121,7 @@ func (s *LACEState) ProcessTrace(in, out, features []float32, numbits []float32,
 			laceCF1FilterGainA, laceCF1FilterGainB, laceCF1LogGainLimit,
 			s.window[:],
 		)
+		appendTraceRecord(&records, TraceStageCF1KernelScaled, sf, 1, laceCF1KernelSize, s.cf1LastKernel[:laceCF1KernelSize])
 	}
 	appendTraceRecord(&records, TraceStagePostCF1, -1, 1, frame20msSize, outputBuf[:])
 
@@ -252,7 +251,6 @@ func traceAdaCombParams(
 	features []float32,
 	kernelLayer, gainLayer, globalGainLayer *LinearLayer,
 	kernelSize int,
-	filterGainA, filterGainB, logGainLimit float32,
 ) {
 	var kernel [adaCombMaxKernelSize]float32
 	var gains [2]float32
@@ -261,20 +259,6 @@ func traceAdaCombParams(
 	computeGenericDense(globalGainLayer, gains[1:2], features, actTanh)
 	appendTraceRecord(records, TraceStageCF1KernelRaw, subframe, 1, kernelSize, kernel[:kernelSize])
 	appendTraceRecord(records, TraceStageCF1GainsRaw, subframe, 1, len(gains), gains[:])
-
-	gains[0] = opusmath.ExpF32(logGainLimit - gains[0])
-	gains[1] = opusmath.ExpF32(filterGainA*gains[1] + filterGainB)
-	var norm float32
-	for k := 0; k < kernelSize; k++ {
-		norm += roundMul32(kernel[k], kernel[k])
-	}
-	invNorm := scaleKernelInvNorm(norm)
-	scale := invNorm * gains[0]
-	for k := 0; k < kernelSize; k++ {
-		kernel[k] *= scale
-	}
-	appendTraceRecord(records, TraceStageCF1KernelScaled, subframe, 1, kernelSize, kernel[:kernelSize])
-	appendTraceRecord(records, TraceStageCF1GainsScaled, subframe, 1, len(gains), gains[:])
 }
 
 func appendTraceRecord(records *[]TraceRecord, stage TraceStage, subframe, channels, samplesPerChannel int, values []float32) {

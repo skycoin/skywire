@@ -41,7 +41,7 @@ func hysteresisDecisionInt(val int, thresholds, hysteresis []int, prev int) int 
 }
 
 // stereoAnalysisDecision mirrors libopus stereo_analysis() and returns dual-stereo usage.
-func stereoAnalysisDecision(normL, normR []celtNorm, lm, nbBands int) bool {
+func stereoAnalysisDecision(normL, normR []celtNorm, lm, nbBands int, edges []int) bool {
 	if lm < 0 {
 		lm = 0
 	}
@@ -61,8 +61,8 @@ func stereoAnalysisDecision(normL, normR []celtNorm, lm, nbBands int) bool {
 	sumLR := eps
 	sumMS := eps
 	for band := 0; band < maxBand; band++ {
-		bandStart := EBands[band] << lm
-		bandEnd := EBands[band+1] << lm
+		bandStart := edges[band] << lm
+		bandEnd := edges[band+1] << lm
 		if bandStart >= len(normL) || bandStart >= len(normR) {
 			break
 		}
@@ -87,6 +87,6 @@ func stereoAnalysisDecision(normL, normR []celtNorm, lm, nbBands int) bool {
 	if lm <= 1 {
 		thetas -= 8
 	}
-	base := EBands[13] << (lm + 1)
+	base := edges[13] << (lm + 1)
 	return float32(base+thetas)*sumMS > float32(base)*sumLR
 }

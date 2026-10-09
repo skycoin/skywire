@@ -68,7 +68,7 @@ func mult16x32Q16(a, b int32) int32 {
 // in place: it is first scaled down to the int16 working range, then its
 // absolute value is taken. iy must have length >= N (alg_quant allocates N+3
 // for vectorisation headroom; this search only touches indices [0,N)).
-func OpPvqSearch(x []int32, iy []int, k, n int, scratch *celtEncodeScratch) int32 {
+func OpPvqSearch(x []int32, iy []int32, k, n int, scratch *celtEncodeScratch) int32 {
 	var y []int32
 	var signx []bool
 	if scratch != nil {
@@ -119,12 +119,12 @@ func OpPvqSearch(x []int32, iy []int, k, n int, scratch *celtEncodeScratch) int3
 		rcp := int32(int16(mult16x32Q16(int32(k), CeltRcp(sum))))
 		for j := 0; j < n; j++ {
 			// Round towards zero.
-			iy[j] = int(mult16x16Q15i32(x[j], rcp))
-			y[j] = int32(iy[j])
+			iy[j] = mult16x16Q15i32(x[j], rcp)
+			y[j] = iy[j]
 			yy = int16(mac16x16(int32(yy), y[j], y[j]))
 			xy = mac16x16(xy, x[j], y[j])
 			y[j] *= 2
-			pulsesLeft -= iy[j]
+			pulsesLeft -= int(iy[j])
 		}
 	}
 
@@ -133,7 +133,7 @@ func OpPvqSearch(x []int32, iy []int, k, n int, scratch *celtEncodeScratch) int3
 		tmp := int32(pulsesLeft)
 		yy = int16(mac16x16(int32(yy), tmp, tmp))
 		yy = int16(mac16x16(int32(yy), tmp, y[0]))
-		iy[0] += pulsesLeft
+		iy[0] += int32(pulsesLeft)
 		pulsesLeft = 0
 	}
 

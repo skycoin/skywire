@@ -1,4 +1,4 @@
-//go:build !arm64 || purego
+//go:build (!arm64 && !amd64) || nosimd || purego || !goexperiment.simd
 
 package celt
 
@@ -9,11 +9,20 @@ func stereoMergeRescaleNEON(x, y []float32, mid, lgain, rgain float32) {
 	if n <= 0 {
 		return
 	}
-	// x already has len n; reslice y to n so the compiler proves both indices
-	// in-bounds and drops the per-iteration bounds checks (the caller always
-	// passes len(y) == len(x); a shorter y panics here, as it did at y[i]).
-	x = x[:n]
 	y = y[:n]
+	if stereoMergeUsesFMA {
+		for i := 0; i < n; i++ {
+			xv, yv := x[i], y[i]
+			left := fma32(mid, xv, -yv)
+			right := fma32(mid, xv, yv)
+			x[i] = noFMA32Mul(lgain, left)
+			y[i] = noFMA32Mul(rgain, right)
+		}
+		return
+	}
+	// x already has len n; the compiler proves both indices in-bounds and drops
+	// per-iteration bounds checks (the caller passes len(y) == len(x)).
+	x = x[:n]
 	// 8-wide loop: 8 pairs per iteration exposes 8 independent critical paths
 	// (each pair is lgain*(mid*x−y) and rgain*(mid*x+y)) so throughput rather
 	// than per-pair latency limits the loop, approximately halving the cycle

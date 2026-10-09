@@ -27,7 +27,8 @@ type LibopusResampler struct {
 
 	copyMode  bool
 	up2HQMode bool
-	down      *DownsamplingResampler
+	down      *DownsamplingResampler // down_FIR stage, set when fsOut < fsIn
+	idleDown  *DownsamplingResampler // down_FIR stage kept for reuse by init
 }
 
 type libopusResamplerSnapshot struct {
@@ -130,15 +131,6 @@ func (r *LibopusResampler) resampleIIRFIRSliceWithScratch(out []int16, in []int1
 	copy(r.sFIR[:], buf[lastNSamplesIn*2:lastNSamplesIn*2+resamplerOrderFIR12])
 }
 
-// Coefficients for 2x upsampler allpass filters (from resampler_rom.h)
-var (
-	// Tables for 2x upsampler, high quality
-	// Even samples: 3rd order allpass
-	silkResamplerUp2HQ0 = [3]int16{1746, 14986, 39083 - 65536}
-	// Odd samples: 3rd order allpass
-	silkResamplerUp2HQ1 = [3]int16{6854, 25769, 55542 - 65536}
-)
-
 var silkResamplerFracFIR12Flat = [48]int16{
 	189, -600, 617, 30567,
 	117, -159, -1070, 29704,
@@ -193,14 +185,15 @@ const (
 )
 
 // Delay matrix for decoder (from resampler.c)
-// in \ out  8  12  16  24  48
-var delayMatrixDec = [3][5]int8{
-	/*  8 */ {4, 0, 2, 0, 0},
-	/* 12 */ {0, 9, 4, 7, 4},
-	/* 16 */ {0, 3, 12, 7, 7},
+// in \ out  8  12  16  24  48  96
+var delayMatrixDec = [3][6]int8{
+	/*  8 */ {4, 0, 2, 0, 0, 0},
+	/* 12 */ {0, 9, 4, 7, 4, 4},
+	/* 16 */ {0, 3, 12, 7, 7, 7},
 }
 
-// rateID converts sample rate to index: 8000->0, 12000->1, 16000->2, 24000->3, 48000->4
+// rateID converts sample rate to index: 8000->0, 12000->1, 16000->2,
+// 24000->3, 48000->4, and 96000->5.
 func rateID(rate int) int {
 	switch rate {
 	case 8000:
@@ -213,6 +206,8 @@ func rateID(rate int) int {
 		return 3
 	case 48000:
 		return 4
+	case 96000:
+		return 5
 	default:
 		return 0
 	}
@@ -243,10 +238,25 @@ func NewLibopusResamplerEnc(fsIn, fsOut int) *LibopusResampler {
 }
 
 func newLibopusResampler(fsIn, fsOut int, forEnc bool) *LibopusResampler {
-	r := &LibopusResampler{
-		fsInKHz:  int32(fsIn / 1000),
-		fsOutKHz: int32(fsOut / 1000),
-	}
+	r := &LibopusResampler{}
+	r.init(fsIn, fsOut, forEnc)
+	return r
+}
+
+// init is silk_resampler_init (silk/resampler.c): it clears the state and
+// configures the fsIn -> fsOut conversion, forEnc selecting the encoder
+// (delay_matrix_enc) or the decoder (delay_matrix_dec) delay compensation. The
+// state and scratch buffers are reused when they are large enough.
+func (r *LibopusResampler) init(fsIn, fsOut int, forEnc bool) {
+	r.sIIR = [6]int32{}
+	r.sFIR = [8]int16{}
+	r.fsInKHz = int32(fsIn / 1000)
+	r.fsOutKHz = int32(fsOut / 1000)
+	r.inputDelay = 0
+	r.invRatioQ16 = 0
+	r.batchSize = 0
+	r.copyMode = false
+	r.up2HQMode = false
 
 	// Delay compensation from libopus (delay_matrix_enc for the encoder input
 	// resampler, delay_matrix_dec for the decoder output resampler).
@@ -259,33 +269,38 @@ func newLibopusResampler(fsIn, fsOut int, forEnc bool) *LibopusResampler {
 	} else {
 		inIdx := rateID(fsIn)
 		outIdx := rateID(fsOut)
-		if inIdx < 3 && outIdx < 5 {
+		if inIdx < 3 && outIdx < 6 {
 			r.inputDelay = int32(delayMatrixDec[inIdx][outIdx])
 		}
 	}
 
 	if fsOut < fsIn {
-		r.down = newDownsamplingResampler(fsIn, fsOut, forEnc)
-		return r
+		if r.down == nil {
+			r.down, r.idleDown = r.idleDown, nil
+			if r.down == nil {
+				r.down = &DownsamplingResampler{}
+			}
+		}
+		r.down.init(fsIn, fsOut, forEnc)
+		r.delayBuf = r.delayBuf[:0]
+		return
 	}
+	if r.down != nil {
+		r.idleDown, r.down = r.down, nil
+	}
+	clear(ensureInt16Slice(&r.delayBuf, int(r.fsInKHz)))
+	maxInputSamples := int(r.fsInKHz * resamplerMaxFrameMs)
+	maxOutputSamples := int(r.fsOutKHz * resamplerMaxFrameMs)
+	ensureInt16Slice(&r.scratchIn, maxInputSamples)
+	ensureInt16Slice(&r.scratchOut, maxOutputSamples)
+	ensureFloat32Slice(&r.scratchResult, maxOutputSamples)
 	if fsOut == fsIn {
 		r.copyMode = true
-		r.delayBuf = make([]int16, r.fsInKHz)
-		maxInputSamples := int(r.fsInKHz * resamplerMaxFrameMs)
-		r.scratchIn = make([]int16, maxInputSamples)
-		r.scratchOut = make([]int16, maxInputSamples)
-		r.scratchResult = make([]float32, maxInputSamples)
-		return r
+		return
 	}
 	if fsOut == fsIn*2 {
 		r.up2HQMode = true
-		r.delayBuf = make([]int16, r.fsInKHz)
-		maxInputSamples := int(r.fsInKHz * resamplerMaxFrameMs)
-		maxOutputSamples := int(r.fsOutKHz * resamplerMaxFrameMs)
-		r.scratchIn = make([]int16, maxInputSamples)
-		r.scratchOut = make([]int16, maxOutputSamples)
-		r.scratchResult = make([]float32, maxOutputSamples)
-		return r
+		return
 	}
 
 	// Batch size
@@ -303,21 +318,7 @@ func newLibopusResampler(fsIn, fsOut int, forEnc bool) *LibopusResampler {
 		r.invRatioQ16++
 	}
 
-	// Initialize delay buffer
-	r.delayBuf = make([]int16, r.fsInKHz)
-
-	// Pre-allocate scratch buffers for zero-allocation resampling.
-	// Opus allows up to 60ms frames, so size for that worst case.
-	// Max input: fsInKHz * 60
-	// Max output: fsOutKHz * 60
-	maxInputSamples := int(r.fsInKHz * resamplerMaxFrameMs)
-	maxOutputSamples := int(r.fsOutKHz * resamplerMaxFrameMs)
-	r.scratchBuf = make([]int16, 2*r.batchSize+resamplerOrderFIR12)
-	r.scratchIn = make([]int16, maxInputSamples)
-	r.scratchOut = make([]int16, maxOutputSamples)
-	r.scratchResult = make([]float32, maxOutputSamples)
-
-	return r
+	ensureInt16Slice(&r.scratchBuf, int(2*r.batchSize+resamplerOrderFIR12))
 }
 
 // ResamplerState holds the internal state of the resampler. For downsampling
@@ -525,6 +526,16 @@ func (r *LibopusResampler) processInt16Core(in []int16, inLen int32) []int16 {
 	return outInt16
 }
 
+// Resample is silk_resampler (silk/resampler.c): it resamples in (at least
+// 1 ms of input) into out, which holds len(in)*fsOut/fsIn samples.
+func (r *LibopusResampler) Resample(out, in []int16) {
+	if r.down != nil {
+		r.down.processWithDelay(out, in)
+		return
+	}
+	copy(out, r.processInt16Core(in, int32(len(in))))
+}
+
 func writeInt16AsFloat32(dst []float32, src []int16) int {
 	written := min(len(src), len(dst))
 	if written > 0 {
@@ -573,6 +584,37 @@ func (r *LibopusResampler) ProcessInto(samples []float32, out []float32) int {
 	return written
 }
 
+// ResampleStereoInt16 runs silk_resampler on the left channel with l and on
+// the right channel with r (each padded to 1 ms like ProcessInt16Into) and
+// returns their int16 outputs, which stay valid until the resamplers' next
+// calls. ok is false, and neither resampler runs, for empty input or down_FIR
+// configurations, whose output lives in the delegated resampler; callers use
+// ProcessInt16Into for those.
+func ResampleStereoInt16(l, r *LibopusResampler, left, right []int16) (outL, outR []int16, ok bool) {
+	if l.down != nil || r.down != nil || len(left) == 0 || len(right) == 0 {
+		return nil, nil, false
+	}
+	in, inLen := l.prepareInputFromInt16(left)
+	outL = l.processInt16Core(in, inLen)
+	in, inLen = r.prepareInputFromInt16(right)
+	outR = r.processInt16Core(in, inLen)
+	return outL, outR, true
+}
+
+// InterleaveInt16AsFloat32 writes the INT16TORES conversion of left[i] and
+// right[i] to dst[2i] and dst[2i+1] for i < len(left), as silk_Decode's stereo
+// output loop does.
+func InterleaveInt16AsFloat32(dst []float32, left, right []int16) {
+	const inv32768 = 1.0 / 32768.0
+	right = right[:len(left)]
+	dst = dst[:2*len(left)]
+	for i, l := range left {
+		pair := (*[2]float32)(dst[2*i : 2*i+2])
+		pair[0] = float32(l) * inv32768
+		pair[1] = float32(right[i]) * inv32768
+	}
+}
+
 // ProcessIntoBoth resamples float32 input, writing the resampler output to outF32
 // (identical to ProcessInto) and copying the native int16 resampler output to
 // outI16. See ProcessInt16IntoBoth for why the int16 output is needed by the
@@ -582,7 +624,9 @@ func (r *LibopusResampler) ProcessIntoBoth(samples []float32, outF32 []float32, 
 		return 0
 	}
 	if r.down != nil {
-		return r.down.ProcessInto(samples, outF32)
+		written := r.down.ProcessInto(samples, outF32)
+		copy(outI16, r.down.scratchOut[:written])
+		return written
 	}
 
 	in, inLen := r.prepareInputFromFloat32(samples)
@@ -622,9 +666,9 @@ func (r *LibopusResampler) ProcessInt16IntoBoth(samples []int16, outF32 []float3
 		return 0
 	}
 	if r.down != nil {
-		// The < 16 kHz API downsample path is not exercised by hybrid decode
-		// (hybrid SILK is always WB -> >=16k API); fall back to float-only.
-		return r.down.ProcessInt16Into(samples, outF32)
+		written := r.down.ProcessInt16Into(samples, outF32)
+		copy(outI16, r.down.scratchOut[:written])
+		return written
 	}
 
 	in, inLen := r.prepareInputFromInt16(samples)
@@ -646,67 +690,63 @@ func (r *LibopusResampler) up2HQ(out []int16, in []int16) {
 	up2HQCore(out, in[:n:n], &r.sIIR)
 }
 
+// Allpass coefficients of silkResamplerUp2HQ0/1 as constants, so the hot loop
+// multiplies by immediates and keeps its six filter states in registers.
+const (
+	up2HQ00 int64 = 1746
+	up2HQ01 int64 = 14986
+	up2HQ02 int64 = 39083 - 65536
+	up2HQ10 int64 = 6854
+	up2HQ11 int64 = 25769
+	up2HQ12 int64 = 55542 - 65536
+)
+
 func up2HQCoreGo(out []int16, in []int16, sIIR *[6]int32) {
 	// Keep allpass filter state in locals during the hot loop.
 	s0, s1, s2 := sIIR[0], sIIR[1], sIIR[2]
 	s3, s4, s5 := sIIR[3], sIIR[4], sIIR[5]
 
-	c00 := int64(silkResamplerUp2HQ0[0])
-	c01 := int64(silkResamplerUp2HQ0[1])
-	c02 := int64(silkResamplerUp2HQ0[2])
-	c10 := int64(silkResamplerUp2HQ1[0])
-	c11 := int64(silkResamplerUp2HQ1[1])
-	c12 := int64(silkResamplerUp2HQ1[2])
-
-	_ = out[2*len(in)-1]
-
-	outPos := 0
-	for k := range in {
+	out = out[:2*len(in)]
+	for k, x := range in {
 		// Convert to Q10
-		in32 := int32(in[k]) << 10
+		in32 := int32(x) << 10
 
 		// First all-pass section for even output sample
-		Y := in32 - s0
-		X := int32((int64(Y) * c00) >> 16)
+		X := int32((int64(in32-s0) * up2HQ00) >> 16)
 		out32_1 := s0 + X
 		s0 = in32 + X
 
 		// Second all-pass section for even output sample
-		Y = out32_1 - s1
-		X = int32((int64(Y) * c01) >> 16)
+		X = int32((int64(out32_1-s1) * up2HQ01) >> 16)
 		out32_2 := s1 + X
 		s1 = out32_1 + X
 
 		// Third all-pass section for even output sample
-		Y = out32_2 - s2
-		X = Y + int32((int64(Y)*c02)>>16)
-		out32_1 = s2 + X
+		Y := out32_2 - s2
+		X = Y + int32((int64(Y)*up2HQ02)>>16)
+		evenOut := s2 + X
 		s2 = out32_2 + X
 
-		// Convert back to int16 and store even sample
-		out[outPos] = sat16RShiftRound10(out32_1)
-
 		// First all-pass section for odd output sample
-		Y = in32 - s3
-		X = int32((int64(Y) * c10) >> 16)
+		X = int32((int64(in32-s3) * up2HQ10) >> 16)
 		out32_1 = s3 + X
 		s3 = in32 + X
 
 		// Second all-pass section for odd output sample
-		Y = out32_1 - s4
-		X = int32((int64(Y) * c11) >> 16)
+		X = int32((int64(out32_1-s4) * up2HQ11) >> 16)
 		out32_2 = s4 + X
 		s4 = out32_1 + X
 
 		// Third all-pass section for odd output sample
 		Y = out32_2 - s5
-		X = Y + int32((int64(Y)*c12)>>16)
-		out32_1 = s5 + X
+		X = Y + int32((int64(Y)*up2HQ12)>>16)
+		oddOut := s5 + X
 		s5 = out32_2 + X
 
-		// Convert back to int16 and store odd sample
-		out[outPos+1] = sat16RShiftRound10(out32_1)
-		outPos += 2
+		// Convert back to int16 and store the output pair
+		pair := out[2*k : 2*k+2]
+		pair[0] = sat16RShiftRound10(evenOut)
+		pair[1] = sat16RShiftRound10(oddOut)
 	}
 
 	sIIR[0], sIIR[1], sIIR[2] = s0, s1, s2
@@ -732,6 +772,11 @@ func (r *LibopusResampler) firInterpol(out []int16, outIdx int, buf []int16, max
 		return outIdx
 	}
 
+	if done := firInterpolVec(out[outIdx:outIdx+nOut], buf, indexIncrQ16); done > 0 {
+		firInterpolGeneric(out[outIdx+done:outIdx+nOut], buf, int32(done)*indexIncrQ16, indexIncrQ16)
+		return outIdx + nOut
+	}
+
 	switch indexIncrQ16 {
 	case 21846: // 8 kHz -> 48 kHz: phases 0, 4, 8 per input step.
 		return r.firInterpol21846(out, outIdx, buf, nOut)
@@ -741,16 +786,29 @@ func (r *LibopusResampler) firInterpol(out []int16, outIdx int, buf []int16, max
 		return r.firInterpol43691(out, outIdx, buf, nOut)
 	case 65536: // 24 kHz -> 48 kHz: phase 0 only.
 		return r.firInterpol65536(out, outIdx, buf, nOut)
+	case 87382: // 16 kHz -> 24 kHz and 8 kHz -> 12 kHz: phases 0, 4, 8.
+		if nOut <= firInterpol87382MaxOut {
+			firInterpol87382(out[outIdx:outIdx+nOut], buf)
+			return outIdx + nOut
+		}
 	}
 
-	// BCE hints for hot inner-loop accesses.
-	_ = out[outIdx+nOut-1]
-	lastIndexQ16 := int32(nOut-1) * indexIncrQ16
+	firInterpolGeneric(out[outIdx:outIdx+nOut], buf, 0, indexIncrQ16)
+	return outIdx + nOut
+}
+
+// firInterpolGeneric is the silk_resampler_private_IIR_FIR_INTERPOL loop for
+// any index increment, producing len(dst) outputs from indexQ16 onwards.
+func firInterpolGeneric(dst []int16, buf []int16, indexQ16, indexIncrQ16 int32) {
+	nOut := len(dst)
+	if nOut == 0 {
+		return
+	}
+	// BCE hint for the last tap read.
+	lastIndexQ16 := indexQ16 + int32(nOut-1)*indexIncrQ16
 	_ = buf[int(lastIndexQ16>>16)+7]
 
-	dst := out[outIdx : outIdx+nOut]
-	_ = dst[nOut-1]
-	for indexQ16, n := int32(0), 0; n < nOut; n, indexQ16 = n+1, indexQ16+indexIncrQ16 {
+	for n := 0; n < nOut; n, indexQ16 = n+1, indexQ16+indexIncrQ16 {
 		// Fractional position for table lookup (0..11), matching libopus smulwb(indexQ16&0xFFFF, 12).
 		tableIndex := int((uint32(indexQ16&0xFFFF) * 12) >> 16)
 		bufIdx := int(indexQ16 >> 16)
@@ -773,8 +831,6 @@ func (r *LibopusResampler) firInterpol(out []int16, outIdx int, buf []int16, max
 
 		dst[n] = sat16RShiftRound15(resQ15)
 	}
-
-	return outIdx + nOut
 }
 
 func (r *LibopusResampler) firInterpol21846(out []int16, outIdx int, buf []int16, nOut int) int {
@@ -982,6 +1038,41 @@ func firInterpol43691CoreGo(dst []int16, buf []int16, nOut int) {
 				int32(buf8[6])*fir8c6 +
 				int32(buf8[7])*fir8c7
 			dst[j] = sat16RShiftRound15(resQ15)
+		}
+	}
+}
+
+// firInterpol87382MaxOut bounds the outputs for which the 87382 step keeps
+// the phase pattern of firInterpol87382: three steps advance the index by
+// 4<<16 plus 2, and that drift moves no phase before output 3*2730.
+const firInterpol87382MaxOut = 3 * 2730
+
+// firInterpol87382 is silk_resampler_private_IIR_FIR_INTERPOL for
+// index_increment_Q16 = 87382 (a 2/3 step on the 2x-upsampled signal).
+// Output 3g+k reads buf[4g+k:] with phase 4k for k = 0, 1, 2, so each group
+// of three outputs uses one ten-sample window.
+func firInterpol87382(dst []int16, buf []int16) {
+	groups := len(dst) / 3
+	_ = buf[4*len(dst)/3+7]
+	for g := range groups {
+		b := (*[10]int16)(buf[4*g : 4*g+10])
+		d := (*[3]int16)(dst[3*g : 3*g+3])
+		d[0] = sat16RShiftRound15(int32(b[0])*fir0c0 + int32(b[1])*fir0c1 + int32(b[2])*fir0c2 + int32(b[3])*fir0c3 +
+			int32(b[4])*fir0c4 + int32(b[5])*fir0c5 + int32(b[6])*fir0c6 + int32(b[7])*fir0c7)
+		d[1] = sat16RShiftRound15(int32(b[1])*fir4c0 + int32(b[2])*fir4c1 + int32(b[3])*fir4c2 + int32(b[4])*fir4c3 +
+			int32(b[5])*fir4c4 + int32(b[6])*fir4c5 + int32(b[7])*fir4c6 + int32(b[8])*fir4c7)
+		d[2] = sat16RShiftRound15(int32(b[2])*fir8c0 + int32(b[3])*fir8c1 + int32(b[4])*fir8c2 + int32(b[5])*fir8c3 +
+			int32(b[6])*fir8c4 + int32(b[7])*fir8c5 + int32(b[8])*fir8c6 + int32(b[9])*fir8c7)
+	}
+	for j := 3 * groups; j < len(dst); j++ {
+		b := (*[8]int16)(buf[4*groups+j-3*groups : 4*groups+j-3*groups+8])
+		switch j - 3*groups {
+		case 0:
+			dst[j] = sat16RShiftRound15(int32(b[0])*fir0c0 + int32(b[1])*fir0c1 + int32(b[2])*fir0c2 + int32(b[3])*fir0c3 +
+				int32(b[4])*fir0c4 + int32(b[5])*fir0c5 + int32(b[6])*fir0c6 + int32(b[7])*fir0c7)
+		default:
+			dst[j] = sat16RShiftRound15(int32(b[0])*fir4c0 + int32(b[1])*fir4c1 + int32(b[2])*fir4c2 + int32(b[3])*fir4c3 +
+				int32(b[4])*fir4c4 + int32(b[5])*fir4c5 + int32(b[6])*fir4c6 + int32(b[7])*fir4c7)
 		}
 	}
 }

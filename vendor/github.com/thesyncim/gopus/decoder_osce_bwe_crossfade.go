@@ -4,11 +4,9 @@ package gopus
 
 import "github.com/thesyncim/gopus/internal/opusmath"
 
-// osceWindow mirrors the upstream libopus 1.6.1 `osce_window[]` table from
-// dnn/osce_features.c. Only the first 160 entries are needed by
-// osce_bwe_cross_fade_10ms (the 10 ms half-window weights at 16 kHz). The full
-// 320-entry table is preserved here so future Phase 3 features (e.g. the BWE
-// spectral feature extractor) can reuse the same constants.
+// osceWindow is the 320-entry osce_window table from libopus 1.6.1
+// dnn/osce_features.c. osceBWECrossFade10ms uses its first 160 weights,
+// interpolated from 16 kHz to 48 kHz.
 var osceWindow = [320]float32{
 	0.004908718808, 0.014725683311, 0.024541228523, 0.034354408400, 0.044164277127,
 	0.053969889210, 0.063770299562, 0.073564563600, 0.083351737332, 0.093130877450,
@@ -86,7 +84,8 @@ var osceWindow = [320]float32{
 // this helper converts the two inputs to the same int16 domain, applies the
 // reference writeback, then normalises the result back to float32.
 //
-// length must be >= 480.
+// It leaves both buffers unchanged if length or either buffer is shorter than
+// 480 samples. Samples beyond the first 480 are untouched.
 func osceBWECrossFade10ms(xFadein, xFadeout []float32, length int) {
 	if length < 480 {
 		return

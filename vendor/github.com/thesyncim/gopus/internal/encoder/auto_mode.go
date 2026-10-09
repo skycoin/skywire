@@ -53,6 +53,10 @@ var autoModeThresholds = [2][2]int{
 	{44000, 10000}, // stereo
 }
 
+// silkFixConst001Q16 is SILK_FIX_CONST(0.01, 16), the Q16 factor decide_fec
+// applies to its loss-scaled FEC threshold.
+const silkFixConst001Q16 = 655
+
 // FEC threshold table from libopus opus_encoder.c lines 186-192.
 // Format: [threshold, hysteresis] for NB, MB, WB, SWB, FB.
 var fecThresholdsTable = [10]int{
@@ -63,31 +67,55 @@ var fecThresholdsTable = [10]int{
 	22000, 1000, // FB
 }
 
-// computeStereoWidthForMode implements libopus compute_stereo_width() (float-point path).
-// It updates e.widthMem and returns stereo width in [0, 1] range (Q15 scale as float).
-// Reference: opus_encoder.c lines 854-938.
+// frameStereoWidth runs compute_stereo_width() on the raw caller frame for every
+// stereo frame not forced to mono, whatever the mode and before the "too little
+// space" exit, so width_mem advances exactly as in opus_encode_native()
+// (src/opus_encoder.c:1321-1324).
+func (e *Encoder) frameStereoWidth(pcm []opusRes, frameSize int) opusVal16 {
+	if width, ok := e.fixedStereoWidthForMode(frameSize); ok {
+		return width
+	}
+	if e.channels == 2 && e.forceChannels != 1 {
+		return e.computeStereoWidthForMode(pcm, frameSize)
+	}
+	return 0
+}
+
+// computeStereoWidthForMode implements the normalized float stereo width and
+// state history from libopus compute_stereo_width().
+// Reference: src/opus_encoder.c:854-938.
 func (e *Encoder) computeStereoWidthForMode(pcm []opusRes, frameSize int) opusVal16 {
 	if e.channels != 2 || len(pcm) < frameSize*2 {
 		return 0
 	}
 
-	frameRate := max(int(e.sampleRate)/frameSize, 50)
-	shortAlpha := opusVal16(25.0 / opusVal16(frameRate))
+	frameRate := int(e.sampleRate) / frameSize
+	shortAlpha := opusVal16(25.0 / opusVal16(max(frameRate, 50)))
 
 	// Accumulate per-frame energy and cross-correlation (unrolled by 4).
 	var xx, xy, yy opusVal32
 	for i, j := 0, 0; i < frameSize-3; i, j = i+4, j+8 {
 		var pxx, pxy, pyy opusVal32
-		x0, y0 := pcm[j], pcm[j+1]
-		x1, y1 := pcm[j+2], pcm[j+3]
-		x2, y2 := pcm[j+4], pcm[j+5]
-		x3, y3 := pcm[j+6], pcm[j+7]
-		pxx += x0 * x0
-		pxy += x0 * y0
-		pyy += y0 * y0
-		pxx += x1 * x1
-		pxy += x1 * y1
-		pyy += y1 * y1
+		p := pcm[j : j+8 : j+8]
+		x0, y0 := p[0], p[1]
+		x1, y1 := p[2], p[3]
+		x2, y2 := p[4], p[5]
+		x3, y3 := p[6], p[7]
+		if outerTargetV3FMA {
+			// The pinned AMD64 v3 C object seeds each pair with sample 1, then
+			// contracts sample 0 into that rounded product.
+			pxx, pxy, pyy = x1*x1, x1*y1, y1*y1
+			pxx += x0 * x0
+			pxy += x0 * y0
+			pyy += y0 * y0
+		} else {
+			pxx += x0 * x0
+			pxy += x0 * y0
+			pyy += y0 * y0
+			pxx += x1 * x1
+			pxy += x1 * y1
+			pyy += y1 * y1
+		}
 		pxx += x2 * x2
 		pxy += x2 * y2
 		pyy += y2 * y2
@@ -107,10 +135,13 @@ func (e *Encoder) computeStereoWidthForMode(pcm []opusRes, frameSize int) opusVa
 	}
 
 	mem := &e.widthMem
+	// Only short_alpha uses the 50 Hz floor; width smoothing uses the actual
+	// frame rate (opus_encoder.c:compute_stereo_width).
 	// Exponential smoothing.
 	mem.XX += shortAlpha * (xx - mem.XX)
-	// Rewritten to avoid overflow on abrupt sign change (opus_encoder.c line 911).
-	mem.XY = (1-shortAlpha)*mem.XY + shortAlpha*xy
+	// The AMD64 v3 C object rounds alpha*xy, then fuses beta*oldXY with it.
+	// stereoWidthXYUpdate selects that contraction only on the matching target.
+	mem.XY = stereoWidthXYUpdate(1-shortAlpha, mem.XY, round32(shortAlpha*xy))
 	mem.YY += shortAlpha * (yy - mem.YY)
 
 	// Clamp to non-negative.
@@ -145,11 +176,12 @@ func (e *Encoder) computeStereoWidthForMode(pcm []opusRes, frameSize int) opusVa
 		// Approximate loudness difference.
 		ldiff := absOpusVal16(qrrtXX-qrrtYY) / (epsilon + qrrtXX + qrrtYY)
 		// Width = sqrt(1 - corr^2) * ldiff, clamped to [0, 1].
-		decorr := 1.0 - corr*corr
+		decorr := stereoWidthDecorrelation(corr)
 		if decorr < 0 {
 			decorr = 0
 		}
-		width := minf(1.0, celtSqrtOpusVal32(decorr)) * ldiff
+		// C stores width before subtracting the prior smoothed value.
+		width := round32(minf(1.0, celtSqrtOpusVal32(decorr)) * ldiff)
 
 		// Smoothing over one second.
 		fr := opusVal16(frameRate)
@@ -216,11 +248,11 @@ func decideFEC(useInBandFEC bool, packetLoss int32, lastFEC bool, mode Mode, ban
 			lbrrRateThreshold += hysteresis
 		}
 
-		// silk_SMULWB(silk_MUL(threshold, 125-min(loss,25)), SILK_FIX_CONST(0.01, 16))
-		// = threshold * (125 - min(loss, 25)) * 0.01 / (essentially integer multiply then shift)
+		// silk_SMULWB(silk_MUL(threshold, 125-min(loss,25)), SILK_FIX_CONST(0.01, 16)):
+		// the Q16 constant 0.01 is 655, so the scaled threshold rounds down from
+		// threshold*(125-loss)*655/65536 (src/opus_encoder.c:954-955).
 		loss := min(packetLoss, 25)
-		// In float: threshold * (125 - loss) / 100
-		lbrrRateThreshold = lbrrRateThreshold * (125 - loss) / 100
+		lbrrRateThreshold = smulwb(lbrrRateThreshold*(125-loss), silkFixConst001Q16)
 
 		if equivRate > lbrrRateThreshold {
 			return true
@@ -248,12 +280,13 @@ func (e *Encoder) autoVoiceRatioFromAnalysis() {
 		return
 	}
 	var prob float32
-	if e.prevMode == ModeAuto || e.prevMode == 0 {
+	switch e.prevMode {
+	case ModeAuto:
 		// First frame or unknown previous mode.
 		prob = e.lastAnalysisInfo.MusicProb
-	} else if e.prevMode == ModeCELT {
+	case ModeCELT:
 		prob = e.lastAnalysisInfo.MusicProbMax
-	} else {
+	default:
 		prob = e.lastAnalysisInfo.MusicProbMin
 	}
 	e.voiceRatio = opusmath.FloorHalfPlusF32ToInt32(float32(100) * (float32(1) - prob))
@@ -263,9 +296,11 @@ func (e *Encoder) autoVoiceRatioFromAnalysis() {
 // Matches libopus opus_encoder.c lines 1294-1304.
 func (e *Encoder) updateDetectedBandwidth() {
 	e.detectedBandwidth = 0
+	e.detectedBandwidthValid = false
 	if !e.lastAnalysisValid {
 		return
 	}
+	e.detectedBandwidthValid = true
 	abw := e.lastAnalysisInfo.BandwidthIndex
 	switch {
 	case abw <= 12:
@@ -328,6 +363,18 @@ func (e *Encoder) autoStreamChannelsDecision(voiceEst, equivRate int32) {
 	}
 }
 
+// applyStereoToMonoTransition delays a forced or automatic stereo-to-mono
+// change for one frame while SILK is active, matching opus_encoder.c:1562-1570.
+func (e *Encoder) applyStereoToMonoTransition(mode Mode) {
+	if e.streamChannels == 1 && e.prevChannels == 2 && e.toMono == 0 &&
+		mode != ModeCELT && e.prevMode != ModeCELT {
+		e.toMono = 1
+		e.streamChannels = 2
+	} else {
+		e.toMono = 0
+	}
+}
+
 func (e *Encoder) updateStreamChannelsForFrame(frameSize int) {
 	frameRate := int(e.sampleRate) / frameSize
 	if frameRate <= 0 {
@@ -356,15 +403,19 @@ func (e *Encoder) autoModeDecision(stereoWidth opusVal16, voiceEst, equivRate in
 	modeMusic := int32(autoModeThresholds[1][1])
 
 	threshold := modeMusic + (voiceEst*voiceEst*(modeVoice-modeMusic))/16384
+	if fixedThreshold, ok := e.fixedModeThreshold(voiceEst); ok {
+		threshold = fixedThreshold
+	}
 
 	if e.voipApp {
 		threshold += 8000
 	}
 
 	// Hysteresis based on previous mode.
-	if e.prevMode == ModeCELT {
+	switch e.prevMode {
+	case ModeCELT:
 		threshold -= 4000
-	} else if e.prevMode == ModeSILK || e.prevMode == ModeHybrid {
+	case ModeSILK, ModeHybrid:
 		threshold += 4000
 	}
 
@@ -464,6 +515,25 @@ func (e *Encoder) autoSelectBandwidth(voiceEst, equivRate int32) types.Bandwidth
 	return bandwidth
 }
 
+// selectAutoBandwidth updates the selected bandwidth in the cases where
+// libopus reruns its rate-dependent bandwidth selection. Keep autoBandwidth
+// before max-bandwidth and user-bandwidth clamps so a later relaxed limit can
+// restore the automatic choice.
+func (e *Encoder) selectAutoBandwidth(mode Mode, voiceEst, equivRate int32) {
+	if mode != ModeCELT && !e.first && !e.silkMode.AllowBandwidthSwitch {
+		return
+	}
+
+	e.bandwidth = e.autoSelectBandwidth(voiceEst, equivRate)
+	e.autoBandwidth = e.bandwidth
+	// Prevent any transition to SWB/FB until SILK has switched to WB and turned
+	// off the variable LP filter.
+	if !e.first && mode != ModeCELT && !e.silkMode.InWBModeWithoutVariableLP &&
+		e.bandwidth > types.BandwidthWideband {
+		e.bandwidth = types.BandwidthWideband
+	}
+}
+
 // autoClampBandwidth applies bandwidth clamping rules.
 // Matches libopus opus_encoder.c lines 1629-1684.
 func (e *Encoder) autoClampBandwidth(bandwidth types.Bandwidth, mode Mode, equivRate int32, maxRate int) types.Bandwidth {
@@ -501,7 +571,7 @@ func (e *Encoder) autoClampBandwidth(bandwidth types.Bandwidth, mode Mode, equiv
 	}
 
 	// Use detected bandwidth to reduce encoded bandwidth (lines 1653-1673).
-	if e.detectedBandwidth > 0 && !e.userBandwidthSet {
+	if e.detectedBandwidthValid && !e.userBandwidthSet {
 		var minDetected types.Bandwidth
 		switch {
 		case equivRate <= 18000*e.streamChannels && mode == ModeCELT:
@@ -547,11 +617,12 @@ func autoModeFixup(mode Mode, bandwidth types.Bandwidth) Mode {
 }
 
 // autoModeAndBandwidthDecision implements the full libopus auto-mode decision chain.
-// Called from Encode() when e.mode == ModeAuto.
+// Called from Encode() for automatic mode or a low-delay application, which
+// fixes CELT mode while retaining automatic channel and bandwidth decisions.
 // Updates e.bandwidth, e.streamChannels, e.voiceRatio, e.detectedBandwidth,
 // e.autoBandwidth, e.first.
 // Returns the selected mode.
-func (e *Encoder) autoModeAndBandwidthDecision(pcm []opusRes, frameSize, maxDataBytes int, isSilence bool) Mode {
+func (e *Encoder) autoModeAndBandwidthDecision(stereoWidth opusVal16, frameSize, maxDataBytes int, isSilence bool) (mode, prevModeNext Mode) {
 	frameRate := int(e.sampleRate) / frameSize
 	if frameRate <= 0 {
 		frameRate = 50
@@ -567,14 +638,10 @@ func (e *Encoder) autoModeAndBandwidthDecision(pcm []opusRes, frameSize, maxData
 	// Step 2: Compute voice_ratio from analysis (lines 1279-1291).
 	e.autoVoiceRatioFromAnalysis()
 
-	// Step 3: Compute detected bandwidth from analysis (lines 1294-1304).
-	e.updateDetectedBandwidth()
-
-	// Step 4: Compute stereo width (line 1322).
-	var stereoWidth opusVal16
-	if e.channels == 2 && e.forceChannels != 1 {
-		stereoWidth = e.computeStereoWidthForMode(pcm, frameSize)
-	}
+	// Step 3: stereoWidth is the frame's compute_stereo_width() result
+	// (line 1322), measured by frameStereoWidth before the low-space exit.
+	// Detected bandwidth is refreshed at native entry for both automatic and
+	// user-forced modes.
 
 	// Step 5: First-pass equiv_rate with e.channels (line 1410-1411).
 	equivRate := e.computeEquivRate(e.bitrate, int32(e.channels), int32(frameRate), useVBR,
@@ -590,11 +657,16 @@ func (e *Encoder) autoModeAndBandwidthDecision(pcm []opusRes, frameSize, maxData
 	equivRate = e.computeEquivRate(e.bitrate, e.streamChannels, int32(frameRate), useVBR,
 		ModeAuto, e.complexity, e.packetLoss)
 
-	// Step 9: Mode selection with interpolated thresholds (lines 1492-1527).
-	// silk_mode.useDTX (opus_encoder.c:1461): DTX favours SILK only when the
-	// generalized DTX is unusable, i.e. DTX on AND the analysis is invalid/silent.
-	silkUseDTX := e.dtxEnabled && !(e.lastAnalysisValid || isSilence)
-	mode := e.autoModeDecision(stereoWidth, voiceEst, equivRate, frameSize, maxDataBytes, silkUseDTX)
+	// Step 9: Application override or interpolated mode thresholds (lines 1466-1527).
+	if e.lowDelay {
+		// opus_encoder.c:1467-1473 pins restricted low-delay/CELT to CELT
+		// before the channel-dependent bandwidth decision at lines 1583-1627.
+		mode = ModeCELT
+	} else {
+		// silk_mode.useDTX (opus_encoder.c:1461) favours SILK only when the
+		// generalized DTX is unusable: DTX on with invalid/silent analysis.
+		mode = e.autoModeDecision(stereoWidth, voiceEst, equivRate, frameSize, maxDataBytes, e.silkMode.UseDTX)
+	}
 
 	// Step 10: Frame size constraint (lines 1533-1537).
 	if mode != ModeCELT && frameSize < int(e.sampleRate)/100 {
@@ -603,36 +675,22 @@ func (e *Encoder) autoModeAndBandwidthDecision(pcm []opusRes, frameSize, maxData
 	if e.lfe {
 		mode = ModeCELT
 	}
+	// A switch into CELT-only keeps the previous mode for this frame and
+	// codes the redundant CELT frame (lines 1541-1557), before the
+	// bandwidth decision and the mode fixup see the mode.
+	mode, prevModeNext = e.applyCELTTransitionDelay(frameSize, mode)
 
-	// Step 11: Stereo→mono transition delay (lines 1562-1570).
-	// When switching from stereo to mono, delay by two frames for smooth SILK downmix.
-	// toMono is set to 1 on the first frame, then cleared on the next.
-	if e.streamChannels == 1 && e.prevChannels == 2 && e.toMono == 0 &&
-		mode != ModeCELT && e.prevMode != ModeCELT {
-		e.toMono = 1
-		e.streamChannels = 2
-	} else {
-		e.toMono = 0
-	}
+	// Step 11: Stereo-to-mono transition delay (lines 1562-1570).
+	e.applyStereoToMonoTransition(mode)
 
 	// Step 12: Recompute equiv_rate with mode decision (lines 1572-1574).
 	equivRate = e.computeEquivRate(e.bitrate, e.streamChannels, int32(frameRate), useVBR,
 		mode, e.complexity, e.packetLoss)
 
-	// Step 13: Auto bandwidth selection (lines 1583-1627).
-	// Run when CELT-only, first frame, or SILK allows bandwidth switch.
-	allowBWSwitch := e.silkAllowBandwidthSwitch()
-	if mode == ModeCELT || e.first || allowBWSwitch {
-		bw := e.autoSelectBandwidth(voiceEst, equivRate)
-		e.bandwidth = bw
-		e.autoBandwidth = bw
-	}
-
-	// Prevent SWB/FB until SILK LP filter is inactive (lines 1625-1626).
-	if !e.first && mode != ModeCELT && !e.silkInWBModeWithoutVariableLP() &&
-		e.bandwidth > types.BandwidthWideband {
-		e.bandwidth = types.BandwidthWideband
-	}
+	// Step 13: Auto bandwidth selection (lines 1583-1627). It runs for CELT-only
+	// frames, on the first frame, and when the last SILK packet reported that
+	// low speech activity allows a bandwidth switch.
+	e.selectAutoBandwidth(mode, voiceEst, equivRate)
 
 	// Step 14: Bandwidth clamping (lines 1629-1684).
 	e.bandwidth = e.autoClampBandwidth(e.bandwidth, mode, equivRate, maxRate)
@@ -644,31 +702,12 @@ func (e *Encoder) autoModeAndBandwidthDecision(pcm []opusRes, frameSize, maxData
 
 	// Step 16: Mode fixup based on final bandwidth (lines 1692-1695).
 	mode = autoModeFixup(mode, e.bandwidth)
-
-	// Track previous channels for stereo→mono transition. st->first is cleared
-	// later, at the common commit point in encodeOpusResWithAnalysisMaxBytes
-	// (libopus opus_encode_native line 2562), so the low-space / SILK nBytes==0
-	// early returns correctly leave it set.
-	e.prevChannels = e.streamChannels
-
-	return mode
-}
-
-// silkAllowBandwidthSwitch checks if the SILK encoder allows bandwidth switching.
-// In libopus, this is set when SILK's internal sample rate is below the API rate.
-// Matches libopus silk_encode_frame_FLP.c allowBandwidthSwitch output.
-func (e *Encoder) silkAllowBandwidthSwitch() bool {
-	if e.silkEncoder == nil {
-		return false
+	if prevModeNext != ModeCELT {
+		prevModeNext = mode
 	}
-	return e.silkEncoder.AllowBandwidthSwitch()
-}
 
-// silkInWBModeWithoutVariableLP checks if SILK is in WB mode with LP filter inactive.
-// Matches libopus: silk_mode.inWBmodeWithoutVariableLP = (fs_kHz == 16 && sLP.mode == 0).
-func (e *Encoder) silkInWBModeWithoutVariableLP() bool {
-	if e.silkEncoder == nil {
-		return true // Conservative: don't restrict bandwidth if SILK not initialized.
-	}
-	return e.silkEncoder.InWBModeWithoutVariableLP()
+	// prev_channels and st->first advance at the end of the frame
+	// (opus_encode_frame_native), so the low-space and SILK DTX early returns
+	// leave them unchanged.
+	return mode, prevModeNext
 }

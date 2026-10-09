@@ -2,14 +2,11 @@ package multistream
 
 import "github.com/thesyncim/gopus/internal/dnnblob"
 
-// SetDNNBlob retains a validated USE_WEIGHTS_FILE blob for future optional
-// extension paths. A nil blob clears the retained main-decoder model state.
-// The blob is also fanned out to every child stream decoder so each stream
-// can bind its own OSCE LACE/NoLACE and OSCE BWE runtime models (libopus
-// keeps an independent `silk_OSCE_struct` per `silk_channel_state` and one
-// `silk_OSCE_BWE_struct` per `silk_channel_state`; the multistream decoder
-// mirrors that by giving every per-stream `streamState` its own copy of the
-// runtime state).
+// SetDNNBlob retains a validated USE_WEIGHTS_FILE blob. It binds OSCE models
+// to each child decoder and DRED models to the parent's per-stream recovery
+// state. A nil blob clears the model bindings. The per-stream OSCE state
+// corresponds to libopus's silk_OSCE_struct
+// and silk_OSCE_BWE_struct in each silk_channel_state.
 func (d *Decoder) SetDNNBlob(blob *dnnblob.Blob) {
 	d.dnnBlob = blob
 	var models dnnblob.DecoderModelState
@@ -19,6 +16,10 @@ func (d *Decoder) SetDNNBlob(blob *dnnblob.Blob) {
 	d.pitchDNNLoaded = models.PitchDNN
 	d.plcModelLoaded = models.PLC
 	d.farganModelLoaded = models.FARGAN
+	if !models.PLC {
+		d.clearRawSILKHistory()
+	}
+	d.bindDREDNeuralModels(blob, models)
 	d.setOSCEModelState(models)
 	// Fan the blob out to the child stream decoders so each stream binds its
 	// own OSCE LACE/NoLACE + OSCE BWE runtime models. Test stubs that do not

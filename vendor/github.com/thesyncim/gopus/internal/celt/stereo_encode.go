@@ -4,22 +4,15 @@
 package celt
 
 // IntensityDecay is the decay parameter for intensity stereo Laplace encoding.
-// Matches the decoder's expectation for stereo param decoding.
-// Reference: libopus celt/celt_decoder.c, stereo parameter decoding
+// The decoder uses the same decay value when it reads the intensity band.
 const IntensityDecay = 16384
 
-// EncodeStereoParams encodes stereo mode parameters to the bitstream.
-// For the initial implementation, this encodes mid-side stereo only:
-// - intensity = nbBands (meaning no intensity stereo, all bands use mid-side)
-// - dual_stereo = 0 (meaning mid-side mode, not dual stereo)
+// EncodeStereoParams encodes a no-intensity stereo parameter set with dual
+// stereo enabled. It writes nbBands as the intensity band, then writes a
+// dual-stereo flag of 1. It returns -1 to indicate that intensity stereo is
+// disabled. If no range encoder is active, it returns -1 without writing.
 //
-// Returns the intensity band (-1 since intensity stereo is disabled in this mode).
-//
-// The decoder reads stereo params in decodeStereoParams() which expects:
-// 1. intensity band index encoded with Laplace model
-// 2. dual_stereo flag encoded as single bit
-//
-// Reference: RFC 6716 Section 4.3.4, libopus celt/celt_decoder.c
+// DecodeStereoParams reads the intensity band before the dual-stereo flag.
 func (e *Encoder) EncodeStereoParams(nbBands int) int {
 	if e.rangeEncoder == nil {
 		return -1
@@ -40,7 +33,7 @@ func (e *Encoder) EncodeStereoParams(nbBands int) int {
 
 // encodeLaplaceIntensity encodes the intensity stereo band using Laplace model.
 // This mirrors the decoder's decodeLaplace for stereo params.
-// val is the intensity band (nbBands for mid-side only mode).
+// val is the intensity band; nbBands disables intensity stereo.
 func (e *Encoder) encodeLaplaceIntensity(val int, decay int) {
 	re := e.rangeEncoder
 	if re == nil {
@@ -73,18 +66,20 @@ func (e *Encoder) encodeLaplaceIntensity(val int, decay int) {
 	re.Encode(uint32(cumFL), uint32(cumFL+fk), uint32(laplaceFS))
 }
 
-// EncodeStereoParamsWithIntensity encodes stereo params with optional intensity stereo.
-// intensityBand: band where intensity stereo starts (-1 to disable)
-// dualStereo: true for dual stereo mode
-//
-// For future use when intensity stereo is implemented.
+// EncodeStereoParamsWithIntensity encodes stereo parameters with optional
+// intensity stereo. intensityBand selects the first intensity-stereo band when
+// it is in [0, nbBands); any other value disables intensity stereo. dualStereo
+// selects independent channel coding below the intensity band, or for all bands
+// when intensity stereo is disabled. The return value is intensityBand when
+// enabled, or -1 when disabled. If no range encoder is active, it returns -1
+// without writing.
 func (e *Encoder) EncodeStereoParamsWithIntensity(nbBands, intensityBand int, dualStereo bool) int {
 	if e.rangeEncoder == nil {
 		return -1
 	}
 
 	// Encode intensity band
-	// If intensityBand < 0, encode nbBands (meaning no intensity stereo)
+	// If intensityBand is outside [0, nbBands), encode nbBands (no intensity stereo).
 	encodeVal := nbBands
 	if intensityBand >= 0 && intensityBand < nbBands {
 		encodeVal = intensityBand
@@ -105,14 +100,14 @@ func (e *Encoder) EncodeStereoParamsWithIntensity(nbBands, intensityBand int, du
 }
 
 // ConvertToMidSide converts L/R stereo to mid/side representation.
-// This is the inverse of MidSideToLR.
 //
 // The conversion is:
 //
 //	mid[i] = (left[i] + right[i]) / sqrt(2)
 //	side[i] = (left[i] - right[i]) / sqrt(2)
 //
-// The sqrt(2) normalization preserves energy: |L|^2 + |R|^2 = |M|^2 + |S|^2
+// The normalization preserves energy: |L|^2 + |R|^2 = |M|^2 + |S|^2. The
+// function processes the common prefix of left and right.
 //
 // Parameters:
 //   - left: left channel samples
@@ -121,7 +116,7 @@ func (e *Encoder) EncodeStereoParamsWithIntensity(nbBands, intensityBand int, du
 // Returns: mid and side channel arrays
 //
 // Reference: RFC 6716 Section 4.3.4
-func ConvertToMidSide(left, right []celtNorm) (mid, side []celtNorm) {
+func ConvertToMidSide(left, right []celtNorm) (mid, side []CeltNorm) {
 	n := len(left)
 	if n == 0 {
 		return nil, nil
@@ -157,9 +152,8 @@ func ConvertToMidSide(left, right []celtNorm) (mid, side []celtNorm) {
 //	left[i] = (mid[i] + side[i]) / sqrt(2)
 //	right[i] = (mid[i] - side[i]) / sqrt(2)
 //
-// Combined with ConvertToMidSide, this forms an identity transform:
-// L,R -> M,S -> L,R (with floating point precision)
-func ConvertMidSideToLR(mid, side []celtNorm) (left, right []celtNorm) {
+// The function processes the common prefix of mid and side.
+func ConvertMidSideToLR(mid, side []celtNorm) (left, right []CeltNorm) {
 	n := len(mid)
 	if n == 0 {
 		return nil, nil
@@ -176,16 +170,7 @@ func ConvertMidSideToLR(mid, side []celtNorm) (left, right []celtNorm) {
 	const invSqrt2 = float32(0.7071067811865476)
 
 	for i := 0; i < n; i++ {
-		// Inverse of the forward transform
-		// M = (L+R)/sqrt(2), S = (L-R)/sqrt(2)
-		// L = (M+S)/sqrt(2), R = (M-S)/sqrt(2)
-		// But we need L = (M+S)*sqrt(2)/2 = (M+S)/sqrt(2) ... wait
-		// Actually: M*sqrt(2) = L+R, S*sqrt(2) = L-R
-		// So: L = (M+S)*sqrt(2)/2 = (M+S)/sqrt(2) ... hmm
-		// Let me reconsider: if M = (L+R)/sqrt(2), S = (L-R)/sqrt(2)
-		// then L+R = M*sqrt(2), L-R = S*sqrt(2)
-		// 2L = (M+S)*sqrt(2), L = (M+S)*sqrt(2)/2 = (M+S)/sqrt(2)
-		// Same for R: R = (M-S)/sqrt(2)
+		// Apply the inverse orthonormal mid-side transform.
 		left[i] = celtNorm((float32(mid[i]) + float32(side[i])) * invSqrt2)
 		right[i] = celtNorm((float32(mid[i]) - float32(side[i])) * invSqrt2)
 	}
@@ -193,22 +178,9 @@ func ConvertMidSideToLR(mid, side []celtNorm) (left, right []celtNorm) {
 	return left, right
 }
 
-// deinterleaveStereoScratchF32 separates interleaved float-build stereo using
-// float-width scratch buffers.
-func deinterleaveStereoScratchF32(interleaved []float32, leftBuf, rightBuf *[]float32) (left, right []float32) {
-	if len(interleaved) < 2 {
-		return nil, nil
-	}
-
-	n := len(interleaved) / 2
-	left = ensureFloat32Slice(leftBuf, n)
-	right = ensureFloat32Slice(rightBuf, n)
-	DeinterleaveStereoIntoF32(interleaved, left, right)
-	return left, right
-}
-
-// DeinterleaveStereoInto separates interleaved stereo samples into pre-allocated L and R slices.
-// left and right must each have capacity >= len(interleaved)/2.
+// DeinterleaveStereoInto separates interleaved stereo samples into L and R
+// slices. It processes len(interleaved)/2 samples per channel, ignoring a
+// trailing unpaired sample. left and right must each have at least that length.
 func DeinterleaveStereoInto(interleaved, left, right []celtNorm) {
 	n := len(interleaved) / 2
 	if n <= 0 {
@@ -224,8 +196,9 @@ func DeinterleaveStereoInto(interleaved, left, right []celtNorm) {
 	}
 }
 
-// DeinterleaveStereoIntoF32 separates interleaved float-build stereo samples
-// into pre-allocated L and R slices.
+// DeinterleaveStereoIntoF32 separates interleaved float32 stereo samples into
+// L and R slices. It processes len(interleaved)/2 samples per channel, ignoring
+// a trailing unpaired sample. left and right must each have at least that length.
 func DeinterleaveStereoIntoF32(interleaved, left, right []float32) {
 	n := len(interleaved) / 2
 	if n <= 0 {
@@ -240,8 +213,11 @@ func DeinterleaveStereoIntoF32(interleaved, left, right []float32) {
 	}
 }
 
-// InterleaveStereoInto combines separate L and R arrays into a pre-allocated interleaved slice.
-// interleaved must have capacity >= 2*min(len(left), len(right)).
+// InterleaveStereoInto combines the common prefix of separate L and R slices
+// into interleaved stereo. interleaved must have length at least twice the
+// common-prefix length. Extra destination elements remain unchanged; if the
+// destination is too short or either source is empty, the function returns
+// without writing.
 func InterleaveStereoInto(left, right, interleaved []celtNorm) {
 	n := min(len(right), len(left))
 	if len(interleaved) < n*2 || n <= 0 {

@@ -39,7 +39,7 @@ func (h Header) EndSamples(sampleRate int) int {
 }
 
 // ParseHeader decodes the lightweight libopus DRED header from a payload body
-// with the temporary extension prefix already stripped. dredFrameOffset is in
+// with the experimental extension prefix already stripped. dredFrameOffset uses
 // 2.5 ms units, matching libopus dred_find_payload().
 func ParseHeader(payload []byte, dredFrameOffset int) (Header, error) {
 	var rd rangecoding.Decoder

@@ -55,7 +55,7 @@ func (d *Decoder) bindOSCEBWEModel(blob *dnnblob.Blob, supported bool) error {
 	// loaded model so each channel slot can run the forward pass
 	// independently.
 	for ch := range d.osceBWE.osceBWERuntime {
-		if err := d.osceBWE.osceBWERuntime[ch].SetModel(blob); err != nil {
+		if err := d.osceBWE.osceBWERuntime[ch].SetModelPreservingState(blob); err != nil {
 			d.osceBWE.osceBWEModel = nil
 			// Clear any sibling slot we may have already bound so the
 			// runtime state is fully detached on failure.
@@ -66,11 +66,6 @@ func (d *Decoder) bindOSCEBWEModel(blob *dnnblob.Blob, supported bool) error {
 			return err
 		}
 	}
-	// Feature extractor state is independent of the model weights but its
-	// signal-history / last-spec buffers must start from zero on (re)bind to
-	// match `osce_init` in libopus.
-	d.osceBWE.osceBWEFeatures[0].Reset()
-	d.osceBWE.osceBWEFeatures[1].Reset()
 	return nil
 }
 

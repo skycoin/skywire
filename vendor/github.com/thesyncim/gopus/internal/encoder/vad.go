@@ -1,4 +1,4 @@
-// This file implements multi-band Voice Activity Detection (VAD) for DTX,
+// This file implements the multi-band VAD used by the top-level VAD helper,
 // matching libopus SILK VAD behavior from silk/VAD.c.
 //
 // The VAD splits the signal into 4 frequency bands using analysis filter banks:

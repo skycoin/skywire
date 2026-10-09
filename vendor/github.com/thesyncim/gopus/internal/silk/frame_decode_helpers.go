@@ -13,6 +13,21 @@ func initFrameDecodeState(st *decoderState, fsKHz, framesPerPacket, nbSubfr int)
 	silkDecoderSetFs(st, fsKHz)
 }
 
+// preparePLCFrameDecodeState configures the current loss frame before SILK
+// concealment. opus_decoder.c requests at least 10 ms from silk_Decode, which
+// sets current subframe geometry in dec_API.c before silk_PLC_conceal reads it.
+func (d *Decoder) preparePLCFrameDecodeState(bandwidth Bandwidth, frameSizeSamples, channels int) {
+	silkFrameSize := max(frameSizeSamples, d.outputSampleRate()/100)
+	framesPerPacket, nbSubfr, err := frameParams(d.frameDurationFromAPISamples(silkFrameSize))
+	if err != nil {
+		return
+	}
+	fsKHz := GetBandwidthConfig(bandwidth).SampleRate / 1000
+	for ch := range min(channels, len(d.state)) {
+		initFrameDecodeState(&d.state[ch], fsKHz, framesPerPacket, nbSubfr)
+	}
+}
+
 // frameCondCoding returns the conditional-coding mode for a mono frame: the
 // first frame in a packet is coded independently, later frames conditionally on
 // the previous frame. Mirrors the condCoding selection in libopus
@@ -225,7 +240,7 @@ func (d *Decoder) finalizeDecodedChannelFrame(channel int, st *decoderState, ctr
 	}
 	silkUpdateOutBuf(st, frameOut)
 	if nativePostfilterEnabled {
-		d.fireNativePostfilterHook(channel, st, ctrl, frameOut)
+		d.processNativePostfilterFrame(channel, st, ctrl, frameOut)
 	}
 	d.updateSILKPLCStateFromCtrl(channel, st, ctrl)
 	if dredHooksEnabled {

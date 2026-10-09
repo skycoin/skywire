@@ -19,8 +19,9 @@ const (
 // bookkeeping under the explicit extra-controls build. It is attached to the
 // per-stream `streamState` so a multistream decoder can run the libopus OSCE
 // postfilter family on its SILK lowband output, just like the single-stream
-// decoder in package gopus. The state is lazily allocated when models are
-// bound; the multistream Decoder fans `SetDNNBlob` / `SetOSCEBWE` /
+// decoder in package gopus. The state is allocated when models are bound or
+// when a SILK frame begins feature capture; the multistream Decoder fans
+// `SetDNNBlob` / `SetOSCEBWE` /
 // `SetOSCELACE` out to every stream so each child carries an independent
 // per-channel runtime (libopus does the same: per-`silk_channel_state` LACE/
 // NoLACE state and per-stream `silk_OSCE_BWE_struct`).

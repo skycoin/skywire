@@ -2,8 +2,14 @@
 
 package multistream
 
+import "github.com/thesyncim/gopus/internal/celt"
+
 type streamQEXTPayloads struct {
 	payloads [maxPacketExtensionFrames][]byte
+}
+
+func configureStreamNative96kCELT(dec *celt.Decoder) {
+	dec.EnableHD96kMode()
 }
 
 func (p *streamQEXTPayloads) frame(frameIndex int) []byte {

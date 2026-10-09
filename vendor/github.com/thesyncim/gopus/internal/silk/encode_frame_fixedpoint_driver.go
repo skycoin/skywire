@@ -3,12 +3,12 @@
 package silk
 
 // This file wires the bit-exact FIXED_POINT SILK per-frame driver
-// (silkEncodeFramePayloadFIX) into the public silk.Encoder so that
-// Encoder.EncodeFrame produces byte-exact SILK payloads matching the libopus
-// FIXED_POINT encoder (silk/fixed/encode_frame_FIX.c + silk/enc_API.c). The
-// surrounding orchestration (range-coder init, LBRR header emit, multi-frame
-// loop, VAD/FEC header patch) is shared with the float path in encode_frame.go;
-// only the per-frame analysis + rate-control body is replaced here.
+// (silkEncodeFramePayloadFIX) into the silk.Encoder channel state so that
+// Encoder.encodeFrame codes byte-exact SILK frames matching the libopus
+// FIXED_POINT encoder (silk/fixed/encode_frame_FIX.c). The packet-level flow of
+// silk_Encode (PacketEncoder.Encode in enc_api.go: LBRR header and data,
+// multi-frame loop, stereo front end, VAD/FEC header patch) is shared with the
+// float path; only the per-frame analysis + rate-control body is replaced here.
 //
 // The driver maintains its own integer cross-frame state (int16 x_buf, VAD
 // state, noise-shape smoothers, previous-NLSF history, NSQ state, ...) mirroring
@@ -19,44 +19,22 @@ package silk
 // on the public Encoder under the gopus_fixed_point build.
 type silkEncoderFixedFields struct {
 	fixed *silkFixedEncodeState
-
-	// fixedStereoInt16In, when non-nil, holds the raw int16 mid/side frame
-	// (post stereo_LR_to_MS, pre LP_variable_cutoff) that the integer SILK
-	// encode body must consume verbatim for one EncodeFrame call. It lets the
-	// validated integer stereo front-end (silkStereoLRToMS) feed exact int16
-	// mid/side samples into the per-channel encode without a float round-trip,
-	// matching libopus enc_API.c where silk_stereo_LR_to_MS writes inputBuf+2
-	// and silk_encode_frame_FIX consumes inputBuf+1 directly. It is consumed
-	// (cleared) by buildFixedInputBuf.
-	fixedStereoInt16In []int16
-
-	// Scratch buffers for the integer stereo front-end (stereoFixedFrontEnd).
-	scratchStereoFixedMid     []int16
-	scratchStereoFixedSide    []int16
-	scratchStereoFixedX2      []int16
-	scratchStereoFixedMidOut  []int16
-	scratchStereoFixedSideOut []int16
 }
 
 // silkFixedEncodeState holds the persistent silk_encoder_state_FIX-equivalent
 // state for the integer SILK encode path.
 type silkFixedEncodeState struct {
-	initialized bool
-
 	// scratch holds the reusable per-frame working buffers for the integer
 	// encode path, grown once and reused across every frame of a packet.
 	scratch *silkFixedEncodeScratch
 
-	// fs_kHz this state was configured for; a change forces re-init.
+	// fsKHz is the channel's internal rate (sCmn.fs_kHz).
 	fsKHz int
 
-	// Integer x_buf history (ltp_mem_length + la_shape + frame_length samples),
-	// matching silk_encoder_state_FIX.x_buf. The new frame is inserted at
-	// x_buf[ltp_mem_length + la_shape].
+	// Integer x_buf history (ltp_mem_length + la_shape + frame_length samples
+	// at the highest internal rate), matching silk_encoder_state_FIX.x_buf. The
+	// new frame is inserted at x_buf[ltp_mem_length + la_shape].
 	xBuf []int16
-
-	// Persistent VAD analysis state (silk_VAD_state).
-	vad silkVADState
 
 	// Persistent NSQ state (silk_nsq_state).
 	nsq NSQState
@@ -65,8 +43,6 @@ type silkFixedEncodeState struct {
 	frameCounter         int32
 	prevSignalType       int32
 	prevLag              int32
-	noSpeechCounter      int32
-	inDTX                int32
 	firstFrameAfterReset bool
 	ltpCorrQ15           int32
 	sumLogGainQ7         int32
@@ -83,16 +59,6 @@ type silkFixedEncodeState struct {
 
 	// LBRR carry (sCmn.LBRRprevLastGainIndex).
 	lbrrPrevLastGainIndex int8
-
-	// VAD-derived state for the current frame (set by silkEncodeDoVADFIX).
-	speechActivityQ8     int32
-	inputTiltQ15         int32
-	inputQualityBandsQ15 [vadNBands]int32
-
-	// lastFixedVADFlag is the integer VAD decision of the most recent encode
-	// body call (1 == active), exposed via FixedLastVADFlag for the stereo
-	// VAD header patch.
-	lastFixedVADFlag bool
 
 	// captureSnapshot enables the per-frame test snapshot capture below. It is
 	// off in production so the hot path does not copy x_buf each frame.
@@ -151,7 +117,7 @@ func (e *Encoder) captureFixedSnapshot(
 	st *silkFixedEncodeState,
 	ps *silkEncodeFramePayloadFIXState,
 	inputBuf []int16,
-	numSubframes, frameSamples, condCoding, predictLPCOrder, pitchEstLPCOrder, useCBRInt int,
+	numSubframes, frameSamples, condCoding, predictLPCOrder, pitchEstLPCOrder, useCBRInt, maxBits int,
 ) {
 	st.testPreEncodeXBuf = append(st.testPreEncodeXBuf[:0], st.xBuf...)
 	st.testPreEncodeInputBuf = append(st.testPreEncodeInputBuf[:0], inputBuf...)
@@ -168,7 +134,7 @@ func (e *Encoder) captureFixedSnapshot(
 	st.testNbSubfr = numSubframes
 	st.testFrameLength = frameSamples
 	st.testSnrDBQ7 = e.snrDBQ7
-	st.testMaxBits = int(e.maxBits)
+	st.testMaxBits = maxBits
 	st.testCondCoding = int32(condCoding)
 	st.testPredictLPCOrder = predictLPCOrder
 	st.testPitchEstLPCOrder = pitchEstLPCOrder
@@ -200,7 +166,7 @@ func (e *Encoder) captureFixedSnapshot(
 		NbSubfr:              numSubframes,
 		FrameLength:          frameSamples,
 		SnrDBQ7:              e.snrDBQ7,
-		MaxBits:              int(e.maxBits),
+		MaxBits:              maxBits,
 		CondCoding:           int32(condCoding),
 		PredictLPCOrder:      predictLPCOrder,
 		PitchEstLPCOrder:     pitchEstLPCOrder,
@@ -239,6 +205,12 @@ func (e *Encoder) FixedXBufForTest() []int16 {
 		return nil
 	}
 	return e.fixed.xBuf
+}
+
+// FixedXBufForTest returns the integer x_buf history of the first channel. For
+// parity tests only.
+func (s *PacketEncoder) FixedXBufForTest() []int16 {
+	return s.state[0].FixedXBufForTest()
 }
 
 // FixedFrameCounterForTest returns the integer frame counter. For parity tests.
@@ -320,106 +292,93 @@ func (e *Encoder) FixedPreEncodeForTest() FixedPreEncodeSnapshot {
 	}
 }
 
-// ensureFixedState lazily allocates / re-initializes the integer SILK state for
-// the encoder's current fs_kHz. It mirrors the parts of silk_init_encoder /
-// silk_control_encoder first-frame reset that establish the integer cross-frame
-// state (sNSQ.prev_gain_Q16, lagPrev, LastGainIndex, prevLag).
+// ensureFixedState returns the integer SILK state at the channel's current
+// internal rate. Encoder.reset sets it up (resetFixedState); silk_setup_fs
+// resets its analysis history on a rate change (resetFixedAnalysisHistory) and
+// silk_setup_resamplers carries its x_buf over (xBufToInt16/xBufFromInt16).
 func (e *Encoder) ensureFixedState() *silkFixedEncodeState {
-	fsKHz := int(e.sampleRate / 1000)
+	st := e.fixed
+	st.fsKHz = int(e.fsKHz)
+	return st
+}
+
+// prefillFrameFixed is the prefill branch of silk_encode_frame_FIX
+// (silk/fixed/encode_frame_FIX.c): the frame counter advances, the LP-filtered
+// frame enters x_buf and x_buf shifts, without analysis or entropy coding.
+func (e *Encoder) prefillFrameFixed(in []int16) {
+	st := e.ensureFixedState()
+	st.frameCounter++
+	keep := (ltpMemLengthMs + laShapeMs) * st.fsKHz
+	frameSamples := len(in)
+	copy(st.xBuf[keep:keep+frameSamples], in)
+	copy(st.xBuf[:keep], st.xBuf[frameSamples:frameSamples+keep])
+}
+
+// resetFixedState returns the integer SILK state to the state
+// silk_init_encoder leaves it, with x_buf sized for the highest internal rate.
+// Called from Encoder.reset under the tag.
+func (e *Encoder) resetFixedState() {
 	st := e.fixed
 	if st == nil {
 		st = &silkFixedEncodeState{}
 		e.fixed = st
 	}
-	if !st.initialized || st.fsKHz != fsKHz {
-		st.fsKHz = fsKHz
-		ltpMemLength := ltpMemLengthMs * fsKHz
-		laShape := laShapeMs * fsKHz
-		frameLength := 20 * fsKHz
-		st.xBuf = make([]int16, ltpMemLength+laShape+frameLength)
-		silkVADInit(&st.vad)
-		st.nsq = NSQState{}
-		st.frameCounter = 0
-		st.prevSignalType = typeNoVoiceActivity
-		st.prevLag = 0
-		st.noSpeechCounter = 0
-		st.inDTX = 0
-		st.firstFrameAfterReset = true
-		st.ltpCorrQ15 = 0
-		st.sumLogGainQ7 = 0
-		st.prevNLSFqQ15 = [maxLPCOrder]int16{}
-		st.lastGainIndex = 10
-		st.harmShapeGainSmthQ16 = 0
-		st.tiltSmthQ16 = 0
-		st.ecPrevLagIndex = 0
-		st.ecPrevSignalType = typeNoVoiceActivity
-		st.lbrrPrevLastGainIndex = 10
-		st.speechActivityQ8 = 0
-		st.inputTiltQ15 = 0
-		st.inputQualityBandsQ15 = [vadNBands]int32{}
-		// control_codec first-frame reset (control_codec.c:254,257).
-		st.nsq.prevGainQ16 = 1 << 16
-		st.nsq.lagPrev = 100
-		st.initialized = true
-	}
-	return st
+	st.fsKHz = 0
+	clear(ensureInt16Slice(&st.xBuf, (ltpMemLengthMs+laShapeMs)*maxFsKHz+maxFrameLength))
+	st.nsq = NSQState{}
+	st.frameCounter = 0
+	st.prevSignalType = typeNoVoiceActivity
+	st.prevLag = 0
+	st.firstFrameAfterReset = true
+	st.ltpCorrQ15 = 0
+	st.sumLogGainQ7 = 0
+	st.prevNLSFqQ15 = [maxLPCOrder]int16{}
+	st.lastGainIndex = 10
+	st.harmShapeGainSmthQ16 = 0
+	st.tiltSmthQ16 = 0
+	st.ecPrevLagIndex = 0
+	st.ecPrevSignalType = typeNoVoiceActivity
+	st.lbrrPrevLastGainIndex = 10
+	st.nsq.prevGainQ16 = 1 << 16
+	st.nsq.lagPrev = 100
 }
 
-// resetFixedState forces the integer SILK state to re-initialize on the next
-// frame. Called from Encoder.Reset under the tag.
-func (e *Encoder) resetFixedState() {
-	if e.fixed != nil {
-		e.fixed.initialized = false
-	}
+// xBufToInt16 copies the first len(dst) samples of the integer x_buf for
+// silk_setup_resamplers (silk/control_codec.c), which resamples the FIXED_POINT
+// x_buf in place.
+func (e *Encoder) xBufToInt16(dst []int16) {
+	copy(dst, e.fixed.xBuf)
 }
 
-// buildFixedInputBuf converts the float frame to int16 (RES2INT16 / FLOAT2INT16)
-// and applies silk_LP_variable_cutoff, returning the int16 frame that libopus
-// places at inputBuf+1 just before insertion into x_buf.
-func (e *Encoder) buildFixedInputBuf(pcm []float32, frameSamples int) []int16 {
-	buf := ensureInt16Slice(&e.scratchLPInt16, frameSamples)
-	if e.fixedStereoInt16In != nil {
-		// Integer stereo front-end (silkStereoLRToMS) already produced the exact
-		// int16 mid/side samples libopus writes into inputBuf+2; consume them
-		// verbatim so no float round-trip can perturb the LSBs.
-		src := e.fixedStereoInt16In
-		for i := 0; i < frameSamples; i++ {
-			if i < len(src) {
-				buf[i] = src[i]
-			} else {
-				buf[i] = 0
-			}
-		}
-		e.fixedStereoInt16In = nil
-	} else {
-		for i := 0; i < frameSamples; i++ {
-			if i < len(pcm) {
-				buf[i] = float32ToInt16(pcm[i])
-			} else {
-				buf[i] = 0
-			}
-		}
-	}
-	// silk_LP_variable_cutoff operates in place on inputBuf+1.
-	e.lpState.LPVariableCutoff(buf, frameSamples)
-	return buf
+// xBufFromInt16 stores the resampled x_buf of silk_setup_resamplers
+// (silk/control_codec.c) back into the integer x_buf.
+func (e *Encoder) xBufFromInt16(src []int16) {
+	copy(e.fixed.xBuf, src)
 }
 
 // encodeFrameFixedBody runs the FIXED_POINT analysis + rate-control body for one
-// SILK frame and finalizes via the shared tail. It is the integer-path
-// counterpart of the float analysis block in EncodeFrame.
+// SILK frame, the integer-path counterpart of the float analysis block in
+// encodeFrame. in is the LP-filtered frame (inputBuf+1); the VAD decision of the
+// packet-level silk_encode_do_VAD step is already in the channel state.
 func (e *Encoder) encodeFrameFixedBody(
-	pcm []float32,
-	frameSamples, numSubframes, subframeSamples, payloadSizeMs int,
-	condCoding int,
-	vadFlag, firstFrameAfterReset, useSharedEncoder, blockUseCBR bool,
-) []byte {
+	in []int16,
+	numSubframes, subframeSamples, condCoding int,
+	vadFlag, firstFrameAfterReset bool,
+	maxBits int,
+	useCBR bool,
+) int32 {
 	st := e.ensureFixedState()
 	fsKHz := st.fsKHz
+	frameSamples := len(in)
 	ltpMemLength := ltpMemLengthMs * fsKHz
 	laShape := laShapeMs * fsKHz
 	laPitch := laPitchMs * fsKHz
+	// silk/control_codec.c uses FIND_PITCH_LPC_WIN_MS for four-subframe
+	// frames and FIND_PITCH_LPC_WIN_MS_2_SF for the two-subframe 10 ms path.
 	pitchLPCWinLength := (ltpMemLengthMs + (laPitchMs << 1)) * fsKHz
+	if numSubframes != maxNbSubfr {
+		pitchLPCWinLength = (10 + (laPitchMs << 1)) * fsKHz
+	}
 
 	// reducedDependency / first packet: code the first frame as
 	// first_frame_after_reset (libopus enc_API.c:268).
@@ -427,9 +386,9 @@ func (e *Encoder) encodeFrameFixedBody(
 		st.firstFrameAfterReset = true
 	}
 
-	// Build the int16 input frame (RES2INT16 + LP variable cutoff), then insert
-	// into x_buf at x_frame + LA_SHAPE_MS*fs_kHz (encode_frame_FIX.c).
-	inputBuf := e.buildFixedInputBuf(pcm, frameSamples)
+	// Insert the frame into x_buf at x_frame + LA_SHAPE_MS*fs_kHz
+	// (encode_frame_FIX.c).
+	inputBuf := in
 	xFrame := ltpMemLength
 	insert := st.xBuf[xFrame+laShape : xFrame+laShape+frameSamples]
 	copy(insert, inputBuf)
@@ -443,19 +402,27 @@ func (e *Encoder) encodeFrameFixedBody(
 		pitchEstLPCOrder = predictLPCOrder
 	}
 
-	opusVADActivity := 1
-	if !vadFlag {
-		opusVADActivity = vadNoActivity
+	signalType := int8(typeNoVoiceActivity)
+	if vadFlag {
+		signalType = int8(typeUnvoiced)
 	}
 
 	useCBRInt := 0
-	if blockUseCBR {
+	if useCBR {
 		useCBRInt = 1
 	}
-
-	lbrrFlagInt := int32(0)
-	if e.lbrrEnabled {
-		lbrrFlagInt = 1
+	// The noise shaping analysis reads sCmn.useCBR, the packet's CBR control
+	// (silk_control_encoder); the rate control loop reads the block's useCBR.
+	cmnUseCBR := 0
+	if e.useCBR {
+		cmnUseCBR = 1
+	}
+	// silk/control_codec.c:silk_setup_complexity enables NLSF interpolation
+	// at complexity 4 and above. Analysis uses its configured la_shape;
+	// x_buf insertion and history retain the fixed LA_SHAPE_MS lookahead.
+	var useInterpolatedNLSFs int32
+	if e.complexity >= 4 {
+		useInterpolatedNLSFs = 1
 	}
 
 	ps := &silkEncodeFramePayloadFIXState{
@@ -466,7 +433,7 @@ func (e *Encoder) encodeFrameFixedBody(
 			nbSubfr:                     numSubframes,
 			ltpMemLength:                ltpMemLength,
 			laPitch:                     laPitch,
-			laShape:                     laShape,
+			laShape:                     int(e.laShape),
 			pitchLPCWinLength:           pitchLPCWinLength,
 			pitchEstimationLPCOrder:     pitchEstLPCOrder,
 			predictLPCOrder:             predictLPCOrder,
@@ -475,23 +442,23 @@ func (e *Encoder) encodeFrameFixedBody(
 			complexity:                  int(e.pitchEstimationComplexity),
 			nStatesDelayedDecision:      int(e.nStatesDelayedDecision),
 			warpingQ16:                  e.warpingQ16,
-			useCBR:                      useCBRInt,
+			useCBR:                      cmnUseCBR,
 			nlsfMSVQSurvivors:           int(e.nlsfSurvivors),
+			useInterpolatedNLSFs:        useInterpolatedNLSFs,
 			pitchEstimationThresholdQ16: e.pitchEstimationThresholdQ16,
 			snrDBQ7:                     e.snrDBQ7,
-			inputTiltQ15:                st.inputTiltQ15,
+			inputTiltQ15:                e.inputTiltQ15,
 			packetLossPerc:              e.packetLossPercent,
 			nFramesPerPacket:            e.nFramesPerPacket,
-			lbrrFlag:                    lbrrFlagInt,
+			lbrrFlag:                    int32(e.lbrrFlag),
 			condCoding:                  int32(condCoding),
-			opusVADActivity:             opusVADActivity,
+			vadDone:                     true,
 			frameCounter:                st.frameCounter,
 			prevSignalType:              st.prevSignalType,
 			prevLag:                     st.prevLag,
-			speechActivityQ8:            st.speechActivityQ8,
-			inputQualityBandsQ15:        st.inputQualityBandsQ15,
-			noSpeechCounter:             st.noSpeechCounter,
-			inDTX:                       st.inDTX,
+			speechActivityQ8:            e.speechActivityQ8,
+			inputQualityBandsQ15:        e.inputQualityBandsQ15,
+			indicesSignalType:           signalType,
 			firstFrameAfterReset:        st.firstFrameAfterReset,
 			ltpCorrQ15:                  st.ltpCorrQ15,
 			sumLogGainQ7:                st.sumLogGainQ7,
@@ -499,9 +466,7 @@ func (e *Encoder) encodeFrameFixedBody(
 			harmShapeGainSmthQ16:        st.harmShapeGainSmthQ16,
 			tiltSmthQ16:                 st.tiltSmthQ16,
 			lastGainIndex:               st.lastGainIndex,
-			vad:                         st.vad,
 			nsq:                         st.nsq,
-			vadInput:                    inputBuf,
 			xBuf:                        st.xBuf,
 		},
 		ecPrevLagIndex:        st.ecPrevLagIndex,
@@ -512,8 +477,8 @@ func (e *Encoder) encodeFrameFixedBody(
 		nFramesEncoded:        int(e.nFramesEncoded),
 		lbrrPrevFrameHadLBRR:  e.nFramesEncoded > 0 && e.lbrrFlags[e.nFramesEncoded-1] != 0,
 		rangeEncoder:          e.rangeEncoder,
-		maxBits:               int(e.maxBits),
-		useCBR:                blockUseCBR,
+		maxBits:               maxBits,
+		useCBR:                useCBR,
 		bandwidth:             e.bandwidth,
 	}
 
@@ -521,26 +486,17 @@ func (e *Encoder) encodeFrameFixedBody(
 	// parity test can replay them against the libopus oracle. Disabled in
 	// production (gated by a test-only flag) to keep the hot path lean.
 	if st.captureSnapshot {
-		e.captureFixedSnapshot(st, ps, inputBuf, numSubframes, frameSamples, condCoding, predictLPCOrder, pitchEstLPCOrder, useCBRInt)
+		e.captureFixedSnapshot(st, ps, inputBuf, numSubframes, frameSamples, condCoding, predictLPCOrder, pitchEstLPCOrder, useCBRInt, maxBits)
 	}
 
 	res := e.silkEncodeFramePayloadFIX(ps)
 
-	// The SILK VAD header bit (and, for the stereo side channel, the mid-only
-	// gate) must reflect the integer VAD decision computed inside the encode
-	// body, not the Opus-level activity flag passed in. Persist it and patch the
-	// standalone header from it below.
-	st.lastFixedVADFlag = res.vadFlag != 0
-
 	// Persist the integer cross-frame state back.
 	fs := &ps.silkEncodeFrameFIXState
-	st.vad = fs.vad
 	st.nsq = fs.nsq
 	st.frameCounter = fs.frameCounter
 	st.prevSignalType = fs.prevSignalType
 	st.prevLag = fs.prevLag
-	st.noSpeechCounter = fs.noSpeechCounter
-	st.inDTX = fs.inDTX
 	st.firstFrameAfterReset = fs.firstFrameAfterReset
 	st.ltpCorrQ15 = fs.ltpCorrQ15
 	st.sumLogGainQ7 = fs.sumLogGainQ7
@@ -550,20 +506,18 @@ func (e *Encoder) encodeFrameFixedBody(
 	st.tiltSmthQ16 = fs.tiltSmthQ16
 	st.ecPrevLagIndex = ps.ecPrevLagIndex
 	st.ecPrevSignalType = ps.ecPrevSignalType
-	st.speechActivityQ8 = fs.speechActivityQ8
 
-	// Mirror the float encoder's cross-frame fields read by the orchestration
-	// (LBRR header, hybrid silk_info, bandwidth switch gate).
+	// Mirror the float encoder's cross-frame fields read by the packet encoder
+	// (silk_info outputs, silk_HP_variable_cutoff).
 	e.previousGainIndex = fs.lastGainIndex
-	e.previousLogGain = int32(fs.lastGainIndex)
 	e.ecPrevSignalType = ps.ecPrevSignalType
 	e.lastQuantOffsetType = int(fs.indicesQuantOffset)
-	e.lastSeed = int8(fs.frameCounter-1) & 3
+	e.lastSeed = res.seed
 	e.isPreviousFrameVoiced = fs.indicesSignalType == int8(typeVoiced)
-	e.lastSpeechActivityQ8 = fs.speechActivityQ8
+	e.pitchState.prevLag = fs.prevLag
 
-	// Capture LBRR side info for this frame so the shared LBRR header machinery
-	// (encodeLBRRData) can emit it in the NEXT packet.
+	// Capture LBRR side info for this frame so the packet encoder can emit it
+	// with the NEXT packet.
 	frameIdx := int(e.nFramesEncoded)
 	if frameIdx >= 0 && frameIdx < maxFramesPerPacket {
 		if res.lbrrFlag != 0 {
@@ -590,15 +544,5 @@ func (e *Encoder) encodeFrameFixedBody(
 	keep := ltpMemLength + laShape
 	copy(st.xBuf[:keep], st.xBuf[frameSamples:frameSamples+keep])
 
-	return e.finalizeEncodeFrame(frameSamples, payloadSizeMs, res.vadFlag != 0, useSharedEncoder)
-}
-
-// FixedLastVADFlag reports the integer VAD decision of the most recent fixed
-// encode-body call (1 == active), for the stereo orchestration's VAD header
-// patch. It is meaningful only under the gopus_fixed_point build.
-func (e *Encoder) FixedLastVADFlag() bool {
-	if e.fixed == nil {
-		return false
-	}
-	return e.fixed.lastFixedVADFlag
+	return e.finishFrame(frameSamples)
 }

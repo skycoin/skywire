@@ -5,23 +5,21 @@ package silk
 // Fixed-point parity surface for SILK's adaptive high-pass biquad path.
 //
 // SILK is inherently fixed-point: the decode-side biquad
-// (silkBiquadAltStride1 in lp_variable_cutoff.go) and the adaptive cutoff
-// adaptation (UpdateVariableHPCutoff / HPCutoffCoefsQ28 in
-// hp_variable_cutoff.go) are already integer and byte-exact against the
-// FIXED_POINT libopus reference in the default build.
+// (silkBiquadAltStride1 in lp_variable_cutoff.go) and adaptive cutoff update
+// (hpVariableCutoff / HPCutoffCoefsQ28 in hp_variable_cutoff.go) use integer
+// arithmetic and match the FIXED_POINT libopus reference in the default build.
 //
-// This file completes that surface with silkBiquadAltStride2, the
-// interleaved-stereo variant of silk_biquad_alt (silk/biquad_alt.c
-// silk_biquad_alt_stride2_c), which the default build did not yet expose. It
-// reuses the Q-format macros from libopus_fixed.go and mirrors stride1's
-// arithmetic exactly so both stride variants share the same rounding and
-// saturation behaviour.
+// In gopus_fixed_point builds, this file provides silkBiquadAltStride2, the
+// interleaved-stereo variant of silk_biquad_alt (silk/biquad_alt.c,
+// silk_biquad_alt_stride2_c). It reuses the Q-format macros from
+// libopus_fixed.go and mirrors stride1's arithmetic so both stride variants
+// share the same rounding and saturation behavior.
 
 // updateVariableHPSmth1Q15 is the pure per-frame body of
 // silk_HP_variable_cutoff (silk/HP_variable_cutoff.c) for a voiced frame: given
 // the previous frame's pitch lag/quality/activity it advances and returns the
 // updated variable_HP_smth1_Q15. It is the same arithmetic that
-// (*Encoder).UpdateVariableHPCutoff applies in the default build, exposed
+// (*Encoder).hpVariableCutoff applies in the default build, exposed
 // stand-alone so the fixed-point oracle can exercise it without an Encoder.
 func updateVariableHPSmth1Q15(fsKHz, prevLag, qualityQ15, speechActivityQ8, smth1Q15 int32) int32 {
 	pitchFreqHzQ16 := silkLSHIFT(silkMUL(fsKHz, 1000), 16) / prevLag
@@ -88,5 +86,38 @@ func silkBiquadAltStride2(in []int16, bQ28 [transitionNB]int32, aQ28 [transition
 		// Scale back to Q0 and saturate.
 		out[2*k+0] = silkSAT16(silkRSHIFT(out32Q14[0]+(1<<14)-1, 14))
 		out[2*k+1] = silkSAT16(silkRSHIFT(out32Q14[1]+(1<<14)-1, 14))
+	}
+}
+
+// HPCutoffRes24 applies the FIXED_POINT+ENABLE_RES24 Opus VoIP input high-pass
+// stage from src/opus_encoder.c:hp_cutoff and its silk_biquad_res helper. Input
+// and output are interleaved opus_res Q8 samples. State follows C's
+// opus_val32 layout [L0,L1,R0,R1] in Q12; cutoffHz is already selected by the
+// Opus-level variable-cutoff smoother. It performs no allocation.
+func HPCutoffRes24(in, out []int32, state *[4]int32, fs, channels, cutoffHz int32) {
+	bQ28, aQ28 := HPCutoffCoefsQ28(cutoffHz, fs)
+	a0LQ28 := (-aQ28[0]) & 0x00003FFF
+	a0UQ28 := silkRSHIFT(-aQ28[0], 14)
+	a1LQ28 := (-aQ28[1]) & 0x00003FFF
+	a1UQ28 := silkRSHIFT(-aQ28[1], 14)
+	for c := int32(0); c < channels; c++ {
+		s0 := state[2*c]
+		s1 := state[2*c+1]
+		for i := c; i < int32(len(in)); i += channels {
+			inval := int32(silkSAT16(silkRSHIFT_ROUND(in[i], 8)))
+			out32Q14 := silkLSHIFT(silkSMLAWB(s0, bQ28[0], inval), 2)
+
+			s0 = s1 + silkRSHIFT_ROUND(silkSMULWB(out32Q14, a0LQ28), 14)
+			s0 = silkSMLAWB(s0, out32Q14, a0UQ28)
+			s0 = silkSMLAWB(s0, bQ28[1], inval)
+
+			s1 = silkRSHIFT_ROUND(silkSMULWB(out32Q14, a1LQ28), 14)
+			s1 = silkSMLAWB(s1, out32Q14, a1UQ28)
+			s1 = silkSMLAWB(s1, bQ28[2], inval)
+
+			out[i] = int32(silkSAT16(silkRSHIFT(out32Q14+(1<<14)-1, 14))) << 8
+		}
+		state[2*c] = s0
+		state[2*c+1] = s1
 	}
 }

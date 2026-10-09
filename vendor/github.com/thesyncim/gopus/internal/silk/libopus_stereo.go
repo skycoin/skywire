@@ -52,31 +52,45 @@ func silkStereoMSToLR(state *stereoDecState, mid []int16, side []int16, predQ13 
 	delta1 := silkRSHIFT_ROUND(silkSMULBB(predQ13[1]-pred1, denomQ16), 16)
 
 	interpSamples := stereoInterpLenMs * fsKHz
-	for n := range interpSamples {
-		pred0 += delta0
-		pred1 += delta1
-		sum := silkLSHIFT(silkADD_LSHIFT32(int32(mid[n])+int32(mid[n+2]), int32(mid[n+1]), 1), 9)
-		sum = silkSMLAWB(silkLSHIFT(int32(side[n+1]), 8), sum, pred0)
-		sum = silkSMLAWB(sum, silkLSHIFT(int32(mid[n+1]), 11), pred1)
-		side[n+1] = silkSAT16(silkRSHIFT_ROUND(sum, 8))
-	}
-
-	pred0 = predQ13[0]
-	pred1 = predQ13[1]
-	for n := interpSamples; n < frameLength; n++ {
-		sum := silkLSHIFT(silkADD_LSHIFT32(int32(mid[n])+int32(mid[n+2]), int32(mid[n+1]), 1), 9)
-		sum = silkSMLAWB(silkLSHIFT(int32(side[n+1]), 8), sum, pred0)
-		sum = silkSMLAWB(sum, silkLSHIFT(int32(mid[n+1]), 11), pred1)
-		side[n+1] = silkSAT16(silkRSHIFT_ROUND(sum, 8))
-	}
+	stereoPredictSide(mid, side, 0, interpSamples, pred0, pred1, delta0, delta1)
+	stereoPredictSide(mid, side, interpSamples, frameLength, predQ13[0], predQ13[1], 0, 0)
 
 	state.predPrevQ13[0] = int16(predQ13[0])
 	state.predPrevQ13[1] = int16(predQ13[1])
 
-	for n := range frameLength {
-		sum := int32(mid[n+1]) + int32(side[n+1])
-		diff := int32(mid[n+1]) - int32(side[n+1])
-		mid[n+1] = silkSAT16(sum)
-		side[n+1] = silkSAT16(diff)
+	stereoMidSideToLR(mid[1:frameLength+1], side[1:frameLength+1])
+}
+
+// stereoPredictSideScalar adds the stereo prediction to side[n+1] for n in
+// [from, to), advancing the Q13 predictors by delta before each sample. It is
+// the prediction loop of libopus silk/stereo_MS_to_LR.c; the fixed-predictor
+// loop is the same with zero deltas.
+func stereoPredictSideScalar(mid, side []int16, from, to int, pred0, pred1, delta0, delta1 int32) {
+	if from >= to {
+		return
+	}
+	m := mid[from : to+2]
+	out := side[from+1 : to+1]
+	for i, sv := range out {
+		w := (*[3]int16)(m[i : i+3])
+		pred0 += delta0
+		pred1 += delta1
+		m1 := int32(w[1])
+		sum := silkLSHIFT(silkADD_LSHIFT32(int32(w[0])+int32(w[2]), m1, 1), 9)
+		sum = silkSMLAWB(silkLSHIFT(int32(sv), 8), sum, pred0)
+		sum = silkSMLAWB(sum, silkLSHIFT(m1, 11), pred1)
+		out[i] = silkSAT16(silkRSHIFT_ROUND(sum, 8))
+	}
+}
+
+// stereoMidSideToLRScalar converts mid/side to left/right in place:
+// L = SAT16(mid+side), R = SAT16(mid-side).
+func stereoMidSideToLRScalar(mid, side []int16) {
+	side = side[:len(mid)]
+	for n, m := range mid {
+		sum := int32(m) + int32(side[n])
+		diff := int32(m) - int32(side[n])
+		mid[n] = silkSAT16(sum)
+		side[n] = silkSAT16(diff)
 	}
 }

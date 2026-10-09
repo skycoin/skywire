@@ -43,28 +43,6 @@ const (
 	pgInt16MAX = int32(0x7FFF)
 )
 
-// silkSigmQ15 is the bit-exact Go port of silk_sigm_Q15 (silk/sigm_Q15.c):
-// a piecewise-linear sigmoid lookup with Q15 output and Q5 input.
-func silkSigmQ15(inQ5 int32) int32 {
-	sigmLUTslopeQ10 := [6]int32{237, 153, 73, 30, 12, 7}
-	sigmLUTposQ15 := [6]int32{16384, 23955, 28861, 31213, 32178, 32548}
-	sigmLUTnegQ15 := [6]int32{16384, 8812, 3906, 1554, 589, 219}
-
-	if inQ5 < 0 {
-		inQ5 = -inQ5
-		if inQ5 >= 6*32 {
-			return 0
-		}
-		ind := silkRSHIFT(inQ5, 5)
-		return sigmLUTnegQ15[ind] - silkSMULBB(sigmLUTslopeQ10[ind], inQ5&0x1F)
-	}
-	if inQ5 >= 6*32 {
-		return 32767
-	}
-	ind := silkRSHIFT(inQ5, 5)
-	return sigmLUTposQ15[ind] + silkSMULBB(sigmLUTslopeQ10[ind], inQ5&0x1F)
-}
-
 // silkProcessGainsParams mirrors the silk_encoder_state_FIX /
 // silk_encoder_control_FIX fields read by silk_process_gains_FIX.
 type silkProcessGainsParams struct {

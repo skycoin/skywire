@@ -45,6 +45,7 @@ type perModeTables struct {
 func (d *Decoder) EnablePerModeTables(nbEBands, scaleBase int, eBands []int16, logN []int16, allocVectors []uint8, cacheIndex []int16, cacheBits, cacheCaps []uint8) {
 	if pm := buildPerModeTables(nbEBands, scaleBase, eBands, logN, allocVectors, cacheIndex, cacheBits, cacheCaps); pm != nil {
 		d.perMode = pm
+		d.Reset()
 	}
 }
 
@@ -140,6 +141,19 @@ func buildPerModeTables(nbEBands, scaleBase int, eBands []int16, logN []int16, a
 // paths leave perMode nil and stay byte-identical.
 func (e *Encoder) EnablePerModeTables(nbEBands, scaleBase int, eBands []int16, logN []int16, allocVectors []uint8, cacheIndex []int16, cacheBits, cacheCaps []uint8) {
 	e.perMode = buildPerModeTables(nbEBands, scaleBase, eBands, logN, allocVectors, cacheIndex, cacheBits, cacheCaps)
+	if e.perMode != nil {
+		n := nbEBands * int(e.channels)
+		e.prevEnergy = make([]celtGLog, n)
+		e.prevLogEnergy = make([]celtGLog, n)
+		e.prevEnergy2 = make([]celtGLog, n)
+		e.energyError = make([]celtGLog, n)
+		e.prevBandLogEnergy = make([]celtGLog, n)
+		// celt_encoder.c initializes oldLogE and oldLogE2 to -28.
+		for i := range n {
+			e.prevLogEnergy[i] = -28
+			e.prevEnergy2[i] = -28
+		}
+	}
 }
 
 // modeBandWidth returns the active band width (eBands[i+1]-eBands[i]) for band i.
@@ -162,4 +176,11 @@ func (e *Encoder) computeBandEnergiesGLogActive(mdctCoeffs []float32, nbBands, f
 		return
 	}
 	computeBandEnergiesGLogF32Into(mdctCoeffs, nbBands, frameSize, channels, binMul, dst)
+}
+
+func (e *Encoder) modeEdges() []int {
+	if e.perMode != nil {
+		return e.perMode.eBands
+	}
+	return EBands[:]
 }
