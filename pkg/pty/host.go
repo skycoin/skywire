@@ -160,7 +160,7 @@ func (h *Host) ExecRemoteVia(ctx context.Context, dialer StreamDialer, rPK ciphe
 	// auto-retry isn't at-most-once safe). The caller's retry then re-dials
 	// because the stale session is gone.
 	if pe := h.acquireExec(key); pe != nil {
-		resp, err := pe.sess.Exec(req)
+		resp, err := execWithin(pe.sess, req)
 		h.releaseExec(key, pe, err)
 		return resp, err
 	}
@@ -176,7 +176,7 @@ func (h *Host) ExecRemoteVia(ctx context.Context, dialer StreamDialer, rPK ciphe
 		_ = stream.Close() //nolint:errcheck
 		return nil, fmt.Errorf("dmsgpty: new pty client: %w", err)
 	}
-	resp, err := ptyC.Exec(req)
+	resp, err := execWithin(ptyC, req)
 	if err != nil {
 		_ = ptyC.Close() //nolint:errcheck // closes the underlying stream too
 		return nil, err

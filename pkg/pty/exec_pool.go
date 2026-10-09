@@ -25,6 +25,7 @@
 package pty
 
 import (
+	"errors"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -146,5 +147,38 @@ func (h *Host) cacheExec(key execKey, sess execSession) {
 	h.execMu.Unlock()
 	for _, s := range toClose {
 		_ = s.Close() //nolint:errcheck,gosec
+	}
+}
+
+// execGrace is how long past the command's own timeout an Exec waits for
+// its reply before the session counts as dead. A var so tests can shorten it.
+var execGrace = 15 * time.Second
+
+var errExecStalled = errors.New("dmsgpty: no reply from the remote within the command's timeout; session dropped")
+
+// execWithin runs Exec but gives up on a session that never answers. A
+// session whose stream died without an error otherwise blocked Exec for
+// good, and the pool kept handing that session to every later exec.
+func execWithin(sess execSession, req *CommandExecReq) (*CommandExecResult, error) {
+	d := time.Duration(req.TimeoutMS) * time.Millisecond
+	if d <= 0 {
+		d = execDefaultTimeout
+	}
+	type result struct {
+		resp *CommandExecResult
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		resp, err := sess.Exec(req)
+		ch <- result{resp, err}
+	}()
+	t := time.NewTimer(d + execGrace)
+	defer t.Stop()
+	select {
+	case r := <-ch:
+		return r.resp, r.err
+	case <-t.C:
+		return nil, errExecStalled
 	}
 }
