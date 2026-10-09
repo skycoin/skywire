@@ -2,6 +2,7 @@
 package transport
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -34,7 +35,7 @@ func NewSignedList(pk cipher.PubKey, sk cipher.SecKey, at int64, entries []*Entr
 	sort.Slice(l.Entries, func(i, j int) bool {
 		a, b := l.Entries[i], l.Entries[j]
 		if a.Remote != b.Remote {
-			return a.Remote.Hex() < b.Remote.Hex()
+			return bytes.Compare(a.Remote[:], b.Remote[:]) < 0
 		}
 		return a.Type < b.Type
 	})

@@ -3,8 +3,8 @@
 package transport
 
 import (
+	"bytes"
 	"crypto/sha256"
-	"math/big"
 
 	"github.com/google/uuid"
 
@@ -29,8 +29,7 @@ func MakeTransportID(keyA, keyB cipher.PubKey, netType types.Type) uuid.UUID {
 
 // SortEdges sorts keys so that least-significant comes first
 func SortEdges(keyA, keyB cipher.PubKey) [2]cipher.PubKey {
-	var a, b big.Int
-	if a.SetBytes(keyA[:]).Cmp(b.SetBytes(keyB[:])) < 0 {
+	if bytes.Compare(keyA[:], keyB[:]) < 0 {
 		return [2]cipher.PubKey{keyA, keyB}
 	}
 	return [2]cipher.PubKey{keyB, keyA}

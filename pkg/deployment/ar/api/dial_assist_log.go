@@ -28,6 +28,7 @@
 package api
 
 import (
+	"bytes"
 	"sort"
 	"strconv"
 	"sync"
@@ -124,7 +125,7 @@ func topPeers(counts map[cipher.PubKey]int, n int) []string {
 		if entries[i].n != entries[j].n {
 			return entries[i].n > entries[j].n
 		}
-		return entries[i].pk.Hex() < entries[j].pk.Hex()
+		return bytes.Compare(entries[i].pk[:], entries[j].pk[:]) < 0
 	})
 	if len(entries) > n {
 		entries = entries[:n]
