@@ -118,10 +118,11 @@ services:
       - GODEBUG=madvdontneed=1
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
     healthcheck:
-      # dmsg-discovery and transport-discovery, served by the visor. Every
-      # service starting at once on a 2-core CI runner contends, so
-      # start_period is generous.
-      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9090/health && curl -sf http://127.0.0.1:9094/health"]
+      # The dmsg server (its health endpoint, dmsg-server.json), dmsg-discovery
+      # and transport-discovery, all served by the visor. Every service
+      # starting at once on a 2-core CI runner contends, so start_period is
+      # generous.
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8082/health && curl -sf http://127.0.0.1:9090/health && curl -sf http://127.0.0.1:9094/health"]
       interval: 3s
       timeout: 3s
       retries: 30

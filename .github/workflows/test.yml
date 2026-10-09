@@ -131,6 +131,12 @@ jobs:
       - name: Test E2E
         run: make e2e-test
 
+      # visor-s runs the dmsg server and every deployment service, and the
+      # suite only tails the client visors, so print it when anything fails.
+      - name: visor-s log on failure
+        if: failure()
+        run: DOCKER_TAG=e2e docker compose -f ./docker/docker-compose.yml logs --no-color --tail=1500 visor-s
+
       - name: Clean E2E
         run: make e2e-stop
 

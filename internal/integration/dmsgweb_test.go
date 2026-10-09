@@ -33,7 +33,7 @@ import (
 
 // dmsgWebProxy is the local SOCKS5 address the visor's embedded dmsgweb resolver
 // listens on (DmsgWebConfig default proxy_port 4445). The address-resolver's dmsg
-// PK (it answers at <servicesPK>:80/ar) is defined in diagnostics_test.go.
+// PK (it answers at <arPK>:80) is defined in diagnostics_test.go.
 const dmsgWebProxy = "socks5h://127.0.0.1:4445"
 
 // TestEnv_DmsgWeb fetches the address-resolver's /health over dmsg through visor-b's
@@ -81,7 +81,7 @@ func TestEnv_DmsgWeb(t *testing.T) {
 	// Fetch the AR's /health over dmsg via the SOCKS5 resolver. Retry to absorb
 	// the resolver's cold dmsg session to the AR. Capture diagnostics so a
 	// failure is debuggable instead of a bare empty body.
-	url := fmt.Sprintf("http://%s.dmsg:80/ar/health", servicesPK)
+	url := fmt.Sprintf("http://%s.dmsg:80/health", arPK)
 	cmd := fmt.Sprintf("curl -s -S -m 25 -x %s %s", dmsgWebProxy, url)
 
 	var body, lastErr string
@@ -99,6 +99,6 @@ func TestEnv_DmsgWeb(t *testing.T) {
 
 	// The health JSON must carry the AR's own dmsg address — confirms the request
 	// reached THIS service over dmsg (not some local/upstream fallback).
-	require.Contains(t, body, servicesPK, "AR /health should advertise its host visor's dmsg_address")
+	require.Contains(t, body, arPK, "AR /health should advertise its own dmsg_address")
 	t.Logf("dmsgweb fetched AR /health over dmsg (%d bytes) in %v", len(body), time.Since(start).Round(time.Second))
 }
