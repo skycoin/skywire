@@ -99,6 +99,10 @@ type Publisher struct {
 	// is no window where the gate is unconfigured.
 	allow *allowState
 
+	// dropLeaves evicts a node's leaf bytes once it is published (see
+	// Config.DropPublishedLeaves).
+	dropLeaves bool
+
 	batchWindow  time.Duration
 	wakeup       chan struct{}
 	done         chan struct{}
@@ -143,6 +147,10 @@ type memNode struct {
 	// never persisted and every publish re-serialized nearly the whole
 	// tree — the GC-bound CPU seen in production.
 	mutSeq uint64
+
+	// evictedFrom, when set, is the published TreeNode that holds the
+	// leaf values this node keeps as nil (see evict.go).
+	evictedFrom skycipher.SHA256
 }
 
 // treeMutSeq is the process-wide monotonic source for memNode.mutSeq.
@@ -182,6 +190,12 @@ type Config struct {
 	// automatically.
 	SubscriberAllowlist []cipher.PubKey
 
+	// DropPublishedLeaves keeps no leaf bytes in memory for a sub-tree
+	// once it is published. They are read back from the store when the
+	// sub-tree changes or is read. For feeds whose old sub-trees are large
+	// and settled, such as one per day.
+	DropPublishedLeaves bool
+
 	// sharedAllow is set internally by NewWithDMSG when it builds the
 	// allowState before constructing the CXO node, so the OnSubscribeRemote
 	// closure and the resulting Publisher share the same state. Not
@@ -217,6 +231,9 @@ type PubConfig struct {
 	// a hard crash. Acceptable because the publisher republishes from
 	// memory on restart.
 	NoSyncCXDS bool
+
+	// DropPublishedLeaves, see Config.DropPublishedLeaves.
+	DropPublishedLeaves bool
 }
 
 // NewWithDMSG is a convenience wrapper around New: it constructs a
@@ -270,9 +287,10 @@ func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publish
 	}
 
 	p, err := New(cxoNode, sk, Config{
-		BatchWindow: conf.BatchWindow,
-		Logger:      conf.Logger,
-		sharedAllow: allow,
+		BatchWindow:         conf.BatchWindow,
+		Logger:              conf.Logger,
+		sharedAllow:         allow,
+		DropPublishedLeaves: conf.DropPublishedLeaves,
 	})
 	if err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
@@ -323,9 +341,10 @@ func NewWithTCP(listenAddr string, sk cipher.SecKey, conf PubConfig) (*Publisher
 	}
 
 	p, err := New(cxoNode, sk, Config{
-		BatchWindow: conf.BatchWindow,
-		Logger:      conf.Logger,
-		sharedAllow: allow,
+		BatchWindow:         conf.BatchWindow,
+		Logger:              conf.Logger,
+		sharedAllow:         allow,
+		DropPublishedLeaves: conf.DropPublishedLeaves,
 	})
 	if err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
@@ -382,6 +401,7 @@ func New(cxoNode *node.Node, sk cipher.SecKey, conf Config) (*Publisher, error) 
 		cleanupNudge: make(chan struct{}, 1),
 		cleanupDone:  make(chan struct{}),
 	}
+	p.dropLeaves = conf.DropPublishedLeaves
 	// Hydrate the in-memory tree from the previously-published Root on
 	// the underlying CXO node, if one exists. Without this, every
 	// process restart starts from an empty memNode — the next Put
@@ -756,6 +776,15 @@ func (p *Publisher) Get(path string) ([]byte, bool) {
 	if !ok {
 		return nil, false
 	}
+	if v == nil {
+		parent := walkLivePath(p.root, segs[:len(segs)-1])
+		if parent == nil {
+			return nil, false
+		}
+		if v, ok = p.readEvicted(parent)[segs[len(segs)-1]]; !ok {
+			return nil, false
+		}
+	}
 	out := make([]byte, len(v))
 	copy(out, v)
 	return out, true
@@ -898,7 +927,7 @@ func (p *Publisher) Walk(prefix string, fn func(path string, value []byte) bool)
 		}
 		startNode = next
 	}
-	walkLeaves(startNode, canonical, fn)
+	walkLeaves(startNode, canonical, fn, p.readEvicted)
 }
 
 // flushTimeout bounds how long Flush waits for the publish loop to
@@ -1199,10 +1228,18 @@ func (p *Publisher) doPublish(force bool) error {
 		if n.mutSeq != fs.mutSeq {
 			// Re-mutated during the publish: the encoded hash reflects
 			// stale content. Leave cached=false so it re-encodes next tick.
+			// An evicted node reads its untouched leaves from this encode
+			// now, since the Root that held the older one is about to go.
+			if n.evictedFrom != (skycipher.SHA256{}) {
+				n.evictedFrom = fs.hash
+			}
 			continue
 		}
 		n.cached = true
 		n.pubHash = fs.hash
+		if p.dropLeaves {
+			evict(n, fs.hash)
+		}
 	}
 	if p.dirtyGen == gen {
 		// No mutation landed during the publish — the live tree now
@@ -1267,11 +1304,12 @@ func cloneMemNode(n *memNode) *memNode {
 		return nil
 	}
 	out := &memNode{
-		leaves:  make(map[string][]byte, len(n.leaves)),
-		subs:    make(map[string]*memNode, len(n.subs)),
-		pubHash: n.pubHash,
-		cached:  n.cached,
-		mutSeq:  n.mutSeq,
+		leaves:      make(map[string][]byte, len(n.leaves)),
+		subs:        make(map[string]*memNode, len(n.subs)),
+		pubHash:     n.pubHash,
+		cached:      n.cached,
+		mutSeq:      n.mutSeq,
+		evictedFrom: n.evictedFrom,
 	}
 	for k, v := range n.leaves {
 		out.leaves[k] = v // share immutable leaf byte slice
@@ -1507,6 +1545,9 @@ type freshSub struct {
 // via the slow path and recorded in freshSubs.
 func encodeNode(up registry.Pack, n *memNode, path []string, freshSubs *[]freshSub) (TreeNode, error) {
 	var node TreeNode
+	if err := fillEvicted(up, n); err != nil {
+		return node, err
+	}
 
 	names := sortedNames(n)
 	if len(names) == 0 {
@@ -1703,9 +1744,19 @@ func invalidatePath(chain []*memNode) {
 
 // walkLeaves visits every leaf at-or-under the given node, prefixing
 // reported paths with the supplied path string.
-func walkLeaves(n *memNode, path string, fn func(string, []byte) bool) bool {
+// load, when set, supplies the leaves of an evicted node.
+func walkLeaves(n *memNode, path string, fn func(string, []byte) bool, load func(*memNode) map[string][]byte) bool {
+	var evicted map[string][]byte
+	if n.evictedFrom != (skycipher.SHA256{}) && load != nil {
+		evicted = load(n)
+	}
 	for _, name := range sortedNames(n) {
 		if leaf, ok := n.leaves[name]; ok {
+			if leaf == nil {
+				if leaf, ok = evicted[name]; !ok {
+					continue
+				}
+			}
 			full := name
 			if path != "" {
 				full = path + "/" + name
@@ -1722,7 +1773,7 @@ func walkLeaves(n *memNode, path string, fn func(string, []byte) bool) bool {
 			if path != "" {
 				full = path + "/" + name
 			}
-			if !walkLeaves(sub, full, fn) {
+			if !walkLeaves(sub, full, fn, load) {
 				return false
 			}
 		}

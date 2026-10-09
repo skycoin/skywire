@@ -160,9 +160,10 @@ func StartMetricsCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client,
 }
 
 // metricsPubConfig keeps the store under dataPath/cxo-metrics, or in memory
-// when there is no data path.
+// when there is no data path. A settled day is read back from the store
+// rather than kept in the heap as well.
 func metricsPubConfig(log *logging.Logger, dataPath string) treestore.PubConfig {
-	conf := treestore.PubConfig{Logger: log, InMemoryDB: true, DmsgPort: skyenv.DmsgTPDMetricsCXOPort}
+	conf := treestore.PubConfig{Logger: log, InMemoryDB: true, DmsgPort: skyenv.DmsgTPDMetricsCXOPort, DropPublishedLeaves: true}
 	if dataPath != "" {
 		conf.InMemoryDB, conf.DataDir = false, filepath.Join(dataPath, "cxo-metrics")
 	}
@@ -318,28 +319,24 @@ func planDayOps(bodies map[string][][]byte, dates []string, prev map[string]int,
 		if len(bs) == 0 {
 			continue
 		}
-		base := store.MetricsDayPath(date)
-		staleFrom := len(bs)
-		if len(bs) == 1 {
-			puts = append(puts, treestore.PutOp{Path: base, Value: bs[0]})
-			staleFrom = 0 // every part path from a previous split is now stale
-		} else {
-			deletes = append(deletes, treestore.PutOp{Path: base})
-			for i, b := range bs {
-				puts = append(puts, treestore.PutOp{Path: store.MetricsDayPartPath(date, i), Value: b})
-			}
+		// Every day is its own sub-tree, even in one part, so a settled
+		// day is published once and then only referenced; a day kept as a
+		// leaf of metrics/day was re-encoded with that node on every tick.
+		// A day not yet known in this form may be a single leaf an older
+		// publisher wrote, which has to go before its parts can land.
+		if prev[date] == 0 {
+			deletes = append(deletes, treestore.PutOp{Path: store.MetricsDayPath(date)})
+		}
+		for i, b := range bs {
+			puts = append(puts, treestore.PutOp{Path: store.MetricsDayPartPath(date, i), Value: b})
 		}
 		// A day that splits into fewer parts than last time leaves the
 		// leftover high-index leaves behind; a reader stitching by
 		// prefix would then serve records that no longer exist.
-		for i := staleFrom; i < prev[date]; i++ {
+		for i := len(bs); i < prev[date]; i++ {
 			deletes = append(deletes, treestore.PutOp{Path: store.MetricsDayPartPath(date, i)})
 		}
-		if len(bs) > 1 {
-			next[date] = len(bs)
-		} else {
-			next[date] = 0
-		}
+		next[date] = len(bs)
 	}
 
 	if prune {
