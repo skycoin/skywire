@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -77,8 +78,9 @@ func TestMetricsPubConfig(t *testing.T) {
 	if c := metricsPubConfig(log, ""); !c.InMemoryDB {
 		t.Fatal("no data path must keep the store in memory")
 	}
-	c := metricsPubConfig(log, "/var/lib/skywire/tpd/bandwidth")
-	if c.InMemoryDB || c.DataDir != "/var/lib/skywire/tpd/bandwidth/cxo-metrics" {
+	dir := filepath.Join("var", "lib", "skywire", "tpd", "bandwidth")
+	c := metricsPubConfig(log, dir)
+	if c.InMemoryDB || c.DataDir != filepath.Join(dir, "cxo-metrics") {
 		t.Fatalf("got InMemoryDB=%v DataDir=%q", c.InMemoryDB, c.DataDir)
 	}
 }

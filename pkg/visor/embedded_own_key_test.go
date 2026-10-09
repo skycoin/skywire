@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -119,7 +120,7 @@ func TestEmbeddedServiceRunsStandaloneWithoutKey(t *testing.T) {
 	var blocks []services.Block
 	for _, raw := range []string{
 		`{"type":"test-own-key","name":"keyless"}`,
-		`{"type":"test-own-key","name":"filekey","config_path":"` + path + `"}`,
+		`{"type":"test-own-key","name":"filekey","config_path":` + strconv.Quote(path) + `}`,
 	} {
 		var b services.Block
 		require.NoError(t, json.Unmarshal([]byte(raw), &b))
