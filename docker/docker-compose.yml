@@ -47,30 +47,34 @@ services:
       timeout: 3s
       retries: 5
 
-  # deployment-services collapses the nine deployment-side containers
-  # (transport-discovery, route-finder, dmsg-discovery, dmsg-server,
-  # setup-node, service-discovery, address-resolver, transport-setup,
-  # stun-server) into a single process driven by `skywire svc run`.
-  # Each service runs as a goroutine inside one binary, sharing a
-  # signal handler and merged log stream. Hostnames are preserved on
-  # the docker bridge via `aliases` so visor configs and the e2e
-  # test's extra_hosts continue to refer to each service by its
-  # original name; only the IPs change.
+  # visor-s is the deployment host, the way prod runs one: a single visor
+  # that is also the dmsg server (dmsg.server.config_path keeps the
+  # server's own key) and runs every deployment service in its process
+  # under the service's own key (embedded_services, from
+  # docker/integration/visorS.jq): dmsg-discovery, transport-discovery,
+  # route-finder, service-discovery, address-resolver, setup-node,
+  # transport-setup and stun. Each service is reached over dmsg at its own
+  # key, and its plain-HTTP addr serves the suite's direct curls; the
+  # service hostnames alias this container.
   #
-  # IP plan: visors=173.0.0.17 + intra=174.0.0.17 inherits stun's
-  # required pair (RFC 3489 needs two distinct IPs for full NAT type
-  # detection); srv=175.0.0.2 inherits TPD's address.
-  deployment-services:
+  # IP plan: visors=173.0.0.17 + intra=174.0.0.17 are stun's two IPs
+  # (RFC 3489 needs two distinct IPs for full NAT type detection), and
+  # 174.0.0.17:8080 is the dmsg server's public address.
+  visor-s:
     privileged: true
     image: "${REGISTRY}/skywire:${DOCKER_TAG}"
-    hostname: deployment-services
-    container_name: "deployment-services"
+    container_name: "visor-s"
+    hostname: visor-s
     networks:
       srv:
         ipv4_address: 175.0.0.2
         aliases:
           - dmsg-discovery
           - dmsg-server
+          - transport-discovery
+          - route-finder
+          - address-resolver
+          - service-discovery
           - setup-node
           - transport-setup
       intra:
@@ -78,6 +82,10 @@ services:
         aliases:
           - dmsg-discovery
           - dmsg-server
+          - transport-discovery
+          - route-finder
+          - address-resolver
+          - service-discovery
           - setup-node
           - transport-setup
           - stun-server
@@ -85,18 +93,11 @@ services:
         ipv4_address: 173.0.0.17
         aliases:
           - stun-server
-    depends_on:
-      redis:
-        condition: service_healthy
-    restart: always
-    environment:
-      - GODEBUG=madvdontneed=1
-    entrypoint: "/release/skywire svc run --config /release/services.json"
     volumes:
       - type: bind
-        source: ../docker/integration/services.json
-        target: /release/services.json
-        read_only: true
+        source: ../docker/integration/visorS.json
+        target: /opt/skywire/skywire-visor.json
+        read_only: false
       - type: bind
         source: ../docker/integration/dmsg-server.json
         target: /release/dmsg-server.json
@@ -109,70 +110,18 @@ services:
         source: ../docker/integration/transport-setup.json
         target: /release/transport-setup.json
         read_only: true
-    healthcheck:
-      # dmsg-discovery's /health stands for the whole process: the
-      # services share one supervisor, so one live HTTP listener
-      # means it is up. Several services starting concurrently on a
-      # 2-core CI runner contend, so start_period is generous.
-      test: ["CMD", "curl", "-sf", "http://127.0.0.1:9090/health"]
-      interval: 3s
-      timeout: 3s
-      retries: 30
-      start_period: 60s
-    stdin_open: true # docker run -i
-    tty: true        # docker run -t
-
-  # visor-s runs transport-discovery, route-finder, address-resolver
-  # and service-discovery INSIDE a visor (config.embedded_services),
-  # the way a deployment host does: each is mounted under a prefix on
-  # the visor's dmsg HTTP port and addressed by the visor's key
-  # (dmsg://<visor-s pk>:80/tpd, /rf, /ar, /sd — see
-  # docker/integration/services-config.json). The same handlers are
-  # also served on their old plain-HTTP ports so the suite's direct
-  # curls keep working; the service hostnames now alias this container.
-  visor-s:
-    privileged: true
-    image: "${REGISTRY}/skywire:${DOCKER_TAG}"
-    container_name: "visor-s"
-    hostname: visor-s
-    networks:
-      srv:
-        ipv4_address: 175.0.0.3
-        aliases:
-          - transport-discovery
-          - route-finder
-          - address-resolver
-          - service-discovery
-      intra:
-        ipv4_address: 174.0.0.18
-        aliases:
-          - transport-discovery
-          - route-finder
-          - address-resolver
-          - service-discovery
-    extra_hosts:
-      - "dmsg-discovery:174.0.0.17"
-      - "dmsg-server:174.0.0.17"
-      - "setup-node:174.0.0.17"
-      - "stun-server:174.0.0.17"
-      - "transport-setup:174.0.0.17"
-    volumes:
-      - type: bind
-        source: ../docker/integration/visorS.json
-        target: /opt/skywire/skywire-visor.json
-        read_only: false
     depends_on:
       redis:
-        condition: service_healthy
-      deployment-services:
         condition: service_healthy
     restart: always
     environment:
       - GODEBUG=madvdontneed=1
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
     healthcheck:
-      # transport-discovery's plain-HTTP /health, served by the visor.
-      test: ["CMD", "curl", "-sf", "http://127.0.0.1:9094/health"]
+      # dmsg-discovery and transport-discovery, served by the visor. Every
+      # service starting at once on a 2-core CI runner contends, so
+      # start_period is generous.
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9090/health && curl -sf http://127.0.0.1:9094/health"]
       interval: 3s
       timeout: 3s
       retries: 30
@@ -227,10 +176,10 @@ services:
       - "visor-c:173.0.0.13"
       - "dmsg-discovery:174.0.0.17"
       - "dmsg-server:174.0.0.17"
-      - "transport-discovery:174.0.0.18"
-      - "route-finder:174.0.0.18"
-      - "address-resolver:174.0.0.18"
-      - "service-discovery:174.0.0.18"
+      - "transport-discovery:174.0.0.17"
+      - "route-finder:174.0.0.17"
+      - "address-resolver:174.0.0.17"
+      - "service-discovery:174.0.0.17"
       - "setup-node:174.0.0.17"
       - "stun-server:174.0.0.17"
       - "transport-setup:174.0.0.17"
@@ -275,10 +224,10 @@ services:
       - "visor-c:173.0.0.13"
       - "dmsg-discovery:174.0.0.17"
       - "dmsg-server:174.0.0.17"
-      - "transport-discovery:174.0.0.18"
-      - "route-finder:174.0.0.18"
-      - "address-resolver:174.0.0.18"
-      - "service-discovery:174.0.0.18"
+      - "transport-discovery:174.0.0.17"
+      - "route-finder:174.0.0.17"
+      - "address-resolver:174.0.0.17"
+      - "service-discovery:174.0.0.17"
       - "setup-node:174.0.0.17"
       - "stun-server:174.0.0.17"
       - "transport-setup:174.0.0.17"
@@ -296,8 +245,6 @@ services:
         target: /opt/integration/hypervisor.key
         read_only: false
     depends_on:
-      deployment-services:
-        condition: service_healthy
       visor-s:
         condition: service_healthy
     restart: always
@@ -333,10 +280,10 @@ services:
       - "visor-b:173.0.0.12"
       - "dmsg-discovery:174.0.0.17"
       - "dmsg-server:174.0.0.17"
-      - "transport-discovery:174.0.0.18"
-      - "route-finder:174.0.0.18"
-      - "address-resolver:174.0.0.18"
-      - "service-discovery:174.0.0.18"
+      - "transport-discovery:174.0.0.17"
+      - "route-finder:174.0.0.17"
+      - "address-resolver:174.0.0.17"
+      - "service-discovery:174.0.0.17"
       - "setup-node:174.0.0.17"
       - "stun-server:174.0.0.17"
       - "transport-setup:174.0.0.17"
@@ -377,18 +324,17 @@ services:
       - srv
     extra_hosts:
       # Static host entries bypass Docker embedded DNS (127.0.0.11)
-      # which is flaky on GH Actions ("server misbehaving"). All
-      # collapsed deployment services point at the deployment-services
-      # container's intra IP (174.0.0.17); UT remains separate.
+      # which is flaky on GH Actions ("server misbehaving"). Every
+      # deployment service is in visor-s, at its intra IP (174.0.0.17).
       - "visor-a:173.0.0.11"
       - "visor-b:173.0.0.12"
       - "visor-c:173.0.0.13"
       - "dmsg-discovery:174.0.0.17"
       - "dmsg-server:174.0.0.17"
-      - "transport-discovery:174.0.0.18"
-      - "route-finder:174.0.0.18"
-      - "address-resolver:174.0.0.18"
-      - "service-discovery:174.0.0.18"
+      - "transport-discovery:174.0.0.17"
+      - "route-finder:174.0.0.17"
+      - "address-resolver:174.0.0.17"
+      - "service-discovery:174.0.0.17"
       - "setup-node:174.0.0.17"
       - "stun-server:174.0.0.17"
       - "transport-setup:174.0.0.17"

@@ -13,7 +13,7 @@
 // in /health (dmsg-only AR) — so every visor logged "SUDPH unavailable" and the
 // SUDPH leg of TestEnv_Tp always skipped.
 //
-// The deployment AR now advertises public_udp_addr (docker/integration/services.json),
+// The deployment AR now advertises public_udp_addr (docker/integration/visorS.jq),
 // so /health carries udp_address, visors bind SUDPH and register their
 // STUN-discovered address, and the hole punch completes over the directly-reachable
 // Docker network. This test asserts that path works end to end.

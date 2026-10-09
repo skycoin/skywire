@@ -38,7 +38,7 @@ import (
 )
 
 // dmsgServerPK is the deployment dmsg-server's public key
-// (docker/integration/dmsg-server.json + services.json). Its WebTransport
+// (docker/integration/dmsg-server.json, run by visor-s). Its WebTransport
 // endpoint is advertised once ServeWebTransport binds and registers.
 const dmsgServerPK = "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282"
 
