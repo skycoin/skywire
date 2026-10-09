@@ -87,3 +87,39 @@ func TestRoundSig2(t *testing.T) {
 	require.Equal(t, 150.0, roundSig2(153))
 	require.Equal(t, 0.0012, roundSig2(0.00123))
 }
+
+// After the first cycle only the shards whose transports changed are encoded
+// again, and a visor left with no transports has its shard deleted.
+func TestRoutingChangedShards(t *testing.T) {
+	k := sortedKeys(3)
+	entries := []*transport.Entry{tp(k[0], k[1], 12), tp(k[0], k[2], 5), tp(k[1], k[2], 7)}
+	r := &RoutingCXOPublisher{}
+
+	lists := routingLists(entries)
+	ops, err := r.changedShards(lists)
+	require.NoError(t, err)
+	require.Len(t, ops, 2, "the first cycle puts every shard")
+	r.lists = lists
+
+	entries[2].Latency = 7.04 // below the rounding
+	lists = routingLists(entries)
+	ops, err = r.changedShards(lists)
+	require.NoError(t, err)
+	require.Empty(t, ops, "nothing changed")
+	r.lists = lists
+
+	entries[2].Latency = 30
+	lists = routingLists(entries)
+	ops, err = r.changedShards(lists)
+	require.NoError(t, err)
+	require.Len(t, ops, 1)
+	require.Equal(t, RoutingPathPrefix+k[1].Hex(), ops[0].Path)
+	r.lists = lists
+
+	lists = routingLists(entries[:2])
+	ops, err = r.changedShards(lists)
+	require.NoError(t, err)
+	require.Len(t, ops, 1)
+	require.Equal(t, RoutingPathPrefix+k[1].Hex(), ops[0].Path)
+	require.Nil(t, ops[0].Value, "k[1] has no transports left")
+}

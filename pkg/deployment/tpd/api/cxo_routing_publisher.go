@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -51,10 +52,9 @@ type RoutingCXOPublisher struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 
-	// shards is the set of shard paths the last cycle wrote, so the next
-	// can delete the ones whose visor has no transports left. Only the
-	// publish loop touches it.
-	shards map[string]bool
+	// lists are the shards the last cycle published, by path, so the next
+	// puts only what changed. Only the publish loop touches it.
+	lists map[string][]allTransportsWireEntry
 
 	mu        sync.Mutex
 	lastError error
@@ -73,7 +73,7 @@ func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client,
 	}
 	pub.SetAllowlist(nil) // open feed: every visor routes on it
 	pubCtx, cancel := context.WithCancel(ctx)
-	rp := &RoutingCXOPublisher{api: api, pub: pub, log: log, cancel: cancel, done: make(chan struct{}), shards: map[string]bool{}}
+	rp := &RoutingCXOPublisher{api: api, pub: pub, log: log, cancel: cancel, done: make(chan struct{})}
 	if logger != nil {
 		logger.WithField("feed_pk", pub.Feed()).WithField("dmsg_port", skyenv.DmsgTPDRoutingCXOPort).
 			Info("CXO routing publisher running")
@@ -104,40 +104,58 @@ func (r *RoutingCXOPublisher) publishOnce(ctx context.Context) {
 		r.recordError(err)
 		return
 	}
-	shards, err := routingShards(entries)
+	lists := routingLists(entries)
+	ops, err := r.changedShards(lists)
 	if err != nil {
 		r.log.WithError(err).Warn("routing shard encode failed")
 		r.recordError(err)
 		return
 	}
-	// Sized for the puts; the few shards that went away since the last
-	// publish grow it. (A sum of the two lengths here is what CodeQL's
-	// allocation-size-overflow check flags.)
-	ops := make([]treestore.PutOp, 0, len(shards))
-	for path := range r.shards {
-		if _, still := shards[path]; !still {
-			ops = append(ops, treestore.PutOp{Path: path})
+	// Every cycle still publishes a Root, as it did when every shard was put,
+	// so a new subscriber always finds a fresh head. One stored shard will do.
+	if len(ops) == 0 {
+		for path := range lists {
+			if body, ok := r.pub.Get(path); ok {
+				ops = append(ops, treestore.PutOp{Path: path, Value: body})
+			}
+			break
 		}
 	}
-	for path, body := range shards {
-		ops = append(ops, treestore.PutOp{Path: path, Value: body})
-	}
-	sort.Slice(ops, func(i, j int) bool { return ops[i].Path < ops[j].Path })
 	if err := r.pub.PutBatch(ops); err != nil {
 		r.log.WithError(err).Warn("routing PutBatch failed")
 		r.recordError(err)
 		return
 	}
-	next := make(map[string]bool, len(shards))
-	for path := range shards {
-		next[path] = true
-	}
-	r.shards = next
+	r.lists = lists
 }
 
-// routingShards groups entries into one gzipped leaf per lower-keyed edge.
-// Output is deterministic: an unchanged shard yields identical bytes.
-func routingShards(entries []*transport.Entry) (map[string][]byte, error) {
+// changedShards returns the puts that bring the published tree from r.lists
+// to lists: only a shard whose list changed is encoded again, and a shard
+// whose visor has no transports left is deleted.
+func (r *RoutingCXOPublisher) changedShards(lists map[string][]allTransportsWireEntry) ([]treestore.PutOp, error) {
+	var ops []treestore.PutOp
+	for path := range r.lists {
+		if _, still := lists[path]; !still {
+			ops = append(ops, treestore.PutOp{Path: path})
+		}
+	}
+	for path, list := range lists {
+		if prev, ok := r.lists[path]; ok && slices.Equal(prev, list) {
+			continue
+		}
+		body, err := encodeShard(list)
+		if err != nil {
+			return nil, err
+		}
+		ops = append(ops, treestore.PutOp{Path: path, Value: body})
+	}
+	sort.Slice(ops, func(i, j int) bool { return ops[i].Path < ops[j].Path })
+	return ops, nil
+}
+
+// routingLists groups entries by their lower-keyed edge into one sorted list
+// per shard path.
+func routingLists(entries []*transport.Entry) map[string][]allTransportsWireEntry {
 	byPK := make(map[cipher.PubKey][]allTransportsWireEntry)
 	for _, e := range entries {
 		if e == nil || e.Edges[0] == e.Edges[1] {
@@ -152,7 +170,7 @@ func routingShards(entries []*transport.Entry) (map[string][]byte, error) {
 			ThroughputBps: roundSig2(e.ThroughputBps),
 		})
 	}
-	out := make(map[string][]byte, len(byPK))
+	out := make(map[string][]allTransportsWireEntry, len(byPK))
 	for pk, list := range byPK {
 		sort.Slice(list, func(i, j int) bool {
 			if list[i].Edges[1] != list[j].Edges[1] {
@@ -160,11 +178,29 @@ func routingShards(entries []*transport.Entry) (map[string][]byte, error) {
 			}
 			return list[i].Type < list[j].Type
 		})
-		body, err := json.Marshal(list)
+		out[RoutingPathPrefix+pk.Hex()] = list
+	}
+	return out
+}
+
+func encodeShard(list []allTransportsWireEntry) ([]byte, error) {
+	body, err := json.Marshal(list)
+	if err != nil {
+		return nil, err
+	}
+	return cxoutils.Gzip(body), nil
+}
+
+// routingShards encodes every shard: one gzipped leaf per lower-keyed edge.
+func routingShards(entries []*transport.Entry) (map[string][]byte, error) {
+	lists := routingLists(entries)
+	out := make(map[string][]byte, len(lists))
+	for path, list := range lists {
+		body, err := encodeShard(list)
 		if err != nil {
 			return nil, err
 		}
-		out[RoutingPathPrefix+pk.Hex()] = cxoutils.Gzip(body)
+		out[path] = body
 	}
 	return out, nil
 }
