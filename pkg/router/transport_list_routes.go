@@ -244,9 +244,14 @@ func (r *router) listRoutes3Hop(ctx context.Context, log *logging.Logger, src, d
 	ctx, cancel := context.WithTimeout(ctx, listRouteTimeout)
 	defer cancel()
 
-	localTps := r.localRouteTps(src)
+	return r.listRoutes3HopFrom(ctx, log, f, src, dst, r.localRouteTps(src), opts)
+}
+
+// listRoutes3HopFrom is listRoutes3Hop over the given first-hop transports.
+func (r *router) listRoutes3HopFrom(ctx context.Context, log *logging.Logger, f TransportListFetcher, src, dst cipher.PubKey, localTps []oracleLocalTp, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
 	first := firstHopsByPeer(src, dst, localTps, opts)
 	if len(first) == 0 {
+		r.routeSource.listNoFirstHop.Add(1)
 		return nil, nil, errors.New("transport-list routes: no usable first hop")
 	}
 
@@ -255,9 +260,11 @@ func (r *router) listRoutes3Hop(ctx context.Context, log *logging.Logger, src, d
 		dstEntries = l.Transports()
 	} else if o := r.dstTransportOracle(); o != nil {
 		if dstEntries, err = o.DstTransports(ctx, src, dst); err != nil {
+			r.routeSource.listNoDstList.Add(1)
 			return nil, nil, err
 		}
 	} else {
+		r.routeSource.listNoDstList.Add(1)
 		return nil, nil, ferr
 	}
 
@@ -285,8 +292,10 @@ func (r *router) listRoutes3Hop(ctx context.Context, log *logging.Logger, src, d
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
+			r.routeSource.listFetches.Add(1)
 			l, lerr := f.FetchTransportList(ctx, pk)
 			if lerr != nil {
+				r.routeSource.listFetchFails.Add(1)
 				return
 			}
 			mu.Lock()
@@ -296,8 +305,13 @@ func (r *router) listRoutes3Hop(ctx context.Context, log *logging.Logger, src, d
 	}
 	wg.Wait()
 
+	if len(lists) == 0 {
+		r.routeSource.listNoNeighborList.Add(1)
+		return nil, nil, errors.New("transport-list routes: no neighbor answered with its list")
+	}
 	legs, err := compute3HopRoutes(src, dst, localTps, lists, dstEntries, opts)
 	if err != nil {
+		r.routeSource.listNoPath.Add(1)
 		return nil, nil, err
 	}
 	r.routeSource.listRoutes.Add(1)
