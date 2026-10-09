@@ -35,6 +35,8 @@ func (st *store) AddStart(ctx context.Context, s Start) error {
 }
 
 func (st *store) Starts(ctx context.Context, from, to time.Time) ([]Start, error) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	return st.b.startsOf(ctx, from, to)
 }
 
