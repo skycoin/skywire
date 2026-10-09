@@ -31,8 +31,8 @@
     },
     "stcpr_port": 40550,
     "sudph_port": 40560,
-    "discovery_dmsg": "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/tpd",
-    "address_resolver_dmsg": "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/ar"
+    "discovery_dmsg": "dmsg://032edaa87383c6987eb5037fcf7281745e7db142c65a4f537589fe44d6b07c16a8:80",
+    "address_resolver_dmsg": "dmsg://0283c63541f61e21f3b490feb1f20c9b69e2ecea691268c243339c0dc7d1b553d7:80"
   },
   "routing": {
     "route_setup_nodes": [
@@ -41,7 +41,7 @@
     ],
     "route_finder_timeout": "10s",
     "min_hops": 1,
-    "route_finder_dmsg": "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/rf"
+    "route_finder_dmsg": "dmsg://0206f60cafeb0d1ab58dd8aba5a36daa707497642280c91a1043860141e23f5a66:80"
   },
   "launcher": {
     "apps": [
@@ -73,7 +73,7 @@
     "server_addr": ":5505",
     "bin_path": "/release",
     "display_node_ip": false,
-    "service_discovery_dmsg": "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/sd"
+    "service_discovery_dmsg": "dmsg://028d2b274019b46e8ac68b1c147cf7ef2cdf799f0271d252efe87a73bdc847b83e:80"
   },
   "hypervisors": [
     "0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe"

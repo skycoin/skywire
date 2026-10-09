@@ -523,7 +523,7 @@ func TestEnv_Tp(t *testing.T) {
 					// DMSG multi-hop-through-server transports remain flaky in Docker E2E
 					// (the DMSG server is an unaccounted intermediary), so keep them a soft
 					// skip. SUDPH now works: the deployment AR advertises a udp_address
-					// (docker/integration/services.json → public_udp_addr), so STUN/hole
+					// (docker/integration/visorS.jq → public_udp_addr), so STUN/hole
 					// punching completes — it is enforced like the other UDP transports.
 					// A dedicated hard-assert lives in TestEnv_SUDPHTransport (sudph_test.go).
 					if tpType == types.DMSG {

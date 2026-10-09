@@ -46,9 +46,9 @@
 	},
 	"transport": {
 		"discovery": "",
-		"discovery_dmsg": "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/tpd",
+		"discovery_dmsg": "dmsg://032edaa87383c6987eb5037fcf7281745e7db142c65a4f537589fe44d6b07c16a8:80",
 		"address_resolver": "",
-		"address_resolver_dmsg": "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/ar",
+		"address_resolver_dmsg": "dmsg://0283c63541f61e21f3b490feb1f20c9b69e2ecea691268c243339c0dc7d1b553d7:80",
 		"public_autoconnect": true,
 		"transport_setup": [
 			"0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
@@ -67,13 +67,13 @@
 			"02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1"
 		],
 		"route_finder": "",
-		"route_finder_dmsg": "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/rf",
+		"route_finder_dmsg": "dmsg://0206f60cafeb0d1ab58dd8aba5a36daa707497642280c91a1043860141e23f5a66:80",
 		"route_finder_timeout": "10s",
 		"min_hops": 1
 	},
 	"launcher": {
 		"service_discovery": "",
-		"service_discovery_dmsg": "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/sd",
+		"service_discovery_dmsg": "dmsg://028d2b274019b46e8ac68b1c147cf7ef2cdf799f0271d252efe87a73bdc847b83e:80",
 		"apps": [
 			{
 				"name": "vpn-client",
