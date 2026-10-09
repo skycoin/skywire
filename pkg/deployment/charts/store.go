@@ -117,6 +117,8 @@ func (st *store) rollup(ctx context.Context, current time.Time) error {
 }
 
 func (st *store) Range(ctx context.Context, from, to time.Time, hourly bool) ([]Sample, error) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	return st.b.rangeOf(ctx, hourly, from, to)
 }
 
