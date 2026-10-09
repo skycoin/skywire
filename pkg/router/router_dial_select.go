@@ -30,6 +30,7 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 	if opts == nil {
 		opts = DefaultDialOptions() // nolint
 	}
+	r.routeSource.requests.Add(1)
 
 	// Check if force local routes is enabled
 	forceLocal := r.forceLocalRoutes.Load()
@@ -80,6 +81,7 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 			} else {
 				log.WithField("transport", hop.TpID).
 					Debug("1-hop route over the existing transport; skipping the route finder")
+				r.routeSource.directHops.Add(1)
 				if opts != nil {
 					opts.note("direct-hop %s", hop.TpID.String()[:8])
 				}
@@ -96,7 +98,11 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 			hi = uint16(e) //nolint:gosec
 		}
 		if hi <= 2 {
-			if oFwd, oRev, oErr := r.oracle2HopRoutes(ctx, log, src, dst, opts); oErr == nil {
+			oFwd, oRev, oErr := r.oracle2HopRoutes(ctx, log, src, dst, opts)
+			if !errors.Is(oErr, errRSNOracleInert) {
+				r.routeSource.oracleAttempts.Add(1)
+			}
+			if oErr == nil {
 				// The oracle knows nothing of a diversify dial's first-hop
 				// exclusions, and it returns before the finder filter below: it
 				// handed every extra tunnel the same direct first hop its sibling
@@ -109,6 +115,7 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 					if opts.DiversifyTransports {
 						opts.note("oracle: path over a free first hop")
 					}
+					r.routeSource.oracleRoutes.Add(1)
 					return oFwd, oRev, nil
 				}
 			} else if !errors.Is(oErr, errRSNOracleInert) {
