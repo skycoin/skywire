@@ -42,6 +42,9 @@ type RouteSourceStats struct {
 	ListNoDstList      int64 `json:"list_no_dst_list"`
 	ListNoNeighborList int64 `json:"list_no_neighbor_list"`
 	ListNoPath         int64 `json:"list_no_path"`
+	// ListExcluded is list routes found but every candidate was a held or
+	// recently dead first hop.
+	ListExcluded int64 `json:"list_excluded"`
 	// ListFetches is neighbor lists asked for; ListFetchFails is how many
 	// did not come back.
 	ListFetches    int64 `json:"list_fetches"`
@@ -67,6 +70,7 @@ type routeSourceCounters struct {
 	listNoDstList      atomic.Int64
 	listNoNeighborList atomic.Int64
 	listNoPath         atomic.Int64
+	listExcluded       atomic.Int64
 	listFetches        atomic.Int64
 	listFetchFails     atomic.Int64
 }
@@ -90,6 +94,7 @@ func (r *router) RouteSourceStats() RouteSourceStats {
 		ListNoDstList:        c.listNoDstList.Load(),
 		ListNoNeighborList:   c.listNoNeighborList.Load(),
 		ListNoPath:           c.listNoPath.Load(),
+		ListExcluded:         c.listExcluded.Load(),
 		ListFetches:          c.listFetches.Load(),
 		ListFetchFails:       c.listFetchFails.Load(),
 	}
