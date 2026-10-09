@@ -9,10 +9,12 @@ Display and manage transports of the LOCAL visor.
 	UUID (the Transport ID) with a Transport Type identifying its
 	implementation. Types: stcp stcpr sudph dmsg squic webrtc ws wt
 
-	This command has three distinct transport views:
+	This command has four distinct transport views:
 	  tp                      LOCAL visor's live transports (this command)
 	  tp --remote <pk>        a REMOTE visor's live transports, via the
 	                          Transport Setup Node (see also 'tps list')
+	  tp --skynet <pk>        the list a REMOTE visor signs and serves, read
+	                          over a skywire transport to it
 	  tp all / tp tpd-stats   the whole-network view registered in the
 	                          Transport Discovery (TPD)
 
@@ -65,6 +67,7 @@ skywire cli tp
   -s, --stats             show transport statistics (count by type, unique visors)
       --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
       --remote strings    list transports on remote visor(s) via TPS (comma-separated PKs)
+      --skynet strings    list the transports remote visor(s) sign and serve, fetched over skywire transports (comma-separated PKs)
   -L, --live              live-refresh mode (bubbletea TUI, 1s tick); shows transport bandwidth/latency updating in place. Skips --more service-disc fetches per tick; not compatible with --remote/--id/--tptypes
 ```
 

@@ -44,6 +44,7 @@ var (
 	utURL            string
 	sdURL            string
 	listRemoteVisors []string
+	listSkynetVisors []string
 	tpLive           bool
 	// RootCmd is tpCmd
 	RootCmd = tpCmd
@@ -93,6 +94,7 @@ func init() {
 	tpCmd.Flags().BoolVarP(&showStats, "stats", "s", false, "show transport statistics (count by type, unique visors)")
 	tpCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	tpCmd.Flags().StringSliceVar(&listRemoteVisors, "remote", nil, "list transports on remote visor(s) via TPS (comma-separated PKs)")
+	tpCmd.Flags().StringSliceVar(&listSkynetVisors, "skynet", nil, "list the transports remote visor(s) sign and serve, fetched over skywire transports (comma-separated PKs)")
 	tpCmd.Flags().BoolVarP(&tpLive, "live", "L", false, "live-refresh mode (bubbletea TUI, 1s tick); shows transport bandwidth/latency updating in place. Skips --more service-disc fetches per tick; not compatible with --remote/--id/--tptypes")
 }
 
@@ -107,10 +109,12 @@ var tpCmd = &cobra.Command{
 	UUID (the Transport ID) with a Transport Type identifying its
 	implementation. Types: stcp stcpr sudph dmsg squic webrtc ws wt
 
-	This command has three distinct transport views:
+	This command has four distinct transport views:
 	  tp                      LOCAL visor's live transports (this command)
 	  tp --remote <pk>        a REMOTE visor's live transports, via the
 	                          Transport Setup Node (see also 'tps list')
+	  tp --skynet <pk>        the list a REMOTE visor signs and serves, read
+	                          over a skywire transport to it
 	  tp all / tp tpd-stats   the whole-network view registered in the
 	                          Transport Discovery (TPD)
 
@@ -129,8 +133,8 @@ var tpCmd = &cobra.Command{
 		// tick's Transports() RPC (the tp.Log fields). Branch early so
 		// we don't waste work on incompatible flags.
 		if tpLive {
-			if len(listRemoteVisors) > 0 || tpTypes || showStats || tpID != "" {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--live cannot be combined with --remote/--tptypes/--stats/--id"))
+			if len(listRemoteVisors) > 0 || len(listSkynetVisors) > 0 || tpTypes || showStats || tpID != "" {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--live cannot be combined with --remote/--skynet/--tptypes/--stats/--id"))
 			}
 			err := livetui.Run(func(ctx context.Context) (string, error) {
 				return renderTransportListLive(rpcClient)
@@ -141,6 +145,14 @@ var tpCmd = &cobra.Command{
 			if err != nil && !errors.Is(err, context.Canceled) {
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
+			return
+		}
+
+		if len(listSkynetVisors) > 0 {
+			if len(listRemoteVisors) > 0 {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--skynet and --remote are different sources; use one"))
+			}
+			listSkynetTransports(cmd, rpcClient, listSkynetVisors)
 			return
 		}
 
