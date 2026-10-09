@@ -1,5 +1,7 @@
 //go:build !js && !mobile
 
+//go:embedbuild -gzip -strip -tags=withoutsystray,withoutgotop blob/skywire.wasm.gz GOOS=js GOARCH=wasm github.com/skycoin/skywire
+
 // Package execwasm pkg/wasmhv/execwasm/embed_native.go c3-wasm-embed
 package execwasm
 
