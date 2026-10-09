@@ -150,7 +150,7 @@ jobs:
             registry.gitlab.com/fdroid/fdroidserver:buildserver-trixie \
             bash /ci/android/fdroid/check.sh
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v6
         with:
           name: fdroid-unsigned-apk
           path: fdroid-out/*.apk
