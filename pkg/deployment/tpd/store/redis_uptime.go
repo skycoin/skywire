@@ -159,6 +159,14 @@ func (s *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now tim
 	return timelines
 }
 
+// A transport's day hash (type, last_seen) and the day's online set are only
+// ever read for today, so they outlive the day by half a day instead of
+// keeping eight. The timeline, read back a week, keeps eight.
+const (
+	tpUptimeTodayTTL    = 36 * time.Hour
+	tpUptimeTimelineTTL = 8 * 24 * time.Hour
+)
+
 func tpUptimeKey(tpID string, date string) string {
 	return fmt.Sprintf("%s:tp-uptime:%s:%s", serviceName, tpID, date)
 }
@@ -195,14 +203,14 @@ func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUI
 
 	pipe.HSet(ctx, key, "type", tpType)
 	pipe.HSet(ctx, key, "last_seen", at.Unix())
-	pipe.Expire(ctx, key, 8*24*time.Hour)
+	pipe.Expire(ctx, key, tpUptimeTodayTTL)
 
 	pipe.SAdd(ctx, tpUptimeOnlineKey(date), idStr)
-	pipe.Expire(ctx, tpUptimeOnlineKey(date), 8*24*time.Hour)
+	pipe.Expire(ctx, tpUptimeOnlineKey(date), tpUptimeTodayTTL)
 
 	tlKey := tpUptimeTimelineKey(idStr, date)
 	pipe.SetBit(ctx, tlKey, currentTimelineSlot(at), 1)
-	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
+	pipe.Expire(ctx, tlKey, tpUptimeTimelineTTL)
 
 	if _, err := pipe.Exec(ctx); err != nil {
 		// Reward-critical (see RecordHeartbeat): surface store failures at Warn
@@ -241,7 +249,7 @@ func (s *redisStore) IngestTransportTimeline(ctx context.Context, tpID uuid.UUID
 	pipe := s.client.Pipeline()
 	pipe.Set(ctx, stagingKey, string(bitmap), time.Minute)
 	pipe.BitOpOr(ctx, tlKey, tlKey, stagingKey)
-	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
+	pipe.Expire(ctx, tlKey, tpUptimeTimelineTTL)
 	pipe.Del(ctx, stagingKey)
 	_, err := pipe.Exec(ctx)
 	return err
