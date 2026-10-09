@@ -45,7 +45,13 @@ func load() {
 			return
 		}
 		stamp = trailerStamp(size)
-		rev = embeddedRevision()
+		var recorded string
+		rev, recorded = embeddedRevision()
+		// A module built with the binary by //go:embedbuild replaces the blob
+		// but not revision.txt, so the recorded commit does not describe it.
+		if recorded != "" && recorded != stamp {
+			rev = ""
+		}
 	})
 }
 
