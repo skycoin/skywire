@@ -92,6 +92,8 @@ type redisStore struct {
 	live liveSet
 	// leafArchive keeps settled metrics leaves on disk (leaf_archive.go).
 	leafArchive string
+	// archived caches decoded archived days for older bandwidth (bw_archive.go).
+	archived archivedDayCache
 }
 
 func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl time.Duration, logger *logging.Logger) (*redisStore, error) {

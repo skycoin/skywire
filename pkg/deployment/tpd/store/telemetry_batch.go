@@ -109,12 +109,12 @@ func (s *redisStore) applyTelemetry(ctx context.Context, updates []TelemetryUpda
 			}
 			bw[i] = bandwidthScript.EvalSha(ctx, pipe, keys,
 				reporterHex, u.Sent, u.Recv, now.Unix(), typeOrUnknown(u.Type),
-				int64((10*time.Minute)/time.Second), historyTTLSeconds, int64((400*24*time.Hour)/time.Second), date)
+				int64((10*time.Minute)/time.Second), historyTTLSeconds, int64((400*24*time.Hour)/time.Second), date, s.bandwidthDailyTTLFor())
 			if u.SameNetwork {
 				// Marked on the day's hash itself, beside the counters it
 				// qualifies; it lives exactly as long as they do.
 				pipe.HSet(ctx, keys[1], sameNetworkField, "1")
-				pipe.Expire(ctx, keys[1], bandwidthHistoryTTL)
+				pipe.Expire(ctx, keys[1], time.Duration(s.bandwidthDailyTTLFor())*time.Second)
 			}
 		}
 		if j, ok := tputIdx[i]; ok {
