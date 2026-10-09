@@ -14,7 +14,12 @@ import (
 var streamCensus = struct {
 	mu sync.Mutex
 	m  map[*censusEntry]weak.Pointer[Stream]
-}{m: make(map[*censusEntry]weak.Pointer[Stream])}
+	// pruneAt is the size at which censusTrack next drops collected streams,
+	// so the map stays bounded when nothing reads the census.
+	pruneAt int
+}{m: make(map[*censusEntry]weak.Pointer[Stream]), pruneAt: censusPruneMin}
+
+const censusPruneMin = 1024
 
 type censusEntry struct {
 	mu        sync.Mutex
@@ -31,6 +36,10 @@ func censusTrack(s *Stream, initiator bool) {
 	e := &censusEntry{initiator: initiator, state: "open", created: time.Now()}
 	s.census.Store(e)
 	streamCensus.mu.Lock()
+	if len(streamCensus.m) >= streamCensus.pruneAt {
+		pruneCensusLocked()
+		streamCensus.pruneAt = max(2*len(streamCensus.m), censusPruneMin)
+	}
 	streamCensus.m[e] = weak.Make(s)
 	streamCensus.mu.Unlock()
 }
@@ -95,4 +104,12 @@ func StreamCensus() []StreamCensusRow {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Count > out[j].Count })
 	return out
+}
+
+func pruneCensusLocked() {
+	for e, wp := range streamCensus.m {
+		if wp.Value() == nil {
+			delete(streamCensus.m, e)
+		}
+	}
 }

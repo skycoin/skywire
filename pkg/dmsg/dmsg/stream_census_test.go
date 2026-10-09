@@ -83,3 +83,18 @@ func TestStreamCensus_TracksLifecycle(t *testing.T) {
 		return censusCount(true, "closed")+censusCount(false, "closed") == 0
 	}, 5*time.Second, 50*time.Millisecond, "closed streams stayed in memory")
 }
+
+// Nothing reads the census on a server, so tracking alone must keep the map
+// from holding an entry for every stream ever made.
+func TestStreamCensus_BoundedWithoutReads(t *testing.T) {
+	for i := 0; i < 20*censusPruneMin; i++ {
+		censusTrack(&Stream{}, true)
+		if i%censusPruneMin == 0 {
+			runtime.GC()
+		}
+	}
+	streamCensus.mu.Lock()
+	n := len(streamCensus.m)
+	streamCensus.mu.Unlock()
+	require.Less(t, n, 4*censusPruneMin)
+}
