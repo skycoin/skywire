@@ -30,7 +30,7 @@ func (m *HD96kMode) hd96kMDCTForward(input []float32) []float32 {
 		return nil
 	}
 	coeffs := make([]float32, frameSize)
-	mdctForwardOverlapF32Scratch(input, m.Overlap, coeffs, nil, nil, nil, nil)
+	mdctForwardOverlapF32Scratch(input, m.Overlap, coeffs, nil, nil, nil, nil, nil)
 	return coeffs
 }
 

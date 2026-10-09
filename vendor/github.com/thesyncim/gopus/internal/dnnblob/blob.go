@@ -1,11 +1,12 @@
-// Package dnnblob parses and validates the libopus USE_WEIGHTS_FILE neural
-// weights blob and exposes typed views over its records.
+// Package dnnblob parses the USE_WEIGHTS_FILE format read by libopus
+// `dnn/parse_lpcnet_weights.c`. A blob contains named records with a type tag,
+// payload byte size, and weight data. [Clone] validates the record framing and
+// retains a copy of the input; each record's data view refers to that copy.
 //
-// A blob is the on-disk WeightArray container libopus loads with
-// parse_weights() (dnn/parse_lpcnet_weights.c): a sequence of named records,
-// each carrying a type tag and a payload of float32, int32 or int8 weights. The
-// DRED, OSCE and LPCNet model loaders bind their layers from these records, so
-// this package mirrors the libopus blob format and record types exactly.
+// The package checks required record names for known DRED, OSCE, and LPCNet
+// model families and exposes typed float32, int32, and int8 views. Model loaders
+// bind those views to layers and validate layer dimensions; this package does
+// not execute the networks.
 package dnnblob
 
 import (
@@ -34,7 +35,9 @@ type Record struct {
 	Data []byte
 }
 
-// Blob stores a validated copy of a libopus-style weights blob and its records.
+// Blob stores a framing-validated copy of a libopus-style weights blob and its
+// records. Raw, Records, and Record.Data are mutable; each Record.Data payload
+// aliases Raw. Leave them unchanged while model views use the blob.
 type Blob struct {
 	Raw     []byte
 	Records []Record
@@ -155,54 +158,59 @@ func optionalFloatMirror(required []string, name string) bool {
 	return slices.Contains(required, int8Name)
 }
 
-// SupportsPitchDNN reports whether the blob contains the pitch model family
-// libopus uses from both DRED and PLC/FARGAN control loaders.
+// SupportsPitchDNN reports whether the required pitch-model record names are
+// present for the libopus DRED and PLC/FARGAN control loaders.
 func (b *Blob) SupportsPitchDNN() bool {
 	return b.validateRecordNames(pitchDNNRequiredRecordNames) == nil
 }
 
-// SupportsPLC reports whether the blob contains the PLC model family.
+// SupportsPLC reports whether the required PLC model record names are present.
 func (b *Blob) SupportsPLC() bool {
 	return b.validateRecordNames(plcRequiredRecordNames) == nil
 }
 
-// SupportsFARGAN reports whether the blob contains the FARGAN model family.
+// SupportsFARGAN reports whether the required FARGAN model record names are
+// present.
 func (b *Blob) SupportsFARGAN() bool {
 	return b.validateRecordNames(farganRequiredRecordNames) == nil
 }
 
-// SupportsDREDEncoder reports whether the blob contains the DRED encoder model family.
+// SupportsDREDEncoder reports whether the required DRED encoder record names
+// are present.
 func (b *Blob) SupportsDREDEncoder() bool {
 	return b.validateRecordNames(dredEncoderRequiredRecordNames) == nil
 }
 
-// SupportsDREDDecoder reports whether the blob contains the DRED decoder model family.
+// SupportsDREDDecoder reports whether the required DRED decoder record names
+// are present.
 func (b *Blob) SupportsDREDDecoder() bool {
 	return b.validateRecordNames(dredDecoderRequiredRecordNames) == nil
 }
 
-// SupportsOSCELACE reports whether the blob contains the LACE OSCE model family.
+// SupportsOSCELACE reports whether all required LACE record names are present.
 func (b *Blob) SupportsOSCELACE() bool {
 	return b.validateRecordNames(osceLACERequiredRecordNames) == nil
 }
 
-// SupportsOSCENoLACE reports whether the blob contains the NoLACE OSCE model family.
+// SupportsOSCENoLACE reports whether all required NoLACE record names are present.
 func (b *Blob) SupportsOSCENoLACE() bool {
 	return b.validateRecordNames(osceNoLACERequiredRecordNames) == nil
 }
 
-// SupportsOSCE reports whether the blob contains the core OSCE model families.
+// SupportsOSCE reports whether the required LACE and NoLACE record names are
+// present.
 func (b *Blob) SupportsOSCE() bool {
 	return b.SupportsOSCELACE() && b.SupportsOSCENoLACE()
 }
 
-// SupportsOSCEBWE reports whether the blob contains the OSCE_BWE model family.
+// SupportsOSCEBWE reports whether the required OSCE_BWE record names are
+// present.
 func (b *Blob) SupportsOSCEBWE() bool {
 	return b.validateRecordNames(osceBWERequiredRecordNames) == nil
 }
 
-// DecoderModels reports which decoder-side model families are available from
-// the retained blob.
+// DecoderModels reports which decoder-side model families have all required
+// record names in the retained blob. Model loaders validate layer dimensions.
 func (b *Blob) DecoderModels() DecoderModelState {
 	return DecoderModelState{
 		PitchDNN: b.SupportsPitchDNN(),
@@ -214,8 +222,8 @@ func (b *Blob) DecoderModels() DecoderModelState {
 	}
 }
 
-// ValidateEncoderControl mirrors the libopus encoder DNN-blob surface by
-// requiring the model families needed for DRED encoder loading.
+// ValidateEncoderControl checks for the record names required by the libopus
+// encoder DNN-blob control. The model loader validates layer dimensions.
 func (b *Blob) ValidateEncoderControl() error {
 	if !b.SupportsDREDEncoder() || !b.SupportsPitchDNN() {
 		return errInvalidBlob
@@ -223,9 +231,9 @@ func (b *Blob) ValidateEncoderControl() error {
 	return nil
 }
 
-// ValidateDecoderControl mirrors the default-build libopus decoder DNN-blob
-// surface by requiring the core deep-PLC model families and, when requested,
-// the optional OSCE/OSCE_BWE families.
+// ValidateDecoderControl checks for the record names required by the default
+// libopus decoder DNN-blob control and, when requested, OSCE and OSCE_BWE. Model
+// loaders validate layer dimensions.
 func (b *Blob) ValidateDecoderControl(requireOSCEBWE bool) error {
 	models := b.DecoderModels()
 	if !models.PLC || !models.PitchDNN || !models.FARGAN {
@@ -237,8 +245,8 @@ func (b *Blob) ValidateDecoderControl(requireOSCEBWE bool) error {
 	return nil
 }
 
-// ValidateDREDDecoderControl mirrors the standalone libopus DRED decoder
-// model-loading path, which only requires the RDOVAE decoder family.
+// ValidateDREDDecoderControl checks for the record names required by the
+// standalone libopus DRED decoder loader. Model loaders validate dimensions.
 func (b *Blob) ValidateDREDDecoderControl() error {
 	if !b.SupportsDREDDecoder() {
 		return errInvalidBlob
@@ -246,10 +254,10 @@ func (b *Blob) ValidateDREDDecoderControl() error {
 	return nil
 }
 
-// RequiredDecoderControlRecordNames returns a read-only view of the
-// loader-derived record names the default-build libopus main decoder path
-// expects from OPUS_SET_DNN_BLOB. When requireOSCEBWE is true, the returned
-// view also includes the optional OSCE and OSCE_BWE families.
+// RequiredDecoderControlRecordNames returns the shared loader-derived record
+// names expected by the default-build libopus main decoder path for
+// OPUS_SET_DNN_BLOB. When requireOSCEBWE is true, it includes the optional OSCE
+// and OSCE_BWE families. Callers must treat the returned slice as read-only.
 func RequiredDecoderControlRecordNames(requireOSCEBWE bool) []string {
 	if requireOSCEBWE {
 		return requiredDecoderControlWithBWERecordNames
@@ -257,15 +265,16 @@ func RequiredDecoderControlRecordNames(requireOSCEBWE bool) []string {
 	return requiredDecoderControlCoreRecordNames
 }
 
-// RequiredEncoderControlRecordNames returns a read-only view of the
-// loader-derived record names the libopus encoder path expects from
-// OPUS_SET_DNN_BLOB.
+// RequiredEncoderControlRecordNames returns the shared loader-derived record
+// names the libopus encoder path expects from OPUS_SET_DNN_BLOB. Callers must
+// treat the returned slice as read-only.
 func RequiredEncoderControlRecordNames() []string {
 	return requiredEncoderControlRecordNames
 }
 
-// RequiredDREDDecoderRecordNames returns a read-only view of the loader-derived
-// record names for the standalone libopus DRED decoder model family.
+// RequiredDREDDecoderRecordNames returns the shared loader-derived record names
+// for the standalone libopus DRED decoder model family. Callers must treat the
+// returned slice as read-only.
 func RequiredDREDDecoderRecordNames() []string {
 	return requiredStandaloneDREDDecoderRecordNames
 }

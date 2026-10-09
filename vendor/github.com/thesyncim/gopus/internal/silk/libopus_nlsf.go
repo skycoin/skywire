@@ -118,11 +118,12 @@ func silkNLSFStabilize(nlsfQ15 []int16, deltaMinQ15 []int16, order int) {
 		if minDiff >= 0 {
 			return
 		}
-		if idx == 0 {
+		switch idx {
+		case 0:
 			nlsfQ15[0] = deltaMinQ15[0]
-		} else if idx == order {
+		case order:
 			nlsfQ15[order-1] = int16((1 << 15) - int32(deltaMinQ15[order]))
-		} else {
+		default:
 			minCenter := int32(0)
 			for k := 0; k < idx; k++ {
 				minCenter += int32(deltaMinQ15[k])

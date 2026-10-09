@@ -1,6 +1,7 @@
-// This file implements DTX (Discontinuous Transmission) for the Opus encoder.
-// DTX saves bandwidth during silence by emitting 1-byte TOC-only packets,
-// allowing the decoder to activate its internal Comfort Noise Generation (CNG).
+// This file implements the Opus-level DTX activity decision for the encoder.
+// A suppressed single frame becomes a TOC-only packet; multi-frame packets keep
+// their subframe-count framing. The decoder handles TOC-only DTX packets
+// through its concealment path. SILK internal DTX remains a separate decision.
 //
 // Activity detection matches libopus opus_encoder.c:1911-1930:
 //  1. is_digital_silence: max sample below quantization floor
@@ -35,7 +36,7 @@ const (
 
 // dtxState holds state for discontinuous transmission.
 type dtxState struct {
-	// Multi-band VAD state for SILK-mode DTX speech detection
+	// Standalone VAD storage; Opus-level DTX uses the frame activity decision.
 	vad *VADState
 
 	// Counter for consecutive no-activity frames in milliseconds (Q1 format)
@@ -165,10 +166,8 @@ func (e *Encoder) shouldUseDTXRes(pcm []opusRes) (bool, bool) {
 		isActive = e.dtx.peakSignalEnergy < pseudoSNRThreshold*0.5*frameEnergy
 	}
 
-	shouldTrackPeak := true
-	if e.lastAnalysisValid && e.lastAnalysisInfo.VADProb <= dtxActivityThreshold {
-		shouldTrackPeak = false
-	}
+	shouldTrackPeak := !(e.lastAnalysisValid && e.lastAnalysisInfo.VADProb <= dtxActivityThreshold)
+
 	if shouldTrackPeak && !isSilence {
 		frameEnergy := computeFrameEnergyRes(pcm)
 		e.dtx.peakSignalEnergy = maxf(0.999*e.dtx.peakSignalEnergy, frameEnergy)
@@ -211,7 +210,9 @@ func (e *Encoder) frameSizeMsQ1(frameSize int) int32 {
 // decideDTXSuppress runs libopus decide_dtx_mode (opus_encoder.c:1115-1140),
 // called after the frame has been fully encoded so that the encoder state is
 // advanced exactly as libopus does before discarding the payload for a DTX
-// continuation packet (opus_encoder.c:2564-2572).
+// continuation packet (opus_encoder.c:2564-2572). The Opus-level decision only
+// runs while SILK's own DTX is off; otherwise, and without DTX, the inactivity
+// run restarts.
 //
 // activity is the resolved opus_int activity for this frame: for the SILK
 // VAD_NO_DECISION path libopus resolves it to signalType != TYPE_NO_VOICE_ACTIVITY
@@ -219,7 +220,7 @@ func (e *Encoder) frameSizeMsQ1(frameSize int) int32 {
 //
 // Returns true if the frame should be emitted as a 1-byte TOC-only DTX packet.
 func (e *Encoder) decideDTXSuppress(activity bool, frameSize int) bool {
-	if !e.dtxEnabled || e.dtx == nil {
+	if !e.dtxEnabled || e.silkMode.UseDTX || e.dtx == nil {
 		if e.dtx != nil {
 			e.dtx.noActivityMsQ1 = 0
 			e.dtx.inDTXMode = false
@@ -249,60 +250,51 @@ func (e *Encoder) decideDTXSuppress(activity bool, frameSize int) bool {
 	return false
 }
 
-// subframeDTXSuppress runs the per-sub-frame Opus-level DTX decision for one
-// internal frame of a multi-frame packet. It mirrors libopus
-// opus_encode_frame_native, which computes the per-frame activity (analysis /
-// peak-energy branch) and then calls decide_dtx_mode once per sub-frame with the
-// sub-frame's duration (opus_encoder.c:1911-1930, 2564-2572). It must be called
-// AFTER the sub-frame is encoded so the encoder state has already advanced
-// exactly as libopus does before the payload is discarded for a suppressed
-// sub-frame.
-//
-// subVADPCM is the unfiltered sub-frame PCM (the same buffer the whole-frame VAD
-// would use). When vadAlreadyComputed is true the caller has already populated
-// the Opus-level VAD decision (e.g. the DRED path ran updateOpusVADRes for this
-// sub-frame), so the activity is read back from that decision instead of being
-// recomputed — this avoids double-counting peak_signal_energy.
-//
-// Returns true when the sub-frame should be emitted as a length-0 (suppressed)
-// frame in the repacketized packet.
-func (e *Encoder) subframeDTXSuppress(mode Mode, subVADPCM []opusRes, subFrameSize int, vadAlreadyComputed bool) bool {
+// subframeDTXSuppress runs decide_dtx_mode for a coded frame of a multi-frame
+// packet on the activity decided for it (src/opus_encoder.c:2564-2572) and
+// reports whether the frame becomes a DTX frame.
+func (e *Encoder) subframeDTXSuppress(subFrameSize int) bool {
 	if !e.dtxEnabled || e.dtx == nil {
 		return false
 	}
-	if !vadAlreadyComputed {
-		// Compute the Opus-level activity + peak-energy tracking for this
-		// sub-frame exactly as the whole-frame path does for short packets.
-		if mode == ModeCELT {
-			e.updateCELTOnlyOpusVADRes(subVADPCM, subFrameSize)
-		} else {
-			e.updateOpusVADRes(subVADPCM, subFrameSize)
-		}
-	}
-	activity := e.resolveDTXActivity()
-	return e.decideDTXSuppress(activity, subFrameSize)
+	return e.decideDTXSuppress(e.resolveDTXActivity(), subFrameSize)
 }
 
-// InDTX returns whether the encoder is currently in DTX mode.
-// This matches OPUS_GET_IN_DTX from libopus.
+// InDTX returns whether the encoder is currently in DTX mode, matching
+// OPUS_GET_IN_DTX (src/opus_encoder.c): after a SILK or Hybrid frame coded
+// with SILK's own DTX, SILK's no-speech run decides; otherwise the Opus-level
+// inactivity run does.
 func (e *Encoder) InDTX() bool {
+	if e.silkMode.UseDTX && (e.prevMode == ModeSILK || e.prevMode == ModeHybrid) && e.silk != nil {
+		return e.silk.InDTX(e.silkMode.NChannelsInternal)
+	}
 	if !e.dtxEnabled || e.dtx == nil {
 		return false
 	}
 	return e.dtx.noActivityMsQ1 >= NBSpeechFramesBeforeDTX*20*2
 }
 
-// GetVADActivity returns the current VAD speech activity level (0-255).
+// GetVADActivity returns the latest available Opus-level activity estimate in
+// Q8 (0-255). It reads the existing frame decision and does not run another
+// detector. It reports the analyzer or CELT fallback used by Opus activity
+// decisions, not the separate SILK VAD state. It returns 0 before a decision,
+// after Reset, or when the current activity decision is unavailable.
 func (e *Encoder) GetVADActivity() int {
-	if e.dtx == nil || e.dtx.vad == nil {
+	if e == nil || !e.lastOpusVADActivityObserved || !e.lastOpusVADValid {
 		return 0
 	}
-	return int(e.dtx.vad.SpeechActivityQ8)
+	prob := e.lastOpusVADProb
+	if !(prob > 0) {
+		return 0
+	}
+	if prob >= 1 {
+		return 255
+	}
+	return int(prob * 256)
 }
 
-// classifySignal determines signal type using energy-based detection.
-// This is a legacy function kept for compatibility; new code uses VAD.
-// Returns: 0 = inactive (silence), 1 = unvoiced, 2 = voiced
+// classifySignal compares mean-square PCM energy with its silence threshold.
+// It returns 0 below the threshold and 2 otherwise.
 func classifySignal(pcm []float32) (int, float32) {
 	if len(pcm) == 0 {
 		return 0, 0

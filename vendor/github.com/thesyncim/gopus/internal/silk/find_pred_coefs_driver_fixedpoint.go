@@ -4,7 +4,7 @@ package silk
 
 // This file assembles the libopus FIXED_POINT SILK prediction-coefficient
 // search, silk_find_pred_coefs_FIX from silk/fixed/find_pred_coefs_FIX.c. It is
-// the driver that orchestrates the already-ported integer kernels:
+// the driver that orchestrates the integer kernels:
 //
 //   - gain inversion / normalization (invGains_Q16, local_gains) and
 //     silk_scale_copy_vector16 for the unvoiced pre-emphasis copy,

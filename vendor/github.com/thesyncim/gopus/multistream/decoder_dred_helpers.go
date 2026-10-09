@@ -57,7 +57,7 @@ func (d *Decoder) maybeDropDREDState() {
 		return
 	}
 	s := d.dred
-	if s.dredDNNBlob == nil && !s.dredModelLoaded && len(s.dredCache) == 0 {
+	if s.dredDNNBlob == nil && !s.dredModelLoaded && len(s.dredCache) == 0 && len(s.dredPLC) == 0 {
 		d.dred = nil
 	}
 }
@@ -81,16 +81,67 @@ func (d *Decoder) setDREDDecoderBlob(blob *dnnblob.Blob) {
 	if !s.dredModelLoaded {
 		d.clearDREDPayloadState()
 		clear(s.dredProcesses)
-		for i := range s.dredPLC {
-			s.dredPLC[i].Reset()
+		if !d.dredNeuralConcealmentAvailable() {
+			for i := range s.dredPLC {
+				s.dredPLC[i].Reset()
+			}
 		}
 		d.releaseDREDSidecar()
 		d.maybeDropDREDState()
 	}
 }
 
-func (d *Decoder) ensureDREDSidecar() {
+func (d *Decoder) ensureDREDPLCState() *decoderDREDState {
 	s := d.ensureDREDState()
+	if s == nil {
+		return nil
+	}
+	streams := len(d.decoders)
+	if streams <= 0 {
+		return s
+	}
+	if len(s.dredPLC) != streams {
+		s.dredPLC = resizeDREDState(s.dredPLC, streams)
+	}
+	if len(s.dredRecovery) != streams {
+		s.dredRecovery = resizeDREDState(s.dredRecovery, streams)
+	}
+	if len(s.dredBlend) != streams {
+		s.dredBlend = resizeDREDState(s.dredBlend, streams)
+	}
+	if len(s.dredAnalysis) != streams {
+		s.dredAnalysis = resizeDREDState(s.dredAnalysis, streams)
+	}
+	if len(s.dredPredictor) != streams {
+		s.dredPredictor = resizeDREDState(s.dredPredictor, streams)
+	}
+	if len(s.dredFARGAN) != streams {
+		s.dredFARGAN = resizeDREDState(s.dredFARGAN, streams)
+	}
+	return s
+}
+
+func resizeDREDState[T any](state []T, streams int) []T {
+	if len(state) == streams {
+		return state
+	}
+	resized := make([]T, streams)
+	copy(resized, state)
+	return resized
+}
+
+func (d *Decoder) ensureDRED48kState(s *decoderDREDState) {
+	streams := len(d.decoders)
+	if len(s.dredBridge) != streams {
+		s.dredBridge = resizeDREDState(s.dredBridge, streams)
+	}
+	if len(s.dredPCM32) != streams {
+		s.dredPCM32 = makeDREDPCM32Scratch(streams, d.coupledStreams)
+	}
+}
+
+func (d *Decoder) ensureDREDSidecar() {
+	s := d.ensureDREDPLCState()
 	if s == nil || len(s.dredCache) != 0 {
 		return
 	}
@@ -98,17 +149,16 @@ func (d *Decoder) ensureDREDSidecar() {
 	if streams <= 0 {
 		return
 	}
-	s.dredDecoded = make([]internaldred.Decoded, streams)
-	s.dredProcesses = make([]rdovae.Processor, streams)
-	s.dredPLC = make([]lpcnetplc.State, streams)
-	s.dredRecovery = make([]int, streams)
-	s.dredBlend = make([]int, streams)
-	s.dredAnalysis = make([]lpcnetplc.Analysis, streams)
-	s.dredPredictor = make([]lpcnetplc.Predictor, streams)
-	s.dredFARGAN = make([]lpcnetplc.FARGAN, streams)
-	s.dredBridge = make([]decoderDRED48kBridgeState, streams)
-	s.dredPCM32 = makeDREDPCM32Scratch(streams, d.coupledStreams)
-	s.dredData = makeDREDBuffers(streams)
+	if len(s.dredDecoded) != streams {
+		s.dredDecoded = resizeDREDState(s.dredDecoded, streams)
+	}
+	if len(s.dredProcesses) != streams {
+		s.dredProcesses = resizeDREDState(s.dredProcesses, streams)
+	}
+	d.ensureDRED48kState(s)
+	if len(s.dredData) != streams {
+		s.dredData = makeDREDBuffers(streams)
+	}
 	s.dredCache = make([]internaldred.Cache, streams)
 }
 
@@ -119,31 +169,57 @@ func (d *Decoder) releaseDREDSidecar() {
 	}
 	s.dredDecoded = nil
 	s.dredProcesses = nil
-	s.dredPLC = nil
-	s.dredRecovery = nil
-	s.dredBlend = nil
-	s.dredAnalysis = nil
-	s.dredPredictor = nil
-	s.dredFARGAN = nil
-	s.dredBridge = nil
-	s.dredPCM32 = nil
 	s.dredData = nil
 	s.dredCache = nil
+	if !d.dredNeuralConcealmentAvailable() {
+		s.dredPLC = nil
+		s.dredRecovery = nil
+		s.dredBlend = nil
+		s.dredAnalysis = nil
+		s.dredPredictor = nil
+		s.dredFARGAN = nil
+		s.dredBridge = nil
+		s.dredPCM32 = nil
+	}
 }
 
 func (d *Decoder) resetDREDRuntimeState() {
 	s := d.dredState()
+	d.clearRawSILKHistory()
 	if s == nil {
 		return
 	}
 	for i := range s.dredPLC {
 		s.dredPLC[i].Reset()
 	}
+	for i := range s.dredAnalysis {
+		s.dredAnalysis[i].Reset()
+	}
+	for i := range s.dredPredictor {
+		s.dredPredictor[i].Reset()
+	}
+	for i := range s.dredFARGAN {
+		s.dredFARGAN[i].Reset()
+	}
 	for i := range s.dredRecovery {
 		s.dredRecovery[i] = 0
 	}
+	clear(s.dredBlend)
 	for i := range s.dredBridge {
 		s.dredBridge[i] = decoderDRED48kBridgeState{}
+	}
+}
+
+func (d *Decoder) clearRawSILKHistory() {
+	if d == nil {
+		return
+	}
+	for stream := range d.rawSILKHistory {
+		clear(d.rawSILKHistory[stream])
+		d.rawSILKHistoryPos[stream] = 0
+		d.rawSILKHistoryFill[stream] = 0
+		d.pcmHistorySynced[stream] = false
+		d.directRawCapture[stream] = false
 	}
 }
 
@@ -338,15 +414,22 @@ func (d *Decoder) queueCachedDREDRecovery(stream, maxDredSamples, decodeOffsetSa
 }
 
 func (d *Decoder) dredNeuralConcealmentAvailable() bool {
-	return d != nil &&
-		d.dnnBlob != nil &&
+	if d == nil {
+		return false
+	}
+	switch d.sampleRate {
+	case 8000, 12000, 16000, 24000, 48000, 96000:
+	default:
+		return false
+	}
+	return d.dnnBlob != nil &&
 		d.pitchDNNLoaded &&
 		d.plcModelLoaded &&
 		d.farganModelLoaded
 }
 
 func (d *Decoder) ensureDREDNeuralRuntime(stream int) bool {
-	s := d.dredState()
+	s := d.ensureDREDPLCState()
 	if s == nil || stream < 0 || stream >= len(s.dredAnalysis) || stream >= len(s.dredPredictor) || stream >= len(s.dredFARGAN) {
 		return false
 	}
@@ -373,6 +456,56 @@ func (d *Decoder) ensureDREDNeuralRuntime(stream int) bool {
 	return true
 }
 
+func (d *Decoder) bindDREDNeuralModels(blob *dnnblob.Blob, models dnnblob.DecoderModelState) {
+	s := d.dredState()
+	if s == nil {
+		return
+	}
+	for i := range s.dredPLC {
+		if models.PitchDNN {
+			if s.dredAnalysis[i].Loaded() {
+				_ = s.dredAnalysis[i].SetModelPreservingState(blob)
+			} else {
+				_ = s.dredAnalysis[i].SetModel(blob)
+			}
+		} else {
+			s.dredAnalysis[i] = lpcnetplc.Analysis{}
+		}
+		if models.PLC {
+			if s.dredPredictor[i].Loaded() {
+				_ = s.dredPredictor[i].SetModelPreservingState(blob)
+			} else {
+				_ = s.dredPredictor[i].SetModel(blob)
+			}
+		} else {
+			s.dredPredictor[i] = lpcnetplc.Predictor{}
+			s.dredPLC[i].Reset()
+		}
+		if models.FARGAN {
+			if s.dredFARGAN[i].Loaded() {
+				_ = s.dredFARGAN[i].SetModelPreservingState(blob)
+			} else {
+				_ = s.dredFARGAN[i].SetModel(blob)
+			}
+		} else {
+			s.dredFARGAN[i] = lpcnetplc.FARGAN{}
+		}
+	}
+	if !models.PLC {
+		clear(s.dredRecovery)
+		clear(s.dredBlend)
+		for i := range s.dredBridge {
+			s.dredBridge[i] = decoderDRED48kBridgeState{}
+		}
+		for i := range d.directRawCapture {
+			d.directRawCapture[i] = false
+			if i < len(d.pcmHistorySynced) {
+				d.pcmHistorySynced[i] = false
+			}
+		}
+	}
+}
+
 func (d *Decoder) streamPacketHasDREDPayload(packet []byte) bool {
 	if packet == nil || len(packet) == 0 || d.ignoreExtensions {
 		return false
@@ -383,7 +516,7 @@ func (d *Decoder) streamPacketHasDREDPayload(packet []byte) bool {
 
 func (d *Decoder) markDREDUpdatedPCMFrame(stream int, samples []int16) {
 	s := d.dredState()
-	if s == nil || stream < 0 || stream >= len(s.dredPLC) || stream >= len(s.dredBridge) || len(samples) < lpcnetplc.FrameSize {
+	if s == nil || stream < 0 || stream >= len(s.dredPLC) || len(samples) < lpcnetplc.FrameSize {
 		return
 	}
 	usable := len(samples) - len(samples)%lpcnetplc.FrameSize
@@ -392,37 +525,178 @@ func (d *Decoder) markDREDUpdatedPCMFrame(stream int, samples []int16) {
 	}
 }
 
-func (d *Decoder) beginDREDRawMonoGoodFrameCapture(stream int, st *streamState, mode int, packet []byte) func() {
-	if d == nil || st == nil || !d.dredNeuralConcealmentAvailable() || d.ignoreExtensions {
-		return nil
+func (d *Decoder) ensureDREDHookStorage(stream int) bool {
+	if d == nil || stream < 0 || stream >= len(d.decoders) {
+		return false
 	}
-	if mode != streamModeSILK && mode != streamModeHybrid {
-		return nil
+	streams := len(d.decoders)
+	if len(d.rawSILKFrameHooks) != streams {
+		d.rawSILKHistoryPos = resizeDREDState(d.rawSILKHistoryPos, streams)
+		d.rawSILKHistoryFill = resizeDREDState(d.rawSILKHistoryFill, streams)
+		d.pcmHistorySynced = resizeDREDState(d.pcmHistorySynced, streams)
+		d.directRawCapture = resizeDREDState(d.directRawCapture, streams)
+		d.rawSILKHistory = resizeDREDState(d.rawSILKHistory, streams)
+		d.rawSILKFrameHooks = resizeDREDState(d.rawSILKFrameHooks, streams)
+		d.rawSILKLossHooks = resizeDREDState(d.rawSILKLossHooks, streams)
+		d.deepPLCLossHooks = resizeDREDState(d.deepPLCLossHooks, streams)
+		d.deepPLCHookUsed = resizeDREDState(d.deepPLCHookUsed, streams)
+		d.dredGenerateHooks = resizeDREDState(d.dredGenerateHooks, streams)
+	}
+	return true
+}
+
+func (d *Decoder) ensureRawSILKHistory(stream int) bool {
+	if !d.ensureDREDHookStorage(stream) {
+		return false
+	}
+	if len(d.rawSILKHistory[stream]) != lpcnetplc.PLCBufSize {
+		d.rawSILKHistory[stream] = make([]int16, lpcnetplc.PLCBufSize)
+	}
+	return d.ensureDREDCallbacks(stream)
+}
+
+func (d *Decoder) ensureDREDCallbacks(stream int) bool {
+	if !d.ensureDREDHookStorage(stream) {
+		return false
+	}
+	if d.rawSILKFrameHooks[stream] == nil {
+		streamIndex := stream
+		d.rawSILKFrameHooks[stream] = func(samples []int16) {
+			d.recordRawSILKFrame(streamIndex, samples)
+		}
+	}
+	if d.rawSILKLossHooks[stream] == nil {
+		streamIndex := stream
+		d.rawSILKLossHooks[stream] = func(samples []int16) {
+			d.recordRawSILKFrame(streamIndex, samples)
+		}
+	}
+	if d.deepPLCLossHooks[stream] == nil {
+		streamIndex := stream
+		d.deepPLCLossHooks[stream] = func(samples []float32) (bool, int) {
+			if !d.generateDREDNeuralFrames16k(streamIndex, samples, len(samples)) {
+				return false, 0
+			}
+			d.deepPLCHookUsed[streamIndex] = true
+			return true, 0
+		}
+	}
+	if d.dredGenerateHooks[stream] == nil {
+		streamIndex := stream
+		d.dredGenerateHooks[stream] = func(frame []float32) bool {
+			return d.generateDREDPLCFrame(streamIndex, frame)
+		}
+	}
+	return true
+}
+
+func (d *Decoder) generateDREDPLCFrame(stream int, frame []float32) bool {
+	s := d.dredState()
+	if s == nil || stream < 0 || stream >= len(s.dredPLC) || stream >= len(s.dredAnalysis) ||
+		stream >= len(s.dredPredictor) || stream >= len(s.dredFARGAN) || len(frame) < lpcnetplc.FrameSize {
+		return false
+	}
+	plc := &s.dredPLC[stream]
+	if plc.Blend() == 0 {
+		return plc.GenerateConcealedFrameFloatWithAnalysis(&s.dredAnalysis[stream], &s.dredPredictor[stream], &s.dredFARGAN[stream], frame[:lpcnetplc.FrameSize])
+	}
+	return plc.GenerateConcealedFrameFloat(&s.dredPredictor[stream], &s.dredFARGAN[stream], frame[:lpcnetplc.FrameSize])
+}
+
+func (d *Decoder) recordRawSILKFrame(stream int, samples []int16) {
+	if d == nil || stream < 0 || stream >= len(d.rawSILKHistory) || len(samples) < lpcnetplc.FrameSize {
+		return
+	}
+	history := d.rawSILKHistory[stream]
+	capacity := len(history)
+	if capacity < lpcnetplc.FrameSize {
+		return
+	}
+	for offset := 0; offset+lpcnetplc.FrameSize <= len(samples); offset += lpcnetplc.FrameSize {
+		copy(history[d.rawSILKHistoryPos[stream]:], samples[offset:offset+lpcnetplc.FrameSize])
+		d.rawSILKHistoryPos[stream] = (d.rawSILKHistoryPos[stream] + lpcnetplc.FrameSize) % capacity
+		if d.rawSILKHistoryFill[stream] < capacity {
+			d.rawSILKHistoryFill[stream] += lpcnetplc.FrameSize
+		}
+	}
+	if d.directRawCapture[stream] {
+		d.markDREDUpdatedPCMFrame(stream, samples)
+		if s := d.dredState(); s != nil && stream < len(s.dredPLC) {
+			d.pcmHistorySynced[stream] = true
+		}
+	}
+}
+
+func (d *Decoder) replayRawSILKHistory(stream int) bool {
+	if d == nil || stream < 0 || stream >= len(d.rawSILKHistory) || d.pcmHistorySynced[stream] {
+		return false
+	}
+	fill := d.rawSILKHistoryFill[stream]
+	if fill < lpcnetplc.FrameSize {
+		return false
 	}
 	s := d.dredState()
-	hasSidecar := s != nil && len(s.dredCache) != 0
-	if !hasSidecar {
-		if s == nil || !s.dredModelLoaded || !d.streamPacketHasDREDPayload(packet) {
-			return nil
-		}
+	if s == nil || stream >= len(s.dredPLC) {
+		return false
+	}
+	history := d.rawSILKHistory[stream]
+	capacity := len(history)
+	start := (d.rawSILKHistoryPos[stream] - fill + capacity) % capacity
+	for offset := 0; offset < fill; offset += lpcnetplc.FrameSize {
+		frameStart := (start + offset) % capacity
+		s.dredPLC[stream].MarkUpdatedFrameInt16(history[frameStart : frameStart+lpcnetplc.FrameSize])
+	}
+	d.pcmHistorySynced[stream] = true
+	return true
+}
+
+func (d *Decoder) beginDREDRawMonoFrameCapture(stream int, st *streamState, mode int, packet []byte) bool {
+	if d == nil || st == nil || (mode != streamModeSILK && mode != streamModeHybrid) {
+		return false
+	}
+	if !d.ensureRawSILKHistory(stream) {
+		return false
+	}
+	if s := d.dredState(); s != nil && s.dredModelLoaded && d.streamPacketHasDREDPayload(packet) {
 		d.ensureDREDSidecar()
 	}
-	s = d.dredState()
-	if s == nil || stream < 0 || stream >= len(s.dredPLC) || stream >= len(s.dredBridge) {
-		return nil
-	}
-	hook := func(samples []int16) {
-		d.markDREDUpdatedPCMFrame(stream, samples)
+	d.directRawCapture[stream] = false
+	if d.dredNeuralConcealmentAvailable() && d.ensureDREDNeuralRuntime(stream) {
+		// Feed every loaded-model raw update into the child PLC runtime, as libopus does.
+		d.replayRawSILKHistory(stream)
+		d.directRawCapture[stream] = true
 	}
 	switch mode {
 	case streamModeSILK:
-		st.silkDec.SetRawMonoFrameHook(hook)
-		return func() { st.silkDec.SetRawMonoFrameHook(nil) }
+		st.silkDec.SetRawMonoFrameHook(d.rawSILKFrameHooks[stream])
+		if d.plcModelLoaded {
+			st.silkDec.SetRawMonoLossFrameHook(d.rawSILKLossHooks[stream])
+		} else {
+			st.silkDec.SetRawMonoLossFrameHook(nil)
+		}
 	case streamModeHybrid:
-		st.hybridDec.SetRawMonoFrameHook(hook)
-		return func() { st.hybridDec.SetRawMonoFrameHook(nil) }
+		st.hybridDec.SetRawMonoFrameHook(d.rawSILKFrameHooks[stream])
+		if d.plcModelLoaded {
+			st.hybridDec.SetRawMonoLossFrameHook(d.rawSILKLossHooks[stream])
+		} else {
+			st.hybridDec.SetRawMonoLossFrameHook(nil)
+		}
 	default:
-		return nil
+		return false
+	}
+	return true
+}
+
+func (d *Decoder) endDREDRawMonoFrameCapture(stream int, st *streamState) {
+	if d == nil || st == nil {
+		return
+	}
+	st.silkDec.SetRawMonoFrameHook(nil)
+	st.silkDec.SetRawMonoLossFrameHook(nil)
+	st.hybridDec.SetRawMonoFrameHook(nil)
+	st.hybridDec.SetRawMonoLossFrameHook(nil)
+	if stream >= 0 && stream < len(d.directRawCapture) {
+		d.directRawCapture[stream] = false
 	}
 }
 
@@ -483,17 +757,11 @@ func (d *Decoder) generateDREDNeuralFrames16k(stream int, dst []float32, samples
 }
 
 func (d *Decoder) decodeDREDSILKOrHybridPLCStream(stream, frameSize int, st *streamState) ([]float32, bool, error) {
-	if st == nil || st.channels < 1 || st.channels > 2 {
+	if st == nil || st.channels < 1 || st.channels > 2 || !d.ensureDREDCallbacks(stream) {
 		return nil, false, nil
 	}
-	usedHook := false
-	hook := func(concealed []float32) (bool, int) {
-		if !d.generateDREDNeuralFrames16k(stream, concealed, len(concealed)) {
-			return false, 0
-		}
-		usedHook = true
-		return true, 0
-	}
+	d.deepPLCHookUsed[stream] = false
+	hook := d.deepPLCLossHooks[stream]
 
 	var (
 		decoded []float32
@@ -506,7 +774,11 @@ func (d *Decoder) decodeDREDSILKOrHybridPLCStream(stream, frameSize int, st *str
 		st.silkDec.SetDeepPLCLossMonoHook(nil)
 	case streamModeHybrid:
 		st.hybridDec.SetDeepPLCLossMonoHook(hook)
-		decoded, err = st.finishDecode32(st.hybridDec.DecodeToFloat32WithPacketStereo(nil, frameSize, st.lastPacketStereo))
+		decoded = st.framePCMFor(frameSize * int(st.channels))
+		err = st.hybridDec.DecodePLCToFloat32WithPacketStereoInto(frameSize, st.lastPacketStereo, decoded)
+		if err == nil {
+			decoded, err = st.finishDecode32(decoded, nil)
+		}
 		st.hybridDec.SetDeepPLCLossMonoHook(nil)
 	default:
 		return nil, false, nil
@@ -514,7 +786,7 @@ func (d *Decoder) decodeDREDSILKOrHybridPLCStream(stream, frameSize int, st *str
 	if err != nil {
 		return nil, false, err
 	}
-	if !usedHook {
+	if !d.deepPLCHookUsed[stream] {
 		return nil, false, nil
 	}
 	return decoded, true, nil
@@ -522,36 +794,58 @@ func (d *Decoder) decodeDREDSILKOrHybridPLCStream(stream, frameSize int, st *str
 
 func (d *Decoder) decodeDREDPLCStream(stream, frameSize int) ([]float32, bool, error) {
 	s := d.dredState()
-	if s == nil ||
-		stream < 0 ||
-		stream >= len(s.dredCache) ||
-		stream >= len(s.dredPLC) ||
-		stream >= len(s.dredBridge) ||
-		s.dredCache[stream].Empty() ||
-		!s.dredModelLoaded ||
-		d.ignoreExtensions ||
-		!d.dredNeuralConcealmentAvailable() {
+	if d == nil || stream < 0 || stream >= len(d.decoders) || !d.dredNeuralConcealmentAvailable() {
 		return nil, false, nil
 	}
 	st, ok := d.decoders[stream].(*streamState)
 	if !ok || st == nil || st.channels < 1 || st.channels > 2 {
 		return nil, false, nil
 	}
-	if !d.ensureDREDNeuralRuntime(stream) {
+	hasSidecar := s != nil &&
+		stream < len(s.dredCache) && !s.dredCache[stream].Empty() &&
+		s.dredModelLoaded && !d.ignoreExtensions
+	mainNeuralReady := st.complexity >= 5
+	if !hasSidecar && !mainNeuralReady {
 		return nil, false, nil
 	}
 	if st.lastMode == streamModeSILK || st.lastMode == streamModeHybrid {
+		if !hasSidecar && st.silkDec.GetSampleRateKHz() != 16 {
+			return nil, false, nil
+		}
+	}
+	// celt_decode_lost selects neural PLC only outside its native 96 kHz mode.
+	if st.lastMode == streamModeCELT && st.sampleRate == 96000 {
+		return nil, false, nil
+	}
+	if !d.ensureDREDNeuralRuntime(stream) {
+		return nil, false, nil
+	}
+	s = d.dredState()
+	if s == nil || stream >= len(s.dredPLC) {
+		return nil, false, nil
+	}
+	if st.lastMode == streamModeSILK || st.lastMode == streamModeHybrid {
+		d.ensureRawSILKHistory(stream)
+		d.replayRawSILKHistory(stream)
 		decoded, ok, err := d.decodeDREDSILKOrHybridPLCStream(stream, frameSize, st)
 		if err != nil || !ok {
 			return decoded, ok, err
 		}
-		if stream < len(s.dredRecovery) {
+		if hasSidecar && stream < len(s.dredRecovery) {
 			s.dredRecovery[stream] += frameSize
 		}
 		st.recordDecodeCall(frameSize, 0)
+		st.lastFinalRangeDataLen = 0
 		return decoded, true, nil
 	}
 	if st.celtDec == nil || st.lastMode != streamModeCELT {
+		return nil, false, nil
+	}
+	if !d.ensureDREDCallbacks(stream) {
+		return nil, false, nil
+	}
+	d.ensureDRED48kState(s)
+	if stream >= len(s.dredBridge) || stream >= len(s.dredPCM32) {
 		return nil, false, nil
 	}
 	if frameSize <= 0 {
@@ -576,20 +870,9 @@ func (d *Decoder) decodeDREDPLCStream(stream, frameSize int) ([]float32, bool, e
 	}
 	bridge := &s.dredBridge[stream]
 	plc := &s.dredPLC[stream]
-	analysis := &s.dredAnalysis[stream]
-	predictor := &s.dredPredictor[stream]
-	fargan := &s.dredFARGAN[stream]
 
 	d.prepareDRED48kNeuralEntry(stream, frameSize, st)
-	generate := func(frame []float32) bool {
-		if len(frame) < lpcnetplc.FrameSize {
-			return false
-		}
-		if plc.Blend() == 0 {
-			return plc.GenerateConcealedFrameFloatWithAnalysis(analysis, predictor, fargan, frame[:lpcnetplc.FrameSize])
-		}
-		return plc.GenerateConcealedFrameFloat(predictor, fargan, frame[:lpcnetplc.FrameSize])
-	}
+	generate := d.dredGenerateHooks[stream]
 
 	var okConceal bool
 	if plc.FECFillPos() > plc.FECReadPos() {
@@ -600,10 +883,11 @@ func (d *Decoder) decodeDREDPLCStream(stream, frameSize int) ([]float32, bool, e
 	if !okConceal {
 		return nil, false, nil
 	}
-	if stream < len(s.dredRecovery) {
+	if hasSidecar && stream < len(s.dredRecovery) {
 		s.dredRecovery[stream] += frameSize
 	}
 	st.recordDecodeCall(frameSize, 0)
+	st.lastFinalRangeDataLen = 0
 	st.applyOutputGain32(out)
 	return out, true, nil
 }

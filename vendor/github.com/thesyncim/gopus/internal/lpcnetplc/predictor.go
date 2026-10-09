@@ -8,19 +8,15 @@ import (
 	"github.com/thesyncim/gopus/internal/opusmath"
 )
 
-// Match the pinned libopus DNN kernels selected by the helper build. Linux
-// parity helpers explicitly disable x86 intrinsics, so amd64 stays on the
-// scalar path instead of simulating libopus' optional vector kernels.
-// Keep the architecture-wide switches constant so unused variants fold away
-// when they cannot apply to the target build.
-const (
-	useArm64DNNVectorKernels = runtime.GOARCH == "arm64"
-	useX86DNNVectorKernels   = false
-	useSUBias                = useX86DNNVectorKernels
-	useIntegerInt8Accum      = useArm64DNNVectorKernels || useX86DNNVectorKernels
-)
+// Match the DNN kernels of the instruction-paired libopus DRED build. The
+// arm64 SIMD lane uses the NEON kernel arithmetic (nearest-even quantization
+// and integer blocks); the arm64 scalar build quantizes with floor-half and
+// accumulates float blocks. The amd64 Go SIMD lane uses the AVX2/FMA
+// compute_linear and compute_conv2d that dnn/x86/x86_dnn_map.c selects; the
+// other amd64 lanes use the generic C kernels.
+const useArm64DNNVectorKernels = runtime.GOARCH == "arm64" && useNEONAnalysisKernels
 
-var useX86AVX2FMA = false
+var useX86DNNVectorKernels = dnnmath.X86VectorKernels
 
 type predictorState struct {
 	gru1 [GRU1Size]float32
@@ -28,10 +24,11 @@ type predictorState struct {
 }
 
 type predictorScratch struct {
-	tmp   [DenseInSize]float32
-	zrh   [3 * GRU1Size]float32
-	recur [3 * GRU1Size]float32
-	quant [maxModelIn]int16
+	tmp     [DenseInSize]float32
+	zrh     [3 * GRU1Size]float32
+	recur   [3 * GRU1Size]float32
+	quant   [maxModelIn]int16
+	quantSU [maxModelIn]uint8
 }
 
 // Predictor owns reusable PLC model state and scratch so callers can keep the
@@ -161,14 +158,22 @@ func computeGenericGRU(inputWeights, recurrentWeights *LinearLayer, state, in []
 	}
 	computeActivation(h, h, n, activationTanh)
 	for i := range n {
-		// libopus: "h[i] = z[i]*state[i] + (1-z[i])*h[i]". clang rounds (1-z)*h
-		// first then fuses the leading product as fma(z, state, (1-z)*h).
-		h[i] = fma32(z[i], state[i], (1-z[i])*h[i])
+		// libopus dnn/nnet.c:compute_generic_gru rounds (1-z)*h before
+		// fusing z*state into it. Keep that rounded product explicit so Go
+		// does not select z*state as the non-fused product.
+		h[i] = fma32(z[i], state[i], noFMA32Mul(1-z[i], h[i]))
 		state[i] = h[i]
 	}
 }
 
 func computeLinear(layer *LinearLayer, out, in []float32, scratch *predictorScratch) {
+	computeLinearQuant(layer, out, in, scratch.quant[:], scratch.quantSU[:])
+}
+
+// computeLinearQuant mirrors libopus compute_linear() for the dense layers the
+// PLC, FARGAN and PitchDNN models use. q and qSU are the caller's input
+// quantization scratch for the generic/NEON and AVX2 integer kernels.
+func computeLinearQuant(layer *LinearLayer, out, in []float32, q []int16, qSU []uint8) {
 	bias := layer.Bias
 	n := layer.NbOutputs
 	m := layer.NbInputs
@@ -176,9 +181,13 @@ func computeLinear(layer *LinearLayer, out, in []float32, scratch *predictorScra
 	if !layer.FloatWeights.Empty() {
 		sgemv(out[:n], layer.FloatWeights, n, m, n, in[:m])
 	} else if !layer.Weights.Empty() {
-		cgemv8x4(out[:n], layer.Weights, layer.Scale, n, m, in[:m], scratch.quant[:m])
-		if useSUBias && !layer.Subias.Empty() {
+		if useX86DNNVectorKernels {
+			// dnn/nnet_arch.h selects subias for integer matrices under
+			// dnn/vec_avx.h's USE_SU_BIAS.
+			dnnmath.CGEMV8x4X86(out[:n], layer.Weights, layer.Scale, n, m, in[:m], qSU[:m])
 			bias = layer.Subias
+		} else {
+			cgemv8x4(out[:n], layer.Weights, layer.Scale, n, m, in[:m], q[:m])
 		}
 	} else {
 		clear(out[:n])
@@ -191,17 +200,15 @@ func computeLinear(layer *LinearLayer, out, in []float32, scratch *predictorScra
 }
 
 func sgemv(out []float32, weights dnnblob.Float32View, rows, cols, colStride int, x []float32) {
+	if useX86DNNVectorKernels {
+		dnnmath.SGEMVX86(out, weights, rows, cols, colStride, x)
+		return
+	}
 	if useFusedFloatDense() {
-		// libopus dnn/vec_neon.h sgemv() falls back to the scalar loop
-		//   for (i) { out[i]=0; for (j) out[i] += weights[j*col_stride+i]*x[j]; }
-		// when rows is not a multiple of 8. For rows>1 clang vectorizes that loop
-		// across the output index i with vfmaq_f32 (fused multiply-add per lane),
-		// matching sgemvFused. For rows==1 there is no i-axis to vectorize, so
-		// clang emits scalar FMUL+FADD (separate rounding) for the reduction.
-		// sig_net_cond_gain_dense (rows=1) needs that non-fused reduction to stay
-		// bit-exact with the libopus FARGAN gain; rows>1 dense/gate layers (e.g.
-		// sig_net_gain_dense_out rows=4, plc_dense_out rows=20) stay fused.
-		if rows == 1 {
+		// The selected NEON sgemv reduces its single-output gain layer with
+		// rounded products. The scalar libopus compute_linear_c uses an ascending
+		// FMADD chain for that layer, as it does for the other output counts.
+		if rows == 1 && useNEONAnalysisKernels {
 			sgemvSplit(out, weights, rows, cols, colStride, x)
 		} else {
 			sgemvFused(out, weights, rows, cols, colStride, x)
@@ -239,7 +246,7 @@ func cgemv8x4(out []float32, weights dnnblob.Int8View, scale dnnblob.Float32View
 	for i := range cols {
 		q[i] = quantizeInput(x[i])
 	}
-	if useIntegerInt8Accum {
+	if useArm64DNNVectorKernels {
 		cgemv8x4IntAccum(out, weights, scale, rows, cols, q)
 		return
 	}
@@ -316,33 +323,26 @@ func computeActivation(output, input []float32, n, activation int) {
 }
 
 func quantizeInput(x float32) int16 {
-	return quantizeInputWithOptions(x, useNearestEvenQuant(), useSUBias)
+	return quantizeInputWithOptions(x, useNearestEvenQuant())
 }
 
-func quantizeInputWithOptions(x float32, nearestEven, suBias bool) int16 {
+func quantizeInputWithOptions(x float32, nearestEven bool) int16 {
 	if nearestEven {
-		if suBias {
-			// Match libopus AVX2: fused single-precision 127*x+127, then cvtps_epi32.
-			scaled := fma32(x, 127, 127)
-			return int16(opusmath.RoundToEvenF32ToInt32(scaled))
-		}
 		// Match libopus NEON: multiply in float32, then round to nearest-even.
 		scaled := float32(127 * x)
 		q := int16(opusmath.RoundToEvenF32ToInt32(scaled))
 		return int16(int8(q))
 	}
 	scaled := float32(127 * x)
-	q := int16(opusmath.FloorHalfPlusF32ToInt32(scaled))
-	if suBias {
-		return 127 + q
-	}
-	return int16(int8(q))
+	return int16(int8(opusmath.FloorHalfPlusF32ToInt32(scaled)))
 }
 
 func useNearestEvenQuant() bool {
-	return useArm64DNNVectorKernels || useX86AVX2FMA
+	return useArm64DNNVectorKernels
 }
 
 func useFusedFloatDense() bool {
-	return useArm64DNNVectorKernels || useX86AVX2FMA
+	// The ARM scalar compute_linear_c and selected NEON float dense kernels
+	// both use an ascending FMA chain, independent of int8 quantization.
+	return runtime.GOARCH == "arm64"
 }

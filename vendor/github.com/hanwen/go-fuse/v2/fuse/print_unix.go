@@ -4,10 +4,30 @@ package fuse
 
 import "fmt"
 
+var (
+	attrFlagNames = newFlagNames([]flagNameEntry{
+		{ATTR_SUBMOUNT, "SUBMOUNT"},
+		{ATTR_DAX, "DAX"},
+	})
+	setXAttrFlagNames = newFlagNames([]flagNameEntry{
+		{SETXATTR_ACL_KILL_SGID, "ACL_KILL_SGID"},
+	})
+)
+
 func (in *CreateIn) string() string {
 	return fmt.Sprintf(
-		"{0%o [%s] (0%o)}", in.Mode,
-		flagString(openFlagNames, int64(in.Flags), "O_RDONLY"), in.Umask)
+		"{0%o [%s] (0%o)%s}", in.Mode,
+		flagString(openFlagNames, int64(in.Flags), "O_RDONLY"), in.Umask,
+		optFlagString(fuseOpenInFlagNames, int64(in.OpenFlags)))
+}
+
+func (a *Attr) flagsString() string {
+	return optFlagString(attrFlagNames, int64(a.Flags))
+}
+
+func (in *SetXAttrIn) string() string {
+	return fmt.Sprintf("{sz %d f%o%s}", in.Size, in.Flags,
+		optFlagString(setXAttrFlagNames, int64(in.SetXAttrFlags)))
 }
 
 func (in *GetAttrIn) string() string {

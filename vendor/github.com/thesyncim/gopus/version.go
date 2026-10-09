@@ -3,12 +3,7 @@ package gopus
 // gopusVersion is the gopus library version string.
 const gopusVersion = "gopus 0.1.0"
 
-// VersionString returns a human-readable version string for the gopus library.
-//
-// The returned string identifies gopus, not libopus. It is analogous to
-// opus_get_version_string() from celt/celt.c in libopus 1.6.1, which returns
-// "libopus <version>". Applications that need to detect libopus at runtime
-// should not use this function; it will not contain the substring "libopus".
+// VersionString returns gopus's compiled-in identification string.
 func VersionString() string {
 	return gopusVersion
 }

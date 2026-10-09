@@ -10,9 +10,8 @@ func celtPitchXcorrFloat(x, y []float32, out []float32, length, maxPitch int) {
 	if length <= 0 || len(out) == 0 {
 		return
 	}
-	// Need at least `length` samples for scalar correlation.
-	// The assembly implementation might read up to length+3 for the kernel,
-	// but it should handle bounds if we ensure maxPitch respects len(y).
+	// Keep each correlation window within y. The SIMD kernel can load beyond
+	// the current lane only when the next samples are within that window.
 	maxByY := len(y) - length + 1
 	if maxByY <= 0 {
 		return

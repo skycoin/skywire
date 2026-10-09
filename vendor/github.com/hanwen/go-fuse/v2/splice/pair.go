@@ -8,12 +8,15 @@ package splice
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"syscall"
 )
 
 type Pair struct {
-	r, w int
-	size int
+	r, w         *os.File
+	rConn, wConn syscall.RawConn
+	size         int
 }
 
 func (p *Pair) MaxGrow() {
@@ -32,7 +35,11 @@ func (p *Pair) Grow(n int) error {
 		return fmt.Errorf("splice: want %d bytes, max pipe size %d", n, maxPipeSize)
 	}
 
-	newsize, errNo := fcntl(uintptr(p.r), F_SETPIPE_SZ, n)
+	var newsize int
+	var errNo syscall.Errno
+	p.rConn.Control(func(fd uintptr) {
+		newsize, errNo = fcntl(fd, F_SETPIPE_SZ, n)
+	})
 	if errNo != 0 {
 		return fmt.Errorf("splice: fcntl returned %v", errNo)
 	}
@@ -45,8 +52,16 @@ func (p *Pair) Cap() int {
 }
 
 func (p *Pair) Close() error {
-	err1 := syscall.Close(p.r)
-	err2 := syscall.Close(p.w)
+	if p.r == nil {
+		log.Panicf("2nd close r")
+	}
+	err1 := p.r.Close()
+	p.r = nil
+	if p.w == nil {
+		log.Panicf("2nd close w")
+	}
+	err2 := p.w.Close()
+	p.w = nil
 	if err1 != nil {
 		return err1
 	}
@@ -54,17 +69,27 @@ func (p *Pair) Close() error {
 }
 
 func (p *Pair) Read(d []byte) (n int, err error) {
-	return syscall.Read(p.r, d)
+	p.rConn.Control(func(fd uintptr) {
+		n, err = syscall.Read(int(fd), d)
+	})
+	return
 }
 
 func (p *Pair) Write(d []byte) (n int, err error) {
-	return syscall.Write(p.w, d)
+	p.wConn.Control(func(fd uintptr) {
+		n, err = syscall.Write(int(fd), d)
+	})
+	return
 }
 
 func (p *Pair) ReadFd() uintptr {
-	return uintptr(p.r)
+	var fd uintptr
+	p.rConn.Control(func(f uintptr) { fd = f })
+	return fd
 }
 
 func (p *Pair) WriteFd() uintptr {
-	return uintptr(p.w)
+	var fd uintptr
+	p.wConn.Control(func(f uintptr) { fd = f })
+	return fd
 }

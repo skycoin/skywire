@@ -136,20 +136,13 @@ func (t *plcStageTrace) captureCombOut(ch int, etmp []celtSig) {
 	t.combOut[ch] = buf
 }
 
-// captureFold snapshots the per-channel folded overlap seed.
-func (t *plcStageTrace) captureFold(overlapBuffer []celtSig, channels, segLen int) {
-	if t == nil {
+// captureFold snapshots channel ch's folded overlap seed.
+func (t *plcStageTrace) captureFold(ch int, overlap []celtSig) {
+	if t == nil || ch < 0 || ch >= len(t.fold) {
 		return
 	}
-	for ch := 0; ch < channels && ch < len(t.fold); ch++ {
-		buf := make([]float32, segLen)
-		ovl := overlapBuffer[ch*segLen : (ch+1)*segLen]
-		for i := range segLen {
-			buf[i] = float32(ovl[i])
-		}
-		t.fold[ch] = buf
-	}
-	t.overlap = segLen
+	t.fold[ch] = append([]float32(nil), overlap...)
+	t.overlap = len(overlap)
 }
 
 func (t *plcStageTrace) Final() []float32 {
@@ -184,22 +177,14 @@ func (t *plcStageTrace) armed() bool {
 	return t != nil && t.foldCount == t.foldIndex
 }
 
-// capturePreSyn snapshots the per-channel pre-postfilter synthesis buffer from
-// the interleaved noise-PLC dst.
-func (t *plcStageTrace) capturePreSyn(dst []float32, frameSize, channels int) {
-	if t == nil {
+// capturePreSyn snapshots channel ch's noise-PLC out_syn before the
+// postfilter.
+func (t *plcStageTrace) capturePreSyn(ch int, outSyn []celtSig) {
+	if t == nil || ch < 0 || ch >= len(t.presyn) {
 		return
 	}
-	for ch := 0; ch < channels && ch < len(t.presyn); ch++ {
-		buf := make([]float32, frameSize)
-		for i := range frameSize {
-			buf[i] = dst[i*channels+ch]
-		}
-		t.presyn[ch] = buf
-	}
-	t.n = frameSize
-	if channels > t.channels {
-		t.channels = channels
-	}
+	t.presyn[ch] = append([]float32(nil), outSyn...)
+	t.n = len(outSyn)
+	t.channels = max(t.channels, ch+1)
 	t.captured = true
 }

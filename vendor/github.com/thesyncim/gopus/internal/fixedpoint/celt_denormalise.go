@@ -24,17 +24,6 @@ func imin(a, b int) int {
 	return b
 }
 
-// celtExp2DbFrac implements the FIXED_POINT (non-QEXT) celt_exp2_db_frac macro:
-// SHL32(celt_exp2_frac(PSHR32(x, DB_SHIFT-10)), 14). Input x is a Q24 fractional
-// log-energy in [0, 1<<DB_SHIFT); the result is the Q14 mantissa lifted into the
-// upper bits by the left shift.
-func celtExp2DbFrac(x int32) int32 {
-	// PSHR32(x, DB_SHIFT-10) reduces Q24 to Q10; celt_exp2_frac takes Q10 in
-	// (opus_val16) and returns the Q14 mantissa.
-	q10 := int16(pshr32(x, 24-10))
-	return int32(CeltExp2Frac(q10)) << 14
-}
-
 // DenormaliseBands ports the FIXED_POINT celt/bands.c denormalise_bands: for the
 // active bands [start,end) it derives each band's gain from bandLogE[i] (biased
 // by eMeans[i]) and writes the de-normalised synthesis spectrum into freq. Bands
@@ -52,6 +41,17 @@ func celtExp2DbFrac(x int32) int32 {
 //	downsample    decode downsampling factor
 //	silence       when non-zero, the whole frame is silenced
 func DenormaliseBands(x, freq, bandLogE []int32, eBands []int16, shortMdctSize, start, end, M, downsample int, silence bool) {
+	denormaliseBands(x, freq, bandLogE, eBands, shortMdctSize, start, end, M, downsample, silence, fixedQEXTBuild)
+}
+
+// denormaliseBandsQ15 runs the FIXED_POINT synthesis gain path without the
+// ENABLE_QEXT energy polynomial. CELTDecoder and CeltSynthesis use this Q15
+// form even in a build that also contains the separate QEXT decoder.
+func denormaliseBandsQ15(x, freq, bandLogE []int32, eBands []int16, shortMdctSize, start, end, M, downsample int, silence bool) {
+	denormaliseBands(x, freq, bandLogE, eBands, shortMdctSize, start, end, M, downsample, silence, false)
+}
+
+func denormaliseBands(x, freq, bandLogE []int32, eBands []int16, shortMdctSize, start, end, M, downsample int, silence, qext bool) {
 	n := M * int(shortMdctSize)
 	bound := M * int(eBands[end])
 	if downsample != 1 {
@@ -90,8 +90,15 @@ func DenormaliseBands(x, freq, bandLogE []int32, eBands []int16, shortMdctSize, 
 			shift = 0
 			g = 0
 		} else {
-			// Handle the fractional part: g = SHL32(celt_exp2_db_frac(lg&((1<<DB_SHIFT)-1)), 2)
-			g = shl32(celtExp2DbFrac(lg&((1<<24)-1)), 2)
+			// Handle the fractional part with the energy polynomial for this CELT
+			// coefficient domain. QEXT stores Q31 CELT coefficients; CELTDecoder
+			// keeps its Q15 path in the same build.
+			fraction := lg & ((1 << 24) - 1)
+			if qext {
+				g = shl32(celtExp2DbFrac(fraction), 2)
+			} else {
+				g = shl32(celtExp2DbFracQ15(fraction), 2)
+			}
 		}
 		// Handle extreme gains with negative shift by capping g.
 		if shift < 0 {

@@ -2,6 +2,8 @@
 
 package fixedpoint
 
+const celtToneishnessQ29 = int32(526133504) // QCONST32(.98f, 29) in celt/fixed_generic.h
+
 // This file ports the integer CELT FIXED_POINT transient detector:
 // transient_analysis and patch_transient_decision from celt/celt_encoder.c.
 //
@@ -197,8 +199,8 @@ func TransientAnalysis(in []int32, length, c int, allowWeakTransients bool, tone
 
 	isTransient := maskMetric > 200
 	// Prevent confusing the partial cycle of a very low frequency tone with a
-	// transient. QCONST32(.98f,29)=526133719, QCONST16(0.026f,13)=213.
-	if toneishness > 526133494 && toneFreq < 213 {
+	// transient. QCONST32(.98f,29)=526133504, QCONST16(0.026f,13)=213.
+	if toneishness > celtToneishnessQ29 && toneFreq < 213 {
 		isTransient = false
 		maskMetric = 0
 	}

@@ -31,6 +31,7 @@ func (d *Decoder) ltpSynthesis(excitation []int32, pitchLag int, ltpCoeffs []int
 	}
 	scale := ltpScaleFactors[ltpScale]
 
+	d.syncOutputHistory()
 	historyLen := len(d.outputHistory)
 
 	for i := range excitation {
@@ -68,6 +69,7 @@ func (d *Decoder) ltpSynthesis(excitation []int32, pitchLag int, ltpCoeffs []int
 // bit-exact decode path uses updateHistoryInt16 instead; this variant is
 // exercised only by unit tests.
 func (d *Decoder) updateHistory(samples []float32) {
+	d.syncOutputHistory()
 	historyLen := len(d.outputHistory)
 	for _, s := range samples {
 		d.outputHistory[d.historyIndex] = s
@@ -75,26 +77,18 @@ func (d *Decoder) updateHistory(samples []float32) {
 	}
 }
 
-// updateHistoryInt16 is an int16-native variant used by decode hot paths.
+// updateHistoryInt16 appends decoded samples to the output history. The
+// samples go to the int16 ring historyQ0; their float values (sample/32768)
+// are written to outputHistory by syncOutputHistory when a reader needs them.
 func (d *Decoder) updateHistoryInt16(samples []int16) {
-	hist := d.outputHistory
+	hist := d.historyQ0
 	historyLen := len(hist)
 	if historyLen == 0 {
 		return
 	}
 	idx := d.historyIndex
-	pos := 0
-	const inv32768 = 1.0 / 32768.0
-	for pos < len(samples) {
-		n := historyLen - idx
-		if remain := len(samples) - pos; n > remain {
-			n = remain
-		}
-		dst := hist[idx : idx+n]
-		src := samples[pos : pos+n]
-		for i, s := range src {
-			dst[i] = float32(s) * inv32768
-		}
+	for pos := 0; pos < len(samples); {
+		n := copy(hist[idx:], samples[pos:])
 		pos += n
 		idx += n
 		if idx == historyLen {
@@ -102,12 +96,34 @@ func (d *Decoder) updateHistoryInt16(samples []int16) {
 		}
 	}
 	d.historyIndex = idx
+	d.historyPending = min(d.historyPending+len(samples), historyLen)
+}
+
+// syncOutputHistory converts the historyPending most recent int16 history
+// samples, the ones before historyIndex, into outputHistory.
+func (d *Decoder) syncOutputHistory() {
+	n := d.historyPending
+	if n == 0 {
+		return
+	}
+	d.historyPending = 0
+	hist := d.outputHistory
+	start := d.historyIndex - n
+	if start < 0 {
+		start += len(hist)
+		writeInt16AsFloat32Core(hist[start:], d.historyQ0[start:], len(hist)-start)
+		start = 0
+	}
+	if m := d.historyIndex - start; m > 0 {
+		writeInt16AsFloat32Core(hist[start:d.historyIndex], d.historyQ0[start:d.historyIndex], m)
+	}
 }
 
 // getHistorySample retrieves a sample from the float output history buffer,
 // offset samples back from the current write position (positive = past). Used by
 // the float reference LTP helpers and their unit tests.
 func (d *Decoder) getHistorySample(offset int) float32 {
+	d.syncOutputHistory()
 	historyLen := len(d.outputHistory)
 	idx := d.historyIndex - offset
 	for idx < 0 {

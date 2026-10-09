@@ -1,7 +1,5 @@
 package celt
 
-import "unsafe"
-
 const (
 	maxPseudo            = 40
 	logMaxPseudo         = 6
@@ -14,11 +12,16 @@ type pulseCacheLookup50Data struct {
 	valid   [len(cacheBits50)]bool
 }
 
-var (
-	pulseCacheLookup50 = buildPulseCacheLookup50()
-	cacheBits50Base    = uintptr(unsafe.Pointer(&cacheBits50[0]))
-	cacheBits50End     = cacheBits50Base + uintptr(len(cacheBits50))
-)
+const noPulseCacheLookupOffset = -1
+
+// pulseCacheView carries the cache slice and its optional static-table lookup
+// offset. Custom mode tables use noPulseCacheLookupOffset and binary search.
+type pulseCacheView struct {
+	bits         []uint8
+	staticOffset int
+}
+
+var pulseCacheLookup50 = buildPulseCacheLookup50()
 
 func getPulses(i int) int {
 	if i < 8 {
@@ -27,30 +30,37 @@ func getPulses(i int) int {
 	return (8 + (i & 7)) << ((i >> 3) - 1)
 }
 
-func pulseCacheForBand(band, lm int) ([]uint8, bool) {
+func pulseCacheForBand(band, lm int) (pulseCacheView, bool) {
 	if band < 0 || band >= MaxBands {
-		return nil, false
+		return pulseCacheView{}, false
 	}
 	if lm < -1 {
-		return nil, false
+		return pulseCacheView{}, false
 	}
 	idx := (lm + 1) * MaxBands
 	if idx < 0 || idx >= len(cacheIndex50) {
-		return nil, false
+		return pulseCacheView{}, false
 	}
 	start := int(cacheIndex50[idx+band])
 	if start < 0 || start >= len(cacheBits50) {
-		return nil, false
+		return pulseCacheView{}, false
 	}
 	cache := cacheBits50[start:]
 	if len(cache) == 0 {
-		return nil, false
+		return pulseCacheView{}, false
 	}
 	maxPseudo := int(cache[0])
 	if maxPseudo <= 0 || maxPseudo >= len(cache) {
-		return nil, false
+		return pulseCacheView{}, false
 	}
-	return cache, true
+	return pulseCacheView{bits: cache, staticOffset: start}, true
+}
+
+func pulseCacheTableOffset(cacheBits []uint8, start int) int {
+	if len(cacheBits) == len(cacheBits50) && len(cacheBits) > 0 && &cacheBits[0] == &cacheBits50[0] {
+		return start
+	}
+	return noPulseCacheLookupOffset
 }
 
 func bitsToPulses(band, lm, bitsQ3 int) int {
@@ -75,33 +85,33 @@ func pulsesToBits(band, lm, pulses int) int {
 	return pulsesToBitsCached(cache, pulses)
 }
 
-func bitsToPulsesCached(cache []uint8, bitsQ3 int) int {
-	if bitsQ3 <= 0 || len(cache) == 0 {
+func bitsToPulsesCached(cache pulseCacheView, bitsQ3 int) int {
+	if bitsQ3 <= 0 || len(cache.bits) == 0 {
 		return 0
 	}
 	return bitsToPulsesCachedFast(cache, bitsQ3)
 }
 
-func pulsesToBitsCached(cache []uint8, pulses int) int {
-	if pulses <= 0 || len(cache) == 0 {
+func pulsesToBitsCached(cache pulseCacheView, pulses int) int {
+	if pulses <= 0 || len(cache.bits) == 0 {
 		return 0
 	}
-	maxPseudo := int(cache[0])
+	maxPseudo := int(cache.bits[0])
 	if pulses > maxPseudo {
 		pulses = maxPseudo
 	}
-	return int(cache[pulses]) + 1
+	return int(cache.bits[pulses]) + 1
 }
 
-func pulseCacheMaxBits(cache []uint8) int {
-	if len(cache) == 0 {
+func pulseCacheMaxBits(cache pulseCacheView) int {
+	if len(cache.bits) == 0 {
 		return 0
 	}
-	maxPseudo := int(cache[0])
-	if maxPseudo <= 0 || maxPseudo >= len(cache) {
+	maxPseudo := int(cache.bits[0])
+	if maxPseudo <= 0 || maxPseudo >= len(cache.bits) {
 		return 0
 	}
-	return int(cache[maxPseudo])
+	return int(cache.bits[maxPseudo])
 }
 
 func buildPulseCacheLookup50() pulseCacheLookup50Data {
@@ -122,21 +132,6 @@ func buildPulseCacheLookup50() pulseCacheLookup50Data {
 		}
 	}
 	return data
-}
-
-func cacheBits50Offset(cache []uint8) (int, bool) {
-	if len(cache) == 0 {
-		return 0, false
-	}
-	ptr := uintptr(unsafe.Pointer(&cache[0]))
-	if ptr < cacheBits50Base || ptr >= cacheBits50End {
-		return 0, false
-	}
-	offset := int(ptr - cacheBits50Base)
-	if offset < 0 || offset >= len(cacheBits50) || !pulseCacheLookup50.valid[offset] {
-		return 0, false
-	}
-	return offset, true
 }
 
 func bitsToPulsesCachedBinarySearch(cache []uint8, bitsQ3 int) int {
@@ -162,8 +157,8 @@ func bitsToPulsesCachedBinarySearch(cache []uint8, bitsQ3 int) int {
 	return hi
 }
 
-func bitsToPulsesCachedFast(cache []uint8, bitsQ3 int) int {
-	if offset, ok := cacheBits50Offset(cache); ok {
+func bitsToPulsesCachedFast(cache pulseCacheView, bitsQ3 int) int {
+	if offset := cache.staticOffset; offset >= 0 && offset < len(cacheBits50) && pulseCacheLookup50.valid[offset] {
 		idx := bitsQ3 - 1
 		if idx < 0 {
 			return 0
@@ -173,5 +168,5 @@ func bitsToPulsesCachedFast(cache []uint8, bitsQ3 int) int {
 		}
 		return int(pulseCacheLookup50.lut[offset][idx])
 	}
-	return bitsToPulsesCachedBinarySearch(cache, bitsQ3)
+	return bitsToPulsesCachedBinarySearch(cache.bits, bitsQ3)
 }

@@ -1,6 +1,8 @@
 package celt
 
 import (
+	"math"
+
 	"github.com/thesyncim/gopus/internal/opusmath"
 )
 
@@ -28,6 +30,12 @@ type kissFFTState struct {
 	bitrev  []int
 	w       []kissCpx
 	fstride []int // Pre-computed fstride array for fftImpl (avoids per-call allocation)
+	// bitrevBytes holds 8*bitrev[i], the byte offset of each bit-reversed
+	// slot in the FFT buffer; every entry is below 8*nfft.
+	bitrevBytes []uintptr
+	// stageTw holds each factor stage's twiddles packed for the Fast
+	// butterflies; see kissStageTwiddles.
+	stageTw []kissStageTwiddles
 }
 
 var (
@@ -38,22 +46,8 @@ var (
 	kissFFTState480 = newKissFFTState(480)
 )
 
-// kissHalfSub computes a - 0.5*b. Materializing 0.5*b through round32 keeps the
-// product from contracting into a single FMSUB with the subtract (which would
-// diverge from scalar libopus), so the function inlines and sheds its call
-// overhead while staying bit-identical to the reference on every build — the
-// same idiom as kissScaleMul above.
-func kissHalfSub(a, b float32) float32 {
-	return a - round32(0.5*b)
-}
-
-// kissScaleMul, kissAdd, and kissSub are the FFT's float32 multiply/add/subtract
-// primitives. kissScaleMul materializes the product through a Float32bits round-trip
-// so a surrounding butterfly t = w*f followed by f ± t cannot contract into a single
-// FMADD (which would diverge from scalar libopus); with the product materialized the
-// add and subtract have no multiply left to fuse and need no barrier. Unlike a
-// //go:noinline call these inline, shedding the per-operation call overhead while
-// staying bit-identical to the scalar reference on every build.
+// kissScaleMul marks multiply sites that stay rounded before their consumers
+// in the selected libopus target.
 func kissScaleMul(a, b float32) float32 {
 	return round32(a * b)
 }
@@ -68,6 +62,8 @@ func kissSub(a, b float32) float32 {
 
 func getKissFFTState(nfft int) *kissFFTState {
 	switch nfft {
+	case 960:
+		return getKissFFTState960()
 	case 320:
 		return getKissFFTState320()
 	case 60:
@@ -88,14 +84,32 @@ func newKissFFTState(nfft int) *kissFFTState {
 	if st := newStaticKissFFTState(nfft); st != nil {
 		return st
 	}
+	return newDynamicKissFFTState(nfft, nil)
+}
 
+// newDynamicKissFFTState follows opus_fft_alloc_twiddles: smaller transforms
+// share their mode's base table, with a power-of-two index shift.
+func newDynamicKissFFTState(nfft int, base *kissFFTState) *kissFFTState {
 	factors, ok := kfFactor(nfft)
 	if !ok {
 		return &kissFFTState{nfft: nfft}
 	}
 	bitrev := make([]int, nfft)
 	computeBitrevTableRecursive(0, bitrev, 0, 1, 1, factors)
-	w := computeTwiddles(nfft)
+	var w []kissCpx
+	shift := -1
+	if base == nil {
+		w = computeTwiddles(nfft)
+	} else {
+		shift = 0
+		for shift < 32 && nfft<<shift != base.nfft {
+			shift++
+		}
+		if shift == 32 {
+			return nil
+		}
+		w = base.w
+	}
 
 	// Pre-compute fstride array for fftImpl (eliminates per-call allocation)
 	maxFactors := len(factors) / 2
@@ -106,7 +120,8 @@ func newKissFFTState(nfft int) *kissFFTState {
 		fstride[i+1] = fstride[i] * p
 	}
 
-	return &kissFFTState{nfft: nfft, shift: 0, factors: factors, bitrev: bitrev, w: w, fstride: fstride}
+	return &kissFFTState{nfft: nfft, shift: shift, factors: factors, bitrev: bitrev, w: w, fstride: fstride,
+		bitrevBytes: kissBitrevBytes(bitrev), stageTw: newKissStageTwiddles(factors, fstride, shift, w)}
 }
 
 func newStaticKissFFTState(nfft int) *kissFFTState {
@@ -156,13 +171,29 @@ func newStaticKissFFTState(nfft int) *kissFFTState {
 	}
 
 	return &kissFFTState{
-		nfft:    nfft,
-		shift:   shift,
-		factors: factors,
-		bitrev:  bitrev,
-		w:       twiddles,
-		fstride: fstride,
+		nfft:        nfft,
+		shift:       shift,
+		factors:     factors,
+		bitrev:      bitrev,
+		w:           twiddles,
+		fstride:     fstride,
+		bitrevBytes: kissBitrevBytes(bitrev),
+		stageTw:     newKissStageTwiddles(factors, fstride, shift, twiddles),
 	}
+}
+
+// kissBitrevBytes returns the byte offsets 8*bitrev[i] of the bit-reversed
+// FFT slots. It panics unless every slot is inside the len(bitrev)-point
+// buffer, which lets the offset stores skip their per-element checks.
+func kissBitrevBytes(bitrev []int) []uintptr {
+	off := make([]uintptr, len(bitrev))
+	for i, rev := range bitrev {
+		if uint(rev) >= uint(len(bitrev)) {
+			panic("celt: kiss FFT bit-reversal slot out of range")
+		}
+		off[i] = uintptr(rev) * 8
+	}
+	return off
 }
 
 // kfFactor computes the radix factors for kiss FFT.
@@ -214,11 +245,13 @@ func kfFactor(n int) ([]int, bool) {
 
 func computeTwiddles(nfft int) []kissCpx {
 	w := make([]kissCpx, nfft)
-	const pi = float32(3.14159265358979323846264338327)
+	// celt/kiss_fft.c:compute_twiddles evaluates phase and libm in double,
+	// then kf_cexp narrows each stored component to opus_val16 (float).
+	const pi = 3.14159265358979323846264338327
 	for i := range nfft {
-		phase := (-2.0 * pi / float32(nfft)) * float32(i)
-		w[i].r = opusmath.CosF32(phase)
-		w[i].i = opusmath.SinF32(phase)
+		phase := (-2.0 * pi / float64(nfft)) * float64(i)
+		w[i].r = float32(math.Cos(phase))
+		w[i].i = float32(math.Sin(phase))
 	}
 	return w
 }
@@ -300,7 +333,6 @@ func kfBfly3M1(fout []kissCpx, tw []kissCpx, fstride, n, mm int) {
 		return
 	}
 	epi3i := tw[fstride].i
-	half := float32(0.5)
 	_ = fout[last] // BCE hint for base+0..2 accesses.
 	for i := range n {
 		base := i * mm
@@ -313,18 +345,12 @@ func kfBfly3M1(fout []kissCpx, tw []kissCpx, fstride, n, mm int) {
 		s0r := a1r - a2r
 		s0i := a1i - a2i
 
-		f1r := a0r - half*s3r
-		f1i := a0i - half*s3i
+		f1r := kissHalfSub(a0r, s3r)
+		f1i := kissHalfSub(a0i, s3i)
 		f0r := a0r + s3r
 		f0i := a0i + s3i
 
-		s0r *= epi3i
-		s0i *= epi3i
-
-		f2r := f1r + s0i
-		f2i := f1i - s0r
-		f1r -= s0i
-		f1i += s0r
+		f1r, f1i, f2r, f2i := kissRadix3ScaledOutputs(f1r, f1i, s0r, s0i, epi3i)
 
 		fout[base].r, fout[base].i = f0r, f0i
 		fout[base+1].r, fout[base+1].i = f1r, f1i
@@ -392,41 +418,47 @@ func kfBfly2(fout []kissCpx, m, N int) {
 		return
 	}
 	// m==4 degenerate radix-2 after radix-4
-	tw := float32(0.7071067812)
-	for range N {
-		fout2 := fout[4:]
-		t := fout2[0]
-		fout2[0].r = fout[0].r - t.r
-		fout2[0].i = fout[0].i - t.i
-		fout[0].r += t.r
-		fout[0].i += t.i
+	kfBfly2M4(fout, N)
+}
 
-		t.r = kissScaleMul(kissAdd(fout2[1].r, fout2[1].i), tw)
-		t.i = kissScaleMul(kissSub(fout2[1].i, fout2[1].r), tw)
-		fout2[1].r = kissSub(fout[1].r, t.r)
-		fout2[1].i = kissSub(fout[1].i, t.i)
-		fout[1].r = kissAdd(fout[1].r, t.r)
-		fout[1].i = kissAdd(fout[1].i, t.i)
+// kfBfly2M4Twiddle is the kf_bfly2 m == 4 twiddle, 0.7071067812.
+const kfBfly2M4Twiddle = float32(0.7071067812)
 
-		t.r = fout2[2].i
-		t.i = -fout2[2].r
-		fout2[2].r = kissSub(fout[2].r, t.r)
-		fout2[2].i = kissSub(fout[2].i, t.i)
-		fout[2].r = kissAdd(fout[2].r, t.r)
-		fout[2].i = kissAdd(fout[2].i, t.i)
+// kfBfly2M4Scalar is the kf_bfly2 radix-2 stage with m == 4 (after a radix-4
+// stage): N groups of eight values, each addressed through a fixed-size array
+// view.
+func kfBfly2M4Scalar(fout []kissCpx, N int) {
+	tw := kfBfly2M4Twiddle
+	if N <= 0 {
+		return
+	}
+	groups := fout[:8*N]
+	for i := 0; i < len(groups); i += 8 {
+		g := (*[8]kissCpx)(groups[i : i+8])
+		t := g[4]
+		g[4].r = g[0].r - t.r
+		g[4].i = g[0].i - t.i
+		g[0].r += t.r
+		g[0].i += t.i
 
-		t.r = kissScaleMul(kissSub(fout2[3].i, fout2[3].r), tw)
-		t.i = -kissScaleMul(kissAdd(fout2[3].i, fout2[3].r), tw)
-		fout2[3].r = kissSub(fout[3].r, t.r)
-		fout2[3].i = kissSub(fout[3].i, t.i)
-		fout[3].r = kissAdd(fout[3].r, t.r)
-		fout[3].i = kissAdd(fout[3].i, t.i)
+		b1 := g[5]
+		g[5].r, g[1].r = kissBfly2M4Outputs(g[1].r, kissAdd(b1.r, b1.i), tw)
+		g[5].i, g[1].i = kissBfly2M4Outputs(g[1].i, kissSub(b1.i, b1.r), tw)
 
-		fout = fout[8:]
+		t.r = g[6].i
+		t.i = -g[6].r
+		g[6].r = kissSub(g[2].r, t.r)
+		g[6].i = kissSub(g[2].i, t.i)
+		g[2].r = kissAdd(g[2].r, t.r)
+		g[2].i = kissAdd(g[2].i, t.i)
+
+		b3 := g[7]
+		g[7].r, g[3].r = kissBfly2M4Outputs(g[3].r, kissSub(b3.i, b3.r), tw)
+		g[7].i, g[3].i = kissBfly2M4Outputs(g[3].i, -kissAdd(b3.i, b3.r), tw)
 	}
 }
 
-func kfBfly4(fout []kissCpx, fstride int, st *kissFFTState, m, N, mm int) {
+func kfBfly4(fout []kissCpx, fstride int, st *kissFFTState, stage, m, N, mm int, fast bool) {
 	if m == 1 {
 		kfBfly4M1(fout, N)
 		return
@@ -434,10 +466,14 @@ func kfBfly4(fout []kissCpx, fstride int, st *kissFFTState, m, N, mm int) {
 	if N <= 0 || mm <= 0 {
 		return
 	}
+	if fast {
+		kfBfly4InnerFast(fout, st.stageTw[stage].tw4, N, mm)
+		return
+	}
 	kfBfly4Inner(fout, st.w, m, N, mm, fstride)
 }
 
-func kfBfly3(fout []kissCpx, fstride int, st *kissFFTState, m, N, mm int) {
+func kfBfly3(fout []kissCpx, fstride int, st *kissFFTState, stage, m, N, mm int, fast bool) {
 	if N <= 0 || mm <= 0 {
 		return
 	}
@@ -445,15 +481,23 @@ func kfBfly3(fout []kissCpx, fstride int, st *kissFFTState, m, N, mm int) {
 		kfBfly3M1(fout, st.w, fstride, N, mm)
 		return
 	}
+	if fast {
+		kfBfly3InnerFast(fout, st.stageTw[stage].tw3, st.w[fstride*m].i, N, mm)
+		return
+	}
 	kfBfly3Inner(fout, st.w, m, N, mm, fstride)
 }
 
-func kfBfly5(fout []kissCpx, fstride int, st *kissFFTState, m, N, mm int) {
+func kfBfly5(fout []kissCpx, fstride int, st *kissFFTState, stage, m, N, mm int, fast bool) {
 	if N <= 0 || mm <= 0 {
 		return
 	}
 	if m == 1 {
 		kfBfly5M1(fout, st.w, fstride, N, mm)
+		return
+	}
+	if fast {
+		kfBfly5InnerFast(fout, st.stageTw[stage].tw5, st.w[fstride*m], st.w[fstride*2*m], N, mm)
 		return
 	}
 	kfBfly5Inner(fout, st.w, m, N, mm, fstride)
@@ -471,10 +515,7 @@ func (st *kissFFTState) fftImpl(fout []kissCpx) {
 
 	// Find L by walking factors until m == 1
 	L := 0
-	for {
-		if 2*L+1 >= len(st.factors) {
-			break
-		}
+	for 2*L+1 < len(st.factors) {
 		m := st.factors[2*L+1]
 		L++
 		if m == 1 {
@@ -487,6 +528,7 @@ func (st *kissFFTState) fftImpl(fout []kissCpx) {
 
 	m := st.factors[2*L-1]
 	shift := max(st.shift, 0)
+	fast := kfBflyScalarFastInput(fout)
 	for i := L - 1; i >= 0; i-- {
 		m2 := 1
 		if i != 0 {
@@ -498,11 +540,11 @@ func (st *kissFFTState) fftImpl(fout []kissCpx) {
 		case 2:
 			kfBfly2(fout, m, N)
 		case 4:
-			kfBfly4(fout, twFstride, st, m, N, m2)
+			kfBfly4(fout, twFstride, st, i, m, N, m2, fast)
 		case 3:
-			kfBfly3(fout, twFstride, st, m, N, m2)
+			kfBfly3(fout, twFstride, st, i, m, N, m2, fast)
 		case 5:
-			kfBfly5(fout, twFstride, st, m, N, m2)
+			kfBfly5(fout, twFstride, st, i, m, N, m2, fast)
 		}
 		m = m2
 	}
@@ -542,13 +584,15 @@ func KissFFT32ToScaledWithScratch(out []complex64, x []complex64, scale float32,
 	kissFFT32ToScaled(out, x, scale, scratch)
 }
 
-func kissFFT32ToScratch(x []complex64, scratch []kissCpx) []kissCpx {
+func kissFFT32ToScratch(x []complex64, scratch []kissCpx, st *kissFFTState) []kissCpx {
 	n := len(x)
 	if n == 0 {
 		return nil
 	}
 
-	st := getKissFFTState(n)
+	if st == nil {
+		st = getKissFFTState(n)
+	}
 	if st == nil || len(st.bitrev) != n {
 		tmp := make([]complex64, n)
 		dft32FallbackTo(tmp, x)
@@ -635,7 +679,7 @@ func kissFFT32To(out []complex64, x []complex64, scratch []kissCpx) {
 	if n == 0 || len(out) < n {
 		return
 	}
-	scratch = kissFFT32ToScratch(x, scratch)
+	scratch = kissFFT32ToScratch(x, scratch, nil)
 	if len(scratch) < n {
 		return
 	}
@@ -672,7 +716,7 @@ func kissFFT32ToInterleaved(outRI []float32, x []complex64, scratch []kissCpx) {
 		return
 	}
 
-	scratch = kissFFT32ToScratch(x, scratch)
+	scratch = kissFFT32ToScratch(x, scratch, nil)
 	if len(scratch) < n {
 		return
 	}

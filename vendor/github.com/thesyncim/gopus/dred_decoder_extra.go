@@ -14,22 +14,30 @@ import (
 // parse/process path has not been armed with a DRED decoder model blob yet.
 var ErrDREDModelNotLoaded = errors.New("gopus: DRED decoder model not loaded")
 
-// DREDRequest mirrors the low-cost opus_dred_parse() request parameters that
-// affect how much cached redundancy is usable.
+// DREDRequest supplies the limits used to evaluate cached DRED data.
+// MaxDREDSamples is a sample limit at SampleRate; SampleRate is in hertz. The
+// request bounds usable feature frames and 40 ms latent chunks.
 type DREDRequest = internaldred.Request
 
-// DREDAvailability summarizes the request-bounded DRED coverage available from
-// a parsed payload.
+// DREDAvailability summarizes request-bounded DRED coverage. FeatureFrames
+// counts 10 ms feature frames and MaxLatents counts 40 ms latent chunks;
+// OffsetSamples, EndSamples, and AvailableSamples are sample counts at the
+// request sample rate. Availability is also bounded by the parsed payload.
 type DREDAvailability = internaldred.Availability
 
-// DREDFeatureWindow mirrors the feature-offset window libopus derives from a
-// parsed DRED result and a concealment request.
+// DREDFeatureWindow describes the 10 ms feature indexes considered for a
+// concealment request. FeatureOffsetBase and MaxFeatureIndex are inclusive
+// indexes; RecoverableFeatureFrames counts requested indexes within the parsed
+// payload, while MissingPositiveFrames counts requested indexes beyond it.
 type DREDFeatureWindow = internaldred.FeatureWindow
 
-// DREDParsed is the retained low-cost DRED metadata parsed from an Opus packet.
+// DREDParsed retains the parsed header and number of payload latent chunks
+// available before model-backed processing. Each payload latent chunk spans
+// 40 ms.
 type DREDParsed = internaldred.Parsed
 
-// DREDResult bundles parsed DRED metadata with request-bounded availability.
+// DREDResult bundles a DRED request and parsed payload metadata with the
+// coverage available under that request.
 type DREDResult = internaldred.Result
 
 // DREDProcessStage reports how far a retained DRED packet has progressed through
@@ -46,8 +54,9 @@ const (
 	DREDProcessStageProcessed
 )
 
-// DREDDecoder mirrors libopus's standalone OpusDREDDecoder control lifetime for
-// the tag-gated DRED parse/process surface.
+// DREDDecoder retains the DRED-specific RDOVAE model and processing state for
+// the standalone Parse/Process API. It is available with -tags gopus_dred or
+// -tags gopus_osce; its model is separate from the Decoder's PLC models.
 type DREDDecoder struct {
 	dnnBlob     *dnnblob.Blob
 	model       *rdovae.Decoder
@@ -55,13 +64,15 @@ type DREDDecoder struct {
 	processor   rdovae.Processor
 }
 
-// NewDREDDecoder constructs a tag-gated standalone DRED decoder wrapper.
+// NewDREDDecoder constructs an empty standalone DRED decoder. Call
+// SetDNNBlob before Parse.
 func NewDREDDecoder() *DREDDecoder {
 	return &DREDDecoder{}
 }
 
-// SetDNNBlob loads and validates a standalone DRED decoder model blob, matching
-// the libopus OpusDREDDecoder DNN-blob control lifetime.
+// SetDNNBlob copies and validates a standalone DRED decoder model blob. A
+// successful call replaces the retained model and resets its processing state;
+// an invalid blob leaves the currently loaded model unchanged.
 func (d *DREDDecoder) SetDNNBlob(data []byte) error {
 	if d == nil {
 		return ErrInvalidArgument
@@ -106,7 +117,8 @@ func NewDRED() *DRED {
 	return &DRED{}
 }
 
-// Clear resets the retained DRED payload and process stage.
+// Clear removes the retained payload, parsed metadata, latent/state/feature
+// output, and process stage. It does not change the model on DREDDecoder.
 func (d *DRED) Clear() {
 	if d == nil {
 		return
@@ -116,7 +128,7 @@ func (d *DRED) Clear() {
 	d.processStage = 0
 }
 
-// Empty reports whether any DRED payload is currently retained.
+// Empty reports whether this DRED state is nil or retains no payload.
 func (d *DRED) Empty() bool {
 	return d == nil || d.cache.Empty()
 }
@@ -175,8 +187,9 @@ func (d *DRED) LatentCount() int {
 	return d.decoded.NbLatents
 }
 
-// FillState copies the retained DRED decoder state into dst and returns the
-// number of floats written.
+// FillState copies the retained 50-float RDOVAE state into dst and returns
+// the number of floats written. It copies a prefix when dst is short and returns
+// zero for an empty state.
 func (d *DRED) FillState(dst []float32) int {
 	if d == nil || d.Empty() {
 		return 0
@@ -184,8 +197,9 @@ func (d *DRED) FillState(dst []float32) int {
 	return d.decoded.FillState(dst)
 }
 
-// FillLatents copies the retained request-bounded DRED latent vectors into dst
-// and returns the number of floats written.
+// FillLatents copies retained request-bounded latent records into dst and
+// returns the number of floats written. Each record has 25 latent values
+// followed by its quantizer-level value; a short dst receives a prefix.
 func (d *DRED) FillLatents(dst []float32) int {
 	if d == nil || d.Empty() {
 		return 0
@@ -202,8 +216,9 @@ func (d *DRED) FeatureCount() int {
 	return d.decoded.NbLatents * 4 * internaldred.NumFeatures
 }
 
-// FillFeatures copies the retained processed DRED feature frames into dst and
-// returns the number of floats written.
+// FillFeatures copies retained processed feature frames into dst and returns
+// the number of floats written. Each 10 ms frame has 20 float features; a short
+// dst receives a prefix, and deferred or empty states write nothing.
 func (d *DRED) FillFeatures(dst []float32) int {
 	if d == nil || d.processStage != DREDProcessStageProcessed {
 		return 0
@@ -212,7 +227,7 @@ func (d *DRED) FillFeatures(dst []float32) int {
 }
 
 // Result evaluates the retained DRED payload against an opus_dred_parse()-style
-// request.
+// request. It returns a zero result when no payload is retained.
 func (d *DRED) Result(maxDredSamples, sampleRate int) DREDResult {
 	if d == nil {
 		return DREDResult{}
@@ -240,8 +255,9 @@ func (d *DRED) FillQuantizerLevels(dst []int32, maxDredSamples, sampleRate int) 
 	return d.Result(maxDredSamples, sampleRate).FillQuantizerLevels(dst)
 }
 
-// FeatureWindow reports the retained DRED feature-offset window for a given
-// concealment request.
+// FeatureWindow reports the retained 10 ms DRED feature-index window for a
+// concealment request. decodeOffsetSamples and frameSizeSamples use samples at
+// sampleRate; initFrames is the number of pre-roll feature frames.
 func (d *DRED) FeatureWindow(maxDredSamples, sampleRate, decodeOffsetSamples, frameSizeSamples, initFrames int) DREDFeatureWindow {
 	result := d.Result(maxDredSamples, sampleRate)
 	if d != nil && d.processStage == DREDProcessStageProcessed {
@@ -251,11 +267,14 @@ func (d *DRED) FeatureWindow(maxDredSamples, sampleRate, decodeOffsetSamples, fr
 }
 
 // Parse finds and retains the temporary DRED packet extension from packet and
-// returns the request-bounded available and trailing-silence sample counts.
+// returns available and trailing-silence sample counts at sampleRate. It
+// requires a loaded DRED decoder model. If packet has no supported DRED
+// extension, Parse clears dst and returns zero counts without an error. With
+// deferProcessing true, parsed state and latents are retained for a later
+// Process call; otherwise model-derived features are produced before Parse
+// returns.
 //
-// This tag-gated wrapper covers the supported standalone parse, deferred
-// process, and feature-retention surface. It does not claim broad DRED
-// audio-path parity beyond the green seams documented for the current release.
+// The API is available with -tags gopus_dred or -tags gopus_osce.
 func (d *DREDDecoder) Parse(dst *DRED, packet []byte, maxDredSamples, sampleRate int, deferProcessing bool) (availableSamples, dredEnd int, err error) {
 	if d == nil || dst == nil || sampleRate <= 0 || maxDredSamples < 0 {
 		return 0, 0, ErrInvalidArgument
@@ -290,8 +309,10 @@ func (d *DREDDecoder) Parse(dst *DRED, packet []byte, maxDredSamples, sampleRate
 	return result.Availability.AvailableSamples, result.Availability.EndSamples, nil
 }
 
-// Process finalizes a deferred standalone DRED state by running the pure-Go
-// RDOVAE decoder and retaining the derived DRED feature frames.
+// Process finalizes a deferred DRED state by running the RDOVAE decoder and
+// retaining the derived feature frames. src may equal dst; otherwise Process
+// copies the retained state to dst. Processing an already processed state is
+// idempotent. The DRED decoder model must be loaded.
 func (d *DREDDecoder) Process(src, dst *DRED) error {
 	if d == nil || src == nil || dst == nil {
 		return ErrInvalidArgument
@@ -312,21 +333,25 @@ func (d *DREDDecoder) Process(src, dst *DRED) error {
 	return nil
 }
 
-// DecodeDRED decodes a processed standalone DRED payload into pcm using the
-// receiver Decoder state as the concealment context.
+// DecodeDRED conceals frameSizeSamples per channel into interleaved float32
+// pcm using a processed DRED payload and the receiver's decoder history.
+// dredOffsetSamples and frameSizeSamples use samples at the Decoder API rate;
+// the frame size must be a positive multiple of 2.5 ms, and
+// pcm must hold frameSizeSamples*Channels elements. It returns samples per
+// channel; it reports ErrOptionalExtensionUnavailable when the receiver's
+// DRED neural runtime is not ready.
 func (d *Decoder) DecodeDRED(dred *DRED, dredOffsetSamples int, pcm []float32, frameSizeSamples int) (int, error) {
 	return d.decodeExplicitDREDFloat(dred, dredOffsetSamples, pcm, frameSizeSamples)
 }
 
-// DecodeDREDInt24 decodes a processed standalone DRED payload into 24-bit PCM
-// samples stored in int32, using the receiver Decoder state as the concealment
-// context. Each element carries a signed 24-bit value in the range
-// [-8388608, 8388607] (= ±2^23), right-justified in int32 — matching libopus
-// opus_decoder_dred_decode24() (src/opus_decoder.c): the float DRED decode path
-// followed by RES2INT24 (arch.h) on each sample.
-//
-// pcm must hold at least frameSizeSamples*channels elements.
-// Returns the number of samples per channel decoded, or an error.
+// DecodeDREDInt24 conceals frameSizeSamples per channel into interleaved
+// 24-bit-scale PCM stored in int32, using a processed DRED payload and the
+// receiver's decoder history. Values are right-justified; the nominal signed
+// 24-bit range is [-8388608, 8388607], but libopus RES2INT24
+// (src/celt/arch.h) does not soft-clip or clamp to that range; a +1.0 sample
+// maps to 8388608. dredOffsetSamples and frameSizeSamples use samples at the
+// Decoder API rate; the frame size must be a positive multiple of 2.5 ms, and pcm
+// must hold frameSizeSamples*Channels elements. It returns samples per channel.
 func (d *Decoder) DecodeDREDInt24(dred *DRED, dredOffsetSamples int, pcm []int32, frameSizeSamples int) (int, error) {
 	if frameSizeSamples <= 0 {
 		return 0, ErrInvalidArgument

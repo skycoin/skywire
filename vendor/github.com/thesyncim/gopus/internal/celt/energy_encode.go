@@ -27,7 +27,7 @@ const (
 // This ensures encoder and decoder use matching gain values.
 //
 // Reference: RFC 6716 Section 4.3.2, libopus celt/quant_bands.c amp2Log2()
-func (e *Encoder) ComputeBandEnergies(mdctCoeffs []float32, nbBands, frameSize int) []celtGLog {
+func (e *Encoder) ComputeBandEnergies(mdctCoeffs []float32, nbBands, frameSize int) []CeltGLog {
 	// Use default scratch buffer - caller should use ComputeBandEnergiesInto if they need
 	// a specific destination buffer to avoid aliasing
 	energiesLen := nbBands * int(e.channels)
@@ -36,25 +36,10 @@ func (e *Encoder) ComputeBandEnergies(mdctCoeffs []float32, nbBands, frameSize i
 	return dst
 }
 
-// ComputeBandEnergiesF32 computes CELT band energies from float-build MDCT
-// coefficients and returns the encoder scratch view.
-func (e *Encoder) ComputeBandEnergiesF32(mdctCoeffs []float32, nbBands, frameSize int) []celtGLog {
-	energiesLen := nbBands * int(e.channels)
-	dst := ensureGLogSlice(&e.scratch.energies, energiesLen)
-	e.ComputeBandEnergiesF32Into(mdctCoeffs, nbBands, frameSize, dst)
-	return dst
-}
-
 // ComputeBandEnergiesInto computes band energies into the provided destination buffer.
 // Use this instead of ComputeBandEnergies when you need to avoid buffer aliasing.
 func (e *Encoder) ComputeBandEnergiesInto(mdctCoeffs []float32, nbBands, frameSize int, dst []celtGLog) {
 	computeBandEnergiesGLogInto(mdctCoeffs, nbBands, frameSize, int(e.channels), dst)
-}
-
-// ComputeBandEnergiesF32Into computes CELT band energies into celt_glog-width
-// scratch for callers that already carry float-build MDCT coefficients.
-func (e *Encoder) ComputeBandEnergiesF32Into(mdctCoeffs []float32, nbBands, frameSize int, dst []celtGLog) {
-	computeBandEnergiesGLogF32Into(mdctCoeffs, nbBands, frameSize, int(e.channels), 1<<GetModeConfig(frameSize).LM, dst)
 }
 
 // ComputeBandEnergiesFloat32Into computes CELT band energies in libopus
@@ -220,6 +205,30 @@ func computeBandEnergiesGLogF32IntoEdges(mdctCoeffs []float32, nbBands, frameSiz
 	}
 }
 
+// computeBandAmplitudesGLogF32 is compute_band_energies() followed by
+// amp2Log2() for the standard band layout with M = binMul: amp receives the
+// linear band amplitudes and dst their log2 energies relative to eMeans, both
+// laid out [c*nbBands+band] over channels blocks of frameSize coefficients. dst
+// matches computeBandEnergiesGLogF32Into. It reports false, with both outputs
+// unspecified, when a band reaches past the coefficients; callers then use the
+// general routines.
+func computeBandAmplitudesGLogF32(mdctCoeffs []float32, nbBands, frameSize, channels, binMul int, amp []celtEner, dst []celtGLog) bool {
+	if nbBands < 0 || nbBands > MaxBands || channels < 1 || channels > 2 || binMul <= 0 ||
+		len(mdctCoeffs) < frameSize*channels || len(amp) < nbBands*channels || len(dst) < nbBands*channels ||
+		EBands[nbBands]*binMul > frameSize {
+		return false
+	}
+	for c := range channels {
+		coeffs := mdctCoeffs[c*frameSize : (c+1)*frameSize]
+		for band := range nbBands {
+			a := celtSqrt(float32(1e-27) + celtInnerProdF32LibopusOrder(coeffs[EBands[band]*binMul:EBands[band+1]*binMul]))
+			amp[c*nbBands+band] = celtEner(a)
+			dst[c*nbBands+band] = celtGLog(celtLog2(a) - float32(eMeans[band]*DB6))
+		}
+	}
+	return true
+}
+
 func computeBandEnergiesFloat32Into(mdctCoeffs []float32, nbBands, frameSize, channels int, dst []float32) {
 	if nbBands > MaxBands {
 		nbBands = MaxBands
@@ -323,23 +332,16 @@ func applyLFEBandLogEClamp(energies []celtGLog, nbBands, channels int) {
 }
 
 // computeBandRMS computes the per-band log2 amplitude from MDCT coefficients.
-// Returns log2(sqrt(sum(x^2))) using the same epsilon as libopus.
-// This matches libopus compute_band_energies() + amp2Log2() (float path).
+// It preserves libopus's order: inner product, epsilon addition, float32 sqrt,
+// then log2.
 func computeBandRMS(coeffs []float32, start, end int) float32 {
 	if end <= start || start < 0 || end > len(coeffs) {
 		return float32(0.5) * celtLog2(float32(1e-27))
 	}
 
 	c := coeffs[start:end:end]
-	if celtFusedFloat {
-		sumSq := float32(1e-27) + celtBandSumSqScalarNoFMA(c)
-		return celtLog2(celtSqrt(sumSq))
-	}
-
-	// Compute sum of squares with the same accumulation order libopus uses
-	// for celt_inner_prod() on the active architecture.
 	sumSq := float32(1e-27) + celtInnerProdF32LibopusOrder(c)
-	return float32(0.5) * celtLog2(sumSq)
+	return celtLog2(celtSqrt(sumSq))
 }
 
 func computeBandRMSFloat32(coeffs []float32, start, end int) float32 {
@@ -347,12 +349,8 @@ func computeBandRMSFloat32(coeffs []float32, start, end int) float32 {
 		return float32(0.5) * celtLog2(float32(1e-27))
 	}
 	c := coeffs[start:end:end]
-	if celtFusedFloat {
-		sumSq := float32(1e-27) + celtBandSumSqScalarNoFMA(c)
-		return celtLog2(celtSqrt(sumSq))
-	}
 	sumSq := float32(1e-27) + celtInnerProdF32LibopusOrder(c)
-	return float32(0.5) * celtLog2(sumSq)
+	return celtLog2(celtSqrt(sumSq))
 }
 
 // celtSqrt mirrors libopus celt_sqrt in the float build: (float)sqrt((double)x).
@@ -362,24 +360,6 @@ func celtSqrt(x float32) float32 {
 	return float32(math.Sqrt(float64(x)))
 }
 
-// celtBandSumSqScalarNoFMA accumulates the band sum-of-squares in scalar order,
-// matching libopus celt_inner_prod_c (xy = MAC16_16(xy, x[i], x[i]), i.e. a plain
-// float32 multiply followed by a float32 add per element). Materializing each
-// square through a Float32bits round-trip stops a fused build (celtFusedFloat)
-// from contracting sum + x*x into a single FMADD, so the band energy that feeds
-// the dynalloc boost decision tracks the scalar reference instead of the NEON
-// lane-ordered inner product. With the square materialized, the accumulating add
-// has no multiply left to fuse, so it needs no separate barrier. Band energy is
-// computed once per frame, so the lost FMA is negligible.
-func celtBandSumSqScalarNoFMA(x []float32) float32 {
-	var sum float32
-	for i := range x {
-		p := round32(x[i] * x[i])
-		sum += p
-	}
-	return sum
-}
-
 func celtInnerProdF32LibopusOrder(x []float32) float32 {
 	if celtUseFusedFloatMath {
 		return celtInnerProdNeonStyleNorm(x, x)
@@ -387,11 +367,7 @@ func celtInnerProdF32LibopusOrder(x []float32) float32 {
 	if celtUseSSEFloatMath {
 		return celtInnerProdSSEStyleNorm(x, x)
 	}
-	var sum float32
-	for i := range x {
-		sum = celtFloatMulAdd(x[i], x[i], sum)
-	}
-	return sum
+	return celtScalarSumSquares(x)
 }
 
 func celtAbsInt(v int) int {
@@ -418,10 +394,13 @@ func coarseLossDistortion(energies []celtGLog, oldEBands []celtGLog, nbBands, ch
 				continue
 			}
 			d := energies[idx] - oldEBands[oldIdx]
-			dist += d * d
+			if neonRoundsReductionTerm(band, nbBands) {
+				dist += round32(d * d)
+			} else {
+				dist += d * d
+			}
 		}
 	}
-	dist /= 128.0
 	if dist > 200 {
 		return 200
 	}
@@ -454,10 +433,13 @@ func coarseLossDistortionRange(energies []celtGLog, oldEBands []celtGLog, start,
 				continue
 			}
 			d := energies[idx] - oldEBands[oldIdx]
-			dist += d * d
+			if neonRoundsReductionTerm(band-start, end-start) {
+				dist += round32(d * d)
+			} else {
+				dist += d * d
+			}
 		}
 	}
-	dist /= 128.0
 	if dist > 200 {
 		return 200
 	}
@@ -468,8 +450,8 @@ func (e *Encoder) encodeCoarseEnergyPass(energies []celtGLog, startBand, nbBands
 	if e.rangeEncoder == nil {
 		return energies, 0
 	}
-	if nbBands > MaxBands {
-		nbBands = MaxBands
+	if nbBands > e.predStride() {
+		nbBands = e.predStride()
 	}
 	if nbBands < 0 {
 		nbBands = 0
@@ -534,10 +516,10 @@ func (e *Encoder) encodeCoarseEnergyPass(energies []celtGLog, startBand, nbBands
 				oldE = minEnergy
 			}
 
-			predMul := noFMA32Mul(coef32, oldE)
-			f := noFMA32Sub(noFMA32Sub(x, predMul), prevBandEnergy[c])
+			// The amd64.v3 helper reuses rounded coef*oldE for reconstruction,
+			// matching GCC's v3 kernel; other targets preserve source expressions.
+			f, oldProduct := quantCoarseEnergyResidual32(x, coef32, oldE, prevBandEnergy[c])
 			qi := floor32ToInt(f/float32(DB6) + 0.5)
-			qi0 := qi
 
 			decayBound := oldEBand
 			minDecay := float32(-28.0 * DB6)
@@ -552,11 +534,14 @@ func (e *Encoder) encodeCoarseEnergyPass(energies []celtGLog, startBand, nbBands
 					qi = 0
 				}
 			}
+			// badness counts the budget clamps only, after the decay bound
+			// (quant_bands.c quant_coarse_energy_impl: qi0 = qi).
+			qi0 := qi
 
 			tell := e.rangeEncoder.Tell()
 			bitsLeft := budget - tell - 3*channels*(nbBands-band)
 			remaining := budget - tell
-			if band != 0 && bitsLeft < 30 {
+			if band != startBand && bitsLeft < 30 {
 				if bitsLeft < 24 && qi > 1 {
 					qi = 1
 				}
@@ -599,10 +584,8 @@ func (e *Encoder) encodeCoarseEnergyPass(energies []celtGLog, startBand, nbBands
 
 			q := float32(qi) * float32(DB6)
 			coarseError[idx] = celtGLog(f - q)
-			quantizedEnergy := noFMA32Add(noFMA32Add(predMul, prevBandEnergy[c]), q)
-			quantizedEnergies[idx] = celtGLog(quantizedEnergy)
-			betaMul := noFMA32Mul(beta32, q)
-			prevBandEnergy[c] = noFMA32Sub(noFMA32Add(prevBandEnergy[c], q), betaMul)
+			quantizedEnergies[idx] = celtGLog(quantCoarseEnergyReconstruct32(oldProduct, coef32, oldE, prevBandEnergy[c], q))
+			prevBandEnergy[c] = quantCoarseEnergyUpdate32(prevBandEnergy[c], q, beta32)
 		}
 	}
 
@@ -622,19 +605,14 @@ func (e *Encoder) encodeCoarseEnergyPass(energies []celtGLog, startBand, nbBands
 	return quantizedEnergies, badness
 }
 
+// coarseNbAvailableBytesForBudget returns the nbAvailableBytes argument of
+// quant_coarse_energy(): the frame's nbAvailableBytes while one is set, and
+// budget/8 otherwise.
 func (e *Encoder) coarseNbAvailableBytesForBudget(budget int) int {
-	nbAvailableBytes := budget / 8
-	if e.coarseAvailableBytes > 0 {
-		nbAvailableBytes = int(e.coarseAvailableBytes)
-		maxBytes := budget / 8
-		if nbAvailableBytes > maxBytes {
-			nbAvailableBytes = maxBytes
-		}
+	if e.coarseAvailableSet {
+		return int(e.coarseAvailableBytes)
 	}
-	if nbAvailableBytes < 0 {
-		nbAvailableBytes = 0
-	}
-	return nbAvailableBytes
+	return max(budget/8, 0)
 }
 
 // DecideIntraMode runs libopus-style two-pass intra/inter selection for coarse energy.
@@ -642,14 +620,24 @@ func (e *Encoder) coarseNbAvailableBytesForBudget(budget int) int {
 // startBand specifies the first band to encode (0 for CELT-only, 17 for hybrid mode).
 // This matches libopus quant_coarse_energy which iterates from start to end.
 func (e *Encoder) DecideIntraMode(energies []celtGLog, startBand, nbBands int, lm int) bool {
+	intra, _ := e.decideIntraMode(energies, startBand, nbBands, lm, false)
+	return intra
+}
+
+// decideIntraMode is DecideIntraMode. With keepPass, a two-pass decision on
+// a full band range leaves the range coder after the intra flag and the
+// selected pass, as quant_coarse_energy does, and reports true; the caller
+// then must not encode the flag, and EncodeCoarseEnergy applies the kept
+// pass. Otherwise the coder is restored.
+func (e *Encoder) decideIntraMode(energies []celtGLog, startBand, nbBands int, lm int, keepPass bool) (bool, bool) {
 	if e.rangeEncoder == nil {
-		return false
+		return false, false
 	}
-	if nbBands > MaxBands {
-		nbBands = MaxBands
+	if nbBands > e.predStride() {
+		nbBands = e.predStride()
 	}
 	if nbBands <= 0 {
-		return false
+		return false, false
 	}
 	if lm < 0 {
 		lm = 0
@@ -683,12 +671,12 @@ func (e *Encoder) DecideIntraMode(energies []celtGLog, startBand, nbBands int, l
 
 	tell := e.rangeEncoder.Tell()
 	if tell+3 > budget {
-		return false
+		return false, false
 	}
 
 	// Match libopus: without two-pass search, the threshold/force decision is final.
 	if !twoPass || intra {
-		return intra
+		return intra, false
 	}
 
 	maxDecay32 := float32(16.0 * DB6)
@@ -704,8 +692,10 @@ func (e *Encoder) DecideIntraMode(energies []celtGLog, startBand, nbBands int, l
 		maxDecay32 = float32(3.0 * DB6)
 	}
 
+	// Like libopus quant_coarse_energy(), the start state is a plain coder
+	// copy; the intra pass keeps the bytes it wrote since then.
 	startState := &e.scratch.coarseStartState
-	e.rangeEncoder.SaveStateInto(startState)
+	e.rangeEncoder.SaveStateShallowInto(startState)
 
 	oldStart := ensureGLogSlice(&e.scratch.coarseOldStart, len(e.prevEnergy))
 	copy(oldStart, e.prevEnergy)
@@ -756,7 +746,14 @@ func (e *Encoder) DecideIntraMode(energies []celtGLog, startBand, nbBands int, l
 		stride,
 	)
 	tellIntra := e.rangeEncoder.TellFrac()
-	e.rangeEncoder.RestoreState(startState)
+	channelsMatch := channels == int(e.channels)
+	keep := keepPass && startBand == 0 && channelsMatch
+	if keep {
+		e.rangeEncoder.SaveStateSinceInto(&e.scratch.coarseIntraState, startState)
+		copy(ensureGLogSliceNoClear(&e.scratch.coarseIntraOldE, len(workOldE)), workOldE)
+		copy(ensureGLogSliceNoClear(&e.scratch.coarseIntraErr, len(workErr)), workErr)
+	}
+	e.rangeEncoder.RestoreStateShallow(startState)
 	copy(e.prevEnergy, oldStart)
 
 	copy(workOldE, oldStart)
@@ -784,9 +781,18 @@ func (e *Encoder) DecideIntraMode(energies []celtGLog, startBand, nbBands int, l
 	if badnessIntra == badnessInter && e.rangeEncoder.TellFrac()+intraBias > tellIntra {
 		useIntra = true
 	}
-	e.rangeEncoder.RestoreState(startState)
 	copy(e.prevEnergy, oldStart)
-	return useIntra
+	if !keep {
+		e.rangeEncoder.RestoreStateShallow(startState)
+		return useIntra, false
+	}
+	if useIntra {
+		e.rangeEncoder.RestoreState(&e.scratch.coarseIntraState)
+		copy(workOldE, e.scratch.coarseIntraOldE)
+		copy(workErr, e.scratch.coarseIntraErr)
+	}
+	e.coarsePassKept = true
+	return useIntra, true
 }
 
 // EncodeCoarseEnergy encodes coarse (6dB step) band energies.
@@ -797,12 +803,12 @@ func (e *Encoder) DecideIntraMode(energies []celtGLog, startBand, nbBands int, l
 // Returns the quantized energies (after encoding) for use by fine energy encoding.
 //
 // Reference: RFC 6716 Section 4.3.2, libopus celt/quant_bands.c quant_coarse_energy()
-func (e *Encoder) EncodeCoarseEnergy(energies []celtGLog, nbBands int, intra bool, lm int) []celtGLog {
+func (e *Encoder) EncodeCoarseEnergy(energies []celtGLog, nbBands int, intra bool, lm int) []CeltGLog {
 	if e.rangeEncoder == nil {
 		return energies
 	}
-	if nbBands > MaxBands {
-		nbBands = MaxBands
+	if nbBands > e.predStride() {
+		nbBands = e.predStride()
 	}
 	if nbBands < 0 {
 		nbBands = 0
@@ -821,6 +827,48 @@ func (e *Encoder) EncodeCoarseEnergy(energies []celtGLog, nbBands int, intra boo
 
 	newDistortion := coarseLossDistortion(energies, e.prevEnergy, nbBands, channels, e.predStride())
 
+	var quantizedEnergies []celtGLog
+	if e.coarsePassKept {
+		e.coarsePassKept = false
+		quantizedEnergies = e.applyKeptCoarsePass(nbBands, channels)
+	} else {
+		quantizedEnergies = e.encodeCoarseEnergy(energies, nbBands, intra, lm)
+	}
+
+	alpha32 := float32(AlphaCoef[lm])
+	if intra {
+		e.delayedIntra = opusVal32(newDistortion)
+	} else {
+		e.delayedIntra = opusVal32(alpha32*alpha32*float32(e.delayedIntra) + newDistortion)
+	}
+
+	return quantizedEnergies
+}
+
+// applyKeptCoarsePass takes the pass decideIntraMode kept: its quantized
+// energies and errors sit in the coarse scratch with the prediction stride,
+// and move to the nbBands-per-channel layout encodeCoarseEnergyPass writes,
+// updating prevEnergy the same way.
+func (e *Encoder) applyKeptCoarsePass(nbBands, channels int) []celtGLog {
+	stride := e.predStride()
+	quantized := e.scratch.quantizedEnergies[:len(e.scratch.quantizedEnergies)]
+	coarseErr := e.scratch.coarseError[:len(e.scratch.coarseError)]
+	for c := range channels {
+		// Channel c moves down from c*stride to c*nbBands; nbBands <= stride,
+		// so ascending copies never overwrite a band they still read.
+		copy(quantized[c*nbBands:(c+1)*nbBands], quantized[c*stride:c*stride+nbBands])
+		copy(coarseErr[c*nbBands:(c+1)*nbBands], coarseErr[c*stride:c*stride+nbBands])
+	}
+	quantized = ensureGLogSliceNoClear(&e.scratch.quantizedEnergies, nbBands*channels)
+	ensureGLogSliceNoClear(&e.scratch.coarseError, nbBands*channels)
+	for c := range channels {
+		copy(e.prevEnergy[c*stride:c*stride+nbBands], quantized[c*nbBands:(c+1)*nbBands])
+	}
+	return quantized
+}
+
+// encodeCoarseEnergy runs EncodeCoarseEnergy's coarse-energy pass.
+func (e *Encoder) encodeCoarseEnergy(energies []celtGLog, nbBands int, intra bool, lm int) []celtGLog {
 	budget := e.rangeEncoder.StorageBits()
 	if e.frameBits > 0 && int(e.frameBits) < budget {
 		budget = int(e.frameBits)
@@ -840,29 +888,21 @@ func (e *Encoder) EncodeCoarseEnergy(energies []celtGLog, nbBands int, intra boo
 	}
 
 	quantizedEnergies, _ := e.encodeCoarseEnergyPass(energies, 0, nbBands, intra, lm, budget, maxDecay32, false)
-
-	alpha32 := float32(AlphaCoef[lm])
-	if intra {
-		e.delayedIntra = opusVal32(newDistortion)
-	} else {
-		e.delayedIntra = opusVal32(alpha32*alpha32*float32(e.delayedIntra) + newDistortion)
-	}
-
 	return quantizedEnergies
 }
 
 // EncodeCoarseEnergyRange encodes coarse energies for bands in [start, end).
 // This mirrors EncodeCoarseEnergy but only processes the specified band range.
 // Bands outside the range keep their previous energy values.
-func (e *Encoder) EncodeCoarseEnergyRange(energies []celtGLog, start, end int, intra bool, lm int) []celtGLog {
+func (e *Encoder) EncodeCoarseEnergyRange(energies []celtGLog, start, end int, intra bool, lm int) []CeltGLog {
 	if e.rangeEncoder == nil {
 		return energies
 	}
 	if start < 0 {
 		start = 0
 	}
-	if end > MaxBands {
-		end = MaxBands
+	if end > e.predStride() {
+		end = e.predStride()
 	}
 	if end <= start {
 		return energies
@@ -987,8 +1027,9 @@ func (e *Encoder) EncodeCoarseEnergyRange(energies []celtGLog, start, end int, i
 				oldE = minEnergy
 			}
 
-			predMul := noFMA32Mul(coef32, oldE)
-			f := noFMA32Sub(noFMA32Sub(x, predMul), prevBandEnergy[c])
+			// The amd64.v3 helper reuses rounded coef*oldE for reconstruction,
+			// matching GCC's v3 kernel; other targets preserve source expressions.
+			f, oldProduct := quantCoarseEnergyResidual32(x, coef32, oldE, prevBandEnergy[c])
 			qi := floor32ToInt(f/float32(DB6) + 0.5)
 
 			decayBound := oldEBand
@@ -1049,10 +1090,8 @@ func (e *Encoder) EncodeCoarseEnergyRange(energies []celtGLog, start, end int, i
 
 			q := float32(qi) * float32(DB6)
 			coarseError[idx] = celtGLog(f - q)
-			energy := noFMA32Add(noFMA32Add(predMul, prevBandEnergy[c]), q)
-			quantizedEnergies[idx] = celtGLog(energy)
-			betaMul := noFMA32Mul(beta32, q)
-			prevBandEnergy[c] = noFMA32Sub(noFMA32Add(prevBandEnergy[c], q), betaMul)
+			quantizedEnergies[idx] = celtGLog(quantCoarseEnergyReconstruct32(oldProduct, coef32, oldE, prevBandEnergy[c], q))
+			prevBandEnergy[c] = quantCoarseEnergyUpdate32(prevBandEnergy[c], q, beta32)
 		}
 	}
 
@@ -1133,8 +1172,8 @@ func (e *Encoder) EncodeFineEnergy(energies []celtGLog, quantizedCoarse []celtGL
 	if e.rangeEncoder == nil {
 		return
 	}
-	if nbBands > MaxBands {
-		nbBands = MaxBands
+	if nbBands > e.predStride() {
+		nbBands = e.predStride()
 	}
 	if nbBands > len(fineBits) {
 		nbBands = len(fineBits)
@@ -1184,20 +1223,21 @@ func (e *Encoder) EncodeFineEnergy(energies []celtGLog, quantizedCoarse []celtGL
 
 // encodeFineEnergyFromError mirrors libopus quant_fine_energy() with prev_quant=NULL.
 // It consumes and updates errorVals in-place so the same residual state can be used
-// by energy finalisation and next-frame energyError clipping.
-func (e *Encoder) encodeFineEnergyFromError(quantizedEnergies []celtGLog, nbBands int, fineBits []int32, errorVals []celtGLog) {
+// by energy finalisation and next-frame energyError clipping. stateStride is
+// the mode's oldBandE channel stride; QEXT keeps its history in encoder state.
+func (e *Encoder) encodeFineEnergyFromError(quantizedEnergies []celtGLog, nbBands, stateStride int, fineBits []int32, errorVals []celtGLog) {
 	if e.rangeEncoder == nil {
 		return
 	}
-	if nbBands > MaxBands {
-		nbBands = MaxBands
+	if nbBands > e.predStride() {
+		nbBands = e.predStride()
 	}
 	if nbBands > len(fineBits) {
 		nbBands = len(fineBits)
 	}
 
-	channels := int(e.channels)
-	if len(quantizedEnergies) < nbBands*channels || len(errorVals) < nbBands*channels {
+	channels := e.codedChannels()
+	if len(quantizedEnergies) < (channels-1)*stateStride+nbBands || len(errorVals) < nbBands*channels {
 		channels = 1
 	}
 
@@ -1217,7 +1257,8 @@ func (e *Encoder) encodeFineEnergyFromError(quantizedEnergies []celtGLog, nbBand
 		scale32 := float32(extra)
 		for c := 0; c < channels; c++ {
 			idx := c*nbBands + band
-			if idx >= len(quantizedEnergies) || idx >= len(errorVals) {
+			stateIdx := c*stateStride + band
+			if stateIdx >= len(quantizedEnergies) || idx >= len(errorVals) {
 				continue
 			}
 
@@ -1228,7 +1269,7 @@ func (e *Encoder) encodeFineEnergyFromError(quantizedEnergies []celtGLog, nbBand
 			re.EncodeRawBits(uint32(q2), uint(bits))
 
 			offset := (float32(q2)+0.5)*float32(uint(1)<<(14-bits))*(1.0/16384.0) - 0.5
-			quantizedEnergies[idx] = celtGLog(quantizedEnergies[idx] + offset)
+			quantizedEnergies[stateIdx] = celtGLog(quantizedEnergies[stateIdx] + offset)
 			errorVals[idx] = celtGLog(err - offset)
 		}
 	}
@@ -1242,8 +1283,8 @@ func (e *Encoder) EncodeFineEnergyRange(energies []celtGLog, quantizedCoarse []c
 	if start < 0 {
 		start = 0
 	}
-	if end > MaxBands {
-		end = MaxBands
+	if end > e.predStride() {
+		end = e.predStride()
 	}
 	if end <= start {
 		return
@@ -1295,8 +1336,8 @@ func (e *Encoder) EncodeFineEnergyRangeFromError(quantizedEnergies []celtGLog, s
 	if start < 0 {
 		start = 0
 	}
-	if end > MaxBands {
-		end = MaxBands
+	if end > e.predStride() {
+		end = e.predStride()
 	}
 	if end <= start {
 		return
@@ -1353,8 +1394,8 @@ func (e *Encoder) EncodeEnergyRemainder(energies []celtGLog, quantizedEnergies [
 	if e.rangeEncoder == nil {
 		return
 	}
-	if nbBands > MaxBands {
-		nbBands = MaxBands
+	if nbBands > e.predStride() {
+		nbBands = e.predStride()
 	}
 	if nbBands > len(remainderBits) {
 		nbBands = len(remainderBits)
@@ -1418,8 +1459,8 @@ func (e *Encoder) EncodeEnergyFinalise(energies []celtGLog, quantizedEnergies []
 	if e.rangeEncoder == nil {
 		return
 	}
-	if nbBands > MaxBands {
-		nbBands = MaxBands
+	if nbBands > e.predStride() {
+		nbBands = e.predStride()
 	}
 	if nbBands <= 0 {
 		return
@@ -1468,8 +1509,8 @@ func (e *Encoder) encodeEnergyFinaliseFromError(quantizedEnergies []celtGLog, nb
 	if e.rangeEncoder == nil {
 		return
 	}
-	if nbBands > MaxBands {
-		nbBands = MaxBands
+	if nbBands > e.predStride() {
+		nbBands = e.predStride()
 	}
 	if nbBands <= 0 {
 		return
@@ -1482,11 +1523,23 @@ func (e *Encoder) encodeEnergyFinaliseFromError(quantizedEnergies []celtGLog, nb
 	if len(quantizedEnergies) < nbBands*channels || len(errorVals) < nbBands*channels {
 		channels = 1
 	}
+	encodeEnergyFinaliseResidual(e.rangeEncoder, quantizedEnergies, errorVals, 0, nbBands, channels, fineQuant, finePriority, bitsLeft)
+}
 
-	re := e.rangeEncoder
-
+// encodeEnergyFinaliseResidual follows libopus quant_energy_finalise(). A nil
+// oldEBands leaves the refined energy history intact while coding final bits
+// from a residual backup, as the QEXT encoder does when it reserves bytes.
+func encodeEnergyFinaliseResidual(re *rangecoding.Encoder, oldEBands, errorVals []celtGLog, start, end, channels int, fineQuant, finePriority []int32, bitsLeft int) {
+	if re == nil || channels <= 0 {
+		return
+	}
+	start = max(start, 0)
+	if end <= start {
+		return
+	}
+	bitsLeft = max(bitsLeft, 0)
 	for prio := range 2 {
-		for band := 0; band < nbBands && bitsLeft >= channels; band++ {
+		for band := start; band < end && bitsLeft >= channels; band++ {
 			if band >= len(fineQuant) || band >= len(finePriority) {
 				continue
 			}
@@ -1494,8 +1547,8 @@ func (e *Encoder) encodeEnergyFinaliseFromError(quantizedEnergies []celtGLog, nb
 				continue
 			}
 			for c := 0; c < channels; c++ {
-				idx := c*nbBands + band
-				if idx >= len(quantizedEnergies) || idx >= len(errorVals) {
+				idx := c*end + band
+				if idx >= len(errorVals) || (oldEBands != nil && idx >= len(oldEBands)) {
 					continue
 				}
 
@@ -1506,7 +1559,9 @@ func (e *Encoder) encodeEnergyFinaliseFromError(quantizedEnergies []celtGLog, nb
 				re.EncodeRawBits(uint32(q2), 1)
 
 				offset := (float32(q2) - 0.5) * float32(uint(1)<<(14-fineQuant[band]-1)) * (1.0 / 16384.0)
-				quantizedEnergies[idx] = celtGLog(quantizedEnergies[idx] + offset)
+				if oldEBands != nil {
+					oldEBands[idx] = celtGLog(oldEBands[idx] + offset)
+				}
 				errorVals[idx] = celtGLog(float32(errorVals[idx]) - offset)
 				bitsLeft--
 			}
@@ -1522,8 +1577,8 @@ func (e *Encoder) EncodeEnergyFinaliseRange(energies []celtGLog, quantizedEnergi
 	if start < 0 {
 		start = 0
 	}
-	if end > MaxBands {
-		end = MaxBands
+	if end > e.predStride() {
+		end = e.predStride()
 	}
 	if end <= start {
 		return
@@ -1576,8 +1631,8 @@ func (e *Encoder) EncodeEnergyFinaliseRangeFromError(quantizedEnergies []celtGLo
 	if start < 0 {
 		start = 0
 	}
-	if end > MaxBands {
-		end = MaxBands
+	if end > e.predStride() {
+		end = e.predStride()
 	}
 	if end <= start {
 		return
@@ -1629,7 +1684,7 @@ func (e *Encoder) EncodeEnergyFinaliseRangeFromError(quantizedEnergies []celtGLo
 
 // EncodeCoarseEnergyWithEncoder encodes coarse energies using an explicit range encoder.
 // This variant allows passing a range encoder directly rather than using e.rangeEncoder.
-func (e *Encoder) EncodeCoarseEnergyWithEncoder(re *rangecoding.Encoder, energies []celtGLog, nbBands int, intra bool, lm int) []celtGLog {
+func (e *Encoder) EncodeCoarseEnergyWithEncoder(re *rangecoding.Encoder, energies []celtGLog, nbBands int, intra bool, lm int) []CeltGLog {
 	oldRE := e.rangeEncoder
 	e.rangeEncoder = re
 	defer func() { e.rangeEncoder = oldRE }()
@@ -1646,12 +1701,12 @@ func (e *Encoder) EncodeFineEnergyWithEncoder(re *rangecoding.Encoder, energies 
 	e.EncodeFineEnergy(energies, quantizedCoarse, nbBands, fineBits)
 }
 
-func (e *Encoder) encodeFineEnergyFromErrorWithEncoder(re *rangecoding.Encoder, quantizedEnergies []celtGLog, nbBands int, fineBits []int32, errorVals []celtGLog) {
+func (e *Encoder) encodeFineEnergyFromErrorWithEncoder(re *rangecoding.Encoder, quantizedEnergies []celtGLog, nbBands, stateStride int, fineBits []int32, errorVals []celtGLog) {
 	oldRE := e.rangeEncoder
 	e.rangeEncoder = re
 	defer func() { e.rangeEncoder = oldRE }()
 
-	e.encodeFineEnergyFromError(quantizedEnergies, nbBands, fineBits, errorVals)
+	e.encodeFineEnergyFromError(quantizedEnergies, nbBands, stateStride, fineBits, errorVals)
 }
 
 // encodeFineEnergyFromErrorWithPrev mirrors libopus quant_fine_energy() when
@@ -1660,8 +1715,8 @@ func (e *Encoder) encodeFineEnergyFromErrorWithPrev(quantizedEnergies []celtGLog
 	if e.rangeEncoder == nil {
 		return
 	}
-	if nbBands > MaxBands {
-		nbBands = MaxBands
+	if nbBands > e.predStride() {
+		nbBands = e.predStride()
 	}
 	if nbBands > len(extraQuant) {
 		nbBands = len(extraQuant)
@@ -1736,7 +1791,7 @@ func (e *Encoder) EncodeEnergyRemainderWithEncoder(re *rangecoding.Encoder, ener
 
 // EncodeCoarseEnergyHybrid encodes coarse energies for hybrid mode.
 // Only encodes bands from startBand onwards (typically band 17).
-func (e *Encoder) EncodeCoarseEnergyHybrid(energies []celtGLog, nbBands int, intra bool, lm int, startBand int) []celtGLog {
+func (e *Encoder) EncodeCoarseEnergyHybrid(energies []celtGLog, nbBands int, intra bool, lm int, startBand int) []CeltGLog {
 	if e.rangeEncoder == nil || nbBands == 0 {
 		return make([]celtGLog, nbBands*int(e.channels))
 	}

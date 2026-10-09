@@ -1,7 +1,8 @@
 # Agent Instructions
 
 gopus is a pure-Go, no-cgo implementation of the Opus audio codec (RFC 6716 /
-RFC 8251) that targets **byte- and quality-parity with libopus 1.6.1**. The
+RFC 8251) that targets **strong behavioral and quality parity with libopus 1.6.1**,
+with scoped byte-exact guarantees under `reports/validation.md#parity-contract`. The
 pinned reference lives in `tmp_check/opus-1.6.1/`; when behavior is uncertain,
 gopus matches libopus unless fixture evidence says otherwise.
 
@@ -11,26 +12,42 @@ uses…", "removed…"); describe what the code does today.
 
 ## Prime directive: parity, proven against a live C oracle
 
-- Match libopus 1.6.1 exactly — both observable behavior and, on the bit-exact
-  lanes, the emitted bytes and the entropy coder's final range.
+- Follow `reports/validation.md#parity-contract`: exact API/protocol behavior, integer
+  primitives and conversions on identical inputs, and
+  same-packet entropy ranges; preserve established byte-exact coverage. Universal
+  floating-point or encoder packet identity across compiler targets is not a
+  release requirement.
 - **Never weaken a gate to make work pass.** Do not relax quality thresholds,
-  edit fixture or baseline files, loosen oracle tolerances, or skip a failing
-  case to go green. Fix the root cause. Fixture/baseline edits are review-visible
-  evidence, not a shortcut.
+  edit fixture or baseline files, or skip a failing case to go green. A numerical
+  allowance requires a localized rounding cause, a justified bound, independent
+  quality/recovery evidence and an executable scoped regression under the parity
+  target. Unknown mismatches remain failures. Fixture/baseline edits are
+  review-visible evidence, not a shortcut.
 - Parity is proven on two tiers (see README "Parity & testing"): bit-exact kernel
   oracles plus differential fuzzing of every public decode entry point, and
-  `opus_compare` quality on real audio. SILK decode is bit-exact; CELT/Hybrid sit
-  in the near-exact envelope.
+  `opus_compare` quality on real audio. Exact packet, range, and sample gates
+  use matching C build configurations; quality scores complement those gates.
 
-## Tiers and the per-arch float budget
+## Paired scalar and SIMD references
 
-- The `purego` build tag is the scalar reference path: **bit-exact on every
-  architecture**, and the lane the byte-parity gates compare against.
-- The default build selects assembly (arm64 NEON, amd64 SSE/AVX2) only where
-  libopus does, and only behind a quality gate.
-- One residual is documented: a few CELT float kernels drift by ≤1 ULP on
-  darwin/arm64 — a per-arch float budget, exactly like libopus's own
-  NEON-vs-scalar difference. Do not chase ≤1-ULP arm64 float drift as a bug.
+- Go 1.27 is the minimum version. All codec kernels are Go implementations.
+- The ordinary build uses scalar Go. The `nosimd` and `purego` build tags force
+  that path, including when `GOEXPERIMENT=simd` is set.
+- `GOEXPERIMENT=simd` selects Go `archsimd` kernels where implemented, with
+  scalar fallbacks for other kernels.
+- Compare Go SIMD with libopus SIMD and Go scalar with libopus scalar on the
+  same CPU, using identical input, application, controls, and scalar widths.
+  Verify effective kernel dispatch as well as build flags and runtime features.
+- Same-path exact tests retain their assertions. Validated floating-point
+  differences use explicit per-kernel bounds under the parity target, never
+  architecture-wide ULP waivers. Different libopus SIMD/scalar results cannot
+  justify a mismatch against the matching reference.
+- Prioritize semantic correctness, quality and zero allocations. Do not add
+  compiler-specific hot-loop calls solely for last-bit identity once a numerical
+  difference is validated. A measured 1–2% end-to-end variation is acceptable.
+- Validated coverage, reference exceptions, and measured performance are recorded
+  in `reports/validation.md#performance`. Passing a subset of tests does not
+  prove complete parity.
 
 ## Libopus type parity
 
@@ -88,8 +105,9 @@ measurement reflects steady state, not one-time lazy init).
 - Optional features are behind build tags, mirrored tag-for-flag with libopus:
   `gopus_dred`, `gopus_osce`, `gopus_qext`, `gopus_custom_modes`,
   `gopus_fixed_point`. The default build links zero of their code.
-- Run `go test` for the packages you touch (default and, where relevant, `-tags
-  purego`) before finishing a codec or runtime change.
+- Run `go test` for the packages you touch in the ordinary build and with
+  `GOEXPERIMENT=simd`; also run `-tags nosimd` when validating the scalar
+  reference lane.
 
 ## Layout
 

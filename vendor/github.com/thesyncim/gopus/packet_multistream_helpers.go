@@ -25,7 +25,12 @@ func decodeMultistreamPacket(src []byte, srcOffset, length int, selfDelimited bo
 	return src[srcOffset:length], length - srcOffset, nil
 }
 
-// MultistreamPacketPad pads the final stream packet inside a multistream packet.
+// MultistreamPacketPad pads the final stream packet in a multistream packet
+// in place.
+// length is the current packet length in bytes, newLen is the target length in
+// bytes, and numStreams is the number of constituent Opus streams. The input
+// slice must contain length bytes and have capacity for newLen bytes. If its
+// original length is shorter, reslice the caller's slice to newLen after success.
 func MultistreamPacketPad(data []byte, length, newLen, numStreams int) error {
 	if numStreams < 1 || length < 1 || newLen < length {
 		return ErrInvalidArgument
@@ -56,8 +61,12 @@ func MultistreamPacketPad(data []byte, length, newLen, numStreams int) error {
 	return PacketPad(data[offset:], lastOldLen, lastNewLen)
 }
 
-// MultistreamPacketUnpad removes padding from all streams in a multistream packet.
-// It returns the new packet length.
+// MultistreamPacketUnpad removes padding from every stream in a multistream packet
+// in place and returns the new packet length in bytes. length is the number of
+// input bytes and numStreams is the number of constituent Opus streams; all but
+// the final stream packet must use self-delimited framing. data must contain
+// length bytes. The function does not extend data, so len(data) must also be
+// large enough for the rebuilt output.
 func MultistreamPacketUnpad(data []byte, length, numStreams int) (int, error) {
 	if numStreams < 1 || length < 1 || length > len(data) {
 		return 0, ErrInvalidArgument

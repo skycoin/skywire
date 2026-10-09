@@ -139,7 +139,7 @@ func encodeDREDLatents(enc *rangecoding.Encoder, x []float32, scale, dzone, rTab
 }
 
 // EncodePayload mirrors libopus dred_encode_silk_frame() for a caller-owned
-// DRED history window. dst must not include the temporary experimental prefix.
+// DRED history window. dst must not include the experimental prefix.
 // It returns the encoded payload length in bytes, or 0 when libopus would
 // suppress DRED emission for the provided window.
 func EncodePayload(dst []byte, maxChunks, q0, dQ, qmax int32, stateBuffer, latentsBuffer []float32, latentsFill, dredOffset, latentOffset int32, lastExtraDREDOffset *int32, activity []byte) int {
@@ -256,8 +256,8 @@ func EncodePayload(dst []byte, maxChunks, q0, dQ, qmax int32, stateBuffer, laten
 	return len(enc.Done())
 }
 
-// EncodeExperimentalPayload mirrors the current libopus temporary DRED payload
-// framing by prepending the experimental header in front of EncodePayload().
+// EncodeExperimentalPayload prepends the experimental DRED version header to
+// the payload produced by EncodePayload().
 func EncodeExperimentalPayload(dst []byte, maxChunks, q0, dQ, qmax int32, stateBuffer, latentsBuffer []float32, latentsFill, dredOffset, latentOffset int32, lastExtraDREDOffset *int32, activity []byte) int {
 	if len(dst) <= ExperimentalHeaderBytes {
 		return 0

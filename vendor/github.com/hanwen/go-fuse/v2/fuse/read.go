@@ -26,6 +26,10 @@ func (r *readResultData) Bytes(buf []byte) ([]byte, Status) {
 	return r.Data, OK
 }
 
+func (r *readResultData) Readv(dst [][]byte) (int, Status) {
+	return copyToIov(dst, r.Data), OK
+}
+
 func ReadResultData(b []byte) ReadResult {
 	return &readResultData{b}
 }
@@ -40,6 +44,23 @@ type seekableResult interface {
 
 type statefulResult interface {
 	Stateful() (fd uintptr, sz int)
+}
+
+type withSlice interface {
+	// Slices may be called more than once and must return the same data each time.
+	Slices() ([][]byte, Status)
+}
+
+// withReadv is a ReadResult that can write directly into a scatter
+// list, e.g. virtiofs guest memory.
+type withReadv interface {
+	Readv(dst [][]byte) (int, Status)
+}
+
+// withSpliceFlags is a ReadResult carrying splice(2) flags for the write to
+// /dev/fuse.
+type withSpliceFlags interface {
+	SpliceFlags() int
 }
 
 // ReadResultFd is the read return for zero-copy file data.
@@ -81,4 +102,41 @@ func (r *readResultFd) Size() int {
 }
 
 func (r *readResultFd) Done() {
+}
+
+// readResultVector is the read return for scatter-gather I/O. It implements
+// the withSlice interface so the kernel write uses writev(2) directly,
+// avoiding a copy into a single contiguous buffer.
+type readResultVector struct {
+	vecs [][]byte
+}
+
+func (r *readResultVector) Size() int {
+	return iovLen(r.vecs)
+}
+
+func (r *readResultVector) Done() {}
+
+// Bytes concatenates the vector into buf, reusing its capacity.
+func (r *readResultVector) Bytes(buf []byte) ([]byte, Status) {
+	buf = buf[:0]
+	for _, v := range r.vecs {
+		buf = append(buf, v...)
+	}
+	return buf, OK
+}
+
+func (r *readResultVector) Readv(dst [][]byte) (int, Status) {
+	return copyToIov(dst, r.vecs...), OK
+}
+
+func (r *readResultVector) Slices() ([][]byte, Status) {
+	return r.vecs, OK
+}
+
+// ReadResultVector returns a ReadResult for scatter-gather I/O.
+// When the kernel write path supports it, the buffers are sent via
+// writev(2) without being copied into a single contiguous region.
+func ReadResultVector(vecs [][]byte) ReadResult {
+	return &readResultVector{vecs}
 }

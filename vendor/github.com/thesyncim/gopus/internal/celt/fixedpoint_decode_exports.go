@@ -4,14 +4,19 @@ package celt
 
 import "github.com/thesyncim/gopus/internal/rangecoding"
 
+// MaxCustomBands bounds custom-mode band arrays in the fixed CELT driver.
+// celt/modes.c compute_ebands() uses at most the 25 Bark intervals.
+const MaxCustomBands = 25
+
 // CELTDecodeAllocation holds the per-band bit allocation and side parameters the
 // CELT decoder prologue derives between the spread decision and quant_all_bands.
 type CELTDecodeAllocation struct {
-	TFRes           []int32
-	Offsets         []int32
-	Pulses          []int32
-	FineQuant       []int32
-	FinePriority    []int32
+	TFRes           [MaxCustomBands]int32
+	Offsets         [MaxCustomBands]int32
+	Pulses          [MaxCustomBands]int32
+	Caps            [MaxCustomBands]int32
+	FineQuant       [MaxCustomBands]int32
+	FinePriority    [MaxCustomBands]int32
 	Spread          int
 	AllocTrim       int
 	Intensity       int
@@ -30,22 +35,23 @@ func TFDecode(start, end int, isTransient bool, tfRes []int32, lm int, rd *range
 // DecodeCELTAllocation reproduces the celt_decode_with_ec allocation prologue
 // (tf_decode -> spread -> dynalloc offsets -> alloc_trim -> anti_collapse_rsv ->
 // clt_compute_allocation), reading from the shared range decoder. totalBits is
-// len*8 (ec storage bits). It returns the fully-decoded allocation; all slices
-// are freshly allocated of length end.
+// len*8 (ec storage bits). It returns the fully-decoded allocation; band arrays
+// use fixed storage for the standard mode's bands.
 func DecodeCELTAllocation(rd *rangecoding.Decoder, totalBits, start, end, lm, channels int, transient bool) CELTDecodeAllocation {
 	a := CELTDecodeAllocation{Spread: spreadNormal}
 
-	a.TFRes = make([]int32, end)
-	tfDecode(start, end, transient, a.TFRes, lm, rd)
+	tfDecode(start, end, transient, a.TFRes[:end], lm, rd)
 
 	tell := rd.Tell()
 	if tell+4 <= totalBits {
 		a.Spread = rd.DecodeICDF(spreadICDF, 5)
 	}
 
-	cap := make([]int32, end)
+	var capStorage [MaxBands]int32
+	cap := capStorage[:end]
 	initCapsInto(cap, end, lm, channels)
-	offsets := make([]int32, end)
+	copy(a.Caps[:end], cap)
+	offsets := a.Offsets[:end]
 	dynallocLogp := 6
 	totalBitsQ3 := totalBits << bitRes
 	tellFrac := rd.TellFrac()
@@ -70,7 +76,6 @@ func DecodeCELTAllocation(rd *rangecoding.Decoder, totalBits, start, end, lm, ch
 			dynallocLogp = max(2, dynallocLogp-1)
 		}
 	}
-	a.Offsets = offsets
 
 	a.AllocTrim = 5
 	if tellFrac+(6<<bitRes) <= totalBitsQ3 {
@@ -83,11 +88,15 @@ func DecodeCELTAllocation(rd *rangecoding.Decoder, totalBits, start, end, lm, ch
 	}
 	bitsQ3 -= a.AntiCollapseRsv
 
-	a.Pulses = make([]int32, end)
-	a.FineQuant = make([]int32, end)
-	a.FinePriority = make([]int32, end)
 	a.CodedBands = cltComputeAllocation(start, end, offsets, cap, a.AllocTrim, &a.Intensity, &a.DualStereo,
-		bitsQ3, &a.Balance, a.Pulses, a.FineQuant, a.FinePriority, channels, lm, rd)
+		bitsQ3, &a.Balance, a.Pulses[:end], a.FineQuant[:end], a.FinePriority[:end], channels, lm, rd)
 
 	return a
+}
+
+// DecodePulsesInto32 expands a CWRS codeword into caller-owned opus_int storage.
+// The supplied unsigned row scratch is reused by the general CWRS path.
+func DecodePulsesInto32(index uint32, n, k int, y []int32, row []uint32) uint32 {
+	scratch := bandDecodeScratch{cwrsU: row}
+	return decodePulsesInto32(index, n, k, y, &scratch)
 }

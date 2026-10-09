@@ -20,9 +20,8 @@ import (
 
 // Layer dimensions are copied verbatim from libopus
 // `dnn/bbwenet_data.h` and the `init_bbwenetlayers` call sites in
-// `dnn/bbwenet_data.c`. Keeping them as named constants makes future runtime
-// code self-documenting and lets the loader fail loudly if a future libopus
-// upgrade changes a layer shape.
+// `dnn/bbwenet_data.c`. The loader validates each bound layer against these
+// dimensions.
 const (
 	FeatureDim  = 114
 	FrameSize16 = 80

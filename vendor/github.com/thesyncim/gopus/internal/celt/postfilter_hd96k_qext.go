@@ -11,8 +11,7 @@ package celt
 // phase independently with the SAME pitch period at N/2 and overlap/2 = 120.
 // This is equivalent to doubling the comb period and tap spacing (mirroring the
 // filter around 24 kHz). Each phase reads up to 2*COMBFILTER_MAXPERIOD samples
-// of synthesized history, so the HD path keeps its own per-channel history of
-// the last 2*COMBFILTER_MAXPERIOD post-postfilter samples.
+// of decode_mem history.
 //
 // This is intentionally separate from the 48 kHz comb-filter path so that path
 // stays byte-identical.
@@ -27,126 +26,37 @@ func (d *Decoder) hd96kPostfilterActive() bool {
 	return d.synthOverlap == 240
 }
 
-// applyHD96kPostfilterInterleaved runs the native 96 kHz postfilter on
-// interleaved PCM (mono or stereo).
-func (d *Decoder) applyHD96kPostfilterInterleaved(samples []float32, frameSize, lm int, newPeriod int, newGain float32, newTapset int) {
-	channels := int(d.channels)
-	if channels == 1 {
-		d.applyHD96kPostfilterMono(samples, frameSize, lm, newPeriod, newGain, newTapset)
-		return
-	}
-	if len(samples) < frameSize*channels {
-		return
-	}
-	work := ensureFloat32Slice(&d.postfilterScratchF32, frameSize*2)
-	left := work[:frameSize]
-	right := work[frameSize : frameSize*2]
-	for i := 0; i < frameSize; i++ {
-		left[i] = samples[i*channels]
-		right[i] = samples[i*channels+1]
-	}
-	d.applyHD96kPostfilterStereoPlanar(left, right, frameSize, lm, newPeriod, newGain, newTapset)
-	for i := 0; i < frameSize; i++ {
-		samples[i*channels] = left[i]
-		samples[i*channels+1] = right[i]
-	}
-}
-
-// applyHD96kPostfilterMono runs the native 96 kHz comb-filter postfilter in
-// place on one channel's frame and advances the per-channel history. It mirrors
-// libopus celt_decode_with_ec()'s two comb_filter calls (segment 0 of length
-// shortMdctSize with the old->new parameter cross-fade, segment 1 of length
-// N-shortMdctSize with constant new parameters) dispatched through
-// comb_filter_qext.
-func (d *Decoder) applyHD96kPostfilterMono(samples []float32, frameSize, lm int, newPeriod int, newGain float32, newTapset int) {
-	channels := int(d.channels)
-	if channels < 1 {
-		channels = 1
-	}
-	qs := d.ensureQEXTState()
-	if len(qs.hd96kPostMem) < hd96kCombHistory*channels {
-		qs.hd96kPostMem = make([]float32, hd96kCombHistory*channels)
-	}
-	hist := qs.hd96kPostMem[:hd96kCombHistory]
-	d.hd96kPostfilterChannel(samples[:frameSize], hist, frameSize, lm, newPeriod, newGain, newTapset)
-	d.commitHD96kPostfilterState(lm, newPeriod, newGain, newTapset)
-}
-
-// applyHD96kPostfilterStereoPlanar runs the native 96 kHz postfilter on planar
-// left/right channels.
-func (d *Decoder) applyHD96kPostfilterStereoPlanar(left, right []float32, frameSize, lm int, newPeriod int, newGain float32, newTapset int) {
-	qs := d.ensureQEXTState()
-	if len(qs.hd96kPostMem) < hd96kCombHistory*2 {
-		qs.hd96kPostMem = make([]float32, hd96kCombHistory*2)
-	}
-	histL := qs.hd96kPostMem[:hd96kCombHistory]
-	histR := qs.hd96kPostMem[hd96kCombHistory : 2*hd96kCombHistory]
-	d.hd96kPostfilterChannel(left[:frameSize], histL, frameSize, lm, newPeriod, newGain, newTapset)
-	d.hd96kPostfilterChannel(right[:frameSize], histR, frameSize, lm, newPeriod, newGain, newTapset)
-	d.commitHD96kPostfilterState(lm, newPeriod, newGain, newTapset)
-}
-
-func (d *Decoder) commitHD96kPostfilterState(lm int, newPeriod int, newGain float32, newTapset int) {
-	d.postfilterPeriodOld = d.postfilterPeriod
-	d.postfilterGainOld = d.postfilterGain
-	d.postfilterTapsetOld = d.postfilterTapset
-	d.postfilterPeriod = int32(newPeriod)
-	d.postfilterGain = newGain
-	d.postfilterTapset = int32(newTapset)
-	if lm != 0 {
-		d.postfilterPeriodOld = d.postfilterPeriod
-		d.postfilterGainOld = d.postfilterGain
-		d.postfilterTapsetOld = d.postfilterTapset
-	}
-}
-
-// hd96kPostfilterChannel filters one channel's frame in place using hist as the
-// 2*COMBFILTER_MAXPERIOD-sample post-postfilter history, then refreshes hist
-// with the filtered tail. Periods/gains/tapsets are read from the decoder's
-// postfilter cross-fade state (old -> current) and the incoming new params.
-func (d *Decoder) hd96kPostfilterChannel(samples []float32, hist []float32, frameSize, lm int, newPeriod int, newGain float32, newTapset int) {
+// hd96kPostfilterDecodeMem runs celt_decode_with_ec()'s two comb_filter
+// calls, dispatched to comb_filter_qext, in place on every channel's out_syn of
+// n samples. The even/odd phases read up to 2*COMBFILTER_MAXPERIOD samples of
+// decode_mem history before out_syn.
+func (d *Decoder) hd96kPostfilterDecodeMem(n, lm int, newPeriod int, newGain float32, newTapset int) {
 	d.clampDecodePostfilterPeriods()
-	t0 := int(d.postfilterPeriodOld)
-	t1 := int(d.postfilterPeriod)
-	g0 := d.postfilterGainOld
-	g1 := d.postfilterGain
-	tap0 := int(d.postfilterTapsetOld)
-	tap1 := int(d.postfilterTapset)
-	t2 := newPeriod
-	g2 := newGain
-	tap2 := newTapset
-	t0, t1, tap0, tap1 = sanitizePostfilterParams(t0, t1, g0, g1, tap0, tap1)
-	t1b, t2, tap1b, tap2 := sanitizePostfilterParams(t1, t2, g1, g2, tap1, tap2)
+	g0, g1 := d.postfilterGainOld, d.postfilterGain
+	t0, t1, tap0, tap1 := sanitizePostfilterParams(int(d.postfilterPeriodOld), int(d.postfilterPeriod), g0, g1, int(d.postfilterTapsetOld), int(d.postfilterTapset))
+	t1b, t2, tap1b, tap2 := sanitizePostfilterParams(t1, newPeriod, g1, newGain, tap1, newTapset)
 
 	overlap := d.synthOverlapLen()
 	window := GetWindowBufferF32(overlap)
-
-	shortMdctSize := frameSize >> uint(lm)
-	if shortMdctSize <= 0 || shortMdctSize > frameSize {
-		shortMdctSize = frameSize
+	shortMdctSize := n >> uint(lm)
+	if shortMdctSize <= 0 || shortMdctSize > n {
+		shortMdctSize = n
 	}
-
-	// Build the contiguous timeline [history | frame] so the comb filter can
-	// read negative delays out of the synthesized history.
-	qs := d.ensureQEXTState()
-	tl := ensureFloat32Slice(&qs.hd96kPostTimeline, hd96kCombHistory+frameSize)
-	copy(tl[:hd96kCombHistory], hist)
-	copy(tl[hd96kCombHistory:], samples[:frameSize])
-
-	base := hd96kCombHistory
-	combFilterQEXTFloat32(tl, base, t0, t1, shortMdctSize, g0, g1, tap0, tap1, window, overlap, &qs.hd96kPostPhase)
-	if lm != 0 && shortMdctSize < frameSize {
-		combFilterQEXTFloat32(tl, base+shortMdctSize, t1b, t2, frameSize-shortMdctSize, g1, g2, tap1b, tap2, window, overlap, &qs.hd96kPostPhase)
+	phase := &d.ensureQEXTState().hd96kPostPhase
+	start := d.decodeMemHistoryLen() - n
+	for c := range int(d.channels) {
+		x := d.decodeMemChannel(c)
+		combFilterQEXTFloat32(x, start, t0, t1, shortMdctSize, g0, g1, tap0, tap1, window, overlap, phase)
+		if lm != 0 && shortMdctSize < n {
+			combFilterQEXTFloat32(x, start+shortMdctSize, t1b, t2, n-shortMdctSize, g1, newGain, tap1b, tap2, window, overlap, phase)
+		}
 	}
-
-	copy(samples[:frameSize], tl[base:base+frameSize])
-	// Refresh history with the last 2*MAXPERIOD samples of the timeline.
-	copy(hist, tl[frameSize:frameSize+hd96kCombHistory])
+	d.commitPostfilterState(lm, newPeriod, newGain, newTapset)
 }
 
 // combFilterQEXTFloat32 applies libopus comb_filter_qext in place over tl at
-// [pos, pos+n): it deinterleaves the timeline (which extends 2*MAXPERIOD samples
-// before pos) into even/odd phases, runs the plain comb filter on each phase at
+// [pos, pos+n): it deinterleaves the timeline (decode_mem, which extends at
+// least 2*MAXPERIOD samples before pos) into even/odd phases, runs the plain comb filter on each phase at
 // n/2 with overlap/2 and a half-rate window, and re-interleaves the result.
 func combFilterQEXTFloat32(tl []float32, pos, t0, t1, n int, g0, g1 float32, tapset0, tapset1 int, window []float32, overlap int, scratch *hd96kCombPhase) {
 	if n <= 0 {
@@ -235,15 +145,18 @@ func combFilterScalarFloat32(buf []float32, history, t0, t1, n int, g0, g1 float
 	i := 0
 	for ; i < overlap; i++ {
 		x0 := x(i - t1 + 2)
-		f := window[i] * window[i]
-		oneMinus := float32(1.0) - f
-		*y(i) = x(i) +
-			noFMA32Mul(oneMinus*g00, x(i-t0)) +
-			noFMA32Mul(oneMinus*g01, x(i-t0+1)+x(i-t0-1)) +
-			noFMA32Mul(oneMinus*g02, x(i-t0+2)+x(i-t0-2)) +
-			noFMA32Mul(f*g10, x2) +
-			noFMA32Mul(f*g11, x1+x3) +
-			noFMA32Mul(f*g12, x0+x4)
+		f := noFMA32Mul(window[i], window[i])
+		oneMinus := noFMA32Sub(1, f)
+		// celt.c comb_filter rounds each interpolated gain, then the
+		// selected ARM libopus kernel accumulates six taps with FMADD.
+		t := x(i)
+		t = fma32(noFMA32Mul(oneMinus, g00), x(i-t0), t)
+		t = fma32(noFMA32Mul(oneMinus, g01), noFMA32Add(x(i-t0+1), x(i-t0-1)), t)
+		t = fma32(noFMA32Mul(oneMinus, g02), noFMA32Add(x(i-t0+2), x(i-t0-2)), t)
+		t = fma32(noFMA32Mul(f, g10), x2, t)
+		t = fma32(noFMA32Mul(f, g11), noFMA32Add(x1, x3), t)
+		t = fma32(noFMA32Mul(f, g12), noFMA32Add(x0, x4), t)
+		*y(i) = t
 		x4 = x3
 		x3 = x2
 		x2 = x1
@@ -254,12 +167,22 @@ func combFilterScalarFloat32(buf []float32, history, t0, t1, n int, g0, g1 float
 	}
 	// Constant-filter tail (libopus comb_filter_const): rolling taps x1..x4
 	// carry over from the overlap loop. SHL32(.,1) is a no-op in the float build.
+	if combUsesSSE {
+		// The x86 C kernel handles the original constant-body four-sample
+		// prefix with grouped side products, independently of the QEXT phase
+		// storage. Its scalar remainder follows below.
+		for end := i + ((n - i) &^ 3); i < end; i++ {
+			x0 := x(i - t1 + 2)
+			*y(i) = combFilterConstSSEValue(x(i), g10, g11, g12, x2, x1, x3, x0, x4)
+			x4, x3, x2, x1 = x3, x2, x1, x0
+		}
+	}
 	for ; i < n; i++ {
 		x0 := x(i - t1 + 2)
 		t := x(i)
-		t += noFMA32Mul(g10, x2)
-		t += noFMA32Mul(g11, x1+x3)
-		t += noFMA32Mul(g12, x0+x4)
+		t = fma32(g10, x2, t)
+		t = fma32(g11, noFMA32Add(x1, x3), t)
+		t = fma32(g12, noFMA32Add(x0, x4), t)
 		*y(i) = t
 		x4 = x3
 		x3 = x2

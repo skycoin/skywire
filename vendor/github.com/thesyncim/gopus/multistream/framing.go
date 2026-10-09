@@ -24,9 +24,11 @@ type parsedOpusPacket struct {
 // only valid until the next parseInto on the same scratch; the hot-path callers
 // parse-then-build atomically before reusing it.
 type packetScratch struct {
-	frameSizes []int
-	frames     [][]byte
-	lengths    []int // build-side frame length scratch
+	frameSizes      []int
+	frames          [][]byte
+	lengths         []int // build-side frame length scratch
+	extensions      []packetExtensionData
+	extensionBuffer []byte
 }
 
 func (p *packetScratch) sizes(n int) []int {
@@ -544,13 +546,24 @@ func buildOpusPacketFromFramesAndPaddingInto(scratch *packetScratch, tocBase byt
 }
 
 func parsePacketExtensionList(padding []byte, nbFrames int) ([]packetExtensionData, error) {
+	return parsePacketExtensionListInto(nil, padding, nbFrames)
+}
+
+func parsePacketExtensionListInto(scratch *packetScratch, padding []byte, nbFrames int) ([]packetExtensionData, error) {
 	if len(padding) == 0 || nbFrames <= 0 {
+		if scratch != nil {
+			scratch.extensions = scratch.extensions[:0]
+		}
 		return nil, nil
 	}
 
 	var iter packetExtensionIterator
 	initPacketExtensionIterator(&iter, padding, nbFrames)
 	var extensions []packetExtensionData
+	if scratch != nil {
+		scratch.extensions = scratch.extensions[:0]
+		extensions = scratch.extensions
+	}
 	for {
 		var ext packetExtensionData
 		ok, err := iter.next(&ext)
@@ -558,9 +571,15 @@ func parsePacketExtensionList(padding []byte, nbFrames int) ([]packetExtensionDa
 			return nil, err
 		}
 		if !ok {
+			if scratch != nil {
+				scratch.extensions = extensions
+			}
 			return extensions, nil
 		}
 		extensions = append(extensions, ext)
+		if scratch != nil {
+			scratch.extensions = extensions
+		}
 	}
 }
 
@@ -635,9 +654,7 @@ func generatePacketExtensions(dst []byte, length int, extensions []packetExtensi
 		return 0, ErrPacketTooShort
 	}
 
-	frameMinIdx := make([]int, nbFrames)
-	frameMaxIdx := make([]int, nbFrames)
-	frameRepeatIdx := make([]int, nbFrames)
+	var frameMinIdx, frameMaxIdx, frameRepeatIdx [maxPacketExtensionFrames]int
 	for f := range nbFrames {
 		frameMinIdx[f] = len(extensions)
 	}
@@ -653,7 +670,7 @@ func generatePacketExtensions(dst []byte, length int, extensions []packetExtensi
 			frameMaxIdx[ext.Frame] = i + 1
 		}
 	}
-	copy(frameRepeatIdx, frameMinIdx)
+	copy(frameRepeatIdx[:], frameMinIdx[:])
 
 	pos := 0
 	written := 0
@@ -826,19 +843,36 @@ func generatePacketExtensions(dst []byte, length int, extensions []packetExtensi
 }
 
 func buildOpusPacketFromFramesAndExtensions(tocBase byte, frames [][]byte, extensions []packetExtensionData, selfDelimited bool, dst []byte) (int, error) {
+	return buildOpusPacketFromFramesAndExtensionsInto(nil, tocBase, frames, extensions, selfDelimited, dst)
+}
+
+func buildOpusPacketFromFramesAndExtensionsInto(scratch *packetScratch, tocBase byte, frames [][]byte, extensions []packetExtensionData, selfDelimited bool, dst []byte) (int, error) {
 	if len(extensions) == 0 {
-		return buildOpusPacketFromFrames(tocBase, frames, selfDelimited, dst)
+		return buildOpusPacketFromFramesInto(scratch, tocBase, frames, selfDelimited, dst)
 	}
 
 	extLen, err := generatePacketExtensions(nil, len(dst), extensions, len(frames), false)
 	if err != nil {
 		return 0, err
 	}
-	padding := make([]byte, extLen)
+	var padding []byte
+	if scratch == nil {
+		padding = make([]byte, extLen)
+	} else if cap(scratch.extensionBuffer) < extLen {
+		// An encoder's child packet is bounded by MS_FRAME_TMP. Reserve that
+		// envelope when the first extension arrives so later DRED/QEXT payload
+		// growth does not allocate in the warmed encode path.
+		reserve := max(extLen, msFrameTmp)
+		scratch.extensionBuffer = make([]byte, extLen, reserve)
+		padding = scratch.extensionBuffer
+	} else {
+		scratch.extensionBuffer = scratch.extensionBuffer[:extLen]
+		padding = scratch.extensionBuffer
+	}
 	if _, err := generatePacketExtensions(padding, extLen, extensions, len(frames), false); err != nil {
 		return 0, err
 	}
-	return buildOpusPacketFromFramesAndPadding(tocBase, frames, padding, selfDelimited, dst)
+	return buildOpusPacketFromFramesAndPaddingInto(scratch, tocBase, frames, padding, selfDelimited, dst)
 }
 
 func makeSelfDelimitedPacket(packet []byte) ([]byte, error) {
@@ -855,8 +889,8 @@ func makeSelfDelimitedPacket(packet []byte) ([]byte, error) {
 // into dst (which must hold at least len(packet)+2 bytes) and returns the number
 // of bytes written. scratch may be nil. Ordinary (non-extension) padding is
 // dropped, matching makeSelfDelimitedPacket; only opaque packet extensions are
-// re-emitted. The common path (no padding, or padding carrying no extensions)
-// is allocation-free.
+// re-emitted. When scratch is provided, reusable parser and extension buffers
+// keep this path allocation-free after warmup.
 func makeSelfDelimitedPacketInto(scratch *packetScratch, dst, packet []byte) (int, error) {
 	parsed, err := parseOpusPacketInto(scratch, packet, false)
 	if err != nil {
@@ -865,7 +899,7 @@ func makeSelfDelimitedPacketInto(scratch *packetScratch, dst, packet []byte) (in
 	if len(parsed.padding) == 0 {
 		return buildOpusPacketFromFramesInto(scratch, parsed.tocBase, parsed.frames, true, dst)
 	}
-	extensions, err := parsePacketExtensionList(parsed.padding, parsed.paddingFrameCount)
+	extensions, err := parsePacketExtensionListInto(scratch, parsed.padding, parsed.paddingFrameCount)
 	if err != nil {
 		return 0, err
 	}
@@ -873,7 +907,7 @@ func makeSelfDelimitedPacketInto(scratch *packetScratch, dst, packet []byte) (in
 		// Ordinary padding carries no extensions; drop it entirely.
 		return buildOpusPacketFromFramesInto(scratch, parsed.tocBase, parsed.frames, true, dst)
 	}
-	return buildOpusPacketFromFramesAndExtensions(parsed.tocBase, parsed.frames, extensions, true, dst)
+	return buildOpusPacketFromFramesAndExtensionsInto(scratch, parsed.tocBase, parsed.frames, extensions, true, dst)
 }
 
 func decodeSelfDelimitedPacket(data []byte) ([]byte, int, error) {

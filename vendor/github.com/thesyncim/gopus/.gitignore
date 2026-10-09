@@ -29,6 +29,8 @@ mem.out
 # Example binaries
 examples/*/bench-*
 examples/*/*.exe
+/examples/webrtc-control/webrtc-control
+/examples/webrtc-dred-loopback/webrtc-dred-loopback
 
 # Retired planning directory (keep migration stubs only)
 .planning/*

@@ -19,10 +19,12 @@ func init() {
 			maxK := min((length-1)>>1, MaxPVQK)
 			for k := 0; k <= maxK; k++ {
 				gain := float32(length) / float32(length+spreadFactor*k)
-				theta := 0.5 * gain * gain
+				// celt/vq.c:exp_rotation rounds gain*gain, then halves it,
+				// before subtracting theta from Q15ONE for the sine cosine.
+				theta := noFMA32Mul(0.5, noFMA32Mul(gain, gain))
 				expRotationCoeffTable[spreadIdx][length][k] = expRotationCoeff{
 					c: opusmath.CELTCosNormF32(theta),
-					s: opusmath.CELTCosNormF32(float32(1) - theta),
+					s: opusmath.CELTCosNormF32(noFMA32Sub(1, theta)),
 				}
 			}
 		}
