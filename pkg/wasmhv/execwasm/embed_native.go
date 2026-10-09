@@ -1,5 +1,7 @@
 //go:build !js && !mobile
 
+//go:embedbuild -gzip -strip -tags=withoutsystray,withoutgotop blob/skywire.wasm.gz GOOS=js GOARCH=wasm github.com/skycoin/skywire
+
 // Package execwasm pkg/wasmhv/execwasm/embed_native.go c3-wasm-embed
 package execwasm
 
@@ -44,14 +46,15 @@ func embeddedSize() int64 {
 }
 
 // embeddedRevision reads the commit recorded beside the module by
-// `make embed-exec-wasm`. It lives here, beside blobFS, for the same reason
-// embeddedOpen does: the js build has no blob directory, and shared code that
-// touches blobFS directly does not compile for GOOS=js. This one is a 40-byte
-// file, so reading it whole costs nothing.
-func embeddedRevision() string {
+// `make embed-exec-wasm`, and the Stamp of the module it was recorded for when
+// a second line holds one. It lives here, beside blobFS, because the js build
+// has no blob directory and shared code that touches blobFS does not compile
+// for GOOS=js.
+func embeddedRevision() (rev, stamp string) {
 	b, err := blobFS.ReadFile(revisionName)
 	if err != nil {
-		return ""
+		return "", ""
 	}
-	return strings.TrimSpace(string(b))
+	rev, stamp, _ = strings.Cut(string(b), "\n")
+	return strings.TrimSpace(rev), strings.TrimSpace(stamp)
 }
