@@ -202,16 +202,19 @@ func TestPlanDayOpsSteadyState(t *testing.T) {
 
 	ops, next := planDayOps(bodies, dates, map[string]int{}, true)
 	want := []string{
-		"+metrics/day/2026-09-04",
-		"+metrics/day/2026-09-03",
-		"+metrics/day/2026-09-02",
+		"-metrics/day/2026-09-02",
+		"-metrics/day/2026-09-03",
+		"-metrics/day/2026-09-04",
+		"+metrics/day/2026-09-04/part/0000",
+		"+metrics/day/2026-09-03/part/0000",
+		"+metrics/day/2026-09-02/part/0000",
 	}
 	if got := opPaths(ops); !equalStrings(got, want) {
 		t.Errorf("ops = %v, want %v", got, want)
 	}
 	for _, d := range dates {
-		if next[d] != 0 {
-			t.Errorf("%s recorded %d parts, want 0 (single leaf)", d, next[d])
+		if next[d] != 1 {
+			t.Errorf("%s recorded %d parts, want 1", d, next[d])
 		}
 	}
 }
@@ -255,10 +258,10 @@ func TestGzipPartsDoesNotOverSplit(t *testing.T) {
 // that is the whole point of the layout, and the bookkeeping for those days has
 // to survive the cycle so the next full one can still retire them.
 func TestPlanDayOpsCurrentDayOnlyTouchesToday(t *testing.T) {
-	prev := map[string]int{"2026-09-04": 0, "2026-09-03": 0, "2026-08-20": 3}
+	prev := map[string]int{"2026-09-04": 1, "2026-09-03": 1, "2026-08-20": 3}
 	ops, next := planDayOps(map[string][][]byte{"2026-09-04": body(1)}, []string{"2026-09-04"}, prev, false)
 
-	if got, want := opPaths(ops), []string{"+metrics/day/2026-09-04"}; !equalStrings(got, want) {
+	if got, want := opPaths(ops), []string{"+metrics/day/2026-09-04/part/0000"}; !equalStrings(got, want) {
 		t.Errorf("ops = %v, want %v", got, want)
 	}
 	if len(next) != len(prev) {
@@ -272,7 +275,7 @@ func TestPlanDayOpsCurrentDayOnlyTouchesToday(t *testing.T) {
 // A rolling window has to retire the days that fall out of it, leaf AND parts,
 // or the tree grows by a day forever and a prefix Walk keeps serving them.
 func TestPlanDayOpsRetiresDaysOutOfWindow(t *testing.T) {
-	prev := map[string]int{"2026-09-04": 0, "2026-09-03": 0, "2026-08-05": 0, "2026-08-04": 2}
+	prev := map[string]int{"2026-09-04": 1, "2026-09-03": 1, "2026-08-05": 0, "2026-08-04": 2}
 	dates := []string{"2026-09-04", "2026-09-03"}
 	bodies := map[string][][]byte{dates[0]: body(1), dates[1]: body(1)}
 
@@ -281,8 +284,8 @@ func TestPlanDayOpsRetiresDaysOutOfWindow(t *testing.T) {
 		"-metrics/day/2026-08-04/part/0000",
 		"-metrics/day/2026-08-04/part/0001",
 		"-metrics/day/2026-08-05",
-		"+metrics/day/2026-09-04",
-		"+metrics/day/2026-09-03",
+		"+metrics/day/2026-09-04/part/0000",
+		"+metrics/day/2026-09-03/part/0000",
 	}
 	if got := opPaths(ops); !equalStrings(got, want) {
 		t.Errorf("ops = %v, want %v", got, want)
@@ -312,25 +315,23 @@ func TestPlanDayOpsDeletesBeforePutsWhenFormChanges(t *testing.T) {
 		t.Errorf("recorded %d parts, want 2", next["2026-09-04"])
 	}
 
-	// Split -> single leaf: every old part must go before the leaf lands.
+	// Three parts -> one: the stale parts go, the day stays a sub-tree.
 	ops, next = planDayOps(map[string][][]byte{"2026-09-04": body(1)}, []string{"2026-09-04"}, map[string]int{"2026-09-04": 3}, false)
 	want = []string{
-		"-metrics/day/2026-09-04/part/0000",
 		"-metrics/day/2026-09-04/part/0001",
 		"-metrics/day/2026-09-04/part/0002",
-		"+metrics/day/2026-09-04",
+		"+metrics/day/2026-09-04/part/0000",
 	}
 	if got := opPaths(ops); !equalStrings(got, want) {
-		t.Errorf("split->leaf ops = %v, want %v", got, want)
+		t.Errorf("3->1 parts ops = %v, want %v", got, want)
 	}
-	if next["2026-09-04"] != 0 {
-		t.Errorf("recorded %d parts, want 0", next["2026-09-04"])
+	if next["2026-09-04"] != 1 {
+		t.Errorf("recorded %d parts, want 1", next["2026-09-04"])
 	}
 
 	// Shrinking split: the leftover high-index parts must be retired.
 	ops, _ = planDayOps(map[string][][]byte{"2026-09-04": body(2)}, []string{"2026-09-04"}, map[string]int{"2026-09-04": 4}, false)
 	want = []string{
-		"-metrics/day/2026-09-04",
 		"-metrics/day/2026-09-04/part/0002",
 		"-metrics/day/2026-09-04/part/0003",
 		"+metrics/day/2026-09-04/part/0000",
@@ -350,11 +351,11 @@ func equalStrings(a, b []string) bool {
 // A routine tick has a body only for the open day but plans against the
 // whole window: settled days are left alone, days that left it retired.
 func TestPlanDayOpsLeavesSettledDaysAlone(t *testing.T) {
-	prev := map[string]int{"2026-09-04": 0, "2026-09-03": 0, "2026-09-02": 2, "2026-08-04": 0}
+	prev := map[string]int{"2026-09-04": 1, "2026-09-03": 1, "2026-09-02": 2, "2026-08-04": 0}
 	window := []string{"2026-09-04", "2026-09-03", "2026-09-02"}
 	ops, next := planDayOps(map[string][][]byte{"2026-09-04": body(1)}, window, prev, true)
 
-	want := []string{"-metrics/day/2026-08-04", "+metrics/day/2026-09-04"}
+	want := []string{"-metrics/day/2026-08-04", "+metrics/day/2026-09-04/part/0000"}
 	if got := opPaths(ops); !equalStrings(got, want) {
 		t.Errorf("ops = %v, want %v", got, want)
 	}
