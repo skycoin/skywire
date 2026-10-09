@@ -63,9 +63,10 @@ type API struct {
 	metrics                     armetrics.Metrics
 	reqsInFlightCountMiddleware *metricsutil.RequestsInFlightCountMiddleware
 
-	udpConnsMu sync.RWMutex
-	udpConns   map[cipher.PubKey]net.Conn
-	startedAt  time.Time
+	udpConnsMu    sync.RWMutex
+	udpConns      map[cipher.PubKey]net.Conn
+	sudphSessions sudphSessions
+	startedAt     time.Time
 
 	closeOnce sync.Once
 	closeC    chan struct{}
@@ -303,6 +304,7 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 	})
 
 	r.Get("/health", api.health)
+	r.Get("/sudph-sessions", api.sudphSessionsHandler)
 	r.Get("/", api.ChartsPage)
 	r.With(middleware.Compress(5)).Get("/transports", api.transports)
 	r.Delete("/deregister/{network}", api.deregister)
@@ -897,6 +899,8 @@ func (a *API) ListenUDP(listener net.Listener) {
 			}
 			continue
 		}
+
+		conn = a.sudphSessions.track(conn)
 
 		// Non-blocking acquire: if the semaphore is full, drop
 		// the connection immediately rather than queueing.
