@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -58,4 +59,44 @@ func TestListRoutes3HopCountsReasons(t *testing.T) {
 	require.Equal(t, int64(1), st.ListRoutes)
 	require.Equal(t, int64(3), st.ListFetches)
 	require.Equal(t, int64(1), st.ListFetchFails)
+}
+
+// A 3-hop candidate whose route just died young gives way to the next one,
+// as the route finder's candidates do; with every candidate dead the dial
+// still gets one rather than failing.
+func TestListRoutes3HopSkipsDeadRoute(t *testing.T) {
+	src, _ := cipher.GenerateKeyPair()
+	a1, _ := cipher.GenerateKeyPair()
+	a2, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	dst, _ := cipher.GenerateKeyPair()
+	local := []oracleLocalTp{
+		{id: uuid.New(), remotePK: a1, tpType: tptypes.STCPR},
+		{id: uuid.New(), remotePK: a2, tpType: tptypes.STCPR},
+	}
+	f := mapListFetcher{dst: {b}, a1: {b}, a2: {b}}
+	lists := map[cipher.PubKey][]*transport.Entry{}
+	for _, pk := range []cipher.PubKey{a1, a2} {
+		l, err := f.FetchTransportList(context.Background(), pk)
+		require.NoError(t, err)
+		lists[pk] = l.Transports()
+	}
+	dl, err := f.FetchTransportList(context.Background(), dst)
+	require.NoError(t, err)
+	legs, err := compute3HopRoutes(src, dst, local, lists, dl.Transports(), nil)
+	require.NoError(t, err)
+	require.Len(t, legs, 2)
+
+	log := logging.MustGetLogger("test")
+	r := &router{logger: log, deadRoutes: newDeadRouteCache(time.Minute, time.Minute)}
+	require.True(t, r.deadRoutes.mark(legs[0].Forward, time.Second, time.Now()))
+
+	opts := &DialOptions{}
+	fwd, _, err := r.listRoutes3HopFrom(context.Background(), log, f, src, dst, local, opts)
+	require.NoError(t, err)
+	require.Equal(t, legs[1].Forward[0].TpID, fwd[0].TpID, "the dead route's sibling is picked")
+
+	require.True(t, r.deadRoutes.mark(legs[1].Forward, time.Second, time.Now()))
+	_, _, err = r.listRoutes3HopFrom(context.Background(), log, f, src, dst, local, opts)
+	require.NoError(t, err, "with every candidate dead the dial keeps one")
 }
