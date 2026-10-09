@@ -160,9 +160,10 @@ func StartMetricsCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client,
 }
 
 // metricsPubConfig keeps the store under dataPath/cxo-metrics, or in memory
-// when there is no data path..
+// when there is no data path. A settled day is read back from the store
+// rather than kept in the heap as well.
 func metricsPubConfig(log *logging.Logger, dataPath string) treestore.PubConfig {
-	conf := treestore.PubConfig{Logger: log, InMemoryDB: true, DmsgPort: skyenv.DmsgTPDMetricsCXOPort}
+	conf := treestore.PubConfig{Logger: log, InMemoryDB: true, DmsgPort: skyenv.DmsgTPDMetricsCXOPort, DropPublishedLeaves: true}
 	if dataPath != "" {
 		conf.InMemoryDB, conf.DataDir = false, filepath.Join(dataPath, "cxo-metrics")
 	}
