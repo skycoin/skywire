@@ -28,24 +28,19 @@ type embeddedState struct {
 	} `json:"services"`
 }
 
-// TestEnv_EmbeddedServicesCXO: visor-s embeds transport-discovery, the
-// address resolver and service discovery. Registration reaches them over
-// CXO, so each aggregator must run on visor-s's own publisher node for its
-// port (one listener per port, one key) and be subscribed to the other
-// visors' feeds. Telemetry and AR binds also take visor-s's own feed
-// in-process; its SD feed stays empty because visor-s registers no services.
+// TestEnv_EmbeddedServicesCXO: visor-s runs every deployment service in its
+// process under the service's own key, as the production hosts do.
+// Registration reaches transport-discovery, the address resolver and
+// service discovery over CXO, so each one's aggregator must be running and
+// subscribed to the visors' feeds.
 func TestEnv_EmbeddedServicesCXO(t *testing.T) {
 	env := NewEnv().GatherContainersInfo()
 	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %s:3435 state --select services --json", visorS)
 
-	type aggWant struct {
-		svcType    string
-		localRoots bool
-	}
-	want := map[string]aggWant{
-		"telemetry": {"transport-discovery", true},
-		"ar-bind":   {"address-resolver", true},
-		"sd-reg":    {"service-discovery", false},
+	want := map[string]string{
+		"telemetry": "transport-discovery",
+		"ar-bind":   "address-resolver",
+		"sd-reg":    "service-discovery",
 	}
 	var last embeddedState
 	ok := func() bool {
@@ -60,8 +55,7 @@ func TestEnv_EmbeddedServicesCXO(t *testing.T) {
 				return false
 			}
 			for _, a := range svc.Aggregators {
-				if w, wanted := want[a.Name]; wanted && w.svcType == svc.Type &&
-					a.Error == "" && a.Shared && a.Subscribed > 0 && (!w.localRoots || a.LocalRoots > 0) {
+				if w, wanted := want[a.Name]; wanted && w == svc.Type && a.Error == "" && a.Subscribed > 0 {
 					ready++
 				}
 			}
@@ -69,6 +63,6 @@ func TestEnv_EmbeddedServicesCXO(t *testing.T) {
 		return ready == len(want)
 	}
 	if !assert.Eventually(t, ok, 4*time.Minute, 10*time.Second) {
-		t.Fatalf("embedded aggregators on visor-s never all shared its nodes with live subscriptions: %+v", last)
+		t.Fatalf("embedded aggregators on visor-s never all had live subscriptions: %+v", last)
 	}
 }

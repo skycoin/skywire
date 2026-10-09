@@ -822,18 +822,13 @@ e2e-run: ## E2E. Start e2e environment and wait for all health checks to pass
 	@# once causes healthcheck timeouts because Go services are too
 	@# slow to initialize when competing for CPU.
 	@#
-	@# After #2471 the nine deployment-side services (tpd, rf,
-	@# dmsg-disc, dmsg-server, sn, sd, ar, tps, stun) collapse into
-	@# one `deployment-services` container; the previous per-service
-	@# staging is replaced by one wait on the supervisor. The five
-	@# per-service redis containers are now a single `redis` (each
-	@# service uses its own logical DB), and the deprecated
-	@# uptime-tracker + its postgres are gone (uptime is integrated
-	@# into the discovery services).
+	@# visor-s is the deployment host: one visor that is also the dmsg
+	@# server and runs every deployment service in its process under
+	@# the service's own key, as the production hosts do. All services
+	@# share one redis, each on its own logical DB.
 	bash -c "DOCKER_TAG=e2e docker compose up -d --wait redis"
-	bash -c "DOCKER_TAG=e2e docker compose up -d --wait deployment-services || { echo '=== deployment-services unhealthy — logs: ==='; docker compose logs --tail=150 deployment-services; exit 1; }"
-	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-s || { echo '=== visor-s (embedded tpd/rf/ar/sd) unhealthy — logs: ==='; docker compose logs --tail=200 visor-s; exit 1; }"
-	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-b || { echo '=== visor-b unhealthy — deployment-services (dmsg-server side) + visor-b logs: ==='; docker compose logs --tail=200 deployment-services; docker compose logs --tail=120 visor-b; exit 1; }"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-s || { echo '=== visor-s (deployment services) unhealthy — logs: ==='; docker compose logs --tail=200 visor-s; exit 1; }"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-b || { echo '=== visor-b unhealthy — visor-s + visor-b logs: ==='; docker compose logs --tail=200 visor-s; docker compose logs --tail=120 visor-b; exit 1; }"
 	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-a visor-c || { echo '=== visor-a/visor-c unhealthy — logs: ==='; docker compose logs --tail=150 visor-a visor-c; exit 1; }"
 	bash -c "DOCKER_TAG=e2e docker compose ps"
 
@@ -884,21 +879,14 @@ e2e-config: ## E2E. Regenerate visor configs from template and deployment config
 		-j 0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe \
 		--pty-rpc-exec \
 		-o docker/integration/visorC.json
-	@# visor-S: hosts transport-discovery, route-finder, address-resolver and
-	@# service-discovery in-process (embedded_services); the four dmsg URLs
-	@# in services-config.json carry its key and the /tpd /rf /ar /sd prefixes.
-	@# config gen has no flag for the section, so it is added with jq; the
-	@# blocks are the old services.json entries minus their keys and dmsg
-	@# settings, plus their plain-HTTP addr for the suite's direct curls.
+	@# visor-S is the deployment host, as on prod: one visor that is also the
+	@# dmsg server (dmsg.server.config_path keeps the server's own key) and runs
+	@# every deployment service in its process under the service's own key
+	@# (embedded_services). The blocks are in docker/integration/visorS.jq.
 	SKYDEPLOY=docker/integration/services-config.json SKYENV=docker/integration/e2e.conf \
 		go run . cli config gen -f --nofetch --sk e31d7e9cb497d8a39f211a5b012982a3546c7a3bdf50ed65fe6e8442a4297e5b \
 		-o docker/integration/visorS.json
-	jq --indent 2 '.launcher.apps |= map(.auto_start = false) | .embedded_services = [ \
-		{"type":"transport-discovery","name":"tpd","addr":":9094","redis":"redis://redis:6379/1","entry_timeout":"2m","uptime_db":"","store_data_path":"/var/lib/skywire/tpd/bandwidth"}, \
-		{"type":"route-finder","name":"rf","addr":":9092","redis":"redis://redis:6379/1"}, \
-		{"type":"service-discovery","name":"sd","addr":":9091","redis":"redis://redis:6379/2","entry_timeout":"2m"}, \
-		{"type":"address-resolver","name":"ar","addr":":9093","udp_addr":":9093","public_udp_addr":"174.0.0.18:9093","redis":"redis://redis:6379/3","entry_timeout":"2m"} ]' \
-		docker/integration/visorS.json > docker/integration/visorS.json.tmp && mv docker/integration/visorS.json.tmp docker/integration/visorS.json
+	jq --indent 2 -f docker/integration/visorS.jq docker/integration/visorS.json > docker/integration/visorS.json.tmp && mv docker/integration/visorS.json.tmp docker/integration/visorS.json
 	@echo "E2E visor configs regenerated."
 	@echo ""
 	@echo "NOTE: skychat should read \"--addr *:8001 --pair-enable\" in"
