@@ -2,6 +2,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -61,7 +62,7 @@ func (api *API) visorTable(ctx context.Context) charts.Table {
 		if list[i].total != list[j].total {
 			return list[i].total > list[j].total
 		}
-		return list[i].pk.Hex() < list[j].pk.Hex()
+		return bytes.Compare(list[i].pk[:], list[j].pk[:]) < 0
 	})
 
 	roles := api.serverRoles(ctx)

@@ -16,6 +16,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"math"
@@ -155,7 +156,7 @@ func routingShards(entries []*transport.Entry) (map[string][]byte, error) {
 	for pk, list := range byPK {
 		sort.Slice(list, func(i, j int) bool {
 			if list[i].Edges[1] != list[j].Edges[1] {
-				return list[i].Edges[1].Hex() < list[j].Edges[1].Hex()
+				return bytes.Compare(list[i].Edges[1][:], list[j].Edges[1][:]) < 0
 			}
 			return list[i].Type < list[j].Type
 		})
