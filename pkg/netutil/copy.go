@@ -64,20 +64,66 @@ func CopyReadWriteCloser(conn1, conn2 io.ReadWriteCloser) error {
 	return firstErr
 }
 
-// copyBufSize is the per-direction relay buffer. io.Copy would allocate a
-// fresh 32 KiB for every stream direction; a dmsg server bridging ~2,000
-// streams held ~120 MB of those (heap profile on the TPD host, 2026-09-10),
-// and re-allocated them on every stream open. Pooled, the buffers are reused
-// across streams and released when idle.
-const copyBufSize = 32 * 1024
+// A relayed stream starts on a small buffer and moves to a large one once a
+// run of reads fills the small one, so request/response streams, most of a
+// dmsg server's ~2,000, hold 4 KiB per direction instead of 32 KiB, and bulk
+// transfers still copy in 32 KiB reads. Buffers are pooled and reused.
+const (
+	copyBufSmall  = 4 * 1024
+	copyBufLarge  = 32 * 1024
+	copyGrowAfter = 4
+)
 
-var copyBufPool = sync.Pool{New: func() any { b := make([]byte, copyBufSize); return &b }}
+var (
+	copySmallPool = sync.Pool{New: func() any { b := make([]byte, copyBufSmall); return &b }}
+	copyLargePool = sync.Pool{New: func() any { b := make([]byte, copyBufLarge); return &b }}
+)
 
-// copyPooled is io.Copy with a pooled buffer. io.CopyBuffer still prefers the
-// destination's ReaderFrom / the source's WriterTo when either exists.
+// copyPooled is io.Copy with a pooled buffer that grows when the stream
+// needs it. A destination's ReaderFrom or a source's WriterTo still wins,
+// and then no buffer is taken at all.
 func copyPooled(dst io.Writer, src io.Reader) error {
-	bp := copyBufPool.Get().(*[]byte)
-	_, err := io.CopyBuffer(dst, src, *bp)
-	copyBufPool.Put(bp)
+	_, err := copyAdaptive(dst, src)
 	return err
+}
+
+// copyAdaptive is copyPooled, also returning the buffer size it ended on
+// (0 when the copy needed none).
+func copyAdaptive(dst io.Writer, src io.Reader) (int, error) {
+	_, wt := src.(io.WriterTo)
+	_, rf := dst.(io.ReaderFrom)
+	if wt || rf {
+		_, err := io.Copy(dst, src)
+		return 0, err
+	}
+	pool := &copySmallPool
+	bp := pool.Get().(*[]byte)
+	defer func() { pool.Put(bp) }()
+	full := 0
+	for {
+		buf := *bp
+		n, rerr := src.Read(buf)
+		if n > 0 {
+			nw, werr := dst.Write(buf[:n])
+			if werr == nil && nw != n {
+				werr = io.ErrShortWrite
+			}
+			if werr != nil {
+				return len(buf), werr
+			}
+			if n < len(buf) {
+				full = 0
+			} else if full++; pool == &copySmallPool && full >= copyGrowAfter {
+				copySmallPool.Put(bp)
+				pool = &copyLargePool
+				bp = pool.Get().(*[]byte)
+			}
+		}
+		if rerr != nil {
+			if rerr == io.EOF {
+				return len(*bp), nil
+			}
+			return len(*bp), rerr
+		}
+	}
 }
