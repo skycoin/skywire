@@ -163,3 +163,13 @@ func (s *redisStore) cleanOldBandwidthDaily(ctx context.Context, now time.Time) 
 
 // cleanBatch is how many keys one UNLINK removes.
 const cleanBatch = 10000
+
+// bandwidthEdgesTTL is the life of a transport's stored edge pair. It is
+// only looked up for transports whose daily hashes are still in redis, so it
+// outlives them by a day.
+func (s *redisStore) bandwidthEdgesTTL() time.Duration {
+	if s.leafArchive == "" {
+		return bandwidthHistoryTTL
+	}
+	return bandwidthDailyTTL + 24*time.Hour
+}
