@@ -1087,13 +1087,14 @@ embed-exec-wasm: assert-clean-tree exec-wasm ## Stage the js/wasm command module
 	@# empty revision, which then reads as "stale" forever.
 	@strings -a ./build/exec-wasm/skywire.wasm | grep -oE 'vcs\.revision=[0-9a-f]{40}' \
 		| head -1 | cut -d= -f2 > ./pkg/wasmhv/execwasm/blob/revision.txt
+	@tail -c 8 ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz | od -An -tx4 | tr -d " \n" >> ./pkg/wasmhv/execwasm/blob/revision.txt; echo >> ./pkg/wasmhv/execwasm/blob/revision.txt
 	@ls -la ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz
 	@echo "staged module revision: $$(cat ./pkg/wasmhv/execwasm/blob/revision.txt)"
 
 check-exec-wasm: ## Report whether the staged js/wasm command module matches HEAD
 	@test -f ./pkg/wasmhv/execwasm/blob/revision.txt || { \
 		echo "no staged js/wasm command module — run 'make embed-exec-wasm'"; exit 1; }
-	@staged=$$(cat ./pkg/wasmhv/execwasm/blob/revision.txt); head=$$(git rev-parse HEAD); \
+	@staged=$$(head -1 ./pkg/wasmhv/execwasm/blob/revision.txt); head=$$(git rev-parse HEAD); \
 	if [ "$$staged" = "$$head" ]; then \
 		echo "staged js/wasm command module is current ($$head)"; \
 	else \

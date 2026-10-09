@@ -31,7 +31,7 @@ func TestEmbedded_AccessorsMakeNoHeapCopy(t *testing.T) {
 		if s := trailerStamp(n); s == "" {
 			t.Error("trailerStamp() = \"\" for a staged module")
 		}
-		_ = embeddedRevision()
+		_, _ = embeddedRevision()
 	})
 	t.Logf("accessors: heap +%d KiB for a %d MiB module", delta, n>>20)
 	if delta > noCopyBudget/1024 {

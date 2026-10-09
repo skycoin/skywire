@@ -14,4 +14,4 @@ func embeddedOpen() (fs.File, error) { return nil, fs.ErrNotExist }
 func embeddedSize() int64 { return 0 }
 
 // The js build carries no blob, so it records no revision either.
-func embeddedRevision() string { return "" }
+func embeddedRevision() (rev, stamp string) { return "", "" }
