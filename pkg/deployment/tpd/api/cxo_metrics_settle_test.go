@@ -70,3 +70,15 @@ func TestMetricsSettleNeverKeepsAnEmptyDay(t *testing.T) {
 	require.NotContains(t, fake.saved, "d2")
 	require.Empty(t, m.unsaved)
 }
+
+// With a data path the metrics feed keeps its store on disk, not in the heap.
+func TestMetricsPubConfig(t *testing.T) {
+	log := logging.MustGetLogger("t")
+	if c := metricsPubConfig(log, ""); !c.InMemoryDB {
+		t.Fatal("no data path must keep the store in memory")
+	}
+	c := metricsPubConfig(log, "/var/lib/skywire/tpd/bandwidth")
+	if c.InMemoryDB || c.DataDir != "/var/lib/skywire/tpd/bandwidth/cxo-metrics" {
+		t.Fatalf("got InMemoryDB=%v DataDir=%q", c.InMemoryDB, c.DataDir)
+	}
+}
