@@ -51,6 +51,7 @@ import (
 	"compress/gzip"
 	"context"
 	jsoniter "github.com/json-iterator/go"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -129,11 +130,10 @@ type MetricsCXOPublisher struct {
 func StartMetricsCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logrus.FieldLogger) (*MetricsCXOPublisher, error) {
 	log := logging.MustGetLogger("tpd-cxo-metrics-pub")
 
-	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{
-		Logger:     log,
-		InMemoryDB: true, // metrics are always recomputed from redis on the next tick
-		DmsgPort:   skyenv.DmsgTPDMetricsCXOPort,
-	})
+	// Thirty days of leaves, several MB each, would otherwise sit in the heap
+	// twice, in the tree and in the object store. On disk the store's copy
+	// is page cache the kernel can drop.
+	pub, err := treestore.NewWithDMSG(dmsgC, sk, metricsPubConfig(log, api.backupPath))
 	if err != nil {
 		return nil, err
 	}
@@ -157,6 +157,16 @@ func StartMetricsCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client,
 	}
 	go mp.loop(pubCtx)
 	return mp, nil
+}
+
+// metricsPubConfig keeps the store under dataPath/cxo-metrics, or in memory
+// when there is no data path.
+func metricsPubConfig(log *logging.Logger, dataPath string) treestore.PubConfig {
+	conf := treestore.PubConfig{Logger: log, InMemoryDB: true, DmsgPort: skyenv.DmsgTPDMetricsCXOPort}
+	if dataPath != "" {
+		conf.InMemoryDB, conf.DataDir = false, filepath.Join(dataPath, "cxo-metrics")
+	}
+	return conf
 }
 
 // FeedPK returns the publisher's feed PK — i.e. TPD's own PK, since
