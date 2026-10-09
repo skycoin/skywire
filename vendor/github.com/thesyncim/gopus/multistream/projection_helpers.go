@@ -1,14 +1,11 @@
 package multistream
 
-// SetProjectionDemixingMatrix sets optional projection demixing coefficients.
-// Matrix data is S16LE, column-major, with dimensions:
-//
-//	rows = output channels
-//	cols = streams + coupledStreams
-//
-// This method is intended for mapping-family-3 projection flows where
-// decoded stream channels are routed with trivial mapping and then demixed
-// to output channels.
+// SetProjectionDemixingMatrix sets the optional signed 16-bit little-endian
+// projection matrix in column-major order. The matrix has outputChannels rows
+// and streams+coupledStreams columns, so its byte length must be
+// 2*outputChannels*(streams+coupledStreams). It requires identity channel
+// mapping. The matrix is copied; an empty slice clears demixing. Invalid size or
+// mapping returns ErrInvalidProjectionMatrix.
 func (d *Decoder) SetProjectionDemixingMatrix(matrix []byte) error {
 	if len(matrix) == 0 {
 		d.projectionDemixing = nil
@@ -47,7 +44,7 @@ func (d *Decoder) SetProjectionDemixingMatrix(matrix []byte) error {
 func (d *Decoder) applyProjectionDemixing32(output []float32, frameSize int) {
 	rows := d.outputChannels
 	cols := d.projectionCols
-	if len(d.projectionDemixing) == 0 || cols <= 0 || rows <= 0 || cols > rows {
+	if len(d.projectionDemixing) == 0 || cols <= 0 || rows <= 0 {
 		return
 	}
 
@@ -60,7 +57,7 @@ func (d *Decoder) applyProjectionDemixing32(output []float32, frameSize int) {
 func (d *Decoder) applyProjectionDemixingInt16(output []int16, input []float32, frameSize int) {
 	rows := d.outputChannels
 	cols := d.projectionCols
-	if len(d.projectionDemixing) == 0 || cols <= 0 || rows <= 0 || cols > rows {
+	if len(d.projectionDemixing) == 0 || cols <= 0 || rows <= 0 {
 		copy(output, float32ToInt16(input))
 		return
 	}

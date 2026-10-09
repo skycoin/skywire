@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7-labs
 
-ARG GO_VERSION=1.26
+ARG GO_VERSION=1.27.0
 FROM golang:${GO_VERSION}-bookworm
 
 ARG LIBOPUS_VERSION=1.6.1

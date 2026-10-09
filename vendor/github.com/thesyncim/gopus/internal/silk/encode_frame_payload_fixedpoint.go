@@ -17,7 +17,7 @@ import "github.com/thesyncim/gopus/internal/rangecoding"
 //     first_frame_after_reset clear).
 //
 // LP variable-cutoff filtering and the x_buf shift/insert are handled by the
-// caller (the float EncodeFrame already does the equivalent); this driver
+// caller (Encoder.encodeFrame, as for the float path); this driver
 // operates on the prepared silkEncodeFrameFIXState (x_buf with the new frame in
 // place) exactly as silk_encode_frame_FIX does after silk_LP_variable_cutoff.
 
@@ -68,6 +68,8 @@ type silkEncodeFramePayloadFIXResult struct {
 	// this frame: 1 == VAD-active. It feeds the SILK VAD header bit and, for the
 	// stereo side channel, the mid-only-flag coding gate.
 	vadFlag int
+	// seed is indices.Seed as the last silk_NSQ run left it.
+	seed int8
 }
 
 // silkEncodeIndices is the bit-exact Go port of silk_encode_indices
@@ -331,7 +333,7 @@ func (e *Encoder) silkLBRREncodeFIX(
 
 	// NSQ with LBRR gains.
 	lbrrPulses := ensureInt8Slice(&sc.lbrrPulses, st.frameLength)
-	var lbrrCtrl sEncCtrlFIX = *ctrl
+	lbrrCtrl := *ctrl
 	lbrrCtrl.gainsQ16 = gainsQ16[:st.nbSubfr]
 	silkRunNSQFIX(sc, st, &sNSQLBRR, &indicesLBRR, &lbrrCtrl, x16, lbrrPulses)
 
@@ -420,12 +422,14 @@ func (e *Encoder) silkEncodeFramePayloadFIX(ps *silkEncodeFramePayloadFIXState) 
 	currentPrevInd := st.lastGainIndex
 	frameSeed := seed
 
+gainSearch:
 	for iter := 0; ; iter++ {
-		if gainsID == gainsIDLower {
+		switch gainsID {
+		case gainsIDLower:
 			nBits = nBitsLower
-		} else if gainsID == gainsIDUpper {
+		case gainsIDUpper:
 			nBits = nBitsUpper
-		} else {
+		default:
 			if iter > 0 {
 				*re = rangeCopy
 				st.nsq = nsqCopy0
@@ -475,7 +479,7 @@ func (e *Encoder) silkEncodeFramePayloadFIX(ps *silkEncodeFramePayloadFIXState) 
 			}
 
 			if !useCBR && iter == 0 && nBits <= maxBits {
-				break
+				break gainSearch
 			}
 		}
 
@@ -545,7 +549,7 @@ func (e *Encoder) silkEncodeFramePayloadFIX(ps *silkEncodeFramePayloadFIXState) 
 			}
 		}
 
-		if !(foundLower && foundUpper) {
+		if !foundLower || !foundUpper {
 			if nBits > maxBits {
 				next := int(gainMultQ8) * 3 / 2
 				if next > 1024 {
@@ -597,6 +601,7 @@ func (e *Encoder) silkEncodeFramePayloadFIX(ps *silkEncodeFramePayloadFIXState) 
 	// prevSignalType). first_frame_after_reset cleared here.
 	st.firstFrameAfterReset = false
 
+	out.seed = frameSeed
 	out.nBytesOut = int(silkRSHIFT(int32(re.Tell()+7), 3))
 	return out
 }

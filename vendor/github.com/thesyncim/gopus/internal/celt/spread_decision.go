@@ -64,13 +64,12 @@ func (e *Encoder) SpreadingDecisionWithWeights(normX []celtNorm, nbBands, channe
 	// N0 = total MDCT coefficients per channel (== frameSize).
 	N0 := frameSize
 
-	// binFS drives the package ScaledBand* helpers to the libopus eBands[i]<<LM
-	// bin edges for the active mode. For the 48 kHz modes binFS == frameSize.
-	binFS := Overlap * M
+	// Scale the active mode's edges by M, as libopus eBands[i] << LM.
+	edges := e.modeEdges()
 
 	// Check if the last band is too narrow for spread decision
 	// libopus: if (M*(eBands[end]-eBands[end-1]) <= 8) return SPREAD_NONE
-	lastBandWidth := ScaledBandWidth(nbBands-1, binFS)
+	lastBandWidth := (edges[nbBands] - edges[nbBands-1]) * M
 	if lastBandWidth <= 8 {
 		return spreadNone
 	}
@@ -83,8 +82,8 @@ func (e *Encoder) SpreadingDecisionWithWeights(normX []celtNorm, nbBands, channe
 		// Process each band
 		for band := range nbBands {
 			// Get band boundaries
-			bandStart := ScaledBandStart(band, binFS)
-			bandEnd := ScaledBandEnd(band, binFS)
+			bandStart := edges[band] * M
+			bandEnd := edges[band+1] * M
 			N := bandEnd - bandStart
 
 			if N <= 8 {
@@ -109,8 +108,8 @@ func (e *Encoder) SpreadingDecisionWithWeights(normX []celtNorm, nbBands, channe
 			tcount := [3]int{tc0, tc1, tc2}
 
 			// High frequency bands contribution (bands above 8kHz).
-			// Match libopus: if (i > m->nbEBands-4), where m->nbEBands is 21.
-			if band > MaxBands-4 {
+			// Match libopus: if (i > m->nbEBands-4).
+			if band > e.predStride()-4 {
 				hfSum += int32((32 * (tcount[1] + tcount[0])) / N)
 			}
 
@@ -140,9 +139,9 @@ func (e *Encoder) SpreadingDecisionWithWeights(normX []celtNorm, nbBands, channe
 	if updateHF {
 		// Match libopus normalization exactly:
 		// hf_sum = celt_udiv(hf_sum, C*(4-m->nbEBands+end))
-		// with m->nbEBands fixed at 21 and end == nbBands.
+		// with end == nbBands and the active mode's total band count.
 		if hfSum > 0 {
-			den := channels * (4 - MaxBands + nbBands)
+			den := channels * (4 - e.predStride() + nbBands)
 			if den > 0 {
 				hfSum = hfSum / int32(den)
 			}
@@ -151,9 +150,10 @@ func (e *Encoder) SpreadingDecisionWithWeights(normX []celtNorm, nbBands, channe
 
 		// Adjust for current tapset decision
 		adjustedHF := e.hfAverage
-		if e.tapsetDecision == 2 {
+		switch e.tapsetDecision {
+		case 2:
 			adjustedHF += 4
-		} else if e.tapsetDecision == 0 {
+		case 0:
 			adjustedHF -= 4
 		}
 
@@ -241,7 +241,7 @@ func computeSpreadWeights(bandLogE []celtGLog, nbBands, channels, lsbDepth int) 
 			eMean = float32(eMeans[i])
 		}
 		// noise_floor = 0.0625*logN + 0.5 + (9-lsb_depth) - eMeans + 0.0062*(i+5)^2
-		noiseFloor[i] = 0.0625*logNVal + 0.5 + float32(9-lsbDepth) - eMean + 0.0062*float32((i+5)*(i+5))
+		noiseFloor[i] = 0.0625*logNVal + 0.5 + float32(9-lsbDepth) - eMean + float32(0.0062*float32(i+5))*float32(i+5)
 	}
 
 	// Compute maxDepth (maximum signal relative to noise floor across all bands/channels)

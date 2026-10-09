@@ -1,6 +1,3 @@
-// Package celt implements the CELT encoder per RFC 6716 Section 4.3.
-// This file provides allocation trim analysis for optimal bit allocation.
-
 package celt
 
 import "github.com/thesyncim/gopus/internal/opusmath"
@@ -15,33 +12,19 @@ type allocTrimDetail struct {
 	raw      opusVal16
 }
 
-// AllocTrimAnalysis computes the optimal allocation trim value for a CELT frame.
-// The trim value biases bit allocation between lower and higher frequency bands.
-// A higher trim value allocates more bits to lower frequencies.
+// AllocTrimAnalysis returns the CELT allocation trim index in [0, 10]. Higher
+// values favor lower frequency bands. It follows alloc_trim_analysis in
+// libopus celt/celt_encoder.c.
 //
-// The algorithm considers:
-// - Equivalent bitrate (lower bitrates favor lower trim)
-// - Spectral tilt (energy distribution across bands)
-// - TF estimate (transient characteristic)
-// - Stereo correlation (for stereo signals)
-// - Tonality slope (optional, from analysis)
+// normCoeffs contains normalized mono or left-channel MDCT coefficients;
+// normCoeffsRight contains the right channel, or is nil for mono. bandLogE
+// contains nbBands log energies per channel. intensity is the first band that
+// uses intensity stereo, or nbBands when intensity stereo is disabled. lm is
+// the log2 multiplier of the short-transform size.
 //
-// Parameters:
-//   - normCoeffs: normalized MDCT coefficients (left channel for stereo, or mono)
-//   - bandLogE: band log-energies [nbBands * channels]
-//   - nbBands: number of frequency bands
-//   - lm: log mode (frame size index)
-//   - channels: 1 for mono, 2 for stereo
-//   - normCoeffsRight: normalized right channel coefficients (nil for mono)
-//   - intensity: intensity stereo band threshold (nbBands for no intensity stereo)
-//   - tfEstimate: TF estimate from transient analysis (0.0-1.0)
-//   - equivRate: equivalent bitrate in bits per second
-//   - surroundTrim: surround mix trim adjustment (0 for non-surround)
-//   - tonalitySlope: tonality slope from analysis (-1 to 1, 0 if not available)
-//
-// Returns: trim index in range [0, 10], where 5 is the neutral default
-//
-// Reference: libopus celt/celt_encoder.c alloc_trim_analysis()
+// equivRate is the equivalent bitrate in bits per second. tfEstimate is the
+// transient-analysis estimate in [0, 1]; surroundTrim is the surround allocation
+// adjustment. A zero tonalitySlope disables the optional analysis adjustment.
 func AllocTrimAnalysis(
 	normCoeffs []celtNorm,
 	bandLogE []celtGLog,
@@ -68,6 +51,7 @@ func AllocTrimAnalysis(
 		surroundTrim,
 		tonalitySlope,
 		tonalitySlope != 0,
+		EBands[:],
 	)
 	return trimIndex
 }
@@ -85,6 +69,7 @@ func allocTrimAnalysisDetailed(
 	surroundTrim celtGLog,
 	tonalitySlope opusVal16,
 	analysisValid bool,
+	edges []int,
 ) (int, allocTrimDetail) {
 	detail := allocTrimDetail{}
 
@@ -92,9 +77,8 @@ func allocTrimAnalysisDetailed(
 	trim := opusVal16(5.0)
 	detail.base = trim
 
-	// At low bitrate, reducing the trim seems to help. At higher bitrates, it's less
-	// clear what's best, so we're keeping it as it was before, at least for now.
-	// Reference: libopus lines 877-883
+	// Bitrates below 80 kbit/s reduce the baseline trim according to
+	// celt/celt_encoder.c:alloc_trim_analysis.
 	if equivRate < 64000 {
 		trim = opusVal16(4.0)
 		detail.base = trim
@@ -107,7 +91,7 @@ func allocTrimAnalysisDetailed(
 	// Stereo correlation adjustment
 	// Reference: libopus lines 884-920
 	if channels == 2 && normCoeffsRight != nil && len(normCoeffs) > 0 && len(normCoeffsRight) > 0 {
-		logXC := computeStereoCorrelationTrim(normCoeffs, normCoeffsRight, nbBands, lm, intensity)
+		logXC := computeStereoCorrelationTrim(normCoeffs, normCoeffsRight, nbBands, lm, intensity, edges)
 
 		// trim += max(-4, 0.75 * logXC)
 		stereoAdjust := opusVal16(0.75) * logXC
@@ -121,8 +105,8 @@ func allocTrimAnalysisDetailed(
 	// Spectral tilt adjustment
 	// Reference: libopus lines 922-931
 	// The spectral tilt measures whether energy is concentrated in low or high frequencies.
-	// Positive diff = more energy in lower bands (tilted down)
-	// Negative diff = more energy in higher bands (tilted up)
+	// Positive diff indicates a tilt toward higher bands; negative diff
+	// indicates a tilt toward lower bands.
 	var diff opusVal32
 	end := min(nbBands, len(bandLogE)/channels)
 
@@ -195,12 +179,12 @@ func allocTrimAnalysisDetailed(
 // It measures inter-channel correlation to estimate mid-side coding savings.
 //
 // Reference: libopus celt/celt_encoder.c alloc_trim_analysis() lines 884-920
-func computeStereoCorrelationTrim(normL, normR []celtNorm, nbBands, lm, intensity int) opusVal16 {
-	logXC, _ := computeStereoCorrelationLogs(normL, normR, nbBands, lm, intensity)
+func computeStereoCorrelationTrim(normL, normR []celtNorm, nbBands, lm, intensity int, edges []int) opusVal16 {
+	logXC, _ := computeStereoCorrelationLogs(normL, normR, nbBands, lm, intensity, edges)
 	return logXC
 }
 
-func computeStereoCorrelationLogs(normL, normR []celtNorm, nbBands, lm, intensity int) (opusVal16, opusVal16) {
+func computeStereoCorrelationLogs(normL, normR []celtNorm, nbBands, lm, intensity int, edges []int) (opusVal16, opusVal16) {
 	// Compute inter-channel correlation for low frequencies (first 8 bands)
 	// libopus uses inner product of normalized coefficients between channels
 
@@ -208,8 +192,8 @@ func computeStereoCorrelationLogs(normL, normR []celtNorm, nbBands, lm, intensit
 
 	// Compute correlation for first 8 bands
 	for band := 0; band < 8 && band < nbBands; band++ {
-		bandStart := EBands[band] << lm
-		bandEnd := EBands[band+1] << lm
+		bandStart := edges[band] << lm
+		bandEnd := edges[band+1] << lm
 
 		if bandStart >= len(normL) || bandStart >= len(normR) {
 			break
@@ -241,8 +225,8 @@ func computeStereoCorrelationLogs(normL, normR []celtNorm, nbBands, lm, intensit
 	// Also compute minimum correlation across higher bands (up to intensity threshold)
 	minXC := sum
 	for band := 8; band < intensity && band < nbBands; band++ {
-		bandStart := EBands[band] << lm
-		bandEnd := EBands[band+1] << lm
+		bandStart := edges[band] << lm
+		bandEnd := edges[band+1] << lm
 
 		if bandStart >= len(normL) || bandStart >= len(normR) {
 			break
@@ -282,8 +266,10 @@ func computeStereoCorrelationLogs(normL, normR []celtNorm, nbBands, lm, intensit
 }
 
 // UpdateStereoSaving updates the running stereo_saving estimate used by libopus
-// compute_vbr(). The state is updated once per frame after alloc-trim analysis.
-func UpdateStereoSaving(prev opusVal16, normL, normR []celtNorm, nbBands, lm, intensity int) opusVal16 {
+// compute_vbr(). The state is updated once per frame after alloc-trim analysis:
+// stereo_saving = min(stereo_saving+0.25, -logXC2/2) (celt/celt_encoder.c:919).
+// The state is unbounded; compute_vbr caps the value it reads at 1.
+func UpdateStereoSaving(prev opusVal16, normL, normR []celtNorm, nbBands, lm, intensity int, edges []int) OpusVal16 {
 	if len(normL) == 0 || len(normR) == 0 || nbBands <= 0 {
 		return prev
 	}
@@ -294,19 +280,8 @@ func UpdateStereoSaving(prev opusVal16, normL, normR []celtNorm, nbBands, lm, in
 		intensity = nbBands
 	}
 
-	_, logXC2 := computeStereoCorrelationLogs(normL, normR, nbBands, lm, intensity)
-	limit := opusVal16(-0.5) * logXC2
-	next := prev + opusVal16(0.25)
-	if next > limit {
-		next = limit
-	}
-	if next < opusVal16(0) {
-		next = 0
-	}
-	if next > opusVal16(1) {
-		next = 1
-	}
-	return next
+	_, logXC2 := computeStereoCorrelationLogs(normL, normR, nbBands, lm, intensity, edges)
+	return min(prev+0.25, -(0.5 * logXC2))
 }
 
 func celtInnerProdNorm(x, y []celtNorm, start, end int) opusVal16 {
@@ -327,20 +302,24 @@ func celtInnerProdNorm(x, y []celtNorm, start, end int) opusVal16 {
 	return opusVal16(celtInnerProdLibopusOrder(x[start:end], y[start:end]))
 }
 
-// ComputeEquivRate computes the equivalent bitrate for allocation trim analysis.
-// This matches libopus computation in celt_encoder.c line 1925.
+// ComputeEquivRate computes equiv_rate, the equivalent 20 ms bitrate the
+// intensity hysteresis, allocation trim and signal-bandwidth floor read.
+// This matches libopus celt_encoder.c:1925-1927.
 //
 // Parameters:
-//   - nbCompressedBytes: target compressed packet size in bytes
-//   - channels: number of audio channels (1 or 2)
+//   - nbCompressedBytes: payload budget of the frame in bytes
+//   - channels: number of coded channels (1 or 2)
 //   - lm: log mode (frame size index: 0=2.5ms, 1=5ms, 2=10ms, 3=20ms)
-//   - targetBitrate: target bitrate in bps (0 if using fixed packet size)
+//   - targetBitrate: st->bitrate in bps; BitrateMax (or any non-positive value)
+//     codes a fixed packet size
 //
 // Returns: equivalent bitrate in bits per second
 //
 // Reference: libopus celt/celt_encoder.c line 1925:
 //
 //	equiv_rate = ((opus_int32)nbCompressedBytes*8*50 << (3-LM)) - (40*C+20)*((400>>LM) - 50);
+//	if (st->bitrate != OPUS_BITRATE_MAX)
+//	   equiv_rate = IMIN(equiv_rate, st->bitrate - (40*C+20)*((400>>LM) - 50));
 func ComputeEquivRate(nbCompressedBytes, channels, lm, targetBitrate int) int {
 	// Base computation from packet size
 	// 50 is the frame rate for 20ms frames at 48kHz

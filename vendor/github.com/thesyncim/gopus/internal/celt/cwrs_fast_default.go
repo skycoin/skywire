@@ -1,5 +1,3 @@
-//go:build !arm64 || purego
-
 package celt
 
 // cwrsiFastCore is the table-only CWRS decoder. Callers validate n/k/y and

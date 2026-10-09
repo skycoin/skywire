@@ -109,7 +109,7 @@ func signalTypeFromState(st *decoderState) int {
 	if st == nil {
 		return 0
 	}
-	return int(st.indices.signalType)
+	return int(st.prevSignalType)
 }
 
 // silkPLCChannelView adapts one channel of a Decoder to the
@@ -157,15 +157,28 @@ func (v *silkPLCChannelView) IsPreviousFrameVoiced() bool {
 }
 
 func (v *silkPLCChannelView) OutputHistory() []float32 {
-	return v.d.outputHistory
+	return v.d.OutputHistory()
 }
 
 func (v *silkPLCChannelView) HistoryIndex() int {
 	return v.d.historyIndex
 }
 
+func (v *silkPLCChannelView) GetLagPrev() int {
+	st := v.state()
+	if st == nil {
+		return 0
+	}
+	return int(st.lagPrev)
+}
+
 func (v *silkPLCChannelView) GetLastSignalType() int {
 	return signalTypeFromState(v.state())
+}
+
+func (v *silkPLCChannelView) IsFirstFrameAfterReset() bool {
+	st := v.state()
+	return st != nil && st.firstFrameAfterReset
 }
 
 func (v *silkPLCChannelView) GetLTPCoefficients() [ltpOrder]int16 {
@@ -193,7 +206,13 @@ func (v *silkPLCChannelView) GetLTPScale() int32 {
 }
 
 func (v *silkPLCChannelView) GetExcitationHistory() []int32 {
-	return excitationHistoryFromState(v.state())
+	st := v.state()
+	if st == nil {
+		return nil
+	}
+	// PLC.c chooses the random-source origin from the previous good frame's
+	// saved geometry, which may extend past the current loss frame length.
+	return st.excQ14[:]
 }
 
 func (v *silkPLCChannelView) GetLPCCoefficientsQ12() []int16 {

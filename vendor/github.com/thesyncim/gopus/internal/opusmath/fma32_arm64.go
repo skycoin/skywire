@@ -6,16 +6,11 @@ package opusmath
 // used by the CELT FLOAT_APPROX approximations (see CeltExp2 in celt.go), which
 // mirror libopus' MULT_ADD/MAC chains.
 //
-// The function is split per architecture so each platform's floating-point
-// contraction is isolated to one place. On arm64 the Go compiler may contract
-// a*b + c into a hardware FMA instruction, which keeps the product at full
-// precision through the add instead of rounding it to float32 first. That single
-// fused step is the documented source of arm64-only 1-ULP differences against
-// amd64 libopus and is part of the accepted per-architecture parity budget;
-// keeping the expression here (rather than calling math.FMA or forcing a
-// rounding barrier) preserves that behaviour. The body is intentionally
-// identical to the non-arm64 build so the only difference is the compiler's
-// contraction choice.
+// The helper is split per architecture so compiler contraction is localized.
+// On arm64 the Go compiler may contract a*b + c into a hardware FMA instruction,
+// which keeps the product at full precision through the add. Exact comparisons
+// use the libopus instruction lane selected for the same build configuration;
+// quality thresholds do not excuse a difference from that matching reference.
 func fma32(a, b, c float32) float32 {
 	return a*b + c
 }

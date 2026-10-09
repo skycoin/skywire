@@ -3,6 +3,7 @@ package multistream
 import (
 	"github.com/thesyncim/gopus/internal/celt"
 	"github.com/thesyncim/gopus/internal/rangecoding"
+	"github.com/thesyncim/gopus/internal/silk"
 )
 
 // decodeHybridModeWithTransition wraps the Hybrid decode with the libopus
@@ -11,6 +12,10 @@ import (
 // hook once redundancy is known to be absent, mirroring opus_decode_frame, then
 // crossfaded onto the front of the decoded Hybrid frame.
 func (d *streamState) decodeHybridModeWithTransition(frame []byte, frameSize, transSize int, toc streamTOC) ([]float32, error) {
+	// The shared Hybrid decoder can be idle while standalone SILK or CELT
+	// packets update the stream's packet-channel state. Keep its next transition
+	// decision aligned with opus_decoder's previous ToC channel count.
+	d.hybridDec.SetPrevPacketStereo(d.lastPacketStereo)
 	var ts transitionState
 	if d.haveDecoded && int(d.lastMode) == streamModeCELT {
 		ts.active = true
@@ -50,22 +55,20 @@ func (d *streamState) decodeHybridToFloat32(frame []byte, frameSize int, toc str
 	needCeltReset := d.haveDecoded && int(d.lastMode) != toc.mode && !d.prevRedundancy
 	d.celtDec.SetBandwidth(celtBW)
 
-	const (
-		f10  = 480
-		f5   = f10 >> 1
-		f2_5 = f5 >> 1
-	)
 	fs := int(d.sampleRate)
+	f5 := fs / 200
+	f2_5 := f5 / 2
 
 	redundancy := false
 	celtToSilk := false
 	redundancyBytes := 0
 	mainLen := len(frame)
 	var redundantAudio []float32
+	var redundantRange uint32
 
-	afterSilk := func(rd *rangecoding.Decoder) error {
+	afterSilk := func(rd *rangecoding.Decoder) (int, error) {
 		if rd == nil {
-			return nil
+			return mainLen, nil
 		}
 		if rd.Tell()+17+20 <= 8*len(frame) {
 			redundancy = rd.DecodeBit(12) == 1
@@ -83,18 +86,25 @@ func (d *streamState) decodeHybridToFloat32(frame []byte, frameSize int, toc str
 				}
 			}
 		}
-		// Hand the final redundancy decision to the gopus_fixed_point integer
-		// highband hook (which runs next, against a clone of this same decoder
-		// positioned at the CELT start band) so it can decline redundant frames it
-		// does not reproduce. A no-op in the default build.
-		d.setFixedHybridRedundancy(redundancy)
+		// Hand the final redundancy decision and trailing CELT frame to the
+		// gopus_fixed_point highband path. The shared range decoder has already
+		// consumed the flags and excluded these trailing bytes.
+		var fixedRedundantData []byte
+		if redundancy && redundancyBytes > 0 && mainLen >= 0 && mainLen+redundancyBytes <= len(frame) {
+			fixedRedundantData = frame[mainLen : mainLen+redundancyBytes]
+		}
+		codedChannels := 1
+		if toc.stereo {
+			codedChannels = 2
+		}
+		d.setFixedRedundancy(redundancy, celtToSilk, fixedRedundantData, codedChannels)
 		// pcm_transition for a CELT->Hybrid mode change: decode the 5 ms PLC frame
 		// in the previous CELT mode now that redundancy is known to be absent and
 		// before the CELT decoder is reset (opus_decode_frame lines ~540-543).
 		if ts != nil && ts.active && ts.pendingTransSize > 0 && !redundancy && len(ts.pcm) == 0 {
 			pcm, perr := d.transitionPLCToFloat32(ts.pendingTransSize, ts.prevMode, ts.prevBW, ts.prevStereo)
 			if perr != nil {
-				return perr
+				return 0, perr
 			}
 			ts.pcm = pcm
 		}
@@ -106,22 +116,25 @@ func (d *streamState) decodeHybridToFloat32(frame []byte, frameSize int, toc str
 		// the redundancy-updated CELT state (no reset). Mirrors opus_decode_frame.
 		if redundancy && celtToSilk && redundancyBytes > 0 && mainLen >= 0 && mainLen+redundancyBytes <= len(frame) {
 			redundantData := frame[mainLen : mainLen+redundancyBytes]
-			redundantAudio = make([]float32, f5*channels)
+			redundantAudio = d.redundantPCMFor(f5 * channels)
 			if rerr := d.celtDec.DecodeFrameWithPacketStereoToFloat32AtAPIRate(redundantData, f5, toc.stereo, redundantAudio); rerr != nil {
-				return rerr
+				return 0, rerr
 			}
+			redundantRange = d.celtDec.FinalRange()
 		}
 		if needCeltReset {
 			d.celtDec.Reset()
 			d.celtDec.SetBandwidth(celtBW)
 		}
-		return nil
+		return mainLen, nil
 	}
 
-	var rd rangecoding.Decoder
+	rd := &d.rangeDecoder
 	rd.Init(frame)
-	out, err := d.hybridDec.DecodeWithDecoderHook(&rd, frameSize, toc.stereo, afterSilk)
-	if err != nil {
+	out := d.framePCMFor(frameSize * channels)
+	d.installOSCELACESilkPostfilterHook(silk.BandwidthWideband, toc.stereo)
+	defer d.clearOSCELACESilkPostfilterHook()
+	if err := d.hybridDec.DecodeWithDecoderHookToFloat32(rd, frameSize, toc.stereo, afterSilk, out); err != nil {
 		return nil, err
 	}
 
@@ -133,10 +146,11 @@ func (d *streamState) decodeHybridToFloat32(frame []byte, frameSize int, toc str
 			d.celtDec.Reset()
 			d.celtDec.SetBandwidth(celtBW)
 			redundantData := frame[mainLen : mainLen+redundancyBytes]
-			redundantAudio = make([]float32, f5*channels)
+			redundantAudio = d.redundantPCMFor(f5 * channels)
 			if err := d.celtDec.DecodeFrameWithPacketStereoToFloat32AtAPIRate(redundantData, f5, toc.stereo, redundantAudio); err != nil {
 				return nil, err
 			}
+			redundantRange = d.celtDec.FinalRange()
 			start := (frameSize - f2_5) * channels
 			if start >= 0 && start < len(out) && len(redundantAudio) >= f5*channels {
 				streamSmoothFade(out[start:], redundantAudio[f2_5*channels:], out[start:], f2_5, channels, fs)
@@ -149,6 +163,10 @@ func (d *streamState) decodeHybridToFloat32(frame []byte, frameSize int, toc str
 	}
 
 	d.prevRedundancy = redundancy && !celtToSilk
+	d.lastHybridRange = d.hybridDec.FinalRange() ^ redundantRange
+	if mainLen <= 1 {
+		d.lastHybridRange = 0
+	}
 	return out, nil
 }
 
@@ -159,10 +177,8 @@ func streamSmoothFade(in1, in2, out []float32, overlap, channels, sampleRate int
 		return
 	}
 	inc := 48000 / sampleRate
-	if inc <= 0 {
-		inc = 1
-	}
-	win := celt.GetWindowBufferF32(overlap * inc)
+	// opus_decoder.c smooth_fade uses a zero window stride at native 96 kHz.
+	win := celt.GetWindowBufferF32(max(overlap, overlap*inc))
 	if len(win) == 0 {
 		return
 	}
@@ -180,13 +196,18 @@ func streamSmoothFade(in1, in2, out []float32, overlap, channels, sampleRate int
 				break
 			}
 			oneMinusW := streamSmoothFadeSub(float32(1), w)
-			out[idx] = streamSmoothFadeMul(w, in2[idx]) + streamSmoothFadeMul(oneMinusW, in1[idx])
+			out[idx] = streamSmoothFadeMulAdd(w, in2[idx], streamSmoothFadeMul(oneMinusW, in1[idx]))
 		}
 	}
 }
 
 //go:noinline
 func streamSmoothFadeMul(a, b float32) float32 { return a * b }
+
+// streamSmoothFadeMulAdd follows the contraction of the first product and sum
+// in libopus src/opus_decoder.c smooth_fade on targets whose C build uses FMA.
+// The rounded second product remains a separate operation.
+func streamSmoothFadeMulAdd(a, b, c float32) float32 { return a*b + c }
 
 //go:noinline
 func streamSmoothFadeSub(a, b float32) float32 { return a - b }

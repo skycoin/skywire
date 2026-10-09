@@ -4,6 +4,7 @@ package gopus
 
 import (
 	"encoding/binary"
+	"errors"
 	"io"
 	"math"
 	"unsafe"
@@ -14,68 +15,9 @@ import (
 // streaming Reader can copy decoded PCM straight to its output buffer instead
 // of re-encoding each sample.
 var hostIsLittleEndian = func() bool {
-	var x uint16 = 1
-	return *(*byte)(unsafe.Pointer(&x)) == 1
+	probe := [2]byte{1, 0}
+	return binary.NativeEndian.Uint16(probe[:]) == 1
 }()
-
-// Streaming API
-//
-// The Reader and Writer types provide io.Reader and io.WriteCloser interfaces
-// for streaming Opus encode/decode operations. They handle frame boundaries
-// internally, allowing integration with Go's standard io patterns.
-//
-// # Streaming Decode
-//
-// To decode a stream of Opus packets:
-//
-//	source := &MyPacketReader{} // implements PacketReader
-//	reader, err := gopus.NewReader(gopus.DefaultDecoderConfig(48000, 2), source, gopus.FormatFloat32LE)
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-//
-//	// Read decoded PCM bytes
-//	buf := make([]byte, 4096)
-//	for {
-//	    n, err := reader.Read(buf)
-//	    if err == io.EOF {
-//	        break
-//	    }
-//	    if err != nil {
-//	        log.Fatal(err)
-//	    }
-//	    processAudio(buf[:n])
-//	}
-//
-// # Streaming Encode
-//
-// To encode PCM audio to a stream of Opus packets:
-//
-//	sink := &MyPacketSink{} // implements PacketSink
-//	writer, err := gopus.NewWriter(48000, 2, sink, gopus.FormatFloat32LE, gopus.ApplicationAudio)
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-//
-//	// Write PCM bytes
-//	pcmBytes := getPCMData() // float32 little-endian bytes
-//	_, err = writer.Write(pcmBytes)
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-//
-//	// Flush remaining buffered samples and close the sink when supported.
-//	if err := writer.Close(); err != nil {
-//	    log.Fatal(err)
-//	}
-//
-// # Sample Format
-//
-// Both Reader and Writer support two sample formats:
-//   - FormatFloat32LE: 32-bit float, little-endian (4 bytes per sample)
-//   - FormatInt16LE: 16-bit signed integer, little-endian (2 bytes per sample)
-//
-// Samples are interleaved for stereo: [L0, R0, L1, R1, ...]
 
 // SampleFormat specifies the PCM sample format for streaming.
 type SampleFormat int
@@ -109,38 +51,37 @@ func (f SampleFormat) BytesPerSample() int {
 }
 
 // PacketReader provides Opus packets for streaming decode.
-// Implementations should return io.EOF when no more packets are available.
+// ReadPacketInto writes the next packet into dst and returns its byte length;
+// callers may reuse dst after the call. Return io.EOF when the stream ends.
 type PacketReader interface {
-	// ReadPacketInto fills dst with the next Opus packet.
+	// ReadPacketInto writes the next packet into dst and returns its byte length.
+	// The caller may reuse dst after this call returns.
 	//
-	// granulePos is the source packet position in decoded-sample units when the
-	// container provides one (for example Ogg Opus granule positions). Sources
-	// that do not track positions should return 0.
+	// granulePos is the source position in decoded samples at 48 kHz when the
+	// container provides one, as with an Ogg Opus granule position. Return 0
+	// when positions are unavailable.
 	//
-	// Returns io.EOF when stream ends. Return n=0, err=nil to trigger PLC.
+	// Return io.EOF when the stream ends. A final complete packet may be
+	// returned with n > 0 and io.EOF; Reader drains its PCM before returning EOF.
+	// Return n=0, err=nil to request packet loss concealment for one frame.
 	ReadPacketInto(dst []byte) (n int, granulePos uint64, err error)
 }
 
 // PacketSink receives encoded Opus packets from streaming encode.
 type PacketSink interface {
-	// WritePacket writes an encoded Opus packet.
-	// Returns number of bytes written and any error.
+	// WritePacket writes one encoded Opus packet and returns the number of bytes
+	// accepted. Writer does not retry; a short count returns io.ErrShortWrite,
+	// except that an error returned with zero bytes is preserved. The packet buffer
+	// is reused after this method returns, so copy packet if retaining it.
 	//
-	// If the sink also implements io.Closer, Writer.Close forwards to it after
-	// flushing any buffered audio.
+	// If the sink also implements io.Closer, Writer.Close calls it at most once
+	// after attempting a flush, or after an earlier sink write error.
 	WritePacket(packet []byte) (int, error)
 }
 
-// Reader decodes an Opus stream, implementing io.Reader.
-// Output is PCM samples in the configured format.
-//
-// The Reader handles frame boundaries internally, buffering decoded
-// PCM samples and serving byte-oriented reads.
-//
-// Example:
-//
-//	reader, err := gopus.NewReader(gopus.DefaultDecoderConfig(48000, 2), source, gopus.FormatFloat32LE)
-//	io.Copy(audioOutput, reader)
+// Reader decodes packets from a PacketReader and exposes PCM as an io.Reader.
+// Read returns little-endian samples in the configured format. A Reader is not
+// safe for concurrent use.
 type Reader struct {
 	dec    *Decoder
 	source PacketReader
@@ -156,12 +97,9 @@ type Reader struct {
 	eof bool // Source exhausted
 }
 
-// NewReader creates a streaming decoder.
-//
-// Parameters:
-//   - cfg: decoder configuration
-//   - source: provides Opus packets for decoding
-//   - format: output sample format (FormatFloat32LE or FormatInt16LE)
+// NewReader creates a Reader that decodes packets from source into format.
+// It returns ErrNilPacketReader for a nil source, ErrInvalidSampleFormat for
+// an unsupported format, or the decoder configuration error.
 func NewReader(cfg DecoderConfig, source PacketReader, format SampleFormat) (*Reader, error) {
 	if source == nil {
 		return nil, ErrNilPacketReader
@@ -187,11 +125,20 @@ func NewReader(cfg DecoderConfig, source PacketReader, format SampleFormat) (*Re
 	}, nil
 }
 
-// Read implements io.Reader, reading decoded PCM bytes.
-//
-// The Reader handles frame boundaries internally, fetching and decoding
-// packets as needed to fill the buffer.
+// Read implements io.Reader and returns decoded PCM bytes in the format passed
+// to NewReader. Each call decodes at most one packet, so a short read at a packet
+// boundary is normal. It returns io.EOF after the source ends and buffered PCM
+// has been consumed. An empty destination does not advance the source or
+// buffered PCM; it returns io.EOF only when EOF is already known and no PCM
+// remains.
 func (r *Reader) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		if r.eof && r.offset >= len(r.byteBuf) {
+			return 0, io.EOF
+		}
+		return 0, nil
+	}
+
 	// If buffer is exhausted, try to get more data
 	if r.offset >= len(r.byteBuf) {
 		if r.eof {
@@ -202,9 +149,10 @@ func (r *Reader) Read(p []byte) (int, error) {
 		nPacket, granulePos, err := r.source.ReadPacketInto(r.packetBuf)
 		if err == io.EOF {
 			r.eof = true
-			return 0, io.EOF
-		}
-		if err != nil {
+			if nPacket <= 0 {
+				return 0, io.EOF
+			}
+		} else if err != nil {
 			return 0, err
 		}
 		r.lastGranulePos = granulePos
@@ -282,13 +230,14 @@ func (r *Reader) Channels() int {
 
 // LastGranulePos returns the most recent packet position reported by the source.
 //
-// For Ogg Opus this is the granule position from the underlying page header.
+// For Ogg Opus this is the computed granule position of that packet.
 // Sources that do not track positions may leave this at 0.
 func (r *Reader) LastGranulePos() uint64 {
 	return r.lastGranulePos
 }
 
-// Reset clears buffers and decoder state for a new stream.
+// Reset clears buffered PCM and decoder state. It does not reset or replace the
+// PacketReader, so subsequent reads continue from that source's current position.
 func (r *Reader) Reset() {
 	r.dec.Reset()
 	if r.byteBuf != nil {
@@ -299,17 +248,8 @@ func (r *Reader) Reset() {
 	r.eof = false
 }
 
-// Writer encodes PCM samples to an Opus stream, implementing io.WriteCloser.
-// Input is PCM samples in the configured format.
-//
-// The Writer buffers input samples until a complete frame is accumulated,
-// then encodes and sends the packet to the sink.
-//
-// Example:
-//
-//	writer, err := gopus.NewWriter(48000, 2, sink, gopus.FormatFloat32LE, gopus.ApplicationAudio)
-//	io.Copy(writer, audioInput)
-//	writer.Close() // flush remaining buffered samples
+// Writer encodes PCM bytes from io.Writer calls into Opus packets for a
+// PacketSink. It buffers incomplete frames and is not safe for concurrent use.
 type Writer struct {
 	enc    *Encoder
 	sink   PacketSink
@@ -319,20 +259,18 @@ type Writer struct {
 	frameBytes   int    // Bytes needed for one frame
 	frameSamples int    // Samples per frame across all channels
 
-	packetBuf  []byte    // Buffer for encoded packet (4000 bytes)
-	pcmScratch []float32 // Reused PCM scratch for byte-to-sample conversion
-	paddedBuf  []byte    // Reused zero-padded frame buffer for Flush
-	closed     bool
+	packetBuf          []byte    // Buffer for encoded packet (4000 bytes)
+	pcmScratch         []float32 // Reused PCM scratch for byte-to-sample conversion
+	paddedBuf          []byte    // Reused zero-padded frame buffer for Flush
+	closed             bool      // Write and Flush reject calls after close or a sink write error.
+	sinkCloseAttempted bool
 }
 
-// NewWriter creates a streaming encoder.
-//
-// Parameters:
-//   - sampleRate: input sample rate (8000, 12000, 16000, 24000, or 48000)
-//   - channels: number of audio channels (1 or 2)
-//   - sink: receives encoded Opus packets
-//   - format: input sample format (FormatFloat32LE or FormatInt16LE)
-//   - application: encoder application hint
+// NewWriter creates a Writer that encodes interleaved PCM at sampleRate with
+// channels and sends packets to sink. format selects little-endian float32 or
+// signed int16 input, and application selects the encoder's intended use. The
+// writer uses a 20 ms frame duration by default. It returns an error for a nil
+// sink, unsupported format, or invalid encoder configuration.
 func NewWriter(sampleRate, channels int, sink PacketSink, format SampleFormat, application Application) (*Writer, error) {
 	if sink == nil {
 		return nil, ErrNilPacketSink
@@ -365,10 +303,12 @@ func NewWriter(sampleRate, channels int, sink PacketSink, format SampleFormat, a
 	}, nil
 }
 
-// Write implements io.Writer, encoding PCM bytes to Opus packets.
-//
-// The Writer buffers input samples until a complete frame is accumulated,
-// then encodes and sends the packet to the sink.
+// Write implements io.Writer for interleaved little-endian PCM in the format
+// passed to NewWriter. It buffers incomplete frames and encodes each complete
+// frame. On success it consumes all of p. On error,
+// the returned count covers only input bytes in frames handled before the error;
+// packets sent before an error are not rolled back. A sink error closes the
+// Writer.
 func (w *Writer) Write(p []byte) (int, error) {
 	if w.closed {
 		return 0, io.ErrClosedPipe
@@ -384,18 +324,12 @@ func (w *Writer) Write(p []byte) (int, error) {
 		// Extract one frame of bytes
 		frameData := w.sampleBuf[processedBytes : processedBytes+w.frameBytes]
 
-		// Convert bytes to float32 PCM using reusable scratch.
-		pcm := w.pcmScratch[:w.frameSamples]
-		w.decodePCMInto(pcm, frameData)
-
-		// Encode the frame
-		n, err := w.enc.Encode(pcm, w.packetBuf)
+		n, err := w.encodeFrame(frameData)
 		if err != nil {
 			w.discardConsumedPrefix(processedBytes)
 			return consumedInputBytes(initialBuffered, processedBytes, len(p)), err
 		}
 
-		// If n > 0, send packet to sink (n == 0 means DTX suppressed)
 		if n > 0 {
 			if err := w.writePacketToSink(w.packetBuf[:n]); err != nil {
 				w.closed = true
@@ -445,6 +379,16 @@ func (w *Writer) discardConsumedPrefix(consumed int) {
 	w.sampleBuf = w.sampleBuf[:remaining]
 }
 
+func (w *Writer) encodeFrame(data []byte) (int, error) {
+	pcm := w.pcmScratch[:w.frameSamples]
+	w.decodePCMInto(pcm, data)
+	if w.format == FormatInt16LE {
+		// Match opus_encode's short-input analysis and 16-bit precision cap.
+		return w.enc.encodeInt16Packet(pcm, w.packetBuf)
+	}
+	return w.enc.Encode(pcm, w.packetBuf)
+}
+
 // decodePCMInto converts bytes to float32 PCM samples using caller-provided scratch.
 func (w *Writer) decodePCMInto(dst []float32, data []byte) {
 	switch w.format {
@@ -461,9 +405,9 @@ func (w *Writer) decodePCMInto(dst []float32, data []byte) {
 	}
 }
 
-// Flush encodes any buffered samples.
-// If samples don't fill a complete frame, they are zero-padded.
-// Call Flush before closing the stream to ensure all audio is encoded.
+// Flush encodes buffered PCM. A partial final frame is zero-padded to the
+// configured frame size. With no buffered PCM,
+// Flush has no effect.
 func (w *Writer) Flush() error {
 	if w.closed {
 		return io.ErrClosedPipe
@@ -475,16 +419,11 @@ func (w *Writer) Flush() error {
 	// Zero-pad to complete frame using reusable scratch.
 	clear(w.paddedBuf)
 	copy(w.paddedBuf, w.sampleBuf)
-	pcm := w.pcmScratch[:w.frameSamples]
-	w.decodePCMInto(pcm, w.paddedBuf)
-
-	// Encode the frame
-	n, err := w.enc.Encode(pcm, w.packetBuf)
+	n, err := w.encodeFrame(w.paddedBuf)
 	if err != nil {
 		return err
 	}
 
-	// If n > 0, send packet to sink
 	if n > 0 {
 		if err := w.writePacketToSink(w.packetBuf[:n]); err != nil {
 			w.closed = true
@@ -498,26 +437,37 @@ func (w *Writer) Flush() error {
 	return nil
 }
 
-// Close flushes buffered samples and closes the underlying sink when supported.
-//
-// If the sink implements io.Closer, Close forwards to it after a successful
-// flush. Close is idempotent.
+// Close attempts to flush buffered samples and closes the underlying sink when
+// supported, including when flushing fails. If both flushing and closing fail,
+// the returned error matches both. Repeated calls return nil and do not retry
+// the sink close.
 func (w *Writer) Close() error {
-	if w.closed {
+	if w.sinkCloseAttempted {
 		return nil
 	}
-	if err := w.Flush(); err != nil {
-		return err
+	var flushErr error
+	if !w.closed {
+		flushErr = w.Flush()
 	}
 	w.closed = true
+	w.sinkCloseAttempted = true
+	var closeErr error
 	if closer, ok := w.sink.(io.Closer); ok {
-		return closer.Close()
+		closeErr = closer.Close()
 	}
-	return nil
+	if flushErr == nil {
+		return closeErr
+	}
+	if closeErr == nil {
+		return flushErr
+	}
+	return errors.Join(flushErr, closeErr)
 }
 
-// SetBitrate sets the target bitrate in bits per second.
-// Valid range is 6000 to 510000 (6 kbps to 510 kbps).
+// SetBitrate sets the target bitrate in bits per second. Positive values are
+// clamped to the encoder's supported range. BitrateAuto and BitrateMax select
+// automatic and output-buffer-limited bitrates; other nonpositive values return
+// ErrInvalidBitrate.
 func (w *Writer) SetBitrate(bitrate int) error {
 	return w.enc.SetBitrate(bitrate)
 }
@@ -537,12 +487,14 @@ func (w *Writer) SetDTX(enabled bool) {
 	w.enc.SetDTX(enabled)
 }
 
-// Reset clears buffers and encoder state for a new stream.
-// It also clears the closed flag so the writer can be reused with a reusable sink.
+// Reset clears buffered PCM and encoder state and clears the closed flag. It
+// retains the PacketSink without resetting or reopening it, so the sink must be
+// reusable if the Writer is reused.
 func (w *Writer) Reset() {
 	w.enc.Reset()
 	w.sampleBuf = w.sampleBuf[:0]
 	w.closed = false
+	w.sinkCloseAttempted = false
 }
 
 // SampleRate returns the sample rate in Hz.

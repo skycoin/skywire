@@ -140,7 +140,7 @@ func validateLSBDepth(depth int) error {
 // validFrameSize reports whether samples is a legal Opus frame size at the
 // native sample rate fs. libopus frame_size_select accepts the short durations
 // (fs/400)<<n for n in 0..2 (2.5/5/10 ms) and the long durations n*fs/50 for
-// n in 1..6 (20/40/60/80/100/120 ms). At 48 kHz this is the legacy
+// n in 1..6 (20/40/60/80/100/120 ms). At 48 kHz this is the
 // {120,240,480,960,1920,2880,3840,4800,5760} set.
 func validFrameSize(samples, fs int) bool {
 	if fs <= 0 {
@@ -189,7 +189,7 @@ func validExpertFrameDuration(duration ExpertFrameDuration) bool {
 }
 
 // expertFrameDurationFrameSize returns the native-Fs frame size for an expert
-// frame duration. At 48 kHz this is the legacy 120..5760 set; at sub-48 kHz it
+// frame duration. At 48 kHz this is the 120..5760 set; at sub-48 kHz it
 // scales by fs (e.g. 20 ms at 16 kHz = 320).
 func expertFrameDurationFrameSize(duration ExpertFrameDuration, fs int) int {
 	switch duration {

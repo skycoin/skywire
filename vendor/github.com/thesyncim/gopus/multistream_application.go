@@ -1,10 +1,13 @@
 package gopus
 
-// SetApplication updates the encoder application hint.
+// SetApplication changes the encoder application hint before any stream has
+// committed a frame. Reapplying the current hint remains valid afterward. An
+// encode that returns a low-space packet without committing a child frame
+// leaves the application mutable.
 //
 // Valid values are ApplicationVoIP, ApplicationAudio, and ApplicationLowDelay.
 func (e *MultistreamEncoder) SetApplication(application Application) error {
-	if err := validateMutableApplication(e.application, e.encodedOnce, application); err != nil {
+	if err := validateMutableApplication(e.application, e.enc.AnyStreamHasCodedFrame(), application); err != nil {
 		return err
 	}
 	previousApplication := e.application

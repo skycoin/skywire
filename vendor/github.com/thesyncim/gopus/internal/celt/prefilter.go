@@ -15,11 +15,20 @@ type prefilterResult struct {
 
 // runPrefilter applies the CELT prefilter (comb filter) and returns the
 // postfilter parameters to signal in the bitstream.
-// This mirrors libopus run_prefilter() in celt_encoder.c.
-func (e *Encoder) runPrefilter(preemph []float32, frameSize int, tapset int, enabled bool, tfEstimate float32, nbAvailableBytes int, toneFreq, toneishness, maxPitchRatio float32) prefilterResult {
+// This mirrors libopus run_prefilter() in celt_encoder.c. in is
+// celt_encode_with_ec's planar buffer: channel c occupies
+// in[c*(frameSize+overlap):(c+1)*(frameSize+overlap)] with the pre-emphasized
+// frame after its overlap head. run_prefilter filters the frame in place,
+// loads the head from st->in_mem and saves the filtered tail back to it.
+func (e *Encoder) runPrefilter(in []float32, frameSize int, tapset int, enabled bool, tfEstimate float32, nbAvailableBytes int, toneFreq, toneishness, maxPitchRatio float32) prefilterResult {
+	// celt_encode_with_ec enables the pitch prefilter only when start == 0.
+	// Hybrid frames still run the disabled transition to update filter history.
+	enabled = enabled && !e.IsHybrid()
 	result := prefilterResult{on: false, pitch: combFilterMinPeriod, qg: 0, tapset: tapset, gain: 0}
 	channels := int(e.channels)
-	if channels <= 0 || frameSize <= 0 || len(preemph) == 0 {
+	overlap := min(e.analysisOverlap(), frameSize)
+	stride := frameSize + overlap
+	if channels <= 0 || frameSize <= 0 || len(in) < channels*stride {
 		return result
 	}
 
@@ -33,6 +42,8 @@ func (e *Encoder) runPrefilter(preemph []float32, frameSize int, tapset int, ena
 	qextScale := e.combScale()
 	maxPeriod := e.combMaxPeriod()
 	minPeriod := e.combMinPeriod()
+	e.recordPitchControls(frameSize, channels, enabled, e.complexity, maxPeriod, minPeriod,
+		tfEstimate, toneFreq, toneishness, maxPitchRatio)
 	// e.prefilterPeriod is stored at the unscaled COMBFILTER range (the comb
 	// filter runs at that scale; only the analysis buffers/search use the
 	// QEXT-scaled period). Clamp it the same way libopus clamps
@@ -43,8 +54,9 @@ func (e *Encoder) runPrefilter(preemph []float32, frameSize int, tapset int, ena
 		prevTapset = len(combFilterGains) - 1
 	}
 	if !enabled && e.prefilterGain == 0 {
-		overlap := min(e.analysisOverlap(), frameSize)
-		e.updatePrefilterNoopStateFromPreemph(preemph, frameSize, channels, overlap)
+		e.recordEncodePrefilterNoopTrace(nil, in, frameSize, channels, overlap, 0,
+			prevPeriod, combFilterMinPeriod, 0, 0, prevTapset, tapset)
+		e.updatePrefilterNoopStateFromIn(in, frameSize, channels, overlap)
 		e.prefilterPeriod = combFilterMinPeriod
 		e.prefilterGain = 0
 		e.prefilterTapset = tapset
@@ -54,23 +66,11 @@ func (e *Encoder) runPrefilter(preemph []float32, frameSize int, tapset int, ena
 	perChanLen := maxPeriod + frameSize
 	pre := ensureSigSliceNoClear(&e.scratch.prefilterPre, perChanLen*channels)
 
-	if channels == 1 {
-		hist := e.prefilterMem[:maxPeriod]
-		preCh := pre[:perChanLen]
-		copy(preCh[:maxPeriod], hist)
-		// celtSig is a float32 alias, so the per-sample copy is a plain memmove.
-		copy(preCh[maxPeriod:maxPeriod+frameSize], preemph[:frameSize])
-	} else {
-		histL := e.prefilterMem[:maxPeriod]
-		histR := e.prefilterMem[maxPeriod : 2*maxPeriod]
-		preL := pre[:perChanLen]
-		preR := pre[perChanLen : 2*perChanLen]
-		copy(preL[:maxPeriod], histL)
-		copy(preR[:maxPeriod], histR)
-		for i := range frameSize {
-			preL[maxPeriod+i] = celtSig(preemph[2*i])
-			preR[maxPeriod+i] = celtSig(preemph[2*i+1])
-		}
+	for ch := range channels {
+		preCh := pre[ch*perChanLen : (ch+1)*perChanLen]
+		// celtSig is a float32 alias, so both copies are plain memmoves.
+		copy(preCh[:maxPeriod], e.prefilterMem[ch*maxPeriod:(ch+1)*maxPeriod])
+		copy(preCh[maxPeriod:], in[ch*stride+overlap:ch*stride+overlap+frameSize])
 	}
 	pitchIndex := combFilterMinPeriod
 	gain1 := float32(0)
@@ -100,12 +100,12 @@ func (e *Encoder) runPrefilter(preemph []float32, frameSize int, tapset int, ena
 	} else if enabled && e.complexity >= 5 {
 		pitchBufLen := max((maxPeriod+frameSize)>>1, 1)
 		pitchBuf := ensureFloat32Slice(&e.scratch.prefilterPitchBuf, pitchBufLen)
-		pitchDownsampleSig(pre, pitchBuf, pitchBufLen, channels, 2)
+		e.runPrefilterPitchDownsample(pre, pitchBuf, pitchBufLen, channels, perChanLen, 2)
 		maxPitch := max(maxPeriod-3*minPeriod, 1)
-		searchOut := pitchSearch(pitchBuf[maxPeriod>>1:], pitchBuf, frameSize, maxPitch, &e.scratch)
+		searchOut := e.runPrefilterPitchSearch(pitchBuf, maxPeriod>>1, frameSize, maxPitch)
 		pitchIndex = searchOut
 		pitchIndex = maxPeriod - pitchIndex
-		gain1 = removeDoubling(pitchBuf, maxPeriod, minPeriod, frameSize, &pitchIndex, e.prefilterPeriod, e.prefilterGain, &e.scratch)
+		gain1 = e.runPrefilterRemoveDoubling(pitchBuf, maxPeriod, minPeriod, frameSize, &pitchIndex)
 		if pitchIndex > maxPeriod-2*qextScale {
 			pitchIndex = maxPeriod - 2*qextScale
 		}
@@ -171,9 +171,10 @@ func (e *Encoder) runPrefilter(preemph []float32, frameSize int, tapset int, ena
 		pfOn = true
 	}
 
-	overlap := min(e.analysisOverlap(), frameSize)
 	if gain1 == 0 && e.prefilterGain == 0 {
-		e.updatePrefilterNoopState(pre, perChanLen, frameSize, channels, overlap)
+		e.recordEncodePrefilterNoopTrace(pre, in, frameSize, channels, overlap, perChanLen,
+			prevPeriod, pitchIndex, -e.prefilterGain, -gain1, prevTapset, tapset)
+		e.updatePrefilterNoopState(pre, in, perChanLen, frameSize, channels, overlap)
 		e.prefilterPeriod = pitchIndex
 		e.prefilterGain = 0
 		e.prefilterTapset = tapset
@@ -186,21 +187,33 @@ func (e *Encoder) runPrefilter(preemph []float32, frameSize int, tapset int, ena
 	mode := e.modeConfig(frameSize)
 	shortMdctSize := frameSize / mode.ShortBlocks
 	offset := max(shortMdctSize-overlap, 0)
-	window := GetWindowBufferF32(overlap)
+	window := e.scratch.modeWindow(overlap)
 
-	var before [2]opusVal32
-	var after [2]opusVal32
 	for ch := range channels {
 		preCh := pre[ch*perChanLen : (ch+1)*perChanLen]
 		outCh := out[ch*perChanLen : (ch+1)*perChanLen]
-		preSub := preCh[maxPeriod : maxPeriod+frameSize]
-		before[ch] = absSumSig(preSub)
 		if offset > 0 {
+			traceCall := e.beginEncodePrefilterCombTrace(ch, outCh, preCh, maxPeriod, prevPeriod, prevPeriod, offset,
+				-e.prefilterGain, -e.prefilterGain, prevTapset, prevTapset, nil, 0)
 			combFilterWithInputSig(outCh, preCh, maxPeriod, prevPeriod, prevPeriod, offset, -e.prefilterGain, -e.prefilterGain, prevTapset, prevTapset, nil, 0)
+			e.finishEncodePrefilterCombTrace(traceCall, outCh, maxPeriod, offset)
 		}
-		combFilterWithInputSig(outCh, preCh, maxPeriod+offset, prevPeriod, pitchIndex, frameSize-offset, -e.prefilterGain, -gain1, prevTapset, tapset, window, overlap)
-		outSub := outCh[maxPeriod : maxPeriod+frameSize]
-		after[ch] = absSumSig(outSub)
+		start := maxPeriod + offset
+		n := frameSize - offset
+		traceCall := e.beginEncodePrefilterCombTrace(ch, outCh, preCh, start, prevPeriod, pitchIndex, n,
+			-e.prefilterGain, -gain1, prevTapset, tapset, window, overlap)
+		combFilterWithInputSig(outCh, preCh, start, prevPeriod, pitchIndex, n, -e.prefilterGain, -gain1, prevTapset, tapset, window, overlap)
+		e.finishEncodePrefilterCombTrace(traceCall, outCh, start, n)
+	}
+	// before[c] and after[c] are run_prefilter's serial ABS32 sums over the
+	// input and the comb-filtered output.
+	var before, after [2]opusVal32
+	preSub := func(ch int) []celtSig { return pre[ch*perChanLen+maxPeriod : ch*perChanLen+maxPeriod+frameSize] }
+	outSub := func(ch int) []celtSig { return out[ch*perChanLen+maxPeriod : ch*perChanLen+maxPeriod+frameSize] }
+	if channels == 2 {
+		before[0], before[1], after[0], after[1] = absSumSig4(preSub(0), preSub(1), outSub(0), outSub(1))
+	} else {
+		before[0], after[0] = absSumSig2(preSub(0), outSub(0))
 	}
 
 	cancelPitch := false
@@ -225,62 +238,23 @@ func (e *Encoder) runPrefilter(preemph []float32, frameSize int, tapset int, ena
 			preCh := pre[ch*perChanLen : (ch+1)*perChanLen]
 			outCh := out[ch*perChanLen : (ch+1)*perChanLen]
 			copy(outCh[maxPeriod:maxPeriod+frameSize], preCh[maxPeriod:maxPeriod+frameSize])
-			combFilterWithInputSig(outCh, preCh, maxPeriod+offset, prevPeriod, pitchIndex, overlap, -e.prefilterGain, 0, prevTapset, tapset, window, overlap)
+			start := maxPeriod + offset
+			traceCall := e.beginEncodePrefilterCombTrace(ch, outCh, preCh, start, prevPeriod, pitchIndex, overlap,
+				-e.prefilterGain, 0, prevTapset, tapset, window, overlap)
+			combFilterWithInputSig(outCh, preCh, start, prevPeriod, pitchIndex, overlap, -e.prefilterGain, 0, prevTapset, tapset, window, overlap)
+			e.finishEncodePrefilterCombTrace(traceCall, outCh, start, overlap)
 		}
 		gain1 = 0
 		pfOn = false
 		qg = 0
 	}
 
-	if overlap > 0 {
-		need := channels * overlap
-		if len(e.overlapBuffer) < need {
-			newBuf := make([]celtSig, need)
-			copy(newBuf, e.overlapBuffer)
-			e.overlapBuffer = newBuf
-		}
+	for ch := range channels {
+		outCh := out[ch*perChanLen+maxPeriod : ch*perChanLen+maxPeriod+frameSize]
+		copySigToFloat32(in[ch*stride+overlap:ch*stride+overlap+frameSize], outCh)
 	}
-
-	if channels == 1 {
-		preCh := pre[:perChanLen]
-		outCh := out[:perChanLen]
-		mem := e.prefilterMem[:maxPeriod]
-		if frameSize > maxPeriod {
-			copy(mem, preCh[frameSize:frameSize+maxPeriod])
-		} else {
-			copy(mem, mem[frameSize:])
-			copy(mem[maxPeriod-frameSize:], preCh[maxPeriod:maxPeriod+frameSize])
-		}
-		outSub2 := outCh[maxPeriod : maxPeriod+frameSize]
-		copySigToFloat32(preemph[:frameSize], outSub2)
-		if overlap > 0 && len(e.overlapBuffer) >= overlap && frameSize >= overlap {
-			hist := e.overlapBuffer[:overlap]
-			copy(hist, outSub2[frameSize-overlap:])
-		}
-	} else {
-		preL := pre[:perChanLen]
-		preR := pre[perChanLen : 2*perChanLen]
-		outL := out[maxPeriod : maxPeriod+frameSize]
-		outR := out[perChanLen+maxPeriod : perChanLen+maxPeriod+frameSize]
-		memL := e.prefilterMem[:maxPeriod]
-		memR := e.prefilterMem[maxPeriod : 2*maxPeriod]
-		if frameSize > maxPeriod {
-			copy(memL, preL[frameSize:frameSize+maxPeriod])
-			copy(memR, preR[frameSize:frameSize+maxPeriod])
-		} else {
-			copy(memL, memL[frameSize:])
-			copy(memL[maxPeriod-frameSize:], preL[maxPeriod:maxPeriod+frameSize])
-			copy(memR, memR[frameSize:])
-			copy(memR[maxPeriod-frameSize:], preR[maxPeriod:maxPeriod+frameSize])
-		}
-		interleaveSigToFloat32(outL, outR, preemph[:frameSize*2])
-		if overlap > 0 && len(e.overlapBuffer) >= channels*overlap && frameSize >= overlap {
-			histL := e.overlapBuffer[:overlap]
-			histR := e.overlapBuffer[overlap : 2*overlap]
-			copy(histL, outL[frameSize-overlap:])
-			copy(histR, outR[frameSize-overlap:])
-		}
-	}
+	e.savePrefilterMem(pre, perChanLen, frameSize, channels)
+	e.swapPrefilterInMem(in, frameSize, channels, overlap)
 
 	e.prefilterPeriod = pitchIndex
 	e.prefilterGain = gain1
@@ -301,20 +275,36 @@ func abs32(x float32) float32 {
 	return x
 }
 
-func (e *Encoder) updatePrefilterNoopState(pre []celtSig, perChanLen, frameSize, channels, overlap int) {
-	if channels <= 0 || frameSize <= 0 || len(pre) < perChanLen*channels {
-		return
-	}
+// updatePrefilterNoopState is run_prefilter's state update when both the old
+// and the new gain are zero: the comb filter leaves the frame in in unchanged,
+// so only prefilter_mem and in_mem advance.
+func (e *Encoder) updatePrefilterNoopState(pre []celtSig, in []float32, perChanLen, frameSize, channels, overlap int) {
+	e.savePrefilterMem(pre, perChanLen, frameSize, channels)
+	e.swapPrefilterInMem(in, frameSize, channels, overlap)
+}
+
+// updatePrefilterNoopStateFromIn is updatePrefilterNoopState before pre is
+// built: prefilter_mem advances straight from the frame in in.
+func (e *Encoder) updatePrefilterNoopStateFromIn(in []float32, frameSize, channels, overlap int) {
 	maxPeriod := e.combMaxPeriod()
-	if overlap > 0 {
-		need := channels * overlap
-		if len(e.overlapBuffer) < need {
-			newBuf := make([]celtSig, need)
-			copy(newBuf, e.overlapBuffer)
-			e.overlapBuffer = newBuf
+	stride := frameSize + overlap
+	for ch := range channels {
+		mem := e.prefilterMem[ch*maxPeriod : (ch+1)*maxPeriod]
+		frame := in[ch*stride+overlap : ch*stride+overlap+frameSize]
+		if frameSize > maxPeriod {
+			copyFloat32ToSig(mem, frame[frameSize-maxPeriod:])
+		} else {
+			copy(mem, mem[frameSize:])
+			copyFloat32ToSig(mem[maxPeriod-frameSize:], frame)
 		}
 	}
+	e.swapPrefilterInMem(in, frameSize, channels, overlap)
+}
 
+// savePrefilterMem is run_prefilter's prefilter_mem update from pre: the last
+// max_period samples of the unfiltered history and frame.
+func (e *Encoder) savePrefilterMem(pre []celtSig, perChanLen, frameSize, channels int) {
+	maxPeriod := e.combMaxPeriod()
 	for ch := range channels {
 		preCh := pre[ch*perChanLen : (ch+1)*perChanLen]
 		mem := e.prefilterMem[ch*maxPeriod : (ch+1)*maxPeriod]
@@ -324,101 +314,36 @@ func (e *Encoder) updatePrefilterNoopState(pre []celtSig, perChanLen, frameSize,
 			copy(mem, mem[frameSize:])
 			copy(mem[maxPeriod-frameSize:], preCh[maxPeriod:maxPeriod+frameSize])
 		}
-		if overlap > 0 && frameSize >= overlap && len(e.overlapBuffer) >= (ch+1)*overlap {
-			hist := e.overlapBuffer[ch*overlap : (ch+1)*overlap]
-			copy(hist, preCh[maxPeriod+frameSize-overlap:maxPeriod+frameSize])
-		}
 	}
 }
 
-func (e *Encoder) updatePrefilterNoopStateFromPreemph(preemph []float32, frameSize, channels, overlap int) {
-	if channels <= 0 || frameSize <= 0 || len(preemph) < frameSize*channels {
+// swapPrefilterInMem is run_prefilter's in_mem exchange: each channel's
+// overlap head in in takes the previous filtered tail from st->in_mem, and
+// st->in_mem keeps this frame's filtered tail in[c*(N+overlap)+N:].
+func (e *Encoder) swapPrefilterInMem(in []float32, frameSize, channels, overlap int) {
+	if overlap <= 0 {
 		return
 	}
-	maxPeriod := e.combMaxPeriod()
-	if overlap > 0 {
-		need := channels * overlap
-		if len(e.overlapBuffer) < need {
-			newBuf := make([]celtSig, need)
-			copy(newBuf, e.overlapBuffer)
-			e.overlapBuffer = newBuf
-		}
+	if need := channels * overlap; len(e.overlapBuffer) < need {
+		newBuf := make([]celtSig, need)
+		copy(newBuf, e.overlapBuffer)
+		e.overlapBuffer = newBuf
 	}
-
-	if channels == 1 {
-		mem := e.prefilterMem[:maxPeriod]
-		if frameSize > maxPeriod {
-			copyFloat32ToSig(mem, preemph[frameSize-maxPeriod:frameSize])
-		} else {
-			copy(mem, mem[frameSize:])
-			copyFloat32ToSig(mem[maxPeriod-frameSize:], preemph[:frameSize])
-		}
-		if overlap > 0 && frameSize >= overlap && len(e.overlapBuffer) >= overlap {
-			copyFloat32ToSig(e.overlapBuffer[:overlap], preemph[frameSize-overlap:frameSize])
-		}
-		return
-	}
-
-	if channels == 2 {
-		memL := e.prefilterMem[:maxPeriod]
-		memR := e.prefilterMem[maxPeriod : 2*maxPeriod]
-		if frameSize > maxPeriod {
-			src := (frameSize - maxPeriod) * 2
-			for i := range maxPeriod {
-				memL[i] = celtSig(preemph[src])
-				memR[i] = celtSig(preemph[src+1])
-				src += 2
-			}
-		} else {
-			copy(memL, memL[frameSize:])
-			copy(memR, memR[frameSize:])
-			dst := maxPeriod - frameSize
-			src := 0
-			for i := range frameSize {
-				memL[dst+i] = celtSig(preemph[src])
-				memR[dst+i] = celtSig(preemph[src+1])
-				src += 2
-			}
-		}
-		if overlap > 0 && frameSize >= overlap && len(e.overlapBuffer) >= 2*overlap {
-			histL := e.overlapBuffer[:overlap]
-			histR := e.overlapBuffer[overlap : 2*overlap]
-			src := (frameSize - overlap) * 2
-			for i := range overlap {
-				histL[i] = celtSig(preemph[src])
-				histR[i] = celtSig(preemph[src+1])
-				src += 2
-			}
-		}
-		return
-	}
-
+	stride := frameSize + overlap
 	for ch := range channels {
-		mem := e.prefilterMem[ch*maxPeriod : (ch+1)*maxPeriod]
-		if frameSize > maxPeriod {
-			src := (frameSize-maxPeriod)*channels + ch
-			for i := range maxPeriod {
-				mem[i] = celtSig(preemph[src])
-				src += channels
-			}
-		} else {
-			copy(mem, mem[frameSize:])
-			dst := maxPeriod - frameSize
-			src := ch
-			for i := range frameSize {
-				mem[dst+i] = celtSig(preemph[src])
-				src += channels
-			}
-		}
-		if overlap > 0 && frameSize >= overlap && len(e.overlapBuffer) >= (ch+1)*overlap {
-			hist := e.overlapBuffer[ch*overlap : (ch+1)*overlap]
-			src := (frameSize-overlap)*channels + ch
-			for i := range overlap {
-				hist[i] = celtSig(preemph[src])
-				src += channels
-			}
-		}
+		mem := e.overlapBuffer[ch*overlap : (ch+1)*overlap]
+		inCh := in[ch*stride : (ch+1)*stride]
+		copySigToFloat32(inCh[:overlap], mem)
+		copyFloat32ToSig(mem, inCh[frameSize:])
 	}
+}
+
+type pitchDownsampleIntermediateCapture struct {
+	Decimated          []float32
+	RawAutocorrelation [5]float32
+	LPCInput           [5]float32
+	LPC                [4]float32
+	Captured           uint32
 }
 
 func pitchDownsampleSig(x []celtSig, xLP []float32, length, channels, factor int) {
@@ -431,34 +356,13 @@ func pitchDownsampleSig(x []celtSig, xLP []float32, length, channels, factor int
 	)
 	handled := false
 	if factor == 2 {
-		if channels == 1 {
-			// Sliding-window FIR: each output xLP[i] = 0.25*(x[2i-1]+x[2i+1]) + 0.5*x[2i].
-			// Slicing src to exactly 2*length lets the compiler prove every window
-			// access (win[0:3]) is in bounds, eliminating per-sample bounds checks.
+		switch channels {
+		case 1:
 			xLP[0] = firQuarter*float32(x[1]) + firHalf*float32(x[0])
 			if length > 1 && len(x) >= 2*length {
-				src := x[:2*length]
-				win := src[1:] // win[0]=x[2i-1], win[1]=x[2i], win[2]=x[2i+1] at i=1
-				dst := xLP[1:length]
-				// 4-output unroll: consecutive outputs share y[2i+1]=y[2(i+1)-1],
-				// reducing loads from 12 to 9 per 4 outputs.
-				for len(dst) >= 4 && len(win) >= 9 {
-					w0, w1, w2, w3, w4, w5, w6, w7, w8 := win[0], win[1], win[2], win[3], win[4], win[5], win[6], win[7], win[8]
-					dst[0] = firQuarter*float32(w0) + firQuarter*float32(w2) + firHalf*float32(w1)
-					dst[1] = firQuarter*float32(w2) + firQuarter*float32(w4) + firHalf*float32(w3)
-					dst[2] = firQuarter*float32(w4) + firQuarter*float32(w6) + firHalf*float32(w5)
-					dst[3] = firQuarter*float32(w6) + firQuarter*float32(w8) + firHalf*float32(w7)
-					win = win[8:]
-					dst = dst[4:]
-				}
-				for len(dst) > 0 && len(win) >= 3 {
-					v := firQuarter*float32(win[0]) + firQuarter*float32(win[2]) + firHalf*float32(win[1])
-					dst[0] = v
-					win = win[2:]
-					dst = dst[1:]
-				}
+				pitchDownsample2(xLP[:length], x[:2*length], nil)
 			}
-		} else if channels == 2 {
+		case 2:
 			chStride := len(x) / 2
 			x0 := x[:chStride]
 			x1 := x[chStride:]
@@ -466,32 +370,7 @@ func pitchDownsampleSig(x []celtSig, xLP []float32, length, channels, factor int
 			v1 := firQuarter*float32(x1[1]) + firHalf*float32(x1[0])
 			xLP[0] = v0 + v1
 			if length > 1 && len(x0) >= 2*length && len(x1) >= 2*length {
-				s0 := x0[:2*length]
-				s1 := x1[:2*length]
-				w0 := s0[1:]
-				w1 := s1[1:]
-				dst := xLP[1:length]
-				// 2× unroll: w0[2] shared between pair; L and R independent (12
-				// FMULs per 2 outputs saturate 4-wide dispatch with latency hiding).
-				for len(dst) >= 2 && len(w0) >= 5 && len(w1) >= 5 {
-					vv0_0 := firQuarter*float32(w0[0]) + firQuarter*float32(w0[2]) + firHalf*float32(w0[1])
-					vv1_0 := firQuarter*float32(w1[0]) + firQuarter*float32(w1[2]) + firHalf*float32(w1[1])
-					vv0_1 := firQuarter*float32(w0[2]) + firQuarter*float32(w0[4]) + firHalf*float32(w0[3])
-					vv1_1 := firQuarter*float32(w1[2]) + firQuarter*float32(w1[4]) + firHalf*float32(w1[3])
-					dst[0] = vv0_0 + vv1_0
-					dst[1] = vv0_1 + vv1_1
-					w0 = w0[4:]
-					w1 = w1[4:]
-					dst = dst[2:]
-				}
-				for len(dst) > 0 && len(w0) >= 3 && len(w1) >= 3 {
-					vv0 := firQuarter*float32(w0[0]) + firQuarter*float32(w0[2]) + firHalf*float32(w0[1])
-					vv1 := firQuarter*float32(w1[0]) + firQuarter*float32(w1[2]) + firHalf*float32(w1[1])
-					dst[0] = vv0 + vv1
-					w0 = w0[2:]
-					w1 = w1[2:]
-					dst = dst[1:]
-				}
+				pitchDownsample2(xLP[:length], x0[:2*length], x1[:2*length])
 			}
 		}
 		handled = true
@@ -520,13 +399,25 @@ func pitchDownsampleSig(x []celtSig, xLP []float32, length, channels, factor int
 			xLP[0] += v
 		}
 	}
+	if pitchDownsampleTraceCaptureEnabled {
+		recordPitchDownsampleDecimated(x, xLP, length, channels, factor)
+	}
 
 	var ac [5]float32
 	pitchAutocorr5F32(xLP[:length], length, &ac)
+	if pitchDownsampleTraceCaptureEnabled {
+		recordPitchDownsampleAutocorrelation(x, xLP, length, channels, factor, ac)
+	}
 
-	applyCELTAutocorrNoiseAndLagWindow32(ac[:], 4)
+	applyCELTPitchLagWindow32(ac[:], 4)
+	if pitchDownsampleTraceCaptureEnabled {
+		recordPitchDownsampleLPCInput(x, xLP, length, channels, factor, ac)
+	}
 
 	lpc := lpcFromAutocorr32(ac)
+	if pitchDownsampleTraceCaptureEnabled {
+		recordPitchDownsampleLPC(x, xLP, length, channels, factor, lpc)
+	}
 	tmp := float32(1.0)
 	for i := range 4 {
 		tmp *= float32(0.9)
@@ -603,7 +494,7 @@ func pitchSearch(xLP []float32, y []float32, length, maxPitch int, scratch *enco
 	Syy := float32(1)
 	for j := range halfLen {
 		yj := float32(y[j])
-		Syy += yj * yj
+		Syy = pitchSearchAddSquare(Syy, yj)
 	}
 	bestNum := [2]float32{-1, -1}
 	bestDen := [2]float32{0, 0}
@@ -616,13 +507,21 @@ func pitchSearch(xLP []float32, y []float32, length, maxPitch int, scratch *enco
 		for ; i < r.lo; i++ {
 			yi := float32(y[i])
 			yil := float32(y[i+halfLen])
-			Syy += yil*yil - yi*yi
+			Syy = pitchSearchSlideSyy(Syy, yil, yi)
 			if Syy < 1 {
 				Syy = 1
 			}
 		}
 		n := r.hi - r.lo + 1
-		pitchXCorrFloat32Quality(xLP, y[r.lo:], xcorr[r.lo:], halfLen, n)
+		if libopusFloatInnerProdUsesNeonOrder {
+			// libopus pitch.c calls celt_inner_prod for each fine candidate;
+			// its NEON lane reduction differs from the four-lag xcorr kernel.
+			for j := r.lo; j <= r.hi; j++ {
+				xcorr[j] = innerProdFloat32(xLP, y[j:], halfLen)
+			}
+		} else {
+			pitchXCorrFloat32Quality(xLP, y[r.lo:], xcorr[r.lo:], halfLen, n)
+		}
 		for ; i <= r.hi; i++ {
 			if xcorr[i] < -1 {
 				xcorr[i] = -1
@@ -647,7 +546,7 @@ func pitchSearch(xLP []float32, y []float32, length, maxPitch int, scratch *enco
 			}
 			yi := float32(y[i])
 			yil := float32(y[i+halfLen])
-			Syy += yil*yil - yi*yi
+			Syy = pitchSearchSlideSyy(Syy, yil, yi)
 			if Syy < 1 {
 				Syy = 1
 			}
@@ -678,7 +577,7 @@ func findBestPitchF32(xcorr []float32, y []float32, length, maxPitch int, bestPi
 	_ = y[length+maxPitch-1]
 	_ = xcorr[maxPitch-1]
 	for j := range length {
-		Syy += y[j] * y[j]
+		Syy = pitchSearchAddSquare(Syy, y[j])
 	}
 	const xcorrScale = float32(1e-12)
 	for i := range maxPitch {
@@ -702,11 +601,34 @@ func findBestPitchF32(xcorr []float32, y []float32, length, maxPitch int, bestPi
 		}
 		yi := y[i]
 		yil := y[i+length]
-		Syy += yil*yil - yi*yi
+		Syy = pitchSearchSlideSyy(Syy, yil, yi)
 		if Syy < 1 {
 			Syy = 1
 		}
 	}
+}
+
+// pitchSearchAddSquare and pitchSearchSlideSyy match the float recurrence in
+// libopus celt/pitch.c find_best_pitch(). The selected ARM scalar C build
+// contracts Syy additions; the NEON build reduces vectorized square groups in
+// input order, then contracts only its scalar tail.
+func pitchSearchAddSquare(sum, value float32) float32 {
+	if libopusPitchSearchUsesFMA && !libopusFloatInnerProdUsesNeonOrder {
+		return opusmath.FMA32(value, value, sum)
+	}
+	return sum + value*value
+}
+
+func pitchSearchSlideSyy(sum, entering, leaving float32) float32 {
+	// celt/pitch.c find_best_pitch() forms Syy + (entering² - leaving²).
+	if libopusPitchSearchUsesFMA {
+		// The selected ARM C variants contract the entering square with the
+		// rounded negative leaving square, then add the rounded delta to Syy.
+		delta := opusmath.FMA32(entering, entering, -noFMA32Mul(leaving, leaving))
+		return noFMA32Add(sum, delta)
+	}
+	delta := noFMA32Sub(noFMA32Mul(entering, entering), noFMA32Mul(leaving, leaving))
+	return noFMA32Add(sum, delta)
 }
 
 type pitchSearchRange struct {
@@ -823,24 +745,33 @@ func removeDoubling(x []float32, maxPeriod, minPeriod, N int, T0 *int, prevPerio
 	T0val := *T0
 	x0 := xBase[maxPeriod:]
 	xx, xy := prefilterDualInnerProdF32(x0, x0, xBase[maxPeriod-T0val:maxPeriod-T0val+N], N)
+	if removeDoublingMathTraceCaptureEnabled {
+		recordRemoveDoublingDual(xx, xy)
+	}
 
+	// yy_lookup[i] is a running sum, and the search below reads it only at
+	// T0, T1 <= T0 and T1b, which is at most T0+T1 for k == 2 and below T0
+	// after that. The prefix up to that bound holds the same values as the
+	// full maxperiod table.
+	limit := min(T0val+(2*T0val+2)/4, maxPeriod)
 	yyLookup := ensureFloat32Slice(&scratch.prefilterYYLookup, maxPeriod+1)
 	yy := xx
 	yyLookup[0] = yy
 	// Hoist the two descending input windows into fixed-length slices so the
-	// per-iteration index is provably in range, dropping three bounds checks
-	// per iteration on this maxPeriod-long critical loop. Bit-exact.
-	v1s := xBase[:maxPeriod]
-	v2s := xBase[N : N+maxPeriod]
-	yl := yyLookup[:maxPeriod+1]
+	// per-iteration index is provably in range. Bit-exact.
+	v1s := xBase[maxPeriod-limit : maxPeriod]
+	v2s := xBase[N+maxPeriod-limit : N+maxPeriod]
+	yl := yyLookup[:limit+1]
 	// idx descends (== i ascending) so the loop counter is directly provable
-	// in [0,maxPeriod), preserving the exact yy accumulation order.
-	for idx := maxPeriod - 1; idx >= 0; idx-- {
+	// in [0,limit), preserving the exact yy accumulation order.
+	for idx := limit - 1; idx >= 0; idx-- {
 		v1 := v1s[idx]
 		v2 := v2s[idx]
-		yy += v1 * v1
-		yy -= v2 * v2
-		yl[maxPeriod-idx] = maxFloat32(0, yy)
+		yy = removeDoublingYYUpdate32(yy, v1, v2)
+		yl[limit-idx] = maxFloat32(0, yy)
+		if removeDoublingMathTraceCaptureEnabled {
+			recordRemoveDoublingYY(limit-idx, v1, v2, yy, yl[limit-idx])
+		}
 	}
 
 	yy = yyLookup[T0val]
@@ -866,6 +797,9 @@ func removeDoubling(x []float32, maxPeriod, minPeriod, N int, T0 *int, prevPerio
 			T1b = (2*secondCheck[k]*T0val + k) / (2 * k)
 		}
 		xy1, xy2 := prefilterDualInnerProdF32(x0, xBase[maxPeriod-T1:maxPeriod-T1+N], xBase[maxPeriod-T1b:maxPeriod-T1b+N], N)
+		if removeDoublingMathTraceCaptureEnabled {
+			recordRemoveDoublingDual(xy1, xy2)
+		}
 		xy = float32(0.5) * (xy1 + xy2)
 		yy = float32(0.5) * (yyLookup[T1] + yyLookup[T1b])
 		g1 := computePitchGain(xy, xx, yy)
@@ -892,12 +826,14 @@ func removeDoubling(x []float32, maxPeriod, minPeriod, N int, T0 *int, prevPerio
 	if bestXY < 0 {
 		bestXY = 0
 	}
-	pg := g
+	// celt/pitch.c sets pg to Q15ONE when best_yy <= best_xy, then clamps
+	// pg to the selected gain in either branch.
+	pg := float32(1)
 	if bestYY > bestXY {
 		pg = bestXY / noFMA32Add(bestYY, 1)
-		if pg > g {
-			pg = g
-		}
+	}
+	if pg > g {
+		pg = g
 	}
 
 	prev := innerProdFloat32(x0, xBase[maxPeriod-(T-1):maxPeriod-(T-1)+N], N)
@@ -944,7 +880,7 @@ func prefilterDualInnerProdF32(x, y1, y2 []float32, length int) (float32, float3
 	return sum1, sum2
 }
 
-func prefilterDualInnerProdF32SSEOrder(x, y1, y2 []float32, length int) (float32, float32) {
+func prefilterDualInnerProdF32SSEOrderScalar(x, y1, y2 []float32, length int) (float32, float32) {
 	var acc1 [4]float32
 	var acc2 [4]float32
 	i := 0
@@ -975,22 +911,90 @@ func prefilterDualInnerProdF32SSEOrder(x, y1, y2 []float32, length int) (float32
 // prefilterDualInnerProdF32NeonOrder reproduces libopus
 // arm/pitch_neon_intr.c dual_inner_prod_neon: two 4-lane vfmaq_f32 accumulators
 // over 8-element groups, a 4-element tail, the (acc0+acc2)+(acc1+acc3)
-// reductions, and a fused multiply-add scalar tail. prefilterDualInnerProdAsm
-// implements this in NEON asm on arm64 and a bit-identical math.FMA fallback
-// under the purego tag.
+// reductions, and a fused multiply-add scalar tail. The arm64 SIMD Go kernel
+// uses archsimd; scalar Go builds preserve the same operation order.
 func prefilterDualInnerProdF32NeonOrder(x, y1, y2 []float32, length int) (float32, float32) {
 	return prefilterDualInnerProdAsm(x, y1, y2, length)
 }
 
 func computePitchGain(xy, xx, yy float32) float32 {
-	if xy == 0 || xx == 0 || yy == 0 {
+	if pitchGainZeroInputReturnsZero && (xy == 0 || xx == 0 || yy == 0) {
+		if removeDoublingMathTraceCaptureEnabled {
+			recordRemoveDoublingGain(xy, xx, yy, 0, 0, 0)
+		}
 		return 0
 	}
-	den := noFMA32Add(1, noFMA32Mul(xx, yy))
-	return xy / opusmath.SqrtF32(den)
+	den := pitchGainDenominator32(xx, yy)
+	root := opusmath.SqrtF32(den)
+	gain := xy / root
+	if removeDoublingMathTraceCaptureEnabled {
+		recordRemoveDoublingGain(xy, xx, yy, den, root, gain)
+	}
+	return gain
 }
 
-func celtFIR5F32(x []float32, num [5]float32) {
+// pitchDownsample2Scalar computes outputs [start, len(dst)) of the factor-2
+// pitch_downsample() decimation: dst[i] is 0.25*x[2i-1] + 0.25*x[2i+1] +
+// 0.5*x[2i] of x0, plus the same sum of x1 when x1 is not nil, in the C
+// operation order. x0 and x1 hold 2*len(dst) samples and start is at least 1.
+func pitchDownsample2Scalar(dst, x0, x1 []float32, start int) {
+	const (
+		firQuarter = float32(0.25)
+		firHalf    = float32(0.5)
+	)
+	n := len(dst)
+	if start < 1 || start >= n || len(x0) < 2*n || (x1 != nil && len(x1) < 2*n) {
+		return
+	}
+	// w[0], w[1] and w[2] are x[2i-1], x[2i] and x[2i+1] of output i.
+	w0 := x0[2*start-1 : 2*n]
+	dst = dst[start:]
+	if x1 == nil {
+		// 4-output unroll: consecutive outputs share x[2i+1] = x[2(i+1)-1],
+		// reducing loads from 12 to 9 per 4 outputs.
+		for len(dst) >= 4 && len(w0) >= 9 {
+			a0, a1, a2, a3, a4, a5, a6, a7, a8 := w0[0], w0[1], w0[2], w0[3], w0[4], w0[5], w0[6], w0[7], w0[8]
+			dst[0] = firQuarter*float32(a0) + firQuarter*float32(a2) + firHalf*float32(a1)
+			dst[1] = firQuarter*float32(a2) + firQuarter*float32(a4) + firHalf*float32(a3)
+			dst[2] = firQuarter*float32(a4) + firQuarter*float32(a6) + firHalf*float32(a5)
+			dst[3] = firQuarter*float32(a6) + firQuarter*float32(a8) + firHalf*float32(a7)
+			w0 = w0[8:]
+			dst = dst[4:]
+		}
+		for len(dst) > 0 && len(w0) >= 3 {
+			dst[0] = firQuarter*float32(w0[0]) + firQuarter*float32(w0[2]) + firHalf*float32(w0[1])
+			w0 = w0[2:]
+			dst = dst[1:]
+		}
+		return
+	}
+	w1 := x1[2*start-1 : 2*n]
+	// 2x unroll: w[2] is shared by the pair, and the channels are independent.
+	for len(dst) >= 2 && len(w0) >= 5 && len(w1) >= 5 {
+		vv0_0 := firQuarter*float32(w0[0]) + firQuarter*float32(w0[2]) + firHalf*float32(w0[1])
+		vv1_0 := firQuarter*float32(w1[0]) + firQuarter*float32(w1[2]) + firHalf*float32(w1[1])
+		vv0_1 := firQuarter*float32(w0[2]) + firQuarter*float32(w0[4]) + firHalf*float32(w0[3])
+		vv1_1 := firQuarter*float32(w1[2]) + firQuarter*float32(w1[4]) + firHalf*float32(w1[3])
+		dst[0] = vv0_0 + vv1_0
+		dst[1] = vv0_1 + vv1_1
+		w0 = w0[4:]
+		w1 = w1[4:]
+		dst = dst[2:]
+	}
+	for len(dst) > 0 && len(w0) >= 3 && len(w1) >= 3 {
+		vv0 := firQuarter*float32(w0[0]) + firQuarter*float32(w0[2]) + firHalf*float32(w0[1])
+		vv1 := firQuarter*float32(w1[0]) + firQuarter*float32(w1[2]) + firHalf*float32(w1[1])
+		dst[0] = vv0 + vv1
+		w0 = w0[2:]
+		w1 = w1[2:]
+		dst = dst[1:]
+	}
+}
+
+// celtFIR5Scalar is libopus celt_fir5() (celt/celt_lpc.c) in the float
+// build: each output adds the five taps on the previous inputs, starting from
+// zero filter memory, in the C order.
+func celtFIR5Scalar(x []float32, num [5]float32) {
 	n0 := num[0]
 	n1 := num[1]
 	n2 := num[2]
@@ -1038,15 +1042,27 @@ func pitchAutocorr5F32(lp []float32, length int, ac *[5]float32) {
 	pitchXCorrFloat32(lp, lp, ac[:], fastN, 5)
 	for lag := 0; lag <= 4; lag++ {
 		tail := float32(0)
-		for i := lag + fastN; i < length; i++ {
-			tail += lp[i] * lp[i-lag]
+		tailStart := lag + fastN
+		// The paired GCC 13.3 x86-v3 and Darwin ARM64 SIMD callers in
+		// celt/celt_lpc.c:_celt_autocorr round four-term vector products
+		// before ordered adds and fuse the scalar residual MAC16_16 updates.
+		// Target helpers preserve that split and the separate prefix addition.
+		if pitchAutocorrRoundFourTermTail && length-tailStart == 4 {
+			tail = pitchAutocorrTail4(lp[tailStart:], lp[tailStart-lag:])
+		} else if pitchAutocorrUsesFMA32 && length-tailStart < 4 {
+			for i := tailStart; i < length; i++ {
+				tail = pitchAutocorrMAC32(lp[i], lp[i-lag], tail)
+			}
+		} else {
+			for i := tailStart; i < length; i++ {
+				tail += lp[i] * lp[i-lag]
+			}
 		}
 		ac[lag] += tail
 	}
 }
 
-// prefilterInnerProd and prefilterDualInnerProd are implemented in:
-//   prefilter_innerprod_asm.go + prefilter_innerprod_{arm64,amd64}.s  (SIMD path)
-//   prefilter_innerprod_default.go                                     (Go fallback)
+// prefilterDualInnerProdF32 selects scalar Go by default and archsimd kernels
+// under GOEXPERIMENT=simd where the architecture-specific implementation exists.
 
 var secondCheck = [16]int{0, 0, 3, 2, 3, 2, 5, 2, 3, 2, 3, 2, 5, 2, 3, 2}

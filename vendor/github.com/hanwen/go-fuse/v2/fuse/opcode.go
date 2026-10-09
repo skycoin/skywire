@@ -87,17 +87,7 @@ const (
 ////////////////////////////////////////////////////////////////
 
 func doInit(server *protocolServer, req *request) {
-	var input *InitIn
-	if len(req.inputBuf) < int(unsafe.Sizeof(InitIn{})) {
-		// Kernels predating protocol 7.36 send a 16-byte INIT
-		// payload; zero-extend it so the full struct can be
-		// read safely.
-		var extended InitIn
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&extended)), unsafe.Sizeof(extended)), req.inputBuf)
-		input = &extended
-	} else {
-		input = (*InitIn)(req.inData())
-	}
+	input := (*InitIn)(req.inData())
 	if input.Major != _FUSE_KERNEL_VERSION {
 		log.Printf("Major versions does not match. Given %d, want %d\n", input.Major, _FUSE_KERNEL_VERSION)
 		req.status = EIO
@@ -156,6 +146,7 @@ func doInit(server *protocolServer, req *request) {
 		MaxStackDepth:       uint32(server.opts.MaxStackDepth),
 	}
 	out.setFlags(kernelFlags)
+	server.negotiatedFlags = out.Flags64()
 	if server.opts.MaxReadAhead != 0 && uint32(server.opts.MaxReadAhead) < out.MaxReadAhead {
 		out.MaxReadAhead = uint32(server.opts.MaxReadAhead)
 	}
@@ -181,11 +172,19 @@ func doCreate(server *protocolServer, req *request) {
 	req.status = status
 }
 
+// doTmpfile answers a request for a file with no name. The kernel sends the name of the anonymous dentry it made
+// for it, which is "/" and means nothing, so it is not passed on.
+func doTmpfile(server *protocolServer, req *request) {
+	out := (*CreateOut)(req.outData())
+	status := server.fileSystem.Tmpfile(req.cancel, (*CreateIn)(req.inData()), out)
+	req.status = status
+}
+
 func doReadDir(server *protocolServer, req *request) {
 	in := (*ReadIn)(req.inData())
 	out := NewDirEntryList(req.outPayload, uint64(in.Offset))
 	code := server.fileSystem.ReadDir(req.cancel, in, out)
-	req.outPayload = out.bytes()
+	req.outPayload = out.Bytes()
 	req.status = code
 }
 
@@ -194,7 +193,7 @@ func doReadDirPlus(server *protocolServer, req *request) {
 	out := NewDirEntryList(req.outPayload, uint64(in.Offset))
 
 	code := server.fileSystem.ReadDirPlus(req.cancel, in, out)
-	req.outPayload = out.bytes()
+	req.outPayload = out.Bytes()
 	req.status = code
 }
 
@@ -210,10 +209,28 @@ func doSetattr(server *protocolServer, req *request) {
 }
 
 func doWrite(server *protocolServer, req *request) {
-	n, status := server.fileSystem.Write(req.cancel, (*WriteIn)(req.inData()), req.inPayload)
+	in := (*WriteIn)(req.inData())
 	o := (*WriteOut)(req.outData())
-	o.Size = n
-	req.status = status
+	data := req.inPayloadIov
+	if data == nil {
+		req.inPayloadOne[0] = req.inPayload
+		data = req.inPayloadOne[:]
+	}
+	o.Size, req.status = server.fileSystem.Writev(req.cancel, in, data)
+	if req.status != ENOSYS {
+		return
+	}
+	if len(data) == 1 {
+		o.Size, req.status = server.fileSystem.Write(req.cancel, in, data[0])
+		return
+	}
+	server.writevCopyOnce.Do(func() {
+		server.opts.Logger.Printf("Writev not implemented; copying split WRITE data")
+	})
+	buf := server.buffers.AllocBuffer(uint32(iovLen(data)))
+	defer server.buffers.FreeBuffer(buf)
+	copyFromIov(buf, data, 0)
+	o.Size, req.status = server.fileSystem.Write(req.cancel, in, buf)
 }
 
 func doNotifyReply(server *protocolServer, req *request) {
@@ -428,27 +445,20 @@ func doAccess(server *protocolServer, req *request) {
 
 func doSymlink(server *protocolServer, req *request) {
 	out := (*EntryOut)(req.outData())
-	n1, n2 := req.filenames()
-
+	n1, n2, code := req.filenames()
+	if !code.Ok() {
+		req.status = code
+		return
+	}
 	req.status = server.fileSystem.Symlink(req.cancel, req.inHeader(), n2, n1, out)
 }
 
 func doRename(server *protocolServer, req *request) {
-	if server.kernelSettings.supportsRenameSwap() {
-		doRename2(server, req)
+	n1, n2, code := req.filenames()
+	if !code.Ok() {
+		req.status = code
 		return
 	}
-	in1 := (*Rename1In)(req.inData())
-	in := RenameIn{
-		InHeader: in1.InHeader,
-		Newdir:   in1.Newdir,
-	}
-	n1, n2 := req.filenames()
-	req.status = server.fileSystem.Rename(req.cancel, &in, n1, n2)
-}
-
-func doRename2(server *protocolServer, req *request) {
-	n1, n2 := req.filenames()
 	req.status = server.fileSystem.Rename(req.cancel, (*RenameIn)(req.inData()), n1, n2)
 }
 
@@ -632,6 +642,7 @@ func init() {
 		_OP_WRITE:           doWrite,
 		_OP_OPENDIR:         doOpenDir,
 		_OP_CREATE:          doCreate,
+		_OP_TMPFILE:         doTmpfile,
 		_OP_SETATTR:         doSetattr,
 		_OP_GETXATTR:        doGetXAttr,
 		_OP_LISTXATTR:       doGetXAttr,
@@ -667,7 +678,7 @@ func init() {
 		_OP_NOTIFY_REPLY:    doNotifyReply,
 		_OP_FALLOCATE:       doFallocate,
 		_OP_READDIRPLUS:     doReadDirPlus,
-		_OP_RENAME2:         doRename2,
+		_OP_RENAME2:         doRename,
 		_OP_INTERRUPT:       doInterrupt,
 		_OP_COPY_FILE_RANGE: doCopyFileRange,
 		_OP_LSEEK:           doLseek,
@@ -680,6 +691,7 @@ func init() {
 		_OP_BMAP:                  _BmapOut{},
 		_OP_COPY_FILE_RANGE:       WriteOut{},
 		_OP_CREATE:                CreateOut{},
+		_OP_TMPFILE:               CreateOut{},
 		_OP_GETATTR:               AttrOut{},
 		_OP_GETLK:                 LkOut{},
 		_OP_GETXATTR:              GetXAttrOut{},
@@ -717,6 +729,7 @@ func init() {
 		_OP_BMAP:               _BmapIn{},
 		_OP_COPY_FILE_RANGE:    CopyFileRangeIn{},
 		_OP_CREATE:             CreateIn{},
+		_OP_TMPFILE:            CreateIn{},
 		_OP_FALLOCATE:          FallocateIn{},
 		_OP_FLUSH:              FlushIn{},
 		_OP_FORGET:             ForgetIn{},
@@ -743,7 +756,7 @@ func init() {
 		_OP_RELEASE:            ReleaseIn{},
 		_OP_RELEASEDIR:         ReleaseIn{},
 		_OP_RENAME2:            RenameIn{},
-		_OP_RENAME:             Rename1In{},
+		_OP_RENAME:             RenameIn{},
 		_OP_SETATTR:            SetAttrIn{},
 		_OP_SETLK:              LkIn{},
 		_OP_SETLKW:             LkIn{},
@@ -757,7 +770,10 @@ func init() {
 
 	// File name args.
 	for op, count := range map[uint32]int{
-		_OP_CREATE:      1,
+		_OP_CREATE: 1,
+		// TMPFILE goes through the same kernel code as CREATE, so it carries a name as well: the name of the
+		// anonymous dentry the kernel makes for the file, which is always "/" and names nothing.
+		_OP_TMPFILE:     1,
 		_OP_SETXATTR:    1,
 		_OP_GETXATTR:    1,
 		_OP_LINK:        1,

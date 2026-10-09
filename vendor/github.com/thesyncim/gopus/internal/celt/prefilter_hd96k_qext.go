@@ -44,9 +44,15 @@ func combFilterWithInputSigQEXT(dst, src []celtSig, start, t0, t1, n int, g0, g1
 		return
 	}
 
-	newWindow := make([]float32, overlap2)
-	phaseIn := make([]float32, combFilterMaxPeriod+n2)
-	phaseOut := make([]float32, n2)
+	// modes.c caps custom frames at 2048 samples with QEXT; native 96 kHz
+	// CELT frames have at most 1920. Keep the temporary phase arrays on the
+	// stack, as comb_filter_qext does, including the 120-point phase window.
+	var windowStorage [120]float32
+	var inputStorage [combFilterMaxPeriod + 1024]float32
+	var outputStorage [1024]float32
+	newWindow := windowStorage[:overlap2]
+	phaseIn := inputStorage[:combFilterMaxPeriod+n2]
+	phaseOut := outputStorage[:n2]
 
 	for s := 0; s < 2; s++ {
 		for i := 0; i < overlap2; i++ {
@@ -114,15 +120,18 @@ func combFilterScalarFloat32Out(out, in []float32, history, t0, t1, n int, g0, g
 	i := 0
 	for ; i < overlap; i++ {
 		x0 := x(i - t1 + 2)
-		f := window[i] * window[i]
-		oneMinus := float32(1.0) - f
-		out[i] = x(i) +
-			noFMA32Mul(oneMinus*g00, x(i-t0)) +
-			noFMA32Mul(oneMinus*g01, x(i-t0+1)+x(i-t0-1)) +
-			noFMA32Mul(oneMinus*g02, x(i-t0+2)+x(i-t0-2)) +
-			noFMA32Mul(f*g10, x2) +
-			noFMA32Mul(f*g11, x1+x3) +
-			noFMA32Mul(f*g12, x0+x4)
+		f := noFMA32Mul(window[i], window[i])
+		oneMinus := noFMA32Sub(1, f)
+		// celt.c comb_filter rounds each interpolated gain, then the
+		// selected ARM libopus kernel accumulates six taps with FMADD.
+		t := x(i)
+		t = fma32(noFMA32Mul(oneMinus, g00), x(i-t0), t)
+		t = fma32(noFMA32Mul(oneMinus, g01), noFMA32Add(x(i-t0+1), x(i-t0-1)), t)
+		t = fma32(noFMA32Mul(oneMinus, g02), noFMA32Add(x(i-t0+2), x(i-t0-2)), t)
+		t = fma32(noFMA32Mul(f, g10), x2, t)
+		t = fma32(noFMA32Mul(f, g11), noFMA32Add(x1, x3), t)
+		t = fma32(noFMA32Mul(f, g12), noFMA32Add(x0, x4), t)
+		out[i] = t
 		x4 = x3
 		x3 = x2
 		x2 = x1
@@ -136,12 +145,22 @@ func combFilterScalarFloat32Out(out, in []float32, history, t0, t1, n int, g0, g
 	}
 	// Constant-filter tail (libopus comb_filter_const): rolling taps x1..x4
 	// carry over from the overlap loop. SHL32(.,1) is a no-op in the float build.
+	if combUsesSSE {
+		// The x86 C kernel handles the original constant-body four-sample
+		// prefix with grouped side products, independently of the QEXT phase
+		// storage. Its scalar remainder follows below.
+		for end := i + ((n - i) &^ 3); i < end; i++ {
+			x0 := x(i - t1 + 2)
+			out[i] = combFilterConstSSEValue(x(i), g10, g11, g12, x2, x1, x3, x0, x4)
+			x4, x3, x2, x1 = x3, x2, x1, x0
+		}
+	}
 	for ; i < n; i++ {
 		x0 := x(i - t1 + 2)
 		t := x(i)
-		t += noFMA32Mul(g10, x2)
-		t += noFMA32Mul(g11, x1+x3)
-		t += noFMA32Mul(g12, x0+x4)
+		t = fma32(g10, x2, t)
+		t = fma32(g11, noFMA32Add(x1, x3), t)
+		t = fma32(g12, noFMA32Add(x0, x4), t)
 		out[i] = t
 		x4 = x3
 		x3 = x2

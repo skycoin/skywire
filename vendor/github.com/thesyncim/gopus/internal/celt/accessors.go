@@ -1,14 +1,10 @@
 package celt
 
-// OverlapBuffer returns the overlap buffer for CELT overlap.
-// Size is Overlap * channels samples.
-func (d *Decoder) OverlapBuffer() []float32 {
-	return d.overlapBuffer
-}
-
-// SetOverlapBuffer copies the given samples to the overlap buffer.
-func (d *Decoder) SetOverlapBuffer(samples []float32) {
-	copy(d.overlapBuffer, samples)
+// DecodeMem returns channel c's synthesis delay line, libopus decode_mem[c]:
+// the decoded history followed by the MDCT overlap of the next frame.
+func (d *Decoder) DecodeMem(c int) []float32 {
+	d.ensureDecodeMem()
+	return d.decodeMemChannel(c)
 }
 
 // PreemphState returns the de-emphasis filter state.

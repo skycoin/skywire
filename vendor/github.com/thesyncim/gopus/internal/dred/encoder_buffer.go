@@ -1,8 +1,8 @@
 package dred
 
-// EncoderBuffer mirrors the libopus DRED encoder-side 16 kHz d-frame staging
-// state from dred_compute_latents(), without pulling in resampling or RDOVAE
-// inference yet.
+// EncoderBuffer stages 16 kHz mono samples into the libopus DRED encoder
+// d-frame window used by dred_compute_latents(). LatentGenerator composes this
+// buffer with LPCNet analysis and RDOVAE inference.
 type EncoderBuffer struct {
 	inputBuffer     [2 * DFrameSize]float32
 	inputBufferFill int32
@@ -43,10 +43,10 @@ func (b *EncoderBuffer) LatentOffset() int32 {
 	return b.latentOffset
 }
 
-// Append16k stages 16 kHz mono PCM into the libopus-shaped DRED d-frame buffer.
-// The callback, when non-nil, is invoked once per emitted 320-sample d-frame
-// with a slice that aliases internal storage and is only valid until the
-// callback returns.
+// Append16k stages 16 kHz mono float32 PCM into the DRED d-frame buffer. For
+// each emitted 320-sample frame, the callback receives a slice that aliases
+// internal storage and is valid only until the callback returns. The return
+// value is the number of d-frames emitted, whether or not callback is nil.
 func (b *EncoderBuffer) Append16k(pcm []float32, extraDelay int32, emit func(frame []float32)) int {
 	if b == nil {
 		return 0

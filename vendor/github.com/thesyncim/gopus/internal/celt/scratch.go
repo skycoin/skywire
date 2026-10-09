@@ -106,6 +106,7 @@ type bandDecodeScratch struct {
 
 	// Scratch buffers for PVQ/folding operations
 	pvqPulses  []int32 // Pulse vector from CWRS decode; libopus uses C int.
+	pvqRefine  []int32 // Separate QEXT refinement vector while pulses stay live.
 	pvqNorm    []celtNorm
 	foldResult []celtNorm
 	cwrsU      []uint32 // CWRS u-row scratch buffer
@@ -133,16 +134,13 @@ type bandEncodeScratch struct {
 	// fresh slice in that slot, identical to before. See ensureFloatScratch.
 	floatScratch arena.Bump[celtNorm]
 
-	// Theta RDO buffers (for stereo encoding): eight per-band celtNorm slots,
+	// Theta RDO buffers (for stereo encoding): five per-band celtNorm slots,
 	// each bounded by maxBandWidth, all live simultaneously within one band's RDO.
 	xSave       []celtNorm
 	ySave       []celtNorm
-	normSave    []celtNorm
 	xResult0    []celtNorm
 	yResult0    []celtNorm
 	normResult0 []celtNorm
-	thetaX      []celtNorm
-	thetaY      []celtNorm
 
 	// Theta RDO encoder state saves (reusable across bands)
 	ecSave     rangecoding.EncoderState
@@ -151,12 +149,14 @@ type bandEncodeScratch struct {
 	extEcSave0 rangecoding.EncoderState
 
 	// PVQ scratch buffers
-	pvqSignx []byte
-	pvqY     []float32
-	pvqAbsX  []float32
-	pvqX     []celtNorm
-	pvqIy    []int32
-	qextIy   []int32 // QEXT cubic pulse scratch; libopus uses C int.
+	pvqSignx  []byte
+	pvqY      []float32
+	pvqAbsX   []float32
+	pvqX      []celtNorm
+	pvqIy     []int32
+	pvqUpIy   []int32
+	pvqRefine []int32
+	qextIy    []int32 // QEXT cubic pulse scratch; libopus uses C int.
 
 	// CWRS scratch
 	cwrsU []uint32
@@ -194,7 +194,7 @@ func (s *bandEncodeScratch) ensureFloatScratch(channels int) {
 	const maxPVQN = maxBandWidth * 2
 	normLen := 8 * EBands[MaxBands-1]
 	maxBand := 8 * (EBands[MaxBands] - EBands[MaxBands-1])
-	total := channels*normLen + maxBand + maxBandWidth*16 + 3*maxPVQN + 8*maxBandWidth
+	total := channels*normLen + maxBand + maxBandWidth*16 + 3*maxPVQN + 5*maxBandWidth
 	if s.floatScratch.Cap() >= total {
 		return
 	}
@@ -207,27 +207,21 @@ func (s *bandEncodeScratch) ensureFloatScratch(channels int) {
 	s.pvqX = s.floatScratch.Alloc(maxPVQN)
 	s.xSave = s.floatScratch.Alloc(maxBandWidth)
 	s.ySave = s.floatScratch.Alloc(maxBandWidth)
-	s.normSave = s.floatScratch.Alloc(maxBandWidth)
 	s.xResult0 = s.floatScratch.Alloc(maxBandWidth)
 	s.yResult0 = s.floatScratch.Alloc(maxBandWidth)
 	s.normResult0 = s.floatScratch.Alloc(maxBandWidth)
-	s.thetaX = s.floatScratch.Alloc(maxBandWidth)
-	s.thetaY = s.floatScratch.Alloc(maxBandWidth)
 }
 
 // ensureXSave returns a pre-allocated buffer for saving X during theta RDO.
+// The theta RDO callers of the ensure*Save and ensure*Result0 buffers copy all
+// n elements in before any read, so none of them zero-fills.
 func (s *bandEncodeScratch) ensureXSave(n int) []celtNorm {
-	return ensureNormSlice(&s.xSave, n)
+	return ensureNormSliceNoClear(&s.xSave, n)
 }
 
 // ensureYSave returns a pre-allocated buffer for saving Y during theta RDO.
 func (s *bandEncodeScratch) ensureYSave(n int) []celtNorm {
-	return ensureNormSlice(&s.ySave, n)
-}
-
-// ensureNormSave returns a pre-allocated buffer for saving norm during theta RDO.
-func (s *bandEncodeScratch) ensureNormSave(n int) []celtNorm {
-	return ensureNormSlice(&s.normSave, n)
+	return ensureNormSliceNoClear(&s.ySave, n)
 }
 
 // ensureXResult0 returns a pre-allocated buffer for X result during theta RDO.
@@ -243,16 +237,7 @@ func (s *bandEncodeScratch) ensureYResult0(n int) []celtNorm {
 
 // ensureNormResult0 returns a pre-allocated buffer for norm result during theta RDO.
 func (s *bandEncodeScratch) ensureNormResult0(n int) []celtNorm {
-	return ensureNormSlice(&s.normResult0, n)
-}
-
-func (s *bandEncodeScratch) ensureThetaX(n int) []celtNorm {
-	// Callers copy() the full n elements in before any read, so the zero-fill is dead work.
-	return ensureNormSliceNoClear(&s.thetaX, n)
-}
-
-func (s *bandEncodeScratch) ensureThetaY(n int) []celtNorm {
-	return ensureNormSliceNoClear(&s.thetaY, n)
+	return ensureNormSliceNoClear(&s.normResult0, n)
 }
 
 func (s *bandEncodeScratch) ensureHadamardTmpNorm(n int) []celtNorm {
@@ -378,6 +363,10 @@ func (s *bandDecodeScratch) ensurePVQPulses(n int) []int32 {
 	return ensureInt32Slice(&s.pvqPulses, n)
 }
 
+func (s *bandDecodeScratch) ensurePVQRefine(n int) []int32 {
+	return ensureInt32Slice(&s.pvqRefine, n)
+}
+
 // ensurePVQNorm returns a pre-allocated buffer for normalized vector.
 func (s *bandDecodeScratch) ensurePVQNorm(n int) []celtNorm {
 	return ensureNormSlice(&s.pvqNorm, n)
@@ -394,7 +383,8 @@ func (s *bandDecodeScratch) ensureCWRSU(n int) []uint32 {
 }
 
 func (s *bandDecodeScratch) ensureHadamardTmpNorm(n int) []celtNorm {
-	return ensureNormSlice(&s.hadamardTmpNorm, n)
+	// (de)interleaveHadamardInto writes all n elements before any read, so the zero-fill is dead work.
+	return ensureNormSliceNoClear(&s.hadamardTmpNorm, n)
 }
 
 // ensureQuantWork returns a pre-allocated deinterleaved working buffer.
@@ -402,10 +392,18 @@ func (s *bandDecodeScratch) ensureQuantWork(n int) []celtNorm {
 	return ensureNormSlice(&s.quantWork, n)
 }
 
+// ensureQuantWorkNoClear returns the deinterleaved working buffer without
+// zeroing it, for decodes whose quant_partition writes every element before
+// reading it.
+func (s *bandDecodeScratch) ensureQuantWorkNoClear(n int) []celtNorm {
+	return ensureNormSliceNoClear(&s.quantWork, n)
+}
+
 type imdctScratch = imdctScratchF32
 
 // imdctScratchF32 holds scratch buffers for float32 IMDCT to avoid per-call allocations.
 type imdctScratchF32 struct {
+	customMDCTState
 	fftIn  []complex64
 	fftTmp []kissCpx
 	buf    []float32

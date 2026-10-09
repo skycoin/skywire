@@ -140,10 +140,19 @@ func newDecoderDownsamplingResampler(fsIn, fsOut int) *DownsamplingResampler {
 }
 
 func newDownsamplingResampler(fsIn, fsOut int, forEncoder bool) *DownsamplingResampler {
-	r := &DownsamplingResampler{
-		fsInKHz:  int32(fsIn / 1000),
-		fsOutKHz: int32(fsOut / 1000),
-	}
+	r := &DownsamplingResampler{}
+	r.init(fsIn, fsOut, forEncoder)
+	return r
+}
+
+// init is the down_FIR branch of silk_resampler_init (silk/resampler.c): it
+// clears the filter state and configures the fsIn -> fsOut ratio, reusing the
+// state and scratch buffers when they are large enough.
+func (r *DownsamplingResampler) init(fsIn, fsOut int, forEncoder bool) {
+	r.sIIR = [2]int32{}
+	r.fsInKHz = int32(fsIn / 1000)
+	r.fsOutKHz = int32(fsOut / 1000)
+	r.inputDelay = 0
 
 	// Batch size: 10ms of input data
 	r.batchSize = r.fsInKHz * 10 // RESAMPLER_MAX_BATCH_SIZE_MS = 10
@@ -208,11 +217,9 @@ func newDownsamplingResampler(fsIn, fsOut int, forEncoder bool) *DownsamplingRes
 	}
 
 	// Initialize state
-	r.sFIR = make([]int32, r.firOrder)
-	r.delayBuf = make([]int16, r.fsInKHz)
-	r.scratchBuf = make([]int32, int(r.batchSize)+r.firOrder)
-
-	return r
+	clear(ensureInt32Slice(&r.sFIR, r.firOrder))
+	clear(ensureInt16Slice(&r.delayBuf, int(r.fsInKHz)))
+	ensureInt32Slice(&r.scratchBuf, int(r.batchSize)+r.firOrder)
 }
 
 // CopyFrom copies src's configuration and filter state into r, leaving r ready
@@ -470,48 +477,37 @@ func (r *DownsamplingResampler) ar2Filter(out []int32, in []int16) {
 
 // firInterpolate performs FIR interpolation on the filtered signal.
 // Matches libopus silk_resampler_private_down_FIR_INTERPOL.
+//
+// Each output is a wrapping int32 sum of silk_SMULWB/SMLAWB terms, so the
+// terms may be added in any order. The taps read their coefficients straight
+// from the fixed-size coefficient rows instead of holding all of them in
+// registers across the loop.
 func (r *DownsamplingResampler) firInterpolate(out []int16, buf []int32, maxIndexQ16, indexIncrementQ16 int32, startOutIdx int) int {
 	outIdx := 0
 
 	switch r.firOrder {
 	case resamplerDownOrderFIR0:
-		// 18-tap filter with multiple phases
+		// 18-tap filter with multiple phases; phase k's half row is
+		// firCoefs[9*k : 9*k+9] and the mirrored half is phase fracs-1-k.
+		const half = resamplerDownOrderFIR0 / 2
 		firFracs := r.firFracs
-		firCoefs := r.firCoefs
+		firCoefs := r.firCoefs[:half*firFracs]
 		for indexQ16 := int32(0); indexQ16 < maxIndexQ16; indexQ16 += indexIncrementQ16 {
 			bufPtr := int(indexQ16 >> 16)
-			_ = buf[bufPtr+17] // BCE hint
+			b := (*[resamplerDownOrderFIR0]int32)(buf[bufPtr : bufPtr+resamplerDownOrderFIR0])
 			interpolInd := int(smulwb(indexQ16&0xFFFF, int32(firFracs)))
-
-			// Forward taps
-			interpol := firCoefs[resamplerDownOrderFIR0/2*interpolInd:]
-			_ = interpol[8] // BCE hint
-			f0, f1, f2, f3 := int64(int16(interpol[0])), int64(int16(interpol[1])), int64(int16(interpol[2])), int64(int16(interpol[3]))
-			f4, f5, f6, f7, f8 := int64(int16(interpol[4])), int64(int16(interpol[5])), int64(int16(interpol[6])), int64(int16(interpol[7])), int64(int16(interpol[8]))
-			resQ6 := int32((int64(buf[bufPtr+0]) * f0) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+1]) * f1) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+2]) * f2) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+3]) * f3) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+4]) * f4) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+5]) * f5) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+6]) * f6) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+7]) * f7) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+8]) * f8) >> 16)
-
-			// Reverse taps (symmetric filter)
-			interpol = firCoefs[resamplerDownOrderFIR0/2*(firFracs-1-interpolInd):]
-			_ = interpol[8] // BCE hint
-			r0, r1, r2, r3 := int64(int16(interpol[0])), int64(int16(interpol[1])), int64(int16(interpol[2])), int64(int16(interpol[3]))
-			r4, r5, r6, r7, r8 := int64(int16(interpol[4])), int64(int16(interpol[5])), int64(int16(interpol[6])), int64(int16(interpol[7])), int64(int16(interpol[8]))
-			resQ6 += int32((int64(buf[bufPtr+17]) * r0) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+16]) * r1) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+15]) * r2) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+14]) * r3) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+13]) * r4) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+12]) * r5) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+11]) * r6) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+10]) * r7) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+9]) * r8) >> 16)
+			f := (*[half]int16)(firCoefs[half*interpolInd : half*interpolInd+half])
+			g := (*[half]int16)(firCoefs[half*(firFracs-1-interpolInd) : half*(firFracs-interpolInd)])
+			resQ6 := int32((int64(b[0])*int64(f[0]))>>16) + int32((int64(b[1])*int64(f[1]))>>16) +
+				int32((int64(b[2])*int64(f[2]))>>16) + int32((int64(b[3])*int64(f[3]))>>16) +
+				int32((int64(b[4])*int64(f[4]))>>16) + int32((int64(b[5])*int64(f[5]))>>16) +
+				int32((int64(b[6])*int64(f[6]))>>16) + int32((int64(b[7])*int64(f[7]))>>16) +
+				int32((int64(b[8])*int64(f[8]))>>16)
+			resQ6 += int32((int64(b[17])*int64(g[0]))>>16) + int32((int64(b[16])*int64(g[1]))>>16) +
+				int32((int64(b[15])*int64(g[2]))>>16) + int32((int64(b[14])*int64(g[3]))>>16) +
+				int32((int64(b[13])*int64(g[4]))>>16) + int32((int64(b[12])*int64(g[5]))>>16) +
+				int32((int64(b[11])*int64(g[6]))>>16) + int32((int64(b[10])*int64(g[7]))>>16) +
+				int32((int64(b[9])*int64(g[8]))>>16)
 
 			if outIdx < len(out) {
 				out[outIdx] = int16(sat16(rshiftRound(resQ6, 6)))
@@ -520,29 +516,17 @@ func (r *DownsamplingResampler) firInterpolate(out []int16, buf []int32, maxInde
 		}
 
 	case resamplerDownOrderFIR1:
-		// 24-tap symmetric filter (single phase)
-		// Cache FIR coefficients as int64 to avoid repeated int32->int64 conversion.
-		fc1 := r.firCoefs
-		_ = fc1[11] // BCE hint
-		d0, d1, d2, d3 := int64(int16(fc1[0])), int64(int16(fc1[1])), int64(int16(fc1[2])), int64(int16(fc1[3]))
-		d4, d5, d6, d7 := int64(int16(fc1[4])), int64(int16(fc1[5])), int64(int16(fc1[6])), int64(int16(fc1[7]))
-		d8, d9, d10, d11 := int64(int16(fc1[8])), int64(int16(fc1[9])), int64(int16(fc1[10])), int64(int16(fc1[11]))
+		// 24-tap symmetric filter (single phase).
+		c := (*[resamplerDownOrderFIR1 / 2]int16)(r.firCoefs)
 		for indexQ16 := int32(0); indexQ16 < maxIndexQ16; indexQ16 += indexIncrementQ16 {
 			bufPtr := int(indexQ16 >> 16)
-			_ = buf[bufPtr+23] // BCE hint
-
-			resQ6 := int32((int64(buf[bufPtr+0]+buf[bufPtr+23]) * d0) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+1]+buf[bufPtr+22]) * d1) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+2]+buf[bufPtr+21]) * d2) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+3]+buf[bufPtr+20]) * d3) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+4]+buf[bufPtr+19]) * d4) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+5]+buf[bufPtr+18]) * d5) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+6]+buf[bufPtr+17]) * d6) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+7]+buf[bufPtr+16]) * d7) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+8]+buf[bufPtr+15]) * d8) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+9]+buf[bufPtr+14]) * d9) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+10]+buf[bufPtr+13]) * d10) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+11]+buf[bufPtr+12]) * d11) >> 16)
+			b := (*[resamplerDownOrderFIR1]int32)(buf[bufPtr : bufPtr+resamplerDownOrderFIR1])
+			resQ6 := int32((int64(b[0]+b[23])*int64(c[0]))>>16) + int32((int64(b[1]+b[22])*int64(c[1]))>>16) +
+				int32((int64(b[2]+b[21])*int64(c[2]))>>16) + int32((int64(b[3]+b[20])*int64(c[3]))>>16) +
+				int32((int64(b[4]+b[19])*int64(c[4]))>>16) + int32((int64(b[5]+b[18])*int64(c[5]))>>16) +
+				int32((int64(b[6]+b[17])*int64(c[6]))>>16) + int32((int64(b[7]+b[16])*int64(c[7]))>>16) +
+				int32((int64(b[8]+b[15])*int64(c[8]))>>16) + int32((int64(b[9]+b[14])*int64(c[9]))>>16) +
+				int32((int64(b[10]+b[13])*int64(c[10]))>>16) + int32((int64(b[11]+b[12])*int64(c[11]))>>16)
 
 			if outIdx < len(out) {
 				out[outIdx] = int16(sat16(rshiftRound(resQ6, 6)))
@@ -551,38 +535,21 @@ func (r *DownsamplingResampler) firInterpolate(out []int16, buf []int32, maxInde
 		}
 
 	case resamplerDownOrderFIR2:
-		// 36-tap symmetric filter (single phase) - MOST COMMON (48kHz -> 16kHz)
-		// Cache FIR coefficients as int64 for inlined smlawb (avoids repeated int32->int64 conversion).
-		fc := r.firCoefs
-		_ = fc[17] // BCE hint
-		c0, c1, c2, c3 := int64(int16(fc[0])), int64(int16(fc[1])), int64(int16(fc[2])), int64(int16(fc[3]))
-		c4, c5, c6, c7 := int64(int16(fc[4])), int64(int16(fc[5])), int64(int16(fc[6])), int64(int16(fc[7]))
-		c8, c9, c10, c11 := int64(int16(fc[8])), int64(int16(fc[9])), int64(int16(fc[10])), int64(int16(fc[11]))
-		c12, c13, c14, c15 := int64(int16(fc[12])), int64(int16(fc[13])), int64(int16(fc[14])), int64(int16(fc[15]))
-		c16, c17 := int64(int16(fc[16])), int64(int16(fc[17]))
+		// 36-tap symmetric filter (single phase), used for 48 kHz -> 16 kHz.
+		c := (*[resamplerDownOrderFIR2 / 2]int16)(r.firCoefs)
 		for indexQ16 := int32(0); indexQ16 < maxIndexQ16; indexQ16 += indexIncrementQ16 {
 			bufPtr := int(indexQ16 >> 16)
-			_ = buf[bufPtr+35] // BCE hint: prove all 36 elements are in bounds
-
-			// Inline smlawb: a + ((int64(b) * c) >> 16) where c is pre-cast to int64.
-			resQ6 := int32((int64(buf[bufPtr+0]+buf[bufPtr+35]) * c0) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+1]+buf[bufPtr+34]) * c1) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+2]+buf[bufPtr+33]) * c2) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+3]+buf[bufPtr+32]) * c3) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+4]+buf[bufPtr+31]) * c4) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+5]+buf[bufPtr+30]) * c5) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+6]+buf[bufPtr+29]) * c6) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+7]+buf[bufPtr+28]) * c7) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+8]+buf[bufPtr+27]) * c8) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+9]+buf[bufPtr+26]) * c9) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+10]+buf[bufPtr+25]) * c10) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+11]+buf[bufPtr+24]) * c11) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+12]+buf[bufPtr+23]) * c12) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+13]+buf[bufPtr+22]) * c13) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+14]+buf[bufPtr+21]) * c14) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+15]+buf[bufPtr+20]) * c15) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+16]+buf[bufPtr+19]) * c16) >> 16)
-			resQ6 += int32((int64(buf[bufPtr+17]+buf[bufPtr+18]) * c17) >> 16)
+			b := (*[resamplerDownOrderFIR2]int32)(buf[bufPtr : bufPtr+resamplerDownOrderFIR2])
+			resQ6 := int32((int64(b[0]+b[35])*int64(c[0]))>>16) + int32((int64(b[1]+b[34])*int64(c[1]))>>16) +
+				int32((int64(b[2]+b[33])*int64(c[2]))>>16) + int32((int64(b[3]+b[32])*int64(c[3]))>>16) +
+				int32((int64(b[4]+b[31])*int64(c[4]))>>16) + int32((int64(b[5]+b[30])*int64(c[5]))>>16) +
+				int32((int64(b[6]+b[29])*int64(c[6]))>>16) + int32((int64(b[7]+b[28])*int64(c[7]))>>16) +
+				int32((int64(b[8]+b[27])*int64(c[8]))>>16)
+			resQ6 += int32((int64(b[9]+b[26])*int64(c[9]))>>16) + int32((int64(b[10]+b[25])*int64(c[10]))>>16) +
+				int32((int64(b[11]+b[24])*int64(c[11]))>>16) + int32((int64(b[12]+b[23])*int64(c[12]))>>16) +
+				int32((int64(b[13]+b[22])*int64(c[13]))>>16) + int32((int64(b[14]+b[21])*int64(c[14]))>>16) +
+				int32((int64(b[15]+b[20])*int64(c[15]))>>16) + int32((int64(b[16]+b[19])*int64(c[16]))>>16) +
+				int32((int64(b[17]+b[18])*int64(c[17]))>>16)
 
 			if outIdx < len(out) {
 				out[outIdx] = int16(sat16(rshiftRound(resQ6, 6)))

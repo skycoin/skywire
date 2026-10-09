@@ -29,12 +29,6 @@ func initVariableHPSmth1Q15() int32 {
 	return silkLSHIFT(silkLin2Log(int32(variableHPMinCutoffHzQ16))-(16<<7), 8)
 }
 
-// VariableHPSmth1Q15 returns the current smoothed log-domain cutoff estimate
-// (Q15) so the Opus-level encoder can drive hp_cutoff().
-func (e *Encoder) VariableHPSmth1Q15() int32 {
-	return e.variableHPSmth1Q15
-}
-
 // InitVariableHPSmth2Q15 returns the Opus-level init value for
 // variable_HP_smth2_Q15 (src/opus_encoder.c opus_encoder_init):
 //
@@ -96,12 +90,10 @@ func HPCutoffCoefsQ28(cutoffHz, fs int32) (bQ28 [3]int32, aQ28 [2]int32) {
 	return bQ28, aQ28
 }
 
-// UpdateVariableHPCutoff ports silk_HP_variable_cutoff (silk/HP_variable_cutoff.c).
-// It adapts variable_HP_smth1_Q15 from the previous frame's pitch lag and quality.
-// Call once per packet, before the Opus-level hp_cutoff() of the next packet,
-// matching enc_API.c (silk_HP_variable_cutoff is invoked per packet on
-// state_Fxx[0]).
-func (e *Encoder) UpdateVariableHPCutoff() {
+// hpVariableCutoff is silk_HP_variable_cutoff (silk/HP_variable_cutoff.c): it
+// adapts variable_HP_smth1_Q15 from the previous frame's pitch lag and quality.
+// silk_Encode runs it on the first channel before each frame's VAD.
+func (e *Encoder) hpVariableCutoff() {
 	// if( psEncC1->prevSignalType == TYPE_VOICED )
 	if !e.isPreviousFrameVoiced {
 		return
@@ -110,7 +102,7 @@ func (e *Encoder) UpdateVariableHPCutoff() {
 	if prevLag <= 0 {
 		return
 	}
-	fsKHz := e.sampleRate / 1000
+	fsKHz := e.fsKHz
 	if fsKHz <= 0 {
 		fsKHz = 8
 	}

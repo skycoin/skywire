@@ -63,10 +63,12 @@ type qextModeConfig struct {
 	CacheCaps     []uint8
 }
 
-// computeQEXTModeConfig mirrors libopus compute_qext_mode() mode selection.
-// It does not enable QEXT by itself; it only prepares the mode/tables that the
-// future encoder/decoder wiring will need.
+// computeQEXTModeConfig mirrors the QEXT side-cache selection in
+// celt/modes.c opus_custom_mode_create() and compute_qext_mode().
 func computeQEXTModeConfig(sampleRate, shortMDCTSize int) (qextModeConfig, bool) {
+	if sampleRate != 48000 && sampleRate != 96000 {
+		return qextModeConfig{}, false
+	}
 	cfg := qextModeConfig{
 		ShortMDCTSize: shortMDCTSize,
 		CacheIndex:    qextCacheIndex50[:],
@@ -74,11 +76,11 @@ func computeQEXTModeConfig(sampleRate, shortMDCTSize int) (qextModeConfig, bool)
 		CacheCaps:     qextCacheCaps50[:],
 	}
 
-	switch {
-	case shortMDCTSize*48000 == 120*sampleRate:
+	switch shortMDCTSize * 48000 {
+	case 120 * sampleRate:
 		cfg.EBands = qextEBands240[:]
 		cfg.LogN = qextLogN240[:]
-	case shortMDCTSize*48000 == 90*sampleRate:
+	case 90 * sampleRate:
 		// libopus ships one trailing qext_logN_180 value that sits past the
 		// active NB_QEXT_BANDS window. We keep the exact source table above and
 		// expose the active prefix here.
@@ -98,6 +100,17 @@ func computeQEXTModeConfig(sampleRate, shortMDCTSize int) (qextModeConfig, bool)
 func qextShortMDCTSize(frameSize int) int {
 	mode := GetModeConfig(frameSize)
 	if mode.ShortBlocks <= 0 {
+		return frameSize
+	}
+	return frameSize / mode.ShortBlocks
+}
+
+// qextShortMDCTSizeForMode derives the QEXT band's short-transform geometry
+// from the active CELT mode. Native 96 kHz CELT uses 240-bin short transforms
+// for every duration, including frame sizes whose 48 kHz mode has a different
+// LM/short-block decomposition.
+func qextShortMDCTSizeForMode(frameSize int, mode ModeConfig) int {
+	if mode.ShortBlocks <= 0 || frameSize%mode.ShortBlocks != 0 {
 		return frameSize
 	}
 	return frameSize / mode.ShortBlocks
@@ -144,7 +157,11 @@ func computeQEXTReservation(nbCompressedBytes, minAllowed, frameSize, channels, 
 	if cbrVBRTargetBytes > 0 {
 		targetBytes = cbrVBRTargetBytes
 	}
-	qextBytes += roundFloat32ToInt(scale * float32((nbCompressedBytes-targetBytes)-qextBytes))
+	// In the float libopus build, qext_bytes is an int and MULT16_32_Q15
+	// expands to float multiplication. The compound assignment converts the
+	// complete float sum back to int, truncating toward zero; rounding the
+	// adjustment separately can move one byte between the main and side coders.
+	qextBytes = int(float32(qextBytes) + scale*float32((nbCompressedBytes-targetBytes)-qextBytes))
 	qextBytes = max(nbCompressedBytes-1275, max(21, qextBytes))
 
 	paddingBytes = (qextBytes + 253) / 254
@@ -164,11 +181,4 @@ func computeQEXTReservation(nbCompressedBytes, minAllowed, frameSize, channels, 
 		return nbCompressedBytes, 0, 0
 	}
 	return mainBytes, payloadBytes, paddingBytes
-}
-
-func roundFloat32ToInt(x float32) int {
-	if x >= 0 {
-		return int(x + 0.5)
-	}
-	return int(x - 0.5)
 }

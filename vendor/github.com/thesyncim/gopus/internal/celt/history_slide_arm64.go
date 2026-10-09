@@ -1,3 +1,3 @@
-//go:build arm64 && !purego
+//go:build arm64 && !nosimd && !purego
 
 package celt

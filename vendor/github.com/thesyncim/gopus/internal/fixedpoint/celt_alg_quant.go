@@ -118,7 +118,7 @@ func mult16x16Q15(a, b int32) int32 {
 // normaliseResidual ports celt/vq.c normalise_residual (FIXED_POINT, QEXT off).
 // It rescales the integer codeword iy to unit norm scaled by gain, writing the
 // celt_norm result into X.
-func normaliseResidual(iy []int, x []int32, n int, ryy, gain int32) {
+func normaliseResidual(iy []int32, x []int32, n int, ryy, gain int32) {
 	k := int(CeltILog2(ryy)) >> 1
 	t := vshr32(ryy, 2*(k-7)-15)
 	g := mult32x32q31(CeltRsqrtNorm32(t), gain)
@@ -131,14 +131,14 @@ func normaliseResidual(iy []int, x []int32, n int, ryy, gain int32) {
 // extractCollapseMask ports celt/vq.c extract_collapse_mask. It returns a
 // bitmask whose i-th bit is set when the i-th of B equal-width sub-bands of iy
 // contains any nonzero pulse.
-func extractCollapseMask(iy []int, n, b int) uint32 {
+func extractCollapseMask(iy []int32, n, b int) uint32 {
 	if b <= 1 {
 		return 1
 	}
 	n0 := int(celtUdiv(uint32(n), uint32(b)))
 	var collapseMask uint32
 	for i := 0; i < b; i++ {
-		var tmp int
+		var tmp int32
 		for j := 0; j < n0; j++ {
 			tmp |= iy[i*n0+j]
 		}
@@ -156,18 +156,18 @@ func extractCollapseMask(iy []int, n, b int) uint32 {
 // anti-collapse mask. X is modified in place.
 func AlgQuant(x []int32, n, k, spread, b int, enc *rangecoding.Encoder, gain int32, resynth bool, scratch *celtEncodeScratch) uint32 {
 	// iy needs N+3 slots for the search's vectorisation headroom.
-	var iy []int
+	var iy []int32
 	if scratch != nil {
-		iy = ensureInt(&scratch.pvqIy, n+3)
+		iy = ensureInt32(&scratch.pvqIy, n+3)
 	} else {
-		iy = make([]int, n+3)
+		iy = make([]int32, n+3)
 	}
 
 	expRotation(x, n, 1, b, k, spread)
 
 	yy := OpPvqSearch(x, iy, k, n, scratch)
 	collapseMask := extractCollapseMask(iy, n, b)
-	encodePulses(iy[:n], n, k, enc)
+	encodePulses(iy[:n], n, k, enc, scratch)
 	if resynth {
 		normaliseResidual(iy, x, n, yy, gain)
 	}
@@ -182,34 +182,55 @@ func AlgQuant(x []int32, n, k, spread, b int, enc *rangecoding.Encoder, gain int
 // pulse codeword from dec via the CWRS coder, normalises and inverse-rotates it
 // into X, and returns the anti-collapse mask. X is written, not read.
 func AlgUnquant(x []int32, n, k, spread, b int, dec *rangecoding.Decoder, gain int32) uint32 {
-	iy := make([]int, n)
-	ryy := decodePulses(iy, n, k, dec)
-	normaliseResidual(iy, x, n, ryy, gain)
+	var pulseStorage [celtMaxBandWidth]int32
+	var row [256]uint32
+	var iy []int32
+	if n <= len(pulseStorage) {
+		iy = pulseStorage[:n]
+	} else {
+		iy = make([]int32, n)
+	}
+	celt.DecodePulsesInto32(dec.DecodeUniform(celt.PVQ_V(n, k)), n, k, iy, row[:])
+	var ryy int32
+	for _, pulse := range iy {
+		v := int32(int16(pulse))
+		ryy += v * v
+	}
+	shift := int(CeltILog2(ryy)) >> 1
+	g := mult32x32q31(CeltRsqrtNorm32(vshr32(ryy, 2*(shift-7)-15)), gain)
+	for i := range iy {
+		x[i] = vshr32(mult16x32Q15(int16(iy[i]), g), shift+15-normShift)
+	}
 	expRotation(x, n, -1, b, k, spread)
-	return extractCollapseMask(iy, n, b)
+	if b <= 1 {
+		return 1
+	}
+	n0 := int(celtUdiv(uint32(n), uint32(b)))
+	var mask uint32
+	for i := 0; i < b; i++ {
+		var nonzero int32
+		for j := 0; j < n0; j++ {
+			nonzero |= iy[i*n0+j]
+		}
+		if nonzero != 0 {
+			mask |= 1 << uint(i)
+		}
+	}
+	return mask
 }
 
 // encodePulses ports celt/vq.c encode_pulses: compute the CWRS index of the
 // pulse vector and its codeword count V(N,K), then encode the index as a
 // uniform via ec_enc_uint.
-func encodePulses(y []int, n, k int, enc *rangecoding.Encoder) {
-	index := celt.EncodePulses(y, n, k)
+func encodePulses(y []int32, n, k int, enc *rangecoding.Encoder, scratch *celtEncodeScratch) {
+	index := celt.EncodePulses32Scratch(y, n, k, pulseCWRSBuffer(scratch))
 	nc := celt.PVQ_V(n, k)
 	enc.EncodeUniform(index, nc)
 }
 
-// decodePulses ports celt/vq.c decode_pulses: decode the uniform CWRS index
-// (ec_dec_uint with ft = V(N,K)), expand it to the pulse vector, and return Ryy
-// = sum(iy[i]^2), matching cwrsi's accumulated squared norm.
-func decodePulses(iy []int, n, k int, dec *rangecoding.Decoder) int32 {
-	nc := celt.PVQ_V(n, k)
-	index := dec.DecodeUniform(nc)
-	y := celt.DecodePulses(index, n, k)
-	var ryy int32
-	for i := 0; i < n; i++ {
-		iy[i] = y[i]
-		v := int32(int16(y[i]))
-		ryy += v * v
+func pulseCWRSBuffer(scratch *celtEncodeScratch) *[]uint32 {
+	if scratch == nil {
+		return nil
 	}
-	return ryy
+	return &scratch.pvqCWRS
 }

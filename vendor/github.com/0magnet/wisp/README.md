@@ -36,6 +36,9 @@ A `Client` opens a session against a Wisp server and multiplexes streams over
 it: `DialContext` for TCP, `DialUDP` for datagrams (when the server offers the
 UDP extension, which `UDPSupported` reports).
 
+`wisp.DialConn(ctx, conn, cfg)` runs the same session over a `net.Conn` you
+already have, instead of dialing a URL.
+
 ```go
 c, err := wisp.Dial(ctx, wisp.ClientConfig{URL: "ws://127.0.0.1:6001/wisp"})
 if err != nil {
@@ -80,12 +83,12 @@ gocloc --not-match-d='(vendor|node_modules|\.git)' .
 -------------------------------------------------------------------------------
 Language                     files          blank        comment           code
 -------------------------------------------------------------------------------
-Go                              22            593            783           4117
+Go                              22            599            802           4179
 YAML                             1              0              7             98
 Makefile                         1             19             34             89
-Markdown                         1             19              0             55
+Markdown                         1             21              0             73
 Bourne Shell                     1              8             16             30
 -------------------------------------------------------------------------------
-TOTAL                           26            639            840           4389
+TOTAL                           26            647            859           4469
 -------------------------------------------------------------------------------
 ```

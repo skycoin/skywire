@@ -2,6 +2,8 @@ package multistream
 
 import "github.com/thesyncim/gopus/internal/opusmath"
 
+// The C projection decoder maps its output channels to the first matrix
+// columns. Columns beyond rows receive no callback and contribute nothing.
 func applyProjectionDemixingMatrix32(dst, src []float32, matrix []int16, frame []float32, frameSize, rows, cols int) {
 	frame = frame[:cols]
 	for s := range frameSize {
@@ -9,13 +11,13 @@ func applyProjectionDemixingMatrix32(dst, src []float32, matrix []int16, frame [
 		outBase := s * rows
 		in := src[inBase : inBase+rows]
 		out := dst[outBase : outBase+rows]
-		for col := range cols {
+		for col := range min(rows, cols) {
 			frame[col] = in[col]
 		}
 		for row := range out {
 			out[row] = 0
 		}
-		for col := range cols {
+		for col := range min(rows, cols) {
 			inputSample := frame[col]
 			mcol := matrix[col*rows : col*rows+rows]
 			for row := range rows {
@@ -33,10 +35,10 @@ func applyProjectionDemixingMatrixInt16(dst []int16, src []float32, matrix []int
 		outBase := s * rows
 		in := src[inBase : inBase+rows]
 		out := dst[outBase : outBase+rows]
-		for col := range cols {
+		for col := range min(rows, cols) {
 			frame[col] = in[col]
 		}
-		for col := range cols {
+		for col := range min(rows, cols) {
 			inputSample := int32(opusmath.Float32ToInt16(frame[col]))
 			mcol := matrix[col*rows : col*rows+rows]
 			for row := range rows {

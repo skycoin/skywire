@@ -12,10 +12,12 @@ func innerProductF32Libopus(a, b []float32, length int) silkCReal {
 	result := silkCReal(0)
 	i := 0
 	for ; i < length-3; i += 4 {
-		result += silkCReal(a[i])*silkCReal(b[i]) +
-			silkCReal(a[i+1])*silkCReal(b[i+1]) +
-			silkCReal(a[i+2])*silkCReal(b[i+2]) +
-			silkCReal(a[i+3])*silkCReal(b[i+3])
+		x := (*[4]float32)(a[i : i+4])
+		y := (*[4]float32)(b[i : i+4])
+		result += silkCReal(x[0])*silkCReal(y[0]) +
+			silkCReal(x[1])*silkCReal(y[1]) +
+			silkCReal(x[2])*silkCReal(y[2]) +
+			silkCReal(x[3])*silkCReal(y[3])
 	}
 	for ; i < length; i++ {
 		result += silkCReal(a[i]) * silkCReal(b[i])
@@ -33,10 +35,11 @@ func energyF32Libopus(x []float32, length int) silkCReal {
 	result := silkCReal(0)
 	i := 0
 	for ; i < length-3; i += 4 {
-		result += silkCReal(x[i])*silkCReal(x[i]) +
-			silkCReal(x[i+1])*silkCReal(x[i+1]) +
-			silkCReal(x[i+2])*silkCReal(x[i+2]) +
-			silkCReal(x[i+3])*silkCReal(x[i+3])
+		v := (*[4]float32)(x[i : i+4])
+		result += silkCReal(v[0])*silkCReal(v[0]) +
+			silkCReal(v[1])*silkCReal(v[1]) +
+			silkCReal(v[2])*silkCReal(v[2]) +
+			silkCReal(v[3])*silkCReal(v[3])
 	}
 	for ; i < length; i++ {
 		result += silkCReal(x[i]) * silkCReal(x[i])

@@ -11,6 +11,8 @@ import "github.com/thesyncim/gopus/internal/dnnblob"
 
 func (d *streamState) setOSCELACEEnabled(_ bool) {}
 
+func (d *streamState) osceLACEEnabledForComplexity() bool { return false }
+
 func (d *streamState) setOSCEBWEEnabled(_ bool) {}
 
 func (d *streamState) bindOSCEModels(_ *dnnblob.Blob) error { return nil }

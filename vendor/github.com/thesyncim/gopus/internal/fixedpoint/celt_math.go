@@ -1,9 +1,10 @@
-// Package fixedpoint is the gopus FIXED_POINT CELT codec: a pure-integer port of
-// libopus' CELT encoder and decoder for the static 48000/960 mode. Everything
-// runs in the integer domain with no floating-point and reproduces the libopus
-// integer arithmetic bit-for-bit. The package is not part of the default float
-// build; it is compiled only behind the gopus_fixed_point build tag, so its
-// consumers select the integer codec at build time.
+// Package fixedpoint contains integer CELT math helpers and the FIXED_POINT
+// CELT encoder and decoder. The codec implementation is selected by the
+// gopus_fixed_point build tag; with it enabled, gopus_qext and
+// gopus_custom_modes select the QEXT and custom-mode paths. The untagged
+// celt_math.go file also builds with the default configuration. Codec-domain
+// arithmetic uses the integer widths and truncation rules of the matching
+// libopus FIXED_POINT path; float32 analysis metadata remains at the boundary.
 //
 // The port covers the whole FIXED_POINT CELT pipeline, each file naming the
 // libopus translation unit it mirrors:
@@ -11,7 +12,7 @@
 //   - integer math kernels (celt/mathops.h, celt/mathops.c): log2/exp2, sqrt,
 //     rcp, cos, ilog2 — see celt_math.go and celt_mathops.go;
 //   - the MDCT and KISS-FFT (celt/mdct.c, celt/kiss_fft.c) plus the precomputed
-//     48000/960 twiddle/window tables;
+//     48000/960 tables and optional 96000/1920 QEXT tables;
 //   - band energy, normalisation, PVQ pulse search and the entropy-coupled band
 //     quantiser (celt/bands.c, celt/vq.c, celt/quant_bands.c);
 //   - the encoder and decoder drivers, prefilter/comb filter, transient and
@@ -23,9 +24,9 @@
 // int64. The macros that truncate an operand to int16 before a 16x16 or 16x32
 // multiply (MULT16_16, MULT16_16_Q15, MAC16_16, MULT16_32_Q15, ...) and the
 // rounded/arithmetic shifts (PSHR32, VSHR32, ROUND16) are reproduced with those
-// exact Go integer types. Using a wider type anywhere would skip the truncation
-// or overflow wraparound the reference depends on and break bit-exactness, so
-// the operand widths in this package are load-bearing, not incidental.
+// exact Go integer types. Widening codec-domain operands before the matching C
+// truncation or shift would change the reference's wraparound and break
+// bit-exactness, so these operand widths are load-bearing.
 //
 // Q-notation used throughout matches libopus (1.0 represented as 1<<n):
 //

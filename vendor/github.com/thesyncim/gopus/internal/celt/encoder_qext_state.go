@@ -5,6 +5,7 @@ import "github.com/thesyncim/gopus/internal/rangecoding"
 type encoderQEXTState struct {
 	enabled     bool
 	lastPayload []byte
+	oldBandE    []celtGLog
 }
 
 type encoderQEXTScratch struct {
@@ -15,7 +16,6 @@ type encoderQEXTScratch struct {
 	bandLogE  []celtGLog
 	quantized []celtGLog
 	qerr      []celtGLog
-	oldBandE  []celtGLog
 	normL     []celtNorm
 	normR     []celtNorm
 	encoder   rangecoding.Encoder

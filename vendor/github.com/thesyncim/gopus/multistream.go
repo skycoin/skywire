@@ -29,15 +29,9 @@ func multistreamMappingLengthError(channels, got int) error {
 	return fmt.Errorf("%w: expected %d mapping entries for %d channels, got %d", ErrInvalidMapping, channels, channels, got)
 }
 
-// MultistreamEncoder encodes multi-channel PCM audio into Opus multistream packets.
-//
-// A MultistreamEncoder instance maintains internal state and is NOT safe for concurrent use.
-// Each goroutine should create its own MultistreamEncoder instance.
-//
-// Multistream encoding is used for surround sound configurations (5.1, 7.1, etc.)
-// where multiple coupled (stereo) and uncoupled (mono) streams are combined.
-//
-// Reference: RFC 6716 Appendix B, RFC 7845 Section 5.1.1
+// MultistreamEncoder encodes interleaved multichannel PCM into Opus
+// multistream packets. It retains stream state and is not safe for concurrent
+// use; use one encoder per stream.
 type MultistreamEncoder struct {
 	enc                 *multistream.Encoder
 	sampleRate          int32
@@ -45,40 +39,26 @@ type MultistreamEncoder struct {
 	frameSize           int32
 	expertFrameDuration ExpertFrameDuration
 	application         Application
-	encodedOnce         bool
 	modeSet             bool
 	scratchPCM32        []float32
 	dnnBlob             *dnnblob.Blob
 }
 
-// NewMultistreamEncoder creates a new multistream encoder with explicit configuration.
+// NewMultistreamEncoder returns an encoder for an explicit channel mapping.
+// sampleRate is in hertz and must be 8, 12, 16, 24, or 48 kHz; 96 kHz is
+// available in builds tagged gopus_qext. channels is the number of input
+// channels (1–255), streams is the number of elementary streams (1–255), and
+// coupledStreams is the number of initial stereo streams (0–streams). The sum
+// streams+coupledStreams must not exceed 255.
 //
-// Parameters:
-//   - sampleRate: input sample rate (8000, 12000, 16000, 24000, or 48000 Hz)
-//   - channels: total input channels (1-255)
-//   - streams: total elementary streams (N, 1-255)
-//   - coupledStreams: number of coupled stereo streams (M, 0 to streams)
-//     with streams + coupledStreams <= 255
-//   - mapping: channel mapping table (length must equal channels)
-//   - application: application hint for encoder optimization
+// mapping must contain one entry per input channel. Values 0 through
+// 2*coupledStreams-1 select left or right channels of coupled streams (even is
+// left, odd is right); subsequent values select mono streams. The value 255
+// omits an input channel. Every stream must receive input, and both channels of
+// every coupled stream must be mapped. The constructor copies mapping.
 //
-// Returns ErrInvalidChannels when channels is outside the explicit multistream
-// range [1, 255].
-//
-// The mapping table determines how input audio is routed to stream encoders:
-//   - Values 0 to 2*M-1: to coupled streams (even=left, odd=right of stereo pair)
-//   - Values 2*M to N+M-1: to uncoupled (mono) streams
-//   - Value 255: silent channel (input ignored)
-//
-// Example for 5.1 surround (6 channels, 4 streams, 2 coupled):
-//
-//	mapping = [0, 4, 1, 2, 3, 5]
-//	  Input 0 (FL): mapping[0]=0 -> coupled stream 0, left
-//	  Input 1 (C):  mapping[1]=4 -> uncoupled stream 2 (2*2+0)
-//	  Input 2 (FR): mapping[2]=1 -> coupled stream 0, right
-//	  Input 3 (RL): mapping[3]=2 -> coupled stream 1, left
-//	  Input 4 (RR): mapping[4]=3 -> coupled stream 1, right
-//	  Input 5 (LFE): mapping[5]=5 -> uncoupled stream 3 (2*2+1)
+// The constructor returns an error for an unsupported rate, invalid count,
+// mapping or layout, or invalid application.
 func NewMultistreamEncoder(sampleRate, channels, streams, coupledStreams int, mapping []byte, application Application) (*MultistreamEncoder, error) {
 	if !validSampleRate(sampleRate) {
 		return nil, ErrInvalidSampleRate
@@ -106,6 +86,7 @@ func NewMultistreamEncoder(sampleRate, channels, streams, coupledStreams int, ma
 	if err != nil {
 		return nil, err
 	}
+	maxSamples := sampleRate * 120 / 1000 * channels
 
 	mse := &MultistreamEncoder{
 		enc:                 enc,
@@ -114,7 +95,7 @@ func NewMultistreamEncoder(sampleRate, channels, streams, coupledStreams int, ma
 		frameSize:           int32(sampleRate / 50), // Default 20ms at the native rate
 		expertFrameDuration: ExpertFrameDurationArg,
 		application:         application,
-		scratchPCM32:        make([]float32, 5760*channels),
+		scratchPCM32:        make([]float32, maxSamples),
 	}
 
 	// Apply application hint
@@ -125,23 +106,9 @@ func NewMultistreamEncoder(sampleRate, channels, streams, coupledStreams int, ma
 	return mse, nil
 }
 
-// NewMultistreamEncoderDefault creates a multistream encoder with default Vorbis-style mapping
-// for standard channel configurations (1-8 channels).
-//
-// This is a convenience function that calls the internal DefaultMapping() to get the appropriate
-// streams, coupledStreams, and mapping for the given channel count.
-// Returns ErrInvalidChannels when channels is outside the default-mapping range [1, 8].
-// Use NewMultistreamEncoder with an explicit mapping for layouts above 8 channels.
-//
-// Supported channel counts:
-//   - 1: mono (1 stream, 0 coupled)
-//   - 2: stereo (1 stream, 1 coupled)
-//   - 3: 3.0 (2 streams, 1 coupled)
-//   - 4: quad (2 streams, 2 coupled)
-//   - 5: 5.0 (3 streams, 2 coupled)
-//   - 6: 5.1 surround (4 streams, 2 coupled)
-//   - 7: 6.1 surround (4 streams, 3 coupled)
-//   - 8: 7.1 surround (5 streams, 3 coupled)
+// NewMultistreamEncoderDefault returns an encoder with the Vorbis mapping for
+// 1–8 input channels. Use NewMultistreamEncoder for other layouts. It returns
+// an error for an unsupported sample rate, channel count, or application.
 func NewMultistreamEncoderDefault(sampleRate, channels int, application Application) (*MultistreamEncoder, error) {
 	if !validSampleRate(sampleRate) {
 		return nil, ErrInvalidSampleRate
@@ -157,6 +124,7 @@ func NewMultistreamEncoderDefault(sampleRate, channels int, application Applicat
 	if err != nil {
 		return nil, err
 	}
+	maxSamples := sampleRate * 120 / 1000 * channels
 
 	mse := &MultistreamEncoder{
 		enc:                 enc,
@@ -165,7 +133,7 @@ func NewMultistreamEncoderDefault(sampleRate, channels int, application Applicat
 		frameSize:           int32(sampleRate / 50), // Default 20ms at the native rate
 		expertFrameDuration: ExpertFrameDurationArg,
 		application:         application,
-		scratchPCM32:        make([]float32, 5760*channels),
+		scratchPCM32:        make([]float32, maxSamples),
 	}
 
 	// Apply application hints
@@ -176,15 +144,9 @@ func NewMultistreamEncoderDefault(sampleRate, channels int, application Applicat
 	return mse, nil
 }
 
-// MultistreamDecoder decodes Opus multistream packets into multi-channel PCM audio.
-//
-// A MultistreamDecoder instance maintains internal state and is NOT safe for concurrent use.
-// Each goroutine should create its own MultistreamDecoder instance.
-//
-// Multistream decoding is used for surround sound configurations (5.1, 7.1, etc.)
-// where multiple coupled (stereo) and uncoupled (mono) streams are combined.
-//
-// Reference: RFC 6716 Appendix B, RFC 7845 Section 5.1.1
+// MultistreamDecoder decodes Opus multistream packets into interleaved PCM. It
+// retains stream state and is not safe for concurrent use; use one decoder per
+// stream.
 type MultistreamDecoder struct {
 	dec              *multistream.Decoder
 	sampleRate       int32
@@ -193,25 +155,24 @@ type MultistreamDecoder struct {
 	ignoreExtensions bool
 	dnnBlob          *dnnblob.Blob
 	softClipMem      []float32
+	decodeScratch    []float32
 }
 
-// NewMultistreamDecoder creates a new multistream decoder with explicit configuration.
+// NewMultistreamDecoder returns a decoder for an explicit channel mapping.
+// sampleRate is in hertz and must be 8, 12, 16, 24, or 48 kHz; 96 kHz is
+// available in builds tagged gopus_qext. channels is the number of output
+// channels (1–255), streams is the number of elementary streams (1–255), and
+// coupledStreams is the number of initial stereo streams (0–streams). The sum
+// streams+coupledStreams must not exceed 255.
 //
-// Parameters:
-//   - sampleRate: output sample rate (8000, 12000, 16000, 24000, or 48000 Hz)
-//   - channels: total output channels (1-255)
-//   - streams: total elementary streams (N, 1-255)
-//   - coupledStreams: number of coupled stereo streams (M, 0 to streams)
-//     with streams + coupledStreams <= 255
-//   - mapping: channel mapping table (length must equal channels)
+// mapping must contain one entry per output channel. Values 0 through
+// 2*coupledStreams-1 select left or right channels of coupled streams (even is
+// left, odd is right); subsequent values select mono streams. Repeated values
+// duplicate a decoded channel, and 255 produces silence. The constructor copies
+// mapping.
 //
-// Returns ErrInvalidChannels when channels is outside the explicit multistream
-// range [1, 255].
-//
-// The mapping table determines how decoded audio is routed to output channels:
-//   - Values 0 to 2*M-1: from coupled streams (even=left, odd=right of stereo pair)
-//   - Values 2*M to N+M-1: from uncoupled (mono) streams
-//   - Value 255: silent channel (output zeros)
+// The constructor returns an error for an unsupported rate, invalid count, or
+// invalid mapping.
 func NewMultistreamDecoder(sampleRate, channels, streams, coupledStreams int, mapping []byte) (*MultistreamDecoder, error) {
 	if !validSampleRate(sampleRate) {
 		return nil, ErrInvalidSampleRate
@@ -246,23 +207,9 @@ func NewMultistreamDecoder(sampleRate, channels, streams, coupledStreams int, ma
 	}, nil
 }
 
-// NewMultistreamDecoderDefault creates a multistream decoder with default Vorbis-style mapping
-// for standard channel configurations (1-8 channels).
-//
-// This is a convenience function that calls the internal DefaultMapping() to get the appropriate
-// streams, coupledStreams, and mapping for the given channel count.
-// Returns ErrInvalidChannels when channels is outside the default-mapping range [1, 8].
-// Use NewMultistreamDecoder with an explicit mapping for layouts above 8 channels.
-//
-// Supported channel counts:
-//   - 1: mono (1 stream, 0 coupled)
-//   - 2: stereo (1 stream, 1 coupled)
-//   - 3: 3.0 (2 streams, 1 coupled)
-//   - 4: quad (2 streams, 2 coupled)
-//   - 5: 5.0 (3 streams, 2 coupled)
-//   - 6: 5.1 surround (4 streams, 2 coupled)
-//   - 7: 6.1 surround (4 streams, 3 coupled)
-//   - 8: 7.1 surround (5 streams, 3 coupled)
+// NewMultistreamDecoderDefault returns a decoder with the Vorbis mapping for
+// 1–8 output channels. Use NewMultistreamDecoder for other layouts. It returns
+// an error for an unsupported sample rate or channel count.
 func NewMultistreamDecoderDefault(sampleRate, channels int) (*MultistreamDecoder, error) {
 	if !validSampleRate(sampleRate) {
 		return nil, ErrInvalidSampleRate

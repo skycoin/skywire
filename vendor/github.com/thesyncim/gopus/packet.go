@@ -119,15 +119,16 @@ var tocTable = func() [256]TOC {
 	return table
 }()
 
-// GenerateTOC creates a TOC byte from encoding parameters.
-// config: Configuration index 0-31 (from configTable)
-// stereo: True for stereo, false for mono
-// frameCode: Frame count code 0-3
+// GenerateTOC packs a configuration, channel flag, and frame-count code into
+// a TOC byte.
+// config contributes its low five bits, and frameCode contributes its low two bits:
 //
 //	0: 1 frame
 //	1: 2 equal-sized frames
 //	2: 2 different-sized frames
-//	3: arbitrary number of frames
+//	3: frame count is encoded in the packet
+//
+// The function masks these fields; it does not validate their values.
 func GenerateTOC(config uint8, stereo bool, frameCode uint8) byte {
 	toc := (config & 0x1F) << 3
 	if stereo {
@@ -137,8 +138,10 @@ func GenerateTOC(config uint8, stereo bool, frameCode uint8) byte {
 	return toc
 }
 
-// ConfigFromParams returns the config index for given mode, bandwidth, and frame size.
-// Returns -1 if the combination is invalid.
+// ConfigFromParams returns the TOC configuration index for mode, bandwidth,
+// and frameSize.
+// frameSize is measured in samples at 48 kHz. It returns -1 when the combination
+// does not appear in the Opus configuration table.
 func ConfigFromParams(mode Mode, bandwidth Bandwidth, frameSize int) int {
 	// Search configTable for matching entry
 	for i, entry := range configTable {
@@ -154,7 +157,9 @@ func ValidConfig(config uint8) bool {
 	return config < 32
 }
 
-// ParseTOC parses a TOC byte and returns the decoded fields.
+// ParseTOC decodes the configuration, channel flag, and frame-count code in b.
+// Every byte value has a TOC interpretation; the returned FrameSize is in
+// samples at 48 kHz.
 func ParseTOC(b byte) TOC {
 	return tocTable[b]
 }

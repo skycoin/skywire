@@ -108,21 +108,18 @@ type stereoDecState struct {
 	sSide       [2]int16
 }
 
-// stereoEncState holds encoder-side stereo state, matching libopus stereo_enc_state.
-// This enables proper LP filtering for stereo mid/side predictor analysis.
+// stereoEncState is the encoder-side stereo state, libopus stereo_enc_state
+// (silk/structs.h).
 type stereoEncState struct {
 	predPrevQ13   [2]int16 // Previous frame prediction coefficients (Q13)
-	sMid          [2]int16 // Mid signal buffer for LP filter continuity
-	sSide         [2]int16 // Side signal buffer for LP filter continuity
-	widthPrevQ14  int16    // Previous frame's stereo width (Q14)
+	sMid          [2]int16 // Mid signal history for LP filter continuity
+	sSide         [2]int16 // Side signal history for LP filter continuity
+	midSideAmpQ0  [4]int32 // Smoothed mid/residual amplitudes for LP/HP (Q0)
 	smthWidthQ14  int16    // Smoothed stereo width (Q14)
+	widthPrevQ14  int16    // Previous frame's stereo width (Q14)
 	silentSideLen int16    // Accumulated silent side length (samples)
-	// Tracks whether the previous coded frame collapsed to mid-only so the
-	// first returning side frame can reset state like libopus enc_API.c.
-	prevDecodeOnlyMiddle int32
-	// Per-frame stereo metadata for LBRR in the next packet (set during frame encode).
-	lbrrStereoIx [maxFramesPerPacket]StereoQuantIndices
-	lbrrMidOnly  [maxFramesPerPacket]int32
-	// Smoothed mid/residual amplitudes for LP/HP (Q0), matching libopus.
-	midSideAmpQ0 [4]int32
+	// Per-frame predictor indices and mid-only flags of the current packet,
+	// coded again with the packet's LBRR data in the next packet.
+	predIx       [maxFramesPerPacket][2][3]int8
+	midOnlyFlags [maxFramesPerPacket]int8
 }

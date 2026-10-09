@@ -1,7 +1,8 @@
 package gopus
 
-// Reset clears the decoder state for a new stream.
-// Call this when starting to decode a new audio stream.
+// Reset clears codec, concealment, extension-payload, and soft-clipping history
+// for a new stream. It preserves the decoder's sample rate, channel layout, gain,
+// and extension-handling setting.
 func (d *MultistreamDecoder) Reset() {
 	d.dec.Reset()
 	d.lastFrameSize = d.sampleRate / 50

@@ -10,21 +10,11 @@ import "errors"
 // ErrInvalidDefaultMappingChannels indicates a channel count outside the default mapping range.
 var ErrInvalidDefaultMappingChannels = errors.New("multistream: invalid default mapping channel count (must be 1-8)")
 
-// DefaultMapping returns the default Vorbis-style (mapping family 1) configuration
-// for a given channel count.
-//
-// Returns:
-//   - streams: total number of elementary Opus streams (N)
-//   - coupledStreams: number of coupled (stereo) streams (M), where first M streams are stereo
-//   - mapping: channel mapping table where mapping[i] indicates the source for output channel i
-//   - err: error if channel count is invalid for the default mapping (must be 1-8)
-//
-// The mapping table encodes which decoded channel feeds each output channel:
-//   - Values 0 to 2*M-1: from coupled streams (even=left, odd=right of stereo pair)
-//   - Values 2*M to N+M-1: from uncoupled (mono) streams
-//   - Value 255: silent channel
-//
-// Reference: RFC 7845 Section 5.1.1
+// DefaultMapping returns the Vorbis mapping family configuration for 1–8
+// channels. In a decoder, mapping[i] selects the decoded stream channel for
+// output channel i; in an encoder, it selects the destination stream channel for
+// input channel i. The returned slice is newly allocated. Other channel counts
+// return ErrInvalidDefaultMappingChannels.
 func DefaultMapping(channels int) (streams, coupledStreams int, mapping []byte, err error) {
 	switch channels {
 	case 1:
