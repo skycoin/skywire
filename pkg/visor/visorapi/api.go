@@ -711,9 +711,12 @@ type DmsgPtyExecArgs struct {
 	RemotePort uint16
 	Req        pty.CommandExecReq
 	// Scheme: "" (default — MultiDialer chain), "dmsg" (force dmsg
-	// only), or "skynet" (force skynet only). Unknown values
-	// return a clear error rather than silently falling back.
+	// only), "skynet" (force skynet only), or "tcp" (the remote's
+	// direct-TCP pty listener at Addr, dialed as this visor). Unknown
+	// values return a clear error rather than silently falling back.
 	Scheme string
+	// Addr is the host:port of the direct-TCP listener for Scheme "tcp".
+	Addr string
 }
 
 // UptimeHistoryArgs is the request shape for API.UptimeHistory. All

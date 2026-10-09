@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"regexp"
 	"strconv"
@@ -267,7 +268,10 @@ Transport (--transport, default auto):
   dmsg    force via-visor dmsg.
   skynet  force via-visor skynet.
   tcp     direct noise-TCP; needs a host:port target (--via or a
-          tcp://<pk>@host:port positional).
+          tcp://<pk>@host:port positional). The local visor dials it
+          as itself, so the remote whitelist sees the visor's key. With
+          --sk, DMSGPTY_SK, --visor-key or --via-visor this CLI dials it
+          instead, which also works while the visor is down.
 --standalone is not supported here (no standalone-dmsg exec path yet).
 
 Target grammar — in addition to the bare <pk>:
@@ -335,6 +339,7 @@ A target scheme that disagrees with an explicit --transport errors.`,
 
 		// Direct-TCP: --via flag or a tcp target. pk is in the URL, so
 		// args are just `<command> [args...]`.
+		tcpAddr := ""
 		if via != "" || eff == internal.TransportTCP {
 			if via == "" {
 				return fmt.Errorf("pty exec: --transport tcp needs a host:port target (tcp://<pk>@host:port or --via tcp://<pk>@host:port)")
@@ -342,6 +347,19 @@ A target scheme that disagrees with an explicit --transport errors.`,
 			if len(args) < 1 {
 				return fmt.Errorf("pty exec --via: <command> required")
 			}
+			rPK, addr, err := parseTCPVia(via)
+			if err != nil {
+				return err
+			}
+			// With no identity given, the local visor dials as itself, so
+			// a remote whitelist holding the visor's key lets this in
+			// without reading the visor's config.
+			if !tcpIdentityGiven(cmd) {
+				tcpAddr = addr
+				args = append([]string{rPK.Hex()}, args...)
+			}
+		}
+		if via != "" && tcpAddr == "" {
 			rPK, addr, err := parseTCPVia(via)
 			if err != nil {
 				return err
@@ -373,6 +391,12 @@ A target scheme that disagrees with an explicit --transport errors.`,
 			scheme = "dmsg"
 		case internal.TransportSkynet:
 			scheme = "skynet"
+		}
+		if tcpAddr != "" {
+			scheme = "tcp"
+			if _, p, err := net.SplitHostPort(tcpAddr); err == nil {
+				ptyPort = p
+			}
 		}
 
 		if len(args) < 2 {
@@ -429,6 +453,7 @@ A target scheme that disagrees with an explicit --transport errors.`,
 				TimeoutMS: timeout.Milliseconds(),
 			},
 			Scheme: scheme,
+			Addr:   tcpAddr,
 		})
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "exec: %v\n", err) //nolint:errcheck
@@ -473,6 +498,13 @@ func reportExecResult(cmd *cobra.Command, resp *pty.CommandExecResult) {
 // when explicitly set; the legacy opt-in --via-visor is honored only
 // when --visor-key was not set. When neither is set the historical
 // default holds: exec/start do NOT borrow (they were opt-in).
+// tcpIdentityGiven reports whether the caller chose the identity for a direct
+// TCP dial. Without one, the local visor dials as itself.
+func tcpIdentityGiven(cmd *cobra.Command) bool {
+	f := cmd.Flags()
+	return f.Changed("sk") || f.Changed("visor-key") || f.Changed("via-visor") || os.Getenv("DMSGPTY_SK") != ""
+}
+
 func resolveVisorKeyBorrow(cmd *cobra.Command, visorKey, viaVisor bool) bool {
 	if cmd.Flags().Changed("visor-key") {
 		return visorKey
