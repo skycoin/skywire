@@ -314,8 +314,26 @@ func (r *router) listRoutes3HopFrom(ctx context.Context, log *logging.Logger, f 
 		r.routeSource.listNoPath.Add(1)
 		return nil, nil, err
 	}
-	r.routeSource.listRoutes.Add(1)
+	// The same first-hop filter the route finder's candidates go through: a
+	// route that just died young, or a first hop a sibling tunnel holds, gives
+	// way to the next candidate.
+	cands := make([][]routing.Hop, len(legs))
+	for i, l := range legs {
+		cands[i] = l.Forward
+	}
+	free := r.freeFirstHops(cands, opts)
+	if len(free) == 0 {
+		r.routeSource.listExcluded.Add(1)
+		return nil, nil, errors.New("transport-list routes: every 3-hop candidate leaves over an excluded first hop")
+	}
 	leg := legs[0]
+	for _, l := range legs {
+		if &l.Forward[0] == &free[0][0] {
+			leg = l
+			break
+		}
+	}
+	r.routeSource.listRoutes.Add(1)
 	log.WithField("lists", len(lists)).WithField("candidates", len(legs)).
 		Infof("3-hop route from transport lists via %s and %s (no TPD)", leg.Forward[0].To, leg.Forward[1].To)
 	if opts != nil {
