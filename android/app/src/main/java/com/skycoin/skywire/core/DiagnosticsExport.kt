@@ -1,5 +1,7 @@
 package com.skycoin.skywire.core
 
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Context
 import android.os.Build
 import com.skycoin.skywire.api.VisorApi
@@ -54,6 +56,7 @@ object DiagnosticsExport {
         // first poll takes.
         val sources = buildList<Pair<String, suspend () -> String>> {
             add("skywire-config.redacted.json" to { config.redactedConfigJson() })
+            add("exit-reasons.txt" to { exitReasons(app) })
             add("core-runtime.log" to {
                 api.runtimeLogs(since = 0).entries.orEmpty().joinToString("\n")
             })
@@ -90,6 +93,7 @@ object DiagnosticsExport {
                 }
             }
 
+            zip.file(notes, "app-crash.log", paths.crashLogFile)
             // The one source that exists when the visor will not start.
             zip.file(notes, "process-output.log", paths.processLogFile)
             zip.file(
@@ -116,6 +120,10 @@ object DiagnosticsExport {
         process-output.log[.1]      the visor child process's combined stdout/stderr, captured by
                                     the app — the only source that exists when the visor won't start
         skywire-config.redacted.json the visor config WITHOUT its secret key
+        exit-reasons.txt            why the app's last processes ended, as Android recorded it:
+                                    LOW_MEMORY or OTHER means the phone stopped the app,
+                                    CRASH means the app failed (stack in app-crash.log)
+        app-crash.log               stack traces of the app's own crashes, if it has had any
         device.txt                  phone, Android and version details
         collection-notes.txt        present only if something could not be collected, and why
 
@@ -136,6 +144,46 @@ object DiagnosticsExport {
             appendLine("abis = ${Build.SUPPORTED_ABIS.joinToString(",")}")
         }
     }
+
+    /**
+     * Android's record of how this app's recent processes ended, newest first
+     * (API 30+). It is what tells a crash from the phone stopping the app.
+     */
+    private fun exitReasons(context: Context): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return "Not recorded before Android 11 (this is Android ${Build.VERSION.RELEASE})."
+        }
+        val am = context.getSystemService(ActivityManager::class.java)
+        val exits = am.getHistoricalProcessExitReasons(context.packageName, 0, MAX_EXITS)
+        if (exits.isEmpty()) return "No exits recorded."
+        return exits.joinToString("\n") { e ->
+            "${Instant.ofEpochMilli(e.timestamp)} ${e.processName} pid=${e.pid} " +
+                "reason=${exitReasonName(e.reason)} status=${e.status} importance=${e.importance} " +
+                "pss=${e.pss}kB rss=${e.rss}kB ${e.description.orEmpty()}"
+        }
+    }
+
+    private fun exitReasonName(reason: Int): String = when (reason) {
+        ApplicationExitInfo.REASON_EXIT_SELF -> "EXIT_SELF"
+        ApplicationExitInfo.REASON_SIGNALED -> "SIGNALED"
+        ApplicationExitInfo.REASON_LOW_MEMORY -> "LOW_MEMORY"
+        ApplicationExitInfo.REASON_CRASH -> "CRASH"
+        ApplicationExitInfo.REASON_CRASH_NATIVE -> "CRASH_NATIVE"
+        ApplicationExitInfo.REASON_ANR -> "ANR"
+        ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "INITIALIZATION_FAILURE"
+        ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "PERMISSION_CHANGE"
+        ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "EXCESSIVE_RESOURCE_USAGE"
+        ApplicationExitInfo.REASON_USER_REQUESTED -> "USER_REQUESTED"
+        ApplicationExitInfo.REASON_USER_STOPPED -> "USER_STOPPED"
+        ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "DEPENDENCY_DIED"
+        ApplicationExitInfo.REASON_OTHER -> "OTHER"
+        ApplicationExitInfo.REASON_FREEZER -> "FREEZER"
+        ApplicationExitInfo.REASON_PACKAGE_STATE_CHANGE -> "PACKAGE_STATE_CHANGE"
+        ApplicationExitInfo.REASON_PACKAGE_UPDATED -> "PACKAGE_UPDATED"
+        else -> "UNKNOWN($reason)"
+    }
+
+    private const val MAX_EXITS = 16
 
     // --- zip plumbing ---
 
