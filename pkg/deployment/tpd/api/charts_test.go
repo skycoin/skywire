@@ -139,7 +139,7 @@ func TestGraphEngineRoutes(t *testing.T) {
 	w := httptest.NewRecorder()
 	api.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/graph/engine.js", nil))
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), "'netview'", "the loader runs the module as the netview role")
+	require.Contains(t, w.Body.String(), "globalThis.Go", "the loader is the wasm_exec.js that runs the netview module")
 
 	w = httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/graph/engine.wasm", nil)

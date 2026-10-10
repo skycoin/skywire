@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/nettest"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/httputil"
 )
 
 func ExampleMakeHTTPTransport() {
@@ -74,7 +74,7 @@ func ExampleMakeHTTPTransport() {
 		}
 	}()
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	//	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 	r.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("<html><body><h1>Hello World!</h1></body></html>")) //nolint:errcheck

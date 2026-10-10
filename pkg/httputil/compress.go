@@ -73,6 +73,11 @@ type compressWriter struct {
 }
 
 func (c *compressWriter) WriteHeader(status int) {
+	if status < http.StatusOK {
+		// 1xx goes out at once: a WebSocket upgrade writes 101 and then hijacks.
+		c.ResponseWriter.WriteHeader(status)
+		return
+	}
 	if !c.decided {
 		c.status = status
 	}
@@ -118,7 +123,7 @@ func (c *compressWriter) decide(large bool) error {
 	}
 	c.ResponseWriter.WriteHeader(c.status)
 	if len(c.buf) > 0 {
-		_, err := c.ResponseWriter.Write(c.buf)
+		_, err := c.ResponseWriter.Write(c.buf) //nolint:gosec // passes the handler's own body through
 		c.buf = nil
 		return err
 	}

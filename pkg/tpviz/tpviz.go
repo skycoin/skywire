@@ -18,13 +18,13 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	geoip2 "github.com/oschwald/geoip2-golang/v2"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/geoip"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -1420,7 +1420,7 @@ func (s *Server) getCacheAgeSeconds(cacheFile string) int64 {
 // raw from here. The content-type gate leaves the wasm blob
 // (application/wasm) and the websocket upgrade alone.
 func (s *Server) Handler() http.Handler {
-	return middleware.Compress(5)(s.mux)
+	return httputil.CompressMin(httputil.CompressMinBytes, 5)(s.mux)
 }
 
 // Start initializes the cache and starts auto-refresh without starting the HTTP server.

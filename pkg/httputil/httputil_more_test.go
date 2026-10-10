@@ -12,7 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -197,7 +196,7 @@ func TestSetLoggerMiddleware(t *testing.T) {
 	t.Run("with request id sets context logger", func(t *testing.T) {
 		h := SetLoggerMiddleware(discardLog())(next)
 		r := httptest.NewRequest(http.MethodGet, "/", nil)
-		r = r.WithContext(context.WithValue(r.Context(), middleware.RequestIDKey, "req-1"))
+		r = r.WithContext(WithReqID(r.Context(), "req-1"))
 		h.ServeHTTP(httptest.NewRecorder(), r)
 		assert.NotNil(t, seen)
 	})
@@ -221,7 +220,7 @@ func TestLogMiddleware(t *testing.T) {
 
 	t.Run("with request id", func(t *testing.T) {
 		r := httptest.NewRequest(http.MethodGet, "/path", nil)
-		r = r.WithContext(context.WithValue(r.Context(), middleware.RequestIDKey, "rid"))
+		r = r.WithContext(WithReqID(r.Context(), "rid"))
 		w := httptest.NewRecorder()
 		mw(next).ServeHTTP(w, r)
 		assert.Equal(t, http.StatusTeapot, w.Code)

@@ -12,8 +12,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/sirupsen/logrus"
 
@@ -141,7 +139,7 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 		panic("cannot create new api without a store.Storer")
 	}
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	api := &API{
 		Handler:                     r,
 		metrics:                     m,
@@ -165,10 +163,10 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 	if !enableLoadTesting {
 		r.Use(newRemoteRateLimiter().middleware)
 	}
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP) //nolint:staticcheck
+	r.Use(httputil.RequestID)
+	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(log))
-	r.Use(middleware.Recoverer)
+	r.Use(httputil.Recoverer)
 	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip JSON responses on the wire — this router is also served over
 	// dmsg, where every byte is relayed. Matches rf/ut/sd.
@@ -332,7 +330,7 @@ func (a *API) AllServers(ctx context.Context, _ logrus.FieldLogger) (entries []*
 func (a *API) getEntry() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		staticPK := cipher.PubKey{}
-		if err := staticPK.UnmarshalText([]byte(chi.URLParam(r, "pk"))); err != nil {
+		if err := staticPK.UnmarshalText([]byte(r.PathValue("pk"))); err != nil {
 			a.handleError(w, r, disc.ErrBadInput)
 			return
 		}
@@ -867,7 +865,7 @@ func (a *API) allClientsByServer() http.HandlerFunc {
 func (a *API) clientsByServer() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		serverPK := cipher.PubKey{}
-		if err := serverPK.UnmarshalText([]byte(chi.URLParam(r, "pk"))); err != nil {
+		if err := serverPK.UnmarshalText([]byte(r.PathValue("pk"))); err != nil {
 			a.handleError(w, r, disc.ErrBadInput)
 			return
 		}

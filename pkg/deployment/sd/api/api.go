@@ -15,9 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -248,9 +245,9 @@ const maxBodyBytes = 1 << 20
 // (log, enableMetrics, nonceDB, reqsInFlightCountMiddleware) is
 // assigned in New and never mutated afterwards, so the resulting
 // handler is safe to share across request goroutines.
-func (a *API) newRouter() chi.Router {
-	r := chi.NewRouter()
-	r.Use(middleware.RealIP) //nolint:staticcheck
+func (a *API) newRouter() *httputil.Router {
+	r := httputil.NewRouter()
+	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(a.log))
 	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip service-discovery JSON responses on the wire (skips small bodies,
@@ -262,9 +259,9 @@ func (a *API) newRouter() chi.Router {
 		r.Use(a.reqsInFlightCountMiddleware.Handle)
 		r.Use(metricsutil.RequestDurationMiddleware)
 	}
-	r.Use(middleware.Timeout(httpTimeout))
+	r.Use(httputil.Timeout(httpTimeout))
 
-	r.Use(cors.Handler(cors.Options{
+	r.Use(httputil.CORS(httputil.CORSOptions{
 		AllowedOrigins: []string{"*"},
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
@@ -272,11 +269,11 @@ func (a *API) newRouter() chi.Router {
 		MaxAge:         300,
 	}))
 
-	r.Route("/api", func(r chi.Router) {
+	r.Route("/api", func(r *httputil.Router) {
 		r.Get("/services", a.getEntries)
 		r.Get("/services/{addr}", a.getEntry)
 
-		r.Group(func(r chi.Router) {
+		r.Group(func(r *httputil.Router) {
 			if a.nonceDB != nil {
 				r.Use(httpauth.MakeMiddleware(a.nonceDB))
 			}
@@ -634,7 +631,7 @@ func (a *API) deregisterEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check sType
-	sType := chi.URLParam(r, "type")
+	sType := r.PathValue("type")
 	if sType == "" {
 		a.log.WithError(ErrMissingType).WithField("Step", "Checking type").Error("Deregistration process interrupt.")
 		a.writeError(w, r, http.StatusBadRequest, ErrMissingType.Error())
@@ -841,7 +838,7 @@ func ipIsPublic(se servicedisc.Service, remoteIP string) bool {
 func serviceAddrFromParam(r *http.Request) (servicedisc.SWAddr, error) {
 	const key = "addr"
 	var addr servicedisc.SWAddr
-	err := addr.UnmarshalText([]byte(chi.URLParam(r, key)))
+	err := addr.UnmarshalText([]byte(r.PathValue(key)))
 	return addr, err
 }
 

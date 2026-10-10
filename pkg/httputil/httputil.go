@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -157,7 +156,7 @@ func SetLoggerMiddleware(log logrus.FieldLogger) func(next http.Handler) http.Ha
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 
-			if reqID := middleware.GetReqID(ctx); reqID != "" && log != nil {
+			if reqID := GetReqID(ctx); reqID != "" && log != nil {
 				ctx = context.WithValue(ctx, LoggerKey, log.WithField("RequestID", reqID))
 			}
 			next.ServeHTTP(w, r.WithContext(ctx))
