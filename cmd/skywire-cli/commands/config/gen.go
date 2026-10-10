@@ -1149,6 +1149,10 @@ func mergeExistingApps(log *logging.Logger) {
 	if l := oldConfCache.MemoryLimit; l != "" && l != "auto" {
 		conf.MemoryLimit = oldConfCache.MemoryLimit
 	}
+	// So is where the status page of those services is served.
+	if oldConfCache.DeploymentStatusAddr != "" {
+		conf.DeploymentStatusAddr = oldConfCache.DeploymentStatusAddr
+	}
 	if oldConfCache.Launcher == nil {
 		return
 	}

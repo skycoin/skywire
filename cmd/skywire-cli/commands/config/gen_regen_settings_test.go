@@ -35,9 +35,10 @@ func TestRegenPreservesVisorPersistedSettings(t *testing.T) {
 		Launcher: &visorconfig.Launcher{
 			Apps: []appserver.AppConfig{{Name: "skysocks-client", AutoStart: true}},
 		},
-		AppSettings:      map[string]visorconfig.AppSettingsEntry{"skysocks-client": {}},
-		EmbeddedServices: []svcs.Block{{Type: "service-discovery", Raw: json.RawMessage(`{"type":"service-discovery"}`)}},
-		MemoryLimit:      "5600MiB",
+		AppSettings:          map[string]visorconfig.AppSettingsEntry{"skysocks-client": {}},
+		EmbeddedServices:     []svcs.Block{{Type: "service-discovery", Raw: json.RawMessage(`{"type":"service-discovery"}`)}},
+		MemoryLimit:          "5600MiB",
+		DeploymentStatusAddr: "127.0.0.1:8092",
 	}
 	conf = new(visorconfig.V1)
 
@@ -57,6 +58,7 @@ func TestRegenPreservesVisorPersistedSettings(t *testing.T) {
 		"an operator's autostart toggle must survive a regen (pre-existing contract)")
 	require.Len(t, conf.EmbeddedServices, 1, "embedded_services must survive a regen")
 	require.Equal(t, "5600MiB", conf.MemoryLimit, "memory_limit must survive a regen")
+	require.Equal(t, "127.0.0.1:8092", conf.DeploymentStatusAddr, "deployment_status_addr must survive a regen")
 }
 
 // The same call must be a no-op on a fresh (non-regen) generate, so a
