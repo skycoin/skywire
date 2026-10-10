@@ -38,17 +38,10 @@ type request struct {
 	// Unstructured input (filenames, data for WRITE call)
 	inPayload []byte
 
-	// WRITE data, if not contiguous.
-	inPayloadIov [][]byte
-	inPayloadOne [1][]byte
-
-	// nil if the request has no extension.
-	ext *requestExt
-
 	// Output data.
 	status Status
 
-	// Unstructured output. Only one of outPayload and readResult is non-nil.
+	// Unstructured output. Only one of these is non-nil.
 	outPayload []byte
 	readResult ReadResult
 
@@ -76,8 +69,6 @@ type requestAlloc struct {
 
 	// Input, if small enough to fit here.
 	smallInputBuf [128]byte
-
-	extInline requestExt
 }
 
 func (r *request) inHeader() *InHeader {
@@ -95,9 +86,6 @@ func (r *request) clear() {
 	r.outHeaderBuf = nil
 	r.outDataBuf = nil
 	r.inPayload = nil
-	r.inPayloadIov = nil
-	r.inPayloadOne[0] = nil
-	r.ext = nil
 	r.status = OK
 	r.outPayload = nil
 	r.startTime = time.Time{}
@@ -125,25 +113,18 @@ func (r *request) InputDebug() string {
 	if h.FileNames == 1 {
 		name := r.filename()
 
-		rest := r.inPayload[min(len(name)+1, len(r.inPayload)):]
+		rest := r.inPayload[len(name)+1:]
 		names = fmt.Sprintf(" %q %s", name, summarizePayload(rest))
 	} else if h.FileNames == 2 {
-		n1, n2, _ := r.filenames()
+		n1, n2 := r.filenames()
 		names = fmt.Sprintf(" %q %q", n1, n2)
-	} else if r.inPayloadIov != nil {
-		names = fmt.Sprintf(" %db in %d segments", iovLen(r.inPayloadIov), len(r.inPayloadIov))
 	} else {
 		names = summarizePayload(r.inPayload)
 	}
 
-	ext := ""
-	if r.ext != nil {
-		ext = " " + r.ext.String()
-	}
-
-	return fmt.Sprintf("rx %d: %s n%d %s%s%s p%d",
+	return fmt.Sprintf("rx %d: %s n%d %s%s p%d",
 		hdr.Unique, operationName(hdr.Opcode), hdr.NodeId,
-		val, names, ext, hdr.Caller.Pid)
+		val, names, hdr.Caller.Pid)
 }
 
 func summarizePayload(p []byte) string {
@@ -180,10 +161,7 @@ func (r *request) OutputDebug() string {
 		} else {
 			spl := ""
 
-			if ws, ok := r.readResult.(withSlice); ok {
-				slices, _ := ws.Slices()
-				spl = fmt.Sprintf(" (%d slices)", len(slices))
-			} else if r.readResult != nil {
+			if r.readResult != nil {
 				_, pipeOK := r.readResult.(statefulResult)
 				_, fdOK := r.readResult.(seekableResult)
 				if fdOK || pipeOK {
@@ -223,56 +201,12 @@ func (r *requestAlloc) setInput(input []byte) bool {
 	return true
 }
 
-func (r *requestAlloc) splitPayload(inSize, structSize int) Status {
-	r.inPayload = r.inputBuf[inSize:]
-	r.inputBuf = r.inputBuf[:inSize]
-	r.extendInput(structSize)
-	return r.splitExt(&r.extInline)
-}
-
-func (r *requestAlloc) extendInput(size int) {
-	n := len(r.inputBuf)
-	if n >= size {
-		return
-	}
-	payloadInline := len(r.inPayload) > 0 && unsafe.SliceData(r.inPayload) == &r.smallInputBuf[n]
-	if payloadInline && size+len(r.inPayload) > len(r.smallInputBuf) {
-		buf := make([]byte, size)
-		copy(buf, r.inputBuf)
-		r.inputBuf = buf
-		return
-	}
-	if payloadInline {
-		r.inPayload = r.smallInputBuf[size : size+copy(r.smallInputBuf[size:], r.inPayload)]
-	} else if unsafe.SliceData(r.inputBuf) != &r.smallInputBuf[0] {
-		copy(r.smallInputBuf[:], r.inputBuf)
-	}
-	clear(r.smallInputBuf[n:size])
-	r.inputBuf = r.smallInputBuf[:size]
-}
-
-// splitExt parses the extension, if any, into storage.
-func (r *request) splitExt(storage *requestExt) Status {
-	extLen := int(r.inHeader().TotalExtlen) * 8
-	if extLen == 0 {
-		return OK
-	}
-	if extLen > len(r.inPayload) {
-		return EIO
-	}
-	split := len(r.inPayload) - extLen
-	b := r.inPayload[split:]
-	r.inPayload = r.inPayload[:split]
-	r.ext = storage
-	return storage.parse(b)
-}
-
 func (r *request) inData() unsafe.Pointer {
 	return unsafe.Pointer(&r.inputBuf[0])
 }
 
 // note: outSize is without OutHeader
-func parseRequest(in []byte, kernelSettings *InitIn, negotiated uint64) (h *operationHandler, inSize, outSize, outPayloadSize int, errno Status) {
+func parseRequest(in []byte, kernelSettings *InitIn) (h *operationHandler, inSize, outSize, outPayloadSize int, errno Status) {
 	inSize = int(unsafe.Sizeof(InHeader{}))
 	if len(in) < inSize {
 		errno = EIO
@@ -288,11 +222,8 @@ func parseRequest(in []byte, kernelSettings *InitIn, negotiated uint64) (h *oper
 	if h.InputSize > 0 {
 		inSize = int(h.InputSize)
 	}
-	if hdr.Opcode == _OP_RENAME {
-		inSize = renameInSize(kernelSettings)
-	}
-	if hdr.Opcode == _OP_SETXATTR {
-		inSize = setXAttrInSize(negotiated)
+	if hdr.Opcode == _OP_RENAME && kernelSettings.supportsRenameSwap() {
+		inSize = int(unsafe.Sizeof(RenameIn{}))
 	}
 	if hdr.Opcode == _OP_INIT && inSize > len(in) {
 		// Minor version 36 extended the size of InitIn struct
@@ -338,17 +269,14 @@ func (r *request) filename() string {
 	return string(name)
 }
 
-func (r *request) filenames() (string, string, Status) {
+func (r *request) filenames() (string, string) {
 	i1 := bytes.IndexByte(r.inPayload, 0)
-	if i1 < 0 {
-		return "", "", EIO
+	if i1 < 0 || i1+1 >= len(r.inPayload) {
+		return "", ""
 	}
-	rest := r.inPayload[i1+1:]
-	i2 := bytes.IndexByte(rest, 0)
-	if i2 < 0 {
-		return string(r.inPayload[:i1]), "", EIO
-	}
-	return string(r.inPayload[:i1]), string(rest[:i2]), OK
+	s1 := string(r.inPayload[:i1])
+	s2 := string(r.inPayload[i1+1 : len(r.inPayload)-1])
+	return s1, s2
 }
 
 // serializeHeader serializes the response header. The header points
