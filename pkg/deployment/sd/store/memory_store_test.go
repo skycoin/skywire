@@ -33,7 +33,7 @@ func TestMemoryStore(t *testing.T) {
 		if svc.Addr.PubKey() == pkA {
 			require.Nil(t, svc.LocalIPs, "local IPs hidden unless the entry asks to show them")
 		} else {
-			require.EqualValues(t, []string{"10.0.0.2"}, []string(svc.LocalIPs))
+			require.EqualValues(t, []string{"10.0.0.2"}, svc.LocalIPs)
 		}
 	}
 	byVersion, _ := s.Services(ctx, "vpn", "v2", "") //nolint:errcheck
