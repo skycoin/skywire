@@ -26,7 +26,7 @@ require (
 	github.com/0magnet/osnotify v0.0.0
 	github.com/0magnet/pfilter v0.0.14
 	github.com/0magnet/plot-go v0.0.1
-	github.com/0magnet/progkit v0.0.0-20261010154136-92cdea7ae352
+	github.com/0magnet/progkit v0.0.0-20261010162521-5acd96b9b1f6
 	github.com/0magnet/realorigin v0.2.3
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
 	github.com/0magnet/sh/v3 v3.13.2-0.20261004194540-aa2d6e4a31a5
@@ -34,7 +34,7 @@ require (
 	github.com/0magnet/sysinfo v1.1.4-0.20261003211934-59c35da8ce3f
 	github.com/0magnet/termanim v0.0.0
 	github.com/0magnet/webrtc/v4 v4.2.24
-	github.com/0magnet/websh v0.0.1-0.20261010140514-f069471e6435
+	github.com/0magnet/websh v0.0.1-0.20261010162512-55aa0b32e017
 	github.com/0magnet/wfdrive v0.3.2
 	github.com/0magnet/winbox-go v0.0.1-0.20261008155453-e5e3ca2e9451
 	github.com/0magnet/wisp v0.0.0-20261010111717-5602c41d7a1c
@@ -134,7 +134,7 @@ require (
 	github.com/0magnet/dtls/v3 v3.1.11 // indirect
 	github.com/0magnet/go-dsp v0.0.0 // indirect
 	github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 // indirect
-	github.com/0magnet/xterm-go v0.0.1-0.20261010135510-6e5d0b154025 // indirect
+	github.com/0magnet/xterm-go v0.0.1-0.20261010151358-9a8ac37a85ad // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20261008234032-65faa4be4f89 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/MichaelMure/go-term-text v0.3.1 // indirect

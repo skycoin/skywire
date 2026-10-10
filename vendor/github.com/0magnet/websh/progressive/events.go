@@ -27,6 +27,10 @@ type Placement struct {
 	Fit string `json:"fit,omitempty"`
 	// Input gives the placement the mouse over it, instead of the program.
 	Input bool `json:"input,omitempty"`
+	// Page, with Input, lets the mouse over it go on to the page around the
+	// terminal as well: for a page's own element moved into the cells, whose
+	// handlers listen on the document.
+	Page bool `json:"page,omitempty"`
 	// Events asks the host to report what happens to the placement — clicks,
 	// and messages from its widget — as input (Filter reads them).
 	Events bool `json:"events,omitempty"`
