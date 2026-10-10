@@ -11991,16 +11991,17 @@
         return this._mergeSearchHits(hits, []);
       }
 
-      // One row per message (thread + time), newest first, at most 100.
+      // One row per message, newest first, at most 100. The page stamps a
+      // message when it arrives and the visor when it stores it, so the same
+      // text in the same chat within two minutes is one message.
       _mergeSearchHits(a, b) {
-        const seen = new Set();
-        return a.concat(b)
-          .filter(h => {
-            const id = h.key + '|' + h.ts.getTime();
-            if (seen.has(id)) return false;
-            seen.add(id);
-            return true;
-          })
+        const kept = [];
+        a.concat(b).forEach(h => {
+          const dup = kept.some(k => k.key === h.key && k.text === h.text
+            && Math.abs(k.ts.getTime() - h.ts.getTime()) < 120000);
+          if (!dup) kept.push(h);
+        });
+        return kept
           .sort((x, y) => (y.ts.getTime() || 0) - (x.ts.getTime() || 0))
           .slice(0, 100);
       }
@@ -13393,7 +13394,7 @@
       // message preview there would replace the one identifier the row exists
       // to show.
       updatePreview(remotePk, msg) {
-        document.querySelectorAll('#recipients .recipient-item, #pinnedList .recipient-item').forEach(item => {
+        document.querySelectorAll('#recipients .recipient-item, #requests .recipient-item, #pinnedList .recipient-item').forEach(item => {
           if (item.dataset.pk === remotePk) {
             const arrow = msg.from === 'me' ? '↑ ' : '↓ ';
             const el = item.querySelector('.recipient-preview');
