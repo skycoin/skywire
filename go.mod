@@ -37,7 +37,6 @@ require (
 	github.com/0magnet/wfdrive v0.3.2
 	github.com/0magnet/winbox-go v0.0.1-0.20261008155453-e5e3ca2e9451
 	github.com/0magnet/wisp v0.0.0-20261010111717-5602c41d7a1c
-	github.com/0magnet/xterm-go v0.0.1-0.20261010135510-6e5d0b154025
 	github.com/0magnet/yamux v0.1.3-0.20261004024245-10ef81fe8447
 	github.com/ActiveState/termtest/conpty v0.5.0
 	github.com/DiSiqueira/GoTree v1.0.0
@@ -132,6 +131,7 @@ require (
 	github.com/0magnet/dtls/v3 v3.1.11 // indirect
 	github.com/0magnet/go-dsp v0.0.0 // indirect
 	github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 // indirect
+	github.com/0magnet/xterm-go v0.0.1-0.20261010135510-6e5d0b154025 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20261008234032-65faa4be4f89 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/MichaelMure/go-term-text v0.3.1 // indirect
