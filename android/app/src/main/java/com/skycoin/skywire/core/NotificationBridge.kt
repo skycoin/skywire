@@ -119,6 +119,16 @@ internal class NotificationBridge(context: Context) {
                     .putExtra(DeepLinks.EXTRA_THREAD, event.tag),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
+        } else if (event.app == SKYMAIL && event.tag.isNotEmpty()) {
+            // The visor tags a mail notification with the message id.
+            PendingIntent.getActivity(
+                app,
+                event.tag.hashCode(),
+                Intent(app, MainActivity::class.java)
+                    .setAction(DeepLinks.ACTION_OPEN_MAIL)
+                    .putExtra(DeepLinks.EXTRA_MAIL_ID, event.tag),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
         } else {
             PendingIntent.getActivity(
                 app,
@@ -178,6 +188,7 @@ internal class NotificationBridge(context: Context) {
     companion object {
         private const val TAG = "SkywireNotify"
         private const val SKYCHAT = "skychat"
+        private const val SKYMAIL = "skymail"
         private const val DATA_PREFIX = "data: "
         private const val RETRY_MS = 2_000L
 
@@ -200,6 +211,12 @@ internal class NotificationBridge(context: Context) {
                 // A message from a person interrupts — that is what a chat is.
                 importance = NotificationManager.IMPORTANCE_HIGH,
                 category = NotificationCompat.CATEGORY_MESSAGE,
+            ),
+            "skymail" to Channel(
+                id = "app_skymail",
+                label = "Skymail",
+                importance = NotificationManager.IMPORTANCE_DEFAULT,
+                category = NotificationCompat.CATEGORY_EMAIL,
             ),
             "skydex-client" to Channel(
                 id = "app_skydex",

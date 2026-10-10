@@ -39,6 +39,21 @@ object DeepLinks {
     const val ACTION_OPEN_THREAD = "com.skycoin.skywire.OPEN_CHAT_THREAD"
     const val EXTRA_THREAD = "thread"
 
+    /** What a Skymail notification opens the app with; [EXTRA_MAIL_ID] is the message. */
+    const val ACTION_OPEN_MAIL = "com.skycoin.skywire.OPEN_MAIL"
+    const val EXTRA_MAIL_ID = "mail_id"
+
+    /** An inbox message a notification asked to show. */
+    data class MailLink(val id: String, val seq: Long)
+
+    private val mail = MutableStateFlow<MailLink?>(null)
+
+    val pendingMail: StateFlow<MailLink?> = mail.asStateFlow()
+
+    fun mailLinkHandled(link: MailLink) {
+        mail.compareAndSet(link, null)
+    }
+
     private val seq = AtomicLong()
 
     private val chat = MutableStateFlow<ChatLink?>(null)
@@ -48,6 +63,12 @@ object DeepLinks {
 
     /** True when [intent] carried a link this app claims. */
     fun offer(intent: Intent?): Boolean {
+        if (intent?.action == ACTION_OPEN_MAIL) {
+            val id = intent.getStringExtra(EXTRA_MAIL_ID)?.trim().orEmpty()
+            if (id.isEmpty()) return false
+            mail.value = MailLink(id, seq.incrementAndGet())
+            return true
+        }
         if (intent?.action == ACTION_OPEN_THREAD) {
             val thread = intent.getStringExtra(EXTRA_THREAD)?.trim().orEmpty()
             if (thread.isEmpty()) return false

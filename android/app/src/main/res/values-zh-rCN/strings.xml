@@ -784,7 +784,7 @@
     <string name="help_chat_body">消息、通话、群组和频道都经由 Skywire 传输，而不是某家公司的服务器。你在这里的身份就是本节点的公钥——用 QR 码按钮把它发出去，拿到它的人就能联系到你。\n\n这与桌面端是同一个聊天，只是为手机重新排版。历史记录只保存在本机；没有账号，也不会自行同步，所以换到另一部手机时，要先在聊天内的设置里导出，再到新手机上导入。\n\nSkyChat 的日志在“设置 \u25b8 诊断”里，与本应用保存的其他日志放在一起。</string>
 
     <string name="help_hub_title">关于应用</string>
-    <string name="help_hub_body">你的节点能运行的一切都集中在这里。点开一张卡片进入该应用自己的页面；无论你在看哪一个，节点本身都在底下持续运行。\n\nSkySOCKS 和 SkyVPN 把其他流量送进网络，SkyDEX 用于交易，SkyChat 用于聊天，集群用于查看你在别处运行的节点。变灰的卡片表示尚未实现。</string>
+    <string name="help_hub_body">你的节点能运行的一切都集中在这里。点开一张卡片进入该应用自己的页面；无论你在看哪一个，节点本身都在底下持续运行。\n\nSkySOCKS 和 SkyVPN 把其他流量送进网络，SkyDEX 用于交易，SkyChat 用于聊天，Skymail 用于节点之间收发邮件，集群用于查看你在别处运行的节点。变灰的卡片表示尚未实现。</string>
 
     <string name="help_wallet_title">关于钱包</string>
     <string name="help_wallet_body">Skycoin、与它共用节点软件的各种 Fibercoin，还有比特币——全部由本机生成、从不离开本机的密钥持有。Skywire 看不到这些密钥，它们也绝不会被发送到网络上。\n\n十二个助记词就是钱包本身。任何人只要看到它们，不需要你的手机也能在任意设备上花掉这些币；而你一旦弄丢，没有人能帮你找回钱包——我们不能，任何人都不能。\n\n余额和交易记录来自每个币种所指向的节点服务器，因此当某个币种的节点服务器无法连接时，只会显示最后一次已知的余额，并且无法转账。</string>
@@ -852,4 +852,73 @@
     <string name="settings_encrypt_on_done">配置已加密。</string>
     <string name="settings_encrypt_on_pending">断开连接后将对配置加密。</string>
     <string name="settings_encrypt_off_done">配置已不再加密。</string>
+
+    <!-- Skymail -->
+    <plurals name="hub_mail_unread">
+        <item quantity="other">%d 封未读</item>
+    </plurals>
+    <string name="mail_your_address">你的地址</string>
+    <string name="mail_address_hint">Skywire 上的任何人都能给这个地址写信，@ 前面写什么名字都能送到你这里。Skymail 只在 Skywire 网络里传递，不会送到普通电子邮箱。</string>
+    <string name="mail_copy">复制</string>
+    <string name="mail_share">分享</string>
+    <string name="mail_off_title">你的邮箱已关闭</string>
+    <string name="mail_off_body">邮箱关闭期间，发往你地址的邮件会被拒收。</string>
+    <string name="mail_not_running">邮箱没有运行：%1$s</string>
+    <string name="mail_turn_on">打开</string>
+    <string name="mail_inbox">收件箱</string>
+    <string name="mail_inbox_unread">收件箱（%1$d）</string>
+    <string name="mail_sent_folder">已发送</string>
+    <string name="mail_empty_inbox">还没有邮件。</string>
+    <string name="mail_empty_sent">还没有发出邮件。</string>
+    <string name="mail_no_subject">（无主题）</string>
+    <string name="mail_write">写邮件</string>
+    <string name="mail_unverified">发件人未验证</string>
+    <string name="mail_from">发件人</string>
+    <string name="mail_to">收件人</string>
+    <string name="mail_cc">抄送</string>
+    <string name="mail_date">日期</string>
+    <string name="mail_verified_line">由这个地址所指的节点发出。</string>
+    <string name="mail_unverified_line">由节点 %1$s 送达，而这个地址指的不是它。发件人一栏可能不是对方本人。</string>
+    <string name="mail_from_html">以纯文本显示。</string>
+    <string name="mail_attachments">附件</string>
+    <string name="mail_save">保存</string>
+    <string name="mail_reply">回复</string>
+    <string name="mail_delete">删除</string>
+    <string name="mail_delete_confirm">删除这封邮件？</string>
+    <string name="mail_deleted">邮件已删除</string>
+    <string name="mail_attachment_saved">已把 %1$s 保存到“下载”</string>
+    <string name="mail_attachment_failed">无法保存附件：%1$s</string>
+    <string name="mail_compose_title">新邮件</string>
+    <string name="mail_to_hint">Skymail 地址，或节点的公钥</string>
+    <string name="mail_contacts">联系人</string>
+    <string name="mail_add_cc">添加抄送</string>
+    <string name="mail_subject">主题</string>
+    <string name="mail_body">正文</string>
+    <string name="mail_attach">添加附件</string>
+    <string name="mail_remove">移除</string>
+    <string name="mail_send_note">邮件会立即发出，.dmsg 地址走 dmsg。收件人的节点离线时收不到，也不会重试。</string>
+    <string name="mail_send">发送</string>
+    <string name="mail_sending">正在发送…</string>
+    <string name="mail_sent">已发送</string>
+    <string name="mail_send_failed">无法发送：%1$s</string>
+    <string name="mail_bad_address">不是 Skymail 地址：%1$s</string>
+    <string name="mail_no_recipient">请添加收件人。</string>
+    <string name="mail_attachments_too_big">太大了：一封邮件连同附件大约只能有 %1$s。</string>
+    <string name="mail_result_title">没有全部送达</string>
+    <string name="mail_result_delivered">已通过 %1$s 送达</string>
+    <string name="mail_result_failed">未送达：%1$s</string>
+    <string name="mail_reply_header">%1$s，%2$s 写道：</string>
+    <string name="mail_settings_title">邮箱设置</string>
+    <string name="mail_setting_on">邮箱开启</string>
+    <string name="mail_setting_on_desc">在你的地址收取邮件。关闭期间，发给你的邮件会被拒收。</string>
+    <string name="mail_usage">已用 %1$s，共 %2$s</string>
+    <string name="mail_limits">超过 %1$s 的邮件会被拒收，超过 %2$d 天的邮件会被删除。</string>
+    <string name="mail_allowed_title">谁可以给你写信</string>
+    <string name="mail_allowed_everyone">所有人。添加公钥后，只接收列表中这些公钥的邮件。</string>
+    <string name="mail_allowed_only">仅限：</string>
+    <string name="mail_allow_hint">公钥或 Skymail 地址</string>
+    <string name="mail_allow_add">添加</string>
+    <string name="mail_allow_bad">这不是公钥，也不是 Skymail 地址。</string>
+    <string name="help_mail_title">Skymail</string>
+    <string name="help_mail_body">Skymail 是节点之间的电子邮件。你的节点在一个由其公钥生成的地址上有一个邮箱，邮件经 Skywire 加密传递，发件人的公钥由网络本身证明，而不是靠邮件服务器。\n\n它不会送到普通电子邮箱，也不能给离线的节点写信：邮件会立即发出，不会重试。在手机上请使用 .dmsg 地址；.skynet 地址需要一条路由，而手机很少能有。\n\n邮件保存在这部手机上，大小和保存时间以邮箱设置中的限制为准。</string>
 </resources>

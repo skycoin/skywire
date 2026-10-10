@@ -163,6 +163,9 @@ object VoiceCalls {
      */
     private val names = MutableStateFlow<Map<String, String>>(emptyMap())
 
+    /** The same names, for screens that offer a contact to pick. */
+    val addressBook: StateFlow<Map<String, String>> = names.asStateFlow()
+
     internal fun setNames(book: Map<String, String>) {
         names.value = book.mapKeys { (pk, _) -> pk.lowercase() }
     }
