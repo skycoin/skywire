@@ -9,8 +9,8 @@
 // The console starts on the help for the command it was opened on and runs the
 // real binary from there. A plain line is run captured — its output is folded
 // into the scrollback. A line beginning with `!` is run in the real terminal:
-// the TUI steps aside, hands the child the screen (so a pty exec, a live plot,
-// anything streaming or full-screen works), and resumes when it exits.
+// the console steps aside, hands the child the screen (so a pty exec, a live
+// plot, anything streaming or full-screen works), and resumes when it exits.
 package tui
 
 import (
@@ -18,13 +18,14 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"github.com/0magnet/progkit"
 	"github.com/fatih/color"
+	"github.com/gdamore/tcell/v3"
+	tcolor "github.com/gdamore/tcell/v3/color"
+	"github.com/rivo/uniseg"
 	"github.com/spf13/cobra"
 
 	"github.com/0magnet/termanim/matrix/backdrop"
@@ -32,9 +33,8 @@ import (
 	"github.com/skycoin/skywire/pkg/flags"
 )
 
-// frameRate is how often the rain is advanced. The simulation is tuned at 30
-// steps a second and is driven from elapsed time, so a slower tick costs
-// smoothness and not speed — the rain falls at the same rate either way.
+// frameRate is how often the rain is advanced. The simulation is driven from
+// elapsed time, so a slower tick costs smoothness and not speed.
 const frameRate = 50 * time.Millisecond
 
 // promptText is the prompt on the input line and the marker each run is
@@ -42,195 +42,341 @@ const frameRate = 50 * time.Millisecond
 // typed and where its output is recorded.
 const promptText = "skywire> "
 
-type tickMsg time.Time
+// chromeRows is everything on screen that is not the scrollback: the title, the
+// rule under it, the input line and the key line.
+const chromeRows = 4
 
-// outputMsg carries the result of a captured run back to Update: the line the
-// user typed and the child's combined stdout+stderr.
-type outputMsg struct {
-	line string
-	body string
-}
-
-// execDoneMsg says an interactive (`!`) run has finished and the alt-screen is
-// back. err is whatever the child exited with, for the note in the scrollback.
-type execDoneMsg struct {
-	line string
-	err  error
-}
+const (
+	titleSGR = "\x1b[1;97m"
+	dimSGR   = "\x1b[38;5;245m"
+	resetSGR = "\x1b[0m"
+)
 
 type model struct {
 	root *cobra.Command
 	self string // path to this binary, the command every run shells out to
 
-	out   viewport.Model  // the scrollback
-	input textinput.Model // the prompt line
+	app   *progkit.App
+	input *progkit.Input
 
-	// body accumulates the scrollback text. The viewport holds a wrapped copy;
-	// this is the source it is re-wrapped from when the width changes.
-	body string
+	mu   sync.Mutex
+	body string // the scrollback, as the commands printed it
+
+	top      int  // first scrollback line in view
+	atBottom bool // follow new output
+	quit     bool
 
 	painter *backdrop.Painter
-	w, h    int
-
-	// dt is elapsed seconds banked by the ticks and spent by the next frame.
-	dt       float64
-	lastTick time.Time
+	width   int
+	last    time.Time
 }
 
-// Run opens the console on cmd and blocks until the user quits.
+// Run opens the console on focus and blocks until the user quits.
 func Run(root, focus *cobra.Command) error {
 	// Help is rendered in-process into the scrollback. coloredcobra colors via
-	// fatih/color, which renders lazily and disables itself when the write
-	// target isn't a terminal (our strings.Builder isn't) — so clear its global
-	// NoColor, and the codes it emits show on the alt-screen. (Forcing
-	// gookit/color here did nothing: coloredcobra doesn't use gookit.)
+	// fatih/color, which disables itself when the write target isn't a
+	// terminal (our strings.Builder isn't), so clear its global NoColor.
 	color.NoColor = false
+	app, err := progkit.Open()
+	if err != nil {
+		return err
+	}
+	defer app.Close()
+
 	m := newModel(root, focus)
-	p := tea.NewProgram(m, tea.WithAltScreen())
-	_, err := p.Run()
-	return err
+	m.app = app
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		t := time.NewTicker(frameRate)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				app.Redraw()
+			}
+		}
+	}()
+	app.Run(m.draw, m.handle)
+	return nil
 }
 
 func newModel(root, focus *cobra.Command) *model {
 	self, _ := os.Executable() //nolint:errcheck
-
-	in := textinput.New()
-	in.Prompt = promptText
-	in.Focus()
-
 	m := &model{
-		root:  root,
-		self:  self,
-		input: in,
+		root:     root,
+		self:     self,
+		atBottom: true,
 		painter: backdrop.New(backdrop.Options{
 			// The screen is composed here, so the backdrop is asked for no
 			// padding of its own and told where the layout's empty space is.
 			Pad:    -1,
 			GapMin: 4,
 			// Undimmed, as the help screen is: the cell of clear kept either
-			// side of every word is what keeps the text readable, and GapMin
-			// already confines the rain to the space the layout left empty.
+			// side of every word is what keeps the text readable.
 			Force: true,
 		}),
+		body: renderHelp(focus),
 	}
-
-	// Open on the help for the focused command, colored the same as `--help`.
-	m.body = renderHelp(focus)
+	m.input = &progkit.Input{ID: "prompt", OnSubmit: m.run}
 	return m
 }
 
-func (m *model) Init() tea.Cmd { return tick() }
-
-func tick() tea.Cmd {
-	return tea.Tick(frameRate, func(t time.Time) tea.Msg { return tickMsg(t) })
-}
-
-func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tickMsg:
-		if t := time.Time(msg); !m.lastTick.IsZero() {
-			m.dt += t.Sub(m.lastTick).Seconds()
-		}
-		m.lastTick = time.Time(msg)
-		return m, tick()
-
-	case tea.WindowSizeMsg:
-		m.w, m.h = msg.Width, msg.Height
-		// The framework is the authority on the size, not the terminal.
-		m.painter.SetWidth(msg.Width)
-		m.layout()
-		return m, nil
-
-	case outputMsg:
-		m.append(promptText + msg.line + "\n" + msg.body)
-		return m, nil
-
-	case execDoneMsg:
-		note := "ran in the real terminal (live output was not captured)"
-		if msg.err != nil {
-			note = fmt.Sprintf("ran in the real terminal: %v", msg.err)
-		}
-		m.append(promptText + msg.line + "\n" + note)
-		return m, nil
-
-	case tea.KeyMsg:
-		return m.key(msg)
+// draw composes the screen as text, paints the rain behind it, and lays the
+// prompt over its row.
+func (m *model) draw(f *progkit.Frame) {
+	if f.W != m.width {
+		m.width = f.W
+		m.painter.SetWidth(f.W)
 	}
-	return m, nil
-}
+	now := time.Now()
+	dt := 0.0
+	if !m.last.IsZero() {
+		dt = now.Sub(m.last).Seconds()
+	}
+	m.last = now
 
-func (m *model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyCtrlC, tea.KeyEsc:
-		return m, tea.Quit
-
-	case tea.KeyEnter:
-		return m.run(strings.TrimSpace(m.input.Value()))
-
-	// The scrollback scrolls independently: some output is longer than fits.
-	case tea.KeyPgDown:
-		m.out.PageDown()
-		return m, nil
-	case tea.KeyPgUp:
-		m.out.PageUp()
-		return m, nil
-	case tea.KeyUp:
-		m.out.ScrollUp(1)
-		return m, nil
-	case tea.KeyDown:
-		m.out.ScrollDown(1)
-		return m, nil
+	m.mu.Lock()
+	lines := wrapANSI(m.body, max(f.W, 20))
+	m.mu.Unlock()
+	view := max(f.H-chromeRows, 1)
+	maxTop := max(len(lines)-view, 0)
+	if m.atBottom || m.top > maxTop {
+		m.top = maxTop
 	}
 
-	// Everything else is for the input line.
-	var cmd tea.Cmd
-	m.input, cmd = m.input.Update(msg)
-	return m, cmd
+	rows := make([]string, 0, f.H)
+	rows = append(rows,
+		titleSGR+"skywire"+resetSGR+dimSGR+" — interactive console"+resetSGR,
+		dimSGR+strings.Repeat("─", f.W)+resetSGR,
+	)
+	for i := 0; i < view; i++ {
+		r := ""
+		if m.top+i < len(lines) {
+			r = lines[m.top+i]
+		}
+		rows = append(rows, r)
+	}
+	rows = append(rows,
+		promptText+m.input.Value(),
+		dimSGR+"  enter run · !cmd real terminal · pgup/pgdn scroll · ctrl+c quit"+resetSGR)
+
+	out := m.painter.Frame(strings.Join(rows, "\n"), dt)
+	for y, l := range progkit.ParseANSI(out, tcell.StyleDefault) {
+		progkit.DrawLine(f.Screen, 0, y, f.W, l)
+	}
+	inputRow := f.H - 2
+	progkit.DrawText(f.Screen, 0, inputRow, f.W, promptText, tcell.StyleDefault)
+	m.input.Style = tcell.StyleDefault.Foreground(tcolor.Default)
+	m.input.Draw(f, progkit.Rect{X: len(promptText), Y: inputRow, W: f.W - len(promptText), H: 1}, true)
+}
+
+func (m *model) handle(ev tcell.Event) bool {
+	view := 10
+	if _, h := m.app.Screen.Size(); h > chromeRows {
+		view = h - chromeRows
+	}
+	switch ev := ev.(type) {
+	case *tcell.EventKey:
+		switch {
+		case ev.Key() == tcell.KeyEscape, progkit.IsCtrl(ev, 'c'):
+			return false
+		case ev.Key() == tcell.KeyPgUp:
+			m.scroll(-view)
+		case ev.Key() == tcell.KeyPgDn:
+			m.scroll(view)
+		case ev.Key() == tcell.KeyUp:
+			m.scroll(-1)
+		case ev.Key() == tcell.KeyDown:
+			m.scroll(1)
+		default:
+			m.input.Key(ev)
+		}
+	case *tcell.EventMouse:
+		switch {
+		case ev.Buttons()&tcell.WheelUp != 0:
+			m.scroll(-3)
+		case ev.Buttons()&tcell.WheelDown != 0:
+			m.scroll(3)
+		}
+	}
+	return !m.quit
+}
+
+// scroll moves the view by n lines; reaching the end follows new output again.
+func (m *model) scroll(n int) {
+	m.atBottom = false
+	m.top = max(m.top+n, 0)
+	m.mu.Lock()
+	lines := len(wrapANSI(m.body, max(m.width, 20)))
+	m.mu.Unlock()
+	_, h := m.app.Screen.Size()
+	if m.top >= lines-max(h-chromeRows, 1) {
+		m.atBottom = true
+	}
 }
 
 // run acts on a submitted line: quit, no-op, interactive (`!`) or captured.
-func (m *model) run(line string) (tea.Model, tea.Cmd) {
-	m.input.Reset()
-
+func (m *model) run(line string) {
+	line = strings.TrimSpace(line)
+	m.input.SetValue("")
 	switch line {
 	case "":
-		return m, nil
+		return
 	case "exit", "quit", "q":
-		return m, tea.Quit
+		m.quit = true
+		return
 	}
 
 	if strings.HasPrefix(line, "!") {
 		rest := strings.TrimSpace(line[1:])
 		if rest == "" {
-			return m, nil
+			return
 		}
 		args, err := splitArgs(rest)
 		if err != nil {
 			m.append(promptText + line + "\n" + err.Error())
-			return m, nil
+			return
 		}
-		c := exec.Command(m.self, args...) //nolint:gosec // self is our own os.Executable()
-		return m, tea.ExecProcess(c, func(err error) tea.Msg {
-			return execDoneMsg{line: line, err: err}
-		})
+		m.append(promptText + line + "\n" + m.interactive(args))
+		return
 	}
 
 	args, err := splitArgs(line)
 	if err != nil {
 		m.append(promptText + line + "\n" + err.Error())
-		return m, nil
+		return
 	}
-
 	// A command path that only prints help (a group, or an explicit --help) is
-	// rendered IN-PROCESS: instant, colored, and free of the cursor-control
-	// sequences a subprocess pty folds into the scrollback (the scroll garbage).
-	// Anything actually runnable is run as a child — its effects belong in a
-	// process, and its plain output has no control sequences either.
+	// rendered IN-PROCESS: instant, colored, and free of cursor-control
+	// sequences. Anything runnable is run as a child.
 	if c := m.helpTarget(args); c != nil {
 		m.append(promptText + line + "\n" + renderHelp(c))
-		return m, nil
+		return
 	}
-	return m, captureCmd(m.self, line, args)
+	go func() {
+		m.append(promptText + line + "\n" + capture(m.self, args))
+		m.app.Redraw()
+	}()
+}
+
+// interactive hands the terminal to a child and takes it back when it exits.
+func (m *model) interactive(args []string) string {
+	if err := m.app.Screen.Suspend(); err != nil {
+		return fmt.Sprintf("could not give up the terminal: %v", err)
+	}
+	c := exec.Command(m.self, args...) //nolint:gosec // self is our own os.Executable()
+	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+	err := c.Run()
+	if rerr := m.app.Screen.Resume(); rerr != nil && err == nil {
+		err = rerr
+	}
+	if err != nil {
+		return fmt.Sprintf("ran in the real terminal: %v", err)
+	}
+	return "ran in the real terminal (live output was not captured)"
+}
+
+// capture runs self with args and returns its combined output.
+func capture(self string, args []string) string {
+	out, err := exec.Command(self, args...).CombinedOutput() //nolint:gosec // self is our own os.Executable()
+	body := string(out)
+	if err != nil && strings.TrimSpace(body) == "" {
+		body = err.Error()
+	}
+	if strings.TrimSpace(body) == "" {
+		body = "(no output)"
+	}
+	return body
+}
+
+// append adds a block to the scrollback and follows it.
+func (m *model) append(block string) {
+	block = strings.TrimRight(block, "\n")
+	m.mu.Lock()
+	if m.body == "" {
+		m.body = block
+	} else {
+		m.body += "\n" + block
+	}
+	m.mu.Unlock()
+	m.atBottom = true
+}
+
+// wrapANSI splits s into lines no wider than w cells. Escape sequences are
+// kept and take no width, and the colors in effect at a break carry on in
+// the next line.
+func wrapANSI(s string, w int) []string {
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		var (
+			cur    strings.Builder
+			active string // SGR sequences since the last reset
+			width  int
+			state  = -1
+		)
+		for len(line) > 0 {
+			if line[0] == 0x1b {
+				n := escapeLen(line)
+				seq := line[:n]
+				line = line[n:]
+				state = -1 // text after a sequence starts afresh
+				cur.WriteString(seq)
+				if strings.HasPrefix(seq, "\x1b[") && strings.HasSuffix(seq, "m") {
+					if seq == "\x1b[0m" || seq == "\x1b[m" {
+						active = ""
+					} else {
+						active += seq
+					}
+				}
+				continue
+			}
+			var cluster string
+			var gw int
+			cluster, line, gw, state = uniseg.FirstGraphemeClusterInString(line, state)
+			if width+gw > w && width > 0 {
+				cur.WriteString(resetSGR)
+				out = append(out, cur.String())
+				cur.Reset()
+				cur.WriteString(active)
+				width = 0
+			}
+			cur.WriteString(cluster)
+			width += gw
+		}
+		out = append(out, cur.String())
+	}
+	return out
+}
+
+// escapeLen is the length of the escape sequence s starts with: a CSI up to
+// its final byte, an OSC up to BEL or ST, or ESC and one byte.
+func escapeLen(s string) int {
+	if len(s) < 2 {
+		return len(s)
+	}
+	switch s[1] {
+	case '[':
+		for i := 2; i < len(s); i++ {
+			if s[i] >= 0x40 && s[i] <= 0x7e {
+				return i + 1
+			}
+		}
+	case ']':
+		for i := 2; i < len(s); i++ {
+			if s[i] == 0x07 {
+				return i + 1
+			}
+			if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '\\' {
+				return i + 2
+			}
+		}
+	default:
+		return 2
+	}
+	return len(s)
 }
 
 // helpTarget resolves args to the command whose help to show, or nil if the
@@ -274,34 +420,6 @@ func renderHelp(c *cobra.Command) string {
 	return buf.String()
 }
 
-// captureCmd runs self with args, capturing combined stdout+stderr, and reports
-// it as an outputMsg.
-func captureCmd(self, line string, args []string) tea.Cmd {
-	return func() tea.Msg {
-		out, err := exec.Command(self, args...).CombinedOutput() //nolint:gosec // self is our own os.Executable()
-		body := string(out)
-		if err != nil && strings.TrimSpace(body) == "" {
-			body = err.Error()
-		}
-		if strings.TrimSpace(body) == "" {
-			body = "(no output)"
-		}
-		return outputMsg{line: line, body: body}
-	}
-}
-
-// append adds a block to the scrollback and scrolls to the bottom.
-func (m *model) append(block string) {
-	block = strings.TrimRight(block, "\n")
-	if m.body == "" {
-		m.body = block
-	} else {
-		m.body += "\n" + block
-	}
-	m.setContent()
-	m.out.GotoBottom()
-}
-
 // splitArgs is a quote-aware split of a command line: single and double quotes
 // group, and an unterminated quote is an error rather than a silent guess.
 func splitArgs(line string) ([]string, error) {
@@ -339,86 +457,4 @@ func splitArgs(line string) ([]string, error) {
 		args = append(args, cur.String())
 	}
 	return args, nil
-}
-
-// layout sizes the scrollback and input to the current terminal.
-func (m *model) layout() {
-	w := m.w
-	if w < 20 {
-		w = 20
-	}
-	h := m.h - chromeRows
-	if h < 1 {
-		h = 1
-	}
-	m.out.Width, m.out.Height = w, h
-	m.input.Width = w - len(promptText) - 1
-	m.setContent()
-	m.out.GotoBottom()
-}
-
-// setContent re-wraps the scrollback body to the current width.
-func (m *model) setContent() {
-	if m.out.Width <= 0 {
-		return
-	}
-	// lipgloss wraps with the escape sequences accounted for, which matters:
-	// help arrives from coloredcobra already colored.
-	m.out.SetContent(lipgloss.NewStyle().Width(m.out.Width).Render(m.body))
-}
-
-// chromeRows is everything on screen that is not the scrollback: the title, the
-// rule under it, the input line and the key line.
-const chromeRows = 4
-
-var (
-	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15"))
-	dimStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-)
-
-// View is the composed screen with the rain painted in behind it.
-//
-// The two halves are kept apart: screen decides what the program looks like
-// and paint decides what is behind it, and only the first is worth a test.
-func (m *model) View() string {
-	if m.w == 0 {
-		// No size yet: bubbletea sends the first WindowSizeMsg right after
-		// Init, so this is one frame at most.
-		return ""
-	}
-	s := m.screen()
-
-	// dt is what has actually elapsed, accumulated by the ticks, so the rain
-	// falls at its own rate however often the screen happens to be redrawn. A
-	// redraw that is not a tick — a keypress — passes zero and does not move
-	// it, or the rain would run at the speed the user types.
-	out := m.painter.Frame(s, m.dt)
-	m.dt = 0
-	return out
-}
-
-// screen composes the frame as plain text: title, scrollback, input, key line.
-// Exactly m.h rows, none wider than m.w.
-func (m *model) screen() string {
-	rows := make([]string, 0, m.h)
-	rows = append(rows,
-		titleStyle.Render("skywire")+dimStyle.Render(" — interactive console"),
-		dimStyle.Render(strings.Repeat("─", m.w)),
-	)
-
-	body := strings.Split(m.out.View(), "\n")
-	lines := m.h - chromeRows
-	for i := 0; i < lines; i++ {
-		r := ""
-		if i < len(body) {
-			r = body[i]
-		}
-		rows = append(rows, r)
-	}
-
-	rows = append(rows,
-		m.input.View(),
-		dimStyle.Render("  enter run · !cmd real terminal · pgup/pgdn scroll · ctrl+c quit"))
-
-	return strings.Join(rows, "\n")
 }
