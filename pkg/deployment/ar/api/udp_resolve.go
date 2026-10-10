@@ -60,6 +60,5 @@ func (a *API) writeUDPReply(conn net.Conn, reply addrresolver.UDPResolveReply) e
 	if err != nil {
 		return err
 	}
-	_, err = conn.Write(b)
-	return err
+	return writeSUDPH(conn, b)
 }
