@@ -13,8 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 
 	kcp "github.com/0magnet/kcp-go/v5"
@@ -276,12 +274,12 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 	// inert until SetBindingsCXOPublisher installs a publisher.
 	api.store = &bindNotifyStore{Store: s, api: api}
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP) //nolint:staticcheck
+	r.Use(httputil.RequestID)
+	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(log))
-	r.Use(middleware.Recoverer)
+	r.Use(httputil.Recoverer)
 	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip JSON responses on the wire — this router is also served over
 	// dmsg, where every byte is relayed. Matches rf/ut/sd.
@@ -295,7 +293,7 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 	}
 	r.Use(httputil.SetLoggerMiddleware(log))
 
-	r.Group(func(r chi.Router) {
+	r.Group(func(r *httputil.Router) {
 		r.Use(httpauth.MakeMiddleware(nonceStore))
 
 		r.Post("/bind/stcpr", api.bind)
@@ -308,7 +306,7 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Get("/health", api.health)
 	r.Get("/sudph-sessions", api.sudphSessionsHandler)
 	r.Get("/", api.ChartsPage)
-	r.With(middleware.Compress(5)).Get("/transports", api.transports)
+	r.With(httputil.CompressMin(httputil.CompressMinBytes, 5)).Get("/transports", api.transports)
 	r.Delete("/deregister/{network}", api.deregister)
 
 	nonceHandler := &httpauth.NonceHandler{Store: nonceStore}
@@ -577,8 +575,8 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 
 	a.logger(r).Debugf("New /resolve request from %v", remoteAddr)
 
-	tpType := chi.URLParam(r, "type")
-	rawReceiverPK := chi.URLParam(r, "pk")
+	tpType := r.PathValue("type")
+	rawReceiverPK := r.PathValue("pk")
 	a.logger(r).Debugf("New /resolve request of type %v from %v", tpType, remoteAddr)
 
 	ctx := r.Context()
@@ -716,7 +714,7 @@ func (a *API) deregister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var netType types.Type
-	switch chi.URLParam(r, "network") {
+	switch r.PathValue("network") {
 	case "sudph":
 		netType = types.SUDPH
 	case "stcpr":

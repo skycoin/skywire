@@ -13,8 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -82,7 +80,7 @@ var mainServices = [4]string{"tpd", "dmsgd", "ar", "sd"}
 var sdSubServices = [3]string{"vpn", "visor", "skysocks"}
 var arSubServices = [2]string{"sudph", "stcpr"}
 
-// New returns a new *chi.Mux object, which can be started as a server
+// New returns a new *httputil.Router object, which can be started as a server
 func New(s store.Store, logger *logging.Logger, urls ServicesURLs, config NetworkMonitorConfig) *API {
 
 	api := &API{
@@ -98,12 +96,12 @@ func New(s store.Store, logger *logging.Logger, urls ServicesURLs, config Networ
 		deadEntries:   make(map[string][]string),
 		liveEntries:   make(map[string]int),
 	}
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	r.Use(
-		middleware.RequestID,
-		middleware.RealIP, //nolint:staticcheck
+		httputil.RequestID,
+		httputil.RealIP, //nolint:staticcheck
 		httputil.NewLogMiddleware(logger),
-		middleware.Recoverer,
+		httputil.Recoverer,
 		// gzip JSON responses on the wire. Matches rf/ut/sd.
 		httputil.CompressMin(httputil.CompressMinBytes, 5),
 		httputil.SetLoggerMiddleware(logger),

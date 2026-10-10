@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/skycoin/skywire/pkg/httputil"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 )
@@ -111,22 +111,18 @@ func (s *ServiceStats) NamePort(port uint16, name string) {
 }
 
 // Handler counts next's requests by route pattern, status class, bytes sent
-// and time taken. Routers built with chi report their pattern; anything else
+// and time taken. An httputil.Router reports its pattern; anything else
 // is counted by its first path segment.
 func (s *ServiceStats) Handler(next http.Handler) http.Handler {
 	if s == nil {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rctx, _ := r.Context().Value(chi.RouteCtxKey).(*chi.Context)
-		if rctx == nil {
-			rctx = chi.NewRouteContext()
-			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
-		}
+		r, routePattern := httputil.TrackRoutePattern(r)
 		rw := &countingWriter{ResponseWriter: w, status: http.StatusOK}
 		start := time.Now()
 		next.ServeHTTP(rw, r)
-		pattern := rctx.RoutePattern()
+		pattern := *routePattern
 		if pattern == "" {
 			pattern = firstSegment(r.URL.Path)
 		}

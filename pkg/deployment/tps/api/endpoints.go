@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -76,7 +75,7 @@ func (api *API) removeTransport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) getTransports(w http.ResponseWriter, r *http.Request) {
-	pkParam := chi.URLParam(r, "pk")
+	pkParam := r.PathValue("pk")
 	var pk cipher.PubKey
 	if err := pk.UnmarshalText([]byte(pkParam)); err != nil {
 		api.badRequest(w, r, err)

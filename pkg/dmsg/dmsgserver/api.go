@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/pires/go-proxyproto"
 	"github.com/sirupsen/logrus"
 
@@ -36,11 +35,11 @@ type ServerAPI struct {
 	minuteEncValues map[*dmsg.SessionCommon]uint64
 	secondDecValues map[*dmsg.SessionCommon]uint64
 	secondEncValues map[*dmsg.SessionCommon]uint64
-	router          *chi.Mux
+	router          *httputil.Router
 }
 
 // NewServerAPI returns a new ServerAPI object, which can be started as a server
-func NewServerAPI(r *chi.Mux, log *logging.Logger, m metrics.Metrics) *ServerAPI {
+func NewServerAPI(r *httputil.Router, log *logging.Logger, m metrics.Metrics) *ServerAPI {
 	api := &ServerAPI{
 		metrics:         m,
 		startedAt:       time.Now(),

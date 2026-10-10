@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/monitor/store"
 	nm "github.com/skycoin/skywire/pkg/deployment/monitor/types"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -46,7 +46,7 @@ func newMockServer(t *testing.T, data *mockData) *httptest.Server {
 		require.NoError(t, json.NewEncoder(w).Encode(v))
 	}
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	r.Get("/uptimes", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, data.uptimes) })
 	r.Get("/all-transports", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, data.transports) })
 	r.Get("/dmsg-discovery/visorEntries", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, data.dmsgd) })
