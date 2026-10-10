@@ -497,7 +497,12 @@
 			const fire = (type, init) => {
 				let ev;
 				if (type === 'message') ev = new R.MessageEvent('message', init);
-				else if (type === 'close') ev = new R.CloseEvent('close', init);
+				else if (type === 'close' && typeof R.CloseEvent === 'function') ev = new R.CloseEvent('close', init);
+				else if (type === 'close') {
+					// No CloseEvent before Node 23: an Event with its fields.
+					ev = new R.Event('close');
+					for (const k of ['code', 'reason', 'wasClean']) Object.defineProperty(ev, k, { value: init[k] });
+				}
 				else ev = new R.Event(type);
 				const h = ws['on' + type];
 				if (typeof h === 'function') { try { h.call(ws, ev); } catch (e) { setTimeout(() => { throw e; }); } }

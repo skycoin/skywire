@@ -541,8 +541,7 @@ func focusWindowOwning(el js.Value) {
 // re-wires on each load. Wiring is marked on the element to keep a re-render
 // from stacking listeners.
 func wireFrameFocus() {
-	var onMouseDown js.Func
-	onMouseDown = js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+	onMouseDown := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		if len(args) > 0 && args[0].Truthy() {
 			if t := args[0].Get("target"); t.Truthy() {
 				// The frame element, not the target inside it: the target

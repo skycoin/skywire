@@ -50,6 +50,9 @@ type atlasConfig struct {
 	// mirrorGlyph reports whether a glyph is drawn flipped left-to-right.
 	// See Options.MirrorGlyph.
 	mirrorGlyph func(string) bool
+	// allowTransparency mirrors Options.AllowTransparency: glyphs are drawn on
+	// a transparent background instead of having the opaque one baked in.
+	allowTransparency bool
 	// pageSize seeds the atlas page. A rebuilt atlas keeps whatever size
 	// the last one had grown to: the font or the palette changing says
 	// nothing about how many distinct glyphs the content needs.
@@ -132,7 +135,7 @@ func newTextureAtlas(cfg atlasConfig) *textureAtlas {
 	a.tmpCanvas = document.Call("createElement", "canvas")
 	a.tmpCanvas.Set("width", cfg.deviceCellWidth*4+tmpCanvasGlyphPadding*2)
 	a.tmpCanvas.Set("height", cfg.deviceCellHeight+tmpCanvasGlyphPadding*2)
-	a.tmpCtx = a.tmpCanvas.Call("getContext", "2d", map[string]any{"alpha": false, "willReadFrequently": true})
+	a.tmpCtx = a.tmpCanvas.Call("getContext", "2d", map[string]any{"alpha": cfg.allowTransparency, "willReadFrequently": true})
 	return a
 }
 
@@ -216,9 +219,15 @@ func (a *textureAtlas) ansiColor(idx int) (css string, rgb uint32) {
 	return css, cssToRGB(css)
 }
 
-// backgroundColor resolves the glyph background (always opaque; the
-// transparency path of upstream is not ported).
+// backgroundColor resolves the background a glyph is rasterized on
+// (_getBackgroundColor). With allowTransparency it is fully transparent:
+// the background may be translucent, and baking it into the glyph would
+// draw it twice around the antialiased edges, too dark. Otherwise it is
+// the cell's background made opaque, which clearColorPixels then keys out.
 func (a *textureAtlas) backgroundColor(bgColorMode uint32, bgColor int, inverse bool) (css string, rgb uint32) {
+	if a.cfg.allowTransparency {
+		return "rgba(0,0,0,0)", 0
+	}
 	switch bgColorMode {
 	case vt.AttrCMP16, vt.AttrCMP256:
 		return a.ansiColor(bgColor)
@@ -226,10 +235,11 @@ func (a *textureAtlas) backgroundColor(bgColorMode uint32, bgColor int, inverse 
 		arr := vt.ToColorRGB(uint32(bgColor))                                           // #nosec G115 -- 24-bit RGB channels and palette indices
 		return rgbCSS([3]int{arr[0], arr[1], arr[2]}), uint32(bgColor) & vt.AttrRGBMask // #nosec G115 -- 24-bit RGB channels and palette indices
 	default:
+		// opaque: the alpha channel is ignored without allowTransparency
 		if inverse {
-			return a.cfg.colors.Foreground, cssToRGB(a.cfg.colors.Foreground)
+			return opaqueCSS(a.cfg.colors.Foreground), cssToRGB(a.cfg.colors.Foreground)
 		}
-		return a.cfg.colors.Background, cssToRGB(a.cfg.colors.Background)
+		return opaqueCSS(a.cfg.colors.Background), cssToRGB(a.cfg.colors.Background)
 	}
 }
 
@@ -250,6 +260,11 @@ func (a *textureAtlas) foregroundColor(fgColorMode uint32, fgColor int, inverse,
 		} else {
 			css, rgb = a.cfg.colors.Foreground, cssToRGB(a.cfg.colors.Foreground)
 		}
+	}
+	// Text is always opaque, whatever the background's alpha (an inverse
+	// cell draws the default background as its text color).
+	if a.cfg.allowTransparency {
+		css = opaqueCSS(css)
 	}
 	if dim {
 		// apply dim via opacity on the foreground color
@@ -489,8 +504,9 @@ func (a *textureAtlas) drawToCache(chars string, code uint32, bg, fg, ext uint32
 		ctx.Call("restore")
 
 		// stroke in the background color to give an outline between
-		// the text and the underline
-		if !customGlyph && cfg.fontSize >= 12 && chars != " " {
+		// the text and the underline; only without transparency, since
+		// stroked text cannot be cleared back out of a transparent glyph
+		if !customGlyph && cfg.fontSize >= 12 && !cfg.allowTransparency && chars != " " {
 			ctx.Call("save")
 			ctx.Set("textBaseline", "alphabetic")
 			metrics := ctx.Call("measureText", chars)
@@ -577,7 +593,14 @@ func (a *textureAtlas) drawToCache(chars string, code uint32, bg, fg, ext uint32
 	pix := make([]byte, jsData.Get("length").Int())
 	js.CopyBytesToGo(pix, jsData)
 
-	isEmpty := clearColorPixels(pix, bgRGB, fgRGB, enableClearThresholdCheck)
+	// Key out the background color, or, when the glyph was drawn on a
+	// transparent background, only check that something was drawn.
+	var isEmpty bool
+	if !cfg.allowTransparency {
+		isEmpty = clearColorPixels(pix, bgRGB, fgRGB, enableClearThresholdCheck)
+	} else {
+		isEmpty = completelyTransparent(pix)
+	}
 	if isEmpty {
 		return nullRasterizedGlyph
 	}
@@ -814,6 +837,17 @@ func clearColorPixels(pix []byte, bg, fg uint32, enableThresholdCheck bool) bool
 	return isEmpty
 }
 
+// completelyTransparent reports whether every pixel has zero alpha
+// (checkCompletelyTransparent).
+func completelyTransparent(pix []byte) bool {
+	for off := 3; off < len(pix); off += 4 {
+		if pix[off] > 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func absInt(v int) int {
 	if v < 0 {
 		return -v
@@ -849,12 +883,4 @@ func jsCeil(v float64) float64 {
 		return i + 1
 	}
 	return i
-}
-
-// cssToRGB parses #rgb / #rrggbb to 0xRRGGBB (white on failure).
-func cssToRGB(css string) uint32 {
-	if rgb, ok := vt.ParseColor(css); ok {
-		return uint32(rgb[0])<<16 | uint32(rgb[1])<<8 | uint32(rgb[2]) // #nosec G115 -- 24-bit RGB channels and palette indices
-	}
-	return 0xFFFFFF
 }

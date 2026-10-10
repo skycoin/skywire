@@ -115,6 +115,7 @@ Instance methods (chainable, mirroring WinBox.js 1:1):
 - w.**Minimize**() / w.**Maximize**() / w.**Fullscreen**() / w.**Restore**()
 - w.**AddClass**(name string) / w.**RemoveClass**(name string) / w.**HasClass**(name string) : bool / w.**ToggleClass**(name string)
 - w.**AddControl**(winbox.Control) / w.**RemoveControl**(name string)
+- w.**Dock**(edge winbox.Edge, size winbox.Unit) / w.**Undock**() — pin a window to a viewport edge; see [Docking](#differences)
 
 Instance fields (read/write like the JS properties):
 
@@ -1071,6 +1072,30 @@ A host that already polls for readiness before mounting its UI — many do — h
 the cheaper option of adding `typeof WinBox === "function"` to the condition it
 already waits on, which gates every window it will ever open in one place.
 
+### A prebuilt drop-in: `dist/`
+
+To replace a `<script src="winbox.js">` without building anything, `dist/` holds
+the `cmd/winbox-js` module, already compiled with TinyGo. The files are
+committed, because a consumer's `go build` cannot produce a wasm module from a
+second toolchain; `make dist` rebuilds them and needs `tinygo`.
+
+| File | What it is |
+|---|---|
+| `winbox.wasm.gz` | the module, gzipped (about 150 kB) |
+| `winbox-exec.js` | TinyGo's `wasm_exec.js`, wrapped so its loader class is `globalThis.__winboxGo` rather than `Go`, and a page's own Go wasm module can use a different toolchain's |
+| `winbox-loader.js` | starts the module, publishes `globalThis.WinBox`, and resolves `globalThis.__winboxReady` |
+
+Load `winbox-exec.js`, then `winbox-loader.js`, then wait on `__winboxReady`.
+The loader gets the module bytes from the first of these that is set:
+`globalThis.__WINBOX_WASM_B64__` (the gzipped module inlined as base64, for a
+single-file page with nothing to fetch from), `globalThis.__WINBOX_WASM_URL__`,
+or `winbox.wasm` next to the page. The last two are fetched as is, so serve
+the inflated module or send `Content-Encoding: gzip`.
+
+The package `github.com/0magnet/winbox-go/dist` embeds the three files and
+returns them from `WasmGz()`, `ExecJS()` and `LoaderJS()`, so a Go server can
+serve or inline them without a copy.
+
 <a name="differences"></a>
 ## Differences from WinBox.js
 
@@ -1157,15 +1182,18 @@ gocloc --not-match-d='(vendor|node_modules|\.git)' .
 -------------------------------------------------------------------------------
 Language                     files          blank        comment           code
 -------------------------------------------------------------------------------
-Go                               7            268            248           1572
-JavaScript                       2            117             82            935
-Markdown                         1            189              1            875
+Go                              16            412            579           2907
+Markdown                         1            217              1            981
+JavaScript                       3            112            120            961
 CSS                              1              0             39            294
-HTML                             2              4              0            137
-YAML                             1              0              9             69
-JSON                             2              0              0             28
-Bourne Shell                     1              2              3             12
+HTML                             2              4              4            160
+Makefile                         1             22             52            118
+YAML                             1              0              7             98
+Bourne Shell                     4             19             61             93
+JSON                             1              0              0              8
+XML                              1              0              0              4
+Plain Text                       1              1              0              3
 -------------------------------------------------------------------------------
-TOTAL                           17            580            382           3922
+TOTAL                           32            787            863           5627
 -------------------------------------------------------------------------------
 ```

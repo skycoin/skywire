@@ -10,14 +10,19 @@ xterm.js is the front-end terminal component used by VS Code, Hyper and Theia �
 
 ## Features
 
-- **Terminal apps just work**: the full escape-sequence machinery of xterm.js is ported — cursor addressing, scroll regions, the alternate screen buffer, insert/delete, SGR text styling (16/256/truecolor, underline styles), charsets, device reports (DA/DSR/DECRQM/DECRQSS) and mouse tracking (X10/VT200/DRAG/ANY with SGR encoding) for curses apps.
+- **Terminal apps just work**: the full escape-sequence machinery of xterm.js is ported — cursor addressing, scroll regions, the alternate screen buffer, insert/delete, SGR text styling (16/256/truecolor, underline styles), charsets, device reports (DA/DSR/DECRQM/DECRQSS, XTVERSION, CSI 14/16/18 t, OSC 4/10/11/12 color queries, focus mode 1004) and mouse tracking (X10/VT200/DRAG/ANY with SGR encoding) for curses apps. CSI 14/16 t answer only when enabled in `Options.WindowOptions`. `Terminal.OnReply` receives these replies apart from what the person typed, so an embedder running a shell can keep them out of its line editor.
 - **Headless-capable core**: the `vt` subpackage (parser, buffers, input handler) is pure Go with zero dependencies — it builds natively, so terminal semantics are tested with plain `go test`, no browser needed. Use it standalone to interpret pty output server-side.
 - **Rich Unicode support**: CJK wide characters, combining characters, wcwidth tables ported from the UnicodeV6 provider, and opt-in grapheme clustering (mode 2027, UAX #29 on Unicode 17 tables) for ZWJ emoji, flags and conjuncts.
 - **Scrollback**: ring-buffer scrollback with reflow on resize, native scrollbar viewport in the browser layer.
 - **Self-contained**: no JS dependencies; styles are injected automatically.
 - **GPU-accelerated**: an optional WebGL2 renderer (the `addon-webgl` equivalent) draws the grid as instanced quads sampling a glyph texture atlas, with pixel-perfect procedural box drawing, block, shade and powerline glyphs. Enable with `term.EnableWebGL()`; it falls back to the DOM renderer when WebGL2 is unavailable.
 - **IME support**: composition events (CJK input methods, dead keys) are handled with an in-place composition view like xterm.js.
-- **Small**: ~850 KB wasm with TinyGo (≈4 MB with standard Go).
+- **Pictures**: inline images (`AddImage`, `RemoveImage`, `ClearImages`, `CellSize`), laid over the screen for an embedder to place (the protocol parsing is the embedder's, through `SetApcHandler` for APC sequences such as kitty graphics), and sixel (`Options.Sixel`, on by default; `Terminal.OnSixel` receives each picture, and DA1 then answers `62;4;9;22`).
+- **Kitty keyboard protocol**: `vt.KittyKey` encodes a key event under the flags in effect (`KittyFlags`; `ResetKittyKeyboard`).
+- **Shell integration**: OSC 133 prompt marks. `ScrollToPreviousPrompt` and `ScrollToNextPrompt` move between prompts and `LastCommandOutput` returns the last command's text and exit status.
+- **Pointer, fonts and touch**: OSC 22 pointer shapes set the CSS cursor over the screen. `SetFont`, `SetFontFamily` and `SetFontSize` re-measure the cells and rebuild the renderer. Touch scrolls and taps.
+- **Screen reader mode**: `Options.ScreenReaderMode` builds an accessibility tree and a live region that announces output.
+- **Small**: ~1.1 MB wasm with TinyGo (the demo) (≈4 MB with standard Go).
 
 ## What xterm-go is not
 
@@ -68,7 +73,7 @@ tinygo build -target wasm -no-debug -o main.wasm .
 
 ### Options
 
-`xterm.New` takes `*vt.Options` (pass `nil` for defaults): dimensions, scrollback length, fonts, cursor style/blink, a `Theme` with the standard 16 colors (set `Theme.Generate256` to derive colors 16–255 from them in CIELAB), and more — mirroring the xterm.js options relevant to the port.
+`xterm.New` takes `*vt.Options` (pass `nil` for defaults): dimensions, scrollback length, fonts, cursor style/blink, a `Theme` with the standard 16 colors (set `Theme.Generate256` to derive colors 16–255 from them in CIELAB), `Sixel`, `ScreenReaderMode`, `WindowOptions` and more — mirroring the xterm.js options relevant to the port.
 
 ```go
 opts := vt.NewOptions()
@@ -120,7 +125,7 @@ if err := term.EnableWebGL(); err != nil {
 - Parser handlers are synchronous (Go has no reason for the async parse-stack machinery).
 - The WebGL renderer uses a single 2048² atlas page (cleared and lazily rebuilt on overflow) instead of the multi-page grow/merge machinery, and does not port the selection/decoration/ligature-joiner model overrides or the minimum-contrast-ratio option.
 - The deprecated canvas renderer is not ported (DOM and WebGL are).
-- Accessibility tree, link decorations and the selection service are not (yet) ported; text selection uses the browser's native selection (DOM renderer).
+- Link decorations and the link provider are not ported: `vt` registers OSC 8 hyperlinks (`OscLinkService`) but the browser layer does not underline or open them. Selection is the port's own cell selection (`selection.go`, drawn under WebGL too) rather than the selection service.
 - Windows conpty wrapping heuristics are not ported.
 
 ## Contributing
@@ -166,13 +171,17 @@ gocloc --not-match-d='(vendor|node_modules|\.git)' .
 -------------------------------------------------------------------------------
 Language                     files          blank        comment           code
 -------------------------------------------------------------------------------
-Go                              36           1201           1535          11108
-JavaScript                       1             56             46            457
-Markdown                         1             40              0             93
-YAML                             1              0              9             69
-HTML                             1              0              0             30
-JSON                             2              0              0             28
+Go                              68           1965           2880          18712
+Plain Text                       2              1              0            799
+JavaScript                       1             51             44            452
+Markdown                         1             52              0            131
+Makefile                         1             21             52            111
+YAML                             1              0              7             98
+HTML                             1              0              4             45
+Bourne Shell                     2              9             21             37
+JSON                             1              0              0              8
+XML                              1              0              0              4
 -------------------------------------------------------------------------------
-TOTAL                           42           1297           1590          11785
+TOTAL                           79           2099           3008          20397
 -------------------------------------------------------------------------------
 ```

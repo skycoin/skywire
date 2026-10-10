@@ -23,9 +23,10 @@ github.com/0magnet/bbolt/internal/freelist
 # github.com/0magnet/bitree v0.0.0
 ## explicit; go 1.25.0
 github.com/0magnet/bitree
-# github.com/0magnet/bottle v0.0.1-0.20261005224524-8f37c8756dab
+# github.com/0magnet/bottle v0.0.1-0.20261008160757-8052b02bade6
 ## explicit; go 1.24
 github.com/0magnet/bottle
+github.com/0magnet/bottle/proc
 github.com/0magnet/bottle/vnet
 # github.com/0magnet/calvin v0.0.0
 ## explicit; go 1.26.0
@@ -155,21 +156,23 @@ github.com/0magnet/webrtc/v4/internal/mux
 github.com/0magnet/webrtc/v4/internal/util
 github.com/0magnet/webrtc/v4/pkg/media
 github.com/0magnet/webrtc/v4/pkg/rtcerr
-# github.com/0magnet/websh v0.0.1-0.20261004205330-1203fa7da370
+# github.com/0magnet/websh v0.0.1-0.20261010140514-f069471e6435
 ## explicit; go 1.26.6
+github.com/0magnet/websh/progressive
 github.com/0magnet/websh/shell
 github.com/0magnet/websh/shell/browser
 github.com/0magnet/websh/shell/sed
+github.com/0magnet/websh/widget
 # github.com/0magnet/wfdrive v0.3.2
 ## explicit; go 1.26.0
 github.com/0magnet/wfdrive/bidi
-# github.com/0magnet/winbox-go v0.0.0
+# github.com/0magnet/winbox-go v0.0.1-0.20261008155453-e5e3ca2e9451
 ## explicit; go 1.24
 github.com/0magnet/winbox-go
-# github.com/0magnet/wisp v0.0.0-20261009120029-edd66081caa0
+# github.com/0magnet/wisp v0.0.0-20261010111717-5602c41d7a1c
 ## explicit; go 1.26.4
 github.com/0magnet/wisp
-# github.com/0magnet/xterm-go v0.0.1-0.20261004020305-36b45f096b30
+# github.com/0magnet/xterm-go v0.0.1-0.20261010135510-6e5d0b154025
 ## explicit; go 1.24
 github.com/0magnet/xterm-go
 github.com/0magnet/xterm-go/vt
