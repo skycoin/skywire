@@ -951,59 +951,10 @@ func groupItemHandler() http.HandlerFunc {
 					before = time.Unix(0, ns).UTC()
 				}
 			}
-			var msgs []visorapi.GroupMessage
-			if err := pairRPCCall("GroupHistoryPage", func(c visorapi.API) error {
-				out, e := c.GroupHistoryPage(visorapi.GroupHistoryPageArgs{
-					GroupID: id, Before: before, Limit: limit,
-				})
-				msgs = out
-				return e
-			}); err != nil {
+			out, err := groupHistoryRows(id, before, limit)
+			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
-			}
-			// First pass: collect delete tombstones (keyed by author + target
-			// ts_nano) so a reloading client / new joiner sees deletes applied
-			// even if the pruned original still lingers on the feed.
-			type delKey struct {
-				sender string
-				ts     int64
-			}
-			deleted := make(map[delKey]bool)
-			for _, m := range msgs {
-				if dmeta, ok := parseGroupDeleteText(m.Text); ok {
-					deleted[delKey{m.SenderPK.Hex(), dmeta.ToTSNano}] = true
-				}
-			}
-			// Second pass: emit chat rows, skipping tombstones and any message
-			// its own author deleted for everyone. Enrich file/reply bodies +
-			// carry ts_nano (the exact delete/reply identity).
-			out := make([]map[string]any, 0, len(msgs))
-			for _, m := range msgs {
-				if _, ok := parseGroupDeleteText(m.Text); ok {
-					continue
-				}
-				if deleted[delKey{m.SenderPK.Hex(), m.TS.UnixNano()}] {
-					continue
-				}
-				row := map[string]any{
-					"group_id":  m.GroupID,
-					"sender_pk": m.SenderPK.Hex(),
-					"text":      m.Text,
-					"ts":        m.TS,
-					"ts_nano":   m.TS.UnixNano(),
-				}
-				if meta, ok := parseGroupFileText(m.Text); ok {
-					row["text"] = "📎 " + meta.Name
-					enrichGroupFileRow(row, meta)
-				} else if rmeta, ok := parseReplyText(m.Text); ok {
-					row["text"] = rmeta.Text
-					enrichReplyRow(row, rmeta)
-				} else if fmeta, ok := parseForwardText(m.Text); ok {
-					row["text"] = fmeta.Text
-					enrichForwardRow(row, fmeta)
-				}
-				out = append(out, row)
 			}
 			writeJSON(w, out)
 
@@ -1011,6 +962,66 @@ func groupItemHandler() http.HandlerFunc {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	}
+}
+
+// groupHistoryRows is one page of a group's history as the browser renders it:
+// delete tombstones applied, file, reply and forward bodies turned into text.
+// Shared by /group/<id>/history and /search.
+func groupHistoryRows(id string, before time.Time, limit int) ([]map[string]any, error) {
+	var msgs []visorapi.GroupMessage
+	if err := pairRPCCall("GroupHistoryPage", func(c visorapi.API) error {
+		out, e := c.GroupHistoryPage(visorapi.GroupHistoryPageArgs{
+			GroupID: id, Before: before, Limit: limit,
+		})
+		msgs = out
+		return e
+	}); err != nil {
+		return nil, err
+	}
+	// First pass: collect delete tombstones (keyed by author + target
+	// ts_nano) so a reloading client / new joiner sees deletes applied
+	// even if the pruned original still lingers on the feed.
+	type delKey struct {
+		sender string
+		ts     int64
+	}
+	deleted := make(map[delKey]bool)
+	for _, m := range msgs {
+		if dmeta, ok := parseGroupDeleteText(m.Text); ok {
+			deleted[delKey{m.SenderPK.Hex(), dmeta.ToTSNano}] = true
+		}
+	}
+	// Second pass: emit chat rows, skipping tombstones and any message
+	// its own author deleted for everyone. Enrich file/reply bodies +
+	// carry ts_nano (the exact delete/reply identity).
+	out := make([]map[string]any, 0, len(msgs))
+	for _, m := range msgs {
+		if _, ok := parseGroupDeleteText(m.Text); ok {
+			continue
+		}
+		if deleted[delKey{m.SenderPK.Hex(), m.TS.UnixNano()}] {
+			continue
+		}
+		row := map[string]any{
+			"group_id":  m.GroupID,
+			"sender_pk": m.SenderPK.Hex(),
+			"text":      m.Text,
+			"ts":        m.TS,
+			"ts_nano":   m.TS.UnixNano(),
+		}
+		if meta, ok := parseGroupFileText(m.Text); ok {
+			row["text"] = "📎 " + meta.Name
+			enrichGroupFileRow(row, meta)
+		} else if rmeta, ok := parseReplyText(m.Text); ok {
+			row["text"] = rmeta.Text
+			enrichReplyRow(row, rmeta)
+		} else if fmeta, ok := parseForwardText(m.Text); ok {
+			row["text"] = fmeta.Text
+			enrichForwardRow(row, fmeta)
+		}
+		out = append(out, row)
+	}
+	return out, nil
 }
 
 // groupPeerActions maps a URL action onto the visor RPC it proxies.
