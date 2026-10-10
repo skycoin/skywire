@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
-	"github.com/gin-gonic/gin"
 )
 
 var (
@@ -199,8 +198,8 @@ const htmlFrontPageTemplate = `
 {{.Page.Content}}
 `
 
-func mainPage(c *gin.Context) {
-	c.Writer.Header().Set("Server", "")
+func mainPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Server", "")
 	tmpl0, err1 := tmpl.Clone()
 	if err1 != nil {
 		fmt.Println("Error cloning template:", err1)
@@ -249,11 +248,11 @@ func mainPage(c *gin.Context) {
 	err = tmpl.Execute(&result, tmplData)
 	if err != nil {
 		fmt.Println("error: ", err)
-		c.Writer.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	c.Writer.WriteHeader(http.StatusOK)
-	c.Writer.Write((bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1))) //nolint:errcheck,gosec
+	w.WriteHeader(http.StatusOK)
+	w.Write((bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1))) //nolint:errcheck,gosec
 }
 
 var htmlMainPageTemplate = `
