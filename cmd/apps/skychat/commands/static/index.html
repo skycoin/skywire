@@ -2483,6 +2483,15 @@
     .addr-result.hidden { display: none; }
     .addr-result.pending { opacity: 0.6; }
     .addr-result.bad { border-color: var(--accent-red); }
+    .ar-retry {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--priTx);
+      font: inherit;
+      text-decoration: underline;
+      cursor: pointer;
+    }
 
     .ar-avatar {
       width: 40px;
@@ -9528,6 +9537,14 @@
           const published = p && (p.name || p.avatar) ? p : null;
           this._newContact.profile = published;
 
+          if (p && p.unreachable) {
+            box.className = 'addr-result';
+            box.innerHTML = `<div class="ar-avatar">${icon('user', 20)}</div><div class="ar-body">
+              <div class="ar-title">${this.escapeHtml(this.abbrevPk(pk))}</div>
+              <div class="ar-sub">Couldn't reach them to ask for their name and picture.
+                <button type="button" class="ar-retry" onclick="app.onNewContactPk()">Try again</button></div></div>`;
+            return;
+          }
           if (!published) {
             box.className = 'addr-result';
             box.innerHTML = `<div class="ar-avatar">${icon('user', 20)}</div><div class="ar-body">
@@ -9689,6 +9706,10 @@
         if (!pk) return;
         this.showToast('Asking for their published profile…');
         this.fetchPeerProfile(pk).then(p => {
+          if (p && p.unreachable) {
+            this.showToast("Couldn't reach them. They may be offline, try again later.", 'error');
+            return;
+          }
           if (!p || (!p.name && !p.avatar)) {
             this.showToast('They publish no name or picture.', 'error');
             return;
@@ -9736,15 +9757,15 @@
 
       // fetchPeerProfile asks the visor for a peer's published profile.
       //
-      // Resolves to null on every failure rather than rejecting: a peer with
-      // no profile, a peer who is offline, and a build without --pair-enable
-      // are the same fact to every caller — there is nothing to show, use the
-      // key. Callers that want to say something about it check for null.
+      // Never rejects. Resolves to null when this build has no profiles, and
+      // to {unreachable: true} when the peer could not be asked, so a form can
+      // say "try again" instead of "they publish no name". Either way there is
+      // no name or avatar on it, which is all most callers check.
       fetchPeerProfile(pk) {
         if (!pk || this.profileAvailable === false) return Promise.resolve(null);
         return fetch(`/profile/peer?pk=${encodeURIComponent(pk)}`)
-          .then(res => (res.ok ? res.json() : null))
-          .catch(() => null);
+          .then(res => (res.ok ? res.json() : { unreachable: true }))
+          .catch(() => ({ unreachable: true }));
       }
 
       // ---- My profile --------------------------------------------------
