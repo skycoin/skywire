@@ -108,12 +108,25 @@ internal class NotificationBridge(context: Context) {
 
     private fun show(event: NotifyEvent) {
         val channel = channelFor(event.app)
-        val open = PendingIntent.getActivity(
-            app,
-            0,
-            Intent(app, MainActivity::class.java).setAction(Intent.ACTION_MAIN),
-            PendingIntent.FLAG_IMMUTABLE,
-        )
+        // SkyChat's tag names the conversation, so its notification opens it.
+        // One request code per tag, or every chat would share one intent.
+        val open = if (event.app == SKYCHAT && event.tag.isNotEmpty()) {
+            PendingIntent.getActivity(
+                app,
+                event.tag.hashCode(),
+                Intent(app, MainActivity::class.java)
+                    .setAction(DeepLinks.ACTION_OPEN_THREAD)
+                    .putExtra(DeepLinks.EXTRA_THREAD, event.tag),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        } else {
+            PendingIntent.getActivity(
+                app,
+                0,
+                Intent(app, MainActivity::class.java).setAction(Intent.ACTION_MAIN),
+                PendingIntent.FLAG_IMMUTABLE,
+            )
+        }
         val builder = NotificationCompat.Builder(app, channel.id)
             .setSmallIcon(R.drawable.skywire_logo)
             .setContentTitle(event.title.ifEmpty { channel.label })
@@ -164,6 +177,7 @@ internal class NotificationBridge(context: Context) {
 
     companion object {
         private const val TAG = "SkywireNotify"
+        private const val SKYCHAT = "skychat"
         private const val DATA_PREFIX = "data: "
         private const val RETRY_MS = 2_000L
 

@@ -284,6 +284,31 @@ internal object ChatWebView {
         return false
     }
 
+    /**
+     * Open the conversation a notification was about. The page only opens one
+     * it already has, and loads its contacts and groups after the document,
+     * so a cold start is retried for a while.
+     */
+    suspend fun openThread(view: WebView, thread: String): Boolean {
+        val script = """
+            (function () {
+              var chat = window.app;
+              return !!(chat && typeof chat.openThreadFromHost === 'function' &&
+                chat.openThreadFromHost(${JSONObject.quote(thread)}));
+            })()
+        """.trimIndent()
+        repeat(THREAD_ATTEMPTS) {
+            if (evaluate(view, script) == "true") return true
+            delay(THREAD_RETRY_MS)
+        }
+        Log.w(TAG, "chat page never opened the notified conversation")
+        return false
+    }
+
+    /** ~10 s: the group list waits on the visor's RPC, which may still be starting. */
+    private const val THREAD_ATTEMPTS = 40
+    private const val THREAD_RETRY_MS = 250L
+
     private suspend fun evaluate(view: WebView, script: String): String? =
         suspendCancellableCoroutine { continuation ->
             view.evaluateJavascript(script) { result -> continuation.resume(result) }
