@@ -38,9 +38,9 @@ func TestPageMarksStarts(t *testing.T) {
 		return Content{Charts: []Chart{{Title: "X", From: from, To: now, Times: f.Times,
 			Series: []Series{{Name: "x", Vals: f.Values("x", false)}}}}}, nil
 	}}
-	body, err := p.render(ctx, Ranges[0])
+	c, err := p.render(ctx, Ranges[0])
 	require.NoError(t, err)
-	html := string(body)
+	html := string(c.body)
 	require.Equal(t, 2, strings.Count(html, "<g class='start'>"))
 	require.Contains(t, html, "Running v1.3.100 (bbbbbbbbb) since")
 	require.Contains(t, html, `"v":"v1.3.100-0-aaaaaaaaa"`)
