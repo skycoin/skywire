@@ -95,9 +95,7 @@ var liveConfigFieldTable = []liveConfigField{
 			if err != nil {
 				return fmt.Errorf("invalid log level %q: %w", nv.String(), err)
 			}
-			if ml := v.conf.MasterLogger(); ml != nil {
-				ml.SetLevel(lvl)
-			}
+			setLogLevel(v.conf.MasterLogger(), lvl)
 			v.conf.LogLevel = nv.String()
 			return v.conf.Flush()
 		},

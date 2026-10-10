@@ -26,6 +26,9 @@ type Config struct {
 	Debug  bool      // show debug logs
 	Pins   Pin       // debug pins
 	Output io.Writer // provide an output
+	// DebugIf, when set, is asked on every debug line, so debug output can be
+	// turned on and off while the logger runs; Debug is then ignored.
+	DebugIf func() bool
 }
 
 // NewConfig returns Config with default values
@@ -145,12 +148,17 @@ type Logger interface {
 type logger struct {
 	*log.Logger
 	pins Pin
+	on   func() bool
+}
+
+func (l *logger) debugOn(pin Pin) bool {
+	return pin&l.pins != 0 && (l.on == nil || l.on())
 }
 
 // NewLogger create new Logger using given Config.
 // By default flags of the Logger is log.Lshortfile|log.Ltime
 func NewLogger(c Config) Logger {
-	if c.Debug == false { //nolint:staticcheck
+	if c.Debug == false && c.DebugIf == nil { //nolint:staticcheck
 		c.Pins = No // don't show debug logs
 	}
 	if c.Output == nil {
@@ -159,25 +167,26 @@ func NewLogger(c Config) Logger {
 	return &logger{
 		Logger: log.New(c.Output, c.Prefix, log.Lshortfile|log.Ltime),
 		pins:   c.Pins,
+		on:     c.DebugIf,
 	}
 }
 
 func (l *logger) Debug(pin Pin, args ...interface{}) {
-	if pin&l.pins != 0 {
+	if l.debugOn(pin) {
 		args = append([]interface{}{"[DBG] "}, args...)
 		l.Output(2, fmt.Sprint(args...)) //nolint:errcheck,gosec
 	}
 }
 
 func (l *logger) Debugln(pin Pin, args ...interface{}) {
-	if pin&l.pins != 0 {
+	if l.debugOn(pin) {
 		args = append([]interface{}{"[DBG]"}, args...)
 		l.Output(2, fmt.Sprintln(args...)) //nolint:errcheck,gosec
 	}
 }
 
 func (l *logger) Debugf(pin Pin, format string, args ...interface{}) {
-	if pin&l.pins != 0 {
+	if l.debugOn(pin) {
 		format = "[DBG] " + format
 		l.Output(2, fmt.Sprintf(format, args...)) //nolint:errcheck,gosec
 	}

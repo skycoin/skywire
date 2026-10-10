@@ -47,9 +47,6 @@ func (sn *Node) DmsgClient() *dmsg.Client {
 
 // NewNode constructs a new SetupNode.
 func NewNode(conf *SetupConfig) (*Node, error) {
-	if lvl, err := logging.LevelFromString(conf.LogLevel); err == nil {
-		logging.SetLevel(lvl)
-	}
 	masterLogger := logging.NewMasterLogger()
 	packageLogger := masterLogger.PackageLogger("node:disc")
 

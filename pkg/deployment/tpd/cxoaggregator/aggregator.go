@@ -450,16 +450,16 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggrega
 			// level so prod runs at INFO get nothing extra.
 			cfg.Logger.Output = os.Stderr
 			cfg.Logger.Prefix = "[tpd-cxo-aggregator:node] "
-			if lvl := logging.GetLevel(); lvl == logrus.DebugLevel || lvl == logrus.TraceLevel {
-				cfg.Logger.Debug = true
-				// Filter to the pins that diagnose Subscribe → Root
-				// delivery → fill chains. ConnPin is loud-on-startup but
-				// only one-shot; MsgPin would be too chatty (every Root +
-				// every chunk request), so include only MsgReceivePin
-				// which captures the publisher side of subscribe/root
-				// receipt.
-				cfg.Logger.Pins = node.FillPin | node.ConnPin | node.MsgReceivePin
-			}
+			// Asked per line, so a log level changed at runtime takes
+			// effect without rebuilding the node.
+			cfg.Logger.DebugIf = func() bool { return logging.GetLevel() >= logrus.DebugLevel }
+			// Filter to the pins that diagnose Subscribe → Root
+			// delivery → fill chains. ConnPin is loud-on-startup but
+			// only one-shot; MsgPin would be too chatty (every Root +
+			// every chunk request), so include only MsgReceivePin
+			// which captures the publisher side of subscribe/root
+			// receipt.
+			cfg.Logger.Pins = node.FillPin | node.ConnPin | node.MsgReceivePin
 		},
 		// The three Root-lifecycle callbacks together make the CXO
 		// replication chain observable from tpd's logs:

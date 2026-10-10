@@ -913,7 +913,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, opts Options, logBcast 
 	if logLvl, err := logging.LevelFromString(logLevel); err != nil {
 		v.log.WithError(err).Warn("Failed to read log level from config.")
 	} else {
-		v.conf.MasterLogger().SetLevel(logLvl)
+		setLogLevel(v.conf.MasterLogger(), logLvl)
 	}
 
 	v.ctx = ctx
