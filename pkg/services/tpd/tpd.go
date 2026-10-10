@@ -153,6 +153,9 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 			closeAll()
 			return nil, fmt.Errorf("transport-discovery: load live transport set: %w", err)
 		}
+	} else {
+		// An in-memory store is the whole set already.
+		store.ShareStore(ctx, storeCfg.URL, st)
 	}
 
 	nonceStoreConfig := cfg.NonceStoreConfig(plainHTTP)
