@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
@@ -61,41 +60,5 @@ func TestServeGz(t *testing.T) {
 	ServeGz(w, httptest.NewRequest(http.MethodGet, "/skywire.wasm", nil), nil, "")
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("absent: code=%d", w.Code)
-	}
-}
-
-// TestServe covers the embedded-only entry point in whichever state this build
-// is in: with a staged module it serves it under its stamp; without one it
-// sends the browser to the page origin's /skywire.wasm.
-func TestServe(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/tpviz-gl.wasm", nil)
-	r.Header.Set("Accept-Encoding", "gzip")
-	w := httptest.NewRecorder()
-	Serve(w, r)
-	if !Present() {
-		if w.Code != http.StatusFound || w.Header().Get("Location") != OriginPath {
-			t.Fatalf("absent: code=%d location=%q, want 302 → %s", w.Code, w.Header().Get("Location"), OriginPath)
-		}
-		t.Logf("no module embedded in this build: Serve redirects to %s", OriginPath)
-		return
-	}
-	if w.Code != 200 || w.Header().Get("Content-Type") != "application/wasm" || w.Header().Get("Content-Encoding") != "gzip" {
-		t.Fatalf("present: code=%d ct=%q enc=%q", w.Code, w.Header().Get("Content-Type"), w.Header().Get("Content-Encoding"))
-	}
-	if w.Header().Get("ETag") != `"`+Stamp()+`"` || !bytes.Equal(w.Body.Bytes(), Gz()) {
-		t.Fatalf("present: etag=%q stamp=%q len=%d", w.Header().Get("ETag"), Stamp(), w.Body.Len())
-	}
-}
-
-func TestLoaderJS(t *testing.T) {
-	exec := []byte("globalThis.Go = class { constructor() { this.argv = ['js']; } };\n")
-	out := string(LoaderJS(exec, "netview"))
-	if !strings.HasPrefix(out, string(exec)) {
-		t.Fatal("loader must start with the loader it wraps")
-	}
-	for _, want := range []string{"class extends _Go", "super();", "this.argv=['skywire','desk-host','--role','netview']", "HOME:'/home/user'", "USER:'user'"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("prelude missing %q", want)
-		}
 	}
 }

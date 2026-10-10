@@ -325,6 +325,9 @@ jobs:
       - name: Compile-check js/wasm binaries
         run: make build-wasm
 
+      - name: Check the committed netview module is current
+        run: make check-netview-wasm
+
   # Build lane for the android payload: cmd/skywire-mobile with tags
   # mobile,withoutsystray (GOOS=android GOARCH=arm64, pure-Go), then the size
   # budget — so the lite variant can't silently rot or regain stripped assets.
