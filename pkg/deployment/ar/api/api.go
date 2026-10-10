@@ -807,7 +807,7 @@ func (a *API) sendDialRequest(dialerPK, dialeePK cipher.PubKey, dialeeVisorData 
 		return fmt.Errorf("marshal: %w", err)
 	}
 
-	if _, err := conn.Write(data); err != nil {
+	if err := writeSUDPH(conn, data); err != nil {
 		return err
 	}
 
@@ -960,6 +960,19 @@ func (a *API) sudphConnHandshake(conn net.Conn) {
 // is generous enough to detect dead connections without false positives.
 const sudphReadTimeout = 3 * time.Minute
 
+// sudphWriteTimeout bounds a write to a SUDPH session. A peer that stops
+// acking fills the KCP send window, and without it every lookup that
+// asks that peer to dial blocks forever and pins its own session.
+var sudphWriteTimeout = 10 * time.Second
+
+func writeSUDPH(conn net.Conn, b []byte) error {
+	if err := conn.SetWriteDeadline(time.Now().Add(sudphWriteTimeout)); err != nil {
+		return err
+	}
+	_, err := conn.Write(b)
+	return err
+}
+
 // sudphInitialReadTimeout is the maximum time to wait for the initial
 // LocalAddresses payload after a successful handshake.
 const sudphInitialReadTimeout = 30 * time.Second
@@ -1084,7 +1097,7 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 				// notices, never reconnects, and its SUDPH entry goes
 				// stale. The echo gives the visor read loop a liveness
 				// deadline to trip. Best-effort.
-				if _, err := conn.Write(data); err != nil {
+				if err := writeSUDPH(conn, data); err != nil {
 					a.log.Debugf("Failed to echo SUDPH heartbeat to %v: %v", pk, err)
 					return
 				}
