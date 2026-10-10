@@ -51,3 +51,28 @@ func TestGraphCacheSharesCoHostedTPD(t *testing.T) {
 	require.Contains(t, g.graph, a, "TPD's transport, from its live set")
 	require.Contains(t, g.graph, b)
 }
+
+// The same with an in-memory TPD store, as a deployment without redis runs.
+func TestGraphCacheSharesCoHostedMemoryTPD(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	log := logging.MustGetLogger("test")
+	mem := storeconfig.Config{Type: storeconfig.Memory}
+	tpd, err := tpdstore.New(ctx, mem, time.Minute, log)
+	require.NoError(t, err)
+	a, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	e := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "stcpr"}
+	require.NoError(t, tpd.RegisterTransportsBatch(ctx, a, []*transport.SignedEntry{{Entry: e}}))
+	shareKey := "redis://localhost:6379#" + uuid.NewString()
+	tpdstore.ShareStore(ctx, shareKey, tpd)
+
+	own, err := tpdstore.New(ctx, mem, time.Minute, log)
+	require.NoError(t, err)
+	c := NewGraphCache(own, time.Hour, nil)
+	c.ShareFrom(shareKey)
+	g, err := c.Rebuild(ctx)
+	require.NoError(t, err)
+	require.Contains(t, g.graph, a, "TPD's transport, from its shared memory store")
+	require.Contains(t, g.graph, b)
+}

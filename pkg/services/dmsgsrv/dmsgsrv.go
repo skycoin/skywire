@@ -20,7 +20,6 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -181,15 +180,11 @@ func (s *service) Run(ctx context.Context) error {
 		cfg.MaxSessions = dmsg.DefaultMaxSessions
 	}
 	if cfg.HTTPAddress == "" {
-		u, err := url.Parse(cfg.LocalAddress)
+		addr, err := healthAddr(cfg.LocalAddress)
 		if err != nil {
-			return fmt.Errorf("dmsg-server: parse local_address %q: %w", cfg.LocalAddress, err)
+			return err
 		}
-		hp, err := strconv.Atoi(u.Port())
-		if err != nil {
-			return fmt.Errorf("dmsg-server: parse local_address port %q: %w", cfg.LocalAddress, err)
-		}
-		cfg.HTTPAddress = ":" + strconv.Itoa(hp+1)
+		cfg.HTTPAddress = addr
 	}
 
 	var m metrics.Metrics
@@ -718,4 +713,18 @@ func dmsgdServersFeed(dmsgC *dmsg.Client, discPK cipher.PubKey, log *logging.Log
 	}, 0)
 	mgr.Pin(cxosub.FeedDMSGDClientsByServer)
 	return mgr
+}
+
+// healthAddr is the health address for a server listening on local: the
+// port after its own, on every interface.
+func healthAddr(local string) (string, error) {
+	_, p, err := net.SplitHostPort(local)
+	if err != nil {
+		return "", fmt.Errorf("dmsg-server: parse local_address %q: %w", local, err)
+	}
+	hp, err := strconv.Atoi(p)
+	if err != nil {
+		return "", fmt.Errorf("dmsg-server: parse local_address port %q: %w", local, err)
+	}
+	return ":" + strconv.Itoa(hp+1), nil
 }

@@ -144,8 +144,11 @@ func (s *service) Run(ctx context.Context) error {
 	// verb is safe here. Log the fields that are useful for diagnosis instead.
 	log.Infof("Config: public_key=%s transport_discovery=%s log_level=%s cascade=%t transport=%t",
 		conf.PK, conf.TransportDiscovery, conf.LogLevel, conf.Cascade != nil, conf.Transport != nil)
-	sn, err := router.NewNode(conf)
+	sn, err := router.NewNode(ctx, conf)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
 		return fmt.Errorf("setup-node: create node: %w", err)
 	}
 

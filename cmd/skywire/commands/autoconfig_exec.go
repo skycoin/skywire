@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 )
 
@@ -64,6 +65,11 @@ func execConfigGen(r resolvedConfig, args []string) error {
 	cmd.Env = os.Environ()
 	if r.skyenvPath != "" {
 		cmd.Env = append(cmd.Env, "SKYENV="+r.skyenvPath)
+	}
+	if r.skydeploy != "" {
+		if _, err := os.Stat(r.skydeploy); err == nil {
+			cmd.Env = append(cmd.Env, "SKYDEPLOY="+r.skydeploy)
+		}
 	}
 	if err := cmd.Run(); err != nil {
 		if stderrBuf.Len() > 0 {
@@ -139,3 +145,50 @@ func restartOrPrompt(r resolvedConfig) {
 // finishAutoconfig is a no-op on native builds — the service restart
 // already happened (asynchronously) in restartOrPrompt.
 func finishAutoconfig(_ resolvedConfig) {}
+
+// exportDeployment writes the services-config of the deployment the visor
+// runs beside its config, and makes it the visor's SKYDEPLOY so nothing it
+// leaves unset falls back to prod.
+func exportDeployment(r *resolvedConfig) error {
+	if r.deployment == "" {
+		return nil
+	}
+	path := r.skydeploy
+	if path == "" {
+		path = filepath.Join(filepath.Dir(r.configPath), "deployment-services.json")
+	}
+	out, err := exec.Command(skywireBin(), "cli", "config", "deployment", "-i", r.configPath).Output() //nolint:gosec
+	if err != nil {
+		return fmt.Errorf("export the deployment's services-config: %w", err)
+	}
+	if err := os.WriteFile(path, out, 0o644); err != nil { //nolint:gosec
+		return err
+	}
+	r.skydeploy = path
+	msg3(fmt.Sprintf("Wrote the deployment's services-config to %s; other visors join with it", path))
+	return nil
+}
+
+// syncDeploymentDropIn sets SKYDEPLOY on the visor unit, or removes the
+// setting when path is empty, and reports whether anything changed.
+func syncDeploymentDropIn(path string) (bool, error) {
+	if path == "" {
+		err := os.Remove(deploymentDropIn)
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return err == nil, err
+	}
+	// The visor stops at start on a SKYDEPLOY it cannot read.
+	if _, err := os.Stat(path); err != nil {
+		return false, fmt.Errorf("SKYDEPLOY: %w", err)
+	}
+	content := fmt.Sprintf("# Managed by `skywire autoconfig`. Edits will be overwritten.\n[Service]\nEnvironment=SKYDEPLOY=%s\n", path)
+	if old, err := os.ReadFile(deploymentDropIn); err == nil && string(old) == content {
+		return false, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(deploymentDropIn), 0o755); err != nil { //nolint:gosec
+		return false, err
+	}
+	return true, os.WriteFile(deploymentDropIn, []byte(content), 0o644) //nolint:gosec
+}

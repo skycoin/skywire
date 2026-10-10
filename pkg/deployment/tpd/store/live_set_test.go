@@ -137,3 +137,24 @@ func TestLiveSetByEdge(t *testing.T) {
 	_, ok := (&liveSet{}).byEdge(a, false, now)
 	require.False(t, ok, "off: callers read redis")
 }
+
+func TestShareStore(t *testing.T) {
+	const url = "redis://share-store-test:6379"
+	ctx, cancel := context.WithCancel(context.Background())
+	s := newMemoryStore()
+	ShareStore(ctx, url, s)
+	if got, ok := SharedLiveStore(url); !ok || got != Store(s) {
+		t.Fatalf("SharedLiveStore = %v, %v; want the shared store", got, ok)
+	}
+	cancel()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, ok := SharedLiveStore(url); !ok {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("store still shared after ctx ended")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
