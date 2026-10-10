@@ -126,6 +126,10 @@ class VpnAppRoutingStore(private val prefs: AppPreferences) {
 /** An app that can be chosen for SkyVPN. */
 data class InstalledApp(val packageName: String, val label: String)
 
+/** [apps] with the [chosen] ones first, each group keeping its order. */
+fun chosenFirst(apps: List<InstalledApp>, chosen: Set<String>): List<InstalledApp> =
+    apps.sortedBy { it.packageName !in chosen }
+
 /**
  * The apps worth offering: the ones on the launcher (the apps a person opens
  * and would think to choose) that can use the network at all, without this
