@@ -37,7 +37,7 @@ require (
 	github.com/0magnet/wfdrive v0.3.2
 	github.com/0magnet/winbox-go v0.0.1-0.20261008155453-e5e3ca2e9451
 	github.com/0magnet/wisp v0.0.0-20261010111717-5602c41d7a1c
-	github.com/0magnet/yamux v0.1.3-0.20261004024245-10ef81fe8447
+	github.com/0magnet/yamux v0.1.3-0.20261010151333-a0a36faac6f4
 	github.com/ActiveState/termtest/conpty v0.5.0
 	github.com/DiSiqueira/GoTree v1.0.0
 	github.com/MichaelMure/go-term-markdown v0.1.4
