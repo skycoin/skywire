@@ -17,6 +17,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 
+	kcp "github.com/0magnet/kcp-go/v5"
+
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	armetrics "github.com/skycoin/skywire/pkg/deployment/ar/metrics"
@@ -878,6 +880,9 @@ const sudphMaxInFlightHandshakes = 256
 
 // ListenUDP listens for UDP connections for SUDPH.
 func (a *API) ListenUDP(listener net.Listener) {
+	if kl, ok := listener.(*kcp.Listener); ok {
+		a.sudphSessions.lis.Store(kl)
+	}
 	a.log.Infof("Listening UDP on %v", listener.Addr())
 
 	// Semaphore bounding in-flight handshake goroutines.

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
+	"unsafe"
 	"weak"
 
 	kcp "github.com/0magnet/kcp-go/v5"
@@ -15,6 +16,7 @@ import (
 type sudphSessions struct {
 	accepted atomic.Int64
 	closed   atomic.Int64
+	lis      atomic.Pointer[kcp.Listener]
 
 	mu sync.Mutex
 	m  map[*sessionMark]weak.Pointer[kcp.UDPSession]
@@ -77,21 +79,30 @@ type SudphSessionsReport struct {
 	InMemoryClosed    int `json:"in_memory_closed"`
 	InMemoryWrapperUp int `json:"in_memory_wrapper_reachable"`
 	// KCP counters are process wide, so they include the visor's own sessions.
-	KCPCurrEstab    uint64 `json:"kcp_curr_estab"`
-	KCPPassiveOpens uint64 `json:"kcp_passive_opens"`
-	KCPActiveOpens  uint64 `json:"kcp_active_opens"`
-	SudphConnsBound int    `json:"sudph_conns_bound"`
+	// ListenerSessions is the size of the KCP listener's own session map, and
+	// ClosedInListener how many sessions this API closed are still in it.
+	ListenerSessions int    `json:"kcp_listener_sessions"`
+	ClosedInListener int    `json:"closed_in_listener_map"`
+	KCPCurrEstab     uint64 `json:"kcp_curr_estab"`
+	KCPPassiveOpens  uint64 `json:"kcp_passive_opens"`
+	KCPActiveOpens   uint64 `json:"kcp_active_opens"`
+	SudphConnsBound  int    `json:"sudph_conns_bound"`
 }
 
 func (a *API) sudphSessionsReport() SudphSessionsReport {
 	ss := &a.sudphSessions
 	r := SudphSessionsReport{Accepted: ss.accepted.Load(), Closed: ss.closed.Load()}
+	n, inMap, _ := listenerSessions(ss.lis.Load())
+	r.ListenerSessions = n
 	ss.mu.Lock()
 	ss.pruneLocked()
-	for m := range ss.m {
+	for m, wp := range ss.m {
 		r.InMemory++
 		if m.closed.Load() {
 			r.InMemoryClosed++
+			if s := wp.Value(); s != nil && inMap[uintptr(unsafe.Pointer(s))] { //nolint:gosec
+				r.ClosedInListener++
+			}
 		}
 		if m.wrapper.Value() != nil {
 			r.InMemoryWrapperUp++
