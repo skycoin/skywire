@@ -3,6 +3,7 @@ package log
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -105,4 +106,31 @@ func TestLogger_Pins(t *testing.T) {
 		t.Error("pins work incorrect", buf.String())
 	}
 
+}
+
+// DebugIf turns debug lines on and off while the logger runs, for every
+// configured pin, whatever Debug says.
+func TestLogger_DebugIf(t *testing.T) {
+	var buf bytes.Buffer
+	on := false
+	c := NewConfig()
+	c.Output = &buf
+	c.Pins = 1
+	c.DebugIf = func() bool { return on }
+	l := NewLogger(c)
+
+	l.Debug(1, "hidden")
+	if buf.Len() != 0 {
+		t.Fatalf("debug printed while off: %q", buf.String())
+	}
+	on = true
+	l.Debugf(1, "shown %d", 1)
+	if !strings.Contains(buf.String(), "shown 1") {
+		t.Fatalf("debug not printed while on: %q", buf.String())
+	}
+	buf.Reset()
+	l.Debug(2, "other pin")
+	if buf.Len() != 0 {
+		t.Fatalf("unconfigured pin printed: %q", buf.String())
+	}
 }
