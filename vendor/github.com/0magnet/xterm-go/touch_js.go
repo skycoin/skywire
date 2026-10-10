@@ -46,6 +46,9 @@ type touchState struct {
 func (t *Terminal) wireTouch() {
 	nonPassive := map[string]any{"passive": false}
 	t.element.Call("addEventListener", "touchstart", t.fn(func(_ js.Value, args []js.Value) any {
+		if args[0].Get("defaultPrevented").Bool() {
+			return nil // handled by something over the cells (xterm.go)
+		}
 		t.touchStart(args[0])
 		return nil
 	}), nonPassive)
