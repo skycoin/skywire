@@ -9,9 +9,10 @@
 //     -> { pid, id, exited: Promise<exitCode>, kill(force), stdin, resize(c, r) }
 //
 // - argv[0] is resolved against jsfs (absolute, cwd-relative, or PATH-walked);
-//   the file's bytes ARE the program. Compiled modules are cached by path so
-//   repeat spawns skip the compile. A program too big to hold as bytes is
-//   bound to its path with registerModule / registerURL instead, and a caller
+//   the file's bytes ARE the program, read asynchronously under a mount.
+//   Compiled modules are cached by path so repeat spawns skip the compile.
+//   A program too big to hold as bytes is bound to its path with
+//   registerModule / registerURL instead, and a caller
 //   that keeps programs elsewhere passes opts.bytes or opts.module. Bytes
 //   with opts.stamp are compiled once per path and stamp: proc.cached(path,
 //   stamp) says when a spawn needs no bytes at all.
@@ -213,16 +214,24 @@
 		}
 
 		// Resolve argv[0] to bytes in jsfs. Absolute or cwd-relative first,
-		// then a PATH walk (env.PATH, colon-separated) as a shell would.
-		const tryPath = (p) => {
-			const bytes = jsfs.readFile(p);
-			return bytes ? { path: p, bytes } : null;
-		};
-		if (argv0.startsWith("/")) return tryPath(argv0);
-		if (argv0.includes("/")) return tryPath(join(cwd || jsfs.getCwd(), argv0));
-		for (const dir of ((env && env.PATH) || "/bin").split(":")) {
-			const hit = tryPath(join(dir, argv0));
-			if (hit) return hit;
+		// then a PATH walk (env.PATH, colon-separated) as a shell would. A
+		// candidate under a mount can only be read asynchronously, so from
+		// there on the walk is a promise, which spawn waits for.
+		const candidates = argv0.startsWith("/") ? [argv0]
+			: argv0.includes("/") ? [join(cwd || jsfs.getCwd(), argv0)]
+			: ((env && env.PATH) || "/bin").split(":").map((dir) => join(dir, argv0));
+		for (let i = 0; i < candidates.length; i++) {
+			if (jsfs.mounted && jsfs.mounted(candidates[i])) return findLater(candidates.slice(i));
+			const bytes = jsfs.readFile(candidates[i]);
+			if (bytes) return { path: candidates[i], bytes };
+		}
+		return null;
+	}
+
+	async function findLater(candidates) {
+		for (const p of candidates) {
+			const bytes = await jsfs.readFileAsync(p);
+			if (bytes) return { path: p, bytes };
 		}
 		return null;
 	}
@@ -423,7 +432,7 @@
 		let cwd = opts.cwd || jsfs.getCwd();
 		const env = opts.env || {};
 
-		const prog = programOf(opts, argv[0], cwd, env);
+		let prog = programOf(opts, argv[0], cwd, env);
 		const pid = nextPID++;
 		const id = opts.id || ("p" + pid);
 		if (!prog) {
@@ -472,6 +481,16 @@
 			return true;
 		};
 		const exited = (async () => {
+			if (typeof prog.then === "function") {
+				prog = await prog;
+				if (!prog) {
+					myStdio.stderr(new TextEncoder().encode(argv[0] + ": not found\n"));
+					reap(id);
+					closeStdin(stdinR, stdinW);
+					if (rec) rec.exitInfo = { code: 127, crashed: false };
+					return 127;
+				}
+			}
 			// The Go loader and the program compile in parallel; both may be a
 			// network fetch on the first spawn.
 			const mod = await resolveModule(prog);
@@ -852,7 +871,7 @@ self.onmessage = async (ev) => {
 
 		const cwd = opts.cwd || jsfs.getCwd();
 		const env = Object.assign({}, opts.env || {});
-		const prog = readProgram(argv[0], cwd, env);
+		let prog = readProgram(argv[0], cwd, env);
 		const pid = nextPID++;
 		const id = opts.id || ('p' + pid);
 		for (const k of idEnvNames(opts)) env[k] = id;
@@ -878,6 +897,7 @@ self.onmessage = async (ev) => {
 		let settled = false;
 
 		let terminate = null;
+		let notFound = null;
 		const exited = new Promise((resolve) => {
 			const finish = (code, wasCrash) => {
 				if (settled) return;
@@ -892,6 +912,7 @@ self.onmessage = async (ev) => {
 			// runtime is busy — so kill() terminates it. 130 is what a shell
 			// reports for a program killed by an interrupt.
 			terminate = () => { if (settled) return false; finish(130, false); return true; };
+			notFound = () => finish(127, false);
 			w.onmessage = (ev) => {
 				const m = ev.data;
 				if (m.out) { myStdio.stdout(m.out); return; }
@@ -908,6 +929,14 @@ self.onmessage = async (ev) => {
 		// across to the worker, so a spawn costs an instantiate, not a compile.
 		(async () => {
 			try {
+				if (typeof prog.then === 'function') {
+					prog = await prog;
+					if (!prog) {
+						myStdio.stderr(new TextEncoder().encode(argv[0] + ': not found\n'));
+						notFound();
+						return;
+					}
+				}
 				const mod = await resolveModule(prog);
 				const kind = kindOf(mod);
 				const loader = kind === 'tinygo' ? assets.wasmExecTinyGo : (assets.wasmExecGo || assets.wasmExec);

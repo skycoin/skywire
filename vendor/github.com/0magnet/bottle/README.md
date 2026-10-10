@@ -110,6 +110,8 @@ when another thread owns the filesystem. `jsfs.unmount(prefix)` detaches it.
 or throws an error with a `.code`, for a loader that cannot wait, such as
 TinyGo's, whose WASI filesystem calls are synchronous. Mounted paths answer
 `ENOTSUP` there, and a lazy file answers `EAGAIN` until its bytes arrive.
+`jsfs.readFileAsync(path)` reads a whole file, mounts included, and proc uses
+it to run a program that lives under a mount.
 
 And in the program, listen/dial loopback through the adapter:
 

@@ -750,6 +750,35 @@
 		};
 	}
 
+	// readFileAsync reads a whole file through the fs calls, so a path under a
+	// mount works too. It resolves null for anything that is not a file.
+	function readFileAsync(path) {
+		const call = (name, ...a) => new Promise((res, rej) => fsImpl[name](...a, (err, v) => err ? rej(err) : res(v)));
+		return (async () => {
+			let st;
+			try { st = await call('stat', path); } catch (e) { return null; }
+			if (!st.isFile()) return null;
+			const fd = await call('open', path, 0, 0);
+			try {
+				const parts = [];
+				let n = 0;
+				for (;;) {
+					const buf = new Uint8Array(1 << 16);
+					const got = await call('read', fd, buf, 0, buf.length, n);
+					if (!got) break;
+					parts.push(buf.subarray(0, got));
+					n += got;
+				}
+				const out = new Uint8Array(n);
+				let at = 0;
+				for (const p of parts) { out.set(p, at); at += p.length; }
+				return out;
+			} finally {
+				await call('close', fd).catch(() => {});
+			}
+		})();
+	}
+
 	// mount attaches provider at prefix, which becomes a directory in the tree
 	// so its parent lists it; a mount at / takes the whole tree, and readFile
 	// answers null there. unmount detaches it; fds still open there answer
@@ -1085,5 +1114,7 @@
 		mount,           // mount(prefix, provider): hand a subtree to a provider
 		unmount,         // unmount(prefix)
 		mounts() { return mounts.map((m) => m.prefix); },
+		mounted(path) { return !!mountOf(path); },
+		readFileAsync, // the whole file through the fs calls, mounts included
 	};
 })();
