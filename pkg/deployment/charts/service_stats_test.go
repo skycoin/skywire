@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/httputil"
 )
 
 // Requests are counted under the route that matched, not the path asked for,
@@ -16,7 +17,7 @@ import (
 // process figures and response time percentiles.
 func TestServiceStatsCountsByRoute(t *testing.T) {
 	s := NewServiceStats("test")
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	r.Get("/entries/{pk}", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("hello")) }) //nolint:errcheck
 	r.Get("/missing", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
 	h := s.Handler(r)

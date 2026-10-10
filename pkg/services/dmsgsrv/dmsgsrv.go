@@ -27,9 +27,6 @@ import (
 	"strings"
 	"time"
 
-	chi "github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -203,11 +200,11 @@ func (s *service) Run(ctx context.Context) error {
 	}
 	metricsutil.ServeHTTPMetrics(log, s.cfg.MetricsAddr)
 
-	r := chi.NewRouter()
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP) //nolint:staticcheck
+	r := httputil.NewRouter()
+	r.Use(httputil.RequestID)
+	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(log))
-	r.Use(middleware.Recoverer)
+	r.Use(httputil.Recoverer)
 
 	srvAPI := dmsgserver.NewServerAPI(r, log, m)
 

@@ -8,16 +8,16 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/httputil"
 )
 
 func TestResolveFastPath(t *testing.T) {
 	target, _ := cipher.GenerateKeyPair()
 	var httpCalls atomic.Int64
-	mux := chi.NewRouter()
+	mux := httputil.NewRouter()
 	for _, typ := range []string{"stcpr", "sudph", "squicr"} {
 		mux.Get("/resolve/"+typ+"/{pk}", func(w http.ResponseWriter, _ *http.Request) {
 			httpCalls.Add(1)
@@ -67,7 +67,7 @@ func TestSameHostMirrorsTheResolver(t *testing.T) {
 func TestResolveRemembersNotFound(t *testing.T) {
 	target, _ := cipher.GenerateKeyPair()
 	var calls atomic.Int64
-	mux := chi.NewRouter()
+	mux := httputil.NewRouter()
 	mux.Get("/resolve/sudph/{pk}", func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		http.Error(w, "nope", http.StatusNotFound)

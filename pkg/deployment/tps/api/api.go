@@ -5,8 +5,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-playground/validator/v10"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -38,12 +36,12 @@ func New(log *logging.Logger, conf config.Config) *API {
 	api := &API{logger: log, validator: v}
 	api.dmsgC = setupDmsgC(conf, log)
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP) //nolint:staticcheck
+	r.Use(httputil.RequestID)
+	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(log))
-	r.Use(middleware.Recoverer)
+	r.Use(httputil.Recoverer)
 	r.Use(httputil.SetLoggerMiddleware(log))
 
 	r.Post("/add", api.addTransport)

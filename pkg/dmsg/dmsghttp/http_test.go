@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/httputil"
 )
 
 const (
@@ -84,7 +84,7 @@ func (r httpClientResult) Assert(t *testing.T, i int) {
 }
 
 func startHTTPServer(t *testing.T, results chan httpServerResult, lis net.Listener) {
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 
 	r.HandleFunc(endpointHTML, func(w http.ResponseWriter, _ *http.Request) {
 		result := httpServerResult{Path: endpointHTML}

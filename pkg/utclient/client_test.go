@@ -10,12 +10,12 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httpauthclient"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -83,7 +83,7 @@ func TestUpdateVisorUptime(t *testing.T) {
 }
 
 func authHandler(next http.Handler) http.Handler {
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	log := logging.MustGetLogger("utclient")
 	r.Handle("/security/nonces/{pk}", http.HandlerFunc(
 		func(w http.ResponseWriter, _ *http.Request) {
@@ -93,7 +93,7 @@ func authHandler(next http.Handler) http.Handler {
 		},
 	))
 
-	r.Handle("/*", next)
+	r.Handle("/{rest...}", next)
 
 	return r
 }

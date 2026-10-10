@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -23,7 +23,7 @@ func TestBindQUIC(t *testing.T) {
 	t.Run("success posts to quic bind path", func(t *testing.T) {
 		var got LocalAddresses
 		gotCh := make(chan struct{}, 1)
-		mux := chi.NewRouter()
+		mux := httputil.NewRouter()
 		mux.Post("/bind/quic", func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewDecoder(r.Body).Decode(&got) //nolint
 			gotCh <- struct{}{}
@@ -41,7 +41,7 @@ func TestBindQUIC(t *testing.T) {
 	})
 
 	t.Run("rate limited returns error", func(t *testing.T) {
-		mux := chi.NewRouter()
+		mux := httputil.NewRouter()
 		mux.Post("/bind/quic", func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusTooManyRequests)
 		})
@@ -56,7 +56,7 @@ func TestBindQUIC(t *testing.T) {
 	})
 
 	t.Run("non-OK status returns error", func(t *testing.T) {
-		mux := chi.NewRouter()
+		mux := httputil.NewRouter()
 		mux.Post("/bind/quic", func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "no", http.StatusInternalServerError)
 		})
@@ -72,7 +72,7 @@ func TestBindQUIC(t *testing.T) {
 func TestBindWT(t *testing.T) {
 	var got LocalAddresses
 	gotCh := make(chan struct{}, 1)
-	mux := chi.NewRouter()
+	mux := httputil.NewRouter()
 	mux.Post("/bind/wt", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&got) //nolint
 		gotCh <- struct{}{}

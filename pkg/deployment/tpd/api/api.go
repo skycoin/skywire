@@ -7,12 +7,11 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -140,12 +139,12 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		edgeRespCache:               newEdgeRespCache(edgeRespCacheTTL),
 	}
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP) //nolint:staticcheck
+	r.Use(httputil.RequestID)
+	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(log))
-	r.Use(middleware.Recoverer)
+	r.Use(httputil.Recoverer)
 	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip JSON responses on the wire — this router is also served over
 	// dmsg, where every byte is relayed. Matches rf/ut/sd.
@@ -159,14 +158,13 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Use(httputil.SetLoggerMiddleware(log))
 
 	// Authenticated endpoints (rate limited + auth)
-	r.Group(func(r chi.Router) {
+	r.Group(func(r *httputil.Router) {
 		r.Use(api.rateLimiter.Middleware())
 		r.Use(httpauth.MakeMiddleware(nonceStore))
 
-		r.Get("/transports/id:{id}", api.getTransportByID)
-		r.Get("/transports/edge:{edge}", api.getTransportByEdge)
+		r.Get("/transports/{ref}", byKind(map[string]http.HandlerFunc{"id": api.getTransportByID, "edge": api.getTransportByEdge}))
 		r.Post("/transports/", api.registerTransport)
-		r.Delete("/transports/id:{id}", api.deleteTransport)
+		r.Delete("/transports/{ref}", byKind(map[string]http.HandlerFunc{"id": api.deleteTransport}))
 		r.Post("/transports/delete-batch", api.deleteTransportsBatch)
 		r.Get("/v4/update", api.visorHeartbeat)
 
@@ -180,7 +178,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	})
 
 	// Public data endpoints (rate limited, no auth)
-	r.Group(func(r chi.Router) {
+	r.Group(func(r *httputil.Router) {
 		r.Use(api.rateLimiter.Middleware())
 
 		r.Post("/transports/edges", api.getTransportsByEdges)
@@ -190,7 +188,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		// edge PK — identical shape to the DHT value under
 		// SHA256(edgePK || "tp") so a visor with a full DHT node can
 		// consume either source interchangeably.
-		r.Get("/v3/transports/edge:{edge}", api.getTransportsByEdgeV3)
+		r.Get("/v3/transports/{ref}", byKind(map[string]http.HandlerFunc{"edge": api.getTransportsByEdgeV3}))
 		r.Get("/all-transports/stats", api.getAllTransportsStats)
 		r.Get("/all-transports/per-key-stats", api.getAllTransportsPerKeyStats)
 		r.Get("/transports/stats/{edge}", api.getTransportStats)
@@ -236,7 +234,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	// unconditionally; until SetUptimeRecorder is called they 503,
 	// matching the visor's logserver pattern. No auth: this is the
 	// service's own version-history, useful for unauth'd monitoring.
-	r.Group(func(r chi.Router) {
+	r.Group(func(r *httputil.Router) {
 		r.Get("/uptime/now", api.uptimeNow)
 		r.Get("/uptime/sessions", api.uptimeSessions)
 		r.Get("/uptime/timeline", api.uptimeTimeline)
@@ -601,4 +599,20 @@ func (api *API) SeedReconcile(ctx context.Context) error {
 	}
 	api.reconcile.seed(time.Now(), entries)
 	return nil
+}
+
+// byKind serves paths like /transports/id:<id> and /transports/edge:<pk>.
+// A ServeMux wildcard fills a whole segment, so the kind is split off here
+// and the value is set as the path value of that name.
+func byKind(handlers map[string]http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		kind, value, ok := strings.Cut(r.PathValue("ref"), ":")
+		h := handlers[kind]
+		if !ok || h == nil {
+			http.NotFound(w, r)
+			return
+		}
+		r.SetPathValue(kind, value)
+		h(w, r)
+	}
 }

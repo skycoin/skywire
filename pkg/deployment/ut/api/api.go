@@ -15,9 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/httprate"
 	"github.com/go-echarts/go-echarts/v2/charts"
 	"github.com/go-echarts/go-echarts/v2/opts"
 	"github.com/sirupsen/logrus"
@@ -38,17 +35,6 @@ const (
 	rateLimiterRequests = 5
 	rateLimiterWindow   = 1 * time.Minute
 )
-
-// keyByRemoteAddr keys the rate limiter off the TCP peer address (r.RemoteAddr),
-// canonicalizing IPv6 to its /64. It is the explicit, non-deprecated equivalent
-// of httprate.KeyByIP (which was deprecated to make the trust model explicit).
-func keyByRemoteAddr(r *http.Request) (string, error) {
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		ip = r.RemoteAddr
-	}
-	return httprate.CanonicalizeIP(ip), nil
-}
 
 // API register all the API endpoints.
 // It implements a net/http.Handler.
@@ -113,11 +99,11 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore, 
 		DmsgServers:                 []string{},
 	}
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP) //nolint:staticcheck
-	r.Use(middleware.Recoverer)
+	r.Use(httputil.RequestID)
+	r.Use(httputil.RealIP) //nolint:staticcheck
+	r.Use(httputil.Recoverer)
 	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip responses on the wire — /uptimes is a fleet-wide JSON body polled
 	// constantly by the reward system + CLIs; it compresses ~80-90%. Clients
@@ -135,11 +121,11 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore, 
 	r.Get("/v2/update", sendGone)
 	r.Get("/v3/update", sendGone)
 
-	r.Group(func(r chi.Router) {
+	r.Group(func(r *httputil.Router) {
 		// logged requests group
 		r.Use(httputil.NewLogMiddleware(log))
 
-		r.Group(func(r chi.Router) {
+		r.Group(func(r *httputil.Router) {
 			// authenticated requests group
 			if enableLoadTesting {
 				r.Use(httpauth.MakeLoadTestingMiddleware(nonceStore))
@@ -149,14 +135,10 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore, 
 			r.Get("/v4/update", api.handleUpdate())
 		})
 
-		r.Group(func(r chi.Router) {
-			// request rate limited group, keyed per TCP peer (r.RemoteAddr).
-			// Explicit form of the now-deprecated httprate.LimitByIP wrapper
-			// (identical behavior): LimitByIP/KeyByIP were deprecated to force
-			// callers to state a trust model, since behind a reverse proxy
-			// RemoteAddr is the proxy's address. We keep the prior per-RemoteAddr
-			// keying — see keyByRemoteAddr.
-			r.Use(httprate.LimitBy(rateLimiterRequests, rateLimiterWindow, keyByRemoteAddr))
+		r.Group(func(r *httputil.Router) {
+			// Rate limited per TCP peer (r.RemoteAddr). Behind a reverse proxy
+			// that is the proxy address.
+			r.Use(httputil.RateLimit(rateLimiterRequests, rateLimiterWindow, httputil.KeyByRemoteAddr))
 
 			r.Get("/visors", api.handleVisors)
 			r.Get("/uptimes", api.handleUptimes)
@@ -714,12 +696,12 @@ func NewPrivate(log logrus.FieldLogger, s store.Store) *PrivateAPI {
 		startedAt: time.Now(),
 	}
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 
 	r.Use(httputil.NewLogMiddleware(log))
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP) //nolint:staticcheck
-	r.Use(middleware.Recoverer)
+	r.Use(httputil.RequestID)
+	r.Use(httputil.RealIP) //nolint:staticcheck
+	r.Use(httputil.Recoverer)
 
 	r.Get("/visor-ips", pAPI.handleVisorIPs)
 

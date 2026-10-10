@@ -17,12 +17,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httpauthclient"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -30,14 +30,14 @@ import (
 // arRouter builds a chi router that satisfies the auth handshake
 // (/security/nonces/{pk}) and dispatches everything else to next.
 func arRouter(next http.Handler) http.Handler {
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	r.Handle("/security/nonces/{pk}", http.HandlerFunc(func(w http.ResponseWriter, rq *http.Request) {
-		pk := chi.URLParam(rq, "pk")
+		pk := rq.PathValue("pk")
 		var edge cipher.PubKey
 		_ = edge.Set(pk)                                                                           //nolint
 		_ = json.NewEncoder(w).Encode(&httpauthclient.NextNonceResponse{Edge: edge, NextNonce: 1}) //nolint
 	}))
-	r.Handle("/*", next)
+	r.Handle("/{rest...}", next)
 	return r
 }
 
@@ -62,7 +62,7 @@ func newReadyClient(t *testing.T, srv *httptest.Server) *httpClient {
 func TestResolve(t *testing.T) {
 	target, _ := cipher.GenerateKeyPair()
 
-	mux := chi.NewRouter()
+	mux := httputil.NewRouter()
 	mux.Get("/resolve/stcpr/{pk}", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(VisorData{RemoteAddr: "1.2.3.4:5000"}) //nolint
 	})
@@ -112,7 +112,7 @@ func TestTransports(t *testing.T) {
 	pk2, _ := cipher.GenerateKeyPair()
 
 	t.Run("success", func(t *testing.T) {
-		mux := chi.NewRouter()
+		mux := httputil.NewRouter()
 		mux.Get("/transports", func(w http.ResponseWriter, _ *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string][]string{ //nolint
 				"stcpr": {pk1.Hex(), pk2.Hex()},
@@ -131,7 +131,7 @@ func TestTransports(t *testing.T) {
 	})
 
 	t.Run("non-OK status", func(t *testing.T) {
-		mux := chi.NewRouter()
+		mux := httputil.NewRouter()
 		mux.Get("/transports", func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "down", http.StatusServiceUnavailable)
 		})
@@ -148,7 +148,7 @@ func TestTransportsType(t *testing.T) {
 	pk1, _ := cipher.GenerateKeyPair()
 	pk2, _ := cipher.GenerateKeyPair()
 
-	mux := chi.NewRouter()
+	mux := httputil.NewRouter()
 	mux.Get("/transports", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string][]string{ //nolint
 			"sudph": {pk1.Hex()},
@@ -176,7 +176,7 @@ func TestTransportsType(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	gotMethod := make(chan string, 1)
-	mux := chi.NewRouter()
+	mux := httputil.NewRouter()
 	mux.Delete("/some/path", func(_ http.ResponseWriter, r *http.Request) {
 		gotMethod <- r.Method
 	})
@@ -206,7 +206,7 @@ func TestClose(t *testing.T) {
 
 func TestFetchPublicUDPAddr(t *testing.T) {
 	t.Run("advertised udp_address", func(t *testing.T) {
-		mux := chi.NewRouter()
+		mux := httputil.NewRouter()
 		mux.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"udp_address": "5.6.7.8:30178"}) //nolint
 		})
@@ -218,7 +218,7 @@ func TestFetchPublicUDPAddr(t *testing.T) {
 	})
 
 	t.Run("host without port gets default port", func(t *testing.T) {
-		mux := chi.NewRouter()
+		mux := httputil.NewRouter()
 		mux.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"udp_address": "5.6.7.8"}) //nolint
 		})
@@ -230,7 +230,7 @@ func TestFetchPublicUDPAddr(t *testing.T) {
 	})
 
 	t.Run("empty udp_address yields empty", func(t *testing.T) {
-		mux := chi.NewRouter()
+		mux := httputil.NewRouter()
 		mux.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]string{}) //nolint
 		})
@@ -283,7 +283,7 @@ func TestFetchPublicUDPAddr(t *testing.T) {
 func TestBindSTCPRWithV6AndPublicIP(t *testing.T) {
 	var v4Binds, v6Binds int
 	bindCh := make(chan struct{}, 4)
-	mux := chi.NewRouter()
+	mux := httputil.NewRouter()
 	mux.Post("/bind/stcpr", func(w http.ResponseWriter, _ *http.Request) {
 		v4Binds++ // both v4 and v6 clients hit the same loopback endpoint
 		bindCh <- struct{}{}
@@ -312,7 +312,7 @@ func TestBindSTCPRWithV6AndPublicIP(t *testing.T) {
 func TestDelBindSTCPR(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		done := make(chan struct{}, 1)
-		mux := chi.NewRouter()
+		mux := httputil.NewRouter()
 		mux.Delete("/bind/stcpr", func(w http.ResponseWriter, _ *http.Request) {
 			done <- struct{}{}
 			w.WriteHeader(http.StatusOK)
@@ -326,7 +326,7 @@ func TestDelBindSTCPR(t *testing.T) {
 	})
 
 	t.Run("non-OK status errors", func(t *testing.T) {
-		mux := chi.NewRouter()
+		mux := httputil.NewRouter()
 		mux.Delete("/bind/stcpr", func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "no", http.StatusInternalServerError)
 		})

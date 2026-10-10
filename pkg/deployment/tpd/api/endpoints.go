@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
@@ -115,7 +114,7 @@ func (api *API) registerTransportV3(w http.ResponseWriter, r *http.Request) {
 // same store.GetTransportsByEdge that v2 uses; it's already the bare
 // Entry list (SignedEntry is not persisted).
 func (api *API) getTransportsByEdgeV3(w http.ResponseWriter, r *http.Request) {
-	edgeParam := chi.URLParam(r, "edge")
+	edgeParam := r.PathValue("edge")
 	var edge cipher.PubKey
 	if err := edge.UnmarshalText([]byte(edgeParam)); err != nil {
 		api.writeError(w, r, ErrInvalidPubKey)
@@ -193,7 +192,7 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) getTransportByID(w http.ResponseWriter, r *http.Request) {
-	idParam := chi.URLParam(r, "id")
+	idParam := r.PathValue("id")
 
 	id, err := uuid.Parse(idParam)
 	if err != nil {
@@ -247,7 +246,7 @@ func (api *API) getTransportsByEdges(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
-	edgeParam := chi.URLParam(r, "edge")
+	edgeParam := r.PathValue("edge")
 
 	pk := cipher.PubKey{}
 	if err := pk.UnmarshalText([]byte(edgeParam)); err != nil {
@@ -287,7 +286,7 @@ func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) getTransportStats(w http.ResponseWriter, r *http.Request) {
-	edgeParam := chi.URLParam(r, "edge")
+	edgeParam := r.PathValue("edge")
 
 	pk := cipher.PubKey{}
 	if err := pk.UnmarshalText([]byte(edgeParam)); err != nil {
@@ -426,7 +425,7 @@ func (api *API) deleteTransport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(r, "id")
+	idParam := r.PathValue("id")
 
 	id, err := uuid.Parse(idParam)
 	if err != nil {
@@ -607,7 +606,7 @@ func (api *API) health(w http.ResponseWriter, r *http.Request) {
 
 // GET /bandwidth/transport/{id}?period=daily&limit=7
 func (api *API) getTransportBandwidth(w http.ResponseWriter, r *http.Request) {
-	idParam := chi.URLParam(r, "id")
+	idParam := r.PathValue("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
 		api.writeError(w, r, ErrInvalidTransportID)
@@ -638,7 +637,7 @@ func (api *API) getTransportBandwidth(w http.ResponseWriter, r *http.Request) {
 // GET /bandwidth/visor/{pk}?period=daily&limit=7
 // Aggregates bandwidth from all transports belonging to a visor
 func (api *API) getVisorBandwidth(w http.ResponseWriter, r *http.Request) {
-	pkParam := chi.URLParam(r, "pk")
+	pkParam := r.PathValue("pk")
 	pk := cipher.PubKey{}
 	if err := pk.UnmarshalText([]byte(pkParam)); err != nil {
 		api.log(r).WithError(err).Error("Error parsing PK")
@@ -994,7 +993,7 @@ func (api *API) getVersions(w http.ResponseWriter, r *http.Request) {
 //   - on=true|false|all|none (filter by online status)
 //   - status=true (include online status in response)
 func (api *API) getVersionsByPKs(w http.ResponseWriter, r *http.Request) {
-	pksParam := chi.URLParam(r, "pks")
+	pksParam := r.PathValue("pks")
 	if pksParam == "" {
 		api.writeError(w, r, ErrEmptyPubKey)
 		return
@@ -1212,7 +1211,7 @@ func (api *API) getNetworkTransportUptime(w http.ResponseWriter, r *http.Request
 // GET /metrics/uptime/{ids}
 // Transport uptime for specific transport IDs (comma-separated).
 func (api *API) getTransportUptimeByIDs(w http.ResponseWriter, r *http.Request) {
-	idsParam := chi.URLParam(r, "ids")
+	idsParam := r.PathValue("ids")
 	ids, err := parseIDs(idsParam)
 	if err != nil || len(ids) == 0 {
 		api.writeError(w, r, ErrInvalidTransportID)
@@ -1244,7 +1243,7 @@ func (api *API) getTransportUptimeByIDs(w http.ResponseWriter, r *http.Request) 
 // GET /metrics/uptime/visor/{pks}
 // Transport uptime for transports of specific visors (comma-separated PKs).
 func (api *API) getTransportUptimeByVisors(w http.ResponseWriter, r *http.Request) {
-	pksParam := chi.URLParam(r, "pks")
+	pksParam := r.PathValue("pks")
 	pks, err := parsePKs(pksParam)
 	if err != nil || len(pks) == 0 {
 		api.writeError(w, r, ErrInvalidPubKey)
