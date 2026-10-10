@@ -1,5 +1,3 @@
-//go:build !mobile
-
 // Package visor pkg/visor/hypervisor_handlers_mail.go c3-vis-core
 package visor
 
@@ -17,12 +15,12 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
-// The hypervisor's view of a visor's mailbox, for the dashboard's mail tab.
+// The hypervisor's view of a visor's mailbox, for the dashboard's mail tab
+// and the phone app's mail screen.
 // Every route calls the visor's mail API, the same one `skywire cli mail` and
 // the desk's mail window use, so it works for remote visors too.
 
-// mailRoutes registers the mail routes. The mobile build has no dashboard and
-// stubs it out (hypervisor_handlers_mail_mobile.go).
+// mailRoutes registers the mail routes.
 func (hv *Hypervisor) mailRoutes(r chi.Router) {
 	r.Get("/visors/{pk}/mail", hv.getMailStatus())
 	r.Post("/visors/{pk}/mail/send", hv.postMailSend())
@@ -132,7 +130,13 @@ func (hv *Hypervisor) postMailSend() http.HandlerFunc {
 		}
 		res, err := ctx.API.MailSend(msg)
 		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadGateway, err)
+			// The per-recipient results say which address failed and why;
+			// the error alone only says that nothing went out.
+			body := map[string]any{"error": err.Error()}
+			if res != nil {
+				body["message_id"], body["recipients"] = res.MessageID, res.Recipients
+			}
+			httputil.WriteJSON(w, r, http.StatusBadGateway, body)
 			return
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, res)
