@@ -1,6 +1,6 @@
 // Package svcmode pkg/svcmode/svcmode.go c3-vis-core
 // services (transport-discovery, address-resolver, route-finder,
-// service-discovery, uptime-tracker, config-bootstrapper) that need
+// service-discovery, config-bootstrapper) that need
 // to listen on HTTP, dmsghttp, or both simultaneously. It centralizes:
 //
 // Note on dmsg-discovery specifically: dmsg-discovery's HTTP listener

@@ -26,8 +26,6 @@ const (
 	AddressResolverAddrEnvKey = "ADDR_ADDRESS_RESOLVER"
 	// RFAddrEnvKey is env arg holding RF address.
 	RFAddrEnvKey = "ADDR_RF"
-	// UptimeTrackerAddrEnvKey is env arg holding uptime tracker address.
-	UptimeTrackerAddrEnvKey = "ADDR_UPTIME_TRACKER"
 
 	// STCPTableLenEnvKey is env arg holding Stcp table length.
 	STCPTableLenEnvKey = "STCP_TABLE_LEN"
@@ -49,7 +47,6 @@ type DirectRoutesEnvConfig struct {
 	DmsgServers     []string
 	TPDiscovery     string
 	RF              string
-	UptimeTracker   string
 	AddressResolver string
 	TPRemoteIPs     []string
 	STCPTable       map[cipher.PubKey]string
@@ -73,10 +70,6 @@ func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 
 	if config.RF != "" {
 		envs[RFAddrEnvKey] = config.RF
-	}
-
-	if config.UptimeTracker != "" {
-		envs[UptimeTrackerAddrEnvKey] = config.UptimeTracker
 	}
 
 	if len(config.STCPTable) != 0 {

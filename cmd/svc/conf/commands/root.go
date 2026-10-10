@@ -116,7 +116,6 @@ func filterServices(svc deployment.Services, keepHTTP, keepDmsg bool) deployment
 		out.TransportDiscovery = ""
 		out.AddressResolver = ""
 		out.RouteFinder = ""
-		out.UptimeTracker = ""
 		out.ServiceDiscovery = ""
 		out.GeoIP = ""
 		out.RewardSystem = ""
@@ -128,7 +127,6 @@ func filterServices(svc deployment.Services, keepHTTP, keepDmsg bool) deployment
 		out.TransportDiscoveryDmsg = ""
 		out.AddressResolverDmsg = ""
 		out.RouteFinderDmsg = ""
-		out.UptimeTrackerDmsg = ""
 		out.ServiceDiscoveryDmsg = ""
 		out.RewardSystemDmsg = ""
 	}

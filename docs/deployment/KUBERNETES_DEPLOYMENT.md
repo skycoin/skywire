@@ -11,7 +11,7 @@ The reference production deployment runs on Docker Compose; there is no Kubernet
 
 ## When K8s is and isn't a good fit
 
-K8s fits the parts of the deployment that look like ordinary stateless web services — `dmsg-discovery`, `transport-discovery`, `address-resolver` (HTTP side), `service-discovery`, `route-finder`, `uptime-tracker`, `setup-node`, `config-bootstrapper`, `network-monitor`. These are clean Deployments behind ClusterIP Services with an Ingress for external traffic.
+K8s fits the parts of the deployment that look like ordinary stateless web services — `dmsg-discovery`, `transport-discovery`, `address-resolver` (HTTP side), `service-discovery`, `route-finder`, `setup-node`, `config-bootstrapper`, `network-monitor`. These are clean Deployments behind ClusterIP Services with an Ingress for external traffic.
 
 K8s gets awkward for two pieces:
 
@@ -30,13 +30,11 @@ A minimal cluster runs the following workloads:
 | Workload | Kind | Replicas | External traffic |
 |---|---|---|---|
 | `redis` | StatefulSet | 1 (or use a managed Redis) | none |
-| `postgres` | StatefulSet | 1 (or use a managed DB) | none — only `uptime-tracker` connects |
 | `dmsg-discovery` | Deployment | 2+ | Ingress (TLS) → ClusterIP :9090 |
 | `address-resolver` | Deployment | 2+ | Ingress (TLS) → ClusterIP :9093, plus LoadBalancer UDP :30178 |
 | `transport-discovery` | Deployment | 2+ | Ingress (TLS) → ClusterIP :9091 |
 | `service-discovery` | Deployment | 2+ | Ingress (TLS) → ClusterIP :9098 |
 | `route-finder` | Deployment | 2+ | Ingress (TLS) → ClusterIP :9092 |
-| `uptime-tracker` | Deployment | 2+ | Ingress (TLS) → ClusterIP :9096 |
 | `config-bootstrapper` | Deployment | 1 | Ingress (TLS) → ClusterIP :9082 |
 | `setup-node` | Deployment | 1+ | none — dmsg-only |
 | `network-monitor` | Deployment | 1 | none — internal |
@@ -60,11 +58,8 @@ stringData:
   tpd-sk: "<...>"
   sd-sk: "<...>"
   rf-sk: "<...>"
-  ut-sk: "<...>"
   dmsgd-sk: "<...>"
   redis-password: "<...>"
-  postgres-password: "<...>"
-  ut-api-key: "<...>"
 ```
 
 Whitelisted PKs (network-monitor, survey, etc.) and per-service config files (config-bootstrapper's `config.json`, setup-node config, dmsg-server config minus the secret key) belong in ConfigMaps.
@@ -90,9 +85,9 @@ volumes:
 
 The format follows `deployment/services-config.json` in the repo — `prod` and `test` keys, each with `dmsg_servers`, `dmsg_discovery`, `transport_discovery`, etc. **Every component in the cluster (services and visors)** must use the same `services-config.json`; mismatched lists mean dmsg-servers will not peer with each other and visors bootstrap against servers the rest of the deployment does not know.
 
-## Redis and Postgres
+## Redis
 
-Use a managed Redis / Postgres if your cloud provider offers one — the operational headache of running them as StatefulSets in your own cluster usually exceeds the cost. If you do run them in-cluster, use `volumeClaimTemplates` for persistent storage:
+Use a managed Redis if your cloud provider offers one — the operational headache of running it as a StatefulSet in your own cluster usually exceeds the cost. If you do run it in-cluster, use `volumeClaimTemplates` for persistent storage:
 
 ```yaml
 apiVersion: apps/v1
@@ -340,6 +335,6 @@ For in-cluster Go pprof on individual pods, services accept `--pprof :PORT` to b
 
 **STCPR works but SUDPH doesn't.** Same as above, plus check that the cluster's egress doesn't NAT outgoing UDP differently from inbound. SUDPH hole-punching needs symmetric NAT behavior; with strict-symmetric-NAT egress, only STCPR will work.
 
-**Services start but discovery returns empty.** Confirm Redis is reachable from the service pods (try `redis-cli -h redis -a $REDIS_PASSWORD ping` from a debug pod). Confirm the Postgres connection string for uptime-tracker. There is no `dht:*` mirror to inspect — the DHT is gone, and `storeconfig.Config` carries no DB-index field.
+**Services start but discovery returns empty.** Confirm Redis is reachable from the service pods (try `redis-cli -h redis -a $REDIS_PASSWORD ping` from a debug pod). There is no `dht:*` mirror to inspect — the DHT is gone, and `storeconfig.Config` carries no DB-index field.
 
 **STUN unavailable.** Run STUN outside the cluster (a dedicated VM with two public IPs and `network_mode: host`). Reference its address from the cluster's `services-config.json` `stun_servers` list. There is no portable way to run STUN inside K8s.

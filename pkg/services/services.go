@@ -10,9 +10,8 @@
 // service-discovery, address-resolver, route-finder, transport-setup,
 // stun-server, setup-node) down to a single binary invocation
 // (`skywire svc run --config services.json`) so CI e2e doesn't have
-// to wrangle nine Dockerfiles. uptime-tracker and network-monitor
-// are out of scope — UT is being subsumed by TPD, NM is intentionally
-// disabled in the production deployment. Production deployments
+// to wrangle nine Dockerfiles. network-monitor is out of scope, as it
+// is disabled in the production deployment. Production deployments
 // unchanged — the existing per-service cobra subcommands stay and
 // build their own Service via the same Factory.
 //

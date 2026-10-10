@@ -184,12 +184,9 @@ services:
       - http://${SD_HOST}:${SD_PORT}
       - --tpd-url
       - http://${TPDISC_HOST}:${TPDISC_PORT}
-      - --ut-url
-      - http://${UTTRACKER_HOST}:${UTTRACKER_PORT}
       - --cleaning-delay
       - "180"
     depends_on:
-      - uptime-tracker
       - route-finder
       - setup-node
       - service-discovery
@@ -283,7 +280,6 @@ services:
     volumes:
       - ./visors-config:/etc/skywire/skywire-visor
     depends_on:
-      - uptime-tracker
       - route-finder
       - setup-node
       - service-discovery
@@ -327,50 +323,6 @@ services:
       - /etc/transport-setup/tps.json
     volumes:
       - ./visors-config:/etc/transport-setup
-  uptime-tracker:
-    container_name: uptime-tracker
-    image: "skycoin/skywire:test"
-    restart: always
-    ports:
-      - 127.0.0.1:${UTTRACKER_PPROF}:${UTTRACKER_PPROF}
-      - ${UTTRACKER_PORT}:${UTTRACKER_PORT}
-    command:
-      - svc
-      - ut
-      - --addr
-      - :${UTTRACKER_PORT}
-      - --pprof
-      - :${UTTRACKER_PPROF}
-      - --redis
-      - redis://${REDIS_HOST}:${REDIS_PORT}
-      - --sk
-      - ${UTTRACKER_SECKEY}
-      - --dmsg-disc
-      - http://${DMSGDISC_HOST}:${DMSGDISC_PORT}
-      - --pg-host
-      - ${POSTGRES_HOST}
-    environment:
-      - REDIS_ADDR=${REDIS_HOST}:${REDIS_PORT}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - API_KEY=${UTTRACKER_API_KEY}
-      - PG_PASSWORD=${POSTGRES_PASSWORD}
-      - PG_USER=${POSTGRES_USER}
-      - PG_DATABASE=uptime_tracker
-    depends_on:
-      - postgres
-      - redis
-      - dmsg-discovery
-  postgres:
-    container_name: ${POSTGRES_HOST}
-    image: "postgres:15.4-alpine3.18"
-    restart: always
-    environment:
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_MULTIPLE_DATABASES=${POSTGRES_MULTIPLE_DATABASES}
-    volumes:
-      - ./postgres-init:/docker-entrypoint-initdb.d
-      - ./postgres-data:/var/lib/postgresql/data
   redis:
     container_name: ${REDIS_HOST}
     image: "redis:alpine3.18"

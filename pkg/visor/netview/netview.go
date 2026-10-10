@@ -104,7 +104,7 @@ func Compute(fetch func(service, path string) ([]byte, error)) *Response {
 
 	// UT — uptimes?v=v2 → [{pk, on}, ...]
 	utStatus := make(map[string]string)
-	if body, err := fetch("ut", "/uptimes?v=v2"); err == nil {
+	if body, err := fetch("tpd", "/uptimes?v=v2"); err == nil {
 		var es []struct {
 			PK string `json:"pk"`
 			On bool   `json:"on"`

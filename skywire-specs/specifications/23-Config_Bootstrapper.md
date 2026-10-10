@@ -6,7 +6,7 @@ The *Config Bootstrapper* (CB) is a service that provides initial configuration 
 
 The Config Bootstrapper provides:
 
-- **Service endpoints**: URLs for uptime tracker, address resolver, transport discovery, etc.
+- **Service endpoints**: URLs for address resolver, transport discovery, etc.
 - **DMSG configuration**: DMSG discovery URLs and server lists
 - **Network parameters**: Default settings for transport limits, timeouts, etc.
 - **DMSG HTTP configuration**: Configuration for HTTP-over-DMSG routing
@@ -45,7 +45,6 @@ GET /
         "transport_discovery": "https://tpd.skywire.skycoin.com",
         "address_resolver": "https://ar.skywire.skycoin.com",
         "route_finder": "https://rf.skywire.skycoin.com",
-        "uptime_tracker": "https://ut.skywire.skycoin.com",
         "service_discovery": "https://sd.skywire.skycoin.com",
         "stun_servers": [
             "stun.skywire.skycoin.com:3478",
@@ -77,7 +76,6 @@ GET /
 | `transport_discovery` | string | Transport Discovery service URL |
 | `address_resolver` | string | Address Resolver service URL |
 | `route_finder` | string | Route Finder service URL |
-| `uptime_tracker` | string | Uptime Tracker service URL |
 | `service_discovery` | string | Service Discovery service URL |
 | `stun_servers` | array | STUN server addresses for NAT traversal |
 | `dmsg_servers` | array | Known DMSG servers with public keys |
@@ -108,10 +106,6 @@ GET /dmsghttp
         "http_routes": {
             "tpd.skywire.skycoin.com": {
                 "pk": "03tpd123...",
-                "port": 80
-            },
-            "ut.skywire.skycoin.com": {
-                "pk": "03ut456...",
                 "port": 80
             },
             "ar.skywire.skycoin.com": {
@@ -164,7 +158,6 @@ GET /config/{section}
         "transport_discovery": "https://tpd.skywire.skycoin.com",
         "address_resolver": "https://ar.skywire.skycoin.com",
         "route_finder": "https://rf.skywire.skycoin.com",
-        "uptime_tracker": "https://ut.skywire.skycoin.com",
         "service_discovery": "https://sd.skywire.skycoin.com"
     }
     ```

@@ -8,7 +8,6 @@ type DMSGHTTPConf struct {
 	TranspordDiscovery string            `json:"transport_discovery"`
 	AddressResolver    string            `json:"address_resolver"`
 	RouteFinder        string            `json:"route_finder"`
-	UptimeTracker      string            `json:"uptime_tracker"`
 	ServiceDiscovery   string            `json:"service_discovery"`
 }
 
