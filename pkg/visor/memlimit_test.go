@@ -35,3 +35,13 @@ func TestAutoMemoryLimit(t *testing.T) {
 		t.Fatalf("autoMemoryLimit(0) = %d, want 0", got)
 	}
 }
+
+func TestApplyMemoryLimitNone(t *testing.T) {
+	before := debug.SetMemoryLimit(-1)
+	for _, v := range []string{"none", ""} {
+		applyMemoryLimit(logging.MustGetLogger("test"), v)
+		if got := debug.SetMemoryLimit(-1); got != before {
+			t.Fatalf("memory_limit %q changed the limit to %d", v, got)
+		}
+	}
+}

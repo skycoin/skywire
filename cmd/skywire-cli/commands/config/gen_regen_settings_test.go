@@ -81,15 +81,16 @@ func TestFreshGenCarriesNoPersistedSettings(t *testing.T) {
 }
 
 // "auto" was the generated default, not an operator's choice, so a regen
-// drops it while an explicit size survives.
+// replaces it with "none" while an explicit choice survives.
 func TestRegenDropsAutoMemoryLimit(t *testing.T) {
 	restoreRegen, restoreOld, restoreConf := isRegen, oldConfCache, conf
 	t.Cleanup(func() { isRegen, oldConfCache, conf = restoreRegen, restoreOld, restoreConf })
 
 	isRegen = true
-	for old, want := range map[string]string{"auto": "", "": "", "1GiB": "1GiB"} {
+	for old, want := range map[string]string{"auto": "none", "": "none", "none": "none", "1GiB": "1GiB"} {
 		oldConfCache = &visorconfig.V1{MemoryLimit: old}
 		conf = new(visorconfig.V1)
+		conf.MemoryLimit = "none"
 		conf.Launcher = &visorconfig.Launcher{}
 		mergeExistingApps(logging.MustGetLogger("test"))
 		require.Equal(t, want, conf.MemoryLimit, "old memory_limit %q", old)

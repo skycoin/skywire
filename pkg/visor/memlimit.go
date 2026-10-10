@@ -16,12 +16,12 @@ import (
 // Supported values:
 //   - "auto": set to 90% of the total system RAM (or cgroup limit)
 //   - "256MiB", "512MiB", "1GiB", etc.: explicit limit
-//   - "": no limit (default)
+//   - "none", or "": no limit (the default)
 //
 // A GOMEMLIMIT in the environment wins, so a service unit can size the
 // visor without editing its config.
 func applyMemoryLimit(log *logging.Logger, limit string) {
-	if limit == "" {
+	if limit == "" || limit == "none" {
 		return
 	}
 	if env := os.Getenv("GOMEMLIMIT"); env != "" {
