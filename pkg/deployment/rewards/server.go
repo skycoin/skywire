@@ -5,42 +5,31 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 )
 
-// WhitelistAuth returns a gin middleware that checks if the remote PK
+// WhitelistAuth returns a middleware that checks if the remote PK
 // (from DMSG/skynet RemoteAddr) is in the whitelist. Exported so the
 // visor can use the same auth pattern.
-func WhitelistAuth(wlkeys []cipher.PubKey) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if len(wlkeys) == 0 {
-			c.Next()
-			return
-		}
-		remotePK := extractPK(c)
-		if remotePK.Null() {
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-		for _, pk := range wlkeys {
-			if pk == remotePK {
-				c.Next()
+func WhitelistAuth(wlkeys []cipher.PubKey) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !IsWhitelisted(r, wlkeys) {
+				http.Error(w, "401 Unauthorized", http.StatusUnauthorized)
 				return
 			}
-		}
-		c.AbortWithStatus(http.StatusUnauthorized)
+			next.ServeHTTP(w, r)
+		})
 	}
 }
 
 // IsWhitelisted checks if the current request is from a whitelisted PK
 // without blocking. Used for UI rendering (show/hide links).
-func IsWhitelisted(c *gin.Context, wlkeys []cipher.PubKey) bool {
+func IsWhitelisted(r *http.Request, wlkeys []cipher.PubKey) bool {
 	if len(wlkeys) == 0 {
 		return true
 	}
-	remotePK := extractPK(c)
+	remotePK := extractPK(r)
 	if remotePK.Null() {
 		return false
 	}
@@ -57,12 +46,12 @@ func IsWhitelisted(c *gin.Context, wlkeys []cipher.PubKey) bool {
 // handlers that must attribute a request to its sender — e.g. the survey-push
 // endpoint stores a pushed survey under the sender's own PK so a visor can only
 // write its own.
-func RemotePK(c *gin.Context) cipher.PubKey {
-	return extractPK(c)
+func RemotePK(r *http.Request) cipher.PubKey {
+	return extractPK(r)
 }
 
-func extractPK(c *gin.Context) cipher.PubKey {
-	host := c.Request.RemoteAddr
+func extractPK(r *http.Request) cipher.PubKey {
+	host := r.RemoteAddr
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}

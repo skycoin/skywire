@@ -19,13 +19,13 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
-	"github.com/gin-gonic/gin"
 	"github.com/robert-nix/ansihtml"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/deployment/rewards"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/httputil"
@@ -37,7 +37,7 @@ import (
 // nolint: gocyclo
 //
 //gocyclo:ignore
-func buildRouter() *gin.Engine {
+func buildRouter() http.Handler {
 	// Derive PK from SK for health endpoint display.
 	pk, err := sk.PubKey()
 	if err != nil {
@@ -82,16 +82,13 @@ func buildRouter() *gin.Engine {
 		fmt.Println("Error parsing head template:", err1)
 	}
 
-	r1 := gin.New()
-	// Disable Gin's default logger middleware
-	r1.Use(gin.Recovery())
-	r1.Use(loggingMiddleware())
+	r1 := http.NewServeMux()
 
 	// When hosted by the visor, the visor's /health takes priority
-	// (it's an explicit route on the visor's gin router). Register
+	// (it is an explicit route on the visor router). Register
 	// at both paths so standalone mode gets /health and visor mode
 	// gets /health/health.
-	healthHandler := func(c *gin.Context) {
+	healthHandler := func(w http.ResponseWriter, r *http.Request) {
 		// Standard health response matching other skywire services
 		resp := httputil.HealthCheckResponse{
 			ServiceName: "rewards",
@@ -105,7 +102,7 @@ func buildRouter() *gin.Engine {
 		prevDuration, _ := script.Exec(`systemctl status skywire-reward.service --lines=0`).Match("Duration").First(1).String()             //nolint:errcheck,gosec
 		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()                                                     //nolint:errcheck,gosec
 
-		c.JSON(http.StatusOK, gin.H{
+		httputil.WriteJSON(w, r, http.StatusOK, map[string]any{
 			"service_name":                    resp.ServiceName,
 			"build_info":                      resp.BuildInfo,
 			"started_at":                      resp.StartedAt,
@@ -116,8 +113,8 @@ func buildRouter() *gin.Engine {
 			"whitelisted_keys":                wlkeys,
 		})
 	}
-	r1.GET("/health", healthHandler)
-	r1.GET("/health/health", healthHandler) // accessible when visor's /health takes priority
+	r1.HandleFunc("GET /health", healthHandler)
+	r1.HandleFunc("GET /health/health", healthHandler) // accessible when visor's /health takes priority
 	if !healthOnly {
 		// Visor survey PUSH ingest (POST /node-info + GET /node-info/stored-checksum),
 		// served over the same dmsg listener a visor already reaches. A visor stores
@@ -128,26 +125,26 @@ func buildRouter() *gin.Engine {
 		// endpoint for testing minimum response time of curl via socks5 proxy / stand-in for latency test
 		// https://dev.to/tigt/making-the-worlds-fastest-website-and-other-mistakes-56na
 		// This is the fastest web page. You may not like it, but this is what peak performance looks like.
-		r1.GET("/204", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Status(http.StatusNoContent)
+		r1.HandleFunc("GET /204", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.WriteHeader(http.StatusNoContent)
 		})
 
-		r1.GET("/robots.txt", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Content-Type", "text/plain")
-			c.Writer.WriteHeader(http.StatusOK)
+		r1.HandleFunc("GET /robots.txt", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusOK)
 			base := strings.TrimRight(canonicalDomain, "/")
-			c.Writer.Write([]byte("User-agent: *\nAllow: /\n")) //nolint:errcheck,gosec
+			w.Write([]byte("User-agent: *\nAllow: /\n")) //nolint:errcheck,gosec
 			if base != "" {
-				c.Writer.Write([]byte("Sitemap: " + base + "/sitemap.xml\n")) //nolint:errcheck,gosec
+				w.Write([]byte("Sitemap: " + base + "/sitemap.xml\n")) //nolint:errcheck,gosec
 			}
 		})
 
-		r1.GET("/sitemap.xml", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Content-Type", "application/xml")
-			c.Writer.WriteHeader(http.StatusOK)
+		r1.HandleFunc("GET /sitemap.xml", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Content-Type", "application/xml")
+			w.WriteHeader(http.StatusOK)
 			base := strings.TrimRight(canonicalDomain, "/")
 			if base == "" {
 				base = "https://reward.theskywirenetwork.net"
@@ -187,49 +184,49 @@ func buildRouter() *gin.Engine {
 				xml += "  <url><loc>" + base + u.loc + "</loc><priority>" + u.priority + "</priority></url>\n"
 			}
 			xml += "</urlset>\n"
-			c.Writer.Write([]byte(xml)) //nolint:errcheck,gosec
+			w.Write([]byte(xml)) //nolint:errcheck,gosec
 		})
 
-		r1.GET("/transports", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
-			c.Writer.Header().Set("Transfer-Encoding", "chunked")
-			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Flush()
-			c.Writer.Write([]byte(chunkedPageHead("Transport Statistics", "Live transport statistics for the Skywire Network", "/transport-graph"))) //nolint:errcheck,gosec
-			c.Writer.Flush()
-			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
-			c.Writer.Flush()
+		r1.HandleFunc("GET /transports", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Content-Type", "text/html;charset=utf-8")
+			w.Header().Set("Transfer-Encoding", "chunked")
+			w.WriteHeader(http.StatusOK)
+			flush(w)
+			w.Write([]byte(chunkedPageHead("Transport Statistics", "Live transport statistics for the Skywire Network", "/transport-graph"))) //nolint:errcheck,gosec
+			flush(w)
+			w.Write([]byte(navlinks)) //nolint:errcheck,gosec
+			flush(w)
 			tpstats, _ := script.Exec("skywire cli tp tree -s").Bytes() //nolint:errcheck,gosec
-			c.Writer.Write(ansihtml.ConvertToHTML(tpstats))             //nolint:errcheck,gosec
-			c.Writer.Flush()
-			c.Writer.Write([]byte(htmlend)) //nolint:errcheck,gosec
-			c.Writer.Flush()
+			w.Write(ansihtml.ConvertToHTML(tpstats))                    //nolint:errcheck,gosec
+			flush(w)
+			w.Write([]byte(htmlend)) //nolint:errcheck,gosec
+			flush(w)
 		})
 
 		/* //consumes excessive server resources when network is heavily transported*/
-		r1.GET("/transports-map", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
-			c.Writer.Header().Set("Transfer-Encoding", "chunked")
-			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Flush()
-			c.Writer.Write([]byte(chunkedPageHead("Transport Map", "Geographic map of active Skywire transports", "/transport-graph"))) //nolint:errcheck,gosec
-			c.Writer.Flush()
-			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
-			c.Writer.Flush()
+		r1.HandleFunc("GET /transports-map", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Content-Type", "text/html;charset=utf-8")
+			w.Header().Set("Transfer-Encoding", "chunked")
+			w.WriteHeader(http.StatusOK)
+			flush(w)
+			w.Write([]byte(chunkedPageHead("Transport Map", "Geographic map of active Skywire transports", "/transport-graph"))) //nolint:errcheck,gosec
+			flush(w)
+			w.Write([]byte(navlinks)) //nolint:errcheck,gosec
+			flush(w)
 			tpstats, _ := script.Exec("skywire cli tp tree -s").Match("Count of transports:").Replace("Count of transports: ", "").Replace("\n", "").String() //nolint:errcheck,gosec
 			tpcount, _ := strconv.Atoi(tpstats)                                                                                                               //nolint:errcheck,gosec
 			if tpcount < 400 {
 				tpTree, _ := script.Exec("skywire cli tp tree").Bytes() //nolint:errcheck,gosec
-				c.Writer.Write(ansihtml.ConvertToHTML(tpTree))          //nolint:errcheck,gosec
-				c.Writer.Flush()
+				w.Write(ansihtml.ConvertToHTML(tpTree))                 //nolint:errcheck,gosec
+				flush(w)
 			} else {
-				c.Writer.Write([]byte(fmt.Sprintf("Transport count: %v exceeds server resources to map", tpcount))) //nolint:errcheck,gosec,staticcheck
-				c.Writer.Flush()
+				w.Write([]byte(fmt.Sprintf("Transport count: %v exceeds server resources to map", tpcount))) //nolint:errcheck,gosec,staticcheck
+				flush(w)
 			}
-			c.Writer.Write([]byte(htmlend)) //nolint:errcheck,gosec
-			c.Writer.Flush()
+			w.Write([]byte(htmlend)) //nolint:errcheck,gosec
+			flush(w)
 		})
 
 		// Create tpviz server with file caching (same as standalone skywire cli tp viz)
@@ -259,21 +256,21 @@ func buildRouter() *gin.Engine {
 		// tp-viz from shadowing the hypervisor API.
 		if !disableTpVizAPI {
 			tpvizHandler := tpvizServer.Handler()
-			r1.GET("/api/transports", gin.WrapH(tpvizHandler))
-			r1.GET("/api/uptimes", gin.WrapH(tpvizHandler))
-			r1.GET("/api/services", gin.WrapH(tpvizHandler))
-			r1.GET("/api/health", gin.WrapH(tpvizHandler))
-			r1.GET("/api/ip-groups", gin.WrapH(tpvizHandler))
-			r1.GET("/api/dmsg/servers", gin.WrapH(tpvizHandler))
-			r1.GET("/api/dmsg/entries", gin.WrapH(tpvizHandler))
-			r1.GET("/api/dmsg/health", gin.WrapH(tpvizHandler))
-			r1.GET("/bundle.js", gin.WrapH(tpvizHandler))
+			r1.HandleFunc("GET /api/transports", tpvizHandler.ServeHTTP)
+			r1.HandleFunc("GET /api/uptimes", tpvizHandler.ServeHTTP)
+			r1.HandleFunc("GET /api/services", tpvizHandler.ServeHTTP)
+			r1.HandleFunc("GET /api/health", tpvizHandler.ServeHTTP)
+			r1.HandleFunc("GET /api/ip-groups", tpvizHandler.ServeHTTP)
+			r1.HandleFunc("GET /api/dmsg/servers", tpvizHandler.ServeHTTP)
+			r1.HandleFunc("GET /api/dmsg/entries", tpvizHandler.ServeHTTP)
+			r1.HandleFunc("GET /api/dmsg/health", tpvizHandler.ServeHTTP)
+			r1.HandleFunc("GET /bundle.js", tpvizHandler.ServeHTTP)
 		}
 
-		r1.GET("/transport-graph", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
-			c.Writer.WriteHeader(http.StatusOK)
+		r1.HandleFunc("GET /transport-graph", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Content-Type", "text/html;charset=utf-8")
+			w.WriteHeader(http.StatusOK)
 			// Use full embedded index.html with nav links
 			navLinks := []tpviz.NavLink{
 				{URL: "/", Label: "fiber"},
@@ -282,23 +279,23 @@ func buildRouter() *gin.Engine {
 			}
 			html, err := tpviz.GetEmbeddedIndexWithNavLinks(navLinks)
 			if err != nil {
-				c.Writer.Write([]byte("Error loading transport graph: " + err.Error())) //nolint:errcheck,gosec
+				w.Write([]byte("Error loading transport graph: " + err.Error())) //nolint:errcheck,gosec
 				return
 			}
-			c.Writer.Write([]byte(html)) //nolint:errcheck,gosec
+			w.Write([]byte(html)) //nolint:errcheck,gosec
 		})
-		r1.GET("/log-collection", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
-			c.Writer.Header().Set("Transfer-Encoding", "chunked") //nolint:errcheck,gosec
-			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Flush()
-			c.Writer.Write([]byte(chunkedPageHead("Log Collection", "Skywire visor survey and transport log collection overview", "/log-collection"))) //nolint:errcheck,gosec
-			c.Writer.Flush()
-			c.Writer.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\na { color: #3399FF; }\na:visited { color: #FF00FF; }\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec  //nolint:errcheck,gosec
-			c.Writer.Flush()
-			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
-			c.Writer.Flush()
+		r1.HandleFunc("GET /log-collection", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Content-Type", "text/html;charset=utf-8")
+			w.Header().Set("Transfer-Encoding", "chunked") //nolint:errcheck,gosec
+			w.WriteHeader(http.StatusOK)
+			flush(w)
+			w.Write([]byte(chunkedPageHead("Log Collection", "Skywire visor survey and transport log collection overview", "/log-collection"))) //nolint:errcheck,gosec
+			flush(w)
+			w.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\na { color: #3399FF; }\na:visited { color: #FF00FF; }\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec  //nolint:errcheck,gosec
+			flush(w)
+			w.Write([]byte(navlinks)) //nolint:errcheck,gosec
+			flush(w)
 			tmpFile, err := os.CreateTemp(os.TempDir(), "*.sh")
 			if err != nil {
 				return
@@ -310,18 +307,18 @@ func buildRouter() *gin.Engine {
 			_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())                                          //nolint:errcheck,gosec
 			res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String() //nolint:errcheck,gosec
 			os.Remove(tmpFile.Name())                                                                         //nolint:errcheck,gosec
-			c.Writer.Write([]byte(fmt.Sprintf("%s\n", res)))                                                  //nolint:errcheck,gosec,staticcheck
-			c.Writer.Flush()
+			w.Write([]byte(fmt.Sprintf("%s\n", res)))                                                         //nolint:errcheck,gosec,staticcheck
+			flush(w)
 
 			// Initial line count
 			initialLineCount, _ := script.File(wd + `/` + "skywire-cli-log.txt").CountLines() //nolint:errcheck,gosec
 			// Read and print the initial lines
 			initialContent, _ := script.File(wd + `/` + "skywire-cli-log.txt").First(initialLineCount).Bytes() //nolint:errcheck,gosec
-			c.Writer.Write(ansihtml.ConvertToHTML(initialContent))                                             //nolint:errcheck,gosec
-			c.Writer.Flush()
+			w.Write(ansihtml.ConvertToHTML(initialContent))                                                    //nolint:errcheck,gosec
+			flush(w)
 			for {
 				select {
-				case <-c.Writer.CloseNotify():
+				case <-r.Context().Done():
 					return
 				default:
 				}
@@ -333,8 +330,8 @@ func buildRouter() *gin.Engine {
 				if currentLineCount > initialLineCount {
 					newContent, _ := script.File(wd + `/` + "skywire-cli-log.txt").Last(currentLineCount - initialLineCount).Bytes() //nolint:errcheck,gosec
 					initialLineCount = currentLineCount
-					c.Writer.Write(ansihtml.ConvertToHTML(newContent)) //nolint:errcheck,gosec
-					c.Writer.Flush()
+					w.Write(ansihtml.ConvertToHTML(newContent)) //nolint:errcheck,gosec
+					flush(w)
 				}
 				finished, _ := script.File(wd + `/` + "skywire-cli-log.txt").Last(1).MatchRegexp(regexp.MustCompile(".*finished.*")).String() //nolint:errcheck,gosec
 				if finished != "" {
@@ -342,31 +339,31 @@ func buildRouter() *gin.Engine {
 				}
 			}
 
-			c.Writer.Write([]byte(htmltoplink)) //nolint:errcheck,gosec
-			c.Writer.Flush()
-			c.Writer.Write([]byte(htmlend)) //nolint:errcheck,gosec
-			c.Writer.Flush()
+			w.Write([]byte(htmltoplink)) //nolint:errcheck,gosec
+			flush(w)
+			w.Write([]byte(htmlend)) //nolint:errcheck,gosec
+			flush(w)
 		})
 
-		r1.GET("/log-collection/tree", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Transfer-Encoding", "chunked")
-			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Write([]byte(chunkedPageHead("Survey Index", "Index of Skywire visor surveys and transport logs on the Skywire Network", "/log-collection/tree"))) //nolint:errcheck,gosec
-			c.Writer.Flush()
-			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
-			c.Writer.Flush()
-			c.Writer.Write([]byte("<p style='margin:6px 0;'>View: <b>flat list</b> &middot; <a href='/log-collection/tree-detail'>detail tree (per-PK health.json + version inline)</a></p>\n")) //nolint:errcheck,gosec
-			c.Writer.Flush()
+		r1.HandleFunc("GET /log-collection/tree", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Transfer-Encoding", "chunked")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(chunkedPageHead("Survey Index", "Index of Skywire visor surveys and transport logs on the Skywire Network", "/log-collection/tree"))) //nolint:errcheck,gosec
+			flush(w)
+			w.Write([]byte(navlinks)) //nolint:errcheck,gosec
+			flush(w)
+			w.Write([]byte("<p style='margin:6px 0;'>View: <b>flat list</b> &middot; <a href='/log-collection/tree-detail'>detail tree (per-PK health.json + version inline)</a></p>\n")) //nolint:errcheck,gosec
+			flush(w)
 			surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines() //nolint:errcheck,gosec
-			c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n\n", surveycount)))                          //nolint:errcheck,gosec,staticcheck
-			c.Writer.Flush()
+			w.Write([]byte(fmt.Sprintf("Total surveys: %v\n\n", surveycount)))                                 //nolint:errcheck,gosec,staticcheck
+			flush(w)
 			// List visor directories with survey status
-			wl := isWhitelisted(c)
+			wl := isWhitelisted(r)
 			backupsDir := filepath.Join(wd, "log_backups")
 			dirEntries, err := os.ReadDir(backupsDir)
 			if err != nil {
-				fmt.Fprintf(c.Writer, "Error reading log_backups: %v\n", err) //nolint:errcheck,gosec
+				fmt.Fprintf(w, "Error reading log_backups: %v\n", err) //nolint:errcheck,gosec
 			} else {
 				for _, entry := range dirEntries {
 					if !entry.IsDir() {
@@ -379,7 +376,7 @@ func buildRouter() *gin.Engine {
 					if surveyErr != nil {
 						status = "<span style='color:#FF6384'>no survey</span>"
 					}
-					fmt.Fprintf(c.Writer, "<a href='/log-collection/tree/%s'>%s</a>  %s", pk, pk, status) //nolint:errcheck,gosec
+					fmt.Fprintf(w, "<a href='/log-collection/tree/%s'>%s</a>  %s", pk, pk, status) //nolint:errcheck,gosec
 					if wl {
 						// Show links to individual files for whitelisted keys
 						pkDir := filepath.Join(backupsDir, pk)
@@ -389,18 +386,18 @@ func buildRouter() *gin.Engine {
 								if f.IsDir() {
 									continue
 								}
-								fmt.Fprintf(c.Writer, "  <a href='/log-collection/file/%s/%s'>%s</a>", pk, f.Name(), f.Name()) //nolint:errcheck,gosec
+								fmt.Fprintf(w, "  <a href='/log-collection/file/%s/%s'>%s</a>", pk, f.Name(), f.Name()) //nolint:errcheck,gosec
 							}
 						}
 					}
-					fmt.Fprint(c.Writer, "\n") //nolint:errcheck,gosec
+					fmt.Fprint(w, "\n") //nolint:errcheck,gosec
 				}
 			}
-			c.Writer.Flush()
-			c.Writer.Write([]byte(htmltoplink)) //nolint:errcheck,gosec
-			c.Writer.Flush()
-			c.Writer.Write([]byte(htmlend)) //nolint:errcheck,gosec
-			c.Writer.Flush()
+			flush(w)
+			w.Write([]byte(htmltoplink)) //nolint:errcheck,gosec
+			flush(w)
+			w.Write([]byte(htmlend)) //nolint:errcheck,gosec
+			flush(w)
 		})
 
 		// Detail tree view — restores the pre-2026-03-28 format that
@@ -411,90 +408,90 @@ func buildRouter() *gin.Engine {
 		// (Index header, ├/└ branches, color-coded file types, age +
 		// JSON body for health.json, version field for node-info.json),
 		// converted to HTML. The flat list lives at /log-collection/tree.
-		r1.GET("/log-collection/tree-detail", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Transfer-Encoding", "chunked")
-			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Write([]byte(chunkedPageHead("Survey Detail Tree", "Detailed Skywire visor survey tree with inline health.json and version info", "/log-collection/tree-detail"))) //nolint:errcheck,gosec
-			c.Writer.Flush()
-			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
-			c.Writer.Flush()
-			c.Writer.Write([]byte("<p style='margin:6px 0;'>View: <a href='/log-collection/tree'>flat list</a> &middot; <b>detail tree (per-PK health.json + version inline)</b></p>\n")) //nolint:errcheck,gosec
-			c.Writer.Flush()
+		r1.HandleFunc("GET /log-collection/tree-detail", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Transfer-Encoding", "chunked")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(chunkedPageHead("Survey Detail Tree", "Detailed Skywire visor survey tree with inline health.json and version info", "/log-collection/tree-detail"))) //nolint:errcheck,gosec
+			flush(w)
+			w.Write([]byte(navlinks)) //nolint:errcheck,gosec
+			flush(w)
+			w.Write([]byte("<p style='margin:6px 0;'>View: <a href='/log-collection/tree'>flat list</a> &middot; <b>detail tree (per-PK health.json + version inline)</b></p>\n")) //nolint:errcheck,gosec
+			flush(w)
 			st, err := script.Exec(`skywire cli log st -d ` + wd + `/log_backups -r`).Bytes()
 			if err != nil {
 				log.WithError(err).Error()
-				c.Writer.Write([]byte(err.Error())) //nolint:errcheck,gosec
+				w.Write([]byte(err.Error())) //nolint:errcheck,gosec
 			}
-			c.Writer.Write(ansihtml.ConvertToHTML(st)) //nolint:errcheck,gosec
-			c.Writer.Flush()
-			c.Writer.Write([]byte(htmltoplink)) //nolint:errcheck,gosec
-			c.Writer.Flush()
-			c.Writer.Write([]byte(htmlend)) //nolint:errcheck,gosec
-			c.Writer.Flush()
+			w.Write(ansihtml.ConvertToHTML(st)) //nolint:errcheck,gosec
+			flush(w)
+			w.Write([]byte(htmltoplink)) //nolint:errcheck,gosec
+			flush(w)
+			w.Write([]byte(htmlend)) //nolint:errcheck,gosec
+			flush(w)
 		})
 
-		r1.GET("/log-collection/tree/:pk", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			if c.Param("pk") == "" {
-				c.Writer.WriteHeader(http.StatusBadRequest)
-				c.Writer.Write([]byte("must specify public key")) //nolint:errcheck,gosec
-				c.Writer.Flush()
+		r1.HandleFunc("GET /log-collection/tree/{pk}", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			if r.PathValue("pk") == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte("must specify public key")) //nolint:errcheck,gosec
+				flush(w)
 				return
 			}
-			pks := strings.Split(c.Param("pk"), ",")
+			pks := strings.Split(r.PathValue("pk"), ",")
 			for _, pk := range pks {
 				var pK cipher.PubKey
 				err := pK.Set(pk)
 				if err != nil {
-					c.Writer.WriteHeader(http.StatusBadRequest)
-					c.Writer.Write([]byte("invalid public key: " + pk + " " + err.Error())) //nolint:errcheck,gosec
-					c.Writer.Flush()
+					w.WriteHeader(http.StatusBadRequest)
+					w.Write([]byte("invalid public key: " + pk + " " + err.Error())) //nolint:errcheck,gosec
+					flush(w)
 					return
 				}
 			}
-			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Transfer-Encoding", "chunked")
-			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Write([]byte(chunkedPageHead("Visor Survey", "Skywire visor survey and log details", "/log-collection/tree/"+c.Param("pk")))) //nolint:errcheck,gosec
-			c.Writer.Flush()
-			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
-			c.Writer.Flush()
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("Server", "")
+			w.Header().Set("Transfer-Encoding", "chunked")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(chunkedPageHead("Visor Survey", "Skywire visor survey and log details", "/log-collection/tree/"+r.PathValue("pk")))) //nolint:errcheck,gosec
+			flush(w)
+			w.Write([]byte(navlinks)) //nolint:errcheck,gosec
+			flush(w)
 			surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines() //nolint:errcheck,gosec
-			c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                            //nolint:errcheck,gosec,staticcheck
-			c.Writer.Flush()
-			st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -rup ` + c.Param("pk")).Bytes() //nolint:errcheck,gosec
-			c.Writer.Write(ansihtml.ConvertToHTML(st))                                                      //nolint:errcheck,gosec
-			c.Writer.Flush()
+			w.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                                   //nolint:errcheck,gosec,staticcheck
+			flush(w)
+			st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -rup ` + r.PathValue("pk")).Bytes() //nolint:errcheck,gosec
+			w.Write(ansihtml.ConvertToHTML(st))                                                                 //nolint:errcheck,gosec
+			flush(w)
 			// For whitelisted keys, show clickable file links
-			if isWhitelisted(c) {
+			if isWhitelisted(r) {
 				for _, pk := range pks {
 					pkDir := filepath.Join(wd, "log_backups", pk)
 					files, fErr := os.ReadDir(pkDir)
 					if fErr == nil {
-						fmt.Fprintf(c.Writer, "\n<b>Files for %s:</b>\n", pk) //nolint:errcheck,gosec
+						fmt.Fprintf(w, "\n<b>Files for %s:</b>\n", pk) //nolint:errcheck,gosec
 						for _, f := range files {
 							if f.IsDir() {
 								continue
 							}
-							fmt.Fprintf(c.Writer, "  <a href='/log-collection/file/%s/%s'>%s</a>\n", pk, f.Name(), f.Name()) //nolint:errcheck,gosec
+							fmt.Fprintf(w, "  <a href='/log-collection/file/%s/%s'>%s</a>\n", pk, f.Name(), f.Name()) //nolint:errcheck,gosec
 						}
 					}
 				}
-				c.Writer.Flush()
+				flush(w)
 			}
-			c.Writer.Write([]byte(htmltoplink)) //nolint:errcheck,gosec
-			c.Writer.Flush()
-			c.Writer.Write([]byte(htmlend)) //nolint:errcheck,gosec
-			c.Writer.Flush()
+			w.Write([]byte(htmltoplink)) //nolint:errcheck,gosec
+			flush(w)
+			w.Write([]byte(htmlend)) //nolint:errcheck,gosec
+			flush(w)
 		})
 
-		r1.GET("/log-collection/tplogs", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Write([]byte(func() (l string) { //nolint:errcheck,gosec
+		r1.HandleFunc("GET /log-collection/tplogs", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(func() (l string) { //nolint:errcheck,gosec
 				l = chunkedPageHead("Transport Bandwidth Logs", "Daily transport bandwidth logs for the Skywire Network", "/log-collection/tplogs")
 				l += navlinks
 				l += "<p><a href='/stats/bandwidth-history'>View Bandwidth History Graph</a></p>"
@@ -517,40 +514,40 @@ func buildRouter() *gin.Engine {
 			}()))
 		})
 
-		r1.GET("/stats/ut", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Transfer-Encoding", "chunked")
-			c.Writer.Header().Set("Content-Type", "text/plain")
-			c.Writer.Flush()
+		r1.HandleFunc("GET /stats/ut", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Transfer-Encoding", "chunked")
+			w.Header().Set("Content-Type", "text/plain")
+			flush(w)
 			utstats, err := script.Exec(`skywire cli ut -t`).String()
 			if err != nil {
-				c.Writer.WriteHeader(http.StatusInternalServerError)
+				w.WriteHeader(http.StatusInternalServerError)
 				log.Println(err.Error())
-				c.Writer.Flush()
+				flush(w)
 				return
 			}
-			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Flush()
-			c.Writer.Write([]byte(fmt.Sprintf("Uptime tracker version statistics:\n%s\n", utstats))) //nolint:errcheck,gosec,staticcheck
-			c.Writer.Flush()
+			w.WriteHeader(http.StatusOK)
+			flush(w)
+			w.Write([]byte(fmt.Sprintf("Uptime tracker version statistics:\n%s\n", utstats))) //nolint:errcheck,gosec,staticcheck
+			flush(w)
 		})
 
-		r1.StaticFile("/stats/arch", tempStatsPath+"/arch.txt")
-		r1.StaticFile("/stats/os", tempStatsPath+"/os.txt")
-		r1.StaticFile("/stats/cpu", tempStatsPath+"/cpu.txt")
-		r1.StaticFile("/stats/mem", tempStatsPath+"/mem.txt")
-		r1.StaticFile("/stats/ram", tempStatsPath+"/ram.txt")
-		r1.StaticFile("/stats/product", tempStatsPath+"/product.txt")
-		r1.StaticFile("/stats/country/unique", tempStatsPath+"/country_unique.txt")
-		r1.StaticFile("/stats/country/unique/json", tempStatsPath+"/country_unique.json")
-		r1.StaticFile("/stats/country/full", tempStatsPath+"/country_full.txt")
-		r1.StaticFile("/stats/country/full/json", tempStatsPath+"/country_full.json")
+		serveFile(r1, "/stats/arch", tempStatsPath+"/arch.txt")
+		serveFile(r1, "/stats/os", tempStatsPath+"/os.txt")
+		serveFile(r1, "/stats/cpu", tempStatsPath+"/cpu.txt")
+		serveFile(r1, "/stats/mem", tempStatsPath+"/mem.txt")
+		serveFile(r1, "/stats/ram", tempStatsPath+"/ram.txt")
+		serveFile(r1, "/stats/product", tempStatsPath+"/product.txt")
+		serveFile(r1, "/stats/country/unique", tempStatsPath+"/country_unique.txt")
+		serveFile(r1, "/stats/country/unique/json", tempStatsPath+"/country_unique.json")
+		serveFile(r1, "/stats/country/full", tempStatsPath+"/country_full.txt")
+		serveFile(r1, "/stats/country/full/json", tempStatsPath+"/country_full.json")
 
 		// Aggregated stats page
-		r1.GET("/stats", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-			c.Writer.WriteHeader(http.StatusOK)
+		r1.HandleFunc("GET /stats", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
 
 			l := chunkedPageHead("Network Statistics", "Skywire Network hardware, OS, and geographic statistics", "/stats")
 			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
@@ -697,15 +694,15 @@ func buildRouter() *gin.Engine {
 			l += "<br>" + htmltoplink
 			l += "</body></html>"
 
-			c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+			w.Write([]byte(l)) //nolint:errcheck,gosec
 		})
 
 		// Network time series — every chart on one page. The /stats page keeps
 		// its own presentation; this is the SVG view of the same network.
-		r1.GET("/stats/charts", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-			c.Writer.WriteHeader(http.StatusOK)
+		r1.HandleFunc("GET /stats/charts", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
 
 			l := chunkedPageHead("Network Time Series", "Skywire Network bandwidth, latency, version adoption and liveness over time", "/stats/charts")
 			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
@@ -739,14 +736,14 @@ func buildRouter() *gin.Engine {
 			l += "<br>" + htmltoplink
 			l += "</body></html>"
 
-			c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+			w.Write([]byte(l)) //nolint:errcheck,gosec
 		})
 
 		// Version history chart route
-		r1.GET("/stats/version-history", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-			c.Writer.WriteHeader(http.StatusOK)
+		r1.HandleFunc("GET /stats/version-history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
 
 			l := chunkedPageHead("Version History", "Skywire visor version adoption history", "/stats/version-history")
 			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
@@ -771,14 +768,14 @@ func buildRouter() *gin.Engine {
 			l += "<br>" + htmltoplink
 			l += "</body></html>"
 
-			c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+			w.Write([]byte(l)) //nolint:errcheck,gosec
 		})
 
 		// Bandwidth history chart route
-		r1.GET("/stats/bandwidth-history", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-			c.Writer.WriteHeader(http.StatusOK)
+		r1.HandleFunc("GET /stats/bandwidth-history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
 
 			l := chunkedPageHead("Bandwidth History", "Skywire Network bandwidth usage history", "/stats/bandwidth-history")
 			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
@@ -799,14 +796,14 @@ func buildRouter() *gin.Engine {
 			l += "<br>" + htmltoplink
 			l += "</body></html>"
 
-			c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+			w.Write([]byte(l)) //nolint:errcheck,gosec
 		})
 
 		// Per-visor bandwidth stacked chart route
-		r1.GET("/stats/visor-bandwidth", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-			c.Writer.WriteHeader(http.StatusOK)
+		r1.HandleFunc("GET /stats/visor-bandwidth", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
 
 			l := chunkedPageHead("Visor Bandwidth", "Per-visor bandwidth usage on the Skywire Network", "/stats/visor-bandwidth")
 			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
@@ -820,14 +817,14 @@ func buildRouter() *gin.Engine {
 			l += "<br>" + htmltoplink
 			l += "</body></html>"
 
-			c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+			w.Write([]byte(l)) //nolint:errcheck,gosec
 		})
 
-		r1.GET("/skycoin-rewards", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Transfer-Encoding", "chunked")
-			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Flush()
+		r1.HandleFunc("GET /skycoin-rewards", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Transfer-Encoding", "chunked")
+			w.WriteHeader(http.StatusOK)
+			flush(w)
 			l := fmt.Sprintf("<div style='float: right;'>%s</div>", func() string {
 				yearlyTotal := 408000.0
 				result := fmt.Sprintf("<u>Annual reward distribution per pool:</u>\n%g Skycoin\n<u>Monthly rewards per pool:</u>\n", yearlyTotal)
@@ -955,68 +952,72 @@ func buildRouter() *gin.Engine {
 				fmt.Println("error: ", err)
 			}
 
-			c.Writer.Write(normalizeNewlines(result.Bytes())) //nolint:errcheck,gosec
-			c.Writer.Flush()
+			w.Write(normalizeNewlines(result.Bytes())) //nolint:errcheck,gosec
+			flush(w)
 		})
 
-		authRoute := r1.Group("/")
-		if len(wlkeys) > 0 {
-			authRoute.Use(whitelistAuth(wlkeys))
+		handleAuth := func(pattern string, h http.HandlerFunc) {
+			r1.Handle(pattern, rewards.WhitelistAuth(wlkeys)(h))
 		}
 
 		// Serve individual log files — whitelisted keys only
-		authRoute.GET("/log-collection/file/:pk/:filename", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
+		handleAuth("GET /log-collection/file/{pk}/{filename}", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
 			if len(wlkeys) == 0 {
-				c.Writer.WriteHeader(http.StatusUnauthorized)
-				c.Writer.Write([]byte("401 Unauthorized")) //nolint:errcheck,gosec
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write([]byte("401 Unauthorized")) //nolint:errcheck,gosec
 				return
 			}
-			pk := c.Param("pk")
-			filename := c.Param("filename")
+			pk, ok := pathPK(r)
+			filename := r.PathValue("filename")
+			if !ok {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte("400 Bad Request")) //nolint:errcheck,gosec
+				return
+			}
 			// Sanitize: only allow simple filenames (no path traversal)
 			if strings.Contains(filename, "/") || strings.Contains(filename, "..") {
-				c.Writer.WriteHeader(http.StatusBadRequest)
-				c.Writer.Write([]byte("400 Bad Request")) //nolint:errcheck,gosec
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte("400 Bad Request")) //nolint:errcheck,gosec
 				return
 			}
 			filePath := filepath.Join(wd, "log_backups", pk, filename)
 			data, err := os.ReadFile(filePath) //nolint:gosec
 			if err != nil {
-				c.Writer.WriteHeader(http.StatusNotFound)
-				c.Writer.Write([]byte("404 Not Found")) //nolint:errcheck,gosec
+				w.WriteHeader(http.StatusNotFound)
+				w.Write([]byte("404 Not Found")) //nolint:errcheck,gosec
 				return
 			}
 			if strings.HasSuffix(filename, ".json") {
-				c.Writer.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Content-Type", "application/json")
 			} else {
-				c.Writer.Header().Set("Content-Type", "text/plain")
+				w.Header().Set("Content-Type", "text/plain")
 			}
-			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Write(data) //nolint:errcheck,gosec
-			c.Writer.Flush()
+			w.WriteHeader(http.StatusOK)
+			w.Write(data) //nolint:errcheck,gosec
+			flush(w)
 		})
 
 		// dmsgpost dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f:80/reward -d $(skycoin-cli createRawTransaction /home/user/.skycoin/wallets/2023_06_29.wlt --csv <(curl --silent -L https://theskywirenetwork.net/skycoin-rewards/csv) -a 24MGsKPDo3EJX4uF1h4CHcgmNNHmtGaLR5f) -s <secret-key-of-reward-whitelisted-pk>
-		authRoute.POST("/reward", func(c *gin.Context) {
+		handleAuth("POST /reward", func(w http.ResponseWriter, r *http.Request) {
 			//override the behavior of `public fallback` for this endpoint
 			if len(wlkeys) == 0 {
-				c.Writer.WriteHeader(http.StatusUnauthorized)
-				c.Writer.Write([]byte("len(wlkeys) == 0")) //nolint:errcheck,gosec
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write([]byte("len(wlkeys) == 0")) //nolint:errcheck,gosec
 				return
 			}
 			// Read the request body
-			body, err := io.ReadAll(c.Request.Body)
+			body, err := io.ReadAll(r.Body)
 			if err != nil {
-				c.Writer.WriteHeader(http.StatusInternalServerError)
-				c.Writer.Write([]byte("io.ReadAll(c.Request.Body) :\n\n" + string(body) + "\n\nError:\n\n" + err.Error())) //nolint:errcheck,gosec
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte("io.ReadAll(r.Body) :\n\n" + string(body) + "\n\nError:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
 			//check that wallet is running
 			status, err := script.Exec("skywire skycoin cli status").String()
 			if err != nil {
-				c.Writer.WriteHeader(http.StatusInternalServerError)
-				c.Writer.Write([]byte("skywire skycoin cli status:\n\n" + status + "\n\nskywire skycoin cli status error:\n\n" + err.Error())) //nolint:errcheck,gosec
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte("skywire skycoin cli status:\n\n" + status + "\n\nskywire skycoin cli status error:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
 			// Find all combined transaction CSVs. Anchored to
@@ -1027,8 +1028,8 @@ func buildRouter() *gin.Engine {
 			// distribution flow.
 			f, err := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}_rewardtxn0\.csv$`)).Slice()
 			if err != nil {
-				c.Writer.WriteHeader(http.StatusInternalServerError)
-				c.Writer.Write([]byte("script.FindFiles(wd + /hist/).MatchRegexp(combined rewardtxn0).Slice():\n\n" + strings.Join(f, "\n") + "\n\nError:\n\n" + err.Error())) //nolint:errcheck,gosec
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte("script.FindFiles(wd + /hist/).MatchRegexp(combined rewardtxn0).Slice():\n\n" + strings.Join(f, "\n") + "\n\nError:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
 			//and range through the results
@@ -1041,22 +1042,22 @@ func buildRouter() *gin.Engine {
 					//raw transaction is the request body ; decode it to make sure it's good
 					decoded, err := script.Exec("skywire skycoin cli decodeRawTransaction " + string(body)).String()
 					if err != nil {
-						c.Writer.WriteHeader(http.StatusBadRequest)
-						c.Writer.Write([]byte("skywire skycoin cli decodeRawTransaction:\n\n" + decoded + "\n\nskywire skycoin cli decodeRawTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
+						w.WriteHeader(http.StatusBadRequest)
+						w.Write([]byte("skywire skycoin cli decodeRawTransaction:\n\n" + decoded + "\n\nskywire skycoin cli decodeRawTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
 						return
 					}
 					//if all is well, broadcast the transaction
 					txid, err := script.Exec("skywire skycoin cli broadcastTransaction " + string(body)).String()
 					if err != nil {
-						c.Writer.WriteHeader(http.StatusInternalServerError)
-						c.Writer.Write([]byte("skywire skycoin cli broadcastTransaction:\n\n" + txid + "\n\nskywire skycoin cli broadcastTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
+						w.WriteHeader(http.StatusInternalServerError)
+						w.Write([]byte("skywire skycoin cli broadcastTransaction:\n\n" + txid + "\n\nskywire skycoin cli broadcastTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
 						return
 					}
 					//record the transaction ID for that day's reward
 					_, err = script.Echo(txid).WriteFile(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1))
 					if err != nil {
-						c.Writer.WriteHeader(http.StatusInternalServerError)
-						c.Writer.Write([]byte(`script.Echo(txid).WriteFile(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1))\n\n` + txid + "\n\n" + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1) + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
+						w.WriteHeader(http.StatusInternalServerError)
+						w.Write([]byte(`script.Echo(txid).WriteFile(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1))\n\n` + txid + "\n\n" + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1) + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
 						return
 					}
 					//record the transaction ID for the reward notification system - append the file!
@@ -1064,28 +1065,28 @@ func buildRouter() *gin.Engine {
 					fmt.Printf("[reward] Appending txid to %s\n", txnFile)
 					_, err = script.Echo(txid).AppendFile(txnFile)
 					if err != nil {
-						c.Writer.WriteHeader(http.StatusInternalServerError)
-						c.Writer.Write([]byte(`script.Echo(txid).AppendFile(wd + / + "transactions0.txt")\n\n` + txid + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
+						w.WriteHeader(http.StatusInternalServerError)
+						w.Write([]byte(`script.Echo(txid).AppendFile(wd + / + "transactions0.txt")\n\n` + txid + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
 						return
 					}
-					c.Writer.WriteHeader(http.StatusOK)
-					c.Writer.Write([]byte(txid)) //nolint:errcheck,gosec
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(txid)) //nolint:errcheck,gosec
 					return
 				}
 			}
-			c.Writer.WriteHeader(http.StatusNotFound)
-			h, _ := script.FindFiles(wd + `/hist/`).String()                      //nolint:errcheck,gosec
-			c.Writer.Write([]byte("No undistributed rewards csv found.\n\n" + h)) //nolint:errcheck,gosec
+			w.WriteHeader(http.StatusNotFound)
+			h, _ := script.FindFiles(wd + `/hist/`).String()               //nolint:errcheck,gosec
+			w.Write([]byte("No undistributed rewards csv found.\n\n" + h)) //nolint:errcheck,gosec
 		})
 
-		r1.GET("/skycoin-rewards/csv", func(c *gin.Context) {
+		r1.HandleFunc("GET /skycoin-rewards/csv", func(w http.ResponseWriter, r *http.Request) {
 			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint:errcheck,gosec
 			if strings.TrimRight(active, "\n") == "active" {
-				c.Writer.Header().Set("Server", "")
-				c.Writer.WriteHeader(http.StatusNotFound)
+				w.Header().Set("Server", "")
+				w.WriteHeader(http.StatusNotFound)
 				return
 			}
-			c.Writer.Header().Set("Server", "")
+			w.Header().Set("Server", "")
 			// Anchored to YYYY-MM-DD_rewardtxn0.csv so per-pool variants
 			// (_pool1_rewardtxn0.csv / _pool2_rewardtxn0.csv from PR
 			// #2946) are excluded — they are informational, not
@@ -1094,30 +1095,30 @@ func buildRouter() *gin.Engine {
 			for _, f1 := range f {
 				g, err := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 				if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
-					c.Writer.Header().Set("Content-Type", "text/plain")
-					c.Writer.WriteHeader(http.StatusOK)
-					c.Writer.Write([]byte("skycoin-rewards/hist/" + f1)) //nolint:errcheck,gosec
+					w.Header().Set("Content-Type", "text/plain")
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte("skycoin-rewards/hist/" + f1)) //nolint:errcheck,gosec
 					return
 				}
 
 			}
-			c.Writer.WriteHeader(http.StatusNotFound)
+			w.WriteHeader(http.StatusNotFound)
 		})
 		//status of reward system hourly run.
-		r1.GET("/skycoin-rewards/s", func(c *gin.Context) {
+		r1.HandleFunc("GET /skycoin-rewards/s", func(w http.ResponseWriter, r *http.Request) {
 			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint:errcheck,gosec
-			c.JSON(http.StatusOK, gin.H{"active": strings.TrimRight(active, "\n")})
+			httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"active": strings.TrimRight(active, "\n")})
 		})
 
-		r1.GET("/skycoin-rewards/csv/plain", func(c *gin.Context) {
+		r1.HandleFunc("GET /skycoin-rewards/csv/plain", func(w http.ResponseWriter, r *http.Request) {
 			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint:errcheck,gosec
 			if strings.TrimRight(active, "\n") == "active" {
-				c.Writer.Header().Set("Server", "")
-				c.Writer.WriteHeader(http.StatusNotFound)
+				w.Header().Set("Server", "")
+				w.WriteHeader(http.StatusNotFound)
 				return
 			}
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Content-Type", "text/plain")
+			w.Header().Set("Server", "")
+			w.Header().Set("Content-Type", "text/plain")
 			// Anchored to YYYY-MM-DD_rewardtxn0.csv so per-pool variants
 			// (_pool1_rewardtxn0.csv / _pool2_rewardtxn0.csv from PR
 			// #2946) are excluded — they are informational, not
@@ -1126,24 +1127,24 @@ func buildRouter() *gin.Engine {
 			for _, f1 := range f {
 				g, _ := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String() //nolint:errcheck,gosec
 				if g != "" && g != "\n" {
-					c.Redirect(http.StatusFound, "/skycoin-rewards/hist/"+f1)
+					http.Redirect(w, r, "/skycoin-rewards/hist/"+f1, http.StatusFound)
 					return
 				}
 
 			}
-			c.Writer.WriteHeader(http.StatusNotFound)
+			w.WriteHeader(http.StatusNotFound)
 		})
 
-		r1.GET("/skycoin-rewards/hist/:date", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
-			c.Writer.Header().Set("Transfer-Encoding", "chunked")
-			_, err := time.Parse("2006-01-02", c.Param("date"))
+		r1.HandleFunc("GET /skycoin-rewards/hist/{date}", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			w.Header().Set("Transfer-Encoding", "chunked")
+			_, err := time.Parse("2006-01-02", r.PathValue("date"))
 			if err != nil {
-				_, err1 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_rewardtxn0.csv", "", -1))
-				_, err2 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_stats.txt", "", -1))
-				_, err3 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_ineligible.csv", "", -1))
-				_, err4 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_shares.csv", "", -1))
-				_, err5 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), ".txt", "", -1))
+				_, err1 := time.Parse("2006-01-02", strings.Replace(r.PathValue("date"), "_rewardtxn0.csv", "", -1))
+				_, err2 := time.Parse("2006-01-02", strings.Replace(r.PathValue("date"), "_stats.txt", "", -1))
+				_, err3 := time.Parse("2006-01-02", strings.Replace(r.PathValue("date"), "_ineligible.csv", "", -1))
+				_, err4 := time.Parse("2006-01-02", strings.Replace(r.PathValue("date"), "_shares.csv", "", -1))
+				_, err5 := time.Parse("2006-01-02", strings.Replace(r.PathValue("date"), ".txt", "", -1))
 				// Per-pool detail CSVs from the bandwidth-mode reward calc
 				// (PR #2946). Served as raw text — they have non-standard
 				// column layouts (pool1_shares: presence-share+P1 SKY;
@@ -1151,22 +1152,22 @@ func buildRouter() *gin.Engine {
 				// per-pool aggregation by address) so falling through to
 				// the same raw-bytes serving branch as _rewardtxn0.csv is
 				// the right move — no per-column rewrite needed for now.
-				_, err6 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_pool1_shares.csv", "", -1))
-				_, err7 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_pool2_shares.csv", "", -1))
-				_, err8 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_pool1_rewardtxn0.csv", "", -1))
-				_, err9 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_pool2_rewardtxn0.csv", "", -1))
+				_, err6 := time.Parse("2006-01-02", strings.Replace(r.PathValue("date"), "_pool1_shares.csv", "", -1))
+				_, err7 := time.Parse("2006-01-02", strings.Replace(r.PathValue("date"), "_pool2_shares.csv", "", -1))
+				_, err8 := time.Parse("2006-01-02", strings.Replace(r.PathValue("date"), "_pool1_rewardtxn0.csv", "", -1))
+				_, err9 := time.Parse("2006-01-02", strings.Replace(r.PathValue("date"), "_pool2_rewardtxn0.csv", "", -1))
 				if err1 != nil && err2 != nil && err3 != nil && err4 != nil && err5 != nil &&
 					err6 != nil && err7 != nil && err8 != nil && err9 != nil {
 					fmt.Println("cant parse date or match filename")
-					c.Writer.WriteHeader(http.StatusNotFound)
-					c.Writer.Flush()
+					w.WriteHeader(http.StatusNotFound)
+					flush(w)
 					return
 				}
 				if err1 == nil || err2 == nil || err5 == nil ||
 					err6 == nil || err7 == nil || err8 == nil || err9 == nil {
-					filetoserve, err := script.File(wd + `/hist/` + c.Param("date")).Bytes()
+					filetoserve, err := script.File(wd + `/hist/` + r.PathValue("date")).Bytes()
 					if err == nil {
-						c.Writer.Header().Set("Content-Type", "text/plain")
+						w.Header().Set("Content-Type", "text/plain")
 						// Raw CSV / stats / txt downloads are bulk data
 						// artifacts the indexable per-date HTML page
 						// already summarizes. Tell crawlers not to
@@ -1176,24 +1177,24 @@ func buildRouter() *gin.Engine {
 						// for "skycoin rewards <date>", not a dozen
 						// .csv siblings). `follow` keeps any links
 						// inside the file (typically none) crawlable.
-						c.Writer.Header().Set("X-Robots-Tag", "noindex, follow")
-						c.Writer.WriteHeader(http.StatusOK)
-						c.Writer.Flush()
-						_, _ = c.Writer.Write(filetoserve) //nolint:errcheck,gosec
-						c.Writer.Flush()
+						w.Header().Set("X-Robots-Tag", "noindex, follow")
+						w.WriteHeader(http.StatusOK)
+						flush(w)
+						_, _ = w.Write(filetoserve) //nolint:errcheck,gosec
+						flush(w)
 						return
 					}
 					fmt.Println("non nil script.File error")
-					c.Writer.WriteHeader(http.StatusNotFound)
-					c.Writer.Flush()
+					w.WriteHeader(http.StatusNotFound)
+					flush(w)
 					return
 				}
 				if err3 == nil {
-					l2, err := script.File(wd + `/hist/` + c.Param("date")).Slice()
+					l2, err := script.File(wd + `/hist/` + r.PathValue("date")).Slice()
 					if err != nil {
 						fmt.Println("non nil script.File error")
-						c.Writer.WriteHeader(http.StatusNotFound)
-						c.Writer.Flush()
+						w.WriteHeader(http.StatusNotFound)
+						flush(w)
 						return
 					}
 					var toserve string
@@ -1202,20 +1203,20 @@ func buildRouter() *gin.Engine {
 						reason, _ := script.Echo(line).Column(3).String() //nolint:errcheck,gosec
 						toserve += fmt.Sprintf("%s%s\n", strings.TrimRight(strings.TrimRight(thispk, "\n"), "\r"), strings.TrimRight(strings.TrimRight(strings.TrimRight(reason, "\n"), "\r"), ","))
 					}
-					c.Writer.Header().Set("Content-Type", "text/plain")
-					c.Writer.Header().Set("X-Robots-Tag", "noindex, follow")
-					c.Writer.WriteHeader(http.StatusOK)
-					c.Writer.Flush()
-					c.Writer.Write([]byte(toserve)) //nolint:errcheck,gosec
-					c.Writer.Flush()
+					w.Header().Set("Content-Type", "text/plain")
+					w.Header().Set("X-Robots-Tag", "noindex, follow")
+					w.WriteHeader(http.StatusOK)
+					flush(w)
+					w.Write([]byte(toserve)) //nolint:errcheck,gosec
+					flush(w)
 					return
 				}
 				if err4 == nil {
-					l2, err := script.File(wd + `/hist/` + c.Param("date")).Slice()
+					l2, err := script.File(wd + `/hist/` + r.PathValue("date")).Slice()
 					if err != nil {
 						fmt.Println("non nil script.File error")
-						c.Writer.WriteHeader(http.StatusNotFound)
-						c.Writer.Flush()
+						w.WriteHeader(http.StatusNotFound)
+						flush(w)
 						return
 					}
 					var toserve string
@@ -1226,59 +1227,59 @@ func buildRouter() *gin.Engine {
 						thispk, err := script.Echo(line).Column(2).String()
 						if err != nil {
 							fmt.Println("non nil script.Echo(line).Column(2).String() error")
-							c.Writer.WriteHeader(http.StatusNotFound)
-							c.Writer.Flush()
+							w.WriteHeader(http.StatusNotFound)
+							flush(w)
 							return
 						}
 						share, err := script.Echo(line).Column(3).String()
 						if err != nil {
 							fmt.Println("non nil script.Echo(line).Column(3).String() error")
-							c.Writer.WriteHeader(http.StatusNotFound)
-							c.Writer.Flush()
+							w.WriteHeader(http.StatusNotFound)
+							flush(w)
 							return
 						}
 						sky, err := script.Echo(line).Column(4).String()
 						if err != nil {
 							fmt.Println("non nil script.Echo(line).Column(4).String() error")
-							c.Writer.WriteHeader(http.StatusNotFound)
-							c.Writer.Flush()
+							w.WriteHeader(http.StatusNotFound)
+							flush(w)
 							return
 						}
 						toserve += fmt.Sprintf("%s%s%s\n", strings.TrimRight(strings.TrimRight(thispk, "\n"), "\r"), strings.TrimRight(strings.TrimRight(share, "\n"), "\r"), strings.TrimRight(strings.TrimRight(strings.TrimRight(sky, "\n"), "\r"), ","))
 					}
-					c.Writer.Header().Set("Content-Type", "text/plain")
-					c.Writer.Header().Set("X-Robots-Tag", "noindex, follow")
-					c.Writer.WriteHeader(http.StatusOK)
-					c.Writer.Flush()
-					c.Writer.Write([]byte(toserve)) //nolint:errcheck,gosec
-					c.Writer.Flush()
+					w.Header().Set("Content-Type", "text/plain")
+					w.Header().Set("X-Robots-Tag", "noindex, follow")
+					w.WriteHeader(http.StatusOK)
+					flush(w)
+					w.Write([]byte(toserve)) //nolint:errcheck,gosec
+					flush(w)
 					return
 				}
 
 			}
-			rewardfiles, err := script.FindFiles(wd + `/hist`).Match(c.Param("date")).Slice()
+			rewardfiles, err := script.FindFiles(wd + `/hist`).Match(r.PathValue("date")).Slice()
 			if err != nil {
-				fmt.Println("non nil script.FindFiles(wd + `/hist`).Match(c.Param(\"date\")).Slice() error")
-				c.Writer.WriteHeader(http.StatusNotFound)
-				c.Writer.Flush()
+				fmt.Println("non nil script.FindFiles(wd + `/hist`).Match(r.PathValue(\"date\")).Slice() error")
+				w.WriteHeader(http.StatusNotFound)
+				flush(w)
 				return
 			}
 			if len(rewardfiles) == 0 {
-				c.Writer.WriteHeader(http.StatusNotFound)
-				c.Writer.Flush()
+				w.WriteHeader(http.StatusNotFound)
+				flush(w)
 				return
 			}
 			l := ""
-			l3, err := os.Stat(wd + `/hist/` + c.Param("date") + "_rewardtxn0.csv")
+			l3, err := os.Stat(wd + `/hist/` + r.PathValue("date") + "_rewardtxn0.csv") //nolint:gosec // date was checked with time.Parse above
 			if err != nil {
-				fmt.Println("non nil os.Stat(wd + `/hist/` + c.Param(\"date\") + \"_rewardtxn0.csv\") error")
-				c.Writer.WriteHeader(http.StatusNotFound)
-				c.Writer.Flush()
+				fmt.Println("non nil os.Stat(wd + `/hist/` + r.PathValue(\"date\") + \"_rewardtxn0.csv\") error")
+				w.WriteHeader(http.StatusNotFound)
+				flush(w)
 				return
 			}
 			l += "Reward data generated: " + l3.ModTime().Format("2006-01-02 15:04:05") + "\n\n"
 
-			l1, err := script.File(wd + `/hist/` + c.Param("date") + ".txt").String()
+			l1, err := script.File(wd + `/hist/` + r.PathValue("date") + ".txt").String()
 			if err != nil {
 				l += "Rewards not distributed yet — awaiting broadcast\n\n"
 			} else {
@@ -1290,7 +1291,7 @@ func buildRouter() *gin.Engine {
 				}
 			}
 
-			l2, err := script.File(wd + `/hist/` + c.Param("date") + "_shares.csv").Slice()
+			l2, err := script.File(wd + `/hist/` + r.PathValue("date") + "_shares.csv").Slice()
 			if err != nil {
 				l += "<div style='float: right;'>PK,Share,SKY Amount\nReward shares file not found\nerror: " + err.Error() + "\n\n"
 			} else {
@@ -1312,28 +1313,28 @@ func buildRouter() *gin.Engine {
 					thispk, err := script.Echo(line).Column(2).String()
 					if err != nil {
 						fmt.Println("non nil script.Echo(line).Column(2).String() error")
-						c.Writer.WriteHeader(http.StatusNotFound)
-						c.Writer.Flush()
+						w.WriteHeader(http.StatusNotFound)
+						flush(w)
 						return
 					}
 					share, err := script.Echo(line).Column(3).String()
 					if err != nil {
 						fmt.Println("non nil script.Echo(line).Column(3).String() error")
-						c.Writer.WriteHeader(http.StatusNotFound)
-						c.Writer.Flush()
+						w.WriteHeader(http.StatusNotFound)
+						flush(w)
 						return
 					}
 					sky, err := script.Echo(line).Column(skyCol).String()
 					if err != nil {
 						fmt.Printf("non nil script.Echo(line).Column(%d).String() error\n", skyCol)
-						c.Writer.WriteHeader(http.StatusNotFound)
-						c.Writer.Flush()
+						w.WriteHeader(http.StatusNotFound)
+						flush(w)
 						return
 					}
 					l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + strings.TrimRight(share, "\n") + strings.Replace(sky, ",\n", "\n", -1)
 				}
 			}
-			l2, err = script.File(wd + `/hist/` + c.Param("date") + "_ineligible.csv").Slice()
+			l2, err = script.File(wd + `/hist/` + r.PathValue("date") + "_ineligible.csv").Slice()
 			if err == nil {
 				l += "\n\nIneligible:\n"
 				for _, line := range l2 {
@@ -1372,7 +1373,7 @@ func buildRouter() *gin.Engine {
 			// bandwidth mode.
 			//   pool1_shares.csv columns: SkyAddr, PK, PresenceShare, Pool1SKY, IP, Arch, UUID, Interfaces, Country, XPub
 			//   pool2_shares.csv columns: SkyAddr, PK, Bandwidth(bytes), Pool2Weight, Pool2SKY, IP, ...
-			l2, err = script.File(wd + `/hist/` + c.Param("date") + "_pool1_shares.csv").Slice()
+			l2, err = script.File(wd + `/hist/` + r.PathValue("date") + "_pool1_shares.csv").Slice()
 			if err == nil {
 				l += "\n\nPool 1 (Presence):\nPK,Presence Share,Pool 1 SKY\n"
 				for i, line := range l2 {
@@ -1385,7 +1386,7 @@ func buildRouter() *gin.Engine {
 					l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + strings.TrimRight(share, "\n") + strings.Replace(p1sky, ",\n", "\n", -1)
 				}
 			}
-			l2, err = script.File(wd + `/hist/` + c.Param("date") + "_pool2_shares.csv").Slice()
+			l2, err = script.File(wd + `/hist/` + r.PathValue("date") + "_pool2_shares.csv").Slice()
 			if err == nil {
 				l += "\n\nPool 2 (Bandwidth):\nPK,Bandwidth (bytes),Pool 2 SKY\n"
 				for i, line := range l2 {
@@ -1405,36 +1406,36 @@ func buildRouter() *gin.Engine {
 
 			l += "</div>"
 
-			l1, err = script.File(wd + `/hist/` + c.Param("date") + "_stats.txt").String()
+			l1, err = script.File(wd + `/hist/` + r.PathValue("date") + "_stats.txt").String()
 			if err != nil {
-				fmt.Println("non nil script.File(wd + `/hist/` + c.Param(\"date\") + \"_stats.txt\").String() error")
-				c.Writer.WriteHeader(http.StatusNotFound)
-				c.Writer.Flush()
+				fmt.Println("non nil script.File(wd + `/hist/` + r.PathValue(\"date\") + \"_stats.txt\").String() error")
+				w.WriteHeader(http.StatusNotFound)
+				flush(w)
 				return
 			}
-			l += c.Param("date") + "_stats.txt\n" + l1 + "\n"
+			l += r.PathValue("date") + "_stats.txt\n" + l1 + "\n"
 
-			l2, err = script.File(wd+`/`+"hist/"+c.Param("date")+"_rewardtxn0.csv").Replace(",", " ").Slice()
+			l2, err = script.File(wd+`/`+"hist/"+r.PathValue("date")+"_rewardtxn0.csv").Replace(",", " ").Slice()
 			if err != nil {
-				fmt.Println("non nil script.File(wd+`/`+\"hist/\"+c.Param(\"date\")+\"_rewardtxn0.csv\").Replace(\",\", \" \").Slice() error")
-				c.Writer.WriteHeader(http.StatusNotFound)
-				c.Writer.Flush()
+				fmt.Println("non nil script.File(wd+`/`+\"hist/\"+r.PathValue(\"date\")+\"_rewardtxn0.csv\").Replace(\",\", \" \").Slice() error")
+				w.WriteHeader(http.StatusNotFound)
+				flush(w)
 				return
 			}
-			l += c.Param("date") + "_transaction0.csv\n\nSKY Address, Amount\n"
+			l += r.PathValue("date") + "_transaction0.csv\n\nSKY Address, Amount\n"
 			for _, line := range l2 {
 				skyaddr, err := script.Echo(line).Column(1).String()
 				if err != nil {
 					fmt.Println("non nil script.Echo(line).Column(1).String() error")
-					c.Writer.WriteHeader(http.StatusNotFound)
-					c.Writer.Flush()
+					w.WriteHeader(http.StatusNotFound)
+					flush(w)
 					return
 				}
 				skyamt, err := script.Echo(line).Column(2).String()
 				if err != nil {
 					fmt.Println("non nil script.Echo(line).Column(2).String() error")
-					c.Writer.WriteHeader(http.StatusNotFound)
-					c.Writer.Flush()
+					w.WriteHeader(http.StatusNotFound)
+					flush(w)
 					return
 				}
 				// Never display raw xpub keys — they are private.
@@ -1452,12 +1453,12 @@ func buildRouter() *gin.Engine {
 			}
 
 			// For whitelisted keys, add links to all raw files for this date
-			if isWhitelisted(c) {
+			if isWhitelisted(r) {
 				histFiles, hErr := os.ReadDir(filepath.Join(wd, "hist"))
 				if hErr == nil {
 					l += "\n<b>Raw files:</b>\n"
 					for _, hf := range histFiles {
-						if strings.HasPrefix(hf.Name(), c.Param("date")) {
+						if strings.HasPrefix(hf.Name(), r.PathValue("date")) {
 							l += fmt.Sprintf("  <a href='/skycoin-rewards/hist/%s'>%s</a>\n", hf.Name(), hf.Name())
 						}
 					}
@@ -1480,18 +1481,18 @@ func buildRouter() *gin.Engine {
 			// actual reward totals + visor count + country count
 			// instead of a templated stub, and the JSON-LD Dataset
 			// block gives Google a clean rich-snippet target.
-			stats := parseRewardStats(wd, c.Param("date"))
-			pageDescription := stats.description(c.Param("date"))
-			pageTitle := stats.title(c.Param("date"))
-			pageCanonical := strings.TrimRight(canonicalDomain, "/") + "/skycoin-rewards/hist/" + c.Param("date")
-			jsonLD := stats.jsonLD(pageCanonical, c.Param("date"))
+			stats := parseRewardStats(wd, r.PathValue("date"))
+			pageDescription := stats.description(r.PathValue("date"))
+			pageTitle := stats.title(r.PathValue("date"))
+			pageCanonical := strings.TrimRight(canonicalDomain, "/") + "/skycoin-rewards/hist/" + r.PathValue("date")
+			jsonLD := stats.jsonLD(pageCanonical, r.PathValue("date"))
 
 			htmlPageTemplateData1 := (htmlTemplateData{
 				Title:       pageTitle,
 				Description: pageDescription,
 				Content:     htmpl.HTML(l),      //nolint:gosec
 				JSONLD:      htmpl.HTML(jsonLD), //nolint:gosec
-			}).withCanonical("/skycoin-rewards/hist/" + c.Param("date"))
+			}).withCanonical("/skycoin-rewards/hist/" + r.PathValue("date"))
 			tmplData := map[string]interface{}{
 				"Page": htmlPageTemplateData1,
 			}
@@ -1501,31 +1502,36 @@ func buildRouter() *gin.Engine {
 				fmt.Println("error: ", err)
 			}
 
-			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Flush()
-			c.Writer.Write(result.Bytes()) //nolint:errcheck,gosec
-			c.Writer.Flush()
+			w.WriteHeader(http.StatusOK)
+			flush(w)
+			w.Write(result.Bytes()) //nolint:errcheck,gosec
+			flush(w)
 		})
 
-		authRoute.GET("/node-info/:pk", func(c *gin.Context) {
-			c.Writer.Header().Set("Server", "")
+		handleAuth("GET /node-info/{pk}", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
 			//override the behavior of `public fallback` for this endpoint
 			if len(wlkeys) == 0 {
-				c.Writer.WriteHeader(http.StatusUnauthorized)
-				c.Writer.Write([]byte("len(wlkeys) == 0")) //nolint:errcheck,gosec
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write([]byte("len(wlkeys) == 0")) //nolint:errcheck,gosec
 				return
 			}
-			c.Writer.Header().Set("Transfer-Encoding", "chunked")
-			ni, err := script.File(wd + `/` + "log_backups/" + c.Param("pk") + "/node-info.json").Bytes()
+			pk, ok := pathPK(r)
+			if !ok {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Transfer-Encoding", "chunked")
+			ni, err := script.File(wd + `/` + "log_backups/" + pk + "/node-info.json").Bytes()
 			if err != nil {
-				c.Writer.WriteHeader(http.StatusNotFound)
-				c.Writer.Flush()
+				w.WriteHeader(http.StatusNotFound)
+				flush(w)
 				return
 			}
-			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Flush()
-			_, _ = c.Writer.Write(ni) //nolint:errcheck,gosec
-			c.Writer.Flush()
+			w.WriteHeader(http.StatusOK)
+			flush(w)
+			_, _ = w.Write(ni) //nolint:errcheck,gosec
+			flush(w)
 		})
 
 		type reward struct {
@@ -1539,13 +1545,12 @@ func buildRouter() *gin.Engine {
 
 		type rewards []reward
 
-		r1.GET("/skycoin-rewards.json", func(c *gin.Context) {
+		r1.HandleFunc("GET /skycoin-rewards.json", func(w http.ResponseWriter, r *http.Request) {
 			data := rewards{}
 			rewardtxncsvs, err := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Basename().Replace("_rewardtxn0.csv", "").Slice()
 			if err != nil {
-				c.Writer.WriteHeader(http.StatusInternalServerError)
-				c.Writer.Write([]byte("500 Internal Server Error #1 " + err.Error())) //nolint:errcheck,gosec
-				c.AbortWithStatus(http.StatusInternalServerError)
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte("500 Internal Server Error #1 " + err.Error())) //nolint:errcheck,gosec
 				return
 			}
 			counter := 0
@@ -1572,17 +1577,15 @@ func buildRouter() *gin.Engine {
 				} else {
 					skycoinpershare, err := script.File(statsFile).Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String()
 					if err != nil {
-						c.Writer.WriteHeader(http.StatusInternalServerError)
-						c.Writer.Write([]byte("500 Internal Server Error #2 " + err.Error())) //nolint:errcheck,gosec
-						c.AbortWithStatus(http.StatusInternalServerError)
+						w.WriteHeader(http.StatusInternalServerError)
+						w.Write([]byte("500 Internal Server Error #2 " + err.Error())) //nolint:errcheck,gosec
 						return
 					}
 					if strings.TrimSpace(skycoinpershare) == "" {
 						pool1, err := script.File(statsFile).Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String()
 						if err != nil {
-							c.Writer.WriteHeader(http.StatusInternalServerError)
-							c.Writer.Write([]byte("500 Internal Server Error #3 " + err.Error())) //nolint:errcheck,gosec
-							c.AbortWithStatus(http.StatusInternalServerError)
+							w.WriteHeader(http.StatusInternalServerError)
+							w.Write([]byte("500 Internal Server Error #3 " + err.Error())) //nolint:errcheck,gosec
 							return
 						}
 						rdata.One, err = strconv.ParseFloat(strings.TrimRight(pool1, "\n"), 64)
@@ -1591,9 +1594,8 @@ func buildRouter() *gin.Engine {
 						}
 						pool2, err := script.File(statsFile).Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String()
 						if err != nil {
-							c.Writer.WriteHeader(http.StatusInternalServerError)
-							c.Writer.Write([]byte("500 Internal Server Error #5 " + err.Error())) //nolint:errcheck,gosec
-							c.AbortWithStatus(http.StatusInternalServerError)
+							w.WriteHeader(http.StatusInternalServerError)
+							w.Write([]byte("500 Internal Server Error #5 " + err.Error())) //nolint:errcheck,gosec
 							return
 						}
 						rdata.Two, err = strconv.ParseFloat(strings.TrimRight(pool2, "\n"), 64)
@@ -1612,33 +1614,30 @@ func buildRouter() *gin.Engine {
 				}
 				data = append(data, rdata)
 			}
-			c.Header("Content-Type", "application/json")
-			c.JSON(http.StatusOK, data)
+			httputil.WriteJSON(w, r, http.StatusOK, data)
 		})
 
-		r1.GET("/skycoin-rewards/txids", func(c *gin.Context) {
+		r1.HandleFunc("GET /skycoin-rewards/txids", func(w http.ResponseWriter, r *http.Request) {
 			txids, err := script.File(wd + "/transactions0.txt").Slice()
 			if err != nil {
-				c.Writer.WriteHeader(http.StatusInternalServerError)
-				c.Writer.Write([]byte("500 Internal Server Error" + err.Error())) //nolint:errcheck,gosec
-				c.AbortWithStatus(http.StatusInternalServerError)
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte("500 Internal Server Error" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
-			c.Header("Content-Type", "application/json")
-			c.JSON(http.StatusOK, txids)
+			httputil.WriteJSON(w, r, http.StatusOK, txids)
 		})
 
 		// JSON API: per-visor reward data for a specific date
-		r1.GET("/skycoin-rewards/hist/:date/json", func(c *gin.Context) {
-			dateStr := c.Param("date")
+		r1.HandleFunc("GET /skycoin-rewards/hist/{date}/json", func(w http.ResponseWriter, r *http.Request) {
+			dateStr := r.PathValue("date")
 			if _, err := time.Parse("2006-01-02", dateStr); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid date format, use YYYY-MM-DD"})
+				httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]any{"error": "invalid date format, use YYYY-MM-DD"})
 				return
 			}
 			sharesFile := wd + `/hist/` + dateStr + "_shares.csv"
 			lines, err := script.File(sharesFile).Slice()
 			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": "no reward data for " + dateStr})
+				httputil.WriteJSON(w, r, http.StatusNotFound, map[string]any{"error": "no reward data for " + dateStr})
 				return
 			}
 			// Check if rewards were distributed (txid file exists)
@@ -1677,7 +1676,7 @@ func buildRouter() *gin.Engine {
 					results = append(results, visorReward{PK: pkStr, Share: share, Amount: sky})
 				}
 			}
-			c.JSON(http.StatusOK, gin.H{
+			httputil.WriteJSON(w, r, http.StatusOK, map[string]any{
 				"date":    dateStr,
 				"sent":    sent,
 				"txid":    txid,
@@ -1687,10 +1686,10 @@ func buildRouter() *gin.Engine {
 		})
 
 		// JSON API: reward history for a specific visor PK (last 7 days)
-		r1.GET("/skycoin-rewards/visor/:pk", func(c *gin.Context) {
-			pk := c.Param("pk")
+		r1.HandleFunc("GET /skycoin-rewards/visor/{pk}", func(w http.ResponseWriter, r *http.Request) {
+			pk := r.PathValue("pk")
 			days := 7
-			if d := c.Query("days"); d != "" {
+			if d := r.URL.Query().Get("days"); d != "" {
 				if parsed, err := strconv.Atoi(d); err == nil && parsed > 0 && parsed <= 90 {
 					days = parsed
 				}
@@ -1745,21 +1744,21 @@ func buildRouter() *gin.Engine {
 					history = append(history, dayReward{Date: date, Sent: sent, Txid: txid})
 				}
 			}
-			c.JSON(http.StatusOK, gin.H{
+			httputil.WriteJSON(w, r, http.StatusOK, map[string]any{
 				"pk":      pk,
 				"days":    days,
 				"history": history,
 			})
 		})
 
-		r1.StaticFile("/log-collection/json", filepath.Join(os.TempDir(), "log-collection.json"))
+		serveFile(r1, "/log-collection/json", filepath.Join(os.TempDir(), "log-collection.json"))
 
-		r1.GET("/favicon.ico", func(c *gin.Context) {
-			_, _ = c.Writer.WriteString(string(faviconBuffer)) //nolint:errcheck,gosec
+		r1.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+			w.Write(faviconBuffer) //nolint:errcheck,gosec
 		})
 
-		r1.GET("/", mainPage)
-		r1.GET("/index.html", mainPage)
+		r1.HandleFunc("GET /{$}", mainPage)
+		r1.HandleFunc("GET /index.html", mainPage)
 		// Login chain auto-setup
 		if loginNode == "auto" {
 			// --login-node auto is no longer supported; ensureLoginChain
@@ -1804,15 +1803,14 @@ func buildRouter() *gin.Engine {
 			}
 		}
 
-		// Start the server using the custom Gin handler
 	}
 
-	return r1
+	return logRequests(httputil.Recoverer(r1))
 }
 
 // BuildHandler builds and returns the reward system's HTTP handler
 // without starting any servers. The visor can mount this handler on
-// its own port 80 gin router for integrated DMSG/skynet access.
+// its own port 80 router for integrated DMSG/skynet access.
 //
 // Call SetConfig before BuildHandler to configure the reward system.
 func BuildHandler() http.Handler {
@@ -1821,7 +1819,7 @@ func BuildHandler() http.Handler {
 
 // serveStandalone starts HTTP and DMSG listeners. Called by the CLI command.
 // bindAddr is the host:port listen address for the HTTP server.
-func serveStandalone(r1 *gin.Engine, bindAddr string) {
+func serveStandalone(h http.Handler, bindAddr string) {
 	log := logging.MustGetLogger("dmsghttp")
 	if dmsgDisc == "" {
 		log.Fatal("Dmsg Discovery URL not specified")
@@ -1892,7 +1890,7 @@ func serveStandalone(r1 *gin.Engine, bindAddr string) {
 	// Increased timeouts for dmsg latency characteristics
 	// DMSG has higher latency than direct TCP due to multi-hop routing
 	serve := &http.Server{
-		Handler:           &ginHandler{Router: r1},
+		Handler:           h,
 		ReadTimeout:       30 * time.Second, // Allow for dmsg multi-hop latency
 		WriteTimeout:      60 * time.Second, // Allow time to generate large responses
 		IdleTimeout:       90 * time.Second, // Keep connections alive longer
@@ -1903,8 +1901,11 @@ func serveStandalone(r1 *gin.Engine, bindAddr string) {
 	// Start serving
 	wg.Add(1)
 	go func() {
-		fmt.Printf("listening on http://%s using gin router\n", bindAddr)
-		r1.Run(bindAddr) //nolint:errcheck,gosec
+		fmt.Printf("listening on http://%s\n", bindAddr)
+		srv := &http.Server{Addr: bindAddr, Handler: h, ReadHeaderTimeout: 10 * time.Second}
+		if err := srv.ListenAndServe(); err != nil {
+			log.WithError(err).Error("HTTP listener stopped")
+		}
 		wg.Done()
 	}()
 
@@ -1984,11 +1985,11 @@ func cal() (ret string) {
 
 // isWhitelisted checks if the current request comes from a whitelisted public key.
 // Returns true if wlkeys is empty (public mode) or the remote PK matches a whitelisted key.
-func isWhitelisted(c *gin.Context) bool {
+func isWhitelisted(r *http.Request) bool {
 	if len(wlkeys) == 0 {
 		return false // public mode — no special access
 	}
-	remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+	remotePK, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return false
 	}
@@ -1998,40 +1999,6 @@ func isWhitelisted(c *gin.Context) bool {
 		}
 	}
 	return false
-}
-
-func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Get the remote PK.
-		remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
-		if err != nil {
-			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte("500 Internal Server Error")) //nolint:errcheck,gosec
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-		// Check if the remote PK is whitelisted.
-		whitelisted := false
-		if len(whitelistedPKs) == 0 {
-			whitelisted = true
-		} else {
-			for _, whitelistedPK := range whitelistedPKs {
-				if remotePK == whitelistedPK.String() {
-					whitelisted = true
-					break
-				}
-			}
-		}
-		if whitelisted {
-			c.Next()
-		} else {
-			// Otherwise, return a 401 Unauthorized error.
-			c.Writer.WriteHeader(http.StatusUnauthorized)
-			c.Writer.Write([]byte("401 Unauthorized")) //nolint:errcheck,gosec
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-	}
 }
 
 const nextlogrun = `#!/bin/bash
@@ -2076,4 +2043,21 @@ func rewardServicePKs() []cipher.PubKey {
 		}
 	}
 	return out
+}
+
+// serveFile answers GET and HEAD on pattern with the file at path.
+func serveFile(mux *http.ServeMux, pattern, path string) {
+	mux.HandleFunc("GET "+pattern, func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, path)
+	})
+}
+
+// pathPK returns the {pk} path value when it is a valid public key. ServeMux
+// unescapes path values, so an unchecked one could carry "../" into a file path.
+func pathPK(r *http.Request) (string, bool) {
+	var pk cipher.PubKey
+	if err := pk.Set(r.PathValue("pk")); err != nil || pk.Null() {
+		return "", false
+	}
+	return pk.Hex(), true
 }

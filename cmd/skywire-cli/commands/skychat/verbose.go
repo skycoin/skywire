@@ -10,7 +10,7 @@
 // Why not just re-use a struct from cmd/apps/skychat/commands: that
 // package is the chat-app implementation; the CLI is a thin client
 // over /status JSON. Importing the chat-app's full struct here would
-// pull in its dependency graph (gin, persistent-stores, …). The
+// pull in its dependency graph (persistent-stores, …). The
 // trimmed shape here is just the counters the verbose path needs.
 package cliskychat
 
