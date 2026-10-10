@@ -107,7 +107,11 @@ jobs:
           fi
           GOOS=js GOARCH=wasm \
             go build -trimpath -buildvcs=true -mod=vendor -tags "withoutsystray withoutgotop" -ldflags="${LDFLAGS}" -o skywire.wasm .
-          gzip -9 -n -c skywire.wasm > pkg/wasmhv/execwasm/blob/skywire.wasm.gz
+          # The module is also published on its own with its manifest, for the
+          # packages and for visors that refresh their copy when the desk is
+          # opened.
+          sh scripts/wasm-module.sh skywire.wasm dist "${VERSION}"
+          cp dist/skywire.wasm.gz pkg/wasmhv/execwasm/blob/skywire.wasm.gz
           # Record which commit the module was built from, beside it, so a
           # served binary can report that its desk is older than itself. Without
           # this the blob has no revision, execwasm.Revision() is "", and the
@@ -147,7 +151,7 @@ jobs:
           build_arch armhf   arm     7
           build_arch 386     386     ""
           build_arch riscv64 riscv64 ""
-          ( cd dist && sha256sum *.zst > SHA256SUMS )
+          ( cd dist && sha256sum -- *.zst skywire.wasm.gz skywire.wasm.json > SHA256SUMS )
           {
             echo "BRANCH=${BRANCH}"
             echo "VERSION=${VERSION}"
@@ -177,9 +181,11 @@ jobs:
               --prerelease \
               --title "${BRANCH} latest (${VERSION})" \
               --notes "${NOTES}"
-            gh release upload "${TAG}" dist/*.zst dist/SHA256SUMS --clobber
+            gh release upload "${TAG}" dist/*.zst dist/skywire.wasm.gz dist/skywire.wasm.json dist/SHA256SUMS --clobber
+            # The module used to ship as this zstd asset; nothing builds it now.
+            gh release delete-asset "${TAG}" skywire-js-wasm.zst --yes 2>/dev/null || true
           else
-            gh release create "${TAG}" dist/*.zst dist/SHA256SUMS \
+            gh release create "${TAG}" dist/*.zst dist/skywire.wasm.gz dist/skywire.wasm.json dist/SHA256SUMS \
               --target "${GITHUB_SHA}" \
               --prerelease \
               --title "${BRANCH} latest (${VERSION})" \

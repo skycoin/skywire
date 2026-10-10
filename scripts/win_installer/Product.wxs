@@ -76,6 +76,8 @@
             <Directory Id="INSTALLDIR" Name="Skywire">
                <Component Id="ApplicationFiles" Guid="d6963d6c-acea-49a0-bd9b-610f8a8bce82">
                     <File Id="SKYWIRE" Source=".\build\skywire.exe"/>
+                    <File Id="SKYWIREWASM" Source=".\build\skywire.wasm.gz"/>
+                    <File Id="SKYWIREWASMJSON" Source=".\build\skywire.wasm.json"/>
                     <File Id="SKYWIREBAT" Source=".\build\skywire.bat"/>
                     <File Id="SKYWIREAUTOCONFIGBAT" Source=".\build\skywire-autoconfig.bat"/>
                     <File Id="ICON" Source=".\images\ico.ico"/>

@@ -37,8 +37,53 @@ jobs:
             --title "${{ env.RELEASE_TAG }}" \
             --generate-notes || true
 
-  linux:
+  wasm-module:
+    # The js/wasm module, built once and shipped beside every binary: on the
+    # release as skywire.wasm.gz with its manifest, and inside each archive,
+    # macOS package and MSI, so an installed visor has a desk to serve.
     needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout skywire at the tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Build the js/wasm module
+        env:
+          CGO_ENABLED: "0"
+          GOOS: js
+          GOARCH: wasm
+        run: |
+          set -euo pipefail
+          go build -trimpath -buildvcs=true -mod=vendor -tags "withoutsystray withoutgotop" \
+            -ldflags "-s -w -buildid= -X ${MODULE}/pkg/buildinfo.version=${RELEASE_TAG}" \
+            -o "$RUNNER_TEMP/skywire.wasm" .
+          if grep -aq 'vcs.modified=true' "$RUNNER_TEMP/skywire.wasm"; then
+            echo "::error::the js/wasm module records vcs.modified=true"
+            exit 1
+          fi
+          sh scripts/wasm-module.sh "$RUNNER_TEMP/skywire.wasm" dist "${RELEASE_TAG}"
+          ( cd dist && sha256sum skywire.wasm.gz > skywire.wasm.gz.sha256 )
+
+      - name: Upload to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ env.RELEASE_TAG }}" \
+            dist/skywire.wasm.gz dist/skywire.wasm.json dist/skywire.wasm.gz.sha256 \
+            --repo ${{ github.repository }} \
+            --clobber
+
+  linux:
+    needs: [create-release, wasm-module]
     runs-on: ubuntu-latest
     strategy:
       # Don't let one arch's transient failure (e.g. a flaky module fetch)
@@ -249,12 +294,16 @@ jobs:
           make check-exec-wasm
 
       - name: Create archive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ARCHIVE_NAME="skywire-${{ env.RELEASE_TAG }}-linux-${{ matrix.arch }}"
           mkdir -p dist
           cp bin/skywire dist/
+          gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} \
+            --pattern skywire.wasm.gz --pattern skywire.wasm.json --dir dist --clobber
           cd dist
-          tar -cvf - skywire | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
+          tar -cvf - skywire skywire.wasm.gz skywire.wasm.json | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
           sha256sum "${ARCHIVE_NAME}.tar.xz" > "${ARCHIVE_NAME}.tar.xz.sha256"
 
       - name: Upload to release
@@ -268,7 +317,7 @@ jobs:
             --clobber
 
   darwin-amd64:
-    needs: create-release
+    needs: [create-release, wasm-module]
     runs-on: macos-15-intel
     steps:
       - uses: actions/setup-go@v7
@@ -302,12 +351,16 @@ jobs:
           ./bin/skywire skycoin || true
 
       - name: Create archive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ARCHIVE_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-amd64"
           mkdir -p dist
           cp bin/skywire dist/
+          gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} \
+            --pattern skywire.wasm.gz --pattern skywire.wasm.json --dir dist --clobber
           cd dist
-          tar -cvf - skywire | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
+          tar -cvf - skywire skywire.wasm.gz skywire.wasm.json | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
           shasum -a 256 "${ARCHIVE_NAME}.tar.xz" > "${ARCHIVE_NAME}.tar.xz.sha256"
 
       - name: Create macOS package
@@ -315,6 +368,7 @@ jobs:
           PKG_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-amd64"
           mkdir -p pkg-root/usr/local/bin
           cp bin/skywire pkg-root/usr/local/bin/
+          cp dist/skywire.wasm.gz dist/skywire.wasm.json pkg-root/usr/local/bin/
           pkgbuild --root pkg-root \
             --identifier com.skycoin.skywire \
             --version "${{ env.RELEASE_TAG }}" \
@@ -335,7 +389,7 @@ jobs:
             --clobber
 
   darwin-arm64:
-    needs: create-release
+    needs: [create-release, wasm-module]
     runs-on: macos-latest
     steps:
       - uses: actions/setup-go@v7
@@ -369,12 +423,16 @@ jobs:
           ./bin/skywire skycoin || true
 
       - name: Create archive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ARCHIVE_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-arm64"
           mkdir -p dist
           cp bin/skywire dist/
+          gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} \
+            --pattern skywire.wasm.gz --pattern skywire.wasm.json --dir dist --clobber
           cd dist
-          tar -cvf - skywire | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
+          tar -cvf - skywire skywire.wasm.gz skywire.wasm.json | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
           shasum -a 256 "${ARCHIVE_NAME}.tar.xz" > "${ARCHIVE_NAME}.tar.xz.sha256"
 
       - name: Create macOS package
@@ -382,6 +440,7 @@ jobs:
           PKG_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-arm64"
           mkdir -p pkg-root/usr/local/bin
           cp bin/skywire pkg-root/usr/local/bin/
+          cp dist/skywire.wasm.gz dist/skywire.wasm.json pkg-root/usr/local/bin/
           pkgbuild --root pkg-root \
             --identifier com.skycoin.skywire \
             --version "${{ env.RELEASE_TAG }}" \
@@ -402,7 +461,7 @@ jobs:
             --clobber
 
   windows:
-    needs: create-release
+    needs: [create-release, wasm-module]
     runs-on: windows-latest
     strategy:
       matrix:
@@ -511,11 +570,16 @@ jobs:
           }
 
       - name: Create archive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
           $ARCHIVE_NAME = "skywire-${{ env.RELEASE_TAG }}-windows-${{ matrix.arch }}"
           New-Item -ItemType Directory -Force -Path "dist"
           Copy-Item "bin\skywire.exe" "dist\"
+          gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} `
+            --pattern skywire.wasm.gz --pattern skywire.wasm.json --dir wasm --clobber
+          Copy-Item "wasm\skywire.wasm.gz", "wasm\skywire.wasm.json" "dist\"
 
           # Include hardware wallet binary and required DLLs if present
           if (Test-Path "bin\skyhw.exe") {
@@ -552,6 +616,8 @@ jobs:
           Set-Location scripts\win_installer
           New-Item -ItemType Directory -Force -Path "build\apps"
           Copy-Item ..\..\bin\skywire.exe build\skywire.exe
+          Copy-Item ..\..\wasm\skywire.wasm.gz build\skywire.wasm.gz
+          Copy-Item ..\..\wasm\skywire.wasm.json build\skywire.wasm.json
           Copy-Item skywire.bat build\skywire.bat
           Copy-Item skywire-autoconfig.bat build\skywire-autoconfig.bat
           New-Item -ItemType File -Path "build\new.update"
@@ -620,7 +686,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} --pattern "*.sha256"
-          cat *.sha256 > checksums.txt
+          cat -- *.sha256 > checksums.txt
 
       - name: Upload combined checksums
         env:
