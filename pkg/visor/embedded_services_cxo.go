@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	cxoregistry "github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
+	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
@@ -63,6 +64,9 @@ type embeddedService struct {
 type embeddedSet struct {
 	once sync.Once
 	svcs []*embeddedService
+	// board is the status page of svcs, built once.
+	boardOnce sync.Once
+	board     *charts.Board
 	// ports are the CXO ports the embedded services aggregate on.
 	ports map[uint16]bool
 }

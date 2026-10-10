@@ -100,6 +100,11 @@ const cacheFor = time.Minute
 
 // ServeHTTP renders the page for ?range=, from a copy at most a minute old.
 func (p *Page) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	serveRendered(w, r, p.render, p.Log)
+}
+
+// serveRendered answers r with what render gives for its ?range=.
+func serveRendered(w http.ResponseWriter, r *http.Request, render func(context.Context, Range) (cached, error), log logrus.FieldLogger) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -110,10 +115,10 @@ func (p *Page) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			rg = x
 		}
 	}
-	c, err := p.render(r.Context(), rg)
+	c, err := render(r.Context(), rg)
 	if err != nil {
-		if p.Log != nil {
-			p.Log.WithError(err).WithField("range", rg.Name).Warn("charts page render failed")
+		if log != nil {
+			log.WithError(err).WithField("range", rg.Name).Warn("charts page render failed")
 		}
 		http.Error(w, "charts unavailable", http.StatusServiceUnavailable)
 		return
@@ -139,9 +144,25 @@ func (p *Page) render(ctx context.Context, rg Range) (cached, error) {
 		return c, nil
 	}
 	now := time.Now().UTC()
-	content, err := p.Build(ctx, rg, now)
+	content, starts, err := p.content(ctx, rg, now)
 	if err != nil {
 		return cached{}, err
+	}
+	var b bytes.Buffer
+	p.write(&b, rg, now, content, starts)
+	if p.cache == nil {
+		p.cache = map[string]cached{}
+	}
+	c := newCached(b.Bytes())
+	p.cache[rg.Name] = c
+	return c, nil
+}
+
+// content is what the page shows for rg, and when the service started.
+func (p *Page) content(ctx context.Context, rg Range, now time.Time) (Content, []Start, error) {
+	content, err := p.Build(ctx, rg, now)
+	if err != nil {
+		return Content{}, nil, err
 	}
 	if p.Stats != nil && p.Store != nil {
 		if f, from, err := rg.Frame(ctx, p.Store, now); err == nil {
@@ -155,35 +176,51 @@ func (p *Page) render(ctx context.Context, rg Range) (cached, error) {
 			content.Charts[i].Starts = starts
 		}
 	}
-	var b bytes.Buffer
-	p.write(&b, rg, now, content, starts)
-	if p.cache == nil {
-		p.cache = map[string]cached{}
-	}
-	c := cached{at: time.Now(), body: b.Bytes()}
+	return content, starts, nil
+}
+
+// newCached keeps body and, once, its gzip.
+func newCached(body []byte) cached {
+	c := cached{at: time.Now(), body: body}
 	var z bytes.Buffer
 	if gw, err := gzip.NewWriterLevel(&z, 5); err == nil {
 		if _, err := gw.Write(c.body); err == nil && gw.Close() == nil {
 			c.gz = z.Bytes()
 		}
 	}
-	p.cache[rg.Name] = c
-	return c, nil
+	return c
 }
 
 func (p *Page) write(b *bytes.Buffer, rg Range, now time.Time, c Content, starts []Start) {
-	title := html.EscapeString(p.Title)
-	fmt.Fprintf(b, "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>%s</title><style>%s</style></head><body><header><div><h1>%s</h1>", title, pageCSS, title)
-	if p.About != "" {
-		fmt.Fprintf(b, "<p class='about'>%s</p>", html.EscapeString(p.About))
+	writeHead(b, p.Title)
+	writeIntro(b, p.About, starts, p.Links)
+	writeNav(b, rg)
+	writeContent(b, c, "c")
+	writeFoot(b, now)
+}
+
+func writeHead(b *bytes.Buffer, title string) {
+	t := html.EscapeString(title)
+	fmt.Fprintf(b, "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>%s</title><style>%s</style></head><body><header><div><h1>%s</h1>", t, pageCSS, t)
+}
+
+// writeIntro writes the lines under a title: what it is, since when it has
+// run, and its other pages.
+func writeIntro(b *bytes.Buffer, about string, starts []Start, links []Link) {
+	if about != "" {
+		fmt.Fprintf(b, "<p class='about'>%s</p>", html.EscapeString(about))
 	}
 	if n := len(starts); n > 0 {
 		s := starts[n-1]
 		fmt.Fprintf(b, "<p class='about'>Running %s since <time data-t='%d'>%s UTC</time></p>", html.EscapeString(s.Label()), s.At.UnixMilli(), s.At.Format("2006-01-02 15:04"))
 	}
-	for _, l := range p.Links {
+	for _, l := range links {
 		fmt.Fprintf(b, "<p class='links'><a href='%s'>%s</a></p>", html.EscapeString(l.Href), html.EscapeString(l.Name))
 	}
+}
+
+// writeNav ends the header with the range links and opens main.
+func writeNav(b *bytes.Buffer, rg Range) {
 	b.WriteString("</div><nav>")
 	for _, x := range Ranges {
 		cls := ""
@@ -193,36 +230,47 @@ func (p *Page) write(b *bytes.Buffer, rg Range, now time.Time, c Content, starts
 		fmt.Fprintf(b, "<a href='?range=%s'%s>%s</a>", x.Name, cls, x.Name)
 	}
 	b.WriteString("</nav></header><main>")
+}
+
+// writeContent writes c's charts, with ids from prefix, then its tables.
+func writeContent(b *bytes.Buffer, c Content, prefix string) {
 	for i := range c.Charts {
-		b.WriteString(c.Charts[i].SVG(fmt.Sprintf("c%d", i)))
+		b.WriteString(c.Charts[i].SVG(fmt.Sprintf("%s%d", prefix, i)))
 	}
 	for _, t := range c.Tables {
-		fmt.Fprintf(b, "<section class='table'><h2>%s</h2>", html.EscapeString(t.Title))
-		if t.Note != "" {
-			fmt.Fprintf(b, "<p class='note'>%s</p>", html.EscapeString(t.Note))
-		}
-		if t.Tall {
-			b.WriteString("<div class='scroll tall'><table><thead><tr>")
-		} else {
-			b.WriteString("<div class='scroll'><table><thead><tr>")
-		}
-		for _, h := range t.Head {
-			fmt.Fprintf(b, "<th>%s</th>", html.EscapeString(h))
-		}
-		b.WriteString("</tr></thead><tbody>")
-		for ri, row := range t.Rows {
-			if ri < len(t.Marks) && t.Marks[ri] != "" {
-				fmt.Fprintf(b, "<tr class='mark' style='--mark:%s'>", html.EscapeString(t.Marks[ri]))
-			} else {
-				b.WriteString("<tr>")
-			}
-			for _, cell := range row {
-				fmt.Fprintf(b, "<td>%s</td>", html.EscapeString(cell))
-			}
-			b.WriteString("</tr>")
-		}
-		b.WriteString("</tbody></table></div></section>")
+		writeTable(b, t)
 	}
+}
+
+func writeTable(b *bytes.Buffer, t Table) {
+	fmt.Fprintf(b, "<section class='table'><h2>%s</h2>", html.EscapeString(t.Title))
+	if t.Note != "" {
+		fmt.Fprintf(b, "<p class='note'>%s</p>", html.EscapeString(t.Note))
+	}
+	if t.Tall {
+		b.WriteString("<div class='scroll tall'><table><thead><tr>")
+	} else {
+		b.WriteString("<div class='scroll'><table><thead><tr>")
+	}
+	for _, h := range t.Head {
+		fmt.Fprintf(b, "<th>%s</th>", html.EscapeString(h))
+	}
+	b.WriteString("</tr></thead><tbody>")
+	for ri, row := range t.Rows {
+		if ri < len(t.Marks) && t.Marks[ri] != "" {
+			fmt.Fprintf(b, "<tr class='mark' style='--mark:%s'>", html.EscapeString(t.Marks[ri]))
+		} else {
+			b.WriteString("<tr>")
+		}
+		for _, cell := range row {
+			fmt.Fprintf(b, "<td>%s</td>", html.EscapeString(cell))
+		}
+		b.WriteString("</tr>")
+	}
+	b.WriteString("</tbody></table></div></section>")
+}
+
+func writeFoot(b *bytes.Buffer, now time.Time) {
 	fmt.Fprintf(b, "</main><footer>Sampled every %s and refreshed every minute while open. <span class='tz'>Times are UTC.</span> Rendered <time data-t='%d'>%s UTC</time>.</footer><script>%s</script></body></html>",
 		strings.TrimSuffix(Interval.String(), "0s"), now.UnixMilli(), now.Format("2006-01-02 15:04"), pageJS)
 }
@@ -258,7 +306,10 @@ td:first-child{font-family:ui-monospace,monospace;font-size:11.5px}
 tr.mark td{background:color-mix(in srgb,var(--mark) 13%,transparent)}tr.mark td:first-child{box-shadow:inset 3px 0 0 var(--mark)}
 .legend-t i{display:block;width:10px;height:10px;border-radius:3px}.legend-t td:first-child{width:14px;padding-right:0}
 .legend-t td:nth-child(2),.mono{font-family:ui-monospace,monospace;font-size:11.5px}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
-footer{max-width:1100px;margin:0 auto;padding:12px 16px 32px;color:var(--muted);font-size:12px}`
+footer{max-width:1100px;margin:0 auto;padding:12px 16px 32px;color:var(--muted);font-size:12px}
+section.svc{display:grid;gap:16px;padding-top:16px;border-top:1px solid var(--grid)}
+h2.svc{font-size:18px}
+section.svc>.note{margin:0;color:var(--muted);font-size:13px}`
 
 const pageJS = `(function(){
 var fT=new Intl.DateTimeFormat(undefined,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),fD=new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric'}),

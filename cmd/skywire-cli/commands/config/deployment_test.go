@@ -193,3 +193,11 @@ func TestDeploymentServicesWSS(t *testing.T) {
 		t.Errorf("wss_domain_suffix %q", svc.WSSDomainSuffix)
 	}
 }
+
+func TestStatusAddr(t *testing.T) {
+	for in, want := range map[string]string{"203.0.113.7": "127.0.0.1:8082", "203.0.113.7:18080": "127.0.0.1:18082", "203.0.113.7:x": ""} {
+		if got := statusAddr(in); got != want {
+			t.Errorf("statusAddr(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

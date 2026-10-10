@@ -45,12 +45,18 @@ Ports, from the dmsg server's port P:
 | P | TCP and UDP | public | dmsg server (TCP, ws, QUIC and WebTransport) |
 | P+13 | UDP | public | address resolver, for UDP hole punching |
 | P+1 | TCP | 127.0.0.1 | dmsg server health |
+| P+2 | TCP | 127.0.0.1 | status page of the services, for a reverse proxy |
 | P+10 | TCP | 127.0.0.1 | dmsg discovery |
 
 Only P and P+13 need to be open in a firewall or forwarded.
 
 Check it with `skywire cli visor state --select services`. It lists each
 service with its address, whether it is running, and its store.
+
+The visor also serves a status page of all its services, a table of them
+and the charts of each, at `/status` on its dmsg HTTP port and on
+`deployment_status_addr` (P+2 on loopback), which a reverse proxy can put on
+a public name.
 
 ### Keys and regenerating
 

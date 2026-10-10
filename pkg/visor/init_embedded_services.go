@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -41,6 +42,14 @@ func initEmbeddedServices(ctx context.Context, v *Visor, log *logging.Logger) er
 		SK:         v.conf.SK,
 		DmsgAddr:   fmt.Sprintf("%s:%d", v.conf.PK.Hex(), visorconfig.DmsgHTTPPort),
 		CXO:        visorCXOHost{v},
+	}
+	if addr := v.conf.DeploymentStatusAddr; addr != "" {
+		log.WithField("addr", addr).Info("Serving the deployment status page")
+		go func() {
+			if err := charts.Serve(ctx, addr, v.statusBoard()); err != nil {
+				log.WithError(err).Error("deployment status listener failed")
+			}
+		}()
 	}
 	for _, es := range svcs {
 		if es.err != nil {

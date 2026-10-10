@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	proxyproto "github.com/pires/go-proxyproto"
@@ -80,8 +81,10 @@ func New(cfg *Config, log *logging.Logger) services.Service {
 // service is the runnable instance. Lowercase: callers go through
 // New / factory so we can change the internal layout freely.
 type service struct {
-	cfg *Config
-	log *logging.Logger
+	// chartsAPI is the running API, whose charts the host shows on its status page.
+	chartsAPI atomic.Pointer[api.API]
+	cfg       *Config
+	log       *logging.Logger
 	// stats, set by Run, counts the process and its traffic for the status page.
 	stats *charts.ServiceStats
 }
@@ -137,6 +140,7 @@ func (s *service) Run(ctx context.Context) error {
 	enableMetrics := cfg.MetricsAddr != ""
 	entryTimeout := cfg.EntryTimeout.Std()
 	a := api.New(log, db, m, cfg.Testing, cfg.EnableLoadTesting, enableMetrics, dmsgAddr, cfg.AuthPassphrase, entryTimeout)
+	s.chartsAPI.Store(a)
 
 	for _, k := range cfg.Whitelist {
 		api.WhitelistPKs.Set(k)
@@ -574,4 +578,13 @@ func chartStore(cfg *Config, log *logging.Logger) charts.Store {
 		return charts.NewMemoryStore()
 	}
 	return st
+}
+
+// ChartsPage is the charts page of the running service, for the host's status
+// page. Nil before the service has started.
+func (s *service) ChartsPage() *charts.Page {
+	if a := s.chartsAPI.Load(); a != nil {
+		return a.Charts()
+	}
+	return nil
 }

@@ -306,3 +306,8 @@ func foundSeries(f *charts.Frame) []charts.Series {
 	}
 	return out
 }
+
+// Charts is the charts page, or nil until StartCharts runs.
+func (a *API) Charts() *charts.Page {
+	return a.chartsPage.Load()
+}

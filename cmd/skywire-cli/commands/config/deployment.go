@@ -30,7 +30,9 @@ import (
 const (
 	deployDmsgPort   = 8080
 	deployDiscOffset = 10
-	deployAROffset   = 13
+	// The status page of the services, for a reverse proxy, on loopback.
+	deployStatusOffset = 2
+	deployAROffset     = 13
 )
 
 var (
@@ -95,6 +97,10 @@ func configureDeployment(pk cipher.PubKey) error {
 		return err
 	}
 	conf.EmbeddedServices = blocks
+	conf.DeploymentStatusAddr = statusAddr(deploymentHost)
+	if oldConfCache != nil && oldConfCache.DeploymentStatusAddr != "" {
+		conf.DeploymentStatusAddr = oldConfCache.DeploymentStatusAddr
+	}
 	services = svc
 	// The deployment is prod for the rest of config gen, as SKYDEPLOY makes it
 	// for the visor, so no field falls back to prod's services.
@@ -365,4 +371,13 @@ func deploymentAddr(v string) (string, int, error) {
 		return "", 0, fmt.Errorf("--deployment %q: bad port", v)
 	}
 	return host, port, nil
+}
+
+// statusAddr is the loopback address of the deployment's status page.
+func statusAddr(host string) string {
+	_, port, err := deploymentAddr(host)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("127.0.0.1:%d", port+deployStatusOffset)
 }

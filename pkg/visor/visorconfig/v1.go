@@ -45,6 +45,10 @@ type V1 struct {
 	// and addressed as dmsg://<visor pk>:80/<prefix>/... Blocks have the
 	// same shape as a services.json entry plus an optional "prefix".
 	EmbeddedServices []services.Block `json:"embedded_services,omitempty"`
+	// DeploymentStatusAddr serves the status page of the embedded services
+	// over plain HTTP, such as 127.0.0.1:8082 for a reverse proxy. It is also
+	// at /status on the dmsg HTTP port. Empty serves it there only.
+	DeploymentStatusAddr string `json:"deployment_status_addr,omitempty"`
 
 	// Stats configures the visor-local telemetry store. Nil/zero
 	// values use defaults; Disabled=true skips the store entirely.

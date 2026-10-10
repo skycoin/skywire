@@ -395,3 +395,11 @@ func (api *API) roleColors(ctx context.Context) map[string]string {
 	}
 	return out
 }
+
+// Charts is the charts page, or nil until StartCharts runs.
+func (api *API) Charts() *charts.Page {
+	if c := api.chartState.Load(); c != nil {
+		return c.page
+	}
+	return nil
+}

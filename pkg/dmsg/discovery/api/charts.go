@@ -229,3 +229,8 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, r charts.Range, 
 	out.Tables = append(out.Tables, t)
 	return out, nil
 }
+
+// Charts is the charts page, or nil until StartCharts runs.
+func (a *API) Charts() *charts.Page {
+	return a.chartsPage.Load()
+}

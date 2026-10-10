@@ -189,3 +189,8 @@ func sumSeries(in []charts.Series, n int) []float64 {
 }
 
 func fmtCount(v float64) string { return strconv.FormatFloat(v, 'f', 0, 64) }
+
+// Charts is the charts page, or nil until StartCharts runs.
+func (a *API) Charts() *charts.Page {
+	return a.chartsPage.Load()
+}

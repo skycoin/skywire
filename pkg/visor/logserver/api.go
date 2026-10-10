@@ -133,6 +133,9 @@ type API struct {
 	uptimeRecorder       *serviceuptime.Recorder // service-self uptime, set via SetUptimeRecorder
 	logLevelController   LogLevelController      // temporary log level, set via SetLogLevelController
 	websiteHandler       http.Handler            // optional: serves unmatched routes (custom website)
+	// statusPage serves /status, the status of the deployment services the
+	// visor runs. Nil answers 404.
+	statusPage http.Handler
 	// ptyHandler serves /pty (web terminal) when set by the visor.
 	// Gated by ptyWhitelist — typically the dmsgpty whitelist (configured
 	// PKs + hypervisor PKs + the visor's own PK).
@@ -368,6 +371,14 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		return false
 	}
 
+	r.HandleFunc("GET /status", func(w http.ResponseWriter, req *http.Request) {
+		if api.statusPage == nil {
+			http.NotFound(w, req)
+			return
+		}
+		api.statusPage.ServeHTTP(w, req)
+	})
+
 	// Landing page with links to available endpoints. When a custom
 	// websiteHandler is set (port 80 reverse-proxy or rewards UI), it
 	// serves the root path too — replacing the default landing page
@@ -381,6 +392,9 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		var links []string
 		links = append(links, `<a href="/health">/health</a> - visor health status`)
+		if api.statusPage != nil {
+			links = append(links, `<a href="/status">/status</a> - deployment services status`)
+		}
 		if wl {
 			links = append(links, `<a href="/node-info">/node-info</a> - node survey`)
 			links = append(links, `<a href="/node-info/checksum">/node-info/checksum</a> - survey checksum`)
@@ -524,6 +538,11 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 // - The reward system UI handler
 func (api *API) SetWebsiteHandler(h http.Handler) {
 	api.websiteHandler = h
+}
+
+// SetStatusPage serves h at /status and links it from the landing page.
+func (api *API) SetStatusPage(h http.Handler) {
+	api.statusPage = h
 }
 
 func (api *API) health(w http.ResponseWriter, req *http.Request) {
