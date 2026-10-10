@@ -29,6 +29,9 @@ class SkywirePaths(context: Context) {
     /** Captured stdout/stderr of the visor child process (rotating). */
     val processLogFile: File = File(dataDir, "skywire-process.log")
 
+    /** Stack traces of the app's own crashes, written by [CrashLog]. */
+    val crashLogFile: File = File(dataDir, "app-crash.log")
+
     /**
      * The extracted, executable Go payload. Valid because the module packs
      * jniLibs with useLegacyPackaging=true.
