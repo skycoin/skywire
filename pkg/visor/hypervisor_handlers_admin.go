@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
@@ -152,7 +150,7 @@ func (hv *Hypervisor) deleteRewardAddress() http.HandlerFunc {
 
 func (hv *Hypervisor) proxyRewardSystem() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		path := chi.URLParam(r, "*")
+		path := r.PathValue("rest")
 		if path == "" {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, "missing reward API path")
 			return

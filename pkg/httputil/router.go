@@ -15,46 +15,68 @@ type Middleware = func(http.Handler) http.Handler
 // Router is an http.ServeMux with middleware groups and path prefixes. Paths
 // use ServeMux wildcards ({pk}, {rest...}). A path ending in "/" matches only
 // itself, and Get("/") inside Route("/api") answers both "/api" and "/api/".
+// Route owns its prefix: an unmatched path below it gets 404 or 405 there and
+// never reaches a broader route such as "/{rest...}".
 type Router struct {
 	mux    *http.ServeMux
 	prefix string
 	mws    []Middleware
-	top    *[]Middleware // nil below the root
+	shared *routerShared // set on the root only
+	root   *Router
+}
+
+type routerShared struct {
+	top    []Middleware
+	owned  map[string]bool // Route prefixes with an unmatched handler
+	exact  map[string]bool // paths registered for any method
 	once   sync.Once
-	h      http.Handler
+	served http.Handler
 }
 
 // NewRouter returns an empty Router.
 func NewRouter() *Router {
-	return &Router{mux: http.NewServeMux(), top: new([]Middleware)}
+	rt := &Router{mux: http.NewServeMux(), shared: &routerShared{owned: map[string]bool{}, exact: map[string]bool{}}}
+	rt.root = rt
+	return rt
 }
 
 // Use adds middleware. On the root it runs for every request, before routing
 // and for unmatched paths too. In a Group or Route it wraps that group's routes.
 func (rt *Router) Use(mws ...Middleware) {
-	if rt.top != nil {
-		*rt.top = append(*rt.top, mws...)
+	if rt.shared != nil {
+		rt.shared.top = append(rt.shared.top, mws...)
 		return
 	}
 	rt.mws = append(rt.mws, mws...)
 }
 
 func (rt *Router) child(prefix string, mws ...Middleware) *Router {
-	return &Router{mux: rt.mux, prefix: rt.prefix + prefix, mws: append(slices.Clone(rt.mws), mws...)}
+	return &Router{mux: rt.mux, root: rt.root, prefix: strings.TrimSuffix(rt.prefix+prefix, "/"), mws: append(slices.Clone(rt.mws), mws...)}
 }
 
 // Group registers routes that share middleware added inside fn.
 func (rt *Router) Group(fn func(r *Router)) { fn(rt.child("")) }
 
 // Route registers routes under prefix.
-func (rt *Router) Route(prefix string, fn func(r *Router)) { fn(rt.child(prefix)) }
+func (rt *Router) Route(prefix string, fn func(r *Router)) {
+	c := rt.child(prefix)
+	fn(c)
+	if c.prefix != "" && !rt.root.shared.owned[c.prefix] {
+		rt.root.shared.owned[c.prefix] = true
+		rt.mux.Handle(c.prefix+"/", c.wrap(c.prefix+"/*", http.HandlerFunc(rt.root.unmatched)))
+		if !rt.root.shared.exact[c.prefix] {
+			// Without this ServeMux would redirect the bare prefix to prefix/.
+			rt.mux.Handle(c.prefix, c.wrap(c.prefix, http.HandlerFunc(rt.root.unmatched)))
+		}
+	}
+}
 
 // With returns a Router whose routes also run mws.
 func (rt *Router) With(mws ...Middleware) *Router { return rt.child("", mws...) }
 
 // Mount serves prefix and everything below it with h. h sees the full path.
 func (rt *Router) Mount(prefix string, h http.Handler) {
-	full := rt.prefix + prefix
+	full := strings.TrimSuffix(rt.prefix+prefix, "/")
 	wrapped := rt.wrap(full+"/*", h)
 	rt.mux.Handle(full, wrapped)
 	rt.mux.Handle(full+"/", wrapped)
@@ -97,6 +119,9 @@ func (rt *Router) handle(method, path string, h http.Handler) {
 }
 
 func (rt *Router) register(method, path string, h http.Handler) {
+	if method == "" {
+		rt.root.shared.exact[path] = true
+	}
 	if method != "" {
 		path = method + " " + path
 	}
@@ -116,18 +141,39 @@ func (rt *Router) wrap(pattern string, h http.Handler) http.Handler {
 	})
 }
 
+var routeMethods = []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
+
+// unmatched answers a path below a Route prefix that no route took: 405 with
+// Allow when the path exists for other methods, else 404.
+func (rt *Router) unmatched(w http.ResponseWriter, r *http.Request) {
+	own := r.Pattern
+	var allow []string
+	for _, m := range routeMethods {
+		probe := r.Clone(r.Context())
+		probe.Method = m
+		if _, p := rt.mux.Handler(probe); p != "" && p != own {
+			allow = append(allow, m)
+		}
+	}
+	if len(allow) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Allow", strings.Join(allow, ", "))
+	http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+}
+
 // ServeHTTP runs the root middleware and then the matching route.
 func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	rt.once.Do(func() {
+	s := rt.root.shared
+	s.once.Do(func() {
 		var h http.Handler = rt.mux
-		if rt.top != nil {
-			for i := len(*rt.top) - 1; i >= 0; i-- {
-				h = (*rt.top)[i](h)
-			}
+		for i := len(s.top) - 1; i >= 0; i-- {
+			h = s.top[i](h)
 		}
-		rt.h = h
+		s.served = h
 	})
-	rt.h.ServeHTTP(w, r)
+	s.served.ServeHTTP(w, r)
 }
 
 type routePatternKey struct{}

@@ -4,7 +4,7 @@
 //
 // Two of these are structural rather than behavioral, and both guard traps
 // that are invisible at compile time: the route must resolve OUTSIDE the /api
-// group (whose 30s middleware.Timeout would sever a long-lived stream) while
+// group (whose 30s Timeout would sever a long-lived stream) while
 // leaving the group's own routes intact, and the handler must 503 rather than
 // panic when there is no hub — bare-visor Hypervisors are a normal fixture here.
 package visor
@@ -18,10 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -129,7 +127,7 @@ func TestGetNotifyStream_StreamsEventAndEndsOnContextCancel(t *testing.T) {
 }
 
 // TestNotifyStreamRouting pins the structural decision that the route lives
-// OUTSIDE the /api group. Inside it, middleware.Timeout(httpTimeout) puts a 30s
+// OUTSIDE the /api group. Inside it, httputil.Timeout(httpTimeout) puts a 30s
 // deadline on the whole request and would sever the stream every 30s — invisible
 // in a unit test of the handler alone, and on a live-only feed every event in
 // the reconnect gap is simply lost. It also checks the sibling routes still
@@ -174,9 +172,9 @@ func TestNotifyStreamRouting(t *testing.T) {
 	})
 }
 
-// TestNotifyStreamPlacementRationale pins the chi behavior that dictates where
+// TestNotifyStreamPlacementRationale pins the router behavior that dictates where
 // the route is registered: a handler inside a group carrying
-// middleware.Timeout(httpTimeout) sees a request-context deadline, and one
+// httputil.Timeout(httpTimeout) sees a request-context deadline, and one
 // registered at the "/" level does not — even when its pattern starts /api.
 //
 // That deadline is fatal to SSE (the response is torn down at httpTimeout, and
@@ -186,15 +184,15 @@ func TestNotifyStreamRouting(t *testing.T) {
 func TestNotifyStreamPlacementRationale(t *testing.T) {
 	var insideDeadline, outsideDeadline bool
 
-	r := chi.NewRouter()
-	r.Route("/", func(r chi.Router) {
-		r.Route("/api", func(r chi.Router) {
-			r.Use(middleware.Timeout(httpTimeout))
+	r := httputil.NewRouter()
+	r.Route("/", func(r *httputil.Router) {
+		r.Route("/api", func(r *httputil.Router) {
+			r.Use(httputil.Timeout(httpTimeout))
 			r.Get("/inside", func(_ http.ResponseWriter, req *http.Request) {
 				_, insideDeadline = req.Context().Deadline()
 			})
 		})
-		r.Route("/api/outside", func(r chi.Router) {
+		r.Route("/api/outside", func(r *httputil.Router) {
 			r.Get("/stream", func(_ http.ResponseWriter, req *http.Request) {
 				_, outsideDeadline = req.Context().Deadline()
 			})
