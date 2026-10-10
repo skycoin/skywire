@@ -611,6 +611,7 @@
 		const p = normalize(path);
 		if (p === null) return null;
 		for (const m of mounts) {
+			if (m.prefix === '/') return { m, rel: p };
 			if (p === m.prefix) return { m, rel: '/' };
 			if (p.startsWith(m.prefix + '/')) return { m, rel: p.slice(m.prefix.length) };
 		}
@@ -750,14 +751,15 @@
 	}
 
 	// mount attaches provider at prefix, which becomes a directory in the tree
-	// so its parent lists it. unmount detaches it; fds still open there answer
+	// so its parent lists it; a mount at / takes the whole tree, and readFile
+	// answers null there. unmount detaches it; fds still open there answer
 	// EIO from then on.
 	function mount(prefix, provider) {
 		const p = normalize(prefix);
-		if (p === null || p === '/') throw mkerr('EINVAL', 'mount at ' + prefix);
+		if (p === null) throw mkerr('EINVAL', 'mount at ' + prefix);
 		if (!provider || typeof provider !== 'object') throw mkerr('EINVAL', 'no provider');
 		if (mounts.some((m) => m.prefix === p)) throw mkerr('EBUSY', p);
-		mkdirp(p, 0o755);
+		if (p !== '/') mkdirp(p, 0o755);
 		mounts.push({ prefix: p, provider });
 		mounts.sort((a, b) => b.prefix.length - a.prefix.length);
 	}
@@ -1073,7 +1075,7 @@
 		mkdirp,          // host-side seeding helpers
 		writeFile: writeFileSeed,
 		writeLazy,       // seed a file fetched from a url on first read
-		readFile(path) { const r = resolve(path, true); if (!r.node || r.node.data === null) return null; return r.node.data; },
+		readFile(path) { if (mountOf(path)) return null; const r = resolve(path, true); if (!r.node || r.node.data === null) return null; return r.node.data; },
 		setCwd(d) { processImpl.chdir(d); },
 		pipe() { return makePipe(); },        // [readFd, writeFd]
 		isPipe(fd) { return isPipe(fd); },

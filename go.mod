@@ -9,7 +9,7 @@ require (
 	github.com/0magnet/audioprism-go v0.0.0
 	github.com/0magnet/bbolt v1.5.1-0.20261004201233-f6a048c19b9a
 	github.com/0magnet/bitree v0.0.0
-	github.com/0magnet/bottle v0.0.1-0.20261010184236-05c057152157
+	github.com/0magnet/bottle v0.0.1-0.20261010201116-c4057e41d00e
 	github.com/0magnet/calvin v0.0.0
 	github.com/0magnet/coloredcobra v1.0.4-0.20260908180055-b9d8b508df51
 	github.com/0magnet/cosmos-go v0.0.0

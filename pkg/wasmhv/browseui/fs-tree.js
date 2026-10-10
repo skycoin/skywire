@@ -1,10 +1,8 @@
 // pkg/wasmhv/browseui/fs-tree.js
-// One subtree of a jsfs tree, lent across the page/worker boundary. The page
-// and the exec worker each have their own jsfs, and each mounts the subtrees
-// the other one owns: the page shows the worker's /opt/skywire and /mnt, and
-// the worker shows the page's /home, so a command reads and writes the files
-// the desk shell sees. A jsfs mount provider may answer whenever it is ready,
-// so no SharedArrayBuffer is needed.
+// The exec worker's jsfs, shown on the page. Every skywire command runs in the
+// worker, so its tree is the one tree: the page mounts it at / and the desk
+// shell, the file manager and every command see the same files. A jsfs mount
+// provider may answer whenever it is ready, so no SharedArrayBuffer is needed.
 //
 //   SkywireFSTree(post) -> { mount(prefix), call(m), answer(m) }
 //   post(msg, transfer) sends to the other side; call answers its {t:'fs'}
@@ -32,7 +30,7 @@
 		}
 
 		function provider(prefix) {
-			var abs = function (rel) { return rel === '/' ? prefix : prefix + rel; };
+			var abs = function (rel) { return prefix === '/' ? rel : rel === '/' ? prefix : prefix + rel; };
 			var p = {};
 			Object.keys(PATHS).forEach(function (op) {
 				p[op] = function () {

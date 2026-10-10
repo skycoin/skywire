@@ -70,6 +70,8 @@ github.com/0magnet/bottle v0.0.1-0.20261008160757-8052b02bade6 h1:6MxsnZlraR005+
 github.com/0magnet/bottle v0.0.1-0.20261008160757-8052b02bade6/go.mod h1:02z8sWzqF3QH4SjMxnx5bnysFUqsw9CdUTtIj+CIxkw=
 github.com/0magnet/bottle v0.0.1-0.20261010184236-05c057152157 h1:A//UXMNz3kG9lze9m3TKMBRaMtE/aS/Cv4l69r6q7SY=
 github.com/0magnet/bottle v0.0.1-0.20261010184236-05c057152157/go.mod h1:02z8sWzqF3QH4SjMxnx5bnysFUqsw9CdUTtIj+CIxkw=
+github.com/0magnet/bottle v0.0.1-0.20261010201116-c4057e41d00e h1:8P77d1DuZcwow0cHE5yoxaGQPlcOl/Y30hEIDgWkAi0=
+github.com/0magnet/bottle v0.0.1-0.20261010201116-c4057e41d00e/go.mod h1:02z8sWzqF3QH4SjMxnx5bnysFUqsw9CdUTtIj+CIxkw=
 github.com/0magnet/calvin v0.0.0 h1:gUPh78127uuHtpm3GGWo5N+2gqz/qAi3yVTh4BdvuaU=
 github.com/0magnet/calvin v0.0.0/go.mod h1:lSY+7FAzjDu2AlOiyR6pXXzJGhI1U7d4ZNHpzWyAYIg=
 github.com/0magnet/coloredcobra v1.0.4-0.20260908180055-b9d8b508df51 h1:lZFYbwsNArM50QJI/apWJgDMTF0YmTwUeC+Sp6g+HCA=

@@ -99,8 +99,7 @@ func runSkywireWasm(ctx context.Context, s *shell.Shell, hc *interp.HandlerConte
 	hooks := js.ValueOf(map[string]interface{}{})
 	hooks.Set("stdout", outF)
 	hooks.Set("stderr", errF)
-	// The command starts where the shell is. The worker mounts the shell's
-	// /home, so the files it names are the ones the shell sees.
+	// The command starts where the shell is, on the same tree.
 	hooks.Set("cwd", hc.Dir)
 	// Ctrl+C parity: the shell cancels ctx on ^C; forward that to the command
 	// instance's registered interrupt so a foreground visor shuts down like it

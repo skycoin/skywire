@@ -103,7 +103,8 @@ jsfs.writeFile('/etc/myapp.conf', 'KEY=value\n');
 Hand a subtree to another filesystem, such as a remote one, with
 `jsfs.mount(prefix, provider)`. The provider answers the fs calls under the
 prefix with node-style callbacks, whenever it is ready; `jsfs.js` documents
-them where the mount layer is defined. `jsfs.unmount(prefix)` detaches it.
+them where the mount layer is defined. A mount at `/` takes the whole tree, as
+when another thread owns the filesystem. `jsfs.unmount(prefix)` detaches it.
 
 `jsfs.sync` has the same fs methods without callbacks. Each returns its result
 or throws an error with a `.code`, for a loader that cannot wait, such as

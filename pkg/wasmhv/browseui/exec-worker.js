@@ -7,18 +7,13 @@
 // A worker is the right home for a wasm visor and a poor home for a shell, so
 // the split is: the page keeps the UI — the desk, the terminals, the nested
 // browser, the desk host — and this thread keeps every Go runtime that
-// is a skywire COMMAND. The page's own jsfs stays where it is, seeded and
-// in-memory; this worker's jsfs is the one the visor writes and the one that
-// holds the IndexedDB snapshot, so the identity in /opt/skywire survives a
-// reload exactly as before, just from over here.
-//
-// The two trees are SEPARATE. Sharing one jsfs across the boundary is what
-// bottle's fsbridge.js does, and it needs SharedArrayBuffer (Atomics.wait,
-// forbidden on the main thread and required by a Go runtime's synchronous
-// syscalls), which needs cross-origin isolation the desk does not have. What
-// each side owns is lent to the other instead (fs-tree.js): the page mounts
-// this thread's /opt/skywire and /mnt, and this thread mounts the page's /home,
-// where the desk shell keeps its files. A command starts in the shell's cwd.
+// is a skywire COMMAND. This worker's jsfs is the desk's one filesystem: the
+// visor writes it, it holds the IndexedDB snapshot, and the page mounts all of
+// it at / (fs-tree.js), so the desk shell and every command see the same files
+// and the shell's files survive a reload too. A command starts in the shell's
+// cwd. Sharing the tree itself would take SharedArrayBuffer (bottle's
+// fsbridge.js), and so cross-origin isolation the desk does not have; a jsfs
+// mount answers asynchronously and needs neither.
 //
 // Protocol (page ⇄ worker), page first:
 //   → {t:'init', persistDB, wasmURL, wasmExecURL}   restore the FS, bind the module
@@ -30,7 +25,7 @@
 //   ← {t:'vlisten'|'vunlisten', port}               this thread's vnet claims
 //   → {t:'vopen', cid, port} ⇄ {t:'vdata', cid, b} ⇄ {t:'vclose', cid}
 //   ← {t:'log', level, line}                        console output
-//   ⇄ {t:'fs', id, op, args} ⇄ {t:'fsr', id, err, res}   a call on the other's tree
+//   → {t:'fs', id, op, args} ← {t:'fsr', id, err, res}   a call on this thread's tree
 (function () {
 	'use strict';
 	// Page-side load of the bundle is a no-op: everything below is worker-only.
@@ -208,7 +203,6 @@
 	}
 
 	function init(m) {
-		PAGE_TREES.forEach(tree.mount);
 		if (m.wasmURL) globalThis.skywireExec.wasmURL = m.wasmURL;
 		if (m.wasmExecURL) globalThis.skywireExec.wasmExecURL = m.wasmExecURL;
 		if (!m.persistDB) { post({ t: 'ready', restored: false }); return; }
@@ -312,9 +306,7 @@
 		}
 	}
 
-	// tree lends this thread's /opt/skywire and /mnt to the page and mounts
-	// the page's /home here, so a command sees the files the desk shell sees.
-	var PAGE_TREES = ['/home'];
+	// tree answers the page's mount of this thread's whole tree.
 	var tree = globalThis.SkywireFSTree(post);
 
 	self.onmessage = function (ev) {
@@ -322,7 +314,6 @@
 		switch (m.t) {
 		case 'init': init(m); return;
 		case 'fs': tree.call(m); return;
-		case 'fsr': tree.answer(m); return;
 		case 'spawn': spawn(m); return;
 		case 'stdin': {
 			var si = instances[m.id];

@@ -114,11 +114,9 @@
 			try { w.postMessage(m, transfer || []); } catch (e) { /* worker gone */ }
 		}
 
-		// ---- shared trees ----------------------------------------------
+		// ---- the one tree ----------------------------------------------
 		// Every skywire command runs on the worker's jsfs, so the page mounts
-		// the subtrees the visor writes and the worker mounts the shell's
-		// (fs-tree.js).
-		var WORKER_TREES = ['/mnt', '/opt/skywire'];
+		// all of it at / (fs-tree.js) and keeps no files of its own.
 		var tree = globalThis.SkywireFSTree ? globalThis.SkywireFSTree(post) : null;
 
 		// sendable decides whether a chunk's buffer can be handed over rather
@@ -449,7 +447,7 @@
 			remoteExec.wasmURL = abs(opts.wasmURL || globalThis.skywireExec.wasmURL);
 			remoteExec.wasmExecURL = abs(opts.wasmExecURL || globalThis.skywireExec.wasmExecURL);
 			globalThis.skywireExec = remoteExec;
-			if (tree) WORKER_TREES.forEach(tree.mount);
+			if (tree) tree.mount('/');
 			// The registries under the names skywire's page code already uses.
 			// __skywireSignals is deliberately NOT re-aliased: the interrupt
 			// registry that matters is the worker's (that is where

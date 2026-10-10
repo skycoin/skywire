@@ -51,8 +51,8 @@ var skywireExecJS []byte
 //go:embed exec-remote.js
 var execRemoteJS []byte
 
-// fsTreeJS provides globalThis.SkywireFSTree: a jsfs subtree lent across the
-// page/worker boundary, in both bundles since each side mounts the other's.
+// fsTreeJS provides globalThis.SkywireFSTree: the worker's jsfs mounted on the
+// page. In both bundles, since the page mounts it and the worker answers.
 //
 //go:embed fs-tree.js
 var fsTreeJS []byte
