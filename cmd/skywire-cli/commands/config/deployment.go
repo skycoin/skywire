@@ -257,6 +257,12 @@ func deploymentServices(pk cipher.PubKey, blocks []svcblock.Block) (visorconfig.
 	var srv deployment.DmsgServerEntry
 	srv.Static = srvPK.Hex()
 	srv.Server.Address = srvAddr
+	// A browser visor can only reach the server over wss, at the name the
+	// server derives from its key and wss_domain_suffix.
+	if suffix := strings.TrimPrefix(blockString(blocks, "dmsg-server", "wss_domain_suffix"), "."); suffix != "" {
+		srv.Server.AddressWS = "wss://" + srvPK.DNSLabel() + "." + suffix + "/dmsg"
+		svc.WSSDomainSuffix = suffix
+	}
 	svc.DmsgServers = []deployment.DmsgServerEntry{srv}
 	svc.DmsgDiscoveryDmsg = fmt.Sprintf("dmsg://%s:80", discPK.Hex())
 	svc.RouteSetupNodes = []cipher.PubKey{snPK}

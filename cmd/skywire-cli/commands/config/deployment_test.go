@@ -162,3 +162,34 @@ func TestDeploymentBlocksOwnKeyTPD(t *testing.T) {
 		t.Errorf("tpd at %q, want %q", svc.TransportDiscoveryDmsg, want)
 	}
 }
+
+// A dmsg server given a wss_domain_suffix is exported with the wss address a
+// browser visor bootstraps from.
+func TestDeploymentServicesWSS(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	blocks, err := deploymentBlocks("203.0.113.7", "", pk, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var srvPK cipher.PubKey
+	for i, b := range blocks {
+		if b.Type != "dmsg-server" {
+			continue
+		}
+		_, srvPK, _, _ = svcblock.OwnKey(b.Raw) //nolint:errcheck
+		raw := strings.Replace(string(b.Raw), "{", `{"wss_domain_suffix":".example.net",`, 1)
+		if err := blocks[i].UnmarshalJSON([]byte(raw)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	svc, err := deploymentServices(pk, blocks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "wss://" + srvPK.DNSLabel() + ".example.net/dmsg"; svc.DmsgServers[0].Server.AddressWS != want {
+		t.Errorf("address_ws %q, want %q", svc.DmsgServers[0].Server.AddressWS, want)
+	}
+	if svc.WSSDomainSuffix != "example.net" {
+		t.Errorf("wss_domain_suffix %q", svc.WSSDomainSuffix)
+	}
+}

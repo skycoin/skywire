@@ -134,10 +134,23 @@ To give a deployment's dmsg server a name:
 The record only matters to browser visors bootstrapping. Native visors keep
 connecting by IP if the DNS stops answering.
 
-Browser visors cannot join a custom deployment yet. The wasm build has no
-`SKYDEPLOY`, and the services-config export does not carry the wss address.
-Until that changes, these names serve browser visors pointed at the
-deployment by other means.
+Once the dmsg server has a wss name, the services-config export carries it as
+the server's `address_ws`, so browser visors can join too.
+
+### Join a browser visor
+
+A browser visor reads the same `SKYDEPLOY` setting from the desk's own
+`/etc/skywire.conf`. Put the deployment's services-config in the desk's
+filesystem, for example at `/opt/skywire/deployment-services.json`, and add:
+
+```
+SKYDEPLOY='/opt/skywire/deployment-services.json'
+```
+
+then reload the page. The desk runs `skywire autoconfig`, which loads the
+deployment before it generates the config and starts the visor. Other
+`skywire` commands in the desk follow `SKYDEPLOY` when it is in their
+environment, as they do natively.
 
 ## The browse origin
 
