@@ -309,6 +309,8 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	authRoute("GET /debug/pprof/trace", pprof.Trace)
 	// The last seconds of execution trace, when the flight recorder runs.
 	authRoute("GET /debug/pprof/flightrecorder", flightrec.Handler().ServeHTTP)
+	// A full heap dump written to LocalPath/log, for finding what retains an object.
+	authRoute("POST /debug/heapdump", heapDumpHandler(localPath))
 
 	// /stats/* (auth'd) — visor-local telemetry store. Handlers
 	// degrade to 503 when SetStatsReader hasn't been called.
