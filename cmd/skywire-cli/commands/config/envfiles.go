@@ -173,6 +173,18 @@ const envfileLinux = `#
 #	whatever its listener resolves to, which is only right on a LAN.
 #DMSGSERVERPUBLIC='1.2.3.4:30084'
 
+#--	Run a whole deployment in this visor and use it instead of prod: dmsg
+#	discovery, a dmsg server, setup and transport setup nodes, transport and
+#	service discovery, the address resolver and the route finder. Give the
+#	public host[:port] of its dmsg server. That port and UDP port+13 must be
+#	reachable. 'skywire cli config deployment' prints the services-config
+#	other visors join with.
+#DEPLOYMENT='1.2.3.4:8080'
+
+#--	Redis for the deployment, a URL or a socket path. Empty keeps every entry
+#	in memory, so a restart starts the deployment empty.
+#DEPLOYMENTREDIS='redis://127.0.0.1:6379'
+
 #--	Where the in-visor dmsg server self-terminates TLS for its wss front
 #	via Let's Encrypt, so a browser or wasm visor can reach it. Set it on a
 #	host with NO reverse proxy — including any host where the standalone

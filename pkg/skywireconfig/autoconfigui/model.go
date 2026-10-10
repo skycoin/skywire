@@ -51,7 +51,7 @@ type Model struct {
 }
 
 var groupOrder = []string{
-	"Hypervisor", "Identity and rewards", "Networking and transports", "Dmsg server",
+	"Hypervisor", "Identity and rewards", "Networking and transports", "Dmsg server", "Deployment",
 	"Privacy and routing", "Whitelists", "Resolvers and web bridges", "VPN server",
 	"VPN router", "Proxy", "Apps", "Skycoin", "Runtime", "Other",
 }
@@ -80,7 +80,7 @@ var groupExact = map[string]string{
 }
 
 var groupPrefix = []struct{ prefix, group string }{
-	{"dmsg-server", "Dmsg server"}, {"dmsg-relay", "Dmsg server"},
+	{"dmsg-server", "Dmsg server"}, {"dmsg-relay", "Dmsg server"}, {"deployment", "Deployment"},
 	{"vpnrouter", "VPN router"}, {"proxy", "Proxy"}, {"startproxy", "Proxy"},
 	{"dmsgweb", "Resolvers and web bridges"}, {"skynetweb", "Resolvers and web bridges"},
 	{"skycoin", "Skycoin"}, {"skychat", "Apps"}, {"chat", "Apps"},

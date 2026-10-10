@@ -188,7 +188,7 @@ func TestTUIState(t *testing.T) {
 
 func TestGroups(t *testing.T) {
 	for name, want := range map[string]string{
-		"ishv": "Hypervisor", "no-ishv": "Hypervisor", "dmsg-server-public": "Dmsg server",
+		"ishv": "Hypervisor", "no-ishv": "Hypervisor", "dmsg-server-public": "Dmsg server", "deployment-redis": "Deployment",
 		"vpnrouter-ssid": "VPN router", "skycoinwebaddr": "Skycoin", "zzz": "Other",
 	} {
 		if got := GroupOf(name); got != want {
