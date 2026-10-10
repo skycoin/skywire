@@ -1257,7 +1257,7 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 						cacheDir = filepath.Join(filepath.Dir(p), dmsgWSTLSCacheDirName)
 					}
 				}
-				if tlsLis := dmsgsrv.ServeWSTLS(log, srv, tlsAddr, cacheDir, wssHost, wssURL); tlsLis != nil {
+				if tlsLis := dmsgsrv.ServeWSTLS(log, srv, tlsAddr, cacheDir, wssHost, wssURL, deployment.Prod.WSSAliasHosts(v.conf.PK.DNSLabel())...); tlsLis != nil {
 					v.pushCloseStack("dmsg_server_wss", tlsLis.Close)
 				}
 			}

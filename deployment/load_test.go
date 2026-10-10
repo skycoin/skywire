@@ -35,3 +35,14 @@ func TestLoadFile(t *testing.T) {
 		t.Error("missing file: want an error")
 	}
 }
+
+func TestWSSAliasHosts(t *testing.T) {
+	s := Services{WSSDomainAliases: []string{"theskywirenetwork.net", ".old.example", ""}}
+	got := s.WSSAliasHosts("abc")
+	if len(got) != 2 || got[0] != "abc.theskywirenetwork.net" || got[1] != "abc.old.example" {
+		t.Fatalf("WSSAliasHosts = %v", got)
+	}
+	if hosts := (&Services{}).WSSAliasHosts("abc"); hosts != nil {
+		t.Errorf("no aliases: %v", hosts)
+	}
+}

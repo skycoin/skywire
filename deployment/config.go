@@ -19,6 +19,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"net/url"
+	"strings"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -220,6 +221,10 @@ type Services struct {
 	// known fleet server (IsKnownDmsgServer) — a third party running this binary
 	// never mis-advertises this domain for a PK with no DNS record.
 	WSSDomainSuffix string `json:"wss_domain_suffix,omitempty"`
+	// WSSDomainAliases are earlier suffixes a known server still answers on
+	// and gets certificates for, without advertising them, so browser modules
+	// built with an old name keep reaching it while the fleet moves.
+	WSSDomainAliases []string `json:"wss_domain_aliases,omitempty"`
 	// BrowseOriginSuffix is the deployment-wide domain the "real-origin" browse
 	// path (pkg/visor/meshproxy.go, the wasm SW browse origin, and the hosted
 	// Caddy front) serves untrusted mesh content under — e.g. ".haltingstate.net"
@@ -297,3 +302,14 @@ var TestConf Conf
 // + SKYDEPLOY override) and config_js.go (js, copies from the
 // generated static literals). See the package doc above for the
 // rationale on the split.
+
+// WSSAliasHosts are the alias host names of a server with DNS label label.
+func (s *Services) WSSAliasHosts(label string) []string {
+	var hosts []string
+	for _, a := range s.WSSDomainAliases {
+		if a = strings.TrimPrefix(a, "."); a != "" {
+			hosts = append(hosts, label+"."+a)
+		}
+	}
+	return hosts
+}

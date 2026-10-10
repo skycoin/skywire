@@ -324,7 +324,8 @@ func (s *service) Run(ctx context.Context) error {
 	// wasm-visor with no extra port and no discovery topology change. See
 	// docs/design/dmsg-server-protocol-unification.md.
 	mainWSURL := ""
-	var wssHost string // <DNSLabel>.<suffix> this server's wss advert + built-in TLS use
+	var wssHost string      // <DNSLabel>.<suffix> this server's wss advert + built-in TLS use
+	var wssAliases []string // the deployment's earlier names for this server, still answered
 	if cfg.WSAddress == "" && primaryAdvertised != "" && !strings.HasPrefix(primaryAdvertised, ":") {
 		mainWSURL = "ws://" + primaryAdvertised + "/dmsg"
 		// wss_domain_suffix: advertise a TLS-fronted wss:// URL self-derived from
@@ -340,6 +341,7 @@ func (s *service) Run(ctx context.Context) error {
 		suffix := strings.TrimPrefix(cfg.WSSDomainSuffix, ".")
 		if suffix == "" && deployment.Prod.IsKnownDmsgServer(cfg.PubKey) {
 			suffix = strings.TrimPrefix(deployment.Prod.WSSDomainSuffix, ".")
+			wssAliases = deployment.Prod.WSSAliasHosts(cfg.PubKey.DNSLabel())
 		}
 		if suffix != "" {
 			wssHost = cfg.PubKey.DNSLabel() + "." + suffix
@@ -399,7 +401,7 @@ func (s *service) Run(ctx context.Context) error {
 					cacheDir = filepath.Join(filepath.Dir(cfg.Path), "dmsg-autocert")
 				}
 			}
-			ServeWSTLS(log, srv, cfg.WSTLSAddress, cacheDir, wssHost, mainWSURL)
+			ServeWSTLS(log, srv, cfg.WSTLSAddress, cacheDir, wssHost, mainWSURL, wssAliases...)
 		}
 	}
 
