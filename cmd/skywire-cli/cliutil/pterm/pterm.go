@@ -1,11 +1,7 @@
-//go:build js && wasm
-
-// Package pterm cmd/skywire-cli/cliutil/pterm/pterm_js.go c5-cli-util
+// Package pterm cmd/skywire-cli/cliutil/pterm/pterm.go c5-cli-util
 //
-// js/wasm implementation of the shadow: plain ANSI SGR codes and a simple
-// box-drawing tree renderer, no pterm import (pterm's keyboard dependency
-// does not build for js). Output is functionally equivalent for the color
-// and tree surface the CLI uses.
+// The ANSI colors and box-drawing tree the CLI used from github.com/pterm/pterm,
+// with the same output. pterm's keyboard dependency does not build for js.
 package pterm
 
 import (
@@ -13,8 +9,20 @@ import (
 	"strings"
 )
 
+const reset = "\x1b[0m"
+
+// sgr colors each line of the text and restores the color after a nested
+// reset, as pterm does, so a colored span inside another keeps the outer one.
 func sgr(code string, a ...interface{}) string {
-	return "\x1b[" + code + "m" + fmt.Sprint(a...) + "\x1b[0m"
+	start := "\x1b[" + code + "m"
+	lines := strings.Split(fmt.Sprint(a...), "\n")
+	for i, line := range lines {
+		if line == "" {
+			continue
+		}
+		lines[i] = start + strings.ReplaceAll(line, reset, reset+start) + reset
+	}
+	return strings.Join(lines, "\n")
 }
 
 // Sprint-style color functions.
@@ -27,6 +35,7 @@ var (
 	Yellow  = func(a ...interface{}) string { return sgr("33", a...) }
 	White   = func(a ...interface{}) string { return sgr("37", a...) }
 	Black   = func(a ...interface{}) string { return sgr("30", a...) }
+	gray    = func(a ...interface{}) string { return sgr("90", a...) }
 )
 
 // Style is a background style; its Sprint wraps arguments in the SGR code.
@@ -42,8 +51,8 @@ var (
 	BgMagenta = Style{"45"}
 )
 
-// Println mirrors fmt.Println (pterm.Println adds theming; plain is fine).
-func Println(a ...interface{}) { fmt.Println(a...) }
+// Println prints the arguments and a newline.
+func Println(a ...interface{}) { fmt.Print(fmt.Sprint(a...) + "\n") }
 
 // TreeNode is one node of a renderable tree.
 type TreeNode struct {
@@ -60,31 +69,43 @@ type LeveledListItem struct {
 // LeveledList is a list of leveled items.
 type LeveledList []LeveledListItem
 
-// TreePrinter renders a TreeNode with box-drawing branches.
+// TreePrinter renders a TreeNode with gray box-drawing branches.
 type TreePrinter struct{ root TreeNode }
+
+// DefaultTree is the zero-config tree printer.
+var DefaultTree = TreePrinter{}
 
 // WithRoot returns a printer for the given root.
 func (t TreePrinter) WithRoot(n TreeNode) *TreePrinter { return &TreePrinter{root: n} }
 
-// Render prints the tree.
-func (t *TreePrinter) Render() error {
+// Srender returns the rendered tree.
+func (t *TreePrinter) Srender() string {
 	var b strings.Builder
-	b.WriteString(t.root.Text + "\n")
+	if t.root.Text != "" {
+		b.WriteString(t.root.Text + "\n")
+	}
 	renderChildren(&b, t.root.Children, "")
-	fmt.Print(b.String())
+	return b.String()
+}
+
+// Render prints the tree and a blank line.
+func (t *TreePrinter) Render() error {
+	fmt.Print(t.Srender() + "\n")
 	return nil
 }
 
 func renderChildren(b *strings.Builder, nodes []TreeNode, prefix string) {
 	for i, n := range nodes {
-		branch, cont := "├─", "│ "
+		branch, cont := "├", gray("│")+" "
 		if i == len(nodes)-1 {
-			branch, cont = "└─", "  "
+			branch, cont = "└", "  "
 		}
-		b.WriteString(prefix + branch + n.Text + "\n")
+		b.WriteString(prefix + gray(branch) + gray("─"))
+		if len(n.Children) == 0 {
+			b.WriteString(gray("─") + n.Text + "\n")
+			continue
+		}
+		b.WriteString(gray("┬") + n.Text + "\n")
 		renderChildren(b, n.Children, prefix+cont)
 	}
 }
-
-// DefaultTree is the zero-config tree printer.
-var DefaultTree = TreePrinter{}
