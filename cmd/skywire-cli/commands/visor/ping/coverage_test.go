@@ -1,7 +1,7 @@
 // Package ping — coverage_test.go: exercises the non-RPC surface of the
 // ping subcommands: the human/NDJSON formatters, the per-run stats
-// aggregators, the event classifiers, and the two Bubble Tea TUI models
-// (mux-bandwidth and ping-tree) driven through Update/View/applyEvent
+// aggregators, the event classifiers, and the two TUI models
+// (mux-bandwidth and ping-tree) driven through applyEvent and the renderers
 // with synthetic rpcgrpc events. The cobra RunE bodies and the gRPC
 // stream consumers (which need a live visor) are not covered here.
 package ping
@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -214,54 +213,28 @@ func TestMuxBwSignalContext(t *testing.T) {
 
 func TestMuxBwTUIModel(t *testing.T) {
 	origProbe := muxBwProbeRTT
-	muxBwProbeRTT = true // exercise the RTT render block + fixedRows branch
+	muxBwProbeRTT = true // exercise the RTT render block
 	defer func() { muxBwProbeRTT = origProbe }()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	req := &rpcgrpc.MuxBandwidthRequest{Routes: 2, DurationNs: 1e9}
-	m := newMuxBwTUIModel(ctx, cancel, "targetPK", req)
+	m := newMuxBwTUIModel("targetPK", req)
+	require.Contains(t, m.hint(), "q quit")
 
-	require.NotNil(t, m.Init())
-	require.Equal(t, 12, m.fixedRows()) // 9 + 3 (probe-rtt)
-
-	// Window size makes the model ready and builds the viewport.
-	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-
-	// Feed every event variant through Update → applyEvent.
 	for _, ev := range []*rpcgrpc.MuxBandwidthEvent{
 		muxRouteEstablished(0, false), muxRouteEstablished(1, true), muxSample(),
 		muxRttProbe(true), muxRttProbe(false), muxDone(), muxError(), muxRouteFailure(),
 	} {
-		m.Update(muxBwEventMsg{ev: ev})
+		m.applyEvent(ev)
 	}
 
-	// Ticks + spinner + scroll keys + auto-scroll toggle.
-	m.Update(muxBwTickMsg{})
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
-	for _, kt := range []tea.KeyType{tea.KeyUp, tea.KeyDown, tea.KeyPgUp, tea.KeyPgDown, tea.KeyHome, tea.KeyEnd} {
-		m.Update(tea.KeyMsg{Type: kt})
-	}
-
-	require.NotEmpty(t, m.View())
+	top := m.renderTop("")
+	require.Contains(t, top, "RTT probes")
+	require.Contains(t, top, "Events:")
+	require.NotEmpty(t, m.renderEventsBody())
 	require.NotEmpty(t, m.renderDone())
 
-	// Resize after ready (the else branch).
-	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-
-	// Stream-end + error messages.
-	m.Update(muxBwStreamDoneMsg{})
-	m.Update(muxBwStreamErrMsg{err: context.Canceled})
-	require.NotEmpty(t, m.View())
-}
-
-func TestMuxBwTUIQuit(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	m := newMuxBwTUIModel(ctx, cancel, "pk", &rpcgrpc.MuxBandwidthRequest{Routes: 1, DurationNs: 1e9})
-	_, c := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	require.NotNil(t, c)
-	require.Equal(t, "Shutting down...\n", m.View())
+	m.finish(context.Canceled)
+	require.Contains(t, m.hint(), "Run complete")
 }
 
 // --- tree_stream.go helpers ------------------------------------------
@@ -359,42 +332,27 @@ func TestWriteNDJSONLine(t *testing.T) {
 }
 
 func TestPingTreeModel(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	m := newPingTreeModel(ctx, cancel)
-
-	require.NotNil(t, m.Init())
-	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m := newPingTreeModel()
+	require.Contains(t, m.renderTree(), "Discovering")
 
 	for _, ev := range []*rpcgrpc.PingTreeEvent{
 		treeDiscovered(), treePingResult(1, false, "live_ping"), treePingResult(2, true, "live_ping"),
 		treePingResult(1, false, "transport_summary"), treeLevelDone(1), treeStatus(),
 		treeRunDone(), treeServerError(),
 	} {
-		m.Update(eventMsg{ev: ev})
+		m.applyEvent(ev)
 	}
 
-	m.Update(tickMsg{})
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
-	for _, kt := range []tea.KeyType{tea.KeyUp, tea.KeyDown, tea.KeyPgUp, tea.KeyPgDown, tea.KeyHome, tea.KeyEnd} {
-		m.Update(tea.KeyMsg{Type: kt})
-	}
+	require.Contains(t, m.statsLine("|"), "|")
+	require.Contains(t, m.renderTree(), "Run Summary")
+	require.Contains(t, m.hint(), "q quit")
 
-	require.NotEmpty(t, m.View())
-	require.NotEmpty(t, m.statsLine())
-	require.NotEmpty(t, m.renderTree())
-
-	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	m.Update(streamDoneMsg{})
-	m.Update(streamErrMsg{err: context.Canceled})
-	require.NotEmpty(t, m.View())
+	m.finish(context.Canceled)
+	require.Contains(t, m.statsLine(""), "stream error")
+	require.Contains(t, m.hint(), "Run complete")
 }
 
-func TestPingTreeModelQuit(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	m := newPingTreeModel(ctx, cancel)
-	_, c := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	require.NotNil(t, c)
-	require.NotEmpty(t, m.View()) // "Shutting down" path
+func TestSgr(t *testing.T) {
+	require.Equal(t, "\x1b[38;5;82mok\x1b[0m", sgr(82, false)("ok"))
+	require.Equal(t, "\x1b[1;38;5;39mok\x1b[0m", sgr(39, true)("ok"))
 }
