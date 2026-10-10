@@ -104,7 +104,7 @@ github.com/0magnet/gotop/v4/termui
 github.com/0magnet/gotop/v4/termui/drawille-go
 github.com/0magnet/gotop/v4/utils
 github.com/0magnet/gotop/v4/widgets
-# github.com/0magnet/kcp-go/v5 v5.6.81
+# github.com/0magnet/kcp-go/v5 v5.6.82
 ## explicit; go 1.24.0
 github.com/0magnet/kcp-go/v5
 # github.com/0magnet/lolcat-go v0.0.0
