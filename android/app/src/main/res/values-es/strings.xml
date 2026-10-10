@@ -59,6 +59,7 @@
     <string name="app_wallet">Billetera</string>
     <string name="app_fleet">Flota</string>
     <string name="app_skymeet">SkyMeet</string>
+    <string name="app_skymail">Skymail</string>
 
     <!-- Apps hub -->
     <string name="hub_subtitle">%1$d instaladas · %2$d en marcha</string>
@@ -73,6 +74,7 @@
     <string name="hub_wallet_sub">SKY · Fibercoin · BTC · ETH</string>
     <string name="hub_fleet_sub">Nodos que ejecutas en otro sitio</string>
     <string name="hub_meet_sub">Llamadas cifradas</string>
+    <string name="hub_mail_sub">Correo por Skywire</string>
     <string name="hub_hero_reconnecting">Reconectando</string>
     <string name="hub_hero_starting">Iniciando</string>
     <string name="hub_hero_no_exit">Aún no has elegido salida</string>
