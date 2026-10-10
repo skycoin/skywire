@@ -6,7 +6,7 @@
 // Why a dedicated command vs. `cli visor ping`:
 //   - `visor ping` is end-to-end. It can't tell an operator WHERE
 //     in a 4-hop route the latency is coming from.
-//   - `visor ping tree` is bubbletea-TUI for an interactive sweep
+//   - `visor ping tree` is a TUI for an interactive sweep
 //     of public visors. Not scripting-friendly, not per-hop.
 //   - `route find` shows the forward path's PK list but no
 //     measurements.
