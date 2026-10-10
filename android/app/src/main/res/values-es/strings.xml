@@ -872,7 +872,7 @@
     <string name="help_chat_body">Mensajes, llamadas, grupos y canales que viajan por Skywire en vez de por los servidores de una empresa. Tu identidad aquí es la clave pública de este nodo: repártela con el botón QR y cualquiera que la tenga podrá alcanzarte.\n\nEste es el mismo chat que corre en el escritorio, dispuesto para un teléfono. Guarda su propio historial en este dispositivo; no hay cuenta y nada se sincroniza solo, así que pasar a otro teléfono significa exportar desde los ajustes dentro del chat e importar allí.\n\nLos registros de SkyChat están en Ajustes ▸ Diagnóstico, junto con todos los demás registros que guarda esta app.</string>
 
     <string name="help_hub_title">Sobre Apps</string>
-    <string name="help_hub_body">Todo lo que tu nodo puede ejecutar, en un solo sitio. Cada icono abre la pantalla de su app; el nodo sigue funcionando por debajo de la que estés mirando.\n\nSkySOCKS y SkyVPN mandan el tráfico de otras apps por la red, SkyDEX opera, SkyChat envía mensajes y Flota vigila los nodos que ejecutas en otro sitio. Un icono en gris es algo que todavía no está construido.</string>
+    <string name="help_hub_body">Todo lo que tu nodo puede ejecutar, en un solo sitio. Cada icono abre la pantalla de su app; el nodo sigue funcionando por debajo de la que estés mirando.\n\nSkySOCKS y SkyVPN mandan el tráfico de otras apps por la red, SkyDEX opera, SkyChat envía mensajes, Skymail lleva correo entre nodos y Flota vigila los nodos que ejecutas en otro sitio. Un icono en gris es algo que todavía no está construido.</string>
 
     <string name="help_wallet_title">Sobre la Billetera</string>
     <string name="help_wallet_body">Skycoin, las Fibercoins que comparten su software de nodo y Bitcoin, todas en manos de claves que se generan en este teléfono y nunca salen de él. Skywire nunca las ve y nunca se envían a la red.\n\nLas doce palabras de recuperación son la billetera. Cualquiera que las lea puede gastar las monedas desde cualquier dispositivo sin tu teléfono, y si las pierdes nadie puede recuperarte la billetera: ni nosotros, ni nadie.\n\nLos saldos y el historial vienen del nodo al que apunta cada moneda, así que una moneda cuyo nodo no se alcanza muestra su último saldo conocido y no permite enviar.</string>
@@ -945,4 +945,75 @@
     <string name="settings_encrypt_on_done">Configuración cifrada.</string>
     <string name="settings_encrypt_on_pending">La configuración se cifrará cuando te desconectes.</string>
     <string name="settings_encrypt_off_done">La configuración ya no está cifrada.</string>
+
+    <!-- Skymail -->
+    <plurals name="hub_mail_unread">
+        <item quantity="one">%d sin leer</item>
+        <item quantity="many">%d sin leer</item>
+        <item quantity="other">%d sin leer</item>
+    </plurals>
+    <string name="mail_your_address">Tu dirección</string>
+    <string name="mail_address_hint">Cualquiera en Skywire puede escribirte a esta dirección, y cualquier nombre antes de la @ te llega. Skymail viaja solo por la red Skywire: no llega al correo electrónico común.</string>
+    <string name="mail_copy">Copiar</string>
+    <string name="mail_share">Compartir</string>
+    <string name="mail_off_title">Tu buzón está apagado</string>
+    <string name="mail_off_body">El correo enviado a tu dirección se rechaza mientras el buzón está apagado.</string>
+    <string name="mail_not_running">El buzón no está en marcha: %1$s</string>
+    <string name="mail_turn_on">Encender</string>
+    <string name="mail_inbox">Recibidos</string>
+    <string name="mail_inbox_unread">Recibidos (%1$d)</string>
+    <string name="mail_sent_folder">Enviados</string>
+    <string name="mail_empty_inbox">Todavía no hay correo.</string>
+    <string name="mail_empty_sent">Todavía no has enviado nada.</string>
+    <string name="mail_no_subject">(sin asunto)</string>
+    <string name="mail_write">Escribir</string>
+    <string name="mail_unverified">Remitente sin verificar</string>
+    <string name="mail_from">De</string>
+    <string name="mail_to">Para</string>
+    <string name="mail_cc">Cc</string>
+    <string name="mail_date">Fecha</string>
+    <string name="mail_verified_line">Enviado por el nodo que nombra esta dirección.</string>
+    <string name="mail_unverified_line">Entregado por el nodo %1$s, que esta dirección no nombra. Puede que la línea De no sea suya.</string>
+    <string name="mail_from_html">Se muestra como texto sin formato.</string>
+    <string name="mail_attachments">Adjuntos</string>
+    <string name="mail_save">Guardar</string>
+    <string name="mail_reply">Responder</string>
+    <string name="mail_delete">Eliminar</string>
+    <string name="mail_delete_confirm">¿Eliminar este mensaje?</string>
+    <string name="mail_deleted">Mensaje eliminado</string>
+    <string name="mail_attachment_saved">%1$s guardado en Descargas</string>
+    <string name="mail_attachment_failed">No se pudo guardar el adjunto: %1$s</string>
+    <string name="mail_compose_title">Mensaje nuevo</string>
+    <string name="mail_to_hint">Una dirección de Skymail o la clave pública de un nodo</string>
+    <string name="mail_contacts">Contactos</string>
+    <string name="mail_add_cc">Añadir Cc</string>
+    <string name="mail_subject">Asunto</string>
+    <string name="mail_body">Mensaje</string>
+    <string name="mail_attach">Adjuntar archivos</string>
+    <string name="mail_remove">Quitar</string>
+    <string name="mail_send_note">El correo sale ahora, por dmsg para una dirección .dmsg. Si el nodo del destinatario está desconectado, no lo recibe y nada lo reintenta.</string>
+    <string name="mail_send">Enviar</string>
+    <string name="mail_sending">Enviando…</string>
+    <string name="mail_sent">Enviado</string>
+    <string name="mail_send_failed">No se pudo enviar: %1$s</string>
+    <string name="mail_bad_address">No es una dirección de Skymail: %1$s</string>
+    <string name="mail_no_recipient">Añade un destinatario.</string>
+    <string name="mail_attachments_too_big">Demasiado grande: un mensaje puede ocupar unos %1$s, adjuntos incluidos.</string>
+    <string name="mail_result_title">No llegó a todos</string>
+    <string name="mail_result_delivered">Entregado por %1$s</string>
+    <string name="mail_result_failed">No entregado: %1$s</string>
+    <string name="mail_reply_header">El %1$s, %2$s escribió:</string>
+    <string name="mail_settings_title">Ajustes del buzón</string>
+    <string name="mail_setting_on">Buzón encendido</string>
+    <string name="mail_setting_on_desc">Recibe correo en tu dirección. Mientras está apagado, el correo para ti se rechaza.</string>
+    <string name="mail_usage">%1$s de %2$s en uso</string>
+    <string name="mail_limits">Se rechazan los mensajes de más de %1$s y se elimina el correo de más de %2$d días.</string>
+    <string name="mail_allowed_title">Quién puede escribirte</string>
+    <string name="mail_allowed_everyone">Todos. Añade una clave para aceptar correo solo de las claves de tu lista.</string>
+    <string name="mail_allowed_only">Solo estos:</string>
+    <string name="mail_allow_hint">Una clave pública o una dirección de Skymail</string>
+    <string name="mail_allow_add">Añadir</string>
+    <string name="mail_allow_bad">No es una clave pública ni una dirección de Skymail.</string>
+    <string name="help_mail_title">Skymail</string>
+    <string name="help_mail_body">Skymail es correo electrónico entre nodos. Tu nodo tiene un buzón en una dirección hecha con su clave pública, y el correo viaja por Skywire, cifrado, con la clave del remitente probada por la red y no por un servidor de correo.\n\nNo llega al correo electrónico común, y no se puede escribir a un nodo desconectado: el correo sale en el acto y nada lo reintenta. Usa la dirección .dmsg desde un teléfono; una dirección .skynet necesita una ruta, que un teléfono rara vez tiene.\n\nEl correo se guarda en este teléfono, dentro de los límites de tamaño y antigüedad de los ajustes del buzón.</string>
 </resources>

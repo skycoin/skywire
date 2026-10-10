@@ -89,8 +89,8 @@ import com.skycoin.skywire.ui.theme.SkyHeroGradient
  * card while the tunnel is up (or on its way up), and a grid of app cards
  * whose status dots come from the visor's own app list.
  *
- * Greyed "coming soon" cards are kept to the apps being built next — SkyMeet
- * and Skymail. A hub full of them reads as an unfinished app.
+ * At most ONE greyed "coming soon" card at a time — currently SkyMeet. A hub
+ * with several of them reads as an unfinished app.
  */
 private enum class HubCategory { NETWORK, FINANCE, SOCIAL }
 
@@ -176,6 +176,20 @@ fun HubScreen(
         )
         add(
             HubTile(
+                name = stringResource(R.string.app_skymail),
+                subtitle = state.unreadMail.takeIf { it > 0 }
+                    ?.let { pluralStringResource(R.plurals.hub_mail_unread, it, it) }
+                    ?: stringResource(R.string.hub_mail_sub),
+                icon = Icons.Rounded.Email,
+                category = HubCategory.SOCIAL,
+                statusApp = MAIL_APP,
+                wide = true,
+                badgeCount = state.unreadMail.takeIf { it > 0 },
+                onClick = { onOpenRoute(Routes.MAIL) },
+            ),
+        )
+        add(
+            HubTile(
                 name = stringResource(R.string.app_fleet),
                 // With the ingest on, the subtitle is the fleet's headcount.
                 subtitle = state.fleetOnline
@@ -193,16 +207,6 @@ fun HubScreen(
                 name = stringResource(R.string.app_skymeet),
                 subtitle = stringResource(R.string.hub_meet_sub),
                 icon = Icons.Rounded.Videocam,
-                category = HubCategory.SOCIAL,
-                wide = true,
-                comingSoon = true,
-            ),
-        )
-        add(
-            HubTile(
-                name = stringResource(R.string.app_skymail),
-                subtitle = stringResource(R.string.hub_mail_sub),
-                icon = Icons.Rounded.Email,
                 category = HubCategory.SOCIAL,
                 wide = true,
                 comingSoon = true,
@@ -600,6 +604,10 @@ private fun AppCard(tile: HubTile, status: AppState?) {
                 Column(Modifier.weight(1f)) {
                     Text(tile.name, style = MaterialTheme.typography.titleMedium)
                     CardSubtitle(tile.subtitle)
+                }
+                tile.badgeCount?.let {
+                    CountBadge(it)
+                    Spacer(Modifier.width(8.dp))
                 }
                 Icon(
                     Icons.Rounded.ChevronRight,

@@ -71,6 +71,8 @@ data class HubUiState(
     val vpnPending: Boolean? = null,
     /** Messages waiting in SkyChat, as skychat itself counts them. */
     val unreadMessages: Int = 0,
+    /** Unread mail in the visor's Skymail inbox. */
+    val unreadMail: Int = 0,
     /** The active SKY wallet's cached balance, formatted; null = no wallet. */
     val skyBalance: String? = null,
     /** The Fleet opt-in, so the tile says nothing extra while it is off. */
@@ -369,7 +371,12 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                 ?.let { wallet.cachedSnapshot(it) }
                 ?.let { Amounts.format(it.confirmed, CoinSpec.SKY.exponent, 0) }
         }
-        mutable.update { it.copy(unreadMessages = unread, skyBalance = balance) }
+        val mail = if (mutable.value.apps[MAIL_APP]?.running == true) {
+            runCatching { api.mailStatus().unread }.getOrDefault(mutable.value.unreadMail)
+        } else {
+            0
+        }
+        mutable.update { it.copy(unreadMessages = unread, unreadMail = mail, skyBalance = balance) }
     }
 
     /** Remote visors currently connected in, the Fleet screen's own way. */
@@ -408,3 +415,6 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
         const val FLEET_EVERY_N_POLLS = 3
     }
 }
+
+/** The visor's mailbox app, whose status and unread count the Skymail tile shows. */
+internal const val MAIL_APP = "skymail"
