@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
 )
@@ -183,7 +181,7 @@ func (hv *Hypervisor) appCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, 
 		return nil, false
 	}
 
-	appName := chi.URLParam(r, "app")
+	appName := r.PathValue("app")
 
 	app, err := ctx.API.App(appName)
 	if err != nil {

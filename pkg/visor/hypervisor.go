@@ -17,8 +17,6 @@ import (
 
 	"github.com/0magnet/bottle/vnet"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
@@ -393,7 +391,7 @@ func (hv *Hypervisor) DisableUI() error {
 
 // SetAuth turns the web UI's login requirement on or off at runtime.
 //
-// EnableAuth is read while the chi router is BUILT, not per request, so setting
+// EnableAuth is read while the router is BUILT, not per request, so setting
 // the flag alone changes nothing on a server that is already serving. The
 // change takes effect by rebuilding the mux, which is what this does: only the
 // HTTP listener is cycled, in the same way EnableUI/DisableUI cycle it. The
@@ -817,64 +815,48 @@ func (hv *Hypervisor) HTTPHandler() http.Handler {
 	return hv.makeMux()
 }
 
-type logrusLogFormatter struct {
-	logger *logging.Logger
-}
-type logrusLogEntry struct {
-	logger *logging.Logger
-	method string
-	path   string
+// logRequests logs each request at debug level once it is served.
+func (hv *Hypervisor) logRequests(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		sw := &httputil.StatusWriter{ResponseWriter: w}
+		next.ServeHTTP(sw, r)
+		hv.logger.WithFields(logrus.Fields{
+			"method":  r.Method,
+			"path":    r.URL.Path,
+			"status":  sw.Status(),
+			"bytes":   sw.BytesWritten(),
+			"elapsed": time.Since(start).Round(time.Microsecond),
+		}).Debug("HTTP request")
+	})
 }
 
-func (f *logrusLogFormatter) NewLogEntry(r *http.Request) middleware.LogEntry {
-	return &logrusLogEntry{
-		logger: f.logger,
-		method: r.Method,
-		path:   r.URL.Path,
-	}
-}
-func (e *logrusLogEntry) Write(status, bytes int, header http.Header, elapsed time.Duration, extra interface{}) {
-	e.logger.WithFields(logrus.Fields{
-		"method":  e.method,
-		"path":    e.path,
-		"status":  status,
-		"bytes":   bytes,
-		"elapsed": elapsed.Round(time.Microsecond),
-	}).Debug("HTTP request")
-}
-func (e *logrusLogEntry) Panic(v interface{}, stack []byte) {
-	e.logger.WithField("stack", string(stack)).Errorf("HTTP panic: %v", v)
-}
-func (hv *Hypervisor) makeMux() chi.Router {
-	r := chi.NewRouter()
+func (hv *Hypervisor) makeMux() *httputil.Router {
+	r := httputil.NewRouter()
 
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP) //nolint:staticcheck
+	r.Use(httputil.RequestID)
+	r.Use(httputil.RealIP)
 
 	if hv.visor != nil {
 		if hv.visor.MasterLogger().GetLevel() == logrus.DebugLevel || hv.visor.MasterLogger().GetLevel() == logrus.TraceLevel {
-			r.Use(middleware.RequestLogger(&logrusLogFormatter{logger: hv.logger}))
-			r.Use(middleware.Recoverer)
+			r.Use(hv.logRequests)
+			r.Use(httputil.Recoverer)
 		}
 	}
 
 	r.Use(httputil.SetLoggerMiddleware(hv.logger))
 
-	r.Route("/", func(r chi.Router) {
-		r.Route("/api", func(r chi.Router) {
-			r.Use(middleware.Timeout(httpTimeout))
+	r.Route("/", func(r *httputil.Router) {
+		r.Route("/api", func(r *httputil.Router) {
+			r.Use(httputil.Timeout(httpTimeout))
 
 			// The /api surface is JSON, most of it list-shaped and
 			// re-sent on every UI poll (the node list refreshes every
 			// 10s by default). /visors-tree-summary alone measured
 			// 8.8 MB on a nine-visor deployment; gzip takes it to
-			// 1.5 MB. Restricted to application/json so SSE
-			// (text/event-stream, /log and /notify) and the websocket
-			// upgrades under /visors/{pk}/... are left untouched —
-			// chi only swaps in the compressing writer once it sees a
-			// listed Content-Type, so Hijack and Flush still reach the
-			// real ResponseWriter on those routes.
-			r.Use(middleware.Compress(5, "application/json"))
+			// 1.5 MB. SSE (/log and /notify) is never compressed, and
+			// the websocket upgrades under /visors/{pk}/... pass through.
+			r.Use(httputil.CompressMin(httputil.CompressMinBytes, 5))
 
 			r.Get("/ping", hv.getPong())
 
@@ -900,14 +882,14 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			}
 
 			if hv.c.EnableAuth {
-				r.Group(func(r chi.Router) {
+				r.Group(func(r *httputil.Router) {
 					r.Post("/create-account", hv.users.CreateAccount())
 					r.Post("/login", hv.users.Login())
 					r.Post("/logout", hv.users.Logout())
 				})
 			}
 
-			r.Group(func(r chi.Router) {
+			r.Group(func(r *httputil.Router) {
 				if hv.c.EnableAuth {
 					r.Use(hv.users.Authorize)
 				}
@@ -1046,7 +1028,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Delete("/visors/{pk}/skychat/password", hv.deleteSkychatPassword())
 				// Skychat reverse-proxy: forward all calls under
 				// /skychat/proxy/* to the local skychat HTTP server.
-				r.HandleFunc("/visors/{pk}/skychat/proxy/*", hv.skychatProxyHandler())
+				r.HandleFunc("/visors/{pk}/skychat/proxy/{rest...}", hv.skychatProxyHandler())
 				// Skychat GROUP chat: bridge the hvui group panel to the
 				// local visor's group RPC (native counterpart to the wasm
 				// visor's skychatGroup* JS hooks).
@@ -1093,7 +1075,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		// Reward system proxy — fetches from the reward system via the visor's
 		// DMSG client (or HTTP fallback), avoiding CORS issues and ensuring
 		// DMSG-first access pattern.
-		r.Get("/api/rewards/*", hv.proxyRewardSystem())
+		r.Get("/api/rewards/{rest...}", hv.proxyRewardSystem())
 
 		// dmsg-discovery proxy. Visors can be configured to point their
 		// dmsg-discovery URL at this hypervisor; entry GETs for PKs
@@ -1105,7 +1087,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		// hypervisor's HTTP layer; access is gated by network reach.
 		if hv.lanDmsg != nil {
 			upstreamRP := hv.upstreamDiscProxy()
-			r.Route("/dmsg-discovery", func(r chi.Router) {
+			r.Route("/dmsg-discovery", func(r *httputil.Router) {
 				r.Get("/entry/{pk}", hv.discProxyEntryGet(upstreamRP))
 				r.Post("/entry", hv.discProxyForward(upstreamRP))
 				r.Post("/entry/", hv.discProxyForward(upstreamRP))
@@ -1127,10 +1109,10 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		// Notification stream for a host application (the Android foreground
 		// service; later the manager UI's bell). Registered here rather than
 		// inside the /api group on purpose: that group applies
-		// middleware.Timeout(httpTimeout), a 30s deadline on the whole
+		// httputil.Timeout(httpTimeout), a 30s deadline on the whole
 		// request, which severs a long-lived SSE response — the same reason
 		// /pty sits out here. Auth is opted into explicitly instead.
-		r.Route("/api/notifications", func(r chi.Router) {
+		r.Route("/api/notifications", func(r *httputil.Router) {
 			if hv.c.EnableAuth {
 				r.Use(hv.users.Authorize)
 			}
@@ -1141,7 +1123,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		// A browse frame's WebSockets, relayed through the browse proxy
 		// (api_browse_ws.go). Out of the /api group for the same reason as the
 		// stream above: its timeout would sever a long-lived connection.
-		r.Route("/api/browse-ws", func(r chi.Router) {
+		r.Route("/api/browse-ws", func(r *httputil.Router) {
 			if hv.c.EnableAuth {
 				r.Use(hv.users.Authorize)
 			}
@@ -1149,7 +1131,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		})
 		// A browse frame's requests, streamed (api_browse_stream.go); out here
 		// so a long download is not cut at the /api timeout.
-		r.Route("/api/browse-stream", func(r chi.Router) {
+		r.Route("/api/browse-stream", func(r *httputil.Router) {
 			if hv.c.EnableAuth {
 				r.Use(hv.users.Authorize)
 			}
@@ -1161,7 +1143,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		//
 		// Out here for the same reason the notification stream is, and it cost
 		// a debugging session to find out: inside /api these carry
-		// middleware.Timeout(httpTimeout), which cancels the request context
+		// httputil.Timeout(httpTimeout), which cancels the request context
 		// 30 s in. The symptom is not an error anywhere — the microphone
 		// stream simply broke and silently reopened every 30 seconds, for the
 		// whole call.
@@ -1169,7 +1151,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		// The path shape differs from the sibling /api/visors/{pk}/skychat/
 		// voice/* routes because it has to; {pk} is kept so the same
 		// withCtx(visorCtx) auth + CSRF + local-visor checks apply.
-		r.Route("/api/voice-audio", func(r chi.Router) {
+		r.Route("/api/voice-audio", func(r *httputil.Router) {
 			if hv.c.EnableAuth {
 				r.Use(hv.users.Authorize)
 			}
@@ -1179,7 +1161,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		})
 
 		// we don't enable `dmsgpty` endpoints for Windows
-		r.Route("/pty", func(r chi.Router) {
+		r.Route("/pty", func(r *httputil.Router) {
 			if hv.c.EnableAuth {
 				r.Use(hv.users.Authorize)
 			}
@@ -1189,12 +1171,10 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 		// /ws — the /api surface as a message transport, for a UI that talks to
 		// its visor over a socket instead of same-origin XHR. Out here beside
-		// /pty rather than under /api: that group's middleware.Timeout wraps the
-		// ResponseWriter in something that is not an http.Hijacker, which
-		// websocket.Accept requires, and its 30s deadline would cut a long-lived
-		// connection. Auth is opted into explicitly, as /pty does. Replayed
+		// /pty rather than under /api: that group's 30s Timeout would cut
+		// a long-lived connection. Auth is opted into explicitly, as /pty does. Replayed
 		// requests still traverse /api and pick that middleware up per request.
-		r.Group(func(r chi.Router) {
+		r.Group(func(r *httputil.Router) {
 			if hv.c.EnableAuth {
 				r.Use(hv.users.Authorize)
 			}
@@ -1227,7 +1207,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		// the rest of the hypervisor uses keeps every path identical while
 		// putting them behind the session.
 		if hv.tpvizServer != nil {
-			r.Group(func(r chi.Router) {
+			r.Group(func(r *httputil.Router) {
 				if hv.c.EnableAuth {
 					r.Use(hv.users.Authorize)
 				}
@@ -1267,11 +1247,11 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		// catch-all so /wallet/* is claimed here. See
 		// docs/design/gui-app-serving-modes.md.
 		// The node proxy fetches any URL the caller names, so it needs a session.
-		r.Group(func(r chi.Router) {
+		r.Group(func(r *httputil.Router) {
 			if hv.c.EnableAuth {
 				r.Use(hv.users.Authorize)
 			}
-			r.Handle("/wallet/*", hv.walletHandler())
+			r.Handle("/wallet/{rest...}", hv.walletHandler())
 		})
 		// The dashboard wallet's cipher, at the paths its route loads relative to
 		// the page.
@@ -1282,7 +1262,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		// launcher injected into index.html (and the browse.js / launcher assets).
 		r.Get("/api/ui-version", hv.getUIVersion())
 		hv.logUIRoot()
-		r.Handle("/*", hv.uiHandler())
+		r.Handle("/{rest...}", hv.uiHandler())
 	})
 
 	// Hand the finished router to the /ws transport, which replays each frame
@@ -1431,15 +1411,15 @@ func (tw *timeoutResponseWriter) copyTo(w http.ResponseWriter) {
 }
 func pkFromParam(r *http.Request, key string) (cipher.PubKey, error) {
 	pk := cipher.PubKey{}
-	err := pk.UnmarshalText([]byte(chi.URLParam(r, key)))
+	err := pk.UnmarshalText([]byte(r.PathValue(key)))
 
 	return pk, err
 }
 func uuidFromParam(r *http.Request, key string) (uuid.UUID, error) {
-	return uuid.Parse(chi.URLParam(r, key))
+	return uuid.Parse(r.PathValue(key))
 }
 func ridFromParam(r *http.Request, key string) (routing.RouteID, error) {
-	rid, err := strconv.ParseUint(chi.URLParam(r, key), 10, 32)
+	rid, err := strconv.ParseUint(r.PathValue(key), 10, 32)
 	if err != nil {
 		return 0, errors.New("invalid route ID provided")
 	}

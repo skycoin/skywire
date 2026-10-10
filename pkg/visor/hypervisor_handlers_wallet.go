@@ -24,7 +24,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/go-chi/chi/v5"
 	wasmtinygo "github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo"
 
 	"github.com/skycoin/skywire/pkg/app/launcher"
@@ -95,7 +94,7 @@ func walletNodeDefault() string {
 // used to have here is sent there.
 func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rest := chi.URLParam(r, "*")
+		rest := r.PathValue("rest")
 		// A running skycoin-web app answers the coin list and every coin's API
 		// itself, including its server-side wallets, so the page uses those.
 		if app := launcher.GetHTTPHandler(skyenv.SkycoinWebName); app != nil {

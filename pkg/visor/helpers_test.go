@@ -159,7 +159,7 @@ func TestStrSliceFromQuery(t *testing.T) {
 }
 
 func TestUUIDFromParam(t *testing.T) {
-	// No chi route context → empty param → parse error (covers the helper).
+	// No path value → empty param → parse error (covers the helper).
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	_, err := uuidFromParam(r, "id")
 	require.Error(t, err)
