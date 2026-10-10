@@ -115,7 +115,7 @@ github.com/0magnet/pfilter
 # github.com/0magnet/plot-go v0.0.1
 ## explicit; go 1.25
 github.com/0magnet/plot-go
-# github.com/0magnet/progkit v0.0.0-20261010154136-92cdea7ae352
+# github.com/0magnet/progkit v0.0.0-20261010162521-5acd96b9b1f6
 ## explicit; go 1.26.6
 github.com/0magnet/progkit
 # github.com/0magnet/realorigin v0.2.3
@@ -159,7 +159,7 @@ github.com/0magnet/webrtc/v4/internal/mux
 github.com/0magnet/webrtc/v4/internal/util
 github.com/0magnet/webrtc/v4/pkg/media
 github.com/0magnet/webrtc/v4/pkg/rtcerr
-# github.com/0magnet/websh v0.0.1-0.20261010140514-f069471e6435
+# github.com/0magnet/websh v0.0.1-0.20261010162512-55aa0b32e017
 ## explicit; go 1.26.6
 github.com/0magnet/websh/childtty
 github.com/0magnet/websh/progressive
@@ -177,7 +177,7 @@ github.com/0magnet/winbox-go
 # github.com/0magnet/wisp v0.0.0-20261010111717-5602c41d7a1c
 ## explicit; go 1.26.4
 github.com/0magnet/wisp
-# github.com/0magnet/xterm-go v0.0.1-0.20261010135510-6e5d0b154025
+# github.com/0magnet/xterm-go v0.0.1-0.20261010151358-9a8ac37a85ad
 ## explicit; go 1.24
 github.com/0magnet/xterm-go
 github.com/0magnet/xterm-go/vt
@@ -293,11 +293,8 @@ github.com/cenkalti/backoff
 github.com/cespare/xxhash/v2
 # github.com/charmbracelet/bubbles v1.0.0
 ## explicit; go 1.24.2
-github.com/charmbracelet/bubbles/cursor
 github.com/charmbracelet/bubbles/key
-github.com/charmbracelet/bubbles/runeutil
 github.com/charmbracelet/bubbles/spinner
-github.com/charmbracelet/bubbles/textinput
 github.com/charmbracelet/bubbles/viewport
 # github.com/charmbracelet/bubbletea v1.3.10
 ## explicit; go 1.24.0
