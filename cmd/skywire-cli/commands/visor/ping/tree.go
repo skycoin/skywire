@@ -1,5 +1,5 @@
 // Package ping cmd/skywire-cli/commands/visor/ping/tree.go c4-vis-cli
-// interactive Bubble Tea TUI for `cli visor ping tree`.
+// interactive TUI for `cli visor ping tree`.
 //
 // History: this command used to host a ~2300-line client-side BFS
 // + concurrency-limited ping orchestrator + state machine. That code
@@ -7,12 +7,12 @@
 // transports: default concurrency=2 capped throughput at ~4 pings/
 // minute (so level 1 of a 500-transport visor took >2 hours and
 // level 2 never started), the renderer hid pending entries (making
-// progress invisible), and the Bubble Tea TUI's /dev/tty
+// progress invisible), and the TUI's /dev/tty
 // requirement made the tool undriveable from CI or coding agents.
 //
 // #2732 moved the BFS server-side as the StreamPingTree gRPC RPC.
 // This file now consumes that stream and renders it with the same
-// Bubble Tea TUI shape — header, stats line, scrollable tree
+// TUI shape — header, stats line, scrollable tree
 // viewport, footer — that operators were already familiar with.
 //
 // The NDJSON-driven sibling lives in tree_stream.go (`cli visor ping
@@ -99,13 +99,13 @@ func init() {
 
 var pingTreeCmd = &cobra.Command{
 	Use:   "tree",
-	Short: "Interactive Bubble Tea TUI for the ping-tree (server-side BFS over the skywire route graph)",
+	Short: "Interactive TUI for the ping-tree (server-side BFS over the skywire route graph)",
 	Long: `Walk the visor's neighborhood breadth-first, pinging each
 discovered visor and rendering the results as a scrollable tree.
 
 The BFS runs server-side via the StreamPingTree gRPC RPC (see
 #2732 / pkg/visor/rpcgrpc/server_ping_tree.go); this command is a
-thin Bubble Tea TUI on top of that stream.
+thin TUI on top of that stream.
 
 The non-interactive sibling 'cli visor ping tree-stream' emits the
 same events as NDJSON on stdout — use that one for CI, coding-agent

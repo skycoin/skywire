@@ -108,14 +108,20 @@ Modes (mutually exclusive):
 	// Installed here rather than on one root so every command group gets it
 	// at its own level: `skywire tree` shows everything, `skywire cli tree`
 	// shows the CLI subtree.
-	if prev := findChild(root, "tree"); prev != nil {
+	// A command group with its own `tree` (visor ping tree) keeps it.
+	prev := findChild(root, "tree")
+	if prev != nil && prev.Annotations[helpTreeAnnotation] == "" {
+		return
+	}
+	if prev != nil {
 		root.RemoveCommand(prev)
 	}
 	root.AddCommand(&cobra.Command{
-		Use:    "tree",
-		Short:  "print the subcommand tree",
-		Hidden: true,
-		Args:   cobra.NoArgs,
+		Use:         "tree",
+		Annotations: map[string]string{helpTreeAnnotation: "1"},
+		Short:       "print the subcommand tree",
+		Hidden:      true,
+		Args:        cobra.NoArgs,
 		Run: func(cmd *cobra.Command, _ []string) {
 			// One value, two renderings: the ASCII tree is Node.Human, so the
 			// text and JSON forms cannot describe different trees.
@@ -283,3 +289,7 @@ func printCmdDoc(c *cobra.Command, depth int) {
 	fmt.Println("```")
 	fmt.Println()
 }
+
+// helpTreeAnnotation marks the `tree` command InstallHelp adds, so a repeat
+// call replaces it and a command's own `tree` is left alone.
+const helpTreeAnnotation = "skywire/help-tree"

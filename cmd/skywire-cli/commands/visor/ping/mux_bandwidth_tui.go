@@ -1,5 +1,5 @@
 // Package ping cmd/skywire-cli/commands/visor/ping/mux_bandwidth_tui.go c4-vis-cli
-// Bubble Tea TUI consumer of the StreamMuxBandwidth gRPC RPC.
+// Interactive TUI consumer of the StreamMuxBandwidth gRPC RPC.
 //
 // Operator-visible: `cli visor ping mux-bw-tui <pk>` runs the same
 // multiplexed-route bandwidth test as `mux-bw` but presents it as a
@@ -46,7 +46,7 @@ func init() {
 
 var muxBandwidthTUICmd = &cobra.Command{
 	Use:   "mux-bw-tui <pk>",
-	Short: "Interactive Bubble Tea TUI for the multiplexed-route bandwidth probe",
+	Short: "Interactive TUI for the multiplexed-route bandwidth probe",
 	Long: `Live dashboard for StreamMuxBandwidth — same RPC as
 'cli visor ping mux-bw', different rendering.
 
@@ -55,7 +55,7 @@ The screen shows:
   * Live stats line — instant + avg + peak throughput, bytes pumped, active routes
   * Throughput sparkline — last 60 sample-interval ticks
   * RTT sparkline (when --probe-rtt) — last 60 probes
-  * Events log — scrollable viewport
+  * Events log — scrollable
 
 For automation / harness consumption use the NDJSON sibling
 'cli visor ping mux-bw' instead.
