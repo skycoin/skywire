@@ -116,6 +116,9 @@
 			stdout: hooks.stdout || null,
 			stderr: hooks.stderr || null,
 			stdin: hooks.stdin || null,
+			// hooks.tty: a terminal of its own (cols, rows, onRaw), when the shell
+			// runs it on one, so a full-screen program gets keys, raw mode and size.
+			tty: hooks.tty || null,
 			// The ring is kept REGARDLESS of hooks: it is the only readable
 			// copy of a long-running instance's log.
 			tail: TAIL_BYTES,
@@ -126,7 +129,7 @@
 		// exactly as it would on SIGINT. Handed over SYNCHRONOUSLY, before the
 		// command starts, which is the contract skywirecmd_js.go relies on.
 		if (typeof hooks.instance === 'function') {
-			hooks.instance({ interrupt: p.kill });
+			hooks.instance({ interrupt: p.kill, stdin: p.stdin, resize: p.resize });
 		}
 		return p;
 	}

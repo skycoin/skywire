@@ -115,6 +115,9 @@ github.com/0magnet/pfilter
 # github.com/0magnet/plot-go v0.0.1
 ## explicit; go 1.25
 github.com/0magnet/plot-go
+# github.com/0magnet/progkit v0.0.0-20261010154136-92cdea7ae352
+## explicit; go 1.26.6
+github.com/0magnet/progkit
 # github.com/0magnet/realorigin v0.2.3
 ## explicit; go 1.26.0
 github.com/0magnet/realorigin
@@ -158,6 +161,7 @@ github.com/0magnet/webrtc/v4/pkg/media
 github.com/0magnet/webrtc/v4/pkg/rtcerr
 # github.com/0magnet/websh v0.0.1-0.20261010140514-f069471e6435
 ## explicit; go 1.26.6
+github.com/0magnet/websh/childtty
 github.com/0magnet/websh/progressive
 github.com/0magnet/websh/shell
 github.com/0magnet/websh/shell/browser
