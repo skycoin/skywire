@@ -46,6 +46,10 @@ func TestRouter(t *testing.T) {
 	rt.With(tag("with")).Get("/with", say("with"))
 	rt.Mount("/m", http.StripPrefix("/m", say("m")))
 	rt.Handle("/files/{rest...}", say("f"))
+	rt.Route("/", func(r *Router) {
+		r.Route("/deep", func(r *Router) { r.Get("/x", say("deep")) })
+	})
+	rt.Handle("/{rest...}", say("ui"))
 
 	cases := []struct{ method, path, body string }{
 		{"GET", "/a/", "a-slash"},
@@ -57,6 +61,7 @@ func TestRouter(t *testing.T) {
 		{"GET", "/m", "m"},
 		{"GET", "/m/x/y", "m"},
 		{"PUT", "/files/x/y", "fx/y"},
+		{"GET", "/deep/x", "deep"},
 	}
 	for _, c := range cases {
 		w := do(rt, c.method, c.path)
@@ -68,10 +73,17 @@ func TestRouter(t *testing.T) {
 	require.Equal(t, []string{"root"}, do(rt, "GET", "/api/v/1").Header().Values("X-Mw"))
 	require.Equal(t, []string{"root", "with"}, do(rt, "GET", "/with").Header().Values("X-Mw"))
 
-	w := do(rt, "GET", "/a/b")
-	require.Equal(t, http.StatusNotFound, w.Code, "a trailing slash matches only itself")
+	require.Equal(t, "uia/b", do(rt, "GET", "/a/b").Body.String(), "a trailing slash matches only itself")
+	w := do(rt, "GET", "/api/v/1/x")
+	require.Equal(t, http.StatusNotFound, w.Code)
 	require.Equal(t, "root", w.Header().Get("X-Mw"), "root middleware runs for unmatched paths")
 	require.Equal(t, http.StatusMethodNotAllowed, do(rt, "DELETE", "/api/v/1").Code)
+	require.Equal(t, http.StatusNotFound, do(rt, "GET", "/api/nope").Code, "Route owns its prefix")
+	require.Equal(t, http.StatusNotFound, do(rt, "GET", "/deep").Code, "a bare Route prefix is not redirected")
+	w = do(rt, "PUT", "/api/v/1")
+	require.Equal(t, http.StatusMethodNotAllowed, w.Code)
+	require.Equal(t, "GET, POST", w.Header().Get("Allow"))
+	require.Equal(t, "uiother/page", do(rt, "GET", "/other/page").Body.String())
 
 	r, pattern := TrackRoutePattern(httptest.NewRequest("POST", "/api/v/1", nil))
 	rt.ServeHTTP(httptest.NewRecorder(), r)

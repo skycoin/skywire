@@ -16,10 +16,8 @@
 // to the HTTP call it stands in for. There is exactly one implementation of the
 // API — this is a transport, not a parallel surface.
 //
-// It is deliberately mounted OUTSIDE the /api group: that group carries
-// middleware.Timeout, whose wrapped ResponseWriter is not an http.Hijacker (so
-// websocket.Accept fails) and whose 30s deadline would kill a long-lived
-// socket. /pty sits outside for the same reason and opts into auth explicitly;
+// It is deliberately mounted OUTSIDE the /api group: that group's 30s
+// Timeout would kill a long-lived socket. /pty sits outside for the same reason and opts into auth explicitly;
 // this follows it.
 //
 // Wire format is JSON text frames. `type` is carried from the first version so
@@ -42,14 +40,14 @@ package visor
 import (
 	"context"
 	"encoding/json"
-	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
 
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
+
 	"github.com/coder/websocket"
-	"github.com/go-chi/chi/v5"
 )
 
 const (
@@ -272,13 +270,6 @@ func (hv *Hypervisor) serveWSRequest(ctx context.Context, up *http.Request, req 
 	if req.Body != nil {
 		body = strings.NewReader(*req.Body)
 	}
-	// Drop the upgrade request's chi routing context before replaying. chi's
-	// Mux.ServeHTTP reuses an existing *chi.Context when it finds one — without
-	// resetting it — so a sub-request built from this handler's context inherits
-	// RoutePath "/ws" and every replayed path resolves straight back to this
-	// handler. Clearing the key makes chi's type assertion miss and allocate a
-	// fresh routing context, which is what a new request should get.
-	ctx = context.WithValue(ctx, chi.RouteCtxKey, nil)
 	sub, err := http.NewRequestWithContext(ctx, strings.ToUpper(req.Method), req.Path, body)
 	if err != nil {
 		res.Status, res.Body = http.StatusBadRequest, "bad request line"

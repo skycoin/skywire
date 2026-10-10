@@ -5,6 +5,6 @@
 // reaches the visor's mail over RPC if it needs it.
 package visor
 
-import "github.com/go-chi/chi/v5"
+import "github.com/skycoin/skywire/pkg/httputil"
 
-func (hv *Hypervisor) mailRoutes(chi.Router) {}
+func (hv *Hypervisor) mailRoutes(*httputil.Router) {}

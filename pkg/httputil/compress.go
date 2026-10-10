@@ -50,6 +50,8 @@ func compressible(ct string) bool {
 	}
 	ct = strings.TrimSpace(ct)
 	switch {
+	case ct == "text/event-stream":
+		return false // streamed event by event
 	case strings.HasPrefix(ct, "text/"),
 		ct == "application/json", ct == "application/javascript", ct == "application/x-javascript",
 		ct == "application/xml", ct == "image/svg+xml",

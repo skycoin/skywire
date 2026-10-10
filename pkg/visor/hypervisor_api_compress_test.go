@@ -1,7 +1,6 @@
 package visor
 
 import (
-	"compress/gzip"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,9 +14,9 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-// The hypervisor's /api surface must negotiate gzip. Everything on it
-// is JSON, and the node list re-fetches the whole thing every 10s.
-func TestHypervisorAPICompressesJSON(t *testing.T) {
+// The hypervisor's /api surface gzips JSON over httputil.CompressMinBytes,
+// which httputil tests. A reply smaller than that, like this one, stays plain.
+func TestHypervisorAPISmallJSONStaysPlain(t *testing.T) {
 	conf := visorconfig.MakeConfig(false)
 	conf.FillDefaults(false)
 	conf.DBPath = filepath.Join(t.TempDir(), "users_test.db")
@@ -40,12 +39,8 @@ func TestHypervisorAPICompressesJSON(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }() //nolint:errcheck
 
-	require.Equal(t, "gzip", resp.Header.Get("Content-Encoding"))
-	require.Contains(t, resp.Header.Get("Vary"), "Accept-Encoding")
-
-	zr, err := gzip.NewReader(resp.Body)
-	require.NoError(t, err)
-	body, err := io.ReadAll(zr)
+	require.Empty(t, resp.Header.Get("Content-Encoding"))
+	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.True(t, strings.Contains(string(body), `"exists"`), "body: %s", body)
 }

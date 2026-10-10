@@ -64,9 +64,6 @@ require (
 	github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
 	github.com/gen2brain/malgo v0.11.26
 	github.com/gizak/termui/v3 v3.1.0
-	github.com/go-chi/chi/v5 v5.3.2
-	github.com/go-chi/cors v1.2.2
-	github.com/go-chi/httprate v0.16.1
 	github.com/go-echarts/go-echarts/v2 v2.7.3
 	github.com/go-playground/validator/v10 v10.30.5
 	github.com/go-redis/redis v6.15.9+incompatible
@@ -274,7 +271,6 @@ require (
 	github.com/xo/terminfo v1.2.0 // indirect
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	github.com/zeebo/xxh3 v1.1.0 // indirect
 	github.com/zyedidia/micro v1.4.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0 // indirect

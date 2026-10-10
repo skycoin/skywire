@@ -4,7 +4,6 @@ package visor
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	wasmtinygo "github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo"
 	"github.com/stretchr/testify/require"
 
@@ -20,13 +18,12 @@ import (
 	"github.com/skycoin/skywire/pkg/wallet/coins"
 )
 
-// walletReq builds a request whose chi "*" URL param is set to rest, as the
-// /wallet/* route delivers it to walletHandler.
+// walletReq builds a request whose {rest} path value is rest, as the
+// /wallet/{rest...} route delivers it to walletHandler.
 func walletReq(rest string) *http.Request {
 	req := httptest.NewRequest(http.MethodGet, "/wallet/"+rest, nil)
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("*", rest)
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req.SetPathValue("rest", rest)
+	return req
 }
 
 // TestWalletHandlerRouting covers the multicoin routing decisions added to the
