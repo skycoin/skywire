@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	svcblock "github.com/skycoin/skywire/pkg/services"
 )
@@ -54,6 +55,9 @@ func TestDeploymentBlocks(t *testing.T) {
 	}
 	if len(svc.DmsgServers) != 1 || svc.DmsgServers[0].Server.Address != "203.0.113.7:18080" {
 		t.Errorf("dmsg servers %+v", svc.DmsgServers)
+	}
+	if svc.BrowseOriginSuffix == "" || svc.BrowseOriginSuffix != deployment.Prod.BrowseOriginSuffix {
+		t.Errorf("browse origin %q, want prod's %q", svc.BrowseOriginSuffix, deployment.Prod.BrowseOriginSuffix)
 	}
 	if len(svc.RouteSetupNodes) != 1 || len(svc.TransportSetupPKs) != 1 {
 		t.Errorf("setup nodes %v, transport setup %v", svc.RouteSetupNodes, svc.TransportSetupPKs)

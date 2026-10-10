@@ -261,6 +261,9 @@ func deploymentServices(pk cipher.PubKey, blocks []svcblock.Block) (visorconfig.
 	svc.DmsgDiscoveryDmsg = fmt.Sprintf("dmsg://%s:80", discPK.Hex())
 	svc.RouteSetupNodes = []cipher.PubKey{snPK}
 	svc.TransportSetupPKs = []cipher.PubKey{tpsPK}
+	// The browse origin serves any deployment's visors, so a private one keeps
+	// prod's.
+	svc.BrowseOriginSuffix = deployment.Prod.BrowseOriginSuffix
 	at := func(t string) (string, error) {
 		b, ok := find(t)
 		if !ok {
