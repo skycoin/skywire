@@ -51,6 +51,12 @@ var skywireExecJS []byte
 //go:embed exec-remote.js
 var execRemoteJS []byte
 
+// fsTreeJS provides globalThis.SkywireFSTree: a jsfs subtree lent across the
+// page/worker boundary, in both bundles since each side mounts the other's.
+//
+//go:embed fs-tree.js
+var fsTreeJS []byte
+
 // execWorkerJS is the worker half — the tail of ExecWorkerJS() below, not part
 // of the page bundle.
 //
@@ -117,6 +123,7 @@ var BrowseJS = func() []byte {
 		hvwsClientJS,
 		hvwsVNetJS,
 		bottle.ProcJS(),
+		fsTreeJS,
 		skywireExecJS,
 		// Directly after it: the shim that can REPLACE it with a worker-hosted
 		// one. Nothing else in the bundle cares which of the two is installed.
@@ -163,6 +170,7 @@ var ExecWorkerJS = func() []byte {
 		bottle.VNetJS(),
 		bottle.ProcJS(),
 		skywireExecJS,
+		fsTreeJS,
 		execWorkerJS,
 	})
 }()

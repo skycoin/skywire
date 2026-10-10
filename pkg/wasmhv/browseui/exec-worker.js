@@ -12,31 +12,30 @@
 // holds the IndexedDB snapshot, so the identity in /opt/skywire survives a
 // reload exactly as before, just from over here.
 //
-// The filesystems are therefore SEPARATE, and that is a real consequence, not
-// an oversight: `cat /opt/skywire/skywire.json` typed at the desk's shell reads
-// the page's tree, which the visor no longer writes to. Sharing one jsfs across
-// the boundary is what bottle's fsbridge.js does, and it needs SharedArrayBuffer
-// (Atomics.wait, forbidden on the main thread and required by a Go runtime's
-// synchronous syscalls) — which needs cross-origin isolation, which the desk
-// does not have and will not take on for this. Every skywire command runs HERE,
-// so the tree the binary reads and the tree it writes are always the same one;
-// only the shell's own builtins see a different one.
+// The two trees are SEPARATE. Sharing one jsfs across the boundary is what
+// bottle's fsbridge.js does, and it needs SharedArrayBuffer (Atomics.wait,
+// forbidden on the main thread and required by a Go runtime's synchronous
+// syscalls), which needs cross-origin isolation the desk does not have. What
+// each side owns is lent to the other instead (fs-tree.js): the page mounts
+// this thread's /opt/skywire and /mnt, and this thread mounts the page's /home,
+// where the desk shell keeps its files. A command starts in the shell's cwd.
 //
 // Protocol (page ⇄ worker), page first:
 //   → {t:'init', persistDB, wasmURL, wasmExecURL}   restore the FS, bind the module
 //   ← {t:'ready', restored}
-//   → {t:'spawn', id, args, env}                    run `skywire <args...>`
+//   → {t:'spawn', id, args, env, cwd}               run `skywire <args...>`
 //   ← {t:'out'|'err', id, b}                        stdout/stderr chunks
 //   ← {t:'exit', id, code} | {t:'fail', id, msg}
 //   → {t:'kill', id}                                the instance's own interrupt
 //   ← {t:'vlisten'|'vunlisten', port}               this thread's vnet claims
 //   → {t:'vopen', cid, port} ⇄ {t:'vdata', cid, b} ⇄ {t:'vclose', cid}
 //   ← {t:'log', level, line}                        console output
+//   ⇄ {t:'fs', id, op, args} ⇄ {t:'fsr', id, err, res}   a call on the other's tree
 (function () {
 	'use strict';
 	// Page-side load of the bundle is a no-op: everything below is worker-only.
 	if (typeof importScripts !== 'function' || typeof self === 'undefined' || typeof self.postMessage !== 'function') return;
-	if (!globalThis.jsfs || !globalThis.proc || !globalThis.vnet || !globalThis.skywireExec) return;
+	if (!globalThis.jsfs || !globalThis.proc || !globalThis.vnet || !globalThis.skywireExec || !globalThis.SkywireFSTree) return;
 
 	var v = globalThis.vnet;
 
@@ -179,6 +178,7 @@
 			},
 		};
 		if (m.env) hooks.env = m.env;
+		if (m.cwd) hooks.cwd = m.cwd;
 		if (m.tty) {
 			hooks.stdin = 'pipe';
 			hooks.tty = { cols: m.tty.cols, rows: m.tty.rows, onRaw: function (on) { post({ t: 'raw', id: id, on: !!on }); } };
@@ -208,6 +208,7 @@
 	}
 
 	function init(m) {
+		PAGE_TREES.forEach(tree.mount);
 		if (m.wasmURL) globalThis.skywireExec.wasmURL = m.wasmURL;
 		if (m.wasmExecURL) globalThis.skywireExec.wasmExecURL = m.wasmExecURL;
 		if (!m.persistDB) { post({ t: 'ready', restored: false }); return; }
@@ -311,45 +312,17 @@
 		}
 	}
 
-	// fsCall runs one call of the page's mount of this thread's tree
-	// (exec-remote.js, mountWorkerTree) on this thread's jsfs and answers it.
-	// read and write move bytes rather than a caller's buffer, and a stat
-	// result loses its is*() methods, which the page's jsfs puts back.
-	function fsCall(m) {
-		function reply(err, res) {
-			if (err) {
-				post({ t: 'fsr', id: m.id, err: { code: err.code || 'EIO', message: String(err.message || err) } });
-				return;
-			}
-			if (res instanceof Uint8Array) { post({ t: 'fsr', id: m.id, res: res }, [res.buffer]); return; }
-			if (res && typeof res === 'object' && !Array.isArray(res)) {
-				var plain = {};
-				for (var k in res) if (typeof res[k] !== 'function') plain[k] = res[k];
-				res = plain;
-			}
-			post({ t: 'fsr', id: m.id, res: res });
-		}
-		var fs = globalThis.fs, a = m.args || [];
-		try {
-			if (m.op === 'read') {
-				var buf = new Uint8Array(a[1]);
-				fs.read(a[0], buf, 0, a[1], a[2], function (err, n) { reply(err, err ? null : buf.slice(0, n)); });
-				return;
-			}
-			if (m.op === 'write') {
-				fs.write(a[0], a[1], 0, a[1].length, a[2], reply);
-				return;
-			}
-			if (typeof fs[m.op] !== 'function') { reply({ code: 'ENOSYS', message: m.op }); return; }
-			fs[m.op].apply(fs, a.concat([reply]));
-		} catch (e) { reply(e); }
-	}
+	// tree lends this thread's /opt/skywire and /mnt to the page and mounts
+	// the page's /home here, so a command sees the files the desk shell sees.
+	var PAGE_TREES = ['/home'];
+	var tree = globalThis.SkywireFSTree(post);
 
 	self.onmessage = function (ev) {
 		var m = ev.data || {};
 		switch (m.t) {
 		case 'init': init(m); return;
-		case 'fs': fsCall(m); return;
+		case 'fs': tree.call(m); return;
+		case 'fsr': tree.answer(m); return;
 		case 'spawn': spawn(m); return;
 		case 'stdin': {
 			var si = instances[m.id];

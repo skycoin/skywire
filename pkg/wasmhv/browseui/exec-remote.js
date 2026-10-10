@@ -114,58 +114,12 @@
 			try { w.postMessage(m, transfer || []); } catch (e) { /* worker gone */ }
 		}
 
-		// ---- the worker's tree on the page --------------------------------
-		// Every skywire command, the visor included, runs on the worker's
-		// jsfs, so the page's own tree went stale wherever the visor writes,
-		// and a `pty fs mount` landed where the desk shell could not see it.
-		// The page mounts those subtrees of the worker's tree over this
-		// channel: a jsfs provider may answer whenever it is ready, so no
-		// SharedArrayBuffer is needed.
+		// ---- shared trees ----------------------------------------------
+		// Every skywire command runs on the worker's jsfs, so the page mounts
+		// the subtrees the visor writes and the worker mounts the shell's
+		// (fs-tree.js).
 		var WORKER_TREES = ['/mnt', '/opt/skywire'];
-		var fsWait = {};
-		var fsSeq = 0;
-		function fsAsk(op, args, cb, transfer) {
-			var id = ++fsSeq;
-			fsWait[id] = cb;
-			post({ t: 'fs', id: id, op: op, args: args }, transfer);
-		}
-		function fsAnswer(m) {
-			var cb = fsWait[m.id];
-			if (!cb) return;
-			delete fsWait[m.id];
-			cb(m.err || null, m.res);
-		}
-		function workerTree(prefix) {
-			var abs = function (rel) { return rel === '/' ? prefix : prefix + rel; };
-			var p = {};
-			// Which arguments are paths inside the mount, per call.
-			var PATHS = {
-				stat: [0], lstat: [0], readdir: [0], mkdir: [0], rmdir: [0], unlink: [0],
-				truncate: [0], chmod: [0], chown: [0], lchown: [0], utimes: [0], readlink: [0],
-				open: [0], rename: [0, 1], link: [0, 1], symlink: [1],
-				close: [], fstat: [], ftruncate: [], fchmod: [], fchown: [], fsync: [],
-			};
-			Object.keys(PATHS).forEach(function (op) {
-				p[op] = function () {
-					var args = Array.prototype.slice.call(arguments);
-					var cb = args.pop();
-					PATHS[op].forEach(function (i) { args[i] = abs(args[i]); });
-					fsAsk(op, args, cb);
-				};
-			});
-			p.read = function (fd, length, position, cb) { fsAsk('read', [fd, length, position], cb); };
-			p.write = function (fd, bytes, position, cb) { fsAsk('write', [fd, bytes, position], cb, [bytes.buffer]); };
-			return p;
-		}
-		function mountWorkerTrees() {
-			var jsfs = globalThis.jsfs;
-			if (!jsfs || typeof jsfs.mount !== 'function') return;
-			WORKER_TREES.forEach(function (prefix) {
-				try { jsfs.mount(prefix, workerTree(prefix)); } catch (e) {
-					console.warn('[exec-worker] could not mount the worker\'s ' + prefix + ':', e && e.message);
-				}
-			});
-		}
+		var tree = globalThis.SkywireFSTree ? globalThis.SkywireFSTree(post) : null;
 
 		// sendable decides whether a chunk's buffer can be handed over rather
 		// than copied. Only when the view owns the whole buffer — a subarray
@@ -303,7 +257,7 @@
 				});
 			}
 			var tty = hooks.tty ? { cols: hooks.tty.cols, rows: hooks.tty.rows } : null;
-			post({ t: 'spawn', id: id, args: args.slice(), env: hooks.env || null, tty: tty });
+			post({ t: 'spawn', id: id, args: args.slice(), env: hooks.env || null, cwd: hooks.cwd || null, tty: tty });
 			return p;
 		}
 		remoteExec.wasmURL = globalThis.skywireExec.wasmURL;
@@ -438,7 +392,8 @@
 			case 'exit': finish(m.id, m.code, null); return;
 			case 'fail': finish(m.id, 1, m.msg || 'exec failed'); return;
 			case 'rtc': rtcHost(m); return;
-			case 'fsr': fsAnswer(m); return;
+			case 'fs': if (tree) tree.call(m); return;
+			case 'fsr': if (tree) tree.answer(m); return;
 			case 'vlisten': claim(m.port); return;
 			case 'vunlisten': release(m.port); return;
 			case 'vdata': {
@@ -494,7 +449,7 @@
 			remoteExec.wasmURL = abs(opts.wasmURL || globalThis.skywireExec.wasmURL);
 			remoteExec.wasmExecURL = abs(opts.wasmExecURL || globalThis.skywireExec.wasmExecURL);
 			globalThis.skywireExec = remoteExec;
-			mountWorkerTrees();
+			if (tree) WORKER_TREES.forEach(tree.mount);
 			// The registries under the names skywire's page code already uses.
 			// __skywireSignals is deliberately NOT re-aliased: the interrupt
 			// registry that matters is the worker's (that is where

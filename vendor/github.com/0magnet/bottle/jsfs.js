@@ -801,6 +801,9 @@
 		umask() { return 0o22; },
 		cwd() { return cwd; },
 		chdir(dir) {
+			// A mount answers later, so a directory inside one is taken on trust;
+			// the first call made there reports it if it is not one.
+			if (mountOf(dir)) { cwd = normalize(dir); return; }
 			const r = resolve(dir, true);
 			if (!r.node) throw mkerr('ENOENT', dir);
 			if (r.node.entries === null) throw mkerr('ENOTDIR', dir);

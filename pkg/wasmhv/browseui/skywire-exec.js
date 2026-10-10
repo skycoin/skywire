@@ -13,7 +13,7 @@
 //
 // globalThis.skywireExec(args, hooks) -> Promise<exitCode>
 //   args:  ["cli","config","gen","-rp"]   (argv[0] "skywire" is implied)
-//   hooks: { stdout(Uint8Array), stderr(Uint8Array), stdin(), env, instance }
+//   hooks: { stdout(Uint8Array), stderr(Uint8Array), stdin(), env, cwd, instance }
 //
 // Requires jsfs.js and proc.js installed (both are in the browse bundle) and
 // the module served at skywireExec.wasmURL (default /skywire.wasm; 404 = the
@@ -93,7 +93,7 @@
 		hooks = hooks || {};
 		var id = 'x' + (++execSeq);
 		var env = {
-			HOME: '/home/user', USER: 'user', PWD: globalThis.jsfs.getCwd(),
+			HOME: '/home/user', USER: 'user', PWD: hooks.cwd || globalThis.jsfs.getCwd(),
 			PATH: '/opt/skywire/bin:/usr/bin:/bin', TMPDIR: '/tmp', TERM: 'xterm-256color',
 			COLUMNS: '100', LINES: '30',
 		};
@@ -108,6 +108,8 @@
 		var p = globalThis.proc.spawn({
 			argv: ['skywire'].concat(args),
 			env: env,
+			// hooks.cwd: the calling shell's directory, which may be a mount.
+			cwd: hooks.cwd || undefined,
 			id: id,
 			// SKYWIRE_EXEC_ID is the name pkg/cmdutil/signal_js.go looks the id
 			// up under; BOTTLE_PID is proc's own, which bottle's vnet adapter
