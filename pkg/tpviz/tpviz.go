@@ -28,10 +28,9 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/tpviz/netview"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
-	"github.com/skycoin/skywire/pkg/wasmhv"
-	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
 
 // legacyFS (the embedded legacy JavaScript UI, `//go:embed legacy/*`) lives in
@@ -600,22 +599,10 @@ func (s *Server) setupRoutes() {
 		w.Write(content) //nolint:errcheck,gosec
 	})
 
-	// The Go/wasm WebGL view, loaded lazily by bundle.js when that view is
-	// selected from the toggle. It is a ROLE of the one skywire command module
-	// (`skywire desk-host --role netview`, pkg/wasmhv/deskhost), which the
-	// native binary embeds (pkg/wasmhv/execwasm) — no separate tpviz-gl.wasm.
-	// The URLs are kept so bundle.js needs no path change. The loader is Go's
-	// wasm_exec.js pinned to the netview role (argv + the env the root binary's
-	// inits expect, execwasm.LoaderJS); bundle.js sets the same argv before
-	// go.run. Where nothing is embedded (a source build, or this server running
-	// inside a tab's wasm hypervisor) execwasm.Serve redirects to the page
-	// origin's /skywire.wasm.
-	s.mux.HandleFunc("/tpviz-gl.wasm", execwasm.Serve)
-	s.mux.HandleFunc("/tpviz-gl-exec.js", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Write(execwasm.LoaderJS(wasmhv.WasmExecJS, "netview")) //nolint:errcheck,gosec
-	})
+	// The WebGL view, loaded lazily by bundle.js when it is selected. It is a
+	// module of its own (pkg/tpviz/netview), embedded in every build.
+	s.mux.HandleFunc("/tpviz-gl.wasm", netview.ServeWasm)
+	s.mux.HandleFunc("/tpviz-gl-exec.js", netview.ServeExecJS)
 
 	// Serve textures for globe visualization
 	s.mux.HandleFunc("/textures/", func(w http.ResponseWriter, r *http.Request) {

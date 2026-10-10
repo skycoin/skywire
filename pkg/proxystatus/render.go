@@ -262,13 +262,11 @@ var liveScript = `<script>(function(){var ws=null,pend=null,last=null,pv=null,` 
 	`document.body.classList.add("js");connect();})();</script>`
 
 // graphScript drives the GPU route-graph view. It reuses the network
-// visualizer's engine WITHOUT any new wasm: it loads the one skywire command
-// module in its "netview" role (go.argv = skywire desk-host --role netview,
-// exactly as pkg/tpviz/ui/src/cosmos-go-graph.ts does), which publishes the
-// generic cosmos-go graph API on globalThis.tpvizGL (pkg/tpviz/wasmgl.Register),
-// then drives tpvizGL.init/setData with the route subgraph the page emits in the
-// #rgdata JSON. /main.wasm and /wasm_exec.js are served same-origin by the
-// skysocks status handler (pkg/skysocks/client.go) out of pkg/wasmhv/execwasm.
+// visualizer's engine: it loads the netview module (pkg/tpviz/netview), which
+// publishes the cosmos-go graph API on globalThis.tpvizGL, then drives
+// tpvizGL.init/setData with the route subgraph the page emits in the #rgdata
+// JSON. /main.wasm and /wasm_exec.js are served same-origin by the
+// skysocks status handler (pkg/skysocks/client.go) out of pkg/tpviz/netview.
 //
 // Lazy: the module is fetched only the first time the graph view is opened,
 // so a user who stays on the tree pays nothing. Live: a MutationObserver on the
@@ -306,7 +304,7 @@ const graphScript = `<script>(function(){` +
 	`function ready(){var g=gl();if(g&&g.ready){booted=true;booting=false;if(!g.init("rgcanvas",onEvent)){setTimeout(function(){g.init("rgcanvas",onEvent);apply(true);observe();},80);}else{apply(true);observe();}return true;}return false;}` +
 	`function boot(){if(booted||booting){return;}booting=true;` +
 	`var s=document.createElement("script");s.src="/wasm_exec.js";s.onerror=function(){booting=false;fail();};` +
-	`s.onload=function(){var G=window.Go;if(!G){booting=false;fail();return;}var go=new G();go.argv=["skywire","desk-host","--role","netview"];` +
+	`s.onload=function(){var G=window.Go;if(!G){booting=false;fail();return;}var go=new G();` +
 	`WebAssembly.instantiateStreaming(fetch("/main.wasm"),go.importObject).then(function(res){go.run(res.instance);` +
 	`var tries=0;(function wait(){if(ready()){return;}if(++tries>150){booting=false;fail();return;}setTimeout(wait,20);})();` +
 	`}).catch(function(){booting=false;fail();});};document.head.appendChild(s);}` +
