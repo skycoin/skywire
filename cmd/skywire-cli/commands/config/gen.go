@@ -886,7 +886,6 @@ func fetchServiceConfig(log *logging.Logger) {
 			services.TransportDiscoveryDmsg = embedded.TransportDiscoveryDmsg
 			services.AddressResolverDmsg = embedded.AddressResolverDmsg
 			services.RouteFinderDmsg = embedded.RouteFinderDmsg
-			services.UptimeTrackerDmsg = embedded.UptimeTrackerDmsg
 			services.ServiceDiscoveryDmsg = embedded.ServiceDiscoveryDmsg
 		}
 	} else {
@@ -1498,9 +1497,6 @@ func configureLauncher(log *logging.Logger) {
 		BinPath:       skyenv.AppBinPath,
 		DisplayNodeIP: isDisplayNodeIP,
 	}
-	// The standalone uptime-tracker is deprecated (uptime is now tracked by the
-	// discovery services). Generated configs no longer carry an `uptime_tracker`
-	// block — conf.UptimeTracker stays nil and initUptimeTracker skips it.
 	if cliAddr != "" {
 		conf.CLIAddr = offsetAddr(cliAddr)
 	} else {

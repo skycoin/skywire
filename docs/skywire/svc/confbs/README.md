@@ -45,8 +45,7 @@ GET / - visorconfig.Services
       "transport_discovery": "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80",
       "transport_setup": [
         "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
-      ],
-      "uptime_tracker": "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80"
+      ]
     }
 ```
 
@@ -75,7 +74,7 @@ skywire svc confbs
       --keyfile string            path to file containing secret key (auto-generated if missing)
                                   
       --mode string               listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)
-      --pprof string              address to bind pprof debug server (e.g. localhost:6060)
+      --pprofaddr string          address to bind pprof debug server (e.g. localhost:6060)
       --sk cipher.SecKey          dmsg secret key
                                    (default 0000000000000000000000000000000000000000000000000000000000000000)
       --tag string                logging tag

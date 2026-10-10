@@ -54,7 +54,6 @@ type Keyring struct {
 	AddressResolver    *KeyPair `json:"address_resolver,omitempty"`
 	RouteFinder        *KeyPair `json:"route_finder,omitempty"`
 	ServiceDiscovery   *KeyPair `json:"service_discovery,omitempty"`
-	UptimeTracker      *KeyPair `json:"uptime_tracker,omitempty"`
 	SetupNode          *KeyPair `json:"setup_node,omitempty"`
 	ConfService        *KeyPair `json:"conf_service,omitempty"`
 	NetworkMonitor     *KeyPair `json:"network_monitor,omitempty"`
@@ -132,7 +131,6 @@ func (kr *Keyring) ExportKeyfiles(dir string) error {
 		"address_resolver":    kr.AddressResolver,
 		"route_finder":        kr.RouteFinder,
 		"service_discovery":   kr.ServiceDiscovery,
-		"uptime_tracker":      kr.UptimeTracker,
 		"setup_node":          kr.SetupNode,
 		"conf_service":        kr.ConfService,
 		"network_monitor":     kr.NetworkMonitor,
@@ -199,7 +197,6 @@ func (kr *Keyring) PublicKeys() map[string]string {
 	addPK("address_resolver", kr.AddressResolver)
 	addPK("route_finder", kr.RouteFinder)
 	addPK("service_discovery", kr.ServiceDiscovery)
-	addPK("uptime_tracker", kr.UptimeTracker)
 	addPK("setup_node", kr.SetupNode)
 	addPK("conf_service", kr.ConfService)
 	addPK("network_monitor", kr.NetworkMonitor)

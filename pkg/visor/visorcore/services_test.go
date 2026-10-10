@@ -42,7 +42,6 @@ func TestResolveServicesNilMatchesDeployment(t *testing.T) {
 		{"AddressResolverDmsg", s.AddressResolverDmsg, d.AddressResolverDmsg},
 		{"ServiceDiscoveryDmsg", s.ServiceDiscoveryDmsg, d.ServiceDiscoveryDmsg},
 		{"ConfDmsg", s.ConfDmsg, d.ConfDmsg},
-		{"UptimeTrackerDmsg", s.UptimeTrackerDmsg, d.UptimeTrackerDmsg},
 		{"RewardSystemDmsg", s.RewardSystemDmsg, d.RewardSystemDmsg},
 	} {
 		if c.got != c.want {

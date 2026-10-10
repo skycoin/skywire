@@ -72,9 +72,6 @@ type ServiceConfig struct {
 	// (e.g., dmsg-server config.json, setup-node config.json).
 	ConfigFile string `json:"config_file,omitempty"`
 
-	// PostgresHost is the PostgreSQL host (for UT).
-	PostgresHost string `json:"pg_host,omitempty"`
-
 	// GodebugEnv is the GODEBUG environment variable value.
 	GodebugEnv string `json:"godebug,omitempty"`
 }
@@ -106,7 +103,6 @@ type DeployEnvConfig struct {
 		AddressResolver    *ServiceConfig `json:"address_resolver,omitempty"`
 		RouteFinder        *ServiceConfig `json:"route_finder,omitempty"`
 		ServiceDiscovery   *ServiceConfig `json:"service_discovery,omitempty"`
-		UptimeTracker      *ServiceConfig `json:"uptime_tracker,omitempty"`
 		SetupNode          *ServiceConfig `json:"setup_node,omitempty"`
 		NetworkMonitor     *ServiceConfig `json:"network_monitor,omitempty"`
 		ConfService        *ServiceConfig `json:"conf_service,omitempty"`
@@ -123,12 +119,6 @@ type DeployEnvConfig struct {
 		URL      string `json:"url,omitempty"`
 		Password string `json:"password,omitempty"`
 	} `json:"redis,omitempty"`
-
-	Postgres struct {
-		Host     string `json:"host,omitempty"`
-		User     string `json:"user,omitempty"`
-		Database string `json:"database,omitempty"`
-	} `json:"postgres,omitempty"`
 }
 
 // DeployConfig is the top-level config with prod/test environments.
@@ -148,7 +138,6 @@ func DefaultDeployConfig() *DeployConfig {
 				AddressResolver    *ServiceConfig `json:"address_resolver,omitempty"`
 				RouteFinder        *ServiceConfig `json:"route_finder,omitempty"`
 				ServiceDiscovery   *ServiceConfig `json:"service_discovery,omitempty"`
-				UptimeTracker      *ServiceConfig `json:"uptime_tracker,omitempty"`
 				SetupNode          *ServiceConfig `json:"setup_node,omitempty"`
 				NetworkMonitor     *ServiceConfig `json:"network_monitor,omitempty"`
 				ConfService        *ServiceConfig `json:"conf_service,omitempty"`
@@ -196,14 +185,6 @@ func DefaultDeployConfig() *DeployConfig {
 					EntryTimeout: "2m",
 					GodebugEnv:   "madvdontneed=1",
 				},
-				UptimeTracker: &ServiceConfig{
-					Addr:         ":9095",
-					Keyfile:      "/etc/skywire/keys/ut.key",
-					Redis:        "redis://redis:6379",
-					PprofAddr:    ":6095",
-					PostgresHost: "postgres",
-					GodebugEnv:   "madvdontneed=1",
-				},
 				SetupNode: &ServiceConfig{
 					ConfigFile: "/etc/skywire/setup-node/config.json",
 					PprofAddr:  ":6070",
@@ -230,14 +211,6 @@ func DefaultDeployConfig() *DeployConfig {
 				Password string `json:"password,omitempty"`
 			}{
 				URL: "redis://redis:6379",
-			},
-			Postgres: struct {
-				Host     string `json:"host,omitempty"`
-				User     string `json:"user,omitempty"`
-				Database string `json:"database,omitempty"`
-			}{
-				Host: "postgres",
-				User: "postgres",
 			},
 		}
 	}

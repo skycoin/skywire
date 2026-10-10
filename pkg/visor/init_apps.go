@@ -605,10 +605,6 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 			envCfg.RF = conf.Routing.RouteFinder
 		}
 
-		if conf.UptimeTracker != nil {
-			envCfg.UptimeTracker = conf.UptimeTracker.Addr
-		}
-
 		if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {
 			envCfg.STCPTable = conf.STCP.PKTable
 		}

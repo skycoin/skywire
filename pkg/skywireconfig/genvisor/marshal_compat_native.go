@@ -335,11 +335,6 @@ func marshalV1Native(w *strings.Builder, v *visorconfig.V1, indent int) {
 		marshalRoutingNative(w, v.Routing, o.indent+1)
 	}
 
-	if v.UptimeTracker != nil {
-		o.field("uptime_tracker")
-		marshalUptimeTrackerNative(w, v.UptimeTracker, o.indent+1)
-	}
-
 	// launcher (no omitempty)
 	o.field("launcher")
 	if v.Launcher == nil {
@@ -1123,17 +1118,6 @@ func marshalRoutingNative(w *strings.Builder, r *visorconfig.Routing, indent int
 	if len(r.TransportPreference) > 0 {
 		o.field("transport_preference")
 		writeStringSliceNative(w, r.TransportPreference, o.indent+1)
-	}
-	o.close()
-}
-
-func marshalUptimeTrackerNative(w *strings.Builder, u *visorconfig.UptimeTracker, indent int) {
-	o := newObjNative(w, indent)
-	o.field("addr")
-	writeQuotedNative(w, u.Addr)
-	if u.AddrDmsg != "" {
-		o.field("addr_dmsg")
-		writeQuotedNative(w, u.AddrDmsg)
 	}
 	o.close()
 }

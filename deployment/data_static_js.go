@@ -97,7 +97,6 @@ var prodData = Services{
 	TransportDiscoveryDmsg: "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80",
 	AddressResolverDmsg:    "dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80",
 	RouteFinderDmsg:        "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80",
-	UptimeTrackerDmsg:      "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80",
 	ServiceDiscoveryDmsg:   "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80",
 	RewardSystemDmsg:       "dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f:80",
 }
@@ -179,7 +178,6 @@ var testData = Services{
 	TransportDiscoveryDmsg: "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80",
 	AddressResolverDmsg:    "dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80",
 	RouteFinderDmsg:        "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80",
-	UptimeTrackerDmsg:      "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80",
 	ServiceDiscoveryDmsg:   "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80",
 	RewardSystemDmsg:       "dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f:80",
 }

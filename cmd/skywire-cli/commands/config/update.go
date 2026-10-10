@@ -210,16 +210,6 @@ func applyServiceEndpoints(conf *visorconfig.V1) {
 	if len(services.StunServers) > 0 {
 		conf.StunServers = services.StunServers
 	}
-	// The standalone uptime tracker is deprecated and fresh configs no longer
-	// carry the block (see configureLauncher in gen.go) — only refresh it for a
-	// config that already has one.
-	if conf.UptimeTracker != nil {
-		addr := services.UptimeTrackerDmsg
-		if addr == "" {
-			addr = services.UptimeTracker
-		}
-		setIfNotEmpty(&conf.UptimeTracker.Addr, addr)
-	}
 }
 
 // setIfNotEmpty assigns v to *dst unless v is empty.

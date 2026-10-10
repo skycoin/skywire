@@ -31,7 +31,6 @@ func DmsgServicePKs(svc Services) cipher.PubKeys {
 		svc.RouteFinderDmsg,
 		svc.ServiceDiscoveryDmsg,
 		svc.ConfDmsg,
-		svc.UptimeTrackerDmsg,
 		svc.RewardSystemDmsg,
 	}
 	var pks cipher.PubKeys

@@ -37,7 +37,7 @@ type API struct {
 
 	mu            sync.RWMutex
 	startedAt     time.Time
-	utData        map[string]bool
+	onlineVisors  map[string]bool
 	liveEntries   map[string]int
 	deadEntries   map[string][]string
 	pendingDeaths map[string]map[string]bool
@@ -57,7 +57,6 @@ type ServicesURLs struct {
 	DMSGD string
 	SD    string
 	AR    string
-	UT    string
 }
 
 const (
@@ -222,7 +221,7 @@ func (api *API) updateNetworkStatus() error {
 	for _, service := range api.deadEntries {
 		status.LastCleaning.AllDeadEntriesCleaned += len(service)
 	}
-	status.OnlineVisors = len(api.utData)
+	status.OnlineVisors = len(api.onlineVisors)
 	return api.store.SetNetworkStatus(status)
 }
 
@@ -247,8 +246,8 @@ func (api *API) cleanNetwork(ctx context.Context) error {
 	api.mu.Lock()
 
 	// fetch uptime tracker in each itterate
-	if err := api.fetchUTData(ctx); err != nil {
-		api.logger.WithError(err).Warn("unable to fetch UT data")
+	if err := api.fetchOnlineVisors(ctx); err != nil {
+		api.logger.WithError(err).Warn("unable to fetch visor uptimes from TPD")
 		return err
 	}
 	// cleaning main services
@@ -436,7 +435,7 @@ func (api *API) checkingEntries(ctx context.Context, data []string, service, sTy
 	default:
 		newPendingDeaths := make(map[string]bool)
 		for _, entry := range data {
-			_, online := api.utData[entry]
+			_, online := api.onlineVisors[entry]
 			if !online {
 				if _, ok := api.pendingDeaths[target][entry]; ok {
 					api.deadEntries[target] = append(api.deadEntries[target], entry)
@@ -497,11 +496,11 @@ func (api *API) tpdCleaning(ctx context.Context) error {
 			return err
 		}
 		newPendingDeaths := make(map[string]bool)
-		// check entries in tpd that are available in UT or not, based on both edges
+		// check entries in tpd that are online or not, based on both edges
 		for _, tp := range tpdData {
 			// check edge[0]
-			_, online1 := api.utData[tp.Edges[0].Hex()]
-			_, online2 := api.utData[tp.Edges[1].Hex()]
+			_, online1 := api.onlineVisors[tp.Edges[0].Hex()]
+			_, online2 := api.onlineVisors[tp.Edges[1].Hex()]
 			if !online1 || !online2 {
 				if _, ok := api.pendingDeaths["tpd"][tp.ID.String()]; ok {
 					api.deadEntries["tpd"] = append(api.deadEntries["tpd"], tp.ID.String())
@@ -597,13 +596,13 @@ type visorTransports struct {
 	Stcpr []string `json:"stcpr"`
 }
 
-func (api *API) fetchUTData(ctx context.Context) error {
+func (api *API) fetchOnlineVisors(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return context.DeadlineExceeded
 	default:
 		response := make(map[string]bool)
-		res, err := api.httpClient.Get(fmt.Sprintf("%s/uptimes?status=on", api.servicesURLs.UT))
+		res, err := api.httpClient.Get(api.servicesURLs.TPD + "/uptimes")
 		if err != nil {
 			return err
 		}
@@ -623,18 +622,21 @@ func (api *API) fetchUTData(ctx context.Context) error {
 		}
 
 		for _, visor := range data {
-			response[visor.Key] = visor.Online
+			if visor.Online {
+				response[visor.PK] = true
+			}
 		}
 		if len(response) == 0 {
-			return fmt.Errorf("empty ut data fetched")
+			return fmt.Errorf("no online visors in TPD uptimes")
 		}
 
-		api.utData = response
+		api.onlineVisors = response
 		return nil
 	}
 }
 
+// uptimes is one visor of TPD's /uptimes.
 type uptimes struct {
-	Key    string `json:"key"`
-	Online bool   `json:"online"`
+	PK     string `json:"pk"`
+	Online bool   `json:"on"`
 }

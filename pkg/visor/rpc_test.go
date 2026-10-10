@@ -46,7 +46,7 @@ func TestHealth(t *testing.T) {
 		v.isServicesHealthy.init()
 
 		rpc := &RPC{visor: v, log: logrus.New()}
-		// mock initUptimeTracker
+		// mock initUptimeHeartbeat
 		v.isServicesHealthy.set()
 		h := &visorapi.HealthInfo{}
 		err := rpc.Health(nil, h)

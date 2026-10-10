@@ -1088,9 +1088,7 @@ type VisorCatResponse struct {
 // a new feed means adding a case to the visor's FetchCXO switch and
 // a row to the mapping table — nothing in between needs to know.
 type FetchCXOArgs struct {
-	// Feed is one of: "tpd-metrics", "tpd-uptime". (UT's standalone
-	// uptime tracker is intentionally absent — that service is being
-	// deprecated, so there's no point publishing it over CXO.)
+	// Feed is one of: "tpd-metrics", "tpd-uptime".
 	Feed string `json:"feed"`
 	// Path is the TreeStore path inside the feed, e.g.
 	// "metrics/days/7" or "uptimes/days/30".

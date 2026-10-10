@@ -252,7 +252,6 @@ func (a *API) dmsghttpConfGen() httputil.DMSGHTTPConf {
 	dmsghttpConf.RouteFinder = a.services.RouteFinderDmsg
 	dmsghttpConf.ServiceDiscovery = a.services.ServiceDiscoveryDmsg
 	dmsghttpConf.TranspordDiscovery = a.services.TransportDiscoveryDmsg
-	dmsghttpConf.UptimeTracker = a.services.UptimeTrackerDmsg
 	return dmsghttpConf
 }
 

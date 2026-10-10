@@ -58,7 +58,6 @@ type Endpoint struct {
 //	"ar"     — address-resolver
 //	"rf"     — route-finder
 //	"sd"     — service-discovery
-//	"ut"     — uptime-tracker
 //	"reward" — reward system
 //
 // Only PUBLIC, browser-reachable GET endpoints (and a couple of notable POSTs)
@@ -130,22 +129,6 @@ var Manifest = map[string][]Endpoint{
 		{Method: "GET", Path: "/uptimes", Desc: "visor uptime summaries", Query: []Param{
 			{Name: "v", Desc: "response version: v2 or v3", Example: "v3"},
 			{Name: "visors", Desc: "filter to a ;-separated PK list", Example: "pk1;pk2"},
-		}},
-	},
-	// uptime-tracker — pkg/deployment/ut/api/api.go
-	"ut": {
-		{Method: "GET", Path: "/health", Desc: "service health + build info"},
-		{Method: "GET", Path: "/visors", Desc: "all tracked visors"},
-		{Method: "GET", Path: "/uptimes", Desc: "uptime summaries", Query: []Param{
-			{Name: "visors", Desc: "filter to a ,-separated PK list", Example: "pk1,pk2"},
-			{Name: "v", Desc: "response version: v2 (daily history)", Example: "v2"},
-			{Name: "status", Desc: "filter by online state: on or off", Example: "on"},
-			{Name: "startDate", Desc: "period start (unix seconds)", Example: ""},
-			{Name: "endDate", Desc: "period end (unix seconds)", Example: ""},
-		}},
-		{Method: "GET", Path: "/uptime/{pk}", Desc: "uptime for a single visor"},
-		{Method: "GET", Path: "/dashboard", Desc: "uptime dashboard chart", Query: []Param{
-			{Name: "length", Desc: "number of months to chart", Example: "6"},
 		}},
 	},
 	// reward system — cmd/skywire-cli/commands/rewards/server

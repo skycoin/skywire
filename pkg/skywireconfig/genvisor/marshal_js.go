@@ -317,11 +317,6 @@ func marshalV1(w *strings.Builder, v *visorconfig.V1, indent int) {
 		marshalRouting(w, v.Routing, o.indent+1)
 	}
 
-	if v.UptimeTracker != nil {
-		o.field("uptime_tracker")
-		marshalUptimeTracker(w, v.UptimeTracker, o.indent+1)
-	}
-
 	// launcher (no omitempty)
 	o.field("launcher")
 	if v.Launcher == nil {
@@ -1108,17 +1103,6 @@ func marshalRouting(w *strings.Builder, r *visorconfig.Routing, indent int) {
 	if len(r.TransportPreference) > 0 {
 		o.field("transport_preference")
 		writeStringSlice(w, r.TransportPreference, o.indent+1)
-	}
-	o.close()
-}
-
-func marshalUptimeTracker(w *strings.Builder, u *visorconfig.UptimeTracker, indent int) {
-	o := newObj(w, indent)
-	o.field("addr")
-	writeQuoted(w, u.Addr)
-	if u.AddrDmsg != "" {
-		o.field("addr_dmsg")
-		writeQuoted(w, u.AddrDmsg)
 	}
 	o.close()
 }

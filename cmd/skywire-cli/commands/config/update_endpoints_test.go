@@ -123,7 +123,4 @@ func TestApplyServiceEndpointsPreservesUnrelatedState(t *testing.T) {
 	require.Equal(t, uint16(3), conf.Routing.MinHops)
 	require.Equal(t, "/opt/skywire/apps", conf.Launcher.BinPath)
 	require.Same(t, launcher, conf.Launcher, "launcher struct must be mutated in place, not replaced")
-
-	// No uptime_tracker block is invented for a config that lacks one.
-	require.Nil(t, conf.UptimeTracker)
 }

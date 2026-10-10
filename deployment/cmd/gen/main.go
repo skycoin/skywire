@@ -51,7 +51,6 @@ type services struct {
 	RouteFinder        string   `json:"route_finder,omitempty"`
 	RouteSetupNodes    []string `json:"route_setup_nodes,omitempty"`
 	TransportSetupPKs  []string `json:"transport_setup,omitempty"`
-	UptimeTracker      string   `json:"uptime_tracker,omitempty"`
 	ServiceDiscovery   string   `json:"service_discovery,omitempty"`
 	StunServers        []string `json:"stun_servers,omitempty"`
 	DNSServer          string   `json:"dns_server,omitempty"`
@@ -70,7 +69,6 @@ type services struct {
 	TransportDiscoveryDmsg string `json:"transport_discovery_dmsg,omitempty"`
 	AddressResolverDmsg    string `json:"address_resolver_dmsg,omitempty"`
 	RouteFinderDmsg        string `json:"route_finder_dmsg,omitempty"`
-	UptimeTrackerDmsg      string `json:"uptime_tracker_dmsg,omitempty"`
 	ServiceDiscoveryDmsg   string `json:"service_discovery_dmsg,omitempty"`
 	RewardSystem           string `json:"reward_system,omitempty"`
 	RewardSystemDmsg       string `json:"reward_system_dmsg,omitempty"`
@@ -171,7 +169,6 @@ func emitServices(buf *bytes.Buffer, s services) {
 	emitStringField(buf, "RouteFinder", s.RouteFinder)
 	emitPubKeyList(buf, "RouteSetupNodes", s.RouteSetupNodes)
 	emitPubKeyList(buf, "TransportSetupPKs", s.TransportSetupPKs)
-	emitStringField(buf, "UptimeTracker", s.UptimeTracker)
 	emitStringField(buf, "ServiceDiscovery", s.ServiceDiscovery)
 	emitStringList(buf, "StunServers", s.StunServers)
 	emitStringField(buf, "DNSServer", s.DNSServer)
@@ -185,7 +182,6 @@ func emitServices(buf *bytes.Buffer, s services) {
 	emitStringField(buf, "TransportDiscoveryDmsg", s.TransportDiscoveryDmsg)
 	emitStringField(buf, "AddressResolverDmsg", s.AddressResolverDmsg)
 	emitStringField(buf, "RouteFinderDmsg", s.RouteFinderDmsg)
-	emitStringField(buf, "UptimeTrackerDmsg", s.UptimeTrackerDmsg)
 	emitStringField(buf, "ServiceDiscoveryDmsg", s.ServiceDiscoveryDmsg)
 	emitStringField(buf, "RewardSystem", s.RewardSystem)
 	emitStringField(buf, "RewardSystemDmsg", s.RewardSystemDmsg)
