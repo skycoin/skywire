@@ -1,8 +1,10 @@
 package api
 
 import (
+	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -87,9 +89,12 @@ type SudphSessionsReport struct {
 	KCPPassiveOpens  uint64 `json:"kcp_passive_opens"`
 	KCPActiveOpens   uint64 `json:"kcp_active_opens"`
 	SudphConnsBound  int    `json:"sudph_conns_bound"`
+	// ClosedAddrs lists, on ?closed=N, up to N closed sessions still in
+	// memory by address, to look up in a heap dump.
+	ClosedAddrs []string `json:"closed_addrs,omitempty"`
 }
 
-func (a *API) sudphSessionsReport() SudphSessionsReport {
+func (a *API) sudphSessionsReport(listClosed int) SudphSessionsReport {
 	ss := &a.sudphSessions
 	r := SudphSessionsReport{Accepted: ss.accepted.Load(), Closed: ss.closed.Load()}
 	n, inMap, _ := listenerSessions(ss.lis.Load())
@@ -100,8 +105,12 @@ func (a *API) sudphSessionsReport() SudphSessionsReport {
 		r.InMemory++
 		if m.closed.Load() {
 			r.InMemoryClosed++
-			if s := wp.Value(); s != nil && inMap[uintptr(unsafe.Pointer(s))] { //nolint:gosec
+			s := wp.Value()
+			if s != nil && inMap[uintptr(unsafe.Pointer(s))] { //nolint:gosec
 				r.ClosedInListener++
+			}
+			if s != nil && len(r.ClosedAddrs) < listClosed {
+				r.ClosedAddrs = append(r.ClosedAddrs, fmt.Sprintf("%p", s))
 			}
 		}
 		if m.wrapper.Value() != nil {
@@ -118,5 +127,6 @@ func (a *API) sudphSessionsReport() SudphSessionsReport {
 }
 
 func (a *API) sudphSessionsHandler(w http.ResponseWriter, r *http.Request) {
-	a.writeJSON(w, r, http.StatusOK, a.sudphSessionsReport())
+	n, _ := strconv.Atoi(r.URL.Query().Get("closed")) //nolint:errcheck
+	a.writeJSON(w, r, http.StatusOK, a.sudphSessionsReport(n))
 }
