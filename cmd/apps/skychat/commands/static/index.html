@@ -3290,6 +3290,51 @@
       overflow-y: auto;
     }
 
+    /* Search: while #sidebar has .searching, the field and its results stand
+       in for the tabs and the conversation list. */
+    .search-bar,
+    .search-results {
+      display: none;
+    }
+    .sidebar.searching .side-tabs,
+    .sidebar.searching .sidebar-scroll {
+      display: none;
+    }
+    .sidebar.searching .search-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 12px 6px;
+    }
+    .sidebar.searching .search-results {
+      display: block;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+    }
+    .search-bar .cg-input {
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+    }
+    .search-hint {
+      padding: 18px 20px;
+      font-size: 14px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+    .search-snippet mark {
+      background: var(--prictr);
+      color: var(--priTx);
+      border-radius: 3px;
+    }
+    .search-when {
+      align-self: flex-start;
+      flex-shrink: 0;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
     /* Tab filtering. A section declares which tab it belongs to and the
        active tab hides the rest; data-scope="any" is always shown. Done
        in CSS rather than by re-rendering so switching tabs cannot lose a
@@ -3599,6 +3644,8 @@
              is the group's now; it right-aligns the cluster on whichever
              line it lands on. -->
         <div class="title-actions">
+          <button class="icon-btn" onclick="app.openSearch()" title="Search"
+                  aria-label="Search contacts, groups, channels and messages"><svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg></button>
           <button class="icon-btn" onclick="app.showMyQr()"
                   title="Your address" aria-label="Your address as a QR code">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true">
@@ -3662,6 +3709,15 @@
         <span class="me-go"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5"/></svg></span>
       </button>
     </div>
+
+    <!-- Search, shown in place of the tabs and the list (see openSearch). -->
+    <div class="search-bar">
+      <input id="searchField" class="cg-input" type="search" autocomplete="off"
+             placeholder="Search" aria-label="Search contacts, groups, channels and messages"
+             oninput="app.onSearchInput()" onkeydown="if (event.key === 'Escape') app.closeSearch()" />
+      <button class="icon-btn" onclick="app.closeSearch()" title="Close search" aria-label="Close search"><svg class="ic" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div id="searchResults" class="search-results"></div>
 
     <!-- Four views over the same sections. "All" is the default and the
          only one that shows everything; the rest narrow it. -->
@@ -11649,6 +11705,186 @@
         if (!pk) return false;
         this.selectRecipient(pk);
         return true;
+      }
+
+      // ---- Search ------------------------------------------------------
+      //
+      // Contacts, groups and channels match by name or key from what the
+      // page holds. Messages come from /search, which reads the whole stored
+      // history, merged with this page's own cache (Saved Messages, and any
+      // chat when the visor keeps no history).
+
+      openSearch() {
+        const side = document.getElementById('sidebar');
+        const field = document.getElementById('searchField');
+        if (!side || !field) return;
+        side.classList.add('searching');
+        field.value = '';
+        field.focus();
+        this._renderSearch('', [], false);
+      }
+
+      closeSearch() {
+        const side = document.getElementById('sidebar');
+        if (side) side.classList.remove('searching');
+        clearTimeout(this._searchTimer);
+        this._searchSeq = (this._searchSeq || 0) + 1; // an answer still in flight is dropped
+      }
+
+      onSearchInput() {
+        clearTimeout(this._searchTimer);
+        this._searchTimer = setTimeout(() => this._runSearch(), 250);
+      }
+
+      _runSearch() {
+        const field = document.getElementById('searchField');
+        const q = field ? field.value.trim() : '';
+        const seq = (this._searchSeq = (this._searchSeq || 0) + 1);
+        const local = this._searchCachedMessages(q);
+        this._renderSearch(q, local, !!q);
+        if (!q) return;
+        fetch('/search?q=' + encodeURIComponent(q))
+          .then(res => (res.ok ? res.json() : []))
+          .catch(() => [])
+          .then(hits => {
+            if (seq !== this._searchSeq) return;
+            const stored = (hits || []).map(h => ({
+              key: h.group_id || h.peer,
+              isGroup: !!h.group_id,
+              from: h.outgoing ? 'me' : (h.from || h.peer),
+              text: h.text || '',
+              ts: new Date(h.ts),
+            }));
+            this._renderSearch(q, this._mergeSearchHits(stored, local), false);
+          });
+      }
+
+      _searchCachedMessages(q) {
+        const needle = q.toLowerCase();
+        if (!needle) return [];
+        const groupIds = new Set((this.groups || []).map(g => g.id));
+        const hits = [];
+        Object.keys(this.messages || {}).forEach(key => {
+          (this.messages[key] || []).forEach(m => {
+            if (!m || m.date || typeof m.text !== 'string') return;
+            if (!m.text.toLowerCase().includes(needle)) return;
+            hits.push({ key, isGroup: groupIds.has(key), from: m.from, text: m.text, ts: new Date(m.ts) });
+          });
+        });
+        return this._mergeSearchHits(hits, []);
+      }
+
+      // One row per message (thread + time), newest first, at most 100.
+      _mergeSearchHits(a, b) {
+        const seen = new Set();
+        return a.concat(b)
+          .filter(h => {
+            const id = h.key + '|' + h.ts.getTime();
+            if (seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          })
+          .sort((x, y) => (y.ts.getTime() || 0) - (x.ts.getTime() || 0))
+          .slice(0, 100);
+      }
+
+      _renderSearch(q, messages, pending) {
+        const box = document.getElementById('searchResults');
+        if (!box) return;
+        this._searchHits = messages;
+        const needle = q.toLowerCase();
+        if (!needle) {
+          box.innerHTML = '<p class="search-hint">Search contacts, groups, channels and messages.</p>';
+          return;
+        }
+        const people = [...new Set([...this.recipients, ...(this.contacts || [])])]
+          .filter(pk => pk.toLowerCase().includes(needle) || this.shortPk(pk).toLowerCase().includes(needle));
+        const groups = (this.groups || [])
+          .filter(g => (g.name || '').toLowerCase().includes(needle) || g.id.toLowerCase().includes(needle));
+        const section = (title, rows) => (rows
+          ? `<div class="groups-header"><span>${title}</span></div><ul class="recipient-list">${rows}</ul>`
+          : '');
+        let html = section('Contacts', people.map(pk => this._searchPersonRow(pk)).join(''))
+          + section('Groups', groups.filter(g => g.kind !== 'channel').map(g => this._searchGroupRow(g)).join(''))
+          + section('Channels', groups.filter(g => g.kind === 'channel').map(g => this._searchGroupRow(g)).join(''))
+          + section('Messages', messages.map((h, i) => this._searchMessageRow(h, i, needle)).join(''));
+        if (pending) html += '<p class="search-hint">Searching messages…</p>';
+        else if (!html) html = '<p class="search-hint">Nothing found.</p>';
+        box.innerHTML = html;
+      }
+
+      _searchPersonRow(pk) {
+        const image = localStorage.getItem(`i_${pk}`) || 'p.png';
+        return `<li><div class="recipient-item" onclick="app.openSearchResult('dm', '${this.escapeAttr(pk)}')">
+            <img class="recipient-avatar" src="${this.escapeAttr(image)}" alt="" />
+            <div class="recipient-info">
+              <div class="recipient-pk" title="${this.escapeAttr(pk)}">${this.escapeHtml(this.shortPk(pk))}</div>
+              <div class="recipient-preview">${this.escapeHtml(this.abbrevPk(pk))}</div>
+            </div>
+          </div></li>`;
+      }
+
+      _searchGroupRow(g) {
+        return `<li><div class="group-item" onclick="app.openSearchResult('group', '${this.escapeAttr(g.id)}')">
+            <div class="group-avatar-sm">${this._groupAvatarHTML(g, 20)}</div>
+            <div class="recipient-info">
+              <div class="recipient-pk">${this.escapeHtml(g.name || g.id)}</div>
+              <div class="recipient-preview">${this.escapeHtml(this._groupSubtitle(g))}</div>
+            </div>
+          </div></li>`;
+      }
+
+      _searchMessageRow(h, i, needle) {
+        const g = h.isGroup ? (this.groups || []).find(x => x.id === h.key) : null;
+        const title = h.key === this.savedKey() ? 'Saved Messages'
+          : g ? (g.name || g.id) : this.shortPk(h.key);
+        const mine = h.from === 'me' || (!!this.myPK && String(h.from || '').toLowerCase() === this.myPK);
+        const who = mine ? 'You: ' : (h.isGroup && h.from ? this.shortPk(h.from) + ': ' : '');
+        const when = isNaN(h.ts.getTime()) ? '' : h.ts.toLocaleDateString();
+        return `<li><div class="recipient-item" onclick="app.openSearchHit(${i})">
+            <div class="recipient-info">
+              <div class="recipient-pk">${this.escapeHtml(title)}</div>
+              <div class="recipient-preview search-snippet">${this.escapeHtml(who)}${this._searchSnippet(h.text, needle)}</div>
+            </div>
+            <span class="search-when">${this.escapeHtml(when)}</span>
+          </div></li>`;
+      }
+
+      // A window of the text around the first match, with the match marked.
+      _searchSnippet(text, needle) {
+        const t = String(text || '');
+        const at = t.toLowerCase().indexOf(needle);
+        if (at < 0) return this.escapeHtml(t.slice(0, 90));
+        const from = Math.max(0, at - 30);
+        return (from > 0 ? '…' : '') + this.escapeHtml(t.slice(from, at))
+          + '<mark>' + this.escapeHtml(t.slice(at, at + needle.length)) + '</mark>'
+          + this.escapeHtml(t.slice(at + needle.length, at + needle.length + 60));
+      }
+
+      openSearchResult(kind, key) {
+        this.closeSearch();
+        if (kind === 'group') { this.selectGroup(key); return; }
+        if (!this.recipients.includes(key)) this._addRecipient(key);
+        this.selectRecipient(key);
+      }
+
+      openSearchHit(i) {
+        const h = (this._searchHits || [])[i];
+        if (!h) return;
+        if (h.key === this.savedKey()) {
+          this.closeSearch();
+          this.selectSaved();
+        } else {
+          this.openSearchResult(h.isGroup ? 'group' : 'dm', h.key);
+        }
+        if (!isNaN(h.ts.getTime())) this._scrollToWhenLoaded(h.ts.toISOString(), 20);
+      }
+
+      // The thread may still be loading its history; look for the row a while.
+      _scrollToWhenLoaded(tsIso, tries) {
+        const rows = document.querySelectorAll('#messages .message-row');
+        if ([...rows].some(r => r.dataset.ts === tsIso)) { this.scrollToMessage(tsIso); return; }
+        if (tries > 0) setTimeout(() => this._scrollToWhenLoaded(tsIso, tries - 1), 150);
       }
 
       // onAddressInput debounces the resolve so typing a 66-character key
