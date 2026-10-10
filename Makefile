@@ -231,14 +231,12 @@ build-merged-cgo: ## Build with CGO optimization for faster DMSG handshakes (req
 # One binary: visor + cli `config` subtree + the 4 client apps (in-proc via the
 # launcher registry). The `mobile` tag strips the embedded desktop assets
 # (geoip db 30 MB, manager UI 6.8 MB, vendored browser wallet 11 MB, tpviz
-# legacy 2.8 MB). `nomsgpack` is gin's own tag: it drops the ugorji msgpack
-# codec (2.8 MB of code, the biggest third-party package in the payload) — gin
-# is on the phone only for the log server and the rewards server, both JSON.
+# legacy 2.8 MB).
 # Output lands in the android project's jniLibs so Android
 # Studio picks it up directly. -checklinkname=0 is REQUIRED on GOOS=android:
 # the vendored wlynxg/anet uses //go:linkname into net (Go ≥1.23 blocks it).
 ANDROID_JNILIBS := android/app/src/main/jniLibs/arm64-v8a
-MOBILE_TAGS := mobile,withoutsystray,nomsgpack
+MOBILE_TAGS := mobile,withoutsystray
 # Size budget for the android payload, in bytes (70 MiB). The CI lane fails
 # over it so the lite variant can't silently rot or regain the stripped fat.
 # It gates the pure-Go lane, which measured 68.8 MB (65.6 MiB) on 2026-09-23;
