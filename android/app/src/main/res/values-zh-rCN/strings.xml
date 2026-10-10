@@ -27,6 +27,7 @@
     <string name="app_wallet">钱包</string>
     <string name="app_fleet">集群</string>
     <string name="app_skymeet">SkyMeet</string>
+    <string name="app_skymail">Skymail</string>
 
     <!-- Apps hub -->
     <string name="hub_subtitle">已安装 %1$d 个 · 运行中 %2$d 个</string>
@@ -41,6 +42,7 @@
     <string name="hub_wallet_sub">SKY · Fibercoin · BTC · ETH</string>
     <string name="hub_fleet_sub">你在别处运行的节点</string>
     <string name="hub_meet_sub">加密通话</string>
+    <string name="hub_mail_sub">Skywire 邮件</string>
     <string name="hub_hero_reconnecting">重新连接中</string>
     <string name="hub_hero_starting">启动中</string>
     <string name="hub_hero_no_exit">尚未选择出口</string>

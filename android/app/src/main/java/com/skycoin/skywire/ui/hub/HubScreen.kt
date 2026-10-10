@@ -31,6 +31,7 @@ import androidx.compose.material.icons.rounded.AltRoute
 import androidx.compose.material.icons.rounded.CandlestickChart
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Email
 import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Route
@@ -88,9 +89,8 @@ import com.skycoin.skywire.ui.theme.SkyHeroGradient
  * card while the tunnel is up (or on its way up), and a grid of app cards
  * whose status dots come from the visor's own app list.
  *
- * At most ONE greyed "coming soon" card at a time — currently SkyMeet. A hub
- * with several of them reads as an unfinished app; a single one reads as the
- * next thing being built. The rest arrive as they ship.
+ * Greyed "coming soon" cards are kept to the apps being built next — SkyMeet
+ * and Skymail. A hub full of them reads as an unfinished app.
  */
 private enum class HubCategory { NETWORK, FINANCE, SOCIAL }
 
@@ -193,6 +193,16 @@ fun HubScreen(
                 name = stringResource(R.string.app_skymeet),
                 subtitle = stringResource(R.string.hub_meet_sub),
                 icon = Icons.Rounded.Videocam,
+                category = HubCategory.SOCIAL,
+                wide = true,
+                comingSoon = true,
+            ),
+        )
+        add(
+            HubTile(
+                name = stringResource(R.string.app_skymail),
+                subtitle = stringResource(R.string.hub_mail_sub),
+                icon = Icons.Rounded.Email,
                 category = HubCategory.SOCIAL,
                 wide = true,
                 comingSoon = true,
@@ -662,10 +672,7 @@ private fun SkyDnsCard(state: HubUiState, onToggle: (Boolean) -> Unit) {
     }
 }
 
-/**
- * The single greyed card: dashed border, muted throughout, and the one
- * "coming soon" badge in the app.
- */
+/** A greyed card for an app not built yet: dashed border, muted, "coming soon". */
 @Composable
 private fun ComingSoonCard(tile: HubTile) {
     val border = MaterialTheme.colorScheme.outlineVariant
