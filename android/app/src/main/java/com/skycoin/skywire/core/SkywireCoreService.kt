@@ -51,6 +51,14 @@ class SkywireCoreService : Service() {
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /** What the notification says now, rebuilt in the new language when it changes. */
+    @Volatile private var status: (Context) -> String = { it.getString(R.string.core_notification_starting) }
+
+    /** True while the foreground notification is up; guarded by [notificationLock]. */
+    private var showing = false
+    private val notificationLock = Any()
+
     private lateinit var paths: SkywirePaths
     private lateinit var configManager: ConfigManager
     private lateinit var vault: ConfigVault
@@ -71,6 +79,12 @@ class SkywireCoreService : Service() {
         vault = ConfigVault(paths, this)
         prefs = AppPreferences(this)
         createChannel()
+        scope.launch {
+            AppLocale.changes.collect {
+                createChannel()
+                notify(status)
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -79,7 +93,11 @@ class SkywireCoreService : Service() {
             // ACTION_START, or null on a START_STICKY revival: the system
             // only revives us if the core was meant to be running — resume.
             else -> {
-                startForeground(NOTIFICATION_ID, notification(getString(R.string.core_notification_starting)))
+                synchronized(notificationLock) {
+                    status = { it.getString(R.string.core_notification_starting) }
+                    startForeground(NOTIFICATION_ID, notification())
+                    showing = true
+                }
                 startCore()
             }
         }
@@ -156,7 +174,7 @@ class SkywireCoreService : Service() {
                     child = process
                     CoreServiceState.mutableState.value =
                         CoreState.Running(System.currentTimeMillis(), attempt)
-                    notify(getString(R.string.core_notification_running))
+                    notify { it.getString(R.string.core_notification_running) }
                     // The skydns app autostarts with the visor and dials the
                     // VPN service for its tunnel, so the service must listen.
                     if (prefs.boolean(SkyDns.PREF_STANDALONE, SkyDns.DEFAULT_STANDALONE).first()) {
@@ -198,7 +216,7 @@ class SkywireCoreService : Service() {
                     else (backoffMs * 2).coerceAtMost(MAX_BACKOFF_MS)
                     CoreServiceState.mutableState.value =
                         CoreState.Restarting(attempt + 1, backoffMs)
-                    notify(getString(R.string.core_notification_restarting, attempt + 1))
+                    notify { it.getString(R.string.core_notification_restarting, attempt + 1) }
                     // Sliced so a Disconnect during the backoff takes effect in
                     // ~250 ms instead of waiting out the whole delay.
                     val deadline = SystemClock.elapsedRealtime() + backoffMs
@@ -228,7 +246,7 @@ class SkywireCoreService : Service() {
                 if (CoreServiceState.mutableState.value !is CoreState.Failed) {
                     CoreServiceState.mutableState.value = CoreState.Stopped
                 }
-                stopForeground(STOP_FOREGROUND_REMOVE)
+                hideNotification()
                 stopSelf()
             }
         }
@@ -236,7 +254,7 @@ class SkywireCoreService : Service() {
 
     private fun stopCore() {
         if (runner?.isActive != true) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
+            hideNotification()
             stopSelf()
             return
         }
@@ -291,15 +309,17 @@ class SkywireCoreService : Service() {
 
     private fun createChannel() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val text = AppLocale.localized(this)
         val channel = NotificationChannel(
             CHANNEL_ID,
-            getString(R.string.core_channel_name),
+            text.getString(R.string.core_channel_name),
             NotificationManager.IMPORTANCE_LOW,
-        ).apply { description = getString(R.string.core_channel_description) }
+        ).apply { description = text.getString(R.string.core_channel_description) }
         manager.createNotificationChannel(channel)
     }
 
-    private fun notification(text: String): Notification {
+    private fun notification(): Notification {
+        val text = AppLocale.localized(this)
         val contentIntent = PendingIntent.getActivity(
             this,
             0,
@@ -308,17 +328,28 @@ class SkywireCoreService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.skywire_logo)
-            .setContentTitle(getString(R.string.core_notification_title))
-            .setContentText(text)
+            .setContentTitle(text.getString(R.string.core_notification_title))
+            .setContentText(status(text))
             .setContentIntent(contentIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .build()
     }
 
-    private fun notify(text: String) {
+    /** Show [next] in the foreground notification, if it is still up. */
+    private fun notify(next: (Context) -> String) {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID, notification(text))
+        synchronized(notificationLock) {
+            status = next
+            if (showing) manager.notify(NOTIFICATION_ID, notification())
+        }
+    }
+
+    private fun hideNotification() {
+        synchronized(notificationLock) {
+            showing = false
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        }
     }
 
     companion object {

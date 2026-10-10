@@ -439,17 +439,19 @@ internal class VoiceCallWatcher(context: Context) {
         fun ensureChannels(context: Context) {
             val manager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            // Called again when the language changes, which renames the channels.
+            val text = AppLocale.localized(context)
             manager.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_RINGING,
-                    context.getString(R.string.call_channel_incoming),
+                    text.getString(R.string.call_channel_incoming),
                     NotificationManager.IMPORTANCE_HIGH,
                 ),
             )
             manager.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_ONGOING,
-                    context.getString(R.string.call_channel_ongoing),
+                    text.getString(R.string.call_channel_ongoing),
                     NotificationManager.IMPORTANCE_LOW,
                 ),
             )

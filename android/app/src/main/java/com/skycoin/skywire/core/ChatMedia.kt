@@ -117,7 +117,7 @@ object ChatMedia {
         @JavascriptInterface
         fun update(json: String) {
             val state = runCatching { JSONObject(json) }.getOrNull() ?: return
-            main.post { show(context, state) }
+            main.post { show(AppLocale.localized(context), state) }
         }
 
         @JavascriptInterface

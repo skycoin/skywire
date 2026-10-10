@@ -2,6 +2,7 @@ package com.skycoin.skywire.core
 
 import android.Manifest
 import android.app.Notification
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -18,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -54,6 +56,14 @@ class VoiceCallService : android.app.Service() {
         super.onCreate()
         VoiceCallWatcher.ensureChannels(this)
         engine = VoiceAudioEngine(this)
+        scope.launch {
+            AppLocale.changes.collect {
+                VoiceCallWatcher.ensureChannels(this@VoiceCallService)
+                if (inForeground.get()) {
+                    getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification())
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -110,6 +120,7 @@ class VoiceCallService : android.app.Service() {
     }
 
     private fun notification(): Notification {
+        val text = AppLocale.localized(this)
         val open = PendingIntent.getActivity(
             this,
             0,
@@ -120,8 +131,8 @@ class VoiceCallService : android.app.Service() {
         )
         return NotificationCompat.Builder(this, VoiceCallWatcher.CHANNEL_ONGOING)
             .setSmallIcon(R.drawable.skywire_logo)
-            .setContentTitle(getString(R.string.call_ongoing_title))
-            .setContentText(getString(R.string.call_ongoing_text))
+            .setContentTitle(text.getString(R.string.call_ongoing_title))
+            .setContentText(text.getString(R.string.call_ongoing_text))
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setContentIntent(open)
             .setOngoing(true)
