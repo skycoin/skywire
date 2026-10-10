@@ -10,7 +10,7 @@ import (
 
 func TestDeploymentBlocks(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
-	blocks, err := deploymentBlocks("203.0.113.7:18080", "", nil)
+	blocks, err := deploymentBlocks("203.0.113.7:18080", "", pk, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,8 +20,15 @@ func TestDeploymentBlocks(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", b.Type, err)
 		}
+		own := false
+		for _, typ := range ownKeyTypes {
+			own = own || typ == b.Type
+		}
+		if hasKey != own {
+			t.Errorf("%s: own key %v, want %v", b.Type, hasKey, own)
+		}
 		if !hasKey {
-			t.Errorf("%s: no key of its own", b.Type)
+			continue
 		}
 		if other, dup := seen[bpk]; dup {
 			t.Errorf("%s and %s share a key", b.Type, other)
@@ -41,7 +48,7 @@ func TestDeploymentBlocks(t *testing.T) {
 	}
 	for typ, got := range map[string]string{"transport-discovery": svc.TransportDiscoveryDmsg, "address-resolver": svc.AddressResolverDmsg,
 		"route-finder": svc.RouteFinderDmsg, "service-discovery": svc.ServiceDiscoveryDmsg} {
-		if want := "dmsg://" + keyOfType(t, blocks, typ).Hex() + ":80"; got != want {
+		if want := "dmsg://" + pk.Hex() + ":80" + deploymentPrefix(t, blocks, typ); got != want {
 			t.Errorf("%s at %q, want %q", typ, got, want)
 		}
 	}
@@ -53,7 +60,7 @@ func TestDeploymentBlocks(t *testing.T) {
 	}
 
 	// A regenerate keeps every block, and so every key.
-	again, err := deploymentBlocks("203.0.113.7:18080", "", blocks)
+	again, err := deploymentBlocks("203.0.113.7:18080", "", pk, blocks)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +75,8 @@ func TestDeploymentBlocks(t *testing.T) {
 }
 
 func TestDeploymentBlocksRedis(t *testing.T) {
-	blocks, err := deploymentBlocks("203.0.113.7", "127.0.0.1:6379", nil)
+	pk, _ := cipher.GenerateKeyPair()
+	blocks, err := deploymentBlocks("203.0.113.7", "127.0.0.1:6379", pk, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,17 +121,40 @@ func TestDeploymentAddr(t *testing.T) {
 	}
 }
 
-func keyOfType(t *testing.T, blocks []svcblock.Block, typ string) cipher.PubKey {
+func deploymentPrefix(t *testing.T, blocks []svcblock.Block, typ string) string {
 	t.Helper()
 	for _, b := range blocks {
 		if b.Type == typ {
-			_, pk, _, err := svcblock.OwnKey(b.Raw)
-			if err != nil {
-				t.Fatal(err)
-			}
-			return pk
+			return b.Prefix()
 		}
 	}
 	t.Fatalf("no %s block", typ)
-	return cipher.PubKey{}
+	return ""
+}
+
+// A setup node added beside a transport discovery under its own key, as on
+// prod, is pointed at that key, not at the visor's.
+func TestDeploymentBlocksOwnKeyTPD(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	tpk, tsk := cipher.GenerateKeyPair()
+	var old svcblock.Block
+	if err := old.UnmarshalJSON([]byte(`{"type":"transport-discovery","name":"tpd","secret_key":"` + tsk.Hex() + `"}`)); err != nil {
+		t.Fatal(err)
+	}
+	blocks, err := deploymentBlocks("203.0.113.7", "", pk, []svcblock.Block{old})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range blocks {
+		if b.Type == "setup-node" && !strings.Contains(string(b.Raw), `"transport_discovery_dmsg":"dmsg://`+tpk.Hex()+`:80"`) {
+			t.Errorf("setup node not pointed at the own-key TPD: %s", b.Raw)
+		}
+	}
+	svc, err := deploymentServices(pk, blocks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "dmsg://" + tpk.Hex() + ":80"; svc.TransportDiscoveryDmsg != want {
+		t.Errorf("tpd at %q, want %q", svc.TransportDiscoveryDmsg, want)
+	}
 }

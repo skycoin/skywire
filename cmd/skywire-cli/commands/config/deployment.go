@@ -86,7 +86,7 @@ func configureDeployment(pk cipher.PubKey) error {
 	if oldConfCache != nil {
 		old = oldConfCache.EmbeddedServices
 	}
-	blocks, err := deploymentBlocks(deploymentHost, deploymentRedis, old)
+	blocks, err := deploymentBlocks(deploymentHost, deploymentRedis, pk, old)
 	if err != nil {
 		return err
 	}
@@ -104,10 +104,10 @@ func configureDeployment(pk cipher.PubKey) error {
 }
 
 // deploymentBlocks returns old with a block added for each deployment service
-// it lacks, each under a key of its own. A service under the visor's key
-// would deadlock the visor's start: its address resolver and transport
-// discovery clients wait for services that mount only after them.
-func deploymentBlocks(host, redis string, old []svcblock.Block) ([]svcblock.Block, error) {
+// it lacks. Transport and service discovery, the route finder and the address
+// resolver run under the visor's key, pk, behind path prefixes. The others need
+// keys of their own.
+func deploymentBlocks(host, redis string, pk cipher.PubKey, old []svcblock.Block) ([]svcblock.Block, error) {
 	host, port, err := deploymentAddr(host)
 	if err != nil {
 		return nil, err
@@ -121,9 +121,9 @@ func deploymentBlocks(host, redis string, old []svcblock.Block) ([]svcblock.Bloc
 		sk cipher.SecKey
 	}
 	keys := map[string]keypair{}
-	for _, t := range deploymentTypes {
-		pk, sk := blockKey(old, t)
-		keys[t] = keypair{pk, sk}
+	for _, t := range ownKeyTypes {
+		bpk, bsk := blockKey(old, t)
+		keys[t] = keypair{bpk, bsk}
 	}
 
 	srvAddr := net.JoinHostPort(host, strconv.Itoa(port))
@@ -136,6 +136,12 @@ func deploymentBlocks(host, redis string, old []svcblock.Block) ([]svcblock.Bloc
 	// server. Without these settings it would dial prod's.
 	dmsgConf := map[string]any{"sessions_count": 1, "discovery_dmsg": discURL, "servers": []disc.Entry{entry}}
 	arPort := strconv.Itoa(port + deployAROffset)
+	tpdURL := fmt.Sprintf("dmsg://%s:80/tpd", pk.Hex())
+	for _, b := range old {
+		if _, tpk, ok, err := svcblock.OwnKey(b.Raw); b.Type == "transport-discovery" && err == nil && ok {
+			tpdURL = fmt.Sprintf("dmsg://%s:80", tpk.Hex())
+		}
+	}
 
 	fields := map[string]map[string]any{
 		"dmsg-server": {"public_address": srvAddr, "local_address": fmt.Sprintf(":%d", port),
@@ -144,12 +150,12 @@ func deploymentBlocks(host, redis string, old []svcblock.Block) ([]svcblock.Bloc
 		"dmsg-discovery": {"addr": fmt.Sprintf("127.0.0.1:%d", port+deployDiscOffset),
 			"dmsg_servers": []disc.Entry{entry}},
 		"setup-node": {"dmsg": dmsgConf, "log_level": "info",
-			"transport_discovery_dmsg": fmt.Sprintf("dmsg://%s:80", keys["transport-discovery"].pk.Hex())},
+			"transport_discovery_dmsg": tpdURL},
 		"transport-setup":     {"dmsg": dmsgConf},
-		"transport-discovery": {"dmsg": dmsgConf},
-		"route-finder":        {"dmsg": dmsgConf},
-		"service-discovery":   {"dmsg": dmsgConf},
-		"address-resolver": {"dmsg": dmsgConf, "udp_addr": ":" + arPort,
+		"transport-discovery": {},
+		"route-finder":        {},
+		"service-discovery":   {},
+		"address-resolver": {"udp_addr": ":" + arPort,
 			"public_udp_addr": net.JoinHostPort(host, arPort)},
 	}
 	// The entry timeouts the standalone services default to.
@@ -168,7 +174,9 @@ func deploymentBlocks(host, redis string, old []svcblock.Block) ([]svcblock.Bloc
 		}
 		f := fields[t]
 		f["type"], f["name"] = t, deploymentNames[t]
-		f["public_key"], f["secret_key"] = keys[t].pk, keys[t].sk
+		if k, ok := keys[t]; ok {
+			f["public_key"], f["secret_key"] = k.pk, k.sk
+		}
 		if db, ok := redisDBs[t]; ok {
 			if redis == "" {
 				f["testing"] = true
@@ -192,6 +200,9 @@ func deploymentBlocks(host, redis string, old []svcblock.Block) ([]svcblock.Bloc
 // deploymentTypes are the services of a generated deployment, in start order.
 var deploymentTypes = []string{"dmsg-server", "dmsg-discovery", "setup-node", "transport-setup",
 	"transport-discovery", "route-finder", "service-discovery", "address-resolver"}
+
+// ownKeyTypes are the services that cannot run under the visor's key.
+var ownKeyTypes = []string{"dmsg-server", "dmsg-discovery", "setup-node", "transport-setup"}
 
 var deploymentNames = map[string]string{"dmsg-server": "dmsgs", "dmsg-discovery": "dmsgd",
 	"setup-node": "sn", "transport-setup": "tps", "transport-discovery": "tpd",
