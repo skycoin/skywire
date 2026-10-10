@@ -14,6 +14,7 @@ import (
 	rpc "github.com/0magnet/gobrpc"
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -45,13 +46,14 @@ func (sn *Node) DmsgClient() *dmsg.Client {
 	return sn.dmsgC
 }
 
-// NewNode constructs a new SetupNode.
-func NewNode(conf *SetupConfig) (*Node, error) {
+// NewNode constructs a new SetupNode. It gives up when ctx ends before the
+// node reaches the dmsg network.
+func NewNode(ctx context.Context, conf *SetupConfig) (*Node, error) {
 	masterLogger := logging.NewMasterLogger()
 	packageLogger := masterLogger.PackageLogger("node:disc")
 
 	type setupNodeKey struct{}
-	ctx := context.WithValue(context.Background(), setupNodeKey{}, true)
+	ctx = context.WithValue(ctx, setupNodeKey{}, true)
 
 	// Single dmsg client with self-hosted dmsg-discovery — matches the
 	// visor's post-#3136 bootstrap (pkg/visor/init_dmsg.go + pkg/dmsg/dmsgc/
@@ -60,10 +62,9 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 	// (conf.Dmsg.Discovery) is no longer supported for deployment
 	// services; conf.Dmsg.DiscoveryDmsg is required.
 	//
-	// The seed-server set is conf.Dmsg.Servers ∪ dmsg.Prod.DmsgServers,
-	// deduped by Static PK with operator-supplied entries first. A
-	// deployment may therefore omit conf.Dmsg.Servers and still
-	// bootstrap — the embedded Prod set is the default. Same merge
+	// The seed-server set is conf.Dmsg.Servers plus the embedded servers of
+	// the deployment whose discovery this is, deduped by Static PK. A private
+	// deployment gets none of prod's servers. Same merge
 	// shape as dmsgsrv.buildTransitDmsg (pkg/services/dmsgsrv/
 	// dmsgsrv.go) so RSNs and dmsg-servers share the cold-start path.
 	//
@@ -77,7 +78,7 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 	// resolving discovery via a registering-fallback that reads direct-
 	// first (synthetic entries for the local PK + dmsg-service PKs) and
 	// writes via dmsg-HTTP routed through the same client's sessions.
-	servers := make([]*disc.Entry, 0, len(conf.Dmsg.Servers)+len(dmsg.Prod.DmsgServers))
+	servers := make([]*disc.Entry, 0, len(conf.Dmsg.Servers))
 	seenPK := map[cipher.PubKey]struct{}{}
 	addServer := func(e *disc.Entry) {
 		if e == nil || e.Static.Null() || e.Server == nil {
@@ -92,8 +93,8 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 	for _, e := range conf.Dmsg.Servers {
 		addServer(e)
 	}
-	for i := range dmsg.Prod.DmsgServers {
-		addServer(&dmsg.Prod.DmsgServers[i])
+	for _, e := range deployment.EmbeddedServersForDiscoveryDmsg(conf.Dmsg.DiscoveryDmsg) {
+		addServer(e)
 	}
 
 	seedKeys := append(cipher.PubKeys{conf.PK}, dmsgServicePKsFromConf(conf)...)
@@ -115,7 +116,11 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 	log.WithField("local_pk", conf.PK).WithField("dmsg_conf", conf.Dmsg).
 		WithField("disc_url", conf.Dmsg.DiscoveryDmsg).
 		Info("Connecting to the dmsg network.")
-	<-dmsgC.Ready()
+	select {
+	case <-dmsgC.Ready():
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 	log.Info("Connected!")
 
 	dialer := WrapDmsgClient(dmsgC)
