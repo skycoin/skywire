@@ -3072,6 +3072,21 @@
     }
     .notif-muted-list { max-height: 160px; overflow-y: auto; }
     .notif-muted-empty { font-size: 13px; color: var(--text-muted); padding: 6px 0; }
+    /* A message request open in the chat: what to do about the sender. */
+    .request-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-top: 1px solid var(--border-color);
+      background: var(--surf);
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+    .request-bar.hidden { display: none; }
+    .request-bar span { flex: 1 1 200px; }
+
     .notif-muted-item {
       display: flex; align-items: center; justify-content: space-between;
       gap: 8px; padding: 7px 0; font-size: 13px; color: var(--text-primary);
@@ -3781,6 +3796,11 @@
         </div>
         <ul id="channels" class="group-list"></ul>
       </div>
+      <!-- Messages from people not yet let in, while approval is on. -->
+      <div id="requestsSection" class="groups-section hidden" data-scope="dm">
+        <div class="groups-header"><span>Requests</span></div>
+        <ul id="requests" class="recipient-list"></ul>
+      </div>
       <div id="chatsSection" class="groups-section" data-scope="dm">
         <div class="groups-header"><span>Chats</span></div>
         <ul id="recipients" class="recipient-list"></ul>
@@ -3869,6 +3889,13 @@
     <div id="linkBar" class="link-bar hidden"></div>
 
     <div id="replyChip" class="reply-chip hidden"></div>
+
+    <!-- Shown while the open chat is a message request (_syncRequestBar). -->
+    <div id="requestBar" class="request-bar hidden">
+      <span>Not in your contacts. Accept to keep chatting, or block them.</span>
+      <button class="btn btn-secondary" onclick="app.blockRequest()">Block</button>
+      <button class="btn btn-primary" onclick="app.acceptRequest()">Accept</button>
+    </div>
 
     <form id="msgForm" class="message-form hidden" autocomplete="off" onsubmit="app.sendMessage(this); return false;">
       <select id="networkSelect" class="network-select" title="Network type"
@@ -4278,6 +4305,23 @@
             <button class="btn btn-secondary" id="ringbackClear" onclick="app.clearRingback()">Use the plain ring</button>
           </div>
           <div id="ringbackStatus" class="xfer-status"></div>
+        </div>
+
+        <!-- Shown when the visor answers /privacy. -->
+        <div id="privacySection" class="hidden">
+          <div class="settings-section">Privacy</div>
+          <div class="notif-setting">
+            <div>
+              <div class="notif-label">Approve new contacts first</div>
+              <div class="notif-desc">Messages from people you have not saved or written to wait under Requests until you accept them.</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="privacyApproval" onchange="app.setApproval(this.checked)">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="notif-muted-title">Blocked</div>
+          <div id="blockedList" class="notif-muted-list"></div>
         </div>
 
         <div class="settings-section">Import / export chat</div>
@@ -4719,6 +4763,7 @@
       pause: '<path d="M9 4.5v15M15 4.5v15"/>',
       download: '<path d="M12 3.5v12"/><path d="m7.5 11 4.5 4.5L16.5 11"/><path d="M4 20.5h16"/>',
       check: '<path d="m4.5 12.5 5 5 10-11"/>',
+      block: '<circle cx="12" cy="12" r="8.5"/><path d="m6 6 12 12"/>',
       checkDouble: '<path d="m2 12.5 4.5 4.5 9-10"/><path d="m10.5 15.7 1.3 1.3 9-10"/>',
       close: '<path d="M6 6l12 12M18 6 6 18"/>',
       expand: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
@@ -4867,6 +4912,8 @@
         // Which ⋮ the header menu is currently hanging from — 'dmMenuBtn'
         // or 'groupMenuBtn'. Only meaningful while the menu is open.
         this._hdrMenuBtn = 'dmMenuBtn';
+        // Who may message this visor, from /privacy: see syncPrivacy.
+        this.privacy = { available: false, approval: false, blocked: new Set(), requests: new Set() };
         // Peer presence, refreshed from /presence: {pk: {online, rtt_ms, at}}.
         // presenceAvailable stays null until the first answer; false means the
         // endpoint isn't there (no --pair-enable) so the dots stay hidden.
@@ -4993,6 +5040,7 @@
         this._sseSubscribe();
         this.syncPairedFromVisor();
         this.syncHistoryPeers();
+        this.syncPrivacy();
         this.syncMyPK();
         this.syncGroups();
         this.renderPinned();
@@ -5043,7 +5091,8 @@
             <div class="pair-badge ${isPaired ? '' : 'hidden'}" title="Paired via CXO">CXO</div>
             <div class="unread-badge hidden">0</div>
           </div>`;
-        document.getElementById('recipients').appendChild(li);
+        document.getElementById(this._isRequest(r) ? 'requests' : 'recipients').appendChild(li);
+        this._syncRequestsSection();
 
         this.updateUnreadBadges();
         this._renderPresence();  // paint the new dot from what we already know
@@ -7130,7 +7179,13 @@
             forwardFrom: data.forward_from || '',
             wireId: data.id, // sender-side id — referenced by the read receipt we send back
           };
+          const requestFrom = data.request ? this.processPk(data.sender) : '';
+          if (requestFrom) this.privacy.requests.add(requestFrom);
           this.addMsgToList(data.sender, message);
+          if (requestFrom) {
+            this._placeRecipientRow(requestFrom);
+            this._syncRequestBar();
+          }
 
           const msgArea = document.getElementById('messages');
           if (message.from === this.recipient &&
@@ -7147,7 +7202,7 @@
           // focused thread and for muted/disabled threads by _shouldNotify).
           const notifKey = this.processPk(data.sender);
           this.notifyMessage(notifKey, {
-            title: this.shortPk(notifKey),
+            title: requestFrom ? `Message request · ${this.shortPk(notifKey)}` : this.shortPk(notifKey),
             body: this.notif.preview ? (this._previewText(message.text, message.file) || 'New message') : 'New message',
             icon: localStorage.getItem(`i_${notifKey}`) || 'p.png',
             isGroup: false,
@@ -7262,6 +7317,8 @@
         // are the same screen, so re-tapping the chat you already had open
         // still has to switch panes to it.
         this._enterChatPane();
+        // After the switch below as well; set here for the no-op case.
+        setTimeout(() => this._syncRequestBar(), 0);
         if (this.recipient === pk && !this.group) return;
         this.cancelReply(); // a reply armed in another thread must not follow
         this.group = null;
@@ -7669,6 +7726,15 @@
           msgField.value = '';
           this.syncComposerBtn();
           return;
+        }
+
+        // Replying to a request lets the sender in; the visor does the same
+        // when the message goes out.
+        if (this._isRequest(this.recipient)) {
+          this.privacy.requests.delete(this.recipient.toLowerCase());
+          this._placeRecipientRow(this.recipient);
+          this._syncRequestsSection();
+          this._syncRequestBar();
         }
 
         // A note goes straight into the local thread — there is no wire call,
@@ -9071,6 +9137,7 @@
         this._xferStatus('');
         this._renderNotifModal();
         this._renderRingbackSetting();
+        this._renderPrivacySettings();
         document.getElementById('appSettingsModal').classList.add('visible');
         this._ensureNotifPermission();
       }
@@ -10142,6 +10209,7 @@
       selectSaved() {
         const key = this.savedKey();
         this._enterChatPane();
+        setTimeout(() => this._syncRequestBar(), 0);
         this.cancelReply();
         this.group = null;
         this.recipient = key;
@@ -10887,6 +10955,7 @@
 
       selectGroup(id) {
         this._enterChatPane();   // see selectRecipient
+        setTimeout(() => this._syncRequestBar(), 0);
         this.cancelReply(); // a reply armed in another thread must not follow
         this.group = id;
         this.recipient = null;
@@ -11565,6 +11634,13 @@
         // one string on the clipboard is one too many.
         items.push({ icon: this._qrIcon(), label: 'QR code', act: 'showQr' });
         items.push({ icon: icon('gear', 16), label: 'Settings', act: 'openSettings' });
+        if (this.privacy.available && this.recipient) {
+          const blocked = this._isBlocked(this.recipient);
+          items.push({
+            icon: icon('block', 16), label: blocked ? 'Unblock' : 'Block',
+            act: 'toggleBlock', warn: !blocked,
+          });
+        }
         items.push({ sep: true });
         items.push({
           icon: this._trashIcon(), label: 'Delete chat',
@@ -11726,6 +11802,126 @@
         if (!pk) return false;
         this.selectRecipient(pk);
         return true;
+      }
+
+      // ---- Privacy: requests and blocking ----------------------------------
+      //
+      // The visor decides (/privacy): a blocked peer's messages, files and
+      // calls never arrive, and with approval on a stranger's messages wait
+      // under Requests. This page shows that state and changes it.
+
+      syncPrivacy() {
+        fetch('/privacy')
+          .then(res => (res.ok ? res.json() : null))
+          .then(state => { if (state) this._applyPrivacy(state); })
+          .catch(() => { /* an older visor: no privacy controls */ });
+      }
+
+      _applyPrivacy(state) {
+        this.privacy = {
+          available: true,
+          approval: !!state.approval,
+          blocked: new Set((state.blocked || []).map(pk => pk.toLowerCase())),
+          requests: new Set((state.requests || []).map(pk => pk.toLowerCase())),
+        };
+        this.recipients.forEach(pk => this._placeRecipientRow(pk));
+        this._syncRequestsSection();
+        this._syncRequestBar();
+        this._renderPrivacySettings();
+        this._refreshHeaderMenu();
+      }
+
+      _isRequest(pk) { return !!pk && this.privacy.requests.has(String(pk).toLowerCase()); }
+      _isBlocked(pk) { return !!pk && this.privacy.blocked.has(String(pk).toLowerCase()); }
+
+      // _placeRecipientRow moves a chat's row to Requests or Chats.
+      _placeRecipientRow(pk) {
+        const row = document.querySelector(
+          `#recipients .recipient-item[data-pk="${pk}"], #requests .recipient-item[data-pk="${pk}"]`);
+        const li = row && row.closest('li');
+        const list = document.getElementById(this._isRequest(pk) ? 'requests' : 'recipients');
+        if (li && list && li.parentElement !== list) list.appendChild(li);
+      }
+
+      _syncRequestsSection() {
+        const list = document.getElementById('requests');
+        const section = document.getElementById('requestsSection');
+        if (list && section) section.classList.toggle('hidden', !list.children.length);
+      }
+
+      _syncRequestBar() {
+        const bar = document.getElementById('requestBar');
+        if (bar) bar.classList.toggle('hidden', !!this.group || !this._isRequest(this.recipient));
+      }
+
+      _privacyPost(path, body) {
+        return fetch(path, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        }).then(res => (res.ok ? res.json() : res.text().then(t => { throw new Error(t.trim()); })))
+          .then(state => { this._applyPrivacy(state); return state; });
+      }
+
+      // acceptRequest lets the open chat's sender in and saves them as a contact.
+      acceptRequest() {
+        const pk = this.recipient;
+        if (!pk) return;
+        this._privacyPost('/privacy/accept', { pk })
+          .then(() => {
+            this.addContact(pk);
+            this.showToast(`${this.shortPk(pk)} can message you now.`);
+          })
+          .catch(e => this.showToast(`Accept failed: ${e.message}`, 'error'));
+      }
+
+      // blockRequest blocks the open request's sender and drops the chat.
+      blockRequest() {
+        const pk = this.recipient;
+        if (!pk) return;
+        this._privacyPost('/privacy/block', { pk, blocked: true })
+          .then(() => {
+            this._removeConversation(pk);
+            this.showToast(`${this.shortPk(pk)} is blocked.`);
+          })
+          .catch(e => this.showToast(`Block failed: ${e.message}`, 'error'));
+      }
+
+      // toggleBlock blocks or unblocks the open chat's peer, keeping the chat.
+      toggleBlock() {
+        const pk = this.recipient;
+        if (!pk) return;
+        const blocked = !this._isBlocked(pk);
+        this.setBlocked(pk, blocked);
+      }
+
+      setBlocked(pk, blocked) {
+        this._privacyPost('/privacy/block', { pk, blocked })
+          .then(() => this.showToast(blocked
+            ? `${this.shortPk(pk)} is blocked. Their messages and calls will not reach you.`
+            : `${this.shortPk(pk)} is unblocked.`))
+          .catch(e => this.showToast(`${blocked ? 'Block' : 'Unblock'} failed: ${e.message}`, 'error'));
+      }
+
+      setApproval(on) {
+        this._privacyPost('/privacy', { approval: !!on })
+          .catch(e => {
+            this.showToast(`Could not change the setting: ${e.message}`, 'error');
+            this._renderPrivacySettings();
+          });
+      }
+
+      _renderPrivacySettings() {
+        const section = document.getElementById('privacySection');
+        if (!section) return;
+        section.classList.toggle('hidden', !this.privacy.available);
+        const box = document.getElementById('privacyApproval');
+        if (box) box.checked = this.privacy.approval;
+        const wrap = document.getElementById('blockedList');
+        if (!wrap) return;
+        const keys = [...this.privacy.blocked];
+        wrap.innerHTML = keys.length
+          ? keys.map(pk => `<div class="notif-muted-item"><span class="nm-name" title="${this.escapeAttr(pk)}">${this.escapeHtml(this.shortPk(pk))}</span>`
+            + `<button class="nm-unmute" onclick="app.setBlocked('${this.escapeAttr(pk)}', false)">Unblock</button></div>`).join('')
+          : '<div class="notif-muted-empty">Nobody is blocked.</div>';
       }
 
       // ---- Search ------------------------------------------------------
@@ -13221,8 +13417,12 @@
           return;
         }
         if (!this.recipient || !confirm('Delete this conversation?')) return;
+        this._removeConversation(this.recipient);
+        this.showToast('Conversation deleted.');
+      }
 
-        const pk = this.recipient;
+      // _removeConversation drops the open DM with pk here and on the visor.
+      _removeConversation(pk) {
         this.recipients = this.recipients.filter(v => v !== pk);
         this._unpinIf('dm:' + pk);
         delete this.messages[pk];
@@ -13282,7 +13482,8 @@
         this.renderContacts();
 
         this.recipient = null;
-        this.showToast('Conversation deleted.');
+        this._syncRequestsSection();
+        this._syncRequestBar();
       }
 
       // _forgetStoredConversation drops the visor's stored copy of a whole
