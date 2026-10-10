@@ -79,3 +79,19 @@ func TestFreshGenCarriesNoPersistedSettings(t *testing.T) {
 	require.Empty(t, conf.Routing.RouterSettings)
 	require.Empty(t, conf.AppSettings)
 }
+
+// "auto" was the generated default, not an operator's choice, so a regen
+// drops it while an explicit size survives.
+func TestRegenDropsAutoMemoryLimit(t *testing.T) {
+	restoreRegen, restoreOld, restoreConf := isRegen, oldConfCache, conf
+	t.Cleanup(func() { isRegen, oldConfCache, conf = restoreRegen, restoreOld, restoreConf })
+
+	isRegen = true
+	for old, want := range map[string]string{"auto": "", "": "", "1GiB": "1GiB"} {
+		oldConfCache = &visorconfig.V1{MemoryLimit: old}
+		conf = new(visorconfig.V1)
+		conf.Launcher = &visorconfig.Launcher{}
+		mergeExistingApps(logging.MustGetLogger("test"))
+		require.Equal(t, want, conf.MemoryLimit, "old memory_limit %q", old)
+	}
+}

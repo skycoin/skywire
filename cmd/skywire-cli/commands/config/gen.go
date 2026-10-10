@@ -1144,8 +1144,9 @@ func mergeExistingApps(log *logging.Logger) {
 	if len(oldConfCache.EmbeddedServices) > 0 && len(conf.EmbeddedServices) == 0 {
 		conf.EmbeddedServices = oldConfCache.EmbeddedServices
 	}
-	// So is memory_limit: a host sized for the services it runs keeps its limit.
-	if oldConfCache.MemoryLimit != "" {
+	// So is an explicit memory_limit. "auto" was only the old generated default,
+	// so a regen drops it and the visor runs without a limit.
+	if l := oldConfCache.MemoryLimit; l != "" && l != "auto" {
 		conf.MemoryLimit = oldConfCache.MemoryLimit
 	}
 	if oldConfCache.Launcher == nil {
@@ -1536,7 +1537,6 @@ func configureLauncher(log *logging.Logger) {
 	if conf.GeoIP == "" {
 		conf.GeoIP = deployment.Prod.GeoIP
 	}
-	conf.MemoryLimit = "auto"
 	// Config bootstrap service
 	conf.ConfService = serviceConfURL
 	conf.ConfServiceDmsg = services.ConfDmsg
