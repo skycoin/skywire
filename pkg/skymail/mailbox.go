@@ -44,7 +44,18 @@ type Config struct {
 	Dialers map[string]skymailbridge.Dialer
 	// Limits bound what the mailbox keeps; zero fields take defaults.
 	Limits Limits
-	Log    logrus.FieldLogger
+	// OnDeliver, when set, is told of each message the network files in the
+	// inbox, once it is stored. It must not block.
+	OnDeliver func(Delivered)
+	Log       logrus.FieldLogger
+}
+
+// Delivered is a message the network just filed in the inbox.
+type Delivered struct {
+	ID      string
+	From    string
+	Subject string
+	PeerPK  cipher.PubKey
 }
 
 // Mailbox is one PK's mail: a Maildir, an SMTP receiver policy, and a
@@ -235,6 +246,13 @@ func (r receiver) Deliver(_ context.Context, env skymailbridge.Envelope) (string
 	}
 	r.mb.log.WithField("from_pk", peer.Hex()).WithField("id", id).WithField("bytes", len(env.Body)).
 		Info("skymail: delivered")
+	if r.mb.cfg.OnDeliver != nil {
+		d := Delivered{ID: id, PeerPK: peer}
+		if h, err := parseHeader(env.Body); err == nil {
+			d.From, d.Subject = decodeHeader(h.Get("From")), decodeHeader(h.Get("Subject"))
+		}
+		r.mb.cfg.OnDeliver(d)
+	}
 	return "Ok: delivered " + id, nil
 }
 
