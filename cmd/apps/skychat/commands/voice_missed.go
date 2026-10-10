@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/skychat/history"
+	"github.com/skycoin/skywire/pkg/skychat/privacy"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
@@ -151,8 +152,25 @@ func watchMissedCalls(ctx context.Context) {
 			// one currently in progress.
 			continue
 		}
-		resolveCalls(seen, incoming, active, time.Now(), recordCall)
+		resolveCalls(seen, declineBlockedCalls(incoming), active, time.Now(), recordCall)
 	}
+}
+
+// declineBlockedCalls declines the ringing calls from blocked peers and returns
+// the rest, so a blocked caller is turned away and not logged as missed.
+func declineBlockedCalls(incoming []string) []string {
+	kept := make([]string, 0, len(incoming))
+	for _, line := range incoming {
+		id, peer, ok := parseVoiceInvite(line)
+		if !ok || inboundVerdict(peer) != privacy.Reject {
+			kept = append(kept, line)
+			continue
+		}
+		if err := pairRPCCall("VoiceDecline", func(c visorapi.API) error { return c.VoiceDecline(id) }); err != nil {
+			appLog("Voice: declining a call from blocked %s: %v", peer, err)
+		}
+	}
+	return kept
 }
 
 // resolveCalls advances the watcher's state by one poll and records every call
