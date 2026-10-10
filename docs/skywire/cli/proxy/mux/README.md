@@ -21,16 +21,21 @@ skywire cli proxy mux
 ## Subcommands
 
 - [add](add/README.md) — Add a leg to an active proxy session's mux'd rg from a piped route
+- [adopt](adopt/README.md) — Adopt a standby tunnel's route chain as a mux leg of an active tunnel
 - [auto](auto/README.md) — Adapt a proxy session's mux legs to a preset off live latency
-- [cap](cap/README.md) — Set the adaptive mux active-width ceiling at runtime
+- [cap](cap/README.md) — Set an app's mux active-width ceiling at runtime
 - [direction](direction/README.md) — Pin which leg class carries each data direction on an active session
+- [events](events/README.md) — Show what happened to an active proxy session's route groups, and why
+- [grow](grow/README.md) — Widen a proxy tunnel with legs built on its standby tunnels' routes
 - [info](info/README.md) — Show per-mux-leg traffic for an active proxy session
 - [mode](mode/README.md) — Change mux scheduler weighting at runtime
+- [negotiated](negotiated/README.md) — Report the per-group values the two ends negotiated, and the send window in effect
 - [plot](plot/README.md) — Live per-leg bandwidth + RTT chart for a mux'd route group (terminal)
 - [rm](rm/README.md) — Remove a leg from an active proxy session's mux'd route group
 - [set](set/README.md) — Reconcile an active proxy session's mux legs to a target set
 - [standby](standby/README.md) — Set the adaptive mux warm-standby reserve pool size at runtime
-- [width](width/README.md) — Set the adaptive mux steady active download width at runtime
+- [weights](weights/README.md) — Pin, read or release the per-leg send weights on a mux'd route group
+- [width](width/README.md) — Set an app's mux active width at runtime
 
 ## Global Flags
 

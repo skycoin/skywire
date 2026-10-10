@@ -15,9 +15,11 @@ skywire cli skychat voice
 - [answer](answer/README.md) — Accept a ringing inbound call
 - [call](call/README.md) — Place a voice call to a peer
 - [decline](decline/README.md) — Reject a ringing inbound call
+- [dialing](dialing/README.md) — List outbound calls not yet answered, and how each is going
 - [hangup](hangup/README.md) — End an active call
 - [incoming](incoming/README.md) — List ringing inbound calls awaiting an answer
 - [list](list/README.md) — List active calls
+- [ringback](ringback/README.md) — The tone callers hear while this visor rings
 - [spectrogram](spectrogram/README.md) — Live audio spectrogram in the terminal (mic, or --monitor for system audio)
 
 ## Global Flags

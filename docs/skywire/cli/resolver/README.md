@@ -26,6 +26,7 @@ skywire cli resolver
 
 - [ca](ca/README.md) — Manage the local resolver CA (TLS MITM mode)
 - [down](down/README.md) — Disable the embedded resolving proxies
+- [route](route/README.md) — Per-domain upstreams: send chosen domains through another exit
 - [up](up/README.md) — Enable the embedded resolving proxies
 
 ## Global Flags

@@ -9,9 +9,11 @@ packets already on it complete normally. Removing the last leg in a
 mux group leaves the group with the primary route only — to fully
 tear down the session, use 'proxy stop' instead.
 
-When the app has multiple concurrent rg's, pass --rg <src-port> to
-target one of them; otherwise the visor errors with the candidate
-list.
+When the app has multiple concurrent rg's — one per SOCKS5 connection,
+or one per tunnel under 'proxy start --tunnels N' — pass --rg <port> to
+target one of them; that is the group's own port as 'mux info' prints it
+(desc.dst_port), since every group shares one src_port. Otherwise the
+visor errors with the candidate list.
 
 Example:
   skywire cli proxy mux info                            # find the leg
@@ -27,7 +29,7 @@ skywire cli proxy mux rm <tp-id>
 
 ```
   -n, --name string   app whose route group to modify (default "skysocks-client")
-      --rg uint16     rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)
+      --rg uint16     rg selector: the route group's own port as 'mux info' prints it (desc.dst_port; its src_port also matches). Only needed when the app has multiple active rg's — e.g. 'proxy start --tunnels N'
 ```
 
 ## Global Flags

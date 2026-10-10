@@ -259,6 +259,8 @@ https://conf.skywire.skycoin.com/
 
 This endpoint provides json which will become part of the visor's config.
 
+To run a whole custom deployment in one visor, with the services-config generated for you, see [custom-deployment.md](../guides/custom-deployment.md). The rest of this section describes the separate-unit layout.
+
 When setting up a custom deployment, the following file is created (manually) to reflect your deployment:
 ```
 {

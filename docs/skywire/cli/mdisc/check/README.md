@@ -27,6 +27,7 @@ skywire cli mdisc check
 ## Flags
 
 ```
+      --embedded           check the dmsg servers built into this binary instead of asking a discovery
       --timeout duration   per-server probe timeout (default 15s)
       --warn-only          always exit 0 (report problems without failing)
 ```
