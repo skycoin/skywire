@@ -11,16 +11,15 @@ const _OP_MONITOR = uint32(60)
 func doMonitor(_ *protocolServer, req *request) {
 	// macFUSE sends watcher-monitor notifications for files and directories.
 	// They are advisory and do not require a reply.
-	req.status = OK
+	req.suppressReply = true
 }
 
 func init() {
 	operationHandlers[_OP_MONITOR] = &operationHandler{
-		Name:          "MONITOR",
-		Func:          doMonitor,
-		InputSize:     unsafe.Sizeof(MonitorIn{}),
-		InType:        MonitorIn{},
-		SuppressReply: true,
+		Name:      "MONITOR",
+		Func:      doMonitor,
+		InputSize: unsafe.Sizeof(MonitorIn{}),
+		InType:    MonitorIn{},
 	}
 
 	checkFixedBufferSize()

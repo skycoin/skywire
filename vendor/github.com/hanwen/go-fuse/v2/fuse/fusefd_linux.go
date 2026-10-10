@@ -14,17 +14,9 @@ func (r *fuseFD) write(req *request) Status {
 		})
 		return ToStatus(err)
 	}
-
 	if req.readResult != nil {
-		defer func() {
-			req.readResult.Done()
-			req.readResult = nil
-		}()
-		if ws, ok := req.readResult.(withSlice); ok {
-			return r.writeWithSlice(req, ws)
-		}
-
-		if r.server.canSplice && !r.server.opts.DisableSplice {
+		defer req.readResult.Done()
+		if r.server.canSplice {
 			err := r.trySplice(req, req.readResult)
 			if err == nil {
 				return OK

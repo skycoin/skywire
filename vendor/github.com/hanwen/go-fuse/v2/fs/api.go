@@ -384,11 +384,6 @@ type NodeWriter interface {
 	Write(ctx context.Context, f FileHandle, data []byte, off int64) (written uint32, errno syscall.Errno)
 }
 
-// Writev is like Write, for data split over several slices.
-type NodeWritever interface {
-	Writev(ctx context.Context, f FileHandle, data [][]byte, off int64) (written uint32, errno syscall.Errno)
-}
-
 // Fsync is a signal to ensure writes to the Inode are flushed
 // to stable storage.
 type NodeFsyncer interface {
@@ -523,28 +518,6 @@ type NodeLookuper interface {
 	Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*Inode, syscall.Errno)
 }
 
-// NodeLookupNoder looks up a node ID without path context. It is only
-// called on the root node. This is called on files exported as NFS,
-// if a client holds a reference predating the start of this file
-// system, e.g. in case of server reboot.
-//
-// LookupNode must return a node whose StableAttr.Ino == id.
-type NodeLookupNoder interface {
-	LookupNode(ctx context.Context, id uint64, out *fuse.EntryOut) (*Inode, syscall.Errno)
-}
-
-// NodeLookupParenter resolves the parent directory of a node without
-// path context; it is the ".." counterpart of NodeLookupNoder. It is
-// called on a node without a known parent (eg. one returned by
-// LookupNode) when the kernel reconnects an NFS filehandle for a
-// directory, or for an export without no_subtree_check.
-//
-// LookupParent must return the parent directory and the name of the
-// receiver in it, and fill out with the parent's attributes.
-type NodeLookupParenter interface {
-	LookupParent(ctx context.Context, out *fuse.EntryOut) (parent *Inode, name string, errno syscall.Errno)
-}
-
 // NodeWrapChilder wraps a FS node implementation in another one. If
 // defined, it is called automatically from NewInode and
 // NewPersistentInode. Thus, existing file system implementations,
@@ -625,16 +598,6 @@ type NodeCreater interface {
 	Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (node *Inode, fh FileHandle, fuseFlags uint32, errno syscall.Errno)
 }
 
-// Tmpfile creates a file in this directory which has no name, as open(2) with O_TMPFILE does. It is answered like
-// Create, with a node and an open file handle, but the node is not added to the directory: the file gets a name
-// only if the caller links it into place, through /proc/self/fd of the descriptor it holds. A directory which does
-// not implement this interface answers EOPNOTSUPP. A filesystem which never supports it can implement the interface
-// and answer ENOSYS, which the kernel remembers for the whole mount: it then fails O_TMPFILE without sending another
-// request.
-type NodeTmpfiler interface {
-	Tmpfile(ctx context.Context, flags uint32, mode uint32, out *fuse.EntryOut) (node *Inode, fh FileHandle, fuseFlags uint32, errno syscall.Errno)
-}
-
 // Unlink should remove a child from this directory.  If the
 // return status is OK, the Inode is removed as child in the
 // FS tree automatically. Default is to return success.
@@ -708,11 +671,6 @@ type FileReader interface {
 // See NodeWriter.
 type FileWriter interface {
 	Write(ctx context.Context, data []byte, off int64) (written uint32, errno syscall.Errno)
-}
-
-// See NodeWritever.
-type FileWritever interface {
-	Writev(ctx context.Context, data [][]byte, off int64) (written uint32, errno syscall.Errno)
 }
 
 // See NodeGetlker.
@@ -860,12 +818,4 @@ type Options struct {
 	// RootStableAttr is an optional way to set e.g. Ino and/or Gen for
 	// the root directory when calling fs.Mount(), Mode is ignored.
 	RootStableAttr *StableAttr
-
-	// ExternalNodeID, if set, uses StableAttr.Ino - which the
-	// caller controls - as the FUSE nodeID, instead of one
-	// allocated internally. This is a prerequisite for exporting
-	// the file system over NFS. In this case, it is important to
-	// ensure StableAttr.Gen is increased each time the same inode
-	// number is reused.
-	ExternalNodeID bool
 }
