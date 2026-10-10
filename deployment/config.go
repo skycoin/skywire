@@ -203,7 +203,6 @@ type Services struct {
 	RouteFinder        string          `json:"route_finder,omitempty"`
 	RouteSetupNodes    []cipher.PubKey `json:"route_setup_nodes,omitempty"`
 	TransportSetupPKs  []cipher.PubKey `json:"transport_setup,omitempty"`
-	UptimeTracker      string          `json:"uptime_tracker,omitempty"`
 	ServiceDiscovery   string          `json:"service_discovery,omitempty"`
 	StunServers        []string        `json:"stun_servers,omitempty"`
 	DNSServer          string          `json:"dns_server,omitempty"`
@@ -235,7 +234,6 @@ type Services struct {
 	TransportDiscoveryDmsg string `json:"transport_discovery_dmsg,omitempty"`
 	AddressResolverDmsg    string `json:"address_resolver_dmsg,omitempty"`
 	RouteFinderDmsg        string `json:"route_finder_dmsg,omitempty"`
-	UptimeTrackerDmsg      string `json:"uptime_tracker_dmsg,omitempty"`
 	ServiceDiscoveryDmsg   string `json:"service_discovery_dmsg,omitempty"`
 	// Reward system
 	RewardSystem     string `json:"reward_system,omitempty"`
@@ -263,9 +261,6 @@ func (s *Services) BackfillClearnetFromDmsg() {
 	}
 	if s.RouteFinder == "" {
 		s.RouteFinder = s.RouteFinderDmsg
-	}
-	if s.UptimeTracker == "" {
-		s.UptimeTracker = s.UptimeTrackerDmsg
 	}
 	if s.ServiceDiscovery == "" {
 		s.ServiceDiscovery = s.ServiceDiscoveryDmsg

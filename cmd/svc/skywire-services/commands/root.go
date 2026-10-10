@@ -25,7 +25,6 @@ import (
 	se "github.com/skycoin/skywire/cmd/svc/sw-env/commands"
 	tpd "github.com/skycoin/skywire/cmd/svc/transport-discovery/commands"
 	tps "github.com/skycoin/skywire/cmd/svc/transport-setup/commands"
-	ut "github.com/skycoin/skywire/cmd/svc/uptime-tracker/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	_ "github.com/skycoin/skywire/pkg/services/ar"
 	_ "github.com/skycoin/skywire/pkg/services/confbs"
@@ -54,7 +53,6 @@ func init() {
 		confbs.RootCmd,
 		conf.ServicesConfCmd,
 		se.RootCmd,
-		ut.RootCmd,
 		sd.RootCmd,
 		sn.RootCmd,
 		nm.RootCmd,
@@ -69,7 +67,6 @@ func init() {
 	confbs.RootCmd.Use = "confbs"
 	conf.RootCmd.Use = "conf"
 	se.RootCmd.Use = "se"
-	ut.RootCmd.Use = "ut"
 	sd.RootCmd.Use = "sd"
 	sn.RootCmd.Use = "sn"
 	nm.RootCmd.Use = "nm"

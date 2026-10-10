@@ -65,7 +65,6 @@ func generateExamples() string {
 		"transport_discovery": deployment.Prod.TransportDiscoveryDmsg,
 		"address_resolver":    deployment.Prod.AddressResolverDmsg,
 		"route_finder":        deployment.Prod.RouteFinderDmsg,
-		"uptime_tracker":      deployment.Prod.UptimeTrackerDmsg,
 		"service_discovery":   deployment.Prod.ServiceDiscoveryDmsg,
 		"route_setup_nodes":   []string{exPK1, exPK2},
 		"stun_servers":        []string{"stun.l.google.com:19302"},

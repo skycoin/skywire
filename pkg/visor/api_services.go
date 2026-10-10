@@ -43,7 +43,7 @@ import (
 //
 // The following are probed:
 //   - Services: Config Service, Transport Discovery, DMSG Discovery,
-//     Address Resolver, Route Finder, Service Discovery, Uptime Tracker
+//     Address Resolver, Route Finder, Service Discovery
 //     (each via GET {base}/health, dmsg:// or http://)
 //   - DMSG servers: one entry per server the visor currently has an
 //     active session with; latency comes from the visor's measured
@@ -69,10 +69,6 @@ func (v *Visor) ServiceHealth() ([]visorapi.ServiceHealthEntry, error) {
 		{"Route Finder", svcURLs{v.conf.Routing.RouteFinder, v.conf.Routing.RouteFinderDmsg}},
 		{"Service Discovery", svcURLs{v.conf.Launcher.ServiceDisc, v.conf.Launcher.ServiceDiscDmsg}},
 	}
-	// The standalone Uptime Tracker service is DEPRECATED — uptime is now
-	// TPD-integrated (/uptimes?v=v3). Its dmsg endpoint no longer answers, so
-	// probing it only paints Services-Health "degraded"; it's no longer listed.
-
 	// Probe every service over dmsg only — plain HTTP to deployment services is
 	// no longer supported. v.dmsgHTTP connects through a direct client with
 	// pre-loaded entries for all deployment services (no discovery lookup). The
@@ -321,10 +317,6 @@ func (v *Visor) fetchServiceDataUncached(ctx context.Context, service, path stri
 	switch service {
 	case "tpd":
 		httpURL, dmsgURL = v.conf.Transport.Discovery, v.conf.Transport.DiscoveryDmsg
-	case "ut":
-		if v.conf.UptimeTracker != nil {
-			httpURL, dmsgURL = v.conf.UptimeTracker.Addr, v.conf.UptimeTracker.AddrDmsg
-		}
 	case "sd":
 		httpURL, dmsgURL = v.conf.Launcher.ServiceDisc, v.conf.Launcher.ServiceDiscDmsg
 	case "ar":

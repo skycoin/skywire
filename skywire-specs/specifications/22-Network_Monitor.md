@@ -7,7 +7,7 @@ The *Network Monitor* (NM) is a service that monitors the health and status of t
 The Network Monitor:
 
 - **Monitors visor health**: Checks if visors are responsive
-- **Tracks service availability**: Monitors uptime tracker, address resolver, etc.
+- **Tracks service availability**: Monitors address resolver, route finder, etc.
 - **Detects network issues**: Identifies connectivity problems
 - **Provides network status**: Aggregates health information for dashboards
 
@@ -66,11 +66,6 @@ GET /status
             }
         },
         "services": {
-            "uptime_tracker": {
-                "status": "healthy",
-                "latency_ms": 45,
-                "last_check": "2024-02-25T10:30:00Z"
-            },
             "address_resolver": {
                 "status": "healthy",
                 "latency_ms": 32,
@@ -187,16 +182,16 @@ GET /status/service/{name}
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `name` | string | Service name (e.g., "uptime_tracker", "address_resolver") |
+| `name` | string | Service name (e.g., "address_resolver", "route_finder") |
 
 **Response:**
 
 - 200 OK (Success).
     ```json
     {
-        "name": "uptime_tracker",
+        "name": "address_resolver",
         "status": "healthy",
-        "url": "https://ut.skywire.skycoin.com",
+        "url": "https://ar.skywire.skycoin.com",
         "checks": [
             {
                 "endpoint": "/health",
@@ -294,7 +289,6 @@ GET /alerts
 
 | Service | Health Endpoint | Check Interval |
 |---------|----------------|----------------|
-| Uptime Tracker | `/health` | 60s |
 | Address Resolver | `/health` | 60s |
 | Transport Discovery | `/health` | 60s |
 | Route Finder | `/health` | 60s |

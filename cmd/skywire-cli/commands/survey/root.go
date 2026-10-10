@@ -109,10 +109,6 @@ the given dmsg discovery. Output honors --json / --jq like every other command.`
 			survey.ServicesURLs.RouteFinder = conf.Routing.RouteFinder
 			survey.ServicesURLs.RouteSetupNodes = conf.Routing.RouteSetupNodes
 			survey.ServicesURLs.TransportSetupPKs = conf.Transport.TransportSetupPKs
-			// uptime_tracker is deprecated and absent from generated configs (nil-safe).
-			if conf.UptimeTracker != nil {
-				survey.ServicesURLs.UptimeTracker = conf.UptimeTracker.Addr
-			}
 			survey.ServicesURLs.ServiceDiscovery = conf.Launcher.ServiceDisc
 			survey.ServicesURLs.SurveyWhitelist = conf.SurveyWhitelist
 			survey.ServicesURLs.StunServers = conf.StunServers

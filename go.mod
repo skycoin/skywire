@@ -40,7 +40,6 @@ require (
 	github.com/0magnet/xterm-go v0.0.1-0.20261004020305-36b45f096b30
 	github.com/0magnet/yamux v0.1.3-0.20261004024245-10ef81fe8447
 	github.com/ActiveState/termtest/conpty v0.5.0
-	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0
 	github.com/MichaelMure/go-term-markdown v0.1.4
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
@@ -64,7 +63,6 @@ require (
 	github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
 	github.com/gen2brain/malgo v0.11.26
 	github.com/gizak/termui/v3 v3.1.0
-	github.com/go-echarts/go-echarts/v2 v2.7.3
 	github.com/go-playground/validator/v10 v10.30.5
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-redis/redis/v8 v8.11.5
@@ -82,7 +80,6 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/kr/pretty v0.3.1
 	github.com/krolaw/dhcp4 v0.0.0-20190909130307-a50d88189771
-	github.com/lib/pq v1.12.3
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 	github.com/miekg/dns v1.1.73
 	github.com/orandin/lumberjackrus v1.0.1
@@ -128,8 +125,6 @@ require (
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/telebot.v3 v3.3.8
-	gorm.io/driver/postgres v1.6.3
-	gorm.io/gorm v1.31.2
 	gvisor.dev/gvisor v0.0.0-20260903204851-a8086798b6cb
 )
 
@@ -189,13 +184,7 @@ require (
 	github.com/gopherjs/gopherjs v1.21.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/itchyny/timefmt-go v0.1.9 // indirect
-	github.com/jackc/pgpassfile v1.0.0 // indirect
-	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.11.0 // indirect
-	github.com/jackc/puddle/v2 v2.2.3 // indirect
 	github.com/jaypipes/pcidb v1.1.1 // indirect
-	github.com/jinzhu/inflection v1.0.0 // indirect
-	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/compress v1.20.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/klauspost/reedsolomon v1.14.2 // indirect

@@ -38,7 +38,6 @@ type V1 struct {
 	STCP          *tnspec.STCPConfig   `json:"skywire-tcp,omitempty"`
 	Transport     *Transport           `json:"transport"`
 	Routing       *Routing             `json:"routing"`
-	UptimeTracker *UptimeTracker       `json:"uptime_tracker,omitempty"`
 	Launcher      *Launcher            `json:"launcher"`
 	// EmbeddedServices are deployment services (transport-discovery,
 	// address-resolver, route-finder, service-discovery) this visor runs
@@ -892,12 +891,6 @@ type Routing struct {
 	// destabilizes their handshakes — the pty 32-leg-mux footgun. Set true
 	// only with a policy purpose-built for control traffic.
 	PolicyOnControlPorts bool `json:"policy_on_control_ports,omitempty"`
-}
-
-// UptimeTracker configures uptime tracker.
-type UptimeTracker struct {
-	Addr     string `json:"addr"`
-	AddrDmsg string `json:"addr_dmsg,omitempty"`
 }
 
 // PublicVisorConfig configures public visor behavior and service discovery registration.

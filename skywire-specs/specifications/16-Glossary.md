@@ -38,8 +38,6 @@
 
 **Service Discovery (SD):** A registry for Skywire application services (VPN, proxy, visor) with geo-location and version data.
 
-**Uptime Tracker (UT):** A service tracking visor online status for reward eligibility.
-
 **Packet:** A data unit transmitted over routes. 7-byte header (type, route ID, payload size) followed by variable-length payload.
 
 **Noise Protocol:** ChaCha20-Poly1305 authenticated encryption used for route group encryption. Handshake pattern: XX for routes.

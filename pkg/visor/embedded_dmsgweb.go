@@ -396,9 +396,6 @@ func serviceAliasMap(conf *visorconfig.V1) map[string]cipher.PubKey {
 	if conf.Launcher != nil {
 		add("sd", conf.Launcher.ServiceDiscDmsg, conf.Launcher.ServiceDisc)
 	}
-	if conf.UptimeTracker != nil {
-		add("ut", conf.UptimeTracker.AddrDmsg, conf.UptimeTracker.Addr)
-	}
 	// Reward system (top-level config fields, not a sub-block).
 	add("rewards", conf.RewardSystemDmsg, conf.RewardSystem)
 
