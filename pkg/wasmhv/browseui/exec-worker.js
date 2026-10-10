@@ -179,6 +179,10 @@
 			},
 		};
 		if (m.env) hooks.env = m.env;
+		if (m.tty) {
+			hooks.stdin = 'pipe';
+			hooks.tty = { cols: m.tty.cols, rows: m.tty.rows, onRaw: function (on) { post({ t: 'raw', id: id, on: !!on }); } };
+		}
 		try {
 			globalThis.skywireExec(m.args || [], hooks).then(function (code) {
 				delete instances[id]; delete pendingKill[id];
@@ -347,6 +351,21 @@
 		case 'init': init(m); return;
 		case 'fs': fsCall(m); return;
 		case 'spawn': spawn(m); return;
+		case 'stdin': {
+			var si = instances[m.id];
+			if (si && si.stdin) { try { si.stdin.write(m.b); } catch (e) { /* gone */ } }
+			return;
+		}
+		case 'stdinclose': {
+			var sc = instances[m.id];
+			if (sc && sc.stdin) { try { sc.stdin.close(); } catch (e) { /* gone */ } }
+			return;
+		}
+		case 'resize': {
+			var rz = instances[m.id];
+			if (rz && typeof rz.resize === 'function') { try { rz.resize(m.c, m.r); } catch (e) { /* gone */ } }
+			return;
+		}
 		case 'kill':
 			if (!interrupt(m.id)) pendingKill[m.id] = true;
 			return;

@@ -285,16 +285,25 @@
 			var rec = { argv: argv.slice(), tail: '', filtered: '', exitInfo: null, _line: '' };
 			tails[id] = rec;
 			var p = new Promise(function (res, rej) {
-				live[id] = { out: hooks.stdout || null, err: hooks.stderr || null, resolve: res, reject: rej, rec: rec };
+				live[id] = { out: hooks.stdout || null, err: hooks.stderr || null, raw: (hooks.tty && hooks.tty.onRaw) || null, resolve: res, reject: rej, rec: rec };
 			});
 			// The interrupt is handed over SYNCHRONOUSLY, before the command
 			// starts — the contract cmd/wasm-visor/skywirecmd_js.go relies on
 			// for Ctrl+C. Here it posts a kill the worker turns into the same
 			// registered interrupt the in-page path would have invoked.
 			if (typeof hooks.instance === 'function') {
-				hooks.instance({ interrupt: function () { post({ t: 'kill', id: id }); return true; } });
+				hooks.instance({
+					interrupt: function () { post({ t: 'kill', id: id }); return true; },
+					// A command on the shell's terminal: its keys and resizes go over too.
+					stdin: hooks.tty ? {
+						write: function (b) { post({ t: 'stdin', id: id, b: b }); return id in live; },
+						close: function () { post({ t: 'stdinclose', id: id }); },
+					} : null,
+					resize: function (c, r) { post({ t: 'resize', id: id, c: c, r: r }); },
+				});
 			}
-			post({ t: 'spawn', id: id, args: args.slice(), env: hooks.env || null });
+			var tty = hooks.tty ? { cols: hooks.tty.cols, rows: hooks.tty.rows } : null;
+			post({ t: 'spawn', id: id, args: args.slice(), env: hooks.env || null, tty: tty });
 			return p;
 		}
 		remoteExec.wasmURL = globalThis.skywireExec.wasmURL;
@@ -419,6 +428,11 @@
 					if (ee.rec) { try { tailPush(ee.rec, dec.decode(m.b, { stream: true })); } catch (e) { /* ignore */ } }
 					if (ee.err) { try { ee.err(m.b); } catch (e) { /* sink gone */ } }
 				}
+				return;
+			}
+			case 'raw': {
+				var er = live[m.id];
+				if (er && er.raw) { try { er.raw(!!m.on); } catch (e) { /* sink gone */ } }
 				return;
 			}
 			case 'exit': finish(m.id, m.code, null); return;

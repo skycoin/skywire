@@ -59,7 +59,7 @@ var listCmd = &cobra.Command{
 		}
 		defer rpcClient.Close() //nolint:errcheck,gosec
 
-		// --live: bubbletea watch view. Honors --filter and --hops;
+		// --live: watch view. Honors --filter and --hops;
 		// not compatible with the machine-output flags (their structured
 		// snapshot is its own thing). Re-fetches ActiveRoutes() every tick
 		// so bandwidth counters tick up in place.
@@ -226,7 +226,7 @@ func init() {
 	listCmd.Flags().BoolVar(&statusHops, "hops", false,
 		"also print the full forward hop path for each route group")
 	listCmd.Flags().BoolVarP(&statusLive, "live", "L", false,
-		"live-refresh mode (bubbletea TUI, 1s tick); shows route groups + bandwidth updating in place")
+		"live-refresh mode (TUI, 1s tick); shows route groups + bandwidth updating in place")
 }
 
 func formatBytes(b uint64) string {
