@@ -561,14 +561,17 @@ func (r *rectangleRenderer) renderVertices(attrs []float32, count int, up *jsF32
 func (r *rectangleRenderer) handleResize() { r.updateViewportRectangle() }
 
 // updateViewportRectangle sets the first rectangle that clears the
-// whole screen to the background color.
+// whole screen to the background color. It keeps the background's alpha,
+// as _bgFloat does upstream: this quad is the only place the default
+// background is drawn, so a translucent theme background shows through
+// here and nowhere else. Cell backgrounds stay opaque (updateRectangle).
 func (r *rectangleRenderer) updateViewportRectangle() {
-	bg := cssToRGB(r.colors.Background)
+	bg, alpha := cssToRGBA(r.colors.Background)
 	br, bgc, bb := rgbToFloats(bg)
-	r.addRectangle(r.bgAttrs, 0, 0, 0,
+	r.addRectangleAlpha(r.bgAttrs, 0, 0, 0,
 		float64(r.term.Core.Cols()*r.dims.deviceCellWidth),
 		float64(r.term.Core.Rows()*r.dims.deviceCellHeight),
-		br, bgc, bb)
+		br, bgc, bb, float32(alpha))
 }
 
 func (r *rectangleRenderer) updateBackgrounds(model *renderModel) {
@@ -589,7 +592,7 @@ func (r *rectangleRenderer) updateBackgrounds(model *renderModel) {
 			if bg != currentBg || (fg != currentFg && (currentInverse || inverse)) {
 				// a rectangle is drawn when going from non-default to
 				// another color
-				if currentBg != 0 || (currentInverse && currentFg != 0) {
+				if needsBgRect(currentBg, currentFg, currentInverse) {
 					offset := rectangleCount * rectIndices
 					rectangleCount++
 					r.growBg(offset + rectIndices)
@@ -601,7 +604,7 @@ func (r *rectangleRenderer) updateBackgrounds(model *renderModel) {
 				currentInverse = inverse
 			}
 		}
-		if currentBg != 0 || (currentInverse && currentFg != 0) {
+		if needsBgRect(currentBg, currentFg, currentInverse) {
 			offset := rectangleCount * rectIndices
 			rectangleCount++
 			r.growBg(offset + rectIndices)
@@ -609,6 +612,18 @@ func (r *rectangleRenderer) updateBackgrounds(model *renderModel) {
 		}
 	}
 	r.bgCount = rectangleCount
+}
+
+// needsBgRect reports whether a run of cells needs a background rectangle.
+//
+// Upstream tests the whole bg word against 0, so a default-background cell
+// that carries only flags (an underlined one has BgHasExtended set) gets a
+// rectangle in the default background color, drawn opaque. Under an opaque
+// theme that is invisible; under a translucent one it is an opaque block
+// behind every underline. Only the color mode decides here, which draws
+// the same picture in the opaque case and leaves such cells translucent.
+func needsBgRect(bg, fg uint32, inverse bool) bool {
+	return bg&vt.AttrCMMask != 0 || (inverse && fg != 0)
 }
 
 func (r *rectangleRenderer) growBg(needed int) {
@@ -691,7 +706,12 @@ func (r *rectangleRenderer) updateRectangle(attrs []float32, offset int, fg, bg 
 		rr, rg, rb)
 }
 
+// addRectangle adds an opaque rectangle.
 func (r *rectangleRenderer) addRectangle(attrs []float32, offset int, x1, y1, width, height float64, cr, cg, cb float32) {
+	r.addRectangleAlpha(attrs, offset, x1, y1, width, height, cr, cg, cb, 1)
+}
+
+func (r *rectangleRenderer) addRectangleAlpha(attrs []float32, offset int, x1, y1, width, height float64, cr, cg, cb, ca float32) {
 	cw := float64(r.dims.deviceCanvasWidth)
 	ch := float64(r.dims.deviceCanvasHeight)
 	if cw == 0 || ch == 0 {
@@ -704,7 +724,7 @@ func (r *rectangleRenderer) addRectangle(attrs []float32, offset int, x1, y1, wi
 	attrs[offset+4] = cr
 	attrs[offset+5] = cg
 	attrs[offset+6] = cb
-	attrs[offset+7] = 1 // alpha: rectangles are always drawn opaque
+	attrs[offset+7] = ca
 }
 
 // webglRenderer coordinates the model, atlas and both sub-renderers
@@ -912,16 +932,17 @@ func (r *webglRenderer) refreshCharAtlas() {
 		dpr = 1
 	}
 	cfg := atlasConfig{
-		deviceCellWidth:  r.dims.deviceCellWidth,
-		deviceCellHeight: r.dims.deviceCellHeight,
-		deviceCharWidth:  r.dims.deviceCharWidth,
-		deviceCharHeight: r.dims.deviceCharHeight,
-		fontSize:         r.term.Core.Options.FontSize,
-		fontFamily:       r.term.Core.Options.FontFamily,
-		dpr:              dpr,
-		lineHeight:       maxF(r.term.Core.Options.LineHeight, 1),
-		colors:           r.term.colors,
-		mirrorGlyph:      r.term.Core.Options.MirrorGlyph,
+		deviceCellWidth:   r.dims.deviceCellWidth,
+		deviceCellHeight:  r.dims.deviceCellHeight,
+		deviceCharWidth:   r.dims.deviceCharWidth,
+		deviceCharHeight:  r.dims.deviceCharHeight,
+		fontSize:          r.term.Core.Options.FontSize,
+		fontFamily:        r.term.Core.Options.FontFamily,
+		dpr:               dpr,
+		lineHeight:        maxF(r.term.Core.Options.LineHeight, 1),
+		colors:            r.term.colors,
+		mirrorGlyph:       r.term.Core.Options.MirrorGlyph,
+		allowTransparency: r.term.Core.Options.AllowTransparency,
 	}
 	if r.atlas != nil {
 		cfg.pageSize = r.atlas.pageSize

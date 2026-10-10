@@ -368,3 +368,25 @@ func (s *selection) selectAll() {
 	}
 	s.notify()
 }
+
+// selectRange selects the cells from start up to but not including end, as a
+// screen reader's selection in the accessibility tree describes them.
+func (s *selection) selectRange(start, end pos) {
+	if !start.before(end) {
+		return
+	}
+	s.drop()
+	s.buf = s.buffer()
+	s.mode = selectChar
+	s.anchor = start
+	s.focus = pos{end.col - 1, end.line}
+	if end.col == 0 {
+		s.focus = pos{s.cols() - 1, end.line - 1}
+	}
+	s.has = true
+	s.moved = true
+	if a, b, ok := s.span(); ok {
+		s.markDirty(a, b)
+	}
+	s.notify()
+}
