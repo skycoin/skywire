@@ -214,8 +214,6 @@ class ConfigManager(
      *    SkyDNS switches (see [SkyDns]);
      *  - drop `skywire-tcp` — skips the `:7777` STCP listener;
      *  - `dmsgscp.disabled` — on by default when absent, writes scp-root;
-     *  - `skymail.enable=false` — the mailbox is on when the section is
-     *    absent, and the phone app has no Skymail yet;
      *  - `tp_viz.enable=false` — cosmetic (field is never read) but keeps
      *    the config honest about what the phone uses;
      *  - `routing.transport_preference` — the primary transport the app
@@ -326,7 +324,6 @@ class ConfigManager(
                 }
             }
             putObject("dmsgscp") { put("disabled", JsonPrimitive(true)) }
-            putObject("skymail") { put("enable", JsonPrimitive(false)) }
         }
         paths.configFile.writeText(json.encodeToString(JsonObject.serializer(), edited))
     }
