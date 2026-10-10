@@ -2641,9 +2641,9 @@ func configureExtraResolvers(log *logging.Logger) {
 
 // configureBrowseOrigin enables, by default, the loopback "real-origin" browse
 // proxy (pkg/visor/meshproxy.go). Its meshStatusHandler serves the proxy-status
-// pages at status-<surface>.<suffix> (e.g. status-skysocks.haltingstate.net) —
+// pages at status-<surface>.<suffix> (e.g. status-skysocks.theskywirenetwork.net) —
 // the native counterpart of the wasm visor's browse origin. Suffix defaults to
-// the deployment's browse_origin_suffix (".haltingstate.net"), matching the wasm
+// the deployment's browse_origin_suffix (".theskywirenetwork.net"), matching the wasm
 // surface, so a real single-level wildcard cert *.<suffix> covers the status
 // hosts. TLS activates on that loopback listener ONLY when the operator supplies
 // --browse-tls-cert/--browse-tls-key (the wildcard PRIVATE KEY is a deployment

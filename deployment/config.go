@@ -227,7 +227,7 @@ type Services struct {
 	WSSDomainAliases []string `json:"wss_domain_aliases,omitempty"`
 	// BrowseOriginSuffix is the deployment-wide domain the "real-origin" browse
 	// path (pkg/visor/meshproxy.go, the wasm SW browse origin, and the hosted
-	// Caddy front) serves untrusted mesh content under — e.g. ".haltingstate.net"
+	// Caddy front) serves untrusted mesh content under — e.g. ".theskywirenetwork.net"
 	// (a SEPARATE eTLD+1 from the visor app on WSSDomainSuffix, so untrusted
 	// browsed content is cookie/origin-isolated from the visor identity). Lives
 	// here so the domain is defined in exactly one place instead of being

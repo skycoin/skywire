@@ -116,7 +116,7 @@ per-target origin — `<id>.<suffix>`, where the id is a hash of the canonical
 target, because a wildcard certificate matches exactly one label and so cannot
 carry the target in the hostname — and the frame loads there. The address bar
 still reads `http://home.dmsg/` while the document behind it is at something
-like `https://74wqe524hg2qkjaxctxo.haltingstate.net/`: a genuine,
+like `https://74wqe524hg2qkjaxctxo.theskywirenetwork.net/`: a genuine,
 separate origin with its own storage and its own script world, which the desk
 that opened it cannot read into. netscrape inverts the rewrite for display, the
 same way it keeps `vnet:8001` in the bar for the dashboard. See

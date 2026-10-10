@@ -167,7 +167,7 @@ through the browser visor's own transports, so the origin does not care
 which deployment a visor uses.
 
 The services-config export keeps prod's browse origin,
-`.haltingstate.net`, so a deployment does not need its own. On a native
+`.theskywirenetwork.net`, so a deployment does not need its own. On a native
 visor the local browse proxy uses `.mesh.localhost` by default, which
 needs no DNS or certificate.
 
