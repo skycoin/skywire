@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gdamore/tcell/v2"
+	"github.com/gdamore/tcell/v3"
 
 	"github.com/skycoin/skywire/pkg/skywireconfig/autoconfigcmd"
 )
@@ -158,29 +158,29 @@ func TestRoundTripThroughFile(t *testing.T) {
 func TestTUIState(t *testing.T) {
 	m := NewModel(testFlags(), writeEnv(t))
 	s := newTUIState(m)
-	key := func(k tcell.Key, r rune) { s.handleKey(tcell.NewEventKey(k, r, 0)) }
+	key := func(k tcell.Key, r string) { s.handleKey(tcell.NewEventKey(k, r, 0)) }
 	if s.field().Name != "ishv" {
 		t.Fatalf("start on %s", s.field().Name)
 	}
-	key(tcell.KeyEnter, 0) // toggles the bool
+	key(tcell.KeyEnter, "") // toggles the bool
 	if s.field().Value != "false" {
 		t.Fatal("bool not toggled")
 	}
-	key(tcell.KeyRune, 'r')
+	key(tcell.KeyRune, "r")
 	if s.field().Changed() {
 		t.Fatal("revert failed")
 	}
 	for s.field().Name != "min-hops" {
-		key(tcell.KeyDown, 0)
+		key(tcell.KeyDown, "")
 	}
-	key(tcell.KeyEnter, 0)
-	key(tcell.KeyBackspace2, 0)
-	key(tcell.KeyRune, '5')
-	key(tcell.KeyEnter, 0)
+	key(tcell.KeyEnter, "")
+	key(tcell.KeyBackspace2, "")
+	key(tcell.KeyRune, "5")
+	key(tcell.KeyEnter, "")
 	if s.field().Value != "5" {
 		t.Fatalf("edit gave %q", s.field().Value)
 	}
-	key(tcell.KeyRune, 'p')
+	key(tcell.KeyRune, "p")
 	if !s.done || s.action != ActionPrint {
 		t.Fatal("print not chosen")
 	}

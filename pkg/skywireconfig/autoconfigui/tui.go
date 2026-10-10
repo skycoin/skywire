@@ -4,7 +4,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gdamore/tcell/v2"
+	"github.com/0magnet/progkit"
+	"github.com/gdamore/tcell/v3"
+	"github.com/gdamore/tcell/v3/color"
 )
 
 // Action is what the operator chose when the terminal form closed.
@@ -28,7 +30,7 @@ type tuiState struct {
 	cur     int
 	top     int
 	editing bool
-	buf     []rune
+	input   progkit.Input
 	status  string
 	quitArm bool
 	action  Action
@@ -44,6 +46,7 @@ func newTUIState(m *Model) *tuiState {
 		}
 	}
 	s.cur = 1
+	s.input = progkit.Input{ID: "value", OnSubmit: s.commit}
 	return s
 }
 
@@ -61,52 +64,56 @@ func (s *tuiState) move(d int) {
 // handleKey applies one key press and reports nothing, results live in s.
 func (s *tuiState) handleKey(ev *tcell.EventKey) {
 	if s.editing {
-		s.editKey(ev)
+		if ev.Key() == tcell.KeyEscape {
+			s.editing = false
+			return
+		}
+		s.input.Key(ev)
 		return
 	}
-	if ev.Key() != tcell.KeyRune || ev.Rune() != 'q' {
+	if progkit.Typed(ev) != "q" {
 		s.quitArm = false
 	}
-	switch ev.Key() {
-	case tcell.KeyUp:
+	switch {
+	case ev.Key() == tcell.KeyUp:
 		s.move(-1)
-	case tcell.KeyDown:
+	case ev.Key() == tcell.KeyDown:
 		s.move(1)
-	case tcell.KeyPgUp:
+	case ev.Key() == tcell.KeyPgUp:
 		for i := 0; i < 10; i++ {
 			s.move(-1)
 		}
-	case tcell.KeyPgDn:
+	case ev.Key() == tcell.KeyPgDn:
 		for i := 0; i < 10; i++ {
 			s.move(1)
 		}
-	case tcell.KeyEnter:
+	case ev.Key() == tcell.KeyEnter:
 		s.activate()
-	case tcell.KeyEscape, tcell.KeyCtrlC:
+	case ev.Key() == tcell.KeyEscape, progkit.IsCtrl(ev, 'c'):
 		s.done = true
-	case tcell.KeyRune:
-		s.runeKey(ev.Rune())
+	default:
+		s.typed(progkit.Typed(ev))
 	}
 }
 
-func (s *tuiState) runeKey(r rune) {
-	switch r {
-	case 'k':
+func (s *tuiState) typed(k string) {
+	switch k {
+	case "k":
 		s.move(-1)
-	case 'j':
+	case "j":
 		s.move(1)
-	case ' ':
+	case " ":
 		s.activate()
-	case 'r':
+	case "r":
 		f := s.field()
 		f.Value = f.Current
-	case 'n':
+	case "n":
 		s.m.NoRestart = !s.m.NoRestart
-	case 'p':
+	case "p":
 		s.finish(ActionPrint)
-	case 's':
+	case "s":
 		s.finish(ActionApply)
-	case 'q':
+	case "q":
 		if s.changes() == 0 || s.quitArm {
 			s.done = true
 			return
@@ -142,42 +149,18 @@ func (s *tuiState) activate() {
 		return
 	}
 	s.editing = true
-	s.buf = []rune(f.Value)
+	s.input.SetValue(f.Value)
 }
 
-func (s *tuiState) editKey(ev *tcell.EventKey) {
-	switch ev.Key() {
-	case tcell.KeyEnter:
-		f := s.field()
-		f.Value = string(s.buf)
-		if f.Type == "int" {
-			if _, err := strconv.Atoi(strings.TrimSpace(f.Value)); err != nil {
-				s.status = "not an integer: " + f.Value
-			}
+func (s *tuiState) commit(v string) {
+	f := s.field()
+	f.Value = v
+	if f.Type == "int" {
+		if _, err := strconv.Atoi(strings.TrimSpace(f.Value)); err != nil {
+			s.status = "not an integer: " + f.Value
 		}
-		s.editing = false
-	case tcell.KeyEscape:
-		s.editing = false
-	case tcell.KeyBackspace, tcell.KeyBackspace2:
-		if len(s.buf) > 0 {
-			s.buf = s.buf[:len(s.buf)-1]
-		}
-	case tcell.KeyCtrlU:
-		s.buf = nil
-	case tcell.KeyRune:
-		s.buf = append(s.buf, ev.Rune())
 	}
-}
-
-func draw(scr tcell.Screen, y, w int, text string, st tcell.Style) {
-	i := 0
-	for _, r := range text {
-		if i >= w {
-			break
-		}
-		scr.SetContent(i, y, r, nil, st)
-		i++
-	}
+	s.editing = false
 }
 
 func wrap(text string, w int) []string {
@@ -199,20 +182,16 @@ func wrap(text string, w int) []string {
 	return lines
 }
 
-func (s *tuiState) render(scr tcell.Screen) {
-	scr.Clear()
-	w, h := scr.Size()
+func (s *tuiState) render(f *progkit.Frame) {
+	scr, w, h := f.Screen, f.W, f.H
 	base := tcell.StyleDefault
 	bold := base.Bold(true)
-	dim := base.Foreground(tcell.ColorGray)
-	chg := base.Foreground(tcell.ColorYellow).Bold(true)
-	draw(scr, 0, w, "skywire autoconfig  "+s.m.Path, bold)
+	dim := base.Foreground(color.Gray)
+	chg := base.Foreground(color.Yellow).Bold(true)
+	progkit.DrawText(scr, 0, 0, w, "skywire autoconfig  "+s.m.Path, bold)
 
 	helpH := 5
-	bodyH := h - 2 - helpH
-	if bodyH < 1 {
-		bodyH = 1
-	}
+	bodyH := max(h-2-helpH, 1)
 	if s.cur < s.top {
 		s.top = s.cur
 	}
@@ -223,43 +202,46 @@ func (s *tuiState) render(scr tcell.Screen) {
 		r := s.rows[s.top+i]
 		y := 1 + i
 		if r.field == nil {
-			draw(scr, y, w, "== "+r.header+" ==", bold)
+			progkit.DrawText(scr, 0, y, w, "== "+r.header+" ==", bold)
 			continue
 		}
-		f := r.field
-		val := f.Value
-		if f.Secret && val != "" {
+		fl := r.field
+		val := fl.Value
+		if fl.Secret && val != "" {
 			val = strings.Repeat("*", len(val))
-		}
-		if s.editing && s.top+i == s.cur {
-			val = string(s.buf) + "_"
 		}
 		mark := "  "
 		st := base
-		if f.Changed() {
+		if fl.Changed() {
 			mark, st = "* ", chg
+		}
+		label := mark + padRight(fl.Name, 28) + " "
+		if s.editing && s.top+i == s.cur {
+			x := progkit.DrawText(scr, 0, y, w, label, st.Reverse(true))
+			s.input.Draw(f, progkit.Rect{X: x, Y: y, W: w - x, H: 1}, true)
+			continue
 		}
 		if s.top+i == s.cur {
 			st = st.Reverse(true)
 		}
-		draw(scr, y, w, mark+padRight(f.Name, 28)+" "+val, st)
+		progkit.DrawText(scr, 0, y, w, label+val, st)
 	}
 
 	hy := h - 1 - helpH
 	if s.cur < len(s.rows) && s.rows[s.cur].field != nil {
-		f := s.field()
-		text := f.Help
-		if f.Note != "" {
-			text += " Note: " + f.Note
+		fl := s.field()
+		text := fl.Help
+		if fl.Note != "" {
+			text += " Note: " + fl.Note
 		}
-		if f.Default != "" {
-			text += " (default " + f.Default + ")"
+		if fl.Default != "" {
+			text += " (default " + fl.Default + ")"
 		}
 		for i, l := range wrap(text, w) {
 			if i >= helpH {
 				break
 			}
-			draw(scr, hy+i, w, l, dim)
+			progkit.DrawText(scr, 0, hy+i, w, l, dim)
 		}
 	}
 	nr := "restart"
@@ -267,11 +249,13 @@ func (s *tuiState) render(scr tcell.Screen) {
 		nr = "no restart"
 	}
 	keys := "enter edit/toggle  r revert  n " + nr + "  p print command  s save  q quit"
+	if s.editing {
+		keys = "enter keep  esc cancel"
+	}
 	if s.status != "" {
 		keys = s.status
 	}
-	draw(scr, h-1, w, keys, bold)
-	scr.Show()
+	progkit.DrawText(scr, 0, h-1, w, keys, bold)
 }
 
 func padRight(s string, n int) string {
@@ -284,24 +268,18 @@ func padRight(s string, n int) string {
 // RunTUI shows the form in the terminal and returns what the operator chose.
 // The model holds the edits afterwards.
 func RunTUI(m *Model) (Action, error) {
-	scr, err := tcell.NewScreen()
+	app, err := progkit.Open()
 	if err != nil {
 		return ActionQuit, err
 	}
-	if err := scr.Init(); err != nil {
-		return ActionQuit, err
-	}
-	defer scr.Fini()
+	defer app.Close()
 	s := newTUIState(m)
-	for !s.done {
-		s.render(scr)
-		switch ev := scr.PollEvent().(type) {
-		case *tcell.EventResize:
-			scr.Sync()
-		case *tcell.EventKey:
+	app.Run(s.render, func(ev tcell.Event) bool {
+		if ev, ok := ev.(*tcell.EventKey); ok {
 			s.status = ""
 			s.handleKey(ev)
 		}
-	}
+		return !s.done
+	})
 	return s.action, nil
 }

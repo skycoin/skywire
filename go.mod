@@ -26,7 +26,7 @@ require (
 	github.com/0magnet/osnotify v0.0.0
 	github.com/0magnet/pfilter v0.0.14
 	github.com/0magnet/plot-go v0.0.1
-	github.com/0magnet/progkit v0.0.0-20261010162521-5acd96b9b1f6
+	github.com/0magnet/progkit v0.0.0-20261010165220-ff2a61ded799
 	github.com/0magnet/realorigin v0.2.3
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
 	github.com/0magnet/sh/v3 v3.13.2-0.20261004194540-aa2d6e4a31a5
@@ -56,7 +56,6 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/flynn/noise v1.1.0
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/gdamore/tcell/v2 v2.13.10
 	github.com/gdamore/tcell/v3 v3.5.0
 	github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
 	github.com/gen2brain/malgo v0.11.26
@@ -83,7 +82,6 @@ require (
 	github.com/orandin/lumberjackrus v1.0.1
 	github.com/oschwald/geoip2-golang/v2 v2.4.0
 	github.com/peterh/liner v1.2.3
-	github.com/pgavlin/femto v0.0.0-20201224065653-0c9d20f9cac4
 	github.com/pion/datachannel v1.6.3
 	github.com/pion/ice/v4 v4.4.7
 	github.com/pion/interceptor v0.1.49
@@ -92,7 +90,6 @@ require (
 	github.com/pkg/sftp v1.13.11
 	github.com/quic-go/quic-go v0.63.0
 	github.com/quic-go/webtransport-go v0.13.0
-	github.com/rivo/tview v0.42.0
 	github.com/rivo/uniseg v0.4.7
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/shirou/gopsutil/v3 v3.24.5
@@ -139,7 +136,6 @@ require (
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/alecthomas/chroma v0.10.0 // indirect
 	github.com/anatol/smart.go v0.0.0-20260913233941-486c28b93357 // indirect
-	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/benhoyt/goawk v1.32.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
@@ -230,7 +226,6 @@ require (
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
-	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/shibukawa/configdir v0.0.0-20170330084843-e180dbdc8da0 // indirect
 	github.com/shoenig/go-m1cpu v0.2.4 // indirect
 	github.com/shopspring/decimal v1.5.0 // indirect
@@ -247,7 +242,6 @@ require (
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	github.com/zyedidia/micro v1.4.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0 // indirect
 	go.opentelemetry.io/otel v1.45.0 // indirect
@@ -264,7 +258,6 @@ require (
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261005182115-fad411399dd8 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect
 	modernc.org/libc v1.77.1 // indirect

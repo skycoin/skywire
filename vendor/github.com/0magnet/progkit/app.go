@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"io"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -290,13 +291,16 @@ type MsgEvent struct {
 }
 
 // Key is the key a placed element passed on to the program, named as the
-// browser names it (KeyboardEvent.key), or nil.
+// browser names it (KeyboardEvent.key), with "Ctrl+" before a held Ctrl, or nil.
 func (m Msg) Key() *tcell.EventKey {
 	if m.Type != "key" {
 		return nil
 	}
 	if k, ok := browserKeys[m.Value]; ok {
 		return tcell.NewEventKey(k, "", 0)
+	}
+	if c, ok := strings.CutPrefix(m.Value, "Ctrl+"); ok && len([]rune(c)) == 1 {
+		return tcell.NewEventKey(tcell.KeyRune, c, tcell.ModCtrl)
 	}
 	if r := []rune(m.Value); len(r) == 1 {
 		return tcell.NewEventKey(tcell.KeyRune, m.Value, 0)

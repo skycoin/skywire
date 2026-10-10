@@ -34,8 +34,9 @@ app.Run(func(f *progkit.Frame) {
 })
 ```
 
-The widgets are `Input`, `Button`, `List`, `Text` (a scrolling view that takes
-ANSI colored output) and `Spinner`, with `Box` and `DrawLine` for the rest. Each
+The widgets are `Input`, `Area` (a multi-line editor, a textarea in websh),
+`Button`, `List`, `Text` (a scrolling view that takes ANSI colored output) and
+`Spinner`, with `Box` and `DrawLine` for the rest. Each
 placed element is the one shipped document, `widget.html`, told by a post what
 to be. Only changed placements and changed elements are sent after a frame.
 
