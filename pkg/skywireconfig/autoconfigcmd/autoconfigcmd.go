@@ -673,4 +673,9 @@ Every flag below corresponds to a SKYENV variable in skywire.conf.
 Passing a flag rewrites that line (uncommenting it if necessary);
 omitting a flag leaves the existing line untouched. The downstream
 'cli config gen' invocation then sources skywire.conf so the new
-values take effect on the same run.`
+values take effect on the same run.
+
+Run "skywire autoconfig i" for an interactive form that lists every
+setting with its current value and help text. Add --port N to serve the
+form on a local web page instead, guarded by a one-time token. Either
+form can print the equivalent autoconfig command instead of applying it.`
