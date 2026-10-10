@@ -95,7 +95,7 @@ func init() {
 	tpCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	tpCmd.Flags().StringSliceVar(&listRemoteVisors, "remote", nil, "list transports on remote visor(s) via TPS (comma-separated PKs)")
 	tpCmd.Flags().StringSliceVar(&listSkynetVisors, "skynet", nil, "list the transports remote visor(s) sign and serve, fetched over skywire transports (comma-separated PKs)")
-	tpCmd.Flags().BoolVarP(&tpLive, "live", "L", false, "live-refresh mode (bubbletea TUI, 1s tick); shows transport bandwidth/latency updating in place. Skips --more service-disc fetches per tick; not compatible with --remote/--id/--tptypes")
+	tpCmd.Flags().BoolVarP(&tpLive, "live", "L", false, "live-refresh mode (TUI, 1s tick); shows transport bandwidth/latency updating in place. Skips --more service-disc fetches per tick; not compatible with --remote/--id/--tptypes")
 }
 
 // RootCmd contains commands that interact with the skywire-visor
@@ -127,7 +127,7 @@ var tpCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 
-		// --live: bubbletea-based watch view of the default transport
+		// --live: watch view of the default transport
 		// listing. Slim renderer — no --more service-disc fetches per
 		// tick (too expensive) and bandwidth comes straight from each
 		// tick's Transports() RPC (the tp.Log fields). Branch early so
@@ -1033,7 +1033,7 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 }
 
 // renderTransportListLive builds a slim transport-listing snapshot for
-// the --live bubbletea viewport. It honors --types/--pks/--logs and
+// the --live view. It honors --types/--pks/--logs and
 // --bw so the live view matches whatever filter the user typed, but
 // deliberately skips --more (per-tick UT/SD/visor SD fetches would
 // blow the refresh budget) and inactive transports (their state
