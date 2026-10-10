@@ -20,6 +20,12 @@ start it with: skywire cli config set flight_recorder=true
 
 For sampling profiles (cpu / profile / trace), --seconds controls
 the sample duration; the visor caps this at its pprof default (30s).
+--debug N appends debug=N and returns text instead of a binary profile:
+
+  skywire cli log pprof <pk> goroutine --debug 2
+  skywire cli log pprof <pk> heap --debug 1
+
+--gc runs a garbage collection before a heap or allocs profile.
 Whitelisted via the remote visor's survey_whitelist.
 
 ## Usage
@@ -31,6 +37,8 @@ skywire cli log pprof <pk> <profile>
 ## Flags
 
 ```
+      --debug int     append debug=N, for a text form (goroutine 2 is the full dump with wait times, heap 1 ends with the runtime MemStats)
+      --gc            for heap/allocs: run a GC first (gc=1) so the profile holds live objects only
   -n, --seconds int   for cpu/profile/trace: duration in seconds (visor default is 30)
 ```
 
