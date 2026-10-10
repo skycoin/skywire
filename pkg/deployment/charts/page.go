@@ -2,6 +2,7 @@ package charts
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -91,6 +92,8 @@ type Page struct {
 type cached struct {
 	at   time.Time
 	body []byte
+	// gz is body gzipped, once per render rather than once per request.
+	gz []byte
 }
 
 const cacheFor = time.Minute
@@ -107,7 +110,7 @@ func (p *Page) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			rg = x
 		}
 	}
-	body, err := p.render(r.Context(), rg)
+	c, err := p.render(r.Context(), rg)
 	if err != nil {
 		if p.Log != nil {
 			p.Log.WithError(err).WithField("range", rg.Name).Warn("charts page render failed")
@@ -120,19 +123,25 @@ func (p *Page) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Set("Cache-Control", "public, max-age=60")
 	h.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src data:")
 	h.Set("X-Content-Type-Options", "nosniff")
+	body := c.body
+	if len(c.gz) > 0 && r.Method == http.MethodGet && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		h.Set("Content-Encoding", "gzip")
+		h.Add("Vary", "Accept-Encoding")
+		body = c.gz
+	}
 	_, _ = w.Write(body) //nolint:errcheck
 }
 
-func (p *Page) render(ctx context.Context, rg Range) ([]byte, error) {
+func (p *Page) render(ctx context.Context, rg Range) (cached, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if c, ok := p.cache[rg.Name]; ok && time.Since(c.at) < cacheFor {
-		return c.body, nil
+		return c, nil
 	}
 	now := time.Now().UTC()
 	content, err := p.Build(ctx, rg, now)
 	if err != nil {
-		return nil, err
+		return cached{}, err
 	}
 	if p.Stats != nil && p.Store != nil {
 		if f, from, err := rg.Frame(ctx, p.Store, now); err == nil {
@@ -151,8 +160,15 @@ func (p *Page) render(ctx context.Context, rg Range) ([]byte, error) {
 	if p.cache == nil {
 		p.cache = map[string]cached{}
 	}
-	p.cache[rg.Name] = cached{at: time.Now(), body: b.Bytes()}
-	return b.Bytes(), nil
+	c := cached{at: time.Now(), body: b.Bytes()}
+	var z bytes.Buffer
+	if gw, err := gzip.NewWriterLevel(&z, 5); err == nil {
+		if _, err := gw.Write(c.body); err == nil && gw.Close() == nil {
+			c.gz = z.Bytes()
+		}
+	}
+	p.cache[rg.Name] = c
+	return c, nil
 }
 
 func (p *Page) write(b *bytes.Buffer, rg Range, now time.Time, c Content, starts []Start) {
