@@ -11635,6 +11635,22 @@
         return true;
       }
 
+      // openThreadFromHost opens the conversation a phone notification was
+      // about: a peer's key, a group id, or "join:<group id>". Only one the
+      // page already has; false until it has loaded, so the host retries.
+      openThreadFromHost(tag) {
+        const key = String(tag == null ? '' : tag).trim().replace(/^join:/, '');
+        if (!key) return false;
+        if ((this.groups || []).some(g => g.id === key)) {
+          this.selectGroup(key);
+          return true;
+        }
+        const pk = this.recipients.find(p => p.toLowerCase() === key.toLowerCase());
+        if (!pk) return false;
+        this.selectRecipient(pk);
+        return true;
+      }
+
       // onAddressInput debounces the resolve so typing a 66-character key
       // doesn't fire 66 requests, and so a half-typed key doesn't flash an
       // error on every keystroke.

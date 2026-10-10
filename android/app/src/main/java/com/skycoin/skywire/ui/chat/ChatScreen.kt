@@ -134,7 +134,11 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
         val link = chatLink ?: return@LaunchedEffect
         val view = webView
         if (!pageReady || view == null) return@LaunchedEffect
-        ChatWebView.openAddress(view, link.address)
+        if (link.thread) {
+            ChatWebView.openThread(view, link.address)
+        } else {
+            ChatWebView.openAddress(view, link.address)
+        }
         DeepLinks.chatLinkHandled(link)
     }
 

@@ -33,7 +33,11 @@ object DeepLinks {
      * would set a StateFlow to a value it already holds, which emits nothing
      * and leaves the second tap doing nothing at all.
      */
-    data class ChatLink(val address: String, val id: Long)
+    data class ChatLink(val address: String, val id: Long, val thread: Boolean = false)
+
+    /** What a SkyChat notification opens the app with; [EXTRA_THREAD] is its conversation. */
+    const val ACTION_OPEN_THREAD = "com.skycoin.skywire.OPEN_CHAT_THREAD"
+    const val EXTRA_THREAD = "thread"
 
     private val seq = AtomicLong()
 
@@ -44,6 +48,12 @@ object DeepLinks {
 
     /** True when [intent] carried a link this app claims. */
     fun offer(intent: Intent?): Boolean {
+        if (intent?.action == ACTION_OPEN_THREAD) {
+            val thread = intent.getStringExtra(EXTRA_THREAD)?.trim().orEmpty()
+            if (thread.isEmpty()) return false
+            chat.value = ChatLink(thread, seq.incrementAndGet(), thread = true)
+            return true
+        }
         if (intent?.action != Intent.ACTION_VIEW) return false
         return offer(intent.data)
     }
