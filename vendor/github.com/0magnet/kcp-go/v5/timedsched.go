@@ -86,6 +86,9 @@ func (h *timedFuncHeap) pop() timedFunc {
 // tasks. It is half of KCP's shortest update interval, 10ms.
 const schedSlack = 5 * time.Millisecond
 
+// testHookBeforeArm runs in a shard just before it arms its timer.
+var testHookBeforeArm atomic.Pointer[func()]
+
 // TimedSched runs functions at given times on a few shard goroutines.
 //
 // Put pushes onto a shard's heap under its lock and wakes the shard only when
@@ -134,10 +137,15 @@ func (ts *TimedSched) run(sh *tsShard) {
 			due = append(due, sh.tasks.pop())
 		}
 		var wait time.Duration
+		pending := false
 		sh.armed = time.Time{}
 		if len(due) == 0 && len(sh.tasks) > 0 {
+			if hook := testHookBeforeArm.Load(); hook != nil {
+				(*hook)()
+			}
 			sh.armed = sh.tasks[0].ts
 			wait = time.Until(sh.armed)
+			pending = true
 		}
 		sh.mu.Unlock()
 
@@ -150,9 +158,11 @@ func (ts *TimedSched) run(sh *tsShard) {
 			continue
 		}
 
+		// A head that came due while arming, as after a GC pause, fires at once.
+		// Without a timer no Put could wake the shard for it.
 		var fire <-chan time.Time
-		if wait > 0 {
-			timer.Reset(wait)
+		if pending {
+			timer.Reset(max(wait, 0))
 			fire = timer.C
 		}
 		select {
