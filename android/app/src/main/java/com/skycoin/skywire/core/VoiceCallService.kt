@@ -1,9 +1,11 @@
 package com.skycoin.skywire.core
 
+import android.Manifest
 import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.IBinder
 import android.util.Log
@@ -19,8 +21,9 @@ import kotlinx.coroutines.cancel
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Runs for exactly as long as a call is connected, and does one thing: lend
- * the visor this phone's microphone and speaker ([VoiceAudioEngine]).
+ * Runs from the moment a call is placed until it ends, and does one thing:
+ * lend the visor this phone's microphone and speaker ([VoiceAudioEngine])
+ * while the call is connected.
  *
  * **Why a service of its own** rather than a few coroutines in the core
  * service. Recording from the background is only allowed to a foreground
@@ -44,6 +47,9 @@ class VoiceCallService : android.app.Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var engine: VoiceAudioEngine
 
+    /** The foreground service types held now, so a type is never asked for twice. */
+    @Volatile private var types = 0
+
     override fun onCreate() {
         super.onCreate()
         VoiceCallWatcher.ensureChannels(this)
@@ -51,12 +57,15 @@ class VoiceCallService : android.app.Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Starts as playback-only, and that is not a formality: the platform
-        // REFUSES a `microphone` foreground service outright — SecurityException,
-        // not a silent mute — unless RECORD_AUDIO is already granted. A call can
-        // arrive before the user has ever been asked, so claiming the microphone
-        // up front would crash the app on the very call that needed it.
-        if (!foreground(ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)) {
+        // Playback is always allowed; the microphone only with RECORD_AUDIO
+        // granted (SecurityException otherwise) and only while the app is on
+        // screen. A call placed from the screen is claimed here, before the
+        // user can lock the phone, or a call answered after that records
+        // silence.
+        val claimed = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED &&
+            foreground(ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+        if (!claimed && !foreground(ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)) {
             // Never in the foreground, so the platform's clock on the start is
             // still running; stopping now is what stops it.
             stopSelf()
@@ -69,21 +78,27 @@ class VoiceCallService : android.app.Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        engine.start(scope, onMicrophoneReady = {
-            // Promote before a single frame is recorded. Recording from the
-            // background is what the type buys, and a call may well be running
-            // with the app off-screen.
-            foreground(ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-        })
+        if (audio.get()) {
+            engine.start(scope, onMicrophoneReady = {
+                // The permission may have arrived mid-call. Promote before a
+                // single frame is recorded.
+                foreground(ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            })
+        }
         // Not sticky: a revived service with no call would hold the microphone
         // for nothing. The watcher starts us again if a call is still up.
         return START_NOT_STICKY
     }
 
-    private fun foreground(type: Int): Boolean =
-        runCatching { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), type) }
-            .onFailure { Log.w(TAG, "could not enter the foreground as type $type", it) }
+    /** Add [type] to the types this service holds; a type already held is not asked for again. */
+    private fun foreground(type: Int): Boolean {
+        if ((types and type) == type) return true
+        val next = types or type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+        return runCatching { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), next) }
+            .onSuccess { types = next }
+            .onFailure { Log.w(TAG, "could not enter the foreground as type $next", it) }
             .isSuccess
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -121,11 +136,20 @@ class VoiceCallService : android.app.Service() {
         /** Whether a call currently wants this service up: set by [start], cleared by [stop]. */
         private val wanted = AtomicBoolean(false)
 
+        /** Whether the call is connected, so the microphone and speaker are lent to it. */
+        private val audio = AtomicBoolean(false)
+
         /** Set once startForeground has been honoured, cleared on destroy. */
         private val inForeground = AtomicBoolean(false)
 
-        fun start(context: Context) {
+        /**
+         * Bring the service up for a call being placed ([connected] false) or
+         * one in progress. Started while the call is still being placed so the
+         * microphone is claimed while the user is on screen; see onStartCommand.
+         */
+        fun start(context: Context, connected: Boolean) {
             wanted.set(true)
+            audio.set(connected)
             ContextCompat.startForegroundService(
                 context,
                 Intent(context, VoiceCallService::class.java),
@@ -148,6 +172,7 @@ class VoiceCallService : android.app.Service() {
          */
         fun stop(context: Context) {
             wanted.set(false)
+            audio.set(false)
             if (inForeground.get()) {
                 context.stopService(Intent(context, VoiceCallService::class.java))
             }

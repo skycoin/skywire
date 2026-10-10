@@ -240,6 +240,7 @@ internal class VoiceCallWatcher(context: Context) {
     fun watch(scope: CoroutineScope): Job = scope.launch(Dispatchers.IO) {
         ensureChannels(app)
         var wasInCall = false
+        var wasWanted = false
         try {
             while (coroutineContext.isActive) {
                 // Before the calls, so a name is already in hand when one
@@ -256,10 +257,17 @@ internal class VoiceCallWatcher(context: Context) {
                     VoiceCalls.set(ringing, dialing, active)
                     showRinging(ringing.firstOrNull())
                     val inCall = active.isNotEmpty()
-                    if (inCall != wasInCall) {
-                        if (inCall) VoiceCallService.start(app) else VoiceCallService.stop(app)
-                        wasInCall = inCall
+                    // Up while a call is still being placed too: the
+                    // microphone can only be claimed while the user is on
+                    // screen, and a callee may answer after the phone is locked.
+                    val wanted = inCall || dialing.any { !it.state.ended }
+                    if (wanted && (!wasWanted || inCall != wasInCall)) {
+                        VoiceCallService.start(app, connected = inCall)
+                    } else if (!wanted && wasWanted) {
+                        VoiceCallService.stop(app)
                     }
+                    wasInCall = inCall
+                    wasWanted = wanted
                 }
                 // The tick, unless something happened that the next answer
                 // will be about. Hanging up nudges this so the visor is asked
@@ -274,7 +282,7 @@ internal class VoiceCallWatcher(context: Context) {
             VoiceCalls.clear()
             notifications.cancel(RINGING_NOTIFICATION_ID)
             showing = null
-            if (wasInCall) VoiceCallService.stop(app)
+            if (wasWanted) VoiceCallService.stop(app)
         }
     }
 
