@@ -152,6 +152,11 @@ func deploymentBlocks(host, redis string, old []svcblock.Block) ([]svcblock.Bloc
 		"address-resolver": {"dmsg": dmsgConf, "udp_addr": ":" + arPort,
 			"public_udp_addr": net.JoinHostPort(host, arPort)},
 	}
+	// The entry timeouts the standalone services default to.
+	for t, d := range map[string]string{"dmsg-discovery": "60m", "transport-discovery": "5m",
+		"route-finder": "10m", "service-discovery": "5m", "address-resolver": "5m"} {
+		fields[t]["entry_timeout"] = d
+	}
 	// Route finder reads the transport graph transport discovery stores.
 	redisDBs := map[string]int{"dmsg-discovery": 0, "transport-discovery": 1, "route-finder": 1,
 		"service-discovery": 2, "address-resolver": 3}

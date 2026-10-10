@@ -98,3 +98,9 @@ func finishAutoconfig(r resolvedConfig) {
 		os.Exit(1)
 	}
 }
+
+// exportDeployment has nothing to do in a browser visor.
+func exportDeployment(*resolvedConfig) error { return nil }
+
+// syncDeploymentDropIn has no unit to change in a browser visor.
+func syncDeploymentDropIn(string) (bool, error) { return false, nil }

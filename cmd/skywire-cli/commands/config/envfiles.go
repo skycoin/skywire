@@ -185,6 +185,12 @@ const envfileLinux = `#
 #	in memory, so a restart starts the deployment empty.
 #DEPLOYMENTREDIS='redis://127.0.0.1:6379'
 
+#--	Join a private deployment: the services-config its host prints with
+#	'skywire cli config deployment'. It replaces prod's for config gen and,
+#	through a drop-in autoconfig writes, for the visor. A deployment host
+#	gets its own export here.
+#SKYDEPLOY='/opt/skywire/deployment-services.json'
+
 #--	Where the in-visor dmsg server self-terminates TLS for its wss front
 #	via Let's Encrypt, so a browser or wasm visor can reach it. Set it on a
 #	host with NO reverse proxy — including any host where the standalone

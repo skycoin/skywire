@@ -72,7 +72,7 @@ var groupExact = map[string]string{
 	"no-direct-transports": "Privacy and routing", "pty-rpc-exec": "Privacy and routing",
 	"calculate-routes": "Privacy and routing",
 	"dmsgpty-pks":      "Whitelists", "survey": "Whitelists", "routesetup": "Whitelists",
-	"tpsetup": "Whitelists", "resolvers": "Resolvers and web bridges",
+	"tpsetup": "Whitelists", "skydeploy": "Deployment", "resolvers": "Resolvers and web bridges",
 	"wisp-socks": "Resolvers and web bridges", "vpnserver": "VPN server",
 	"killsw": "VPN server", "addvpn": "VPN server", "vpnwl": "VPN server",
 	"secure": "VPN server", "netifc": "VPN server",
