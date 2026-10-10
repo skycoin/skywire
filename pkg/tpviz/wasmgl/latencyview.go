@@ -7,16 +7,16 @@
 // The sphere here is NOT the Earth. Position is a function of latency
 // only, so two visors sit close together when the network puts them
 // close together, whichever continents they are on. Geography is
-// available as a colour, which is what makes the interesting question
+// available as a color, which is what makes the interesting question
 // askable: where does network distance agree with physical distance, and
 // where does it not.
 //
-// Division of labour follows the rest of this package. The embedding,
+// Division of labor follows the rest of this package. The embedding,
 // the tessellation and the projection are Go, because they are numeric
 // work over the whole point set; cosmos-go draws the points and links
 // from the projected positions with its simulation OFF, because the
 // positions are solved, not simulated. Its link distance is a single
-// global scalar, so a force layout could not honour per-edge latency
+// global scalar, so a force layout could not honor per-edge latency
 // even in principle.
 package wasmgl
 

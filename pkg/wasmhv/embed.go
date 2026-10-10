@@ -108,9 +108,9 @@ var PWAIcon512 []byte
 var FaviconICO []byte
 
 // WasmExecJS is Go's lib/wasm/wasm_exec.js — the loader every page serves
-// beside the one skywire command module (/wasm_exec.js, and the role-pinned
-// copies execwasm.LoaderJS derives from it). It MUST match the Go toolchain
-// that built the module — refresh it from $(go env GOROOT)/lib/wasm/wasm_exec.js
+// beside the skywire command module and the netview module
+// (pkg/tpviz/netview). It MUST match the Go toolchain that built both, the
+// go.mod version. Refresh it from $(go env GOROOT)/lib/wasm/wasm_exec.js
 // when the toolchain moves.
 //
 //go:embed wasm_exec.js

@@ -186,9 +186,9 @@ document.getElementById('find').addEventListener('input',function(e){var q=e.tar
 for(var i=0;i<n;i++)if(G.k[i].indexOf(q)===0){sel=i;gl.focusIndex(i);info(i,0,0);return}});
 document.getElementById('fit').onclick=function(){if(gl)gl.fit()};
 var probe=document.createElement('canvas');if(!(probe.getContext('webgl2')||probe.getContext('webgl'))){say('This browser has no WebGL, which the graph needs.');return}
-say('Loading the WebGL engine. It is the skywire wasm module, about 35 MB, and the browser keeps it after the first visit.');
+say('Loading the WebGL engine. It is about 1 MB.');
 var s=document.createElement('script');s.src='graph/engine.js';s.onerror=function(){say('The WebGL engine did not load.')};
-s.onload=function(){var go=new Go();go.argv=['skywire','desk-host','--role','netview'];
+s.onload=function(){var go=new Go();
 WebAssembly.instantiateStreaming(fetch('graph/engine.wasm'),go.importObject).then(function(r){go.run(r.instance);var tries=0;
 (function wait(){if(window.tpvizGL&&window.tpvizGL.ready){gl=window.tpvizGL;if(!gl.init('gl',onEvent)){say('The WebGL engine could not start.');return}
 show();say('');return}if(++tries>200){say('The WebGL engine did not start.');return}setTimeout(wait,25)})()}).catch(function(err){say('The WebGL engine failed: '+err)})};

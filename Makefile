@@ -1,7 +1,7 @@
 
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
-.PHONY : build clean install format  bin build-race
+.PHONY : build clean install format  bin build-race netview-wasm check-netview-wasm
 .PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-aab android-apk-debug check-mobile-version
 .PHONY : generate services vet check-cg check-help check-inner check-ci
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
@@ -488,11 +488,21 @@ check-bundle-wasm: ## Warn if the committed routing-policy bundle.wasm differs f
 		ls -l "$$tmp" "$(CURDIR)/$(BUNDLE_WASM)"; rm -f "$$tmp"; \
 	fi
 
-# The Go/wasm WebGL tpviz view builds no separate tpviz-gl.wasm: it is a role
-# of the one skywire command module (`skywire desk-host --role netview`,
-# pkg/wasmhv/deskhost), which pkg/tpviz serves at /tpviz-gl.wasm out of the
-# copy the native binary embeds (make embed-exec-wasm). bundle.js in
-# pkg/tpviz/legacy/ loads it lazily when the "WebGL (Go)" view is selected.
+# The WebGL graph view is its own small module, committed gzipped. It is built
+# with the go.mod toolchain so the build is byte-reproducible and matches the
+# committed pkg/wasmhv/wasm_exec.js.
+NETVIEW_WASM = pkg/tpviz/netview/netview.wasm.gz
+NETVIEW_BUILD = GOTOOLCHAIN=go$$(awk '/^go /{print $$2}' go.mod) GOOS=js GOARCH=wasm go build -trimpath -buildvcs=false -ldflags='-s -w'
+
+netview-wasm: ## Rebuild the committed netview module (pkg/tpviz/netview)
+	@tmp=$$(mktemp) && $(NETVIEW_BUILD) -o "$$tmp" ./cmd/netview && gzip -9 -n -c "$$tmp" > $(NETVIEW_WASM) && rm -f "$$tmp"
+	@ls -l $(NETVIEW_WASM); echo "commit $(NETVIEW_WASM) with the change that needed it."
+
+check-netview-wasm: ## Fail if the committed netview module differs from a fresh build
+	@tmp=$$(mktemp) && $(NETVIEW_BUILD) -o "$$tmp" ./cmd/netview && gzip -9 -n -c "$$tmp" > "$$tmp.gz" && rm -f "$$tmp" && \
+	if cmp -s "$$tmp.gz" $(NETVIEW_WASM); then rm -f "$$tmp.gz"; echo "$(NETVIEW_WASM) is up to date."; else \
+		rm -f "$$tmp.gz"; echo "$(NETVIEW_WASM) is stale. Run 'make netview-wasm' and commit it."; exit 1; fi
+
 
 # embed-winbox was removed: the window manager now lives in
 # github.com/0magnet/winbox-go, which the Go desk host links directly. To

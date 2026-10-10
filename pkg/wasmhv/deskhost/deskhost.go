@@ -4,9 +4,8 @@
 //
 // The desk host: the DOM-side surfaces of the skywire desk — the websh
 // terminal (shell_js.go), the netscrape browser (browser_js.go), the desk
-// chrome with its apps (desk_js.go, desk_pair_js.go) and the tpviz WebGL view
-// (tpviz_js.go) — as a library the ONE js/wasm build of the root binary runs
-// in the page (`skywire desk-host`, cmd/skywire/commands/deskhost_js.go).
+// chrome with its apps (desk_js.go, desk_pair_js.go) — as a library the ONE
+// js/wasm build of the root binary runs in the page (`skywire desk-host`, cmd/skywire/commands/deskhost_js.go).
 //
 // # One module
 //
@@ -43,7 +42,6 @@ import (
 //     the served desk page.
 //   - "browser": netscrape only, with the same-origin DirectLoader, for a page
 //     that already has a desk of its own.
-//   - "netview": the tpviz WebGL view (globalThis.tpvizGL).
 //   - "auto" / "": shell+browser+desk when the realm has a document; nothing
 //     in a worker.
 //
@@ -62,9 +60,6 @@ func Run(role string) {
 		installBrowserDirectLoader()
 		installOriginLoader()
 		fmt.Println("deskhost: browser role — call skywireBrowser.open(el)")
-	case "netview":
-		installNetView()
-		fmt.Println("deskhost: netview role — call tpvizGL.init(elId, onEvent)")
 	default:
 		if hasDOM() {
 			installShell()

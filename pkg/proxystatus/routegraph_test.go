@@ -242,7 +242,7 @@ func TestRenderGraphView(t *testing.T) {
 		`nd.x`, `nd.y`, "positions:pp",
 		// driver reuses the network visualizer's engine with no new wasm: the
 		// command module in its netview role → tpvizGL (cosmos-go), same-origin
-		`go.argv=["skywire","desk-host","--role","netview"]`, "/main.wasm", "/wasm_exec.js",
+		"/main.wasm", "/wasm_exec.js",
 		"tpvizGL", "instantiateStreaming", "MutationObserver", "setData",
 		// per-stream + exit colors reach the payload
 		rgExitColor, rgStreamColors[0], rgStreamColors[1],
