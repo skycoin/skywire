@@ -32,3 +32,21 @@ func TestSudphSessionsCountsAndFrees(t *testing.T) {
 		return r.Closed == 1 && r.InMemory == 0
 	}, 3*sudphHandshakeTimeout, 200*time.Millisecond)
 }
+
+// The report reads the KCP listener's own session map, under its lock.
+func TestSudphSessionsListenerMap(t *testing.T) {
+	a := newTestAPI(t)
+	l, err := kcp.Listen("127.0.0.1:0")
+	require.NoError(t, err)
+	defer l.Close() //nolint:errcheck
+	go a.ListenUDP(l)
+
+	c, err := kcp.Dial(l.Addr().String())
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+	_, err = c.Write([]byte("x"))
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		return a.sudphSessionsReport().ListenerSessions >= 1
+	}, 5*time.Second, 50*time.Millisecond)
+}
