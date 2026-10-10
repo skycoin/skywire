@@ -16,6 +16,7 @@
     <string name="app_wallet">Wallet</string>
     <string name="app_fleet">Fleet</string>
     <string name="app_skymeet">SkyMeet</string>
+    <string name="app_skymail">Skymail</string>
 
     <!-- Apps hub -->
     <string name="hub_subtitle">%1$d installed · %2$d running</string>
@@ -30,6 +31,7 @@
     <string name="hub_wallet_sub">SKY · Fibercoin · BTC · ETH</string>
     <string name="hub_fleet_sub">Visors you run elsewhere</string>
     <string name="hub_meet_sub">Encrypted calls</string>
+    <string name="hub_mail_sub">Mail over Skywire</string>
     <string name="hub_hero_reconnecting">Reconnecting</string>
     <string name="hub_hero_starting">Starting</string>
     <string name="hub_hero_no_exit">No exit chosen yet</string>
@@ -824,7 +826,7 @@
     <string name="help_chat_body">Messages, calls, groups and channels that travel over Skywire rather than a company\u2019s servers. Your identity here is this visor\u2019s public key — hand it out with the QR button and anyone holding it can reach you.\n\nThis is the same chat the desktop runs, laid out for a phone. It keeps its own history on this device; there is no account and nothing syncs on its own, so moving to another phone means exporting from Settings inside the chat and importing there.\n\nLogs for SkyChat live in Settings \u25b8 Diagnostics, together with every other log this app keeps.</string>
 
     <string name="help_hub_title">About Apps</string>
-    <string name="help_hub_body">Everything your visor can run, in one place. A tile opens the app\u2019s own screen; the visor itself keeps running underneath whichever one you are looking at.\n\nSkySOCKS and SkyVPN send other traffic through the network, SkyDEX trades, SkyChat messages and Fleet watches the visors you run elsewhere. A greyed tile is not built yet.</string>
+    <string name="help_hub_body">Everything your visor can run, in one place. A tile opens the app\u2019s own screen; the visor itself keeps running underneath whichever one you are looking at.\n\nSkySOCKS and SkyVPN send other traffic through the network, SkyDEX trades, SkyChat messages, Skymail sends mail between visors and Fleet watches the visors you run elsewhere. A greyed tile is not built yet.</string>
 
     <string name="help_wallet_title">About Wallet</string>
     <string name="help_wallet_body">Skycoin, the Fibercoins that share its node software, and Bitcoin — all held by keys that are generated on this phone and never leave it. Skywire never sees them and they are never sent to the network.\n\nThe twelve recovery words are the wallet. Anyone who reads them can spend the coins from any device without your phone, and if you lose them nobody can recover the wallet for you — not us, not anyone.\n\nBalances and history come from the node each coin is pointed at, so a coin whose node is unreachable shows its last known balance and will not send.</string>
@@ -897,4 +899,74 @@
     <string name="settings_encrypt_on_done">Config encrypted.</string>
     <string name="settings_encrypt_on_pending">The config will be encrypted when you disconnect.</string>
     <string name="settings_encrypt_off_done">Config is no longer encrypted.</string>
+
+    <!-- Skymail: the visor's mailbox (ui/mail) -->
+    <plurals name="hub_mail_unread">
+        <item quantity="one">%d unread</item>
+        <item quantity="other">%d unread</item>
+    </plurals>
+    <string name="mail_your_address">Your address</string>
+    <string name="mail_address_hint">Anyone on Skywire can write to this address, and any name before the @ reaches you. Skymail travels only on the Skywire network: it does not reach ordinary e-mail.</string>
+    <string name="mail_copy">Copy</string>
+    <string name="mail_share">Share</string>
+    <string name="mail_off_title">Your mailbox is off</string>
+    <string name="mail_off_body">Mail sent to your address is refused while the mailbox is off.</string>
+    <string name="mail_not_running">The mailbox is not running: %1$s</string>
+    <string name="mail_turn_on">Turn on</string>
+    <string name="mail_inbox">Inbox</string>
+    <string name="mail_inbox_unread">Inbox (%1$d)</string>
+    <string name="mail_sent_folder">Sent</string>
+    <string name="mail_empty_inbox">No mail yet.</string>
+    <string name="mail_empty_sent">Nothing sent yet.</string>
+    <string name="mail_no_subject">(no subject)</string>
+    <string name="mail_write">Write</string>
+    <string name="mail_unverified">Unverified sender</string>
+    <string name="mail_from">From</string>
+    <string name="mail_to">To</string>
+    <string name="mail_cc">Cc</string>
+    <string name="mail_date">Date</string>
+    <string name="mail_verified_line">Sent by the visor this address names.</string>
+    <string name="mail_unverified_line">Delivered by visor %1$s, which this address does not name. The From line may not be theirs.</string>
+    <string name="mail_from_html">Shown as plain text.</string>
+    <string name="mail_attachments">Attachments</string>
+    <string name="mail_save">Save</string>
+    <string name="mail_reply">Reply</string>
+    <string name="mail_delete">Delete</string>
+    <string name="mail_delete_confirm">Delete this message?</string>
+    <string name="mail_deleted">Message deleted</string>
+    <string name="mail_attachment_saved">Saved %1$s to Downloads</string>
+    <string name="mail_attachment_failed">Could not save the attachment: %1$s</string>
+    <string name="mail_compose_title">New message</string>
+    <string name="mail_to_hint">A Skymail address, or a visor’s public key</string>
+    <string name="mail_contacts">Contacts</string>
+    <string name="mail_add_cc">Add Cc</string>
+    <string name="mail_subject">Subject</string>
+    <string name="mail_body">Message</string>
+    <string name="mail_attach">Attach files</string>
+    <string name="mail_remove">Remove</string>
+    <string name="mail_send_note">Mail goes out now, over dmsg for a .dmsg address. A recipient whose visor is offline does not get it, and nothing retries.</string>
+    <string name="mail_send">Send</string>
+    <string name="mail_sending">Sending…</string>
+    <string name="mail_sent">Sent</string>
+    <string name="mail_send_failed">Could not send: %1$s</string>
+    <string name="mail_bad_address">Not a Skymail address: %1$s</string>
+    <string name="mail_no_recipient">Add a recipient.</string>
+    <string name="mail_attachments_too_big">Too large: a message can be about %1$s, attachments included.</string>
+    <string name="mail_result_title">Not everyone got it</string>
+    <string name="mail_result_delivered">Delivered over %1$s</string>
+    <string name="mail_result_failed">Not delivered: %1$s</string>
+    <string name="mail_reply_header">On %1$s, %2$s wrote:</string>
+    <string name="mail_settings_title">Mailbox settings</string>
+    <string name="mail_setting_on">Mailbox on</string>
+    <string name="mail_setting_on_desc">Receive mail at your address. While it is off, mail to you is refused.</string>
+    <string name="mail_usage">%1$s of %2$s used</string>
+    <string name="mail_limits">Messages over %1$s are refused, and mail older than %2$d days is deleted.</string>
+    <string name="mail_allowed_title">Who can write to you</string>
+    <string name="mail_allowed_everyone">Everyone. Add a key to accept mail only from the keys you list.</string>
+    <string name="mail_allowed_only">Only these:</string>
+    <string name="mail_allow_hint">A public key or a Skymail address</string>
+    <string name="mail_allow_add">Add</string>
+    <string name="mail_allow_bad">That is not a public key or a Skymail address.</string>
+    <string name="help_mail_title">Skymail</string>
+    <string name="help_mail_body">Skymail is e-mail between visors. Your visor keeps a mailbox at an address made from its public key, and mail is carried over Skywire, encrypted, with the sender’s key proved by the network rather than by a mail server.\n\nIt does not reach ordinary e-mail, and a visor that is offline cannot be written to: mail goes out at once and nothing retries. Use the .dmsg address from a phone; a .skynet address needs a route, which a phone rarely has.\n\nMail is kept on this phone, up to the size and age limits in the mailbox settings.</string>
 </resources>

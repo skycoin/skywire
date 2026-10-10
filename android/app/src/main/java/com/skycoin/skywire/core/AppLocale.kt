@@ -7,6 +7,9 @@ import android.os.Build
 import android.os.LocaleList
 import androidx.annotation.RequiresApi
 import androidx.core.content.edit
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import java.util.Locale
 
 /**
@@ -26,11 +29,10 @@ import java.util.Locale
  *    [wrap]. Nothing recreates the Activity on its own there, so [set] says so
  *    in its return value.
  *
- * The one honest caveat, and only below 33: a service that is *already*
- * running keeps the language it was created with, because its resources were
- * resolved then. In practice that is the core service's notification text
- * until the visor is next stopped and started. Activities are recreated on the
- * spot and so read correctly straight away.
+ * A notification already posted keeps the language it was built in, so the
+ * services that hold one rebuild it on [changes], with text from [localized].
+ * Below 33 their own context was resolved when they started and stays in the
+ * old language, which is why [localized] wraps afresh.
  *
  * Deliberately its own tiny SharedPreferences file rather than a key in
  * [AppPreferences]: this is read from `attachBaseContext`, before anything is
@@ -40,6 +42,29 @@ import java.util.Locale
 object AppLocale {
 
     private const val PREFS = "locale"
+
+    private val changed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** Fires when the interface language changes while the process runs. */
+    val changes: SharedFlow<Unit> = changed.asSharedFlow()
+
+    @Volatile
+    private var seen: LocaleList? = null
+
+    /**
+     * From Application.onConfigurationChanged. On API 33+ this is how a
+     * language change arrives, from the picker or system settings alike, and
+     * by then the resources already follow it.
+     */
+    fun onConfigurationChanged(config: Configuration) {
+        val locales = config.locales
+        val before = seen
+        seen = locales
+        if (before != null && before != locales) changed.tryEmit(Unit)
+    }
+
+    /** A context whose strings are in the current language, for text built after a change. */
+    fun localized(context: Context): Context = wrap(context.applicationContext)
 
     /** What the interface is currently drawn in. */
     fun current(context: Context): AppLanguage =
@@ -66,6 +91,7 @@ object AppLocale {
             return false
         }
         prefs(context).edit { putString(AppLanguage.PREF_KEY, language.name) }
+        changed.tryEmit(Unit)
         return true
     }
 

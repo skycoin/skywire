@@ -31,6 +31,7 @@ import androidx.compose.material.icons.rounded.AltRoute
 import androidx.compose.material.icons.rounded.CandlestickChart
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Email
 import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Route
@@ -89,8 +90,7 @@ import com.skycoin.skywire.ui.theme.SkyHeroGradient
  * whose status dots come from the visor's own app list.
  *
  * At most ONE greyed "coming soon" card at a time — currently SkyMeet. A hub
- * with several of them reads as an unfinished app; a single one reads as the
- * next thing being built. The rest arrive as they ship.
+ * with several of them reads as an unfinished app.
  */
 private enum class HubCategory { NETWORK, FINANCE, SOCIAL }
 
@@ -172,6 +172,20 @@ fun HubScreen(
                 icon = Icons.Rounded.AccountBalanceWallet,
                 category = HubCategory.FINANCE,
                 onClick = { onOpenTab(Routes.WALLET) },
+            ),
+        )
+        add(
+            HubTile(
+                name = stringResource(R.string.app_skymail),
+                subtitle = state.unreadMail.takeIf { it > 0 }
+                    ?.let { pluralStringResource(R.plurals.hub_mail_unread, it, it) }
+                    ?: stringResource(R.string.hub_mail_sub),
+                icon = Icons.Rounded.Email,
+                category = HubCategory.SOCIAL,
+                statusApp = MAIL_APP,
+                wide = true,
+                badgeCount = state.unreadMail.takeIf { it > 0 },
+                onClick = { onOpenRoute(Routes.MAIL) },
             ),
         )
         add(
@@ -591,6 +605,10 @@ private fun AppCard(tile: HubTile, status: AppState?) {
                     Text(tile.name, style = MaterialTheme.typography.titleMedium)
                     CardSubtitle(tile.subtitle)
                 }
+                tile.badgeCount?.let {
+                    CountBadge(it)
+                    Spacer(Modifier.width(8.dp))
+                }
                 Icon(
                     Icons.Rounded.ChevronRight,
                     contentDescription = null,
@@ -662,10 +680,7 @@ private fun SkyDnsCard(state: HubUiState, onToggle: (Boolean) -> Unit) {
     }
 }
 
-/**
- * The single greyed card: dashed border, muted throughout, and the one
- * "coming soon" badge in the app.
- */
+/** A greyed card for an app not built yet: dashed border, muted, "coming soon". */
 @Composable
 private fun ComingSoonCard(tile: HubTile) {
     val border = MaterialTheme.colorScheme.outlineVariant

@@ -26,8 +26,17 @@ class SkywirePaths(context: Context) {
     /** Config `local_path` — app workdirs, log DBs, uptime.db land here. */
     val localDir: File = File(dataDir, "local")
 
+    /** The app install the config was last generated for; see [ConfigManager]. */
+    val configStampFile: File = File(dataDir, "skywire-config.installed-at")
+
+    /** The config as it was before an update regenerated it, until that finishes. */
+    val configBackupFile: File = File(dataDir, "skywire-config.json.pre-update")
+
     /** Captured stdout/stderr of the visor child process (rotating). */
     val processLogFile: File = File(dataDir, "skywire-process.log")
+
+    /** Stack traces of the app's own crashes, written by [CrashLog]. */
+    val crashLogFile: File = File(dataDir, "app-crash.log")
 
     /**
      * The extracted, executable Go payload. Valid because the module packs
