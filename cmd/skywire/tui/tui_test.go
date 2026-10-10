@@ -5,8 +5,10 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/rivo/uniseg"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
@@ -62,4 +64,26 @@ func TestEachDeepestFirstVisitsChildrenFirst(t *testing.T) {
 	require.Less(t, pos["root cli config"], pos["root cli"], "a child was visited after its parent")
 	require.Less(t, pos["root cli"], pos["root"], "a child was visited after the root")
 	require.Len(t, order, 3, "not every command was visited")
+}
+
+func TestWrapANSI(t *testing.T) {
+	got := wrapANSI("\x1b[31mabcdef\x1b[0m gh\nij", 4)
+	want := []string{"\x1b[31mabcd\x1b[0m", "\x1b[31mef\x1b[0m g\x1b[0m", "h", "ij"}
+	require.Equal(t, want, got)
+	for _, l := range got {
+		require.LessOrEqual(t, uniseg.StringWidth(stripANSI(l)), 4)
+	}
+}
+
+func stripANSI(s string) string {
+	var b strings.Builder
+	for len(s) > 0 {
+		if s[0] == 0x1b {
+			s = s[escapeLen(s):]
+			continue
+		}
+		b.WriteByte(s[0])
+		s = s[1:]
+	}
+	return b.String()
 }
