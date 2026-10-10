@@ -47,7 +47,7 @@ import java.lang.ref.WeakReference
 object ChatMedia {
 
     private const val CHANNEL_ID = "chat-media"
-    private const val NOTIFICATION_ID = 3
+    private const val NOTIFICATION_ID = 4
 
     /**
      * What the notification's skip buttons move by. The seconds are also what
