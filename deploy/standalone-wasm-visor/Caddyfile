@@ -1,0 +1,18 @@
+# Caddyfile — reverse-proxy the standalone wasm-visor on a subdomain.
+#
+# `skywire cli hv serve` (the skywire-wasm-visor-serve.service in this directory) serves
+# the keyless self-contained page on 127.0.0.1:7999; Caddy fronts it with auto-HTTPS.
+# Restart that service after a skywire update to serve the new build (the page is built
+# from the running binary's embedded wasm + UI).
+#
+# Replace wasm.example.net with your subdomain.
+#
+# SAFETY: the served page is KEYLESS — each visitor's browser mints + persists its own
+# ephemeral key (localStorage); the page NEVER asks for a secret key, so serving from a
+# domain is safe. (The key-entry-spoof risk only applies to key-BEARING `hv gen` files —
+# never serve those from a domain.)
+
+wasm.example.net {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:7999
+}
