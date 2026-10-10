@@ -14,7 +14,7 @@ import (
 
 // applyMemoryLimit sets GOMEMLIMIT based on the config value.
 // Supported values:
-//   - "auto": set to 60% of available system RAM
+//   - "auto": set to 90% of the total system RAM (or cgroup limit)
 //   - "256MiB", "512MiB", "1GiB", etc.: explicit limit
 //   - "": no limit (default)
 //
@@ -31,12 +31,12 @@ func applyMemoryLimit(log *logging.Logger, limit string) {
 
 	var bytes int64
 	if limit == "auto" {
-		avail := availableMemoryBytes()
-		if avail <= 0 {
-			log.Warn("Could not detect available memory, skipping GOMEMLIMIT")
+		total := totalMemoryBytes()
+		if total <= 0 {
+			log.Warn("Could not detect total memory, skipping GOMEMLIMIT")
 			return
 		}
-		bytes = int64(float64(avail) * 0.6)
+		bytes = autoMemoryLimit(total)
 	} else {
 		var err error
 		bytes, err = parseMemorySize(limit)
@@ -54,33 +54,37 @@ func applyMemoryLimit(log *logging.Logger, limit string) {
 	log.Infof("GOMEMLIMIT set to %s (was %s)", formatBytes(bytes), formatBytes(prev))
 }
 
-// availableMemoryBytes reads total available RAM from /proc/meminfo.
-func availableMemoryBytes() int64 {
-	f, err := os.Open("/proc/meminfo")
-	if err != nil {
-		return 0
-	}
-	defer f.Close() //nolint:errcheck
+// autoMemoryLimit returns the "auto" limit for a machine with total bytes of
+// memory. It is a safety net near the total, not a working budget, because a
+// lower limit only turns memory into back to back GC cycles.
+func autoMemoryLimit(total int64) int64 {
+	return total / 10 * 9
+}
 
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		// Prefer MemAvailable (accounts for caches/buffers)
-		if strings.HasPrefix(line, "MemAvailable:") {
-			return parseMemInfoLine(line)
+// totalMemoryBytes returns the memory of the machine, or of its cgroup when
+// that is smaller.
+func totalMemoryBytes() int64 {
+	total := int64(0)
+	if f, err := os.Open("/proc/meminfo"); err == nil {
+		defer f.Close() //nolint:errcheck
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			if line := scanner.Text(); strings.HasPrefix(line, "MemTotal:") {
+				total = parseMemInfoLine(line)
+				break
+			}
 		}
 	}
-
-	// Fall back to MemTotal if MemAvailable not present
-	f.Seek(0, 0) //nolint:errcheck,gosec
-	scanner = bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "MemTotal:") {
-			return parseMemInfoLine(line)
+	for _, p := range []string{"/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"} {
+		b, err := os.ReadFile(p) //nolint:gosec
+		if err != nil {
+			continue
+		}
+		if v, err := strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64); err == nil && v > 0 && (total == 0 || v < total) {
+			total = v
 		}
 	}
-	return 0
+	return total
 }
 
 // parseMemInfoLine parses a /proc/meminfo line like "MemAvailable:  1234567 kB"

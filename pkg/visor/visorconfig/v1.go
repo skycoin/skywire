@@ -107,7 +107,7 @@ type V1 struct {
 	RewardAddress    string `json:"reward_address,omitempty"`
 	RewardSystem     string `json:"reward_system,omitempty"`
 	RewardSystemDmsg string `json:"reward_system_dmsg,omitempty"`
-	MemoryLimit      string `json:"memory_limit,omitempty"` // Go memory limit (e.g., "256MiB", "auto" for 60% of available RAM)
+	MemoryLimit      string `json:"memory_limit,omitempty"` // Go memory limit (e.g., "256MiB", "auto" for 90% of total RAM, a safety net)
 	// FlightRecorder keeps the last seconds of execution trace in memory for
 	// stall diagnosis. Off by default because it allocates heavily.
 	FlightRecorder bool `json:"flight_recorder,omitempty"`
