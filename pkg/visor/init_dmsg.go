@@ -566,6 +566,13 @@ func (v *Visor) seedDmsgServiceEntries(dmsgC *dmsg.Client, log *logging.Logger) 
 	if len(serverPKs) == 0 {
 		return
 	}
+	// A visor whose only server is its own seeds that server, so its client
+	// can dial it before discovery lists it. Elsewhere discovery has the entries.
+	for _, srv := range v.conf.Dmsg.Servers {
+		if v.dmsgSelfOnly && srv != nil && srv.Server != nil {
+			dmsgC.SeedEntryCache(srv.Static, srv)
+		}
+	}
 	pks := v.dmsgServicePKs()
 	for _, pk := range pks {
 		dmsgC.SeedEntryCache(pk, &dmsgdisc.Entry{
