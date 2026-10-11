@@ -2599,3 +2599,32 @@ func (rc *rpcClient) MailSetSettings(u MailSettingsUpdate) error {
 func (rc *rpcClient) EmbeddedServiceControl(name, action string) error {
 	return rc.Call("EmbeddedServiceControl", &EmbeddedServiceControlArgs{Name: name, Action: action}, &struct{}{})
 }
+
+// HostBridgeConnect implements API.
+func (rc *rpcClient) HostBridgeConnect(url string) error {
+	return rc.Call("HostBridgeConnect", &url, &struct{}{})
+}
+
+// HostBridgeDisconnect implements API.
+func (rc *rpcClient) HostBridgeDisconnect() error {
+	return rc.Call("HostBridgeDisconnect", &struct{}{}, &struct{}{})
+}
+
+// HostBridgeStatus implements API.
+func (rc *rpcClient) HostBridgeStatus() (HostBridgeStatus, error) {
+	var out HostBridgeStatus
+	err := rc.Call("HostBridgeStatus", &struct{}{}, &out)
+	return out, err
+}
+
+// HostBridgeForward implements API.
+func (rc *rpcClient) HostBridgeForward(host, local string) (HostBridgeForward, error) {
+	var out HostBridgeForward
+	err := rc.Call("HostBridgeForward", &HostBridgeForwardArgs{Host: host, Local: local}, &out)
+	return out, err
+}
+
+// HostBridgeUnforward implements API.
+func (rc *rpcClient) HostBridgeUnforward(host string) error {
+	return rc.Call("HostBridgeUnforward", &host, &struct{}{})
+}
