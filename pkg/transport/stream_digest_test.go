@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/telemetrywire"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -123,4 +124,9 @@ func TestTransportCheckpointsMatchPeer(t *testing.T) {
 	_, recv := receiver.Checkpoints()
 	require.Equal(t, sent.Latest[0], recv.Latest[0])
 	require.Equal(t, sent.Epoch, recv.Epoch)
+}
+
+// The telemetry carries every level a transport keeps.
+func TestCheckpointLevelsMatchWire(t *testing.T) {
+	require.Equal(t, CheckpointLevels, telemetrywire.CheckpointLevels)
 }

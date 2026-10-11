@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/telemetrywire"
 )
@@ -583,4 +584,31 @@ func keysOf(m map[string][]byte) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// A transport's checkpoints go out on their own shard, only when they move,
+// and the shard is deleted once no transport in it has any.
+func TestSinkPublishesCheckpoints(t *testing.T) {
+	sink := newRecordingSink()
+	tr := newTrackerWithSink(t, sink)
+	id, idle := uuid.New(), uuid.New()
+	day := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
+	path := telemetrywire.CheckpointLeafPath(telemetrywire.ShardOf(id))
+
+	ck := telemetrywire.DirCheckpoints{Epoch: 5, Latest: [telemetrywire.CheckpointLevels]telemetrywire.Checkpoint{{Offset: 16 << 20, Digest: 5}}}
+	probes := []TransportProbe{{ID: id, Type: "stcpr", Sent: ck}, {ID: idle, Type: "stcpr"}}
+	tr.probes.Transports = func() []TransportProbe { return probes }
+	tr.sample(day)
+	puts, _ := sink.snapshot()
+	_, got, err := telemetrywire.DecodeCheckpointShard(puts[path])
+	require.NoError(t, err)
+	require.Equal(t, []telemetrywire.CheckpointEntry{{ID: id, Sent: ck}}, got, "only a transport with checkpoints")
+
+	tr.sample(day.Add(time.Minute))
+	require.Equal(t, 1, sink.putCountFor(path), "unchanged checkpoints are not put again")
+
+	probes = []TransportProbe{{ID: idle, Type: "stcpr"}}
+	tr.sample(day.Add(2 * time.Minute))
+	_, dels := sink.snapshot()
+	require.Contains(t, dels, path)
 }
