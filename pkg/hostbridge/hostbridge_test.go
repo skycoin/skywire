@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -16,8 +17,13 @@ import (
 
 const testToken = "0123456789abcdef"
 
+// startBridge runs a bridge in the test, or returns HOSTBRIDGE_EXTERNAL, the
+// address of one started with -token 0123456789abcdef, such as a TinyGo build.
 func startBridge(t *testing.T) string {
 	t.Helper()
+	if ext := os.Getenv("HOSTBRIDGE_EXTERNAL"); ext != "" {
+		return ext
+	}
 	s, err := NewServer(Config{Token: testToken, Origins: []string{DefaultOrigin}})
 	require.NoError(t, err)
 	l, err := net.Listen("tcp", "127.0.0.1:0")
