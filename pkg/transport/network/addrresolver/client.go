@@ -946,7 +946,8 @@ func (c *httpClient) serveSUDPHConn(arConn net.Conn, addrCh chan<- RemoteVisor) 
 }
 
 func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error) {
-	if types.NormalizeType(types.Type(tType)) != types.SUDPH {
+	ask := asksResolver(ctx)
+	if !ask && types.NormalizeType(types.Type(tType)) != types.SUDPH {
 		if f := c.fastResolve.Load(); f != nil {
 			if data, ok := (*f)(ctx, tType, pk); ok {
 				data.IsLocal = sameHost(data.RemoteAddr, c.localPublicIPRaw())
@@ -958,7 +959,7 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 		return VisorData{}, ErrNotReady
 	}
 	nfKey := notFoundKey(tType, pk)
-	if c.notFound.recent(nfKey, time.Now()) {
+	if !ask && c.notFound.recent(nfKey, time.Now()) {
 		return VisorData{}, ErrNoEntry
 	}
 	if types.NormalizeType(types.Type(tType)) == types.SUDPH {
