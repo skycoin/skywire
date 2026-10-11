@@ -270,17 +270,18 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, c *rfCharts, r c
 		if v, ok := f.Latest(k + "rate"); ok {
 			rate = pct(v)
 		}
-		reqs = append(reqs, charts.Series{Name: pk.Hex(), Vals: f.Values(k+"req", false), Cells: []string{state, rate}})
-		rates = append(rates, charts.Series{Name: pk.Hex(), Vals: f.Values(k+"rate", false)})
+		ver := c.nodeVersion(pk)
+		reqs = append(reqs, charts.Series{Name: pk.Hex(), Vals: f.Values(k+"req", false), Cells: []string{ver, state, rate}})
+		rates = append(rates, charts.Series{Name: pk.Hex(), Vals: f.Values(k+"rate", false), Cells: []string{ver}})
 		lat = append(lat,
 			charts.Series{Name: pk.Hex() + " p50", Vals: f.Values(k+"p50", false)},
 			charts.Series{Name: pk.Hex() + " p95", Vals: f.Values(k+"p95", false)})
 	}
 	sn := chart("Route setup requests", "Setups each route setup node handled, per 5 minutes.", charts.Lines, reqs)
-	sn.Legend = []string{"Setup node", "Now", "Success rate", "Requests"}
+	sn.Legend = []string{"Setup node", "Version", "Now", "Success rate", "Requests"}
 	rt := chart("Route setup success rate", "Successful setups as a share of finished ones.", charts.Lines, rates)
 	rt.Format = pct
-	rt.Legend = []string{"Setup node", "Success rate"}
+	rt.Legend = []string{"Setup node", "Version", "Success rate"}
 	lt := chart("Route setup latency", "Median and 95th percentile time of successful setups.", charts.Lines, lat)
 	lt.Format = ms
 	lt.Legend = []string{"Setup node and percentile", "Latency"}
@@ -310,4 +311,14 @@ func foundSeries(f *charts.Frame) []charts.Series {
 // Charts is the charts page, or nil until StartCharts runs.
 func (a *API) Charts() *charts.Page {
 	return a.chartsPage.Load()
+}
+
+// nodeVersion is the version a setup node reported on its last /stats read.
+func (c *rfCharts) nodeVersion(pk cipher.PubKey) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if s := c.prevNode[pk]; s != nil {
+		return s.Version
+	}
+	return ""
 }
