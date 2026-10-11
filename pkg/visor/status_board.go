@@ -2,6 +2,9 @@
 package visor
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/services"
 )
@@ -21,8 +24,24 @@ func (v *Visor) statusBoard() *charts.Board {
 	return v.embedded.board
 }
 
+// statusSummary lists the visor, the dmsg server it runs and every embedded
+// service, each by the public key it answers on.
 func (v *Visor) statusSummary() *charts.Table {
-	t := &charts.Table{Title: "Services", Head: []string{"Service", "Name", "Address", "State", "Store"}}
+	t := &charts.Table{Title: "Services", Head: []string{"Service", "Public key", "State", "Store"}}
+	if v.conf != nil {
+		t.Rows = append(t.Rows, []string{"visor", v.conf.PK.Hex(), "running", ""})
+	}
+	if srv := v.RolesSnapshot().DmsgServer; srv.Enabled || srv.Running {
+		state := "starting"
+		if srv.Running {
+			state = fmt.Sprintf("running, %d sessions, %d peer servers", srv.SessionCount, srv.PeerCount)
+		}
+		pk := ""
+		if !srv.PK.Null() {
+			pk = srv.PK.Hex()
+		}
+		t.Rows = append(t.Rows, []string{"dmsg server", pk, state, ""})
+	}
 	for _, st := range v.embeddedServiceStates() {
 		state := "running"
 		switch {
@@ -33,9 +52,29 @@ func (v *Visor) statusSummary() *charts.Table {
 		case !st.Running:
 			state = "starting"
 		}
-		t.Rows = append(t.Rows, []string{st.Type, st.Name, st.URL, state, st.State.Store})
+		name := st.Type
+		if st.Name != "" && st.Name != st.Type {
+			name += " (" + st.Name + ")"
+		}
+		addr := dmsgURLPK(st.URL)
+		if addr == "" {
+			addr = st.PlainHTTP
+		}
+		t.Rows = append(t.Rows, []string{name, addr, state, st.State.Store})
 	}
 	return t
+}
+
+// dmsgURLPK is the public key in a dmsg://<pk>[:port][/path] URL.
+func dmsgURLPK(u string) string {
+	pk, ok := strings.CutPrefix(u, "dmsg://")
+	if !ok {
+		return ""
+	}
+	if i := strings.IndexAny(pk, ":/"); i >= 0 {
+		pk = pk[:i]
+	}
+	return pk
 }
 
 func (v *Visor) statusSections() []charts.Section {

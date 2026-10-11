@@ -210,9 +210,6 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, r charts.Range, 
 			Note: "A client delegates to several servers, so these add up to more than the client count.",
 			Kind: charts.Lines, From: from, To: now, Times: f.Times, Series: perServer,
 			Legend: []string{"Public key", "Address", "Type", "Official", "Free sessions", "Clients"}},
-		{Title: "Free sessions per registered dmsg server", Note: "Spare capacity each server advertises in its entry.",
-			Kind: charts.Lines, From: from, To: now, Times: f.Times, Series: free,
-			Legend: []string{"Public key", "Address", "Free sessions"}},
 		{Title: "Hypervisor LAN dmsg servers",
 			Note: "Servers that hypervisors run for the visors on their LAN. They have no discovery entry, by design.",
 			Kind: charts.Lines, From: from, To: now, Times: f.Times, Series: []charts.Series{
@@ -221,6 +218,10 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, r charts.Range, 
 			}},
 	}}
 	out.Charts = append(out.Charts, a.serverLoadCharts(f, from, now, reg)...)
+	// Spare capacity goes right after the sessions each server holds.
+	out.Charts = append(out.Charts, charts.Chart{Title: "Free sessions per registered dmsg server", Note: "Spare capacity each server advertises in its entry.",
+		Kind: charts.Lines, From: from, To: now, Times: f.Times, Series: free,
+		Legend: []string{"Public key", "Address", "Free sessions"}})
 	sort.SliceStable(lan, func(i, j int) bool { return lan[i].clients > lan[j].clients })
 	t := charts.Table{Title: "Hypervisor LAN dmsg servers now", Head: []string{"Public key", "Clients"}}
 	for _, l := range lan {

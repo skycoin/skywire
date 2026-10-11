@@ -8,6 +8,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgc"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -40,12 +41,47 @@ func TestStatusBoard(t *testing.T) {
 		t.Fatalf("sections %+v, want the running transport discovery only", secs)
 	}
 	sum := v.statusSummary()
-	if len(sum.Rows) != 3 {
-		t.Fatalf("summary rows %v, want every service", sum.Rows)
+	want := [][]string{
+		{"visor", pk.Hex(), "running", ""},
+		{"transport-discovery (tpd)", pk.Hex(), "running", ""},
+		{"route-finder (rf)", pk.Hex(), "starting", ""},
+		{"setup-node (sn)", pk.Hex(), "running", ""},
 	}
-	for i, want := range [][2]string{{"transport-discovery", "running"}, {"route-finder", "starting"}, {"setup-node", "running"}} {
-		if sum.Rows[i][0] != want[0] || sum.Rows[i][3] != want[1] {
-			t.Errorf("row %d = %v, want %s %s", i, sum.Rows[i], want[0], want[1])
+	if len(sum.Rows) != len(want) {
+		t.Fatalf("summary rows %v, want the visor and every service", sum.Rows)
+	}
+	for i := range want {
+		for j := range want[i] {
+			if sum.Rows[i][j] != want[i][j] {
+				t.Errorf("row %d = %v, want %v", i, sum.Rows[i], want[i])
+				break
+			}
 		}
+	}
+}
+
+func TestDmsgURLPK(t *testing.T) {
+	for in, want := range map[string]string{
+		"dmsg://02ab:80/tpd": "02ab",
+		"dmsg://02ab":        "02ab",
+		"dmsg://02ab/x":      "02ab",
+		"":                   "",
+		"http://02ab":        "",
+	} {
+		if got := dmsgURLPK(in); got != want {
+			t.Errorf("dmsgURLPK(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A visor running a dmsg server lists it under its key, after the visor.
+func TestStatusSummaryDmsgServer(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	v := &Visor{conf: &visorconfig.V1{Common: &visorconfig.Common{PK: pk},
+		Dmsg: &dmsgc.DmsgConfig{Server: &dmsgc.DmsgServerConfig{Enabled: true}}}}
+	v.embedded.once.Do(func() {})
+	sum := v.statusSummary()
+	if len(sum.Rows) != 2 || sum.Rows[1][0] != "dmsg server" || sum.Rows[1][1] != pk.Hex() || sum.Rows[1][2] != "starting" {
+		t.Fatalf("summary rows %v, want the visor then its dmsg server", sum.Rows)
 	}
 }

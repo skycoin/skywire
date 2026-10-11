@@ -94,14 +94,15 @@ func TestDailyLatencyChartGapsMissingDays(t *testing.T) {
 func TestVisorBWTable(t *testing.T) {
 	day := &store.VisorBWDay{Date: "2026-10-05", Transports: 3, SameNetworkExcluded: 1, Visors: map[string]map[string]uint64{
 		"aa": {"stcpr": 1 << 20},
-		"bb": {"stcpr": 1 << 30, "sudph": 1 << 20},
+		"bb": {"stcpr": 1 << 30, "sudph": 1 << 20, "": 1 << 10},
 	}}
 	tb := visorBWTable(day, map[string]string{"bb": roleRegistered})
 	require.Contains(t, tb.Title, "2026-10-05")
 	require.Contains(t, tb.Note, "1 transports between visors on the same network")
-	require.Equal(t, []string{"bb", "registered dmsg server", "1 GiB", "stcpr 1 GiB, sudph 1 MiB"}, tb.Rows[0])
+	require.Equal(t, []string{"Public key", "Role", "Sent", "stcpr", "sudph", "unknown"}, tb.Head)
+	require.Equal(t, []string{"bb", "registered dmsg server", "1 GiB", "1 GiB", "1 MiB", "1 KiB"}, tb.Rows[0])
 	require.Equal(t, "#4e79a7", tb.Marks[0])
-	require.Equal(t, []string{"aa", ""}, tb.Rows[1][:2])
+	require.Equal(t, []string{"aa", "", "1 MiB", "1 MiB", "", ""}, tb.Rows[1])
 	require.Empty(t, tb.Marks[1])
 }
 
