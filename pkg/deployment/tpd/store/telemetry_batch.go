@@ -109,7 +109,7 @@ func (s *redisStore) applyTelemetry(ctx context.Context, updates []TelemetryUpda
 			}
 			bw[i] = bandwidthScript.EvalSha(ctx, pipe, keys,
 				reporterHex, u.Sent, u.Recv, now.Unix(), typeOrUnknown(u.Type),
-				int64((10*time.Minute)/time.Second), historyTTLSeconds, int64((400*24*time.Hour)/time.Second), date, s.bandwidthDailyTTLFor())
+				bandwidthPrevTTLSeconds, historyTTLSeconds, int64((400*24*time.Hour)/time.Second), date, s.bandwidthDailyTTLFor())
 			if u.SameNetwork {
 				// Marked on the day's hash itself, beside the counters it
 				// qualifies; it lives exactly as long as they do.
