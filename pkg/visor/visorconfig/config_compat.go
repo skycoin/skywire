@@ -52,7 +52,8 @@ type v1JSON struct {
 	Routing       *Routing             `json:"routing"`
 	Launcher      *Launcher            `json:"launcher"`
 
-	EmbeddedServices []services.Block `json:"embedded_services,omitempty"`
+	EmbeddedServices     []services.Block `json:"embedded_services,omitempty"`
+	DeploymentStatusAddr string           `json:"deployment_status_addr,omitempty"`
 
 	Stats   *Stats        `json:"stats,omitempty"`
 	Skychat *Skychat      `json:"skychat,omitempty"`
@@ -123,6 +124,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.Routing = mirror.Routing
 	v.Launcher = mirror.Launcher
 	v.EmbeddedServices = mirror.EmbeddedServices
+	v.DeploymentStatusAddr = mirror.DeploymentStatusAddr
 	v.Stats = mirror.Stats
 	v.Skychat = mirror.Skychat
 	v.Wallet = mirror.Wallet
