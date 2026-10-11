@@ -25,10 +25,10 @@ func main() {
 		cfg.Logf = log.Printf
 	}
 	err := hostbridge.Run(*addr, cfg, func(url string) {
-		os.Stderr.WriteString("connect the visor to " + url + "\n") //nolint:errcheck
+		_, _ = os.Stderr.WriteString("connect the visor to " + url + "\n") //nolint:errcheck
 	})
 	if err != nil {
-		os.Stderr.WriteString("hostbridge: " + err.Error() + "\n") //nolint:errcheck
+		_, _ = os.Stderr.WriteString("hostbridge: " + err.Error() + "\n") //nolint:errcheck
 		os.Exit(1)
 	}
 }
