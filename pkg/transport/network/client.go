@@ -92,6 +92,9 @@ type ClientFactory struct {
 	// reachable from the internet.
 	OnExternalSTCPR func()
 
+	// Sockets opens the OS sockets of the carriers. Nil means the host's own.
+	Sockets Sockets
+
 	// udpDemux holds a *udpDemux (the unified transport_port shared UDP socket)
 	// when EnableUnifiedUDP has been called; nil otherwise → per-type UDP binding.
 	// Typed `any` because udpDemux is //go:build !tinygo (quic-go/kcp-go), and this
@@ -160,6 +163,7 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 	generic.lSK = f.SK
 	generic.listenAddr = f.ListenAddr
 	generic.onExternalSTCPR = f.OnExternalSTCPR
+	generic.sockets = f.sockets()
 
 	switch netType {
 	case types.STCP:
@@ -227,6 +231,8 @@ type genericClient struct {
 	mLog   *logging.MasterLogger
 	porter *porter.Porter
 	eb     tcpDialAnnouncer
+
+	sockets Sockets
 
 	connListener    net.Listener
 	listeners       map[uint16]*listener

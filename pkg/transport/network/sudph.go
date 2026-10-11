@@ -87,7 +87,7 @@ func (c *sudphClient) listen() (net.Listener, error) {
 			confPort = fmt.Sprintf(":%d", c.port)
 		}
 		for {
-			packetListener, err = net.ListenPacket("udp", confPort)
+			packetListener, err = c.socks().ListenPacket("udp", confPort)
 			if err != nil {
 				c.log.WithError(err).Warnf("Failed to listen on port: %d", c.port)
 				c.port++
