@@ -181,6 +181,9 @@ func (ps *pushState) emitPlain(p []byte) { ps.dec.feed(p, ps.deliver) }
 
 func (ps *pushState) deliver(p routing.Packet) {
 	mt := ps.mt
+	if ps.src != nil {
+		mt.recvDig.add(ps.src.tp, p)
+	}
 	if n := len(p); n > routing.PacketHeaderSize {
 		mt.logRecv(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
 	}
