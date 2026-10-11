@@ -96,8 +96,7 @@ INFO?=$(VERSION) $(DATE) $(COMMIT) $(BUILDTAG)
 # package.
 #
 # The js/wasm command module (exec-wasm) deliberately takes NO version
-# ldflags. It is built first and embedded into the native binary that follows,
-# so it cannot borrow that binary's stamped version. Instead it self-describes
+# ldflags. Instead it self-describes
 # from the VCS info the Go toolchain records automatically (debug.BuildInfo
 # vcs.revision / vcs.modified, written into a GOOS=js binary as plain text via
 # -buildvcs): buildinfo.VersionOrCommit() turns that into a
@@ -1052,13 +1051,7 @@ playground: ## Build the docs-site playground (static desk page: shell + skywire
 
 # --- one wasm module (#4484 convergence) --------------------------------------
 # The full skywire command module for GOOS=js: the desk's `skywire` command and
-# the tab visor. Built FIRST and gzipped into pkg/wasmhv/execwasm/blob/, then
-# the native binary is built with it embedded — the two-stage build every
-# distributed binary gets (publish-binary.yml, release.yml). The staged blob is
-# TRACKED (#4872), so a plain `make build` / `go build .` embeds whatever was
-# last committed there; restaging it modifies two tracked files, which is why
-# the release workflows hide them with `git update-index --assume-unchanged`
-# before building (a dirty tree stamps the binary "+dirty").
+# the tab visor. It is not embedded; a visor serves the copy beside its binary.
 EXEC_WASM_TAGS ?= withoutsystray withoutgotop
 
 exec-wasm: ## Build the js/wasm command module to build/exec-wasm/skywire.wasm
@@ -1066,52 +1059,5 @@ exec-wasm: ## Build the js/wasm command module to build/exec-wasm/skywire.wasm
 	GOOS=js GOARCH=wasm go build -trimpath -buildvcs=true -mod=vendor -tags "$(EXEC_WASM_TAGS)" -ldflags="-s -w" -o ./build/exec-wasm/skywire.wasm .
 	@ls -la ./build/exec-wasm/skywire.wasm
 
-# The module is built with -buildvcs=true, so ONE untracked file in the work
-# tree is enough for Go to record vcs.modified=true inside it, and every native
-# binary that embeds it then reports dev-<commit>-dirty for the rest of its
-# life. That is how the blob committed by #4872 came to be dirty: it was staged
-# from a tree with untracked bench/ dirs in it, and v1.3.94 shipped the result.
-# release.yml and publish-binary.yml gate their own stage-1 builds this way;
-# this is the same gate for the maintainer who restages the blob by hand.
-# EMBED_REQUIRE_CLEAN=0 overrides it for a throwaway local build.
-EMBED_REQUIRE_CLEAN ?= 1
-
-.PHONY: assert-clean-tree
-assert-clean-tree:
-	@test "$(EMBED_REQUIRE_CLEAN)" != "1" || test -z "$$(git status --porcelain)" || { \
-		echo "work tree is dirty — the staged js/wasm module would be stamped -dirty:"; \
-		git status --porcelain; \
-		echo "commit or clean the tree first, or set EMBED_REQUIRE_CLEAN=0 for a local build"; \
-		exit 1; }
-
-embed-exec-wasm: assert-clean-tree exec-wasm ## Stage the js/wasm command module for embedding (pkg/wasmhv/execwasm/blob/, tracked)
-	gzip -9 -n -c ./build/exec-wasm/skywire.wasm > ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz
-	@# Record which commit the module was built from, so the native binary can
-	@# say at serve time that it is serving a module older than itself. The
-	@# module is built with -buildvcs=true and is never inflated in memory, so
-	@# the revision is lifted here rather than scanned from 176 MB at runtime.
-	@# vcs.revision= is not at the start of a strings(1) line, so match the
-	@# substring rather than anchoring: an anchored sed silently records an
-	@# empty revision, which then reads as "stale" forever.
-	@strings -a ./build/exec-wasm/skywire.wasm | grep -oE 'vcs\.revision=[0-9a-f]{40}' \
-		| head -1 | cut -d= -f2 > ./pkg/wasmhv/execwasm/blob/revision.txt
-	@tail -c 8 ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz | od -An -tx4 | tr -d " \n" >> ./pkg/wasmhv/execwasm/blob/revision.txt; echo >> ./pkg/wasmhv/execwasm/blob/revision.txt
-	@ls -la ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz
-	@echo "staged module revision: $$(cat ./pkg/wasmhv/execwasm/blob/revision.txt)"
-
-check-exec-wasm: ## Report whether the staged js/wasm command module matches HEAD
-	@test -f ./pkg/wasmhv/execwasm/blob/revision.txt || { \
-		echo "no staged js/wasm command module — run 'make embed-exec-wasm'"; exit 1; }
-	@staged=$$(head -1 ./pkg/wasmhv/execwasm/blob/revision.txt); head=$$(git rev-parse HEAD); \
-	if [ "$$staged" = "$$head" ]; then \
-		echo "staged js/wasm command module is current ($$head)"; \
-	else \
-		echo "STALE: the staged js/wasm command module is $$staged, HEAD is $$head"; \
-		echo "Run 'make embed-exec-wasm' and rebuild, or the desk serves older code than the binary."; \
-		exit 1; \
-	fi
-
-build-embedded: embed-exec-wasm build ## Two-stage build: the native binary with the js/wasm command module embedded
-
-clean-exec-wasm: ## Delete the staged js/wasm command module (it is tracked — `git checkout` the blob to get it back)
-	rm -f ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz ./build/exec-wasm/skywire.wasm
+wasm-module: exec-wasm ## Put the js/wasm command module and its manifest beside ./skywire
+	sh ./scripts/wasm-module.sh ./build/exec-wasm/skywire.wasm . dev

@@ -7,8 +7,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
-	"os"
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -21,24 +19,6 @@ import (
 // constant: it folds in the skywire command module served from disk, which is
 // rebuilt in place while the server runs.
 const servedVersionToken = "__SKYWIRE_SERVED_VERSION__"
-
-// execWasmStamp fingerprints the skywire command module served at
-// /skywire.wasm from disk — size + mtime, stat'd on every call. The file is
-// ~170 MB and rebuilt in place, so hashing its content per poll is out, and a
-// hash taken once at startup would miss every rebuild, which is exactly what
-// the fingerprint exists to catch. Empty when there is no such file.
-func execWasmStamp(path string) string {
-	if path == "" {
-		return ""
-	}
-	fi, err := os.Stat(path)
-	if err != nil {
-		return ""
-	}
-	h := sha256.New()
-	h.Write([]byte(fmt.Sprintf("%d:%d", fi.Size(), fi.ModTime().UnixNano()))) //nolint:errcheck // hash.Hash never errors
-	return hex.EncodeToString(h.Sum(nil))[:16]
-}
 
 // deskAssetsStamp fingerprints the desk client the host binary embeds and
 // serves itself (desk-boot, the browse bundle, the exec worker) plus the
@@ -59,13 +39,8 @@ var deskAssetsStamp = sync.OnceValue(func() string {
 // served build plus the command module's stamp when one is served. It changes
 // iff a reload would load something different.
 func servedVersion(build, execWasmPath string) string {
-	if s := execWasmStamp(execWasmPath); s != "" {
+	if s := execwasm.Stamp(execWasmPath); s != "" {
 		return build + "-" + s
-	}
-	if execWasmPath == "" {
-		if s := execwasm.Stamp(); s != "" {
-			return build + "-" + s
-		}
 	}
 	return build
 }

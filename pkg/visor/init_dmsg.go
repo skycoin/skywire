@@ -49,6 +49,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorcore"
+	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
 
 func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
@@ -662,6 +663,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	// GET /transports: the signed transport list, for callers over a transport.
 	lsAPI.SetTransportListProvider(v)
 	lsAPI.SetReachCardProvider(v)
+	lsAPI.SetWasmModule(execwasm.DefaultPath())
 	// /debug/loglevel: whitelisted keys can turn on debug logging for a
 	// while. Only on this whitelisted surface, never on the localhost one.
 	lsAPI.SetLogLevelController(v)

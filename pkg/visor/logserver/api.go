@@ -145,6 +145,8 @@ type API struct {
 	transportListProvider TransportListProvider
 	// reachCardProvider serves GET /reach, how to dial this visor.
 	reachCardProvider ReachCardProvider
+	// wasmModulePath is the js/wasm module served under GET /wasm/.
+	wasmModulePath string
 }
 
 // ptyPKAllowed reports whether the request's remote host (a PK hex
@@ -210,6 +212,8 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	r.HandleFunc("GET /health", api.health)
 	r.HandleFunc("GET /transports", api.transportList)
 	r.HandleFunc("GET /reach", api.reachCard) // addrresolver.ReachPath
+	r.HandleFunc("GET /wasm/skywire.wasm.gz", api.wasmModule("skywire.wasm.gz"))
+	r.HandleFunc("GET /wasm/skywire.wasm.json", api.wasmModule("skywire.wasm.json"))
 
 	// Service catalog — lists ports available for .skynet / skynet
 	// forwarding. Public services are visible; hidden services are

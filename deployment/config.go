@@ -234,7 +234,10 @@ type Services struct {
 	// hardcoded across the serve flags / config-gen / docs; consumers read it via
 	// deployment.Prod.BrowseOriginSuffix. Empty (the local default) means the
 	// browse origin uses ".mesh.localhost" (loopback, secure-context, no cert).
-	BrowseOriginSuffix     string `json:"browse_origin_suffix,omitempty"`
+	BrowseOriginSuffix string `json:"browse_origin_suffix,omitempty"`
+	// WasmModuleSource is the visor that serves the current js/wasm module over
+	// dmsg. Visors refresh their copy from it when the desk is opened.
+	WasmModuleSource       string `json:"wasm_module_source,omitempty"`
 	DmsgDiscoveryDmsg      string `json:"dmsg_discovery_dmsg,omitempty"`
 	TransportDiscoveryDmsg string `json:"transport_discovery_dmsg,omitempty"`
 	AddressResolverDmsg    string `json:"address_resolver_dmsg,omitempty"`

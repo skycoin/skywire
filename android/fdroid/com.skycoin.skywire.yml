@@ -102,7 +102,6 @@ Builds:
     # (skycoin-lite wasm) are vendored too, and the mobile build has neither.
     scandelete:
       - pkg/geoip/GeoLite2-City.mmdb.gz
-      - pkg/wasmhv/execwasm/blob
       - docs/examples/routing-policies/wasm/*/*.wasm
       - vendor/github.com/blang/semver/package.json
       - vendor/github.com/go-redis/redis/v8/package.json

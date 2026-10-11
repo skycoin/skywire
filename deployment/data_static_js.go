@@ -55,6 +55,7 @@ var prodData = Services{
 	ConfDmsg:           "dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80",
 	WSSDomainSuffix:    "skywire.dev",
 	BrowseOriginSuffix: ".theskywirenetwork.net",
+	WasmModuleSource:   "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
 	DmsgServers: []DmsgServerEntry{
 		{Static: "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7", Server: struct {
 			Address   string `json:"address"`

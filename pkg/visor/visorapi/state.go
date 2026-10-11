@@ -246,29 +246,22 @@ type ModulePresence struct {
 	EmbeddedTPS        bool `json:"embedded_transport_setup"`
 	EmbeddedRouteSetup bool `json:"embedded_route_setup"`
 
-	// ExecWasm describes the js/wasm command module this binary serves to
-	// browser desks. Queryable rather than log-only on purpose: `go build .`
-	// embeds whatever pkg/wasmhv/execwasm/blob already holds instead of
-	// rebuilding it, so a current binary can serve a module many commits
-	// old, and the only other signal is a startup warning that scrolls past.
+	// ExecWasm describes the js/wasm module this visor serves for the desk.
 	ExecWasm *ExecWasmInfo `json:"exec_wasm,omitempty"`
 }
 
-// ExecWasmInfo reports the embedded js/wasm command module's provenance.
+// ExecWasmInfo describes the js/wasm module a visor serves for the desk.
 type ExecWasmInfo struct {
-	// Present is false for a plain source build, which embeds only the
-	// placeholder README and falls back to an on-disk module.
-	Present bool `json:"present"`
-	// Revision is the commit the module was built from, recorded beside it
-	// by `make embed-exec-wasm`. Empty when the module predates that.
+	// Path is the module on disk.
+	Path string `json:"path"`
+	// Version and Revision are from the manifest beside it, when there is one.
+	Version  string `json:"version,omitempty"`
 	Revision string `json:"revision,omitempty"`
-	// BinaryRevision is this visor's own commit, for comparison.
-	BinaryRevision string `json:"binary_revision,omitempty"`
-	// Stale is true when both revisions are known and differ: the desk is
-	// serving older code than the visor. Fix with `make embed-exec-wasm`.
-	Stale bool `json:"stale"`
 	// Stamp is the served content fingerprint, which the page polls.
 	Stamp string `json:"stamp,omitempty"`
+	// Source is the visor the module is refreshed from when the desk is
+	// opened. Empty when it is not refreshed.
+	Source string `json:"source,omitempty"`
 }
 
 // RolesSnapshot is the `roles` section of a StateSnapshot.

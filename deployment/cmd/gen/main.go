@@ -58,6 +58,7 @@ type services struct {
 	SurveyWhitelist    []string `json:"survey_whitelist,omitempty"`
 	WSSDomainSuffix    string   `json:"wss_domain_suffix,omitempty"`
 	BrowseOriginSuffix string   `json:"browse_origin_suffix,omitempty"`
+	WasmModuleSource   string   `json:"wasm_module_source,omitempty"`
 	DmsgServers        []struct {
 		Static string `json:"static"`
 		Server struct {
@@ -177,6 +178,7 @@ func emitServices(buf *bytes.Buffer, s services) {
 	emitStringField(buf, "ConfDmsg", s.ConfDmsg)
 	emitStringField(buf, "WSSDomainSuffix", s.WSSDomainSuffix)
 	emitStringField(buf, "BrowseOriginSuffix", s.BrowseOriginSuffix)
+	emitStringField(buf, "WasmModuleSource", s.WasmModuleSource)
 	emitDmsgServers(buf, s.DmsgServers)
 	emitStringField(buf, "DmsgDiscoveryDmsg", s.DmsgDiscoveryDmsg)
 	emitStringField(buf, "TransportDiscoveryDmsg", s.TransportDiscoveryDmsg)
