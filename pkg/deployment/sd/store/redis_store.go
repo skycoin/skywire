@@ -10,15 +10,15 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/fastjson"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 )
 
-var json = jsoniter.ConfigFastest
+var json = fastjson.JSON
 
 const (
 	serviceKeyPrefix   = "service:"

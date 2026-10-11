@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/oracle_plan_cache.go c2-net-routing
 //
 // ONE destination-transport query per fill, and N distinct paths out of it.

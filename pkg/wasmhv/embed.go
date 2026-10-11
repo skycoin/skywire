@@ -116,6 +116,10 @@ var FaviconICO []byte
 //go:embed wasm_exec.js
 var WasmExecJS []byte
 
+// WasmExecTinyGoJS is the loader for a module TinyGo built, served at
+// /wasm_exec_tinygo.js where bottle looks for it. Empty means none is served.
+var WasmExecTinyGoJS []byte
+
 // ServiceWorkerFor renders sw.js for one serving context: build is the
 // fingerprint that names the cache (a new build ships a byte-different worker,
 // which is what makes the browser re-install it), precache the shell files

@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/leg_split.go c2-net-routing
 //
 // Leg SPLIT — the reverse of leg re-home (leg_rehome.go).

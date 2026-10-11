@@ -138,7 +138,7 @@ github.com/0magnet/sh/v3/syntax
 # github.com/0magnet/spheregraph v0.0.0
 ## explicit; go 1.25.0
 github.com/0magnet/spheregraph
-# github.com/0magnet/sysinfo v1.1.4-0.20261003211934-59c35da8ce3f
+# github.com/0magnet/sysinfo v1.1.4-0.20261006160455-a3ceeeb4eaed
 ## explicit; go 1.23
 github.com/0magnet/sysinfo
 github.com/0magnet/sysinfo/cpuid

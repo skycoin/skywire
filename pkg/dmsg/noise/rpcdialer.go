@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package noise pkg/dmsg/noise/rpcdialer.go c1-net-dmsg
 //
 // RPCClientDialer is split out of net.go behind //go:build !tinygo because it

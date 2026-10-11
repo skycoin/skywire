@@ -1,4 +1,4 @@
-//go:build tinygo || js
+//go:build js
 
 // Package appserver pkg/app/appserver/proc_external_tinygo.go c2-vis-appsvc
 //

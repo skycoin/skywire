@@ -1,6 +1,6 @@
-//go:build js && wasm
+//go:build (js && wasm) || tinygo
 
-// Package visor pkg/visor/rewards_ui_js.go c3-vis-core
+// Package visor pkg/visor/rewards_ui_stub.go c3-vis-core
 package visor
 
 import (

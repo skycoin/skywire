@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/setup_rpc_gateway.go c2-net-routing
 package router
 

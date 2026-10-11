@@ -1,5 +1,3 @@
-//go:build !tinygo
-
 // Package metrics pkg/dmsg/dmsg/metrics/victoria_metrics.go c1-net-dmsg
 //
 // The VictoriaMetrics-backed Metrics impl pulls third_party/VictoriaMetrics

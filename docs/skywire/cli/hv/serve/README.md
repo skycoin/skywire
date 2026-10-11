@@ -30,19 +30,20 @@ skywire cli hv serve
 ## Flags
 
 ```
-  -a, --addr string            HTTP listen address (default ":7999")
-      --boot-reports string    keep the reports of desks that did not start in this file as JSON lines, moved to <file>.1 at 1 MiB (they are also logged). The default is under $STATE_DIRECTORY when systemd sets one (StateDirectory=), else the temp dir. Empty = log only (default "/tmp/skywire-desk-boot-reports.jsonl")
-      --browse-origin string   ALSO serve the browse-origin SW bootstrap on this second addr (e.g. 127.0.0.1:7998), for the hosted real-origin browser's B origins. Caddy routes *.<browse-suffix> here; this same process serves V on --addr and B here. Empty = off (V host-routes B on --addr, local mode)
-      --browse-suffix string   browse-origin domain suffix for the real-origin browser (leading dot). Empty = .mesh.localhost (local); when --browse-origin is set (hosted mode) and this is empty it defaults to the deployment's browse_origin_suffix (".haltingstate.net" from services-config.json)
-      --desk-docs-port int     run 'skywire doc serve' on this desk vnet port (0 = off) — same cost as above
-      --desk-help-terminal     open a desk terminal that has already run 'skywire --help' — costs a whole extra Go/wasm runtime of the full binary, and that memory is never returned
-      --exec-wasm string       path to the full skywire CLI wasm module to serve at /skywire.wasm — the desk host, the tab's visor and the terminal's 'skywire' command (build: GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" -o build/skywire.wasm .). Empty = the module installed beside this binary (skywire.wasm.gz), served as it is. Without one, serve refuses to start
-      --harness                mount the /ctl/* operator control bridge (drive the in-tab visor from a shell); DEV ONLY — never expose publicly
-      --password string        gate the served PWA behind an access password (cookie login). Empty = open. Use over --tls / behind TLS so the password isn't sent in clear
-      --tls                    serve over HTTPS with a self-signed localhost cert (a real https origin for local testing — wss works, ws:// is mixed-content-blocked exactly as in prod). Accept the browser cert warning once; the cert is persisted across restarts
-      --tls-cert string        PEM cert to serve TLS with instead of the self-signed localhost cert — e.g. a locally-trusted *.mesh.localhost cert (mkcert) so real-origin browse iframes load without a per-host accept. Requires --tls-key
-      --tls-key string         PEM key paired with --tls-cert
-      --v-origin string        the PUBLIC origin(s) of the visor app V that B's bootstrap postMessages to, e.g. https://theskywirenetwork.net. Comma-separated for several apps sharing one browse domain, or "*" to accept any parent. Only needed with --browse-origin behind a proxy; empty = derive from --addr (local)
+  -a, --addr string             HTTP listen address (default ":7999")
+      --boot-reports string     keep the reports of desks that did not start in this file as JSON lines, moved to <file>.1 at 1 MiB (they are also logged). The default is under $STATE_DIRECTORY when systemd sets one (StateDirectory=), else the temp dir. Empty = log only (default "/tmp/skywire-desk-boot-reports.jsonl")
+      --browse-origin string    ALSO serve the browse-origin SW bootstrap on this second addr (e.g. 127.0.0.1:7998), for the hosted real-origin browser's B origins. Caddy routes *.<browse-suffix> here; this same process serves V on --addr and B here. Empty = off (V host-routes B on --addr, local mode)
+      --browse-suffix string    browse-origin domain suffix for the real-origin browser (leading dot). Empty = .mesh.localhost (local); when --browse-origin is set (hosted mode) and this is empty it defaults to the deployment's browse_origin_suffix (".theskywirenetwork.net" from services-config.json)
+      --desk-docs-port int      run 'skywire doc serve' on this desk vnet port (0 = off) — same cost as above
+      --desk-help-terminal      open a desk terminal that has already run 'skywire --help' — costs a whole extra Go/wasm runtime of the full binary, and that memory is never returned
+      --exec-js-tinygo string   path to TinyGo's wasm_exec.js (targets/wasm_exec.js in the TinyGo tree that built --exec-wasm), served at /wasm_exec_tinygo.js. The desk picks it for a module TinyGo built and keeps Go's loader for the rest. Empty = none
+      --exec-wasm string        path to the full skywire CLI wasm module to serve at /skywire.wasm — the desk host, the tab's visor and the terminal's 'skywire' command (build: GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" -o build/skywire.wasm .). Empty = the module installed beside this binary (skywire.wasm.gz), served as it is. Without one, serve refuses to start
+      --harness                 mount the /ctl/* operator control bridge (drive the in-tab visor from a shell); DEV ONLY — never expose publicly
+      --password string         gate the served PWA behind an access password (cookie login). Empty = open. Use over --tls / behind TLS so the password isn't sent in clear
+      --tls                     serve over HTTPS with a self-signed localhost cert (a real https origin for local testing — wss works, ws:// is mixed-content-blocked exactly as in prod). Accept the browser cert warning once; the cert is persisted across restarts
+      --tls-cert string         PEM cert to serve TLS with instead of the self-signed localhost cert — e.g. a locally-trusted *.mesh.localhost cert (mkcert) so real-origin browse iframes load without a per-host accept. Requires --tls-key
+      --tls-key string          PEM key paired with --tls-cert
+      --v-origin string         the PUBLIC origin(s) of the visor app V that B's bootstrap postMessages to, e.g. https://theskywirenetwork.net. Comma-separated for several apps sharing one browse domain, or "*" to accept any parent. Only needed with --browse-origin behind a proxy; empty = derive from --addr (local)
 ```
 
 ## Global Flags

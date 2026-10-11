@@ -51,7 +51,7 @@ func Bundle() []byte { return bundleWASM }
 // Has reports whether name is a known WASM preset (manifest membership).
 func Has(name string) bool {
 	_, ok := descriptions[name]
-	return ok
+	return ok && engineAvailable
 }
 
 // Describe returns the one-line manifest description for a preset name,

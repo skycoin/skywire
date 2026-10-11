@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/dial_tunnel_legs.go c2-net-routing
 //
 // Multi-leg tunnels AT DIAL TIME.
