@@ -5816,7 +5816,7 @@
         catch (e) { return []; }
       }
       _saveHiddenGroup() {
-        localStorage.setItem('skychat_hidden_group', JSON.stringify([...this.hiddenGroup]));
+        this._store('skychat_hidden_group', JSON.stringify([...this.hiddenGroup]));
       }
       _groupHideKey(gid, tsNano) { return gid + ':' + tsNano; }
       _isGroupHidden(gid, tsNano) {
@@ -6260,7 +6260,7 @@
         const rates = this._speedRates();
         const at = rates.indexOf(this.speed);
         this.speed = rates[(at + 1) % rates.length];
-        localStorage.setItem('skychat_speed', String(this.speed));
+        this._store('skychat_speed', String(this.speed));
         this._applySpeed();
       }
 
@@ -7908,7 +7908,7 @@
 
       toggleMediaMode() {
         this.mediaMode = this.mediaMode === 'mic' ? 'video' : 'mic';
-        localStorage.setItem('skychat_media_mode', this.mediaMode);
+        this._store('skychat_media_mode', this.mediaMode);
         this.syncComposerBtn();
         this.showToast(this.mediaMode === 'video'
           ? 'Video message mode'
@@ -9436,7 +9436,7 @@
       }
 
       _saveContacts() {
-        localStorage.setItem('skychat_contacts', JSON.stringify(this.contacts));
+        this._store('skychat_contacts', JSON.stringify(this.contacts));
       }
 
       isContact(pk) {
@@ -10161,7 +10161,7 @@
         const valid = ['all', 'dm', 'groups', 'channels', 'calls'];
         if (!valid.includes(tab)) tab = 'all';
         this.tab = tab;
-        if (!opts.silent) localStorage.setItem('skychat_tab', tab);
+        if (!opts.silent) this._store('skychat_tab', tab);
         const bar = document.getElementById('sidebar');
         if (bar) bar.dataset.tab = tab;
         document.querySelectorAll('.side-tab').forEach(btn => {
@@ -10860,7 +10860,7 @@
         const key = this._currentPinKey();
         if (!key) return;
         this.pinned = (this.pinned === key) ? null : key;
-        if (this.pinned) localStorage.setItem('skychat_pinned', this.pinned);
+        if (this.pinned) this._store('skychat_pinned', this.pinned);
         else localStorage.removeItem('skychat_pinned');
         this.renderPinned();
         this._updatePinButtons();
@@ -13578,7 +13578,7 @@
       }
 
       _saveNotifPrefs() {
-        localStorage.setItem('skychat_notif', JSON.stringify({
+        this._store('skychat_notif', JSON.stringify({
           enabled: this.notif.enabled,
           preview: this.notif.preview,
           muted: this.notif.muted,
@@ -14730,29 +14730,34 @@
           }
           return m;
         });
+        // Callers have already changed this.messages, so a full quota only
+        // stops the caching. The next reload recovers the thread from history.
+        this._store(`c_${pk}`, JSON.stringify(serializable));
+      }
+
+      // _store writes one localStorage value and reports a full quota once.
+      // A write that throws abandons its handler half done, which with a full
+      // quota is every tap that saves something.
+      _store(key, value) {
         try {
-          localStorage.setItem(`c_${pk}`, JSON.stringify(serializable));
+          localStorage.setItem(key, value);
+          return true;
         } catch (e) {
-          // Out of quota. Every caller has ALREADY changed this.messages and
-          // is about to re-render from it, so throwing from here abandons the
-          // operation half-done — deleteForMe in particular would leave the
-          // message gone from memory, still in the cache, and the screen never
-          // redrawn. Report once and let the caller finish; the thread simply
-          // stops being cached, which the next reload recovers from history.
-          console.debug('skychat: could not cache thread:', e && e.message);
+          console.warn(`skychat: could not store ${key}:`, (e && e.message) || e);
           if (!this._quotaWarned) {
             this._quotaWarned = true;
-            this.showToast('This browser is out of storage — conversations are no longer being cached.', 'error');
+            this.showToast('This browser is out of storage, so chats and settings are no longer saved here.', 'error');
           }
+          return false;
         }
       }
 
       saveSeenList() {
-        localStorage.setItem('s', JSON.stringify(this.messagesSeen));
+        this._store('s', JSON.stringify(this.messagesSeen));
       }
 
       saveRecipients() {
-        localStorage.setItem('r', JSON.stringify(this.recipients));
+        this._store('r', JSON.stringify(this.recipients));
       }
 
       loadData() {
