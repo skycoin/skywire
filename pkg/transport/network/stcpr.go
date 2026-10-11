@@ -57,8 +57,7 @@ func (c *stcprClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 
 func (c *stcprClient) dial(ctx context.Context, addr string) (net.Conn, error) {
 	c.announceDial(types.STCPR, addr)
-	dialer := net.Dialer{}
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	conn, err := c.socks().DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +100,7 @@ func (c *stcprClient) serve() {
 			confPort = fmt.Sprintf(":%d", c.port)
 		}
 		for {
-			lis, err = net.Listen("tcp", confPort)
+			lis, err = c.socks().Listen("tcp", confPort)
 			if err != nil {
 				c.log.WithError(err).Warnf("Failed to listen on port: %d", c.port)
 				c.port++

@@ -27,7 +27,7 @@ func (f *ClientFactory) EnableUnifiedUDP(port int) error {
 	if port == 0 {
 		return nil
 	}
-	conn, err := net.ListenPacket("udp", fmt.Sprintf(":%d", port))
+	conn, err := f.sockets().ListenPacket("udp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return fmt.Errorf("unified transport port %d: %w", port, err)
 	}
