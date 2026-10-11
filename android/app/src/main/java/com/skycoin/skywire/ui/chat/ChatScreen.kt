@@ -103,8 +103,11 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
         val request = pendingMedia
         pendingMedia = null
         webView?.evaluateJavascript("window.skywirePermissionPrompt = false", null)
+        // Only the missing permissions were asked for, so one the phone had
+        // already granted (the microphone, for a first video) is not in grants.
         request?.grantOrDeny { resource ->
-            ChatWebView.androidPermission(resource)?.let { grants[it] == true } ?: false
+            ChatWebView.androidPermission(resource)
+                ?.let { grants[it] ?: ChatWebView.hasPermission(context, it) } ?: false
         }
     }
 
