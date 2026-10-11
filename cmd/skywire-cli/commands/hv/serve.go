@@ -71,19 +71,19 @@ Keyless: no key is baked in; each visitor's browser mints + persists its own
 ephemeral key (localStorage). That is what makes serving from a domain safe — the
 page never asks anyone to type a secret key.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		// Hosted mode (a browse-origin bootstrap addr is set → Caddy fronts
-		// *.<suffix>) with no explicit suffix sources the browse-origin domain
-		// from the embedded deployment config instead of hardcoding it, so the
-		// domain lives in exactly one place (services-config.json). Local mode
-		// (no --browse-origin) keeps the .mesh.localhost default.
 		if serveExecJS != "" {
-			js, err := os.ReadFile(serveExecJS)
+			js, err := os.ReadFile(filepath.Clean(serveExecJS))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "read --exec-js:", err)
 				os.Exit(1)
 			}
 			wasmhv.WasmExecJS = js
 		}
+		// Hosted mode (a browse-origin bootstrap addr is set → Caddy fronts
+		// *.<suffix>) with no explicit suffix sources the browse-origin domain
+		// from the embedded deployment config instead of hardcoding it, so the
+		// domain lives in exactly one place (services-config.json). Local mode
+		// (no --browse-origin) keeps the .mesh.localhost default.
 		browseSuffix := serveBrowseSuffix
 		if browseSuffix == "" && serveBrowseOrigin != "" {
 			browseSuffix = deployment.Prod.BrowseOriginSuffix
