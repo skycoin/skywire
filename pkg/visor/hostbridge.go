@@ -12,6 +12,7 @@ import (
 	"github.com/skycoin/skywire/pkg/hostbridge"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 const (
@@ -46,7 +47,8 @@ func (v *Visor) hostBridgeLog() *logging.Logger {
 }
 
 // HostBridgeConnect connects to the bridge at url, replacing any session,
-// and keeps redialing it until HostBridgeDisconnect.
+// and keeps redialing it until HostBridgeDisconnect. The URL is saved in the
+// config, so the visor reconnects at boot.
 func (v *Visor) HostBridgeConnect(url string) error {
 	hb := &v.hostBridge
 	hb.mu.Lock()
@@ -73,7 +75,33 @@ func (v *Visor) HostBridgeConnect(url string) error {
 		return errors.New("replaced by a newer connect")
 	}
 	v.hostBridgeLog().WithField("url", url).Info("Connected to the host bridge")
-	go v.hostBridgeSupervise(gen, c)
+	v.hostBridgeSave()
+	go v.hostBridgeSupervise(gen, url, c)
+	return nil
+}
+
+// initHostBridge reconnects to the bridge saved in the config, in the
+// background, and reopens its forwards once connected.
+func initHostBridge(_ context.Context, v *Visor, _ *logging.Logger) error {
+	if v.conf == nil || v.conf.HostBridge == nil || v.conf.HostBridge.URL == "" {
+		return nil
+	}
+	cfg := v.conf.HostBridge
+	hb := &v.hostBridge
+	hb.mu.Lock()
+	if hb.url == cfg.URL && hb.client != nil {
+		hb.mu.Unlock()
+		return nil
+	}
+	hb.gen++
+	gen := hb.gen
+	hb.url, hb.err = cfg.URL, "connecting"
+	hb.forwards = map[string]*hostBridgeFwd{}
+	for _, f := range cfg.Forwards {
+		hb.forwards[f.Host] = &hostBridgeFwd{host: f.Host, local: f.Local}
+	}
+	hb.mu.Unlock()
+	go v.hostBridgeSupervise(gen, cfg.URL, nil)
 	return nil
 }
 
@@ -108,12 +136,18 @@ func (v *Visor) hostBridgeAttach(gen int, c *hostbridge.Client) bool {
 	return true
 }
 
-// hostBridgeSupervise redials the bridge with backoff whenever the session
-// of generation gen ends.
-func (v *Visor) hostBridgeSupervise(gen int, c *hostbridge.Client) {
+// hostBridgeSupervise keeps the session of generation gen up. It dials when
+// c is nil and redials with backoff each time the session ends.
+func (v *Visor) hostBridgeSupervise(gen int, url string, c *hostbridge.Client) {
 	hb := &v.hostBridge
-	log := v.hostBridgeLog()
+	log := v.hostBridgeLog().WithField("url", url)
 	for {
+		if c == nil {
+			if c = v.hostBridgeRedial(gen, url); c == nil {
+				return
+			}
+			log.Info("Connected to the host bridge")
+		}
 		select {
 		case <-c.Done():
 		case <-v.ctx.Done():
@@ -125,48 +159,72 @@ func (v *Visor) hostBridgeSupervise(gen int, c *hostbridge.Client) {
 			hb.mu.Unlock()
 			return
 		}
-		url := hb.url
 		hb.client, hb.err = nil, "session to the bridge ended"
 		for _, f := range hb.forwards {
 			f.l, f.bound = nil, ""
 		}
 		hb.mu.Unlock()
-		log.WithField("url", url).Warn("Session to the host bridge ended, redialing")
+		log.Warn("Session to the host bridge ended, redialing")
+		c = nil
+	}
+}
 
-		for wait := hostBridgeMinRetry; ; wait = min(2*wait, hostBridgeMaxRetry) {
-			select {
-			case <-time.After(wait):
-			case <-v.ctx.Done():
-				return
+// hostBridgeRedial dials url with backoff until it connects, and returns
+// nil when generation gen is replaced or the visor stops.
+func (v *Visor) hostBridgeRedial(gen int, url string) *hostbridge.Client {
+	hb := &v.hostBridge
+	for wait := hostBridgeMinRetry; ; wait = min(2*wait, hostBridgeMaxRetry) {
+		hb.mu.Lock()
+		current := hb.gen == gen
+		hb.mu.Unlock()
+		if !current {
+			return nil
+		}
+		c, err := v.dialHostBridge(url)
+		if err == nil {
+			if v.hostBridgeAttach(gen, c) {
+				return c
 			}
-			hb.mu.Lock()
-			current := hb.gen == gen
-			hb.mu.Unlock()
-			if !current {
-				return
-			}
-			next, err := v.dialHostBridge(url)
-			if err != nil {
-				hb.mu.Lock()
-				if hb.gen == gen {
-					hb.err = err.Error()
-				}
-				hb.mu.Unlock()
-				continue
-			}
-			if !v.hostBridgeAttach(gen, next) {
-				_ = next.Close() //nolint:errcheck
-				return
-			}
-			log.WithField("url", url).Info("Reconnected to the host bridge")
-			c = next
-			break
+			_ = c.Close() //nolint:errcheck
+			return nil
+		}
+		hb.mu.Lock()
+		if hb.gen == gen {
+			hb.err = err.Error()
+		}
+		hb.mu.Unlock()
+		select {
+		case <-time.After(wait):
+		case <-v.ctx.Done():
+			return nil
 		}
 	}
 }
 
-// HostBridgeDisconnect ends the session and its forwards.
-func (v *Visor) HostBridgeDisconnect() error {
+// hostBridgeSave writes the URL and forwards to the config, or removes the
+// section when disconnected.
+func (v *Visor) hostBridgeSave() {
+	if v.conf == nil {
+		return
+	}
+	hb := &v.hostBridge
+	hb.mu.Lock()
+	var cfg *visorconfig.HostBridgeConfig
+	if hb.url != "" {
+		cfg = &visorconfig.HostBridgeConfig{URL: hb.url, Forwards: []visorconfig.HostBridgeForwardConfig{}}
+		for _, f := range hb.forwards {
+			cfg.Forwards = append(cfg.Forwards, visorconfig.HostBridgeForwardConfig{Host: f.host, Local: f.local})
+		}
+		sort.Slice(cfg.Forwards, func(i, j int) bool { return cfg.Forwards[i].Host < cfg.Forwards[j].Host })
+	}
+	hb.mu.Unlock()
+	if err := v.conf.UpdateHostBridge(cfg); err != nil {
+		v.hostBridgeLog().WithError(err).Warn("Could not save the host bridge in the config")
+	}
+}
+
+// hostBridgeDisconnect ends the session and its forwards.
+func (v *Visor) hostBridgeDisconnect() error {
 	hb := &v.hostBridge
 	hb.mu.Lock()
 	defer hb.mu.Unlock()
@@ -191,10 +249,10 @@ func (v *Visor) HostBridgeStatus() (visorapi.HostBridgeStatus, error) {
 	return st, nil
 }
 
-// HostBridgeForward listens on host on the bridge's host and passes each
+// hostBridgeForward listens on host on the bridge's host and passes each
 // connection to local, an address the visor can dial. The forward is kept
 // across reconnects.
-func (v *Visor) HostBridgeForward(host, local string) (visorapi.HostBridgeForward, error) {
+func (v *Visor) hostBridgeForward(host, local string) (visorapi.HostBridgeForward, error) {
 	hb := &v.hostBridge
 	hb.mu.Lock()
 	defer hb.mu.Unlock()
@@ -216,8 +274,8 @@ func (v *Visor) HostBridgeForward(host, local string) (visorapi.HostBridgeForwar
 	return f.status(), nil
 }
 
-// HostBridgeUnforward stops the forward from host.
-func (v *Visor) HostBridgeUnforward(host string) error {
+// hostBridgeUnforward stops the forward from host.
+func (v *Visor) hostBridgeUnforward(host string) error {
 	hb := &v.hostBridge
 	hb.mu.Lock()
 	defer hb.mu.Unlock()
@@ -256,4 +314,32 @@ func (v *Visor) hostBridgeListen(c *hostbridge.Client, f *hostBridgeFwd) {
 
 func (f *hostBridgeFwd) status() visorapi.HostBridgeForward {
 	return visorapi.HostBridgeForward{Host: f.host, Bound: f.bound, Local: f.local, Error: f.err}
+}
+
+// HostBridgeDisconnect ends the session and its forwards, and removes them
+// from the config.
+func (v *Visor) HostBridgeDisconnect() error {
+	err := v.hostBridgeDisconnect()
+	v.hostBridgeSave()
+	return err
+}
+
+// HostBridgeForward listens on host on the bridge's host and passes each
+// connection to local, an address the visor can dial. The forward is kept
+// across reconnects and saved in the config.
+func (v *Visor) HostBridgeForward(host, local string) (visorapi.HostBridgeForward, error) {
+	f, err := v.hostBridgeForward(host, local)
+	if err == nil {
+		v.hostBridgeSave()
+	}
+	return f, err
+}
+
+// HostBridgeUnforward stops the forward from host.
+func (v *Visor) HostBridgeUnforward(host string) error {
+	err := v.hostBridgeUnforward(host)
+	if err == nil {
+		v.hostBridgeSave()
+	}
+	return err
 }

@@ -39,6 +39,7 @@ func TestRegenPreservesVisorPersistedSettings(t *testing.T) {
 		EmbeddedServices:     []svcs.Block{{Type: "service-discovery", Raw: json.RawMessage(`{"type":"service-discovery"}`)}},
 		MemoryLimit:          "5600MiB",
 		DeploymentStatusAddr: "127.0.0.1:8092",
+		HostBridge:           &visorconfig.HostBridgeConfig{URL: "ws://127.0.0.1:3438/t", Forwards: []visorconfig.HostBridgeForwardConfig{{Host: "127.0.0.1:1080", Local: "127.0.0.1:1080"}}},
 	}
 	conf = new(visorconfig.V1)
 
@@ -59,6 +60,7 @@ func TestRegenPreservesVisorPersistedSettings(t *testing.T) {
 	require.Len(t, conf.EmbeddedServices, 1, "embedded_services must survive a regen")
 	require.Equal(t, "5600MiB", conf.MemoryLimit, "memory_limit must survive a regen")
 	require.Equal(t, "127.0.0.1:8092", conf.DeploymentStatusAddr, "deployment_status_addr must survive a regen")
+	require.Equal(t, oldConfCache.HostBridge, conf.HostBridge, "host_bridge must survive a regen")
 }
 
 // The same call must be a no-op on a fresh (non-regen) generate, so a

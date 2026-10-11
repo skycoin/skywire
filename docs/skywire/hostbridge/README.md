@@ -9,7 +9,8 @@ socket. The bridge does that for it. The tab connects to the bridge over a
 WebSocket on loopback, then asks it to dial, listen on TCP or bind UDP.
 
 Only pages in --origin may connect, and only with the token in the printed
-URL. The bridge holds no keys.
+URL. The token is kept in --token-file, so the URL stays the same when the
+bridge restarts. The bridge holds no keys.
 
 ## Usage
 
@@ -20,9 +21,10 @@ skywire hostbridge
 ## Flags
 
 ```
-      --addr string     address the tab connects to (default "127.0.0.1:3438")
-      --origin string   comma separated pages allowed to connect, * for any (default "https://skywire.dev")
-      --token string    secret the tab must present, random when empty
+      --addr string         address the tab connects to (default "127.0.0.1:3438")
+      --origin string       comma separated pages allowed to connect, * for any (default "https://skywire.dev")
+      --token string        secret the tab must present, read from --token-file when empty
+      --token-file string   file that keeps the token across restarts, default <user config dir>/skywire/hostbridge-token, none for a new token each run
 ```
 
 ## Global Flags

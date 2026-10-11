@@ -126,17 +126,22 @@ func TestHostBridgeForwardAndReconnect(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, host, f.Bound)
 	echoOnce(t, host, "through the bridge")
+	require.NotNil(t, v.conf.HostBridge, "connect and forward must be saved")
+	require.Equal(t, url, v.conf.HostBridge.URL)
+	require.Equal(t, []visorconfig.HostBridgeForwardConfig{{Host: host, Local: echo.Addr().String()}}, v.conf.HostBridge.Forwards)
 
-	// Cut the session. The visor notices, redials after a second and reopens
-	// the forward.
+	// Cut the session. The visor redials on a new session and reopens the
+	// forward.
+	v.hostBridge.mu.Lock()
+	before := v.hostBridge.client
+	v.hostBridge.mu.Unlock()
 	proxy.cut()
 	require.Eventually(t, func() bool {
+		v.hostBridge.mu.Lock()
+		now := v.hostBridge.client
+		v.hostBridge.mu.Unlock()
 		st, _ := v.HostBridgeStatus() //nolint:errcheck
-		return !st.Connected
-	}, 5*time.Second, 10*time.Millisecond, "visor did not notice the cut")
-	require.Eventually(t, func() bool {
-		st, _ := v.HostBridgeStatus() //nolint:errcheck
-		return st.Connected && len(st.Forwards) == 1 && st.Forwards[0].Bound == host
+		return now != nil && now != before && len(st.Forwards) == 1 && st.Forwards[0].Bound == host
 	}, 15*time.Second, 50*time.Millisecond, "visor did not reconnect")
 	echoOnce(t, host, "after the reconnect")
 
@@ -154,4 +159,55 @@ func TestHostBridgeForwardAndReconnect(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, st.Connected)
 	require.Empty(t, st.URL)
+	require.Nil(t, v.conf.HostBridge, "disconnect must remove the saved bridge")
+}
+
+func TestHostBridgeReconnectsAtBoot(t *testing.T) {
+	const token = "0123456789abcdef"
+	srv, err := hostbridge.NewServer(hostbridge.Config{Token: token})
+	require.NoError(t, err)
+	bl, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bl.Close() }) //nolint:errcheck
+
+	echo, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = echo.Close() }) //nolint:errcheck
+	go func() {
+		for {
+			c, err := echo.Accept()
+			if err != nil {
+				return
+			}
+			go func() { _, _ = io.Copy(c, c); _ = c.Close() }() //nolint:errcheck
+		}
+	}()
+
+	_, sk := cipher.GenerateKeyPair()
+	common, err := visorconfig.NewCommon(logging.NewMasterLogger(), filepath.Join(t.TempDir(), "c.json"), &sk)
+	require.NoError(t, err)
+	host := freeLoopbackAddr(t)
+	conf := &visorconfig.V1{Common: common, HostBridge: &visorconfig.HostBridgeConfig{
+		URL:      "ws://" + bl.Addr().String() + "/" + token,
+		Forwards: []visorconfig.HostBridgeForwardConfig{{Host: host, Local: echo.Addr().String()}},
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	v := &Visor{ctx: ctx, conf: conf}
+
+	// The bridge starts after the visor, so the first dials fail.
+	require.NoError(t, initHostBridge(ctx, v, nil))
+	st, err := v.HostBridgeStatus()
+	require.NoError(t, err)
+	require.False(t, st.Connected)
+	require.Len(t, st.Forwards, 1)
+	time.Sleep(500 * time.Millisecond)
+	go srv.Serve(bl) //nolint:errcheck
+
+	require.Eventually(t, func() bool {
+		st, _ := v.HostBridgeStatus() //nolint:errcheck
+		return st.Connected && len(st.Forwards) == 1 && st.Forwards[0].Bound == host
+	}, 15*time.Second, 50*time.Millisecond, "visor did not connect at boot")
+	echoOnce(t, host, "after boot")
+	require.NoError(t, v.HostBridgeDisconnect())
 }

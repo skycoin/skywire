@@ -1154,6 +1154,10 @@ func mergeExistingApps(log *logging.Logger) {
 	if oldConfCache.DeploymentStatusAddr != "" {
 		conf.DeploymentStatusAddr = oldConfCache.DeploymentStatusAddr
 	}
+	// host_bridge is written by the visor, when it connects to a host bridge.
+	if oldConfCache.HostBridge != nil {
+		conf.HostBridge = oldConfCache.HostBridge
+	}
 	if oldConfCache.Launcher == nil {
 		return
 	}
