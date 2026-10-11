@@ -243,7 +243,7 @@ func (c *quicClient) dial(ctx context.Context, addr string, rPK cipher.PubKey) (
 	// for both roles needs quic.Transport routing — a later optimization;
 	// ephemeral dial sockets work for publicly-reachable peers, which is the
 	// v1 target. NAT hole-punching is a follow-up.)
-	dialUDP, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+	dialUDP, err := c.socks().ListenPacket("udp", "0.0.0.0:0")
 	if err != nil {
 		return nil, fmt.Errorf("bind quic dial socket: %w", err)
 	}
@@ -346,7 +346,7 @@ func (c *quicClient) listen() (net.Listener, error) {
 			confPort = fmt.Sprintf(":%d", c.port)
 		}
 		for {
-			udpConn, err = net.ListenPacket("udp", confPort)
+			udpConn, err = c.socks().ListenPacket("udp", confPort)
 			if err != nil {
 				c.log.WithError(err).Warnf("Failed to listen on UDP port %d", c.port)
 				c.port++
