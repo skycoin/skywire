@@ -427,6 +427,11 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 			},
 			Static: serviceURL.Addr.PK,
 		}
+		// A service on a key that also runs a dmsg server, such as the visor's
+		// own, must not drop that server from the direct client.
+		if prev, perr := v.dClient.Entry(ctx, serviceURL.Addr.PK); perr == nil && prev.Server != nil {
+			clientEntry.Server = prev.Server
+		}
 
 		err = v.dClient.PostEntry(ctx, clientEntry)
 		if err != nil {
