@@ -40,6 +40,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
 import com.skycoin.skywire.core.AppVisibility
@@ -51,6 +53,8 @@ import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.theme.LocalDarkTheme
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Chat tab — skychat's own web UI, embedded.
@@ -114,6 +118,22 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
             ChatWebView.androidPermission(resource)
                 ?.let { grants[it] ?: ChatWebView.hasPermission(context, it) } ?: false
         }
+    }
+
+    // Android's permission dialog is an Activity, so showing it pauses ours. No pause
+    // and no answer means none is coming, and the page's request would wait forever.
+    val activity = remember(context) { context.findActivity() as? LifecycleOwner }
+    LaunchedEffect(pendingMedia) {
+        val request = pendingMedia ?: return@LaunchedEffect
+        val lifecycle = activity?.lifecycle ?: return@LaunchedEffect
+        val shown = withTimeoutOrNull(PROMPT_SHOW_MS) {
+            lifecycle.currentStateFlow.first { !it.isAtLeast(Lifecycle.State.RESUMED) }
+        }
+        if (shown != null || pendingMedia !== request) return@LaunchedEffect
+        ChatPageLog.add("webview: Android showed no permission dialog, refusing ${request.resources.joinToString()}")
+        pendingMedia = null
+        webView?.evaluateJavascript("window.skywirePermissionPrompt = false", null)
+        request.deny()
     }
 
     // One rule for both ways back, so the ← in the header and the phone's own
@@ -396,3 +416,4 @@ private fun ChatStatus(
 
 private const val PAGE_PING_MS = 2_000L
 private const val PAGE_STALL_MS = 5_000L
+private const val PROMPT_SHOW_MS = 5_000L
