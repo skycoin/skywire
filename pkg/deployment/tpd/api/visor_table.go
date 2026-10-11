@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
@@ -103,4 +104,24 @@ func (api *API) visorVersions() map[string]string {
 		}
 	}
 	return out
+}
+
+// versionCacheFor is how long the key to version map behind versionOf is kept.
+const versionCacheFor = time.Minute
+
+// versionOf is the version visor pk last reported, from a map rebuilt at most
+// once a minute, since it runs for every request any service in the process takes.
+func (api *API) versionOf(pk cipher.PubKey) string {
+	api.versions.mu.Lock()
+	defer api.versions.mu.Unlock()
+	if api.versions.m == nil || time.Since(api.versions.at) > versionCacheFor {
+		m := make(map[cipher.PubKey]string)
+		for _, u := range api.getUptimesFromCache() {
+			if u.Version != "" {
+				m[u.PK] = u.Version
+			}
+		}
+		api.versions.m, api.versions.at = m, time.Now()
+	}
+	return api.versions.m[pk]
 }

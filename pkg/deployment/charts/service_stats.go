@@ -3,6 +3,7 @@ package charts
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -11,9 +12,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -312,7 +315,7 @@ func (s *ServiceStats) Charts(f *Frame, from, to time.Time) []Chart {
 	if len(f.Keys(prefixReq)) > 0 {
 		out = append(out,
 			chart("HTTP requests, by endpoint", "Requests per 5 minutes, by method and route.", Stacked, nil, f.Group(prefixReq, 8)),
-			chart("HTTP requests, by caller version", "Requests per 5 minutes, by the version the caller sent. None is a visor too old to send one.", Stacked, nil, f.Group(prefixVer, 8)),
+			chart("HTTP requests, by caller version", "Requests per 5 minutes, by the version the caller sent, or else the one transport discovery last saw from its key. None is neither.", Stacked, nil, f.Group(prefixVer, 8)),
 			chart("HTTP responses, by status", "Responses per 5 minutes, by status class.", Stacked, nil, f.Group(prefixCode, 0)),
 			chart("HTTP bytes sent, by endpoint", "Response bytes per 5 minutes, by method and route.", Stacked, Bytes, f.Group(prefixHTTPOut, 8)),
 			chart("HTTP response time", "Median and 95th percentile time to answer, per 5 minutes.", Lines, ms, []Series{
@@ -392,11 +395,39 @@ func openFiles() (int, bool) {
 	return len(names), true
 }
 
-// callerVersion is the version a request's caller sent, or "none".
+// versionOf maps a caller's key to the version a service last saw it report,
+// for callers that send no version. See SetVersionLookup.
+var versionOf atomic.Pointer[func(cipher.PubKey) string]
+
+// SetVersionLookup makes f the lookup of a caller's version by its key, used
+// for requests that do not carry one. Transport discovery sets it.
+func SetVersionLookup(f func(cipher.PubKey) string) { versionOf.Store(&f) }
+
+// callerVersion is the version a request's caller sent, else the one looked up
+// by its key, else "none".
 func callerVersion(r *http.Request) string {
-	v := r.Header.Get(buildinfo.VersionHeader)
-	if v == "" || len(v) > 64 {
-		return "none"
+	if v := r.Header.Get(buildinfo.VersionHeader); v != "" && len(v) <= 64 {
+		return v
 	}
-	return v
+	if f := versionOf.Load(); f != nil {
+		if pk, ok := callerPK(r); ok {
+			if v := (*f)(pk); v != "" {
+				return v
+			}
+		}
+	}
+	return "none"
+}
+
+// callerPK is the caller's key: the one it signs with, or over dmsg the
+// stream's remote key ("<pk>:<port>").
+func callerPK(r *http.Request) (cipher.PubKey, bool) {
+	var pk cipher.PubKey
+	if h := r.Header.Get("SW-Public"); h != "" && pk.Set(h) == nil {
+		return pk, true
+	}
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil && pk.Set(host) == nil {
+		return pk, true
+	}
+	return pk, false
 }
