@@ -333,10 +333,10 @@ func (api *API) visorBandwidthTable(ctx context.Context, c *tpdCharts, now time.
 		}
 		c.visorBW = &day
 	}
-	return visorBWTable(c.visorBW, api.serverRoles(ctx)), true
+	return visorBWTable(c.visorBW, api.serverRoles(ctx), api.visorVersions()), true
 }
 
-func visorBWTable(day *store.VisorBWDay, roles map[string]string) charts.Table {
+func visorBWTable(day *store.VisorBWDay, roles, versions map[string]string) charts.Table {
 	type row struct {
 		pk     string
 		total  uint64
@@ -379,7 +379,7 @@ func visorBWTable(day *store.VisorBWDay, roles map[string]string) charts.Table {
 		}
 		return types[a] < types[b]
 	})
-	t.Head = []string{"Public key", "Role", "Sent"}
+	t.Head = []string{"Public key", "Version", "Role", "Sent"}
 	for _, typ := range types {
 		if typ == "" {
 			typ = "unknown"
@@ -387,7 +387,7 @@ func visorBWTable(day *store.VisorBWDay, roles map[string]string) charts.Table {
 		t.Head = append(t.Head, typ)
 	}
 	for _, r := range rows {
-		row := []string{r.pk, roleName[roles[r.pk]], charts.Bytes(float64(r.total))}
+		row := []string{r.pk, versions[r.pk], roleName[roles[r.pk]], charts.Bytes(float64(r.total))}
 		for _, typ := range types {
 			cell := ""
 			if n := r.byType[typ]; n > 0 {

@@ -55,7 +55,7 @@ func collect(t *testing.T, a *API, c *rfCharts) map[string]float64 {
 
 func TestCollectSetupNodes(t *testing.T) {
 	var mu sync.Mutex
-	snap := setupmetrics.StatsSnapshot{StartedAt: time.Unix(100, 0), TotalRequests: 10, Successful: 8, Failed: 2,
+	snap := setupmetrics.StatsSnapshot{Version: "v1.3.100", StartedAt: time.Unix(100, 0), TotalRequests: 10, Successful: 8, Failed: 2,
 		FailuresByReason: map[setupmetrics.FailureReason]uint64{"source_unreachable": 2},
 		RouteLengthHist:  map[int]uint64{1: 5, 2: 3},
 		LatencyMs:        setupmetrics.LatencyStats{Count: 8, P50: 120, P95: 900}}
@@ -79,6 +79,7 @@ func TestCollectSetupNodes(t *testing.T) {
 	require.Equal(t, 120.0, v[k+"p50"])
 	_, counted := v[k+"req"]
 	require.False(t, counted, "the first read is only a baseline")
+	require.Equal(t, "v1.3.100", c.nodeVersion(pk))
 
 	mu.Lock()
 	snap.TotalRequests, snap.Successful, snap.Failed = 15, 12, 3

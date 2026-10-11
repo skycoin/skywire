@@ -113,7 +113,7 @@ func (a *API) collectCharts(ctx context.Context) (map[string]float64, error) {
 }
 
 // serverLoadCharts draws the load registered servers report on their /health.
-func (a *API) serverLoadCharts(f *charts.Frame, from, now time.Time, reg map[string]*disc.Server) []charts.Chart {
+func (a *API) serverLoadCharts(f *charts.Frame, from, now time.Time, reg map[string]*disc.Server, vers map[string]string) []charts.Chart {
 	if len(f.Keys(chartSrvOK)) == 0 {
 		return nil
 	}
@@ -131,7 +131,7 @@ func (a *API) serverLoadCharts(f *charts.Frame, from, now time.Time, reg map[str
 		if n, ok := f.Latest(chartSrvActive + pk); ok {
 			active = strconv.FormatFloat(n, 'f', 0, 64)
 		}
-		conns = append(conns, charts.Series{Name: pk, Vals: f.Values(k, false), Cells: []string{addr, peers, active}})
+		conns = append(conns, charts.Series{Name: pk, Vals: f.Values(k, false), Cells: []string{vers[pk], addr, peers, active}})
 	}
 	out := []charts.Chart{
 		{Title: "Bytes relayed per dmsg server", Note: "What each registered server carried between its clients and peers per 5 minutes, both ways, as it reports on its /health.",
@@ -140,7 +140,7 @@ func (a *API) serverLoadCharts(f *charts.Frame, from, now time.Time, reg map[str
 			Kind: charts.Stacked, From: from, To: now, Times: f.Times, Series: f.Group(chartSrvStreams, 0)},
 		{Title: "Sessions per dmsg server", Note: "Clients connected to each registered server, as the server counts them. Each is one connection, however many streams it carries.",
 			Kind: charts.Lines, From: from, To: now, Times: f.Times, Series: conns,
-			Legend: []string{"Public key", "Address", "Peer servers", "Active streams", "Sessions"}},
+			Legend: []string{"Public key", "Version", "Address", "Peer servers", "Active streams", "Sessions"}},
 	}
 	var silent []string
 	for _, k := range f.Keys(chartSrvOK) {
@@ -165,9 +165,11 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, r charts.Range, 
 		servers = nil
 	}
 	reg := map[string]*disc.Server{}
+	vers := map[string]string{}
 	for _, s := range servers {
 		if s.Server != nil {
 			reg[s.Static.Hex()] = s.Server
+			vers[s.Static.Hex()] = s.Version
 		}
 	}
 
@@ -191,8 +193,8 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, r charts.Range, 
 			official = "yes"
 		}
 		perServer = append(perServer, charts.Series{Name: pk, Vals: f.Values(k, false),
-			Cells: []string{srv.Address, srv.ServerType, official, strconv.Itoa(srv.AvailableSessions)}})
-		free = append(free, charts.Series{Name: pk, Vals: f.Values(chartServerFree+pk, false), Cells: []string{srv.Address}})
+			Cells: []string{vers[pk], srv.Address, srv.ServerType, official, strconv.Itoa(srv.AvailableSessions)}})
+		free = append(free, charts.Series{Name: pk, Vals: f.Values(chartServerFree+pk, false), Cells: []string{vers[pk], srv.Address}})
 	}
 
 	out := charts.Content{Charts: []charts.Chart{
@@ -209,7 +211,7 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, r charts.Range, 
 		{Title: "Clients per registered dmsg server",
 			Note: "A client delegates to several servers, so these add up to more than the client count.",
 			Kind: charts.Lines, From: from, To: now, Times: f.Times, Series: perServer,
-			Legend: []string{"Public key", "Address", "Type", "Official", "Free sessions", "Clients"}},
+			Legend: []string{"Public key", "Version", "Address", "Type", "Official", "Free sessions", "Clients"}},
 		{Title: "Hypervisor LAN dmsg servers",
 			Note: "Servers that hypervisors run for the visors on their LAN. They have no discovery entry, by design.",
 			Kind: charts.Lines, From: from, To: now, Times: f.Times, Series: []charts.Series{
@@ -217,15 +219,23 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, r charts.Range, 
 				{Name: "clients using them", Vals: f.Values(chartLANClients, false)},
 			}},
 	}}
-	out.Charts = append(out.Charts, a.serverLoadCharts(f, from, now, reg)...)
+	out.Charts = append(out.Charts, a.serverLoadCharts(f, from, now, reg, vers)...)
 	// Spare capacity goes right after the sessions each server holds.
 	out.Charts = append(out.Charts, charts.Chart{Title: "Free sessions per registered dmsg server", Note: "Spare capacity each server advertises in its entry.",
 		Kind: charts.Lines, From: from, To: now, Times: f.Times, Series: free,
-		Legend: []string{"Public key", "Address", "Free sessions"}})
+		Legend: []string{"Public key", "Version", "Address", "Free sessions"}})
 	sort.SliceStable(lan, func(i, j int) bool { return lan[i].clients > lan[j].clients })
-	t := charts.Table{Title: "Hypervisor LAN dmsg servers now", Head: []string{"Public key", "Clients"}}
+	t := charts.Table{Title: "Hypervisor LAN dmsg servers now", Head: []string{"Public key", "Version", "Clients"}}
 	for _, l := range lan {
-		t.Rows = append(t.Rows, []string{l.pk, strconv.FormatFloat(l.clients, 'f', 0, 64)})
+		// A LAN server has no server entry, but its visor's client entry has the version.
+		ver := ""
+		var pk cipher.PubKey
+		if pk.Set(l.pk) == nil {
+			if e, err := a.db.Entry(ctx, pk); err == nil && e != nil {
+				ver = e.Version
+			}
+		}
+		t.Rows = append(t.Rows, []string{l.pk, ver, strconv.FormatFloat(l.clients, 'f', 0, 64)})
 	}
 	out.Tables = append(out.Tables, t)
 	return out, nil

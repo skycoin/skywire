@@ -15,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -246,6 +247,7 @@ func (c *Client) doRequest(client *http.Client, req *http.Request, body []byte) 
 	req.Header.Set("SW-Nonce", strconv.FormatUint(uint64(nonce), 10))
 	req.Header.Set("SW-Sig", sign.Hex())
 	req.Header.Set("SW-Public", c.key.Hex())
+	req.Header.Set(buildinfo.VersionHeader, buildinfo.Version())
 	if c.clientPublicIP != "" {
 		req.Header.Set("SW-PublicIP", c.clientPublicIP)
 	}

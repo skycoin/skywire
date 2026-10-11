@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgc"
@@ -42,10 +43,10 @@ func TestStatusBoard(t *testing.T) {
 	}
 	sum := v.statusSummary()
 	want := [][]string{
-		{"visor", pk.Hex(), "running", ""},
-		{"transport-discovery (tpd)", pk.Hex(), "running", ""},
-		{"route-finder (rf)", pk.Hex(), "starting", ""},
-		{"setup-node (sn)", pk.Hex(), "running", ""},
+		{"visor", pk.Hex(), buildinfo.Version(), "running", ""},
+		{"transport-discovery (tpd)", pk.Hex(), buildinfo.Version(), "running", ""},
+		{"route-finder (rf)", pk.Hex(), buildinfo.Version(), "starting", ""},
+		{"setup-node (sn)", pk.Hex(), buildinfo.Version(), "running", ""},
 	}
 	if len(sum.Rows) != len(want) {
 		t.Fatalf("summary rows %v, want the visor and every service", sum.Rows)
@@ -81,7 +82,7 @@ func TestStatusSummaryDmsgServer(t *testing.T) {
 		Dmsg: &dmsgc.DmsgConfig{Server: &dmsgc.DmsgServerConfig{Enabled: true}}}}
 	v.embedded.once.Do(func() {})
 	sum := v.statusSummary()
-	if len(sum.Rows) != 2 || sum.Rows[1][0] != "dmsg server" || sum.Rows[1][1] != pk.Hex() || sum.Rows[1][2] != "starting" {
+	if len(sum.Rows) != 2 || sum.Rows[1][0] != "dmsg server" || sum.Rows[1][1] != pk.Hex() || sum.Rows[1][3] != "starting" {
 		t.Fatalf("summary rows %v, want the visor then its dmsg server", sum.Rows)
 	}
 }
