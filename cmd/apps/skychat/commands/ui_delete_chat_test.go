@@ -30,11 +30,7 @@ func TestDeleteChatReachesTheStore(t *testing.T) {
 	page := strings.ReplaceAll(string(b), "\r\n", "\n")
 
 	// The body of deleteChat: from its declaration to the next method.
-	m := regexp.MustCompile(`(?s)\n\s+deleteChat\(\) \{\n(.*?)\n\s+\}\n\n\s+//`).FindStringSubmatch(page)
-	if m == nil {
-		t.Fatal("deleteChat() not found in index.html")
-	}
-	body := m[1]
+	body := deleteChatBody(t, page)
 	if !strings.Contains(body, "_forgetStoredConversation(pk)") {
 		t.Error("deleteChat no longer erases the stored conversation; the visor's history will put it back on the next load")
 	}
@@ -42,7 +38,7 @@ func TestDeleteChatReachesTheStore(t *testing.T) {
 		t.Error("deleteChat still describes itself as UI-local; it is not")
 	}
 
-	m = regexp.MustCompile(`(?s)_forgetStoredConversation\(pk\) \{\n(.*?)\n\s+\}\n`).FindStringSubmatch(page)
+	m := regexp.MustCompile(`(?s)_forgetStoredConversation\(pk\) \{\n(.*?)\n\s+\}\n`).FindStringSubmatch(page)
 	if m == nil {
 		t.Fatal("_forgetStoredConversation not found in index.html")
 	}
@@ -96,11 +92,7 @@ func TestDeletePairedChatStaysDeleted(t *testing.T) {
 	// conversation on the next load; the user must hear about it rather than
 	// a console.debug line. Same body-extraction anchor as the test above:
 	// from the declaration to the blank line + comment that follows it.
-	m = regexp.MustCompile(`(?s)\n\s+deleteChat\(\) \{\n(.*?)\n\s+\}\n\n\s+//`).FindStringSubmatch(page)
-	if m == nil {
-		t.Fatal("deleteChat() not found in index.html")
-	}
-	body := m[1]
+	body := deleteChatBody(t, page)
 	unpairAt := strings.Index(body, "`/pair/${pk}`")
 	if unpairAt < 0 {
 		t.Fatal("deleteChat no longer revokes the pair of the conversation it deletes")
@@ -109,4 +101,22 @@ func TestDeletePairedChatStaysDeleted(t *testing.T) {
 	if !strings.Contains(rest, "showToast") || strings.Contains(rest, "console.debug('skychat: unpair failed") {
 		t.Error("deleteChat's unpair failure is silent; a pair the visor still holds puts the conversation back on the next load and the user should be told")
 	}
+}
+
+// deleteChatBody is what deleteChat does to a conversation: its own body plus
+// _removeConversation, which it calls and blocking a request reuses.
+func deleteChatBody(t *testing.T, page string) string {
+	t.Helper()
+	m := regexp.MustCompile(`(?s)\n\s+deleteChat\(\) \{\n(.*?)\n\s+\}\n\n\s+//`).FindStringSubmatch(page)
+	if m == nil {
+		t.Fatal("deleteChat() not found in index.html")
+	}
+	if !strings.Contains(m[1], "this._removeConversation(") {
+		t.Fatal("deleteChat no longer removes the conversation through _removeConversation")
+	}
+	r := regexp.MustCompile(`(?s)\n\s+_removeConversation\(pk\) \{\n(.*?)\n\s+\}\n\n\s+//`).FindStringSubmatch(page)
+	if r == nil {
+		t.Fatal("_removeConversation(pk) not found in index.html")
+	}
+	return r[1] + "\n" + m[1]
 }

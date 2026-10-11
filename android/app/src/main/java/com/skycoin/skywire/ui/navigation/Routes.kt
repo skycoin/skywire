@@ -2,7 +2,7 @@ package com.skycoin.skywire.ui.navigation
 
 /**
  * Navigation routes. Five top-level bottom-bar destinations; SkySOCKS /
- * SkyVPN / SkyDEX / Fleet are full-screen routes pushed from the hub —
+ * SkyVPN / SkyDEX / Fleet / Skymail are full-screen routes pushed from the hub —
  * back returns to the hub.
  */
 object Routes {
@@ -16,6 +16,7 @@ object Routes {
     const val VPN = "vpn"
     const val DEX = "dex"
     const val FLEET = "fleet"
+    const val MAIL = "mail"
 
     /** Logs & diagnostics — pushed from Settings. */
     const val DIAGNOSTICS = "diagnostics"

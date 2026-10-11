@@ -1,7 +1,9 @@
 package com.skycoin.skywire
 
+import com.skycoin.skywire.core.InstalledApp
 import com.skycoin.skywire.core.VpnAppMode
 import com.skycoin.skywire.core.VpnAppRouting
+import com.skycoin.skywire.core.chosenFirst
 import com.skycoin.skywire.core.tunAppRules
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -67,6 +69,15 @@ class VpnAppRoutingTest {
         assertEquals(setOf(browser), routing.selected)
         assertEquals(setOf(bank), routing.copy(mode = VpnAppMode.EXCEPT).selected)
         assertTrue(routing.copy(mode = VpnAppMode.ALL).selected.isEmpty())
+    }
+
+    /** The picker lists the apps already chosen first, both halves still in name order. */
+    @Test
+    fun chosenAppsComeFirst() {
+        val apps = listOf("Bank", "Chat", "Firefox", "Maps", "Zoom").map { InstalledApp("pkg.$it", it) }
+        val ordered = chosenFirst(apps, setOf("pkg.Zoom", "pkg.Chat"))
+        assertEquals(listOf("Chat", "Zoom", "Bank", "Firefox", "Maps"), ordered.map { it.label })
+        assertEquals(apps, chosenFirst(apps, emptySet()))
     }
 
     @Test
