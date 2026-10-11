@@ -50,7 +50,7 @@ func NewHTTP(address string, client *http.Client, log *logging.Logger) APIClient
 		WithField("addr", address).
 		Debug("Created HTTP client.")
 	return &httpClient{
-		client:  withVersion(client),
+		client:  client,
 		address: address,
 		log:     log,
 	}
@@ -91,6 +91,11 @@ func (c *httpClient) do(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 	if requestInFlight(ctx) && overDmsg(c.address) {
 		return nil, fmt.Errorf("%w (%s)", ErrCircularDiscovery, c.address)
+	}
+	// The caller may set client.Transport after NewHTTP (the dmsg transport needs
+	// the dmsg client this serves), so the header goes on the request, not the client.
+	if runtime.GOOS != "js" {
+		req.Header.Set(buildinfo.VersionHeader, buildinfo.Version())
 	}
 	return c.client.Do(req.WithContext(withRequestInFlight(ctx)))
 }
@@ -512,38 +517,4 @@ func (c *httpClient) ClientsByServer(ctx context.Context, serverPK cipher.PubKey
 	}
 
 	return entries, nil
-}
-
-// withVersion returns a copy of c that sends this build's version on every
-// request, so the discovery can count requests by caller version. A browser
-// would preflight the extra header, so js builds leave it out.
-func withVersion(c *http.Client) *http.Client {
-	if runtime.GOOS == "js" {
-		return c
-	}
-	if c == nil {
-		c = http.DefaultClient
-	}
-	cp := *c
-	base := cp.Transport
-	if base == nil {
-		base = http.DefaultTransport
-	}
-	cp.Transport = versionTransport{base}
-	return &cp
-}
-
-type versionTransport struct{ base http.RoundTripper }
-
-func (t versionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	r = r.Clone(r.Context())
-	r.Header.Set(buildinfo.VersionHeader, buildinfo.Version())
-	return t.base.RoundTrip(r)
-}
-
-// CloseIdleConnections passes on to the wrapped transport.
-func (t versionTransport) CloseIdleConnections() {
-	if c, ok := t.base.(interface{ CloseIdleConnections() }); ok {
-		c.CloseIdleConnections()
-	}
 }
