@@ -96,6 +96,10 @@ type ManagedTransport struct {
 	// transportMx.
 	push        *pushState
 	transportMx sync.Mutex
+	// sendDig and recvDig hash each direction of the current conn, for the
+	// checkpoints the peer's can be matched against (stream_digest.go).
+	sendDig streamDigest
+	recvDig streamDigest
 	// writeSem serializes writers against each other on the underlying conn, so
 	// a packet reaches the wire as one frame. It is deliberately NOT
 	// transportMx: readPacket takes that one on every read, and holding it
@@ -721,7 +725,7 @@ func (mt *ManagedTransport) sendTransportPing() {
 		mt.log.WithError(err).Debug("Failed to set ping write deadline")
 	}
 	p := routing.MakeTransportPingPacket(time.Now().UnixNano())
-	n, err := tp.Write(p)
+	n, err := mt.sendDig.write(tp, p)
 	if err != nil {
 		mt.log.WithError(err).Debug("Failed to send transport ping")
 		// A persistently failing write means the link is dead in the
@@ -771,7 +775,7 @@ func (mt *ManagedTransport) handleTransportPing(p routing.Packet) {
 		mt.log.WithError(err).Debug("Failed to set pong write deadline")
 	}
 	pong := routing.MakeTransportPongPacket(timestamp)
-	n, err := tp.Write(pong)
+	n, err := mt.sendDig.write(tp, pong)
 	if err != nil {
 		mt.log.WithError(err).Debug("Failed to send transport pong")
 		return
@@ -862,7 +866,7 @@ func (mt *ManagedTransport) sendBwProbe() {
 	}
 	for seq := 0; seq < transportBwProbeTrain; seq++ {
 		p := routing.MakeTransportBwProbePacket(probeID, uint16(seq), transportBwProbeTrain) //nolint:gosec
-		n, err := tp.Write(p)
+		n, err := mt.sendDig.write(tp, p)
 		if err != nil {
 			mt.log.WithError(err).Debug("bw-probe: train write failed")
 			return
@@ -917,7 +921,7 @@ func (mt *ManagedTransport) handleBwProbe(p routing.Packet) {
 		mt.log.WithError(err).Debug("bw-probe: set ack write deadline")
 	}
 	ack := routing.MakeTransportBwAckPacket(probeID, uint64(estBps))
-	if n, err := tp.Write(ack); err != nil {
+	if n, err := mt.sendDig.write(tp, ack); err != nil {
 		mt.log.WithError(err).Debug("bw-probe: ack write failed")
 	} else if n > routing.PacketHeaderSize {
 		mt.logSent(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
@@ -1156,6 +1160,8 @@ func (mt *ManagedTransport) setTransport(newTransport network.Transport) {
 	mt.missedPongs.Store(0)
 	mt.pingWriteFails.Store(0)
 
+	mt.sendDig.reset(newTransport)
+	mt.recvDig.reset(newTransport)
 	// Set new underlying transport.
 	mt.transport = newTransport
 	mt.attachPush(newTransport)
@@ -1386,7 +1392,7 @@ func (mt *ManagedTransport) writeLocked(ctx context.Context, tp network.Transpor
 	if err := tp.SetWriteDeadline(writeDeadline(ctx)); err != nil {
 		mt.log.WithError(err).Debug("Failed to set write deadline")
 	}
-	return tp.Write(packet)
+	return mt.sendDig.write(tp, packet)
 }
 
 // datagramConnOf returns the transport's native datagram channel (QUIC) and
@@ -1457,7 +1463,7 @@ func (mt *ManagedTransport) WriteRawPacket(packet routing.Packet) error {
 	if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
 		mt.log.WithError(err).Debug("Failed to set write deadline")
 	}
-	n, err := tp.Write(packet)
+	n, err := mt.sendDig.write(tp, packet)
 	<-sem
 	if err != nil {
 		if cur := mt.getUnderlying(); cur != nil && cur != tp {
@@ -1513,6 +1519,7 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, tp network.Tran
 		mt.log.WithError(err).Debug("Failed to read packet payload.")
 		return nil, tp, err
 	}
+	mt.recvDig.add(tp, packet)
 	if n := len(packet); n > routing.PacketHeaderSize {
 		mt.logRecv(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
 	}
