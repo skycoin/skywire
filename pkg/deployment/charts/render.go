@@ -49,6 +49,9 @@ type Chart struct {
 	// Legend, when set, draws the legend as a table with these column headers.
 	// The first column is the series name and the last is its latest value.
 	Legend []string
+	// Process marks a chart of the whole process rather than one service. A
+	// Board draws these once, not in each section of a service sharing it.
+	Process bool
 	// Starts are the service's starts, drawn as markers where they fall in the chart's window.
 	Starts []Start
 

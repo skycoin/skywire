@@ -63,8 +63,29 @@ func (bd *Board) render(ctx context.Context, rg Range) (cached, error) {
 	if bd.Sections != nil {
 		sections = bd.Sections()
 	}
+	built := make([]builtSection, len(sections))
+	var process builtSection
 	for i, s := range sections {
-		bd.writeSection(ctx, &b, i, s, rg, now)
+		built[i] = bd.build(ctx, s, rg, now)
+		var own, rest []Chart
+		for _, c := range built[i].content.Charts {
+			if c.Process {
+				own = append(own, c)
+			} else {
+				rest = append(rest, c)
+			}
+		}
+		built[i].content.Charts = rest
+		if process.content.Charts == nil && own != nil {
+			process = builtSection{title: "Process", about: "Every service on this page runs in this one process.",
+				starts: built[i].starts, content: Content{Charts: own}}
+		}
+	}
+	if process.content.Charts != nil {
+		process.write(&b, "process", "pc")
+	}
+	for i, s := range built {
+		s.write(&b, fmt.Sprintf("s%d", i), fmt.Sprintf("s%dc", i))
 	}
 	writeFoot(&b, now)
 	if bd.cache == nil {
@@ -75,34 +96,41 @@ func (bd *Board) render(ctx context.Context, rg Range) (cached, error) {
 	return c, nil
 }
 
-// writeSection writes one service. A page that fails to render is noted in
-// its section rather than failing the board.
-func (bd *Board) writeSection(ctx context.Context, b *bytes.Buffer, i int, s Section, rg Range, now time.Time) {
-	title := s.Title
-	if title == "" && s.Page != nil {
-		title = s.Page.Title
+// builtSection is one section of a board, rendered but not yet written.
+type builtSection struct {
+	title, about, note string
+	starts             []Start
+	content            Content
+}
+
+// build renders one service. A page that fails to render is noted in its
+// section rather than failing the board.
+func (bd *Board) build(ctx context.Context, s Section, rg Range, now time.Time) builtSection {
+	out := builtSection{title: s.Title, about: s.About, note: s.Note}
+	if out.title == "" && s.Page != nil {
+		out.title = s.Page.Title
 	}
-	fmt.Fprintf(b, "<section class='svc' id='s%d'><h2 class='svc'>%s</h2>", i, html.EscapeString(title))
-	note := s.Note
-	var content Content
-	var starts []Start
+	if out.about == "" && s.Page != nil {
+		out.about = s.Page.About
+	}
 	if s.Page != nil {
 		var err error
-		if content, starts, err = s.Page.content(ctx, rg, now); err != nil {
+		if out.content, out.starts, err = s.Page.content(ctx, rg, now); err != nil {
 			if bd.Log != nil {
-				bd.Log.WithError(err).WithField("service", title).Warn("charts section render failed")
+				bd.Log.WithError(err).WithField("service", out.title).Warn("charts section render failed")
 			}
-			note = "Charts unavailable right now."
+			out.note = "Charts unavailable right now."
 		}
 	}
-	about := s.About
-	if about == "" && s.Page != nil {
-		about = s.Page.About
+	return out
+}
+
+func (s builtSection) write(b *bytes.Buffer, id, chartPrefix string) {
+	fmt.Fprintf(b, "<section class='svc' id='%s'><h2 class='svc'>%s</h2>", id, html.EscapeString(s.title))
+	writeIntro(b, s.about, s.starts, nil)
+	if s.note != "" {
+		fmt.Fprintf(b, "<p class='note'>%s</p>", html.EscapeString(s.note))
 	}
-	writeIntro(b, about, starts, nil)
-	if note != "" {
-		fmt.Fprintf(b, "<p class='note'>%s</p>", html.EscapeString(note))
-	}
-	writeContent(b, content, fmt.Sprintf("s%dc", i))
+	writeContent(b, s.content, chartPrefix)
 	b.WriteString("</section>")
 }
