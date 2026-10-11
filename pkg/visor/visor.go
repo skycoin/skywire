@@ -87,6 +87,9 @@ var mLog = initLogger()
 type Visor struct {
 	closeStack []closer
 
+	// hostBridge is the session to a host bridge. See hostbridge.go.
+	hostBridge hostBridgeState
+
 	// tempLog is the log level set for a while from /debug/loglevel.
 	tempLog tempLogLevel
 

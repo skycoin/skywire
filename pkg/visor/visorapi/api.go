@@ -101,6 +101,15 @@ type Node interface {
 	// EmbeddedServiceControl stops, starts or restarts an embedded service that
 	// runs under its own key.
 	EmbeddedServiceControl(name, action string) error
+	// HostBridgeConnect connects the visor to the host bridge at url and
+	// keeps it connected. HostBridgeDisconnect ends it.
+	HostBridgeConnect(url string) error
+	HostBridgeDisconnect() error
+	HostBridgeStatus() (HostBridgeStatus, error)
+	// HostBridgeForward listens on host, an address on the bridge's host,
+	// and passes each connection to local. HostBridgeUnforward stops it.
+	HostBridgeForward(host, local string) (HostBridgeForward, error)
+	HostBridgeUnforward(host string) error
 	// Close closes the API connection (for RPC clients)
 	Close() error
 }

@@ -1377,3 +1377,17 @@ func (proxyDefaultAPI) SetSkyenv(_ visorapi.SkyenvEdits) (visorapi.SkyenvState, 
 func (proxyDefaultAPI) EmbeddedServiceControl(_, _ string) error {
 	return ErrProxyNotSupported
 }
+
+func (proxyDefaultAPI) HostBridgeConnect(string) error { return ErrProxyNotSupported }
+
+func (proxyDefaultAPI) HostBridgeDisconnect() error { return ErrProxyNotSupported }
+
+func (proxyDefaultAPI) HostBridgeStatus() (visorapi.HostBridgeStatus, error) {
+	return visorapi.HostBridgeStatus{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) HostBridgeForward(_, _ string) (visorapi.HostBridgeForward, error) {
+	return visorapi.HostBridgeForward{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) HostBridgeUnforward(string) error { return ErrProxyNotSupported }
