@@ -358,22 +358,44 @@ func visorBWTable(day *store.VisorBWDay, roles map[string]string) charts.Table {
 	})
 	t := charts.Table{Title: "Top visors by bytes sent, " + day.Date + " (UTC day)",
 		Note: fmt.Sprintf("%d visors sent bytes over %d transports. %d transports between visors on the same network are left out, as in rewards pool 2. Visors that run a dmsg server are tinted, blue when it is registered in dmsg discovery and green when it serves a hypervisor's LAN.",
-			len(day.Visors), day.Transports, day.SameNetworkExcluded),
-		Head: []string{"Public key", "Role", "Sent", "By type"}}
-	for i, r := range rows {
-		if i == topVisorsByBandwidth {
-			break
+			len(day.Visors), day.Transports, day.SameNetworkExcluded)}
+	if len(rows) > topVisorsByBandwidth {
+		rows = rows[:topVisorsByBandwidth]
+	}
+	// One column per transport type the listed visors used, the busiest first.
+	byType := map[string]uint64{}
+	for _, r := range rows {
+		for typ, n := range r.byType {
+			byType[typ] += n
 		}
-		types := make([]string, 0, len(r.byType))
-		for typ := range r.byType {
-			types = append(types, typ)
+	}
+	types := make([]string, 0, len(byType))
+	for typ := range byType {
+		types = append(types, typ)
+	}
+	sort.Slice(types, func(a, b int) bool {
+		if byType[types[a]] != byType[types[b]] {
+			return byType[types[a]] > byType[types[b]]
 		}
-		sort.Slice(types, func(a, b int) bool { return r.byType[types[a]] > r.byType[types[b]] })
-		parts := make([]string, 0, len(types))
+		return types[a] < types[b]
+	})
+	t.Head = []string{"Public key", "Role", "Sent"}
+	for _, typ := range types {
+		if typ == "" {
+			typ = "unknown"
+		}
+		t.Head = append(t.Head, typ)
+	}
+	for _, r := range rows {
+		row := []string{r.pk, roleName[roles[r.pk]], charts.Bytes(float64(r.total))}
 		for _, typ := range types {
-			parts = append(parts, typ+" "+charts.Bytes(float64(r.byType[typ])))
+			cell := ""
+			if n := r.byType[typ]; n > 0 {
+				cell = charts.Bytes(float64(n))
+			}
+			row = append(row, cell)
 		}
-		t.Rows = append(t.Rows, []string{r.pk, roleName[roles[r.pk]], charts.Bytes(float64(r.total)), strings.Join(parts, ", ")})
+		t.Rows = append(t.Rows, row)
 		t.Marks = append(t.Marks, roleColor[roles[r.pk]])
 	}
 	return t

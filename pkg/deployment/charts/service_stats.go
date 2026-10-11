@@ -76,17 +76,15 @@ func NewServiceStats(name string) *ServiceStats {
 		reqs: map[string]float64{}, codes: map[string]float64{}, out: map[string]float64{}}
 }
 
-// sharedWith names the other services running in this process.
-func (s *ServiceStats) sharedWith() string {
+// sharedBy names every service running in this process when there is more
+// than one.
+func sharedBy() string {
 	inProcess.mu.Lock()
 	defer inProcess.mu.Unlock()
-	var others []string
-	for _, n := range inProcess.names {
-		if n != s.name {
-			others = append(others, n)
-		}
+	if len(inProcess.names) < 2 {
+		return ""
 	}
-	return strings.Join(others, " and ")
+	return strings.Join(inProcess.names[:len(inProcess.names)-1], ", ") + " and " + inProcess.names[len(inProcess.names)-1]
 }
 
 // CountDmsg counts the traffic c accepts on its listening ports.
@@ -277,8 +275,8 @@ func (s *ServiceStats) Charts(f *Frame, from, to time.Time) []Chart {
 		return Chart{Title: title, Note: note, Kind: kind, From: from, To: to, Times: f.Times, Format: format, Series: series}
 	}
 	process := "this service's process"
-	if shared := s.sharedWith(); shared != "" {
-		process = "the process this service shares with the " + shared
+	if shared := sharedBy(); shared != "" {
+		process = "the process the " + shared + " share"
 	}
 	out := []Chart{
 		chart("Process CPU", "Share of one core used by "+process+", and by its garbage collector.", Lines, pct, []Series{
@@ -293,6 +291,9 @@ func (s *ServiceStats) Charts(f *Frame, from, to time.Time) []Chart {
 			{Name: "goroutines", Vals: f.Values(keyGoroutines, false)},
 			{Name: "open files", Vals: f.Values(keyFDs, false)},
 		}),
+	}
+	for i := range out {
+		out[i].Process = true
 	}
 	if len(f.Keys(prefixOut)) > 0 {
 		out = append(out,
